@@ -16,8 +16,8 @@ server-only packages. Server packages (`server`, `db`, `emails`, `models`, `pipe
 and `scripts/` share. `shared/podcastEpisodes.ts` splits into its universal constants and its server functions. Apps
 never import apps, except that `@carlnotes/client` imports the api's `AppType` as a type. `scripts/check-structure.sh`
 enforces the new package rule and `scripts/check-ui-boundary.ts` becomes the package boundary check. Every root script
-keeps its name, a stable `temporal` script lands first on the current layout so Northflank switches to it before the
-move, and Bun moves from 1.3.14 to 1.4.3 in `.bun-version`, both Dockerfile stages, `@types/bun`, and the README pin
+keeps its name, a stable `temporal` script ships with the move so Northflank switches to it right after the deploy,
+and Bun moves from 1.3.14 to 1.4.3 in `.bun-version`, both Dockerfile stages, `@types/bun`, and the README pin
 together. No URL, response, schema, UI, or deploy topology changes. Captures of the documents, a rendered topic page, a
 podcast feed, a share image, and a podcast cover are diffed before and after, and the production image is built and run.
 
@@ -47,8 +47,8 @@ serve-pages-from-a-web-service and reserve-spend-before-calls changes when phase
 - The Dockerfile copies every workspace package.json before the frozen install and every package and app the runtime
   needs. `drizzle.config.ts`, `biome.json`, `bunfig.toml`, `components.json`, `.dockerignore`, `.github/workflows`,
   `.claude/settings.json`, and the root `tsconfig.json` name the new folders.
-- Northflank: the `temporal-worker` command, the `migrate`, `edge-purge`, and `docs-sync` jobs, and the two cron jobs
-  switch to root scripts before the move.
+- Northflank: the `temporal-worker` command and the `migrate`, `edge-purge`, and `docs-sync` jobs switch to root
+  scripts right after the deploy; the two cron jobs already ran theirs.
 - Docs: the root and per-module `AGENTS.md`, `CLAUDE.md`, `README.md`, `CONTRIBUTING.md`, the skills under
   `.agents/skills` and `.claude/skills`, `.opencode`, and `openspec/specs` name the new paths;
   `openspec/changes/archive` stays untouched. Open questions 2 and 3 on the Notion Mobile page close.

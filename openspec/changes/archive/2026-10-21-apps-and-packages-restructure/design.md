@@ -180,7 +180,7 @@ so the table's "today" column is what the README documents, and the user confirm
 before switching it (manual step 6). The Dockerfile's `CMD` stays the explicit `doppler run` array, since the `app`
 service starts from the image and not from a command override.
 
-| Northflank resource | Today, as the README documents it | After task 1 | After the move |
+| Northflank resource | Before, as the README documented it | After the switch | After the move |
 |---|---|---|---|
 | `app` service | image `CMD`: `doppler run -- bun api/index.ts` | unchanged | image `CMD`: `doppler run -- bun apps/api/index.ts` |
 | `temporal-worker` service | `doppler run -- bun worker/temporal.ts` | `bun run temporal` | unchanged |
@@ -257,8 +257,7 @@ bundler could never resolve is gone.
 
 ## Risks / Trade-offs
 
-- [Every open worktree conflicts with the move] → merge or park them first (manual step 1), and land the `temporal`
-  script on its own before the move.
+- [Every open worktree conflicts with the move] → merge or park them first (manual step 1).
 - [Sentry groups by file path, so known errors reopen as new issues] → resolve the old ones as they reappear (manual
   step 24).
 - [Bun 1.4 changes behavior somewhere the gate does not reach] → the before-and-after captures, the smoke suite, and
@@ -279,13 +278,13 @@ bundler could never resolve is gone.
 
 ## Migration Plan
 
-**Phase one.** Land the `temporal` script alone and let `release-main` finish; switch each Northflank command to its
-root script and confirm the next sweep logs a poller and a manual scan reaches a terminal state (manual steps 5 to 7).
-Capture the documents, a rendered topic page, a podcast feed, a share image, and a podcast cover from the dev server.
-Move everything; run `bun run check`, `bun run db:generate` (no migration), and `bun run smoke`; recapture and diff;
-build the image with `docker build --platform=linux/amd64` and the three `VITE_*` arguments, run it on the dev Doppler
-config, and request `/api/health`, a public topic page, `/docs`, a blog post, `/sitemap.xml`, and a podcast cover.
-Ship.
+**Phase one.** Capture the documents, a rendered topic page, a podcast feed, a share image, and a podcast cover from
+the dev server. Move everything, with the `temporal` script in the same commit; run `bun run check`, `bun run
+db:generate` (no migration), and `bun run smoke`; recapture and diff; build the image with `docker build
+--platform=linux/amd64` and the three `VITE_*` arguments, run it on the dev Doppler config, and request `/api/health`,
+a public topic page, `/docs`, a blog post, `/sitemap.xml`, and a podcast cover. Ship and let `release-main` finish,
+then switch each Northflank command to its root script and confirm the next sweep logs a poller and a manual scan
+reaches a terminal state (manual steps 5 to 7).
 
 What the apply measured, on 2026-10-20: 1,375 files moved and 818 had an import rewritten; `tsc -b` is clean; all five
 workflow bundles build with `packages/contracts/scanFailure.ts` compiled as source; `bun test` runs 1,698 tests across

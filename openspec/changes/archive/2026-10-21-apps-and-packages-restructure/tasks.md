@@ -1,4 +1,4 @@
-## 1. Phase one: the cutover scripts, landed on the current layout
+## 1. Phase one: the cutover scripts
 
 - [x] 1.1 Add the `temporal` root script, `doppler run -- bun worker/temporal.ts`, to `package.json`; name it in the
       README's process table and worker section, `worker/AGENTS.md`, and the Northflank command table in `design.md`
