@@ -172,7 +172,9 @@ export async function fetchPublicUrl(url: string, init: RequestInit = {}): Promi
 // connect to the checked address itself. fetch would look the host up a second time, and a hostile
 // dns server could answer that second lookup with an internal address
 async function fetchByAddress(parsedUrl: URL, publicAddress: string, init: RequestInit): Promise<Response> {
-	// the url names the address, the Host header names the site, and tls still validates the real hostname
+	// the url names the address, the Host header names the site, tls sends the site's name as the server name, and the
+	// certificate is checked against the site's name. Bun 1.4 sends the url's host as the server name unless told
+	// otherwise, and a server behind Cloudflare or Fastly refuses a handshake that names an address
 	const pinnedUrl = new URL(parsedUrl)
 	pinnedUrl.hostname = publicAddress.includes(":") ? `[${publicAddress}]` : publicAddress
 	const headers = new Headers(init.headers)
@@ -184,6 +186,7 @@ async function fetchByAddress(parsedUrl: URL, publicAddress: string, init: Reque
 		tls:
 			parsedUrl.protocol === "https:"
 				? {
+						serverName: parsedUrl.hostname,
 						checkServerIdentity: (_host: string, certificate: PeerCertificate) =>
 							checkServerIdentity(parsedUrl.hostname, certificate),
 					}

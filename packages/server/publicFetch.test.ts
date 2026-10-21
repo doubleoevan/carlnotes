@@ -80,10 +80,12 @@ test("fetchPublicUrl checks every redirect hop and connects to the vetted addres
 	const originalFetch = globalThis.fetch
 	const requestedUrls: string[] = []
 	const hostHeaders: string[] = []
+	const tlsServerNames: string[] = []
 	globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
 		const url = new URL(input.toString())
 		requestedUrls.push(url.toString())
 		hostHeaders.push(new Headers(init?.headers).get("host") ?? "")
+		tlsServerNames.push((init as { tls?: { serverName?: string } } | undefined)?.tls?.serverName ?? "")
 		// one path bounces to an internal address, one moves to another public page, and anything else is the landing page
 		if (url.pathname === "/bounce") {
 			return new Response(null, { status: 302, headers: { location: "http://169.254.169.254/latest/meta-data" } })
@@ -99,11 +101,13 @@ test("fetchPublicUrl checks every redirect hop and connects to the vetted addres
 		await expect(fetchPublicUrl("https://public.example/bounce")).rejects.toThrow(/is an internal address/)
 		expect(requestedUrls).not.toContain("http://169.254.169.254/latest/meta-data")
 
-		// a redirect to another public page is still followed, connecting to the resolved address with the site in the Host header
+		// a redirect to another public page is still followed, connecting to the resolved address with the site in the Host
+		// header and as the tls server name, so a server that needs the name to pick its certificate still gets it
 		const response = await fetchPublicUrl("https://public.example/moved")
 		expect(await response.text()).toBe("public body")
 		expect(requestedUrls).toContain("https://93.184.216.34/landed")
 		expect(hostHeaders.every((host) => host === "public.example")).toBe(true)
+		expect(tlsServerNames.every((serverName) => serverName === "public.example")).toBe(true)
 
 		// a host the resolver cannot answer for is never fetched
 		await expect(fetchPublicUrl("https://unresolved.example/page")).rejects.toThrow(/did not resolve/)
