@@ -2,7 +2,7 @@
 
 - [x] 1.1 Add the `temporal` root script, `doppler run -- bun worker/temporal.ts`, to `package.json`; name it in the
       README's process table and worker section, `worker/AGENTS.md`, and the Northflank command table in `design.md`
-- [ ] 1.2 After the one commit ships and `release-main` finishes, switch the `temporal-worker` command and confirm the
+- [x] 1.2 After the one commit ships and `release-main` finishes, switch the `temporal-worker` command and confirm the
       `migrate`, `edge-purge`, `docs-sync`, scan-sweep, and budget-reset commands against the table (manual steps 5 to
       7); record each confirmed command in `design.md`
 

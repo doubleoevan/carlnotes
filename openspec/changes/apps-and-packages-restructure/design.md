@@ -426,6 +426,18 @@ main had from promptfoo's optional dependencies and the isolated install links o
 Rollback is reverting the commit; the Northflank commands keep working either way, since each starts through a script
 both images have.
 
+Shipped as 8b92e486 on 2026-10-21. `release-main` built the image, ran the migrate job (nothing to apply), deployed
+`app`, purged the edge, deployed `temporal-worker`, and embedded the docs; the worker polls its six queues, every public
+document, page, asset, feed, cover, and preview image answers 200, and the four Northflank commands run their root
+scripts. The one thing the gate did not reach was Bun 1.4's tls behavior: the pinned public fetch sent the url's address
+as the tls server name, so a feed behind Cloudflare refused the handshake and one behind Fastly served the wrong
+certificate. The Smoke workflow caught it on the first CI run, before any production scan ran, and b96e870f sets the
+server name to the site's hostname. The phase two baseline, measured against the `app` service's `code.run` url with
+`oha -c 50 -z 30s` on `/api/topic-feed` as a signed-out visitor right after the deploy, before the fix: 78 requests per
+second, every one a 200, latency p50 0.57 s, p90 1.06 s, p99 2.57 s, slowest 4.72 s; the minute gauge line on the busier
+replica read an event-loop p99 of 6 ms with a 129 ms maximum and 81 pool connections open with none waiting, and the
+other replica an event-loop p99 of 10 ms with a 158 ms maximum.
+
 **Phase two.** Ship the pages package, `apps/web/server.ts`, the worker thread, and the pool default; the `app` service
 still serves every path. Create the `web` service from the build image with `bun run web`, size both services, add
 `deploy-web` to `release-main`, raise `DATABASE_POOL_COUNT` in Doppler prd and restart every prd process, then add the
