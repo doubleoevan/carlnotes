@@ -3,6 +3,7 @@
 	// the build output goes above this folder. react-email treats every entry under --dir as a template and opens
 	// emitted declaration files as emails
 	"compilerOptions": {
+		"types": ["bun", "react"],
 		"outDir": "../../.tsbuild/emails"
 	},
 	"references": [
