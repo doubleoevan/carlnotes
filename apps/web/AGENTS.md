@@ -21,11 +21,12 @@ the browser bundle and renders pages through the server build, behind its own ro
   `IconButton.tsx`, the button whose tooltip is also its accessible name.
 - `components/table/` — the page tables and their cells: `TopicNameLink.tsx`, a topic's linked name with its latest
   podcast episode's play button, and `PodcastEpisodeTitleLink.tsx`, a podcast episode's linked title with its play
-  button. `TeamMembershipRows.tsx` holds the teams table's membership and invite rows, `AdminUserRows.tsx` the admin
-  users table's row with its subtables, and `PagedTableSection.tsx` the titled section of a paged, sortable table that
-  Similar topics and both episode tables share. `usePagination` in
-  `TablePagination.tsx` starts a table at ten rows a page unless it asks for another size, and its
-  `ScriptedTablePagination` shows a paged table's pagination only with JavaScript.
+  button. `TeamMembershipRows.tsx` holds the teams table's membership and invite rows, `TeamSubtablesRow.tsx` the
+  members or topics subtable a membership row opens under itself, with `useTeamSubtables`, the hook that holds which one
+  is open and the team page payload that fills it, `AdminUserRows.tsx` the admin users table's row with its subtables,
+  and `PagedTableSection.tsx` the titled section of a paged, sortable table that Similar topics and both episode tables
+  share. `usePagination` in `TablePagination.tsx` starts a table at ten rows a page unless it asks for another size, and
+  its `ScriptedTablePagination` shows a paged table's pagination only with JavaScript.
 - `components/chat/` — the chat panel, both composers, the chat message lists, and the hooks behind them.
   `useChatRoom.ts` is the chat room's state, `useChatRoomSpokenAnswer.ts` speaks carl's reply to the browser's spoken
   message, and `useChatRoomLinkPreviews.ts` polls for fresh chat messages' link preview cards. `MicButton.tsx` is the
@@ -60,7 +61,8 @@ the browser bundle and renders pages through the server build, behind its own ro
   starts the browser's analytics, reports a page view per route change, and captures the named visit events, their urls
   rewritten like every other event's. `renderedRows.ts` picks the rows a paged list renders: the page shown and the
   list's first fifty. `billingRedirects.ts` sends the browser to the Stripe Customer Portal at the url
-  `@carlnotes/client/billingClient` returns, and the plans page opens Checkout the same way, and `inviteUrl.ts` builds an invite token's absolute url on the page's
+  `@carlnotes/client/billingClient` returns, and the plans page opens Checkout the same way,
+  and `inviteUrl.ts` builds an invite token's absolute url on the page's
   origin. Both read `window`. `installDeeplinks.ts` holds
   the Add to AI dialog's providers, their deeplinks and paste steps, and the remembered choice, `shareSheet.ts` opens
   the operating system's share sheet, and `staleBundleReload.ts` reloads the page once if a deploy removed a bundle
@@ -73,6 +75,13 @@ the browser bundle and renders pages through the server build, behind its own ro
   `MonthlyBudgetCutoffTable.tsx` is the plans page's monthly budget cutoff table of every plan's cutoffs, which a test
   checks against the docs page's copy, and `monthlyBudgetCutoffCopy.ts` holds the wording both of them use.
 - `components/invite/` — the invite fields, editors, and modals, shared by the topic and team pages.
+- `components/topic/` — the topic page's sections, cards, dialogs, and editors, and the edit topic modal.
+  `saveTopic.ts` is the modal's save flow: the create or update, the podcast switch, the attachment uploads, edits, and
+  removals, then the invites and the team change, with `MISSING_FIELD_NOTES` and `showSaveError` beside it;
+  `EditTopicModal.test.tsx` covers both modules.
+- `components/team/` — the team page's header, gate, menu, dialogs, and buttons, and the team modal. `saveTeam.ts` is
+  the team save flow the team modal and the topic modal's teams field share: `createTeam`, `createTeamForInviteLink`,
+  `saveTeam`, and `TEAM_REJECTION_REASONS`, the sentence for each team rejection.
 - `components/share/` — the share menus for a topic and a team, over the options they both use.
 - `components/search/` — the header's search bar, its Filters menu, and its result rows. The topic, podcast episode,
   team, and user matches are server searches sent once typing pauses, and the finding matches come from the loaded

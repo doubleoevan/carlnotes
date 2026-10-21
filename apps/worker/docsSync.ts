@@ -34,10 +34,16 @@ export function toSections(page: string, markdown: string): DocsSection[] {
 		sections.push({ heading, text: headingEnd === -1 ? "" : part.slice(headingEnd + 1) })
 	}
 
-	// prefix every section with the page title, so its embedding and its quoted text both name the page they belong to
+	// prefix every section with the page title, so its embedding and its quoted text both name the page they belong to.
+	// a repeated heading gets an ordinal, so the (page, heading) key stays unique for the upsert
+	const headingCounts = new Map<string, number>()
 	return sections
 		.filter((section) => section.text.trim())
-		.map(({ heading, text }) => {
+		.map(({ heading: sectionHeading, text }) => {
+			// count this heading on the page, and number every repeat after the first
+			const headingCount = (headingCounts.get(sectionHeading) ?? 0) + 1
+			headingCounts.set(sectionHeading, headingCount)
+			const heading = headingCount === 1 ? sectionHeading : `${sectionHeading} (${headingCount})`
 			const content = `${title === heading ? title : `${title}: ${heading}`}\n\n${text.trim()}`
 			return { page, heading, content, contentHash: createHash("sha256").update(content).digest("hex") }
 		})

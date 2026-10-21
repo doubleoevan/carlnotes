@@ -2,7 +2,7 @@ import { type FetchTopicPageOptions, fetchTopicPage, type TopicGate } from "@car
 import { isTopicSlugStale, toTopicPath } from "@carlnotes/contracts/seo"
 import type { TopicResponse } from "@carlnotes/contracts/topics"
 import { useMatch, useNavigate } from "@tanstack/react-router"
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { useTopicChangeCount } from "@/stores/chatPanelStore"
 import { useLoadInBrowser } from "./useBrowserValue"
 
@@ -47,8 +47,15 @@ export function useTopicPagePayload({ topicId, topicSlug }: UseTopicPagePayloadO
 	const loadedTopic = loadedTopicById ?? loadedTopicBySlug
 	// the topic page payload. undefined while loading, null if missing or not visible
 	const [topic, setTopic] = useState<TopicResponse | null | undefined>(loadedTopic ?? undefined)
-	// the gate in front of an invite or private topic that the user may not see
+	// the gate in front of an invite topic that the user may not see
 	const [topicGate, setTopicGate] = useState<TopicGate | null>(null)
+
+	// the topic id the page shows now, written once the render commits, so a reload's response for a topic the page
+	// left is dropped
+	const shownTopicIdRef = useRef(topicId)
+	useEffect(() => {
+		shownTopicIdRef.current = topicId
+	}, [topicId])
 
 	// fetch the topic page payload, which says whether the topic is visible, gated to this user, or missing
 	const reloadTopicPage = useCallback(
@@ -56,6 +63,9 @@ export function useTopicPagePayload({ topicId, topicSlug }: UseTopicPagePayloadO
 			try {
 				// a poll reload leaves out the related topics, so the page keeps the ones it loaded
 				const topicPage = await fetchTopicPage(topicId, fetchTopicPageOptions)
+				if (shownTopicIdRef.current !== topicId) {
+					return
+				}
 				const fetchedTopic = topicPage.status === "visible" ? topicPage.topic : null
 				setTopic((previousTopic) =>
 					fetchTopicPageOptions.isPoll ? toPolledTopicPage(previousTopic, fetchedTopic) : fetchedTopic,
@@ -63,7 +73,10 @@ export function useTopicPagePayload({ topicId, topicSlug }: UseTopicPagePayloadO
 				setTopicGate(topicPage.status === "gated" ? topicPage.topicGate : null)
 			} catch (error) {
 				console.error("topic page load failed", error)
-				setTopic(null)
+				// a failed reload for a topic the page left changes nothing on the page that replaced it
+				if (shownTopicIdRef.current === topicId) {
+					setTopic(null)
+				}
 			}
 		},
 		[topicId],

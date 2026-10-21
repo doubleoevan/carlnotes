@@ -1,8 +1,12 @@
-// podcast switch tests: what the edit topic modal's podcast switch says for each state of the podcast
-import { expect, test } from "bun:test"
+// edit topic modal tests: what the podcast switch says for each state of the podcast, and what a retried Save does
+import { afterEach, expect, mock, spyOn, test } from "bun:test"
+import * as topicClient from "@carlnotes/client/topicClient"
 import type { TopicPodcast } from "@carlnotes/contracts/podcast"
 import { renderToStaticMarkup } from "react-dom/server"
 import { PodcastSwitch } from "./EditTopicModal"
+import { saveTopic } from "./saveTopic"
+import type { TopicTeamField } from "./TopicTeamSelect"
+import type { TopicFields } from "./useTopicFields"
 
 // a topic's podcast that is on and gets full episodes, with nothing published
 const topicPodcast: TopicPodcast = {
@@ -43,4 +47,60 @@ test("the podcast switch says whether the podcast is on and shows the free plan'
 	expect(
 		toPodcastSwitchHtml({ topicPodcast: { ...topicPodcast, hasFullPodcastEpisodes: false }, isPodcastEnabled: true }),
 	).toContain("latest 10-minute episode")
+})
+
+// put the topic client's spies back after each save test
+afterEach(() => {
+	mock.restore()
+})
+
+// the fields of a new private topic with one file staged to upload. the setters do nothing here
+function toNewTopicFields(): TopicFields {
+	const fields: Partial<TopicFields> = {
+		name: "Coffee",
+		prompt: "Coffee news",
+		tags: [],
+		frequency: "weekly",
+		scheduledTime: "07:00",
+		scheduledDayOfWeek: "monday",
+		visibility: "private",
+		maxTopicFindings: 5,
+		isPodcastEnabled: false,
+		emailInvites: [],
+		usernameInvites: [],
+		defaultSourceKeys: [],
+		keptSources: [],
+		addedSources: [],
+		keptAttachments: [],
+		pendingFiles: [new File(["notes"], "notes.txt", { type: "text/plain" })],
+		setPendingFiles: () => {},
+		promptSourceUrls: [],
+	}
+	return fields as TopicFields
+}
+
+// a retried Save after a failed attachment upload updates the topic the first attempt created
+test("a retried saveTopic updates the topic the failed Save created", async () => {
+	// the create succeeds, the first upload fails, and the retry's upload succeeds
+	const sendCreateTopicSpy = spyOn(topicClient, "sendCreateTopic").mockResolvedValue("topic-1")
+	const sendUpdateTopicSpy = spyOn(topicClient, "sendUpdateTopic").mockResolvedValue(undefined)
+	spyOn(topicClient, "uploadTopicAttachment")
+		.mockRejectedValueOnce(new Error("upload failed"))
+		.mockResolvedValueOnce(undefined)
+	const saveTopicOptions = {
+		topic: undefined,
+		createdTopicId: { current: null as string | null },
+		fields: toNewTopicFields(),
+		topicTeam: { assignTopicTeam: async () => {} } as unknown as TopicTeamField,
+	}
+
+	// the first Save creates the topic and throws on the upload
+	await expect(saveTopic(saveTopicOptions)).rejects.toThrow("upload failed")
+	expect(sendCreateTopicSpy).toHaveBeenCalledTimes(1)
+	expect(saveTopicOptions.createdTopicId.current).toBe("topic-1")
+
+	// the retry updates that topic and creates nothing
+	expect(await saveTopic(saveTopicOptions)).toBe("topic-1")
+	expect(sendCreateTopicSpy).toHaveBeenCalledTimes(1)
+	expect(sendUpdateTopicSpy).toHaveBeenCalledWith("topic-1", expect.objectContaining({ name: "Coffee" }))
 })

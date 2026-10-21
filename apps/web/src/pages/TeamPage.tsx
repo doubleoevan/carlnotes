@@ -2,6 +2,7 @@ import { authClient } from "@carlnotes/client/authClient"
 import type { TeamPageResult } from "@carlnotes/client/teamClient"
 import { fetchTeamPage, sendDeleteTeam, sendRemoveTopicFromTeam } from "@carlnotes/client/teamClient"
 import { fetchAddableTopics } from "@carlnotes/client/topicClient"
+import { isLeaderRole } from "@carlnotes/contracts/enums"
 import type { TeamPageResponse } from "@carlnotes/contracts/teams"
 import { getRouteApi, useNavigate } from "@tanstack/react-router"
 import { Pencil, Share2, Trash2 } from "lucide-react"
@@ -30,15 +31,15 @@ function toTeamChatContext(viewedTeam: TeamPageResponse | null): ChatPageContext
 	if (!viewedTeam) {
 		return null
 	}
-	const joinTeam =
-		viewedTeam.role === null
-			? {
-					teamId: viewedTeam.teamId,
-					name: viewedTeam.name,
-					avatarVersion: viewedTeam.avatarVersion,
-					hasRequestedToJoin: viewedTeam.hasRequestedToJoin,
-				}
-			: null
+	// a non-member gets the join button
+	const joinTeam = viewedTeam.role
+		? null
+		: {
+				teamId: viewedTeam.teamId,
+				name: viewedTeam.name,
+				avatarVersion: viewedTeam.avatarVersion,
+				hasRequestedToJoin: viewedTeam.hasRequestedToJoin,
+			}
 	// naming the team marks its own chat room and its topics' chat rooms, which all have its team id
 	return {
 		topicId: null,
@@ -79,7 +80,7 @@ export function TeamPage() {
 					options: [
 						// sharing sits directly above editing, the order the topic page's menu uses
 						{ label: "Share team", Icon: Share2, onSelect: () => setIsSharing(true) },
-						...(viewedTeam.role === "leader"
+						...(isLeaderRole(viewedTeam.role)
 							? [
 									{ label: "Edit team", Icon: Pencil, onSelect: () => setOpenDialog("edit") },
 									{ label: "Delete team", Icon: Trash2, onSelect: () => setIsConfirmingDelete(true) },
@@ -88,7 +89,7 @@ export function TeamPage() {
 					],
 					report: { subjectKind: "team", subjectId: viewedTeam.teamId, subjectLabel: viewedTeam.name },
 					// a leader gets the team topics' Add Topic button
-					hasNewTopicButton: viewedTeam.role === "leader",
+					hasNewTopicButton: isLeaderRole(viewedTeam.role),
 				}
 			: null,
 	)
@@ -99,7 +100,7 @@ export function TeamPage() {
 
 	// a leader's first visit to a team with no topics opens the edit team dialog
 	const openEditTeamDialog = useCallback((team: TeamPageResponse, teamDialog: TeamDialog): void => {
-		if (team.role !== "leader" || team.topics.length > 0 || teamIdRef.current === team.teamId) {
+		if (!isLeaderRole(team.role) || team.topics.length > 0 || teamIdRef.current === team.teamId) {
 			return
 		}
 		teamIdRef.current = team.teamId
@@ -108,7 +109,7 @@ export function TeamPage() {
 
 	// the topics a leader may add, reread whenever the team reloads
 	useEffect(() => {
-		if (viewedTeam?.role !== "leader") {
+		if (!viewedTeam || !isLeaderRole(viewedTeam.role)) {
 			setAddableTopics([])
 			return
 		}
@@ -201,7 +202,7 @@ export function TeamPage() {
 					teamId={teamPage.teamId}
 					teamName={teamPage.name}
 					isPublic={teamPage.isPublic}
-					canInvite={teamPage.role !== null}
+					canInvite={Boolean(teamPage.role)}
 					onClose={() => setIsSharing(false)}
 				/>
 			)}
@@ -267,7 +268,7 @@ function TeamMembersSection({ teamPage, onChanged }: { teamPage: TeamPageRespons
 						teamId={teamPage.teamId}
 						members={teamPage.members}
 						hiddenMemberCount={teamPage.hiddenMemberCount}
-						isTeamLeader={teamPage.role === "leader"}
+						isTeamLeader={isLeaderRole(teamPage.role)}
 						onChanged={onChanged}
 					/>
 				</TableCard>
@@ -297,7 +298,7 @@ function TeamTopicsSection({
 	onNewTopicOpen: () => void
 	onChanged: () => void
 }) {
-	const isTeamLeader = teamPage.role === "leader"
+	const isTeamLeader = isLeaderRole(teamPage.role)
 	return (
 		<AccordionItem value="topics">
 			<div className="flex items-center gap-2 [&>:first-child]:flex-1">
@@ -320,7 +321,7 @@ function TeamTopicsSection({
 				) : (
 					<TopicsTable
 						topics={teamPage.topics}
-						includesNonPublicTopics={teamPage.role !== null}
+						includesNonPublicTopics={Boolean(teamPage.role)}
 						topicTooltip="Topics on this team"
 						onRemoveTopic={
 							isTeamLeader

@@ -374,6 +374,21 @@ test("episode_listens are unique per episode and user, episode_feed_tokens per t
 	expect(allMigrationsSql()).toContain(`ADD COLUMN "is_podcast_enabled" boolean DEFAULT true NOT NULL`)
 })
 
+// a finding keeps the scan that first found it apart from the scan that last reviewed it. the first scan is nullable, so
+// a deleted scan clears it instead of deleting the finding, and every finding from before the column is backfilled
+test("findings.found_scan_id is nullable, set null on delete, indexed, and backfilled from scan_id", () => {
+	expect(findings.foundScanId.notNull).toBe(false)
+	expect(findings.scanId.notNull).toBe(true)
+	expect(allMigrationsSql()).toContain(`ALTER TABLE "findings" ADD COLUMN "found_scan_id" text`)
+	expect(allMigrationsSql()).toMatch(/findings_found_scan_id_scans_id_fk.*ON DELETE set null/)
+	expect(allMigrationsSql()).toContain(
+		'CREATE INDEX "findings_found_scan_id_idx" ON "findings" USING btree ("found_scan_id")',
+	)
+	expect(allMigrationsSql()).toContain(
+		`UPDATE "findings" SET "found_scan_id" = "scan_id" WHERE "found_scan_id" IS NULL`,
+	)
+})
+
 // the duplicate check reads resources by content hash, and the new finding count reads a topic's findings by arrival
 test("resources are indexed by content hash and findings by topic and arrival", () => {
 	expect(allMigrationsSql()).toContain(

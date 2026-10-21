@@ -12,7 +12,7 @@ import { EMBED_DIMENSIONS, findings, resources, scans } from "@carlnotes/db/sche
 import { teamMembers, teams } from "@carlnotes/db/schema/teams"
 import { attachments, topics } from "@carlnotes/db/schema/topics"
 import { users } from "@carlnotes/db/schema/users"
-import { readLiteLLMKeySpend } from "@carlnotes/models/litellm"
+import { readLiteLLMKeySpend } from "@carlnotes/models/litellmProxy"
 import { toPositiveInteger } from "@carlnotes/server/envSettings"
 import { and, count, eq, gte, isNotNull, sql } from "drizzle-orm"
 import { loadOwnedTopics } from "./activityTopics"

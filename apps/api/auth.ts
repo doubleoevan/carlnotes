@@ -7,7 +7,7 @@ import { toNormalizedUsername, toProviderUsername } from "@carlnotes/contracts/u
 import { db, schema } from "@carlnotes/db"
 import { deleteRedisKeys, runWithRedis } from "@carlnotes/db/redis"
 import { incrementRateLimitWindow } from "@carlnotes/db/redisRateLimits"
-import { provisionLiteLLMKey } from "@carlnotes/models/litellm"
+import { provisionLiteLLMKey } from "@carlnotes/models/litellmProxy"
 import { trackEvent } from "@carlnotes/server/analytics"
 import { appBaseUrl } from "@carlnotes/server/appUrl"
 import { reportError } from "@carlnotes/server/monitoring"

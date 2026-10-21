@@ -320,6 +320,29 @@ export const noteUpdatePayload = z.object({
 	visibility: z.enum(noteVisibilities).optional(),
 })
 
+// the longest emoji a note comment reaction takes, with room for a skin tone and a joined family
+const NOTE_COMMENT_REACTION_EMOJI_MAX_CHARS = 32
+
+// one note comment as the editor's thread store writes it: a blocknote document, an array of blocks, and any metadata
+export const noteCommentPayload = z.object({
+	body: z.array(z.record(z.string(), z.unknown())).min(1),
+	metadata: z.unknown().optional(),
+})
+
+// the new note comment thread body: its first comment, and any metadata
+export const noteCommentThreadPayload = z.object({
+	initialComment: noteCommentPayload,
+	metadata: z.unknown().optional(),
+})
+
+// the note comment add and edit body
+export const noteCommentWritePayload = z.object({ comment: noteCommentPayload })
+
+// the note comment reaction body: one emoji
+export const noteCommentReactionPayload = z.object({
+	emoji: z.string().trim().min(1).max(NOTE_COMMENT_REACTION_EMOJI_MAX_CHARS),
+})
+
 // one spoken turn of a podcast episode. its speaker, its words as speech, and an optional short delivery style
 export const podcastEpisodeTurnPayload = z.object({
 	speaker: z.enum(podcastEpisodeSpeakers),

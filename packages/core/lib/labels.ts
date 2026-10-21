@@ -133,7 +133,7 @@ export function toBrewsWord(count: number): string {
 
 // a count with its noun, singular where there is one of the thing
 export function toCountLabel(count: number, noun: string): string {
-	return `${count} ${noun}${count === 1 ? "" : "s"}`
+	return `${count.toLocaleString()} ${noun}${count === 1 ? "" : "s"}`
 }
 
 /**

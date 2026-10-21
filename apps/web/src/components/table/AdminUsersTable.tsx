@@ -1,4 +1,5 @@
 import type { AdminUserRow } from "@carlnotes/contracts/admin"
+import { isAdminRole, isPaidPlan } from "@carlnotes/contracts/enums"
 import { toBytesLabel, toCentsLabel, toCountLabel } from "@carlnotes/core/lib/labels"
 import { TABLE_CLASS, TABLE_HEAD_CLASS, TABLE_SCROLL_CLASS } from "@/lib/styleClasses"
 import { cn } from "@/lib/utils"
@@ -98,9 +99,9 @@ export function AdminUsersTable({
 							<td className="py-2 pr-4">{`Total ${toCountLabel(users.length, "user")}`}</td>
 							<td className="py-2 pr-4" />
 							<td className="py-2 pr-4">
-								{toCountLabel(users.filter((user) => user.role === "admin").length, "admin")}
+								{toCountLabel(users.filter((user) => isAdminRole(user.role)).length, "admin")}
 							</td>
-							<td className="py-2 pr-4">{`${users.filter((user) => user.plan !== "free").length} paid`}</td>
+							<td className="py-2 pr-4">{`${users.filter((user) => isPaidPlan(user.plan)).length} paid`}</td>
 							{/* signup and last login total nothing, and each still needs its cell to keep the columns lined up */}
 							<td className="py-2 pr-4" />
 							<td className="py-2 pr-4" />

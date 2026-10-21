@@ -33,8 +33,9 @@ key budget, and daily scans cutoff, the stored object deletes, and the reset's r
 attempt again after a fixed wait, for the worker's first Temporal connection, a podcast episode's publish, and the
 podcast episode smoke's chapters. Every fetch of a user-supplied url goes through `fetchPublicUrl` (`publicFetch.ts`),
 which re-checks each redirect hop against the internal-address rule, with `readLimitedBody` bounding reads. A fetch
-that a server responds to with an error status throws `FetchStatusError`, and `isRetryableFetchFailure` says whether a
-failure is worth a retry: a timeout, an abort, a 429, or a 5xx.
+that a server responds to with an error status throws `FetchStatusError`, `isHostRejection` says whether a failure is
+the host rejecting the request (a 4xx or an oversized body) instead of a fault, and `isRetryableFetchFailure` says
+whether a failure is worth a retry: a timeout, an abort, a 429, or a 5xx.
 
 - Imports: `@carlnotes/contracts` only among the packages, never `db` or anything after it. Only the monitoring and analytics clients and `publicFetch` reach the network, and nothing here touches
   the database.

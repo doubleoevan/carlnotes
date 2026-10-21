@@ -3,6 +3,7 @@
 
 import { sendDeleteTeamInvite, sendRemoveTeamMember } from "@carlnotes/client/teamClient"
 import { sendUserInvite } from "@carlnotes/client/topicClient"
+import { isLeaderRole } from "@carlnotes/contracts/enums"
 import type { ProfileTeamStatus } from "@carlnotes/contracts/profiles"
 import { Users, X } from "lucide-react"
 import { type ReactNode, useState } from "react"
@@ -103,11 +104,11 @@ export function InviteUserToTeamButton({
 							</span>
 							{profileTeamStatus.status === "member" ? (
 								<TeamOptionRemoveAction
-									canRemove={profileTeamStatus.role === "leader"}
+									canRemove={isLeaderRole(profileTeamStatus.role)}
 									label={`Remove ${profileUsername} from ${profileTeamStatus.name}`}
 									tooltip={
 										<>
-											{profileTeamStatus.role === "leader" ? "Remove " : "Must be a leader to remove "}
+											{isLeaderRole(profileTeamStatus.role) ? "Remove " : "Must be a leader to remove "}
 											<span className="font-semibold">{profileUsername}</span>
 											{" from "}
 											<span className="font-semibold">{profileTeamStatus.name}</span>

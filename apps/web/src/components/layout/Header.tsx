@@ -1,5 +1,6 @@
 import { authClient } from "@carlnotes/client/authClient"
 import { toAvatarVersion } from "@carlnotes/contracts/avatars"
+import { isAdminRole } from "@carlnotes/contracts/enums"
 import { useLocation } from "@tanstack/react-router"
 import { useState } from "react"
 import { CoffeeMug } from "@/components/branding/CoffeeMug"
@@ -45,7 +46,7 @@ export function Header() {
 	const { data: session } = authClient.useSession()
 	const isSignedIn = Boolean(session)
 	// the admin link renders only for admins
-	const isAdmin = session?.user.role === "admin"
+	const isAdmin = isAdminRole(session?.user.role)
 	// the headline shimmers on every route change. keying the wrapper by pathname remounts it to replay
 	const pathname = useLocation({ select: (location) => location.pathname })
 	// a click on a home link while already on the home page reloads the feed

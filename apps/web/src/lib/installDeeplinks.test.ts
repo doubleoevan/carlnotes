@@ -13,11 +13,14 @@ test("the cursor deeplink includes the name and the url", () => {
 	expect(JSON.parse(atob(cursorLink.searchParams.get("config") ?? ""))).toEqual({ url: mcpServer.url })
 })
 
-// the vs code link includes the whole server as url-encoded json
-test("the vs code deeplink includes the name and the url", () => {
+// the vs code link is the documented vscode:mcp/install uri, with the server and its http transport as url-encoded json
+test("the vs code deeplink includes the name, the http transport, and the url", () => {
 	const vscodeLink = toInstallDeeplink("vscode", mcpServer)
-	expect(vscodeLink.startsWith("vscode://mcp/install?")).toBe(true)
-	expect(JSON.parse(decodeURIComponent(vscodeLink.slice("vscode://mcp/install?".length)))).toEqual(mcpServer)
+	expect(vscodeLink.startsWith("vscode:mcp/install?")).toBe(true)
+	expect(JSON.parse(decodeURIComponent(vscodeLink.slice("vscode:mcp/install?".length)))).toEqual({
+		...mcpServer,
+		type: "http",
+	})
 })
 
 // no remembered choice keeps the default order. a remembered choice moves to the front

@@ -28,3 +28,10 @@ test("isSameSignature passes an exact match and fails a different or shorter sig
 	expect(isSameSignature({ expectedSignature: "abc123", signature: "abc124" })).toBe(false)
 	expect(isSameSignature({ expectedSignature: "abc123", signature: "abc" })).toBe(false)
 })
+
+// a request's signature with the same character count and more bytes fails instead of throwing an error, which would
+// turn a bad signature into a 500
+test("isSameSignature fails a signature of the same character count and another byte count", () => {
+	expect(isSameSignature({ expectedSignature: "ab", signature: "éé" })).toBe(false)
+	expect(isSameSignature({ expectedSignature: "a".repeat(64), signature: "é".repeat(64) })).toBe(false)
+})

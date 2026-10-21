@@ -1,7 +1,15 @@
-// public-fetch tests: the address checks, the redirect-hop pinning, and the vetted-address connection
+// public-fetch tests: the address checks, the host rejection check, the redirect-hop pinning, and the vetted-address
+// connection
 import { expect, mock, test } from "bun:test"
 import * as dnsPromises from "node:dns/promises"
-import { fetchPublicUrl, isInternalAddress, toFetchableUrl } from "./publicFetch"
+import {
+	FetchStatusError,
+	fetchPublicUrl,
+	isHostRejection,
+	isInternalAddress,
+	OversizedBodyError,
+	toFetchableUrl,
+} from "./publicFetch"
 
 // the address check that stops a user-supplied url reaching our own network: internal ranges rejected, public ones allowed
 test("isInternalAddress rejects loopback, private, link-local, cgnat, and their ipv6 forms", () => {
@@ -60,6 +68,23 @@ test("toFetchableUrl rejects an internal url", () => {
 	}
 })
 
+// a rejected status and an oversized body come from the host, and neither is a fault in this code
+test("isHostRejection separates the host rejecting the request from a fault in this code", () => {
+	expect(isHostRejection(new FetchStatusError("https://a.test/feed", 404))).toBe(true)
+	expect(isHostRejection(new FetchStatusError("https://a.test/feed", 429))).toBe(true)
+	expect(isHostRejection(new OversizedBodyError("https://a.test/feed", 5_000_000))).toBe(true)
+
+	// a 5xx is the host failing, and can be a request this code sent wrong
+	expect(isHostRejection(new FetchStatusError("https://a.test/feed", 500))).toBe(false)
+	expect(isHostRejection(new FetchStatusError("https://a.test/feed", 503))).toBe(false)
+
+	// anything else reached this code without the host saying no
+	expect(isHostRejection(new TypeError("undefined is not a function"))).toBe(false)
+	expect(isHostRejection(new Error("fetch failed"))).toBe(false)
+	expect(isHostRejection("not an error at all")).toBe(false)
+	expect(isHostRejection(undefined)).toBe(false)
+})
+
 // stand in for dns so the .example hosts resolve here: one to a fixed public address, one to nothing.
 // every other host keeps the real resolver, so the mock cannot leak into other tests
 mock.module("node:dns/promises", () => ({
@@ -81,6 +106,8 @@ test("fetchPublicUrl checks every redirect hop and connects to the vetted addres
 	const requestedUrls: string[] = []
 	const hostHeaders: string[] = []
 	const tlsServerNames: string[] = []
+
+	// record each request's url, Host header, and tls server name
 	globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
 		const url = new URL(input.toString())
 		requestedUrls.push(url.toString())

@@ -13,7 +13,7 @@ import { useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
 import { FileDropZone } from "@/components/common/FileDropZone"
 import { COMPOSER_BOX_CLASS, ICON_BUTTON_CLASS, SEND_BUTTON_CLASS } from "@/lib/styleClasses"
-import { CHAT_FILE_PICKER_ACCEPT, cn, isTouchScreen, isWideScreen } from "@/lib/utils"
+import { CHAT_FILE_PICKER_ACCEPT, cn, isSendKey, isTouchScreen, isWideScreen } from "@/lib/utils"
 import { ChatAttachmentChips } from "./ChatAttachmentChips"
 import { MentionSuggestionList, useMentionAutocomplete } from "./MentionSuggestionList"
 import { isMicShown, MicButton } from "./MicButton"
@@ -259,7 +259,7 @@ export function ChatRoomComposer({
 		if (autocomplete.usernameSuggestions.length > 0 && autocomplete.handleAutocompleteKey(event)) {
 			return
 		}
-		if (event.key === "Enter" && !event.shiftKey) {
+		if (isSendKey(event)) {
 			event.preventDefault()
 			handlePostChatMessage()
 		}

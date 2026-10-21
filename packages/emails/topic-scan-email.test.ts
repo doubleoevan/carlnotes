@@ -160,3 +160,10 @@ test("renderTopicScanEmail names a new episode in its summary line if the scan h
 	expect(noPodcastEpisodeEmailHtml).toContain("2 new findings worth your time on ")
 	expect(noPodcastEpisodeEmailHtml).not.toContain("Coffee Break episode")
 })
+
+// the footer's copy says follow, the client-facing word, never subscribe, which is the code word
+test("renderTopicScanEmail's footer says the reader follows the topic", async () => {
+	const html = await renderTopicScanEmail({ topicName: "LLM tooling", findingCount: 0, findings: [] })
+	expect(html).toContain("because you follow ")
+	expect(html).not.toContain("subscribe to emails")
+})

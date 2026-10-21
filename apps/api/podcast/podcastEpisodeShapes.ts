@@ -1,6 +1,7 @@
 // a podcast episode in the shape the player shows, with its chapters and the user's progress, and in the shape a table
 // row shows, with its chapter count, and each topic's latest of either, limited to what the user may listen to
 import type { PodcastEpisode, PodcastEpisodeSummary } from "@carlnotes/contracts/podcast"
+import { isPublishedPodcastEpisode } from "@carlnotes/contracts/podcast"
 import { FULL_PODCAST_COVER_SIZE, SMALL_PODCAST_COVER_SIZE } from "@carlnotes/contracts/podcastEpisodes"
 import { toPodcastEpisodePath } from "@carlnotes/contracts/seo"
 import { db } from "@carlnotes/db"
@@ -225,7 +226,7 @@ export function toPodcastEpisodeSummary({
 		durationSeconds: podcastEpisodeRow.durationSeconds,
 		publishedAt: podcastEpisodeRow.publishedAt?.toISOString() ?? null,
 		// a published podcast episode has its own page
-		pagePath: podcastEpisodeRow.status === "published" ? toPodcastEpisodePath(topic, podcastEpisodeRow) : null,
+		pagePath: isPublishedPodcastEpisode(podcastEpisodeRow) ? toPodcastEpisodePath(topic, podcastEpisodeRow) : null,
 		chapterCount,
 	}
 }

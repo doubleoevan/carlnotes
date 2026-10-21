@@ -4,7 +4,6 @@
 import type { TopicInviteBadge } from "@carlnotes/contracts/invites"
 import { db } from "@carlnotes/db"
 import { invites } from "@carlnotes/db/schema/invites"
-import { users } from "@carlnotes/db/schema/users"
 import { trackEvent } from "@carlnotes/server/analytics"
 import { eq } from "drizzle-orm"
 import { Hono } from "hono"
@@ -14,6 +13,7 @@ import {
 	acceptTeamInvite,
 	acceptTopicInvite,
 	type InviteAcceptResult,
+	loadUserEmail,
 	toInviteProperties,
 	toInviteRejection,
 } from "./inviteAcceptance"
@@ -39,11 +39,8 @@ export function isInviteRecipient(
 async function loadReceivedInvite(userId: string, inviteId: string): Promise<typeof invites.$inferSelect | null> {
 	// read the row and the user's address, then run the recipient check
 	const [invite] = await db.select().from(invites).where(eq(invites.id, inviteId))
-	const [user] = await db
-		.select({ email: users.email, isEmailVerified: users.emailVerified })
-		.from(users)
-		.where(eq(users.id, userId))
-	if (!invite || !user || !isInviteRecipient(invite, { id: userId, ...user })) {
+	const userEmail = await loadUserEmail(userId)
+	if (!invite || !userEmail || !isInviteRecipient(invite, { id: userId, ...userEmail })) {
 		return null
 	}
 
@@ -102,7 +99,7 @@ export const receivedInvitesRoute = new Hono<AppEnv>()
 		if (!user) {
 			return context.json({ error: "unauthorized" }, 401)
 		}
-		const invitedRows = await loadInvitedTopicSubscriptions({ id: user.id, email: user.email })
+		const invitedRows = await loadInvitedTopicSubscriptions(user.id)
 		// shape each row as a badge
 		const topicInviteBadges: TopicInviteBadge[] = invitedRows.flatMap((invitedRow) =>
 			invitedRow.inviteId

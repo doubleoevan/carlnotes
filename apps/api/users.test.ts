@@ -3,7 +3,7 @@
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import { restoreConnectionPool, type SentQuery, stubConnectionPool } from "@carlnotes/db/connectionPoolStub"
 import * as store from "@carlnotes/db/store"
-import * as litellm from "@carlnotes/models/litellm"
+import * as litellmProxy from "@carlnotes/models/litellmProxy"
 import * as monitoring from "@carlnotes/server/monitoring"
 import { quietErrorReports } from "@carlnotes/server/monitoringTestFixtures"
 import { saveEnvSettings } from "@carlnotes/server/savedEnvSettings"
@@ -95,7 +95,7 @@ test("a LiteLLM key created while the account was closing is deleted from the pr
 	// no configured Redis, and a spy on the key delete
 	delete Bun.env.REDIS_URL
 	spyOn(sessions, "revokeUserSessions").mockResolvedValue(false)
-	const deleteLiteLLMKeySpy = spyOn(litellm, "deleteLiteLLMKey").mockResolvedValue(undefined)
+	const deleteLiteLLMKeySpy = spyOn(litellmProxy, "deleteLiteLLMKey").mockResolvedValue(undefined)
 
 	// the close reads a user row with no key, and the delete of that row returns a key
 	stubUserRowLiteLLMKeys({ selectedUserRowLiteLLMKey: null, deletedUserRowLiteLLMKey: "sk-late" })
@@ -115,7 +115,7 @@ test("a LiteLLM key that the close already deleted is not deleted a second time"
 	// no configured Redis, and a spy on the key delete
 	delete Bun.env.REDIS_URL
 	spyOn(sessions, "revokeUserSessions").mockResolvedValue(false)
-	const deleteLiteLLMKeySpy = spyOn(litellm, "deleteLiteLLMKey").mockResolvedValue(undefined)
+	const deleteLiteLLMKeySpy = spyOn(litellmProxy, "deleteLiteLLMKey").mockResolvedValue(undefined)
 
 	// the close reads the user's key, and the delete of the user's row returns the same key
 	stubUserRowLiteLLMKeys({ selectedUserRowLiteLLMKey: "sk-stored", deletedUserRowLiteLLMKey: "sk-stored" })

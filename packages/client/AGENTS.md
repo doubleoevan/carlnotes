@@ -15,6 +15,7 @@
 - Most clients build on `apiClient()`. Some calls, and all of `chatClient.ts`, `flagContentClient.ts`, and
   `voiceClient.ts`, use `fetch` at `toApiUrl` instead. `pageHeadClient.ts` reads a page's head data.
   `voiceClientTestFixtures.ts` holds the voice tests' topic voice chat page and spoken question timings.
+  `fetchTestFixtures.ts` holds `stubFetch` and `stubFailingFetch`, the fetch stubs the client tests share.
 - A client returns values and never touches the browser. `billingClient.ts` returns the Checkout and Customer Portal
   urls, and the web app sends the browser to them; `apps/web/src/lib/inviteUrl.ts` builds an
   invite token's url on the page's origin; and an error shows through the `showError` the app configures.

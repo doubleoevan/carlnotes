@@ -185,11 +185,11 @@ export const topicResponse = topicFeed.extend({
 
 export type TopicResponse = z.infer<typeof topicResponse>
 
-// the 403 that a topic page or a podcast episode page responds with to someone who may not see an invite or private
-// topic. only an invite topic's gate names the topic
+// the 403 that a topic page or a podcast episode page responds with to someone who may not see an invite topic, naming
+// the topic
 export const topicGateResponse = z.object({
 	error: z.literal("forbidden"),
-	gatedVisibility: z.enum(visibilities).exclude(["public"]),
+	gatedVisibility: z.literal("invite"),
 	topicName: z.string().nullable().catch(null),
 })
 

@@ -1,18 +1,13 @@
 // the manual-scan email: what a Scan you triggered yourself turned up, sent when it finishes because it takes several minutes.
-// the shell, cards, and footer are the topic-scan email's, so the two stay visually identical
+// the cards and sections are the topic-scan email's, over the shared shell, so the two stay visually identical
 import { Section, Text } from "@react-email/components"
 import { render } from "@react-email/render"
 import type { CSSProperties, ReactElement } from "react"
+import { EmailFooter, EmailIntro, EmailShell, footerBrandLink, LinkOrText, summaryLink } from "./emailShell"
 import {
-	EmailFooter,
-	EmailIntro,
-	EmailShell,
 	FindingCards,
-	footerBrandLink,
-	LinkOrText,
 	PodcastEpisodeSection,
 	ScanSummarySection,
-	summaryLink,
 	type TopicScanEmailFinding,
 	type TopicScanEmailPodcastEpisode,
 } from "./topic-scan-email"

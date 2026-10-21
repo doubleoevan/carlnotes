@@ -167,11 +167,12 @@ export function toPodcastFeedPath(topicId: string): string {
 }
 
 /**
- * Returns a podcast episode page's path, which comes after its topic page's path.
+ * Returns a podcast episode page's path, which comes after its topic page's path. Takes a podcast episode with a season
+ * and a number.
  */
 export function toPodcastEpisodePath(
 	topic: { id: string; name: string },
-	podcastEpisode: { season: number | null; episodeNumber: number | null },
+	podcastEpisode: { season: number; episodeNumber: number },
 ): string {
 	return `${toTopicPath(topic)}/episodes/${podcastEpisode.season}/${podcastEpisode.episodeNumber}`
 }

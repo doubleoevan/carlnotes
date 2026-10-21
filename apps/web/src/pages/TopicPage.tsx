@@ -1,5 +1,6 @@
 import { authClient } from "@carlnotes/client/authClient"
 import { sendTopicFeatureOrder, sendTopicSubscription, type TopicGate } from "@carlnotes/client/topicClient"
+import { isAdminRole } from "@carlnotes/contracts/enums"
 import type { TopicResponse } from "@carlnotes/contracts/topics"
 import { matchesTopicFindingFilter } from "@carlnotes/core/lib/topicFindingFilters"
 import { toSortedTopicFindings } from "@carlnotes/core/lib/topicFindingSorts"
@@ -108,7 +109,7 @@ export function TopicPage() {
 					mcp: { name: `CarlNotes: ${topic.name}`, url: `${origin}/mcp/t/${topic.id}` },
 					options: toTopicActionOptions({
 						topic,
-						isAdminUser: session?.user.role === "admin",
+						isAdminUser: isAdminRole(session?.user.role),
 						topicActionLayout,
 						onAddTopicToTeam: () => setOpenDialog("add-topic-to-team"),
 						onShareTopic: () => setOpenDialog("share"),
@@ -123,14 +124,16 @@ export function TopicPage() {
 			: null,
 	)
 
-	// run a topic action, then reload the page
+	// run a topic action, then reload the page. returns whether the action succeeded
 	const runThenReload = useCallback(
-		async (handler: () => Promise<void>) => {
+		async (handler: () => Promise<void>): Promise<boolean> => {
 			try {
 				await handler()
 				await reloadTopicPage()
+				return true
 			} catch (error) {
 				console.error("topic action failed", error)
+				return false
 			}
 		},
 		[reloadTopicPage],
@@ -150,7 +153,11 @@ export function TopicPage() {
 			return
 		}
 		const isSubscribing = !topic.isSubscribed
-		await runThenReload(() => sendTopicSubscription(topic.id, isSubscribing))
+		const isSubscriptionSaved = await runThenReload(() => sendTopicSubscription(topic.id, isSubscribing))
+		if (!isSubscriptionSaved) {
+			toast.error("That didn't go through. Try again.")
+			return
+		}
 		// an invite topic only shows findings from the next scan onward, which the toast spells out
 		const disclaimer = isSubscribing && topic.visibility === "invite" ? `\n${NEXT_SCAN_DISCLAIMER}` : ""
 		toast(isSubscribing ? `Following ${topic.name}.${disclaimer}` : `Unfollowed ${topic.name}.`)
@@ -351,7 +358,7 @@ function TopicPagePlaceholder({
 	return (
 		<>
 			<TopicSkeleton topicTitle={topicGate.topicName ?? undefined} />
-			<TopicGateNotice visibility={topicGate.visibility} isSignedIn={isSignedIn} returnPath={`/topics/${topicId}`} />
+			<TopicGateNotice isSignedIn={isSignedIn} returnPath={`/topics/${topicId}`} />
 		</>
 	)
 }

@@ -1,8 +1,21 @@
-// activity tests for the payload assembly
-import { expect, test } from "bun:test"
+// activity tests for the payload assembly, the pending invitations an unverified address never matches, and the 404 a
+// non-admin gets for another user's activity
+import { afterEach, expect, test } from "bun:test"
 import type { PodcastEpisodeSummary } from "@carlnotes/contracts/podcast"
-import { toSubscriptionRows } from "./activity"
+import {
+	FREE_USER_ACCESS_ROW,
+	restoreConnectionPool,
+	type SentQuery,
+	stubConnectionPool,
+} from "@carlnotes/db/connectionPoolStub"
+import { activityRoute, loadInvitedTopicSubscriptions, toSubscriptionRows } from "./activity"
 import { toActivityTopics, toCents } from "./activityTopics"
+import { toSignedInApp } from "./testSession"
+
+// put the connection pool's own query back after each test
+afterEach(() => {
+	restoreConnectionPool()
+})
 
 // scans.cost is a numeric dollars string, converted once for every spend figure on the page
 test("toCents converts the dollars string and zeroes malformed values", () => {
@@ -140,4 +153,33 @@ test("toActivityTopics and toSubscriptionRows include each topic's latest podcas
 	)
 	expect(subscriptionWithEpisode?.latestPodcastEpisode).toBe(podcastEpisode)
 	expect(subscriptionWithoutEpisode?.latestPodcastEpisode).toBeNull()
+})
+
+// the invites query the pending invitations read sends for a user whose address is verified or not, with the user's
+// row as the one query result
+async function readPendingInvitationsQuery(isEmailVerified: boolean): Promise<SentQuery | undefined> {
+	const sentQueries = stubConnectionPool(({ text }) =>
+		text.includes('"email_verified"') ? [["someone@example.com", isEmailVerified]] : [],
+	)
+	await loadInvitedTopicSubscriptions("user-1")
+	return sentQueries.find(({ text }) => text.includes('from "invites"'))
+}
+
+// an unverified address matches no email invitation, and a username invitation still names the account
+test("loadInvitedTopicSubscriptions matches an email invitation only for a verified address", async () => {
+	// a verified address matches the invitations sent to it
+	expect((await readPendingInvitationsQuery(true))?.values).toContain("someone@example.com")
+
+	// an unverified address matches none, and a username invitation still names the account
+	const unverifiedQuery = await readPendingInvitationsQuery(false)
+	expect(unverifiedQuery?.values).not.toContain("someone@example.com")
+	expect(unverifiedQuery?.text).toContain('"invites"."email" is null')
+})
+
+// another user's activity is a private read, so a non-admin reads it as missing
+test("a non-admin asking for another user's activity gets a 404", async () => {
+	stubConnectionPool(() => [FREE_USER_ACCESS_ROW])
+	const response = await toSignedInApp(activityRoute, "user-1").request("/activity?userId=user-2")
+	expect(response.status).toBe(404)
+	expect(await response.json()).toEqual({ error: "not found" })
 })

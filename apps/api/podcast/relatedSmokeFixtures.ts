@@ -133,15 +133,17 @@ export async function seedRelatedFixtures(): Promise<void> {
 		.values(relatedResourceIds.map((id) => ({ id, url: `https://related-smoke.example/${id}`, kind: "read" as const })))
 
 	// the findings: one for the public topic not yet shown, and three for each of the others
-	await db
-		.insert(findings)
-		.values(
-			topicIds.flatMap((topicId) =>
-				relatedResourceIds
-					.slice(0, topicId === relatedTopicIds.publicNotShown ? 1 : 3)
-					.map((resourceId) => ({ topicId, resourceId, scanId: `${topicId}-scan`, relevanceScore: 0.8 })),
-			),
-		)
+	await db.insert(findings).values(
+		topicIds.flatMap((topicId) =>
+			relatedResourceIds.slice(0, topicId === relatedTopicIds.publicNotShown ? 1 : 3).map((resourceId) => ({
+				topicId,
+				resourceId,
+				scanId: `${topicId}-scan`,
+				foundScanId: `${topicId}-scan`,
+				relevanceScore: 0.8,
+			})),
+		),
+	)
 
 	// the podcast episodes, each an hour older than its next number
 	await db.insert(podcastEpisodes).values(

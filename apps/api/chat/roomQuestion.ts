@@ -52,7 +52,7 @@ export async function buildModelRoomQuestion(
 		.where(and(toTopicFilter(chatRoomSummaries.topicId, topicId), eq(chatRoomSummaries.teamId, teamId)))
 
 	// the chat messages and the chat room's attachments, in the shapes that the template reads
-	const chatMessages = await toChatRoomMessages(transaction, topicId, windowChatMessages)
+	const chatMessages = await toChatRoomMessages(transaction, topicId, teamId, windowChatMessages)
 	const chatRoomAttachmentsBlock = await toChatRoomAttachmentsBlock(transaction, topicId, teamId)
 
 	// one question through the versioned template: the summary, the attachments, and the chat messages
@@ -90,6 +90,7 @@ export function toChatRoomTranscriptLine({ authorUsername, content, repliedTo }:
 async function toChatRoomMessages(
 	transaction: DbTransaction,
 	topicId: string | null,
+	teamId: string,
 	windowChatMessages: (typeof chatRoomMessages.$inferSelect)[],
 ): Promise<string> {
 	// the replied-to ids the window itself does not include
@@ -100,7 +101,7 @@ async function toChatRoomMessages(
 			(chatMessageId): chatMessageId is number => chatMessageId !== null && !messageRowByMessageId.has(chatMessageId),
 		)
 
-	// a reply may answer a line older than the window, so those rows are read by id in one batch
+	// a reply may answer a line older than the window, so those rows are read by id in one batch, within this room's team
 	const answeredMessageRows =
 		answeredMessageIds.length === 0
 			? []
@@ -108,7 +109,11 @@ async function toChatRoomMessages(
 					.select()
 					.from(chatRoomMessages)
 					.where(
-						and(toTopicFilter(chatRoomMessages.topicId, topicId), inArray(chatRoomMessages.id, answeredMessageIds)),
+						and(
+							toTopicFilter(chatRoomMessages.topicId, topicId),
+							eq(chatRoomMessages.teamId, teamId),
+							inArray(chatRoomMessages.id, answeredMessageIds),
+						),
 					)
 
 	// the fetched rows join the window's map, so every reference resolves the same way

@@ -2,9 +2,15 @@
 // each write checks edit access, mutates the ydoc threads map under the note's lock, mirrors sql, and fans out
 import { DefaultThreadStoreAuth } from "@blocknote/core/comments"
 import { YjsThreadStore } from "@blocknote/core/yjs"
+import {
+	noteCommentReactionPayload,
+	noteCommentThreadPayload,
+	noteCommentWritePayload,
+} from "@carlnotes/contracts/payloads"
 import { type DbTransaction, db } from "@carlnotes/db"
 import { noteComments, noteCommentThreads, notes } from "@carlnotes/db/schema/notes"
 import { trackEvent } from "@carlnotes/server/analytics"
+import { zValidator } from "@hono/zod-validator"
 import { and, eq, inArray, not, sql } from "drizzle-orm"
 import { type Context, Hono } from "hono"
 import * as Y from "yjs"
@@ -142,7 +148,7 @@ function toThreadErrorResponse(context: Context, error: unknown): Response {
 
 // the note comment routes, shaped to the editor's REST thread store calls
 export const noteCommentThreadsRoute = new Hono<AppEnv>()
-	.post("/notes/:id/threads", async (context) => {
+	.post("/notes/:id/threads", zValidator("json", noteCommentThreadPayload), async (context) => {
 		// a new thread with its first comment
 		const userId = currentUser(context)
 		const noteId = userId ? await loadCommentableNoteId(context, context.req.param("id")) : null
@@ -151,10 +157,10 @@ export const noteCommentThreadsRoute = new Hono<AppEnv>()
 		}
 
 		// the store generates the thread and comment ids
-		const body = await context.req.json()
+		const noteCommentThread = context.req.valid("json")
 		try {
 			const outcome = await mutateNoteThreads(noteId, userId, null, (threadStore) =>
-				threadStore.createThread({ initialComment: body?.initialComment ?? { body: undefined } }),
+				threadStore.createThread(noteCommentThread),
 			)
 			if (!outcome) {
 				return context.json({ error: "not found" }, 404)
@@ -166,7 +172,7 @@ export const noteCommentThreadsRoute = new Hono<AppEnv>()
 			return toThreadErrorResponse(context, error)
 		}
 	})
-	.post("/notes/:id/threads/:threadId/comments", async (context) => {
+	.post("/notes/:id/threads/:threadId/comments", zValidator("json", noteCommentWritePayload), async (context) => {
 		// one reply into an existing thread
 		const userId = currentUser(context)
 		const noteId = userId ? await loadCommentableNoteId(context, context.req.param("id")) : null
@@ -176,10 +182,10 @@ export const noteCommentThreadsRoute = new Hono<AppEnv>()
 
 		// the store appends the comment and saves the thread
 		const threadId = context.req.param("threadId")
-		const body = await context.req.json()
+		const { comment } = context.req.valid("json")
 		try {
 			const outcome = await mutateNoteThreads(noteId, userId, threadId, (threadStore) =>
-				threadStore.addComment({ threadId, comment: body?.comment ?? { body: undefined } }),
+				threadStore.addComment({ threadId, comment }),
 			)
 			if (!outcome) {
 				return context.json({ error: "not found" }, 404)
@@ -191,30 +197,30 @@ export const noteCommentThreadsRoute = new Hono<AppEnv>()
 			return toThreadErrorResponse(context, error)
 		}
 	})
-	.put("/notes/:id/threads/:threadId/comments/:commentId", async (context) => {
-		// edit one comment's body, own comments only by the store's rules
-		const userId = currentUser(context)
-		const noteId = userId ? await loadCommentableNoteId(context, context.req.param("id")) : null
-		if (!userId || !noteId) {
-			return context.json({ error: "not found" }, 404)
-		}
+	.put(
+		"/notes/:id/threads/:threadId/comments/:commentId",
+		zValidator("json", noteCommentWritePayload),
+		async (context) => {
+			// edit one comment's body, own comments only by the store's rules
+			const userId = currentUser(context)
+			const noteId = userId ? await loadCommentableNoteId(context, context.req.param("id")) : null
+			if (!userId || !noteId) {
+				return context.json({ error: "not found" }, 404)
+			}
 
-		// the store checks the comment's ownership
-		const threadId = context.req.param("threadId")
-		const body = await context.req.json()
-		try {
-			const outcome = await mutateNoteThreads(noteId, userId, threadId, (threadStore) =>
-				threadStore.updateComment({
-					threadId,
-					commentId: context.req.param("commentId"),
-					comment: body?.comment ?? { body: undefined },
-				}),
-			)
-			return outcome ? context.json({ ok: true }) : context.json({ error: "not found" }, 404)
-		} catch (error) {
-			return toThreadErrorResponse(context, error)
-		}
-	})
+			// the store checks the comment's ownership
+			const threadId = context.req.param("threadId")
+			const { comment } = context.req.valid("json")
+			try {
+				const outcome = await mutateNoteThreads(noteId, userId, threadId, (threadStore) =>
+					threadStore.updateComment({ threadId, commentId: context.req.param("commentId"), comment }),
+				)
+				return outcome ? context.json({ ok: true }) : context.json({ error: "not found" }, 404)
+			} catch (error) {
+				return toThreadErrorResponse(context, error)
+			}
+		},
+	)
 	.delete("/notes/:id/threads/:threadId/comments/:commentId", async (context) => {
 		// remove one comment. the editor sends soft deletes as a query flag
 		const userId = currentUser(context)
@@ -300,30 +306,30 @@ export const noteCommentThreadsRoute = new Hono<AppEnv>()
 			return toThreadErrorResponse(context, error)
 		}
 	})
-	.post("/notes/:id/threads/:threadId/comments/:commentId/reactions", async (context) => {
-		// add one emoji reaction
-		const userId = currentUser(context)
-		const noteId = userId ? await loadCommentableNoteId(context, context.req.param("id")) : null
-		if (!userId || !noteId) {
-			return context.json({ error: "not found" }, 404)
-		}
+	.post(
+		"/notes/:id/threads/:threadId/comments/:commentId/reactions",
+		zValidator("json", noteCommentReactionPayload),
+		async (context) => {
+			// add one emoji reaction
+			const userId = currentUser(context)
+			const noteId = userId ? await loadCommentableNoteId(context, context.req.param("id")) : null
+			if (!userId || !noteId) {
+				return context.json({ error: "not found" }, 404)
+			}
 
-		// the reaction keys on the user and emoji, so a repeat is a no-op
-		const threadId = context.req.param("threadId")
-		const body = await context.req.json()
-		try {
-			const outcome = await mutateNoteThreads(noteId, userId, threadId, (threadStore) =>
-				threadStore.addReaction({
-					threadId,
-					commentId: context.req.param("commentId"),
-					emoji: String(body?.emoji ?? ""),
-				}),
-			)
-			return outcome ? context.json({ ok: true }) : context.json({ error: "not found" }, 404)
-		} catch (error) {
-			return toThreadErrorResponse(context, error)
-		}
-	})
+			// the reaction keys on the user and emoji, so a repeat is a no-op
+			const threadId = context.req.param("threadId")
+			const { emoji } = context.req.valid("json")
+			try {
+				const outcome = await mutateNoteThreads(noteId, userId, threadId, (threadStore) =>
+					threadStore.addReaction({ threadId, commentId: context.req.param("commentId"), emoji }),
+				)
+				return outcome ? context.json({ ok: true }) : context.json({ error: "not found" }, 404)
+			} catch (error) {
+				return toThreadErrorResponse(context, error)
+			}
+		},
+	)
 	.delete("/notes/:id/threads/:threadId/comments/:commentId/reactions/:emoji", async (context) => {
 		// remove one emoji reaction
 		const userId = currentUser(context)

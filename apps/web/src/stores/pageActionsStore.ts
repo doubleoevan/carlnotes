@@ -52,6 +52,11 @@ function savePageActions(actions: PageActions | null): void {
 export function useRegisterPageActions(actions: PageActions | null): void {
 	// each render builds a new actions object, and react would count every one as a change
 	const signature = JSON.stringify(actions, (_, value) => (typeof value === "function" ? "handler" : value))
+	// the latest handlers replace the stored ones on every commit, with no publish. a page that re-renders with a new
+	// onSelect closure under the same signature stores the new closure
+	useEffect(() => {
+		pageActions = actions
+	})
 	// biome-ignore lint/correctness/useExhaustiveDependencies: the signature compares the actions by content
 	useEffect(() => {
 		savePageActions(actions)

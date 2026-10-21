@@ -274,8 +274,11 @@ type UpsertFindingOptions = {
 // whether the upsert added the finding to the topic, and the relevance score that it stored
 type UpsertFindingResult = { isNew: boolean; relevanceScore: number }
 
-// upsert one finding per topic and resource, and return whether the finding is new and the score that it stored
-async function upsertFinding({
+/**
+ * Upserts one finding per topic and resource, and returns whether the finding is new and the score that it stored.
+ * The scan that found the finding is written on the insert alone, and a re-score updates the review columns.
+ */
+export async function upsertFinding({
 	scan,
 	topicId,
 	resource,
@@ -303,15 +306,18 @@ async function upsertFinding({
 	const topicResourceRef = { topicId, resourceId: resource.id }
 	const [findingRow] = await db
 		.insert(findings)
-		// the finding includes the relevance score and explanation, the scan that produced them, and a chapter's rating
+		// the finding includes the relevance score and explanation, the scan that produced them and first found the
+		// finding, and a chapter's rating
 		.values({
 			...topicResourceRef,
 			...review,
+			foundScanId: scan.id,
 			relevanceScore: insertedScore,
 			isFromCustomSource,
 			rating: toPodcastEpisodeChapterRatingSql(topicResourceRef),
 		})
-		// a re-score hits the topic and resource unique constraint, so update that row in place
+		// a re-score hits the topic and resource unique constraint, so update that row in place. the scan that first
+		// found the finding stays
 		.onConflictDoUpdate({
 			target: [findings.topicId, findings.resourceId],
 			set: { ...review, relevanceScore: updatedScoreSql, isFromCustomSource: isFromCustomSourceSql },

@@ -20,11 +20,11 @@ import {
 	toPlannedFindings,
 } from "./planPodcastEpisode"
 
-// a Topic's Finding from the given Scan, with ids that follow from its name,
+// a Topic's Finding that the given Scan first found, with ids that follow from its name,
 // and any score, rating, bookmark, or url Source page flag that the test overrides
 function toFindingRow(
 	name: string,
-	scanId: string,
+	foundScanId: string,
 	topicFindingRowOverrides: Partial<
 		Pick<TopicFindingRow, "relevanceScore" | "rating" | "isBookmarked" | "isUrlSourcePage">
 	> = {},
@@ -33,7 +33,7 @@ function toFindingRow(
 		findingId: `finding-${name}`,
 		resourceId: `resource-${name}`,
 		sourceUrl: `https://a.com/${name}`,
-		scanId,
+		foundScanId,
 		relevanceScore: topicFindingRowOverrides.relevanceScore ?? 0,
 		rating: topicFindingRowOverrides.rating ?? null,
 		isBookmarked: topicFindingRowOverrides.isBookmarked ?? false,
@@ -241,4 +241,9 @@ test("one plan sums the billed user's month spend once", async () => {
 		plannedFindings: [{ findingId: "finding-1", resourceId: "resource-1", sourceUrl: "https://a.com/1" }],
 	})
 	expect(sentQueries.filter((sentQuery) => sentQuery.text.includes("sum("))).toHaveLength(3)
+
+	// the Scan's own Findings are the ones it first found, so the read selects the found scan, never the latest review's
+	const findingsQuery = sentQueries.find((sentQuery) => sentQuery.text.includes('from "findings"'))
+	expect(findingsQuery?.text).toContain('"findings"."found_scan_id"')
+	expect(findingsQuery?.text).not.toContain('"findings"."scan_id"')
 })

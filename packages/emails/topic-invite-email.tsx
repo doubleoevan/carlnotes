@@ -7,7 +7,7 @@ import { Link } from "@react-email/components"
 import { render } from "@react-email/render"
 import type { ReactElement } from "react"
 import AuthEmail, { type AuthEmailProps } from "./auth-email"
-import { summaryLink } from "./topic-scan-email"
+import { summaryLink } from "./emailShell"
 
 // what an invitation says: who invited, to which topic, and the address the invitation is tied to
 export type TopicInviteEmailProps = {
@@ -52,7 +52,7 @@ function toAuthEmailProps({
 		),
 		buttonLabel: "See the topic",
 		url: inviteUrl,
-		linkNote: `This invitation was sent to ${inviteeEmail}. Sign up or log in and the topic opens for you. Subscribing is your call once you've had a look.`,
+		linkNote: `This invitation was sent to ${inviteeEmail}. Sign up or log in and the topic opens for you. Following is your call once you've had a look.`,
 		closingNote: "Not interested? Ignore this email and nothing will change.",
 		appUrl,
 	}

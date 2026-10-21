@@ -1,9 +1,10 @@
 // the topic-scan email: a designed, deliverable summary of a scheduled Scan's new Findings.
 // authored as a react-email template, so it can be previewed with `bun run dev:email` and rendered to html at send time
-import { Body, Container, Head, Heading, Hr, Html, Img, Link, Preview, Section, Text } from "@react-email/components"
+import { Img, Link, Section, Text } from "@react-email/components"
 import { render } from "@react-email/render"
 import Markdown from "markdown-to-jsx"
 import type { CSSProperties, ReactElement, ReactNode } from "react"
+import { EmailFooter, EmailIntro, EmailShell, footerBrandLink, LinkOrText, summaryLink } from "./emailShell"
 
 // the urls a recap may link to: this email's own Finding urls
 export type AllowedNoteUrls = ReadonlySet<string>
@@ -69,7 +70,7 @@ export default function TopicScanEmail({
 
 			{/* the footer with the one-click unsubscribe link */}
 			<EmailFooter unsubscribeUrl={unsubscribeUrl}>
-				{"You're receiving this because you subscribe to emails for "}
+				{"You're receiving this because you follow "}
 				<LinkOrText href={topicUrl} style={footerBrandLink}>
 					{topicName}
 				</LinkOrText>
@@ -80,53 +81,6 @@ export default function TopicScanEmail({
 				{"."}
 			</EmailFooter>
 		</EmailShell>
-	)
-}
-
-/**
- * The shared page chrome every CarlNotes email renders inside: the inbox preheader, the tinted body, and the
- * brand header linking home.
- */
-export function EmailShell({
-	preview,
-	appUrl,
-	children,
-}: {
-	preview: string
-	appUrl?: string
-	children: ReactNode
-}): ReactElement {
-	return (
-		<Html>
-			<Head />
-			<Preview>{preview}</Preview>
-			<Body style={main}>
-				<Container style={container}>
-					{/* the CarlNotes brand header, linking home */}
-					<Section style={header}>
-						<Text style={brand}>
-							<span style={cup}>{"☕ "}</span>
-							<LinkOrText href={appUrl} style={brandLink}>
-								CarlNotes
-							</LinkOrText>
-						</Text>
-					</Section>
-					{children}
-				</Container>
-			</Body>
-		</Html>
-	)
-}
-
-/**
- * An email's heading and the lead sentence under it.
- */
-export function EmailIntro({ heading, children }: { heading: string; children: ReactNode }): ReactElement {
-	return (
-		<Section style={intro}>
-			<Heading style={h1}>{heading}</Heading>
-			<Text style={summaryText}>{children}</Text>
-		</Section>
 	)
 }
 
@@ -257,31 +211,6 @@ export function FindingCards({ findings }: { findings: TopicScanEmailFinding[] }
 	)
 }
 
-/**
- * The rule and small print that close an email, with the unsubscribe link only when the caller has one.
- */
-export function EmailFooter({
-	unsubscribeUrl,
-	children,
-}: {
-	unsubscribeUrl?: string
-	children: ReactNode
-}): ReactElement {
-	return (
-		<>
-			<Hr style={hr} />
-			<Section>
-				<Text style={footerText}>{children}</Text>
-				{unsubscribeUrl ? (
-					<Link href={unsubscribeUrl} style={footerLink}>
-						Unsubscribe
-					</Link>
-				) : null}
-			</Section>
-		</>
-	)
-}
-
 // sample data the `dev:email` preview renders, so the template shows real-looking content while you design
 TopicScanEmail.PreviewProps = {
 	topicName: "LLM tooling",
@@ -353,29 +282,6 @@ function closingNote(findingCount: number): string {
 	return findingCount === 0 ? " Carl has high standards." : ""
 }
 
-/**
- * A label as a link when its url is known, and as plain text when it is not,
- * so the email still reads without an app base url configured.
- */
-export function LinkOrText({
-	href,
-	style,
-	children,
-}: {
-	href?: string
-	style: CSSProperties
-	children: ReactNode
-}): ReactElement {
-	return href ? (
-		<Link href={href} style={style}>
-			{children}
-		</Link>
-	) : (
-		// biome-ignore lint/complexity/noUselessFragments: children is a ReactNode, not assignable to the declared ReactElement return type on its own
-		<>{children}</>
-	)
-}
-
 // the root domain of a url for the muted line under each title, falling back to the url itself
 function hostOf(url: string): string {
 	try {
@@ -385,31 +291,6 @@ function hostOf(url: string): string {
 	}
 }
 
-// coffee-toned palette kept high-contrast and image-free so it renders well and stays out of spam filters
-const main: CSSProperties = {
-	backgroundColor: "#f4f1ea",
-	fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif",
-	padding: "24px 0",
-}
-const container: CSSProperties = {
-	backgroundColor: "#ffffff",
-	border: "1px solid #ece7de",
-	borderRadius: "12px",
-	margin: "0 auto",
-	maxWidth: "600px",
-	overflow: "hidden",
-	padding: "8px 28px 24px",
-}
-const header: CSSProperties = { paddingTop: "20px" }
-const brand: CSSProperties = { color: "#7c4a1e", fontSize: "18px", fontWeight: 700, margin: "0" }
-// the brand, heading, and footer links all carry the coffee tones, underlined only in the small footer text
-const brandLink: CSSProperties = { color: "#7c4a1e", textDecoration: "none" }
-export const summaryLink: CSSProperties = { color: "#7c4a1e", textDecoration: "none", fontWeight: 600 }
-export const footerBrandLink: CSSProperties = { color: "#7c4a1e", textDecoration: "underline" }
-const cup: CSSProperties = { fontSize: "22px" }
-const intro: CSSProperties = { paddingTop: "8px" }
-const h1: CSSProperties = { color: "#2b2b2b", fontSize: "22px", fontWeight: 700, margin: "8px 0 4px" }
-const summaryText: CSSProperties = { color: "#5b5b5b", fontSize: "15px", lineHeight: "1.5", margin: "0" }
 // the recap block, tinted a shade warmer than the finding cards so it reads as Carl's voice instead of another link
 const summaryCard: CSSProperties = {
 	backgroundColor: "#f7f2e9",
@@ -475,6 +356,3 @@ const cardNumber: CSSProperties = { color: "#a79c8c", fontWeight: 400 }
 const cardHost: CSSProperties = { color: "#a79c8c", fontSize: "12px", margin: "2px 0 0" }
 const cardHostLink: CSSProperties = { color: "#a79c8c", textDecoration: "none" }
 const cardNote: CSSProperties = { color: "#4b4b4b", fontSize: "14px", lineHeight: "1.5", margin: "8px 0 0" }
-const hr: CSSProperties = { borderColor: "#ece7de", margin: "24px 0 16px" }
-const footerText: CSSProperties = { color: "#9a938a", fontSize: "12px", lineHeight: "1.5", margin: "0 0 6px" }
-const footerLink: CSSProperties = { color: "#7c4a1e", fontSize: "12px" }

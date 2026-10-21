@@ -5,6 +5,7 @@ import {
 	sendTeamMemberRole,
 	setTeamMemberVisibility,
 } from "@carlnotes/client/teamClient"
+import { isLeaderRole } from "@carlnotes/contracts/enums"
 import type { TeamPageResponse } from "@carlnotes/contracts/teams"
 import { toCountLabel } from "@carlnotes/core/lib/labels"
 import { X } from "lucide-react"
@@ -107,7 +108,7 @@ export function TeamMembersTable({
 									: `Total ${toCountLabel(activeMembers.length + hiddenMemberCount, "member")}`}
 							</td>
 							<td className="py-2 pr-4">
-								{toCountLabel(activeMembers.filter((member) => member.role === "leader").length, "leader")}
+								{toCountLabel(activeMembers.filter((member) => isLeaderRole(member.role)).length, "leader")}
 							</td>
 							<td className="py-2 pr-4">
 								{`${activeMembers.filter((member) => member.isMemberVisible).length}/${activeMembers.length} shown`}
@@ -146,7 +147,7 @@ function MemberRow({
 }) {
 	// the last-leader rejection toast shows what to do first
 	const handleRoleChange = async (nextRole: string): Promise<void> => {
-		if (!(await sendTeamMemberRole(teamId, member.userId, nextRole === "leader" ? "leader" : "member"))) {
+		if (!(await sendTeamMemberRole(teamId, member.userId, isLeaderRole(nextRole) ? "leader" : "member"))) {
 			toast.error("Promote another leader first. A team can't lose its last one.")
 		}
 		onChanged()

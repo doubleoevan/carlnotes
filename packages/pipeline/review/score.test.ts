@@ -1,9 +1,11 @@
-// score tests for the promotion threshold, bounded concurrency, the plan limit check, the score prompt, and the review
-// fields a re-score writes
+// score tests for the promotion threshold, bounded concurrency, the plan limit check, the score prompt, the review
+// fields a re-score writes, and the found scan that a re-score keeps
 import { expect, test } from "bun:test"
+import { restoreConnectionPool, stubConnectionPool } from "@carlnotes/db/connectionPoolStub"
+import type { resources, scans } from "@carlnotes/db/schema/scans"
 import { canScoreResource, newBudget } from "@carlnotes/models/budget"
 import { runWithConcurrency } from "@carlnotes/server/concurrency"
-import { buildScorePrompt, isPromoted, toFindingReviewFields } from "./score"
+import { buildScorePrompt, isPromoted, toFindingReviewFields, upsertFinding } from "./score"
 
 // a high cheap-model score earns promotion to the premium score-model's re-score
 test("isPromoted gates on the promotion threshold", () => {
@@ -87,6 +89,41 @@ test("a review names only the columns a re-score decides", () => {
 	])
 	for (const userColumn of ["rating", "ratedByUserId", "ratedTeamId", "ratedRole", "viewCount"]) {
 		expect({ userColumn, isWritten: userColumn in review }).toEqual({ userColumn, isWritten: false })
+	}
+})
+
+// the scan that first found a finding is written with the insert alone. a re-score moves scan_id to the re-scoring scan
+// and leaves found_scan_id, so a re-scored finding is not new to the digest or the podcast episode's plan again
+test("upsertFinding writes the found scan on the insert and never on the re-score", async () => {
+	// a pool whose upsert returns an updated row
+	const sentQueries = stubConnectionPool(({ text }) =>
+		text.startsWith('insert into "findings"') ? [["finding-1", false, 0.5]] : [],
+	)
+	try {
+		// the re-scoring scan, the resource it scored, and the review it wrote
+		const scan = { id: "scan-2" } as typeof scans.$inferSelect
+		const resource = { id: "resource-1", contentHash: "content-hash" } as typeof resources.$inferSelect
+		const review = { score: 0.5, relevanceExplanation: "why it matters", topicContextHash: "context-hash" }
+
+		// re-score a finding an earlier scan found, which the pool reports as an updated row
+		const upsertFindingResult = await upsertFinding({
+			scan,
+			topicId: "topic-1",
+			resource,
+			...review,
+			isFromCustomSource: false,
+		})
+		expect(upsertFindingResult).toEqual({ isNew: false, relevanceScore: 0.5 })
+
+		// the insert names the found scan, and the conflict update names the latest scan alone
+		const upsertQuery = sentQueries.find((sentQuery) => sentQuery.text.startsWith('insert into "findings"'))
+		const [insertClause = "", updateClause = ""] = (upsertQuery?.text ?? "").split("on conflict")
+		expect(insertClause).toContain('"found_scan_id"')
+		expect(updateClause).toContain('"scan_id"')
+		expect(updateClause).not.toContain('"found_scan_id"')
+	} finally {
+		// put the connection pool's own query back
+		restoreConnectionPool()
 	}
 })
 

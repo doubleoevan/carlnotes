@@ -1,6 +1,6 @@
 import { authClient } from "@carlnotes/client/authClient"
 import { fetchPodcastEpisodePage } from "@carlnotes/client/podcastEpisodeClient"
-import type { GatedTopicVisibility } from "@carlnotes/client/topicClient"
+import { isPublishedPodcastEpisode } from "@carlnotes/contracts/podcast"
 import type { PodcastEpisodePageResponse } from "@carlnotes/contracts/podcastEpisodePage"
 import { isTopicSlugStale, toPodcastEpisodePath, toTopicPath } from "@carlnotes/contracts/seo"
 import { useMatch, useNavigate, useParams } from "@tanstack/react-router"
@@ -53,8 +53,8 @@ export function PodcastEpisodePage() {
 		loadedPodcastEpisodePage ?? undefined,
 	)
 
-	// the visibility of the episode's invite or private topic if the user may not see the topic, or null
-	const [gatedVisibility, setGatedVisibility] = useState<GatedTopicVisibility | null>(null)
+	// whether the episode's topic is an invite topic the user may not see
+	const [isTopicGated, setIsTopicGated] = useState(false)
 
 	// the podcast feed dialog's open state, the actions menu's open dialog, and the New Topic button's dialog
 	const [isPodcastFeedDialogOpen, setIsPodcastFeedDialogOpen] = useState(false)
@@ -68,13 +68,11 @@ export function PodcastEpisodePage() {
 				setPodcastEpisodePage(
 					podcastEpisodePageResult.status === "visible" ? podcastEpisodePageResult.podcastEpisodePage : null,
 				)
-				setGatedVisibility(
-					podcastEpisodePageResult.status === "gated" ? podcastEpisodePageResult.topicGate.visibility : null,
-				)
+				setIsTopicGated(podcastEpisodePageResult.status === "gated")
 			})
 			.catch(() => {
 				setPodcastEpisodePage(null)
-				setGatedVisibility(null)
+				setIsTopicGated(false)
 			})
 	}, [topicId, season, episodeNumber])
 	const pageId = `${topicId}/${season}/${episodeNumber}`
@@ -89,7 +87,7 @@ export function PodcastEpisodePage() {
 		}
 		const { topic, podcastEpisode } = podcastEpisodePage
 		const isUrlPodcastEpisode = `${topic.id}/${podcastEpisode.season}/${podcastEpisode.episodeNumber}` === pageId
-		if (isUrlPodcastEpisode && isTopicSlugStale(topic, topicSlug)) {
+		if (isUrlPodcastEpisode && isTopicSlugStale(topic, topicSlug) && isPublishedPodcastEpisode(podcastEpisode)) {
 			void navigate({ to: toPodcastEpisodePath(topic, podcastEpisode), replace: true })
 		}
 	}, [podcastEpisodePage, pageId, topicSlug, navigate])
@@ -112,12 +110,11 @@ export function PodcastEpisodePage() {
 			</main>
 		)
 	}
-	if (podcastEpisodePage === null && gatedVisibility) {
+	if (podcastEpisodePage === null && isTopicGated) {
 		return (
 			<main className={PAGE_CLASS}>
 				<PodcastEpisodeSkeleton />
 				<TopicGateNotice
-					visibility={gatedVisibility}
 					isSignedIn={Boolean(session)}
 					returnPath={`/topics/${topicId}/${topicSlug ?? "topic"}/episodes/${season}/${episodeNumber}`}
 				/>

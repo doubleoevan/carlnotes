@@ -7,7 +7,7 @@ import { teamMembers, teams } from "@carlnotes/db/schema/teams"
 import { topics } from "@carlnotes/db/schema/topics"
 import { users } from "@carlnotes/db/schema/users"
 import { trackEvent } from "@carlnotes/server/analytics"
-import { and, eq, or, sql } from "drizzle-orm"
+import { and, eq, isNull, or, type SQL, sql } from "drizzle-orm"
 import { isLeaderRole } from "../authorization"
 import type { AnalyticsProperties } from "../currentUser"
 import { joinTeam, toTeamRole } from "../team/members"
@@ -137,7 +137,7 @@ export async function acceptTeamInvite(
 
 	// a leader's invitation joins the team automatically, and so does one addressed to this person by anyone
 	const creatorRole = invite.invitedByUserId ? await toTeamRole(invite.invitedByUserId, teamRow.id) : null
-	const isLeaderInvite = creatorRole !== null && isLeaderRole(creatorRole)
+	const isLeaderInvite = isLeaderRole(creatorRole)
 	const isAutomaticJoin = isLeaderInvite || (await isInviteForUser(invite, userId))
 
 	// an open link admits when some other live invitation already names this person
@@ -190,11 +190,22 @@ export async function isInviteForUser(
 		return false
 	}
 	// the user's verified address must be the one the invite names
-	const [user] = await db
+	const userEmail = await loadUserEmail(userId)
+	return Boolean(userEmail?.isEmailVerified && userEmail.email === invite.email)
+}
+
+// the user's address and whether it is verified
+type UserEmail = { email: string; isEmailVerified: boolean }
+
+/**
+ * Loads the user's address and whether it is verified, or undefined for a missing user.
+ */
+export async function loadUserEmail(userId: string): Promise<UserEmail | undefined> {
+	const [userEmail] = await db
 		.select({ email: users.email, isEmailVerified: users.emailVerified })
 		.from(users)
 		.where(eq(users.id, userId))
-	return Boolean(user?.isEmailVerified && user.email === invite.email)
+	return userEmail
 }
 
 /**
@@ -215,21 +226,35 @@ async function toAutomaticInvite(
 	teamId: string,
 	acceptedInviteId: string,
 ): Promise<typeof invites.$inferSelect | null> {
-	// an invitation addresses a user by their account, or by an address their account verified
-	const [user] = await db
-		.select({ email: users.email, isEmailVerified: users.emailVerified })
-		.from(users)
-		.where(eq(users.id, userId))
-	const isAddressedToUser = user?.isEmailVerified
-		? or(eq(invites.invitedUserId, userId), eq(invites.email, user.email))
-		: eq(invites.invitedUserId, userId)
+	// a missing user has no invitations
+	const userEmail = await loadUserEmail(userId)
+	if (!userEmail) {
+		return null
+	}
 
 	// both addressings have their own unique row, so either one may match and the first live one admits
 	const userInvites = await db
 		.select()
 		.from(invites)
-		.where(and(eq(invites.teamId, teamId), isAddressedToUser))
+		.where(and(eq(invites.teamId, teamId), toInviteAddressedToUserFilter({ userId, ...userEmail })))
 	return userInvites.find((invite) => isAutomaticInvite(invite, acceptedInviteId, new Date())) ?? null
+}
+
+// the user an invitation may address, by id or by a verified address
+type InviteAddressedToUserOptions = { userId: string } & UserEmail
+
+/**
+ * The filter for the invitations addressed to a user. A username invitation matches by the invited user id, and an
+ * email invitation matches by its address only for a verified user.
+ */
+export function toInviteAddressedToUserFilter({
+	userId,
+	email,
+	isEmailVerified,
+}: InviteAddressedToUserOptions): SQL | undefined {
+	// a username invitation names the account outright
+	const usernameInviteFilter = and(isNull(invites.email), eq(invites.invitedUserId, userId))
+	return isEmailVerified ? or(usernameInviteFilter, eq(invites.email, email)) : usernameInviteFilter
 }
 
 // one use spent from the token, conditional on the limit. false if the link had none left

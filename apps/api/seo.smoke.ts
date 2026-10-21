@@ -96,9 +96,15 @@ try {
 			})
 			.returning()
 		failUnless(scan !== undefined, `the scan insert on ${topicId} returned no row`)
-		await db
-			.insert(findings)
-			.values(resourceIds.map((resourceId) => ({ topicId, resourceId, scanId: scan.id, relevanceScore: 0.9 })))
+		await db.insert(findings).values(
+			resourceIds.map((resourceId) => ({
+				topicId,
+				resourceId,
+				scanId: scan.id,
+				foundScanId: scan.id,
+				relevanceScore: 0.9,
+			})),
+		)
 	}
 
 	// loadPublicTopics lists the public topic, and neither the private topic nor the thin one

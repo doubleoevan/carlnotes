@@ -12,6 +12,7 @@ import { zValidator } from "@hono/zod-validator"
 import { eq } from "drizzle-orm"
 import { type Context, Hono } from "hono"
 import { stream } from "hono/streaming"
+import { isLeaderRole } from "./authorization"
 import {
 	MAX_AVATAR_BYTES,
 	saveAvatarSource,
@@ -118,7 +119,7 @@ export const avatarsRoute = new Hono<AppEnv>()
 
 		// only a leader may change the team's avatar, and the 404 hides the team from everyone else
 		const teamId = context.req.param("id")
-		if ((await toTeamRole(userId, teamId)) !== "leader") {
+		if (!isLeaderRole(await toTeamRole(userId, teamId))) {
 			return context.json({ error: "not found" }, 404)
 		}
 

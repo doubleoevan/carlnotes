@@ -25,12 +25,20 @@ describe("a setting in dollars", () => {
 	const restoreEnvSettings = saveEnvSettings([settingName])
 	afterEach(restoreEnvSettings)
 
-	test("reads the default when unset, and the configured number when set", () => {
-		// unset, then set to twelve and a half dollars
+	test("reads the default when unset or empty, and the configured number when set", () => {
+		// unset, empty, and blank each read as the default, never as zero dollars
 		delete Bun.env[settingName]
 		expect(readDollarSetting(settingName, 0.5)).toBe(0.5)
+		Bun.env[settingName] = ""
+		expect(readDollarSetting(settingName, 0.5)).toBe(0.5)
+		Bun.env[settingName] = "  "
+		expect(readDollarSetting(settingName, 0.5)).toBe(0.5)
+
+		// twelve and a half dollars, and an explicit zero
 		Bun.env[settingName] = "12.5"
 		expect(readDollarSetting(settingName, 0.5)).toBe(12.5)
+		Bun.env[settingName] = "0"
+		expect(readDollarSetting(settingName, 0.5)).toBe(0)
 	})
 
 	test("throws on a value that is not a number of dollars, zero or more", () => {

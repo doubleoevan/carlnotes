@@ -16,7 +16,16 @@ import { matchesTopicFindingFilter } from "@carlnotes/core/lib/topicFindingFilte
 import { toSortedTopicFindings } from "@carlnotes/core/lib/topicFindingSorts"
 import { toPossibleSourceUrls } from "@carlnotes/core/lib/topicPromptUrls"
 import { toScanRecapPlaceholder } from "@/components/topic/TopicScanRecap"
-import { cn, shouldHandleLinkClick, toAuthorizeReturnPath, toLinkClickHandler, toSafeRedirectPath } from "./utils"
+import {
+	cn,
+	isSendKey,
+	NEXT_SCAN_DISCLAIMER,
+	shouldHandleLinkClick,
+	toAuthorizeReturnPath,
+	toLinkClickHandler,
+	toSafeRedirectPath,
+	toSubscribeTooltip,
+} from "./utils"
 
 // twMerge makes later tailwind classes win over earlier conflicting ones
 test("cn merges conflicting tailwind classes", () => {
@@ -278,6 +287,23 @@ test("an oauth query returns to the authorize endpoint with the query intact", (
 test("a visit without the oauth parameters returns no authorize path", () => {
 	expect(toAuthorizeReturnPath(new URLSearchParams({ next: "/topics/topic-1" }))).toBeNull()
 	expect(toAuthorizeReturnPath(new URLSearchParams({ client_id: "client-1" }))).toBeNull()
+})
+
+// Enter sends, Shift+Enter starts a new line, and Enter confirming an IME candidate sends nothing
+test("isSendKey sends on a plain Enter outside an IME composition", () => {
+	const enterPress = { key: "Enter", shiftKey: false, nativeEvent: { isComposing: false } }
+	expect(isSendKey(enterPress)).toBe(true)
+	expect(isSendKey({ ...enterPress, shiftKey: true })).toBe(false)
+	expect(isSendKey({ ...enterPress, key: "a" })).toBe(false)
+	expect(isSendKey({ ...enterPress, nativeEvent: { isComposing: true } })).toBe(false)
+})
+
+// the Follow button's tooltip is client-facing copy, so it says follow and never subscribe
+test("toSubscribeTooltip says follow in every state", () => {
+	expect(toSubscribeTooltip(false, false, false)).toBe("Sign up to follow")
+	expect(toSubscribeTooltip(true, true, false)).toBe("Unfollow this topic")
+	expect(toSubscribeTooltip(true, false, false)).toBe("Follow this topic")
+	expect(toSubscribeTooltip(true, false, true)).toBe(`Follow this topic. ${NEXT_SCAN_DISCLAIMER}`)
 })
 
 // a primary click with no modifier key is the app's to handle, and a modified or secondary click is the browser's

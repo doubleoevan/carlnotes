@@ -1,5 +1,6 @@
 import { fetchSeasonPodcastEpisodes } from "@carlnotes/client/podcastEpisodeClient"
 import type { PodcastEpisode, SeasonPodcastEpisodes } from "@carlnotes/contracts/podcast"
+import { isPublishedPodcastEpisode } from "@carlnotes/contracts/podcast"
 import { PODCAST_NAME } from "@carlnotes/contracts/podcastEpisodes"
 import { toPodcastEpisodePath, toTopicPath } from "@carlnotes/contracts/seo"
 import type { TopicResponse } from "@carlnotes/contracts/topics"
@@ -118,7 +119,9 @@ export function PodcastEpisodesCard({ topic, onPodcastEpisodeRemoved }: PodcastE
 							className={className}
 							isLatestPodcastEpisode={podcastEpisode.id === latestPodcastEpisodeId}
 							isPlayButtonMuted={podcastEpisode.id !== playerCardPodcastEpisodeId}
-							podcastEpisodePath={toPodcastEpisodePath(topic, podcastEpisode)}
+							podcastEpisodePath={
+								isPublishedPodcastEpisode(podcastEpisode) ? toPodcastEpisodePath(topic, podcastEpisode) : null
+							}
 							onRemovePodcastEpisode={
 								topic.podcast?.canRemovePodcastEpisodes ? () => setPodcastEpisodeToRemove(podcastEpisode) : undefined
 							}

@@ -4,7 +4,7 @@ import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import { restoreConnectionPool, stubConnectionPool } from "@carlnotes/db/connectionPoolStub"
 import * as redis from "@carlnotes/db/redis"
 import * as redisRateLimits from "@carlnotes/db/redisRateLimits"
-import * as litellm from "@carlnotes/models/litellm"
+import * as litellmProxy from "@carlnotes/models/litellmProxy"
 import { quietErrorReports } from "@carlnotes/server/monitoringTestFixtures"
 import { auth, sendAuthEmailInBackground, toSignupAvatarSource } from "./auth"
 import * as sessions from "./sessions"
@@ -31,7 +31,9 @@ async function runUserCreateHook(): Promise<Record<string, unknown>> {
 // a signup whose LiteLLM key creation fails or times out still creates the user with no key and reports the failure
 test("a signup whose key creation fails creates the user with no key and reports the failure", async () => {
 	// make the key creation time out, spy on the error report, and quiet the console
-	spyOn(litellm, "provisionLiteLLMKey").mockRejectedValue(new DOMException("The operation timed out.", "TimeoutError"))
+	spyOn(litellmProxy, "provisionLiteLLMKey").mockRejectedValue(
+		new DOMException("The operation timed out.", "TimeoutError"),
+	)
 	const reportErrorSpy = quietErrorReports()
 
 	// the user is created with a username and no key, and the failure is reported once
@@ -43,7 +45,7 @@ test("a signup whose key creation fails creates the user with no key and reports
 
 // a signup whose LiteLLM key creation succeeds stores the key on the new user
 test("a signup whose key creation succeeds creates the user with the key", async () => {
-	spyOn(litellm, "provisionLiteLLMKey").mockResolvedValue("sk-new")
+	spyOn(litellmProxy, "provisionLiteLLMKey").mockResolvedValue("sk-new")
 	expect((await runUserCreateHook()).litellmVirtualKey).toBe("sk-new")
 })
 

@@ -50,7 +50,14 @@ async function readPages(section: Section): Promise<ContentPage[]> {
 			toPage(filename, await Bun.file(`${CONTENT_ROOT}/${section}/${filename}`).text()),
 		),
 	)
-	return pages.filter((page) => page !== null).sort((first, second) => second.date.localeCompare(first.date))
+	return pages.filter((page) => page !== null).sort(compareNewestFirst)
+}
+
+/**
+ * Orders two pages newest first, with the slug breaking a date tie.
+ */
+export function compareNewestFirst(first: ContentPage, second: ContentPage): number {
+	return second.date.localeCompare(first.date) || first.slug.localeCompare(second.slug)
 }
 
 // parse one file's Markdown into a page, or null if its frontmatter is incomplete

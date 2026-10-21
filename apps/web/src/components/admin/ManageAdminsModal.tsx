@@ -1,5 +1,6 @@
 import { sendUserRole } from "@carlnotes/client/billingClient"
 import type { AdminUserRow } from "@carlnotes/contracts/admin"
+import { isAdminRole } from "@carlnotes/contracts/enums"
 import { ChevronsUpDown, ShieldUser, X } from "lucide-react"
 import { useState } from "react"
 import { toast } from "sonner"
@@ -25,7 +26,7 @@ export function ManageAdminsModal({
 }) {
 	// yourself first, then the rest of the users in the payload's order
 	const admins = users
-		.filter((user) => user.role === "admin")
+		.filter((user) => isAdminRole(user.role))
 		.sort((firstUser, secondUser) => Number(secondUser.id === signedInUserId) - Number(firstUser.id === signedInUserId))
 
 	// promote a user to an admin and show a toast
@@ -87,7 +88,7 @@ export function ManageAdminsModal({
 					))}
 				</ul>
 				<AddAdminMenu
-					users={users.filter((user) => user.role !== "admin")}
+					users={users.filter((user) => !isAdminRole(user.role))}
 					onAddAdmin={(account) => void handleAddAdmin(account)}
 				/>
 			</DialogContent>

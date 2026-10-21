@@ -1,12 +1,13 @@
 // the typed api client for the team routes
+import { isLeaderRole } from "@carlnotes/contracts/enums"
 import { type Invite, type InviteSource, inviteCreateResponse } from "@carlnotes/contracts/invites"
 import type { CreateTeamPayload, UpdateTeamPayload } from "@carlnotes/contracts/payloads"
 import type { TeamSearchResult } from "@carlnotes/contracts/search"
 import type { TeamPageResponse, TeamSummary, TeamsPageResponse } from "@carlnotes/contracts/teams"
 import { apiClient, readApiErrorMessage, showClientError, toApiUrl } from "./apiClient"
 
-// how creating a team was rejected, for the modal to show which way it went
-export type CreateTeamRejection = "quota" | "name-taken"
+// how creating a team was rejected, for the modal to show which way it went. a failure is any other rejected response
+export type CreateTeamRejection = "quota" | "name-taken" | "failed"
 
 // fetch the teams the user belongs to, for the teams page
 export async function fetchTeams(): Promise<TeamsPageResponse> {
@@ -20,7 +21,7 @@ export async function fetchTeams(): Promise<TeamsPageResponse> {
 // the teams that the user leads
 export async function fetchLeaderTeams(): Promise<TeamSummary[]> {
 	const teamsPage = await fetchTeams()
-	return teamsPage.teams.filter((team) => team.role === "leader")
+	return teamsPage.teams.filter((team) => isLeaderRole(team.role))
 }
 
 // delete one of the user's own sent team invitations
@@ -56,20 +57,45 @@ export async function fetchTeamPage(teamId: string): Promise<TeamPageResult> {
 export async function sendCreateTeam(
 	payload: CreateTeamPayload,
 ): Promise<{ teamId: string } | { rejection: CreateTeamRejection }> {
-	const response = await apiClient().api.teams.$post({ json: payload })
+	// a request that never reaches the server is a failure
+	const response = await apiClient()
+		.api.teams.$post({ json: payload })
+		.catch(() => null)
+	if (!response) {
+		return { rejection: "failed" }
+	}
 	if (response.ok) {
 		// the id names both the new page and where an avatar upload goes
 		const created = (await response.json()) as { teamId: string }
 		return { teamId: created.teamId }
 	}
-	// a taken name is reported by status, and the plan limit is the other rejection
-	return { rejection: response.status === 409 ? "name-taken" : "quota" }
+
+	// a taken name and the daily team limit are each reported by status, and any other rejection is a failure
+	if (response.status === 409) {
+		return { rejection: "name-taken" }
+	}
+	return { rejection: response.status === 429 ? "quota" : "failed" }
 }
 
-// the leader's team edits: name, description, and the public toggle
-export async function sendUpdateTeam(teamId: string, payload: UpdateTeamPayload): Promise<"name-taken" | null> {
-	const response = await apiClient().api.teams[":id"].$patch({ param: { id: teamId }, json: payload })
-	return response.status === 409 ? "name-taken" : null
+// the leader's team edits: name, description, and the public toggle. a taken name names itself, and any other
+// rejection or a request that never reaches the server is a failed save
+export async function sendUpdateTeam(
+	teamId: string,
+	payload: UpdateTeamPayload,
+): Promise<"name-taken" | "failed" | null> {
+	// a request that never reaches the server is a failed save
+	const response = await apiClient()
+		.api.teams[":id"].$patch({ param: { id: teamId }, json: payload })
+		.catch(() => null)
+	if (!response) {
+		return "failed"
+	}
+
+	// a taken name names itself, and any other rejected status is a failed save
+	if (response.status === 409) {
+		return "name-taken"
+	}
+	return response.ok ? null : "failed"
 }
 
 // whether a team name is already taken, for the form's on-blur check. the save still enforces for real

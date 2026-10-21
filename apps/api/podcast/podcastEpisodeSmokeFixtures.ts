@@ -153,7 +153,11 @@ export async function seed(): Promise<void> {
 			toPodcastEpisodeRow({ id: privatePodcastEpisodeId, topicId: privateTopicId, topicOwnerId: paidOwnerId }),
 		])
 	await db.insert(resources).values({ id: resourceId, url: `https://episodes-smoke.example/${runId}`, kind: "read" })
-	const findingTopicAndScanIds = { topicId: publicTopicId, scanId: `${publicPodcastEpisodeId}-scan` }
+	const findingTopicAndScanIds = {
+		topicId: publicTopicId,
+		scanId: `${publicPodcastEpisodeId}-scan`,
+		foundScanId: `${publicPodcastEpisodeId}-scan`,
+	}
 	await db.insert(findings).values({ id: findingId, resourceId, relevanceScore: 0.9, ...findingTopicAndScanIds })
 	const chapterTimes = { startSeconds: 0, endSeconds: 120 }
 	await db.insert(podcastEpisodeChapters).values({

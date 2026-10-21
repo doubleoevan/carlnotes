@@ -4,13 +4,14 @@
 and the evals all start. It imports `@carlnotes/db`, `@carlnotes/server`, and `@carlnotes/contracts`, with `ai`,
 `@ai-sdk/openai`, the Langfuse and OpenTelemetry packages, and `tesseract.js`.
 
-- `models.ts` — every model call, through LiteLLM; `litellm.ts` — the user keys that those calls bill to. A key is
-  created at signup, or by `loadOrProvisionUserLiteLLMKey` before a user's first model call if that user has no key. A
-  key is also replaced, read, and reset on the first of the month by the reset job
-  (`apps/worker/resetMonthlyBudgets.ts`), and `isUserLiteLLMKeyBudgetStale` tells billing whether a key's max budget
-  still matches its user's budget. Every proxy admin call times out after five seconds. A Scan creates its owner's
-  missing key before any Source runs. `litellmTestFixtures.ts` is the stub proxy, the connection pool stub that keeps
-  the call order, the user row, and the setup and restore that each LiteLLM test file runs around every test.
+- `models.ts` — every model call, through LiteLLM; `litellm.ts` — the user keys that those calls bill to, over
+  `litellmProxy.ts`, the proxy's key api that creates, deletes, and reads a key. A key is created at signup, or by
+  `loadOrProvisionUserLiteLLMKey` before a user's first model call if that user has no key. A key is also replaced,
+  read, and reset on the first of the month by the reset job (`apps/worker/resetMonthlyBudgets.ts`), and
+  `isUserLiteLLMKeyBudgetStale` tells billing whether a key's max budget still matches its user's budget. Every proxy
+  admin call times out after five seconds. A Scan creates its owner's missing key before any Source runs.
+  `litellmTestFixtures.ts` is the stub proxy, the connection pool stub that keeps the call order, the user row, and the
+  setup and restore that each LiteLLM test file runs around every test.
 - `budget.ts` — a Scan's one Budget, which every scan stage charges; nothing spends outside it. It also prices the
   calls the api meters itself: `speechCost` by its speech tier and `transcriptionCost`.
 - `telemetry.ts` traces model calls in Langfuse on its own tracer provider beside Sentry's, and both processes start

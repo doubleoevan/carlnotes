@@ -5,6 +5,8 @@ import type { ChatAttachment } from "@carlnotes/contracts/payloads"
 import { type DbTransaction, db } from "@carlnotes/db"
 import { chatRoomAttachments } from "@carlnotes/db/schema/chat"
 import {
+	clearPendingObjectDeletion,
+	recordPendingObjectDeletionBeforeUpload,
 	recordPendingObjectDeletions,
 	toChatRoomAttachmentKey,
 	toStoredObjectKeys,
@@ -161,32 +163,41 @@ export async function storeChatRoomAttachment(
 	chatMessageId: number,
 	preparedAttachment: PreparedChatRoomAttachment,
 ): Promise<void> {
-	// the bytes are stored first, so a row never points at an object that failed to store
+	// the key is recorded as pending with the upload grace period, then the bytes are stored, so a row never points at
+	// an object that failed to store
 	const attachmentId = crypto.randomUUID()
 	let objectKey: string | null = null
 	if (preparedAttachment.bytes) {
 		// the team's own chat room stores under a team path
 		objectKey = toChatRoomAttachmentKey(topicId ?? `team-${teamId}`, attachmentId, preparedAttachment.attachment.name)
+		await recordPendingObjectDeletionBeforeUpload(objectKey)
 		await uploadAttachment(
 			objectKey,
 			preparedAttachment.bytes,
 			preparedAttachment.contentType ?? "application/octet-stream",
 		)
 	}
-	await db.insert(chatRoomAttachments).values({
-		id: attachmentId,
-		topicId,
-		teamId,
-		messageId: chatMessageId,
-		uploaderUserId: userId,
-		uploaderUsername: username,
-		kind: preparedAttachment.attachment.kind,
-		name: preparedAttachment.attachment.name,
-		objectKey,
-		contentType: preparedAttachment.contentType,
-		byteSize: preparedAttachment.bytes?.byteLength,
-		context: preparedAttachment.contextText ? encryptChatText(preparedAttachment.contextText) : "",
-		status: preparedAttachment.attachment.kind === "image" ? "pending" : "ready",
+
+	// the row, with the key's pending deletion cleared in the same transaction
+	await db.transaction(async (transaction) => {
+		await transaction.insert(chatRoomAttachments).values({
+			id: attachmentId,
+			topicId,
+			teamId,
+			messageId: chatMessageId,
+			uploaderUserId: userId,
+			uploaderUsername: username,
+			kind: preparedAttachment.attachment.kind,
+			name: preparedAttachment.attachment.name,
+			objectKey,
+			contentType: preparedAttachment.contentType,
+			byteSize: preparedAttachment.bytes?.byteLength,
+			context: preparedAttachment.contextText ? encryptChatText(preparedAttachment.contextText) : "",
+			status: preparedAttachment.attachment.kind === "image" ? "pending" : "ready",
+		})
+		if (objectKey) {
+			await clearPendingObjectDeletion(objectKey, transaction)
+		}
 	})
 
 	// an image's description arrives after the post, on the uploader's own key

@@ -1,7 +1,8 @@
 // team client tests: a team avatar upload that never reaches the server fails with the generic rejection, and a rejected
-// one returns the reason the server names
+// one returns the reason the server names. a team create and a team update each read a rejection by its status
 import { afterEach, expect, test } from "bun:test"
-import { sendTeamAvatar } from "./teamClient"
+import { stubFailingFetch, stubFetch } from "./fetchTestFixtures"
+import { sendCreateTeam, sendTeamAvatar, sendUpdateTeam } from "./teamClient"
 
 // the real fetch to put back after each test
 const originalFetch = globalThis.fetch
@@ -11,12 +12,49 @@ afterEach(() => {
 
 test("a team avatar upload fails on a network error and returns the server's reason on a rejection", async () => {
 	// the request never reaches the server
-	globalThis.fetch = (async () => {
-		throw new TypeError("network down")
-	}) as unknown as typeof fetch
+	stubFailingFetch()
 	expect(await sendTeamAvatar("team-1", new File(["image"], "avatar.png"))).toBe("failed")
 
 	// the server rejects the image and names why
-	globalThis.fetch = (async () => Response.json({ error: "too-large" }, { status: 400 })) as unknown as typeof fetch
+	stubFetch(Response.json({ error: "too-large" }, { status: 400 }))
 	expect(await sendTeamAvatar("team-1", new File(["image"], "avatar.png"))).toBe("too-large")
+})
+
+// a created team returns its id. a taken name is the 409 and the daily team limit the 429, each its own rejection, and
+// any other rejected status or a request that never reaches the server is a failure, never the plan limit
+test("sendCreateTeam returns the id, and reads a taken name, the team limit, and a failure apart", async () => {
+	const createTeamPayload = { name: "Espresso club", topicIds: [] }
+	stubFetch(Response.json({ teamId: "team-1" }))
+	expect(await sendCreateTeam(createTeamPayload)).toEqual({ teamId: "team-1" })
+
+	// the two rejections the route names
+	stubFetch(Response.json({ error: "name-taken" }, { status: 409 }))
+	expect(await sendCreateTeam(createTeamPayload)).toEqual({ rejection: "name-taken" })
+	stubFetch(Response.json({ error: "team limit reached" }, { status: 429 }))
+	expect(await sendCreateTeam(createTeamPayload)).toEqual({ rejection: "quota" })
+
+	// a validation error, a server error, and a request that never reaches the server
+	stubFetch(Response.json({ error: "bad request" }, { status: 400 }))
+	expect(await sendCreateTeam(createTeamPayload)).toEqual({ rejection: "failed" })
+	stubFetch(new Response("no", { status: 500 }))
+	expect(await sendCreateTeam(createTeamPayload)).toEqual({ rejection: "failed" })
+	stubFailingFetch()
+	expect(await sendCreateTeam(createTeamPayload)).toEqual({ rejection: "failed" })
+})
+
+// a team update is saved on an ok response alone. a taken name names itself, and any other rejected status or a request
+// that never reaches the server is a failed save, never a silent success
+test("sendUpdateTeam reads a saved edit, a taken name, and a failed save apart", async () => {
+	stubFetch(Response.json({ ok: true }))
+	expect(await sendUpdateTeam("team-1", { name: "Espresso club" })).toBeNull()
+	stubFetch(Response.json({ error: "name-taken" }, { status: 409 }))
+	expect(await sendUpdateTeam("team-1", { name: "Taken" })).toBe("name-taken")
+
+	// a forbidden edit, a server error, and a request that never reaches the server
+	stubFetch(Response.json({ error: "forbidden" }, { status: 403 }))
+	expect(await sendUpdateTeam("team-1", { name: "Espresso club" })).toBe("failed")
+	stubFetch(new Response("no", { status: 500 }))
+	expect(await sendUpdateTeam("team-1", { name: "Espresso club" })).toBe("failed")
+	stubFailingFetch()
+	expect(await sendUpdateTeam("team-1", { name: "Espresso club" })).toBe("failed")
 })

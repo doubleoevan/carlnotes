@@ -156,14 +156,15 @@ async function topicFindingUrls(topicId: string): Promise<string[]> {
 	return findingRows.map((findingRow) => findingRow.url)
 }
 
-// the Findings this Scan surfaced, joined to their Resources for the email
+// the Findings this Scan first found, joined to their Resources for the email. a Finding an earlier Scan found and this
+// Scan re-scored is not new
 async function newFindingsForScan(scanId: string): Promise<TopicScanEmailFinding[]> {
-	// this topic scan's Findings joined to their Resource for the title, link
+	// this topic scan's new Findings joined to their Resource for the title, link
 	return db
 		.select({ title: resources.title, url: resources.url, relevanceExplanation: findings.relevanceExplanation })
 		.from(findings)
 		.innerJoin(resources, eq(findings.resourceId, resources.id))
-		.where(and(eq(findings.scanId, scanId), isFindingShown))
+		.where(and(eq(findings.foundScanId, scanId), isFindingShown))
 		.orderBy(desc(findings.relevanceScore))
 }
 

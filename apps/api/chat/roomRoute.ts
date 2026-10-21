@@ -13,7 +13,7 @@ import { toStoredFileHeaders } from "../topic/attachments"
 import { loadLinkPreviewImage } from "./linkPreviews"
 import { saveSeenChatMentions } from "./mentions"
 import { chatBodyLimit } from "./privateChat"
-import { postChatRoomMessage, streamChatRoomEvents } from "./room"
+import { postChatRoomMessage, streamChatRoomEvents, toChatMessageIdParam } from "./room"
 import { loadChatRoom } from "./roomAccess"
 import {
 	clearChatRoom,
@@ -43,10 +43,7 @@ const chatRoomSignedOutRejection = toSignedOutRejection("not found", 404)
 
 /** The chat message id a backward page starts reading below, or undefined for the latest page. */
 export function toBeforeChatMessageId(beforeParam: string | undefined): number | undefined {
-	const beforeChatMessageId = Number(beforeParam)
-	return beforeParam && Number.isSafeInteger(beforeChatMessageId) && beforeChatMessageId > 0
-		? beforeChatMessageId
-		: undefined
+	return toChatMessageIdParam(beforeParam) || undefined
 }
 
 /**

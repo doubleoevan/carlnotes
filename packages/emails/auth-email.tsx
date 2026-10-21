@@ -5,7 +5,7 @@
 import { Link, Section, Text } from "@react-email/components"
 import { render } from "@react-email/render"
 import type { CSSProperties, ReactElement, ReactNode } from "react"
-import { EmailIntro, EmailShell } from "./topic-scan-email"
+import { EmailIntro, EmailShell } from "./emailShell"
 
 // what an auth email says. the link is the point, and everything else is one sentence around it
 export type AuthEmailProps = {

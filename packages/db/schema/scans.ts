@@ -133,10 +133,12 @@ export const findings = pgTable(
 		resourceId: text("resource_id")
 			.notNull()
 			.references(() => resources.id, { onDelete: "cascade" }),
-		// the topic scan that produced this finding
+		// the latest topic scan that reviewed this finding. a re-score moves it to that scan
 		scanId: text("scan_id")
 			.notNull()
 			.references(() => scans.id, { onDelete: "cascade" }),
+		// the topic scan that first found this finding, written once on insert. null if that scan was deleted
+		foundScanId: text("found_scan_id").references(() => scans.id, { onDelete: "set null" }),
 		// the model's relevance score and its explanation
 		relevanceScore: real("relevance_score").notNull(),
 		relevanceExplanation: text("relevance_explanation").notNull().default(""),
@@ -164,8 +166,10 @@ export const findings = pgTable(
 		// a topic's findings, most relevant first, for the feed's ranked read and the topic page.
 		// nulls first is what a plain descending order means, so an index scan returns both reads' rows already in order
 		index("findings_topic_relevance_idx").on(table.topicId, table.relevanceScore.desc().nullsFirst()),
-		// one scan's findings, for a public topic page's structured data and a scan email
+		// the findings a scan last reviewed, for a public topic page's structured data
 		index("findings_scan_id_idx").on(table.scanId),
+		// the findings a scan first found, for a scan email and a podcast episode's plan
+		index("findings_found_scan_id_idx").on(table.foundScanId),
 		// a topic's findings by when they arrived, for the new finding count and the reads that take a topic's latest findings
 		index("findings_topic_created_idx").on(table.topicId, table.createdAt),
 	],

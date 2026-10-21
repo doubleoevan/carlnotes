@@ -53,8 +53,8 @@ export async function loadPageAccess(userId: string | null, page: NotePage): Pro
 	// a team page is its own holding team. a private team's page is members only
 	const [role, isAdmin] = await Promise.all([toTeamRole(userId, page.team.id), toAdmin(userId)])
 	return {
-		canSeePage: page.team.isPublic || role !== null,
-		isHoldingTeamMember: role !== null,
+		canSeePage: page.team.isPublic || Boolean(role),
+		isHoldingTeamMember: Boolean(role),
 		isPageOwner: false,
 		isAdmin,
 	}

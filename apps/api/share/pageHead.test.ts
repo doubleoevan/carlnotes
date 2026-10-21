@@ -214,7 +214,7 @@ test("toPodcastEpisodePageHead names the episode, its card, its audio, and valid
 	})
 })
 
-// an invite topic's podcast episode page has its card alone
+// an invite topic's podcast episode page has its card alone, and its head describes the topic, never the episode
 test("toPodcastEpisodePageHead gives an invite topic's episode its card alone", () => {
 	const head = toPodcastEpisodePageHead({
 		topicPreview: { ...TOPIC_PREVIEW, visibility: "invite" },
@@ -222,9 +222,9 @@ test("toPodcastEpisodePageHead gives an invite topic's episode its card alone", 
 		appUrl: "https://carlnotes.com",
 	})
 
-	// the episode's title, description, and card
+	// the episode's title and card, with the topic's description in place of the episode's, which summarizes its findings
 	expect(head.cardTitle).toBe("Agents ship, and the evals follow")
-	expect(head.description).toBe("What shipped this week and why the evals matter.")
+	expect(head.description).toBe("What agents are shipping this week.")
 	expect(head.imageUrl).toStartWith("https://carlnotes.com/api/episodes/episode-1/preview.png?v=")
 
 	// no index, no feed, and no structured data

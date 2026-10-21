@@ -5,7 +5,7 @@ import { Link } from "@react-email/components"
 import { render } from "@react-email/render"
 import type { ReactElement } from "react"
 import AuthEmail, { type AuthEmailProps } from "./auth-email"
-import { summaryLink } from "./topic-scan-email"
+import { summaryLink } from "./emailShell"
 
 export type TeamInviteEmailProps = {
 	senderUsername: string

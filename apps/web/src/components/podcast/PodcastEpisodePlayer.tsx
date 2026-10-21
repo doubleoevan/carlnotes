@@ -1,5 +1,9 @@
 import { fetchPodcastEpisode } from "@carlnotes/client/podcastEpisodeClient"
-import type { PodcastEpisode } from "@carlnotes/contracts/podcast"
+import {
+	isPublishedPodcastEpisode,
+	type PodcastEpisode,
+	type PublishedPodcastEpisodeNumbers,
+} from "@carlnotes/contracts/podcast"
 import { PODCAST_NAME } from "@carlnotes/contracts/podcastEpisodes"
 import { toPodcastEpisodePath } from "@carlnotes/contracts/seo"
 import type { TopicResponse } from "@carlnotes/contracts/topics"
@@ -57,6 +61,9 @@ export function PodcastEpisodePlayer({
 		<span className="text-primary text-sm font-bold whitespace-nowrap">new episode</span>
 	) : undefined
 	const titleAside = isPodcastEpisodeLoaded ? <PodcastEpisodePlaybackPill /> : unplayedTitleAside
+	// the podcast episode with the season and number its player card and page path need, or null before it publishes
+	const publishedPodcastEpisode = toPublishedPodcastEpisode(podcastEpisode)
+
 	return (
 		<CollapsibleSection
 			value="podcast"
@@ -66,10 +73,10 @@ export function PodcastEpisodePlayer({
 			className="mt-2"
 		>
 			{/* a published podcast episode's player card, or the card of an episode with no audio */}
-			{podcastEpisode?.status === "published" ? (
+			{publishedPodcastEpisode ? (
 				<PodcastEpisodePlayerCard
-					podcastEpisode={podcastEpisode}
-					podcastEpisodePath={toPodcastEpisodePath(topic, podcastEpisode)}
+					podcastEpisode={publishedPodcastEpisode}
+					podcastEpisodePath={toPodcastEpisodePath(topic, publishedPodcastEpisode)}
 					chapterTopicFeed={{
 						topicFindings: topic.findings,
 						topic: { id: topic.id, name: topic.name, prompt: topic.prompt, visibility: topic.visibility },
@@ -218,4 +225,11 @@ function UnpublishedPodcastEpisodeCard({ podcastEpisode, scanControl }: Unpublis
 			</div>
 		</div>
 	)
+}
+
+// the podcast episode once it is published with a season and a number, or null for one still recording or failed
+function toPublishedPodcastEpisode(
+	podcastEpisode: PodcastEpisode | null | undefined,
+): (PodcastEpisode & PublishedPodcastEpisodeNumbers) | null {
+	return podcastEpisode?.status === "published" && isPublishedPodcastEpisode(podcastEpisode) ? podcastEpisode : null
 }

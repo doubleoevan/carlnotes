@@ -53,6 +53,8 @@ export function McpConsentPage() {
 	}
 	const clientDisplayName = mcpClientName ?? "your AI"
 	const isClientKnown = typeof mcpClientName === "string"
+	// a link without a client id names no client CarlNotes can know
+	const isClientMissing = !mcpClientId || mcpClientName === null
 	return (
 		<main className={PAGE_CLASS}>
 			{/* the question as a modal the user answers: no close, and no way out but the two buttons */}
@@ -68,7 +70,7 @@ export function McpConsentPage() {
 						Carl can share your topics and take its questions. It only changes what you can change yourself.
 					</DialogDescription>
 					{error && <p className="text-destructive text-sm">{error}</p>}
-					{mcpClientName === null && (
+					{isClientMissing && (
 						<p className="text-destructive text-sm">CarlNotes doesn't know this AI. Start again from your AI.</p>
 					)}
 					{/* allow or deny */}

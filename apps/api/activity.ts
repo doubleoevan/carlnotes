@@ -17,6 +17,7 @@ import { loadOwnedTopics } from "./activityTopics"
 import { isAdminRole, isAllowed, monthlySpendDollars, userBudgetCents } from "./authorization"
 import { toProfileIdentity, withAvatarVersion } from "./avatars"
 import type { AppEnv } from "./currentUser"
+import { loadUserEmail, toInviteAddressedToUserFilter } from "./invite/inviteAcceptance"
 import { loadLatestPodcastEpisodeSummaries } from "./podcast/podcastEpisodeShapes"
 
 // the subscription row fields that the queries read, with the subscribed time as a date
@@ -27,10 +28,7 @@ export type SubscriptionRowFields = Omit<SubscriptionRow, "subscribedAt" | "late
 /**
  * Assembles the user's Activity payload for the signed-in user: the user, or an admin viewing the user's activity.
  */
-export async function loadActivity(
-	user: { id: string; email: string },
-	signedInUserId: string,
-): Promise<ActivityResponse> {
+export async function loadActivity(userId: string, signedInUserId: string): Promise<ActivityResponse> {
 	// select the user's identity, budget inputs, and litellm key
 	const [userRow] = await db
 		.select({
@@ -43,12 +41,12 @@ export async function loadActivity(
 			avatarKey: users.avatarKey,
 		})
 		.from(users)
-		.where(eq(users.id, user.id))
+		.where(eq(users.id, userId))
 
 	// this month's spend divided into what produced it, and the user's monthly budget cutoffs
 	const [monthlySpend, monthlyBudgetCutoffs] = await Promise.all([
-		monthlySpendDollars(user.id),
-		loadMonthlyBudgetCutoffs(user.id),
+		monthlySpendDollars(userId),
+		loadMonthlyBudgetCutoffs(userId),
 	])
 
 	// the user's subscriptions on topics they do not own, both active and inactive alike
@@ -83,9 +81,9 @@ export async function loadActivity(
 		// whether this user belongs to the owning team, which decides if a private one may be named
 		.leftJoin(
 			teamMembers,
-			and(eq(teamMembers.teamId, teams.id), eq(teamMembers.userId, user.id), eq(teamMembers.isActive, true)),
+			and(eq(teamMembers.teamId, teams.id), eq(teamMembers.userId, userId), eq(teamMembers.isActive, true)),
 		)
-		.where(and(ne(topics.ownerId, user.id), eq(subscriptions.subscriberUserId, user.id)))
+		.where(and(ne(topics.ownerId, userId), eq(subscriptions.subscriberUserId, userId)))
 
 	// the invitations the user sent on their own topics, and whether each invitee subscribed
 	const inviteRows = await db
@@ -121,7 +119,7 @@ export async function loadActivity(
 		.where(
 			// user invites, matched by email or by account, and invite links left out. declined rows are stored but hidden here
 			and(
-				eq(topics.ownerId, user.id),
+				eq(topics.ownerId, userId),
 				or(isNotNull(invites.email), isNotNull(invites.invitedUserId)),
 				isNull(invites.declinedAt),
 			),
@@ -136,7 +134,7 @@ export async function loadActivity(
 			owner: withAvatarVersion(subscriptionRow.owner),
 			team: toTeamIdentity(subscriptionRow.team),
 		})),
-		...(await loadInvitedTopicSubscriptions(user)),
+		...(await loadInvitedTopicSubscriptions(userId)),
 	]
 	const subscriptionTopicRows = subscriptionRowFields.map((subscriptionRow) => ({
 		id: subscriptionRow.topicId,
@@ -152,7 +150,7 @@ export async function loadActivity(
 	return {
 		// whose activity this is, for the page's profile link
 		user: {
-			userId: user.id,
+			userId,
 			username: userRow?.username ?? "",
 			avatarSource: userRow?.avatarSource ?? null,
 			avatarVersion: toAvatarVersion(userRow ?? {}),
@@ -166,7 +164,7 @@ export async function loadActivity(
 			budgetOverrideCents: userRow?.budgetOverrideCents ?? null,
 		}),
 		monthlyBudgetCutoffs,
-		topics: await loadOwnedTopics({ userId: user.id, signedInUserId }),
+		topics: await loadOwnedTopics({ userId, signedInUserId }),
 		subscriptions: toSubscriptionRows(subscriptionRowFields, subscriptionPodcastEpisodeByTopic),
 		invites: inviteRows.map((inviteRow) => ({
 			inviteId: inviteRow.inviteId,
@@ -184,14 +182,16 @@ export async function loadActivity(
 /**
  * Loads the topic invitations waiting for the user's answer, shaped as the subscription rows they will become.
  */
-export async function loadInvitedTopicSubscriptions(user: {
-	id: string
-	email: string
-}): Promise<SubscriptionRowFields[]> {
+export async function loadInvitedTopicSubscriptions(userId: string): Promise<SubscriptionRowFields[]> {
+	// the user's address, and the topics the user already subscribes to
+	const userEmail = await loadUserEmail(userId)
+	if (!userEmail) {
+		return []
+	}
 	const subscribedTopicIdQuery = db
 		.select({ topicId: subscriptions.topicId })
 		.from(subscriptions)
-		.where(eq(subscriptions.subscriberUserId, user.id))
+		.where(eq(subscriptions.subscriberUserId, userId))
 	// the pending invitations, each with the topic it opens and the owner who sent it
 	const invitedRows = await db
 		.select({
@@ -221,12 +221,13 @@ export async function loadInvitedTopicSubscriptions(user: {
 		// whether this user belongs to the owning team, which decides if a private one may be named
 		.leftJoin(
 			teamMembers,
-			and(eq(teamMembers.teamId, teams.id), eq(teamMembers.userId, user.id), eq(teamMembers.isActive, true)),
+			and(eq(teamMembers.teamId, teams.id), eq(teamMembers.userId, userId), eq(teamMembers.isActive, true)),
 		)
 		.where(
-			// pending means unanswered: no spent use, no decline, no passed expiry
+			// pending means unanswered: no spent use, no decline, no passed expiry. only a verified address matches an email
+			// invitation
 			and(
-				or(eq(invites.invitedUserId, user.id), eq(invites.email, user.email)),
+				toInviteAddressedToUserFilter({ userId, ...userEmail }),
 				eq(invites.usedCount, 0),
 				isNull(invites.declinedAt),
 				or(isNull(invites.expiresAt), gt(invites.expiresAt, new Date())),
@@ -297,18 +298,17 @@ export const activityRoute = new Hono<AppEnv>().get("/activity", async (context)
 	// without the userId param, the user loads their own activity
 	const requestedUserId = context.req.query("userId")
 	if (!requestedUserId || requestedUserId === user.id) {
-		return context.json(await loadActivity({ id: user.id, email: user.email }, user.id))
+		return context.json(await loadActivity(user.id, user.id))
 	}
 
-	// viewing another user's activity requires the admin:console permission
+	// viewing another user's activity requires the admin:console permission. anyone else reads it as missing
 	if (!(await isAllowed(user.id, "admin:console"))) {
-		return context.json({ error: "forbidden" }, 403)
+		return context.json({ error: "not found" }, 404)
 	}
 
 	// show the target user's activity, or nothing if no such user exists
-	const [targetUser] = await db
-		.select({ id: users.id, email: users.email })
-		.from(users)
-		.where(eq(users.id, requestedUserId))
-	return targetUser ? context.json(await loadActivity(targetUser, user.id)) : context.json({ error: "not found" }, 404)
+	const [targetUser] = await db.select({ id: users.id }).from(users).where(eq(users.id, requestedUserId))
+	return targetUser
+		? context.json(await loadActivity(targetUser.id, user.id))
+		: context.json({ error: "not found" }, 404)
 })

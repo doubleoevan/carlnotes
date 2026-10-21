@@ -1,3 +1,4 @@
+import { isLeaderRole } from "@carlnotes/contracts/enums"
 import type { TeamSummary } from "@carlnotes/contracts/teams"
 import { toCentsLabel, toCountLabel } from "@carlnotes/core/lib/labels"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
@@ -121,7 +122,7 @@ export function TeamsMembershipTable({
 							<td className="py-2 pr-4">{toCountLabel(teams.length, "team")}</td>
 							<td className="py-2 pr-4">{`${teams.filter((team) => team.isPublic).length}/${teams.length} public`}</td>
 							<td className="py-2 pr-4">
-								{toCountLabel(teams.filter((team) => team.role === "leader").length, "leader")}
+								{toCountLabel(teams.filter((team) => isLeaderRole(team.role)).length, "leader")}
 							</td>
 							{!isReadOnly && <td className="py-2 pr-4" />}
 							<td className="py-2 pr-4">

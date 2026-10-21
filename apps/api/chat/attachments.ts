@@ -263,13 +263,14 @@ export async function deleteChatAttachments(topicId: string, userId?: string): P
 // a chat attachment's routes, both scoped to the user who sent it
 export const chatAttachmentsRoute = new Hono<AppEnv>()
 	.delete("/chat-attachments/:id", async (context) => {
-		// deleting a kept attachment is signed-in only and scoped to its keeper, freeing its limit slot
+		// deleting a kept attachment is signed-in only and scoped to its keeper, freeing its limit slot. another
+		// user's kept attachment reads as a missing one
 		const userId = currentUser(context)
 		if (!userId) {
 			return toChatRejection(context, "signup")
 		}
 		const isDeleted = await deleteKeptAttachment(userId, context.req.param("id"))
-		return isDeleted ? context.json({ ok: true }) : context.json({ error: "forbidden" }, 403)
+		return isDeleted ? context.json({ ok: true }) : context.json({ error: "not found" }, 404)
 	})
 	.get("/chat-attachments/:id/download", async (context) => {
 		// downloading a chat attachment is signed-in only and scoped to the user who sent it

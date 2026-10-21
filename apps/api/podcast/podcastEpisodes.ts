@@ -205,12 +205,14 @@ export const podcastEpisodesRoute = new Hono<AppEnv>()
 			return context.json(podcastEpisodePage)
 		}
 
-		// respond 403 with the topic's gate to a user or visitor who may not see an invite or private topic, or 404.
-		// only an invite topic's gate names the topic
+		// respond 403 with the gate of an invite topic to a user or visitor who may not see it, and 404 for a private
+		// topic, which does not exist for them, or a missing podcast episode
 		const publishedPodcastEpisode = await loadPublishedPodcastEpisode({ topicId, season, episodeNumber })
 		const podcastEpisodeTopic = publishedPodcastEpisode?.topic
 		const isTopicHidden =
 			podcastEpisodeTopic !== undefined && !(await isAllowed(userId, "topic:view", podcastEpisodeTopic))
+
+		// the gate of a hidden invite topic, which names the topic
 		const topicGateResponse = isTopicHidden && podcastEpisodeTopic ? toTopicGateResponse(podcastEpisodeTopic) : null
 		return topicGateResponse ? context.json(topicGateResponse, 403) : context.json({ error: "not found" }, 404)
 	})

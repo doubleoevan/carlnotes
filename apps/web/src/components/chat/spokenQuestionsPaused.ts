@@ -1,4 +1,5 @@
 import { authClient } from "@carlnotes/client/authClient"
+import { isPremiumPlan } from "@carlnotes/contracts/enums"
 import { useNavigate } from "@tanstack/react-router"
 import { toast } from "sonner"
 
@@ -31,7 +32,7 @@ export function toSpokenQuestionsPausedAction(
 	plan: string | null | undefined,
 	upgradePromptCta: UpgradePromptCta,
 ): SpokenQuestionsPausedAction {
-	return plan === "premium"
+	return isPremiumPlan(plan)
 		? { kind: "toast", prompt: PREMIUM_PLAN_PROMPTS[upgradePromptCta] }
 		: { kind: "navigate", navigation: { to: "/plans", search: { cta: upgradePromptCta } } }
 }

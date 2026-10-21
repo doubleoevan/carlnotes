@@ -438,6 +438,13 @@ second, every one a 200, latency p50 0.57 s, p90 1.06 s, p99 2.57 s, slowest 4.7
 replica read an event-loop p99 of 6 ms with a 129 ms maximum and 81 pool connections open with none waiting, and the
 other replica an event-loop p99 of 10 ms with a 158 ms maximum.
 
+Rerun 2026-10-21 08:37 PT after b96e870f and c0a21ae2, same command and url: 77 requests per second, every one a 200,
+p50 0.55 s, p90 1.11 s, p99 2.27 s, slowest 5.17 s. The run before the move, 2026-10-20 16:40 PT on Bun 1.3: 76 requests
+per second, every one a 200, p50 0.59 s, p90 1.04 s, p99 2.39 s, slowest 5.10 s. Within noise, so the move and the Bun
+upgrade are neutral under load. The topic page run answers 32 200s, 88 503s, and 429 for the rest every time: two
+replicas of 16 render slots render the first wave, and the render limit sheds the rest of the visitor limiter's 120 a
+minute, so it measures configuration, not render speed.
+
 **Phase two.** Ship the pages package, `apps/web/server.ts`, the worker thread, and the pool default; the `app` service
 still serves every path. Create the `web` service from the build image with `bun run web`, size both services, add
 `deploy-web` to `release-main`, raise `DATABASE_POOL_COUNT` in Doppler prd and restart every prd process, then add the

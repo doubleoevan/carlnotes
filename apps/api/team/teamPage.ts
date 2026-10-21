@@ -39,7 +39,7 @@ export async function loadTeamPage(userId: string | null, teamId: string): Promi
 
 	// check access before reading the page. a private team shows only its gate to everyone but its members, an admin,
 	// and someone with a pending invite
-	const isMember = role !== null
+	const isMember = Boolean(role)
 	const isInvited = !isMember && (await hasPendingTeamInvite(userId, team.id))
 	if (!team.isPublic && !isMember && !isInvited && !(await isAllowed(userId, "admin:console"))) {
 		return { status: "gated", teamName: team.name, hasRequestedToJoin }

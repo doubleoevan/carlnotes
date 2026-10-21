@@ -8,7 +8,7 @@ import type { PodcastEpisodeTurn } from "@carlnotes/contracts/payloads"
 import { podcastEpisodeSpeechModel } from "@carlnotes/server/podcastEpisodeSettings"
 import { type SpeechTier, speechCost, transcriptionCost } from "./budget"
 import { runFfmpeg } from "./ffmpeg"
-import { deleteLiteLLMKey, provisionLiteLLMKey, readLiteLLMKeySpend } from "./litellm"
+import { deleteLiteLLMKey, provisionLiteLLMKey, readLiteLLMKeySpend } from "./litellmProxy"
 import { recordSpeech, recordSpokenAnswer, SPOKEN_ANSWER_SPEECH_TIER } from "./speech"
 import { transcodeRecording, transcribeRecording } from "./transcription"
 

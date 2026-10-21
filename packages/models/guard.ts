@@ -113,8 +113,13 @@ export async function screenImage(imageBytes: Uint8Array): Promise<ScreenVerdict
  * An accepted text comes back redacted.
  */
 export function toScreenVerdict(guardResponse: GuardResponse, screenType: ScreenType, text: string): ScreenVerdict {
+	// the configured threshold if it is above zero and at most one, or else the default. an empty setting reads as zero
+	// and a word reads as NaN, and neither is a threshold
+	const configuredThreshold = Number(Bun.env.LLM_GUARD_INJECTION_THRESHOLD)
+	const threshold =
+		configuredThreshold > 0 && configuredThreshold <= 1 ? configuredThreshold : DEFAULT_INJECTION_THRESHOLD
+
 	// the detectors for this type of text that scored at or above the threshold
-	const threshold = Number(Bun.env.LLM_GUARD_INJECTION_THRESHOLD ?? DEFAULT_INJECTION_THRESHOLD)
 	const scores = guardResponse.scanners ?? {}
 	const detectors = SCREEN_TYPES[screenType].filter((detector) => (scores[detector] ?? 0) >= threshold)
 	if (detectors.length > 0) {

@@ -3,7 +3,7 @@ import { sendAcceptInvite } from "@carlnotes/client/topicClient"
 import type { InviteRejection } from "@carlnotes/contracts/invites"
 import { toInvitePath } from "@carlnotes/contracts/seo"
 import { getRouteApi, Navigate, useNavigate } from "@tanstack/react-router"
-import { useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { CoffeeLoading } from "@/components/branding/CoffeeLoading"
 import { CoffeeMug } from "@/components/branding/CoffeeMug"
 import { AnchorLink } from "@/components/common/AnchorLink"
@@ -25,21 +25,28 @@ export function InvitePage() {
 	const navigate = useNavigate()
 	const { data: session, isPending } = authClient.useSession()
 	const [inviteRejection, setInviteRejection] = useState<InviteRejection | "teamFull" | null>(null)
+	// whether the acceptance request failed to reach the api, which a retry may pass
+	const [isInviteAcceptFailed, setIsInviteAcceptFailed] = useState(false)
 
-	// accept the token exactly once, as soon as the session loads, then go to the topic or team it opens
+	// accept the token once, then go to the topic or team it opens. a failed request opens the once-latch back up
 	const isAcceptingInviteRef = useRef(false)
-	useEffect(() => {
-		if (isPending || !session || isAcceptingInviteRef.current) {
+	const acceptInvite = useCallback((): void => {
+		if (isAcceptingInviteRef.current) {
 			return
 		}
 		isAcceptingInviteRef.current = true
+		setIsInviteAcceptFailed(false)
 		void sendAcceptInvite(token)
 			.catch(() => {
-				// a network failure may pass on a later visit, so the once-latch opens back up
 				isAcceptingInviteRef.current = false
-				return { status: "unknown" } as const
+				setIsInviteAcceptFailed(true)
+				return null
 			})
 			.then((inviteResponse) => {
+				// a failed request shows its own notice, with the retry
+				if (!inviteResponse) {
+					return
+				}
 				// navigate to the accepted topic
 				if (inviteResponse.status === "joined") {
 					navigate({ to: "/topics/$topicId", params: { topicId: inviteResponse.topicId }, replace: true })
@@ -52,7 +59,14 @@ export function InvitePage() {
 				}
 				setInviteRejection(inviteResponse.status)
 			})
-	}, [isPending, session, token, navigate])
+	}, [token, navigate])
+
+	// accept as soon as the session loads
+	useEffect(() => {
+		if (!isPending && session) {
+			acceptInvite()
+		}
+	}, [isPending, session, acceptInvite])
 
 	// the session decides whether this visitor can accept at all, so nothing renders until it resolves
 	if (isPending) {
@@ -67,26 +81,61 @@ export function InvitePage() {
 	return (
 		<div className={cn(SESSION_PAGE_CLASS, "items-center gap-6")}>
 			<CoffeeMug className="size-12" />
-			{/* the invite rejection with its way forward, or a loading line while the acceptance runs */}
-			{inviteRejection ? (
-				<div className="text-center">
-					<p className="text-lg font-semibold">{INVITE_REJECTIONS[inviteRejection]}</p>
-					<p className="text-muted-foreground mt-2 text-sm">
-						{inviteRejection === "teamFull" ? (
-							"Ask a team leader to make room, then try again."
-						) : (
-							<>
-								{"Ask whoever invited you for a fresh link, or "}
-								<AnchorLink href="/" className="text-link hover:underline">
-									go find a topic
-								</AnchorLink>
-							</>
-						)}
-					</p>
-				</div>
-			) : (
-				<p className="text-muted-foreground text-center text-sm">Carl is checking your invitation…</p>
-			)}
+			{/* the request failure with its retry, the rejection with its way forward, or the loading line */}
+			<InviteNotice
+				isInviteAcceptFailed={isInviteAcceptFailed}
+				inviteRejection={inviteRejection}
+				onRetry={acceptInvite}
+			/>
+		</div>
+	)
+}
+
+/**
+ * The join page's notice: a failed request with its retry, an invite rejection with its way forward, or the loading
+ * line while the acceptance runs.
+ */
+export function InviteNotice({
+	isInviteAcceptFailed,
+	inviteRejection,
+	onRetry,
+}: {
+	isInviteAcceptFailed: boolean
+	inviteRejection: InviteRejection | "teamFull" | null
+	onRetry: () => void
+}) {
+	// a failed request is retried from here, and never reads as a rejected invitation
+	if (isInviteAcceptFailed) {
+		return (
+			<div className="text-center">
+				<p className="text-lg font-semibold">{"Carl couldn't check your invitation."}</p>
+				<p className="text-muted-foreground mt-2 text-sm">
+					{"Check your connection, then "}
+					<button type="button" onClick={onRetry} className="text-link hover:underline">
+						try again
+					</button>
+				</p>
+			</div>
+		)
+	}
+	if (!inviteRejection) {
+		return <p className="text-muted-foreground text-center text-sm">Carl is checking your invitation…</p>
+	}
+	return (
+		<div className="text-center">
+			<p className="text-lg font-semibold">{INVITE_REJECTIONS[inviteRejection]}</p>
+			<p className="text-muted-foreground mt-2 text-sm">
+				{inviteRejection === "teamFull" ? (
+					"Ask a team leader to make room, then try again."
+				) : (
+					<>
+						{"Ask whoever invited you for a fresh link, or "}
+						<AnchorLink href="/" className="text-link hover:underline">
+							go find a topic
+						</AnchorLink>
+					</>
+				)}
+			</p>
 		</div>
 	)
 }

@@ -1,6 +1,6 @@
 import { authClient } from "@carlnotes/client/authClient"
 import { fetchBillingState, fetchCheckoutUrl } from "@carlnotes/client/billingClient"
-import { plans } from "@carlnotes/contracts/enums"
+import { isPaidPlan, plans } from "@carlnotes/contracts/enums"
 import { type BillingInterval, PLANS, type Plan, SCAN_COST_CENTS } from "@carlnotes/contracts/plans"
 import { toBrewsWord } from "@carlnotes/core/lib/labels"
 import { isUsersPlan, toPlanBadge } from "@carlnotes/core/lib/planCards"
@@ -61,7 +61,7 @@ export function PlansPage() {
 	const highlightedPlan = signedInPlan ?? RECOMMENDED_PLAN
 
 	// only a paid plan can bill on something other than monthly
-	const isSubscribed = signedInPlan !== null && signedInPlan !== "free"
+	const isSubscribed = isPaidPlan(signedInPlan)
 	const isLoadingInterval = isSubscribed && billingInterval === null
 
 	// the yearly toggle is set to the interval the user bills on
@@ -83,7 +83,7 @@ export function PlansPage() {
 
 	// a free user upgrades through checkout at the selected billing interval
 	async function handleCheckout(plan: Plan): Promise<void> {
-		if (plan === "free") {
+		if (!isPaidPlan(plan)) {
 			return
 		}
 		setIsRedirecting(true)
@@ -138,12 +138,12 @@ export function PlansPage() {
 				<CoffeeLoading />
 			) : (
 				<div className="mt-8 grid gap-6 sm:grid-cols-3">
-					{plans.map((plan) => (
+					{plans.map((planOption) => (
 						<PlanCard
-							key={plan}
-							plan={plan}
+							key={planOption}
+							plan={planOption}
 							isYearly={isYearly}
-							isHighlighted={plan === highlightedPlan}
+							isHighlighted={planOption === highlightedPlan}
 							signedInPlan={signedInPlan}
 							subscribedInterval={billingInterval}
 							isRedirecting={isRedirecting}
@@ -219,7 +219,7 @@ function PlanCard({
 				<span className="text-muted-foreground text-sm"> /month</span>
 			</div>
 			<p className="text-muted-foreground mt-1 text-xs">
-				{plan === "free"
+				{!isPaidPlan(plan)
 					? "Free forever"
 					: isYearly
 						? `Billed ${toWholeDollarLabel(planConfig.priceYearlyCents)} yearly`
@@ -240,7 +240,7 @@ function PlanCard({
 				<QuotaLink label={`${toWholeDollarLabel(planConfig.monthlyBudgetCents)} coffee fund a month`} />
 				<QuotaLink label={`About ${monthlyScanEstimate} ${toBrewsWord(monthlyScanEstimate)} a month`} />
 				{/* the free plan's short episode with only the latest kept, or a paid plan's full episodes, every one kept */}
-				<QuotaLink label={plan === "free" ? "Short podcast for latest brew only" : "Full podcasts for every brew"} />
+				<QuotaLink label={isPaidPlan(plan) ? "Full podcasts for every brew" : "Short podcast for latest brew only"} />
 			</ul>
 			<PlanButton
 				plan={plan}
@@ -288,8 +288,8 @@ function PlanButton({
 	onCheckout: (plan: Plan) => void
 	onPortal: () => void
 }) {
-	// a logged-out visitor goes to the signup no matter which card they select
-	if (signedInPlan === null) {
+	// a logged-out visitor has no plan and goes to the signup no matter which card they select
+	if (!signedInPlan) {
 		return (
 			<AnchorLink href="/signup?cta=pricing" className={cn(buttonVariants({ variant: "default" }), "mt-6 w-full")}>
 				Get started
@@ -304,7 +304,7 @@ function PlanButton({
 		)
 	}
 	// a paying user's plan changes go through the Stripe portal
-	if (signedInPlan !== "free") {
+	if (isPaidPlan(signedInPlan)) {
 		return (
 			<Button variant="outline" onClick={onPortal} disabled={isRedirecting} className="mt-6 w-full">
 				Manage billing

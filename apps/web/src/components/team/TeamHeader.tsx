@@ -1,6 +1,7 @@
 // the team page's identity header, with a leader's avatar picker
 
 import { sendTeamAvatar } from "@carlnotes/client/teamClient"
+import { isLeaderRole } from "@carlnotes/contracts/enums"
 import type { TeamPageResponse } from "@carlnotes/contracts/teams"
 import { toCountLabel } from "@carlnotes/core/lib/labels"
 import { Plus } from "lucide-react"
@@ -61,7 +62,9 @@ export function TeamHeader({
 	// the chat mention badge's click opens the page's chat room panel
 	onOpenChat: () => void
 }) {
-	const isTeamLeader = teamPage.role === "leader"
+	const isTeamLeader = isLeaderRole(teamPage.role)
+	// a role of any kind is a membership
+	const isTeamMember = Boolean(teamPage.role)
 	return (
 		<header>
 			<div className="flex items-center gap-4">
@@ -86,7 +89,7 @@ export function TeamHeader({
 				</span>
 				{/* the right column, the join or add button aligned with the avatar's top */}
 				<div className="ml-auto flex flex-col items-end gap-1 self-start">
-					{teamPage.role === null && (
+					{!isTeamMember && (
 						<JoinTeamButton
 							teamId={teamPage.teamId}
 							teamName={teamPage.name}
@@ -95,7 +98,7 @@ export function TeamHeader({
 							onChangeRequest={onChanged}
 						/>
 					)}
-					{teamPage.role !== null && (
+					{isTeamMember && (
 						<Button className="shrink-0" onClick={onInviteOpen}>
 							<Plus className="size-4" />
 							Add Member

@@ -2,6 +2,8 @@
 // SETUP: create plus and premium products with monthly and yearly prices, plus a metered manual-scan overage price in
 // Stripe
 
+import { isPaidPlan } from "@carlnotes/contracts/enums"
+import { checkoutPayload } from "@carlnotes/contracts/payloads"
 import { type BillingInterval, PLANS, type Plan } from "@carlnotes/contracts/plans"
 import type { BillingState } from "@carlnotes/contracts/profiles"
 import { db } from "@carlnotes/db"
@@ -171,15 +173,15 @@ export function toPaidSubscription(subscription: StripeSubscriptionFields): Subs
 		return null
 	}
 
-	// the plan is set at checkout. anything else is not one of our paid subscriptions
-	const plan = subscription.metadata?.plan
-	if (plan !== "plus" && plan !== "premium") {
+	// the plan is set at checkout, so the checkout body's plan names it. anything else is not one of our paid subscriptions
+	const checkoutPlanResult = checkoutPayload.shape.plan.safeParse(subscription.metadata?.plan)
+	if (!checkoutPlanResult.success) {
 		return null
 	}
 
 	const stripeCustomerId = typeof subscription.customer === "string" ? subscription.customer : subscription.customer.id
 	return {
-		plan,
+		plan: checkoutPlanResult.data,
 		status: subscription.status,
 		stripeCustomerId,
 		stripeSubscriptionId: subscription.id,
@@ -256,7 +258,7 @@ async function applySubscriptionState(subscription: Stripe.Subscription): Promis
 
 	// the user's plan before this event
 	const [user] = await db.select({ plan: users.plan }).from(users).where(eq(users.id, userId))
-	const previousPlan = user?.plan ?? "free"
+	const planBeforeEvent = user?.plan ?? "free"
 
 	// a null paid subscription clears the billing_subscriptions row and reverts the user to free
 	const paidSubscription = toPaidSubscription(subscription)
@@ -264,10 +266,10 @@ async function applySubscriptionState(subscription: Stripe.Subscription): Promis
 		await db.delete(billingSubscriptions).where(eq(billingSubscriptions.userId, userId))
 		await syncUserPlan({ userId, plan: "free" })
 		// report the cancellation of a paid plan. a repeated clear of a free user reports nothing
-		if (previousPlan !== "free") {
-			trackEvent("subscription_canceled", userId, { entryPoint: "webhook", plan: "free", fromPlan: previousPlan })
+		if (isPaidPlan(planBeforeEvent)) {
+			trackEvent("subscription_canceled", userId, { entryPoint: "webhook", plan: "free", fromPlan: planBeforeEvent })
 		}
-		await syncUserLiteLLMKey({ userId, plan: "free", previousPlan })
+		await syncUserLiteLLMKey({ userId, plan: "free", planBeforeEvent })
 		return
 	}
 
@@ -279,13 +281,13 @@ async function applySubscriptionState(subscription: Stripe.Subscription): Promis
 	await syncUserPlan({ userId, plan: paidSubscription.plan })
 
 	// report a subscription that started, or a plan that changed. a repeated event for the same plan reports nothing
-	const planProperties = { entryPoint: "webhook", plan: paidSubscription.plan, fromPlan: previousPlan }
-	if (previousPlan === "free") {
+	const planProperties = { entryPoint: "webhook", plan: paidSubscription.plan, fromPlan: planBeforeEvent }
+	if (!isPaidPlan(planBeforeEvent)) {
 		trackEvent("subscription_started", userId, planProperties)
-	} else if (previousPlan !== paidSubscription.plan) {
+	} else if (planBeforeEvent !== paidSubscription.plan) {
 		trackEvent("plan_changed", userId, planProperties)
 	}
-	await syncUserLiteLLMKey({ userId, plan: paidSubscription.plan, previousPlan })
+	await syncUserLiteLLMKey({ userId, plan: paidSubscription.plan, planBeforeEvent })
 }
 
 // the user a subscription event belongs to, and the plan it leaves them on
@@ -298,13 +300,13 @@ async function syncUserPlan({ userId, plan }: SyncUserPlanOptions): Promise<void
 }
 
 // the user a subscription event belongs to, the plan it leaves them on, and the plan they had before it
-type SyncUserLiteLLMKeyOptions = SyncUserPlanOptions & { previousPlan: Plan }
+type SyncUserLiteLLMKeyOptions = SyncUserPlanOptions & { planBeforeEvent: Plan }
 
 // reissue the LiteLLM key at the user's budget if the plan changed or the key's budget is stale. a new key's spend
 // starts at zero
-async function syncUserLiteLLMKey({ userId, plan, previousPlan }: SyncUserLiteLLMKeyOptions): Promise<void> {
+async function syncUserLiteLLMKey({ userId, plan, planBeforeEvent }: SyncUserLiteLLMKeyOptions): Promise<void> {
 	// keep the key if the plan is unchanged and the key's maximum budget matches the user's budget
-	if (previousPlan === plan && !(await isUserLiteLLMKeyBudgetStale(userId))) {
+	if (planBeforeEvent === plan && !(await isUserLiteLLMKeyBudgetStale(userId))) {
 		return
 	}
 

@@ -86,14 +86,26 @@ export const NEXT_SCAN_DISCLAIMER = "Findings appear after the topic's next brew
 export function toSubscribeTooltip(isSignedIn: boolean, isSubscribed: boolean, isInviteTopic: boolean): string {
 	// a visitor is nudged to sign up before the toggle applies to them at all
 	if (!isSignedIn) {
-		return "Sign up to subscribe"
+		return "Sign up to follow"
 	}
 	// already subscribed, so the Follow button's action is to leave
 	if (isSubscribed) {
-		return "Unsubscribe from this topic"
+		return "Unfollow this topic"
 	}
 	// subscribing to an invite topic is accepting it, so the copy includes the next-scan expectation
-	return isInviteTopic ? `Subscribe to this topic. ${NEXT_SCAN_DISCLAIMER}` : "Subscribe to this topic"
+	return isInviteTopic ? `Follow this topic. ${NEXT_SCAN_DISCLAIMER}` : "Follow this topic"
+}
+
+/**
+ * Whether a key press in a composer sends the draft: Enter without Shift, outside an IME composition. An IME user
+ * presses Enter to confirm a candidate, and that press arrives with isComposing true.
+ */
+export function isSendKey(keyPress: {
+	key: string
+	shiftKey: boolean
+	nativeEvent: Pick<KeyboardEvent, "isComposing">
+}): boolean {
+	return keyPress.key === "Enter" && !keyPress.shiftKey && !keyPress.nativeEvent.isComposing
 }
 
 /**

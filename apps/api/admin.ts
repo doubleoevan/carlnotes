@@ -15,7 +15,7 @@ import {
 	loadAdminUserTeams,
 	loadAdminUserTopics,
 } from "./adminConsole"
-import { isAllowed } from "./authorization"
+import { isAdminRole, isAllowed } from "./authorization"
 import { type AppEnv, currentUser } from "./currentUser"
 import { refreshSessionUser } from "./sessions"
 import { loadAdminTeamTopics } from "./team/helpers"
@@ -47,7 +47,7 @@ export async function setUserRole(
 
 // whether a role change is an admin demoting themselves, the one change setUserRole rejects
 export function isSelfDemotion(actingUserId: string, targetUserId: string, role: "admin" | "user"): boolean {
-	return actingUserId === targetUserId && role !== "admin"
+	return actingUserId === targetUserId && !isAdminRole(role)
 }
 
 /**

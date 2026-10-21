@@ -9,6 +9,7 @@ import {
 } from "@carlnotes/client/billingClient"
 import type { OwnerTopic } from "@carlnotes/contracts/activity"
 import type { AdminUserRow } from "@carlnotes/contracts/admin"
+import { isAdminRole } from "@carlnotes/contracts/enums"
 import { toCentsFromDollars } from "@carlnotes/contracts/plans"
 import type { TeamSummary } from "@carlnotes/contracts/teams"
 import { toBytesLabel, toCentsLabel } from "@carlnotes/core/lib/labels"
@@ -77,7 +78,7 @@ export function UserRow({
 
 	// set the user's role on the server, then reload the console
 	async function handleRoleChange(selectedRole: string): Promise<void> {
-		const role = selectedRole === "admin" ? "admin" : "user"
+		const role = isAdminRole(selectedRole) ? "admin" : "user"
 		const isRoleSet = await sendUserRole(user.id, role)
 		if (!isRoleSet) {
 			toast.error("Role change failed.")

@@ -33,6 +33,18 @@ export function isRetryableHttpStatus(status: number): boolean {
 }
 
 /**
+ * Whether a fetch failure is the host rejecting the request, which the url's owner can fix, instead of a fault.
+ */
+export function isHostRejection(error: unknown): boolean {
+	if (error instanceof OversizedBodyError) {
+		return true
+	}
+
+	// a 5xx is the host failing instead of rejecting the request, and can be a request this code sent wrong
+	return error instanceof FetchStatusError && error.status < 500
+}
+
+/**
  * Whether a fetch failure is one the next attempt may pass: a timeout, an abort, a rate limit, or a server error.
  */
 export function isRetryableFetchFailure(error: unknown): boolean {

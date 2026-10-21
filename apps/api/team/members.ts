@@ -8,7 +8,7 @@ import { subscriptions, topics } from "@carlnotes/db/schema/topics"
 import { users } from "@carlnotes/db/schema/users"
 import { trackEvent } from "@carlnotes/server/analytics"
 import { and, count, eq, inArray, not, notInArray } from "drizzle-orm"
-import { isAdminRole } from "../authorization"
+import { isAdminRole, isLeaderRole } from "../authorization"
 import { deletePodcastFeedToken } from "../podcast/podcastFeedTokens"
 import { updateTopicSubscriberCount } from "../topic/subscriberCounts"
 
@@ -97,7 +97,7 @@ export async function approveJoinTeamRequest(
 	joinUserId: string,
 ): Promise<"joined" | "forbidden" | "limited"> {
 	// only a leader can approve a join request
-	if ((await toTeamRole(userId, teamId)) !== "leader") {
+	if (!isLeaderRole(await toTeamRole(userId, teamId))) {
 		return "forbidden"
 	}
 
@@ -195,15 +195,15 @@ export async function removeTeamMember(
 ): Promise<"removed" | "forbidden" | "lastLeader"> {
 	// you can remove a user if you are a leader or yourself if you are not the only leader
 	const teamRole = await toTeamRole(userId, teamId)
-	if (userId !== removeUserId && teamRole !== "leader") {
+	if (userId !== removeUserId && !isLeaderRole(teamRole)) {
 		return "forbidden"
 	}
-	if (teamRole === null) {
+	if (!teamRole) {
 		return "forbidden"
 	}
 
 	// a leader cannot remove themself if they are the only leader
-	if ((await toTeamRole(removeUserId, teamId)) === "leader" && (await teamLeaderCount(teamId)) <= 1) {
+	if (isLeaderRole(await toTeamRole(removeUserId, teamId)) && (await teamLeaderCount(teamId)) <= 1) {
 		return "lastLeader"
 	}
 
@@ -239,6 +239,7 @@ export async function removeTeamMemberInTransaction(
  * Deactivates a team member's subscriptions on the team's topics.
  * A team member that the topic can still reach through another of their teams keeps their subscription to it.
  * A topic that another of their teams owns keeps their subscription to it.
+ * A topic the team member owns themself keeps their subscription to it.
  */
 export async function deactivateTeamTopicSubscriptions(
 	transaction: DbTransaction,
@@ -261,12 +262,16 @@ export async function deactivateTeamTopicSubscriptions(
 			.where(and(eq(teamMembers.userId, userId), notInArray(teamTopics.teamId, [teamId])))
 	// a topic another of their teams owns keeps their subscription to it
 	// biome-ignore lint/nursery/useExplicitReturnType: drizzle's select builder type is generated, and naming it here would break on an upgrade
-	const ownedTopicIds = (userId: string) =>
+	const teamOwnedTopicIds = (userId: string) =>
 		transaction
 			.select({ topicId: topics.id })
 			.from(topics)
 			.innerJoin(teamMembers, and(eq(teamMembers.teamId, topics.teamId), eq(teamMembers.isActive, true)))
 			.where(and(eq(teamMembers.userId, userId), notInArray(topics.teamId, [teamId])))
+	// a topic the team member owns themself keeps their subscription to it
+	// biome-ignore lint/nursery/useExplicitReturnType: drizzle's select builder type is generated, and naming it here would break on an upgrade
+	const userOwnedTopicIds = (userId: string) =>
+		transaction.select({ topicId: topics.id }).from(topics).where(eq(topics.ownerId, userId))
 
 	// the rows deactivate instead of being deleted, and the user's podcast feed token for each of those topics is deleted
 	for (const userId of userIds) {
@@ -278,7 +283,8 @@ export async function deactivateTeamTopicSubscriptions(
 					inArray(subscriptions.topicId, teamTopicIds),
 					eq(subscriptions.subscriberUserId, userId),
 					notInArray(subscriptions.topicId, subscribedTopicIds(userId)),
-					notInArray(subscriptions.topicId, ownedTopicIds(userId)),
+					notInArray(subscriptions.topicId, teamOwnedTopicIds(userId)),
+					notInArray(subscriptions.topicId, userOwnedTopicIds(userId)),
 				),
 			)
 			.returning({ topicId: subscriptions.topicId })
@@ -302,12 +308,12 @@ export async function setTeamMemberRole(
 	targetUserId: string,
 	role: "leader" | "member",
 ): Promise<"saved" | "forbidden" | "lastLeader"> {
-	if ((await toTeamRole(actingUserId, teamId)) !== "leader") {
+	if (!isLeaderRole(await toTeamRole(actingUserId, teamId))) {
 		return "forbidden"
 	}
 	// demoting the last leader would leave the team with no leader and is not allowed
-	const isRoleDemotion = role !== "leader"
-	if (isRoleDemotion && (await toTeamRole(targetUserId, teamId)) === "leader" && (await teamLeaderCount(teamId)) <= 1) {
+	const isRoleDemotion = !isLeaderRole(role)
+	if (isRoleDemotion && isLeaderRole(await toTeamRole(targetUserId, teamId)) && (await teamLeaderCount(teamId)) <= 1) {
 		return "lastLeader"
 	}
 

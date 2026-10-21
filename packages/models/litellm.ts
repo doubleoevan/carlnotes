@@ -1,5 +1,5 @@
 // load the LiteLLM key that is billed for a user's model calls, and create the key if the user has none.
-// create, replace, delete, and read a user's budgeted key through the proxy admin api, and run the monthly reset
+// replace a user's key at a budget change, delete it with the user, and run the monthly reset
 
 import { isAdminRole } from "@carlnotes/contracts/enums"
 import { toCentsFromDollars, userBudgetCents } from "@carlnotes/contracts/plans"
@@ -10,15 +10,10 @@ import { users } from "@carlnotes/db/schema/users"
 import { runWithConcurrency } from "@carlnotes/server/concurrency"
 import { reportError } from "@carlnotes/server/monitoring"
 import { and, eq, isNotNull, isNull, lt, sql } from "drizzle-orm"
+import { deleteLiteLLMKey, type LiteLLMKeyBudget, provisionLiteLLMKey, readLiteLLMKeyBudget } from "./litellmProxy"
 
 // how many key replacements the reset runs against the proxy at once
 const MONTHLY_BUDGET_RESET_CONCURRENCY = 4
-
-// how long a proxy admin call may run before it counts as failed
-const LITELLM_ADMIN_TIMEOUT_MS = 5000
-
-// a key's recorded spend and its maximum budget in dollars. a key with no maximum budget has a null budget
-export type LiteLLMKeyBudget = { spendDollars: number; maxBudgetDollars: number | null }
 
 // a user's stored key, the email and budget that a new key for the user is created with,
 // and the role, plan, and budget override that the budget is computed from
@@ -168,58 +163,6 @@ async function loadUserLiteLLMKeyBudget(userId: string): Promise<UserLiteLLMKeyB
 }
 
 /**
- * Creates a virtual key for a user at the user's monthly budget. The proxy never resets the key's spend on its own.
- * The spend starts again at zero only when the monthly budget reset or a plan or budget change replaces the key.
- */
-export async function provisionLiteLLMKey(email: string, budgetCents: number): Promise<string> {
-	// ask the proxy for a budgeted key aliased to the user's email and the creation time
-	const { baseURL, masterKey } = litellmConfig()
-	const response = await fetch(`${baseURL}/key/generate`, {
-		method: "POST",
-		headers: authHeaders(masterKey),
-		// the key is the user's, aliased to their email and the creation time, at their budget in dollars
-		body: JSON.stringify({
-			user_id: email,
-			key_alias: `user:${email}:${Date.now()}`,
-			max_budget: budgetCents / 100,
-		}),
-		signal: AbortSignal.timeout(LITELLM_ADMIN_TIMEOUT_MS),
-	})
-	// log the proxy's response body and throw an error that names only the status
-	if (!response.ok) {
-		console.error(`litellm key/generate failed: ${response.status}`, await response.text())
-		throw new Error(`litellm key/generate failed: ${response.status}`)
-	}
-	const { key } = (await response.json()) as { key: string }
-	return key
-}
-
-/**
- * Deletes a virtual key from the proxy, so nothing can spend what is left of its budget.
- */
-export async function deleteLiteLLMKey(key: string): Promise<void> {
-	// ask the proxy to delete the key
-	const { baseURL, masterKey } = litellmConfig()
-	const response = await fetch(`${baseURL}/key/delete`, {
-		method: "POST",
-		headers: authHeaders(masterKey),
-		body: JSON.stringify({ keys: [key] }),
-		signal: AbortSignal.timeout(LITELLM_ADMIN_TIMEOUT_MS),
-	})
-
-	// a key that the proxy does not know is already deleted
-	if (response.status === 404) {
-		return
-	}
-
-	// log the proxy's response body and throw an error that names only the status
-	if (!response.ok) {
-		console.error(`litellm key/delete failed: ${response.status}`, await response.text())
-		throw new Error(`litellm key/delete failed: ${response.status}`)
-	}
-}
-
-/**
  * Deletes a user's stored LiteLLM key from the proxy.
  */
 export async function deleteUserLiteLLMKey(userId: string): Promise<void> {
@@ -228,44 +171,6 @@ export async function deleteUserLiteLLMKey(userId: string): Promise<void> {
 	if (litellmKeyOwner?.litellmVirtualKey) {
 		await deleteLiteLLMKey(litellmKeyOwner.litellmVirtualKey)
 	}
-}
-
-/**
- * Reads a key's recorded spend and maximum budget.
- * Returns null if the proxy is unreachable, times out, or does not know the key.
- */
-export async function readLiteLLMKeyBudget(key: string): Promise<LiteLLMKeyBudget | null> {
-	try {
-		// ask the proxy for the key's recorded spend and maximum budget
-		const { baseURL, masterKey } = litellmConfig()
-		const response = await fetch(`${baseURL}/key/info?key=${encodeURIComponent(key)}`, {
-			headers: authHeaders(masterKey),
-			signal: AbortSignal.timeout(LITELLM_ADMIN_TIMEOUT_MS),
-		})
-		// a failed response, such as for a key that the proxy does not know, reads as an unknown budget
-		if (!response.ok) {
-			return null
-		}
-
-		// return the spend and the maximum budget. a response with no spend reads as an unknown budget
-		const { info } = (await response.json()) as { info?: { spend?: number; max_budget?: number | null } }
-		if (typeof info?.spend !== "number") {
-			return null
-		}
-		return { spendDollars: info.spend, maxBudgetDollars: info.max_budget ?? null }
-	} catch {
-		// a network failure or a timeout reads as an unknown budget
-		return null
-	}
-}
-
-/**
- * Reads a key's recorded spend in dollars, or null if the proxy is unreachable, times out, or does not know the key.
- */
-export async function readLiteLLMKeySpend(key: string): Promise<number | null> {
-	// read the key's budget and return its spend
-	const litellmKeyBudget = await readLiteLLMKeyBudget(key)
-	return litellmKeyBudget?.spendDollars ?? null
 }
 
 /**
@@ -278,22 +183,33 @@ export async function replaceUserLiteLLMKey(userId: string): Promise<boolean> {
 	if (!litellmKeyOwner?.litellmVirtualKey) {
 		return true
 	}
-	const { litellmVirtualKey, budgetCents } = litellmKeyOwner
+	const { litellmVirtualKey, budgetCents, role, plan, budgetOverrideCents } = litellmKeyOwner
 
-	// the new key is stored before the old one is retired, so a store that fails leaves the user on the old key
+	// the new key is stored before the old one is retired, so a store that fails leaves the user on the old key.
+	// the store matches the row only while it still has the key, the role, the plan, and the override that sized the
+	// new key, so two replacements at once store one key and a budget that changed since the read stores none
 	try {
 		const replacementKey = await provisionLiteLLMKey(litellmKeyOwner.email, budgetCents)
 		const updatedUserIds = await db
 			.update(users)
 			.set({ litellmVirtualKey: replacementKey, litellmKeyCreatedAt: new Date() })
-			.where(eq(users.id, userId))
+			.where(
+				and(
+					eq(users.id, userId),
+					eq(users.litellmVirtualKey, litellmVirtualKey),
+					eq(users.role, role),
+					eq(users.plan, plan),
+					sql`${users.budgetOverrideCents} is not distinct from ${budgetOverrideCents}`,
+				),
+			)
 			.returning({ id: users.id })
 			.catch((storeError: unknown) => checkFailedLiteLLMKeyStore({ userId, key: replacementKey, storeError }))
 
-		// the user's row is gone, so delete the new key that no row has
+		// the user's row is gone, another replacement stored its key first, or the budget changed since the read, so the
+		// new key that no row has is deleted, and the stored key counts as replaced only if its budget is current
 		if (updatedUserIds.length === 0) {
 			await deleteUnstoredLiteLLMKey(userId, replacementKey)
-			return true
+			return !(await isUserLiteLLMKeyBudgetStale(userId))
 		}
 
 		// the new key is stored, so an old one the proxy would not retire is reported, not a failure
@@ -378,19 +294,4 @@ async function loadLiteLLMKeyOwner(userId: string): Promise<LiteLLMKeyOwner | un
 		budgetOverrideCents: user.budgetOverrideCents,
 	})
 	return { ...user, budgetCents }
-}
-
-// the proxy base url and master key, required for every admin call
-function litellmConfig(): { baseURL: string; masterKey: string } {
-	const baseURL = Bun.env.LITELLM_BASE_URL
-	const masterKey = Bun.env.LITELLM_MASTER_KEY
-	if (!baseURL || !masterKey) {
-		throw new Error("LITELLM_BASE_URL and LITELLM_MASTER_KEY must be set to manage user keys")
-	}
-	return { baseURL, masterKey }
-}
-
-// the master-key auth headers for the proxy admin api
-function authHeaders(masterKey: string): Record<string, string> {
-	return { Authorization: `Bearer ${masterKey}`, "Content-Type": "application/json" }
 }

@@ -1,12 +1,3 @@
-import { sendTopicPodcast } from "@carlnotes/client/podcastEpisodeClient"
-import {
-	DailyTopicLimitError,
-	sendAttachmentContext,
-	sendCreateTopic,
-	sendDeleteAttachment,
-	sendUpdateTopic,
-	uploadTopicAttachment,
-} from "@carlnotes/client/topicClient"
 import { maxTopicFindingsOptions, visibilities } from "@carlnotes/contracts/enums"
 import type { TopicPodcast } from "@carlnotes/contracts/podcast"
 import {
@@ -15,27 +6,27 @@ import {
 	SHORT_PODCAST_EPISODE_MINUTES,
 } from "@carlnotes/contracts/podcastEpisodes"
 import type { TopicResponse } from "@carlnotes/contracts/topics"
-import { type UseNavigateResult, useNavigate } from "@tanstack/react-router"
+import { useNavigate } from "@tanstack/react-router"
 import { useRef, useState } from "react"
 import { toast } from "sonner"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { FieldLabel } from "@/components/common/FieldLabel"
-import { InviteEditor, sendPendingUsernameInvites } from "@/components/invite/InviteEditor"
+import { InviteEditor } from "@/components/invite/InviteEditor"
 import { Button } from "@/components/primitives/button"
 import { Dialog, DialogContent, DialogFooter, DialogTitle } from "@/components/primitives/dialog"
 import { Input } from "@/components/primitives/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/primitives/select"
 import { Switch } from "@/components/primitives/switch"
-import { toSeePlansToastAction } from "@/lib/toastActions"
 import { cn } from "@/lib/utils"
 import { useTopicFeed } from "@/providers/TopicFeedProvider"
 import { hasDailySlotLeft, PromptSourceUrls, ScheduleFields, SourceLimitNote } from "./EditTopicFields"
+import { MISSING_FIELD_NOTES, saveTopic, showSaveError } from "./saveTopic"
 import { TagPicker } from "./TagPicker"
 import { stageFiles, TopicAttachmentEditor } from "./TopicAttachmentEditor"
 import { TopicPromptComposer } from "./TopicPromptComposer"
 import { TopicSourceEditor } from "./TopicSourceEditor"
-import { type TopicTeamField, TopicTeamSelect, useTopicTeamChoice } from "./TopicTeamSelect"
-import { type TopicFields, toUpdateTopicPayload, useTopicFields, type Visibility } from "./useTopicFields"
+import { TopicTeamSelect, useTopicTeamChoice } from "./TopicTeamSelect"
+import { useTopicFields, type Visibility } from "./useTopicFields"
 
 // the emoji shown for each visibility option
 const VISIBILITY_EMOJI: Record<Visibility, string> = { private: "🔒", public: "🌐", invite: "✉️" }
@@ -68,6 +59,8 @@ export function EditTopicModal({
 	const fields = useTopicFields(topic, isMakingTopicPublic)
 	const topicTeam = useTopicTeamChoice(topic, initialTeam)
 	const [isSaving, setIsSaving] = useState(false)
+	// the id a failed Save already created, which the retry updates
+	const createdTopicIdRef = useRef<string | null>(null)
 
 	// a topic that is not private lives on a team
 	const isTeamMissing = fields.visibility !== "private" && !topicTeam.isTeamChosen
@@ -106,7 +99,7 @@ export function EditTopicModal({
 		setIsSaving(true)
 		try {
 			const topicName = fields.name
-			const topicId = await saveTopic({ topic, fields, topicTeam })
+			const topicId = await saveTopic({ topic, createdTopicId: createdTopicIdRef, fields, topicTeam })
 			await onTopicSaved(topicId, topicName)
 		} catch (error) {
 			// surface an error as a toast. the modal stays open so a failed upload retries on the next Save
@@ -319,91 +312,4 @@ export function PodcastSwitch({ topicPodcast, isPodcastEnabled, isTopicOwner, on
 			/>
 		</div>
 	)
-}
-
-/**
- * Create or update the topic, then upload the new files, send the attachment edits, and send the attachment removals.
- * Returns the saved topic's id. Throws only if the save itself fails, and shows lesser failures as toasts.
- */
-async function saveTopic({
-	topic,
-	fields,
-	topicTeam,
-}: {
-	topic: TopicResponse | undefined
-	fields: TopicFields
-	topicTeam: TopicTeamField
-}): Promise<string> {
-	// an existing topic updates in place. a new one is created and yields its id
-	const payload = toUpdateTopicPayload(fields)
-	let topicId: string
-	if (topic) {
-		await sendUpdateTopic(topic.id, payload)
-		topicId = topic.id
-	} else {
-		topicId = await sendCreateTopic(payload)
-	}
-
-	// save the podcast switch if it changed and show a toast if it did not save
-	if (topic?.podcast && fields.isPodcastEnabled !== topic.podcast.isEnabled) {
-		const isTopicPodcastSaved = await sendTopicPodcast({ topicId: topic.id, isPodcastEnabled: fields.isPodcastEnabled })
-		if (!isTopicPodcastSaved) {
-			toast.error("The podcast switch didn't save. Carl suggests trying again.")
-		}
-	}
-
-	// upload the new attachment files one at a time, dropping each from the pending list as it uploads
-	for (const file of [...fields.pendingFiles]) {
-		await uploadTopicAttachment(topicId, file)
-		fields.setPendingFiles((current) => current.filter((pending) => pending !== file))
-	}
-
-	// update every attachment whose context the owner edited, for the next topic scan
-	const editedAttachments = fields.keptAttachments.filter((attachment) => {
-		const loadedAttachment = topic?.attachments.find((loaded) => loaded.id === attachment.id)
-		return loadedAttachment !== undefined && attachment.context !== loadedAttachment.context
-	})
-	for (const attachment of editedAttachments) {
-		await sendAttachmentContext(attachment.id, attachment.context ?? "")
-	}
-
-	// best-effort attachment removals. the reloaded page shows whatever truly remains
-	const keptAttachmentIds = new Set(fields.keptAttachments.map((attachment) => attachment.id))
-	const removedAttachments = (topic?.attachments ?? []).filter((attachment) => !keptAttachmentIds.has(attachment.id))
-	await Promise.all(
-		removedAttachments.map((attachment) =>
-			sendDeleteAttachment(attachment.id).catch((error) => console.error("attachment delete failed", error)),
-		),
-	)
-
-	// a private topic keeps no team and names no followers
-	if (fields.visibility !== "private") {
-		await sendPendingUsernameInvites(topicId, fields.usernameInvites).catch((error) => {
-			console.error("username invites failed", error)
-			toast.error("The topic saved, but its invitations didn't go out.")
-		})
-		await topicTeam.assignTopicTeam(topicId).catch((error) => {
-			console.error("team change failed", error)
-			toast.error("The topic saved, but the team change didn't hold.")
-		})
-	}
-	return topicId
-}
-
-// what the toast shows for each required field a save click found empty
-const MISSING_FIELD_NOTES = {
-	name: "Please give the topic a title.",
-	prompt: "Please write Carl's prompt first.",
-	team: "Pick a team, create one, or set Visibility to private.",
-} as const
-
-// show a toast to tell the user why a topic save failed
-function showSaveError(error: unknown, navigate: UseNavigateResult<string>): void {
-	if (error instanceof DailyTopicLimitError) {
-		toast.error(`${error.message}\n Move a topic to weekly, or get a bigger pot.`, {
-			action: toSeePlansToastAction(navigate),
-		})
-		return
-	}
-	toast.error(error instanceof Error ? error.message : "Save failed. Carl suggests trying again.")
 }

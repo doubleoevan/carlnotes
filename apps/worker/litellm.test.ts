@@ -4,13 +4,11 @@ import { afterEach, beforeEach, expect, spyOn, test } from "bun:test"
 import { toTableRow } from "@carlnotes/db/connectionPoolStub"
 import { scans } from "@carlnotes/db/schema/scans"
 import {
-	deleteLiteLLMKey,
 	isUserLiteLLMKeyBudgetExhausted,
 	isUserLiteLLMKeyBudgetStale,
 	loadOrProvisionUserLiteLLMKey,
-	provisionLiteLLMKey,
-	readLiteLLMKeyBudget,
 } from "@carlnotes/models/litellm"
+import { deleteLiteLLMKey, provisionLiteLLMKey, readLiteLLMKeyBudget } from "@carlnotes/models/litellmProxy"
 import {
 	restoreLiteLLMTest,
 	setUpLiteLLMTest,

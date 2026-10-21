@@ -118,7 +118,7 @@ export const topicsRoute = new Hono<AppEnv>()
 		if (topicPage) {
 			return context.json(topicPage)
 		}
-		// respond 403 with the gate of an invite or private topic, or 404 for a missing topic
+		// respond 403 with the gate of an invite topic, or 404 for a private or missing topic
 		const topicGateResponse = await loadTopicGateResponse(topicId)
 		return topicGateResponse ? context.json(topicGateResponse, 403) : context.json({ error: "not found" }, 404)
 	})

@@ -8,7 +8,7 @@ import { deleteStoredObject, toResourceContentKey, uploadResourceContent } from 
 import { type Budget, charge } from "@carlnotes/models/budget"
 import { traceStage } from "@carlnotes/models/telemetry"
 import { reportError } from "@carlnotes/server/monitoring"
-import { FetchStatusError, OversizedBodyError } from "@carlnotes/server/publicFetch"
+import { isHostRejection } from "@carlnotes/server/publicFetch"
 import { eq, sql } from "drizzle-orm"
 import { blueskyIngester } from "./bluesky"
 import type { FetchedBody, IngestContext, IngestedResource, IngestResult, Source, SourceIngester } from "./ingester"
@@ -134,18 +134,6 @@ async function storeFetchedBody(resourceId: string, fetchedBody: FetchedBody): P
 		reportError(error, "object-storage", { resourceId, operation: "write" })
 		await deleteStoredObject(toResourceContentKey(resourceId))
 	}
-}
-
-/**
- * Whether a Source failure is the host rejecting the request instead of a fault in this code.
- */
-export function isHostRejection(error: unknown): boolean {
-	if (error instanceof OversizedBodyError) {
-		return true
-	}
-
-	// a 5xx is the host failing instead of rejecting the request, and can be a request this code sent wrong
-	return error instanceof FetchStatusError && error.status < 500
 }
 
 /**

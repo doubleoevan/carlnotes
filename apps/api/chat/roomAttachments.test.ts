@@ -1,14 +1,15 @@
-// room attachment tests for shared images: a flagged image rejects the post, a flagged description marks its row
-// failed, and a room turn never reads a failed image
+// room attachment tests for shared files: a flagged image rejects the post, a flagged description marks its row
+// failed, a room turn never reads a failed image, and a stored file's key is pending until its row commits
 import { afterEach, beforeEach, expect, mock, spyOn, test } from "bun:test"
 import type { ChatAttachment } from "@carlnotes/contracts/payloads"
 import { restoreConnectionPool, stubConnectionPool } from "@carlnotes/db/connectionPoolStub"
+import * as store from "@carlnotes/db/store"
 import { withoutScanner, withScanner } from "@carlnotes/models/guardTestFixtures"
 import * as imageText from "@carlnotes/models/imageText"
 import * as litellm from "@carlnotes/models/litellm"
 import * as attach from "@carlnotes/pipeline/attach"
 import { quietErrorReports } from "@carlnotes/server/monitoringTestFixtures"
-import { describeChatRoomImage, prepareChatRoomAttachments } from "./roomAttachments"
+import { describeChatRoomImage, prepareChatRoomAttachments, storeChatRoomAttachment } from "./roomAttachments"
 import { loadPromptMessageImages } from "./roomTurns"
 
 // the text the image screen's image text read returns, so a test image needs no real text in its pixels. the afterEach below
@@ -78,4 +79,33 @@ test("a room turn never reads a failed image", async () => {
 	// the read leaves out a failed row
 	expect(sentQueries[0]?.text).toContain('"room_attachments"."status" <> $')
 	expect(sentQueries[0]?.values).toContain("failed")
+})
+
+// a shared file's key is recorded as pending before its bytes store, and the row's transaction clears it
+test("a shared file records its key before the upload and clears it with the row", async () => {
+	// a stubbed database with every query recorded, and a spied upload
+	const sentQueries = stubConnectionPool()
+	const uploadAttachmentSpy = spyOn(store, "uploadAttachment").mockResolvedValue()
+	await storeChatRoomAttachment("user-1", "ann", "topic-1", "team-1", 42, {
+		attachment: { kind: "pdf", name: "paper.pdf", dataUrl: "data:application/pdf;base64,AA", keep: false },
+		contextText: "the paper's words",
+		bytes: new Uint8Array([1]),
+		contentType: "application/pdf",
+	})
+
+	// the pending insert comes first, the upload next, and the clear follows the row insert
+	const pendingInsertIndex = sentQueries.findIndex(({ text }) =>
+		text.startsWith('insert into "pending_object_deletions"'),
+	)
+	const rowInsertIndex = sentQueries.findIndex(({ text }) => text.startsWith('insert into "room_attachments"'))
+	const pendingDeleteIndex = sentQueries.findIndex(({ text }) =>
+		text.startsWith('delete from "pending_object_deletions"'),
+	)
+	expect(pendingInsertIndex).toBe(0)
+	expect(pendingDeleteIndex).toBeGreaterThan(rowInsertIndex)
+
+	// the three name one key
+	const objectKey = uploadAttachmentSpy.mock.calls[0]?.[0]
+	expect(sentQueries[pendingInsertIndex]?.values[0]).toBe(objectKey)
+	expect(sentQueries[pendingDeleteIndex]?.values).toEqual([objectKey])
 })

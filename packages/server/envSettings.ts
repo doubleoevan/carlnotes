@@ -10,11 +10,12 @@ export function toPositiveInteger(value: string | undefined, defaultValue: numbe
 }
 
 /**
- * Reads a setting in dollars, or the default if unset, and throws an error on anything but zero or more dollars.
+ * Reads a setting in dollars, or the default if unset or empty, and throws an error on anything but zero or more dollars.
  */
 export function readDollarSetting(settingName: string, defaultDollars: number): number {
-	const configuredValue = Bun.env[settingName]
-	const dollars = configuredValue === undefined ? defaultDollars : Number(configuredValue)
+	// an empty value reads as unset, the way toPositiveInteger reads one
+	const configuredValue = Bun.env[settingName]?.trim()
+	const dollars = configuredValue ? Number(configuredValue) : defaultDollars
 	if (!Number.isFinite(dollars) || dollars < 0) {
 		throw new Error(`${settingName} must be a number of dollars, zero or more. got: ${configuredValue}`)
 	}

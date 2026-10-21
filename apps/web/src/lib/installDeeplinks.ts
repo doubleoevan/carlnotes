@@ -66,8 +66,9 @@ export function toInstallDeeplink(deeplinkAiProvider: DeeplinkAiProvider, mcpSer
 		return `cursor://anysphere.cursor-deeplink/mcp/install?name=${encodeURIComponent(mcpServer.name)}&config=${encodeURIComponent(encodedConfig)}`
 	}
 
-	// build the vs code deeplink with the server as url-encoded json
-	return `vscode://mcp/install?${encodeURIComponent(JSON.stringify({ name: mcpServer.name, url: mcpServer.url }))}`
+	// build the vs code deeplink with the server as url-encoded json. a remote server declares the http transport
+	const vscodeMcpServer = { name: mcpServer.name, type: "http", url: mcpServer.url }
+	return `vscode:mcp/install?${encodeURIComponent(JSON.stringify(vscodeMcpServer))}`
 }
 
 /**

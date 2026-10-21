@@ -333,6 +333,7 @@ async function seedTopic(topic: SeedTopic): Promise<void> {
 				topicId: topic.id,
 				resourceId,
 				scanId,
+				foundScanId: scanId,
 				// the score and explanation Carl gave, plus a demo view count derived from the score
 				relevanceScore: finding.score,
 				relevanceExplanation: finding.why,

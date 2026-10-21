@@ -87,6 +87,7 @@ export async function seed(): Promise<void> {
 			topicId,
 			resourceId: resourceRow.id,
 			scanId: scan.id,
+			foundScanId: scan.id,
 			relevanceScore: 0.9 - index * 0.1,
 			relevanceExplanation: `Why finding ${index + 1} matters to ${runId}.`,
 		})),

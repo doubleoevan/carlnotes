@@ -8,6 +8,7 @@ import { AnchorLink } from "@/components/common/AnchorLink"
 import { Button, buttonVariants } from "@/components/primitives/button"
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/primitives/dialog"
 import { useBrowserValue } from "@/hooks/useBrowserValue"
+import { copyToClipboard } from "@/lib/utils"
 import { captureVisitEvent, toPublicTopicProperties } from "@/lib/visitAnalytics"
 
 // the podcast app link for each platform. iOS opens Apple Podcasts, and Android apps register the pcast scheme
@@ -57,8 +58,7 @@ export function PodcastFeedDialog({
 	const handleCopyPodcastFeedUrl = async (): Promise<void> => {
 		captureSubscribeClick("copy-link")
 		if (podcastFeedUrl) {
-			await navigator.clipboard.writeText(podcastFeedUrl)
-			toast("Feed link copied.")
+			await copyToClipboard(podcastFeedUrl, "Feed link copied.")
 		}
 	}
 

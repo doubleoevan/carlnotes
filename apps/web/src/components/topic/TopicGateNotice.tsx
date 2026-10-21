@@ -1,4 +1,3 @@
-import type { GatedTopicVisibility } from "@carlnotes/client/topicClient"
 import { toCtaTag } from "@carlnotes/contracts/signupCta"
 import { useNavigate } from "@tanstack/react-router"
 import { AnchorLink } from "@/components/common/AnchorLink"
@@ -7,48 +6,32 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle } f
 import { toSignupHref } from "@/components/session/signupPrompts"
 import { useSearchParams } from "@/hooks/useSearchParams"
 
-// the gated topic's visibility, whether the user is signed in, and the path that a visitor returns to
-type TopicGateNoticeProps = { visibility: GatedTopicVisibility; isSignedIn: boolean; returnPath: string }
-
-// what each gate says to a signed-in user and to a visitor.
-// a private topic's gate asks a visitor to log in and never to sign up
-const GATE_COPY = {
-	invite: {
-		title: "This topic is invite-only",
-		signedInDescription: "Ask the topic owner for an invite to see it.",
-		visitorDescription: "Sign up to see it.",
-	},
-	private: {
-		title: "This topic is private",
-		signedInDescription: "Ask the topic owner to share it with you.",
-		visitorDescription: "Log in to see it if it's shared with you.",
-	},
-} satisfies Record<GatedTopicVisibility, { title: string; signedInDescription: string; visitorDescription: string }>
+// whether the user is signed in, and the path that a visitor returns to
+type TopicGateNoticeProps = { isSignedIn: boolean; returnPath: string }
 
 /**
- * The gate in front of an invite or private topic's page or its podcast episode's page.
+ * The gate in front of an invite topic's page or its podcast episode's page.
  */
-export function TopicGateNotice({ visibility, isSignedIn, returnPath }: TopicGateNoticeProps) {
+export function TopicGateNotice({ isSignedIn, returnPath }: TopicGateNoticeProps) {
 	const navigate = useNavigate()
 
 	// which arrival a signup gets attributed to for analytics
 	const searchParams = useSearchParams()
 	const ctaTag = toCtaTag(searchParams.get("src")) ?? "gate"
-
-	// the copy for the gated topic's visibility
-	const gateCopy = GATE_COPY[visibility]
 	return (
 		<Dialog open onOpenChange={() => navigate({ to: "/" })}>
 			{/* the gate's own actions are the only ways out, so there is no ✕ */}
 			<DialogContent className="sm:max-w-md" hideCloseButton>
-				<DialogTitle>{gateCopy.title}</DialogTitle>
-				<DialogDescription>{isSignedIn ? gateCopy.signedInDescription : gateCopy.visitorDescription}</DialogDescription>
+				<DialogTitle>This topic is invite-only</DialogTitle>
+				<DialogDescription>
+					{isSignedIn ? "Ask the topic owner for an invite to see it." : "Sign up to see it."}
+				</DialogDescription>
 				<DialogFooter>
 					{isSignedIn ? (
 						// the only action a signed-in user has here is leaving
 						<Button onClick={() => navigate({ to: "/" })}>Back to CarlNotes</Button>
 					) : (
-						<GatedSignedOutActions returnPath={returnPath} ctaTag={ctaTag} isSignupShown={visibility === "invite"} />
+						<GatedSignedOutActions returnPath={returnPath} ctaTag={ctaTag} />
 					)}
 				</DialogFooter>
 			</DialogContent>
@@ -56,31 +39,20 @@ export function TopicGateNotice({ visibility, isSignedIn, returnPath }: TopicGat
 	)
 }
 
-// the visitor's call-to-action links, which return to the gated page after login or signup.
-// a private topic offers login alone, as the primary action
-function GatedSignedOutActions({
-	returnPath,
-	ctaTag,
-	isSignupShown,
-}: {
-	returnPath: string
-	ctaTag: string
-	isSignupShown: boolean
-}) {
+// the visitor's call-to-action links, which return to the gated page after login or signup
+function GatedSignedOutActions({ returnPath, ctaTag }: { returnPath: string; ctaTag: string }) {
 	return (
 		<>
 			<AnchorLink
 				href={`/login?next=${encodeURIComponent(returnPath)}`}
-				className={buttonVariants({ variant: isSignupShown ? "outline" : "default" })}
+				className={buttonVariants({ variant: "outline" })}
 			>
 				Log in
 			</AnchorLink>
 			{/* cta names the arrival for the signup_completed event */}
-			{isSignupShown ? (
-				<AnchorLink href={toSignupHref(ctaTag, returnPath)} className={buttonVariants({ variant: "default" })}>
-					Sign up
-				</AnchorLink>
-			) : null}
+			<AnchorLink href={toSignupHref(ctaTag, returnPath)} className={buttonVariants({ variant: "default" })}>
+				Sign up
+			</AnchorLink>
 		</>
 	)
 }

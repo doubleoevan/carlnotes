@@ -20,7 +20,8 @@ at the root import it by name.
   limit, over the fake bundle and requests in `indexTestFixtures.ts`.
   `index.ts` serves the docs site's static build from `apps/docs/dist` at `/docs`, stripping the prefix to find a file,
   and the web app's browser bundle from `apps/web/dist/client`. It renders every other page through the web app's
-  server build in `apps/web/dist/server`, the paths `bundlePaths.ts` names. A page render sets the `DEGRADED_RENDER_HEADER` from `@carlnotes/contracts/seo` if a required
+  server build in `apps/web/dist/server`, the paths `bundlePaths.ts` names. A page render sets the
+  `DEGRADED_RENDER_HEADER` from `@carlnotes/contracts/seo` if a required
   read fails, and that page returns a 503 with a `Retry-After`, is reported, and is never cached at the edge.
   Ahead of a page render, `index.ts` limits a visitor's origin requests by address through `rateLimit.ts`, redirects a
   page url with a click id (`fbclid`, `gclid`, and the like) permanently to the url without it, which is the
@@ -216,8 +217,10 @@ at the root import it by name.
 - `activity.ts` — the activity page and its route, over `activityTopics.ts` (each topic's month scans, counts, chat
   mentions, and latest podcast episode).
 - `invite/invites.ts` — the invite links, the topic or team a token opens, and the link routes;
-  `invite/inviteAcceptance.ts` — accepting an invite: the token acceptance, the topic and team acceptances, and the
-  spent use. `invites.smoke.ts` runs `inviteLinkSmokeSections.ts` and `userInviteSmokeSections.ts` over
+  `invite/inviteAcceptance.ts` — accepting an invite: the token acceptance, the topic and team acceptances, the
+  spent use, and `loadUserEmail` with `toInviteAddressedToUserFilter`, the invitation match by account or verified
+  address that `activity.ts` and `invite/receivedInvites.ts` read through. `invites.smoke.ts` runs
+  `inviteLinkSmokeSections.ts` and `userInviteSmokeSections.ts` over
   `inviteSmokeFixtures.ts`, and `team/teams.smoke.ts` runs `teamMembershipSmokeSections.ts`,
   `teamTopicSmokeSections.ts`, and `teamPageSmokeSections.ts` over `teamSmokeFixtures.ts`.
   `podcast/podcastEpisodes.smoke.ts` runs `podcastEpisodeSmokeSections.ts`, `podcastFeedSmokeSections.ts`,
@@ -248,9 +251,11 @@ at the root import it by name.
   and `cacheSession` from the session update hook,
   so a session missing from Redis is stored at its next daily refresh.
   An account close is rejected while a configured Redis is unreachable.
-- Every authority check routes through `authorization.ts` and the role helpers, `loadMonthlyBudgetCutoffStatus` among
-  them, which says whether a cutoff kind is stopped by a spent budget, paused, or allowed; inline
-  `role ===` / `plan ===` comparisons are banned outside it (`authorization.test.ts` greps).
+- Every authority check routes through `authorization.ts` and the role and plan readers in
+  `@carlnotes/contracts/enums` (`isAdminRole`, `isLeaderRole`, `isPaidPlan`, `isPremiumPlan`), with
+  `loadMonthlyBudgetCutoffStatus` among the gate's checks, which says whether a cutoff kind is stopped by a spent
+  budget, paused, or allowed. A `===` or `!==` on a name ending in role, plan, or tier, or against a role or plan
+  literal, is banned across `apps/api` and `apps/web/src` outside the gate (`authorization.test.ts` greps both).
 - Request bodies validate with zod payloads from `@carlnotes/contracts/payloads` and
   `@carlnotes/contracts/topicPayloads` via `zValidator`.
 - A private or team read the user may not see responds 404, never 403; the invite gate keeps its 403.

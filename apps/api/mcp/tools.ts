@@ -64,7 +64,7 @@ function registerReadTools(mcpServer: McpServer, toolCaller: ToolCaller, routeTo
 		{
 			title: "List topics",
 			description:
-				"The topics this toolCaller may read: the public ones for everyone, plus what a connected account owns, follows, and holds through a team.",
+				"The topics you may read: the public ones for everyone, plus what a connected account owns, follows, and holds through a team.",
 			inputSchema: z.object({ cursor: cursorArgument }),
 			annotations: { readOnlyHint: true },
 		},

@@ -1,6 +1,7 @@
 import { PODCAST_NAME } from "@carlnotes/contracts/podcastEpisodes"
 import { DEFAULT_SOURCES, toDefaultSource } from "@carlnotes/contracts/sources"
 import type { TopicFeed, TopicResponse } from "@carlnotes/contracts/topics"
+import { toCountLabel } from "@carlnotes/core/lib/labels"
 import { AudioLines, Diamond, Download, ExternalLink, Globe, Link, Lock, Mail, Plug, Puzzle, Rss } from "lucide-react"
 import type * as React from "react"
 import { AnchorLink } from "@/components/common/AnchorLink"
@@ -264,8 +265,8 @@ function TopicInfoFooter(props: TopicInfoProps) {
 			{/* the closing row, with the team count on the left and the follower count on the right */}
 			<div className={DASHED_SEPARATOR_CLASS} />
 			<div className="flex items-center justify-between gap-3 pt-3 text-sm">
-				<span>{`${topic.teamCount.toLocaleString()} team${topic.teamCount === 1 ? "" : "s"}`}</span>
-				<span>{`${topic.subscriberCount.toLocaleString()} follower${topic.subscriberCount === 1 ? "" : "s"}`}</span>
+				<span>{toCountLabel(topic.teamCount, "team")}</span>
+				<span>{toCountLabel(topic.subscriberCount, "follower")}</span>
 			</div>
 		</>
 	)

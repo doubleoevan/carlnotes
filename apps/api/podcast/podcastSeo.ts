@@ -1,6 +1,7 @@
 // a public topic's podcast in search: its published episodes as the sitemap and llms.txt list them,
 // and the PodcastSeries and PodcastEpisode structured data
 
+import { isPublishedPodcastEpisode } from "@carlnotes/contracts/podcast"
 import { FULL_PODCAST_COVER_SIZE, PODCAST_SHOW_NAME } from "@carlnotes/contracts/podcastEpisodes"
 import { toPodcastEpisodePath, toPodcastFeedPath, toTopicPath } from "@carlnotes/contracts/seo"
 import type { PublicTopic } from "@carlnotes/contracts/topics"
@@ -76,9 +77,9 @@ export function toPublicPodcastEpisodePages({
 	// each public topic by its id
 	const publicTopicById = new Map(publicTopics.map((publicTopic) => [publicTopic.id, publicTopic]))
 	return publicPodcastEpisodeRows.flatMap((podcastEpisodeRow) => {
-		// a podcast episode whose topic is not listed has no page
+		// a podcast episode whose topic is not listed, or that has no season and number yet, has no page
 		const publicTopic = podcastEpisodeRow.topicId ? publicTopicById.get(podcastEpisodeRow.topicId) : undefined
-		if (!publicTopic) {
+		if (!publicTopic || !isPublishedPodcastEpisode(podcastEpisodeRow)) {
 			return []
 		}
 

@@ -1,5 +1,5 @@
-// the podcast episode page smoke sections: the gates of an invite and a private topic's episode pages, the sitemap,
-// the topic gates, the link-preview card, and a public topic's episode page
+// the podcast episode page smoke sections: the gate of an invite topic's episode page, the 404 of a private topic's,
+// the sitemap, the topic gates, the link-preview card, and a public topic's episode page
 import { toSitemapXml } from "../seo"
 import { loadTopicGateResponse } from "../topic/helpers"
 import {
@@ -20,7 +20,7 @@ import {
 } from "./podcastEpisodeSmokeFixtures"
 
 /**
- * Checks the gates of an invite and a private topic's episode pages, the sitemap, and the topic gates.
+ * Checks the gate of an invite topic's episode page, the 404 of a private topic's, the sitemap, and the topic gates.
  */
 export async function checkGatedPodcastEpisodePages(): Promise<void> {
 	// an invite topic's podcast episode page shows a visitor the topic's gate, and the sitemap never lists the episode.
@@ -48,23 +48,21 @@ export async function checkGatedPodcastEpisodePages(): Promise<void> {
 			ownerInvitePodcastEpisodePage.topic?.visibility === "invite",
 	)
 
-	// a private topic's podcast episode page shows a visitor and a signed-in non-member the topic's gate without its name.
-	// the topic's owner still opens the page, and the sitemap never lists the episode
+	// a private topic's podcast episode page does not exist for a visitor or a signed-in non-member. the topic's owner
+	// still opens the page, and the sitemap never lists the episode
 	const privatePodcastEpisodePath = `/topics/${privateTopicId}/episodes/2026/1`
 	const gatedUsers = [
 		{ gatedUserLabel: "a visitor", gatedUserId: null },
 		{ gatedUserLabel: "a signed-in non-member", gatedUserId: subscriberId },
 	]
 	for (const { gatedUserLabel, gatedUserId } of gatedUsers) {
-		// the gate that the user gets, with no name in it
-		const privateGateResponse = await request({ path: privatePodcastEpisodePath, userId: gatedUserId })
-		const privateGateBody = await privateGateResponse.json()
+		// the 404 that the user gets, with no gate body
+		const privateNotFoundResponse = await request({ path: privatePodcastEpisodePath, userId: gatedUserId })
+		const privateNotFoundBody = await privateNotFoundResponse.json()
 		check(
-			`a private topic's episode page is gated for ${gatedUserLabel}, without the topic's name`,
-			privateGateResponse.status === 403 &&
-				privateGateBody.gatedVisibility === "private" &&
-				privateGateBody.topicName === null,
-			privateGateBody,
+			`a private topic's episode page does not exist for ${gatedUserLabel}`,
+			privateNotFoundResponse.status === 404 && privateNotFoundBody.gatedVisibility === undefined,
+			privateNotFoundBody,
 		)
 	}
 	check(
@@ -76,13 +74,8 @@ export async function checkGatedPodcastEpisodePages(): Promise<void> {
 		!(await toSitemapXml("https://carlnotes.example.com")).includes(privateTopicId),
 	)
 
-	// the topic page's gate names only an invite topic, and a public topic has no gate
-	const privateTopicGateResponse = await loadTopicGateResponse(privateTopicId)
-	check(
-		"a private topic's gate has no name",
-		privateTopicGateResponse?.gatedVisibility === "private" && privateTopicGateResponse.topicName === null,
-		privateTopicGateResponse,
-	)
+	// the topic page's gate names an invite topic, and a private or public topic has no gate
+	check("a private topic has no gate", (await loadTopicGateResponse(privateTopicId)) === null)
 	const inviteTopicGateResponse = await loadTopicGateResponse(inviteTopicId)
 	check(
 		"an invite topic's gate names the topic",

@@ -117,9 +117,11 @@ function TotalSummaries({
 	users: AdminUserRow[]
 	teams: AdminTeamRow[]
 }) {
+	// the users on each plan. a count, not a plan gate
+	const usersByPlan = Map.groupBy(users, (user) => user.plan)
 	return (
 		<div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
-			<PlanCountCard label="Users" counts={plans.map((plan) => users.filter((user) => user.plan === plan).length)} />
+			<PlanCountCard label="Users" counts={plans.map((countedPlan) => usersByPlan.get(countedPlan)?.length ?? 0)} />
 			<TotalCard label="Teams" figure={String(teams.length)} />
 			<TotalCard label="Storage" figure={toBytesLabel(totals.attributedBytes)} />
 			<TotalCard label="Cost this month" figure={toCentsLabel(totals.monthVariableCostCents)} />

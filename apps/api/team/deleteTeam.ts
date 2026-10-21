@@ -22,7 +22,7 @@ export type DeleteTeamResult =
  * Deletes a team with no leader outright, and hands a populated one to a new leader while the caller leaves.
  */
 export async function deleteTeam(userId: string, teamId: string): Promise<DeleteTeamResult> {
-	if ((await toTeamRole(userId, teamId)) !== "leader") {
+	if (!isLeaderRole(await toTeamRole(userId, teamId))) {
 		return { status: "forbidden" }
 	}
 

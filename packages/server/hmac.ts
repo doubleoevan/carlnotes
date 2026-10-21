@@ -36,9 +36,12 @@ export function toAuthSecretSignature({ value, purpose, encoding }: ToAuthSecret
  * closer guess.
  */
 export function isSameSignature({ expectedSignature, signature }: IsSameSignatureOptions): boolean {
-	// timingSafeEqual throws on a pair of different lengths, so the lengths are compared first
+	// timingSafeEqual throws on buffers of different byte lengths, so the byte lengths are compared first. a character
+	// count is not a byte count, since a character outside ascii takes more than one byte
+	const expectedSignatureBytes = Buffer.from(expectedSignature)
+	const signatureBytes = Buffer.from(signature)
 	return (
-		expectedSignature.length === signature.length &&
-		crypto.timingSafeEqual(Buffer.from(expectedSignature), Buffer.from(signature))
+		expectedSignatureBytes.length === signatureBytes.length &&
+		crypto.timingSafeEqual(expectedSignatureBytes, signatureBytes)
 	)
 }

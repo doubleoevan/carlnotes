@@ -65,3 +65,12 @@ test("toSections leaves out the video marker and keeps other html", () => {
 	const [section] = toSections("quickstart", markdown)
 	expect(section?.content).toBe(`Quickstart\n\n${example}\n\nOpen \`/mcp/t/<topic id>\`.`)
 })
+
+// two sections with one heading would collide on the (page, heading) upsert key, so every repeat is numbered, a heading
+// that repeats the frontmatter title included
+test("toSections numbers a repeated heading, and one that repeats the title", () => {
+	const repeated = "---\ntitle: T\n---\nIntro.\n\n## Examples\n\nOne.\n\n## T\n\nTitled.\n\n## Examples\n\nTwo.\n"
+	const sections = toSections("page", repeated)
+	expect(sections.map((section) => section.heading)).toEqual(["T", "Examples", "T (2)", "Examples (2)"])
+	expect(sections[3]?.content).toBe("T: Examples (2)\n\nTwo.")
+})

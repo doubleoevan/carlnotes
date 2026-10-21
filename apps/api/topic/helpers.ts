@@ -20,7 +20,7 @@ import { subscriptionActivatedAt, subscriptionActivatedAtByTopicId, toTopicRole 
 import { scansRemaining } from "./quotas"
 
 /**
- * Loads the gate response of an invite or private topic, or null for a public or missing topic.
+ * Loads the gate response of an invite topic, or null for a public, private, or missing topic.
  */
 export async function loadTopicGateResponse(topicId: string): Promise<TopicGateResponse | null> {
 	// load the topic's visibility and name, and build its gate
@@ -32,20 +32,13 @@ export async function loadTopicGateResponse(topicId: string): Promise<TopicGateR
 }
 
 /**
- * Returns the gate response of an invite or private topic, naming only an invite topic, or null for a public topic.
+ * Returns the gate response of an invite topic, naming the topic, or null for a public or private topic.
  */
 export function toTopicGateResponse(
 	topic: Pick<typeof topics.$inferSelect, "visibility" | "name">,
 ): TopicGateResponse | null {
-	// a public topic has no gate
-	if (topic.visibility === "public") {
-		return null
-	}
-	return {
-		error: "forbidden",
-		gatedVisibility: topic.visibility,
-		topicName: topic.visibility === "invite" ? topic.name : null,
-	}
+	// a public topic has no gate, and a private topic does not exist for someone who may not see it
+	return topic.visibility === "invite" ? { error: "forbidden", gatedVisibility: "invite", topicName: topic.name } : null
 }
 
 // the latest succeeded topic scan with its recap and duration

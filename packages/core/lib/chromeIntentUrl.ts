@@ -6,7 +6,9 @@
  * Android only: no other platform supports this kind of intent.
  */
 export function toChromeIntentUrl(pageUrl: string): string {
-	// the scheme is named at the intent's own end, so the url it wraps goes in without one
+	// the scheme is named at the intent's own end, so the url it wraps goes in without one. the intent path stops before
+	// the page url's fragment, whose # would start the intent's own fields. the fallback url keeps the whole page url
 	const [scheme = "https", schemelessUrl = ""] = pageUrl.split("://")
-	return `intent://${schemelessUrl}#Intent;scheme=${scheme};package=com.android.chrome;S.browser_fallback_url=${encodeURIComponent(pageUrl)};end`
+	const [intentPath = ""] = schemelessUrl.split("#")
+	return `intent://${intentPath}#Intent;scheme=${scheme};package=com.android.chrome;S.browser_fallback_url=${encodeURIComponent(pageUrl)};end`
 }

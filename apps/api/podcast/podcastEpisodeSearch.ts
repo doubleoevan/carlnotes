@@ -1,5 +1,7 @@
 // the search bar's podcast episode search: the published podcast episodes the user or visitor may see whose title or
 // description matches the query, title matches first, then the nearest by meaning over the episode vectors
+
+import { isPublishedPodcastEpisode, type PublishedPodcastEpisodeNumbers } from "@carlnotes/contracts/podcast"
 import { type PodcastEpisodeSearchResult, SEARCH_MIN_CHARS, USER_SEARCH_LIMIT } from "@carlnotes/contracts/search"
 import { toPodcastEpisodePath } from "@carlnotes/contracts/seo"
 import { DAY_MS } from "@carlnotes/contracts/time"
@@ -80,7 +82,7 @@ export async function searchPodcastEpisodes({
 	// the title and description matches, which a full list returns alone
 	const textMatchRows = await toTextMatchQuery({ query: trimmedQuery, viewFilter })
 	if (textMatchRows.length >= USER_SEARCH_LIMIT) {
-		return textMatchRows.map(toPodcastEpisodeSearchResult)
+		return textMatchRows.filter(isPublishedPodcastEpisode).map(toPodcastEpisodeSearchResult)
 	}
 
 	// the nearest by meaning fill the rest, leaving out the text matches. a short query and a search that may not embed
@@ -102,7 +104,7 @@ export async function searchPodcastEpisodes({
 	const nearMeaningMatchRows = meaningMatchRows.filter(
 		(meaningMatchRow) => meaningMatchRow.distance <= MAX_MEANING_MATCH_DISTANCE,
 	)
-	return [...textMatchRows, ...nearMeaningMatchRows].map(toPodcastEpisodeSearchResult)
+	return [...textMatchRows, ...nearMeaningMatchRows].filter(isPublishedPodcastEpisode).map(toPodcastEpisodeSearchResult)
 }
 
 // a public shown topic's episode vector, by its saved flag and by its topic checked again
@@ -231,7 +233,9 @@ async function isVisitorEmbeddingAllowed(clientAddress: string | null): Promise<
 }
 
 // a matched row in the shape the search bar's row reads
-function toPodcastEpisodeSearchResult(podcastEpisodeMatchRow: PodcastEpisodeMatchRow): PodcastEpisodeSearchResult {
+function toPodcastEpisodeSearchResult(
+	podcastEpisodeMatchRow: PodcastEpisodeMatchRow & PublishedPodcastEpisodeNumbers,
+): PodcastEpisodeSearchResult {
 	const topic = { id: podcastEpisodeMatchRow.topicId, name: podcastEpisodeMatchRow.topicName }
 	return {
 		id: podcastEpisodeMatchRow.id,

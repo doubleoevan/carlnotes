@@ -88,6 +88,7 @@ export async function seedTestData(): Promise<SeededRowIds> {
 			topicId: topic.id,
 			resourceId: resourceRow.id,
 			scanId: scan.id,
+			foundScanId: scan.id,
 			relevanceScore: 0.9 - i * 0.1,
 			relevanceExplanation: SEEDED_FINDINGS[i]?.relevanceExplanation ?? "",
 		})),

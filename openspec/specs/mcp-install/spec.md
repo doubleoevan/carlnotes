@@ -29,7 +29,11 @@ The option SHALL open a dialog listing Claude, ChatGPT, Gemini, Grok, Perplexity
 - **THEN** it lists Claude, ChatGPT, Gemini, Grok, Perplexity, DeepSeek, Cursor, VS Code, and Copy server URL top to bottom and nothing is preselected
 
 ### Requirement: Cursor and VS Code install with one click from one function
-Cursor and VS Code SHALL be one-click installs whose hrefs come from one function taking `{ name, url }`: `cursor://anysphere.cursor-deeplink/mcp/install?name=<name>&config=<base64 of {"url"}>` for Cursor and `vscode://mcp/install?<url-encoded {"name","url"} json>` for VS Code.
+Cursor and VS Code SHALL be one-click installs whose hrefs come from one function taking `{ name, url }`:
+`cursor://anysphere.cursor-deeplink/mcp/install?name=<name>&config=<base64 of {"url"}>` for Cursor and
+`vscode:mcp/install?<url-encoded {"name","type":"http","url"} json>` for VS Code. The VS Code link SHALL start with
+`vscode:mcp/install?`, with no `//` after the scheme, and its json SHALL name the `http` transport beside the server's
+name and url.
 
 #### Scenario: The Cursor deeplink includes the server
 - **WHEN** the function builds the Cursor link for a name and url
@@ -37,7 +41,8 @@ Cursor and VS Code SHALL be one-click installs whose hrefs come from one functio
 
 #### Scenario: The VS Code deeplink includes the server
 - **WHEN** the function builds the VS Code link for a name and url
-- **THEN** decoding its query yields json holding that name and url
+- **THEN** the link starts with `vscode:mcp/install?`, and decoding its query yields json holding that name, that url,
+  and `"type": "http"`
 
 ### Requirement: Claude and ChatGPT open paste instructions
 Claude, ChatGPT, Gemini, Grok, Perplexity, and DeepSeek SHALL open short paste instructions with the server url and a copy control, and a provider with a terminal tool, Claude with Claude Code, SHALL add that tool's command in a box with its own copy control, named for the tool. Neither has a public install deeplink. Each instruction SHALL be a constant. A directory listing url replaces its steps once one is approved.

@@ -141,12 +141,25 @@ test("the capability union covers chat send and persist", () => {
 	expect(chatCapabilities).toHaveLength(2)
 })
 
-// no api file outside authorization.ts compares role or plan with ===
-test("role and plan === checks live only in the authorization gate module", () => {
-	// every api source file, minus the gate itself
-	const files = listSourceFiles(["apps/api"]).filter(({ path }) => path !== "apps/api/authorization.ts")
+// the gate module, the dev seed script, and the smoke section whose comparisons are assertions and not gates
+const GATE_SCAN_SKIPPED_PATHS = [
+	"apps/api/authorization.ts",
+	"apps/api/seed.ts",
+	"apps/api/team/teamTopicSmokeSections.ts",
+]
 
-	// no file outside the gate uses === on role or plan
-	const offenders = files.filter(({ text }) => /\b(role|plan|tier)\s*===/.test(text)).map(({ path }) => path)
+// no api or web file outside the gate compares a role, a plan, or a tier with === or !==
+test("role and plan comparisons live only in the gate modules", () => {
+	// every api and web source file, minus the skipped ones
+	const files = listSourceFiles(["apps/api", "apps/web/src"]).filter(
+		({ path }) => !GATE_SCAN_SKIPPED_PATHS.includes(path),
+	)
+
+	// a name ending in role, plan, or tier in either case, such as teamRole or previousPlan, compared with === or !==, or
+	// a role or plan literal compared with anything, such as a call's result. member is also a team status, so the
+	// literal list leaves it to the name form
+	const offenders = files
+		.filter(({ text }) => /\b\w*(role|plan|tier)\s*[!=]==|[!=]==\s*"(leader|admin|free|plus|premium)"/i.test(text))
+		.map(({ path }) => path)
 	expect(offenders).toEqual([])
 })

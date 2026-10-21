@@ -4,6 +4,7 @@ import { canCreateTeamToday, loadUserAccess } from "@carlnotes/db/quotas"
 import { teamMembers, teams, teamTopics } from "@carlnotes/db/schema/teams"
 import { subscriptions, topics } from "@carlnotes/db/schema/topics"
 import { and, eq, inArray, isNull, notInArray, sql } from "drizzle-orm"
+import { isLeaderRole } from "../authorization"
 import { deletePodcastFeedToken } from "../podcast/podcastFeedTokens"
 import { clearVisitorTopicPages } from "../topic/feeds"
 import { canSeeTopic } from "../topic/permissions"
@@ -112,7 +113,7 @@ export async function addTopicToTeam(
 	topicId: string,
 ): Promise<"added" | "forbidden" | "alreadyAdded"> {
 	// attaching is a leader's power
-	if ((await toTeamRole(userId, teamId)) !== "leader") {
+	if (!isLeaderRole(await toTeamRole(userId, teamId))) {
 		return "forbidden"
 	}
 
@@ -220,7 +221,7 @@ export async function removeTopicFromTeam(userId: string, teamId: string, topicI
 		.select({ ownerId: topics.ownerId, teamId: topics.teamId })
 		.from(topics)
 		.where(eq(topics.id, topicId))
-	if ((await toTeamRole(userId, teamId)) !== "leader" && topic?.ownerId !== userId) {
+	if (!isLeaderRole(await toTeamRole(userId, teamId)) && topic?.ownerId !== userId) {
 		return false
 	}
 
@@ -326,7 +327,7 @@ export async function updateTeam(
 	payload: { name?: string; description?: string | null; isPublic?: boolean },
 ): Promise<"saved" | "forbidden" | "name-taken"> {
 	// updating is a leader's power
-	if ((await toTeamRole(userId, teamId)) !== "leader") {
+	if (!isLeaderRole(await toTeamRole(userId, teamId))) {
 		return "forbidden"
 	}
 

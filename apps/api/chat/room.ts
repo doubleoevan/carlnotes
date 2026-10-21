@@ -5,7 +5,7 @@ import { chatRoomMessages } from "@carlnotes/db/schema/chat"
 import { isBudgetRejection, MODEL_CHAT_TURN_FAILED_REJECTION, SPENT_BUDGET_REJECTION } from "@carlnotes/models/models"
 import { trackEvent } from "@carlnotes/server/analytics"
 import { reportError } from "@carlnotes/server/monitoring"
-import { eq } from "drizzle-orm"
+import { and, eq } from "drizzle-orm"
 import type { Context } from "hono"
 import { streamSSE } from "hono/streaming"
 import { isMonthlySpendExhausted } from "../authorization"
@@ -14,7 +14,7 @@ import { loadUsername } from "../usernames"
 import { encryptChatText } from "./encryption"
 import { saveLinkPreviews } from "./linkPreviews"
 import { saveChatMentions } from "./mentions"
-import { loadChatRoom } from "./roomAccess"
+import { loadChatRoom, toTopicFilter } from "./roomAccess"
 import { prepareChatRoomAttachments, storeChatRoomAttachment } from "./roomAttachments"
 import { loadChatRoomDeltas, loadChatRoomMessages } from "./roomMessages"
 import { notifyChatRoomMessage, onChatRoomMessage } from "./roomStream"
@@ -47,9 +47,14 @@ export async function postChatRoomMessage(
 		return null
 	}
 
-	// whether this chat message gives carl the chat turn. his chat mention, the room-wide @all, or a reply to his chat message
-	const isModelChatTurn =
-		hasModelMention(content) || hasAllMention(content) || (await isReplyToModel(replyToChatMessageId))
+	// a reply answers a chat message in this same chat room, and one outside it reads like a missing chat room
+	const repliedToChatMessage = await loadRepliedToChatMessage({ replyToChatMessageId, topicId, teamId })
+	if (replyToChatMessageId !== null && !repliedToChatMessage) {
+		return null
+	}
+
+	// whether this chat message gives carl the chat turn
+	const isModelChatTurn = isModelAddressed(content, repliedToChatMessage)
 
 	// the budget gate runs before anything posts, so a spent budget is reported privately and spends nothing
 	if (isModelChatTurn && (await isMonthlySpendExhausted(userId))) {
@@ -158,18 +163,43 @@ function trackChatRoomMessage({
 	})
 }
 
-// whether the replied-to chat message is carl's, which continues his exchange without a fresh chat mention
-async function isReplyToModel(replyToChatMessageId: number | null): Promise<boolean> {
-	if (!replyToChatMessageId) {
-		return false
+// the author fields of a replied-to chat message, which say whether it is carl's
+type RepliedToChatMessage = { authorUserId: string | null; authorUsername: string }
+
+// whether a chat message addresses carl: his chat mention, the room-wide @all, or a reply to his chat message
+function isModelAddressed(content: string, repliedToChatMessage: RepliedToChatMessage | null): boolean {
+	return (
+		hasModelMention(content) ||
+		hasAllMention(content) ||
+		(repliedToChatMessage !== null && isModelChatMessage(repliedToChatMessage))
+	)
+}
+
+// the replied-to chat message id, and the chat room the reply posts into
+type LoadRepliedToChatMessageOptions = { replyToChatMessageId: number | null; topicId: string | null; teamId: string }
+
+// the replied-to chat message's author fields if it sits in this chat room, or null for no reply or one outside it
+async function loadRepliedToChatMessage({
+	replyToChatMessageId,
+	topicId,
+	teamId,
+}: LoadRepliedToChatMessageOptions): Promise<RepliedToChatMessage | null> {
+	if (replyToChatMessageId === null) {
+		return null
 	}
 
-	// carl's rows have his name and no account reference. the id alone resolves the chat message
-	const [repliedTo] = await db
+	// the row by id within this team's chat room for the topic, or within the team's own chat room for no topic
+	const [repliedToChatMessage] = await db
 		.select({ authorUserId: chatRoomMessages.authorUserId, authorUsername: chatRoomMessages.authorUsername })
 		.from(chatRoomMessages)
-		.where(eq(chatRoomMessages.id, replyToChatMessageId))
-	return repliedTo ? isModelChatMessage(repliedTo) : false
+		.where(
+			and(
+				eq(chatRoomMessages.id, replyToChatMessageId),
+				eq(chatRoomMessages.teamId, teamId),
+				toTopicFilter(chatRoomMessages.topicId, topicId),
+			),
+		)
+	return repliedToChatMessage ?? null
 }
 
 /**
@@ -177,14 +207,16 @@ async function isReplyToModel(replyToChatMessageId: number | null): Promise<bool
  */
 export function streamChatRoomEvents(context: Context, topicId: string | null, teamId: string): Response {
 	return streamSSE(context, async (stream) => {
-		// the heartbeat keeps the stream detectably alive. a dead socket behind a proxy stays silent
-		const heartbeat = setInterval(() => void stream.writeSSE({ event: "ping", data: "" }), 25_000)
 		// catch up from the cursor first, so a reconnect misses nothing and replays nothing
-		let cursor = Number(context.req.query("after") ?? 0)
+		let cursor = toChatMessageIdParam(context.req.query("after"))
 		for (const chatMessage of await loadChatRoomMessages(topicId, teamId, cursor)) {
 			await stream.writeSSE({ id: String(chatMessage.id), event: "message", data: JSON.stringify(chatMessage) })
 			cursor = chatMessage.id
 		}
+
+		// the heartbeat keeps the stream detectably alive, and starts once the catch-up is done. a dead socket behind a
+		// proxy stays silent
+		const heartbeat = setInterval(() => void stream.writeSSE({ event: "ping", data: "" }), 25_000)
 
 		// each notification's delivery chains onto the last, so a burst never reads the cursor before the prior delta advanced it
 		await new Promise<void>((resolve) => {
@@ -227,4 +259,12 @@ export function streamChatRoomEvents(context: Context, topicId: string | null, t
 			stream.onAbort(endStream)
 		})
 	})
+}
+
+/**
+ * Returns the chat message id a cursor param names, or zero for a param that names none.
+ */
+export function toChatMessageIdParam(chatMessageIdParam: string | undefined): number {
+	const chatMessageId = Number(chatMessageIdParam)
+	return Number.isSafeInteger(chatMessageId) && chatMessageId > 0 ? chatMessageId : 0
 }

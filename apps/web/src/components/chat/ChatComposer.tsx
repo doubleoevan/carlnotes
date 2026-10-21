@@ -7,7 +7,7 @@ import { FileDropZone } from "@/components/common/FileDropZone"
 import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from "@/components/primitives/popover"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import { COMPOSER_BOX_CLASS, ICON_BUTTON_CLASS, SEND_BUTTON_CLASS } from "@/lib/styleClasses"
-import { CHAT_FILE_PICKER_ACCEPT, isTouchScreen, isWideScreen } from "@/lib/utils"
+import { CHAT_FILE_PICKER_ACCEPT, isSendKey, isTouchScreen, isWideScreen } from "@/lib/utils"
 import { ChatAttachmentChips } from "./ChatAttachmentChips"
 import { isMicShown, MicButton } from "./MicButton"
 import { RecordingBar } from "./RecordingBar"
@@ -91,7 +91,7 @@ export function ChatComposer({
 
 	// Enter sends the question and Shift+Enter starts a new line
 	function handleSendQuestion(event: React.KeyboardEvent<HTMLTextAreaElement>): void {
-		if (event.key === "Enter" && !event.shiftKey) {
+		if (isSendKey(event)) {
 			event.preventDefault()
 			sendQuestion()
 		}

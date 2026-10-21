@@ -626,6 +626,12 @@ Check for:
      `worker/docsSync.ts` (now `DOCS_CONTENT_DIRECTORY` in `packages/server/docsContent.ts`), and
      `shared/podcastEpisodes.ts` (now `packages/contracts/podcastEpisodes.ts`,
      `packages/server/podcastEpisodeSettings.ts`, and `packages/server/podcastCoverPaths.ts`)
+   - `TEAM_REJECTION_REASONS` in `ui/src/components/topic/TopicTeamSelect.tsx` (now
+     `apps/web/src/components/team/saveTeam.ts`), `isLeaderRole` in `api/authorization.ts` (now
+     `packages/contracts/enums.ts`, re-exported by the gate), and `isHostRejection` in `worker/ingest/index.ts` (now
+     `packages/server/publicFetch.ts`)
+   - `provisionLiteLLMKey`, `deleteLiteLLMKey`, `readLiteLLMKeyBudget`, and `readLiteLLMKeySpend` in
+     `packages/models/litellm.ts` (now `packages/models/litellmProxy.ts`)
 
 5. **Cross-harness enforcement parity**: `.claude/settings.json` hooks and
    `.opencode/plugin/guardrails.mjs` must gate the same operations with the

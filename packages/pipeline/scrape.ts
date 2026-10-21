@@ -12,6 +12,9 @@ import { CAPTION_HOSTS, fetchDeclaredTranscript } from "./transcripts"
 // the Firecrawl endpoint that scrapes a page to Markdown
 const FIRECRAWL_ENDPOINT = "https://api.firecrawl.dev/v1/scrape"
 
+// Firecrawl's own statuses for a bad key, billing, and its rate limit
+const FIRECRAWL_FAULT_STATUSES = new Set([401, 402, 429])
+
 // how long a Firecrawl scrape may run before it aborts
 const SCRAPE_TIMEOUT_MS = 30_000
 
@@ -108,7 +111,11 @@ async function fetchFirecrawlMarkdown(url: string): Promise<FetchResult> {
 		signal: AbortSignal.timeout(SCRAPE_TIMEOUT_MS),
 	})
 
-	// a failed scrape throws an error. review catches the error and scores the snippet instead
+	// a failed scrape throws an error. review catches the error and scores the snippet instead. Firecrawl's own
+	// unauthorized, payment required, and rate limit statuses are faults on Firecrawl's side
+	if (FIRECRAWL_FAULT_STATUSES.has(response.status)) {
+		throw new Error(`firecrawl scrape ${url} failed on firecrawl's side: ${response.status}`)
+	}
 	if (!response.ok) {
 		throw new FetchStatusError(`firecrawl scrape ${url}`, response.status)
 	}

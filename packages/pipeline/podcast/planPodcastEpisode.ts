@@ -28,10 +28,11 @@ export type PodcastEpisodePlan = { podcastEpisodeId: string; plannedFindings: Pl
 // the Scan that a Podcast Episode is planned for, its Topic, and the user that the Podcast Episode's calls bill
 export type PlanPodcastEpisodeOptions = { scanId: string; topicId: string; billedUserId: string }
 
-// one of a Topic's Findings, with the Scan that found the Finding, its relevance score, a user's rating of the Finding,
-// whether a user bookmarked the Finding, and whether its page is one of the Topic's url Sources
+// one of a Topic's Findings, with the Scan that first found the Finding, which is null if that Scan was deleted, its
+// relevance score, a user's rating of the Finding, whether a user bookmarked the Finding, and whether its page is one of
+// the Topic's url Sources
 export type TopicFindingRow = PlannedFinding & {
-	scanId: string
+	foundScanId: string | null
 	relevanceScore: number
 	rating: (typeof findings.$inferSelect)["rating"]
 	isBookmarked: boolean
@@ -200,9 +201,9 @@ export function toPlannedFindings({
 		return []
 	}
 
-	// take the Scan's own Findings that no Podcast Episode narrated.
-	// the rows arrive best first, so each group keeps its score order
-	const scanFindingRows = unnarratedFindingRows.filter((topicFindingRow) => topicFindingRow.scanId === scanId)
+	// take the Findings this Scan first found that no Podcast Episode narrated. a Finding an earlier Scan found and this
+	// Scan re-scored is not the Scan's own. the rows arrive best first, so each group keeps its score order
+	const scanFindingRows = unnarratedFindingRows.filter((topicFindingRow) => topicFindingRow.foundScanId === scanId)
 
 	// split the Topic's other Findings into bonus Findings, unnarrated Findings with no bonus, and narrated Findings.
 	// a Finding has a bonus if a user liked or bookmarked the Finding, or if its page is a url Source's page
@@ -212,7 +213,7 @@ export function toPlannedFindings({
 		(topicFindingRow) => !scanFindingRows.includes(topicFindingRow) && hasScoreBonus(topicFindingRow),
 	)
 	const otherUnnarratedFindingRows = unnarratedFindingRows.filter(
-		(topicFindingRow) => topicFindingRow.scanId !== scanId && !hasScoreBonus(topicFindingRow),
+		(topicFindingRow) => topicFindingRow.foundScanId !== scanId && !hasScoreBonus(topicFindingRow),
 	)
 	const otherNarratedFindingRows = narratableFindingRows.filter(
 		(topicFindingRow) => isNarrated(topicFindingRow) && !hasScoreBonus(topicFindingRow),
@@ -299,7 +300,7 @@ async function loadPlannedFindings({
 			findingId: findings.id,
 			resourceId: findings.resourceId,
 			sourceUrl: resources.url,
-			scanId: findings.scanId,
+			foundScanId: findings.foundScanId,
 			relevanceScore: findings.relevanceScore,
 			rating: findings.rating,
 			isBookmarked: inArray(findings.id, bookmarkedFindingIds).mapWith(Boolean),

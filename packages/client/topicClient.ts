@@ -16,7 +16,6 @@ import {
 	scanNote,
 	suggestSourcesResponse,
 	type TopicFeedResponse,
-	type TopicGateResponse,
 	type TopicResponse,
 	topicCreateResponse,
 	topicFeedResponse,
@@ -144,11 +143,8 @@ export async function sendTopicFindingOpened(findingId: string): Promise<void> {
 	)
 }
 
-// the visibility of a gated topic: invite or private
-export type GatedTopicVisibility = TopicGateResponse["gatedVisibility"]
-
-// the gate in front of an invite or private topic, with its visibility and an invite topic's name
-export type TopicGate = { visibility: GatedTopicVisibility; topicName: string | null }
+// the gate in front of an invite topic, with the topic's name, or null for a name that is not text
+export type TopicGate = { topicName: string | null }
 
 // what asking for a topic page got: the topic, the gate in front of it, or no such topic at all
 export type TopicPageResult =
@@ -185,7 +181,7 @@ export async function readTopicGate(response: { json: () => Promise<unknown> }):
 	if (!topicGateResult.success) {
 		return null
 	}
-	return { visibility: topicGateResult.data.gatedVisibility, topicName: topicGateResult.data.topicName }
+	return { topicName: topicGateResult.data.topicName }
 }
 
 /**

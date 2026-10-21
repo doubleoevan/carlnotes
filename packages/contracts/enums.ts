@@ -97,9 +97,30 @@ export const teamRoles = ["leader", "member"] as const
 /**
  * Whether a stored platform role grants admin authority.
  */
-export function isAdminRole(role: string | undefined): boolean {
+export function isAdminRole(role: string | null | undefined): boolean {
 	// the one place this role decides authority. it stays plain text to match Better Auth's admin plugin shape
 	return role === "admin"
+}
+
+/**
+ * Whether a team membership role is the leader's.
+ */
+export function isLeaderRole(role: string | null | undefined): boolean {
+	return role === "leader"
+}
+
+/**
+ * Whether a plan is paid.
+ */
+export function isPaidPlan(plan: string | null | undefined): plan is Exclude<(typeof plans)[number], "free"> {
+	return Boolean(plan) && plan !== "free"
+}
+
+/**
+ * Whether a plan is the premium one.
+ */
+export function isPremiumPlan(plan: string | null | undefined): boolean {
+	return plan === "premium"
 }
 // who may send an invite to a user: everyone, only connected senders, or nobody at all
 export const inviteAccesses = ["anyone", "connected", "nobody"] as const

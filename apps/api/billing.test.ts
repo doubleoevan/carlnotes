@@ -97,7 +97,7 @@ test("a verified webhook whose apply fails responds 500 and is reported", async 
 })
 
 // the plan the user was on before the event, whether the key's budget is stale, and whether a key reissue succeeds
-type PostPlusSubscriptionEventOptions = { previousPlan: Plan; isKeyBudgetStale?: boolean; isKeyReissued?: boolean }
+type PostPlusSubscriptionEventOptions = { planBeforeEvent: Plan; isKeyBudgetStale?: boolean; isKeyReissued?: boolean }
 
 // the webhook's response, and the spies on the key's budget check and the key reissue
 type PostPlusSubscriptionEventResult = {
@@ -107,16 +107,18 @@ type PostPlusSubscriptionEventResult = {
 	replaceUserLiteLLMKeySpy: Mock<typeof litellm.replaceUserLiteLLMKey>
 }
 
-// post a signed active subscription event on the plus plan for a user who was on previousPlan, and return the response
+// post a signed active subscription event on the plus plan for a user who was on planBeforeEvent, and return the response
 // and the spies
 async function postPlusSubscriptionEvent({
-	previousPlan,
+	planBeforeEvent,
 	isKeyBudgetStale = false,
 	isKeyReissued = true,
 }: PostPlusSubscriptionEventOptions): Promise<PostPlusSubscriptionEventResult> {
 	// the user's plan before the event, and nothing for every other query
 	const reportErrorSpy = configureWebhook()
-	stubConnectionPool((sentQuery) => (sentQuery.text.startsWith('select "plan" from "users"') ? [[previousPlan]] : []))
+	stubConnectionPool((sentQuery) =>
+		sentQuery.text.startsWith('select "plan" from "users"') ? [[planBeforeEvent]] : [],
+	)
 
 	// the key's budget check, the key reissue, and a reissue backoff that waits no time
 	const isUserLiteLLMKeyBudgetStaleSpy = spyOn(litellm, "isUserLiteLLMKeyBudgetStale").mockResolvedValue(
@@ -133,7 +135,7 @@ async function postPlusSubscriptionEvent({
 // a renewal on the same plan with a matching key keeps the LiteLLM key, so the key's spend keeps counting the whole month
 test("a subscription event on the user's current plan with a matching key keeps the LiteLLM key", async () => {
 	const { response, isUserLiteLLMKeyBudgetStaleSpy, replaceUserLiteLLMKeySpy } = await postPlusSubscriptionEvent({
-		previousPlan: "plus",
+		planBeforeEvent: "plus",
 	})
 	expect(response.status).toBe(200)
 	expect(isUserLiteLLMKeyBudgetStaleSpy).toHaveBeenCalledWith("user-1")
@@ -143,7 +145,7 @@ test("a subscription event on the user's current plan with a matching key keeps 
 // a key left at an old budget by an earlier failed reissue is reissued on the next event, even on the same plan
 test("a subscription event on the user's current plan with a stale key reissues the LiteLLM key", async () => {
 	const { response, replaceUserLiteLLMKeySpy } = await postPlusSubscriptionEvent({
-		previousPlan: "plus",
+		planBeforeEvent: "plus",
 		isKeyBudgetStale: true,
 	})
 	expect(response.status).toBe(200)
@@ -153,7 +155,7 @@ test("a subscription event on the user's current plan with a stale key reissues 
 // a plan change reissues the LiteLLM key at the new plan's budget without reading the key's budget
 test("a subscription event that changes the plan reissues the LiteLLM key", async () => {
 	const { response, isUserLiteLLMKeyBudgetStaleSpy, replaceUserLiteLLMKeySpy } = await postPlusSubscriptionEvent({
-		previousPlan: "free",
+		planBeforeEvent: "free",
 	})
 	expect(response.status).toBe(200)
 	expect(isUserLiteLLMKeyBudgetStaleSpy).not.toHaveBeenCalled()
@@ -163,7 +165,7 @@ test("a subscription event that changes the plan reissues the LiteLLM key", asyn
 // a reissue that fails every attempt is reported, and the webhook responds 500 so Stripe sends the event again
 test("a subscription event whose key reissue fails every attempt responds 500 and is reported", async () => {
 	const { response, reportErrorSpy, replaceUserLiteLLMKeySpy } = await postPlusSubscriptionEvent({
-		previousPlan: "free",
+		planBeforeEvent: "free",
 		isKeyReissued: false,
 	})
 

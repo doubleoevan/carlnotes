@@ -9,11 +9,12 @@ import { useIsPodcastEpisodePlaying } from "@/stores/podcastEpisodePlayerStore"
 import { PodcastEpisodeTooltip } from "./PodcastEpisodeDetails"
 import { RemovePodcastEpisodeButton } from "./RemovePodcastEpisodeDialog"
 
-// the podcast episode, its page's path, whether the episode is the topic's latest, whether its play button is muted,
-// the row's own classes, and the call that opens the remove dialog, passed only if the user may remove episodes
+// the podcast episode, its page's path or null for an episode without a page yet, whether the episode is the topic's
+// latest, whether its play button is muted, the row's own classes, and the call that opens the remove dialog, passed
+// only if the user may remove episodes
 type PodcastEpisodeRowProps = {
 	podcastEpisode: PodcastEpisode
-	podcastEpisodePath: string
+	podcastEpisodePath: string | null
 	isLatestPodcastEpisode: boolean
 	isPlayButtonMuted?: boolean
 	className?: string
@@ -21,8 +22,9 @@ type PodcastEpisodeRowProps = {
 }
 
 /**
- * One podcast episode's list item, with its play button, its title linked to the episode's page, its date and duration,
- * and the remove button if a remove call is passed. The button and the title each open the episode's tooltip.
+ * One podcast episode's list item, with its play button, its title linked to the episode's page if it has one, its date
+ * and duration, and the remove button if a remove call is passed. The button and the title each open the episode's
+ * tooltip.
  */
 export function PodcastEpisodeRow({
 	podcastEpisode,
@@ -70,9 +72,13 @@ export function PodcastEpisodeRow({
 			<div className="min-w-0 flex-1">
 				<div className="truncate text-sm font-bold">
 					<PodcastEpisodeTooltip podcastEpisode={podcastEpisode}>
-						<AnchorLink href={podcastEpisodePath} className="relative z-10 hover:underline">
-							{toPodcastEpisodeTitleLabel(podcastEpisode)}
-						</AnchorLink>
+						{podcastEpisodePath ? (
+							<AnchorLink href={podcastEpisodePath} className="relative z-10 hover:underline">
+								{toPodcastEpisodeTitleLabel(podcastEpisode)}
+							</AnchorLink>
+						) : (
+							<span className="relative z-10">{toPodcastEpisodeTitleLabel(podcastEpisode)}</span>
+						)}
 					</PodcastEpisodeTooltip>
 				</div>
 				<div className="text-muted-foreground text-xs" suppressHydrationWarning>

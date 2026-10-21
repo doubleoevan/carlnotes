@@ -4,11 +4,13 @@ import { MAX_ATTACHMENT_CONTEXT_CHARS } from "@carlnotes/contracts/topics"
 import { restoreConnectionPool, stubConnectionPool, toTableRow } from "@carlnotes/db/connectionPoolStub"
 import { attachments } from "@carlnotes/db/schema/topics"
 import * as store from "@carlnotes/db/store"
+import { FetchStatusError } from "@carlnotes/server/publicFetch"
 // the methods to test, and the ingestion, which the pool stub keeps off the database
-import { ingestAttachment, toTopicContextHash } from "./attach"
-import { isTableFileType, toCanonicalContentType } from "./attachContentType"
+import { ingestAttachment, ingestUrlAttachment, toTopicContextHash } from "./attach"
+import { AttachmentValidationError, isTableFileType, toCanonicalContentType } from "./attachContentType"
 import { MAX_TABLE_CHARS, MAX_TABLE_ROWS, toClippedTableText, toTableText } from "./attachTable"
 import { extractText } from "./attachText"
+import * as scrape from "./scrape"
 import * as temporalClient from "./temporalClient"
 
 // the OOXML media types the resolver and gate know
@@ -340,4 +342,26 @@ test("a successful upload leaves no key pending", async () => {
 	expect(sentQueries.some(({ text }) => text.startsWith('insert into "pending_object_deletions"'))).toBe(true)
 	expect(sentQueries.some(({ text }) => text.startsWith('delete from "pending_object_deletions"'))).toBe(true)
 	expect(deleteStoredObjectSpy).not.toHaveBeenCalled()
+})
+
+// a page its host refuses is the user's to fix, so it is a validation error. a scraper with no key, a scraper error, and
+// any other fault are infrastructure failures, which are rethrown as they are so the error report names them
+test("ingestUrlAttachment rejects a page its host refuses and rethrows any other fetch failure", async () => {
+	// the host answers 404
+	const fetchContentSpy = spyOn(scrape, "fetchContent").mockRejectedValue(
+		new FetchStatusError("firecrawl scrape https://a.test/page", 404),
+	)
+	const hostRejection = await ingestUrlAttachment("topic-1", "https://a.test/page").catch((error: unknown) => error)
+	expect(hostRejection).toBeInstanceOf(AttachmentValidationError)
+	expect((hostRejection as Error).message).toBe("this page could not be read: https://a.test/page")
+
+	// the scraper has no key, and the scraper fails
+	for (const infrastructureError of [
+		new Error("FIRECRAWL_API_KEY is not set"),
+		new FetchStatusError("firecrawl scrape https://a.test/page", 503),
+	]) {
+		fetchContentSpy.mockRejectedValue(infrastructureError)
+		const rethrownError = await ingestUrlAttachment("topic-1", "https://a.test/page").catch((error: unknown) => error)
+		expect(rethrownError).toBe(infrastructureError)
+	}
 })

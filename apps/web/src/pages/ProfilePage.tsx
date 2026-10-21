@@ -144,7 +144,8 @@ export function ProfilePage() {
 
 	// load the profile, except while hydrating the profile the server loaded
 	const reloadProfilePage = useCallback((): void => {
-		// a failed profile load shows the missing page
+		// a new load clears the last profile's missing state, and a failed profile load shows the missing page
+		setIsProfileMissing(false)
 		fetchProfile(userId)
 			.then((fetchedProfile) => (fetchedProfile ? setProfile(fetchedProfile) : setIsProfileMissing(true)))
 			.catch((error) => {
@@ -356,7 +357,7 @@ function ProfileHeader({
 			</div>
 			{/* when they joined, and the number of unique people subscribed to their topics */}
 			<p className="text-muted-foreground mt-2 text-sm">
-				Joined {joinDateLabel} · {profile.subscriberCount.toLocaleString()} followers
+				{`Joined ${joinDateLabel} · ${toCountLabel(profile.subscriberCount, "follower")}`}
 			</p>
 		</header>
 	)

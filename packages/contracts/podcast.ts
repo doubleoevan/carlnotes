@@ -47,6 +47,18 @@ export const publishedPodcastEpisodeSummary = podcastEpisodeSummary.extend({
 
 export type PublishedPodcastEpisodeSummary = z.infer<typeof publishedPodcastEpisodeSummary>
 
+// the season and number a published podcast episode is given
+export type PublishedPodcastEpisodeNumbers = Pick<PublishedPodcastEpisodeSummary, "season" | "episodeNumber">
+
+/**
+ * Whether a podcast episode has the season and number a published one is given.
+ */
+export function isPublishedPodcastEpisode<T extends { season: number | null; episodeNumber: number | null }>(
+	podcastEpisode: T,
+): podcastEpisode is T & PublishedPodcastEpisodeNumbers {
+	return podcastEpisode.season !== null && podcastEpisode.episodeNumber !== null
+}
+
 // a podcast episode in the shape that the player shows: its summary, its topic, its status, its audio and covers, its
 // chapters, and the user's progress. a recording or failed episode has its status and its title once written
 export const podcastEpisode = podcastEpisodeSummary.extend({

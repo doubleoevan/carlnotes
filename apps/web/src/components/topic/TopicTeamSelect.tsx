@@ -4,7 +4,6 @@ import {
 	fetchLeaderTeams,
 	fetchTeamNameTaken,
 	sendAddTopicTeam,
-	sendCreateTeam,
 	sendRemoveTopicFromTeam,
 } from "@carlnotes/client/teamClient"
 import type { TeamSummary } from "@carlnotes/contracts/teams"
@@ -16,6 +15,7 @@ import { MultiCombobox } from "@/components/common/MultiCombobox"
 import { type PendingInvite, sendPendingInvites, TeamInviteFields } from "@/components/invite/TeamInviteFields"
 import { Input } from "@/components/primitives/input"
 import { Switch } from "@/components/primitives/switch"
+import { createTeam, TEAM_REJECTION_REASONS } from "@/components/team/saveTeam"
 import { NEW_TEAM_CHOICE, NEW_TEAM_OPTION, toTeamChoices } from "@/lib/topicTeamChoices"
 
 // the teams choice with the writes that apply it
@@ -113,7 +113,7 @@ export function useTopicTeamChoice(topic: TopicResponse | undefined, initialTeam
 		}
 		void fetchTeamNameTaken(teamName)
 			.then((isTeamNameTaken) => {
-				setNewTeamRejection(isTeamNameTaken ? "A team already has that name." : null)
+				setNewTeamRejection(isTeamNameTaken ? TEAM_REJECTION_REASONS["name-taken"] : null)
 			})
 			.catch(() => setNewTeamRejection(null))
 	}
@@ -143,18 +143,14 @@ async function createNewTeam(
 	if (!newTeam.name.trim()) {
 		return
 	}
-	const createTeamResult = await sendCreateTeam({
+	const createTeamResult = await createTeam({
 		name: newTeam.name.trim(),
 		description: null,
 		topicIds: [topicId],
 		isPublic: newTeam.isPublic,
 	})
 	if ("rejection" in createTeamResult) {
-		toast.error(
-			createTeamResult.rejection === "name-taken"
-				? "A team already holds that name."
-				: "That's a lot of teams for one day. Try again tomorrow.",
-		)
+		toast.error(createTeamResult.rejection)
 		return
 	}
 	await sendPendingInvites(createTeamResult.teamId, newTeam.pendingInvites)

@@ -41,6 +41,28 @@ test("toScreenVerdict flags only at or above the threshold", () => {
 	expect(toScreenVerdict({ scanners: { PromptInjection: 0.8 } }, "page", "a page").isFlagged).toBe(true)
 })
 
+// an empty, unreadable, or out-of-range threshold setting keeps the default, so a blank setting never flags every page
+// and a word never passes every page
+test("toScreenVerdict reads the configured threshold only when it is above zero and at most one", () => {
+	const restoreEnvSettings = saveEnvSettings(["LLM_GUARD_INJECTION_THRESHOLD"])
+	try {
+		// a blank setting, a word, zero, a negative number, and a number past one each keep the default of 0.8
+		for (const thresholdSetting of ["", "abc", "0", "-0.2", "1.5"]) {
+			Bun.env.LLM_GUARD_INJECTION_THRESHOLD = thresholdSetting
+			expect(toScreenVerdict({ scanners: {} }, "page", "a page").isFlagged).toBe(false)
+			expect(toScreenVerdict({ scanners: { PromptInjection: 0.79 } }, "page", "a page").isFlagged).toBe(false)
+			expect(toScreenVerdict({ scanners: { PromptInjection: 0.8 } }, "page", "a page").isFlagged).toBe(true)
+		}
+
+		// a threshold in range applies
+		Bun.env.LLM_GUARD_INJECTION_THRESHOLD = "0.5"
+		expect(toScreenVerdict({ scanners: { PromptInjection: 0.5 } }, "page", "a page").isFlagged).toBe(true)
+		expect(toScreenVerdict({ scanners: { PromptInjection: 0.49 } }, "page", "a page").isFlagged).toBe(false)
+	} finally {
+		restoreEnvSettings()
+	}
+})
+
 // a rejection alongside below-threshold scores is the scores' verdict, not a blanket rejection
 test("toScreenVerdict passes a rejection whose scores are all below the threshold", () => {
 	expect(toScreenVerdict({ is_valid: false, scanners: { PromptInjection: 0.1 } }, "page", "a page").isFlagged).toBe(

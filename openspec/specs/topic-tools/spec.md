@@ -350,3 +350,16 @@ SHALL reach the Topic only if an editor's own turn previews it and that editor a
 - **WHEN** an editor has a preview standing in the Topic's private chat and another in its team room
 - **THEN** each is answered only by that editor's next message on its own page
 
+### Requirement: A tool description speaks to the client and names no internal identifier
+
+Every MCP tool description SHALL be written for the program and the person reading the tool list: it SHALL address the
+caller as "you" and SHALL include no identifier from the code, no variable, type, or parameter name such as
+`toolCaller`. The `list_topics` description SHALL say the topics you may read: the public ones for everyone, plus what a
+connected account owns, follows, and holds through a team.
+
+#### Scenario: The list_topics description names no identifier
+
+- **WHEN** a client lists tools
+- **THEN** the `list_topics` description says "you" where it names the caller, and no description includes `toolCaller`
+  or another identifier from the code
+

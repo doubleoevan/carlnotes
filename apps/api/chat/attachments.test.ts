@@ -1,4 +1,5 @@
-// chat attachment tests. what the payload accepts, how a chat turn's attachments group, and what gets kept
+// chat attachment tests. what the payload accepts, how a chat turn's attachments group, what gets kept, and what a
+// delete of somebody else's kept attachment responds
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import { CHAT_ATTACHMENT_TEXT_CHARS, clipAttachmentText } from "@carlnotes/contracts/chat"
 import { withAttachmentNote } from "@carlnotes/contracts/chatQuestionNotes"
@@ -8,7 +9,8 @@ import * as store from "@carlnotes/db/store"
 import { withScanner } from "@carlnotes/models/guardTestFixtures"
 import * as attach from "@carlnotes/pipeline/attach"
 import { quietErrorReports } from "@carlnotes/server/monitoringTestFixtures"
-import { storeTopicChatAttachments } from "./attachments"
+import { toSignedInApp } from "../testSession"
+import { chatAttachmentsRoute, storeTopicChatAttachments } from "./attachments"
 import { toAttachmentsByChatTurnId } from "./chatAttachmentReads"
 
 // an attachment kind is validated: an image includes a data url and text includes text, never crossed
@@ -131,4 +133,14 @@ test("a kept image with a flagged description stores no row and deletes its obje
 	expect(sentQueries.some((sentQuery) => sentQuery.text.startsWith('insert into "chat_attachments"'))).toBe(false)
 	expect(deletedObjectKeys).toHaveLength(1)
 	expect(reportErrorSpy.mock.calls.some(([error]) => String(error).includes("flagged by the scanner"))).toBe(true)
+})
+
+// a kept attachment another user owns, or none at all, reads as a missing one
+test("deleting a kept attachment the user does not own responds 404", async () => {
+	stubConnectionPool()
+	const response = await toSignedInApp(chatAttachmentsRoute, "user-1").request("/chat-attachments/a-1", {
+		method: "DELETE",
+	})
+	expect(response.status).toBe(404)
+	expect(await response.json()).toEqual({ error: "not found" })
 })

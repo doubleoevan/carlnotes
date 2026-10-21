@@ -24,8 +24,7 @@ export async function clearChatRoom(context: Context, topicId: string | null, te
 	}
 
 	// clearing belongs to a leader of the team, and to an admin moderating it
-	const role = await toTeamRole(userId, chatRoom.teamId)
-	const isTeamLeader = role !== null && isLeaderRole(role)
+	const isTeamLeader = isLeaderRole(await toTeamRole(userId, chatRoom.teamId))
 	if (!isTeamLeader && !(await loadUserAccess(userId)).isAdmin) {
 		return context.json({ error: "not found" }, 404)
 	}
@@ -90,7 +89,7 @@ export async function deleteChatRoomAttachment(
 	// the uploader removes their own file, and a leader removes anyone's
 	if (
 		chatRoomAttachment.uploaderUserId !== userId &&
-		(await toTeamRole(userId, chatRoomAttachment.teamId)) !== "leader"
+		!isLeaderRole(await toTeamRole(userId, chatRoomAttachment.teamId))
 	) {
 		return context.json({ error: "not found" }, 404)
 	}
@@ -112,7 +111,7 @@ export function canDeleteChatRoomMessage(
 	teamRole: "leader" | "member" | null,
 	isAdmin: boolean,
 ): boolean {
-	return authorUserId === userId || teamRole === "leader" || isAdmin
+	return authorUserId === userId || isLeaderRole(teamRole) || isAdmin
 }
 
 /**
@@ -126,7 +125,7 @@ export async function deleteChatRoomMessage(
 	// the team role and the admin flag are only read when the user is not the chat message's own author
 	const isAuthor = chatRoomMessage.authorUserId === userId
 	const teamRole = isAuthor ? null : await toTeamRole(userId, chatRoomMessage.teamId)
-	const isAdmin = isAuthor || teamRole === "leader" ? false : (await loadUserAccess(userId)).isAdmin
+	const isAdmin = isAuthor || isLeaderRole(teamRole) ? false : (await loadUserAccess(userId)).isAdmin
 	if (!canDeleteChatRoomMessage(userId, chatRoomMessage.authorUserId, teamRole, isAdmin)) {
 		return context.json({ error: "not found" }, 404)
 	}

@@ -13,7 +13,7 @@ import { chatModel, cheapModel } from "@carlnotes/models/models"
 // the prompt loader fetches the registry version first, falling back to the bundled markdown
 import { type BuiltPrompt, fetchPromptTemplate, promptTelemetry } from "@carlnotes/models/prompts/fetch"
 import { writePrompt } from "@carlnotes/models/prompts/write"
-import { toFetchableUrl } from "@carlnotes/server/publicFetch"
+import { isHostRejection, toFetchableUrl } from "@carlnotes/server/publicFetch"
 import { generateText } from "ai"
 import { and, eq } from "drizzle-orm"
 import { AttachmentValidationError, isSupportedAttachmentType } from "./attachContentType"
@@ -115,9 +115,13 @@ export async function ingestUrlAttachment(topicId: string, url: string): Promise
 		throw new AttachmentValidationError(error instanceof Error ? error.message : String(error))
 	}
 
-	// an attached url names a page to read, so it takes the scrape instead of the caption path a video would
-	const fetchResult = await fetchContent(fetchableUrl.toString(), "read").catch(() => {
-		throw new AttachmentValidationError(`this page could not be read: ${url}`)
+	// an attached url names a page to read, so it takes the scrape instead of the caption path a video would.
+	// a page its host refuses is the user's to fix, and any other fetch failure is an infrastructure fault that is rethrown
+	const fetchResult = await fetchContent(fetchableUrl.toString(), "read").catch((error: unknown) => {
+		if (isHostRejection(error)) {
+			throw new AttachmentValidationError(`this page could not be read: ${url}`)
+		}
+		throw error
 	})
 
 	// the processing workflow screens this Markdown as a document, so there is no llm-guard screen here

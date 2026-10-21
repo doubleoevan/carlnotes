@@ -40,8 +40,11 @@ test("a key replacement creates the new key at the user's budget, stores the new
 // a user whose row is deleted while the new key is created has no row to store the key on.
 // the new key is deleted, and the old key is kept
 test("a key replacement for a user whose row is gone deletes the new key and keeps the old key", async () => {
-	// a user with a stored key, whose update matches no row
-	stubConnectionPoolInCallOrder((sentQuery) => (sentQuery.text.startsWith("update") ? [] : [toUserRow("sk-old")]))
+	// a user with a stored key, whose row is gone by the store and by the read that follows it
+	let selectCount = 0
+	stubConnectionPoolInCallOrder((sentQuery) =>
+		sentQuery.text.startsWith("update") || selectCount++ > 0 ? [] : [toUserRow("sk-old")],
+	)
 	const proxyRequests = stubProxy(() => Response.json({ key: "sk-new" }))
 
 	// the replacement returns true, and the only key deleted is the new key

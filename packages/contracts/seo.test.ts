@@ -84,6 +84,18 @@ test("toPodcastFeedPath uses the id alone, and toPodcastEpisodePath adds the sea
 	expect(podcastEpisodePath).toBe(`/topics/${TOPIC_ID}/home-espresso/episodes/2026/3`)
 })
 
+// an unpublished podcast episode has a null season and number, which the compiler rejects. the path it would write
+// ends in /episodes/null/null
+test("toPodcastEpisodePath takes a published season and number alone", () => {
+	const topic = { id: TOPIC_ID, name: "Home Espresso" }
+	const unpublishedPodcastEpisode: { season: number | null; episodeNumber: number | null } = {
+		season: null,
+		episodeNumber: null,
+	}
+	// @ts-expect-error an unpublished podcast episode's null season and number are not a page path
+	expect(toPodcastEpisodePath(topic, unpublishedPodcastEpisode)).toContain("/episodes/null/null")
+})
+
 // a host reads in lowercase without its www, and a url that does not parse is returned unchanged
 test("toHostWithoutWww drops a leading www and returns an unparseable url unchanged", () => {
 	expect(toHostWithoutWww("https://www.Example.com/a/b?c=1")).toBe("example.com")

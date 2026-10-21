@@ -43,8 +43,8 @@ export type Capability =
 	| "admin:setFeatureOrder"
 	| "admin:deleteUser"
 
-// the user's budget and the admin role test live in shared, where the worker can read them
-export { isAdminRole } from "@carlnotes/contracts/enums"
+// the user's budget and the role helpers live in contracts, where the worker can read them
+export { isAdminRole, isLeaderRole } from "@carlnotes/contracts/enums"
 export { type UserAccess, userBudgetCents } from "@carlnotes/contracts/plans"
 
 // the user's access row and the month's spend, from the loaders that the api shares with the worker
@@ -117,13 +117,6 @@ async function decideTopicCapability(
 		default:
 			return assertNever(capability)
 	}
-}
-
-/**
- * Whether a team membership row's role grants team leader authority.
- */
-export function isLeaderRole(role: "leader" | "member"): boolean {
-	return role === "leader"
 }
 
 /**

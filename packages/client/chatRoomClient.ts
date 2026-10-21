@@ -44,14 +44,19 @@ export async function fetchChatRoomMessageLinkPreviews(
 	teamId: string,
 	chatMessageIds: number[],
 ): Promise<Record<number, ChatLinkPreview[]>> {
-	const response = await fetch(`${toChatRoomPath(topicId, teamId)}/link-previews?ids=${chatMessageIds.join(",")}`)
-	if (!response.ok) {
+	// a network error, a rejected status, and a body that is not json each read as no cards yet
+	try {
+		const response = await fetch(`${toChatRoomPath(topicId, teamId)}/link-previews?ids=${chatMessageIds.join(",")}`)
+		if (!response.ok) {
+			return {}
+		}
+
+		// the payload is a card list per chat message id
+		const { linkPreviews } = (await response.json()) as { linkPreviews: Record<number, ChatLinkPreview[]> }
+		return linkPreviews
+	} catch {
 		return {}
 	}
-
-	// the payload is a card list per chat message id
-	const { linkPreviews } = (await response.json()) as { linkPreviews: Record<number, ChatLinkPreview[]> }
-	return linkPreviews
 }
 
 /**

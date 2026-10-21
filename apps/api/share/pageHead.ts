@@ -2,6 +2,7 @@
 
 import { MINIMUM_SHOWN_FINDINGS } from "@carlnotes/contracts/enums"
 import type { PageHead } from "@carlnotes/contracts/pageHead"
+import type { PublishedPodcastEpisodeNumbers } from "@carlnotes/contracts/podcast"
 import {
 	toInvitePath,
 	toPageTitle,
@@ -89,7 +90,12 @@ export const pageHeadRoute = new Hono<AppEnv>()
 		return context.json(
 			toPodcastEpisodePageHead({
 				topicPreview,
-				podcastEpisodeRow: publishedPodcastEpisode.podcastEpisodeRow,
+				// the row was found by this season and number, which its own type leaves nullable until publish
+				podcastEpisodeRow: {
+					...publishedPodcastEpisode.podcastEpisodeRow,
+					season: seasonNumber,
+					episodeNumber: podcastEpisodeNumber,
+				},
 				appUrl: appUrl(),
 			}),
 		)
@@ -170,10 +176,11 @@ export function toTopicPageHead({ topicPreview, appUrl, jsonLd, podcastFeedUrl }
 	}
 }
 
-// the topic, the podcast episode, and the app's url that a podcast episode page's head is built from
+// the topic, the published podcast episode, whose season and number are set, and the app's url that a podcast episode
+// page's head is built from
 type ToPodcastEpisodePageHeadOptions = {
 	topicPreview: TopicPreview
-	podcastEpisodeRow: PodcastEpisodeRow
+	podcastEpisodeRow: PodcastEpisodeRow & PublishedPodcastEpisodeNumbers
 	appUrl: string
 }
 
@@ -199,11 +206,12 @@ export function toPodcastEpisodePageHead({
 		toPodcastEpisodePreview(podcastEpisodeRow, topicPreview.title),
 	)
 
-	// the head that every podcast episode page has, with its titles, its description, and its card
+	// the head that every podcast episode page has, with its titles, its description, and its card. a private or invite
+	// topic's episode description summarizes its findings, which stay private, so its head describes the topic instead
 	const cardPageHead = {
 		title: toPageTitle(`${podcastEpisodeTitle} · ${topicPreview.title}`),
 		cardTitle: podcastEpisodeTitle,
-		description: podcastEpisodeRow.description ?? "",
+		description: isPublicTopic ? (podcastEpisodeRow.description ?? "") : topicPreview.description,
 		canonicalUrl: isIndexed ? pageUrl : null,
 		cardUrl: pageUrl,
 		imageUrl: `${appUrl}/api/episodes/${podcastEpisodeRow.id}/preview.png?v=${toPreviewVersion(podcastEpisodePreviewKey)}`,
@@ -227,8 +235,8 @@ export function toPodcastEpisodePageHead({
 			publishedAt: podcastEpisodeRow.publishedAt ?? new Date(),
 			durationSeconds: podcastEpisodeRow.durationSeconds ?? 0,
 			// where the podcast episode sits in the series
-			season: podcastEpisodeRow.season ?? 0,
-			episodeNumber: podcastEpisodeRow.episodeNumber ?? 0,
+			season: podcastEpisodeRow.season,
+			episodeNumber: podcastEpisodeRow.episodeNumber,
 			audioUrl,
 			series: podcastSeries,
 		}),

@@ -1,4 +1,5 @@
 import type { ActivityResponse } from "@carlnotes/contracts/activity"
+import { isPaidPlan } from "@carlnotes/contracts/enums"
 import type { BillingState } from "@carlnotes/contracts/profiles"
 import { Settings } from "lucide-react"
 import { useState } from "react"
@@ -90,7 +91,7 @@ function PlanSection({ billing }: { billing: BillingState }) {
 				<span className="font-semibold">{"Plan "}</span>
 				<span className="text-muted-foreground capitalize">{billing.plan}</span>
 				{/* monthly or yearly billing interval. free has no subscription */}
-				{billing.plan !== "free" && (
+				{isPaidPlan(billing.plan) && (
 					<span className="text-muted-foreground">{`, billed ${billing.billingInterval}`}</span>
 				)}
 			</p>
@@ -111,7 +112,7 @@ export function PlanButton({ billing }: { billing: BillingState }) {
 		}
 	}
 
-	if (billing.plan !== "free") {
+	if (isPaidPlan(billing.plan)) {
 		return (
 			<Tooltip>
 				<TooltipTrigger asChild>

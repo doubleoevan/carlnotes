@@ -4,6 +4,7 @@ import { authClient } from "@carlnotes/client/authClient"
 import { sendChatMentionsViewed, sendClearChatRoom } from "@carlnotes/client/chatRoomClient"
 import { fetchTeamPage } from "@carlnotes/client/teamClient"
 import { CHAT_ROOM_ATTACHMENT_LIMIT } from "@carlnotes/contracts/chat"
+import { isAdminRole, isLeaderRole } from "@carlnotes/contracts/enums"
 import { markChatRoomOpened } from "@carlnotes/core/stores/chatRoomStore"
 import { X } from "lucide-react"
 import { lazy, Suspense, useEffect, useState } from "react"
@@ -41,7 +42,7 @@ function useRoomMembers(
 				const team = teamPage.status === "visible" ? teamPage.team : null
 				const activeMembers = (team?.members ?? []).filter((member) => member.isActive)
 				setMembers(activeMembers.map((member) => ({ userId: member.userId, username: member.username })))
-				setIsTeamLeader(team?.role === "leader")
+				setIsTeamLeader(isLeaderRole(team?.role))
 			})
 			.catch(() => setMembers([]))
 		return () => {
@@ -92,7 +93,7 @@ export function ChatRoomPanel({
 	const editableTopicDraft = useEditableTopicDraft(topicId)
 
 	// an admin moderates every chat room, the same way the header decides its admin console link
-	const isAdmin = session?.user.role === "admin"
+	const isAdmin = isAdminRole(session?.user.role)
 	const reply = useRoomReply(chatRoom, session?.user.id)
 
 	// an open panel is what counts as seeing a chat mention, which clears every badge for this chat room at once

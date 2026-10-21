@@ -1,37 +1,23 @@
-import {
-	type CreateTeamRejection,
-	fetchTeamNameTaken,
-	sendAddTopicTeam,
-	sendCreateTeam,
-	sendRemoveTopicFromTeam,
-	sendTeamAvatar,
-	sendUpdateTeam,
-} from "@carlnotes/client/teamClient"
+import { fetchTeamNameTaken } from "@carlnotes/client/teamClient"
 import { CHAT_NAME } from "@carlnotes/contracts/chat"
 import type { TeamIdentity } from "@carlnotes/contracts/teams"
 import { useNavigate } from "@tanstack/react-router"
 import { Users } from "lucide-react"
 import { useRef, useState } from "react"
 import { toast } from "sonner"
-import { AVATAR_REJECTIONS } from "@/components/avatar/AvatarUpload"
 import { TeamAvatarPicker } from "@/components/avatar/TeamAvatarPicker"
 import { FieldLabel } from "@/components/common/FieldLabel"
 import { MultiCombobox } from "@/components/common/MultiCombobox"
-import { type PendingInvite, sendPendingInvites, TeamInviteFields } from "@/components/invite/TeamInviteFields"
+import { type PendingInvite, TeamInviteFields } from "@/components/invite/TeamInviteFields"
 import { Button } from "@/components/primitives/button"
 import { Dialog, DialogContent, DialogFooter, DialogTitle } from "@/components/primitives/dialog"
 import { Input } from "@/components/primitives/input"
 import { Switch } from "@/components/primitives/switch"
 import { Textarea } from "@/components/primitives/textarea"
+import { createTeamForInviteLink, saveTeam, TEAM_REJECTION_REASONS } from "@/components/team/saveTeam"
 import { EditTopicModal } from "@/components/topic/EditTopicModal"
 import { useObjectUrl } from "@/hooks/useObjectUrl"
 import { cn } from "@/lib/utils"
-
-// what each rejection tells the person saving a team
-const REJECTION_REASONS: Record<CreateTeamRejection, string> = {
-	quota: "You have reached your limit of teams for one day. Try again tomorrow.",
-	"name-taken": "A team already has that name. Try another.",
-}
 
 // a topic the multiselect offers: the user's own, a public one, or an invite topic they can read
 type TopicOption = { id: string; name: string }
@@ -148,22 +134,13 @@ export function EditTeamModal({
 			setRejection("Name the team before making a link to it.")
 			return null
 		}
-		let newTeamId: string | null = null
-		const saveRejection = await saveTeam({
-			fields: savedFields,
-			currentTopicIds: [],
-			pendingInvites: [],
-			avatarFile: null,
-			onTeamSaved: (team) => {
-				newTeamId = team.teamId
-			},
-		})
-		if (saveRejection || !newTeamId) {
-			setRejection(saveRejection ?? "That team didn't get made. Try again.")
+		const createdTeamResult = await createTeamForInviteLink(savedFields)
+		if ("rejection" in createdTeamResult) {
+			setRejection(createdTeamResult.rejection)
 			return null
 		}
-		setCreatedTeam({ teamId: newTeamId, name, avatarVersion: null, description, isPublic })
-		return newTeamId
+		setCreatedTeam({ teamId: createdTeamResult.teamId, name, avatarVersion: null, description, isPublic })
+		return createdTeamResult.teamId
 	}
 
 	// saving creates or updates and uploads the selected image, or reports a rejection reason
@@ -230,7 +207,7 @@ export function EditTeamModal({
 		}
 		void fetchTeamNameTaken(teamName).then((isTeamNameTaken) => {
 			if (isTeamNameTaken) {
-				setRejection(REJECTION_REASONS["name-taken"])
+				setRejection(TEAM_REJECTION_REASONS["name-taken"])
 			}
 		})
 	}
@@ -329,73 +306,4 @@ export function EditTeamModal({
 			)}
 		</Dialog>
 	)
-}
-
-// save the team and its avatar, returning a rejection to show in place, or null once every write succeeded
-async function saveTeam({
-	team,
-	fields,
-	currentTopicIds,
-	pendingInvites,
-	avatarFile,
-	onTeamSaved,
-}: {
-	team?: EditedTeam
-	fields: { name: string; description: string | null; topicIds: string[]; isPublic: boolean }
-	// the topics the team held when the modal was opened, which the selected list is compared against
-	currentTopicIds: string[]
-	// the invitations entered while creating, sent after the team has been created
-	pendingInvites: PendingInvite[]
-	avatarFile: File | null
-	onTeamSaved: (team: { teamId: string }) => void
-}): Promise<string | null> {
-	// an edit updates its fields, and a create saves the team its avatar attaches to
-	let teamId = team?.teamId ?? ""
-	if (team) {
-		if (
-			(await sendUpdateTeam(team.teamId, {
-				name: fields.name,
-				description: fields.description,
-				isPublic: fields.isPublic,
-			})) !== null
-		) {
-			return REJECTION_REASONS["name-taken"]
-		}
-
-		// new selected topics are added and dropped ones are deleted
-		const topicRejections = await Promise.all(
-			fields.topicIds.filter((id) => !currentTopicIds.includes(id)).map((id) => sendAddTopicTeam(teamId, id)),
-		)
-		await Promise.all(
-			currentTopicIds.filter((id) => !fields.topicIds.includes(id)).map((id) => sendRemoveTopicFromTeam(teamId, id)),
-		)
-		// show a topic rejection reason from the api
-		const topicRejection = topicRejections.find(Boolean)
-		if (topicRejection) {
-			return topicRejection
-		}
-	} else {
-		const createdTeam = await sendCreateTeam(fields)
-		if ("rejection" in createdTeam) {
-			return REJECTION_REASONS[createdTeam.rejection]
-		}
-		teamId = createdTeam.teamId
-	}
-
-	// the queued team invites are sent, each reported by a toast because the modal closes
-	await sendPendingInvites(teamId, pendingInvites)
-
-	// the selected avatar image uploads before a created team's page opens
-	if (avatarFile) {
-		const rejection = await sendTeamAvatar(teamId, avatarFile)
-		if (rejection) {
-			return AVATAR_REJECTIONS[rejection] ?? "That image didn't reach Carl. Try again."
-		}
-	}
-
-	// a created team opens its page with the image in place
-	if (!team) {
-		onTeamSaved({ teamId })
-	}
-	return null
 }

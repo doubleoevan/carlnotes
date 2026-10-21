@@ -1,13 +1,11 @@
 import { sendAcceptInvite, sendDeclineInvite } from "@carlnotes/client/activityClient"
 import { authClient, toSessionProfileIdentity } from "@carlnotes/client/authClient"
-import { fetchTeamPage, sendRemoveTopicFromTeam } from "@carlnotes/client/teamClient"
+import { isLeaderRole } from "@carlnotes/contracts/enums"
 import type { ProfileIdentity } from "@carlnotes/contracts/profiles"
-import type { TeamPageResponse, TeamSummary, TeamsPageResponse } from "@carlnotes/contracts/teams"
+import type { TeamSummary, TeamsPageResponse } from "@carlnotes/contracts/teams"
 import { toCentsLabel } from "@carlnotes/core/lib/labels"
 import { X } from "lucide-react"
-import { useState } from "react"
 import { toast } from "sonner"
-import { CoffeeLoading } from "@/components/branding/CoffeeLoading"
 import { TeamAvatar } from "@/components/branding/TeamAvatar"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { PageUpdateCountBadge } from "@/components/common/UpdateCountBadge"
@@ -15,11 +13,8 @@ import { UserProfileLink } from "@/components/common/UserProfileLink"
 import { Button } from "@/components/primitives/button"
 import { Switch } from "@/components/primitives/switch"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
-import { THIN_SCROLLBAR_CLASS } from "@/lib/styleClasses"
-import { cn } from "@/lib/utils"
 import { SubtableCountButton } from "./SubtableCountButton"
-import { TeamMembersTable } from "./TeamMembersTable"
-import { TopicsTable } from "./TopicsTable"
+import { TeamSubtablesRow, useTeamSubtables } from "./TeamSubtablesRow"
 
 // one invitation waiting for the user's answer, as the teams page payload sends it
 export type ReceivedInvite = TeamsPageResponse["receivedInvites"][number]
@@ -120,7 +115,7 @@ export function TeamMembershipRow({
 						</td>
 						<td className="py-2 text-right">
 							{/* deleting the whole team is a leader's power, and it returns every topic to its creator */}
-							{team.role === "leader" && (
+							{isLeaderRole(team.role) && (
 								<Tooltip>
 									<TooltipTrigger asChild>
 										<Button size="icon-sm" variant="ghost" onClick={onDelete} aria-label={`Delete ${team.name}`}>
@@ -140,7 +135,8 @@ export function TeamMembershipRow({
 			{openSubtable && (
 				<TeamSubtablesRow
 					teamId={team.teamId}
-					isTeamLeader={team.role === "leader"}
+					teamRole={team.role}
+					isReadOnly={isReadOnly}
 					openSubtable={openSubtable}
 					teamPage={teamPage}
 					columnCount={isReadOnly ? 6 : 11}
@@ -148,90 +144,6 @@ export function TeamMembershipRow({
 				/>
 			)}
 		</>
-	)
-}
-
-// one row's subtable state: which is open, and the team page payload that fills it, loaded on the first open
-function useTeamSubtables(teamId: string) {
-	const [openSubtable, setOpenSubtable] = useState<"topics" | "members" | null>(null)
-	const [teamPage, setTeamPage] = useState<TeamPageResponse | null>(null)
-
-	// the team page payload includes both the topics and the members, gated to members and invitees
-	async function loadOpenTeamPage(): Promise<void> {
-		const loaded = await fetchTeamPage(teamId).catch(() => null)
-		if (loaded?.status !== "visible") {
-			toast.error("Couldn't load that team.")
-			setOpenSubtable(null)
-			return
-		}
-		setTeamPage(loaded.team)
-	}
-	async function handleSubtableClick(subtable: "topics" | "members"): Promise<void> {
-		setOpenSubtable(openSubtable === subtable ? null : subtable)
-		if (teamPage === null) {
-			await loadOpenTeamPage()
-		}
-	}
-
-	// a change inside an open subtable refetches the team page right away
-	async function handleSubtableChanged(): Promise<void> {
-		setTeamPage(null)
-		await loadOpenTeamPage()
-	}
-	return { openSubtable, teamPage, handleSubtableClick, handleSubtableChanged }
-}
-
-// whichever subtable is open, in the same tables the team page renders
-function TeamSubtablesRow({
-	teamId,
-	isTeamLeader,
-	openSubtable,
-	teamPage,
-	columnCount,
-	onChanged,
-}: {
-	teamId: string
-	isTeamLeader: boolean
-	openSubtable: "topics" | "members"
-	teamPage: TeamPageResponse | null
-	// the row spans the table above it, whose columns depend on the read-only mode
-	columnCount: number
-	onChanged: () => void
-}) {
-	return (
-		<tr className="border-b">
-			<td colSpan={columnCount} className="py-2">
-				<div className={cn("bg-sunken overflow-x-auto rounded-lg border px-4 py-2", THIN_SCROLLBAR_CLASS)}>
-					{teamPage === null && <CoffeeLoading className="min-h-0 justify-start py-2 text-sm" />}
-					{teamPage &&
-						openSubtable === "topics" &&
-						(teamPage.topics.length === 0 ? (
-							<p className="text-muted-foreground py-2 text-sm">No topics on this team yet.</p>
-						) : (
-							<TopicsTable
-								className="bg-sunken mb-0 border-0 p-0 shadow-none"
-								topics={teamPage.topics}
-								includesNonPublicTopics
-								topicTooltip="Topics on this team"
-								onRemoveTopic={
-									isTeamLeader
-										? (topic) => void sendRemoveTopicFromTeam(teamId, topic.id).then(() => onChanged())
-										: undefined
-								}
-							/>
-						))}
-					{teamPage && openSubtable === "members" && (
-						<TeamMembersTable
-							teamId={teamId}
-							members={teamPage.members}
-							hiddenMemberCount={teamPage.hiddenMemberCount}
-							isTeamLeader={isTeamLeader}
-							onChanged={onChanged}
-						/>
-					)}
-				</div>
-			</td>
-		</tr>
 	)
 }
 
@@ -372,11 +284,11 @@ export function TeamInviteRow({ invite, onAnswered }: { invite: ReceivedInvite; 
 					</Tooltip>
 				</td>
 			</tr>
-			{/* whichever subtable is open, read-only for an invitee */}
+			{/* whichever subtable is open, read-only for an invitee, who has no role yet */}
 			{openSubtable && (
 				<TeamSubtablesRow
 					teamId={invite.teamId}
-					isTeamLeader={false}
+					teamRole={null}
 					openSubtable={openSubtable}
 					teamPage={teamPage}
 					columnCount={11}

@@ -1,7 +1,7 @@
 import { fetchTopicPage, sendSubscriptionEmail } from "@carlnotes/client/topicClient"
 import type { Topic } from "@carlnotes/contracts/profiles"
 import type { TopicResponse } from "@carlnotes/contracts/topics"
-import { toMonthYearLabel } from "@carlnotes/core/lib/labels"
+import { toCountLabel, toMonthYearLabel } from "@carlnotes/core/lib/labels"
 import { X } from "lucide-react"
 import { useState } from "react"
 import { CoffeeLoading } from "@/components/branding/CoffeeLoading"
@@ -215,12 +215,12 @@ export function TopicsTable({
 							<td className="py-2 pr-4">Total</td>
 							<td className="py-2 pr-4" colSpan={2} />
 							{includesNonPublicTopics && <td className="py-2 pr-4">{`${totals.public}/${topics.length} public`}</td>}
-							<td className="py-2 pr-4">
-								{`${totals.subscribers.toLocaleString()} follower${totals.subscribers === 1 ? "" : "s"}`}
-							</td>
+							<td className="py-2 pr-4">{toCountLabel(totals.subscribers, "follower")}</td>
 							<td className="py-2 pr-4">
 								{totals.kept.toLocaleString()} / {totals.seen.toLocaleString()} findings
 							</td>
+							{/* the Emails column has no total, and its empty cell keeps the Active total under its heading */}
+							{isEmailShown && <td className="py-2 pr-4" />}
 							{onRemoveTopic && <td className="py-2 pr-4">{`${topics.length}/${topics.length} active`}</td>}
 							{onRemoveTopic && <td className="py-2" />}
 						</tr>
