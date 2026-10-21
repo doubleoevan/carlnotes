@@ -26,9 +26,10 @@ export async function updateTopicSubscriberCount(topicId: string, handle: DbHand
 
 // lock the topic row, recount its subscribers, and store the count, all on one transaction's handle
 async function recountTopicSubscribers(topicId: string, handle: DbHandle): Promise<void> {
-	// lock the topic row before the recount. the recount's own statement then takes its snapshot after every blocked
-	// subscription write on this Topic has committed
-	await handle.select({ id: topics.id }).from(topics).where(eq(topics.id, topicId)).for("update")
+	// lock the topic row before the recount. no key update leaves room for the foreign key share a concurrent
+	// subscription insert holds on the row, so two accepts of one Topic serialize here instead of deadlocking, and the
+	// recount's own statement takes its snapshot after every blocked write on this Topic has committed
+	await handle.select({ id: topics.id }).from(topics).where(eq(topics.id, topicId)).for("no key update")
 
 	// the owner subscribes to their own Topic for delivery, and has never counted as one of its subscribers
 	const subscriberCount = sql<number>`(

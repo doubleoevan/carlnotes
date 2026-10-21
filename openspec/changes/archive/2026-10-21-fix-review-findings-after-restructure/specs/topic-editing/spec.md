@@ -18,10 +18,10 @@ instead of creating a second Topic. The owner ends with one Topic however many t
 
 ### Requirement: The subscriber recount locks the Topic row
 
-The recount that writes `topics.subscriber_count` SHALL lock the Topic row with `select ... for update` before counting
-the active Subscriptions, and the lock, the count, and the write SHALL run in one transaction, so two concurrent
-subscribe or unsubscribe writes recount one after the other and the stored count never ends on the earlier of two
-reads.
+The recount that writes `topics.subscriber_count` SHALL lock the Topic row with `select ... for no key update` before
+counting the active Subscriptions, the strength a Subscription insert's foreign key share does not block, and the lock,
+the count, and the write SHALL run in one transaction, so two concurrent subscribe or unsubscribe writes recount one
+after the other, never deadlock, and the stored count never ends on the earlier of two reads.
 
 #### Scenario: Concurrent writes recount in turn
 

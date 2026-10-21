@@ -72,7 +72,8 @@ private or team topic, matching the billing state route and the AGENTS rule.
   `clearPendingObjectDeletion` in the row's transaction, as the other upload paths do.
 - `note/noteCommentThreads.ts`: zod payloads in `@carlnotes/contracts/payloads` for the thread, comment, edit, and
   reaction bodies, attached with `zValidator`.
-- `topic/subscriberCounts.ts`: `select ... for update` on the topic row before the recount.
+- `topic/subscriberCounts.ts`: `select ... for no key update` on the topic row before the recount, the strength a
+  subscription insert's foreign key share does not block.
 - `mcp/tools.ts`: the `list_topics` description says "you", never `toolCaller`.
 - `content.ts`: the date sort breaks a tie by slug.
 - `EditTopicModal.tsx`: a ref holds the id a failed Save created, and the retry updates that topic.

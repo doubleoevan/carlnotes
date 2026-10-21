@@ -13,9 +13,9 @@ test("updateTopicSubscriberCount locks the topic row before the recount", async 
 	const sentQueries = stubConnectionPool()
 	await updateTopicSubscriberCount("topic-1")
 
-	// a select for update of the topic row, then the update that stores the count
+	// a select for no key update of the topic row, then the update that stores the count
 	expect(sentQueries.map(({ text }) => text.split(" ")[0])).toEqual(["select", "update"])
 	expect(sentQueries[0]?.text).toContain('from "topics"')
-	expect(sentQueries[0]?.text).toContain("for update")
+	expect(sentQueries[0]?.text).toContain("for no key update")
 	expect(sentQueries[0]?.values).toEqual(["topic-1"])
 })
