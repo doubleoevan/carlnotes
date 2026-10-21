@@ -111,6 +111,10 @@ test suite. Green before any hand-off.
 - Per-process scripts are `dev:<module>` / `build:<module>`; bare `dev` is the multi-process orchestrator, and no bare
   `build` exists — the Dockerfile runs the `build:<module>` scripts itself. When adding or changing package.json
   scripts, update the README Development section in the same change.
+- A process started from outside the repo, a Northflank service, job, or cron, runs through a root script, never a
+  file path, so moving a file changes only the script. Add the script in the same change as the process. The
+  exceptions are the image's `CMD`, which the `app` service starts from, and the worker in `smoke.yml`, whose env
+  override has to follow `doppler run`.
 - Structure changes update the docs in the same change: a new, moved, renamed, or deleted folder, entry point, or script
   is included in the workspace's AGENTS.md, and in the root module map or routing table when it changes what they say.
 - Thorough beats narrow scope. A fix, a split, or a follow-up the change can do now is done in the change, never
