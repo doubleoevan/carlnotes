@@ -7,7 +7,7 @@ TBD - created by archiving change coffee-break-podcast. Update Purpose after arc
 
 `litellm-config.yaml` SHALL NOT gain a model alias for speech. The file SHALL say in a comment that speech goes through
 the pass-through and that the proxy charges it from LiteLLM's own price table. The app's own speech rates SHALL live in
-one file, `worker/budget.ts`, so a price change in the repo is an edit to
+one file, `packages/models/budget.ts`, so a price change in the repo is an edit to
       that file alone. The standard tier's rates are $0.50 per million text input tokens and $9 per million audio output
       tokens through December 31, 2026. A Flex call SHALL be recorded at what the proxy charges the key for it, which is
       half the text input rate and the full audio output rate, so the app's spend sum and the key's metered spend agree.
@@ -15,8 +15,8 @@ one file, `worker/budget.ts`, so a price change in the repo is an edit to
 `litellm-config.yaml` SHALL NOT gain a model alias for transcription either. A transcription SHALL call Google's
 model by name on the pass-through's Interactions route, which checks the key's budget and charges the key nothing for
 the call, so the app's own spend row is the only meter of a transcription. The file's comment SHALL say so. The app's
-transcription rate SHALL live in `worker/budget.ts` beside the speech rates, from Google's page: $2 per million audio
-and text input tokens and $12 per million output tokens, with thought tokens priced as output.
+transcription rate SHALL live in `packages/models/budget.ts` beside the speech rates, from Google's page: $2 per million
+audio and text input tokens and $12 per million output tokens, with thought tokens priced as output.
 
 #### Scenario: The config has no speech alias
 
@@ -26,7 +26,7 @@ and text input tokens and $12 per million output tokens, with thought tokens pri
 #### Scenario: A price change is one file
 
 - **WHEN** the speech rates change
-- **THEN** the only repo file that states them is `worker/budget.ts`
+- **THEN** the only repo file that states them is `packages/models/budget.ts`
 
 #### Scenario: The config has no transcription alias
 - **WHEN** the LiteLLM proxy starts with the config
@@ -87,7 +87,7 @@ standard tier, asking for audio output. The two request shapes SHALL read the sa
 The repo SHALL include a smoke script, run under `doppler run` against the local proxy that `bun run carl-up` starts,
 that renders a short two-speaker clip on each tier through the same code path that the worker uses. It SHALL use a test
 key that it creates for the run, SHALL assert that each response is playable audio, and SHALL assert that the test key's
-spend in LiteLLM rose by each call's token counts at that tier's rate in `worker/budget.ts`, so a change in what the
+spend in LiteLLM rose by each call's token counts at that tier's rate in `packages/models/budget.ts`, so a change in what the
 proxy charges for either tier fails the smoke. It SHALL print both amounts, and SHALL delete the test key when it ends.
 
 #### Scenario: The clip renders on both tiers

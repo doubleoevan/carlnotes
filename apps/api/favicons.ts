@@ -1,0 +1,112 @@
+// the route that serves a host's stored favicon, and the path that a finding, a link preview,
+// and a podcast episode chapter name the favicon by
+import type { ChatLinkPreview } from "@carlnotes/contracts/chat"
+import type { TopicFinding } from "@carlnotes/contracts/findings"
+import type { PodcastEpisodeChapter } from "@carlnotes/contracts/podcast"
+import { toUrlHost } from "@carlnotes/contracts/sources"
+import { db } from "@carlnotes/db"
+import { favicons } from "@carlnotes/db/schema/storage"
+import { attachmentStream } from "@carlnotes/db/store"
+import { and, eq, inArray, isNotNull } from "drizzle-orm"
+import { Hono } from "hono"
+import type { AppEnv } from "./currentUser"
+import { toStoredFileHeaders } from "./topic/attachments"
+
+// a month. an icon that changes on its site shows up within it
+const FAVICON_CACHE_CONTROL = "public, max-age=2592000"
+
+// an icon opened as a page gets a policy that allows nothing and sandboxes the document. a base url and a form's action
+// stay on this origin
+const FAVICON_CONTENT_SECURITY_POLICY =
+	"default-src 'none'; style-src 'unsafe-inline'; base-uri 'self'; form-action 'self'; sandbox"
+
+/**
+ * The path this origin serves a host's favicon from.
+ */
+export function toFaviconPath(host: string): string {
+	return `/api/favicons/${encodeURIComponent(host)}`
+}
+
+/**
+ * Fill each topic finding's faviconPath from its source host, one query for the whole page.
+ */
+export async function attachTopicFindingFaviconPaths(topicFindings: TopicFinding[]): Promise<void> {
+	// the hosts with a stored icon, looked up once for the page
+	const hosts = topicFindings.map((topicFinding) => topicFinding.source).filter((host): host is string => host !== null)
+	const faviconHosts = await loadFaviconHosts([...new Set(hosts)])
+	for (const topicFinding of topicFindings) {
+		topicFinding.faviconPath = toStoredFaviconPath(topicFinding.source, faviconHosts)
+	}
+}
+
+/**
+ * Fill each link preview's faviconPath from its url's host, one query for the batch.
+ */
+export async function attachLinkPreviewFaviconPaths(chatLinkPreviews: ChatLinkPreview[]): Promise<void> {
+	// the hosts with a stored icon, looked up once for the batch
+	const hosts = chatLinkPreviews
+		.map((linkPreview) => toUrlHost(linkPreview.url))
+		.filter((host): host is string => host !== null)
+	const faviconHosts = await loadFaviconHosts([...new Set(hosts)])
+	// each card names its own host's path, or null
+	for (const linkPreview of chatLinkPreviews) {
+		linkPreview.faviconPath = toStoredFaviconPath(toUrlHost(linkPreview.url), faviconHosts)
+	}
+}
+
+/**
+ * Fills each podcast episode chapter's faviconPath from its source url's host, in one query for the episode.
+ */
+export async function attachPodcastEpisodeChapterFaviconPaths(
+	podcastEpisodeChapters: PodcastEpisodeChapter[],
+): Promise<void> {
+	// the hosts with a stored icon, looked up once for the podcast episode
+	const hosts = podcastEpisodeChapters
+		.map((podcastEpisodeChapter) => toUrlHost(podcastEpisodeChapter.sourceUrl))
+		.filter((host): host is string => host !== null)
+	const faviconHosts = await loadFaviconHosts([...new Set(hosts)])
+	// set each chapter's favicon path, or null if its host has no stored icon
+	for (const podcastEpisodeChapter of podcastEpisodeChapters) {
+		podcastEpisodeChapter.faviconPath = toStoredFaviconPath(toUrlHost(podcastEpisodeChapter.sourceUrl), faviconHosts)
+	}
+}
+
+// the path for a host with a stored icon, null for one without
+function toStoredFaviconPath(host: string | null, faviconHosts: Set<string>): string | null {
+	return host && faviconHosts.has(host) ? toFaviconPath(host) : null
+}
+
+// the hosts among these with a stored icon
+async function loadFaviconHosts(hosts: string[]): Promise<Set<string>> {
+	// an empty list matches nothing, so skip the query
+	if (hosts.length === 0) {
+		return new Set()
+	}
+
+	// one query for every host on the page
+	const faviconRows = await db
+		.select({ host: favicons.host })
+		.from(favicons)
+		.where(and(inArray(favicons.host, hosts), isNotNull(favicons.objectKey)))
+	return new Set(faviconRows.map((faviconRow) => faviconRow.host))
+}
+
+// serve a host's stored icon from this origin, cacheable for a month
+export const faviconsRoute = new Hono<AppEnv>().get("/favicons/:host", async (context) => {
+	// the stored object and its type, for the host the path names
+	const [faviconRow] = await db
+		.select({ objectKey: favicons.objectKey, contentType: favicons.contentType })
+		.from(favicons)
+		.where(eq(favicons.host, context.req.param("host")))
+	// a host with no row or no stored icon has nothing to serve
+	if (!faviconRow?.objectKey || !faviconRow.contentType) {
+		return context.json({ error: "not found" }, 404)
+	}
+	return context.body(attachmentStream(faviconRow.objectKey), 200, {
+		...toStoredFileHeaders("favicon", faviconRow.contentType),
+		"Cache-Control": FAVICON_CACHE_CONTROL,
+		"Content-Security-Policy": FAVICON_CONTENT_SECURITY_POLICY,
+		// only this origin's pages can embed an icon
+		"Cross-Origin-Resource-Policy": "same-origin",
+	})
+})

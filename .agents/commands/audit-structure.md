@@ -15,7 +15,7 @@ canonical copy, symlinked where tools require their own path. Canonical homes:
 **Rule 2:** generated files stay where their generator puts them, untouched:
 OpenSpec output (`.claude/commands/opsx/`, `.opencode/commands/opsx-*.md`,
 `.claude/skills/openspec-*`, `.opencode/skills/openspec-*`, `openspec/`),
-shadcn components (`ui/src/components/ui/`), tool caches
+shadcn components (`apps/web/src/components/primitives/`), tool caches
 (`.opencode/package.json`, `node_modules`).
 
 Check for:
@@ -613,6 +613,19 @@ Check for:
      `evals/topic-chat/topicChatEval.ts` and `evals/team-chat/teamChatEval.ts` (now `evals/evalChecks.ts`)
    - `isWeekend` in `worker/schedule.ts` (now `isUtcWeekend` in `shared/time.ts`), and `toSpokenEventMeasurements` in
      `api/chat/voiceRoute.ts` (now `toSpokenEventProperties`)
+   - the top-level folders `ui/`, `api/`, `worker/`, `db/`, `shared/`, `emails/`, and `docs/` (now the Bun workspaces
+     `apps/web`, `apps/api`, `apps/worker`, `apps/docs`, `packages/contracts`, `packages/client`, `packages/core`,
+     `packages/tokens`, `packages/server`, `packages/db`, `packages/emails`, `packages/models`, and `packages/pipeline`;
+     every entry above names its paths in the old layout), the `@shared/*` alias (now `@carlnotes/contracts/*` and
+     `@carlnotes/server/*`), the `worker/index.ts` re-export module (removed: the api imports each module by its
+     package path), `ui/src/clients/` (now `packages/client/`), and `scripts/check-ui-boundary.ts` (now
+     `scripts/check-package-boundaries.ts`)
+   - `reportFailedWrite` / `reportRejectedWrite` in `ui/src/clients/topicClient.ts` (now `showFailedWrite` /
+     `showRejectedWrite` in `packages/client/topicClient.ts`), `sourceFilesUnder` in `db/schema.test.ts` (now
+     `listSourceFiles` in `packages/server/sourceFileTestFixtures.ts`), `DOCS_ROOT` in `api/seo.ts` and `DOCS_DIR` in
+     `worker/docsSync.ts` (now `DOCS_CONTENT_DIRECTORY` in `packages/server/docsContent.ts`), and
+     `shared/podcastEpisodes.ts` (now `packages/contracts/podcastEpisodes.ts`,
+     `packages/server/podcastEpisodeSettings.ts`, and `packages/server/podcastCoverPaths.ts`)
 
 5. **Cross-harness enforcement parity**: `.claude/settings.json` hooks and
    `.opencode/plugin/guardrails.mjs` must gate the same operations with the
@@ -628,7 +641,7 @@ Check for:
    > both scripts (missing jq now exits 2 with a message, never hangs, never
    > passes silently).
 6. **Gitignore coverage**: `.opencode/node_modules/`, `.opencode/package.json`,
-   `.opencode/package-lock.json`, `ui/node_modules/`, and any tool cache dirs
+   `.opencode/package-lock.json`, `apps/*/node_modules/`, `packages/*/node_modules/`, and any tool cache dirs
    must be ignored; confirm none are tracked or staged.
 7. **Untracked strays**: anything in `git status` that is neither deliberate
    source nor covered by `.gitignore`; classify each as commit, ignore, or
@@ -646,12 +659,12 @@ Check for:
     each module's folders against its doc's layout bullet.
 
 11. **Prompts do not restate what the code already holds**: check each prompt
-    body under `worker/prompts/` for a hand-typed list of source kinds,
+    body under `packages/models/prompts/` for a hand-typed list of source kinds,
     visibilities, frequencies, or findings limits, and compare it against
-    `shared/sources.ts` and `shared/enums.ts`. A prompt takes such a list as a
+    `packages/contracts/sources.ts` and `packages/contracts/enums.ts`. A prompt takes such a list as a
     variable, the way `chat-glossary.md` takes `{{sourceOptions}}`. The
     `prompt-authoring` skill's Prompt fragments section is the rule.
-12. **One wording, one prompt fragment**: when two prompts under `worker/prompts/`
+12. **One wording, one prompt fragment**: when two prompts under `packages/models/prompts/`
     share the same paragraph or rule, it belongs in a prompt fragment that both prompts splice, as
     `chat-glossary.md` and `chat-conduct.md` are spliced. Diff the prompt bodies
     against each other for repeated sentences and flag any that a prompt fragment

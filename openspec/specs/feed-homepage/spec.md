@@ -4,7 +4,7 @@
 TBD - created by archiving change add-feed-homepage. Update Purpose after archive.
 ## Requirements
 ### Requirement: The homepage renders the Feed from the committed design export
-The homepage SHALL implement the committed design export at `docs/design/homepage.html`: the dark hero band with Carl's headline, the overlapping search field (visual for now), and the collapsible Topic sections **Your topics**, **Featured**, and **Popular**. Display type SHALL use Architects Daughter and body type SHALL use Karla. The export is the source of truth for layout and interaction; the shipped theming and ambient background have since evolved past it.
+The homepage SHALL implement the committed design export at `apps/docs/design/homepage.html`: the dark hero band with Carl's headline, the overlapping search field (visual for now), and the collapsible Topic sections **Your topics**, **Featured**, and **Popular**. Display type SHALL use Architects Daughter and body type SHALL use Karla. The export is the source of truth for layout and interaction; the shipped theming and ambient background have since evolved past it.
 
 #### Scenario: Homepage shows the hero and topic sections
 - **WHEN** the homepage loads against the seeded dev data

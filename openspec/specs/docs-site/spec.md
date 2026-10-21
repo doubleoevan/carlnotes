@@ -5,14 +5,14 @@ TBD - created by archiving change docs-site-scaffold. Update Purpose after archi
 ## Requirements
 ### Requirement: The documentation site is a Starlight project built to static files
 
-The documentation SHALL be an Astro Starlight project at `docs/`, configured with `site` set to the production origin, `base` set to `/docs`, and `outDir` set to `./dist`. It SHALL be built by a `build:docs` script in the root `package.json`, which produces static HTML, CSS, and assets under `docs/dist` and requires no running process of its own.
+The documentation SHALL be an Astro Starlight project at `apps/docs/`, configured with `site` set to the production origin, `base` set to `/docs`, and `outDir` set to `./dist`. It SHALL be built by a `build:docs` script in the root `package.json`, which produces static HTML, CSS, and assets under `apps/docs/dist` and requires no running process of its own.
 
 Astro and Starlight SHALL be dev dependencies. They run only at build time, so no new package reaches the production runtime.
 
 #### Scenario: The build produces a static site
 
 - **WHEN** `bun run build:docs` runs
-- **THEN** `docs/dist` holds the built HTML, assets, and search index, and no server process is started
+- **THEN** `apps/docs/dist` holds the built HTML, assets, and search index, and no server process is started
 
 #### Scenario: The site option is set so emitted URLs are absolute
 
@@ -77,7 +77,7 @@ A page that exists as structure but carries no content yet SHALL be marked as a 
 
 ### Requirement: Screenshots are project assets referenced relatively
 
-Screenshots SHALL live under `docs/src/assets/screenshots/` and SHALL be referenced by relative path from the page that uses them. A screenshot SHALL NOT be served from the docs `public/` directory or referenced by an absolute path.
+Screenshots SHALL live under `apps/docs/src/assets/screenshots/` and SHALL be referenced by relative path from the page that uses them. A screenshot SHALL NOT be served from the docs `public/` directory or referenced by an absolute path.
 
 Astro applies the base path to images it processes and does not apply it to absolute paths written by hand, so an absolute reference resolves in development and 404s in production. Referencing assets relatively keeps the base path correct in both.
 
@@ -116,14 +116,14 @@ The app image SHALL build the docs in its build stage and copy the built output 
 
 ### Requirement: The app server serves the built docs under /docs ahead of the ui
 
-The app service SHALL serve `docs/dist` under `/docs` through Hono's Bun `serveStatic`, from the same process that serves the API and the ui. Because Astro's `base` prefixes generated links without nesting the build output, the handler SHALL rewrite the incoming request path to strip the `/docs` prefix before resolving a file.
+The app service SHALL serve `apps/docs/dist` under `/docs` through Hono's Bun `serveStatic`, from the same process that serves the API and the ui. Because Astro's `base` prefixes generated links without nesting the build output, the handler SHALL rewrite the incoming request path to strip the `/docs` prefix before resolving a file.
 
 The docs handler SHALL sit ahead of the ui's built client files and the ui's server handler, so no `/docs` path is rendered by the ui.
 
 #### Scenario: A docs page is served
 
 - **WHEN** a user opens `/docs/how-carlnotes-works/`
-- **THEN** the app responds 200 with that page's built HTML from `docs/dist`
+- **THEN** the app responds 200 with that page's built HTML from `apps/docs/dist`
 
 #### Scenario: A docs asset is served
 

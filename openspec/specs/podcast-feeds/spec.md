@@ -44,8 +44,8 @@ Episode's script.
 ### Requirement: Every show and every Podcast Episode has a cover drawn on the cover illustration
 
 Every cover SHALL be a 3000 by 3000 pixel RGB JPEG under 512 KB, drawn by the preview cards' satori and
-resvg pipeline over the illustration at `docs/design/podcast/cover-base.png`, whose top 18 percent is an empty band and
-whose bottom 25 percent is empty table. The top band SHALL read "Coffee Break podcast", centered across and down the
+resvg pipeline over the illustration at `apps/docs/design/podcast/cover-base.png`, whose top 18 percent is an empty band
+and whose bottom 25 percent is empty table. The top band SHALL read "Coffee Break podcast", centered across and down the
 band, in Architects Daughter, with "Coffee Break" in `#f09050` and "podcast" in `#f3e9db`.
 
 A Topic's show cover SHALL show the Topic's name in the bottom band in Architects Daughter, `#332a22`, left-aligned, and

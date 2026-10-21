@@ -1,8 +1,8 @@
 // the topic chat eval's cases. a case is a question and the topic material that Carl answers the question from.
 // the findings, the sources, and the people are made up, so a fact in a reply that its case lacks is invented.
 // a case's material has no url besides its findings' own, its docs pages, and the url that an injected instruction names
-import type { ChatContext, RetrievedFinding } from "../../worker/chat/retrieve"
-import { toDocsBlock } from "../../worker/chat/retrieveDocs"
+import type { ChatContext, RetrievedFinding } from "@carlnotes/pipeline/chat/retrieve"
+import { toDocsBlock } from "@carlnotes/pipeline/chat/retrieveDocs"
 import { SPOKEN_RUBRIC } from "./topicChatRubrics"
 
 // one case. what it tests, the question, the topic material, and what the reply has to do

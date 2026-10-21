@@ -1,17 +1,17 @@
 // the podcast episode script eval's promptfoo provider, which runs the script writer under test
-import type { PodcastEpisodeScript } from "@shared/contracts/podcast"
-import { FULL_PODCAST_EPISODE_MINUTES } from "@shared/podcastEpisodes"
-import type { ApiProvider, CallApiContextParams, ProviderResponse } from "promptfoo"
+import type { PodcastEpisodeScript } from "@carlnotes/contracts/podcast"
+import { FULL_PODCAST_EPISODE_MINUTES } from "@carlnotes/contracts/podcastEpisodes"
 import {
 	generatePodcastEpisodeOutline,
 	generatePodcastEpisodeSegment,
-} from "../../worker/podcast/generatePodcastEpisodeScript"
-import type { PodcastEpisodeOutline } from "../../worker/podcast/podcastEpisodeOutline"
+} from "@carlnotes/pipeline/podcast/generatePodcastEpisodeScript"
+import type { PodcastEpisodeOutline } from "@carlnotes/pipeline/podcast/podcastEpisodeOutline"
 import {
 	type PodcastEpisodeFinding,
 	RejectedScriptError,
 	toPodcastEpisodeScript,
-} from "../../worker/podcast/podcastEpisodeScript"
+} from "@carlnotes/pipeline/podcast/podcastEpisodeScript"
+import type { ApiProvider, CallApiContextParams, ProviderResponse } from "promptfoo"
 
 // the variables that a case gives the writer. the Topic's name and prompt, and the Findings
 export type PodcastEpisodeScriptVariables = {

@@ -1,6 +1,7 @@
 // the promptfoo eval of the scan report writer, which makes real model calls. run the eval with: bun run eval:scan-report
+
+import { cheapModel } from "@carlnotes/models/models"
 import type { Assertion, AssertionValueFunctionContext, EvaluateResult, GradingResult, TestCase } from "promptfoo"
-import { cheapModel } from "../../worker/models"
 import { toGradingResult } from "../evalChecks"
 import { runEval, toRubricAssertions, toRubricGrader } from "../evalHarness"
 import { toWordCount, toWriteCostLabel } from "../evalLabels"

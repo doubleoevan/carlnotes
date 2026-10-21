@@ -6,7 +6,6 @@
 		"useIgnoreFile": true
 	},
 	"files": {
-		"ignoreUnknown": false,
 		"includes": [
 			"**",
 			"!.agents",
@@ -14,12 +13,12 @@
 			"!.opencode",
 			"!openspec",
 			"!skills-lock.json",
-			"!db/migrations",
-			"!docs/design",
-			"!docs/public",
+			"!packages/db/migrations",
+			"!apps/docs/design",
+			"!apps/docs/public",
 			"!evals/results",
-			"!ui/public",
-			"!ui/src/routeTree.gen.ts"
+			"!apps/web/public",
+			"!apps/web/src/routeTree.gen.ts"
 		]
 	},
 	"formatter": {
@@ -71,6 +70,39 @@
 		{
 			"includes": ["**/*.tsx"],
 			"linter": { "rules": { "nursery": { "useExplicitReturnType": "off" } } }
+		},
+		{
+			"includes": [
+				"packages/contracts/**",
+				"packages/client/**",
+				"packages/core/**",
+				"!**/*.test.ts",
+				"!**/*.test.tsx",
+				"!**/*TestFixtures.ts"
+			],
+			"linter": {
+				"rules": {
+					"style": {
+						"noRestrictedGlobals": {
+							"level": "error",
+							"options": {
+								"deniedGlobals": {
+									"window": "a universal package runs where there is no window. the app passes what it reads from one",
+									"document": "a universal package runs where there is no document",
+									"navigator": "a universal package runs where there is no navigator",
+									"location": "a universal package runs where there is no location. the app passes its origin",
+									"localStorage": "a universal package has no browser storage",
+									"sessionStorage": "a universal package has no browser storage",
+									"history": "a universal package has no browser history",
+									"matchMedia": "a universal package has no viewport",
+									"Bun": "a universal package runs where there is no Bun. the server package reads the environment",
+									"process": "a universal package runs where there is no process. the server package reads the environment"
+								}
+							}
+						}
+					}
+				}
+			}
 		}
 	]
 }

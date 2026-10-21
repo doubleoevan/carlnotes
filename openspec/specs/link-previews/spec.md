@@ -38,7 +38,7 @@ Detection SHALL run for a member's messages and for Carl's own, in rooms and in 
 
 ### Requirement: Every preview fetch goes through the public-url guard
 
-The page and its image SHALL both be fetched through `fetchPublicUrl` (`worker/scrape.ts`), never through a bare `fetch` and never through the billed Firecrawl path `fetchContent(url, "read")`. A malformed url, a non-http(s) url, an internal address, and a redirect chain arriving at an internal address SHALL each fail closed, leaving the message as plain text.
+The page and its image SHALL both be fetched through `fetchPublicUrl` (`packages/pipeline/scrape.ts`), never through a bare `fetch` and never through the billed Firecrawl path `fetchContent(url, "read")`. A malformed url, a non-http(s) url, an internal address, and a redirect chain arriving at an internal address SHALL each fail closed, leaving the message as plain text.
 
 An image host is held to the same rule as a page host, since an image url redirecting inward is the same hazard as a page doing it.
 

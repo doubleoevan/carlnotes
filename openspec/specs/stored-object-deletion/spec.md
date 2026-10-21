@@ -5,7 +5,7 @@ TBD - created by archiving change harden-failure-paths. Update Purpose after arc
 ## Requirements
 ### Requirement: Every stored object is deleted through one path
 
-The app SHALL delete a stored object through one function in `worker/store.ts`, and nothing else SHALL call the bucket's
+The app SHALL delete a stored object through one function in `packages/db/store.ts`, and nothing else SHALL call the bucket's
 delete. The function SHALL try the delete at once, SHALL remove the key's pending row on success, and on failure SHALL
 log the failure, leave the pending row in place, and return without throwing an error. A delete of an object that is
 already gone SHALL count as a success. Resource content, whose key is fixed per Resource and rewritten by the next

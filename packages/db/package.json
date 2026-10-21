@@ -1,0 +1,16 @@
+{
+	"name": "@carlnotes/db",
+	"version": "0.1.0",
+	"private": true,
+	"type": "module",
+	"exports": {
+		".": "./index.ts",
+		"./*": "./*.ts"
+	},
+	"dependencies": {
+		"@carlnotes/contracts": "workspace:*",
+		"@carlnotes/server": "workspace:*",
+		"@neondatabase/serverless": "^1.2.0",
+		"drizzle-orm": "^0.45.4"
+	}
+}

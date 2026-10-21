@@ -5,11 +5,11 @@ TBD - created by archiving change serve-ui-bundle-from-api. Update Purpose after
 ## Requirements
 ### Requirement: A missing bundle degrades rather than crashing
 
-The server SHALL start and serve the API when `ui/dist` is absent, which is the normal state in local development where Vite serves the UI and proxies `/api`. A static lookup or fallback that finds no file SHALL answer 404 rather than throwing.
+The server SHALL start and serve the API when `apps/web/dist` is absent, which is the normal state in local development where Vite serves the UI and proxies `/api`. A static lookup or fallback that finds no file SHALL answer 404 rather than throwing.
 
 #### Scenario: The api runs in dev with no bundle built
 
-- **WHEN** the server starts with no `ui/dist` directory and a request arrives for `/`
+- **WHEN** the server starts with no `apps/web/dist` directory and a request arrives for `/`
 - **THEN** the server is running, the API routes work, and the request answers 404 without an unhandled error
 
 ### Requirement: Built docs assets cache like the UI bundle's
@@ -28,11 +28,11 @@ Files in the docs output whose names carry a content hash SHALL be cached with `
 
 ### Requirement: Missing docs output degrades rather than crashing
 
-The server SHALL start and serve every other route when `docs/dist` is absent, which is the normal state in local development where the docs run under their own dev server. A docs lookup that finds no file SHALL answer 404 rather than throwing.
+The server SHALL start and serve every other route when `apps/docs/dist` is absent, which is the normal state in local development where the docs run under their own dev server. A docs lookup that finds no file SHALL answer 404 rather than throwing.
 
 #### Scenario: The api runs with no docs built
 
-- **WHEN** the server starts with no `docs/dist` directory and a request arrives for `/docs`
+- **WHEN** the server starts with no `apps/docs/dist` directory and a request arrives for `/docs`
 - **THEN** the server is running, every other route works, and the request answers 404 without an unhandled error
 
 ### Requirement: The app service serves the api and the ui from one process

@@ -1,0 +1,12 @@
+{
+	"extends": "../../tsconfig.base.json",
+	"references": [
+		{
+			"path": "../../packages/contracts"
+		},
+		{
+			"path": "../../packages/server"
+		}
+	],
+	"include": ["**/*.ts"]
+}

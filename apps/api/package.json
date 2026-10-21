@@ -1,0 +1,44 @@
+{
+	"name": "@carlnotes/api",
+	"version": "0.1.0",
+	"private": true,
+	"type": "module",
+	"exports": {
+		".": "./index.ts",
+		"./*": "./*.ts"
+	},
+	"dependencies": {
+		"@blocknote/core": "0.55.0",
+		"@blocknote/server-util": "0.55.0",
+		"@carlnotes/contracts": "workspace:*",
+		"@carlnotes/db": "workspace:*",
+		"@carlnotes/emails": "workspace:*",
+		"@carlnotes/models": "workspace:*",
+		"@carlnotes/pipeline": "workspace:*",
+		"@carlnotes/server": "workspace:*",
+		"@hono/mcp": "^0.3.2",
+		"@hono/zod-validator": "^0.9.1",
+		"@modelcontextprotocol/sdk": "^1.32.1",
+		"@resvg/resvg-js": "^2.6.2",
+		"ai": "^7.0.137",
+		"better-auth": "~1.6.33",
+		"drizzle-orm": "^0.45.4",
+		"hono": "^4.13.13",
+		"hono-rate-limiter": "^0.5.4",
+		"markdown-to-jsx": "^9.10.3",
+		"react": "^19.3.0",
+		"react-dom": "^19.3.0",
+		"sanitize-html": "2.18.0",
+		"satori": "^0.29.1",
+		"stripe": "^22.6.2",
+		"yjs": "13.6.33",
+		"zod": "^4.6.6"
+	},
+	"devDependencies": {
+		"@neondatabase/serverless": "^1.2.0",
+		"@types/react": "^19.3.0",
+		"@types/react-dom": "^19.3.0",
+		"@types/sanitize-html": "2.16.2",
+		"playwright-core": "^1.64.0"
+	}
+}

@@ -2,45 +2,70 @@
 
 ## Module map
 
-Dependency order: `ui` → `api` / `worker` → `db` → `shared`. The boundary is a rule, enforced for the ui by a
-preflight check (`scripts/check-ui-boundary.ts`) and by convention elsewhere. The ui imports api, worker, and db as
-types only. The api and the worker import db, every module imports shared, and shared imports nothing app-level.
+Workspaces are `apps/*` and `packages/*`. An app imports packages and never another app, except that `@carlnotes/client`
+and `apps/web` import `AppType` and the auth type from `@carlnotes/api` as types only. A package imports only the
+packages before it in its chain: `contracts` → `client` → `core` (universal, with `tokens` standing apart as CSS alone)
+and `server` → `db` → `emails` → `models` → `pipeline` (server). A server package may import a universal one.
+`scripts/check-package-boundaries.ts` enforces the order in preflight.
 
-- `ui/` — the TanStack Start app: the file routes under `ui/src/routes/`, the pages they render, components, typed API
-  clients, and the stores behind them. A public page renders on the server for a visitor and a crawler. The sign-in
-  pages, a route behind sign-in, and every route when the request brings a session cookie render in the browser.
-- `api/` — the Hono server: routes, authorization, billing, chat rooms, tasting notes, teams, invites, share cards, page
-  head data, and the document routes (the sitemap, the feeds, the llms files, the IndexNow key, and security.txt).
-- `worker/` — Temporal workflows, the scan pipeline, ingesters, chat replies, link previews, prompts, email delivery,
-  the scheduled sweep, and the monthly budget reset.
-- `db/` — Drizzle schema, migrations, quotas, the Redis store, and the database claim. Neon Postgres and Redis.
-- `shared/` — what every module may import: the zod contracts and request payloads, enums, plans, and Source
-  definitions.
+Apps, the deployable entry points:
+
+- `apps/web/` — the TanStack Start app: the file routes under `apps/web/src/routes/`, the pages they render, components,
+  providers, and the DOM-bound hooks, lib, and stores. A public page renders on the server for a visitor and a crawler.
+  The sign-in pages, a route behind sign-in, and every route when the request brings a session cookie render in the
+  browser.
+- `apps/api/` — the Hono server: routes, authorization, billing, chat rooms, tasting notes, teams, invites, share cards,
+  page head data, the MCP server, and the document routes (the sitemap, the feeds, the llms files, the IndexNow key, and
+  security.txt).
+- `apps/worker/` — the Temporal worker, its workflows and their activities under `workflows/`, the scheduled sweep, the
+  monthly budget reset, the docs embed, and the modules only the sweep reads.
+- `apps/docs/` — the Starlight docs site, built to static files the api serves at `/docs`, with the design files and
+  the release notes convention beside it.
+
+Packages, private `@carlnotes/<name>` workspaces that export source, in dependency order:
+
+- `packages/contracts/` — the zod contracts and request payloads, enums, plans, Source definitions, and the other
+  universal modules every workspace may import.
+- `packages/client/` — the typed api clients. An app configures the base url and how an error shows.
+- `packages/core/` — the DOM-free lib, stores, and hooks that the web app shares with any other client.
+- `packages/tokens/` — `tokens.css`, the design tokens.
+- `packages/server/` — env settings, monitoring, analytics, hmac, retry, concurrency, and the public fetch: everything
+  that reads `Bun.env` or a server SDK.
+- `packages/db/` — Drizzle schema, migrations, quotas, the Redis store, object storage, and the database claim. Neon
+  Postgres, Redis, and R2.
+- `packages/emails/` — the react-email templates, the send every email goes through, and unsubscribe.
+- `packages/models/` — LiteLLM, the model roles, budgets, the guard, telemetry, speech, transcription, image text,
+  ffmpeg, and the prompts under `prompts/`.
+- `packages/pipeline/` — the scan pipeline: ingesters, review, chat replies and retrieval, attachments, link previews,
+  the podcast episode, and the Temporal client.
+
+Beside them at the root:
+
 - `infra/` — the service configs the app runs beside: litellm, llm-guard, and the Northflank pipelines.
-- `content/blog/` — the blog posts `api/content.ts` serves.
+- `content/blog/` — the blog posts `apps/api/content.ts` serves.
 - `evals/` — the evals that measure the model-facing prompts, their graders, and the review pipeline, one folder each,
   and `evalHarness.ts`, which the promptfoo evals share. They make real model calls, so no eval runs in `bun test`.
   The Evals workflow runs the promptfoo evals in CI, report-only.
 
-Each module has its own AGENTS.md with entry points, layout, and commands.
+Each app and package has its own AGENTS.md with entry points, layout, and commands.
 
 ## Routing table
 
 | Task | Open | Skill | Skip |
 |---|---|---|---|
-| New or changed ingester | `worker/ingest/` (`ingester.ts` is the interface) | ingester-authoring | `api/`, `ui/` |
-| Model-facing prompt | `worker/prompts/*.md` + its thin builder | prompt-authoring | everything outside `worker/` |
-| Schema or migration | `db/schema/<domain>.ts`, then `bun run db:generate` | domain-model | `db/migrations/` (generated) |
-| UI screen or component | `ui/src/routes/` for the route and its head, `ui/src/pages/`, `ui/src/components/<area>/` | jsx-conventions | `api/` except `shared/contracts/`, `shared/payloads.ts`, and `shared/topicPayloads.ts` types |
-| Tasting note or sync change | `api/note/`, `ui/src/components/note/` | domain-model | `worker/` |
-| API route or permission | `api/<domain>/`, `api/authorization.ts` | domain-model | `worker/` except `worker/index.ts` exports |
-| Temporal workflow change | `worker/workflows/`, `worker/temporal.ts` | — | `ui/`, `api/` route files |
-| Email template or send | `emails/*.tsx`, `worker/email.ts`, `worker/notify.ts` | — | `ui/` |
-| Release notes | `api/releases.ts`, the convention in `docs/release-notes.md` | domain-model | `ui/` except the footer link |
-| Docs page | `docs/src/content/`, its shared pieces in `docs/src/components/`, the video plugin `docs/src/topicTutorialVideoPlugin.ts`, then `bun run docs:embed` | — | `docs/dist/` (built) |
+| New or changed ingester | `packages/pipeline/ingest/` (`ingester.ts` is the interface) | ingester-authoring | `apps/api/`, `apps/web/` |
+| Model-facing prompt | `packages/models/prompts/*.md` + its thin builder | prompt-authoring | everything outside `packages/models/prompts/` and the builder's own folder |
+| Schema or migration | `packages/db/schema/<domain>.ts`, then `bun run db:generate` | domain-model | `packages/db/migrations/` (generated) |
+| UI screen or component | `apps/web/src/routes/` for the route and its head, `apps/web/src/pages/`, `apps/web/src/components/<area>/` | jsx-conventions | `apps/api/`; the request and response types are in `packages/contracts/` (`payloads.ts`, `topicPayloads.ts`, and the contracts) |
+| Tasting note or sync change | `apps/api/note/`, `apps/web/src/components/note/` | domain-model | `apps/worker/`, `packages/pipeline/` |
+| API route or permission | `apps/api/<domain>/`, `apps/api/authorization.ts` | domain-model | `apps/worker/`; `packages/pipeline/` and `packages/models/` beyond the modules the route imports |
+| Temporal workflow change | `apps/worker/workflows/`, `apps/worker/temporal.ts` | — | `apps/web/`, `apps/api/` route files |
+| Email template or send | `packages/emails/*.tsx`, `packages/emails/email.ts`, `packages/pipeline/notify.ts` | — | `apps/web/` |
+| Release notes | `apps/api/releases.ts`, the convention in `apps/docs/release-notes.md` | domain-model | `apps/web/` except the footer link |
+| Docs page | `apps/docs/src/content/`, its shared pieces in `apps/docs/src/components/`, the video plugin `apps/docs/src/topicTutorialVideoPlugin.ts`, then `bun run docs:embed` | — | `apps/docs/dist/` (built) |
 | Eval work | `evals/README.md`, `evals/evalHarness.ts`, `evals/evalChecks.ts`, `evals/<eval>/`, `.github/workflows/evals.yml`, `.github/workflows/llm-guard-update.yml` | prompt-authoring | app modules except the function the eval calls |
-| Podcast episode, player, feed, or cover | `worker/podcast/`, `worker/workflows/recordPodcastEpisode.ts`, `api/podcast/`, `api/share/podcastFeed.ts`, `api/share/podcastCover.ts`, `worker/speech.ts`, `shared/podcastEpisodes.ts`, `ui/src/components/podcast/`, `ui/src/pages/PodcastEpisodePage.tsx` | domain-model, prompt-authoring | `db/migrations/` |
-| MCP tool, Topic Tool, or the Add to AI dialog | `api/mcp/`, `api/tool/`, `ui/src/components/common/AddToAiDialog.tsx` | domain-model | `worker/` except `worker/index.ts` and `worker/budget.ts` exports |
+| Podcast episode, player, feed, or cover | `packages/pipeline/podcast/`, `apps/worker/workflows/recordPodcastEpisode.ts`, `apps/api/podcast/`, `apps/api/share/podcastFeed.ts`, `apps/api/share/podcastCover.ts`, `packages/models/speech.ts`, `packages/contracts/podcastEpisodes.ts`, `packages/server/podcastEpisodeSettings.ts`, `packages/server/podcastCoverPaths.ts`, `apps/web/src/components/podcast/`, `apps/web/src/pages/PodcastEpisodePage.tsx` | domain-model, prompt-authoring | `packages/db/migrations/` |
+| MCP tool, Topic Tool, or the Add to AI dialog | `apps/api/mcp/`, `apps/api/tool/`, `apps/web/src/components/common/AddToAiDialog.tsx` | domain-model | `apps/worker/`; `packages/pipeline/` and `packages/models/` beyond `budget.ts` and the modules the tool imports |
 
 Domain vocabulary is canonical and enforced, so grepping a domain noun reliably finds its code.
 
@@ -48,9 +73,9 @@ Domain vocabulary is canonical and enforced, so grepping a domain noun reliably 
 
 Generated or archived paths that burn context:
 
-- `db/migrations/` — generated SQL and snapshots; the schema is `db/schema/`
-- `ui/src/routeTree.gen.ts` — the route tree Vite generates from `ui/src/routes/`; the routes are the files
-- `ui/dist/`, `docs/dist/` — built UI and docs output
+- `packages/db/migrations/` — generated SQL and snapshots; the schema is `packages/db/schema/`
+- `apps/web/src/routeTree.gen.ts` — the route tree Vite generates from `apps/web/src/routes/`; the routes are the files
+- `apps/web/dist/`, `apps/docs/dist/` — built web app and docs output
 - `coverage/` — test coverage output
 - `openspec/changes/archive/` — archived OpenSpec changes
 - `.agents/skills/{ai-sdk,vercel-react-best-practices,web-design-guidelines,impeccable,ponytail}/` — vendored skills,
@@ -60,16 +85,20 @@ Generated or archived paths that burn context:
 
 ## Verification
 
-`bun run check` is the gate: Biome, the ui boundary check, `tsc -b`, the Temporal workflow bundle check, and the test suite.
-Green before any hand-off.
+`bun run check` is the gate: Biome, the package boundary check, `tsc -b`, the Temporal workflow bundle check, and the
+test suite. Green before any hand-off.
 
 ## Rules (always-on)
 
 - Comment every logical group: `//` comment line(s) above every group of 2+ statements, one line preferred.
-- One package.json. Folders separate concerns; packages separate deployments.
-- State lives in module scope behind exported functions, in a `ui/src/stores/` module, or in a hook. Author a class only
-  for an `Error` subclass, or for many instances with their own lifecycle that something outside holds, as
-  `ui/src/components/note/noteProvider.ts` does. A single-instance class is a singleton, which is a module with extra steps.
+- A `package.json` lives at the root, in `apps/<name>/`, or in `packages/<name>/`. The module map above has the import
+  order. A universal package (`contracts`, `client`, `core`, `tokens`) depends only on universal packages and holds no
+  Bun, Node, or DOM global. A module goes to the lowest package whose dependencies it needs, among the packages that
+  import it. `scripts/check-structure.sh` and `scripts/check-package-boundaries.ts` enforce it.
+- State lives in module scope behind exported functions, in a `packages/core/stores/` or `apps/web/src/stores/` module,
+  or in a hook. Author a class only for an `Error` subclass, or for many instances with their own lifecycle that
+  something outside holds, as `apps/web/src/components/note/noteProvider.ts` does. A single-instance class is a
+  singleton, which is a module with extra steps.
 - Domain nouns and rejected terms: the `domain-model` skill is the single source.
 - Follow vs subscribe: the domain-model skill owns the rule. Copy says follow, identifiers say subscribe.
 - Bash runs from the repo root: relative paths only, never prefix commands with cd. Scripts and hooks assume repo-root cwd.
@@ -83,7 +112,7 @@ Green before any hand-off.
   `build` exists — the Dockerfile runs the `build:<module>` scripts itself. When adding or changing package.json
   scripts, update the README Development section in the same change.
 - Structure changes update the docs in the same change: a new, moved, renamed, or deleted folder, entry point, or script
-  is included in the module's AGENTS.md, and in the root module map or routing table when it changes what they say.
+  is included in the workspace's AGENTS.md, and in the root module map or routing table when it changes what they say.
 - Thorough beats narrow scope. A fix, a split, or a follow-up the change can do now is done in the change, never
   deferred to "its own change" or a recommendation. Only work that needs the user's decision is left out, and it is
   named with the reason.
@@ -97,8 +126,8 @@ Rules agents and reviewers must honor, source copies at `.agents/skills/`:
 - domain-model: the canonical domain vocabulary and its rejected terms
 - ingester-authoring: ingesters return Resources only, never Findings; idempotent by canonical URL; one failing Source
   never aborts a Scan batch
-- prompt-authoring: model-facing prompts live as versioned markdown under `worker/prompts/` with frontmatter and
-  `{{variable}}` bodies, loaded by thin builders; never inline string literals; Carl addresses a "reader" where the
+- prompt-authoring: model-facing prompts live as versioned markdown under `packages/models/prompts/` with frontmatter
+  and `{{variable}}` bodies, loaded by thin builders; never inline string literals; Carl addresses a "reader" where the
   app's code says "user"
 - code-style, jsx-conventions, git-discipline: shared readability and git rules
 - vendored guidance: vercel-react-best-practices, web-design-guidelines, ai-sdk, impeccable, ponytail

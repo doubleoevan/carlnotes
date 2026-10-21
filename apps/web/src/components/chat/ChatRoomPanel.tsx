@@ -1,0 +1,245 @@
+// the chat room panel: one shared conversation streaming live, clearable by a leader alone
+
+import { authClient } from "@carlnotes/client/authClient"
+import { sendChatMentionsViewed, sendClearChatRoom } from "@carlnotes/client/chatRoomClient"
+import { fetchTeamPage } from "@carlnotes/client/teamClient"
+import { CHAT_ROOM_ATTACHMENT_LIMIT } from "@carlnotes/contracts/chat"
+import { markChatRoomOpened } from "@carlnotes/core/stores/chatRoomStore"
+import { X } from "lucide-react"
+import { lazy, Suspense, useEffect, useState } from "react"
+import type { ChatPanelState } from "@/stores/chatPanelStore"
+import { ChatBudgetNotice } from "./ChatBudgetNotice"
+import { ChatCallToActionPanel } from "./ChatCallToActionPanel"
+import type { ChatRoomMenu, CurrentChatRoomOption } from "./ChatOptionsMenu"
+import { ChatMessagesLoading, ChatPanelWidget } from "./ChatPanelWidget"
+import { ChatRoomComposer, DisabledRoomComposer } from "./ChatRoomComposer"
+import { ClearChatDialog } from "./ClearChatDialog"
+import { TopicDraftCard } from "./TopicDraftCard"
+import { type ChatRoomRejection, useChatRoom } from "./useChatRoom"
+import { useEditableTopicDraft } from "./useEditableTopicDraft"
+import { useRoomReply } from "./useRoomReply"
+
+// the chat message list is lazy-loaded on the first open instead of with the page
+const ChatRoomMessages = lazy(() =>
+	import("./ChatRoomMessages").then((chatMessages) => ({ default: chatMessages.ChatRoomMessages })),
+)
+
+// the team's active members for the @ autocomplete, plus whether the user leads it
+function useRoomMembers(
+	teamId: string,
+	userId: string | undefined,
+): { memberUsernames: string[]; isTeamLeader: boolean } {
+	const [members, setMembers] = useState<{ userId: string; username: string }[]>([])
+	const [isTeamLeader, setIsTeamLeader] = useState(false)
+	useEffect(() => {
+		let isStale = false
+		fetchTeamPage(teamId)
+			.then((teamPage) => {
+				if (isStale) {
+					return
+				}
+				const team = teamPage.status === "visible" ? teamPage.team : null
+				const activeMembers = (team?.members ?? []).filter((member) => member.isActive)
+				setMembers(activeMembers.map((member) => ({ userId: member.userId, username: member.username })))
+				setIsTeamLeader(team?.role === "leader")
+			})
+			.catch(() => setMembers([]))
+		return () => {
+			isStale = true
+		}
+	}, [teamId])
+	const memberUsernames = members
+		.filter((member) => member.userId !== userId)
+		.map((member) => member.username)
+		.sort()
+	return { memberUsernames, isTeamLeader }
+}
+
+/**
+ * The shared chat room panel. A null topic is the team's own chat room.
+ */
+export function ChatRoomPanel({
+	topicId,
+	contextName,
+	teamId,
+	chatRoomMenu,
+	panelState,
+	onPanelState,
+	onOpenChatRoom,
+	joinButton,
+}: {
+	// null is the team's own chat room on its team page
+	topicId: string | null
+	// what the empty chat room's opening line names: the topic, or the team itself
+	contextName: string
+	teamId: string
+	// the chat rooms this panel's menu shows and its callbacks
+	chatRoomMenu: ChatRoomMenu
+	// how much of the screen the panel takes, owned by the shell so it survives a chat room switch
+	panelState: Exclude<ChatPanelState, "collapsed">
+	onPanelState: (nextPanelState: ChatPanelState) => void
+	// a callback to mark the chat room's mentions as seen
+	onOpenChatRoom?: () => void
+	// the Join Team button, shown in place of the conversation to someone who cannot see a team chat
+	joinButton?: React.ReactNode
+}) {
+	// the chat members for the autocomplete, the chat room itself, and which chat message the composer answers
+	const [isClearChatOpen, setIsClearChatOpen] = useState(false)
+	const { data: session } = authClient.useSession()
+	const chatRoom = useChatRoom({ topicId, teamId, userId: session?.user.id })
+	const { memberUsernames, isTeamLeader } = useRoomMembers(teamId, session?.user.id)
+	// read the topic this chat room may edit
+	const editableTopicDraft = useEditableTopicDraft(topicId)
+
+	// an admin moderates every chat room, the same way the header decides its admin console link
+	const isAdmin = session?.user.role === "admin"
+	const reply = useRoomReply(chatRoom, session?.user.id)
+
+	// an open panel is what counts as seeing a chat mention, which clears every badge for this chat room at once
+	useEffect(() => {
+		markChatRoomOpened(topicId, teamId)
+		sendChatMentionsViewed(topicId, teamId).catch(() => {})
+		onOpenChatRoom?.()
+	}, [topicId, teamId, onOpenChatRoom])
+
+	// a user who does not have access to the chat room gets a call to action button instead
+	if (chatRoom.isRejected && !joinButton) {
+		return null
+	}
+
+	// "open" and "enlarged" render the same panel, sized by the flag
+	const isPanelEnlarged = panelState === "enlarged"
+
+	// the open chat room the switcher row names, taken from this chat room's own menu row
+	const currentChatRoom = chatRoomMenu.chatRoomOptions?.find((chatRoomOption) => chatRoomOption.isActive)
+	const currentRoom: CurrentChatRoomOption = {
+		name: currentChatRoom?.name ?? contextName,
+		team: currentChatRoom?.team,
+	}
+
+	// a chat room the user does not have access to gets a call to action button instead
+	if (chatRoom.isRejected) {
+		return (
+			<ChatCallToActionPanel
+				isEnlarged={isPanelEnlarged}
+				onPanelState={onPanelState}
+				currentChatRoom={currentRoom}
+				chatRoomMenu={chatRoomMenu}
+				actionLine="Join this team to start the conversation"
+			>
+				{joinButton}
+			</ChatCallToActionPanel>
+		)
+	}
+
+	// the clear chat option belongs to a team leader or an admin. an empty chat room has nothing to clear
+	const isClearable = (isTeamLeader || isAdmin) && chatRoom.chatMessages.length > 0
+	return (
+		<ChatPanelWidget
+			isEnlarged={isPanelEnlarged}
+			onPanelState={onPanelState}
+			isRoom
+			currentChatRoom={currentRoom}
+			chatRoomMenu={{
+				...chatRoomMenu,
+				onClear: isClearable ? () => setIsClearChatOpen(true) : undefined,
+				clearLabel: `Clear ${contextName} chat`,
+			}}
+		>
+			{/* the chat messages, or the loading message while the chat room loads */}
+			{chatRoom.isLoaded ? (
+				<Suspense fallback={<ChatMessagesLoading />}>
+					<ChatRoomMessages
+						isEnlarged={isPanelEnlarged}
+						chatRoom={chatRoom}
+						userId={session?.user.id ?? ""}
+						isTeamLeader={isTeamLeader}
+						isAdmin={isAdmin}
+						chatName={contextName}
+						topicId={topicId}
+						teamId={teamId}
+						onReplyChatMessage={reply.selectChatMessage}
+					/>
+				</Suspense>
+			) : (
+				<ChatMessagesLoading />
+			)}
+
+			{/* a rejected post is private to the poster, shown here instead of posted to the chat room */}
+			{chatRoom.rejection && (
+				<div className="text-muted-foreground flex shrink-0 items-start justify-between gap-2 border-t px-3 py-2 text-xs">
+					<ChatRoomRejectionNotice rejection={chatRoom.rejection} />
+					<button
+						type="button"
+						aria-label="Dismiss"
+						onClick={chatRoom.clearRejection}
+						className="hover:text-foreground shrink-0"
+					>
+						<X className="size-3.5" />
+					</button>
+				</div>
+			)}
+			{/* the topic this chat room can edit, as it is saved or as carl proposed changing it */}
+			{editableTopicDraft && (
+				<TopicDraftCard
+					topicDraft={editableTopicDraft.topicDraft}
+					topicId={topicId}
+					isTopicEditProposed={editableTopicDraft.isTopicEditProposed}
+					isCarlReplying={chatRoom.isMessageLoading}
+				/>
+			)}
+			{chatRoom.isLoaded ? (
+				<ChatRoomComposer
+					memberUsernames={memberUsernames}
+					reply={reply}
+					voiceChatPage={chatRoom.voiceChatPage}
+					onBudgetRejected={chatRoom.showBudgetRejection}
+					onPostChatMessage={async (chatRoomPost) => {
+						// the reply selection clears only with the draft, so a failed post keeps both
+						const isPosted = await chatRoom.postChatMessage(chatRoomPost)
+						if (isPosted) {
+							reply.clear()
+						}
+						return isPosted
+					}}
+				/>
+			) : (
+				<DisabledRoomComposer />
+			)}
+
+			{/* the clear chat confirmation is only mounted while open, so its state resets each time */}
+			{isClearChatOpen && (
+				<ClearChatDialog
+					onConfirm={async () => {
+						// clear the chat room, then reload its chat messages. the stream never announces a clear
+						const isChatCleared = await sendClearChatRoom(topicId, teamId)
+						if (isChatCleared) {
+							await chatRoom.reloadChatMessages()
+						}
+						return isChatCleared
+					}}
+					onClose={() => setIsClearChatOpen(false)}
+				>
+					{"This clears the whole conversation for every member of the team, and the attachment files are deleted too."}
+				</ClearChatDialog>
+			)}
+		</ChatPanelWidget>
+	)
+}
+
+// why a post's files did not post, shown only to the poster
+const ATTACHMENT_REJECTION_TEXT = {
+	attachmentLimitReached: `That would pass the ${CHAT_ROOM_ATTACHMENT_LIMIT} files you can share in this chat room. Delete some to share more.`,
+	attachmentRejected: "Those files didn't post. One of them may be unreadable.",
+}
+
+/**
+ * Renders why a chat room post was rejected: the plans link for a spent budget, or why its files did not post.
+ */
+export function ChatRoomRejectionNotice({ rejection }: { rejection: ChatRoomRejection }) {
+	return rejection === "budget" ? (
+		<ChatBudgetNotice />
+	) : (
+		<p className="text-muted-foreground text-sm">{ATTACHMENT_REJECTION_TEXT[rejection]}</p>
+	)
+}

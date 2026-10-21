@@ -6,8 +6,8 @@ TBD - created by archiving change coffee-break-podcast. Update Purpose after arc
 ### Requirement: The topic page shows the latest Podcast Episode in a player under the title
 
 On a Topic with a published Podcast Episode that the user may listen to, the topic page SHALL show a player directly
-under the topic title and above the findings section, following the wireframes in `docs/design/podcast/`. Its section
-heading SHALL read "Coffee Break podcast". It SHALL show the latest Podcast Episode's season,
+under the topic title and above the findings section, following the wireframes in `apps/docs/design/podcast/`.
+Its section heading SHALL read "Coffee Break podcast". It SHALL show the latest Podcast Episode's season,
 episode number, title, publish date, length, and chapter count, a seek bar split by chapter, a playback rate button once
 the Podcast Episode is loaded, a Subscribe button, and a chapter list: the first three chapters shown, with a control
 under the card that shows the rest. The page's html SHALL include every chapter, and in a browser without JavaScript

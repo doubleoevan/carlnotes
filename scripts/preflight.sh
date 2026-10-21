@@ -4,8 +4,8 @@ set -euo pipefail
 # lint and format check
 bunx biome check .
 
-# check that the ui imports the api, the worker, and the db folder as types only
-bun scripts/check-ui-boundary.ts
+# check that every import, package.json, and tsconfig under apps/ and packages/ stays inside its workspace boundary
+bun scripts/check-package-boundaries.ts
 
 # type-check the whole project via the solution file. tsc -b only rechecks a project whose own files changed, so a
 # lockfile that changed since the last check, or a fresh install, rebuilds every project against the new dependencies

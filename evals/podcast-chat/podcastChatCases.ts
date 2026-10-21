@@ -1,9 +1,9 @@
 // the podcast chat eval's cases. a case is a question asked out loud during one chapter of a podcast episode, and the
 // host who has to answer it. the topic material and the chapter are made up, so a fact in an answer that its case lacks
 // is invented
-import type { PodcastEpisodeSpeaker } from "@shared/enums"
-import { toPodcastEpisodeChapterContext } from "../../worker/chat/podcastEpisodeChapterTestFixtures"
-import type { PodcastEpisodeChapterContext } from "../../worker/chat/retrievePodcastEpisodeChapter"
+import type { PodcastEpisodeSpeaker } from "@carlnotes/contracts/enums"
+import { toPodcastEpisodeChapterContext } from "@carlnotes/pipeline/chat/podcastEpisodeChapterTestFixtures"
+import type { PodcastEpisodeChapterContext } from "@carlnotes/pipeline/chat/retrievePodcastEpisodeChapter"
 import { QUIET_BURR_SET_FINDING } from "../topic-chat/topicChatCases"
 import { CHAPTER_ANSWER_RUBRIC } from "./podcastChatRubrics"
 

@@ -2,8 +2,8 @@
 // benign articles, known attacks, and images, with no model calls and no spend
 import { readdirSync, readFileSync } from "node:fs"
 import { join } from "node:path"
-import { type ScreenVerdict, screenImage, screenText } from "../../worker/guard"
-import { stopTextRecognitionWorker } from "../../worker/imageText"
+import { type ScreenVerdict, screenImage, screenText } from "@carlnotes/models/guard"
+import { stopTextRecognitionWorker } from "@carlnotes/models/imageText"
 import type { EvalFixture, InjectionImage } from "./reviewPipelineEval"
 import { FIXTURES_DIRECTORY } from "./reviewPipelineExport"
 

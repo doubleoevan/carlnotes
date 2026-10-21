@@ -1,10 +1,11 @@
 // one-time backfill: move existing resources.content from postgres into object storage.
 // idempotent, a resource that already has a content_key is skipped, so it can be re-run.
 // run under doppler after the migration: doppler run -- bun scripts/backfill-resource-content.ts
+
+import { db } from "@carlnotes/db"
+import { resources } from "@carlnotes/db/schema/scans"
+import { uploadResourceContent } from "@carlnotes/db/store"
 import { and, eq, isNotNull, isNull } from "drizzle-orm"
-import { db } from "../db"
-import { resources } from "../db/schema/scans"
-import { uploadResourceContent } from "../worker/store"
 
 // upload the content of each resource that has no key yet and write its key and size, reporting progress
 async function backfill(): Promise<void> {

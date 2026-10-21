@@ -1,0 +1,125 @@
+import { authClient, passSignupGate } from "@carlnotes/client/authClient"
+import { SIGNUP_CTA_COOKIE_NAME, toCtaTag } from "@carlnotes/contracts/signupCta"
+import { useEffect, useState } from "react"
+import { CoffeeMug } from "@/components/branding/CoffeeMug"
+import { Button } from "@/components/primitives/button"
+import { SessionLayout } from "@/components/session/SessionLayout"
+import { SIGNUP_PROMPTS } from "@/components/session/signupPrompts"
+import { TurnstileWidget } from "@/components/session/TurnstileWidget"
+import { useCtaPromptToast } from "@/hooks/useCtaPromptToast"
+import { usePageTitle } from "@/hooks/usePageTitle"
+import { useSearchParams } from "@/hooks/useSearchParams"
+import { SESSION_PAGE_CLASS } from "@/lib/styleClasses"
+import { cn, toSafeRedirectPath } from "@/lib/utils"
+
+// the one toast that names the action a visitor tried
+const SIGNUP_PROMPT_TOAST_ID = "signup-prompt"
+
+/**
+ * Renders the signup page, with one-click OAuth and a password form on request behind a Turnstile check.
+ */
+export function SignupPage() {
+	usePageTitle("Sign up")
+	// the path a signup returns to, from the next param
+	const searchParams = useSearchParams()
+	const redirectPath = toSafeRedirectPath(searchParams.get("next"))
+	// the cta param for analytics, which names the button that brought this visitor here
+	const ctaParam = searchParams.get("cta")
+	const [turnstileToken, setTurnstileToken] = useState<string | null>(null)
+	const [error, setError] = useState<string | null>(null)
+	const [isSubmitting, setIsSubmitting] = useState(false)
+	const [spentTokenCount, setSpentTokenCount] = useState(0)
+	// the address a succeeded password signup was sent to, which swaps the form for a non-blocking notice
+	const [verifyingEmail, setVerifyingEmail] = useState<string | null>(null)
+
+	// remember which button brought this visitor here, so signup_completed can track what converted
+	useEffect(() => {
+		const ctaTag = toCtaTag(ctaParam)
+		if (ctaTag) {
+			// biome-ignore lint/suspicious/noDocumentCookie: the Cookie Store API it prefers is missing in Safari
+			document.cookie = `${SIGNUP_CTA_COOKIE_NAME}=${ctaTag}; max-age=1800; path=/`
+		}
+	}, [ctaParam])
+
+	// say what signing up unlocks if an action the visitor tried brought them here
+	useCtaPromptToast(SIGNUP_PROMPTS, SIGNUP_PROMPT_TOAST_ID)
+
+	// validates the turnstile token, then creates the account with a password
+	const handlePasswordSignup = async (email: string, password: string): Promise<void> => {
+		if (!turnstileToken) {
+			setError("Complete the challenge above first.")
+			return
+		}
+		setIsSubmitting(true)
+		setError(null)
+
+		// checking the token spends it, so the token count must be incremented to issue a new one
+		const failAndRenewChallenge = (message: string): void => {
+			setError(message)
+			setTurnstileToken(null)
+			setSpentTokenCount((previousTokenCount) => previousTokenCount + 1)
+			setIsSubmitting(false)
+		}
+
+		// a dropped network call reads as a failed check instead of a Submit button that stays stuck
+		try {
+			// the gate proves a human asked for this, and only then does the account get created
+			const gate = await passSignupGate(turnstileToken)
+			if ("error" in gate) {
+				failAndRenewChallenge(gate.error)
+				return
+			}
+			const name = email.split("@")[0] ?? email
+			const { error: signUpError } = await authClient.signUp.email({ email, password, name })
+			if (signUpError) {
+				failAndRenewChallenge(signUpError.message ?? "Sign up failed.")
+				return
+			}
+			setVerifyingEmail(email)
+		} catch (signupError) {
+			console.error("signup failed", signupError)
+			failAndRenewChallenge("Carl didn't catch that. Please try again.")
+		}
+	}
+
+	// one click, straight to the provider redirect, with no gate for oauth
+	const handleOAuthSignup = (provider: "google" | "github"): void => {
+		void authClient.signIn.social({ provider, callbackURL: redirectPath })
+	}
+
+	// a password signup succeeded. show the non-blocking verification notice instead of the form
+	if (verifyingEmail) {
+		return <VerifyEmailNotice email={verifyingEmail} redirectPath={redirectPath} />
+	}
+
+	return (
+		<SessionLayout
+			submitLabel="Sign up"
+			onSubmit={handlePasswordSignup}
+			onOAuth={handleOAuthSignup}
+			error={error}
+			isSubmitting={isSubmitting}
+			extraFields={<TurnstileWidget onVerify={setTurnstileToken} spentTokenCount={spentTokenCount} />}
+			footerPrompt={"Already have an account? "}
+			footerLinkLabel="Log in"
+			footerHref="/login"
+		/>
+	)
+}
+
+// the post-signup notice. verification is not a wall, so it offers a way straight into the app
+function VerifyEmailNotice({ email, redirectPath }: { email: string; redirectPath: string }) {
+	return (
+		<div className={cn(SESSION_PAGE_CLASS, "text-center")}>
+			<CoffeeMug className="text-primary mx-auto size-10" />
+			<h1 className="mt-4 text-2xl font-semibold">Check your email</h1>
+			<p className="text-muted-foreground mt-2 text-sm">
+				{`We sent a link to confirm ${email}. You don't have to click it now. You can start using CarlNotes right away.`}
+			</p>
+			{/* full navigation, not client-side. useSession otherwise keeps its cached signed-out state */}
+			<Button onClick={() => (window.location.href = redirectPath)} className="mt-6">
+				Continue to CarlNotes
+			</Button>
+		</div>
+	)
+}

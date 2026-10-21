@@ -1,0 +1,61 @@
+import { authClient } from "@carlnotes/client/authClient"
+import { useState } from "react"
+import { AnchorLink } from "@/components/common/AnchorLink"
+import { SessionLayout } from "@/components/session/SessionLayout"
+import { toSignupHref } from "@/components/session/signupPrompts"
+import { usePageTitle } from "@/hooks/usePageTitle"
+import { useSearchParams } from "@/hooks/useSearchParams"
+import { toAuthorizeReturnPath, toSafeRedirectPath } from "@/lib/utils"
+
+/**
+ * The login page. oauth is one click, and email is a step, revealed on request
+ */
+export function LoginPage() {
+	usePageTitle("Log in")
+	const [error, setError] = useState<string | null>(null)
+	const [isSubmitting, setIsSubmitting] = useState(false)
+	// the path sign-in returns to, an mcp client's authorize request or else the next param
+	const searchParams = useSearchParams()
+	const redirectPath = toSafeRedirectPath(toAuthorizeReturnPath(searchParams) ?? searchParams.get("next"))
+
+	// logs in with the existing account's email and password
+	const handleLogin = async (email: string, password: string): Promise<void> => {
+		setIsSubmitting(true)
+		setError(null)
+		const { error: signInError } = await authClient.signIn.email({ email, password })
+		if (signInError) {
+			setError(signInError.message ?? "Log in failed.")
+			setIsSubmitting(false)
+			return
+		}
+		// full navigation, not client-side. the session client's cache otherwise still shows signed-out
+		window.location.href = redirectPath
+	}
+
+	// open the provider's oauth sign-in
+	const handleOAuthLogin = (provider: "google" | "github"): void => {
+		void authClient.signIn.social({ provider, callbackURL: redirectPath })
+	}
+
+	return (
+		<SessionLayout
+			submitLabel="Log in"
+			onSubmit={handleLogin}
+			onOAuth={handleOAuthLogin}
+			error={error}
+			isSubmitting={isSubmitting}
+			// the reset password link at the bottom of the login form
+			extraFields={
+				<AnchorLink
+					href="/reset-password"
+					className="text-muted-foreground hover:text-foreground block text-right text-sm underline underline-offset-4"
+				>
+					Forgot password?
+				</AnchorLink>
+			}
+			footerPrompt={"Don't have an account? "}
+			footerLinkLabel="Sign up"
+			footerHref={toSignupHref("login", redirectPath)}
+		/>
+	)
+}

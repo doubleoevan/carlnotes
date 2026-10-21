@@ -5,7 +5,7 @@ TBD - created by archiving change add-redis-and-scale-out. Update Purpose after 
 ## Requirements
 ### Requirement: One Redis store serves every caller, and a failed use of it returns null
 
-The app SHALL reach Redis through one module in `db/`, built on Bun's built-in `RedisClient` from the `REDIS_URL`
+The app SHALL reach Redis through one module in `packages/db/`, built on Bun's built-in `RedisClient` from the `REDIS_URL`
 setting, with no Redis package added. Every read and write SHALL go through one wrapper that returns a result on success
 and null on any failure, including a client that is not connected and a command with no reply within two seconds, so a
 caller always has a value to act on and no Redis failure ever reaches a request as an error or holds it. The wrapper

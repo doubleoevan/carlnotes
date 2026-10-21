@@ -9,13 +9,13 @@ cd "$(dirname "$0")/.." || exit 1
 # runs locally. everything else runs anywhere, since it needs only the dev database and the outside apis.
 # the podcast episode smoke also needs ffmpeg
 DEVELOPER_ONLY_SMOKE_FILES=(
-	worker/scan.smoke.ts
-	worker/attach.smoke.ts
-	worker/search.smoke.ts
-	worker/review.smoke.ts
-	worker/chat.smoke.ts
-	worker/speech.smoke.ts
-	worker/podcast/podcastEpisode.smoke.ts
+	apps/worker/scan.smoke.ts
+	packages/pipeline/attach.smoke.ts
+	packages/pipeline/search.smoke.ts
+	apps/worker/review.smoke.ts
+	packages/pipeline/chat.smoke.ts
+	packages/models/speech.smoke.ts
+	apps/worker/podcastEpisode.smoke.ts
 	evals/review-pipeline/reviewPipelineEval.smoke.ts
 )
 
@@ -31,7 +31,7 @@ is_listed() {
 
 # the smoke files that need the built ui, which this runner never builds
 BUILT_UI_SMOKE_FILES=(
-	api/seo.smoke.ts
+	apps/api/seo.smoke.ts
 )
 
 # read the smoke files in order from the smoke script in package.json, and stop the run if the read fails partway

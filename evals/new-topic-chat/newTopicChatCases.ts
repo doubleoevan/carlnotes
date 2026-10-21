@@ -1,9 +1,10 @@
 // the new-topic chat eval's cases. a case is one chat turn with the conversation so far, the topic draft that
 // the conversation wrote, and the user's next message. the topics are made up
-import type { ChatHistoryTurn, ChatToolCall } from "@shared/payloads"
-import { EMPTY_TOPIC_DRAFT, type TopicDraft, type TopicDraftTeam } from "@shared/topicPayloads"
-import { toSuggestionsText } from "../../api/tool/newTopicChatTools"
-import type { SuggestedSource } from "../../worker/suggest"
+
+import { toSuggestionsText } from "@carlnotes/api/tool/newTopicChatTools"
+import type { ChatHistoryTurn, ChatToolCall } from "@carlnotes/contracts/payloads"
+import { EMPTY_TOPIC_DRAFT, type TopicDraft, type TopicDraftTeam } from "@carlnotes/contracts/topicPayloads"
+import type { SuggestedSource } from "@carlnotes/pipeline/suggest"
 
 // one case. what it tests, the chat turn, and what the turn has to do
 export type NewTopicChatCase = {

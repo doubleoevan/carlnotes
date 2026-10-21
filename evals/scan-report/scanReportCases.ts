@@ -1,7 +1,7 @@
 // the scan report eval's cases. a case is a Topic and what one Scan kept, filtered, and read from its Sources.
 // the findings, the sources, and the numbers are made up, so a fact in a report that its case lacks is invented
-import type { ScannedSource } from "../../worker/review/summarize"
-import type { FilterReason, KeptFinding } from "../../worker/review/track"
+import type { ScannedSource } from "@carlnotes/pipeline/review/summarize"
+import type { FilterReason, KeptFinding } from "@carlnotes/pipeline/review/track"
 
 // one case. what it tests, its Topic, its Scan's outcome, and what it checks beyond the checks that every case gets
 export type ScanReportCase = {

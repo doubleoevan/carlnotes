@@ -1,5 +1,5 @@
 // the podcast episode script eval's grader and rubrics, and the label of the source material after each rubric
-import { chatModel } from "../../worker/models"
+import { chatModel } from "@carlnotes/models/models"
 
 // the model that grades every rubric
 export const GRADER_MODEL = chatModel()

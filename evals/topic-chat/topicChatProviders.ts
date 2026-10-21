@@ -1,12 +1,13 @@
 // the topic chat eval's promptfoo provider, which runs the reply writer under test
+
+import { CHAT_COST_PER_MILLION_TOKENS, tokenCost } from "@carlnotes/models/budget"
+import { chatModel } from "@carlnotes/models/models"
+import { toModelMessages } from "@carlnotes/pipeline/chat/chatMessages"
+import { buildTopicChatPrompt } from "@carlnotes/pipeline/chat/chatPrompts"
+import { MAX_TURN_STEPS, toStepsText } from "@carlnotes/pipeline/chat/index"
+import { webSearchTool } from "@carlnotes/pipeline/chat/search"
 import { generateText, stepCountIs } from "ai"
 import type { ApiProvider, CallApiContextParams, ProviderResponse } from "promptfoo"
-import { CHAT_COST_PER_MILLION_TOKENS, tokenCost } from "../../worker/budget"
-import { MAX_TURN_STEPS, toStepsText } from "../../worker/chat"
-import { toModelMessages } from "../../worker/chat/chatMessages"
-import { buildTopicChatPrompt } from "../../worker/chat/chatPrompts"
-import { webSearchTool } from "../../worker/chat/search"
-import { chatModel } from "../../worker/models"
 import type { TopicChatCase } from "./topicChatCases"
 
 // the variables that a case gives the reply writer. the question, the topic material, and whether the question was

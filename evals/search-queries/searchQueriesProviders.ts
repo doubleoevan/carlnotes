@@ -1,6 +1,7 @@
 // the search queries eval's promptfoo provider, which runs the query writer under test and searches no query
+
+import { generateSearchQueries } from "@carlnotes/pipeline/ingest/search"
 import type { ApiProvider, CallApiContextParams, ProviderResponse } from "promptfoo"
-import { generateSearchQueries } from "../../worker/ingest/search"
 import type { SearchQueriesCase } from "./searchQueriesCases"
 
 // the variables that a case gives the writer. everything in the case except its description and its rubric

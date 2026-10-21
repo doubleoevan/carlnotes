@@ -1,7 +1,8 @@
 // the promptfoo eval of the team chat reply, read across every topic a team holds, which makes real model calls.
 // run the eval with: bun run eval:team-chat
+
+import { chatModel } from "@carlnotes/models/models"
 import type { TestCase } from "promptfoo"
-import { chatModel } from "../../worker/models"
 import { toChatReplyAssertions, toChatReplyCaseLine } from "../evalChecks"
 import { runEval, toRubricAssertions, toRubricGrader } from "../evalHarness"
 import { TEAM_CHAT_CASES, type TeamChatCase } from "./teamChatCases"

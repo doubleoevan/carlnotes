@@ -61,7 +61,7 @@ jobs:
       # the attachment suite needs a worker polling temporal's queues, not just the server behind them.
       # nohup keeps it running across the steps that follow, and its log is printed if it never polls
       - name: Start the temporal worker
-        run: nohup doppler run -- env LLM_GUARD_URL= bun worker/temporal.ts > temporal-worker.log 2>&1 &
+        run: nohup doppler run -- env LLM_GUARD_URL= bun apps/worker/temporal.ts > temporal-worker.log 2>&1 &
         env:
           DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
       # a worker that never polls would otherwise surface as an attachment stuck pending for 90 seconds
@@ -89,7 +89,7 @@ jobs:
       # Chrome. it runs even after a failed suite, so a blocked challenge is never hidden by another failure
       - name: Check the signup challenge in a browser
         if: always()
-        run: doppler run --command "bun run build:ui && bun api/signup.smoke.ts"
+        run: doppler run --command "bun run build:ui && bun apps/api/signup.smoke.ts"
         env:
           DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
       # the smoke coverage joins the unit coverage on Codecov under its own flag

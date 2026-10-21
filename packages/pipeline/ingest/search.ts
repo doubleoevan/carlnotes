@@ -1,0 +1,213 @@
+// the search ingester
+
+import { cheapModel } from "@carlnotes/models/models"
+// the prompt loader fetches the registry version first, falling back to the bundled markdown
+import { type BuiltPrompt, fetchPromptTemplate, promptTelemetry } from "@carlnotes/models/prompts/fetch"
+import { writePrompt } from "@carlnotes/models/prompts/write"
+import { generateText, Output } from "ai"
+import { z } from "zod"
+import { buildTopicScanContext } from "../attach"
+import type { IngestContext, NewResource, Source, SourceIngester } from "./ingester"
+import { toResourceKind } from "./normalize"
+import { fetchVideos, playlistIdFromUrl } from "./youtube"
+
+// query and fetch limits
+export const MAX_SEARCH_QUERIES = 5
+const RESULTS_PER_QUERY = 10
+const FETCH_TIMEOUT_MS = 10_000
+// the longest user-controlled context sent to the model, in characters. the limit bounds a huge context's token spend
+const MAX_CONTEXT_CHARS = 8000
+// Exa is the search provider
+const EXA_ENDPOINT = "https://api.exa.ai/search"
+
+// read the topic's context, generate queries from it, search per query, and merge the deduped Resources
+export const searchIngester: SourceIngester = async (source: Source, ingestContext?: IngestContext) => {
+	// read the topic's context and name
+	const { name: topicName, context: topicContext } = await buildTopicScanContext(source.topicId)
+
+	// generate search queries from the context on the Scan owner's key, then run them and keep whichever succeeds
+	const litellmApiKey = ingestContext?.litellmApiKey
+	const searchQueries = await generateSearchQueries({ topicContext, topicName, litellmApiKey })
+	const searchResponses = await runSearches(searchQueries)
+
+	// merge search query results. sum the per-search cost and collect the Resources
+	const resourceByUrl = new Map<string, NewResource>()
+	let costDollars = 0
+	for (const response of searchResponses) {
+		const searchResults = parseResults(response)
+		costDollars += searchResults.costDollars
+
+		// dedupe Resources across queries by url, keeping the first seen
+		for (const resource of searchResults.resources) {
+			if (!resourceByUrl.has(resource.url)) {
+				resourceByUrl.set(resource.url, resource)
+			}
+		}
+	}
+
+	// expand any YouTube playlist result into its videos. the YouTube API bills by quota, so the cost is unchanged
+	const resources = await expandYouTubePlaylists([...resourceByUrl.values()])
+	// search requires an API key, so fallbackMode stays unset
+	return { resources, costDollars }
+}
+
+// the shape of Exa's search response
+export type SearchResponse = {
+	results: { url?: string; title?: string | null; highlights?: string[] }[]
+	costDollars?: { total?: number }
+}
+
+// build the search prompt from search-topic.md. an empty context falls back to the topic name
+export async function buildSearchPrompt(context: string, name: string): Promise<BuiltPrompt> {
+	// the name states the subject and the prompt says what to do about it, so the name is labeled and leads
+	const namedContext = context.trim() ? `Subject: ${name}\n\nWhat the reader is looking for:\n${context.trim()}` : name
+	const topicContext = namedContext.slice(0, MAX_CONTEXT_CHARS)
+	const { template, name: promptName, registryPrompt } = await fetchPromptTemplate("search-topic")
+
+	// fence the topic's user-supplied context in the prompt as untrusted
+	const prompt = writePrompt(template, { topicContext }, { maxQueries: String(MAX_SEARCH_QUERIES) })
+	return { prompt, name: promptName, registryPrompt }
+}
+
+// the topic's context and its name, which the search queries are written from, and the key that bills the writing
+type GenerateSearchQueriesOptions = { topicContext: string; topicName: string; litellmApiKey?: string }
+
+/**
+ * Writes a limited list of search queries from the topic's context with the cheap model, billed to the given key.
+ */
+export async function generateSearchQueries({
+	topicContext,
+	topicName,
+	litellmApiKey,
+}: GenerateSearchQueriesOptions): Promise<string[]> {
+	// fetch and write the prompt
+	const searchPrompt = await buildSearchPrompt(topicContext, topicName)
+
+	// write the queries as structured output. promptTelemetry links the registry version to the trace
+	const { output } = await generateText({
+		model: cheapModel(litellmApiKey),
+		output: Output.object({ schema: z.object({ queries: z.array(z.string()) }) }),
+		prompt: searchPrompt.prompt,
+		...promptTelemetry(searchPrompt),
+	})
+
+	// trim, drop blanks, and dedupe the model output, then limit it so a chatty model doesn't inflate the search call count
+	const queries = [...new Set(output.queries.map((query) => query.trim()).filter(Boolean))]
+	return queries.slice(0, MAX_SEARCH_QUERIES)
+}
+
+// turn a search response into deduped Resources plus the dollar cost that the provider reported for the search
+export function parseResults(response: SearchResponse): { resources: NewResource[]; costDollars: number } {
+	// keep the first Resource seen per url so repeated results collapse to one
+	const resourceByUrl = new Map<string, NewResource>()
+	for (const result of response.results) {
+		// skip results without a usable url. a url is required to dedupe and a null url would break the batch insert
+		if (typeof result.url !== "string" || resourceByUrl.has(result.url)) {
+			continue
+		}
+
+		// map a url to a Resource, its resource kind is determined by the link host
+		resourceByUrl.set(result.url, {
+			url: result.url,
+			title: result.title ?? null,
+			kind: toResourceKind(result.url),
+			snippet: result.highlights?.join(" ") || null,
+			contentHash: null,
+		})
+	}
+
+	// a missing costDollars.total counts as 0, so the Scan cost tracking is best-effort
+	return { resources: [...resourceByUrl.values()], costDollars: response.costDollars?.total ?? 0 }
+}
+
+// run every query in parallel and keep the responses that succeeded. one bad query must not discard the rest
+async function runSearches(searchQueries: string[]): Promise<SearchResponse[]> {
+	// settle every query so one rejection cannot cancel the others
+	const outcomes = await Promise.allSettled(searchQueries.map(runSearch))
+
+	// collect the responses that succeeded and log each query that failed
+	const searchResponses: SearchResponse[] = []
+	for (const outcome of outcomes) {
+		if (outcome.status === "fulfilled") {
+			searchResponses.push(outcome.value)
+		} else {
+			console.error("exa search query failed", outcome.reason)
+		}
+	}
+
+	// every query failing means the search itself is broken, so fail the Source instead of reporting zero results
+	if (outcomes.length > 0 && searchResponses.length === 0) {
+		throw new Error(`all ${outcomes.length} exa search queries failed`)
+	}
+	return searchResponses
+}
+
+/**
+ * Runs one Exa search query and returns its response, throwing an error on a missing key or a failed response.
+ */
+export async function runSearch(query: string): Promise<SearchResponse> {
+	// Exa requires an API key. without one this Source cannot run at all, so throw an error
+	const apiKey = Bun.env.EXA_API_KEY
+	if (!apiKey) {
+		throw new Error("EXA_API_KEY is not set")
+	}
+
+	// POST the query with the API key header, bounded by the fetch timeout
+	const response = await fetch(EXA_ENDPOINT, {
+		method: "POST",
+		headers: { "x-api-key": apiKey, "content-type": "application/json" },
+		body: JSON.stringify({
+			query,
+			numResults: RESULTS_PER_QUERY,
+			type: "auto",
+			moderation: true,
+			contents: { highlights: true },
+		}),
+		signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+	})
+
+	// a failed response throws an error. runSearches keeps the queries that succeeded
+	if (!response.ok) {
+		throw new Error(`exa search returned ${response.status}`)
+	}
+	return (await response.json()) as SearchResponse
+}
+
+// expand any YouTube playlist result into its videos. Resources that are not playlists pass through unchanged
+async function expandYouTubePlaylists(resources: NewResource[]): Promise<NewResource[]> {
+	// playlist expansion needs the YouTube API key. without it, the playlist keeps its plain link
+	const apiKey = Bun.env.YOUTUBE_API_KEY
+	if (!apiKey) {
+		return resources
+	}
+
+	// expand every playlist in parallel. anything that is not a playlist passes through untouched
+	const playlistResources = (
+		await Promise.all(resources.map((resource) => expandYouTubePlaylist(resource, apiKey)))
+	).flat()
+	// dedupe the flattened Resources by url again so two playlists that share a video collapse to one
+	const resourceByUrl = new Map<string, NewResource>()
+	for (const resource of playlistResources) {
+		if (!resourceByUrl.has(resource.url)) {
+			resourceByUrl.set(resource.url, resource)
+		}
+	}
+	return [...resourceByUrl.values()]
+}
+
+// expand a single Resource into its playlist's videos if its url is a playlist page
+async function expandYouTubePlaylist(resource: NewResource, apiKey: string): Promise<NewResource[]> {
+	// a non-playlist url has nothing to expand
+	const playlistId = playlistIdFromUrl(resource.url)
+	if (!playlistId) {
+		return [resource]
+	}
+
+	// a private, deleted, or slow playlist falls back to its plain link instead of failing the whole search batch
+	try {
+		return (await fetchVideos(playlistId, apiKey)).resources
+	} catch (error) {
+		console.error(`search playlist ${playlistId} expansion failed`, error)
+		return [resource]
+	}
+}

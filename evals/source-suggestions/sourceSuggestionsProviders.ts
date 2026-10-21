@@ -1,7 +1,8 @@
 // the source suggestions eval's promptfoo provider, which runs the suggester under test.
 // the suggester searches with Exa and reads every suggested Source the way its ingester will
+
+import { toSourceSuggestions } from "@carlnotes/pipeline/suggest"
 import type { ApiProvider, CallApiContextParams, ProviderResponse } from "promptfoo"
-import { toSourceSuggestions } from "../../worker/suggest"
 import { type SourceSuggestionsCase, SUGGESTION_LIMIT } from "./sourceSuggestionsCases"
 
 // the variables that a case gives the suggester. everything in the case except its description and its rubric

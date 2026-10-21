@@ -8,7 +8,7 @@ description: Conventions for writing CarlNotes source ingesters. Use when creati
 An ingester turns one kind of Source into Resources. One ingester per source kind, one file each, colocated tests.
 
 ## Conventions
-- Location: `worker/ingest/<kind>.ts` with `worker/ingest/<kind>.test.ts`.
+- Location: `packages/pipeline/ingest/<kind>.ts` with `packages/pipeline/ingest/<kind>.test.ts`.
 - Naming: `<kind>Ingester` (e.g. `rssIngester`, `redditIngester`, `composioIngester`).
 - Output: Resources only. Ingesters never score, rank, or touch Findings — that's the review pipeline's job.
 - One `composioIngester` covers all Composio toolkits: toolkit variety lives in Source config, not in ingester code.
@@ -19,4 +19,4 @@ An ingester turns one kind of Source into Resources. One ingester per source kin
 - Errors: a failing Source degrades that Scan only. Never let one ingester's failure abort a whole Scan batch.
 
 ## Interface
-The shared ingester interface is `worker/ingest/ingester.ts` (`SourceIngester` in, `IngestResult` out). Implement it exactly instead of inventing a variant.
+The shared ingester interface is `packages/pipeline/ingest/ingester.ts` (`SourceIngester` in, `IngestResult` out). Implement it exactly instead of inventing a variant.

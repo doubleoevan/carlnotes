@@ -1,6 +1,6 @@
 // the source suggestions eval's cases. a case is a Topic and the Sources that the Topic already follows.
 // the topics are written for the eval. the sources that the eval suggests are real, and each one is searched for and read
-import type { SuggestedSource } from "../../worker/suggest"
+import type { SuggestedSource } from "@carlnotes/pipeline/suggest"
 
 // one case. what it tests, its Topic, the Sources that the Topic already follows, and what its suggestions have to do
 export type SourceSuggestionsCase = {

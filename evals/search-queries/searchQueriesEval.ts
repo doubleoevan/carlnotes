@@ -1,8 +1,9 @@
 // the promptfoo eval of the search query writer, which makes real model calls.
 // run the eval with: bun run eval:search-queries
+
+import { cheapModel } from "@carlnotes/models/models"
+import { MAX_SEARCH_QUERIES } from "@carlnotes/pipeline/ingest/search"
 import type { Assertion, GradingResult, TestCase } from "promptfoo"
-import { MAX_SEARCH_QUERIES } from "../../worker/ingest/search"
-import { cheapModel } from "../../worker/models"
 import { toGradingResult } from "../evalChecks"
 import { runEval, toRubricAssertions, toRubricGrader } from "../evalHarness"
 import { SEARCH_QUERIES_CASES, type SearchQueriesCase } from "./searchQueriesCases"

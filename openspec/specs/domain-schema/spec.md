@@ -10,7 +10,7 @@ The schema SHALL define the domain vocabulary as Drizzle tables: Topic, Source, 
 #### Scenario: Schema type-checks and exposes every entity
 
 - **WHEN** `bunx tsc -b` runs against the repository
-- **THEN** `db/schema.ts` compiles and exports a Drizzle table for each of `topics`, `sources`, `scans`, `resources`, `findings`, `subscriptions`, `teams`, `team_members`, `team_topics`, `integrations`, and `users`
+- **THEN** `packages/db/schema.ts` compiles and exports a Drizzle table for each of `topics`, `sources`, `scans`, `resources`, `findings`, `subscriptions`, `teams`, `team_members`, `team_topics`, `integrations`, and `users`
 
 #### Scenario: No rejected domain noun appears
 
@@ -240,7 +240,7 @@ The schema SHALL define `sessions`, `accounts`, and `verifications` tables shape
 
 #### Scenario: Schema exposes the Better Auth tables
 - **WHEN** `bunx tsc -b` runs against the repository
-- **THEN** `db/schema.ts` compiles and exports a Drizzle table for each of `sessions`, `accounts`, and `verifications`, named consistently with the plural `users` table
+- **THEN** `packages/db/schema.ts` compiles and exports a Drizzle table for each of `sessions`, `accounts`, and `verifications`, named consistently with the plural `users` table
 
 ### Requirement: Better Auth's `accounts` table is distinct from Integration
 `accounts` (Better Auth-managed) SHALL represent only sign-in identity: the credential or OAuth grant a user authenticates with. The existing `Integration` entity SHALL remain the sole representation of a connected external account used for sourcing or delivery (e.g. Composio-managed Gmail). Neither SHALL substitute for the other: a Source or Subscription MUST NOT resolve credentials through `accounts`, and sign-in MUST NOT be implemented through `integrations`.
@@ -361,7 +361,7 @@ The schema SHALL define a `bookmarks` table: the user (cascade delete), the find
 
 #### Scenario: The schema exposes bookmarks
 - **WHEN** `bunx tsc -b` runs against the repository
-- **THEN** `db/schema.ts` compiles and exports a `bookmarks` table with the user and finding references, their cascades, and the per-pair uniqueness
+- **THEN** `packages/db/schema.ts` compiles and exports a `bookmarks` table with the user and finding references, their cascades, and the per-pair uniqueness
 
 ### Requirement: Resource carries an optional engagement signal
 The `resources` table SHALL carry a nullable `engagement` integer holding the source's engagement count where an ingester captured one, such as a reddit post score. Null means no signal was captured.
@@ -382,7 +382,7 @@ The schema SHALL define a `billing_subscriptions` table carrying the owning user
 
 #### Scenario: The schema exposes billing_subscriptions
 - **WHEN** `bunx tsc -b` runs against the repository
-- **THEN** `db/schema.ts` compiles and exports a `billing_subscriptions` Drizzle table with the user, Stripe customer id, Stripe subscription id, plan, status, and current period end
+- **THEN** `packages/db/schema.ts` compiles and exports a `billing_subscriptions` Drizzle table with the user, Stripe customer id, Stripe subscription id, plan, status, and current period end
 
 #### Scenario: Billing Subscription is not the topic Subscription
 - **WHEN** the two tables are inspected
@@ -434,8 +434,8 @@ The row SHALL carry whether the question was spoken, `is_spoken`, false by defau
 model and each spoken part of a reply SHALL write a row with cost and no text, so voice spend reads from the same
 table. A silent recording calls no model and writes no row.
 
-The row SHALL have its `kind`, a non-null `chat_turn_kind` enum built from `chatTurnKinds` in `shared/enums.ts`, with
-no default, so every insert names it:
+The row SHALL have its `kind`, a non-null `chat_turn_kind` enum built from `chatTurnKinds` in
+`packages/contracts/enums.ts`, with no default, so every insert names it:
 - `private` for a private chat turn on a Topic, a Team, or the new-topic chat
 - `podcast` for a turn asked from the podcast player
 - `chat_room` for Carl's chat room turn

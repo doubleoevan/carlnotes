@@ -1,13 +1,17 @@
 {
 	"files": [],
-	"compilerOptions": { "baseUrl": ".", "paths": { "@shared/*": ["shared/*"] } },
 	"references": [
-		{ "path": "./shared" },
-		{ "path": "./db" },
-		{ "path": "./emails" },
-		{ "path": "./api" },
-		{ "path": "./worker" },
-		{ "path": "./ui" },
+		{ "path": "./packages/contracts" },
+		{ "path": "./packages/client" },
+		{ "path": "./packages/core" },
+		{ "path": "./packages/server" },
+		{ "path": "./packages/db" },
+		{ "path": "./packages/emails" },
+		{ "path": "./packages/models" },
+		{ "path": "./packages/pipeline" },
+		{ "path": "./apps/api" },
+		{ "path": "./apps/worker" },
+		{ "path": "./apps/web" },
 		{ "path": "./scripts" },
 		{ "path": "./evals" }
 	]

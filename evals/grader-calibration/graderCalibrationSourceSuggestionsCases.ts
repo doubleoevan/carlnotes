@@ -1,6 +1,6 @@
 // the grader calibration cases of the source suggestions eval's rubrics.
 // the topic is the topic chat eval's, and the suggested sources are real coffee publications
-import type { SuggestedSource } from "../../worker/suggest"
+import type { SuggestedSource } from "@carlnotes/pipeline/suggest"
 import type { SourceSuggestionsVariables } from "../source-suggestions/sourceSuggestionsProviders"
 import * as sourceSuggestionsRubrics from "../source-suggestions/sourceSuggestionsRubrics"
 import { TOPIC_CHAT_CONTEXT } from "../topic-chat/topicChatCases"

@@ -1,18 +1,19 @@
 // the promptfoo eval of the podcast episode script writer, which makes real model calls.
 // run the eval with: bun run eval:podcast-episode-script
-import { PODCAST_EPISODE_DESCRIPTION_MAX_CHARS, PODCAST_EPISODE_TITLE_MAX_CHARS } from "@shared/contracts/podcast"
-import type { PodcastEpisodeChapterScript } from "@shared/payloads"
-import { FULL_PODCAST_EPISODE_MINUTES } from "@shared/podcastEpisodes"
-import type { Assertion, AssertionValueFunctionContext, EvaluateResult, GradingResult, TestCase } from "promptfoo"
-import { scoreModel } from "../../worker/models"
-import { toCheckedPodcastEpisodeOutline } from "../../worker/podcast/podcastEpisodeOutline"
+
+import type { PodcastEpisodeChapterScript } from "@carlnotes/contracts/payloads"
+import { PODCAST_EPISODE_DESCRIPTION_MAX_CHARS, PODCAST_EPISODE_TITLE_MAX_CHARS } from "@carlnotes/contracts/podcast"
+import { FULL_PODCAST_EPISODE_MINUTES } from "@carlnotes/contracts/podcastEpisodes"
+import { scoreModel } from "@carlnotes/models/models"
+import { toCheckedPodcastEpisodeOutline } from "@carlnotes/pipeline/podcast/podcastEpisodeOutline"
 import {
 	isRepeatedGoodbyeOpeningTurn,
 	type PodcastEpisodeSegment,
 	RejectedScriptError,
 	toCheckedPodcastEpisodeSegment,
 	toScriptMinutes,
-} from "../../worker/podcast/podcastEpisodeScript"
+} from "@carlnotes/pipeline/podcast/podcastEpisodeScript"
+import type { Assertion, AssertionValueFunctionContext, EvaluateResult, GradingResult, TestCase } from "promptfoo"
 import { toGradingResult } from "../evalChecks"
 import { runEval, toRubricAssertions, toRubricGrader } from "../evalHarness"
 import { toWriteCostLabel } from "../evalLabels"

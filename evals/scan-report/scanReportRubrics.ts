@@ -1,8 +1,8 @@
 // the scan report eval's grader and rubrics, and the scan data that the grader reads after each rubric
-import { newBudget } from "../../worker/budget"
-import { chatModel } from "../../worker/models"
-import { toCostLine } from "../../worker/review/summarize"
-import { emptyReviewOutcome, type FilterReason } from "../../worker/review/track"
+import { newBudget } from "@carlnotes/models/budget"
+import { chatModel } from "@carlnotes/models/models"
+import { toCostLine } from "@carlnotes/pipeline/review/summarize"
+import { emptyReviewOutcome, type FilterReason } from "@carlnotes/pipeline/review/track"
 import type { ScanReportVariables } from "./scanReportProviders"
 
 // the model that grades every rubric

@@ -1,0 +1,362 @@
+// a live smoke test for a full topic Scan, ingestion then review: seed a topic with two sources, scan, check the outputs,
+// and send the Scan's report to Resend's test inbox.
+// run it with: bun run smoke:scan. needs the LiteLLM proxy at LITELLM_BASE_URL, the latest migration, and Doppler secrets
+import { MINIMUM_SHOWN_FINDINGS } from "@carlnotes/contracts/enums"
+import { FULL_PODCAST_EPISODE_MINUTES } from "@carlnotes/contracts/podcastEpisodes"
+import { db } from "@carlnotes/db"
+import { findings, resources, scans } from "@carlnotes/db/schema/scans"
+import { sources, topicEmailSends, topics } from "@carlnotes/db/schema/topics"
+import { users } from "@carlnotes/db/schema/users"
+import { topicVectors } from "@carlnotes/db/schema/vectors"
+import { deleteUserLiteLLMKey } from "@carlnotes/models/litellm"
+import { toUntrustedFences } from "@carlnotes/models/prompts/untrustedFenceTestFixtures"
+import { shutdownTelemetry, startTelemetry } from "@carlnotes/models/telemetry"
+import { buildContextPrompt } from "@carlnotes/pipeline/attach"
+import { buildAgreementPrompt } from "@carlnotes/pipeline/chat/agreement"
+// the extracted prompt builders, loaded here to prove that each writes its prompt from its Markdown template
+import { buildSearchPrompt } from "@carlnotes/pipeline/ingest/search"
+import { saveTopicVectors } from "@carlnotes/pipeline/meanVectors"
+import { sendScanReport } from "@carlnotes/pipeline/notify"
+import { buildOutlinePrompt, buildSegmentPrompt } from "@carlnotes/pipeline/podcast/generatePodcastEpisodeScript"
+import { buildScorePrompt } from "@carlnotes/pipeline/review/score"
+import { buildScanReportPrompt } from "@carlnotes/pipeline/review/summarize"
+import { loadScan } from "@carlnotes/pipeline/scan"
+import { and, eq, inArray, isNotNull } from "drizzle-orm"
+import { finishScan, ingestForScan, reviewForScan } from "./workflows/runTopicScanActivities"
+
+// a real feed that is reliably up, plus a topic context that matches it so relevant resources pass the relevance gate
+const FEED_URL = "https://simonwillison.net/atom/everything/"
+const PODCAST_ID = "1528594034"
+const TOPIC_CONTEXT =
+	"Large language models and LLM tooling: building applications with models like Claude and GPT, prompt engineering, embeddings, retrieval, agents, and AI engineering practices."
+
+// pgvector comes back as a number via drizzle's vector mapper
+function vectorLength(value: unknown): number {
+	return Array.isArray(value) ? value.length : 0
+}
+
+// one id per run, so fixture rows never collide with an earlier run's
+const runId = Date.now()
+
+// seed a fake owner, a topic whose context matches the feed, and an RSS source with no API key
+async function seedTestData(): Promise<{ topicId: string; userId: string }> {
+	// a fake owner at Resend's test inbox, which accepts the report without delivering it anywhere.
+	// deleting the owner on cleanup cascades to the topic, source, scan, findings, and send rows
+	const [user] = await db
+		.insert(users)
+		.values({
+			name: "scan-smoke",
+			email: `delivered+scan-smoke-${runId}@resend.dev`,
+			username: `scan-smoke-${runId}`,
+			usernameNormalized: `scansmoke${runId}`,
+		})
+		.returning()
+	if (!user) {
+		throw new Error("failed to seed user")
+	}
+
+	// a topic whose context matches the feed so the relevance gate allows resources to be returned
+	const [topic] = await db
+		.insert(topics)
+		.values({ ownerId: user.id, name: "LLM scan smoke", prompt: TOPIC_CONTEXT })
+		.returning()
+	if (!topic) {
+		throw new Error("failed to seed topic")
+	}
+
+	// an RSS source with no API key pointing at the feed, plus a podcast source naming one show
+	await db.insert(sources).values([
+		{ topicId: topic.id, kind: "rss" as const, config: { url: FEED_URL }, status: "ready" as const },
+		{ topicId: topic.id, kind: "podcast" as const, config: { podcastId: PODCAST_ID }, status: "ready" as const },
+	])
+
+	// a completed Scan dated now, so that a schedule sweep doesn't race this smoke on the same topic
+	await db.insert(scans).values({ topicId: topic.id, ownerId: user.id, status: "succeeded", finishedAt: new Date() })
+	return { topicId: topic.id, userId: user.id }
+}
+
+// run the topic scan pipeline, check the smoke assertions, and print a report. returns true if every check passes
+async function check(topicId: string, ownerId: string): Promise<boolean> {
+	// run the full pipeline for the topic, ingestion then review, driving the workflow's own stages in order. the row
+	// is marked dispatched, so a schedule sweep sharing the database never starts it a second time through Temporal
+	const [smokeScan] = await db.insert(scans).values({ topicId, ownerId, dispatchedAt: new Date() }).returning()
+	if (!smokeScan) {
+		throw new Error("could not open a scan for the smoke topic")
+	}
+	const ingestResult = await ingestForScan(smokeScan.id, topicId)
+	const reviewResult = await reviewForScan(smokeScan.id, topicId, ownerId, ingestResult, ingestResult.budget)
+	await finishScan(smokeScan.id, topicId, ownerId, ingestResult, reviewResult)
+
+	// re-read the scan row, whose counts and cost the closing stage wrote
+	const topicScan = await loadScan(smokeScan.id)
+	if (!topicScan) {
+		throw new Error("the scan row vanished mid-smoke")
+	}
+
+	// read this topic's findings and one embedded resource from this scan, joined through the findings
+	const topicFindings = await db.select().from(findings).where(eq(findings.topicId, topicId))
+	const [topic] = await db
+		.select({ maxTopicFindings: topics.maxTopicFindings })
+		.from(topics)
+		.where(eq(topics.id, topicId))
+
+	// the scan's kept_count is what review wrote, and the topic is then trimmed to its maxTopicFindings
+	const expectedFindingCount = Math.min(topicScan.keptCount, topic?.maxTopicFindings ?? 0)
+	const [embedded] = await db
+		.select({ embedding: resources.embedding, model: resources.embeddingModel })
+		.from(findings)
+		.innerJoin(resources, eq(findings.resourceId, resources.id))
+		.where(and(eq(findings.topicId, topicId), isNotNull(resources.embedding)))
+		.limit(1)
+
+	// the private topic's succeeded scan saves its vector as not public and shown. made public, the vector is saved as
+	// public and shown once the topic lists enough findings
+	const privateTopicVectorRow = await loadTopicVectorRow(topicId)
+	await db.update(topics).set({ visibility: "public" }).where(eq(topics.id, topicId))
+	await saveTopicVectors(topicId)
+	const publicTopicVectorRow = await loadTopicVectorRow(topicId)
+	const isTopicShown = topicFindings.length >= MINIMUM_SHOWN_FINDINGS
+
+	// for an RSS-only scan, ingestion cost is 0, so the total cost should equal the sum of the review stage costs
+	const totalCost = Number(topicScan.cost)
+	const totalStageCosts = Object.values(topicScan.stageCosts).reduce((sum, value) => sum + value, 0)
+	const findingsWithExplanations = topicFindings.filter((finding) => finding.relevanceExplanation.trim().length > 0)
+	const embeddingLength = vectorLength(embedded?.embedding)
+
+	// the longest relevance explanation must be substantive, well beyond one line
+	const explanationLengths = topicFindings.map((finding) => finding.relevanceExplanation.trim().length)
+	const longestExplanationLength = Math.max(0, ...explanationLengths)
+
+	// print the smoke test report
+	console.log("\n=== topic scan smoke report ===")
+	console.log(`scan.status        : ${topicScan.status}`)
+	console.log(`found/kept/filtered: ${topicScan.foundCount} / ${topicScan.keptCount} / ${topicScan.filteredCount}`)
+	console.log(`cost               : ${totalCost}`)
+	console.log(`stage_costs        : ${JSON.stringify(topicScan.stageCosts)} (sum ${totalStageCosts.toFixed(6)})`)
+	// print the findings and embedding report
+	console.log(
+		`findings           : ${topicFindings.length} of ${expectedFindingCount} expected (with explanations: ${findingsWithExplanations.length})`,
+	)
+	console.log(`embedding length   : ${embeddingLength} (model ${embedded?.model})`)
+	if (findingsWithExplanations[0]) {
+		console.log(`sample explanation : ${findingsWithExplanations[0].relevanceExplanation}`)
+	}
+
+	// print the scan report itself so the owner can review its quality by reading it
+	console.log(`scan summary:\n${topicScan.scanSummary}`)
+
+	// what the podcast source contributed, and whether any episode reached Firecrawl
+	const episodes = ingestResult.resources.filter((resource) => resource.kind === "listen")
+	const scrapedEpisodes = await scrapedEpisodeCount(episodes.map((episode) => episode.url))
+	console.log(`\nepisodes ingested  : ${episodes.length} (with transcripts: ${countWithTranscripts(episodes)})`)
+	console.log(`episodes scraped   : ${scrapedEpisodes} (a stored body without a transcript means Firecrawl ran)`)
+
+	// send the Scan's report twice, the way a retry would. one email goes out, and one row names the Scan
+	const firstReportOutcome = await sendScanReport({ scanId: smokeScan.id, recipientUserId: ownerId })
+	const secondReportOutcome = await sendScanReport({ scanId: smokeScan.id, recipientUserId: ownerId })
+	const reportRows = await db
+		.select({ recipientUserId: topicEmailSends.recipientUserId })
+		.from(topicEmailSends)
+		.where(eq(topicEmailSends.scanId, smokeScan.id))
+	console.log(`report sends       : ${firstReportOutcome.outcome}, then ${secondReportOutcome.outcome}`)
+
+	// the smoke assertions
+	const results: [string, boolean][] = [
+		// scan email checks. a second run finds the first run's row and sends nothing
+		["the report was accepted", firstReportOutcome.outcome === "accepted"],
+		["a second report run sent nothing", secondReportOutcome.outcome === "skipped"],
+		["one send row names the Scan", reportRows.length === 1],
+
+		// topic scan checks
+		["scan succeeded", topicScan.status === "succeeded"],
+		["found resources", topicScan.foundCount > 0],
+		["embedding is 1024-dim", embeddingLength === 1024],
+		[
+			"a private topic's succeeded scan saved its vector as not public and shown",
+			privateTopicVectorRow?.isPublicAndShown === false,
+		],
+		[
+			"made public, the topic's vector is saved as public and shown if it lists enough findings",
+			publicTopicVectorRow?.isPublicAndShown === isTopicShown,
+		],
+
+		// topic findings checks
+		["findings match kept_count limited by maxTopicFindings", topicFindings.length === expectedFindingCount],
+		["stage_costs sum to cost", Math.abs(totalCost - totalStageCosts) < 1e-6],
+		["at least one finding", topicFindings.length > 0],
+		["a finding has a relevance explanation", findingsWithExplanations.length > 0],
+
+		// podcast source checks. keyless ingestion spends nothing, and an episode is never scraped
+		["the podcast source found episodes", episodes.length > 0],
+		["keyless ingestion cost nothing", topicScan.stageCosts.ingestion === 0],
+		["no episode was scraped for its page", scrapedEpisodes === 0],
+
+		// scan report and prompt rendering checks
+		["scan summary is non-empty", (topicScan.scanSummary ?? "").trim().length > 0],
+		["a relevance explanation is substantive", longestExplanationLength > 200],
+		...(await writeSamplePrompts()),
+	]
+
+	// print each check and return the overall result
+	let allPass = true
+	for (const [label, pass] of results) {
+		console.log(`${pass ? "PASS" : "FAIL"}  ${label}`)
+		allPass = allPass && pass
+	}
+	return allPass
+}
+
+// a topic's vector row with whether it is saved as public and shown, or undefined with no vector
+async function loadTopicVectorRow(topicId: string): Promise<{ isPublicAndShown: boolean } | undefined> {
+	const [topicVectorRow] = await db
+		.select({ isPublicAndShown: topicVectors.isPublicAndShown })
+		.from(topicVectors)
+		.where(eq(topicVectors.topicId, topicId))
+	return topicVectorRow
+}
+
+// how many of this scan's episodes carried a transcript their feed published
+function countWithTranscripts(episodes: { transcriptUrl?: string | null }[]): number {
+	return episodes.filter((episode) => episode.transcriptUrl).length
+}
+
+// how many episodes stored a body without naming a transcript, which is the only way Firecrawl could have run on one
+async function scrapedEpisodeCount(episodeUrls: string[]): Promise<number> {
+	// nothing ingested means nothing to check
+	if (episodeUrls.length === 0) {
+		return 0
+	}
+
+	// read back what this scan's episodes stored. the fetch stage writes the key, and review scores in memory
+	const storedEpisodes = await db
+		.select({ contentKey: resources.contentKey, transcriptUrl: resources.transcriptUrl })
+		.from(resources)
+		.where(inArray(resources.url, episodeUrls))
+	return storedEpisodes.filter((episode) => episode.contentKey && !episode.transcriptUrl).length
+}
+
+// write each extracted prompt with sample inputs and report whether the registry served them
+async function writeSamplePrompts(): Promise<[string, boolean][]> {
+	// the single-purpose prompts
+	const scoreResult = await buildScorePrompt("sample content", "sample topic context", true)
+	const searchResult = await buildSearchPrompt("sample topic context", "sample topic")
+	const contextResult = await buildContextPrompt("sample document text")
+	const agreementResult = await buildAgreementPrompt("sounds good", "frequency: daily")
+
+	// the report prompt renders over a minimal sample scan
+	const sampleFinding = {
+		title: "Sample",
+		url: "https://a.test",
+		relevanceScore: 0.9,
+		relevanceExplanation: "note",
+		isNew: true,
+	}
+	const reportResult = await buildScanReportPrompt({
+		topicName: "sample topic",
+		topicContext: "sample topic context",
+		date: "January 1, 2026",
+		// a single kept finding with zeroed drop totals
+		reviewOutcome: {
+			keptFindings: [sampleFinding],
+			filteredCounts: {
+				"duplicate content": 0,
+				"near-duplicate": 0,
+				"below relevance threshold": 0,
+				"flagged by scanner": 0,
+				"no text to score": 0,
+			},
+			deferredCount: 0,
+			failedCount: 0,
+		},
+		// one healthy source and an untouched budget
+		scannedSources: [{ sourceKind: "rss", status: "ok" }],
+		budget: {
+			spentDollars: 0,
+			limitDollars: 0.5,
+			stageCosts: { ingestion: 0, embedding: 0, fetch: 0, scoringCheap: 0, scoringPremium: 0 },
+			maxScoredResources: 25,
+			fetchCounts: { reusedCount: 0, revalidatedCount: 0, fetchedCount: 0 },
+		},
+	})
+
+	// the podcast episode's outline prompt and segment prompt, over one sample finding in a one-segment outline
+	const samplePodcastEpisodeFinding = {
+		findingId: "finding-1",
+		title: "Sample",
+		sourceHost: "a.test",
+		snippet: "sample summary",
+		relevanceExplanation: "note",
+		content: "sample content",
+	}
+	const scriptInput = {
+		topicName: "sample topic",
+		topicPrompt: "sample topic prompt",
+		podcastEpisodeFindings: [samplePodcastEpisodeFinding],
+		maxMinutes: FULL_PODCAST_EPISODE_MINUTES,
+	}
+	const outlineResult = await buildOutlinePrompt(scriptInput)
+	const sampleOutline = {
+		title: "Sample episode",
+		description: "A sample.",
+		segments: [{ theme: "sample", chapters: [{ findingId: "finding-1", minutes: 2 }] }],
+	}
+	const segmentResult = await buildSegmentPrompt({ ...scriptInput, outline: sampleOutline, segmentIndex: 0 })
+
+	// report whether the registry actually served this run's prompts, or the worker ran on the bundled Markdown alone
+	const servedFromRegistry = [
+		scoreResult,
+		searchResult,
+		contextResult,
+		agreementResult,
+		reportResult,
+		outlineResult,
+		segmentResult,
+	].some((result) => result.registryPrompt && !result.registryPrompt.isFallback)
+	console.log(`registry serving  : ${servedFromRegistry ? "prompts served from Langfuse" : "bundled markdown only"}`)
+
+	// each prompt renders to a non-empty string
+	const builtPrompts: [string, string][] = [
+		["score prompt", scoreResult.prompt],
+		["search prompt", searchResult.prompt],
+		["attachment context prompt", contextResult.prompt],
+		["agreement check prompt", agreementResult.prompt],
+		["scan report prompt", reportResult.prompt],
+		["episode outline prompt", outlineResult.prompt],
+		["episode segment prompt", segmentResult.prompt],
+	]
+	return builtPrompts.flatMap(([label, prompt]) => [
+		[`${label} renders`, prompt.length > 0],
+		[`${label} fences its untrusted inputs`, toUntrustedFences(prompt).length > 0],
+		// the fence closes above the final line, so a prompt ending on a closing tag ends on a value
+		[`${label} restates the task last`, !prompt.trimEnd().endsWith(">")],
+	])
+}
+
+// seed the test data and run the checks, then always delete the fake owner
+async function smokeTest(): Promise<number> {
+	const { topicId, userId } = await seedTestData()
+	// run the checks, then delete the owner regardless of outcome
+	try {
+		const isPassed = await check(topicId, userId)
+		console.log(`\n=== smoke ${isPassed ? "PASSED" : "FAILED"} ===`)
+		return isPassed ? 0 : 1
+	} finally {
+		// delete the LiteLLM key that the owner's first ingest created, then the owner
+		await deleteUserLiteLLMKey(userId)
+		await db.delete(users).where(eq(users.id, userId))
+	}
+}
+
+// run the smoke test, computing the exit code instead of exiting early so telemetry can flush first
+startTelemetry()
+let exitCode: number
+try {
+	exitCode = await smokeTest()
+} catch (error) {
+	console.error(error)
+	exitCode = 1
+}
+
+// flush telemetry, then report the outcome as the exit code
+await shutdownTelemetry()
+process.exitCode = exitCode

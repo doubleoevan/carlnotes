@@ -1,0 +1,212 @@
+// the durable Scan: it runs the pipeline's three stages as activities
+
+import { toWorkflowFailureReason } from "@carlnotes/contracts/scanFailure"
+// the attempt counts the retry policies that the temporal activities read
+import {
+	FINISH_ATTEMPTS,
+	FINISH_TIMEOUT_MS,
+	HEARTBEAT_TIMEOUT_MS,
+	INGEST_ATTEMPTS,
+	INGEST_TIMEOUT_MS,
+	QUEUED_STAGE_TIMEOUT_MS,
+	REVIEW_ATTEMPTS,
+	REVIEW_TIMEOUT_MS,
+} from "@carlnotes/pipeline/stageTimeouts"
+import type { ScanTrigger } from "@carlnotes/pipeline/temporalClient"
+import {
+	CancellationScope,
+	getExternalWorkflowHandle,
+	isCancellation,
+	ParentClosePolicy,
+	patched,
+	proxyActivities,
+	startChild,
+} from "@temporalio/workflow"
+// the workflow that records a succeeded Scan's Podcast Episode, and the queue that it runs on
+import {
+	PODCAST_EPISODE_TASK_QUEUE,
+	type RecordPodcastEpisodeWorkflowInput,
+	recordPodcastEpisodeWorkflow,
+} from "./recordPodcastEpisode"
+import type * as scanActivities from "./runTopicScanActivities"
+// the workflow that emails a completed Scan's outcome, the queue that it runs on, and the signal that ends its wait
+import {
+	podcastEpisodeOutlineSettledSignal,
+	SCAN_EMAIL_TASK_QUEUE,
+	type ScanEmailWorkflowInput,
+	sendScanEmailWorkflow,
+} from "./sendScanEmail"
+
+// the queue that a Scan's closing writes run on, apart from the scan slots
+export const SCAN_CLOSING_TASK_QUEUE = "scan-closing"
+
+// ingest activity may be retried: it dedupes on canonical url. its schedule-to-close bound covers the wait for a scan slot
+const { ingestForScan } = proxyActivities<typeof scanActivities>({
+	startToCloseTimeout: INGEST_TIMEOUT_MS,
+	scheduleToCloseTimeout: QUEUED_STAGE_TIMEOUT_MS,
+	heartbeatTimeout: HEARTBEAT_TIMEOUT_MS,
+	retry: { maximumAttempts: INGEST_ATTEMPTS },
+})
+
+// review pays for the fetches and the model calls, so it gets one retry and no more. it waits for a scan slot behind
+// the other Scans' ingests, so its schedule-to-close bound covers that wait too
+const { reviewForScan } = proxyActivities<typeof scanActivities>({
+	startToCloseTimeout: REVIEW_TIMEOUT_MS,
+	scheduleToCloseTimeout: QUEUED_STAGE_TIMEOUT_MS,
+	heartbeatTimeout: HEARTBEAT_TIMEOUT_MS,
+	retry: { maximumAttempts: REVIEW_ATTEMPTS },
+})
+
+// the closing writes are idempotent, so they may retry. they are short enough not to need a heartbeat, and they run on
+// their own queue with no schedule-to-close bound, so a closing write can fail only by running and never by waiting
+const { finishScan, failScan, stopScan, reportScanEmailNotStarted, reportPodcastEpisodeRecordingNotStarted } =
+	proxyActivities<typeof scanActivities>({
+		taskQueue: SCAN_CLOSING_TASK_QUEUE,
+		startToCloseTimeout: FINISH_TIMEOUT_MS,
+		retry: { maximumAttempts: FINISH_ATTEMPTS },
+	})
+
+/**
+ * Runs one Topic's Scan to a terminal status. The Scan row is opened by whoever started this workflow,
+ * so this fills in that Scan row instead of writing its own.
+ */
+export async function runTopicScanWorkflow(
+	scanId: string,
+	topicId: string,
+	ownerId: string,
+	trigger: ScanTrigger,
+): Promise<void> {
+	// the Budget spent so far, and the status that the finishScan activity saved
+	let spentBudget: scanActivities.IngestStageResult["budget"] | undefined
+	let finishedScanStatus: scanActivities.IngestStageResult["status"] | undefined
+
+	// a stage that throws an error ends the Scan as failed with whatever it had already spent
+	try {
+		const ingestResult = await ingestForScan(scanId, topicId)
+		spentBudget = ingestResult.budget
+
+		const reviewResult = await reviewForScan(scanId, topicId, ownerId, ingestResult, ingestResult.budget)
+		spentBudget = reviewResult.budget
+
+		// a cancelled stage returns what it had instead of throwing an error
+		if (CancellationScope.current().consideredCancelled) {
+			await stopCancelledScan(scanId)
+			return
+		}
+		await finishScan(scanId, topicId, ownerId, ingestResult, reviewResult)
+		finishedScanStatus = ingestResult.status
+	} catch (error) {
+		// a cancel that lands while a stage is waiting rejects that stage instead of returning through it
+		if (isCancellation(error)) {
+			await stopCancelledScan(scanId)
+			return
+		}
+
+		// record the failure. if the record itself fails, fail the workflow with the error that failed the Scan, and leave
+		// the row to the sweep's stale close-out
+		try {
+			await failScan(scanId, toWorkflowFailureReason(error), spentBudget)
+		} catch {
+			throw error
+		}
+	}
+
+	// a succeeded Scan starts its podcast episode recording in its own workflow.
+	// a Scan replaying from before the patch started no podcast episode workflow
+	const isPodcastEpisodeReadyToRecord = finishedScanStatus === "succeeded" && patched("episode-render-workflow")
+
+	// email a completed Scan's outcome from its own workflow, outside the try so nothing here can fail the Scan.
+	// a Scan replaying a closing write from before the patch already sent its email, so the patch marker skips the start
+	const isScanEmailReadyToSend = trigger !== "scheduled" || finishedScanStatus === "succeeded"
+	if (finishedScanStatus !== undefined && isScanEmailReadyToSend && patched("scan-email-workflow")) {
+		// a scheduled Scan's digest goes to the subscribers, and any other Scan reports to whoever ran it
+		// or created the Topic. either email waits for the outline of a Podcast Episode that is ready to record
+		const scanEmailInput = { scanId, topicId, isPodcastEpisodeReadyToRecord }
+		await startScanEmail(
+			trigger === "scheduled"
+				? { ...scanEmailInput, trigger }
+				: { ...scanEmailInput, trigger, reportRecipientUserId: ownerId },
+		)
+	}
+
+	// start the podcast episode recording after the email workflow, so the email workflow exists before the outline signal.
+	// the Podcast Episode bills the Scan's owner
+	if (isPodcastEpisodeReadyToRecord) {
+		const isPodcastEpisodeRecordingStarted = await startPodcastEpisodeRecording({
+			scanId,
+			topicId,
+			billedUserId: ownerId,
+			trigger,
+		})
+
+		// end the email's wait if the podcast episode recording never started
+		if (!isPodcastEpisodeRecordingStarted) {
+			await signalPodcastEpisodeOutlineSettled(scanId)
+		}
+	}
+}
+
+// save a Scan the user cancelled
+function stopCancelledScan(scanId: string): Promise<void> {
+	return CancellationScope.nonCancellable(() => stopScan(scanId))
+}
+
+// start the Scan's email as a child that outlives this workflow, so the Topic's next Scan never waits on it,
+// and return its handle if this call started it. an existing child is left alone, and any other failure is reported
+async function startScanEmail(scanEmailWorkflowInput: ScanEmailWorkflowInput): Promise<void> {
+	try {
+		await startChild(sendScanEmailWorkflow, {
+			workflowId: toScanEmailWorkflowId(scanEmailWorkflowInput.scanId),
+			taskQueue: SCAN_EMAIL_TASK_QUEUE,
+			parentClosePolicy: ParentClosePolicy.ABANDON,
+			args: [scanEmailWorkflowInput],
+		})
+	} catch (error) {
+		// a child with this id is the Scan's email, already on its way
+		if (error instanceof Error && error.name === "WorkflowExecutionAlreadyStartedError") {
+			return
+		}
+		await reportScanEmailNotStarted(scanEmailWorkflowInput.scanId, toWorkflowFailureReason(error))
+	}
+}
+
+// the id of a Scan's email workflow
+function toScanEmailWorkflowId(scanId: string): string {
+	return `scan-email-${scanId}`
+}
+
+// end the wait of the Scan's email workflow for the podcast episode outline, through the workflow's id.
+// an email workflow that an earlier run of this workflow started gets the signal too
+async function signalPodcastEpisodeOutlineSettled(scanId: string): Promise<void> {
+	try {
+		await getExternalWorkflowHandle(toScanEmailWorkflowId(scanId)).signal(podcastEpisodeOutlineSettledSignal)
+	} catch {
+		// an email workflow that already finished, or never started, has no wait to end
+	}
+}
+
+// start the podcast episode recording as a child that outlives this workflow, and return whether a recording is running.
+// a child that already exists is left alone, and any other failure to start is reported
+async function startPodcastEpisodeRecording(
+	recordPodcastEpisodeWorkflowInput: RecordPodcastEpisodeWorkflowInput,
+): Promise<boolean> {
+	try {
+		await startChild(recordPodcastEpisodeWorkflow, {
+			workflowId: `episode-${recordPodcastEpisodeWorkflowInput.scanId}`,
+			taskQueue: PODCAST_EPISODE_TASK_QUEUE,
+			parentClosePolicy: ParentClosePolicy.ABANDON,
+			args: [recordPodcastEpisodeWorkflowInput],
+		})
+		return true
+	} catch (error) {
+		// a child with this id is the Scan's Podcast Episode, already recording
+		if (error instanceof Error && error.name === "WorkflowExecutionAlreadyStartedError") {
+			return true
+		}
+		await reportPodcastEpisodeRecordingNotStarted(
+			recordPodcastEpisodeWorkflowInput.scanId,
+			toWorkflowFailureReason(error),
+		)
+		return false
+	}
+}

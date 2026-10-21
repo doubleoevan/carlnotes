@@ -1,6 +1,7 @@
 // the promptfoo eval of the topic chat reply, which makes real model calls. run the eval with: bun run eval:topic-chat
+
+import { chatModel } from "@carlnotes/models/models"
 import type { Assertion, TestCase } from "promptfoo"
-import { chatModel } from "../../worker/models"
 import { NO_MARKDOWN_ASSERTION, toChatReplyAssertions, toChatReplyCaseLine } from "../evalChecks"
 import { runEval, toRubricAssertions, toRubricGrader } from "../evalHarness"
 import { TOPIC_CHAT_CASES, type TopicChatCase } from "./topicChatCases"

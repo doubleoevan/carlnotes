@@ -12,9 +12,9 @@ Topic that has never been saved and reflects what the editor holds right now ins
 The route SHALL require a signed-in caller. It SHALL NOT draw on the daily scan quota, the monthly spend budget, or any
 metered allowance, because suggesting is not scanning and a reader setting a Topic up has not asked for a Scan.
 
-A cheap-tier model SHALL generate the candidates from a versioned prompt under `worker/prompts`, with structured output,
-so what comes back is a typed list instead of prose to parse. The Topic's name and prompt SHALL be interpolated as
-untrusted data, as every model-facing prompt already requires.
+A cheap-tier model SHALL generate the candidates from a versioned prompt under `packages/models/prompts`, with
+structured output, so what comes back is a typed list instead of prose to parse. The Topic's name and prompt SHALL be
+interpolated as untrusted data, as every model-facing prompt already requires.
 
 Before the model call, the route SHALL run one web search for the Topic's name and the start of its prompt, and SHALL
 give the model the pages it found, each with its title, host, and address, as untrusted data. The prompt SHALL lean on

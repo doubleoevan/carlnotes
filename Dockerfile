@@ -1,17 +1,30 @@
 # syntax=docker/dockerfile:1
 
-# the app service image: the Hono api plus the ui's built browser files and server build, started under Doppler.
+# the app service image: the Hono api plus the web app's built browser files and server build, started under Doppler.
 # the litellm proxy is a separate service and builds from infra/litellm/Dockerfile, not this file.
 # Bun is pinned to the version in .bun-version, which CI also reads, and to that tag's digest
-FROM oven/bun:1.3.14@sha256:e10577f0db68676a7024391c6e5cb4b879ebd17188ab750cf10024a6d700e5c4 AS build
+FROM oven/bun:1.4.3@sha256:ec06c3b6cea04192ae6770c434f668ca41d343ad19fa6472216c7b48be39c598 AS build
 WORKDIR /app
 
-# install against the committed lockfile on its own layer, so it caches until a dependency actually changes
+# install against the committed lockfile on its own layer, so it caches until a dependency actually changes.
+# each workspace's package.json on its own line. a glob COPY flattens them into one directory
 COPY package.json bun.lock ./
+COPY apps/api/package.json ./apps/api/
+COPY apps/docs/package.json ./apps/docs/
+COPY apps/web/package.json ./apps/web/
+COPY apps/worker/package.json ./apps/worker/
+COPY packages/client/package.json ./packages/client/
+COPY packages/contracts/package.json ./packages/contracts/
+COPY packages/core/package.json ./packages/core/
+COPY packages/db/package.json ./packages/db/
+COPY packages/emails/package.json ./packages/emails/
+COPY packages/models/package.json ./packages/models/
+COPY packages/pipeline/package.json ./packages/pipeline/
+COPY packages/server/package.json ./packages/server/
+COPY packages/tokens/package.json ./packages/tokens/
 RUN bun install --frozen-lockfile
 
-# the whole tree, since tsconfig project references span ui, api, worker, db, and shared.
-# a narrower copy breaks the ui build the moment it imports across a module boundary
+# the whole tree. the web build imports the universal packages and the docs build imports the contracts
 COPY . .
 
 # the Turnstile site key. Vite inlines it into the bundle at build time, so unlike every other setting it cannot
@@ -32,9 +45,9 @@ RUN bun run build:ui
 # dependencies, so the toolchain stays in this stage and only the built output is copied forward
 RUN bun run build:docs
 
-# the runtime includes only what serving a request needs: production dependencies, the modules Bun executes, and the
-# built ui and docs. the toolchain and every dev dependency stay behind in the build stage
-FROM oven/bun:1.3.14@sha256:e10577f0db68676a7024391c6e5cb4b879ebd17188ab750cf10024a6d700e5c4 AS runtime
+# the runtime includes only what serving a request needs: production dependencies, the workspaces Bun executes, and the
+# built web app and docs. the toolchain and every dev dependency stay behind in the build stage
+FROM oven/bun:1.4.3@sha256:ec06c3b6cea04192ae6770c434f668ca41d343ad19fa6472216c7b48be39c598 AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
 
@@ -49,35 +62,47 @@ RUN apt-get update \
 # Doppler injects the secrets at start. copy its binary from its published image, pinned by version and digest
 COPY --from=dopplerhq/cli:3.77.0@sha256:bc59e0e97ea596a2c402f108043b9fd6ad574db253998364de939c0ca373453e /bin/doppler /bin/doppler
 
-# resolve production dependencies from the same lockfile the build stage used
+# resolve production dependencies from the same lockfile the build stage used. each workspace's package.json on its
+# own line. the install links each @carlnotes package into node_modules by it
 COPY package.json bun.lock ./
+COPY apps/api/package.json ./apps/api/
+COPY apps/docs/package.json ./apps/docs/
+COPY apps/web/package.json ./apps/web/
+COPY apps/worker/package.json ./apps/worker/
+COPY packages/client/package.json ./packages/client/
+COPY packages/contracts/package.json ./packages/contracts/
+COPY packages/core/package.json ./packages/core/
+COPY packages/db/package.json ./packages/db/
+COPY packages/emails/package.json ./packages/emails/
+COPY packages/models/package.json ./packages/models/
+COPY packages/pipeline/package.json ./packages/pipeline/
+COPY packages/server/package.json ./packages/server/
+COPY packages/tokens/package.json ./packages/tokens/
 RUN bun install --frozen-lockfile --production
 
-# Bun runs the TypeScript directly, so the source is the artifact. each module has its own tsconfig,
-# and the root pair resolves the @shared alias the worker and api import across
+# Bun runs the TypeScript directly, so the source is the artifact: the packages, and the two apps the image runs as.
+# each workspace has its own tsconfig, and the root pair ties the project references together
 COPY tsconfig.base.json tsconfig.json ./
-COPY shared ./shared
-COPY db ./db
-COPY emails ./emails
-COPY worker ./worker
-COPY api ./api
+COPY packages ./packages
+COPY apps/api ./apps/api
+COPY apps/worker ./apps/worker
 
 # the illustration that every podcast cover is drawn over
-COPY docs/design/podcast/cover-base.png ./docs/design/podcast/cover-base.png
+COPY apps/docs/design/podcast/cover-base.png ./apps/docs/design/podcast/cover-base.png
 
 # the blog's markdown, which the api renders per request. the docs moved to the Starlight site above
 COPY content ./content
 
-# the built ui: the browser files the api serves, and the server build the api renders pages through
-COPY --from=build /app/ui/dist ./ui/dist
+# the built web app: the browser files the api serves, and the server build the api renders pages through
+COPY --from=build /app/apps/web/dist ./apps/web/dist
 
 # the built docs site, served under /docs
-COPY --from=build /app/docs/dist ./docs/dist
+COPY --from=build /app/apps/docs/dist ./apps/docs/dist
 
 # the docs markdown source, which the docs:embed deploy job chunks and embeds for chat
-COPY docs/src/content/docs ./docs/src/content/docs
+COPY apps/docs/src/content/docs ./apps/docs/src/content/docs
 
 # the port that bun serves the api on if PORT is unset
 EXPOSE 3000
 USER bun
-CMD ["doppler", "run", "--", "bun", "api/index.ts"]
+CMD ["doppler", "run", "--", "bun", "apps/api/index.ts"]

@@ -1,0 +1,14 @@
+{
+	"name": "@carlnotes/server",
+	"version": "0.1.0",
+	"private": true,
+	"type": "module",
+	"exports": {
+		"./*": "./*.ts"
+	},
+	"dependencies": {
+		"@carlnotes/contracts": "workspace:*",
+		"@sentry/bun": "^11.6.0",
+		"posthog-node": "^5.55.2"
+	}
+}

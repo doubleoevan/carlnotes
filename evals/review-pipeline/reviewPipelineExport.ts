@@ -3,13 +3,13 @@
 // a written row keeps its own text in the fixture
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
+import { db } from "@carlnotes/db"
+import { findings, resources } from "@carlnotes/db/schema/scans"
+import { attachments, topics } from "@carlnotes/db/schema/topics"
+import { getResourceContent } from "@carlnotes/db/store"
+import { buildTopicScanContext } from "@carlnotes/pipeline/attach"
+import { loadBookmarkedFindingRows } from "@carlnotes/pipeline/review/index"
 import { and, desc, eq, inArray, isNotNull, ne, notExists, sql } from "drizzle-orm"
-import { db } from "../../db"
-import { findings, resources } from "../../db/schema/scans"
-import { attachments, topics } from "../../db/schema/topics"
-import { buildTopicScanContext } from "../../worker/attach"
-import { loadBookmarkedFindingRows } from "../../worker/review"
-import { getResourceContent } from "../../worker/store"
 import type { EvalFixture, LabeledResource } from "./reviewPipelineEval"
 
 // where the fixtures and their page cache live, and how many Resources a fixture holds

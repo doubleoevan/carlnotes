@@ -1,0 +1,312 @@
+// tests for utils methods and dependencies
+
+import { afterEach, expect, setSystemTime, test } from "bun:test"
+import type { TopicFinding } from "@carlnotes/contracts/findings"
+import { DAY_MS } from "@carlnotes/contracts/time"
+import {
+	durationMsBetween,
+	toAgeLabel,
+	toClockLabel,
+	toDurationLabel,
+	toPodcastEpisodeDurationLabel,
+	toScheduleLabel,
+	toTimeLabel,
+} from "@carlnotes/core/lib/labels"
+import { matchesTopicFindingFilter } from "@carlnotes/core/lib/topicFindingFilters"
+import { toSortedTopicFindings } from "@carlnotes/core/lib/topicFindingSorts"
+import { toPossibleSourceUrls } from "@carlnotes/core/lib/topicPromptUrls"
+import { toScanRecapPlaceholder } from "@/components/topic/TopicScanRecap"
+import { cn, shouldHandleLinkClick, toAuthorizeReturnPath, toLinkClickHandler, toSafeRedirectPath } from "./utils"
+
+// twMerge makes later tailwind classes win over earlier conflicting ones
+test("cn merges conflicting tailwind classes", () => {
+	expect(cn("p-2", "p-4")).toBe("p-4")
+})
+
+// clsx drops falsy conditional values and keeps truthy ones
+test("cn handles conditional class values", () => {
+	expect(cn("base", false && "hidden", true && "block")).toBe("base block")
+})
+
+// the age label tests need to freeze the clock so that buckets are deterministic. reset to real time after each test
+afterEach(() => setSystemTime())
+
+test("toAgeLabel buckets elapsed time into the coarsest unit", () => {
+	setSystemTime(new Date("2026-07-17T12:00:00.000Z"))
+	const daysAgo = (days: number): string => new Date(Date.now() - days * DAY_MS).toISOString()
+	// null and same-day
+	expect(toAgeLabel(null)).toBe("")
+	expect(toAgeLabel(daysAgo(0))).toBe("today")
+	// days and weeks
+	expect(toAgeLabel(daysAgo(6))).toBe("6d")
+	expect(toAgeLabel(daysAgo(7))).toBe("1w")
+	expect(toAgeLabel(daysAgo(29))).toBe("4w")
+	// months and years, including the boundaries
+	expect(toAgeLabel(daysAgo(30))).toBe("1mo")
+	expect(toAgeLabel(daysAgo(364))).toBe("12mo")
+	expect(toAgeLabel(daysAgo(365))).toBe("1y")
+	expect(toAgeLabel(daysAgo(900))).toBe("2y")
+})
+
+test("durationMsBetween measures the span, or reads null while unfinished", () => {
+	expect(durationMsBetween("2026-07-21T00:00:00.000Z", "2026-07-21T00:02:00.000Z")).toBe(120_000)
+	expect(durationMsBetween("2026-07-21T00:00:00.000Z", null)).toBeNull()
+})
+
+test("toDurationLabel reads seconds under a minute and minutes above", () => {
+	// null and negative spans render as nothing
+	expect(toDurationLabel(null)).toBe("")
+	expect(toDurationLabel(-1000)).toBe("")
+	// whole seconds under a minute
+	expect(toDurationLabel(45_000)).toBe("45s")
+	// whole minutes drop the trailing decimal, fractional minutes keep one
+	expect(toDurationLabel(180_000)).toBe("3 min")
+	expect(toDurationLabel(264_000)).toBe("4.4 min")
+})
+
+test("toTimeLabel leaves the hour unpadded and crosses noon and midnight", () => {
+	expect(toTimeLabel("09:00")).toBe("9:00 AM")
+	expect(toTimeLabel("00:00")).toBe("12:00 AM")
+	expect(toTimeLabel("12:00")).toBe("12:00 PM")
+	expect(toTimeLabel("23:30")).toBe("11:30 PM")
+})
+
+test("toScheduleLabel names the day only for weekly", () => {
+	expect(toScheduleLabel("daily", "09:00", "monday")).toBe("Daily at 9:00 AM")
+	expect(toScheduleLabel("weekdays", "09:00", "monday")).toBe("Weekdays at 9:00 AM")
+	expect(toScheduleLabel("weekly", "09:00", "friday")).toBe("Weekly on Friday at 9:00 AM")
+})
+
+// a clock label pads the seconds and adds the hours from one hour up
+test("toClockLabel reads minutes and seconds, and hours from one hour up", () => {
+	expect(toClockLabel(0)).toBe("0:00")
+	expect(toClockLabel(230.7)).toBe("3:50")
+	expect(toClockLabel(1690)).toBe("28:10")
+	expect(toClockLabel(3723)).toBe("1:02:03")
+})
+
+// a duration label rounds to whole minutes and shows at least one minute
+test("toPodcastEpisodeDurationLabel rounds to whole minutes, and never reads zero", () => {
+	expect(toPodcastEpisodeDurationLabel(1690)).toBe("28 min")
+	expect(toPodcastEpisodeDurationLabel(20)).toBe("1 min")
+	expect(toPodcastEpisodeDurationLabel(null)).toBe("1 min")
+})
+
+// the team scope widens bookmarked to every member's saves, and mine keeps only the user's own
+test("matchesTopicFindingFilter's team scope includes a teammate's bookmark and mine excludes it", () => {
+	const teammateSaved = topicFinding({
+		isBookmarked: false,
+		teamBookmarks: [{ userId: "u2", username: "teammate", avatarSource: null, avatarVersion: null }],
+	})
+	expect(matchesTopicFindingFilter(teammateSaved, "bookmarked", "team")).toBe(true)
+	expect(matchesTopicFindingFilter(teammateSaved, "bookmarked", "mine")).toBe(false)
+	// the user's own bookmark shows under either scope
+	expect(matchesTopicFindingFilter(topicFinding({ isBookmarked: true }), "bookmarked", "team")).toBe(true)
+})
+
+// a topic finding fixture for the view and sort helpers. overrides set the fields that a test case exercises
+function topicFinding(overrides: Partial<TopicFinding>): TopicFinding {
+	return {
+		// identity and resource metadata. publishedAt and fetchedAt are what the recency sorts read
+		findingId: "f",
+		scanId: "s",
+		resourceId: "r",
+		url: "https://example.com/a",
+		resourceKind: "read",
+		title: null,
+		source: null,
+		faviconPath: null,
+		publishedAt: null,
+		fetchedAt: "2026-07-01T00:00:00.000Z",
+		// the review, signals, and per-user states the helpers read
+		viewCount: 0,
+		relevanceScore: 0,
+		relevanceExplanation: "",
+		rating: null,
+		engagement: null,
+		isConsumed: false,
+		isBookmarked: false,
+		teamBookmarks: [],
+		...overrides,
+	}
+}
+
+// each view keeps its own slice: all keeps everything, unread drops consumed, bookmarked keeps bookmarks only
+test("matchesTopicFindingFilter filters by the active view", () => {
+	const consumedTopicFinding = topicFinding({ isConsumed: true })
+	const bookmarkedTopicFinding = topicFinding({ isBookmarked: true })
+	expect(matchesTopicFindingFilter(consumedTopicFinding, "all")).toBe(true)
+	expect(matchesTopicFindingFilter(consumedTopicFinding, "unread")).toBe(false)
+	expect(matchesTopicFindingFilter(consumedTopicFinding, "bookmarked")).toBe(false)
+	expect(matchesTopicFindingFilter(bookmarkedTopicFinding, "bookmarked")).toBe(true)
+})
+
+// a finding rated thumbs down shows only in the rated down view, and that view shows nothing else
+test("matchesTopicFindingFilter shows a finding rated down only in the rated down view", () => {
+	const ratedDownTopicFinding = topicFinding({ rating: "down", isBookmarked: true })
+	expect(matchesTopicFindingFilter(ratedDownTopicFinding, "all")).toBe(false)
+	expect(matchesTopicFindingFilter(ratedDownTopicFinding, "unread")).toBe(false)
+	expect(matchesTopicFindingFilter(ratedDownTopicFinding, "bookmarked")).toBe(false)
+	expect(matchesTopicFindingFilter(ratedDownTopicFinding, "ratedDown")).toBe(true)
+	expect(matchesTopicFindingFilter(topicFinding({ rating: "up" }), "ratedDown")).toBe(false)
+})
+
+// bookmarked findings pin first in every mode, and each group orders internally by the active sort
+test("toSortedTopicFindings pins bookmarks and sorts each group", () => {
+	const pinnedLow = topicFinding({ findingId: "pinned-low", relevanceScore: 0.1, isBookmarked: true })
+	const keptHigh = topicFinding({ findingId: "kept-high", relevanceScore: 0.9 })
+	const keptLow = topicFinding({ findingId: "kept-low", relevanceScore: 0.5 })
+	// the pinned row leads despite its lower relevance, and the unbookmarked group sorts among itself
+	const relevantOrder = toSortedTopicFindings([keptLow, keptHigh, pinnedLow], "relevant")
+	expect(relevantOrder.map((finding) => finding.findingId)).toEqual(["pinned-low", "kept-high", "kept-low"])
+})
+
+// the homepage and the topic page build a topic's list from separately queried rows
+test("toSortedTopicFindings breaks relevance ties the same way no matter what the incoming order", () => {
+	const tiedFindings = [
+		topicFinding({ findingId: "b", relevanceScore: 1, publishedAt: "2026-07-01T00:00:00.000Z" }),
+		topicFinding({ findingId: "a", relevanceScore: 1, publishedAt: "2026-07-01T00:00:00.000Z" }),
+		topicFinding({ findingId: "c", relevanceScore: 1, publishedAt: "2026-07-20T00:00:00.000Z" }),
+	]
+	// the newest of the tied findings leads, and the two sharing a date sort by id instead of by arrival
+	const relevantIds = toSortedTopicFindings(tiedFindings, "relevant").map((finding) => finding.findingId)
+	expect(relevantIds).toEqual(["c", "a", "b"])
+	const reversedIds = toSortedTopicFindings([...tiedFindings].reverse(), "relevant").map((finding) => finding.findingId)
+	expect(reversedIds).toEqual(relevantIds)
+})
+
+// trending ranks sort by engagement value first, and findings without one fall back to recency
+test("toSortedTopicFindings trending falls back to newest without an engagement value", () => {
+	const hot = topicFinding({ findingId: "hot", engagement: 500, publishedAt: "2026-07-01T00:00:00.000Z" })
+	const mild = topicFinding({ findingId: "mild", engagement: 20, publishedAt: "2026-07-10T00:00:00.000Z" })
+	const newer = topicFinding({ findingId: "newer", publishedAt: "2026-07-20T00:00:00.000Z" })
+	const older = topicFinding({ findingId: "older", publishedAt: "2026-07-05T00:00:00.000Z" })
+	// engagement values rank first by size, then the rest order by recency
+	const trendingOrder = toSortedTopicFindings([older, newer, mild, hot], "trending")
+	expect(trendingOrder.map((finding) => finding.findingId)).toEqual(["hot", "mild", "newer", "older"])
+})
+
+// the recap placeholder shows still-reading only while the scan runs, or a call to action for the budget wall
+test("toScanRecapPlaceholder matches the scan outcome", () => {
+	expect(toScanRecapPlaceholder({ status: "running", error: null, stoppedAt: null })).toBe(
+		"I'm on my fifteenth mug.\nThe internet was busy today…",
+	)
+	// a failed scan names the budget wall by its own error text
+	expect(toScanRecapPlaceholder({ status: "failed", error: "Budget has been exceeded!", stoppedAt: null })).toBe(
+		"Today I ran out of coffee.",
+	)
+	// any other failure gets the plain line
+	expect(toScanRecapPlaceholder({ status: "failed", error: "connection rejected", stoppedAt: null })).toBe(
+		"This one didn't brew.",
+	)
+
+	// a succeeded scan whose report call threw an error still has its findings, so it must not show still-reading
+	expect(toScanRecapPlaceholder({ status: "succeeded", error: null, stoppedAt: null })).toBe(
+		"No entry for this one.\nThe raccoon stole my keyboard.\nFindings are there though.",
+	)
+
+	// a stopped scan closes as succeeded, so only its stoppedAt tells it apart from one that had no note written
+	expect(toScanRecapPlaceholder({ status: "succeeded", error: null, stoppedAt: "2026-07-24T12:01:00.000Z" })).toBe(
+		"Carl stopped brewing.\nThis was in the pot.",
+	)
+})
+
+// a url written plainly in the prompt is offered as a Source
+test("a url in the prompt is offered", () => {
+	expect(toPossibleSourceUrls("read https://example.com/post", [], [])).toEqual(["https://example.com/post"])
+})
+
+// the sentence's own punctuation is not part of the address
+test("trailing sentence punctuation is not part of the url", () => {
+	expect(toPossibleSourceUrls("read https://example.com/post.", [], [])).toEqual(["https://example.com/post"])
+	expect(toPossibleSourceUrls("read https://example.com/post, then rest", [], [])).toEqual(["https://example.com/post"])
+})
+
+// a bracket the url opened belongs to it, and one the sentence opened does not
+test("brackets are kept or dropped by whether the url opened them", () => {
+	expect(toPossibleSourceUrls("see https://en.wikipedia.org/wiki/Ruby_(gem)", [], [])).toEqual([
+		"https://en.wikipedia.org/wiki/Ruby_(gem)",
+	])
+	expect(toPossibleSourceUrls("(see https://example.com/post)", [], [])).toEqual(["https://example.com/post"])
+})
+
+// a pasted address may have an upper-case scheme
+test("an upper-case scheme still matches", () => {
+	expect(toPossibleSourceUrls("read HTTPS://example.com/post", [], [])).toEqual(["HTTPS://example.com/post"])
+})
+
+// a url that is already a Source has nothing to offer
+test("a url that is already a source is not offered", () => {
+	const keptSources = [{ sourceKind: "url", config: { url: "https://example.com/post" } }]
+	expect(toPossibleSourceUrls("read https://example.com/post", keptSources, [])).toEqual([])
+	const addedSources = [{ optionKey: "url", value: "https://example.com/post" }]
+	expect(toPossibleSourceUrls("read https://example.com/post", [], addedSources)).toEqual([])
+})
+
+// the same url written twice is offered once
+test("a repeated url is offered once", () => {
+	expect(toPossibleSourceUrls("https://example.com/a and https://example.com/a", [], [])).toEqual([
+		"https://example.com/a",
+	])
+})
+
+// a redirect path stays on this site: absolute urls, protocol-relative, backslash, and control tricks all return "/"
+test("toSafeRedirectPath keeps a plain path and rejects everything that could leave the site", () => {
+	expect(toSafeRedirectPath("/topics/top_longevity")).toBe("/topics/top_longevity")
+	expect(toSafeRedirectPath(null)).toBe("/")
+	// every way out of the site comes home instead
+	expect(toSafeRedirectPath("https://evil.com")).toBe("/")
+
+	expect(toSafeRedirectPath("//evil.com")).toBe("/")
+	expect(toSafeRedirectPath("/\\evil.com")).toBe("/")
+	expect(toSafeRedirectPath("\\/evil.com")).toBe("/")
+	expect(toSafeRedirectPath("/\tevil.com")).toBe("/")
+})
+
+// sign-in returns to the authorize endpoint with the whole oauth query
+test("an oauth query returns to the authorize endpoint with the query intact", () => {
+	const searchParams = new URLSearchParams({
+		client_id: "client-1",
+		redirect_uri: "http://localhost:9999/callback",
+		response_type: "code",
+		state: "s1",
+	})
+	expect(toAuthorizeReturnPath(searchParams)).toBe(`/api/auth/mcp/authorize?${searchParams.toString()}`)
+})
+
+// a visit with only a next parameter, or only a client id, returns null
+test("a visit without the oauth parameters returns no authorize path", () => {
+	expect(toAuthorizeReturnPath(new URLSearchParams({ next: "/topics/topic-1" }))).toBeNull()
+	expect(toAuthorizeReturnPath(new URLSearchParams({ client_id: "client-1" }))).toBeNull()
+})
+
+// a primary click with no modifier key is the app's to handle, and a modified or secondary click is the browser's
+test("shouldHandleLinkClick accepts only a primary click with no modifier key", () => {
+	const primaryClick = { button: 0, metaKey: false, ctrlKey: false, shiftKey: false, altKey: false }
+	expect(shouldHandleLinkClick(primaryClick)).toBe(true)
+	expect(shouldHandleLinkClick({ ...primaryClick, metaKey: true })).toBe(false)
+	expect(shouldHandleLinkClick({ ...primaryClick, altKey: true })).toBe(false)
+	expect(shouldHandleLinkClick({ ...primaryClick, button: 1 })).toBe(false)
+})
+
+// the app's click runs the action and keeps the browser from following the link, and a modified click does neither
+test("toLinkClickHandler runs its action only on a click the app handles", () => {
+	// count the action's runs and the links it stopped
+	let actionCount = 0
+	let preventDefaultCount = 0
+	const handleClick = toLinkClickHandler(() => {
+		actionCount += 1
+	})
+	const preventDefault = (): void => {
+		preventDefaultCount += 1
+	}
+
+	// a primary click, then the same click with the command key
+	const primaryClick = { button: 0, metaKey: false, ctrlKey: false, shiftKey: false, altKey: false }
+	handleClick({ ...primaryClick, preventDefault })
+	handleClick({ ...primaryClick, metaKey: true, preventDefault })
+
+	// only the primary click ran the action and stopped the link
+	expect(actionCount).toBe(1)
+	expect(preventDefaultCount).toBe(1)
+})

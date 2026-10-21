@@ -1,0 +1,22 @@
+{
+	"name": "@carlnotes/worker",
+	"version": "0.1.0",
+	"private": true,
+	"type": "module",
+	"dependencies": {
+		"@carlnotes/contracts": "workspace:*",
+		"@carlnotes/db": "workspace:*",
+		"@carlnotes/emails": "workspace:*",
+		"@carlnotes/models": "workspace:*",
+		"@carlnotes/pipeline": "workspace:*",
+		"@carlnotes/server": "workspace:*",
+		"@langfuse/tracing": "^5.13.1",
+		"@temporalio/activity": "^1.24.0",
+		"@temporalio/worker": "^1.24.0",
+		"@temporalio/workflow": "^1.24.0",
+		"drizzle-orm": "^0.45.4"
+	},
+	"devDependencies": {
+		"ai": "^7.0.137"
+	}
+}

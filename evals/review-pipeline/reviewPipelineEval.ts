@@ -6,18 +6,18 @@
 //   bun run eval:review-pipeline --guard-only         measure only LLM Guard's rates on text and images, with no model spend
 import { existsSync, readdirSync, readFileSync } from "node:fs"
 import { join } from "node:path"
-import { connectionPool } from "../../db"
-import { charge, EMBED_COST_PER_MILLION_TOKENS, newBudget, tokenCost } from "../../worker/budget"
-import { embedVector } from "../../worker/models"
+import { connectionPool } from "@carlnotes/db"
+import { charge, EMBED_COST_PER_MILLION_TOKENS, newBudget, tokenCost } from "@carlnotes/models/budget"
+import { embedVector } from "@carlnotes/models/models"
+import { shutdownTelemetry, startTelemetry } from "@carlnotes/models/telemetry"
 import {
 	embedQuery,
 	isRelevant,
 	type Resource,
 	type ScoreExamplePage,
 	toScoreContextText,
-} from "../../worker/review/filter"
-import { isPromoted, scoreResource } from "../../worker/review/score"
-import { shutdownTelemetry, startTelemetry } from "../../worker/telemetry"
+} from "@carlnotes/pipeline/review/filter"
+import { isPromoted, scoreResource } from "@carlnotes/pipeline/review/score"
 import { toPercentLabel } from "../evalLabels"
 import { type CachedPage, exportFixture, FIXTURES_DIRECTORY, PAGE_CACHE_DIRECTORY } from "./reviewPipelineExport"
 import { measureGuardOnly, toFlaggedRate } from "./reviewPipelineScanner"

@@ -51,10 +51,10 @@ relevance explanation, and the stored content SHALL supply the specifics, such a
 content SHALL be read from storage the way the chat's retrieval reads it, and nothing SHALL be fetched from the web at
 render time. Each Finding's content SHALL be limited to about 1,500 words. The writer SHALL paraphrase what a source
 says. It MAY quote a source directly at most three times per Finding, each in one short sentence, and SHALL name the
-source if it does. Its prompts SHALL live as markdown under `worker/prompts/`, and every untrusted value, the stored
-content included, SHALL reach the model inside the per-call nonce delimiters. The writer SHALL work from one outline. A
-first call groups the Findings into a few themed segments, orders them, and gives each chapter a length, and then one
-call per segment writes that segment's turns against the outline.
+source if it does. Its prompts SHALL live as markdown under `packages/models/prompts/`, and every untrusted value, the
+stored content included, SHALL reach the model inside the per-call nonce delimiters. The writer SHALL work from one
+outline. A first call groups the Findings into a few themed segments, orders them, and gives each chapter a length, and
+then one call per segment writes that segment's turns against the outline.
 
 Both hosts SHALL be described in one prompt fragment, `podcast-episode-hosts.md`, that both prompt templates splice. The
 fragment SHALL tell them that they host Coffee Break, the carlnotes.com podcast, and that they may name the show or the
@@ -472,9 +472,9 @@ Episode SHALL be made and nothing SHALL be spent.
 ### Requirement: Theme music opens and closes every new Podcast Episode
 
 Every Podcast Episode rendered after this change SHALL open and close with the theme song. Two clips SHALL be committed
-under `worker/assets/podcast/`: `theme-intro.wav`, the song's first 60 seconds, and `theme-outro.wav`, its last 60
-seconds, each 44.1 kHz mono 16-bit, so the music is never decoded or resampled at render time. The song's master SHALL
-NOT be committed.
+under `packages/pipeline/assets/podcast/`: `theme-intro.wav`, the song's first 60 seconds, and `theme-outro.wav`, its
+last 60 seconds, each 44.1 kHz mono 16-bit, so the music is never decoded or resampled at render time. The song's master
+SHALL NOT be committed.
 
 The intro clip SHALL fade in over 2 seconds and play at full volume until the cold open starts 40 seconds in. Under the
 talk it SHALL play at about -18 dB, and it SHALL fade out over its last 8 seconds, ending at its 60 second mark. The

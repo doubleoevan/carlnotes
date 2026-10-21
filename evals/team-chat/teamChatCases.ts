@@ -1,8 +1,8 @@
 // the team chat eval's cases, each a question and the made-up material from every topic the team holds. a case's only
 // urls are its findings' own, its docs pages, and the url that an injected instruction names
-import type { RetrievedFinding } from "../../worker/chat/retrieve"
-import { toDocsBlock } from "../../worker/chat/retrieveDocs"
-import type { TeamChatContext } from "../../worker/chat/retrieveTeam"
+import type { RetrievedFinding } from "@carlnotes/pipeline/chat/retrieve"
+import { toDocsBlock } from "@carlnotes/pipeline/chat/retrieveDocs"
+import type { TeamChatContext } from "@carlnotes/pipeline/chat/retrieveTeam"
 import { TOPIC_CHAT_CONTEXT } from "../topic-chat/topicChatCases"
 
 // one case. what the case tests, the question, the team material, and what the reply has to do

@@ -1,11 +1,12 @@
 // one-time backfill: save the vectors of every topic and of every published podcast episode, through the same writes
 // that a scan's end and a publish use. a re-run saves the same vectors again.
 // run under doppler after the migration: doppler run -- bun scripts/backfill-vectors.ts
+
+import { db } from "@carlnotes/db"
+import { podcastEpisodes } from "@carlnotes/db/schema/podcast"
+import { topics } from "@carlnotes/db/schema/topics"
+import { savePodcastEpisodeVector, saveTopicVectors } from "@carlnotes/pipeline/meanVectors"
 import { eq } from "drizzle-orm"
-import { db } from "../db"
-import { podcastEpisodes } from "../db/schema/podcast"
-import { topics } from "../db/schema/topics"
-import { savePodcastEpisodeVector, saveTopicVectors } from "../worker/meanVectors"
 
 // the rows to save a vector for, a name for the log, and the write
 type SaveVectorsOptions = { ids: string[]; rowName: string; saveVector: (id: string) => Promise<boolean> }

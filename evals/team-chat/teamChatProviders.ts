@@ -1,13 +1,14 @@
 // the team chat eval's promptfoo provider, which runs the reply writer under test
+
+import { toEmptyChatTurnToolCalls, toOpenNewTopicChatTool } from "@carlnotes/api/tool/chatTools"
+import { CHAT_COST_PER_MILLION_TOKENS, tokenCost } from "@carlnotes/models/budget"
+import { chatModel } from "@carlnotes/models/models"
+import { toModelMessages } from "@carlnotes/pipeline/chat/chatMessages"
+import { buildTeamChatPrompt } from "@carlnotes/pipeline/chat/chatPrompts"
+import { MAX_TURN_STEPS, toStepsText } from "@carlnotes/pipeline/chat/index"
+import { webSearchTool } from "@carlnotes/pipeline/chat/search"
 import { generateText, stepCountIs } from "ai"
 import type { ApiProvider, CallApiContextParams, ProviderResponse } from "promptfoo"
-import { toEmptyChatTurnToolCalls, toOpenNewTopicChatTool } from "../../api/tool/chatTools"
-import { CHAT_COST_PER_MILLION_TOKENS, tokenCost } from "../../worker/budget"
-import { MAX_TURN_STEPS, toStepsText } from "../../worker/chat"
-import { toModelMessages } from "../../worker/chat/chatMessages"
-import { buildTeamChatPrompt } from "../../worker/chat/chatPrompts"
-import { webSearchTool } from "../../worker/chat/search"
-import { chatModel } from "../../worker/models"
 import type { TeamChatCase } from "./teamChatCases"
 
 // the variables that a case gives the reply writer. the question and the team material

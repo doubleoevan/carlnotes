@@ -1,7 +1,7 @@
 // review pipeline eval smoke: runs one tiny labeled fixture through the real review path, the same embedding, relevance
 // gate, and tiered scoring a Scan uses. Proves the pipeline works end to end before anyone labels a 50-resource
 // corpus. it makes a handful of paid model calls (pennies), so it is owner-run and never part of bun test: bun run smoke:eval
-import { shutdownTelemetry, startTelemetry } from "../../worker"
+import { shutdownTelemetry, startTelemetry } from "@carlnotes/models/telemetry"
 import { type EvalFixture, measureFixture } from "./reviewPipelineEval"
 
 // a topic and four labeled Resources: two squarely on-topic, one adjacent, one from a different world entirely.

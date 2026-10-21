@@ -1,5 +1,5 @@
 # the scanner set the llm-guard container runs. one pass reports every scanner's score, and the app reads only
-# the detectors that belong to the layer it is screening (worker/guard.ts owns that mapping).
+# the detectors that belong to the layer it is screening (packages/models/guard.ts owns that mapping).
 #
 # thresholds here stay permissive on purpose: the app decides what counts as a hit from LLM_GUARD_INJECTION_THRESHOLD,
 # whose value comes from the eval harness's measured false-positive rate on articles that discuss prompt injection in benign prose.

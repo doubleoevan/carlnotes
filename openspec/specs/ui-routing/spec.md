@@ -5,7 +5,7 @@ TBD - created by archiving change move-ui-to-tanstack-start. Update Purpose afte
 ## Requirements
 ### Requirement: The ui routes are files under a route tree
 
-The ui SHALL declare its routes as files under `ui/src/routes`, one file per route, with the route tree generated from that directory. Every page under `ui/src/pages` SHALL have a route file, except `NotFoundPage`, which the `_layout` route renders as its `notFoundComponent`.
+The ui SHALL declare its routes as files under `apps/web/src/routes`, one file per route, with the route tree generated from that directory. Every page under `apps/web/src/pages` SHALL have a route file, except `NotFoundPage`, which the `_layout` route renders as its `notFoundComponent`.
 
 A literal path passed to the router's own `Link` or `useNavigate` SHALL be type-checked against the route tree, so a literal path that no route serves fails to compile instead of resolving to the not-found route at runtime. A path passed to `AnchorLink` as a string href is not type-checked.
 
@@ -47,7 +47,7 @@ A server-rendered route SHALL read its data in a loader that calls the api over 
 
 #### Scenario: A value import across the boundary is rejected
 
-- **WHEN** code under `ui/src` imports the api, the worker, or the database as a value
+- **WHEN** code under `apps/web/src` imports the api, the worker, or the database as a value
 - **THEN** the preflight check fails, whether or not that import would have worked on the server
 
 ### Requirement: A route behind sign-in redirects a signed-out visitor

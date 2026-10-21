@@ -39,19 +39,19 @@ files:
 `grader-calibration/` has no rubrics file, and keeps one cases file for each eval that it calibrates.
 
 `evalHarness.ts` is the plumbing that the evals share. It turns the prompt registry off as soon as an eval imports the
-harness, so every eval reads the templates in `worker/prompts/` and measures an edit on its next run. It runs the cases
-four at a time and grades each rubric with the grader that the eval names. It prints the report with the eval's pass
-rate, its 95% interval, and whether the run clears the eval's gate. It writes the full results to
+harness, so every eval reads the templates in `packages/models/prompts/` and measures an edit on its next run. It runs
+the cases four at a time and grades each rubric with the grader that the eval names. It prints the report with the
+eval's pass rate, its 95% interval, and whether the run clears the eval's gate. It writes the full results to
 `logs/eval-<name>.json`, and it exits with a failure if the pass rate falls below the gate. A local run also saves the
 pass count, the commit, whether the working tree had changes, and the writer's and the grader's models to
 `results/<name>.json`, and rebuilds `results/badge.json` from every eval's saved count, which the root README's evals
-badge reads through shields.io. The harness also holds the rubric assertions and the tool call recorder.
-`evalChecks.ts` holds the grading result that every check in code returns, the no-markdown check that the topic
-chat and podcast chat evals run on a spoken answer, and the chat reply checks and case line that the topic chat and team
-chat evals share. `evalReplies.ts` holds what several evals read from a reply: its links, checked against what the chat
-may link, its prose paragraphs, and its markdown markup. `evalLabels.ts` holds a percentage, a word count, a run's
-writing cost, and a chat turn's tool names. None of those three files sets anything up on import, so any eval can import
-them without the harness.
+badge reads through shields.io. The harness also holds the rubric assertions and the tool call recorder. `evalChecks.ts`
+holds the grading result that every check in code returns, the no-markdown check that the topic chat and podcast chat
+evals run on a spoken answer, and the chat reply checks and case line that the topic chat and team chat evals share.
+`evalReplies.ts` holds what several evals read from a reply: its links, checked against what the chat may link, its
+prose paragraphs, and its markdown markup. `evalLabels.ts` holds a percentage, a word count, a run's writing cost, and a
+chat turn's tool names. None of those three files sets anything up on import, so any eval can import them without the
+harness.
 
 Every output gets two kinds of checks:
 

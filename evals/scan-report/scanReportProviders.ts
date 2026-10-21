@@ -1,8 +1,9 @@
 // the scan report eval's promptfoo provider, which runs the report writer under test
+
+import { newBudget } from "@carlnotes/models/budget"
+import { summarizeTopicScan } from "@carlnotes/pipeline/review/summarize"
+import { emptyReviewOutcome } from "@carlnotes/pipeline/review/track"
 import type { ApiProvider, CallApiContextParams, ProviderResponse } from "promptfoo"
-import { newBudget } from "../../worker/budget"
-import { summarizeTopicScan } from "../../worker/review/summarize"
-import { emptyReviewOutcome } from "../../worker/review/track"
 import type { ScanReportCase } from "./scanReportCases"
 
 // the variables that a case gives the writer. everything in the case except its description and its rubric

@@ -1,0 +1,39 @@
+// signed one-click unsubscribe tokens for the topic-scan email
+import { isSameSignature, toAuthSecretSignature } from "@carlnotes/server/hmac"
+
+// an unsubscribe token includes the recipient and the topic to drop them from
+type UnsubscribePayload = { userId: string; topicId: string }
+
+// sign a token that unsubscribes this user from this topic. the worker creates one per recipient at email-send time
+export async function signUnsubscribeToken(unsubscribePayload: UnsubscribePayload): Promise<string> {
+	// a base64url payload plus its signature, joined by a dot
+	const encodedPayload = Buffer.from(JSON.stringify(unsubscribePayload)).toString("base64url")
+	return `${encodedPayload}.${toSignature(encodedPayload)}`
+}
+
+// verify a token's signature and shape, returning its payload or null if either is wrong
+export async function verifyUnsubscribeToken(token: string): Promise<UnsubscribePayload | null> {
+	// split the payload from its signature and reject a tampered or malformed token
+	const [encodedPayload, signature] = token.split(".")
+	if (
+		!encodedPayload ||
+		!signature ||
+		!isSameSignature({ expectedSignature: toSignature(encodedPayload), signature })
+	) {
+		return null
+	}
+
+	// the signature holds, so decode the payload and require both fields
+	try {
+		const unsubscribePayload = JSON.parse(Buffer.from(encodedPayload, "base64url").toString()) as UnsubscribePayload
+		return unsubscribePayload.userId && unsubscribePayload.topicId ? unsubscribePayload : null
+	} catch {
+		return null
+	}
+}
+
+// HMAC-SHA256 of the value keyed on the app auth secret, base64url-encoded
+function toSignature(value: string): string {
+	// the app auth secret keys the signature, so a token can't be forged without it
+	return toAuthSecretSignature({ value, purpose: "unsubscribe tokens", encoding: "base64url" })
+}

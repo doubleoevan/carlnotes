@@ -1,0 +1,70 @@
+// scan failure tests: what a stored reason reads as, and that the real cause survives Temporal's wrapper
+import { expect, test } from "bun:test"
+import {
+	FIRST_SCAN_PAUSED_REASON,
+	FIRST_SCAN_SPENT_BUDGET_REASON,
+	isBudgetError,
+	MANUAL_SCAN_PAUSED_LABEL,
+	SCAN_SPENT_BUDGET_LABEL,
+	SCHEDULED_SCAN_SPENT_BUDGET_REASON,
+	toScanFailureLabel,
+	toWorkflowFailureReason,
+} from "./scanFailure"
+
+// the proxy's rejection, as it reaches the workflow: wrapped by the AI sdk's retry and then by temporal
+function temporalFailure(): Error {
+	const budgetError = new Error(
+		"AI_APICallError: Budget has been exceeded! Key=user:reader@example.com Current cost: 3.008, Max budget: 3.0",
+	)
+	const retryError = new Error("Failed after 3 attempts. Last error: Budget has been exceeded!", { cause: budgetError })
+	// temporal's own failure says only that an activity failed, with the real reason one level down
+	return new Error("Activity task failed", { cause: retryError })
+}
+
+/**
+ * Temporal's outer message is "Activity task failed" on every failed scan, which no budget rule can match.
+ * The reason has to come from the cause chain instead.
+ */
+test("the stored reason comes from the cause, not temporal's wrapper", () => {
+	const reason = toWorkflowFailureReason(temporalFailure())
+	expect(reason).toContain("Budget has been exceeded")
+	expect(reason).not.toBe("Activity task failed")
+
+	// and that reason is what turns the scan into a budget failure the user can act on
+	expect(isBudgetError(reason)).toBe(true)
+	expect(toScanFailureLabel(reason)).toBe("Carl hit this month's coffee budget.")
+	// temporal's own message is not a budget failure
+	expect(isBudgetError("Activity task failed")).toBe(false)
+})
+
+// the reason that the sweep saves for an owner whose budget is spent reads as the budget label
+test("the scheduled Scan's budget reason reads as the budget label", () => {
+	expect(isBudgetError(SCHEDULED_SCAN_SPENT_BUDGET_REASON)).toBe(true)
+	expect(toScanFailureLabel(SCHEDULED_SCAN_SPENT_BUDGET_REASON)).toBe(SCAN_SPENT_BUDGET_LABEL)
+	expect(SCAN_SPENT_BUDGET_LABEL).toBe("Carl hit this month's coffee budget.")
+})
+
+// the reason stored on a first Scan whose owner's budget is spent reads as the budget label
+test("the first Scan's budget reason reads as the budget label", () => {
+	expect(isBudgetError(FIRST_SCAN_SPENT_BUDGET_REASON)).toBe(true)
+	expect(toScanFailureLabel(FIRST_SCAN_SPENT_BUDGET_REASON)).toBe(SCAN_SPENT_BUDGET_LABEL)
+})
+
+// the reason stored on a first Scan past the manual scans cutoff reads as the paused label, and is not a spent budget
+test("the first Scan's paused reason reads as the paused manual scan label", () => {
+	expect(isBudgetError(FIRST_SCAN_PAUSED_REASON)).toBe(false)
+	expect(toScanFailureLabel(FIRST_SCAN_PAUSED_REASON)).toBe(MANUAL_SCAN_PAUSED_LABEL)
+})
+
+// a failure with nothing wrapped keeps its own message
+test("an unwrapped failure keeps its message", () => {
+	expect(toWorkflowFailureReason(new Error("every source rejected"))).toBe("every source rejected")
+	expect(toWorkflowFailureReason("a plain string")).toBe("a plain string")
+})
+
+// a cause that points back at itself must not spin the walk
+test("a self-referencing cause terminates", () => {
+	const circular: Error & { cause?: unknown } = new Error("the outer one")
+	circular.cause = circular
+	expect(toWorkflowFailureReason(circular)).toBe("the outer one")
+})

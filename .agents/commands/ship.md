@@ -33,10 +33,10 @@ read" list.
 
 Backward, from the docs: every path named in an AGENTS.md still has to exist.
 
-    grep -rnoE '`[a-zA-Z0-9_./-]+/`' AGENTS.md */AGENTS.md | tr -d '`'
+    grep -rnoE '`[a-zA-Z0-9_./-]+/`' AGENTS.md apps/*/AGENTS.md packages/*/AGENTS.md | tr -d '`'
 
 Each hit prints as `file:line:path`, and the path reads relative to that
-module, so `pages/` in `ui/AGENTS.md` is `ui/src/pages/`. Resolve each one
+module, so `pages/` in `apps/web/AGENTS.md` is `apps/web/src/pages/`. Resolve each one
 against its own module. A path that no longer resolves is drift the change
 introduced or left behind.
 
@@ -101,8 +101,8 @@ fields, each new string a user reads, and each repeated class list. A second
 copy gets a shared helper now (code-style rule 18).
 
 Put the shared piece where every caller can import it without side effects: a
-client for an api call, a `shared/contracts/` module for a type the api and the ui both
-read, `ui/src/lib/styleClasses.ts` for a class list. Leave apart code that only
+client for an api call, a `packages/contracts/` module for a type the api and the ui both
+read, `apps/web/src/lib/styleClasses.ts` for a class list. Leave apart code that only
 looks alike but means different things, and two components whose jobs differ
 enough that sharing would take a flag per difference. Fix every copy in this
 pass, rerun step 4, and report what was shared, where it now lives, and what was

@@ -37,8 +37,9 @@ carl-up to start, carl-down to stop.
 ### Gates
 
 Every push runs `scripts/preflight.sh` through the pre-push hook: Biome, the
-type check, and the test suite, all green or the push is rejected. Run the
-same gate anytime with `bun run check`. Never bypass with `--no-verify`.
+package boundary check, the type check, the workflow bundle check, and the
+test suite, all green or the push is rejected. Run the same gate anytime with
+`bun run check`. Never bypass with `--no-verify`.
 Edit-time hooks also block comment-discipline and structure violations as
 agents write; the rules live in `.agents/skills/`.
 

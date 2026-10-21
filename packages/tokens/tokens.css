@@ -1,0 +1,132 @@
+/* the design tokens: the theme that maps shadcn's and the app's own token names onto the palette, the Latte light
+   palette on :root, and the Dark roast palette under .dark */
+
+@theme inline {
+	/* fonts: Architects Daughter for display, Karla for body */
+	--font-sans: "Karla", ui-sans-serif, system-ui, sans-serif;
+	--font-display: "Architects Daughter", ui-sans-serif, cursive;
+	/* shadcn semantic tokens, mapped to the CarlNotes palette below */
+	--color-background: var(--background);
+	--color-sunken: var(--sunken);
+	--color-foreground: var(--foreground);
+	--color-card: var(--card);
+	--color-card-foreground: var(--card-foreground);
+	--color-popover: var(--popover);
+	--color-popover-foreground: var(--popover-foreground);
+	--color-primary: var(--primary);
+	--color-primary-foreground: var(--primary-foreground);
+	--color-secondary: var(--secondary);
+	--color-secondary-foreground: var(--secondary-foreground);
+	--color-muted: var(--muted);
+	--color-bubble: var(--bubble);
+	--color-muted-foreground: var(--muted-foreground);
+	--color-accent: var(--accent);
+	--color-accent-foreground: var(--accent-foreground);
+	--color-destructive: var(--destructive);
+	--color-border: var(--border);
+	--color-input: var(--input);
+	--color-ring: var(--ring);
+	/* CarlNotes extras: the hero band, the "# new" badge, links/expanders, dashed row separators */
+	--color-hero: var(--hero);
+	--color-hero-foreground: var(--hero-foreground);
+	--color-hero-muted: var(--hero-muted);
+	--color-hero-accent: var(--hero-accent);
+	--color-badge: var(--badge);
+	--color-link: var(--link);
+	--color-separator: var(--separator);
+	--color-separator-strong: var(--separator-strong);
+	--color-separator-sunken: var(--separator-sunken);
+	--color-spend-chat: var(--spend-chat);
+	--color-spend-podcast-episode: var(--spend-podcast-episode);
+	--radius-sm: calc(var(--radius) - 4px);
+	--radius-md: calc(var(--radius) - 2px);
+	--radius-lg: var(--radius);
+	--radius-xl: calc(var(--radius) + 4px);
+}
+
+/* Latte, light mode */
+:root {
+	--radius: 0.625rem;
+	--background: #e2d8c4;
+	/* the inset a subtable sits on, quieter than the card holding it. a step darker than the page behind the card */
+	--sunken: #d6c9ad;
+	--foreground: #332a22;
+	--card: #fffdf9;
+	--card-foreground: #332a22;
+	--popover: #fffdf9;
+	--popover-foreground: #332a22;
+	--primary: #d9974a;
+	--primary-foreground: #2a1c0f;
+	--secondary: #f4eee2;
+	--secondary-foreground: #75604a;
+	--muted: #efe6d8;
+	--muted-foreground: #7a6449;
+	/* the other party's chat bubble */
+	--bubble: #e2d8c4;
+	--accent: #e9dcc8;
+	--accent-foreground: #75604a;
+	--destructive: #b5433a;
+	--border: #dcccb6;
+	--input: #dcccb6;
+	--ring: #d9974a;
+	--hero: #3b2a1d;
+	--hero-foreground: #f3e9db;
+	--hero-muted: #b59c81;
+	/* the hero band stays dark in both themes. its highlight text is this same orange in both */
+	--hero-accent: #f09050;
+	--badge: #b5773a;
+	--link: #a35f2d;
+	/* the quiet dashes inside cards and popovers, and the stronger cut for row separators on the page itself */
+	--separator: #dcccb6;
+	--separator-strong: #c9b28b;
+	/* the rules inside a subtable, dark enough to show on the sunken fill */
+	--separator-sunken: #a68d64;
+	--ring-line: rgba(120, 96, 72, 0.18);
+	/* the budget's chat segment, espresso against the orange brews segment */
+	--spend-chat: #6b4a26;
+	/* the budget's podcast episode segment, a roast brown between the scan and chat segments */
+	--spend-podcast-episode: #a8703a;
+}
+
+/* Dark roast, dark mode. the background sits a step lighter and the cards a step darker */
+.dark {
+	--background: #584532;
+	/* a step darker than the page and the cards on it */
+	--sunken: #241a10;
+	--foreground: #f0e6d6;
+	--card: #302417;
+	--card-foreground: #f0e6d6;
+	--popover: #302417;
+	--popover-foreground: #f0e6d6;
+	--primary: #f09050;
+	--primary-foreground: #1a1511;
+	/* the pair colors small badge text. the contrast clears the 4.5:1 body-text ratio */
+	--secondary: #75593e;
+	--secondary-foreground: #eadfc6;
+	--muted: #54422f;
+	--muted-foreground: #c2b494;
+	/* the other party's chat bubble */
+	--bubble: #584532;
+	--accent: #5d4a35;
+	--accent-foreground: #c9ba99;
+	--destructive: #e0674f;
+	--border: #69553f;
+	--input: #69553f;
+	--ring: #f09050;
+	--hero: #0f0c09;
+	--hero-foreground: #f4ebdc;
+	--hero-muted: #b3a48c;
+	--hero-accent: #f09050;
+	--badge: #f09050;
+	--link: #f09050;
+	/* quiet inside cards and popovers, stronger between rows on the page, same split as light mode */
+	--separator: #614e39;
+	--separator-strong: #7b6449;
+	/* a subtable's rules reuse the border color */
+	--separator-sunken: #69553f;
+	--ring-line: rgba(201, 186, 153, 0.18);
+	/* the budget's chat segment, cream against the orange brews segment */
+	--spend-chat: #f0e6d6;
+	/* the budget's podcast episode segment, a caramel between the scan and chat segments */
+	--spend-podcast-episode: #c99a5b;
+}

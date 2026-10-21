@@ -1,7 +1,8 @@
 // the promptfoo eval of the podcast chat reply to a question asked from the podcast player, which makes real model
 // calls. run the eval with: bun run eval:podcast-chat
+
+import { chatModel } from "@carlnotes/models/models"
 import type { Assertion, AssertionValueFunctionContext, EvaluateResult, GradingResult, TestCase } from "promptfoo"
-import { chatModel } from "../../worker/models"
 import { NO_MARKDOWN_ASSERTION, toGradingResult } from "../evalChecks"
 import { runEval, toRubricAssertions, toRubricGrader } from "../evalHarness"
 import { toWriteCostLabel } from "../evalLabels"

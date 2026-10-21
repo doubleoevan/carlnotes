@@ -1,0 +1,20 @@
+{
+	"extends": "../../tsconfig.base.json",
+	"compilerOptions": {
+		"paths": {
+			"@/*": ["./src/*"]
+		}
+	},
+	"references": [
+		{
+			"path": "../../packages/client"
+		},
+		{
+			"path": "../../packages/contracts"
+		},
+		{
+			"path": "../../packages/core"
+		}
+	],
+	"include": ["src", "*.ts"]
+}

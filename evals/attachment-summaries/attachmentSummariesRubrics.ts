@@ -1,7 +1,8 @@
 // the attachment summaries eval's grader and rubrics, and the attachment that the grader reads after each rubric.
 // the output's shape and the material's label depend on the attachment's kind
-import { buildContextPrompt } from "../../worker/attach"
-import { scoreModel } from "../../worker/models"
+
+import { scoreModel } from "@carlnotes/models/models"
+import { buildContextPrompt } from "@carlnotes/pipeline/attach"
 import type { AttachmentSummariesVariables } from "./attachmentSummariesProviders"
 
 // the kinds of attachment that the writers summarize: document, image

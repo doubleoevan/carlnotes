@@ -1,14 +1,14 @@
 // bundle every temporal workflow the way the worker does. a bad import fails the gate, not production.
 //
-// the worker bundles workflow code with webpack, which resolves neither the @shared/* tsconfig alias nor
-// anything else only tsc understands. that makes `tsc -b` pass on code the worker cannot load,
-// and the first sign of it is temporal-worker crash-looping after a deploy. bundling here is the check that catches it.
+// the worker bundles workflow code with webpack, which resolves a workspace package through node_modules and nothing
+// that only tsc understands. that makes `tsc -b` pass on code the worker cannot load, and the first sign of it is
+// temporal-worker crash-looping after a deploy. bundling here is the check that catches it.
 import { readdirSync } from "node:fs"
 import { join } from "node:path"
 import { bundleWorkflowCode } from "@temporalio/worker"
 
 // the worker takes one workflowsPath per queue, and every one of them is a file in this directory
-const WORKFLOWS_DIRECTORY = join(import.meta.dir, "..", "worker", "workflows")
+const WORKFLOWS_DIRECTORY = join(import.meta.dir, "..", "apps", "worker", "workflows")
 
 // a workflow entry point is a .ts file that is not an activities module, the shared stage timeouts, or a test
 function toWorkflowPaths(): string[] {

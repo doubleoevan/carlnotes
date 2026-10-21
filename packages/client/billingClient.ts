@@ -1,0 +1,117 @@
+// the typed api client for the billing and admin routes
+import type { OwnerTopic } from "@carlnotes/contracts/activity"
+import type { AdminConsoleResponse } from "@carlnotes/contracts/admin"
+import type { BillingState } from "@carlnotes/contracts/profiles"
+import type { TeamPageResponse, TeamSummary } from "@carlnotes/contracts/teams"
+import { apiClient } from "./apiClient"
+
+// start Stripe Checkout for a plan and billing interval, returning the hosted page's url
+export async function fetchCheckoutUrl(
+	plan: "plus" | "premium",
+	billingInterval: "monthly" | "yearly",
+): Promise<string> {
+	const response = await apiClient().api.billing.checkout.$post({ json: { plan, billingInterval } })
+	if (!response.ok) {
+		throw new Error(`checkout failed: ${response.status}`)
+	}
+	const { url } = (await response.json()) as { url: string }
+	return url
+}
+
+// the Stripe Customer Portal's url, or null if there is no subscription to manage
+export async function fetchBillingPortalUrl(): Promise<string | null> {
+	const response = await apiClient().api.billing.portal.$post()
+	if (!response.ok) {
+		return null
+	}
+	const { url } = (await response.json()) as { url: string }
+	return url
+}
+
+// the current user's billing state for the account page
+export async function fetchBillingState(userId?: string): Promise<BillingState> {
+	// the user's own billing state, or another user's for an admin to view
+	const response = await apiClient().api.billing.state.$get({ query: userId ? { userId } : {} })
+	// a rejected read includes an error body, which would otherwise parse as a billing state
+	if (!response.ok) {
+		throw new Error(`billing state failed: ${response.status}`)
+	}
+	return (await response.json()) as BillingState
+}
+
+// the admin console payload: the users table and the totals summaries throws an error when the user is not an admin
+export async function fetchAdminConsole(): Promise<AdminConsoleResponse> {
+	const response = await apiClient().api.admin.console.$get()
+	if (!response.ok) {
+		throw new Error(`admin console failed: ${response.status}`)
+	}
+	return (await response.json()) as AdminConsoleResponse
+}
+
+// change a user's role from the admin table. returns false if the api rejects the change
+export async function sendUserRole(userId: string, role: "admin" | "user"): Promise<boolean> {
+	const response = await apiClient().api.admin.users[":id"].role.$post({ param: { id: userId }, json: { role } })
+	return response.ok
+}
+
+// one user's topics, read when an admin opens their row in the console
+export async function fetchAdminUserTopics(userId: string): Promise<OwnerTopic[]> {
+	const response = await apiClient().api.admin.users[":id"].topics.$get({ param: { id: userId } })
+	if (!response.ok) {
+		throw new Error(`admin user topics failed: ${response.status}`)
+	}
+	return ((await response.json()) as { topics: OwnerTopic[] }).topics
+}
+
+// one team's active members for the admin table's expandable row
+export async function fetchAdminTeamMembers(teamId: string): Promise<TeamPageResponse["members"]> {
+	const response = await apiClient().api.admin.teams[":id"].members.$get({ param: { id: teamId } })
+	if (!response.ok) {
+		throw new Error(`admin team members failed: ${response.status}`)
+	}
+	return ((await response.json()) as { members: TeamPageResponse["members"] }).members
+}
+
+// the teams a user belongs to, for the admin table's expandable row
+export async function fetchAdminUserTeams(userId: string): Promise<TeamSummary[]> {
+	const response = await apiClient().api.admin.users[":id"].teams.$get({ param: { id: userId } })
+	if (!response.ok) {
+		throw new Error(`admin user teams failed: ${response.status}`)
+	}
+	return ((await response.json()) as { teams: TeamSummary[] }).teams
+}
+
+// one team's topics for the admin table's expandable row
+export async function fetchAdminTeamTopics(teamId: string): Promise<OwnerTopic[]> {
+	const response = await apiClient().api.admin.teams[":id"].topics.$get({ param: { id: teamId } })
+	if (!response.ok) {
+		throw new Error(`admin team topics failed: ${response.status}`)
+	}
+	return ((await response.json()) as { topics: OwnerTopic[] }).topics
+}
+
+/**
+ * Set or clear a user's budget override in cents from the admin table.
+ * Throws on a rejection, and returns whether the proxy key was resized to the new budget.
+ */
+export async function sendUserBudgetOverride(
+	userId: string,
+	budgetOverrideCents: number | null,
+): Promise<{ isKeyResized: boolean }> {
+	const response = await apiClient().api.admin.users[":id"].budget.$post({
+		param: { id: userId },
+		json: { budgetOverrideCents },
+	})
+	if (!response.ok) {
+		throw new Error(`budget override failed: ${response.status}`)
+	}
+	return (await response.json()) as { isKeyResized: boolean }
+}
+
+// close another user's account from the admin console. throws an error on a rejection, so the table can show it failed
+export async function sendDeleteUser(userId: string): Promise<void> {
+	const response = await apiClient().api.admin.users[":id"].$delete({ param: { id: userId } })
+	if (!response.ok) {
+		throw new Error(`user delete failed: ${response.status}`)
+	}
+}

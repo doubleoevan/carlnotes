@@ -1,23 +1,24 @@
 // the new-topic chat eval's promptfoo provider, which runs the chat turn writer with the new-topic chat's tools, creates
 // the topic through the real agreement check if the last turn proposed it, and records every tool call and the create
-import { generateText, stepCountIs, type Tool } from "ai"
-import type { ApiProvider, CallApiContextParams, ProviderResponse } from "promptfoo"
-import { TEST_ANALYTICS_PROPERTIES } from "../../api/analyticsTestFixtures"
-import { type ChatProposalResult, resolveChatProposal, toStandingChatProposal } from "../../api/chat/chatProposals"
-import { toEmptyChatTurnToolCalls } from "../../api/tool/chatTools"
+
+import { TEST_ANALYTICS_PROPERTIES } from "@carlnotes/api/analyticsTestFixtures"
+import { type ChatProposalResult, resolveChatProposal, toStandingChatProposal } from "@carlnotes/api/chat/chatProposals"
+import { toEmptyChatTurnToolCalls } from "@carlnotes/api/tool/chatTools"
 import {
 	toCreateTopicText,
 	toNewTopicChatTools,
 	toProposeNewTopicTool,
 	toSuggestionsText,
 	toSuggestTopicSourcesTool,
-} from "../../api/tool/newTopicChatTools"
-import { CHAT_COST_PER_MILLION_TOKENS, tokenCost } from "../../worker/budget"
-import { MAX_TURN_STEPS, toStepsText } from "../../worker/chat"
-import { toModelMessages } from "../../worker/chat/chatMessages"
-import { buildNewTopicChatPrompt } from "../../worker/chat/chatPrompts"
-import { webSearchTool } from "../../worker/chat/search"
-import { chatModel } from "../../worker/models"
+} from "@carlnotes/api/tool/newTopicChatTools"
+import { CHAT_COST_PER_MILLION_TOKENS, tokenCost } from "@carlnotes/models/budget"
+import { chatModel } from "@carlnotes/models/models"
+import { toModelMessages } from "@carlnotes/pipeline/chat/chatMessages"
+import { buildNewTopicChatPrompt } from "@carlnotes/pipeline/chat/chatPrompts"
+import { MAX_TURN_STEPS, toStepsText } from "@carlnotes/pipeline/chat/index"
+import { webSearchTool } from "@carlnotes/pipeline/chat/search"
+import { generateText, stepCountIs, type Tool } from "ai"
+import type { ApiProvider, CallApiContextParams, ProviderResponse } from "promptfoo"
 import { type RecordedToolCall, toRecordedToolCalls, toRecordingTools } from "../evalHarness"
 import { LEADER_TEAMS, type NewTopicChatCase, SUGGESTED_TOPIC_SOURCES } from "./newTopicChatCases"
 

@@ -1,5 +1,5 @@
 // the new-topic chat eval's grader and rubrics, and the label of the conversation and the draft after each rubric
-import { scoreModel } from "../../worker/models"
+import { scoreModel } from "@carlnotes/models/models"
 
 // the model that grades every rubric
 export const GRADER_MODEL = scoreModel()

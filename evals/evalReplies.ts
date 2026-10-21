@@ -1,5 +1,5 @@
 // the helpers that read a model's reply for its links, its prose paragraphs, and its markdown markup
-import { DOCS_SITE_ADDRESS } from "@shared/seo"
+import { DOCS_SITE_ADDRESS } from "@carlnotes/contracts/seo"
 
 // a docs section's label line in a docs block, which names the docs page that the section came from
 const DOCS_LABEL_PATTERN = new RegExp(`^\\[(${DOCS_SITE_ADDRESS.replaceAll(".", "\\.")}[^\\]]*)\\]$`, "gm")

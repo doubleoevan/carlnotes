@@ -1,5 +1,5 @@
 // the team chat eval's grader and rubrics, and the label of the question and the team material after each rubric
-import { scoreModel } from "../../worker/models"
+import { scoreModel } from "@carlnotes/models/models"
 import { toChatSupportRubric } from "../topic-chat/topicChatRubrics"
 
 // the model that grades every rubric

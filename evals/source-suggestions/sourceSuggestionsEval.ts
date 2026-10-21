@@ -1,8 +1,9 @@
 // the promptfoo eval of the source suggester, which makes real calls on Exa, the models, and the suggested Sources.
 // run the eval with: bun run eval:source-suggestions
+
+import { cheapModel } from "@carlnotes/models/models"
+import type { SuggestedSource } from "@carlnotes/pipeline/suggest"
 import type { Assertion, EvaluateResult, GradingResult, TestCase } from "promptfoo"
-import { cheapModel } from "../../worker/models"
-import type { SuggestedSource } from "../../worker/suggest"
 import { toGradingResult } from "../evalChecks"
 import { runEval, toRubricAssertions, toRubricGrader } from "../evalHarness"
 import { toPercentLabel } from "../evalLabels"

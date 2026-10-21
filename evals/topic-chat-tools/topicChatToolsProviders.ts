@@ -1,22 +1,19 @@
 // the topic chat tools eval's promptfoo provider, which runs the chat turn writer with the tools that a user who may
 // edit the topic gets, and records every tool call and every save the server makes
-import { toWordsWithoutModelMention } from "@shared/chatMentions"
-import type { ChatToolCall } from "@shared/payloads"
-import { generateText, stepCountIs } from "ai"
-import type { ApiProvider, CallApiContextParams, ProviderResponse } from "promptfoo"
+
 import {
 	type ChatProposalResult,
 	resolveChatProposal,
 	toStandingChatProposal,
 	toTopicEditSaves,
-} from "../../api/chat/chatProposals"
+} from "@carlnotes/api/chat/chatProposals"
 import {
 	type ChatRoomTranscriptMessage,
 	EMPTY_CHAT_ROOM_ATTACHMENTS_BLOCK,
 	EMPTY_CHAT_ROOM_SUMMARY,
 	toChatRoomTranscriptLine,
 	toModelRoomQuestion,
-} from "../../api/chat/roomQuestion"
+} from "@carlnotes/api/chat/roomQuestion"
 import {
 	type ChatTurnToolCalls,
 	toAddTopicSourceText,
@@ -26,13 +23,17 @@ import {
 	toSavedTopicFieldsText,
 	toSavedTopicPromptText,
 	toTopicEditPreviewTools,
-} from "../../api/tool/chatTools"
-import { CHAT_COST_PER_MILLION_TOKENS, tokenCost } from "../../worker/budget"
-import { MAX_TURN_STEPS, toStepsText } from "../../worker/chat"
-import { toModelMessages } from "../../worker/chat/chatMessages"
-import { buildTopicChatPrompt, toEditTopicBlock } from "../../worker/chat/chatPrompts"
-import { webSearchTool } from "../../worker/chat/search"
-import { chatModel } from "../../worker/models"
+} from "@carlnotes/api/tool/chatTools"
+import { toWordsWithoutModelMention } from "@carlnotes/contracts/chatMentions"
+import type { ChatToolCall } from "@carlnotes/contracts/payloads"
+import { CHAT_COST_PER_MILLION_TOKENS, tokenCost } from "@carlnotes/models/budget"
+import { chatModel } from "@carlnotes/models/models"
+import { toModelMessages } from "@carlnotes/pipeline/chat/chatMessages"
+import { buildTopicChatPrompt, toEditTopicBlock } from "@carlnotes/pipeline/chat/chatPrompts"
+import { MAX_TURN_STEPS, toStepsText } from "@carlnotes/pipeline/chat/index"
+import { webSearchTool } from "@carlnotes/pipeline/chat/search"
+import { generateText, stepCountIs } from "ai"
+import type { ApiProvider, CallApiContextParams, ProviderResponse } from "promptfoo"
 import { type RecordedToolCall, toRecordedToolCalls, toRecordingTools } from "../evalHarness"
 import { BURRNOTES_TOPIC_SOURCE_LABEL, TOPIC_CHAT_CONTEXT } from "../topic-chat/topicChatCases"
 import type { TopicChatToolsCase } from "./topicChatToolsCases"

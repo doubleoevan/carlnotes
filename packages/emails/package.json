@@ -1,0 +1,23 @@
+{
+	"name": "@carlnotes/emails",
+	"version": "0.1.0",
+	"private": true,
+	"type": "module",
+	"exports": {
+		"./*": "./*.ts",
+		"./*-email": "./*-email.tsx"
+	},
+	"dependencies": {
+		"@carlnotes/contracts": "workspace:*",
+		"@carlnotes/db": "workspace:*",
+		"@carlnotes/server": "workspace:*",
+		"@react-email/components": "^1.0.12",
+		"@react-email/render": "^2.1.0",
+		"markdown-to-jsx": "^9.10.3",
+		"react": "^19.3.0",
+		"zod": "^4.6.6"
+	},
+	"devDependencies": {
+		"@types/react": "^19.3.0"
+	}
+}

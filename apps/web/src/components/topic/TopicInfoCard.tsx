@@ -1,0 +1,17 @@
+import type { TopicResponse } from "@carlnotes/contracts/topics"
+import { INFO_CARD_CLASS } from "@/lib/styleClasses"
+import { CollapsibleSection } from "./CollapsibleSection"
+import { TopicInfo } from "./TopicInfo"
+
+/**
+ * The topic page's info card shown under "Topic roast"
+ */
+export function TopicInfoCard({ topic, onMakeTopicPublic }: { topic: TopicResponse; onMakeTopicPublic?: () => void }) {
+	return (
+		<CollapsibleSection value="roast" title="Topic roast" className="min-w-0">
+			<div className={INFO_CARD_CLASS}>
+				<TopicInfo topic={topic} isCard onMakeTopicPublic={onMakeTopicPublic} />
+			</div>
+		</CollapsibleSection>
+	)
+}

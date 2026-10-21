@@ -1,10 +1,11 @@
 // the promptfoo eval of the topic chat's tool calls and the saves an agreed preview makes, in the solo chat and the team
 // room, which makes real model calls.
 // run the eval with: bun run eval:topic-chat-tools
-import { CANCEL_TOPIC_EDIT_TOOL, PROPOSE_TOPIC_EDIT_TOOL } from "@shared/contracts/chat"
+
+import { toChatRoomTranscriptLine } from "@carlnotes/api/chat/roomQuestion"
+import { CANCEL_TOPIC_EDIT_TOOL, PROPOSE_TOPIC_EDIT_TOOL } from "@carlnotes/contracts/chat"
+import { chatModel } from "@carlnotes/models/models"
 import type { Assertion, EvaluateResult, GradingResult, TestCase } from "promptfoo"
-import { toChatRoomTranscriptLine } from "../../api/chat/roomQuestion"
-import { chatModel } from "../../worker/models"
 import { toGradingResult } from "../evalChecks"
 import { runEval, toRubricAssertions, toRubricGrader } from "../evalHarness"
 import { toToolNamesLabel, toWriteCostLabel } from "../evalLabels"

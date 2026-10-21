@@ -5,13 +5,13 @@ TBD - created by archiving change add-versioned-prompts-scan-report. Update Purp
 ## Requirements
 ### Requirement: Model-facing prompts live as versioned markdown files
 
-Every model-facing prompt in the worker SHALL live as one markdown file under `worker/prompts/` with YAML frontmatter carrying exactly `title`, `version`, `model tier`, `description`, and `updated`, followed by a `{{variable}}`-templated body. Git history is the audit trail; the `version` integer SHALL be bumped (with `updated`) only on meaningful wording changes, not formatting or variable plumbing. The initial set is `summarize-resource.md`, `summarize-topic-scan.md`, `search-topic.md`, and `attach-context.md`.
+Every model-facing prompt in the worker SHALL live as one markdown file under `packages/models/prompts/` with YAML frontmatter carrying exactly `title`, `version`, `model tier`, `description`, and `updated`, followed by a `{{variable}}`-templated body. Git history is the audit trail; the `version` integer SHALL be bumped (with `updated`) only on meaningful wording changes, not formatting or variable plumbing. The initial set is `summarize-resource.md`, `summarize-topic-scan.md`, `search-topic.md`, and `attach-context.md`.
 
 A template SHALL place every untrusted placeholder after its instructions, never inside the instruction region, and SHALL restate the task after its last untrusted block — the delimited text is content to evaluate, never instructions, then the task and the required output. A template SHALL NOT ask for output that a plain-text surface cannot render, such as markdown links.
 
 #### Scenario: A prompt file carries frontmatter and a templated body
 
-- **WHEN** a prompt file under `worker/prompts/` is read
+- **WHEN** a prompt file under `packages/models/prompts/` is read
 - **THEN** it has the five frontmatter keys and a body whose runtime inputs appear as `{{variable}}` placeholders
 
 #### Scenario: A meaningful wording change bumps the version
@@ -57,12 +57,12 @@ Interpolation SHALL be untrusted by default. `writePrompt`'s untrusted variable 
 
 ### Requirement: New prompts follow the versioned-prompt pattern from the start
 
-A new model-facing prompt — including one introduced by a new Source ingester — SHALL ship as a versioned markdown file under `worker/prompts/` with a thin loader, never as an inline string literal, and SHALL pass every untrusted input through the loader's untrusted map with the task restated after it. The convention SHALL be documented as the `prompt-authoring` skill (canonical at `.agents/skills/`, symlinked from `.claude/skills/`, listed in `AGENTS.md`).
+A new model-facing prompt — including one introduced by a new Source ingester — SHALL ship as a versioned markdown file under `packages/models/prompts/` with a thin loader, never as an inline string literal, and SHALL pass every untrusted input through the loader's untrusted map with the task restated after it. The convention SHALL be documented as the `prompt-authoring` skill (canonical at `.agents/skills/`, symlinked from `.claude/skills/`, listed in `AGENTS.md`).
 
 #### Scenario: A new ingester ships its prompt versioned
 
 - **WHEN** a new Source ingester needs a model prompt
-- **THEN** the prompt lands as a `worker/prompts/*.md` file with frontmatter and a thin loader, following the documented skill
+- **THEN** the prompt lands as a `packages/models/prompts/*.md` file with frontmatter and a thin loader, following the documented skill
 
 #### Scenario: A new prompt's untrusted inputs are delimited by default
 

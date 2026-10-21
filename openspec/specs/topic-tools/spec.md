@@ -4,7 +4,7 @@
 TBD - created by archiving change mcp-server-topic-tuning. Update Purpose after archive.
 ## Requirements
 ### Requirement: Three Topic Tools live in one module with authorization inside
-`api/tool/` SHALL hold `updateTopicPrompt`, `addTopicSource`, and `removeTopicSource`. Each SHALL take the acting user id, the topic id, and its input, load the Topic, and ask `isAllowed(user, "topic:edit", topic)` itself before writing. Each SHALL return a discriminated result: saved, missing, forbidden, or a named validation failure. No caller SHALL check edit rights on a tool's behalf, and a null user id SHALL be rejected.
+`apps/api/tool/` SHALL hold `updateTopicPrompt`, `addTopicSource`, and `removeTopicSource`. Each SHALL take the acting user id, the topic id, and its input, load the Topic, and ask `isAllowed(user, "topic:edit", topic)` itself before writing. Each SHALL return a discriminated result: saved, missing, forbidden, or a named validation failure. No caller SHALL check edit rights on a tool's behalf, and a null user id SHALL be rejected.
 
 #### Scenario: A user without edit rights is rejected inside the tool
 - **WHEN** any adapter calls a tool for a user who may view but not edit the Topic
@@ -152,7 +152,7 @@ The MCP server SHALL register the edit tools with `topic_id` as an ordinary argu
 - **THEN** the edit tools have a destructive hint and the read tools have a read-only hint
 
 ### Requirement: createTopicFromDraft runs the editor's create path
-`api/tool/` SHALL hold `createTopicFromDraft`, taking the acting user id and a Topic Draft: a name, a prompt, Sources as source option and value pairs, and invite emails. It SHALL build the editor's create payload with the editor's defaults, weekly on Wednesday at 09:00, invite visibility, ten results, no tags, and the default Sources beside the chosen ones built through the shared source registry, and SHALL call the same create function the editor's route calls, with the Prompt Version origin of the adapter. It SHALL return created with the Topic's id and name, or the create path's own rejection: quota, a daily-frequency limit, an invitee the app will not invite, or an unusable Source value. A null user id SHALL be rejected.
+`apps/api/tool/` SHALL hold `createTopicFromDraft`, taking the acting user id and a Topic Draft: a name, a prompt, Sources as source option and value pairs, and invite emails. It SHALL build the editor's create payload with the editor's defaults, weekly on Wednesday at 09:00, invite visibility, ten results, no tags, and the default Sources beside the chosen ones built through the shared source registry, and SHALL call the same create function the editor's route calls, with the Prompt Version origin of the adapter. It SHALL return created with the Topic's id and name, or the create path's own rejection: quota, a daily-frequency limit, an invitee the app will not invite, or an unusable Source value. A null user id SHALL be rejected.
 
 #### Scenario: A Topic made by the tool is the editor's Topic
 - **WHEN** `createTopicFromDraft` saves from either adapter
@@ -167,7 +167,7 @@ The MCP server SHALL register the edit tools with `topic_id` as an ordinary argu
 - **THEN** the tool returns that rejection and no Topic exists
 
 ### Requirement: suggestTopicDraftSources returns the editor's suggestions
-`api/tool/` SHALL hold `suggestTopicDraftSources`, taking the acting user id, a name, and a prompt, and returning the verified suggestions the editor's Recommend button gets, each with its source option and value, under the same daily suggestion limit and on the user's own key. A reached limit SHALL return a named failure and no suggestions.
+`apps/api/tool/` SHALL hold `suggestTopicDraftSources`, taking the acting user id, a name, and a prompt, and returning the verified suggestions the editor's Recommend button gets, each with its source option and value, under the same daily suggestion limit and on the user's own key. A reached limit SHALL return a named failure and no suggestions.
 
 #### Scenario: Suggestions are the verified ones
 - **WHEN** `suggestTopicDraftSources` runs for a name and prompt

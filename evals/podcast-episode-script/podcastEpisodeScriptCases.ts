@@ -1,6 +1,6 @@
 // the podcast episode script eval's cases. a case is a Topic and the Findings that the writer makes a podcast episode from.
 // the sources, the people, and the figures are made up, so a fact in a script that its case lacks is invented
-import type { PodcastEpisodeFinding } from "../../worker/podcast/podcastEpisodeScript"
+import type { PodcastEpisodeFinding } from "@carlnotes/pipeline/podcast/podcastEpisodeScript"
 
 // one case. what it tests, its Topic, its Findings, and what it checks beyond the checks that every case gets
 export type PodcastEpisodeScriptCase = {

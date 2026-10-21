@@ -2,9 +2,9 @@
 // in the solo chat or the team room, and the tool call that the turn has to make, if any. the topic is made up
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
-import type { ChatAttachment, ChatHistoryTurn, ChatToolCall } from "@shared/payloads"
-import type { ChatRoomTranscriptMessage } from "../../api/chat/roomQuestion"
-import type { ChatContext } from "../../worker/chat/retrieve"
+import type { ChatRoomTranscriptMessage } from "@carlnotes/api/chat/roomQuestion"
+import type { ChatAttachment, ChatHistoryTurn, ChatToolCall } from "@carlnotes/contracts/payloads"
+import type { ChatContext } from "@carlnotes/pipeline/chat/retrieve"
 import { BURRNOTES_TOPIC_SOURCE_ID, TOPIC_CHAT_CONTEXT } from "../topic-chat/topicChatCases"
 
 // one case. what it tests, where the turn happens, the conversation so far, and the tool call that the turn has to make

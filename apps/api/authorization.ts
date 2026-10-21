@@ -1,0 +1,387 @@
+// the authorization gate
+import { dailyFrequencies } from "@carlnotes/contracts/enums"
+import {
+	ADMIN_QUOTA,
+	type BillingInterval,
+	type MonthlyBudgetCutoffKind,
+	PLANS,
+	type Plan,
+	userBudgetCents,
+} from "@carlnotes/contracts/plans"
+import { db } from "@carlnotes/db"
+import { isMonthlyBudgetCutoffPassed } from "@carlnotes/db/monthlyBudgetCutoffs"
+import { hasFullPodcastEpisodes, loadUserAccess, monthlySpendDollars, toSpendCents } from "@carlnotes/db/quotas"
+import { teamMembers, teamTopics } from "@carlnotes/db/schema/teams"
+import { subscriptions, topics } from "@carlnotes/db/schema/topics"
+import { and, count, eq, inArray } from "drizzle-orm"
+import { assertNever, canRateTopic, canSeeTopic, toTopicEditRole } from "./topic/permissions"
+import { loadBillingAccess, scansToday } from "./topic/quotas"
+
+// the topic fields that every resource capability needs: identity, owner, visibility, and the team that owns it
+type GatedTopic = Pick<typeof topics.$inferSelect, "id" | "ownerId" | "visibility" | "teamId">
+
+// the gated capabilities that "isAllowed" decides
+export type Capability =
+	// a topic and its scans
+	| "topic:view"
+	| "topic:edit"
+	| "topic:delete"
+	| "topic:invite"
+	| "topic:rate"
+	| "topic:create"
+	| "scan:request"
+	| "scan:manual"
+	// chat, and a topic's podcast episodes
+	| "chat:send"
+	| "chat:persist"
+	| "podcastEpisode:full"
+	| "podcastEpisode:remove"
+	// the admin console
+	| "admin:console"
+	| "admin:setRole"
+	| "admin:setBudget"
+	| "admin:setFeatureOrder"
+	| "admin:deleteUser"
+
+// the user's budget and the admin role test live in shared, where the worker can read them
+export { isAdminRole } from "@carlnotes/contracts/enums"
+export { type UserAccess, userBudgetCents } from "@carlnotes/contracts/plans"
+
+// the user's access row and the month's spend, from the loaders that the api shares with the worker
+export { loadUserAccess, monthlySpendDollars }
+
+/**
+ * Whether the user may execute a capability, optionally on a given topic.
+ */
+export async function isAllowed(userId: string | null, capability: Capability, topic?: GatedTopic): Promise<boolean> {
+	// rating is a subscriber action, not an admin power, so it skips the admin override and uses the topic rule
+	if (capability === "topic:rate") {
+		return topic ? canRateTopic(userId, topic) : false
+	}
+
+	// resolve access authority. an admin passes every entitlement and overrides topic view/edit/delete/scan authority
+	const userAccess = userId ? await loadUserAccess(userId) : null
+	if (userAccess?.isAdmin) {
+		return true
+	}
+
+	// the chat capabilities check the sign-in status, the topic's visibility, and the user's budget
+	if (capability === "chat:send" || capability === "chat:persist") {
+		return decideChat(userId, capability, topic)
+	}
+
+	// everything else checks ownership, subscription, or plan
+	return decideTopicCapability(userId, capability, userAccess?.plan ?? "free", topic)
+}
+
+// the per-capability decisions for a non-admin or a signed-out visitor
+async function decideTopicCapability(
+	userId: string | null,
+	capability: Exclude<Capability, "topic:rate" | "chat:send" | "chat:persist">,
+	plan: Plan,
+	topic?: GatedTopic,
+): Promise<boolean> {
+	switch (capability) {
+		// admin-only capabilities already returned true above for an admin, so a non-admin is rejected
+		case "admin:console":
+		case "admin:setRole":
+		case "admin:setBudget":
+		case "admin:setFeatureOrder":
+		case "admin:deleteUser":
+			return false
+		// viewing follows the topic's visibility, invite, and subscription rules
+		case "topic:view":
+			return topic ? canSeeTopic(userId, topic) : false
+		// the topic owner and the owning team's members, while the owner is still on it
+		case "topic:edit":
+			return topic ? (await toTopicEditRole(userId, topic)) !== null : false
+		// only the topic owner may delete the topic, manage its invite list, or remove one of its podcast episodes
+		case "topic:delete":
+		case "topic:invite":
+		case "podcastEpisode:remove":
+			return Boolean(userId) && topic?.ownerId === userId
+		// creating a topic is gated by the plan's topic limit
+		case "topic:create":
+			return userId ? (await ownerTopicCount(userId)) < PLANS[plan].topicLimit : false
+		// requesting a manual scan is topic owner only, checked without reading any quota
+		case "scan:request":
+			return Boolean(userId) && topic?.ownerId === userId
+		// a manual scan needs the owner to be within their daily quota
+		case "scan:manual":
+			return userId && topic ? (await loadManualScanAuthorization(userId, topic)).status === "allowed" : false
+		// an admin or a paid plan gets full podcast episodes, and the free plan gets short podcast episodes.
+		// the admin role and the plan are the topic owner's
+		case "podcastEpisode:full":
+			return topic ? hasFullPodcastEpisodes(topic.ownerId) : false
+		// a new capability fails to compile here
+		default:
+			return assertNever(capability)
+	}
+}
+
+/**
+ * Whether a team membership row's role grants team leader authority.
+ */
+export function isLeaderRole(role: "leader" | "member"): boolean {
+	return role === "leader"
+}
+
+/**
+ * Whether the user has spent their monthly budget, so the proxy would reject the model calls a scan or a chat turn makes.
+ */
+export async function isMonthlySpendExhausted(userId: string): Promise<boolean> {
+	// sum the scan, chat, and podcast episode spend against the user's one budget
+	const [userAccess, monthlySpend] = await Promise.all([loadUserAccess(userId), monthlySpendDollars(userId)])
+	return toSpendCents(monthlySpend) >= userBudgetCents(userAccess)
+}
+
+/**
+ * Returns the user's spend status for this cutoff kind: budget, paused, or allowed.
+ */
+export async function loadMonthlyBudgetCutoffStatus(
+	userId: string,
+	kind: MonthlyBudgetCutoffKind,
+): Promise<"budget" | "paused" | "allowed"> {
+	// start both checks together. each reads the user's access row and the month's spend, which load once per request
+	const [isSpendExhausted, isCutoffPassed] = await Promise.all([
+		isMonthlySpendExhausted(userId),
+		isMonthlyBudgetCutoffPassed(userId, kind),
+	])
+
+	// a spent budget comes first, then a passed cutoff
+	if (isSpendExhausted) {
+		return "budget"
+	}
+	return isCutoffPassed ? "paused" : "allowed"
+}
+
+/**
+ * The plan's topic limit for this user, which a page subtracts what used from, to display how many topics they have left to add.
+ */
+export async function topicLimit(userId: string): Promise<number> {
+	const { isAdmin, plan } = await loadUserAccess(userId)
+	return isAdmin ? ADMIN_QUOTA : PLANS[plan].topicLimit
+}
+
+/**
+ * The number of remaining topics the user may create under the topic limit, floored at zero. Admins see the unlimited marker.
+ * The limit counts the topics they own, so deleting one frees up a slot.
+ */
+export async function topicsRemaining(userId: string): Promise<number> {
+	// admins bypass the topic limit so they can test freely
+	const { isAdmin, plan } = await loadUserAccess(userId)
+	if (isAdmin) {
+		return ADMIN_QUOTA
+	}
+
+	// count every topic the user owns against their plan's limit
+	return Math.max(0, PLANS[plan].topicLimit - (await ownerTopicCount(userId)))
+}
+
+/**
+ * How many topics the plan allows on a daily frequency, and how many slots are still free
+ * Admins get unlimited topics. A topic moved off a daily frequency gives the user their slot back.
+ */
+export async function loadDailyTopicQuota(userId: string): Promise<{ limit: number; remainingTopics: number }> {
+	// admins bypass the daily topic limit, as they do every other quota
+	const [userAccess, { billingInterval }] = await Promise.all([loadUserAccess(userId), loadBillingAccess(userId)])
+	if (userAccess.isAdmin) {
+		return { limit: ADMIN_QUOTA, remainingTopics: ADMIN_QUOTA }
+	}
+
+	// what the plan allows at the user's billing interval, less the topics already on a daily frequency
+	const limit = PLANS[userAccess.plan].dailyTopicLimit[billingInterval]
+	return { limit, remainingTopics: Math.max(0, limit - (await dailyTopicCount(userId))) }
+}
+
+/**
+ * The topic ids among the given set that the user is actively subscribed to.
+ * One query resolves every topic at once, so the feed never checks per topic.
+ */
+export async function subscribedTopicIds(userId: string, topicIds: string[]): Promise<Set<string>> {
+	// an empty id list matches nothing, so skip the query
+	if (topicIds.length === 0) {
+		return new Set()
+	}
+
+	// the actively subscribed topics among the given ids
+	const subscriptionRows = await db
+		.select({ topicId: subscriptions.topicId })
+		.from(subscriptions)
+		.where(
+			and(
+				inArray(subscriptions.topicId, topicIds),
+				eq(subscriptions.subscriberUserId, userId),
+				eq(subscriptions.isActive, true),
+			),
+		)
+	return new Set(subscriptionRows.map((subscriptionRow) => subscriptionRow.topicId))
+}
+
+/**
+ * The topic ids among the given set the user reaches through team membership.
+ * Two queries resolve every topic at once, the same shape as subscribedTopicIds.
+ */
+export async function memberTopicIds(userId: string, topicIds: string[]): Promise<Set<string>> {
+	// an empty id list matches nothing, so skip the query
+	if (topicIds.length === 0) {
+		return new Set()
+	}
+
+	// the topics held by a team the user belongs to: through topics.teamId or a teamTopics share
+	const [memberRows, sharedRows] = await Promise.all([
+		db
+			.select({ topicId: topics.id })
+			.from(topics)
+			.innerJoin(teamMembers, and(eq(teamMembers.teamId, topics.teamId), eq(teamMembers.isActive, true)))
+			.where(and(inArray(topics.id, topicIds), eq(teamMembers.userId, userId))),
+		db
+			.select({ topicId: teamTopics.topicId })
+			.from(teamTopics)
+			.innerJoin(teamMembers, and(eq(teamMembers.teamId, teamTopics.teamId), eq(teamMembers.isActive, true)))
+			.where(and(inArray(teamTopics.topicId, topicIds), eq(teamMembers.userId, userId))),
+	])
+	return new Set([...memberRows, ...sharedRows].map((topicRow) => topicRow.topicId))
+}
+
+// the outcome of a manual-scan authorization
+export type ManualScanAuthorization =
+	| { status: "forbidden" }
+	| { status: "quota" }
+	| { status: "allowed"; remainingScans: number; isOverage: boolean }
+
+/**
+ * Whether the user may run a manual scan on the topic right now.
+ * An owner checks the daily limit, which a payment method makes soft with extra scans billed as overage.
+ * Admins bypass the limit.
+ */
+export async function loadManualScanAuthorization(userId: string, topic: GatedTopic): Promise<ManualScanAuthorization> {
+	// load the user's access, today's scan count, and whether they can be billed, then authorize
+	const userAccess = await loadUserAccess(userId)
+	const [scansUsedToday, billingAccess] = await Promise.all([scansToday(userId), loadBillingAccess(userId)])
+	return authorizeManualScan({
+		isAdmin: userAccess.isAdmin,
+		plan: userAccess.plan,
+		isTopicOwner: topic.ownerId === userId,
+		scansUsedToday,
+		...billingAccess,
+	})
+}
+
+// the outcome of a daily-frequency authorization. a rejection includes the limit, so the message can show the number
+export type DailyFrequencyAuthorization = { status: "allowed" } | { status: "quota"; limit: number }
+
+/**
+ * Whether the user may put one more topic on a daily frequency, based on their plan's daily topic limit.
+ */
+export async function loadDailyFrequencyAuthorization(userId: string): Promise<DailyFrequencyAuthorization> {
+	const [userAccess, { billingInterval }, dailyTopicsUsed] = await Promise.all([
+		loadUserAccess(userId),
+		loadBillingAccess(userId),
+		dailyTopicCount(userId),
+	])
+	return authorizeDailyFrequency({
+		isAdmin: userAccess.isAdmin,
+		plan: userAccess.plan,
+		billingInterval,
+		dailyTopicsUsed,
+	})
+		? { status: "allowed" }
+		: { status: "quota", limit: PLANS[userAccess.plan].dailyTopicLimit[billingInterval] }
+}
+
+/**
+ * Whether one more daily-frequency topic is allowed.
+ * An admin bypasses the limit. Everyone else fits under their plan's limit for their billing interval.
+ */
+export function authorizeDailyFrequency({
+	isAdmin,
+	plan,
+	billingInterval,
+	dailyTopicsUsed,
+}: {
+	isAdmin: boolean
+	plan: Plan
+	billingInterval: BillingInterval
+	dailyTopicsUsed: number
+}): boolean {
+	return isAdmin || dailyTopicsUsed < PLANS[plan].dailyTopicLimit[billingInterval]
+}
+
+/**
+ * Whether a manual scan is allowed, from values the caller already loaded.
+ * An owner or an admin may scan. An owner checks the daily limit, which a payment method makes soft
+ * with extra scans billed as overage. Admins bypass the limit.
+ */
+export function authorizeManualScan({
+	isAdmin,
+	plan,
+	isTopicOwner,
+	scansUsedToday,
+	hasPaymentMethod,
+	billingInterval,
+}: {
+	isAdmin: boolean
+	plan: Plan
+	isTopicOwner: boolean
+	scansUsedToday: number
+	hasPaymentMethod: boolean
+	// how the subscription bills: monthly or yearly
+	billingInterval: BillingInterval
+}): ManualScanAuthorization {
+	// only the owner or an admin may run a manual scan on the topic
+	if (!isAdmin && !isTopicOwner) {
+		return { status: "forbidden" }
+	}
+
+	// an admin bypasses the daily scan limit entirely
+	if (isAdmin) {
+		return { status: "allowed", remainingScans: ADMIN_QUOTA, isOverage: false }
+	}
+
+	// at or past the daily scan limit, a payment method on a monthly subscription allows the scan as billed overage
+	const dailyScanLimit = PLANS[plan].dailyScanLimit[billingInterval]
+	if (scansUsedToday >= dailyScanLimit) {
+		const isBillable = hasPaymentMethod && billingInterval === "monthly"
+		return isBillable ? { status: "allowed", remainingScans: 0, isOverage: true } : { status: "quota" }
+	}
+	return { status: "allowed", remainingScans: dailyScanLimit - scansUsedToday - 1, isOverage: false }
+}
+
+// every chat capability needs a signed-in user. sending a chat needs a visible topic and budget left
+async function decideChat(
+	userId: string | null,
+	capability: "chat:send" | "chat:persist",
+	topic?: GatedTopic,
+): Promise<boolean> {
+	// a signed-out visitor gets no capabilities
+	if (!userId) {
+		return false
+	}
+
+	// saving history requires an account
+	if (capability === "chat:persist") {
+		return true
+	}
+
+	// sending checks visibility and budget
+	if (!topic || !(await canSeeTopic(userId, topic))) {
+		return false
+	}
+	return !(await isMonthlySpendExhausted(userId))
+}
+
+// how many topics the user owns
+async function ownerTopicCount(userId: string): Promise<number> {
+	const [topicCountRow] = await db.select({ count: count() }).from(topics).where(eq(topics.ownerId, userId))
+	return topicCountRow?.count ?? 0
+}
+
+// how many topics the user has on a daily frequency
+async function dailyTopicCount(userId: string): Promise<number> {
+	const [topicCountRow] = await db
+		.select({ count: count() })
+		.from(topics)
+		.where(and(eq(topics.ownerId, userId), inArray(topics.frequency, [...dailyFrequencies])))
+	return topicCountRow?.count ?? 0
+}

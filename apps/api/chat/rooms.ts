@@ -1,0 +1,124 @@
+// every chat room one user can open, for the chat panel's switch chat rooms menu
+import { toAvatarKeyVersion } from "@carlnotes/contracts/avatars"
+import type { ChatRoom } from "@carlnotes/contracts/chat"
+import { db } from "@carlnotes/db"
+import { chatRoomMentions } from "@carlnotes/db/schema/chat"
+import { teamMembers, teams, teamTopics } from "@carlnotes/db/schema/teams"
+import { topics } from "@carlnotes/db/schema/topics"
+import { users } from "@carlnotes/db/schema/users"
+import { and, count, eq, inArray, isNull } from "drizzle-orm"
+import { withAvatarVersion } from "../avatars"
+import { loadTeamChatMentions, loadTopicChatMentions } from "./mentions"
+
+/**
+ * The chat rooms a user may open: their teams' own chat rooms, and a chat room per topic those teams hold. Newest first.
+ */
+export async function loadChatRooms(userId: string): Promise<ChatRoom[]> {
+	// the teams the user actively belongs to, which is what opens a chat room
+	const teamRows = await db
+		.select({ teamId: teams.id, name: teams.name, avatarKey: teams.avatarKey, createdAt: teams.createdAt })
+		.from(teamMembers)
+		.innerJoin(teams, eq(teams.id, teamMembers.teamId))
+		.where(and(eq(teamMembers.userId, userId), eq(teamMembers.isActive, true)))
+	if (teamRows.length === 0) {
+		return []
+	}
+
+	// select each topic owned or shared by a team
+	const teamIds = teamRows.map((teamRow) => teamRow.teamId)
+	const [ownedTopicRows, sharedTopicRows] = await Promise.all([
+		db
+			.select({ topicId: topics.id, teamId: topics.teamId, name: topics.name, createdAt: topics.createdAt })
+			.from(topics)
+			.where(inArray(topics.teamId, teamIds)),
+		db
+			.select({ topicId: topics.id, teamId: teamTopics.teamId, name: topics.name, createdAt: topics.createdAt })
+			.from(teamTopics)
+			.innerJoin(topics, eq(topics.id, teamTopics.topicId))
+			.where(inArray(teamTopics.teamId, teamIds)),
+	])
+
+	// load the team chat mentions and topic chat mentions for this user
+	const topicRows = [...ownedTopicRows, ...sharedTopicRows]
+	const [teamChatMentions, topicChatMentions, membersByTeamId] = await Promise.all([
+		loadTeamChatMentions(userId, teamIds),
+		loadTopicChatMentions(
+			userId,
+			topicRows.map((topicRow) => topicRow.topicId),
+		),
+		loadTeamMembersByTeam(teamIds),
+	])
+
+	// a team's own chat room, then the chat rooms of what it holds, all sorted newest first together
+	const teamById = new Map(teamRows.map((teamRow) => [teamRow.teamId, teamRow]))
+	const chatRooms: (ChatRoom & { createdAt: Date })[] = [
+		...teamRows.map((teamRow) => ({
+			teamId: teamRow.teamId,
+			topicId: null,
+			name: teamRow.name,
+			teamName: teamRow.name,
+			teamAvatarVersion: toAvatarKeyVersion(teamRow.avatarKey),
+			chatMentions: teamChatMentions.get(teamRow.teamId) ?? [],
+			chatRoomMembers: membersByTeamId.get(teamRow.teamId) ?? [],
+			createdAt: teamRow.createdAt,
+		})),
+		...topicRows.flatMap((topicRow) =>
+			topicRow.teamId
+				? [
+						{
+							teamId: topicRow.teamId,
+							topicId: topicRow.topicId,
+							name: topicRow.name,
+							teamName: teamById.get(topicRow.teamId)?.name ?? "",
+							teamAvatarVersion: toAvatarKeyVersion(teamById.get(topicRow.teamId)?.avatarKey ?? null),
+							// each chat room counts only what was said in it, so a topic two teams hold never counts twice in a total
+							chatMentions: (topicChatMentions.get(topicRow.topicId) ?? []).filter(
+								(mention) => mention.teamId === topicRow.teamId,
+							),
+							chatRoomMembers: membersByTeamId.get(topicRow.teamId) ?? [],
+							createdAt: topicRow.createdAt,
+						},
+					]
+				: [],
+		),
+	]
+	return chatRooms
+		.sort((first, second) => second.createdAt.getTime() - first.createdAt.getTime())
+		.map(({ createdAt: _createdAt, ...room }) => room)
+}
+
+// every team's active members in one query, for the chat room rows the teams share
+async function loadTeamMembersByTeam(teamIds: string[]): Promise<Map<string, ChatRoom["chatRoomMembers"]>> {
+	const memberRows = await db
+		.select({
+			teamId: teamMembers.teamId,
+			userId: users.id,
+			username: users.username,
+			avatarSource: users.avatarSource,
+			avatarKey: users.avatarKey,
+		})
+		.from(teamMembers)
+		.innerJoin(users, eq(users.id, teamMembers.userId))
+		.where(and(inArray(teamMembers.teamId, teamIds), eq(teamMembers.isActive, true)))
+		.orderBy(users.username)
+
+	// each team's chat room members, in the username order that the query returned
+	const membersByTeamId = new Map<string, ChatRoom["chatRoomMembers"]>()
+	for (const { teamId, ...memberColumns } of memberRows) {
+		const chatRoomMembers = membersByTeamId.get(teamId) ?? []
+		chatRoomMembers.push(withAvatarVersion(memberColumns))
+		membersByTeamId.set(teamId, chatRoomMembers)
+	}
+	return membersByTeamId
+}
+
+/**
+ * How many unseen chat mentions the user has across every chat room, as one indexed count.
+ */
+export async function countUnseenChatMentions(userId: string): Promise<number> {
+	const [chatMentionRow] = await db
+		.select({ unseen: count() })
+		.from(chatRoomMentions)
+		.where(and(eq(chatRoomMentions.userId, userId), isNull(chatRoomMentions.seenAt)))
+	return chatMentionRow?.unseen ?? 0
+}

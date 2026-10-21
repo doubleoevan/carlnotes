@@ -1,7 +1,8 @@
 // the promptfoo eval of the attachment summary writers, which makes real model calls.
 // run the eval with: bun run eval:attachment-summaries
+
+import { chatModel, cheapModel } from "@carlnotes/models/models"
 import type { Assertion, AssertionValueFunctionContext, EvaluateResult, GradingResult, TestCase } from "promptfoo"
-import { chatModel, cheapModel } from "../../worker/models"
 import { toGradingResult } from "../evalChecks"
 import { runEval, toRubricAssertions, toRubricGrader } from "../evalHarness"
 import { toWordCount } from "../evalLabels"

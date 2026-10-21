@@ -1,6 +1,6 @@
 // the grader calibration cases of the team chat eval's rubrics.
 // the team is the team chat eval's, and its findings and the chat replies are made up
-import type { RetrievedFinding } from "../../worker/chat/retrieve"
+import type { RetrievedFinding } from "@carlnotes/pipeline/chat/retrieve"
 import { ROASTING_TOPIC_NAME, TEAM_CHAT_CONTEXT } from "../team-chat/teamChatCases"
 import type { TeamChatVariables } from "../team-chat/teamChatProviders"
 import * as teamChatRubrics from "../team-chat/teamChatRubrics"

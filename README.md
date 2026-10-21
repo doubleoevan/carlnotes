@@ -1,6 +1,6 @@
 # CarlNotes
 
-<img src="ui/public/carl-hero.png" alt="Carl, holding a raccoon and a machine learning textbook" width="200" align="left" />
+<img src="apps/web/public/carl-hero.png" alt="Carl, holding a raccoon and a machine learning textbook" width="200" align="left" />
 
 **He already read it. All of it.**
 
@@ -24,19 +24,25 @@ TwitterAPI.io · Langfuse · LLM Guard · Sentry + PostHog
 
 ## Architecture
 
-CarlNotes is a modular monolith: one repository, one `package.json`, five modules.
+CarlNotes is one repository of Bun workspaces: four apps under `apps/` and nine private `@carlnotes/<name>` packages
+under `packages/`, every one exporting source with no build step.
 
-1. `ui/` is a TanStack Start React app. Its public pages render on the server for a visitor, and every page renders in
-   the browser for a signed-in user.
-2. `api/` is a Hono server that serves every `/api` route, the `/mcp` server and its oauth discovery documents, the
+1. `apps/web` is a TanStack Start React app. Its public pages render on the server for a visitor, and every page renders
+   in the browser for a signed-in user.
+2. `apps/api` is a Hono server that serves every `/api` route, the `/mcp` server and its oauth discovery documents, the
    document routes (the sitemap, the feeds, the llms files, the IndexNow key, and security.txt), the blog and release
-   pages, and the built docs, and renders every other page through the ui's server build.
-3. `worker/` holds the scan pipeline and the Temporal workflows.
-4. `db/` holds the Drizzle schema.
-5. `shared/` holds the zod contracts, enums, plans, and Source definitions.
+   pages, and the built docs, and renders every other page through the web app's server build.
+3. `apps/worker` holds the Temporal worker, its workflows, the scheduled sweep, and the monthly budget reset.
+4. `apps/docs` is the Starlight docs site, built to static files.
 
-That list is the dependency order: each module imports only from the ones below it. `scripts/check-ui-boundary.ts` fails
-the preflight when the ui imports the api, the worker, or the db folder as a value.
+The packages come in two chains. The universal ones, `contracts` → `client` → `core`, with `tokens` beside them as CSS
+alone, hold the zod contracts, the typed api clients, and the DOM-free stores, hooks, and rules, and name no Bun, Node,
+or DOM global. The server ones, `server` → `db` → `emails` → `models` → `pipeline`, hold the env settings and
+monitoring, the Drizzle schema and the Redis and object stores, the email templates and send, every model call and
+prompt, and the scan pipeline with the chat replies and the podcast episode.
+
+Each arrow is the dependency order, which `AGENTS.md` spells out and `scripts/check-package-boundaries.ts` enforces in
+preflight.
 
 ```mermaid
 flowchart
@@ -55,10 +61,10 @@ These processes run in production:
 
 | Process | What it does |
 |---|---|
-| `app` | Serves the api and the ui, rendering public pages on the server. Chat replies and uploads run in-process. |
-| `temporal-worker` | One process hosts six Temporal Workers: each Worker polls exactly one task queue, so attachments, topic scans, the closing writes that record a scan's outcome, scan emails, podcast episode recordings, and source screens each get their own Worker. The closing writes have their own queue so a backlog of scans waiting for a slot never starves the write that records a scan that already paid for its review. If any Worker stops, the process exits and the platform restarts it. |
-| scheduler | `bun worker/schedule.ts` sweeps for scheduled Topics and starts their scans. Whether a Topic is scheduled is computed in one query from its frequency and Scan window, so a sweep is safe to repeat and there is no stored queue to drift. A database claim keeps two sweeps from overlapping. In production a Northflank cron job runs one sweep per interval (`bun run schedule`). |
-| budget reset | `bun worker/resetMonthlyBudgets.ts` replaces every LiteLLM key created before the month began, so each user's spend starts the month at zero. The reset replaces a few keys at a time, under the same kind of database claim as the sweep. In production a Northflank cron job runs the reset once a day shortly after midnight UTC (`bun run reset:monthly-budgets`). After the first of the month, the reset finds only the keys that an earlier run failed to replace. |
+| `app` | Serves the api and the web app, rendering public pages on the server. Chat replies and uploads run in-process. |
+| `temporal-worker` | One process hosts six Temporal Workers: each Worker polls exactly one task queue, so attachments, topic scans, the closing writes that record a scan's outcome, scan emails, podcast episode recordings, and source screens each get their own Worker. The closing writes have their own queue so a backlog of scans waiting for a slot never starves the write that records a scan that already paid for its review. If any Worker stops, the process exits and the platform restarts it. In production the Northflank service starts it with `bun run temporal`. |
+| scheduler | `bun apps/worker/schedule.ts` sweeps for scheduled Topics and starts their scans. Whether a Topic is scheduled is computed in one query from its frequency and Scan window, so a sweep is safe to repeat and there is no stored queue to drift. A database claim keeps two sweeps from overlapping. In production a Northflank cron job runs one sweep per interval (`bun run schedule`). |
+| budget reset | `bun apps/worker/resetMonthlyBudgets.ts` replaces every LiteLLM key created before the month began, so each user's spend starts the month at zero. The reset replaces a few keys at a time, under the same kind of database claim as the sweep. In production a Northflank cron job runs the reset once a day shortly after midnight UTC (`bun run reset:monthly-budgets`). After the first of the month, the reset finds only the keys that an earlier run failed to replace. |
 | `llm-guard` | The content scanner is its own service (see below). |
 
 Every process above runs on Northflank, which deploys on a git trigger. `app` and `temporal-worker` each run as
@@ -120,7 +126,7 @@ saves the episode's title and description and signals the Scan's email workflow,
 email can name the episode. One script call per segment writes the two hosts' turns against the outline, in up to three
 drafts: a draft that fails a check is retried with the reason, and a third draft is repaired instead of failing the
 episode. The sign-off ends on two fixed lines and then a goodbye that the writer words differently every time. The
-prompts are in `worker/prompts/`.
+prompts are in `packages/models/prompts/`.
 
 Each chapter is recorded as one two-speaker Gemini speech call through LiteLLM's pass-through. A manual Scan's
 chapters are recorded on the standard tier, and a scheduled Scan's on Gemini's Flex tier, where a chapter may wait up to
@@ -135,13 +141,14 @@ when an episode ends, the next unplayed episode from the listener's other Topics
 own page with its transcript, rendered on the server for a public Topic. Every episode page has its preview card, so a
 shared link previews no matter what the Topic's visibility is, and a private or invite Topic's episode page is noindex
 and shows the Topic's gate to anyone who may not see the Topic. Covers are drawn over
-`docs/design/podcast/cover-base.png`.
+`apps/docs/design/podcast/cover-base.png`.
 
 `PODCAST_SPEECH_MODEL` set empty turns episodes off, and `PODCAST_RECORDING_CONCURRENCY` (16 by default) limits the
 episode activities on each worker replica. A free Topic gets a 10-minute episode after every scan and keeps only the
 latest short one, where a paid plan gets 30 minutes and keeps every full episode. A scan that finishes while a Topic's
 short episode is still recording makes no episode, and its findings go into the next one. Each plan's monthly budget
-cutoffs in `shared/plans.ts` turn a paid plan's episodes short, then pause every plan's episodes, so scans keep running.
+cutoffs in `packages/contracts/plans.ts` turn a paid plan's episodes short, then pause every plan's episodes, so scans
+keep running.
 
 ### Chat
 
@@ -252,7 +259,7 @@ the rule that lets Northflank renew its certificate are listed in the `cache-at-
 
 Domain vocabulary is load-bearing and lives in `.agents/skills/domain-model/`.
 
-How the AI guardrails work lives in [docs/ai-scaffolding.md](docs/ai-scaffolding.md).
+How the AI guardrails work lives in [apps/docs/ai-scaffolding.md](apps/docs/ai-scaffolding.md).
 
 Feature work lands change-by-change through [OpenSpec](https://github.com/Fission-AI/OpenSpec) — specs and changes in
 progress live in `openspec/`.
@@ -269,7 +276,7 @@ workflow runs the promptfoo evals in CI, report-only.
 ```mermaid
 flowchart
     Cases[Made-up cases] --> Provider[Provider · calls the app's own function]
-    Templates[(worker/prompts/*.md in git)] --> Provider
+    Templates[(packages/models/prompts/*.md in git)] --> Provider
     Provider --> LiteLLM[LiteLLM proxy]
     LiteLLM --> Output[Output under test]
     Output --> Code[Checks in code]
@@ -342,22 +349,23 @@ How each eval works, how to read its report, and how to write a new one live in 
 
 ```bash
 bun install
-bun run dev          # api, ui, temporal, and worker together (concurrently, colored per process); run carl-up first for the Docker infra
+bun run dev          # api, ui, temporal, worker, and the email preview together (concurrently, colored per process); run carl-up first for the Docker infra
                      # `mkdir -p logs && bun run dev 2>&1 | tee logs/dev.log` keeps a copy to tail from another shell; logs/ is gitignored
                      # every line is prefixed with its process, so `grep '^\[api\]' logs/dev.log` reads one of them
 bun run carl-up      # bring up the Docker infra (litellm proxy, temporal dev server, Redis, llm-guard) and create a limited dev key; carl-down stops it
                      # scans run as Temporal workflows, so dev:temporal must be up for any scan to happen, not just for attachments
-bun run dev:ui       # Vite dev server (UI); wraps itself in doppler run
+bun run dev:ui       # Vite dev server for the web app in apps/web; wraps itself in doppler run
 bun run dev:api      # Hono API; wraps itself in doppler run for DATABASE_URL; the Vite dev server proxies /api, /mcp, and the api's own pages and documents here
 bun run dev:worker   # scheduled-scan sweep loop (set SCHEDULE_INTERVAL_MS); `bun run schedule` runs one sweep, as a cron would
 bun run reset:monthly-budgets # replace every LiteLLM key created before the month began, as the daily cron does. a later run in the same month replaces only the keys that an earlier run failed to replace
-bun run dev:temporal # Temporal worker for topic scans and attachment processing; needs a Temporal server (docker-compose `temporal`, or `temporal server start-dev`)
+bun run temporal     # Temporal worker for topic scans and attachment processing, as the Northflank service starts it; needs a Temporal server (docker-compose `temporal`, or `temporal server start-dev`)
+bun run dev:temporal # the same worker, kept as the dev name beside dev:api and dev:ui
 bun run dev:temporal:watch # the same worker, restarted on save; what `bun run dev` uses. a restart mid-review leaves that scan waiting out its 30-minute activity timeout before it fails
-bun run dev:email    # react-email preview server for the templates in emails/ (localhost:3011); no doppler needed
+bun run dev:email    # react-email preview server for the templates in packages/emails/ (localhost:3011); no doppler needed
 bun run dev:docs     # Starlight dev server on localhost:4321/docs, reachable on the LAN, with hot reload; also shows draft pages that the production build leaves out
-                     # it runs in the background: `cd docs && astro dev stop` ends it, `astro dev logs` tails it
+                     # it runs in the background: `cd apps/docs && astro dev stop` ends it, `astro dev logs` tails it
 bun run test:coverage # the test suite with bun's built-in line and function coverage table
-bun run smoke:coverage # run every smoke test script, one process each, writing coverage/smoke/<name>/lcov.info; the Smoke workflow runs this on each push to main and uploads them under the smoke flag. the list is read from the smoke script, and the seo smoke test is skipped, since it needs the built ui
+bun run smoke:coverage # run every smoke test script, one process each, writing coverage/smoke/<name>/lcov.info; the Smoke workflow runs this on each push to main and uploads them under the smoke flag. the list is read from the smoke script, and the seo smoke test is skipped, since it needs the built web app
                      # with SMOKE_SKIP_DEVELOPER_ONLY=1 it skips the ones that need litellm or temporal. the Smoke workflow starts both as containers instead, and runs a temporal worker beside them, so it runs every one but the seo smoke test
 bun run docs:embed   # chunk the docs markdown by section and embed the changed sections into docs_chunks, which chat quotes; run it after editing docs
 bun run docs:embed:prd # the same sync against the production database, the owner-run escape hatch until the deploy job runs it
@@ -365,8 +373,8 @@ bun run edge:purge   # clear the pages and the signed-out feed that Cloudflare s
 bun run sync:releases # re-read every published GitHub release into the releases table the /releases endpoint serves; it seeds history and repairs a missed webhook delivery, and is safe to re-run
 bun run sync:releases:prd # the same sync against the production database; run it once after the first deploy, since the table starts empty. the webhook writes it going forward
 bun run releases:preview <tag> "<title>" # store release-notes/<tag>.local.md in the dev releases table with the repo's screenshots inlined, so /releases and /releases/<tag> read as they will before the release exists on GitHub
-bun run build:ui     # production build (no doppler, so it runs in CI and deploys)
-bun run build:docs   # build static docs to docs/dist, which the api serves under /docs
+bun run build:ui     # production build of apps/web to apps/web/dist (no doppler, so it runs in CI and deploys)
+bun run build:docs   # build static docs to apps/docs/dist, which the api serves at /docs
                      # /docs on the api (3000) and through the Vite proxy (5173) is this build, which only changes when you rerun this script and doesn't hot reload
 ```
 
@@ -376,8 +384,8 @@ database (below). The dev, db, and smoke scripts wrap themselves in `doppler run
 Database: generate a migration from the Drizzle schema, then apply it:
 
 ```bash
-bun run db:generate   # write a migration from the db/schema files (offline, no doppler)
-bun run db:migrate    # apply pending migrations (db/migrate.ts, the same one-shot script the deploy job runs)
+bun run db:generate   # write a migration from the packages/db/schema files (offline, no doppler)
+bun run db:migrate    # apply pending migrations (packages/db/migrate.ts, the same one-shot script the deploy job runs)
 bun run db:seed       # creates the dev demo user and a user per plan using a real signup, then loads idempotent stub data (rejects an attempt to run it outside of the dev config)
 bun run litellm:restart # reload litellm-config.yaml. the file is bind-mounted, so a restart picks up an edit with no rebuild
 ```
@@ -423,13 +431,14 @@ overage, and the admin console's Stripe net-revenue line are static. The gate, p
 Checks — run the full gate with one command (enforced on push by `scripts/preflight.sh`):
 
 ```bash
-bun run check       # biome + ui boundary + tsc + workflow bundles + bun test
+bun run check       # biome + package boundaries + tsc + workflow bundles + bun test
 ```
 
 Or run them individually:
 
 ```bash
 bunx biome check .
+bun scripts/check-package-boundaries.ts # every import stays inside the dependencies its workspace declares
 bunx tsc -b             # add --force after a dependency change. bun run check does that on its own
 bun test
 bun run check:workflows # every Temporal workflow file still bundles
@@ -496,11 +505,11 @@ internet, so every query takes longer than it does next to the database.
 
 The evals and their `eval:*` scripts are described under [Evals](#evals).
 
-Prompt registry (owner-run): git is the source of truth for prompt wording (`worker/prompts/*.md`); this pushes it up to
-Langfuse as the `production` version each prompt is served from. Idempotent: an unchanged prompt creates no new version.
-Needs `LANGFUSE_PUBLIC_KEY`/`LANGFUSE_SECRET_KEY` set. `--candidate` uploads under the `candidate` label instead,
-leaving the served `production` label untouched until someone promotes the version in Langfuse by hand — the deploy job
-runs that form, while these two scripts write `production` directly.
+Prompt registry (owner-run): git is the source of truth for prompt wording (`packages/models/prompts/*.md`); this pushes
+it up to Langfuse as the `production` version each prompt is served from. Idempotent: an unchanged prompt creates no new
+version. Needs `LANGFUSE_PUBLIC_KEY`/`LANGFUSE_SECRET_KEY` set. `--candidate` uploads under the `candidate` label
+instead, leaving the served `production` label untouched until someone promotes the version in Langfuse by hand — the
+deploy job runs that form, while these two scripts write `production` directly.
 
 Each Doppler config points at its own Langfuse project, so the environment is chosen at the `doppler run` call and there
 is one script per target. The script names the environment it wrote to in its summary line, since a run against dev
@@ -514,8 +523,11 @@ bun run prompts:sync
 bun run prompts:sync:prd
 ```
 
-Container image: The app service is the Hono API plus the built UI bundle it serves. It builds from the repo-root
-`Dockerfile` and starts under `doppler run`. The LiteLLM proxy is a separate service with its own image in `infra/litellm/`:
+Container image: The app service is the Hono api plus the built web app it serves. It builds from the repo-root
+`Dockerfile`, which copies the root `package.json`, `bun.lock`, and every workspace's `package.json` before the install,
+so that layer caches until a dependency changes, then copies the packages and the two apps the image runs, `apps/api`
+and `apps/worker`, beside the built web app and docs, and starts under `doppler run`. The LiteLLM proxy is a separate
+service with its own image in `infra/litellm/`:
 
 ```bash
 docker build --platform=linux/amd64 --build-arg VITE_TURNSTILE_SITE_KEY=<site-key> --build-arg VITE_POSTHOG_KEY=<project-key> --build-arg VITE_POSTHOG_HOST=<host> -t carlnotes-app .
@@ -534,7 +546,7 @@ finishes with the docs embed. It runs in Northflank instead of GitHub Actions, a
 offline gate, the smoke suite, and the weekly LLM Guard version check. None of them deploy. So new code never meets an old schema:
 
 ```bash
-doppler run -- bun db/migrate.ts
+doppler run -- bun packages/db/migrate.ts
 # or
 bun run db:migrate
 ```
@@ -543,7 +555,7 @@ Prompts are a deploy job too, uploaded as candidates instead of promoted. Withou
 wording it already had while the repo moves on, and a scan reads stale prompts:
 
 ```bash
-doppler run -- bun worker/prompts/sync.ts --candidate
+doppler run -- bun packages/models/prompts/sync.ts --candidate
 # or
 bun run prompts:sync --candidate
 ```
@@ -552,7 +564,7 @@ The docs embeddings are a deploy job too. It re-embeds only the sections whose w
 docs alone costs nothing:
 
 ```bash
-doppler run -- bun worker/docsSync.ts
+doppler run -- bun apps/worker/docsSync.ts
 # or
 bun run docs:embed
 ```
@@ -563,7 +575,7 @@ Cloudflare shares, so no cached page names assets the old build had. It needs `C
 since those pages leave the edge within two minutes anyway:
 
 ```bash
-doppler run -- bun api/edgeCache.purge.ts
+doppler run -- bun apps/api/edgeCache.purge.ts
 # or
 bun run edge:purge
 ```
@@ -574,15 +586,16 @@ prompt. A prompt whose live wording differs from the bundled one is logged once 
 
 The temporal worker and the scan sweep are their own services, built from this same image with the command overridden.
 They pick up new code on every deploy exactly as the api does. `schedule` decides what to scan and `temporal` does the scan work.
+Each starts through a root script, so the command Northflank runs never names a file path and survives a file move.
 
 ```bash
-doppler run -- bun worker/temporal.ts
+doppler run -- bun apps/worker/temporal.ts
 # or
-bun run dev:temporal
+bun run temporal
 ```
 
 ```bash
-doppler run -- bun worker/schedule.ts
+doppler run -- bun apps/worker/schedule.ts
 # or
 bun run schedule
 ```
@@ -598,7 +611,7 @@ and redeploys the service on push. A model swap is the config edit and nothing e
 
 [SECURITY.md](SECURITY.md) says how to report a vulnerability and lists the dependency checks that run on their own:
 Dependabot, `bun audit` in CI, CodeQL, the pinned actions and image digests, and the three-day release age. Dependency
-changes run through the pinned Bun, `bunx bun@1.3.14 add ...`, so the lockfile keeps the format CI's Bun reads. CI
+changes run through the pinned Bun, `bunx bun@1.4.3 add ...`, so the lockfile keeps the format CI's Bun reads. CI
 reads that version from `.bun-version` through the shared `.github/actions/setup-bun` step, and the Dockerfile pins the
 same version in its image tag, so a Bun upgrade changes both.
 

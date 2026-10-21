@@ -1,0 +1,20 @@
+{
+	"extends": "../../tsconfig.base.json",
+	// the build output goes above this folder. react-email treats every entry under --dir as a template and opens
+	// emitted declaration files as emails
+	"compilerOptions": {
+		"outDir": "../../.tsbuild/emails"
+	},
+	"references": [
+		{
+			"path": "../../packages/contracts"
+		},
+		{
+			"path": "../../packages/db"
+		},
+		{
+			"path": "../../packages/server"
+		}
+	],
+	"include": ["**/*.ts", "**/*.tsx"]
+}

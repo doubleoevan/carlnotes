@@ -1,11 +1,12 @@
 // the podcast chat eval's promptfoo provider, which runs the podcast reply under test and returns its answer, with
 // the answer's speaker in the response's metadata
+
+import { CHAT_COST_PER_MILLION_TOKENS, tokenCost } from "@carlnotes/models/budget"
+import { chatModel } from "@carlnotes/models/models"
+import { toModelMessages } from "@carlnotes/pipeline/chat/chatMessages"
+import { buildTopicChatPrompt } from "@carlnotes/pipeline/chat/chatPrompts"
+import { streamPodcastReply } from "@carlnotes/pipeline/chat/podcastReply"
 import type { ApiProvider, CallApiContextParams, ProviderResponse } from "promptfoo"
-import { CHAT_COST_PER_MILLION_TOKENS, tokenCost } from "../../worker/budget"
-import { toModelMessages } from "../../worker/chat/chatMessages"
-import { buildTopicChatPrompt } from "../../worker/chat/chatPrompts"
-import { streamPodcastReply } from "../../worker/chat/podcastReply"
-import { chatModel } from "../../worker/models"
 import { TOPIC_CHAT_CONTEXT } from "../topic-chat/topicChatCases"
 import type { PodcastChatCase } from "./podcastChatCases"
 
