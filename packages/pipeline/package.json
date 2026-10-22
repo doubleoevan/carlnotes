@@ -13,7 +13,7 @@
 		"@carlnotes/models": "workspace:*",
 		"@carlnotes/server": "workspace:*",
 		"@temporalio/client": "^1.24.0",
-		"ai": "^7.0.144",
+		"ai": "^7.0.145",
 		"drizzle-orm": "^0.45.4",
 		"exceljs": "^4.4.0",
 		"mammoth": "^1.13.0",
