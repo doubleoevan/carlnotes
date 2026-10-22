@@ -97,7 +97,7 @@
 		"@resvg/resvg-js": "^2.6.2",
 		"@temporalio/worker": "^1.24.0",
 		"@types/bun": "~1.4.3",
-		"ai": "^7.0.143",
+		"ai": "^7.0.144",
 		"concurrently": "^10.0.6",
 		"drizzle-kit": "^0.31.11",
 		"drizzle-orm": "^0.45.4",
