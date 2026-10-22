@@ -15,14 +15,23 @@ export function useTheme(): { isDark: boolean; toggleTheme: () => void } {
 	const toggleTheme = (): void => {
 		const nextIsDark = !isDark
 		document.documentElement.classList.toggle("dark", nextIsDark)
-		localStorage.setItem("theme", nextIsDark ? "dark" : "light")
+		localStorage.setItem(THEME_STORAGE_KEY, nextIsDark ? "dark" : "light")
 		// set the theme-color meta tag to the theme's hero color
-		document.querySelector('meta[name="theme-color"]')?.setAttribute("content", nextIsDark ? HERO_DARK : HERO_LIGHT)
+		document
+			.querySelector(`meta[name="${THEME_COLOR_META_NAME}"]`)
+			?.setAttribute("content", nextIsDark ? HERO_DARK : HERO_LIGHT)
 		setIsDark(nextIsDark)
 	}
 	return { isDark, toggleTheme }
 }
 
-// each theme's hero color, mirroring --hero in globals.css. the browser tints its toolbar with the hero color
-const HERO_LIGHT = "#3b2a1d"
-const HERO_DARK = "#0f0c09"
+// each theme's hero color, which the browser tints its toolbar with. they are written here instead of imported, so the
+// client bundle includes no palette
+export const HERO_LIGHT = "#3b2a1d"
+export const HERO_DARK = "#0f0c09"
+
+// the localStorage key that the saved theme lives under
+export const THEME_STORAGE_KEY = "theme"
+
+// the name of the meta tag that the browser tints its toolbar from
+export const THEME_COLOR_META_NAME = "theme-color"

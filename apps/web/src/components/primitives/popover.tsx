@@ -2,7 +2,8 @@ import * as PopoverPrimitive from "@radix-ui/react-popover"
 import { X } from "lucide-react"
 import type * as React from "react"
 
-import { HIGHLIGHT_SCROLLBAR_CLASS } from "@/lib/styleClasses"
+import { useScrollRegionTabStop } from "@/hooks/useScrollRegionTabStop"
+import { HIGHLIGHT_SCROLLBAR_CLASS, SCROLL_REGION_FOCUS_CLASS } from "@/lib/styleClasses"
 import { cn } from "@/lib/utils"
 
 // the shadcn new-york popover root
@@ -50,16 +51,30 @@ function PopoverContent({
 				)}
 				{...props}
 			>
-				{/* the scrolling body. the shell around it never scrolls. padding lives here, on the same box as the scrollbar,
-				    and overscroll-contain keeps a drag here off the page behind */}
-				<div
-					data-slot="popover-viewport"
-					className={cn("min-h-0 overflow-y-auto overscroll-contain p-4", HIGHLIGHT_SCROLLBAR_CLASS, bodyClassName)}
-				>
-					{children}
-				</div>
+				<PopoverViewport className={bodyClassName}>{children}</PopoverViewport>
 			</PopoverPrimitive.Content>
 		</PopoverPrimitive.Portal>
+	)
+}
+
+// the scrolling body. the shell around it never scrolls. padding lives here, on the same box as the scrollbar, and
+// overscroll-contain keeps a drag here off the page behind. it mounts with the open panel
+function PopoverViewport({ className, children }: { className?: string; children: React.ReactNode }) {
+	const { ref: viewportRef, tabIndex } = useScrollRegionTabStop<HTMLDivElement>()
+	return (
+		<div
+			ref={viewportRef}
+			data-slot="popover-viewport"
+			tabIndex={tabIndex}
+			className={cn(
+				"min-h-0 overflow-y-auto overscroll-contain p-4",
+				HIGHLIGHT_SCROLLBAR_CLASS,
+				SCROLL_REGION_FOCUS_CLASS,
+				className,
+			)}
+		>
+			{children}
+		</div>
 	)
 }
 

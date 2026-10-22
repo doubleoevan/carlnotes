@@ -2,6 +2,7 @@
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import { restoreConnectionPool, stubConnectionPool } from "@carlnotes/db/connectionPoolStub"
 import * as store from "@carlnotes/db/store"
+import { BASELINE_POLICY_DIRECTIVES } from "./contentSecurityPolicy"
 import { faviconsRoute, toFaviconPath } from "./favicons"
 
 // put the pool's own query and every spy back after each test
@@ -23,10 +24,11 @@ test("a stored icon is served with a policy that keeps a base url and a form on 
 	spyOn(store, "attachmentStream").mockReturnValue(new Blob(["icon"]).stream())
 	const response = await faviconsRoute.request("/favicons/example.com")
 
-	// the icon, with the sandboxed policy and both directives
+	// the icon, with the sandboxed policy and every baseline directive
 	expect(response.status).toBe(200)
 	const contentSecurityPolicy = response.headers.get("Content-Security-Policy") ?? ""
 	expect(contentSecurityPolicy).toContain("sandbox")
-	expect(contentSecurityPolicy).toContain("base-uri 'self'")
-	expect(contentSecurityPolicy).toContain("form-action 'self'")
+	for (const policyDirective of BASELINE_POLICY_DIRECTIVES) {
+		expect(contentSecurityPolicy).toContain(policyDirective)
+	}
 })

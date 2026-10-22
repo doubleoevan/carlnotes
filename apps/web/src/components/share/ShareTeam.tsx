@@ -2,6 +2,7 @@ import { sendCreateTeamInvite } from "@carlnotes/client/teamClient"
 import { Check, Link, Share } from "lucide-react"
 import { useState } from "react"
 import { toast } from "sonner"
+import { COPIED_FEEDBACK_MS } from "@/components/common/CopyMarkdownButton"
 import { Dialog, DialogContent, DialogTitle } from "@/components/primitives/dialog"
 import { useIsMounted, useOrigin } from "@/hooks/useBrowserValue"
 import { toInviteUrl } from "@/lib/inviteUrl"
@@ -10,7 +11,6 @@ import { MENU_DIVIDER_CLASS } from "@/lib/styleClasses"
 import { copyToClipboard } from "@/lib/utils"
 import { captureVisitEvent } from "@/lib/visitAnalytics"
 import {
-	COPIED_FEEDBACK_MS,
 	COPY_PAGE_LABEL,
 	CopyLinkOption,
 	DisabledShareOption,

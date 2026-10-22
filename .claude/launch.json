@@ -36,6 +36,13 @@
       "autoPort": false
     },
     {
+      "name": "storybook",
+      "runtimeExecutable": "bun",
+      "runtimeArgs": ["run", "dev:storybook"],
+      "port": 6006,
+      "autoPort": false
+    },
+    {
       "name": "temporal-ui",
       "url": "http://localhost:8233"
     },

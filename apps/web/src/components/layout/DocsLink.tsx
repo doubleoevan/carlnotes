@@ -19,7 +19,7 @@ export function DocsLink({
 	onNavigate?: () => void
 }) {
 	return (
-		<AnchorLink href="/docs" target="_blank" rel="noopener noreferrer" onClick={onNavigate} className={className}>
+		<AnchorLink href="/docs" isNewTab onClick={onNavigate} className={className}>
 			{hasIcon && <BookOpen className="size-4" />}
 			{label}
 		</AnchorLink>

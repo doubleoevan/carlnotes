@@ -1,5 +1,5 @@
 import { Check, ChevronsUpDown, Plus, X } from "lucide-react"
-import { useState } from "react"
+import { useId, useState } from "react"
 import { Badge } from "@/components/primitives/badge"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/primitives/popover"
 import { MENU_OPTION_CLASS, MENU_OPTION_SELECTED_CLASS } from "@/lib/styleClasses"
@@ -12,6 +12,7 @@ export type ComboboxOption = { value: string; label: string }
  * A multi-select combobox: the selected options are removable pills, and the filtered options list is a popover dropdown.
  */
 export function MultiCombobox({
+	id,
 	options,
 	values,
 	onUpdateValues,
@@ -20,7 +21,10 @@ export function MultiCombobox({
 	newOptionLabel,
 	onNewOption,
 	pinnedOption,
+	isRequired,
 }: {
+	// the trigger's id, which a field label names it by
+	id?: string
 	options: ComboboxOption[]
 	values: string[]
 	onUpdateValues: (values: string[]) => void
@@ -31,9 +35,14 @@ export function MultiCombobox({
 	onNewOption?: () => void
 	// an option that sits under the scrolling list instead of in it, so a long list never hides it
 	pinnedOption?: ComboboxOption
+	// a required field. a button takes no aria-required, so the trigger's description says it
+	isRequired?: boolean
 }) {
 	const [isOpen, setIsOpen] = useState(false)
 	const [filter, setFilter] = useState("")
+	// a labeled trigger takes its name from the label, so the trigger text, the placeholder or the selected count,
+	// describes it instead
+	const triggerTextId = useId()
 
 	// clicking an option toggles its value in the selection
 	const handleUpdateValues = (value: string): void => {
@@ -71,11 +80,14 @@ export function MultiCombobox({
 			<Popover open={isOpen} onOpenChange={setIsOpen} modal>
 				<PopoverTrigger asChild>
 					<button
+						id={id}
+						aria-describedby={id ? triggerTextId : undefined}
 						type="button"
 						className="border-input bg-background flex min-h-9 w-full items-center justify-between rounded-md border px-3 text-sm"
 					>
-						<span className={cn(selectedOptions.length === 0 && "text-muted-foreground")}>
+						<span id={triggerTextId} className={cn(selectedOptions.length === 0 && "text-muted-foreground")}>
 							{selectedOptions.length === 0 ? placeholder : `${selectedOptions.length} selected`}
+							{isRequired && <span className="sr-only">, required</span>}
 						</span>
 						<ChevronsUpDown className="size-4 shrink-0 opacity-50" />
 					</button>
@@ -105,8 +117,12 @@ export function MultiCombobox({
 							</button>
 						))}
 					</div>
-					{/* show a message if there are no options left after filtering */}
-					{shownOptions.length === 0 && <p className="text-muted-foreground px-2 py-2 text-sm">{emptyLabel}</p>}
+					{/* the empty label if there is nothing to offer, or the no-match line if the filter left no option */}
+					{shownOptions.length === 0 && (
+						<p className="text-muted-foreground px-2 py-2 text-sm">
+							{options.length === 0 ? emptyLabel : "Nothing matches."}
+						</p>
+					)}
 					{/* the pinned option toggles like any other row, from under the list where it always shows */}
 					{pinnedOption && (
 						<button

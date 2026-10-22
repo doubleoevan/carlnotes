@@ -10,7 +10,12 @@ import { AnchorLink } from "@/components/common/AnchorLink"
 import { Popover, PopoverCloseButton, PopoverContent, PopoverTrigger } from "@/components/primitives/popover"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import { ScrollBox } from "@/components/topic/TopicScanRecap"
-import { ICON_TILE_BUTTON_CLASS, POPOVER_HEADING_CLASS, POPOVER_PANEL_CLASS } from "@/lib/styleClasses"
+import {
+	ICON_TILE_BUTTON_CLASS,
+	POPOVER_HEADING_CLASS,
+	POPOVER_PANEL_CLASS,
+	STANDALONE_LINK_CLASS,
+} from "@/lib/styleClasses"
 import { cn } from "@/lib/utils"
 import { THEME_SONG_LYRICS, toLyricsSections } from "./themeSongLyrics"
 
@@ -48,14 +53,14 @@ function ThemeSongCredits() {
 		<div className="flex flex-col gap-1 text-sm">
 			{/* the heading in the note popups' heading style, padded on both sides so that the heading centers clear of the close button */}
 			<h2 className={cn(POPOVER_HEADING_CLASS, "px-6")}>
-				<AnchorLink href={PODCAST_THEME_SONG.youtubeUrl} className="text-link hover:underline">
+				<AnchorLink href={PODCAST_THEME_SONG.youtubeUrl} className="sentence-link">
 					{PODCAST_THEME_SONG.title}
 				</AnchorLink>
 				{" Theme Song"}
 			</h2>
 			<p>
 				{`${PODCAST_THEME_SONG_WRITING_LABEL} `}
-				<AnchorLink href={PODCAST_THEME_SONG.songwriterUrl} className="text-link hover:underline">
+				<AnchorLink href={PODCAST_THEME_SONG.songwriterUrl} className="sentence-link">
 					{PODCAST_THEME_SONG.songwriter}
 				</AnchorLink>
 			</p>
@@ -78,7 +83,7 @@ function ThemeSongCredits() {
 
 			{/* the link to the song's video, at the far right below the lyrics */}
 			<p className="mt-1 text-right">
-				<AnchorLink href={PODCAST_THEME_SONG.youtubeUrl} className="text-link font-bold hover:underline">
+				<AnchorLink href={PODCAST_THEME_SONG.youtubeUrl} className={cn(STANDALONE_LINK_CLASS, "font-bold")}>
 					Enjoy 😊
 				</AnchorLink>
 			</p>

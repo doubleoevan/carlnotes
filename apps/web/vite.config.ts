@@ -32,6 +32,7 @@ export default defineConfig({
 			"^/mcp(/t/|\\?|$)": API_ORIGIN,
 			"/.well-known": API_ORIGIN,
 			"/docs": API_ORIGIN,
+			"/nightshift": API_ORIGIN,
 			"/blog": API_ORIGIN,
 			"/releases": API_ORIGIN,
 			"/changelog": API_ORIGIN,

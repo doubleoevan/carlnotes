@@ -10,7 +10,13 @@ import type * as React from "react"
 import { useEffect, useLayoutEffect, useRef, useState } from "react"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { CopyMarkdownButton } from "@/components/common/CopyMarkdownButton"
-import { HIGHLIGHT_SCROLLBAR_CLASS, POPOVER_HEADING_CLASS } from "@/lib/styleClasses"
+import { useScrollRegionTabStop } from "@/hooks/useScrollRegionTabStop"
+import {
+	HIGHLIGHT_SCROLLBAR_CLASS,
+	POPOVER_HEADING_CLASS,
+	SCROLL_REGION_FOCUS_CLASS,
+	STANDALONE_LINK_CLASS,
+} from "@/lib/styleClasses"
 import { cn } from "@/lib/utils"
 
 // the fields a scan recap popover reads, shared by the topic page's scan history and the Activity subtable
@@ -70,7 +76,7 @@ function FindingLink({
 	// an allowed url renders as a link
 	if (href && allowedUrls?.has(href)) {
 		return (
-			<AnchorLink href={href} isUserContent className="text-link hover:underline">
+			<AnchorLink href={href} isUserContent className="sentence-link">
 				{children}
 			</AnchorLink>
 		)
@@ -140,14 +146,19 @@ export function ScrollBox({
 	// the bordered box's classes, for a caller that lets the box shrink
 	boxClassName?: string
 }) {
-	const scrollBoxRef = useRef<HTMLDivElement>(null)
+	// the scrolling element and its tab stop
+	const { ref: scrollBoxRef, tabIndex } = useScrollRegionTabStop<HTMLDivElement>()
 	// biome-ignore lint/correctness/useExhaustiveDependencies: the value is the trigger, read through the ref
 	useEffect(() => {
 		scrollBoxRef.current?.scrollTo({ top: 0 })
 	}, [scrollToTopOn])
 	return (
 		<div className={cn("group border-primary/50 relative rounded-md border", boxClassName)}>
-			<div ref={scrollBoxRef} className={cn("max-h-72 overflow-y-auto p-2", HIGHLIGHT_SCROLLBAR_CLASS, className)}>
+			<div
+				ref={scrollBoxRef}
+				tabIndex={tabIndex}
+				className={cn("max-h-72 overflow-y-auto p-2", HIGHLIGHT_SCROLLBAR_CLASS, SCROLL_REGION_FOCUS_CLASS, className)}
+			>
 				{children}
 			</div>
 			{copyMarkdown && <CopyMarkdownButton markdown={copyMarkdown} />}
@@ -211,7 +222,7 @@ export function NumberedTopicFindingList({ findings }: { findings: TopicFinding[
 		<ol className="mt-3 space-y-2.5">
 			{findings.map((finding, index) => (
 				<li key={finding.findingId}>
-					<AnchorLink href={finding.url} isUserContent className="text-link hover:underline">
+					<AnchorLink href={finding.url} isUserContent className={STANDALONE_LINK_CLASS}>
 						{index + 1}. {finding.title ?? finding.url}
 					</AnchorLink>
 					{/* the host under the title, then the model's reason the finding was kept.
@@ -322,7 +333,7 @@ export function TopicScanNote({
 				<button
 					type="button"
 					onClick={() => setIsExpanded(!isExpanded)}
-					className="text-link mt-1 text-xs hover:underline"
+					className={cn(STANDALONE_LINK_CLASS, "mt-1 text-xs")}
 				>
 					{isExpanded ? "Read less" : "Read more"}
 				</button>

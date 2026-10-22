@@ -3,8 +3,10 @@ import { useState } from "react"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import { cn, copyToClipboard } from "@/lib/utils"
 
-// how long the copied checkmark stays before the button offers to copy again
-const COPIED_FEEDBACK_MS = 1500
+/**
+ * How long the copied checkmark stays before the button offers to copy again.
+ */
+export const COPIED_FEEDBACK_MS = 1500
 
 /**
  * The hover copy button on a notes scroll box: it copies the box's content to the clipboard as Markdown ready to paste into an AI,

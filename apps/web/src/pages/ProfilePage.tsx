@@ -27,7 +27,7 @@ import { InviteUserToTeamButton } from "@/components/team/InviteUserToTeamButton
 import { NewTopicButton, useNewTopicDialog } from "@/components/topic/TopicEditorChoiceDialog"
 import { useLoadInBrowser } from "@/hooks/useBrowserValue"
 import { usePageTitle } from "@/hooks/usePageTitle"
-import { CARD_CLASS, PAGE_CLASS } from "@/lib/styleClasses"
+import { CARD_CLASS, PAGE_CLASS, STANDALONE_LINK_CLASS } from "@/lib/styleClasses"
 import { cn } from "@/lib/utils"
 import { openNewTopicChat, useRegisterChatContext } from "@/stores/chatPanelStore"
 import { type PageActionOption, useRegisterPageActions } from "@/stores/pageActionsStore"
@@ -211,7 +211,7 @@ export function ProfilePage() {
 }
 
 // the topics and teams sections. each is an accordion item containing a table
-function ProfileSections({
+export function ProfileSections({
 	profile,
 	isOwnProfile,
 	topics,
@@ -233,7 +233,8 @@ function ProfileSections({
 						{isOwnProfile ? "Your topics" : toCountLabel(profile.topics.length, "topic")}
 					</AccordionTrigger>
 					<AccordionContent>
-						{/* your own profile manages the topics. other users see the profile table */}
+						{/* your own profile manages the topics. other users see the profile table, or a muted line if the
+						    profile has no topics */}
 						{isOwnProfile ? (
 							topics === null ? (
 								<CoffeeLoading className="min-h-0 justify-start py-2 text-sm" />
@@ -242,7 +243,7 @@ function ProfileSections({
 									<button
 										type="button"
 										onClick={() => openNewTopicChat()}
-										className="font-display text-link text-lg hover:underline"
+										className={cn(STANDALONE_LINK_CLASS, "font-display text-lg")}
 									>
 										Give Carl a topic. You know the one.
 									</button>
@@ -250,8 +251,10 @@ function ProfileSections({
 							) : (
 								<OwnerTopicsTable topics={topics} onReloadPage={onLoadTopics} />
 							)
-						) : (
+						) : profile.topics.length > 0 ? (
 							<TopicsTable topics={profile.topics} includesNonPublicTopics={profile.includesNonPublicTopics} />
+						) : (
+							<p className="text-muted-foreground text-sm">No public topics.</p>
 						)}
 					</AccordionContent>
 				</AccordionItem>

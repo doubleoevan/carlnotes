@@ -19,9 +19,9 @@ COPY packages/core/package.json ./packages/core/
 COPY packages/db/package.json ./packages/db/
 COPY packages/emails/package.json ./packages/emails/
 COPY packages/models/package.json ./packages/models/
+COPY packages/nightshift/package.json ./packages/nightshift/
 COPY packages/pipeline/package.json ./packages/pipeline/
 COPY packages/server/package.json ./packages/server/
-COPY packages/tokens/package.json ./packages/tokens/
 RUN bun install --frozen-lockfile
 
 # the whole tree. the web build imports the universal packages and the docs build imports the contracts
@@ -44,6 +44,10 @@ RUN bun run build:ui
 # the docs site, built to static files the app service serves under /docs. Astro and Starlight are dev
 # dependencies, so the toolchain stays in this stage and only the built output is copied forward
 RUN bun run build:docs
+
+# the Nightshift component browser, a static Storybook the app service serves at /nightshift. it writes into
+# apps/web/dist/nightshift after build:ui, and Storybook is a dev dependency, so only the built output moves forward
+RUN bun run build:storybook
 
 # the runtime includes only what serving a request needs: production dependencies, the workspaces Bun executes, and the
 # built web app and docs. the toolchain and every dev dependency stay behind in the build stage
@@ -75,9 +79,9 @@ COPY packages/core/package.json ./packages/core/
 COPY packages/db/package.json ./packages/db/
 COPY packages/emails/package.json ./packages/emails/
 COPY packages/models/package.json ./packages/models/
+COPY packages/nightshift/package.json ./packages/nightshift/
 COPY packages/pipeline/package.json ./packages/pipeline/
 COPY packages/server/package.json ./packages/server/
-COPY packages/tokens/package.json ./packages/tokens/
 RUN bun install --frozen-lockfile --production
 
 # Bun runs the TypeScript directly, so the source is the artifact: the packages, and the two apps the image runs as.
@@ -93,7 +97,8 @@ COPY apps/docs/design/podcast/cover-base.png ./apps/docs/design/podcast/cover-ba
 # the blog's markdown, which the api renders per request. the docs moved to the Starlight site above
 COPY content ./content
 
-# the built web app: the browser files the api serves, and the server build the api renders pages through
+# the built web app: the browser files the api serves, the server build the api renders pages through, and the
+# Nightshift component browser under nightshift/
 COPY --from=build /app/apps/web/dist ./apps/web/dist
 
 # the built docs site, served under /docs

@@ -32,7 +32,8 @@ The page routes that `api/index.ts` and `api/api.ts` serve today move into `@car
 apps mount: the static roots and the ui render with its page guards, render concurrency, and page rate limiters
 (`index.ts`'s page chain), `content.ts`, `documents.ts`, `seo.ts`, `jsonLd.ts`, the release pages split from the
 GitHub webhook in `releases.ts`, `share/*`, `avatars.ts` and `avatarsRoute.ts`, `favicons.ts`, the podcast feed and
-cover routes in `podcast/podcastFeeds.ts`, `botAnalytics.ts`, `edgeCache.ts`, `trustedProxies.ts`, and
+cover routes in `podcast/podcastFeeds.ts`, `nightshift.ts` with the component browser's root in `bundlePaths.ts`,
+`botAnalytics.ts`, `edgeCache.ts`, `trustedProxies.ts`, and
 `requestTracing.ts`. `apps/api/index.ts` mounts it exactly where it mounted the routes, so the `app` service serves
 every path as before. `apps/web/server.ts` is a second Hono entry: the health routes, the pages package, and the ui
 render from `apps/web/dist`, started by `bun run web` on the same image. Its loaders reach the api through

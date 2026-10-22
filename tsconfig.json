@@ -4,6 +4,7 @@
 		{ "path": "./packages/contracts" },
 		{ "path": "./packages/client" },
 		{ "path": "./packages/core" },
+		{ "path": "./packages/nightshift" },
 		{ "path": "./packages/server" },
 		{ "path": "./packages/db" },
 		{ "path": "./packages/emails" },

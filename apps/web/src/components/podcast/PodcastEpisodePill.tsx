@@ -18,10 +18,10 @@ import { PodcastEpisodeTooltip } from "./PodcastEpisodeDetails"
 // the style that every podcast episode pill shares, with a button's shadow
 const PILL_CLASS = "shadow-lift inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-semibold"
 
-// a pill's colors while its podcast episode or chapter plays, and a pill's border otherwise.
-// the border keeps the pill visible on a highlighted row
+// a pill's colors while its podcast episode or chapter plays, and its colors while neither plays.
+// the idle border keeps the pill visible on a highlighted row
 const HIGHLIGHTED_PILL_CLASS = "bg-primary text-primary-foreground border-transparent font-bold"
-const IDLE_PILL_BORDER_CLASS = "border-separator-strong"
+const IDLE_PILL_CLASS = "border-separator-strong bg-muted text-link"
 
 // the podcast episode, the chapter that the pill plays, and the pill's own classes
 type PodcastEpisodeChapterPillProps = {
@@ -52,11 +52,7 @@ export function PodcastEpisodeChapterPill({ podcastEpisode, chapter, className }
 				event.stopPropagation()
 				togglePodcastEpisodeChapterPlayback(podcastEpisode, chapter)
 			}}
-			className={cn(
-				PILL_CLASS,
-				isChapterPlaying ? HIGHLIGHTED_PILL_CLASS : [IDLE_PILL_BORDER_CLASS, "bg-muted text-primary"],
-				className,
-			)}
+			className={cn(PILL_CLASS, isChapterPlaying ? HIGHLIGHTED_PILL_CLASS : IDLE_PILL_CLASS, className)}
 		>
 			<PodcastEpisodePillBody
 				text={`E${podcastEpisode.episodeNumber} · ch ${chapter.position + 1}`}
@@ -133,11 +129,7 @@ export function PodcastEpisodeNumberPill({
 				type="button"
 				aria-label={`${isPodcastEpisodePlaying ? "Pause" : "Play"} episode ${podcastEpisode.episodeNumber}`}
 				onClick={() => void togglePodcastEpisodePlayback(podcastEpisode.id)}
-				className={cn(
-					PILL_CLASS,
-					isPodcastEpisodePlaying ? HIGHLIGHTED_PILL_CLASS : [IDLE_PILL_BORDER_CLASS, "bg-muted text-link"],
-					className,
-				)}
+				className={cn(PILL_CLASS, isPodcastEpisodePlaying ? HIGHLIGHTED_PILL_CLASS : IDLE_PILL_CLASS, className)}
 			>
 				<PodcastEpisodePillBody text={`E${podcastEpisode.episodeNumber}`} isPlaying={isPodcastEpisodePlaying} />
 			</button>

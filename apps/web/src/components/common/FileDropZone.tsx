@@ -81,7 +81,7 @@ export function FileDropZone({
 			{/* the overlay covers the target while a file is over it, so the whole box reads as the target */}
 			{isDraggingFiles &&
 				(overlay ?? (
-					<div className="bg-background/90 border-primary text-primary pointer-events-none absolute inset-0 z-10 grid place-items-center rounded-md border-2 border-dashed">
+					<div className="bg-background/90 border-primary text-link pointer-events-none absolute inset-0 z-10 grid place-items-center rounded-[inherit] border-2 border-dashed">
 						<span className="flex items-center gap-2 text-sm font-medium">
 							<Paperclip aria-hidden="true" className="size-4" />
 							Drop to attach

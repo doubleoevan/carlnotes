@@ -4,8 +4,9 @@
 
 Workspaces are `apps/*` and `packages/*`. An app imports packages and never another app, except that `@carlnotes/client`
 and `apps/web` import `AppType` and the auth type from `@carlnotes/api` as types only. A package imports only the
-packages before it in its chain: `contracts` → `client` → `core` (universal, with `tokens` standing apart as CSS alone)
-and `server` → `db` → `emails` → `models` → `pipeline` (server). A server package may import a universal one.
+packages before it in its chain: `contracts` → `client` → `core` (universal, with `nightshift` standing apart as the
+design system) and `server` → `db` → `emails` → `models` → `pipeline` (server). A server package may import a universal
+one.
 `scripts/check-package-boundaries.ts` enforces the order in preflight.
 
 Apps, the deployable entry points:
@@ -13,7 +14,7 @@ Apps, the deployable entry points:
 - `apps/web/` — the TanStack Start app: the file routes under `apps/web/src/routes/`, the pages they render, components,
   providers, and the DOM-bound hooks, lib, and stores. A public page renders on the server for a visitor and a crawler.
   The sign-in pages, a route behind sign-in, and every route when the request brings a session cookie render in the
-  browser.
+  browser. Its Storybook, the Nightshift component browser, builds to static files the api serves at `/nightshift`.
 - `apps/api/` — the Hono server: routes, authorization, billing, chat rooms, tasting notes, teams, invites, share cards,
   page head data, the MCP server, and the document routes (the sitemap, the feeds, the llms files, the IndexNow key, and
   security.txt).
@@ -28,7 +29,8 @@ Packages, private `@carlnotes/<name>` workspaces that export source, in dependen
   universal modules every workspace may import.
 - `packages/client/` — the typed api clients. An app configures the base url and how an error shows.
 - `packages/core/` — the DOM-free lib, stores, and hooks that the web app shares with any other client.
-- `packages/tokens/` — `tokens.css`, the design tokens.
+- `packages/nightshift/` — Nightshift, the design system: every color token, the radius scale, the fonts, and the type
+  roles in TypeScript, the email values, and the `tokens.css` and Figma files written from them.
 - `packages/server/` — env settings, monitoring, analytics, hmac, retry, concurrency, and the public fetch: everything
   that reads `Bun.env` or a server SDK.
 - `packages/db/` — Drizzle schema, migrations, quotas, the Redis store, object storage, and the database claim. Neon
@@ -56,13 +58,14 @@ Each app and package has its own AGENTS.md with entry points, layout, and comman
 | New or changed ingester | `packages/pipeline/ingest/` (`ingester.ts` is the interface) | ingester-authoring | `apps/api/`, `apps/web/` |
 | Model-facing prompt | `packages/models/prompts/*.md` + its thin builder | prompt-authoring | everything outside `packages/models/prompts/` and the builder's own folder |
 | Schema or migration | `packages/db/schema/<domain>.ts`, then `bun run db:generate` | domain-model | `packages/db/migrations/` (generated) |
-| UI screen or component | `apps/web/src/routes/` for the route and its head, `apps/web/src/pages/`, `apps/web/src/components/<area>/` | jsx-conventions | `apps/api/`; the request and response types are in `packages/contracts/` (`payloads.ts`, `topicPayloads.ts`, and the contracts) |
+| UI screen or component | `apps/web/src/routes/` for the route and its head, `apps/web/src/pages/`, `apps/web/src/components/<area>/`; the Storybook MCP server's catalog (`bun run dev:storybook`) before writing a component; a story beside every primitive and shared component | jsx-conventions | `apps/api/`; the request and response types are in `packages/contracts/` (`payloads.ts`, `topicPayloads.ts`, and the contracts) |
+| Design token, type role, or email color | `packages/nightshift/` (`colors.ts`, `radius.ts`, `typography.ts`, `email.ts`), then `bun run nightshift:write` | — | `packages/nightshift/tokens.css` and `packages/nightshift/figma/` (generated) |
 | Tasting note or sync change | `apps/api/note/`, `apps/web/src/components/note/` | domain-model | `apps/worker/`, `packages/pipeline/` |
 | API route or permission | `apps/api/<domain>/`, `apps/api/authorization.ts` | domain-model | `apps/worker/`; `packages/pipeline/` and `packages/models/` beyond the modules the route imports |
 | Temporal workflow change | `apps/worker/workflows/`, `apps/worker/temporal.ts` | — | `apps/web/`, `apps/api/` route files |
 | Email template or send | `packages/emails/*.tsx`, `packages/emails/email.ts`, `packages/pipeline/notify.ts` | — | `apps/web/` |
-| Release notes | `apps/api/releases.ts`, the convention in `apps/docs/release-notes.md` | domain-model | `apps/web/` except the footer link |
-| Docs page | `apps/docs/src/content/`, its shared pieces in `apps/docs/src/components/`, the video plugin `apps/docs/src/topicTutorialVideoPlugin.ts`, then `bun run docs:embed` | — | `apps/docs/dist/` (built) |
+| Release notes | `apps/api/releases.ts`, the convention in `apps/docs/release-notes.md` | domain-model, write-docs | `apps/web/` except the footer link |
+| Docs page | `apps/docs/src/content/`, its shared pieces in `apps/docs/src/components/`, the video plugin `apps/docs/src/topicTutorialVideoPlugin.ts`, then `bun run docs:embed` | write-docs | `apps/docs/dist/` (built) |
 | Eval work | `evals/README.md`, `evals/evalHarness.ts`, `evals/evalChecks.ts`, `evals/<eval>/`, `.github/workflows/evals.yml`, `.github/workflows/llm-guard-update.yml` | prompt-authoring | app modules except the function the eval calls |
 | Podcast episode, player, feed, or cover | `packages/pipeline/podcast/`, `apps/worker/workflows/recordPodcastEpisode.ts`, `apps/api/podcast/`, `apps/api/share/podcastFeed.ts`, `apps/api/share/podcastCover.ts`, `packages/models/speech.ts`, `packages/contracts/podcastEpisodes.ts`, `packages/server/podcastEpisodeSettings.ts`, `packages/server/podcastCoverPaths.ts`, `apps/web/src/components/podcast/`, `apps/web/src/pages/PodcastEpisodePage.tsx` | domain-model, prompt-authoring | `packages/db/migrations/` |
 | MCP tool, Topic Tool, or the Add to AI dialog | `apps/api/mcp/`, `apps/api/tool/`, `apps/web/src/components/common/AddToAiDialog.tsx` | domain-model | `apps/worker/`; `packages/pipeline/` and `packages/models/` beyond `budget.ts` and the modules the tool imports |
@@ -75,7 +78,8 @@ Generated or archived paths that burn context:
 
 - `packages/db/migrations/` — generated SQL and snapshots; the schema is `packages/db/schema/`
 - `apps/web/src/routeTree.gen.ts` — the route tree Vite generates from `apps/web/src/routes/`; the routes are the files
-- `apps/web/dist/`, `apps/docs/dist/` — built web app and docs output
+- `apps/web/dist/`, `apps/docs/dist/` — built web app, component browser, and docs output
+- `packages/nightshift/tokens.css`, `packages/nightshift/figma/` — generated from the Nightshift TypeScript source
 - `coverage/` — test coverage output
 - `openspec/changes/archive/` — archived OpenSpec changes
 - `.agents/skills/{ai-sdk,vercel-react-best-practices,web-design-guidelines,impeccable,ponytail}/` — vendored skills,
@@ -92,8 +96,8 @@ test suite. Green before any hand-off.
 
 - Comment every logical group: `//` comment line(s) above every group of 2+ statements, one line preferred.
 - A `package.json` lives at the root, in `apps/<name>/`, or in `packages/<name>/`. The module map above has the import
-  order. A universal package (`contracts`, `client`, `core`, `tokens`) depends only on universal packages and holds no
-  Bun, Node, or DOM global. A module goes to the lowest package whose dependencies it needs, among the packages that
+  order. A universal package (`contracts`, `client`, `core`, `nightshift`) depends only on universal packages and holds
+  no Bun, Node, or DOM global. A module goes to the lowest package whose dependencies it needs, among the packages that
   import it. `scripts/check-structure.sh` and `scripts/check-package-boundaries.ts` enforce it.
 - State lives in module scope behind exported functions, in a `packages/core/stores/` or `apps/web/src/stores/` module,
   or in a hook. Author a class only for an `Error` subclass, or for many instances with their own lifecycle that
@@ -134,4 +138,5 @@ Rules agents and reviewers must honor, source copies at `.agents/skills/`:
   and `{{variable}}` bodies, loaded by thin builders; never inline string literals; Carl addresses a "reader" where the
   app's code says "user"
 - code-style, jsx-conventions, git-discipline: shared readability and git rules
+- write-docs: clear, persuasive prose for READMEs, design docs, proposals, PR descriptions, and release notes
 - vendored guidance: vercel-react-best-practices, web-design-guidelines, ai-sdk, impeccable, ponytail

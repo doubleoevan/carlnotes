@@ -47,7 +47,7 @@ function ReplyLink({ href, children }: { href?: string; children?: React.ReactNo
 	// open the new-topic chat from the words that name it
 	if (href === NEW_TOPIC_CHAT_HREF) {
 		return (
-			<button type="button" onClick={() => openNewTopicChat()} className="text-link hover:underline">
+			<button type="button" onClick={() => openNewTopicChat()} className="sentence-link">
 				{children}
 			</button>
 		)
@@ -56,7 +56,7 @@ function ReplyLink({ href, children }: { href?: string; children?: React.ReactNo
 		return <span>{children}</span>
 	}
 	return (
-		<AnchorLink href={href} className="text-link hover:underline">
+		<AnchorLink href={href} className="sentence-link">
 			{children}
 		</AnchorLink>
 	)
@@ -68,7 +68,7 @@ function ReplyImage({ src, alt }: { src?: string; alt?: string }) {
 		return <span>{alt ?? ""}</span>
 	}
 	return (
-		<AnchorLink href={src} className="text-link hover:underline">
+		<AnchorLink href={src} className="sentence-link">
 			{alt || "image"}
 		</AnchorLink>
 	)

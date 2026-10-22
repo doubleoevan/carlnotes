@@ -7,20 +7,28 @@ import type { TopicFinding } from "@carlnotes/contracts/findings"
 import type { PodcastEpisode } from "@carlnotes/contracts/podcast"
 import { toHostWithoutWww } from "@carlnotes/contracts/seo"
 import { Bookmark, Check, Circle, ExternalLink } from "lucide-react"
-import { useEffect, useState } from "react"
+import { type ReactNode, useEffect, useState } from "react"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { LinkPreviewCard, LinkPreviewLoading } from "@/components/common/LinkPreviewCard"
 import { RatingThumbs } from "@/components/common/RatingThumbs"
 import { FindingChapterPill } from "@/components/podcast/PodcastEpisodePill"
 import { Input } from "@/components/primitives/input"
 import { PopoverCloseButton, PopoverContent } from "@/components/primitives/popover"
-import { POPOVER_HEADING_CLASS, POPOVER_PANEL_CLASS } from "@/lib/styleClasses"
+import {
+	POPOVER_HEADING_CLASS,
+	POPOVER_PANEL_CLASS,
+	SECTION_LABEL_CLASS,
+	STANDALONE_LINK_CLASS,
+} from "@/lib/styleClasses"
 import { cn } from "@/lib/utils"
 import { captureVisitEvent, toPublicTopicProperties } from "@/lib/visitAnalytics"
 import { type TopicFeedHandlers, useIsSignedIn } from "@/providers/TopicFeedProvider"
 import { ResourceMetadata } from "./TopicFindingSummary"
 import { InfoSection } from "./TopicInfo"
 import { ScrollBox, toNotesMarkdown } from "./TopicScanRecap"
+
+// the bookmark and read toggles' text-button style
+const TOPIC_FINDING_TOGGLE_CLASS = "hover:text-link flex min-h-11 items-center gap-2 text-sm hover:underline sm:min-h-9"
 
 // the topic that the note popover's copied Markdown names, with its visibility
 export type ResourceInfoTopic = { id: string; name: string; prompt: string; visibility: (typeof visibilities)[number] }
@@ -65,42 +73,28 @@ export function ResourceInfo({
 				<h2 className={POPOVER_HEADING_CLASS}>Topic Finding</h2>
 
 				{/* the topic finding's rank and its title, which is the one way out to the page itself */}
-				<div className="mb-3 flex items-start gap-2.5">
-					{topicFindingRank !== null && (
-						<span className="text-muted-foreground font-display shrink-0 text-sm tabular-nums">
-							<span className="sr-only">Rank </span>
-							{topicFindingRank}
-						</span>
-					)}
-					<div className="min-w-0 flex-1">
-						<AnchorLink
-							href={resource.url}
-							isUserContent
-							onClick={() => {
-								// report the click by the finding's host, naming the topic only if it is public
-								captureVisitEvent("visit_finding_clicked", {
-									host: toHostWithoutWww(resource.url),
-									...toPublicTopicProperties(topic),
-								})
-								topicFeedHandlers.openTopicFinding(resource.findingId)
-							}}
-							className="text-link inline-flex items-start gap-1 text-sm font-semibold hover:underline"
-						>
-							{resource.title ?? resource.url}
-							<ExternalLink className="mt-0.5 size-3.5 shrink-0" />
-						</AnchorLink>
-						<div className="text-muted-foreground mt-0.5 flex flex-wrap items-center gap-1.5 text-xs">
-							<ResourceMetadata resource={resource} />
-							<FindingChapterPill podcastEpisode={podcastEpisode} findingId={resource.findingId} />
-						</div>
-					</div>
-				</div>
+				<TopicFindingHeading
+					topicFindingRank={topicFindingRank}
+					title={resource.title ?? resource.url}
+					url={resource.url}
+					onClick={() => {
+						// report the click by the finding's host, naming the topic only if it is public
+						captureVisitEvent("visit_finding_clicked", {
+							host: toHostWithoutWww(resource.url),
+							...toPublicTopicProperties(topic),
+						})
+						topicFeedHandlers.openTopicFinding(resource.findingId)
+					}}
+				>
+					<ResourceMetadata resource={resource} />
+					<FindingChapterPill podcastEpisode={podcastEpisode} findingId={resource.findingId} />
+				</TopicFindingHeading>
 
 				{/* the linked page's link preview card, right above Carl's notes */}
 				<FindingLinkPreview findingId={resource.findingId} />
 
 				{/* the AI explanation of why this resource is relevant, in a scroll box so a long note stays contained */}
-				<div className="text-muted-foreground font-display mb-1 text-xs tracking-wide uppercase">{"Carl's notes"}</div>
+				<div className={cn(SECTION_LABEL_CLASS, "mb-1")}>{"Carl's notes"}</div>
 				<ScrollBox
 					copyMarkdown={toNotesMarkdown({
 						topicId: topic.id,
@@ -112,15 +106,7 @@ export function ResourceInfo({
 					<p>{resource.relevanceExplanation || "No notes yet."}</p>
 				</ScrollBox>
 				{/* when the resource was fetched and how many times it was opened */}
-				<div className="mt-3 space-y-2">
-					<InfoSection className="py-0" label="Fetched">
-						{new Date(resource.fetchedAt).toLocaleDateString()}
-					</InfoSection>
-					<div className="bg-separator h-px" />
-					<InfoSection className="py-0" label="Views">
-						{resource.viewCount.toLocaleString()}
-					</InfoSection>
-				</div>
+				<TopicFindingStats fetchedAt={resource.fetchedAt} viewCount={resource.viewCount} />
 				{/* the bookmark, read, and rating buttons, only shown to a signed-in user */}
 				{isSignedIn && (
 					<div className="mt-3 border-t pt-2">
@@ -139,7 +125,7 @@ export function ResourceInfo({
 									type="button"
 									onClick={() => topicFeedHandlers.bookmarkTopicFinding(resource.findingId, !resource.isBookmarked)}
 									aria-pressed={resource.isBookmarked}
-									className="hover:text-primary flex min-h-11 items-center gap-2 text-sm hover:underline sm:min-h-9"
+									className={TOPIC_FINDING_TOGGLE_CLASS}
 								>
 									<Bookmark className={cn("size-4", resource.isBookmarked && "text-primary fill-current")} />
 									{bookmarkLabel}
@@ -148,7 +134,7 @@ export function ResourceInfo({
 							<button
 								type="button"
 								onClick={() => topicFeedHandlers.consumeTopicFinding(resource.findingId, !resource.isConsumed)}
-								className="hover:text-primary flex min-h-11 items-center gap-2 text-sm hover:underline sm:min-h-9"
+								className={TOPIC_FINDING_TOGGLE_CLASS}
 							>
 								{resource.isConsumed ? <Circle className="size-4" /> : <Check className="size-4" />}
 								{resource.isConsumed ? "Mark unread" : "Mark read"}
@@ -158,6 +144,65 @@ export function ResourceInfo({
 				)}
 			</PopoverContent>
 		</>
+	)
+}
+
+/**
+ * A topic finding's heading in its note popover: the rank if it is not null, the title linked out to the page, and the
+ * metadata line under the title.
+ */
+export function TopicFindingHeading({
+	topicFindingRank,
+	title,
+	url,
+	onClick,
+	children,
+}: {
+	topicFindingRank: number | null
+	title: string
+	url: string
+	onClick?: () => void
+	// the metadata line under the title
+	children: ReactNode
+}) {
+	return (
+		<div className="mb-3 flex items-start gap-2.5">
+			{topicFindingRank !== null && (
+				<span className="text-muted-foreground font-display shrink-0 text-sm tabular-nums">
+					<span className="sr-only">Rank </span>
+					{topicFindingRank}
+				</span>
+			)}
+			<div className="min-w-0 flex-1">
+				<AnchorLink
+					href={url}
+					isUserContent
+					onClick={onClick}
+					className={cn(STANDALONE_LINK_CLASS, "inline-flex items-start gap-1 text-sm font-semibold")}
+				>
+					{title}
+					<ExternalLink className="mt-0.5 size-3.5 shrink-0" />
+				</AnchorLink>
+				<div className="text-muted-foreground mt-0.5 flex flex-wrap items-center gap-1.5 text-xs">{children}</div>
+			</div>
+		</div>
+	)
+}
+
+/**
+ * A topic finding's stats in its note popover: the day it was fetched, a divider, and how many times it was opened.
+ */
+export function TopicFindingStats({ fetchedAt, viewCount }: { fetchedAt: string; viewCount: number }) {
+	return (
+		<div className="mt-3 space-y-2">
+			<InfoSection className="py-0" label="Fetched">
+				{new Date(fetchedAt).toLocaleDateString()}
+			</InfoSection>
+			<div className="bg-separator h-px" />
+			<InfoSection className="py-0" label="Views">
+				{viewCount.toLocaleString()}
+			</InfoSection>
+		</div>
 	)
 }
 
@@ -229,7 +274,7 @@ function TopicFindingRating({
 
 	return (
 		<div>
-			<span className="text-muted-foreground font-display text-xs tracking-wide uppercase">Rate this finding</span>
+			<span className={SECTION_LABEL_CLASS}>Rate this finding</span>
 			{/* the words sit beside the thumbs that send them, and one line of thanks replaces them once sent */}
 			<div className="mt-2 flex items-center gap-2">
 				{isTopicFindingRatingSent ? (

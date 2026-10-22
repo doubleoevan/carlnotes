@@ -14,10 +14,34 @@ export const SEARCH_BAR_ICON_CLASS =
 	"text-muted-foreground hover:text-foreground grid min-h-11 w-8 shrink-0 place-items-center rounded-md sm:min-h-9"
 
 /**
+ * The hover that a ghost button on the dark hero band takes in place of the ghost variant's own: a white wash and the
+ * hero's text color.
+ */
+export const HERO_BUTTON_HOVER_CLASS = "hover:bg-white/10 hover:text-hero-foreground dark:hover:bg-white/10"
+
+/**
+ * A link that stands alone, such as a link in a table cell, a footer link, or a link alone in its line: the link color,
+ * underlined on hover. A link inside a sentence takes the sentence-link utility instead.
+ */
+export const STANDALONE_LINK_CLASS = "text-link hover:underline"
+
+/**
  * A list row with a dashed separator over it. The first row has no separator.
  */
 export const DASHED_ROW_CLASS =
 	"after:border-separator-strong relative after:absolute after:inset-x-2 after:top-0 after:border-t after:border-dashed first:after:hidden"
+
+/**
+ * The tinted band behind a list row under the pointer. It paints on a rounded under-layer, so the row's dashed
+ * separator stays straight.
+ */
+export const LIST_ROW_HOVER_CLASS =
+	"relative isolate before:absolute before:inset-0 before:-z-10 before:rounded-lg before:transition-colors hover:before:bg-accent-foreground/20"
+
+/**
+ * The tint that keeps a list row's under-layer lit while the player is on the row's podcast episode chapter.
+ */
+export const LIST_ROW_HIGHLIGHTED_CLASS = "before:bg-muted/70"
 
 /**
  * A round play button in the primary color, with a button's shadow. Each button adds its own size class.
@@ -85,6 +109,12 @@ export const THIN_SCROLLBAR_CLASS =
 export const HIGHLIGHT_SCROLLBAR_CLASS = "scrollbar-highlight"
 
 /**
+ * The focus ring of a scrolling box that takes a tab stop, drawn inside its edge so a clipping parent never hides it.
+ */
+export const SCROLL_REGION_FOCUS_CLASS =
+	"outline-none focus-visible:ring-[3px] focus-visible:ring-inset focus-visible:ring-ring/50"
+
+/**
  * The width the leading column keeps in every table. The min and the max are the same value. A long
  * name wraps inside the column.
  */
@@ -141,9 +171,9 @@ const TABLE_ROW_RULE_CLASS = [
 	// a subtable draws its rules on the sunken fill
 	"[&_table_tr.border-b>*]:border-separator-sunken",
 	"[&_table_thead.border-b>tr>*]:border-separator-sunken",
-	// the controls sitting on that same fill: the row selects and the pager buttons
-	"[&_table_select]:border-separator-sunken",
-	"[&_table_button:not([role])]:border-separator-sunken",
+	// the selects and pager buttons anywhere in a subtable's cell, its pagination footer included
+	"[&_td[colspan]_select]:border-separator-sunken",
+	"[&_td[colspan]_button:not([role])]:border-separator-sunken",
 ].join(" ")
 
 /**
@@ -182,9 +212,10 @@ export const CARD_CLASS = "bg-card rounded-lg border p-4 shadow-lift"
 
 /**
  * The wrapper that scrolls a table sideways. It sits inside the card, and the card's padding and
- * whatever follows the table stay put while the columns move under them.
+ * whatever follows the table stay put while the columns move under them. It is positioned, so absolutely positioned
+ * content in a cell, such as a link's hidden screen reader text, stays inside it and never widens the page.
  */
-export const TABLE_SCROLL_CLASS = `-mx-4 overflow-x-auto ${THIN_SCROLLBAR_CLASS}`
+export const TABLE_SCROLL_CLASS = `relative -mx-4 overflow-x-auto ${THIN_SCROLLBAR_CLASS}`
 
 /**
  * The centered display-font title at the top of a note popover.
@@ -192,9 +223,31 @@ export const TABLE_SCROLL_CLASS = `-mx-4 overflow-x-auto ${THIN_SCROLLBAR_CLASS}
 export const POPOVER_HEADING_CLASS = "font-display mb-2 text-center text-lg"
 
 /**
+ * The section label: the small uppercase muted label in the display font over a field, a value, or a group. Each caller
+ * adds its own margin and alignment. It is the sectionLabel type role in Nightshift's typography.ts with the muted
+ * color.
+ */
+export const SECTION_LABEL_CLASS = "text-muted-foreground font-display text-xs tracking-wide uppercase"
+
+/**
  * The bordered card around the topic page's info and settings sections.
  */
 export const INFO_CARD_CLASS = "border-separator bg-card h-fit rounded-lg border p-5 text-sm shadow-lift"
+
+/**
+ * The dashed dividers between an info card's sections.
+ */
+export const INFO_CARD_SECTIONS_CLASS = "divide-separator-strong divide-y divide-dashed"
+
+/**
+ * Two info sections in one row, which takes the place of one divided section. Each section in it takes py-0.
+ */
+export const INFO_SECTION_PAIR_CLASS = "flex items-start gap-3 py-3 last:pb-0"
+
+/**
+ * The second info section in a pair row, at the right.
+ */
+export const INFO_SECTION_PAIR_END_CLASS = "ml-auto py-0 text-right"
 
 /**
  * The card around a list of rows, such as a topic's findings, its podcast episodes, or its scan history.
@@ -219,6 +272,16 @@ export const RAIL_BARE_ICON_INSET = "-mr-2 sm:mr-1"
  * The page shell every route's main element takes. A page that needs more room overrides the width.
  */
 export const PAGE_CLASS = "mx-auto max-w-5xl px-safe pt-3 pb-10"
+
+/**
+ * The row at the top of a page shell, with the page title at the left and the page's action at the right.
+ */
+export const PAGE_HEADER_CLASS = "flex items-center justify-between gap-4"
+
+/**
+ * The h1 of a page shell: the display font, with the icon of the page's header menu item in front.
+ */
+export const PAGE_TITLE_CLASS = "font-display flex items-center gap-2 text-2xl"
 
 /**
  * A 20px icon button tile in a line of text or a row. The tile and its tap area reach past the line's height.
@@ -270,6 +333,16 @@ export const COMPOSER_BOX_CLASS =
 	"placeholder:text-muted-foreground w-full resize-none bg-transparent py-1 text-base leading-relaxed outline-none sm:text-sm"
 
 /**
+ * The bordered band at the bottom of a chat panel that holds the chat composer.
+ */
+export const COMPOSER_BAR_CLASS = "shrink-0 border-t px-3 py-2.5"
+
+/**
+ * The rounded frame around the chat composer's question box and its button row.
+ */
+export const COMPOSER_FRAME_CLASS = "bg-background rounded-2xl border px-3 py-2"
+
+/**
  * The round frame a user's or a team's avatar takes. The caller sets the size.
  */
 export const AVATAR_CLASS =
@@ -285,6 +358,11 @@ export const ANSWER_BUBBLE_CLASS =
  * How wide a user's question bubble and the tag under it grow.
  */
 export const QUESTION_BUBBLE_WIDTH_CLASS = "max-w-[85%] @lg:max-w-[75%]"
+
+/**
+ * A user's question bubble in a chat turn.
+ */
+export const QUESTION_BUBBLE_CLASS = `bg-primary text-primary-foreground rounded-2xl rounded-br-sm px-3.5 py-2 text-sm whitespace-pre-wrap ${QUESTION_BUBBLE_WIDTH_CLASS}`
 
 /**
  * The centered narrow column of the sign-in, signup, and invite pages.

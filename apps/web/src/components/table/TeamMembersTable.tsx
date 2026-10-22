@@ -15,7 +15,7 @@ import { AnchorLink } from "@/components/common/AnchorLink"
 import { Button } from "@/components/primitives/button"
 import { Switch } from "@/components/primitives/switch"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
-import { TABLE_CLASS, TABLE_HEAD_CLASS, TABLE_SCROLL_CLASS } from "@/lib/styleClasses"
+import { STANDALONE_LINK_CLASS, TABLE_CLASS, TABLE_HEAD_CLASS, TABLE_SCROLL_CLASS } from "@/lib/styleClasses"
 import { cn } from "@/lib/utils"
 import { SortableHeader } from "./SortableHeader"
 import { TablePagination, usePaginatedRowSort } from "./TablePagination"
@@ -113,10 +113,12 @@ export function TeamMembersTable({
 							<td className="py-2 pr-4">
 								{`${activeMembers.filter((member) => member.isMemberVisible).length}/${activeMembers.length} shown`}
 							</td>
+							{/* the member count sits under the Active heading, and the delete column stays empty */}
 							{hasRemovalColumns && (
-								<td className="py-2 pr-4" colSpan={2}>
-									{toCountLabel(activeMembers.length + hiddenMemberCount, "member")}
-								</td>
+								<>
+									<td className="py-2 pr-4">{toCountLabel(activeMembers.length + hiddenMemberCount, "member")}</td>
+									<td className="py-2" />
+								</>
 							)}
 						</tr>
 					</tfoot>
@@ -191,7 +193,7 @@ function MemberRow({
 						avatarVersion={member.avatarVersion}
 						className="size-6"
 					/>
-					<AnchorLink href={`/profiles/${member.userId}`} className="text-link hover:underline">
+					<AnchorLink href={`/profiles/${member.userId}`} className={STANDALONE_LINK_CLASS}>
 						{member.username}
 					</AnchorLink>
 				</span>

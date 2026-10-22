@@ -11,7 +11,6 @@ const ICON_BUTTON_CLASS = "text-muted-foreground hover:text-foreground grid h-11
 export function IconButton({
 	tooltip,
 	ariaLabel,
-	isPressed,
 	isDisabled,
 	className = ICON_BUTTON_CLASS,
 	onClick,
@@ -20,7 +19,6 @@ export function IconButton({
 	tooltip: React.ReactNode
 	// the plain-text name a markup tooltip cannot provide on its own
 	ariaLabel?: string
-	isPressed?: boolean
 	isDisabled?: boolean
 	// the classes that replace the muted icon's look
 	className?: string
@@ -33,7 +31,6 @@ export function IconButton({
 				<button
 					type="button"
 					aria-label={ariaLabel ?? (typeof tooltip === "string" ? tooltip : undefined)}
-					aria-pressed={isPressed}
 					disabled={isDisabled}
 					onClick={onClick}
 					className={className}

@@ -1,7 +1,8 @@
-import { authClient, toSessionProfileIdentity } from "@carlnotes/client/authClient"
+import { authClient } from "@carlnotes/client/authClient"
 import { fetchAdminConsole } from "@carlnotes/client/billingClient"
 import type { AdminConsoleResponse, AdminTeamRow, AdminTotals, AdminUserRow } from "@carlnotes/contracts/admin"
 import { plans } from "@carlnotes/contracts/enums"
+import { toSessionProfileIdentity } from "@carlnotes/contracts/profiles"
 import { toBytesLabel, toCentsLabel } from "@carlnotes/core/lib/labels"
 import { Settings, ShieldUser } from "lucide-react"
 import { useCallback, useEffect, useState } from "react"
@@ -13,7 +14,7 @@ import { Button } from "@/components/primitives/button"
 import { AdminTeamsTable } from "@/components/table/AdminTeamsTable"
 import { AdminUsersTable } from "@/components/table/AdminUsersTable"
 import { usePageTitle } from "@/hooks/usePageTitle"
-import { PAGE_CLASS } from "@/lib/styleClasses"
+import { PAGE_CLASS, PAGE_HEADER_CLASS, PAGE_TITLE_CLASS } from "@/lib/styleClasses"
 import { cn } from "@/lib/utils"
 
 /**
@@ -64,8 +65,8 @@ export function AdminPage() {
 			    the padding sits on each block instead of the main, so the title lines up with the other pages */}
 			<div className="mx-auto max-w-5xl px-safe">
 				{/* the page title with the same icon as its header menu item, and the manage admins button to the right */}
-				<div className="flex items-center justify-between gap-4">
-					<h1 className="font-display flex items-center gap-2 text-2xl">
+				<div className={PAGE_HEADER_CLASS}>
+					<h1 className={PAGE_TITLE_CLASS}>
 						<ShieldUser className="size-6" />
 						Admin
 					</h1>

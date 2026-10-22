@@ -1,8 +1,8 @@
 import { fetchActivity } from "@carlnotes/client/activityClient"
-import { authClient, toSessionProfileIdentity } from "@carlnotes/client/authClient"
+import { authClient } from "@carlnotes/client/authClient"
 import { fetchBillingState } from "@carlnotes/client/billingClient"
 import type { ActivityResponse } from "@carlnotes/contracts/activity"
-import type { BillingState } from "@carlnotes/contracts/profiles"
+import { type BillingState, toSessionProfileIdentity } from "@carlnotes/contracts/profiles"
 import { User } from "lucide-react"
 import { useEffect, useState } from "react"
 import { AccountBudget, PlanButton } from "@/components/account/AccountBudget"
@@ -11,7 +11,7 @@ import { CoffeeLoading } from "@/components/branding/CoffeeLoading"
 import { UserProfileLink } from "@/components/common/UserProfileLink"
 import { usePageTitle } from "@/hooks/usePageTitle"
 import { useSearchParams } from "@/hooks/useSearchParams"
-import { PAGE_CLASS } from "@/lib/styleClasses"
+import { PAGE_CLASS, PAGE_HEADER_CLASS, PAGE_TITLE_CLASS } from "@/lib/styleClasses"
 
 /**
  * The account page: the payment notice, the monthly spend against budget, the scan usage, and the current plan.
@@ -57,8 +57,8 @@ export function AccountPage() {
 	return (
 		<main className={PAGE_CLASS}>
 			{/* the page title with the same icon as its header menu item, and the plan button to the right */}
-			<div className="flex items-center justify-between gap-4">
-				<h1 className="font-display flex items-center gap-2 text-2xl">
+			<div className={PAGE_HEADER_CLASS}>
+				<h1 className={PAGE_TITLE_CLASS}>
 					<User className="size-6" />
 					Account
 				</h1>

@@ -1,10 +1,20 @@
 // the topic-scan email: a designed, deliverable summary of a scheduled Scan's new Findings.
 // authored as a react-email template, so it can be previewed with `bun run dev:email` and rendered to html at send time
+import { emailColors, toEmailFontSize } from "@carlnotes/nightshift/email"
 import { Img, Link, Section, Text } from "@react-email/components"
 import { render } from "@react-email/render"
 import Markdown from "markdown-to-jsx"
 import type { CSSProperties, ReactElement, ReactNode } from "react"
-import { EmailFooter, EmailIntro, EmailShell, footerBrandLink, LinkOrText, summaryLink } from "./emailShell"
+import {
+	bodyLargeText,
+	bodyText,
+	EmailFooter,
+	EmailIntro,
+	EmailShell,
+	footerBrandLink,
+	LinkOrText,
+	summaryLink,
+} from "./emailShell"
 
 // the urls a recap may link to: this email's own Finding urls
 export type AllowedNoteUrls = ReadonlySet<string>
@@ -133,7 +143,7 @@ export function PodcastEpisodeSection({
 
 			{/* the cover, linked to the podcast episode */}
 			{podcastEpisode.coverUrl && podcastEpisode.url ? (
-				<Link href={podcastEpisode.url}>
+				<Link href={podcastEpisode.url} style={podcastEpisodeCoverLink}>
 					<Img
 						src={podcastEpisode.coverUrl}
 						width="600"
@@ -291,24 +301,30 @@ function hostOf(url: string): string {
 	}
 }
 
-// the recap block, tinted a shade warmer than the finding cards so it reads as Carl's voice instead of another link
-const summaryCard: CSSProperties = {
-	backgroundColor: "#f7f2e9",
-	border: "1px solid #ece2d2",
+// the block for the recap and the podcast episode.
+// it is tinted a shade warmer than the finding cards so it reads as Carl's voice instead of another link
+export const summaryCard: CSSProperties = {
+	backgroundColor: emailColors.secondary,
+	border: `1px solid ${emailColors.muted}`,
 	borderRadius: "10px",
 	marginTop: "16px",
 	padding: "14px 16px",
 }
 const summaryLabel: CSSProperties = {
-	color: "#a79c8c",
-	fontSize: "11px",
+	color: emailColors.mutedForeground,
+	fontSize: toEmailFontSize("caption"),
 	letterSpacing: "0.06em",
 	margin: "0 0 6px",
 	textTransform: "uppercase",
 }
-const summaryBody: CSSProperties = { color: "#4b4b4b", fontSize: "14px", lineHeight: "1.5", margin: "6px 0" }
+const summaryBody: CSSProperties = { ...bodyText, margin: "6px 0" }
 // the model picks its own heading levels, so every one is pinned to the same compact inline-styled scale
-const summaryHeading: CSSProperties = { color: "#2b2b2b", fontSize: "15px", fontWeight: 700, margin: "10px 0 4px" }
+const summaryHeading: CSSProperties = {
+	color: emailColors.foreground,
+	fontSize: toEmailFontSize("bodyLarge"),
+	fontWeight: 700,
+	margin: "10px 0 4px",
+}
 function toSummaryMarkdownOptions(allowedUrls?: AllowedNoteUrls) {
 	return {
 		disableParsingRawHTML: true,
@@ -321,38 +337,39 @@ function toSummaryMarkdownOptions(allowedUrls?: AllowedNoteUrls) {
 			ul: { props: { style: { ...summaryBody, paddingLeft: "18px" } } },
 			ol: { props: { style: { ...summaryBody, paddingLeft: "18px" } } },
 			li: { props: { style: { margin: "2px 0" } } },
-			strong: { props: { style: { color: "#2b2b2b", fontWeight: 600 } } },
+			strong: { props: { style: { color: emailColors.foreground, fontWeight: 600 } } },
 			a: { component: FindingLink, props: { allowedUrls } },
 			img: { component: (): null => null },
 		},
 	}
 }
-// the podcast episode's title line, the description's heading and text, and the cover.
+// the podcast episode's title line, the description's heading and text, and the cover with its link, which takes the
+// link color in place of react-email's default.
 // the cover fills the section's width up to the 600 pixels that the cover is served at
-const podcastEpisodeTitleLine: CSSProperties = {
-	color: "#4b4b4b",
-	fontSize: "15px",
-	lineHeight: "1.5",
-	margin: "0 0 10px",
-}
+const podcastEpisodeTitleLine: CSSProperties = { ...bodyLargeText, margin: "0 0 10px" }
 const podcastEpisodeSummaryLabel: CSSProperties = { ...summaryLabel, margin: "14px 0 6px" }
-const podcastEpisodeDescriptionText: CSSProperties = {
-	color: "#4b4b4b",
-	fontSize: "14px",
-	lineHeight: "1.5",
-	margin: "0",
-}
+const podcastEpisodeDescriptionText: CSSProperties = { ...bodyText, margin: "0" }
 const podcastEpisodeCover: CSSProperties = { borderRadius: "8px", display: "block", height: "auto", width: "100%" }
+const podcastEpisodeCoverLink: CSSProperties = { color: emailColors.link }
 const card: CSSProperties = {
-	backgroundColor: "#faf8f4",
-	border: "1px solid #efeae0",
+	backgroundColor: emailColors.card,
+	border: `1px solid ${emailColors.secondary}`,
 	borderRadius: "10px",
 	marginTop: "12px",
 	padding: "14px 16px",
 }
-const cardTitle: CSSProperties = { color: "#7c4a1e", fontSize: "16px", fontWeight: 600, textDecoration: "none" }
+const cardTitle: CSSProperties = {
+	color: emailColors.link,
+	fontSize: toEmailFontSize("bodyLarge"),
+	fontWeight: 600,
+	textDecoration: "none",
+}
 // the same muted tone as cardHost, so the rank reads as a label instead of part of the link itself
-const cardNumber: CSSProperties = { color: "#a79c8c", fontWeight: 400 }
-const cardHost: CSSProperties = { color: "#a79c8c", fontSize: "12px", margin: "2px 0 0" }
-const cardHostLink: CSSProperties = { color: "#a79c8c", textDecoration: "none" }
-const cardNote: CSSProperties = { color: "#4b4b4b", fontSize: "14px", lineHeight: "1.5", margin: "8px 0 0" }
+const cardNumber: CSSProperties = { color: emailColors.mutedForeground, fontWeight: 400 }
+const cardHost: CSSProperties = {
+	color: emailColors.mutedForeground,
+	fontSize: toEmailFontSize("caption"),
+	margin: "2px 0 0",
+}
+const cardHostLink: CSSProperties = { color: emailColors.mutedForeground, textDecoration: "none" }
+const cardNote: CSSProperties = { ...bodyText, margin: "8px 0 0" }

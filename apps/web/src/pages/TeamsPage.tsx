@@ -1,7 +1,8 @@
-import { authClient, toSessionProfileIdentity } from "@carlnotes/client/authClient"
+import { authClient } from "@carlnotes/client/authClient"
 import { fetchTeams, sendDeleteTeam, sendRemoveTeamMember } from "@carlnotes/client/teamClient"
 import { fetchAddableTopics } from "@carlnotes/client/topicClient"
 import { CHAT_NAME } from "@carlnotes/contracts/chat"
+import { toSessionProfileIdentity } from "@carlnotes/contracts/profiles"
 import type { TeamSummary, TeamsPageResponse } from "@carlnotes/contracts/teams"
 import { useAllTeamChatMentions } from "@carlnotes/core/stores/chatRoomStore"
 import { useAllNoteBadges } from "@carlnotes/core/stores/noteBadgeStore"
@@ -18,11 +19,11 @@ import { SentTeamInvitesTable } from "@/components/table/TeamInvitesTable"
 import { TeamsMembershipTable } from "@/components/table/TeamsMembershipTable"
 import { EditTeamModal } from "@/components/team/EditTeamModal"
 import { usePageTitle } from "@/hooks/usePageTitle"
-import { PAGE_CLASS } from "@/lib/styleClasses"
+import { PAGE_CLASS, PAGE_HEADER_CLASS, PAGE_TITLE_CLASS } from "@/lib/styleClasses"
 import { useRegisterChatContext } from "@/stores/chatPanelStore"
 
 /**
- * The teams page: the teams the user belongs to with their role in each, the New Team button, and the
+ * The teams page: the teams the user belongs to with their role in each, the New team button, and the
  * only place to leave a team.
  */
 export function TeamsPage() {
@@ -91,9 +92,9 @@ export function TeamsPage() {
 
 	return (
 		<main className={PAGE_CLASS}>
-			{/* the page title with the same icon as its header menu item, and the New Team button to the right */}
-			<div className="flex items-center justify-between gap-4">
-				<h1 className="font-display flex items-center gap-2 text-2xl">
+			{/* the page title with the same icon as its header menu item, and the New team button to the right */}
+			<div className={PAGE_HEADER_CLASS}>
+				<h1 className={PAGE_TITLE_CLASS}>
 					<Users className="size-6" />
 					Teams
 					{/* the unread chat mentions across every chat room and the unread notes on the teams, in one count */}
@@ -105,7 +106,7 @@ export function TeamsPage() {
 				</h1>
 				<Button className="shrink-0" onClick={() => void handleCreateOpen()}>
 					<Plus className="size-4" />
-					New Team
+					New team
 				</Button>
 			</div>
 			{/* whose teams these are, with a link to their profile */}
@@ -131,7 +132,7 @@ export function TeamsPage() {
 									/>
 								) : (
 									<p className="text-muted-foreground pb-4 pl-4 text-sm">
-										<button type="button" onClick={() => void handleCreateOpen()} className="text-link hover:underline">
+										<button type="button" onClick={() => void handleCreateOpen()} className="sentence-link">
 											Start a team.
 										</button>{" "}
 										Carl brews for everyone at once.
@@ -160,7 +161,7 @@ export function TeamsPage() {
 					title={`Delete ${teamToDelete.name}?`}
 					confirmLabel="Delete team"
 					cancelLabel="Keep it"
-					onConfirm={() => void handleDeleteTeam()}
+					onConfirm={handleDeleteTeam}
 					onClose={() => setTeamToDelete(null)}
 				>
 					{`Its ${teamToDelete.topicCount} topic${teamToDelete.topicCount === 1 ? "" : "s"} go back to whoever created them, and the room is deleted with the team. A team with other members survives without you instead, led by a co-leader or its longest-standing member.`}
@@ -171,7 +172,7 @@ export function TeamsPage() {
 					title="Leave this team?"
 					confirmLabel="Leave team"
 					cancelLabel="Stay"
-					onConfirm={() => void handleLeaveTeam()}
+					onConfirm={handleLeaveTeam}
 					onClose={() => setTeamToLeave(null)}
 				>
 					{`You lose access to ${teamToLeave.name}'s topics and its ${CHAT_NAME}.`}

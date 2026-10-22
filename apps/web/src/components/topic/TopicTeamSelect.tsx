@@ -8,7 +8,7 @@ import {
 } from "@carlnotes/client/teamClient"
 import type { TeamSummary } from "@carlnotes/contracts/teams"
 import type { TopicResponse } from "@carlnotes/contracts/topics"
-import { useEffect, useState } from "react"
+import { useEffect, useId, useState } from "react"
 import { toast } from "sonner"
 import { FieldLabel } from "@/components/common/FieldLabel"
 import { MultiCombobox } from "@/components/common/MultiCombobox"
@@ -160,17 +160,24 @@ async function createNewTeam(
  * The topic teams multiselect: the leader teams this topic may sit on, and a new team created on save.
  */
 export function TopicTeamSelect({ teamField, isTeamMissing }: { teamField: TopicTeamField; isTeamMissing?: boolean }) {
+	// the ids that tie each field label to its field
+	const teamsComboboxId = useId()
+	const newTeamNameInputId = useId()
 	return (
 		<div className="space-y-3">
 			<div>
-				<FieldLabel isRequired>Teams</FieldLabel>
+				<FieldLabel htmlFor={teamsComboboxId} isRequired>
+					Teams
+				</FieldLabel>
 				<MultiCombobox
+					id={teamsComboboxId}
 					options={toTeamChoices(teamField.offeredTeams)}
 					values={teamField.selectedTeamIds}
 					onUpdateValues={teamField.setSelectedTeamIds}
 					placeholder="Pick teams…"
 					emptyLabel="No teams to pick."
 					pinnedOption={NEW_TEAM_OPTION}
+					isRequired
 				/>
 				{/* the note names the field a blocked save stopped on */}
 				{isTeamMissing && (
@@ -182,8 +189,9 @@ export function TopicTeamSelect({ teamField, isTeamMissing }: { teamField: Topic
 			{teamField.isNewTeamSelected && (
 				<>
 					<div>
-						<FieldLabel>Name</FieldLabel>
+						<FieldLabel htmlFor={newTeamNameInputId}>Name</FieldLabel>
 						<Input
+							id={newTeamNameInputId}
 							value={teamField.newTeamName}
 							placeholder="what to call it…"
 							onChange={(event) => teamField.setNewTeamName(event.target.value)}

@@ -4,6 +4,7 @@
 import { FULL_PODCAST_COVER_SIZE, type PodcastCover, type PodcastCoverSize } from "@carlnotes/contracts/podcastEpisodes"
 import { attachmentExists, getAttachmentBytes, uploadAttachment } from "@carlnotes/db/store"
 import { runFfmpeg } from "@carlnotes/models/ffmpeg"
+import { latte } from "@carlnotes/nightshift/colors"
 import { toPodcastCoverKey } from "@carlnotes/server/podcastCoverPaths"
 import { renderAsync } from "@resvg/resvg-js"
 import satori from "satori"
@@ -27,11 +28,11 @@ const BOTTOM_BAND_HEIGHT = FULL_PODCAST_COVER_SIZE * 0.25
 
 // the font size of the top band's line, and the colors of its two parts
 const TOP_BAND_FONT_SIZE = 190
-const BRAND_NAME_COLOR = "#f09050"
-const PODCAST_WORD_COLOR = "#f3e9db"
+const BRAND_NAME_COLOR = latte.heroAccent
+const PODCAST_WORD_COLOR = latte.heroForeground
 
 // the title's color, and how many lines a title may run
-const TITLE_COLOR = "#332a22"
+const TITLE_COLOR = latte.foreground
 const MAX_TITLE_LINES = 3
 
 // the longest title that each font size takes, largest size first,

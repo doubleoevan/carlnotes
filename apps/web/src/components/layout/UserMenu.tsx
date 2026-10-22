@@ -1,8 +1,4 @@
-import {
-	useAllChatMentions,
-	useAllTeamChatMentions,
-	useAllTopicChatMentions,
-} from "@carlnotes/core/stores/chatRoomStore"
+import { useAllTeamChatMentions, useAllTopicChatMentions } from "@carlnotes/core/stores/chatRoomStore"
 import { useAllNoteBadges } from "@carlnotes/core/stores/noteBadgeStore"
 import { useTopicInviteBadges } from "@carlnotes/core/stores/topicInviteStore"
 import { useLocation } from "@tanstack/react-router"
@@ -10,7 +6,7 @@ import { Activity, CircleUserRound, Columns3Cog, LogOut, ShieldUser, User, Users
 import { useState } from "react"
 import { UserAvatar } from "@/components/branding/UserAvatar"
 import { AnchorLink } from "@/components/common/AnchorLink"
-import { toUpdateLabel, UpdateCountBadge } from "@/components/common/UpdateCountBadge"
+import { MenuTriggerUpdateCountBadge, UpdateCountBadge } from "@/components/common/UpdateCountBadge"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/primitives/popover"
 import { signOutAndReload } from "@/components/session/signOut"
 import { type TopicTutorialVideoOpener, TopicTutorialVideoOption } from "@/components/topic/TopicTutorialVideoDialog"
@@ -34,13 +30,6 @@ export function UserMenu({
 	isAdmin: boolean
 	onPlayTopicTutorialVideo: (opener: TopicTutorialVideoOpener) => void
 }) {
-	// the avatar's one badge sums every unread chat mention, note change, and topic invitation,
-	// and the tooltip shows the waiting groups
-	const chatMentions = useAllChatMentions()
-	const noteBadges = useAllNoteBadges()
-	const topicInviteBadges = useTopicInviteBadges()
-	const menuLabel = ["User menu", toUpdateLabel(chatMentions, noteBadges, topicInviteBadges)].filter(Boolean).join(", ")
-
 	// controlled so the menu closes on item click and navigation
 	const [isOpen, setIsOpen] = useState(false)
 	const handleCloseMenu = (): void => {
@@ -55,21 +44,19 @@ export function UserMenu({
 
 	return (
 		<Popover open={isOpen} onOpenChange={setIsOpen}>
-			<PopoverTrigger className="relative ml-1 hidden rounded-full sm:block" aria-label={menuLabel}>
+			<PopoverTrigger className="relative ml-1 hidden rounded-full sm:block">
+				{/* the trigger's name and the one badge, its tooltip listing every waiting group under its own heading */}
+				<MenuTriggerUpdateCountBadge
+					name="User menu"
+					className="absolute -top-1 -right-1"
+					countBadgeClassName="h-5 min-w-5 text-xs"
+				/>
 				{/* the user avatar trigger button */}
 				<UserAvatar
 					userId={userId}
 					username={username}
 					avatarVersion={avatarVersion}
 					className="size-9 border-2 border-white/55"
-				/>
-				{/* the one badge, its tooltip listing every waiting group under its own heading */}
-				<UpdateCountBadge
-					chatMentions={chatMentions}
-					noteBadges={noteBadges}
-					invites={topicInviteBadges}
-					className="absolute -top-1 -right-1"
-					countBadgeClassName="h-5 min-w-5 text-xs"
 				/>
 			</PopoverTrigger>
 			<PopoverContent align="end" className="w-52" bodyClassName="p-1">

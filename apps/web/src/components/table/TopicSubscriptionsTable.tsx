@@ -191,7 +191,7 @@ export function TopicSubscriptionsTable({
 					{subscriptionToDelete.inviteId ? "Your invitation to " : "Your subscription to "}
 					<AnchorLink
 						href={toTopicPath({ id: subscriptionToDelete.topicId, name: subscriptionToDelete.name })}
-						className="text-link hover:underline"
+						className="sentence-link"
 					>
 						{subscriptionToDelete.name}
 					</AnchorLink>

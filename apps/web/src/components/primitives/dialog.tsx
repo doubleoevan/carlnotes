@@ -30,8 +30,12 @@ function DialogContent({
 	className,
 	children,
 	hideCloseButton,
+	isCloseButtonDisabled,
 	...props
-}: React.ComponentProps<typeof DialogPrimitive.Content> & { hideCloseButton?: boolean }) {
+}: React.ComponentProps<typeof DialogPrimitive.Content> & {
+	hideCloseButton?: boolean
+	isCloseButtonDisabled?: boolean
+}) {
 	// the element to give focus back to when the dialog closes, and nothing where a render has no document
 	const openerRef = useRef(typeof document === "undefined" ? null : (document.activeElement as HTMLElement | null))
 	return (
@@ -47,6 +51,8 @@ function DialogContent({
 				className={cn(
 					"bg-popover text-popover-foreground data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 fixed top-1/2 left-1/2 z-50 grid max-h-[85dvh] w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 gap-4 overflow-y-auto rounded-xl border p-6 shadow-lift",
 					HIGHLIGHT_SCROLLBAR_CLASS,
+					// a title that wraps stops short of the close button
+					!hideCloseButton && "[&_[data-slot=dialog-title]]:pr-8",
 					className,
 				)}
 				{...props}
@@ -55,8 +61,10 @@ function DialogContent({
 				{/* the ✕ close in the top corner */}
 				{!hideCloseButton && (
 					<DialogPrimitive.Close
-						className="focus-visible:ring-ring/50 text-muted-foreground hover:text-foreground absolute top-4 right-4 grid size-8 place-items-center rounded-md outline-none focus-visible:ring-[3px]"
+						className="focus-visible:ring-ring/50 text-muted-foreground hover:text-foreground absolute top-4 right-4 grid size-8 place-items-center rounded-md outline-none focus-visible:ring-[3px] aria-disabled:pointer-events-none aria-disabled:opacity-50"
 						aria-label="Close"
+						// mark the close button disabled while it keeps its focus
+						aria-disabled={isCloseButtonDisabled}
 					>
 						<X className="size-4" />
 					</DialogPrimitive.Close>

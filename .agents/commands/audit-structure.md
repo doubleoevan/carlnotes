@@ -615,11 +615,11 @@ Check for:
      `api/chat/voiceRoute.ts` (now `toSpokenEventProperties`)
    - the top-level folders `ui/`, `api/`, `worker/`, `db/`, `shared/`, `emails/`, and `docs/` (now the Bun workspaces
      `apps/web`, `apps/api`, `apps/worker`, `apps/docs`, `packages/contracts`, `packages/client`, `packages/core`,
-     `packages/tokens`, `packages/server`, `packages/db`, `packages/emails`, `packages/models`, and `packages/pipeline`;
-     every entry above names its paths in the old layout), the `@shared/*` alias (now `@carlnotes/contracts/*` and
-     `@carlnotes/server/*`), the `worker/index.ts` re-export module (removed: the api imports each module by its
-     package path), `ui/src/clients/` (now `packages/client/`), and `scripts/check-ui-boundary.ts` (now
-     `scripts/check-package-boundaries.ts`)
+     `packages/nightshift`, `packages/server`, `packages/db`, `packages/emails`, `packages/models`, and
+     `packages/pipeline`; every entry above names its paths in the old layout), the `@shared/*` alias (now
+     `@carlnotes/contracts/*` and `@carlnotes/server/*`), the `worker/index.ts` re-export module (removed: the api
+     imports each module by its package path), `ui/src/clients/` (now `packages/client/`), and
+     `scripts/check-ui-boundary.ts` (now `scripts/check-package-boundaries.ts`)
    - `reportFailedWrite` / `reportRejectedWrite` in `ui/src/clients/topicClient.ts` (now `showFailedWrite` /
      `showRejectedWrite` in `packages/client/topicClient.ts`), `sourceFilesUnder` in `db/schema.test.ts` (now
      `listSourceFiles` in `packages/server/sourceFileTestFixtures.ts`), `DOCS_ROOT` in `api/seo.ts` and `DOCS_DIR` in
@@ -632,6 +632,14 @@ Check for:
      `packages/server/publicFetch.ts`)
    - `provisionLiteLLMKey`, `deleteLiteLLMKey`, `readLiteLLMKeyBudget`, and `readLiteLLMKeySpend` in
      `packages/models/litellm.ts` (now `packages/models/litellmProxy.ts`)
+   - `packages/tokens` and `@carlnotes/tokens` (now `packages/nightshift` and `@carlnotes/nightshift`), and a
+     hand-edited `tokens.css` (now written, with `figma/light.tokens.json` and `figma/dark.tokens.json`, from
+     `colors.ts`, `radius.ts`, `theme.ts`, and `typography.ts` in `packages/nightshift/` by `bun run nightshift:write`)
+   - `hasTsconfig` on `Workspace` in `scripts/packageBoundaries.ts`, and the exemption that let a dependency on a
+     tsconfig-less package go without a reference (removed)
+   - `chat/thinkingLines.ts` and its test (now `common/thinkingLines.ts`), and the three local thinking lines,
+     `ThinkingLine` in `chat/ChatMessageParts.tsx`, `ScanThinkingLine` in `topic/TopicScanHistory.tsx`, and
+     `ThinkingLine` in `topic/TopicSourceEditor.tsx` (now `common/ThinkingLine.tsx`)
 
 5. **Cross-harness enforcement parity**: `.claude/settings.json` hooks and
    `.opencode/plugin/guardrails.mjs` must gate the same operations with the

@@ -1,5 +1,7 @@
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
+import { STANDALONE_LINK_CLASS } from "@/lib/styleClasses"
+import { cn } from "@/lib/utils"
 
 /**
  * How much of the scan quota is left, linking to the sign-in page for a visitor or the plans page for a logged-in user.
@@ -28,7 +30,7 @@ export function ScanQuotaLink({
 	return (
 		<Tooltip>
 			<TooltipTrigger asChild>
-				<AnchorLink href={href} className="text-link animate-hydrate mr-2.5 text-xs hover:underline">
+				<AnchorLink href={href} className={cn(STANDALONE_LINK_CLASS, "animate-hydrate mr-2.5 text-xs")}>
 					{label}
 				</AnchorLink>
 			</TooltipTrigger>

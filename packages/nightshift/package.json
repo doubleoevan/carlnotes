@@ -1,0 +1,13 @@
+{
+	"name": "@carlnotes/nightshift",
+	"version": "0.1.0",
+	"private": true,
+	"type": "module",
+	"exports": {
+		"./tokens.css": "./tokens.css",
+		"./*": "./*.ts"
+	},
+	"devDependencies": {
+		"tailwindcss": "^4.3.3"
+	}
+}

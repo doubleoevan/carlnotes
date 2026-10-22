@@ -4,12 +4,13 @@ import { MAX_TOPIC_SOURCES } from "@carlnotes/contracts/topics"
 import { capitalize, toBrewsWord } from "@carlnotes/core/lib/labels"
 import { useNavigate } from "@tanstack/react-router"
 import { Coffee, X } from "lucide-react"
+import { useId, useState } from "react"
 import { FieldLabel } from "@/components/common/FieldLabel"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/primitives/select"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
+import { FULL_SOURCES_NOTE } from "./AddSourceButtons"
 import { ScanQuotaLink } from "./ScanQuotaLink"
 import { TimePicker } from "./TimePicker"
-import { FULL_SOURCES_NOTE } from "./TopicSourceEditor"
 
 // the field unions that the frequency and day-of-week selects offer
 export type Frequency = (typeof frequencies)[number]
@@ -40,16 +41,40 @@ export function ScheduleFields({
 	scheduledDayOfWeek: DayOfWeek
 	onScheduledDayOfWeekChange: (dayOfWeek: DayOfWeek) => void
 }) {
+	// the navigate that opens the plans page on a pick of a plan-limited frequency, the id that ties the label to the
+	// select, and whether the frequency list is open
+	const navigate = useNavigate()
+	const frequencySelectId = useId()
+	const [isFrequencyListOpen, setIsFrequencyListOpen] = useState(false)
+
+	// a plan-limited frequency picked from the open list opens the plans page instead of being picked. a typeahead on
+	// the closed trigger also reports a plan-limited frequency, and that keeps the current frequency
+	const handleFrequencyChange = (value: string): void => {
+		const pickedFrequency = value as Frequency
+		if (!isPlanLimitedFrequency(pickedFrequency, hasDailySlot)) {
+			onFrequencyChange(pickedFrequency)
+			return
+		}
+		if (isFrequencyListOpen) {
+			void navigate({ to: "/plans" })
+		}
+	}
+
 	return (
 		<div>
 			{/* how many daily slots the plan has left, so the user sees their limit before they select a frequency */}
 			<div className="flex items-baseline gap-2">
-				<FieldLabel>Frequency</FieldLabel>
+				<FieldLabel htmlFor={frequencySelectId}>Frequency</FieldLabel>
 				<DailyTopicQuotaLink dailyTopicsRemaining={dailyTopicsRemaining} dailyTopicLimit={dailyTopicLimit} />
 			</div>
 			<div className="flex flex-wrap gap-2">
-				<Select value={frequency} onValueChange={(value) => onFrequencyChange(value as Frequency)}>
-					<SelectTrigger className="w-32" aria-label="Scan frequency">
+				<Select
+					value={frequency}
+					onValueChange={handleFrequencyChange}
+					open={isFrequencyListOpen}
+					onOpenChange={setIsFrequencyListOpen}
+				>
+					<SelectTrigger id={frequencySelectId} className="w-32">
 						<SelectValue />
 					</SelectTrigger>
 					<SelectContent>
@@ -120,26 +145,31 @@ export function hasDailySlotLeft(
 	return (dailyTopicsRemaining ?? 1) > 0 || isDailyFrequency(topicFrequency ?? "")
 }
 
-// one select frequency option
-function FrequencyOption({ frequency, hasDailySlot }: { frequency: Frequency; hasDailySlot: boolean }) {
-	const navigate = useNavigate()
-	// only a daily scan draws on a slot, so every other frequency is always open
-	if (hasDailySlot || !isDailyFrequency(frequency)) {
+// whether the plan has no slot left for a frequency. only a daily scan draws on a slot, so every other frequency is open
+function isPlanLimitedFrequency(frequency: Frequency, hasDailySlot: boolean): boolean {
+	return !hasDailySlot && isDailyFrequency(frequency)
+}
+
+/**
+ * Renders one select frequency option. A plan-limited one stays an option, so the listbox holds only options, and the
+ * select opens the plans page when it is picked.
+ */
+export function FrequencyOption({ frequency, hasDailySlot }: { frequency: Frequency; hasDailySlot: boolean }) {
+	if (!isPlanLimitedFrequency(frequency, hasDailySlot)) {
 		return <SelectItem value={frequency}>{capitalize(frequency)}</SelectItem>
 	}
 	return (
 		<Tooltip>
+			{/* dimmed and marked unavailable, but not disabled, so a hover or focus shows the tooltip and a pick still
+			    reaches the select */}
 			<TooltipTrigger asChild>
-				<button type="button" className="w-full cursor-pointer text-left" onClick={() => navigate({ to: "/plans" })}>
-					<SelectItem value={frequency} disabled>
-						{capitalize(frequency)}
-						{/* a coffee cup where the check mark sits on the option that is disabled,
-						    since this must be bought instead of selected */}
-						<span className="absolute right-2 flex size-3.5 items-center justify-center">
-							<Coffee className="size-4" />
-						</span>
-					</SelectItem>
-				</button>
+				<SelectItem value={frequency} aria-disabled="true" className="cursor-pointer opacity-50">
+					{capitalize(frequency)}
+					{/* a coffee cup where the check mark sits, marking a frequency the plan has to buy */}
+					<span className="absolute right-2 flex size-3.5 items-center justify-center">
+						<Coffee className="size-4" />
+					</span>
+				</SelectItem>
 			</TooltipTrigger>
 			{/* beside the list instead of above it, so the tooltip doesn't cover the select option which is the call-to-action */}
 			<TooltipContent side="right">Pick up some coffee for more daily scans.</TooltipContent>

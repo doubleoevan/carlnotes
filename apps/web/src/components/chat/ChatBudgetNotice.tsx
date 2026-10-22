@@ -6,7 +6,7 @@ export function ChatBudgetNotice() {
 	return (
 		<p className="text-muted-foreground text-sm whitespace-pre-line">
 			{`${CHAT_REJECTION_COPY.budget}\n`}
-			<AnchorLink href={PLANS_PATH} className="text-link hover:underline">
+			<AnchorLink href={PLANS_PATH} className="sentence-link">
 				{PLANS_ACTION_LABEL}
 			</AnchorLink>
 			{" to keep chatting."}

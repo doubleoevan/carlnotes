@@ -1,5 +1,10 @@
 import type * as React from "react"
-import { DASHED_ROW_CLASS, INFO_CARD_CLASS, RESOURCE_LIST_CARD_CLASS } from "@/lib/styleClasses"
+import {
+	DASHED_ROW_CLASS,
+	INFO_CARD_CLASS,
+	INFO_CARD_SECTIONS_CLASS,
+	RESOURCE_LIST_CARD_CLASS,
+} from "@/lib/styleClasses"
 import { cn } from "@/lib/utils"
 import { ResourceSkeleton } from "./TopicFeedSkeleton"
 
@@ -191,7 +196,7 @@ function ScanHistorySkeleton() {
 // an info card with a label bar and a text bar per section, split by dashed dividers
 function InfoCardSkeleton({ sectionKeys }: { sectionKeys: string[] }) {
 	return (
-		<div className={cn(INFO_CARD_CLASS, "divide-separator-strong divide-y divide-dashed")}>
+		<div className={cn(INFO_CARD_CLASS, INFO_CARD_SECTIONS_CLASS)}>
 			{sectionKeys.map((sectionKey) => (
 				<div key={sectionKey} className="py-3 first:pt-0 last:pb-0">
 					<div className="bg-muted h-3.5 w-24 animate-pulse rounded" />

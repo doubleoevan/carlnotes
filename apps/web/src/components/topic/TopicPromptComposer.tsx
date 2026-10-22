@@ -18,6 +18,7 @@ const PASTED_TEXT_FILENAME = "Pasted text.txt"
  * The topic prompt box: staged attachment chips over a box that grows with the prompt, a paperclip, and a clear button.
  */
 export function TopicPromptComposer({
+	promptInputId,
 	prompt,
 	topicName,
 	pendingFiles,
@@ -25,6 +26,8 @@ export function TopicPromptComposer({
 	onAddFiles,
 	onRemoveFile,
 }: {
+	// the prompt box's id, which its field label names it by
+	promptInputId: string
 	prompt: string
 	topicName: string
 	pendingFiles: File[]
@@ -74,13 +77,14 @@ export function TopicPromptComposer({
 			<div className="flex flex-wrap items-end gap-2 sm:flex-nowrap">
 				<AttachButton onSelect={onAddFiles} />
 				<textarea
+					id={promptInputId}
 					ref={promptBoxRef}
+					aria-required
 					rows={2}
 					value={prompt}
 					onChange={(event) => onPromptChange(event.target.value)}
 					onPaste={handlePaste}
 					placeholder={placeholder}
-					aria-label="Carl's prompt"
 					className="placeholder:text-muted-foreground min-w-0 flex-1 resize-none bg-transparent py-2 text-base leading-relaxed outline-none max-sm:order-first max-sm:basis-full sm:py-1 sm:text-sm"
 				/>
 				{/* the clear button empties the box and focuses it again. it shows only if the box has text */}

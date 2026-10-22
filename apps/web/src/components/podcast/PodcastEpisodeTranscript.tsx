@@ -1,7 +1,13 @@
 import type { PodcastEpisodeTranscriptBlock } from "@carlnotes/contracts/podcast"
 import { useState } from "react"
 import { MoreButton } from "@/components/topic/MoreButton"
-import { HIGHLIGHT_SCROLLBAR_CLASS, INFO_CARD_CLASS, SCRIPTED_ONLY_CLASS } from "@/lib/styleClasses"
+import { useScrollRegionTabStop } from "@/hooks/useScrollRegionTabStop"
+import {
+	HIGHLIGHT_SCROLLBAR_CLASS,
+	INFO_CARD_CLASS,
+	SCRIPTED_ONLY_CLASS,
+	SCROLL_REGION_FOCUS_CLASS,
+} from "@/lib/styleClasses"
 import { cn } from "@/lib/utils"
 
 // the collapsed transcript's height, with its last lines fading out. the transcript collapses only with JavaScript
@@ -25,13 +31,20 @@ const CHAPTER_TITLE_SEPARATOR_CLASS = [
  */
 export function PodcastEpisodeTranscript({ transcript }: { transcript: PodcastEpisodeTranscriptBlock[] }) {
 	const [isExpanded, setIsExpanded] = useState(false)
+	// the card's tab stop, so a keyboard can scroll a transcript that holds no link
+	const { ref: transcriptCardRef, tabIndex } = useScrollRegionTabStop<HTMLDivElement>()
 	return (
 		<>
-			{/* the transcript card */}
+			{/* the transcript card. the collapsed card clips its overflow instead of scrolling, so only the expanded card
+			takes the tab stop */}
 			<div
+				ref={transcriptCardRef}
+				tabIndex={isExpanded ? tabIndex : undefined}
 				className={cn(
 					INFO_CARD_CLASS,
-					isExpanded ? [EXPANDED_TRANSCRIPT_CLASS, HIGHLIGHT_SCROLLBAR_CLASS] : COLLAPSED_TRANSCRIPT_CLASS,
+					isExpanded
+						? [EXPANDED_TRANSCRIPT_CLASS, HIGHLIGHT_SCROLLBAR_CLASS, SCROLL_REGION_FOCUS_CLASS]
+						: COLLAPSED_TRANSCRIPT_CLASS,
 				)}
 			>
 				{transcript.map((transcriptBlock, transcriptBlockIndex) => (

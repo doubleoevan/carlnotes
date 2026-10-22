@@ -7,7 +7,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives
 import { SortableHeader } from "@/components/table/SortableHeader"
 import { TableCard } from "@/components/table/TableCard"
 import { SMALLEST_PAGE_SIZE, TablePagination, usePaginatedRowSort } from "@/components/table/TablePagination"
-import { TABLE_CLASS, TABLE_HEAD_CLASS, TABLE_SCROLL_CLASS } from "@/lib/styleClasses"
+import { STANDALONE_LINK_CLASS, TABLE_CLASS, TABLE_HEAD_CLASS, TABLE_SCROLL_CLASS } from "@/lib/styleClasses"
 import { cn } from "@/lib/utils"
 import { NoteVisibilityIcon } from "./NoteVisibilitySelect"
 
@@ -71,7 +71,7 @@ export function NotesTable({ notes, onOpenNote }: { notes: Note[]; onOpenNote: (
 										<button
 											type="button"
 											onClick={() => onOpenNote(note)}
-											className="text-link text-left hover:underline"
+											className={cn(STANDALONE_LINK_CLASS, "text-left")}
 										>
 											{note.name}
 										</button>

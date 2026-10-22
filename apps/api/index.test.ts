@@ -7,6 +7,7 @@ import { restoreRedisClient, stubRedisClient } from "@carlnotes/db/redisClientSt
 import { quietErrorReports } from "@carlnotes/server/monitoringTestFixtures"
 import { PROVIDER_PHOTO_ORIGINS } from "./avatars"
 import { DEFAULT_BODY_LIMIT_BYTES } from "./bodyLimit"
+import { BASELINE_POLICY_DIRECTIVES, FRAME_SOURCE_DIRECTIVE } from "./contentSecurityPolicy"
 import { RENDERED_EDGE_CACHE_CONTROL } from "./edgeCache"
 import server from "./index"
 import {
@@ -129,10 +130,10 @@ test("the signed-out feed is shared at the edge and sent uncompressed, and a sig
 
 // security.txt is for a researcher, so a search engine leaves it out of its results
 test("security.txt is served with a noindex header", async () => {
-	const response = await server.fetch(new Request("http://localhost:3000/.well-known/security.txt"))
+	const response = await request("/.well-known/security.txt")
 
 	expect(response.status).toBe(200)
-	expect(response.headers.get("X-Robots-Tag")).toBe("noindex")
+	expect(response.robotsTag).toBe("noindex")
 })
 
 // the fallback is for reads. a write to a path nothing handles is a 404, not a page
@@ -186,18 +187,20 @@ test("an mcp request past the default body limit is rejected with a 413", async 
 
 // an oauth avatar redirects to its provider, so the policy has to allow that origin
 test("the content security policy allows every provider photo host the avatar redirect points at", async () => {
-	const response = await server.fetch(new Request("http://localhost:3000/api/health"))
-	const imageSources = response.headers.get("Content-Security-Policy")?.split(";")[0] ?? ""
+	const response = await request("/api/health")
+	const imageSources = response.contentSecurityPolicy?.split(";")[0] ?? ""
 	for (const photoOrigin of PROVIDER_PHOTO_ORIGINS) {
 		expect(imageSources).toContain(photoOrigin)
 	}
 })
 
-// signup renders the Turnstile challenge in an iframe from Cloudflare, so the policy has to allow that origin
-test("the content security policy allows the Turnstile challenge frame", async () => {
-	const response = await server.fetch(new Request("http://localhost:3000/api/health"))
-	const policyDirectives = response.headers.get("Content-Security-Policy")?.split(";") ?? []
+// signup renders the Turnstile challenge in an iframe from Cloudflare, so the policy has to allow that origin. its
+// frame-src is the directive that the component browser's policy shares
+test("the content security policy allows the shared frame sources, the Turnstile challenge among them", async () => {
+	const response = await request("/api/health")
+	const policyDirectives = response.contentSecurityPolicy?.split(";") ?? []
 	const frameSources = policyDirectives.find((directive) => directive.trim().startsWith("frame-src")) ?? ""
+	expect(frameSources.trim()).toBe(FRAME_SOURCE_DIRECTIVE)
 	expect(frameSources).toContain("https://challenges.cloudflare.com")
 })
 
@@ -213,13 +216,18 @@ test("a public file is cached for an hour in the browser and a day at the edge",
 	expect(response.edgeCacheControl).toBe("max-age=86400")
 })
 
-// every response names the referrer a cross-origin link sees, forbids type sniffing, and keeps a base url and a form on
-// this origin
+// every response names the referrer a cross-origin link sees, forbids type sniffing, and includes every baseline
+// policy directive
 test("every response includes the baseline security headers", async () => {
 	const response = await server.fetch(new Request("http://localhost:3000/api/health"))
 
+	// the referrer and sniffing headers, which the request fixture does not read
 	expect(response.headers.get("Referrer-Policy")).toBe("strict-origin-when-cross-origin")
 	expect(response.headers.get("X-Content-Type-Options")).toBe("nosniff")
-	expect(response.headers.get("Content-Security-Policy")).toContain("base-uri 'self'")
-	expect(response.headers.get("Content-Security-Policy")).toContain("form-action 'self'")
+
+	// every directive that each policy includes
+	const contentSecurityPolicy = response.headers.get("Content-Security-Policy") ?? ""
+	for (const policyDirective of BASELINE_POLICY_DIRECTIVES) {
+		expect(contentSecurityPolicy).toContain(policyDirective)
+	}
 })

@@ -1,13 +1,9 @@
 import { maxTopicFindingsOptions, visibilities } from "@carlnotes/contracts/enums"
 import type { TopicPodcast } from "@carlnotes/contracts/podcast"
-import {
-	FULL_PODCAST_EPISODE_MINUTES,
-	PODCAST_NAME,
-	SHORT_PODCAST_EPISODE_MINUTES,
-} from "@carlnotes/contracts/podcastEpisodes"
+import { FULL_PODCAST_EPISODE_MINUTES, SHORT_PODCAST_EPISODE_MINUTES } from "@carlnotes/contracts/podcastEpisodes"
 import type { TopicResponse } from "@carlnotes/contracts/topics"
 import { useNavigate } from "@tanstack/react-router"
-import { useRef, useState } from "react"
+import { useId, useRef, useState } from "react"
 import { toast } from "sonner"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { FieldLabel } from "@/components/common/FieldLabel"
@@ -17,6 +13,7 @@ import { Dialog, DialogContent, DialogFooter, DialogTitle } from "@/components/p
 import { Input } from "@/components/primitives/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/primitives/select"
 import { Switch } from "@/components/primitives/switch"
+import { STANDALONE_LINK_CLASS } from "@/lib/styleClasses"
 import { cn } from "@/lib/utils"
 import { useTopicFeed } from "@/providers/TopicFeedProvider"
 import { hasDailySlotLeft, PromptSourceUrls, ScheduleFields, SourceLimitNote } from "./EditTopicFields"
@@ -51,6 +48,12 @@ export function EditTopicModal({
 }) {
 	// the title input ref to focus it on open
 	const titleInputRef = useRef<HTMLInputElement>(null)
+	// the ids that tie each field label to its field
+	const titleInputId = useId()
+	const promptInputId = useId()
+	const maxTopicFindingsSelectId = useId()
+	const visibilitySelectId = useId()
+	const podcastSwitchId = useId()
 	// sends the user to the plans page when a daily schedule is at the plan's limit
 	const navigate = useNavigate()
 	// every tag across the loaded feed seeds the tag picker, and the topicFeed has the daily slots left
@@ -124,9 +127,13 @@ export function EditTopicModal({
 
 				{/* title */}
 				<div>
-					<FieldLabel isRequired>Title</FieldLabel>
+					<FieldLabel htmlFor={titleInputId} isRequired>
+						Title
+					</FieldLabel>
 					<Input
+						id={titleInputId}
 						ref={titleInputRef}
+						aria-required
 						value={fields.name}
 						onChange={(event) => fields.setName(event.target.value)}
 						className={cn(missingField === "name" && !fields.name.trim() && "border-destructive")}
@@ -139,8 +146,11 @@ export function EditTopicModal({
 					ref={promptFieldRef}
 					className={cn(missingField === "prompt" && !fields.prompt.trim() && "rounded-md ring-1 ring-destructive")}
 				>
-					<FieldLabel isRequired>{"Carl's Prompt"}</FieldLabel>
+					<FieldLabel htmlFor={promptInputId} isRequired>
+						{"Carl's Prompt"}
+					</FieldLabel>
 					<TopicPromptComposer
+						promptInputId={promptInputId}
 						prompt={fields.prompt}
 						topicName={fields.name}
 						pendingFiles={fields.pendingFiles}
@@ -173,12 +183,12 @@ export function EditTopicModal({
 				{/* max findings and visibility side by side */}
 				<div className="grid grid-cols-2 gap-3">
 					<div>
-						<FieldLabel>Max findings</FieldLabel>
+						<FieldLabel htmlFor={maxTopicFindingsSelectId}>Max findings</FieldLabel>
 						<Select
 							value={String(fields.maxTopicFindings)}
 							onValueChange={(value) => fields.setMaxTopicFindings(Number(value))}
 						>
-							<SelectTrigger className="w-full" aria-label="Max findings">
+							<SelectTrigger id={maxTopicFindingsSelectId} className="w-full">
 								<SelectValue />
 							</SelectTrigger>
 							<SelectContent>
@@ -191,9 +201,9 @@ export function EditTopicModal({
 						</Select>
 					</div>
 					<div>
-						<FieldLabel>Visibility</FieldLabel>
+						<FieldLabel htmlFor={visibilitySelectId}>Visibility</FieldLabel>
 						<Select value={fields.visibility} onValueChange={(value) => fields.setVisibility(value as Visibility)}>
-							<SelectTrigger className="w-full" aria-label="Visibility">
+							<SelectTrigger id={visibilitySelectId} className="w-full">
 								<SelectValue />
 							</SelectTrigger>
 							<SelectContent>
@@ -247,8 +257,9 @@ export function EditTopicModal({
 				{/* the podcast switch, for a saved topic that has a podcast */}
 				{topic?.podcast && (
 					<div>
-						<FieldLabel>Podcast</FieldLabel>
+						<FieldLabel htmlFor={podcastSwitchId}>Podcast</FieldLabel>
 						<PodcastSwitch
+							podcastSwitchId={podcastSwitchId}
 							topicPodcast={topic.podcast}
 							isPodcastEnabled={fields.isPodcastEnabled}
 							isTopicOwner={topic.isTopicOwner}
@@ -272,8 +283,10 @@ export function EditTopicModal({
 	)
 }
 
-// the topic's podcast, whether the switch is on, whether the user owns the topic, and the switch's change callback
+// the switch's id for its field label, the topic's podcast, whether the switch is on, whether the user owns the topic,
+// and the switch's change callback
 type PodcastSwitchProps = {
+	podcastSwitchId: string
 	topicPodcast: TopicPodcast
 	isPodcastEnabled: boolean
 	isTopicOwner: boolean
@@ -283,7 +296,13 @@ type PodcastSwitchProps = {
 /**
  * The podcast switch, with the free plan's short episode and the owner's plans link if the topic lacks full episodes.
  */
-export function PodcastSwitch({ topicPodcast, isPodcastEnabled, isTopicOwner, onPodcastChange }: PodcastSwitchProps) {
+export function PodcastSwitch({
+	podcastSwitchId,
+	topicPodcast,
+	isPodcastEnabled,
+	isTopicOwner,
+	onPodcastChange,
+}: PodcastSwitchProps) {
 	return (
 		<div className="flex items-center justify-between gap-3">
 			<div className="flex flex-col gap-0.5">
@@ -298,14 +317,14 @@ export function PodcastSwitch({ topicPodcast, isPodcastEnabled, isTopicOwner, on
 					</span>
 				)}
 				{!topicPodcast.hasFullPodcastEpisodes && isTopicOwner && (
-					<AnchorLink href="/plans" className="text-link text-xs hover:underline">
+					<AnchorLink href="/plans" className={cn(STANDALONE_LINK_CLASS, "text-xs")}>
 						{`Upgrade for ${FULL_PODCAST_EPISODE_MINUTES}-minute episodes, every one kept`}
 					</AnchorLink>
 				)}
 			</div>
 			{/* the switch */}
 			<Switch
-				aria-label={PODCAST_NAME}
+				id={podcastSwitchId}
 				checked={isPodcastEnabled}
 				onCheckedChange={onPodcastChange}
 				className="h-7.5 w-13 [&>span]:size-6"

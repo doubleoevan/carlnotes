@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { createRootRoute, HeadContent, Outlet, Scripts, useLocation } from "@tanstack/react-router"
 import { type ReactNode, useEffect, useState } from "react"
 import { Toaster } from "@/components/primitives/sonner"
+import { HERO_DARK, HERO_LIGHT, THEME_COLOR_META_NAME, THEME_STORAGE_KEY } from "@/hooks/useTheme"
 import { hasSessionCookie } from "@/lib/sessionCookie"
 import { captureVisit } from "@/lib/visitAnalytics"
 import "@/globals.css"
@@ -19,11 +20,11 @@ const SITE_IMAGE_URL = `${SITE_URL}/opengraph-image.png`
 const FIRST_PAINT_SCRIPT = `(() => {
   document.documentElement.classList.add("scripted")
   try {
-    const savedTheme = localStorage.getItem("theme")
+    const savedTheme = localStorage.getItem("${THEME_STORAGE_KEY}")
     const isDark = savedTheme ? savedTheme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches
     document.documentElement.classList.toggle("dark", isDark)
     if (isDark) {
-      document.querySelector('meta[name="theme-color"]')?.setAttribute("content", "#0f0c09")
+      document.querySelector('meta[name="${THEME_COLOR_META_NAME}"]')?.setAttribute("content", "${HERO_DARK}")
     }
   } catch {}
 })()`
@@ -37,7 +38,7 @@ export const Route = createRootRoute({
 				name: "viewport",
 				content: "width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content",
 			},
-			{ name: "theme-color", content: "#3b2a1d" },
+			{ name: THEME_COLOR_META_NAME, content: HERO_LIGHT },
 			{ title: SITE_TITLE },
 			{ name: "description", content: SITE_DESCRIPTION },
 			{ property: "og:type", content: "website" },

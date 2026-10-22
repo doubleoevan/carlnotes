@@ -5,6 +5,7 @@
 		{ "path": "../packages/server" },
 		{ "path": "../packages/db" },
 		{ "path": "../packages/models" },
+		{ "path": "../packages/nightshift" },
 		{ "path": "../packages/pipeline" },
 		{ "path": "../apps/api" }
 	],

@@ -12,7 +12,13 @@ import { ArrowUp, Paperclip } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
 import { FileDropZone } from "@/components/common/FileDropZone"
-import { COMPOSER_BOX_CLASS, ICON_BUTTON_CLASS, SEND_BUTTON_CLASS } from "@/lib/styleClasses"
+import {
+	COMPOSER_BAR_CLASS,
+	COMPOSER_BOX_CLASS,
+	COMPOSER_FRAME_CLASS,
+	ICON_BUTTON_CLASS,
+	SEND_BUTTON_CLASS,
+} from "@/lib/styleClasses"
 import { CHAT_FILE_PICKER_ACCEPT, cn, isSendKey, isTouchScreen, isWideScreen } from "@/lib/utils"
 import { ChatAttachmentChips } from "./ChatAttachmentChips"
 import { MentionSuggestionList, useMentionAutocomplete } from "./MentionSuggestionList"
@@ -33,8 +39,8 @@ const MAX_MESSAGE_BOX_HEIGHT_PX = 120
  */
 export function DisabledRoomComposer({ placeholder }: { placeholder?: string }) {
 	return (
-		<div aria-hidden="true" className="shrink-0 border-t px-3 py-2.5 opacity-60">
-			<div className="bg-background rounded-2xl border px-3 py-2">
+		<div aria-hidden="true" className={cn(COMPOSER_BAR_CLASS, "opacity-60")}>
+			<div className={COMPOSER_FRAME_CLASS}>
 				<p className="text-muted-foreground py-1 text-base leading-relaxed sm:text-sm">
 					{placeholder ?? toComposerPlaceholder(ALL_USERNAME)}
 				</p>
@@ -268,7 +274,7 @@ export function ChatRoomComposer({
 	return (
 		<form
 			autoComplete="off"
-			className="relative shrink-0 border-t px-3 py-2.5"
+			className={cn(COMPOSER_BAR_CLASS, "relative")}
 			onSubmit={(event) => {
 				event.preventDefault()
 				handlePostChatMessage()
@@ -290,7 +296,7 @@ export function ChatRoomComposer({
 				onRemove={(index) => setPendingAttachments((waiting) => waiting.filter((_, at) => at !== index))}
 			/>
 			{/* the chat message field owns its own line, with the send button below it */}
-			<FileDropZone className="bg-background rounded-2xl border px-3 py-2" onDropFiles={attachSelectedFiles}>
+			<FileDropZone className={COMPOSER_FRAME_CLASS} onDropFiles={attachSelectedFiles}>
 				{/* the recording bar replaces the box while a recording runs */}
 				{voiceRecording.state === "recording" ? (
 					<RecordingBar voiceRecording={voiceRecording} />

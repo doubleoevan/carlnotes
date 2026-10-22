@@ -4,11 +4,11 @@ import { PODCAST_EPISODE_SPEAKER_NAMES } from "@carlnotes/contracts/podcastEpiso
 import { Check, Copy } from "lucide-react"
 import { useState } from "react"
 import { CoffeeMug } from "@/components/branding/CoffeeMug"
+import { ThinkingLine } from "@/components/common/ThinkingLine"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import { ANSWER_BUBBLE_CLASS } from "@/lib/styleClasses"
 import { copyToClipboard } from "@/lib/utils"
 import { ChatAuthor } from "./ChatAuthor"
-import { randomThinkingLine } from "./thinkingLines"
 
 /**
  * Formats the label for how long ago a chat turn finished, from "just now" through minutes, hours, and days.
@@ -78,12 +78,6 @@ export function CopyButton({ text, isTooltipBelow = false }: { text: string; isT
 			<TooltipContent side={isTooltipBelow ? "bottom" : "top"}>{isCopied ? "Copied" : "Copy message"}</TooltipContent>
 		</Tooltip>
 	)
-}
-
-/** One "Carl is ___" shimmer line shown while waiting for the response. */
-export function ThinkingLine() {
-	const [thinkingLine] = useState(randomThinkingLine)
-	return <span className="shimmer-text">{`Carl is ${thinkingLine}…`}</span>
 }
 
 /** Carl's bubble while he thinks: the avatar, the mug, and the shimmer. */

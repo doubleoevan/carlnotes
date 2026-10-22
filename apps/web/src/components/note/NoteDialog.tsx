@@ -1,15 +1,7 @@
-// the note dialog, which creates a note or opens one. a user who can edit gets the live editor with
-// comments, and a read-only open gets the stored HTML
+// the note dialog, which creates a note or opens one. a user who can edit gets the live editor with comments, and a
+// read-only open gets the stored HTML
 
-import {
-	createNote,
-	deleteNote,
-	fetchNote,
-	type NotePageRef,
-	sendNoteRead,
-	updateNote,
-} from "@carlnotes/client/noteClient"
-import type { noteVisibilities } from "@carlnotes/contracts/enums"
+import { deleteNote, fetchNote, type NotePageRef, sendNoteRead, updateNote } from "@carlnotes/client/noteClient"
 import { NOTE_NAME_MAX_CHARS, type Note } from "@carlnotes/contracts/notes"
 import { markNoteOpened } from "@carlnotes/core/stores/noteBadgeStore"
 import { Maximize2, MessageSquareText, Minimize2, Pencil, X } from "lucide-react"
@@ -22,8 +14,9 @@ import { Input } from "@/components/primitives/input"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import { MENU_BUTTON_HIGHLIGHT_CLASS } from "@/lib/styleClasses"
 import { cn, isWideScreen } from "@/lib/utils"
+import { CreateNote } from "./CreateNote"
 import { NoteStatic } from "./NoteStatic"
-import { NoteVisibilitySelect, VISIBILITY_TOOLTIPS } from "./NoteVisibilitySelect"
+import { type NoteVisibility, NoteVisibilitySelect, VISIBILITY_TOOLTIPS } from "./NoteVisibilitySelect"
 import type { NoteSaveErrorReason, NoteSaveStatus } from "./noteProvider"
 
 // the editor and the blocknote bundle load only when a note opens for a user who can edit
@@ -35,8 +28,6 @@ const SAVE_STATUS_LABELS: Record<NoteSaveStatus, string> = {
 	saved: "Saved",
 	unsaved: "Not saved",
 }
-
-type NoteVisibility = (typeof noteVisibilities)[number]
 
 /**
  * One note's dialog, or the create flow when no note is given. Closing it ends any live connection.
@@ -111,75 +102,6 @@ export function NoteDialog({
 				)}
 			</DialogContent>
 		</Dialog>
-	)
-}
-
-// the create flow: a name, a visibility the creator may use, and one button
-function CreateNote({
-	page,
-	creatableVisibilities,
-	onCreated,
-}: {
-	page: NotePageRef
-	creatableVisibilities: NoteVisibility[]
-	onCreated: (note: Note) => void
-}) {
-	// the name and visibility the create posts. default to team when that visibility is available, otherwise private
-	const [name, setName] = useState("")
-	const [noteVisibility, setNoteVisibility] = useState<NoteVisibility>(
-		creatableVisibilities.includes("team") ? "team" : "private",
-	)
-
-	// a wide screen focuses the name on open. a phone waits for a tap.
-	// focus on a phone pops the keyboard over the dialog
-	const nameInputRef = useRef<HTMLInputElement>(null)
-	useEffect(() => {
-		if (isWideScreen()) {
-			nameInputRef.current?.focus()
-		}
-	}, [])
-
-	// the create itself, rejected server-side outside the creatable visibilities
-	async function handleCreate() {
-		const created = await createNote(page, name.trim(), noteVisibility)
-		if (!created) {
-			toast.error("Carl couldn't start that note. Try again in a moment.")
-			return
-		}
-		onCreated(created)
-	}
-
-	return (
-		<>
-			<DialogTitle>New note</DialogTitle>
-
-			{/* the name, then the visibility with its meaning on the same row */}
-			<div className="space-y-3">
-				<Input
-					ref={nameInputRef}
-					value={name}
-					onChange={(event) => setName(event.target.value)}
-					placeholder="Name your note"
-					aria-label="Note name"
-					maxLength={NOTE_NAME_MAX_CHARS}
-				/>
-				<div className="flex items-center gap-3">
-					<NoteVisibilitySelect
-						visibilities={creatableVisibilities}
-						visibility={noteVisibility}
-						onNoteVisibilityChange={setNoteVisibility}
-					/>
-					<DialogDescription className="text-sm">{VISIBILITY_TOOLTIPS[noteVisibility]}</DialogDescription>
-				</div>
-			</div>
-
-			{/* the action, bottom-right */}
-			<div className="flex justify-end">
-				<Button onClick={() => void handleCreate()} disabled={name.trim().length === 0}>
-					Add note
-				</Button>
-			</div>
-		</>
 	)
 }
 
@@ -424,7 +346,7 @@ function OpenNote({
 					title="Delete this note?"
 					confirmLabel="Delete note"
 					cancelLabel="Keep it"
-					onConfirm={() => void handleDeleteNote()}
+					onConfirm={handleDeleteNote}
 					onClose={() => setIsConfirmingDelete(false)}
 				>
 					{`"${note.name}" and its comments go in the bin. Carl can't fish them back out.`}

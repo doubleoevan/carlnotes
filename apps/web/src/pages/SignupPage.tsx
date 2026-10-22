@@ -1,16 +1,14 @@
 import { authClient, passSignupGate } from "@carlnotes/client/authClient"
 import { SIGNUP_CTA_COOKIE_NAME, toCtaTag } from "@carlnotes/contracts/signupCta"
 import { useEffect, useState } from "react"
-import { CoffeeMug } from "@/components/branding/CoffeeMug"
-import { Button } from "@/components/primitives/button"
 import { SessionLayout } from "@/components/session/SessionLayout"
 import { SIGNUP_PROMPTS } from "@/components/session/signupPrompts"
 import { TurnstileWidget } from "@/components/session/TurnstileWidget"
+import { VerifyEmailNotice } from "@/components/session/VerifyEmailNotice"
 import { useCtaPromptToast } from "@/hooks/useCtaPromptToast"
 import { usePageTitle } from "@/hooks/usePageTitle"
 import { useSearchParams } from "@/hooks/useSearchParams"
-import { SESSION_PAGE_CLASS } from "@/lib/styleClasses"
-import { cn, toSafeRedirectPath } from "@/lib/utils"
+import { toSafeRedirectPath } from "@/lib/utils"
 
 // the one toast that names the action a visitor tried
 const SIGNUP_PROMPT_TOAST_ID = "signup-prompt"
@@ -104,22 +102,5 @@ export function SignupPage() {
 			footerLinkLabel="Log in"
 			footerHref="/login"
 		/>
-	)
-}
-
-// the post-signup notice. verification is not a wall, so it offers a way straight into the app
-function VerifyEmailNotice({ email, redirectPath }: { email: string; redirectPath: string }) {
-	return (
-		<div className={cn(SESSION_PAGE_CLASS, "text-center")}>
-			<CoffeeMug className="text-primary mx-auto size-10" />
-			<h1 className="mt-4 text-2xl font-semibold">Check your email</h1>
-			<p className="text-muted-foreground mt-2 text-sm">
-				{`We sent a link to confirm ${email}. You don't have to click it now. You can start using CarlNotes right away.`}
-			</p>
-			{/* full navigation, not client-side. useSession otherwise keeps its cached signed-out state */}
-			<Button onClick={() => (window.location.href = redirectPath)} className="mt-6">
-				Continue to CarlNotes
-			</Button>
-		</div>
 	)
 }

@@ -15,7 +15,13 @@ import { Popover, PopoverCloseButton, PopoverContent, PopoverTrigger } from "@/c
 import { Switch } from "@/components/primitives/switch"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import { TopicScanRecap, toNotesMarkdown } from "@/components/topic/TopicScanRecap"
-import { POPOVER_PANEL_CLASS, TABLE_CLASS, TABLE_HEAD_CLASS, TABLE_SCROLL_CLASS } from "@/lib/styleClasses"
+import {
+	POPOVER_PANEL_CLASS,
+	STANDALONE_LINK_CLASS,
+	TABLE_CLASS,
+	TABLE_HEAD_CLASS,
+	TABLE_SCROLL_CLASS,
+} from "@/lib/styleClasses"
 import { cn } from "@/lib/utils"
 import { SortableHeader } from "./SortableHeader"
 import { TableCard } from "./TableCard"
@@ -44,8 +50,8 @@ const topicSortValues = {
 }
 
 /**
- * The Activity page's owned-topics table: sortable columns, cost last, a totals line, and a cost-cell click
- * opening that topic's scan history.
+ * The topics table on the user's own profile, also opened as an admin subtable: sortable columns, cost last, a totals
+ * line, and a cost-cell click opening that topic's scan history.
  */
 export function OwnerTopicsTable({
 	topics,
@@ -92,8 +98,10 @@ export function OwnerTopicsTable({
 	const emailOnCount = topics.filter((topic) => topic.isEmailEnabled).length
 	return (
 		<TableCard className={cn("mb-4", className)}>
-			<div className={TABLE_SCROLL_CLASS}>
-				<table className={cn(TABLE_CLASS, "min-w-2xl")}>
+			{/* in an admin subtable, the table keeps its own column widths and minimum width over the admin table's subtable
+			    rules, and it scrolls inside its own box without widening the admin table's row */}
+			<div className={cn(TABLE_SCROLL_CLASS, "contain-inline-size")}>
+				<table className={cn(TABLE_CLASS, "min-w-2xl! table-auto!")}>
 					<thead className={TABLE_HEAD_CLASS}>
 						<tr>
 							<SortableHeader sort={sort} sortKey="name" label="Topic" className="py-2 pr-4" />
@@ -180,7 +188,7 @@ export function OwnerTopicsTable({
 												<button
 													type="button"
 													onClick={() => handleCostCellClick(topic.id)}
-													className="text-link inline-flex items-center gap-0.5 hover:underline"
+													className={cn(STANDALONE_LINK_CLASS, "inline-flex items-center gap-0.5")}
 												>
 													{toCentsLabel(topic.monthCostCents)}
 													{/* the chevron shows whether the scan costs table is open or closed */}
@@ -341,7 +349,7 @@ function ScanNotesCell({ scan, topic }: { scan: ActivityScan; topic: Pick<OwnerT
 
 	return (
 		<Popover onOpenChange={handleOpenScanNote}>
-			<PopoverTrigger className="text-link hover:underline">{duration || "—"}</PopoverTrigger>
+			<PopoverTrigger className={STANDALONE_LINK_CLASS}>{duration || "—"}</PopoverTrigger>
 			<PopoverContent align="start" className={POPOVER_PANEL_CLASS}>
 				<PopoverCloseButton />
 				{isNoteLoaded ? (

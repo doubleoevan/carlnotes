@@ -3,10 +3,11 @@
 import { sendCreateTopicInvite } from "@carlnotes/client/topicClient"
 import { useState } from "react"
 import { toast } from "sonner"
+import { COPIED_FEEDBACK_MS } from "@/components/common/CopyMarkdownButton"
 import { toInviteUrl } from "@/lib/inviteUrl"
 import { canOpenShareSheet, openShareSheet } from "@/lib/shareSheet"
 import { copyToClipboard } from "@/lib/utils"
-import { COPIED_FEEDBACK_MS, COPY_PAGE_LABEL, INVITE_LABEL } from "./ShareOptions"
+import { COPY_PAGE_LABEL, INVITE_LABEL } from "./ShareOptions"
 
 // what the share menu can do, and the label it shows after a copy lands
 export type ShareTopicActions = {

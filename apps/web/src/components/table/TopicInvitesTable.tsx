@@ -2,14 +2,53 @@ import { sendDeleteTopicInvite } from "@carlnotes/client/activityClient"
 import type { ActivityResponse } from "@carlnotes/contracts/activity"
 import { toTopicPath } from "@carlnotes/contracts/seo"
 import { AnchorLink } from "@/components/common/AnchorLink"
-import { type SentInviteRow, SentInvitesTable } from "./SentInvitesTable"
+import { STANDALONE_LINK_CLASS } from "@/lib/styleClasses"
+import { type SentInviteRow, SentInvitesTable, type SentInvitesTableLabels } from "./SentInvitesTable"
 
 // one invite the user sent on a topic they own
 type InviteRow = ActivityResponse["invites"][number]
 
 /**
+ * The topic invitations table's headers and withdraw confirmation, worded for subscribing to a topic.
+ */
+export const TOPIC_INVITES_TABLE_LABELS: SentInvitesTableLabels = {
+	targetLabel: "Topic",
+	acceptedLabel: "Followed",
+	acceptedNoun: "subscribed",
+	confirmTitle: "Delete this invitation?",
+	confirmLabel: "Delete invitation",
+	confirmBody: (row) => (
+		<>
+			{`${row.inviteeEmail ?? row.invitee?.username ?? "This invitee"} loses access to `}
+			<span className="font-semibold">{row.targetName}</span>, and their subscription goes with it. Inviting them again
+			starts over.
+		</>
+	),
+}
+
+/**
+ * Returns a topic invitation's target cell, the topic's name linked to its page, with the name it sorts by.
+ */
+export function toTopicInviteTarget({
+	topicId,
+	name,
+}: {
+	topicId: string
+	name: string
+}): Pick<SentInviteRow, "target" | "targetName"> {
+	return {
+		target: (
+			<AnchorLink href={toTopicPath({ id: topicId, name })} className={STANDALONE_LINK_CLASS}>
+				{name}
+			</AnchorLink>
+		),
+		targetName: name,
+	}
+}
+
+/**
  * The Activity page's topic invitations table: who the user invited to their topics and whether each one subscribed.
- * Using the same table that the Team page uses for team invitations.
+ * It uses the same table that the Teams page uses for team invitations.
  */
 export function TopicInvitesTable({
 	invites,
@@ -24,15 +63,7 @@ export function TopicInvitesTable({
 	// topic invitations in the shape of invite table rows
 	const inviteRows = invites.map((inviteRow) => ({
 		inviteId: inviteRow.inviteId,
-		target: (
-			<AnchorLink
-				href={toTopicPath({ id: inviteRow.topicId, name: inviteRow.name })}
-				className="text-link hover:underline"
-			>
-				{inviteRow.name}
-			</AnchorLink>
-		),
-		targetName: inviteRow.name,
+		...toTopicInviteTarget(inviteRow),
 		invitee: inviteRow.invitee,
 		inviteeEmail: inviteRow.inviteeEmail,
 		invitedAt: inviteRow.invitedAt,
@@ -50,19 +81,8 @@ export function TopicInvitesTable({
 
 	return (
 		<SentInvitesTable
+			{...TOPIC_INVITES_TABLE_LABELS}
 			inviteRows={inviteRows}
-			targetLabel="Topic"
-			acceptedLabel="Followed"
-			acceptedNoun="subscribed"
-			confirmTitle="Delete this invitation?"
-			confirmLabel="Delete invitation"
-			confirmBody={(row) => (
-				<>
-					{`${row.inviteeEmail ?? row.invitee?.username ?? "This invitee"} loses access to `}
-					<span className="font-semibold">{row.targetName}</span>, and their subscription goes with it. Inviting them
-					again starts over.
-				</>
-			)}
 			onDeleteInvite={isReadOnly ? undefined : handleDeleteTopicInvite}
 		/>
 	)

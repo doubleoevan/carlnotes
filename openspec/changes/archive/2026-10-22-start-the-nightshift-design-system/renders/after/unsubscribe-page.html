@@ -1,0 +1,21 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>CarlNotes</title><style>
+	body { margin: 0; background: #f4eee2; color: #332a22; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; }
+	a { color: #8f4c17; }
+
+	body { min-height:100vh; display:flex; align-items:center; justify-content:center }
+
+	.card { background:#fffdf9; border:1px solid #efe6d8; border-radius:14px;
+	        max-width:440px; margin:24px; padding:32px 36px; text-align:center; box-shadow:0 1px 3px rgba(0,0,0,.06) }
+
+	.mark { color:#8f4c17; font-size:15px; font-weight:700; margin-bottom:20px }
+	h1    { font-size:22px; margin:0 0 10px }
+	p     { color:#75604a; font-size:15px; line-height:1.55; margin:0 0 8px }
+	.back { margin-top:20px }
+	button { margin-top:16px; padding:10px 22px; border:0; border-radius:8px; background:#8f4c17;
+	         color:#fffdf9; font-size:15px; cursor:pointer }
+</style></head><body><div class="card"><div class="mark">☕ CarlNotes</div>
+		<h1>Unsubscribe?</h1>
+		<p>No more emails about <strong>LLM tooling</strong>. You can follow it again from the app.</p>
+		<form method="post" action="/api/unsubscribe?token=token"><input type="hidden" name="confirm" value="unsubscribe"><button type="submit">Unsubscribe</button></form>
+		<p class="back"><a href="https://carlnotes.example.com/topics/t1/llm-tooling">Keep the emails and open the topic instead</a></p>
+	</div></body></html>

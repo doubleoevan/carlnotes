@@ -8,7 +8,7 @@ import { toast } from "sonner"
 import { CoffeeLoading } from "@/components/branding/CoffeeLoading"
 import { TeamAvatar } from "@/components/branding/TeamAvatar"
 import { AnchorLink } from "@/components/common/AnchorLink"
-import { TABLE_CLASS, TABLE_HEAD_CLASS, TABLE_SCROLL_CLASS } from "@/lib/styleClasses"
+import { STANDALONE_LINK_CLASS, TABLE_CLASS, TABLE_HEAD_CLASS, TABLE_SCROLL_CLASS } from "@/lib/styleClasses"
 import { cn } from "@/lib/utils"
 import { TopicsSubtableRow } from "./OwnerTopicsTable"
 import { SortableHeader } from "./SortableHeader"
@@ -132,7 +132,7 @@ function TeamRow({ team }: { team: AdminTeamRow }) {
 			<tr className="border-b">
 				<td className="py-2 pr-4">
 					{/* the team's avatar and name, linking to its team page */}
-					<AnchorLink href={`/teams/${team.teamId}`} className="text-link flex items-center gap-2 hover:underline">
+					<AnchorLink href={`/teams/${team.teamId}`} className={cn(STANDALONE_LINK_CLASS, "flex items-center gap-2")}>
 						<TeamAvatar team={team} className="size-6" />
 						{team.name}
 					</AnchorLink>

@@ -1,8 +1,8 @@
-import type { PodcastEpisode } from "@carlnotes/contracts/podcast"
+import type { PodcastEpisodeSummary } from "@carlnotes/contracts/podcast"
 import { toPodcastEpisodeDayAndDurationLabels, toPodcastEpisodeTitleLabel } from "@carlnotes/core/lib/labels"
 import { Pause, Play } from "lucide-react"
 import { AnchorLink } from "@/components/common/AnchorLink"
-import { DASHED_ROW_CLASS, PLAY_BUTTON_CLASS, PLAY_BUTTON_MUTED_CLASS } from "@/lib/styleClasses"
+import { DASHED_ROW_CLASS, LIST_ROW_HOVER_CLASS, PLAY_BUTTON_CLASS, PLAY_BUTTON_MUTED_CLASS } from "@/lib/styleClasses"
 import { cn } from "@/lib/utils"
 import { togglePodcastEpisodePlayback } from "@/stores/podcastEpisodePlayActions"
 import { useIsPodcastEpisodePlaying } from "@/stores/podcastEpisodePlayerStore"
@@ -13,7 +13,7 @@ import { RemovePodcastEpisodeButton } from "./RemovePodcastEpisodeDialog"
 // latest, whether its play button is muted, the row's own classes, and the call that opens the remove dialog, passed
 // only if the user may remove episodes
 type PodcastEpisodeRowProps = {
-	podcastEpisode: PodcastEpisode
+	podcastEpisode: PodcastEpisodeSummary
 	podcastEpisodePath: string | null
 	isLatestPodcastEpisode: boolean
 	isPlayButtonMuted?: boolean
@@ -41,14 +41,7 @@ export function PodcastEpisodeRow({
 		...(isLatestPodcastEpisode ? ["latest"] : []),
 	]
 	return (
-		<li
-			className={cn(
-				DASHED_ROW_CLASS,
-				"isolate flex items-center gap-3 py-2.5 pr-1 pl-2 before:absolute before:inset-0 before:-z-10",
-				"hover:before:bg-accent-foreground/20 before:rounded-lg before:transition-colors",
-				className,
-			)}
-		>
+		<li className={cn(DASHED_ROW_CLASS, LIST_ROW_HOVER_CLASS, "flex items-center gap-3 py-2.5 pr-1 pl-2", className)}>
 			{/* the play button with its tooltip. the button's click area covers the row */}
 			<PodcastEpisodeTooltip podcastEpisode={podcastEpisode}>
 				<button

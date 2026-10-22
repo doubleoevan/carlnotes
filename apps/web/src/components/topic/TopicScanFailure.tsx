@@ -13,7 +13,7 @@ export function TopicScanFailure({ error }: { error: string | null }) {
 		return (
 			<p className="text-muted-foreground">
 				{toScanFailureLabel(error)}{" "}
-				<AnchorLink href="/account" className="underline">
+				<AnchorLink href="/account" className="sentence-link">
 					See account
 				</AnchorLink>
 			</p>

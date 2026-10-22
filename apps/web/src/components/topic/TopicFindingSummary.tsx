@@ -31,10 +31,6 @@ export function TopicFindingSummary({
 		"max-w-full truncate text-left text-sm group-hover:text-foreground",
 		resource.isConsumed ? "text-muted-foreground font-normal" : "text-foreground font-semibold",
 	)
-	const metadataClass = cn(
-		"mt-0.5 text-xs group-hover:text-foreground/80",
-		resource.isConsumed ? "text-muted-foreground/70" : "text-muted-foreground",
-	)
 	return (
 		<div className={cn("flex min-w-0 items-start gap-2.5", className)}>
 			{/* the resource kind icon */}
@@ -62,8 +58,9 @@ export function TopicFindingSummary({
 						</AnchorLink>
 					</PopoverTrigger>
 				</div>
-				{/* the metadata line, then the children */}
-				<div className={cn(metadataClass, "flex flex-wrap items-center gap-1.5")}>
+				{/* the metadata line, then the children. the line reads at full muted strength either way,
+				    since the title already marks a read resource */}
+				<div className="text-muted-foreground mt-0.5 flex flex-wrap items-center gap-1.5 text-xs group-hover:text-foreground/80">
 					<ResourceMetadata resource={resource} />
 					{children}
 				</div>

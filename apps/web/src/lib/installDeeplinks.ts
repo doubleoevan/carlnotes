@@ -21,7 +21,7 @@ export type PasteAiProvider = "claude" | "chatgpt" | "gemini" | "grok" | "perple
 export type McpServer = { name: string; url: string }
 
 // the localStorage key for the last chosen provider
-const LAST_AI_PROVIDER_KEY = "add-to-ai:last"
+export const LAST_AI_PROVIDER_KEY = "add-to-ai:last"
 
 // a terminal command that adds the server, and the name of the tool that runs it
 export type AddMcpCommand = { tool: string; line: string }

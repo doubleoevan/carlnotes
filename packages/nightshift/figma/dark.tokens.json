@@ -1,0 +1,708 @@
+{
+	"color": {
+		"background": {
+			"$type": "color",
+			"$value": {
+				"colorSpace": "srgb",
+				"components": [
+					0.3451,
+					0.2706,
+					0.1961
+				],
+				"alpha": 1,
+				"hex": "#584532"
+			},
+			"$description": "the page. in dark mode it sits a step lighter"
+		},
+		"sunken": {
+			"$type": "color",
+			"$value": {
+				"colorSpace": "srgb",
+				"components": [
+					0.1412,
+					0.102,
+					0.0627
+				],
+				"alpha": 1,
+				"hex": "#241a10"
+			},
+			"$description": "the inset a subtable sits on, quieter than the card holding it. the page's color in light mode"
+		},
+		"foreground": {
+			"$type": "color",
+			"$value": {
+				"colorSpace": "srgb",
+				"components": [
+					0.9412,
+					0.902,
+					0.8392
+				],
+				"alpha": 1,
+				"hex": "#f0e6d6"
+			},
+			"$description": "text on the page"
+		},
+		"card": {
+			"$type": "color",
+			"$value": {
+				"colorSpace": "srgb",
+				"components": [
+					0.1882,
+					0.1412,
+					0.0902
+				],
+				"alpha": 1,
+				"hex": "#302417"
+			},
+			"$description": "a raised surface. in dark mode it sits a step darker"
+		},
+		"cardForeground": {
+			"$type": "color",
+			"$value": {
+				"colorSpace": "srgb",
+				"components": [
+					0.9412,
+					0.902,
+					0.8392
+				],
+				"alpha": 1,
+				"hex": "#f0e6d6"
+			},
+			"$description": "text on a card"
+		},
+		"popover": {
+			"$type": "color",
+			"$value": {
+				"colorSpace": "srgb",
+				"components": [
+					0.1882,
+					0.1412,
+					0.0902
+				],
+				"alpha": 1,
+				"hex": "#302417"
+			},
+			"$description": "a popover or a menu"
+		},
+		"popoverForeground": {
+			"$type": "color",
+			"$value": {
+				"colorSpace": "srgb",
+				"components": [
+					0.9412,
+					0.902,
+					0.8392
+				],
+				"alpha": 1,
+				"hex": "#f0e6d6"
+			},
+			"$description": "text in a popover"
+		},
+		"primary": {
+			"$type": "color",
+			"$value": {
+				"colorSpace": "srgb",
+				"components": [
+					0.9412,
+					0.5647,
+					0.3137
+				],
+				"alpha": 1,
+				"hex": "#f09050"
+			},
+			"$description": "the highlight color, on a primary button and a focus ring"
+		},
+		"primaryForeground": {
+			"$type": "color",
+			"$value": {
+				"colorSpace": "srgb",
+				"components": [
+					0.102,
+					0.0824,
+					0.0667
+				],
+				"alpha": 1,
+				"hex": "#1a1511"
+			},
+			"$description": "text on the highlight color"
+		},
+		"secondary": {
+			"$type": "color",
+			"$value": {
+				"colorSpace": "srgb",
+				"components": [
+					0.4588,
+					0.349,
+					0.2431
+				],
+				"alpha": 1,
+				"hex": "#75593e"
+			},
+			"$description": "a quiet fill, and in dark mode a small badge's fill"
+		},
+		"secondaryForeground": {
+			"$type": "color",
+			"$value": {
+				"colorSpace": "srgb",
+				"components": [
+					0.9176,
+					0.8745,
+					0.7765
+				],
+				"alpha": 1,
+				"hex": "#eadfc6"
+			},
+			"$description": "text on the quiet fill. the dark pair clears the 4.5:1 body text ratio"
+		},
+		"muted": {
+			"$type": "color",
+			"$value": {
+				"colorSpace": "srgb",
+				"components": [
+					0.3294,
+					0.2588,
+					0.1843
+				],
+				"alpha": 1,
+				"hex": "#54422f"
+			},
+			"$description": "a muted fill"
+		},
+		"mutedForeground": {
+			"$type": "color",
+			"$value": {
+				"colorSpace": "srgb",
+				"components": [
+					0.7765,
+					0.7216,
+					0.5961
+				],
+				"alpha": 1,
+				"hex": "#c6b898"
+			},
+			"$description": "muted text, at 4.5:1 or more on the page, a card, a subtable, a muted fill, and a hovered row"
+		},
+		"bubble": {
+			"$type": "color",
+			"$value": {
+				"colorSpace": "srgb",
+				"components": [
+					0.3451,
+					0.2706,
+					0.1961
+				],
+				"alpha": 1,
+				"hex": "#584532"
+			},
+			"$description": "the other party's chat bubble"
+		},
+		"accent": {
+			"$type": "color",
+			"$value": {
+				"colorSpace": "srgb",
+				"components": [
+					0.3451,
+					0.2706,
+					0.1922
+				],
+				"alpha": 1,
+				"hex": "#584531"
+			},
+			"$description": "a hovered row or option"
+		},
+		"accentForeground": {
+			"$type": "color",
+			"$value": {
+				"colorSpace": "srgb",
+				"components": [
+					0.7882,
+					0.7294,
+					0.6
+				],
+				"alpha": 1,
+				"hex": "#c9ba99"
+			},
+			"$description": "text on a hovered row or option"
+		},
+		"destructive": {
+			"$type": "color",
+			"$value": {
+				"colorSpace": "srgb",
+				"components": [
+					1,
+					0.6275,
+					0.5451
+				],
+				"alpha": 1,
+				"hex": "#ffa08b"
+			},
+			"$description": "a destructive action, and error text on the page or a card. coral in dark mode, to read on the page"
+		},
+		"border": {
+			"$type": "color",
+			"$value": {
+				"colorSpace": "srgb",
+				"components": [
+					0.4118,
+					0.3333,
+					0.2471
+				],
+				"alpha": 1,
+				"hex": "#69553f"
+			},
+			"$description": "a border"
+		},
+		"input": {
+			"$type": "color",
+			"$value": {
+				"colorSpace": "srgb",
+				"components": [
+					0.4118,
+					0.3333,
+					0.2471
+				],
+				"alpha": 1,
+				"hex": "#69553f"
+			},
+			"$description": "a field's border"
+		},
+		"ring": {
+			"$type": "color",
+			"$value": {
+				"colorSpace": "srgb",
+				"components": [
+					0.9412,
+					0.5647,
+					0.3137
+				],
+				"alpha": 1,
+				"hex": "#f09050"
+			},
+			"$description": "a focus ring"
+		},
+		"hero": {
+			"$type": "color",
+			"$value": {
+				"colorSpace": "srgb",
+				"components": [
+					0.0588,
+					0.0471,
+					0.0353
+				],
+				"alpha": 1,
+				"hex": "#0f0c09"
+			},
+			"$description": "the hero band, which stays dark in both modes"
+		},
+		"heroForeground": {
+			"$type": "color",
+			"$value": {
+				"colorSpace": "srgb",
+				"components": [
+					0.9569,
+					0.9216,
+					0.8627
+				],
+				"alpha": 1,
+				"hex": "#f4ebdc"
+			},
+			"$description": "text on the hero band"
+		},
+		"heroMuted": {
+			"$type": "color",
+			"$value": {
+				"colorSpace": "srgb",
+				"components": [
+					0.702,
+					0.6431,
+					0.549
+				],
+				"alpha": 1,
+				"hex": "#b3a48c"
+			},
+			"$description": "muted text on the hero band"
+		},
+		"heroAccent": {
+			"$type": "color",
+			"$value": {
+				"colorSpace": "srgb",
+				"components": [
+					0.9412,
+					0.5647,
+					0.3137
+				],
+				"alpha": 1,
+				"hex": "#f09050"
+			},
+			"$description": "the hero band's highlight text, the same orange in both"
+		},
+		"badge": {
+			"$type": "color",
+			"$value": {
+				"colorSpace": "srgb",
+				"components": [
+					0.9529,
+					0.6549,
+					0.4549
+				],
+				"alpha": 1,
+				"hex": "#f3a774"
+			},
+			"$description": "the \"# new\" count beside a topic, at 4.5:1 or more on the page and every fill on it"
+		},
+		"link": {
+			"$type": "color",
+			"$value": {
+				"colorSpace": "srgb",
+				"components": [
+					1,
+					0.6392,
+					0.4039
+				],
+				"alpha": 1,
+				"hex": "#ffa367"
+			},
+			"$description": "a link, an expander, or highlight-colored text, at 4.5:1 or more on every surface it sits on"
+		},
+		"separator": {
+			"$type": "color",
+			"$value": {
+				"colorSpace": "srgb",
+				"components": [
+					0.3804,
+					0.3059,
+					0.2235
+				],
+				"alpha": 1,
+				"hex": "#614e39"
+			},
+			"$description": "the quiet dashes inside cards and popovers"
+		},
+		"separatorStrong": {
+			"$type": "color",
+			"$value": {
+				"colorSpace": "srgb",
+				"components": [
+					0.4824,
+					0.3922,
+					0.2863
+				],
+				"alpha": 1,
+				"hex": "#7b6449"
+			},
+			"$description": "the stronger cut between rows on the page itself"
+		},
+		"separatorSunken": {
+			"$type": "color",
+			"$value": {
+				"colorSpace": "srgb",
+				"components": [
+					0.4118,
+					0.3333,
+					0.2471
+				],
+				"alpha": 1,
+				"hex": "#69553f"
+			},
+			"$description": "the rules inside a subtable, dark enough to show on the sunken fill"
+		},
+		"ringLine": {
+			"$type": "color",
+			"$value": {
+				"colorSpace": "srgb",
+				"components": [
+					0.7882,
+					0.7294,
+					0.6
+				],
+				"alpha": 0.18,
+				"hex": "#c9ba99"
+			},
+			"$description": "the steam rings behind the feed"
+		},
+		"spendChat": {
+			"$type": "color",
+			"$value": {
+				"colorSpace": "srgb",
+				"components": [
+					0.9412,
+					0.902,
+					0.8392
+				],
+				"alpha": 1,
+				"hex": "#f0e6d6"
+			},
+			"$description": "the budget's chat segment, espresso in light and cream in dark, against the orange scan segment"
+		},
+		"spendPodcastEpisode": {
+			"$type": "color",
+			"$value": {
+				"colorSpace": "srgb",
+				"components": [
+					0.7882,
+					0.6039,
+					0.3569
+				],
+				"alpha": 1,
+				"hex": "#c99a5b"
+			},
+			"$description": "the budget's podcast episode segment, a brown between the scan and chat segments"
+		}
+	},
+	"radius": {
+		"sm": {
+			"$type": "dimension",
+			"$value": {
+				"value": 6,
+				"unit": "px"
+			}
+		},
+		"md": {
+			"$type": "dimension",
+			"$value": {
+				"value": 8,
+				"unit": "px"
+			}
+		},
+		"lg": {
+			"$type": "dimension",
+			"$value": {
+				"value": 10,
+				"unit": "px"
+			}
+		},
+		"xl": {
+			"$type": "dimension",
+			"$value": {
+				"value": 14,
+				"unit": "px"
+			}
+		}
+	},
+	"font": {
+		"sans": {
+			"$type": "fontFamily",
+			"$value": "Karla",
+			"$description": "the body font"
+		},
+		"display": {
+			"$type": "fontFamily",
+			"$value": "Architects Daughter",
+			"$description": "the display font, for titles, headings, and the uppercase section label"
+		},
+		"email": {
+			"$type": "fontFamily",
+			"$value": "System UI",
+			"$description": "the system font stack every email renders in"
+		}
+	},
+	"type": {
+		"display": {
+			"fontFamily": {
+				"$type": "fontFamily",
+				"$value": "{font.display}",
+				"$description": "the hero tagline, which steps down to text-2xl below the sm breakpoint"
+			},
+			"fontSize": {
+				"$type": "dimension",
+				"$value": {
+					"value": 36,
+					"unit": "px"
+				}
+			},
+			"lineHeight": {
+				"$type": "dimension",
+				"$value": {
+					"value": 45,
+					"unit": "px"
+				}
+			},
+			"fontWeight": {
+				"$type": "fontWeight",
+				"$value": 400
+			}
+		},
+		"pageTitle": {
+			"fontFamily": {
+				"$type": "fontFamily",
+				"$value": "{font.display}",
+				"$description": "a page's h1, and a dialog's title at a tighter line height"
+			},
+			"fontSize": {
+				"$type": "dimension",
+				"$value": {
+					"value": 24,
+					"unit": "px"
+				}
+			},
+			"lineHeight": {
+				"$type": "dimension",
+				"$value": {
+					"value": 32,
+					"unit": "px"
+				}
+			},
+			"fontWeight": {
+				"$type": "fontWeight",
+				"$value": 400
+			}
+		},
+		"sectionHeading": {
+			"fontFamily": {
+				"$type": "fontFamily",
+				"$value": "{font.display}",
+				"$description": "a collapsible section's title, a popover's heading, and an h2 or h3"
+			},
+			"fontSize": {
+				"$type": "dimension",
+				"$value": {
+					"value": 18,
+					"unit": "px"
+				}
+			},
+			"lineHeight": {
+				"$type": "dimension",
+				"$value": {
+					"value": 28,
+					"unit": "px"
+				}
+			},
+			"fontWeight": {
+				"$type": "fontWeight",
+				"$value": 400
+			}
+		},
+		"label": {
+			"fontFamily": {
+				"$type": "fontFamily",
+				"$value": "{font.sans}",
+				"$description": "a settings heading and emphasis in a table"
+			},
+			"fontSize": {
+				"$type": "dimension",
+				"$value": {
+					"value": 14,
+					"unit": "px"
+				}
+			},
+			"lineHeight": {
+				"$type": "dimension",
+				"$value": {
+					"value": 20,
+					"unit": "px"
+				}
+			},
+			"fontWeight": {
+				"$type": "fontWeight",
+				"$value": 600
+			}
+		},
+		"body": {
+			"fontFamily": {
+				"$type": "fontFamily",
+				"$value": "{font.sans}",
+				"$description": "the default text of tables, menus, popovers, dialogs, and cards"
+			},
+			"fontSize": {
+				"$type": "dimension",
+				"$value": {
+					"value": 14,
+					"unit": "px"
+				}
+			},
+			"lineHeight": {
+				"$type": "dimension",
+				"$value": {
+					"value": 20,
+					"unit": "px"
+				}
+			},
+			"fontWeight": {
+				"$type": "fontWeight",
+				"$value": 400
+			}
+		},
+		"bodyLarge": {
+			"fontFamily": {
+				"$type": "fontFamily",
+				"$value": "{font.sans}",
+				"$description": "a field or a composer on a phone, large enough that the phone does not zoom, then body from sm"
+			},
+			"fontSize": {
+				"$type": "dimension",
+				"$value": {
+					"value": 16,
+					"unit": "px"
+				}
+			},
+			"lineHeight": {
+				"$type": "dimension",
+				"$value": {
+					"value": 24,
+					"unit": "px"
+				}
+			},
+			"fontWeight": {
+				"$type": "fontWeight",
+				"$value": 400
+			}
+		},
+		"caption": {
+			"fontFamily": {
+				"$type": "fontFamily",
+				"$value": "{font.sans}",
+				"$description": "metadata, tooltips, badges, and table pagination"
+			},
+			"fontSize": {
+				"$type": "dimension",
+				"$value": {
+					"value": 12,
+					"unit": "px"
+				}
+			},
+			"lineHeight": {
+				"$type": "dimension",
+				"$value": {
+					"value": 16,
+					"unit": "px"
+				}
+			},
+			"fontWeight": {
+				"$type": "fontWeight",
+				"$value": 400
+			}
+		},
+		"sectionLabel": {
+			"fontFamily": {
+				"$type": "fontFamily",
+				"$value": "{font.display}",
+				"$description": "the uppercase label above a field or a group"
+			},
+			"fontSize": {
+				"$type": "dimension",
+				"$value": {
+					"value": 12,
+					"unit": "px"
+				}
+			},
+			"lineHeight": {
+				"$type": "dimension",
+				"$value": {
+					"value": 16,
+					"unit": "px"
+				}
+			},
+			"fontWeight": {
+				"$type": "fontWeight",
+				"$value": 400
+			},
+			"letterSpacing": {
+				"$type": "dimension",
+				"$value": {
+					"value": 0.3,
+					"unit": "px"
+				}
+			}
+		}
+	}
+}

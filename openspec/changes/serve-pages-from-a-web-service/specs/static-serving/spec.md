@@ -3,8 +3,9 @@
 ### Requirement: The app service serves the api and the ui from one process
 
 The one build image SHALL start two services. The `web` service, `apps/web`'s server, SHALL serve the pages the ui's
-server handler renders, the blog and release pages, the built docs, the documents, the feeds, the podcast feeds, the
-share and cover images, the avatars, the favicons, and the ui's built client files. The `app` service, `apps/api`,
+server handler renders, the blog and release pages, the built docs, the built component browser at `/nightshift`, the
+documents, the feeds, the podcast feeds, the share and cover images, the avatars, the favicons, and the ui's built
+client files. The `app` service, `apps/api`,
 SHALL serve `/api`, `/mcp`, the oauth well-known routes, and every stream, and SHALL keep serving every path the web
 service serves, so routing a path from one service to the other changes nothing about its response. The page routes
 SHALL live in one server package that both services mount, and the ui's built assets SHALL be served with the content

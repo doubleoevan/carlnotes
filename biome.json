@@ -18,7 +18,9 @@
 			"!apps/docs/public",
 			"!evals/results",
 			"!apps/web/public",
-			"!apps/web/src/routeTree.gen.ts"
+			"!apps/web/src/routeTree.gen.ts",
+			"!packages/nightshift/tokens.css",
+			"!packages/nightshift/figma"
 		]
 	},
 	"formatter": {
@@ -76,6 +78,7 @@
 				"packages/contracts/**",
 				"packages/client/**",
 				"packages/core/**",
+				"packages/nightshift/**",
 				"!**/*.test.ts",
 				"!**/*.test.tsx",
 				"!**/*TestFixtures.ts"

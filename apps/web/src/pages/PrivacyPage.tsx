@@ -1,10 +1,10 @@
 import Markdown from "markdown-to-jsx"
 import type * as React from "react"
-import { AnchorLink } from "@/components/common/AnchorLink"
 import { TableCard } from "@/components/table/TableCard"
 import { usePageTitle } from "@/hooks/usePageTitle"
 import { PAGE_CLASS, TABLE_CLASS, TABLE_SCROLL_CLASS } from "@/lib/styleClasses"
 import { cn } from "@/lib/utils"
+import { LEGAL_MARKDOWN_OPTIONS } from "./legalMarkdownOptions"
 
 // the providers table on the shared table card, scrolling instead of cramping on a narrow screen
 function ScrollableTable({ children }: { children?: React.ReactNode }) {
@@ -17,19 +17,15 @@ function ScrollableTable({ children }: { children?: React.ReactNode }) {
 	)
 }
 
-// map the privacy markdown to the same legal-page typography as the terms page, plus bold labels and the table
+// map the privacy markdown to the shared legal-page typography, plus bold labels and the table
 const PRIVACY_MARKDOWN_OPTIONS = {
-	disableAutoLink: true,
+	...LEGAL_MARKDOWN_OPTIONS,
 	overrides: {
-		h2: { props: { className: "font-display mt-8 mb-1 text-lg" } },
-		p: { props: { className: "mt-3 text-sm leading-relaxed" } },
-		ul: { props: { className: "mt-3 list-disc space-y-1.5 pl-5 text-sm leading-relaxed" } },
-		li: { props: { className: "leading-relaxed" } },
+		...LEGAL_MARKDOWN_OPTIONS.overrides,
 		strong: { props: { className: "font-semibold" } },
 		table: { component: ScrollableTable },
 		th: { props: { className: "border-separator border-b px-3 py-2 align-top font-semibold" } },
 		td: { props: { className: "border-separator border-b px-3 py-2 align-top leading-relaxed" } },
-		a: { component: AnchorLink, props: { className: "text-link hover:underline" } },
 	},
 } as const
 

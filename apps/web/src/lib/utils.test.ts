@@ -32,6 +32,12 @@ test("cn merges conflicting tailwind classes", () => {
 	expect(cn("p-2", "p-4")).toBe("p-4")
 })
 
+// the app's shadow-lift utility merges as a shadow, so a later shadow-none replaces it
+test("cn lets shadow-none replace the shadow-lift utility", () => {
+	expect(cn("rounded-lg shadow-lift", "bg-sunken shadow-none")).toBe("rounded-lg bg-sunken shadow-none")
+	expect(cn("shadow-none", "shadow-lift")).toBe("shadow-lift")
+})
+
 // clsx drops falsy conditional values and keeps truthy ones
 test("cn handles conditional class values", () => {
 	expect(cn("base", false && "hidden", true && "block")).toBe("base block")

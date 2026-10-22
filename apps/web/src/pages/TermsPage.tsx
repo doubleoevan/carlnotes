@@ -1,19 +1,7 @@
 import Markdown from "markdown-to-jsx"
-import { AnchorLink } from "@/components/common/AnchorLink"
 import { usePageTitle } from "@/hooks/usePageTitle"
 import { PAGE_CLASS } from "@/lib/styleClasses"
-
-// map the terms markdown to a readable legal-page typography: display-font section headings, foreground body
-const TERMS_MARKDOWN_OPTIONS = {
-	disableAutoLink: true,
-	overrides: {
-		h2: { props: { className: "font-display mt-8 mb-1 text-lg" } },
-		p: { props: { className: "mt-3 text-sm leading-relaxed" } },
-		ul: { props: { className: "mt-3 list-disc space-y-1.5 pl-5 text-sm leading-relaxed" } },
-		li: { props: { className: "leading-relaxed" } },
-		a: { component: AnchorLink, props: { className: "text-link hover:underline" } },
-	},
-} as const
+import { LEGAL_MARKDOWN_OPTIONS } from "./legalMarkdownOptions"
 
 // the terms of service body, below the title
 const TERMS_BODY = `## 1. Agreement
@@ -154,7 +142,7 @@ export function TermsPage() {
 				Effective date: July 24, 2026 · Last updated: October 1, 2026
 			</p>
 			{/* the numbered sections, rendered from the markdown body */}
-			<Markdown options={TERMS_MARKDOWN_OPTIONS}>{TERMS_BODY}</Markdown>
+			<Markdown options={LEGAL_MARKDOWN_OPTIONS}>{TERMS_BODY}</Markdown>
 		</main>
 	)
 }

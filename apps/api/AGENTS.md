@@ -8,31 +8,40 @@ at the root import it by name.
 
 - `index.ts` opens each request's memo (`@carlnotes/db/requestMemo`) in its first middleware, and its `onError` reports
   an error no route handles to Sentry and keeps Hono's 500. `requestTracing.ts` runs next: it counts the request's
-  queries and cache reads, names a traced request's Sentry transaction by its route and attaches its query count,
-  the pool's counts, and the event loop's lag, and outside production sets a `Server-Timing` header with the duration
-  and the counts. In dev it also logs one line per request with the same numbers and the cache keys that missed.
-  `queryBudgets.test.ts` holds the cached routes' query budgets, each a route requested twice against the pool and
-  Redis stubs.
-  `index.ts` also serves `/api/health`, which the platform polls and which sends no query, and `/api/health/deep`,
-  which runs one query and returns the pool's counts for a monitor. Neither looks up a session. Its tests split
-  between `index.test.ts`, for the routing, the health checks, the api's own validation, and the security headers,
-  `pageRender.test.ts`, for the rendered pages, and `pageGuards.test.ts`, for the click id redirect and the render
-  limit, over the fake bundle and requests in `indexTestFixtures.ts`.
-  `index.ts` serves the docs site's static build from `apps/docs/dist` at `/docs`, stripping the prefix to find a file,
-  and the web app's browser bundle from `apps/web/dist/client`. It renders every other page through the web app's
-  server build in `apps/web/dist/server`, the paths `bundlePaths.ts` names. A page render sets the
-  `DEGRADED_RENDER_HEADER` from `@carlnotes/contracts/seo` if a required
-  read fails, and that page returns a 503 with a `Retry-After`, is reported, and is never cached at the edge.
-  Ahead of a page render, `index.ts` limits a visitor's origin requests by address through `rateLimit.ts`, redirects a
-  page url with a click id (`fbclid`, `gclid`, and the like) permanently to the url without it, which is the
-  one the edge caches, and sheds a visitor's render past `RENDER_CONCURRENCY` with a 503 and a two-second retry while
-  the edge serves its stale copy; a signed-in render is never shed. Every response includes the content security policy
-  with `base-uri` and `form-action` on this origin, `Referrer-Policy`, and `X-Content-Type-Options`, and an unhashed
-  public file from the ui bundle is cached an hour in the browser and a day at the edge under the `rendered` tag.
+  queries and cache reads, names a traced request's Sentry transaction by its route and attaches its query count, the
+  pool's counts, and the event loop's lag, and outside production sets a `Server-Timing` header with the duration and
+  the counts. In dev it also logs one line per request with the same numbers and the cache keys that missed.
+  `queryBudgets.test.ts` holds the cached routes' query budgets, each a route requested twice against the pool and Redis
+  stubs. `index.ts` also serves `/api/health`, which the platform polls and which sends no query, and
+  `/api/health/deep`, which runs one query and returns the pool's counts for a monitor. Neither looks up a session. Its
+  tests split between `index.test.ts`, for the routing, the health checks, the api's own validation, and the security
+  headers, `pageRender.test.ts`, for the rendered pages, and `pageGuards.test.ts`, for the click id redirect and the
+  render limit, over the fake bundle and requests in `indexTestFixtures.ts`. `index.ts` serves the docs site's static
+  build from `apps/docs/dist` at `/docs`, stripping the prefix to find a file, and the web app's browser bundle from
+  `apps/web/dist/client`. `nightshift.ts` serves the Nightshift component browser's static Storybook from
+  `apps/web/dist/nightshift` at `/nightshift/`. It sets its own frame policy, opener isolation, and `noindex`, gives
+  every fixed-name file an `ETag`, and caches only its hashed assets immutably, tested in `nightshift.test.ts`.
+  `index.ts` renders every other page through the web app's server build in `apps/web/dist/server`, the paths
+  `bundlePaths.ts` names. A page render sets the `DEGRADED_RENDER_HEADER` from `@carlnotes/contracts/seo` if a required
+  read fails, and that page returns a 503 with a `Retry-After`, is reported, and is never cached at the edge. Ahead of a
+  page render, `index.ts` limits a visitor's origin requests by address through `rateLimit.ts`, redirects a page url
+  with a click id (`fbclid`, `gclid`, and the like) permanently to the url without it, which is the one the edge caches,
+  and sheds a visitor's render past `RENDER_CONCURRENCY` with a 503 and a two-second retry while the edge serves its
+  stale copy; a signed-in render is never shed. Every response includes the content security policy, `Referrer-Policy`,
+  and `X-Content-Type-Options`, and an unhashed public file from the ui bundle is cached an hour in the browser and a
+  day at the edge under the `rendered` tag. `contentSecurityPolicy.ts` holds `BASELINE_POLICY_DIRECTIVES`, the
+  directives every policy ends with: `object-src 'none'`, and `base-uri` and `form-action` on this origin. Its
+  `toContentSecurityPolicy` builds a policy from a route's own directives and the baseline, for the default policy in
+  `index.ts`, `nightshift.ts`, and `favicons.ts`. It also holds `FRAME_SOURCE_DIRECTIVE`, the frames a page may load:
+  this origin, YouTube's privacy-enhanced player, and Cloudflare's Turnstile challenge. The default policy and the
+  component browser's policy both use it, so a story frames what the app frames. `responseHeaders.ts` holds
+  `NOINDEX_HEADER`, the `X-Robots-Tag: noindex` header that `documents.ts` and `nightshift.ts` set.
 - Domain folders: `topic/`, `team/`, `chat/`, `invite/`, `note/`, `podcast/`, `share/`, `tool/`, `mcp/`. Root files
   serve more than one domain (auth, billing, admin, avatars, favicons, profiles, SEO, `likePattern.ts` for the contains
   pattern the name and text searches match with, `content.ts` for the blog under `content/blog/`, and `seed.ts`, the
-  entry behind `bun run db:seed` over `@carlnotes/db/seed`).
+  entry behind `bun run db:seed` over `@carlnotes/db/seed`). `apiPageStyle.ts` holds `API_PAGE_BASE_STYLE`, the
+  body and link rules in the emails' palette that the api's own pages start with: the pages `content.ts` renders and
+  the unsubscribe page in `unsubscribe.ts`.
   `billingRoute.ts` holds the billing routes over `billing.ts`; its Stripe webhook responds 400 to a bad signature and
   500 to a verified event it could not apply, so Stripe retries it.
 - `documents.ts` — the document routes: the sitemap, the site and topic feeds, the llms files, the IndexNow key, and
@@ -206,7 +215,8 @@ at the root import it by name.
   type and byte size, the first five a user sends in a day.
 - `edgeCache.ts` — what the edge may cache: a signed-out page, a permanent redirect from a page path, the blog and
   release pages, and the signed-out feed for a minute under the `rendered` tag, and a versioned avatar or card for a
-  year in the browser and a day at the edge. A
+  year in the browser and a day at the edge. `setStaticFileCacheControl` caches a file of the docs site or the
+  component browser for a year if its name holds a content hash, and has the browser revalidate every other file. A
   user avatar response is tagged `user-avatar:<userId>` and a team avatar response `team-avatar:<teamId>`, and
   `purgeEdgeCacheTagAfterDeletion` purges one tag once an account close or a team deletion has committed, reporting a
   failed purge, logging a skipped one, and never failing the deletion. `purgeEdgeCacheTags` is the purge by tag both it
@@ -259,10 +269,10 @@ at the root import it by name.
 - Request bodies validate with zod payloads from `@carlnotes/contracts/payloads` and
   `@carlnotes/contracts/topicPayloads` via `zValidator`.
 - A private or team read the user may not see responds 404, never 403; the invite gate keeps its 403.
-- Imports: `@carlnotes/contracts`, `@carlnotes/server`, `@carlnotes/db`, `@carlnotes/emails`, `@carlnotes/models`, and
-  `@carlnotes/pipeline`, each module by its package path, such as `@carlnotes/models/litellm` or
-  `@carlnotes/pipeline/chat/index`. Never `@carlnotes/worker`, `@carlnotes/web`, or a
-  universal package other than `contracts`.
+- Imports: `@carlnotes/contracts`, `@carlnotes/nightshift`, `@carlnotes/server`, `@carlnotes/db`, `@carlnotes/emails`,
+  `@carlnotes/models`, and `@carlnotes/pipeline`, each module by its package path, such as `@carlnotes/models/litellm`,
+  `@carlnotes/nightshift/email` for the api's own HTML pages, or `@carlnotes/nightshift/colors` for the share images.
+  Never `@carlnotes/worker`, `@carlnotes/web`, or a universal package other than `contracts` and `nightshift`.
 - Dev: `bun run dev:api` (doppler, on `PORT`, 3000 by default).
   Tests: `bun test apps/api`; `*.smoke.ts` run under `doppler run`. `testSession.ts` resolves the session lookup as one
   user or as a visitor, builds a route with one user signed in, and builds a json post, and `indexTestFixtures.ts`

@@ -23,18 +23,20 @@ import { defaultBodyLimit } from "./bodyLimit"
 import { trackBotFetches } from "./botAnalytics"
 import { DOCS_BUNDLE_ROOT, UI_CLIENT_ROOT, UI_SERVER_ENTRY } from "./bundlePaths"
 import { BLOG_INDEX_PATH, BLOG_PAGE_PATH, contentRoute } from "./content"
+import { FRAME_SOURCE_DIRECTIVE, toContentSecurityPolicy } from "./contentSecurityPolicy"
 import type { AppEnv } from "./currentUser"
 import { documentsRoute } from "./documents"
 import {
 	IMMUTABLE_CACHE_CONTROL,
 	NO_STORE_CACHE_CONTROL,
 	PUBLIC_FILE_HEADERS,
-	REVALIDATE_CACHE_CONTROL,
 	renderedCacheHeaders,
+	setStaticFileCacheControl,
 } from "./edgeCache"
 import { faviconsRoute } from "./favicons"
 import { mcpRoute } from "./mcp/server"
 import { resolveToolCaller } from "./mcp/toolCaller"
+import { nightshiftRoute } from "./nightshift"
 import { pageRenderRateLimiter, toolCallerRateLimiter } from "./rateLimit"
 import { RELEASE_PATH, RELEASES_PATH, releasesRoute } from "./releases"
 import { traceRequest } from "./requestTracing"
@@ -107,16 +109,12 @@ await importUiServer()
 startRuntimeGauges({ processName: "api", readPoolGauges, readExtraGauges: readRedisExtraGauges })
 
 // the default policy, used unless a route sets its own. images may come from a composer's local preview,
-// github, and an avatar's photo host. frames may come from YouTube and Cloudflare's Turnstile challenge.
-// a base url and a form's action stay on this origin
-const CONTENT_SECURITY_POLICY = [
+// github, and an avatar's photo host. frames may come from the shared frame sources
+const CONTENT_SECURITY_POLICY = toContentSecurityPolicy([
 	`img-src 'self' blob: data: https://raw.githubusercontent.com ${[...PROVIDER_PHOTO_ORIGINS].join(" ")}`,
-	"frame-src 'self' https://www.youtube-nocookie.com https://challenges.cloudflare.com",
-	"object-src 'none'",
+	FRAME_SOURCE_DIRECTIVE,
 	"frame-ancestors 'none'",
-	"base-uri 'self'",
-	"form-action 'self'",
-].join("; ")
+])
 
 // the headers every response includes unless its route set its own: the policy, the referrer a cross-origin link sees
 // as the origin alone, and a browser that never sniffs a response's type
@@ -187,11 +185,17 @@ const server = new Hono<AppEnv>()
 	.route("/", contentRoute)
 	// the documents built per request, and the redirects from the old /pricing and /topics paths
 	.route("/", documentsRoute)
-	// the statically built docs site, which owns every /docs path
+	// the statically built docs site, which owns every /docs path. the docs assets under _astro have a content hash in
+	// their name, so they get cached like the ui bundle's
 	.on(
 		["GET", "HEAD"],
 		["/docs", "/docs/*"],
-		serveStatic({ root: DOCS_BUNDLE_ROOT, rewriteRequestPath: toDocsFilePath, onFound: setDocsCacheControl }),
+		serveStatic({
+			root: DOCS_BUNDLE_ROOT,
+			rewriteRequestPath: toDocsFilePath,
+			onFound: (_path, context) =>
+				setStaticFileCacheControl({ context, isHashedAsset: context.req.path.startsWith("/docs/_astro/") }),
+		}),
 	)
 	// a docs path matching no statically built file gets the docs site's own 404 page
 	.on(["GET", "HEAD"], ["/docs", "/docs/*"], async (context) => {
@@ -201,6 +205,8 @@ const server = new Hono<AppEnv>()
 		}
 		return context.html(await notFoundPage.text(), 404)
 	})
+	// the statically built Nightshift component browser, which owns every /nightshift path
+	.route("/", nightshiftRoute)
 	// the built ui's files: hashed assets and whatever vite copied from the public folder
 	.on(["GET", "HEAD"], "*", serveStatic({ root: UI_CLIENT_ROOT, onFound: setBundleCacheControl }))
 	// every request past this point renders a page with the ui's server, so it passes the page guards here
@@ -244,12 +250,6 @@ function toSameSitePath(path: string): string {
 function toDocsFilePath(path: string): string {
 	const filePath = path.slice("/docs".length) || "/"
 	return extname(filePath) ? filePath : `${filePath.replace(/\/$/, "")}/index.html`
-}
-
-// the docs assets under _astro have a content hash in their name, so they get cached like the ui bundle's
-function setDocsCacheControl(_path: string, context: Context): void {
-	const isHashedAsset = context.req.path.startsWith("/docs/_astro/")
-	context.header("Cache-Control", isHashedAsset ? IMMUTABLE_CACHE_CONTROL : REVALIDATE_CACHE_CONTROL)
 }
 
 // import the ui's server handler. bun caches the module after the first import, and a bundle that fails to import is

@@ -103,7 +103,7 @@ export function useMentionAutocomplete(options: {
 /** The username list showing above the chat message box, carl pinned first then the chat members. */
 export function MentionSuggestionList({ autocomplete }: { autocomplete: MentionAutocomplete }) {
 	return (
-		<ul className="bg-popover absolute right-3 bottom-full left-3 z-10 mb-1 overflow-hidden rounded-md border shadow-md">
+		<ul className="bg-popover absolute right-3 bottom-full left-3 z-10 mb-1 overflow-hidden rounded-md border shadow-lift">
 			{autocomplete.usernameSuggestions.map((username, index) => (
 				<li key={username}>
 					<button

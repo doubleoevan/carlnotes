@@ -1,6 +1,7 @@
-import { authClient, toSessionProfileIdentity } from "@carlnotes/client/authClient"
+import { authClient } from "@carlnotes/client/authClient"
 import type { TopicFinding } from "@carlnotes/contracts/findings"
 import type { PodcastEpisode } from "@carlnotes/contracts/podcast"
+import { toSessionProfileIdentity } from "@carlnotes/contracts/profiles"
 import { Bookmark } from "lucide-react"
 import { useState } from "react"
 import { UserAvatar } from "@/components/branding/UserAvatar"
@@ -8,7 +9,7 @@ import { TooltipLabel, TooltipSection } from "@/components/common/UpdateCountBad
 import { FindingChapterPill, useIsFindingChapterPlaying } from "@/components/podcast/PodcastEpisodePill"
 import { Popover, PopoverAnchor } from "@/components/primitives/popover"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
-import { DASHED_ROW_CLASS } from "@/lib/styleClasses"
+import { DASHED_ROW_CLASS, LIST_ROW_HIGHLIGHTED_CLASS, LIST_ROW_HOVER_CLASS } from "@/lib/styleClasses"
 import { cn } from "@/lib/utils"
 import { type TopicFeedHandlers, useIsSignedIn, useTopicFeedActions } from "@/providers/TopicFeedProvider"
 import { ResourceInfo, type ResourceInfoTopic } from "./ResourceInfo"
@@ -71,9 +72,10 @@ export function TopicResource({
 				onMouseLeave={() => setIsHintOpen(false)}
 				className={cn(
 					DASHED_ROW_CLASS,
-					"group isolate flex cursor-pointer before:absolute before:inset-0 before:-z-10 before:rounded-lg before:transition-colors hover:before:bg-accent-foreground/20",
+					LIST_ROW_HOVER_CLASS,
+					"group flex cursor-pointer",
 					// the finding whose chapter is playing stays highlighted
-					isChapterPlaying && "before:bg-muted/70",
+					isChapterPlaying && LIST_ROW_HIGHLIGHTED_CLASS,
 					className,
 				)}
 			>

@@ -1,11 +1,23 @@
 import { sendDeleteTeamInvite } from "@carlnotes/client/teamClient"
 import type { TeamsPageResponse } from "@carlnotes/contracts/teams"
 import { TeamLink } from "@/components/team/TeamLink"
-import { type SentInviteRow, SentInvitesTable } from "./SentInvitesTable"
+import { type SentInviteRow, SentInvitesTable, type SentInvitesTableLabels, toInviteeLabel } from "./SentInvitesTable"
 
 /**
- * The Team page's team invitations table: who the member invited to their team and whether each one subscribed.
- * Using the same table that the Activity page uses for topic invitations.
+ * The team invitations table's headers and withdraw confirmation, worded for joining a team.
+ */
+export const TEAM_INVITES_TABLE_LABELS: SentInvitesTableLabels = {
+	targetLabel: "Team",
+	acceptedLabel: "Joined",
+	acceptedNoun: "joined",
+	confirmTitle: "Withdraw this invitation?",
+	confirmLabel: "Withdraw it",
+	confirmBody: (row) => `The invitation to ${toInviteeLabel(row)} goes away. Anyone who already joined stays.`,
+}
+
+/**
+ * The Teams page's team invitations table: who the member invited to their team and whether each one joined.
+ * It uses the same table that the Activity page uses for topic invitations.
  */
 export function SentTeamInvitesTable({
 	invites,
@@ -35,17 +47,6 @@ export function SentTeamInvitesTable({
 	}
 
 	return (
-		<SentInvitesTable
-			inviteRows={inviteRows}
-			targetLabel="Team"
-			acceptedLabel="Joined"
-			acceptedNoun="joined"
-			confirmTitle="Withdraw this invitation?"
-			confirmLabel="Withdraw it"
-			confirmBody={(row) =>
-				`The invitation to ${row.inviteeEmail ?? row.invitee?.username ?? "this invitee"} goes away. Anyone who already joined stays.`
-			}
-			onDeleteInvite={handleDeleteTeamInvite}
-		/>
+		<SentInvitesTable {...TEAM_INVITES_TABLE_LABELS} inviteRows={inviteRows} onDeleteInvite={handleDeleteTeamInvite} />
 	)
 }

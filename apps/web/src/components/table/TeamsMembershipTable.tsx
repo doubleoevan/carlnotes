@@ -4,7 +4,7 @@ import { toCentsLabel, toCountLabel } from "@carlnotes/core/lib/labels"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import { TABLE_CLASS, TABLE_HEAD_CLASS, TABLE_SCROLL_CLASS } from "@/lib/styleClasses"
 import { cn } from "@/lib/utils"
-import { SortableHeader } from "./SortableHeader"
+import { type RowSort, SortableHeader } from "./SortableHeader"
 import { TableCard } from "./TableCard"
 import { TablePagination, usePaginatedRowSort } from "./TablePagination"
 import { type ReceivedInvite, TeamInviteRow, TeamMembershipRow } from "./TeamMembershipRows"
@@ -61,44 +61,7 @@ export function TeamsMembershipTable({
 			<div className={TABLE_SCROLL_CLASS}>
 				<table className={cn(TABLE_CLASS, "min-w-3xl")}>
 					<thead className={TABLE_HEAD_CLASS}>
-						<tr>
-							<SortableHeader sort={sort} sortKey="team" label="Team" className="py-2 pr-4" />
-							<th className="py-2 pr-4 font-normal">Description</th>
-							<SortableHeader sort={sort} sortKey="visibility" label="Visibility" className="py-2 pr-4" />
-							<SortableHeader sort={sort} sortKey="role" label="Role" className="py-2 pr-4" />
-							{!isReadOnly && (
-								<SortableHeader sort={sort} sortKey="invitedBy" label="Invited by" className="py-2 pr-4" />
-							)}
-							<SortableHeader sort={sort} sortKey="members" label="Members" className="py-2 pr-4" />
-							<SortableHeader sort={sort} sortKey="topics" label="Topics" className="py-2 pr-4" />
-							{!isReadOnly && (
-								<>
-									<SortableHeader
-										sort={sort}
-										sortKey="scans"
-										label="Scans"
-										tooltip="Month-to-date scan spend across the team's topics"
-										className="py-2 pr-4"
-									/>
-									<SortableHeader
-										sort={sort}
-										sortKey="chat"
-										label="Chat"
-										tooltip="Month-to-date chat spend across the team's topics"
-										className="py-2 pr-4"
-									/>
-									<th className="py-2 pr-4 font-normal">
-										<Tooltip>
-											<TooltipTrigger asChild>
-												<span>Active</span>
-											</TooltipTrigger>
-											<TooltipContent>Your active teams</TooltipContent>
-										</Tooltip>
-									</th>
-									<th className="py-2" />
-								</>
-							)}
-						</tr>
+						<TeamsMembershipTableHead sort={sort} isReadOnly={isReadOnly} />
 					</thead>
 					<tbody>
 						{pageRows.map((pageRow) =>
@@ -155,5 +118,51 @@ export function TeamsMembershipTable({
 			</div>
 			<TablePagination {...pagination} />
 		</TableCard>
+	)
+}
+
+/**
+ * The teams table's header row: the sortable headers, and on the user's own teams page the Invited by, spend, Active,
+ * and delete columns.
+ */
+export function TeamsMembershipTableHead({ sort, isReadOnly }: { sort: RowSort; isReadOnly: boolean }) {
+	return (
+		<tr>
+			<SortableHeader sort={sort} sortKey="team" label="Team" className="py-2 pr-4" />
+			<th className="py-2 pr-4 font-normal">Description</th>
+			<SortableHeader sort={sort} sortKey="visibility" label="Visibility" className="py-2 pr-4" />
+			<SortableHeader sort={sort} sortKey="role" label="Role" className="py-2 pr-4" />
+			{!isReadOnly && <SortableHeader sort={sort} sortKey="invitedBy" label="Invited by" className="py-2 pr-4" />}
+			<SortableHeader sort={sort} sortKey="members" label="Members" className="py-2 pr-4" />
+			<SortableHeader sort={sort} sortKey="topics" label="Topics" className="py-2 pr-4" />
+			{/* the user's own spend and membership controls */}
+			{!isReadOnly && (
+				<>
+					<SortableHeader
+						sort={sort}
+						sortKey="scans"
+						label="Scans"
+						tooltip="Month-to-date scan spend across the team's topics"
+						className="py-2 pr-4"
+					/>
+					<SortableHeader
+						sort={sort}
+						sortKey="chat"
+						label="Chat"
+						tooltip="Month-to-date chat spend across the team's topics"
+						className="py-2 pr-4"
+					/>
+					<th className="py-2 pr-4 font-normal">
+						<Tooltip>
+							<TooltipTrigger asChild>
+								<span>Active</span>
+							</TooltipTrigger>
+							<TooltipContent>Your active teams</TooltipContent>
+						</Tooltip>
+					</th>
+					<th className="py-2" />
+				</>
+			)}
+		</tr>
 	)
 }

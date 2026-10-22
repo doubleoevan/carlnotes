@@ -15,7 +15,10 @@
 		},
 		{
 			"path": "../../packages/core"
+		},
+		{
+			"path": "../../packages/nightshift"
 		}
 	],
-	"include": ["src", "*.ts"]
+	"include": ["src", "*.ts", ".storybook/**/*.ts", ".storybook/**/*.tsx"]
 }

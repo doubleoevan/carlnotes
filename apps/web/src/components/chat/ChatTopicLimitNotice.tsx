@@ -6,7 +6,7 @@ export function ChatTopicLimitNotice({ topicLimit }: { topicLimit: number }) {
 	return (
 		<p className="text-muted-foreground border-t px-3 py-3 text-sm whitespace-pre-line">
 			{`Your plan has ${topicLimit} topics, and you used them all.\n`}
-			<AnchorLink href={PLANS_PATH} className="text-link hover:underline">
+			<AnchorLink href={PLANS_PATH} className="sentence-link">
 				{PLANS_ACTION_LABEL}
 			</AnchorLink>
 			{" for more, or drop an existing topic from its page."}

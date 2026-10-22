@@ -1,19 +1,22 @@
 // the workspace boundary rules the check script runs over the workspaces, the files, and the installed packages
 import { posix } from "node:path"
 
+// the web app's folder, which imports the api as types only and whose files the component browser rule checks
+const WEB_APP_FOLDER = "apps/web"
+
 // the app packages, which no app or package imports
 const APP_PACKAGE_NAMES = new Set(["@carlnotes/web", "@carlnotes/api", "@carlnotes/worker", "@carlnotes/docs"])
 
 // the api package, and the workspaces that import it as types only
 const API_PACKAGE_NAME = "@carlnotes/api"
-const TYPE_ONLY_API_IMPORTERS = new Set(["packages/client", "apps/web"])
+const TYPE_ONLY_API_IMPORTERS = new Set(["packages/client", WEB_APP_FOLDER])
 
 // the universal packages: a browser, a phone, and the server all load them
 export const UNIVERSAL_WORKSPACE_FOLDERS = new Set([
 	"packages/contracts",
 	"packages/client",
 	"packages/core",
-	"packages/tokens",
+	"packages/nightshift",
 ])
 
 // the server dependencies a universal package's runtime closure never reaches
@@ -32,6 +35,19 @@ const SERVER_DEPENDENCY_SCOPE = "@temporalio/"
 // a test file, which may import bun and node modules inside a universal package
 const TEST_FILE_PATTERN = /(?:\.test\.tsx?|TestFixtures\.ts)$/
 
+/** The web app's component browser folders: the component browser's config and its pages. */
+export const COMPONENT_BROWSER_FOLDERS = new Set([`${WEB_APP_FOLDER}/.storybook`, `${WEB_APP_FOLDER}/src/nightshift`])
+
+/** The end of a story file's name. */
+export const STORY_FILE_SUFFIX = ".stories.tsx"
+
+// the design tokens package and its stylesheet
+const NIGHTSHIFT_PACKAGE_NAME = "@carlnotes/nightshift"
+const NIGHTSHIFT_STYLESHEET_IMPORT_PATH = `${NIGHTSHIFT_PACKAGE_NAME}/tokens.css`
+
+// a story file, and Storybook's own packages
+const STORY_IMPORT_PATTERN = /\.stories(?:\.tsx?)?$|^(?:storybook|@storybook\/[^/]+)(?:\/|$)/
+
 // a bun or node module
 const RUNTIME_MODULE_PATTERN = /^(?:bun|bun:.+|node:.+)$/
 
@@ -45,15 +61,14 @@ const TYPE_ONLY_STATEMENT_PATTERN = /^(?:import|export)\s+type\s/
 const NAMED_IMPORT_SPECIFIERS_PATTERN = /^import\s*\{([^}]*)\}\s*from/
 
 /**
- * A workspace's package.json and tsconfig: its repo folder, its name, its dependency names, whether it has a tsconfig,
- * and the folders that tsconfig references. hasTsconfig is false for a CSS-only package.
+ * A workspace's package.json and tsconfig: its repo folder, its name, its dependency names, and the folders its tsconfig
+ * references.
  */
 export type Workspace = {
 	folder: string
 	name: string
 	dependencies: string[]
 	devDependencies: string[]
-	hasTsconfig: boolean
 	references: string[]
 }
 
@@ -165,8 +180,14 @@ type ToImportViolationOptions = { workspace: Workspace; sourceFile: SourceFile; 
 
 // the rule one import breaks, or undefined
 function toImportViolation({ workspace, sourceFile, parsedImport }: ToImportViolationOptions): string | undefined {
-	// a relative import stays inside the workspace
+	// the web app keeps its stories, Storybook, and nightshift's TypeScript inside the component browser
 	const { importPath, isTypeOnly } = parsedImport
+	const componentBrowserViolation = toComponentBrowserImportViolation({ workspace, sourceFile, importPath })
+	if (componentBrowserViolation) {
+		return componentBrowserViolation
+	}
+
+	// a relative import stays inside the workspace
 	if (importPath.startsWith(".")) {
 		const resolvedPath = posix.normalize(`${posix.dirname(sourceFile.filePath)}/${importPath}`)
 		return isInsideFolder(resolvedPath, workspace.folder) ? undefined : "a relative import stays inside its workspace"
@@ -185,7 +206,7 @@ function toImportViolation({ workspace, sourceFile, parsedImport }: ToImportViol
 		return undefined
 	}
 
-	// an app is imported by nothing, except the api as types only from the client and the web app
+	// an app is imported by nothing, except the api as types only from the api client package and the web app
 	const isTypeOnlyApiImport =
 		packageName === API_PACKAGE_NAME && isTypeOnly && TYPE_ONLY_API_IMPORTERS.has(workspace.folder)
 	if (APP_PACKAGE_NAMES.has(packageName) && !isTypeOnlyApiImport) {
@@ -197,11 +218,48 @@ function toImportViolation({ workspace, sourceFile, parsedImport }: ToImportViol
 	return isDeclared ? undefined : `the package.json does not declare ${packageName}`
 }
 
+// the workspace, the file, and the import path the component browser rule checks
+type ToComponentBrowserImportViolationOptions = { workspace: Workspace; sourceFile: SourceFile; importPath: string }
+
+// the web app imports a story or Storybook only from the component browser, and nightshift's TypeScript only from a
+// test or the component browser, so neither reaches the browser bundle. nightshift's stylesheet passes anywhere
+function toComponentBrowserImportViolation({
+	workspace,
+	sourceFile,
+	importPath,
+}: ToComponentBrowserImportViolationOptions): string | undefined {
+	// only the web app's own files are checked
+	if (workspace.folder !== WEB_APP_FOLDER) {
+		return undefined
+	}
+
+	// a story or Storybook outside the component browser
+	const isComponentBrowserSourceFile = isComponentBrowserFile(sourceFile.filePath)
+	if (STORY_IMPORT_PATTERN.test(importPath) && !isComponentBrowserSourceFile) {
+		return "the web app imports a story or Storybook only from a story or the component browser"
+	}
+
+	// a nightshift module other than the stylesheet, outside a test and the component browser
+	const isNightshiftModuleImport =
+		importPath.startsWith(`${NIGHTSHIFT_PACKAGE_NAME}/`) && importPath !== NIGHTSHIFT_STYLESHEET_IMPORT_PATH
+	const isNightshiftImporter = isComponentBrowserSourceFile || TEST_FILE_PATTERN.test(sourceFile.filePath)
+	return isNightshiftModuleImport && !isNightshiftImporter
+		? "the web app imports nightshift's TypeScript only from a test, a story, or the component browser"
+		: undefined
+}
+
 // the package an import path names: the first two segments of a scoped path, the first segment otherwise
 function toPackageName(importPath: string): string {
 	const segments = importPath.split("/")
 	const segmentCount = importPath.startsWith("@") ? 2 : 1
 	return segments.slice(0, segmentCount).join("/")
+}
+
+// whether a repo-relative path is a component browser file: a story, or a file in the component browser's config or
+// pages
+function isComponentBrowserFile(filePath: string): boolean {
+	const isInComponentBrowserFolder = [...COMPONENT_BROWSER_FOLDERS].some((folder) => isInsideFolder(filePath, folder))
+	return isInComponentBrowserFolder || filePath.endsWith(STORY_FILE_SUFFIX)
 }
 
 // whether a repo-relative path is the folder or sits inside it
@@ -217,11 +275,8 @@ type ToPackageJsonViolationsOptions = { workspaces: Workspace[]; workspace: Work
  * a universal package that depends on a non-universal one.
  */
 export function toPackageJsonViolations({ workspaces, workspace }: ToPackageJsonViolationsOptions): string[] {
-	// the @carlnotes names the package.json declares, minus a package with no tsconfig to reference, and the ones the
-	// tsconfig references
-	const declaredNames = toCarlnotesDependencyNames(workspace).filter(
-		(name) => workspaces.find((candidate) => candidate.name === name)?.hasTsconfig ?? true,
-	)
+	// the @carlnotes names the package.json declares, and the ones the tsconfig references
+	const declaredNames = toCarlnotesDependencyNames(workspace)
 	const referencedNames = workspace.references.map(
 		(referenceFolder) => workspaces.find((candidate) => candidate.folder === referenceFolder)?.name ?? referenceFolder,
 	)

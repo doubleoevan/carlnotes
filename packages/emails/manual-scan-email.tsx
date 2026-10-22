@@ -1,13 +1,23 @@
 // the manual-scan email: what a Scan you triggered yourself turned up, sent when it finishes because it takes several minutes.
 // the cards and sections are the topic-scan email's, over the shared shell, so the two stay visually identical
+import { emailColors, toEmailFontSize } from "@carlnotes/nightshift/email"
 import { Section, Text } from "@react-email/components"
 import { render } from "@react-email/render"
 import type { CSSProperties, ReactElement } from "react"
-import { EmailFooter, EmailIntro, EmailShell, footerBrandLink, LinkOrText, summaryLink } from "./emailShell"
+import {
+	bodyLargeText,
+	EmailFooter,
+	EmailIntro,
+	EmailShell,
+	footerBrandLink,
+	LinkOrText,
+	summaryLink,
+} from "./emailShell"
 import {
 	FindingCards,
 	PodcastEpisodeSection,
 	ScanSummarySection,
+	summaryCard,
 	type TopicScanEmailFinding,
 	type TopicScanEmailPodcastEpisode,
 } from "./topic-scan-email"
@@ -57,7 +67,7 @@ export default function ManualScanEmail(props: ManualScanEmailProps): ReactEleme
 					<FindingCards findings={props.findings} />
 				</>
 			) : (
-				<Section style={failureCard}>
+				<Section style={summaryCard}>
 					<Text style={failureText}>{props.failureReason}</Text>
 					<Text style={failureNote}>Carl will keep trying on this topic's schedule.</Text>
 				</Section>
@@ -148,13 +158,11 @@ function toClosingNote(props: ManualScanEmailProps): string {
 	return props.status === "succeeded" && props.findings.length === 0 ? " Carl has high standards." : ""
 }
 
-// the failure block, tinted like the recap card so a scan that turned up nothing, still reads as a finished note
-const failureCard: CSSProperties = {
-	backgroundColor: "#f7f2e9",
-	border: "1px solid #ece2d2",
-	borderRadius: "10px",
-	marginTop: "16px",
-	padding: "14px 16px",
+// the failure text and the note under it, in the recap card
+const failureText: CSSProperties = { ...bodyLargeText, margin: "0" }
+const failureNote: CSSProperties = {
+	color: emailColors.mutedForeground,
+	fontSize: toEmailFontSize("body"),
+	lineHeight: "1.5",
+	margin: "6px 0 0",
 }
-const failureText: CSSProperties = { color: "#4b4b4b", fontSize: "15px", lineHeight: "1.5", margin: "0" }
-const failureNote: CSSProperties = { color: "#a79c8c", fontSize: "13px", lineHeight: "1.5", margin: "6px 0 0" }

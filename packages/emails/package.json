@@ -10,6 +10,7 @@
 	"dependencies": {
 		"@carlnotes/contracts": "workspace:*",
 		"@carlnotes/db": "workspace:*",
+		"@carlnotes/nightshift": "workspace:*",
 		"@carlnotes/server": "workspace:*",
 		"@react-email/components": "^1.0.12",
 		"@react-email/render": "^2.1.0",

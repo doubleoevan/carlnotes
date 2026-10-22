@@ -1,8 +1,6 @@
 import { authClient } from "@carlnotes/client/authClient"
-import { AVATAR_COLOR, toAvatarInitials, toAvatarTint, toAvatarVersion } from "@carlnotes/contracts/avatars"
-import { useState } from "react"
-import { AVATAR_CLASS } from "@/lib/styleClasses"
-import { cn } from "@/lib/utils"
+import { toAvatarVersion } from "@carlnotes/contracts/avatars"
+import { Avatar } from "@/components/branding/Avatar"
 
 /**
  * A user's avatar: their stored image, or their initials on a tinted circle.
@@ -24,36 +22,7 @@ export function UserAvatar({
 	const { data: session } = authClient.useSession()
 	const shownAvatarVersion = session?.user.id === userId ? toAvatarVersion(session.user) : avatarVersion
 
-	// the image url at the avatar's version, and the url that failed to load, which shows the initials instead
+	// the image url at the avatar's version
 	const imageUrl = shownAvatarVersion === null ? null : `/api/avatars/${userId}?v=${shownAvatarVersion}`
-	const [brokenImageUrl, setBrokenImageUrl] = useState<string | null>(null)
-	return (
-		<span className={cn(AVATAR_CLASS, "size-8", className)}>
-			{imageUrl && imageUrl !== brokenImageUrl ? (
-				<img src={imageUrl} alt="" onError={() => setBrokenImageUrl(imageUrl)} className="size-full object-cover" />
-			) : (
-				<AvatarInitials userId={userId} username={username} />
-			)}
-		</span>
-	)
-}
-
-// the initials on a tinted circle, drawn from the same id and name everywhere
-function AvatarInitials({ userId, username }: { userId: string; username: string }) {
-	return (
-		<svg viewBox="0 0 32 32" className="size-full" role="presentation">
-			<circle cx="16" cy="16" r="16" fill={toAvatarTint(userId)} />
-			<text
-				x="16"
-				y="16"
-				fill={AVATAR_COLOR}
-				fontSize="13"
-				textAnchor="middle"
-				dominantBaseline="central"
-				className="font-display"
-			>
-				{toAvatarInitials(username)}
-			</text>
-		</svg>
-	)
+	return <Avatar imageUrl={imageUrl} ownerId={userId} name={username} className={className} />
 }

@@ -1,6 +1,7 @@
 // how long the edge and the browser may cache a response, and the purge by tag that clears a response early
 import { reportError } from "@carlnotes/server/monitoring"
 import { getSessionCookie } from "better-auth/cookies"
+import type { Context } from "hono"
 import { createMiddleware } from "hono/factory"
 
 // the tag that every shared rendered response is cached under, which the release purge clears
@@ -66,6 +67,17 @@ export const renderedCacheHeaders = createMiddleware(async (context, next) => {
 	await next()
 	setRenderedCacheHeaders(context.req.raw, context.res)
 })
+
+// the response a static file's cache header goes on, and whether the file's name holds a content hash
+export type SetStaticFileCacheControlOptions = { context: Context; isHashedAsset: boolean }
+
+/**
+ * Caches a file of a statically built site for a year if its name holds a content hash, and has the browser revalidate
+ * every other file on each use.
+ */
+export function setStaticFileCacheControl({ context, isHashedAsset }: SetStaticFileCacheControlOptions): void {
+	context.header("Cache-Control", isHashedAsset ? IMMUTABLE_CACHE_CONTROL : REVALIDATE_CACHE_CONTROL)
+}
 
 /**
  * Returns the cache headers of an image whose url names a version, long at the current version and brief otherwise.

@@ -1,11 +1,13 @@
 // the package boundary check flags an import or a package.json that crosses a workspace boundary and lets the rest through
 import { expect, test } from "bun:test"
-import { existsSync, readFileSync } from "node:fs"
-import { join } from "node:path"
+import { readFileSync } from "node:fs"
+import { posix } from "node:path"
 import {
+	COMPONENT_BROWSER_FOLDERS,
 	checkPackageBoundaries,
 	isTypeOnlyImport,
 	type ResolvePackage,
+	STORY_FILE_SUFFIX,
 	toClosureViolations,
 	toImportViolations,
 	toPackageJsonViolations,
@@ -20,7 +22,6 @@ const CONTRACTS: Workspace = {
 	name: "@carlnotes/contracts",
 	dependencies: ["zod"],
 	devDependencies: [],
-	hasTsconfig: true,
 	references: [],
 }
 const CLIENT: Workspace = {
@@ -28,7 +29,6 @@ const CLIENT: Workspace = {
 	name: "@carlnotes/client",
 	dependencies: ["@carlnotes/contracts", "hono"],
 	devDependencies: ["@carlnotes/api"],
-	hasTsconfig: true,
 	references: ["apps/api", "packages/contracts"],
 }
 const DB: Workspace = {
@@ -36,15 +36,15 @@ const DB: Workspace = {
 	name: "@carlnotes/db",
 	dependencies: ["@carlnotes/contracts", "drizzle-orm"],
 	devDependencies: [],
-	hasTsconfig: true,
 	references: ["packages/contracts"],
 }
+
+// the two apps
 const API: Workspace = {
 	folder: "apps/api",
 	name: "@carlnotes/api",
 	dependencies: ["@carlnotes/contracts", "@carlnotes/db"],
 	devDependencies: [],
-	hasTsconfig: true,
 	references: ["packages/contracts", "packages/db"],
 }
 const WEB: Workspace = {
@@ -52,17 +52,10 @@ const WEB: Workspace = {
 	name: "@carlnotes/web",
 	dependencies: ["@carlnotes/client", "@carlnotes/contracts"],
 	devDependencies: [],
-	hasTsconfig: true,
 	references: ["packages/client", "packages/contracts"],
 }
-const TOKENS: Workspace = {
-	folder: "packages/tokens",
-	name: "@carlnotes/tokens",
-	dependencies: [],
-	devDependencies: [],
-	hasTsconfig: false,
-	references: [],
-}
+
+// the whole map, which most tests check against
 const WORKSPACES = [CONTRACTS, CLIENT, DB, API, WEB]
 
 // a resolver over an in-memory dependency graph. a name outside the graph does not resolve
@@ -73,10 +66,13 @@ function toFakeResolver(graph: Record<string, string[]>): ResolvePackage {
 	}
 }
 
-// the violations of one file's text inside a workspace
-function toFileViolations(filePath: string, fileText: string): string[] {
-	return toImportViolations({ workspaces: WORKSPACES, sourceFile: { filePath, fileText } })
+// the check that returns one file's violations inside a workspace map
+function toFileViolationsCheck(workspaces: Workspace[]): (filePath: string, fileText: string) => string[] {
+	return (filePath, fileText) => toImportViolations({ workspaces, sourceFile: { filePath, fileText } })
 }
+
+// the violations of one file's text inside the whole map
+const toFileViolations = toFileViolationsCheck(WORKSPACES)
 
 // an import is parsed with its path, the line it starts on, and its type-only flag, across statement shapes
 test("toParsedImports reads static, multi-line, side-effect, dynamic, and re-export imports", () => {
@@ -101,8 +97,8 @@ test("isTypeOnlyImport accepts statement-level and all-specifier type imports an
 	expect(isTypeOnlyImport('import "@carlnotes/api"')).toBe(false)
 })
 
-// an app import fails everywhere, except the api as types only from the client and the web app
-test("toImportViolations flags an app import and passes a type-only api import from the client", () => {
+// an app import fails everywhere, except the api as types only from the api client package and the web app
+test("toImportViolations flags an app import and passes a type-only api import from the api client package", () => {
 	expect(toFileViolations("apps/api/x.ts", 'import { scan } from "@carlnotes/worker/scan"\n')).toEqual([
 		"apps/api: apps/api/x.ts:1 imports @carlnotes/worker/scan. an app is never imported",
 	])
@@ -115,6 +111,54 @@ test("toImportViolations flags an app import and passes a type-only api import f
 	expect(toFileViolations("packages/db/x.ts", 'import type { AppType } from "@carlnotes/api"\n')).toEqual([
 		"packages/db: packages/db/x.ts:1 imports @carlnotes/api. an app is never imported",
 	])
+})
+
+// the web app imports nightshift's stylesheet anywhere and its TypeScript only from a test, a story, or the
+// component browser
+test("toImportViolations flags nightshift's TypeScript in a web app page and passes it in a test, a story, and Storybook", () => {
+	// the web app with nightshift declared, so only the component browser rule can fail an import
+	const webWithNightshift: Workspace = { ...WEB, dependencies: [...WEB.dependencies, "@carlnotes/nightshift"] }
+	const toWebViolations = toFileViolationsCheck([webWithNightshift])
+	const colorsImport = 'import { latte } from "@carlnotes/nightshift/colors"\n'
+
+	// a page fails, and every allowed importer passes
+	expect(toWebViolations("apps/web/src/pages/HomePage.tsx", colorsImport)).toEqual([
+		"apps/web: apps/web/src/pages/HomePage.tsx:1 imports @carlnotes/nightshift/colors. the web app imports nightshift's TypeScript only from a test, a story, or the component browser",
+	])
+	expect(toWebViolations("apps/web/src/hooks/useTheme.test.ts", colorsImport)).toEqual([])
+	expect(toWebViolations("apps/web/src/components/primitives/button.stories.tsx", colorsImport)).toEqual([])
+	expect(toWebViolations("apps/web/.storybook/manager.ts", colorsImport)).toEqual([])
+	expect(toWebViolations("apps/web/src/nightshift/TokenSwatches.tsx", colorsImport)).toEqual([])
+
+	// the stylesheet passes anywhere
+	expect(toWebViolations("apps/web/src/routes/__root.tsx", 'import "@carlnotes/nightshift/tokens.css"\n')).toEqual([])
+})
+
+// a story and Storybook stay inside the component browser, so neither reaches the app's own code
+test("toImportViolations flags a story or Storybook in app code and passes them in a story and the component browser", () => {
+	// a route that imports a story, and a page that imports Storybook, fail
+	expect(
+		toFileViolations(
+			"apps/web/src/routes/index.tsx",
+			'import { Default } from "../components/layout/Footer.stories"\n',
+		),
+	).toEqual([
+		"apps/web: apps/web/src/routes/index.tsx:1 imports ../components/layout/Footer.stories. the web app imports a story or Storybook only from a story or the component browser",
+	])
+	expect(toFileViolations("apps/web/src/pages/HomePage.tsx", 'import { fn } from "storybook/test"\n')).toEqual([
+		"apps/web: apps/web/src/pages/HomePage.tsx:1 imports storybook/test. the web app imports a story or Storybook only from a story or the component browser",
+	])
+
+	// a story and the component browser's config may import both
+	expect(
+		toFileViolations("apps/web/src/components/layout/Layout.stories.tsx", 'import { fn } from "storybook/test"\n'),
+	).toEqual([])
+	expect(
+		toFileViolations(
+			"apps/web/.storybook/preview.tsx",
+			'import { withThemeByClassName } from "@storybook/addon-themes"\n',
+		),
+	).toEqual([])
 })
 
 // a relative import resolves against the file and must stay inside the workspace folder
@@ -174,7 +218,7 @@ test("toPackageJsonViolations flags references that differ from the package.json
 })
 
 // the package.json: a universal package depends on universal packages, with the api as a type-only dev dependency
-test("toPackageJsonViolations flags a server package in a universal package.json and passes the client's api dev dependency", () => {
+test("toPackageJsonViolations flags a server package in a universal package.json and passes the api client package's api dev dependency", () => {
 	expect(toPackageJsonViolations({ workspaces: WORKSPACES, workspace: CLIENT })).toEqual([])
 	const clientOnDb = {
 		...CLIENT,
@@ -245,7 +289,6 @@ test("checkPackageBoundaries passes a clean tree and gathers violations across t
 		name: "@carlnotes/core",
 		dependencies: ["@carlnotes/db"],
 		devDependencies: [],
-		hasTsconfig: true,
 		references: [],
 	}
 	const { violations } = checkPackageBoundaries({
@@ -261,16 +304,9 @@ test("checkPackageBoundaries passes a clean tree and gathers violations across t
 	])
 })
 
-// a dependency on a package with no tsconfig, such as the CSS-only tokens, needs no reference
-test("toPackageJsonViolations lets a dependency on a tsconfig-less package go unreferenced", () => {
-	const webWithTokens = { ...WEB, dependencies: [...WEB.dependencies, "@carlnotes/tokens"] }
-	expect(toPackageJsonViolations({ workspaces: [CONTRACTS, CLIENT, WEB, TOKENS], workspace: webWithTokens })).toEqual(
-		[],
-	)
-})
-
-// biome.json's noRestrictedGlobals override names the universal packages that hold TypeScript, the same set the rules do
+// biome.json's noRestrictedGlobals override names the universal packages, the same set the rules do
 test("the Biome override and the boundary rules name the same universal packages", () => {
+	// the folders the override includes, without their glob
 	const biomeConfig = JSON.parse(readFileSync("biome.json", "utf8")) as {
 		overrides: { includes: string[]; linter?: { rules?: { style?: { noRestrictedGlobals?: unknown } } } }[]
 	}
@@ -278,8 +314,24 @@ test("the Biome override and the boundary rules name the same universal packages
 	const overrideFolders = universalOverride?.includes
 		.filter((include) => !include.startsWith("!"))
 		.map((include) => include.replace(/\/\*\*$/, ""))
-	const typescriptUniversalFolders = [...UNIVERSAL_WORKSPACE_FOLDERS].filter((folder) =>
-		existsSync(join(folder, "tsconfig.json")),
+
+	// they match the rules' set
+	expect(new Set(overrideFolders)).toEqual(UNIVERSAL_WORKSPACE_FOLDERS)
+})
+
+// globals.css keeps the component browser's files out of tailwind's scan, the same files the boundary rules name
+test("globals.css and the boundary rules name the same component browser files", () => {
+	// every source the stylesheet leaves out, resolved from the stylesheet's folder to a repo path
+	const globalsCss = readFileSync("apps/web/src/globals.css", "utf8")
+	const excludedPaths = [...globalsCss.matchAll(/@source not "([^"]+)"/g)].map((sourceMatch) =>
+		posix.join("apps/web/src", sourceMatch[1] ?? ""),
 	)
-	expect(new Set(overrideFolders)).toEqual(new Set(typescriptUniversalFolders))
+
+	// the folders match the rules' folders, and the one glob names every story file
+	expect(new Set(excludedPaths.filter((excludedPath) => !excludedPath.includes("*")))).toEqual(
+		COMPONENT_BROWSER_FOLDERS,
+	)
+	expect(excludedPaths.filter((excludedPath) => excludedPath.includes("*"))).toEqual([
+		`apps/web/src/**/*${STORY_FILE_SUFFIX}`,
+	])
 })

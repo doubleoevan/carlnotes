@@ -2,14 +2,19 @@ import { toCtaTag } from "@carlnotes/contracts/signupCta"
 import { SITE_URL } from "@carlnotes/core/lib/pageHead"
 import { defaultParseSearch, Link } from "@tanstack/react-router"
 import type * as React from "react"
+import { isPathAtOrAfter } from "@/lib/utils"
 import { captureVisitEvent } from "@/lib/visitAnalytics"
 
 // the uri schemes that open another app in the same tab with no target or rel, like a mail client or a podcast app
 const URI_SCHEME_PREFIXES = ["mailto:", "tel:", "sms:", "cursor:", "vscode:", "podcast:", "pcast:"]
 
 // the paths the server answers itself, which the client router has no routes for: the docs site, the blog, the
-// releases, and the api's own files, which download or open in a new tab through the props the caller passes
-const SERVER_PATH_PREFIXES = ["/docs", "/blog", "/releases", "/api"]
+// releases, the Nightshift component browser, and the api's own files, which download, or open in a new tab with
+// isNewTab
+const SERVER_PATH_PREFIXES = ["/docs", "/blog", "/releases", "/nightshift", "/api"]
+
+// the target and rel of a link that opens in a new tab. noopener denies the opened page a way back to this one
+const NEW_TAB_PROPS = { target: "_blank", rel: "noopener noreferrer" }
 
 /**
  * The component that every link in feature code goes through
@@ -18,9 +23,15 @@ const SERVER_PATH_PREFIXES = ["/docs", "/blog", "/releases", "/api"]
 export function AnchorLink({
 	href,
 	isUserContent,
+	isNewTab,
 	children,
 	...props
-}: React.ComponentProps<"a"> & { href: string; isUserContent?: boolean }) {
+}: React.ComponentProps<"a"> & {
+	href: string
+	isUserContent?: boolean
+	// opens a server path or an internal route in a new tab. an external link always opens in one
+	isNewTab?: boolean
+}) {
 	// a uri scheme link opens another app, so it gets no target and no rel
 	if (URI_SCHEME_PREFIXES.some((prefix) => href.startsWith(prefix))) {
 		return (
@@ -30,11 +41,13 @@ export function AnchorLink({
 		)
 	}
 
-	// a server path does not use the router, so the link is a plain anchor with a full page load
+	// a server path does not use the router, so the link is a plain anchor with a full page load, in a new tab with
+	// isNewTab
 	const path = href.split(/[?#]/, 1)[0] ?? href
-	if (SERVER_PATH_PREFIXES.some((prefix) => path === prefix || path.startsWith(`${prefix}/`))) {
+	const newTabProps = isNewTab ? NEW_TAB_PROPS : {}
+	if (SERVER_PATH_PREFIXES.some((prefix) => isPathAtOrAfter(path, prefix))) {
 		return (
-			<a href={href} {...props}>
+			<a href={href} {...newTabProps} {...props}>
 				{children}
 			</a>
 		)
@@ -59,6 +72,7 @@ export function AnchorLink({
 				to={url.pathname}
 				search={defaultParseSearch(url.search)}
 				hash={url.hash.slice(1)}
+				{...newTabProps}
 				{...props}
 				onClick={handleClick}
 			>

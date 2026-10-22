@@ -204,7 +204,7 @@ function SharedImage({
 	// the image opens full size in a new tab
 	const imageUrl = toChatRoomAttachmentUrl(topicId, teamId, attachment.id)
 	return (
-		<AnchorLink href={imageUrl} target="_blank" rel="noopener noreferrer" className="mb-1 block w-fit">
+		<AnchorLink href={imageUrl} isNewTab className="mb-1 block w-fit">
 			<img
 				src={imageUrl}
 				alt={attachment.name}

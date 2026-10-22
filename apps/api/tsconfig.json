@@ -17,6 +17,9 @@
 			"path": "../../packages/models"
 		},
 		{
+			"path": "../../packages/nightshift"
+		},
+		{
 			"path": "../../packages/pipeline"
 		},
 		{
