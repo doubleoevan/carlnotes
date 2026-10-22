@@ -144,7 +144,7 @@ export function PodcastEpisodePage() {
 					<div className="flex items-start justify-between gap-3">
 						<p className="text-muted-foreground min-w-0 text-sm">
 							{"Coffee Break podcast · "}
-							<AnchorLink href={topicPath} className="text-link hover:underline">
+							<AnchorLink href={topicPath} className="sentence-link">
 								{topic.name}
 							</AnchorLink>
 						</p>

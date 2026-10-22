@@ -4,7 +4,7 @@ import { useState } from "react"
 import { Badge } from "@/components/primitives/badge"
 import { Input } from "@/components/primitives/input"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/primitives/popover"
-import { MENU_OPTION_CLASS } from "@/lib/styleClasses"
+import { MENU_OPTION_CLASS, STANDALONE_LINK_CLASS } from "@/lib/styleClasses"
 import { cn } from "@/lib/utils"
 
 // canCreate lets typing add a tag that is not in knownTags. openPickerLabel renders a link that opens the picker
@@ -63,7 +63,7 @@ export function TagPicker({ tags, knownTags, canCreate = false, openPickerLabel,
 				{/* the optional link-styled label anchors and opens the picker */}
 				{openPickerLabel && (
 					<PopoverTrigger asChild>
-						<button type="button" className="text-link text-sm hover:underline">
+						<button type="button" className={cn(STANDALONE_LINK_CLASS, "text-sm")}>
 							{openPickerLabel}
 						</button>
 					</PopoverTrigger>

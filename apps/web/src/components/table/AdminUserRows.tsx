@@ -22,7 +22,8 @@ import { UserAvatar } from "@/components/branding/UserAvatar"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { ConfirmDialog } from "@/components/common/ConfirmDialog"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
-import { TABLE_CLASS, TABLE_HEAD_CLASS, TABLE_SCROLL_CLASS } from "@/lib/styleClasses"
+import { STANDALONE_LINK_CLASS, TABLE_CLASS, TABLE_HEAD_CLASS, TABLE_SCROLL_CLASS } from "@/lib/styleClasses"
+import { cn } from "@/lib/utils"
 import { TopicsSubtableRow } from "./OwnerTopicsTable"
 import { SubtableCountButton } from "./SubtableCountButton"
 import { TableCard } from "./TableCard"
@@ -135,7 +136,10 @@ export function UserRow({
 					{/* the avatar and username link to the user's profile */}
 					<Tooltip>
 						<TooltipTrigger asChild>
-							<AnchorLink href={`/profiles/${user.id}`} className="text-link flex items-center gap-2 hover:underline">
+							<AnchorLink
+								href={`/profiles/${user.id}`}
+								className={cn(STANDALONE_LINK_CLASS, "flex items-center gap-2")}
+							>
 								<UserAvatar
 									userId={user.id}
 									username={user.username}
@@ -154,7 +158,7 @@ export function UserRow({
 						<TooltipTrigger asChild>
 							<AnchorLink
 								href={`/activity?userId=${user.id}`}
-								className="text-link block max-w-52 truncate text-left hover:underline"
+								className={cn(STANDALONE_LINK_CLASS, "block max-w-52 truncate text-left")}
 							>
 								{user.email}
 							</AnchorLink>
@@ -179,7 +183,7 @@ export function UserRow({
 					{/* the plan links to the user's account page */}
 					<Tooltip>
 						<TooltipTrigger asChild>
-							<AnchorLink href={`/account?userId=${user.id}`} className="text-link capitalize hover:underline">
+							<AnchorLink href={`/account?userId=${user.id}`} className={cn(STANDALONE_LINK_CLASS, "capitalize")}>
 								{user.plan}
 							</AnchorLink>
 						</TooltipTrigger>
@@ -302,7 +306,7 @@ function UserTeamsSubtable({ teams }: { teams: TeamSummary[] }) {
 								<td className="py-2 pr-4">
 									<AnchorLink
 										href={`/teams/${team.teamId}`}
-										className="text-link flex items-center gap-2 hover:underline"
+										className={cn(STANDALONE_LINK_CLASS, "flex items-center gap-2")}
 									>
 										<TeamAvatar team={team} className="size-6" />
 										{team.name}

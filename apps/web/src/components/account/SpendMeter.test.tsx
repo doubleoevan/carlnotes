@@ -83,19 +83,21 @@ function toCutoffCircles(html: string): { percentLabel: string; className: strin
 }
 
 // 171 of 300 cents is 57 percent, past the two lowest cutoffs, which share a circle, and short of the daily scans one
-test("the bar fades a passed circle, dashes the daily scans circle, and lists the spent budget last", () => {
+test("the bar dims a passed circle, dashes the daily scans circle, and lists the spent budget last", () => {
 	// three circles, the two lowest cutoffs sharing the first
 	const html = renderSpendMeter(171, FREE_CUTOFFS)
 	const cutoffCircles = toCutoffCircles(html)
 	expect(cutoffCircles.map((cutoffCircle) => cutoffCircle.percentLabel)).toEqual(["15%", "58%", "90%"])
 
-	// the passed circle fades, the daily scans circle has a dashed edge, and the manual scans circle is neither
+	// the passed circle dims its fill and border with its label still readable, the daily scans circle has a dashed edge,
+	// and the manual scans circle is neither
 	const [passedCircle, dailyScansCircle, manualScansCircle] = cutoffCircles
-	expect(passedCircle?.className).toContain("opacity-45")
+	expect(passedCircle?.className).toContain("bg-muted border-muted-foreground/50 text-muted-foreground")
+	expect(passedCircle?.className).not.toContain("opacity-")
 	expect(passedCircle?.className).not.toContain("border-dashed")
 	expect(dailyScansCircle?.className).toContain("border-dashed")
-	expect(dailyScansCircle?.className).not.toContain("opacity-45")
-	expect(manualScansCircle?.className).not.toContain("opacity-45")
+	expect(dailyScansCircle?.className).not.toContain("bg-muted")
+	expect(manualScansCircle?.className).not.toContain("bg-muted")
 	expect(manualScansCircle?.className).not.toContain("border-dashed")
 
 	// the list has a line for each cutoff and ends with the spent budget's line

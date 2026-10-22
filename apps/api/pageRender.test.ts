@@ -6,6 +6,7 @@ import { join } from "node:path"
 import { DEGRADED_RENDER_HEADER } from "@carlnotes/contracts/seo"
 import * as analytics from "@carlnotes/server/analytics"
 import * as monitoring from "@carlnotes/server/monitoring"
+import { DOCS_BUNDLE_ROOT, UI_SERVER_ENTRY } from "./bundlePaths"
 import { RENDERED_EDGE_CACHE_CONTROL } from "./edgeCache"
 import server from "./index"
 import {
@@ -97,8 +98,8 @@ test("a hashed asset is cached immutably", async () => {
 // a docs path matching no built file gets the docs site's own 404 page, never the ui's page
 test("an unknown docs path responds with the docs 404 page", async () => {
 	const bundleDirectory = await createBundleDirectory()
-	await mkdir(join(bundleDirectory, "apps/docs/dist"), { recursive: true })
-	await writeFile(join(bundleDirectory, "apps/docs/dist/404.html"), DOCS_NOT_FOUND_HTML)
+	await mkdir(join(bundleDirectory, DOCS_BUNDLE_ROOT), { recursive: true })
+	await writeFile(join(bundleDirectory, DOCS_BUNDLE_ROOT, "404.html"), DOCS_NOT_FOUND_HTML)
 	const response = await withWorkingDirectory(bundleDirectory, () => request("/docs/no-such-page"))
 
 	// the docs 404 page with a 404 status
@@ -140,7 +141,7 @@ test("a crawler's page fetch is reported, and an asset or an unknown agent is no
 // a bundle that throws on import is a broken deploy, not a missing build, so the page asks a crawler to retry
 test("a bundle that fails to import responds 503", async () => {
 	const bundleDirectory = await createBundleDirectory()
-	await writeFile(join(bundleDirectory, "apps/web/dist/server/server.js"), 'throw new Error("a broken bundle")')
+	await writeFile(join(bundleDirectory, UI_SERVER_ENTRY), 'throw new Error("a broken bundle")')
 	const response = await withWorkingDirectory(bundleDirectory, () => request("/topics/abc123"))
 
 	expect(response.status).toBe(503)
@@ -153,7 +154,7 @@ test("a page rendered without a read it needs responds 503 with no edge copy", a
 	const reportErrorSpy = spyOn(monitoring, "reportError").mockImplementation(() => {})
 	const bundleDirectory = await createBundleDirectory()
 	const degradedServerEntryText = `export default { fetch: () => new Response(${JSON.stringify(PAGE_HTML)}, { headers: { "content-type": "text/html", "${DEGRADED_RENDER_HEADER}": "1" } }) }`
-	await writeFile(join(bundleDirectory, "apps/web/dist/server/server.js"), degradedServerEntryText)
+	await writeFile(join(bundleDirectory, UI_SERVER_ENTRY), degradedServerEntryText)
 	const response = await withWorkingDirectory(bundleDirectory, async () =>
 		server.fetch(new Request("http://localhost:3000/topics/abc123")),
 	)

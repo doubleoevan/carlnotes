@@ -4,8 +4,8 @@ import type { TopicScan } from "@carlnotes/contracts/topics"
 import { useState } from "react"
 import { CoffeeLoading } from "@/components/branding/CoffeeLoading"
 import { NoteIcon } from "@/components/branding/NoteIcon"
-import { randomThinkingLine } from "@/components/chat/thinkingLines"
 import { Pagination } from "@/components/common/Pagination"
+import { ThinkingLine } from "@/components/common/ThinkingLine"
 import { PodcastEpisodeNumberPill } from "@/components/podcast/PodcastEpisodePill"
 import {
 	Popover,
@@ -16,7 +16,13 @@ import {
 } from "@/components/primitives/popover"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import { toRenderedRows } from "@/lib/renderedRows"
-import { DASHED_ROW_CLASS, POPOVER_PANEL_CLASS, RESOURCE_LIST_CARD_CLASS } from "@/lib/styleClasses"
+import {
+	DASHED_ROW_CLASS,
+	LIST_ROW_HOVER_CLASS,
+	POPOVER_PANEL_CLASS,
+	RESOURCE_LIST_CARD_CLASS,
+	SECTION_LABEL_CLASS,
+} from "@/lib/styleClasses"
 import { cn } from "@/lib/utils"
 import { CollapsibleSection } from "./CollapsibleSection"
 import { TopicScanFailure } from "./TopicScanFailure"
@@ -44,28 +50,15 @@ export function TopicScanHistory({
 	const [openedPageNumber, setOpenedPageNumber] = useState(1)
 	const pageCount = Math.ceil(scans.length / SCANS_PER_PAGE)
 	const pageNumber = Math.min(openedPageNumber, Math.max(1, pageCount))
-
-	// the scans the history renders: the page shown, and the first NO_SCRIPT_ROW_LIMIT scans for a reader without
-	// JavaScript
-	const renderedScans = toRenderedRows(scans, { pageNumber, pageSize: SCANS_PER_PAGE })
 	return (
 		<CollapsibleSection value="history" title="Brew diary">
-			{/* one row per rendered scan, each drawing its own dashed separator */}
-			<div className={cn(RESOURCE_LIST_CARD_CLASS, "p-1")}>
-				{renderedScans.map(({ row: scan, className }) => (
-					<ScanRow
-						key={scan.id}
-						scan={scan}
-						allowedUrls={allowedUrls}
-						findings={findings?.filter((finding) => finding.scanId === scan.id)}
-						topic={topic}
-						className={className}
-					/>
-				))}
-				{scans.length === 0 && (
-					<p className="text-muted-foreground py-3 pl-2 text-sm">{"Carl hasn't scanned this topic yet."}</p>
-				)}
-			</div>
+			<TopicScanHistoryCard
+				scans={scans}
+				pageNumber={pageNumber}
+				allowedUrls={allowedUrls}
+				findings={findings}
+				topic={topic}
+			/>
 			{/* the page numbers under the card */}
 			{pageCount > 1 && (
 				<Pagination
@@ -76,6 +69,46 @@ export function TopicScanHistory({
 				/>
 			)}
 		</CollapsibleSection>
+	)
+}
+
+/**
+ * The scan history's card, with a row per scan on the page shown, or the line that an empty history shows.
+ */
+export function TopicScanHistoryCard({
+	scans,
+	pageNumber,
+	allowedUrls,
+	findings,
+	topic,
+}: {
+	scans: TopicScan[]
+	pageNumber: number
+	allowedUrls?: AllowedScanNoteUrls
+	findings?: TopicFinding[]
+	// names the topic in each diary's copied Markdown
+	topic: { id: string; name: string; prompt: string }
+}) {
+	// the scans the card renders: the page shown, and the first NO_SCRIPT_ROW_LIMIT scans for a page load without
+	// JavaScript
+	const renderedScans = toRenderedRows(scans, { pageNumber, pageSize: SCANS_PER_PAGE })
+	return (
+		<div className={cn(RESOURCE_LIST_CARD_CLASS, "p-1")}>
+			{/* one row per rendered scan, each drawing its own dashed separator */}
+			{renderedScans.map(({ row: scan, className }) => (
+				<ScanRow
+					key={scan.id}
+					scan={scan}
+					allowedUrls={allowedUrls}
+					findings={findings?.filter((finding) => finding.scanId === scan.id)}
+					topic={topic}
+					className={className}
+				/>
+			))}
+			{scans.length === 0 && (
+				<p className="text-muted-foreground py-3 pl-2 text-sm">{"Carl hasn't scanned this topic yet."}</p>
+			)}
+		</div>
 	)
 }
 
@@ -114,7 +147,7 @@ function ScanRow({
 				<Tooltip>
 					<TooltipTrigger asChild>
 						<PopoverTrigger
-							className="group relative isolate flex w-full items-center gap-3 py-2.5 pr-1 pl-2 text-left before:absolute before:inset-0 before:-z-10 before:rounded-lg before:transition-colors hover:before:bg-accent-foreground/20"
+							className={cn(LIST_ROW_HOVER_CLASS, "group flex w-full items-center gap-3 py-2.5 pr-1 pl-2 text-left")}
 							aria-describedby={undefined}
 						>
 							{/* the time is formatted in the local time zone, so the server's markup can differ */}
@@ -155,7 +188,8 @@ function ScanRow({
 	)
 }
 
-// the scan's one-line stat: kept and found counts when succeeded, a shimmering thinking line while running,
+// the scan's one-line stat: its read and kept counts if it succeeded, failed if it failed, and a shimmering thinking
+// line while it runs
 function ScanStat({ scan }: { scan: TopicScan }) {
 	if (scan.status === "succeeded") {
 		return (
@@ -167,13 +201,7 @@ function ScanStat({ scan }: { scan: TopicScan }) {
 	if (scan.status === "failed") {
 		return <span className="text-destructive min-w-0 flex-1 truncate text-xs">failed</span>
 	}
-	return <ScanThinkingLine />
-}
-
-// a thinking line while a scan runs, selected once so the poll's re-renders don't swap it mid-scan
-function ScanThinkingLine() {
-	const [thinkingLine] = useState(randomThinkingLine)
-	return <span className="shimmer-text min-w-0 flex-1 truncate text-xs">{`Carl is ${thinkingLine}…`}</span>
+	return <ThinkingLine className="min-w-0 flex-1 truncate text-xs" />
 }
 
 // the history scan note: the complete recap, and for a failed scan, the reason it failed
@@ -208,7 +236,7 @@ function ScanNote({
 			{/* why a failed scan failed, above the recap */}
 			{scan.status === "failed" && (
 				<div className="mb-3">
-					<div className="text-muted-foreground font-display mb-1 text-xs tracking-wide uppercase">Failed</div>
+					<div className={cn(SECTION_LABEL_CLASS, "mb-1")}>Failed</div>
 					<TopicScanFailure error={scan.error} />
 				</div>
 			)}

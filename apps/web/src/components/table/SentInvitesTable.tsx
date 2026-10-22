@@ -35,10 +35,18 @@ const sentInviteSortValues = {
 	accepted: (inviteRow: SentInviteRow) => inviteRow.acceptedAt ?? "",
 }
 
-// what the invitee cell and the tooltips call one row's person
-function toInviteeLabel(inviteRow: SentInviteRow): string {
+/**
+ * Returns the name a sent invite's invitee goes by: the email, the username, or "this invitee".
+ */
+export function toInviteeLabel(inviteRow: SentInviteRow): string {
 	return inviteRow.inviteeEmail ?? inviteRow.invitee?.username ?? "this invitee"
 }
+
+/** The headers and the withdraw confirmation that each invitations table words for its own target. */
+export type SentInvitesTableLabels = Pick<
+	React.ComponentProps<typeof SentInvitesTable>,
+	"targetLabel" | "acceptedLabel" | "acceptedNoun" | "confirmTitle" | "confirmLabel" | "confirmBody"
+>
 
 /**
  * The invitations the user sent, a shared table for topics and teams alike: the target user or email, when the invite was sent,
@@ -172,7 +180,7 @@ export function SentInvitesTable({
 					title={confirmTitle}
 					confirmLabel={confirmLabel}
 					cancelLabel="Keep it"
-					onConfirm={() => void handleDeleteInvite()}
+					onConfirm={handleDeleteInvite}
 					onClose={() => setDeleteInvite(null)}
 				>
 					{confirmBody(deleteInvite)}

@@ -5,7 +5,8 @@ import { useRef, useState } from "react"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { Textarea } from "@/components/primitives/textarea"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
-import { FILE_PICKER_ACCEPT } from "@/lib/utils"
+import { STANDALONE_LINK_CLASS } from "@/lib/styleClasses"
+import { cn, FILE_PICKER_ACCEPT } from "@/lib/utils"
 import { ScrollNote } from "./TopicScanRecap"
 
 // one stored attachment, whose context the owner can read and correct
@@ -75,7 +76,7 @@ export function TopicAttachmentEditor({
 			<button
 				type="button"
 				onClick={() => fileInputRef.current?.click()}
-				className="text-link mt-2 flex items-center gap-1.5 text-sm hover:underline"
+				className={cn(STANDALONE_LINK_CLASS, "mt-2 flex items-center gap-1.5 text-sm")}
 			>
 				<Paperclip aria-hidden="true" className="size-3.5" />
 				add an attachment
@@ -164,7 +165,7 @@ function AttachmentLink({ attachment }: { attachment: StoredAttachment }) {
 		return (
 			<AnchorLink
 				href={attachment.sourceUrl}
-				className="group text-link flex min-w-0 flex-1 items-center gap-1 hover:underline"
+				className={cn(STANDALONE_LINK_CLASS, "group flex min-w-0 flex-1 items-center gap-1")}
 			>
 				<span className="min-w-0 truncate">{attachment.sourceUrl}</span>
 				<ExternalLink aria-hidden="true" className="size-3 shrink-0" />
@@ -175,7 +176,7 @@ function AttachmentLink({ attachment }: { attachment: StoredAttachment }) {
 		<AnchorLink
 			href={`/api/attachments/${attachment.id}/download`}
 			download={attachment.filename}
-			className="group text-link flex min-w-0 flex-1 items-center gap-1 hover:underline"
+			className={cn(STANDALONE_LINK_CLASS, "group flex min-w-0 flex-1 items-center gap-1")}
 		>
 			<span className="min-w-0 truncate">{attachment.filename}</span>
 			<Download aria-hidden="true" className="size-3 shrink-0" />
@@ -205,7 +206,12 @@ function AttachmentContext({
 	// a native <details> reveals a long context
 	return (
 		<details className="group">
-			<summary className="text-link flex cursor-pointer list-none items-center gap-1.5 text-xs hover:underline [&::-webkit-details-marker]:hidden">
+			<summary
+				className={cn(
+					STANDALONE_LINK_CLASS,
+					"flex cursor-pointer list-none items-center gap-1.5 text-xs [&::-webkit-details-marker]:hidden",
+				)}
+			>
 				<ChevronRight aria-hidden="true" className="size-3.5 shrink-0 transition-transform group-open:rotate-90" />
 				content
 			</summary>
@@ -227,7 +233,7 @@ function AttachmentContext({
 			<div className="mt-1 flex items-start justify-between gap-2">
 				<p className="text-muted-foreground text-xs italic">
 					{"What Carl read from the file. Every brew reads it. "}
-					<button type="button" onClick={() => setIsEditing(!isEditing)} className="text-link hover:underline">
+					<button type="button" onClick={() => setIsEditing(!isEditing)} className="sentence-link">
 						Edit
 					</button>
 					{" wisely."}
@@ -235,7 +241,7 @@ function AttachmentContext({
 				<button
 					type="button"
 					onClick={() => setIsEditing(!isEditing)}
-					className="text-link shrink-0 text-xs hover:underline"
+					className={cn(STANDALONE_LINK_CLASS, "shrink-0 text-xs")}
 				>
 					{isEditing ? "done" : "edit"}
 				</button>

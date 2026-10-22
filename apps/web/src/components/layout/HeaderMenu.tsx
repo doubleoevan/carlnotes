@@ -1,13 +1,10 @@
 // the header's mobile-only hamburger menu
 
-import { useAllChatMentions } from "@carlnotes/core/stores/chatRoomStore"
-import { useAllNoteBadges } from "@carlnotes/core/stores/noteBadgeStore"
-import { useTopicInviteBadges } from "@carlnotes/core/stores/topicInviteStore"
 import { useLocation } from "@tanstack/react-router"
 import { Columns3Cog, LogIn, Menu, Moon, Sun, UserPlus } from "lucide-react"
 import { useState } from "react"
 import { AnchorLink } from "@/components/common/AnchorLink"
-import { toUpdateLabel, UpdateCountBadge } from "@/components/common/UpdateCountBadge"
+import { MenuTriggerUpdateCountBadge } from "@/components/common/UpdateCountBadge"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/primitives/popover"
 import { signOutAndReload } from "@/components/session/signOut"
 import { type TopicTutorialVideoOpener, TopicTutorialVideoOption } from "@/components/topic/TopicTutorialVideoDialog"
@@ -40,10 +37,6 @@ export function HeaderMenu({
 }) {
 	// the path highlights the open page's option, and sends the login back to where the visitor started
 	const pathname = useLocation({ select: (location) => location.pathname })
-	// the one badge sums every unread chat mention, note change, and topic invitation
-	const chatMentions = useAllChatMentions()
-	const noteBadges = useAllNoteBadges()
-	const topicInviteBadges = useTopicInviteBadges()
 	// controlled so every item click closes the menu, including navigation and sign-out
 	const [isMenuOpen, setIsMenuOpen] = useState(false)
 	const closeMenu = (): void => {
@@ -64,19 +57,14 @@ export function HeaderMenu({
 
 	return (
 		<Popover open={isMenuOpen} onOpenChange={setIsMenuOpen}>
-			<PopoverTrigger
-				className="relative grid size-11 place-items-center rounded-md hover:bg-white/10 sm:hidden"
-				aria-label={["Menu", toUpdateLabel(chatMentions, noteBadges, topicInviteBadges)].filter(Boolean).join(", ")}
-			>
-				<Menu className="size-5" />
-				{/* the one unread count badged on the menu trigger */}
-				<UpdateCountBadge
-					chatMentions={chatMentions}
-					noteBadges={noteBadges}
-					invites={topicInviteBadges}
+			<PopoverTrigger className="relative grid size-11 place-items-center rounded-md hover:bg-white/10 sm:hidden">
+				{/* the trigger's name and the one unread count badged on the menu trigger */}
+				<MenuTriggerUpdateCountBadge
+					name="Menu"
 					className="absolute top-1 right-1"
 					countBadgeClassName={MENU_BADGE_CLASS}
 				/>
+				<Menu className="size-5" />
 			</PopoverTrigger>
 			<PopoverContent align="end" className="w-52" bodyClassName="p-1">
 				<button

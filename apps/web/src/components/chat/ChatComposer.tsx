@@ -6,8 +6,16 @@ import { AnchorLink } from "@/components/common/AnchorLink"
 import { FileDropZone } from "@/components/common/FileDropZone"
 import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from "@/components/primitives/popover"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
-import { COMPOSER_BOX_CLASS, ICON_BUTTON_CLASS, SEND_BUTTON_CLASS } from "@/lib/styleClasses"
-import { CHAT_FILE_PICKER_ACCEPT, isSendKey, isTouchScreen, isWideScreen } from "@/lib/utils"
+import {
+	COMPOSER_BAR_CLASS,
+	COMPOSER_BOX_CLASS,
+	COMPOSER_FRAME_CLASS,
+	ICON_BUTTON_CLASS,
+	SECTION_LABEL_CLASS,
+	SEND_BUTTON_CLASS,
+	STANDALONE_LINK_CLASS,
+} from "@/lib/styleClasses"
+import { CHAT_FILE_PICKER_ACCEPT, cn, isSendKey, isTouchScreen, isWideScreen } from "@/lib/utils"
 import { ChatAttachmentChips } from "./ChatAttachmentChips"
 import { isMicShown, MicButton } from "./MicButton"
 import { RecordingBar } from "./RecordingBar"
@@ -117,7 +125,7 @@ export function ChatComposer({
 	return (
 		<form
 			autoComplete="off"
-			className="shrink-0 border-t px-3 py-2.5"
+			className={COMPOSER_BAR_CLASS}
 			onSubmit={(event) => {
 				event.preventDefault()
 				sendQuestion()
@@ -126,7 +134,7 @@ export function ChatComposer({
 			{/* attachments show as chips in the input, each is removable until the send */}
 			{<ChatAttachmentChips attachments={attachments} onRemove={chat.removeAttachment} />}
 			<FileDropZone
-				className="bg-background rounded-2xl border px-3 py-2"
+				className={COMPOSER_FRAME_CLASS}
 				onDropFiles={(files) => {
 					// a visitor's file drop routes to the signup
 					if (isSignupRequired) {
@@ -272,9 +280,7 @@ function KeptAttachmentsButton({
 					<TooltipContent>Minimize</TooltipContent>
 				</Tooltip>
 				{/* the centered label names the attachments menu */}
-				<div className="text-muted-foreground font-display mb-1 text-center text-xs tracking-wide uppercase">
-					Chat files
-				</div>
+				<div className={cn(SECTION_LABEL_CLASS, "mb-1 text-center")}>Chat files</div>
 				{keptAttachments.map((keptAttachment) => (
 					<div key={keptAttachment.id} className="flex min-w-0 items-center gap-2 rounded-md px-1 py-1">
 						{keptAttachment.kind === "image" ? (
@@ -290,7 +296,7 @@ function KeptAttachmentsButton({
 								<AnchorLink
 									href={`/api/chat-attachments/${keptAttachment.id}/download`}
 									download={keptAttachment.name}
-									className="text-link min-w-0 flex-1 truncate hover:underline"
+									className={cn(STANDALONE_LINK_CLASS, "min-w-0 flex-1 truncate")}
 								>
 									{keptAttachment.name}
 								</AnchorLink>

@@ -1,0 +1,69 @@
+import { Meta } from "@storybook/addon-docs/blocks"
+import { RadiusScale, TokenSwatches } from "./TokenSwatches"
+
+<Meta title="Nightshift/Tokens" />
+
+# Tokens
+
+This page shows every Nightshift color token and radius step, read from the TypeScript source in `packages/nightshift`.
+To change one, edit `colors.ts` or `radius.ts` there, then run `bun run nightshift:write`. The last section lists the
+colors and radii the web app still writes outside the source.
+
+The writer writes `tokens.css` and two Figma variable files, `figma/light.tokens.json` and `figma/dark.tokens.json`,
+from the source. `packages/nightshift/tokens.test.ts` fails if any of the three differs from what the source writes.
+The swatches read the same source, so they show the values the app ships.
+
+## Colors
+
+Each token has a Latte value for light mode and a Dark roast value for dark mode. Each row shows the two side by side,
+each swatch over its mode's page fill, so the translucent `ringLine` shows as the app paints it. `tokens.css` puts the
+light values on `:root` and the dark values under `.dark`, as custom properties named after the token.
+
+The Tailwind theme maps every token but one to a `--color-*` variable. That variable gives the app the token's `bg-*`,
+`text-*`, and `border-*` utilities. Each row names the theme group that maps its token. The shadcn theme group holds
+the semantic names that shadcn/ui components read, such as `background`, `primary`, and `ring`, plus the app's
+`sunken` and `bubble`. The CarlNotes theme extra group holds the hero band, the badge, links, separators, and the
+budget's segments. `ringLine` is the one token the theme does not map.
+
+<TokenSwatches />
+
+## Radius
+
+The scale holds one base radius and each step's offset from it in pixels. `tokens.css` writes the base as `--radius` on
+`:root` and each step as a `--radius-*` offset of it. The `rounded-sm`, `rounded-md`, `rounded-lg`, and `rounded-xl`
+utilities read those steps. The Figma files write each step in pixels.
+
+<RadiusScale />
+
+## Emails
+
+Every email inlines the Latte values from `packages/nightshift/email.ts` as literal colors, because not every email
+client reads CSS custom properties. An email shows in light mode alone. Its text links take the `link` token, which
+reads at 4.5:1 or more on every email fill. A Finding's host link takes the muted text color. The button in the
+account and invitation emails takes the `heroAccent` fill with `primaryForeground` text.
+
+## Colors and radii outside the source
+
+The web app still writes these values itself, so a change to the source does not reach them:
+
+- The hero colors `#3b2a1d` and `#0f0c09` in `apps/web/src/hooks/useTheme.ts`, for the theme-color meta tag, and the
+  dark one in `apps/web/public/site.webmanifest`. `useTheme.test.ts` fails if they differ from the `hero` token.
+- The emoji picker's red, green, and blue triplets in `apps/web/src/globals.css`, hand-written copies of the light and
+  dark `popover`, `popoverForeground`, and `primary` values.
+- Black at an opacity in the dialog, chat panel, avatar, and YouTube player overlays, the `shadow-lift` utility, and the
+  chat panel's shadow and light-mode ring.
+- Black at an opacity in Tailwind's own shadows: `shadow-xs` on the input, textarea, select trigger, switch, and topic
+  prompt composer, and `drop-shadow-lg` on the YouTube play icon.
+- White at an opacity in the header's hover and current-page tints, the header's avatar border, and the chat panel's
+  dark-mode ring.
+- White mixed into the `hero` fill for the hover of the OAuth buttons on the sign-in and sign-up pages.
+- Plain white in the destructive button's text, the avatar overlays' text, the coffee cup icon, the YouTube play
+  triangle, and the shimmer animation's glint.
+- The favicon chip in dark mode: a white fill and border, and Tailwind's `neutral-600` on its globe.
+- Brand colors: the Google logo in `OAuthProviderIcons.tsx`, the YouTube logo in `BrandIcon.tsx`, and the CarlNotes
+  icon art in `public/favicon.svg` and `public/carl-bimi.svg`.
+- Toast colors, which the Sonner toast library sets from its own light and dark themes and its `richColors` option,
+  except the light success, info, warning, and error text, which `primitives/sonner.tsx` darkens to 4.5:1 on their
+  fills.
+- The `rounded`, `rounded-2xl`, and `rounded-full` utilities and `border-radius: 9999px` in the CSS, which keep
+  Tailwind's own values or draw a full circle. The tooltip's arrow writes its own `rounded-[2px]`.

@@ -1,11 +1,13 @@
 // the server-rendered blog pages: Markdown under content/blog/, rendered to HTML in Hono
 import { readdir } from "node:fs/promises"
 import { toPageTitle } from "@carlnotes/contracts/seo"
+import { emailColors } from "@carlnotes/nightshift/email"
 import { appUrl } from "@carlnotes/server/appUrl"
 import { Hono } from "hono"
 import Markdown from "markdown-to-jsx"
 import { createElement } from "react"
 import { renderToStaticMarkup } from "react-dom/server"
+import { API_PAGE_BASE_STYLE } from "./apiPageStyle"
 import { toJsonLdTag } from "./jsonLd"
 import { cacheForTtl } from "./ttlCache"
 
@@ -82,17 +84,16 @@ function toPage(filename: string, markdown: string): ContentPage | null {
 	return { slug: filename.replace(/\.md$/, ""), title, description, date, body: match[2] }
 }
 
-// the coffee-toned page colors the emails already use, so the blog reads as the same sender
-const PAGE_STYLE = `
-	body { margin: 0; background: #f4f1ea; color: #2b2b2b; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; line-height: 1.6; }
+// the base style, then the blog's own line height, column, and type
+const PAGE_STYLE = `${API_PAGE_BASE_STYLE}
+	body { line-height: 1.6; }
 	main { max-width: 42rem; margin: 0 auto; padding: 2rem 1.25rem 4rem; }
-	a { color: #7c4a1e; }
 	/* an image wider than the column shrinks to the column's width */
 	img { max-width: 100%; height: auto; }
 	/* the logo in the header, then the type a page and an index card set */
 	header a { text-decoration: none; font-weight: 700; font-size: 18px; }
 	h1 { font-size: 28px; line-height: 1.25; }
-	.post-date { color: #6b5b4a; font-size: 14px; }
+	.post-date { color: ${emailColors.mutedForeground}; font-size: 14px; }
 	.post-card { margin-top: 1.5rem; }
 `
 

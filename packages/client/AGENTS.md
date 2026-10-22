@@ -10,8 +10,7 @@
   from a failed response, and `ApiResponse` is the `ok`, `status`, `json`, and `text` of a response, the part the
   helpers read.
 - `authClient.ts` — the Better Auth client, typed by the api's `auth` through `inferAdditionalFields`, which sends its
-  `/api/auth` requests to the page's own origin, with the signed-in user's identity from the session and the
-  signup-gate call for a password signup.
+  `/api/auth` requests to the page's own origin, with the signup-gate call for a password signup.
 - Most clients build on `apiClient()`. Some calls, and all of `chatClient.ts`, `flagContentClient.ts`, and
   `voiceClient.ts`, use `fetch` at `toApiUrl` instead. `pageHeadClient.ts` reads a page's head data.
   `voiceClientTestFixtures.ts` holds the voice tests' topic voice chat page and spoken question timings.

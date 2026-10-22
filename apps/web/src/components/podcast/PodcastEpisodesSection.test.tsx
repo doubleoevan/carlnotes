@@ -5,6 +5,7 @@ import { expect, test } from "bun:test"
 import type { PodcastEpisodeSummary } from "@carlnotes/contracts/podcast"
 import { NO_SCRIPT_ROW_LIMIT } from "@carlnotes/contracts/seo"
 import { renderWithRouter } from "@/components/chat/renderWithRouter"
+import { toElementClassNames } from "@/components/markupTestFixtures"
 import { SCRIPTED_HIDDEN_CLASS } from "@/lib/styleClasses"
 import { PodcastEpisodesSection } from "./PodcastEpisodesSection"
 import { toPodcastEpisodeSummaryFixture } from "./podcastEpisodeTestFixtures"
@@ -25,11 +26,6 @@ function toPodcastEpisodeSummary(episodeNumber: number): PodcastEpisodeSummary {
 const ONE_PAGE_CARD_MARKER = "overflow-hidden pb-0"
 const SCRIPTED_PAGINATION_CARD_MARKER = "scripted:pb-4"
 
-// the table rows in the markup, each with its class list
-function toRowClassNames(html: string): string[] {
-	return [...html.matchAll(/<tr class="([^"]*)"><td/g)].map((rowMatch) => rowMatch[1] ?? "")
-}
-
 test("sixty episodes render the first fifty rows, five visible with JavaScript", async () => {
 	const podcastEpisodes = Array.from({ length: 60 }, (_, i) => toPodcastEpisodeSummary(i + 1))
 	const html = await renderWithRouter(
@@ -41,8 +37,11 @@ test("sixty episodes render the first fifty rows, five visible with JavaScript",
 		/>,
 	)
 
+	// the table body only, so the header row is not counted
+	const tableBodyHtml = html.slice(html.indexOf("<tbody"), html.indexOf("</tbody>"))
+
 	// fifty rows, the first five shown and the rest hidden once JavaScript runs
-	const rowClassNames = toRowClassNames(html)
+	const rowClassNames = toElementClassNames(tableBodyHtml, "tr")
 	expect(rowClassNames).toHaveLength(NO_SCRIPT_ROW_LIMIT)
 	expect(rowClassNames.slice(0, 5).some((rowClassName) => rowClassName.includes(SCRIPTED_HIDDEN_CLASS))).toBe(false)
 	expect(rowClassNames.slice(5).every((rowClassName) => rowClassName.includes(SCRIPTED_HIDDEN_CLASS))).toBe(true)

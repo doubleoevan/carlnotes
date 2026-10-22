@@ -5,7 +5,8 @@ import { Globe, Lock, Users } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/primitives/select"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 
-type NoteVisibility = (typeof noteVisibilities)[number]
+// one of the visibilities a note can take
+export type NoteVisibility = (typeof noteVisibilities)[number]
 
 // the visibilities mapped to their labels, tooltips, and icons
 const VISIBILITY_LABELS: Record<NoteVisibility, string> = {

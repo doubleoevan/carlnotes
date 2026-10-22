@@ -3,7 +3,7 @@ import { CHAT_NAME } from "@carlnotes/contracts/chat"
 import type { TeamIdentity } from "@carlnotes/contracts/teams"
 import { useNavigate } from "@tanstack/react-router"
 import { Users } from "lucide-react"
-import { useRef, useState } from "react"
+import { useId, useRef, useState } from "react"
 import { toast } from "sonner"
 import { TeamAvatarPicker } from "@/components/avatar/TeamAvatarPicker"
 import { FieldLabel } from "@/components/common/FieldLabel"
@@ -119,6 +119,10 @@ export function EditTeamModal({
 
 	// the name is what someone opens this to change, so it takes the focus the dialog hands out
 	const nameRef = useRef<HTMLInputElement>(null)
+	// the ids that tie each field label to its field
+	const nameInputId = useId()
+	const descriptionInputId = useId()
+	const topicsComboboxId = useId()
 
 	// set by a save click that found the name empty
 	const [wasNameMissed, setWasNameMissed] = useState(false)
@@ -238,9 +242,13 @@ export function EditTeamModal({
 					className="size-14"
 				/>
 				<div>
-					<FieldLabel isRequired>Name</FieldLabel>
+					<FieldLabel htmlFor={nameInputId} isRequired>
+						Name
+					</FieldLabel>
 					<Input
+						id={nameInputId}
 						ref={nameRef}
+						aria-required
 						value={name}
 						placeholder="what to call it…"
 						onChange={(event) => setName(event.target.value)}
@@ -249,22 +257,23 @@ export function EditTeamModal({
 					/>
 				</div>
 				<div>
-					<FieldLabel>Description</FieldLabel>
+					<FieldLabel htmlFor={descriptionInputId}>Description</FieldLabel>
 					<Textarea
+						id={descriptionInputId}
 						value={description}
-						rows={2}
 						placeholder="what the team reads about…"
 						onChange={(event) => setDescription(event.target.value)}
 					/>
 				</div>
 				{/* the team's topics, selected from a combobox */}
 				<div>
-					<FieldLabel>Topics</FieldLabel>
+					<FieldLabel htmlFor={topicsComboboxId}>Topics</FieldLabel>
 					<MultiCombobox
+						id={topicsComboboxId}
 						options={topicOptions.map((topicOption) => ({ value: topicOption.id, label: topicOption.name }))}
 						values={selectedTopicIds}
 						onUpdateValues={setSelectedTopicIds}
-						placeholder="pick topics..."
+						placeholder="pick topics…"
 						emptyLabel="No topics to add yet."
 						newOptionLabel="New topic"
 						onNewOption={() => setIsNewTopicOpen(true)}

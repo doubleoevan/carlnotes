@@ -11,7 +11,7 @@ import { Input } from "@/components/primitives/input"
 import { Label } from "@/components/primitives/label"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import { PasswordInput } from "@/components/session/PasswordInput"
-import { CARD_CLASS } from "@/lib/styleClasses"
+import { CARD_CLASS, STANDALONE_LINK_CLASS } from "@/lib/styleClasses"
 import { cn } from "@/lib/utils"
 
 /**
@@ -97,7 +97,7 @@ export function ProfileFields({
 							type="button"
 							onClick={handleProviderPhotoToggle}
 							aria-pressed={avatarSource === "oauth"}
-							className="text-link text-xs hover:underline"
+							className={cn(STANDALONE_LINK_CLASS, "text-xs")}
 						>
 							Use the photo from my sign-in provider
 							{avatarSource === "oauth" && <Check className="ml-1 inline size-3.5" />}

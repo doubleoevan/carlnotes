@@ -5,15 +5,14 @@ import { BrandIcon } from "@/components/common/BrandIcon"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import { cn } from "@/lib/utils"
 
-// how long the copied confirmation stays up
-export const COPIED_FEEDBACK_MS = 1500
-
 // one size for every icon in the share menu, so the labels line up
 export const SHARE_OPTION_ICON_CLASS = "size-4 shrink-0"
 
+// the row shape every share menu option keeps, live or disabled, so the labels line up
+const SHARE_OPTION_LAYOUT_CLASS = "flex min-h-10 w-full items-center gap-2 rounded-md px-2 text-sm"
+
 // every option in the share menu, whichever kind it is
-export const SHARE_OPTION_CLASS =
-	"hover:bg-accent focus-visible:bg-accent flex min-h-10 w-full items-center gap-2 rounded-md px-2 text-sm focus-visible:outline-none"
+export const SHARE_OPTION_CLASS = `hover:bg-accent focus-visible:bg-accent ${SHARE_OPTION_LAYOUT_CLASS} focus-visible:outline-none`
 
 // the invite option's label, which doubles as the key its copied confirmation is held under
 export const INVITE_LABEL = "Copy invite link"
@@ -132,8 +131,11 @@ export function DisabledShareOption({
 					aria-disabled={onClick ? undefined : "true"}
 					onClick={onClick}
 					className={cn(
-						"text-muted-foreground/60 flex min-h-10 w-full items-center gap-2 rounded-md px-2 text-sm",
-						onClick ? "hover:bg-accent cursor-pointer" : "cursor-not-allowed",
+						SHARE_OPTION_LAYOUT_CLASS,
+						// the owner's live option reads at full muted strength, and only a disabled one dims
+						onClick
+							? "text-muted-foreground hover:bg-accent cursor-pointer"
+							: "text-muted-foreground/60 cursor-not-allowed",
 					)}
 				>
 					{icon}
@@ -160,7 +162,7 @@ export function CopyLinkOption({
 	onCopy: () => void
 }) {
 	return (
-		<button type="button" onClick={onCopy} className={cn(className, isCopied && "text-primary")}>
+		<button type="button" onClick={onCopy} className={cn(className, isCopied && "text-link")}>
 			{icon}
 			{isCopied ? "Copied" : label}
 			{isCopied && <Check className="ml-auto size-4" />}

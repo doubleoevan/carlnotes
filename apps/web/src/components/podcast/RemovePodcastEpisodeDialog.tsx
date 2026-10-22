@@ -35,7 +35,7 @@ export function RemovePodcastEpisodeDialog({
 			title="Remove this episode?"
 			confirmLabel="Remove episode"
 			cancelLabel="Keep it"
-			onConfirm={() => void handleRemovePodcastEpisode()}
+			onConfirm={handleRemovePodcastEpisode}
 			onClose={onClose}
 		>
 			{`${toPodcastEpisodeName(podcastEpisode)} leaves the topic page, every podcast feed, and its own page for good. Its number is not used again.`}

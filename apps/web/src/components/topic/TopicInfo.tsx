@@ -10,7 +10,7 @@ import { UserProfileLink } from "@/components/common/UserProfileLink"
 import { PodcastEpisodeRow } from "@/components/podcast/PodcastEpisodeRow"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import { ShareTopicButton } from "@/components/share/ShareTopic"
-import { MENU_BUTTON_CLASS, POPOVER_HEADING_CLASS } from "@/lib/styleClasses"
+import { MENU_BUTTON_CLASS, POPOVER_HEADING_CLASS, SECTION_LABEL_CLASS } from "@/lib/styleClasses"
 import { cn } from "@/lib/utils"
 import { TopicScanFailure } from "./TopicScanFailure"
 import {
@@ -310,7 +310,7 @@ export function InfoSection({
 }) {
 	return (
 		<div className={cn("py-3 first:pt-0 last:pb-0", className)}>
-			<div className="text-muted-foreground font-display text-xs tracking-wide uppercase">{label}</div>
+			<div className={SECTION_LABEL_CLASS}>{label}</div>
 			{/* a long unbroken token like a url wraps here instead of pushing the card wider than the page */}
 			<div className="text-foreground mt-1 break-words">{children}</div>
 		</div>

@@ -8,7 +8,7 @@ import { PODCAST_EPISODE_SPEAKER_NAMES } from "@carlnotes/contracts/podcastEpiso
 import { RotateCcw } from "lucide-react"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { hasPreviewableLink, LinkPreviewCard, LinkPreviewLoading } from "@/components/common/LinkPreviewCard"
-import { ANSWER_BUBBLE_CLASS, QUESTION_BUBBLE_WIDTH_CLASS } from "@/lib/styleClasses"
+import { ANSWER_BUBBLE_CLASS, QUESTION_BUBBLE_CLASS } from "@/lib/styleClasses"
 import { cn } from "@/lib/utils"
 import { ChatAuthor } from "./ChatAuthor"
 import { ChatBudgetNotice } from "./ChatBudgetNotice"
@@ -89,14 +89,7 @@ function QuestionBubble({ chatTurn, now, author }: { chatTurn: ChatTurn; now: nu
 			isOwnChatMessage
 		>
 			<div className="group flex w-full flex-col items-end">
-				<p
-					className={cn(
-						"bg-primary text-primary-foreground rounded-2xl rounded-br-sm px-3.5 py-2 text-sm whitespace-pre-wrap",
-						QUESTION_BUBBLE_WIDTH_CLASS,
-					)}
-				>
-					{question}
-				</p>
+				<p className={QUESTION_BUBBLE_CLASS}>{question}</p>
 				{chatTurn.podcastEpisodeChapter && podcastEpisodeNote && (
 					<PodcastEpisodeChapterTag
 						podcastEpisodeChapter={chatTurn.podcastEpisodeChapter}
@@ -143,7 +136,7 @@ function ChatImage({ attachment }: { attachment: ChatMessageAttachment & { dataU
 	// the image opens full size in a new tab, from its data url until the upload has an id
 	const imageUrl = attachment.dataUrl ?? toChatAttachmentUrl(attachment.id)
 	return (
-		<AnchorLink href={imageUrl} target="_blank" rel="noopener noreferrer" className="mt-1 block w-fit">
+		<AnchorLink href={imageUrl} isNewTab className="mt-1 block w-fit">
 			<img
 				src={imageUrl}
 				alt={attachment.name}
@@ -253,7 +246,7 @@ function ChatRejectionNotice({ rejection, onRetry }: { rejection: ChatRejection;
 			<p className="text-muted-foreground text-sm">
 				{`${CHAT_REJECTION_COPY.failed} `}
 				{onRetry ? (
-					<button type="button" onClick={onRetry} className="text-link hover:underline">
+					<button type="button" onClick={onRetry} className="sentence-link">
 						Try again?
 						<RotateCcw className="ml-1.5 inline size-3.5 align-middle" aria-hidden="true" />
 					</button>

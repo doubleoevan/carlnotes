@@ -17,6 +17,7 @@ import {
 } from "@/components/topic/TopicTutorialVideoDialog"
 import { useIsSignedInBeforeSession } from "@/hooks/useIsSignedInBeforeSession"
 import { useTheme } from "@/hooks/useTheme"
+import { HERO_BUTTON_HOVER_CLASS, SECTION_LABEL_CLASS } from "@/lib/styleClasses"
 import { cn, toLinkClickHandler, toSafeRedirectPath } from "@/lib/utils"
 import { useTopicFeed } from "@/providers/TopicFeedProvider"
 import { Attribution } from "./Attribution"
@@ -25,8 +26,15 @@ import { HeaderMenu } from "./HeaderMenu"
 import { ThemeToggle } from "./ThemeToggle"
 import { UserMenu } from "./UserMenu"
 
-// the hover style shared by the header's menu buttons
-const HERO_BUTTON_HOVER = "hover:bg-white/10 hover:text-hero-foreground dark:hover:bg-white/10"
+// the hero headline's type, which the base heading and its two overlay copies share so their letters line up
+const HERO_HEADLINE_CLASS = "font-display text-2xl leading-tight sm:text-4xl"
+
+// the hero headline's last sentence in the accent color. the glint copy keeps only its nowrap
+const HERO_HEADLINE_ACCENT_CLASS = "text-hero-accent faint-underline whitespace-nowrap"
+
+// the hero headline's two sentences, which every copy of the headline writes
+const HERO_HEADLINE_FIRST_SENTENCE = "He already read it."
+const HERO_HEADLINE_LAST_SENTENCE = "All of it."
 
 // Carl's pitch, shown inline on wide screens and inside the phone's note popover
 const CARL_PITCH =
@@ -34,7 +42,12 @@ const CARL_PITCH =
 
 // the desktop nav link's classes on the dark hero band. the current page is marked with a white wash at twice the hover fill
 function menuLinkClassName(pathname: string, href: string): string {
-	return cn(buttonVariants({ variant: "ghost" }), "min-h-9", HERO_BUTTON_HOVER, pathname === href && "bg-white/20")
+	return cn(
+		buttonVariants({ variant: "ghost" }),
+		"min-h-9",
+		HERO_BUTTON_HOVER_CLASS,
+		pathname === href && "bg-white/20",
+	)
 }
 
 /**
@@ -92,7 +105,7 @@ export function Header() {
 						{!session && (
 							<>
 								{/* the docs open in their own tab */}
-								<DocsLink className={cn(buttonVariants({ variant: "ghost" }), "min-h-9", HERO_BUTTON_HOVER)} />
+								<DocsLink className={cn(buttonVariants({ variant: "ghost" }), "min-h-9", HERO_BUTTON_HOVER_CLASS)} />
 								<AnchorLink
 									href="/plans"
 									aria-current={pathname === "/plans" ? "page" : undefined}
@@ -117,7 +130,7 @@ export function Header() {
 								<AnchorLink
 									href={`/login?next=${encodeURIComponent(toSafeRedirectPath(pathname))}`}
 									rel="nofollow"
-									className={cn(buttonVariants({ variant: "ghost" }), "min-h-9", HERO_BUTTON_HOVER)}
+									className={cn(buttonVariants({ variant: "ghost" }), "min-h-9", HERO_BUTTON_HOVER_CLASS)}
 								>
 									Log in
 								</AnchorLink>
@@ -154,22 +167,21 @@ export function Header() {
 							<div key={pathname} className="shimmer-reveal min-w-0 text-center sm:text-left">
 								{/* the dimmed heading that the light reveals. the page's real h1. only this copy is a link.
 							        the overlay copies are pointer-transparent */}
-								<h1 className="shimmer-reveal-base font-display text-2xl leading-tight sm:text-4xl">
-									{`He already read it. `}
-									<AnchorLink href="/" onClick={handleHomeClick} className="text-hero-accent whitespace-nowrap">
-										All of it.
+								<h1 className={cn("shimmer-reveal-base", HERO_HEADLINE_CLASS)}>
+									{`${HERO_HEADLINE_FIRST_SENTENCE} `}
+									<AnchorLink href="/" onClick={handleHomeClick} className={HERO_HEADLINE_ACCENT_CLASS}>
+										{HERO_HEADLINE_LAST_SENTENCE}
 									</AnchorLink>
 								</h1>
 								{/* the full-color copy the light wipes in from the left */}
-								<div aria-hidden="true" className="shimmer-reveal-top font-display text-2xl leading-tight sm:text-4xl">
-									He already read it. <span className="text-hero-accent whitespace-nowrap">All of it.</span>
+								<div aria-hidden="true" className={cn("shimmer-reveal-top", HERO_HEADLINE_CLASS)}>
+									{`${HERO_HEADLINE_FIRST_SENTENCE} `}
+									<span className={HERO_HEADLINE_ACCENT_CLASS}>{HERO_HEADLINE_LAST_SENTENCE}</span>
 								</div>
 								{/* a white highlight on the reveal edge */}
-								<div
-									aria-hidden="true"
-									className="shimmer-reveal-glint font-display text-2xl leading-tight sm:text-4xl"
-								>
-									He already read it. <span className="whitespace-nowrap">All of it.</span>
+								<div aria-hidden="true" className={cn("shimmer-reveal-glint", HERO_HEADLINE_CLASS)}>
+									{`${HERO_HEADLINE_FIRST_SENTENCE} `}
+									<span className="whitespace-nowrap">{HERO_HEADLINE_LAST_SENTENCE}</span>
 								</div>
 							</div>
 							<TopicTutorialVideoButton
@@ -242,9 +254,7 @@ function PitchButton() {
 			<PopoverContent align="end" className="w-72 text-sm font-normal">
 				<PopoverCloseButton />
 				{/* the title label. the first line clears the close button */}
-				<div className="text-muted-foreground font-display mb-2 text-center text-xs tracking-wide uppercase">
-					Meet Carl
-				</div>
+				<div className={cn(SECTION_LABEL_CLASS, "mb-2 text-center")}>Meet Carl</div>
 				<p>{CARL_PITCH}</p>
 			</PopoverContent>
 		</Popover>
@@ -270,9 +280,7 @@ function AttributionButton() {
 			<PopoverContent align="start" className="w-80 text-sm">
 				<PopoverCloseButton />
 				{/* the persona credit's label. the first line clears the close button */}
-				<div className="text-muted-foreground font-display mb-1 text-center text-xs tracking-wide uppercase">
-					The Real Carl
-				</div>
+				<div className={cn(SECTION_LABEL_CLASS, "mb-1 text-center")}>The Real Carl</div>
 				<Attribution />
 			</PopoverContent>
 		</Popover>

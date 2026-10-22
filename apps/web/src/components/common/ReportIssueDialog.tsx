@@ -48,8 +48,9 @@ export function ReportIssueDialog({
 					value={reason}
 					onChange={(event) => setReason(event.target.value)}
 					maxLength={FLAG_REASON_MAX_CHARS}
-					rows={4}
 					aria-label="Why you are reporting this"
+					// four lines tall before it grows with the reason. the field sizes to its content, which ignores rows
+					className="min-h-24"
 				/>
 				<DialogFooter>
 					<Button variant="ghost" onClick={onClose}>

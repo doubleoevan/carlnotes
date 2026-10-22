@@ -1,5 +1,6 @@
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { usePageTitle } from "@/hooks/usePageTitle"
+import { STANDALONE_LINK_CLASS } from "@/lib/styleClasses"
 
 /**
  * The catch-all for a url no route matches, which a typo'd or stale link lands on, instead of a broken site.
@@ -15,7 +16,7 @@ export function NotFoundPage() {
 			</p>
 			{/* a link back to the home page */}
 			<p className="mt-6 text-sm">
-				<AnchorLink href="/" className="text-link hover:underline">
+				<AnchorLink href="/" className={STANDALONE_LINK_CLASS}>
 					Back to your topics
 				</AnchorLink>
 			</p>

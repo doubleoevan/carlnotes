@@ -1,11 +1,12 @@
 // tests for the document routes, the seo files they serve, and a topic's description
 import { expect, test } from "bun:test"
+import { hasSubstringsInOrder } from "@carlnotes/contracts/textOrderTestFixtures"
 import { DAY_MS } from "@carlnotes/contracts/time"
 import type { PublicTopic } from "@carlnotes/contracts/topics"
 import { restoreConnectionPool, stubConnectionPool } from "@carlnotes/db/connectionPoolStub"
 import { saveEnvSettings } from "@carlnotes/server/savedEnvSettings"
 import { documentsRoute } from "./documents"
-import { loadDocsPages, toLlmsFullTxt, toLlmsTxt, toSecurityTxt, toTopicDescription } from "./seo"
+import { loadDocsPages, toLlmsFullTxt, toLlmsTxt, toSecurityTxt, toSitemapXml, toTopicDescription } from "./seo"
 
 // a public topic as loadPublicTopics returns it
 const PUBLIC_TOPIC = {
@@ -57,12 +58,14 @@ test("llms.txt follows the convention", async () => {
 	expect(llmsTxt).toContain("(https://carlnotes.com/topics/topic-public/coffee-gear-reviews)")
 
 	// the sections appear in reading order
-	const sectionOffsets = ["## About", "## Docs", "## Blog", "## Topics"].map((section) => llmsTxt.indexOf(section))
-	expect(sectionOffsets.every((offset, index) => offset > (sectionOffsets[index - 1] ?? -1))).toBe(true)
+	expect(hasSubstringsInOrder(llmsTxt, ["## About", "## Docs", "## Blog", "## Topics"])).toBe(true)
 
 	// the docs links come from the real docs tree. the entry page leads, with starlight's trailing slash
 	expect(llmsTxt).toContain("(https://carlnotes.com/docs/)")
 	expect(llmsTxt.indexOf("/docs/)")).toBeLessThan(llmsTxt.indexOf("/docs/quickstart/"))
+
+	// llms.txt leaves out the component browser
+	expect(llmsTxt).not.toContain("/nightshift")
 })
 
 // the long form includes the docs and blog text whole, and no topic content
@@ -77,6 +80,21 @@ test("llms-full.txt includes page bodies and no topics", async () => {
 	expect(llmsFullTxt).toContain("# What is CarlNotes")
 	expect(llmsFullTxt).toContain("Carl reads.")
 	expect(llmsFullTxt).not.toMatch(/carlnotes\.com\/topics\//)
+	expect(llmsFullTxt).not.toContain("/nightshift")
+})
+
+// the sitemap lists the static routes and never the component browser
+test("the sitemap leaves the component browser out", async () => {
+	// no database rows, so the sitemap holds its fixed pages alone
+	stubConnectionPool()
+	try {
+		// a static route is listed, and the component browser is not
+		const sitemapXml = await toSitemapXml("https://carlnotes.com")
+		expect(sitemapXml).toContain("<loc>https://carlnotes.com/plans</loc>")
+		expect(sitemapXml).not.toContain("/nightshift")
+	} finally {
+		restoreConnectionPool()
+	}
 })
 
 // the docs loader parses the folded frontmatter every docs page uses

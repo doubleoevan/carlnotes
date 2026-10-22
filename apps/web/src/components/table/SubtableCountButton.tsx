@@ -1,8 +1,10 @@
 import { ChevronDown } from "lucide-react"
+import { STANDALONE_LINK_CLASS } from "@/lib/styleClasses"
 import { cn } from "@/lib/utils"
 
 /**
  * The count that opens a subtable under its row: the number with a chevron that rotates while open and isn't shown at zero.
+ * The accessible name ends with the count, so it includes the number that the button shows.
  */
 export function SubtableCountButton({
 	count,
@@ -21,8 +23,11 @@ export function SubtableCountButton({
 			onClick={onClick}
 			disabled={count === 0}
 			aria-expanded={isOpen}
-			aria-label={ariaLabel}
-			className="text-link flex items-center gap-0.5 hover:underline disabled:cursor-default disabled:no-underline disabled:opacity-50"
+			aria-label={`${ariaLabel}, ${count}`}
+			className={cn(
+				STANDALONE_LINK_CLASS,
+				"flex items-center gap-0.5 disabled:cursor-default disabled:no-underline disabled:opacity-50",
+			)}
 		>
 			{count}
 			{/* the chevron points down when the subtable is closed and rotates up when it opens */}

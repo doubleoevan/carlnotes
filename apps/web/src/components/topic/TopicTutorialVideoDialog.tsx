@@ -72,7 +72,7 @@ export function TopicTutorialVideoDialog({
 		<Dialog open onOpenChange={onClose}>
 			<DialogContent aria-describedby={undefined} className="sm:max-w-3xl">
 				{/* the video's title with its coffee cup, which a screen reader skips as decoration */}
-				<DialogTitle className="pr-8">
+				<DialogTitle>
 					{TOPIC_TUTORIAL_VIDEO.name} <span aria-hidden="true">☕</span>
 				</DialogTitle>
 				{/* the thumbnail with YouTube's play button over it, which plays the video in place */}

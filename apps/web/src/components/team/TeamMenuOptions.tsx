@@ -1,5 +1,5 @@
 // the options that the team menus share. a team, a team with an action, and New team
-import type { TeamSummary } from "@carlnotes/contracts/teams"
+import type { TeamIdentity } from "@carlnotes/contracts/teams"
 import { Plus } from "lucide-react"
 import { TeamAvatar } from "@/components/branding/TeamAvatar"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
@@ -9,13 +9,7 @@ import { cn } from "@/lib/utils"
 /**
  * One team option in a team menu, with the team's avatar and name.
  */
-export function TeamOption({
-	team,
-	onSelect,
-}: {
-	team: { teamId: string; name: string; avatarVersion: string | null }
-	onSelect: () => void
-}) {
+export function TeamOption({ team, onSelect }: { team: TeamIdentity; onSelect: () => void }) {
 	return (
 		<button type="button" onClick={onSelect} className={MENU_OPTION_CLASS}>
 			<TeamAvatar team={team} className="size-5" />
@@ -33,7 +27,7 @@ export function TeamActionOption({
 	Icon,
 	onSelect,
 }: {
-	team: TeamSummary
+	team: TeamIdentity
 	// what the option does, read in its tooltip and its accessible name
 	actionLabel: string
 	Icon: typeof Plus
@@ -42,12 +36,9 @@ export function TeamActionOption({
 	return (
 		<Tooltip>
 			<TooltipTrigger asChild>
-				<button
-					type="button"
-					onClick={onSelect}
-					aria-label={`${actionLabel} ${team.name}`}
-					className={MENU_OPTION_CLASS}
-				>
+				<button type="button" onClick={onSelect} className={MENU_OPTION_CLASS}>
+					{/* a screen reader reads the action before the team's name */}
+					<span className="sr-only">{`${actionLabel} `}</span>
 					<TeamAvatar team={team} className="size-5" />
 					<span className="min-w-0 flex-1 truncate">{team.name}</span>
 					<Icon className="text-muted-foreground size-4 shrink-0" />

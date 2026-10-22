@@ -26,12 +26,19 @@ export function UserProfileLink({
 	// opens the profile in a new tab, for a link inside a table the user is still working in
 	isNewTab?: boolean
 } & React.ComponentProps<"a">) {
+	// a display name shows alone, and a screen reader reads the username after it
+	const linkText = (
+		<span className="text-link">
+			{displayName ?? user.username}
+			{displayName && displayName !== user.username && <span className="sr-only">{` (@${user.username})`}</span>}
+		</span>
+	)
+
 	// the rest props flow to the anchor, so a tooltip trigger can wrap this link asChild
 	return (
 		<AnchorLink
 			href={`/profiles/${user.userId}`}
-			aria-label={displayName && displayName !== user.username ? `${displayName} (@${user.username})` : undefined}
-			{...(isNewTab ? { target: "_blank", rel: "noreferrer" } : {})}
+			isNewTab={isNewTab}
 			{...props}
 			className={cn("inline-flex items-center gap-2 hover:underline", className)}
 		>
@@ -43,10 +50,10 @@ export function UserProfileLink({
 			/>
 			{label ? (
 				<span className="text-muted-foreground">
-					{label} <span className="text-link">{displayName ?? user.username}</span>
+					{label} {linkText}
 				</span>
 			) : (
-				<span className="text-link">{displayName ?? user.username}</span>
+				linkText
 			)}
 		</AnchorLink>
 	)

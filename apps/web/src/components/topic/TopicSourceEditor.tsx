@@ -1,3 +1,4 @@
+// the topic sources editor: its default and custom source lists, the add-source picker, and the suggest sources request
 import { fetchSourceSuggestions } from "@carlnotes/client/topicClient"
 import {
 	CUSTOM_SOURCE_OPTIONS,
@@ -8,18 +9,18 @@ import {
 } from "@carlnotes/contracts/sources"
 import type { SuggestSourcesPayload } from "@carlnotes/contracts/topicPayloads"
 import { MAX_TOPIC_SOURCES, type TopicResponse } from "@carlnotes/contracts/topics"
-import { Lightbulb, X } from "lucide-react"
+import { X } from "lucide-react"
 import type * as React from "react"
 import { useState } from "react"
 import { toast } from "sonner"
-import { randomThinkingLine } from "@/components/chat/thinkingLines"
-import { Badge } from "@/components/primitives/badge"
+import { ThinkingLine } from "@/components/common/ThinkingLine"
 import { Button } from "@/components/primitives/button"
 import { Input } from "@/components/primitives/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/primitives/select"
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import { cn } from "@/lib/utils"
+import { AddSourceLink, RecommendButton } from "./AddSourceButtons"
 import { toScreeningMessage } from "./TopicInfo"
+import { TopicDefaultSource, TopicSource } from "./TopicSource"
 import type { TopicFields } from "./useTopicFields"
 
 // a source staged by the picker or by a suggestion: the custom source option it came from, and its typed value
@@ -27,9 +28,6 @@ export type AddedSource = { optionKey: string; value: string; name?: string }
 
 // how many sources one suggestion request asks for at most
 const MAX_SUGGESTIONS = 3
-
-// what the add-source buttons show once the topic has reached its source limit
-export const FULL_SOURCES_NOTE = `Carl reads ${MAX_TOPIC_SOURCES} sources per topic. Drop one to add another.`
 
 // a staged row reads as its resolved name, then as its config summary, then as what was typed
 function toStagedSummary(added: AddedSource): string {
@@ -220,7 +218,7 @@ export function TopicSourceEditor({ fields }: TopicSourceEditorProps) {
 				<div className="mt-2 flex items-center justify-between gap-4">
 					<AddSourceLink isFull={isFull} onClick={() => setIsAdding(true)} />
 					{isSuggestingSources ? (
-						<ThinkingLine />
+						<ThinkingLine className="text-sm" />
 					) : (
 						<RecommendButton
 							isFull={isFull}
@@ -264,134 +262,7 @@ function toExcludedStagedSource(added: AddedSource): SuggestSourcesPayload["excl
 	return option ? [{ sourceOption: option.key, value: added.value }] : []
 }
 
-// the link that opens the add-source picker
-function AddSourceLink({ isFull, onClick }: { isFull: boolean; onClick: () => void }) {
-	const link = (
-		<button
-			type="button"
-			onClick={onClick}
-			disabled={isFull}
-			className="text-link text-sm hover:underline disabled:cursor-default disabled:opacity-50 disabled:hover:no-underline"
-		>
-			+ add a source
-		</button>
-	)
-	if (!isFull) {
-		return link
-	}
-	return (
-		<Tooltip>
-			<TooltipTrigger asChild>
-				<span>{link}</span>
-			</TooltipTrigger>
-			<TooltipContent>{FULL_SOURCES_NOTE}</TooltipContent>
-		</Tooltip>
-	)
-}
-
-// the button that asks Carl to suggest sources. its tooltip shows how many sources it can add
-function RecommendButton({
-	isFull,
-	isDisabled,
-	suggestionCount,
-	onClick,
-}: {
-	isFull: boolean
-	isDisabled: boolean
-	suggestionCount: number
-	onClick: () => void
-}) {
-	const suggestionNote = `Carl suggests up to ${suggestionCount} source${suggestionCount === 1 ? "" : "s"}`
-	return (
-		<Tooltip>
-			<TooltipTrigger asChild>
-				<span>
-					<Button variant="outline" size="sm" onClick={onClick} disabled={isFull || isDisabled}>
-						<Lightbulb className="size-3.5" />
-						Recommend
-					</Button>
-				</span>
-			</TooltipTrigger>
-			<TooltipContent>{isFull ? FULL_SOURCES_NOTE : suggestionNote}</TooltipContent>
-		</Tooltip>
-	)
-}
-
-// one thinking line, shown where the suggest sources button was while its request is in progress
-function ThinkingLine() {
-	const [thinkingLine] = useState(randomThinkingLine)
-	return <span className="shimmer-text text-sm">{`Carl is ${thinkingLine}…`}</span>
-}
-
-// one default source row. it removes like any other source when on, and reads as a + turn-on button when off
-function TopicDefaultSource({
-	label,
-	summary,
-	isOn,
-	onTurnOn,
-	onTurnOff,
-}: {
-	label: string
-	summary: string
-	isOn: boolean
-	onTurnOn: () => void
-	onTurnOff: () => void
-}) {
-	if (!isOn) {
-		return (
-			<button type="button" onClick={onTurnOn} className="text-link text-sm hover:underline">
-				+ {label}
-			</button>
-		)
-	}
-	return <TopicSource sourceKind={label} summary={summary} onRemoveTopicSource={onTurnOff} />
-}
-
 // a tiny source section label inside the sources field
 function TopicSourceSectionLabel({ children, className }: { children: React.ReactNode; className?: string }) {
-	return <div className={cn("text-muted-foreground/80 mb-1 text-[11px] tracking-wide", className)}>{children}</div>
-}
-
-// one source row in the editor
-function TopicSource({
-	sourceKind,
-	summary,
-	screeningMessage,
-	onRemoveTopicSource,
-}: {
-	sourceKind: string
-	summary: string
-	screeningMessage?: string | null
-	onRemoveTopicSource: () => void
-}) {
-	return (
-		<div className="flex items-center gap-2 text-sm">
-			<Badge variant="outline" className="shrink-0">
-				{sourceKind}
-			</Badge>
-			<Tooltip>
-				<TooltipTrigger asChild>
-					<span className="text-muted-foreground min-w-0 flex-1 truncate">
-						{summary || "—"}
-						{screeningMessage && <span className="text-muted-foreground/70"> · {screeningMessage}</span>}
-					</span>
-				</TooltipTrigger>
-				{/* the whole summary, since the row cuts a long url short. hover only, as touch has no hover */}
-				{summary && <TooltipContent className="max-w-72 wrap-anywhere">{summary}</TooltipContent>}
-			</Tooltip>
-			<Tooltip>
-				<TooltipTrigger asChild>
-					<button
-						type="button"
-						aria-label={`Remove ${sourceKind} source`}
-						onClick={onRemoveTopicSource}
-						className="text-muted-foreground hover:text-foreground shrink-0"
-					>
-						<X className="size-3.5" />
-					</button>
-				</TooltipTrigger>
-				<TooltipContent>Delete source</TooltipContent>
-			</Tooltip>
-		</div>
-	)
+	return <div className={cn("text-muted-foreground mb-1 text-[11px] tracking-wide", className)}>{children}</div>
 }

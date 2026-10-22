@@ -1,0 +1,37 @@
+import { Meta } from "@storybook/addon-docs/blocks"
+import { EmailTypeSpecimens, FontFamilySpecimens, TypeSpecimens } from "./TypeSpecimens"
+
+<Meta title="Nightshift/Typography" />
+
+# Typography
+
+This page shows the web app's font families, its type roles, and each role's size in an email. The specimens read
+`packages/nightshift/typography.ts`, beside the colors. To change a family or a role, edit it there, then run
+`bun run nightshift:write`. The writer puts the two web font stacks in `tokens.css` and every family and role in the
+Figma files. A role's size also sets the font size of the email styles that use it. The web app's pages keep writing
+a role's classes themselves, so a role change does not reach them.
+
+## Font families
+
+Karla sets the body text. Architects Daughter sets titles, headings, and the uppercase section label.
+
+<FontFamilySpecimens />
+
+## Type roles
+
+A type role names the class set the app already writes for one level of text. Its size, line height, weight, and
+letter spacing are the values those classes give in Tailwind's default theme. `packages/nightshift/tokens.test.ts`
+reads that theme from `tailwindcss/theme.css` and fails if a role's values differ from its classes. Each sample below
+sets the role's values from the source, so it shows what the role's classes give. The table under each sample lists
+those values and the classes.
+
+<TypeSpecimens />
+
+## Email
+
+Every email renders in the system font stack, because not every email client loads web fonts. An email style takes its
+font size from a type role, as the role's size in pixels at a 16-pixel rem. Its weight and line height stay as the
+template writes them. The samples below show the five roles the email templates use: `pageTitle`, `sectionHeading`,
+`body`, `bodyLarge`, and `caption`. Each sets a line height of 1.5, the only line height the templates write.
+
+<EmailTypeSpecimens />

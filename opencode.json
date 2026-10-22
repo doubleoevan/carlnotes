@@ -40,6 +40,11 @@
 			"command": ["npx", "-y", "@notionhq/notion-mcp-server"],
 			"enabled": true,
 			"environment": { "NOTION_TOKEN": "{env:NOTION_TOKEN}" }
+		},
+		"storybook": {
+			"type": "remote",
+			"url": "http://localhost:6006/mcp",
+			"enabled": true
 		}
 	}
 }

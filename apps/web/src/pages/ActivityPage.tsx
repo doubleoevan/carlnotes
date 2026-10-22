@@ -15,7 +15,7 @@ import { TopicSubscriptionsTable } from "@/components/table/TopicSubscriptionsTa
 import { NewTopicButton, useNewTopicDialog } from "@/components/topic/TopicEditorChoiceDialog"
 import { usePageTitle } from "@/hooks/usePageTitle"
 import { useSearchParams } from "@/hooks/useSearchParams"
-import { PAGE_CLASS } from "@/lib/styleClasses"
+import { PAGE_CLASS, PAGE_HEADER_CLASS, PAGE_TITLE_CLASS } from "@/lib/styleClasses"
 import { useRegisterPageActions } from "@/stores/pageActionsStore"
 
 /**
@@ -70,8 +70,8 @@ export function ActivityPage() {
 	return (
 		<main className={PAGE_CLASS}>
 			{/* the page title with the same icon as its header menu item, and the new topic button to the right */}
-			<div className="flex items-center justify-between gap-4">
-				<h1 className="font-display flex items-center gap-2 text-2xl">
+			<div className={PAGE_HEADER_CLASS}>
+				<h1 className={PAGE_TITLE_CLASS}>
 					<Activity className="size-6" />
 					{/* the user's own title shows the topic invitations waiting for an answer */}
 					<span className="relative">
@@ -95,9 +95,6 @@ export function ActivityPage() {
 		</main>
 	)
 }
-
-// the add topic call-to-action link
-const ADD_TOPIC_CLASS = "text-link hover:underline"
 
 // the loaded page
 function ActivitySections({
@@ -126,7 +123,7 @@ function ActivitySections({
 							/>
 						) : isOwnView ? (
 							<EmptyActivitySection>
-								<AnchorLink href="/" className={ADD_TOPIC_CLASS}>
+								<AnchorLink href="/" className="sentence-link">
 									Follow a topic.
 								</AnchorLink>
 							</EmptyActivitySection>
@@ -145,7 +142,7 @@ function ActivitySections({
 							<TopicInvitesTable invites={activity.invites} onReload={onReload} isReadOnly={!isOwnView} />
 						) : isOwnView ? (
 							<EmptyActivitySection>
-								<AnchorLink href="/" className={ADD_TOPIC_CLASS}>
+								<AnchorLink href="/" className="sentence-link">
 									Share a topic.
 								</AnchorLink>
 							</EmptyActivitySection>

@@ -152,7 +152,7 @@ export function ChatOptionsMenu({
 									<TeamAvatar team={chatRoomOption.team} className="size-5" />
 								</span>
 								<span
-									className={cn("min-w-0 flex-1 truncate", chatRoomOption.isHighlighted && "text-primary font-medium")}
+									className={cn("min-w-0 flex-1 truncate", chatRoomOption.isHighlighted && "text-link font-medium")}
 								>
 									{chatRoomOption.name}
 								</span>

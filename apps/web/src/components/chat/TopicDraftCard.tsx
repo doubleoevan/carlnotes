@@ -7,7 +7,7 @@ import type { ReactNode } from "react"
 import { CoffeeLoading } from "@/components/branding/CoffeeLoading"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { ScrollBox } from "@/components/topic/TopicScanRecap"
-import { POPOVER_HEADING_CLASS } from "@/lib/styleClasses"
+import { POPOVER_HEADING_CLASS, SECTION_LABEL_CLASS, STANDALONE_LINK_CLASS } from "@/lib/styleClasses"
 import { clearProposedTopicEdit } from "@/stores/chatPanelStore"
 
 // how the card words each visibility
@@ -94,7 +94,7 @@ export function TopicDraftCard({
 								{topicId ? (
 									<AnchorLink
 										href={toTopicPath({ id: topicId, name: topicDraft.name })}
-										className="text-link hover:underline"
+										className={STANDALONE_LINK_CLASS}
 									>
 										{topicDraft.name}
 									</AnchorLink>
@@ -233,7 +233,7 @@ function TopicDraftField({
 }) {
 	return (
 		<div className="py-1.5 first:pt-0 last:pb-0">
-			<dt className="text-muted-foreground font-display text-xs tracking-wide uppercase">{label}</dt>
+			<dt className={SECTION_LABEL_CLASS}>{label}</dt>
 			<dd key={fieldText} className="text-foreground animate-in fade-in mt-1 min-w-0 break-words duration-500">
 				{children}
 			</dd>

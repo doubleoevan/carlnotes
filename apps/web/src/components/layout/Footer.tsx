@@ -1,7 +1,12 @@
 import { useLocation } from "@tanstack/react-router"
+import type * as React from "react"
 import { AnchorLink } from "@/components/common/AnchorLink"
+import { STANDALONE_LINK_CLASS } from "@/lib/styleClasses"
 import { cn } from "@/lib/utils"
 import { DocsLink } from "./DocsLink"
+
+// one centered row of footer items that wraps, with a readable gap between items
+const FOOTER_ROW_CLASS = "flex flex-wrap justify-center gap-x-6 gap-y-1"
 
 /**
  * The global footer
@@ -15,45 +20,41 @@ export function Footer() {
 	)
 }
 
-// the copyright and license line, then the legal link row, each centered with a readable gap between items
+// the copyright and license line, the site link row, then the legal link row
 function FooterLegal() {
-	const pathname = useLocation({ select: (location) => location.pathname })
 	return (
 		<div className="mt-3 space-y-1.5">
 			{/* the copyright, the license, and the raccoon line */}
-			<div className="flex flex-wrap justify-center gap-x-6 gap-y-1">
+			<div className={FOOTER_ROW_CLASS}>
 				<span>© 2026 CarlNotes</span>
 				<span>AGPL-3.0 licensed.</span>
 				<span>Take the code. Leave the raccoon.</span>
 			</div>
-			{/* the docs, the releases, the source, the license, and the legal pages */}
-			<div className="flex flex-wrap justify-center gap-x-6 gap-y-1">
-				<DocsLink className="text-link hover:underline" />
-				<AnchorLink
-					href="/releases"
-					className={cn("text-link hover:underline", pathname === "/releases" && "underline")}
-				>
-					Releases
-				</AnchorLink>
-				<AnchorLink
-					href="https://github.com/doubleoevan/carlnotes/blob/main/README.md"
-					className="text-link hover:underline"
-				>
-					Source Code
-				</AnchorLink>
-				<AnchorLink
-					href="https://github.com/doubleoevan/carlnotes/blob/main/LICENSE"
-					className="text-link hover:underline"
-				>
-					License
-				</AnchorLink>
-				<AnchorLink href="/privacy" className={cn("text-link hover:underline", pathname === "/privacy" && "underline")}>
-					Privacy
-				</AnchorLink>
-				<AnchorLink href="/terms" className={cn("text-link hover:underline", pathname === "/terms" && "underline")}>
-					Terms
-				</AnchorLink>
+			{/* the docs, the releases, the source, and the Nightshift component browser, which opens in a new tab like the docs */}
+			<div className={FOOTER_ROW_CLASS}>
+				<DocsLink className={STANDALONE_LINK_CLASS} />
+				<FooterLink href="/releases">Releases</FooterLink>
+				<FooterLink href="https://github.com/doubleoevan/carlnotes/blob/main/README.md">Source Code</FooterLink>
+				<FooterLink href="/nightshift/" isNewTab>
+					Nightshift Design System
+				</FooterLink>
+			</div>
+			{/* the license and the legal pages */}
+			<div className={FOOTER_ROW_CLASS}>
+				<FooterLink href="https://github.com/doubleoevan/carlnotes/blob/main/LICENSE">License</FooterLink>
+				<FooterLink href="/privacy">Privacy</FooterLink>
+				<FooterLink href="/terms">Terms</FooterLink>
 			</div>
 		</div>
+	)
+}
+
+// a footer link, underlined while its page is the one open. an external url never matches the open page
+function FooterLink({ href, children, ...props }: React.ComponentProps<typeof AnchorLink>) {
+	const pathname = useLocation({ select: (location) => location.pathname })
+	return (
+		<AnchorLink href={href} {...props} className={cn(STANDALONE_LINK_CLASS, pathname === href && "underline")}>
+			{children}
+		</AnchorLink>
 	)
 }

@@ -2,8 +2,9 @@
 // pool. only tests import it
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
-import { join } from "node:path"
+import { dirname, join } from "node:path"
 import { restoreConnectionPool, stubConnectionPool } from "@carlnotes/db/connectionPoolStub"
+import { UI_CLIENT_ROOT, UI_SERVER_ENTRY } from "./bundlePaths"
 import server from "./index"
 
 // the page the fake server entry renders, the one hashed client asset and its text, the public file's text, and the
@@ -61,12 +62,12 @@ export async function createBundleDirectory({
 	failingRenderCount = 0,
 }: CreateBundleDirectoryOptions = {}): Promise<string> {
 	const root = await createTestDirectory("carl-bundle-")
-	await mkdir(join(root, "apps/web/dist/client/assets"), { recursive: true })
-	await mkdir(join(root, "apps/web/dist/server"), { recursive: true })
+	await mkdir(join(root, UI_CLIENT_ROOT, "assets"), { recursive: true })
+	await mkdir(join(root, dirname(UI_SERVER_ENTRY)), { recursive: true })
 
 	// write the asset, the public file, and the server entry
-	await writeFile(join(root, `apps/web/dist/client${HASHED_ASSET_PATH}`), HASHED_ASSET_TEXT)
-	await writeFile(join(root, "apps/web/dist/client/robots.txt"), PUBLIC_FILE_TEXT)
+	await writeFile(join(root, UI_CLIENT_ROOT, HASHED_ASSET_PATH), HASHED_ASSET_TEXT)
+	await writeFile(join(root, UI_CLIENT_ROOT, "robots.txt"), PUBLIC_FILE_TEXT)
 	const serverEntryText = [
 		"let renderCount = 0",
 		"export default { fetch: async () => {",
@@ -75,7 +76,7 @@ export async function createBundleDirectory({
 		`return new Response(${JSON.stringify(PAGE_HTML)}, { headers: { "content-type": "text/html" } })`,
 		"} }",
 	].join("\n")
-	await writeFile(join(root, "apps/web/dist/server/server.js"), serverEntryText)
+	await writeFile(join(root, UI_SERVER_ENTRY), serverEntryText)
 	return root
 }
 
@@ -83,13 +84,18 @@ export async function createBundleDirectory({
 export type ResponseSnapshot = {
 	status: number
 	body: string
-	// the headers that the tests read
+	// the cache and content headers that the tests read
 	cacheControl: string | null
 	edgeCacheControl: string | null
 	contentEncoding: string | null
 	contentType: string | null
+	etag: string | null
+	// the policy, redirect, retry, and robots headers that the tests read
+	contentSecurityPolicy: string | null
+	crossOriginOpenerPolicy: string | null
 	location: string | null
 	retryAfter: string | null
+	robotsTag: string | null
 }
 
 /**
@@ -104,8 +110,12 @@ export async function request(path: string, requestInit: RequestInit = {}): Prom
 		edgeCacheControl: response.headers.get("CDN-Cache-Control"),
 		contentEncoding: response.headers.get("Content-Encoding"),
 		contentType: response.headers.get("Content-Type"),
+		etag: response.headers.get("ETag"),
+		contentSecurityPolicy: response.headers.get("Content-Security-Policy"),
+		crossOriginOpenerPolicy: response.headers.get("Cross-Origin-Opener-Policy"),
 		location: response.headers.get("Location"),
 		retryAfter: response.headers.get("Retry-After"),
+		robotsTag: response.headers.get("X-Robots-Tag"),
 	}
 }
 

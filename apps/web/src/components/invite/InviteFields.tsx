@@ -143,7 +143,7 @@ function InviteLinkMenu({ inviteLink }: { inviteLink: InviteLink }) {
 			</Popover>
 			<p className="text-muted-foreground mt-1.5 text-xs italic">
 				{inviteLink.caption ?? "A fresh brew will be waiting to pour on their "}
-				<AnchorLink href={inviteLink.link.href} className="text-link hover:underline">
+				<AnchorLink href={inviteLink.link.href} className="sentence-link">
 					{inviteLink.link.label}
 				</AnchorLink>
 			</p>

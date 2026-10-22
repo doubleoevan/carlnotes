@@ -5,7 +5,9 @@
 	"type": "module",
 	"scripts": {
 		"dev": "vite",
-		"build": "vite build"
+		"build": "vite build",
+		"dev:storybook": "storybook dev -p 6006 --no-open",
+		"build:storybook": "storybook build --output-dir dist/nightshift"
 	},
 	"dependencies": {
 		"@blocknote/core": "0.55.0",
@@ -14,7 +16,7 @@
 		"@carlnotes/client": "workspace:*",
 		"@carlnotes/contracts": "workspace:*",
 		"@carlnotes/core": "workspace:*",
-		"@carlnotes/tokens": "workspace:*",
+		"@carlnotes/nightshift": "workspace:*",
 		"@radix-ui/react-accordion": "^1.3.0",
 		"@radix-ui/react-label": "^2.1.17",
 		"@radix-ui/react-popover": "^1.3.0",
@@ -46,10 +48,16 @@
 		"yjs": "13.6.33"
 	},
 	"devDependencies": {
+		"@storybook/addon-a11y": "10.6.2",
+		"@storybook/addon-docs": "10.6.2",
+		"@storybook/addon-mcp": "10.6.2",
+		"@storybook/addon-themes": "10.6.2",
+		"@storybook/tanstack-react": "10.6.2",
 		"@tailwindcss/vite": "^4.3.3",
 		"@types/react": "^19.3.0",
 		"@types/react-dom": "^19.3.0",
 		"@vitejs/plugin-react": "^6.1.2",
+		"storybook": "10.6.2",
 		"tailwindcss": "^4.3.3",
 		"tw-animate-css": "^1.4.0",
 		"vite": "^8.3.4"

@@ -1,7 +1,8 @@
 // time units and time limits that every module shares
 
-// one hour and one day in milliseconds
-export const HOUR_MS = 60 * 60 * 1000
+// one minute, one hour, and one day in milliseconds
+export const MINUTE_MS = 60 * 1000
+export const HOUR_MS = 60 * MINUTE_MS
 export const DAY_MS = 24 * HOUR_MS
 
 /**

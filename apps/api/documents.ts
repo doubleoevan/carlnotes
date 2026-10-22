@@ -20,11 +20,9 @@ import {
 } from "./podcast/podcastFeedTokens"
 import { loadPublicPodcastEpisodeRows } from "./podcast/podcastSeo"
 import { loadReleases, toReleasePath, toReleaseSummary } from "./releases"
+import { NOINDEX_HEADER } from "./responseHeaders"
 import { loadDocsPages, loadPublicTopics, toLlmsFullTxt, toLlmsTxt, toSecurityTxt, toSitemapXml } from "./seo"
 import { toSiteFeedXml, toTopicFeedXml } from "./share/feed"
-
-// the header that keeps a document out of search results
-const NOINDEX_HEADER = { "X-Robots-Tag": "noindex" }
 
 // the document routes
 export const documentsRoute = new Hono<AppEnv>()

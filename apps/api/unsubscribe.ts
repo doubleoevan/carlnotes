@@ -6,8 +6,10 @@ import type { DeviceProperties } from "@carlnotes/contracts/userAgent"
 import { db } from "@carlnotes/db"
 import { subscriptions, topics } from "@carlnotes/db/schema/topics"
 import { verifyUnsubscribeToken } from "@carlnotes/emails/unsubscribe"
+import { emailColors } from "@carlnotes/nightshift/email"
 import { trackEvent } from "@carlnotes/server/analytics"
 import { and, eq } from "drizzle-orm"
+import { API_PAGE_BASE_STYLE } from "./apiPageStyle"
 import { deletePodcastFeedToken } from "./podcast/podcastFeedTokens"
 import { updateTopicSubscriberCount } from "./topic/subscriberCounts"
 
@@ -119,22 +121,22 @@ function backLink(url: string | undefined, label: string): string {
 }
 
 // TODO: redirect to a page in the app instead
-const PAGE_STYLE = `
-	body { margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center;
-	       background:#f4f1ea; color:#2b2b2b; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif }
+// the base style, then the page's centered card, logo, and button
+const PAGE_STYLE = `${API_PAGE_BASE_STYLE}
+	body { min-height:100vh; display:flex; align-items:center; justify-content:center }
 
-	.card { background:#fff; border:1px solid #ece7de; border-radius:14px;
+	.card { background:${emailColors.card}; border:1px solid ${emailColors.muted}; border-radius:14px;
 	        max-width:440px; margin:24px; padding:32px 36px; text-align:center; box-shadow:0 1px 3px rgba(0,0,0,.06) }
 
-	.mark { color:#7c4a1e; font-size:15px; font-weight:700; margin-bottom:20px }
+	.mark { color:${emailColors.link}; font-size:15px; font-weight:700; margin-bottom:20px }
 	h1    { font-size:22px; margin:0 0 10px }
-	p     { color:#5b5b5b; font-size:15px; line-height:1.55; margin:0 0 8px }
+	p     { color:${emailColors.secondaryForeground}; font-size:15px; line-height:1.55; margin:0 0 8px }
 	.back { margin-top:20px }
-	a     { color:#7c4a1e }
-	button { margin-top:16px; padding:10px 22px; border:0; border-radius:8px; background:#7c4a1e; color:#fff; font-size:15px; cursor:pointer }
+	button { margin-top:16px; padding:10px 22px; border:0; border-radius:8px; background:${emailColors.link};
+	         color:${emailColors.card}; font-size:15px; cursor:pointer }
 `
 
-// a served web page can use a style block, unlike an email. the card holds the CarlNotes mark and the page content
+// the api's own pages can use a style block, unlike an email. the card holds the CarlNotes mark and the page content
 function renderPage(cardContent: string): string {
 	return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>CarlNotes</title><style>${PAGE_STYLE}</style></head><body><div class="card"><div class="mark">☕ CarlNotes</div>${cardContent}</div></body></html>`
 }

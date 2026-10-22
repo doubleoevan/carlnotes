@@ -29,12 +29,18 @@ export function SkipPlaybackButtons() {
 }
 
 /**
- * The button that steps the loaded podcast episode's playback speed, showing the speed that the episode plays at.
+ * The button that steps the loaded podcast episode's playback speed, showing the speed that the episode plays at. Its
+ * tooltip and accessible name include the speed it shows.
  */
 export function PlaybackSpeedButton({ playbackRate }: { playbackRate: number }) {
+	const playbackRateText = `${playbackRate}x`
 	return (
-		<IconButton tooltip="Playback speed" className={PLAYBACK_CONTROL_BUTTON_CLASS} onClick={cyclePlaybackRate}>
-			{`${playbackRate}x`}
+		<IconButton
+			tooltip={`Playback speed ${playbackRateText}`}
+			className={PLAYBACK_CONTROL_BUTTON_CLASS}
+			onClick={cyclePlaybackRate}
+		>
+			{playbackRateText}
 		</IconButton>
 	)
 }

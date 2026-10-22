@@ -8,7 +8,12 @@ import { useState } from "react"
 import { RatingThumbs } from "@/components/common/RatingThumbs"
 import { Popover, PopoverAnchor, PopoverTrigger } from "@/components/primitives/popover"
 import { ResourceInfo, type ResourceInfoTopic } from "@/components/topic/ResourceInfo"
-import { DASHED_ROW_CLASS, SCRIPTED_HIDDEN_CLASS } from "@/lib/styleClasses"
+import {
+	DASHED_ROW_CLASS,
+	LIST_ROW_HIGHLIGHTED_CLASS,
+	LIST_ROW_HOVER_CLASS,
+	SCRIPTED_HIDDEN_CLASS,
+} from "@/lib/styleClasses"
 import { cn } from "@/lib/utils"
 import type { TopicFeedHandlers } from "@/providers/TopicFeedProvider"
 import { playPodcastEpisode } from "@/stores/podcastEpisodePlayerStore"
@@ -111,18 +116,18 @@ function PodcastEpisodeChapterRow({
 			onClick={handleRowClick}
 			className={cn(
 				DASHED_ROW_CLASS,
-				"isolate flex items-center before:absolute before:inset-0 before:-z-10 before:rounded-lg",
-				"hover:before:bg-accent-foreground/20 before:transition-colors",
+				LIST_ROW_HOVER_CLASS,
+				"flex items-center",
 				chapterTopicFinding && "cursor-pointer",
 				// the player's chapter stays highlighted
-				isPlayerChapter && "before:bg-muted/70",
+				isPlayerChapter && LIST_ROW_HIGHLIGHTED_CLASS,
 				// every chapter is in the html. with JavaScript, the rows past the first few hide until the list expands
 				isHiddenUntilExpanded && SCRIPTED_HIDDEN_CLASS,
 			)}
 		>
 			{/* the chapter's number */}
 			<span className={CHAPTER_NUMBER_SLOT_CLASS} aria-hidden="true">
-				<span className={cn("font-display text-sm tabular-nums", isPlayerChapter && "text-primary font-bold")}>
+				<span className={cn("font-display text-sm tabular-nums", isPlayerChapter && "text-link font-bold")}>
 					{chapter.position + 1}
 				</span>
 			</span>
@@ -136,7 +141,7 @@ function PodcastEpisodeChapterRow({
 						className={cn(
 							"truncate text-left hover:underline",
 							!chapterTopicFinding && "after:absolute after:inset-0",
-							isPlayerChapter && "text-primary",
+							isPlayerChapter && "text-link",
 						)}
 					>
 						{chapter.title}

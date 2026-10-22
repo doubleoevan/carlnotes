@@ -9,6 +9,7 @@ test("a scheme link and a server path render plain anchors", async () => {
 		<>
 			<AnchorLink href="mailto:carl@carlnotes.com">Email</AnchorLink>
 			<AnchorLink href="/docs/start">Docs</AnchorLink>
+			<AnchorLink href="/nightshift/">Nightshift</AnchorLink>
 			<AnchorLink href="/api/attachments/a1/download" download="notes.txt">
 				notes.txt
 			</AnchorLink>
@@ -16,6 +17,7 @@ test("a scheme link and a server path render plain anchors", async () => {
 	)
 	expect(anchorsHtml).toContain('<a href="mailto:carl@carlnotes.com">Email</a>')
 	expect(anchorsHtml).toContain('<a href="/docs/start">Docs</a>')
+	expect(anchorsHtml).toContain('<a href="/nightshift/">Nightshift</a>')
 	expect(anchorsHtml).toContain('<a href="/api/attachments/a1/download" download="notes.txt">notes.txt</a>')
 })
 
@@ -50,4 +52,21 @@ test("an external link opens a new tab with its rel", async () => {
 	expect(linksHtml).toContain('<a href="//example.com/other" target="_blank" rel="noopener noreferrer">Other</a>')
 	expect(linksHtml).toContain('<a target="_blank" rel="noopener noreferrer">Script</a>')
 	expect(linksHtml).not.toContain("javascript:")
+})
+
+// isNewTab gives a server path and an internal route the same target and rel as an external link
+test("isNewTab opens a server path and an internal route in a new tab", async () => {
+	const linksHtml = await renderWithRouter(
+		<>
+			<AnchorLink href="/docs" isNewTab>
+				Docs
+			</AnchorLink>
+			<AnchorLink href="/profiles/u1" isNewTab>
+				Profile
+			</AnchorLink>
+		</>,
+	)
+	expect(linksHtml).toContain('<a href="/docs" target="_blank" rel="noopener noreferrer">Docs</a>')
+	expect(linksHtml).toMatch(/<a [^>]*href="\/profiles\/u1"[^>]*>Profile<\/a>/)
+	expect(linksHtml).toMatch(/<a [^>]*target="_blank"[^>]*rel="noopener noreferrer"[^>]*>Profile<\/a>/)
 })

@@ -2,6 +2,7 @@
 
 import { AVATAR_COLOR, toAvatarInitials, toAvatarTint } from "@carlnotes/contracts/avatars"
 import { getAttachmentBytes } from "@carlnotes/db/store"
+import { darkRoast } from "@carlnotes/nightshift/colors"
 import { renderAsync } from "@resvg/resvg-js"
 import satori from "satori"
 import { MAX_AVATAR_BYTES, type PublishedAvatar, toAvatarContentType } from "../avatars"
@@ -11,7 +12,7 @@ export const PREVIEW_WIDTH = 1200
 export const PREVIEW_HEIGHT = 630
 
 // bump this when the card's design changes. Slack and X cache preview images hard and ignore cache headers.
-export const PREVIEW_TEMPLATE_VERSION = "v3"
+export const PREVIEW_TEMPLATE_VERSION = "v4"
 
 /**
  * Returns the version that a card's url names: a short hash of its storage key, which changes with the card.
@@ -21,7 +22,7 @@ export function toPreviewVersion(previewKey: string): string {
 }
 
 // the muted color each card's footer prints its counts in
-export const CARD_MUTED_COLOR = "#b9a68e"
+export const CARD_MUTED_COLOR = darkRoast.heroMuted
 
 // how much time a provider photo gets to load before the card gives up on it
 const PROVIDER_PHOTO_TIMEOUT_MS = 3000
@@ -30,9 +31,9 @@ const PROVIDER_PHOTO_TIMEOUT_MS = 3000
 const displayFont = await Bun.file(new URL("./fonts/ArchitectsDaughter-Regular.ttf", import.meta.url)).arrayBuffer()
 
 // the rest of the card's palette, taken from the dark theme
-const CARD_BACKGROUND = "#2a1f14"
-const CARD_COLOR = "#f0e6d6"
-const CARD_ACCENT = "#f09050"
+const CARD_BACKGROUND = darkRoast.card
+const CARD_COLOR = darkRoast.foreground
+const CARD_ACCENT = darkRoast.primary
 
 // one element of the card's markup, in the React element shape that satori reads
 export type CardElement = {

@@ -82,7 +82,7 @@ export function SessionLayout({
 			{/* the link to the other auth route */}
 			<p className="text-muted-foreground mt-6 text-center text-sm">
 				{footerPrompt}
-				<AnchorLink href={footerHref} className="text-link underline">
+				<AnchorLink href={footerHref} className="sentence-link">
 					{footerLinkLabel}
 				</AnchorLink>
 			</p>
@@ -97,7 +97,7 @@ function EmbeddedWebviewNotice() {
 		<p className="text-muted-foreground mb-4 text-center text-sm whitespace-pre-line">
 			{`Google won't sign you in from inside another app's browser. Email works fine here.\n`}
 			{platform === "android" ? (
-				<AnchorLink href={toChromeIntentUrl(window.location.href)} className="text-link underline">
+				<AnchorLink href={toChromeIntentUrl(window.location.href)} className="sentence-link">
 					Or open this page in Chrome.
 				</AnchorLink>
 			) : (

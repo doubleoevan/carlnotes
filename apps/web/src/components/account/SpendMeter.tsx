@@ -111,7 +111,7 @@ export function SpendMeter({
 				{budgetUsedPercent >= 100 && (
 					<>
 						{" "}
-						<AnchorLink href="/plans" className="underline">
+						<AnchorLink href="/plans" className="sentence-link">
 							Pick up some coffee.
 						</AnchorLink>
 					</>
@@ -195,7 +195,7 @@ function CutoffMarkerCircle({
 						className={cn(
 							"border-foreground bg-card text-foreground grid size-6.5 shrink-0 place-items-center rounded-full border-[1.5px] text-[9px] font-semibold tabular-nums",
 							isCutoffMarkerMoving && "border-dashed",
-							isCutoffMarkerPassed && "bg-muted opacity-45",
+							isCutoffMarkerPassed && "bg-muted border-muted-foreground/50 text-muted-foreground",
 						)}
 					>
 						{percent}%

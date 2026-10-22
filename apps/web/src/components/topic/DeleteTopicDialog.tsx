@@ -1,5 +1,6 @@
 import { sendDeleteTopic } from "@carlnotes/client/topicClient"
 import type { TopicResponse } from "@carlnotes/contracts/topics"
+import { toast } from "sonner"
 import { ConfirmDialog } from "@/components/common/ConfirmDialog"
 
 /**
@@ -14,14 +15,17 @@ export function DeleteTopicDialog({
 	onClose: () => void
 	onTopicDeleted: () => Promise<void>
 }) {
-	// delete the topic, then let the parent refresh the feed and navigate home
+	// delete the topic, then let the parent refresh the feed and navigate home. a failed delete keeps the dialog open
+	// and says so in a toast
 	const handleDelete = async (): Promise<void> => {
 		try {
 			await sendDeleteTopic(topic.id)
-			await onTopicDeleted()
 		} catch (error) {
 			console.error("topic delete failed", error)
+			toast.error("That topic didn't get deleted. Try again.")
+			return
 		}
+		await onTopicDeleted()
 	}
 	return (
 		<ConfirmDialog

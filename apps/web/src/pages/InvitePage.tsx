@@ -111,7 +111,7 @@ export function InviteNotice({
 				<p className="text-lg font-semibold">{"Carl couldn't check your invitation."}</p>
 				<p className="text-muted-foreground mt-2 text-sm">
 					{"Check your connection, then "}
-					<button type="button" onClick={onRetry} className="text-link hover:underline">
+					<button type="button" onClick={onRetry} className="sentence-link">
 						try again
 					</button>
 				</p>
@@ -130,7 +130,7 @@ export function InviteNotice({
 				) : (
 					<>
 						{"Ask whoever invited you for a fresh link, or "}
-						<AnchorLink href="/" className="text-link hover:underline">
+						<AnchorLink href="/" className="sentence-link">
 							go find a topic
 						</AnchorLink>
 					</>

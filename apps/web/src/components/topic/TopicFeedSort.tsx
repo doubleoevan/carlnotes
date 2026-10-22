@@ -40,27 +40,46 @@ export function TopicFeedSort() {
 				<TooltipContent>Sort</TooltipContent>
 			</Tooltip>
 			<PopoverContent align="end" sideOffset={13} className="w-40" bodyClassName="p-1">
-				{/* one row per sort mode with a check on the active one */}
-				{TOPIC_FINDING_SORTS.map((sortOption) => {
-					const { label, Icon } = SORT_OPTIONS[sortOption]
-					return (
-						<button
-							key={sortOption}
-							type="button"
-							onClick={() => {
-								setSort(sortOption)
-								setIsOpen(false)
-							}}
-							aria-pressed={sortOption === sort}
-							className={cn(MENU_OPTION_CLASS, sortOption === sort && MENU_OPTION_SELECTED_CLASS)}
-						>
-							<Icon className="size-4 text-muted-foreground" />
-							<span className="flex-1 text-left">{label}</span>
-							{sortOption === sort ? <Check className="size-4" /> : null}
-						</button>
-					)
-				})}
+				<TopicFeedSortOptions
+					selectedSort={sort}
+					onSelectSort={(sortOption) => {
+						setSort(sortOption)
+						setIsOpen(false)
+					}}
+				/>
 			</PopoverContent>
 		</Popover>
+	)
+}
+
+/**
+ * The sort menu's options, one row per sort mode, with the selected tint and a check on the active one.
+ */
+export function TopicFeedSortOptions({
+	selectedSort,
+	onSelectSort,
+}: {
+	selectedSort: TopicFindingSort
+	onSelectSort: (sort: TopicFindingSort) => void
+}) {
+	return (
+		<>
+			{TOPIC_FINDING_SORTS.map((sortOption) => {
+				const { label, Icon } = SORT_OPTIONS[sortOption]
+				return (
+					<button
+						key={sortOption}
+						type="button"
+						onClick={() => onSelectSort(sortOption)}
+						aria-pressed={sortOption === selectedSort}
+						className={cn(MENU_OPTION_CLASS, sortOption === selectedSort && MENU_OPTION_SELECTED_CLASS)}
+					>
+						<Icon className="size-4 text-muted-foreground" />
+						<span className="flex-1 text-left">{label}</span>
+						{sortOption === selectedSort ? <Check className="size-4" /> : null}
+					</button>
+				)
+			})}
+		</>
 	)
 }

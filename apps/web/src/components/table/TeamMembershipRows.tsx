@@ -1,7 +1,7 @@
 import { sendAcceptInvite, sendDeclineInvite } from "@carlnotes/client/activityClient"
-import { authClient, toSessionProfileIdentity } from "@carlnotes/client/authClient"
+import { authClient } from "@carlnotes/client/authClient"
 import { isLeaderRole } from "@carlnotes/contracts/enums"
-import type { ProfileIdentity } from "@carlnotes/contracts/profiles"
+import { type ProfileIdentity, toSessionProfileIdentity } from "@carlnotes/contracts/profiles"
 import type { TeamSummary, TeamsPageResponse } from "@carlnotes/contracts/teams"
 import { toCentsLabel } from "@carlnotes/core/lib/labels"
 import { X } from "lucide-react"
@@ -13,6 +13,8 @@ import { UserProfileLink } from "@/components/common/UserProfileLink"
 import { Button } from "@/components/primitives/button"
 import { Switch } from "@/components/primitives/switch"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
+import { STANDALONE_LINK_CLASS } from "@/lib/styleClasses"
+import { cn } from "@/lib/utils"
 import { SubtableCountButton } from "./SubtableCountButton"
 import { TeamSubtablesRow, useTeamSubtables } from "./TeamSubtablesRow"
 
@@ -43,7 +45,7 @@ export function TeamMembershipRow({
 				<td className="py-2 pr-4">
 					{/* the team's avatar and name link to its page, with the team chat room's mention badge on top */}
 					<span className="relative inline-block">
-						<AnchorLink href={`/teams/${team.teamId}`} className="text-link flex items-center gap-2 hover:underline">
+						<AnchorLink href={`/teams/${team.teamId}`} className={cn(STANDALONE_LINK_CLASS, "flex items-center gap-2")}>
 							<TeamAvatar team={team} className="size-6" />
 							{team.name}
 						</AnchorLink>
@@ -199,7 +201,10 @@ export function TeamInviteRow({ invite, onAnswered }: { invite: ReceivedInvite; 
 			<tr className="border-b">
 				<td className="py-2 pr-4">
 					{invite.isPublic ? (
-						<AnchorLink href={`/teams/${invite.teamId}`} className="text-link flex items-center gap-2 hover:underline">
+						<AnchorLink
+							href={`/teams/${invite.teamId}`}
+							className={cn(STANDALONE_LINK_CLASS, "flex items-center gap-2")}
+						>
 							{teamLabel}
 						</AnchorLink>
 					) : (

@@ -2,10 +2,11 @@
 // one template for all of them, differing only in what they say and what the link is for.
 // the topic invitation email reuses it too, through its own wrapper in topic-invite-email.tsx.
 // authored as a react-email template like the scan emails, so it previews with `bun run dev:email`
+import { emailColors, toEmailFontSize } from "@carlnotes/nightshift/email"
 import { Link, Section, Text } from "@react-email/components"
 import { render } from "@react-email/render"
 import type { CSSProperties, ReactElement, ReactNode } from "react"
-import { EmailIntro, EmailShell } from "./emailShell"
+import { EmailIntro, EmailShell, footerText } from "./emailShell"
 
 // what an auth email says. the link is the point, and everything else is one sentence around it
 export type AuthEmailProps = {
@@ -53,7 +54,7 @@ export default function AuthEmail({
 				</Link>
 			</Section>
 			<Section style={footerSection}>
-				<Text style={footerText}>
+				<Text style={authFooterText}>
 					{linkNote ? `${linkNote} ` : ""}
 					{closingNote ?? "If you didn't ask for this, you can ignore this email and nothing will change."}
 				</Text>
@@ -84,20 +85,29 @@ export function renderAuthEmailText(props: AuthEmailProps): Promise<string> {
 	return render(<AuthEmail {...props} />, { plainText: true })
 }
 
-// the coffee-toned palette the scan emails already use, so every CarlNotes email looks like the same sender
+// the button, the fallback link, and the small print, in the email colors
 const buttonSection: CSSProperties = { padding: "8px 0 4px" }
 const button: CSSProperties = {
-	backgroundColor: "#f09050",
+	backgroundColor: emailColors.heroAccent,
 	borderRadius: "8px",
-	color: "#2a1f14",
+	color: emailColors.primaryForeground,
 	display: "inline-block",
-	fontSize: "16px",
+	fontSize: toEmailFontSize("bodyLarge"),
 	fontWeight: 600,
 	padding: "12px 24px",
 	textDecoration: "none",
 }
 const fallbackSection: CSSProperties = { padding: "12px 0 4px" }
-const fallbackText: CSSProperties = { color: "#6b5b4a", fontSize: "13px", margin: "0 0 4px" }
-const fallbackLink: CSSProperties = { color: "#7c4a1e", fontSize: "13px", wordBreak: "break-all" }
+const fallbackText: CSSProperties = {
+	color: emailColors.mutedForeground,
+	fontSize: toEmailFontSize("body"),
+	margin: "0 0 4px",
+}
+const fallbackLink: CSSProperties = {
+	color: emailColors.link,
+	fontSize: toEmailFontSize("body"),
+	wordBreak: "break-all",
+}
 const footerSection: CSSProperties = { padding: "12px 0 24px" }
-const footerText: CSSProperties = { color: "#6b5b4a", fontSize: "13px", margin: 0 }
+// the small print: the shell's footer text with no margin
+const authFooterText: CSSProperties = { ...footerText, margin: 0 }

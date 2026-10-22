@@ -58,7 +58,7 @@ export function PodcastEpisodePlayer({
 	const isPodcastEpisodeUnplayed =
 		podcastEpisode?.status === "published" && podcastEpisode.progressSeconds === 0 && !podcastEpisode.isCompleted
 	const unplayedTitleAside = isPodcastEpisodeUnplayed ? (
-		<span className="text-primary text-sm font-bold whitespace-nowrap">new episode</span>
+		<span className="text-link text-sm font-bold whitespace-nowrap">new episode</span>
 	) : undefined
 	const titleAside = isPodcastEpisodeLoaded ? <PodcastEpisodePlaybackPill /> : unplayedTitleAside
 	// the podcast episode with the season and number its player card and page path need, or null before it publishes

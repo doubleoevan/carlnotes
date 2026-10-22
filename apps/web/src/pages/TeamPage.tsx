@@ -222,7 +222,7 @@ export function TeamPage() {
 					title="Delete this team?"
 					confirmLabel="Delete team"
 					cancelLabel="Keep it"
-					onConfirm={() => void handleDeleteTeam()}
+					onConfirm={handleDeleteTeam}
 					onClose={() => setIsConfirmingDelete(false)}
 				>
 					{"Its topics return to whoever made them, and the room closes with it."}

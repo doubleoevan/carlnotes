@@ -34,7 +34,6 @@ function readWorkspace(folder: string): Workspace {
 		name: packageJson.name,
 		dependencies: Object.keys(packageJson.dependencies ?? {}),
 		devDependencies: Object.keys(packageJson.devDependencies ?? {}),
-		hasTsconfig: existsSync(tsconfigPath),
 		references: references.map((reference) => posix.normalize(posix.join(folder, reference.path))),
 	}
 }

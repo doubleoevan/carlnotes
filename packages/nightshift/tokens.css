@@ -1,5 +1,5 @@
-/* the design tokens: the theme that maps shadcn's and the app's own token names onto the palette, the Latte light
-   palette on :root, and the Dark roast palette under .dark */
+/* the design tokens, written by scripts/write-nightshift-tokens.ts from this package's TypeScript. change a token
+   in the source and run bun run nightshift:write, never this file */
 
 @theme inline {
 	/* fonts: Architects Daughter for display, Karla for body */
@@ -26,7 +26,7 @@
 	--color-border: var(--border);
 	--color-input: var(--input);
 	--color-ring: var(--ring);
-	/* CarlNotes extras: the hero band, the "# new" badge, links/expanders, dashed row separators */
+	/* CarlNotes extras: the hero band, the badge, links and expanders, row separators, and the budget's segments */
 	--color-hero: var(--hero);
 	--color-hero-foreground: var(--hero-foreground);
 	--color-hero-muted: var(--hero-muted);
@@ -47,51 +47,75 @@
 /* Latte, light mode */
 :root {
 	--radius: 0.625rem;
+	/* the page. in dark mode it sits a step lighter */
 	--background: #e2d8c4;
-	/* the inset a subtable sits on, quieter than the card holding it. a step darker than the page behind the card */
-	--sunken: #d6c9ad;
+	/* the inset a subtable sits on, quieter than the card holding it. the page's color in light mode */
+	--sunken: #e2d8c4;
+	/* text on the page */
 	--foreground: #332a22;
+	/* a raised surface. in dark mode it sits a step darker */
 	--card: #fffdf9;
+	/* text on a card */
 	--card-foreground: #332a22;
+	/* a popover or a menu */
 	--popover: #fffdf9;
+	/* text in a popover */
 	--popover-foreground: #332a22;
+	/* the highlight color, on a primary button and a focus ring */
 	--primary: #d9974a;
+	/* text on the highlight color */
 	--primary-foreground: #2a1c0f;
+	/* a quiet fill, and in dark mode a small badge's fill */
 	--secondary: #f4eee2;
+	/* text on the quiet fill. the dark pair clears the 4.5:1 body text ratio */
 	--secondary-foreground: #75604a;
+	/* a muted fill */
 	--muted: #efe6d8;
-	--muted-foreground: #7a6449;
+	/* muted text, at 4.5:1 or more on the page, a card, a subtable, a muted fill, and a hovered row */
+	--muted-foreground: #705a40;
 	/* the other party's chat bubble */
 	--bubble: #e2d8c4;
+	/* a hovered row or option */
 	--accent: #e9dcc8;
-	--accent-foreground: #75604a;
-	--destructive: #b5433a;
+	/* text on a hovered row or option */
+	--accent-foreground: #705a40;
+	/* a destructive action, and error text on the page or a card. coral in dark mode, to read on the page */
+	--destructive: #a7362f;
+	/* a border */
 	--border: #dcccb6;
+	/* a field's border */
 	--input: #dcccb6;
+	/* a focus ring */
 	--ring: #d9974a;
+	/* the hero band, which stays dark in both modes */
 	--hero: #3b2a1d;
+	/* text on the hero band */
 	--hero-foreground: #f3e9db;
+	/* muted text on the hero band */
 	--hero-muted: #b59c81;
-	/* the hero band stays dark in both themes. its highlight text is this same orange in both */
+	/* the hero band's highlight text, the same orange in both */
 	--hero-accent: #f09050;
-	--badge: #b5773a;
-	--link: #a35f2d;
-	/* the quiet dashes inside cards and popovers, and the stronger cut for row separators on the page itself */
+	/* the "# new" count beside a topic, at 4.5:1 or more on the page and every fill on it */
+	--badge: #805429;
+	/* a link, an expander, or highlight-colored text, at 4.5:1 or more on every surface it sits on */
+	--link: #8f4c17;
+	/* the quiet dashes inside cards and popovers */
 	--separator: #dcccb6;
+	/* the stronger cut between rows on the page itself */
 	--separator-strong: #c9b28b;
 	/* the rules inside a subtable, dark enough to show on the sunken fill */
 	--separator-sunken: #a68d64;
+	/* the steam rings behind the feed */
 	--ring-line: rgba(120, 96, 72, 0.18);
-	/* the budget's chat segment, espresso against the orange brews segment */
+	/* the budget's chat segment, espresso in light and cream in dark, against the orange scan segment */
 	--spend-chat: #6b4a26;
-	/* the budget's podcast episode segment, a roast brown between the scan and chat segments */
+	/* the budget's podcast episode segment, a brown between the scan and chat segments */
 	--spend-podcast-episode: #a8703a;
 }
 
-/* Dark roast, dark mode. the background sits a step lighter and the cards a step darker */
+/* Dark roast, dark mode */
 .dark {
 	--background: #584532;
-	/* a step darker than the page and the cards on it */
 	--sunken: #241a10;
 	--foreground: #f0e6d6;
 	--card: #302417;
@@ -100,16 +124,14 @@
 	--popover-foreground: #f0e6d6;
 	--primary: #f09050;
 	--primary-foreground: #1a1511;
-	/* the pair colors small badge text. the contrast clears the 4.5:1 body-text ratio */
 	--secondary: #75593e;
 	--secondary-foreground: #eadfc6;
 	--muted: #54422f;
-	--muted-foreground: #c2b494;
-	/* the other party's chat bubble */
+	--muted-foreground: #c6b898;
 	--bubble: #584532;
-	--accent: #5d4a35;
+	--accent: #584531;
 	--accent-foreground: #c9ba99;
-	--destructive: #e0674f;
+	--destructive: #ffa08b;
 	--border: #69553f;
 	--input: #69553f;
 	--ring: #f09050;
@@ -117,16 +139,12 @@
 	--hero-foreground: #f4ebdc;
 	--hero-muted: #b3a48c;
 	--hero-accent: #f09050;
-	--badge: #f09050;
-	--link: #f09050;
-	/* quiet inside cards and popovers, stronger between rows on the page, same split as light mode */
+	--badge: #f3a774;
+	--link: #ffa367;
 	--separator: #614e39;
 	--separator-strong: #7b6449;
-	/* a subtable's rules reuse the border color */
 	--separator-sunken: #69553f;
 	--ring-line: rgba(201, 186, 153, 0.18);
-	/* the budget's chat segment, cream against the orange brews segment */
 	--spend-chat: #f0e6d6;
-	/* the budget's podcast episode segment, a caramel between the scan and chat segments */
 	--spend-podcast-episode: #c99a5b;
 }

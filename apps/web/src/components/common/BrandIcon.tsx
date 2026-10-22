@@ -35,6 +35,9 @@ const BRAND_ICON_PATHS = {
 
 export type Brand = keyof typeof BRAND_ICON_PATHS
 
+// every brand this file draws, in the order the paths list them
+export const BRANDS = Object.keys(BRAND_ICON_PATHS) as Brand[]
+
 /**
  * One platform's logo, colored by the text around it so it takes the row's own color.
  */

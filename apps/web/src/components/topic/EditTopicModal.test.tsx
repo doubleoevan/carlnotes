@@ -26,6 +26,7 @@ type ToPodcastSwitchHtmlOptions = { topicPodcast: TopicPodcast; isPodcastEnabled
 function toPodcastSwitchHtml({ topicPodcast, isPodcastEnabled }: ToPodcastSwitchHtmlOptions): string {
 	return renderToStaticMarkup(
 		<PodcastSwitch
+			podcastSwitchId="podcast-switch"
 			topicPodcast={topicPodcast}
 			isPodcastEnabled={isPodcastEnabled}
 			isTopicOwner={false}
@@ -47,6 +48,11 @@ test("the podcast switch says whether the podcast is on and shows the free plan'
 	expect(
 		toPodcastSwitchHtml({ topicPodcast: { ...topicPodcast, hasFullPodcastEpisodes: false }, isPodcastEnabled: true }),
 	).toContain("latest 10-minute episode")
+})
+
+// the switch takes the id its Podcast field label names it by
+test("the podcast switch takes the id of its field label", () => {
+	expect(toPodcastSwitchHtml({ topicPodcast, isPodcastEnabled: true })).toContain('id="podcast-switch"')
 })
 
 // put the topic client's spies back after each save test

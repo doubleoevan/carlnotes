@@ -1,0 +1,20 @@
+import { Markdown, Meta } from "@storybook/addon-docs/blocks"
+import inventoryTable from "./inventoryTable.md?raw"
+import { toMarkdownTableOptions } from "./ScrollingTable"
+
+<Meta title="Nightshift/Inventory" />
+
+# Inventory
+
+This page lists the component patterns the web app builds today and the Nightshift component each one would become.
+Nightshift is the CarlNotes design system: one vocabulary of tokens, type, and components for the web app and a planned
+Expo (React Native) app.
+
+The table counts each pattern in `apps/web/src`, with tests, stories, `src/nightshift/`, and the generated route tree
+excluded. Each row names how the pattern is built today, where it appears, and the Nightshift name it would take. A
+primitive is a shadcn/ui component kept in `apps/web/src/components/primitives/`. The counts are a snapshot. No script
+updates them.
+
+<Markdown options={toMarkdownTableOptions({ label: "Inventory table", minWidth: "48rem" })}>
+  {inventoryTable}
+</Markdown>

@@ -1,5 +1,6 @@
 // the profile contracts: a user's identity, the profile page, a topic table row, and the billing state
 import { z } from "zod"
+import { toAvatarVersion } from "./avatars"
 import type { visibilities } from "./enums"
 import type { BillingInterval, Plan } from "./plans"
 import type { PodcastEpisodeSummary } from "./podcast"
@@ -14,6 +15,23 @@ export const profileIdentity = z.object({
 })
 
 export type ProfileIdentity = z.infer<typeof profileIdentity>
+
+/**
+ * Returns the signed-in user's identity for a profile link, read from the session user.
+ */
+export function toSessionProfileIdentity(sessionUser: {
+	id: string
+	username?: string | null
+	avatarSource?: string | null
+	avatarKey?: string | null
+}): ProfileIdentity {
+	return {
+		userId: sessionUser.id,
+		username: sessionUser.username ?? "",
+		avatarSource: sessionUser.avatarSource ?? null,
+		avatarVersion: toAvatarVersion(sessionUser),
+	}
+}
 
 // one row in a profile or team page's topic table. subscriberCount is by Topic, which the footer sums
 export type Topic = {

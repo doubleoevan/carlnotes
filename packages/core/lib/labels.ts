@@ -128,12 +128,19 @@ export function capitalize(word: string): string {
  * A count of Brews with the right plural
  */
 export function toBrewsWord(count: number): string {
-	return count === 1 ? "Brew" : "Brews"
+	return toCountNoun(count, "Brew")
+}
+
+/**
+ * Returns a regular noun for a count, singular where there is one of the thing and plural otherwise, without the count.
+ */
+export function toCountNoun(count: number, noun: string): string {
+	return count === 1 ? noun : `${noun}s`
 }
 
 // a count with its noun, singular where there is one of the thing
 export function toCountLabel(count: number, noun: string): string {
-	return `${count.toLocaleString()} ${noun}${count === 1 ? "" : "s"}`
+	return `${count.toLocaleString()} ${toCountNoun(count, noun)}`
 }
 
 /**

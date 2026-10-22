@@ -19,7 +19,8 @@ from `apps/docs/dist`, so it runs no process of its own, and nothing imports it.
   `src/routeData.ts` — the route middleware that points the header wordmark at the app instead of the docs home.
   `src/topicTutorialVideoPlugin.ts` — the Sätteri plugin that fills a page's video marker with the video on making a
   topic, built from `TOPIC_TUTORIAL_VIDEO` in `@carlnotes/contracts/youtube`, the constant the app reads too.
-- `src/assets/screenshots/` — the screenshots the pages reference by relative path, with a README on taking them.
+- `src/assets/screenshots/` — the screenshots the docs pages reference by relative path, and the ones release notes
+  reference by raw url (`release-notes.md`), with a README on taking them.
   `public/favicon.svg` is the site's icon.
 - `design/` — design references outside the site: `homepage.html`, and `podcast/` with the player mockups and
   `cover-base.png`, the illustration `apps/api/share/podcastCover.ts` draws the podcast covers over.

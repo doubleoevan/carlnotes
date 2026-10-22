@@ -17,7 +17,7 @@ import { toSignupNavigation } from "@/components/session/signupPrompts"
 import { ShareTopic } from "@/components/share/ShareTopic"
 import { TeamLink } from "@/components/team/TeamLink"
 import { useRevealClassName } from "@/hooks/useRevealClassName"
-import { POPOVER_PANEL_CLASS, RAIL_BARE_ICON_INSET, RAIL_TEXT_INSET } from "@/lib/styleClasses"
+import { POPOVER_PANEL_CLASS, RAIL_BARE_ICON_INSET, RAIL_TEXT_INSET, STANDALONE_LINK_CLASS } from "@/lib/styleClasses"
 import { cn } from "@/lib/utils"
 import { useTopicFeed } from "@/providers/TopicFeedProvider"
 import { TopicFindingList } from "./TopicFindingsSection"
@@ -67,7 +67,7 @@ export function Topic({ topic, index, className }: TopicProps) {
 				<div className="flex items-center gap-2">
 					{/* the chat mention count sits at the name's top-right corner while the user has unseen chat mentions */}
 					<span className="relative inline-block min-w-0">
-						<AnchorLink href={toTopicPath(topic)} className="text-link min-w-0 hover:underline">
+						<AnchorLink href={toTopicPath(topic)} className={cn(STANDALONE_LINK_CLASS, "min-w-0")}>
 							<h3 className="font-display pt-1 pl-4 pb-1 text-lg leading-tight">{topic.name}</h3>
 						</AnchorLink>
 						<PageUpdateCountBadge topicId={topic.id} className="-right-2" />
@@ -249,7 +249,7 @@ export function NewCountInfo({ topic }: { topic: TopicFeed }) {
 		<Popover>
 			<Tooltip>
 				<TooltipTrigger asChild>
-					<PopoverTrigger className="text-badge hover:opacity-75 shrink-0 text-sm font-semibold">
+					<PopoverTrigger className="text-badge shrink-0 text-sm font-semibold hover:underline">
 						{topic.newCount} new
 					</PopoverTrigger>
 				</TooltipTrigger>

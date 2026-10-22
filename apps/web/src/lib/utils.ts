@@ -2,7 +2,7 @@
 import { type ClassValue, clsx } from "clsx"
 import { FileText, Headphones, type LucideIcon, Play } from "lucide-react"
 import { toast } from "sonner"
-import { twMerge } from "tailwind-merge"
+import { extendTailwindMerge } from "tailwind-merge"
 import type { ResourceKind } from "@/providers/TopicFeedProvider"
 
 /**
@@ -16,6 +16,14 @@ export function toSafeRedirectPath(path: string | null): string {
 	// checked per character. a regex written with control characters trips the lint rule against them
 	const hasEscapeCharacter = [...path].some((character) => character === "\\" || character.charCodeAt(0) < 0x20)
 	return hasEscapeCharacter ? "/" : path
+}
+
+/**
+ * Whether a url path is the parent path itself or a path after it, matched at a segment boundary, so "/apiary" is
+ * not after "/api".
+ */
+export function isPathAtOrAfter(path: string, parentPath: string): boolean {
+	return path === parentPath || path.startsWith(`${parentPath}/`)
 }
 
 /**
@@ -177,6 +185,9 @@ export function addEventListeners(target: EventTarget, listeners: [string, () =>
 		}
 	}
 }
+
+// the class merge, taught that the app's own shadow-lift utility is a shadow, so a later shadow-none replaces it
+const twMerge = extendTailwindMerge({ extend: { classGroups: { shadow: [{ shadow: ["lift"] }] } } })
 
 /**
  * Merges class names, resolving Tailwind conflicts.

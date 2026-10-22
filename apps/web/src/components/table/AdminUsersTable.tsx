@@ -4,7 +4,7 @@ import { toBytesLabel, toCentsLabel, toCountLabel } from "@carlnotes/core/lib/la
 import { TABLE_CLASS, TABLE_HEAD_CLASS, TABLE_SCROLL_CLASS } from "@/lib/styleClasses"
 import { cn } from "@/lib/utils"
 import { UserRow } from "./AdminUserRows"
-import { SortableHeader } from "./SortableHeader"
+import { type RowSort, SortableHeader } from "./SortableHeader"
 import { TableCard } from "./TableCard"
 import { TablePagination, usePaginatedRowSort } from "./TablePagination"
 
@@ -46,46 +46,7 @@ export function AdminUsersTable({
 			<div className={TABLE_SCROLL_CLASS}>
 				<table className={cn(TABLE_CLASS, "min-w-3xl [&_tbody_tr:last-child>*]:border-b-0")}>
 					<thead className={TABLE_HEAD_CLASS}>
-						<tr>
-							<SortableHeader sort={sort} sortKey="user" label="User" className="py-2 pr-4" />
-							<SortableHeader sort={sort} sortKey="email" label="Email" className="py-2 pr-4" />
-							<SortableHeader sort={sort} sortKey="role" label="Role" className="py-2 pr-4" />
-							<SortableHeader sort={sort} sortKey="plan" label="Plan" className="py-2 pr-4" />
-							<SortableHeader sort={sort} sortKey="signup" label="Signup" className="py-2 pr-4" />
-							<SortableHeader sort={sort} sortKey="lastLogin" label="Last login" className="py-2 pr-4" />
-							<SortableHeader sort={sort} sortKey="topics" label="Topics" className="py-2 pr-4" />
-							<SortableHeader sort={sort} sortKey="teams" label="Teams" className="py-2 pr-4" />
-							<SortableHeader sort={sort} sortKey="storage" label="Storage" className="py-2 pr-4" />
-							<SortableHeader
-								sort={sort}
-								sortKey="scans"
-								label="Scans"
-								tooltip="Month-to-date scan spend"
-								className="py-2 pr-4"
-							/>
-							<SortableHeader
-								sort={sort}
-								sortKey="chat"
-								label="Chat"
-								tooltip="Month-to-date chat spend"
-								className="py-2 pr-4"
-							/>
-							<SortableHeader
-								sort={sort}
-								sortKey="cost"
-								label="Cost / budget"
-								tooltip="Cost against the monthly budget"
-								className="py-2 pr-4"
-							/>
-							<SortableHeader
-								sort={sort}
-								sortKey="override"
-								label="Override"
-								tooltip="Budget override"
-								className="py-2 pr-4"
-							/>
-							<th className="py-2" />
-						</tr>
+						<AdminUsersTableHead sort={sort} />
 					</thead>
 					<tbody>
 						{pageRows.map((user) => (
@@ -122,5 +83,47 @@ export function AdminUsersTable({
 			</div>
 			<TablePagination {...pagination} />
 		</TableCard>
+	)
+}
+
+/**
+ * The users table's header row: a sortable header per column and the close account button's empty column.
+ */
+export function AdminUsersTableHead({ sort }: { sort: RowSort }) {
+	return (
+		<tr>
+			<SortableHeader sort={sort} sortKey="user" label="User" className="py-2 pr-4" />
+			<SortableHeader sort={sort} sortKey="email" label="Email" className="py-2 pr-4" />
+			<SortableHeader sort={sort} sortKey="role" label="Role" className="py-2 pr-4" />
+			<SortableHeader sort={sort} sortKey="plan" label="Plan" className="py-2 pr-4" />
+			<SortableHeader sort={sort} sortKey="signup" label="Signup" className="py-2 pr-4" />
+			<SortableHeader sort={sort} sortKey="lastLogin" label="Last login" className="py-2 pr-4" />
+			<SortableHeader sort={sort} sortKey="topics" label="Topics" className="py-2 pr-4" />
+			<SortableHeader sort={sort} sortKey="teams" label="Teams" className="py-2 pr-4" />
+			<SortableHeader sort={sort} sortKey="storage" label="Storage" className="py-2 pr-4" />
+			<SortableHeader
+				sort={sort}
+				sortKey="scans"
+				label="Scans"
+				tooltip="Month-to-date scan spend"
+				className="py-2 pr-4"
+			/>
+			<SortableHeader
+				sort={sort}
+				sortKey="chat"
+				label="Chat"
+				tooltip="Month-to-date chat spend"
+				className="py-2 pr-4"
+			/>
+			<SortableHeader
+				sort={sort}
+				sortKey="cost"
+				label="Cost / budget"
+				tooltip="Cost against the monthly budget"
+				className="py-2 pr-4"
+			/>
+			<SortableHeader sort={sort} sortKey="override" label="Override" tooltip="Budget override" className="py-2 pr-4" />
+			<th className="py-2" />
+		</tr>
 	)
 }

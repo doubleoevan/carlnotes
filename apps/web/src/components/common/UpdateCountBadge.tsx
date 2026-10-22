@@ -1,8 +1,10 @@
 import type { ChatMention } from "@carlnotes/contracts/chat"
 import type { TopicInviteBadge } from "@carlnotes/contracts/invites"
 import type { NoteBadge } from "@carlnotes/contracts/notes"
-import { useTeamMentions, useTopicMentions } from "@carlnotes/core/stores/chatRoomStore"
-import { usePageNoteBadges } from "@carlnotes/core/stores/noteBadgeStore"
+import { toCountNoun } from "@carlnotes/core/lib/labels"
+import { useAllChatMentions, useTeamMentions, useTopicMentions } from "@carlnotes/core/stores/chatRoomStore"
+import { useAllNoteBadges, usePageNoteBadges } from "@carlnotes/core/stores/noteBadgeStore"
+import { useTopicInviteBadges } from "@carlnotes/core/stores/topicInviteStore"
 import type * as React from "react"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import { cn } from "@/lib/utils"
@@ -48,7 +50,7 @@ export function TooltipSection({ heading, tooltipLines }: { heading?: string; to
 }
 
 /**
- * Labels a chat mention noteBadge for one chat mention set.
+ * Labels a chat mention badge for one chat mention set.
  */
 export function toChatLabel(chatMentions: ChatMention[]): string {
 	return chatMentions.length === 1 ? "1 chat for you" : `${chatMentions.length} chats for you`
@@ -69,7 +71,7 @@ function toChatMentionLines(chatMentions: ChatMention[]): TooltipLine[] {
 }
 
 /**
- * Labels an unread note noteBadge.
+ * Labels an unread note badge.
  */
 export function toNoteLabel(noteCount: number): string {
 	return noteCount === 1 ? "1 unread note change" : `${noteCount} unread note changes`
@@ -105,7 +107,7 @@ function toNoteLines(noteBadges: NoteBadge[]): TooltipLine[] {
 }
 
 /**
- * Labels a topic invitation noteBadge.
+ * Labels a topic invitation badge.
  */
 export function toTopicInviteLabel(inviteCount: number): string {
 	return inviteCount === 1 ? "1 topic invitation" : `${inviteCount} topic invitations`
@@ -127,10 +129,8 @@ export function toTopicInviteLines(topicInviteBadges: TopicInviteBadge[]): Toolt
 	}))
 }
 
-/**
- * Labels a summed noteBadge with each waiting group's own label, in the order the tooltip lists them.
- */
-export function toUpdateLabel(
+// labels a summed badge with each waiting group's own label, in the order the tooltip lists them
+function toUpdateLabel(
 	chatMentionBadges: ChatMention[],
 	noteBadges: NoteBadge[],
 	inviteBadges: TopicInviteBadge[],
@@ -144,7 +144,7 @@ export function toUpdateLabel(
 }
 
 /**
- * Shows one noteBadge summing chat mentions, note changes, and topic invitations, its tooltip listing each group under
+ * Shows one badge summing chat mentions, note changes, and topic invitations, its tooltip listing each group under
  * its own heading, as a link when given an href and as nothing while none waits.
  */
 export function UpdateCountBadge({
@@ -160,7 +160,7 @@ export function UpdateCountBadge({
 	chatMentions?: ChatMention[]
 	noteBadges?: NoteBadge[]
 	invites?: TopicInviteBadge[]
-	// where the noteBadge's click goes, and what else it does
+	// where the badge's click goes, and what else it does
 	href?: string
 	onClick?: (event: React.MouseEvent) => void
 	onMouseEnter?: () => void
@@ -173,24 +173,31 @@ export function UpdateCountBadge({
 		return null
 	}
 
-	// the trigger is a link when the noteBadge goes somewhere, else a status
-	const unreadLabel = toUpdateLabel(chatMentions, noteBadges, invites)
-	const countBadge = <CountBadge count={unreadCount} className={countBadgeClassName} />
+	// a screen reader hears the shown count, then each waiting group's own label
+	const unreadLabel = ` ${toCountNoun(unreadCount, "update")}, ${toUpdateLabel(chatMentions, noteBadges, invites)}`
+	const countBadge = (
+		<>
+			<CountBadge count={unreadCount} className={countBadgeClassName} />
+			<span className="sr-only">{unreadLabel}</span>
+		</>
+	)
+
+	// the trigger is a link when the badge goes somewhere, else a status
 	return (
 		<Tooltip>
 			<TooltipTrigger asChild>
 				{href ? (
 					<AnchorLink
 						href={href}
-						aria-label={unreadLabel}
 						onClick={onClick}
 						onMouseEnter={onMouseEnter}
-						className={className}
+						// the padding grows the link to the 24-pixel minimum target, and the negative margin keeps the count in place
+						className={cn("-m-1 p-1", className)}
 					>
 						{countBadge}
 					</AnchorLink>
 				) : (
-					<span role="status" aria-label={unreadLabel} className={className}>
+					<span role="status" className={className}>
 						{countBadge}
 					</span>
 				)}
@@ -211,7 +218,43 @@ export function UpdateCountBadge({
 }
 
 /**
- * Shows one page's unread chat mentions and note changes as one noteBadge at its name's top-right corner, its click
+ * Shows a menu trigger's one badge, summing every unread chat mention, note change, and topic invitation, with the
+ * trigger's accessible name: its own name, then each waiting group's label.
+ */
+export function MenuTriggerUpdateCountBadge({
+	name,
+	className,
+	countBadgeClassName,
+}: {
+	// the trigger's own name, such as Menu
+	name: string
+	// the badge's placement on the trigger, and the count's size
+	className?: string
+	countBadgeClassName?: string
+}) {
+	// every unread chat mention, note change, and topic invitation
+	const chatMentions = useAllChatMentions()
+	const noteBadges = useAllNoteBadges()
+	const topicInviteBadges = useTopicInviteBadges()
+	return (
+		<>
+			{/* the trigger's name, read from its content. a screen reader skips the status badge inside a button */}
+			<span className="sr-only">
+				{[name, toUpdateLabel(chatMentions, noteBadges, topicInviteBadges)].filter(Boolean).join(", ")}
+			</span>
+			<UpdateCountBadge
+				chatMentions={chatMentions}
+				noteBadges={noteBadges}
+				invites={topicInviteBadges}
+				className={className}
+				countBadgeClassName={countBadgeClassName}
+			/>
+		</>
+	)
+}
+
+/**
+ * Shows one page's unread chat mentions and note changes as one badge at its name's top-right corner, its click
  * opening the chat while a chat mention waits, else the notes' page.
  */
 export function PageUpdateCountBadge({
@@ -224,11 +267,11 @@ export function PageUpdateCountBadge({
 }: {
 	// the chat room's topic, or null for a team's own chat room
 	topicId: string | null
-	// the team, for a noteBadge that stands for a team's own chat room instead of a topic's
+	// the team, for a badge that stands for a team's own chat room instead of a topic's
 	teamId?: string
-	// where the noteBadge's click goes instead of the topic's chat room
+	// where the badge's click goes instead of the topic's chat room
 	href?: string
-	// a page title's noteBadge opens the chat here instead of following the link
+	// a page title's badge opens the chat here instead of following the link
 	onClick?: (event: React.MouseEvent) => void
 	onMouseEnter?: () => void
 	className?: string

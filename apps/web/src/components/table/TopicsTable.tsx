@@ -11,7 +11,13 @@ import { Popover, PopoverCloseButton, PopoverContent, PopoverTrigger } from "@/c
 import { Switch } from "@/components/primitives/switch"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import { TopicInfo } from "@/components/topic/TopicInfo"
-import { POPOVER_PANEL_CLASS, TABLE_CLASS, TABLE_HEAD_CLASS, TABLE_SCROLL_CLASS } from "@/lib/styleClasses"
+import {
+	POPOVER_PANEL_CLASS,
+	STANDALONE_LINK_CLASS,
+	TABLE_CLASS,
+	TABLE_HEAD_CLASS,
+	TABLE_SCROLL_CLASS,
+} from "@/lib/styleClasses"
 import { cn } from "@/lib/utils"
 import { TopicVisibility } from "./OwnerTopicsTable"
 import { SortableHeader } from "./SortableHeader"
@@ -249,15 +255,17 @@ function TopicPopover({ topic }: { topic: Topic }) {
 		}
 	}
 
+	// the kept and seen counts the cell shows, which start its accessible name
+	const keptOverSeenLabel = `${topic.keptCount.toLocaleString()} / ${topic.seenCount.toLocaleString()}`
 	return (
 		<Popover onOpenChange={handleOpenChange}>
 			<Tooltip>
 				<TooltipTrigger asChild>
 					<PopoverTrigger
-						aria-label={`Topic roast for ${topic.name}`}
-						className="text-link inline-flex items-center gap-1.5 hover:underline"
+						aria-label={`${keptOverSeenLabel} kept, topic roast for ${topic.name}`}
+						className={cn(STANDALONE_LINK_CLASS, "inline-flex items-center gap-1.5")}
 					>
-						{topic.keptCount.toLocaleString()} / {topic.seenCount.toLocaleString()}
+						{keptOverSeenLabel}
 						<NoteIcon className="size-5" />
 					</PopoverTrigger>
 				</TooltipTrigger>

@@ -4,7 +4,7 @@ import type { MouseEvent } from "react"
 import { Pagination } from "@/components/common/Pagination"
 import { AccordionContent, AccordionItem, AccordionTrigger } from "@/components/primitives/accordion"
 import { toRenderedRows } from "@/lib/renderedRows"
-import { RAIL_TEXT_INSET } from "@/lib/styleClasses"
+import { RAIL_TEXT_INSET, STANDALONE_LINK_CLASS } from "@/lib/styleClasses"
 import { cn } from "@/lib/utils"
 import { Topic } from "./Topic"
 
@@ -48,7 +48,7 @@ export function TopicSection({ section, onNewTopicChat }: TopicSectionProps) {
 				{/* the section topics, or a call to action to start one */}
 				{section.topics.length === 0 && (
 					<p className="text-muted-foreground pl-4 pb-4 text-sm">
-						<button type="button" onClick={onNewTopicChat} className="text-link hover:underline">
+						<button type="button" onClick={onNewTopicChat} className={STANDALONE_LINK_CLASS}>
 							Give Carl a topic. You know the one.
 						</button>
 					</p>

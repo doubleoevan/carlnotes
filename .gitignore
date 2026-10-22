@@ -2,11 +2,12 @@
 logs
 *.log
 
-# Dependencies (covers root, ui/, .opencode/)
+# Dependencies (covers the root, every workspace under apps/ and packages/, and .opencode/)
 node_modules/
 
-# Build output
+# Build output, and the folder a storybook build writes without --output-dir
 dist
+storybook-static/
 *.tsbuildinfo
 .tsbuild/
 
