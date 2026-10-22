@@ -29,7 +29,7 @@
 		"markdown-to-jsx": "^9.10.3",
 		"react": "^19.3.0",
 		"react-dom": "^19.3.0",
-		"sanitize-html": "2.18.0",
+		"sanitize-html": "2.18.1",
 		"satori": "^0.29.1",
 		"stripe": "^22.6.2",
 		"yjs": "13.6.33",
