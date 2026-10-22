@@ -65,6 +65,7 @@ export async function toCardPng(rows: CardElement[]): Promise<Uint8Array> {
 			style: {
 				height: "100%",
 				width: "100%",
+				boxSizing: "border-box",
 				display: "flex",
 				flexDirection: "column",
 				justifyContent: "space-between",
