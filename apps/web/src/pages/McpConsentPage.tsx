@@ -12,9 +12,9 @@ import { PAGE_CLASS } from "@/lib/styleClasses"
  */
 export function McpConsentPage() {
 	usePageTitle("Connect to AI")
-	// the signed authorize query and the mcp client id from Better Auth's redirect to this page
+	// whether Better Auth's redirect to this page signed its query, and the mcp client id from it
 	const searchParams = useSearchParams()
-	const oauthQuery = searchParams.has("sig") ? searchParams.toString() : null
+	const isQuerySigned = searchParams.has("sig")
 	const mcpClientId = searchParams.get("client_id")
 	const { data: session, isPending } = authClient.useSession()
 	const [mcpClientName, setMcpClientName] = useState<string | null | undefined>(undefined)
@@ -33,13 +33,15 @@ export function McpConsentPage() {
 
 	// send the consent, then follow Better Auth's redirect out of the app
 	const handleConsent = async (isAccepted: boolean): Promise<void> => {
-		if (!oauthQuery) {
+		if (!isQuerySigned) {
 			setError("This connect link has expired. Start again from your AI.")
 			return
 		}
 		setIsSubmitting(true)
 		try {
-			window.location.href = await sendMcpConsent(oauthQuery, isAccepted)
+			// send the address bar's own query. the router's copy keeps one value of a repeated parameter, which breaks the
+			// signature
+			window.location.href = await sendMcpConsent(window.location.search.slice(1), isAccepted)
 		} catch (consentError) {
 			console.error("mcp consent failed", consentError)
 			setError("That didn't go through. Try again, or start over from your AI.")
