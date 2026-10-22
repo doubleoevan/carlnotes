@@ -48,6 +48,12 @@
       "sourceType": "github",
       "skillPath": "skills/web-design-guidelines/SKILL.md",
       "computedHash": "f3bc47f890f42a44db1007ab390709ec368e4b8c089baee6b0007182236ac474"
+    },
+    "write-docs": {
+      "source": "doubleoevan/skills",
+      "sourceType": "github",
+      "skillPath": "skills/write-docs/SKILL.md",
+      "computedHash": "ff8c1df5cd89cad5a8be293ed89930576ca95e3f15381a9c0ee7531cfa9766f7"
     }
   }
 }
