@@ -34,7 +34,7 @@ export function toAuthorizeReturnPath(searchParams: URLSearchParams): string | n
 	if (!searchParams.has("client_id") || !searchParams.has("redirect_uri")) {
 		return null
 	}
-	return `/api/auth/mcp/authorize?${searchParams.toString()}`
+	return `/api/auth/oauth2/authorize?${searchParams.toString()}`
 }
 
 /**

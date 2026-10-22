@@ -2,8 +2,9 @@
 // its forced consent, an account's consumed, rating, and bookmark writes, its edits, and the per-tool-caller rate limit
 // run it with: doppler run -- bun api/mcp/mcp.smoke.ts. needs Doppler secrets, and no model at all
 import { connectionPool } from "@carlnotes/db"
+import { checkOAuth, registeredClientId } from "./mcpOAuthSmokeSections"
 import { cleanUp, failureCount, seed } from "./mcpSmokeFixtures"
-import { checkOAuth, checkRateLimit, checkUser, checkVisitor, registeredClientId } from "./mcpSmokeSections"
+import { checkRateLimit, checkUser, checkVisitor } from "./mcpSmokeSections"
 
 // seed, run the sections in order, and always clean up
 try {

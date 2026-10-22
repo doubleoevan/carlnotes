@@ -4,11 +4,10 @@
 import { toCanonicalEmail } from "@carlnotes/contracts/emails"
 import { toDeviceProperties } from "@carlnotes/contracts/userAgent"
 import { toProviderUsername } from "@carlnotes/contracts/usernames"
-import { db, schema } from "@carlnotes/db"
 import { trackBotEvent, trackEvent } from "@carlnotes/server/analytics"
 import { APIError } from "better-auth"
 import { createAuthMiddleware } from "better-auth/api"
-import { eq } from "drizzle-orm"
+import { loadOAuthClientName } from "./mcp/oauthClientNames"
 import { isBreachedPassword } from "./passwords"
 
 // the better auth endpoint path for password signup, the only path the gate cookie is required on
@@ -47,19 +46,16 @@ export const afterAuthRequest = createAuthMiddleware(async (context) => {
 	// report an app's authorization once it trades its code for a token. a refresh reports nothing
 	const requestBody = context.body instanceof FormData ? Object.fromEntries(context.body.entries()) : context.body
 	const clientId = typeof requestBody?.client_id === "string" ? requestBody.client_id : null
-	if (context.path !== "/mcp/token" || requestBody?.grant_type !== "authorization_code" || !clientId) {
+	if (context.path !== "/oauth2/token" || requestBody?.grant_type !== "authorization_code" || !clientId) {
 		return
 	}
-	// name the app by its registration. an unregistered client gets no token and reports nothing
-	const [oauthApplication] = await db
-		.select({ name: schema.oauthApplications.name })
-		.from(schema.oauthApplications)
-		.where(eq(schema.oauthApplications.clientId, clientId))
-	if (!oauthApplication) {
+	// name the app by its registration. an unregistered client gets no token, and an unnamed one has no name to report
+	const clientName = await loadOAuthClientName(clientId)
+	if (!clientName) {
 		return
 	}
 	// report the connection by the app's registered name
-	trackBotEvent("mcp_connected", oauthApplication.name, { entryPoint: "mcp", clientName: oauthApplication.name })
+	trackBotEvent("mcp_connected", clientName, { entryPoint: "mcp", clientName })
 })
 
 // the login method a request path names: email for the password form, the provider for an oauth callback, or null

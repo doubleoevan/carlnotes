@@ -8,6 +8,9 @@
 		"./*": "./*.ts"
 	},
 	"dependencies": {
+		"@better-auth/cimd": "~1.7.11",
+		"@better-auth/mcp": "~1.7.11",
+		"@better-auth/oauth-provider": "~1.7.11",
 		"@blocknote/core": "0.56.0",
 		"@blocknote/server-util": "0.56.0",
 		"@carlnotes/contracts": "workspace:*",
@@ -21,8 +24,8 @@
 		"@hono/zod-validator": "^0.9.1",
 		"@modelcontextprotocol/sdk": "^1.32.1",
 		"@resvg/resvg-js": "^2.6.2",
-		"ai": "^7.0.143",
-		"better-auth": "~1.6.33",
+		"ai": "^7.0.144",
+		"better-auth": "~1.7.11",
 		"drizzle-orm": "^0.45.4",
 		"hono": "^4.13.13",
 		"hono-rate-limiter": "^0.5.4",

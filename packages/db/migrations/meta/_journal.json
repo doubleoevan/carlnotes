@@ -792,6 +792,20 @@
       "when": 1792593064351,
       "tag": "0112_white_paper_doll",
       "breakpoints": true
+    },
+    {
+      "idx": 113,
+      "version": "7",
+      "when": 1792696074542,
+      "tag": "0113_drop_mcp_oauth_1_6_tables",
+      "breakpoints": true
+    },
+    {
+      "idx": 114,
+      "version": "7",
+      "when": 1792696080995,
+      "tag": "0114_mcp_oauth_1_7_tables",
+      "breakpoints": true
     }
   ]
 }

@@ -13,7 +13,7 @@ import { getCookie, setCookie } from "hono/cookie"
 import { z } from "zod"
 import { activityRoute } from "./activity"
 import { adminRoute } from "./admin"
-import { auth } from "./auth"
+import { auth, MCP_RESOURCE_URL } from "./auth"
 import { loadDailyTopicQuota, topicLimit, topicsRemaining } from "./authorization"
 import { AVATAR_UPLOAD_PATH, avatarsRoute, TEAM_AVATAR_UPLOAD_PATH } from "./avatarsRoute"
 import { billingRoute } from "./billingRoute"
@@ -78,7 +78,7 @@ import { usersRoute } from "./users"
 const PASSWORD_RESET_REQUEST_PATH = "/request-password-reset"
 
 // the mcp plugin's authorize endpoint. it shows the consent page only when the request sends prompt=consent
-const MCP_AUTHORIZE_PATH = "/mcp/authorize"
+const MCP_AUTHORIZE_PATH = "/oauth2/authorize"
 
 // how long the unseen chat mention count is served from Redis
 const UNSEEN_CHAT_MENTION_COUNT_TTL_MS = 10_000
@@ -116,10 +116,23 @@ export const apiRoute = new Hono<AppEnv>()
 	// bound every body on the routes with no limit of their own
 	.use("*", except(OWN_BODY_LIMIT_PATHS, defaultBodyLimit))
 	.on(["POST", "GET"], "/auth/*", async (context) => {
-		// send every mcp authorize request through the consent page. the client cannot skip it
+		// redirect a form post to authorize to the same request by get, so it goes through the consent page too
+		if (context.req.method === "POST" && context.req.path.endsWith(MCP_AUTHORIZE_PATH)) {
+			const authorizeUrl = new URL(context.req.url)
+			for (const [name, value] of new URLSearchParams(await context.req.text())) {
+				authorizeUrl.searchParams.append(name, value)
+			}
+			return context.redirect(`${authorizeUrl.pathname}${authorizeUrl.search}`, 303)
+		}
+
+		// send every mcp authorize request through the consent page, which the client cannot skip. a request that names
+		// no resource asks for the MCP server, so its token is the signed one the server verifies
 		if (context.req.method === "GET" && context.req.path.endsWith(MCP_AUTHORIZE_PATH)) {
 			const authorizeUrl = new URL(context.req.url)
 			authorizeUrl.searchParams.set("prompt", "consent")
+			if (!authorizeUrl.searchParams.has("resource")) {
+				authorizeUrl.searchParams.set("resource", MCP_RESOURCE_URL)
+			}
 			return auth.handler(new Request(authorizeUrl, context.req.raw))
 		}
 

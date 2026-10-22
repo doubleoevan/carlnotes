@@ -1,6 +1,9 @@
 // the app's Better Auth instance: email/password and Google/GitHub sign-in, with sessions read from Redis first
 // and kept in Postgres through the Drizzle adapter
 
+import { cimd } from "@better-auth/cimd"
+import { fetchClientMetadataResource } from "@better-auth/cimd/node"
+import { mcp } from "@better-auth/mcp"
 import { SIGNUP_CTA_COOKIE_NAME, toCtaTag } from "@carlnotes/contracts/signupCta"
 import { toDeviceProperties } from "@carlnotes/contracts/userAgent"
 import { toNormalizedUsername, toProviderUsername } from "@carlnotes/contracts/usernames"
@@ -9,11 +12,11 @@ import { deleteRedisKeys, runWithRedis } from "@carlnotes/db/redis"
 import { incrementRateLimitWindow } from "@carlnotes/db/redisRateLimits"
 import { provisionLiteLLMKey } from "@carlnotes/models/litellmProxy"
 import { trackEvent } from "@carlnotes/server/analytics"
-import { appBaseUrl } from "@carlnotes/server/appUrl"
+import { appUrl } from "@carlnotes/server/appUrl"
 import { reportError } from "@carlnotes/server/monitoring"
 import { APIError, betterAuth } from "better-auth"
 import { drizzleAdapter } from "better-auth/adapters/drizzle"
-import { mcp } from "better-auth/plugins"
+import { jwt } from "better-auth/plugins"
 import { eq } from "drizzle-orm"
 import {
 	clearResetPasswordTokens,
@@ -70,6 +73,9 @@ export function sendAuthEmailInBackground(emailKind: string, emailSendPromise: P
  */
 const sessionSecondaryStorage = {
 	get: (key: string): Promise<string | null> => runWithRedis("session get", (client) => client.get(key)),
+	// read a single-use value and delete it in one step, so two requests never both read it
+	getAndDelete: (key: string): Promise<string | null> =>
+		runWithRedis("session get and delete", (client) => client.getdel(key)),
 	set: async (key: string, value: string, ttlSeconds?: number): Promise<void> => {
 		await runWithRedis("session set", (client) =>
 			ttlSeconds ? client.set(key, value, "EX", ttlSeconds) : client.set(key, value),
@@ -94,11 +100,18 @@ export function toSignupAvatarSource(image: string | null | undefined): "oauth" 
 	return image ? "oauth" : "generated"
 }
 
-// the oauth server plugin, minus its options property. `tsc -b` cannot name that property's type in auth's declaration
-const { options: _mcpOptions, ...mcpPlugin } = mcp({
+// the MCP server's url, which every MCP access token is bound to
+export const MCP_RESOURCE_URL = `${appUrl()}/mcp`
+
+// the oauth server for the MCP server. a client registers itself, by dynamic registration or a client metadata
+// document, then the user signs in and consents. infer makes a client that returns to a loopback or app address native
+const mcpPlugin = mcp({
 	loginPage: "/login",
-	resource: `${appBaseUrl()}/mcp`,
-	oidcConfig: { loginPage: "/login", consentPage: "/mcp/consent" },
+	consentPage: "/mcp/consent",
+	resource: MCP_RESOURCE_URL,
+	allowDynamicClientRegistration: true,
+	allowUnauthenticatedClientRegistration: true,
+	clientRegistrationDefaultApplicationType: "infer",
 })
 
 export const auth = betterAuth({
@@ -110,8 +123,9 @@ export const auth = betterAuth({
 	// a verification value is read from Redis first and kept in Postgres,
 	// so an unreachable Redis never breaks a sign-in, a password reset, or a verification link
 	verification: { storeInDatabase: true },
-	// better auth derives trustedOrigins from baseURL itself
-	baseURL: Bun.env.BETTER_AUTH_URL,
+	// better auth derives trustedOrigins from baseURL itself. the local fallback is for tests, where the mcp plugin still
+	// needs a base url to name its token issuer
+	baseURL: appUrl(),
 	// these are appended to that derived origin
 	trustedOrigins: isLanDevOriginTrusted ? LAN_DEV_ORIGINS : undefined,
 	// email and password sign-in. the reset link is short-lived and a reset revokes every session
@@ -147,8 +161,13 @@ export const auth = betterAuth({
 	hooks: { before: beforeCredentialRequest, after: afterAuthRequest },
 	// resolve the client address through the trusted proxies
 	advanced: { ipAddress: ipAddressOptions },
-	// the oauth server for the mcp server. a client registers itself, then the user signs in and consents
-	plugins: [mcpPlugin],
+	// the oauth server for the MCP server, the jwt plugin that signs its access tokens, and client metadata documents
+	// as the second way a client registers. the jwt plugin's model is named jwk, so the plural names the jwks table
+	plugins: [
+		jwt({ schema: { jwks: { modelName: "jwk" } } }),
+		mcpPlugin,
+		cimd({ fetchClientMetadataResource, metadataProfile: "mcp-2026-07-28" }),
+	],
 	// rate limiting for credential endpoints
 	rateLimit: {
 		enabled: true,
@@ -160,7 +179,7 @@ export const auth = betterAuth({
 			"/reset-password": { window: CREDENTIAL_RATE_LIMIT_WINDOW_SECONDS, max: CREDENTIAL_RATE_MAX },
 			"/change-password": { window: CREDENTIAL_RATE_LIMIT_WINDOW_SECONDS, max: CREDENTIAL_RATE_MAX },
 			// an mcp client registers with no credential, and each registration writes a row
-			"/mcp/register": { window: MCP_REGISTER_RATE_LIMIT_WINDOW_SECONDS, max: MCP_REGISTER_RATE_MAX },
+			"/oauth2/register": { window: MCP_REGISTER_RATE_LIMIT_WINDOW_SECONDS, max: MCP_REGISTER_RATE_MAX },
 		},
 	},
 	// a non-blocking verification email on signup, whose link lives a day instead of the default hour

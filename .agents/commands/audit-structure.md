@@ -640,6 +640,16 @@ Check for:
    - `chat/thinkingLines.ts` and its test (now `common/thinkingLines.ts`), and the three local thinking lines,
      `ThinkingLine` in `chat/ChatMessageParts.tsx`, `ScanThinkingLine` in `topic/TopicScanHistory.tsx`, and
      `ThinkingLine` in `topic/TopicSourceEditor.tsx` (now `common/ThinkingLine.tsx`)
+   - `mcp` from `better-auth/plugins` (now `mcp` from `@better-auth/mcp`, beside `jwt` and `cimd` in
+     `apps/api/auth.ts`), `auth.api.getMcpSession` (now `verifyMcpAccessToken` in `apps/api/mcp/toolCaller.ts`), and
+     `oAuthDiscoveryMetadata` and `oAuthProtectedResourceMetadata` (now `oauthProviderAuthServerMetadata` and
+     `toProtectedResourceMetadata` in `apps/api/index.ts`)
+   - `/api/auth/mcp/authorize`, `/mcp/register`, and `/mcp/token` (now `/api/auth/oauth2/authorize`, `/oauth2/register`,
+     and `/oauth2/token`), and the consent page's `consent_code` (now the signed query it posts as `oauth_query`)
+   - `oauthApplications` and `oauth_applications` (now `oauthClients` and `oauth_clients` in
+     `packages/db/schema/users.ts`), and the client name lookups in `toolCaller.ts`, `server.ts`, and `authHooks.ts`
+     (now `loadOAuthClientName` in `apps/api/mcp/oauthClientNames.ts`)
+   - `getIp` from `better-auth/api` (now `getIP`)
 
 5. **Cross-harness enforcement parity**: `.claude/settings.json` hooks and
    `.opencode/plugin/guardrails.mjs` must gate the same operations with the

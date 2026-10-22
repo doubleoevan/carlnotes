@@ -1,5 +1,6 @@
 // the server that owns the origin
 import { extname, resolve } from "node:path"
+import { oauthProviderAuthServerMetadata } from "@better-auth/oauth-provider"
 import { DEGRADED_RENDER_HEADER } from "@carlnotes/contracts/seo"
 import { withTimeLimit } from "@carlnotes/contracts/time"
 import { db, readPoolGauges, sizeConnectionPool } from "@carlnotes/db"
@@ -10,7 +11,6 @@ import { toPositiveInteger } from "@carlnotes/server/envSettings"
 import { reportError, startMonitoring } from "@carlnotes/server/monitoring"
 import { startRuntimeGauges } from "@carlnotes/server/runtimeGauges"
 import { getSessionCookie } from "better-auth/cookies"
-import { oAuthDiscoveryMetadata, oAuthProtectedResourceMetadata } from "better-auth/plugins"
 import { sql } from "drizzle-orm"
 import type { Context, Next } from "hono"
 import { Hono } from "hono"
@@ -159,16 +159,17 @@ const server = new Hono<AppEnv>()
 	.get("/api/health/deep", checkDatabaseHealth)
 	// an icon request reads one row and never a session, so it sits ahead of the api tree too
 	.route("/api", faviconsRoute)
-	// the oauth discovery documents an mcp client reads under /.well-known, with or without a path appended
-	.get("/.well-known/oauth-authorization-server", (context) => oAuthDiscoveryMetadata(auth)(context.req.raw))
-	.get("/.well-known/oauth-authorization-server/*", (context) => oAuthDiscoveryMetadata(auth)(context.req.raw))
-	.get("/.well-known/oauth-protected-resource", (context) => oAuthProtectedResourceMetadata(auth)(context.req.raw))
-	.get("/.well-known/oauth-protected-resource/*", (context) => oAuthProtectedResourceMetadata(auth)(context.req.raw))
+	// the oauth discovery documents an mcp client reads under /.well-known, with or without a path appended. every
+	// protected resource path, the topic-bound /mcp/t/:topicId included, reads the one document for /mcp
+	.get("/.well-known/oauth-authorization-server", (context) => oauthProviderAuthServerMetadata(auth)(context.req.raw))
+	.get("/.well-known/oauth-authorization-server/*", (context) => oauthProviderAuthServerMetadata(auth)(context.req.raw))
+	.get("/.well-known/oauth-protected-resource", (context) => toProtectedResourceMetadata(context.req.raw))
+	.get("/.well-known/oauth-protected-resource/*", (context) => toProtectedResourceMetadata(context.req.raw))
 	// report what a known bot fetched, once the route below has answered: a page, a document, a card, or a feed
 	.use("*", trackBotFetches)
 	// the tool caller resolves ahead of the limiter, which keys by the user a token names. the wildcard matches /mcp itself
 	.use("/mcp/*", async (context, next) => {
-		context.set("toolCaller", await resolveToolCaller(context.req.raw.headers))
+		context.set("toolCaller", await resolveToolCaller(context.req.raw))
 		await next()
 	})
 	.use("/mcp/*", toolCallerRateLimiter, defaultBodyLimit)
@@ -331,6 +332,12 @@ function toRenderedPageResponse(request: Request, page: Response): Response {
 		statusText: isDegradedRender ? "Service Unavailable" : page.statusText,
 		headers: pageHeaders,
 	})
+}
+
+// the protected resource metadata for /mcp, which the mcp plugin serves at its own well-known path through the auth
+// handler. a request for any path after it reads the same document
+function toProtectedResourceMetadata(request: Request): Promise<Response> {
+	return auth.handler(new Request(new URL("/.well-known/oauth-protected-resource", request.url), request))
 }
 
 // respond with one trivial query's latency and the pool's counts, or with 503 if the query fails or takes too long.

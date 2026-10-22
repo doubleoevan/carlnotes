@@ -8,7 +8,7 @@ import { chatProposals, chatRoomMessages, chatTurns } from "./schema/chat"
 import { podcastEpisodeChapters, podcastEpisodes } from "./schema/podcast"
 import { EMBED_DIMENSIONS, EMBED_MODEL_NAME, findings, resources } from "./schema/scans"
 import { subscriptions, topicEmailSends, topicPromptVersions, topics } from "./schema/topics"
-import { oauthAccessTokens, oauthApplications, oauthConsents } from "./schema/users"
+import { oauthAccessTokens, oauthClients, oauthRefreshTokens } from "./schema/users"
 
 // read the generated initial migration once for SQL-level assertions
 const migrationsDirectory = join(import.meta.dir, "migrations")
@@ -324,17 +324,17 @@ test("topic_prompt_versions cascades from its topic, nulls its user, and indexes
 	expect(allMigrationsSql()).toMatch(/CREATE INDEX (IF NOT EXISTS )?"topic_prompt_versions_topic_created_idx"/)
 })
 
-// the oauth tables come from Better Auth's mcp plugin. tokens and consents cascade from their client,
-// and a consent also cascades from its user
+// the oauth tables mirror Better Auth's mcp plugin, cascading from their client and user and clearing a deleted session
 test("the oauth tables mirror the mcp plugin's models and cascade from their client", () => {
-	expect(oauthApplications.clientId.isUnique).toBe(true)
-	expect(oauthAccessTokens.accessToken.isUnique).toBe(true)
+	expect(oauthClients.clientId.isUnique).toBe(true)
 	expect(oauthAccessTokens.userId.notNull).toBe(false)
-	expect(oauthConsents.consentGiven.notNull).toBe(true)
+	expect(oauthRefreshTokens.userId.notNull).toBe(true)
 	// the migration SQL holds the cascades
-	expect(allMigrationsSql()).toMatch(/oauth_access_tokens_client_id_oauth_applications_client_id_fk.*ON DELETE cascade/)
-	expect(allMigrationsSql()).toMatch(/oauth_consents_client_id_oauth_applications_client_id_fk.*ON DELETE cascade/)
+	expect(allMigrationsSql()).toMatch(/oauth_access_tokens_client_id_oauth_clients_client_id_fk.*ON DELETE cascade/)
+	expect(allMigrationsSql()).toMatch(/oauth_refresh_tokens_user_id_users_id_fk.*ON DELETE cascade/)
+	expect(allMigrationsSql()).toMatch(/oauth_access_tokens_session_id_sessions_id_fk.*ON DELETE set null/)
 	expect(allMigrationsSql()).toMatch(/oauth_consents_user_id_users_id_fk.*ON DELETE cascade/)
+	expect(allMigrationsSql()).toMatch(/oauth_clients_user_id_users_id_fk.*ON DELETE cascade/)
 })
 
 // a deleted topic's podcast episodes keep their spend history, a deleted owner's episodes are deleted,

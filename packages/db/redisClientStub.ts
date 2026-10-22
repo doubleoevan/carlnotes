@@ -37,7 +37,7 @@ export function restoreRedisClient(): void {
 	setRedisClientBuilder(() => new RedisClient(Bun.env.REDIS_URL, REDIS_CLIENT_OPTIONS))
 }
 
-// a fake client over the shared map. a get, a set, and a delete read and write the map, the increment script counts a
+// a fake client over the shared map. a get, a get-and-delete, a set, and a delete read and write the map, the increment script counts a
 // key, the decrement script lowers a key that exists, the slot script always takes the slot, and pub/sub delivers nothing
 function toFakeRedisClient(storedValueByKey: Map<string, string>): RedisConnectionClient {
 	const fakeRedisClient = {
@@ -51,6 +51,12 @@ function toFakeRedisClient(storedValueByKey: Map<string, string>): RedisConnecti
 		},
 		async get(key: string): Promise<string | null> {
 			return storedValueByKey.get(key) ?? null
+		},
+		// read a key and delete it
+		async getdel(key: string): Promise<string | null> {
+			const storedValue = storedValueByKey.get(key) ?? null
+			storedValueByKey.delete(key)
+			return storedValue
 		},
 		// the XX option writes only a key that exists, and the expiry options are ignored
 		async set(key: string, value: string, ...options: string[]): Promise<"OK" | null> {

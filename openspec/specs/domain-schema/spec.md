@@ -735,18 +735,25 @@ The schema SHALL hold `topic_prompt_versions`: a Topic reference that cascades o
 - **THEN** the version row stays with its user reference cleared
 
 ### Requirement: Better Auth's OAuth provider tables persist beside the sign-in tables
-The schema SHALL hold `oauth_applications`, `oauth_access_tokens`, and `oauth_consents` shaped to Better Auth's `mcp` plugin models, with the same plural naming and plain timestamps without time zone as `sessions`, `accounts`, and `verifications`. They are identity plumbing like those tables, and no Source or Subscription SHALL reference them.
+The schema SHALL hold `jwks`, `oauth_clients`, `oauth_resources`, `oauth_client_resources`, `oauth_refresh_tokens`,
+`oauth_access_tokens`, `oauth_consents`, and `oauth_client_assertions`, shaped to the models of Better Auth's `mcp`,
+`jwt`, and `cimd` plugins, with the same plural naming and plain timestamps without time zone as `sessions`, `accounts`,
+and `verifications`, text arrays and jsonb where the models hold lists and JSON, and every row a user or a client owns
+deleted with it. They are identity plumbing like those tables, and no Source or Subscription SHALL reference them.
 
 #### Scenario: A registered client's token resolves to its user
 - **WHEN** a client registers dynamically and a user consents
-- **THEN** a row exists in each of `oauth_applications`, `oauth_consents`, and `oauth_access_tokens`, and the token lookup resolves to the user
+- **THEN** a row exists in `oauth_clients` and in `oauth_consents`, the access token is a JWT the server verifies
+  against a key in `jwks`, and it resolves to the user
 
 ### Requirement: The change includes the prompt version and OAuth migration
-The change SHALL include one generated migration creating the four tables, applied on deploy.
+The migrations SHALL create `topic_prompt_versions` and the OAuth provider tables, applied on deploy. The 1.6 tables
+`oauth_applications`, `oauth_access_tokens`, and `oauth_consents` SHALL be dropped before the 1.7 tables are created.
 
 #### Scenario: The migration creates the tables
-- **WHEN** the migration runs against an empty schema
-- **THEN** `topic_prompt_versions`, `oauth_applications`, `oauth_access_tokens`, and `oauth_consents` exist with their references and indexes
+- **WHEN** the migrations run against an empty schema
+- **THEN** `topic_prompt_versions` and every OAuth provider table exist with their references and indexes, and
+`oauth_applications` does not
 
 ### Requirement: A user's LiteLLM virtual key is stored on the user row, and null until it is created
 The `users` table SHALL have a nullable column that records the user's LiteLLM virtual key, beside the time that the key was created. The column SHALL be null only while the user has no key: during signup, and after a signup whose key creation failed, until the user's first model call creates and stores one. A key stored after signup SHALL record its own creation time, so the monthly budget reset treats it as created that month.

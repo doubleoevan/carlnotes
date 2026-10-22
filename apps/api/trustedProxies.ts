@@ -2,7 +2,7 @@
 // warning logged once if TRUSTED_PROXIES is unset or misses a hop
 
 import { isInternalAddress } from "@carlnotes/server/publicFetch"
-import { getIp } from "better-auth/api"
+import { getIP } from "better-auth/api"
 
 // the proxies from TRUSTED_PROXIES, as comma-separated IPs or CIDR ranges. in production these are Cloudflare's ranges
 export const trustedProxies = (Bun.env.TRUSTED_PROXIES ?? "")
@@ -17,7 +17,7 @@ export const ipAddressOptions = { trustedProxies, ipAddressHeaders: ["x-forwarde
  * Resolves a request's client address exactly as Better Auth does, returning null if no entry can be trusted.
  */
 export function resolveClientAddress(request: Request, ipAddress = ipAddressOptions): string | null {
-	return getIp(request, { advanced: { ipAddress } })
+	return getIP(request, { advanced: { ipAddress } })
 }
 
 /**

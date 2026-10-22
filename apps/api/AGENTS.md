@@ -69,12 +69,13 @@ at the root import it by name.
   Nothing missed while a subscriber was down is replayed.
   Chat catches up from its cursor, and a note resyncs on the next poke or when the note stream reaches the age limit.
 - `mcp/` — the mcp server: `server.ts` (the `/mcp` and `/mcp/t/:topicId` routes and the transport), `tools.ts` (the
-  tools it registers, with their schemas and annotations), `toolCaller.ts` (the tool caller: the visitor or user a
-  bearer token resolves to), and
-  `results.ts` (what the finding tools return for a visitor or a user, paged under a client's result limit, and the
-  paging helpers) and `topicResults.ts` (what `list_topics` returns). `mcp.smoke.ts` runs the sections in
-  `mcpSmokeSections.ts` over the fixtures in `mcpSmokeFixtures.ts`, and stops the first scan of the topic it creates
-  through `topic/firstScanSmoke.ts`.
+  tools it registers, with their schemas and annotations), `toolCaller.ts` (the tool caller: the visitor or user an
+  access token resolves to, verified in-process against the auth server's signing keys), `oauthClientNames.ts` (the
+  registered name of each MCP client, which the tool caller, the consent page's route, and the app connection report
+  read), `results.ts` (what the finding tools return for a visitor or a user, paged under a client's result limit, and
+  the paging helpers), and `topicResults.ts` (what `list_topics` returns). `mcp.smoke.ts` runs the sections in
+  `mcpSmokeSections.ts` and the oauth flow in `mcpOAuthSmokeSections.ts` over the fixtures in `mcpSmokeFixtures.ts`,
+  and stops the first scan of the topic it creates through `topic/firstScanSmoke.ts`.
 - `podcast/` — a Topic's podcast episodes: `podcastEpisodes.ts` (the routes for a season's episodes, an episode page,
   the next unplayed episode, one episode with its files and its preview card, a listener's progress, a chapter's rating,
   the podcast switch, and removing an episode), `podcastEpisodeRows.ts` (the episode row reads, the episode view rules
@@ -244,9 +245,11 @@ at the root import it by name.
   hook reports the failure, and the user is created without a key. The user's first model call creates the key.
   `authEmails.ts` sends the emails Better Auth asks for, and each mail hook in `auth.ts` starts its send through
   `sendAuthEmailInBackground`, which logs and reports a send that throws, and responds at once, so a slow or down
-  Resend never holds a signup or a reset request. `/mcp/register` is limited to 600 registrations an hour per address.
-  `authHooks.ts` holds the request hooks `auth.ts` passes Better Auth, the breach check and the canonical address before
-  a credential request and the sign-in and app connection reports after one, with the Google and GitHub profile mappers.
+  Resend never holds a signup or a reset request. `/oauth2/register` is limited to 600 registrations an hour per
+  address. `auth.ts` composes the MCP OAuth server from the `mcp`, `jwt`, and `cimd` plugins and exports
+  `MCP_RESOURCE_URL`, the `/mcp` url every MCP access token is bound to. `authHooks.ts` holds the request hooks
+  `auth.ts` passes Better Auth, the breach check and the canonical address before a credential request and the sign-in
+  and app connection reports after one, with the Google and GitHub profile mappers.
   `signupGate.ts` holds the turnstile check a password signup passes, signed into a five-minute cookie whose nonce
   Redis records, so one signup consumes it and a replay is rejected; while Redis is down the signature and expiry alone
   pass.

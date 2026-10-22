@@ -13,17 +13,18 @@ export async function fetchMcpClientName(clientId: string): Promise<string | nul
 }
 
 /**
- * Sends the user's consent, allowed or denied, and returns the redirect url.
+ * Sends the user's consent, allowed or denied, with the signed query the auth server sent the consent page,
+ * and returns the url to go to next.
  */
-export async function sendMcpConsent(consentCode: string, isAccepted: boolean): Promise<string> {
+export async function sendMcpConsent(oauthQuery: string, isAccepted: boolean): Promise<string> {
 	// post the consent to better auth's consent endpoint. the typed api client has no path for it
 	const consentResponse = await fetch(toApiUrl("/api/auth/oauth2/consent"), {
 		method: "POST",
 		headers: { "Content-Type": "application/json" },
-		body: JSON.stringify({ accept: isAccepted, consent_code: consentCode }),
+		body: JSON.stringify({ accept: isAccepted, oauth_query: oauthQuery }),
 	})
 	if (!consentResponse.ok) {
 		throw new Error(`consent returned ${consentResponse.status}`)
 	}
-	return ((await consentResponse.json()) as { redirectURI: string }).redirectURI
+	return ((await consentResponse.json()) as { url: string }).url
 }

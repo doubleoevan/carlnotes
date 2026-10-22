@@ -1,14 +1,12 @@
 // the mcp server. one handler serves /mcp and the topic-bound /mcp/t/:topicId with the same tools
 
-import { db } from "@carlnotes/db"
-import { oauthApplications } from "@carlnotes/db/schema/users"
 import { trackBotEvent } from "@carlnotes/server/analytics"
 import { StreamableHTTPTransport } from "@hono/mcp"
 import { McpServer, type RegisteredTool } from "@modelcontextprotocol/sdk/server/mcp.js"
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js"
-import { eq } from "drizzle-orm"
 import { type Context, Hono } from "hono"
 import { type AppEnv, currentUser } from "../currentUser"
+import { loadOAuthClientName } from "./oauthClientNames"
 import { resolveToolCaller, type ToolCaller } from "./toolCaller"
 import { registerTools } from "./tools"
 
@@ -29,16 +27,13 @@ export const mcpClientsRoute = new Hono<AppEnv>().get("/mcp/clients/:clientId", 
 	}
 
 	// look the client's name up by id
-	const [client] = await db
-		.select({ name: oauthApplications.name })
-		.from(oauthApplications)
-		.where(eq(oauthApplications.clientId, context.req.param("clientId")))
-	return client ? context.json({ name: client.name }) : context.json({ error: "not found" }, 404)
+	const clientName = await loadOAuthClientName(context.req.param("clientId"))
+	return clientName ? context.json({ name: clientName }) : context.json({ error: "not found" }, 404)
 })
 
 // serve one request with the tools registered for the tool caller the rate limit resolved
 async function handleMcpRequest(context: Context<AppEnv>, routeTopicId: string | null): Promise<Response> {
-	const toolCaller = context.get("toolCaller") ?? (await resolveToolCaller(context.req.raw.headers))
+	const toolCaller = context.get("toolCaller") ?? (await resolveToolCaller(context.req.raw))
 	const mcpServer = new McpServer({ name: SERVER_NAME, version: SERVER_VERSION })
 	trackToolCalls(mcpServer, toolCaller)
 	registerTools(mcpServer, toolCaller, routeTopicId)

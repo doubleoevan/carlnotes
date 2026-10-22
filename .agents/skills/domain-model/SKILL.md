@@ -105,10 +105,11 @@ what: `isTeamLeader`.
 The **MCP server** at `/mcp` (and its topic-bound `/mcp/t/<topicId>`) is a second reader over the api's query
 layer with the same tool list for everyone. The **client** is the program on the other end (Claude, Cursor,
 VS Code), never the person. A **tool caller** is whoever is behind a request before it is resolved, and it resolves
-exactly once: a bearer token the OAuth lookup accepts makes it a **user**, anything else makes it a **visitor**.
-Past that line identifiers say `user` and `visitor` as everywhere else, and no query runs against a null user
-where a visitor branch should run instead. "Add to AI" is the install copy. Better Auth's `oauth_applications`,
-`oauth_access_tokens`, and `oauth_consents` are identity plumbing beside `sessions`, never domain nouns.
+exactly once: an access token the auth server signed for `/mcp` makes it a **user**, anything else makes it a
+**visitor**. Past that line identifiers say `user` and `visitor` as everywhere else, and no query runs against a null
+user where a visitor branch should run instead. "Add to AI" is the install copy. Better Auth's `oauth_clients`, its
+token, consent, and resource tables, and `jwks` are identity plumbing beside `sessions`, never domain nouns. The OAuth
+**resource** a token is bound to, `MCP_RESOURCE_URL`, is the `/mcp` url, never a Resource.
 
 ## Page is the Topic or the Team a thing lives on
 A **page** is exactly one Topic or one Team, and it is what a Note sits on and what a private Chat Turn

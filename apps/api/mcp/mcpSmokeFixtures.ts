@@ -3,7 +3,7 @@
 import { db } from "@carlnotes/db"
 import { findings, resources, scans } from "@carlnotes/db/schema/scans"
 import { topics } from "@carlnotes/db/schema/topics"
-import { accounts, oauthApplications, users } from "@carlnotes/db/schema/users"
+import { accounts, oauthClients, users } from "@carlnotes/db/schema/users"
 import { deleteUserLiteLLMKey } from "@carlnotes/models/litellm"
 import { Client } from "@modelcontextprotocol/sdk/client/index.js"
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js"
@@ -103,7 +103,7 @@ export async function cleanUp(registeredClientId: string): Promise<void> {
 	await db.delete(users).where(eq(users.id, ownerId))
 	await db.delete(resources).where(inArray(resources.url, resourceUrls))
 	if (registeredClientId) {
-		await db.delete(oauthApplications).where(eq(oauthApplications.clientId, registeredClientId))
+		await db.delete(oauthClients).where(eq(oauthClients.clientId, registeredClientId))
 	}
 }
 

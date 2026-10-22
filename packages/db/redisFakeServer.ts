@@ -107,6 +107,14 @@ export function toFakeRedisClient(fakeRedisServer: FakeRedisServer): FakeRedisCl
 			await stallIfCommandStalled()
 			return fakeRedisServer.storedValueByKey.get(key) ?? null
 		},
+		// a get-and-delete fails and hangs as a get does, then reads a shared key and deletes it
+		async getdel(key: string): Promise<string | null> {
+			throwIfCommandFailing()
+			await stallIfCommandStalled()
+			const storedValue = fakeRedisServer.storedValueByKey.get(key) ?? null
+			fakeRedisServer.storedValueByKey.delete(key)
+			return storedValue
+		},
 		// a set hangs while commands are stalled, then writes the shared keys and ignores the expiry.
 		// the XX option writes only a key that exists
 		async set(key: string, value: string, ...options: string[]): Promise<"OK" | null> {

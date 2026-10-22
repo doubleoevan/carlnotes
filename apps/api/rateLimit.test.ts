@@ -4,7 +4,7 @@ import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import * as redis from "@carlnotes/db/redis"
 import { restoreRedisClient, stubRedisClient, stubUnreachableRedisClient } from "@carlnotes/db/redisClientStub"
 import * as redisRateLimits from "@carlnotes/db/redisRateLimits"
-import { getIp } from "better-auth/api"
+import { getIP } from "better-auth/api"
 import { Hono } from "hono"
 import { auth } from "./auth"
 import type { AppEnv } from "./currentUser"
@@ -73,7 +73,7 @@ test("a request that skips the edge resolves to its sender", () => {
 test("Better Auth and the limiter resolve the same client address", () => {
 	const request = new Request("http://localhost/mcp", { headers: { "x-forwarded-for": "203.0.113.7" } })
 	expect(auth.options.advanced?.ipAddress).toBe(ipAddressOptions)
-	expect(resolveClientAddress(request)).toBe(getIp(request, auth.options))
+	expect(resolveClientAddress(request)).toBe(getIP(request, auth.options))
 })
 
 // the store counts a limiter key under a prefixed Redis key and returns the count as the limiter's hits and reset time

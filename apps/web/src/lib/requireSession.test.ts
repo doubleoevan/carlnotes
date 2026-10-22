@@ -28,8 +28,8 @@ afterEach(() => {
 // the whole path and query go into next, encoded so the & in the query stays part of next
 test("a signed-out visitor at the consent page is sent to log in with the consent path", async () => {
 	setSettledSession(null)
-	expect(await readRedirectHref("/mcp/consent?consent_code=a&client_id=b")).toBe(
-		`/login?next=${encodeURIComponent("/mcp/consent?consent_code=a&client_id=b")}`,
+	expect(await readRedirectHref("/mcp/consent?client_id=b&sig=a")).toBe(
+		`/login?next=${encodeURIComponent("/mcp/consent?client_id=b&sig=a")}`,
 	)
 })
 

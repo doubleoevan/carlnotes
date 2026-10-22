@@ -286,7 +286,7 @@ test("an oauth query returns to the authorize endpoint with the query intact", (
 		response_type: "code",
 		state: "s1",
 	})
-	expect(toAuthorizeReturnPath(searchParams)).toBe(`/api/auth/mcp/authorize?${searchParams.toString()}`)
+	expect(toAuthorizeReturnPath(searchParams)).toBe(`/api/auth/oauth2/authorize?${searchParams.toString()}`)
 })
 
 // a visit with only a next parameter, or only a client id, returns null
