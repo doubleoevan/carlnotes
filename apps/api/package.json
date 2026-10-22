@@ -24,7 +24,7 @@
 		"@hono/zod-validator": "^0.9.1",
 		"@modelcontextprotocol/sdk": "^1.32.1",
 		"@resvg/resvg-js": "^2.6.2",
-		"ai": "^7.0.144",
+		"ai": "^7.0.145",
 		"better-auth": "~1.7.11",
 		"drizzle-orm": "^0.45.4",
 		"hono": "^4.13.13",
