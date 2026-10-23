@@ -1,8 +1,10 @@
 // the tool call tracker reports each call's outcome: ok, rejected for a result flagged as an error, and failed for a
-// thrown error
+// thrown error, and the client name route reads a client id that is a url
 import { expect, spyOn, test } from "bun:test"
 import * as analytics from "@carlnotes/server/analytics"
-import { trackToolCalls } from "./server"
+import { toSignedInApp } from "../testSession"
+import * as oauthClientNames from "./oauthClientNames"
+import { mcpClientsRoute, trackToolCalls } from "./server"
 
 // a registered tool's handler
 type FakeToolHandler = (...handlerArguments: unknown[]) => Promise<{ content: never[]; isError?: boolean }>
@@ -41,4 +43,15 @@ test("trackToolCalls reports an ok, a rejected, and a failed tool call by the ap
 		["mcp_tool_called", "test-app", { ...toolCallProperties, tool: "failed_tool", outcome: "failed" }],
 	])
 	trackBotEventSpy.mockRestore()
+})
+
+test("the client name route reads an encoded url client id whole", async () => {
+	const loadNameSpy = spyOn(oauthClientNames, "loadOAuthClientName").mockResolvedValue("Claude")
+	const clientId = "https://claude.ai/oauth/mcp-oauth-client-metadata"
+	const response = await toSignedInApp(mcpClientsRoute, "user-1").request(
+		`/mcp/clients/${encodeURIComponent(clientId)}`,
+	)
+	expect(await response.json()).toEqual({ name: "Claude" })
+	expect(loadNameSpy).toHaveBeenCalledWith(clientId)
+	loadNameSpy.mockRestore()
 })

@@ -8,7 +8,6 @@ import { CoffeeLoading } from "@/components/branding/CoffeeLoading"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { ScrollBox } from "@/components/topic/TopicScanRecap"
 import { POPOVER_HEADING_CLASS, SECTION_LABEL_CLASS, STANDALONE_LINK_CLASS } from "@/lib/styleClasses"
-import { clearProposedTopicEdit } from "@/stores/chatPanelStore"
 
 // how the card words each visibility
 const VISIBILITY_LABELS: Record<TopicDraft["visibility"], string> = {
@@ -29,6 +28,7 @@ export function TopicDraftCard({
 	isCarlReplying = false,
 	attachmentFiles = [],
 	onRemoveAttachmentFile,
+	onDismissTopicEdit,
 }: {
 	topicDraft: TopicDraft
 	// the topic the card shows, which makes its name a link. absent in the new-topic chat, where none exists yet
@@ -39,6 +39,8 @@ export function TopicDraftCard({
 	isCarlReplying?: boolean
 	attachmentFiles?: File[]
 	onRemoveAttachmentFile?: (index: number) => void
+	// takes a proposed edit off the card, shown as the dismiss button on a proposed edit
+	onDismissTopicEdit?: () => void
 }) {
 	// a team alone is not a topic draft. opening this chat from a team page starts the draft on that team,
 	// and a create clears every other field but keeps the team for the next topic, so counting it would leave the card up for good
@@ -71,11 +73,11 @@ export function TopicDraftCard({
 				<div className="relative">
 					<h2 className={POPOVER_HEADING_CLASS}>{heading}</h2>
 					{/* clear the proposed edit */}
-					{isTopicEditProposed && (
+					{isTopicEditProposed && onDismissTopicEdit && (
 						<button
 							type="button"
 							aria-label="Dismiss proposed edit"
-							onClick={clearProposedTopicEdit}
+							onClick={onDismissTopicEdit}
 							className="text-muted-foreground hover:text-foreground absolute top-0 right-0"
 						>
 							<X className="size-3.5" />

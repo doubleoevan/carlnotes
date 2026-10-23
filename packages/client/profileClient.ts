@@ -1,6 +1,5 @@
 // the user profile api client
 import type { ProfileResponse, ProfileTeamStatus } from "@carlnotes/contracts/profiles"
-import type { UserSearchResult } from "@carlnotes/contracts/search"
 import { apiClient, readApiErrorMessage, toApiUrl } from "./apiClient"
 
 // a user's public profile by id, or null if there is no such user
@@ -48,16 +47,6 @@ export async function sendAvatarSource(avatarSource: "generated" | "oauth"): Pro
 	const response = await fetch(toApiUrl("/api/avatars"), { method: "POST", body })
 	if (!response.ok) {
 		throw new Error(`avatar source change failed: ${response.status}`)
-	}
-}
-
-// return users whose name contains the query for the search bar.
-export async function searchUsers(query: string): Promise<UserSearchResult[]> {
-	try {
-		const response = await fetch(toApiUrl(`/api/users?q=${encodeURIComponent(query)}`))
-		return response.ok ? ((await response.json()) as { users: UserSearchResult[] }).users : []
-	} catch {
-		return []
 	}
 }
 

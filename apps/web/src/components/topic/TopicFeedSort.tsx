@@ -1,11 +1,11 @@
-import { TOPIC_FINDING_SORTS, type TopicFindingSort } from "@carlnotes/core/lib/topicFindingSorts"
+import { TOPIC_FINDING_SORTS, type TopicFindingSort } from "@carlnotes/contracts/findings"
 import { ArrowUpDown, Check, Clock, Flame, type LucideIcon, Target } from "lucide-react"
 import { useState } from "react"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/primitives/popover"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import { MENU_OPTION_CLASS, MENU_OPTION_SELECTED_CLASS, SEARCH_BAR_ICON_CLASS } from "@/lib/styleClasses"
 import { cn } from "@/lib/utils"
-import { useTopicFeed } from "@/providers/TopicFeedProvider"
+import { useOptionalTopicFeed } from "@/providers/TopicFeedProvider"
 
 // each sort mode's display label and icon
 const SORT_OPTIONS: Record<TopicFindingSort, { label: string; Icon: LucideIcon }> = {
@@ -16,14 +16,21 @@ const SORT_OPTIONS: Record<TopicFindingSort, { label: string; Icon: LucideIcon }
 
 /**
  * The Sort menu at the end of the search bar, beside Filters: the relevant / newest / trending modes.
- * Selecting a mode closes the menu, and exactly one mode is ever active.
+ * Selecting a mode closes the menu, and exactly one mode is ever active. Given a search sort, it sorts the search page
+ * or a search card in place of the topic feed.
  */
-export function TopicFeedSort() {
-	// the sort lives in the topic feed context
-	const { sort, setSort, hasTopicFeed } = useTopicFeed()
+export function TopicFeedSort({
+	searchSort,
+}: {
+	searchSort?: { sort: TopicFindingSort; onSort: (sort: TopicFindingSort) => void }
+}) {
+	// the sort lives in the topic feed context, unless a search holds it: the search page's url or a search card's
+	const topicFeed = useOptionalTopicFeed()
 	const [isOpen, setIsOpen] = useState(false)
-	// a page with no findings hides the control
-	if (!hasTopicFeed) {
+	const sort = searchSort?.sort ?? topicFeed?.sort
+	const setSort = searchSort?.onSort ?? topicFeed?.setSort
+	// a page with no findings and no search hides the control
+	if (!sort || !setSort || (!topicFeed?.hasTopicFeed && !searchSort)) {
 		return null
 	}
 	return (

@@ -1,4 +1,5 @@
 import type { PodcastEpisodeSummary } from "@carlnotes/contracts/podcast"
+import { toDotSeparatedText } from "@carlnotes/contracts/text"
 import { toPodcastEpisodeDayAndDurationLabels, toPodcastEpisodeTitleLabel } from "@carlnotes/core/lib/labels"
 import { Pause, Play } from "lucide-react"
 import { AnchorLink } from "@/components/common/AnchorLink"
@@ -75,7 +76,7 @@ export function PodcastEpisodeRow({
 					</PodcastEpisodeTooltip>
 				</div>
 				<div className="text-muted-foreground text-xs" suppressHydrationWarning>
-					{podcastEpisodeDetailLabels.join(" · ")}
+					{toDotSeparatedText(podcastEpisodeDetailLabels)}
 				</div>
 			</div>
 			{/* the remove button */}

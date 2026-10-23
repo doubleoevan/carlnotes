@@ -1,6 +1,7 @@
-import { CUSTOM_SOURCE_OPTIONS, DEFAULT_SOURCES } from "@carlnotes/contracts/sources"
-import type { ProposeTopicEditPayload, TopicDraft } from "@carlnotes/contracts/topicPayloads"
-import type { TopicResponse } from "@carlnotes/contracts/topics"
+// a topic's fields in the topic card's shape, and an edit previewed over them
+import { CUSTOM_SOURCE_OPTIONS, DEFAULT_SOURCES } from "./sources"
+import type { ProposeTopicEditPayload, TopicDraft } from "./topicPayloads"
+import type { TopicResponse } from "./topics"
 
 // the fields of a topic the card shows
 export type EditableTopicFields = Pick<

@@ -136,7 +136,7 @@ export function toStoryTopicFinding(
 		faviconPath: null,
 		publishedAt: FIXTURE_DATE.toISOString(),
 		fetchedAt: FIXTURE_DATE.toISOString(),
-		viewerCount: 3,
+		viewCount: 3,
 		relevanceScore: 0.92,
 		relevanceExplanation: "A new release of a runtime the topic follows.",
 		rating: null,

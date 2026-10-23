@@ -1,11 +1,13 @@
 // the pagination footer under a table: the rows select on the left and the pager on the right, and the scripted
 // footer that shows only with JavaScript
+
+import { PAGE_SIZES } from "@carlnotes/contracts/pagination"
 import type { Meta, StoryObj } from "@storybook/tanstack-react"
 import { fn } from "storybook/test"
 import { type RelatedTopic, RelatedTopicsSection } from "@/components/topic/RelatedTopicsSection"
 import { toOwnFrameDocs } from "../../../.storybook/parameters"
 import { TableCard } from "./TableCard"
-import { PAGE_SIZES, ScriptedTablePagination, SMALLEST_PAGE_SIZE, TablePagination } from "./TablePagination"
+import { ScriptedTablePagination, SMALLEST_PAGE_SIZE, TablePagination } from "./TablePagination"
 
 const meta = {
 	title: "Table/TablePagination",

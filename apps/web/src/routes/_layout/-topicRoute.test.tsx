@@ -58,7 +58,7 @@ const FINDING = {
 	faviconPath: null,
 	publishedAt: "2026-09-20T00:00:00.000Z",
 	fetchedAt: "2026-09-21T00:00:00.000Z",
-	viewerCount: 3,
+	viewCount: 3,
 	relevanceScore: 0.9,
 	relevanceExplanation: "A weekly roundup of agent releases.",
 	rating: null,

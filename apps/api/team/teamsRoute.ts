@@ -16,7 +16,6 @@ import { and, eq, sql } from "drizzle-orm"
 import { Hono } from "hono"
 import { isLeaderRole } from "../authorization"
 import { type AppEnv, currentUser, toAnalyticsProperties } from "../currentUser"
-import { searchRateLimiter } from "../rateLimit"
 import { deleteTeam } from "./deleteTeam"
 import {
 	approveJoinTeamRequest,
@@ -26,17 +25,12 @@ import {
 	setTeamMemberRole,
 	toTeamRole,
 } from "./members"
-import { searchTeams } from "./search"
 import { loadTeamPage } from "./teamPage"
 import { addTopicToTeam, createTeam, removeTopicFromTeam, updateTeam } from "./teams"
 import { loadTeamsPage } from "./teamsPage"
 
 // the team routes. reads return a 404 for anything the user may not know exists
 export const teamsRoute = new Hono<AppEnv>()
-	// which teams the query finds by name, for the search bar's suggestions
-	.get("/teams/search", searchRateLimiter, async (context) => {
-		return context.json({ teams: await searchTeams(context.req.query("q") ?? "", currentUser(context)) })
-	})
 	.get("/teams/name-check", async (context) => {
 		// whether a name is taken, compared in lowercase like the index that enforces it
 		if (!currentUser(context)) {

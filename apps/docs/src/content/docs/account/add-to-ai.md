@@ -39,24 +39,40 @@ in, so it reads as a visitor. Copy server URL works for any other app that lists
 
 ## What your AI can do
 
-Without an account, your AI reads what a visitor reads. It lists the public topics and reads a topic's feed, with Carl's
-note on each finding. It also searches a topic's findings by meaning. Search uses a shared public budget. When that
-budget is spent for the month, search says so, and reading the feed keeps working.
+Without an account, your AI reads what a visitor reads. It finds public topics, podcast episodes, findings, teams, and
+profiles by name, the same search the site's search bar runs. It lists the public topics and reads a topic's feed, with
+Carl's note on each finding. It also searches one topic's findings by meaning. That search uses a shared public budget.
+When that budget is spent for the month, it says so, and reading the feed keeps working.
 
 Connect an account to unlock the rest:
 
-- **Read, rate, bookmark.** Mark a finding read, rate it up or down, or bookmark it, the same as on the page.
-- **Your topics.** The list includes the topics you own, follow, or have through a team. Each one comes with its
-  sources and their ids.
-- **Edits.** Rewrite a topic's prompt, add a source, or remove one. A prompt edit saves a version. Adding a source
-  returns its projected cost. No brew starts. See
-  [Editing a topic with Coffee Talk](/docs/feed/editing-a-topic-in-chat/) for the same three changes from the panel.
+- **Read, rate, bookmark, follow.** Mark a finding read, rate it up or down, bookmark it, or follow a topic, the same
+  as on the page.
+- **Your topics.** Search and the topic list include the topics you own, follow, or have through a team. Each listed
+  topic comes with its sources and their ids.
+- **Edits.** Change a topic's name, tags, visibility, schedule, findings per brew, podcast, or prompt, and add or
+  remove sources, in one edit. A prompt edit saves a version. Adding a source returns its projected cost. No brew
+  starts. Making a topic public or removing a source saves nothing at first: your AI shows you the change and asks,
+  and it saves only once you agree. See [Editing a topic with Coffee Talk](/docs/feed/editing-a-topic-in-chat/) for
+  the same edits from the panel.
 - **New topics.** Ask for verified source suggestions for a title and prompt, then create the topic. Fields you leave
   out take these defaults: weekly on Wednesday at 9:00 AM, shared by invite, and the top 10 findings. Its first brew
   starts.
 
 Every tool that needs an account says so when there is none. It also says that reading and searching public topics work
 without one.
+
+## Cards
+
+Claude, ChatGPT, VS Code, and Goose show some results as cards instead of text. A search shows the search page's
+numbered list, which you can page and sort, with play buttons, Follow, and each finding's note. A topic edit shows the
+topic card from Coffee Talk, with a Save button for a change that needs your agreement. A feed read shows the findings
+with Carl's notes, thumbs, bookmark, and done. A card's buttons do what your AI's own calls do, under the same account.
+If an app blocks a card's audio, the card links to the episode's page instead.
+
+![The search card for "speed", as an MCP Apps host shows it: numbered rows for a topic, two podcast episodes, and
+findings with their chapters' play pills, then See all on
+CarlNotes](../../../assets/screenshots/mcp-host-search-card.png)
 
 ## Connecting an account
 

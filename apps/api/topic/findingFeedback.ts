@@ -6,7 +6,8 @@ import { topics } from "@carlnotes/db/schema/topics"
 import { trackEvent } from "@carlnotes/server/analytics"
 import { and, eq, isNotNull, sql } from "drizzle-orm"
 import type { AnalyticsProperties } from "../currentUser"
-import { canBookmarkFinding, canRateFinding, isTopicFindingVisible, toTopicRole } from "./permissions"
+import { canBookmarkFinding, canRateFinding, isTopicFindingVisible } from "./findingPermissions"
+import { toTopicRole } from "./permissions"
 import { saveTopicVectorsReportingFailure } from "./saveTopic"
 
 /**
@@ -161,51 +162,62 @@ export async function setConsumed(
 	return true
 }
 
+// who opened which finding, the open's analytics properties, and whether the open counts among the finding's views,
+// which an open past the count rate limit does not
+type RecordViewOptions = {
+	userId: string
+	findingId: string
+	analyticsProperties: AnalyticsProperties
+	isViewCounted: boolean
+}
+
 /**
- * Records an open of the topic finding, counts the user among its viewers on their first open, and marks it consumed.
+ * Records an open of the topic finding, counts it among the finding's views if it is counted, and marks it consumed.
  * Returns false if the user may not see it.
  */
-export async function recordView(
-	userId: string,
-	findingId: string,
-	analyticsProperties: AnalyticsProperties,
-): Promise<boolean> {
+export async function recordView({
+	userId,
+	findingId,
+	analyticsProperties,
+	isViewCounted,
+}: RecordViewOptions): Promise<boolean> {
 	if (!(await isTopicFindingVisible(userId, findingId))) {
 		return false
 	}
 
-	// lock the finding row before looking for the user's earlier open, so two opens at once count the user once. a no
-	// key update lock still lets the view insert take its foreign key share
-	const isFindingOpened = await db.transaction(async (transaction) => {
-		const [lockedFindingRow] = await transaction
-			.select({ id: findings.id })
-			.from(findings)
-			.where(eq(findings.id, findingId))
-			.for("no key update")
-		// a finding deleted since the visibility check records nothing
-		if (!lockedFindingRow) {
+	// count the open among the finding's views, and record its view event. a finding deleted since the visibility check
+	// records nothing. nothing reads view events for scoring
+	if (isViewCounted) {
+		if (!(await addFindingView(findingId))) {
 			return false
 		}
-
-		// count the user on their first open
-		if (!(await hasOpenedFinding(transaction, userId, findingId))) {
-			await transaction
-				.update(findings)
-				.set({ viewerCount: sql`${findings.viewerCount} + 1` })
-				.where(eq(findings.id, findingId))
-		}
-		// record the open's view event. nothing reads view events for scoring
-		await transaction.insert(findingViews).values({ findingId, userId, openedAt: new Date() })
-		return true
-	})
-	if (!isFindingOpened) {
-		return false
+		await db.insert(findingViews).values({ findingId, userId, openedAt: new Date() })
 	}
 	await saveTopicFindingConsumed(userId, findingId, true)
 
 	// track the event for analytics
 	trackEvent("finding_opened", userId, analyticsProperties)
 	return true
+}
+
+/**
+ * Counts a visitor's open of a topic finding among its views, if a visitor may see it. A visitor has no read state, so
+ * nothing else is recorded.
+ */
+export async function countVisitorFindingView(findingId: string): Promise<void> {
+	if (await isTopicFindingVisible(null, findingId)) {
+		await addFindingView(findingId)
+	}
+}
+
+// add one to the finding's views, returning false if the finding is gone
+async function addFindingView(findingId: string): Promise<boolean> {
+	const [viewedFindingRow] = await db
+		.update(findings)
+		.set({ viewCount: sql`${findings.viewCount} + 1` })
+		.where(eq(findings.id, findingId))
+		.returning({ id: findings.id })
+	return viewedFindingRow !== undefined
 }
 
 // insert or delete the consumed row, with the access check already run by the exported callers

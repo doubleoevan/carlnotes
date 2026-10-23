@@ -1,54 +1,84 @@
-// the search bar's topic name search, which applies the topic view rules in SQL
-import { SEARCH_MIN_CHARS, type TopicSearchResult, USER_SEARCH_LIMIT } from "@carlnotes/contracts/search"
+// the site search's topic reader: the topics whose name contains the query, under the topic view rules in SQL
+import type { TopicSearchRow } from "@carlnotes/contracts/search"
+import { toTopicPath } from "@carlnotes/contracts/seo"
 import { db } from "@carlnotes/db"
-import { loadUserAccess } from "@carlnotes/db/quotas"
 import { topics } from "@carlnotes/db/schema/topics"
-import { and, like, sql } from "drizzle-orm"
-import { Hono } from "hono"
-import { type AppEnv, currentUser } from "../currentUser"
+import { and, like, type SQL, sql } from "drizzle-orm"
 import { toContainsLikePattern } from "../likePattern"
-import { searchRateLimiter } from "../rateLimit"
-import { toTopicViewFilter } from "./permissions"
+import { loadLatestPodcastEpisodeSummaries } from "../podcast/podcastEpisodeShapes"
+import { loadSubscribedTopicIds, toTopicViewFilter } from "./permissions"
 
-// who is searching, and the typed query
-export type SearchTopicsOptions = { userId: string | null; query: string }
+// who is searching, whether they are an admin, the trimmed query, the most rows to read, and the filter a topic's tags
+// must pass
+type SearchTopicsOptions = {
+	userId: string | null
+	isAdmin: boolean
+	query: string
+	limit: number
+	topicTagFilter?: SQL
+}
 
 /**
- * Returns the listed topics whose name contains the query and that the user may open, shortest name first.
+ * Returns the topics whose name contains the query and that the user may open, shortest name first, each with its
+ * latest podcast episode the user may listen to and whether the user subscribes to it.
  */
-export async function searchTopics({ userId, query }: SearchTopicsOptions): Promise<TopicSearchResult[]> {
-	// too short a query matches most of the table
-	const trimmedQuery = query.trim()
-	if (trimmedQuery.length < SEARCH_MIN_CHARS) {
+export async function searchTopics(searchTopicsOptions: SearchTopicsOptions): Promise<TopicSearchRow[]> {
+	const topicRows = await toTopicSearchQuery(searchTopicsOptions)
+	if (topicRows.length === 0) {
 		return []
 	}
 
-	// an admin may open every topic, and everyone else the topics the view rules allow
-	const isAdmin = userId ? (await loadUserAccess(userId)).isAdmin : false
-	return toTopicSearchQuery({ userId, query: trimmedQuery, isAdmin })
+	// each topic's latest podcast episode, and the topics a signed-in user subscribes to
+	const { userId } = searchTopicsOptions
+	const [latestPodcastEpisodeByTopicId, subscribedTopicIds] = await Promise.all([
+		loadLatestPodcastEpisodeSummaries(topicRows, userId),
+		userId
+			? loadSubscribedTopicIds(
+					userId,
+					topicRows.map((topicRow) => topicRow.id),
+				)
+			: Promise.resolve(null),
+	])
+
+	// shape each topic as a search row
+	return topicRows.map((topicRow) => ({
+		kind: "topic",
+		id: topicRow.id,
+		name: topicRow.name,
+		path: toTopicPath(topicRow),
+		date: topicRow.createdAt.toISOString(),
+		count: topicRow.viewerCount,
+		topic: {
+			id: topicRow.id,
+			name: topicRow.name,
+			latestPodcastEpisode: latestPodcastEpisodeByTopicId.get(topicRow.id) ?? null,
+		},
+		subscriberCount: topicRow.subscriberCount,
+		isSubscribed: subscribedTopicIds ? subscribedTopicIds.has(topicRow.id) : null,
+	}))
 }
 
-// the search options, with whether the user is an admin
-export type ToTopicSearchQueryOptions = SearchTopicsOptions & { isAdmin: boolean }
-
 /**
- * Returns the topic search's query.
+ * Returns the topic search's query: the name match under the view rules, shorter names first.
  */
 // biome-ignore lint/nursery/useExplicitReturnType: drizzle's select builder type is generated, and naming it here would break on an upgrade
-export function toTopicSearchQuery({ userId, query, isAdmin }: ToTopicSearchQueryOptions) {
+export function toTopicSearchQuery({ userId, isAdmin, query, limit, topicTagFilter }: SearchTopicsOptions) {
 	// the name match, with the typed characters escaped so none acts as a wildcard
 	const isNameMatch = like(sql`lower(${topics.name})`, toContainsLikePattern(query))
 
-	// shorter names sort first, where a larger portion of the name was matched
+	// an admin may open every topic, and everyone else the topics the view rules allow
 	return db
-		.select({ id: topics.id, name: topics.name })
+		.select({
+			id: topics.id,
+			name: topics.name,
+			ownerId: topics.ownerId,
+			visibility: topics.visibility,
+			createdAt: topics.createdAt,
+			viewerCount: topics.viewerCount,
+			subscriberCount: topics.subscriberCount,
+		})
 		.from(topics)
-		.where(isAdmin ? isNameMatch : and(isNameMatch, toTopicViewFilter(userId)))
-		.orderBy(sql`length(${topics.name})`)
-		.limit(USER_SEARCH_LIMIT)
+		.where(and(isNameMatch, isAdmin ? undefined : toTopicViewFilter(userId), topicTagFilter))
+		.orderBy(sql`length(${topics.name})`, topics.id)
+		.limit(limit)
 }
-
-// the topic search route, mounted ahead of the topic routes so /topics/search is never read as a topic id
-export const topicSearchRoute = new Hono<AppEnv>().get("/topics/search", searchRateLimiter, async (context) =>
-	context.json({ topics: await searchTopics({ userId: currentUser(context), query: context.req.query("q") ?? "" }) }),
-)

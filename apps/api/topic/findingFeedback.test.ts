@@ -1,5 +1,5 @@
 // setRating tests: a rating saves its topic's vectors again, and a failed vector save never fails the rating.
-// recordView tests. a user counts among a finding's viewers on the first open only
+// recordView tests. every open counts among a finding's views
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import { FREE_USER_ACCESS_ROW, restoreConnectionPool, stubConnectionPool } from "@carlnotes/db/connectionPoolStub"
 import * as meanVectors from "@carlnotes/pipeline/meanVectors"
@@ -57,52 +57,49 @@ test("a failed vector save is reported and the rating still saves", async () => 
 	expect(reportErrorSpy).toHaveBeenCalledWith(expect.any(Error), "database", { topicId: "topic-1" })
 })
 
-// the rows an open's reads return: the locked finding row, and the user's earlier open if they have one
-function toOpenRows(sentQueryText: string, hasEarlierOpen: boolean): unknown[] {
-	if (sentQueryText.includes("for no key update")) {
-		return [["finding-1"]]
-	}
-
-	// the user's earlier open, then the rating test's rows for the rest
-	if (sentQueryText.includes('from "finding_views"')) {
-		return hasEarlierOpen ? [["view-1"]] : []
-	}
-	return toRatingRows(sentQueryText)
+// an open of the finding by its owner, counted among its views or past the count rate limit
+function toOpen(isViewCounted: boolean): Parameters<typeof recordView>[0] {
+	return { userId: OWNER_ID, findingId: "finding-1", analyticsProperties: TEST_ANALYTICS_PROPERTIES, isViewCounted }
 }
 
-test("a first open counts the user among the viewers, after locking the finding row", async () => {
-	const sentQueries = stubConnectionPool((sentQuery) => toOpenRows(sentQuery.text, false))
-	expect(await recordView(OWNER_ID, "finding-1", TEST_ANALYTICS_PROPERTIES)).toBe(true)
+// the rows an open's reads and writes return: the opened finding's row, then the rating test's rows for the rest
+function toOpenRows(sentQueryText: string): unknown[] {
+	return sentQueryText.startsWith('update "findings"') ? [["finding-1"]] : toRatingRows(sentQueryText)
+}
 
-	// the lock comes first, then the count, then the open's view event
+test("an open counts a view, then records its view event", async () => {
+	const sentQueries = stubConnectionPool((sentQuery) => toOpenRows(sentQuery.text))
+	expect(await recordView(toOpen(true))).toBe(true)
+
+	// the count adds one, and the open's view event follows it
 	const queryTexts = sentQueries.map((sentQuery) => sentQuery.text)
-	const lockIndex = queryTexts.findIndex((queryText) => queryText.includes("for no key update"))
-	const countIndex = queryTexts.findIndex((queryText) => queryText.includes('"viewer_count" = '))
+	const countIndex = queryTexts.findIndex((queryText) =>
+		queryText.includes('"view_count" = "findings"."view_count" + 1'),
+	)
 	const openIndex = queryTexts.findIndex((queryText) => queryText.startsWith('insert into "finding_views"'))
-	expect(lockIndex).toBeGreaterThan(-1)
-	expect(countIndex).toBeGreaterThan(lockIndex)
+	expect(countIndex).toBeGreaterThan(-1)
 	expect(openIndex).toBeGreaterThan(countIndex)
 })
 
-test("a repeat open records the open and counts nobody again", async () => {
-	const sentQueries = stubConnectionPool((sentQuery) => toOpenRows(sentQuery.text, true))
-	expect(await recordView(OWNER_ID, "finding-1", TEST_ANALYTICS_PROPERTIES)).toBe(true)
+test("an open of a finding deleted since the visibility check records nothing", async () => {
+	// the count finds no finding row
+	const sentQueries = stubConnectionPool((sentQuery) =>
+		sentQuery.text.startsWith('update "findings"') ? [] : toOpenRows(sentQuery.text),
+	)
+	expect(await recordView(toOpen(true))).toBe(false)
 
-	// the open's view event is still written, and the viewer count is left alone
+	// no view event, and no consumed row
 	const queryTexts = sentQueries.map((sentQuery) => sentQuery.text)
-	expect(queryTexts.some((queryText) => queryText.includes('"viewer_count" = '))).toBe(false)
-	expect(queryTexts.some((queryText) => queryText.startsWith('insert into "finding_views"'))).toBe(true)
+	expect(queryTexts.some((queryText) => queryText.startsWith("insert into"))).toBe(false)
 })
 
-test("an open of a finding deleted since the visibility check records nothing", async () => {
-	// the lock finds no finding row
-	const sentQueries = stubConnectionPool((sentQuery) =>
-		sentQuery.text.includes("for no key update") ? [] : toOpenRows(sentQuery.text, false),
-	)
-	expect(await recordView(OWNER_ID, "finding-1", TEST_ANALYTICS_PROPERTIES)).toBe(false)
+test("an open past the count rate limit marks the finding read and counts no view", async () => {
+	const sentQueries = stubConnectionPool((sentQuery) => toOpenRows(sentQuery.text))
+	expect(await recordView(toOpen(false))).toBe(true)
 
-	// no count, no view event, and no consumed row
+	// no count and no view event, and the consumed row is written
 	const queryTexts = sentQueries.map((sentQuery) => sentQuery.text)
-	expect(queryTexts.some((queryText) => queryText.includes('"viewer_count" = '))).toBe(false)
-	expect(queryTexts.some((queryText) => queryText.startsWith("insert into"))).toBe(false)
+	expect(queryTexts.some((queryText) => queryText.startsWith('update "findings"'))).toBe(false)
+	expect(queryTexts.some((queryText) => queryText.startsWith('insert into "finding_views"'))).toBe(false)
+	expect(queryTexts.some((queryText) => queryText.startsWith('insert into "consumptions"'))).toBe(true)
 })

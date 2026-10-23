@@ -10,9 +10,18 @@ import { zValidator } from "@hono/zod-validator"
 import { and, desc, eq, gt, sql } from "drizzle-orm"
 import { Hono } from "hono"
 import { loadOrFetchLinkPreview } from "../chat/linkPreviews"
+import { countSenderRateLimitHit, countWithinRateLimit, isCountedSender, toRequestSender } from "../counts/viewerCounts"
 import { type AppEnv, currentUser, toAnalyticsProperties } from "../currentUser"
-import { recordView, saveFindingFeedback, setBookmarked, setConsumed, setRating } from "./findingFeedback"
-import { isTopicFindingVisible } from "./permissions"
+import { isSameOriginRequest } from "../sameOrigin"
+import {
+	countVisitorFindingView,
+	recordView,
+	saveFindingFeedback,
+	setBookmarked,
+	setConsumed,
+	setRating,
+} from "./findingFeedback"
+import { isTopicFindingVisible } from "./findingPermissions"
 
 // the most findings one read of a topic returns, about forty times the largest topic in production
 export const TOPIC_FINDINGS_READ_LIMIT = 1000
@@ -74,10 +83,10 @@ export async function loadTopicFindings({
 			resourceCreatedAt: resources.createdAt,
 			fetchedAt: resources.fetchedAt,
 
-			// load the finding metadata, its viewer count for trending, and the user's consumed and bookmarked dates
+			// load the finding metadata, its view count for trending, and the user's consumed and bookmarked dates
 			relevanceScore: findings.relevanceScore,
 			relevanceExplanation: findings.relevanceExplanation,
-			viewerCount: findings.viewerCount,
+			viewCount: findings.viewCount,
 			rating: findings.rating,
 			...userColumns,
 		})
@@ -124,10 +133,10 @@ export type TopicFindingRow = {
 	// the resource's dates
 	resourceCreatedAt: Date
 	fetchedAt: Date
-	// the relevance, viewer count, rating, and the user's own columns
+	// the relevance, view count, rating, and the user's own columns
 	relevanceScore: TopicFinding["relevanceScore"]
 	relevanceExplanation: TopicFinding["relevanceExplanation"]
-	viewerCount: TopicFinding["viewerCount"]
+	viewCount: TopicFinding["viewCount"]
 	rating: TopicFinding["rating"]
 	consumedAt: Date | null
 	bookmarkedAt: Date | null
@@ -147,10 +156,10 @@ export function toTopicFinding(findingRow: TopicFindingRow): TopicFinding {
 		faviconPath: null,
 		publishedAt: findingRow.resourceCreatedAt.toISOString(),
 		fetchedAt: findingRow.fetchedAt.toISOString(),
-		// the relevance explanation, viewer count, rating, and the user's consumed and bookmarked states
+		// the relevance explanation, view count, rating, and the user's consumed and bookmarked states
 		relevanceScore: findingRow.relevanceScore,
 		relevanceExplanation: findingRow.relevanceExplanation,
-		viewerCount: findingRow.viewerCount,
+		viewCount: findingRow.viewCount,
 		rating: findingRow.rating,
 		isConsumed: findingRow.consumedAt !== null,
 		isBookmarked: findingRow.bookmarkedAt !== null,
@@ -238,13 +247,27 @@ export const findingsRoute = new Hono<AppEnv>()
 		return isBookmarkSet ? context.json({ ok: true }) : context.json({ error: "forbidden" }, 403)
 	})
 	.post("/topic-findings/:id/view", async (context) => {
-		// reject a signed-out visitor
+		// a visitor's open counts a view of a finding a visitor may see, sent by a person from the app's own origin
+		// within the count rate limit. it returns 204 in every case, so the response never says whether the finding exists
 		const userId = currentUser(context)
 		if (!userId) {
-			return context.json({ error: "unauthorized" }, 401)
+			const requestSender = toRequestSender(context)
+			if (isSameOriginRequest(context.req.raw) && isCountedSender(requestSender)) {
+				await countWithinRateLimit({
+					requestSender,
+					rateLimitName: "finding-view",
+					count: () => countVisitorFindingView(context.req.param("id")),
+				})
+			}
+			return context.body(null, 204)
 		}
-		// opening a resource records a view on its topic finding and marks the finding consumed
-		const isViewed = await recordView(userId, context.req.param("id"), toAnalyticsProperties(context))
+		// opening a resource marks the finding consumed, and counts a view within the count rate limit
+		const isViewed = await recordView({
+			userId,
+			findingId: context.req.param("id"),
+			analyticsProperties: toAnalyticsProperties(context),
+			isViewCounted: await countSenderRateLimitHit(toRequestSender(context), "finding-view"),
+		})
 		return isViewed ? context.json({ ok: true }) : context.json({ error: "forbidden" }, 403)
 	})
 	.post("/topic-findings/:id/feedback", zValidator("json", findingFeedbackPayload), async (context) => {

@@ -143,26 +143,6 @@ The Feed response SHALL include `topicsRemaining`: how many more topics the curr
 - **WHEN** a user holding two topics loads the Feed under a cap of five
 - **THEN** the payload carries `topicsRemaining: 3`
 
-### Requirement: A Finding rated thumbs down leaves the feed but stays stored
-
-A Finding that a user rated thumbs down SHALL stay stored, so that its rating keeps guiding later Scans, and SHALL leave
-every place that shows a Topic's Findings to read: the homepage feed, the topic page's All, Unread, and Bookmarked
-views, the new count, the kept count on a topic card and a share card, the RSS feed, a public page's structured data, the
-scan email, Carl's chat, and the MCP feed read. The topic page SHALL offer a Rated down view to a signed-in user that
-shows only those Findings, so a rating can be changed back. A Podcast Episode's chapters SHALL still show the thumbs down
-on the chapter that narrated such a Finding.
-
-#### Scenario: A Finding rated down leaves the feed
-
-- **GIVEN** a Topic with 25 Findings that no one rated down and 8 that a user rated down
-- **WHEN** a user opens the topic page in the All view
-- **THEN** the feed lists the 25, and the new count leaves out the 8
-
-#### Scenario: The Rated down view brings them back
-
-- **WHEN** a signed-in user picks Rated down in the feed's filters
-- **THEN** the feed lists only the 8 Findings rated down, and a thumbs up on one moves it back to the All view
-
 ### Requirement: The feed includes each Topic's latest Podcast Episode
 
 Every Topic in the feed SHALL include its latest published Podcast Episode that the user may listen to, with its
@@ -184,20 +164,6 @@ for the user's access, the user's holding Teams, and the subscriptions' activati
 - **WHEN** the feed holds more Topics
 - **THEN** the number of queries that read the latest Podcast Episodes stays the same
 
-### Requirement: Topic findings include bookmark and viewer fields
-Every topic finding in feed and topic-page payloads SHALL include `isBookmarked`, resolved for the requesting user, and
-`viewerCount`, the signed-in people who have opened it, so the client can render the pinned group, the Bookmarked view,
-and the trending sort without further requests. The existing include-consumed parameter is unchanged: the Bookmarked
-view filters client-side over the delivered payload, the same way the Unread view already does.
-
-#### Scenario: The payload includes both fields
-- **WHEN** a signed-in user requests a feed containing a bookmarked Finding that two people have opened
-- **THEN** that finding includes `isBookmarked` true and `viewerCount` 2
-
-#### Scenario: The Bookmarked view needs no extra request
-- **WHEN** the user switches the filter to Bookmarked
-- **THEN** the client filters the already-delivered Findings by `isBookmarked` with no new fetch
-
 ### Requirement: A topic feed includes its viewer count and its newest finding's time
 Every Topic in the homepage feed payload SHALL include `viewerCount`, read from the Topic's column with no Redis call,
 and `feedUpdatedAt`, the creation time of its newest shown Finding or, with none, the Topic's own, the same time the
@@ -206,4 +172,42 @@ sitemap reads. The homepage SHALL render neither, and the trending sort SHALL re
 #### Scenario: A topic with no findings dates from its creation
 - **WHEN** a Topic in the feed has no Findings
 - **THEN** its `feedUpdatedAt` is its creation time
+
+### Requirement: Topic findings include bookmark and view fields
+
+Every topic finding in feed and topic-page payloads SHALL include `isBookmarked`, resolved for the requesting user, and
+`viewCount`, how many times it has been opened, so the client can render the pinned group, the Bookmarked view, the
+trending sort, and the Views line of the Finding's note without further requests. The existing include-consumed
+parameter is unchanged: the Bookmarked view filters client-side over the delivered payload, the same way the Unread view
+already does.
+
+#### Scenario: The payload includes both fields
+
+- **WHEN** a signed-in user requests a feed containing a bookmarked Finding that was opened 5 times by 2 people
+- **THEN** that finding includes `isBookmarked` true and `viewCount` 5
+
+#### Scenario: The Bookmarked view needs no extra request
+
+- **WHEN** the user switches the filter to Bookmarked
+- **THEN** the client filters the already-delivered Findings by `isBookmarked` with no new fetch
+
+### Requirement: A Finding rated thumbs down leaves every view but stays stored
+
+A Finding that a user rated thumbs down SHALL stay stored, so that its rating keeps guiding later Scans, and SHALL leave
+every place that shows a Topic's Findings to read: the homepage feed, the topic page's All, Unread, and Bookmarked
+views, the site search, the new count, the kept count on a topic card and a share card, the RSS feed, a public page's
+structured data, the scan email, Carl's chat, and the MCP feed read. No view SHALL show it. A Podcast Episode's
+chapters SHALL still show the thumbs down on the chapter that narrated such a Finding.
+
+#### Scenario: A Finding rated down leaves the feed
+
+- **GIVEN** a Topic with 25 Findings that no one rated down and 8 that a user rated down
+- **WHEN** a user opens the topic page in the All view
+- **THEN** the feed lists the 25, and the new count leaves out the 8
+
+#### Scenario: No view brings a Finding rated down back
+
+- **GIVEN** the same Topic, and a bookmarked Finding among the 8 rated down
+- **WHEN** a signed-in user picks Unread or Bookmarked in the feed's filters, or searches for the Finding's title
+- **THEN** none of the 8 Findings is listed
 

@@ -17,6 +17,7 @@ import { Route as LayoutIndexRouteImport } from './routes/_layout/index'
 import { Route as LayoutSignedInRouteImport } from './routes/_layout/_signedIn'
 import { Route as LayoutPlansRouteImport } from './routes/_layout/plans'
 import { Route as LayoutPrivacyRouteImport } from './routes/_layout/privacy'
+import { Route as LayoutSearchRouteImport } from './routes/_layout/search'
 import { Route as LayoutTermsRouteImport } from './routes/_layout/terms'
 import { Route as InviteTokenRouteImport } from './routes/invite.$token'
 import { Route as LayoutSignedInAccountRouteImport } from './routes/_layout/_signedIn/account'
@@ -66,6 +67,11 @@ const LayoutPlansRoute = LayoutPlansRouteImport.update({
 const LayoutPrivacyRoute = LayoutPrivacyRouteImport.update({
   id: '/privacy',
   path: '/privacy',
+  getParentRoute: () => LayoutRoute,
+} as any)
+const LayoutSearchRoute = LayoutSearchRouteImport.update({
+  id: '/search',
+  path: '/search',
   getParentRoute: () => LayoutRoute,
 } as any)
 const LayoutTermsRoute = LayoutTermsRouteImport.update({
@@ -139,6 +145,7 @@ export interface FileRoutesByFullPath {
   '/signup': typeof SignupRoute
   '/plans': typeof LayoutPlansRoute
   '/privacy': typeof LayoutPrivacyRoute
+  '/search': typeof LayoutSearchRoute
   '/terms': typeof LayoutTermsRoute
   '/invite/$token': typeof InviteTokenRoute
   '/account': typeof LayoutSignedInAccountRoute
@@ -159,6 +166,7 @@ export interface FileRoutesByTo {
   '/': typeof LayoutIndexRoute
   '/plans': typeof LayoutPlansRoute
   '/privacy': typeof LayoutPrivacyRoute
+  '/search': typeof LayoutSearchRoute
   '/terms': typeof LayoutTermsRoute
   '/invite/$token': typeof InviteTokenRoute
   '/account': typeof LayoutSignedInAccountRoute
@@ -181,6 +189,7 @@ export interface FileRoutesById {
   '/_layout/_signedIn': typeof LayoutSignedInRouteWithChildren
   '/_layout/plans': typeof LayoutPlansRoute
   '/_layout/privacy': typeof LayoutPrivacyRoute
+  '/_layout/search': typeof LayoutSearchRoute
   '/_layout/terms': typeof LayoutTermsRoute
   '/invite/$token': typeof InviteTokenRoute
   '/_layout/': typeof LayoutIndexRoute
@@ -204,6 +213,7 @@ export interface FileRouteTypes {
     | '/signup'
     | '/plans'
     | '/privacy'
+    | '/search'
     | '/terms'
     | '/invite/$token'
     | '/account'
@@ -224,6 +234,7 @@ export interface FileRouteTypes {
     | '/'
     | '/plans'
     | '/privacy'
+    | '/search'
     | '/terms'
     | '/invite/$token'
     | '/account'
@@ -245,6 +256,7 @@ export interface FileRouteTypes {
     | '/_layout/_signedIn'
     | '/_layout/plans'
     | '/_layout/privacy'
+    | '/_layout/search'
     | '/_layout/terms'
     | '/invite/$token'
     | '/_layout/'
@@ -324,6 +336,13 @@ declare module '@tanstack/react-router' {
       path: '/privacy'
       fullPath: '/privacy'
       preLoaderRoute: typeof LayoutPrivacyRouteImport
+      parentRoute: typeof LayoutRoute
+    }
+    '/_layout/search': {
+      id: '/_layout/search'
+      path: '/search'
+      fullPath: '/search'
+      preLoaderRoute: typeof LayoutSearchRouteImport
       parentRoute: typeof LayoutRoute
     }
     '/_layout/terms': {
@@ -435,6 +454,7 @@ interface LayoutRouteChildren {
   LayoutSignedInRoute: typeof LayoutSignedInRouteWithChildren
   LayoutPlansRoute: typeof LayoutPlansRoute
   LayoutPrivacyRoute: typeof LayoutPrivacyRoute
+  LayoutSearchRoute: typeof LayoutSearchRoute
   LayoutTermsRoute: typeof LayoutTermsRoute
   LayoutIndexRoute: typeof LayoutIndexRoute
   LayoutProfilesUserIdRoute: typeof LayoutProfilesUserIdRoute
@@ -449,6 +469,7 @@ const LayoutRouteChildren: LayoutRouteChildren = {
   LayoutSignedInRoute: LayoutSignedInRouteWithChildren,
   LayoutPlansRoute: LayoutPlansRoute,
   LayoutPrivacyRoute: LayoutPrivacyRoute,
+  LayoutSearchRoute: LayoutSearchRoute,
   LayoutTermsRoute: LayoutTermsRoute,
   LayoutIndexRoute: LayoutIndexRoute,
   LayoutProfilesUserIdRoute: LayoutProfilesUserIdRoute,

@@ -4,7 +4,6 @@
 import { CANCEL_TOPIC_EDIT_TOOL, PROPOSE_NEW_TOPIC_TOOL, toStandingTopicEditCall } from "@carlnotes/contracts/chat"
 import type { ChatToolCall, ChatTurnPayload } from "@carlnotes/contracts/payloads"
 import {
-	type AddTopicSourcePayload,
 	type ProposeTopicEditPayload,
 	proposeTopicEditPayload,
 	type TopicDraft,
@@ -15,17 +14,11 @@ import { chatProposals } from "@carlnotes/db/schema/chat"
 import { checkAgreement } from "@carlnotes/pipeline/chat/agreement"
 import { isSameSignature, toAuthSecretSignature } from "@carlnotes/server/hmac"
 import { and, eq, isNull, type SQL } from "drizzle-orm"
+import { toCanonicalJson } from "../canonicalJson"
 import type { AnalyticsProperties } from "../currentUser"
-import {
-	addTopicSourceInChat,
-	type ChatTurnToolCalls,
-	removeTopicSourceInChat,
-	TOPIC_EDIT_CANCELLED_TEXT,
-	type TopicEditSaveBinding,
-	updateTopicFieldsInChat,
-	updateTopicPromptInChat,
-} from "../tool/chatTools"
+import { type ChatTurnToolCalls, TOPIC_EDIT_CANCELLED_TEXT } from "../tool/chatTools"
 import { createTopicInChat, toTopicDraftSummary } from "../tool/newTopicChatTools"
+import { applyTopicEdit } from "../tool/topicEditSaves"
 import type { ChatPage } from "./chatTurns"
 
 // what carl previewed: an edit to the page's topic, or the topic draft that the new-topic chat would create
@@ -306,76 +299,8 @@ async function applyChatProposal(
 	}
 
 	// apply the topic edit's saves
-	return applyTopicEdit({ userId, topicId: page.topicId ?? "", toolCalls, analyticsProperties }, chatProposal.topicEdit)
-}
-
-/**
- * Applies an agreed topic edit's saves in order and returns each as a call of its tool.
- */
-export async function applyTopicEdit(
-	topicEditSaveBinding: TopicEditSaveBinding,
-	topicEdit: ProposeTopicEditPayload,
-): Promise<ChatToolCall[]> {
-	const serverToolCalls: ChatToolCall[] = []
-	for (const topicEditSave of toTopicEditSaves(topicEdit)) {
-		const output = await applyTopicEditSave(topicEditSaveBinding, topicEditSave)
-		serverToolCalls.push({ ...topicEditSave, output })
-	}
-	return serverToolCalls
-}
-
-// one save an agreed topic edit makes: the save tool it goes through, and that tool's input
-export type TopicEditSave =
-	| { toolName: "updateTopicPrompt"; input: { prompt: string } }
-	| { toolName: "updateTopicFields"; input: Record<string, unknown> }
-	| { toolName: "removeSource"; input: { sourceId: string } }
-	| { toolName: "addSource"; input: AddTopicSourcePayload }
-
-/**
- * Returns the saves an agreed topic edit makes, in order: the prompt, then the settings fields in one save, then each
- * removed source, then each added source.
- */
-export function toTopicEditSaves(topicEdit: ProposeTopicEditPayload): TopicEditSave[] {
-	// the settings fields the edit names, apart from the prompt and the sources
-	const { prompt, addSources = [], removeSourceIds = [], ...topicFields } = topicEdit
-	const namedTopicFields = Object.fromEntries(Object.entries(topicFields).filter(([, value]) => value !== undefined))
-	const promptSaves: TopicEditSave[] =
-		prompt === undefined ? [] : [{ toolName: "updateTopicPrompt", input: { prompt } }]
-	const topicFieldsSaves: TopicEditSave[] =
-		Object.keys(namedTopicFields).length === 0 ? [] : [{ toolName: "updateTopicFields", input: namedTopicFields }]
-
-	// the edit's saves in the order they apply
-	return [
-		...promptSaves,
-		...topicFieldsSaves,
-		...removeSourceIds.map((sourceId): TopicEditSave => ({ toolName: "removeSource", input: { sourceId } })),
-		...addSources.map((topicSource): TopicEditSave => ({ toolName: "addSource", input: topicSource })),
-	]
-}
-
-// apply one save through the path its save tool takes, and return what carl reads
-function applyTopicEditSave(topicEditSaveBinding: TopicEditSaveBinding, topicEditSave: TopicEditSave): Promise<string> {
-	switch (topicEditSave.toolName) {
-		// the prompt and the settings fields
-		case "updateTopicPrompt":
-			return updateTopicPromptInChat(topicEditSaveBinding, topicEditSave.input.prompt)
-		case "updateTopicFields":
-			return updateTopicFieldsInChat(topicEditSaveBinding, topicEditSave.input)
-		// one source removed or added
-		case "removeSource":
-			return removeTopicSourceInChat(topicEditSaveBinding, topicEditSave.input.sourceId)
-		case "addSource":
-			return addTopicSourceInChat(topicEditSaveBinding, topicEditSave.input)
-	}
-}
-
-// json with every object's keys sorted, so two equal values always write the same text
-function toCanonicalJson(value: unknown): string {
-	return JSON.stringify(value, (_key, nestedValue: unknown) =>
-		nestedValue && typeof nestedValue === "object" && !Array.isArray(nestedValue)
-			? Object.fromEntries(
-					Object.entries(nestedValue).sort(([firstKey], [secondKey]) => firstKey.localeCompare(secondKey)),
-				)
-			: nestedValue,
+	return applyTopicEdit(
+		{ userId, topicId: page.topicId ?? "", origin: "chat", toolCalls, analyticsProperties },
+		chatProposal.topicEdit,
 	)
 }

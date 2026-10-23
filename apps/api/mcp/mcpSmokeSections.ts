@@ -1,6 +1,7 @@
 // the sections of the mcp smoke: a visitor's reads, a user's writes and edits, and the rate limit. the oauth flow is in
 // mcpOAuthSmokeSections.ts
 
+import { MCP_CARDS, toMcpCardUri } from "@carlnotes/contracts/mcpCards"
 import { db } from "@carlnotes/db"
 import { topicPromptVersions } from "@carlnotes/db/schema/topics"
 import { desc, eq } from "drizzle-orm"
@@ -28,14 +29,23 @@ export async function checkVisitor(): Promise<void> {
 	const { tools } = await client.listTools()
 	check(
 		"initialize and list tools as a visitor",
-		tools.length === 12,
+		tools.length === 11 && !tools.some((tool) => REMOVED_TOOL_NAMES.includes(tool.name)),
 		tools.map((tool) => tool.name),
 	)
 	check(
-		"the edit tools are annotated destructive and the reads read-only",
-		tools.find((tool) => tool.name === "update_topic_prompt")?.annotations?.destructiveHint === true &&
-			tools.find((tool) => tool.name === "read_topic_feed")?.annotations?.readOnlyHint === true,
+		"the edit tool is annotated destructive and the reads read-only",
+		tools.find((tool) => tool.name === "edit_topic")?.annotations?.destructiveHint === true &&
+			tools.find((tool) => tool.name === "read_topic_feed")?.annotations?.readOnlyHint === true &&
+			tools.find((tool) => tool.name === "search")?.annotations?.readOnlyHint === true,
 	)
+
+	// search the seeded public topic by name, and read each card's resource
+	const visitorSearchResult = await client.callTool({
+		name: "search",
+		arguments: { q: `${runId} topic`, kinds: ["topics"] },
+	})
+	check("search finds the seeded public topic by name", toResultText(visitorSearchResult).includes(topicId))
+	await checkCardResources(client)
 
 	// list the topics and read the feed. a visitor sees every explanation and no consumed flag
 	const listTopicsResult = await client.callTool({ name: "list_topics", arguments: {} })
@@ -89,7 +99,7 @@ export async function checkVisitor(): Promise<void> {
 	await topicRouteClient.client.close()
 }
 
-/** Checks a user's writes: marking consumed, rating, bookmarking, and the edit tools. */
+/** Checks a user's writes: marking consumed, rating, bookmarking, edit_topic and its confirmation, and subscribing. */
 export async function checkUser(accessToken: string): Promise<void> {
 	const { client, transport } = toClient("/mcp", accessToken)
 	await client.connect(transport)
@@ -132,9 +142,9 @@ export async function checkUser(accessToken: string): Promise<void> {
 		toResultText(bookmarkFindingResult),
 	)
 
-	// save the topic's prompt, then read its newest prompt version
-	const updateTopicPromptResult = await client.callTool({
-		name: "update_topic_prompt",
+	// save the topic's prompt through edit_topic, then read its newest prompt version
+	const editPromptResult = await client.callTool({
+		name: "edit_topic",
 		arguments: { topic_id: topicId, prompt: "smoke, edited over mcp" },
 	})
 	const [version] = await db
@@ -144,22 +154,22 @@ export async function checkUser(accessToken: string): Promise<void> {
 		.orderBy(desc(topicPromptVersions.createdAt))
 		.limit(1)
 	check(
-		"update_topic_prompt saves and versions with origin mcp",
-		toResultText(updateTopicPromptResult).startsWith("Saved") &&
+		"edit_topic saves the prompt and versions it with origin mcp",
+		toResultText(editPromptResult).startsWith("Saved") &&
 			version?.origin === "mcp" &&
 			version.prompt === "smoke, edited over mcp",
-		toResultText(updateTopicPromptResult),
+		toResultText(editPromptResult),
 	)
 
-	// add a source beside the topic's web search, find its id in the topic list, and remove it by that id
+	// add a source beside the topic's web search, and find its id in the topic list
 	const addTopicSourceText = toResultText(
 		await client.callTool({
-			name: "add_source",
-			arguments: { topic_id: topicId, sourceOption: "reddit", value: "r/startups" },
+			name: "edit_topic",
+			arguments: { topic_id: topicId, addSources: [{ sourceOption: "reddit", value: "r/startups" }] },
 		}),
 	)
 	check(
-		"add_source returns the source and its cost",
+		"edit_topic adds a source and returns its cost",
 		addTopicSourceText.startsWith("Added reddit — r/startups") && addTopicSourceText.includes("¢"),
 		addTopicSourceText,
 	)
@@ -167,24 +177,43 @@ export async function checkUser(accessToken: string): Promise<void> {
 	const listedTopic = listTopicsPage.items.find((listedItem) => listedItem.topicId === topicId)
 	const listedTopicSource = listedTopic?.sources.find((topicSource) => topicSource.label === "reddit — r/startups")
 	check("list_topics shows the source with its id", Boolean(listedTopicSource?.sourceId), listedTopic)
-	const removeArguments = { topic_id: topicId, sourceId: listedTopicSource?.sourceId ?? "" }
+
+	// removing the source previews first, then saves with the preview's confirmation, which never saves twice
+	const removeArguments = { topic_id: topicId, removeSourceIds: [listedTopicSource?.sourceId ?? ""] }
+	const removePreview = (await client.callTool({
+		name: "edit_topic",
+		arguments: removeArguments,
+	})) as EditTopicToolResult
+	check(
+		"edit_topic previews a removal and saves nothing",
+		removePreview.structuredContent?.status === "confirmRequired",
+		toResultText(removePreview),
+	)
+	const confirmedArguments = { ...removeArguments, confirmation: removePreview.structuredContent?.confirmation }
 	const removeTopicSourceText = toResultText(
-		await client.callTool({ name: "remove_source", arguments: removeArguments }),
+		await client.callTool({ name: "edit_topic", arguments: confirmedArguments }),
 	)
 	check(
-		"remove_source drops it by that id",
+		"the confirmation removes the source",
 		removeTopicSourceText === "Removed reddit — r/startups.",
 		removeTopicSourceText,
 	)
-	// remove the same id again. the result says it was already gone
-	const repeatRemoveTopicSourceText = toResultText(
-		await client.callTool({ name: "remove_source", arguments: removeArguments }),
-	)
+	const repeatRemoval = (await client.callTool({
+		name: "edit_topic",
+		arguments: confirmedArguments,
+	})) as EditTopicToolResult
 	check(
-		"a second removal says it was already gone",
-		repeatRemoveTopicSourceText.includes("already gone"),
-		repeatRemoveTopicSourceText,
+		"the same confirmation saves nothing again",
+		repeatRemoval.structuredContent?.status === "confirmRequired",
+		toResultText(repeatRemoval),
 	)
+
+	// an owner always subscribes to their own topic, so the unsubscribe is rejected
+	const unsubscribeResult = await client.callTool({
+		name: "follow_topic",
+		arguments: { topic_id: topicId, is_following: false },
+	})
+	check("follow_topic keeps an owner following", toResultText(unsubscribeResult).includes("An owner always follows"))
 
 	// create a topic from a draft. the result names its id, and its first version has origin mcp
 	const createArguments = {
@@ -210,6 +239,21 @@ export async function checkUser(accessToken: string): Promise<void> {
 	// stop the first scan the create started and wait for it to end. the cleanup deletes the user under it
 	await stopFirstScan(createdTopicId)
 	await client.close()
+}
+
+// an edit_topic result's status and the confirmation a preview returns
+type EditTopicToolResult = { structuredContent?: { status?: string; confirmation?: string } }
+
+// tool names the server never lists
+const REMOVED_TOOL_NAMES = ["update_topic_prompt", "update_topic_fields", "add_source", "remove_source"]
+
+// read each card's resource, which is the built bundle's html naming its card
+async function checkCardResources(client: ReturnType<typeof toClient>["client"]): Promise<void> {
+	for (const mcpCard of MCP_CARDS) {
+		const cardResource = await client.readResource({ uri: toMcpCardUri(mcpCard) })
+		const cardHtml = (cardResource.contents[0] as { text?: string } | undefined)?.text ?? ""
+		check(`the ${mcpCard} card's resource is its html`, cardHtml.includes(`data-card="${mcpCard}"`))
+	}
 }
 
 /**

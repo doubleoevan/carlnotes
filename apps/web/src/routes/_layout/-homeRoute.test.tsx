@@ -69,7 +69,7 @@ function toTopicFinding(findingNumber: number): TopicFinding {
 		faviconPath: null,
 		publishedAt: "2026-09-20T00:00:00.000Z",
 		fetchedAt: "2026-09-21T00:00:00.000Z",
-		viewerCount: 0,
+		viewCount: 0,
 		relevanceScore: 0.9,
 		relevanceExplanation: "Why Carl kept it.",
 		rating: null,

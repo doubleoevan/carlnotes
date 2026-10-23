@@ -2,6 +2,7 @@ import { toCtaTag } from "@carlnotes/contracts/signupCta"
 import { SITE_URL } from "@carlnotes/core/lib/pageHead"
 import { defaultParseSearch, Link } from "@tanstack/react-router"
 import type * as React from "react"
+import { createContext, useContext } from "react"
 import { isPathAtOrAfter } from "@/lib/utils"
 import { captureVisitEvent } from "@/lib/visitAnalytics"
 
@@ -15,6 +16,12 @@ const SERVER_PATH_PREFIXES = ["/docs", "/blog", "/releases", "/nightshift", "/ap
 
 // the target and rel of a link that opens in a new tab. noopener denies the opened page a way back to this one
 const NEW_TAB_PROPS = { target: "_blank", rel: "noopener noreferrer" }
+
+/**
+ * Opens a link's absolute url somewhere other than this page, such as the host around an mcp card. A link under a
+ * provider of it opens through it.
+ */
+export const LinkOpenerContext = createContext<((url: string) => void) | null>(null)
 
 /**
  * The component that every link in feature code goes through
@@ -32,6 +39,26 @@ export function AnchorLink({
 	// opens a server path or an internal route in a new tab. an external link always opens in one
 	isNewTab?: boolean
 }) {
+	// a link under a link opener opens its absolute url through it, such as in the host around an mcp card, whose
+	// document's base url is the site that served it. only a web url opens, and any other scheme renders its text
+	const openLink = useContext(LinkOpenerContext)
+	if (openLink) {
+		const absoluteUrl = new URL(href, globalThis.document?.baseURI ?? SITE_URL).toString()
+		if (!absoluteUrl.startsWith("https://") && !absoluteUrl.startsWith("http://")) {
+			return <a {...props}>{children}</a>
+		}
+		const handleOpenerClick = (event: React.MouseEvent<HTMLAnchorElement>): void => {
+			props.onClick?.(event)
+			event.preventDefault()
+			openLink(absoluteUrl)
+		}
+		return (
+			<a href={absoluteUrl} {...props} onClick={handleOpenerClick}>
+				{children}
+			</a>
+		)
+	}
+
 	// a uri scheme link opens another app, so it gets no target and no rel
 	if (URI_SCHEME_PREFIXES.some((prefix) => href.startsWith(prefix))) {
 		return (

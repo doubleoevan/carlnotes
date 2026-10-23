@@ -39,10 +39,10 @@ at the root import it by name.
   `NOINDEX_HEADER`, the `X-Robots-Tag: noindex` header that `documents.ts` and `nightshift.ts` set.
 - Domain folders: `topic/`, `team/`, `chat/`, `invite/`, `note/`, `podcast/`, `share/`, `tool/`, `mcp/`. Root files
   serve more than one domain (auth, billing, admin, avatars, favicons, profiles, SEO, `likePattern.ts` for the contains
-  pattern the name and text searches match with, `content.ts` for the blog under `content/blog/`, and `seed.ts`, the
-  entry behind `bun run db:seed` over `@carlnotes/db/seed`). `apiPageStyle.ts` holds `API_PAGE_BASE_STYLE`, the
-  body and link rules in the emails' palette that the api's own pages start with: the pages `content.ts` renders and
-  the unsubscribe page in `unsubscribe.ts`.
+  pattern the name and text searches match with, `canonicalJson.ts` for the json a keyed digest signs, `content.ts` for
+  the blog under `content/blog/`, and `seed.ts`, the entry behind `bun run db:seed` over `@carlnotes/db/seed`).
+  `apiPageStyle.ts` holds `API_PAGE_BASE_STYLE`, the body and link rules in the emails' palette that the api's own pages
+  start with: the pages `content.ts` renders and the unsubscribe page in `unsubscribe.ts`.
   `billingRoute.ts` holds the billing routes over `billing.ts`; its Stripe webhook responds 400 to a bad signature and
   500 to a verified event it could not apply, so Stripe retries it.
 - `documents.ts` — the document routes: the sitemap, the site and topic feeds, the llms files, the IndexNow key, and
@@ -69,9 +69,17 @@ at the root import it by name.
   A note's poke has no update bytes, and the other replicas resync.
   Nothing missed while a subscriber was down is replayed.
   Chat catches up from its cursor, and a note resyncs on the next poke or when the note stream reaches the age limit.
-- `mcp/` — the mcp server: `server.ts` (the `/mcp` and `/mcp/t/:topicId` routes and the transport), `tools.ts` (the
-  tools it registers, with their schemas and annotations), `toolCaller.ts` (the tool caller: the visitor or user an
-  access token resolves to, verified in-process against the auth server's signing keys), `oauthClientNames.ts` (the
+- `mcp/` — the mcp server on `@modelcontextprotocol/server`: `server.ts` (the `/mcp` and `/mcp/t/:topicId` routes and
+  the web-standard transport), `tools.ts` (the reads, the site search, and the per-user writes it registers, with their
+  schemas and annotations), `topicEditTools.ts` (`edit_topic`, `suggest_sources`, and `create_topic`), `toolShapes.ts`
+  (the topic id argument, the registration options, and the result shapes every tool shares), `topicEdits.ts` (the
+  `edit_topic` flow: the topic read as its page reads it, the preview, and the save through the chat's save path),
+  `topicEditConfirmations.ts` (the keyed confirmation that making a topic public or removing a source needs),
+  `searchResults.ts` (what the `search` tool returns, under the search rate limit), `cards.ts` (the three MCP Apps card
+  resources, each html written from the bundle `build:ui` makes in `apps/web/dist/mcp-cards`, and the `_meta` a tool
+  names its card with), `cardData.ts` (what a tool result gives its card in `_meta`: the caller, the podcast episodes
+  with play tokens, and the findings card's topic and findings), `toolCaller.ts` (the tool caller: the visitor or user
+  an access token resolves to, verified in-process against the auth server's signing keys), `oauthClientNames.ts` (the
   registered name of each MCP client, which the tool caller, the consent page's route, and the app connection report
   read), `results.ts` (what the finding tools return for a visitor or a user, paged under a client's result limit, and
   the paging helpers), and `topicResults.ts` (what `list_topics` returns). `mcp.smoke.ts` runs the sections in
@@ -94,21 +102,25 @@ at the root import it by name.
   other published episodes that the user may listen to, and the most related published episodes of other topics. The
   public shown topics' episodes rank through the index of the episode vectors saved as public and shown, cached in
   Redis. A user's own, the episodes they may listen to through their account, are scored for them without an index on
-  every load. Both merge by score, and every read checks each episode again), and `podcastEpisodeSearch.ts` (`GET
-  /api/episodes/search`, the search bar's episode search: title and description matches through trigram indexes, then
-  for a query of three characters or more the nearest by meaning over the episode vectors, under the episode view rules.
-  The query's vector is cached in Redis by its lowercased words and billed to the user's key or the public key, a
-  visitor's embeddings are rate limited per address, and a search that may not embed returns its text matches).
+  every load. Both merge by score, and every read checks each episode again), `podcastEpisodeSearch.ts` (the site
+  search's episode reader: title and description matches through trigram indexes, then for a query of three characters
+  or more the nearest by meaning over the episode vectors, under the episode view rules. The query's vector is cached
+  in Redis by its lowercased words and billed to the user's key or the public key, a visitor's embeddings are rate
+  limited per address, and a search that may not embed returns its text matches), and `playTokens.ts` (the play token
+  an mcp card's audio url includes, which the audio route reads in place of a session).
   `share/podcastFeed.ts` builds the feed, `share/podcastCover.ts` draws the covers over
   `apps/docs/design/podcast/cover-base.png`, and `share/podcastEpisodeImage.ts` draws an episode page's link-preview
   card. `documents.ts` serves a public Topic's feed at `/topics/:id/podcast.xml` and a listener's own at
   `/podcast-feeds/:token.xml`.
 - `tool/` — the Topic Tools, each with its own gate check: `topicTools.ts` (the prompt and field updates),
+  `topicEditSaves.ts` (a topic edit's saves in order through the Topic Tools, which the chat applies an agreed proposal
+  with and `edit_topic` its edit),
   `topicSourceTools.ts` (adding and removing a source, and what one more costs; removing keeps the topic's web search,
   which only the editor turns off, and its last source), and `topicDraftTools.ts` (creating a topic from a draft and
   suggesting its sources). The chat adapters are `chatTools.ts` (the preview tools a chat binds on a topic, the saves
   the server applies once the user's next message agrees, and the wording every adapter and the topic chat tools eval
-  share) and `newTopicChatTools.ts` (the new-topic chat's draft tools). The mcp adapter is in `mcp/tools.ts`.
+  share) and `newTopicChatTools.ts` (the new-topic chat's draft tools). The mcp adapter is in `mcp/tools.ts` and
+  `mcp/topicEditTools.ts`.
   `topicTools.smoke.ts` runs `topicUpdateSmokeSections.ts`, `topicSourceSmokeSections.ts`, and
   `topicDraftSmokeSections.ts` over `topicToolsSmokeFixtures.ts`, and stops the first scan of the topic it creates
   through `topic/firstScanSmoke.ts`.
@@ -118,8 +130,9 @@ at the root import it by name.
   topics a user may add to a team; `topic/accessibleFindings.ts` — the findings a user may read on a topic, with the
   owning team's bookmarks.
 - `topic/findings.ts` — the finding routes, and `topic/findingFeedback.ts` — the feedback a user gives a finding: the
-  rating and its words, the bookmark, consumed, and an open, which counts the user among the finding's viewers on
-  their first open.
+  rating and its words, the bookmark, consumed, and an open, which counts among the finding's views within the count
+  rate limit, a visitor's too when it comes from the app's own origin. `topic/findingPermissions.ts` holds who may see,
+  rate, and bookmark a finding, and `loadTopicFindingPermissions`, the rate and bookmark rules for many topics in two reads.
 - `counts/` — the viewer and listener counts: `countsRoute.ts` (`POST /api/topics/:id/view`, the view a topic page
   sends, counted only from the app's own origin and returning 204, and the `/api/counts/` reads of a topic's viewers
   and followers and a podcast episode's listeners), and `viewerCounts.ts` (counting a topic view or a podcast episode
@@ -224,16 +237,24 @@ at the root import it by name.
   on a chat room post.
 - `team/teams.ts` — creating and updating a team and the topic attach and detach; `team/teamsRoute.ts` — the team
   routes; `team/deleteTeam.ts` — the delete, the handover to a new leader, and the one team row delete an account
-  close shares; `team/search.ts` — the team name search; `team/teamPage.ts` — the team
+  close shares; `team/search.ts` — the site search's team reader; `team/teamPage.ts` — the team
   page read; `team/teamsPage.ts` — the teams page read; `team/helpers.ts` — the team summaries, the profile's team
   statuses, the admin's team topics, and the per-team counts and spend they share.
-- `topic/search.ts` — `searchTopics` and `GET /api/topics/search`, the search bar's topic name search, which applies
-  the `topic:view` rules in SQL ahead of the limit. A user finds the listed topics they may open, and a visitor finds
-  public topics with enough findings. Those rules in SQL live in `topic/permissions.ts`: `toTopicViewFilter`,
-  `toTopicAccessFilter`, the topics a user reaches through their account, and `toTopicRoleFilter`, a topic the user owns
-  or a team of theirs holds. The related reads and the episode view rules share them. The name searches here, in
-  `profiles.ts`, and in `team/search.ts` read trigram indexes, whose plans `searchPlans.smoke.ts` checks beside the chat
-  ranking's, the related reads', and the episode search's.
+- `search/` — the site search behind the search bar, the search page, and the mcp `search` tool: `search.ts`
+  (`searchSite` and `GET /api/search` behind `searchRateLimiter`, which reads each requested kind up to
+  `SEARCH_KIND_LIMIT`, ranks the union, and cuts one page), `searchRanks.ts` (the match tiers, the kind order, the
+  newest and trending sorts, and the page cut), and `findingSearch.ts` (the finding reader, the resource title or url
+  match through `resources_title_or_url_lower_trgm` on the topics the user may open, under the invite gate). The other
+  readers are `topic/search.ts`, `podcast/podcastEpisodeSearch.ts`, `team/search.ts`, and `searchUsers` in
+  `profiles.ts`.
+- `topic/search.ts` — `searchTopics`, the site search's topic reader, which applies the `topic:view` rules in SQL ahead
+  of the limit, with each topic's latest podcast episode and whether a signed-in user follows it. A user finds the
+  listed topics they may open, and a visitor finds public topics with enough findings. Those rules in SQL live in
+  `topic/permissions.ts`: `toTopicViewFilter`, `toTopicAccessFilter`, the topics a user reaches through their account,
+  and `toTopicRoleFilter`, a topic the user owns or a team of theirs holds. The related reads and the episode view rules
+  share them. The name searches here, in `profiles.ts`, in `team/search.ts`, and the finding reader read trigram
+  indexes, whose plans `searchPlans.smoke.ts` checks beside the chat ranking's, the related reads', and the episode
+  search's.
 - `topic/topicDrafts.ts` — the new-topic chat's Topic Draft row, written by the chat turn that changed it and read
   back when the conversation loads.
 - `botAnalytics.ts` — the middleware that reports what a known crawler, unfurler, podcast app, or feed reader fetched,

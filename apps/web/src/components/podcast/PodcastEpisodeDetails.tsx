@@ -1,5 +1,6 @@
 import type { PodcastEpisode, PodcastEpisodeSummary } from "@carlnotes/contracts/podcast"
 import { AI_VOICES_NOTE, PODCAST_NAME } from "@carlnotes/contracts/podcastEpisodes"
+import { toDotSeparatedText } from "@carlnotes/contracts/text"
 import { toCountLabel, toPodcastEpisodeDayAndDurationLabels } from "@carlnotes/core/lib/labels"
 import type * as React from "react"
 import { AnchorLink } from "@/components/common/AnchorLink"
@@ -66,7 +67,7 @@ export function PodcastEpisodeDetails({
 			>
 				{playerChapter && playerChapterIndex !== null
 					? `Chapter ${playerChapterIndex + 1} of ${chapterCount} · ${playerChapter.title}`
-					: podcastEpisodeDetailLabels.join(" · ")}
+					: toDotSeparatedText(podcastEpisodeDetailLabels)}
 			</div>
 			{/* the description, only in a tooltip */}
 			{isInTooltip && podcastEpisode.description && <p className="mt-1">{podcastEpisode.description}</p>}

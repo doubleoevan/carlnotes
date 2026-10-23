@@ -1,11 +1,15 @@
 // the mcp server. one handler serves /mcp and the topic-bound /mcp/t/:topicId with the same tools
 
 import { trackBotEvent } from "@carlnotes/server/analytics"
-import { StreamableHTTPTransport } from "@hono/mcp"
-import { McpServer, type RegisteredTool } from "@modelcontextprotocol/sdk/server/mcp.js"
-import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js"
+import {
+	type CallToolResult,
+	McpServer,
+	type RegisteredTool,
+	WebStandardStreamableHTTPServerTransport,
+} from "@modelcontextprotocol/server"
 import { type Context, Hono } from "hono"
 import { type AppEnv, currentUser } from "../currentUser"
+import { resolveClientAddress } from "../trustedProxies"
 import { loadOAuthClientName } from "./oauthClientNames"
 import { resolveToolCaller, type ToolCaller } from "./toolCaller"
 import { registerTools } from "./tools"
@@ -36,12 +40,15 @@ async function handleMcpRequest(context: Context<AppEnv>, routeTopicId: string |
 	const toolCaller = context.get("toolCaller") ?? (await resolveToolCaller(context.req.raw))
 	const mcpServer = new McpServer({ name: SERVER_NAME, version: SERVER_VERSION })
 	trackToolCalls(mcpServer, toolCaller)
-	registerTools(mcpServer, toolCaller, routeTopicId)
+	registerTools({ mcpServer, toolCaller, routeTopicId, clientAddress: resolveClientAddress(context.req.raw) })
 
 	// connect a stateless transport. no session id, and a json response to each post
-	const transport = new StreamableHTTPTransport({ sessionIdGenerator: undefined, enableJsonResponse: true })
+	const transport = new WebStandardStreamableHTTPServerTransport({
+		sessionIdGenerator: undefined,
+		enableJsonResponse: true,
+	})
 	await mcpServer.connect(transport)
-	return (await transport.handleRequest(context)) ?? context.body(null, 204)
+	return transport.handleRequest(context.req.raw)
 }
 
 // a tool's handler and what it returns

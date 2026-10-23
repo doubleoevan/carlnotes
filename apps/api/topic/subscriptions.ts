@@ -15,12 +15,14 @@ import { deletePodcastFeedToken } from "../podcast/podcastFeedTokens"
 import { loadOwnedTopic, verifiedEmailQuery } from "./permissions"
 import { updateTopicSubscriberCount } from "./subscriberCounts"
 
-// the user, the topic, whether to subscribe or unsubscribe, and the request's analytics properties
+// the user, the topic, whether to subscribe or unsubscribe, the request's analytics properties, and where the change
+// came from: the topic page unless it names the mcp server
 type SetTopicSubscriptionOptions = {
 	userId: string
 	topicId: string
 	isSubscribed: boolean
 	analyticsProperties: AnalyticsProperties
+	subscriptionSource?: "page" | "mcp"
 }
 
 /**
@@ -32,6 +34,7 @@ export async function setTopicSubscription({
 	topicId,
 	isSubscribed,
 	analyticsProperties,
+	subscriptionSource = "page",
 }: SetTopicSubscriptionOptions): Promise<boolean> {
 	// only a visible topic can be subscribed to
 	const [topic] = await db.select().from(topics).where(eq(topics.id, topicId))
@@ -48,12 +51,12 @@ export async function setTopicSubscription({
 		return false
 	}
 
-	// the event's properties: the request's, the topic, and the page as the subscription source
+	// the event's properties: the request's, the topic, and where the subscription came from
 	const subscriptionProperties = {
 		...analyticsProperties,
 		topicId,
 		isTopicPublic: topic.visibility === "public",
-		subscriptionSource: "page",
+		subscriptionSource,
 	}
 
 	// unsubscribing deactivates this user's direct row and turns its email preference off too

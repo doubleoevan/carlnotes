@@ -25,7 +25,11 @@ hour, and a day in milliseconds, `isUtcWeekend`, which says whether a moment fal
 `reportedPath.ts` names a page by its route's shape, for PostHog's page views and Sentry's page renders alike.
 `youtube.ts` builds a YouTube video's watch page url and its player url, and holds `TOPIC_TUTORIAL_VIDEO`, the video on
 making a topic that the homepage, the menus, and the docs build all read, with the marker a docs page writes for it.
-`text.ts` holds `toOneLineText`, which puts text on one line for a note, a title, a search query, or a hash.
+`text.ts` holds `toOneLineText`, which puts text on one line for a note, a title, a search query, or a hash, and
+`toDotSeparatedText`, which joins a line's parts on middle dots.
+`mcpCards.ts` names the MCP Apps cards and the data a tool result gives its card, `pagination.ts` holds the page
+sizes a paged list offers, and `topicEdits.ts` turns a saved topic's fields into the editable draft a topic edit starts
+from.
 `analyticsEvents.ts` holds the event types: the user events keyed to a user, the bot events keyed to a bot's or an
 app's name, the browser's visit events, the entry points, and an event's properties; the clients that send them are
 `@carlnotes/server/analytics`. `userAgent.ts` reads a request's device properties and names a known crawler, unfurler,

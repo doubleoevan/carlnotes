@@ -14,16 +14,12 @@ import {
 	updateTopicSource,
 } from "./topics"
 
-// the topic tool payloads
-export const updateTopicPromptPayload = z.object({ prompt: z.string().trim().min(1).max(TOPIC_PROMPT_CHARS) })
-
+// a source to add: an option key and its value
 export const addTopicSourcePayload = z.object({
 	// a source option key and its value. a default source takes no value
 	sourceOption: z.enum([...defaultSourceKeys, ...customSourceKeys]),
 	value: z.string().trim().max(2000).default(""),
 })
-
-export const removeTopicSourcePayload = z.object({ sourceId: z.string().min(1) })
 
 export type AddTopicSourcePayload = z.infer<typeof addTopicSourcePayload>
 

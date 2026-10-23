@@ -1,36 +1,17 @@
-// the tools the mcp server registers: their names, schemas, annotations, and what each returns
+// the tools the mcp server registers: their names, schemas, annotations, and what each returns. the tools that edit and
+// create a topic are in topicEditTools.ts
 
 import { ratings } from "@carlnotes/contracts/enums"
-import {
-	addTopicSourcePayload,
-	createTopicPayload,
-	removeTopicSourcePayload,
-	updateTopicPromptPayload,
-} from "@carlnotes/contracts/topicPayloads"
-import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
-import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js"
+import { searchRequestPayload } from "@carlnotes/contracts/search"
+import type { CallToolResult } from "@modelcontextprotocol/server"
 import { z } from "zod"
-import type { AnalyticsProperties } from "../currentUser"
-import {
-	toAddTopicSourceText,
-	toRejectionText,
-	toRemoveTopicSourceText,
-	toSavedTopicFieldsText,
-	toSavedTopicPromptText,
-	toUpdateTopicFieldsText,
-} from "../tool/chatTools"
-import { toCreateTopicText, toSuggestionsText } from "../tool/newTopicChatTools"
-import { createTopicFromDraft, suggestTopicDraftSources } from "../tool/topicDraftTools"
-import { addTopicSource, removeTopicSource } from "../tool/topicSourceTools"
-import {
-	toPodcastFieldDescription,
-	toUpdateTopicFieldsShape,
-	updateTopicFields,
-	updateTopicPrompt,
-} from "../tool/topicTools"
+import { setTopicSubscription } from "../topic/subscriptions"
+import { loadFindingsCardData, loadSearchCardData, toCardMeta } from "./cardData"
+import { registerCardResources, toCardToolMeta } from "./cards"
 import {
 	bookmarkFinding,
 	CONNECT_ACCOUNT_TEXT,
+	type McpFinding,
 	type McpPage,
 	markFindingConsumed,
 	rateFinding,
@@ -38,28 +19,27 @@ import {
 	searchFindings,
 	toToolTopicId,
 } from "./results"
+import { searchForTool, toSearchText } from "./searchResults"
 import { type ToolCaller, toMcpAnalyticsProperties } from "./toolCaller"
+import { type RegisterToolsOptions, toPageResult, topicIdArgument, toTextResult } from "./toolShapes"
+import { registerTopicEditTools } from "./topicEditTools"
 import { listTopics } from "./topicResults"
 
-// the two arguments tools share. on the bound route the topic id comes from the url
-const topicIdArgument = z
-	.string()
-	.optional()
-	.describe("The topic's id. Optional on a topic-bound server, which already knows its topic.")
+// the cursor argument the paged reads take
 const cursorArgument = z.string().optional().describe("The cursor a previous page returned.")
 
-// register every tool. every tool caller gets the same list, and only the results differ
-export function registerTools(mcpServer: McpServer, toolCaller: ToolCaller, routeTopicId: string | null): void {
-	registerReadTools(mcpServer, toolCaller, routeTopicId)
-	registerFeedbackTools(mcpServer, toolCaller)
-	// register the topic tools. confirmation is left to the client
-	registerTopicFieldTools(mcpServer, toolCaller, routeTopicId)
-	registerTopicSourceTools(mcpServer, toolCaller, routeTopicId)
-	registerNewTopicTools(mcpServer, toolCaller)
+/**
+ * Registers every tool. Every tool caller gets the same list, and only the results differ.
+ */
+export function registerTools(registerToolsOptions: RegisterToolsOptions): void {
+	registerCardResources(registerToolsOptions.mcpServer)
+	registerReadTools(registerToolsOptions)
+	registerFeedbackTools(registerToolsOptions)
+	registerTopicEditTools(registerToolsOptions)
 }
 
-// register the read tools and the consumed write
-function registerReadTools(mcpServer: McpServer, toolCaller: ToolCaller, routeTopicId: string | null): void {
+// register the read tools, the site search, and the consumed write
+function registerReadTools({ mcpServer, toolCaller, routeTopicId, clientAddress }: RegisterToolsOptions): void {
 	mcpServer.registerTool(
 		"list_topics",
 		{
@@ -79,13 +59,15 @@ function registerReadTools(mcpServer: McpServer, toolCaller: ToolCaller, routeTo
 				"A topic's findings in relevance order, each with Carl's relevance explanation. A connected account's read includes which findings it read and bookmarked.",
 			inputSchema: z.object({ topic_id: topicIdArgument, cursor: cursorArgument }),
 			annotations: { readOnlyHint: true },
+			_meta: toCardToolMeta("findings"),
 		},
 		async ({ topic_id, cursor }) => {
 			const toolTopic = toToolTopicId(routeTopicId, topic_id ?? null)
 			if ("rejection" in toolTopic) {
 				return toTextResult(toolTopic.rejection, true)
 			}
-			return toPageResult(await readTopicFeed(toolCaller, toolTopic.topicId, cursor ?? null))
+			const mcpPage = await readTopicFeed(toolCaller, toolTopic.topicId, cursor ?? null)
+			return toFindingsCardResult({ toolCaller, topicId: toolTopic.topicId, mcpPage })
 		},
 	)
 	mcpServer.registerTool(
@@ -95,6 +77,7 @@ function registerReadTools(mcpServer: McpServer, toolCaller: ToolCaller, routeTo
 			description: "The topic's findings closest to a query, ranked by meaning over the same index the chat uses.",
 			inputSchema: z.object({ topic_id: topicIdArgument, query: z.string().min(1).max(2000), cursor: cursorArgument }),
 			annotations: { readOnlyHint: true },
+			_meta: toCardToolMeta("findings"),
 		},
 		async ({ topic_id, query, cursor }) => {
 			const toolTopic = toToolTopicId(routeTopicId, topic_id ?? null)
@@ -106,7 +89,30 @@ function registerReadTools(mcpServer: McpServer, toolCaller: ToolCaller, routeTo
 			if (searchResult && "text" in searchResult) {
 				return toTextResult(searchResult.text)
 			}
-			return toPageResult(searchResult?.page ?? null)
+			return toFindingsCardResult({ toolCaller, topicId: toolTopic.topicId, mcpPage: searchResult?.page ?? null })
+		},
+	)
+	mcpServer.registerTool(
+		"search",
+		{
+			title: "Search CarlNotes",
+			description:
+				"Find topics, podcast episodes, findings, teams, and profiles by name, the same search the site's search bar and search page run. Rank by relevance, newest, or trending, and page through the results. Each result has its url on carlnotes.com. To rank one topic's findings by meaning, use search_topic_findings.",
+			inputSchema: searchRequestPayload,
+			annotations: { readOnlyHint: true },
+			_meta: toCardToolMeta("search"),
+		},
+		async (searchRequest) => {
+			// search under the site's search limit. a caller past it reads a message
+			const searchResult = await searchForTool({ toolCaller, clientAddress, searchRequest })
+			if ("text" in searchResult) {
+				return toTextResult(searchResult.text)
+			}
+			return {
+				content: [{ type: "text", text: toSearchText(searchResult) }],
+				structuredContent: searchResult,
+				_meta: toCardMeta(await loadSearchCardData(toolCaller, searchResult)),
+			}
 		},
 	)
 	mcpServer.registerTool(
@@ -127,8 +133,8 @@ function registerReadTools(mcpServer: McpServer, toolCaller: ToolCaller, routeTo
 	)
 }
 
-// register the rating and bookmark tools. both need an account
-function registerFeedbackTools(mcpServer: McpServer, toolCaller: ToolCaller): void {
+// register the rating, bookmark, and follow tools. each needs an account
+function registerFeedbackTools({ mcpServer, toolCaller, routeTopicId }: RegisterToolsOptions): void {
 	mcpServer.registerTool(
 		"rate_finding",
 		{
@@ -166,198 +172,66 @@ function registerFeedbackTools(mcpServer: McpServer, toolCaller: ToolCaller): vo
 			)
 		},
 	)
-}
-
-// register the tools that rewrite an existing topic's prompt and settings
-function registerTopicFieldTools(mcpServer: McpServer, toolCaller: ToolCaller, routeTopicId: string | null): void {
 	mcpServer.registerTool(
-		"update_topic_prompt",
+		"follow_topic",
 		{
-			title: "Update a topic's prompt",
+			title: "Follow a topic",
 			description:
-				"Rewrite what the topic is looking for, the prompt every brew scores against. Every save keeps a version. No brew starts.",
-			inputSchema: z.object({ topic_id: topicIdArgument, ...updateTopicPromptPayload.shape }),
-			annotations: { readOnlyHint: false, destructiveHint: true },
+				"Follow a topic for the connected account, or unfollow it. Following puts the topic in the account's feed and its list. An owner always follows their own topic.",
+			inputSchema: z.object({ topic_id: topicIdArgument, is_following: z.boolean() }),
+			annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
 		},
-		async ({ topic_id, prompt }) => {
-			const topicEditCall = toTopicEditCall({ toolCaller, routeTopicId, topicId: topic_id })
-			if ("rejectionResult" in topicEditCall) {
-				return topicEditCall.rejectionResult
+		async ({ topic_id, is_following }) => {
+			const toolTopic = toToolTopicId(routeTopicId, topic_id ?? null)
+			if ("rejection" in toolTopic) {
+				return toTextResult(toolTopic.rejection, true)
 			}
-			// save the prompt. the tool checks edit rights itself
-			const updateTopicPromptResult = await updateTopicPrompt({ ...topicEditCall, prompt, origin: "mcp" })
-			return updateTopicPromptResult.status === "saved"
-				? toTextResult(`${toSavedTopicPromptText(updateTopicPromptResult.topicName)} The next brew reads it.`)
-				: toTextResult(toRejectionText(updateTopicPromptResult.status), true)
-		},
-	)
-	mcpServer.registerTool(
-		"update_topic_fields",
-		{
-			title: "Change a topic's title or settings",
-			description:
-				"Change the topic's name, its tags, its visibility (public, invite, or private), how often it brews (daily, weekdays, or weekly), the time of day it brews as HH:MM and the day a weekly brew runs, or how many findings a brew keeps (5, 10, 15, or 20)." +
-				`${toPodcastFieldDescription()} Name only the fields to change. No brew starts.`,
-			inputSchema: z.object({ topic_id: topicIdArgument, ...toUpdateTopicFieldsShape() }),
-			annotations: { readOnlyHint: false, destructiveHint: true },
-		},
-		async ({ topic_id, ...topicFields }) => {
-			const topicEditCall = toTopicEditCall({ toolCaller, routeTopicId, topicId: topic_id })
-			if ("rejectionResult" in topicEditCall) {
-				return topicEditCall.rejectionResult
-			}
-			// save the named settings. the tool checks edit rights itself
-			const updateTopicFieldsResult = await updateTopicFields({
-				...topicEditCall,
-				topicFields,
-				promptVersionOrigin: "mcp",
-			})
-			return updateTopicFieldsResult.status === "saved"
-				? toTextResult(`${toSavedTopicFieldsText(updateTopicFieldsResult.topicName)} The next brew follows them.`)
-				: toTextResult(toUpdateTopicFieldsText(updateTopicFieldsResult), true)
-		},
-	)
-}
-
-// register the tools that add a source to an existing topic and remove one
-function registerTopicSourceTools(mcpServer: McpServer, toolCaller: ToolCaller, routeTopicId: string | null): void {
-	mcpServer.registerTool(
-		"add_source",
-		{
-			title: "Add a source",
-			description:
-				"Add somewhere for the topic to read: a default source key, or a custom source option with its value. Returns what one more source is projected to cost. No brew starts.",
-			inputSchema: z.object({ topic_id: topicIdArgument, ...addTopicSourcePayload.shape }),
-			annotations: { readOnlyHint: false, destructiveHint: true },
-		},
-		async ({ topic_id, sourceOption, value }) => {
-			const topicEditCall = toTopicEditCall({ toolCaller, routeTopicId, topicId: topic_id })
-			if ("rejectionResult" in topicEditCall) {
-				return topicEditCall.rejectionResult
-			}
-			// add the source. the tool checks edit rights itself
-			const addTopicSourceResult = await addTopicSource({ ...topicEditCall, sourceOption, value, origin: "mcp" })
-			return toTextResult(
-				toAddTopicSourceText(addTopicSourceResult),
-				addTopicSourceResult.status === "missing" || addTopicSourceResult.status === "forbidden",
-			)
-		},
-	)
-	mcpServer.registerTool(
-		"remove_source",
-		{
-			title: "Remove a source",
-			description:
-				"Drop one of the topic's sources by its id, which list_topics shows beside each source. A topic keeps its web search and at least one source. No brew starts.",
-			inputSchema: z.object({ topic_id: topicIdArgument, ...removeTopicSourcePayload.shape }),
-			annotations: { readOnlyHint: false, destructiveHint: true },
-		},
-		async ({ topic_id, sourceId }) => {
-			const topicEditCall = toTopicEditCall({ toolCaller, routeTopicId, topicId: topic_id })
-			if ("rejectionResult" in topicEditCall) {
-				return topicEditCall.rejectionResult
-			}
-			// remove the source. the tool checks edit rights itself
-			const removeTopicSourceResult = await removeTopicSource({ ...topicEditCall, sourceId, origin: "mcp" })
-			return toTextResult(toRemoveTopicSourceText(removeTopicSourceResult), removeTopicSourceResult.status !== "saved")
-		},
-	)
-}
-
-// what an edit tool call resolves to: the topic that the route or the argument names, and a connected account
-type ToTopicEditCallOptions = { toolCaller: ToolCaller; routeTopicId: string | null; topicId: string | undefined }
-
-// the account that an edit tool saves as and the topic it edits, or the result that rejects the call.
-// a missing or mismatched topic is rejected before a caller with no connected account is
-function toTopicEditCall({
-	toolCaller,
-	routeTopicId,
-	topicId,
-}: ToTopicEditCallOptions):
-	| { userId: string; topicId: string; analyticsProperties: AnalyticsProperties }
-	| { rejectionResult: CallToolResult } {
-	const toolTopic = toToolTopicId(routeTopicId, topicId ?? null)
-	if ("rejection" in toolTopic) {
-		return { rejectionResult: toTextResult(toolTopic.rejection, true) }
-	}
-
-	// an edit saves as a connected account, with the call's analytics properties
-	if (toolCaller.kind !== "user") {
-		return { rejectionResult: toTextResult(CONNECT_ACCOUNT_TEXT) }
-	}
-	return {
-		userId: toolCaller.userId,
-		topicId: toolTopic.topicId,
-		analyticsProperties: toMcpAnalyticsProperties(toolCaller),
-	}
-}
-
-// register the tools that start a new topic: the source suggestions and the create
-function registerNewTopicTools(mcpServer: McpServer, toolCaller: ToolCaller): void {
-	mcpServer.registerTool(
-		"suggest_sources",
-		{
-			title: "Suggest sources",
-			description:
-				"Verified sources for a topic name and prompt, each as the option and value create_topic takes. Draws on the account's daily suggestion limit.",
-			inputSchema: z.object({ name: z.string().min(1), prompt: z.string().min(1) }),
-			annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
-		},
-		async ({ name, prompt }) => {
 			if (toolCaller.kind !== "user") {
 				return toTextResult(CONNECT_ACCOUNT_TEXT)
 			}
-			const suggestTopicDraftSourcesResult = await suggestTopicDraftSources({ userId: toolCaller.userId, name, prompt })
-			return toTextResult(
-				toSuggestionsText(suggestTopicDraftSourcesResult),
-				suggestTopicDraftSourcesResult.status !== "ok",
-			)
-		},
-	)
-	mcpServer.registerTool(
-		"create_topic",
-		{
-			title: "Create a topic",
-			description: `Create a topic for the connected account from a name, a prompt, sources as option and value pairs, invite emails, a visibility of public, invite, or private, the team it joins as the id and name of a team the account leads, tags, how often it brews (daily, weekdays, or weekly), and how many findings a brew keeps (5, 10, 15, or 20).${toPodcastFieldDescription()} Unsaid fields take the editor's defaults: shared by invite, weekly on Wednesday, ten findings. Its first brew starts.`,
-			inputSchema: createTopicPayload,
-			annotations: { readOnlyHint: false, destructiveHint: true },
-		},
-		async (topicDraft) => {
-			if (toolCaller.kind !== "user") {
-				return toTextResult(CONNECT_ACCOUNT_TEXT)
-			}
-			// create the topic through the create path's own gate. the result names the topic's id
-			const createTopicFromDraftResult = await createTopicFromDraft({
+
+			// follow or unfollow through the topic page's own write and its rules
+			const isTopicSubscriptionSet = await setTopicSubscription({
 				userId: toolCaller.userId,
-				topicDraft,
-				origin: "mcp",
+				topicId: toolTopic.topicId,
+				isSubscribed: is_following,
 				analyticsProperties: toMcpAnalyticsProperties(toolCaller),
+				subscriptionSource: "mcp",
 			})
-			if (createTopicFromDraftResult.status !== "created") {
-				return toTextResult(toCreateTopicText(createTopicFromDraftResult), true)
+			if (!isTopicSubscriptionSet) {
+				return toTextResult(toSubscriptionRejectionText(is_following), true)
 			}
 			return {
-				content: [
-					{
-						type: "text",
-						text: `${toCreateTopicText(createTopicFromDraftResult)} Its id is ${createTopicFromDraftResult.topicId}.`,
-					},
-				],
-				structuredContent: { topicId: createTopicFromDraftResult.topicId, name: createTopicFromDraftResult.name },
+				content: [{ type: "text", text: is_following ? "Following." : "Unfollowed." }],
+				structuredContent: { topicId: toolTopic.topicId, isFollowing: is_following },
 			}
 		},
 	)
 }
 
-// shape a page as a tool result, as json text and as structured content. some clients read only the text
-function toPageResult(mcpPage: McpPage<unknown> | null): CallToolResult {
-	if (!mcpPage) {
-		return toTextResult("No readable topic has that id.", true)
-	}
-	return { content: [{ type: "text", text: JSON.stringify(mcpPage) }], structuredContent: mcpPage }
+// what a rejected subscribe or unsubscribe says
+function toSubscriptionRejectionText(isSubscribing: boolean): string {
+	return isSubscribing
+		? "No topic this account may follow has that id. A private topic is followed by its owner alone."
+		: "This account can't unfollow that topic. An owner always follows their own topic."
 }
 
-// shape text as a tool result
-function toTextResult(text: string, isError = false): CallToolResult {
-	return { content: [{ type: "text", text }], isError }
+// who read the findings, their topic, and the page of them
+type ToFindingsCardResultOptions = { toolCaller: ToolCaller; topicId: string; mcpPage: McpPage<McpFinding> | null }
+
+// a page of findings as a tool result, with the findings card's data in its _meta
+async function toFindingsCardResult({
+	toolCaller,
+	topicId,
+	mcpPage,
+}: ToFindingsCardResultOptions): Promise<CallToolResult> {
+	const pageResult = toPageResult(mcpPage)
+	if (!mcpPage) {
+		return pageResult
+	}
+
+	// the topic and the page's findings in the site's shape, for the card alone
+	const findingIds = mcpPage.items.map((mcpFinding) => mcpFinding.findingId)
+	const findingsCardData = await loadFindingsCardData(toolCaller, { topicId, findingIds })
+	return findingsCardData ? { ...pageResult, _meta: toCardMeta(findingsCardData) } : pageResult
 }

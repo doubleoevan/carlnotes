@@ -1,5 +1,6 @@
 // the scan pipeline's tables: scans, resources, findings, and the per-user finding markers
 import type { StoredScanSourceResults } from "@carlnotes/contracts/topics"
+import { sql } from "drizzle-orm"
 import {
 	boolean,
 	index,
@@ -121,6 +122,11 @@ export const resources = pgTable(
 		index("resources_embedding_hnsw").using("hnsw", table.embedding.op("vector_cosine_ops")),
 		// a resource by its content hash, for the duplicate check review runs on every fetched page
 		index("resources_content_hash_idx").on(table.contentHash),
+		// the trigram index behind the site search's finding match, over the lowercased title, else the url
+		index("resources_title_or_url_lower_trgm").using(
+			"gin",
+			sql`lower(coalesce(${table.title}, ${table.url})) gin_trgm_ops`,
+		),
 	],
 )
 
@@ -159,10 +165,10 @@ export const findings = pgTable(
 		ratedByUserId: text("rated_by_user_id"),
 		ratedTeamId: text("rated_team_id"),
 		ratedRole: text("rated_role"),
-		// the signed-in people who have opened this finding's resource, each counted once
-		viewerCount: integer("viewer_count").notNull().default(0),
-		// no longer read or written. a later migration drops it, once no process from before viewer counts runs
+		// the number of times this finding's resource has been opened
 		viewCount: integer("view_count").notNull().default(0),
+		// no longer read or written. a later migration drops it, once no process that counts finding viewers runs
+		viewerCount: integer("viewer_count").notNull().default(0),
 		// created and updated timestamps
 		...timestamps(),
 	},
@@ -174,6 +180,8 @@ export const findings = pgTable(
 		index("findings_topic_relevance_idx").on(table.topicId, table.relevanceScore.desc().nullsFirst()),
 		// the findings a scan last reviewed, for a public topic page's structured data
 		index("findings_scan_id_idx").on(table.scanId),
+		// a resource's findings, for the site search's finding match, which starts from the resources
+		index("findings_resource_id_idx").on(table.resourceId),
 		// the findings a scan first found, for a scan email and a podcast episode's plan
 		index("findings_found_scan_id_idx").on(table.foundScanId),
 		// a topic's findings by when they arrived, for the new finding count and the reads that take a topic's latest findings

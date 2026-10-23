@@ -1,8 +1,8 @@
 import { fetchTopicPage } from "@carlnotes/client/topicClient"
+import { type EditableTopicFields, toEditableTopicDraft } from "@carlnotes/contracts/topicEdits"
 import type { TopicDraft } from "@carlnotes/contracts/topicPayloads"
 import { useEffect, useMemo, useState } from "react"
 import { useIsEditingTopic, useProposedTopicEdit, useTopicChangeCount } from "@/stores/chatPanelStore"
-import { type EditableTopicFields, toEditableTopicDraft } from "./editableTopicDraft"
 
 // the topic a read returned, with the topic id it was read for
 type TopicReadResult = { topicId: string; topic: EditableTopicFields | null }

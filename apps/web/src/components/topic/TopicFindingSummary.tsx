@@ -1,5 +1,7 @@
 // a topic finding as its row shows it, and the metadata line under its title
+
 import type { TopicFinding } from "@carlnotes/contracts/findings"
+import { toDotSeparatedText } from "@carlnotes/contracts/text"
 import { toAgeLabel } from "@carlnotes/core/lib/labels"
 import type * as React from "react"
 import { AnchorLink } from "@/components/common/AnchorLink"
@@ -76,7 +78,7 @@ export function ResourceMetadata({ resource }: { resource: TopicFinding }) {
 	return (
 		<>
 			{resource.source && <HostFavicon faviconPath={resource.faviconPath} />}
-			{[resource.source, toAgeLabel(resource.publishedAt)].filter(Boolean).join(" · ")}
+			{toDotSeparatedText([resource.source, toAgeLabel(resource.publishedAt)])}
 		</>
 	)
 }

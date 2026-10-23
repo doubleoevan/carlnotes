@@ -1,7 +1,7 @@
 // the public profile: who a username belongs to, and the Topics they own.
 import { toAvatarVersion } from "@carlnotes/contracts/avatars"
 import type { ProfileResponse, Topic } from "@carlnotes/contracts/profiles"
-import { SEARCH_MIN_CHARS, USER_SEARCH_LIMIT, type UserSearchResult } from "@carlnotes/contracts/search"
+import { SEARCH_MIN_CHARS, type UserSearchRow } from "@carlnotes/contracts/search"
 import { toNormalizedUsername } from "@carlnotes/contracts/usernames"
 import { type DbHandle, db } from "@carlnotes/db"
 import { subscriptions, topics } from "@carlnotes/db/schema/topics"
@@ -11,31 +11,45 @@ import { Hono } from "hono"
 import { isAllowed } from "./authorization"
 import { withAvatarVersion } from "./avatars"
 import { type AppEnv, currentUser } from "./currentUser"
-import { searchRateLimiter } from "./rateLimit"
 import { loadProfileTeamStatuses, loadPublicTeams, loadTeamSummaries } from "./team/helpers"
 import { toTopicTableRows } from "./topic/topicTableRows"
 
+// the trimmed query and the most rows to read
+type SearchUsersOptions = { query: string; limit: number }
+
 /**
- * Users whose username contains the search query. Matched on the normalized username and query.
+ * Returns the users whose username contains the query, matched on the normalized username and query, shorter names
+ * first.
  */
-export async function searchUsers(query: string): Promise<UserSearchResult[]> {
+export async function searchUsers({ query, limit }: SearchUsersOptions): Promise<UserSearchRow[]> {
 	// normalized usernames are lowercase alphanumerics, so anything else in a query could only act as a LIKE wildcard
 	const normalizedUsername = toNormalizedUsername(query).replaceAll(/[^a-z0-9]/g, "")
-	// too short a query matches most of the table, so it is not worth a search
+	// too short a username matches most of the table
 	if (normalizedUsername.length < SEARCH_MIN_CHARS) {
 		return []
 	}
 
-	// read the matching users and add their avatar versions
-	const userRows = await toUserSearchQuery(normalizedUsername)
-	return userRows.map(withAvatarVersion)
+	// read the matching users and shape each as a search row with its avatar version
+	const userRows = await toUserSearchQuery({ normalizedUsername, limit })
+	return userRows.map((userRow) => {
+		const user = withAvatarVersion(userRow)
+		return {
+			kind: "user",
+			id: user.userId,
+			name: user.username,
+			path: `/profiles/${user.userId}`,
+			date: null,
+			count: null,
+			user,
+		}
+	})
 }
 
 /**
  * Returns the username search's query, shorter names first.
  */
 // biome-ignore lint/nursery/useExplicitReturnType: drizzle's select builder type is generated, and naming it here would break on an upgrade
-export function toUserSearchQuery(normalizedUsername: string) {
+export function toUserSearchQuery({ normalizedUsername, limit }: { normalizedUsername: string; limit: number }) {
 	return db
 		.select({
 			userId: users.id,
@@ -45,8 +59,8 @@ export function toUserSearchQuery(normalizedUsername: string) {
 		})
 		.from(users)
 		.where(like(users.usernameNormalized, `%${normalizedUsername}%`))
-		.orderBy(sql`length(${users.usernameNormalized})`)
-		.limit(USER_SEARCH_LIMIT)
+		.orderBy(sql`length(${users.usernameNormalized})`, users.id)
+		.limit(limit)
 }
 
 /**
@@ -132,12 +146,8 @@ async function loadProfileTopics(
 	return toTopicTableRows(rows, userId)
 }
 
-// the public profile routes: the search bar's user suggestions and the profile page
+// the public profile routes: the profile page and the profile's team statuses
 export const profilesRoute = new Hono<AppEnv>()
-	// public: who a user can find by name, for the search bar's user suggestions
-	.get("/users", searchRateLimiter, async (context) => {
-		return context.json({ users: await searchUsers(context.req.query("q") ?? "") })
-	})
 	// a profile does not require a session. but a session is required to show non-public topics to the owner or an admin.
 	.get("/profiles/:userId", async (context) => {
 		const profile = await loadProfile(context.req.param("userId"), currentUser(context))

@@ -16,10 +16,10 @@ the browser bundle and renders pages through the server build, behind its own ro
   renders them in the browser and runs `requireSession` before they load. A public page's loader reads its head and page
   data from the api. The route generator skips a file whose name starts with `-`, such as the loader both topic routes
   share, the route tests' router in `-loadRouter.ts`, or a route test.
-- `pages/` — one file per route, with `legalMarkdownOptions.ts`, the Markdown options that the terms and privacy
-  pages share; `components/<area>/` — components by domain area. `components/markupTestFixtures.ts` holds
-  `toElementClassNames`, which returns the class attribute of each element with a tag name in rendered markup, for the
-  render tests.
+- `pages/` — one file per route, `SearchPage.tsx` among them, the `/search` page over the site search in its url, with
+  `legalMarkdownOptions.ts`, the Markdown options that the terms and privacy pages share; `components/<area>/` —
+  components by domain area. `components/markupTestFixtures.ts` holds `toElementClassNames`, which returns the class
+  attribute of each element with a tag name in rendered markup, for the render tests.
 - `components/primitives/` is reserved for shadcn; custom shared components go in `components/common/`, among them
   `IconButton.tsx`, the button whose tooltip is also its accessible name, and `FlashingCount.tsx`, a labeled count
   whose highlighted number flashes once when the count changes, and never under reduced motion.
@@ -84,6 +84,7 @@ the browser bundle and renders pages through the server build, behind its own ro
   checks against the docs page's copy, and `monthlyBudgetCutoffCopy.ts` holds the wording both of them use.
 - `components/invite/` — the invite fields, editors, and modals, shared by the topic and team pages.
 - `components/topic/` — the topic page's sections, cards, dialogs, and editors, and the edit topic modal.
+  `TagsAndNewTopicRow.tsx` is the Tags picker and New Topic button row above the home feed and the search results.
   `TopicCountsLine.tsx` ends the topic page with its viewer and follower counts, empty in the server render.
   `saveTopic.ts` is the modal's save flow: the create or update, the podcast switch, the attachment uploads, edits, and
   removals, then the invites and the team change, with `MISSING_FIELD_NOTES` and `showSaveError` beside it;
@@ -93,9 +94,13 @@ the browser bundle and renders pages through the server build, behind its own ro
   the team save flow the team modal and the topic modal's teams field share: `createTeam`, `createTeamForInviteLink`,
   `saveTeam`, and `TEAM_REJECTION_REASONS`, the sentence for each team rejection.
 - `components/share/` — the share menus for a topic and a team, over the options they both use.
-- `components/search/` — the header's search bar, its Filters menu, and its result rows. The topic, podcast episode,
-  team, and user matches are server searches sent once typing pauses, and the finding matches come from the loaded
-  feed.
+- `components/search/` — the header's search bar, its Filters menu, its typeahead rows, and `SearchResultsList.tsx`,
+  the numbered result rows, their skeleton, and the page row that the search page and the mcp search card render.
+  Every kind of match comes from one site search, `GET /api/search`, sent once typing pauses. `searchBarChoices.ts`
+  holds what Enter opens, the search page the bar's text opens, and a list after a toggle, `searchFindingChanges.ts`
+  shows a finding note's change on its row, `searchFilterOptions.ts` holds the Filters menu's view and kind labels and
+  the kind icons the rows share, and `searchRouteSearch.ts` reads and writes a search as the `/search` route's url
+  values. On `/search` the bar's input, Filters menu, and sort show and change the page's url.
 - `components/branding/` — the coffee drawings, the loading indicator, the note icon, and the avatars. `Avatar.tsx`
   is the one avatar that `UserAvatar` and `TeamAvatar` render: the stored image, or the owner's initials on a tinted
   circle if there is no image or it fails to load. `HostAvatar.tsx` is Carl's or Vienna's own picture.
@@ -136,26 +141,39 @@ the browser bundle and renders pages through the server build, behind its own ro
   `lib/webApiClient.ts` holds the app's `configureApiClient` call, with the base url, `""` in the browser and the api on
   port 3000 on the server, and `showError`, which toasts the message; `router.tsx` calls it where both the server
   render and the browser pass, and the route tests' `-loadRouter.ts` calls it the same way.
+- `mcpCards/` — the MCP Apps cards the mcp server's search, topic, and finding tools name: `main.tsx`, the entry
+  `vite.mcpCards.config.ts` builds into one script and one stylesheet in `dist/mcp-cards/` as part of `build`, and
+  `McpCardApp.tsx`, which connects to the host with `@modelcontextprotocol/ext-apps`, follows its theme, and renders
+  the card its html names in a one-route memory router, every link opening through the host by `LinkOpenerContext` in
+  `AnchorLink`. `SearchCard.tsx`, `TopicCard.tsx`, and `FindingsCard.tsx` render the site's own components,
+  `CardSubscribeButton.tsx` and `CardPodcastPlayer.tsx` beside them. `cardHost.ts` holds the connected app, the card data
+  a tool result includes in `_meta`, and the tool calls the cards make, and `cardFindingHandlers.ts` the finding note's
+  handlers the search and findings cards share, each a tool call. The card build aliases
+  `@carlnotes/client/authClient` to `cardAuthClient.ts`, whose session is the tool result's caller, and
+  `@/lib/visitAnalytics` to `cardVisitAnalytics.ts`, which reports nothing, and `cardFetch.ts` returns a podcast
+  episode read from the tool result and fails every other request, so a card reaches the api only through a tool call.
 - `stores/` — the stores that reach the browser or a component library, named `<thing>Store.ts` and built the way
   `packages/core/AGENTS.md` describes, on `@carlnotes/core/stores/storeListeners`. Reach for a store only when state
   outlives a page or crosses the tree; `useState` and `providers/` cover everything else. The DOM-free stores,
   `chatRoomStore`, `noteBadgeStore`, and `topicInviteStore`, live in `@carlnotes/core/stores/`. The stores here:
-  `chatPanelStore.ts` (which chat room or private chat the panel shows), `pageActionsStore.ts` (the
-  search bar's page actions menu, with its lucide icons), and the podcast and spoken answer stores, which drive audio
-  elements and the media session. `spokenAnswerStore.ts` drives the spoken answer audio element:
-  the queue of one reply's spoken parts, keyed by its spoken answer key, the playing state the play buttons read, and
-  the announcement of each queue's end that listen mode reads, with the queue's shape, its next step, and the lock
-  screen's host name in `spokenAnswerQueue.ts`. It pauses the podcast episode before a host speaks, the podcast store
-  stops the speaking host when the podcast episode plays, and it holds back a chat room's auto-played reply while a
-  composer records. `spokenAudioCache.ts` keeps the session's spoken audio by each spoken part's voice and text within a
-  size limit, and returns a spoken part's audio from the cache, from a fetch already on its way, or from the speech
-  route. `streamedSpokenAnswer.ts` speaks a spoken question's reply as it streams, for the chat and the podcast player
-  alike. `podcastEpisodeQuestionStore.ts` is a question asked from the podcast player: the pause and the resume, the
-  recording's send and cancel, so every podcast mic slot can send, the chat turn it sends with the chapter, and the
-  snapshots a chat panel showing that topic mirrors, with its phases, endings, resume rule, and chapter line label in
-  `@carlnotes/core/stores/podcastEpisodeQuestionRules`, and its tests' player store spies and stubbed recording in
-  `podcastEpisodeQuestionTestFixtures.ts`. `podcastEpisodeListenStore.ts` keeps whether the user is signed in and saves
-  a signed-in user's progress in the loaded podcast episode, its playback start once per load, for the player store.
+  `chatPanelStore.ts` (which chat room or private chat the panel shows), `pageActionsStore.ts` (the search bar's page
+  actions menu, with its lucide icons), `searchBarStore.ts` (the search page the bar's text opens, which the header's
+  logo links to from any other page, and the event the logo sends to empty the bar from the search page), and the
+  podcast and spoken answer stores, which drive audio elements and the media session. `spokenAnswerStore.ts` drives
+  the spoken answer audio element: the queue of one reply's spoken parts, keyed by its spoken answer key, the playing
+  state the play buttons read, and the announcement of each queue's end that listen mode reads, with the queue's
+  shape, its next step, and the lock screen's host name in `spokenAnswerQueue.ts`. It pauses the podcast episode
+  before a host speaks, the podcast store stops the speaking host when the podcast episode plays, and it holds back a
+  chat room's auto-played reply while a composer records. `spokenAudioCache.ts` keeps the session's spoken audio by
+  each spoken part's voice and text within a size limit, and returns a spoken part's audio from the cache, from a
+  fetch already on its way, or from the speech route. `streamedSpokenAnswer.ts` speaks a spoken question's reply as it
+  streams, for the chat and the podcast player alike. `podcastEpisodeQuestionStore.ts` is a question asked from the
+  podcast player: the pause and the resume, the recording's send and cancel, so every podcast mic slot can send, the
+  chat turn it sends with the chapter, and the snapshots a chat panel showing that topic mirrors, with its phases,
+  endings, resume rule, and chapter line label in `@carlnotes/core/stores/podcastEpisodeQuestionRules`, and its tests'
+  player store spies and stubbed recording in `podcastEpisodeQuestionTestFixtures.ts`. `podcastEpisodeListenStore.ts`
+  keeps whether the user is signed in and saves a signed-in user's progress in the loaded podcast episode, its
+  playback start once per load, for the player store.
 - `hooks/` — the React hooks that read the browser or a route, `useTopicPagePayload.ts` among them, the topic page's
   payload and its poll reload, and `useScanNote.ts`, a scan's note behind its recap popover, read once the trigger is
   pointed at, focused, touched, or opened, and kept once the scan has finished; `providers/` — context providers;
@@ -232,5 +250,5 @@ the browser bundle and renders pages through the server build, behind its own ro
   (`@carlnotes/server`, `@carlnotes/db`, `@carlnotes/emails`, `@carlnotes/models`, `@carlnotes/pipeline`) and never
   another app. The preflight boundary check, `scripts/check-package-boundaries.ts`, fails an import outside this list.
 - `.tsx` is exempt from the comment-groups hook; keep the comment style anyway.
-- Dev: `bun run dev:ui` (port 5173), `bun run dev:storybook` (port 6006). Build: `bun run build:ui`,
-  `bun run build:storybook`. Tests: `bun test apps/web`.
+- Dev: `bun run dev:ui` (port 5173), `bun run dev:storybook` (port 6006). Build: `bun run build:ui`, which builds the
+  mcp cards too, and `bun run build:storybook`. Tests: `bun test apps/web`.

@@ -134,7 +134,7 @@ function topicFinding(overrides: Partial<TopicFinding>): TopicFinding {
 		publishedAt: null,
 		fetchedAt: "2026-07-01T00:00:00.000Z",
 		// the review, signals, and per-user states the helpers read
-		viewerCount: 0,
+		viewCount: 0,
 		relevanceScore: 0,
 		relevanceExplanation: "",
 		rating: null,
@@ -155,14 +155,13 @@ test("matchesTopicFindingFilter filters by the active view", () => {
 	expect(matchesTopicFindingFilter(bookmarkedTopicFinding, "bookmarked")).toBe(true)
 })
 
-// a finding rated thumbs down shows only in the rated down view, and that view shows nothing else
-test("matchesTopicFindingFilter shows a finding rated down only in the rated down view", () => {
+// a finding rated thumbs down shows in no view, even bookmarked, and one rated thumbs up shows as usual
+test("matchesTopicFindingFilter never shows a finding rated down", () => {
 	const ratedDownTopicFinding = topicFinding({ rating: "down", isBookmarked: true })
 	expect(matchesTopicFindingFilter(ratedDownTopicFinding, "all")).toBe(false)
 	expect(matchesTopicFindingFilter(ratedDownTopicFinding, "unread")).toBe(false)
 	expect(matchesTopicFindingFilter(ratedDownTopicFinding, "bookmarked")).toBe(false)
-	expect(matchesTopicFindingFilter(ratedDownTopicFinding, "ratedDown")).toBe(true)
-	expect(matchesTopicFindingFilter(topicFinding({ rating: "up" }), "ratedDown")).toBe(false)
+	expect(matchesTopicFindingFilter(topicFinding({ rating: "up" }), "all")).toBe(true)
 })
 
 // bookmarked findings pin first in every mode, and each group orders internally by the active sort
@@ -189,13 +188,13 @@ test("toSortedTopicFindings breaks relevance ties the same way no matter what th
 	expect(reversedIds).toEqual(relevantIds)
 })
 
-// trending ranks the most viewed findings first, and findings with the same viewer count fall back to recency
-test("toSortedTopicFindings trending orders by viewer count, then newest", () => {
-	const mostViewedFinding = topicFinding({ findingId: "most", viewerCount: 9, publishedAt: "2026-07-01T00:00:00.000Z" })
-	const viewedFinding = topicFinding({ findingId: "viewed", viewerCount: 3, publishedAt: "2026-07-10T00:00:00.000Z" })
+// trending ranks the most viewed findings first, and findings with the same view count fall back to recency
+test("toSortedTopicFindings trending orders by view count, then newest", () => {
+	const mostViewedFinding = topicFinding({ findingId: "most", viewCount: 9, publishedAt: "2026-07-01T00:00:00.000Z" })
+	const viewedFinding = topicFinding({ findingId: "viewed", viewCount: 3, publishedAt: "2026-07-10T00:00:00.000Z" })
 	const newerFinding = topicFinding({ findingId: "newer", publishedAt: "2026-07-20T00:00:00.000Z" })
 	const olderFinding = topicFinding({ findingId: "older", publishedAt: "2026-07-05T00:00:00.000Z" })
-	// viewer counts rank first by size, then the findings no one has opened order by recency
+	// view counts rank first by size, then the findings no one has opened order by recency
 	const trendingOrder = toSortedTopicFindings(
 		[olderFinding, newerFinding, viewedFinding, mostViewedFinding],
 		"trending",
@@ -203,10 +202,10 @@ test("toSortedTopicFindings trending orders by viewer count, then newest", () =>
 	expect(trendingOrder.map((finding) => finding.findingId)).toEqual(["most", "viewed", "newer", "older"])
 })
 
-// a bookmarked finding stays pinned under trending even with fewer viewers than the rest
+// a bookmarked finding stays pinned under trending even with fewer views than the rest
 test("toSortedTopicFindings trending keeps the bookmark pin", () => {
-	const bookmarkedFinding = topicFinding({ findingId: "pinned", viewerCount: 0, isBookmarked: true })
-	const popularFinding = topicFinding({ findingId: "popular", viewerCount: 50 })
+	const bookmarkedFinding = topicFinding({ findingId: "pinned", viewCount: 0, isBookmarked: true })
+	const popularFinding = topicFinding({ findingId: "popular", viewCount: 50 })
 	const trendingOrder = toSortedTopicFindings([popularFinding, bookmarkedFinding], "trending")
 	expect(trendingOrder.map((finding) => finding.findingId)).toEqual(["pinned", "popular"])
 })

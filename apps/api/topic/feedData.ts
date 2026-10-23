@@ -123,10 +123,10 @@ async function loadFeedFindingRows(
 				title: resources.title,
 				resourceCreatedAt: resources.createdAt,
 				fetchedAt: resources.fetchedAt,
-				// the topic finding's metadata, its viewer count, and the user's consumed and bookmarked dates
+				// the topic finding's metadata, its view count, and the user's consumed and bookmarked dates
 				relevanceScore: findings.relevanceScore,
 				relevanceExplanation: findings.relevanceExplanation,
-				viewerCount: findings.viewerCount,
+				viewCount: findings.viewCount,
 				rating: findings.rating,
 				consumedAt: consumptions.consumedAt,
 				bookmarkedAt: bookmarks.createdAt,

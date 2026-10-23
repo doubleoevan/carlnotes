@@ -29,7 +29,7 @@ Open a finding's popover for its controls:
 
 - **Rate this finding**: thumbs up or thumbs down, and a box to tell Carl why. What you write there goes back to him as
   feedback on the finding. A thumbs down hides the finding from your feed for good, and Carl scores pages like it lower
-  from then on. The **Rated down** view in **Filters** shows them, in case you change your mind.
+  from then on.
 - **Mark read**: your feed tracks what you haven't read yet. The **All** view mutes what you've read, and the **Unread**
   view hides it.
 - **Bookmark**: a bookmarked finding stays at the top of your feed and is never filtered out. When Carl scores what a
@@ -42,11 +42,11 @@ why](../../../assets/screenshots/feed-thumbs-and-consumed.png)
 Sort the feed by **Relevance**, **Newest**, or **Trending**. Use the **Filters** control to filter by resource kind, by
 tags, or by view. The **Reheat** button reloads the topic feed in place.
 
-**Trending** orders findings by how many signed-in people opened them, newest first among ties. Your bookmarks stay on
+**Trending** orders findings by their views, newest first among ties. Your bookmarks stay on
 top. On the homepage, Trending also orders the topics in each section by viewers, then by followers, then by their
 newest finding. Featured topics keep their order.
 
-## Viewers, followers, and listeners
+## Viewers, followers, listeners, and views
 
 The bottom of every topic page shows how many people have viewed the topic and how many follow it, as **Viewers** and
 **Followers**. A podcast episode page shows **Listeners**: how many people have played the podcast episode here or
@@ -56,6 +56,9 @@ open.
 ![The bottom of a topic page reading Viewers: 4, with the 4 flashing, and Followers: 27](../../../assets/screenshots/topic-viewer-counts.png)
 
 Each count is an approximate all-time total. A person counts once, signed in or not, however often they come back.
+
+A finding's note shows **Views**: how many times anyone has opened the finding from CarlNotes, signed in or not. Every
+open counts, so one person opening a finding twice adds two.
 
 ## Email updates
 

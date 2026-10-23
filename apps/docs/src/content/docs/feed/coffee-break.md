@@ -135,8 +135,8 @@ Blend card shows whether it's on. Off means no new podcast episodes. The podcast
 ![The Podcast switch at the bottom of the edit form, on: Coffee Break episode after every
 brew](../../../assets/screenshots/podcast-switch.png)
 
-The owner can also remove one episode. Use the trash button on the player or in the episodes list, or pick **Remove
-episode** in an episode page's **⋮** actions menu. The episode leaves the topic page, every feed, and its own page for
+The owner can also remove one episode. Use the trash button in the episodes list, or pick **Remove episode** in an
+episode page's **⋮** actions menu. The episode leaves the topic page, every feed, and its own page for
 good. Its number is not used again.
 
 ## When the mugs rest

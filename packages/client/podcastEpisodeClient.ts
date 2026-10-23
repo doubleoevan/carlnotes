@@ -8,7 +8,6 @@ import {
 	seasonPodcastEpisodes,
 } from "@carlnotes/contracts/podcast"
 import { type PodcastEpisodePageResponse, podcastEpisodePageResponse } from "@carlnotes/contracts/podcastEpisodePage"
-import type { PodcastEpisodeSearchResult } from "@carlnotes/contracts/search"
 import { z } from "zod"
 import { apiClient, toApiUrl } from "./apiClient"
 import { readTopicGate, type TopicGate } from "./topicClient"
@@ -26,17 +25,6 @@ export type PodcastEpisodePageParams = { topicId: string; season: string; episod
 export async function fetchPodcastEpisode(podcastEpisodeId: string): Promise<PodcastEpisode | null> {
 	const response = await apiClient().api.episodes[":id"].$get({ param: { id: podcastEpisodeId } })
 	return response.ok ? podcastEpisode.parse(await response.json()) : null
-}
-
-/**
- * Returns the published podcast episodes whose title or description matches the query, then the nearest by meaning.
- */
-export async function searchPodcastEpisodes(query: string): Promise<PodcastEpisodeSearchResult[]> {
-	const response = await apiClient().api.episodes.search.$get({ query: { q: query } })
-	if (!response.ok) {
-		return []
-	}
-	return ((await response.json()) as { podcastEpisodes: PodcastEpisodeSearchResult[] }).podcastEpisodes
 }
 
 /**

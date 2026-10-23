@@ -125,7 +125,7 @@ test("a review names only the columns a re-score decides", () => {
 		"reviewedContextHash",
 		"scanId",
 	])
-	for (const userColumn of ["rating", "ratedByUserId", "ratedTeamId", "ratedRole", "viewerCount"]) {
+	for (const userColumn of ["rating", "ratedByUserId", "ratedTeamId", "ratedRole", "viewCount"]) {
 		expect({ userColumn, isWritten: userColumn in review }).toEqual({ userColumn, isWritten: false })
 	}
 })

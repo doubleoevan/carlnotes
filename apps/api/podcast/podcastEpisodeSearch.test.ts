@@ -1,5 +1,5 @@
-// the podcast episode search: a short query sends nothing, titles match first under the view rules, the nearest by
-// meaning fill the rest from a cached or a new query vector, and a search that may not embed returns its text matches
+// the podcast episode reader: titles match first under the view rules, the nearest by meaning fill the rest from a
+// cached or a new query vector, and a search that may not embed returns its text matches
 import { afterEach, beforeEach, expect, mock, spyOn, test } from "bun:test"
 import {
 	FREE_USER_ACCESS_ROW,
@@ -13,9 +13,10 @@ import * as litellm from "@carlnotes/models/litellm"
 import * as retrieveDocs from "@carlnotes/pipeline/chat/retrieveDocs"
 import * as monitoring from "@carlnotes/server/monitoring"
 import { saveEnvSettings } from "@carlnotes/server/savedEnvSettings"
+import { searchRoute } from "../search/search"
 import {
 	loadQueryVector,
-	podcastEpisodeSearchRoute,
+	type SearchPodcastEpisodesOptions,
 	searchPodcastEpisodes,
 	toQueryVectorKey,
 	VISITOR_EMBEDDING_LIMIT,
@@ -50,10 +51,33 @@ afterEach(() => {
 	mock.restore()
 })
 
-// a matched row in the column order the match reads select, with a distance on a meaning match
+// a matched row in the column order the match reads select, with a distance on a meaning match: the episode's id, its
+// topic, scan, status, title, description, season, number, audio key and size, duration, listeners, and publish time,
+// then its topic's name and visibility
 function toMatchRow(podcastEpisodeId: string, distance?: number): unknown[] {
-	const matchFields = [podcastEpisodeId, `Episode ${podcastEpisodeId}`, 2026, 1, "topic-1", "Agents"]
+	const matchFields = [
+		podcastEpisodeId,
+		"topic-1",
+		"scan-1",
+		"published",
+		`Episode ${podcastEpisodeId}`,
+		null,
+		2026,
+		1,
+		null,
+		null,
+		600,
+		4,
+		"2026-01-01T00:00:00Z",
+		"Agents",
+		"public",
+	]
 	return distance === undefined ? matchFields : [...matchFields, distance]
+}
+
+// a visitor's search for a query, up to five rows
+function toSearchOptions(query: string, userId: string | null = null): SearchPodcastEpisodesOptions {
+	return { userId, isAdmin: false, query, clientAddress: null, limit: 5 }
 }
 
 // whether a sent query is the text match read
@@ -82,15 +106,9 @@ function stubMatches(textMatchRows: unknown[][], meaningMatchRows: unknown[][] =
 	})
 }
 
-test("a query shorter than the minimum sends no query", async () => {
-	const sentQueries = stubMatches([])
-	expect(await searchPodcastEpisodes({ userId: null, query: " a ", clientAddress: null })).toEqual([])
-	expect(sentQueries).toHaveLength(0)
-})
-
 test("the text match orders title matches first, then the newest, under a visitor's view rules", async () => {
 	const sentQueries = stubMatches([toMatchRow("episode-1")])
-	await searchPodcastEpisodes({ userId: null, query: "Agents", clientAddress: null })
+	await searchPodcastEpisodes(toSearchOptions("Agents"))
 
 	// the published title and description matches, title matches first and then the newest
 	const textMatchRead = sentQueries.find(isTextMatchRead) as SentQuery
@@ -108,7 +126,7 @@ test("the text match orders title matches first, then the newest, under a visito
 
 test("a user's view rules add their topics and an invite topic's episodes published after they subscribed", async () => {
 	const sentQueries = stubMatches([])
-	await searchPodcastEpisodes({ userId: "user-1", query: "agents", clientAddress: null })
+	await searchPodcastEpisodes(toSearchOptions("agents", "user-1"))
 
 	// the user's own and their teams' topics, and the invite topic's subscription gate on the publish time
 	const textMatchRead = sentQueries.find(isTextMatchRead) as SentQuery
@@ -122,7 +140,7 @@ test("a query under three characters gets its text matches alone and embeds noth
 	// a two-character query, one text match, and a public key to embed with
 	Bun.env.LITELLM_PUBLIC_KEY = "public-key"
 	const sentQueries = stubMatches([toMatchRow("e1")])
-	const podcastEpisodeSearchResults = await searchPodcastEpisodes({ userId: null, query: "ai", clientAddress: null })
+	const podcastEpisodeSearchResults = await searchPodcastEpisodes(toSearchOptions("ai"))
 
 	// the text match alone, with no embedding and no meaning match read
 	expect(podcastEpisodeSearchResults.map((podcastEpisodeSearchResult) => podcastEpisodeSearchResult.id)).toEqual(["e1"])
@@ -133,20 +151,21 @@ test("a query under three characters gets its text matches alone and embeds noth
 test("a full list of text matches embeds nothing and reads no meaning match", async () => {
 	const textMatchRows = ["e1", "e2", "e3", "e4", "e5"].map((podcastEpisodeId) => toMatchRow(podcastEpisodeId))
 	const sentQueries = stubMatches(textMatchRows)
-	const podcastEpisodeSearchResults = await searchPodcastEpisodes({
-		userId: null,
-		query: "agents",
-		clientAddress: null,
-	})
+	const podcastEpisodeSearchResults = await searchPodcastEpisodes(toSearchOptions("agents"))
 
 	// five text matches, each with its topic and its page path, and no embedding
 	expect(podcastEpisodeSearchResults).toHaveLength(5)
-	expect(podcastEpisodeSearchResults[0]).toEqual({
-		id: "e1",
-		title: "Episode e1",
-		topicName: "Agents",
-		pagePath: "/topics/topic-1/agents/episodes/2026/1",
-	})
+	expect(podcastEpisodeSearchResults[0]).toEqual(
+		expect.objectContaining({
+			kind: "podcastEpisode",
+			id: "e1",
+			name: "Episode e1",
+			path: "/topics/topic-1/agents/episodes/2026/1",
+			date: "2026-01-01T00:00:00.000Z",
+			count: 4,
+			topic: { id: "topic-1", name: "Agents" },
+		}),
+	)
 	expect(embedRetrievalQuerySpy).not.toHaveBeenCalled()
 	expect(sentQueries.some(isMeaningMatchRead)).toBe(false)
 })
@@ -158,11 +177,7 @@ test("the nearest by meaning fill the rest from a cached vector, leaving out the
 		[toMatchRow("e1"), toMatchRow("e2")],
 		[toMatchRow("near", 0.3), toMatchRow("far", 0.7)],
 	)
-	const podcastEpisodeSearchResults = await searchPodcastEpisodes({
-		userId: null,
-		query: "Agents",
-		clientAddress: null,
-	})
+	const podcastEpisodeSearchResults = await searchPodcastEpisodes(toSearchOptions("Agents"))
 
 	// the text matches, then the near meaning match, with no embedding
 	expect(podcastEpisodeSearchResults.map((podcastEpisodeSearchResult) => podcastEpisodeSearchResult.id)).toEqual([
@@ -211,12 +226,12 @@ test("a visitor embeds on the public key within the address's rate limit, and ov
 
 	// the next uncached search is over the limit: the route returns the text match with a 200 and embeds nothing
 	stubMatches([toMatchRow("e1")])
-	const routeRequest = new Request("http://localhost/episodes/search?q=new%20query", {
+	const routeRequest = new Request("http://localhost/search?q=new%20query&kinds=podcastEpisodes", {
 		headers: { "x-forwarded-for": "203.0.113.9" },
 	})
-	const routeResponse = await podcastEpisodeSearchRoute.request(routeRequest)
+	const routeResponse = await searchRoute.request(routeRequest)
 	expect(routeResponse.status).toBe(200)
-	expect(((await routeResponse.json()) as { podcastEpisodes: { id: string }[] }).podcastEpisodes).toEqual([
+	expect(((await routeResponse.json()) as { rows: { id: string }[] }).rows).toEqual([
 		expect.objectContaining({ id: "e1" }),
 	])
 	expect(embedRetrievalQuerySpy).toHaveBeenCalledTimes(VISITOR_EMBEDDING_LIMIT)

@@ -7,8 +7,8 @@ import { proposeTopicEditPayload } from "@carlnotes/contracts/topicPayloads"
 import { db } from "@carlnotes/db"
 import { chatProposals } from "@carlnotes/db/schema/chat"
 import type { ChatTurnToolCalls } from "../tool/chatTools"
+import { applyTopicEdit } from "../tool/topicEditSaves"
 import {
-	applyTopicEdit,
 	CHAT_PROPOSAL_PAGE_TARGET,
 	type ChatProposalResult,
 	cancelUnconfirmedProposal,
@@ -90,7 +90,7 @@ export async function answerChatRoomProposal({
 		question: toWordsWithoutModelMention(question),
 		toolCalls,
 		litellmApiKey,
-		applyProposal: () => applyTopicEdit({ userId, topicId, toolCalls }, topicEditResult.data),
+		applyProposal: () => applyTopicEdit({ userId, topicId, origin: "chat", toolCalls }, topicEditResult.data),
 	})
 }
 

@@ -1,19 +1,12 @@
 // the chat adapters for a topic: the preview tools, the in-chat saves the server applies, and the wording every
 // adapter shares
 import type { TopicToolCalls } from "@carlnotes/contracts/chat"
-import { KEEP_ONE_SOURCE_MESSAGE } from "@carlnotes/contracts/sources"
-import { type AddTopicSourcePayload, proposeTopicEditPayload } from "@carlnotes/contracts/topicPayloads"
+import { proposeTopicEditPayload } from "@carlnotes/contracts/topicPayloads"
 import { type Tool, tool } from "ai"
 import { z } from "zod"
-import type { AnalyticsProperties } from "../currentUser"
 import type { CreateTopicFromDraftResult } from "./topicDraftTools"
-import {
-	type AddTopicSourceResult,
-	addTopicSource,
-	type RemoveTopicSourceResult,
-	removeTopicSource,
-} from "./topicSourceTools"
-import { type UpdateTopicFieldsResult, updateTopicFields, updateTopicPrompt } from "./topicTools"
+import type { addTopicSource, RemoveTopicSourceResult } from "./topicSourceTools"
+import type { UpdateTopicFieldsResult } from "./topicTools"
 
 // what the topic tools did in one chat turn: what the api client is told, plus how many tools were called
 export type ChatTurnToolCalls = TopicToolCalls & { count: number }
@@ -27,14 +20,6 @@ export function toEmptyChatTurnToolCalls(): ChatTurnToolCalls {
 
 // what cancelling a proposed change returns, whether carl cancels it or the user's message declines it
 export const TOPIC_EDIT_CANCELLED_TEXT = "The preview is off the card. The topic reads as it is saved."
-
-// the user and topic a server-applied save acts on, and the request's analytics properties
-export type TopicEditSaveBinding = {
-	userId: string
-	topicId: string
-	toolCalls: ChatTurnToolCalls
-	analyticsProperties?: AnalyticsProperties
-}
 
 /**
  * Builds the tool that opens the new-topic chat, where Carl makes a topic.
@@ -97,112 +82,6 @@ export function toCancelTopicEditTool({ toolCalls }: { toolCalls: ChatTurnToolCa
 			return TOPIC_EDIT_CANCELLED_TEXT
 		},
 	})
-}
-
-/**
- * Rewrites the topic prompt from a chat, listing the save or its rejection for the toast, and returns what carl reads.
- */
-export async function updateTopicPromptInChat(
-	{ userId, topicId, toolCalls, analyticsProperties }: TopicEditSaveBinding,
-	prompt: string,
-): Promise<string> {
-	// count the call before the write. a failed write still counts
-	toolCalls.count += 1
-	const updateTopicPromptResult = await updateTopicPrompt({
-		userId,
-		topicId,
-		prompt,
-		origin: "chat",
-		analyticsProperties,
-	})
-	if (updateTopicPromptResult.status !== "saved") {
-		toolCalls.topicSaveRejections.push(
-			toRejectionToast("save the prompt", toGateReason(updateTopicPromptResult.status)),
-		)
-		return toRejectionText(updateTopicPromptResult.status)
-	}
-	// list the save for the toast
-	toolCalls.topicSaves.push("Carl saved the new prompt.")
-	return toSavedTopicPromptText(updateTopicPromptResult.topicName)
-}
-
-/**
- * Changes the topic's fields from a chat, listing the save or its rejection for the toast, and returns what carl reads.
- */
-export async function updateTopicFieldsInChat(
-	{ userId, topicId, toolCalls, analyticsProperties }: TopicEditSaveBinding,
-	topicFields: Parameters<typeof updateTopicFields>[0]["topicFields"],
-): Promise<string> {
-	// count the call before the write. a failed write still counts
-	toolCalls.count += 1
-	const updateTopicFieldsResult = await updateTopicFields({
-		userId,
-		topicId,
-		topicFields,
-		promptVersionOrigin: "chat",
-		analyticsProperties,
-	})
-	if (updateTopicFieldsResult.status !== "saved") {
-		toolCalls.topicSaveRejections.push(
-			toRejectionToast("save the settings", toUpdateTopicFieldsReason(updateTopicFieldsResult)),
-		)
-		return toUpdateTopicFieldsText(updateTopicFieldsResult)
-	}
-	// list the save for the toast
-	toolCalls.topicSaves.push("Carl saved the topic's settings.")
-	return toSavedTopicFieldsText(updateTopicFieldsResult.topicName)
-}
-
-/**
- * Adds a source from a chat, listing the save or what stopped it for the toast, and returns what carl reads.
- */
-export async function addTopicSourceInChat(
-	{ userId, topicId, toolCalls, analyticsProperties }: TopicEditSaveBinding,
-	{ sourceOption, value }: AddTopicSourcePayload,
-): Promise<string> {
-	// count the call before the write. a failed write still counts
-	toolCalls.count += 1
-	const addTopicSourceResult = await addTopicSource({
-		userId,
-		topicId,
-		sourceOption,
-		value,
-		origin: "chat",
-		analyticsProperties,
-	})
-	// list the save, or what stopped it, for the toast
-	if (addTopicSourceResult.status === "saved") {
-		toolCalls.topicSaves.push(`Carl added ${addTopicSourceResult.topicSourceLabel}.`)
-	} else {
-		toolCalls.topicSaveRejections.push(toAddTopicSourceToast(addTopicSourceResult))
-	}
-	return toAddTopicSourceText(addTopicSourceResult)
-}
-
-/**
- * Removes a source from a chat, listing the save or its rejection for the toast, and returns what carl reads.
- */
-export async function removeTopicSourceInChat(
-	{ userId, topicId, toolCalls, analyticsProperties }: TopicEditSaveBinding,
-	sourceId: string,
-): Promise<string> {
-	// count the call before the write. a failed write still counts
-	toolCalls.count += 1
-	const removeTopicSourceResult = await removeTopicSource({
-		userId,
-		topicId,
-		sourceId,
-		origin: "chat",
-		analyticsProperties,
-	})
-
-	// list the rejection, or the removal unless the row was already gone, for the toast
-	if (removeTopicSourceResult.status !== "saved") {
-		toolCalls.topicSaveRejections.push(toRemoveTopicSourceToast(removeTopicSourceResult.status))
-	} else if (removeTopicSourceResult.topicSourceLabel) {
-		toolCalls.topicSaves.push(`Carl removed ${removeTopicSourceResult.topicSourceLabel}.`)
-	}
-	return toRemoveTopicSourceText(removeTopicSourceResult)
 }
 
 /**
@@ -285,20 +164,6 @@ export function toUpdateTopicFieldsText(
 		: toRejectionText(updateTopicFieldsResult.status)
 }
 
-// the toast's reason for a rejected settings save
-function toUpdateTopicFieldsReason(
-	updateTopicFieldsResult: Exclude<UpdateTopicFieldsResult, { status: "saved" }>,
-): string {
-	if (updateTopicFieldsResult.status === "empty") {
-		return "No setting was named."
-	}
-
-	// give the reason for the plan's daily limit or the gate's rejection
-	return updateTopicFieldsResult.status === "dailyFrequency"
-		? CREATE_REJECTION_LINES.dailyFrequency
-		: toGateReason(updateTopicFieldsResult.status)
-}
-
 /**
  * Returns the toast a rejected change shows: what carl could not do, and why.
  */
@@ -306,39 +171,11 @@ export function toRejectionToast(action: string, rejectionReason: string): strin
 	return `Carl couldn't ${action}. ${rejectionReason}`
 }
 
-// the toast for a removal that did not save: web search, the last source, or what stopped the removal
-function toRemoveTopicSourceToast(status: Exclude<RemoveTopicSourceResult["status"], "saved">): string {
-	if (status === "webSearch") {
-		return "Carl couldn't remove web search."
-	}
-	return toRejectionToast(
-		"remove that source",
-		status === "lastSource" ? KEEP_ONE_SOURCE_MESSAGE : toGateReason(status),
-	)
-}
-
-// why the gate said no, in the reader's own terms
-function toGateReason(status: "missing" | "forbidden"): string {
+/**
+ * Returns why the gate said no, in the reader's own terms.
+ */
+export function toGateReason(status: "missing" | "forbidden"): string {
 	return status === "missing" ? "That topic isn't there." : "You may not edit this topic."
-}
-
-// the toast for an add that did not save: a source the topic already reads, or what stopped the add
-function toAddTopicSourceToast(addTopicSourceResult: Exclude<AddTopicSourceResult, { status: "saved" }>): string {
-	// word each rejection, a source already read in its own line
-	switch (addTopicSourceResult.status) {
-		case "present":
-			return `Carl didn't add ${addTopicSourceResult.topicSourceLabel}. This topic already has it.`
-		// a bad value or a full topic
-		case "invalid":
-			return toRejectionToast("add that source", "It needs a url, handle, or id.")
-		case "limit":
-			return toRejectionToast(
-				"add that source",
-				`This topic holds ${addTopicSourceResult.limit} sources, the most a topic can.`,
-			)
-		default:
-			return toRejectionToast("add that source", toGateReason(addTopicSourceResult.status))
-	}
 }
 
 // a create rejection that names nothing, and the line each one shows

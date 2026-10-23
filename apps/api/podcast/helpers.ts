@@ -12,8 +12,8 @@ import { isAllowed } from "../authorization"
 import { attachPodcastEpisodeChapterFaviconPaths } from "../favicons"
 import { toTranscriptBlocks } from "../share/podcastFeed"
 import { loadTopicAccessAndFindings } from "../topic/accessibleFindings"
+import { canRateTopic } from "../topic/findingPermissions"
 import { loadTopicOwner, toTeamFields } from "../topic/helpers"
-import { canRateTopic } from "../topic/permissions"
 import {
 	loadAccessiblePodcastEpisode,
 	loadPodcastEpisodeListenRows,

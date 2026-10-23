@@ -14,7 +14,8 @@ import { hasFullPodcastEpisodes, loadUserAccess, monthlySpendDollars, toSpendCen
 import { teamMembers, teamTopics } from "@carlnotes/db/schema/teams"
 import { subscriptions, topics } from "@carlnotes/db/schema/topics"
 import { and, count, eq, inArray } from "drizzle-orm"
-import { assertNever, canRateTopic, canSeeTopic, toTopicEditRole } from "./topic/permissions"
+import { canRateTopic } from "./topic/findingPermissions"
+import { assertNever, canSeeTopic, toTopicEditRole } from "./topic/permissions"
 import { loadBillingAccess, scansToday } from "./topic/quotas"
 
 // the topic fields that every resource capability needs: identity, owner, visibility, and the team that owns it

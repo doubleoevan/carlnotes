@@ -2,7 +2,6 @@
 import { isLeaderRole } from "@carlnotes/contracts/enums"
 import { type Invite, type InviteSource, inviteCreateResponse } from "@carlnotes/contracts/invites"
 import type { CreateTeamPayload, UpdateTeamPayload } from "@carlnotes/contracts/payloads"
-import type { TeamSearchResult } from "@carlnotes/contracts/search"
 import type { TeamPageResponse, TeamSummary, TeamsPageResponse } from "@carlnotes/contracts/teams"
 import { apiClient, readApiErrorMessage, showClientError, toApiUrl } from "./apiClient"
 
@@ -192,15 +191,6 @@ export async function sendTeamAvatar(teamId: string, avatarFile: File): Promise<
 		return null
 	}
 	return (await readApiErrorMessage(response)) ?? "failed"
-}
-
-// the public teams a query finds, for the search bar's team suggestions
-export async function searchTeams(query: string): Promise<TeamSearchResult[]> {
-	const response = await apiClient().api.teams.search.$get({ query: { q: query } })
-	if (!response.ok) {
-		return []
-	}
-	return ((await response.json()) as { teams: TeamSearchResult[] }).teams
 }
 
 // ask to join a team, which a leader answers from their team page

@@ -21,7 +21,7 @@ export function FlashingCount({ label, count }: { label: string; count: number }
 			<span
 				key={flashKey}
 				className={cn(
-					"text-foreground rounded-sm px-0.5 font-semibold tabular-nums",
+					"text-foreground inline-block min-w-[1.5em] rounded-full px-1.5 text-center font-semibold tabular-nums",
 					flashKey > 0 && "animate-count-flash",
 				)}
 			>

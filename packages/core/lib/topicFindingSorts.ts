@@ -1,10 +1,5 @@
 // what order a feed's topic findings read in
-import type { TopicFinding } from "@carlnotes/contracts/findings"
-
-// the feed sort modes. all three are read-side orderings of the delivered findings, never persisted
-export const TOPIC_FINDING_SORTS = ["relevant", "newest", "trending"] as const
-
-export type TopicFindingSort = (typeof TOPIC_FINDING_SORTS)[number]
+import type { TopicFinding, TopicFindingSort } from "@carlnotes/contracts/findings"
 
 /**
  * Order findings for display. Bookmarked findings are pinned above the unbookmarked ones in every mode,
@@ -30,12 +25,10 @@ function sortTopicFindings(findings: TopicFinding[], sort: TopicFindingSort): To
 	if (sort === "newest") {
 		return [...findings].sort(byRecency)
 	}
-	// trending ranks the most unique viewers first, and a tie falls back to recency, then to the finding's id
+	// trending ranks the most viewed first, and a tie falls back to recency, then to the finding's id
 	return [...findings].sort(
 		(first, second) =>
-			second.viewerCount - first.viewerCount ||
-			byRecency(first, second) ||
-			first.findingId.localeCompare(second.findingId),
+			second.viewCount - first.viewCount || byRecency(first, second) || first.findingId.localeCompare(second.findingId),
 	)
 }
 

@@ -1,9 +1,9 @@
-// the shared access checks for topics and topic findings, and the topic view rules in SQL
+// the shared access checks for topics, and the topic view rules in SQL. a topic finding's checks are in
+// findingPermissions.ts
 
 import { db, isPublicAndShown } from "@carlnotes/db"
 import { memoizeInRequest } from "@carlnotes/db/requestMemo"
 import { invites } from "@carlnotes/db/schema/invites"
-import { findings, scans } from "@carlnotes/db/schema/scans"
 import { teamMembers, teamTopics } from "@carlnotes/db/schema/teams"
 import { subscriptions, topics } from "@carlnotes/db/schema/topics"
 import { users } from "@carlnotes/db/schema/users"
@@ -213,8 +213,26 @@ async function isInvited(userId: string, topicId: string): Promise<boolean> {
 	return invite !== undefined
 }
 
+/**
+ * Returns the ids of the topics the user subscribes to among the given ones. The owner's own subscription exists from
+ * creation.
+ */
+export async function loadSubscribedTopicIds(userId: string, topicIds: string[]): Promise<Set<string>> {
+	const subscriptionRows = await db
+		.select({ topicId: subscriptions.topicId })
+		.from(subscriptions)
+		.where(
+			and(
+				eq(subscriptions.subscriberUserId, userId),
+				eq(subscriptions.isActive, true),
+				inArray(subscriptions.topicId, topicIds),
+			),
+		)
+	return new Set(subscriptionRows.map((subscriptionRow) => subscriptionRow.topicId))
+}
+
 // an active subscription on the topic is the grant. deactivating one ends it without losing the row
-async function hasSubscription(userId: string, topicId: string): Promise<boolean> {
+export async function hasSubscription(userId: string, topicId: string): Promise<boolean> {
 	const [subscription] = await db
 		.select({ id: subscriptions.id })
 		.from(subscriptions)
@@ -286,106 +304,6 @@ export async function loadDirectSubscription(
 		.where(and(eq(subscriptions.topicId, topicId), eq(subscriptions.subscriberUserId, userId)))
 		.limit(1)
 	return subscription
-}
-
-/**
- * Whether the user may rate a topic. The owner always may, and a non-owner only as a subscriber.
- */
-export async function canRateTopic(
-	userId: string | null,
-	topic: Pick<typeof topics.$inferSelect, "id" | "ownerId" | "visibility" | "teamId">,
-): Promise<boolean> {
-	// a signed-out visitor has no account to rate as
-	if (!userId) {
-		return false
-	}
-
-	// the owner and every team member may rate, whatever the topic's visibility
-	if ((await toTopicRole(userId, topic)) !== null) {
-		return true
-	}
-
-	// anyone else may rate only as a subscriber, and a private topic never has one
-	switch (topic.visibility) {
-		case "public":
-		case "invite":
-			return hasSubscription(userId, topic.id)
-		case "private":
-			return false
-		// a new visibility value fails to compile here
-		default:
-			return assertNever(topic.visibility)
-	}
-}
-
-/**
- * A finding has the same rating rule as its topic.
- */
-export async function canRateFinding(userId: string, findingId: string): Promise<boolean> {
-	const topic = await loadFindingTopic(findingId)
-	return topic ? canRateTopic(userId, topic) : false
-}
-
-/**
- * Whether the user may bookmark a topic finding. Bookmarks belong to the owner of the topic,
- * so seeing a finding is not enough to pin one.
- */
-export async function canBookmarkFinding(userId: string, findingId: string): Promise<boolean> {
-	// the owner and every team member may keep a finding
-	const topic = await loadFindingTopic(findingId)
-	return topic ? (await toTopicRole(userId, topic)) !== null : false
-}
-
-/**
- * Whether the user may see a topic finding. A signed-out visitor passes it for a public topic alone.
- */
-export async function isTopicFindingVisible(userId: string | null, findingId: string): Promise<boolean> {
-	// a missing finding is invisible to everyone
-	const topic = await loadFindingTopic(findingId)
-	if (!topic) {
-		return false
-	}
-
-	// the owner and every team member see the topic's full history
-	if ((await toTopicRole(userId, topic)) !== null) {
-		return true
-	}
-
-	// anyone else sees a public topic outright, never a private one
-	switch (topic.visibility) {
-		case "public":
-			return true
-		case "invite":
-			// an invite topic opens on a subscription, which a signed-out visitor holds none of
-			if (!userId) {
-				return false
-			}
-			return isVisibleAfterActivation(topic.scanStartedAt, await subscriptionActivatedAt(userId, topic.id))
-		case "private":
-			return false
-		// a new visibility value fails to compile here
-		default:
-			return assertNever(topic.visibility)
-	}
-}
-
-// the id, owner, and visibility of a topic finding's topic plus its scan's start time
-async function loadFindingTopic(findingId: string): Promise<
-	| (Pick<typeof topics.$inferSelect, "id" | "ownerId" | "visibility" | "teamId"> & {
-			scanStartedAt: (typeof scans.$inferSelect)["startedAt"]
-	  })
-	| undefined
-> {
-	// one join maps from the finding to its topic and to the scan that produced it
-	const [topic] = await db
-		.select({ ...gatedTopicColumns, scanStartedAt: scans.startedAt })
-		.from(findings)
-		.innerJoin(topics, eq(findings.topicId, topics.id))
-		.innerJoin(scans, eq(findings.scanId, scans.id))
-		.where(eq(findings.id, findingId))
-		.limit(1)
-	// undefined when the finding id matches nothing
-	return topic
 }
 
 /**

@@ -19,35 +19,27 @@ import { PodcastEpisodeCover } from "./PodcastEpisodeCover"
 import { PodcastEpisodePlaybackPill } from "./PodcastEpisodePill"
 import { PodcastEpisodePlayerCard } from "./PodcastEpisodePlayerCard"
 import { PodcastFeedDialog } from "./PodcastFeedDialog"
-import { RemovePodcastEpisodeDialog } from "./RemovePodcastEpisodeDialog"
 import { ThemeSongNote } from "./ThemeSongNote"
 
 // how often a podcast episode that is still recording is checked for its audio
 const RECORDING_POLL_MS = 5_000
 
-// the topic, the calls behind a chapter's topic finding note, the scan button for a podcast episode that failed to record,
-// and the call that runs after the podcast episode is removed
+// the topic, the calls behind a chapter's topic finding note, and the scan button for a podcast episode that failed to
+// record
 type PodcastEpisodePlayerProps = {
 	topic: TopicResponse
 	topicFeedHandlers: TopicFeedHandlers
 	scanControl: React.ReactNode
-	onPodcastEpisodeRemoved: () => Promise<void>
 }
 
 /**
  * The topic page's podcast episode player, or nothing if no podcast episode shows or is about to record.
  */
-export function PodcastEpisodePlayer({
-	topic,
-	topicFeedHandlers,
-	scanControl,
-	onPodcastEpisodeRemoved,
-}: PodcastEpisodePlayerProps) {
-	// the loaded episode, the episode that this player shows, and whether the podcast feed or remove dialog is open
+export function PodcastEpisodePlayer({ topic, topicFeedHandlers, scanControl }: PodcastEpisodePlayerProps) {
+	// the loaded episode, the episode that this player shows, and whether the podcast feed dialog is open
 	const { podcastEpisode: loadedPodcastEpisode } = usePodcastEpisodePlayer()
 	const { podcastEpisode, willScanRecordPodcastEpisode } = useShownPodcastEpisode(topic)
 	const [isPodcastFeedDialogOpen, setIsPodcastFeedDialogOpen] = useState(false)
-	const [isRemovePodcastEpisodeDialogOpen, setIsRemovePodcastEpisodeDialogOpen] = useState(false)
 	if (!podcastEpisode && !willScanRecordPodcastEpisode) {
 		return null
 	}
@@ -85,9 +77,6 @@ export function PodcastEpisodePlayer({
 						topicFeedHandlers,
 					}}
 					onOpenPodcastFeedDialog={() => setIsPodcastFeedDialogOpen(true)}
-					onRemovePodcastEpisode={
-						topic.podcast?.canRemovePodcastEpisodes ? () => setIsRemovePodcastEpisodeDialogOpen(true) : undefined
-					}
 				/>
 			) : (
 				<UnpublishedPodcastEpisodeCard
@@ -97,14 +86,6 @@ export function PodcastEpisodePlayer({
 			)}
 			{/* the podcast feed dialog */}
 			{isPodcastFeedDialogOpen && <PodcastFeedDialog topic={topic} onClose={() => setIsPodcastFeedDialogOpen(false)} />}
-			{/* the dialog that confirms removing the podcast episode */}
-			{isRemovePodcastEpisodeDialogOpen && podcastEpisode && (
-				<RemovePodcastEpisodeDialog
-					podcastEpisode={podcastEpisode}
-					onPodcastEpisodeRemoved={onPodcastEpisodeRemoved}
-					onClose={() => setIsRemovePodcastEpisodeDialogOpen(false)}
-				/>
-			)}
 		</CollapsibleSection>
 	)
 }

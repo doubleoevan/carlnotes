@@ -48,7 +48,7 @@
 		"smoke:rooms": "doppler run -- bun apps/api/chat/rooms.smoke.ts",
 		"smoke:chat-turns": "doppler run -- bun packages/db/chatTurnShapes.smoke.ts",
 		"smoke:invites": "doppler run -- bun apps/api/invite/invites.smoke.ts",
-		"smoke:mcp": "doppler run -- bun apps/api/mcp/mcp.smoke.ts",
+		"smoke:mcp": "bun run build:ui && doppler run -- bun apps/api/mcp/mcp.smoke.ts",
 		"smoke:tools": "doppler run -- bun apps/api/tool/topicTools.smoke.ts",
 		"smoke:podcast-episodes": "doppler run -- bun apps/api/podcast/podcastEpisodes.smoke.ts",
 		"smoke:search-plans": "doppler run -- bun apps/api/searchPlans.smoke.ts",

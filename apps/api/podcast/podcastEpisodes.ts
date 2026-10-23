@@ -23,9 +23,10 @@ import { type AppEnv, currentUser, toAnalyticsProperties } from "../currentUser"
 import { toPodcastEpisodePreview } from "../share/podcastEpisodeImage"
 import { toCachedPodcastEpisodePreviewPng, toPreviewPngResponse } from "../share/preview"
 import { updateTopicFields } from "../tool/topicTools"
+import { canRateTopic } from "../topic/findingPermissions"
 import { toTopicGateResponse } from "../topic/helpers"
-import { canRateTopic } from "../topic/permissions"
 import { loadPodcastEpisodePage, loadSeasonPodcastEpisodes } from "./helpers"
+import { readPlayToken } from "./playTokens"
 import {
 	toPodcastEpisodeAudioResponse,
 	toPodcastEpisodeChaptersResponse,
@@ -136,12 +137,19 @@ export const podcastEpisodesRoute = new Hono<AppEnv>()
 		}
 		return context.json(await loadPodcastEpisode({ ...accessiblePodcastEpisode, userId }))
 	})
-	// the stable audio url. hono runs this route for a HEAD too and drops the body
+	// the stable audio url. hono runs this route for a HEAD too and drops the body. an mcp card's audio element sends no
+	// session, so its play token names the caller instead, and a token that names none reads as missing
 	.get("/episodes/:id/audio.mp3", async (context) => {
-		const accessiblePodcastEpisode = await loadAccessiblePodcastEpisode({
-			userId: currentUser(context),
-			podcastEpisodeId: context.req.param("id"),
-		})
+		const podcastEpisodeId = context.req.param("id")
+		const playToken = context.req.query("play")
+		const playTokenCaller = playToken ? readPlayToken({ playToken, podcastEpisodeId }) : null
+		if (playToken && !playTokenCaller) {
+			return context.json({ error: "not found" }, 404)
+		}
+
+		// the listener is the token's caller, else the session's user, and the podcast episode is read under that listener's access
+		const listenerUserId = playTokenCaller ? playTokenCaller.userId : currentUser(context)
+		const accessiblePodcastEpisode = await loadAccessiblePodcastEpisode({ userId: listenerUserId, podcastEpisodeId })
 		if (!accessiblePodcastEpisode) {
 			return context.json({ error: "not found" }, 404)
 		}
@@ -149,8 +157,7 @@ export const podcastEpisodesRoute = new Hono<AppEnv>()
 		// count the listener of a web play or a podcast app's download within the listen rate limit, without the redirect
 		// waiting on the count
 		if (context.req.method === "GET" && accessiblePodcastEpisode.podcastEpisodeRow.audioKey) {
-			const requestSender = toRequestSender(context)
-			const podcastEpisodeId = accessiblePodcastEpisode.podcastEpisodeRow.id
+			const requestSender = toRequestSender(context, listenerUserId ?? undefined)
 			void countWithinRateLimit({
 				requestSender,
 				rateLimitName: "podcast-listen",

@@ -4,7 +4,7 @@ import { toAvatarVersion } from "@carlnotes/contracts/avatars"
 import { useNavigate } from "@tanstack/react-router"
 import { lazy, Suspense, useState } from "react"
 import { toSignupNavigation } from "@/components/session/signupPrompts"
-import type { ChatPanelState } from "@/stores/chatPanelStore"
+import { type ChatPanelState, clearProposedTopicEdit } from "@/stores/chatPanelStore"
 import { ChatBudgetNotice } from "./ChatBudgetNotice"
 import { CHAT_QUESTION_PLACEHOLDER, ChatComposer } from "./ChatComposer"
 import type { ChatRoomOption } from "./ChatOptionsMenu"
@@ -173,6 +173,7 @@ export function PrivateChatPanel({
 					topicDraft={chat.editableTopicDraft.topicDraft}
 					topicId={page.topicId}
 					isTopicEditProposed={chat.editableTopicDraft.isTopicEditProposed}
+					onDismissTopicEdit={clearProposedTopicEdit}
 					isCarlReplying={chat.isStreaming}
 				/>
 			)}

@@ -1,12 +1,7 @@
 // the topic chat tools eval's promptfoo provider, which runs the chat turn writer with the tools that a user who may
 // edit the topic gets, and records every tool call and every save the server makes
 
-import {
-	type ChatProposalResult,
-	resolveChatProposal,
-	toStandingChatProposal,
-	toTopicEditSaves,
-} from "@carlnotes/api/chat/chatProposals"
+import { type ChatProposalResult, resolveChatProposal, toStandingChatProposal } from "@carlnotes/api/chat/chatProposals"
 import {
 	type ChatRoomTranscriptMessage,
 	EMPTY_CHAT_ROOM_ATTACHMENTS_BLOCK,
@@ -24,6 +19,7 @@ import {
 	toSavedTopicPromptText,
 	toTopicEditPreviewTools,
 } from "@carlnotes/api/tool/chatTools"
+import { toTopicEditSaves } from "@carlnotes/api/tool/topicEditSaves"
 import { toWordsWithoutModelMention } from "@carlnotes/contracts/chatMentions"
 import type { ChatToolCall } from "@carlnotes/contracts/payloads"
 import { CHAT_COST_PER_MILLION_TOKENS, tokenCost } from "@carlnotes/models/budget"

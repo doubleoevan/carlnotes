@@ -20,6 +20,8 @@ import {
 	toTopicPodcastEpisodeRowsQuery,
 } from "./podcast/relatedPodcastEpisodes"
 import { toUserSearchQuery } from "./profiles"
+import { toFindingSearchQuery } from "./search/findingSearch"
+import { SEARCH_KIND_LIMIT } from "./search/search"
 import { toTeamSearchQuery } from "./team/search"
 import { loadEmbeddingCentroid } from "./topic/relatedness"
 import { toAccessibleRelatedTopicScoresQuery, toPublicRelatedTopicScoresQuery } from "./topic/relatedTopics"
@@ -74,14 +76,20 @@ assertPlan(
 )
 
 // each name search reads its trigram index
-const userSearchPlan = await readPlan(() => toUserSearchQuery("agent"), ["enable_seqscan"])
+const userSearchPlan = await readPlan(
+	() => toUserSearchQuery({ normalizedUsername: "agent", limit: SEARCH_KIND_LIMIT }),
+	["enable_seqscan"],
+)
 assertPlan(
 	"username search",
 	userSearchPlan,
 	userSearchPlan.includes("users_username_normalized_trgm"),
 	"a scan on users_username_normalized_trgm",
 )
-const teamSearchPlan = await readPlan(() => toTeamSearchQuery("agent", null), ["enable_seqscan"])
+const teamSearchPlan = await readPlan(
+	() => toTeamSearchQuery({ userId: null, query: "agent", limit: SEARCH_KIND_LIMIT }),
+	["enable_seqscan"],
+)
 assertPlan(
 	"team search",
 	teamSearchPlan,
@@ -89,7 +97,7 @@ assertPlan(
 	"a scan on teams_name_lower_trgm",
 )
 const topicSearchPlan = await readPlan(
-	() => toTopicSearchQuery({ userId: null, query: "agent", isAdmin: false }),
+	() => toTopicSearchQuery({ userId: null, query: "agent", isAdmin: false, limit: SEARCH_KIND_LIMIT }),
 	["enable_seqscan"],
 )
 assertPlan(
@@ -98,10 +106,20 @@ assertPlan(
 	topicSearchPlan.includes("topics_name_lower_trgm"),
 	"a scan on topics_name_lower_trgm",
 )
+const findingSearchPlan = await readPlan(
+	() => toFindingSearchQuery({ userId: null, query: "agent", isAdmin: false, limit: SEARCH_KIND_LIMIT }),
+	["enable_seqscan", "enable_indexscan"],
+)
+assertPlan(
+	"finding search",
+	findingSearchPlan,
+	findingSearchPlan.includes("resources_title_or_url_lower_trgm"),
+	"a scan on resources_title_or_url_lower_trgm",
+)
 
 // the episode search's text match reads both trigram indexes in one bitmap scan
 const podcastEpisodeTextPlan = await readPlan(
-	() => toTextMatchQuery({ query: "agent", viewFilter: toPodcastEpisodeViewFilter(null) }),
+	() => toTextMatchQuery({ query: "agent", viewFilter: toPodcastEpisodeViewFilter(null), limit: SEARCH_KIND_LIMIT }),
 	["enable_seqscan", "enable_indexscan"],
 )
 assertPlan(

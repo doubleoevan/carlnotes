@@ -5,7 +5,10 @@ import { apiClient, toApiUrl } from "./apiClient"
  * Fetches the name of the mcp client asking for consent, or null when no client has that id.
  */
 export async function fetchMcpClientName(clientId: string): Promise<string | null> {
-	const clientNameResponse = await apiClient().api.mcp.clients[":clientId"].$get({ param: { clientId } })
+	// a client id can be a url, so it is encoded to stay one path segment
+	const clientNameResponse = await apiClient().api.mcp.clients[":clientId"].$get({
+		param: { clientId: encodeURIComponent(clientId) },
+	})
 	if (!clientNameResponse.ok) {
 		return null
 	}

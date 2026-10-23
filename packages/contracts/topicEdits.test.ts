@@ -1,9 +1,6 @@
 // the mapping from a topic to a topic draft: sources by option key, the team, and the email invites
 import { expect, test } from "bun:test"
-import { EMPTY_TOPIC_DRAFT, type TopicDraft } from "@carlnotes/contracts/topicPayloads"
-import { renderToStaticMarkup } from "react-dom/server"
-import { type EditableTopicFields, toEditableTopicDraft } from "./editableTopicDraft"
-import { TopicDraftCard } from "./TopicDraftCard"
+import { type EditableTopicFields, toEditableTopicDraft } from "./topicEdits"
 
 test("a topic maps to a topic draft, dropping an invite with no email and a source of a kind no option offers", () => {
 	const editableTopicDraft = toEditableTopicDraft({
@@ -75,14 +72,6 @@ test("toEditableTopicDraft previews a proposal over the topic", () => {
 	])
 	// a field the proposal leaves alone still reads as the topic has it saved
 	expect(previewedTopicDraft.tags).toEqual(["sports"])
-})
-
-// a create leaves the team on the empty topic draft for the next topic, and the card must not linger on that alone
-test("a topic draft holding only a team is empty", () => {
-	const teamOnlyDraft: TopicDraft = { ...EMPTY_TOPIC_DRAFT, team: { teamId: "team-1", name: "Notes of Carl" } }
-	expect(renderToStaticMarkup(<TopicDraftCard topicDraft={teamOnlyDraft} />)).toBe("")
-	// anything the user actually dictated brings it back
-	expect(renderToStaticMarkup(<TopicDraftCard topicDraft={{ ...teamOnlyDraft, name: "Hoops" }} />)).toContain("Hoops")
 })
 
 // the podcast setting reads as proposed, then as saved, and a topic with no podcast has none to show

@@ -1,6 +1,7 @@
 // the source notes chart: what each Source read and kept in one scan, as plain HTML bars on Nightshift tokens
 
 import { toFallbackModeLabel } from "@carlnotes/contracts/sources"
+import { toDotSeparatedText } from "@carlnotes/contracts/text"
 import type { SourceResult } from "@carlnotes/contracts/topics"
 import { toCountLabel, toExactDollarLabel, toExactDurationLabel, toMonthDayLabel } from "@carlnotes/core/lib/labels"
 import { Trash2 } from "lucide-react"
@@ -336,7 +337,7 @@ function SourceResultDetail({
 		<>
 			<p className="min-w-0 flex-1 wrap-anywhere">
 				<span className="text-foreground mr-2 font-semibold">{row.label}</span>
-				{detailParts.join(" · ")}
+				{toDotSeparatedText(detailParts)}
 				{statusLine && <span className="block">{statusLine}</span>}
 			</p>
 			{onRemoveSource && (

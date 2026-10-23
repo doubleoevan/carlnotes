@@ -1,20 +1,14 @@
 import { authClient } from "@carlnotes/client/authClient"
-import { ADMIN_QUOTA } from "@carlnotes/contracts/plans"
 import type { TopicFeedResponse } from "@carlnotes/contracts/topics"
 import { useNavigate } from "@tanstack/react-router"
-import { Coffee, Plus } from "lucide-react"
+import { Coffee } from "lucide-react"
 import { useState } from "react"
-import { toast } from "sonner"
 import { Accordion } from "@/components/primitives/accordion"
-import { Button } from "@/components/primitives/button"
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import { toSignupNavigation } from "@/components/session/signupPrompts"
-import { TagPicker } from "@/components/topic/TagPicker"
-import { useNewTopicDialog } from "@/components/topic/TopicEditorChoiceDialog"
+import { TagsAndNewTopicRow } from "@/components/topic/TagsAndNewTopicRow"
 import { TopicFeedSkeleton } from "@/components/topic/TopicFeedSkeleton"
 import { TopicSection } from "@/components/topic/TopicSection"
 import { PAGE_CLASS } from "@/lib/styleClasses"
-import { toSeePlansToastAction } from "@/lib/toastActions"
 import { useTopicFeed } from "@/providers/TopicFeedProvider"
 import { openNewTopicChat, useRegisterChatContext } from "@/stores/chatPanelStore"
 import { useRegisterPageActions } from "@/stores/pageActionsStore"
@@ -27,7 +21,7 @@ export function HomePage() {
 	// whether a user is signed in or a visitor is browsing
 	const { data: session } = authClient.useSession()
 	const isSignedIn = Boolean(session)
-	// the shared feed state: the sections, the finding and resource filters, and the topic-creation quota
+	// the shared feed state: the sections, the finding, resource, and tag filters, and the reheat
 	const {
 		topicFeed,
 		findingFilter,
@@ -36,14 +30,10 @@ export function HomePage() {
 		tagFilters,
 		setTagFilters,
 		tagMatchMode,
-		knownTags,
-		reloadTopicFeed,
 		reheat,
 		reheatKey,
 		isReheating,
 	} = useTopicFeed()
-	// the New Topic button's dialog. a created topic reloads the topic feed behind the navigation
-	const { openNewTopicDialog, newTopicDialog } = useNewTopicDialog(() => void reloadTopicFeed())
 	// the section the user opened, or null while none has been opened and the default still applies
 	const [openedSection, setOpenedSection] = useState<string | null>(null)
 
@@ -89,19 +79,8 @@ export function HomePage() {
 		<main className={PAGE_CLASS}>
 			{/* the page's heading for a signed-in user, who gets the compact banner instead of the hero and its h1 */}
 			{isSignedIn && <h1 className="sr-only">Your topics</h1>}
-			{/* the Tags link with its pills and "+" to the left, the "+ New Topic" block to the right,
-				wrapping onto a second line when the screen is too narrow. */}
-			<div className="flex flex-wrap items-start justify-between gap-3">
-				<div className="flex min-w-0 flex-wrap items-center gap-1.5">
-					<TagPicker tags={tagFilters} knownTags={knownTags} openPickerLabel="Tags:" onTagsChange={setTagFilters} />
-				</div>
-				<NewTopicRow
-					remainingTopics={topicFeed?.topicsRemaining ?? null}
-					topicLimit={topicFeed?.topicLimit ?? null}
-					isSignedIn={isSignedIn}
-					onNewTopic={openNewTopicDialog}
-				/>
-			</div>
+			{/* the Tags picker to the left and the New Topic button to the right */}
+			<TagsAndNewTopicRow tags={tagFilters} onTagsChange={setTagFilters} />
 
 			{/* the sections clear the New Topic button above them */}
 			<div className="mt-4">
@@ -128,54 +107,7 @@ export function HomePage() {
 					</Accordion>
 				)}
 			</div>
-			{/* the dialog that the New Topic button opens */}
-			{newTopicDialog}
 		</main>
-	)
-}
-
-// the "+ New Topic" button and remaining topic quota
-function NewTopicRow({
-	remainingTopics,
-	topicLimit,
-	isSignedIn,
-	onNewTopic,
-}: {
-	remainingTopics: number | null
-	// the plan's topic limit, or null while the feed loads
-	topicLimit: number | null
-	isSignedIn: boolean
-	onNewTopic: () => void
-}) {
-	const navigate = useNavigate()
-
-	// a logged-out visitor is shown a sign-up button, and a user at their limit is told so instead of meeting a dead button
-	const isAtLimit = isSignedIn && remainingTopics !== null && remainingTopics <= 0
-	const limitLine = `That's all ${topicLimit ?? 0} topics. Carl needs a little pick-me-up to read more.`
-	const quotaLine =
-		isSignedIn && remainingTopics !== null && topicLimit !== null
-			? topicLimit >= ADMIN_QUOTA
-				? "Unlimited topics"
-				: `${remainingTopics} of ${topicLimit} topics left`
-			: null
-	return (
-		<Tooltip>
-			<TooltipTrigger asChild>
-				<Button
-					size="sm"
-					onClick={isAtLimit ? () => toast(limitLine, { action: toSeePlansToastAction(navigate) }) : onNewTopic}
-					disabled={isSignedIn && remainingTopics === null}
-					className="min-h-11 shrink-0 gap-1.5 rounded-lg sm:min-h-9"
-				>
-					<Plus className="size-4" />
-					New Topic
-				</Button>
-			</TooltipTrigger>
-			<TooltipContent side="bottom">
-				You know the one...
-				{quotaLine && <span className="block">{quotaLine}</span>}
-			</TooltipContent>
-		</Tooltip>
 	)
 }
 

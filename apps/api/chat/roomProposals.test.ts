@@ -4,8 +4,8 @@ import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import { toWordsWithoutModelMention } from "@carlnotes/contracts/chatMentions"
 import { restoreConnectionPool, stubConnectionPool } from "@carlnotes/db/connectionPoolStub"
 import * as agreement from "@carlnotes/pipeline/chat/agreement"
-import * as chatTools from "../tool/chatTools"
 import { toEmptyChatTurnToolCalls } from "../tool/chatTools"
+import * as topicTools from "../tool/topicTools"
 import { decryptChatJson, decryptChatText, encryptChatJson } from "./encryption"
 import { answerChatRoomProposal, recordChatRoomProposal } from "./roomProposals"
 
@@ -38,7 +38,10 @@ test("the member a chat room preview was shown to agrees, and the edit is applie
 	// the member's stored preview, taken back by the delete
 	const sentQueries = stubConnectionPool(() => [[encryptChatJson({ frequency: "daily" })]])
 	const checkAgreementSpy = spyOn(agreement, "checkAgreement").mockResolvedValue({ decision: "agree", totalTokens: 9 })
-	const updateTopicFieldsInChatSpy = spyOn(chatTools, "updateTopicFieldsInChat").mockResolvedValue("Saved.")
+	const updateTopicFieldsSpy = spyOn(topicTools, "updateTopicFields").mockResolvedValue({
+		status: "saved",
+		topicName: "Agents",
+	})
 	const toolCalls = toEmptyChatTurnToolCalls()
 	const chatProposalResult = await answerChatRoomProposal({
 		userId: "maya",
@@ -53,9 +56,13 @@ test("the member a chat room preview was shown to agrees, and the edit is applie
 	expect(sentQueries[0]?.text).toStartWith('delete from "chat_proposals"')
 	expect(sentQueries[0]?.values).toEqual(["maya", "topic-1", "team-1"])
 	expect(checkAgreementSpy.mock.calls[0]?.[0].userWords).toBe("yes, do it")
-	expect(updateTopicFieldsInChatSpy).toHaveBeenCalledWith(
-		expect.objectContaining({ userId: "maya", topicId: "topic-1" }),
-		{ frequency: "daily" },
+	expect(updateTopicFieldsSpy).toHaveBeenCalledWith(
+		expect.objectContaining({
+			userId: "maya",
+			topicId: "topic-1",
+			topicFields: { frequency: "daily" },
+			promptVersionOrigin: "chat",
+		}),
 	)
 	expect(chatProposalResult.agreementTokens).toBe(9)
 	expect(chatProposalResult.serverToolCalls.map((serverToolCall) => serverToolCall.toolName)).toEqual([
@@ -68,7 +75,7 @@ test("the member a chat room preview was shown to agrees, and the edit is applie
 test("another member's yes answers no preview and saves nothing", async () => {
 	const sentQueries = stubConnectionPool(() => [])
 	const checkAgreementSpy = spyOn(agreement, "checkAgreement")
-	const updateTopicFieldsInChatSpy = spyOn(chatTools, "updateTopicFieldsInChat")
+	const updateTopicFieldsSpy = spyOn(topicTools, "updateTopicFields")
 	const chatProposalResult = await answerChatRoomProposal({
 		userId: "devon",
 		topicId: "topic-1",
@@ -78,7 +85,7 @@ test("another member's yes answers no preview and saves nothing", async () => {
 	})
 	expect(sentQueries[0]?.values).toEqual(["devon", "topic-1", "team-1"])
 	expect(checkAgreementSpy).not.toHaveBeenCalled()
-	expect(updateTopicFieldsInChatSpy).not.toHaveBeenCalled()
+	expect(updateTopicFieldsSpy).not.toHaveBeenCalled()
 	expect(chatProposalResult).toEqual({ serverToolCalls: [], agreementTokens: 0 })
 })
 

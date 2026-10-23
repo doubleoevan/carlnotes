@@ -405,7 +405,7 @@ bun run edge:purge   # clear the pages and the signed-out feed that Cloudflare s
 bun run sync:releases # re-read every published GitHub release into the releases table the /releases endpoint serves; it seeds history and repairs a missed webhook delivery, and is safe to re-run
 bun run sync:releases:prd # the same sync against the production database; run it once after the first deploy, since the table starts empty. the webhook writes it going forward
 bun run releases:preview <tag> "<title>" # store release-notes/<tag>.local.md in the dev releases table with the repo's screenshots inlined, so /releases and /releases/<tag> read as they will before the release exists on GitHub
-bun run build:ui     # production build of apps/web to apps/web/dist (no doppler, so it runs in CI and deploys)
+bun run build:ui     # production build of apps/web to apps/web/dist, the mcp cards' bundle in apps/web/dist/mcp-cards included (no doppler, so it runs in CI and deploys)
 bun run build:docs   # build static docs to apps/docs/dist, which the api serves at /docs
                      # /docs on the api (3000) and through the Vite proxy (5173) is this build, which only changes when you rerun this script and doesn't hot reload
 bun run dev:storybook # the Nightshift component browser, Storybook with hot reload on localhost:6006, and its MCP server at localhost:6006/mcp that .mcp.json and opencode.json register; no doppler needed
@@ -511,7 +511,7 @@ bun run smoke:teams        # the team-lifecycle smoke test: creation, join fan-o
 bun run smoke:room         # the team chat-room smoke test: the access matrix, isolation, budget rejection, mention rows, and the room lock
 bun run smoke:rooms        # the chat-rooms smoke test: which rooms a user can open, one per holding team, and the unseen count
 bun run smoke:chat-turns   # the chat turn shapes smoke test: each kind's row and each chat proposal shape is kept, each mismatched row is rejected, rolled back
-bun run smoke:mcp          # the mcp smoke test: what a visitor reads, the oauth flow with its consent page, a user's consumed, rating, and bookmark writes, the edit tools, and the rate limit
+bun run smoke:mcp          # the mcp smoke test: builds the ui, then checks what a visitor reads and searches, each card's resource, the oauth flow with its consent page, a user's consumed, rating, and bookmark writes, edit_topic and its confirmation, follow_topic, and the rate limit
 bun run smoke:tools        # the topic tools smoke test: the gate inside each tool, the prompt version writes, adding and removing sources up to the limit, and that no tool starts a scan
 bun run smoke:podcast-episodes # the podcast episode routes smoke test: access, audio, feeds, covers, and removal
 bun run smoke:search-plans # the search plans smoke test: no HNSW scan in the topic ranking, trigram indexes in the name searches

@@ -1,6 +1,7 @@
 // what order a section's topics read in under the trending sort
+
+import type { TopicFindingSort } from "@carlnotes/contracts/findings"
 import type { TopicSectionKey } from "@carlnotes/contracts/topics"
-import type { TopicFindingSort } from "./topicFindingSorts"
 
 // the fields the trending order reads from a topic
 type TrendingTopic = { id: string; viewerCount: number; subscriberCount: number; feedUpdatedAt: string }

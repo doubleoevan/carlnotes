@@ -20,6 +20,7 @@ import { useTheme } from "@/hooks/useTheme"
 import { HERO_BUTTON_HOVER_CLASS, SECTION_LABEL_CLASS } from "@/lib/styleClasses"
 import { cn, toLinkClickHandler, toSafeRedirectPath } from "@/lib/utils"
 import { useTopicFeed } from "@/providers/TopicFeedProvider"
+import { clearSearchBar, useSearchBarPath } from "@/stores/searchBarStore"
 import { Attribution } from "./Attribution"
 import { DocsLink } from "./DocsLink"
 import { HeaderMenu } from "./HeaderMenu"
@@ -65,6 +66,7 @@ export function Header() {
 	// a click on a home link while already on the home page reloads the feed
 	const { reheat } = useTopicFeed()
 	const handleHomeClick = pathname === "/" ? toLinkClickHandler(() => void reheat()) : undefined
+	const logoLink = useLogoLink(pathname, handleHomeClick)
 
 	// the hero pitches the app to a visitor. it only shows on the home page to logged-out visitors.
 	// a page without the hero gets the video's button beside the logo instead
@@ -80,11 +82,12 @@ export function Header() {
 				<div className="flex items-center justify-between">
 					{/* the brand, with the video's button after it if the hero is hidden, nudged down to the logo's letters */}
 					<div className="flex items-center gap-2">
-						{/* the brand links home or reheats the feed if already on the home page */}
+						{/* the brand links to the search bar's search, or home, emptying the bar from the search page and reheating
+						    the feed if already home */}
 						<AnchorLink
-							href="/"
-							aria-label="CarlNotes home"
-							onClick={handleHomeClick}
+							href={logoLink.href}
+							aria-label={logoLink.ariaLabel}
+							onClick={logoLink.onClick}
 							className="flex items-center gap-2 rounded-md"
 						>
 							{/* nudge the cup up to align with the text */}
@@ -233,6 +236,24 @@ export function Header() {
 			)}
 		</header>
 	)
+}
+
+// what a click on the logo runs as it follows the link
+type LogoClickHandler = ReturnType<typeof toLinkClickHandler>
+
+// where the logo links: the search bar's search from any other page while the bar holds text, and home otherwise,
+// emptying the bar from the search page and reheating the feed if already home
+function useLogoLink(
+	pathname: string,
+	handleHomeClick: LogoClickHandler | undefined,
+): { href: string; ariaLabel: string; onClick: LogoClickHandler | undefined } {
+	const searchBarPath = useSearchBarPath()
+	if (pathname === "/search") {
+		return { href: "/", ariaLabel: "CarlNotes home", onClick: clearSearchBar }
+	}
+	return searchBarPath
+		? { href: searchBarPath, ariaLabel: "CarlNotes search", onClick: undefined }
+		: { href: "/", ariaLabel: "CarlNotes home", onClick: handleHomeClick }
 }
 
 // the narrow screen note button after the call to action

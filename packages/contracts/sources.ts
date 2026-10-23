@@ -1,6 +1,6 @@
 // the Source registry: the default set that every new Topic starts with and the custom options that can be added,
 import type { editableSourceKinds } from "./enums"
-import { toOneLineText } from "./text"
+import { toDotSeparatedText, toOneLineText } from "./text"
 
 // the Google News feed host, and its locale as all three parameters. the app has no per-user locale to read yet
 const GOOGLE_NEWS_HOST = "news.google.com"
@@ -247,7 +247,7 @@ export function toSourceSummary(sourceKind: string, config: Record<string, unkno
 function toRedditSummary(subreddit: unknown, query: unknown): string {
 	const subredditLabel = typeof subreddit === "string" ? `r/${subreddit}` : ""
 	const queryLabel = typeof query === "string" ? query : ""
-	return [subredditLabel, queryLabel].filter(Boolean).join(" · ")
+	return toDotSeparatedText([subredditLabel, queryLabel])
 }
 
 // a source stored by an opaque id is the name its ingester writes back on the first scan. or its id as a fallback

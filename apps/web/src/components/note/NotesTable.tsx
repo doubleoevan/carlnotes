@@ -1,5 +1,7 @@
 // the notes table: sortable name, visibility, and updated columns, one row per visible note
+
 import type { Note } from "@carlnotes/contracts/notes"
+import { toDotSeparatedText } from "@carlnotes/contracts/text"
 import { toAgeLabel } from "@carlnotes/core/lib/labels"
 import { useNoteBadge } from "@carlnotes/core/stores/noteBadgeStore"
 import { CountBadge } from "@/components/common/CountBadge"
@@ -27,10 +29,11 @@ export function toVisibilityCountsLabel(notes: Pick<Note, "visibility">[]): stri
 	for (const note of notes) {
 		visibilityCounts[note.visibility] += 1
 	}
-	return (Object.keys(visibilityCounts) as (keyof typeof visibilityCounts)[])
-		.filter((visibility) => visibilityCounts[visibility] > 0)
-		.map((visibility) => `${visibilityCounts[visibility]} ${visibility}`)
-		.join(" · ")
+	return toDotSeparatedText(
+		(Object.keys(visibilityCounts) as (keyof typeof visibilityCounts)[])
+			.filter((visibility) => visibilityCounts[visibility] > 0)
+			.map((visibility) => `${visibilityCounts[visibility]} ${visibility}`),
+	)
 }
 
 /**

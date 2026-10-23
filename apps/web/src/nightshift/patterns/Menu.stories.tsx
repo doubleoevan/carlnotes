@@ -1,6 +1,7 @@
 // the menu pattern: a popover of options under the search bar's sort button or the bordered Team Up button
+
+import { TOPIC_FINDING_SORTS, type TopicFindingSort } from "@carlnotes/contracts/findings"
 import type { TeamIdentity } from "@carlnotes/contracts/teams"
-import { TOPIC_FINDING_SORTS, type TopicFindingSort } from "@carlnotes/core/lib/topicFindingSorts"
 import type { Meta, StoryObj } from "@storybook/tanstack-react"
 import { ArrowUpDown, Plus, Search, Users, X } from "lucide-react"
 import { fn } from "storybook/test"

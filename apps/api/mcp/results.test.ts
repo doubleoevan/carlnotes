@@ -28,7 +28,7 @@ function topicFinding(index: number, explanationChars = 40): TopicFinding {
 		fetchedAt: "2026-09-02T00:00:00.000Z",
 		relevanceScore: 0.9,
 		relevanceExplanation: "x".repeat(explanationChars),
-		viewerCount: 0,
+		viewCount: 0,
 		rating: null,
 		isConsumed: index === 1,
 		isBookmarked: false,

@@ -106,11 +106,18 @@ export const pageRenderRateLimiter = rateLimiter<AppEnv>({
 	store: toRateLimitStore("rate-limit:page-render"),
 })
 
-// the search limiter, keyed by the user else the address, over the search routes a visitor may call without a session
-export const searchRateLimiter = toRateLimiter({
-	limit: SEARCH_RATE_LIMIT,
-	store: toRateLimitStore("rate-limit:search"),
-})
+// the search limiter, keyed by the user else the address, over the search route a visitor may call without a session.
+// the mcp search tool counts against the same store
+const searchRateLimitStore = toRateLimitStore("rate-limit:search")
+export const searchRateLimiter = toRateLimiter({ limit: SEARCH_RATE_LIMIT, store: searchRateLimitStore })
+
+/**
+ * Counts one search against the search limit under the caller's key, and returns whether it is within the limit.
+ */
+export async function countSearchRateLimitHit(rateLimitToolCaller: RateLimitToolCaller): Promise<boolean> {
+	const { totalHits } = await searchRateLimitStore.increment(toRateLimitKey(rateLimitToolCaller))
+	return totalHits <= SEARCH_RATE_LIMIT
+}
 
 // the speech limiter, keyed by the user else the address, over the spoken parts of a reply
 export const speechRateLimiter = toRateLimiter({

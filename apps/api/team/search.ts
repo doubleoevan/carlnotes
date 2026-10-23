@@ -1,30 +1,35 @@
-// the team name search behind the search bar
+// the site search's team reader: the teams whose name contains the query
 import { toAvatarKeyVersion } from "@carlnotes/contracts/avatars"
-import type { TeamSearchResult } from "@carlnotes/contracts/search"
-import { SEARCH_MIN_CHARS, USER_SEARCH_LIMIT } from "@carlnotes/contracts/search"
-import { toNormalizedUsername } from "@carlnotes/contracts/usernames"
+import type { TeamSearchRow } from "@carlnotes/contracts/search"
 import { db } from "@carlnotes/db"
 import { teamMembers, teams } from "@carlnotes/db/schema/teams"
 import { and, eq, inArray, like, or, sql } from "drizzle-orm"
 import { toContainsLikePattern } from "../likePattern"
+import { toCountsByTeamId } from "./helpers"
+
+// who is searching, the trimmed query, and the most rows to read
+type SearchTeamsOptions = { userId: string | null; query: string; limit: number }
 
 /**
- * Teams whose name contains the query, for the search bar's team suggestions. A public team is found
- * by anyone, and a signed-in user also finds the teams they belong to at any visibility.
+ * Returns the teams whose name contains the query, shorter names first. A public team is found by anyone, and a
+ * signed-in user also finds the teams they belong to at any visibility.
  */
-export async function searchTeams(query: string, userId: string | null): Promise<TeamSearchResult[]> {
-	// the query must meet the same minimum length a username search has
-	const username = toNormalizedUsername(query).replaceAll(/[^a-z0-9]/g, "")
-	if (username.length < SEARCH_MIN_CHARS) {
-		return []
-	}
+export async function searchTeams(searchTeamsOptions: SearchTeamsOptions): Promise<TeamSearchRow[]> {
+	// read the matching teams and their topic and member counts
+	const teamRows = await toTeamSearchQuery(searchTeamsOptions)
+	const countsByTeamId = await toCountsByTeamId(teamRows.map((teamRow) => teamRow.teamId))
 
-	// read the matching teams and add their avatar versions
-	const teamRows = await toTeamSearchQuery(query, userId)
+	// shape each as a search row with its avatar version and its counts
 	return teamRows.map((teamRow) => ({
-		teamId: teamRow.teamId,
+		kind: "team",
+		id: teamRow.teamId,
 		name: teamRow.name,
-		avatarVersion: toAvatarKeyVersion(teamRow.avatarKey),
+		path: `/teams/${teamRow.teamId}`,
+		date: null,
+		count: null,
+		team: { teamId: teamRow.teamId, name: teamRow.name, avatarVersion: toAvatarKeyVersion(teamRow.avatarKey) },
+		topicCount: countsByTeamId.get(teamRow.teamId)?.topicCount ?? 0,
+		memberCount: countsByTeamId.get(teamRow.teamId)?.memberCount ?? 0,
 	}))
 }
 
@@ -32,7 +37,7 @@ export async function searchTeams(query: string, userId: string | null): Promise
  * Returns the team search's query, shorter names first.
  */
 // biome-ignore lint/nursery/useExplicitReturnType: drizzle's select builder type is generated, and naming it here would break on an upgrade
-export function toTeamSearchQuery(query: string, userId: string | null) {
+export function toTeamSearchQuery({ userId, query, limit }: SearchTeamsOptions) {
 	// the teams this user is on, which a pending request to join is not yet one of
 	const memberTeamIds = userId
 		? db
@@ -46,11 +51,11 @@ export function toTeamSearchQuery(query: string, userId: string | null) {
 		? or(eq(teams.isPublic, true), inArray(teams.id, memberTeamIds))
 		: eq(teams.isPublic, true)
 
-	// the name match on the findable teams, shorter names first
+	// the name match on the findable teams, with the typed characters escaped, shorter names first
 	return db
 		.select({ teamId: teams.id, name: teams.name, avatarKey: teams.avatarKey })
 		.from(teams)
 		.where(and(isFindable, like(sql`lower(${teams.name})`, toContainsLikePattern(query))))
-		.orderBy(sql`length(${teams.name})`)
-		.limit(USER_SEARCH_LIMIT)
+		.orderBy(sql`length(${teams.name})`, teams.id)
+		.limit(limit)
 }

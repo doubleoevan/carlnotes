@@ -230,7 +230,6 @@ export function TopicPage() {
 						<PodcastEpisodePlayer
 							topic={topic}
 							topicFeedHandlers={topicFeedHandlers}
-							onPodcastEpisodeRemoved={reloadTopicPage}
 							scanControl={
 								<TopicScanButton
 									topic={topic}

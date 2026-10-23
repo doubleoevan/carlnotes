@@ -1,11 +1,9 @@
+import { DEFAULT_PAGE_SIZE, PAGE_SIZES } from "@carlnotes/contracts/pagination"
 import { ChevronLeft, ChevronRight } from "lucide-react"
 import { useState } from "react"
 import { type RenderedRow, toRenderedRows } from "@/lib/renderedRows"
 import { ONE_PAGE_TABLE_CARD_CLASS, SCRIPTED_PAGINATION_TABLE_CARD_CLASS } from "@/lib/styleClasses"
 import { type SortValue, useRowSort } from "./SortableHeader"
-
-// the page-size choices offered by every paginated table
-export const PAGE_SIZES = [5, 10, 25, 50] as const
 
 // the smallest page a table can be cut into. below this, the pagination controls are hidden
 export const SMALLEST_PAGE_SIZE = PAGE_SIZES[0]
@@ -32,7 +30,7 @@ type PaginatedRows<Row> = {
  * Returns the current pagination state, with the page's rows and the rows the table renders, starting at ten rows a page
  * unless the table asks for another page size.
  */
-export function usePagination<Row>(rows: Row[], initialPageSize = 10): PaginatedRows<Row> {
+export function usePagination<Row>(rows: Row[], initialPageSize: number = DEFAULT_PAGE_SIZE): PaginatedRows<Row> {
 	const [pageSize, setPageSize] = useState<number>(initialPageSize)
 	const [page, setPage] = useState(0)
 	// clamp the page count so an updated row set or page size never strands the view on an empty page

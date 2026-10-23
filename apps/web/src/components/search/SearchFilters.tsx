@@ -1,39 +1,21 @@
 import { authClient } from "@carlnotes/client/authClient"
 import { resourceKinds as allResourceKinds } from "@carlnotes/contracts/enums"
-import { TOPIC_FINDING_FILTERS, type TopicFindingFilter } from "@carlnotes/core/lib/topicFindingFilters"
 import {
-	Ban,
-	Blend,
-	Check,
-	CircleUserRound,
-	CircleX,
-	FileText,
-	Hash,
-	type LucideIcon,
-	Podcast,
-	SlidersHorizontal,
-	Target,
-	Users,
-} from "lucide-react"
+	TAG_MATCH_MODES,
+	type TagMatchMode,
+	TOPIC_FINDING_FILTERS,
+	type TopicFindingFilter,
+} from "@carlnotes/contracts/findings"
+import { SEARCH_RESULT_KINDS, type SearchResultKind } from "@carlnotes/contracts/search"
+import { Ban, Blend, Check, CircleX, type LucideIcon, SlidersHorizontal, Target } from "lucide-react"
 import { Fragment, useState } from "react"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/primitives/popover"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import { MENU_OPTION_CLASS, MENU_OPTION_SELECTED_CLASS, SEARCH_BAR_ICON_CLASS } from "@/lib/styleClasses"
 import { cn, RESOURCE_KIND_ICON } from "@/lib/utils"
-import { type ResourceKind, type TagMatchMode, tagMatchModes, useTopicFeed } from "@/providers/TopicFeedProvider"
+import { type ResourceKind, useTopicFeed } from "@/providers/TopicFeedProvider"
 import { usePageActions } from "@/stores/pageActionsStore"
-
-// which kinds of results the typeahead offers, all on until the user turns one off
-export const SEARCH_RESULT_TYPES = ["topics", "podcasts", "findings", "teams", "users"] as const
-export type SearchResultType = (typeof SEARCH_RESULT_TYPES)[number]
-
-// each feed view's label in the filters menu
-const TOPIC_FINDING_FILTER_LABELS: Record<TopicFindingFilter, string> = {
-	all: "All",
-	unread: "Unread",
-	bookmarked: "Bookmarked",
-	ratedDown: "Rated down",
-}
+import { SEARCH_RESULT_KIND_ICON, SEARCH_RESULT_KIND_LABELS, TOPIC_FINDING_FILTER_LABELS } from "./searchFilterOptions"
 
 // how the selected tags narrow the feed, one mode at a time
 const TAG_MATCH_OPTIONS: Record<TagMatchMode, { label: string; Icon: LucideIcon }> = {
@@ -43,36 +25,44 @@ const TAG_MATCH_OPTIONS: Record<TagMatchMode, { label: string; Icon: LucideIcon 
 	off: { label: "Off", Icon: CircleX },
 }
 
+// the finding, resource kind, and tag filters the menu shows and changes: the topic feed's, or the search page's
+export type FindingFilterState = {
+	resourceKinds: Set<ResourceKind>
+	toggleResourceKind: (resourceKind: ResourceKind) => void
+	findingFilter: TopicFindingFilter
+	setFindingFilter: (findingFilter: TopicFindingFilter) => void
+	tagMatchMode: TagMatchMode
+	setTagMatchMode: (tagMatchMode: TagMatchMode) => void
+}
+
 /**
  * The Filters dropdown at the end of the search bar.
  * The resource kinds to show in the topic feed.
- * The "All / Unread / Bookmarked / Rated down" filter as radios, and which kinds of search results to show.
- * The "Bookmarked" and "Rated down" filters require a signed-in user session.
+ * The "All / Unread / Bookmarked" filter as radios, and which kinds of search results to show.
+ * The "Bookmarked" filter requires a signed-in user session. Given the search page's filters, every
+ * section shows and changes those in place of the topic feed's.
  */
 export function SearchFilters({
-	searchResultTypes,
-	onToggleSearchResultType,
+	searchResultKinds,
+	onToggleSearchResultKind,
+	searchFindingFilterState,
 }: {
-	searchResultTypes: Set<SearchResultType>
-	onToggleSearchResultType: (resultType: SearchResultType) => void
+	searchResultKinds: Set<SearchResultKind>
+	onToggleSearchResultKind: (resultType: SearchResultKind) => void
+	searchFindingFilterState?: FindingFilterState
 }) {
-	// the finding, resource kind, and tag filters live in the topic feed context, shared by the home page and the topic page
-	const {
-		resourceKinds,
-		toggleResourceKind,
-		findingFilter,
-		setFindingFilter,
-		tagMatchMode,
-		setTagMatchMode,
-		bookmarkScope,
-		setBookmarkScope,
-		hasTopicFeed,
-	} = useTopicFeed()
-	// a team topic's page supports team bookmark filtering
-	const hasTeamBookmarks = Boolean(usePageActions()?.hasTeamBookmarks)
+	// the finding, resource kind, and tag filters live in the topic feed context, shared by the home page and the topic
+	// page, unless the search page's url holds them
+	const topicFeed = useTopicFeed()
+	const { resourceKinds, toggleResourceKind, findingFilter, setFindingFilter, tagMatchMode, setTagMatchMode } =
+		searchFindingFilterState ?? topicFeed
+	const { bookmarkScope, setBookmarkScope } = topicFeed
+	const hasFindingFilters = topicFeed.hasTopicFeed || Boolean(searchFindingFilterState)
+	// a team topic's page supports team bookmark filtering, which the search page does not
+	const hasTeamBookmarks = Boolean(usePageActions()?.hasTeamBookmarks) && !searchFindingFilterState
 	const { data: session } = authClient.useSession()
 	const topicFindingFilterOptions = TOPIC_FINDING_FILTERS.filter(
-		(filterOption) => (filterOption !== "bookmarked" && filterOption !== "ratedDown") || Boolean(session),
+		(filterOption) => filterOption !== "bookmarked" || Boolean(session),
 	)
 	// the dropdown is controlled so selecting an option closes the menu
 	const [isOpen, setIsOpen] = useState(false)
@@ -94,7 +84,7 @@ export function SearchFilters({
 			<PopoverContent align="end" alignOffset={-9} sideOffset={13} className="w-44" bodyClassName="p-1">
 				{/* the resource kind, view, and tag filters all narrow topic scan findings.
 				    a page without a topic feed hides them */}
-				{hasTopicFeed && (
+				{hasFindingFilters && (
 					<>
 						{allResourceKinds.map((resourceKind) => (
 							<ResourceKindFilter
@@ -149,7 +139,7 @@ export function SearchFilters({
 						{/* how the tags selected on the home page filter, one mode at a time */}
 						<div role="radiogroup" aria-label="Tags">
 							<div className="text-muted-foreground px-2 py-1 text-xs">Tags</div>
-							{tagMatchModes.map((matchMode) => (
+							{TAG_MATCH_MODES.map((matchMode) => (
 								<RadioRow
 									key={matchMode}
 									radioGroupName="tag-match"
@@ -171,12 +161,12 @@ export function SearchFilters({
 					<div id="search-result-type-label" className="text-muted-foreground px-2 py-1 text-xs">
 						Search for
 					</div>
-					{SEARCH_RESULT_TYPES.map((resultType) => (
-						<SearchResultTypeFilter
+					{SEARCH_RESULT_KINDS.map((resultType) => (
+						<SearchResultKindFilter
 							key={resultType}
 							resultType={resultType}
-							isActive={searchResultTypes.has(resultType)}
-							onClick={() => onToggleSearchResultType(resultType)}
+							isActive={searchResultKinds.has(resultType)}
+							onClick={() => onToggleSearchResultKind(resultType)}
 						/>
 					))}
 				</fieldset>
@@ -214,26 +204,17 @@ function RadioRow({
 	)
 }
 
-// the icon mapped to each kind of search result
-const SEARCH_RESULT_TYPE_ICON: Record<SearchResultType, LucideIcon> = {
-	topics: Hash,
-	podcasts: Podcast,
-	findings: FileText,
-	teams: Users,
-	users: CircleUserRound,
-}
-
 // one clickable search result filter row, checked if active
-function SearchResultTypeFilter({
+function SearchResultKindFilter({
 	resultType,
 	isActive,
 	onClick,
 }: {
-	resultType: SearchResultType
+	resultType: SearchResultKind
 	isActive: boolean
 	onClick: () => void
 }) {
-	const Icon = SEARCH_RESULT_TYPE_ICON[resultType]
+	const Icon = SEARCH_RESULT_KIND_ICON[resultType]
 	return (
 		<button
 			type="button"
@@ -242,7 +223,7 @@ function SearchResultTypeFilter({
 			className={cn(MENU_OPTION_CLASS, isActive && MENU_OPTION_SELECTED_CLASS)}
 		>
 			<Icon className="text-muted-foreground size-4" />
-			<span className="flex-1 text-left capitalize">{resultType}</span>
+			<span className="flex-1 text-left">{SEARCH_RESULT_KIND_LABELS[resultType]}</span>
 			{isActive ? <Check className="size-4" /> : null}
 		</button>
 	)

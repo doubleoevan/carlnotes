@@ -7,9 +7,10 @@ import {
 	sendTopicFindingRating,
 } from "@carlnotes/client/topicClient"
 import { resourceKinds as allResourceKinds } from "@carlnotes/contracts/enums"
+import type { TagMatchMode, TopicFindingFilter, TopicFindingSort } from "@carlnotes/contracts/findings"
 import type { TopicFeedResponse } from "@carlnotes/contracts/topics"
-import { matchesTopicFindingFilter, type TopicFindingFilter } from "@carlnotes/core/lib/topicFindingFilters"
-import { type TopicFindingSort, toSortedTopicFindings } from "@carlnotes/core/lib/topicFindingSorts"
+import { matchesTopicFindingFilter } from "@carlnotes/core/lib/topicFindingFilters"
+import { toSortedTopicFindings } from "@carlnotes/core/lib/topicFindingSorts"
 import { toSortedSectionTopics } from "@carlnotes/core/lib/topicSorts"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useLocation, useMatch } from "@tanstack/react-router"
@@ -17,10 +18,6 @@ import { createContext, type ReactNode, useCallback, useContext, useEffect, useM
 
 // the resource kinds that the Filters menu toggles
 export type ResourceKind = (typeof allResourceKinds)[number]
-
-// how selected tag filters match a topic. it has any of them, all of them, none of them, or off to ignore tag filtering
-export const tagMatchModes = ["any", "all", "none", "off"] as const
-export type TagMatchMode = (typeof tagMatchModes)[number]
 
 // the actions a topic feed resource can trigger. bundled so that components can share these handlers
 export type TopicFeedHandlers = {
@@ -54,10 +51,17 @@ export function useTopicFeed(): TopicFeedValue {
 }
 
 /**
- * Returns the topic feed handlers, and throws if used outside the provider.
+ * Returns the shared topic feed context value, or null outside the provider, such as in an mcp card.
  */
-export function useTopicFeedActions(): TopicFeedHandlers {
-	return useTopicFeed().handlers
+export function useOptionalTopicFeed(): TopicFeedValue | null {
+	return useContext(TopicFeedContext)
+}
+
+/**
+ * Returns the topic feed handlers, or null outside the provider, where a component takes its handlers as props.
+ */
+export function useTopicFeedActions(): TopicFeedHandlers | null {
+	return useContext(TopicFeedContext)?.handlers ?? null
 }
 
 /**
@@ -86,10 +90,11 @@ export function usePageTopicFeedHandlers(reloadPage: () => void | Promise<void>)
 }
 
 /**
- * Returns whether anyone is signed in.
+ * Returns whether anyone is signed in, inside the provider or out of it.
  */
 export function useIsSignedIn(): boolean {
-	return useTopicFeed().isSignedIn
+	const { data: session } = authClient.useSession()
+	return Boolean(session)
 }
 
 // how long a feed the server loads stays fresh in the browser
@@ -106,7 +111,6 @@ function useTopicFeedState() {
 	const [bookmarkScope, setBookmarkScope] = useState<"mine" | "team">("mine")
 	// the feed watches the session itself
 	const { data: session } = authClient.useSession()
-	const isSignedIn = Boolean(session)
 	// selected tag filters and how they match. a topic has any, all, or none of them
 	const [tagFilters, setTagFilters] = useState<string[]>([])
 	const [tagMatchMode, setTagMatchMode] = useState<TagMatchMode>("any")
@@ -272,8 +276,6 @@ function useTopicFeedState() {
 		reheatKey,
 		isReheating,
 		handlers,
-		// whether anyone is signed in, so the per-user finding buttons hide for a visitor
-		isSignedIn,
 		// whether this page renders findings, which is what the kind, view, tag, and sort controls narrow
 		hasTopicFeed,
 	}

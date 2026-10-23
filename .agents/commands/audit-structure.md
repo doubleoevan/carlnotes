@@ -673,6 +673,27 @@ Check for:
      extraction moved to `extract-attachment-text-in-a-worker`), and `extractText` called on the api's event loop (now
      `readChatAttachmentText` in `apps/api/chat/chatAttachmentScreening.ts` over `extractTextInWorker` in
      `apps/api/chat/attachmentExtraction.ts`)
+   - the per-kind search routes `GET /api/topics/search`, `/api/teams/search`, `/api/users`, and
+     `/api/episodes/search`, with `topicSearchRoute`, `podcastEpisodeSearchRoute`, `TopicSearchResult`, `TopicResult`,
+     `PodcastEpisodeSearchResult`, `PodcastEpisodeResult`, `TeamSearchResult`, `TeamResult`, `UserSearchResult`,
+     `UserResult`, `ResourceResult`, `USER_SEARCH_LIMIT`, and `ToTopicSearchQueryOptions` (now `GET /api/search`,
+     `searchSite` and `searchRoute` in `apps/api/search/search.ts`, the `SearchRow` kinds in
+     `packages/contracts/search.ts`, and `SearchTopicsOptions`), and `tagMatchModes` in
+     `apps/web/src/providers/TopicFeedProvider.tsx` (now `TAG_MATCH_MODES` in `packages/contracts/findings.ts`)
+   - `SEARCH_RESULT_TYPES`, `SearchResultType`, and the search kind value `podcasts` in `packages/contracts/search.ts`
+     (now `SEARCH_RESULT_KINDS`, `SearchResultKind`, and `podcastEpisodes`)
+   - the MCP tools `update_topic_prompt`, `update_topic_fields`, `add_source`, and `remove_source` (now `edit_topic` in
+     `apps/api/mcp/topicEditTools.ts`), `updateTopicPromptInChat`, `updateTopicFieldsInChat`, `addTopicSourceInChat`,
+     `removeTopicSourceInChat`, `updateTopicPromptPayload`, and `removeTopicSourcePayload` (now `saveTopicPromptEdit`,
+     `saveTopicFieldsEdit`, `saveAddedTopicSource`, and `saveRemovedTopicSource` in `apps/api/tool/topicEditSaves.ts`,
+     over `proposeTopicEditPayload`), and `TopicEditSave` and `toTopicEditSaves` in `apps/api/chat/chatProposals.ts`
+     (now `apps/api/tool/topicEditSaves.ts`)
+   - `apps/web/src/components/chat/editableTopicDraft.ts` and its test (now `toEditableTopicDraft` in
+     `packages/contracts/topicEdits.ts`), and `NewTopicRow` in `apps/web/src/pages/HomePage.tsx` (now
+     `apps/web/src/components/topic/TagsAndNewTopicRow.tsx`)
+   - `TopicFinding.viewerCount` (now `viewCount` again, read from `findings.view_count`, which counts every open), the
+     first-open lock in `recordView`, and the `ratedDown` view with its "Rated down" filter (removed: a thumbs down hides
+     a finding from every view)
 
 5. **Cross-harness enforcement parity**: `.claude/settings.json` hooks and
    `.opencode/plugin/guardrails.mjs` must gate the same operations with the

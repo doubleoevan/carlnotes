@@ -55,6 +55,13 @@ export async function countPodcastEpisodeListen(requestSender: RequestSender, po
 }
 
 /**
+ * Whether a sender is a person whose view counts: never a crawler, a link unfurler, or a visitor with no address.
+ */
+export function isCountedSender(requestSender: RequestSender): boolean {
+	return toCountedElement(requestSender) !== null
+}
+
+/**
  * Runs a view or a listen count if the sender is within the count rate limit.
  */
 export async function countWithinRateLimit({
@@ -62,14 +69,20 @@ export async function countWithinRateLimit({
 	rateLimitName,
 	count,
 }: CountWithinRateLimitOptions): Promise<void> {
-	const isWithinLimit = await countRateLimitHit({
+	if (await countSenderRateLimitHit(requestSender, rateLimitName)) {
+		await count()
+	}
+}
+
+/**
+ * Counts one hit against the sender's count rate limit, and returns whether the sender is within it.
+ */
+export function countSenderRateLimitHit(requestSender: RequestSender, rateLimitName: string): Promise<boolean> {
+	return countRateLimitHit({
 		key: `rate-limit:${rateLimitName}:${toRateLimitKey(requestSender)}`,
 		rateLimitWindowMs: COUNT_RATE_LIMIT_WINDOW_MS,
 		limit: COUNT_RATE_LIMIT,
 	})
-	if (isWithinLimit) {
-		await count()
-	}
 }
 
 /**

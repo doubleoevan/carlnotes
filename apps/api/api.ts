@@ -34,10 +34,10 @@ import { userInvitesRoute } from "./invite/userInvites"
 import { mcpClientsRoute } from "./mcp/server"
 import { noteCommentThreadsRoute } from "./note/noteCommentThreads"
 import { NOTE_SYNC_PATH, notesRoute } from "./note/notes"
-import { podcastEpisodeSearchRoute } from "./podcast/podcastEpisodeSearch"
 import { podcastEpisodesRoute } from "./podcast/podcastEpisodes"
 import { podcastFeedsRoute } from "./podcast/podcastFeeds"
 import { profilesRoute } from "./profiles"
+import { searchRoute } from "./search/search"
 import { pageHeadRoute } from "./share/pageHead"
 import {
 	toCachedInvitePreviewPng,
@@ -62,7 +62,6 @@ import { featuringRoute } from "./topic/featuring"
 import { buildTopicFeeds, readVisitorTopicFeeds } from "./topic/feeds"
 import { findingsRoute } from "./topic/findings"
 import { scansRoute } from "./topic/scans"
-import { topicSearchRoute } from "./topic/search"
 import { subscriptionsRoute } from "./topic/subscriptions"
 import { topicsRoute } from "./topic/topicsRoute"
 import {
@@ -224,8 +223,8 @@ export const apiRoute = new Hono<AppEnv>()
 			dailyTopicsRemaining: dailyTopicQuota.remainingTopics,
 		})
 	})
-	// the topic routes
-	.route("/", topicSearchRoute)
+	// the site search, then the topic routes
+	.route("/", searchRoute)
 	.route("/", topicsRoute)
 	// a topic page's view, and the counts the topic and podcast episode pages read
 	.route("/", countsRoute)
@@ -235,9 +234,7 @@ export const apiRoute = new Hono<AppEnv>()
 	.route("/", findingsRoute)
 	// the manual scan route
 	.route("/", scansRoute)
-	// the podcast episode search ahead of the podcast episode routes, so /episodes/search is never read as an episode id,
-	// then the podcast feed and cover routes
-	.route("/", podcastEpisodeSearchRoute)
+	// the podcast episode routes, then the podcast feed and cover routes
 	.route("/", podcastEpisodesRoute)
 	.route("/", podcastFeedsRoute)
 	// the chat routes

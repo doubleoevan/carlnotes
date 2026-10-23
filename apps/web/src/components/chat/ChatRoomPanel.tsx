@@ -8,7 +8,7 @@ import { isAdminRole, isLeaderRole } from "@carlnotes/contracts/enums"
 import { markChatRoomOpened } from "@carlnotes/core/stores/chatRoomStore"
 import { X } from "lucide-react"
 import { lazy, Suspense, useEffect, useState } from "react"
-import type { ChatPanelState } from "@/stores/chatPanelStore"
+import { type ChatPanelState, clearProposedTopicEdit } from "@/stores/chatPanelStore"
 import { ChatBudgetNotice } from "./ChatBudgetNotice"
 import { ChatCallToActionPanel } from "./ChatCallToActionPanel"
 import type { ChatRoomMenu, CurrentChatRoomOption } from "./ChatOptionsMenu"
@@ -186,6 +186,7 @@ export function ChatRoomPanel({
 					topicDraft={editableTopicDraft.topicDraft}
 					topicId={topicId}
 					isTopicEditProposed={editableTopicDraft.isTopicEditProposed}
+					onDismissTopicEdit={clearProposedTopicEdit}
 					isCarlReplying={chatRoom.isMessageLoading}
 				/>
 			)}

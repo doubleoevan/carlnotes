@@ -23,7 +23,6 @@ import { PlaybackSpeedButton, SkipPlaybackButtons } from "./PlaybackControlButto
 import { type ChapterTopicFeed, PodcastEpisodeChapters, SHOWN_CHAPTER_COUNT } from "./PodcastEpisodeChapters"
 import { PodcastEpisodeDetails, PodcastEpisodeTooltip } from "./PodcastEpisodeDetails"
 import { isPodcastEpisodeQuestionButtonShown, PodcastEpisodeQuestionButton } from "./PodcastEpisodeQuestionControls"
-import { RemovePodcastEpisodeButton } from "./RemovePodcastEpisodeDialog"
 
 // the button that opens the podcast feed dialog, in the primary color
 const PODCAST_FEED_BUTTON_CLASS = cn(
@@ -39,8 +38,6 @@ type PodcastEpisodePlayerCardProps = {
 	podcastEpisodePath?: string
 	chapterTopicFeed: ChapterTopicFeed
 	onOpenPodcastFeedDialog: () => void
-	// the call that opens the remove dialog, passed only if the user may remove the podcast episode
-	onRemovePodcastEpisode?: () => void
 }
 
 /**
@@ -51,7 +48,6 @@ export function PodcastEpisodePlayerCard({
 	podcastEpisodePath,
 	chapterTopicFeed,
 	onOpenPodcastFeedDialog,
-	onRemovePodcastEpisode,
 }: PodcastEpisodePlayerCardProps) {
 	// the position that this card shows, and the chapter at that position.
 	// a podcast episode that is not loaded shows the user's saved progress
@@ -125,12 +121,6 @@ export function PodcastEpisodePlayerCard({
 							className="hidden sm:flex"
 							label="Subscribe"
 						/>
-						{onRemovePodcastEpisode && (
-							<RemovePodcastEpisodeButton
-								episodeNumber={podcastEpisode.episodeNumber}
-								onRemovePodcastEpisode={onRemovePodcastEpisode}
-							/>
-						)}
 					</div>
 				</div>
 

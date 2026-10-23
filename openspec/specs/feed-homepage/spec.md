@@ -95,8 +95,8 @@ Below the control row and above the sections, the homepage SHALL show a tag filt
 ### Requirement: The feed bar offers three sort modes
 
 The feed bar SHALL offer a "Sort"-labelled menu with three modes: relevant (the default, by relevance score), newest (by
-resource recency), and trending (by unique viewers). Sorting SHALL be pure read-side ranking over the delivered Topics
-and Findings, and the chosen mode SHALL be a UI concern, never persisted.
+resource recency), and trending (by views, every open of a Finding). Sorting SHALL be pure read-side ranking over the
+delivered Topics and Findings, and the chosen mode SHALL be a UI concern, never persisted.
 
 Relevant sort SHALL settle equal scores by resource recency, and any remaining tie by a stable per-Finding key, so the
 ordering is total. Relevance scores bunch at the top of the scale and most of a first page ties outright, which leaves
@@ -104,20 +104,20 @@ the tiebreak — not the score — deciding what a reader actually sees first. A
 order rows arrived in is not reproducible: the homepage and the topic page build a topic's list from separately queried
 rows, so the same Findings under the same sort would present in two different orders.
 
-Trending SHALL order Findings by their unique viewer count, then by resource recency, then by the stable per-Finding
-key, with bookmarked Findings pinned above the rest in each mode. Trending SHALL order the Topics in the Yours,
-Subscribed, and Popular sections by their viewer count, then their follower count, then the time of their newest Finding
-or, with none, their creation time, then by Topic id. The Featured section SHALL keep its hand-set order under every
-mode, and relevant and newest SHALL keep every section's Topic order as it is delivered.
+Trending SHALL order Findings by their view count, then by resource recency, then by the stable per-Finding key, with
+bookmarked Findings pinned above the rest in each mode. Trending SHALL order the Topics in the Yours, Subscribed, and
+Popular sections by their viewer count, then their follower count, then the time of their newest Finding or, with none,
+their creation time, then by Topic id. The Featured section SHALL keep its hand-set order under every mode, and relevant
+and newest SHALL keep every section's Topic order as it is delivered.
 
 #### Scenario: Newest reorders by recency
 - **WHEN** the user switches the sort to newest
 - **THEN** Findings order by resource recency without any new data being fetched
 
 #### Scenario: Trending falls back to newest without a signal
-- **WHEN** the user switches to trending on a feed where several Findings share a viewer count, including Findings
+- **WHEN** the user switches to trending on a feed where several Findings share a view count, including Findings
   nobody opened
-- **THEN** each group with the same viewer count orders newest first, behind every Finding with more viewers
+- **THEN** each group with the same view count orders newest first, behind every Finding with more views
 
 #### Scenario: Equally relevant Findings order by recency
 - **WHEN** several Findings share the same relevance score
@@ -128,7 +128,7 @@ mode, and relevant and newest SHALL keep every section's Topic order as it is de
 - **THEN** the Findings common to both appear in the same relative order on each
 
 #### Scenario: A bookmarked Finding stays pinned under trending
-- **WHEN** the user switches to trending and a bookmarked Finding has fewer viewers than an unbookmarked one
+- **WHEN** the user switches to trending and a bookmarked Finding has fewer views than an unbookmarked one
 - **THEN** the bookmarked Finding still shows above it, in the pinned group
 
 #### Scenario: Trending orders Topics by viewers

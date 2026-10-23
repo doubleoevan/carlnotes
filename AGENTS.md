@@ -14,10 +14,11 @@ Apps, the deployable entry points:
 - `apps/web/` — the TanStack Start app: the file routes under `apps/web/src/routes/`, the pages they render, components,
   providers, and the DOM-bound hooks, lib, and stores. A public page renders on the server for a visitor and a crawler.
   The sign-in pages, a route behind sign-in, and every route when the request brings a session cookie render in the
-  browser. Its Storybook, the Nightshift component browser, builds to static files the api serves at `/nightshift`.
+  browser. Its Storybook, the Nightshift component browser, builds to static files the api serves at `/nightshift`,
+  and its MCP Apps cards build to one bundle the api writes into each card's html.
 - `apps/api/` — the Hono server: routes, authorization, billing, chat rooms, tasting notes, teams, invites, share cards,
-  page head data, viewer and listener counts, the MCP server, and the document routes (the sitemap, the feeds, the llms
-  files, the IndexNow key, and security.txt).
+  the site search, page head data, viewer and listener counts, the MCP server and its MCP Apps cards, and the document
+  routes (the sitemap, the feeds, the llms files, the IndexNow key, and security.txt).
 - `apps/worker/` — the Temporal worker, its workflows and their activities under `workflows/`, the scheduled sweep, the
   monthly budget reset, the docs embed, and the modules only the sweep reads.
 - `apps/docs/` — the Starlight docs site, built to static files the api serves at `/docs`, with the design files and
@@ -68,7 +69,7 @@ Each app and package has its own AGENTS.md with entry points, layout, and comman
 | Docs page | `apps/docs/src/content/`, its shared pieces in `apps/docs/src/components/`, the video plugin `apps/docs/src/topicTutorialVideoPlugin.ts`, then `bun run docs:embed` | write-docs | `apps/docs/dist/` (built) |
 | Eval work | `evals/README.md`, `evals/evalHarness.ts`, `evals/evalChecks.ts`, `evals/<eval>/`, `.github/workflows/evals.yml`, `.github/workflows/llm-guard-update.yml` | prompt-authoring | app modules except the function the eval calls |
 | Podcast episode, player, feed, or cover | `packages/pipeline/podcast/`, `apps/worker/workflows/recordPodcastEpisode.ts`, `apps/api/podcast/`, `apps/api/share/podcastFeed.ts`, `apps/api/share/podcastCover.ts`, `packages/models/speech.ts`, `packages/contracts/podcastEpisodes.ts`, `packages/server/podcastEpisodeSettings.ts`, `packages/server/podcastCoverPaths.ts`, `apps/web/src/components/podcast/`, `apps/web/src/pages/PodcastEpisodePage.tsx` | domain-model, prompt-authoring | `packages/db/migrations/` |
-| MCP tool, Topic Tool, or the Add to AI dialog | `apps/api/mcp/`, `apps/api/tool/`, `apps/web/src/components/common/AddToAiDialog.tsx` | domain-model | `apps/worker/`; `packages/pipeline/` and `packages/models/` beyond `budget.ts` and the modules the tool imports |
+| MCP tool, MCP card, Topic Tool, or the Add to AI dialog | `apps/api/mcp/`, `apps/api/tool/`, `apps/web/src/mcpCards/`, `apps/web/src/components/common/AddToAiDialog.tsx` | domain-model | `apps/worker/`; `packages/pipeline/` and `packages/models/` beyond `budget.ts` and the modules the tool imports |
 
 Domain vocabulary is canonical and enforced, so grepping a domain noun reliably finds its code.
 

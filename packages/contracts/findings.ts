@@ -17,9 +17,9 @@ export const topicFinding = z.object({
 	source: z.string().nullable(),
 	faviconPath: z.string().nullable(),
 	publishedAt: z.string().nullable(),
-	// when the resource was fetched, and how many users have opened the finding, each counted once
+	// when the resource was fetched, and how many times the finding has been opened
 	fetchedAt: z.string(),
-	viewerCount: z.number(),
+	viewCount: z.number(),
 	// the model's review. the relevance score and a short explanation of why
 	relevanceScore: z.number(),
 	relevanceExplanation: z.string(),
@@ -32,3 +32,19 @@ export const topicFinding = z.object({
 })
 
 export type TopicFinding = z.infer<typeof topicFinding>
+
+// the feed sort modes, which the search sorts by too. all three are read-side orderings, never persisted
+export const TOPIC_FINDING_SORTS = ["relevant", "newest", "trending"] as const
+
+export type TopicFindingSort = (typeof TOPIC_FINDING_SORTS)[number]
+
+// the filter views, which the search filters findings by too. unread narrows to the user's unread findings, and
+// bookmarked to the user's bookmarked findings. no view shows a finding rated thumbs down
+export const TOPIC_FINDING_FILTERS = ["all", "unread", "bookmarked"] as const
+
+export type TopicFindingFilter = (typeof TOPIC_FINDING_FILTERS)[number]
+
+// how selected tags filter: a topic with any of them, all of them, none of them, or off to ignore the tags
+export const TAG_MATCH_MODES = ["any", "all", "none", "off"] as const
+
+export type TagMatchMode = (typeof TAG_MATCH_MODES)[number]

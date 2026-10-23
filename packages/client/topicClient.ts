@@ -8,7 +8,6 @@ import {
 	inviteCreateResponse,
 } from "@carlnotes/contracts/invites"
 import { MANUAL_SCAN_PAUSED_LABEL } from "@carlnotes/contracts/scanFailure"
-import type { TopicSearchResult } from "@carlnotes/contracts/search"
 import type { SuggestSourcesPayload, UpdateTopicPayload } from "@carlnotes/contracts/topicPayloads"
 import {
 	EMPTY_SCAN_NOTE,
@@ -389,13 +388,4 @@ export async function sendUserInvite(
 		return rejection
 	}
 	return response.status === 429 ? "limited" : "failed"
-}
-
-// return the topics whose name contains the query
-export async function searchTopics(query: string): Promise<TopicSearchResult[]> {
-	const response = await apiClient().api.topics.search.$get({ query: { q: query } })
-	if (!response.ok) {
-		return []
-	}
-	return ((await response.json()) as { topics: TopicSearchResult[] }).topics
 }

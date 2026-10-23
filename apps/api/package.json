@@ -20,9 +20,10 @@
 		"@carlnotes/nightshift": "workspace:*",
 		"@carlnotes/pipeline": "workspace:*",
 		"@carlnotes/server": "workspace:*",
-		"@hono/mcp": "^0.3.2",
 		"@hono/zod-validator": "^0.9.1",
-		"@modelcontextprotocol/sdk": "^1.32.1",
+		"@modelcontextprotocol/core": "2.3.1",
+		"@modelcontextprotocol/ext-apps": "2.0.3",
+		"@modelcontextprotocol/server": "2.3.1",
 		"@resvg/resvg-js": "^2.6.2",
 		"ai": "^7.0.145",
 		"better-auth": "~1.7.11",
@@ -39,6 +40,7 @@
 		"zod": "^4.6.7"
 	},
 	"devDependencies": {
+		"@modelcontextprotocol/client": "2.3.1",
 		"@neondatabase/serverless": "^1.2.0",
 		"@types/react": "^19.3.0",
 		"@types/react-dom": "^19.3.0",
