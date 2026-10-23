@@ -11,6 +11,9 @@ export const CHAT_REJECTION_COPY: Record<ChatRejection, string> = {
 	rateLimited: "Carl needs a minute to catch up. Ask again shortly.",
 	forbidden: "Carl can't talk about that.",
 	failed: "Carl lost his train of thought.",
+	attachmentTooLarge: "That file is too large for Carl to read. Try a smaller one.",
+	attachmentBusy: "Carl is busy reading other files. Send that file again in a moment.",
+	attachmentUnreadable: "Carl couldn't read that file.",
 }
 
 // the label and path of the link that opens the plans page

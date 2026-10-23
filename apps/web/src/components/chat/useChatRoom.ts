@@ -6,7 +6,12 @@ import {
 	sendChatRoomMessage,
 } from "@carlnotes/client/chatRoomClient"
 import type { SpokenQuestionTimings } from "@carlnotes/client/voiceClient"
-import type { ChatRoomMessage, ChatRoomMessagePage, RoomTopicToolCalls } from "@carlnotes/contracts/chat"
+import type {
+	ChatRoomAttachmentRejection,
+	ChatRoomMessage,
+	ChatRoomMessagePage,
+	RoomTopicToolCalls,
+} from "@carlnotes/contracts/chat"
 import { CARL_USERNAME, hasAllMention, hasModelMention, isModelChatMessage } from "@carlnotes/contracts/chatMentions"
 import type { VoiceChatPage } from "@carlnotes/contracts/payloads"
 import { useMemo, useRef, useState } from "react"
@@ -21,8 +26,9 @@ import { useChatRoomStream } from "./useChatRoomStream"
 // starts very high because prepending lowers it, and it may never go below zero
 export const FIRST_ITEM_INDEX_START = 1_000_000
 
-// why a post was rejected privately to its poster: Carl's spent budget, too many files, or an unreadable file
-export type ChatRoomRejection = "budget" | "attachmentLimitReached" | "attachmentRejected"
+// why a post was rejected privately to its poster: Carl's spent budget, too many files, an unreadable file, or a file
+// too large to read
+export type ChatRoomRejection = "budget" | ChatRoomAttachmentRejection
 
 // what a member posts: the chat message, what it replies to, its files, and for a spoken transcript its timings
 export type ChatRoomPost = Omit<SendChatRoomMessageOptions, "topicId" | "teamId"> & {
@@ -153,8 +159,8 @@ export function useChatRoom({ topicId, teamId, userId }: UseChatRoomOptions): Ch
 			attachments,
 			isSpoken,
 		}).catch(() => null)
-		// too many files and an unreadable file each say so and post nothing
-		if (postChatMessageResult === "attachmentLimitReached" || postChatMessageResult === "attachmentRejected") {
+		// too many files, an unreadable file, and a file too large to read each say so and post nothing
+		if (typeof postChatMessageResult === "string") {
 			setRejection(postChatMessageResult)
 			return false
 		}

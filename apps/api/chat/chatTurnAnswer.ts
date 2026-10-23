@@ -1,5 +1,6 @@
 // answering an allowed chat turn on any private chat page: the podcast episode chapter it may name, its attachments,
 // the proposal it may answer, its tools, and the streamed reply
+import { CHAT_ATTACHMENT_ERRORS, type ChatAttachmentRejection } from "@carlnotes/contracts/chat"
 import { withAttachmentNote } from "@carlnotes/contracts/chatQuestionNotes"
 import type { TopicChatTurnPayload } from "@carlnotes/contracts/payloads"
 import { ADMIN_QUOTA } from "@carlnotes/contracts/plans"
@@ -26,6 +27,18 @@ import { type ChatTurnAuthorization, rejectChatTurn } from "./chatTurnAuthorizat
 import { streamChatTurn } from "./chatTurnStream"
 import type { ChatPage } from "./chatTurns"
 import { saveLinkPreviews } from "./linkPreviews"
+
+// the status a chat turn responds with for a file it could not read: a file too large to read in time takes the 413
+// the body limit returns for an oversized file, a file that waited behind other files a 503 the browser may send
+// again, and a file that cannot be parsed a 422
+const ATTACHMENT_REJECTION_STATUSES = {
+	attachmentTooLarge: 413,
+	attachmentBusy: 503,
+	attachmentUnreadable: 422,
+} as const
+
+// how long the browser waits before sending a file again that waited behind other files, in seconds
+const BUSY_ATTACHMENT_RETRY_AFTER_SECONDS = 30
 
 // an allowed chat turn to answer: its page, the gate's decision, and the question with its attachments
 export type AnswerChatTurnOptions = {
@@ -55,10 +68,10 @@ export async function answerChatTurn(
 		return context.json({ error: "not found" }, 404)
 	}
 
-	// read each attached file into its text and reject the chat turn with a message if a file cannot be read
+	// read each attached file into its text, and reject the chat turn with why if a file cannot be read
 	const resolvedChatAttachments = await resolveChatAttachments(attachments)
-	if (resolvedChatAttachments === null) {
-		return context.json({ error: "That file couldn't be read." }, 422)
+	if (typeof resolvedChatAttachments === "string") {
+		return toAttachmentRejectionResponse(context, resolvedChatAttachments)
 	}
 
 	// load the topic draft that the new-topic chat's tools read and write
@@ -165,6 +178,17 @@ export async function answerChatTurn(
 		agreementTokens: chatProposalResult?.agreementTokens ?? 0,
 		reservation,
 	})
+}
+
+// the response to a chat turn with a file it could not read, naming the rejection, with a retry time for a busy one
+function toAttachmentRejectionResponse(context: Context, rejection: ChatAttachmentRejection): Response {
+	const retryHeaders =
+		rejection === "attachmentBusy" ? { "Retry-After": String(BUSY_ATTACHMENT_RETRY_AFTER_SECONDS) } : undefined
+	return context.json(
+		{ error: CHAT_ATTACHMENT_ERRORS[rejection] },
+		ATTACHMENT_REJECTION_STATUSES[rejection],
+		retryHeaders,
+	)
 }
 
 // load the topic draft that a new-topic chat turn starts from: the stored draft over the browser's copy, with the

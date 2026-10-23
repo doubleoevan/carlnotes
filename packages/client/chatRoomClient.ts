@@ -1,5 +1,11 @@
 // the api client for a team topic's chat room and a team's own chat room: the chat messages, the post, and the stream url
-import type { ChatLinkPreview, ChatRoom, ChatRoomMessagePage } from "@carlnotes/contracts/chat"
+import {
+	CHAT_ROOM_ATTACHMENT_ERRORS,
+	type ChatLinkPreview,
+	type ChatRoom,
+	type ChatRoomAttachmentRejection,
+	type ChatRoomMessagePage,
+} from "@carlnotes/contracts/chat"
 import type { ChatAttachment } from "@carlnotes/contracts/payloads"
 import { apiClient, readApiErrorMessage } from "./apiClient"
 
@@ -81,6 +87,14 @@ export type SendChatRoomMessageOptions = {
 	isSpoken?: boolean
 }
 
+// the attachment rejection that each 400 error a chat room post names means
+const ATTACHMENT_REJECTION_BY_ERROR = new Map(
+	Object.entries(CHAT_ROOM_ATTACHMENT_ERRORS).map(([rejection, error]) => [
+		error,
+		rejection as ChatRoomAttachmentRejection,
+	]),
+)
+
 /**
  * Post a chat message. The chat message itself arrives back through the stream, under the id the post returns.
  * The response includes the budget rejection when there is one.
@@ -93,7 +107,7 @@ export async function sendChatRoomMessage({
 	attachments,
 	isSpoken = false,
 }: SendChatRoomMessageOptions): Promise<
-	{ chatMessageId: number; rejectionReason: string | null } | "attachmentRejected" | "attachmentLimitReached" | null
+	{ chatMessageId: number; rejectionReason: string | null } | ChatRoomAttachmentRejection | null
 > {
 	const response =
 		topicId === null
@@ -105,13 +119,9 @@ export async function sendChatRoomMessage({
 					param: { id: topicId, teamId },
 					json: { content, replyToChatMessageId, attachments, isSpoken },
 				})
-	// only the two the route names are attachment problems. anything else the validator rejected is a plain failure
+	// only the errors the route names are attachment problems. anything else the validator rejected is a plain failure
 	if (response.status === 400) {
-		const errorMessage = await readApiErrorMessage(response)
-		if (errorMessage === "attachment limit reached") {
-			return "attachmentLimitReached"
-		}
-		return errorMessage === "attachment rejected" ? "attachmentRejected" : null
+		return ATTACHMENT_REJECTION_BY_ERROR.get((await readApiErrorMessage(response)) ?? "") ?? null
 	}
 
 	// every other rejected status reports the same way, since none of them names a reason to show

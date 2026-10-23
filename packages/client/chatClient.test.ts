@@ -1,8 +1,8 @@
 // how the stream reader ends a chat turn and which lines it takes as tool calls. a stream read to the end completes
-// unless the server closed it with the failed line
+// unless the server closed it with the failed line, and a rejected file names why it was not read
 import { expect, test } from "bun:test"
 import { type TopicToolCalls, toChatReplyLineText } from "@carlnotes/contracts/chat"
-import { sendChatTurn } from "./chatClient"
+import { sendChatTurn, toChatRejection, toChatTurnRejection } from "./chatClient"
 
 // a mock stream response built from the given chunks, which need not line up with the lines inside them
 function toStreamResponse(chunks: string[]): Response {
@@ -191,4 +191,35 @@ test("sendChatTurn drops a line the server never wrote", async () => {
 	expect(sendResult).toBeNull()
 	expect(streamedText).toBe("Saving.Done.")
 	expect(toolCallsList).toEqual([])
+})
+
+// a chat turn rejected for its file names why: too large to read in time, unreadable, or waiting behind other files
+test("sendChatTurn reads a rejected file as too large or unreadable", async () => {
+	const originalFetch = globalThis.fetch
+	globalThis.fetch = (async () =>
+		Response.json({ error: "That file is too large or slow to read." }, { status: 413 })) as unknown as typeof fetch
+	try {
+		const sendResult = await sendChatTurn({
+			page: { topicId: "t1" },
+			question: "",
+			history: [],
+			attachments: [],
+			onChunk: () => {},
+		})
+		expect(sendResult).toBe("attachmentTooLarge")
+	} finally {
+		globalThis.fetch = originalFetch
+	}
+	expect(toChatTurnRejection(422)).toBe("attachmentUnreadable")
+	expect(toChatTurnRejection(402)).toBe("budget")
+
+	// a 503 names a busy file only if its error says so, since a proxy answers 503 too
+	expect(toChatTurnRejection(503, "attachment busy")).toBe("attachmentBusy")
+	expect(toChatTurnRejection(503, undefined)).toBe("failed")
+})
+
+// the other chat requests keep their own reading of a status, so a voice route's 413 never names a file
+test("toChatRejection reads a 413 and a 422 as failed", () => {
+	expect(toChatRejection(413)).toBe("failed")
+	expect(toChatRejection(422)).toBe("failed")
 })

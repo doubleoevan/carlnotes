@@ -39,12 +39,7 @@ export async function postAsTeamMember(userId: string, chatRoomTeamId: string, c
 	const chatPostResult = await postChatRoomMessage(userId, topicId, chatRoomTeamId, content, null, [])
 
 	// a null, a rejection, or a rejected attachment never stored the message
-	if (
-		chatPostResult === null ||
-		chatPostResult === "attachmentRejected" ||
-		chatPostResult === "attachmentLimitReached" ||
-		chatPostResult.rejectionReason !== null
-	) {
+	if (chatPostResult === null || typeof chatPostResult === "string" || chatPostResult.rejectionReason !== null) {
 		throw new Error(`FAIL  the post as ${userId} did not store: ${JSON.stringify(chatPostResult)}`)
 	}
 

@@ -212,7 +212,16 @@ at the root import it by name.
   routes. A kept image's description is screened before its row is written. `chat/roomAttachments.ts` screens a shared
   image before a post stores and its description before its row turns ready; `chat/chatAttachmentReads.ts` — reading
   them: the kept ones with their context, a chat turn's own, a download, and the object keys behind a user's or a
-  topic's.
+  topic's. A chat turn and a chat room post read a PDF's, Word file's, or workbook's text through
+  `readChatAttachmentText` in `chat/chatAttachmentScreening.ts`, once per file: a kept chat attachment stores the text
+  its chat turn read, which the chat turn returns as a `StorableChatAttachment`. The helper calls `extractTextInWorker`
+  in `chat/attachmentExtraction.ts`, which runs `extractTextUpTo` in one persistent worker thread per process,
+  `chat/attachmentExtractionWorker.ts`, so a large file never stalls the event loop. The bytes are transferred to the
+  thread, which reads one file at a time from a queue. A request's files share one 90-second deadline from
+  `toExtractionDeadline`. A file read past it rejects with `AttachmentTimeLimitError` and stops only its own read, and
+  reads as too large: a 413 on a chat turn and `attachment too large` on a chat room post. A file that waited behind
+  other files until it rejects with `AttachmentBusyError`, and reads as busy: a 503 on a chat turn and `attachment busy`
+  on a chat room post.
 - `team/teams.ts` — creating and updating a team and the topic attach and detach; `team/teamsRoute.ts` — the team
   routes; `team/deleteTeam.ts` — the delete, the handover to a new leader, and the one team row delete an account
   close shares; `team/search.ts` — the team name search; `team/teamPage.ts` — the team

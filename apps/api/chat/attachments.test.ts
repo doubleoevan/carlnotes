@@ -1,15 +1,16 @@
-// chat attachment tests. what the payload accepts, how a chat turn's attachments group, what gets kept, and what a
-// delete of somebody else's kept attachment responds
+// chat attachment tests. what the payload accepts, how a chat turn's attachments group, what gets kept, that a kept
+// file stores the text its chat turn read, and what a delete of somebody else's kept attachment responds
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import { CHAT_ATTACHMENT_TEXT_CHARS, clipAttachmentText } from "@carlnotes/contracts/chat"
 import { withAttachmentNote } from "@carlnotes/contracts/chatQuestionNotes"
 import { type ChatAttachment, chatTurnPayload } from "@carlnotes/contracts/payloads"
 import { restoreConnectionPool, stubConnectionPool } from "@carlnotes/db/connectionPoolStub"
 import * as store from "@carlnotes/db/store"
-import { withScanner } from "@carlnotes/models/guardTestFixtures"
+import { withoutScanner, withScanner } from "@carlnotes/models/guardTestFixtures"
 import * as attach from "@carlnotes/pipeline/attach"
 import { quietErrorReports } from "@carlnotes/server/monitoringTestFixtures"
 import { toSignedInApp } from "../testSession"
+import * as attachmentExtraction from "./attachmentExtraction"
 import { chatAttachmentsRoute, storeTopicChatAttachments } from "./attachments"
 import { toAttachmentsByChatTurnId } from "./chatAttachmentReads"
 
@@ -58,9 +59,16 @@ test("clipAttachmentText marks the cut inside the limit", () => {
 	// an over-limit document stays inside the payload bound and ends on the marker with both totals
 	const clippedAttachment = clipAttachmentText("x".repeat(80_000))
 	expect(clippedAttachment.length).toBeLessThanOrEqual(CHAT_ATTACHMENT_TEXT_CHARS)
-	expect(clippedAttachment).toContain("The attachment is cut here.")
-	expect(clippedAttachment).toContain("80,000")
-	expect(clippedAttachment).toContain("50,000")
+	expect(clippedAttachment).toEndWith(
+		"[The attachment is cut here. It runs 80,000 characters and only the first 50,000 are included.]",
+	)
+
+	// a PDF that stopped reading pages early names its pages in place of its characters
+	const clippedPdf = clipAttachmentText("x".repeat(52_000), 312)
+	expect(clippedPdf.length).toBeLessThanOrEqual(CHAT_ATTACHMENT_TEXT_CHARS)
+	expect(clippedPdf).toEndWith(
+		"[The attachment is cut here. It runs 312 pages and only the first 50,000 characters are included.]",
+	)
 })
 
 // a kept attachment is stored, summarized by a paid call, and gets added into every later chat turn
@@ -133,6 +141,31 @@ test("a kept image with a flagged description stores no row and deletes its obje
 	expect(sentQueries.some((sentQuery) => sentQuery.text.startsWith('insert into "chat_attachments"'))).toBe(false)
 	expect(deletedObjectKeys).toHaveLength(1)
 	expect(reportErrorSpy.mock.calls.some(([error]) => String(error).includes("flagged by the scanner"))).toBe(true)
+})
+
+// a kept PDF stores the text its chat turn extracted, and the store never extracts the file again
+test("a kept pdf summarizes the text its chat turn read without extracting it again", async () => {
+	// a stubbed database and storage, and a summary that records the text it was given
+	stubConnectionPool()
+	spyOn(store, "recordPendingObjectDeletionBeforeUpload").mockResolvedValue()
+	spyOn(store, "uploadAttachment").mockResolvedValue()
+	spyOn(store, "clearPendingObjectDeletion").mockResolvedValue()
+	const generateAttachmentContextSpy = spyOn(attach, "generateAttachmentContext").mockResolvedValue("A summary.")
+	const extractTextSpy = spyOn(attachmentExtraction, "extractTextInWorker")
+
+	// the kept PDF with the text its chat turn read
+	const keptPdf = {
+		kind: "pdf",
+		name: "notes.pdf",
+		dataUrl: "data:application/pdf;base64,AA",
+		keep: true,
+		extractedText: "Carl's notes from the chat turn.",
+	} as const
+	await withoutScanner(async () => {
+		await storeTopicChatAttachments("user-1", "topic-1", "turn-1", [keptPdf], "sk-user")
+	})
+	expect(generateAttachmentContextSpy).toHaveBeenCalledWith("Carl's notes from the chat turn.", "sk-user")
+	expect(extractTextSpy).not.toHaveBeenCalled()
 })
 
 // a kept attachment another user owns, or none at all, reads as a missing one

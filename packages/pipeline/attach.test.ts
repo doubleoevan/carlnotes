@@ -1,4 +1,4 @@
-// attachment extraction tests: the content-type resolver, each extractor, and the table text
+// attachment tests: the content-type resolver, the table text, the topic context hash, and the ingestion
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import { MAX_ATTACHMENT_CONTEXT_CHARS } from "@carlnotes/contracts/topics"
 import { restoreConnectionPool, stubConnectionPool, toTableRow } from "@carlnotes/db/connectionPoolStub"
@@ -7,15 +7,16 @@ import * as store from "@carlnotes/db/store"
 import { FetchStatusError } from "@carlnotes/server/publicFetch"
 // the methods to test, and the ingestion, which the pool stub keeps off the database
 import { ingestAttachment, ingestUrlAttachment, toTopicContextHash } from "./attach"
-import { AttachmentValidationError, isTableFileType, toCanonicalContentType } from "./attachContentType"
+import {
+	AttachmentValidationError,
+	DOCX_TYPE,
+	isTableFileType,
+	toCanonicalContentType,
+	XLSX_TYPE,
+} from "./attachContentType"
 import { MAX_TABLE_CHARS, MAX_TABLE_ROWS, toClippedTableText, toTableText } from "./attachTable"
-import { extractText } from "./attachText"
 import * as scrape from "./scrape"
 import * as temporalClient from "./temporalClient"
-
-// the OOXML media types the resolver and gate know
-const DOCX_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-const XLSX_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
 // a reported type an extractor knows stands as it is
 test("toCanonicalContentType keeps a reported type the gate knows", () => {
@@ -49,42 +50,6 @@ test("isTableFileType admits only the types that have rows", () => {
 	expect(isTableFileType("text/plain")).toBe(false)
 	expect(isTableFileType("application/pdf")).toBe(false)
 	expect(isTableFileType(DOCX_TYPE)).toBe(false)
-})
-
-// a Word document fixture built as the minimal OOXML zip: two paragraphs of plain text
-const DOCX_FIXTURE_BASE64 =
-	"UEsDBBQAAAAIACl6Il3JTxqw6wAAAK4BAAATAAAAW0NvbnRlbnRfVHlwZXNdLnhtbH1QvU7DMBDeeQrLK4odGBBCSTrwMwJDeYCTfUks7LPlc0v79jht6YAK4933q69b7YIXW8zsIvXyRrVSIJloHU29/Fi/NPdScAGy4CNhL/fIcjVcdet9QhZVTNzLuZT0oDWbGQOwigmpImPMAUo986QTmE+YUN+27Z02kQpSacriIYfuCUfY+CKed/V9LJLRsxSPR+KS1UtIyTsDpeJ6S/ZXSnNKUFV54PDsEl9XgtQXExbk74CT7q0uk51F8Q65vEKoLP0Vs9U2mk2oSvW/zYWecRydwbN+cUs5GmSukwevzkgARz/99WHu4RtQSwMECgAAAAAAKXoiXQAAAAAAAAAAAAAAAAYAAABfcmVscy9QSwMEFAAAAAgAKXoiXbmBRHGwAAAAKgEAAAsAAABfcmVscy8ucmVsc43POw7CMAwG4J1TRN5pWgaEUJMuCKkrKgeIEjeNaB5KwqO3JwMDIAZG278/y233sDO5YUzGOwZNVQNBJ70yTjM4D8f1DkjKwikxe4cMFkzQ8VV7wlnkspMmExIpiEsMppzDntIkJ7QiVT6gK5PRRytyKaOmQciL0Eg3db2l8d0A/mGSXjGIvWqADEvAf2w/jkbiwcurRZd/nPhKFFlEjZnB3UdF1atdFRYob+nHi/wJUEsDBAoAAAAAACl6Il0AAAAAAAAAAAAAAAAFAAAAd29yZC9QSwMEFAAAAAgAKXoiXRumyOvFAAAAKQEAABEAAAB3b3JkL2RvY3VtZW50LnhtbG2PwWrDMAyG73sK4XvjbIdRQpIeCnuBbQ+g2moSiCUju0379rMLZTB2+YWQ9P2/+sMtrHAlTYvwYF6b1gCxE7/wNJjvr4/d3kDKyB5XYRrMnZI5jC/91nlxl0CcoRA4ddtg5pxjZ21yMwVMjUTiMjuLBsyl1cluoj6qOEqpGITVvrXtuw24sBkL8iT+XmusolXyeERdQQl9gjwTVAI8rZve1pWq+tD49/qTnLCHiIqTYpyhpHlwzsstX5T+I9hnEPv75PgDUEsBAh4DFAAAAAgAKXoiXclPGrDrAAAArgEAABMAAAAAAAAAAQAAAKSBAAAAAFtDb250ZW50X1R5cGVzXS54bWxQSwECHgMKAAAAAAApeiJdAAAAAAAAAAAAAAAABgAAAAAAAAAAABAA7UEcAQAAX3JlbHMvUEsBAh4DFAAAAAgAKXoiXbmBRHGwAAAAKgEAAAsAAAAAAAAAAQAAAKSBQAEAAF9yZWxzLy5yZWxzUEsBAh4DCgAAAAAAKXoiXQAAAAAAAAAAAAAAAAUAAAAAAAAAAAAQAO1BGQIAAHdvcmQvUEsBAh4DFAAAAAgAKXoiXRumyOvFAAAAKQEAABEAAAAAAAAAAQAAAKSBPAIAAHdvcmQvZG9jdW1lbnQueG1sUEsFBgAAAAAFAAUAIAEAADADAAAAAA=="
-
-// the mammoth library reads the fixture's paragraphs as plain text
-test("extractText reads a docx as plain text", async () => {
-	const docxBytes = new Uint8Array(Buffer.from(DOCX_FIXTURE_BASE64, "base64"))
-	const text = await extractText(DOCX_TYPE, docxBytes)
-	expect(text).toContain("Carl reads the word document.")
-	expect(text).toContain("Second paragraph for the fixture.")
-})
-
-// an Excel workbook written by exceljs round-trips through the reader: sheets, cells, and a date serial
-test("extractText serializes a workbook's sheets as rows", async () => {
-	const { default: ExcelJS } = await import("exceljs")
-	const workbook = new ExcelJS.Workbook()
-
-	// two sheets with rows, and one chart-like empty sheet that must not serialize
-	const submissions = workbook.addWorksheet("Submissions")
-	submissions.addRow(["Agency", "Agent", "Sent"])
-	submissions.addRow(["Writers House", "Amy Berkower", new Date(Date.UTC(2026, 7, 4))])
-	const notes = workbook.addWorksheet("Notes")
-	notes.addRow(["Note"])
-	notes.addRow(["Follow up in september"])
-	workbook.addWorksheet("Empty")
-
-	// the serialized text names each non-empty sheet and keeps the rows verbatim
-	const workbookBytes = new Uint8Array(await workbook.xlsx.writeBuffer())
-	const text = await extractText(XLSX_TYPE, workbookBytes)
-	expect(text).toContain("=== sheet: Submissions ===")
-	expect(text).toContain("Agency,Agent,Sent")
-	expect(text).toContain("Writers House,Amy Berkower,2026-08-04")
-	expect(text).toContain("=== sheet: Notes ===")
-	expect(text).not.toContain("Empty")
 })
 
 // a workbook row that reads like a sheet marker must not open one, no matter how its cells were split
@@ -122,34 +87,6 @@ test("toTableText reads a marker-looking csv row as data", () => {
 	expect(tableText).toContain("=== sheet: Fake ===")
 	expect(tableText).not.toContain('sheet "Fake"')
 	expect(tableText.split("\n").filter((line) => line.startsWith("[file"))).toHaveLength(1)
-})
-
-// Excel's plain csv export is windows-1252, where 0xE9 is the accented e
-test("extractText decodes a windows-1252 csv without replacement characters", async () => {
-	const csvBytes = new Uint8Array([0x43, 0x61, 0x66, 0xe9, 0x2c, 0x31, 0x30])
-	const text = await extractText("text/csv", csvBytes)
-	expect(text).toBe("Café,10")
-	expect(text).not.toContain("�")
-})
-
-// uploaded HTML extracts to marked-up text with no tags left in it
-test("extractText converts html to markdown-shaped text", async () => {
-	const html =
-		"<html><head><style>p{color:red}</style></head><body><h1>Title</h1><p>Body &amp; soul</p><ul><li>One</li><li>Two</li></ul><script>alert(1)</script></body></html>"
-	const text = await extractText("text/html", new TextEncoder().encode(html))
-	expect(text).toContain("# Title")
-	expect(text).toContain("Body & soul")
-	expect(text).toContain("- One")
-
-	// no tag survives, and a script's body is deleted with its tags
-	expect(text).not.toMatch(/<[a-z]/i)
-	expect(text).not.toContain("alert(1)")
-})
-
-// JSON is text to a model, so it decodes as it is
-test("extractText decodes json as text", async () => {
-	const text = await extractText("application/json", new TextEncoder().encode('{"a":1}'))
-	expect(text).toBe('{"a":1}')
 })
 
 // a small csv becomes table text whole: the computed line, the header row, and every data row verbatim

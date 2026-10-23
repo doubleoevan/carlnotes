@@ -3,7 +3,6 @@
 import { toChatReplyLineText } from "@carlnotes/contracts/chat"
 import { withPodcastEpisodeNote } from "@carlnotes/contracts/chatQuestionNotes"
 import type { PodcastEpisodeSpeaker } from "@carlnotes/contracts/enums"
-import type { ChatAttachment } from "@carlnotes/contracts/payloads"
 import type { TopicDraft } from "@carlnotes/contracts/topicPayloads"
 import { isBudgetRejection, SPENT_BUDGET_REJECTION } from "@carlnotes/models/models"
 import type { SpendReservation } from "@carlnotes/models/spendReservations"
@@ -16,6 +15,7 @@ import type { AnalyticsProperties } from "../currentUser"
 import type { ChatTurnToolCalls } from "../tool/chatTools"
 import { saveTopicDraft } from "../topic/topicDrafts"
 import { storeTopicChatAttachments } from "./attachments"
+import type { StorableChatAttachment } from "./chatAttachmentScreening"
 import { recordChatProposal } from "./chatProposals"
 import { type ChatPage, saveChatTurn, toChatPageId } from "./chatTurns"
 import { saveLinkPreviews } from "./linkPreviews"
@@ -28,7 +28,7 @@ export type StreamedChatTurn = {
 	userId: string
 	page: ChatPage
 	question: string
-	attachments: ChatAttachment[]
+	attachments: StorableChatAttachment[]
 	// whether the gate keeps the text, whether the question was spoken, and what the topic tools did
 	isPersisted: boolean
 	isSpoken: boolean

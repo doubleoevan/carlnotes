@@ -20,4 +20,13 @@ test("a file rejection says why the files did not post", async () => {
 	const unreadableHtml = await renderWithRouter(<ChatRoomRejectionNotice rejection="attachmentRejected" />)
 	expect(unreadableHtml).toContain("One of them may be unreadable.")
 	expect(unreadableHtml).not.toContain("empty mug")
+
+	// a file whose read ran past the post's deadline says the file is too large to read
+	const tooLargeHtml = await renderWithRouter(<ChatRoomRejectionNotice rejection="attachmentTooLarge" />)
+	expect(tooLargeHtml).toContain("One of them is too large to read.")
+	expect(tooLargeHtml).not.toContain("empty mug")
+
+	// a file that waited behind other files asks the poster to share it again
+	const busyHtml = await renderWithRouter(<ChatRoomRejectionNotice rejection="attachmentBusy" />)
+	expect(busyHtml).toContain("share them again in a moment")
 })

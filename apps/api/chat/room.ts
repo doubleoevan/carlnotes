@@ -1,3 +1,4 @@
+import type { ChatRoomAttachmentRejection } from "@carlnotes/contracts/chat"
 import { hasAllMention, hasModelMention, isModelChatMessage } from "@carlnotes/contracts/chatMentions"
 import type { ChatAttachment } from "@carlnotes/contracts/payloads"
 import { db } from "@carlnotes/db"
@@ -41,9 +42,7 @@ export async function postChatRoomMessage(
 	replyToChatMessageId: number | null,
 	attachments: ChatAttachment[],
 	{ analyticsProperties, isSpoken = false }: PostChatRoomMessageOptions = {},
-): Promise<
-	{ chatMessageId: number; rejectionReason: string | null } | "attachmentRejected" | "attachmentLimitReached" | null
-> {
+): Promise<{ chatMessageId: number; rejectionReason: string | null } | ChatRoomAttachmentRejection | null> {
 	const chatRoom = await loadChatRoom(userId, topicId, teamId)
 	if (!chatRoom) {
 		return null
@@ -146,7 +145,7 @@ type StoreChatRoomMessageOptions = {
 }
 
 // store a chat message with its attachments, fan it out, save its chat mentions, and report it. returns the chat
-// message's id, a rejected or over-limit attachment, or null if the row was not stored
+// message's id, why its attachments did not post, or null if the row was not stored
 async function storeChatRoomMessage({
 	userId,
 	topicId,
@@ -158,11 +157,14 @@ async function storeChatRoomMessage({
 	isModelChatTurn,
 	isSpoken,
 	analyticsProperties,
-}: StoreChatRoomMessageOptions): Promise<number | "attachmentRejected" | "attachmentLimitReached" | null> {
+}: StoreChatRoomMessageOptions): Promise<number | ChatRoomAttachmentRejection | null> {
 	// every shared file is screened and read before the chat message is stored, so one rejected file posts nothing at all
 	const preparedAttachments = await prepareChatRoomAttachments(userId, topicId, teamId, attachments)
-	if (preparedAttachments === null || preparedAttachments === "attachmentLimitReached") {
-		return preparedAttachments === null ? "attachmentRejected" : "attachmentLimitReached"
+	if (preparedAttachments === null) {
+		return "attachmentRejected"
+	}
+	if (typeof preparedAttachments === "string") {
+		return preparedAttachments
 	}
 
 	// the poster's name is recorded at post-time, which is what keeps attribution and deletes the attachment if the account closes

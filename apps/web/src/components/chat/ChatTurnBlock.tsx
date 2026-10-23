@@ -257,9 +257,15 @@ function ChatRejectionNotice({ rejection, onRetry }: { rejection: ChatRejection;
 		)
 	}
 
-	// ask a user past the per-minute limit to wait
-	if (rejection === "rateLimited") {
-		return <p className="text-muted-foreground text-sm">{CHAT_REJECTION_COPY.rateLimited}</p>
+	// ask a user past the per-minute limit to wait, and say why a file was not read. the retry above resends the question
+	// alone, so a file the server was too busy to read asks to be sent again instead
+	if (
+		rejection === "rateLimited" ||
+		rejection === "attachmentTooLarge" ||
+		rejection === "attachmentUnreadable" ||
+		rejection === "attachmentBusy"
+	) {
+		return <p className="text-muted-foreground text-sm">{CHAT_REJECTION_COPY[rejection]}</p>
 	}
 
 	// an exhausted budget shows a call-to-action to upgrade at the plans page. anything forbidden shows a rejection

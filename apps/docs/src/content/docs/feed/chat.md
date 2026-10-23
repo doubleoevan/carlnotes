@@ -48,6 +48,10 @@ An attached file appears as a chip above the box, with an X to remove it.
 ![An attached file shown as a chip above the message box, with an X to remove
 it](../../../assets/screenshots/chat-attached-file-chip.png)
 
+If Carl can't read a file, the message doesn't send, and he says so. A file too large for him to read in about a minute
+and a half says that instead, so try a smaller one or just the pages you need. If he is busy reading other files, he
+asks you to send it again in a moment.
+
 Carl reads a file you bring into a conversation for that conversation only. It never becomes a topic attachment, and it
 never changes how future brews are scored. Your private chat on a topic is yours alone. Chat text is stored encrypted,
 in private chats and team rooms alike. A team room is not private. Everyone on the team reads what you say there and can

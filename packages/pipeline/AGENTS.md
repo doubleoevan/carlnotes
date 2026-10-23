@@ -14,9 +14,10 @@ it; it imports `@carlnotes/models`, `@carlnotes/emails`, `@carlnotes/db`, `@carl
   and the manual scan route run. `screen.ts` starts the llm-guard screening workflow for every Source still waiting on
   one.
 - `attach.ts` ingests a topic attachment and builds a topic's scan context, over `attachContentType.ts` (the canonical
-  content type and what each type is), `attachText.ts` (the text extracted from an attachment's bytes), and
-  `attachTable.ts` (a table file's rows serialized, clipped, and laid out for the model). `chunk.ts` splits a long
-  document's text into bounded chunks for parallel summarization.
+  content type and what each type is), `attachText.ts` (the text extracted from an attachment's bytes, a PDF read one
+  page at a time, and `extractTextUpTo`, which stops once its text passes the caller's `maxChars`), and `attachTable.ts`
+  (a table file's rows serialized, clipped, and laid out for the model). `chunk.ts` splits a long document's text into
+  bounded chunks for parallel summarization.
 - `ingest/` — one ingester per Source kind: `rss.ts`, `youtube.ts`, `reddit.ts`, `x.ts`, `bluesky.ts`, `podcast.ts`,
   `url.ts`, and `search.ts`, over `feed.ts` for the feeds that need no key and `normalize.ts` for the url, title, and
   kind a Resource gets before it is stored. `index.ts` reads a topic's Sources oldest first, runs and times each through

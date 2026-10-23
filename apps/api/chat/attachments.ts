@@ -17,14 +17,18 @@ import {
 } from "@carlnotes/db/store"
 import { generateAttachmentContext } from "@carlnotes/pipeline/attach"
 import { toCanonicalContentType } from "@carlnotes/pipeline/attachContentType"
-import { extractText } from "@carlnotes/pipeline/attachText"
 import { reportError } from "@carlnotes/server/monitoring"
 import { and, eq, inArray } from "drizzle-orm"
 import { Hono } from "hono"
 import { type AppEnv, currentUser } from "../currentUser"
 import { toStoredFileHeaders } from "../topic/attachments"
 import { loadDownloadableChatAttachment, streamVideoAttachment, toKeptAttachmentContext } from "./chatAttachmentReads"
-import { contentTypeFromDataUrl, decodeDataUrl, screenAttachmentText } from "./chatAttachmentScreening"
+import {
+	contentTypeFromDataUrl,
+	decodeDataUrl,
+	type StorableChatAttachment,
+	screenAttachmentText,
+} from "./chatAttachmentScreening"
 import { toChatRejection } from "./chatTurnAuthorization"
 import { encryptChatText } from "./encryption"
 
@@ -36,7 +40,7 @@ export async function storeTopicChatAttachments(
 	userId: string,
 	topicId: string,
 	chatTurnId: string | null,
-	attachments: ChatAttachment[],
+	attachments: StorableChatAttachment[],
 	litellmApiKey?: string,
 ): Promise<void> {
 	// most chat turns dont sent an attachment
@@ -79,7 +83,7 @@ async function storeTopicChatAttachment(
 	userId: string,
 	topicId: string,
 	chatTurnId: string | null,
-	attachment: ChatAttachment,
+	attachment: StorableChatAttachment,
 	isAttachmentKept: boolean,
 	litellmApiKey?: string,
 ): Promise<boolean> {
@@ -115,18 +119,12 @@ async function storeTopicChatAttachment(
 		return true
 	}
 
-	// a kept PDF is read and screened before any of it is stored, so a flagged one leaves no object behind
+	// a kept PDF's text, extracted once for the chat turn, is screened before any of it is stored, so a flagged one
+	// leaves no object behind
 	const bytes = decodeDataUrl(attachment.dataUrl)
 	const documentText =
 		attachment.kind === "pdf" || attachment.kind === "document"
-			? await screenAttachmentText(
-					await extractText(
-						toCanonicalContentType(contentTypeFromDataUrl(attachment.dataUrl), attachment.name),
-						new Uint8Array(bytes),
-					),
-					"kept chat attachment",
-					topicId,
-				)
+			? await screenAttachmentText(attachment.extractedText, "kept chat attachment", topicId)
 			: ""
 	if (documentText === null) {
 		return false

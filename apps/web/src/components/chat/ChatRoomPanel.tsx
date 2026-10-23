@@ -232,6 +232,8 @@ export function ChatRoomPanel({
 const ATTACHMENT_REJECTION_TEXT = {
 	attachmentLimitReached: `That would pass the ${CHAT_ROOM_ATTACHMENT_LIMIT} files you can share in this chat room. Delete some to share more.`,
 	attachmentRejected: "Those files didn't post. One of them may be unreadable.",
+	attachmentTooLarge: "Those files didn't post. One of them is too large to read. Share a smaller one.",
+	attachmentBusy: "Those files didn't post. Carl is busy reading other files, so share them again in a moment.",
 }
 
 /**

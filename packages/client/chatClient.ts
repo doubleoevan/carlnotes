@@ -1,6 +1,8 @@
 // the topic chat client. the reply arrives as a stream, so it is read chunk by chunk instead of being parsed whole
 import {
+	CHAT_ATTACHMENT_ERRORS,
 	CHAT_HISTORY_TURNS,
+	type ChatAttachmentRejection,
 	type ChatConversation,
 	type ChatReplyLine,
 	compactChatAnswer,
@@ -11,10 +13,11 @@ import {
 import { isPodcastEpisodeSpeaker, type PodcastEpisodeSpeaker } from "@carlnotes/contracts/enums"
 import type { ChatAttachment, ChatHistoryTurn, PodcastEpisodeChapterRef } from "@carlnotes/contracts/payloads"
 import type { TopicDraft, TopicDraftTeam } from "@carlnotes/contracts/topicPayloads"
-import { toApiUrl } from "./apiClient"
+import { readApiErrorMessage, toApiUrl } from "./apiClient"
 
-// why a chat turn was rejected, kept apart so that the panel can prompt an upgrade instead of a generic error
-export type ChatRejection = "budget" | "forbidden" | "failed" | "rateLimited"
+// why a chat turn was rejected, kept apart so that the panel can prompt an upgrade or name a file it could not read
+// instead of a generic error
+export type ChatRejection = "budget" | "forbidden" | "failed" | "rateLimited" | ChatAttachmentRejection
 
 // how a chat turn ended: answered, rejected for a reason, or stopped by the user mid-stream
 export type ChatSendResult = ChatRejection | "stopped" | null
@@ -97,7 +100,8 @@ export async function sendChatTurn({
 			signal,
 		})
 		if (!response.ok || !response.body) {
-			return toChatRejection(response.status)
+			const errorMessage = response.status === 503 ? await readApiErrorMessage(response) : undefined
+			return toChatTurnRejection(response.status, errorMessage)
 		}
 
 		return await readChatStream(response.body, chatReplyHandlers)
@@ -244,6 +248,26 @@ function toChatUrl(chatPage: ChatPage): string {
 		return "/api/chat/new-topic"
 	}
 	return chatPage.topicId !== undefined ? `/api/topics/${chatPage.topicId}/chat` : `/api/teams/${chatPage.teamId}/chat`
+}
+
+/**
+ * Returns the rejection a failed chat turn's status code means: a file too large to read, a file that could not be
+ * read, a file the server was too busy to read, or the rejection any chat request's status means. A 503 is a busy file
+ * only if its error names one, since a proxy in front of the api answers 503 too.
+ */
+export function toChatTurnRejection(status: number, errorMessage?: string): ChatRejection {
+	// a 413 is a file too large to read in time or past the body limit, and a 422 is a file that could not be read
+	if (status === 413) {
+		return "attachmentTooLarge"
+	}
+	if (status === 422) {
+		return "attachmentUnreadable"
+	}
+
+	// a 503 that names a busy file asks for another try, and any other status reads as every chat request's does
+	return status === 503 && errorMessage === CHAT_ATTACHMENT_ERRORS.attachmentBusy
+		? "attachmentBusy"
+		: toChatRejection(status)
 }
 
 /**

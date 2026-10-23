@@ -669,6 +669,10 @@ Check for:
    - `estimateEmbedTokens` in `packages/pipeline/review/filter.ts` and `TRANSCRIPT_CHARS_PER_TOKEN` in
      `packages/models/transcription.ts` (now `toEstimatedTokens` in `packages/models/budget.ts`), and `rejectChatTurn`
      in `apps/api/chat/privateChat.ts` (now exported from `apps/api/chat/chatTurnAuthorization.ts`)
+   - the `serve-pages-from-a-web-service` OpenSpec change (now the unapplied `split-web-from-api`, with its attachment
+     extraction moved to `extract-attachment-text-in-a-worker`), and `extractText` called on the api's event loop (now
+     `readChatAttachmentText` in `apps/api/chat/chatAttachmentScreening.ts` over `extractTextInWorker` in
+     `apps/api/chat/attachmentExtraction.ts`)
 
 5. **Cross-harness enforcement parity**: `.claude/settings.json` hooks and
    `.opencode/plugin/guardrails.mjs` must gate the same operations with the

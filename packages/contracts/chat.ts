@@ -272,15 +272,48 @@ export const CHAT_ATTACHMENT_KEEP_LIMIT = 20
 // how many files one member may have shared with one chat room at a time
 export const CHAT_ROOM_ATTACHMENT_LIMIT = 20
 
-/**
- * Attachment text is held to a limit, with a marker naming the cut.
- */
+// why a sent file was not read: it could not be parsed, it is too large to read before its deadline, or other files kept
+// the worker thread busy until then
+export type ChatAttachmentRejection = "attachmentUnreadable" | "attachmentTooLarge" | "attachmentBusy"
 
-export function clipAttachmentText(text: string): string {
+// the error a chat turn's response names for each file it could not read
+export const CHAT_ATTACHMENT_ERRORS: Record<ChatAttachmentRejection, string> = {
+	attachmentUnreadable: "attachment unreadable",
+	attachmentTooLarge: "attachment too large",
+	attachmentBusy: "attachment busy",
+}
+
+// why a chat room post's files did not post: one was rejected, they would pass the member's file limit, one is too
+// large to read in time, or other files kept the worker thread busy
+export type ChatRoomAttachmentRejection =
+	| "attachmentRejected"
+	| "attachmentLimitReached"
+	| "attachmentTooLarge"
+	| "attachmentBusy"
+
+// the error a chat room post's 400 response names for each rejection of its files
+export const CHAT_ROOM_ATTACHMENT_ERRORS: Record<ChatRoomAttachmentRejection, string> = {
+	attachmentRejected: "attachment rejected",
+	attachmentLimitReached: "attachment limit reached",
+	attachmentTooLarge: CHAT_ATTACHMENT_ERRORS.attachmentTooLarge,
+	attachmentBusy: CHAT_ATTACHMENT_ERRORS.attachmentBusy,
+}
+
+/**
+ * Attachment text is held to a limit, with a marker naming the cut and the attachment's whole length: its characters,
+ * or its pages if it is a PDF that stopped reading pages once its text passed the limit.
+ */
+export function clipAttachmentText(text: string, pdfPageCount?: number): string {
 	if (text.length <= CHAT_ATTACHMENT_TEXT_CHARS) {
 		return text
 	}
-	const marker = `\n\n[The attachment is cut here. It runs ${text.length.toLocaleString("en-US")} characters and only the first ${CHAT_ATTACHMENT_TEXT_CHARS.toLocaleString("en-US")} are included.]`
+
+	// the whole length in pages for a PDF read partway, else in characters
+	const keptChars = CHAT_ATTACHMENT_TEXT_CHARS.toLocaleString("en-US")
+	const marker =
+		pdfPageCount === undefined
+			? `\n\n[The attachment is cut here. It runs ${text.length.toLocaleString("en-US")} characters and only the first ${keptChars} are included.]`
+			: `\n\n[The attachment is cut here. It runs ${pdfPageCount.toLocaleString("en-US")} pages and only the first ${keptChars} characters are included.]`
 	return `${text.slice(0, CHAT_ATTACHMENT_TEXT_CHARS - marker.length)}${marker}`
 }
 

@@ -1,6 +1,6 @@
 // the chat room routes: the page, the stream, posting, the shared files, and the deletes
 
-import type { ChatRoomMessagePage } from "@carlnotes/contracts/chat"
+import { CHAT_ROOM_ATTACHMENT_ERRORS, type ChatRoomMessagePage } from "@carlnotes/contracts/chat"
 import { chatRoomMessagePayload } from "@carlnotes/contracts/payloads"
 import { attachmentStream } from "@carlnotes/db/store"
 import { isVoiceChatConfigured } from "@carlnotes/server/voiceChat"
@@ -85,11 +85,8 @@ async function postChatRoomMessageRoute(
 		attachments,
 		{ analyticsProperties: toAnalyticsProperties(context), isSpoken },
 	)
-	if (postChatMessageResult === "attachmentLimitReached") {
-		return context.json({ error: "attachment limit reached" }, 400)
-	}
-	if (postChatMessageResult === "attachmentRejected") {
-		return context.json({ error: "attachment rejected" }, 400)
+	if (typeof postChatMessageResult === "string") {
+		return context.json({ error: CHAT_ROOM_ATTACHMENT_ERRORS[postChatMessageResult] }, 400)
 	}
 	// the posted chat message, or 404 for a chat room this user may not use
 	return postChatMessageResult ? context.json(postChatMessageResult) : context.json({ error: "not found" }, 404)

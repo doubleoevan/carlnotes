@@ -16,11 +16,14 @@ import { screenImage } from "@carlnotes/models/guard"
 import { loadOrProvisionUserLiteLLMKey } from "@carlnotes/models/litellm"
 import { generateImageContext } from "@carlnotes/pipeline/attach"
 import { toCanonicalContentType } from "@carlnotes/pipeline/attachContentType"
-import { extractText } from "@carlnotes/pipeline/attachText"
 import { and, count, eq, type SQL } from "drizzle-orm"
+import { toExtractionDeadline } from "./attachmentExtraction"
 import {
 	contentTypeFromDataUrl,
 	decodeDataUrl,
+	type ExtractableChatAttachment,
+	type PastDeadlineRejection,
+	readChatAttachmentText,
 	reportFlaggedAttachment,
 	screenAttachmentText,
 	VIDEO_ATTACHMENT_CONTEXT,
@@ -55,16 +58,26 @@ export type PreparedChatRoomAttachment = {
 	contentType: string | null
 }
 
+// one shared attachment file to prepare: the chat room it posts to, the file, and the post's deadline from
+// toExtractionDeadline
+type PrepareChatRoomAttachmentOptions = {
+	topicId: string | null
+	teamId: string
+	attachment: ChatAttachment
+	deadline: number
+}
+
 /**
- * Screen and read every attachment file a chat message shares, answering null if any one of them is rejected,
- * so a rejected attachment file leaves neither a stored file nor a chat message standing beside one that never landed.
+ * Screen and read every attachment file a chat message shares, returning null if any one of them is rejected, or
+ * why if one was not read before the post's deadline, so a rejected attachment file leaves neither a stored file
+ * nor a chat message standing beside one that never landed.
  */
 export async function prepareChatRoomAttachments(
 	userId: string,
 	topicId: string | null,
 	teamId: string,
 	attachments: ChatAttachment[],
-): Promise<PreparedChatRoomAttachment[] | "attachmentLimitReached" | null> {
+): Promise<PreparedChatRoomAttachment[] | "attachmentLimitReached" | PastDeadlineRejection | null> {
 	if (attachments.length === 0) {
 		return []
 	}
@@ -85,12 +98,15 @@ export async function prepareChatRoomAttachments(
 		return "attachmentLimitReached"
 	}
 
-	// one rejection rejects the whole chat message, so the files are read in order, and the first rejection stops it
+	// one rejection rejects the whole chat message, so the files are read in order, and the first rejection stops it.
+	// every file shares one deadline, so the post always responds before the server's idle timeout
 	const preparedAttachments: PreparedChatRoomAttachment[] = []
+	const deadline = toExtractionDeadline()
 	for (const attachment of attachments) {
-		const preparedAttachment = await prepareChatRoomAttachment(topicId, teamId, attachment)
-		if (preparedAttachment === null) {
-			return null
+		// a rejected file stops the post with why
+		const preparedAttachment = await prepareChatRoomAttachment({ topicId, teamId, attachment, deadline })
+		if (preparedAttachment === null || typeof preparedAttachment === "string") {
+			return preparedAttachment
 		}
 		preparedAttachments.push(preparedAttachment)
 	}
@@ -98,12 +114,14 @@ export async function prepareChatRoomAttachments(
 	return preparedAttachments
 }
 
-// screen and read one shared attachment file, with the uploader's limit already weighed for the whole chat message
-async function prepareChatRoomAttachment(
-	topicId: string | null,
-	teamId: string,
-	attachment: ChatAttachment,
-): Promise<PreparedChatRoomAttachment | null> {
+// screen and read one shared attachment file, with the uploader's limit already weighed for the whole chat message.
+// null if the file is rejected, and why if it was not read before the post's deadline
+async function prepareChatRoomAttachment({
+	topicId,
+	teamId,
+	attachment,
+	deadline,
+}: PrepareChatRoomAttachmentOptions): Promise<PreparedChatRoomAttachment | PastDeadlineRejection | null> {
 	// shared text stores its own words, screened like a kept attachment's
 	if (attachment.kind === "text") {
 		const screenedText = await screenAttachmentText(attachment.text, "room attachment", topicId ?? teamId)
@@ -127,22 +145,7 @@ async function prepareChatRoomAttachment(
 	}
 	// a pdf, word file, or workbook has words to pull out, and the room picker offers all three
 	if (attachment.kind === "pdf" || attachment.kind === "document") {
-		const contentType = toCanonicalContentType(contentTypeFromDataUrl(attachment.dataUrl), attachment.name)
-
-		// an unreadable file rejects the post, so nothing half-read ever stores
-		let documentText: string
-		try {
-			documentText = await extractText(contentType, new Uint8Array(bytes))
-		} catch {
-			return null
-		}
-
-		// the screen may also redact in place, so its returned text is the one that stores
-		const screenedText = await screenAttachmentText(documentText, "room attachment", topicId ?? teamId)
-		if (screenedText === null) {
-			return null
-		}
-		return { attachment, contextText: screenedText, bytes, contentType }
+		return prepareExtractableChatRoomAttachment({ topicId, teamId, attachment, deadline, bytes })
 	}
 	// an image is screened by the text it shows, and a flagged one rejects the post before anything stores.
 	// a passed image stores as-is, and its description arrives after the post
@@ -152,6 +155,34 @@ async function prepareChatRoomAttachment(
 		return null
 	}
 	return { attachment, contextText: "", bytes, contentType: contentTypeFromDataUrl(attachment.dataUrl) }
+}
+
+// read and screen a shared PDF, Word file, or workbook, whose bytes the caller decoded. null if the file is rejected,
+// and why if it was not read before the post's deadline
+async function prepareExtractableChatRoomAttachment({
+	topicId,
+	teamId,
+	attachment,
+	deadline,
+	bytes,
+}: PrepareChatRoomAttachmentOptions & {
+	attachment: ExtractableChatAttachment
+	bytes: Uint8Array
+}): Promise<PreparedChatRoomAttachment | PastDeadlineRejection | null> {
+	// a file that cannot be read rejects the post with why, so nothing half-read ever stores. the worker thread takes a
+	// copy, since the bytes store after the post
+	const chatAttachmentText = await readChatAttachmentText({ attachment, bytes: new Uint8Array(bytes), deadline })
+	if ("rejection" in chatAttachmentText) {
+		return chatAttachmentText.rejection === "attachmentUnreadable" ? null : chatAttachmentText.rejection
+	}
+
+	// the screen may also redact in place, so its returned text is the one that stores
+	const contentType = toCanonicalContentType(contentTypeFromDataUrl(attachment.dataUrl), attachment.name)
+	const screenedText = await screenAttachmentText(chatAttachmentText.text, "room attachment", topicId ?? teamId)
+	if (screenedText === null) {
+		return null
+	}
+	return { attachment, contextText: screenedText, bytes, contentType }
 }
 
 // store the shared file beside its chat message
