@@ -48,11 +48,14 @@ export function McpCardApp({ mcpCard }: { mcpCard: McpCard }) {
 		setCardApp(app)
 		applyHostTheme(app?.getHostContext()?.theme)
 	}, [app])
+	// a host frames the card edge to edge, so the card keeps its own margin inside the frame
 	const shownToolCall = cardToolCall ? { ...cardToolCall, toolArguments } : null
 	return (
 		<LinkOpenerContext.Provider value={openHostLink}>
 			<CardToolCallContext.Provider value={{ mcpCard, cardToolCall: shownToolCall }}>
-				<RouterProvider router={cardRouter} />
+				<div className="p-3">
+					<RouterProvider router={cardRouter} />
+				</div>
 			</CardToolCallContext.Provider>
 		</LinkOpenerContext.Provider>
 	)

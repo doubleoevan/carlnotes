@@ -66,13 +66,12 @@ without one.
 
 Claude, ChatGPT, VS Code, and Goose show some results as cards instead of text. A search shows the search page's
 numbered list, which you can page and sort, with play buttons, Follow, and each finding's note. A topic edit shows the
-topic card from Coffee Talk, with a Save button for a change that needs your agreement. A feed read shows the findings
-with Carl's notes, thumbs, bookmark, and done. A card's buttons do what your AI's own calls do, under the same account.
-If an app blocks a card's audio, the card links to the episode's page instead.
+topic card from Coffee Talk. A change that needs your agreement gets a Save button that names what it changes. A feed
+read shows the findings with Carl's notes, thumbs, bookmark, and done. A card's buttons do what your AI's own calls do,
+under the same account. If an app blocks a card's audio, the card links to the episode's page instead.
 
-![The search card for "speed", as an MCP Apps host shows it: numbered rows for a topic, two podcast episodes, and
-findings with their chapters' play pills, then See all on
-CarlNotes](../../../assets/screenshots/mcp-host-search-card.png)
+![The search card for "agents" in a Claude chat: numbered rows for a topic and podcast episodes with their play pills,
+the page buttons, and See all on CarlNotes](../../../assets/screenshots/mcp-host-search-card.png)
 
 ## Connecting an account
 

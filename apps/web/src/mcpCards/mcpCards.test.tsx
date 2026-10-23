@@ -95,7 +95,7 @@ test("the search card renders the search page's table and See all", () => {
 	expect(searchCardMarkup).toContain("See all on CarlNotes")
 })
 
-test("the topic card shows a preview with Save, and a saved topic without it", () => {
+test("the topic card shows a preview with Save and what it changes, and a saved topic without it", () => {
 	const topicDraft = { ...EMPTY_TOPIC_DRAFT, name: "Home espresso", prompt: "Grinders and burrs" }
 	const previewMarkup = renderCard(
 		<TopicCard
@@ -103,13 +103,14 @@ test("the topic card shows a preview with Save, and a saved topic without it", (
 				status: "confirmRequired",
 				topicId: "topic-1",
 				afterTopicDraft: topicDraft,
+				topicEditChanges: ["makes the topic public, so anyone can read it"],
 				confirmation: "1.a",
 			}}
 			editTopicArguments={{ topic_id: "topic-1", visibility: "public" }}
 		/>,
 	)
 	expect(previewMarkup).toContain("Home espresso")
-	expect(previewMarkup).toContain("Save")
+	expect(previewMarkup).toContain("Save makes the topic public, so anyone can read it.")
 	const savedMarkup = renderCard(
 		<TopicCard
 			mcpTopicCardResult={{ status: "saved", topicId: "topic-1", afterTopicDraft: topicDraft }}

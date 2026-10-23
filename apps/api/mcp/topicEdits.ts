@@ -31,11 +31,13 @@ type SavedEditTopicResult = EditTopicResultTopic & {
 	serverToolCallOutputs: string[]
 }
 
-// a previewed edit: what needs the user's agreement, the sources it would remove, and the confirmation that saves it
+// a previewed edit: what needs the user's agreement, the sources it would remove, each change worded for the user, and
+// the confirmation that saves it
 type PreviewedEditTopicResult = EditTopicResultTopic & {
 	status: "confirmRequired"
 	topicEditConfirmationReasons: TopicEditConfirmationReason[]
 	removeSourceIds: string[]
+	topicEditChanges: string[]
 	confirmation: string
 }
 
@@ -81,11 +83,18 @@ export async function editTopic({
 	const topicEditConfirmationReasons = toTopicEditConfirmationReasons(editableTopicFields, topicEdit)
 	const isConfirmed = confirmation !== null && isTopicEditConfirmed(topicEditConfirmationOptions, confirmation)
 	if (topicEditConfirmationReasons.length > 0 && !isConfirmed) {
+		// the preview: the topic after the edit, each change in words, and the confirmation that saves it
+		const removeSourceIds = topicEdit.removeSourceIds ?? []
 		return {
 			status: "confirmRequired",
 			...toEditTopicResultTopic(topicPage, toEditableTopicDraft(editableTopicFields, topicEdit)),
 			topicEditConfirmationReasons,
-			removeSourceIds: topicEdit.removeSourceIds ?? [],
+			removeSourceIds,
+			topicEditChanges: toTopicEditChanges({
+				topicEditConfirmationReasons,
+				topicSources: editableTopicFields.sources,
+				removeSourceIds,
+			}),
 			confirmation: toTopicEditConfirmation(topicEditConfirmationOptions),
 		}
 	}
@@ -139,4 +148,24 @@ function toEditTopicResultTopic(topicPage: TopicResponse, afterTopicDraft: Topic
 		beforeTopicDraft: toEditableTopicDraft(editableTopicFields),
 		afterTopicDraft,
 	}
+}
+
+// each change that needs the user's agreement in words, a removed source named by its kind and summary
+function toTopicEditChanges({
+	topicEditConfirmationReasons,
+	topicSources,
+	removeSourceIds,
+}: {
+	topicEditConfirmationReasons: TopicEditConfirmationReason[]
+	topicSources: EditTopicResultTopic["topicSources"]
+	removeSourceIds: string[]
+}): string[] {
+	// the removed sources' labels, then each change in the order the reasons list them
+	const removedSourceLabels = topicSources
+		.filter((topicSource) => removeSourceIds.includes(topicSource.id))
+		.map((topicSource) => `${topicSource.sourceKind} ${topicSource.summary}`.trim())
+	return [
+		...(topicEditConfirmationReasons.includes("goesPublic") ? ["makes the topic public, so anyone can read it"] : []),
+		...(topicEditConfirmationReasons.includes("removesSources") ? [`removes ${removedSourceLabels.join(", ")}`] : []),
+	]
 }

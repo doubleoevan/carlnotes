@@ -22,6 +22,7 @@ const meta = {
 			status: "confirmRequired",
 			topicId: "topic-home-espresso",
 			afterTopicDraft: { ...TOPIC_DRAFT, visibility: "public" },
+			topicEditChanges: ["makes the topic public, so anyone can read it"],
 			confirmation: "1793000000000.signature",
 		},
 		editTopicArguments: { topic_id: "topic-home-espresso", visibility: "public" },

@@ -57,7 +57,14 @@ export type McpSearchPage = Omit<SearchResultsPage, "rows"> & {
 }
 
 // what the topic card reads of an edit_topic or create_topic result: the topic, and its fields as saved, created, or
-// previewed with the confirmation that saves the preview
+// previewed with each change that needs the user's agreement and the confirmation that saves the preview
 export type McpTopicCardResult =
 	| { status: "saved" | "created"; topicId: string; afterTopicDraft: TopicDraft | null }
-	| { status: "confirmRequired"; topicId: string; afterTopicDraft: TopicDraft; confirmation: string }
+	| {
+			status: "confirmRequired"
+			topicId: string
+			afterTopicDraft: TopicDraft
+			// each change that needs the user's agreement, in words, such as "removes reddit r/agents"
+			topicEditChanges: string[]
+			confirmation: string
+	  }

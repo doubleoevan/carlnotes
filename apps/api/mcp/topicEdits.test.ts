@@ -162,6 +162,7 @@ test("going public saves nothing at first, and the confirmation saves it", async
 		throw new Error(`expected a preview, got ${previewResult.status}`)
 	}
 	expect(previewResult.topicEditConfirmationReasons).toEqual(["goesPublic"])
+	expect(previewResult.topicEditChanges).toEqual(["makes the topic public, so anyone can read it"])
 	expect(previewResult.afterTopicDraft.visibility).toBe("public")
 	expect(updateTopicFieldsSpy).not.toHaveBeenCalled()
 
@@ -179,6 +180,7 @@ test("removing a source needs a confirmation, which saves once", async () => {
 	}
 	expect(previewResult.topicEditConfirmationReasons).toEqual(["removesSources"])
 	expect(previewResult.removeSourceIds).toEqual(["source-2"])
+	expect(previewResult.topicEditChanges).toEqual(["removes reddit r/agents"])
 	expect(removeTopicSourceSpy).not.toHaveBeenCalled()
 
 	// the confirmation removes it, and the same confirmation again matches no topic as it now stands

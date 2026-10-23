@@ -156,17 +156,5 @@ function toEditTopicToolResult(editTopicResult: EditTopicResult): CallToolResult
 
 // the text of a preview that needs the user's agreement: what it would do, and how to confirm it
 function toConfirmRequiredText(editTopicResult: Extract<EditTopicResult, { status: "confirmRequired" }>): string {
-	// name each change that needs agreement, a removed source by its kind and summary
-	const removedSourceLabels = editTopicResult.topicSources
-		.filter((topicSource) => editTopicResult.removeSourceIds.includes(topicSource.id))
-		.map((topicSource) => `${topicSource.sourceKind} ${topicSource.summary}`.trim())
-	const changeLines = [
-		...(editTopicResult.topicEditConfirmationReasons.includes("goesPublic")
-			? ["makes the topic public, so anyone can read it"]
-			: []),
-		...(editTopicResult.topicEditConfirmationReasons.includes("removesSources")
-			? [`removes ${removedSourceLabels.join(", ")}`]
-			: []),
-	]
-	return `Nothing is saved yet. This edit ${changeLines.join(" and ")}. Ask the person, and once they agree, call edit_topic again with the same edit and the confirmation ${editTopicResult.confirmation}.`
+	return `Nothing is saved yet. This edit ${editTopicResult.topicEditChanges.join(" and ")}. Ask the person, and once they agree, call edit_topic again with the same edit and the confirmation ${editTopicResult.confirmation}.`
 }

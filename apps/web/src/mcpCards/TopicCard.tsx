@@ -52,10 +52,14 @@ export function TopicCard({
 				topicId={shownTopicCardResult.topicId}
 				isTopicEditProposed={shownTopicCardResult.status === "confirmRequired"}
 			/>
-			{/* the Save button under a preview that needs the user's agreement, and what stopped a save */}
+			{/* the Save button under a preview that needs the user's agreement, with what it changes or what stopped a save */}
 			{shownTopicCardResult.status === "confirmRequired" && (
 				<div className="flex items-center justify-end gap-3 border-t px-3 py-2">
-					{saveRejection && <p className="text-destructive flex-1 text-sm">{saveRejection}</p>}
+					{saveRejection ? (
+						<p className="text-destructive flex-1 text-sm">{saveRejection}</p>
+					) : (
+						<p className="flex-1 text-sm">Save {shownTopicCardResult.topicEditChanges.join(" and ")}.</p>
+					)}
 					<Button size="sm" disabled={isSaving} onClick={() => void handleSave()}>
 						Save
 					</Button>
