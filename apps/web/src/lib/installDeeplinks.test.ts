@@ -3,7 +3,7 @@ import { expect, test } from "bun:test"
 import { AI_PROVIDERS, toInstallDeeplink, toSortedAiProviders } from "./installDeeplinks"
 
 // the server both links are built from
-const mcpServer = { name: "CarlNotes: Agent infra", url: "https://carlnotes.com/mcp/t/topic-1" }
+const mcpServer = { name: "CarlNotes", url: "https://carlnotes.com/mcp" }
 
 // the cursor link puts the name in its query and the url in its base64 config
 test("the cursor deeplink includes the name and the url", () => {

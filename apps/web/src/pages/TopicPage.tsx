@@ -28,7 +28,6 @@ import { TopicScanButton } from "@/components/topic/TopicScanButton.tsx"
 import { TopicScanHistory } from "@/components/topic/TopicScanHistory"
 import { TopicSettingsCard } from "@/components/topic/TopicSettingsCard"
 import { TopicSkeleton } from "@/components/topic/TopicSkeleton"
-import { useOrigin } from "@/hooks/useBrowserValue"
 import { usePageTitle } from "@/hooks/usePageTitle"
 import { useRevealClassName } from "@/hooks/useRevealClassName"
 import { useTopicPagePayload } from "@/hooks/useTopicPagePayload"
@@ -46,8 +45,6 @@ export function TopicPage() {
 	const { topicId = "", topicSlug } = useParams({ strict: false })
 	// the topic page payload, how the topic is gated, and its reload
 	const { topic, topicGate, reloadTopicPage } = useTopicPagePayload({ topicId, topicSlug })
-	// the page's origin for the topic-bound mcp url
-	const origin = useOrigin()
 	const navigate = useNavigate()
 	// the session gates the Follow button. a visitor's click is sent to signup instead
 	const { data: session } = authClient.useSession()
@@ -108,8 +105,6 @@ export function TopicPage() {
 			? {
 					page: "Topic",
 					hasTeamBookmarks: topic.isTeamMember,
-					// the topic-bound mcp server
-					mcp: { name: `CarlNotes: ${topic.name}`, url: `${origin}/mcp/t/${topic.id}` },
 					options: toTopicActionOptions({
 						topic,
 						isAdminUser: isAdminRole(session?.user.role),

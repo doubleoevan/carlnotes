@@ -26,8 +26,6 @@ export type PageActions = {
 	hasNewTopicButton?: boolean
 	// whether the bookmarked filter can scope to a team
 	hasTeamBookmarks?: boolean
-	// the mcp server that the Add to AI option installs
-	mcp?: { name: string; url: string }
 	// what the report issue option from this page flags
 	report?: {
 		subjectKind: FlagContentPayload["subjectKind"]

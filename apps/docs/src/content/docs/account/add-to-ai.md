@@ -14,17 +14,15 @@ DeepSeek, Cursor, VS Code, and Copy server URL, in that order. The app you picke
 server URL is always last.
 
 ![The Add to AI dialog, with the paste steps for Claude
-open](../../../assets/screenshots/add-to-ai-dialog.png)
+open](../../../assets/screenshots/add-to-ai-dialog-claude.png)
 
-## Two servers
+## One server
 
 Your AI connects to CarlNotes through an MCP server. MCP, the Model Context Protocol, is the standard way an AI app
 connects to outside tools. Every app in the list connects to MCP servers over the web.
 
-An app page offers the account server at `https://carlnotes.com/mcp`. A topic page offers that topic's own server at
-`https://carlnotes.com/mcp/t/<topic id>`. The topic server has the same tools, with the topic already filled in. A call
-that names no topic gets this topic. A call that names another topic is rejected. Share a topic server link with someone
-whose AI should read one topic and nothing else.
+Every page offers the same server, `https://carlnotes.com/mcp`, so you add CarlNotes once. Your AI finds a topic by its
+name, so ask about any topic you can read.
 
 ## Installing
 

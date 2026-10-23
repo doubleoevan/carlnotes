@@ -26,8 +26,8 @@ export function PageActionMenu() {
 	const origin = useOrigin()
 
 	const label = `${pageActions.page} actions`
-	// the mcp server the Add to AI dialog offers. the page's own, or the one at /mcp
-	const mcpServer = pageActions.mcp ?? { name: "CarlNotes", url: `${origin}/mcp` }
+	// the mcp server the Add to AI dialog offers on every page
+	const mcpServer = { name: "CarlNotes", url: `${origin}/mcp` }
 	// the page's options, then New topic on a page without its own New Topic button
 	const pageActionOptions: PageActionOption[] = [
 		...(pageActions.options ?? []),

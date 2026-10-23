@@ -32,11 +32,6 @@ type Story = StoryObj<typeof meta>
 // the site-wide mcp server, with the AI providers in their default order
 export const Default: Story = {}
 
-// a topic's own mcp server, which the topic page opens the dialog with
-export const TopicServer: Story = {
-	args: { mcpServer: { name: "CarlNotes: LLM tooling", url: `${SITE_URL}/mcp/t/topic-llm-tooling` } },
-}
-
 // the Cursor option first, since the user installed through Cursor last time
 export const LastProviderFirst: Story = {
 	beforeEach: () => {
