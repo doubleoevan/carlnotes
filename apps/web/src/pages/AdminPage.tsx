@@ -82,7 +82,8 @@ export function AdminPage() {
 				<TotalSummaries totals={adminConsole.totals} users={adminConsole.users} teams={adminConsole.teams} />
 				{/* the two sections as accordions, the shape every other page's sections take */}
 				<Accordion type="multiple" defaultValue={["users", "teams"]} className="mt-4">
-					<AccordionItem value="users">
+					{/* drop the divider line between the Users and Teams sections */}
+					<AccordionItem value="users" className="border-b-0">
 						<AccordionTrigger className="font-semibold">Users</AccordionTrigger>
 						<AccordionContent>
 							<AdminUsersTable users={adminConsole.users} signedInUserId={session.user.id} onReload={loadConsole} />

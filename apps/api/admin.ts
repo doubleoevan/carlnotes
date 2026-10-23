@@ -10,6 +10,7 @@ import { Hono } from "hono"
 import {
 	loadAdminTeamMembers,
 	loadAdminTeams,
+	loadAdminTopicSubscribers,
 	loadAdminTotals,
 	loadAdminUsers,
 	loadAdminUserTeams,
@@ -156,6 +157,22 @@ export const adminRoute = new Hono<AppEnv>()
 		}
 		const teamTopics = await loadAdminTeamTopics({ teamId: context.req.param("id"), adminUserId: userId })
 		return teamTopics ? context.json({ topics: teamTopics }) : context.json({ error: "not found" }, 404)
+	})
+	.get("/admin/topics/:id/subscribers", async (context) => {
+		// reject a signed-out visitor
+		const userId = currentUser(context)
+		if (!userId) {
+			return context.json({ error: "unauthorized" }, 401)
+		}
+		// one topic's subscribers, as the admin console's topics subtable shows them, admin only
+		if (!(await isAllowed(userId, "admin:console"))) {
+			return context.json({ error: "forbidden" }, 403)
+		}
+		// the topic's subscribers, or 404 for a missing topic
+		const topicSubscribers = await loadAdminTopicSubscribers(context.req.param("id"))
+		return topicSubscribers
+			? context.json({ subscribers: topicSubscribers })
+			: context.json({ error: "not found" }, 404)
 	})
 	.post("/admin/users/:id/budget", zValidator("json", budgetOverridePayload), async (context) => {
 		// reject a signed-out visitor

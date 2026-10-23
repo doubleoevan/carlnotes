@@ -31,8 +31,11 @@ the browser bundle and renders pages through the server build, behind its own ro
   members or topics subtable a membership row opens under itself, with `useTeamSubtables`, the hook that holds which one
   is open and the team page payload that fills it, `AdminUserRows.tsx` the admin users table's row with its subtables,
   and `PagedTableSection.tsx` the titled section of a paged, sortable table that Similar topics and both episode tables
-  share. `usePagination` in `TablePagination.tsx` starts a table at ten rows a page unless it asks for another size, and
-  its `ScriptedTablePagination` shows a paged table's pagination only with JavaScript.
+  share. `OwnerTopicsTable.tsx` opens a topic row's scan costs from `TopicScansTable.tsx` and, in the admin console, its
+  subscribers from `TopicSubscribersTable.tsx`, which reads them when it opens. `UserLinks.tsx` holds the links the
+  user tables share: the avatar and username to the profile, and the email and plan to the activity and account pages.
+  `usePagination` in `TablePagination.tsx` starts a table at ten rows a page unless it asks for another size, and its
+  `ScriptedTablePagination` shows a paged table's pagination only with JavaScript.
 - `components/chat/` — the chat panel, both composers, the chat message lists, and the hooks behind them.
   `useChatRoom.ts` is the chat room's state, `useChatRoomSpokenAnswer.ts` speaks carl's reply to the browser's spoken
   message, and `useChatRoomLinkPreviews.ts` polls for fresh chat messages' link preview cards. `MicButton.tsx` is the
@@ -101,6 +104,12 @@ the browser bundle and renders pages through the server build, behind its own ro
   shows a finding note's change on its row, `searchFilterOptions.ts` holds the Filters menu's view and kind labels and
   the kind icons the rows share, and `searchRouteSearch.ts` reads and writes a search as the `/search` route's url
   values. On `/search` the bar's input, Filters menu, and sort show and change the page's url.
+- `components/layout/` — the app shell every route shares: `Layout.tsx` holds the header, search bar, page content, and
+  footer. `Header.tsx` is the global header, with `UserMenu.tsx`, the signed-in user's dropdown, `HeaderMenu.tsx`, the
+  mobile-only menu, and `ThemeToggle.tsx`. `Footer.tsx` is the global footer, `DocsLink.tsx` is every link to the docs,
+  which opens in a new tab, and `Attribution.tsx` is the persona credit in the hero's popover.
+- `components/admin/` — the admin console's own pieces beyond its tables: `ManageAdminsModal.tsx`, where an admin adds
+  and removes other admins.
 - `components/branding/` — the coffee drawings, the loading indicator, the note icon, and the avatars. `Avatar.tsx`
   is the one avatar that `UserAvatar` and `TeamAvatar` render: the stored image, or the owner's initials on a tinted
   circle if there is no image or it fails to load. `HostAvatar.tsx` is Carl's or Vienna's own picture.

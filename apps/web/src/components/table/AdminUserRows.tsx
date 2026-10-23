@@ -12,21 +12,27 @@ import type { AdminUserRow } from "@carlnotes/contracts/admin"
 import { isAdminRole } from "@carlnotes/contracts/enums"
 import { toCentsFromDollars } from "@carlnotes/contracts/plans"
 import type { TeamSummary } from "@carlnotes/contracts/teams"
-import { toBytesLabel, toCentsLabel } from "@carlnotes/core/lib/labels"
+import { toBytesLabel, toCentsLabel, toDateLabel } from "@carlnotes/core/lib/labels"
 import { Trash2 } from "lucide-react"
 import { useState } from "react"
 import { toast } from "sonner"
 import { CoffeeLoading } from "@/components/branding/CoffeeLoading"
 import { TeamAvatar } from "@/components/branding/TeamAvatar"
-import { UserAvatar } from "@/components/branding/UserAvatar"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { ConfirmDialog } from "@/components/common/ConfirmDialog"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
-import { STANDALONE_LINK_CLASS, TABLE_CLASS, TABLE_HEAD_CLASS, TABLE_SCROLL_CLASS } from "@/lib/styleClasses"
+import {
+	STANDALONE_LINK_CLASS,
+	SUBTABLE_CARD_CLASS,
+	TABLE_CLASS,
+	TABLE_HEAD_CLASS,
+	TABLE_SCROLL_CLASS,
+} from "@/lib/styleClasses"
 import { cn } from "@/lib/utils"
 import { TopicsSubtableRow } from "./OwnerTopicsTable"
 import { SubtableCountButton } from "./SubtableCountButton"
 import { TableCard } from "./TableCard"
+import { UserEmailLink, UserNameLink, UserPlanLink } from "./UserLinks"
 
 // how many columns the users table has, which a subtable row spans to sit under all of them
 const ADMIN_TABLE_COLUMN_COUNT = 14
@@ -134,37 +140,11 @@ export function UserRow({
 			<tr className="border-b">
 				<td className="py-2 pr-4">
 					{/* the avatar and username link to the user's profile */}
-					<Tooltip>
-						<TooltipTrigger asChild>
-							<AnchorLink
-								href={`/profiles/${user.id}`}
-								className={cn(STANDALONE_LINK_CLASS, "flex items-center gap-2")}
-							>
-								<UserAvatar
-									userId={user.id}
-									username={user.username}
-									avatarVersion={user.avatarVersion}
-									className="size-6"
-								/>
-								{user.username}
-							</AnchorLink>
-						</TooltipTrigger>
-						<TooltipContent>{`${user.username}'s profile`}</TooltipContent>
-					</Tooltip>
+					<UserNameLink user={{ userId: user.id, username: user.username, avatarVersion: user.avatarVersion }} />
 				</td>
 				{/* the email links to the user's activity page, where their spend and topics are */}
 				<td className="py-2 pr-4">
-					<Tooltip>
-						<TooltipTrigger asChild>
-							<AnchorLink
-								href={`/activity?userId=${user.id}`}
-								className={cn(STANDALONE_LINK_CLASS, "block max-w-52 truncate text-left")}
-							>
-								{user.email}
-							</AnchorLink>
-						</TooltipTrigger>
-						<TooltipContent>{`${user.username}'s activity`}</TooltipContent>
-					</Tooltip>
+					<UserEmailLink user={{ userId: user.id, username: user.username, email: user.email }} />
 				</td>
 				<td className="py-2 pr-4">
 					{/* an admin cannot change their own role, so the platform always keeps at least one admin */}
@@ -181,18 +161,11 @@ export function UserRow({
 				</td>
 				<td className="py-2 pr-4">
 					{/* the plan links to the user's account page */}
-					<Tooltip>
-						<TooltipTrigger asChild>
-							<AnchorLink href={`/account?userId=${user.id}`} className={cn(STANDALONE_LINK_CLASS, "capitalize")}>
-								{user.plan}
-							</AnchorLink>
-						</TooltipTrigger>
-						<TooltipContent>{`${user.username}'s account`}</TooltipContent>
-					</Tooltip>
+					<UserPlanLink user={{ userId: user.id, username: user.username, plan: user.plan }} />
 				</td>
-				<td className="py-2 pr-4">{new Date(user.createdAt).toLocaleDateString()}</td>
+				<td className="py-2 pr-4">{toDateLabel(user.createdAt)}</td>
 				{/* a user who has not signed in since the column was added has no date to show */}
-				<td className="py-2 pr-4">{user.lastLoginAt ? new Date(user.lastLoginAt).toLocaleDateString() : "None"}</td>
+				<td className="py-2 pr-4">{toDateLabel(user.lastLoginAt)}</td>
 				<td className="py-2 pr-4">
 					{/* the topic count opens this user's topics subtable under the row. a user with no topics has nothing to open */}
 					<SubtableCountButton
@@ -286,7 +259,7 @@ export function UserRow({
 // the teams one user belongs to, read-only under their row: the team link, their role, and the team's numbers
 function UserTeamsSubtable({ teams }: { teams: TeamSummary[] }) {
 	return (
-		<TableCard className="bg-sunken mb-0 shadow-none">
+		<TableCard className={SUBTABLE_CARD_CLASS}>
 			<div className={TABLE_SCROLL_CLASS}>
 				<table className={TABLE_CLASS}>
 					<thead className={TABLE_HEAD_CLASS}>

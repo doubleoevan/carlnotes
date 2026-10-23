@@ -8,6 +8,7 @@ import {
 } from "@carlnotes/client/teamClient"
 import type { Meta, StoryObj } from "@storybook/tanstack-react"
 import { fn, mocked } from "storybook/test"
+import { SUBTABLE_CARD_CLASS } from "@/lib/styleClasses"
 import { STORY_PEOPLE } from "../../../.storybook/fixtures"
 import { STORY_TEAMS, type StoryTeamMember, toStoryTeamMember } from "../../../.storybook/fixtures/teams"
 import { StoryTable } from "../../../.storybook/tableDecorators"
@@ -108,7 +109,7 @@ export const AdminReadOnly: Story = {
 		<StoryTable className="min-w-3xl [&_tbody_tr:last-child>*]:border-b-0">
 			<tr className="border-b">
 				<td colSpan={7} className="py-2">
-					<TableCard className="bg-sunken mb-0 shadow-none">
+					<TableCard className={SUBTABLE_CARD_CLASS}>
 						<TeamMembersTable {...args} />
 					</TableCard>
 				</td>

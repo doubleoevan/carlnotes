@@ -2,7 +2,7 @@
 // contribution figure, and the expandable rows behind a user or a team
 
 import type { OwnerTopic } from "@carlnotes/contracts/activity"
-import type { AdminTeamRow, AdminTotals, AdminUserRow } from "@carlnotes/contracts/admin"
+import type { AdminTeamRow, AdminTopicSubscriberRow, AdminTotals, AdminUserRow } from "@carlnotes/contracts/admin"
 import { toAvatarKeyVersion, toAvatarVersion } from "@carlnotes/contracts/avatars"
 import { toCentsFromDollars } from "@carlnotes/contracts/plans"
 import type { TeamPageResponse, TeamSummary } from "@carlnotes/contracts/teams"
@@ -10,17 +10,18 @@ import { db } from "@carlnotes/db"
 import { chatAttachments, chatTurns } from "@carlnotes/db/schema/chat"
 import { EMBED_DIMENSIONS, findings, resources, scans } from "@carlnotes/db/schema/scans"
 import { teamMembers, teams } from "@carlnotes/db/schema/teams"
-import { attachments, topics } from "@carlnotes/db/schema/topics"
+import { attachments, subscriptions, topicEmailSends, topics } from "@carlnotes/db/schema/topics"
 import { users } from "@carlnotes/db/schema/users"
 import { readLiteLLMKeySpend } from "@carlnotes/models/litellmProxy"
 import { toPositiveInteger } from "@carlnotes/server/envSettings"
-import { and, count, eq, gte, isNotNull, sql } from "drizzle-orm"
+import { and, count, desc, eq, gte, isNotNull, max, sql } from "drizzle-orm"
 import { loadOwnedTopics } from "./activityTopics"
 import { isAdminRole, userBudgetCents } from "./authorization"
 import { withAvatarVersion } from "./avatars"
 import { readStripeTotalRevenueCents } from "./billing"
 import { loadTeamSummaries, toSpendByTeamId } from "./team/helpers"
 import { startOfUtcMonth } from "./topic/quotas"
+import { isActiveNonOwnerTopicSubscription } from "./topic/subscriberCounts"
 
 // the bytes one embedded Resource attributes. a float4 dimension is four bytes wide
 const EMBED_BYTES = EMBED_DIMENSIONS * 4
@@ -160,6 +161,74 @@ export async function loadAdminTeamMembers(teamId: string): Promise<TeamPageResp
 		.innerJoin(users, eq(users.id, teamMembers.userId))
 		.where(and(eq(teamMembers.teamId, teamId), eq(teamMembers.isActive, true)))
 	return teamMemberRows.map(withAvatarVersion)
+}
+
+/** Lists a topic's subscribers by the subscriber count's rule, newest first. Null for a missing topic. */
+export async function loadAdminTopicSubscribers(topicId: string): Promise<AdminTopicSubscriberRow[] | null> {
+	// return null for a missing topic
+	const [topic] = await db.select({ id: topics.id }).from(topics).where(eq(topics.id, topicId))
+	if (!topic) {
+		return null
+	}
+
+	// how many emails the topic sent each recipient, and when it sent the latest
+	const sentEmails = db
+		.select({
+			recipientUserId: topicEmailSends.recipientUserId,
+			emailCount: count().as("email_count"),
+			lastEmailedAt: max(topicEmailSends.sentAt).as("last_emailed_at"),
+		})
+		.from(topicEmailSends)
+		.where(eq(topicEmailSends.topicId, topicId))
+		.groupBy(topicEmailSends.recipientUserId)
+		.as("sent_emails")
+
+	// the active non-owner subscriptions with each subscriber's account and the topic's emails to them.
+	// the topics join supplies the owner id that isActiveNonOwnerTopicSubscription reads
+	const topicSubscriberRows = await db
+		.select({
+			userId: users.id,
+			username: users.username,
+			avatarSource: users.avatarSource,
+			avatarKey: users.avatarKey,
+			email: users.email,
+			plan: users.plan,
+			signedUpAt: users.createdAt,
+			lastLoginAt: users.lastLoginAt,
+			subscribedAt: subscriptions.createdAt,
+			isEmailEnabled: subscriptions.isEmailEnabled,
+			emailCount: sentEmails.emailCount,
+			lastEmailedAt: sentEmails.lastEmailedAt,
+		})
+		.from(subscriptions)
+		.innerJoin(topics, eq(topics.id, subscriptions.topicId))
+		.innerJoin(users, eq(users.id, subscriptions.subscriberUserId))
+		.leftJoin(sentEmails, eq(sentEmails.recipientUserId, users.id))
+		.where(and(eq(subscriptions.topicId, topicId), isActiveNonOwnerTopicSubscription))
+		.orderBy(desc(subscriptions.createdAt))
+
+	// each subscriber with their avatar's version in place of its storage key, 0 for one the topic never emailed, and
+	// their dates as iso strings
+	return topicSubscriberRows.map(
+		({
+			avatarSource,
+			avatarKey,
+			emailCount,
+			signedUpAt,
+			lastLoginAt,
+			subscribedAt,
+			lastEmailedAt,
+			...topicSubscriberRow
+		}) => ({
+			...topicSubscriberRow,
+			avatarVersion: toAvatarVersion({ avatarSource, avatarKey }),
+			emailCount: emailCount ?? 0,
+			signedUpAt: signedUpAt.toISOString(),
+			lastLoginAt: lastLoginAt?.toISOString() ?? null,
+			subscribedAt: subscribedAt.toISOString(),
+			lastEmailedAt: lastEmailedAt?.toISOString() ?? null,
+		}),
+	)
 }
 
 /**

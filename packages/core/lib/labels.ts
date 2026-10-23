@@ -13,6 +13,13 @@ export function toMonthYearLabel(dateString: string | null): string {
 }
 
 /**
+ * An ISO date in the local time zone's short numeric form, such as 10/23/2026. "None" for a null date.
+ */
+export function toDateLabel(dateString: string | null): string {
+	return dateString ? new Date(dateString).toLocaleDateString() : "None"
+}
+
+/**
  * An ISO date as its month and day in the local time zone: Oct 22.
  */
 export function toMonthDayLabel(dateString: string): string {

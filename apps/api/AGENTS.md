@@ -284,8 +284,10 @@ at the root import it by name.
   failed purge, logging a skipped one, and never failing the deletion. `purgeEdgeCacheTags` is the purge by tag both it
   and the release job send. `edgeCache.purge.ts` (`bun run edge:purge`) is the deploy job that clears the `rendered` tag
   right after the app deploys.
-- `admin.ts` — the admin writes (a user's role and budget override) and the admin console routes, over
-  `adminConsole.ts` (the users and teams tables, the platform totals, and the expandable rows).
+- `admin.ts` — the admin writes (a user's role and budget override) and the admin console routes, over `adminConsole.ts`
+  (the users and teams tables, the platform totals, and the expandable rows, a topic's subscribers among them).
+  `loadAdminTopicSubscribers` lists a topic's subscribers by `isActiveNonOwnerTopicSubscription`, the rule
+  `topic/subscriberCounts.ts` counts with.
 - `activity.ts` — the activity page and its route, over `activityTopics.ts` (each topic's month scans, counts, chat
   mentions, and latest podcast episode).
 - `invite/invites.ts` — the invite links, the topic or team a token opens, and the link routes;

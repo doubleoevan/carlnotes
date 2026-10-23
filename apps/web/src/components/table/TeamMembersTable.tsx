@@ -10,15 +10,14 @@ import type { TeamPageResponse } from "@carlnotes/contracts/teams"
 import { toCountLabel } from "@carlnotes/core/lib/labels"
 import { X } from "lucide-react"
 import { toast } from "sonner"
-import { UserAvatar } from "@/components/branding/UserAvatar"
-import { AnchorLink } from "@/components/common/AnchorLink"
 import { Button } from "@/components/primitives/button"
 import { Switch } from "@/components/primitives/switch"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
-import { STANDALONE_LINK_CLASS, TABLE_CLASS, TABLE_HEAD_CLASS, TABLE_SCROLL_CLASS } from "@/lib/styleClasses"
+import { TABLE_CLASS, TABLE_HEAD_CLASS, TABLE_SCROLL_CLASS } from "@/lib/styleClasses"
 import { cn } from "@/lib/utils"
 import { SortableHeader } from "./SortableHeader"
 import { TablePagination, usePaginatedRowSort } from "./TablePagination"
+import { UserNameLink } from "./UserLinks"
 
 // one team member as the team page payload sends them
 type TeamMember = TeamPageResponse["members"][number]
@@ -186,17 +185,7 @@ function MemberRow({
 		<tr className={cn("border-b last:border-b-0", className)}>
 			<td className="py-2 pr-4">
 				{/* the avatar and name link to the profile */}
-				<span className="flex items-center gap-2">
-					<UserAvatar
-						userId={member.userId}
-						username={member.username}
-						avatarVersion={member.avatarVersion}
-						className="size-6"
-					/>
-					<AnchorLink href={`/profiles/${member.userId}`} className={STANDALONE_LINK_CLASS}>
-						{member.username}
-					</AnchorLink>
-				</span>
+				<UserNameLink user={member} />
 			</td>
 			<td className="py-2 pr-4">
 				{/* a leader selects the role. everyone else reads it */}

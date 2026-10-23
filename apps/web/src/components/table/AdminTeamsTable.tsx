@@ -2,13 +2,19 @@ import { fetchAdminTeamMembers, fetchAdminTeamTopics } from "@carlnotes/client/b
 import type { OwnerTopic } from "@carlnotes/contracts/activity"
 import type { AdminTeamRow } from "@carlnotes/contracts/admin"
 import type { TeamPageResponse } from "@carlnotes/contracts/teams"
-import { toCentsLabel, toCountLabel } from "@carlnotes/core/lib/labels"
+import { toCentsLabel, toCountLabel, toDateLabel } from "@carlnotes/core/lib/labels"
 import { useState } from "react"
 import { toast } from "sonner"
 import { CoffeeLoading } from "@/components/branding/CoffeeLoading"
 import { TeamAvatar } from "@/components/branding/TeamAvatar"
 import { AnchorLink } from "@/components/common/AnchorLink"
-import { STANDALONE_LINK_CLASS, TABLE_CLASS, TABLE_HEAD_CLASS, TABLE_SCROLL_CLASS } from "@/lib/styleClasses"
+import {
+	STANDALONE_LINK_CLASS,
+	SUBTABLE_CARD_CLASS,
+	TABLE_CLASS,
+	TABLE_HEAD_CLASS,
+	TABLE_SCROLL_CLASS,
+} from "@/lib/styleClasses"
 import { cn } from "@/lib/utils"
 import { TopicsSubtableRow } from "./OwnerTopicsTable"
 import { SortableHeader } from "./SortableHeader"
@@ -138,7 +144,7 @@ function TeamRow({ team }: { team: AdminTeamRow }) {
 					</AnchorLink>
 				</td>
 				<td className="py-2 pr-4">{team.isPublic ? "public" : "private"}</td>
-				<td className="py-2 pr-4">{new Date(team.createdAt).toLocaleDateString()}</td>
+				<td className="py-2 pr-4">{toDateLabel(team.createdAt)}</td>
 				<td className="py-2 pr-4">
 					{/* the member count opens this team's members under the row, closing the topics subtable for this row */}
 					<SubtableCountButton
@@ -165,7 +171,7 @@ function TeamRow({ team }: { team: AdminTeamRow }) {
 				<tr className="border-b">
 					<td colSpan={7} className="py-2">
 						{teamMembers ? (
-							<TableCard className="bg-sunken mb-0 shadow-none">
+							<TableCard className={SUBTABLE_CARD_CLASS}>
 								<TeamMembersTable
 									teamId={team.teamId}
 									members={teamMembers}

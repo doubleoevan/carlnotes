@@ -1,5 +1,7 @@
-// the invented users the admin console's users table lists: the signed-in admin and three users
-import type { AdminUserRow } from "@carlnotes/contracts/admin"
+// the invented users the admin console lists: the users table's signed-in admin and three users, and a topic's
+// subscribers
+import type { AdminTopicSubscriberRow, AdminUserRow } from "@carlnotes/contracts/admin"
+import { DAY_MS } from "@carlnotes/contracts/time"
 import { FIXTURE_DATE, STORY_ADMIN, STORY_PEOPLE, toStoryEmail } from "../fixtures"
 
 // the story people the users table lists beside the admin
@@ -63,6 +65,24 @@ export const ADMIN_USER_ROW_FIXTURES: AdminUserRow[] = [
 	OVER_BUDGET_USER_ROW,
 	BUDGET_OVERRIDE_USER_ROW,
 ]
+
+/**
+ * A topic's subscribers in the admin console: the story people, newest first, one with the topic's emails off and one
+ * with no recorded login.
+ */
+export const TOPIC_SUBSCRIBER_FIXTURES: AdminTopicSubscriberRow[] = STORY_PEOPLE.map((storyPerson, i) => ({
+	userId: storyPerson.userId,
+	username: storyPerson.username,
+	avatarVersion: null,
+	email: toStoryEmail(storyPerson.username),
+	plan: i === 0 ? "plus" : "free",
+	signedUpAt: new Date(FIXTURE_DATE.getTime() - (30 + i) * DAY_MS).toISOString(),
+	lastLoginAt: i === 2 ? null : new Date(FIXTURE_DATE.getTime() - i * DAY_MS).toISOString(),
+	subscribedAt: new Date(FIXTURE_DATE.getTime() - i * DAY_MS).toISOString(),
+	isEmailEnabled: i !== 1,
+	emailCount: [4, 0, 2][i] ?? 0,
+	lastEmailedAt: i === 1 ? null : new Date(FIXTURE_DATE.getTime() - (i + 1) * DAY_MS).toISOString(),
+}))
 
 // an admin console user row: a free user who signed up and last signed in on the fixture date, with no spend, unless
 // the overrides say otherwise

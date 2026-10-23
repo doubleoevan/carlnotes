@@ -6,6 +6,7 @@ import type { visibilities } from "@carlnotes/contracts/enums"
 import type { TopicFinding } from "@carlnotes/contracts/findings"
 import type { PodcastEpisode } from "@carlnotes/contracts/podcast"
 import { toHostWithoutWww } from "@carlnotes/contracts/seo"
+import { toDateLabel } from "@carlnotes/core/lib/labels"
 import { Bookmark, Check, Circle, ExternalLink } from "lucide-react"
 import { type ReactNode, useEffect, useState } from "react"
 import { AnchorLink } from "@/components/common/AnchorLink"
@@ -196,7 +197,7 @@ export function TopicFindingStats({ fetchedAt, viewCount }: { fetchedAt: string;
 	return (
 		<div className="mt-3 flex justify-between gap-4">
 			<InfoSection className="py-0" label="Fetched">
-				{new Date(fetchedAt).toLocaleDateString()}
+				{toDateLabel(fetchedAt)}
 			</InfoSection>
 			<InfoSection className="py-0 text-right" label="Views">
 				{viewCount.toLocaleString()}

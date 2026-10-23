@@ -1,33 +1,27 @@
 import { sendSubscriptionEmail } from "@carlnotes/client/topicClient"
-import type { ActivityScan, OwnerTopic } from "@carlnotes/contracts/activity"
+import type { OwnerTopic } from "@carlnotes/contracts/activity"
 import { frequencies, isDailyFrequency } from "@carlnotes/contracts/enums"
-import {
-	durationMsBetween,
-	toCentsLabel,
-	toCountLabel,
-	toDurationLabel,
-	toMonthYearLabel,
-} from "@carlnotes/core/lib/labels"
+import { toCentsLabel, toCountLabel, toMonthYearLabel } from "@carlnotes/core/lib/labels"
 import { ChevronDown, Globe, Lock, Mail } from "lucide-react"
 import { Fragment, useState } from "react"
 import { CoffeeLoading } from "@/components/branding/CoffeeLoading"
-import { Popover, PopoverCloseButton, PopoverContent, PopoverTrigger } from "@/components/primitives/popover"
 import { Switch } from "@/components/primitives/switch"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
-import { TopicScanRecap, toNotesMarkdown } from "@/components/topic/TopicScanRecap"
-import { useScanNote } from "@/hooks/useScanNote"
 import {
-	POPOVER_PANEL_CLASS,
 	STANDALONE_LINK_CLASS,
+	SUBTABLE_CARD_CLASS,
 	TABLE_CLASS,
 	TABLE_HEAD_CLASS,
 	TABLE_SCROLL_CLASS,
 } from "@/lib/styleClasses"
 import { cn } from "@/lib/utils"
 import { SortableHeader } from "./SortableHeader"
+import { SubtableCountButton } from "./SubtableCountButton"
 import { TableCard } from "./TableCard"
 import { TablePagination, usePaginatedRowSort } from "./TablePagination"
 import { TopicNameLink } from "./TopicNameLink"
+import { TopicScansTable } from "./TopicScansTable"
+import { TopicSubscribersTable } from "./TopicSubscribersTable"
 
 // the icon and label each visibility reads as, matching the topic page's own info card
 const VISIBILITY_METADATA = {
@@ -35,6 +29,9 @@ const VISIBILITY_METADATA = {
 	public: { icon: Globe, label: "public" },
 	invite: { icon: Mail, label: "invite" },
 }
+
+// the subtable a topic row can open under itself, its scans or, in the admin console, its subscribers
+type TopicSubtable = "scans" | "subscribers"
 
 // the sort accessors for the owned-topics table columns
 const topicSortValues = {
@@ -44,35 +41,43 @@ const topicSortValues = {
 	created: (topic: OwnerTopic) => topic.createdAt,
 	updated: (topic: OwnerTopic) => topic.updatedAt,
 	visibility: (topic: OwnerTopic) => topic.visibility,
-	// sorted by how often the topic brews instead of alphabetically, so the daily ones group at one end
+	// sorted by how often the topic scans instead of alphabetically, so the daily ones group at one end
 	schedule: (topic: OwnerTopic) => frequencies.indexOf(topic.frequency),
 	emailed: (topic: OwnerTopic) => topic.monthEmailCount,
 	cost: (topic: OwnerTopic) => topic.monthCostCents,
 }
 
 /**
- * The topics table on the user's own profile, also opened as an admin subtable: sortable columns, cost last, a totals
- * line, and a cost-cell click opening that topic's scan history.
+ * The topics table on the user's own profile, also opened as an admin subtable: sortable columns, cost last,
+ * a totals line, and a cost-cell click opening that topic's scan history.
+ * In the admin console, the subscriber count opens the topic's subscribers.
  */
 export function OwnerTopicsTable({
 	topics,
 	onReloadPage,
+	canListSubscribers = false,
 	className,
 }: {
 	topics: OwnerTopic[]
 	onReloadPage: () => void
+	// whether the subscriber count opens the topic's subscribers
+	canListSubscribers?: boolean
 	// the card styles a caller overrides
 	className?: string
 }) {
-	const [expandedTopicIds, setExpandedTopicIds] = useState<Set<string>>(new Set())
+	// the subtable open under each topic row, at most one per row
+	const [openSubtableByTopicId, setOpenSubtableByTopicId] = useState<Record<string, TopicSubtable | undefined>>({})
 	// the Emails column sorts on the owner's stored email preference
 	const sortValues = { ...topicSortValues, emails: (topic: OwnerTopic) => (topic.isEmailEnabled ? 1 : 0) }
 	// sort feeds pagination, so a sorted column reorders across every page
 	const { pageRows, sort, pagination } = usePaginatedRowSort(topics, sortValues)
 
-	// toggle one topic's scan history open or closed
-	function handleCostCellClick(topicId: string): void {
-		setExpandedTopicIds((previous) => withTopicId(previous, topicId, !previous.has(topicId)))
+	// open a topic's subtable, closing its other one, or close it if it was already open
+	function handleSubtableClick(topicId: string, topicSubtable: TopicSubtable): void {
+		setOpenSubtableByTopicId((previous) => ({
+			...previous,
+			[topicId]: previous[topicId] === topicSubtable ? undefined : topicSubtable,
+		}))
 	}
 
 	// the owner holds a subscription to their own topic, so this writes the same preference the subscriptions table does
@@ -167,7 +172,19 @@ export function OwnerTopicsTable({
 										<TopicNameLink topic={topic} />
 									</td>
 									<td className="py-2 pr-4">{topic.monthScanCount}</td>
-									<td className="py-2 pr-4">{topic.subscriberCount}</td>
+									{/* in the admin console, the subscriber count also opens and closes this topic's subscribers */}
+									<td className="py-2 pr-4">
+										{canListSubscribers ? (
+											<SubtableCountButton
+												count={topic.subscriberCount}
+												isOpen={openSubtableByTopicId[topic.id] === "subscribers"}
+												ariaLabel={`Show ${topic.name}'s followers`}
+												onClick={() => handleSubtableClick(topic.id, "subscribers")}
+											/>
+										) : (
+											topic.subscriberCount
+										)}
+									</td>
 									<td className="py-2 pr-4">{toMonthYearLabel(topic.createdAt)}</td>
 									<td className="py-2 pr-4">{toMonthYearLabel(topic.updatedAt)}</td>
 									<td className="py-2 pr-4">
@@ -188,7 +205,7 @@ export function OwnerTopicsTable({
 											<TooltipTrigger asChild>
 												<button
 													type="button"
-													onClick={() => handleCostCellClick(topic.id)}
+													onClick={() => handleSubtableClick(topic.id, "scans")}
 													className={cn(STANDALONE_LINK_CLASS, "inline-flex items-center gap-0.5")}
 												>
 													{toCentsLabel(topic.monthCostCents)}
@@ -197,7 +214,7 @@ export function OwnerTopicsTable({
 														aria-hidden="true"
 														className={cn(
 															"size-3.5 shrink-0 transition-transform",
-															expandedTopicIds.has(topic.id) && "rotate-180",
+															openSubtableByTopicId[topic.id] === "scans" && "rotate-180",
 														)}
 													/>
 												</button>
@@ -206,10 +223,15 @@ export function OwnerTopicsTable({
 										</Tooltip>
 									</td>
 								</tr>
-								{expandedTopicIds.has(topic.id) && (
+								{/* the topic's open subtable under the row, its scans or its subscribers */}
+								{openSubtableByTopicId[topic.id] && (
 									<tr className="border-b">
 										<td colSpan={10} className="py-2">
-											<ScansTable scans={topic.scans} topic={topic} />
+											{openSubtableByTopicId[topic.id] === "scans" ? (
+												<TopicScansTable scans={topic.scans} topic={topic} />
+											) : (
+												<TopicSubscribersTable topicId={topic.id} />
+											)}
 										</td>
 									</tr>
 								)}
@@ -247,115 +269,6 @@ export function TopicVisibility({ visibility }: { visibility: OwnerTopic["visibi
 	)
 }
 
-// return a copy of the set with the id present or absent
-function withTopicId(topicIds: Set<string>, topicId: string, isMember: boolean): Set<string> {
-	const next = new Set(topicIds)
-	if (isMember) {
-		next.add(topicId)
-	} else {
-		next.delete(topicId)
-	}
-	return next
-}
-
-// the sort accessors for a topic's scans-this-month columns. time sorts by how long the scan took
-const scanSortValues = {
-	date: (scan: ActivityScan) => new Date(scan.startedAt).getTime(),
-	read: (scan: ActivityScan) => scan.foundCount,
-	kept: (scan: ActivityScan) => scan.keptCount,
-	time: (scan: ActivityScan) => durationMsBetween(scan.startedAt, scan.finishedAt),
-	cost: (scan: ActivityScan) => scan.costCents,
-}
-
-// a topic's scans this month: sortable columns, and a totals line, with pagination.
-function ScansTable({ scans, topic }: { scans: OwnerTopic["scans"]; topic: Pick<OwnerTopic, "id" | "name"> }) {
-	const { pageRows, sort, pagination } = usePaginatedRowSort(scans, scanSortValues)
-
-	if (scans.length === 0) {
-		return (
-			<TableCard className="bg-sunken mb-0 shadow-none">
-				<p className="text-muted-foreground text-sm">No brews this month.</p>
-			</TableCard>
-		)
-	}
-
-	// column totals for the summary line span every scan, not just the visible page
-	const totalFoundCount = scans.reduce((sum, scan) => sum + scan.foundCount, 0)
-	const totalKeptCount = scans.reduce((sum, scan) => sum + scan.keptCount, 0)
-	const totalCostCents = scans.reduce((sum, scan) => sum + scan.costCents, 0)
-	return (
-		<TableCard className="bg-sunken mb-0 shadow-none">
-			<div className={TABLE_SCROLL_CLASS}>
-				<table className={TABLE_CLASS}>
-					<thead className={TABLE_HEAD_CLASS}>
-						<tr>
-							<SortableHeader sort={sort} sortKey="date" label="Date" className="py-2 pr-4" />
-							<SortableHeader sort={sort} sortKey="read" label="Read" className="py-2 pr-4" />
-							<SortableHeader sort={sort} sortKey="kept" label="Kept" className="py-2 pr-4" />
-							<SortableHeader
-								sort={sort}
-								sortKey="time"
-								label="Brew time"
-								tooltip="How long each brew took. Click a time for Carl's notes"
-								className="py-2 pr-4"
-							/>
-							<SortableHeader sort={sort} sortKey="cost" label="Cost" className="py-2 text-right" />
-						</tr>
-					</thead>
-					<tbody>
-						{pageRows.map((scan) => (
-							<tr key={scan.id} className="border-b">
-								<td className="py-2 pr-4">{new Date(scan.startedAt).toLocaleDateString()}</td>
-								<td className="py-2 pr-4">{scan.foundCount}</td>
-								<td className="py-2 pr-4">{scan.keptCount}</td>
-								<td className="py-2 pr-4">
-									<ScanNotesCell scan={scan} topic={topic} />
-								</td>
-								<td className="py-2 text-right">{toCentsLabel(scan.costCents)}</td>
-							</tr>
-						))}
-					</tbody>
-					<tfoot>
-						<tr className="text-muted-foreground">
-							<td className="py-2 pr-4">Total</td>
-							<td className="py-2 pr-4">{`${totalFoundCount} read`}</td>
-							<td className="py-2 pr-4">{`${totalKeptCount} kept`}</td>
-							<td className="py-2 pr-4" />
-							<td className="py-2 text-right">{toCentsLabel(totalCostCents)}</td>
-						</tr>
-					</tfoot>
-				</table>
-			</div>
-			<TablePagination {...pagination} />
-		</TableCard>
-	)
-}
-
-// the Brew time cell, the time taken as a link that opens the scan recap popover
-function ScanNotesCell({ scan, topic }: { scan: ActivityScan; topic: Pick<OwnerTopic, "id" | "name"> }) {
-	const duration = toDurationLabel(durationMsBetween(scan.startedAt, scan.finishedAt))
-	// the scan's note, read as soon as the pointer, focus, or a touch reaches the time, and on open
-	const { scanNote, scanNoteTriggerProps, handleScanNoteOpenChange } = useScanNote(scan)
-	return (
-		<Popover onOpenChange={handleScanNoteOpenChange}>
-			<PopoverTrigger {...scanNoteTriggerProps} className={STANDALONE_LINK_CLASS}>
-				{duration || "—"}
-			</PopoverTrigger>
-			<PopoverContent align="start" className={POPOVER_PANEL_CLASS}>
-				<PopoverCloseButton />
-				{scanNote ? (
-					<TopicScanRecap
-						scan={{ ...scan, ...scanNote, costDollars: scan.costCents / 100 }}
-						copyMarkdown={toNotesMarkdown({ topicId: topic.id, topicName: topic.name, note: scanNote.scanSummary })}
-					/>
-				) : (
-					<CoffeeLoading className="min-h-24 text-base" />
-				)}
-			</PopoverContent>
-		</Popover>
-	)
-}
-
 /**
  * The row an admin table opens under a user or team: their topics once loaded, and the loading cup
  * until then.
@@ -373,7 +286,12 @@ export function TopicsSubtableRow({
 		<tr className="border-b">
 			<td colSpan={colSpan} className="py-2">
 				{topics ? (
-					<OwnerTopicsTable topics={topics} onReloadPage={onReloadPage} className="bg-sunken mb-0 shadow-none" />
+					<OwnerTopicsTable
+						topics={topics}
+						onReloadPage={onReloadPage}
+						canListSubscribers
+						className={SUBTABLE_CARD_CLASS}
+					/>
 				) : (
 					<CoffeeLoading className="min-h-0 justify-start py-2 text-sm" />
 				)}

@@ -1,6 +1,7 @@
-// label tests for the exact duration and dollar labels that a source result's time and cost read, and the month and day
+// label tests for the exact duration and dollar labels that a source result's time and cost read, the month and day
+// label, and the short date label
 import { expect, test } from "bun:test"
-import { toExactDollarLabel, toExactDurationLabel, toMonthDayLabel } from "./labels"
+import { toDateLabel, toExactDollarLabel, toExactDurationLabel, toMonthDayLabel } from "./labels"
 
 // under ten seconds reads to one decimal, and from ten seconds up reads like any other duration
 test("toExactDurationLabel reads to one decimal under ten seconds", () => {
@@ -20,4 +21,10 @@ test("toExactDollarLabel keeps a sub-cent cost readable", () => {
 // a date reads as its short month and day
 test("toMonthDayLabel reads a date as its month and day", () => {
 	expect(toMonthDayLabel("2026-10-22T12:00:00Z")).toBe("Oct 22")
+})
+
+// a date reads in its short numeric form, and a missing one reads None
+test("toDateLabel reads a date, or None for a missing one", () => {
+	expect(toDateLabel("2026-10-22T12:00:00Z")).toBe(new Date("2026-10-22T12:00:00Z").toLocaleDateString())
+	expect(toDateLabel(null)).toBe("None")
 })

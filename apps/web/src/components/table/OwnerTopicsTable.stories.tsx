@@ -1,8 +1,10 @@
 // the topics table on the user's own profile, also opened as a subtable in the admin console: each topic's scans this
 // month, subscribers, schedule, emails, and cost
+import { fetchAdminTopicSubscribers } from "@carlnotes/client/billingClient"
 import { fetchScanNote } from "@carlnotes/client/topicClient"
 import type { Meta, StoryObj } from "@storybook/tanstack-react"
 import { fn, mocked } from "storybook/test"
+import { TOPIC_SUBSCRIBER_FIXTURES } from "../../../.storybook/fixtures/adminUsers"
 import { OWNER_TOPIC_FIXTURES, SCAN_NOTE_FIXTURE } from "../../../.storybook/fixtures/topics"
 import { toTableBodyDecorator } from "../../../.storybook/tableDecorators"
 import { OwnerTopicsTable, TopicsSubtableRow } from "./OwnerTopicsTable"
@@ -19,9 +21,11 @@ const meta = {
 		onReloadPage: { control: false },
 	},
 	parameters: { session: "user" },
-	// a scan time's popover loads its scan note, with its source results chart, from the mocked topic client
+	// a scan time's popover loads its scan note and source results chart, and the admin console's subscribers subtable
+	// loads its subscribers, from the mocked clients
 	beforeEach: () => {
 		mocked(fetchScanNote).mockResolvedValue(SCAN_NOTE_FIXTURE)
+		mocked(fetchAdminTopicSubscribers).mockResolvedValue(TOPIC_SUBSCRIBER_FIXTURES)
 	},
 } satisfies Meta<typeof OwnerTopicsTable>
 
@@ -30,6 +34,15 @@ type Story = StoryObj<typeof meta>
 
 // three owned topics with their totals line, one with a podcast episode's play button beside its name
 export const Default: Story = {}
+
+// in the admin console, the first topic's subscribers, opened by a click on its subscriber count
+export const SubscribersOpen: Story = {
+	args: { canListSubscribers: true },
+	play: async ({ canvas, userEvent }) => {
+		await userEvent.click(canvas.getByRole("button", { name: /followers, 12$/ }))
+		await canvas.findByText("carlos@example.com")
+	},
+}
 
 // the first topic's scans this month, opened by a click on its cost
 export const ScansOpen: Story = {

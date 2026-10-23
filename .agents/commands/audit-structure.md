@@ -666,6 +666,11 @@ Check for:
      `ScanNotePanel` in `apps/web/src/components/topic/TopicScanHistory.tsx`)
    - `api/topic/findingMarks.ts` (now `apps/api/topic/findingFeedback.ts`) and `registerMarkTools` (now
      `registerFeedbackTools` in `apps/api/mcp/tools.ts`)
+   - `ScansTable` and `ScanNotesCell` in `apps/web/src/components/table/OwnerTopicsTable.tsx` (now `TopicScansTable` and
+     `ScanNotesCell` in `apps/web/src/components/table/TopicScansTable.tsx`), and `handleCostCellClick` and
+     `expandedTopicIds` with `setExpandedTopicIds` in `OwnerTopicsTable.tsx` (now `handleSubtableClick` and
+     `openSubtableByTopicId` with `setOpenSubtableByTopicId`), and `withTopicId` there (removed)
+   - `activeSubscribers` in `apps/api/topic/subscriberCounts.ts` (now `isActiveNonOwnerTopicSubscription`)
    - `estimateEmbedTokens` in `packages/pipeline/review/filter.ts` and `TRANSCRIPT_CHARS_PER_TOKEN` in
      `packages/models/transcription.ts` (now `toEstimatedTokens` in `packages/models/budget.ts`), and `rejectChatTurn`
      in `apps/api/chat/privateChat.ts` (now exported from `apps/api/chat/chatTurnAuthorization.ts`)

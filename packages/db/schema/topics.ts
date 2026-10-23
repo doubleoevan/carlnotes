@@ -196,6 +196,10 @@ export const topicEmailSends = pgTable(
 		scanId: text("scan_id").references(() => scans.id, { onDelete: "set null" }),
 		sentAt: timestamp("sent_at", { withTimezone: true }).defaultNow().notNull(),
 	},
-	// one row per Scan and recipient, so a retried send is recorded once. rows without a Scan never collide
-	(table) => [uniqueIndex("topic_email_sends_scan_recipient_unique").on(table.scanId, table.recipientUserId)],
+	// one row per Scan and recipient, so a retried send is recorded once. rows without a Scan never collide. the second
+	// index reads a topic's sends to each recipient in time order
+	(table) => [
+		uniqueIndex("topic_email_sends_scan_recipient_unique").on(table.scanId, table.recipientUserId),
+		index("topic_email_sends_topic_recipient_sent_idx").on(table.topicId, table.recipientUserId, table.sentAt),
+	],
 )

@@ -1,4 +1,4 @@
-// the admin console contracts: its user and team rows and its totals
+// the admin console contracts: its user, team, and topic subscriber rows and its totals
 import type { Plan } from "./plans"
 
 // an admin-console user row: the user's status plus their attributed storage and month-to-date variable cost
@@ -27,6 +27,23 @@ export type AdminUserRow = {
 	// the per-user override in cents (null means the plan value), and the resulting monthly budget
 	budgetOverrideCents: number | null
 	budgetCents: number
+}
+
+// an admin-console topic subscriber row: the user's account, their subscription, and the topic's emails to them
+export type AdminTopicSubscriberRow = {
+	userId: string
+	username: string
+	avatarVersion: string | null
+	email: string
+	plan: Plan
+	signedUpAt: string
+	// when they last signed in, null until they sign in again
+	lastLoginAt: string | null
+	subscribedAt: string
+	isEmailEnabled: boolean
+	emailCount: number
+	// when the topic last emailed them, null if an email was never sent
+	lastEmailedAt: string | null
 }
 
 // an admin-console team row: the team's status, who leads it, and month-to-date spend on its topics

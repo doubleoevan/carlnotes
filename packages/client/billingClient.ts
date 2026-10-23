@@ -1,6 +1,6 @@
 // the typed api client for the billing and admin routes
 import type { OwnerTopic } from "@carlnotes/contracts/activity"
-import type { AdminConsoleResponse } from "@carlnotes/contracts/admin"
+import type { AdminConsoleResponse, AdminTopicSubscriberRow } from "@carlnotes/contracts/admin"
 import type { BillingState } from "@carlnotes/contracts/profiles"
 import type { TeamPageResponse, TeamSummary } from "@carlnotes/contracts/teams"
 import { apiClient } from "./apiClient"
@@ -70,6 +70,15 @@ export async function fetchAdminTeamMembers(teamId: string): Promise<TeamPageRes
 		throw new Error(`admin team members failed: ${response.status}`)
 	}
 	return ((await response.json()) as { members: TeamPageResponse["members"] }).members
+}
+
+// one topic's subscribers, for the admin console's topics subtable
+export async function fetchAdminTopicSubscribers(topicId: string): Promise<AdminTopicSubscriberRow[]> {
+	const response = await apiClient().api.admin.topics[":id"].subscribers.$get({ param: { id: topicId } })
+	if (!response.ok) {
+		throw new Error(`admin topic subscribers failed: ${response.status}`)
+	}
+	return ((await response.json()) as { subscribers: AdminTopicSubscriberRow[] }).subscribers
 }
 
 // the teams a user belongs to, for the admin table's expandable row

@@ -6,10 +6,11 @@ import type { PodcastEpisodeSummary } from "@carlnotes/contracts/podcast"
 import { db } from "@carlnotes/db"
 import { scans } from "@carlnotes/db/schema/scans"
 import { subscriptions, topicEmailSends, topics } from "@carlnotes/db/schema/topics"
-import { and, count, desc, eq, gte, inArray, sql } from "drizzle-orm"
+import { and, count, desc, eq, gte, inArray } from "drizzle-orm"
 import { loadTopicChatMentions } from "./chat/mentions"
 import { loadLatestPodcastEpisodeSummaries } from "./podcast/podcastEpisodeShapes"
 import { startOfUtcMonth } from "./topic/quotas"
+import { isActiveNonOwnerTopicSubscription } from "./topic/subscriberCounts"
 
 // the topic rows that toActivityTopics reads
 type TopicRow = {
@@ -116,14 +117,8 @@ export async function loadTopics({
 		.select({ topicId: subscriptions.topicId, count: count() })
 		.from(subscriptions)
 		.innerJoin(topics, eq(subscriptions.topicId, topics.id))
-		.where(
-			// only other subscribers, so an owner's own row never inflates their topic's count
-			and(
-				inArray(subscriptions.topicId, topicIds),
-				eq(subscriptions.isActive, true),
-				sql`${subscriptions.subscriberUserId} is distinct from ${topics.ownerId}`,
-			),
-		)
+		// count active subscribers other than the owner, by the subscriber count's rule
+		.where(and(inArray(subscriptions.topicId, topicIds), isActiveNonOwnerTopicSubscription))
 		.groupBy(subscriptions.topicId)
 	const emailSendRows = await db
 		.select({ topicId: topicEmailSends.topicId, count: count() })

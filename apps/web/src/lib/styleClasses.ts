@@ -174,6 +174,8 @@ const TABLE_ROW_RULE_CLASS = [
 	// the selects and pager buttons anywhere in a subtable's cell, its pagination footer included
 	"[&_td[colspan]_select]:border-separator-sunken",
 	"[&_td[colspan]_button:not([role])]:border-separator-sunken",
+	// a subtable inside another subtable flips back to the card fill, so it reads apart from the sunken one it sits in
+	"[&_td[colspan]_td[colspan]_[data-slot=table-card]]:bg-card",
 ].join(" ")
 
 /**
@@ -368,6 +370,11 @@ export const QUESTION_BUBBLE_CLASS = `bg-primary text-primary-foreground rounded
  * The centered narrow column of the sign-in, signup, and invite pages.
  */
 export const SESSION_PAGE_CLASS = "mx-auto flex min-h-dvh max-w-sm flex-col justify-center px-4 py-12"
+
+/**
+ * A table card opened as a subtable under a table row, on the sunken surface with no margin or shadow of its own.
+ */
+export const SUBTABLE_CARD_CLASS = "bg-sunken mb-0 shadow-none"
 
 /**
  * The muted counts line at the bottom of the topic and podcast episode pages, spaced apart and at a fixed height while

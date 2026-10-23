@@ -4,7 +4,7 @@ import type { TeamPageResponse, TeamSummary } from "@carlnotes/contracts/teams"
 import { useState } from "react"
 import { toast } from "sonner"
 import { CoffeeLoading } from "@/components/branding/CoffeeLoading"
-import { THIN_SCROLLBAR_CLASS } from "@/lib/styleClasses"
+import { SUBTABLE_CARD_CLASS, THIN_SCROLLBAR_CLASS } from "@/lib/styleClasses"
 import { cn } from "@/lib/utils"
 import { TeamMembersTable } from "./TeamMembersTable"
 import { TopicsTable } from "./TopicsTable"
@@ -56,7 +56,7 @@ export function TeamSubtablesRow({
 							<p className="text-muted-foreground py-2 text-sm">No topics on this team yet.</p>
 						) : (
 							<TopicsTable
-								className="bg-sunken mb-0 border-0 p-0 shadow-none"
+								className={cn(SUBTABLE_CARD_CLASS, "border-0 p-0")}
 								topics={teamPage.topics}
 								includesNonPublicTopics
 								topicTooltip="Topics on this team"

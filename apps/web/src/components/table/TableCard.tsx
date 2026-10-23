@@ -7,5 +7,9 @@ import { cn } from "@/lib/utils"
  * narrow screen needs. Each table adds only its page's spacing.
  */
 export function TableCard({ className, children }: { className?: string; children: React.ReactNode }) {
-	return <div className={cn(CARD_CLASS, className)}>{children}</div>
+	return (
+		<div data-slot="table-card" className={cn(CARD_CLASS, className)}>
+			{children}
+		</div>
+	)
 }
