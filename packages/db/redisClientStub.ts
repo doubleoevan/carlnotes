@@ -2,6 +2,7 @@
 import { RedisClient } from "bun"
 import { setRedisClientBuilder } from "./redis"
 import { REDIS_CLIENT_OPTIONS, type RedisConnectionClient } from "./redisConnection"
+import { runFakeSpendReservationCommand } from "./redisFakeSpendReservations"
 import { readFakeBuffer, runFakeViewerCountCommand, toFakeStoredValue } from "./redisFakeViewerCounts"
 
 /**
@@ -38,8 +39,8 @@ export function restoreRedisClient(): void {
 	setRedisClientBuilder(() => new RedisClient(Bun.env.REDIS_URL, REDIS_CLIENT_OPTIONS))
 }
 
-// a fake client over the shared map. the reads, the writes, the viewer count commands, and the scripts run on the map,
-// and pub/sub delivers nothing
+// a fake client over the shared map. the reads, the writes, the viewer count and spend reservation commands, and the
+// scripts run on the map, and pub/sub delivers nothing
 function toFakeRedisClient(storedValueByKey: Map<string, string>): RedisConnectionClient {
 	const fakeRedisClient = {
 		connected: false,
@@ -80,6 +81,12 @@ function toFakeRedisClient(storedValueByKey: Map<string, string>): RedisConnecti
 			const viewerCountReply = runFakeViewerCountCommand(storedValueByKey, command, commandArguments)
 			if (viewerCountReply !== undefined) {
 				return viewerCountReply
+			}
+
+			// a spend reservation command runs on the map
+			const spendReservationReply = runFakeSpendReservationCommand(storedValueByKey, command, commandArguments)
+			if (spendReservationReply !== undefined) {
+				return spendReservationReply
 			}
 
 			// the slot script always takes the slot

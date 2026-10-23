@@ -164,41 +164,48 @@ at the root import it by name.
   attach or detach calls; and `clearSharedTopicFeedCaches`, which drops the feed copies with the featured and popular
   topic id lists; `topic/feedData.ts` — the batched reads behind every topic in a feed, each table read once for the
   whole batch.
-- `chat/room.ts` — posting to a chat room and its stream; `chat/roomRoute.ts` — the chat room routes;
-  `chat/roomAccess.ts` — one chat room, the member's access to it, and the topic side of a chat room filter;
-  `chat/roomDeletes.ts` — clearing a room and deleting one message or shared file.
+- `chat/room.ts` — posting to a chat room and its stream. A chat message that addresses Carl reserves his turn's largest
+  cost before it posts, priced from the room's stored question by `loadModelRoomQuestionChars` in
+  `chat/roomQuestion.ts`, which sums stored lengths in the database through `toDecryptedLengthSql` in
+  `chat/encryption.ts`, and a budget that the spend and open reservations have reached is rejected privately. Both post
+  routes are under the tool callers' rate limit; `chat/roomRoute.ts` — the chat room routes; `chat/roomAccess.ts` — one
+  chat room, the member's access to it, and the topic side of a chat room filter; `chat/roomDeletes.ts` — clearing a
+  room and deleting one message or shared file.
 - `chat/privateChat.ts` — the private chat routes, each post rejecting a signed-out visitor through
   `toSignedOutRejection` in `bodyLimit.ts` before the body is read; `chat/chatTurnAnswer.ts` — answering an allowed
-  private chat turn: its podcast episode chapter, attachments, proposal, tools, and streamed reply;
-  `chat/chatTurnAuthorization.ts` — whether a user may take a chat turn on a topic, in a team chat, or in the
-  new-topic chat, and `toChatRejection`, the response each rejected status gets, which the private chat routes, the
-  voice routes, and the chat attachment delete share; `chat/chatTurnStream.ts` — streaming a chat turn's reply and
-  saving its row; `chat/chatProposals.ts` — the change Carl previewed in a private chat, recorded in `chat_proposals`
-  as a keyed digest that holds none of the preview's text, taken by the user's next message on that page, and applied by
-  the server through the topic tools or the create path only if it matches its record and the agreement check reads the
-  message as agreeing. No chat binds a tool that saves a topic change or creates a topic. `chat/roomProposals.ts` — a
-  topic's team chat room preview, kept encrypted in `chat_proposals` for the member it was shown to, taken by that
-  member's next message to Carl, and applied the same way, so no other member's yes saves it. A topic chat turn may be a
-  question asked from the podcast player, which names its podcast episode and chapter: the route responds 404 before any
-  model call unless the chapter is on the topic's published podcast episode, and the chat turn's row is a `podcast` row
-  with the answering speaker. `chat/roomTurns.ts` — Carl's chat room turn, and `chat/roomQuestion.ts` — the question
-  it is asked, from the chat window and the room's summary and files, with `toChatRoomTranscriptLine` and the empty
-  placeholders that the topic chat tools eval shares. `room.smoke.ts` runs `roomSmokeSections.ts` over
-  `roomSmokeFixtures.ts`.
-- `chat/voiceRoute.ts` — the voice routes: `GET /chat/spoken-questions` says whether the user's spend is past the
-  spoken questions cutoff, and the rest each name their chat page in the request. `POST /chat/transcription` rejects a
+  private chat turn: its podcast episode chapter, attachments, the reservation of its largest cost, which rejects a turn
+  before any model call once the spend and open reservations reach the budget, its proposal, tools, and streamed reply;
+  `chat/chatTurnAuthorization.ts` — whether a user may take a chat turn on a topic, in a team chat, or in the new-topic
+  chat, `toChatRejection`, the response each rejected status gets, which the private chat routes, the voice routes, and
+  the chat attachment delete share, and `rejectChatTurn`, which also counts a budget rejection; `chat/chatTurnStream.ts`
+  — streaming a chat turn's reply, saving its row, then releasing its reservation; `chat/chatProposals.ts` — the change
+  Carl previewed in a private chat, recorded in `chat_proposals` as a keyed digest that holds none of the preview's
+  text, taken by the user's next message on that page, and applied by the server through the topic tools or the create
+  path only if it matches its record and the agreement check reads the message as agreeing. No chat binds a tool that
+  saves a topic change or creates a topic. `chat/roomProposals.ts` — a topic's team chat room preview, kept encrypted in
+  `chat_proposals` for the member it was shown to, taken by that member's next message to Carl, and applied the same
+  way, so no other member's yes saves it. A topic chat turn may be a question asked from the podcast player, which names
+  its podcast episode and chapter: the route responds 404 before any model call unless the chapter is on the topic's
+  published podcast episode, and the chat turn's row is a `podcast` row with the answering speaker. `chat/roomTurns.ts`
+  — Carl's chat room turn, and `chat/roomQuestion.ts` — the question it is asked, from the chat window and the room's
+  summary and files, with `toChatRoomTranscriptLine` and the empty placeholders that the topic chat tools eval shares.
+  `room.smoke.ts` runs `roomSmokeSections.ts` over `roomSmokeFixtures.ts`.
+- `chat/voiceRoute.ts` — the voice routes: `GET /chat/spoken-questions` says whether the user's spend is past the spoken
+  questions cutoff, and the rest each name their chat page in the request. `POST /chat/transcription` rejects a
   recording past that cutoff with a 402, then transcodes a spoken question's recording through ffmpeg, at most 4 at once
   in the process with a 503 and a Retry-After past that, transcribes it on the user's key, and records the spend as a
   text-less chat turn row, or returns an empty transcript with no row for a recording with no samples; `POST
   /chat/speech` speaks one spoken part of a reply on the user's key in the voice of the speaker who gave it, under the
   speech rate limit and at most 3 spoken parts in progress per user with a 429 past that, and returns the MP3, or the
   WAV if the encode failed; `POST /chat/spoken-events` counts a spoken question's timings and a play tap, under the
-  spoken events rate limit. A failed model call other than a spent budget is reported to Sentry under a fixed message
-  per model call and outcome. `chat/voiceAuthorization.ts` — whether a user may talk to Carl on that page: a private
-  page asks its chat turn's gate, and a chat room asks membership and the monthly spend gate; and the access check that
-  a spoken event asks, which reads the page's visibility or membership and no spend sum. The voice route tests share
-  their pages, transcription request builder, spies, and recorded spoken answer through
-  `chat/voiceRouteTestFixtures.ts`.
+  spoken events rate limit. The transcription and each spoken part reserve their own largest cost before the model is
+  called, are rejected with a 402 once the spend and open reservations reach the budget, and release it after the spend
+  row. A failed model call other than a spent budget is reported to Sentry under a fixed message per model call and
+  outcome. `chat/voiceAuthorization.ts` — whether a user may talk to Carl on that page: a private page asks its chat
+  turn's gate, and a chat room asks membership and the monthly spend gate; and the access check that a spoken event
+  asks, which reads the page's visibility or membership and no spend sum. The voice route tests share their pages,
+  transcription request builder, spies, and recorded spoken answer through `chat/voiceRouteTestFixtures.ts`, and
+  `chat/voiceRoute.reservations.test.ts` holds the voice calls' reservation cases.
 - `chat/chatAttachmentScreening.ts` — `resolveChatAttachments`, which resolves a chat turn's attachments for the model
   and withholds one the scanner flags, an image by the text it shows, `screenAttachmentText`, which screens a stored
   attachment's text, and the data url helpers; `chat/attachments.ts` — storing the rest and deleting them, with the

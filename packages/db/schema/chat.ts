@@ -191,8 +191,12 @@ export const chatRoomAttachments = pgTable(
 		status: attachmentStatus("status").notNull().default("pending"),
 		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 	},
-	// the chat room turn and the chat messages both read one chat room's files at once
-	(table) => [index("room_attachments_topic_id_idx").on(table.topicId)],
+	// the chat room turn and the chat messages both read one chat room's files at once. a team's own chat room has no
+	// topic, so its reads find the room by team
+	(table) => [
+		index("room_attachments_topic_id_idx").on(table.topicId),
+		index("room_attachments_team_id_idx").on(table.teamId, table.topicId),
+	],
 )
 
 // one message in a team topic's shared chat room.

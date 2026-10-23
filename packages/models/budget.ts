@@ -63,14 +63,19 @@ export type StageCosts = {
 export type FetchOutcome = "reused" | "revalidated" | "fetched"
 export type FetchOutcomeCounts = { reusedCount: number; revalidatedCount: number; fetchedCount: number }
 
-// the running budget for an entire Scan
+// the running budget for an entire Scan. reservedDollars is what the Resources in its paid section have reserved and
+// not yet released, which only lives within one attempt
 export type Budget = {
 	spentDollars: number
+	reservedDollars: number
 	limitDollars: number
 	stageCosts: StageCosts
 	maxScoredResources: number
 	fetchCounts: FetchOutcomeCounts
 }
+
+// the budget a heartbeat checkpoints, which includes settled spend only
+export type CheckpointBudget = Omit<Budget, "reservedDollars">
 
 /**
  * A fresh budget at this Scan's configured limits, with every total at zero.
@@ -78,6 +83,7 @@ export type Budget = {
 export function newBudget(): Budget {
 	return {
 		spentDollars: 0,
+		reservedDollars: 0,
 		limitDollars: SCAN_BUDGET_USD,
 		stageCosts: emptyStageCosts(),
 		maxScoredResources: MAX_SCORED_RESOURCES_PER_SCAN,
@@ -89,17 +95,20 @@ export function newBudget(): Budget {
  * The budget a retried stage continues from. The counters come from the checkpoint budget that the last attempt heartbeated,
  * and the limits from a fresh budget. Limits are read from the environment, and a checkpointed one would be stale.
  * A checkpoint that is missing or malformed falls back to the budget the stage was passed.
+ * Either way the budget starts with no open reservation, since the Resources that held one died with the last attempt.
  */
 export function toResumedBudget(checkpointBudget: unknown, passedBudget: Budget): Budget {
-	// a stage on its first attempt has no checkpoint, and one that cannot be read is not worth resuming from
+	// a stage on its first attempt has no checkpoint, and one that cannot be read is not worth resuming from.
+	// a budget passed from before reservations existed has no reserved dollars either
 	if (!isBudgetCheckpoint(checkpointBudget)) {
-		return passedBudget
+		return { ...passedBudget, reservedDollars: 0 }
 	}
 
 	// the limits come from a fresh budget, not the checkpoint
 	const { limitDollars, maxScoredResources } = newBudget()
 	return {
 		spentDollars: checkpointBudget.spentDollars,
+		reservedDollars: 0,
 		limitDollars,
 		stageCosts: checkpointBudget.stageCosts,
 		maxScoredResources,
@@ -107,9 +116,20 @@ export function toResumedBudget(checkpointBudget: unknown, passedBudget: Budget)
 	}
 }
 
+/**
+ * The budget a heartbeat checkpoints: the settled spend and counts, without the dollars that running Resources
+ * reserved.
+ */
+export function toCheckpointBudget({
+	reservedDollars: _reservedDollars,
+	...checkpointBudget
+}: Budget): CheckpointBudget {
+	return checkpointBudget
+}
+
 // whether a checkpoint budget includes every counter a resumed budget reads
-function isBudgetCheckpoint(checkpoint: unknown): checkpoint is Budget {
-	const checkpointBudget = checkpoint as Budget | null
+function isBudgetCheckpoint(checkpoint: unknown): checkpoint is CheckpointBudget {
+	const checkpointBudget = checkpoint as CheckpointBudget | null
 	return (
 		typeof checkpointBudget?.spentDollars === "number" &&
 		hasNumericFields(checkpointBudget.stageCosts, emptyStageCosts()) &&
@@ -133,6 +153,16 @@ function hasNumericFields(value: unknown, template: Record<string, number>): boo
 export function charge(budget: Budget, stage: keyof StageCosts, dollars: number): void {
 	budget.stageCosts[stage] += dollars
 	budget.spentDollars += dollars
+}
+
+// about how many characters of English text one token holds
+const CHARS_PER_TOKEN = 4
+
+/**
+ * A rough token count for text of the given length, for a cost estimate made before or without a model's usage.
+ */
+export function toEstimatedTokens(charCount: number): number {
+	return Math.ceil(charCount / CHARS_PER_TOKEN)
 }
 
 /**
@@ -188,6 +218,27 @@ export function canScoreResource(budget: Budget, stopSignal?: AbortSignal): bool
 		return false
 	}
 	return budget.spentDollars < budget.limitDollars && scoredResourcesCount(budget) < budget.maxScoredResources
+}
+
+/**
+ * Reserves a paid task's largest cost inside the Scan's budget and returns true while the spent and reserved dollars
+ * are below the Scan's limit, even if the task's largest cost would take the Scan past it, and returns false otherwise.
+ * Parallel tasks each reserve before they start, so together they pass the limit by at most one task's largest cost.
+ */
+export function reserveScanSpend(budget: Budget, maxDollars: number): boolean {
+	if (budget.spentDollars + budget.reservedDollars >= budget.limitDollars) {
+		return false
+	}
+	budget.reservedDollars += maxDollars
+	return true
+}
+
+/**
+ * Releases a paid task's reservation once the task ends. What the task spent was already charged to its stage as it
+ * ran.
+ */
+export function releaseScanSpend(budget: Budget, maxDollars: number): void {
+	budget.reservedDollars = Math.max(0, budget.reservedDollars - maxDollars)
 }
 
 // how many Resources the Scan has scored so far

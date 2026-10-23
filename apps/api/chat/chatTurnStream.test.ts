@@ -11,11 +11,18 @@ import * as chatTurns from "./chatTurns"
 
 afterEach(() => mock.restore())
 
+// the order in which the stream saved the chat turn and released its reservation
+let savedAndReleasedSteps: string[] = []
+
 // stream a podcast chat turn whose reply names the given speaker, or none, and return what the save was called with
 async function streamPodcastChatTurn(
 	speaker?: PodcastEpisodeSpeaker,
 ): Promise<Parameters<typeof chatTurns.saveChatTurn>[0]> {
-	const saveChatTurnSpy = spyOn(chatTurns, "saveChatTurn").mockResolvedValue("turn-1")
+	savedAndReleasedSteps = []
+	const saveChatTurnSpy = spyOn(chatTurns, "saveChatTurn").mockImplementation(async () => {
+		savedAndReleasedSteps.push("saved")
+		return "turn-1"
+	})
 	// a reply that already finished
 	async function* replyParts(): AsyncGenerator<never> {}
 	const chatReply: ChatReplyStream = {
@@ -41,6 +48,11 @@ async function streamPodcastChatTurn(
 		analyticsProperties: TEST_ANALYTICS_PROPERTIES,
 		litellmApiKey: "sk-user",
 		agreementTokens: 0,
+		reservation: {
+			release: async () => {
+				savedAndReleasedSteps.push("released")
+			},
+		},
 	}
 
 	// read the whole response so the save after the stream runs
@@ -69,4 +81,10 @@ test("a podcast chat turn with no speaker is stored as carl's", async () => {
 	const saveChatTurnOptions = await streamPodcastChatTurn()
 	expect(saveChatTurnOptions.question).toEndWith("; Carl answered]")
 	expect(chatTurns.toChatTurnRow(saveChatTurnOptions).podcastAnswerSpeaker).toBe("host")
+})
+
+// the reservation is released only after the chat turn's spend row is saved, so the month's spend never dips between
+test("a streamed chat turn releases its reservation after its spend row is saved", async () => {
+	await streamPodcastChatTurn("host")
+	expect(savedAndReleasedSteps).toEqual(["saved", "released"])
 })

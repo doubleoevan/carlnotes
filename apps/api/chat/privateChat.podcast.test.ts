@@ -4,6 +4,7 @@
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import { restoreRedisClient, stubRedisClient } from "@carlnotes/db/redisClientStub"
 import * as litellm from "@carlnotes/models/litellm"
+import { stubReservedUserSpend } from "@carlnotes/models/spendReservationTestFixtures"
 import * as chat from "@carlnotes/pipeline/chat/index"
 import * as retrievePodcastEpisodeChapter from "@carlnotes/pipeline/chat/retrievePodcastEpisodeChapter"
 import { toJsonRequest, toSignedInApp } from "../testSession"
@@ -26,7 +27,7 @@ type AllowedChatTurnSpies = {
 }
 
 // stub user-1 as allowed to chat under the given gate, as a persisted chat turn that may not edit the topic, with
-// sk-user as the key, and return the spies the cases read
+// its largest cost reserved and sk-user as the key, and return the spies the cases read
 function stubAllowedChatTurn(gateName: "authorizeChatTurn" | "authorizeTeamChatTurn"): AllowedChatTurnSpies {
 	// user-1 may chat under the gate, over a fake Redis
 	stubRedisClient()
@@ -38,7 +39,8 @@ function stubAllowedChatTurn(gateName: "authorizeChatTurn" | "authorizeTeamChatT
 		canEditTopic: false,
 	})
 
-	// the key load returns sk-user, and the chapter load is spied
+	// every turn's largest cost is reserved, the key load returns sk-user, and the chapter load is spied
+	stubReservedUserSpend()
 	return {
 		loadOrProvisionUserLiteLLMKeySpy: spyOn(litellm, "loadOrProvisionUserLiteLLMKey").mockResolvedValue("sk-user"),
 		loadPodcastEpisodeChapterContextSpy: spyOn(retrievePodcastEpisodeChapter, "loadPodcastEpisodeChapterContext"),

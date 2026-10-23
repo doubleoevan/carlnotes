@@ -6,7 +6,7 @@ import { db } from "@carlnotes/db"
 import { findings, resources, scans } from "@carlnotes/db/schema/scans"
 import { topics } from "@carlnotes/db/schema/topics"
 import { users } from "@carlnotes/db/schema/users"
-import { type Budget, newBudget, toResumedBudget } from "@carlnotes/models/budget"
+import { type Budget, newBudget, toCheckpointBudget, toResumedBudget } from "@carlnotes/models/budget"
 import { loadOrProvisionUserLiteLLMKey } from "@carlnotes/models/litellm"
 import { notifyIndexNow } from "@carlnotes/pipeline/indexNow"
 import { ingestFromTopicSources, toScannedSource } from "@carlnotes/pipeline/ingest/index"
@@ -348,10 +348,11 @@ async function saveTopicVectorsAfterScan({ scanId, topicId }: SaveTopicVectorsAf
 	await saveTopicVectors(topicId).catch((error: unknown) => reportError(error, "database", { scanId, topicId }))
 }
 
-// report that this worker is alive for as long as the stage runs, and checkpoint the Budget as what it reports
+// report that this worker is alive for as long as the stage runs, and checkpoint the Budget's settled spend as what it
+// reports
 function withHeartbeat<Result>(budget: Budget, runStage: () => Promise<Result>): Promise<Result> {
 	const activityContext = asyncLocalStorage.getStore()
-	const heartbeatPump = setInterval(() => activityContext?.heartbeat(budget), HEARTBEAT_INTERVAL_MS)
+	const heartbeatPump = setInterval(() => activityContext?.heartbeat(toCheckpointBudget(budget)), HEARTBEAT_INTERVAL_MS)
 	return runStage().finally(() => clearInterval(heartbeatPump))
 }
 

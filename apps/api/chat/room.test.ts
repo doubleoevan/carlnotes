@@ -3,10 +3,15 @@
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import { PODCAST_EPISODE_SPEAKER_NAMES } from "@carlnotes/contracts/podcastEpisodes"
 import { restoreConnectionPool, stubConnectionPool } from "@carlnotes/db/connectionPoolStub"
+import { restoreRedisClient, stubRedisClient } from "@carlnotes/db/redisClientStub"
+import { SPENT_BUDGET_REJECTION } from "@carlnotes/models/models"
+import * as spendReservations from "@carlnotes/models/spendReservations"
+import { stubReservedUserSpend } from "@carlnotes/models/spendReservationTestFixtures"
 import * as analytics from "@carlnotes/server/analytics"
 import { saveEnvSettings } from "@carlnotes/server/savedEnvSettings"
 import { Hono } from "hono"
-import * as authorization from "../authorization"
+import { CALLER_RATE_LIMIT } from "../rateLimit"
+import { toJsonRequest, toSignedInApp } from "../testSession"
 import { decryptChatText } from "./encryption"
 import * as linkPreviews from "./linkPreviews"
 import * as mentions from "./mentions"
@@ -15,7 +20,8 @@ import * as roomAccess from "./roomAccess"
 import * as roomAttachments from "./roomAttachments"
 import { canDeleteChatRoomMessage } from "./roomDeletes"
 import * as roomMessages from "./roomMessages"
-import { toBeforeChatMessageId, toChatMessagePage } from "./roomRoute"
+import * as roomQuestion from "./roomQuestion"
+import { chatRoomRoute, TEAM_ROOM_PATH, toBeforeChatMessageId, toChatMessagePage } from "./roomRoute"
 import * as roomStream from "./roomStream"
 import * as roomTurns from "./roomTurns"
 
@@ -56,7 +62,7 @@ test("a chat message with no author needs a leader or an admin", () => {
 })
 
 // a chat room longer than one page is read backward, and only a usable id loads the page above
-test("toBeforeChatMessageId takes a positive whole id and refuses anything else", () => {
+test("toBeforeChatMessageId takes a positive whole id and rejects anything else", () => {
 	expect(toBeforeChatMessageId("42")).toBe(42)
 
 	// no cursor means the latest page, the way an initial load reads it
@@ -105,7 +111,8 @@ test("toChatMessagePage reports whether voice chat is on", () => {
 test("a spoken chat message stores its flag, wakes carl, and reports itself spoken", async () => {
 	// a member of the team's own chat room, under budget, sharing no files
 	spyOn(roomAccess, "loadChatRoom").mockResolvedValue({ topic: null, teamId: "team-1" })
-	spyOn(authorization, "isMonthlySpendExhausted").mockResolvedValue(false)
+	spyOn(roomQuestion, "loadModelRoomQuestionChars").mockResolvedValue(0)
+	const { reservation } = stubReservedUserSpend()
 	spyOn(roomAttachments, "prepareChatRoomAttachments").mockResolvedValue([])
 
 	// the author's name for the select, and the posted chat message's id for the insert
@@ -140,16 +147,19 @@ test("a spoken chat message stores its flag, wakes carl, and reports itself spok
 	expect(insertQuery?.values).toEqual([null, "team-1", "user-1", "ann", expect.any(String), true])
 	expect(decryptChatText(String(insertQuery?.values[4]))).toBe("@carl who is hiring?")
 
-	// carl's turn starts for the chat message, and the event says it was spoken
+	// carl's turn starts for the chat message and releases its reservation once it ends, and the event says it was spoken
 	expect(runModelChatRoomTurnSpy).toHaveBeenCalledWith("user-1", null, "team-1", 42)
+	await Bun.sleep(0)
+	expect(reservation.release).toHaveBeenCalledTimes(1)
 	expect(trackEventSpy).toHaveBeenCalledWith(
 		"room_message_sent",
 		"user-1",
 		expect.objectContaining({ roomKind: "team", mentionsCarl: true, isSpoken: true }),
 	)
 
-	// a typed chat message stores false
+	// a typed chat message stores false, and a chat message carl is not asked in reserves nothing
 	await postChatRoomMessage("user-1", null, "team-1", "hello all", null, [])
+	expect(spendReservations.reserveUserSpend).toHaveBeenCalledTimes(1)
 	const typedInsertQuery = sentQueries.filter((sentQuery) =>
 		sentQuery.text.startsWith('insert into "room_messages"'),
 	)[1]
@@ -178,7 +188,8 @@ test("a reply to a chat message outside the chat room posts nothing", async () =
 test("a reply to carl's chat message in the chat room wakes him", async () => {
 	// a member of a topic's chat room, under budget, sharing no files
 	spyOn(roomAccess, "loadChatRoom").mockResolvedValue({ topic: null, teamId: "team-1" })
-	spyOn(authorization, "isMonthlySpendExhausted").mockResolvedValue(false)
+	spyOn(roomQuestion, "loadModelRoomQuestionChars").mockResolvedValue(0)
+	const { reservation } = stubReservedUserSpend()
 	spyOn(roomAttachments, "prepareChatRoomAttachments").mockResolvedValue([])
 
 	// the replied-to row is carl's own, in this room, then the author's name and the posted chat message's id
@@ -206,10 +217,60 @@ test("a reply to carl's chat message in the chat room wakes him", async () => {
 		rejectionReason: null,
 	})
 	expect(runModelChatRoomTurnSpy).toHaveBeenCalledWith("user-1", null, "team-1", 43)
+	await Bun.sleep(0)
+	expect(reservation.release).toHaveBeenCalledTimes(1)
 
 	// the replied-to read names the topic's chat room for this team
 	const repliedToQuery = sentQueries.find((sentQuery) => sentQuery.text.includes('from "room_messages"'))
 	expect(repliedToQuery?.values).toEqual([7, "team-1", "topic-1"])
+})
+
+// a chat message whose poster's spend and open reservations have reached the budget is rejected privately before it
+// posts, and carl is never called
+test("a chat message is rejected before it posts once the poster's budget is reached", async () => {
+	// a member of the team's own chat room whose budget is taken by another running turn
+	spyOn(roomAccess, "loadChatRoom").mockResolvedValue({ topic: null, teamId: "team-1" })
+	spyOn(roomQuestion, "loadModelRoomQuestionChars").mockResolvedValue(1200)
+	const reserveUserSpendSpy = spyOn(spendReservations, "reserveUserSpend").mockResolvedValue("rejected")
+	const prepareChatRoomAttachmentsSpy = spyOn(roomAttachments, "prepareChatRoomAttachments")
+	const runModelChatRoomTurnSpy = spyOn(roomTurns, "runModelChatRoomTurn").mockResolvedValue(undefined)
+	const sentQueries = stubConnectionPool()
+
+	// the rejection comes back privately, with the spent budget's wording
+	expect(await postChatRoomMessage("user-1", null, "team-1", "@carl who is hiring?", null, [])).toEqual({
+		chatMessageId: 0,
+		rejectionReason: SPENT_BUDGET_REJECTION,
+	})
+
+	// the reservation priced the stored question with the chat message, and nothing was read, stored, or called after
+	expect(reserveUserSpendSpy).toHaveBeenCalledWith({
+		userId: "user-1",
+		kind: "chatTurn",
+		maxDollars: expect.any(Number),
+	})
+	expect(prepareChatRoomAttachmentsSpy).not.toHaveBeenCalled()
+	expect(sentQueries.some((sentQuery) => sentQuery.text.startsWith('insert into "room_messages"'))).toBe(false)
+	expect(runModelChatRoomTurnSpy).not.toHaveBeenCalled()
+})
+
+// a member's posts to a chat room count in the tool callers' rate limit window, as a private chat post does, so a
+// script cannot start carl's chat turns without limit
+test("a chat room post past the tool callers' rate limit is rejected with a 429", async () => {
+	// a body that fails validation, so each post stops before it reads a chat room
+	stubRedisClient()
+	const app = toSignedInApp(chatRoomRoute, "user-1")
+	const postToTeamRoom = async (): Promise<Response> =>
+		app.request(TEAM_ROOM_PATH.replace(":id", "team-1"), toJsonRequest({}))
+	try {
+		for (let i = 0; i < CALLER_RATE_LIMIT; i++) {
+			expect((await postToTeamRoom()).status).toBe(400)
+		}
+
+		// the next post in the window is rate limited
+		expect((await postToTeamRoom()).status).toBe(429)
+	} finally {
+		restoreRedisClient()
+	}
 })
 
 // a cursor param names a positive whole id, and anything else reads as zero

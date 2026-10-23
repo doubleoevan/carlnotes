@@ -11,10 +11,10 @@ import { and, desc, eq, inArray, isNotNull, type SQL, sql } from "drizzle-orm"
 import { embedRetrievalQuery, readDocsBlock } from "./retrieveDocs"
 
 // how many findings a chat turn sends to the model
-const MAX_RETRIEVED_FINDINGS = 8
+export const MAX_RETRIEVED_FINDINGS = 8
 
 // how much of one resource's text a chat turn includes
-const MAX_RESOURCE_CHARS = 2000
+export const MAX_RESOURCE_CHARS = 2000
 
 // how many recent scan summaries a chat turn includes, newest first
 export const MAX_SCAN_SUMMARIES = 3

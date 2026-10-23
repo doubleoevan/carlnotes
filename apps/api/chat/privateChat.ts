@@ -4,14 +4,13 @@ import type { ChatConversation, ChatTurnRow } from "@carlnotes/contracts/chat"
 import { chatTurnPayload, topicChatTurnPayload } from "@carlnotes/contracts/payloads"
 import { db } from "@carlnotes/db"
 import { topics } from "@carlnotes/db/schema/topics"
-import { trackEvent } from "@carlnotes/server/analytics"
 import { isVoiceChatConfigured } from "@carlnotes/server/voiceChat"
 import { zValidator } from "@hono/zod-validator"
 import { eq } from "drizzle-orm"
 import { type Context, Hono } from "hono"
 import { topicLimit } from "../authorization"
 import { toBodyLimit, toSignedOutRejection } from "../bodyLimit"
-import { type AppEnv, currentUser, toAnalyticsProperties } from "../currentUser"
+import { type AppEnv, currentUser } from "../currentUser"
 import { toolCallerRateLimiter } from "../rateLimit"
 import { deleteTopicDraft, loadTopicDraft } from "../topic/topicDrafts"
 import { loadKeptTopicAttachments } from "./chatAttachmentReads"
@@ -21,10 +20,11 @@ import {
 	authorizeNewTopicChatTurn,
 	authorizeTeamChatTurn,
 	type ChatTurnAuthorization,
+	rejectChatTurn,
 	SIGNUP_REQUIRED_ERROR,
 	toChatRejection,
 } from "./chatTurnAuthorization"
-import { type ChatPage, clearChatTurns, loadChatTurns, toChatPageId } from "./chatTurns"
+import { type ChatPage, clearChatTurns, loadChatTurns } from "./chatTurns"
 
 // the paths of a topic's chat, a team's chat, and the new-topic chat, after the /api base
 export const TOPIC_CHAT_PATH = "/topics/:id/chat"
@@ -70,23 +70,6 @@ async function clearChatConversation(context: Context, page: ChatPage): Promise<
 	}
 	await Promise.all([clearChatTurns(userId, page), page.newTopic ? deleteTopicDraft(userId) : undefined])
 	return context.json({ ok: true })
-}
-
-// what a chat turn was rejected for, and the page it was sent on
-type RejectChatTurnOptions = {
-	authorization: Exclude<ChatTurnAuthorization, { status: "allowed" }>
-	page: ChatPage
-}
-
-// count a chat turn that a spent budget stopped, then return the response for its rejection
-function rejectChatTurn(context: Context, { authorization, page }: RejectChatTurnOptions): Response {
-	if (authorization.status === "budget") {
-		trackEvent("chat_budget_reached", authorization.userId, {
-			...toAnalyticsProperties(context),
-			topicId: toChatPageId(page),
-		})
-	}
-	return toChatRejection(context, authorization.status)
 }
 
 // the private chat routes on each page: the conversation, clearing it, and the streamed reply

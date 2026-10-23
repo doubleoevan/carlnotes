@@ -2,6 +2,7 @@
 // messages, with the reconnect delays shortened to nothing
 import { setRedisClientBuilder } from "./redis"
 import type { RedisConnectionClient } from "./redisConnection"
+import { runFakeSpendReservationCommand } from "./redisFakeSpendReservations"
 import { readFakeBuffer, runFakeViewerCountCommand, toFakeStoredValue } from "./redisFakeViewerCounts"
 
 // a channel listener, with the message and channel arguments that Bun's client passes
@@ -152,6 +153,16 @@ export function toFakeRedisClient(fakeRedisServer: FakeRedisServer): FakeRedisCl
 			const viewerCountReply = runFakeViewerCountCommand(fakeRedisServer.storedValueByKey, command, commandArguments)
 			if (viewerCountReply !== undefined) {
 				return viewerCountReply
+			}
+
+			// a spend reservation command runs on the shared keys
+			const spendReservationReply = runFakeSpendReservationCommand(
+				fakeRedisServer.storedValueByKey,
+				command,
+				commandArguments,
+			)
+			if (spendReservationReply !== undefined) {
+				return spendReservationReply
 			}
 			const [script = "", , key = "", rateLimitWindowMs = "0"] = commandArguments
 

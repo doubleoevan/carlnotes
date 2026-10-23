@@ -3,6 +3,7 @@
 // false so Google keeps no recording
 import { VOICE_RECORDING_MAX_SECONDS } from "@carlnotes/contracts/payloads"
 import { chatTranscriptionModel } from "@carlnotes/server/voiceChat"
+import { toEstimatedTokens, transcriptionCost } from "./budget"
 import { runFfmpeg } from "./ffmpeg"
 import { type ModelCallFailure, toModelCallFailure, toRetryableModelCallFailure, WAV_HEADER_BYTES } from "./speech"
 
@@ -63,9 +64,18 @@ export const TRANSCODE_ARGUMENTS = [
 	"pipe:1",
 ]
 
-// Gemini's audio tokens a second, and a transcript's characters a token, for a response that gives no usage
+// Gemini's audio tokens a second, for a response that gives no usage
 const AUDIO_TOKENS_PER_SECOND = 32
-const TRANSCRIPT_CHARS_PER_TOKEN = 4
+
+// the most output one transcription is priced at in tokens: a minute's transcript with room for the thought tokens,
+// which Google prices as output. the request sets no output limit, so this is the estimate's allowance
+const MAX_TRANSCRIPTION_OUTPUT_TOKENS = 4000
+
+// the largest cost of one transcription: the longest recording's audio tokens and the output allowance
+export const MAX_TRANSCRIPTION_DOLLARS = transcriptionCost({
+	inputTokens: TRANSCRIPTION_MAX_SECONDS * AUDIO_TOKENS_PER_SECOND,
+	outputTokens: MAX_TRANSCRIPTION_OUTPUT_TOKENS,
+})
 
 // what the Interactions API's response includes. its status, the steps whose text items hold the transcript, and the
 // usage
@@ -190,6 +200,6 @@ function toTranscriptionTokens({ usage, audioBytes, transcript }: ToTranscriptio
 	const audioSeconds = Math.max(0, audioBytes.length - WAV_HEADER_BYTES) / TRANSCRIPTION_BYTES_PER_SECOND
 	return {
 		inputTokens: Math.round(audioSeconds * AUDIO_TOKENS_PER_SECOND),
-		outputTokens: Math.ceil(transcript.length / TRANSCRIPT_CHARS_PER_TOKEN),
+		outputTokens: toEstimatedTokens(transcript.length),
 	}
 }

@@ -79,3 +79,18 @@ test("decryptChatJson parses stored json and returns null for a missing or non-j
 		expect(decryptChatJson(null)).toBeNull()
 	})
 })
+
+// the room estimate sums stored lengths in the database, reading an encrypted value as its base64 bytes less the
+// marker, the nonce, and the tag. that arithmetic counts the base64 padding too, so it is the plaintext's bytes or up
+// to two over, and a plaintext's bytes are never fewer than its characters
+test("an encrypted value's stored length bounds its plaintext's characters from above", () => {
+	withChatTextKey(() => {
+		// an empty text, a short one, and a long one with multi-byte characters
+		for (const plainText of ["", "a", "who is hiring?", "café ☕ ".repeat(300)]) {
+			const storedText = encryptChatText(plainText)
+			const decryptedBytes = Math.floor(((storedText.length - "enc1:".length) * 3) / 4) - 28
+			expect(decryptedBytes - Buffer.byteLength(plainText)).toBeWithin(0, 3)
+			expect(decryptedBytes).toBeGreaterThanOrEqual(plainText.length)
+		}
+	})
+})

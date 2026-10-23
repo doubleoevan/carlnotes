@@ -7,7 +7,7 @@ import type { PodcastEpisodeTurn } from "@carlnotes/contracts/payloads"
 import { reportError } from "@carlnotes/server/monitoring"
 import { podcastEpisodeSpeechModel } from "@carlnotes/server/podcastEpisodeSettings"
 import { isRetryableHttpStatus } from "@carlnotes/server/publicFetch"
-import type { SpeechTier } from "./budget"
+import { type SpeechTier, speechCost, toEstimatedTokens } from "./budget"
 import { runFfmpeg } from "./ffmpeg"
 
 // one chapter's speech call. its turns, its tier, and the virtual key that it bills, or the master key if no key is
@@ -40,6 +40,11 @@ export type SpokenAnswerResult =
 
 // the tier a spoken answer is recorded on. a reply is spoken at once, so it never waits on the flex tier
 export const SPOKEN_ANSWER_SPEECH_TIER: SpeechTier = "standard"
+
+// Gemini's speech audio tokens a second, and the slowest pace a spoken part is read at in characters a second.
+// the request sets no audio limit, so the slowest pace bounds how long a spoken part's audio can run
+const SPEECH_AUDIO_TOKENS_PER_SECOND = 25
+const SLOWEST_SPOKEN_CHARS_PER_SECOND = 10
 
 // how long one podcast call may take. Google recommends ten minutes or more for flex, which waits for capacity
 const SPEECH_TIMEOUT_MS: Record<SpeechTier, number> = { standard: 3 * 60 * 1000, flex: 12 * 60 * 1000 }
@@ -169,6 +174,18 @@ export function toSpokenAnswerRequestBody(text: string, speaker: PodcastEpisodeS
 			speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: toSpeakerVoice(speaker) } } },
 		},
 	}
+}
+
+/**
+ * Returns the largest cost of speaking a spoken part of the given length on the spoken answer's tier: its text tokens,
+ * and the audio tokens of the part read at the slowest pace.
+ */
+export function maxSpokenAnswerDollars(textLength: number): number {
+	return speechCost({
+		speechTier: SPOKEN_ANSWER_SPEECH_TIER,
+		inputTokens: toEstimatedTokens(textLength),
+		audioTokens: Math.ceil((textLength / SLOWEST_SPOKEN_CHARS_PER_SECOND) * SPEECH_AUDIO_TOKENS_PER_SECOND),
+	})
 }
 
 /**

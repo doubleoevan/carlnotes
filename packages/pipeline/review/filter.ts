@@ -5,7 +5,14 @@ import { toHostWithoutWww } from "@carlnotes/contracts/seo"
 import { db } from "@carlnotes/db"
 import { EMBED_MODEL_NAME, findings, resources } from "@carlnotes/db/schema/scans"
 import { sources } from "@carlnotes/db/schema/topics"
-import { type Budget, canSpend, charge, EMBED_COST_PER_MILLION_TOKENS, tokenCost } from "@carlnotes/models/budget"
+import {
+	type Budget,
+	canSpend,
+	charge,
+	EMBED_COST_PER_MILLION_TOKENS,
+	toEstimatedTokens,
+	tokenCost,
+} from "@carlnotes/models/budget"
 import { embedVector, embedVectors } from "@carlnotes/models/models"
 import { reportError } from "@carlnotes/server/monitoring"
 import { cosineSimilarity } from "ai"
@@ -174,7 +181,7 @@ export async function loadTopicContext({
 	// embed the start of the context as the query side once and update the estimated embedding cost
 	const contextTextToEmbed = text.slice(0, MAX_EMBED_CHARS)
 	const embedding = await embedQuery(contextTextToEmbed, litellmApiKey)
-	charge(budget, "embedding", tokenCost(estimateEmbedTokens(contextTextToEmbed), EMBED_COST_PER_MILLION_TOKENS))
+	charge(budget, "embedding", tokenCost(toEstimatedTokens(contextTextToEmbed.length), EMBED_COST_PER_MILLION_TOKENS))
 	return {
 		name: topicScanContext.name,
 		text,
@@ -303,7 +310,7 @@ async function embedResourcesBatch(
 				charge(
 					budget,
 					"embedding",
-					tokenCost(estimateEmbedTokens(documentTexts[index] ?? ""), EMBED_COST_PER_MILLION_TOKENS),
+					tokenCost(toEstimatedTokens((documentTexts[index] ?? "").length), EMBED_COST_PER_MILLION_TOKENS),
 				)
 				await saveResourceEmbedding(resource.id, embedding)
 				embeddedBatch.embeddings.set(resource.id, embedding)
@@ -336,11 +343,6 @@ function embedText(resource: Pick<Resource, "title" | "snippet" | "url">): strin
  */
 export async function embedQuery(text: string, litellmApiKey?: string): Promise<number[]> {
 	return embedVector(`Instruct: ${EMBED_QUERY_INSTRUCTION}\nQuery: ${text}`, litellmApiKey)
-}
-
-// a rough token estimate for the embedding cost
-function estimateEmbedTokens(text: string): number {
-	return Math.ceil(text.length / 4)
 }
 
 /**

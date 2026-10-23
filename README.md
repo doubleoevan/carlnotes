@@ -191,8 +191,14 @@ flowchart
 ```
 
 Chat is signed-in only. Every chat turn writes a row, because every chat turn is metered. The model spend is charged to
-the asker's own LiteLLM key, sharing the same budget a topic scan charges. Chat text is encrypted. A chat that outgrows
-its context budget is compacted. The newest turns stay whole. Older answers are clipped to their opening characters.
+the asker's own LiteLLM key, sharing the same budget a topic scan charges. Before a turn, a transcription, or a spoken
+part runs, its largest cost is reserved in Redis. The budget is a soft limit: a call starts while the recorded spend and
+the open reservations are below it, so a user with budget left is never rejected, a second call is rejected while the
+first's reservation holds the rest of the budget, until the first releases its reservation, and the month passes the
+budget by at most about one call's largest cost. A rejected turn is rejected before anything posts, and a reservation is
+released once the turn's spend row is written. If Redis is down, the turn falls back to checking recorded spend against
+the budget. Chat text is encrypted. A chat that outgrows its context budget is compacted. The newest turns stay whole.
+Older answers are clipped to their opening characters.
 
 ### Live updates
 

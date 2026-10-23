@@ -141,22 +141,25 @@ Attachment-derived context SHALL be included in a turn's retrieval context only 
 - **THEN** the turn's retrieval context contains no attachment-derived material
 
 ### Requirement: Each turn is metered against the account's monthly spend budget
-A turn's estimated cost SHALL be checked against the user's remaining monthly spend budget before generation, drawing
-from the same per-account pool manual-scan overage draws from. A turn that would exceed the remaining budget SHALL be
-rejected with an upgrade prompt and SHALL NOT be billed. Every private chat SHALL count that rejection as a
-`chat_budget_reached` event: a Topic's chat, a Team's chat, and the new-topic chat. A completed turn's cost SHALL be
-recorded beside its token total, using the same best-effort token-cost tally a scan's review uses.
+A turn's largest possible cost SHALL be reserved against the user's monthly spend budget before generation, as the
+spend-reservations capability states, drawing from the same per-account pool manual-scan overage draws from. A turn
+SHALL start while the recorded spend plus every open reservation is below the budget, even if its maximum would pass it,
+and SHALL be rejected with an upgrade prompt and SHALL NOT be billed once they reach the budget. Every private chat
+SHALL count that rejection as a `chat_budget_reached` event: a Topic's chat, a Team's chat, and the new-topic chat. A
+completed turn's cost SHALL be recorded beside its token total, using the same best-effort token-cost tally a scan's
+review uses, and its reservation SHALL settle at that cost.
 
 A transcription and each spoken part of a reply SHALL be recorded as their own chat spend rows, with no text, so they
-draw from the same pool and count toward it. A spent budget SHALL reject a recording and a spoken part with the same
-upgrade prompt, before any model is called.
+draw from the same pool and count toward it. Each SHALL reserve its own largest cost before its model is called. A
+recording SHALL be rejected with the same upgrade prompt once the recorded spend and open reservations reach the budget,
+and a spoken part only once the recorded spend reaches it, since the chat turn it speaks already holds a reservation.
 
 #### Scenario: A turn within budget proceeds and records its cost
 - **WHEN** a user with remaining monthly budget sends a chat turn
 - **THEN** the reply is generated, and the turn's estimated cost and its token total are recorded against that user
 
 #### Scenario: A turn over budget is blocked, not billed
-- **WHEN** a user's remaining monthly budget cannot cover an estimated turn
+- **WHEN** a user's recorded spend and open reservations have reached their monthly budget
 - **THEN** the turn is rejected with an upgrade prompt, no generation runs, no cost is recorded, and one
   `chat_budget_reached` event is counted for that user
 

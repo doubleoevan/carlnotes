@@ -666,6 +666,9 @@ Check for:
      `ScanNotePanel` in `apps/web/src/components/topic/TopicScanHistory.tsx`)
    - `api/topic/findingMarks.ts` (now `apps/api/topic/findingFeedback.ts`) and `registerMarkTools` (now
      `registerFeedbackTools` in `apps/api/mcp/tools.ts`)
+   - `estimateEmbedTokens` in `packages/pipeline/review/filter.ts` and `TRANSCRIPT_CHARS_PER_TOKEN` in
+     `packages/models/transcription.ts` (now `toEstimatedTokens` in `packages/models/budget.ts`), and `rejectChatTurn`
+     in `apps/api/chat/privateChat.ts` (now exported from `apps/api/chat/chatTurnAuthorization.ts`)
 
 5. **Cross-harness enforcement parity**: `.claude/settings.json` hooks and
    `.opencode/plugin/guardrails.mjs` must gate the same operations with the

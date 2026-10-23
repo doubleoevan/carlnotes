@@ -19,7 +19,7 @@ import { type SearchTotal, webSearchTool } from "./search"
 export const MAX_TURN_STEPS = 8
 
 // the reply's token limit, bounding what one chat turn can spend on expensive output tokens
-const MAX_TURN_OUTPUT_TOKENS = 3000
+export const MAX_TURN_OUTPUT_TOKENS = 3000
 
 // one part of a streamed reply: text as it arrives, or a tool call that returned
 export type ChatReplyPart =

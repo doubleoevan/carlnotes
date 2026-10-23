@@ -18,7 +18,7 @@ import type { ChatReplyCompletion, ChatReplyPart, ChatReplyStream } from "./inde
 const podcastReplySchema = z.object({ speaker: z.enum(podcastEpisodeSpeakers), answer: z.string() })
 
 // the most a podcast chat turn's answer may write. it is spoken, so it is short
-const MAX_PODCAST_REPLY_OUTPUT_TOKENS = 1000
+export const MAX_PODCAST_REPLY_OUTPUT_TOKENS = 1000
 
 // the model call's inputs: the model, the system prompt, the conversation, and the prompt's telemetry options
 type StreamPodcastReplyOptions = {

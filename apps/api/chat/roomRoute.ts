@@ -9,6 +9,7 @@ import { type Context, Hono } from "hono"
 import type { z } from "zod"
 import { toSignedOutRejection } from "../bodyLimit"
 import { type AppEnv, currentUser, toAnalyticsProperties } from "../currentUser"
+import { toolCallerRateLimiter } from "../rateLimit"
 import { toStoredFileHeaders } from "../topic/attachments"
 import { loadLinkPreviewImage } from "./linkPreviews"
 import { saveSeenChatMentions } from "./mentions"
@@ -211,9 +212,11 @@ export const chatRoomRoute = new Hono<AppEnv>()
 		clearChatRoom(context, context.req.param("id"), context.req.param("teamId")),
 	)
 	.delete("/teams/:id/room/messages", (context) => clearChatRoom(context, null, context.req.param("id")))
-	// the post routes: one member's chat message in, carl's chat turn after it when addressed
+	// the post routes: one member's chat message in, carl's chat turn after it when addressed, each under the tool
+	// callers' rate limit as a private chat post is
 	.post(
 		TOPIC_ROOM_PATH,
+		toolCallerRateLimiter,
 		chatRoomSignedOutRejection,
 		chatBodyLimit,
 		zValidator("json", chatRoomMessagePayload),
@@ -221,6 +224,7 @@ export const chatRoomRoute = new Hono<AppEnv>()
 	)
 	.post(
 		TEAM_ROOM_PATH,
+		toolCallerRateLimiter,
 		chatRoomSignedOutRejection,
 		chatBodyLimit,
 		zValidator("json", chatRoomMessagePayload),

@@ -29,23 +29,24 @@ it; it imports `@carlnotes/models`, `@carlnotes/emails`, `@carlnotes/db`, `@carl
   Scan owner's key: the Topic owner's for a scheduled Scan and the starting user's for a manual one. The search
   ingester's query generation bills that key like every other model call a Scan makes. `review/` — filtering and scoring
   (`filter.ts` the relevance gate, `dedupe.ts` the content hash and near-duplicate pass, `fetch.ts` the content fetch
-  for a Resource to score, `score.ts` the scoring and the finding writes, `track.ts` what became of each Resource,
-  `summarize.ts` the scan report, and `index.ts` the stage over them, with `reviewTestFixtures.ts` beside their tests).
-  `chat/` — Carl's streamed chat replies (`index.ts` streams a reply, `podcastReply.ts` streams a podcast question's
-  reply as one structured call whose speaker, `host` or `cohost`, comes before the answer, `chatMessages.ts` shapes a
-  conversation into the model messages a turn sends, `chatPrompts.ts` builds each chat's system prompt from its
-  template, `podcastEpisodeQuestionPrompt.ts` the topic chat prompt's blocks for a question asked from the podcast
-  player, `search.ts` the live web search tool a signed-in chat turn may call, and `agreement.ts` checks whether a
-  user's message agrees to the proposal it answers, reading only the user's words and the proposal, with
-  `chatModelTestFixtures.ts` for the fake models their tests stream from, and `chatContextTestFixtures.ts` and
-  `podcastEpisodeChapterTestFixtures.ts` for the chat context and the chapter their tests read) and their retrieval
-  (`retrieve.ts`, whose topic ranking collects the topics' findings in a materialized common table expression and ranks
-  that set, `retrieveDocs.ts` for the docs sections a question about the app reads and `embedRetrievalQuery`, which
-  embeds a question or a search query with the query instruction, `retrieveTeam.ts` for a team chat room turn's context,
-  and `retrievePodcastEpisodeChapter.ts` for the chapter a podcast question was asked during, with its lines and its
-  Finding). The prompts the builders fill live in `@carlnotes/models/prompts/`, and every model call goes through
-  `@carlnotes/models/models` on a key from `@carlnotes/models/litellm`. `favicons.ts` — a host's favicon, fetched once
-  when review reads a page on it.
+  for a Resource to score, `score.ts` the scoring and the finding writes, each Resource reserving its largest cost
+  before its paid section, `track.ts` what became of each Resource, `summarize.ts` the scan report, and `index.ts` the
+  stage over them, with `reviewTestFixtures.ts` beside their tests). `chat/` — Carl's streamed chat replies (`index.ts`
+  streams a reply, `podcastReply.ts` streams a podcast question's reply as one structured call whose speaker, `host` or
+  `cohost`, comes before the answer, `chatMessages.ts` shapes a conversation into the model messages a turn sends,
+  `chatPrompts.ts` builds each chat's system prompt from its template, `podcastEpisodeQuestionPrompt.ts` the topic chat
+  prompt's blocks for a question asked from the podcast player, `search.ts` the live web search tool a signed-in chat
+  turn may call, and `agreement.ts` checks whether a user's message agrees to the proposal it answers, reading only the
+  user's words and the proposal, `chatTurnCost.ts` the largest cost of one chat turn, which the api reserves before the
+  turn runs, with `chatModelTestFixtures.ts` for the fake models their tests stream from, and
+  `chatContextTestFixtures.ts` and `podcastEpisodeChapterTestFixtures.ts` for the chat context and the chapter their
+  tests read) and their retrieval (`retrieve.ts`, whose topic ranking collects the topics' findings in a materialized
+  common table expression and ranks that set, `retrieveDocs.ts` for the docs sections a question about the app reads and
+  `embedRetrievalQuery`, which embeds a question or a search query with the query instruction, `retrieveTeam.ts` for a
+  team chat room turn's context, and `retrievePodcastEpisodeChapter.ts` for the chapter a podcast question was asked
+  during, with its lines and its Finding). The prompts the builders fill live in `@carlnotes/models/prompts/`, and every
+  model call goes through `@carlnotes/models/models` on a key from `@carlnotes/models/litellm`. `favicons.ts` — a host's
+  favicon, fetched once when review reads a page on it.
 - Every scan stage charges the Scan's one Budget, `@carlnotes/models/budget`.
 - `notify.ts` plans a digest's batches and sends one batch or one report, recording the accepted sends with the Scan's
   id, so a retry never mails anyone twice; the worker's `sendScanEmail` workflow runs it. `scanEmailContent.ts` holds

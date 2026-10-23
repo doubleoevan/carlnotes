@@ -6,6 +6,7 @@ import type { PodcastEpisodeSpeaker } from "@carlnotes/contracts/enums"
 import type { ChatAttachment } from "@carlnotes/contracts/payloads"
 import type { TopicDraft } from "@carlnotes/contracts/topicPayloads"
 import { isBudgetRejection, SPENT_BUDGET_REJECTION } from "@carlnotes/models/models"
+import type { SpendReservation } from "@carlnotes/models/spendReservations"
 import type { ChatReplyStream } from "@carlnotes/pipeline/chat/index"
 import type { PodcastEpisodeChapterContext } from "@carlnotes/pipeline/chat/retrievePodcastEpisodeChapter"
 import { reportError } from "@carlnotes/server/monitoring"
@@ -40,6 +41,8 @@ export type StreamedChatTurn = {
 	// the new-topic chat's draft as the turn started, and the tokens the agreement check spent before the reply
 	topicDraft?: TopicDraft
 	agreementTokens: number
+	// the turn's reservation against the user's budget, released once the turn's spend row is saved
+	reservation: SpendReservation
 }
 
 /** Streams a chat reply to the user, then saves the chat turn whether the stream finished or broke. */
@@ -69,8 +72,10 @@ export function streamChatTurn(context: Context, chatTurn: StreamedChatTurn): Re
 			}
 		}
 
-		// save the spend whether the stream finished or broke. a partial chat turn is never free
+		// save the spend whether the stream finished or broke, then release the reservation. a partial chat turn is never
+		// free, and the saved row now counts what the reservation held
 		const chatTurnId = await saveFinishedChatTurn(chatTurn, isReplyFinished)
+		await chatTurn.reservation.release()
 
 		// store the topic draft that the chat turn wrote. a chat turn that created the topic already deleted it
 		if (chatTurn.toolCalls.topicDraft && !chatTurn.toolCalls.createdTopicId) {

@@ -2,11 +2,14 @@
 import type { TopicDraftTeam } from "@carlnotes/contracts/topicPayloads"
 import { db } from "@carlnotes/db"
 import { topics } from "@carlnotes/db/schema/topics"
+import { trackEvent } from "@carlnotes/server/analytics"
 import { eq } from "drizzle-orm"
 import type { Context } from "hono"
 import { isAllowed, isLeaderRole, isMonthlySpendExhausted, topicsRemaining } from "../authorization"
+import { toAnalyticsProperties } from "../currentUser"
 import { loadTeamSummaries } from "../team/helpers"
 import { toTeamRole } from "../team/members"
+import { type ChatPage, toChatPageId } from "./chatTurns"
 
 // the outcomes of a chat turn request. a spent budget names its user.
 // an allowed chat turn names its user, whether the chat turn keeps its text, and what the chat turn may change
@@ -45,6 +48,25 @@ export function toChatRejection(
 
 	// reject a page this user may not chat on
 	return context.json({ error: "forbidden" }, 403)
+}
+
+// what a chat turn was rejected for, and the page it was sent on
+export type RejectChatTurnOptions = {
+	authorization: Exclude<ChatTurnAuthorization, { status: "allowed" }>
+	page: ChatPage
+}
+
+/**
+ * Counts a chat turn that a spent budget stopped, then returns the response for its rejection.
+ */
+export function rejectChatTurn(context: Context, { authorization, page }: RejectChatTurnOptions): Response {
+	if (authorization.status === "budget") {
+		trackEvent("chat_budget_reached", authorization.userId, {
+			...toAnalyticsProperties(context),
+			topicId: toChatPageId(page),
+		})
+	}
+	return toChatRejection(context, authorization.status)
 }
 
 /**

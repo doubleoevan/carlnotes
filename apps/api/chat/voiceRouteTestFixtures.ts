@@ -1,11 +1,12 @@
 // the voice route tests' shared setup: the pages and bytes the cases send, the recorded spoken answer, the wait for
 // calls in progress, the route signed in and as a visitor over a fake Redis, the transcription request builder, and the
-// spies that allow a page and stub a transcription
+// spies that allow a page, reserve its calls, and stub a transcription
 import { spyOn } from "bun:test"
 import * as monthlyBudgetCutoffs from "@carlnotes/db/monthlyBudgetCutoffs"
 import { stubRedisClient } from "@carlnotes/db/redisClientStub"
 import * as litellm from "@carlnotes/models/litellm"
 import type { SpokenAnswerResult } from "@carlnotes/models/speech"
+import { stubReservedUserSpend } from "@carlnotes/models/spendReservationTestFixtures"
 import * as transcription from "@carlnotes/models/transcription"
 import { Hono } from "hono"
 import type { AppEnv } from "../currentUser"
@@ -60,17 +61,20 @@ export function toTranscriptionRequest(page: unknown, recordingBytes: Uint8Array
 }
 
 // allow every page for user-1 under the chat turn gate and the access check, with spend under the spoken questions
-// cutoff and sk-user as the key, and return the spies the cases read
-export function allowVoicePage(): {
+// cutoff, every call's largest cost reserved, and sk-user as the key, and return the spies the cases read
+export function allowVoicePage(): ReturnType<typeof stubReservedUserSpend> & {
 	recordChatSpendRowSpy: ReturnType<typeof spyOn<typeof chatTurns, "recordChatSpendRow">>
 	loadOrProvisionUserLiteLLMKeySpy: ReturnType<typeof spyOn<typeof litellm, "loadOrProvisionUserLiteLLMKey">>
 } {
 	spyOn(voiceAuthorization, "authorizeVoiceChatPage").mockResolvedValue({ status: "allowed", userId: "user-1" })
 	spyOn(voiceAuthorization, "authorizeVoiceChatPageAccess").mockResolvedValue({ status: "allowed", userId: "user-1" })
 	spyOn(monthlyBudgetCutoffs, "isMonthlyBudgetCutoffPassed").mockResolvedValue(false)
+
+	// the key, the spend row, and the reservation the cases read
 	return {
 		loadOrProvisionUserLiteLLMKeySpy: spyOn(litellm, "loadOrProvisionUserLiteLLMKey").mockResolvedValue("sk-user"),
 		recordChatSpendRowSpy: spyOn(chatTurns, "recordChatSpendRow").mockResolvedValue(undefined),
+		...stubReservedUserSpend(),
 	}
 }
 

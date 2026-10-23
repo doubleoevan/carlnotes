@@ -12,8 +12,24 @@ and the evals all start. It imports `@carlnotes/db`, `@carlnotes/server`, and `@
   admin call times out after five seconds. A Scan creates its owner's missing key before any Source runs.
   `litellmTestFixtures.ts` is the stub proxy, the connection pool stub that keeps the call order, the user row, and the
   setup and restore that each LiteLLM test file runs around every test.
-- `budget.ts` — a Scan's one Budget, which every scan stage charges; nothing spends outside it. It also prices the
-  calls the api meters itself: `speechCost` by its speech tier and `transcriptionCost`.
+- `budget.ts` — a Scan's one Budget, which every scan stage charges; nothing spends outside it. A Resource reserves
+  its largest cost in the Budget's `reservedDollars` with `reserveScanSpend` before its paid section and releases it
+  with `releaseScanSpend` after. A Resource starts while the spent and reserved dollars are below the Scan's limit, so
+  parallel review passes it by at most one Resource's largest cost. The heartbeat checkpoints
+  `toCheckpointBudget`, the settled spend without the reservations, and `toResumedBudget` starts a retried attempt with
+  none. It also prices the calls the api meters itself: `speechCost` by its speech tier and `transcriptionCost`, and
+  `toEstimatedTokens` turns a text length into the tokens a cost estimate prices.
+- `spendReservations.ts` — `reserveUserSpend` reserves a chat turn's, a transcription's, or a spoken part's largest cost
+  against the user's monthly budget, a soft limit: the call starts while the app's own monthly spend sums and the open
+  reservations in the Redis sorted set `spend-reservations:<userId>` are below the budget, even if its largest cost
+  would pass it, so the month passes the budget by at most about one call's largest cost. One Lua script decides and
+  adds. A spoken part is rejected by recorded spend alone, since its chat turn already holds a reservation. A budget
+  that the spend and open reservations have reached returns `"rejected"`, and a reservation is released once the call's
+  spend row is written or the call fails, or expires after the call kind's longest run plus a minute. If Redis cannot
+  run the script, a user under budget runs, and the call's release still removes a member the script may have added
+  late. `transcription.ts` prices its largest cost as `MAX_TRANSCRIPTION_DOLLARS`, and `speech.ts` a spoken part's as
+  `maxSpokenAnswerDollars`. `spendReservationTestFixtures.ts` stubs `reserveUserSpend` for the api tests, with a release
+  they read.
 - `telemetry.ts` traces model calls in Langfuse on its own tracer provider beside Sentry's, and both processes start
   Sentry before it.
 - `speech.ts` sends one two-speaker call per chapter through LiteLLM's Gemini pass-through and returns a WAV, and one

@@ -3,9 +3,16 @@
 import { expect, test } from "bun:test"
 import { restoreConnectionPool, stubConnectionPool } from "@carlnotes/db/connectionPoolStub"
 import type { resources, scans } from "@carlnotes/db/schema/scans"
-import { canScoreResource, newBudget } from "@carlnotes/models/budget"
+import { canScoreResource, charge, newBudget, releaseScanSpend } from "@carlnotes/models/budget"
 import { runWithConcurrency } from "@carlnotes/server/concurrency"
-import { buildScorePrompt, isPromoted, toFindingReviewFields, upsertFinding } from "./score"
+import {
+	buildScorePrompt,
+	isPromoted,
+	MAX_SCORED_RESOURCE_DOLLARS,
+	reserveScoredResource,
+	toFindingReviewFields,
+	upsertFinding,
+} from "./score"
 
 // a high cheap-model score earns promotion to the premium score-model's re-score
 test("isPromoted gates on the promotion threshold", () => {
@@ -48,6 +55,37 @@ test("the plan limit check halts dispatch once either limit is reached", async (
 
 	// the first two were bought, and the rest deferred, without failing anything
 	expect(outcomes).toEqual(["kept 1", "kept 2", "deferred", "deferred", "deferred"])
+})
+
+// each Resource reserves its largest cost before its paid section, and starts only while the spent and reserved
+// dollars are below the Scan's limit, so the Resources running at once pass the limit by at most one largest cost.
+// checking spent dollars alone would let all four start under the limit and finish past it
+test("four parallel Resources against a nearly spent Scan budget start only while budget is left", async () => {
+	// the Scan has two and a half Resources' largest costs left
+	const budget = newBudget()
+	charge(budget, "ingestion", budget.limitDollars - 2.5 * MAX_SCORED_RESOURCE_DOLLARS)
+
+	// four Resources run at once, each reserving, paying for its fetch and scores while the others run, then releasing
+	const outcomes = await runWithConcurrency([1, 2, 3, 4], 4, async (item) => {
+		if (!reserveScoredResource(budget)) {
+			return "deferred"
+		}
+
+		// pay the whole largest cost after the others have started, and release the reservation at the end
+		try {
+			await Bun.sleep(1)
+			charge(budget, "scoringCheap", MAX_SCORED_RESOURCE_DOLLARS)
+			return `scored ${item}`
+		} finally {
+			releaseScanSpend(budget, MAX_SCORED_RESOURCE_DOLLARS)
+		}
+	})
+
+	// three started while budget was left and the fourth was deferred, the Scan passed its limit by less than one
+	// Resource's largest cost, and no reservation is left open
+	expect(outcomes).toEqual(["scored 1", "scored 2", "scored 3", "deferred"])
+	expect(budget.spentDollars - budget.limitDollars).toBeLessThan(MAX_SCORED_RESOURCE_DOLLARS)
+	expect(budget.reservedDollars).toBe(0)
 })
 
 // buildScorePrompt writes the prompt from summarize-resource.md. only the premium tier asks for the relevance explanation

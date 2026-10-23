@@ -3,12 +3,13 @@ import type { ChatAttachment } from "@carlnotes/contracts/payloads"
 import { db } from "@carlnotes/db"
 import { chatRoomMessages } from "@carlnotes/db/schema/chat"
 import { isBudgetRejection, MODEL_CHAT_TURN_FAILED_REJECTION, SPENT_BUDGET_REJECTION } from "@carlnotes/models/models"
+import { reserveUserSpend, type SpendReservation, toReleaseOnFailure } from "@carlnotes/models/spendReservations"
+import { maxChatTurnDollars, toAttachmentChars } from "@carlnotes/pipeline/chat/chatTurnCost"
 import { trackEvent } from "@carlnotes/server/analytics"
 import { reportError } from "@carlnotes/server/monitoring"
 import { and, eq } from "drizzle-orm"
 import type { Context } from "hono"
 import { streamSSE } from "hono/streaming"
-import { isMonthlySpendExhausted } from "../authorization"
 import type { AnalyticsProperties } from "../currentUser"
 import { loadUsername } from "../usernames"
 import { encryptChatText } from "./encryption"
@@ -17,6 +18,7 @@ import { saveChatMentions } from "./mentions"
 import { loadChatRoom, toTopicFilter } from "./roomAccess"
 import { prepareChatRoomAttachments, storeChatRoomAttachment } from "./roomAttachments"
 import { loadChatRoomDeltas, loadChatRoomMessages } from "./roomMessages"
+import { loadModelRoomQuestionChars } from "./roomQuestion"
 import { notifyChatRoomMessage, onChatRoomMessage } from "./roomStream"
 import { postModelRejection, runModelChatRoomTurn } from "./roomTurns"
 
@@ -28,8 +30,8 @@ export type PostChatRoomMessageOptions = { analyticsProperties?: AnalyticsProper
 
 /**
  * Post a chat message into the chatRoom. Member chat mentions become notification rows, and a chat message that addresses Carl
- * starts his chat turn, unless the poster's budget is spent, in which case the rejection comes back privately in this
- * response and nothing posts to the chat room.
+ * starts his chat turn, unless the poster's spend and open reservations have already reached the budget, in which case
+ * the rejection comes back privately in this response and nothing posts to the chat room.
  */
 export async function postChatRoomMessage(
 	userId: string,
@@ -56,11 +58,107 @@ export async function postChatRoomMessage(
 	// whether this chat message gives carl the chat turn
 	const isModelChatTurn = isModelAddressed(content, repliedToChatMessage)
 
-	// the budget gate runs before anything posts, so a spent budget is reported privately and spends nothing
-	if (isModelChatTurn && (await isMonthlySpendExhausted(userId))) {
+	// the budget gate reserves carl's chat turn's largest cost before anything posts, so a budget that the spend and
+	// open reservations have reached is reported privately and spends nothing
+	const reservation = isModelChatTurn
+		? await reserveModelChatRoomTurn({ userId, topicId, teamId, content, attachments })
+		: null
+	if (reservation === "rejected") {
 		return { chatMessageId: 0, rejectionReason: SPENT_BUDGET_REJECTION }
 	}
 
+	// store the chat message, and release the reservation if carl's chat turn never starts
+	const chatMessageId = await storeChatRoomMessage({
+		userId,
+		topicId,
+		teamId,
+		content,
+		replyToChatMessageId,
+		attachments,
+		chatRoomTeamId: chatRoom.teamId,
+		isModelChatTurn,
+		isSpoken,
+		analyticsProperties,
+	}).catch(toReleaseOnFailure(reservation))
+	if (typeof chatMessageId !== "number") {
+		await reservation?.release()
+		return chatMessageId
+	}
+
+	// carl's chat turn runs after the post returns, its chat messages read serialized by the chat room lock.
+	// its reservation is released once the turn has saved its spend row or failed
+	if (reservation) {
+		runModelChatRoomTurn(userId, chatRoom.topic, teamId, chatMessageId)
+			.catch(async (error) => {
+				console.error("carl chat room turn failed", error)
+				if (!isBudgetRejection(error)) {
+					reportError(error, "chat", { teamId })
+				}
+
+				// every failure posts a rejection as carl's own chat message
+				const rejection = isBudgetRejection(error) ? SPENT_BUDGET_REJECTION : MODEL_CHAT_TURN_FAILED_REJECTION
+				await postModelRejection(chatRoom.topic?.id ?? null, teamId, chatMessageId, rejection).catch((rejectionError) =>
+					console.error("carl rejection post failed", rejectionError),
+				)
+			})
+			.finally(() => reservation.release())
+	}
+	return { chatMessageId, rejectionReason: null }
+}
+
+// the poster, the chat room, and the chat message that carl's chat turn would answer
+type ReserveModelChatRoomTurnOptions = {
+	userId: string
+	topicId: string | null
+	teamId: string
+	content: string
+	attachments: ChatAttachment[]
+}
+
+// reserve the largest cost of carl's chat turn on a chat message about to post: the chat room's question as stored
+// now, with the chat message and its attachments added
+async function reserveModelChatRoomTurn({
+	userId,
+	topicId,
+	teamId,
+	content,
+	attachments,
+}: ReserveModelChatRoomTurnOptions): Promise<SpendReservation | "rejected"> {
+	const storedQuestionChars = await loadModelRoomQuestionChars(topicId, teamId)
+	const messageChars = storedQuestionChars + content.length + toAttachmentChars(attachments)
+	return reserveUserSpend({ userId, kind: "chatTurn", maxDollars: maxChatTurnDollars({ messageChars }) })
+}
+
+// one chat message to store: who posted it in which chat room, what it says and answers, its attachments, and what its
+// event reports
+type StoreChatRoomMessageOptions = {
+	userId: string
+	topicId: string | null
+	teamId: string
+	content: string
+	replyToChatMessageId: number | null
+	attachments: ChatAttachment[]
+	// the team the chat room belongs to, which the link previews and the chat mentions name
+	chatRoomTeamId: string
+	isModelChatTurn: boolean
+	isSpoken: boolean
+	analyticsProperties: AnalyticsProperties | undefined
+}
+
+// store a chat message with its attachments, fan it out, save its chat mentions, and report it. returns the chat
+// message's id, a rejected or over-limit attachment, or null if the row was not stored
+async function storeChatRoomMessage({
+	userId,
+	topicId,
+	teamId,
+	content,
+	replyToChatMessageId,
+	attachments,
+	chatRoomTeamId,
+	isModelChatTurn,
+	isSpoken,
+	analyticsProperties,
+}: StoreChatRoomMessageOptions): Promise<number | "attachmentRejected" | "attachmentLimitReached" | null> {
 	// every shared file is screened and read before the chat message is stored, so one rejected file posts nothing at all
 	const preparedAttachments = await prepareChatRoomAttachments(userId, topicId, teamId, attachments)
 	if (preparedAttachments === null || preparedAttachments === "attachmentLimitReached") {
@@ -91,13 +189,11 @@ export async function postChatRoomMessage(
 	}
 
 	// the link preview cards fetch in the background, so the chat message loads for everyone without waiting on its links
-	void saveLinkPreviews(content, chatRoom.teamId).catch((error) =>
-		console.error("chat room link preview failed", error),
-	)
+	void saveLinkPreviews(content, chatRoomTeamId).catch((error) => console.error("chat room link preview failed", error))
 	await notifyChatRoomMessage(topicId, teamId, chatMessageRow.id)
 
 	// team member chat mentions and the replied-to author become rows that the chat mention badges read
-	await saveChatMentions(chatRoom.teamId, userId, chatMessageRow.id, content, replyToChatMessageId ?? null)
+	await saveChatMentions(chatRoomTeamId, userId, chatMessageRow.id, content, replyToChatMessageId ?? null)
 
 	// report the post: which kind of room, whether carl was asked, whether a file came with it, and whether it was spoken
 	trackChatRoomMessage({
@@ -109,24 +205,7 @@ export async function postChatRoomMessage(
 		isSpoken,
 		analyticsProperties,
 	})
-
-	// carl's turn runs after the post returns, its chat messages read serialized by the chat room lock
-	if (isModelChatTurn) {
-		const promptChatMessageId = chatMessageRow.id
-		runModelChatRoomTurn(userId, chatRoom.topic, teamId, promptChatMessageId).catch(async (error) => {
-			console.error("carl chat room turn failed", error)
-			if (!isBudgetRejection(error)) {
-				reportError(error, "chat", { teamId })
-			}
-
-			// every failure posts a rejection as carl's own chat message
-			const rejection = isBudgetRejection(error) ? SPENT_BUDGET_REJECTION : MODEL_CHAT_TURN_FAILED_REJECTION
-			await postModelRejection(chatRoom.topic?.id ?? null, teamId, promptChatMessageId, rejection).catch(
-				(rejectionError) => console.error("carl rejection post failed", rejectionError),
-			)
-		})
-	}
-	return { chatMessageId: chatMessageRow.id, rejectionReason: null }
+	return chatMessageRow.id
 }
 
 // a posted chat message's event: the room it went to, whether carl was asked, whether a file came with it,

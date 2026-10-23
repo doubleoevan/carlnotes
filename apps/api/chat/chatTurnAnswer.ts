@@ -5,7 +5,9 @@ import type { TopicChatTurnPayload } from "@carlnotes/contracts/payloads"
 import { ADMIN_QUOTA } from "@carlnotes/contracts/plans"
 import { EMPTY_TOPIC_DRAFT, type TopicDraft } from "@carlnotes/contracts/topicPayloads"
 import { loadOrProvisionUserLiteLLMKey } from "@carlnotes/models/litellm"
+import { reserveUserSpend, toReleaseOnFailure } from "@carlnotes/models/spendReservations"
 import type { ChatTurnInput } from "@carlnotes/pipeline/chat/chatMessages"
+import { maxChatTurnDollars, toChatTurnMessageChars } from "@carlnotes/pipeline/chat/chatTurnCost"
 import { streamChatReply } from "@carlnotes/pipeline/chat/index"
 import { loadPodcastEpisodeChapterContext } from "@carlnotes/pipeline/chat/retrievePodcastEpisodeChapter"
 import type { Context } from "hono"
@@ -20,7 +22,7 @@ import { toNewTopicChatTools, toProposeNewTopicTool, toSuggestTopicSourcesTool }
 import { loadTopicDraft } from "../topic/topicDrafts"
 import { resolveChatAttachments } from "./chatAttachmentScreening"
 import { answerChatProposal } from "./chatProposals"
-import type { ChatTurnAuthorization } from "./chatTurnAuthorization"
+import { type ChatTurnAuthorization, rejectChatTurn } from "./chatTurnAuthorization"
 import { streamChatTurn } from "./chatTurnStream"
 import type { ChatPage } from "./chatTurns"
 import { saveLinkPreviews } from "./linkPreviews"
@@ -34,7 +36,9 @@ export type AnswerChatTurnOptions = {
 }
 
 /**
- * Streams the reply to an allowed private chat turn.
+ * Streams the reply to an allowed private chat turn. The turn's largest cost is reserved against the user's budget
+ * before any model call, and once the spend and open reservations reach the budget a turn is rejected as a spent budget
+ * is.
  */
 export async function answerChatTurn(
 	context: Context,
@@ -61,8 +65,24 @@ export async function answerChatTurn(
 	const { userId } = authorization
 	const topicDraft = page.newTopic ? await loadNewTopicChatDraft(userId, chatTurnPayload.topicDraft) : undefined
 
+	// reserve the chat turn's largest cost from what it sends, and reject the turn once the spend and open reservations
+	// reach the budget
+	const messageChars = toChatTurnMessageChars({
+		question,
+		history,
+		chatAttachments: resolvedChatAttachments.chatAttachments,
+	})
+	const maxDollars = maxChatTurnDollars({ messageChars, isPodcastReply: podcastEpisodeChapter !== undefined })
+	const reservation = await reserveUserSpend({ userId, kind: "chatTurn", maxDollars })
+	if (reservation === "rejected") {
+		return rejectChatTurn(context, { authorization: { status: "budget", userId }, page })
+	}
+
+	// release the reservation if the reply never starts streaming. once it streams, the stream releases it
+	const releaseOnFailure = toReleaseOnFailure(reservation)
+
 	// the LiteLLM key that the chat turn bills, created first if the user has none
-	const litellmApiKey = await loadOrProvisionUserLiteLLMKey(userId)
+	const litellmApiKey = await loadOrProvisionUserLiteLLMKey(userId).catch(releaseOnFailure)
 
 	// what the tools and the server record, and the request's analytics properties
 	const toolCalls = toEmptyChatTurnToolCalls()
@@ -84,7 +104,7 @@ export async function answerChatTurn(
 				toolCalls,
 				analyticsProperties,
 				litellmApiKey,
-			})
+			}).catch(releaseOnFailure)
 		: undefined
 
 	// stream the reply from the page's own material: one topic, the team's held topics, or the topic draft. a podcast
@@ -117,8 +137,9 @@ export async function answerChatTurn(
 		litellmApiKey,
 		serverToolCalls: chatProposalResult?.serverToolCalls,
 		proposalOutcome: chatProposalResult?.proposalOutcome,
-	})
+	}).catch(releaseOnFailure)
 	if (!chatReply) {
+		await reservation.release()
 		return context.json({ error: "not found" }, 404)
 	}
 
@@ -142,6 +163,7 @@ export async function answerChatTurn(
 		litellmApiKey,
 		topicDraft,
 		agreementTokens: chatProposalResult?.agreementTokens ?? 0,
+		reservation,
 	})
 }
 

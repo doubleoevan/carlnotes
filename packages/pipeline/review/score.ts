@@ -8,8 +8,12 @@ import {
 	canScoreResource,
 	canSpend,
 	charge,
+	FIRECRAWL_COST_PER_FETCH,
 	PREMIUM_COST_PER_MILLION_TOKENS,
+	releaseScanSpend,
+	reserveScanSpend,
 	type StageCosts,
+	toEstimatedTokens,
 	toFetchCountField,
 	tokenCost,
 } from "@carlnotes/models/budget"
@@ -42,6 +46,18 @@ const REVIEW_CONCURRENCY = toPositiveInteger(Bun.env.REVIEW_CONCURRENCY, 4)
 // the text limit that bounds scoring tokens and spend
 const MAX_SCORE_CHARS = 8000
 
+// the score prompt's largest input beside the content, in characters: the template and the topic's score context,
+// and the largest output one score writes in tokens, a score and its relevance explanation
+const MAX_SCORE_PROMPT_CHARS = 12_000
+const MAX_SCORE_OUTPUT_TOKENS = 1000
+
+// the largest cost of one Resource's paid section: a paid fetch, then a cheap and a premium score of the largest prompt
+const MAX_SCORE_TOKENS = toEstimatedTokens(MAX_SCORE_CHARS + MAX_SCORE_PROMPT_CHARS) + MAX_SCORE_OUTPUT_TOKENS
+export const MAX_SCORED_RESOURCE_DOLLARS =
+	FIRECRAWL_COST_PER_FETCH +
+	tokenCost(MAX_SCORE_TOKENS, CHEAP_COST_PER_MILLION_TOKENS) +
+	tokenCost(MAX_SCORE_TOKENS, PREMIUM_COST_PER_MILLION_TOKENS)
+
 // the model's structured output
 const scoreSchema = z.object({ score: z.number(), relevanceExplanation: z.string().optional() })
 
@@ -70,7 +86,7 @@ export async function fetchAndScoreResources(
 	litellmApiKey?: string,
 	stopSignal?: AbortSignal,
 ): Promise<string[]> {
-	// each Resource checks the limit before it starts
+	// each Resource reserves its largest cost before it starts
 	const paidOutcomes = await runWithConcurrency(resourcesToScore, REVIEW_CONCURRENCY, (resource) =>
 		fetchAndScoreResource(resource, scan, topicId, topicContext, budget, customSourceUrls, litellmApiKey, stopSignal),
 	)
@@ -98,8 +114,9 @@ async function fetchAndScoreResource(
 	litellmApiKey?: string,
 	stopSignal?: AbortSignal,
 ): Promise<ResourceOutcome> {
-	// defer the Resource once the Scan hits its dollar limit or its scored-resource limit, or once the user stops the Scan
-	if (!canScoreResource(budget, stopSignal)) {
+	// defer the Resource once the Scan hits its scored-resource limit, once its spent and reserved dollars reach the
+	// dollar limit, or once the user stops the Scan
+	if (!reserveScoredResource(budget, stopSignal)) {
 		return { status: "deferred" }
 	}
 
@@ -151,7 +168,19 @@ async function fetchAndScoreResource(
 		console.error(`review failed for resource ${resource.id}`, error)
 		reportError(error, "score", { resourceId: resource.id, url: resource.url })
 		return { status: "failed" }
+	} finally {
+		// what the Resource spent was charged as it ran, so its reservation ends however the paid section ended
+		releaseScanSpend(budget, MAX_SCORED_RESOURCE_DOLLARS)
 	}
+}
+
+/**
+ * Reserves one Resource's largest cost inside the Scan's budget and returns true, or returns false once the Scan's
+ * scored-resource limit is reached, its spent and reserved dollars reach its dollar limit, or the user stops it.
+ * A true result is released with releaseScanSpend once the Resource's paid section ends.
+ */
+export function reserveScoredResource(budget: Budget, stopSignal?: AbortSignal): boolean {
+	return canScoreResource(budget, stopSignal) && reserveScanSpend(budget, MAX_SCORED_RESOURCE_DOLLARS)
 }
 
 /**

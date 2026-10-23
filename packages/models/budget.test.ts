@@ -6,7 +6,10 @@ import {
 	canSpend,
 	charge,
 	newBudget,
+	releaseScanSpend,
+	reserveScanSpend,
 	speechCost,
+	toCheckpointBudget,
 	toResumedBudget,
 	transcriptionCost,
 } from "./budget"
@@ -98,8 +101,8 @@ describe("a Budget resumed from a heartbeat checkpoint", () => {
 		const passedBudget = newBudget()
 		charge(passedBudget, "ingestion", 0.01)
 
-		expect(toResumedBudget(undefined, passedBudget)).toBe(passedBudget)
-		expect(toResumedBudget(null, passedBudget)).toBe(passedBudget)
+		expect(toResumedBudget(undefined, passedBudget)).toEqual(passedBudget)
+		expect(toResumedBudget(null, passedBudget)).toEqual(passedBudget)
 	})
 
 	test("falls back to the passed Budget when the checkpoint is not one", () => {
@@ -107,9 +110,49 @@ describe("a Budget resumed from a heartbeat checkpoint", () => {
 		const passedBudget = newBudget()
 		charge(passedBudget, "ingestion", 0.01)
 
-		expect(toResumedBudget({ spentDollars: 5 }, passedBudget)).toBe(passedBudget)
-		expect(toResumedBudget({ ...newBudget(), stageCosts: { fetch: 1 } }, passedBudget)).toBe(passedBudget)
-		expect(toResumedBudget("checkpoint", passedBudget)).toBe(passedBudget)
+		expect(toResumedBudget({ spentDollars: 5 }, passedBudget)).toEqual(passedBudget)
+		expect(toResumedBudget({ ...newBudget(), stageCosts: { fetch: 1 } }, passedBudget)).toEqual(passedBudget)
+		expect(toResumedBudget("checkpoint", passedBudget)).toEqual(passedBudget)
+	})
+})
+
+describe("a Budget's reservations", () => {
+	test("admit a paid task while the spent and reserved dollars are below the limit, whatever its cost", () => {
+		// a dime of a half-dollar limit is spent, so two tasks reserving thirty cents each start, and the third does not
+		const budget = { ...newBudget(), limitDollars: 0.5 }
+		charge(budget, "fetch", 0.1)
+		expect(reserveScanSpend(budget, 0.3)).toBe(true)
+		expect(reserveScanSpend(budget, 0.3)).toBe(true)
+		expect(reserveScanSpend(budget, 0.3)).toBe(false)
+
+		// what they hold passes the limit by less than one task's largest cost
+		expect(budget.spentDollars + budget.reservedDollars - budget.limitDollars).toBeLessThan(0.3)
+
+		// a task that ends at a cent charges that and releases its reservation, so the next task starts
+		charge(budget, "scoringCheap", 0.01)
+		releaseScanSpend(budget, 0.3)
+		expect(budget.reservedDollars).toBeCloseTo(0.3, 10)
+		expect(reserveScanSpend(budget, 0.3)).toBe(true)
+	})
+
+	test("are never checkpointed, so a resumed budget includes settled spend and holds no reservation", () => {
+		// an attempt dies while four Resources hold reservations beside the spend it settled
+		const dyingBudget = newBudget()
+		charge(dyingBudget, "fetch", 0.04)
+		for (let i = 0; i < 4; i++) {
+			reserveScanSpend(dyingBudget, 0.05)
+		}
+
+		// the heartbeat sends the settled spend alone, and the next attempt resumes from it with nothing reserved
+		const checkpoint = acrossActivityBoundary(toCheckpointBudget(dyingBudget) as Budget)
+		expect(checkpoint).not.toHaveProperty("reservedDollars")
+		const resumedBudget = toResumedBudget(checkpoint, newBudget())
+		expect(resumedBudget.spentDollars).toBeCloseTo(0.04, 10)
+		expect(resumedBudget.reservedDollars).toBe(0)
+
+		// a passed budget from before reservations existed resumes with nothing reserved too
+		const { reservedDollars: _reservedDollars, ...passedBudgetWithoutReservations } = newBudget()
+		expect(toResumedBudget(undefined, passedBudgetWithoutReservations as Budget).reservedDollars).toBe(0)
 	})
 })
 

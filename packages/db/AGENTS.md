@@ -100,6 +100,8 @@ and `@carlnotes/contracts`, with `drizzle-orm` and `@neondatabase/serverless`.
 - `redisFakeViewerCounts.ts` — the viewer count commands that the fake server and the client stub both handle: the add
   and take scripts, `PFADD`, `SADD`, `PFCOUNT`, `PFMERGE`, `EXISTS`, and the counter read, each counter held as an exact
   set.
+- `redisFakeSpendReservations.ts` — the spend reservation commands that the fake server and the client stub both
+  handle: the reserve script and `ZREM`, each sorted set held as its members and their scores.
 - `redisClientStub.ts` — the Redis client stub that the tests share. `stubRedisClient` swaps the store's clients for
   in-memory fakes over one map and returns the map, and `restoreRedisClient` puts the store's own builder back. Only
   tests import it.

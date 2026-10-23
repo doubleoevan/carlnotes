@@ -16,10 +16,10 @@ Ingestion returns what it spent, the review receives it and returns what it leav
 reads is the running total it was handed. A Scan's stages may run in separate processes, so a shared object mutated in
 place would let the review start from zero and spend the limit twice.
 
-The USD limit SHALL be hard within an attempt: before a Resource enters the paid section, its largest cost at the fetch
-and scoring rates SHALL be reserved inside the Scan's budget, as the spend-reservations capability states, and a
-Resource whose maximum does not fit beside the spent and reserved dollars SHALL be deferred, so the Resources running
-under the concurrency limit can never together carry the Scan past the limit. The count limit stays a check before
+The USD limit SHALL be bounded within an attempt: before a Resource enters the paid section, its largest cost at the
+fetch and scoring rates SHALL be reserved inside the Scan's budget, as the spend-reservations capability states, and a
+Resource SHALL be deferred once the spent and reserved dollars reach the limit, so the Resources running under the
+concurrency limit pass the limit by at most one Resource's largest cost. The count limit stays a check before
 dispatch, so the fetch-outcome counts (`reused + revalidated + fetched`) MAY exceed it by up to `(concurrency - 1)`.
 
 Once either limit is reached, the review SHALL stop dispatching further paid work and leave the remaining Resources
@@ -54,8 +54,8 @@ metered, SHALL defer past the USD limit as the embed-filter requirement states.
 
 - **WHEN** the count limit is reached while other Resources are already running under the concurrency limit
 - **THEN** those running Resources finish and are counted, so the Scan may exceed the count limit by up to
-  `(concurrency - 1)` Resources, and this is not an error, while the USD limit holds because each running Resource
-  reserved its maximum before it started
+  `(concurrency - 1)` Resources, and this is not an error, while the USD limit is passed by at most one Resource's
+  largest cost because each running Resource reserved its maximum before it started
 
 #### Scenario: Unscored Resources wait for a later Scan and the Scan still succeeds
 

@@ -1,12 +1,12 @@
 // carl's question for one chat room turn, written from the chat window, the running summary it rolls,
 // and the room's shared files
 
-import type { DbTransaction } from "@carlnotes/db"
+import { type DbTransaction, db } from "@carlnotes/db"
 import { chatRoomAttachments, chatRoomMessages, chatRoomSummaries } from "@carlnotes/db/schema/chat"
 import { fetchPromptTemplate } from "@carlnotes/models/prompts/fetch"
 import { writePrompt } from "@carlnotes/models/prompts/write"
-import { and, asc, desc, eq, gt, inArray, lt } from "drizzle-orm"
-import { decryptChatText } from "./encryption"
+import { and, asc, desc, eq, gt, inArray, lt, sql } from "drizzle-orm"
+import { decryptChatText, toDecryptedLengthSql } from "./encryption"
 import { toTopicFilter } from "./roomAccess"
 
 // how many chat messages the window includes before the summary takes over
@@ -15,6 +15,13 @@ const CHAT_ROOM_WINDOW_MESSAGES = 30
 // how much of each rolled-out chat message the running summary keeps
 const SUMMARY_MESSAGE_CHARS = 200
 const SUMMARY_MAX_CHARS = 8000
+
+// the characters a turn question holds beside its chat messages and shared files: the template and the running summary
+const MAX_ROOM_QUESTION_TEMPLATE_CHARS = 4000 + SUMMARY_MAX_CHARS
+
+// the characters each transcript line and each shared file adds beside its own words: an author, a quoted line it
+// answers, and a file's name and uploader
+const ROOM_LINE_LABEL_CHARS = 200
 
 // what the template's summary slot says for a chat room with no running summary yet
 export const EMPTY_CHAT_ROOM_SUMMARY = "Nothing yet."
@@ -61,6 +68,43 @@ export async function buildModelRoomQuestion(
 		chatRoomAttachmentsBlock,
 		chatMessages,
 	})
+}
+
+/**
+ * Returns the most characters carl's question for the chat room's next turn holds, from what the chat room stores now:
+ * the window's chat messages, the chat room's shared files, and the template and summary around them. The lengths are
+ * summed in the database, so no stored text is read or decrypted.
+ */
+export async function loadModelRoomQuestionChars(topicId: string | null, teamId: string): Promise<number> {
+	// the window's chat messages, newest first under the window's limit, each with its line's label
+	const windowChatMessages = db
+		.select({
+			lineChars: sql<number>`${toDecryptedLengthSql(chatRoomMessages.content)} + ${ROOM_LINE_LABEL_CHARS}`.as(
+				"line_chars",
+			),
+		})
+		.from(chatRoomMessages)
+		.where(and(toTopicFilter(chatRoomMessages.topicId, topicId), eq(chatRoomMessages.teamId, teamId)))
+		.orderBy(desc(chatRoomMessages.id))
+		.limit(CHAT_ROOM_WINDOW_MESSAGES)
+		.as("window_chat_messages")
+
+	// sum the window's lines and the chat room's ready files, each file with its own label
+	const fileCharsSql = sql<number>`${toDecryptedLengthSql(chatRoomAttachments.context)} + ${ROOM_LINE_LABEL_CHARS}`
+	const [[windowRow], [attachmentsRow]] = await Promise.all([
+		db.select({ chars: sql<string>`coalesce(sum(${windowChatMessages.lineChars}), 0)` }).from(windowChatMessages),
+		db
+			.select({ chars: sql<string>`coalesce(sum(${fileCharsSql}), 0)` })
+			.from(chatRoomAttachments)
+			.where(
+				and(
+					toTopicFilter(chatRoomAttachments.topicId, topicId),
+					eq(chatRoomAttachments.teamId, teamId),
+					eq(chatRoomAttachments.status, "ready"),
+				),
+			),
+	])
+	return MAX_ROOM_QUESTION_TEMPLATE_CHARS + Number(windowRow?.chars ?? 0) + Number(attachmentsRow?.chars ?? 0)
 }
 
 // the template variables of a room turn's question, with the running summary, the room's shared files, and the transcript

@@ -16,11 +16,13 @@ import { speechCost, transcriptionCost } from "@carlnotes/models/budget"
 import { loadOrProvisionUserLiteLLMKey } from "@carlnotes/models/litellm"
 import {
 	type ModelCallFailure,
+	maxSpokenAnswerDollars,
 	recordSpokenAnswer,
 	SPOKEN_ANSWER_SPEECH_TIER,
 	toRetryableModelCallFailure,
 } from "@carlnotes/models/speech"
-import { transcodeRecording, transcribeRecording } from "@carlnotes/models/transcription"
+import { reserveUserSpend, type SpendReservationKind } from "@carlnotes/models/spendReservations"
+import { MAX_TRANSCRIPTION_DOLLARS, transcodeRecording, transcribeRecording } from "@carlnotes/models/transcription"
 import { trackEvent } from "@carlnotes/server/analytics"
 import { reportError } from "@carlnotes/server/monitoring"
 import { zValidator } from "@hono/zod-validator"
@@ -108,6 +110,30 @@ async function recordPaidModelCall(spendRowOptions: RecordChatSpendRowOptions): 
 	} catch (error) {
 		console.error(`the ${spendRowOptions.kind} spend row could not be recorded`, error)
 		reportError(error, "chat", { userId: spendRowOptions.userId, modelCall: spendRowOptions.kind })
+	}
+}
+
+// the user a voice model call bills, the kind of call, and its largest cost
+type ReservedVoiceCallOptions = { userId: string; kind: SpendReservationKind; maxDollars: number }
+
+// run a voice model call under a reservation of its largest cost, and reject the call as a spent budget once the spend
+// and open reservations reach the budget. the reservation is released once the call has recorded its spend row or
+// failed
+async function runReservedVoiceCall(
+	context: Context,
+	{ userId, kind, maxDollars }: ReservedVoiceCallOptions,
+	runModelCall: () => Promise<Response>,
+): Promise<Response> {
+	const reservation = await reserveUserSpend({ userId, kind, maxDollars })
+	if (reservation === "rejected") {
+		return toChatRejection(context, "budget")
+	}
+
+	// run the call and release the reservation however the call ends
+	try {
+		return await runModelCall()
+	} finally {
+		await reservation.release()
 	}
 }
 
@@ -243,33 +269,37 @@ export const voiceRoute = new Hono<AppEnv>()
 				return context.json({ error: "That recording couldn't be read." }, 422)
 			}
 
-			// transcribe on the user's key, created first if the user has none. a key the proxy could not load is a
-			// failure a retry can fix
+			// transcribe under a reservation of the transcription's largest cost
 			const { userId } = authorization
-			const litellmApiKey = await loadOrProvisionUserLiteLLMKey(userId).catch(toRetryableModelCallFailure)
-			if (typeof litellmApiKey !== "string") {
-				return rejectModelCall(context, litellmApiKey, "transcription")
-			}
-			const transcribeRecordingResult = await transcribeRecording({ audioBytes, litellmApiKey })
+			const transcriptionCall = { userId, kind: "transcription" as const, maxDollars: MAX_TRANSCRIPTION_DOLLARS }
+			return runReservedVoiceCall(context, transcriptionCall, async () => {
+				// transcribe on the user's key, created first if the user has none. a key the proxy could not load is a
+				// failure a retry can fix
+				const litellmApiKey = await loadOrProvisionUserLiteLLMKey(userId).catch(toRetryableModelCallFailure)
+				if (typeof litellmApiKey !== "string") {
+					return rejectModelCall(context, litellmApiKey, "transcription")
+				}
+				const transcribeRecordingResult = await transcribeRecording({ audioBytes, litellmApiKey })
 
-			// a recording with no samples called no model, so it returns an empty transcript with no spend row
-			if (transcribeRecordingResult.outcome === "silent") {
-				return context.json({ transcript: "" })
-			}
-			if (transcribeRecordingResult.outcome !== "transcribed") {
-				return rejectModelCall(context, transcribeRecordingResult, "transcription")
-			}
+				// a recording with no samples called no model, so it returns an empty transcript with no spend row
+				if (transcribeRecordingResult.outcome === "silent") {
+					return context.json({ transcript: "" })
+				}
+				if (transcribeRecordingResult.outcome !== "transcribed") {
+					return rejectModelCall(context, transcribeRecordingResult, "transcription")
+				}
 
-			// record the spend as soon as the transcript returns, empty or not. the call was paid either way
-			const { transcript, inputTokens, outputTokens } = transcribeRecordingResult
-			await recordPaidModelCall({
-				kind: "transcription",
-				userId,
-				page,
-				cost: transcriptionCost({ inputTokens, outputTokens }),
-				totalTokens: inputTokens + outputTokens,
+				// record the spend as soon as the transcript returns, empty or not. the call was paid either way
+				const { transcript, inputTokens, outputTokens } = transcribeRecordingResult
+				await recordPaidModelCall({
+					kind: "transcription",
+					userId,
+					page,
+					cost: transcriptionCost({ inputTokens, outputTokens }),
+					totalTokens: inputTokens + outputTokens,
+				})
+				return context.json({ transcript })
 			})
-			return context.json({ transcript })
 		},
 	)
 	.post(
@@ -291,29 +321,33 @@ export const voiceRoute = new Hono<AppEnv>()
 				return context.json({ error: "rate limited" }, 429)
 			}
 			try {
-				// speak the spoken part on the user's key, created first if the user has none. a key the proxy could not load
-				// is a failure a retry can fix
-				const litellmApiKey = await loadOrProvisionUserLiteLLMKey(userId).catch(toRetryableModelCallFailure)
-				if (typeof litellmApiKey !== "string") {
-					return rejectModelCall(context, litellmApiKey, "speech")
-				}
-				const recordSpokenAnswerResult = await recordSpokenAnswer({ text, speaker, litellmApiKey })
-				if (recordSpokenAnswerResult.outcome !== "recorded") {
-					return rejectModelCall(context, recordSpokenAnswerResult, "speech")
-				}
+				// speak under a reservation of the spoken part's largest cost
+				const speechCall = { userId, kind: "speech" as const, maxDollars: maxSpokenAnswerDollars(text.length) }
+				return await runReservedVoiceCall(context, speechCall, async () => {
+					// speak the spoken part on the user's key, created first if the user has none. a key the proxy could not
+					// load is a failure a retry can fix
+					const litellmApiKey = await loadOrProvisionUserLiteLLMKey(userId).catch(toRetryableModelCallFailure)
+					if (typeof litellmApiKey !== "string") {
+						return rejectModelCall(context, litellmApiKey, "speech")
+					}
+					const recordSpokenAnswerResult = await recordSpokenAnswer({ text, speaker, litellmApiKey })
+					if (recordSpokenAnswerResult.outcome !== "recorded") {
+						return rejectModelCall(context, recordSpokenAnswerResult, "speech")
+					}
 
-				// record the spoken part's spend on the spoken answer's tier, then return the audio, which no cache may keep
-				const { audioBytes, audioContentType, inputTokens, audioTokens } = recordSpokenAnswerResult
-				await recordPaidModelCall({
-					kind: "speech",
-					userId,
-					page,
-					cost: speechCost({ speechTier: SPOKEN_ANSWER_SPEECH_TIER, inputTokens, audioTokens }),
-					totalTokens: inputTokens + audioTokens,
-				})
-				return context.body(audioBytes as unknown as ArrayBuffer, 200, {
-					"Content-Type": audioContentType,
-					"Cache-Control": "private, no-store",
+					// record the spoken part's spend on the spoken answer's tier, then return the audio, which no cache may keep
+					const { audioBytes, audioContentType, inputTokens, audioTokens } = recordSpokenAnswerResult
+					await recordPaidModelCall({
+						kind: "speech",
+						userId,
+						page,
+						cost: speechCost({ speechTier: SPOKEN_ANSWER_SPEECH_TIER, inputTokens, audioTokens }),
+						totalTokens: inputTokens + audioTokens,
+					})
+					return context.body(audioBytes as unknown as ArrayBuffer, 200, {
+						"Content-Type": audioContentType,
+						"Cache-Control": "private, no-store",
+					})
 				})
 			} finally {
 				finishSpokenPart(userId)

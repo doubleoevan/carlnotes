@@ -272,6 +272,7 @@ async function writeSamplePrompts(): Promise<[string, boolean][]> {
 		scannedSources: [{ sourceKind: "rss", status: "ok" }],
 		budget: {
 			spentDollars: 0,
+			reservedDollars: 0,
 			limitDollars: 0.5,
 			stageCosts: { ingestion: 0, embedding: 0, fetch: 0, scoringCheap: 0, scoringPremium: 0 },
 			maxScoredResources: 25,

@@ -682,11 +682,11 @@ Ingestion returns what it spent, the review receives it and returns what it leav
 reads is the running total it was handed. A Scan's stages may run in separate processes, so a shared object mutated in
 place would let the review start from zero and spend the limit twice.
 
-Because the paid section runs under bounded concurrency and each limit is checked before dispatch instead of after
-completion, both limits are **approximate**, not hard: up to `(concurrency - 1)` Resources may already be running when a
-limit is reached, so the Scan may overshoot either limit by that many Resources. This overshoot is accepted. It costs a
-few cents, and the USD limit is an in-memory advisory counter that defers work instead of throwing. The fetch-outcome
-counts (`reused + revalidated + fetched`) SHALL therefore approximate, and MAY slightly exceed, the count limit.
+The USD limit SHALL be bounded within an attempt: before a Resource enters the paid section, its largest cost at the
+fetch and scoring rates SHALL be reserved inside the Scan's budget, as the spend-reservations capability states, and a
+Resource SHALL be deferred once the spent and reserved dollars reach the limit, so the Resources running under the
+concurrency limit pass the limit by at most one Resource's largest cost. The count limit stays a check before
+dispatch, so the fetch-outcome counts (`reused + revalidated + fetched`) MAY exceed it by up to `(concurrency - 1)`.
 
 Once either limit is reached, the review SHALL stop dispatching further paid work and leave the remaining Resources
 unscored, left for a later Scan, without failing the Scan. The free stages that spend nothing — the hash dedupe, the
@@ -718,9 +718,10 @@ metered, SHALL defer past the USD limit as the embed-filter requirement states.
 
 #### Scenario: Running work may overshoot a limit
 
-- **WHEN** a limit is reached while other Resources are already running under the concurrency limit
-- **THEN** those running Resources finish and are counted, so the Scan may exceed the limit by up to `(concurrency - 1)`
-  Resources, and this is not an error
+- **WHEN** the count limit is reached while other Resources are already running under the concurrency limit
+- **THEN** those running Resources finish and are counted, so the Scan may exceed the count limit by up to
+  `(concurrency - 1)` Resources, and this is not an error, while the USD limit is passed by at most one Resource's
+  largest cost because each running Resource reserved its maximum before it started
 
 #### Scenario: Unscored Resources wait for a later Scan and the Scan still succeeds
 

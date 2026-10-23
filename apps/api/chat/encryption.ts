@@ -1,6 +1,7 @@
 // encrypting the chat text that is stored in the database for privacy
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto"
 import { reportError } from "@carlnotes/server/monitoring"
+import { type SQL, type SQLWrapper, sql } from "drizzle-orm"
 
 // the marker that says a stored value is encrypted. an unmarked value is plaintext, and a later scheme bumps the number
 const CIPHERTEXT_PREFIX = "enc1:"
@@ -53,6 +54,18 @@ export function decryptChatText(storedText: string): string | null {
 		reportError(error, "chat")
 		return null
 	}
+}
+
+/**
+ * Returns SQL for the most characters a stored chat text column decrypts to, read from its stored length alone: an
+ * encrypted value's base64 bytes less the nonce and the tag, or a plaintext value's own length. A character is at
+ * least one byte, so the result is never below the decrypted length.
+ */
+export function toDecryptedLengthSql(storedTextColumn: SQLWrapper): SQL<number> {
+	const prefixLength = CIPHERTEXT_PREFIX.length
+	return sql<number>`case when left(${storedTextColumn}, ${prefixLength}) = ${CIPHERTEXT_PREFIX}
+		then (length(${storedTextColumn}) - ${prefixLength}) * 3 / 4 - ${NONCE_BYTES + TAG_BYTES}
+		else length(${storedTextColumn}) end`
 }
 
 /**
