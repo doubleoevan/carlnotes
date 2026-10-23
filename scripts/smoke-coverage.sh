@@ -29,11 +29,6 @@ is_listed() {
 	return 1
 }
 
-# the smoke files that need the built ui, which this runner never builds
-BUILT_UI_SMOKE_FILES=(
-	apps/api/seo.smoke.ts
-)
-
 # read the smoke files in order from the smoke script in package.json, and stop the run if the read fails partway
 if ! smoke_file_lines=$(jq -r '.scripts as $scripts | $scripts.smoke | split(" && ") | .[] | sub("^bun run "; "") | $scripts[.] | capture("(?<smokeFile>[^ \"]+\\.smoke\\.ts)").smokeFile' package.json); then
 	echo "=== smoke coverage: could not read the smoke files from package.json's smoke script ==="
@@ -57,13 +52,7 @@ mkdir -p coverage/smoke
 failures=0
 skipped=0
 for smoke_file in "${SMOKE_FILES[@]}"; do
-	# skip a smoke file that needs the built ui, and a developer-only smoke file on a run off a developer's machine, and
-	# name each skip
-	if is_listed "$smoke_file" "${BUILT_UI_SMOKE_FILES[@]}"; then
-		echo "=== smoke coverage: $smoke_file skipped, it needs the built ui ==="
-		skipped=$((skipped + 1))
-		continue
-	fi
+	# skip a developer-only smoke file on a run off a developer's machine, and name the skip
 	if [ "${SMOKE_SKIP_DEVELOPER_ONLY:-0}" = "1" ] && is_listed "$smoke_file" "${DEVELOPER_ONLY_SMOKE_FILES[@]}"; then
 		echo "=== smoke coverage: $smoke_file skipped, it runs only on a developer's machine ==="
 		skipped=$((skipped + 1))

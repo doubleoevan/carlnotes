@@ -81,15 +81,20 @@ jobs:
           exit 1
         env:
           DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+      # the seo and mcp smokes read the built ui and its card bundle, and the signup check opens it in a browser
+      - name: Build the ui
+        run: doppler run -- bun run build:ui
+        env:
+          DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
       # env after doppler run, since doppler injects its own value over anything the step sets
       - run: doppler run -- env LLM_GUARD_URL= bash scripts/smoke-coverage.sh
         env:
           DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
-      # the signup page in a browser, which the coverage runner leaves out: it needs the built ui and the runner's
-      # Chrome. it runs even after a failed suite, so a blocked challenge is never hidden by another failure
+      # the signup page in a browser, which the coverage runner leaves out: it needs the runner's Chrome. it runs even
+      # after a failed suite, so a blocked challenge is never hidden by another failure
       - name: Check the signup challenge in a browser
         if: always()
-        run: doppler run --command "bun run build:ui && bun apps/api/signup.smoke.ts"
+        run: doppler run -- bun apps/api/signup.smoke.ts
         env:
           DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
       # the smoke coverage joins the unit coverage on Codecov under its own flag
