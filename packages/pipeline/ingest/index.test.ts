@@ -1,6 +1,18 @@
-// a Source that runs clean and brings back nothing is reported as a fallback
-import { expect, test } from "bun:test"
-import { type SourceOutcome, toScanSummary } from "./index"
+// ingest tests: how toScanSummary aggregates Source outcomes, and the order and labels that ingestFromTopicSources
+// reads the topic's Sources in
+import { afterEach, expect, test } from "bun:test"
+import { restoreConnectionPool, stubConnectionPool, toTableRow } from "@carlnotes/db/connectionPoolStub"
+import { sources } from "@carlnotes/db/schema/topics"
+import { newBudget } from "@carlnotes/models/budget"
+import { ingestFromTopicSources, type SourceOutcome, toScannedSource, toScanSummary } from "./index"
+
+// the label and duration of a Source outcome, for the tests that read neither
+const UNREAD_OUTCOME_FIELDS = { label: "a source", durationMs: 0 }
+
+// put the connection pool's own query back after each test
+afterEach(() => {
+	restoreConnectionPool()
+})
 
 // one Source outcome, defaulting to a clean run that found one Resource
 function toSourceOutcome(
@@ -10,6 +22,7 @@ function toSourceOutcome(
 		status: "ok",
 		sourceId: "src_1",
 		sourceKind: "rss",
+		...UNREAD_OUTCOME_FIELDS,
 		resources: [{ url: "https://example.test/a", title: "A", snippet: "", publishedAt: null }],
 		costDollars: 0,
 		...overrides,
@@ -26,14 +39,26 @@ test("a fallback Source keeps its cost while adding no Resources", () => {
 test("a fallback Source counts as a clean run when another Source failed", () => {
 	const scanSummary = toScanSummary([
 		toSourceOutcome({ status: "fallback", resources: [] }),
-		{ status: "failed", sourceId: "src_2", sourceKind: "search", reason: "exa search returned 500" },
+		{
+			status: "failed",
+			sourceId: "src_2",
+			sourceKind: "search",
+			...UNREAD_OUTCOME_FIELDS,
+			reason: "exa search returned 500",
+		},
 	])
 	expect(scanSummary.status).toBe("succeeded")
 })
 
 // if every Source errored it is recorded as a failed Scan
 test("a Scan fails when every Source errored", () => {
-	const outcome = { status: "failed", sourceId: "src_1", sourceKind: "rss", reason: "feed returned 404" } as const
+	const outcome = {
+		status: "failed",
+		sourceId: "src_1",
+		sourceKind: "rss",
+		...UNREAD_OUTCOME_FIELDS,
+		reason: "feed returned 404",
+	} as const
 	expect(toScanSummary([outcome]).status).toBe("failed")
 })
 
@@ -86,4 +111,56 @@ test("a Resource that any custom Source found is marked as found by one", () => 
 		scanSummary.resources.map((resource) => [resource.url, resource.isFromCustomSource]),
 	)
 	expect(isFromCustomSourceByUrl).toEqual({ "https://example.test/both": true, "https://example.test/only": false })
+})
+
+// a Source row on topic-1 that waits on its screen, so ingest skips it without reaching an ingester
+function toPendingSourceRow(sourceId: string, config: Record<string, unknown>): unknown[] {
+	return toTableRow(sources, { id: sourceId, topicId: "topic-1", kind: "youtube", config, status: "pending" })
+}
+
+// the merge credits the first Source it reads, so ingest reads the Sources oldest first
+test("ingest reads the topic's Sources in creation order", async () => {
+	const sentQueries = stubConnectionPool()
+	await ingestFromTopicSources({ topicId: "topic-1", budget: newBudget() })
+	expect(sentQueries[0]?.text).toContain('order by "sources"."created_at" asc, "sources"."id" asc')
+})
+
+// an ingester may save a name during the Scan, so each outcome is labeled from the row read after the ingesters ran,
+// and a Source deleted during the ingest keeps the label from the row read at the start
+test("ingest labels each Source from its row after the ingesters ran", async () => {
+	// the start read returns two Sources by channel id, and the read after returns one with its channel's name
+	stubConnectionPool(({ text }) => {
+		if (text.includes("order by")) {
+			return [
+				toPendingSourceRow("named", { channelId: "UC123" }),
+				toPendingSourceRow("deleted", { channelId: "UC456" }),
+			]
+		}
+		return text.includes('from "sources"') ? [["named", "youtube", { channelId: "UC123", name: "Veritasium" }]] : []
+	})
+
+	// the named Source reads by its name, and the deleted one by the id it started with
+	const ingestOutcome = await ingestFromTopicSources({ topicId: "topic-1", budget: newBudget() })
+	expect(ingestOutcome.summary.sourceResults.map(({ sourceId, label }) => [sourceId, label])).toEqual([
+		["named", "Veritasium"],
+		["deleted", "UC456"],
+	])
+})
+
+// the scan report hears that a Source fell back only if it reported a fallback mode, as the source results do
+test("toScannedSource reads an empty result with no fallback mode as ok, and one with a mode as fallback", () => {
+	const emptyOutcome: SourceOutcome = {
+		status: "fallback",
+		sourceId: "s1",
+		sourceKind: "rss",
+		resources: [],
+		costDollars: 0,
+		...UNREAD_OUTCOME_FIELDS,
+	}
+	expect(toScannedSource(emptyOutcome)).toEqual({ sourceKind: "rss", status: "ok" })
+	expect(toScannedSource({ ...emptyOutcome, sourceKind: "reddit", fallbackMode: "reddit-rss" })).toEqual({
+		sourceKind: "reddit",
+		status: "fallback",
+		fallbackMode: "reddit-rss",
+	})
 })

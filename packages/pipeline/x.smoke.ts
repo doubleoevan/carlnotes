@@ -73,19 +73,17 @@ async function check(source: Source): Promise<boolean> {
 	const isMissingHandleDropped = !(await isConfirmed("zzznosuchacct"))
 	const isDormantHandleDropped = !(await isConfirmed(DORMANT_HANDLE))
 
-	// summarize what came back: the urls, the titles, and the engagement counts the tweets included
+	// summarize what came back: the urls, the kinds, and the snippets the tweets included
 	const tweetUrlPattern = /^https:\/\/x\.com\/[^/]+\/status\/\d+$/
 	const resourcesAreTweetUrls = resources.every((resource) => tweetUrlPattern.test(resource.url))
 	const resourcesAreReadKind = resources.every((resource) => resource.kind === "read")
 	const resourcesWithSnippet = resources.filter((resource) => (resource.snippet ?? "").trim().length > 0)
-	const resourcesWithEngagement = resources.filter((resource) => resource.engagement !== null)
 
 	// print the smoke test report
 	console.log("\n=== x smoke report ===")
 	console.log(`handle          : @${X_HANDLE}`)
 	console.log(`resources       : ${resources.length} (limit ${MAX_READS_PER_SOURCE})`)
 	console.log(`with snippet    : ${resourcesWithSnippet.length}`)
-	console.log(`with engagement : ${resourcesWithEngagement.length}`)
 	console.log(`cost (reads $)  : ${costDollars}`)
 	console.log(`fallback mode   : ${fallbackMode ?? "none"}`)
 

@@ -1,6 +1,6 @@
 import { PODCAST_NAME } from "@carlnotes/contracts/podcastEpisodes"
 import { DEFAULT_SOURCES, toDefaultSource } from "@carlnotes/contracts/sources"
-import type { TopicFeed, TopicResponse } from "@carlnotes/contracts/topics"
+import type { TopicDetails, TopicResponse } from "@carlnotes/contracts/topics"
 import { toCountLabel } from "@carlnotes/core/lib/labels"
 import { AudioLines, Diamond, Download, ExternalLink, Globe, Link, Lock, Mail, Plug, Puzzle, Rss } from "lucide-react"
 import type * as React from "react"
@@ -43,7 +43,7 @@ type SourceIcon = (props: { className?: string }) => React.ReactNode
 
 // the card variant includes the full topic response for its scan history
 type TopicInfoProps =
-	| { topic: TopicFeed; isCard?: false; onMakeTopicPublic?: undefined }
+	| { topic: TopicDetails; isCard?: false; onMakeTopicPublic?: undefined }
 	| { topic: TopicResponse; isCard: true; onMakeTopicPublic?: () => void }
 
 // the visibility mapped to its icon and label
@@ -177,7 +177,7 @@ function FailedBrewSection({ scans }: { scans: TopicResponse["scans"] }) {
 }
 
 // the urls a recap may cite and render as real links. no other url can be injected
-function toFindingUrls(topic: TopicFeed | TopicResponse): AllowedScanNoteUrls {
+function toFindingUrls(topic: TopicDetails): AllowedScanNoteUrls {
 	return new Set(topic.findings.map((finding) => finding.url))
 }
 
@@ -186,7 +186,7 @@ function AttachmentPill({
 	attachment,
 	isDownloadable,
 }: {
-	attachment: TopicFeed["attachments"][number]
+	attachment: TopicDetails["attachments"][number]
 	isDownloadable: boolean
 }) {
 	// a failed attachment's object was cleaned up, so there is nothing to link to. show a plain failed marker
@@ -318,7 +318,7 @@ export function InfoSection({
 }
 
 // the sources section: a line per default source first, then one line per custom source
-export function TopicSourcesSection({ sources }: { sources: TopicFeed["sources"] }) {
+export function TopicSourcesSection({ sources }: { sources: TopicDetails["sources"] }) {
 	// the default sources that are on, and the custom ones left after them
 	const defaultSourceKeys = new Set(sources.flatMap((source) => toDefaultSource(source.sourceKind)?.key ?? []))
 	const customSources = sources.filter((source) => !toDefaultSource(source.sourceKind))

@@ -71,6 +71,7 @@ the topic page. The read counts, the kept counts, and the new findings show whet
 
 ## What rating means today
 
-Each finding has a **Rate this finding** section with thumbs up and thumbs down buttons. Ratings set a topic feed's
-**Trending** order, so you and other readers can see what matters. Ratings don't change how future brews score
-findings. That's on the roadmap. For now, the prompt is how you tell Carl what's relevant.
+Each finding has a **Rate this finding** section with thumbs up and thumbs down buttons. Carl reads your thumbs-up
+pages when he scores the next brew, and pages like them rank higher. A thumbs down hides the finding, and pages like it
+rank lower. Ratings don't set the **Trending** order, which follows how many signed-in people opened each finding. The
+prompt is still the main way you tell Carl what's relevant.

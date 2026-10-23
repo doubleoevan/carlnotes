@@ -8,6 +8,7 @@ import { Trash2 } from "lucide-react"
 import { useCallback, useEffect, useState } from "react"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { PodcastEpisodeChaptersTable } from "@/components/podcast/PodcastEpisodeChaptersTable"
+import { PodcastEpisodeCountsLine } from "@/components/podcast/PodcastEpisodeCountsLine"
 import { PodcastEpisodeCover } from "@/components/podcast/PodcastEpisodeCover"
 import { PodcastEpisodePlayerCard } from "@/components/podcast/PodcastEpisodePlayerCard"
 import { PodcastEpisodesSection } from "@/components/podcast/PodcastEpisodesSection"
@@ -194,6 +195,8 @@ export function PodcastEpisodePage() {
 				titleColumnLabel="Podcast"
 				podcastEpisodes={relatedPodcastEpisodes}
 			/>
+			{/* the podcast episode's listener count */}
+			<PodcastEpisodeCountsLine podcastEpisodeId={podcastEpisode.id} isPublic={topic.visibility === "public"} />
 
 			{/* the podcast feed dialog */}
 			{isPodcastFeedDialogOpen && (

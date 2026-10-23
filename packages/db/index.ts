@@ -22,6 +22,7 @@ import * as teams from "./schema/teams"
 import * as topics from "./schema/topics"
 import * as users from "./schema/users"
 import * as vectors from "./schema/vectors"
+import * as viewerCounts from "./schema/viewerCounts"
 
 // the defaults for the pool's size and for how long a request waits for a connection.
 // the size is what the pool keeps if the max_connections read fails
@@ -64,6 +65,7 @@ export const schema = {
 	...topics,
 	...users,
 	...vectors,
+	...viewerCounts,
 }
 export const db = drizzle(connectionPool, { schema })
 

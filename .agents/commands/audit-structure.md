@@ -82,8 +82,9 @@ Check for:
      `adapter.ts` (now `ingester.ts`),
      `SourceAdapter`/`AdapterResult`/`sourceAdapters` (now `SourceIngester`/`IngestResult`/`sourceIngesters`,
      with `AdapterResult` passing through a short-lived `IngesterResult`),
-     `<kind>Adapter` (now `<kind>Ingester`). "adapter" now means only a third-party interface shim,
-     as in Better Auth's `drizzleAdapter` and Hono's `serveStatic`, which keep the word
+     `<kind>Adapter` (now `<kind>Ingester`). "adapter" now means a third-party interface shim,
+     as in Better Auth's `drizzleAdapter` and Hono's `serveStatic`, which keep the word, or the chat and MCP
+     bindings of the Topic Tools (`apps/api/tool/chatTools.ts`, `apps/api/mcp/tools.ts`)
    - `adapter-authoring` skill (now `ingester-authoring`)
    - `worker/review/track.ts` held both the Scan's money and the review's tallies. The money moved out to
      `worker/budget.ts` (`Budget`/`StageCosts`/`charge`/`canSpend` and the cost constants), since ingest and
@@ -351,7 +352,8 @@ Check for:
    - `TopicResource`'s `podcastEpisodeChapterPill` and `isChapterPlaying` props (now `latestPodcastEpisode`), and the
      `TopicFindingRow` component in `ui/src/components/topic/TopicFindingsSection.tsx` (now `TopicFindingList`, which the
      homepage card shares). `MAX_RESOURCES` in `Topic.tsx` (now `MAX_TOPIC_FINDINGS` in `TopicFindingsSection.tsx`)
-   - `TopicPodcast.latestPodcastEpisode` (now `latestPodcastEpisode` on `TopicFeed`, which `TopicResponse` extends)
+   - `TopicPodcast.latestPodcastEpisode` (now `latestPodcastEpisode` on `TopicDetails`, which `TopicFeed` and
+     `TopicResponse` extend)
    - the episodes card's `PodcastEpisodeRow` props `isPlayerCardPodcastEpisode`, `isPodcastEpisodePlaying`, and
      `onTogglePlayback` (now `isPlayButtonMuted` in `ui/src/components/podcast/PodcastEpisodeRow.tsx`, which reads the
      player itself), `PodcastEpisodeDetails` in `PodcastEpisodePlayerCard.tsx` (now its own file), and
@@ -433,8 +435,8 @@ Check for:
      `startFirstScan`, and `toNewSourceRow` from `api/topic/helpers.ts` (now `api/topic/saveHelpers.ts`),
      `loadTeamTopicOptions` from it (now `api/topic/teamTopicOptions.ts`), and `loadTopicAccessAndFindings` from it (now
      `api/topic/accessibleFindings.ts`); `setRating`, `setBookmarked`, `setConsumed`, and `recordView` from
-     `api/topic/findings.ts` (now `api/topic/findingMarks.ts`); `toJsonLdTag`, `toCreativeWorkLd`, and `toFindingListLd`
-     from `api/seo.ts` (now `api/jsonLd.ts`); `authorizeChatTurn`, `authorizeTeamChatTurn`, and
+     `api/topic/findings.ts` (now `api/topic/findingFeedback.ts`); `toJsonLdTag`, `toCreativeWorkLd`, and
+     `toFindingListLd` from `api/seo.ts` (now `api/jsonLd.ts`); `authorizeChatTurn`, `authorizeTeamChatTurn`, and
      `authorizeNewTopicChatTurn` from `api/chat/privateChat.ts` (now `api/chat/chatTurnAuthorization.ts`) and
      `streamChatTurn` from it (now `api/chat/chatTurnStream.ts`); `toTopicFilter` from `api/chat/roomTurns.ts` (now
      `api/chat/roomAccess.ts`) and `toModelRoomQuestion` from it (now `api/chat/roomQuestion.ts`); `listTopics` from
@@ -650,6 +652,20 @@ Check for:
      `packages/db/schema/users.ts`), and the client name lookups in `toolCaller.ts`, `server.ts`, and `authHooks.ts`
      (now `loadOAuthClientName` in `apps/api/mcp/oauthClientNames.ts`)
    - `getIp` from `better-auth/api` (now `getIP`)
+   - `TopicFinding.viewCount` (now `viewerCount` in `packages/contracts/findings.ts`, read from
+     `findings.viewer_count`), and `TopicFinding.engagement` (removed)
+   - `topicResponse = topicFeed.extend` and `TopicFeed` as the topic header's type (now `topicDetails` and
+     `TopicDetails` in `packages/contracts/topics.ts`, which `topicFeed` and `topicResponse` both extend)
+   - `savePodcastEpisodeListen` and `loadNextUnplayedPodcastEpisode` in `apps/api/podcast/podcastEpisodes.ts` (now
+     `apps/api/podcast/podcastEpisodeListens.ts`)
+   - `startScanPoll` (now `startVisiblePoll` in `apps/web/src/lib/visiblePoll.ts`), `toRemovedTopicSourceText` (now
+     `toRemoveTopicSourceText` in `apps/api/tool/chatTools.ts`), `MAX_FAILURE_REASON_CHARS` (now
+     `SOURCE_RESULT_REASON_CHARS` in `packages/contracts/topics.ts`), `RSS_FALLBACK_MODE` (now
+     `REDDIT_RSS_FALLBACK_MODE` in `packages/contracts/sources.ts`), `handleOpenScanNote` (now
+     `handleScanNoteOpenChange` from `apps/web/src/hooks/useScanNote.ts`), and the `ScanNote` component (now
+     `ScanNotePanel` in `apps/web/src/components/topic/TopicScanHistory.tsx`)
+   - `api/topic/findingMarks.ts` (now `apps/api/topic/findingFeedback.ts`) and `registerMarkTools` (now
+     `registerFeedbackTools` in `apps/api/mcp/tools.ts`)
 
 5. **Cross-harness enforcement parity**: `.claude/settings.json` hooks and
    `.opencode/plugin/guardrails.mjs` must gate the same operations with the

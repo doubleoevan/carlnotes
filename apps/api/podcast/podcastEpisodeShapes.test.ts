@@ -175,6 +175,7 @@ function toPodcastEpisodeRowTopic(podcastEpisodeId: string, episodeNumber: numbe
 			audioKey: null,
 			audioByteSize: null,
 			durationSeconds: 600,
+			listenerCount: 0,
 			publishedAt: new Date("2026-10-03T12:00:00.000Z"),
 		},
 		topic: { id: "topic-1", name: "Agents", visibility: "public" },

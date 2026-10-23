@@ -19,6 +19,7 @@ import { reportDailySpend } from "./dailySpend"
 import { retryPendingObjectDeletions } from "./retryPendingObjectDeletions"
 import { reportScanQueue, startUndispatchedScans, toDispatchableScanCount } from "./scanQueue"
 import { isWithinDailyTopicLimit, loadScheduledTopicLimits } from "./scheduledTopicLimits"
+import { syncViewerCounts } from "./syncViewerCounts"
 
 // the sweep's claim, so two sweeps cannot run at once
 const TOPIC_SWEEP_CLAIM = "scheduled-scan-sweep"
@@ -265,9 +266,11 @@ export function frequencyWindowMs(frequency: Topic["frequency"]): number {
 	return frequency === "weekly" ? 7 * DAY_MS : DAY_MS
 }
 
-// run the claimed sweep, then retry the pending object deletions and report the day's spend once the claim is released
+// run the claimed sweep and the claimed viewer count sync, then retry the pending object deletions and report the day's
+// spend once the claims are released
 async function runSweep(): Promise<void> {
 	await runScheduledTopicScans()
+	await syncViewerCounts()
 	await retryPendingObjectDeletions()
 	await reportDailySpend()
 }

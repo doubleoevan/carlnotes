@@ -121,6 +121,11 @@ adds the topic to a team, shares the topic, reports an issue with it, or adds Ca
 ![An episode's own page: its cover, title, and description above the player and the table of
 chapters](../../../assets/screenshots/podcast-episode-page.png)
 
+The bottom of a podcast episode page shows how many people have listened, as **Listeners**. A listener played the
+podcast episode here or downloaded it in a podcast app, and counts once however often they come back.
+
+![The bottom of a podcast episode page, under Similar podcasts, reading Listeners: 1](../../../assets/screenshots/podcast-episode-listener-counts.png)
+
 ## Turning it on and off
 
 The topic's owner has a **Podcast** switch at the bottom of the topic's edit form. Carl can also flip it in Coffee Talk.

@@ -16,8 +16,8 @@ Apps, the deployable entry points:
   The sign-in pages, a route behind sign-in, and every route when the request brings a session cookie render in the
   browser. Its Storybook, the Nightshift component browser, builds to static files the api serves at `/nightshift`.
 - `apps/api/` — the Hono server: routes, authorization, billing, chat rooms, tasting notes, teams, invites, share cards,
-  page head data, the MCP server, and the document routes (the sitemap, the feeds, the llms files, the IndexNow key, and
-  security.txt).
+  page head data, viewer and listener counts, the MCP server, and the document routes (the sitemap, the feeds, the llms
+  files, the IndexNow key, and security.txt).
 - `apps/worker/` — the Temporal worker, its workflows and their activities under `workflows/`, the scheduled sweep, the
   monthly budget reset, the docs embed, and the modules only the sweep reads.
 - `apps/docs/` — the Starlight docs site, built to static files the api serves at `/docs`, with the design files and

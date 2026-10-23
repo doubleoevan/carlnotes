@@ -1,5 +1,4 @@
 // the topic feed logic for the homepage route. it batches every topic's data in one pass and builds each feed in memory
-import { toAvatarVersion } from "@carlnotes/contracts/avatars"
 import type { visibilities } from "@carlnotes/contracts/enums"
 import type { TopicFinding } from "@carlnotes/contracts/findings"
 import { toSourceSummary, toSourceValue } from "@carlnotes/contracts/sources"
@@ -9,10 +8,11 @@ import { cacheJson, deleteRedisKeys } from "@carlnotes/db/redis"
 import { subscriptions, topics } from "@carlnotes/db/schema/topics"
 import { traceRequestStage } from "@carlnotes/server/monitoring"
 import { and, asc, desc, eq, inArray, isNotNull, isNull, ne } from "drizzle-orm"
+import { toProfileIdentity } from "../avatars"
 import { attachTopicFindingFaviconPaths } from "../favicons"
 import { loadTopicFeedData } from "./feedData"
 import { filteredTopicFindings, newTopicFindingCount, toTopicFinding } from "./findings"
-import { toScheduledTimeLabel } from "./helpers"
+import { toScanDurationMs, toScheduledTimeLabel } from "./helpers"
 
 // the Redis key every replica reads the featured and popular topic id lists through, and how long they are kept
 const TOPIC_SECTION_IDS_KEY = "topic-section-ids"
@@ -255,7 +255,6 @@ function buildTopicFeed(
 	const subscriberCount = topic.subscriberCount
 	// only the owner sees their own topic's scan spend
 	const isTopicOwner = topic.ownerId === userId
-	const ownerRow = feedData.ownerByTopic.get(topic.id)
 
 	// read the sources, dropping the grouping key from each row
 	const topicSources = (feedData.sourcesByTopic.get(topic.id) ?? [])
@@ -293,14 +292,7 @@ function buildTopicFeed(
 		scheduledDayOfWeek: topic.scheduledDayOfWeek,
 		maxTopicFindings: topic.maxTopicFindings,
 		// the topic owner to show
-		owner: ownerRow
-			? {
-					userId: ownerRow.userId,
-					username: ownerRow.username,
-					avatarSource: ownerRow.avatarSource,
-					avatarVersion: toAvatarVersion(ownerRow),
-				}
-			: null,
+		owner: toProfileIdentity(feedData.ownerByTopic.get(topic.id) ?? null),
 		isTopicOwner,
 		isOnTeam: topic.teamId !== null,
 		teamLink: feedData.teamLinkByTopic.get(topic.id) ?? null,
@@ -311,14 +303,16 @@ function buildTopicFeed(
 		isSubscribed: feedData.subscribedTopicIdSet.has(topic.id),
 		newCount: newTopicFindingCount(topicFindings),
 		subscriberCount,
+		viewerCount: topic.viewerCount,
 		// the first team to hold a topic owns it in a column, and every later team to add a topic gets a shared-in row
 		teamCount: (feedData.sharedTeamCountByTopic.get(topic.id) ?? 0) + (topic.teamId ? 1 : 0),
 		visibility: topic.visibility,
-		// the created time, last scan details, attachments, sources, and topic findings
+		// the created time, the newest shown finding's time or the created time, the last scan details, attachments,
+		// sources, and topic findings
 		createdAt: topic.createdAt.toISOString(),
+		feedUpdatedAt: (findingRows[0]?.newestFindingCreatedAt ?? topic.createdAt).toISOString(),
 		lastScanAt: lastScan?.startedAt.toISOString() ?? null,
-		lastScanDurationMs:
-			lastScan?.finishedAt != null ? lastScan.finishedAt.getTime() - lastScan.startedAt.getTime() : null,
+		lastScanDurationMs: toScanDurationMs(lastScan),
 		monthCostDollars: isTopicOwner ? Number(feedData.monthCostByTopic.get(topic.id) ?? 0) : null,
 		scanSummary: lastScan?.scanSummary ?? null,
 		attachments: topicAttachments,

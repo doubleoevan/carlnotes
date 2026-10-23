@@ -15,7 +15,7 @@ import { eq } from "drizzle-orm"
 import { Hono } from "hono"
 import { type AppEnv, currentUser, toAnalyticsProperties } from "./currentUser"
 import { toTeamRole } from "./team/members"
-import { canSeeTopic } from "./topic/permissions"
+import { canSeeTopic, gatedTopicColumns } from "./topic/permissions"
 import { loadUsername } from "./usernames"
 
 // how many flags one user may send in a one-day rate limit window, which starts at the window's first flag
@@ -71,13 +71,7 @@ async function toFlaggedSubject(
 	if (payload.subjectKind === "topic") {
 		// the same visibility rule the Topic page uses, so anyone who can open a Topic can flag it
 		const [topic] = await db
-			.select({
-				id: topics.id,
-				name: topics.name,
-				ownerId: topics.ownerId,
-				visibility: topics.visibility,
-				teamId: topics.teamId,
-			})
+			.select({ ...gatedTopicColumns, name: topics.name })
 			.from(topics)
 			.where(eq(topics.id, payload.subjectId))
 		return topic && (await canSeeTopic(userId, topic)) ? { label: topic.name, path: toTopicPath(topic) } : null

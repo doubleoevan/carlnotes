@@ -21,7 +21,7 @@ import {
 	teamRoles,
 	visibilities,
 } from "@carlnotes/contracts/enums"
-import { pgEnum, text, timestamp } from "drizzle-orm/pg-core"
+import { customType, pgEnum, text, timestamp } from "drizzle-orm/pg-core"
 
 // domain pgEnums built from the shared value sets
 export const sourceKind = pgEnum("source_kind", sourceKinds)
@@ -81,3 +81,17 @@ export function timestamps() {
 			.notNull(),
 	}
 }
+
+// a postgres bytea column, which drizzle has no built-in column for
+export const bytea = customType<{ data: Uint8Array; driverData: Buffer }>({
+	dataType() {
+		return "bytea"
+	},
+	// the driver returns a Buffer, which is already a Uint8Array view
+	fromDriver(value: Buffer): Uint8Array {
+		return value
+	},
+	toDriver(value: Uint8Array): Buffer {
+		return Buffer.from(value)
+	},
+})

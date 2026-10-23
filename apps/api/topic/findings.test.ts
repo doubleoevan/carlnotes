@@ -26,11 +26,10 @@ function topicFinding(isConsumed: boolean): TopicFinding {
 		publishedAt: null,
 		fetchedAt: "2026-01-01T00:00:00.000Z",
 		// the topic finding's metadata and the user's isConsumed flag
-		viewCount: 0,
+		viewerCount: 0,
 		relevanceScore: 0,
 		relevanceExplanation: "",
 		rating: null,
-		engagement: null,
 		isConsumed,
 		isBookmarked: false,
 		teamBookmarks: [],

@@ -131,6 +131,14 @@ export function toUserAgentProduct(userAgent: string | null | undefined): string
 }
 
 /**
+ * Whether a user agent counts as a viewer or a listener, which a crawler and a link unfurler never do.
+ */
+export function isCountedUserAgent(userAgent: string | null | undefined): boolean {
+	const botKind = toBot(userAgent)?.kind
+	return botKind !== "crawler" && botKind !== "unfurler"
+}
+
+/**
  * The bot or app a user agent names, or null for a user agent on no list.
  */
 export function toBot(userAgent: string | null | undefined): Bot | null {

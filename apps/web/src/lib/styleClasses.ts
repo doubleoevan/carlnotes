@@ -368,3 +368,9 @@ export const QUESTION_BUBBLE_CLASS = `bg-primary text-primary-foreground rounded
  * The centered narrow column of the sign-in, signup, and invite pages.
  */
 export const SESSION_PAGE_CLASS = "mx-auto flex min-h-dvh max-w-sm flex-col justify-center px-4 py-12"
+
+/**
+ * The muted counts line at the bottom of the topic and podcast episode pages, spaced apart and at a fixed height while
+ * the counts load.
+ */
+export const COUNTS_LINE_CLASS = "text-muted-foreground mt-8 flex h-5 items-center justify-center gap-8 text-sm"

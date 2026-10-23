@@ -81,7 +81,7 @@ export async function loadTopicFeedData(topicRows: (typeof topics.$inferSelect)[
 async function loadFeedFindingRows(
 	topicIds: string[],
 	userId: string | null,
-): Promise<(TopicFindingRow & { topicId: string })[]> {
+): Promise<(TopicFindingRow & { topicId: string; newestFindingCreatedAt: Date })[]> {
 	// a signed-out visitor has no history, so each join condition is sql`false`.
 	// drizzle's typing rejects comparing user_id to null
 	const consumptionJoinCondition = userId
@@ -90,7 +90,8 @@ async function loadFeedFindingRows(
 	const bookmarkJoinCondition = userId
 		? and(eq(bookmarks.findingId, findings.id), eq(bookmarks.userId, userId))
 		: sql`false`
-	// rank each topic's findings by relevance so the feed query can stop at MAX_FEED_FINDINGS_PER_TOPIC per topic
+	// rank each topic's findings by relevance so the feed query can stop at MAX_FEED_FINDINGS_PER_TOPIC per topic, and
+	// read each topic's newest shown finding time in the same pass
 	const rankedFindings = db
 		.select({
 			findingId: findings.id,
@@ -98,6 +99,9 @@ async function loadFeedFindingRows(
 				sql<number>`row_number() over (partition by ${findings.topicId} order by ${findings.relevanceScore} desc, ${findings.id})`.as(
 					"row_number",
 				),
+			newestFindingCreatedAt: sql<Date>`max(${findings.createdAt}) over (partition by ${findings.topicId})`
+				.mapWith(findings.createdAt)
+				.as("newest_finding_created_at"),
 		})
 		.from(findings)
 		.where(and(inArray(findings.topicId, topicIds), isFindingShown))
@@ -107,8 +111,9 @@ async function loadFeedFindingRows(
 	return (
 		db
 			.select({
-				// the owning topic's id groups the rows
+				// the owning topic's id groups the rows, and every row includes its topic's newest shown finding time
 				topicId: findings.topicId,
+				newestFindingCreatedAt: rankedFindings.newestFindingCreatedAt,
 				// the topic finding's identity, the scan that produced it, and its resource metadata
 				findingId: findings.id,
 				scanId: findings.scanId,
@@ -118,12 +123,11 @@ async function loadFeedFindingRows(
 				title: resources.title,
 				resourceCreatedAt: resources.createdAt,
 				fetchedAt: resources.fetchedAt,
-				// the topic finding's metadata, the engagement score, and the user's consumed and bookmarked dates
+				// the topic finding's metadata, its viewer count, and the user's consumed and bookmarked dates
 				relevanceScore: findings.relevanceScore,
 				relevanceExplanation: findings.relevanceExplanation,
-				viewCount: findings.viewCount,
+				viewerCount: findings.viewerCount,
 				rating: findings.rating,
-				engagement: resources.engagement,
 				consumedAt: consumptions.consumedAt,
 				bookmarkedAt: bookmarks.createdAt,
 			})

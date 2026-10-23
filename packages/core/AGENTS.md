@@ -22,6 +22,8 @@ state and rules with no browser in them. It imports `@carlnotes/contracts`, `@ca
   and billing interval, and which badge shows), `streamReconnect.ts` (how long a silent SSE stream runs before it counts
   as dropped and the wait before reopening it, shared by the note stream and the chat room stream),
   `topicFindingFilters.ts` and `topicFindingSorts.ts` (which findings a feed view shows and in what order),
+  `topicSorts.ts` (the homepage's topic order under Trending: viewers, then followers, then the newest finding, with
+  Featured kept in its own order),
   `topicPromptUrls.ts` (the urls written inside a topic prompt), `emailProviders.ts` (the webmail compose urls an invite
   is given), `chromeIntentUrl.ts` (the page as an Android intent url that opens it in Chrome, out of an embedded
   webview), and `voiceRecordingDecisions.ts` (what the voice recorder decides from each frame).

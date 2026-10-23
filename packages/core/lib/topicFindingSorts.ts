@@ -30,17 +30,13 @@ function sortTopicFindings(findings: TopicFinding[], sort: TopicFindingSort): To
 	if (sort === "newest") {
 		return [...findings].sort(byRecency)
 	}
-	// trending ranks engagement value first, and findings without one fall back to recency
-	return [...findings].sort((first, second) => {
-		if (first.engagement !== null && second.engagement !== null) {
-			return second.engagement - first.engagement
-		}
-		// a finding with engagement outranks one without
-		if (first.engagement !== null || second.engagement !== null) {
-			return first.engagement !== null ? -1 : 1
-		}
-		return byRecency(first, second)
-	})
+	// trending ranks the most unique viewers first, and a tie falls back to recency, then to the finding's id
+	return [...findings].sort(
+		(first, second) =>
+			second.viewerCount - first.viewerCount ||
+			byRecency(first, second) ||
+			first.findingId.localeCompare(second.findingId),
+	)
 }
 
 // newest first, with the fetch time standing in when a finding has no publish date

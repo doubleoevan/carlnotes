@@ -82,7 +82,7 @@ export async function readHandle(handle: string): Promise<void> {
 
 // the fields this ingester reads from an advanced search response
 type SearchResponse = {
-	tweets: { id?: string; text?: string; likeCount?: number; author?: { userName?: string } }[]
+	tweets: { id?: string; text?: string; author?: { userName?: string } }[]
 }
 
 /**
@@ -138,7 +138,6 @@ export function toResources(response: SearchResponse): NewResource[] {
 				kind: "read",
 				snippet: toSnippet(tweet.text),
 				contentHash: null,
-				engagement: tweet.likeCount ?? null,
 			})
 		}
 	}

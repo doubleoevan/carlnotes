@@ -4,12 +4,14 @@ import type { scanStatuses } from "@carlnotes/contracts/enums"
 import type { TopicFinding } from "@carlnotes/contracts/findings"
 import { isBudgetError } from "@carlnotes/contracts/scanFailure"
 import { toTopicPath } from "@carlnotes/contracts/seo"
+import type { ScanSourceResults } from "@carlnotes/contracts/topics"
 import { durationMsBetween, toDollarLabel, toDurationLabel } from "@carlnotes/core/lib/labels"
 import Markdown from "markdown-to-jsx"
 import type * as React from "react"
 import { useEffect, useLayoutEffect, useRef, useState } from "react"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { CopyMarkdownButton } from "@/components/common/CopyMarkdownButton"
+import { type SourceRemoval, SourceResultsChart } from "@/components/common/SourceResultsChart"
 import { useScrollRegionTabStop } from "@/hooks/useScrollRegionTabStop"
 import {
 	HIGHLIGHT_SCROLLBAR_CLASS,
@@ -29,6 +31,8 @@ export type ScanRecapFields = {
 	// set when the user stopped the scan, which is a different missing recap from a scan that simply had none written
 	stoppedAt: string | null
 	scanSummary: string | null
+	// what each Source read and kept, null for a scan with no results
+	sourceResults: ScanSourceResults | null
 	costDollars: number | null
 }
 
@@ -236,19 +240,22 @@ export function NumberedTopicFindingList({ findings }: { findings: TopicFinding[
 }
 
 /**
- * A scan recap popover's body: the full summary with the topic scan's findings numbered below it,
- * then how long the scan took, and its cost.
+ * A scan recap popover's body: the full summary with the topic scan's findings numbered below it, the source notes
+ * chart if the scan has results, then how long the scan took, and its cost.
  */
 export function TopicScanRecap({
 	scan,
 	allowedUrls,
 	findings,
 	copyMarkdown,
+	sourceRemoval,
 }: {
 	scan: ScanRecapFields
 	allowedUrls?: AllowedScanNoteUrls
 	findings?: TopicFinding[]
 	copyMarkdown?: string
+	// the Sources the topic still has, which the chart's open row offers to remove
+	sourceRemoval?: SourceRemoval
 }) {
 	const duration = toDurationLabel(durationMsBetween(scan.startedAt, scan.finishedAt))
 	// the cost waits until the scan settles instead of reading as a finished scan that cost nothing
@@ -262,6 +269,16 @@ export function TopicScanRecap({
 				</ScrollNote>
 			) : (
 				<p className="whitespace-pre-line">{toScanRecapPlaceholder(scan)}</p>
+			)}
+			{/* what each Source read and kept, which renders nothing with no row to show */}
+			{scan.sourceResults && (
+				<SourceResultsChart
+					sourceResults={scan.sourceResults.sources}
+					scannedAt={scan.finishedAt ?? scan.startedAt}
+					earlierKeptCount={scan.sourceResults.earlierKeptCount}
+					earlierFoundCount={scan.sourceResults.earlierFoundCount}
+					sourceRemoval={sourceRemoval}
+				/>
 			)}
 			{/* how long it took on the left, and the spend on the right when the api shared it with the owner or an admin */}
 			{(duration || isCostShown) && (

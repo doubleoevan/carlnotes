@@ -270,7 +270,7 @@ async function checkReviewAgain(topicId: string, ownerId: string): Promise<boole
 		console.log("FAIL  the first scan wrote no finding to review again")
 		return false
 	}
-	await db.update(findings).set({ rating: "up", viewCount: 3 }).where(eq(findings.id, ratedFinding.id))
+	await db.update(findings).set({ rating: "up", viewerCount: 3 }).where(eq(findings.id, ratedFinding.id))
 	console.log(`findings after scan 1 : ${firstFindings.length}`)
 
 	// whether a surviving finding still names the scan that reviewed it. a resource whose finding the filter
@@ -318,7 +318,7 @@ async function checkReviewAgain(topicId: string, ownerId: string): Promise<boole
 	const [ratedFindingAfterEdit] = await db
 		.select({
 			rating: findings.rating,
-			viewCount: findings.viewCount,
+			viewerCount: findings.viewerCount,
 			reviewedContextHash: findings.reviewedContextHash,
 		})
 		.from(findings)
@@ -331,7 +331,7 @@ async function checkReviewAgain(topicId: string, ownerId: string): Promise<boole
 		["a finding the scan never rediscovers is still reviewed", isRatedResourceToReview],
 		["the rated finding survived the review", ratedFindingAfterEdit !== undefined],
 		["the rating survived", ratedFindingAfterEdit?.rating === "up"],
-		["the view count survived", ratedFindingAfterEdit?.viewCount === 3],
+		["the viewer count survived", ratedFindingAfterEdit?.viewerCount === 3],
 		[
 			"the finding reviewed again has a new hash",
 			ratedFindingAfterEdit?.reviewedContextHash !== ratedFinding.reviewedContextHash,

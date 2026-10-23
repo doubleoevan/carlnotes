@@ -14,6 +14,7 @@ import type { AnalyticsProperties } from "../currentUser"
 import {
 	toAddTopicSourceText,
 	toRejectionText,
+	toRemoveTopicSourceText,
 	toSavedTopicFieldsText,
 	toSavedTopicPromptText,
 	toUpdateTopicFieldsText,
@@ -50,7 +51,7 @@ const cursorArgument = z.string().optional().describe("The cursor a previous pag
 // register every tool. every tool caller gets the same list, and only the results differ
 export function registerTools(mcpServer: McpServer, toolCaller: ToolCaller, routeTopicId: string | null): void {
 	registerReadTools(mcpServer, toolCaller, routeTopicId)
-	registerMarkTools(mcpServer, toolCaller)
+	registerFeedbackTools(mcpServer, toolCaller)
 	// register the topic tools. confirmation is left to the client
 	registerTopicFieldTools(mcpServer, toolCaller, routeTopicId)
 	registerTopicSourceTools(mcpServer, toolCaller, routeTopicId)
@@ -127,7 +128,7 @@ function registerReadTools(mcpServer: McpServer, toolCaller: ToolCaller, routeTo
 }
 
 // register the rating and bookmark tools. both need an account
-function registerMarkTools(mcpServer: McpServer, toolCaller: ToolCaller): void {
+function registerFeedbackTools(mcpServer: McpServer, toolCaller: ToolCaller): void {
 	mcpServer.registerTool(
 		"rate_finding",
 		{
@@ -247,7 +248,7 @@ function registerTopicSourceTools(mcpServer: McpServer, toolCaller: ToolCaller, 
 		{
 			title: "Remove a source",
 			description:
-				"Drop one of the topic's sources by its id, which list_topics shows beside each source. No brew starts.",
+				"Drop one of the topic's sources by its id, which list_topics shows beside each source. A topic keeps its web search and at least one source. No brew starts.",
 			inputSchema: z.object({ topic_id: topicIdArgument, ...removeTopicSourcePayload.shape }),
 			annotations: { readOnlyHint: false, destructiveHint: true },
 		},
@@ -258,15 +259,7 @@ function registerTopicSourceTools(mcpServer: McpServer, toolCaller: ToolCaller, 
 			}
 			// remove the source. the tool checks edit rights itself
 			const removeTopicSourceResult = await removeTopicSource({ ...topicEditCall, sourceId, origin: "mcp" })
-			if (removeTopicSourceResult.status !== "saved") {
-				return toTextResult(toRejectionText(removeTopicSourceResult.status), true)
-			}
-			// name the removed source, or say it was already gone
-			return toTextResult(
-				removeTopicSourceResult.topicSourceLabel
-					? `Removed ${removeTopicSourceResult.topicSourceLabel}.`
-					: "That source was already gone.",
-			)
+			return toTextResult(toRemoveTopicSourceText(removeTopicSourceResult), removeTopicSourceResult.status !== "saved")
 		},
 	)
 }

@@ -21,7 +21,10 @@ the browser bundle and renders pages through the server build, behind its own ro
   `toElementClassNames`, which returns the class attribute of each element with a tag name in rendered markup, for the
   render tests.
 - `components/primitives/` is reserved for shadcn; custom shared components go in `components/common/`, among them
-  `IconButton.tsx`, the button whose tooltip is also its accessible name.
+  `IconButton.tsx`, the button whose tooltip is also its accessible name, and `FlashingCount.tsx`, a labeled count
+  whose highlighted number flashes once when the count changes, and never under reduced motion.
+  `SourceResultsChart.tsx` is the Source notes bar chart in a scan recap. It fetches nothing, and it shows a trash
+  button on an open row only for a Source id that its caller names as removable.
 - `components/table/` — the page tables and their cells: `TopicNameLink.tsx`, a topic's linked name with its latest
   podcast episode's play button, and `PodcastEpisodeTitleLink.tsx`, a podcast episode's linked title with its play
   button. `TeamMembershipRows.tsx` holds the teams table's membership and invite rows, `TeamSubtablesRow.tsx` the
@@ -48,28 +51,29 @@ the browser bundle and renders pages through the server build, behind its own ro
   panel's chat turns, and finds, replaces, and drops a chat turn by its spoken answer key. `chatRoomTestFixtures.ts` and
   `chatMessagesTestFixtures.tsx` hold the chat fixtures the chat tests share.
 - `lib/` — `utils.ts` and small client-side helpers that read the browser. `toastActions.ts` builds the See plans and
-  See account toast actions. `podcastEpisodePlayback.ts` holds the playback math and the lock screen's media session,
-  with `isMediaSessionAvailable`, which the spoken answer queue shares. `voiceRecorder.ts` records the microphone, reads
-  its level through an analyser, ends the recording once the user stops or the limit passes, and releases the microphone
-  at every end, a rejected request included, with `@carlnotes/core/lib/voiceRecordingDecisions` for what it decides
-  from each frame. `voiceActivity.ts` wraps `@ricky0123/vad-web`, the on-device voice activity detector that ends a
-  podcast player question, loaded on the first question and made once per page. Its worklet, model, and WebAssembly
-  runtime are served from `/assets/voice-activity-<versions>/` by `apps/web/voiceActivityAssetsPlugin.ts`, the Vite
-  plugin that copies them out of the installed packages' folders into the client build and serves them in dev.
-  `@carlnotes/core/lib/pageHead` turns a `PageHead`, or a fixed title and path, into the tags a route's `head()`
-  returns. `loadOnServer.ts` runs a route loader's read on the server only, and its `loadPageOnServer` reads a page's
-  head and page data together. Its `readWithDegradedFallback` returns a fallback for a failed read and marks the
-  response, so the api responds 503. `requireSession.ts` is the sign-in guard the `_signedIn` layout runs before its
-  pages load. `sessionCookie.ts` reads on the server whether the request brings a session cookie. `visitAnalytics.ts`
-  starts the browser's analytics, reports a page view per route change, and captures the named visit events, their urls
-  rewritten like every other event's. `renderedRows.ts` picks the rows a paged list renders: the page shown and the
-  list's first fifty. `billingRedirects.ts` sends the browser to the Stripe Customer Portal at the url
-  `@carlnotes/client/billingClient` returns, and the plans page opens Checkout the same way,
-  and `inviteUrl.ts` builds an invite token's absolute url on the page's
-  origin. Both read `window`. `installDeeplinks.ts` holds
-  the Add to AI dialog's providers, their deeplinks and paste steps, and the remembered choice, `shareSheet.ts` opens
-  the operating system's share sheet, and `staleBundleReload.ts` reloads the page once if a deploy removed a bundle
-  file the open page still asks for.
+  See account toast actions. `visiblePoll.ts` is the poll that runs only while the page is visible, one request at a
+  time, used by the scan poll and the counts poll. `topicViews.ts` sends a topic page's view once per topic per tab,
+  keeping the sent topic ids in memory only. `podcastEpisodePlayback.ts` holds the playback math and the lock screen's
+  media session, with `isMediaSessionAvailable`, which the spoken answer queue shares. `voiceRecorder.ts` records the
+  microphone, reads its level through an analyser, ends the recording once the user stops or the limit passes, and
+  releases the microphone at every end, a rejected request included, with `@carlnotes/core/lib/voiceRecordingDecisions`
+  for what it decides from each frame. `voiceActivity.ts` wraps `@ricky0123/vad-web`, the on-device voice activity
+  detector that ends a podcast player question, loaded on the first question and made once per page. Its worklet, model,
+  and WebAssembly runtime are served from `/assets/voice-activity-<versions>/` by
+  `apps/web/voiceActivityAssetsPlugin.ts`, the Vite plugin that copies them out of the installed packages' folders into
+  the client build and serves them in dev. `@carlnotes/core/lib/pageHead` turns a `PageHead`, or a fixed title and path,
+  into the tags a route's `head()` returns. `loadOnServer.ts` runs a route loader's read on the server only, and its
+  `loadPageOnServer` reads a page's head and page data together. Its `readWithDegradedFallback` returns a fallback for a
+  failed read and marks the response, so the api responds 503. `requireSession.ts` is the sign-in guard the `_signedIn`
+  layout runs before its pages load. `sessionCookie.ts` reads on the server whether the request brings a session cookie.
+  `visitAnalytics.ts` starts the browser's analytics, reports a page view per route change, and captures the named visit
+  events, their urls rewritten like every other event's. `renderedRows.ts` picks the rows a paged list renders: the page
+  shown and the list's first fifty. `billingRedirects.ts` sends the browser to the Stripe Customer Portal at the url
+  `@carlnotes/client/billingClient` returns, and the plans page opens Checkout the same way, and `inviteUrl.ts` builds
+  an invite token's absolute url on the page's origin. Both read `window`. `installDeeplinks.ts` holds the Add to AI
+  dialog's providers, their deeplinks and paste steps, and the remembered choice, `shareSheet.ts` opens the operating
+  system's share sheet, and `staleBundleReload.ts` reloads the page once if a deploy removed a bundle file the open page
+  still asks for.
 - `components/session/` — the login and signup pages' layout and their sign-in pieces. `VerifyEmailNotice.tsx` is the
   notice the signup page shows after a password signup, with a button straight into the app. `signupPrompts.ts` names
   each action that sends a visitor to signup, with the toast the signup page shows on arrival, and
@@ -80,6 +84,7 @@ the browser bundle and renders pages through the server build, behind its own ro
   checks against the docs page's copy, and `monthlyBudgetCutoffCopy.ts` holds the wording both of them use.
 - `components/invite/` — the invite fields, editors, and modals, shared by the topic and team pages.
 - `components/topic/` — the topic page's sections, cards, dialogs, and editors, and the edit topic modal.
+  `TopicCountsLine.tsx` ends the topic page with its viewer and follower counts, empty in the server render.
   `saveTopic.ts` is the modal's save flow: the create or update, the podcast switch, the attachment uploads, edits, and
   removals, then the invites and the team change, with `MISSING_FIELD_NOTES` and `showSaveError` beside it;
   `EditTopicModal.test.tsx` covers both modules. `TopicSourceEditor.tsx` is the modal's sources field, with its source
@@ -112,7 +117,8 @@ the browser bundle and renders pages through the server build, behind its own ro
   the player card and a tooltip), `PodcastEpisodePlayButton.tsx` (a podcast episode's play button, beside a topic's
   note icon and in a table's title cell), `PodcastEpisodesSection.tsx` (the episode page's Other episodes and
   Similar podcasts tables, sortable by title and description), `PodcastEpisodeTranscript.tsx` (the episode page's
-  transcript), `podcastEpisodeTestFixtures.ts` (the web tests' podcast episode summary, chapter, and full
+  transcript), `PodcastEpisodeCountsLine.tsx` (the podcast episode page's listener count, empty in the server render),
+  `podcastEpisodeTestFixtures.ts` (the web tests' podcast episode summary, chapter, and full
   podcast episode), `PlaybackControlButtons.tsx` (the skip and playback speed buttons, in the player card and the bottom
   player),
   `ThemeSongNote.tsx` (the note icon whose popup credits the theme song, beside the podcast's name and episode titles,
@@ -151,22 +157,24 @@ the browser bundle and renders pages through the server build, behind its own ro
   `podcastEpisodeQuestionTestFixtures.ts`. `podcastEpisodeListenStore.ts` keeps whether the user is signed in and saves
   a signed-in user's progress in the loaded podcast episode, its playback start once per load, for the player store.
 - `hooks/` — the React hooks that read the browser or a route, `useTopicPagePayload.ts` among them, the topic page's
-  payload and its poll reload; `providers/` — context providers; `assets/` — images the bundler imports and serves
-  as hashed files. The DOM-free hooks `useNow`, `useAvatar`, and `useUsernameChange` live in `@carlnotes/core/hooks/`. A
-  component that reads the browser during render, `localStorage`, `window`, or `document`, reads it through
-  `useBrowserValue` in `hooks/useBrowserValue.ts`, so the server and the first browser render agree. A page that starts
-  from a server loader's data loads in the browser through `useLoadInBrowser` in the same file. `useLoadInBrowser` skips
-  the first load while hydrating data the server already read. Code without its route's typed `useSearch` reads the
-  query string as `URLSearchParams` through `useSearchParams` in `hooks/useSearchParams.ts`. `useCtaPromptToast` in
-  `hooks/useCtaPromptToast.ts` toasts the prompt that a page's `cta` param names, on the signup and plans pages.
-  `useIsSignedInBeforeSession` in `hooks/useIsSignedInBeforeSession.ts` says whether the page shows as signed in. The
-  page load's session cookie decides until Better Auth's session request finishes, and the session decides after. An
-  element that fades in as it scrolls into view takes its class from `useRevealClassName` in
-  `hooks/useRevealClassName.ts`, which shows a server-rendered element before any script runs, so nothing a crawler or a
-  browser without JavaScript reads starts hidden. A box that scrolls takes its tab stop from `useScrollRegionTabStop` in
-  `hooks/useScrollRegionTabStop.ts`, which returns `{ ref, tabIndex }` for the box, with a tab stop while its content
-  overflows, so a keyboard can scroll text with no link in it. The box draws its focus ring with
-  `SCROLL_REGION_FOCUS_CLASS`.
+  payload and its poll reload, and `useScanNote.ts`, a scan's note behind its recap popover, read once the trigger is
+  pointed at, focused, touched, or opened, and kept once the scan has finished; `providers/` — context providers;
+  `assets/` — images the bundler imports and serves as hashed files. The DOM-free hooks `useNow`, `useAvatar`, and
+  `useUsernameChange` live in `@carlnotes/core/hooks/`. A component that reads the browser during render,
+  `localStorage`, `window`, or `document`, reads it through `useBrowserValue` in `hooks/useBrowserValue.ts`, so the
+  server and the first browser render agree. A page that starts from a server loader's data loads in the browser through
+  `useLoadInBrowser` in the same file. `useLoadInBrowser` skips the first load while hydrating data the server already
+  read. Code without its route's typed `useSearch` reads the query string as `URLSearchParams` through `useSearchParams`
+  in `hooks/useSearchParams.ts`. `useCtaPromptToast` in `hooks/useCtaPromptToast.ts` toasts the prompt that a page's
+  `cta` param names, on the signup and plans pages. `useIsSignedInBeforeSession` in
+  `hooks/useIsSignedInBeforeSession.ts` says whether the page shows as signed in. The page load's session cookie decides
+  until Better Auth's session request finishes, and the session decides after. An element that fades in as it scrolls
+  into view takes its class from `useRevealClassName` in `hooks/useRevealClassName.ts`, which shows a server-rendered
+  element before any script runs, so nothing a crawler or a browser without JavaScript reads starts hidden. A box that
+  scrolls takes its tab stop from `useScrollRegionTabStop` in `hooks/useScrollRegionTabStop.ts`, which returns
+  `{ ref, tabIndex }` for the box, with a tab stop while its content overflows, so a keyboard can scroll text with no
+  link in it. The box draws its focus ring with `SCROLL_REGION_FOCUS_CLASS`. `usePolledCounts` in
+  `hooks/usePolledCounts.ts` reads a page's counts once it has mounted, then every minute while the page is visible.
 - `src/globals.css` — the app's stylesheet, with the keyframes in `animations.css` and the note editor's overrides in
   `components/note/noteEditor.css`. It imports its `@theme inline` block and the `:root` and dark variables from
   `@carlnotes/nightshift/tokens.css`, which is written from the Nightshift TypeScript source, and keeps Tailwind from

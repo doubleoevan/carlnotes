@@ -9,6 +9,7 @@ import { trackEvent } from "@carlnotes/server/analytics"
 import { toPodcastCoverKey } from "@carlnotes/server/podcastCoverPaths"
 import { eq, sql } from "drizzle-orm"
 import { Hono } from "hono"
+import { countPodcastEpisodeListen, toRequestSender } from "../counts/viewerCounts"
 import { type AppEnv, currentUser, toAnalyticsProperties } from "../currentUser"
 import { PRIVATE_NO_STORE_CACHE_CONTROL, toVersionedImageHeaders } from "../edgeCache"
 import { toCachedPodcastCoverJpeg } from "../share/podcastCover"
@@ -132,8 +133,9 @@ export const podcastFeedsRoute = new Hono<AppEnv>()
 			return context.json({ error: "not found" }, 404)
 		}
 
-		// count a download through the listener's feed as one play, and report the play
+		// count a download through the listener's feed as one play and as its listener, and report the play
 		if (context.req.method === "GET") {
+			void countPodcastEpisodeListen(toRequestSender(context, podcastFeedTokenListener.userId), podcastEpisodeRow.id)
 			await db
 				.insert(podcastEpisodeListens)
 				.values({ podcastEpisodeId: podcastEpisodeRow.id, userId: podcastFeedTokenListener.userId, playCount: 1 })

@@ -1,6 +1,14 @@
-// starting a Scan by hand from the topic page
+// starting and stopping a Scan by hand from the topic page, and one Scan's recap and source results
 
 import { MANUAL_SCAN_PAUSED_LABEL, SCAN_SPENT_BUDGET_LABEL } from "@carlnotes/contracts/scanFailure"
+import { toSourceResultLabel, toUrlHost } from "@carlnotes/contracts/sources"
+import {
+	type ScanNote,
+	type ScanSourceResults,
+	type SourceResult,
+	type StoredSourceResult,
+	storedScanSourceResults,
+} from "@carlnotes/contracts/topics"
 import { db } from "@carlnotes/db"
 import { scans } from "@carlnotes/db/schema/scans"
 import { topics } from "@carlnotes/db/schema/topics"
@@ -126,20 +134,78 @@ export async function stopManualScan(
 	return { status: "stopped" }
 }
 
+/**
+ * Returns a scan note's source results from the stored value, or null if the value is missing or malformed.
+ */
+export function toSourceResultsView(storedValue: unknown, canViewOwnerDetails: boolean): ScanSourceResults | null {
+	// a missing value, or one that no longer matches the stored shape, returns no results
+	const storedScanSourceResultsResult = storedScanSourceResults.safeParse(storedValue)
+	if (!storedScanSourceResultsResult.success) {
+		return null
+	}
+
+	// keep the statuses the wire shape names, so a skipped Source and any later status never leave the api
+	const { sources, earlierKeptCount, earlierFoundCount } = storedScanSourceResultsResult.data
+	const sourceResults = sources.flatMap((storedSourceResult) => {
+		const sourceResult = toSourceResultView(storedSourceResult, canViewOwnerDetails)
+		return sourceResult ? [sourceResult] : []
+	})
+	return { sources: sourceResults, earlierKeptCount, earlierFoundCount }
+}
+
+// one stored source result as a scan note returns it, copied field by field, or null for a status the note leaves out
+function toSourceResultView(storedSourceResult: StoredSourceResult, canViewOwnerDetails: boolean): SourceResult | null {
+	// the fields every result has. everyone but the owner and admins reads a url Source by its host
+	const isUrlHostLabel = storedSourceResult.sourceKind === "url" && !canViewOwnerDetails
+	const sourceResultFields = {
+		sourceId: storedSourceResult.sourceId,
+		sourceKind: storedSourceResult.sourceKind,
+		label: isUrlHostLabel
+			? (toUrlHost(storedSourceResult.label) ?? toSourceResultLabel("url", {}))
+			: storedSourceResult.label,
+		foundCount: storedSourceResult.foundCount,
+		keptCount: storedSourceResult.keptCount,
+		costDollars: canViewOwnerDetails ? storedSourceResult.costDollars : null,
+		durationMs: storedSourceResult.durationMs,
+	}
+
+	// add each status's own detail
+	switch (storedSourceResult.status) {
+		case "ok":
+			return { ...sourceResultFields, status: "ok" }
+		case "fallback":
+			return { ...sourceResultFields, status: "fallback", fallbackMode: storedSourceResult.fallbackMode }
+		// a failure reason goes to the owner and admins alone
+		case "failed":
+			return { ...sourceResultFields, status: "failed", reason: canViewOwnerDetails ? storedSourceResult.reason : null }
+		// a skipped Source, and any status this view does not name, stays out
+		default:
+			return null
+	}
+}
+
 // the manual scan route and one scan's recap
 export const scansRoute = new Hono<AppEnv>()
 	.get("/scans/:id", async (context) => {
 		// the scan with its topic, so the topic's own visibility decides who may read the recap
 		const [scanRow] = await db
-			.select({ scanSummary: scans.scanSummary, topic: topics })
+			.select({ scanSummary: scans.scanSummary, sourceResults: scans.sourceResults, topic: topics })
 			.from(scans)
 			.innerJoin(topics, eq(topics.id, scans.topicId))
 			.where(eq(scans.id, context.req.param("id")))
 		// a scan on a topic this user may not see returns the same as a missing one
-		if (!(scanRow && (await isAllowed(currentUser(context), "topic:view", scanRow.topic)))) {
+		const userId = currentUser(context)
+		if (!(scanRow && (await isAllowed(userId, "topic:view", scanRow.topic)))) {
 			return context.json({ error: "not found" }, 404)
 		}
-		return context.json({ scanSummary: scanRow.scanSummary })
+
+		// the recap, and the source results with costs and failure reasons for the owner and admins alone
+		const canViewOwnerDetails = await isAllowed(userId, "topic:viewOwnerDetails", scanRow.topic)
+		const scanNote: ScanNote = {
+			scanSummary: scanRow.scanSummary,
+			sourceResults: toSourceResultsView(scanRow.sourceResults, canViewOwnerDetails),
+		}
+		return context.json(scanNote)
 	})
 	.post("/topics/:id/scan", async (context) => {
 		// reject a signed-out visitor

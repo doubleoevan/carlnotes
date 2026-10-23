@@ -1,4 +1,5 @@
 // the scan pipeline's tables: scans, resources, findings, and the per-user finding markers
+import type { StoredScanSourceResults } from "@carlnotes/contracts/topics"
 import {
 	boolean,
 	index,
@@ -72,6 +73,9 @@ export const scans = pgTable(
 			>()
 			.notNull()
 			.default([]),
+		// one result per Source, each credited with the Resources whose copy survived the merge, and the kept findings
+		// from earlier scans that no Source returned. null for a scan with no closing write
+		sourceResults: jsonb("source_results").$type<StoredScanSourceResults | null>(),
 	},
 	// covers the topic history read and the per-owner daily count and monthly spend sums
 	(table) => [
@@ -100,7 +104,7 @@ export const resources = pgTable(
 		// the review embedding and its model, EMBED_DIMENSIONS wide for qwen3-embedding-8b
 		embedding: vector("embedding", { dimensions: EMBED_DIMENSIONS }),
 		embeddingModel: text("embedding_model"),
-		// the source's engagement count where the ingester captured one, like a reddit post score. null means no engagement value
+		// no longer read or written. a later migration drops it, once no process from before viewer counts runs
 		engagement: integer("engagement"),
 		// when review last fetched this resource's content. defaults to the resource row creation
 		fetchedAt: timestamp("fetched_at", { withTimezone: true }).defaultNow().notNull(),
@@ -155,7 +159,9 @@ export const findings = pgTable(
 		ratedByUserId: text("rated_by_user_id"),
 		ratedTeamId: text("rated_team_id"),
 		ratedRole: text("rated_role"),
-		// the number of times this finding's resource has been opened
+		// the signed-in people who have opened this finding's resource, each counted once
+		viewerCount: integer("viewer_count").notNull().default(0),
+		// no longer read or written. a later migration drops it, once no process from before viewer counts runs
 		viewCount: integer("view_count").notNull().default(0),
 		// created and updated timestamps
 		...timestamps(),

@@ -49,7 +49,7 @@ const TOPIC_FINDINGS = [
 		resourceId: `resource-${index + 1}`,
 		url: `https://example.com/blog/finding-${index + 1}`,
 		title,
-		viewCount: 0,
+		viewerCount: 0,
 		relevanceScore: 0.9,
 		relevanceExplanation,
 	}),

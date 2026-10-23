@@ -48,6 +48,8 @@ export const topics = pgTable(
 		maxTopicFindings: integer("max_results").notNull().default(10),
 		// the unique subscriber count for the topic's active subscribers, not including the owner
 		subscriberCount: integer("subscriber_count").notNull().default(0),
+		// the unique people who opened the topic page, all time
+		viewerCount: integer("viewer_count").notNull().default(0),
 		// whether the owner has the topic's podcast on
 		isPodcastEnabled: boolean("is_podcast_enabled").notNull().default(true),
 		// created and updated timestamps

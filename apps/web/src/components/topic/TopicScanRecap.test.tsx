@@ -1,7 +1,8 @@
-// render tests for allowed urls
+// render tests for allowed urls, and for where the source notes chart sits in the recap
 import { expect, test } from "bun:test"
+import type { ScanSourceResults } from "@carlnotes/contracts/topics"
 import { renderToStaticMarkup } from "react-dom/server"
-import { ScrollNote } from "./TopicScanRecap"
+import { type ScanRecapFields, ScrollNote, TopicScanRecap } from "./TopicScanRecap"
 
 // one note trying every escape hatch at once: a written link, raw HTML, an image, and a bare url to convert to plain text
 const HOSTILE_NOTE = [
@@ -48,4 +49,55 @@ test("a link to a kept finding's url renders as an anchor while others stay plai
 	// the other link is plain text showing its destination without an anchor
 	expect(html).not.toContain('href="https://evil.test"')
 	expect(html).toContain("(https://evil.test)")
+})
+
+// a finished scan's recap fields, with a note, four minutes taken, and no source results
+const FINISHED_SCAN: ScanRecapFields = {
+	status: "succeeded",
+	error: null,
+	startedAt: "2026-07-15T13:00:00.000Z",
+	finishedAt: "2026-07-15T13:04:00.000Z",
+	stoppedAt: null,
+	scanSummary: "Read 12 resources and kept 4.",
+	sourceResults: null,
+	costDollars: null,
+}
+
+// one Source that read 12 and kept 4
+const SOURCE_RESULTS: ScanSourceResults = {
+	sources: [
+		{
+			sourceId: "source-web",
+			sourceKind: "search",
+			label: "web search",
+			status: "ok",
+			foundCount: 12,
+			keptCount: 4,
+			costDollars: null,
+			durationMs: 3_200,
+		},
+	],
+	earlierKeptCount: 0,
+	earlierFoundCount: 0,
+}
+
+// a scan saved before source results were recorded keeps the popover as it was
+test("a scan with no source results renders no chart", () => {
+	const html = renderToStaticMarkup(<TopicScanRecap scan={FINISHED_SCAN} />)
+	expect(html).not.toContain("Source notes")
+	expect(html).toContain("4 min taken")
+})
+
+// the chart sits between Carl's notes and the time and cost footer
+test("a scan with source results renders the chart after the note and before the footer", () => {
+	const html = renderToStaticMarkup(<TopicScanRecap scan={{ ...FINISHED_SCAN, sourceResults: SOURCE_RESULTS }} />)
+
+	// the note, the chart, and the footer appear in that order
+	const noteIndex = html.indexOf("Read 12 resources and kept 4.")
+	const chartIndex = html.indexOf("Source notes")
+	const footerIndex = html.indexOf("4 min taken")
+	expect(noteIndex).toBeGreaterThan(-1)
+	expect(chartIndex).toBeGreaterThan(noteIndex)
+	expect(footerIndex).toBeGreaterThan(chartIndex)
+	expect(html).toContain("4 kept from 12 read across 1 source.")
 })

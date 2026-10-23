@@ -10,6 +10,7 @@ import { RouterProvider } from "@tanstack/react-router"
 import { renderToString } from "react-dom/server"
 import { toPodcastEpisodeSummaryFixture } from "@/components/podcast/podcastEpisodeTestFixtures"
 import type { RelatedTopic } from "@/components/topic/RelatedTopicsSection"
+import { COUNTS_LINE_CLASS } from "@/lib/styleClasses"
 import { loadRouter } from "@/routes/-loadRouter"
 
 // the fixture topic's id and current slug, the invite topic's id and slug, and an id the api does not have
@@ -57,14 +58,13 @@ const FINDING = {
 	faviconPath: null,
 	publishedAt: "2026-09-20T00:00:00.000Z",
 	fetchedAt: "2026-09-21T00:00:00.000Z",
-	viewCount: 3,
+	viewerCount: 3,
 	relevanceScore: 0.9,
 	relevanceExplanation: "A weekly roundup of agent releases.",
 	rating: null,
 	isConsumed: false,
 	isBookmarked: false,
 	teamBookmarks: [],
-	engagement: null,
 } satisfies TopicFinding
 
 // the public topic, as the api returns it to a visitor
@@ -195,6 +195,14 @@ test("the public topic route renders its head and its findings on the server", a
 	expect(html).not.toContain("opengraph-image.png")
 	expect(html).toContain('<meta name="twitter:card" content="summary_large_image"')
 	expect(html).toContain('<script type="application/ld+json">{"@type":"CreativeWork"}</script>')
+})
+
+// the server render holds an empty counts line and no viewer count
+test("the server render holds the empty counts line and no viewer count", async () => {
+	const { router } = await loadRouter(`/topics/${TOPIC_ID}/${TOPIC_SLUG}`)
+	const html = renderToString(<RouterProvider router={router} />)
+	expect(html).toContain(`<p class="${COUNTS_LINE_CLASS}"></p>`)
+	expect(html).not.toMatch(/\bviewers?\b/i)
 })
 
 // a long scan note renders whole on the server with no Read more

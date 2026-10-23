@@ -1,4 +1,4 @@
-import { fetchScanNote, sendSubscriptionEmail } from "@carlnotes/client/topicClient"
+import { sendSubscriptionEmail } from "@carlnotes/client/topicClient"
 import type { ActivityScan, OwnerTopic } from "@carlnotes/contracts/activity"
 import { frequencies, isDailyFrequency } from "@carlnotes/contracts/enums"
 import {
@@ -15,6 +15,7 @@ import { Popover, PopoverCloseButton, PopoverContent, PopoverTrigger } from "@/c
 import { Switch } from "@/components/primitives/switch"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import { TopicScanRecap, toNotesMarkdown } from "@/components/topic/TopicScanRecap"
+import { useScanNote } from "@/hooks/useScanNote"
 import {
 	POPOVER_PANEL_CLASS,
 	STANDALONE_LINK_CLASS,
@@ -333,29 +334,19 @@ function ScansTable({ scans, topic }: { scans: OwnerTopic["scans"]; topic: Pick<
 // the Brew time cell, the time taken as a link that opens the scan recap popover
 function ScanNotesCell({ scan, topic }: { scan: ActivityScan; topic: Pick<OwnerTopic, "id" | "name"> }) {
 	const duration = toDurationLabel(durationMsBetween(scan.startedAt, scan.finishedAt))
-	// the scan recap is loaded on first open and kept while the row stays mounted
-	const [scanSummary, setScanSummary] = useState<string | null>(null)
-	const [isNoteLoaded, setIsNoteLoaded] = useState(false)
-	function handleOpenScanNote(isOpen: boolean): void {
-		if (isOpen && !isNoteLoaded) {
-			fetchScanNote(scan.id)
-				.then((note) => {
-					setScanSummary(note)
-					setIsNoteLoaded(true)
-				})
-				.catch((error) => console.error("scan note load failed", error))
-		}
-	}
-
+	// the scan's note, read as soon as the pointer, focus, or a touch reaches the time, and on open
+	const { scanNote, scanNoteTriggerProps, handleScanNoteOpenChange } = useScanNote(scan)
 	return (
-		<Popover onOpenChange={handleOpenScanNote}>
-			<PopoverTrigger className={STANDALONE_LINK_CLASS}>{duration || "—"}</PopoverTrigger>
+		<Popover onOpenChange={handleScanNoteOpenChange}>
+			<PopoverTrigger {...scanNoteTriggerProps} className={STANDALONE_LINK_CLASS}>
+				{duration || "—"}
+			</PopoverTrigger>
 			<PopoverContent align="start" className={POPOVER_PANEL_CLASS}>
 				<PopoverCloseButton />
-				{isNoteLoaded ? (
+				{scanNote ? (
 					<TopicScanRecap
-						scan={{ ...scan, costDollars: scan.costCents / 100, scanSummary }}
-						copyMarkdown={toNotesMarkdown({ topicId: topic.id, topicName: topic.name, note: scanSummary })}
+						scan={{ ...scan, ...scanNote, costDollars: scan.costCents / 100 }}
+						copyMarkdown={toNotesMarkdown({ topicId: topic.id, topicName: topic.name, note: scanNote.scanSummary })}
 					/>
 				) : (
 					<CoffeeLoading className="min-h-24 text-base" />

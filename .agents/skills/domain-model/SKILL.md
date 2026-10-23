@@ -57,12 +57,17 @@ description: The CarlNotes domain vocabulary. Use whenever naming types, tables,
 - A Podcast Episode is rendered output, never an input: an ingested show's episode is a `listen` Resource from the
   `podcast` Source kind, and only a Topic's own rendered audio is a Podcast Episode. Podcast Episode cost counts in the
   billed user's monthly spend beside Scan and chat cost.
-- A Resource is raw and global; a Finding is scored and topic-scoped. Don't blur them. A Resource may include a captured
-  `engagement` count (like a reddit score) that read-side ranking uses.
+- A Resource is raw and global; a Finding is scored and topic-scoped. Don't blur them.
 - A Scan closes by filtering the Topic to its `max_results` best Findings by relevance; bookmarked Findings are never filtered.
 - A Scan traces every Source that did not deliver normally in `scans.problem_sources`: one that fell back to a keyless
   path records its `fallbackMode`, one that failed records its `reason`. A problem is independent of `status` — a Scan
   whose Sources all succeeded, some of them through a fallback, is still `succeeded`.
+- A Scan that reaches its closing write records one **source result** per Source in `scans.source_results`: its label
+  as of that Scan, its status, its found and kept counts, its ingester's own cost, and its duration. Each Resource is
+  credited to the one Source whose copy survived ingest's merge by canonical url, and Sources run oldest first, so the
+  same Source wins every time. The **earlier count** is the kept Findings from earlier Scans that no Source returned
+  this Scan, which review re-scored. Found counts sum to `found_count`, and kept counts plus the earlier count sum to
+  `kept_count`. A stopped Scan, a failed workflow, and a Scan from before the column hold `null`.
 - A Scan has **one Budget**, created before ingestion. Every stage charges into it — `ingestion` (the Sources' own
   spend: Exa for `search` and TwitterAPI.io for `x`), `embedding`, `fetch`, `scoringCheap`, `scoringPremium` — so
   `Scan.cost` is that Budget's total and `stage_costs` is its breakdown, and the one spend limit sees everything the
@@ -89,7 +94,8 @@ conflate the two, and never resolve Source/delivery credentials through `account
 - "Audience" (use Team)
 - "Addressed" as an invite noun (use user invite; "a message addresses Carl" keeps the plain verb)
 - "typed-email" (use email invite)
-- "Viewer" (a signed-in person is a **user**, a logged-out one is a **visitor**; see below)
+- "Viewer" for the person on the page (a signed-in person is a **user**, a logged-out one is a **visitor**; see below).
+  A viewer count is the one exception, also below
 - "Outsider" (a user who is not on the team is a **non-member**)
 - "Ledger" (a `chat_turns` row is a **chat turn row**, or a **spend row** where the point is what it bills)
 
@@ -100,6 +106,12 @@ person has no account yet, which is the sign-up and join copy. Never "viewer": i
 once, so `viewerRole` and `viewerUserId` read as if a logged-out person could hold a role. Where the
 subject is already unambiguous the qualifier drops entirely: `role`, `userId`. Where it names something else, it says
 what: `isTeamLeader`.
+
+A **viewer count** and a **listener count** are the exception. A Topic's viewer count is the distinct people who
+opened its page, and a Podcast Episode's listener count the distinct people who played or downloaded it. Both are all
+time and count users and visitors alike. A Finding's viewer count counts only the users who opened it. There a viewer
+or a listener is one counted member of an audience, never the person on the page, so `viewerCount`, `listenerCount`,
+`viewer_counters`, and `addViewer` keep the words. The person who sent a view or a listen is the `RequestSender`.
 
 ## On the MCP side, the client is the program and the tool caller resolves to a user or a visitor
 The **MCP server** at `/mcp` (and its topic-bound `/mcp/t/<topicId>`) is a second reader over the api's query

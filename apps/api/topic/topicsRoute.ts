@@ -1,4 +1,4 @@
-// the topic routes: the page, the poll, create, update, delete, and the per-topic settings
+// the topic routes: the page, the poll, create, update, delete, removing one Source, and the per-topic settings
 
 import { suggestSourcesPayload, updateTopicPayload } from "@carlnotes/contracts/topicPayloads"
 import type { TopicResponse } from "@carlnotes/contracts/topics"
@@ -13,6 +13,7 @@ import { Hono } from "hono"
 import { z } from "zod"
 import { type AppEnv, currentUser, toAnalyticsProperties } from "../currentUser"
 import { toolCallerRateLimiter } from "../rateLimit"
+import { removeTopicSource } from "../tool/topicSourceTools"
 import { deleteTopic } from "./deleteTopic"
 import { readVisitorTopicPage, TOPIC_PAGE_KEY_PREFIX } from "./feeds"
 import { loadTopicGateResponse } from "./helpers"
@@ -164,4 +165,27 @@ export const topicsRoute = new Hono<AppEnv>()
 		// delete the topic and everything attached to it. owner or admin only.
 		const isTopicDeleted = await deleteTopic(userId, context.req.param("id"), toAnalyticsProperties(context))
 		return isTopicDeleted ? context.json({ ok: true }) : context.json({ error: "forbidden" }, 403)
+	})
+	.delete("/topics/:id/sources/:sourceId", async (context) => {
+		// remove one Source through the shared topic tool
+		const removeTopicSourceResult = await removeTopicSource({
+			userId: currentUser(context),
+			topicId: context.req.param("id"),
+			sourceId: context.req.param("sourceId"),
+			origin: "editor",
+			analyticsProperties: toAnalyticsProperties(context),
+		})
+
+		// map the result to a status
+		switch (removeTopicSourceResult.status) {
+			case "saved":
+				return context.body(null, 204)
+			case "missing":
+				return context.json({ error: "not found" }, 404)
+			case "forbidden":
+				return context.json({ error: "forbidden" }, 403)
+			// a rule that keeps the Source is a 409 that names the rule
+			default:
+				return context.json({ error: removeTopicSourceResult.status }, 409)
+		}
 	})

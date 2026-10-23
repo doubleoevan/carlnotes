@@ -54,12 +54,16 @@ export function toLastTopicScanFields(
 
 	// the topic's last succeeded scanSummary, read from the scan rows already in memory
 	const scanSummary = scanRows.find((scanRow) => scanRow.id === lastSucceededTopicScan.id)?.scanSummary ?? null
-	// how long that scan took, from its start and finish times
-	const lastScanDurationMs =
-		lastSucceededTopicScan.finishedAt !== null
-			? new Date(lastSucceededTopicScan.finishedAt).getTime() - new Date(lastSucceededTopicScan.startedAt).getTime()
-			: null
-	return { lastSucceededTopicScan, scanSummary, lastScanDurationMs }
+	return { lastSucceededTopicScan, scanSummary, lastScanDurationMs: toScanDurationMs(lastSucceededTopicScan) }
+}
+
+/**
+ * Returns how long a scan took in milliseconds, or null for no scan or one still running.
+ */
+export function toScanDurationMs(
+	scan: { startedAt: Date | string; finishedAt: Date | string | null } | null | undefined,
+): number | null {
+	return scan?.finishedAt ? new Date(scan.finishedAt).getTime() - new Date(scan.startedAt).getTime() : null
 }
 
 // the scan rows in the topic response's shape, stopped scans left out and the cost shown only with spend access

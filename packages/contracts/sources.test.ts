@@ -1,15 +1,21 @@
-// source registry tests: each source kind's summary, the Google News feed url and its publisher, and the picker's options
+// source registry tests: each source kind's summary, the Google News feed url and its publisher, the picker's options,
+// and the labels a source result records
 import { expect, test } from "bun:test"
 import {
 	CUSTOM_SOURCE_OPTIONS,
+	REDDIT_RSS_FALLBACK_MODE,
+	SOURCE_RESULT_LABEL_CHARS,
 	toCustomSourceOption,
 	toDefaultSource,
+	toFallbackModeLabel,
 	toGoogleNewsFeedUrl,
 	toGoogleNewsPublisher,
 	toPublisherDomain,
+	toSourceResultLabel,
 	toSourceSummary,
 	toSourceValue,
 	toUrlHost,
+	YOUTUBE_ATOM_FALLBACK_MODE,
 } from "./sources"
 
 // the Google News option, which the source suggestions stage the same way the picker does
@@ -175,4 +181,26 @@ test("the x option keeps the bare handle from a handle, an @handle, or a profile
 	expect(xOption?.toConfig("https://x.com/i/flow/login")).toBeNull()
 	expect(xOption?.toConfig("https://x.com/gregisenberg/status/1")).toBeNull()
 	expect(xOption?.toConfig("not a handle")).toBeNull()
+})
+
+// a source result is labeled by its summary, or by its kind's sentence name if the summary is empty
+test("toSourceResultLabel labels web search by its kind and a subreddit by its name", () => {
+	expect(toSourceResultLabel("search", {})).toBe("web search")
+	expect(toSourceResultLabel("reddit", { subreddit: "typescript" })).toBe("r/typescript")
+	expect(toSourceResultLabel("composio", {})).toBe("composio")
+})
+
+// a url Source's summary is its whole url, so the label is cut to its limit
+test("toSourceResultLabel cuts a 2,000-character url to the label limit", () => {
+	const longUrl = `https://example.com/${"a".repeat(2_000 - "https://example.com/".length)}`
+	const sourceResultLabel = toSourceResultLabel("url", { url: longUrl })
+	expect(sourceResultLabel).toHaveLength(SOURCE_RESULT_LABEL_CHARS)
+	expect(longUrl.startsWith(sourceResultLabel)).toBe(true)
+})
+
+// each known fallback mode reads as the feed it names, and an unknown mode prints as is
+test("toFallbackModeLabel names each keyless feed and passes an unknown mode through", () => {
+	expect(toFallbackModeLabel(REDDIT_RSS_FALLBACK_MODE)).toBe("Reddit's public RSS feed")
+	expect(toFallbackModeLabel(YOUTUBE_ATOM_FALLBACK_MODE)).toBe("YouTube's public feed")
+	expect(toFallbackModeLabel("bluesky-public")).toBe("bluesky-public")
 })

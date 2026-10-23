@@ -17,9 +17,9 @@ export const topicFinding = z.object({
 	source: z.string().nullable(),
 	faviconPath: z.string().nullable(),
 	publishedAt: z.string().nullable(),
-	// when the resource was fetched, and how many times it's been opened
+	// when the resource was fetched, and how many users have opened the finding, each counted once
 	fetchedAt: z.string(),
-	viewCount: z.number(),
+	viewerCount: z.number(),
 	// the model's review. the relevance score and a short explanation of why
 	relevanceScore: z.number(),
 	relevanceExplanation: z.string(),
@@ -29,8 +29,6 @@ export const topicFinding = z.object({
 	isBookmarked: z.boolean(),
 	// the teammates who bookmarked this finding, for the Bookmarked view's Team scope. empty off a team
 	teamBookmarks: z.array(profileIdentity).default([]),
-	// the resource's captured engagement score, like a reddit score. null if no ingester recorded one
-	engagement: z.number().nullable(),
 })
 
 export type TopicFinding = z.infer<typeof topicFinding>

@@ -1,9 +1,16 @@
 // manual scan tests: a scan with a spent monthly budget, one past the manual scans cutoff, and one whose key has spent
 // its budget are rejected before anything starts or is billed. a failed budget read starts the scan, and an admin's
-// scan checks the admin's own budget
+// scan checks the admin's own budget. scan note tests: who gets a source result's cost, reason, and full url label, and
+// which stored results never leave the api
 import { afterEach, expect, type Mock, mock, spyOn, test } from "bun:test"
 import { MANUAL_SCAN_PAUSED_LABEL, SCAN_SPENT_BUDGET_LABEL } from "@carlnotes/contracts/scanFailure"
-import { stubConnectionPool, toTableRow } from "@carlnotes/db/connectionPoolStub"
+import type { StoredScanSourceResults, StoredSourceResult } from "@carlnotes/contracts/topics"
+import {
+	ADMIN_USER_ACCESS_ROW,
+	FREE_USER_ACCESS_ROW,
+	stubConnectionPool,
+	toTableRow,
+} from "@carlnotes/db/connectionPoolStub"
 import * as monthlyBudgetCutoffs from "@carlnotes/db/monthlyBudgetCutoffs"
 import { topics } from "@carlnotes/db/schema/topics"
 import * as litellm from "@carlnotes/models/litellm"
@@ -14,7 +21,7 @@ import { quietErrorReports } from "@carlnotes/server/monitoringTestFixtures"
 import * as authorization from "../authorization"
 import * as billing from "../billing"
 import { toSignedInApp } from "../testSession"
-import { scansRoute } from "./scans"
+import { scansRoute, toSourceResultsView } from "./scans"
 
 // put the connection pool's own query, the real fetch, the proxy settings, and the spies back after each test
 afterEach(() => {
@@ -190,4 +197,143 @@ test("a manual Scan whose start throws is reported and responds 503", async () =
 		topicId: "topic-1",
 		userId: "owner-1",
 	})
+})
+
+// a url Source with a token in its query that ran, a reddit Source that fell back, an rss feed that failed, and a url
+// Source skipped while its page awaited screening
+const URL_SOURCE_RESULT: StoredSourceResult = {
+	sourceId: "source-url",
+	sourceKind: "url",
+	label: "https://example.com/report?token=abc",
+	foundCount: 1,
+	keptCount: 1,
+	costDollars: 0,
+	durationMs: 1_800,
+	status: "ok",
+}
+const REDDIT_SOURCE_RESULT: StoredSourceResult = {
+	sourceId: "source-reddit",
+	sourceKind: "reddit",
+	label: "r/typescript",
+	foundCount: 9,
+	keptCount: 2,
+	costDollars: 0.004,
+	durationMs: 2_400,
+	status: "fallback",
+	fallbackMode: "reddit-rss",
+}
+const RSS_SOURCE_RESULT: StoredSourceResult = {
+	sourceId: "source-rss",
+	sourceKind: "rss",
+	label: "example.org",
+	foundCount: 0,
+	keptCount: 0,
+	costDollars: 0,
+	durationMs: 300,
+	status: "failed",
+	reason: "feed returned 404",
+}
+const SKIPPED_SOURCE_RESULT: StoredSourceResult = {
+	sourceId: "source-pending",
+	sourceKind: "url",
+	label: "https://unscreened.example.com/page",
+	foundCount: 0,
+	keptCount: 0,
+	costDollars: 0,
+	durationMs: 0,
+	status: "skipped",
+}
+
+// a scan's stored results: the four Sources above, and nine findings from earlier scans read again with four kept
+const STORED_SOURCE_RESULTS: StoredScanSourceResults = {
+	sources: [URL_SOURCE_RESULT, REDDIT_SOURCE_RESULT, RSS_SOURCE_RESULT, SKIPPED_SOURCE_RESULT],
+	earlierKeptCount: 4,
+	earlierFoundCount: 9,
+}
+
+// stub the connection pool to return one scan on a public topic owned by owner-1, with the stored results given, and
+// the access row of admin-1 as an admin's and of every other user as a free user's
+function stubScanNoteRows(storedSourceResults: unknown): void {
+	const topicRow = toTableRow(topics, { id: "topic-1", ownerId: "owner-1", visibility: "public" })
+	stubConnectionPool(({ text, values }) => {
+		// the scan row with its topic's columns
+		if (text.includes('from "scans" inner join "topics"')) {
+			return [["Carl's notes", storedSourceResults, ...topicRow]]
+		}
+
+		// each user's access row, and no rows for any other query
+		if (text.includes('from "users"')) {
+			return values.includes("admin-1") ? [ADMIN_USER_ACCESS_ROW] : [FREE_USER_ACCESS_ROW]
+		}
+		return []
+	})
+}
+
+// read scan-1's note as the given user, or as a signed-out visitor for null
+async function readScanNote(userId: string | null): Promise<unknown> {
+	const response = await (userId ? toSignedInApp(scansRoute, userId) : scansRoute).request("/scans/scan-1")
+	expect(response.status).toBe(200)
+	return response.json()
+}
+
+// the owner and an admin see what each Source cost, why one failed, and a url Source's whole url
+test("the owner and an admin read every source result's cost, reason, and full label", async () => {
+	stubScanNoteRows(STORED_SOURCE_RESULTS)
+	const ownerSourceResults = {
+		sources: [URL_SOURCE_RESULT, REDDIT_SOURCE_RESULT, RSS_SOURCE_RESULT],
+		earlierKeptCount: 4,
+		earlierFoundCount: 9,
+	}
+	expect(await readScanNote("owner-1")).toEqual({ scanSummary: "Carl's notes", sourceResults: ownerSourceResults })
+	expect(await readScanNote("admin-1")).toEqual({ scanSummary: "Carl's notes", sourceResults: ownerSourceResults })
+})
+
+// a visitor gets the counts, statuses, modes, and times, a url Source by its host, and no cost or reason
+test("a signed-out visitor reads no cost or reason and a url Source by its host", async () => {
+	stubScanNoteRows(STORED_SOURCE_RESULTS)
+	expect(await readScanNote(null)).toEqual({
+		scanSummary: "Carl's notes",
+		sourceResults: {
+			sources: [
+				{ ...URL_SOURCE_RESULT, label: "example.com", costDollars: null },
+				{ ...REDDIT_SOURCE_RESULT, costDollars: null },
+				{ ...RSS_SOURCE_RESULT, costDollars: null, reason: null },
+			],
+			earlierKeptCount: 4,
+			earlierFoundCount: 9,
+		},
+	})
+})
+
+// a skipped Source may be a url not yet screened, and a status the view does not name stays out until it does
+test("a skipped result and an unknown stored status never leave the api", () => {
+	// the skipped result is left out of the owner's view
+	const ownerSourceResultsView = toSourceResultsView(STORED_SOURCE_RESULTS, true)
+	expect(ownerSourceResultsView?.sources.map(({ sourceId }) => sourceId)).toEqual([
+		"source-url",
+		"source-reddit",
+		"source-rss",
+	])
+
+	// a stored status the stored shape does not name returns no results at all
+	const unknownStatusSourceResult = { ...URL_SOURCE_RESULT, status: "throttled" }
+	expect(toSourceResultsView({ sources: [unknownStatusSourceResult], earlierKeptCount: 0 }, true)).toBeNull()
+})
+
+// the view copies each wire field by name, so a field added to the stored shape is never sent unreviewed. results saved
+// before the earlier read count read it as zero
+test("an unknown stored field never reaches the response", () => {
+	const storedSourceResultWithSecret = { ...REDDIT_SOURCE_RESULT, apiKey: "sk-secret" }
+	const sourceResultsView = toSourceResultsView(
+		{ sources: [storedSourceResultWithSecret], earlierKeptCount: 0, ownerEmail: "owner@example.com" },
+		true,
+	)
+	expect(sourceResultsView).toEqual({ sources: [REDDIT_SOURCE_RESULT], earlierKeptCount: 0, earlierFoundCount: 0 })
+})
+
+// a malformed value shows no chart instead of breaking the note, and a scan from before source results has none
+test("a malformed stored value and an older scan both return no results", async () => {
+	expect(toSourceResultsView({ sources: "not a list" }, true)).toBeNull()
+	stubScanNoteRows(null)
+	expect(await readScanNote("owner-1")).toEqual({ scanSummary: "Carl's notes", sourceResults: null })
 })

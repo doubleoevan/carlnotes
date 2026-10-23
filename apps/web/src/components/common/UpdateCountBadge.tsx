@@ -26,25 +26,31 @@ export function TooltipLabel({ children }: { children: string }) {
 }
 
 /**
- * One tooltip section, with an optional heading over its lines, the first LISTED_TOOLTIP_LINE_COUNT listed and the rest counted.
+ * One tooltip section, with an optional heading over its lines, the first listedLineCount listed and the rest counted.
  */
-export function TooltipSection({ heading, tooltipLines }: { heading?: string; tooltipLines: TooltipLine[] }) {
+export function TooltipSection({
+	heading,
+	tooltipLines,
+	listedLineCount = LISTED_TOOLTIP_LINE_COUNT,
+}: {
+	heading?: string
+	tooltipLines: TooltipLine[]
+	listedLineCount?: number
+}) {
 	// a section whose lines have markers shows each marker in place of a bullet
 	const hasMarkers = tooltipLines.some((tooltipLine) => tooltipLine.marker)
 	return (
 		<div>
 			{heading ? <p className="font-semibold">{heading}</p> : null}
 			<ul className={hasMarkers ? "mt-0.5 space-y-0.5" : "list-disc pl-4"}>
-				{tooltipLines.slice(0, LISTED_TOOLTIP_LINE_COUNT).map(({ key, line, marker }) => (
+				{tooltipLines.slice(0, listedLineCount).map(({ key, line, marker }) => (
 					<li key={key} className={hasMarkers ? "flex items-center gap-1.5" : undefined}>
 						{marker}
 						{line}
 					</li>
 				))}
 			</ul>
-			{tooltipLines.length > LISTED_TOOLTIP_LINE_COUNT && (
-				<p>{`and ${tooltipLines.length - LISTED_TOOLTIP_LINE_COUNT} more`}</p>
-			)}
+			{tooltipLines.length > listedLineCount && <p>{`and ${tooltipLines.length - listedLineCount} more`}</p>}
 		</div>
 	)
 }

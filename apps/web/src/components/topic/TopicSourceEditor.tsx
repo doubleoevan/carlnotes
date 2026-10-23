@@ -4,6 +4,7 @@ import {
 	CUSTOM_SOURCE_OPTIONS,
 	type CustomSourceKey,
 	DEFAULT_SOURCES,
+	KEEP_ONE_SOURCE_MESSAGE,
 	toCustomSourceOption,
 	toSourceSummary,
 } from "@carlnotes/contracts/sources"
@@ -110,7 +111,7 @@ export function TopicSourceEditor({ fields }: TopicSourceEditorProps) {
 	// remove a source, but show a toast if that would leave the topic with no source at all
 	const removeSource = (remove: () => void): void => {
 		if (totalSources <= 1) {
-			toast.error("Keep at least one source, or Carl's just a guy with opinions.")
+			toast.error(KEEP_ONE_SOURCE_MESSAGE)
 			return
 		}
 		remove()

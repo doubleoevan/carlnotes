@@ -134,11 +134,10 @@ function topicFinding(overrides: Partial<TopicFinding>): TopicFinding {
 		publishedAt: null,
 		fetchedAt: "2026-07-01T00:00:00.000Z",
 		// the review, signals, and per-user states the helpers read
-		viewCount: 0,
+		viewerCount: 0,
 		relevanceScore: 0,
 		relevanceExplanation: "",
 		rating: null,
-		engagement: null,
 		isConsumed: false,
 		isBookmarked: false,
 		teamBookmarks: [],
@@ -190,15 +189,26 @@ test("toSortedTopicFindings breaks relevance ties the same way no matter what th
 	expect(reversedIds).toEqual(relevantIds)
 })
 
-// trending ranks sort by engagement value first, and findings without one fall back to recency
-test("toSortedTopicFindings trending falls back to newest without an engagement value", () => {
-	const hot = topicFinding({ findingId: "hot", engagement: 500, publishedAt: "2026-07-01T00:00:00.000Z" })
-	const mild = topicFinding({ findingId: "mild", engagement: 20, publishedAt: "2026-07-10T00:00:00.000Z" })
-	const newer = topicFinding({ findingId: "newer", publishedAt: "2026-07-20T00:00:00.000Z" })
-	const older = topicFinding({ findingId: "older", publishedAt: "2026-07-05T00:00:00.000Z" })
-	// engagement values rank first by size, then the rest order by recency
-	const trendingOrder = toSortedTopicFindings([older, newer, mild, hot], "trending")
-	expect(trendingOrder.map((finding) => finding.findingId)).toEqual(["hot", "mild", "newer", "older"])
+// trending ranks the most viewed findings first, and findings with the same viewer count fall back to recency
+test("toSortedTopicFindings trending orders by viewer count, then newest", () => {
+	const mostViewedFinding = topicFinding({ findingId: "most", viewerCount: 9, publishedAt: "2026-07-01T00:00:00.000Z" })
+	const viewedFinding = topicFinding({ findingId: "viewed", viewerCount: 3, publishedAt: "2026-07-10T00:00:00.000Z" })
+	const newerFinding = topicFinding({ findingId: "newer", publishedAt: "2026-07-20T00:00:00.000Z" })
+	const olderFinding = topicFinding({ findingId: "older", publishedAt: "2026-07-05T00:00:00.000Z" })
+	// viewer counts rank first by size, then the findings no one has opened order by recency
+	const trendingOrder = toSortedTopicFindings(
+		[olderFinding, newerFinding, viewedFinding, mostViewedFinding],
+		"trending",
+	)
+	expect(trendingOrder.map((finding) => finding.findingId)).toEqual(["most", "viewed", "newer", "older"])
+})
+
+// a bookmarked finding stays pinned under trending even with fewer viewers than the rest
+test("toSortedTopicFindings trending keeps the bookmark pin", () => {
+	const bookmarkedFinding = topicFinding({ findingId: "pinned", viewerCount: 0, isBookmarked: true })
+	const popularFinding = topicFinding({ findingId: "popular", viewerCount: 50 })
+	const trendingOrder = toSortedTopicFindings([popularFinding, bookmarkedFinding], "trending")
+	expect(trendingOrder.map((finding) => finding.findingId)).toEqual(["pinned", "popular"])
 })
 
 // the recap placeholder shows still-reading only while the scan runs, or a call to action for the budget wall

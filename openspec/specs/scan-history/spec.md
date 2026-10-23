@@ -102,9 +102,10 @@ row of page numbers under the card if the Topic has more than five Scans. The ro
 that a homepage section and the podcast episodes card show, and a browser without JavaScript SHALL not show it. Each row
 SHALL show the finish timestamp ("Jul 15 · 6:02 am"), a muted one-line stat ("read {foundCount} · kept {keptCount}" for
 succeeded Scans, the status for running or failed ones), and a right-aligned ⓘ. The ⓘ popover SHALL show Carl's full
-scan summary, then how long the Scan took ("{duration} taken"), appending the cost in cents from the Scan's stored spend
-only if the user owns the Topic or holds the platform admin role. The api SHALL withhold the cost value from everyone
-else instead of relying on the ui to hide it.
+scan summary, then the Source notes chart when the Scan has per-Source results, then how long the Scan took
+("{duration} taken"), appending the cost in cents from the Scan's stored spend only if the user owns the Topic or holds
+the platform admin role. The api SHALL withhold the cost value from everyone else instead of relying on the ui to hide
+it. The Activity page's scan recap popover SHALL show the same chart in the same place.
 
 #### Scenario: History shows five Scans to a page
 
@@ -136,4 +137,15 @@ else instead of relying on the ui to hide it.
 
 - **WHEN** a signed-in non-owner who is not an admin loads the topic page and opens a Scan's ⓘ
 - **THEN** the payload has no cost value and the popover shows the summary and how long the Scan took, but no cost
+
+#### Scenario: The chart sits between the notes and the footer
+
+- **WHEN** a user opens the ⓘ of a Scan that has per-Source results
+- **THEN** the popover shows Carl's notes and the Scan's findings, then the Source notes chart, then the time and
+  cost footer, and the history row itself is unchanged
+
+#### Scenario: A Scan with no results keeps the popover as it was
+
+- **WHEN** a user opens the ⓘ of a Scan saved before per-Source results were recorded
+- **THEN** the popover shows the notes and the footer with no chart between them
 

@@ -1,19 +1,20 @@
 // the Scan pipeline as three activities: ingest, review, and the write that completes the Scan
 
 import { toTopicPath } from "@carlnotes/contracts/seo"
+import type { StoredScanSourceResults, StoredSourceResult } from "@carlnotes/contracts/topics"
 import { db } from "@carlnotes/db"
-import { findings, scans } from "@carlnotes/db/schema/scans"
+import { findings, resources, scans } from "@carlnotes/db/schema/scans"
 import { topics } from "@carlnotes/db/schema/topics"
 import { users } from "@carlnotes/db/schema/users"
 import { type Budget, newBudget, toResumedBudget } from "@carlnotes/models/budget"
 import { loadOrProvisionUserLiteLLMKey } from "@carlnotes/models/litellm"
 import { notifyIndexNow } from "@carlnotes/pipeline/indexNow"
-import type { SourceOutcome } from "@carlnotes/pipeline/ingest/index"
-import { ingestFromTopicSources } from "@carlnotes/pipeline/ingest/index"
+import { ingestFromTopicSources, toScannedSource } from "@carlnotes/pipeline/ingest/index"
 import type { DiscoveredResource } from "@carlnotes/pipeline/ingest/ingester"
 import { saveTopicVectors } from "@carlnotes/pipeline/meanVectors"
 import type { ReviewSummary } from "@carlnotes/pipeline/review/index"
 import { reviewScan } from "@carlnotes/pipeline/review/index"
+import type { ScannedSource } from "@carlnotes/pipeline/review/summarize"
 import { HEARTBEAT_INTERVAL_MS } from "@carlnotes/pipeline/stageTimeouts"
 import { trackEvent } from "@carlnotes/server/analytics"
 import { appBaseUrl } from "@carlnotes/server/appUrl"
@@ -31,7 +32,10 @@ export type IngestStageResult = {
 	foundCount: number
 	status: Scan["status"]
 	problemSources: Scan["problemSources"]
-	sourceOutcomes: SourceOutcome[]
+	// each Source's outcome as the scan report reads it, and each Source's result. a payload from a worker before
+	// source results has none
+	sourceOutcomes: ScannedSource[]
+	sourceResults?: StoredSourceResult[]
 	budget: Budget
 }
 
@@ -67,13 +71,14 @@ export async function ingestForScan(scanId: string, topicId: string): Promise<In
 			// every later stage charges into the budget this returns ingestion runs every Source at once
 			const { sourceOutcomes, summary } = await ingestFromTopicSources({ topicId, budget, litellmApiKey })
 			await recordScanProgress(scanId, budget)
-			// drop the fetched page bodies before the result crosses the activity boundary
+			// drop the fetched page bodies and each Source's own Resources before the result crosses the activity boundary
 			return {
 				resources: summary.resources.map(({ fetchedBody, ...resource }) => resource),
 				foundCount: summary.foundCount,
 				status: summary.status,
 				problemSources: summary.problemSources,
-				sourceOutcomes,
+				sourceOutcomes: sourceOutcomes.map(toScannedSource),
+				sourceResults: summary.sourceResults,
 				budget,
 			}
 		}),
@@ -127,17 +132,38 @@ export async function finishScan(
 ): Promise<void> {
 	const { review, budget } = reviewResult
 
-	// what the Scan kept, counted from its own Findings instead of from the review
-	const [keptRow] = await db.select({ count: count() }).from(findings).where(eq(findings.scanId, scanId))
+	// what the Scan kept, read once from its own Findings instead of from the review, so the kept count and each
+	// Source's kept count agree
+	const keptFindingRows = await db
+		.select({ url: resources.url })
+		.from(findings)
+		.innerJoin(resources, eq(resources.id, findings.resourceId))
+		.where(eq(findings.scanId, scanId))
+	const keptFindingUrls = keptFindingRows.map((keptFindingRow) => keptFindingRow.url)
 
-	// the write completes the Scan: what ingestion found, what review kept, the per-stage costs, and the total
+	// what the review read again from the topic's earlier findings. a review from a worker before this count read none
+	const earlierFoundCount = review.earlierFoundCount ?? 0
+
+	// each Source's kept count beside its result, or null for a payload from a worker before source results
+	const sourceResults = ingestResult.sourceResults
+		? toScanSourceResults({
+				ingestSourceResults: ingestResult.sourceResults,
+				discoveredResources: ingestResult.resources,
+				keptFindingUrls,
+				earlierFoundCount,
+			})
+		: null
+
+	// the write completes the Scan: what ingestion found and review read again, what review kept, each Source's result,
+	// the per-stage costs, and the total
 	const [finishedScan] = await db
 		.update(scans)
 		.set({
 			status: ingestResult.status,
-			foundCount: ingestResult.foundCount,
+			foundCount: ingestResult.foundCount + earlierFoundCount,
 			problemSources: ingestResult.problemSources,
-			keptCount: keptRow?.count ?? review.keptCount,
+			keptCount: keptFindingUrls.length,
+			sourceResults,
 			filteredCount: review.filteredCount,
 			stageCosts: budget.stageCosts,
 			scanSummary: review.scanSummary,
@@ -187,6 +213,50 @@ export async function finishScan(
 	if (appUrl && topic.visibility === "public" && review.addedOrFilteredFindingCount > 0) {
 		await notifyIndexNow([`${appUrl}${toTopicPath(topic)}`])
 	}
+}
+
+// a Source's result as ingest returns it, the Resources the Scan discovered, and the urls of the Scan's kept Findings
+type ToScanSourceResultsOptions = {
+	ingestSourceResults: StoredSourceResult[]
+	discoveredResources: DiscoveredResource[]
+	keptFindingUrls: string[]
+	// the Resources the review read again from the topic's earlier findings, which no Source returned this Scan
+	earlierFoundCount: number
+}
+
+/**
+ * Counts each kept Finding for the Source credited with its Resource, or as earlier if no Source returned it this Scan,
+ * beside the earlier Resources the review read again.
+ */
+export function toScanSourceResults({
+	ingestSourceResults,
+	discoveredResources,
+	keptFindingUrls,
+	earlierFoundCount,
+}: ToScanSourceResultsOptions): StoredScanSourceResults {
+	// the Source each discovered url is credited to
+	const sourceIdByUrl = new Map(discoveredResources.map((resource) => [resource.url, resource.sourceId]))
+
+	// the kept count of each Source, and of the findings from earlier scans
+	const keptCountBySourceId = new Map<string, number>()
+	let earlierKeptCount = 0
+
+	// count each kept url for its Source, or as earlier if this Scan discovered no such url
+	for (const keptFindingUrl of keptFindingUrls) {
+		const sourceId = sourceIdByUrl.get(keptFindingUrl)
+		if (sourceId === undefined) {
+			earlierKeptCount += 1
+			continue
+		}
+		keptCountBySourceId.set(sourceId, (keptCountBySourceId.get(sourceId) ?? 0) + 1)
+	}
+
+	// put each Source's kept count on its result
+	const sourceResults = ingestSourceResults.map((sourceResult) => ({
+		...sourceResult,
+		keptCount: keptCountBySourceId.get(sourceResult.sourceId) ?? 0,
+	}))
+	return { sources: sourceResults, earlierKeptCount, earlierFoundCount }
 }
 
 /**

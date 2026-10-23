@@ -13,7 +13,8 @@ at the root import it by name.
   the counts. In dev it also logs one line per request with the same numbers and the cache keys that missed.
   `queryBudgets.test.ts` holds the cached routes' query budgets, each a route requested twice against the pool and Redis
   stubs. `index.ts` also serves `/api/health`, which the platform polls and which sends no query, and
-  `/api/health/deep`, which runs one query and returns the pool's counts for a monitor. Neither looks up a session. Its
+  `/api/health/deep`, which runs one query and returns the pool's counts for a monitor. Neither looks up a session.
+  `index.ts` responds with a json 404 to a path with a NUL byte, percent-encoded or decoded, ahead of every route. Its
   tests split between `index.test.ts`, for the routing, the health checks, the api's own validation, and the security
   headers, `pageRender.test.ts`, for the rendered pages, and `pageGuards.test.ts`, for the click id redirect and the
   render limit, over the fake bundle and requests in `indexTestFixtures.ts`. `index.ts` serves the docs site's static
@@ -78,34 +79,37 @@ at the root import it by name.
   and stops the first scan of the topic it creates through `topic/firstScanSmoke.ts`.
 - `podcast/` — a Topic's podcast episodes: `podcastEpisodes.ts` (the routes for a season's episodes, an episode page,
   the next unplayed episode, one episode with its files and its preview card, a listener's progress, a chapter's rating,
-  the podcast switch, and removing an episode), `podcastEpisodeRows.ts` (the episode row reads, the episode view rules
-  in SQL, and the subscription activation gate that limit each read to what the user may listen to), `helpers.ts` (the
-  page reads over them: the topic page's podcast, a season's episodes, and a podcast episode page),
-  `podcastEpisodeShapes.ts` (an episode as the player shows it, with its chapters, and as a table row shows it, with its
-  chapter count, and each topic's latest of either: the home feed reads full episodes, and every table row and its play
-  button read summaries), `podcastSeo.ts` (the public episodes that the sitemap and llms.txt list, and the PodcastSeries
-  and PodcastEpisode structured data that `seo.ts` and `share/pageHead.ts` read), `podcastEpisodeFiles.ts` (the audio,
-  chapters, and transcript responses), `podcastFeedTokens.ts` (a listener's feed token, and building, caching, and
-  responding with a feed, or a 304 for a current copy), `podcastFeeds.ts` (a listener's feed url and its reset, an
-  episode's files at paths after a feed token, and the covers), `relatedPodcastEpisodes.ts` (the rows of an episode
-  page's Other episodes and Similar podcasts tables: the topic's other published episodes that the user may listen to,
-  and the most related published episodes of other topics. The public shown topics' episodes rank through the index of
-  the episode vectors saved as public and shown, cached in Redis. A user's own, the episodes they may listen to through
-  their account, are scored for them without an index on every load. Both merge by score, and every read checks each
-  episode again), and `podcastEpisodeSearch.ts` (`GET /api/episodes/search`, the search bar's episode search: title and
-  description matches through trigram indexes, then for a query of three characters or more the nearest by meaning over
-  the episode vectors, under the episode view rules. The query's vector is cached in Redis by its lowercased words and
-  billed to the user's key or the public key, a visitor's embeddings are rate limited per address, and a search that may
-  not embed returns its text matches). `share/podcastFeed.ts` builds the feed, `share/podcastCover.ts` draws the covers
-  over `apps/docs/design/podcast/cover-base.png`, and `share/podcastEpisodeImage.ts` draws an episode page's
-  link-preview card. `documents.ts` serves a public Topic's feed at `/topics/:id/podcast.xml` and a listener's own at
+  the podcast switch, and removing an episode), `podcastEpisodeListens.ts` (saving a listener's progress, with a
+  playback start counted among the listeners, and finding their next unplayed podcast episode), `podcastEpisodeRows.ts`
+  (the episode row reads, the episode view rules in SQL, and the subscription activation gate that limit each read to
+  what the user may listen to), `helpers.ts` (the page reads over them: the topic page's podcast, a season's episodes,
+  and a podcast episode page), `podcastEpisodeShapes.ts` (an episode as the player shows it, with its chapters, and as a
+  table row shows it, with its chapter count, and each topic's latest of either: the home feed reads full episodes, and
+  every table row and its play button read summaries), `podcastSeo.ts` (the public episodes that the sitemap and
+  llms.txt list, and the PodcastSeries and PodcastEpisode structured data that `seo.ts` and `share/pageHead.ts` read),
+  `podcastEpisodeFiles.ts` (the audio, chapters, and transcript responses), `podcastFeedTokens.ts` (a listener's feed
+  token, and building, caching, and responding with a feed, or a 304 for a current copy), `podcastFeeds.ts` (a
+  listener's feed url and its reset, an episode's files at paths after a feed token, and the covers),
+  `relatedPodcastEpisodes.ts` (the rows of an episode page's Other episodes and Similar podcasts tables: the topic's
+  other published episodes that the user may listen to, and the most related published episodes of other topics. The
+  public shown topics' episodes rank through the index of the episode vectors saved as public and shown, cached in
+  Redis. A user's own, the episodes they may listen to through their account, are scored for them without an index on
+  every load. Both merge by score, and every read checks each episode again), and `podcastEpisodeSearch.ts` (`GET
+  /api/episodes/search`, the search bar's episode search: title and description matches through trigram indexes, then
+  for a query of three characters or more the nearest by meaning over the episode vectors, under the episode view rules.
+  The query's vector is cached in Redis by its lowercased words and billed to the user's key or the public key, a
+  visitor's embeddings are rate limited per address, and a search that may not embed returns its text matches).
+  `share/podcastFeed.ts` builds the feed, `share/podcastCover.ts` draws the covers over
+  `apps/docs/design/podcast/cover-base.png`, and `share/podcastEpisodeImage.ts` draws an episode page's link-preview
+  card. `documents.ts` serves a public Topic's feed at `/topics/:id/podcast.xml` and a listener's own at
   `/podcast-feeds/:token.xml`.
 - `tool/` — the Topic Tools, each with its own gate check: `topicTools.ts` (the prompt and field updates),
-  `topicSourceTools.ts` (adding and removing a source, and what one more costs), and `topicDraftTools.ts` (creating a
-  topic from a draft and suggesting its sources). The chat adapters are `chatTools.ts` (the preview tools a chat binds
-  on a topic, the saves the server applies once the user's next message agrees, and the wording every adapter and the
-  topic chat tools eval share) and `newTopicChatTools.ts` (the new-topic chat's draft tools). The mcp adapter is in
-  `mcp/tools.ts`. `topicTools.smoke.ts` runs `topicUpdateSmokeSections.ts`, `topicSourceSmokeSections.ts`, and
+  `topicSourceTools.ts` (adding and removing a source, and what one more costs; removing keeps the topic's web search,
+  which only the editor turns off, and its last source), and `topicDraftTools.ts` (creating a topic from a draft and
+  suggesting its sources). The chat adapters are `chatTools.ts` (the preview tools a chat binds on a topic, the saves
+  the server applies once the user's next message agrees, and the wording every adapter and the topic chat tools eval
+  share) and `newTopicChatTools.ts` (the new-topic chat's draft tools). The mcp adapter is in `mcp/tools.ts`.
+  `topicTools.smoke.ts` runs `topicUpdateSmokeSections.ts`, `topicSourceSmokeSections.ts`, and
   `topicDraftSmokeSections.ts` over `topicToolsSmokeFixtures.ts`, and stops the first scan of the topic it creates
   through `topic/firstScanSmoke.ts`.
 - `topic/helpers.ts` — the topic page's reads; `topic/saveHelpers.ts` — the daily slot a frequency takes, a topic's
@@ -113,8 +117,17 @@ at the root import it by name.
   first scan to reach Temporal, then stops it and waits for its workflow to end; `topic/teamTopicOptions.ts` — the
   topics a user may add to a team; `topic/accessibleFindings.ts` — the findings a user may read on a topic, with the
   owning team's bookmarks.
-- `topic/findings.ts` — the finding routes, and `topic/findingMarks.ts` — the marks a user puts on a finding: the
-  rating and its feedback, the bookmark, consumed, and a view.
+- `topic/findings.ts` — the finding routes, and `topic/findingFeedback.ts` — the feedback a user gives a finding: the
+  rating and its words, the bookmark, consumed, and an open, which counts the user among the finding's viewers on
+  their first open.
+- `counts/` — the viewer and listener counts: `countsRoute.ts` (`POST /api/topics/:id/view`, the view a topic page
+  sends, counted only from the app's own origin and returning 204, and the `/api/counts/` reads of a topic's viewers
+  and followers and a podcast episode's listeners), and `viewerCounts.ts` (counting a topic view or a podcast episode
+  listener into its Redis counter, skipping a crawler or an unfurler, and reading a count as the larger of the counter's
+  estimate and the saved column). The audio routes in `podcast/` and a playback start count a listener through it.
+  `countWithinRateLimit` limits the topic view and the `/episodes/:id/audio.mp3` listen to 30 a minute per sender.
+- `sameOrigin.ts` — `isSameOriginRequest`, true if the request's `Sec-Fetch-Site` header is `same-origin`, or with no
+  such header, if its `Origin` header is the app's origin.
 - `topic/promptVersions.ts` — the Prompt Version write the editor's save and the Topic Tools share.
 - `topic/topicTableRows.ts` — `toTopicTableRows`, the topic table rows that the profile page and the team page share,
   each with its latest Podcast Episode.
@@ -129,12 +142,22 @@ at the root import it by name.
   shared tag, the score limits, the candidate count, `loadRelatedIds`, the public ranking cached in Redis merged with a
   user's own, `toMergedRelatedIds`, and `toRowsInIdOrder`. The related reads' tests store its centroid through
   `relatednessTestFixtures.ts`, and build episode rows through `podcast/podcastEpisodeTestFixtures.ts`.
-- `topic/topics.ts` — the topic page read; `topic/saveTopic.ts` — the create with its default Sources and invites,
-  and the update with its changed-field events, and `saveTopicVectorsOnVisibilityChange`, which the update and the topic
-  tools call to save the topic's vectors again after a visibility change, as `topic/findingMarks.ts`'s `setRating` does
-  after a rating; `topic/topicsRoute.ts` — the topic routes over them, which serve a visitor's topic page from one
-  Redis copy for half a minute and limit source suggestions like a tool caller; `topic/deleteTopic.ts` — the delete,
-  one transaction over every row a topic owns with its object keys recorded.
+- `topic/topics.ts` — the topic page read, whose scan costs, month's cost, and attachment details go only to a user
+  the gate grants `topic:viewOwnerDetails`, the owner or an admin; `topic/saveTopic.ts` — the create with its default
+  Sources and invites, and the update with its changed-field events, and `saveTopicVectorsOnVisibilityChange`, which
+  the update and the topic tools call to save the topic's vectors again after a visibility change, as
+  `topic/findingFeedback.ts`'s `setRating` does after a rating; `topic/topicsRoute.ts` — the topic routes over them,
+  which serve a visitor's topic page from one Redis copy for half a minute and limit source suggestions like a tool
+  caller. Its `DELETE /api/topics/:id/sources/:sourceId` removes one Source through `removeTopicSource` with the
+  `editor` origin: 204 once the Source is gone, 404 for a topic the user cannot see or another topic's Source, 403 for a
+  user or a visitor who may see the topic but not edit it, and 409 naming `webSearch` or `lastSource` if a rule keeps
+  the Source; `topic/deleteTopic.ts` — the delete, one transaction over every row a topic owns with its object keys
+  recorded.
+- `topic/scans.ts` — starting and stopping a manual Scan, and `GET /api/scans/:id`, one Scan's recap and source
+  results behind `topic:view`. `toSourceResultsView` parses the stored results, returns null for a missing or
+  malformed value, keeps only the `ok`, `fallback`, and `failed` results, and copies each wire field by name. For
+  everyone the gate does not grant `topic:viewOwnerDetails`, it nulls each cost and failure reason and labels a url
+  Source by its page's host.
 - `topic/feeds.ts` — the topic feed's sections; the visitors' feed and topic page, each read through one Redis copy
   for half a minute; `clearVisitorTopicCaches`, which a topic's edit and delete and a Source added or removed call to
   drop its page copy, and the visitors' feed copies if the listing changed; `clearVisitorTopicPages`, which a team
@@ -215,8 +238,9 @@ at the root import it by name.
   `POST /api/avatars/decode-failures`, which reports a chosen avatar file that could not be decoded, by its content
   type and byte size, the first five a user sends in a day.
 - `edgeCache.ts` — what the edge may cache: a signed-out page, a permanent redirect from a page path, the blog and
-  release pages, and the signed-out feed for a minute under the `rendered` tag, and a versioned avatar or card for a
-  year in the browser and a day at the edge. `setStaticFileCacheControl` caches a file of the docs site or the
+  release pages, and the signed-out feed for a minute under the `rendered` tag, a versioned avatar or card for a
+  year in the browser and a day at the edge, and a public topic's counts for 30 seconds at the edge through
+  `setCountsCacheHeaders`. `setStaticFileCacheControl` caches a file of the docs site or the
   component browser for a year if its name holds a content hash, and has the browser revalidate every other file. A
   user avatar response is tagged `user-avatar:<userId>` and a team avatar response `team-avatar:<teamId>`, and
   `purgeEdgeCacheTagAfterDeletion` purges one tag once an account close or a team deletion has committed, reporting a

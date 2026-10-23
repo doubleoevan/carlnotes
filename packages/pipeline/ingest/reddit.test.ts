@@ -132,7 +132,7 @@ test("queueRedditRequest runs requests one at a time, even after one fails", asy
 
 // two distinct posts plus a third repeating the first permalink, to test in-payload dedupe
 const CHILDREN = [
-	{ data: { permalink: "/r/x/comments/a/first/", title: "First", selftext: "First self", score: 12 } },
+	{ data: { permalink: "/r/x/comments/a/first/", title: "First", selftext: "First self" } },
 	{ data: { permalink: "/r/x/comments/b/second/", title: "Second" } },
 	{ data: { permalink: "/r/x/comments/a/first/", title: "Dupe" } },
 ]
@@ -151,16 +151,12 @@ test("parsePosts maps reddit posts to deduped read Resources", () => {
 	// the native snippet is the post selftext. a post without one leaves the snippet null.
 	expect(resources[0]?.snippet).toBe("First self")
 	expect(resources[1]?.snippet).toBeNull()
-
-	// the post score is included as the engagement signal, and a post without one leaves it null
-	expect(resources[0]?.engagement).toBe(12)
-	expect(resources[1]?.engagement).toBeNull()
 })
 
 // a search response is the same listing shape, so one parser serves both response types and both kinds of Source
 test("parsePosts maps a search response the same way", () => {
 	const resources = parsePosts({
-		data: { children: [{ data: { permalink: "/r/y/comments/c/found/", title: "Found", score: 3 } }] },
+		data: { children: [{ data: { permalink: "/r/y/comments/c/found/", title: "Found" } }] },
 	})
 	expect(resources).toEqual([
 		{
@@ -169,7 +165,6 @@ test("parsePosts maps a search response the same way", () => {
 			kind: "read",
 			snippet: null,
 			contentHash: null,
-			engagement: 3,
 		},
 	])
 })

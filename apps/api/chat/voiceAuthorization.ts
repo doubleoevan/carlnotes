@@ -6,6 +6,7 @@ import { topics } from "@carlnotes/db/schema/topics"
 import { eq } from "drizzle-orm"
 import { isAllowed, isMonthlySpendExhausted } from "../authorization"
 import { toTeamRole } from "../team/members"
+import { gatedTopicColumns } from "../topic/permissions"
 import {
 	authorizeChatTurn,
 	authorizeNewTopicChatTurn,
@@ -83,10 +84,7 @@ function toChatTurnAuthorization(
 // a topic page's access: a missing or invisible topic is forbidden, and a visitor on a visible one is sent to signup
 async function toTopicAccess(userId: string | null, topicId: string): Promise<VoiceChatPageAccess> {
 	// reject a missing topic the same way as an invisible one
-	const [topic] = await db
-		.select({ id: topics.id, ownerId: topics.ownerId, visibility: topics.visibility, teamId: topics.teamId })
-		.from(topics)
-		.where(eq(topics.id, topicId))
+	const [topic] = await db.select(gatedTopicColumns).from(topics).where(eq(topics.id, topicId))
 	if (!topic || !(await isAllowed(userId, "topic:view", topic))) {
 		return { status: "forbidden" }
 	}

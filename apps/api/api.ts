@@ -24,6 +24,7 @@ import { NEW_TOPIC_CHAT_PATH, privateChatRoute, TEAM_CHAT_PATH, TOPIC_CHAT_PATH 
 import { chatRoomRoute, TEAM_ROOM_PATH, TOPIC_ROOM_PATH } from "./chat/roomRoute"
 import { countUnseenChatMentions, loadChatRooms } from "./chat/rooms"
 import { VOICE_TRANSCRIPTION_PATH, voiceRoute } from "./chat/voiceRoute"
+import { countsRoute } from "./counts/countsRoute"
 import { type AppEnv, currentUser } from "./currentUser"
 import { renderedCacheHeaders } from "./edgeCache"
 import { flagContentRoute } from "./flagContent"
@@ -226,6 +227,8 @@ export const apiRoute = new Hono<AppEnv>()
 	// the topic routes
 	.route("/", topicSearchRoute)
 	.route("/", topicsRoute)
+	// a topic page's view, and the counts the topic and podcast episode pages read
+	.route("/", countsRoute)
 	// the flag content route
 	.route("/", flagContentRoute)
 	// the topic finding routes

@@ -363,13 +363,6 @@ The schema SHALL define a `bookmarks` table: the user (cascade delete), the find
 - **WHEN** `bunx tsc -b` runs against the repository
 - **THEN** `packages/db/schema.ts` compiles and exports a `bookmarks` table with the user and finding references, their cascades, and the per-pair uniqueness
 
-### Requirement: Resource carries an optional engagement signal
-The `resources` table SHALL carry a nullable `engagement` integer holding the source's engagement count where an ingester captured one, such as a reddit post score. Null means no signal was captured.
-
-#### Scenario: Engagement defaults to null
-- **WHEN** a Resource is inserted by an ingester that captures no signal
-- **THEN** `engagement` is null
-
 ### Requirement: The change includes the max-results, bookmarks, and engagement migrations
 The change SHALL include generated Drizzle migrations that add `topics.max_results` with its default and check, backfill existing topics to 10, create `bookmarks`, and add `resources.engagement`. Applying them to a database at the current schema MUST succeed without altering any other table.
 
@@ -906,4 +899,26 @@ showed the preview: a `private` row in the private chat, and a `chat_room` row i
 #### Scenario: A chat room proposal without its preview is rejected
 - **WHEN** an insert writes a chat room row with a digest and no topic edit
 - **THEN** the database rejects it with a check violation
+
+### Requirement: Viewer and listener counts persist beside their rows
+`topics.viewer_count` and `episodes.listener_count` SHALL be integers, not null, defaulting to 0, written only by the
+scheduled sync and never lowered. `viewer_counters` SHALL hold one row per Topic or Podcast Episode with a saved
+counter: the counter's bytes, a cascading reference to its Topic or its Podcast Episode, a check that exactly one of the
+two is set (`viewer_counters_ref_shape`), and its update time. A Topic's or a Podcast Episode's deletion SHALL delete
+its counter.
+
+#### Scenario: A deleted topic takes its counter with it
+- **WHEN** a Topic with a saved counter is deleted
+- **THEN** its `viewer_counters` row is deleted too
+
+### Requirement: A finding's viewer count counts people
+`findings.viewer_count` SHALL be the number of distinct signed-in people who have opened the Finding, replacing
+`findings.view_count`, which counted every open. The migration SHALL backfill it from `finding_views` as the distinct
+users with an open. `findings.view_count` SHALL stay in the database, unread and unwritten, until a later release drops
+it once no process from before this change runs. A person's later opens SHALL leave `findings.viewer_count` unchanged,
+and `finding_views` SHALL keep its one row per open.
+
+#### Scenario: A second open by the same person counts once
+- **WHEN** a signed-in person opens a Finding twice
+- **THEN** its `viewer_count` rises by one and `finding_views` holds two rows
 

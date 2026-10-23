@@ -73,6 +73,10 @@ export async function reviewScan(
 		return { ...emptyReviewSummary(), addedOrFilteredFindingCount: filteredFindingCount }
 	}
 
+	// the Resources read again from the topic's earlier findings, which no Source returned this Scan
+	const discoveredUrls = new Set(discoveredResources.map((resource) => resource.url))
+	const earlierFoundCount = resourcesToReview.filter((resource) => !discoveredUrls.has(resource.url)).length
+
 	// the Resources the Topic already holds Findings for. they are in the feed, so they pass the gate and win a dedupe
 	const topicResourceRows = await db
 		.select({ resourceId: findings.resourceId })
@@ -193,6 +197,7 @@ export async function reviewScan(
 	return {
 		keptCount: reviewOutcome.keptFindings.length,
 		filteredCount: countFilteredResources(reviewOutcome),
+		earlierFoundCount,
 		addedOrFilteredFindingCount,
 		scanSummary,
 		resourceIdsToScore: resourcesToScore.map((resource) => resource.id),

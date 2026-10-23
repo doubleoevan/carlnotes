@@ -11,7 +11,9 @@ import { MANUAL_SCAN_PAUSED_LABEL } from "@carlnotes/contracts/scanFailure"
 import type { TopicSearchResult } from "@carlnotes/contracts/search"
 import type { SuggestSourcesPayload, UpdateTopicPayload } from "@carlnotes/contracts/topicPayloads"
 import {
+	EMPTY_SCAN_NOTE,
 	manualScanResponse,
+	type ScanNote,
 	type SuggestSourcesResponse,
 	scanNote,
 	suggestSourcesResponse,
@@ -185,14 +187,33 @@ export async function readTopicGate(response: { json: () => Promise<unknown> }):
 }
 
 /**
- * One scan's recap, or null if the scan is gone or the topic isn't visible.
+ * One scan's recap and source results, or an empty note if the scan is gone or the topic isn't visible.
  */
-export async function fetchScanNote(scanId: string): Promise<string | null> {
+export async function fetchScanNote(scanId: string): Promise<ScanNote> {
 	const response = await apiClient().api.scans[":id"].$get({ param: { id: scanId } })
 	if (!response.ok) {
-		return null
+		return EMPTY_SCAN_NOTE
 	}
-	return scanNote.parse(await response.json()).scanSummary
+	return scanNote.parse(await response.json())
+}
+
+// what removing a Source came to: removed, kept by the last source rule, or failed
+export type RemoveTopicSourceStatus = "removed" | "lastSource" | "failed"
+
+/**
+ * Removes one of a topic's Sources, returning whether it went or which rule kept it.
+ */
+export async function removeTopicSource(topicId: string, sourceId: string): Promise<RemoveTopicSourceStatus> {
+	const response = await apiClient().api.topics[":id"].sources[":sourceId"].$delete({
+		param: { id: topicId, sourceId },
+	})
+	if (response.status === 204) {
+		return "removed"
+	}
+
+	// a conflict that names the last source rule kept the Source, and any other status is a failure
+	const conflict: { error?: unknown } = response.status === 409 ? await response.json() : {}
+	return conflict.error === "lastSource" ? "lastSource" : "failed"
 }
 
 // a topic save that the api rejected because the plan already hit its limit of topics on a daily schedule.

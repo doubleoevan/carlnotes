@@ -19,7 +19,9 @@ without a link. `envSettings.ts` reads a number that a setting holds: `toPositiv
 and `readDollarSetting` for an amount in dollars. `savedEnvSettings.ts` saves the environment settings a test changes
 and returns the call that puts them back, for every workspace's tests. `monitoringTestFixtures.ts` quiets the console
 and the error report for the api, worker, and database tests. `hmac.ts` signs a value with HMAC-SHA256 for the signup
-gate, the release webhook, the unsubscribe links, and the podcast cover keys. `voiceChat.ts` reads the transcription
+gate, the release webhook, the unsubscribe links, the podcast cover keys, and the viewer counts. `viewerElements.ts`
+turns a counted person into the element their count adds: `u:<userId>` for a user, and for a visitor a keyed hash of
+the address and the user agent through `hmac.ts`, never stored. `voiceChat.ts` reads the transcription
 model from `CHAT_TRANSCRIPTION_MODEL` and says whether voice chat is on, which needs that model and the podcast speech
 model. `podcastEpisodeSettings.ts` reads `PODCAST_SPEECH_MODEL`, which defaults to `gemini-3.8-flash-tts`, and Podcast
 Episodes are off if it is set empty. `podcastCoverPaths.ts` signs a cover's key through `hmac.ts` with

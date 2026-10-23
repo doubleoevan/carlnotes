@@ -19,9 +19,9 @@ function toResponse(
 
 // two distinct tweets plus a third repeating the first id, to exercise in-response dedupe
 const TWEETS = [
-	{ id: "1", text: "first tweet", likeCount: 12, author: { userName: "Sama" } },
-	{ id: "2", text: "  ", likeCount: 0, author: { userName: "karpathy" } },
-	{ id: "1", text: "dupe", likeCount: 99, author: { userName: "Sama" } },
+	{ id: "1", text: "first tweet", author: { userName: "Sama" } },
+	{ id: "2", text: "  ", author: { userName: "karpathy" } },
+	{ id: "1", text: "dupe", author: { userName: "Sama" } },
 ]
 
 // each tweet becomes one "read" Resource keyed by a url built from the handle and the id, deduped within the response
@@ -39,9 +39,6 @@ test(`toResources maps tweets to deduped "read" Resources`, () => {
 	// the native snippet is the tweet text, and a tweet with only whitespace leaves the snippet null
 	expect(resources[0]?.snippet).toBe("first tweet")
 	expect(resources[1]?.snippet).toBeNull()
-
-	// the like count is included as engagement, from the same response and with no extra request
-	expect(resources[0]?.engagement).toBe(12)
 })
 
 // a tweet with no id or no author handle has no url to key on, so it is skipped instead of stored under a broken url

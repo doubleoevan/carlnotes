@@ -62,6 +62,8 @@ CarlNotes reads public web content on a schedule and scores it against context y
 
 **Product analytics.** Usage events keyed to your account id, never to your name or email, such as signup, a topic created, a scan completed, an episode played, or a team joined, with your plan and device type. Anonymous visit events from your browser: page views, plays, and the links and buttons you click to open a finding, sign up, share, or subscribe, naming a public topic at most. What known crawlers, link previewers, podcast apps, and AI agents fetch, keyed to the bot's or app's name. Never anything you typed. Hosted only.
 
+**Viewer and listener counts.** To show how many people view a topic or listen to a podcast episode, we add your account id, or a one-way keyed hash of your IP address and browser if you are signed out, to an approximate counter. The counter keeps no record of who you are, cannot be turned back into your address, and sets nothing on your device.
+
 ## What we do not collect
 
 We do not buy data about you from brokers. We do not track you across other websites. We do not run advertising or ad pixels. We do not attempt to access content behind a paywall unless you explicitly connect your own subscription credentials.
@@ -167,7 +169,7 @@ export function PrivacyPage() {
 			{/* the title and the effective / last-updated dates */}
 			<h1 className="font-display text-2xl">Privacy Policy</h1>
 			<p className="text-muted-foreground mt-2 text-sm">
-				Effective date: July 24, 2026 · Last updated: October 16, 2026
+				Effective date: July 24, 2026 · Last updated: October 22, 2026
 			</p>
 			{/* the sections, rendered from the markdown body */}
 			<Markdown options={PRIVACY_MARKDOWN_OPTIONS}>{PRIVACY_BODY}</Markdown>

@@ -1,7 +1,7 @@
 import { authClient } from "@carlnotes/client/authClient"
 import { sendTopicSubscription } from "@carlnotes/client/topicClient"
 import { toTopicPath } from "@carlnotes/contracts/seo"
-import type { TopicFeed } from "@carlnotes/contracts/topics"
+import type { TopicDetails, TopicFeed } from "@carlnotes/contracts/topics"
 import { useNavigate } from "@tanstack/react-router"
 import { PawPrint } from "lucide-react"
 import { useState } from "react"
@@ -166,7 +166,7 @@ export function TopicInfoPopover({
 	isHintOpen: hintFromCaller,
 	onHintOpenChange,
 }: {
-	topic: TopicFeed
+	topic: TopicDetails
 	children?: React.ReactNode
 	// whether the icon sits in a heading's own text flow
 	isInline?: boolean
@@ -244,7 +244,7 @@ export function TopicInfoPopover({
 }
 
 // the "# new" count as its own popover trigger, showing the same info content anchored at the count on the right
-export function NewCountInfo({ topic }: { topic: TopicFeed }) {
+export function NewCountInfo({ topic }: { topic: TopicDetails }) {
 	return (
 		<Popover>
 			<Tooltip>

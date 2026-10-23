@@ -1,15 +1,27 @@
-// authorization gate tests for the manual-scan decision, the user's budget, and the single-gate rule
-import { expect, test } from "bun:test"
+// authorization gate tests for the manual-scan decision, the user's budget, the owner details, and the single-gate rule
+import { afterEach, expect, test } from "bun:test"
 import { isDailyFrequency } from "@carlnotes/contracts/enums"
 import { ADMIN_BUDGET_CENTS, ADMIN_QUOTA, PLANS } from "@carlnotes/contracts/plans"
+import {
+	ADMIN_USER_ACCESS_ROW,
+	FREE_USER_ACCESS_ROW,
+	restoreConnectionPool,
+	stubConnectionPool,
+} from "@carlnotes/db/connectionPoolStub"
 import { listSourceFiles } from "@carlnotes/server/sourceFileTestFixtures"
 import {
 	authorizeDailyFrequency,
 	authorizeManualScan,
 	type Capability,
 	isAdminRole,
+	isAllowed,
 	userBudgetCents,
 } from "./authorization"
+
+// put the connection pool's own query back after each test
+afterEach(() => {
+	restoreConnectionPool()
+})
 
 // an authorizeManualScan input for a non-admin owner within the daily limit for test cases to override
 function scanInput(
@@ -133,6 +145,25 @@ test("isDailyFrequency counts daily and weekdays, never weekly", () => {
 	expect(isDailyFrequency("daily")).toBe(true)
 	expect(isDailyFrequency("weekdays")).toBe(true)
 	expect(isDailyFrequency("weekly")).toBe(false)
+})
+
+// a topic's costs, failure reasons, and generated context are its owner's, and an admin passes every capability
+test("only the topic owner and an admin may view the owner details", async () => {
+	// member-1 is on the team that owns the topic, admin-1's access row is an admin's, and every other user's is a free
+	// user's
+	stubConnectionPool(({ text, values }) => {
+		if (text.includes('from "team_members"')) {
+			return [["member-1", "member"]]
+		}
+		return values.includes("admin-1") ? [ADMIN_USER_ACCESS_ROW] : [FREE_USER_ACCESS_ROW]
+	})
+	const teamTopic = { id: "topic-1", ownerId: "owner-1", visibility: "public", teamId: "team-1" } as const
+
+	// the owner and an admin may, and a member of the owning team and a signed-out visitor may not
+	expect(await isAllowed("owner-1", "topic:viewOwnerDetails", teamTopic)).toBe(true)
+	expect(await isAllowed("admin-1", "topic:viewOwnerDetails", teamTopic)).toBe(true)
+	expect(await isAllowed("member-1", "topic:viewOwnerDetails", teamTopic)).toBe(false)
+	expect(await isAllowed(null, "topic:viewOwnerDetails", teamTopic)).toBe(false)
 })
 
 // restrict what can be done from the topic chat

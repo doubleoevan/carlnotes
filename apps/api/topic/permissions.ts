@@ -12,6 +12,14 @@ import { and, eq, inArray, or, type SQL, type SQLWrapper, sql } from "drizzle-or
 // a topic row, the shape every check in this file takes
 type TopicRow = typeof topics.$inferSelect
 
+// the topic columns that isAllowed reads
+export const gatedTopicColumns = {
+	id: topics.id,
+	ownerId: topics.ownerId,
+	visibility: topics.visibility,
+	teamId: topics.teamId,
+}
+
 /**
  * The topic row when the user owns it, otherwise undefined. The owner gate that every write shares.
  */
@@ -370,14 +378,7 @@ async function loadFindingTopic(findingId: string): Promise<
 > {
 	// one join maps from the finding to its topic and to the scan that produced it
 	const [topic] = await db
-		// biome-ignore format: one line keeps the select under the comment-density hook's limit
-		.select({
-		id: topics.id,
-		ownerId: topics.ownerId,
-		visibility: topics.visibility,
-		teamId: topics.teamId,
-		scanStartedAt: scans.startedAt,
-	})
+		.select({ ...gatedTopicColumns, scanStartedAt: scans.startedAt })
 		.from(findings)
 		.innerJoin(topics, eq(findings.topicId, topics.id))
 		.innerJoin(scans, eq(findings.scanId, scans.id))

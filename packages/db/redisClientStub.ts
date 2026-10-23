@@ -2,6 +2,7 @@
 import { RedisClient } from "bun"
 import { setRedisClientBuilder } from "./redis"
 import { REDIS_CLIENT_OPTIONS, type RedisConnectionClient } from "./redisConnection"
+import { readFakeBuffer, runFakeViewerCountCommand, toFakeStoredValue } from "./redisFakeViewerCounts"
 
 /**
  * Swaps the store's clients for in-memory fakes that share one map of stored values, and returns the map.
@@ -37,8 +38,8 @@ export function restoreRedisClient(): void {
 	setRedisClientBuilder(() => new RedisClient(Bun.env.REDIS_URL, REDIS_CLIENT_OPTIONS))
 }
 
-// a fake client over the shared map. a get, a get-and-delete, a set, and a delete read and write the map, the increment script counts a
-// key, the decrement script lowers a key that exists, the slot script always takes the slot, and pub/sub delivers nothing
+// a fake client over the shared map. the reads, the writes, the viewer count commands, and the scripts run on the map,
+// and pub/sub delivers nothing
 function toFakeRedisClient(storedValueByKey: Map<string, string>): RedisConnectionClient {
 	const fakeRedisClient = {
 		connected: false,
@@ -58,20 +59,30 @@ function toFakeRedisClient(storedValueByKey: Map<string, string>): RedisConnecti
 			storedValueByKey.delete(key)
 			return storedValue
 		},
+		// read a stored counter as bytes
+		async getBuffer(key: string): Promise<Uint8Array | null> {
+			return readFakeBuffer(storedValueByKey, key)
+		},
 		// the XX option writes only a key that exists, and the expiry options are ignored
-		async set(key: string, value: string, ...options: string[]): Promise<"OK" | null> {
+		async set(key: string, value: string | Uint8Array, ...options: string[]): Promise<"OK" | null> {
 			if (options.includes("XX") && !storedValueByKey.has(key)) {
 				return null
 			}
-			storedValueByKey.set(key, value)
+			storedValueByKey.set(key, toFakeStoredValue(value))
 			return "OK"
 		},
 		// count the keys that existed
 		async del(...keys: string[]): Promise<number> {
 			return keys.filter((key) => storedValueByKey.delete(key)).length
 		},
-		// tell the scripts apart by their text
-		async send(_command: string, commandArguments: string[]): Promise<unknown> {
+		// tell the scripts apart by their text, after the viewer count commands
+		async send(command: string, commandArguments: string[]): Promise<unknown> {
+			const viewerCountReply = runFakeViewerCountCommand(storedValueByKey, command, commandArguments)
+			if (viewerCountReply !== undefined) {
+				return viewerCountReply
+			}
+
+			// the slot script always takes the slot
 			const [script = "", , key = "", rateLimitWindowMs = "0"] = commandArguments
 			if (script.includes("'NX'")) {
 				return 0

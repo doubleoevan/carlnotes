@@ -34,6 +34,9 @@ import {
 	ATTACHMENT_NO_TEXT_REASON,
 	MAX_ATTACHMENT_CONTEXT_CHARS,
 	MAX_TOPIC_SOURCES,
+	type ScanSourceResults,
+	scanNote,
+	scanSourceResults,
 	toAttachmentFailureMessage,
 } from "./topics"
 
@@ -298,5 +301,87 @@ test("podcastEpisodeChapterPayload bounds the chapter position and the podcast e
 	)
 	expect(podcastEpisodeChapterPayload.safeParse({ podcastEpisodeId: "e".repeat(65), chapterPosition: 0 }).success).toBe(
 		false,
+	)
+})
+
+// a scan note's source results as the owner reads them: a cost on every result, and a failed result's reason
+const OWNER_SCAN_SOURCE_RESULTS: ScanSourceResults = {
+	sources: [
+		{
+			sourceId: "source-1",
+			sourceKind: "search",
+			label: "web search",
+			foundCount: 6,
+			keptCount: 2,
+			costDollars: 0.031,
+			durationMs: 2_400,
+			status: "ok",
+		},
+		{
+			sourceId: "source-2",
+			sourceKind: "reddit",
+			label: "r/typescript",
+			foundCount: 4,
+			keptCount: 1,
+			costDollars: 0,
+			durationMs: 900,
+			status: "fallback",
+			fallbackMode: "reddit-rss",
+		},
+		{
+			sourceId: "source-3",
+			sourceKind: "rss",
+			label: "example.com",
+			foundCount: 0,
+			keptCount: 0,
+			costDollars: 0,
+			durationMs: 120,
+			status: "failed",
+			reason: "feed returned 404",
+		},
+	],
+	earlierKeptCount: 3,
+	earlierFoundCount: 8,
+}
+
+// the owner's view includes costs and reasons, and everyone else's view has neither
+test("a scan note's source results parse with costs and reasons and without them", () => {
+	expect(scanSourceResults.safeParse(OWNER_SCAN_SOURCE_RESULTS).success).toBe(true)
+	const visitorScanSourceResults = {
+		...OWNER_SCAN_SOURCE_RESULTS,
+		sources: OWNER_SCAN_SOURCE_RESULTS.sources.map((sourceResult) =>
+			sourceResult.status === "failed"
+				? { ...sourceResult, costDollars: null, reason: null }
+				: { ...sourceResult, costDollars: null },
+		),
+	}
+	expect(scanSourceResults.safeParse(visitorScanSourceResults).success).toBe(true)
+})
+
+// a skipped Source never leaves the api, so the wire shape has no skipped member
+test("a skipped source result is rejected on the wire", () => {
+	const skippedSourceResult = {
+		sourceId: "source-4",
+		sourceKind: "url",
+		label: "example.com",
+		foundCount: 0,
+		keptCount: 0,
+		costDollars: 0,
+		durationMs: 0,
+		status: "skipped",
+	}
+	const scanSourceResultsResult = scanSourceResults.safeParse({
+		...OWNER_SCAN_SOURCE_RESULTS,
+		sources: [...OWNER_SCAN_SOURCE_RESULTS.sources, skippedSourceResult],
+	})
+	expect(scanSourceResultsResult.success).toBe(false)
+})
+
+// a malformed results value costs only the chart, and the note keeps Carl's summary
+test("a scan note with malformed source results keeps its summary and parses the results to null", () => {
+	const parsedScanNote = scanNote.parse({ scanSummary: "Carl's notes", sourceResults: { sources: "not a list" } })
+	expect(parsedScanNote).toEqual({ scanSummary: "Carl's notes", sourceResults: null })
+	expect(scanNote.parse({ scanSummary: null, sourceResults: OWNER_SCAN_SOURCE_RESULTS }).sourceResults).toEqual(
+		OWNER_SCAN_SOURCE_RESULTS,
 	)
 })

@@ -1,6 +1,6 @@
-// the marks a user puts on a topic finding: the rating and its feedback, the bookmark, consumed, and a view
+// the feedback a user gives a topic finding: the rating and its words, the bookmark, consumed, and a view
 
-import { db } from "@carlnotes/db"
+import { type DbHandle, db } from "@carlnotes/db"
 import { bookmarks, consumptions, findingFeedback, findings, findingViews } from "@carlnotes/db/schema/scans"
 import { topics } from "@carlnotes/db/schema/topics"
 import { trackEvent } from "@carlnotes/server/analytics"
@@ -151,17 +151,8 @@ export async function setConsumed(
 		return false
 	}
 	// marking read without ever opening is a dismissal, recorded as its own view event
-	if (isConsumed) {
-		const [openedView] = await db
-			.select({ id: findingViews.id })
-			.from(findingViews)
-			.where(
-				and(eq(findingViews.findingId, findingId), eq(findingViews.userId, userId), isNotNull(findingViews.openedAt)),
-			)
-			.limit(1)
-		if (!openedView) {
-			await db.insert(findingViews).values({ findingId, userId, dismissedAt: new Date() })
-		}
+	if (isConsumed && !(await hasOpenedFinding(db, userId, findingId))) {
+		await db.insert(findingViews).values({ findingId, userId, dismissedAt: new Date() })
 	}
 	await saveTopicFindingConsumed(userId, findingId, isConsumed)
 
@@ -171,7 +162,8 @@ export async function setConsumed(
 }
 
 /**
- * Increments the topic finding's view count and marks it consumed. Returns false if the user may not see it.
+ * Records an open of the topic finding, counts the user among its viewers on their first open, and marks it consumed.
+ * Returns false if the user may not see it.
  */
 export async function recordView(
 	userId: string,
@@ -182,15 +174,34 @@ export async function recordView(
 		return false
 	}
 
-	// increment the view count with a raw SQL expression, then mark the finding consumed
-	await db
-		.update(findings)
-		.set({ viewCount: sql`${findings.viewCount} + 1` })
-		.where(eq(findings.id, findingId))
-	await saveTopicFindingConsumed(userId, findingId, true)
+	// lock the finding row before looking for the user's earlier open, so two opens at once count the user once. a no
+	// key update lock still lets the view insert take its foreign key share
+	const isFindingOpened = await db.transaction(async (transaction) => {
+		const [lockedFindingRow] = await transaction
+			.select({ id: findings.id })
+			.from(findings)
+			.where(eq(findings.id, findingId))
+			.for("no key update")
+		// a finding deleted since the visibility check records nothing
+		if (!lockedFindingRow) {
+			return false
+		}
 
-	// the open finding's view event, recording only. nothing reads these for scoring
-	await db.insert(findingViews).values({ findingId, userId, openedAt: new Date() })
+		// count the user on their first open
+		if (!(await hasOpenedFinding(transaction, userId, findingId))) {
+			await transaction
+				.update(findings)
+				.set({ viewerCount: sql`${findings.viewerCount} + 1` })
+				.where(eq(findings.id, findingId))
+		}
+		// record the open's view event. nothing reads view events for scoring
+		await transaction.insert(findingViews).values({ findingId, userId, openedAt: new Date() })
+		return true
+	})
+	if (!isFindingOpened) {
+		return false
+	}
+	await saveTopicFindingConsumed(userId, findingId, true)
 
 	// track the event for analytics
 	trackEvent("finding_opened", userId, analyticsProperties)
@@ -207,4 +218,16 @@ async function saveTopicFindingConsumed(userId: string, findingId: string, isCon
 
 	// to mark isConsumed, insert the topic finding's consumed row. a duplicate insert does nothing
 	await db.insert(consumptions).values({ userId, findingId }).onConflictDoNothing()
+}
+
+// whether the user has opened the finding before, instead of only dismissing it
+async function hasOpenedFinding(handle: DbHandle, userId: string, findingId: string): Promise<boolean> {
+	const [openedView] = await handle
+		.select({ id: findingViews.id })
+		.from(findingViews)
+		.where(
+			and(eq(findingViews.findingId, findingId), eq(findingViews.userId, userId), isNotNull(findingViews.openedAt)),
+		)
+		.limit(1)
+	return openedView !== undefined
 }

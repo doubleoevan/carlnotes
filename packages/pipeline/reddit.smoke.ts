@@ -77,11 +77,10 @@ async function checkSource(label: string, source: Source): Promise<SourceOutcome
 		console.log(`mode          : ${fallbackMode ?? "oauth"}`)
 		console.log(`resources     : ${resources.length}`)
 
-		// the first Resource, to show the payload carried a title, a snippet, and a score in whichever access mode ran
+		// the first Resource, to show the payload included a title and a snippet in whichever access mode ran
 		console.log(`sample url    : ${resources[0]?.url ?? "none"}`)
 		console.log(`sample title  : ${resources[0]?.title ?? "none"}`)
 		console.log(`sample snippet: ${resources[0]?.snippet?.slice(0, 80) ?? "none"}`)
-		console.log(`engagement    : ${resources[0]?.engagement ?? "none"}`)
 		return resources.length > 0 ? "found" : "failed"
 	} catch (error) {
 		// every access mode rejected. the message names each one, which is what a Scan traces and the report reads

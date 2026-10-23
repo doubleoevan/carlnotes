@@ -22,11 +22,13 @@ type GatedTopic = Pick<typeof topics.$inferSelect, "id" | "ownerId" | "visibilit
 
 // the gated capabilities that "isAllowed" decides
 export type Capability =
-	// a topic and its scans
+	// a topic: viewing, editing, deleting, inviting, and seeing its costs and failure reasons
 	| "topic:view"
 	| "topic:edit"
 	| "topic:delete"
 	| "topic:invite"
+	| "topic:viewOwnerDetails"
+	// rating and creating a topic, and its scans
 	| "topic:rate"
 	| "topic:create"
 	| "scan:request"
@@ -95,9 +97,11 @@ async function decideTopicCapability(
 		// the topic owner and the owning team's members, while the owner is still on it
 		case "topic:edit":
 			return topic ? (await toTopicEditRole(userId, topic)) !== null : false
-		// only the topic owner may delete the topic, manage its invite list, or remove one of its podcast episodes
+		// only the topic owner may delete the topic, manage its invite list, see its costs, failure reasons, and generated
+		// context, or remove one of its podcast episodes
 		case "topic:delete":
 		case "topic:invite":
+		case "topic:viewOwnerDetails":
 		case "podcastEpisode:remove":
 			return Boolean(userId) && topic?.ownerId === userId
 		// creating a topic is gated by the plan's topic limit

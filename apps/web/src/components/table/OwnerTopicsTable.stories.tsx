@@ -19,7 +19,7 @@ const meta = {
 		onReloadPage: { control: false },
 	},
 	parameters: { session: "user" },
-	// a scan time's popover loads its scan note from the mocked topic client
+	// a scan time's popover loads its scan note, with its source results chart, from the mocked topic client
 	beforeEach: () => {
 		mocked(fetchScanNote).mockResolvedValue(SCAN_NOTE_FIXTURE)
 	},

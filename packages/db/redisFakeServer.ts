@@ -2,6 +2,7 @@
 // messages, with the reconnect delays shortened to nothing
 import { setRedisClientBuilder } from "./redis"
 import type { RedisConnectionClient } from "./redisConnection"
+import { readFakeBuffer, runFakeViewerCountCommand, toFakeStoredValue } from "./redisFakeViewerCounts"
 
 // a channel listener, with the message and channel arguments that Bun's client passes
 export type ChannelListener = (channelMessage: string, channel: string) => void
@@ -117,14 +118,20 @@ export function toFakeRedisClient(fakeRedisServer: FakeRedisServer): FakeRedisCl
 		},
 		// a set hangs while commands are stalled, then writes the shared keys and ignores the expiry.
 		// the XX option writes only a key that exists
-		async set(key: string, value: string, ...options: string[]): Promise<"OK" | null> {
+		async set(key: string, value: string | Uint8Array, ...options: string[]): Promise<"OK" | null> {
 			throwIfCommandFailing()
 			await stallIfCommandStalled()
 			if (options.includes("XX") && !fakeRedisServer.storedValueByKey.has(key)) {
 				return null
 			}
-			fakeRedisServer.storedValueByKey.set(key, value)
+			fakeRedisServer.storedValueByKey.set(key, toFakeStoredValue(value))
 			return "OK"
+		},
+		// a counter read fails and hangs as a get does, then returns the stored counter as bytes
+		async getBuffer(key: string): Promise<Uint8Array | null> {
+			throwIfCommandFailing()
+			await stallIfCommandStalled()
+			return readFakeBuffer(fakeRedisServer.storedValueByKey, key)
 		},
 		// a delete hangs while commands are stalled, then returns how many of its keys were there
 		async del(...keys: string[]): Promise<number> {
@@ -138,9 +145,13 @@ export function toFakeRedisClient(fakeRedisServer: FakeRedisServer): FakeRedisCl
 			throwIfCommandFailing()
 			await stallIfCommandStalled()
 
-			// an INFO command returns the server's reply text
+			// an INFO command returns the server's reply text, and a viewer count command runs on the shared keys
 			if (command === "INFO") {
 				return fakeRedisServer.infoReply ?? ""
+			}
+			const viewerCountReply = runFakeViewerCountCommand(fakeRedisServer.storedValueByKey, command, commandArguments)
+			if (viewerCountReply !== undefined) {
+				return viewerCountReply
 			}
 			const [script = "", , key = "", rateLimitWindowMs = "0"] = commandArguments
 

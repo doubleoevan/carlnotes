@@ -1,6 +1,7 @@
 // tests for the rules that decide whether a request is served by the api or a 404, the health checks, the 500 for an
-// error no route handles, the feed's edge caching, the security.txt noindex header, the api's own validation, the mcp
-// routes' body limit, the content security policy, a public file's cache headers, and the baseline security headers
+// error no route handles, the 404 for a path with a NUL byte, the feed's edge caching, the security.txt noindex header,
+// the api's own validation, the mcp routes' body limit, the content security policy, a public file's cache headers, and
+// the baseline security headers
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import { CHAT_HISTORY_TURNS, CHAT_QUESTION_CHARS } from "@carlnotes/contracts/chat"
 import { restoreRedisClient, stubRedisClient } from "@carlnotes/db/redisClientStub"
@@ -79,6 +80,8 @@ test("the deep health check responds 503 when the database fails", async () => {
 
 // a route whose query fails, as one does after waiting past the pool's timeout, responds 500 and reports the error
 test("an error no route handles responds 500 and is reported", async () => {
+	// an empty Redis, so the feed's cache misses and the failing query runs, whatever a local Redis holds
+	stubRedisClient()
 	const reportErrorSpy = quietErrorReports()
 	const poolTimeout = new Error("timeout exceeded when trying to connect")
 	const response = await requestWithQueryStub({
@@ -126,6 +129,21 @@ test("the signed-out feed is shared at the edge and sent uncompressed, and a sig
 	expect(signedOutResponse.contentEncoding).toBeNull()
 	expect(signedInResponse.cacheControl).toBe("private, no-cache")
 	expect(signedInResponse.edgeCacheControl).toBeNull()
+})
+
+// a NUL byte in a path id never reaches Postgres, which rejects the byte in a text value
+test("a path with a NUL byte responds with a json 404 and sends no query", async () => {
+	const nulByteRequests = [
+		{ method: "POST", path: "/api/topics/%00/view" },
+		{ method: "GET", path: "/api/counts/topics/top%00ic" },
+		{ method: "GET", path: "/topics/%00" },
+	]
+	for (const { method, path } of nulByteRequests) {
+		const response = await requestWithQueryStub({ path, toQueryRows: () => [], requestInit: { method } })
+		expect(response.status).toBe(404)
+		expect(JSON.parse(response.body)).toEqual({ error: "not found" })
+		expect(response.queryCount).toBe(0)
+	}
 })
 
 // security.txt is for a researcher, so a search engine leaves it out of its results

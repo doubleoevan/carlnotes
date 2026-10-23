@@ -7,7 +7,8 @@ and `@carlnotes/contracts`, with `drizzle-orm` and `@neondatabase/serverless`.
 - `schema/` — the schema, one file per domain: `users.ts` (users and Better Auth's tables), `topics.ts`, `scans.ts`
   (scans, resources, findings, and the finding markers), `teams.ts`, `invites.ts`, `chat.ts`, `notes.ts`, `podcast.ts`,
   `billing.ts`, `releases.ts`, `claims.ts` (the claims' lease rows), `storage.ts` (favicons and the pending object
-  deletions), `vectors.ts` (the topic and podcast episode vectors that rank related topics, related podcast episodes,
+  deletions), `viewerCounts.ts` (the saved HyperLogLog counter of each topic's viewers and each podcast episode's
+  listeners), `vectors.ts` (the topic and podcast episode vectors that rank related topics, related podcast episodes,
   and the podcast episode search, each table kept apart from the row it ranks so a read of a whole row never includes a
   vector, and each table's public and shown flag with its partial HNSW index), and `columns.ts` (the pgEnums and the
   column helpers they share). A table references another file's table through a lazy `references`, so the files import
@@ -57,6 +58,12 @@ and `@carlnotes/contracts`, with `drizzle-orm` and `@neondatabase/serverless`.
   If an operation returns null, the caller goes on without Redis.
   Sessions read Postgres, a cache calls its loader, and a Resend call goes out without a slot.
   A limiter counts the hit in this process's memory instead, so a caller stays bounded at the limit per replica.
+- `viewerCounts.ts` — a topic's viewers and a podcast episode's listeners, one Redis HyperLogLog each, named by a
+  `ViewerCountRef`. `addViewer` adds one person and lists the ref as changed if the counter grew, `readViewerEstimate`
+  reads the estimate, `takeChangedViewerCountRefs` takes the changed set for the worker's sync, and
+  `restoreViewerCounters` rebuilds Redis from Postgres, merging the saved counters back and adding the seeded signed-in
+  people, marked by `viewer-counts:restored`. Each goes through `runWithRedis`, so a Redis failure loses a count and
+  never fails a request.
 - `memoryRateLimitWindows.ts` — the rate limit windows a process counts in memory while Redis cannot count them,
   bounded by expiry and by a limit of 10,000 keys, the oldest evicted first. A memory count is never written to Redis.
 - `claim.ts` — `runWithClaim` runs the sweep and the budget reset under a database-level claim.
@@ -90,6 +97,9 @@ and `@carlnotes/contracts`, with `drizzle-orm` and `@neondatabase/serverless`.
   reconnect delays shortened to nothing. `startFakeRedisStore` builds the store's clients on a fresh one, and
   `toEveryTimerInstantSetTimeout`, which the billing tests share for the key reissue's retries, runs every timer at
   once.
+- `redisFakeViewerCounts.ts` — the viewer count commands that the fake server and the client stub both handle: the add
+  and take scripts, `PFADD`, `SADD`, `PFCOUNT`, `PFMERGE`, `EXISTS`, and the counter read, each counter held as an exact
+  set.
 - `redisClientStub.ts` — the Redis client stub that the tests share. `stubRedisClient` swaps the store's clients for
   in-memory fakes over one map and returns the map, and `restoreRedisClient` puts the store's own builder back. Only
   tests import it.

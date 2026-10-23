@@ -105,8 +105,8 @@ export function ResourceInfo({
 				>
 					<p>{resource.relevanceExplanation || "No notes yet."}</p>
 				</ScrollBox>
-				{/* when the resource was fetched and how many times it was opened */}
-				<TopicFindingStats fetchedAt={resource.fetchedAt} viewCount={resource.viewCount} />
+				{/* when the resource was fetched and how many users opened it */}
+				<TopicFindingStats fetchedAt={resource.fetchedAt} viewerCount={resource.viewerCount} />
 				{/* the bookmark, read, and rating buttons, only shown to a signed-in user */}
 				{isSignedIn && (
 					<div className="mt-3 border-t pt-2">
@@ -190,17 +190,17 @@ export function TopicFindingHeading({
 }
 
 /**
- * A topic finding's stats in its note popover: the day it was fetched, a divider, and how many times it was opened.
+ * A topic finding's fetch day and how many users opened it, split by a divider, in its note popover.
  */
-export function TopicFindingStats({ fetchedAt, viewCount }: { fetchedAt: string; viewCount: number }) {
+export function TopicFindingStats({ fetchedAt, viewerCount }: { fetchedAt: string; viewerCount: number }) {
 	return (
 		<div className="mt-3 space-y-2">
 			<InfoSection className="py-0" label="Fetched">
 				{new Date(fetchedAt).toLocaleDateString()}
 			</InfoSection>
 			<div className="bg-separator h-px" />
-			<InfoSection className="py-0" label="Views">
-				{viewCount.toLocaleString()}
+			<InfoSection className="py-0" label="Viewers">
+				{viewerCount.toLocaleString()}
 			</InfoSection>
 		</div>
 	)

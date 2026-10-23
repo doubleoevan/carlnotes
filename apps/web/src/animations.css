@@ -84,6 +84,25 @@
 	animation: hydrate-in 0.8s cubic-bezier(0.2, 0.7, 0.2, 1) both;
 }
 
+/* a changed count's number lights up in the highlight color once, then fades back */
+@keyframes count-flash {
+	from {
+		background-color: color-mix(in srgb, var(--primary) 45%, transparent);
+	}
+	to {
+		background-color: transparent;
+	}
+}
+
+.animate-count-flash {
+	animation: count-flash 1.2s ease-out;
+}
+
+/* an ancestor marked data-motion="reduced" stops the flash. a story cannot set the motion preference itself */
+[data-motion="reduced"] .animate-count-flash {
+	animation: none;
+}
+
 /* a bright band sweeps across muted text, like Claude's "thinking" shimmer, for "Carl is Brewing" while a scan runs */
 @keyframes shimmer-sweep {
 	from {
@@ -326,10 +345,12 @@
 
 /* honor a user's reduced-motion preference: no hydrate animation, no rings, no shimmer, and the coffee mug's steam kept still */
 @media (prefers-reduced-motion: reduce) {
-	/* a placeholder stays still, and a card, a message, or a dialog appears and leaves without its entrance */
+	/* a placeholder and a changed count stay still, and a card, a message, or a dialog appears and leaves without its
+	   entrance */
 	.animate-pulse,
 	.animate-in,
-	.animate-out {
+	.animate-out,
+	.animate-count-flash {
 		animation: none;
 	}
 	.animate-hydrate {

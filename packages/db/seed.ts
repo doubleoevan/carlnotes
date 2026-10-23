@@ -334,12 +334,12 @@ async function seedTopic(topic: SeedTopic): Promise<void> {
 				resourceId,
 				scanId,
 				foundScanId: scanId,
-				// the score and explanation Carl gave, plus a demo view count derived from the score
+				// the score and explanation Carl gave, plus a demo viewer count derived from the score
 				relevanceScore: finding.score,
 				relevanceExplanation: finding.why,
-				viewCount: Math.round(finding.score * 60),
+				viewerCount: Math.round(finding.score * 60),
 			})
-			// upsert viewCount so re-seeding refreshes the demo counts on already-seeded rows
-			.onConflictDoUpdate({ target: findings.id, set: { viewCount: Math.round(finding.score * 60) } })
+			// upsert viewerCount so re-seeding refreshes the demo counts on already-seeded rows
+			.onConflictDoUpdate({ target: findings.id, set: { viewerCount: Math.round(finding.score * 60) } })
 	}
 }

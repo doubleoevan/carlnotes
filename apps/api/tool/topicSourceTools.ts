@@ -8,10 +8,10 @@ import { MAX_TOPIC_SOURCES } from "@carlnotes/contracts/topics"
 import { db } from "@carlnotes/db"
 import { loadRecentScanCostDollars } from "@carlnotes/db/monthlyBudgetCutoffs"
 import { scans } from "@carlnotes/db/schema/scans"
-import { sources, type topics } from "@carlnotes/db/schema/topics"
+import { sources, topics } from "@carlnotes/db/schema/topics"
 import { EXA_COST_PER_SEARCH, X_COST_PER_READ } from "@carlnotes/models/budget"
 import { trackEvent } from "@carlnotes/server/analytics"
-import { and, eq } from "drizzle-orm"
+import { and, count, eq } from "drizzle-orm"
 import type { AnalyticsProperties } from "../currentUser"
 import { clearVisitorTopicCaches } from "../topic/feeds"
 import type { PromptVersionOrigin } from "../topic/promptVersions"
@@ -46,7 +46,13 @@ export type AddTopicSourceResult =
 	| { status: "limit"; limit: number }
 	| { status: "present"; topicSourceLabel: string }
 	| { status: "saved"; topicSourceId: string; topicSourceLabel: string; topicSourceCostDelta: TopicSourceCostDelta }
-export type RemoveTopicSourceResult = TopicToolRejection | { status: "saved"; topicSourceLabel: string | null }
+
+// the remove tool's results. a gate rejection, a source a rule keeps, or the save
+export type RemoveTopicSourceResult =
+	| TopicToolRejection
+	| { status: "lastSource" }
+	| { status: "webSearch" }
+	| { status: "saved"; topicSourceLabel: string | null }
 
 /**
  * Adds a source from a registry option and value, and returns its projected cost.
@@ -133,7 +139,8 @@ export async function addTopicSource({
 }
 
 /**
- * Removes one of the topic's sources, returning saved for a row already gone and missing for another topic's row.
+ * Removes one of the topic's sources, returning saved for a row already gone and missing for another topic's row. A
+ * topic keeps its web search, which only the topic editor turns off, and at least one source.
  */
 export async function removeTopicSource({
 	userId,
@@ -167,8 +174,47 @@ export async function removeTopicSource({
 		return { status: "missing" }
 	}
 
-	// delete the row, drop the topic's cached visitor copies, which list the sources, and report which source went
-	await db.delete(sources).where(and(eq(sources.id, sourceId), eq(sources.topicId, topicId)))
+	// keep web search, which only the topic editor turns off
+	if (topicSourceRow.kind === "search") {
+		return { status: "webSearch" }
+	}
+
+	// lock the topic row while counting its sources, so two removals at once never leave the topic with none
+	const removal = await db.transaction(async (transaction): Promise<"removed" | "gone" | "lastSource"> => {
+		await transaction.select({ id: topics.id }).from(topics).where(eq(topics.id, topicId)).for("no key update")
+
+		// a removal that ran at the same time may already have deleted the row
+		const [lockedSourceRow] = await transaction
+			.select({ id: sources.id })
+			.from(sources)
+			.where(and(eq(sources.id, sourceId), eq(sources.topicId, topicId)))
+		if (!lockedSourceRow) {
+			return "gone"
+		}
+
+		// keep the topic's last source
+		const [sourceCountRow] = await transaction
+			.select({ sourceCount: count() })
+			.from(sources)
+			.where(eq(sources.topicId, topicId))
+		if ((sourceCountRow?.sourceCount ?? 0) <= 1) {
+			return "lastSource"
+		}
+
+		// delete the row while the topic row is still locked
+		await transaction.delete(sources).where(and(eq(sources.id, sourceId), eq(sources.topicId, topicId)))
+		return "removed"
+	})
+
+	// a row another removal deleted first is saved with no label, and the last source stays
+	if (removal === "gone") {
+		return { status: "saved", topicSourceLabel: null }
+	}
+	if (removal === "lastSource") {
+		return { status: "lastSource" }
+	}
+
+	// drop the topic's cached visitor copies, which list the sources, and report which source went
 	await clearVisitorTopicCaches({ topicId, visibility: editableTopic.topic.visibility })
 	trackEvent("source_removed", editableTopic.userId, {
 		...toToolAnalyticsProperties(origin, analyticsProperties),

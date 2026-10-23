@@ -22,7 +22,7 @@ export const REDIS_CLIENT_OPTIONS = {
 }
 
 // the commands that the store sends, and the connection methods and properties that the store uses
-type RedisCommandMethod = "get" | "getdel" | "set" | "del" | "send" | "publish"
+type RedisCommandMethod = "get" | "getdel" | "getBuffer" | "set" | "del" | "send" | "publish"
 
 type RedisConnectionMethod = "connected" | "connect" | "close" | "onclose" | "subscribe"
 

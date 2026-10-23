@@ -11,7 +11,7 @@ import { and, desc, eq, gt, sql } from "drizzle-orm"
 import { Hono } from "hono"
 import { loadOrFetchLinkPreview } from "../chat/linkPreviews"
 import { type AppEnv, currentUser, toAnalyticsProperties } from "../currentUser"
-import { recordView, saveFindingFeedback, setBookmarked, setConsumed, setRating } from "./findingMarks"
+import { recordView, saveFindingFeedback, setBookmarked, setConsumed, setRating } from "./findingFeedback"
 import { isTopicFindingVisible } from "./permissions"
 
 // the most findings one read of a topic returns, about forty times the largest topic in production
@@ -74,12 +74,11 @@ export async function loadTopicFindings({
 			resourceCreatedAt: resources.createdAt,
 			fetchedAt: resources.fetchedAt,
 
-			// load the finding metadata, the engagement score for trending, and the user's consumed and bookmarked dates
+			// load the finding metadata, its viewer count for trending, and the user's consumed and bookmarked dates
 			relevanceScore: findings.relevanceScore,
 			relevanceExplanation: findings.relevanceExplanation,
-			viewCount: findings.viewCount,
+			viewerCount: findings.viewerCount,
 			rating: findings.rating,
-			engagement: resources.engagement,
 			...userColumns,
 		})
 		.from(findings)
@@ -125,12 +124,11 @@ export type TopicFindingRow = {
 	// the resource's dates
 	resourceCreatedAt: Date
 	fetchedAt: Date
-	// the relevance, view count, rating, engagement, and the user's own columns
+	// the relevance, viewer count, rating, and the user's own columns
 	relevanceScore: TopicFinding["relevanceScore"]
 	relevanceExplanation: TopicFinding["relevanceExplanation"]
-	viewCount: TopicFinding["viewCount"]
+	viewerCount: TopicFinding["viewerCount"]
 	rating: TopicFinding["rating"]
-	engagement: TopicFinding["engagement"]
 	consumedAt: Date | null
 	bookmarkedAt: Date | null
 }
@@ -149,12 +147,11 @@ export function toTopicFinding(findingRow: TopicFindingRow): TopicFinding {
 		faviconPath: null,
 		publishedAt: findingRow.resourceCreatedAt.toISOString(),
 		fetchedAt: findingRow.fetchedAt.toISOString(),
-		// the relevance explanation, view count, rating, engagement, and the user's consumed and bookmarked states
+		// the relevance explanation, viewer count, rating, and the user's consumed and bookmarked states
 		relevanceScore: findingRow.relevanceScore,
 		relevanceExplanation: findingRow.relevanceExplanation,
-		viewCount: findingRow.viewCount,
+		viewerCount: findingRow.viewerCount,
 		rating: findingRow.rating,
-		engagement: findingRow.engagement,
 		isConsumed: findingRow.consumedAt !== null,
 		isBookmarked: findingRow.bookmarkedAt !== null,
 		teamBookmarks: [],

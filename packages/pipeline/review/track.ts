@@ -38,6 +38,8 @@ export type ReviewSummary = {
 	// how many findings the review kept, and how many resources it filtered out
 	keptCount: number
 	filteredCount: number
+	// how many resources the review read again from the topic's earlier findings, which no Source returned this scan
+	earlierFoundCount: number
 	// how many findings this scan added and kept, plus how many existing findings the topic's limit filtered out
 	addedOrFilteredFindingCount: number
 	// Carl's summary of the scan, or an empty string if there is none
@@ -127,6 +129,7 @@ export function emptyReviewSummary(): ReviewSummary {
 	return {
 		keptCount: 0,
 		filteredCount: 0,
+		earlierFoundCount: 0,
 		addedOrFilteredFindingCount: 0,
 		scanSummary: "",
 		resourceIdsToScore: [],

@@ -40,9 +40,11 @@ function toFeedTopic({ id, name, findings = [] }: ToFeedTopicOptions): TopicFeed
 		canRate: false,
 		isSubscribed: false,
 		subscriberCount: 0,
+		viewerCount: 0,
 		teamCount: 0,
 		visibility: "public",
 		createdAt: "2026-09-01T00:00:00.000Z",
+		feedUpdatedAt: "2026-09-01T00:00:00.000Z",
 		lastScanAt: null,
 		lastScanDurationMs: null,
 		monthCostDollars: null,
@@ -67,14 +69,13 @@ function toTopicFinding(findingNumber: number): TopicFinding {
 		faviconPath: null,
 		publishedAt: "2026-09-20T00:00:00.000Z",
 		fetchedAt: "2026-09-21T00:00:00.000Z",
-		viewCount: 0,
+		viewerCount: 0,
 		relevanceScore: 0.9,
 		relevanceExplanation: "Why Carl kept it.",
 		rating: null,
 		isConsumed: false,
 		isBookmarked: false,
 		teamBookmarks: [],
-		engagement: null,
 	}
 }
 

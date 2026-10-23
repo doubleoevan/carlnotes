@@ -5,7 +5,7 @@ import { PODCAST_SHOW_NAME } from "@carlnotes/contracts/podcastEpisodes"
 import { toMetaDescription, toTopicPath } from "@carlnotes/contracts/seo"
 import { DAY_MS } from "@carlnotes/contracts/time"
 import type { PublicTopic } from "@carlnotes/contracts/topics"
-import { db, isPublicAndShown } from "@carlnotes/db"
+import { db, isFindingShown, isPublicAndShown } from "@carlnotes/db"
 import { findings, scans } from "@carlnotes/db/schema/scans"
 import { teams, teamTopics } from "@carlnotes/db/schema/teams"
 import { topics } from "@carlnotes/db/schema/topics"
@@ -99,8 +99,8 @@ export async function loadPublicTopics(): Promise<PublicTopic[]> {
 const lastScanSummaryQuery = sql`(select ${scans.scanSummary} from ${scans} where ${scans.topicId} = ${topics.id} and ${scans.status} = 'succeeded' and ${scans.keptCount} > 0 and ${scans.scanSummary} <> '' order by ${scans.startedAt} desc limit 1)`
 export const lastScanSummary = sql<string | null>`${lastScanSummaryQuery}`
 
-// when a topic's feed last gained a finding, or the topic's creation time if it has none
-const newestFindingCreatedAtQuery = sql`(select max(${findings.createdAt}) from ${findings} where ${findings.topicId} = ${topics.id})`
+// when a topic's feed last gained a shown finding, or the topic's creation time if it has none
+const newestFindingCreatedAtQuery = sql`(select max(${findings.createdAt}) from ${findings} where ${findings.topicId} = ${topics.id} and ${isFindingShown})`
 const topicFeedUpdatedAt = sql<Date>`coalesce(${newestFindingCreatedAtQuery}, ${topics.createdAt})`.mapWith(
 	topics.createdAt,
 )
@@ -287,10 +287,10 @@ export function toTeamPublicTopicsFilter(teamId: string | typeof teams.id): SQL 
 }
 
 /**
- * Loads when a topic's feed last gained a finding, or the topic's creation time if it has none.
+ * Loads when a topic's feed last gained a shown finding, or the topic's creation time if it has none.
  */
 export async function loadTopicFeedUpdatedAt(topicId: string): Promise<Date | null> {
-	// read the topic's newest finding time, or its creation time if it has none
+	// read the topic's newest shown finding time, or its creation time if it has none
 	const [topicRow] = await db.select({ feedUpdatedAt: topicFeedUpdatedAt }).from(topics).where(eq(topics.id, topicId))
 	return topicRow?.feedUpdatedAt ?? null
 }

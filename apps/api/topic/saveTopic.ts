@@ -6,11 +6,13 @@ import { db } from "@carlnotes/db"
 import { invites } from "@carlnotes/db/schema/invites"
 import { scans } from "@carlnotes/db/schema/scans"
 import { sources, subscriptions, topics } from "@carlnotes/db/schema/topics"
+import { addViewer } from "@carlnotes/db/viewerCounts"
 import { notifyIndexNow } from "@carlnotes/pipeline/indexNow"
 import { saveTopicVectors } from "@carlnotes/pipeline/meanVectors"
 import { trackEvent } from "@carlnotes/server/analytics"
 import { appUrl } from "@carlnotes/server/appUrl"
 import { reportError } from "@carlnotes/server/monitoring"
+import { toUserViewerElement } from "@carlnotes/server/viewerElements"
 import { and, eq, inArray, isNotNull, isNull, notInArray } from "drizzle-orm"
 import { isAllowed } from "../authorization"
 import type { AnalyticsProperties } from "../currentUser"
@@ -190,6 +192,9 @@ export async function createTopic(
 		console.error(`could not start first scan for topic ${topicId}`, error)
 		reportError(error, "first-scan", { topicId, userId })
 	})
+
+	// count the owner as the topic's first viewer
+	void addViewer({ kind: "topic", id: topicId }, toUserViewerElement(userId))
 
 	// email the invitations without delaying the topic created response
 	startInviteEmails({ id: topicId, name, ownerId: userId }, inviteEmails)

@@ -7,7 +7,7 @@ import { topics } from "@carlnotes/db/schema/topics"
 import { eq } from "drizzle-orm"
 import { loadUserAccess, memberTopicIds } from "../authorization"
 import { toTeamRole } from "../team/members"
-import { assertNever, canSeeTopic } from "../topic/permissions"
+import { assertNever, canSeeTopic, gatedTopicColumns } from "../topic/permissions"
 
 // a note row, and the two row shapes a page can be
 type NoteRow = typeof notes.$inferSelect
@@ -185,9 +185,8 @@ async function loadNotePage(note: Pick<NoteRow, "topicId" | "teamId">): Promise<
  * Loads a topic as a note page: the gate fields plus the name.
  */
 export async function loadTopicPage(topicId: string): Promise<NotePage | null> {
-	// biome-ignore format: one line keeps the select under the comment-density hook's limit
 	const [topic] = await db
-		.select({ id: topics.id, ownerId: topics.ownerId, visibility: topics.visibility, teamId: topics.teamId, name: topics.name })
+		.select({ ...gatedTopicColumns, name: topics.name })
 		.from(topics)
 		.where(eq(topics.id, topicId))
 	return topic ? { kind: "topic", topic } : null

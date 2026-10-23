@@ -59,10 +59,12 @@ export async function loadTopicPage(
 		inviteAndScanFields,
 		owner,
 		teamFields,
-		// whether a daily frequency is paused, what the user may do on the topic, the podcast, and the related topics
+		// whether a daily frequency is paused, what the user may do and see on the topic, the podcast, and the related
+		// topics
 		isDailyFrequencyPaused,
 		canRate,
 		canEdit,
+		canViewOwnerDetails,
 		{ podcast, latestPodcastEpisode, podcastEpisodeByScanId },
 		relatedTopics,
 	] = await traceRequestStage("topic_page.reads", () =>
@@ -87,6 +89,7 @@ export async function loadTopicPage(
 			toDailyFrequencyPaused(topic, isTopicOwner),
 			isAllowed(userId, "topic:rate", topic),
 			isAllowed(userId, "topic:edit", topic),
+			isAllowed(userId, "topic:viewOwnerDetails", topic),
 			// the topic's podcast, and each scan's podcast episode for the scan history
 			loadTopicPodcast(topic, userId),
 			// the most related topics that the user may open, none for a poll reload
@@ -96,15 +99,14 @@ export async function loadTopicPage(
 
 	// every later scan reads the generated context, so the owner and admins see the context to edit, and nobody else does.
 	// the owner and admins also see why a failed attachment failed, as a message instead of the recorded reason
-	const canSeeOwnerDetails = isAdmin || isTopicOwner
 	const attachmentRows = rawAttachmentRows.map(({ error, ...attachment }) => ({
 		...attachment,
-		context: canSeeOwnerDetails ? attachment.context : null,
-		failureMessage: canSeeOwnerDetails && attachment.status === "failed" ? toAttachmentFailureMessage(error) : null,
+		context: canViewOwnerDetails ? attachment.context : null,
+		failureMessage: canViewOwnerDetails && attachment.status === "failed" ? toAttachmentFailureMessage(error) : null,
 	}))
 	// a stopped scan is left out of the history and the last-succeeded scan. the month's cost still counts it.
 	// each scan in the history gets its published podcast episode
-	const scanHistory = toScanHistory(scanRows, canSeeOwnerDetails).map((topicScan) => ({
+	const scanHistory = toScanHistory(scanRows, canViewOwnerDetails).map((topicScan) => ({
 		...topicScan,
 		podcastEpisode: podcastEpisodeByScanId.get(topicScan.id) ?? null,
 	}))
@@ -147,7 +149,7 @@ export async function loadTopicPage(
 		createdAt: topic.createdAt.toISOString(),
 		lastScanAt: lastSucceededTopicScan?.startedAt ?? null,
 		lastScanDurationMs,
-		monthCostDollars: canSeeOwnerDetails ? toMonthCostDollars(scanRows) : null,
+		monthCostDollars: canViewOwnerDetails ? toMonthCostDollars(scanRows) : null,
 		scanSummary,
 		// everything connected to the topic
 		attachments: attachmentRows,

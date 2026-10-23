@@ -19,19 +19,24 @@ it; it imports `@carlnotes/models`, `@carlnotes/emails`, `@carlnotes/db`, `@carl
   document's text into bounded chunks for parallel summarization.
 - `ingest/` — one ingester per Source kind: `rss.ts`, `youtube.ts`, `reddit.ts`, `x.ts`, `bluesky.ts`, `podcast.ts`,
   `url.ts`, and `search.ts`, over `feed.ts` for the feeds that need no key and `normalize.ts` for the url, title, and
-  kind a Resource gets before it is stored. `index.ts` runs a topic's Sources through their ingesters, dedupes what they
-  find, and stores it. `ingester.ts` is the interface, whose optional `ingestContext` includes the Scan owner's key: the
-  Topic owner's for a scheduled Scan and the starting user's for a manual one. The search ingester's query generation
-  bills that key like every other model call a Scan makes. `review/` — filtering and scoring (`filter.ts` the
-  relevance gate, `dedupe.ts` the content hash and near-duplicate pass, `fetch.ts` the content fetch for a Resource to
-  score, `score.ts` the scoring and the finding writes, `track.ts` what became of each Resource, `summarize.ts` the scan
-  report, and `index.ts` the stage over them, with `reviewTestFixtures.ts` beside their tests). `chat/` — Carl's
-  streamed chat replies (`index.ts` streams a reply, `podcastReply.ts` streams a podcast question's reply as one
-  structured call whose speaker, `host` or `cohost`, comes before the answer, `chatMessages.ts` shapes a conversation
-  into the model messages a turn sends, `chatPrompts.ts` builds each chat's system prompt from its template,
-  `podcastEpisodeQuestionPrompt.ts` the topic chat prompt's blocks for a question asked from the podcast player,
-  `search.ts` the live web search tool a signed-in chat turn may call, and `agreement.ts` checks whether a user's
-  message agrees to the proposal it answers, reading only the user's words and the proposal, with
+  kind a Resource gets before it is stored. `index.ts` reads a topic's Sources oldest first, runs and times each through
+  its ingester, and stores what they find. Its `toScanSummary` dedupes the Resources by canonical url, credits each to
+  the first Source that returned it as the Resource's `sourceId`, and returns one source result per Source in that
+  order, labeled by `toSourceResultLabel` from the Source's row as it stands after the ingesters ran. The insert strips
+  `sourceId`, which the worker's closing write reads for each Source's kept count. `toScannedSource` narrows an outcome
+  to the four fields the scan report reads, for the payload the worker passes between stages. A Source's fallback mode
+  comes from `@carlnotes/contracts/sources`. `ingester.ts` is the interface, whose optional `ingestContext` includes the
+  Scan owner's key: the Topic owner's for a scheduled Scan and the starting user's for a manual one. The search
+  ingester's query generation bills that key like every other model call a Scan makes. `review/` — filtering and scoring
+  (`filter.ts` the relevance gate, `dedupe.ts` the content hash and near-duplicate pass, `fetch.ts` the content fetch
+  for a Resource to score, `score.ts` the scoring and the finding writes, `track.ts` what became of each Resource,
+  `summarize.ts` the scan report, and `index.ts` the stage over them, with `reviewTestFixtures.ts` beside their tests).
+  `chat/` — Carl's streamed chat replies (`index.ts` streams a reply, `podcastReply.ts` streams a podcast question's
+  reply as one structured call whose speaker, `host` or `cohost`, comes before the answer, `chatMessages.ts` shapes a
+  conversation into the model messages a turn sends, `chatPrompts.ts` builds each chat's system prompt from its
+  template, `podcastEpisodeQuestionPrompt.ts` the topic chat prompt's blocks for a question asked from the podcast
+  player, `search.ts` the live web search tool a signed-in chat turn may call, and `agreement.ts` checks whether a
+  user's message agrees to the proposal it answers, reading only the user's words and the proposal, with
   `chatModelTestFixtures.ts` for the fake models their tests stream from, and `chatContextTestFixtures.ts` and
   `podcastEpisodeChapterTestFixtures.ts` for the chat context and the chapter their tests read) and their retrieval
   (`retrieve.ts`, whose topic ranking collects the topics' findings in a materialized common table expression and ranks

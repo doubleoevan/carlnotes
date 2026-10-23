@@ -17,6 +17,9 @@ export type EdgePurgeResult = { status: "purged" } | { status: "skipped" } | { s
 // and for up to two minutes while the origin responds with an error, such as a shed render's 503
 export const RENDERED_EDGE_CACHE_CONTROL = "max-age=60, stale-while-revalidate=60, stale-if-error=120"
 
+// the edge caches a public topic's or podcast episode's counts for thirty seconds, with no stale copy
+const COUNTS_EDGE_CACHE_CONTROL = "max-age=30"
+
 // how long one purge request may take before it counts as failed
 const PURGE_TIMEOUT_MS = 10_000
 
@@ -46,9 +49,8 @@ const OLD_IMAGE_CACHE_CONTROL = "public, max-age=60"
 export function setRenderedCacheHeaders(request: Request, response: Response): void {
 	// mark the response private if the request has a session cookie or an authorization header, or if the response is
 	// not a page or a permanent redirect, or sets a cookie
-	const hasCredentials = Boolean(getSessionCookie(request)) || request.headers.has("Authorization")
 	const isShareableStatus = response.status === 200 || response.status === 301 || response.status === 308
-	const isShared = isShareableStatus && !hasCredentials && !response.headers.has("Set-Cookie")
+	const isShared = isShareableStatus && !hasCredentials(request) && !response.headers.has("Set-Cookie")
 	if (!isShared) {
 		response.headers.set("Cache-Control", PRIVATE_CACHE_CONTROL)
 		return
@@ -58,6 +60,26 @@ export function setRenderedCacheHeaders(request: Request, response: Response): v
 	response.headers.set("Cache-Control", REVALIDATE_CACHE_CONTROL)
 	response.headers.set("CDN-Cache-Control", RENDERED_EDGE_CACHE_CONTROL)
 	response.headers.set("Cache-Tag", RENDERED_CACHE_TAG)
+}
+
+/**
+ * Marks a counts response shared at the edge if it is a public topic's or podcast episode's counts, read with no
+ * credentials, or private otherwise.
+ */
+export function setCountsCacheHeaders(request: Request, response: Response, isPublic: boolean): void {
+	if (!isPublic || response.status !== 200 || hasCredentials(request)) {
+		response.headers.set("Cache-Control", PRIVATE_CACHE_CONTROL)
+		return
+	}
+
+	// the browser always revalidates, and only the edge caches a copy
+	response.headers.set("Cache-Control", REVALIDATE_CACHE_CONTROL)
+	response.headers.set("CDN-Cache-Control", COUNTS_EDGE_CACHE_CONTROL)
+}
+
+// whether the request has a session cookie or an authorization header, either of which makes a response personal
+function hasCredentials(request: Request): boolean {
+	return Boolean(getSessionCookie(request)) || request.headers.has("Authorization")
 }
 
 /**

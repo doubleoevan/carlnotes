@@ -1,5 +1,6 @@
 import type { TopicResponse } from "@carlnotes/contracts/topics"
 import { useEffect, useState } from "react"
+import { startVisiblePoll } from "@/lib/visiblePoll"
 
 // how often to re-fetch the page while a scan is running
 // a polled scan shows its first findings within seconds, and a long one is not worth as fast of a refetch.
@@ -28,62 +29,9 @@ export function usePollWhileScanning(isScanning: boolean, reload: () => Promise<
 		if (!isScanning) {
 			return
 		}
-		// start the poll, and return its stop as the effect's cleanup
-		return startScanPoll(reload)
+		// start the poll at the scan's rates, and return its stop as the effect's cleanup
+		return startVisiblePoll({ reload, toPollMs: toScanPollMs })
 	}, [isScanning, reload])
-}
-
-/**
- * Polls reload while the page is visible, one request at a time. The next tick is scheduled once the previous reload
- * settles, and a slow response never overlaps the next request. Returns the call that stops the poll.
- */
-export function startScanPoll(reload: () => Promise<void>): () => void {
-	// the timer reschedules itself so the delay can grow, which a single interval can't do
-	const startedAt = Date.now()
-	let pollTimer: ReturnType<typeof setTimeout> | undefined
-	// the id of the poll in progress. a stop or a restart gives the next poll a new id, so a reload still in flight
-	// from an ended poll schedules nothing when it settles
-	let activePollId = 0
-
-	// schedule the next tick at the rate for how long the scan has been watched
-	function schedule(pollId: number): void {
-		pollTimer = setTimeout(() => reloadThenSchedule(pollId), toScanPollMs(Date.now() - startedAt))
-	}
-
-	// reload, then schedule the next tick once the reload settles, while the poll is still the one in progress
-	function reloadThenSchedule(pollId: number): void {
-		void reload().finally(() => {
-			if (pollId === activePollId) {
-				schedule(pollId)
-			}
-		})
-	}
-
-	// end the poll in progress and clear its timer
-	function stopPoll(): void {
-		activePollId += 1
-		clearTimeout(pollTimer)
-	}
-
-	// only poll the page when it is visible. a page shown again reloads right away, then polls on
-	function handleVisibilityChange(): void {
-		stopPoll()
-		if (document.visibilityState === "visible") {
-			reloadThenSchedule(activePollId)
-		}
-	}
-
-	// listen for the page's visibility, and start polling if the page is visible now
-	document.addEventListener("visibilitychange", handleVisibilityChange)
-	if (document.visibilityState === "visible") {
-		schedule(activePollId)
-	}
-
-	// the stop ends the poll and stops listening
-	return () => {
-		stopPoll()
-		document.removeEventListener("visibilitychange", handleVisibilityChange)
-	}
 }
 
 // the manual scan button's live state. isScanning is a recent running row, and isRunningScan sets the flag optimistically

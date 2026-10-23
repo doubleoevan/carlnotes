@@ -12,8 +12,8 @@ export type FetchedBody = { markdown: string; etag: string | null; lastModified:
 // a Resource an ingester finds, optionally including a body it fetched
 export type IngestedResource = NewResource & { fetchedBody?: FetchedBody }
 
-// a Resource that a Scan found, and whether a custom Source found it
-export type DiscoveredResource = NewResource & { isFromCustomSource: boolean }
+// a Resource that a Scan found, whether a custom Source found it, and the one Source credited with it
+export type DiscoveredResource = NewResource & { isFromCustomSource: boolean; sourceId: string }
 
 // what the Scan gives an ingester beside the Source. the Scan owner's LiteLLM key bills an ingester's model calls
 export type IngestContext = { litellmApiKey?: string }

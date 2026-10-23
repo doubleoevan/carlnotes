@@ -26,6 +26,8 @@ export const podcastEpisodeColumns = {
 	audioKey: podcastEpisodes.audioKey,
 	audioByteSize: podcastEpisodes.audioByteSize,
 	durationSeconds: podcastEpisodes.durationSeconds,
+	// the unique people who played or downloaded the podcast episode
+	listenerCount: podcastEpisodes.listenerCount,
 	publishedAt: podcastEpisodes.publishedAt,
 }
 

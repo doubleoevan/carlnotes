@@ -1,5 +1,5 @@
-// scan tests: toScanSummary self-checks, what scanTopic does with a Scan row if the workflow start is rejected or fails,
-// and which Scan rows failUnstartedScan marks failed
+// scan tests: toScanSummary self-checks and the source results it credits, what scanTopic does with a Scan row if the
+// workflow start is rejected or fails, and which Scan rows failUnstartedScan marks failed
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import { restoreConnectionPool, stubConnectionPool } from "@carlnotes/db/connectionPoolStub"
 import type { scans } from "@carlnotes/db/schema/scans"
@@ -88,6 +88,9 @@ function resource(url: string): NewResource {
 	return { url, kind: "read" }
 }
 
+// the label and duration of a Source outcome, for the tests that read neither
+const UNREAD_OUTCOME_FIELDS = { label: "a source", durationMs: 0 }
+
 // counts dedupe across Sources, cost sums only the successful Sources, and a failure among successes still succeeds
 test("toScanSummary aggregates deduped counts, summed cost, and a succeeded status", () => {
 	const summary = toScanSummary([
@@ -95,11 +98,19 @@ test("toScanSummary aggregates deduped counts, summed cost, and a succeeded stat
 			status: "ok",
 			sourceId: "s1",
 			sourceKind: "rss",
+			...UNREAD_OUTCOME_FIELDS,
 			resources: [resource("https://a"), resource("https://b")],
 			costDollars: 0.5,
 		},
-		{ status: "ok", sourceId: "s2", sourceKind: "search", resources: [resource("https://a")], costDollars: 0.25 },
-		{ status: "failed", sourceId: "s3", sourceKind: "reddit", reason: "oauth 403, rss 403" },
+		{
+			status: "ok",
+			sourceId: "s2",
+			sourceKind: "search",
+			...UNREAD_OUTCOME_FIELDS,
+			resources: [resource("https://a")],
+			costDollars: 0.25,
+		},
+		{ status: "failed", sourceId: "s3", sourceKind: "reddit", ...UNREAD_OUTCOME_FIELDS, reason: "oauth 403, rss 403" },
 	])
 
 	// two unique urls found, the two successful costs are summed, and succeeds despite the one failure
@@ -115,15 +126,23 @@ test("toScanSummary aggregates deduped counts, summed cost, and a succeeded stat
 test("toScanSummary reports failed when every Source that ran threw", () => {
 	// aggregate two failed outcomes
 	const summary = toScanSummary([
-		{ status: "failed", sourceId: "s1", sourceKind: "rss", reason: "feed returned 404" },
-		{ status: "failed", sourceId: "s2", sourceKind: "search", reason: "EXA_API_KEY is not set" },
+		{ status: "failed", sourceId: "s1", sourceKind: "rss", ...UNREAD_OUTCOME_FIELDS, reason: "feed returned 404" },
+		{
+			status: "failed",
+			sourceId: "s2",
+			sourceKind: "search",
+			...UNREAD_OUTCOME_FIELDS,
+			reason: "EXA_API_KEY is not set",
+		},
 	])
 	expect(summary.status).toBe("failed")
 })
 
 // a skipped source is not a failure, but it is recorded, so a skipped source doesn't hide in a succeeded scan
 test("toScanSummary records skipped Sources without failing the scan", () => {
-	const summary = toScanSummary([{ status: "skipped", sourceId: "s1", sourceKind: "composio" }])
+	const summary = toScanSummary([
+		{ status: "skipped", sourceId: "s1", sourceKind: "composio", ...UNREAD_OUTCOME_FIELDS },
+	])
 
 	// the scan succeeds and the row names what went unread
 	expect(summary.status).toBe("succeeded")
@@ -133,7 +152,14 @@ test("toScanSummary records skipped Sources without failing the scan", () => {
 // a Source that ran its primary path cleanly leaves no trace behind
 test("toScanSummary leaves the trace empty when every Source ran clean", () => {
 	const summary = toScanSummary([
-		{ status: "ok", sourceId: "keyed", sourceKind: "youtube", resources: [resource("https://a")], costDollars: 0 },
+		{
+			status: "ok",
+			sourceId: "keyed",
+			sourceKind: "youtube",
+			...UNREAD_OUTCOME_FIELDS,
+			resources: [resource("https://a")],
+			costDollars: 0,
+		},
 	])
 	expect(summary.problemSources).toEqual([])
 })
@@ -141,16 +167,30 @@ test("toScanSummary leaves the trace empty when every Source ran clean", () => {
 // only the Sources that hit a problem are traced, each with the path it fell back to. the Scan still succeeds
 test("toScanSummary records the Source that fell back and the one that failed", () => {
 	const summary = toScanSummary([
-		{ status: "ok", sourceId: "keyed", sourceKind: "youtube", resources: [resource("https://a")], costDollars: 0 },
+		{
+			status: "ok",
+			sourceId: "keyed",
+			sourceKind: "youtube",
+			...UNREAD_OUTCOME_FIELDS,
+			resources: [resource("https://a")],
+			costDollars: 0,
+		},
 		{
 			status: "ok",
 			sourceId: "fell-back",
 			sourceKind: "reddit",
+			...UNREAD_OUTCOME_FIELDS,
 			resources: [],
 			costDollars: 0,
 			fallbackMode: "reddit-rss",
 		},
-		{ status: "failed", sourceId: "blocked", sourceKind: "reddit", reason: "oauth 403, rss 403" },
+		{
+			status: "failed",
+			sourceId: "blocked",
+			sourceKind: "reddit",
+			...UNREAD_OUTCOME_FIELDS,
+			reason: "oauth 403, rss 403",
+		},
 	])
 
 	// the fallback includes its fallback mode, and the failure includes its reason, and neither fails the Scan
@@ -159,4 +199,158 @@ test("toScanSummary records the Source that fell back and the one that failed", 
 		{ sourceId: "blocked", status: "failed", reason: "oauth 403, rss 403" },
 	])
 	expect(summary.status).toBe("succeeded")
+})
+
+// a page that two Sources return is credited to the older Source, which runs first, and a page one Source lists twice
+// is read once
+test("toScanSummary credits a page two Sources returned to the older one and reads a repeated page once", () => {
+	const summary = toScanSummary([
+		{
+			status: "ok",
+			sourceId: "older-reddit",
+			sourceKind: "reddit",
+			...UNREAD_OUTCOME_FIELDS,
+			resources: [resource("https://example.com/post")],
+			costDollars: 0,
+		},
+		{
+			status: "ok",
+			sourceId: "newer-search",
+			sourceKind: "search",
+			...UNREAD_OUTCOME_FIELDS,
+			resources: [resource("https://example.com/post"), resource("https://example.com/other")],
+			costDollars: 0.03,
+		},
+		{
+			status: "ok",
+			sourceId: "repeating-rss",
+			sourceKind: "rss",
+			...UNREAD_OUTCOME_FIELDS,
+			resources: [resource("https://example.com/feed-entry"), resource("https://example.com/feed-entry/")],
+			costDollars: 0,
+		},
+	])
+
+	// each Resource names the Source it is credited to, and each Source's found count is its credited Resources
+	expect(summary.resources.map(({ url, sourceId }) => [url, sourceId])).toEqual([
+		["https://example.com/post", "older-reddit"],
+		["https://example.com/other", "newer-search"],
+		["https://example.com/feed-entry", "repeating-rss"],
+	])
+	expect(summary.sourceResults.map(({ sourceId, foundCount }) => [sourceId, foundCount])).toEqual([
+		["older-reddit", 1],
+		["newer-search", 1],
+		["repeating-rss", 1],
+	])
+})
+
+// the per-Source found counts and costs add up to the Scan's own, so nothing is counted twice or dropped
+test("toScanSummary's source results sum to the Scan's found count and cost", () => {
+	const summary = toScanSummary([
+		{
+			status: "ok",
+			sourceId: "s1",
+			sourceKind: "search",
+			...UNREAD_OUTCOME_FIELDS,
+			resources: [resource("https://a"), resource("https://b"), resource("https://c")],
+			costDollars: 0.03,
+		},
+		{
+			status: "ok",
+			sourceId: "s2",
+			sourceKind: "x",
+			...UNREAD_OUTCOME_FIELDS,
+			resources: [resource("https://b"), resource("https://d")],
+			costDollars: 0.015,
+		},
+		{ status: "failed", sourceId: "s3", sourceKind: "rss", ...UNREAD_OUTCOME_FIELDS, reason: "feed returned 404" },
+		{ status: "skipped", sourceId: "s4", sourceKind: "url", ...UNREAD_OUTCOME_FIELDS },
+	])
+
+	// one result per Source, in order, whose found counts and costs sum to the Scan's
+	const foundCountSum = summary.sourceResults.reduce((sum, sourceResult) => sum + sourceResult.foundCount, 0)
+	const costDollarsSum = summary.sourceResults.reduce((sum, sourceResult) => sum + sourceResult.costDollars, 0)
+	expect(summary.sourceResults.map(({ sourceId }) => sourceId)).toEqual(["s1", "s2", "s3", "s4"])
+	expect(foundCountSum).toBe(summary.foundCount)
+	expect(costDollarsSum).toBeCloseTo(summary.costDollars, 10)
+})
+
+// a status names only a real problem. a Source that ran and found nothing is ok, and only a reported mode falls back
+test("toScanSummary records each Source's status, detail, cost, and duration", () => {
+	const summary = toScanSummary([
+		{
+			status: "fallback",
+			sourceId: "empty",
+			sourceKind: "rss",
+			label: "example.com",
+			durationMs: 310,
+			resources: [],
+			costDollars: 0,
+		},
+		{
+			status: "ok",
+			sourceId: "fell-back",
+			sourceKind: "reddit",
+			label: "r/typescript",
+			durationMs: 1_200,
+			resources: [resource("https://reddit.example/post")],
+			costDollars: 0,
+			fallbackMode: "reddit-rss",
+		},
+		{
+			status: "failed",
+			sourceId: "broken",
+			sourceKind: "search",
+			label: "web search",
+			durationMs: 2_400,
+			reason: "exa search returned 500",
+		},
+		{ status: "skipped", sourceId: "unscreened", sourceKind: "url", label: "https://example.com/page", durationMs: 0 },
+	])
+
+	// each result has its status and detail, and only a Source that ran keeps its cost
+	expect(summary.sourceResults).toEqual([
+		{
+			sourceId: "empty",
+			sourceKind: "rss",
+			label: "example.com",
+			foundCount: 0,
+			keptCount: 0,
+			costDollars: 0,
+			durationMs: 310,
+			status: "ok",
+		},
+		{
+			sourceId: "fell-back",
+			sourceKind: "reddit",
+			label: "r/typescript",
+			foundCount: 1,
+			keptCount: 0,
+			costDollars: 0,
+			durationMs: 1_200,
+			status: "fallback",
+			fallbackMode: "reddit-rss",
+		},
+		{
+			sourceId: "broken",
+			sourceKind: "search",
+			label: "web search",
+			foundCount: 0,
+			keptCount: 0,
+			costDollars: 0,
+			durationMs: 2_400,
+			status: "failed",
+			reason: "exa search returned 500",
+		},
+		{
+			sourceId: "unscreened",
+			sourceKind: "url",
+			label: "https://example.com/page",
+			foundCount: 0,
+			keptCount: 0,
+			costDollars: 0,
+			durationMs: 0,
+			status: "skipped",
+		},
+	])
 })

@@ -5,6 +5,7 @@ import { db } from "@carlnotes/db"
 import { deletePodcastFeedCache, toPodcastFeedCacheKey } from "@carlnotes/db/podcastFeedCache"
 import { readRedisJson } from "@carlnotes/db/redis"
 import { podcastEpisodeListens, podcastEpisodes } from "@carlnotes/db/schema/podcast"
+import { readViewerEstimate, type ViewerCountRef } from "@carlnotes/db/viewerCounts"
 import { eq, inArray } from "drizzle-orm"
 import { TEST_ANALYTICS_PROPERTIES } from "../analyticsTestFixtures"
 import { setTopicSubscription } from "../topic/subscriptions"
@@ -106,11 +107,16 @@ export async function checkListenerPodcastFeeds(): Promise<void> {
 
 	// the token's audio counts as the listener's play, and the token opens no other topic's podcast episode
 	const tokenAudioPath = `/podcast-feeds/${ownerFeedToken}/episodes/${invitePodcastEpisodeId}/audio.mp3`
+	const tokenListenerRef = { kind: "podcastEpisode", id: invitePodcastEpisodeId } as const
 	check(
 		"a token's audio HEAD gets a 200",
 		(await request({ path: tokenAudioPath, userId: null, init: { method: "HEAD" } })).status === 200,
 	)
+	check("a HEAD counts no listener", (await readViewerEstimate(tokenListenerRef)) === 0)
 	check("a token's audio GET redirects", (await request({ path: tokenAudioPath, userId: null })).status === 302)
+	check("a GET counts the token's listener once", await waitForViewerEstimate(tokenListenerRef, 1))
+
+	// the download is saved as the listener's play
 	const [tokenListenRow] = await db
 		.select()
 		.from(podcastEpisodeListens)
@@ -165,4 +171,16 @@ export async function checkListenerPodcastFeeds(): Promise<void> {
 		"unsubscribing deletes the token",
 		(await request({ path: new URL(resetFeedUrl).pathname, userId: null })).status === 404,
 	)
+}
+
+// whether the estimate reaches the count within two seconds. the audio route counts after it responds
+async function waitForViewerEstimate(viewerCountRef: ViewerCountRef, count: number): Promise<boolean> {
+	// read the estimate every tenth of a second
+	for (let attempt = 0; attempt < 20; attempt++) {
+		if ((await readViewerEstimate(viewerCountRef)) === count) {
+			return true
+		}
+		await Bun.sleep(100)
+	}
+	return false
 }

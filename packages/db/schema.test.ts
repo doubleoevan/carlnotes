@@ -174,11 +174,6 @@ test("bookmarks is unique per user and finding and cascades from both parents", 
 	expect(allMigrationsSql()).toMatch(/bookmarks_finding_id_findings_id_fk.*ON DELETE cascade/)
 })
 
-// an ingester that captures no engagement value leaves the column null
-test("resources.engagement is nullable", () => {
-	expect(resources.engagement.notNull).toBe(false)
-})
-
 // the consumed state is a per-user row, never a findings column, so it lives in the consumptions table only
 test("consumptions holds per-user consumed state and findings does not", () => {
 	expect("consumptions" in schema).toBe(true)
@@ -295,12 +290,28 @@ test("scans records dispatch as a nullable column and backfills finished rows", 
 	expect(allMigrationsSql()).toMatch(/UPDATE "scans" SET "dispatched_at" = "started_at" WHERE "status" <> 'running'/)
 })
 
-// reading signal is record-only
+// a scan saved before per-source results keeps null, so the column has no default and the migration backfills nothing.
+// the alter waits on the scans lock for at most the lock timeout
+test("scans.source_results is a nullable jsonb column added under a lock timeout with no backfill", () => {
+	expect(schema.scans.sourceResults.notNull).toBe(false)
+	expect(allMigrationsSql()).toMatch(
+		/SET LOCAL lock_timeout = '3s';--> statement-breakpoint\nALTER TABLE "scans" ADD COLUMN "source_results" jsonb;/,
+	)
+	expect(allMigrationsSql()).not.toMatch(/"source_results" jsonb DEFAULT/)
+	expect(allMigrationsSql()).not.toMatch(/UPDATE "scans" SET "source_results"/)
+})
+
+// reading signal is record-only. an import path that ends in the findingFeedback module names no table
 test("finding feedback and views are written and displayed, never read into ranking", () => {
 	const readers = listSourceFiles(["apps/api", "apps/worker", "packages/pipeline"])
-		.filter((file) => /findingFeedback|findingViews|ratedTeamId|ratedRole/.test(file.text))
+		.filter((file) => /(?<!\/)findingFeedback|findingViews|ratedTeamId|ratedRole/.test(file.text))
 		.map((file) => file.path)
-	expect(readers.sort()).toEqual(["apps/api/topic/findingMarks.ts", "apps/api/topic/findings.ts"])
+	// the viewer count seed reads opens only to count the people a topic page shows as its viewers
+	expect(readers.sort()).toEqual([
+		"apps/api/topic/findingFeedback.ts",
+		"apps/api/topic/findings.ts",
+		"apps/worker/viewerCountSeeds.ts",
+	])
 })
 
 // the chat room's chat messages are the team's conversation. it never reaches scoring, retrieval, or embeddings

@@ -13,6 +13,13 @@ export function toMonthYearLabel(dateString: string | null): string {
 }
 
 /**
+ * An ISO date as its month and day in the local time zone: Oct 22.
+ */
+export function toMonthDayLabel(dateString: string): string {
+	return new Date(dateString).toLocaleDateString("en-US", { month: "short", day: "numeric" })
+}
+
+/**
  * The short age label for an ISO date: today, 3d, 2w, 5mo, or 2y. Empty for a null date.
  */
 export function toAgeLabel(dateString: string | null): string {
@@ -69,6 +76,28 @@ export function toDollarLabel(dollars: number | null): string {
 	// coerce null or a non-number (seed rows have no cost) to zero before formatting
 	const amount = Number.isFinite(dollars) ? (dollars as number) : 0
 	return `$${amount.toFixed(2)}`
+}
+
+/**
+ * A duration label to one decimal under ten seconds, as in "0.4s" and "3.2s", and toDurationLabel's from ten seconds up.
+ */
+export function toExactDurationLabel(milliseconds: number | null): string {
+	if (milliseconds !== null && Number.isFinite(milliseconds) && milliseconds >= 0 && milliseconds < 10_000) {
+		return `${(milliseconds / 1000).toFixed(1)}s`
+	}
+	return toDurationLabel(milliseconds)
+}
+
+/**
+ * A dollar label precise enough for a sub-cent cost: "$0" for zero, three decimals under a dollar, and two from a dollar
+ * up.
+ */
+export function toExactDollarLabel(dollars: number | null): string {
+	const amount = Number.isFinite(dollars) ? (dollars as number) : 0
+	if (amount === 0) {
+		return "$0"
+	}
+	return `$${amount.toFixed(amount < 1 ? 3 : 2)}`
 }
 
 /**
@@ -192,7 +221,7 @@ export function toPodcastEpisodeDurationLabel(durationSeconds: number | null): s
  * Returns the day that a podcast episode published, such as Sep 25, in the local time zone. Empty for a null date.
  */
 export function toPodcastEpisodeDateLabel(publishedAt: string | null): string {
-	return publishedAt ? new Date(publishedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : ""
+	return publishedAt ? toMonthDayLabel(publishedAt) : ""
 }
 
 /**

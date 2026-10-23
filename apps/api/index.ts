@@ -148,6 +148,8 @@ const server = new Hono<AppEnv>()
 			}
 		}
 	})
+	// respond 404 to a path with a NUL byte, ahead of every route that would send the byte to Postgres
+	.use(rejectNulBytePath)
 	// check once per process that TRUSTED_PROXIES resolves the x-forwarded-for header, and warn if not
 	.use(async (context, next) => {
 		checkTrustedProxies(context.req.raw)
@@ -220,6 +222,15 @@ const server = new Hono<AppEnv>()
 	})
 	// render every other GET as a page with the ui's server
 	.on(["GET", "HEAD"], "*", (context) => renderUiPage(context.req.raw))
+
+// respond with a json 404 to a path with a NUL byte, percent-encoded or decoded. Postgres rejects the byte in a text
+// value
+async function rejectNulBytePath(context: Context, next: Next): Promise<Response | undefined> {
+	if (new URL(context.req.url).pathname.includes("%00") || context.req.path.includes("\0")) {
+		return context.json({ error: "not found" }, 404)
+	}
+	await next()
+}
 
 // redirect a page url with a click id permanently to the url without it, which is the one the edge caches
 async function redirectClickIdUrl(context: Context, next: Next): Promise<Response | undefined> {

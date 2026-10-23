@@ -1,24 +1,10 @@
 // the note tables: notes, their comment threads and comments, and when a user last opened one
 import { sql } from "drizzle-orm"
-import { boolean, check, customType, index, jsonb, pgTable, primaryKey, text, timestamp } from "drizzle-orm/pg-core"
-import { noteVisibility, primaryId, timestamps } from "./columns"
+import { boolean, check, index, jsonb, pgTable, primaryKey, text, timestamp } from "drizzle-orm/pg-core"
+import { bytea, noteVisibility, primaryId, timestamps } from "./columns"
 import { teams } from "./teams"
 import { topics } from "./topics"
 import { users } from "./users"
-
-// the yjs document bytes column. postgres bytea, which drizzle has no built-in column for
-const bytea = customType<{ data: Uint8Array; driverData: Buffer }>({
-	dataType() {
-		return "bytea"
-	},
-	// the driver returns a Buffer, which is already a Uint8Array view
-	fromDriver(value: Buffer): Uint8Array {
-		return value
-	},
-	toDriver(value: Uint8Array): Buffer {
-		return Buffer.from(value)
-	},
-})
 
 // a note is one named rich-text note on a page, with a visibility: the topic page or the team page it lives on.
 // the ydoc is the source of truth for content and comment threads, and the HTML is regenerated from it on save

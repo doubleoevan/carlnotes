@@ -13,6 +13,8 @@
   `/api/auth` requests to the page's own origin, with the signup-gate call for a password signup.
 - Most clients build on `apiClient()`. Some calls, and all of `chatClient.ts`, `flagContentClient.ts`, and
   `voiceClient.ts`, use `fetch` at `toApiUrl` instead. `pageHeadClient.ts` reads a page's head data.
+  `viewerCountsClient.ts` sends a topic page's view and reads a topic's or a podcast episode's counts, a public
+  topic's without credentials so the edge can cache them.
   `voiceClientTestFixtures.ts` holds the voice tests' topic voice chat page and spoken question timings.
   `fetchTestFixtures.ts` holds `stubFetch` and `stubFailingFetch`, the fetch stubs the client tests share.
 - A client returns values and never touches the browser. `billingClient.ts` returns the Checkout and Customer Portal

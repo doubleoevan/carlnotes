@@ -19,7 +19,7 @@ import {
 	toAddTopicSourceText,
 	toEmptyChatTurnToolCalls,
 	toOpenNewTopicChatTool,
-	toRemovedTopicSourceText,
+	toRemoveTopicSourceText,
 	toSavedTopicFieldsText,
 	toSavedTopicPromptText,
 	toTopicEditPreviewTools,
@@ -50,7 +50,7 @@ const SAVING_TOOL_OUTPUTS: Record<string, (input: Record<string, unknown>) => st
 			topicSourceLabel: String(input.value),
 			topicSourceCostDelta: { perScanCents: 2, perMonthCents: 9 },
 		}),
-	removeSource: () => toRemovedTopicSourceText(BURRNOTES_TOPIC_SOURCE_LABEL),
+	removeSource: () => toRemoveTopicSourceText({ status: "saved", topicSourceLabel: BURRNOTES_TOPIC_SOURCE_LABEL }),
 }
 
 // the topic page every case runs on

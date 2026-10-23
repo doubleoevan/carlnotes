@@ -9,8 +9,9 @@ with its scan concurrency set by `SCAN_CONCURRENCY`, the concurrency of each of 
 Workers by `SCREEN_CONCURRENCY`, and a Worker of its own for the `scan-closing` queue that records a scan's outcome
 apart from the scan slots), `schedule.ts` (the sweep, `bun run schedule`, or `bun run dev:worker` on a minute's
 interval: it starts as many scheduled scans as the backlog allows, a daily topic past its owner's daily scans cutoff
-once a week, then retries the pending object deletions through `retryPendingObjectDeletions.ts` and reports the day's
-spend across every user through `dailySpend.ts`, which warns past `GLOBAL_DAILY_SPEND_ALERT_USD`), `scanQueue.ts` (the
+once a week, then copies the viewer and listener counts through `syncViewerCounts.ts`, retries the pending object
+deletions through `retryPendingObjectDeletions.ts`, and reports the day's spend across every user through
+`dailySpend.ts`, which warns past `GLOBAL_DAILY_SPEND_ALERT_USD`), `scanQueue.ts` (the
 sweep's view of the scan queue: the start of the rows a dying caller never dispatched, the queue's report, and how many
 Scans a sweep may start, `SCAN_DISPATCH_LIMIT` minus the backlog), `scheduledTopicLimits.ts` (the limits that the sweep
 reads once per owner inside one request memo: the daily topic limit, the daily topics that scan weekly past the daily
@@ -27,6 +28,13 @@ for a question about the app; a section whose hash is unchanged is not embedded 
   The sweep selects scheduled Topics in one SQL query and reads each owner's quota, key budget, and daily scans cutoff
   once. For a Topic whose owner's key has spent its budget, the sweep saves a failed Scan with the budget reason instead
   of starting a Scan. The Topics of an owner with no key, or of an owner whose budget read fails, are scanned as usual.
+- `syncViewerCounts.ts` runs under its own claim, `viewer-count-sync`. It takes the topics and podcast episodes whose
+  Redis counter changed, raises each one's count column to the counter's estimate and never lowers it, and saves each
+  counter to `viewer_counters`. On the first sync, and after a Redis restart, it first rebuilds Redis from Postgres: it
+  merges every saved counter back and adds the signed-in people that `viewerCountSeeds.ts` loads, each topic's owner,
+  active followers, and finding openers, and each podcast episode's listeners. A shown count never drops, and the
+  views counted since the last sweep are lost with a restart. A topic or podcast episode whose save fails is listed as
+  changed again for the next sweep.
 - `retryPendingObjectDeletions.ts` retries the pending keys in `pending_object_deletions` after the claimed sweep,
   outside its claim, with a doubling backoff up to a day, and reports a key pending for over a day once, deleting each
   through `deleteStoredObject` in `@carlnotes/db/store`. Before the sweep starts a Scan row that was opened and never
@@ -43,6 +51,14 @@ for a question about the app; a section whose hash is unchanged is not embedded 
   sibling files, and the activities file beside it imports the rest. `temporal.ts` resolves each workflow by
   `new URL("./workflows/<name>.ts", import.meta.url)`, and `scripts/check-workflow-bundles.ts` bundles every workflow in
   preflight.
+- `workflows/runTopicScanActivities.ts` — the Scan's three stages. `ingestForScan` passes on the discovered Resources
+  with the Source each is credited to, each Source's outcome narrowed by `toScannedSource` in
+  `@carlnotes/pipeline/ingest/index` to the four fields the scan report reads, and each Source's result. `finishScan`
+  reads the urls of the Scan's kept Findings once, and `toScanSourceResults` counts each one for the Source credited
+  with its Resource, or as earlier if no Source returned it. The found count adds the review's `earlierFoundCount`, the
+  earlier Findings it read again that no Source returned. The kept count and `source_results` go in the same update as
+  the found count and `problem_sources`, and a payload with no results, from a worker before them, writes `null`. A stop
+  and a failure write no results.
 - A completed Scan's email runs in its own workflow, `workflows/sendScanEmail.ts`, on the `scan-emails` queue that the
   file names, with its own Worker in `temporal.ts`. The scan workflow starts it as a child workflow that outlives the
   Scan's own, so a retrying email never holds up or fails the Scan. Each activity sends one batch or one report through

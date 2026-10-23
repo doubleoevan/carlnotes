@@ -10,6 +10,7 @@ import { resourceKinds as allResourceKinds } from "@carlnotes/contracts/enums"
 import type { TopicFeedResponse } from "@carlnotes/contracts/topics"
 import { matchesTopicFindingFilter, type TopicFindingFilter } from "@carlnotes/core/lib/topicFindingFilters"
 import { type TopicFindingSort, toSortedTopicFindings } from "@carlnotes/core/lib/topicFindingSorts"
+import { toSortedSectionTopics } from "@carlnotes/core/lib/topicSorts"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useLocation, useMatch } from "@tanstack/react-router"
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useState } from "react"
@@ -301,22 +302,27 @@ function filterTopicFeed({
 		return null
 	}
 
-	// rebuild the topic feed sections, dropping topics that miss the tag filters
+	// rebuild the topic feed sections, dropping topics that miss the tag filters and ordering the rest for the sort
 	return {
 		...topicFeed,
 		sections: topicFeed.sections.map((section) => ({
 			key: section.key,
-			topics: section.topics
-				.filter((topic) => matchesTagFilters(topic.tags, tagFilters, tagMatchMode))
-				.map((topic) => ({
-					...topic,
-					findings: toSortedTopicFindings(
-						topic.findings.filter(
-							(finding) => resourceKinds.has(finding.resourceKind) && matchesTopicFindingFilter(finding, findingFilter),
+			topics: toSortedSectionTopics(
+				section.key,
+				section.topics
+					.filter((topic) => matchesTagFilters(topic.tags, tagFilters, tagMatchMode))
+					.map((topic) => ({
+						...topic,
+						findings: toSortedTopicFindings(
+							topic.findings.filter(
+								(finding) =>
+									resourceKinds.has(finding.resourceKind) && matchesTopicFindingFilter(finding, findingFilter),
+							),
+							sort,
 						),
-						sort,
-					),
-				})),
+					})),
+				sort,
+			),
 		})),
 	}
 }

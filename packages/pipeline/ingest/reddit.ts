@@ -1,4 +1,5 @@
 // the Reddit ingester
+import { REDDIT_RSS_FALLBACK_MODE } from "@carlnotes/contracts/sources"
 import { fetchFeed } from "./feed"
 import type { NewResource, Source, SourceIngester } from "./ingester"
 
@@ -21,9 +22,6 @@ const REDDIT_USER_AGENT = "carlnotes/0.1 (source-ingestion; +https://carlnotes.c
 // the OAuth host takes the token and returns the full listing JSON
 const OAUTH_HOST = "https://oauth.reddit.com"
 const PUBLIC_HOST = "https://www.reddit.com"
-
-// what the Scan records for a Source the keyless feeds served
-const RSS_FALLBACK_MODE = "reddit-rss"
 
 // reddit rejects a burst from one address, and a Scan runs its Sources at once
 const MIN_REQUEST_GAP_MS = { oauth: 1_000, rss: 30_000 }
@@ -62,7 +60,7 @@ export const redditIngester: SourceIngester = async (source: Source) => {
 			// reddit charges nothing either way. only the keyless feeds record a fallback mode
 			return accessMode === "oauth"
 				? { resources, costDollars: 0 }
-				: { resources, costDollars: 0, fallbackMode: RSS_FALLBACK_MODE }
+				: { resources, costDollars: 0, fallbackMode: REDDIT_RSS_FALLBACK_MODE }
 		} catch (error) {
 			// a rejected access mode is not the Source's failure while another is left to attempt
 			failures.push(`${accessMode} ${error instanceof Error ? error.message : String(error)}`)
@@ -133,7 +131,7 @@ export function toRedditAccessModes(hasCredentials: boolean): AccessMode[] {
 }
 
 /**
- * The OAuth url for a request, which returns the listing JSON including each post's selftext and score.
+ * The OAuth url for a request, which returns the listing JSON including each post's selftext.
  * A search with no subreddit is the site-wide one, which no Source builds because a Source names a subreddit,
  * but searching reddit at large is how a subreddit is found in the first place, so both forms are built here.
  */
@@ -154,7 +152,8 @@ export function toOauthUrl(request: RedditRequest): string {
 
 /**
  * The keyless url for a request. Reddit rejects its public `.json` endpoints but still serves these rss feeds,
- * which have no post-score and only the subreddit's default ordering. That loss is what the fallback records.
+ * which include the entry's summary instead of the selftext, and only the subreddit's default ordering. That loss is
+ * what the fallback records.
  * Like the OAuth builder, it also builds the site-wide search form that finding a subreddit needs.
  */
 export function toRssUrl(request: RedditRequest): string {
@@ -174,7 +173,7 @@ export function toRssUrl(request: RedditRequest): string {
 
 // the fields parsePosts reads from a reddit listing response. a search returns this same shape
 type RedditListing = {
-	data: { children: { data: { permalink: string; title?: string; selftext?: string; score?: number } }[] }
+	data: { children: { data: { permalink: string; title?: string; selftext?: string } }[] }
 }
 
 // selftext is a post's words, body is a reply's words
@@ -202,7 +201,6 @@ export function parsePosts(json: RedditListing): NewResource[] {
 			kind: "read",
 			snippet: child.data.selftext || null,
 			contentHash: null,
-			engagement: child.data.score ?? null,
 		})
 	}
 	// the deduped "read" Resources, in listing order

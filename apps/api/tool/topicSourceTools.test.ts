@@ -133,7 +133,7 @@ test("a source added to or removed from a public topic drops the visitors' feed 
 
 	// a removed source drops both copies too
 	fillVisitorCopies()
-	stubConnectionPool(({ text }) => (text.startsWith("select") ? [["t1", "rss", { url: "https://a.test/feed" }]] : []))
+	stubConnectionPool(toRemovalQueryRows({ sourceKind: "rss", sourceCount: 2 }))
 	const removeTopicSourceResult = await removeTopicSource({
 		userId: "user-1",
 		topicId: "t1",
@@ -142,4 +142,100 @@ test("a source added to or removed from a public topic drops the visitors' feed 
 	})
 	expect(removeTopicSourceResult.status).toBe("saved")
 	expect(storedValueByKey.size).toBe(0)
+})
+
+// the rows a source removal reads: the source row, the topic row it locks, and the topic's source count
+function toRemovalQueryRows({
+	sourceKind,
+	sourceCount,
+}: {
+	sourceKind: string
+	sourceCount: number
+}): (sentQuery: { text: string }) => unknown[][] {
+	// the count query returns the source count, and every other select returns the source row
+	return ({ text }) => {
+		if (text.includes("count(")) {
+			return [[sourceCount]]
+		}
+		return text.startsWith("select") ? [["t1", sourceKind, { url: "https://a.test/feed" }]] : []
+	}
+}
+
+// stub the gate so the user may edit topic t1
+function stubEditableTopic(): void {
+	spyOn(topicTools, "loadEditableTopic").mockResolvedValue({
+		status: "ok",
+		userId: "user-1",
+		topic: { id: "t1", visibility: "private", frequency: "daily" } as never,
+	})
+}
+
+// web search stays on a topic
+test("removeTopicSource keeps web search and deletes nothing", async () => {
+	stubEditableTopic()
+	stubRedisClient()
+	const sentQueries = stubConnectionPool(toRemovalQueryRows({ sourceKind: "search", sourceCount: 3 }))
+	const removeTopicSourceResult = await removeTopicSource({
+		userId: "user-1",
+		topicId: "t1",
+		sourceId: "s1",
+		origin: "chat",
+	})
+	expect(removeTopicSourceResult.status).toBe("webSearch")
+	expect(sentQueries.some(({ text }) => text.startsWith("delete"))).toBe(false)
+})
+
+// a topic keeps at least one source, counted under a lock on the topic row
+test("removeTopicSource keeps a topic's last source, counting it under the topic row's lock", async () => {
+	stubEditableTopic()
+	stubRedisClient()
+	const sentQueries = stubConnectionPool(toRemovalQueryRows({ sourceKind: "rss", sourceCount: 1 }))
+	const removeTopicSourceResult = await removeTopicSource({
+		userId: "user-1",
+		topicId: "t1",
+		sourceId: "s1",
+		origin: "chat",
+	})
+	expect(removeTopicSourceResult.status).toBe("lastSource")
+	expect(sentQueries.some(({ text }) => text.startsWith("delete"))).toBe(false)
+
+	// the topic row is locked before the count
+	const lockIndex = sentQueries.findIndex(({ text }) => text.includes("for no key update"))
+	const countIndex = sentQueries.findIndex(({ text }) => text.includes("count("))
+	expect(lockIndex).toBeGreaterThan(-1)
+	expect(lockIndex).toBeLessThan(countIndex)
+})
+
+// a topic with another source left removes the one asked for
+test("removeTopicSource deletes a source if the topic keeps another", async () => {
+	stubEditableTopic()
+	stubRedisClient()
+	const sentQueries = stubConnectionPool(toRemovalQueryRows({ sourceKind: "rss", sourceCount: 2 }))
+	const removeTopicSourceResult = await removeTopicSource({
+		userId: "user-1",
+		topicId: "t1",
+		sourceId: "s1",
+		origin: "chat",
+	})
+	expect(removeTopicSourceResult.status).toBe("saved")
+	expect(sentQueries.some(({ text }) => text.startsWith("delete"))).toBe(true)
+})
+
+// a removal that ran at the same time deleted the row first, so the second one is saved instead of the last source
+test("removeTopicSource returns saved if the row is gone once the topic row is locked", async () => {
+	stubEditableTopic()
+	stubRedisClient()
+	const toQueryRows = toRemovalQueryRows({ sourceKind: "rss", sourceCount: 1 })
+	const sentQueries = stubConnectionPool((sentQuery) =>
+		sentQuery.text.includes('"sources"."topic_id" = ') ? [] : toQueryRows(sentQuery),
+	)
+	const removeTopicSourceResult = await removeTopicSource({
+		userId: "user-1",
+		topicId: "t1",
+		sourceId: "s1",
+		origin: "chat",
+	})
+	expect(removeTopicSourceResult).toEqual({ status: "saved", topicSourceLabel: null })
+	expect(sentQueries.some(({ text }) => text.includes("count("))).toBe(false)
+	expect(sentQueries.some(({ text }) => text.startsWith("delete"))).toBe(false)
 })

@@ -135,6 +135,29 @@ try {
 	)
 	console.log("seo smoke: loadPublicTopics lists only public topics, described and dated by their content")
 
+	// a newer finding rated down leaves the topic's date alone, since no page shows it
+	const [downRatedFinding] = await db
+		.select({ id: findings.id, createdAt: findings.createdAt })
+		.from(findings)
+		.where(eq(findings.topicId, topicIds.public))
+		.limit(1)
+	failUnless(downRatedFinding !== undefined, "the public topic has no finding to rate down")
+
+	// make that finding the newest, rate it down, and read the topic's date
+	await db
+		.update(findings)
+		.set({ rating: "down", createdAt: new Date(Date.now() + 60 * 60_000) })
+		.where(eq(findings.id, downRatedFinding.id))
+	const downRatedFeedUpdatedAt = (await loadTopicFeedUpdatedAt(topicIds.public))?.getTime()
+
+	// put the finding back before checking, so a failed check leaves the pages below unchanged
+	await db
+		.update(findings)
+		.set({ rating: null, createdAt: downRatedFinding.createdAt })
+		.where(eq(findings.id, downRatedFinding.id))
+	failUnless(downRatedFeedUpdatedAt === newestFindingTime, "a finding rated down moves the topic's date")
+	console.log("seo smoke: a finding rated down leaves the topic's date alone")
+
 	// the ui server, imported fresh so each page below is its route's first render in this process. the ui server's
 	// loaders read the api, which this run serves itself if no api is already running
 	const uiServer = (await import(resolve(UI_SERVER_ENTRY))).default as UiServer

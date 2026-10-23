@@ -2,6 +2,7 @@
 
 import { expect, test } from "bun:test"
 import {
+	isCountedUserAgent,
 	isInAppBrowser,
 	toBot,
 	toBrowserPlatform,
@@ -112,4 +113,13 @@ test("toUserAgentProduct names the product ahead of its version", () => {
 	expect(toUserAgentProduct("node")).toBe("node")
 	expect(toUserAgentProduct("")).toBe("unknown")
 	expect(toUserAgentProduct(null)).toBe("unknown")
+})
+
+// a person, a podcast app, and a feed reader count as viewers or listeners, and a crawler and an unfurler never do
+test("isCountedUserAgent skips crawlers and unfurlers only", () => {
+	expect(isCountedUserAgent("Mozilla/5.0 (Macintosh) Firefox/130.0")).toBe(true)
+	expect(isCountedUserAgent(null)).toBe(true)
+	expect(isCountedUserAgent("Overcast/3.0 (+http://overcast.fm/; iOS podcast app)")).toBe(true)
+	expect(isCountedUserAgent("Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)")).toBe(false)
+	expect(isCountedUserAgent("Slackbot-LinkExpanding 1.0 (+https://api.slack.com/robots)")).toBe(false)
 })

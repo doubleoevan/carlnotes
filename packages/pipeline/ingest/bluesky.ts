@@ -19,7 +19,6 @@ const MAX_BACKOFF_MS = 30_000
 type BlueskyPost = {
 	author?: { handle?: string }
 	embed?: BlueskyEmbed
-	likeCount?: number
 }
 
 // a post links to a page through an external embed, which a post with its own image nests under media instead
@@ -65,8 +64,6 @@ export function parseLinks(posts: BlueskyPost[]): IngestedResource[] {
 			kind: toResourceKind(url),
 			snippet: external?.description?.trim() || null,
 			contentHash: null,
-			// the sharing post's likes are used as the article's engagement
-			engagement: post.likeCount ?? null,
 		})
 	}
 	// the deduped Resources, in the order they arrived

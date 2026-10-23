@@ -1,9 +1,9 @@
 // the invented topics the stories show: a builder for a topic table row, the owned topics on the Activity page, the
-// topic page's scan history and a scan note, and the topic names the paged tables list
+// topic page's scan history, a scan note with its source results, and the topic names the paged tables list
 import type { ActivityScan, OwnerTopic } from "@carlnotes/contracts/activity"
 import type { Topic } from "@carlnotes/contracts/profiles"
 import { DAY_MS, MINUTE_MS } from "@carlnotes/contracts/time"
-import type { TopicScan } from "@carlnotes/contracts/topics"
+import type { ScanNote, ScanSourceResults, SourceResult, TopicScan } from "@carlnotes/contracts/topics"
 import { FIXTURE_DATE, LLM_TOOLING_TOPIC_FIXTURE, STORY_USER } from "../fixtures"
 import { LATEST_PODCAST_EPISODE_FIXTURE } from "./podcastEpisodes"
 
@@ -28,7 +28,7 @@ export const OWNER_TOPIC_FIXTURES: OwnerTopic[] = [
 		ownerUserId: STORY_USER.userId,
 		isEmailEnabled: true,
 		scans: [
-			toActivityScan({ id: "scan-1", dayOffset: 0, foundCount: 42, keptCount: 6, costCents: 118 }),
+			toActivityScan({ id: "scan-1", dayOffset: 0, foundCount: 349, keptCount: 13, costCents: 118 }),
 			toActivityScan({ id: "scan-2", dayOffset: 1, foundCount: 37, keptCount: 4, costCents: 96 }),
 			toActivityScan({ id: "scan-3", dayOffset: 2, foundCount: 51, keptCount: 9, costCents: 131 }),
 			toActivityScan({ id: "scan-4", dayOffset: 3, foundCount: 29, keptCount: 3, costCents: 75 }),
@@ -74,14 +74,122 @@ export const OWNER_TOPIC_FIXTURES: OwnerTopic[] = [
 
 /** The scans the topic page's scan history lists, newest first, one a day back from the fixture date. */
 export const TOPIC_SCAN_FIXTURES: TopicScan[] = [
-	toTopicScan({ id: "scan-3", dayOffset: 0, foundCount: 42, keptCount: 6 }),
+	toTopicScan({ id: "scan-3", dayOffset: 0, foundCount: 349, keptCount: 13 }),
 	toTopicScan({ id: "scan-2", dayOffset: -1, foundCount: 37, keptCount: 4 }),
 	toTopicScan({ id: "scan-1", dayOffset: -2, foundCount: 51, keptCount: 8 }),
 ]
 
-/** The recap a scan's popover shows once its scan note loads. */
-export const SCAN_NOTE_FIXTURE =
-	"Read 42 resources and kept 6. Two agent frameworks shipped tool calling, and one benchmark changed its scoring."
+/**
+ * The owner's view of a scan's source results: ten Sources that read 349 and kept 13, matching the newest scan in
+ * TOPIC_SCAN_FIXTURES. A subreddit fell back to its public feed, and one page failed.
+ */
+export const SOURCE_RESULTS_FIXTURE: ScanSourceResults = {
+	sources: [
+		toOkSourceResult({
+			sourceId: "source-linkedin",
+			sourceKind: "search",
+			label: "LinkedIn posts via Exa search",
+			foundCount: 121,
+			keptCount: 6,
+			costDollars: 0.031,
+			durationMs: 41_000,
+		}),
+		toOkSourceResult({
+			sourceId: "source-hacker-news",
+			sourceKind: "rss",
+			label: "Hacker News front page",
+			foundCount: 64,
+			keptCount: 3,
+			costDollars: 0,
+			durationMs: 1_800,
+		}),
+		toOkSourceResult({
+			sourceId: "source-engineering-blogs",
+			sourceKind: "rss",
+			label: "Company engineering blogs",
+			foundCount: 52,
+			keptCount: 2,
+			costDollars: 0,
+			durationMs: 3_240,
+		}),
+		{
+			sourceId: "source-startups",
+			sourceKind: "reddit",
+			label: "r/startups",
+			status: "fallback",
+			fallbackMode: "reddit-rss",
+			foundCount: 38,
+			keptCount: 1,
+			costDollars: 0,
+			durationMs: 6_400,
+		},
+		toOkSourceResult({
+			sourceId: "source-startup-news",
+			sourceKind: "rss",
+			label: "Startup news feeds",
+			foundCount: 22,
+			keptCount: 1,
+			costDollars: 0,
+			durationMs: 2_100,
+		}),
+		toOkSourceResult({
+			sourceId: "source-arxiv",
+			sourceKind: "rss",
+			label: "arXiv software engineering",
+			foundCount: 18,
+			keptCount: 0,
+			costDollars: 0,
+			durationMs: 900,
+		}),
+		toOkSourceResult({
+			sourceId: "source-launches",
+			sourceKind: "rss",
+			label: "Product launch roundups",
+			foundCount: 14,
+			keptCount: 0,
+			costDollars: 0,
+			durationMs: 1_200,
+		}),
+		toOkSourceResult({
+			sourceId: "source-founder-videos",
+			sourceKind: "youtube",
+			label: "Founder interview videos",
+			foundCount: 12,
+			keptCount: 0,
+			costDollars: 0,
+			durationMs: 8_800,
+		}),
+		toOkSourceResult({
+			sourceId: "source-substack",
+			sourceKind: "rss",
+			label: "Substack newsletters",
+			foundCount: 8,
+			keptCount: 0,
+			costDollars: 0,
+			durationMs: 700,
+		}),
+		{
+			sourceId: "source-indie-hackers",
+			sourceKind: "url",
+			label: "Indie hacker milestones",
+			status: "failed",
+			reason: "The page answered 403 Forbidden.",
+			foundCount: 0,
+			keptCount: 0,
+			costDollars: 0,
+			durationMs: 2_400,
+		},
+	],
+	earlierKeptCount: 0,
+	earlierFoundCount: 0,
+}
+
+/** The note a scan's popover shows once it loads: the recap and the source results. */
+export const SCAN_NOTE_FIXTURE: ScanNote = {
+	scanSummary:
+		"Read 349 resources and kept 13. Two agent frameworks shipped tool calling, and one benchmark changed its scoring.",
+	sourceResults: SOURCE_RESULTS_FIXTURE,
+}
 
 /** Twelve topic names, enough for a second page at ten rows a page. */
 export const PAGED_TOPIC_NAMES = [
@@ -151,4 +259,9 @@ function toTopicScan({ id, dayOffset, foundCount, keptCount }: ToTopicScanOption
 		costDollars: null,
 		podcastEpisode: null,
 	}
+}
+
+// one Source's result that ran its primary path
+function toOkSourceResult(sourceResultFields: Omit<Extract<SourceResult, { status: "ok" }>, "status">): SourceResult {
+	return { ...sourceResultFields, status: "ok" }
 }

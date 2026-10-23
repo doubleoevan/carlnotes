@@ -347,3 +347,40 @@ function toGoogleNewsSourceConfig(value: string): Record<string, unknown> | null
 function toYouTubeConfig(value: string): Record<string, unknown> {
 	return value.startsWith("PL") ? { playlistId: value } : { channelId: value }
 }
+
+// the fallback modes an ingester reports when it reads through a keyless path
+export const REDDIT_RSS_FALLBACK_MODE = "reddit-rss"
+export const YOUTUBE_ATOM_FALLBACK_MODE = "youtube-atom"
+
+// how each fallback mode reads to a person
+const FALLBACK_MODE_LABELS: Record<string, string> = {
+	[REDDIT_RSS_FALLBACK_MODE]: "Reddit's public RSS feed",
+	[YOUTUBE_ATOM_FALLBACK_MODE]: "YouTube's public feed",
+}
+
+/**
+ * Returns how a fallback mode reads to a person, or the mode itself for a mode with no label.
+ */
+export function toFallbackModeLabel(fallbackMode: string): string {
+	return FALLBACK_MODE_LABELS[fallbackMode] ?? fallbackMode
+}
+
+// how long the label a source result records may be. a url Source's summary is its whole url
+export const SOURCE_RESULT_LABEL_CHARS = 200
+
+/**
+ * Returns the label a Source's result records: its summary, else its kind's sentence name, else the bare kind, cut to
+ * SOURCE_RESULT_LABEL_CHARS.
+ */
+export function toSourceResultLabel(sourceKind: string, config: Record<string, unknown>): string {
+	const sourceOption = [...DEFAULT_SOURCES, ...CUSTOM_SOURCE_OPTIONS].find(
+		(registeredSourceOption) => registeredSourceOption.sourceKind === sourceKind,
+	)
+	return (toSourceSummary(sourceKind, config) || sourceOption?.promptLabel || sourceKind).slice(
+		0,
+		SOURCE_RESULT_LABEL_CHARS,
+	)
+}
+
+// what a user reads after trying to remove a topic's last Source
+export const KEEP_ONE_SOURCE_MESSAGE = "Keep at least one source, or Carl's just a guy with opinions."

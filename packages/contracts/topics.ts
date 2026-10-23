@@ -15,7 +15,7 @@ import { topicFinding } from "./findings"
 import { invite } from "./invites"
 import { podcastEpisode, podcastEpisodeSummary, publishedPodcastEpisodeSummary, topicPodcast } from "./podcast"
 import { profileIdentity } from "./profiles"
-import { customSourceKeys } from "./sources"
+import { customSourceKeys, SOURCE_RESULT_LABEL_CHARS } from "./sources"
 
 // how long a topic prompt may grow before a copy-paste is treated as an attachment
 export const TOPIC_PROMPT_CHARS = 2_000
@@ -33,8 +33,9 @@ export const MAX_TOPIC_DRAFT_TAGS = 10
 
 export const TOPIC_DRAFT_TAG_CHARS = 40
 
-// a topic feed. one Topic's header fields plus its topic finding rows
-export const topicFeed = z.object({
+// the details of a topic that the homepage card and the topic page both show: its header fields plus its topic
+// finding rows
+export const topicDetails = z.object({
 	id: z.string(),
 	name: z.string(),
 	// the prompt for the topic. the design keeps it separate from the topic name
@@ -116,6 +117,15 @@ export const topicFeed = z.object({
 	latestPodcastEpisode: podcastEpisode.nullable(),
 })
 
+export type TopicDetails = z.infer<typeof topicDetails>
+
+// a topic feed: a topic's details plus what the trending sort reads, which the homepage renders nowhere. how many
+// people opened the topic, and when its newest shown finding was found, or its created time with none
+export const topicFeed = topicDetails.extend({
+	viewerCount: z.number(),
+	feedUpdatedAt: z.string(),
+})
+
 export type TopicFeed = z.infer<typeof topicFeed>
 
 // a scan in the topic page history
@@ -139,13 +149,89 @@ export const topicScan = z.object({
 	podcastEpisode: publishedPodcastEpisodeSummary.nullable(),
 })
 
-// one scan's recap, loaded per scan instead of returned with the history
-export const scanNote = z.object({ scanSummary: z.string().nullable() })
+// how long a failed source result's reason may be, and the most source results one scan note returns. two Source adds
+// at once can pass the ten Source limit
+export const SOURCE_RESULT_REASON_CHARS = 300
+export const MAX_SOURCE_RESULTS = 50
+
+// the fields every stored source result has
+const storedSourceResultFields = {
+	sourceId: z.string(),
+	sourceKind: z.string(),
+	label: z.string(),
+	foundCount: z.number().int().nonnegative(),
+	keptCount: z.number().int().nonnegative(),
+	costDollars: z.number().nonnegative(),
+	durationMs: z.number().nonnegative(),
+}
+
+// one Source's result in a scan, as the scans table stores it
+export const storedSourceResult = z.discriminatedUnion("status", [
+	z.object({ ...storedSourceResultFields, status: z.literal("ok") }),
+	z.object({ ...storedSourceResultFields, status: z.literal("fallback"), fallbackMode: z.string() }),
+	z.object({ ...storedSourceResultFields, status: z.literal("failed"), reason: z.string() }),
+	z.object({ ...storedSourceResultFields, status: z.literal("skipped") }),
+])
+
+export type StoredSourceResult = z.infer<typeof storedSourceResult>
+
+// a scan's source results as stored: one per Source, and the findings from earlier scans that no Source returned, read
+// again and kept. results saved before the earlier read count read it as zero
+export const storedScanSourceResults = z.object({
+	sources: z.array(storedSourceResult),
+	earlierKeptCount: z.number().int().nonnegative(),
+	earlierFoundCount: z.number().int().nonnegative().default(0),
+})
+
+export type StoredScanSourceResults = z.infer<typeof storedScanSourceResults>
+
+// the fields every source result in a scan note has: the stored fields, bounded, with a cost of null for everyone but the
+// owner and admins
+const sourceResultFields = {
+	...storedSourceResultFields,
+	label: z.string().max(SOURCE_RESULT_LABEL_CHARS),
+	costDollars: z.number().nonnegative().nullable(),
+}
+
+// one Source's result in a scan note, which has no skipped status. a reason is null for everyone but the owner and
+// admins
+export const sourceResult = z.discriminatedUnion("status", [
+	z.object({ ...sourceResultFields, status: z.literal("ok") }),
+	z.object({ ...sourceResultFields, status: z.literal("fallback"), fallbackMode: z.string() }),
+	z.object({
+		...sourceResultFields,
+		status: z.literal("failed"),
+		reason: z.string().max(SOURCE_RESULT_REASON_CHARS).nullable(),
+	}),
+])
+
+export type SourceResult = z.infer<typeof sourceResult>
+
+// a scan note's source results
+export const scanSourceResults = z.object({
+	sources: z.array(sourceResult).max(MAX_SOURCE_RESULTS),
+	earlierKeptCount: z.number().int().nonnegative(),
+	earlierFoundCount: z.number().int().nonnegative(),
+})
+
+export type ScanSourceResults = z.infer<typeof scanSourceResults>
+
+// one scan's recap and source results, loaded per scan instead of returned with the history. malformed results parse
+// to null
+export const scanNote = z.object({
+	scanSummary: z.string().nullable(),
+	sourceResults: scanSourceResults.nullable().catch(null),
+})
+
+export type ScanNote = z.infer<typeof scanNote>
+
+// the note a failed read returns, with no summary and no source results
+export const EMPTY_SCAN_NOTE: ScanNote = { scanSummary: null, sourceResults: null }
 
 export type TopicScan = z.infer<typeof topicScan>
 
-// a topic's full payload. the topic feed shape plus everything the detail page needs
-export const topicResponse = topicFeed.extend({
+// a topic's full payload. the topic's details plus everything the detail page needs
+export const topicResponse = topicDetails.extend({
 	visibility: z.enum(visibilities),
 	// the topic's podcast, null on an instance with no speech model
 	podcast: topicPodcast.nullable(),
@@ -162,7 +248,7 @@ export const topicResponse = topicFeed.extend({
 	isManualScanPaused: z.boolean(),
 	// whether the user has spent their whole monthly budget, which stops scheduled scans too
 	isSpendExhausted: z.boolean(),
-	// whether this user may edit or delete the topic. true for the owner and for any admin
+	// whether this user may edit the topic: the owner, the owning team's active members, and admins
 	canEdit: z.boolean(),
 	// the team owning this topic, null on a topic no team owns. the page links the team only if reachable
 	team: z.object({ teamId: z.string(), name: z.string(), isPublic: z.boolean() }).nullable(),
@@ -264,7 +350,7 @@ export type PublicTopic = {
 	id: string
 	name: string
 	description: string
-	// when the topic last gained a finding, or when the topic was created if it has no finding, as an ISO string
+	// when the topic last gained a shown finding, or when the topic was created if it has none, as an ISO string
 	feedUpdatedAt: string
 }
 

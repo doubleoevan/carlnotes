@@ -33,7 +33,7 @@ const STORY_TOPIC_FINDING = toStoryTopicFinding({
 	url: "https://example.com/llm-tooling-compared",
 	title: "Three LLM tooling stacks, one retrieval task",
 	publishedAt: new Date(Date.now() - 3 * DAY_MS).toISOString(),
-	viewCount: 1284,
+	viewerCount: 1284,
 	relevanceExplanation: "",
 })
 
@@ -109,8 +109,8 @@ function TopicFindingRowPanel({ heading, findingTitle, notes, isOpen }: InfoPane
 					<p>{notes}</p>
 				</ScrollBox>
 
-				{/* when the finding was fetched and how many times it was opened */}
-				<TopicFindingStats fetchedAt={topicFinding.fetchedAt} viewCount={topicFinding.viewCount} />
+				{/* when the finding was fetched and how many users opened it */}
+				<TopicFindingStats fetchedAt={topicFinding.fetchedAt} viewerCount={topicFinding.viewerCount} />
 			</PopoverContent>
 		</Popover>
 	)

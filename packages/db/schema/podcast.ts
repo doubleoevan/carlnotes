@@ -47,6 +47,8 @@ export const podcastEpisodes = pgTable(
 		audioKey: text("audio_key"),
 		audioByteSize: integer("audio_byte_size"),
 		durationSeconds: integer("duration_seconds"),
+		// the unique people who played or downloaded the podcast episode, all time
+		listenerCount: integer("listener_count").notNull().default(0),
 		// the speech model that recorded the podcast episode, and what the script and the speech cost in dollars
 		model: text("model"),
 		cost: numeric("cost", { precision: 12, scale: 6 }).notNull().default("0"),

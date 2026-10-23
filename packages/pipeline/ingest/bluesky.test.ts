@@ -13,29 +13,24 @@ const posts = [
 				description: "Also an ESPN chatbot.",
 			},
 		},
-		likeCount: 12,
 	},
 	{
 		author: { handle: "theverge.com" },
 		embed: { external: { uri: "https://www.theverge.com/a", title: "Disney Plus tries AI search" } },
-		likeCount: 3,
 	},
 	{
 		author: { handle: "theverge.com" },
 		embed: { media: { external: { uri: "https://www.theverge.com/b", title: "The best instant cameras" } } },
-		likeCount: 7,
 	},
 	{
 		author: { handle: "theverge.com" },
 		embed: { external: { uri: "https://www.youtube.com/watch?v=abc", title: "Hands on" } },
-		likeCount: 4,
 	},
 	{
 		author: { handle: "theverge.com" },
 		embed: { external: { uri: "https://bsky.app/profile/someone" } },
-		likeCount: 9,
 	},
-	{ author: { handle: "theverge.com" }, likeCount: 40 },
+	{ author: { handle: "theverge.com" } },
 ]
 
 test("parseLinks returns the linked article instead of the post", () => {
@@ -48,8 +43,7 @@ test("parseLinks returns the linked article instead of the post", () => {
 	expect(article?.snippet).toBe("Also an ESPN chatbot.")
 	expect(article?.kind).toBe("read")
 
-	// the sharing post's likes are used as the article's engagement, and the fetch fills content later
-	expect(article?.engagement).toBe(12)
+	// the fetch fills content later
 	expect(article?.contentHash).toBeNull()
 })
 
@@ -71,8 +65,8 @@ test("parseLinks skips posts that link nowhere or back into bluesky, and dedupes
 	expect(resources).toHaveLength(3)
 	expect(resources.some((resource) => resource.url.includes("bsky.app"))).toBe(false)
 
-	// the first sighting of an article wins, so its engagement is the one that gets saved
-	expect(resources[0]?.engagement).toBe(12)
+	// the first sighting of an article wins, so its link card's description is the one that gets saved
+	expect(resources[0]?.snippet).toBe("Also an ESPN chatbot.")
 })
 
 test("toBackoffMs prefers the reset time, falls back to retry-after, and limits the wait", () => {

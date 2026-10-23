@@ -7,7 +7,8 @@ it, and it imports only `zod`.
 The contract modules sit at the package root, one per domain, each imported by its own path
 (`@carlnotes/contracts/chat`): `chat.ts`, with the notes a stored question ends with in `chatQuestionNotes.ts`,
 `teams.ts`, `invites.ts`, `activity.ts`, `profiles.ts`, `admin.ts`, `search.ts`, `findings.ts`, `podcast.ts`,
-`podcastEpisodePage.ts`, `topics.ts`, `notes.ts`, `pageHead.ts`, and `signupCta.ts`. `payloads.ts` is the request
+`podcastEpisodePage.ts`, `topics.ts`, `notes.ts`, `pageHead.ts`, `signupCta.ts`, and `viewerCounts.ts`, a topic's and a
+podcast episode's counts. `payloads.ts` is the request
 payload schemas the api validates with `zValidator` and the types inferred from them, with the topic ones in
 `topicPayloads.ts`, `enums.ts` and `plans.ts` hold the values that both sides compare, with the role and plan readers
 `isAdminRole`, `isLeaderRole`, `isPaidPlan`, and `isPremiumPlan` that every role or plan check outside the api's gate
@@ -28,7 +29,8 @@ making a topic that the homepage, the menus, and the docs build all read, with t
 `analyticsEvents.ts` holds the event types: the user events keyed to a user, the bot events keyed to a bot's or an
 app's name, the browser's visit events, the entry points, and an event's properties; the clients that send them are
 `@carlnotes/server/analytics`. `userAgent.ts` reads a request's device properties and names a known crawler, unfurler,
-podcast app, or feed reader from a token list. `scanFailure.ts` is how a stored Scan failure reads to a person, the
+podcast app, or feed reader from a token list, and `isCountedUserAgent` says whether a request counts as a viewer or a
+listener: not a crawler or an unfurler. `scanFailure.ts` is how a stored Scan failure reads to a person, the
 failure reason a workflow stores, and the application failure a workflow reads from an activity's failure, by its
 fields, so the module imports nothing from Temporal. `avatars.ts` is the default avatar's letters and tint and an avatar
 url's version, `usernames.ts` how a username is shaped, validated, and compared, with the word lists a random one is

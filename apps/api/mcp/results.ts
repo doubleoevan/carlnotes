@@ -8,7 +8,7 @@ import { searchTopicFindings as rankTopicFindings } from "@carlnotes/pipeline/ch
 import { eq } from "drizzle-orm"
 import { isAllowed } from "../authorization"
 import { loadTopicAccessAndFindings } from "../topic/accessibleFindings"
-import { setBookmarked, setConsumed, setRating } from "../topic/findingMarks"
+import { setBookmarked, setConsumed, setRating } from "../topic/findingFeedback"
 import { loadTopicFindings } from "../topic/findings"
 import { type ToolCaller, toMcpAnalyticsProperties } from "./toolCaller"
 

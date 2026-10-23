@@ -1,5 +1,6 @@
 // the YouTube ingester
 
+import { YOUTUBE_ATOM_FALLBACK_MODE } from "@carlnotes/contracts/sources"
 import { toYoutubeWatchUrl } from "@carlnotes/contracts/youtube"
 import { db } from "@carlnotes/db"
 import { sources } from "@carlnotes/db/schema/topics"
@@ -28,7 +29,7 @@ export const youtubeIngester: SourceIngester = async (source: Source) => {
 	// fall back to the keyless Atom feed, tagged so the Scan records the fallback
 	const { feedName, resources } = await fetchNamedFeed(atomUrl, { resourceKind: "watch" })
 	await saveSourceName(source, feedName)
-	return { resources, costDollars: 0, fallbackMode: "youtube-atom" }
+	return { resources, costDollars: 0, fallbackMode: YOUTUBE_ATOM_FALLBACK_MODE }
 }
 
 // keep what the channel or playlist is called on the Source, so it reads by name instead of by id

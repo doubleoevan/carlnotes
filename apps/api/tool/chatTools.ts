@@ -1,12 +1,18 @@
 // the chat adapters for a topic: the preview tools, the in-chat saves the server applies, and the wording every
 // adapter shares
 import type { TopicToolCalls } from "@carlnotes/contracts/chat"
+import { KEEP_ONE_SOURCE_MESSAGE } from "@carlnotes/contracts/sources"
 import { type AddTopicSourcePayload, proposeTopicEditPayload } from "@carlnotes/contracts/topicPayloads"
 import { type Tool, tool } from "ai"
 import { z } from "zod"
 import type { AnalyticsProperties } from "../currentUser"
 import type { CreateTopicFromDraftResult } from "./topicDraftTools"
-import { type AddTopicSourceResult, addTopicSource, removeTopicSource } from "./topicSourceTools"
+import {
+	type AddTopicSourceResult,
+	addTopicSource,
+	type RemoveTopicSourceResult,
+	removeTopicSource,
+} from "./topicSourceTools"
 import { type UpdateTopicFieldsResult, updateTopicFields, updateTopicPrompt } from "./topicTools"
 
 // what the topic tools did in one chat turn: what the api client is told, plus how many tools were called
@@ -189,18 +195,14 @@ export async function removeTopicSourceInChat(
 		origin: "chat",
 		analyticsProperties,
 	})
+
+	// list the rejection, or the removal unless the row was already gone, for the toast
 	if (removeTopicSourceResult.status !== "saved") {
-		toolCalls.topicSaveRejections.push(
-			toRejectionToast("remove that source", toGateReason(removeTopicSourceResult.status)),
-		)
-		return toRejectionText(removeTopicSourceResult.status)
+		toolCalls.topicSaveRejections.push(toRemoveTopicSourceToast(removeTopicSourceResult.status))
+	} else if (removeTopicSourceResult.topicSourceLabel) {
+		toolCalls.topicSaves.push(`Carl removed ${removeTopicSourceResult.topicSourceLabel}.`)
 	}
-	// skip the toast for a row already gone
-	if (!removeTopicSourceResult.topicSourceLabel) {
-		return "That source was already gone."
-	}
-	toolCalls.topicSaves.push(`Carl removed ${removeTopicSourceResult.topicSourceLabel}.`)
-	return toRemovedTopicSourceText(removeTopicSourceResult.topicSourceLabel)
+	return toRemoveTopicSourceText(removeTopicSourceResult)
 }
 
 /**
@@ -218,10 +220,23 @@ export function toSavedTopicFieldsText(topicName: string): string {
 }
 
 /**
- * Returns what carl reads after a source is removed.
+ * Returns the text for removeTopicSource's result.
  */
-export function toRemovedTopicSourceText(topicSourceLabel: string): string {
-	return `Removed ${topicSourceLabel}.`
+export function toRemoveTopicSourceText(removeTopicSourceResult: RemoveTopicSourceResult): string {
+	switch (removeTopicSourceResult.status) {
+		// name the removed source, or say it was already gone
+		case "saved":
+			return removeTopicSourceResult.topicSourceLabel
+				? `Removed ${removeTopicSourceResult.topicSourceLabel}.`
+				: "That source was already gone."
+		// say which rule kept the source, or why the gate said no
+		case "lastSource":
+			return "That is the topic's last source, and a topic keeps at least one. Add another source before removing it."
+		case "webSearch":
+			return "Web search stays on the topic here. The owner can turn it off in the topic editor."
+		default:
+			return toRejectionText(removeTopicSourceResult.status)
+	}
 }
 
 /**
@@ -289,6 +304,17 @@ function toUpdateTopicFieldsReason(
  */
 export function toRejectionToast(action: string, rejectionReason: string): string {
 	return `Carl couldn't ${action}. ${rejectionReason}`
+}
+
+// the toast for a removal that did not save: web search, the last source, or what stopped the removal
+function toRemoveTopicSourceToast(status: Exclude<RemoveTopicSourceResult["status"], "saved">): string {
+	if (status === "webSearch") {
+		return "Carl couldn't remove web search."
+	}
+	return toRejectionToast(
+		"remove that source",
+		status === "lastSource" ? KEEP_ONE_SOURCE_MESSAGE : toGateReason(status),
+	)
 }
 
 // why the gate said no, in the reader's own terms

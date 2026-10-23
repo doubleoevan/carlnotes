@@ -167,6 +167,7 @@ const PODCAST_EPISODE_ROW = {
 	audioKey: "episodes/episode-1/audio.mp3",
 	audioByteSize: 3_520_000,
 	durationSeconds: 1690,
+	listenerCount: 0,
 	publishedAt: new Date("2026-10-01T09:00:00Z"),
 }
 

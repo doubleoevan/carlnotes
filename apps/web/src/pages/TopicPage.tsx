@@ -16,6 +16,7 @@ import { JoinTeamButton } from "@/components/team/JoinTeamButton"
 import { RelatedTopicsSection } from "@/components/topic/RelatedTopicsSection"
 import { NewCountInfo } from "@/components/topic/Topic"
 import { TopicActionBar, toTopicActionLayout, toTopicActionOptions } from "@/components/topic/TopicActions"
+import { TopicCountsLine } from "@/components/topic/TopicCountsLine"
 import { type TopicDialog, TopicDialogs } from "@/components/topic/TopicDialogs"
 import { useNewTopicDialog } from "@/components/topic/TopicEditorChoiceDialog"
 import { TopicFindingsSection } from "@/components/topic/TopicFindingsSection"
@@ -31,6 +32,7 @@ import { useOrigin } from "@/hooks/useBrowserValue"
 import { usePageTitle } from "@/hooks/usePageTitle"
 import { useRevealClassName } from "@/hooks/useRevealClassName"
 import { useTopicPagePayload } from "@/hooks/useTopicPagePayload"
+import { sendTopicViewOnce } from "@/lib/topicViews"
 import { cn, NEXT_SCAN_DISCLAIMER } from "@/lib/utils"
 import { captureVisitEvent, toPublicTopicProperties } from "@/lib/visitAnalytics"
 import { type TopicFeedHandlers, usePageTopicFeedHandlers, useTopicFeed } from "@/providers/TopicFeedProvider"
@@ -55,7 +57,7 @@ export function TopicPage() {
 	const [openDialog, setOpenDialog] = useState<TopicDialog | null>(null)
 	usePageTitle(topic?.name ?? null)
 
-	// report the visit once per topic, naming the topic only if it is public
+	// report the visit once per topic, naming the topic only if it is public. send the topic view once per tab
 	const loadedTopicId = topic?.id
 	const loadedTopicVisibility = topic?.visibility
 	useEffect(() => {
@@ -64,6 +66,7 @@ export function TopicPage() {
 				"visit_topic_viewed",
 				toPublicTopicProperties({ id: topicId, visibility: loadedTopicVisibility }),
 			)
+			sendTopicViewOnce(topicId)
 		}
 	}, [topicId, loadedTopicId, loadedTopicVisibility])
 
@@ -244,6 +247,8 @@ export function TopicPage() {
 						onMakeTopicPublic={() => setOpenDialog("make-public")}
 						onReloadTopicPage={reloadTopicPage}
 					/>
+					{/* the topic's viewer and follower counts */}
+					<TopicCountsLine topicId={topic.id} isPublic={topic.visibility === "public"} />
 					<TopicDialogs
 						topic={topic}
 						openDialog={openDialog}
@@ -325,6 +330,9 @@ function TopicCards({
 						allowedUrls={new Set(topic.findings.map((finding) => finding.url))}
 						findings={topic.findings}
 						topic={{ id: topic.id, name: topic.name, prompt: topic.prompt }}
+						canEdit={topic.canEdit}
+						topicSources={topic.sources}
+						onReloadTopicPage={onReloadTopicPage}
 					/>
 					{/* the notes on this topic, expanded by default with no note bodies loaded */}
 					<NotesSection pageType="topic" pageId={topic.id} titleClassName="font-display text-lg" hasCompactHeader />
