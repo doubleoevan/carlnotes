@@ -70,8 +70,8 @@ topic card from Coffee Talk. A change that needs your agreement gets a Save butt
 read shows the findings with Carl's notes, thumbs, bookmark, and done. A card's buttons do what your AI's own calls do,
 under the same account. If an app blocks a card's audio, the card links to the episode's page instead.
 
-![The search card for "agents" in a Claude chat: numbered rows for a topic and podcast episodes with their play pills,
-the page buttons, and See all on CarlNotes](../../../assets/screenshots/mcp-host-search-card.png)
+![The search card for "freckle" in a Claude chat: numbered rows for a topic, two podcast episodes, and findings with
+their play pills, the page buttons, and See all on CarlNotes](../../../assets/screenshots/mcp-host-search-card.png)
 
 ## Connecting an account
 
