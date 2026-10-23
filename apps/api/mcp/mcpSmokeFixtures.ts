@@ -2,7 +2,7 @@
 
 import { db } from "@carlnotes/db"
 import { findings, resources, scans } from "@carlnotes/db/schema/scans"
-import { topics } from "@carlnotes/db/schema/topics"
+import { sources, topics } from "@carlnotes/db/schema/topics"
 import { accounts, oauthClients, users } from "@carlnotes/db/schema/users"
 import { deleteUserLiteLLMKey } from "@carlnotes/models/litellm"
 import { Client } from "@modelcontextprotocol/sdk/client/index.js"
@@ -68,10 +68,11 @@ export async function seed(): Promise<void> {
 		password: await hashPassword(ownerPassword),
 	})
 
-	// insert the public topic and a succeeded scan for its findings
+	// insert the public topic with the web search every topic has, and a succeeded scan for its findings
 	await db
 		.insert(topics)
 		.values({ id: topicId, ownerId, name: `${runId} topic`, prompt: "smoke", visibility: "public" })
+	await db.insert(sources).values({ topicId, kind: "search" })
 	const [scan] = await db.insert(scans).values({ topicId, ownerId, status: "succeeded" }).returning({ id: scans.id })
 	if (!scan) {
 		throw new Error("could not seed a scan")

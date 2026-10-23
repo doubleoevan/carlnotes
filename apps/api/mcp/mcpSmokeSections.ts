@@ -151,7 +151,7 @@ export async function checkUser(accessToken: string): Promise<void> {
 		toResultText(updateTopicPromptResult),
 	)
 
-	// add a source, find its id in the topic list, and remove it by that id
+	// add a source beside the topic's web search, find its id in the topic list, and remove it by that id
 	const addTopicSourceText = toResultText(
 		await client.callTool({
 			name: "add_source",
