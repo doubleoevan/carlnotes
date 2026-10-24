@@ -9,7 +9,6 @@ import * as litellmProxy from "@carlnotes/models/litellmProxy"
 import { appUrl } from "@carlnotes/server/appUrl"
 import { quietErrorReports } from "@carlnotes/server/monitoringTestFixtures"
 import { saveEnvSettings } from "@carlnotes/server/savedEnvSettings"
-import { APPLE_ID_ORIGIN } from "./appleProvider"
 import {
 	auth,
 	loadAppleProviderOptions,
@@ -17,6 +16,7 @@ import {
 	toSignupAvatarSource,
 	toTrustedOrigins,
 } from "./auth"
+import { APPLE_ID_ORIGIN } from "./authHooks"
 import * as sessions from "./sessions"
 import * as usernames from "./usernames"
 
