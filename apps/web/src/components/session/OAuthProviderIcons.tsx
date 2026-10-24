@@ -1,4 +1,4 @@
-// oauth provider icons. GitHub's icon comes from simple-icons, and Google's icon is drawn here
+// oauth provider icons. GitHub's and Apple's icons come from simple-icons. Google's icon is drawn here
 import { BrandIcon } from "@/components/common/BrandIcon"
 
 /**
@@ -29,4 +29,11 @@ export function GoogleIcon({ className }: { className?: string }) {
  */
 export function GithubIcon({ className }: { className?: string }) {
 	return <BrandIcon brand="github" className={className} />
+}
+
+/**
+ * The Apple logo, in the button's text color
+ */
+export function AppleIcon({ className }: { className?: string }) {
+	return <BrandIcon brand="apple" className={className} />
 }

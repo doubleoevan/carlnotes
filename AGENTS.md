@@ -47,7 +47,8 @@ Packages, private `@carlnotes/<name>` workspaces that export source, in dependen
 
 Beside them at the root:
 
-- `infra/` — the service configs the app runs beside: litellm, llm-guard, and the Northflank pipelines.
+- `infra/` — the service configs the app runs beside: litellm, llm-guard, the Northflank pipelines, and the cloudflared
+  dev tunnel that Sign in with Apple's dev callback runs through.
 - `content/blog/` — the blog posts `apps/api/content.ts` serves.
 - `patches/` — the dependency patches `bun install` applies, named in the root package.json's `patchedDependencies`.
 - `evals/` — the evals that measure the model-facing prompts, their graders, and the review pipeline, one folder each,

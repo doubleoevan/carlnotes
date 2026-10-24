@@ -213,6 +213,7 @@ const reportedStages = [
 	"chat",
 	"prompt-registry",
 	"billing",
+	"auth",
 	"page-render",
 	"api-route",
 	"database",

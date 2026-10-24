@@ -77,7 +77,8 @@ the browser bundle and renders pages through the server build, behind its own ro
   dialog's providers, their deeplinks and paste steps, and the remembered choice, `shareSheet.ts` opens the operating
   system's share sheet, and `staleBundleReload.ts` reloads the page once if a deploy removed a bundle file the open page
   still asks for.
-- `components/session/` — the login and signup pages' layout and their sign-in pieces. `VerifyEmailNotice.tsx` is the
+- `components/session/` — the login and signup pages' layout and their sign-in pieces. `SessionLayout.tsx` opens the
+  Google, GitHub, and Apple sign-ins and says so if one does not open. `VerifyEmailNotice.tsx` is the
   notice the signup page shows after a password signup, with a button straight into the app. `signupPrompts.ts` names
   each action that sends a visitor to signup, with the toast the signup page shows on arrival, and
   `toSignupNavigation` and `toSignupHref`, which every such action goes through.

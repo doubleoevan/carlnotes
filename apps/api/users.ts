@@ -12,6 +12,8 @@ import { reportError } from "@carlnotes/server/monitoring"
 import { zValidator } from "@hono/zod-validator"
 import { and, asc, count, eq, inArray, ne } from "drizzle-orm"
 import { Hono } from "hono"
+import { revokeAppleTokens } from "./appleProvider"
+import { loadAppleProviderOptions } from "./auth"
 import { isAllowed } from "./authorization"
 import { cancelUserSubscription } from "./billing"
 import { loadChatAttachmentObjectKeys } from "./chat/chatAttachmentReads"
@@ -113,6 +115,10 @@ export async function deleteUser(
 	if (!isUserSessionsRevokedAgain && Bun.env.REDIS_URL) {
 		reportError(new Error("could not sign a closing account out of redis"), "api-route", { userId: targetUserId })
 	}
+
+	// revoke the account's Sign in with Apple tokens while its accounts rows still exist.
+	// a failed revoke is reported, and the close goes on
+	await revokeAppleTokens(await loadAppleProviderOptions(), targetUserId)
 
 	// record the keys of everything kept in chat, on any topic, and of the avatar, then delete the user row in one
 	// transaction, so the keys survive the cascade

@@ -1,4 +1,5 @@
 // the expo app config: the identity, the EAS project link, the icon and splash, and the config plugins
+import { MOBILE_APP_BUNDLE_IDENTIFIER } from "@carlnotes/contracts/mobileApp"
 import { colors } from "@carlnotes/nightshift/colors"
 import { withSentry } from "@sentry/react-native/expo"
 import type { ExpoConfig } from "expo/config"
@@ -17,11 +18,11 @@ const expoConfig: ExpoConfig = {
 	icon: "./assets/icon.png",
 	userInterfaceStyle: "automatic",
 	ios: {
-		bundleIdentifier: "com.carlnotes.app",
+		bundleIdentifier: MOBILE_APP_BUNDLE_IDENTIFIER,
 		supportsTablet: true,
 	},
 	android: {
-		package: "com.carlnotes.app",
+		package: MOBILE_APP_BUNDLE_IDENTIFIER,
 		adaptiveIcon: {
 			foregroundImage: "./assets/adaptive-icon.png",
 			backgroundColor: colors.background.light,

@@ -1,5 +1,5 @@
-// the app's Better Auth instance: email/password and Google/GitHub sign-in, with sessions read from Redis first
-// and kept in Postgres through the Drizzle adapter
+// the app's Better Auth instance: email/password and Google, GitHub, and Apple sign-in, with sessions read from Redis
+// first and kept in Postgres through the Drizzle adapter
 
 import { cimd } from "@better-auth/cimd"
 import { fetchClientMetadataResource } from "@better-auth/cimd/node"
@@ -18,6 +18,7 @@ import { APIError, betterAuth } from "better-auth"
 import { drizzleAdapter } from "better-auth/adapters/drizzle"
 import { jwt } from "better-auth/plugins"
 import { eq } from "drizzle-orm"
+import { APPLE_ID_ORIGIN, APPLE_PROVIDER_ID, type AppleProviderOptions, toAppleProviderOptions } from "./appleProvider"
 import {
 	clearResetPasswordTokens,
 	sendChangeEmailConfirmationEmail,
@@ -95,6 +96,22 @@ const isLanDevOriginTrusted = Boolean(Bun.env.LAN_DEV_URL) && Bun.env.DOPPLER_EN
 // the private lan ranges, trusted as patterns. isLanDevOriginTrusted turns them on
 const LAN_DEV_ORIGINS = ["http://192.168.*.*:*", "http://10.*.*.*:*"]
 
+// the path that Apple posts its sign-in callback to
+const APPLE_CALLBACK_PATH = "/api/auth/callback/apple"
+
+/**
+ * Returns the origins trusted beyond the app's own, with Apple's origin for Apple's posted callback alone.
+ */
+export function toTrustedOrigins(request?: Request): string[] {
+	// the lan origins, in dev only
+	const lanDevOrigins = isLanDevOriginTrusted ? LAN_DEV_ORIGINS : []
+
+	// Apple's origin, for its callback alone. Better Auth checks redirect urls against the list that it gets with no
+	// request. a redirect to Apple is never allowed
+	const isAppleCallback = request !== undefined && new URL(request.url).pathname === APPLE_CALLBACK_PATH
+	return isAppleCallback ? [APPLE_ID_ORIGIN, ...lanDevOrigins] : lanDevOrigins
+}
+
 // an oauth signup arrives with the provider's photo already on image. a password signup never has one
 export function toSignupAvatarSource(image: string | null | undefined): "oauth" | "generated" {
 	return image ? "oauth" : "generated"
@@ -127,7 +144,7 @@ export const auth = betterAuth({
 	// needs a base url to name its token issuer
 	baseURL: appUrl(),
 	// these are appended to that derived origin
-	trustedOrigins: isLanDevOriginTrusted ? LAN_DEV_ORIGINS : undefined,
+	trustedOrigins: toTrustedOrigins,
 	// email and password sign-in. the reset link is short-lived and a reset revokes every session
 	emailAndPassword: {
 		enabled: true,
@@ -141,7 +158,8 @@ export const auth = betterAuth({
 			await clearResetPasswordTokens(user.id)
 		},
 	},
-	// each provider maps its profile onto the user row, and github's proposes its handle as the username
+	// each provider maps its profile onto the user row, and github's proposes its handle as the username.
+	// Apple signs its client secret when Better Auth starts. Apple stays off without its values
 	socialProviders: {
 		google: {
 			clientId: Bun.env.GOOGLE_CLIENT_ID ?? "",
@@ -153,6 +171,7 @@ export const auth = betterAuth({
 			clientSecret: Bun.env.GITHUB_CLIENT_SECRET ?? "",
 			mapProfileToUser: toGithubProfileUser,
 		},
+		apple: () => toAppleProviderOptions(Bun.env),
 	},
 	// account linking requires a verified email on both the incoming oauth side and the local row
 	account: { accountLinking: { enabled: true } },
@@ -326,3 +345,12 @@ export const auth = betterAuth({
 		},
 	},
 })
+
+/**
+ * Returns the options of the Apple provider that Better Auth registered, or undefined if Apple is off.
+ */
+export async function loadAppleProviderOptions(): Promise<AppleProviderOptions | undefined> {
+	const authContext = await auth.$context
+	const appleProvider = authContext.socialProviders.find((socialProvider) => socialProvider.id === APPLE_PROVIDER_ID)
+	return appleProvider?.options as AppleProviderOptions | undefined
+}

@@ -313,6 +313,11 @@ at the root import it by name.
   `MCP_RESOURCE_URL`, the `/mcp` url every MCP access token is bound to. `authHooks.ts` holds the request hooks
   `auth.ts` passes Better Auth, the breach check and the canonical address before a credential request and the sign-in
   and app connection reports after one, with the Google and GitHub profile mappers.
+  `appleProvider.ts` holds Sign in with Apple's options. It signs Apple's client secret, an ES256 JWT, from the four
+  `APPLE_*` values at runtime and signs a new one every week. Apple stays off if any value is unset or the key will not
+  sign. Its profile mapper returns the stored email of the user who holds the Apple account if an ID token has none.
+  `auth.ts` trusts Apple's origin for Apple's posted callback alone. Closing an account in `users.ts` revokes its Apple
+  tokens through `revokeAppleTokens`, and a failed revoke is reported without stopping the close.
   `signupGate.ts` holds the turnstile check a password signup passes, signed into a five-minute cookie whose nonce
   Redis records, so one signup consumes it and a replay is rejected; while Redis is down the signature and expiry alone
   pass.

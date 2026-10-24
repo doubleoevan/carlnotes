@@ -102,7 +102,11 @@ export const accounts = pgTable(
 			.$onUpdate(() => new Date())
 			.notNull(),
 	},
-	(table) => [index("accounts_user_id_idx").on(table.userId)],
+	// find a user's accounts, and find the account that a provider's sign-in names
+	(table) => [
+		index("accounts_user_id_idx").on(table.userId),
+		index("accounts_provider_id_account_id_idx").on(table.providerId, table.accountId),
+	],
 )
 
 // the verifications table. Better Auth's one-time tokens for email verification and similar flows

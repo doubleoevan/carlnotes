@@ -30,6 +30,7 @@
 		"drizzle-orm": "^0.45.4",
 		"hono": "^4.13.13",
 		"hono-rate-limiter": "^0.5.4",
+		"jose": "^6.2.12",
 		"markdown-to-jsx": "^9.10.3",
 		"react": "19.3.0",
 		"react-dom": "19.3.0",

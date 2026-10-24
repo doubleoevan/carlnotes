@@ -13,14 +13,16 @@ Prefer to watch? Carl makes a topic in this video.☝️👀
 
 ## 1. Sign in
 
-Go to [carlnotes.com](https://carlnotes.com) and pick a sign-in: **Continue with Google**, **Continue with GitHub**, or
-**Continue with email**. Email sign-in uses a password. Carl sends your brew notes to your account's email address.
+Go to [carlnotes.com](https://carlnotes.com) and pick a sign-in: **Continue with Google**, **Continue with GitHub**,
+**Continue with Apple**, or **Continue with email**. Email sign-in uses a password. Carl sends your brew notes to your
+account's email address. If you hide your email with Apple, your brew notes go to the private address Apple makes for
+you, and Apple forwards them to your inbox.
 
 Opened CarlNotes from a link inside another app, such as LinkedIn or Instagram? Then you're in that app's embedded
 browser, and Google blocks sign-in there. CarlNotes detects this and shows the email form first, with a notice. On
 Android, it adds a link that reopens the page in Chrome. On iPhone, use the in-app browser's own menu to open the page
-in Safari, then sign in with Google there. Email sign-in works inside the embedded browser. Google sign-in works only
-from a browser of your own.
+in Safari, then sign in with Google there. Email, GitHub, and Apple sign-in work inside the embedded browser. Google
+sign-in works only from a browser of your own.
 
 ## 2. Create a topic
 

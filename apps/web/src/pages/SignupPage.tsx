@@ -80,11 +80,6 @@ export function SignupPage() {
 		}
 	}
 
-	// one click, straight to the provider redirect, with no gate for oauth
-	const handleOAuthSignup = (provider: "google" | "github"): void => {
-		void authClient.signIn.social({ provider, callbackURL: redirectPath })
-	}
-
 	// a password signup succeeded. show the non-blocking verification notice instead of the form
 	if (verifyingEmail) {
 		return <VerifyEmailNotice email={verifyingEmail} redirectPath={redirectPath} />
@@ -94,7 +89,7 @@ export function SignupPage() {
 		<SessionLayout
 			submitLabel="Sign up"
 			onSubmit={handlePasswordSignup}
-			onOAuth={handleOAuthSignup}
+			redirectPath={redirectPath}
 			error={error}
 			isSubmitting={isSubmitting}
 			extraFields={<TurnstileWidget onVerify={setTurnstileToken} spentTokenCount={spentTokenCount} />}

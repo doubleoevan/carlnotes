@@ -699,6 +699,10 @@ Check for:
    - `TopicFinding.viewerCount` (now `viewCount` again, read from `findings.view_count`, which counts every open), the
      first-open lock in `recordView`, and the `ratedDown` view with its "Rated down" filter (removed: a thumbs down hides
      a finding from every view)
+   - `SessionLayout`'s `onOAuth` prop, `handleOAuthLogin` in `LoginPage.tsx`, and `handleOAuthSignup` in
+     `SignupPage.tsx` (now `handleOAuth` in `apps/web/src/components/session/SessionLayout.tsx`, which takes a
+     `redirectPath` prop), and the `"com.carlnotes.app"` literal in `apps/mobile/app.config.ts` (now
+     `MOBILE_APP_BUNDLE_IDENTIFIER` in `packages/contracts/mobileApp.ts`)
 
 5. **Cross-harness enforcement parity**: `.claude/settings.json` hooks and
    `.opencode/plugin/guardrails.mjs` must gate the same operations with the

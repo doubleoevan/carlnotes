@@ -1,0 +1,10 @@
+# the dev tunnel for Sign in with Apple. Apple rejects a localhost return url.
+# this named tunnel gives Apple's callback a stable https hostname.
+# the tunnel forwards that one path to the local api and answers 404 for everything else.
+# the tunnel's credentials stay in ~/.cloudflared/. `cloudflared tunnel create carlnotes-dev` writes them
+tunnel: carlnotes-dev
+ingress:
+  - hostname: apple-dev.carlnotes.com
+    path: ^/api/auth/callback/apple$
+    service: http://localhost:3000
+  - service: http_status:404

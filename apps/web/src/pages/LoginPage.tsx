@@ -32,16 +32,11 @@ export function LoginPage() {
 		window.location.href = redirectPath
 	}
 
-	// open the provider's oauth sign-in
-	const handleOAuthLogin = (provider: "google" | "github"): void => {
-		void authClient.signIn.social({ provider, callbackURL: redirectPath })
-	}
-
 	return (
 		<SessionLayout
 			submitLabel="Log in"
 			onSubmit={handleLogin}
-			onOAuth={handleOAuthLogin}
+			redirectPath={redirectPath}
 			error={error}
 			isSubmitting={isSubmitting}
 			// the reset password link at the bottom of the login form

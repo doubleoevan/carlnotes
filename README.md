@@ -412,6 +412,7 @@ bun run dev:storybook # the Nightshift component browser, Storybook with hot rel
 bun run build:storybook # build the component browser to apps/web/dist/nightshift, which the api serves at /nightshift; run it after build:ui, which can clear apps/web/dist
 bun run nightshift:write # write packages/nightshift/tokens.css, uniwind.css, and the Figma token files from the Nightshift TypeScript source; run it after changing a token. tokens.test.ts fails until you do
 bun run dev:mobile   # Expo dev server for apps/mobile under doppler, with the expo-mcp server on; a development build connects from a simulator, an emulator, or a phone on the LAN
+bun run dev:tunnel   # the Cloudflare tunnel that forwards Sign in with Apple's dev callback from apple-dev.carlnotes.com to the local api; run it beside bun run dev to sign in with Apple locally
 bun run mobile:build -- --profile development-simulator # EAS (Expo Application Services) cloud build of the mobile app; profiles: development, development-simulator, preview, production
 bun run mobile:update -- --channel production --environment production # publish an EAS Update to a channel's builds, on the fingerprint runtime policy; eas update needs both flags
 bun run mobile:env:sync # move the mobile values (the Sentry DSN, the PostHog key, the Sentry auth token) from Doppler dev and prd into the EAS environments
@@ -436,8 +437,27 @@ log in with those credentials locally to see the seeded demo topics. It also sig
 each plan's limits and monthly budget cutoffs. Auth needs these Doppler variables locally:
 `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`,
 `GITHUB_CLIENT_ID`/`GITHUB_CLIENT_SECRET`, and `RESEND_API_KEY`/`RESEND_FROM_EMAIL` — see `.env.example` for what each
-is for. Signup itself is open: no invite code, Google/GitHub are one-click, and email/password sits behind a "Continue
-with email" toggle.
+is for. Signup itself is open: no invite code, Google, GitHub, and Apple are one-click, and email/password sits behind a
+"Continue with email" toggle.
+
+Sign in with Apple is optional. Without `APPLE_CLIENT_ID`, `APPLE_TEAM_ID`, `APPLE_KEY_ID`, and `APPLE_PRIVATE_KEY`, the
+api starts with Apple off. To turn it on:
+
+1. Join the Apple Developer Program, and create the App ID `com.carlnotes.app` with Sign in with Apple enabled.
+2. Create a Services ID per environment, and enable Sign in with Apple on it. Its domains are `carlnotes.com` for prd
+   and `apple-dev.carlnotes.com` for dev, and its return URLs are `https://carlnotes.com/api/auth/callback/apple` and
+   `https://apple-dev.carlnotes.com/api/auth/callback/apple`.
+3. Create a key with Sign in with Apple, and download its `.p8` file once.
+4. Set the Services ID, the team id, the key id, and the `.p8` file's text in Doppler dev and prd. The api signs the
+   client secret from them at runtime. No secret is stored. Each one expires after 30 days, and the api signs a new one
+   every week.
+5. Register the Resend sending domain and the `RESEND_FROM_EMAIL` address under Sign in with Apple for Email
+   Communication. Apple's private relay delivers mail to a Hide My Email address only from a registered sender.
+6. For dev, install cloudflared (`brew install cloudflared`), then run `cloudflared tunnel login`,
+   `cloudflared tunnel create carlnotes-dev`, and `cloudflared tunnel route dns carlnotes-dev apple-dev.carlnotes.com`
+   once. Set `APPLE_DEV_REDIRECT_URL` in Doppler dev to the dev return URL above. Then run `bun run dev:tunnel` beside
+   `bun run dev`, and sign in from `localhost:5173`. Apple returns to the tunnel, which forwards only that callback to the
+   api, and the api sends the browser back to localhost.
 
 Backfills (owner-run) are one-time data migrations that pair with a schema change. Each is idempotent, so a second run
 changes nothing. Each runs under `doppler` against the configured database:

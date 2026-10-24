@@ -1,12 +1,14 @@
 // auth tests: a signup's LiteLLM key and default avatar, the session hooks that keep Redis in sync with Postgres,
-// and the verification values kept in both
+// the verification values kept in both, and Apple's posted callback
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import { restoreConnectionPool, stubConnectionPool } from "@carlnotes/db/connectionPoolStub"
 import * as redis from "@carlnotes/db/redis"
 import * as redisRateLimits from "@carlnotes/db/redisRateLimits"
 import * as litellmProxy from "@carlnotes/models/litellmProxy"
+import { appUrl } from "@carlnotes/server/appUrl"
 import { quietErrorReports } from "@carlnotes/server/monitoringTestFixtures"
-import { auth, sendAuthEmailInBackground, toSignupAvatarSource } from "./auth"
+import { APPLE_ID_ORIGIN } from "./appleProvider"
+import { auth, loadAppleProviderOptions, sendAuthEmailInBackground, toSignupAvatarSource } from "./auth"
 import * as sessions from "./sessions"
 import * as usernames from "./usernames"
 
@@ -149,4 +151,61 @@ test("a background auth email that throws is reported by its kind", async () => 
 	// the failure reaches the report once the send settles
 	await Bun.sleep(0)
 	expect(reportErrorSpy).toHaveBeenCalledWith(sendError, "email", { emailKind: "verification" })
+})
+
+// Better Auth skips its origin check under bun test. post Apple's callback with the check on
+async function postAppleCallback(origin: string): Promise<Response> {
+	spyOn(redisRateLimits, "incrementRateLimitWindow").mockResolvedValue({ count: 1, resetAt: Date.now() + 60_000 })
+	const authContext = await auth.$context
+	authContext.skipOriginCheck = false
+
+	// post the callback, then put the test setting back
+	try {
+		return await auth.handler(toPostedAppleCallback(origin))
+	} finally {
+		authContext.skipOriginCheck = true
+	}
+}
+
+// Apple's callback as Apple posts it. the post has Apple's origin and a cookie that the domain set with SameSite=None
+function toPostedAppleCallback(origin: string): Request {
+	// the fields that Apple posts on a first authorization, with the name
+	const callbackFields = { code: "code-1", state: "state-1", user: JSON.stringify({ name: { firstName: "Ada" } }) }
+
+	// the form post that a browser sends from Apple's page
+	return new Request(`${appUrl()}/api/auth/callback/apple`, {
+		method: "POST",
+		headers: { origin, cookie: "__cf_bm=1", "content-type": "application/x-www-form-urlencoded" },
+		body: new URLSearchParams(callbackFields),
+	})
+}
+
+// the posted callback passes the origin check and redirects to the app's own callback.
+// the browser sends the Lax state cookie there
+test("apple's posted callback redirects to the app's own callback with its fields", async () => {
+	const response = await postAppleCallback(APPLE_ID_ORIGIN)
+	expect(response.status).toBe(302)
+
+	// the redirect keeps the code, the state, and the name that only the first authorization posts
+	const location = new URL(response.headers.get("location") ?? "")
+	expect(location.origin + location.pathname).toBe(`${appUrl()}/api/auth/callback/apple`)
+	expect(location.searchParams.get("state")).toBe("state-1")
+	expect(JSON.parse(location.searchParams.get("user") ?? "{}").name.firstName).toBe("Ada")
+})
+
+// a posted callback with a cookie from any other origin is rejected
+test("a posted callback from another origin is rejected", async () => {
+	const response = await postAppleCallback("https://attacker.example")
+	expect(response.status).toBe(403)
+})
+
+// Apple's origin is trusted for its posted callback alone. a password reset can never redirect to Apple
+test("a redirect to apple is never trusted", async () => {
+	const authContext = await auth.$context
+	expect(authContext.isTrustedOrigin(`${APPLE_ID_ORIGIN}/`)).toBe(false)
+})
+
+// without the Apple values, Better Auth registers no Apple provider for the account close to revoke with
+test("the apple provider options are undefined while apple is off", async () => {
+	expect(await loadAppleProviderOptions()).toBeUndefined()
 })

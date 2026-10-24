@@ -2,6 +2,7 @@
 // menu option
 import { YOUTUBE_PLAY_TRIANGLE_PATH } from "@carlnotes/contracts/youtube"
 import {
+	siApple,
 	siBluesky,
 	siClaudecode,
 	siCursor,
@@ -25,6 +26,7 @@ const BRAND_ICON_PATHS = {
 	reddit: siReddit.path,
 	youtube: siYoutube.path,
 	github: siGithub.path,
+	apple: siApple.path,
 	linkedin: LINKEDIN_ICON_PATH,
 	claude: siClaudecode.path,
 	cursor: siCursor.path,

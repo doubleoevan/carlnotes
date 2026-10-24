@@ -79,9 +79,13 @@ description: The CarlNotes domain vocabulary. Use whenever naming types, tables,
 ## Auth infrastructure is not domain vocabulary
 Better Auth manages `users`, `sessions`, `accounts`, `verifications` — identity/access plumbing, the same tier as
 `users` itself, never content-domain nouns. `accounts` is sign-in identity only (a password credential or an OAuth grant
-used to authenticate) and is never referenced by a Source or a Subscription. **Integration** stays the sole
-representation of a connected external account used for sourcing or delivery (e.g. Composio-managed Gmail) — never
-conflate the two, and never resolve Source/delivery credentials through `accounts`.
+used to authenticate) and is never referenced by a Source or a Subscription. The OAuth sign-in providers are Google,
+GitHub, and Apple, written "Sign in with Apple" in copy and docs. Apple's web client id is its **Services ID**. The iOS
+app's ID tokens name its bundle identifier instead. A user who hides their email with Apple has a **private relay
+address** as their email: `@privaterelay.appleid.com` for older sign-ups, and `@private.icloud.com` for new ones from
+late 2026. Everywhere else in the app it is an ordinary address, so no code matches on either domain. **Integration**
+stays the sole representation of a connected external account used for sourcing or delivery (e.g. Composio-managed
+Gmail) — never conflate the two, and never resolve Source/delivery credentials through `accounts`.
 
 ## Rejected terms — never introduce
 - "Channel" (use Feed)

@@ -1,3 +1,4 @@
+import { authClient } from "@carlnotes/client/authClient"
 import { isInAppBrowser, toBrowserPlatform } from "@carlnotes/contracts/userAgent"
 import { toChromeIntentUrl } from "@carlnotes/core/lib/chromeIntentUrl"
 import { type SubmitEvent, useEffect, useRef, useState } from "react"
@@ -8,8 +9,14 @@ import { Input } from "@/components/primitives/input"
 import { Label } from "@/components/primitives/label"
 import { SESSION_PAGE_CLASS } from "@/lib/styleClasses"
 import { cn } from "@/lib/utils"
-import { GithubIcon, GoogleIcon } from "./OAuthProviderIcons"
+import { AppleIcon, GithubIcon, GoogleIcon } from "./OAuthProviderIcons"
 import { PasswordInput } from "./PasswordInput"
+
+// the providers that a user can sign in with
+type OAuthProviderId = "google" | "github" | "apple"
+
+// what the page says if a provider's sign-in will not open
+const OAUTH_ERROR_TEXT = "That sign-in didn't open. Try another one, or email."
 
 // the oauth buttons' dark hero background, which leaves the email path reading as the quieter option
 const OAUTH_BUTTON_CLASS =
@@ -21,7 +28,7 @@ const OAUTH_BUTTON_CLASS =
 export function SessionLayout({
 	submitLabel,
 	onSubmit,
-	onOAuth,
+	redirectPath,
 	error,
 	isSubmitting,
 	extraFields,
@@ -31,7 +38,8 @@ export function SessionLayout({
 }: {
 	submitLabel: string
 	onSubmit: (email: string, password: string) => Promise<void>
-	onOAuth: (provider: "google" | "github") => void
+	// the path that a provider's sign-in returns to
+	redirectPath: string
 	error: string | null
 	isSubmitting: boolean
 	// anything the route needs between the password field and the submit button, like signup's bot check
@@ -42,9 +50,25 @@ export function SessionLayout({
 }) {
 	// an embedded webview rejects Google's oauth
 	const [isBrowserInApp] = useState(() => isInAppBrowser(navigator.userAgent))
+	const [oauthError, setOauthError] = useState<string | null>(null)
+
+	// open the provider's sign-in in one click. if the sign-in does not open, say so under the buttons
+	const handleOAuth = async (provider: OAuthProviderId): Promise<void> => {
+		setOauthError(null)
+		try {
+			const { error: signInError } = await authClient.signIn.social({ provider, callbackURL: redirectPath })
+			if (!signInError) {
+				return
+			}
+			console.error(`the ${provider} sign-in did not open`, signInError)
+		} catch (networkError) {
+			console.error(`the ${provider} sign-in request failed`, networkError)
+		}
+		setOauthError(OAUTH_ERROR_TEXT)
+	}
 
 	// both blocks, ordered below by whether the browser is embedded
-	const oauthButtons = <OauthButtons isBrowserInApp={isBrowserInApp} onOAuth={onOAuth} />
+	const oauthButtons = <OauthButtons isBrowserInApp={isBrowserInApp} onOAuth={handleOAuth} error={oauthError} />
 	const emailForm = (
 		<EmailForm
 			isBrowserInApp={isBrowserInApp}
@@ -107,13 +131,16 @@ function EmbeddedWebviewNotice() {
 	)
 }
 
-// google and GitHub sign-in buttons
+// the Google, GitHub, and Apple sign-in buttons. Apple's form works inside an embedded webview.
+// the Apple button stays on there
 function OauthButtons({
 	isBrowserInApp,
 	onOAuth,
+	error,
 }: {
 	isBrowserInApp: boolean
-	onOAuth: (provider: "google" | "github") => void
+	onOAuth: (provider: OAuthProviderId) => void
+	error: string | null
 }) {
 	return (
 		<div className={isBrowserInApp ? "mt-6 space-y-2" : "space-y-2"}>
@@ -122,6 +149,16 @@ function OauthButtons({
 				<GithubIcon />
 				Continue with GitHub
 			</Button>
+			<Button onClick={() => onOAuth("apple")} className={OAUTH_BUTTON_CLASS}>
+				<AppleIcon />
+				Continue with Apple
+			</Button>
+			{/* a sign-in that did not open */}
+			{error && (
+				<p role="alert" className="text-destructive text-center text-sm">
+					{error}
+				</p>
+			)}
 		</div>
 	)
 }
@@ -132,7 +169,7 @@ function GoogleOauthButton({
 	onOAuth,
 }: {
 	isBrowserInApp: boolean
-	onOAuth: (provider: "google" | "github") => void
+	onOAuth: (provider: OAuthProviderId) => void
 }) {
 	if (isBrowserInApp && toBrowserPlatform(navigator.userAgent) === "android") {
 		return (
