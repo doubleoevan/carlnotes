@@ -21,7 +21,7 @@ import { APIError, betterAuth } from "better-auth"
 import { drizzleAdapter } from "better-auth/adapters/drizzle"
 import { jwt } from "better-auth/plugins"
 import { eq } from "drizzle-orm"
-import { APPLE_ID_ORIGIN, APPLE_PROVIDER_ID, type AppleProviderOptions, toAppleProviderOptions } from "./appleProvider"
+import { APPLE_PROVIDER_ID, type AppleProviderOptions, toAppleProviderOptions } from "./appleProvider"
 import {
 	clearResetPasswordTokens,
 	sendChangeEmailConfirmationEmail,
@@ -30,6 +30,7 @@ import {
 	VERIFICATION_LINK_HOURS,
 } from "./authEmails"
 import {
+	APPLE_ID_ORIGIN,
 	afterAuthRequest,
 	beforeCredentialRequest,
 	PASSWORD_SIGNUP_PATH,

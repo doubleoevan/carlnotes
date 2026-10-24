@@ -10,7 +10,6 @@ import { apple } from "better-auth/social-providers"
 import { decodeJwt, decodeProtectedHeader, exportPKCS8, generateKeyPair, jwtVerify, SignJWT } from "jose"
 import {
 	APPLE_CLIENT_SECRET_LIFETIME_SECONDS,
-	APPLE_ID_ORIGIN,
 	type AppleProviderValues,
 	replaceAppleClientSecret,
 	revokeAppleTokens,
@@ -19,6 +18,7 @@ import {
 	toAppleProviderOptions,
 	toAppleProviderValues,
 } from "./appleProvider"
+import { APPLE_ID_ORIGIN } from "./authHooks"
 
 // the longest client secret lifetime that Apple accepts
 const APPLE_MAX_LIFETIME_SECONDS = 15_777_000

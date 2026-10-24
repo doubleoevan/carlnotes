@@ -6,10 +6,10 @@ import { reportError } from "@carlnotes/server/monitoring"
 import type { AppleOptions } from "better-auth/social-providers"
 import { and, eq } from "drizzle-orm"
 import { importPKCS8, SignJWT } from "jose"
-import { toCanonicalProfileEmail } from "./authHooks"
+import { APPLE_ID_ORIGIN, toCanonicalProfileEmail } from "./authHooks"
 
-// Apple's sign-in server. this url is the client secret's audience and the origin of Apple's posted callback
-export const APPLE_ID_ORIGIN = "https://appleid.apple.com"
+// Apple's sign-in server lives in authHooks, so authHooks never imports this module back
+export { APPLE_ID_ORIGIN }
 
 // how long a client secret stays valid. Apple rejects a client secret that lives longer than 15,777,000 seconds
 export const APPLE_CLIENT_SECRET_LIFETIME_SECONDS = 30 * 24 * 60 * 60

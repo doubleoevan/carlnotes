@@ -10,9 +10,11 @@ import { toProviderUsername } from "@carlnotes/contracts/usernames"
 import { trackBotEvent, trackEvent } from "@carlnotes/server/analytics"
 import { APIError } from "better-auth"
 import { createAuthMiddleware } from "better-auth/api"
-import { APPLE_ID_ORIGIN } from "./appleProvider"
 import { loadOAuthClientName } from "./mcp/oauthClientNames"
 import { isBreachedPassword } from "./passwords"
+
+// Apple's sign-in server. this url is the client secret's audience and the origin of Apple's posted callback
+export const APPLE_ID_ORIGIN = "https://appleid.apple.com"
 
 // the better auth endpoint path for password signup, the only path the gate cookie is required on
 export const PASSWORD_SIGNUP_PATH = "/sign-up/email"
