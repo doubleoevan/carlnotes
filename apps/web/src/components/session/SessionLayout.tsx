@@ -1,6 +1,7 @@
 import { authClient } from "@carlnotes/client/authClient"
 import { isInAppBrowser, toBrowserPlatform } from "@carlnotes/contracts/userAgent"
 import { toChromeIntentUrl } from "@carlnotes/core/lib/chromeIntentUrl"
+import { OAUTH_ERROR_TEXT } from "@carlnotes/core/lib/sessionCopy"
 import { type SubmitEvent, useEffect, useRef, useState } from "react"
 import { CoffeeMug } from "@/components/branding/CoffeeMug"
 import { AnchorLink } from "@/components/common/AnchorLink"
@@ -14,9 +15,6 @@ import { PasswordInput } from "./PasswordInput"
 
 // the providers that a user can sign in with
 type OAuthProviderId = "google" | "github" | "apple"
-
-// what the page says if a provider's sign-in will not open
-const OAUTH_ERROR_TEXT = "That sign-in didn't open. Try another one, or email."
 
 // the oauth buttons' dark hero background, which leaves the email path reading as the quieter option
 const OAUTH_BUTTON_CLASS =
@@ -32,6 +30,7 @@ export function SessionLayout({
 	error,
 	isSubmitting,
 	extraFields,
+	passwordMinLength,
 	footerPrompt,
 	footerLinkLabel,
 	footerHref,
@@ -44,6 +43,8 @@ export function SessionLayout({
 	isSubmitting: boolean
 	// anything the route needs between the password field and the submit button, like signup's bot check
 	extraFields?: React.ReactNode
+	// the shortest password the route accepts. signup sets it, login takes any
+	passwordMinLength?: number
 	footerPrompt: string
 	footerLinkLabel: string
 	footerHref: string
@@ -56,7 +57,7 @@ export function SessionLayout({
 	const handleOAuth = async (provider: OAuthProviderId): Promise<void> => {
 		setOauthError(null)
 		try {
-			const { error: signInError } = await authClient.signIn.social({ provider, callbackURL: redirectPath })
+			const { error: signInError } = await authClient().signIn.social({ provider, callbackURL: redirectPath })
 			if (!signInError) {
 				return
 			}
@@ -77,6 +78,7 @@ export function SessionLayout({
 			isSubmitting={isSubmitting}
 			error={error}
 			extraFields={extraFields}
+			passwordMinLength={passwordMinLength}
 		/>
 	)
 
@@ -205,6 +207,7 @@ function EmailForm({
 	isSubmitting,
 	error,
 	extraFields,
+	passwordMinLength,
 }: {
 	isBrowserInApp: boolean
 	onSubmit: (email: string, password: string) => Promise<void>
@@ -212,6 +215,7 @@ function EmailForm({
 	isSubmitting: boolean
 	error: string | null
 	extraFields?: React.ReactNode
+	passwordMinLength?: number
 }) {
 	const [isOpen, setIsOpen] = useState(isBrowserInApp)
 	const [email, setEmail] = useState("")
@@ -257,7 +261,13 @@ function EmailForm({
 					required
 				/>
 			</div>
-			<PasswordInput id="password" label="Password" value={password} onChange={setPassword} />
+			<PasswordInput
+				id="password"
+				label="Password"
+				value={password}
+				onChange={setPassword}
+				minLength={passwordMinLength}
+			/>
 			{extraFields}
 			{error && <p className="text-destructive text-sm">{error}</p>}
 			<Button type="submit" disabled={isSubmitting} className="w-full">

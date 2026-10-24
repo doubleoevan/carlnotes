@@ -57,7 +57,7 @@ function menuLinkClassName(pathname: string, href: string): string {
 export function Header() {
 	const { isDark, toggleTheme } = useTheme()
 	// drives the menu items in both the desktop menu and the mobile menu
-	const { data: session } = authClient.useSession()
+	const { data: session } = authClient().useSession()
 	const isSignedIn = Boolean(session)
 	// the admin link renders only for admins
 	const isAdmin = isAdminRole(session?.user.role)

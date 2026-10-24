@@ -9,7 +9,7 @@ import {
 } from "@carlnotes/contracts/podcast"
 import { type PodcastEpisodePageResponse, podcastEpisodePageResponse } from "@carlnotes/contracts/podcastEpisodePage"
 import { z } from "zod"
-import { apiClient, toApiUrl } from "./apiClient"
+import { apiClient, fetchApi } from "./apiClient"
 import { readTopicGate, type TopicGate } from "./topicClient"
 
 // what a podcast feed url request returns
@@ -86,7 +86,7 @@ export function sendPodcastEpisodeListen(
 	podcastEpisodeId: string,
 	podcastEpisodeListen: PodcastEpisodeListenPayload,
 ): void {
-	fetch(toApiUrl(`/api/episodes/${podcastEpisodeId}/listen`), {
+	fetchApi(`/api/episodes/${podcastEpisodeId}/listen`, {
 		method: "POST",
 		headers: { "Content-Type": "application/json" },
 		body: JSON.stringify(podcastEpisodeListen),

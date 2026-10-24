@@ -1,11 +1,11 @@
 // requireSession tests: where the guard sends a signed-out visitor, and that a signed-in user goes through
 import { afterEach, expect, test } from "bun:test"
-import { authClient } from "@carlnotes/client/authClient"
+import { type AuthClient, authClient } from "@carlnotes/client/authClient"
 import { type AnyRedirect, isRedirect } from "@tanstack/react-router"
 import { requireSession } from "./requireSession"
 
 // the Better Auth session atom useSession reads, and the state it starts with, set back after each test
-const sessionAtom = authClient.$store.atoms.session as NonNullable<typeof authClient.$store.atoms.session>
+const sessionAtom = authClient().$store.atoms.session as NonNullable<AuthClient["$store"]["atoms"]["session"]>
 const initialSessionState = sessionAtom.get()
 
 // settle the session atom the way useSession does once the api returns, with no session or with one

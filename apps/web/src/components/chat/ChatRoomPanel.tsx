@@ -86,7 +86,7 @@ export function ChatRoomPanel({
 }) {
 	// the chat members for the autocomplete, the chat room itself, and which chat message the composer answers
 	const [isClearChatOpen, setIsClearChatOpen] = useState(false)
-	const { data: session } = authClient.useSession()
+	const { data: session } = authClient().useSession()
 	const chatRoom = useChatRoom({ topicId, teamId, userId: session?.user.id })
 	const { memberUsernames, isTeamLeader } = useRoomMembers(teamId, session?.user.id)
 	// read the topic this chat room may edit

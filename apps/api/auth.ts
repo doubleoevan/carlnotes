@@ -3,8 +3,11 @@
 
 import { cimd } from "@better-auth/cimd"
 import { fetchClientMetadataResource } from "@better-auth/cimd/node"
+import { expo } from "@better-auth/expo"
 import { mcp } from "@better-auth/mcp"
+import { MOBILE_APP_SCHEME_ORIGIN } from "@carlnotes/contracts/mobileApp"
 import { SIGNUP_CTA_COOKIE_NAME, toCtaTag } from "@carlnotes/contracts/signupCta"
+import { GATE_COOKIE_NAME, MIN_PASSWORD_LENGTH } from "@carlnotes/contracts/signupGate"
 import { toDeviceProperties } from "@carlnotes/contracts/userAgent"
 import { toNormalizedUsername, toProviderUsername } from "@carlnotes/contracts/usernames"
 import { db, schema } from "@carlnotes/db"
@@ -31,20 +34,18 @@ import {
 	beforeCredentialRequest,
 	PASSWORD_SIGNUP_PATH,
 	toCanonicalProfileEmail,
+	toEntryPoint,
 	toGithubProfileUser,
 } from "./authHooks"
 import { userBudgetCents } from "./authorization"
 import { cacheSession } from "./sessions"
-import { GATE_COOKIE_NAME, verifyGateToken } from "./signupGate"
+import { verifyGateToken } from "./signupGate"
 import { saveDefaultUserTeam } from "./team/teams"
 import { ipAddressOptions } from "./trustedProxies"
 import { saveDefaultUsername, toAssignedUsername, toFreeUsernames } from "./usernames"
 
 // how long a password-reset link stays valid
 const RESET_TOKEN_LIFETIME_SECONDS = 60 * 60
-
-// the minimum password length. above Better Auth's default of 8
-const MIN_PASSWORD_LENGTH = 12
 
 // how hard the credential endpoints are rate-limited
 const CREDENTIAL_RATE_LIMIT_WINDOW_SECONDS = 60
@@ -90,26 +91,35 @@ const sessionSecondaryStorage = {
 		(await incrementRateLimitWindow(key, ttlSeconds * 1000)).count,
 }
 
-// whether a phone on the same network may sign in against this server. dev only
-const isLanDevOriginTrusted = Boolean(Bun.env.LAN_DEV_URL) && Bun.env.DOPPLER_ENVIRONMENT === "dev"
-
-// the private lan ranges, trusted as patterns. isLanDevOriginTrusted turns them on
+// the private lan ranges, trusted as patterns in dev with LAN_DEV_URL set, so a phone on the same network may sign in
 const LAN_DEV_ORIGINS = ["http://192.168.*.*:*", "http://10.*.*.*:*"]
+
+// the Expo dev server's scheme, which a development client may report as its origin. dev only
+const EXPO_DEV_ORIGIN = "exp://"
 
 // the path that Apple posts its sign-in callback to
 const APPLE_CALLBACK_PATH = "/api/auth/callback/apple"
 
 /**
- * Returns the origins trusted beyond the app's own, with Apple's origin for Apple's posted callback alone.
+ * Returns the origins trusted beyond the app's own: the mobile app's scheme, the development origins in dev, and
+ * Apple's origin for Apple's posted callback alone.
  */
 export function toTrustedOrigins(request?: Request): string[] {
-	// the lan origins, in dev only
-	const lanDevOrigins = isLanDevOriginTrusted ? LAN_DEV_ORIGINS : []
+	// the mobile app's scheme. the host-less pattern trusts every url of the scheme, the sign-in callbacks included
+	const trustedOrigins = [MOBILE_APP_SCHEME_ORIGIN]
+
+	// the development origins, in dev only: the Expo dev server's scheme, and the lan with LAN_DEV_URL set
+	if (Bun.env.DOPPLER_ENVIRONMENT === "dev") {
+		trustedOrigins.push(EXPO_DEV_ORIGIN)
+		if (Bun.env.LAN_DEV_URL) {
+			trustedOrigins.push(...LAN_DEV_ORIGINS)
+		}
+	}
 
 	// Apple's origin, for its callback alone. Better Auth checks redirect urls against the list that it gets with no
 	// request. a redirect to Apple is never allowed
 	const isAppleCallback = request !== undefined && new URL(request.url).pathname === APPLE_CALLBACK_PATH
-	return isAppleCallback ? [APPLE_ID_ORIGIN, ...lanDevOrigins] : lanDevOrigins
+	return isAppleCallback ? [APPLE_ID_ORIGIN, ...trustedOrigins] : trustedOrigins
 }
 
 // an oauth signup arrives with the provider's photo already on image. a password signup never has one
@@ -180,9 +190,12 @@ export const auth = betterAuth({
 	hooks: { before: beforeCredentialRequest, after: afterAuthRequest },
 	// resolve the client address through the trusted proxies
 	advanced: { ipAddress: ipAddressOptions },
-	// the oauth server for the MCP server, the jwt plugin that signs its access tokens, and client metadata documents
-	// as the second way a client registers. the jwt plugin's model is named jwk, so the plural names the jwks table
+	// the mobile app's plugin first, which reads a request's expo-origin header as its origin ahead of every other
+	// check. then the oauth server for the MCP server, the jwt plugin that signs its access tokens, and client metadata
+	// documents as the second way a client registers. the jwt plugin's model is named jwk, so the plural names the jwks
+	// table
 	plugins: [
+		expo(),
 		jwt({ schema: { jwks: { modelName: "jwk" } } }),
 		mcpPlugin,
 		cimd({ fetchClientMetadataResource, metadataProfile: "mcp-2026-07-28" }),
@@ -290,7 +303,7 @@ export const auth = betterAuth({
 					// the signup funnel's final event, tagged with what converted and from where
 					const ctaTag = toCtaTag(context?.getCookie(SIGNUP_CTA_COOKIE_NAME) ?? null)
 					trackEvent("signup_completed", user.id, {
-						entryPoint: "web",
+						entryPoint: toEntryPoint(context?.headers, context?.body),
 						plan: "free",
 						...toDeviceProperties(context?.headers?.get("user-agent")),
 						...(ctaTag ? { cta: ctaTag } : {}),

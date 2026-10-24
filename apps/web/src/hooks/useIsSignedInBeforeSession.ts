@@ -9,7 +9,7 @@ const rootRoute = getRouteApi("__root__")
  * and the session decides after.
  */
 export function useIsSignedInBeforeSession(): boolean {
-	const { data: session, isPending } = authClient.useSession()
+	const { data: session, isPending } = authClient().useSession()
 	const hasSessionCookie = Boolean(rootRoute.useLoaderData())
 	return isPending ? hasSessionCookie : Boolean(session)
 }

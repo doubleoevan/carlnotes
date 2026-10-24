@@ -38,6 +38,13 @@ export function toAvatarTint(userId: string): string {
 }
 
 /**
+ * Returns the api path of a user's avatar image at a version, which the web and the mobile app both load.
+ */
+export function toAvatarImagePath(userId: string, avatarVersion: string): string {
+	return `/api/avatars/${userId}?v=${avatarVersion}`
+}
+
+/**
  * Returns the version in a user's avatar url, which is the upload's key id, oauth, or null for the initials.
  */
 export function toAvatarVersion(avatar: { avatarSource?: string | null; avatarKey?: string | null }): string | null {

@@ -703,6 +703,11 @@ Check for:
      `SignupPage.tsx` (now `handleOAuth` in `apps/web/src/components/session/SessionLayout.tsx`, which takes a
      `redirectPath` prop), and the `"com.carlnotes.app"` literal in `apps/mobile/app.config.ts` (now
      `MOBILE_APP_BUNDLE_IDENTIFIER` in `packages/contracts/mobileApp.ts`)
+   - `GATE_COOKIE_NAME` in `apps/api/signupGate.ts` and `MIN_PASSWORD_LENGTH` in `apps/api/auth.ts` (now
+     `packages/contracts/signupGate.ts`), `isLanDevOriginTrusted` in `apps/api/auth.ts` (now a branch of
+     `toTrustedOrigins`), `authClient` the object in `packages/client/authClient.ts` (now `authClient()`, with
+     `configureAuthClient` and the `AuthClient` type), and `fetch(toApiUrl(...))` in a client module (now `fetchApi` in
+     `packages/client/apiClient.ts`; `toApiUrl` stays for a url the platform loads itself)
 
 5. **Cross-harness enforcement parity**: `.claude/settings.json` hooks and
    `.opencode/plugin/guardrails.mjs` must gate the same operations with the

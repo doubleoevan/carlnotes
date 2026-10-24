@@ -1,5 +1,5 @@
 import { authClient } from "@carlnotes/client/authClient"
-import { toAvatarVersion } from "@carlnotes/contracts/avatars"
+import { toAvatarImagePath, toAvatarVersion } from "@carlnotes/contracts/avatars"
 import { Avatar } from "@/components/branding/Avatar"
 
 /**
@@ -19,10 +19,10 @@ export function UserAvatar({
 	className?: string
 }) {
 	// draw the signed-in user's own avatar at the session's version, which an upload or a source change refreshes
-	const { data: session } = authClient.useSession()
+	const { data: session } = authClient().useSession()
 	const shownAvatarVersion = session?.user.id === userId ? toAvatarVersion(session.user) : avatarVersion
 
 	// the image url at the avatar's version
-	const imageUrl = shownAvatarVersion === null ? null : `/api/avatars/${userId}?v=${shownAvatarVersion}`
+	const imageUrl = shownAvatarVersion === null ? null : toAvatarImagePath(userId, shownAvatarVersion)
 	return <Avatar imageUrl={imageUrl} ownerId={userId} name={username} className={className} />
 }

@@ -22,7 +22,7 @@ export function LoginPage() {
 	const handleLogin = async (email: string, password: string): Promise<void> => {
 		setIsSubmitting(true)
 		setError(null)
-		const { error: signInError } = await authClient.signIn.email({ email, password })
+		const { error: signInError } = await authClient().signIn.email({ email, password })
 		if (signInError) {
 			setError(signInError.message ?? "Log in failed.")
 			setIsSubmitting(false)

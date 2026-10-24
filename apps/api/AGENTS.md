@@ -318,9 +318,20 @@ at the root import it by name.
   sign. Its profile mapper returns the stored email of the user who holds the Apple account if an ID token has none.
   `auth.ts` trusts Apple's origin for Apple's posted callback alone. Closing an account in `users.ts` revokes its Apple
   tokens through `revokeAppleTokens`, and a failed revoke is reported without stopping the close.
-  `signupGate.ts` holds the turnstile check a password signup passes, signed into a five-minute cookie whose nonce
-  Redis records, so one signup consumes it and a replay is rejected; while Redis is down the signature and expiry alone
-  pass.
+  `signupGate.ts` holds the single-use token a password signup's gate signs: a five-minute token whose nonce Redis
+  records, so one use consumes it and a replay is rejected, and while Redis is down the signature and expiry alone pass.
+  The web's gate signs it after the turnstile check, and `setGateCookie` sets it as the cookie the signup route reads.
+  `appSignupGate.ts` holds the mobile app's gate beside it: `POST /api/signup-gate/app-challenge` issues a single-use
+  challenge, and `POST /api/signup-gate/app` consumes it, verifies the install's proof for its platform, and sets the
+  same cookie. `appAttest.ts` verifies an iOS App Attest attestation by Apple's steps over `cbor2` and `node:crypto`,
+  against the app id from `APPLE_TEAM_ID` and the bundle identifier, with the development environment allowed in dev;
+  its tests build a certificate chain of their own through `appAttestTestFixtures.ts`.
+  `playIntegrity.ts` decodes an Android Play Integrity token through Google's api with the service account in
+  `PLAY_INTEGRITY_SERVICE_ACCOUNT_KEY` and checks its verdict. The `development` proof passes in dev alone. Each gate
+  route is limited to ten a minute per address, and a rejection is reported as a visitor event with its platform and
+  reason. `auth.ts` adds Better Auth's `expo()` plugin first, which reads a request's `expo-origin` header as its
+  origin, and `toTrustedOrigins` trusts the app's scheme `carlnotes://` everywhere and `exp://` in dev. `authHooks.ts`
+  reports a sign-in and a signup from the app as `mobile`, and a native Apple sign-in by its provider.
   `auth.ts` gives Better Auth the Redis store as its secondary storage and keeps sessions in Postgres too.
   A session is read from Redis first, and from Postgres if Redis has no copy or is down.
   Verification values, such as reset links and OAuth state, are kept in both stores and read the same way.

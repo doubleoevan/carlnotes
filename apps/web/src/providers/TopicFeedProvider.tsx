@@ -93,7 +93,7 @@ export function usePageTopicFeedHandlers(reloadPage: () => void | Promise<void>)
  * Returns whether anyone is signed in, inside the provider or out of it.
  */
 export function useIsSignedIn(): boolean {
-	const { data: session } = authClient.useSession()
+	const { data: session } = authClient().useSession()
 	return Boolean(session)
 }
 
@@ -110,7 +110,7 @@ function useTopicFeedState() {
 	// whose bookmarks the bookmarked filter shows: the user's own, or every member's bookmarks on a team topic
 	const [bookmarkScope, setBookmarkScope] = useState<"mine" | "team">("mine")
 	// the feed watches the session itself
-	const { data: session } = authClient.useSession()
+	const { data: session } = authClient().useSession()
 	// selected tag filters and how they match. a topic has any, all, or none of them
 	const [tagFilters, setTagFilters] = useState<string[]>([])
 	const [tagMatchMode, setTagMatchMode] = useState<TagMatchMode>("any")

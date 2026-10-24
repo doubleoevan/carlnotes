@@ -14,7 +14,7 @@ export const StorySessionContext = createContext<StorySession | null>(null)
  * The client's methods that the stories reach, each a spy. useSession returns the story's session as Better Auth's
  * hook shapes it, and signOut resolves without a request.
  */
-export const authClient = {
+export const authClientStub = {
 	useSession: fn(() => ({
 		data: useContext(StorySessionContext),
 		isPending: false,
@@ -22,4 +22,11 @@ export const authClient = {
 		refetch: fn(),
 	})).mockName("authClient.useSession"),
 	signOut: fn(async () => ({ data: null, error: null })).mockName("authClient.signOut"),
+}
+
+/**
+ * Returns the stub in place of the configured client.
+ */
+export function authClient(): typeof authClientStub {
+	return authClientStub
 }

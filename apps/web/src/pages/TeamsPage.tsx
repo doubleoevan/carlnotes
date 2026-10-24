@@ -28,7 +28,7 @@ import { useRegisterChatContext } from "@/stores/chatPanelStore"
  */
 export function TeamsPage() {
 	usePageTitle("Teams")
-	const { data: session } = authClient.useSession()
+	const { data: session } = authClient().useSession()
 	const [teamsPage, setTeamsPage] = useState<TeamsPageResponse | null>(null)
 	// the chat panel's poll feeds this
 	const teamMentions = useAllTeamChatMentions()

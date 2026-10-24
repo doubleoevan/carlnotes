@@ -23,7 +23,7 @@ import {
 	topicGateResponse,
 	topicResponse,
 } from "@carlnotes/contracts/topics"
-import { type ApiResponse, apiClient, readApiErrorMessage, showClientError, toApiUrl } from "./apiClient"
+import { type ApiResponse, apiClient, fetchApi, readApiErrorMessage, showClientError } from "./apiClient"
 
 // tells the user a write was rejected
 async function showFailedWrite(request: Promise<ApiResponse>, action: string, isBackground = false): Promise<void> {
@@ -338,7 +338,7 @@ export async function uploadTopicAttachment(topicId: string, file: File): Promis
 	// send the file as the form's file field
 	const form = new FormData()
 	form.append("file", file)
-	const response = await fetch(toApiUrl(`/api/topics/${topicId}/attachments`), { method: "POST", body: form })
+	const response = await fetchApi(`/api/topics/${topicId}/attachments`, { method: "POST", body: form })
 
 	// surface the rejection reason from the api, falling back to the status
 	if (!response.ok) {

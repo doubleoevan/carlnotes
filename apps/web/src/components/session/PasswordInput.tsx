@@ -12,12 +12,15 @@ export function PasswordInput({
 	value,
 	onChange,
 	autoComplete,
+	minLength,
 }: {
 	id: string
 	label: string
 	value: string
 	onChange: (value: string) => void
 	autoComplete?: string
+	// the shortest password the form accepts, where the form sets one
+	minLength?: number
 }) {
 	const [isShown, setIsShown] = useState(false)
 	return (
@@ -31,6 +34,7 @@ export function PasswordInput({
 					value={value}
 					onChange={(event) => onChange(event.target.value)}
 					autoComplete={autoComplete}
+					minLength={minLength}
 					className="bg-card dark:bg-card pr-10"
 					required
 				/>

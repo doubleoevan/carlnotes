@@ -59,7 +59,7 @@ const teamRoute = getRouteApi("/_layout/teams/$teamId")
  */
 export function TeamPage() {
 	const { teamId } = teamRoute.useParams()
-	const { data: session } = authClient.useSession()
+	const { data: session } = authClient().useSession()
 	// the team page result, and its reload after a change
 	const { teamResult, reloadTeam } = useTeamPageResult(teamId)
 	const [isConfirmingDelete, setIsConfirmingDelete] = useState(false)

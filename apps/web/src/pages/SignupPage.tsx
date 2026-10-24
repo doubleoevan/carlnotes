@@ -1,5 +1,6 @@
 import { authClient, passSignupGate } from "@carlnotes/client/authClient"
 import { SIGNUP_CTA_COOKIE_NAME, toCtaTag } from "@carlnotes/contracts/signupCta"
+import { MIN_PASSWORD_LENGTH } from "@carlnotes/contracts/signupGate"
 import { useEffect, useState } from "react"
 import { SessionLayout } from "@/components/session/SessionLayout"
 import { SIGNUP_PROMPTS } from "@/components/session/signupPrompts"
@@ -68,7 +69,7 @@ export function SignupPage() {
 				return
 			}
 			const name = email.split("@")[0] ?? email
-			const { error: signUpError } = await authClient.signUp.email({ email, password, name })
+			const { error: signUpError } = await authClient().signUp.email({ email, password, name })
 			if (signUpError) {
 				failAndRenewChallenge(signUpError.message ?? "Sign up failed.")
 				return
@@ -93,6 +94,7 @@ export function SignupPage() {
 			error={error}
 			isSubmitting={isSubmitting}
 			extraFields={<TurnstileWidget onVerify={setTurnstileToken} spentTokenCount={spentTokenCount} />}
+			passwordMinLength={MIN_PASSWORD_LENGTH}
 			footerPrompt={"Already have an account? "}
 			footerLinkLabel="Log in"
 			footerHref="/login"

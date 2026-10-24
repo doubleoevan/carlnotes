@@ -19,7 +19,7 @@ import { PAGE_CLASS, PAGE_HEADER_CLASS, PAGE_TITLE_CLASS } from "@/lib/styleClas
  */
 export function AccountPage() {
 	usePageTitle("Account")
-	const { data: session } = authClient.useSession()
+	const { data: session } = authClient().useSession()
 	const [billing, setBilling] = useState<BillingState | null>(null)
 	const [activity, setActivity] = useState<ActivityResponse | null>(null)
 

@@ -13,7 +13,7 @@ import {
 import { isPodcastEpisodeSpeaker, type PodcastEpisodeSpeaker } from "@carlnotes/contracts/enums"
 import type { ChatAttachment, ChatHistoryTurn, PodcastEpisodeChapterRef } from "@carlnotes/contracts/payloads"
 import type { TopicDraft, TopicDraftTeam } from "@carlnotes/contracts/topicPayloads"
-import { readApiErrorMessage, toApiUrl } from "./apiClient"
+import { fetchApi, readApiErrorMessage } from "./apiClient"
 
 // why a chat turn was rejected, kept apart so that the panel can prompt an upgrade or name a file it could not read
 // instead of a generic error
@@ -33,7 +33,7 @@ export type ChatPage =
  * Loads the user's persisted conversation and its metadata, including whether the user can continue chatting
  */
 export async function fetchChatConversation(chatPage: ChatPage): Promise<ChatConversation> {
-	const response = await fetch(toChatUrl(chatPage))
+	const response = await fetchApi(toChatUrl(chatPage))
 
 	// a failed load raises an error instead of returning an empty conversation
 	if (!response.ok) {
@@ -82,7 +82,7 @@ export async function sendChatTurn({
 	try {
 		const historyChatTurns = history.slice(-CHAT_HISTORY_TURNS)
 		const uncompactedChatTurnStart = toUncompactedChatTurnStart(historyChatTurns)
-		const response = await fetch(toChatUrl(page), {
+		const response = await fetchApi(toChatUrl(page), {
 			method: "POST",
 			headers: { "Content-Type": "application/json" },
 			body: JSON.stringify({
@@ -122,7 +122,7 @@ export async function sendChatTurn({
 export async function sendClearChat(chatPage: ChatPage): Promise<boolean> {
 	// ask the server to clear, reading a request that never left as a clear that did not happen
 	try {
-		const response = await fetch(toChatUrl(chatPage), { method: "DELETE" })
+		const response = await fetchApi(toChatUrl(chatPage), { method: "DELETE" })
 		return response.ok
 	} catch (error) {
 		console.error("chat clear failed", error)
@@ -141,7 +141,7 @@ export function toChatAttachmentUrl(chatAttachmentId: string): string {
  * Deletes one of the user's own kept attachments and returns whether the server accepted it.
  */
 export async function sendDeleteKeptAttachment(keptAttachmentId: string): Promise<boolean> {
-	const response = await fetch(toApiUrl(`/api/chat-attachments/${keptAttachmentId}`), { method: "DELETE" })
+	const response = await fetchApi(`/api/chat-attachments/${keptAttachmentId}`, { method: "DELETE" })
 	return response.ok
 }
 

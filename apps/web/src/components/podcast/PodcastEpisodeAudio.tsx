@@ -34,7 +34,7 @@ export function PodcastEpisodeAudio() {
 	useEffect(() => (audioRef.current ? registerPodcastEpisodeAudio(audioRef.current) : undefined), [])
 
 	// tell the player store whether the user is signed in
-	const { data: session } = authClient.useSession()
+	const { data: session } = authClient().useSession()
 	useEffect(() => setIsUserSignedIn(Boolean(session)), [session])
 	return (
 		<>

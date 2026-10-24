@@ -90,7 +90,7 @@ function ConnectedNoteEditor({
 	const { isDark } = useTheme()
 
 	// the signed-in user's id names their comments
-	const { data: session } = authClient.useSession()
+	const { data: session } = authClient().useSession()
 	const userId = session?.user.id ?? ""
 
 	// comment writes go to the api, which applies them to the ydoc and fans them back out.

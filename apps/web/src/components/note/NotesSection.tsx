@@ -38,7 +38,7 @@ export function NotesSection({
 	const [notes, setNotes] = useState<NotesResponse | null>(null)
 
 	// a visitor is sent to the sign-up page instead of the create modal, and returns to this page once signed up
-	const { data: session } = authClient.useSession()
+	const { data: session } = authClient().useSession()
 	const isSignedOut = !session
 	const pageHref = useLocation({ select: (location) => location.href })
 

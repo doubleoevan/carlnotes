@@ -26,7 +26,10 @@ hour, and a day in milliseconds, `isUtcWeekend`, which says whether a moment fal
 `youtube.ts` builds a YouTube video's watch page url and its player url, and holds `TOPIC_TUTORIAL_VIDEO`, the video on
 making a topic that the homepage, the menus, and the docs build all read, with the marker a docs page writes for it.
 `mobileApp.ts` holds `MOBILE_APP_BUNDLE_IDENTIFIER`, the iOS bundle identifier and Android package that the mobile
-app's config and the api's Apple provider both read.
+app's config and the api's Apple provider both read, and `MOBILE_APP_SCHEME` with its origin, which the app's config
+and the api's trusted origins both read. `signupGate.ts` holds the signup gate as both clients see it: the gate cookie's
+name, `MIN_PASSWORD_LENGTH`, the credentials rule a sign-up form parses with, and the app gate's challenge and proof
+shapes.
 `text.ts` holds `toOneLineText`, which puts text on one line for a note, a title, a search query, or a hash, and
 `toDotSeparatedText`, which joins a line's parts on middle dots.
 `mcpCards.ts` names the MCP Apps cards and the data a tool result gives its card, `pagination.ts` holds the page

@@ -11,6 +11,9 @@ Closing SHALL require nothing beyond being signed in as the account in question.
 
 On success the browser SHALL leave with a full navigation to the homepage, so no signed-in state survives in memory.
 
+The mobile app's settings screen SHALL offer the same control with the same confirmation words, calling the same route,
+and on success SHALL sign the app out and show the sign-in screen, so no signed-in state survives in the app.
+
 #### Scenario: A user closes their own account
 
 - **WHEN** a signed-in user confirms closing their account
@@ -25,6 +28,11 @@ On success the browser SHALL leave with a full navigation to the homepage, so no
 
 - **WHEN** the close route is called without a session
 - **THEN** the response is 401 and no account is closed
+
+#### Scenario: A user closes their own account from the app
+
+- **WHEN** a user confirms closing their account on the app's settings screen
+- **THEN** the account is closed through the same route, the app signs out, and the sign-in screen shows
 
 ### Requirement: An admin closes another account from the console
 

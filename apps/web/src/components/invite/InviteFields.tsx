@@ -70,7 +70,7 @@ export function InviteFields({
 
 // the invite-by-link button and its menu: one row per webmail composer, then a plain copy
 function InviteLinkMenu({ inviteLink }: { inviteLink: InviteLink }) {
-	const { data: session } = authClient.useSession()
+	const { data: session } = authClient().useSession()
 	// open state, closed by each row's handler
 	const [isMenuOpen, setIsMenuOpen] = useState(false)
 

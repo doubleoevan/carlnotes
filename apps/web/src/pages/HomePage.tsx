@@ -19,7 +19,7 @@ import { useRegisterPageActions } from "@/stores/pageActionsStore"
 export function HomePage() {
 	const navigate = useNavigate()
 	// whether a user is signed in or a visitor is browsing
-	const { data: session } = authClient.useSession()
+	const { data: session } = authClient().useSession()
 	const isSignedIn = Boolean(session)
 	// the shared feed state: the sections, the finding, resource, and tag filters, and the reheat
 	const {

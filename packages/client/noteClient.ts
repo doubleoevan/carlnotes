@@ -3,7 +3,7 @@
 
 import type { noteVisibilities } from "@carlnotes/contracts/enums"
 import type { Note, NoteBadge, NoteCommentUser, NoteResponse, NotesResponse } from "@carlnotes/contracts/notes"
-import { apiClient, toApiUrl } from "./apiClient"
+import { apiClient, fetchApi } from "./apiClient"
 
 // a note visibility and a note page reference
 type NoteVisibility = (typeof noteVisibilities)[number]
@@ -83,7 +83,7 @@ export async function deleteNote(noteId: string): Promise<boolean> {
 export async function fetchNoteYdoc(noteId: string, stateVector: Uint8Array | null): Promise<Uint8Array | null> {
 	// the snapshot is raw bytes, so this is a plain fetch instead of the typed client
 	const stateVectorQuery = stateVector ? `?sv=${encodeURIComponent(toBase64(stateVector))}` : ""
-	const response = await fetch(toApiUrl(`/api/notes/${noteId}/ydoc${stateVectorQuery}`))
+	const response = await fetchApi(`/api/notes/${noteId}/ydoc${stateVectorQuery}`)
 	if (!response.ok) {
 		return null
 	}

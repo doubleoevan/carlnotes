@@ -2,6 +2,11 @@ import { authClient } from "@carlnotes/client/authClient"
 import { sendDeleteAccount, sendInviteAccess } from "@carlnotes/client/profileClient"
 import { useAvatar } from "@carlnotes/core/hooks/useAvatar"
 import { type UsernameChange, useUsernameChange } from "@carlnotes/core/hooks/useUsernameChange"
+import {
+	CLOSE_ACCOUNT_CONFIRMATION,
+	CLOSE_ACCOUNT_SECTION_TEXT,
+	REQUEST_FAILED_TEXT,
+} from "@carlnotes/core/lib/sessionCopy"
 import { Check, Info, Settings } from "lucide-react"
 import { type SubmitEvent, useState } from "react"
 import { UserAvatarPicker } from "@/components/avatar/UserAvatarPicker"
@@ -37,7 +42,7 @@ export function AccountSettings() {
 
 // the user profile settings
 function ProfileSection() {
-	const { data: session } = authClient.useSession()
+	const { data: session } = authClient().useSession()
 
 	// only a signed-in user has an account page
 	if (!session) {
@@ -142,7 +147,7 @@ export function ProfileFields({
 
 // the change email section. the current address is where scan emails are delivered, so a change is confirmed twice
 function EmailSection() {
-	const { data: session } = authClient.useSession()
+	const { data: session } = authClient().useSession()
 	const [newEmail, setNewEmail] = useState("")
 	const [isSubmitting, setIsSubmitting] = useState(false)
 	const [error, setError] = useState<string | null>(null)
@@ -154,7 +159,7 @@ function EmailSection() {
 		setIsSubmitting(true)
 		setError(null)
 		try {
-			const { error: changeError } = await authClient.changeEmail({ newEmail, callbackURL: "/account" })
+			const { error: changeError } = await authClient().changeEmail({ newEmail, callbackURL: "/account" })
 			if (changeError) {
 				setError(changeError.message ?? "That didn't work. Try again.")
 				return
@@ -162,7 +167,7 @@ function EmailSection() {
 			setIsRequested(true)
 		} catch (changeError) {
 			console.error("email change failed", changeError)
-			setError("That didn't reach Carl. Try again.")
+			setError(REQUEST_FAILED_TEXT)
 		} finally {
 			setIsSubmitting(false)
 		}
@@ -223,7 +228,7 @@ function PasswordSection() {
 		setError(null)
 		setIsChanged(false)
 		try {
-			const { error: changeError } = await authClient.changePassword({
+			const { error: changeError } = await authClient().changePassword({
 				currentPassword,
 				newPassword,
 				revokeOtherSessions: true,
@@ -238,7 +243,7 @@ function PasswordSection() {
 			setIsChanged(true)
 		} catch (error) {
 			console.error("password change failed", error)
-			setError("That didn't reach Carl. Try again.")
+			setError(REQUEST_FAILED_TEXT)
 		} finally {
 			setIsSubmitting(false)
 		}
@@ -280,7 +285,7 @@ const INVITE_CHOICES = [
 ] as const
 
 function InvitationsSection() {
-	const { data: session, refetch: refreshSession } = authClient.useSession()
+	const { data: session, refetch: refreshSession } = authClient().useSession()
 	const [inviteAccess, setInviteAccess] = useState<string | null>(null)
 	const [saveError, setSaveError] = useState<string | null>(null)
 	if (!session) {
@@ -356,30 +361,27 @@ function DeleteAccountSection() {
 			window.location.href = "/"
 		} catch (deleteError) {
 			console.error("account delete failed", deleteError)
-			setError("That didn't reach Carl. Try again.")
+			setError(REQUEST_FAILED_TEXT)
 		}
 	}
 
 	return (
 		<section className={cn(CARD_CLASS, "border-destructive")}>
 			<h3 className="text-destructive font-semibold">Close your account</h3>
-			<p className="text-muted-foreground mt-1 text-sm">
-				Your topics, findings, and chats go with it, and you stop following every topic. Any paid plan is canceled. This
-				cannot be undone.
-			</p>
+			<p className="text-muted-foreground mt-1 text-sm">{CLOSE_ACCOUNT_SECTION_TEXT}</p>
 			{error && <p className="text-destructive mt-2 text-sm">{error}</p>}
 			<Button variant="destructive" className="mt-3" onClick={() => setIsConfirming(true)}>
 				Close account
 			</Button>
 			{isConfirming && (
 				<ConfirmDialog
-					title="Close your account?"
-					confirmLabel="Close account"
-					cancelLabel="Keep it"
+					title={CLOSE_ACCOUNT_CONFIRMATION.title}
+					confirmLabel={CLOSE_ACCOUNT_CONFIRMATION.confirmLabel}
+					cancelLabel={CLOSE_ACCOUNT_CONFIRMATION.cancelLabel}
 					onConfirm={handleDeleteAccount}
 					onClose={() => setIsConfirming(false)}
 				>
-					Everything Carl kept for you goes with it, and any paid plan is canceled. This cannot be undone.
+					{CLOSE_ACCOUNT_CONFIRMATION.body}
 				</ConfirmDialog>
 			)}
 		</section>

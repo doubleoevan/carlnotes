@@ -16,7 +16,7 @@ export function McpConsentPage() {
 	const searchParams = useSearchParams()
 	const isQuerySigned = searchParams.has("sig")
 	const mcpClientId = searchParams.get("client_id")
-	const { data: session, isPending } = authClient.useSession()
+	const { data: session, isPending } = authClient().useSession()
 	const [mcpClientName, setMcpClientName] = useState<string | null | undefined>(undefined)
 	const [error, setError] = useState<string | null>(null)
 	const [isSubmitting, setIsSubmitting] = useState(false)

@@ -50,7 +50,7 @@ export function TeamMembersTable({
 	isReadOnly?: boolean
 	onChanged: () => void
 }) {
-	const { data: session } = authClient.useSession()
+	const { data: session } = authClient().useSession()
 	const currentUserId = isReadOnly ? null : (session?.user.id ?? null)
 
 	// the removal columns show for a leader, and for the user's own row

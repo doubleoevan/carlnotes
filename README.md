@@ -413,9 +413,9 @@ bun run build:storybook # build the component browser to apps/web/dist/nightshif
 bun run nightshift:write # write packages/nightshift/tokens.css, uniwind.css, and the Figma token files from the Nightshift TypeScript source; run it after changing a token. tokens.test.ts fails until you do
 bun run dev:mobile   # Expo dev server for apps/mobile under doppler, with the expo-mcp server on; a development build connects from a simulator, an emulator, or a phone on the LAN
 bun run dev:tunnel   # the Cloudflare tunnel that forwards Sign in with Apple's dev callback from apple-dev.carlnotes.com to the local api; run it beside bun run dev to sign in with Apple locally
-bun run mobile:build -- --profile development-simulator # EAS (Expo Application Services) cloud build of the mobile app; profiles: development, development-simulator, preview, production
+bun run mobile:build -- --profile development-simulator # EAS (Expo Application Services) cloud build of the mobile app; profiles: development, development-simulator, preview, production. rebuild the development client after a change that adds a native module, as the sign-in change did
 bun run mobile:update -- --channel production --environment production # publish an EAS Update to a channel's builds, on the fingerprint runtime policy; eas update needs both flags
-bun run mobile:env:sync # move the mobile values (the Sentry DSN, the PostHog key, the Sentry auth token) from Doppler dev and prd into the EAS environments
+bun run mobile:env:sync # move the mobile values (the Sentry DSN, the PostHog key, the Play Integrity cloud project number, the Sentry auth token) from Doppler dev and prd into the EAS environments
 ```
 
 The homepage needs `dev:ui` and `dev:api` running, or `bun run dev` for the whole stack, plus a seeded dev database

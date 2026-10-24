@@ -3,7 +3,13 @@
 import { afterEach, beforeEach, expect, mock, spyOn, test } from "bun:test"
 import { restoreRedisClient, stubRedisClient, stubUnreachableRedisClient } from "@carlnotes/db/redisClientStub"
 import { saveEnvSettings } from "@carlnotes/server/savedEnvSettings"
-import { signGateToken, verifyGateToken } from "./signupGate"
+import {
+	APP_SIGNUP_CHALLENGE_PURPOSE,
+	signGateToken,
+	signSingleUseToken,
+	verifyGateToken,
+	verifySingleUseToken,
+} from "./signupGate"
 
 // the signing secret the tokens use, set before each test
 const restoreEnvSettings = saveEnvSettings(["BETTER_AUTH_SECRET"])
@@ -44,6 +50,30 @@ test("a tampered token is rejected before its nonce is read", async () => {
 	expect(await verifyGateToken(`${payload}.${signature?.slice(1)}x`)).toBe(false)
 	expect(await verifyGateToken(payload ?? "")).toBe(false)
 	expect([...storedValueByKey.keys()].some((key) => key.startsWith("signup-gate:"))).toBe(true)
+})
+
+// a token is signed for one purpose. the app's challenge never passes as a gate cookie, and a gate cookie never passes
+// as a challenge
+test("a token verifies for its own purpose alone", async () => {
+	const storedValueByKey = stubRedisClient()
+	const challenge = await signSingleUseToken(APP_SIGNUP_CHALLENGE_PURPOSE)
+	const gateToken = await signGateToken()
+	expect([...storedValueByKey.keys()].some((key) => key.startsWith("app-signup-challenge:"))).toBe(true)
+
+	// each token fails the other purpose's signature, and passes its own
+	expect(await verifyGateToken(challenge)).toBe(false)
+	expect(await verifySingleUseToken(APP_SIGNUP_CHALLENGE_PURPOSE, gateToken)).toBe(false)
+	expect(await verifySingleUseToken(APP_SIGNUP_CHALLENGE_PURPOSE, challenge)).toBe(true)
+	expect(await verifyGateToken(gateToken)).toBe(true)
+})
+
+// the purpose is in the signature itself. a free challenge never passes as a gate cookie while Redis is down and the
+// nonce is not checked
+test("a challenge never passes as a gate cookie while Redis cannot be reached", async () => {
+	stubUnreachableRedisClient()
+	spyOn(console, "error").mockImplementation(() => {})
+	const challenge = await signSingleUseToken(APP_SIGNUP_CHALLENGE_PURPOSE)
+	expect(await verifyGateToken(challenge)).toBe(false)
 })
 
 // a Redis outage keeps signups working on the signed expiry alone

@@ -4,6 +4,7 @@ import type {
 	AnalyticsEventProperties,
 	BotAnalyticsEvent,
 	UserAnalyticsEvent,
+	VisitorAnalyticsEvent,
 } from "@carlnotes/contracts/analyticsEvents"
 import { PostHog } from "posthog-node"
 
@@ -27,6 +28,25 @@ export function trackBotEvent(event: BotAnalyticsEvent, botName: string, propert
 	// a send failure must never surface to the caller. the event is telemetry, not work
 	try {
 		analyticsClient()?.capture(toBotCapture(event, botName, properties))
+	} catch (error) {
+		console.error(`analytics capture failed for ${event}`, error)
+	}
+}
+
+// the distinct id every visitor event shares. the capture never creates a person profile
+const VISITOR_DISTINCT_ID = "visitor"
+
+/**
+ * Records one event for a visitor with no account, keyed to the shared visitor id.
+ */
+export function trackVisitorEvent(event: VisitorAnalyticsEvent, properties?: AnalyticsEventProperties): void {
+	// a send failure must never surface to the caller. the event is telemetry, not work
+	try {
+		analyticsClient()?.capture({
+			distinctId: VISITOR_DISTINCT_ID,
+			event,
+			properties: { ...properties, $process_person_profile: false },
+		})
 	} catch (error) {
 		console.error(`analytics capture failed for ${event}`, error)
 	}

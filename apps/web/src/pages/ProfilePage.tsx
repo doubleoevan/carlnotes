@@ -60,7 +60,7 @@ const profileRoute = getRouteApi("/_layout/profiles/$userId")
 export function ProfilePage() {
 	const { userId } = profileRoute.useParams()
 	const navigate = useNavigate()
-	const { data: session } = authClient.useSession()
+	const { data: session } = authClient().useSession()
 	// the profile the route loads on the server, or null after a browser navigation
 	const loadedProfile = profileRoute.useLoaderData({ select: (loaderData) => loaderData?.profile ?? null })
 	const [profile, setProfile] = useState<ProfileResponse | null>(loadedProfile)
@@ -298,7 +298,7 @@ function ProfileHeader({
 	profileTeamStatuses: ProfileTeamStatus[] | null
 	onLoadProfileTeamStatuses: () => void
 }) {
-	const { data: session } = authClient.useSession()
+	const { data: session } = authClient().useSession()
 	// the unread chat mentions and note changes the user has, across topics and teams, summed on the avatar badge
 	const chatMentions = useAllChatMentions()
 	const noteBadges = useAllNoteBadges()

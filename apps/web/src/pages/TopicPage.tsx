@@ -47,7 +47,7 @@ export function TopicPage() {
 	const { topic, topicGate, reloadTopicPage } = useTopicPagePayload({ topicId, topicSlug })
 	const navigate = useNavigate()
 	// the session gates the Follow button. a visitor's click is sent to signup instead
-	const { data: session } = authClient.useSession()
+	const { data: session } = authClient().useSession()
 	// the shared feed state includes the homepage reload plus the finding filter this page's action bar reads
 	const { reloadTopicFeed: reloadHomePage, findingFilter } = useTopicFeed()
 	// the open dialog, or null if no dialog is open

@@ -45,7 +45,7 @@ export function PodcastEpisodeQuestionButton({
 }) {
 	const navigate = useNavigate()
 	const { phase, isVoiceRecording } = usePodcastEpisodeQuestion()
-	const { data: session } = authClient.useSession()
+	const { data: session } = authClient().useSession()
 
 	// the recording that ends itself on the voice activity detector and sends its transcript to the question
 	const voiceRecording = useVoiceRecording({

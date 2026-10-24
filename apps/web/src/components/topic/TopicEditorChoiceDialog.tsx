@@ -88,7 +88,7 @@ export function useNewTopicDialog(onTopicCreated?: () => void): {
 } {
 	// the router, the session, and whether the dialog is open
 	const navigate = useNavigate()
-	const { data: session } = authClient.useSession()
+	const { data: session } = authClient().useSession()
 	const [isNewTopicDialogOpen, setIsNewTopicDialogOpen] = useState(false)
 
 	// open the dialog for a signed-in user, and send a visitor to sign up first

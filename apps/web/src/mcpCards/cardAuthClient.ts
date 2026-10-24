@@ -1,17 +1,17 @@
 // the auth client an mcp card reads in place of Better Auth's. vite.mcpCards.config.ts aliases
 // @carlnotes/client/authClient to this file. the session is the caller the tool result names, so no request leaves the
 // card
-import type { authClient as betterAuthClient } from "@carlnotes/client/authClient"
+import type { AuthClient } from "@carlnotes/client/authClient"
 import { useCardData } from "./cardHost"
 
 // the session Better Auth's useSession returns, with the user fields the api's auth config adds
-type CardSession = typeof betterAuthClient.$Infer.Session
+type CardSession = AuthClient["$Infer"]["Session"]
 
 /**
  * The client's methods a card's components reach. useSession returns the tool result's caller as Better Auth's hook
  * shapes it, and signOut does nothing.
  */
-export const authClient = {
+const cardAuthClient = {
 	useSession: () => {
 		const { session } = useCardData()
 		const cardSession = session
@@ -28,4 +28,11 @@ export const authClient = {
 		return { data: cardSession, isPending: false, error: null, refetch: async () => {} }
 	},
 	signOut: async () => ({ data: null, error: null }),
+}
+
+/**
+ * Returns the card's client in place of the configured one.
+ */
+export function authClient(): typeof cardAuthClient {
+	return cardAuthClient
 }

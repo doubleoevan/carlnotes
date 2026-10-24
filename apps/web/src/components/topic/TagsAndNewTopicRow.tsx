@@ -18,7 +18,7 @@ import { useNewTopicDialog } from "./TopicEditorChoiceDialog"
 export function TagsAndNewTopicRow({ tags, onTagsChange }: { tags: string[]; onTagsChange: (tags: string[]) => void }) {
 	// the tags across the feed, the plan's topic quota, and the dialog a created topic reloads the feed behind
 	const { topicFeed, knownTags, reloadTopicFeed } = useTopicFeed()
-	const { data: session } = authClient.useSession()
+	const { data: session } = authClient().useSession()
 	const { openNewTopicDialog, newTopicDialog } = useNewTopicDialog(() => void reloadTopicFeed())
 	return (
 		<div className="flex flex-wrap items-start justify-between gap-3">

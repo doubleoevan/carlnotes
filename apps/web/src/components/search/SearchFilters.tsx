@@ -60,7 +60,7 @@ export function SearchFilters({
 	const hasFindingFilters = topicFeed.hasTopicFeed || Boolean(searchFindingFilterState)
 	// a team topic's page supports team bookmark filtering, which the search page does not
 	const hasTeamBookmarks = Boolean(usePageActions()?.hasTeamBookmarks) && !searchFindingFilterState
-	const { data: session } = authClient.useSession()
+	const { data: session } = authClient().useSession()
 	const topicFindingFilterOptions = TOPIC_FINDING_FILTERS.filter(
 		(filterOption) => filterOption !== "bookmarked" || Boolean(session),
 	)

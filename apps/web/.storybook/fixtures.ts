@@ -1,6 +1,6 @@
 // the invented people and data the stories render. every name is made up and every address is at example.com, so no
 // story holds real user data
-import type { authClient } from "@carlnotes/client/authClient"
+import type { AuthClient } from "@carlnotes/client/authClient"
 import type { ProfileIdentity } from "@carlnotes/contracts/profiles"
 
 /** The instant every fixture was created and updated, so a story renders the same dates on every run. */
@@ -10,7 +10,7 @@ export const FIXTURE_DATE = new Date("2026-10-01T12:00:00.000Z")
 export type StorySessionName = "visitor" | "user" | "admin"
 
 /** The session Better Auth's useSession returns, with the user fields the api's auth config adds. */
-export type StorySession = typeof authClient.$Infer.Session
+export type StorySession = AuthClient["$Infer"]["Session"]
 
 /** The invented people a story shows, the signed-in story user first. */
 export const STORY_PEOPLE = [

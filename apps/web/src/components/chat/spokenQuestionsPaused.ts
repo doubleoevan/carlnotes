@@ -43,7 +43,7 @@ export function toSpokenQuestionsPausedAction(
  */
 export function useSpokenQuestionsPausedAction(upgradePromptCta: UpgradePromptCta): () => void {
 	const navigate = useNavigate()
-	const { data: session } = authClient.useSession()
+	const { data: session } = authClient().useSession()
 
 	// premium has no plan above it, so its mic toasts when speaking comes back and stays on the page
 	return () => {

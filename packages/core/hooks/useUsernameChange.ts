@@ -3,6 +3,7 @@
 import { authClient } from "@carlnotes/client/authClient"
 import { sendUsername } from "@carlnotes/client/profileClient"
 import { useState } from "react"
+import { REQUEST_FAILED_TEXT } from "../lib/sessionCopy"
 
 // error messages for username changes
 const USERNAME_REJECTIONS: Record<string, string> = {
@@ -27,7 +28,7 @@ export type UsernameChange = {
  * The typed username and the save method. Refreshes the session on success.
  */
 export function useUsernameChange(onChanged?: () => void): UsernameChange {
-	const { refetch: refreshSession } = authClient.useSession()
+	const { refetch: refreshSession } = authClient().useSession()
 	const [username, setUsername] = useState("")
 	const [rejection, setRejection] = useState<string | null>(null)
 	const [isSaving, setIsSaving] = useState(false)
@@ -51,7 +52,7 @@ export function useUsernameChange(onChanged?: () => void): UsernameChange {
 			// a request that never reached the api gets a rejection message
 		} catch (error) {
 			console.error("username change failed", error)
-			setRejection("That didn't reach Carl. Try again.")
+			setRejection(REQUEST_FAILED_TEXT)
 			return false
 		} finally {
 			setIsSaving(false)

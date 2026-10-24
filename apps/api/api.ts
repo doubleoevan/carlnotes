@@ -1,6 +1,7 @@
 // the JSON endpoints the ui fetches, served under /api by the basePath
 
 import { signupGatePayload } from "@carlnotes/contracts/payloads"
+import { GATE_COOKIE_NAME } from "@carlnotes/contracts/signupGate"
 import { toDeviceProperties } from "@carlnotes/contracts/userAgent"
 import { cacheJson } from "@carlnotes/db/redis"
 import { appUrl } from "@carlnotes/server/appUrl"
@@ -9,10 +10,11 @@ import { zValidator } from "@hono/zod-validator"
 import { isAPIError } from "better-auth/api"
 import { Hono } from "hono"
 import { except } from "hono/combine"
-import { getCookie, setCookie } from "hono/cookie"
+import { getCookie } from "hono/cookie"
 import { z } from "zod"
 import { activityRoute } from "./activity"
 import { adminRoute } from "./admin"
+import { appSignupGateRoute } from "./appSignupGate"
 import { auth, MCP_RESOURCE_URL } from "./auth"
 import { loadDailyTopicQuota, topicLimit, topicsRemaining } from "./authorization"
 import { AVATAR_UPLOAD_PATH, avatarsRoute, TEAM_AVATAR_UPLOAD_PATH } from "./avatarsRoute"
@@ -49,13 +51,7 @@ import {
 	toTeamPreview,
 	toTopicPreview,
 } from "./share/preview"
-import {
-	GATE_COOKIE_MAX_AGE_SECONDS,
-	GATE_COOKIE_NAME,
-	signGateToken,
-	verifyGateToken,
-	verifyTurnstileToken,
-} from "./signupGate"
+import { setGateCookie, signGateToken, verifyGateToken, verifyTurnstileToken } from "./signupGate"
 import { teamsRoute } from "./team/teamsRoute"
 import { TOPIC_ATTACHMENT_UPLOAD_PATH, topicAttachmentsRoute } from "./topic/attachments"
 import { featuringRoute } from "./topic/featuring"
@@ -152,14 +148,11 @@ export const apiRoute = new Hono<AppEnv>()
 			return context.json({ error: "turnstile failed" }, 400)
 		}
 		// mark turnstile checked with a short-lived cookie. create.before reads it once signup actually completes
-		setCookie(context, GATE_COOKIE_NAME, await signGateToken(), {
-			httpOnly: true,
-			sameSite: "Lax",
-			maxAge: GATE_COOKIE_MAX_AGE_SECONDS,
-			path: "/",
-		})
+		setGateCookie(context, await signGateToken())
 		return context.json({ ok: true })
 	})
+	// the app's gate beside it, which sets the same cookie from device attestation
+	.route("/", appSignupGateRoute)
 	// the unsubscribe link of a topic-scan email. the signed token in the url is the auth, so no session is needed, and
 	// a fetch of the link changes nothing, so a mail provider or a scanner that checks the link unsubscribes nobody
 	.get("/unsubscribe", async (context) => {

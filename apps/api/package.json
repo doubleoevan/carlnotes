@@ -9,6 +9,7 @@
 	},
 	"dependencies": {
 		"@better-auth/cimd": "~1.7.11",
+		"@better-auth/expo": "1.7.11",
 		"@better-auth/mcp": "~1.7.11",
 		"@better-auth/oauth-provider": "~1.7.11",
 		"@blocknote/core": "0.56.0",
@@ -27,6 +28,7 @@
 		"@resvg/resvg-js": "^2.6.2",
 		"ai": "^7.0.145",
 		"better-auth": "~1.7.11",
+		"cbor2": "^2.4.0",
 		"drizzle-orm": "^0.45.4",
 		"hono": "^4.13.13",
 		"hono-rate-limiter": "^0.5.4",

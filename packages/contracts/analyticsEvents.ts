@@ -2,7 +2,7 @@
 // bot, and visit events that the server records and the browser sends
 
 // where a server event came from
-export type AnalyticsEntryPoint = "web" | "mcp" | "email" | "feed" | "worker" | "webhook"
+export type AnalyticsEntryPoint = "web" | "mobile" | "mcp" | "email" | "feed" | "worker" | "webhook"
 
 // an event's properties: short identifiers, numbers, and flags, never content
 export type AnalyticsEventProperties = Record<string, string | number | boolean>
@@ -89,6 +89,11 @@ export type BotAnalyticsEvent =
 	| "crawler_fetched"
 	| "link_unfurled"
 	| "feed_fetched"
+
+// the events the server records for a visitor with no account yet
+export type VisitorAnalyticsEvent =
+	// an app install whose attestation the signup gate rejected, by platform and reason
+	"signup_gate_rejected"
 
 // the events the browser sends for an anonymous visit, each named with a visit_ prefix
 export type VisitAnalyticsEvent =

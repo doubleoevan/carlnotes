@@ -158,7 +158,7 @@ function useOpenNewTopicChatOnEmptyFeed(pageContext: ChatPageContext | null, pan
  * The one chat panel that every page in the layout shares.
  */
 export function AppChatPanel() {
-	const { data: session } = authClient.useSession()
+	const { data: session } = authClient().useSession()
 	const { panelState, chatId, pageContext } = useChatPanel()
 	// the chat rooms, each with the user's unread chat mentions in it
 	const chatRooms = useChatRooms()

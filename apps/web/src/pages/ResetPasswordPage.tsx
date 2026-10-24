@@ -63,7 +63,7 @@ function ResetRequestForm() {
 				return
 			}
 			// the reply is the same either way
-			await authClient.requestPasswordReset({ email, redirectTo: "/reset-password" })
+			await authClient().requestPasswordReset({ email, redirectTo: "/reset-password" })
 			setIsSent(true)
 		} catch (requestError) {
 			console.error("password reset request failed", requestError)
@@ -129,7 +129,7 @@ function NewPasswordForm({ resetToken }: { resetToken: string }) {
 		setError(null)
 		// a dropped network call reads as an error instead of a submit button that stays stuck
 		try {
-			const { error: resetError } = await authClient.resetPassword({ token: resetToken, newPassword: password })
+			const { error: resetError } = await authClient().resetPassword({ token: resetToken, newPassword: password })
 			if (resetError) {
 				setError(resetError.message ?? "That link has expired or already been used.")
 				return

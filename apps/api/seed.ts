@@ -1,5 +1,6 @@
 // entry point for `bun run db:seed`
 import { plans } from "@carlnotes/contracts/enums"
+import { GATE_COOKIE_NAME } from "@carlnotes/contracts/signupGate"
 import { db } from "@carlnotes/db"
 import { users } from "@carlnotes/db/schema/users"
 import { seed as seedTopics } from "@carlnotes/db/seed"
@@ -7,7 +8,7 @@ import { replaceUserLiteLLMKey } from "@carlnotes/models/litellm"
 import { eq } from "drizzle-orm"
 import { auth } from "./auth"
 import { isAdminRole } from "./authorization"
-import { GATE_COOKIE_NAME, signGateToken } from "./signupGate"
+import { signGateToken } from "./signupGate"
 
 // fixed local credentials so the seeded demo topics are always reachable by logging in as the same account. the plan
 // users share the password

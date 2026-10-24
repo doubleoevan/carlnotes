@@ -1,14 +1,22 @@
 // auth tests: a signup's LiteLLM key and default avatar, the session hooks that keep Redis in sync with Postgres,
-// the verification values kept in both, and Apple's posted callback
+// the verification values kept in both, Apple's posted callback, and the origins the mobile app is trusted on
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
+import { MOBILE_APP_SCHEME_ORIGIN } from "@carlnotes/contracts/mobileApp"
 import { restoreConnectionPool, stubConnectionPool } from "@carlnotes/db/connectionPoolStub"
 import * as redis from "@carlnotes/db/redis"
 import * as redisRateLimits from "@carlnotes/db/redisRateLimits"
 import * as litellmProxy from "@carlnotes/models/litellmProxy"
 import { appUrl } from "@carlnotes/server/appUrl"
 import { quietErrorReports } from "@carlnotes/server/monitoringTestFixtures"
+import { saveEnvSettings } from "@carlnotes/server/savedEnvSettings"
 import { APPLE_ID_ORIGIN } from "./appleProvider"
-import { auth, loadAppleProviderOptions, sendAuthEmailInBackground, toSignupAvatarSource } from "./auth"
+import {
+	auth,
+	loadAppleProviderOptions,
+	sendAuthEmailInBackground,
+	toSignupAvatarSource,
+	toTrustedOrigins,
+} from "./auth"
 import * as sessions from "./sessions"
 import * as usernames from "./usernames"
 
@@ -208,4 +216,53 @@ test("a redirect to apple is never trusted", async () => {
 // without the Apple values, Better Auth registers no Apple provider for the account close to revoke with
 test("the apple provider options are undefined while apple is off", async () => {
 	expect(await loadAppleProviderOptions()).toBeUndefined()
+})
+
+// the environment the trusted origins read, put back after each test
+const restoreEnvSettings = saveEnvSettings(["DOPPLER_ENVIRONMENT", "LAN_DEV_URL"])
+afterEach(restoreEnvSettings)
+
+// the app's scheme is trusted everywhere, as one host-less pattern that covers the sign-in callbacks
+test("the mobile app's scheme is trusted in every environment", async () => {
+	Bun.env.DOPPLER_ENVIRONMENT = "prd"
+	expect(toTrustedOrigins()).toEqual([MOBILE_APP_SCHEME_ORIGIN])
+
+	// the callback url a sign-in names, and the origin header the app sends, both match the pattern
+	const authContext = await auth.$context
+	expect(authContext.isTrustedOrigin(`${MOBILE_APP_SCHEME_ORIGIN}/`)).toBe(true)
+	expect(authContext.isTrustedOrigin(`${MOBILE_APP_SCHEME_ORIGIN}/settings?cookie=abc`)).toBe(true)
+})
+
+// the Expo dev server's scheme and the lan are trusted in dev alone
+test("the development origins are trusted in dev alone", () => {
+	Bun.env.DOPPLER_ENVIRONMENT = "dev"
+	Bun.env.LAN_DEV_URL = "http://192.168.1.5:5173"
+	expect(toTrustedOrigins()).toEqual([MOBILE_APP_SCHEME_ORIGIN, "exp://", "http://192.168.*.*:*", "http://10.*.*.*:*"])
+
+	// without the lan url the lan patterns go, and outside dev the Expo scheme goes too
+	delete Bun.env.LAN_DEV_URL
+	expect(toTrustedOrigins()).toEqual([MOBILE_APP_SCHEME_ORIGIN, "exp://"])
+	Bun.env.DOPPLER_ENVIRONMENT = "prd"
+	expect(toTrustedOrigins()).not.toContain("exp://")
+})
+
+// an app request sends its session cookie with the Expo origin header and no origin. the expo plugin reads the header
+// as the origin, which the scheme pattern trusts
+test("an app request with a cookie passes the origin check", async () => {
+	spyOn(redisRateLimits, "incrementRateLimitWindow").mockResolvedValue({ count: 1, resetAt: Date.now() + 60_000 })
+	const authContext = await auth.$context
+	authContext.skipOriginCheck = false
+
+	// post a sign-out as the app does, then put the test setting back
+	try {
+		const response = await auth.handler(
+			new Request(`${appUrl()}/api/auth/sign-out`, {
+				method: "POST",
+				headers: { "expo-origin": MOBILE_APP_SCHEME_ORIGIN, cookie: "better-auth.session_token=abc" },
+			}),
+		)
+		expect(response.status).not.toBe(403)
+	} finally {
+		authContext.skipOriginCheck = true
+	}
 })

@@ -3,7 +3,7 @@
 import { SPOKEN_QUESTIONS_PAUSED_ERROR, type SpokenQuestionsState } from "@carlnotes/contracts/chat"
 import type { ConversationChatTurnKind } from "@carlnotes/contracts/enums"
 import type { SpokenAnswerPayload, SpokenEventPayload, VoiceChatPage } from "@carlnotes/contracts/payloads"
-import { readApiErrorMessage, toApiUrl } from "./apiClient"
+import { fetchApi, readApiErrorMessage } from "./apiClient"
 import { type ChatPage, type ChatRejection, toChatRejection } from "./chatClient"
 
 // the longest wait before the one retry of a 503 or a network failure, and the wait if the response named none
@@ -82,7 +82,7 @@ export async function sendTranscription({
  */
 export async function fetchSpokenQuestionsStatus(): Promise<SpokenQuestionsState["status"]> {
 	try {
-		const response = await fetch(toApiUrl("/api/chat/spoken-questions"))
+		const response = await fetchApi("/api/chat/spoken-questions")
 		return response.ok ? ((await response.json()) as SpokenQuestionsState).status : "allowed"
 	} catch (error) {
 		// the network's own failure
@@ -128,9 +128,9 @@ export async function fetchSpokenAnswerAudio({
 
 // fetch a request, and fetch it once more after a 503 or a network failure, after the wait toRetryDelayMs returns.
 // a retry whose request never arrived throws
-async function fetchWithOneRetry(url: string, init: RequestInit): Promise<Response> {
+async function fetchWithOneRetry(path: string, init: RequestInit): Promise<Response> {
 	// the first attempt, with a network failure read as no response
-	const firstResponse = await fetch(url, init).catch((error: unknown) => {
+	const firstResponse = await fetchApi(path, init).catch((error: unknown) => {
 		console.error("voice request failed, retrying", error)
 		return null
 	})
@@ -140,7 +140,7 @@ async function fetchWithOneRetry(url: string, init: RequestInit): Promise<Respon
 
 	// wait as long as the response asked, then try once more
 	await new Promise((resolve) => setTimeout(resolve, toRetryDelayMs(firstResponse)))
-	return fetch(url, init)
+	return fetchApi(path, init)
 }
 
 /**
@@ -159,7 +159,7 @@ export function toRetryDelayMs(response: Response | null): number {
  */
 export function sendSpokenEvent({ page, event }: SpokenEventPayload): void {
 	// keepalive lets the post finish after the page is gone
-	fetch(toApiUrl("/api/chat/spoken-events"), {
+	fetchApi("/api/chat/spoken-events", {
 		method: "POST",
 		headers: { "Content-Type": "application/json" },
 		body: JSON.stringify({ page, event }),

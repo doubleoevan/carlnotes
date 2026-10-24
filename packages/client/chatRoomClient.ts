@@ -7,7 +7,7 @@ import {
 	type ChatRoomMessagePage,
 } from "@carlnotes/contracts/chat"
 import type { ChatAttachment } from "@carlnotes/contracts/payloads"
-import { apiClient, readApiErrorMessage } from "./apiClient"
+import { apiClient, fetchApi, readApiErrorMessage } from "./apiClient"
 
 /**
  * Loads the chat room's latest chat messages. Null means this user has no chat room here,
@@ -21,7 +21,7 @@ export async function fetchChatRoomMessages(
 	// a rejection status is an answer, and any other error is a failure to retry
 	try {
 		const chatRoomPath = toChatRoomPath(topicId, teamId)
-		const response = await fetch(
+		const response = await fetchApi(
 			beforeChatMessageId === undefined ? chatRoomPath : `${chatRoomPath}?before=${beforeChatMessageId}`,
 		)
 		if (response.status === 401 || response.status === 403 || response.status === 404) {
@@ -52,7 +52,7 @@ export async function fetchChatRoomMessageLinkPreviews(
 ): Promise<Record<number, ChatLinkPreview[]>> {
 	// a network error, a rejected status, and a body that is not json each read as no cards yet
 	try {
-		const response = await fetch(`${toChatRoomPath(topicId, teamId)}/link-previews?ids=${chatMessageIds.join(",")}`)
+		const response = await fetchApi(`${toChatRoomPath(topicId, teamId)}/link-previews?ids=${chatMessageIds.join(",")}`)
 		if (!response.ok) {
 			return {}
 		}

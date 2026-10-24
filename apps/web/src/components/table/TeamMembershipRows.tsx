@@ -151,7 +151,7 @@ export function TeamMembershipRow({
 
 // the Invited by cell: who invited the user, or their own profile when they joined on their own
 function InvitedByCell({ invitedBy }: { invitedBy: ProfileIdentity | null }) {
-	const { data: session } = authClient.useSession()
+	const { data: session } = authClient().useSession()
 	const invitedByProfile = invitedBy ?? (session ? toSessionProfileIdentity(session.user) : null)
 	return (
 		<td className="py-2 pr-4 whitespace-nowrap">

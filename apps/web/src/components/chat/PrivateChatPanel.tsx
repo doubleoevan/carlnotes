@@ -114,7 +114,7 @@ export function PrivateChatPanel({
 	const navigate = useNavigate()
 	const chat = useTopicChat(page)
 	// the user authors every question bubble
-	const { data: session } = authClient.useSession()
+	const { data: session } = authClient().useSession()
 
 	// a visitor's send opens the signup page, tagged as a signup from the chat
 	const handleSendChat = chat.isSignupRequired ? () => navigate(toSignupNavigation("chat")) : chat.send

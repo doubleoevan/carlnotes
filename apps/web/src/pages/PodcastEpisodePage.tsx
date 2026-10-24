@@ -94,7 +94,7 @@ export function PodcastEpisodePage() {
 	}, [podcastEpisodePage, pageId, topicSlug, navigate])
 
 	// read the session, and register the actions menu
-	const { data: session } = authClient.useSession()
+	const { data: session } = authClient().useSession()
 	useRegisterPodcastEpisodePageActions({
 		podcastEpisodePage,
 		isSignedIn: Boolean(session),

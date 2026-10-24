@@ -3,7 +3,7 @@ import { isLeaderRole } from "@carlnotes/contracts/enums"
 import { type Invite, type InviteSource, inviteCreateResponse } from "@carlnotes/contracts/invites"
 import type { CreateTeamPayload, UpdateTeamPayload } from "@carlnotes/contracts/payloads"
 import type { TeamPageResponse, TeamSummary, TeamsPageResponse } from "@carlnotes/contracts/teams"
-import { apiClient, readApiErrorMessage, showClientError, toApiUrl } from "./apiClient"
+import { apiClient, fetchApi, readApiErrorMessage, showClientError } from "./apiClient"
 
 // how creating a team was rejected, for the modal to show which way it went. a failure is any other rejected response
 export type CreateTeamRejection = "quota" | "name-taken" | "failed"
@@ -181,7 +181,7 @@ export async function sendTeamAvatar(teamId: string, avatarFile: File): Promise<
 	// send the image. a network failure fails the upload instead of throwing an error
 	const body = new FormData()
 	body.append("avatar", avatarFile)
-	const response = await fetch(toApiUrl(`/api/teams/${teamId}/avatar`), { method: "POST", body }).catch(() => null)
+	const response = await fetchApi(`/api/teams/${teamId}/avatar`, { method: "POST", body }).catch(() => null)
 	if (!response) {
 		return "failed"
 	}

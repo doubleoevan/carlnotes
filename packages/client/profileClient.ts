@@ -1,6 +1,6 @@
 // the user profile api client
 import type { ProfileResponse, ProfileTeamStatus } from "@carlnotes/contracts/profiles"
-import { apiClient, readApiErrorMessage, toApiUrl } from "./apiClient"
+import { apiClient, fetchApi, readApiErrorMessage } from "./apiClient"
 
 // a user's public profile by id, or null if there is no such user
 export async function fetchProfile(userId: string): Promise<ProfileResponse | null> {
@@ -22,7 +22,7 @@ export async function sendUsername(username: string): Promise<string | null> {
 export async function uploadAvatar(file: File): Promise<string | null> {
 	const body = new FormData()
 	body.append("avatar", file)
-	const response = await fetch(toApiUrl("/api/avatars"), { method: "POST", body })
+	const response = await fetchApi("/api/avatars", { method: "POST", body })
 	if (response.ok) {
 		return null
 	}
@@ -44,7 +44,7 @@ export async function sendAvatarDecodeFailure(avatarDecodeFailure: {
 export async function sendAvatarSource(avatarSource: "generated" | "oauth"): Promise<void> {
 	const body = new FormData()
 	body.append("avatarSource", avatarSource)
-	const response = await fetch(toApiUrl("/api/avatars"), { method: "POST", body })
+	const response = await fetchApi("/api/avatars", { method: "POST", body })
 	if (!response.ok) {
 		throw new Error(`avatar source change failed: ${response.status}`)
 	}
@@ -52,7 +52,7 @@ export async function sendAvatarSource(avatarSource: "generated" | "oauth"): Pro
 
 // close the signed-in user's own account. throws an error on a rejection so the account page can show it failed
 export async function sendDeleteAccount(): Promise<void> {
-	const response = await fetch(toApiUrl("/api/users/me"), { method: "DELETE" })
+	const response = await fetchApi("/api/users/me", { method: "DELETE" })
 	if (!response.ok) {
 		throw new Error(`account delete failed: ${response.status}`)
 	}
@@ -60,7 +60,7 @@ export async function sendDeleteAccount(): Promise<void> {
 
 // the user's teams, each with the profile user's status there
 export async function fetchProfileTeamStatuses(profileUserId: string): Promise<ProfileTeamStatus[]> {
-	const response = await fetch(toApiUrl(`/api/profiles/${encodeURIComponent(profileUserId)}/team-statuses`))
+	const response = await fetchApi(`/api/profiles/${encodeURIComponent(profileUserId)}/team-statuses`)
 	if (!response.ok) {
 		throw new Error(`profile team statuses load failed: ${response.status}`)
 	}

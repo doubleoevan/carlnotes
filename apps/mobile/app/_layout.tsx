@@ -1,20 +1,22 @@
-// the root layout: the stylesheet, the fonts behind the splash screen, the api client, and the providers
+// the root layout: the stylesheet, the auth and api clients, the fonts behind the splash screen, the providers, and
+// the sign-in guard over the screens
 import "../global.css"
 import { configureApiClient } from "@carlnotes/client/apiClient"
+import { authClient } from "@carlnotes/client/authClient"
 import { ArchitectsDaughter_400Regular } from "@expo-google-fonts/architects-daughter"
 import { Karla_400Regular, Karla_500Medium, Karla_600SemiBold, Karla_700Bold } from "@expo-google-fonts/karla"
 import * as Sentry from "@sentry/react-native"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
-import Constants from "expo-constants"
 import { useFonts } from "expo-font"
 import { Stack, usePathname } from "expo-router"
 import * as SplashScreen from "expo-splash-screen"
 import { PostHogProvider, usePostHog } from "posthog-react-native"
 import { useEffect } from "react"
 import { Alert } from "react-native"
-import { toApiBaseUrl } from "../src/apiBaseUrl"
+import { toApiRequestSettings } from "../src/apiRequestSettings"
+import { apiBaseUrl, hasSession, mobileAuthClient } from "../src/authClient"
 
-// hold the splash screen until the fonts load
+// hold the splash screen until the fonts and the session load
 SplashScreen.preventAutoHideAsync()
 
 // report errors only when the build has a DSN. a build without one sends nothing and skips the instrumentation
@@ -27,10 +29,16 @@ if (sentryDsn) {
 const posthogApiKey = process.env.EXPO_PUBLIC_POSTHOG_KEY ?? ""
 const POSTHOG_HOST = "https://us.i.posthog.com"
 
-// configure the shared api client once before the first screen renders. an error shows as a native alert
+// configure the shared api client once before the first screen renders, after the auth client that its headers read.
+// every request sends the stored session cookie, and a 401 signs a revoked session out. an error shows as a native alert
 configureApiClient({
-	apiBaseUrl: toApiBaseUrl({ isDevelopment: __DEV__, hostUri: Constants.expoConfig?.hostUri }),
+	apiBaseUrl,
 	showError: (message) => Alert.alert("CarlNotes", message),
+	...toApiRequestSettings({
+		getCookie: () => mobileAuthClient.getCookie(),
+		hasSession,
+		signOut: () => mobileAuthClient.signOut(),
+	}),
 })
 
 // one query client for the whole app
@@ -57,19 +65,24 @@ function RootLayout() {
 		},
 	])
 
-	// hide the splash screen once the fonts load or fail
+	// the session, seeded from secure storage before the first read answers. a user sees no loading state
+	const { data: session, isPending: isSessionPending } = authClient().useSession()
+	const isReady = (isFontLoaded || Boolean(fontLoadError)) && !isSessionPending
+
+	// hide the splash screen once the fonts and the session are in
 	useEffect(() => {
-		if (isFontLoaded || fontLoadError) {
+		if (isReady) {
 			SplashScreen.hideAsync()
 		}
-	}, [isFontLoaded, fontLoadError])
+	}, [isReady])
 
-	// render nothing until then. no screen flashes a fallback font
-	if (!isFontLoaded && !fontLoadError) {
+	// render nothing until then. no screen flashes a fallback font or the wrong side of the guard
+	if (!isReady) {
 		return null
 	}
 
 	// posthog stays disabled without a key. such a build records nothing
+	const isSignedIn = Boolean(session)
 	return (
 		<PostHogProvider
 			apiKey={posthogApiKey}
@@ -78,7 +91,17 @@ function RootLayout() {
 		>
 			<QueryClientProvider client={queryClient}>
 				<ScreenViewRecorder />
-				<Stack screenOptions={{ headerShown: false }} />
+				{/* the guard: a user sees the app's screens, a visitor the sign-in and sign-up screens */}
+				<Stack screenOptions={{ headerShown: false }}>
+					<Stack.Protected guard={isSignedIn}>
+						<Stack.Screen name="index" />
+						<Stack.Screen name="settings" />
+					</Stack.Protected>
+					<Stack.Protected guard={!isSignedIn}>
+						<Stack.Screen name="sign-in" />
+						<Stack.Screen name="sign-up" />
+					</Stack.Protected>
+				</Stack>
 			</QueryClientProvider>
 		</PostHogProvider>
 	)

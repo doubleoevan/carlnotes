@@ -26,6 +26,9 @@ export const SPEECH_RATE_LIMIT = 60
 // how many spoken events one user may send in one rate limit window, apart from the speech limit
 export const SPOKEN_EVENT_RATE_LIMIT = 30
 
+// how many app signup gate requests one address may send in a rate limit window, the credential paths' number
+export const APP_SIGNUP_GATE_RATE_LIMIT = 10
+
 // the bucket that visitors share if no client address can be trusted
 const SHARED_BUCKET = "shared"
 
@@ -129,4 +132,15 @@ export const speechRateLimiter = toRateLimiter({
 export const spokenEventRateLimiter = toRateLimiter({
 	limit: SPOKEN_EVENT_RATE_LIMIT,
 	store: toRateLimitStore("rate-limit:spoken-events"),
+})
+
+// the app signup gate limiters, keyed by the address, one over the challenge route and one over the proof route, so a
+// sign-up attempt spends one hit on each. every Android proof spends one of Google's daily decodes
+export const appSignupChallengeRateLimiter = toRateLimiter({
+	limit: APP_SIGNUP_GATE_RATE_LIMIT,
+	store: toRateLimitStore("rate-limit:app-signup-challenge"),
+})
+export const appSignupGateRateLimiter = toRateLimiter({
+	limit: APP_SIGNUP_GATE_RATE_LIMIT,
+	store: toRateLimitStore("rate-limit:app-signup-gate"),
 })

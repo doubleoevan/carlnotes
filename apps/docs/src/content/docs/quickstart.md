@@ -18,6 +18,11 @@ Go to [carlnotes.com](https://carlnotes.com) and pick a sign-in: **Continue with
 account's email address. If you hide your email with Apple, your brew notes go to the private address Apple makes for
 you, and Apple forwards them to your inbox.
 
+In the CarlNotes app for iPhone and Android, the same account signs in: **Continue with Google**, **Continue with
+Apple**, which opens Apple's own sheet on iPhone, or **Continue with email**. Creating an account by email in the app
+asks for the same email and password, with no check to complete. The app's **Settings** screen signs you out and
+closes your account, the same way the web's account page does.
+
 Opened CarlNotes from a link inside another app, such as LinkedIn or Instagram? Then you're in that app's embedded
 browser, and Google blocks sign-in there. CarlNotes detects this and shows the email form first, with a notice. On
 Android, it adds a link that reopens the page in Chrome. On iPhone, use the in-app browser's own menu to open the page

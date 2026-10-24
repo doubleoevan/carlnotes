@@ -22,7 +22,7 @@ import { cn } from "@/lib/utils"
  */
 export function AdminPage() {
 	usePageTitle("Admin")
-	const { data: session } = authClient.useSession()
+	const { data: session } = authClient().useSession()
 	const [adminConsole, setAdminConsole] = useState<AdminConsoleResponse | null>(null)
 	const [isForbidden, setIsForbidden] = useState(false)
 	const [isManagingAdmins, setIsManagingAdmins] = useState(false)

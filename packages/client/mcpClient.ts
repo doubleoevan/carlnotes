@@ -1,5 +1,5 @@
 // the api client for the mcp consent page. it fetches the mcp client's name and sends the user's consent
-import { apiClient, toApiUrl } from "./apiClient"
+import { apiClient, fetchApi } from "./apiClient"
 
 /**
  * Fetches the name of the mcp client asking for consent, or null when no client has that id.
@@ -21,7 +21,7 @@ export async function fetchMcpClientName(clientId: string): Promise<string | nul
  */
 export async function sendMcpConsent(oauthQuery: string, isAccepted: boolean): Promise<string> {
 	// post the consent to better auth's consent endpoint. the typed api client has no path for it
-	const consentResponse = await fetch(toApiUrl("/api/auth/oauth2/consent"), {
+	const consentResponse = await fetchApi("/api/auth/oauth2/consent", {
 		method: "POST",
 		headers: { "Content-Type": "application/json" },
 		body: JSON.stringify({ accept: isAccepted, oauth_query: oauthQuery }),

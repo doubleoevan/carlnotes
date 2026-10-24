@@ -178,7 +178,7 @@ function BookmarkMark({
 // the bookmark mark's tooltip, with the remove hint over everyone who kept the finding, the user first
 function BookmarkMarkTooltip({ teamBookmarks }: { teamBookmarks: TopicFinding["teamBookmarks"] }) {
 	// the user, then each team member who kept the finding
-	const { data: session } = authClient.useSession()
+	const { data: session } = authClient().useSession()
 	const sessionUser = session?.user
 	const userBookmarks = sessionUser ? [toSessionProfileIdentity(sessionUser)] : []
 	const teamMemberBookmarks = teamBookmarks.filter((teamBookmark) => teamBookmark.userId !== sessionUser?.id)

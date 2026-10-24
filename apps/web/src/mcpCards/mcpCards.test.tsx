@@ -60,7 +60,7 @@ test("the card fetch returns a podcast episode from the tool result and fails ev
 
 test("the card's auth client reads the tool result's caller", () => {
 	function SessionUsername() {
-		const { data: session } = authClient.useSession()
+		const { data: session } = authClient().useSession()
 		return <span>{(session?.user as { username?: string } | undefined)?.username ?? "visitor"}</span>
 	}
 	expect(renderToStaticMarkup(<SessionUsername />)).toBe("<span>vienna</span>")

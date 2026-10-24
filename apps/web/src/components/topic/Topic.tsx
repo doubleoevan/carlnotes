@@ -128,7 +128,7 @@ export function Topic({ topic, index, className }: TopicProps) {
 function SubscribeToggle({ topic }: { topic: TopicFeed }) {
 	const navigate = useNavigate()
 	const { reloadTopicFeed } = useTopicFeed()
-	const { data: session } = authClient.useSession()
+	const { data: session } = authClient().useSession()
 
 	// a visitor is sent to signup, a signed-in user toggles their topic subscription and reloads the topic feed
 	async function handleClick(): Promise<void> {

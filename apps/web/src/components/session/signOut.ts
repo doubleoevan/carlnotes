@@ -1,15 +1,16 @@
 // signing out, one click and done
 
 import { authClient } from "@carlnotes/client/authClient"
+import { toSignOutFailedText } from "@carlnotes/core/lib/sessionCopy"
 import { toast } from "sonner"
 
 /**
  * Signs the user out and reloads the page, so the signed-in controls disappear. A failure shows a toast.
  */
 export async function signOutAndReload(): Promise<void> {
-	const { error } = await authClient.signOut()
+	const { error } = await authClient().signOut()
 	if (error) {
-		toast(`Carl could not sign you out. ${error.message ?? "Try again in a moment."}`)
+		toast(toSignOutFailedText(error.message))
 		return
 	}
 	window.location.reload()

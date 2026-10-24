@@ -1,5 +1,5 @@
 // the expo app config: the identity, the EAS project link, the icon and splash, and the config plugins
-import { MOBILE_APP_BUNDLE_IDENTIFIER } from "@carlnotes/contracts/mobileApp"
+import { MOBILE_APP_BUNDLE_IDENTIFIER, MOBILE_APP_SCHEME } from "@carlnotes/contracts/mobileApp"
 import { colors } from "@carlnotes/nightshift/colors"
 import { withSentry } from "@sentry/react-native/expo"
 import type { ExpoConfig } from "expo/config"
@@ -7,12 +7,12 @@ import type { ExpoConfig } from "expo/config"
 // the EAS project the app links to. eas init cannot write into a dynamic config, so the id lives here
 const EAS_PROJECT_ID = "7b874ce7-cb2a-4d50-a8d7-fb89e078b247"
 
-// the app: CarlNotes, its store identifiers, and the url scheme the sign-in change redirects through
+// the app: CarlNotes, its store identifiers, and the url scheme a browser sign-in returns through
 const expoConfig: ExpoConfig = {
 	name: "CarlNotes",
 	slug: "carlnotes",
 	owner: "carlnotes",
-	scheme: "carlnotes",
+	scheme: MOBILE_APP_SCHEME,
 	version: "0.1.0",
 	orientation: "portrait",
 	icon: "./assets/icon.png",
@@ -20,6 +20,14 @@ const expoConfig: ExpoConfig = {
 	ios: {
 		bundleIdentifier: MOBILE_APP_BUNDLE_IDENTIFIER,
 		supportsTablet: true,
+		// the native Sign in with Apple sheet
+		usesAppleSignIn: true,
+		// App Attest in Apple's production environment on every build. a store or TestFlight build ignores the setting
+		// and uses production anyway, and an ad hoc preview build follows it. a preview build then attests against the
+		// production api
+		entitlements: {
+			"com.apple.developer.devicecheck.appattest-environment": "production",
+		},
 	},
 	android: {
 		package: MOBILE_APP_BUNDLE_IDENTIFIER,
@@ -43,6 +51,9 @@ const expoConfig: ExpoConfig = {
 	},
 	plugins: [
 		"expo-router",
+		"expo-apple-authentication",
+		"expo-secure-store",
+		"expo-web-browser",
 		[
 			"expo-splash-screen",
 			{

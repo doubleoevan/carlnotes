@@ -15,7 +15,7 @@ type AvatarSetting = {
 
 // the signal that better-auth's own plugins raise to make every useSession re-fetch
 function refreshAuthSession(): void {
-	authClient.$store.notify("$sessionSignal")
+	authClient().$store.notify("$sessionSignal")
 }
 
 /**
@@ -23,7 +23,7 @@ function refreshAuthSession(): void {
  * An update refreshes it instead of each page keeping its own state.
  */
 export function useAvatar(): AvatarSetting {
-	const { data: session } = authClient.useSession()
+	const { data: session } = authClient().useSession()
 	const providerImageUrl = session?.user.image ?? null
 
 	// swap between the generated image and the oauth provider's photo

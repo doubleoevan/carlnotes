@@ -25,7 +25,7 @@ export function ActivityPage() {
 	usePageTitle("Activity")
 	// the topic invitations waiting for the user's response, badged on the title
 	const topicInviteBadges = useTopicInviteBadges()
-	const { data: session } = authClient.useSession()
+	const { data: session } = authClient().useSession()
 	const [activity, setActivity] = useState<ActivityResponse | null>(null)
 	// a load the api rejected or did not respond to
 	const [isLoadFailed, setIsLoadFailed] = useState(false)

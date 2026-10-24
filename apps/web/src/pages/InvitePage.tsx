@@ -23,7 +23,7 @@ export function InvitePage() {
 	usePageTitle("Invitation")
 	const { token } = inviteRoute.useParams()
 	const navigate = useNavigate()
-	const { data: session, isPending } = authClient.useSession()
+	const { data: session, isPending } = authClient().useSession()
 	const [inviteRejection, setInviteRejection] = useState<InviteRejection | "teamFull" | null>(null)
 	// whether the acceptance request failed to reach the api, which a retry may pass
 	const [isInviteAcceptFailed, setIsInviteAcceptFailed] = useState(false)

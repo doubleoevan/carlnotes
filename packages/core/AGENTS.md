@@ -26,7 +26,8 @@ state and rules with no browser in them. It imports `@carlnotes/contracts`, `@ca
   Featured kept in its own order),
   `topicPromptUrls.ts` (the urls written inside a topic prompt), `emailProviders.ts` (the webmail compose urls an invite
   is given), `chromeIntentUrl.ts` (the page as an Android intent url that opens it in Chrome, out of an embedded
-  webview), and `voiceRecordingDecisions.ts` (what the voice recorder decides from each frame).
+  webview), `sessionCopy.ts` (the lines the sign-in, sign-out, sign-up, and close-account controls say, shared by the
+  web and the mobile app), and `voiceRecordingDecisions.ts` (what the voice recorder decides from each frame).
 - Imports: `@carlnotes/contracts`, `@carlnotes/client`, and `react`. Never a server package or an app. Universal: the
   root rule. A module that needs a DOM type is a web module and lives in `apps/web/src`.
 - Tests: `bun test packages/core`.

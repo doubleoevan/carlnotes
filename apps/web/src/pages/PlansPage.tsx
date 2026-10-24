@@ -51,7 +51,7 @@ export function PlansPage() {
 	usePageTitle("Plans")
 	// say what upgrading unlocks if a mic past the spoken questions cutoff sent the user here
 	useCtaPromptToast(UPGRADE_PROMPTS, UPGRADE_PROMPT_TOAST_ID)
-	const { data: session } = authClient.useSession()
+	const { data: session } = authClient().useSession()
 	const [isYearly, setIsYearly] = useState(false)
 	const [billingInterval, setBillingInterval] = useState<BillingInterval | null>(null)
 	const [isRedirecting, setIsRedirecting] = useState(false)

@@ -1,12 +1,12 @@
 // the flag-content call, for a Topic or a profile
 import type { FlagContentPayload } from "@carlnotes/contracts/payloads"
-import { readApiErrorMessage, toApiUrl } from "./apiClient"
+import { fetchApi, readApiErrorMessage } from "./apiClient"
 
 /**
  * Flag a Topic or profile. Throws an error with the api's reason on a rejection.
  */
 export async function sendFlagContent(payload: FlagContentPayload): Promise<void> {
-	const response = await fetch(toApiUrl("/api/flag-content"), {
+	const response = await fetchApi("/api/flag-content", {
 		method: "POST",
 		headers: { "Content-Type": "application/json" },
 		body: JSON.stringify(payload),
