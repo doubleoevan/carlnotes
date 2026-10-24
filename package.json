@@ -16,6 +16,10 @@
 		"dev:temporal:watch": "doppler run -- bun --watch apps/worker/temporal.ts",
 		"dev:email": "email dev --dir packages/emails --port 3011",
 		"dev:docs": "bun run --cwd apps/docs dev",
+		"dev:mobile": "doppler run -- bun run --cwd apps/mobile start",
+		"mobile:build": "bun run --cwd apps/mobile eas build",
+		"mobile:update": "bun run --cwd apps/mobile eas update",
+		"mobile:env:sync": "doppler run -- bun scripts/sync-mobile-env.ts && doppler run --config prd -- bun scripts/sync-mobile-env.ts",
 		"build:ui": "bun run --cwd apps/web build",
 		"build:docs": "bun run --cwd apps/docs build",
 		"dev:storybook": "STORYBOOK_DISABLE_TELEMETRY=1 bun run --cwd apps/web dev:storybook",
@@ -102,12 +106,15 @@
 		"drizzle-kit": "^0.31.11",
 		"drizzle-orm": "^0.45.4",
 		"promptfoo": "^0.124.1",
-		"react": "^19.3.1",
+		"react": "19.3.0",
 		"react-email": "^6.11.3",
 		"typescript": "^5.9.3"
 	},
 	"trustedDependencies": [
 		"@swc/core",
 		"protobufjs"
-	]
+	],
+	"patchedDependencies": {
+		"markdown-to-jsx@9.10.3": "patches/markdown-to-jsx@9.10.3.patch"
+	}
 }

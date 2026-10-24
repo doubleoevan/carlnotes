@@ -133,7 +133,11 @@ attachment's reach, an OAuth grant's permissions, and a Temporal `CancellationSc
 which already means an email's subject line and the target of a flagged report. A Note's own
 `private` / `team` / `public` setting is its **visibility**, never its scope. A **page number** is the other sense of
 the word, the position in a paged list, and identifiers say `pageNumber` (from 1), `pageIndex` (from 0), and `pageCount`
-so the two never meet in one name.
+so the two never meet in one name. A third sense is the web app's rendered route (`apps/web/src/pages/`, `HomePage`).
+The mobile app calls a rendered route a **screen** (`HomeScreen` in `apps/mobile/app/`), the native platform's word, so
+"page" on mobile keeps the first two senses only. EAS keeps its own name in identifiers and files (`eas.json`,
+`eas-cli`), since Expo Application Services is the vendor's product; prose says EAS Build or EAS Update when the
+service matters.
 
 ## Follow and subscribe are one concept: follow is the client-facing word, subscribe is the code word
 Client-facing copy says **follow**, **follower**, and **following**. Every identifier says **subscribe**,

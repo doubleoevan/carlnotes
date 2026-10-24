@@ -217,7 +217,7 @@ export function Header() {
 									<AttributionButton />
 								</p>
 								<p className="mt-3 font-bold">
-									{"Give Carl three topics. You know the ones. He'll brew a hot cup of what you just missed."}
+									{"Give Carl a topic. You know the one. He'll brew a hot cup of what you just missed."}
 									<PitchButton />
 								</p>
 								<p className="text-hero-accent mt-1 font-bold">

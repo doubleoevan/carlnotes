@@ -8,8 +8,10 @@
 	},
 	"dependencies": {
 		"@carlnotes/client": "workspace:*",
-		"@carlnotes/contracts": "workspace:*",
-		"react": "^19.3.1"
+		"@carlnotes/contracts": "workspace:*"
+	},
+	"peerDependencies": {
+		"react": "^19.3.0"
 	},
 	"devDependencies": {
 		"@types/react": "^19.3.0"

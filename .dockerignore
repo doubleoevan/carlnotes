@@ -41,6 +41,11 @@ CLAUDE.md
 **/*.test.tsx
 **/*.smoke.ts
 
+# the mobile app never runs in the image. the frozen install skips a workspace whose package.json is not on disk.
+# the tsconfig alone stays, because the docs build reads the root tsconfig, whose references name apps/mobile
+apps/mobile
+!apps/mobile/tsconfig.json
+
 # the litellm service builds from its own image, not this context
 infra
 docker-compose.yml

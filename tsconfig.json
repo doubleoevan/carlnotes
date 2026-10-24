@@ -13,6 +13,7 @@
 		{ "path": "./apps/api" },
 		{ "path": "./apps/worker" },
 		{ "path": "./apps/web" },
+		{ "path": "./apps/mobile" },
 		{ "path": "./scripts" },
 		{ "path": "./evals" }
 	]

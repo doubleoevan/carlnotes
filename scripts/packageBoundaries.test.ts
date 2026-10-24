@@ -55,8 +55,17 @@ const WEB: Workspace = {
 	references: ["packages/client", "packages/contracts"],
 }
 
+// the mobile app. it depends on the universal packages only
+const MOBILE: Workspace = {
+	folder: "apps/mobile",
+	name: "@carlnotes/mobile",
+	dependencies: ["@carlnotes/client", "@carlnotes/contracts"],
+	devDependencies: [],
+	references: ["packages/client", "packages/contracts"],
+}
+
 // the whole map, which most tests check against
-const WORKSPACES = [CONTRACTS, CLIENT, DB, API, WEB]
+const WORKSPACES = [CONTRACTS, CLIENT, DB, API, WEB, MOBILE]
 
 // a resolver over an in-memory dependency graph. a name outside the graph does not resolve
 function toFakeResolver(graph: Record<string, string[]>): ResolvePackage {
@@ -111,6 +120,22 @@ test("toImportViolations flags an app import and passes a type-only api import f
 	expect(toFileViolations("packages/db/x.ts", 'import type { AppType } from "@carlnotes/api"\n')).toEqual([
 		"packages/db: packages/db/x.ts:1 imports @carlnotes/api. an app is never imported",
 	])
+})
+
+// the mobile app imports @carlnotes packages only among the universal four. the api's types are no exception
+test("toImportViolations flags a non-universal import from the mobile app and passes a universal one", () => {
+	// a server package fails the mobile rule. the api's types fail the app rule
+	expect(toFileViolations("apps/mobile/app/index.tsx", 'import { topics } from "@carlnotes/db/schema"\n')).toEqual([
+		"apps/mobile: apps/mobile/app/index.tsx:1 imports @carlnotes/db/schema. the mobile app imports only the universal packages",
+	])
+	expect(toFileViolations("apps/mobile/app/index.tsx", 'import type { AppType } from "@carlnotes/api"\n')).toEqual([
+		"apps/mobile: apps/mobile/app/index.tsx:1 imports @carlnotes/api. an app is never imported",
+	])
+
+	// a declared universal import passes
+	expect(
+		toFileViolations("apps/mobile/app/index.tsx", 'import { searchSite } from "@carlnotes/client/searchClient"\n'),
+	).toEqual([])
 })
 
 // the web app imports nightshift's stylesheet anywhere and its TypeScript only from a test, a story, or the
@@ -234,6 +259,32 @@ test("toPackageJsonViolations flags a server package in a universal package.json
 	])
 })
 
+// the mobile app's package.json declares universal packages only. even a dev dependency on the api fails
+test("toPackageJsonViolations flags a non-universal dependency of the mobile app and passes the universal ones", () => {
+	// the clean mobile app passes
+	expect(toPackageJsonViolations({ workspaces: WORKSPACES, workspace: MOBILE })).toEqual([])
+
+	// a server package fails
+	const mobileOnDb = {
+		...MOBILE,
+		dependencies: [...MOBILE.dependencies, "@carlnotes/db"],
+		references: [...MOBILE.references, "packages/db"],
+	}
+	expect(toPackageJsonViolations({ workspaces: WORKSPACES, workspace: mobileOnDb })).toEqual([
+		"apps/mobile: apps/mobile/package.json depends on @carlnotes/db. the mobile app depends on the universal packages only",
+	])
+
+	// the api fails even as a dev dependency. only the api client package and the web app may declare it
+	const mobileOnApi = {
+		...MOBILE,
+		devDependencies: ["@carlnotes/api"],
+		references: [...MOBILE.references, "apps/api"],
+	}
+	expect(toPackageJsonViolations({ workspaces: WORKSPACES, workspace: mobileOnApi })).toEqual([
+		"apps/mobile: apps/mobile/package.json depends on @carlnotes/api. the mobile app depends on the universal packages only",
+	])
+})
+
 // the closure walk: the walk follows each installed package's own dependencies and names the chain to a server one
 test("toClosureViolations flags a server dependency reached through the chain and passes a clean closure", () => {
 	const cleanResolver = toFakeResolver({ "@carlnotes/contracts": ["zod"], zod: [], hono: [] })
@@ -317,6 +368,30 @@ test("the Biome override and the boundary rules name the same universal packages
 
 	// they match the rules' set
 	expect(new Set(overrideFolders)).toEqual(UNIVERSAL_WORKSPACE_FOLDERS)
+
+	// the mobile override denies Bun and the browser globals. process stays allowed for the EXPO_PUBLIC values
+	const mobileOverride = biomeConfig.overrides.find((override) => override.includes.includes("apps/mobile/**"))
+	const mobileRestrictedGlobals = mobileOverride?.linter?.rules?.style?.noRestrictedGlobals as
+		| { options: { deniedGlobals: Record<string, string> } }
+		| undefined
+	const deniedGlobals = Object.keys(mobileRestrictedGlobals?.options.deniedGlobals ?? {})
+
+	// the denied set holds Bun and the browser globals. process is not denied
+	expect(deniedGlobals).toContain("Bun")
+	expect(deniedGlobals).toContain("window")
+	expect(deniedGlobals).not.toContain("process")
+})
+
+// the patched markdown-to-jsx keeps react-native out of its lockfile peers. bun links peers from the lockfile's
+// manifest entry. an update of the package would write the registry's peers back and link the React Native closure
+// into the image, so this test fails first
+test("the markdown-to-jsx lock entry names no react-native peer", () => {
+	const lockfileText = readFileSync("bun.lock", "utf8")
+	const markdownEntryLine = lockfileText
+		.split("\n")
+		.find((line) => line.includes('"markdown-to-jsx": ["markdown-to-jsx@'))
+	expect(markdownEntryLine).toBeDefined()
+	expect(markdownEntryLine).not.toContain("react-native")
 })
 
 // globals.css keeps the component browser's files out of tailwind's scan, the same files the boundary rules name

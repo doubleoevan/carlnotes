@@ -1,0 +1,14 @@
+diff --git a/package.json b/package.json
+index 21ee17489e602c315339b4af1ceb72dc89723eed..91c40bd2776d9464db358868c1f7a8a4c324f707 100644
+--- a/package.json
++++ b/package.json
+@@ -160,9 +160,6 @@
+     "react": {
+       "optional": true
+     },
+-    "react-native": {
+-      "optional": true
+-    },
+     "solid-js": {
+       "optional": true
+     },

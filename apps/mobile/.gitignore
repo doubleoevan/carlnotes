@@ -1,0 +1,3 @@
+# expo's local state and the exported bundles
+.expo/
+dist/

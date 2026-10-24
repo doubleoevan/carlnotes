@@ -11,7 +11,7 @@ the stack, how the apps and packages fit together, the evals, and the commands t
 Carl doesn't check the news. The news checks in with Carl. Carl never sleeps. He drinks coffee and reads everything. He
 finished the internet. Now he checks nightly for new stuff. And when you drop by, he has notes and a podcast.
 
-**Give Carl three topics. You know the ones. He'll brew a hot cup of what you just missed.**
+**Give Carl a topic. You know the one. He'll brew a hot cup of what you just missed.**
 
 Carl stays up. You stay informed.
 
@@ -410,7 +410,11 @@ bun run build:docs   # build static docs to apps/docs/dist, which the api serves
                      # /docs on the api (3000) and through the Vite proxy (5173) is this build, which only changes when you rerun this script and doesn't hot reload
 bun run dev:storybook # the Nightshift component browser, Storybook with hot reload on localhost:6006, and its MCP server at localhost:6006/mcp that .mcp.json and opencode.json register; no doppler needed
 bun run build:storybook # build the component browser to apps/web/dist/nightshift, which the api serves at /nightshift; run it after build:ui, which can clear apps/web/dist
-bun run nightshift:write # write packages/nightshift/tokens.css and the Figma token files from the Nightshift TypeScript source; run it after changing a token. tokens.test.ts fails until you do
+bun run nightshift:write # write packages/nightshift/tokens.css, uniwind.css, and the Figma token files from the Nightshift TypeScript source; run it after changing a token. tokens.test.ts fails until you do
+bun run dev:mobile   # Expo dev server for apps/mobile under doppler, with the expo-mcp server on; a development build connects from a simulator, an emulator, or a phone on the LAN
+bun run mobile:build -- --profile development-simulator # EAS (Expo Application Services) cloud build of the mobile app; profiles: development, development-simulator, preview, production
+bun run mobile:update -- --channel production --environment production # publish an EAS Update to a channel's builds, on the fingerprint runtime policy; eas update needs both flags
+bun run mobile:env:sync # move the mobile values (the Sentry DSN, the PostHog key, the Sentry auth token) from Doppler dev and prd into the EAS environments
 ```
 
 The homepage needs `dev:ui` and `dev:api` running, or `bun run dev` for the whole stack, plus a seeded dev database

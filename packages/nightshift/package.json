@@ -5,6 +5,7 @@
 	"type": "module",
 	"exports": {
 		"./tokens.css": "./tokens.css",
+		"./uniwind.css": "./uniwind.css",
 		"./*": "./*.ts"
 	},
 	"devDependencies": {

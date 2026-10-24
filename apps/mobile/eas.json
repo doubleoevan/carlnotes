@@ -1,0 +1,33 @@
+{
+	"cli": {
+		"version": ">= 25.3.0"
+	},
+	"build": {
+		"development": {
+			"developmentClient": true,
+			"distribution": "internal",
+			"environment": "development",
+			"bun": "1.4.3"
+		},
+		"development-simulator": {
+			"extends": "development",
+			"ios": {
+				"simulator": true
+			}
+		},
+		"preview": {
+			"distribution": "internal",
+			"environment": "preview",
+			"channel": "preview",
+			"bun": "1.4.3"
+		},
+		"production": {
+			"environment": "production",
+			"channel": "production",
+			"bun": "1.4.3"
+		}
+	},
+	"submit": {
+		"production": {}
+	}
+}

@@ -23,6 +23,9 @@ Apps, the deployable entry points:
   monthly budget reset, the docs embed, and the modules only the sweep reads.
 - `apps/docs/` — the Starlight docs site, built to static files the api serves at `/docs`, with the design files and
   the release notes convention beside it.
+- `apps/mobile/` — the Expo app: CarlNotes for iOS and Android on a development build, with the routes under
+  `apps/mobile/app/`, the Nightshift theme through Uniwind, and EAS Build and Update. It depends on the universal
+  packages alone, stays out of the production image, and its accessibility bar lives in its AGENTS.md.
 
 Packages, private `@carlnotes/<name>` workspaces that export source, in dependency order:
 
@@ -46,6 +49,7 @@ Beside them at the root:
 
 - `infra/` — the service configs the app runs beside: litellm, llm-guard, and the Northflank pipelines.
 - `content/blog/` — the blog posts `apps/api/content.ts` serves.
+- `patches/` — the dependency patches `bun install` applies, named in the root package.json's `patchedDependencies`.
 - `evals/` — the evals that measure the model-facing prompts, their graders, and the review pipeline, one folder each,
   and `evalHarness.ts`, which the promptfoo evals share. They make real model calls, so no eval runs in `bun test`.
   The Evals workflow runs the promptfoo evals in CI, report-only.
@@ -69,6 +73,7 @@ Each app and package has its own AGENTS.md with entry points, layout, and comman
 | Docs page | `apps/docs/src/content/`, its shared pieces in `apps/docs/src/components/`, the video plugin `apps/docs/src/topicTutorialVideoPlugin.ts`, then `bun run docs:embed` | write-docs | `apps/docs/dist/` (built) |
 | Eval work | `evals/README.md`, `evals/evalHarness.ts`, `evals/evalChecks.ts`, `evals/<eval>/`, `.github/workflows/evals.yml`, `.github/workflows/llm-guard-update.yml` | prompt-authoring | app modules except the function the eval calls |
 | Podcast episode, player, feed, or cover | `packages/pipeline/podcast/`, `apps/worker/workflows/recordPodcastEpisode.ts`, `apps/api/podcast/`, `apps/api/share/podcastFeed.ts`, `apps/api/share/podcastCover.ts`, `packages/models/speech.ts`, `packages/contracts/podcastEpisodes.ts`, `packages/server/podcastEpisodeSettings.ts`, `packages/server/podcastCoverPaths.ts`, `apps/web/src/components/podcast/`, `apps/web/src/pages/PodcastEpisodePage.tsx` | domain-model, prompt-authoring | `packages/db/migrations/` |
+| Mobile screen or setup | `apps/mobile/app/` for the routes, `apps/mobile/src/` for the app's own logic, `packages/nightshift/uniwindCss.ts` for the theme, the accessibility bar in `apps/mobile/AGENTS.md` | jsx-conventions | `apps/api/`; every `@carlnotes` package outside the universal four — the boundary check enforces it |
 | MCP tool, MCP card, Topic Tool, or the Add to AI dialog | `apps/api/mcp/`, `apps/api/tool/`, `apps/web/src/mcpCards/`, `apps/web/src/components/common/AddToAiDialog.tsx` | domain-model | `apps/worker/`; `packages/pipeline/` and `packages/models/` beyond `budget.ts` and the modules the tool imports |
 
 Domain vocabulary is canonical and enforced, so grepping a domain noun reliably finds its code.
@@ -80,7 +85,10 @@ Generated or archived paths that burn context:
 - `packages/db/migrations/` — generated SQL and snapshots; the schema is `packages/db/schema/`
 - `apps/web/src/routeTree.gen.ts` — the route tree Vite generates from `apps/web/src/routes/`; the routes are the files
 - `apps/web/dist/`, `apps/docs/dist/` — built web app, component browser, and docs output
-- `packages/nightshift/tokens.css`, `packages/nightshift/figma/` — generated from the Nightshift TypeScript source
+- `packages/nightshift/tokens.css`, `packages/nightshift/uniwind.css`, `packages/nightshift/figma/` — generated from
+  the Nightshift TypeScript source
+- `apps/mobile/uniwind-types.d.ts` — the class-name declarations Uniwind generates from the theme; the source is
+  `packages/nightshift/uniwindCss.ts`
 - `coverage/` — test coverage output
 - `openspec/changes/archive/` — archived OpenSpec changes
 - `.agents/skills/{ai-sdk,vercel-react-best-practices,web-design-guidelines,impeccable,ponytail}/` — vendored skills,

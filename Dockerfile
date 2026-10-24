@@ -7,8 +7,10 @@ FROM oven/bun:1.4.3@sha256:ec06c3b6cea04192ae6770c434f668ca41d343ad19fa6472216c7
 WORKDIR /app
 
 # install against the committed lockfile on its own layer, so it caches until a dependency actually changes.
-# each workspace's package.json on its own line. a glob COPY flattens them into one directory
+# each workspace's package.json on its own line. a glob COPY flattens them into one directory.
+# patches holds the dependency patches the lockfile names, which the install applies
 COPY package.json bun.lock ./
+COPY patches ./patches
 COPY apps/api/package.json ./apps/api/
 COPY apps/docs/package.json ./apps/docs/
 COPY apps/web/package.json ./apps/web/
@@ -67,8 +69,9 @@ RUN apt-get update \
 COPY --from=dopplerhq/cli:3.77.0@sha256:bc59e0e97ea596a2c402f108043b9fd6ad574db253998364de939c0ca373453e /bin/doppler /bin/doppler
 
 # resolve production dependencies from the same lockfile the build stage used. each workspace's package.json on its
-# own line. the install links each @carlnotes package into node_modules by it
+# own line. the install links each @carlnotes package into node_modules by it, and applies the dependency patches
 COPY package.json bun.lock ./
+COPY patches ./patches
 COPY apps/api/package.json ./apps/api/
 COPY apps/docs/package.json ./apps/docs/
 COPY apps/web/package.json ./apps/web/

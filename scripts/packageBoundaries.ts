@@ -5,7 +5,16 @@ import { posix } from "node:path"
 const WEB_APP_FOLDER = "apps/web"
 
 // the app packages, which no app or package imports
-const APP_PACKAGE_NAMES = new Set(["@carlnotes/web", "@carlnotes/api", "@carlnotes/worker", "@carlnotes/docs"])
+const APP_PACKAGE_NAMES = new Set([
+	"@carlnotes/web",
+	"@carlnotes/api",
+	"@carlnotes/worker",
+	"@carlnotes/docs",
+	"@carlnotes/mobile",
+])
+
+// the mobile app's folder. it depends on the universal packages only, the api's types included
+const MOBILE_APP_FOLDER = "apps/mobile"
 
 // the api package, and the workspaces that import it as types only
 const API_PACKAGE_NAME = "@carlnotes/api"
@@ -18,6 +27,11 @@ export const UNIVERSAL_WORKSPACE_FOLDERS = new Set([
 	"packages/core",
 	"packages/nightshift",
 ])
+
+// the universal packages by name: each folder's basename under the @carlnotes scope
+const UNIVERSAL_PACKAGE_NAMES = new Set(
+	[...UNIVERSAL_WORKSPACE_FOLDERS].map((folder) => `@carlnotes/${posix.basename(folder)}`),
+)
 
 // the server dependencies a universal package's runtime closure never reaches
 const SERVER_DEPENDENCY_NAMES = new Set([
@@ -205,12 +219,28 @@ function toImportViolation({ workspace, sourceFile, parsedImport }: ToImportViol
 	if (!packageName.startsWith("@carlnotes/")) {
 		return undefined
 	}
+	return toCarlnotesImportViolation({ workspace, packageName, isTypeOnly })
+}
 
+// the workspace, the @carlnotes package an import names, and whether the import brings in types only
+type ToCarlnotesImportViolationOptions = { workspace: Workspace; packageName: string; isTypeOnly: boolean }
+
+// the @carlnotes rule one import breaks: the app rule, the mobile rule, or the declaration rule
+function toCarlnotesImportViolation({
+	workspace,
+	packageName,
+	isTypeOnly,
+}: ToCarlnotesImportViolationOptions): string | undefined {
 	// an app is imported by nothing, except the api as types only from the api client package and the web app
 	const isTypeOnlyApiImport =
 		packageName === API_PACKAGE_NAME && isTypeOnly && TYPE_ONLY_API_IMPORTERS.has(workspace.folder)
 	if (APP_PACKAGE_NAMES.has(packageName) && !isTypeOnlyApiImport) {
 		return "an app is never imported"
+	}
+
+	// the mobile app imports @carlnotes packages only among the universal four
+	if (workspace.folder === MOBILE_APP_FOLDER && !UNIVERSAL_PACKAGE_NAMES.has(packageName)) {
+		return "the mobile app imports only the universal packages"
 	}
 
 	// the package.json declares the package
@@ -293,14 +323,15 @@ export function toPackageJsonViolations({ workspaces, workspace }: ToPackageJson
 		)
 	}
 
-	// a universal package depends on universal packages only
-	if (UNIVERSAL_WORKSPACE_FOLDERS.has(workspace.folder)) {
+	// a universal package, and the mobile app, depend on universal packages only
+	if (UNIVERSAL_WORKSPACE_FOLDERS.has(workspace.folder) || workspace.folder === MOBILE_APP_FOLDER) {
 		violations.push(...toNonUniversalDependencyViolations({ workspaces, workspace }))
 	}
 	return violations
 }
 
-// the non-universal @carlnotes packages a universal workspace depends on. the api passes as a type-only dev dependency
+// the non-universal @carlnotes packages a universal workspace or the mobile app depends on. the api passes as a
+// type-only dev dependency only for the workspaces allowed it. the mobile app is not one
 function toNonUniversalDependencyViolations({ workspaces, workspace }: ToPackageJsonViolationsOptions): string[] {
 	const violations: string[] = []
 	for (const dependencyName of toCarlnotesDependencyNames(workspace)) {
@@ -312,10 +343,16 @@ function toNonUniversalDependencyViolations({ workspaces, workspace }: ToPackage
 			dependencyName === API_PACKAGE_NAME &&
 			TYPE_ONLY_API_IMPORTERS.has(workspace.folder) &&
 			!workspace.dependencies.includes(dependencyName)
+
+		// name the rule for the workspace kind
+		const ruleText =
+			workspace.folder === MOBILE_APP_FOLDER
+				? "the mobile app depends on the universal packages only"
+				: "a universal package depends on universal packages only"
+
+		// report a dependency neither universal nor the allowed type-only api
 		if (!isUniversal && !isTypeOnlyApi) {
-			violations.push(
-				`${workspace.folder}: ${workspace.folder}/package.json depends on ${dependencyName}. a universal package depends on universal packages only`,
-			)
+			violations.push(`${workspace.folder}: ${workspace.folder}/package.json depends on ${dependencyName}. ${ruleText}`)
 		}
 	}
 	return violations

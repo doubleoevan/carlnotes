@@ -1,0 +1,22 @@
+{
+	"extends": "../../tsconfig.base.json",
+	"compilerOptions": {
+		"lib": ["ESNext"],
+		"types": ["bun", "react"]
+	},
+	"references": [
+		{
+			"path": "../../packages/client"
+		},
+		{
+			"path": "../../packages/contracts"
+		},
+		{
+			"path": "../../packages/core"
+		},
+		{
+			"path": "../../packages/nightshift"
+		}
+	],
+	"include": ["app/**/*.ts", "app/**/*.tsx", "src/**/*.ts", "src/**/*.tsx", "*.ts"]
+}

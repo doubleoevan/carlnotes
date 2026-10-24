@@ -20,7 +20,9 @@
 			"!apps/web/public",
 			"!apps/web/src/routeTree.gen.ts",
 			"!packages/nightshift/tokens.css",
-			"!packages/nightshift/figma"
+			"!packages/nightshift/uniwind.css",
+			"!packages/nightshift/figma",
+			"!apps/mobile/uniwind-types.d.ts"
 		]
 	},
 	"formatter": {
@@ -100,6 +102,31 @@
 									"matchMedia": "a universal package has no viewport",
 									"Bun": "a universal package runs where there is no Bun. the server package reads the environment",
 									"process": "a universal package runs where there is no process. the server package reads the environment"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		{
+			"includes": ["apps/mobile/**", "!**/*.test.ts", "!**/*.test.tsx", "!**/*TestFixtures.ts"],
+			"linter": {
+				"rules": {
+					"style": {
+						"noRestrictedGlobals": {
+							"level": "error",
+							"options": {
+								"deniedGlobals": {
+									"window": "the mobile app has no DOM. process stays allowed for the EXPO_PUBLIC values Metro inlines",
+									"document": "the mobile app has no DOM",
+									"navigator": "the mobile app has no browser navigator",
+									"location": "the mobile app has no browser location",
+									"localStorage": "the mobile app has no browser storage",
+									"sessionStorage": "the mobile app has no browser storage",
+									"history": "the mobile app has no browser history",
+									"matchMedia": "the mobile app has no viewport media queries",
+									"Bun": "the mobile app runs where there is no Bun"
 								}
 							}
 						}
