@@ -109,7 +109,7 @@
 		"promptfoo": "^0.124.1",
 		"react": "19.3.0",
 		"react-email": "^6.11.3",
-		"typescript": "^5.9.3"
+		"typescript": "^7.0.2"
 	},
 	"trustedDependencies": [
 		"@swc/core",
