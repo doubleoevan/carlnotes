@@ -68,6 +68,7 @@
 		"@storybook/addon-ondevice-actions": "10.7.0",
 		"@storybook/addon-ondevice-controls": "10.7.0",
 		"@storybook/react-native": "10.7.0",
+		"@storybook/react-native-ui": "10.7.0",
 		"@types/react": "^19.3.0",
 		"eas-cli": "^25.3.0",
 		"expo-mcp": "~0.2.1",
