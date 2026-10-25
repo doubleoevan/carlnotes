@@ -12,8 +12,6 @@
 		"@better-auth/expo": "1.7.11",
 		"@better-auth/mcp": "~1.7.11",
 		"@better-auth/oauth-provider": "~1.7.11",
-		"@blocknote/core": "0.56.0",
-		"@blocknote/server-util": "0.56.0",
 		"@carlnotes/contracts": "workspace:*",
 		"@carlnotes/db": "workspace:*",
 		"@carlnotes/emails": "workspace:*",
@@ -39,7 +37,6 @@
 		"sanitize-html": "2.18.1",
 		"satori": "^0.63.0",
 		"stripe": "^22.6.2",
-		"yjs": "13.6.33",
 		"zod": "^4.6.7"
 	},
 	"devDependencies": {

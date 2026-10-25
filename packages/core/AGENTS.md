@@ -14,13 +14,19 @@ state and rules with no browser in them. It imports `@carlnotes/contracts`, `@ca
   label, which `apps/web/src/stores/podcastEpisodeQuestionStore.ts` drives. A store that reaches an audio element, the
   media session, or a component library stays in `apps/web/src/stores/`.
 - `hooks/` — `useNow.ts`, the current time re-read on a tick for relative labels, one clock per list; `useAvatar.ts`,
-  the avatar setting read from the session and updated through it; and `useUsernameChange.ts`, changing the signed-in
-  user's username, shared by the account page and the profile page's edit modal.
+  the avatar setting read from the session and updated through it; `useUsernameChange.ts`, changing the signed-in
+  user's username, shared by the account page and the profile page's edit modal; `useNoteBodySave.ts`, the save
+  schedule of the note an editor has open and the hook that reads it (`toNoteBodySave`: a save a second after the
+  last change, one on its way and one waiting at most, nothing for a body equal to the saved one or to the one on its
+  way, `img` tags stripped first, a failed save read as unsaved and retried on the next change, a conflict that stops
+  every save until it is resolved, a waiting save sent on unmount, and `EMPTY_EDITOR_HTML`, the html the editor
+  reports for an empty document); and `useNoteComments.ts`, a note's comment thread loaded when the note opens, with
+  its post and delete.
 - `lib/` — pure rules and formatting: `labels.ts` (values as the text a user sees: dates, durations, money, sizes, and
   counts), `pageHead.ts` (a `PageHead`, or a fixed title and path, as the tags a route's `head()` returns),
   `paginationSlots.ts` (the slots a row of page links shows), `planCards.ts` (which plan card matches the user's plan
   and billing interval, and which badge shows), `streamReconnect.ts` (how long a silent SSE stream runs before it counts
-  as dropped and the wait before reopening it, shared by the note stream and the chat room stream),
+  as dropped and the wait before reopening it, for the chat room stream),
   `topicFindingFilters.ts` and `topicFindingSorts.ts` (which findings a feed view shows and in what order),
   `topicSorts.ts` (the homepage's topic order under Trending: viewers, then followers, then the newest finding, with
   Featured kept in its own order),

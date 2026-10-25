@@ -19,6 +19,7 @@ import { type KeyboardEvent, useCallback, useEffect, useRef, useState } from "re
 import { CoffeeLoading } from "@/components/branding/CoffeeLoading"
 import { Input } from "@/components/primitives/input"
 import { TopicFeedSort } from "@/components/topic/TopicFeedSort"
+import { openInNewTab } from "@/lib/externalLinks"
 import { saveSearchBarPath, useSearchBarClear } from "@/stores/searchBarStore"
 import { PageActionMenu } from "./PageActionMenu"
 import { type FindingFilterState, SearchFilters } from "./SearchFilters"
@@ -115,7 +116,7 @@ export function SearchBar() {
 	const openSearchRow = (searchRow: SearchRow): void => {
 		if (searchRow.kind === "finding") {
 			void sendTopicFindingOpened(searchRow.finding.findingId)
-			window.open(searchRow.finding.url, "_blank", "noopener")
+			openInNewTab(searchRow.finding.url)
 		} else {
 			void navigate({ to: searchRow.path })
 		}

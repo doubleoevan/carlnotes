@@ -1,9 +1,10 @@
-// the source notes chart's heading, row order, summary line, bars, detail line, and trash button, in server-rendered
+// the source footnotes chart's heading, row order, summary line, bars, detail line, and trash button, in server-rendered
 // markup
 import { expect, test } from "bun:test"
 import type { SourceResult } from "@carlnotes/contracts/topics"
 import type { ComponentProps } from "react"
 import { renderToStaticMarkup } from "react-dom/server"
+import { RECAP_HEADING_CLASS } from "@/lib/styleClasses"
 import { EARLIER_ROW_ID, SourceResultsChart, toSourceResultRows, toSourceResultsLine } from "./SourceResultsChart"
 
 // a Source that ran its primary path with the given counts, labeled by its id, with any field replaced
@@ -105,11 +106,12 @@ test("the summary line sums the rows and adds the findings from earlier scans to
 	)
 })
 
-test("the heading reads Source notes with the scan's date on the right", () => {
+test("the heading reads Source footnotes in the display font with the scan's date on the right", () => {
 	const html = renderChart({ sourceResults: [toOkResult({ sourceId: "a", keptCount: 1, foundCount: 2 })] })
-	expect(html).toContain("Source notes")
+	expect(html).toContain("Source footnotes")
+	expect(html).toContain(RECAP_HEADING_CLASS)
 	expect(html).toContain("Oct 22")
-	expect(html.indexOf("Oct 22")).toBeGreaterThan(html.indexOf("Source notes"))
+	expect(html.indexOf("Oct 22")).toBeGreaterThan(html.indexOf("Source footnotes"))
 })
 
 test("one source reads as singular", () => {

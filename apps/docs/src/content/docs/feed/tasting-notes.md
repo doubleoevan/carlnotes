@@ -1,15 +1,15 @@
 ---
 title: Tasting Notes
 description: >-
-  Write rich-text notes on a topic or a team page, keep them private or share them, comment on a
-  line with your teammates, and see what changed since you last looked.
+  Write formatted notes on a topic or a team page, keep them private or share them, talk them over
+  with your teammates in a comment thread, and see what changed since you last looked.
 sidebar:
   order: 5
 ---
 
 Carl writes what he found. **Tasting Notes** are where you write what you think about it. Every topic page has a Tasting
-Notes section. Every team page has the same section, named **Team notes**. A note is rich text with comments on it, and
-more than one person can write in it at the same time.
+Notes section. Every team page has the same section, named **Team notes**. A note is formatted text with a comment
+thread beside it.
 
 The section lists the notes you can see in a table: each note's name, who can see it, and when it last changed. Sort by
 any of the three. **Add note** opens a new one.
@@ -34,24 +34,33 @@ Only a note's creator can change its visibility or delete it. Deleting a topic o
 ![The New note dialog: a name field and the visibility picker, which names who will be able to see
 it](../../../assets/screenshots/notes-new-note.png)
 
-## Writing together
+## Saving
 
-Open a note and start typing. When a teammate has the same note open, you see their changes as they type. There is
-nothing to save and no versions to merge. A note has the formatting of a document: headings, lists, quotes, code, and
-links.
+Open a note and start typing. A note has the formatting of a document: headings, lists, quotes, code, and links, from
+the toolbar above the body or the usual keyboard shortcuts. There is no save button. The note saves itself a second
+after you stop typing, and the footer reads **Saving…**, **Saved**, or **Not saved**. Opening a note shows what was
+last saved.
 
-![An open note: the formatting toolbar above the body, the visibility picker top-left, and the comments pane beside
+Teammates share a note by taking turns. Nobody sees another person's typing live. If a teammate saved the note after you
+opened it, your next save does not go through, so their version is never written over. Your words stay in the editor,
+and a notice names who saved last and offers to reload. Copy anything you want to keep first, then reload to see their
+version and add yours back.
+
+Images are not kept in a note. Paste one and it is dropped on save. Lists are one level deep, so a nested list pasted
+from elsewhere flattens, and a pasted table is not kept.
+
+![An open note: the formatting toolbar above the body, the visibility picker top-left, and the comment thread beside
 it](../../../assets/screenshots/notes-note-open.png)
 
 ## Comments
 
-Select any text in a note and comment on it. A comment thread stays beside the passage it is about, instead of piling up
-at the bottom. A disagreement about one sentence stays attached to that sentence. The speech-bubble button switches
-between **Show comments** and **Hide comments**, so you can read the text on its own.
+Every note has one comment thread. On a wide screen it sits beside the note. On a phone it slides up over the note.
+Each comment shows its author and when it was posted, and its author can delete it. Anyone who can read the note can
+read the thread, and anyone who can write in the note can comment. The speech-bubble button switches between **Show
+comments** and **Hide comments**, so you can read the text on its own.
 
-Type `@` inside a comment to mention someone. The list offers the active members of every team holding the page. A
-mention sends no email of its own. The person sees it in the unread count below, which counts every comment on a note,
-mentioned or not.
+A comment is plain text about the note as a whole. A teammate's comment counts toward the unread count below until
+you open the note.
 
 ## What changed since you last looked
 
@@ -69,7 +78,7 @@ The feed and [Coffee Talk](/docs/feed/chat/) are both about what Carl found. A n
 - **A running verdict on a topic.** Which findings mattered, and why the rest did not.
 - **The brief behind the prompt.** What this topic is meant to catch, so the next person to [rewrite the
   prompt](/docs/topics/writing-a-prompt/) knows what it was aiming at.
-- **A shared read of one week.** One team note per week, with everyone commenting in place, replaces the same
+- **A shared read of one week.** One team note per week, with everyone commenting on it, replaces the same
   conversation in five inboxes.
 
 A note is yours to write. Carl does not read it, score it, or use it when he brews. Context that should change how a

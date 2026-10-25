@@ -1,8 +1,10 @@
-// the note dialog, which creates a note or opens one. a user who can edit gets the live editor with comments, and a
-// read-only open gets the stored HTML
+// the note dialog, which creates a note or opens one. a user who can edit gets the editor on the stored body, and a
+// read-only open gets the body rendered as is, both with the comment thread beside it
 
 import { deleteNote, fetchNote, type NotePageRef, sendNoteRead, updateNote } from "@carlnotes/client/noteClient"
-import { NOTE_NAME_MAX_CHARS, type Note } from "@carlnotes/contracts/notes"
+import { NOTE_NAME_MAX_CHARS, type Note, type NoteResponse } from "@carlnotes/contracts/notes"
+import type { NoteSaveErrorReason, NoteSaveStatus } from "@carlnotes/core/hooks/useNoteBodySave"
+import { useNoteComments } from "@carlnotes/core/hooks/useNoteComments"
 import { markNoteOpened } from "@carlnotes/core/stores/noteBadgeStore"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { Maximize2, MessageSquareText, Minimize2, Pencil, X } from "lucide-react"
@@ -12,16 +14,22 @@ import { ConfirmDialog } from "@/components/common/ConfirmDialog"
 import { Button } from "@/components/primitives/button"
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/primitives/dialog"
 import { Input } from "@/components/primitives/input"
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
-import { MENU_BUTTON_HIGHLIGHT_CLASS } from "@/lib/styleClasses"
 import { isWideScreen } from "@/lib/utils"
 import { CreateNote } from "./CreateNote"
-import { NoteStatic } from "./NoteStatic"
+import { ToolbarButton } from "./NoteToolbar"
 import { type NoteVisibility, NoteVisibilitySelect, VISIBILITY_TOOLTIPS } from "./NoteVisibilitySelect"
-import type { NoteSaveErrorReason, NoteSaveStatus } from "./noteProvider"
 
-// the editor and the blocknote bundle load only when a note opens for a user who can edit
-const NoteEditor = lazy(() => import("./NoteEditor"))
+// the editor and the reader load with the editor package only when a note opens, in the browser alone. the dialog
+// starts the one it will show as it mounts, while the note is still on its way
+const loadNoteEditor = () =>
+	import("./NoteEditor").then((noteEditorModule) => ({ default: noteEditorModule.NoteEditor }))
+const loadNoteStatic = () =>
+	import("./NoteStatic").then((noteStaticModule) => ({ default: noteStaticModule.NoteStatic }))
+const NoteEditor = lazy(loadNoteEditor)
+const NoteStatic = lazy(loadNoteStatic)
+
+// the line shown while the note is on its way
+const LOADING_LINE = <p className="text-muted-foreground py-2 text-sm">{"Unfolding the note…"}</p>
 
 // how the dialog words each save status. the toast carries the reason, so these stay the plain fact
 const SAVE_STATUS_LABELS: Record<NoteSaveStatus, string> = {
@@ -31,13 +39,12 @@ const SAVE_STATUS_LABELS: Record<NoteSaveStatus, string> = {
 }
 
 /**
- * One note's dialog, or the create flow when no note is given. Closing it ends any live connection.
+ * One note's dialog, or the create flow when no note is given. Closing it sends any save still waiting.
  */
 export function NoteDialog({
 	page,
 	pageName,
 	creatableVisibilities,
-	mentionableUsernames,
 	note,
 	onClose,
 	onChanged,
@@ -46,8 +53,6 @@ export function NoteDialog({
 	// the topic or team the note belongs to, named in the empty note's placeholder
 	pageName: string
 	creatableVisibilities: NoteVisibility[]
-	// who a comment's "@" menu offers, the other members of the note's team
-	mentionableUsernames: string[]
 	// null opens the create flow
 	note: Note | null
 	onClose: () => void
@@ -85,7 +90,6 @@ export function NoteDialog({
 						note={openNote}
 						pageName={pageName}
 						creatableVisibilities={creatableVisibilities}
-						mentionableUsernames={mentionableUsernames}
 						isExpanded={isExpanded}
 						onToggleExpand={() => setIsExpanded((wasExpanded) => !wasExpanded)}
 						onChanged={onChanged}
@@ -138,12 +142,11 @@ function NoteFooter({
 	)
 }
 
-// an open note: the header row, the always-editable body, and the footer
+// an open note: the header row, the body as an editor or a reader, and the footer
 function OpenNote({
 	note,
 	pageName,
 	creatableVisibilities,
-	mentionableUsernames,
 	isExpanded,
 	onToggleExpand,
 	onChanged,
@@ -152,7 +155,6 @@ function OpenNote({
 	note: Note
 	pageName: string
 	creatableVisibilities: NoteVisibility[]
-	mentionableUsernames: string[]
 	// whether the dialog fills the screen, and the toggle that sets it
 	isExpanded: boolean
 	onToggleExpand: () => void
@@ -166,8 +168,10 @@ function OpenNote({
 	const [noteVisibility, setNoteVisibility] = useState<NoteVisibility>(note.visibility)
 	const [isConfirmingDelete, setIsConfirmingDelete] = useState(false)
 
-	// the comment threads panel: a sidebar open by default on a wide screen, a sheet a phone opens on demand
-	const [isThreadsOpen, setIsThreadsOpen] = useState(() => isWideScreen())
+	// the comment thread: loaded as the note opens, a column open by default on a wide screen, a sheet a phone opens on
+	// demand
+	const noteCommentThread = useNoteComments(note.id)
+	const [isCommentsOpen, setIsCommentsOpen] = useState(() => isWideScreen())
 
 	// opening a note is what clears its badges. the store clears them at once, and the mark holds until the poll agrees
 	useEffect(() => {
@@ -175,22 +179,24 @@ function OpenNote({
 		void sendNoteRead(note.id)
 	}, [note.id])
 
-	// a read-only open needs the stored note, fetched once
-	const [staticHtml, setStaticHtml] = useState<string | null>(null)
+	// the body's chunk starts loading at once, beside the note fetch, instead of after it
 	useEffect(() => {
-		if (note.canEdit) {
-			return
-		}
+		void (note.canEdit ? loadNoteEditor() : loadNoteStatic())
+	}, [note.canEdit])
+
+	// every open fetches the stored body and the version a save names. null until it arrives, false if it never does
+	const [openedNote, setOpenedNote] = useState<NoteResponse | null | false>(null)
+	useEffect(() => {
 		let isCurrent = true
 		void fetchNote(note.id).then((response) => {
 			if (isCurrent) {
-				setStaticHtml(response?.html ?? null)
+				setOpenedNote(response ?? false)
 			}
 		})
 		return () => {
 			isCurrent = false
 		}
-	}, [note.id, note.canEdit])
+	}, [note.id])
 
 	// a rename saves on blur
 	async function handleRenameNote() {
@@ -220,7 +226,7 @@ function OpenNote({
 		onChanged()
 	}
 
-	// deleting removes the note, its threads, and its comments
+	// deleting removes the note and its comments
 	async function handleDeleteNote() {
 		const isNoteDeleted = await deleteNote(note.id)
 		if (!isNoteDeleted) {
@@ -231,12 +237,10 @@ function OpenNote({
 		onClose()
 	}
 
-	// a save error shows as a toast. a failed post keeps the words for a retry, a rejected one stops saving
+	// a save error shows as a toast. a failed save retries on the next change, a body too long to keep needs a copy
 	function handleSaveNoteError(reason: NoteSaveErrorReason) {
-		if (reason === "rejected") {
-			toast.error(
-				"That edit was too large to save, so this note stopped saving. Copy your latest changes, then refresh.",
-			)
+		if (reason === "tooLarge") {
+			toast.error("That note is too long to save. Copy your latest changes, then shorten it.")
 			return
 		}
 		toast.error("That note didn't save. Carl kept your words — try again in a moment.")
@@ -246,7 +250,7 @@ function OpenNote({
 		<>
 			{/* the owner's visibility select on the left, the expand and close controls grouped on the right */}
 			<div className="flex min-h-9 items-center justify-between gap-2">
-				{note.isTopicOwner ? (
+				{note.isNoteOwner ? (
 					<NoteVisibilitySelect
 						visibilities={creatableVisibilities}
 						visibility={noteVisibility}
@@ -255,57 +259,37 @@ function OpenNote({
 				) : (
 					<span />
 				)}
+				{/* the dialog's own controls, the toolbar's buttons. the comments toggle takes the pressed fill while the
+					thread shows, and the expand toggle only shows on a wide screen, since a phone is always full screen */}
 				<div className="flex items-center gap-0.5">
-					{note.canEdit && (
-						<Tooltip>
-							<TooltipTrigger asChild>
-								<button
-									type="button"
-									aria-label={isThreadsOpen ? "Hide comments" : "Show comments"}
-									aria-pressed={isThreadsOpen}
-									onClick={() => setIsThreadsOpen((wasOpen) => !wasOpen)}
-									// the closed comments button is a plain glyph like the close beside it.
-									// the opened comments takes the standard highlight treatment
-									className={cn(
-										"text-muted-foreground hover:text-foreground grid size-8 shrink-0 place-items-center rounded-md",
-										isThreadsOpen && `${MENU_BUTTON_HIGHLIGHT_CLASS} shadow-raised`,
-									)}
-								>
-									<MessageSquareText className="size-4" />
-								</button>
-							</TooltipTrigger>
-							<TooltipContent>{isThreadsOpen ? "Hide comments" : "Show comments"}</TooltipContent>
-						</Tooltip>
-					)}
-					{/* the expand toggle only shows on a wide screen. a phone is always full screen */}
-					<button
-						type="button"
-						aria-label={isExpanded ? "Collapse" : "Expand"}
+					<ToolbarButton
+						label={isCommentsOpen ? "Hide comments" : "Show comments"}
+						Icon={MessageSquareText}
+						isPressed={isCommentsOpen}
+						className="text-muted-foreground"
+						onClick={() => setIsCommentsOpen((wasOpen) => !wasOpen)}
+					/>
+					<ToolbarButton
+						label={isExpanded ? "Collapse" : "Expand"}
+						Icon={isExpanded ? Minimize2 : Maximize2}
+						className="text-muted-foreground hidden sm:inline-flex"
 						onClick={onToggleExpand}
-						className="text-muted-foreground hover:text-foreground hidden size-8 shrink-0 place-items-center rounded-md sm:grid"
-					>
-						{isExpanded ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
-					</button>
-					<button
-						type="button"
-						aria-label="Close"
-						onClick={onClose}
-						className="text-muted-foreground hover:text-foreground grid size-8 shrink-0 place-items-center rounded-md"
-					>
-						<X className="size-4" />
-					</button>
+					/>
+					<ToolbarButton label="Close" Icon={X} className="text-muted-foreground" onClick={onClose} />
 				</div>
 			</div>
 			{/* the note name on its own centered row. the pencil shows the name is editable and hides while it is being edited */}
 			{note.canEdit ? (
 				<div className="group relative">
+					{/* the name reads as a title at rest, with no field fill in either mode, and takes the ghost hover fill
+						while hovered or being edited */}
 					<Input
 						value={name}
 						onChange={(event) => setName(event.target.value)}
 						onBlur={() => void handleRenameNote()}
 						aria-label="Note name"
 						maxLength={NOTE_NAME_MAX_CHARS}
-						className="h-auto border-none px-8 text-center font-display text-2xl shadow-none focus-visible:ring-0 md:text-2xl"
+						className="hover:bg-accent focus-visible:bg-accent dark:hover:bg-accent/50 dark:focus-visible:bg-accent/50 h-auto border-none px-8 text-center font-display text-2xl shadow-none focus-visible:ring-0 md:text-2xl dark:bg-transparent"
 					/>
 					<Pencil className="text-muted-foreground pointer-events-none absolute top-1/2 right-2 size-4 -translate-y-1/2 group-focus-within:hidden" />
 				</div>
@@ -316,21 +300,28 @@ function OpenNote({
 			{note.canEdit && <DialogTitle className="sr-only">{name}</DialogTitle>}
 			<DialogDescription className="sr-only">{VISIBILITY_TOOLTIPS[noteVisibility]}</DialogDescription>
 
-			{/* the body: the always-editable editor with edit access, the stored HTML without. edits auto-save */}
+			{/* the body: the editor on the stored body with edit access, the body rendered as is without. edits save on
+				their own a moment after typing stops */}
 			<div className="min-h-0 flex-1 overflow-hidden">
-				{note.canEdit ? (
-					<Suspense fallback={<p className="text-muted-foreground py-2 text-sm">{"Unfolding the note…"}</p>}>
-						<NoteEditor
-							noteId={note.id}
-							pageName={pageName}
-							mentionableUsernames={mentionableUsernames}
-							isThreadsOpen={isThreadsOpen}
-							onSaveError={handleSaveNoteError}
-							onSaveStatus={setNoteSaveStatus}
-						/>
+				{openedNote === false && (
+					<p className="text-destructive py-2 text-sm">{"Carl couldn't open that note. Try again in a moment."}</p>
+				)}
+				{openedNote === null && LOADING_LINE}
+				{openedNote && (
+					<Suspense fallback={LOADING_LINE}>
+						{note.canEdit ? (
+							<NoteEditor
+								note={openedNote}
+								pageName={pageName}
+								noteCommentThread={noteCommentThread}
+								isCommentsOpen={isCommentsOpen}
+								onSaveError={handleSaveNoteError}
+								onSaveStatus={setNoteSaveStatus}
+							/>
+						) : (
+							<NoteStatic note={openedNote} noteCommentThread={noteCommentThread} isCommentsOpen={isCommentsOpen} />
+						)}
 					</Suspense>
-				) : (
-					<div className="h-full overflow-y-auto">{staticHtml && <NoteStatic html={staticHtml} />}</div>
 				)}
 			</div>
 

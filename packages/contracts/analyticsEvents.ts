@@ -73,10 +73,9 @@ export type UserAnalyticsEvent =
 	| "team_member_removed"
 	| "team_topic_added"
 	| "team_topic_removed"
-	// notes and their comment threads
+	// notes and their comments
 	| "note_created"
 	| "note_comment_added"
-	| "note_thread_resolved"
 	// a report of someone's content
 	| "content_flagged"
 

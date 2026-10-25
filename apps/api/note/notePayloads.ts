@@ -2,12 +2,9 @@
 import type { Note, NotesResponse } from "@carlnotes/contracts/notes"
 import { db } from "@carlnotes/db"
 import { notes } from "@carlnotes/db/schema/notes"
-import { teamMembers, teamTopics } from "@carlnotes/db/schema/teams"
-import { users } from "@carlnotes/db/schema/users"
-import { and, eq, inArray, ne, or } from "drizzle-orm"
+import { and, eq, ne, or } from "drizzle-orm"
 import type { Context } from "hono"
 import { currentUser } from "../currentUser"
-import { emptyNoteYdoc } from "./noteYdoc"
 import {
 	canDeleteNote,
 	canEditNote,
@@ -16,11 +13,22 @@ import {
 	loadNoteWithPage,
 	loadPageAccess,
 	type NotePage,
+	type NoteRow,
 	type PageAccess,
 } from "./permissions"
 
-// one note row as the notes table stores it
-type NoteRow = typeof notes.$inferSelect
+// the columns a note list reads: everything but the body, which only an opened note loads
+const noteListColumns = {
+	id: notes.id,
+	topicId: notes.topicId,
+	teamId: notes.teamId,
+	name: notes.name,
+	visibility: notes.visibility,
+	ownerUserId: notes.ownerUserId,
+	createdAt: notes.createdAt,
+	updatedAt: notes.updatedAt,
+}
+type NoteListRow = Pick<NoteRow, keyof typeof noteListColumns>
 
 /**
  * Loads the visible note with its page, or null if the user may not see the note.
@@ -47,7 +55,7 @@ export async function loadVisibleNote(
 /**
  * Returns one note row shaped for the api.
  */
-export function toNote(note: NoteRow, userId: string | null, access: PageAccess): Note {
+export function toNote(note: NoteListRow, userId: string | null, access: PageAccess): Note {
 	return {
 		id: note.id,
 		name: note.name,
@@ -55,7 +63,7 @@ export function toNote(note: NoteRow, userId: string | null, access: PageAccess)
 		createdAt: note.createdAt.toISOString(),
 		updatedAt: note.updatedAt.toISOString(),
 		canEdit: canEditNote(userId, note, access),
-		isTopicOwner: userId !== null && note.ownerUserId === userId,
+		isNoteOwner: userId !== null && note.ownerUserId === userId,
 		canDelete: canDeleteNote(userId, note, access),
 	}
 }
@@ -70,12 +78,13 @@ export async function loadNotesPayload(userId: string | null, page: NotePage): P
 		return null
 	}
 
-	// the page's rows. private rows narrow to the user's own in sql, the visibility rules finish in code
+	// the page's rows without their bodies. private rows narrow to the user's own in sql, the visibility rules finish
+	// in code
 	const pageFilter = page.kind === "topic" ? eq(notes.topicId, page.topic.id) : eq(notes.teamId, page.team.id)
 	const privateFilter = pageAccess.isAdmin
 		? undefined
 		: or(ne(notes.visibility, "private"), eq(notes.ownerUserId, userId ?? ""))
-	const noteRows = await db.select().from(notes).where(and(pageFilter, privateFilter))
+	const noteRows = await db.select(noteListColumns).from(notes).where(and(pageFilter, privateFilter))
 	const visibleNotes = noteRows.filter((noteRow) => canSeeNote(userId, noteRow, pageAccess))
 
 	// newest first
@@ -85,43 +94,8 @@ export async function loadNotesPayload(userId: string | null, page: NotePage): P
 	return {
 		pageName: page.kind === "topic" ? page.topic.name : page.team.name,
 		creatableVisibilities: creatableNoteVisibilities(userId, pageAccess),
-		mentionableUsernames: await loadMentionableUsernames(userId, page),
 		notes: sortedNotes.map((noteRow) => toNote(noteRow, userId, pageAccess)),
 	}
-}
-
-// who a comment may mention. the active members of every team holding the page, minus the commenter
-async function loadMentionableUsernames(userId: string | null, page: NotePage): Promise<string[]> {
-	const teamIds = userId ? await loadHoldingTeamIds(page) : []
-	if (teamIds.length === 0) {
-		return []
-	}
-
-	// alphabetical. a user in two holding teams appears once
-	const memberRows = await db
-		.select({ username: users.username })
-		.from(teamMembers)
-		.innerJoin(users, eq(users.id, teamMembers.userId))
-		.where(
-			and(inArray(teamMembers.teamId, teamIds), eq(teamMembers.isActive, true), ne(teamMembers.userId, userId ?? "")),
-		)
-	return [...new Set(memberRows.map((memberRow) => memberRow.username))].sort()
-}
-
-// the teams holding the page. a team page is its own, and a topic is held through its own team
-// column or a share
-async function loadHoldingTeamIds(page: NotePage): Promise<string[]> {
-	if (page.kind === "team") {
-		return [page.team.id]
-	}
-
-	// the shares, then both paths folded together with the nulls dropped
-	const sharedRows = await db
-		.select({ teamId: teamTopics.teamId })
-		.from(teamTopics)
-		.where(eq(teamTopics.topicId, page.topic.id))
-	const sharedTeamIds = sharedRows.map((sharedRow) => sharedRow.teamId)
-	return [...new Set([page.topic.teamId, ...sharedTeamIds].filter((teamId) => teamId !== null))]
 }
 
 /**
@@ -139,7 +113,7 @@ export async function createNote(
 		return null
 	}
 
-	// insert the note with an empty document, saved as edited by its creator
+	// insert the note with an empty body at version 1, saved as edited by its creator
 	const pageColumns = page.kind === "topic" ? { topicId: page.topic.id } : { teamId: page.team.id }
 	const [noteRow] = await db
 		.insert(notes)
@@ -148,7 +122,6 @@ export async function createNote(
 			name,
 			visibility,
 			ownerUserId: userId,
-			ydoc: emptyNoteYdoc(),
 			lastEditorUserId: userId,
 			bodyEditedAt: new Date(),
 		})

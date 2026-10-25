@@ -138,13 +138,12 @@ export function NotesSection({
 				</Accordion>
 			)}
 
-			{/* the dialog, which owns any live connection while it is open */}
+			{/* the dialog, which owns the note's save while it is open */}
 			{openDialog !== null && (
 				<NoteDialog
 					page={{ pageType, pageId }}
 					pageName={notes.pageName}
 					creatableVisibilities={notes.creatableVisibilities}
-					mentionableUsernames={notes.mentionableUsernames}
 					note={openDialog === "create" ? null : openDialog}
 					onClose={() => setOpenDialog(null)}
 					onChanged={reloadNotes}

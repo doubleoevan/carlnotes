@@ -1,7 +1,6 @@
-// render tests for the note table, the static body, and the visibility tooltips
+// render tests for the note table and the visibility tooltips, and the reader's one way of rendering a body
 import { expect, test } from "bun:test"
 import { renderToStaticMarkup } from "react-dom/server"
-import { NoteStatic } from "./NoteStatic"
 import { NotesTable, toVisibilityCountsLabel } from "./NotesTable"
 import { VISIBILITY_TOOLTIPS } from "./NoteVisibilitySelect"
 
@@ -14,7 +13,7 @@ function note(visibility: "private" | "team" | "public", name = "Ideas") {
 		createdAt: "2026-08-01T00:00:00.000Z",
 		updatedAt: "2026-08-20T00:00:00.000Z",
 		canEdit: true,
-		isTopicOwner: true,
+		isNoteOwner: true,
 		canDelete: true,
 	}
 }
@@ -46,10 +45,13 @@ test("the table renders name, visibility, and updated columns", () => {
 	expect(html).toContain("lucide-globe")
 })
 
-// stored HTML renders as-is
-test("the static body renders the server html", () => {
-	const html = renderToStaticMarkup(<NoteStatic html="<p>keep the beans</p>" />)
-	expect(html).toContain("keep the beans")
+// the reader renders the stored body through the editor package's display component, which needs a browser, and
+// never injects it as raw html
+test("the static body renders through the display component", async () => {
+	const staticSource = await Bun.file(new URL("./NoteStatic.tsx", import.meta.url)).text()
+	expect(staticSource).toContain("<EnrichedText ")
+	expect(staticSource).toContain("{note.html}")
+	expect(staticSource).not.toContain("dangerouslySetInnerHTML")
 })
 
 // the footer counts the notes and splits them by visibility, skipping empty visibilities

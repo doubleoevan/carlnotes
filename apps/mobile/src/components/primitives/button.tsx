@@ -23,12 +23,11 @@ const MOBILE_BUTTON_CLASS = "flex-row"
 // button, and a wrapped label stays centered
 const MOBILE_BUTTON_TEXT_CLASS = "shrink text-center"
 
-// each variant's pressed fill in place of the web's hover, and the outline's border color, which the web's base
-// layer gives
+// each variant's pressed fill in place of the web's hover
 const MOBILE_BUTTON_VARIANT_CLASSES = {
 	default: "active:bg-primary/90",
 	destructive: "active:bg-destructive/90",
-	outline: "border-border active:bg-accent dark:active:bg-input/50",
+	outline: "active:bg-accent dark:active:bg-input/50",
 	secondary: "active:bg-secondary/80",
 	ghost: "active:bg-accent dark:active:bg-accent/50",
 	link: "",

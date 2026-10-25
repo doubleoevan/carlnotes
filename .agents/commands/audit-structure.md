@@ -719,6 +719,27 @@ Check for:
      `WEB_COMPONENT_BROWSER_FOLDERS` in `scripts/importBoundaries.ts`), `Workspace`, `SourceFile`, and
      `UNIVERSAL_WORKSPACE_FOLDERS` there (now `scripts/workspaces.ts`), and `listSourceFiles` in
      `scripts/check-package-boundaries.ts` (now `readSourceFiles` in `scripts/sourceFiles.ts`)
+   - `apps/api/note/noteYdoc.ts` with `mergeNoteYdoc`, `toNoteSnapshot`, `emptyNoteYdoc`, `toNoteHtml`, and
+     `saveNoteUpdate` (removed: a note's body is sanitized html saved at a version; `sanitizeNoteHtml` is now in
+     `apps/api/note/noteHtml.ts`), `apps/api/note/noteStream.ts` and the Redis channel `note_updates` (removed: no note
+     change fans out; `apps/api/chat/roomStream.ts` is the one Redis fan-out), `apps/api/note/noteCommentThreads.ts`
+     and the threads routes (now `apps/api/note/noteComments.ts`, one plain-text thread per note), the ydoc snapshot
+     route, the events route, and the users route (removed: a note read returns the body with its version, and a
+     comment includes its author), and `POST /notes/:id/updates` with `NOTE_SYNC_PATH` (now `NOTE_BODY_PATH`,
+     `PUT /notes/:id/body`, in `apps/api/note/notes.ts`)
+   - `apps/web/src/components/note/useNoteSync.ts`, `noteProvider.ts` with `NoteProvider` and `NoteTransport`,
+     `CommentMentions.tsx`, and `noteEditor.css` (removed: the editor is `react-native-enriched-html` in
+     `NoteEditor.tsx`, with `NoteToolbar.tsx`, `NoteLayout.tsx`, `NoteComments.tsx`, and `NoteConflictNotice.tsx`
+     beside it, and the save schedule in `packages/core/hooks/useNoteBodySave.ts`)
+   - `mentionableUsernames` on `NotesResponse` and `NoteCommentUser` in `packages/contracts/notes.ts` (removed: no `@`
+     menu, and a comment includes its author), `NOTE_UPDATE_MAX_CHARS` (now `NOTE_HTML_MAX_CHARS`), `noteSyncPayload`,
+     `noteCommentThreadPayload`, `noteCommentWritePayload`, and `noteCommentReactionPayload` in
+     `packages/contracts/payloads.ts` (now `noteBodyPayload`; `noteCommentPayload` is now the plain-text body),
+     `isNoteBodyChanged` in `apps/api/note/noteBadges.ts` (removed: the save route compares the two bodies as strings),
+     the `ydoc` column on `notes` and the `note_comment_threads` table (now `notes.version` beside `notes.html`, and
+     `note_comments` with a `note_id` and a text `body`), `isTopicOwner` on a `Note` (now `isNoteOwner`; the topic
+     contract keeps `isTopicOwner`), and the `@blocknote/*` packages, `yjs`, `y-prosemirror`, and `y-protocols`
+     (removed from `apps/web` and `apps/api`; `react-native-enriched-html` is the editor)
 
 5. **Cross-harness enforcement parity**: `.claude/settings.json` hooks and
    `.opencode/plugin/guardrails.mjs` must gate the same operations with the

@@ -49,3 +49,11 @@ export const extraThemeColorNames: ColorName[] = [
 export function toKebabName(tokenName: string): string {
 	return tokenName.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`)
 }
+
+/**
+ * Returns a color token as the web theme's CSS variable reference, such as var(--color-muted-foreground), for a style
+ * value that follows the theme without a re-render.
+ */
+export function toColorCssVariable(colorName: ColorName): string {
+	return `var(--color-${toKebabName(colorName)})`
+}

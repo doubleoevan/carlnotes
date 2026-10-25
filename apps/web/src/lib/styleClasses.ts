@@ -225,6 +225,12 @@ export const TABLE_SCROLL_CLASS = `relative -mx-4 overflow-x-auto ${THIN_SCROLLB
 export const POPOVER_HEADING_CLASS = "font-display mb-2 text-center text-lg"
 
 /**
+ * A heading inside a scan's recap: the compact display-font line over the note's sections and the source footnotes.
+ * Each caller adds its own margins.
+ */
+export const RECAP_HEADING_CLASS = "font-display text-foreground text-[13px] font-semibold"
+
+/**
  * The section label: the small uppercase muted label in the display font over a field, a value, or a group. Each caller
  * adds its own margin and alignment. It is the sectionLabel type role in Nightshift's typography.ts with the muted
  * color.

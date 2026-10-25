@@ -8,9 +8,9 @@ import {
 import { cn } from "@carlnotes/nightshift/classNames"
 import { NoteIcon } from "@/components/branding/NoteIcon"
 import { AnchorLink } from "@/components/common/AnchorLink"
+import { ScrollBox } from "@/components/common/ScrollBox"
 import { Popover, PopoverCloseButton, PopoverContent, PopoverTrigger } from "@/components/primitives/popover"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
-import { ScrollBox } from "@/components/topic/TopicScanRecap"
 import {
 	ICON_TILE_BUTTON_CLASS,
 	POPOVER_HEADING_CLASS,

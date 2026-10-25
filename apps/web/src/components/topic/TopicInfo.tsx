@@ -7,6 +7,7 @@ import { AudioLines, Diamond, Download, ExternalLink, Globe, Link, Lock, Mail, P
 import type * as React from "react"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { BrandIcon } from "@/components/common/BrandIcon"
+import { ScrollBox } from "@/components/common/ScrollBox"
 import { UserProfileLink } from "@/components/common/UserProfileLink"
 import { PodcastEpisodeRow } from "@/components/podcast/PodcastEpisodeRow"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
@@ -17,7 +18,6 @@ import {
 	type AllowedScanNoteUrls,
 	NumberedTopicFindingList,
 	SafeNoteText,
-	ScrollBox,
 	ScrollNote,
 	TopicScanNote,
 	toNotesMarkdown,

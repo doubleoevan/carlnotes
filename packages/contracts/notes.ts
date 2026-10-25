@@ -1,5 +1,7 @@
-// the note contracts: a note, a page's notes, an opened note, its comment authors, and its badges
+// the note contracts: a note, a page's notes, an opened note with its body and version, a save's results, a comment,
+// and the badges
 import type { noteVisibilities } from "./enums"
+import type { ProfileIdentity } from "./profiles"
 
 // one note's unread counts for the signed-in user
 export type NoteBadge = {
@@ -14,15 +16,17 @@ export type NoteBadge = {
 	pageName: string
 	// 1 when somebody else changed the body since the user last opened it, however many edits it took
 	unreadEdits: number
-	// the comments written since then by somebody else, soft-deleted ones left out
+	// the comments written since then by somebody else
 	unreadComments: number
 }
 
-// one base64 yjs update posted from a note editor. a large paste arrives as one atomic update, so the limit is sized
-// to hold one
-export const NOTE_UPDATE_MAX_CHARS = 4 * 1024 * 1024
+// the longest HTML body a note keeps. the save route's own body limit admits any UTF-8 encoding of a string this long
+export const NOTE_HTML_MAX_CHARS = 512 * 1024
 
-// the create body for a note on a page
+// the longest comment a note takes
+export const NOTE_COMMENT_MAX_CHARS = 2000
+
+// the longest name a note takes
 export const NOTE_NAME_MAX_CHARS = 120
 
 // one note as the notes table lists it
@@ -34,7 +38,7 @@ export type Note = {
 	updatedAt: string
 	canEdit: boolean
 	// whether the user created it, which alone allows changing its visibility
-	isTopicOwner: boolean
+	isNoteOwner: boolean
 	// whether the user may delete it: its owner, or an admin
 	canDelete: boolean
 }
@@ -45,17 +49,34 @@ export type NotesResponse = {
 	pageName: string
 	// the visibilities the user may create a note in. empty for a visitor
 	creatableVisibilities: (typeof noteVisibilities)[number][]
-	// the usernames a comment's "@" menu offers: the holding team's members, empty without one
-	mentionableUsernames: string[]
 	notes: Note[]
 }
 
-// one note opened in its dialog. the stored HTML is what a read-only open renders
-export type NoteResponse = Note & { html: string }
+// one note opened in its dialog: the stored HTML body, which the editor and the reader both render, and the version
+// the next save names
+export type NoteResponse = Note & { html: string; version: number }
 
-// a comment author as the note comment ui renders it
-export type NoteCommentUser = {
+// a save the api kept: the version the body is stored at now
+export type NoteBodyResponse = { version: number }
+
+// a save that lost to a newer version: the version stored now and who saved it, null for a closed account
+export type NoteConflict = { version: number; lastEditorUsername: string | null }
+export type NoteBodyConflictResponse = { error: "conflict" } & NoteConflict
+
+// how a body save ended: kept at a version or lost to a newer one, which the api decides, or too large for the api
+// to keep or never arrived, which the api client reports
+export type NoteBodySaveResult =
+	| { status: "saved"; version: number }
+	| ({ status: "conflict" } & NoteConflict)
+	| { status: "tooLarge" }
+	| { status: "failed" }
+
+// one comment on a note's thread. a closed account leaves no author
+export type NoteComment = {
 	id: string
-	username: string
-	avatarUrl: string
+	body: string
+	createdAt: string
+	author: ProfileIdentity | null
+	// whether the user may delete it: its author
+	canDelete: boolean
 }

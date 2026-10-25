@@ -6,7 +6,7 @@ import { X } from "lucide-react"
 import type { ReactNode } from "react"
 import { CoffeeLoading } from "@/components/branding/CoffeeLoading"
 import { AnchorLink } from "@/components/common/AnchorLink"
-import { ScrollBox } from "@/components/topic/TopicScanRecap"
+import { ScrollBox } from "@/components/common/ScrollBox"
 import { POPOVER_HEADING_CLASS, SECTION_LABEL_CLASS, STANDALONE_LINK_CLASS } from "@/lib/styleClasses"
 
 // how the card words each visibility

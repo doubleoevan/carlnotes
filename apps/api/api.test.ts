@@ -2,7 +2,7 @@
 // oversized body is rejected before its route, and a visitor's chat post and upload are rejected before their bodies
 // are read
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
-import { NOTE_UPDATE_MAX_CHARS } from "@carlnotes/contracts/notes"
+import { NOTE_HTML_MAX_CHARS } from "@carlnotes/contracts/notes"
 import { restoreRedisClient, stubRedisClient } from "@carlnotes/db/redisClientStub"
 import { MAX_ATTACHMENT_BYTES } from "@carlnotes/pipeline/attach"
 import { APIError } from "better-auth"
@@ -97,17 +97,20 @@ test("a visitor's avatar or attachment upload is rejected with a 401 before its 
 	}
 })
 
-// the note sync post keeps its own limit, sized for one update at its largest, and rejects a body past it with a 413.
-// a visitor's post responds like a missing note before the limit reads the body
-test("a note sync post past its own limit is rejected with a 413 before the route reads it", async () => {
-	// a body past the limit, posted by a signed-in user and by a visitor
-	const oversizedNoteSync = toJsonRequest({ update: "x".repeat(NOTE_UPDATE_MAX_CHARS + 1024) })
+// the note body save keeps its own limit, sized for the longest body in any encoding, and rejects a body past it with
+// a 413. a visitor's save responds like a missing note before the limit reads the body
+test("a note body save past its own limit is rejected with a 413 before the route reads it", async () => {
+	// a body past the limit, sent by a signed-in user and by a visitor
+	const oversizedNoteBody = {
+		...toJsonRequest({ html: "x".repeat(NOTE_HTML_MAX_CHARS * 4 + 1024), version: 1 }),
+		method: "PUT",
+	}
 	signInAs("user-1")
-	const signedInResponse = await apiRoute.request("/api/notes/n1/updates", oversizedNoteSync)
+	const signedInResponse = await apiRoute.request("/api/notes/n1/body", oversizedNoteBody)
 	expect(signedInResponse.status).toBe(413)
 	expect(await signedInResponse.json()).toEqual({ error: "request body too large" })
 
-	// the visitor's post responds 404
+	// the visitor's save responds 404
 	signInAs(null)
-	expect((await apiRoute.request("/api/notes/n1/updates", oversizedNoteSync)).status).toBe(404)
+	expect((await apiRoute.request("/api/notes/n1/body", oversizedNoteBody)).status).toBe(404)
 })

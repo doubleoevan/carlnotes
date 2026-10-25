@@ -18,8 +18,8 @@ import {
 	Underline,
 } from "lucide-react"
 import { AnchorLink } from "@/components/common/AnchorLink"
+import { ScrollBox } from "@/components/common/ScrollBox"
 import { PodcastEpisodeTranscript } from "@/components/podcast/PodcastEpisodeTranscript"
-import { ScrollBox } from "@/components/topic/TopicScanRecap"
 import { CARD_CLASS, SEARCH_BAR_ICON_CLASS, STANDALONE_LINK_CLASS, TABLE_SCROLL_CLASS } from "@/lib/styleClasses"
 
 // the scan note's paragraphs a vertical box overflows with
@@ -209,7 +209,7 @@ export const HighlightScrollbar: Story = {
 // the scrollbar-none utility: the note editor's formatting strip scrolling sideways with no scrollbar
 export const NoScrollbar: Story = { args: { scrollbar: "none" } }
 
-// the ScrollBox component from the scan recap, with its copy button on hover
+// the ScrollBox component from common/, with its copy button on hover
 export const ScrollBoxComponent: Story = {
 	args: { scrollbar: "scrollBox" },
 	parameters: {

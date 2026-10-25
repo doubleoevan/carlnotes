@@ -33,7 +33,8 @@ const expoConfig: ExpoConfig = {
 		package: MOBILE_APP_BUNDLE_IDENTIFIER,
 		adaptiveIcon: {
 			foregroundImage: "./assets/adaptive-icon.png",
-			backgroundColor: colors.background.light,
+			// the table color around the mug in the cover art the foreground is cut from
+			backgroundColor: "#e1d0b8",
 		},
 	},
 	// the fingerprint policy bumps the runtime whenever anything that could affect the native runtime changes. an

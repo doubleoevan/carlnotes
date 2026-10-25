@@ -202,8 +202,10 @@ Older answers are clipped to their opening characters.
 
 ### Live updates
 
-Two features update while you watch them: a team chat room, and a Tasting Note several people are editing. Both push
-over Server-Sent Events (SSE), and neither runs a WebSocket server.
+One feature updates while you watch it: a team chat room. It pushes over Server-Sent Events (SSE), and no WebSocket
+server runs. A Tasting Note does not stream. The editor saves the note's HTML a second after typing stops, with the
+version it opened at, and the api writes only if the stored version still matches. Otherwise the api returns a conflict
+naming who saved last, the words stay in the editor, and the person reloads to take the newer version.
 
 The fan-out between instances is Redis pub/sub. The instance that stored a change delivers the change to its own
 subscribers through an in-process `EventEmitter` first and then publishes the change. Every other instance re-broadcasts
@@ -223,17 +225,13 @@ flowchart
 ```
 
 A chat room publishes the new chat message's id and any Topic Tool calls from that chat turn, and subscribers read the
-row. A note publishes a poke. A note's edits are Yjs updates (Yjs is the shared-editing library under a note), and an
-update can be larger than any message worth publishing. So the instance that merged the update delivers the bytes to
-its own subscribers, and the poke tells the other instances to resync. The note's Yjs document (ydoc) stays the source
-of truth, and the app regenerates its `html` column on save. So a plain page load never starts the editor.
+row.
 
 Redis replays nothing published while a subscriber was disconnected. A chat stream catches up from its cursor on the
 next chat message, and every open chat stream on an instance catches up once its subscriber connection comes back. A
-note resyncs on the next poke, or when its stream closes at the fifteen-minute age limit. A Redis connection that drops
-reconnects with a backoff from one second to thirty. While Redis is unreachable, the app reads a session from Postgres,
-and each cache calls its loader. Each limit counts in its own replica's memory, so a caller gets the full limit on each
-replica. The storing instance still delivers to its own subscribers. A note's stream pauses while its tab is hidden.
+Redis connection that drops reconnects with a backoff from one second to thirty. While Redis is unreachable, the app
+reads a session from Postgres, and each cache calls its loader. Each limit counts in its own replica's memory, so a
+caller gets the full limit on each replica. The storing instance still delivers to its own subscribers.
 
 ### Content screening (LLM Guard)
 

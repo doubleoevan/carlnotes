@@ -311,7 +311,7 @@ The user events SHALL be, by area:
 - teams and invites: `invite_created` and `invite_reused` with `source`, `invite_accepted` and `invite_declined` with
   `kind` (`email`, `username`, or `link`) and `pageKind`, `team_created`, `team_deleted`, `team_join_requested`,
   `team_join_approved`, `team_member_removed` with `isSelf`, `team_topic_added`, and `team_topic_removed`
-- notes: `note_created`, `note_comment_added`, and `note_thread_resolved`
+- notes: `note_created` and `note_comment_added`
 - trust: `content_flagged` with `kind`
 
 The bot events SHALL be `mcp_connected` with `clientName` when an AI app trades its authorization code for a token,

@@ -1,7 +1,7 @@
 // the unread note badge counts. what changed in a note since a user last opened it, and the read that clears it
 import type { NoteBadge } from "@carlnotes/contracts/notes"
 import { db } from "@carlnotes/db"
-import { noteComments, noteCommentThreads, noteReads, notes } from "@carlnotes/db/schema/notes"
+import { noteComments, noteReads, notes } from "@carlnotes/db/schema/notes"
 import { teamMembers, teams, teamTopics } from "@carlnotes/db/schema/teams"
 import { topics } from "@carlnotes/db/schema/topics"
 import { and, count, eq, gt, inArray, isNull, ne, or } from "drizzle-orm"
@@ -152,7 +152,7 @@ async function loadBadgedPages(
 	return { topicIds: [...teamIdsByTopicId.keys()], teamIds, teamIdsByTopicId }
 }
 
-// how many comments each note received since the user last read it, their own and the deleted ones left out
+// how many comments each note received since the user last read it, their own left out
 async function loadUnreadCommentCounts(userId: string, noteIds: string[]): Promise<Map<string, number>> {
 	if (noteIds.length === 0) {
 		return new Map()
@@ -160,41 +160,16 @@ async function loadUnreadCommentCounts(userId: string, noteIds: string[]): Promi
 
 	// count each note's comments from somebody else after the read time. a closed account leaves a null author
 	const commentRows = await db
-		.select({ noteId: noteCommentThreads.noteId, unread: count() })
+		.select({ noteId: noteComments.noteId, unread: count() })
 		.from(noteComments)
-		.innerJoin(noteCommentThreads, eq(noteComments.threadId, noteCommentThreads.id))
-		.leftJoin(noteReads, and(eq(noteReads.noteId, noteCommentThreads.noteId), eq(noteReads.userId, userId)))
+		.leftJoin(noteReads, and(eq(noteReads.noteId, noteComments.noteId), eq(noteReads.userId, userId)))
 		.where(
 			and(
-				inArray(noteCommentThreads.noteId, noteIds),
-				isNull(noteComments.deletedAt),
+				inArray(noteComments.noteId, noteIds),
 				or(isNull(noteComments.authorUserId), ne(noteComments.authorUserId, userId)),
 				or(isNull(noteReads.readAt), gt(noteComments.createdAt, noteReads.readAt)),
 			),
 		)
-		.groupBy(noteCommentThreads.noteId)
+		.groupBy(noteComments.noteId)
 	return new Map(commentRows.map((commentRow) => [commentRow.noteId, commentRow.unread]))
-}
-
-// a comment mark wraps its text in a span of its own, which changes the body's HTML without changing what the body says
-const COMMENT_MARK_PATTERN = /<span\b[^>]*\bdata-bn-thread-id="[^"]*"[^>]*>([\s\S]*?)<\/span>/g
-
-/**
- * Whether two HTML bodies differ in what they say, with comment marks unwrapped first.
- */
-export function isNoteBodyChanged(storedHtml: string, freshHtml: string): boolean {
-	return toCommentlessHtml(storedHtml) !== toCommentlessHtml(freshHtml)
-}
-
-// every comment mark replaced, keeping the words it was attached to. the loop reaches nested comment marks
-function toCommentlessHtml(html: string): string {
-	let commentlessHtml = html
-	let previousHtml = ""
-
-	// each pass unwraps one layer, so a mark inside a mark takes two
-	while (commentlessHtml !== previousHtml) {
-		previousHtml = commentlessHtml
-		commentlessHtml = commentlessHtml.replace(COMMENT_MARK_PATTERN, "$1")
-	}
-	return commentlessHtml
 }

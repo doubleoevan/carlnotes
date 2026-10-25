@@ -9,17 +9,11 @@ import { durationMsBetween, toDollarLabel, toDurationLabel } from "@carlnotes/co
 import { cn } from "@carlnotes/nightshift/classNames"
 import Markdown from "markdown-to-jsx"
 import type * as React from "react"
-import { useEffect, useLayoutEffect, useRef, useState } from "react"
+import { useLayoutEffect, useRef, useState } from "react"
 import { AnchorLink } from "@/components/common/AnchorLink"
-import { CopyMarkdownButton } from "@/components/common/CopyMarkdownButton"
+import { ScrollBox } from "@/components/common/ScrollBox"
 import { type SourceRemoval, SourceResultsChart } from "@/components/common/SourceResultsChart"
-import { useScrollRegionTabStop } from "@/hooks/useScrollRegionTabStop"
-import {
-	HIGHLIGHT_SCROLLBAR_CLASS,
-	POPOVER_HEADING_CLASS,
-	SCROLL_REGION_FOCUS_CLASS,
-	STANDALONE_LINK_CLASS,
-} from "@/lib/styleClasses"
+import { POPOVER_HEADING_CLASS, RECAP_HEADING_CLASS, STANDALONE_LINK_CLASS } from "@/lib/styleClasses"
 
 // the fields a scan recap popover reads, shared by the topic page's scan history and the Activity subtable
 export type ScanRecapFields = {
@@ -99,7 +93,7 @@ function FindingLink({
 
 // a heading at any level renders as one compact display-font line
 function NoteHeading({ children }: { children?: React.ReactNode }) {
-	return <div className="font-display text-foreground mt-2.5 mb-1 text-[13px] font-semibold first:mt-0">{children}</div>
+	return <div className={cn(RECAP_HEADING_CLASS, "mt-2.5 mb-1 first:mt-0")}>{children}</div>
 }
 
 // the Markdown subset a note may use
@@ -128,46 +122,6 @@ function toSafeNoteOptions(allowedUrls?: AllowedScanNoteUrls) {
  */
 export function SafeNoteText({ note, allowedUrls }: { note: string; allowedUrls?: AllowedScanNoteUrls }) {
 	return <Markdown options={toSafeNoteOptions(allowedUrls)}>{note}</Markdown>
-}
-
-/**
- * A bordered box that scrolls when its content overflows, with a thin visible scrollbar to indicate that it is scrollable.
- * With copyMarkdown set, a copy button stays on the corner instead of scrolling away, offering the box's content as Markdown for an AI.
- * With scrollToTopOn set, a change of that value scrolls the box back to its top.
- */
-export function ScrollBox({
-	children,
-	copyMarkdown,
-	scrollToTopOn,
-	className,
-	boxClassName,
-}: {
-	children: React.ReactNode
-	copyMarkdown?: string
-	scrollToTopOn?: unknown
-	// the scrolling element's own classes, for a caller that bounds its height
-	className?: string
-	// the bordered box's classes, for a caller that lets the box shrink
-	boxClassName?: string
-}) {
-	// the scrolling element and its tab stop
-	const { ref: scrollBoxRef, tabIndex } = useScrollRegionTabStop<HTMLDivElement>()
-	// biome-ignore lint/correctness/useExhaustiveDependencies: the value is the trigger, read through the ref
-	useEffect(() => {
-		scrollBoxRef.current?.scrollTo({ top: 0 })
-	}, [scrollToTopOn])
-	return (
-		<div className={cn("group border-primary/50 relative rounded-md border", boxClassName)}>
-			<div
-				ref={scrollBoxRef}
-				tabIndex={tabIndex}
-				className={cn("max-h-72 overflow-y-auto p-2", HIGHLIGHT_SCROLLBAR_CLASS, SCROLL_REGION_FOCUS_CLASS, className)}
-			>
-				{children}
-			</div>
-			{copyMarkdown && <CopyMarkdownButton markdown={copyMarkdown} />}
-		</div>
-	)
 }
 
 /**
@@ -240,8 +194,8 @@ export function NumberedTopicFindingList({ findings }: { findings: TopicFinding[
 }
 
 /**
- * A scan recap popover's body: the full summary with the topic scan's findings numbered below it, the source notes
- * chart if the scan has results, then how long the scan took, and its cost.
+ * A scan recap popover's body: the full summary with the topic scan's findings numbered below it, the source
+ * footnotes chart if the scan has results, then how long the scan took, and its cost.
  */
 export function TopicScanRecap({
 	scan,

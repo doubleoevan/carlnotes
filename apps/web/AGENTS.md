@@ -32,8 +32,10 @@ the browser bundle and renders pages through the server build, behind its own ro
   `cn` until then. Custom shared components go in `components/common/`, among them
   `IconButton.tsx`, the button whose tooltip is also its accessible name, and `FlashingCount.tsx`, a labeled count
   whose highlighted number flashes once when the count changes, and never under reduced motion.
-  `SourceResultsChart.tsx` is the Source notes bar chart in a scan recap. It fetches nothing, and it shows a trash
-  button on an open row only for a Source id that its caller names as removable.
+  `ScrollBox.tsx` is the bordered box that scrolls its overflow on the highlight scrollbar with a tab stop, and with
+  `copyMarkdown` set it shows a copy button on its corner. `SourceResultsChart.tsx` is the Source footnotes bar chart
+  in a scan recap. It fetches nothing, and it shows a trash button on an open row only for a Source id that its caller
+  names as removable.
 - `components/table/` — the page tables and their cells: `TopicNameLink.tsx`, a topic's linked name with its latest
   podcast episode's play button, and `PodcastEpisodeTitleLink.tsx`, a podcast episode's linked title with its play
   button. `TeamMembershipRows.tsx` holds the teams table's membership and invite rows, `TeamSubtablesRow.tsx` the
@@ -62,8 +64,8 @@ the browser bundle and renders pages through the server build, behind its own ro
   the link that opens the plans page, and `toastChatRejection`, which toasts a rejection. `chatTurns.ts` builds the chat
   panel's chat turns, and finds, replaces, and drops a chat turn by its spoken answer key. `chatRoomTestFixtures.ts` and
   `chatMessagesTestFixtures.tsx` hold the chat fixtures the chat tests share.
-- `lib/` — `utils.ts` and small client-side helpers that read the browser. `toastActions.ts` builds the See plans and
-  See account toast actions. `visiblePoll.ts` is the poll that runs only while the page is visible, one request at a
+- `lib/` — `utils.ts` and small client-side helpers that read the browser. `externalLinks.ts` opens a url in a new
+  tab with no handle back to the page. `toastActions.ts` builds the See plans and See account toast actions. `visiblePoll.ts` is the poll that runs only while the page is visible, one request at a
   time, used by the scan poll and the counts poll. `topicViews.ts` sends a topic page's view once per topic per tab,
   keeping the sent topic ids in memory only. `podcastEpisodePlayback.ts` holds the playback math and the lock screen's
   media session, with `isMediaSessionAvailable`, which the spoken answer queue shares. `voiceRecorder.ts` records the
@@ -154,10 +156,24 @@ the browser bundle and renders pages through the server build, behind its own ro
   `stores/podcastEpisodePlayerStore.ts` drives that element, so playback continues from one page to the next,
   `stores/podcastEpisodePlayActions.ts` plays or pauses a podcast episode or a chapter by id from a page, and
   `stores/podcastEpisodeListenStore.ts` saves a signed-in user's progress in the podcast episode.
-- `components/note/` — the Tasting Notes section, table, and dialog, the dialog's create flow in `CreateNote.tsx`,
-  and the lazily imported BlockNote editor with its yjs SSE provider, comment threads, and the comment "@" mention menu.
-  The editor chunk loads only when a note dialog opens, so it never runs on the server.
-  `noteEditor.css` restyles BlockNote, Mantine, and emoji-mart inside `.note-editor`.
+- `components/note/` — the Tasting Notes section, table, and dialog, the dialog's create flow in `CreateNote.tsx`, and
+  the note's body on `react-native-enriched-html`, whose web build is a Tiptap editor. `NoteDialog.tsx` fetches the
+  note's html and version on every open, loads the comment thread through `useNoteComments` at the same time, and
+  loads the editor or the reader lazily, starting the chunk as the dialog mounts, so neither chunk runs on the server:
+  `NoteEditor.tsx` mounts `EnrichedTextInput` over the stored body with `NoteToolbar.tsx` (the inline marks, headings 1
+  to 3, the bulleted, numbered, and checklists, the quote and code block, and the link popover, each a `ToolbarButton`,
+  a Nightshift ghost `Button` lit from the editor's state, which the dialog's own controls reuse), schedules the save
+  through `@carlnotes/core/hooks/useNoteBodySave`, flushes it on unmount, and shows `NoteConflictNotice.tsx` with its
+  Reload button if somebody else saved since the open; `NoteStatic.tsx` renders `EnrichedText` for a read-only open.
+  Both sit in `NoteLayout.tsx`, the page card with the thread of `NoteComments.tsx` beside it on a wide screen and in a
+  sheet on a phone. `noteStyle.ts` holds `NOTE_HTML_STYLE`, the Nightshift note style over the theme's CSS variables,
+  `NOTE_PLACEHOLDER_COLOR`, and `NOTE_BODY_CLASS`. `src/reactNativeTypes.d.ts` declares the React
+  Native types the package's
+  declarations import, and `tsconfig.json` maps `react-native` to it under `paths`, so React Native's global
+  declarations never merge into the DOM's and no React Native code reaches the bundle.
+  `patches/react-native-enriched-html@1.1.1.patch` makes the package's web editor create its Tiptap instance after
+  the component mounts and lets its hooks and ref methods take a null editor until then. Tiptap destroys an editor
+  made during render a millisecond later if nothing has mounted, and a cold open of the dialog lost that race.
 - Clients — the typed api clients live in `@carlnotes/client`, imported as `@carlnotes/client/<domain>Client`.
   `lib/webApiClient.ts` holds the app's `configureApiClient` call, with the base url, `""` in the browser and the api on
   port 3000 on the server, and `showError`, which toasts the message; `router.tsx` calls it where both the server
@@ -198,15 +214,16 @@ the browser bundle and renders pages through the server build, behind its own ro
 - `hooks/` — the React hooks that read the browser or a route, `useTopicPagePayload.ts` among them, the topic page's
   payload and its poll reload, and `useScanNote.ts`, a scan's note behind its recap popover, read once the trigger is
   pointed at, focused, touched, or opened, and kept once the scan has finished; `providers/` — context providers;
-  `assets/` — images the bundler imports and serves as hashed files. The DOM-free hooks `useNow`, `useAvatar`, and
-  `useUsernameChange` live in `@carlnotes/core/hooks/`. A component that reads the browser during render,
-  `localStorage`, `window`, or `document`, reads it through `useBrowserValue` in `hooks/useBrowserValue.ts`, so the
-  server and the first browser render agree. A page that starts from a server loader's data loads in the browser through
-  `useLoadInBrowser` in the same file. `useLoadInBrowser` skips the first load while hydrating data the server already
-  read. Code without its route's typed `useSearch` reads the query string as `URLSearchParams` through `useSearchParams`
-  in `hooks/useSearchParams.ts`. `useCtaPromptToast` in `hooks/useCtaPromptToast.ts` toasts the prompt that a page's
-  `cta` param names, on the signup and plans pages. `useIsSignedInBeforeSession` in
-  `hooks/useIsSignedInBeforeSession.ts` says whether the page shows as signed in. The page load's session cookie decides
+  `assets/` — images the bundler imports and serves as hashed files. The DOM-free hooks `useNow`, `useAvatar`,
+  `useUsernameChange`, `useNoteBodySave`, and `useNoteComments` live in `@carlnotes/core/hooks/`. A component that
+  reads the browser during render, `localStorage`, `window`, or `document`, reads it through `useBrowserValue` in
+  `hooks/useBrowserValue.ts`, so the server and the first browser render agree. A page that starts from a server
+  loader's data loads in the browser through `useLoadInBrowser` in the same file. `useLoadInBrowser` skips the first
+  load while hydrating data the server already read. Code without its route's typed `useSearch` reads the query string
+  as `URLSearchParams` through `useSearchParams` in `hooks/useSearchParams.ts`. `useCtaPromptToast` in
+  `hooks/useCtaPromptToast.ts` toasts the prompt that a page's `cta` param names, on the signup and plans pages.
+  `useIsSignedInBeforeSession` in `hooks/useIsSignedInBeforeSession.ts` says whether the page shows as signed in. The
+  page load's session cookie decides
   until Better Auth's session request finishes, and the session decides after. An element that fades in as it scrolls
   into view takes its class from `useRevealClassName` in `hooks/useRevealClassName.ts`, which shows a server-rendered
   element before any script runs, so nothing a crawler or a browser without JavaScript reads starts hidden. A box that
@@ -214,11 +231,11 @@ the browser bundle and renders pages through the server build, behind its own ro
   `{ ref, tabIndex }` for the box, with a tab stop while its content overflows, so a keyboard can scroll text with no
   link in it. The box draws its focus ring with `SCROLL_REGION_FOCUS_CLASS`. `usePolledCounts` in
   `hooks/usePolledCounts.ts` reads a page's counts once it has mounted, then every minute while the page is visible.
-- `src/globals.css` — the app's stylesheet, with the keyframes in `animations.css` and the note editor's overrides in
-  `components/note/noteEditor.css`. It imports its `@theme inline` block, the `shadow-raised` utility, and the `:root`
-  and dark variables from `@carlnotes/nightshift/tokens.css`, which is written from the Nightshift TypeScript source,
-  has Tailwind read the component contracts in `packages/nightshift/components/`, and keeps Tailwind from scanning
-  stories, so a story never adds a class to the app's css. It defines `sentence-link`, the class of a link
+- `src/globals.css` — the app's stylesheet, with the keyframes in `animations.css` and the `scrollbar-none` utility
+  the note toolbar scrolls sideways with. It imports its `@theme inline` block, the `shadow-raised` utility, and the
+  `:root` and dark variables from `@carlnotes/nightshift/tokens.css`, which is written from the Nightshift TypeScript
+  source, has Tailwind read the component contracts in `packages/nightshift/components/`, and keeps Tailwind from
+  scanning stories, so a story never adds a class to the app's css. It defines `sentence-link`, the class of a link
   inside a sentence: the link color with `faint-underline`, an underline at rest that turns solid on hover. A link in
   its own color inside a sentence, as the hero's is, takes `faint-underline` alone. A link that stands alone, such as a
   table cell, a footer link, or a link alone in its line, takes `STANDALONE_LINK_CLASS` from `lib/styleClasses.ts`, the
@@ -268,8 +285,9 @@ the browser bundle and renders pages through the server build, behind its own ro
   `dist/nightshift/`, which the api serves at `/nightshift`.
 - Imports: `@carlnotes/contracts/*`, `@carlnotes/client/*`, `@carlnotes/core/*`, `@carlnotes/nightshift/tokens.css`,
   `@carlnotes/nightshift/classNames`, the `cn` class merge, the coffee mug and the sign-in providers' icons both apps
-  draw, `@carlnotes/nightshift/coffeeMug` and `@carlnotes/nightshift/oauthProviderIcons`, plus types only from
-  `@carlnotes/api`, such as `AppType` and `auth`. A Nightshift component contract reaches the app only through its
+  draw, `@carlnotes/nightshift/coffeeMug` and `@carlnotes/nightshift/oauthProviderIcons`, the note's style,
+  `@carlnotes/nightshift/noteHtmlStyle` and `toColorCssVariable` from `@carlnotes/nightshift/theme`, plus types only
+  from `@carlnotes/api`, such as `AppType` and `auth`. A Nightshift component contract reaches the app only through its
   implementation in `components/primitives/`. A test, a story, `.storybook/`, and `src/nightshift/` may read the rest of
   `@carlnotes/nightshift`'s TypeScript, so the browser bundle includes no palette module. Only a story,
   `.storybook/`, and `src/nightshift/` may import a story or Storybook. Never a server package (`@carlnotes/server`,

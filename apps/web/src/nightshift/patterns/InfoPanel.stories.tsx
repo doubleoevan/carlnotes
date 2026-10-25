@@ -3,10 +3,11 @@ import { DAY_MS } from "@carlnotes/contracts/time"
 import { cn } from "@carlnotes/nightshift/classNames"
 import type { Meta, StoryObj } from "@storybook/tanstack-react"
 import { useId, useState } from "react"
+import { ScrollBox } from "@/components/common/ScrollBox"
 import { Popover, PopoverAnchor, PopoverCloseButton, PopoverContent } from "@/components/primitives/popover"
 import { TopicFindingHeading, TopicFindingStats } from "@/components/topic/ResourceInfo"
 import { ResourceMetadata, TopicFindingSummary } from "@/components/topic/TopicFindingSummary"
-import { ScrollBox, toNotesMarkdown } from "@/components/topic/TopicScanRecap"
+import { toNotesMarkdown } from "@/components/topic/TopicScanRecap"
 import {
 	DASHED_ROW_CLASS,
 	LIST_ROW_HOVER_CLASS,

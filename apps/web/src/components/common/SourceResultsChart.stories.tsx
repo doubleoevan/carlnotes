@@ -1,4 +1,4 @@
-// the source notes chart in a scan recap: one bar row per Source with what it read and kept, each opening its
+// the source footnotes chart in a scan recap: one bar row per Source with what it read and kept, each opening its
 // details, and the trash button a topic editor sees on a current Source
 import type { SourceResult } from "@carlnotes/contracts/topics"
 import type { Meta, StoryObj } from "@storybook/tanstack-react"

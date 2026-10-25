@@ -10,7 +10,7 @@ import { toTeamRole } from "../team/members"
 import { assertNever, canSeeTopic, gatedTopicColumns } from "../topic/permissions"
 
 // a note row, and the two row shapes a page can be
-type NoteRow = typeof notes.$inferSelect
+export type NoteRow = typeof notes.$inferSelect
 type PageTopic = Pick<typeof topics.$inferSelect, "id" | "ownerId" | "visibility" | "teamId" | "name">
 type PageTeam = Pick<typeof teams.$inferSelect, "id" | "isPublic" | "name">
 

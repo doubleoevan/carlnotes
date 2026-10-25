@@ -1,13 +1,13 @@
-// the note tables: notes, their comment threads and comments, and when a user last opened one
+// the note tables: notes, their comments, and when a user last opened one
 import { sql } from "drizzle-orm"
-import { boolean, check, index, jsonb, pgTable, primaryKey, text, timestamp } from "drizzle-orm/pg-core"
-import { bytea, noteVisibility, primaryId, timestamps } from "./columns"
+import { check, index, integer, pgTable, primaryKey, text, timestamp } from "drizzle-orm/pg-core"
+import { noteVisibility, primaryId, timestamps } from "./columns"
 import { teams } from "./teams"
 import { topics } from "./topics"
 import { users } from "./users"
 
 // a note is one named rich-text note on a page, with a visibility: the topic page or the team page it lives on.
-// the ydoc is the source of truth for content and comment threads, and the HTML is regenerated from it on save
+// the sanitized HTML is the body's one copy, and the version is what a save names
 export const notes = pgTable(
 	"notes",
 	{
@@ -22,12 +22,12 @@ export const notes = pgTable(
 		ownerUserId: text("owner_user_id")
 			.notNull()
 			.references(() => users.id, { onDelete: "cascade" }),
-		// the yjs document bytes and the stored HTML the static state serves
-		ydoc: bytea("ydoc").notNull(),
+		// the sanitized HTML body, empty until somebody writes, and the version a save that changes the body raises
 		html: text("html").notNull().default(""),
+		version: integer("version").notNull().default(1),
 		// who wrote the last edit, so a user is never badged for their own
 		lastEditorUserId: text("last_editor_user_id").references(() => users.id, { onDelete: "set null" }),
-		// when the readable body last changed. updated_at also moves on a comment write and on the HTML regeneration
+		// when the body last changed. updated_at also moves on a rename or a visibility change
 		bodyEditedAt: timestamp("body_edited_at", { withTimezone: true }),
 		...timestamps(),
 	},
@@ -39,39 +39,21 @@ export const notes = pgTable(
 	],
 )
 
-// the sql mirror of a note ydoc's comment threads, for counts and notifications. the ydoc stays the source of truth
-export const noteCommentThreads = pgTable(
-	"note_comment_threads",
-	{
-		// the thread id the ydoc's threads map uses
-		id: text("id").primaryKey(),
-		noteId: text("note_id")
-			.notNull()
-			.references(() => notes.id, { onDelete: "cascade" }),
-		// whether the thread is resolved
-		isResolved: boolean("is_resolved").notNull().default(false),
-		...timestamps(),
-	},
-	(table) => [index("note_comment_threads_note_id_idx").on(table.noteId)],
-)
-
-// the sql mirror of one note comment. the body is the comment's blocknote json
+// one comment on a note's thread, plain text. deleting the note takes its comments with it
 export const noteComments = pgTable(
 	"note_comments",
 	{
-		// the comment id the ydoc thread uses
-		id: text("id").primaryKey(),
-		threadId: text("thread_id")
+		id: primaryId(),
+		noteId: text("note_id")
 			.notNull()
-			.references(() => noteCommentThreads.id, { onDelete: "cascade" }),
-		// who wrote it. the row outlives a closed account
+			.references(() => notes.id, { onDelete: "cascade" }),
+		// who wrote it. the row outlives a closed account with no author
 		authorUserId: text("author_user_id").references(() => users.id, { onDelete: "set null" }),
-		body: jsonb("body"),
-		// saved instead of deleting when the ui soft-deletes a comment
-		deletedAt: timestamp("deleted_at", { withTimezone: true }),
+		body: text("body").notNull(),
 		...timestamps(),
 	},
-	(table) => [index("note_comments_thread_id_idx").on(table.threadId)],
+	// the thread in order, and the unread count's read, both by note
+	(table) => [index("note_comments_note_id_created_at_idx").on(table.noteId, table.createdAt)],
 )
 
 // when a user last opened a note. opening clears the note's unread edit and comment counts

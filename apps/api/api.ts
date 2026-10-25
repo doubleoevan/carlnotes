@@ -34,8 +34,8 @@ import { invitesRoute, toInviteTarget } from "./invite/invites"
 import { receivedInvitesRoute } from "./invite/receivedInvites"
 import { userInvitesRoute } from "./invite/userInvites"
 import { mcpClientsRoute } from "./mcp/server"
-import { noteCommentThreadsRoute } from "./note/noteCommentThreads"
-import { NOTE_SYNC_PATH, notesRoute } from "./note/notes"
+import { noteCommentsRoute } from "./note/noteComments"
+import { NOTE_BODY_PATH, notesRoute } from "./note/notes"
 import { podcastEpisodesRoute } from "./podcast/podcastEpisodes"
 import { podcastFeedsRoute } from "./podcast/podcastFeeds"
 import { profilesRoute } from "./profiles"
@@ -83,7 +83,7 @@ const UNSEEN_CHAT_MENTION_COUNT_TTL_MS = 10_000
 const API_BASE_PATH = "/api"
 
 // the routes that set their own body limit, for chat turns, chat room posts, a spoken question's recording, uploads,
-// and note sync
+// and the note body save
 const OWN_BODY_LIMIT_PATHS = [
 	TOPIC_CHAT_PATH,
 	TEAM_CHAT_PATH,
@@ -94,7 +94,7 @@ const OWN_BODY_LIMIT_PATHS = [
 	AVATAR_UPLOAD_PATH,
 	TEAM_AVATAR_UPLOAD_PATH,
 	TOPIC_ATTACHMENT_UPLOAD_PATH,
-	NOTE_SYNC_PATH,
+	NOTE_BODY_PATH,
 ].map((routePath) => `${API_BASE_PATH}${routePath}`)
 
 // the "All" vs. "Unread" topic finding toggle
@@ -238,7 +238,7 @@ export const apiRoute = new Hono<AppEnv>()
 	.route("/", voiceRoute)
 	// the note routes and their comment threads
 	.route("/", notesRoute)
-	.route("/", noteCommentThreadsRoute)
+	.route("/", noteCommentsRoute)
 	// the kept chat attachment routes
 	.route("/", chatAttachmentsRoute)
 	// the subscription routes

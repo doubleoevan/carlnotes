@@ -257,14 +257,14 @@
 			"$value": {
 				"colorSpace": "srgb",
 				"components": [
-					0.8627,
-					0.8,
-					0.7137
+					0.651,
+					0.5529,
+					0.3922
 				],
 				"alpha": 1,
-				"hex": "#dcccb6"
+				"hex": "#a68d64"
 			},
-			"$description": "a field's border"
+			"$description": "a field's border, at 3:1 or more on a card and a popover, so a field and a select show without a fill"
 		},
 		"ring": {
 			"$type": "color",

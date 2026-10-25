@@ -24,7 +24,7 @@ import {
 	teamRoles,
 } from "./enums"
 import { inviteSources } from "./invites"
-import { NOTE_NAME_MAX_CHARS, NOTE_UPDATE_MAX_CHARS } from "./notes"
+import { NOTE_COMMENT_MAX_CHARS, NOTE_HTML_MAX_CHARS, NOTE_NAME_MAX_CHARS } from "./notes"
 import { topicDraftPayload } from "./topicPayloads"
 
 // the shape that every chat attachment includes whatever its kind
@@ -307,7 +307,14 @@ export type PodcastEpisodeListenPayload = z.infer<typeof podcastEpisodeListenPay
 // the subscription toggle body. true subscribes the current user and false unsubscribes them
 export const subscriptionPayload = z.object({ isSubscribed: z.boolean() })
 
-export const noteSyncPayload = z.object({ update: z.string().min(1).max(NOTE_UPDATE_MAX_CHARS) })
+// the largest postgres integer, the bound on a version a payload names, so an oversized one is a 400
+const POSTGRES_INTEGER_MAX = 2_147_483_647
+
+// the note body save: the HTML the editor wrote, sanitized on arrival, and the version the editor opened at
+export const noteBodyPayload = z.object({
+	html: z.string().max(NOTE_HTML_MAX_CHARS),
+	version: z.number().int().positive().max(POSTGRES_INTEGER_MAX),
+})
 
 export const noteCreatePayload = z.object({
 	name: z.string().trim().min(1).max(NOTE_NAME_MAX_CHARS),
@@ -320,28 +327,8 @@ export const noteUpdatePayload = z.object({
 	visibility: z.enum(noteVisibilities).optional(),
 })
 
-// the longest emoji a note comment reaction takes, with room for a skin tone and a joined family
-const NOTE_COMMENT_REACTION_EMOJI_MAX_CHARS = 32
-
-// one note comment as the editor's thread store writes it: a blocknote document, an array of blocks, and any metadata
-export const noteCommentPayload = z.object({
-	body: z.array(z.record(z.string(), z.unknown())).min(1),
-	metadata: z.unknown().optional(),
-})
-
-// the new note comment thread body: its first comment, and any metadata
-export const noteCommentThreadPayload = z.object({
-	initialComment: noteCommentPayload,
-	metadata: z.unknown().optional(),
-})
-
-// the note comment add and edit body
-export const noteCommentWritePayload = z.object({ comment: noteCommentPayload })
-
-// the note comment reaction body: one emoji
-export const noteCommentReactionPayload = z.object({
-	emoji: z.string().trim().min(1).max(NOTE_COMMENT_REACTION_EMOJI_MAX_CHARS),
-})
+// the note comment body: plain text, trimmed
+export const noteCommentPayload = z.object({ body: z.string().trim().min(1).max(NOTE_COMMENT_MAX_CHARS) })
 
 // one spoken turn of a podcast episode. its speaker, its words as speech, and an optional short delivery style
 export const podcastEpisodeTurnPayload = z.object({

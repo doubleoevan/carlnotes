@@ -43,7 +43,7 @@ export const buttonBoxVariants = cva("shrink-0 items-center justify-center gap-2
 		variant: {
 			default: "bg-primary shadow-raised",
 			destructive: "bg-destructive dark:bg-destructive/40 shadow-raised",
-			outline: "border bg-background shadow-raised dark:bg-input/30 dark:border-input",
+			outline: "border border-input bg-background shadow-raised dark:bg-input/30",
 			secondary: "bg-secondary shadow-raised",
 			ghost: "",
 			link: "",

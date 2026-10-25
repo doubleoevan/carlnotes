@@ -1,0 +1,50 @@
+diff --git a/lib/module/web/EnrichedTextInput.js b/lib/module/web/EnrichedTextInput.js
+index 07130f396693972bdf0e411195c01e798ba1e727..08da5db25d29ab8b76030a0f7a81c9f7ee10dc2c 100644
+--- a/lib/module/web/EnrichedTextInput.js
++++ b/lib/module/web/EnrichedTextInput.js
+@@ -163,6 +163,7 @@ export const EnrichedTextInput = ({
+     extensions,
+     editable,
+     autofocus: autoFocus,
++    immediatelyRender: false,
+     onCreate: ({
+       editor: _editor
+     }) => {
+@@ -237,9 +238,9 @@ export const EnrichedTextInput = ({
+   useOnChangeState(editor, resolvedHtmlStyle, onChangeState);
+   useOnLinkDetected(editor, linkEmitterRef);
+   useImperativeHandle(ref, () => ({
+-    focus: () => editor.commands.focus(),
+-    blur: () => editor.commands.blur(),
+-    setValue: value => editor.commands.setContent(prepareHtmlForTiptap(value, useHtmlNormalizerRef.current, sanitizationConfigRef.current)),
++    focus: () => editor?.commands.focus(),
++    blur: () => editor?.commands.blur(),
++    setValue: value => editor?.commands.setContent(prepareHtmlForTiptap(value, useHtmlNormalizerRef.current, sanitizationConfigRef.current)),
+     setSelection: (start, end) => {
+       const doc = editor.state.doc;
+       runFocused(editor, c => c.setTextSelection({
+diff --git a/lib/module/web/pmPlugins/MentionPlugin/useMentionEvents.js b/lib/module/web/pmPlugins/MentionPlugin/useMentionEvents.js
+index d09f6bdad078e6057e3a689553b53887fe774c0f..2fa1f81afb5f1efffcdd19bb31fc7e3567d5a387 100644
+--- a/lib/module/web/pmPlugins/MentionPlugin/useMentionEvents.js
++++ b/lib/module/web/pmPlugins/MentionPlugin/useMentionEvents.js
+@@ -5,6 +5,7 @@ import { mentionPluginKey } from "./mentionPluginKey.js";
+ import { useEffect } from 'react';
+ export function useMentionEvents(editor, getCallbacks) {
+   useEffect(() => {
++    if (!editor) return;
+     let prevTriggerState = {
+       active: false
+     };
+diff --git a/lib/module/web/useOnEditorChange.js b/lib/module/web/useOnEditorChange.js
+index 6363a1aaa8ad7925dbfc917ba6beb0ee5f23dae3..77be699e44b2dee929b32afc79814108209f2a44 100644
+--- a/lib/module/web/useOnEditorChange.js
++++ b/lib/module/web/useOnEditorChange.js
+@@ -5,7 +5,7 @@ import { adaptWebToNativeEvent } from "./adaptWebToNativeEvent.js";
+ export const useOnEditorChange = (editor, handler, getValue) => {
+   const lastValueRef = useRef('');
+   useEffect(() => {
+-    if (!handler) return;
++    if (!editor || !handler) return;
+     const handleUpdate = () => {
+       const value = getValue(editor);
+       if (value !== lastValueRef.current) {

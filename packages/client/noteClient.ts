@@ -1,9 +1,18 @@
-// the api client for notes: the page's note list, the note lifecycle, the ydoc sync, the stream url,
-// and the comment users
+// the api client for notes: the page's note list, the note lifecycle, the body save, the comment thread, and the
+// badges
 
 import type { noteVisibilities } from "@carlnotes/contracts/enums"
-import type { Note, NoteBadge, NoteCommentUser, NoteResponse, NotesResponse } from "@carlnotes/contracts/notes"
-import { apiClient, fetchApi } from "./apiClient"
+import type {
+	Note,
+	NoteBadge,
+	NoteBodyConflictResponse,
+	NoteBodyResponse,
+	NoteBodySaveResult,
+	NoteComment,
+	NoteResponse,
+	NotesResponse,
+} from "@carlnotes/contracts/notes"
+import { apiClient } from "./apiClient"
 
 // a note visibility and a note page reference
 type NoteVisibility = (typeof noteVisibilities)[number]
@@ -26,7 +35,7 @@ export async function fetchNotes(page: NotePageRef): Promise<NotesResponse | nul
 }
 
 /**
- * Create one note on the page.
+ * Creates one note on the page.
  */
 export async function createNote(page: NotePageRef, name: string, visibility: NoteVisibility): Promise<Note | null> {
 	const response =
@@ -48,18 +57,25 @@ export async function createNote(page: NotePageRef, name: string, visibility: No
 }
 
 /**
- * One note for its dialog, with the stored HTML a read-only open renders.
+ * One note for its dialog, with the stored HTML body and the version a save names. Any error status, or a request that
+ * never arrives, returns null.
  */
 export async function fetchNote(noteId: string): Promise<NoteResponse | null> {
-	const response = await apiClient().api.notes[":id"].$get({ param: { id: noteId } })
-	if (!response.ok) {
+	try {
+		const response = await apiClient().api.notes[":id"].$get({ param: { id: noteId } })
+		if (!response.ok) {
+			return null
+		}
+
+		// the note with its body and version
+		return (await response.json()) as NoteResponse
+	} catch {
 		return null
 	}
-	return (await response.json()) as NoteResponse
 }
 
 /**
- * Rename a note or change its visibility. The api rejects what the caller's role does not allow.
+ * Renames a note or changes its visibility. The api rejects what the caller's role does not allow.
  */
 export async function updateNote(
 	noteId: string,
@@ -70,7 +86,7 @@ export async function updateNote(
 }
 
 /**
- * Delete a note. Only the owner may.
+ * Deletes a note. Only the owner may.
  */
 export async function deleteNote(noteId: string): Promise<boolean> {
 	const response = await apiClient().api.notes[":id"].$delete({ param: { id: noteId } })
@@ -78,83 +94,85 @@ export async function deleteNote(noteId: string): Promise<boolean> {
 }
 
 /**
- * The note document as yjs update bytes: the full document, or the diff against the given state vector.
+ * Saves a note's body at the version the editor opened at. A request that never arrives counts as failed.
  */
-export async function fetchNoteYdoc(noteId: string, stateVector: Uint8Array | null): Promise<Uint8Array | null> {
-	// the snapshot is raw bytes, so this is a plain fetch instead of the typed client
-	const stateVectorQuery = stateVector ? `?sv=${encodeURIComponent(toBase64(stateVector))}` : ""
-	const response = await fetchApi(`/api/notes/${noteId}/ydoc${stateVectorQuery}`)
-	if (!response.ok) {
-		return null
+export async function saveNoteBody(
+	noteId: string,
+	bodySave: { html: string; version: number },
+): Promise<NoteBodySaveResult> {
+	// a thrown fetch error reads as a failed save
+	try {
+		const response = await apiClient().api.notes[":id"].body.$put({ param: { id: noteId }, json: bodySave })
+
+		// a conflict names the newer version and who saved it
+		const status: number = response.status
+		if (status === 409) {
+			const conflict = (await response.json()) as NoteBodyConflictResponse
+			return { status: "conflict", version: conflict.version, lastEditorUsername: conflict.lastEditorUsername }
+		}
+
+		// the body limit returns 413 and the payload's own limit 400. any other error is a failed save
+		if (status === 413 || status === 400) {
+			return { status: "tooLarge" }
+		}
+		if (!response.ok) {
+			return { status: "failed" }
+		}
+
+		// a kept body comes back with the version it is stored at
+		return { status: "saved", version: ((await response.json()) as NoteBodyResponse).version }
+	} catch {
+		return { status: "failed" }
 	}
-	return new Uint8Array(await response.arrayBuffer())
 }
 
 /**
- * Post one yjs update for the server to merge. "rejected" is the server rejecting this exact update, which no retry can ever send.
+ * The note's comment thread, oldest first. Any error status, or a request that never arrives, returns an empty list.
  */
-export async function sendNoteUpdate(noteId: string, update: Uint8Array): Promise<boolean | "rejected"> {
-	const response = await apiClient().api.notes[":id"].updates.$post({
-		param: { id: noteId },
-		json: { update: toBase64(update) },
-	})
-	if (response.status === 400) {
-		return "rejected"
-	}
-	return response.ok
-}
+export async function fetchNoteComments(noteId: string): Promise<NoteComment[]> {
+	try {
+		const response = await apiClient().api.notes[":id"].comments.$get({ param: { id: noteId } })
+		if (!response.ok) {
+			return []
+		}
 
-/**
- * The stream url that the note's EventSource connects to.
- */
-export function toNoteEventsUrl(noteId: string): string {
-	return `/api/notes/${noteId}/events`
-}
-
-/**
- * The base url the editor's REST thread store sends comment writes to.
- */
-export function toNoteThreadsUrl(noteId: string): string {
-	return `/api/notes/${noteId}/threads`
-}
-
-/**
- * The comment authors' usernames and avatars for the editor's resolveUsers.
- */
-export async function fetchNoteUsers(noteId: string, userIds: string[]): Promise<NoteCommentUser[]> {
-	const response = await apiClient().api.notes[":id"].users.$get({
-		param: { id: noteId },
-		query: { ids: userIds.join(",") },
-	})
-	if (!response.ok) {
+		// the thread as the api lists it
+		return ((await response.json()) as { comments: NoteComment[] }).comments
+	} catch {
 		return []
 	}
-	return ((await response.json()) as { users: NoteCommentUser[] }).users
 }
 
 /**
- * Encode bytes as base64 in the browser.
+ * Posts one comment on the note's thread. Any error status, or a request that never arrives, returns null.
  */
-function toBase64(bytes: Uint8Array): string {
-	// build the binary string in chunks so a large update never overflows the argument list
-	let binary = ""
-	const chunkSize = 0x8000
-	for (let offset = 0; offset < bytes.length; offset += chunkSize) {
-		binary += String.fromCharCode(...bytes.subarray(offset, offset + chunkSize))
+export async function postNoteComment(noteId: string, body: string): Promise<NoteComment | null> {
+	try {
+		const response = await apiClient().api.notes[":id"].comments.$post({ param: { id: noteId }, json: { body } })
+		if (!response.ok) {
+			return null
+		}
+
+		// the posted comment as the thread shows it
+		return (await response.json()) as NoteComment
+	} catch {
+		return null
 	}
-	return btoa(binary)
 }
 
 /**
- * Decode base64 back to bytes.
+ * Deletes one of the user's own comments. A request that never arrives reads as not deleted.
  */
-export function fromBase64(encoded: string): Uint8Array {
-	const binary = atob(encoded)
-	const bytes = new Uint8Array(binary.length)
-	for (let index = 0; index < binary.length; index++) {
-		bytes[index] = binary.charCodeAt(index)
+export async function deleteNoteComment(noteId: string, commentId: string): Promise<boolean> {
+	try {
+		// whether the api removed the row
+		const response = await apiClient().api.notes[":id"].comments[":commentId"].$delete({
+			param: { id: noteId, commentId },
+		})
+		return response.ok
+	} catch {
+		return false
 	}
-	return bytes
 }
 
 /**
@@ -172,7 +190,7 @@ export async function fetchNoteBadges(): Promise<NoteBadge[]> {
 }
 
 /**
- * Mark a note read, which clears both of its counts.
+ * Marks a note read, which clears both of its counts.
  */
 export async function sendNoteRead(noteId: string): Promise<void> {
 	await apiClient().api.notes[":id"].read.$post({ param: { id: noteId } })

@@ -1,4 +1,4 @@
-// the source notes chart: what each Source read and kept in one scan, as plain HTML bars on Nightshift tokens
+// the source footnotes chart: what each Source read and kept in one scan, as plain HTML bars on Nightshift tokens
 
 import { toFallbackModeLabel } from "@carlnotes/contracts/sources"
 import { toDotSeparatedText } from "@carlnotes/contracts/text"
@@ -9,6 +9,7 @@ import { Trash2 } from "lucide-react"
 import type * as React from "react"
 import { useId, useState } from "react"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
+import { RECAP_HEADING_CLASS } from "@/lib/styleClasses"
 import { IconButton } from "./IconButton"
 import { TooltipSection } from "./UpdateCountBadge"
 
@@ -41,9 +42,9 @@ export type SourceRemoval = {
 }
 
 /**
- * The source notes chart: the heading with the scan's date, the summary line with its hint and legend, and one bar row per Source that
- * opens its detail line. With sourceRemoval, an open row of a removable Source offers to remove it. It renders nothing
- * with no row to show.
+ * The source footnotes chart: the heading with the scan's date, the summary line with its hint and legend, and one bar
+ * row per Source that opens its detail line. With sourceRemoval, an open row of a removable Source offers to remove it.
+ * It renders nothing with no row to show.
  */
 export function SourceResultsChart({
 	sourceResults,
@@ -86,7 +87,7 @@ export function SourceResultsChart({
 		<section className="mt-4">
 			{/* the heading on the left and the scan's date on the right */}
 			<div className="flex items-baseline justify-between gap-3">
-				<h3 className="text-foreground text-sm font-semibold">Source notes</h3>
+				<h3 className={RECAP_HEADING_CLASS}>Source footnotes</h3>
 				<span className="text-muted-foreground text-xs">{toMonthDayLabel(scannedAt)}</span>
 			</div>
 			{/* the summary line with its tap hint, and the legend at the right end of its first line. the line wraps under

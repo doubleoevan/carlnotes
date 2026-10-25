@@ -3,7 +3,6 @@
 @import "tw-animate-css";
 @import "./animations.css";
 @import "@carlnotes/nightshift/tokens.css";
-@import "./components/note/noteEditor.css";
 
 @custom-variant dark (&:is(.dark *));
 

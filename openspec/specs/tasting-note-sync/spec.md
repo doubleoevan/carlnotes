@@ -3,88 +3,115 @@
 ## Purpose
 TBD - created by archiving change add-napkins. Update Purpose after archive.
 ## Requirements
-### Requirement: A snapshot endpoint serves the ydoc with state-vector diff support
+### Requirement: A note read returns its body and version
 
-The system SHALL serve a note's document over a GET endpoint as a Yjs update. When the request includes the client's state vector, the response SHALL be the diff against it instead of the full document, so a reconnecting client transfers only what it is missing. The endpoint SHALL require view access to the note and SHALL answer as missing (404) when the requesting user or visitor may not see it.
+The note read endpoint SHALL return the note's stored HTML and its integer version together, behind view access, and
+SHALL answer as missing (404) to anyone who may not see the note.
 
-#### Scenario: First load gets the full document
+#### Scenario: An open gets the body and version
 
-- **WHEN** a user with view access requests a note snapshot with no state vector
-- **THEN** the response is a Yjs update encoding the full document
-
-#### Scenario: Reconnect gets only the diff
-
-- **WHEN** a client reconnects and requests the snapshot with its current state vector
-- **THEN** the response encodes only the changes the client does not already have
+- **WHEN** a user with view access reads a note
+- **THEN** the response holds the stored HTML and the version the next save must name
 
 #### Scenario: No view access reads nothing
 
-- **WHEN** someone without view access requests a note snapshot
+- **WHEN** someone without view access reads a note
 - **THEN** the endpoint answers 404
 
-### Requirement: Updates POST as base64 and merge under an advisory lock
+### Requirement: A save writes the sanitized body only at the version it opened at
 
-Clients SHALL send local Yjs updates as base64 over a POST endpoint requiring edit access. The server SHALL merge each update into the stored document under a Postgres advisory lock keyed per note so concurrent writers never lose each other's changes, persist the merged document immediately, and regenerate the HTML after a short debounce so static readers and crawlers see saved content without loading any editor code.
+A save SHALL take the note's HTML and the version the editor opened at, behind edit access, answering 404 to anyone
+without it and answering a visitor before the body is read. The api SHALL sanitize the HTML and then write it, with
+the version raised by one, the saver as last editor, and the body's edit time set, only if the stored version still
+equals the one sent, in one conditional write with no lock. If the stored version differs it SHALL answer a conflict
+(409) naming the stored version and the username of who saved last. A sanitized body equal to the stored one SHALL
+write nothing and answer the stored version. The HTML SHALL be bounded by `NOTE_HTML_MAX_CHARS` in the shared
+contracts, the route SHALL have a body limit of its own, and a larger body SHALL get a 4xx, never a 500.
 
-#### Scenario: Concurrent edits both survive
+#### Scenario: A save at the current version writes and raises it
 
-- **WHEN** two users with edit access post overlapping updates to the same note at the same time
-- **THEN** both updates are merged into the stored document and neither is lost
+- **WHEN** a user with edit access saves a body naming the stored version
+- **THEN** the sanitized body is stored, the version is one higher, the last editor and edit time are set, and the
+  response names the new version
 
-#### Scenario: A write without edit access is refused
+#### Scenario: A save at a stale version is a conflict
 
-- **WHEN** someone without edit access posts an update
-- **THEN** the server refuses it and the stored document is unchanged
+- **WHEN** a user with edit access saves a body naming a version lower than the stored one
+- **THEN** nothing is written and the response is a 409 naming the stored version and who saved last
 
-#### Scenario: A save refreshes the stored HTML
+#### Scenario: A write without edit access is rejected
 
-- **WHEN** an update is persisted
-- **THEN** the stored HTML is regenerated from the merged document
+- **WHEN** someone without edit access saves a body
+- **THEN** the server answers 404 and the stored body is unchanged
 
-### Requirement: Updates fan out to connected clients over SSE
+#### Scenario: An oversized body is rejected
 
-The system SHALL fan out note changes to connected SSE subscribers through an in-process broker keyed by note id. The instance that merged an update SHALL deliver the update bytes to its own subscribers directly, and SHALL publish a poke naming itself and the note over Redis pub/sub, received on the Redis store's one subscriber connection per process, so every other instance tells its subscribers to resync while the instance that published skips the echo of its own poke. The poke includes no update bytes: a Yjs update can be far larger than any message worth publishing, and the resync the client already performs on reconnect is the delivery path. A client applying a broadcast update SHALL converge to the same document as the writer. The SSE stream SHALL require view access. A failed publish SHALL NOT fail the update, since the local subscribers already have the bytes and other instances resync on the next poke or when the stream's age limit closes it.
+- **WHEN** a save's HTML is longer than the limit
+- **THEN** the server answers 413 or 400 and stores nothing
 
-#### Scenario: A collaborator sees an edit without reloading
+#### Scenario: An unchanged body writes nothing
 
-- **WHEN** one user posts an update while another holds an open SSE connection to the same note
-- **THEN** the second client receives the change over SSE and its document converges with the writer's
+- **WHEN** a save's sanitized body equals the stored one at the stored version
+- **THEN** no row changes, the version stays, and the response names the stored version
 
-#### Scenario: An update posted on one instance reaches subscribers on another
+### Requirement: The editor saves on a debounce and flushes on close
 
-- **WHEN** the api runs as more than one instance and an update is posted on one of them
-- **THEN** subscribers connected to other instances are told to resync and converge, and subscribers on the posting instance receive the bytes and never a second resync for their own instance's poke
+The editor SHALL send a save one second after typing stops, merging the keystrokes in between into one save, with at
+most one save on its way and at most one waiting behind it. It SHALL send no save whose HTML equals the last saved
+body, or the body on its way to the server. Closing the dialog SHALL send a pending save at once. A failed save SHALL
+leave the body not saved and retry on the next change. A conflict SHALL stop every further save until the person
+reloads. The schedule SHALL live in `packages/core` with no DOM dependency, behind a hook, so the mobile editor uses
+it unchanged.
 
-#### Scenario: A publish that fails loses no edit
+#### Scenario: Keystrokes merge into one save
 
-- **WHEN** Redis is unreachable while a user posts an update
-- **THEN** the update is merged and stored, subscribers on that instance receive the bytes, and subscribers on other instances converge on their next resync
+- **WHEN** a user types ten characters within a second
+- **THEN** one save goes out, a second after the last keystroke, with all ten
 
-### Requirement: The SSE lifecycle is bounded by the live state
+#### Scenario: A change during a save queues one more
 
-An SSE connection SHALL exist only while a note's dialog is open live, which is to say open for a user with edit access: connect on opening it, disconnect on closing it or on component unmount, and pause while the document is hidden. A read-only open SHALL hold no connection. On reconnect the client SHALL resync via its state vector. The stream SHALL include a keepalive heartbeat matching the chat module's, and reconnects after the chat-style stream max age SHALL lose no data.
+- **WHEN** a user types while a save is on its way
+- **THEN** one more save goes out after the first returns, and the status reads saved only once nothing is pending
 
-#### Scenario: Static notes hold no connections
+#### Scenario: A failed save retries on the next change
 
-- **WHEN** a page renders the note table with no dialog open
-- **THEN** no SSE connection is open for any note
+- **WHEN** a save fails with a network error
+- **THEN** the status reads not saved, a toast says so, and the next change schedules a save of the latest body
 
-#### Scenario: Hiding the tab pauses the stream
+#### Scenario: Closing sends the pending save
 
-- **WHEN** the document becomes hidden while a note is live
-- **THEN** the client drops the SSE connection, and on becoming visible again reconnects and resyncs via its state vector
+- **WHEN** the dialog closes while a save waits for the debounce
+- **THEN** the save is sent at once
 
-#### Scenario: A stream expiring mid-edit loses nothing
+### Requirement: A saved body is sanitized to the editor's tag set
 
-- **WHEN** the server ends a stream at its max age while a user is editing
-- **THEN** the client reconnects, resyncs via its state vector, and the document converges with no lost edits
+The api SHALL sanitize every saved body with an allowlist of exactly the tags the editor writes: `p`, `br`, `b`, `i`,
+`u`, `s`, `code`, `a`, `h1` through `h6`, `ul`, `ol`, `li`, `blockquote`, and `codeblock`; the attributes `href` on
+`a` with the `http`, `https`, and `mailto` schemes, `data-type` on `ul` only when it is exactly `checkbox`, and
+`checked` on `li`. Everything else SHALL be dropped: `img`, `mention`, `script` and `style` with their contents, `style`
+attributes, event handler attributes, `target` and `rel`, and unknown tags with the text inside them kept. An empty
+document, which the editor writes as `<br>` alone, SHALL be stored as an empty string. The sanitizer SHALL run before
+every write and nowhere else.
 
-### Requirement: A minimal custom Yjs provider bridges the editor to SSE
+#### Scenario: Every editor tag survives
 
-The system SHALL provide a minimal Yjs provider — applying updates received over SSE, sending local updates over POST, and exposing stubbed awareness — sufficient to satisfy the editor's collaboration option. There SHALL be no presence and no live cursors in v1.
+- **WHEN** a body holding headings, every inline mark, a link, bulleted, numbered, and checked and unchecked checkbox
+  lists, a block quote, a code block, and an empty line is saved
+- **THEN** the stored HTML holds each of them, and loading it back into the editor writes the same content again
 
-#### Scenario: The editor collaborates through the provider
+#### Scenario: Hostile markup is stripped
 
-- **WHEN** the editor opens for a user with edit access
-- **THEN** it operates through the custom provider with no websocket connection, and no presence indicators or remote cursors render
+- **WHEN** a body holding a `script`, an `onclick` attribute, a `javascript:` link, a `style` attribute, an unknown tag,
+  and a `mention` is saved
+- **THEN** the stored HTML has none of them and keeps the readable text
+
+#### Scenario: A pasted image is dropped
+
+- **WHEN** a body holding an `img` is saved
+- **THEN** the stored HTML has no `img`, and the editor strips the tag from the HTML it sends
+
+#### Scenario: An empty note stores an empty body
+
+- **WHEN** a save's body is the editor's empty document
+- **THEN** the stored HTML is an empty string and the note's placeholder shows on the next open
 

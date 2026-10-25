@@ -1,4 +1,4 @@
-// render tests for allowed urls, and for where the source notes chart sits in the recap
+// render tests for allowed urls, and for where the source footnotes chart sits in the recap
 import { expect, test } from "bun:test"
 import type { ScanSourceResults } from "@carlnotes/contracts/topics"
 import { renderToStaticMarkup } from "react-dom/server"
@@ -84,7 +84,7 @@ const SOURCE_RESULTS: ScanSourceResults = {
 // a scan saved before source results were recorded keeps the popover as it was
 test("a scan with no source results renders no chart", () => {
 	const html = renderToStaticMarkup(<TopicScanRecap scan={FINISHED_SCAN} />)
-	expect(html).not.toContain("Source notes")
+	expect(html).not.toContain("Source footnotes")
 	expect(html).toContain("4 min taken")
 })
 
@@ -94,7 +94,7 @@ test("a scan with source results renders the chart after the note and before the
 
 	// the note, the chart, and the footer appear in that order
 	const noteIndex = html.indexOf("Read 12 resources and kept 4.")
-	const chartIndex = html.indexOf("Source notes")
+	const chartIndex = html.indexOf("Source footnotes")
 	const footerIndex = html.indexOf("4 min taken")
 	expect(noteIndex).toBeGreaterThan(-1)
 	expect(chartIndex).toBeGreaterThan(noteIndex)

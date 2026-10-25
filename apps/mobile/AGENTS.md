@@ -48,7 +48,8 @@ and the package boundary check fails anything else, a type-only import of `@carl
   sign-in, sign-up, and settings screens share: `SessionScreen.tsx` (the frame with the logo, the mug beside the name in
   the `logo` type role, in the web's session column, 24rem wide at most and centered both ways), `SessionTextInput.tsx`
   (the labeled field and the email and password fields over it), `SessionLink.tsx` (the text link to a route, the one
-  way a screen links, and the footer line to the other form, which replaces the screen), `SessionErrorText.tsx`, and
+  way a screen links besides the logo in `SessionScreen.tsx`, which links home as the web's header logo does, and the
+  footer line to the other form, which replaces the screen), `SessionErrorText.tsx`, and
   `OAuthProviderIcons.tsx` (the Google and Apple icons from `@carlnotes/nightshift/oauthProviderIcons`). Their buttons
   are the primitives' `Button`. A route imports `src/` through the `@/` alias, and so does a module whose relative
   import would climb two folders, as in `apps/web`.

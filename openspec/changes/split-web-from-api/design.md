@@ -6,7 +6,7 @@ attachment extraction, as `extract-attachment-text-in-a-worker`. The measurement
 
 - One Northflank service, `app`, renders every page through the ui's server build, calls its own `/api` routes over
   loopback, draws preview and cover images with satori and resvg on a cache miss, streams avatars, attachments, and
-  favicons from R2, and holds every SSE chat and note stream, all on one event loop. After Cloudflare, Redis, and two
+  favicons from R2, and holds every SSE chat stream, all on one event loop. After Cloudflare, Redis, and two
   replicas, the event loop reads 6 to 10 ms p99 at 50 concurrent feed requests, and the minute line warns past a
   100 ms p99 and a 2 s stall. The case for this change is a render burst from shared links, not steady load.
 - Northflank supports path-based routing on a domain: paths in exact, prefix, or regex mode, each to a service and

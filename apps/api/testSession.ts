@@ -18,12 +18,12 @@ export function signInAs(userId: string | null): void {
 }
 
 /**
- * Returns an app that serves the route with the given user signed in on every request.
+ * Returns an app that serves the route with the given user signed in on every request, named after their id.
  */
 export function toSignedInApp(route: Hono<AppEnv>, userId: string): Hono<AppEnv> {
 	return new Hono<AppEnv>()
 		.use(async (context, next) => {
-			context.set("user", { id: userId } as never)
+			context.set("user", { id: userId, username: userId } as never)
 			await next()
 		})
 		.route("/", route)

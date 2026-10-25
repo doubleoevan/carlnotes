@@ -52,7 +52,12 @@ export const colors = {
 		description: "a destructive action, and error text on the page or a card. coral in dark mode, to read on the page",
 	},
 	border: { light: "#dcccb6", dark: "#69553f", description: "a border" },
-	input: { light: "#dcccb6", dark: "#69553f", description: "a field's border" },
+	input: {
+		light: "#a68d64",
+		dark: "#8a7152",
+		description:
+			"a field's border, at 3:1 or more on a card and a popover, so a field and a select show without a fill",
+	},
 	ring: { light: "#d9974a", dark: "#f09050", description: "a focus ring" },
 	hero: { light: "#3b2a1d", dark: "#0f0c09", description: "the hero band, which stays dark in both modes" },
 	heroForeground: { light: "#f3e9db", dark: "#f4ebdc", description: "text on the hero band" },

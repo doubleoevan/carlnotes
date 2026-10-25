@@ -3,96 +3,6 @@
 ## Purpose
 TBD - created by archiving change add-napkins. Update Purpose after archive.
 ## Requirements
-### Requirement: Comment threads anchor to note content
-
-Users SHALL be able to start comment threads anchored to content in a note and reply within them while the note's dialog is open live. The ydoc's threads map SHALL be the source of truth for threads and comments. Pressing text with a comment mark SHALL select that thread on the press, so one tap reaches it on a touch screen.
-
-#### Scenario: A thread is created on selected content
-
-- **WHEN** a user with edit access selects content in a live note and adds a comment
-- **THEN** a thread anchored to that content is stored in the ydoc and visible to others with access
-
-#### Scenario: Pressing commented text selects its thread
-
-- **WHEN** a user presses text with a comment mark
-- **THEN** that thread is selected on the press, so one tap reaches it on a touch screen
-
-### Requirement: A threads panel lists the note's comments
-
-The note dialog SHALL offer a comment threads panel listing the note's threads: a margin sidebar beside the note on a wide screen, open by default, and a sheet sliding up over the note on a phone, closed until it is asked for. A control in the dialog header SHALL toggle it, reading "Show comments" while it is closed and "Hide comments" while it is open. The floating thread card SHALL show only while the panel is closed, and the floating composer SHALL stay available in both states.
-
-#### Scenario: A wide screen opens the panel beside the note
-
-- **WHEN** a user with edit access opens a note on a wide screen
-- **THEN** the threads panel renders as a sidebar in the margin beside the note without any interaction
-
-#### Scenario: A phone opens the panel on demand
-
-- **WHEN** a user with edit access opens a note on a phone
-- **THEN** the threads panel stays closed until they activate the header control, and then it slides up over the note
-
-#### Scenario: The header control toggles the panel
-
-- **WHEN** a user activates the dialog header's comments control
-- **THEN** the panel opens or closes, and the control reads "Show comments" while the panel is closed and "Hide comments" while it is open
-
-#### Scenario: The floating card yields to an open panel
-
-- **WHEN** the threads panel is open
-- **THEN** no floating thread card renders over the note, while the floating composer stays available
-
-### Requirement: A comment's "@" menu offers the page's team members
-
-Typing "@" in a comment box SHALL offer usernames to mention: the active members of every team holding the page, minus the commenter, deduped and in alphabetical order. A visitor SHALL be offered nobody, and so SHALL a topic that no team holds. The list SHALL arrive on the page's notes payload as `mentionableUsernames` instead of being fetched per keystroke. Picking a name SHALL insert it as plain text, with no mention entity stored and no notification sent in v1.
-
-#### Scenario: The menu lists the holding teams' members
-
-- **WHEN** a member of a team holding the page types "@" in a comment box
-- **THEN** the menu offers the active members of every holding team, without the commenter, deduped and in alphabetical order
-
-#### Scenario: A page no team holds offers nobody
-
-- **WHEN** a user types "@" in a comment on a topic that no team holds
-- **THEN** the menu offers nobody
-
-#### Scenario: A pick inserts plain text
-
-- **WHEN** a user picks a name from the "@" menu
-- **THEN** the username is inserted as plain text, with no mention entity stored and no notification sent
-
-### Requirement: Comment permissions are enforced server-side
-
-Thread and comment create, read, update, delete, resolve and unresolve, and emoji reaction add and remove SHALL go through server routes that enforce permissions authoritatively — any client-side comment gating is presentation only. Anyone with edit access to the note SHALL be able to comment; there SHALL be no comment-only role in v1; readers without edit access (including visitors on public notes) SHALL NOT be able to comment.
-
-#### Scenario: A comment from a user without edit access is refused
-
-- **WHEN** someone without edit access on the note calls a comment route directly
-- **THEN** the server refuses it and no thread or comment is stored
-
-#### Scenario: A team member comments on the team note
-
-- **WHEN** a member of a team holding the page comments on the team note
-- **THEN** the comment is accepted and stored
-
-#### Scenario: A reaction is added and removed
-
-- **WHEN** a user with edit access reacts to a comment with an emoji and later removes that reaction
-- **THEN** the reaction is stored against their user and that emoji, a repeat add changes nothing, and the removal clears only their own
-
-### Requirement: Comments mirror to SQL and broadcast over SSE
-
-Comment writes SHALL be applied to the ydoc threads map, mirrored into `note_comment_threads` and `note_comments` tables (for future counts and notifications), and broadcast to connected clients over the note's existing SSE channel — no separate comment stream.
-
-#### Scenario: A new comment reaches a connected collaborator
-
-- **WHEN** a user adds a comment while a collaborator holds the note's SSE connection open
-- **THEN** the collaborator sees the comment without reloading
-
-#### Scenario: The SQL mirror tracks the thread
-
-- **WHEN** a thread gains a comment or is resolved
-- **THEN** the mirrored rows reflect the thread's comments and state
-
 ### Requirement: Comment authors resolve from the users table
 
 Comment authorship SHALL resolve display identity (username and avatar) from the existing `users` table.
@@ -102,26 +12,78 @@ Comment authorship SHALL resolve display identity (username and avatar) from the
 - **WHEN** a comment renders for any user with access
 - **THEN** it shows the author's username and avatar resolved from the users table
 
-### Requirement: Comment bodies validate at the route
+### Requirement: A note has one plain-text comment thread
 
-The thread, comment, edit, and reaction routes SHALL validate their request bodies with zod payloads from the shared
-contracts, attached with the validator the other api routes use, before any store call. A body that fails validation
-SHALL respond 400 and change nothing: no thread, comment, edit, or reaction is stored, and no SQL mirror or SSE
-broadcast runs.
+Each note SHALL have one comment thread, kept as `note_comments` rows that name the note, the author, a plain-text
+body of at most `NOTE_COMMENT_MAX_CHARS` characters, and the time written. The thread SHALL list oldest first. Nothing
+SHALL anchor a comment to a passage of the note, resolve a thread, react to a comment, or mention a user. Deleting a
+note SHALL delete its comments, and closing an author's account SHALL leave their comments with no author.
+
+#### Scenario: A comment is stored on the note
+
+- **WHEN** a user with edit access posts a comment
+- **THEN** a row names the note, the user, the trimmed text, and the time, and the thread shows it last
+
+#### Scenario: A note's deletion takes its comments
+
+- **WHEN** a note with comments is deleted
+- **THEN** no comment row for it remains
+
+### Requirement: The comment thread shows beside the note on a wide screen and over it on a phone
+
+The note dialog SHALL show the thread as a margin column beside the note on a wide screen, open by default, and as a
+sheet that slides up over the note on a phone, closed until it is asked for. A control in the dialog header SHALL
+toggle it, reading "Show comments" while it is closed and "Hide comments" while it is open. Each comment SHALL show its
+author's avatar and username, when it was written, and its text, with a delete control for its author alone. A
+composer SHALL show for anyone with edit access and for nobody else; a reader without edit access SHALL still see the
+thread. The thread SHALL load once when the dialog opens. A post SHALL append the comment the api returns to the
+thread's end, and a delete SHALL remove the comment from the thread in place, with no second load of the thread.
+
+#### Scenario: A wide screen opens the thread beside the note
+
+- **WHEN** a user opens a note on a wide screen
+- **THEN** the thread renders as a column beside the note without any interaction
+
+#### Scenario: A phone opens the thread on demand
+
+- **WHEN** a user opens a note on a phone
+- **THEN** the thread stays closed until they activate the header control, and then it covers the note
+
+#### Scenario: The header control toggles the thread
+
+- **WHEN** a user activates the dialog header's comments control
+- **THEN** the thread opens or closes, and the control reads "Show comments" while closed and "Hide comments" while
+  open
+
+#### Scenario: A reader sees the thread without a composer
+
+- **WHEN** a visitor or a user without edit access opens a public note
+- **THEN** the thread's comments render and no composer renders
+
+### Requirement: Comment routes enforce permissions and validate bodies
+
+The comment list SHALL take view access, a post SHALL take edit access through the same check as writing the body,
+and a delete SHALL be the comment's author's alone. Every rejection SHALL be a 404, as on the other note routes. A
+post SHALL validate its body with the zod payload from the shared contracts, attached with the validator the other api
+routes use, before any query; a body that fails validation SHALL respond 400 and store nothing.
+
+#### Scenario: A comment from a user without edit access is rejected
+
+- **WHEN** someone without edit access on the note posts a comment
+- **THEN** the server answers 404 and no comment is stored
+
+#### Scenario: A team member comments on the team note
+
+- **WHEN** a member of a team holding the page posts a comment on the team note
+- **THEN** the comment is accepted and stored
+
+#### Scenario: Only the author deletes a comment
+
+- **WHEN** a user who did not write a comment tries to delete it
+- **THEN** the server answers 404 and the comment stays, while the author's own delete removes it
 
 #### Scenario: A body of the wrong shape is a 400
 
-- **WHEN** a thread, comment, edit, or reaction route receives a body that is not an object, or one whose fields do not
-  match its payload
-- **THEN** the route responds 400, and nothing is stored, mirrored, or broadcast
-
-#### Scenario: A reaction with no emoji is a 400
-
-- **WHEN** a reaction add or remove arrives with the emoji missing or not a string
-- **THEN** the route responds 400 and no reaction changes
-
-#### Scenario: A well-formed body reaches the store
-
-- **WHEN** a body matches its payload
-- **THEN** the store call runs with the validated body, and the comment is stored, mirrored, and broadcast as before
+- **WHEN** a post arrives with a body that is not an object, an empty text, or a text past the limit
+- **THEN** the route responds 400 before any query, and nothing is stored
 

@@ -2,22 +2,23 @@
 
 Hono server, the `@carlnotes/api` app. Entry `apps/api/index.ts` mounts the route trees; `apps/api/api.ts` aggregates
 the `/api` routes and bounds every body at a megabyte through `toBodyLimit` in `bodyLimit.ts`, except on the chat,
-transcription, upload, and note sync routes, which set their own limits. No app imports it as a value:
+transcription, upload, and note body save routes, which set their own limits. No app imports it as a value:
 `@carlnotes/client` and `apps/web` read `AppType` and the `auth` type from it as types only, and `evals/` and `scripts/`
 at the root import it by name.
 
 - `index.ts` opens each request's memo (`@carlnotes/db/requestMemo`) in its first middleware, and its `onError` reports
   an error no route handles to Sentry and keeps Hono's 500. `requestTracing.ts` runs next: it counts the request's
   queries and cache reads, names a traced request's Sentry transaction by its route and attaches its query count, the
-  pool's counts, and the event loop's lag, and outside production sets a `Server-Timing` header with the duration and
-  the counts. In dev it also logs one line per request with the same numbers and the cache keys that missed.
-  `queryBudgets.test.ts` holds the cached routes' query budgets, each a route requested twice against the pool and Redis
-  stubs. `index.ts` also serves `/api/health`, which the platform polls and which sends no query, and
-  `/api/health/deep`, which runs one query and returns the pool's counts for a monitor. Neither looks up a session.
-  `index.ts` responds with a json 404 to a path with a NUL byte, percent-encoded or decoded, ahead of every route. Its
-  tests split between `index.test.ts`, for the routing, the health checks, the api's own validation, and the security
-  headers, `pageRender.test.ts`, for the rendered pages, and `pageGuards.test.ts`, for the click id redirect and the
-  render limit, over the fake bundle and requests in `indexTestFixtures.ts`. `index.ts` serves the docs site's static
+  connection pool's counts, and the event loop's lag, and outside production sets a `Server-Timing` header with the
+  duration and the counts. In dev it also logs one line per request with the same numbers and the cache keys that
+  missed. `queryBudgets.test.ts` holds the cached routes' query budgets, each a route requested twice against the
+  connection pool and Redis stubs. `index.ts` also serves `/api/health`, which the platform polls and which sends no
+  query, and `/api/health/deep`, which runs one query and returns the connection pool's counts for a monitor. Neither
+  looks up a session. `index.ts` responds with a json 404 to a path with a NUL byte, percent-encoded or decoded,
+  ahead of every route. Its tests split between `index.test.ts`, for the routing, the health checks, the api's own
+  validation, and the security headers, `pageRender.test.ts`, for the rendered pages, and `pageGuards.test.ts`, for
+  the click id redirect and the render limit, over the fake bundle and requests in `indexTestFixtures.ts`.
+  `index.ts` serves the docs site's static
   build from `apps/docs/dist` at `/docs`, stripping the prefix to find a file, and the web app's browser bundle from
   `apps/web/dist/client`. `nightshift.ts` serves the Nightshift component browser's static Storybook from
   `apps/web/dist/nightshift` at `/nightshift/`. It sets its own frame policy, opener isolation, and `noindex`, gives
@@ -57,18 +58,27 @@ at the root import it by name.
   seeds history and repairs a missed delivery, and `releases.preview.ts` (`bun run releases:preview`) stores a
   local notes file through it for reading on the dev server. The convention for writing one is
   `apps/docs/release-notes.md`.
-- `note/` — the tasting-notes routes and their yjs sync: `notes.ts` (the routes and the stream), `noteYdoc.ts` (the
-  yjs merge under the note's lock, the snapshot, and the regenerated HTML), `notePayloads.ts` (a page's note list, one
-  note as the api shapes it, and a note created on a page), `noteCommentThreads.ts` (comment writes), `noteStream.ts`
-  (fan-out), `permissions.ts` (visibility access), `noteBadges.ts` (the unread edit and comment counts, and the read
-  time that clears them).
-- `chat/roomStream.ts` and `note/noteStream.ts` fan a stored chat message and a note change out across replicas
-  over Redis pub/sub through `@carlnotes/db/redis`.
-  Each delivers to its own instance's subscribers first, publishes a payload that names the instance,
-  and skips the echo of its own publish.
-  A note's poke has no update bytes, and the other replicas resync.
-  Nothing missed while a subscriber was down is replayed.
-  Chat catches up from its cursor, and a note resyncs on the next poke or when the note stream reaches the age limit.
+- `note/` — the tasting-notes routes: `notes.ts` (a page's note list, the create, the badges, the read that returns
+  the body's html and version, the rename and visibility change, the delete, and the save, `PUT /api/notes/:id/body`
+  at `NOTE_BODY_PATH`: it rejects a visitor with a 404 before reading the body, bounds the body at
+  `NOTE_HTML_MAX_CHARS * 4 + 1024` bytes so any UTF-8 encoding of a body at the limit fits, validates `noteBodyPayload`,
+  requires `canEditNote`, sanitizes the html, and writes one conditional statement where the id and the version match,
+  raising the version and saving `last_editor_user_id` and `body_edited_at`; an unchanged body writes nothing and
+  returns the stored version, and a moved version returns a 409 with the version and who saved last), `noteHtml.ts`
+  (`sanitizeNoteHtml`, `sanitize-html` over the editor's own tag set: `p`, `br`, `b`, `i`, `u`, `s`, `code`, `a` with
+  an http, https, or mailto `href`, `h1` to `h6`, `ul` with `data-type` only when it is exactly `checkbox`, `ol`, `li`
+  with `checked`, `blockquote`, and `codeblock`; images, scripts, styles, mentions, and unknown tags are dropped with
+  their text kept, and the editor's empty document is stored as `""`), `noteComments.ts` (the comment thread:
+  `GET /api/notes/:id/comments` behind view access, oldest first, each with its author, or null for a closed account,
+  and whether the caller may delete it; `POST /api/notes/:id/comments` behind `canEditNote`, tracking
+  `note_comment_added` with the note id; `DELETE /api/notes/:id/comments/:commentId` for the author alone; every
+  rejection a 404 and a bad body a 400 before any query), `notePayloads.ts` (a page's note list, one note as the api
+  shapes it, and a note created on a page), `permissions.ts` (visibility access), `noteBadges.ts` (the unread edit and
+  comment counts, the comments counted from `note_comments` by note, and the read time that clears them), and
+  `noteTestFixtures.ts` (the rows the stubbed connection pool returns in the route tests).
+- `chat/roomStream.ts` fans a stored chat message out across replicas over Redis pub/sub through `@carlnotes/db/redis`.
+  It delivers to its own instance's subscribers first, publishes a payload that names the instance, and skips the echo
+  of its own publish. Nothing missed while a subscriber was down is replayed. Chat catches up from its cursor.
 - `mcp/` — the mcp server on `@modelcontextprotocol/server`: `server.ts` (the `/mcp` and `/mcp/t/:topicId` routes and
   the web-standard transport), `tools.ts` (the reads, the site search, and the per-user writes it registers, with their
   schemas and annotations), `topicEditTools.ts` (`edit_topic`, `suggest_sources`, and `create_topic`), `toolShapes.ts`
@@ -132,7 +142,8 @@ at the root import it by name.
 - `topic/findings.ts` — the finding routes, and `topic/findingFeedback.ts` — the feedback a user gives a finding: the
   rating and its words, the bookmark, consumed, and an open, which counts among the finding's views within the count
   rate limit, a visitor's too when it comes from the app's own origin. `topic/findingPermissions.ts` holds who may see,
-  rate, and bookmark a finding, and `loadTopicFindingPermissions`, the rate and bookmark rules for many topics in two reads.
+  rate, and bookmark a finding, and `loadTopicFindingPermissions`, the rate and bookmark rules for many topics in two
+  reads.
 - `counts/` — the viewer and listener counts: `countsRoute.ts` (`POST /api/topics/:id/view`, the view a topic page
   sends, counted only from the app's own origin and returning 204, and the `/api/counts/` reads of a topic's viewers
   and followers and a podcast episode's listeners), and `viewerCounts.ts` (counting a topic view or a podcast episode

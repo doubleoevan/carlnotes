@@ -67,14 +67,14 @@ Try these fixes in order:
 1. **Check the prompt.** If the last brews read plenty but kept nothing, the prompt's exclusions are filtering out
    everything. The **Brew diary** shows "read N · kept N" for each brew.
 2. **Check the sources.** Open a brew's recap from the **Brew diary** on the topic page. Under Carl's notes, **Source
-   notes** shows what each source read and what Carl kept from it, and which sources fell back to a public feed or
+   footnotes** shows what each source read and what Carl kept from it, and which sources fell back to a public feed or
    failed. Hover or tap a source for its details: what it read and kept, and how long it took. The topic's owner also
    sees what it cost and why it failed. A source that reads plenty and keeps nothing is the first one to drop. If you
    can edit the topic, the trash icon in a source's open row removes that source after you confirm. The **web** source
    turns off only in the topic editor, and a topic keeps at least one source.
 
-   ![Source notes in a brew's recap, dated at the right: a bar for each source with what it read and kept, one row open
-   with its cost, its time, and the trash icon](../../../assets/screenshots/source-notes.png)
+   ![Source footnotes in a brew's recap, dated at the right: a bar for each source with what it read and kept, one row
+   open with its cost, its time, and the trash icon](../../../assets/screenshots/source-footnotes.png)
 
 3. **Check max results.** Top 5 keeps only 5 findings per brew, which leaves a broad topic thin. Raise it.
 4. **Check the web source.** If you removed "Let Carl crawl", the topic reads only its listed sources. Turn the web

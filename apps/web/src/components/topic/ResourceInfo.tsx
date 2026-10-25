@@ -13,6 +13,7 @@ import { type ReactNode, useEffect, useState } from "react"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { LinkPreviewCard, LinkPreviewLoading } from "@/components/common/LinkPreviewCard"
 import { RatingThumbs } from "@/components/common/RatingThumbs"
+import { ScrollBox } from "@/components/common/ScrollBox"
 import { FindingChapterPill } from "@/components/podcast/PodcastEpisodePill"
 import { Input } from "@/components/primitives/input"
 import { PopoverCloseButton, PopoverContent } from "@/components/primitives/popover"
@@ -26,7 +27,7 @@ import { captureVisitEvent, toPublicTopicProperties } from "@/lib/visitAnalytics
 import { type TopicFeedHandlers, useIsSignedIn } from "@/providers/TopicFeedProvider"
 import { ResourceMetadata } from "./TopicFindingSummary"
 import { InfoSection } from "./TopicInfo"
-import { ScrollBox, toNotesMarkdown } from "./TopicScanRecap"
+import { toNotesMarkdown } from "./TopicScanRecap"
 
 // the bookmark and read toggles' text-button style
 const TOPIC_FINDING_TOGGLE_CLASS = "hover:text-link flex min-h-11 items-center gap-2 text-sm hover:underline sm:min-h-9"

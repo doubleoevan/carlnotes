@@ -70,7 +70,7 @@ Each app and package has its own AGENTS.md with entry points, layout, and comman
 | UI screen or component | `apps/web/src/routes/` for the route and its head, `apps/web/src/pages/`, `apps/web/src/components/<area>/`; the Storybook MCP server's catalog (`bun run dev:storybook`) before writing a component; a story beside every primitive and shared component | jsx-conventions | `apps/api/`; the request and response types are in `packages/contracts/` (`payloads.ts`, `topicPayloads.ts`, and the contracts) |
 | Design token, type role, or email color | `packages/nightshift/` (`colors.ts`, `radius.ts`, `elevation.ts`, `typography.ts`, `email.ts`), then `bun run nightshift:write` | — | `packages/nightshift/tokens.css` and `packages/nightshift/figma/` (generated) |
 | Shared component contract, or a variant of one | `packages/nightshift/components/<name>.ts`, then both implementations at `apps/web/src/components/primitives/<name>.tsx` and `apps/mobile/src/components/primitives/<name>.tsx` with their stories | jsx-conventions | every other component; `bun scripts/check-component-parity.ts` names a missing implementation |
-| Tasting note or sync change | `apps/api/note/`, `apps/web/src/components/note/` | domain-model | `apps/worker/`, `packages/pipeline/` |
+| Tasting note or sync change | `apps/api/note/`, `apps/web/src/components/note/`, `packages/core/hooks/` | domain-model | `apps/worker/`, `packages/pipeline/` |
 | API route or permission | `apps/api/<domain>/`, `apps/api/authorization.ts` | domain-model | `apps/worker/`; `packages/pipeline/` and `packages/models/` beyond the modules the route imports |
 | Temporal workflow change | `apps/worker/workflows/`, `apps/worker/temporal.ts` | — | `apps/web/`, `apps/api/` route files |
 | Email template or send | `packages/emails/*.tsx`, `packages/emails/email.ts`, `packages/pipeline/notify.ts` | — | `apps/web/` |
@@ -117,8 +117,7 @@ workflow bundle check, and the test suite. Green before any hand-off.
   import it. `scripts/check-structure.sh` and `scripts/check-package-boundaries.ts` enforce it.
 - State lives in module scope behind exported functions, in a `packages/core/stores/` or `apps/web/src/stores/` module,
   or in a hook. Author a class only for an `Error` subclass, or for many instances with their own lifecycle that
-  something outside holds, as `apps/web/src/components/note/noteProvider.ts` does. A single-instance class is a
-  singleton, which is a module with extra steps.
+  something outside holds. A single-instance class is a singleton, which is a module with extra steps.
 - Domain nouns and rejected terms: the `domain-model` skill is the single source.
 - Follow vs subscribe: the domain-model skill owns the rule. Copy says follow, identifiers say subscribe.
 - Bash runs from the repo root: relative paths only, never prefix commands with cd. Scripts and hooks assume repo-root cwd.
