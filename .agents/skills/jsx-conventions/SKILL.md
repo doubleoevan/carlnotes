@@ -1,11 +1,11 @@
 ---
 name: jsx-conventions
 description: >
-  JSX and TSX conventions for React code. Use when writing or editing ANY JSX
-  or TSX: components, pages, layouts, props, and markup, even one-line
-  changes. Covers event handler naming, link handling, apostrophes and
-  quotes, heading line breaks, JSX section comments, and the Nightshift
-  component contracts each app implements.
+  JSX and TSX conventions for React and React Native (Expo) code. Use when
+  writing or editing ANY JSX or TSX: components, pages, screens, layouts,
+  props, and markup, even one-line changes. Covers event handler naming, link
+  handling, apostrophes and quotes, heading line breaks, and JSX section
+  comments, with web and React Native versions where they differ.
 ---
 
 # JSX Conventions
@@ -37,10 +37,19 @@ feature code.
 - External links render `target="_blank"` with `rel="noopener noreferrer"`.
 - Scheme links (`mailto:`, `tel:`) render a plain `<a>` with no target or rel.
 
+**React Native (Expo).** The same single component, with native targets.
+
+- Internal routes render `Link` from `expo-router`.
+- External links open with `WebBrowser.openBrowserAsync` from `expo-web-browser`.
+- Scheme links (`mailto:`, `tel:`, `sms:`) open with `Linking.openURL` from
+  `expo-linking`.
+
 ### Apostrophes and quotes — never HTML entities
 
 Never use HTML entities (`&apos;`, `&quot;`, `&amp;`) in JSX text content.
-Wrap the string in a JS expression instead.
+Wrap the string in a JS expression instead. This applies unchanged in React
+Native: the JSX compiler decodes entities on every platform, inside `<Text>`
+too.
 
     // preferred
     {"We're working on our first posts."}
@@ -57,38 +66,16 @@ Break a headline across two lines with `block` on the span. Never use
       <span className="block text-muted-foreground">before it's obvious.</span>
     </h1>
 
+**React Native (Expo).** There is no `<h1>` and no `block`. Nested `<Text>` stays
+inline, so stack two sibling `<Text>` elements in a `<View>`, and mark the
+heading for screen readers with `accessibilityRole="header"`.
+
+    <View accessibilityRole="header">
+      <Text style={styles.title}>{"Startup Intelligence,"}</Text>
+      <Text style={[styles.title, styles.muted]}>{"before it's obvious."}</Text>
+    </View>
+
 ### JSX section comments
 
 Mark every logical section of markup with a `{/* section name */}` comment:
 short, lowercase, on the line above the section it describes.
-
-### Shared components: one contract, an implementation per app
-
-A component both apps draw, such as Button and Badge, has one contract in
-`packages/nightshift/components/<name>.ts` and one implementation per app at the same
-path and file name, `apps/web/src/components/primitives/<name>.tsx` and
-`apps/mobile/src/components/primitives/<name>.tsx`.
-
-- The contract owns what the implementations agree on: the variant and size names,
-  the defaults, the shared props (`variant`, `size`, `disabled`, `asChild`),
-  and the classes both platforms draw, as box classes for the container
-  and text classes for the label. The mobile implementation passes the text classes
-  to its label, since native text does not inherit its container's color.
-- An implementation builds on the contract's box and text classes and adds only its platform's
-  classes, in records keyed by the contract's names. The web adds hover,
-  focus-visible, and the aria, svg, and `has-` selectors. Mobile adds
-  pressed states, `flex-row`, and a hit slop that grows the web's height
-  to the 44-point touch target.
-- Event props stay with the implementation: `onClick` on the web, `onPress` on
-  mobile. The mobile implementation requires an `accessibilityLabel`.
-- A call site imports the implementation, never the contract. A story's controls
-  read their options from the contract's names.
-- Add or rename a variant in the contract, then both implementations and both
-  stories. `tsc -b` fails until both implementations match, and the parity check in
-  preflight names a missing implementation or story.
-
-      // a web implementation's own classes, keyed by the contract's variants
-      const WEB_BUTTON_VARIANT_CLASSES = {
-        default: "hover:bg-primary/90",
-        ...
-      } satisfies Record<ButtonVariant, string>

@@ -11,7 +11,7 @@
       "source": "doubleoevan/skills",
       "sourceType": "github",
       "skillPath": "skills/code-style/SKILL.md",
-      "computedHash": "f42f003dd9f45dcb23308169a3eefa3b4afab141cd1fe33274be6426d4c48bce"
+      "computedHash": "638501c53a6f551b8f6c1f888ab77528557a96219742a00ca4b839e498fe0dd2"
     },
     "git-discipline": {
       "source": "doubleoevan/skills",
@@ -29,7 +29,7 @@
       "source": "doubleoevan/skills",
       "sourceType": "github",
       "skillPath": "skills/jsx-conventions/SKILL.md",
-      "computedHash": "a239c611c0f313db9114a85b5d828f22c8cb9a23665413b587a9bd6e08a7f94e"
+      "computedHash": "69d7e2e64cd2ba8ac8a92b4205ef238dd9ab582a4c6a644c7af8a6fc702bb30e"
     },
     "ponytail": {
       "source": "DietrichGebert/ponytail",

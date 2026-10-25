@@ -5,7 +5,8 @@ description: >
   editing, reviewing, or refactoring ANY TypeScript, JavaScript, or JSX code:
   every new function, every fix, every generated file, even one-line changes.
   Covers mandatory comment groups, comment voice, top-down file order,
-  when to split long files and functions, naming, import paths, early returns,
+  when to split long files and functions, naming, canonical file and folder
+  names, import paths, early returns,
   object parameters, and type modeling. If code is being produced or changed,
   this skill applies.
 ---
@@ -66,10 +67,14 @@ with a bare verb: no `-s` ending, no `-ing` ending, no subject, no "this".
     // parse the request body
 
 A group that declares instead of acting — a type, a schema field, a constant, a
-config object — has no action to name. State the fact instead.
+config object — still leads with a verb. Name what the declaration does for the
+reader: `define`, `list`, `map`, `hold`, `track`.
 
-    // right — a constant declaration, so a plain statement
+    // wrong — a bare noun phrase, no action
     // the source kinds carl can scan
+
+    // right
+    // list the source kinds carl can scan
     export const sourceKinds = ['web', 'rss', 'youtube'] as const
 
 JSDoc runs the other way: third person, never imperative. See rule 11.
@@ -80,7 +85,7 @@ JSDoc runs the other way: third person, never imperative. See rule 11.
     // lifecycle status; running until it succeeds or fails, with the failure reason if it fails
 
     // right — two plain sentences
-    // the scan status. running until it succeeds or fails, and error holds the failure reason
+    // track the scan status. hold the failure reason in error when it fails
 
 ### 2. A comment earns its place
 
@@ -120,12 +125,12 @@ ordering the compiler will not enforce, an api that destroys its input. State it
 as a plain sentence beside the action, never as a defense of it.
 
     // wrong — the constraint arrives as an argument
-    // open LISTEN on the direct connection string, since neon's connection
-    // pooler does not deliver notifications to a listener
+    // open LISTEN on the direct connection string, since neon's pooler endpoint
+    // does not deliver notifications to a listener
 
     // right — the action, then the constraint that makes it the only option
-    // open LISTEN on the direct connection string. neon's connection pooler
-    // drops notifications to a listener
+    // open LISTEN on the direct connection string. neon's pooler drops
+    // notifications to a listener
 
 ### 3. Top-down file order
 
@@ -274,26 +279,31 @@ inferred from the surrounding code, the file name, or the function it sits in.
 
 ### 11. JSDoc for exported functions
 
-Double-star `/** */` block above every exported function. One line only.
-Describe what it does, not how.
+Double-star `/** */` block above every exported function, always in the
+three-line form: `/**` on its own line, one description line, `*/` on its own
+line. Never collapse it onto one line. Describe what it does, not how.
 
 **Third person, not imperative** — the inverse of rule 1. A `//` comment names
-an action the reader follows down the file; a JSDoc block describes a function
-that already exists. The verb takes the `-s` and the line ends in a period.
+an action the reader follows down the file. A JSDoc block describes a function
+that already exists. Start with a capitalized verb that takes the `-s`, and end
+without a period.
 
     // wrong — imperative, reads like a step in a procedure
     /**
-     * Score an article against the reader profile.
+     * Score an article against the reader profile
      */
 
     // wrong — no verb, so the reader learns nothing the name did not say
     /**
-     * Article scoring.
+     * Article scoring
      */
+
+    // wrong — collapsed onto one line, and a trailing period
+    /** Scores an article against the reader profile. */
 
     // right
     /**
-     * Scores an article against the reader profile.
+     * Scores an article against the reader profile
      */
     export function scoreArticle(article: Article, profile: ReaderProfile): number { ... }
 
@@ -301,8 +311,8 @@ The two voices side by side:
 
 | Comment | Voice | Example |
 | --- | --- | --- |
-| `//` | imperative, no period | `// parse the request body` |
-| `/** */` | third person, period | `/** Parses the request body. */` |
+| `//` | imperative, lowercase, no period | `// parse the request body` |
+| `/** */` | third person, capitalized, no period | `* Parses the request body` |
 
 ### 12. Discriminated unions
 
@@ -317,7 +327,7 @@ optional fields to paper over structural differences.
       error?: unknown
     }
 
-    // always — each variant has only what it owns
+    // always — each variant carries only what it owns
     type FetchResult =
       | { status: 'success'; articles: Article[] }
       | { status: 'failed'; error: unknown }
@@ -344,10 +354,10 @@ single `../` are fine. Never include `.ts`/`.tsx` extensions in import
 specifiers.
 
     // wrong — the reader counts dots to locate the file
-    import { CARD_CLASS } from "../../lib/styleClasses.ts"
+    import { cn } from "../../lib/utils.ts"
 
     // right — the alias reads as an absolute address
-    import { CARD_CLASS } from "@/lib/styleClasses"
+    import { cn } from "@/lib/utils"
 
 ### 15. Explicit return types
 
@@ -448,7 +458,7 @@ translation step and splits every search.
 - `cadence` → **frequency**
 - `curate` → **review**, the stage's own name
 - `prune` → **filter**
-- `harvest` → **find**, or **return** for a function's result
+- `harvest` → **find**, or **return** for what a function hands back
 - `seam` → **boundary**, or just name the thing
 
 **Among equally accurate options, use the common word.** A rare word makes the
@@ -471,7 +481,7 @@ substituting.
 
 One piece of logic lives in one place. Anything duplicated is a candidate for
 drying up, from the second copy on: extract it into a shared function and call
-it from every place, in the same change. Two copies drift: a fix goes into one
+it from every place, in the same change. Two copies drift: a fix lands in one
 and the other stays broken.
 
 - Search before writing. A helper, a type, or a check a few files over is the
@@ -488,3 +498,35 @@ and the other stays broken.
 
   // right — one reader in the topic client, called from both
   const topicGate = await readTopicGate(response)
+
+### 19. Canonical file and folder names
+
+File and folder names follow the idiomatic, canonical convention of the stack
+before anything else. A reader who knows the framework should find every file
+where they expect it, named the way they expect.
+
+Priority, highest first:
+
+1. **Names the tooling requires.** Framework-reserved files and folders are
+   fixed: `app/`, `page.tsx`, `layout.tsx`, `route.ts`, `middleware.ts`,
+   `package.json`, `tsconfig.json`. Never rename or wrap them.
+2. **The ecosystem's canonical layout.** Use the structure and casing the
+   framework's own docs and generators use: `src/`, `lib/`, `components/`,
+   `hooks/`, `use-` prefixed hook files, `.test.ts` beside the file it tests.
+3. **The codebase's existing convention**, for anything the first two leave open.
+4. **Never invent a scheme.** No novel folder names, no private suffixes, no
+   mixed casing in one folder.
+
+- Name a file after the concern it holds, with the domain noun in full, the same
+  as rule 10: `topic-source.ts`, never `ts.ts` or `helpers2.ts`.
+- No grab-bag files or folders: `misc/`, `stuff.ts`, `common2/`.
+- Plural folder for a collection (`components/`, `hooks/`), singular file for one
+  concern (`podcast-search.ts`).
+
+    // wrong — invented folder names and mixed casing
+    src/Helpers/topicSourceUtils.ts
+    src/misc/PodcastSearch.ts
+
+    // right — the canonical layout, one casing
+    src/lib/topic-source.ts
+    src/podcast/podcast-search.ts
