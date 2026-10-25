@@ -84,7 +84,7 @@ export function NoteComments({
 						aria-label="Comment"
 						rows={2}
 						maxLength={NOTE_COMMENT_MAX_CHARS}
-						className="bg-card dark:bg-card"
+						className="bg-card"
 					/>
 					<Button type="submit" size="sm" className="self-end" disabled={noteCommentDraft.trim().length === 0}>
 						Comment

@@ -2,6 +2,7 @@
 // app's implementation adds the classes only its platform has, hover and focus on the web and pressed states on mobile
 import { cva, type VariantProps } from "class-variance-authority"
 import type { ComponentPlatform } from "../componentPlatforms"
+import { FIELD_CLASS } from "../field"
 
 /** The apps that keep an implementation of Button. */
 export const platforms: ComponentPlatform[] = ["web", "mobile"]
@@ -43,7 +44,7 @@ export const buttonBoxVariants = cva("shrink-0 items-center justify-center gap-2
 		variant: {
 			default: "bg-primary shadow-raised",
 			destructive: "bg-destructive dark:bg-destructive/40 shadow-raised",
-			outline: "border border-input bg-background shadow-raised dark:bg-input/30",
+			outline: `border shadow-raised ${FIELD_CLASS}`,
 			secondary: "bg-secondary shadow-raised",
 			ghost: "",
 			link: "",

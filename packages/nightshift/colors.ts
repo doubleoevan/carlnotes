@@ -55,8 +55,7 @@ export const colors = {
 	input: {
 		light: "#a68d64",
 		dark: "#8a7152",
-		description:
-			"a field's border, at 3:1 or more on a card and a popover, so a field and a select show without a fill",
+		description: "a field's border, at 3:1 or more on a card and a popover, and at 30% the field's fill, in both modes",
 	},
 	ring: { light: "#d9974a", dark: "#f09050", description: "a focus ring" },
 	hero: { light: "#3b2a1d", dark: "#0f0c09", description: "the hero band, which stays dark in both modes" },

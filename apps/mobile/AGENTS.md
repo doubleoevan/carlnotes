@@ -54,8 +54,8 @@ and the package boundary check fails anything else, a type-only import of `@carl
   are the primitives' `Button`. A route imports `src/` through the `@/` alias, and so does a module whose relative
   import would climb two folders, as in `apps/web`.
 - `global.css` — the stylesheet: tailwind, uniwind, and `@carlnotes/nightshift/uniwind.css`, the theme and the
-  `shadow-raised` utility Nightshift writes, with the component contracts read as a Tailwind source. Change a token in
-  `packages/nightshift/`, never here.
+  `shadow-raised` utility Nightshift writes, with the component contracts and `field.ts` read as Tailwind sources.
+  Change a token in `packages/nightshift/`, never here.
 - `metro.config.js` — Sentry's base config inside Storybook's `withStorybook`, inside `withUniwindConfig`, which must
   stay the outermost wrapper. Storybook is on outside production. In an export, a release build, or an update,
   `withStorybook` empties every Storybook module and every file under `.rnstorybook/`, and the CI export job fails if

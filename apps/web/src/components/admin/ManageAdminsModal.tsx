@@ -8,7 +8,7 @@ import { UserAvatar } from "@/components/branding/UserAvatar"
 import { IconButton } from "@/components/common/IconButton"
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/primitives/dialog"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/primitives/popover"
-import { MENU_OPTION_CLASS } from "@/lib/styleClasses"
+import { FIELD_TRIGGER_CLASS, MENU_OPTION_CLASS } from "@/lib/styleClasses"
 
 /**
  * The modal for an admin to add and remove other admins.
@@ -115,10 +115,7 @@ function AddAdminMenu({ users, onAddAdmin }: { users: AdminUserRow[]; onAddAdmin
 	return (
 		<Popover open={isOpen} onOpenChange={setIsOpen}>
 			<PopoverTrigger asChild>
-				<button
-					type="button"
-					className="border-input bg-background flex min-h-9 w-full items-center justify-between rounded-md border px-3 text-sm"
-				>
+				<button type="button" className={FIELD_TRIGGER_CLASS}>
 					<span className="text-muted-foreground">add by email…</span>
 					<ChevronsUpDown className="size-4 shrink-0 opacity-50" />
 				</button>

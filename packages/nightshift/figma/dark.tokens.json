@@ -264,7 +264,7 @@
 				"alpha": 1,
 				"hex": "#8a7152"
 			},
-			"$description": "a field's border, at 3:1 or more on a card and a popover, so a field and a select show without a fill"
+			"$description": "a field's border, at 3:1 or more on a card and a popover, and at 30% the field's fill, in both modes"
 		},
 		"ring": {
 			"$type": "color",

@@ -22,7 +22,7 @@ const WEB_BUTTON_CLASS =
 const WEB_BUTTON_VARIANT_CLASSES = {
 	default: "hover:bg-primary/90",
 	destructive: "hover:bg-destructive/90 focus-visible:ring-destructive/20 dark:focus-visible:ring-destructive/40",
-	outline: "hover:bg-accent hover:text-accent-foreground dark:hover:bg-input/50",
+	outline: "hover:bg-input/50 hover:text-accent-foreground",
 	secondary: "hover:bg-secondary/80",
 	ghost: "hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50",
 	link: cn(STANDALONE_LINK_CLASS, "underline-offset-4"),

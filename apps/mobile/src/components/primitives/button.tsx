@@ -27,7 +27,7 @@ const MOBILE_BUTTON_TEXT_CLASS = "shrink text-center"
 const MOBILE_BUTTON_VARIANT_CLASSES = {
 	default: "active:bg-primary/90",
 	destructive: "active:bg-destructive/90",
-	outline: "active:bg-accent dark:active:bg-input/50",
+	outline: "active:bg-input/50",
 	secondary: "active:bg-secondary/80",
 	ghost: "active:bg-accent dark:active:bg-accent/50",
 	link: "",

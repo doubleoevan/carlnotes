@@ -35,7 +35,7 @@ export function PasswordInput({
 					onChange={(event) => onChange(event.target.value)}
 					autoComplete={autoComplete}
 					minLength={minLength}
-					className="bg-card dark:bg-card pr-10"
+					className="bg-card pr-10"
 					required
 				/>
 				<button

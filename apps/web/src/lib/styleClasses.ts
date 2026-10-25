@@ -1,5 +1,6 @@
 // the tailwind class strings shared across pages
 import { cn } from "@carlnotes/nightshift/classNames"
+import { FIELD_CLASS } from "@carlnotes/nightshift/field"
 
 /**
  * The highlight treatment over the shared button shape, for the one main action a page view has.
@@ -309,6 +310,15 @@ export const ICON_TILE_BUTTON_CLASS =
  */
 export const POPOVER_PANEL_CLASS =
 	"popover-panel w-[calc(100vw-2rem)] max-w-lg text-sm max-h-[85dvh] sm:max-h-(--radix-popover-content-available-height)"
+
+/**
+ * A popover trigger drawn as a field, such as a combobox: the field's border and fill, and a select trigger's hover and
+ * height.
+ */
+export const FIELD_TRIGGER_CLASS = cn(
+	FIELD_CLASS,
+	"hover:bg-input/50 flex min-h-9 w-full items-center justify-between rounded-md border px-3 text-sm",
+)
 
 /**
  * The option in a popover menu: a phone's touch target, tighter on a pointer. A disabled option fades.

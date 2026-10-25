@@ -2,7 +2,6 @@
 // every visibility has its own tooltip
 import type { noteVisibilities } from "@carlnotes/contracts/enums"
 import { Globe, Lock, Users } from "lucide-react"
-import { buttonVariants } from "@/components/primitives/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/primitives/select"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 
@@ -25,13 +24,6 @@ const VISIBILITY_ICONS: Record<NoteVisibility, typeof Lock> = {
 	team: Users,
 	public: Globe,
 }
-
-// the picker drawn as a standard small Button: its fill in both modes over the trigger's outline, and its icons in the
-// button's text color
-const VISIBILITY_TRIGGER_CLASS = buttonVariants({
-	size: "sm",
-	className: "border-0 dark:bg-primary dark:hover:bg-primary/90 [&_svg:not([class*='text-'])]:text-primary-foreground",
-})
 
 /**
  * The visibility icon a note row shows, named by its tooltip.
@@ -69,7 +61,7 @@ export function NoteVisibilitySelect({
 	}
 	return (
 		<Select value={visibility} onValueChange={(value) => onNoteVisibilityChange(value as NoteVisibility)}>
-			<SelectTrigger size="sm" aria-label="Note visibility" className={VISIBILITY_TRIGGER_CLASS}>
+			<SelectTrigger size="sm" aria-label="Note visibility">
 				<SelectValue />
 			</SelectTrigger>
 			<SelectContent>

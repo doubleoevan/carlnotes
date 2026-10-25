@@ -234,7 +234,7 @@ the browser bundle and renders pages through the server build, behind its own ro
 - `src/globals.css` — the app's stylesheet, with the keyframes in `animations.css` and the `scrollbar-none` utility
   the note toolbar scrolls sideways with. It imports its `@theme inline` block, the `shadow-raised` utility, and the
   `:root` and dark variables from `@carlnotes/nightshift/tokens.css`, which is written from the Nightshift TypeScript
-  source, has Tailwind read the component contracts in `packages/nightshift/components/`, and keeps Tailwind from
+  source, has Tailwind read the contracts in `packages/nightshift/components/` and `field.ts`, and keeps Tailwind from
   scanning stories, so a story never adds a class to the app's css. It defines `sentence-link`, the class of a link
   inside a sentence: the link color with `faint-underline`, an underline at rest that turns solid on hover. A link in
   its own color inside a sentence, as the hero's is, takes `faint-underline` alone. A link that stands alone, such as a

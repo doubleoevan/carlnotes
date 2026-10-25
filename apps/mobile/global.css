@@ -3,5 +3,7 @@
 @import "uniwind";
 @import "@carlnotes/nightshift/uniwind.css";
 
-/* the Nightshift component contracts hold classes the app's implementations draw, outside the app's folder */
+/* the Nightshift component contracts and the field look hold classes the app's implementations draw, outside the
+   app's folder */
 @source "../../packages/nightshift/components";
+@source "../../packages/nightshift/field.ts";

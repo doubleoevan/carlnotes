@@ -88,7 +88,7 @@
 	--destructive: #a7362f;
 	/* a border */
 	--border: #dcccb6;
-	/* a field's border, at 3:1 or more on a card and a popover, so a field and a select show without a fill */
+	/* a field's border, at 3:1 or more on a card and a popover, and at 30% the field's fill, in both modes */
 	--input: #a68d64;
 	/* a focus ring */
 	--ring: #d9974a;

@@ -3,7 +3,7 @@ import { Check, ChevronsUpDown, Plus, X } from "lucide-react"
 import { useId, useState } from "react"
 import { Badge } from "@/components/primitives/badge"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/primitives/popover"
-import { MENU_OPTION_CLASS, MENU_OPTION_SELECTED_CLASS } from "@/lib/styleClasses"
+import { FIELD_TRIGGER_CLASS, MENU_OPTION_CLASS, MENU_OPTION_SELECTED_CLASS } from "@/lib/styleClasses"
 
 // one choice the combobox offers
 export type ComboboxOption = { value: string; label: string }
@@ -83,7 +83,7 @@ export function MultiCombobox({
 						id={id}
 						aria-describedby={id ? triggerTextId : undefined}
 						type="button"
-						className="border-input bg-background flex min-h-9 w-full items-center justify-between rounded-md border px-3 text-sm"
+						className={FIELD_TRIGGER_CLASS}
 					>
 						<span id={triggerTextId} className={cn(selectedOptions.length === 0 && "text-muted-foreground")}>
 							{selectedOptions.length === 0 ? placeholder : `${selectedOptions.length} selected`}

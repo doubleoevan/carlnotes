@@ -1,5 +1,6 @@
 import { TOPIC_PROMPT_CHARS } from "@carlnotes/contracts/topics"
 import { cn } from "@carlnotes/nightshift/classNames"
+import { FIELD_CLASS } from "@carlnotes/nightshift/field"
 import { FileText, Paperclip, X } from "lucide-react"
 import type * as React from "react"
 import { useEffect, useRef, useState } from "react"
@@ -70,7 +71,10 @@ export function TopicPromptComposer({
 	return (
 		<FileDropZone
 			onDropFiles={onAddFiles}
-			className="border-input focus-within:border-ring focus-within:ring-ring/50 dark:bg-input/30 rounded-md border px-3 py-2.5 shadow-xs transition-[color,box-shadow] focus-within:ring-[3px]"
+			className={cn(
+				FIELD_CLASS,
+				"focus-within:border-ring focus-within:ring-ring/50 rounded-md border px-3 py-2.5 shadow-xs transition-[color,box-shadow] focus-within:ring-[3px]",
+			)}
 		>
 			{/* what is staged shows as chips above the box, each is removable until Save uploads it */}
 			{pendingFiles.length > 0 && <PendingAttachmentChips pendingFiles={pendingFiles} onRemoveFile={onRemoveFile} />}

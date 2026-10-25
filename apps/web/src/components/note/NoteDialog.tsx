@@ -289,7 +289,7 @@ function OpenNote({
 						onBlur={() => void handleRenameNote()}
 						aria-label="Note name"
 						maxLength={NOTE_NAME_MAX_CHARS}
-						className="hover:bg-accent focus-visible:bg-accent dark:hover:bg-accent/50 dark:focus-visible:bg-accent/50 h-auto border-none px-8 text-center font-display text-2xl shadow-none focus-visible:ring-0 md:text-2xl dark:bg-transparent"
+						className="hover:bg-accent focus-visible:bg-accent dark:hover:bg-accent/50 dark:focus-visible:bg-accent/50 h-auto border-none px-8 text-center font-display text-2xl shadow-none focus-visible:ring-0 md:text-2xl bg-transparent"
 					/>
 					<Pencil className="text-muted-foreground pointer-events-none absolute top-1/2 right-2 size-4 -translate-y-1/2 group-focus-within:hidden" />
 				</div>

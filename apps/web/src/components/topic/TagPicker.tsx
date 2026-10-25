@@ -104,7 +104,7 @@ export function TagPicker({ tags, knownTags, canCreate = false, openPickerLabel,
 							value={tagQuery}
 							onChange={(event) => setTagQuery(event.target.value)}
 							onKeyDown={handleInputKeyDown}
-							className="h-8 flex-1 border-0 bg-transparent px-0 text-sm shadow-none focus-visible:ring-0 dark:bg-transparent"
+							className="h-8 flex-1 border-0 bg-transparent px-0 text-sm shadow-none focus-visible:ring-0"
 						/>
 						{tagQuery && (
 							<button

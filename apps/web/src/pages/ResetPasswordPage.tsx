@@ -98,7 +98,7 @@ function ResetRequestForm() {
 					type="email"
 					value={email}
 					onChange={(event) => setEmail(event.target.value)}
-					className="bg-card dark:bg-card"
+					className="bg-card"
 					required
 				/>
 			</div>

@@ -122,7 +122,7 @@ export function ProfileFields({
 						onChange={(event) => accountUsernameChange.setUsername(event.target.value)}
 						placeholder={username}
 						aria-describedby={accountUsernameChange.rejection ? "username-rejection" : undefined}
-						className="bg-card dark:bg-card"
+						className="bg-card"
 						required
 					/>
 				</div>
@@ -199,7 +199,7 @@ function EmailSection() {
 							type="email"
 							value={newEmail}
 							onChange={(event) => setNewEmail(event.target.value)}
-							className="bg-card dark:bg-card"
+							className="bg-card"
 							required
 						/>
 					</div>
