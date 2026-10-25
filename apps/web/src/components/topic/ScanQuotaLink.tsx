@@ -1,7 +1,7 @@
+import { cn } from "@carlnotes/nightshift/classNames"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import { STANDALONE_LINK_CLASS } from "@/lib/styleClasses"
-import { cn } from "@/lib/utils"
 
 /**
  * How much of the scan quota is left, linking to the sign-in page for a visitor or the plans page for a logged-in user.

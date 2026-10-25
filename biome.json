@@ -22,7 +22,8 @@
 			"!packages/nightshift/tokens.css",
 			"!packages/nightshift/uniwind.css",
 			"!packages/nightshift/figma",
-			"!apps/mobile/uniwind-types.d.ts"
+			"!apps/mobile/uniwind-types.d.ts",
+			"!apps/mobile/.rnstorybook/storybook.requires.ts"
 		]
 	},
 	"formatter": {
@@ -35,7 +36,15 @@
 		"rules": {
 			"preset": "recommended",
 			"style": {
-				"useBlockStatements": "error"
+				"useBlockStatements": "error",
+				"noRestrictedImports": {
+					"level": "error",
+					"options": {
+						"paths": {
+							"cn": "import cn from @carlnotes/nightshift/classNames, the class merge that knows the shadow-raised utility"
+						}
+					}
+				}
 			},
 			"complexity": {
 				"noExcessiveCognitiveComplexity": "error"

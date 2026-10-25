@@ -1,5 +1,6 @@
 // the header's mobile-only hamburger menu
 
+import { cn } from "@carlnotes/nightshift/classNames"
 import { useLocation } from "@tanstack/react-router"
 import { Columns3Cog, LogIn, Menu, Moon, Sun, UserPlus } from "lucide-react"
 import { useState } from "react"
@@ -9,7 +10,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/primitives
 import { signOutAndReload } from "@/components/session/signOut"
 import { type TopicTutorialVideoOpener, TopicTutorialVideoOption } from "@/components/topic/TopicTutorialVideoDialog"
 import { MENU_DIVIDER_CLASS, MENU_OPTION_CLASS, MENU_OPTION_SELECTED_CLASS } from "@/lib/styleClasses"
-import { cn, toSafeRedirectPath } from "@/lib/utils"
+import { toSafeRedirectPath } from "@/lib/utils"
 import { DocsLink } from "./DocsLink"
 import { UserMenuItems } from "./UserMenu"
 

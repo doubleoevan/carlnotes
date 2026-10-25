@@ -1,17 +1,14 @@
 // fail on an import, a package.json, or a tsconfig that crosses a workspace boundary. the rules live in
-// packageBoundaries.ts. read the workspaces, their source files, and the installed packages, and run the rules
-import { existsSync, readdirSync, readFileSync } from "node:fs"
+// packageBoundaries.ts and importBoundaries.ts. read the workspaces, their source files, and the installed packages,
+// and run the rules
+import { existsSync, readFileSync } from "node:fs"
 import { dirname, posix, resolve } from "node:path"
-import { checkPackageBoundaries, type ResolvedPackage, type Workspace } from "./packageBoundaries"
+import { checkPackageBoundaries, type ResolvedPackage } from "./packageBoundaries"
+import { readSourceFiles } from "./sourceFiles"
+import type { Workspace } from "./workspaces"
 
 // the folders that hold the workspaces
 const WORKSPACE_PARENT_FOLDERS = ["apps", "packages"]
-
-// the folders and the files the scan skips
-const SKIPPED_FOLDER_NAMES = new Set(["node_modules", "dist", ".tsbuild", ".astro"])
-const SKIPPED_FILE_PATHS = new Set(["apps/web/src/routeTree.gen.ts"])
-const SOURCE_FILE_PATTERN = /\.(?:ts|tsx|mjs|astro)$/
-const DECLARATION_FILE_PATTERN = /\.d\.ts$/
 
 // a package.json's fields the check reads
 type PackageJson = { name: string; dependencies?: Record<string, string>; devDependencies?: Record<string, string> }
@@ -38,35 +35,6 @@ function readWorkspace(folder: string): Workspace {
 	}
 }
 
-// list every checked source file under a folder, skipping installed packages, build output, declarations, and the
-// generated route tree
-function listSourceFiles(folder: string): string[] {
-	const filePaths: string[] = []
-	for (const entry of readdirSync(folder, { withFileTypes: true })) {
-		// descend into a folder the scan does not skip
-		const entryPath = posix.join(folder, entry.name)
-		if (entry.isDirectory()) {
-			if (!SKIPPED_FOLDER_NAMES.has(entry.name)) {
-				filePaths.push(...listSourceFiles(entryPath))
-			}
-			continue
-		}
-
-		// keep a source file the scan does not skip
-		if (isCheckedSourceFile(entryPath)) {
-			filePaths.push(entryPath)
-		}
-	}
-	return filePaths
-}
-
-// whether a file is source the check reads
-function isCheckedSourceFile(filePath: string): boolean {
-	return (
-		SOURCE_FILE_PATTERN.test(filePath) && !DECLARATION_FILE_PATTERN.test(filePath) && !SKIPPED_FILE_PATHS.has(filePath)
-	)
-}
-
 // the installed package a name resolves to from a folder, through Bun's resolver, or undefined if it does not resolve
 function resolveInstalledPackage({
 	packageName,
@@ -86,8 +54,7 @@ function resolveInstalledPackage({
 const workspaces = [...new Bun.Glob("{apps,packages}/*/package.json").scanSync()]
 	.sort()
 	.map((packageJsonPath) => readWorkspace(posix.dirname(packageJsonPath)))
-const filePaths = WORKSPACE_PARENT_FOLDERS.flatMap((parentFolder) => listSourceFiles(parentFolder))
-const sourceFiles = filePaths.map((filePath) => ({ filePath, fileText: readFileSync(filePath, "utf8") }))
+const sourceFiles = readSourceFiles(WORKSPACE_PARENT_FOLDERS)
 
 // run the rules, and print a note for each package the closure walk skipped
 const { violations, notes } = checkPackageBoundaries({

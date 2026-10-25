@@ -7,12 +7,13 @@ import {
 	toSignOutFailedText,
 } from "@carlnotes/core/lib/sessionCopy"
 import { useState } from "react"
-import { Alert, Text, View } from "react-native"
-import { mobileAuthClient } from "../src/authClient"
-import { SessionButton } from "../src/components/session/SessionButton"
-import { SessionErrorText } from "../src/components/session/SessionErrorText"
-import { SessionScreen } from "../src/components/session/SessionScreen"
-import { toTypeRoleStyle } from "../src/typeRoleStyles"
+import { Alert, Text as NativeText, View } from "react-native"
+import { mobileAuthClient } from "@/authClient"
+import { Button } from "@/components/primitives/button"
+import { Text } from "@/components/primitives/text"
+import { SessionErrorText } from "@/components/session/SessionErrorText"
+import { SessionScreen } from "@/components/session/SessionScreen"
+import { toTypeRoleStyle } from "@/typeRoleStyles"
 
 export default function SettingsScreen() {
 	const [closeError, setCloseError] = useState<string | null>(null)
@@ -47,25 +48,29 @@ export default function SettingsScreen() {
 
 	return (
 		<SessionScreen>
-			<Text style={toTypeRoleStyle("pageTitle")} className="text-foreground" accessibilityRole="header">
+			<NativeText style={toTypeRoleStyle("pageTitle")} className="text-foreground" accessibilityRole="header">
 				Settings
-			</Text>
-			<SessionButton label="Sign out" onPress={handleSignOut} />
+			</NativeText>
+			<Button accessibilityLabel="Sign out" onPress={handleSignOut}>
+				<Text>Sign out</Text>
+			</Button>
 
 			{/* closing the account, last and destructive as on the web */}
 			<View className="mt-8 gap-3 rounded-lg border border-destructive p-4">
-				<Text style={toTypeRoleStyle("sectionHeading")} className="text-destructive">
+				<NativeText style={toTypeRoleStyle("sectionHeading")} className="text-destructive">
 					Close your account
-				</Text>
-				<Text style={toTypeRoleStyle("body")} className="text-muted-foreground">
+				</NativeText>
+				<NativeText style={toTypeRoleStyle("body")} className="text-muted-foreground">
 					{CLOSE_ACCOUNT_SECTION_TEXT}
-				</Text>
+				</NativeText>
 				<SessionErrorText text={closeError} />
-				<SessionButton
-					label={CLOSE_ACCOUNT_CONFIRMATION.confirmLabel}
+				<Button
 					variant="destructive"
+					accessibilityLabel={CLOSE_ACCOUNT_CONFIRMATION.confirmLabel}
 					onPress={handleCloseAccount}
-				/>
+				>
+					<Text>{CLOSE_ACCOUNT_CONFIRMATION.confirmLabel}</Text>
+				</Button>
 			</View>
 		</SessionScreen>
 	)

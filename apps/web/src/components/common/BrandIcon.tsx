@@ -1,8 +1,8 @@
 // the brand icons used for sharing, sign-in, source rows, the Add to AI dialog, and the tutorial video's player and
 // menu option
 import { YOUTUBE_PLAY_TRIANGLE_PATH } from "@carlnotes/contracts/youtube"
+import { APPLE_ICON_PATH } from "@carlnotes/nightshift/oauthProviderIcons"
 import {
-	siApple,
 	siBluesky,
 	siClaudecode,
 	siCursor,
@@ -26,7 +26,7 @@ const BRAND_ICON_PATHS = {
 	reddit: siReddit.path,
 	youtube: siYoutube.path,
 	github: siGithub.path,
-	apple: siApple.path,
+	apple: APPLE_ICON_PATH,
 	linkedin: LINKEDIN_ICON_PATH,
 	claude: siClaudecode.path,
 	cursor: siCursor.path,

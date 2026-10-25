@@ -1,6 +1,7 @@
-// the mobile app's uniwind.css, written from the source. it holds the radius steps and every mapped color name with
-// each mode's resolved value
+// the mobile app's uniwind.css, written from the source. it holds the radius steps, the raised shadow, and every mapped
+// color name with each mode's resolved value
 import { type ColorMode, type ColorName, colors, toColorChannels } from "./colors"
+import { toRaisedShadowUtilityCss } from "./elevation"
 import { type RadiusStep, radiusSteps, toRadiusPixels } from "./radius"
 import { extraThemeColorNames, shadcnThemeColorNames, toKebabName } from "./theme"
 
@@ -9,11 +10,11 @@ const FILE_HEADER = `/* the mobile design tokens, written by scripts/write-night
    token in the source and run bun run nightshift:write, never this file */`
 
 /**
- * Returns uniwind.css as the token writer writes it: the radius steps in a @theme block, and each mode's resolved
- * color values in its own @variant block.
+ * Returns uniwind.css as the token writer writes it: the radius steps in a @theme block, the raised shadow's utility,
+ * and each mode's resolved color values in its own @variant block.
  */
 export function toUniwindCss(): string {
-	return `${[FILE_HEADER, toRadiusThemeBlock(), toColorModesBlock()].join("\n\n")}\n`
+	return `${[FILE_HEADER, toRadiusThemeBlock(), toRaisedShadowUtilityCss(), toColorModesBlock()].join("\n\n")}\n`
 }
 
 // the @theme block: each radius step resolved to pixels. a native app has no root font size for the web's calc form

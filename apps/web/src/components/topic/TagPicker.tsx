@@ -1,3 +1,4 @@
+import { cn } from "@carlnotes/nightshift/classNames"
 import { Plus, Search, X } from "lucide-react"
 import type * as React from "react"
 import { useState } from "react"
@@ -5,7 +6,6 @@ import { Badge } from "@/components/primitives/badge"
 import { Input } from "@/components/primitives/input"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/primitives/popover"
 import { MENU_OPTION_CLASS, STANDALONE_LINK_CLASS } from "@/lib/styleClasses"
-import { cn } from "@/lib/utils"
 
 // canCreate lets typing add a tag that is not in knownTags. openPickerLabel renders a link that opens the picker
 type TagPickerProps = {
@@ -79,7 +79,7 @@ export function TagPicker({ tags, knownTags, canCreate = false, openPickerLabel,
 						aria-haspopup="dialog"
 						aria-expanded={isOpen}
 						onClick={() => setIsOpen(!isOpen)}
-						className="bg-card text-muted-foreground hover:text-foreground grid size-7 shrink-0 place-items-center rounded-full border shadow-lift"
+						className="bg-card text-muted-foreground hover:text-foreground grid size-7 shrink-0 place-items-center rounded-full border shadow-raised"
 					>
 						<Plus className="size-3.5" />
 					</button>
@@ -88,7 +88,7 @@ export function TagPicker({ tags, knownTags, canCreate = false, openPickerLabel,
 						<button
 							type="button"
 							aria-label="Add tag"
-							className="bg-card text-muted-foreground hover:text-foreground grid size-7 shrink-0 place-items-center rounded-full border shadow-lift"
+							className="bg-card text-muted-foreground hover:text-foreground grid size-7 shrink-0 place-items-center rounded-full border shadow-raised"
 						>
 							<Plus className="size-3.5" />
 						</button>

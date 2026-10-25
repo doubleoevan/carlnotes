@@ -1,11 +1,11 @@
 import type { TopicFeedResponse } from "@carlnotes/contracts/topics"
+import { cn } from "@carlnotes/nightshift/classNames"
 import { getRouteApi, Link } from "@tanstack/react-router"
 import type { MouseEvent } from "react"
 import { Pagination } from "@/components/common/Pagination"
 import { AccordionContent, AccordionItem, AccordionTrigger } from "@/components/primitives/accordion"
 import { toRenderedRows } from "@/lib/renderedRows"
 import { RAIL_TEXT_INSET, STANDALONE_LINK_CLASS } from "@/lib/styleClasses"
-import { cn } from "@/lib/utils"
 import { Topic } from "./Topic"
 
 // every section shows this many topics per page

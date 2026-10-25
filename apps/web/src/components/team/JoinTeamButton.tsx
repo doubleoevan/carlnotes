@@ -1,4 +1,5 @@
 import { sendDeleteJoinRequest, sendJoinRequest } from "@carlnotes/client/teamClient"
+import { cn } from "@carlnotes/nightshift/classNames"
 import { useNavigate } from "@tanstack/react-router"
 import { Minus, Plus } from "lucide-react"
 import { useState } from "react"
@@ -7,7 +8,6 @@ import { Button } from "@/components/primitives/button"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import { toSignupNavigation } from "@/components/session/signupPrompts"
 import { MENU_BUTTON_CLASS } from "@/lib/styleClasses"
-import { cn } from "@/lib/utils"
 
 /**
  * The Join Team button a non-member sees: a plus asks, a minus takes the request back, and a logged-out visitor goes to sign-up instead.

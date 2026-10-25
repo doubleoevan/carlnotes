@@ -2,7 +2,10 @@
 	"extends": "../../tsconfig.base.json",
 	"compilerOptions": {
 		"lib": ["ESNext"],
-		"types": ["bun", "react"]
+		"types": ["bun", "react"],
+		"paths": {
+			"@/*": ["./src/*"]
+		}
 	},
 	"references": [
 		{
@@ -18,5 +21,13 @@
 			"path": "../../packages/nightshift"
 		}
 	],
-	"include": ["app/**/*.ts", "app/**/*.tsx", "src/**/*.ts", "src/**/*.tsx", "*.ts"]
+	"include": [
+		"app/**/*.ts",
+		"app/**/*.tsx",
+		"src/**/*.ts",
+		"src/**/*.tsx",
+		".rnstorybook/**/*.ts",
+		".rnstorybook/**/*.tsx",
+		"*.ts"
+	]
 }

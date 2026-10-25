@@ -115,7 +115,7 @@ function ScrollBoxPattern({ scrollbar }: { scrollbar: "thin" | "highlight" | "no
 			<div
 				role="toolbar"
 				aria-label="Formatting"
-				className="bg-popover text-popover-foreground shadow-lift flex overflow-x-auto rounded-md border"
+				className="bg-popover text-popover-foreground shadow-raised flex overflow-x-auto rounded-md border"
 				style={{ scrollbarWidth: "none" }}
 			>
 				{FORMATTING_BUTTONS.map(({ label, Icon }) => (

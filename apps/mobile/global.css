@@ -2,3 +2,6 @@
 @import "tailwindcss";
 @import "uniwind";
 @import "@carlnotes/nightshift/uniwind.css";
+
+/* the Nightshift component contracts hold classes the app's implementations draw, outside the app's folder */
+@source "../../packages/nightshift/components";

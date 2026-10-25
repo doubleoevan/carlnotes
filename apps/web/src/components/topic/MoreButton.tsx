@@ -1,7 +1,7 @@
+import { cn } from "@carlnotes/nightshift/classNames"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { Button } from "@/components/primitives/button"
 import { SCRIPTED_HIDDEN_CLASS, SCRIPTED_ONLY_CLASS } from "@/lib/styleClasses"
-import { cn } from "@/lib/utils"
 
 // the toggle's size and inset, shared by the button and the link in its place
 const MORE_TOGGLE_CLASS = "text-link mt-1 min-h-11 justify-start pl-9 text-sm sm:min-h-9"

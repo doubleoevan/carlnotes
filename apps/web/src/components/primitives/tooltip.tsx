@@ -1,7 +1,6 @@
+import { cn } from "@carlnotes/nightshift/classNames"
 import * as TooltipPrimitive from "@radix-ui/react-tooltip"
 import type * as React from "react"
-
-import { cn } from "@/lib/utils"
 
 // tooltip provider — sets the shared hover delay. a tooltip bundles its own, so no app-wide provider is needed
 function TooltipProvider({ delayDuration = 200, ...props }: React.ComponentProps<typeof TooltipPrimitive.Provider>) {

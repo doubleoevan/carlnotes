@@ -1,10 +1,10 @@
 import { TOPIC_FINDING_SORTS, type TopicFindingSort } from "@carlnotes/contracts/findings"
+import { cn } from "@carlnotes/nightshift/classNames"
 import { ArrowUpDown, Check, Clock, Flame, type LucideIcon, Target } from "lucide-react"
 import { useState } from "react"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/primitives/popover"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import { MENU_OPTION_CLASS, MENU_OPTION_SELECTED_CLASS, SEARCH_BAR_ICON_CLASS } from "@/lib/styleClasses"
-import { cn } from "@/lib/utils"
 import { useOptionalTopicFeed } from "@/providers/TopicFeedProvider"
 
 // each sort mode's display label and icon

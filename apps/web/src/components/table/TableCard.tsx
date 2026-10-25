@@ -1,6 +1,6 @@
+import { cn } from "@carlnotes/nightshift/classNames"
 import type * as React from "react"
 import { CARD_CLASS } from "@/lib/styleClasses"
-import { cn } from "@/lib/utils"
 
 /**
  * The raised card every table sits in: the surface, the border, and the horizontal scroll a

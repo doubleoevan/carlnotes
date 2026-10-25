@@ -7,6 +7,7 @@ import {
 	CLOSE_ACCOUNT_SECTION_TEXT,
 	REQUEST_FAILED_TEXT,
 } from "@carlnotes/core/lib/sessionCopy"
+import { cn } from "@carlnotes/nightshift/classNames"
 import { Check, Info, Settings } from "lucide-react"
 import { type SubmitEvent, useState } from "react"
 import { UserAvatarPicker } from "@/components/avatar/UserAvatarPicker"
@@ -17,7 +18,6 @@ import { Label } from "@/components/primitives/label"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import { PasswordInput } from "@/components/session/PasswordInput"
 import { CARD_CLASS, STANDALONE_LINK_CLASS } from "@/lib/styleClasses"
-import { cn } from "@/lib/utils"
 
 /**
  * The settings sections on the account page: profile, email, password, invitations, and closing the account.

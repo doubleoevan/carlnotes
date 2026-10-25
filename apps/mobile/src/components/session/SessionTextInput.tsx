@@ -1,6 +1,6 @@
 // the text fields the session forms share: a labeled field, and the email and password fields over it
 import { Text, TextInput, type TextInputProps, View } from "react-native"
-import { toTypeRoleStyle } from "../../typeRoleStyles"
+import { toTypeRoleStyle } from "@/typeRoleStyles"
 
 /**
  * A labeled text field on the card surface.

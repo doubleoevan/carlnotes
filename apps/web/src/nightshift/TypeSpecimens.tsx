@@ -1,5 +1,6 @@
 // the Typography page's specimens: the web app's two font families, every type role set in its own values, and the
 // email font stack at the size of each role the emails use, each read from the Nightshift TypeScript source
+import { cn } from "@carlnotes/nightshift/classNames"
 import { EMAIL_FONT_STACK, toEmailFontSize } from "@carlnotes/nightshift/email"
 import {
 	type FontFamily,
@@ -11,7 +12,6 @@ import {
 } from "@carlnotes/nightshift/typography"
 import { toRemAndPixels } from "@carlnotes/nightshift/units"
 import type { CSSProperties } from "react"
-import { cn } from "@/lib/utils"
 import { CODE_STYLE, DESCRIPTION_STYLE, NAME_STYLE, SECTION_CARD_STYLE } from "./pageStyles"
 import { BODY_CELL_CLASS, HEADER_CELL_CLASS, ScrollingTable } from "./ScrollingTable"
 

@@ -708,6 +708,17 @@ Check for:
      `toTrustedOrigins`), `authClient` the object in `packages/client/authClient.ts` (now `authClient()`, with
      `configureAuthClient` and the `AuthClient` type), and `fetch(toApiUrl(...))` in a client module (now `fetchApi` in
      `packages/client/apiClient.ts`; `toApiUrl` stays for a url the platform loads itself)
+   - `apps/mobile/src/components/session/SessionButton.tsx` (now `Button` in
+     `apps/mobile/src/components/primitives/button.tsx`), `cn` in `apps/web/src/lib/utils.ts` (now
+     `@carlnotes/nightshift/classNames`), `shadow-lift` and its `@utility` in `apps/web/src/globals.css` (now
+     `shadow-raised`, written into `tokens.css` and `uniwind.css` from `packages/nightshift/elevation.ts`), `siApple`
+     in `BrandIcon.tsx` (now `APPLE_ICON_PATH` in `packages/nightshift/oauthProviderIcons.ts`), and the root
+     `components.json` (now `apps/web/components.json`)
+   - `toImportViolations`, `toParsedImports`, `isTypeOnlyImport`, `ParsedImport`, and `STORY_FILE_SUFFIX` in
+     `scripts/packageBoundaries.ts` (now `scripts/importBoundaries.ts`), `COMPONENT_BROWSER_FOLDERS` there (now
+     `WEB_COMPONENT_BROWSER_FOLDERS` in `scripts/importBoundaries.ts`), `Workspace`, `SourceFile`, and
+     `UNIVERSAL_WORKSPACE_FOLDERS` there (now `scripts/workspaces.ts`), and `listSourceFiles` in
+     `scripts/check-package-boundaries.ts` (now `readSourceFiles` in `scripts/sourceFiles.ts`)
 
 5. **Cross-harness enforcement parity**: `.claude/settings.json` hooks and
    `.opencode/plugin/guardrails.mjs` must gate the same operations with the

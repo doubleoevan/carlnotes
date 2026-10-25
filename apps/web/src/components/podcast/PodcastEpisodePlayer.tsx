@@ -7,12 +7,12 @@ import {
 import { PODCAST_NAME } from "@carlnotes/contracts/podcastEpisodes"
 import { toPodcastEpisodePath } from "@carlnotes/contracts/seo"
 import type { TopicResponse } from "@carlnotes/contracts/topics"
+import { cn } from "@carlnotes/nightshift/classNames"
 import { useEffect, useState } from "react"
 import { CollapsibleSection } from "@/components/topic/CollapsibleSection"
 import { isManualScanShown } from "@/components/topic/TopicScanButton"
 import { useSearchParams } from "@/hooks/useSearchParams"
 import { COVER_RECORDING_CLASS, INFO_CARD_CLASS } from "@/lib/styleClasses"
-import { cn } from "@/lib/utils"
 import type { TopicFeedHandlers } from "@/providers/TopicFeedProvider"
 import { usePodcastEpisodePlayer } from "@/stores/podcastEpisodePlayerStore"
 import { PodcastEpisodeCover } from "./PodcastEpisodeCover"
@@ -179,7 +179,7 @@ function UnpublishedPodcastEpisodeCard({ podcastEpisode, scanControl }: Unpublis
 			<PodcastEpisodeCover
 				podcastEpisode={podcastEpisode}
 				className={cn(
-					"border-separator shadow-lift size-24 border sm:size-36",
+					"border-separator shadow-raised size-24 border sm:size-36",
 					podcastEpisode.status === "recording" && COVER_RECORDING_CLASS,
 				)}
 			/>

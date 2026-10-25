@@ -1,4 +1,5 @@
 // the section label pattern: the small uppercase display-font label over a value, beside FieldLabel over a field
+import { cn } from "@carlnotes/nightshift/classNames"
 import type { Meta, StoryObj } from "@storybook/tanstack-react"
 import { FileText } from "lucide-react"
 import { useId } from "react"
@@ -7,7 +8,6 @@ import { FieldLabel } from "@/components/common/FieldLabel"
 import { Input } from "@/components/primitives/input"
 import { InfoSection } from "@/components/topic/TopicInfo"
 import { SECTION_LABEL_CLASS, STANDALONE_LINK_CLASS } from "@/lib/styleClasses"
-import { cn } from "@/lib/utils"
 
 // the kept attachment the centered story's file link downloads, as the Chat files popover links each kept file
 const STORY_KEPT_ATTACHMENT_ID = "attachment-llm-tooling-benchmarks"

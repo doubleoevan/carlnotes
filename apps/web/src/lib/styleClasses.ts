@@ -1,5 +1,5 @@
 // the tailwind class strings shared across pages
-import { cn } from "./utils"
+import { cn } from "@carlnotes/nightshift/classNames"
 
 /**
  * The highlight treatment over the shared button shape, for the one main action a page view has.
@@ -47,7 +47,7 @@ export const LIST_ROW_HIGHLIGHTED_CLASS = "before:bg-muted/70"
  * A round play button in the primary color, with a button's shadow. Each button adds its own size class.
  */
 export const PLAY_BUTTON_CLASS =
-	"bg-primary text-primary-foreground hover:bg-primary/90 shadow-lift grid shrink-0 place-items-center rounded-full transition-colors"
+	"bg-primary text-primary-foreground hover:bg-primary/90 shadow-raised grid shrink-0 place-items-center rounded-full transition-colors"
 
 /**
  * Shows a control only in a browser with JavaScript.
@@ -79,7 +79,7 @@ export const COVER_RECORDING_CLASS = "bg-[url(/podcast-cover-recording.jpg)]"
  * The bordered button treatment shared by the feed toolbar's controls.
  */
 export const MENU_BUTTON_CLASS =
-	"bg-card text-muted-foreground hover:text-foreground inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-lg border px-3 text-sm shadow-lift sm:min-h-9"
+	"bg-card text-muted-foreground hover:text-foreground inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-lg border px-3 text-sm shadow-raised sm:min-h-9"
 
 /**
  * A round button beside the docked podcast player's play button, at play's own size on a phone and a pointer alike:
@@ -210,7 +210,7 @@ export const ONE_PAGE_TABLE_CARD_CLASS = "overflow-hidden pb-0 [&_tbody>tr:last-
 // as a one-page table's does
 export const SCRIPTED_PAGINATION_TABLE_CARD_CLASS = `${ONE_PAGE_TABLE_CARD_CLASS} scripted:overflow-visible scripted:pb-4 scripted:[&_tbody>tr:last-child>*]:border-b`
 
-export const CARD_CLASS = "bg-card rounded-lg border p-4 shadow-lift"
+export const CARD_CLASS = "bg-card rounded-lg border p-4 shadow-raised"
 
 /**
  * The wrapper that scrolls a table sideways. It sits inside the card, and the card's padding and
@@ -232,9 +232,15 @@ export const POPOVER_HEADING_CLASS = "font-display mb-2 text-center text-lg"
 export const SECTION_LABEL_CLASS = "text-muted-foreground font-display text-xs tracking-wide uppercase"
 
 /**
+ * The CarlNotes name in the logo, beside the coffee mug, in the header and on the sign-in pages. It is the logo type
+ * role in Nightshift's typography.ts.
+ */
+export const LOGO_CLASS = "font-display text-xl"
+
+/**
  * The bordered card around the topic page's info and settings sections.
  */
-export const INFO_CARD_CLASS = "border-separator bg-card h-fit rounded-lg border p-5 text-sm shadow-lift"
+export const INFO_CARD_CLASS = "border-separator bg-card h-fit rounded-lg border p-5 text-sm shadow-raised"
 
 /**
  * The dashed dividers between an info card's sections.
@@ -254,7 +260,7 @@ export const INFO_SECTION_PAIR_END_CLASS = "ml-auto py-0 text-right"
 /**
  * The card around a list of rows, such as a topic's findings, its podcast episodes, or its scan history.
  */
-export const RESOURCE_LIST_CARD_CLASS = "border-separator bg-card rounded-lg border shadow-lift"
+export const RESOURCE_LIST_CARD_CLASS = "border-separator bg-card rounded-lg border shadow-raised"
 
 /**
  * The inset that lines up a right-aligned row with the quota line above it. Text takes the full inset.
@@ -348,7 +354,7 @@ export const COMPOSER_FRAME_CLASS = "bg-background rounded-2xl border px-3 py-2"
  * The round frame a user's or a team's avatar takes. The caller sets the size.
  */
 export const AVATAR_CLASS =
-	"inline-block shrink-0 overflow-hidden rounded-full border shadow-lift outline-none focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+	"inline-block shrink-0 overflow-hidden rounded-full border shadow-raised outline-none focus-visible:ring-ring/50 focus-visible:ring-[3px]"
 
 /**
  * A chat reply's bubble, Carl's or Vienna's, and the thinking bubble before it.

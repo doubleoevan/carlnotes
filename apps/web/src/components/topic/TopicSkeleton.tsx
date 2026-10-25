@@ -1,3 +1,4 @@
+import { cn } from "@carlnotes/nightshift/classNames"
 import type * as React from "react"
 import {
 	DASHED_ROW_CLASS,
@@ -5,7 +6,6 @@ import {
 	INFO_CARD_SECTIONS_CLASS,
 	RESOURCE_LIST_CARD_CLASS,
 } from "@/lib/styleClasses"
-import { cn } from "@/lib/utils"
 import { ResourceSkeleton } from "./TopicFeedSkeleton"
 
 // placeholder keys for the skeleton's chapter rows, finding rows, podcast episode rows, and history rows

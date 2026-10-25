@@ -1,7 +1,7 @@
 // the @ mention autocomplete behind the chat room composer: the suggestions, the hook that owns them, and the list
 import { CARL_USERNAME } from "@carlnotes/contracts/chatMentions"
+import { cn } from "@carlnotes/nightshift/classNames"
 import { useState } from "react"
-import { cn } from "@/lib/utils"
 
 // the active username chat mention token behind the caret: an @ at a word start and whatever prefix follows it
 const ACTIVE_CHAT_MENTION_PATTERN = /(^|[^\w@.-])@([\w-]*)$/
@@ -103,7 +103,7 @@ export function useMentionAutocomplete(options: {
 /** The username list showing above the chat message box, carl pinned first then the chat members. */
 export function MentionSuggestionList({ autocomplete }: { autocomplete: MentionAutocomplete }) {
 	return (
-		<ul className="bg-popover absolute right-3 bottom-full left-3 z-10 mb-1 overflow-hidden rounded-md border shadow-lift">
+		<ul className="bg-popover absolute right-3 bottom-full left-3 z-10 mb-1 overflow-hidden rounded-md border shadow-raised">
 			{autocomplete.usernameSuggestions.map((username, index) => (
 				<li key={username}>
 					<button

@@ -1,8 +1,7 @@
+import { cn } from "@carlnotes/nightshift/classNames"
 import * as AccordionPrimitive from "@radix-ui/react-accordion"
 import { ChevronRight } from "lucide-react"
 import type * as React from "react"
-
-import { cn } from "@/lib/utils"
 
 // accordion root — shadcn new-york, adapted with a LEFT disclosure chevron per the design
 function Accordion({ ...props }: React.ComponentProps<typeof AccordionPrimitive.Root>) {

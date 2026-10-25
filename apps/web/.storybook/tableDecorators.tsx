@@ -1,9 +1,9 @@
 // the table a row story renders in: the card, the scroll box, and the table, as the app's tables wrap their rows
+import { cn } from "@carlnotes/nightshift/classNames"
 import type { Decorator } from "@storybook/tanstack-react"
 import type { ReactNode } from "react"
 import { TableCard } from "@/components/table/TableCard"
 import { TABLE_CLASS, TABLE_HEAD_CLASS, TABLE_SCROLL_CLASS } from "@/lib/styleClasses"
-import { cn } from "@/lib/utils"
 
 /**
  * Renders table rows in the card, the scroll box, and the table, under a header row if one is given. A table with a

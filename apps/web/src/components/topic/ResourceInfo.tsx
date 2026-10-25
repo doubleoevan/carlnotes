@@ -7,6 +7,7 @@ import type { TopicFinding } from "@carlnotes/contracts/findings"
 import type { PodcastEpisode } from "@carlnotes/contracts/podcast"
 import { toHostWithoutWww } from "@carlnotes/contracts/seo"
 import { toDateLabel } from "@carlnotes/core/lib/labels"
+import { cn } from "@carlnotes/nightshift/classNames"
 import { Bookmark, Check, Circle, ExternalLink } from "lucide-react"
 import { type ReactNode, useEffect, useState } from "react"
 import { AnchorLink } from "@/components/common/AnchorLink"
@@ -21,7 +22,6 @@ import {
 	SECTION_LABEL_CLASS,
 	STANDALONE_LINK_CLASS,
 } from "@/lib/styleClasses"
-import { cn } from "@/lib/utils"
 import { captureVisitEvent, toPublicTopicProperties } from "@/lib/visitAnalytics"
 import { type TopicFeedHandlers, useIsSignedIn } from "@/providers/TopicFeedProvider"
 import { ResourceMetadata } from "./TopicFindingSummary"

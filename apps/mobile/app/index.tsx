@@ -10,8 +10,8 @@ import { useNow } from "@carlnotes/core/hooks/useNow"
 import { useQuery } from "@tanstack/react-query"
 import { ActivityIndicator, Image, Pressable, ScrollView, Text, View } from "react-native"
 import { SafeAreaView } from "react-native-safe-area-context"
-import { SessionTextLink } from "../src/components/session/SessionLink"
-import { toTypeRoleStyle } from "../src/typeRoleStyles"
+import { SessionTextLink } from "@/components/session/SessionLink"
+import { toTypeRoleStyle } from "@/typeRoleStyles"
 
 // the avatar's size on the home screen, in points
 const AVATAR_SIZE = 44

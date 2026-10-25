@@ -1,9 +1,9 @@
 // a titled, collapsible table section whose rows sort by column and page five at a time, shown with the podcast
 // episodes table the podcast episode page renders through it
 import type { PodcastEpisodeSummary } from "@carlnotes/contracts/podcast"
+import { cn } from "@carlnotes/nightshift/classNames"
 import type { Meta, StoryObj } from "@storybook/tanstack-react"
 import { TABLE_WIDE_FIRST_COLUMN_CLASS } from "@/lib/styleClasses"
-import { cn } from "@/lib/utils"
 import { PODCAST_EPISODE_FIXTURES } from "../../../.storybook/fixtures/podcastEpisodes"
 import { toOwnFrameDocs } from "../../../.storybook/parameters"
 import { PagedTableSection } from "./PagedTableSection"

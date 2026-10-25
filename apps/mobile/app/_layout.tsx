@@ -1,5 +1,5 @@
 // the root layout: the stylesheet, the auth and api clients, the fonts behind the splash screen, the providers, and
-// the sign-in guard over the screens
+// the guards over the screens
 import "../global.css"
 import { configureApiClient } from "@carlnotes/client/apiClient"
 import { authClient } from "@carlnotes/client/authClient"
@@ -13,8 +13,8 @@ import * as SplashScreen from "expo-splash-screen"
 import { PostHogProvider, usePostHog } from "posthog-react-native"
 import { useEffect } from "react"
 import { Alert } from "react-native"
-import { toApiRequestSettings } from "../src/apiRequestSettings"
-import { apiBaseUrl, hasSession, mobileAuthClient } from "../src/authClient"
+import { toApiRequestSettings } from "@/apiRequestSettings"
+import { apiBaseUrl, hasSession, mobileAuthClient } from "@/authClient"
 
 // hold the splash screen until the fonts and the session load
 SplashScreen.preventAutoHideAsync()
@@ -91,7 +91,7 @@ function RootLayout() {
 		>
 			<QueryClientProvider client={queryClient}>
 				<ScreenViewRecorder />
-				{/* the guard: a user sees the app's screens, a visitor the sign-in and sign-up screens */}
+				{/* the sign-in guard. a user sees the app's screens, and a visitor the sign-in and sign-up screens */}
 				<Stack screenOptions={{ headerShown: false }}>
 					<Stack.Protected guard={isSignedIn}>
 						<Stack.Screen name="index" />
@@ -100,6 +100,11 @@ function RootLayout() {
 					<Stack.Protected guard={!isSignedIn}>
 						<Stack.Screen name="sign-in" />
 						<Stack.Screen name="sign-up" />
+					</Stack.Protected>
+
+					{/* the component browser, in a development build only */}
+					<Stack.Protected guard={__DEV__}>
+						<Stack.Screen name="storybook" />
 					</Stack.Protected>
 				</Stack>
 			</QueryClientProvider>

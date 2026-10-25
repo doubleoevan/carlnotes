@@ -1,6 +1,7 @@
 // one mode's tokens as Design Tokens Community Group format 1.0 JSON, the format Figma's variable import reads. each
 // mode is one file, and both files hold the same names, so Figma reads them as two modes of one collection
 import { type ColorMode, colors, toColorChannels } from "./colors"
+import { raisedShadows } from "./elevation"
 import { type RadiusStep, radiusSteps, toRadiusPixels } from "./radius"
 import { fontFamilies, type TypeRole, typeRoles } from "./typography"
 import { toPixels } from "./units"
@@ -13,7 +14,7 @@ type FigmaToken = { $type: string; $value: unknown; $description?: string }
 type FigmaGroup = { [name: string]: FigmaToken | FigmaGroup }
 
 /**
- * Returns one mode's colors, radius steps, font families, and type roles as a Design Tokens group.
+ * Returns one mode's colors, radius steps, raised shadow, font families, and type roles as a Design Tokens group.
  */
 export function toFigmaTokens(mode: ColorMode): FigmaGroup {
 	// each color in this mode
@@ -55,9 +56,24 @@ export function toFigmaTokens(mode: ColorMode): FigmaGroup {
 			return [typeRoleName, typeRoleTokenGroup]
 		}),
 	)
+	// the raised shadow, the format's shadow token with one entry per shadow
+	const shadowTokens: FigmaGroup = {
+		raised: {
+			$type: "shadow",
+			$value: raisedShadows.map((shadow) => ({
+				color: toFigmaColorValue(shadow.color),
+				offsetX: toPixelValue(shadow.offsetXPixels),
+				offsetY: toPixelValue(shadow.offsetYPixels),
+				blur: toPixelValue(shadow.blurPixels),
+				spread: toPixelValue(shadow.spreadPixels),
+			})),
+			$description: "the one elevation, under every raised surface",
+		},
+	}
 	return {
 		color: colorTokens,
 		radius: radiusTokens,
+		shadow: shadowTokens,
 		font: fontFamilyTokens,
 		type: typeRoleTokens,
 	}
@@ -65,7 +81,12 @@ export function toFigmaTokens(mode: ColorMode): FigmaGroup {
 
 // a dimension token in pixels
 function toPixelToken(pixels: number): FigmaToken {
-	return { $type: "dimension", $value: { value: roundTo(pixels, 4), unit: "px" } }
+	return { $type: "dimension", $value: toPixelValue(pixels) }
+}
+
+// a dimension value in pixels
+function toPixelValue(pixels: number): { value: number; unit: "px" } {
+	return { value: roundTo(pixels, 4), unit: "px" }
 }
 
 // a hex or an rgba color as the format's color value, or throw an error for any other form

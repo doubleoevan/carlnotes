@@ -1,8 +1,9 @@
 // the YouTube player that a link preview card and the tutorial video's card and dialog share
 import { toYoutubeAutoplayUrl, toYoutubeWatchUrl, YOUTUBE_FRAME_ATTRIBUTES } from "@carlnotes/contracts/youtube"
+import { cn } from "@carlnotes/nightshift/classNames"
 import { Play } from "lucide-react"
 import { useState } from "react"
-import { cn, toLinkClickHandler } from "@/lib/utils"
+import { toLinkClickHandler } from "@/lib/utils"
 import { AnchorLink } from "./AnchorLink"
 import { YoutubePlayIcon } from "./BrandIcon"
 

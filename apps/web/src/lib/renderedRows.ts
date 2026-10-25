@@ -1,6 +1,6 @@
 import { NO_SCRIPT_ROW_LIMIT } from "@carlnotes/contracts/seo"
+import { cn } from "@carlnotes/nightshift/classNames"
 import { SCRIPTED_HIDDEN_CLASS } from "./styleClasses"
-import { cn } from "./utils"
 
 // a row a paged list renders, and its classes for a browser with JavaScript
 export type RenderedRow<Row> = { row: Row; className: string }

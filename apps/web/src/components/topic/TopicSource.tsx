@@ -1,9 +1,9 @@
 // the sources editor's rows: one source row, and the default source row that is a source row when on
+import { cn } from "@carlnotes/nightshift/classNames"
 import { X } from "lucide-react"
 import { Badge } from "@/components/primitives/badge"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import { STANDALONE_LINK_CLASS } from "@/lib/styleClasses"
-import { cn } from "@/lib/utils"
 
 /** One default source row: a source row while on, and a + turn-on button while off. */
 export function TopicDefaultSource({

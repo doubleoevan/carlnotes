@@ -1,9 +1,9 @@
 import { useAvatar } from "@carlnotes/core/hooks/useAvatar"
+import { cn } from "@carlnotes/nightshift/classNames"
 import { Camera } from "lucide-react"
 import { useState } from "react"
 import { UserAvatar } from "@/components/branding/UserAvatar"
 import { FileDropZone } from "@/components/common/FileDropZone"
-import { cn } from "@/lib/utils"
 import { AVATAR_ACCEPT, AVATAR_REJECTIONS, AvatarDropOverlay, toDroppedImage, toUploadableAvatar } from "./AvatarUpload"
 
 /**

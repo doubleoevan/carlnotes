@@ -1,10 +1,11 @@
 import { sendTopicFindingOpened } from "@carlnotes/client/topicClient"
 import type { SearchRow } from "@carlnotes/contracts/search"
+import { cn } from "@carlnotes/nightshift/classNames"
 import { ArrowRight } from "lucide-react"
 import { TeamAvatar } from "@/components/branding/TeamAvatar"
 import { UserAvatar } from "@/components/branding/UserAvatar"
 import { AnchorLink } from "@/components/common/AnchorLink"
-import { cn, RESOURCE_KIND_ICON } from "@/lib/utils"
+import { RESOURCE_KIND_ICON } from "@/lib/utils"
 import { SEARCH_RESULT_KIND_ICON } from "./searchFilterOptions"
 
 // what every suggestion option needs to be an announced listbox option that clears the search when clicked

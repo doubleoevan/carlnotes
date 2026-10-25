@@ -7,13 +7,18 @@ import { toMarkdownTableOptions } from "./ScrollingTable"
 # Inventory
 
 This page lists the component patterns the web app builds today and the Nightshift component each one would become.
-Nightshift is the CarlNotes design system: one vocabulary of tokens, type, and components for the web app and a planned
+Nightshift is the CarlNotes design system: one vocabulary of tokens, type, and components for the web app and the
 Expo (React Native) app.
 
 The table counts each pattern in `apps/web/src`, with tests, stories, `src/nightshift/`, and the generated route tree
 excluded. Each row names how the pattern is built today, where it appears, and the Nightshift name it would take. A
 primitive is a shadcn/ui component kept in `apps/web/src/components/primitives/`. The counts are a snapshot. No script
 updates them.
+
+A contract is the shared definition of a component both apps draw. Its module in `packages/nightshift/components/` holds
+the variant and size names, the shared props, and the classes both platforms draw. Each app keeps its own implementation
+at the same path, `src/components/primitives/`, and adds only its platform's classes: the web its hover and focus, the
+mobile app its pressed states. Button and Badge have contracts.
 
 <Markdown options={toMarkdownTableOptions({ label: "Inventory table", minWidth: "48rem" })}>
   {inventoryTable}

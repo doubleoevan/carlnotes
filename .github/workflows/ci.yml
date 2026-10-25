@@ -50,3 +50,12 @@ jobs:
           persist-credentials: false
       - uses: ./.github/actions/setup-bun
       - run: CI=1 bun run --cwd apps/mobile export --platform ios --platform android
+      # fail if Storybook reached a production bundle. Storybook's SET_CURRENT_STORY event name survives minification
+      # and fail if either platform exported no bundle
+      - run: |
+          for platform in ios android; do
+            test -n "$(find apps/mobile/dist/_expo/static/js/$platform -name '*.hbc')"
+          done
+          grep_status=0
+          grep -ral --include='*.hbc' SET_CURRENT_STORY apps/mobile/dist/_expo/static/js || grep_status=$?
+          test "$grep_status" -eq 1

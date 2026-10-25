@@ -16,7 +16,7 @@ from `apps/docs/dist`, so it runs no process of its own, and nothing imports it.
   (`apps/worker/docsSync.ts`) embeds the pages' sections into `docs_chunks` for chat, so a page edit is followed by the
   build and the embed; the deploy runs the embed as a job.
 - `src/components/Footer.astro` — the footer override, which adds the copyright line under Starlight's own rows.
-  `src/routeData.ts` — the route middleware that points the header wordmark at the app instead of the docs home.
+  `src/routeData.ts` — the route middleware that points the header logo at the app instead of the docs home.
   `src/topicTutorialVideoPlugin.ts` — the Sätteri plugin that fills a page's video marker with the video on making a
   topic, built from `TOPIC_TUTORIAL_VIDEO` in `@carlnotes/contracts/youtube`, the constant the app reads too.
 - `src/assets/screenshots/` — the screenshots the docs pages reference by relative path, and the ones release notes

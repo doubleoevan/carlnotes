@@ -1,7 +1,7 @@
+import { cn } from "@carlnotes/nightshift/classNames"
 import type * as React from "react"
 import { CollapsibleSection } from "@/components/topic/CollapsibleSection"
 import { TABLE_CLASS, TABLE_HEAD_CLASS, TABLE_SCROLL_CLASS } from "@/lib/styleClasses"
-import { cn } from "@/lib/utils"
 import type { RowSort, SortValue } from "./SortableHeader"
 import { TableCard } from "./TableCard"
 import {

@@ -1,4 +1,5 @@
 // the badge primitive: a small pill for a tag or a source kind, in each of its variants
+import { badgeVariantNames } from "@carlnotes/nightshift/components/badge"
 import type { Meta, StoryObj } from "@storybook/tanstack-react"
 import { Badge } from "./badge"
 
@@ -7,7 +8,7 @@ const meta = {
 	component: Badge,
 	args: { children: "deep learning", variant: "secondary" },
 	argTypes: {
-		variant: { control: "inline-radio", options: ["default", "secondary", "outline"] },
+		variant: { control: "inline-radio", options: badgeVariantNames },
 		asChild: { control: false },
 	},
 } satisfies Meta<typeof Badge>

@@ -479,6 +479,70 @@
 			}
 		}
 	},
+	"shadow": {
+		"raised": {
+			"$type": "shadow",
+			"$value": [
+				{
+					"color": {
+						"colorSpace": "srgb",
+						"components": [
+							0,
+							0,
+							0
+						],
+						"alpha": 0.2,
+						"hex": "#000000"
+					},
+					"offsetX": {
+						"value": 0,
+						"unit": "px"
+					},
+					"offsetY": {
+						"value": 2,
+						"unit": "px"
+					},
+					"blur": {
+						"value": 5,
+						"unit": "px"
+					},
+					"spread": {
+						"value": 0,
+						"unit": "px"
+					}
+				},
+				{
+					"color": {
+						"colorSpace": "srgb",
+						"components": [
+							0,
+							0,
+							0
+						],
+						"alpha": 0.34,
+						"hex": "#000000"
+					},
+					"offsetX": {
+						"value": 0,
+						"unit": "px"
+					},
+					"offsetY": {
+						"value": 8,
+						"unit": "px"
+					},
+					"blur": {
+						"value": 15,
+						"unit": "px"
+					},
+					"spread": {
+						"value": -6,
+						"unit": "px"
+					}
+				}
+			],
+			"$description": "the one elevation, under every raised surface"
+		}
+	},
 	"font": {
 		"sans": {
 			"$type": "fontFamily",
@@ -539,6 +603,31 @@
 				"$type": "dimension",
 				"$value": {
 					"value": 32,
+					"unit": "px"
+				}
+			},
+			"fontWeight": {
+				"$type": "fontWeight",
+				"$value": 400
+			}
+		},
+		"logo": {
+			"fontFamily": {
+				"$type": "fontFamily",
+				"$value": "{font.display}",
+				"$description": "the CarlNotes name in the logo, beside the coffee mug, in the header and on the sign-in pages"
+			},
+			"fontSize": {
+				"$type": "dimension",
+				"$value": {
+					"value": 20,
+					"unit": "px"
+				}
+			},
+			"lineHeight": {
+				"$type": "dimension",
+				"$value": {
+					"value": 28,
 					"unit": "px"
 				}
 			},

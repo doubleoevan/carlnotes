@@ -3,11 +3,12 @@
 import type { TopicFinding } from "@carlnotes/contracts/findings"
 import { toDotSeparatedText } from "@carlnotes/contracts/text"
 import { toAgeLabel } from "@carlnotes/core/lib/labels"
+import { cn } from "@carlnotes/nightshift/classNames"
 import type * as React from "react"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { HostFavicon } from "@/components/common/HostFavicon"
 import { PopoverTrigger } from "@/components/primitives/popover"
-import { cn, RESOURCE_KIND_ICON } from "@/lib/utils"
+import { RESOURCE_KIND_ICON } from "@/lib/utils"
 
 // the finding, whether its kind icon shows, and the children that come after the age on the metadata line
 type TopicFindingSummaryProps = {

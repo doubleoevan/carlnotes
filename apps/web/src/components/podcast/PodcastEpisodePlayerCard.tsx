@@ -1,5 +1,6 @@
 import type { PodcastEpisode } from "@carlnotes/contracts/podcast"
 import { toClockLabel } from "@carlnotes/core/lib/labels"
+import { cn } from "@carlnotes/nightshift/classNames"
 import { Pause, Play, Rss } from "lucide-react"
 import { useState } from "react"
 import { MoreButton } from "@/components/topic/MoreButton"
@@ -11,7 +12,6 @@ import {
 	PLAYBACK_CONTROL_BUTTON_CLASS,
 	SCRIPTED_ONLY_CLASS,
 } from "@/lib/styleClasses"
-import { cn } from "@/lib/utils"
 import {
 	playPodcastEpisode,
 	seekPlaybackTo,

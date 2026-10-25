@@ -11,7 +11,8 @@
   module map and the package rule are in AGENTS.md.
 - Postgres access goes through Drizzle in `packages/db/`. Don't reach for `Bun.sql`, `pg`, or raw clients.
 - Verification gate before any hand-off: `bunx biome check .` + `bun scripts/check-package-boundaries.ts` +
-  `bunx tsc -b` + `bun scripts/check-workflow-bundles.ts` + `bun test` (enforced on push by `scripts/preflight.sh`).
+  `bun scripts/check-component-parity.ts` + `bunx tsc -b` + `bun scripts/check-workflow-bundles.ts` + `bun test`
+  (enforced on push by `scripts/preflight.sh`).
 
 ## Skills
 Skills load from `.claude/skills/` (canonical copies at `.agents/skills/`). Follow them; they are not restated here.

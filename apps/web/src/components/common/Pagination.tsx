@@ -1,9 +1,9 @@
 import { NO_SCRIPT_ROW_LIMIT } from "@carlnotes/contracts/seo"
 import { toPaginationSlots } from "@carlnotes/core/lib/paginationSlots"
+import { cn } from "@carlnotes/nightshift/classNames"
 import { ChevronLeft, ChevronRight } from "lucide-react"
 import { type MouseEvent, type ReactNode, useLayoutEffect, useRef } from "react"
 import { MENU_BUTTON_CLASS } from "@/lib/styleClasses"
-import { cn } from "@/lib/utils"
 
 // one control in the row. its onClick saves where the control sits on screen
 type PageControl = {

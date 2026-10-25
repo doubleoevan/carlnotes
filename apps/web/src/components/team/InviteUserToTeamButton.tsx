@@ -5,6 +5,7 @@ import { sendDeleteTeamInvite, sendRemoveTeamMember } from "@carlnotes/client/te
 import { sendUserInvite } from "@carlnotes/client/topicClient"
 import { isLeaderRole } from "@carlnotes/contracts/enums"
 import type { ProfileTeamStatus } from "@carlnotes/contracts/profiles"
+import { cn } from "@carlnotes/nightshift/classNames"
 import { Users, X } from "lucide-react"
 import { type ReactNode, useState } from "react"
 import { toast } from "sonner"
@@ -14,7 +15,6 @@ import { Button } from "@/components/primitives/button"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/primitives/popover"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import { MENU_DIVIDER_CLASS, MENU_OPTION_CLASS } from "@/lib/styleClasses"
-import { cn } from "@/lib/utils"
 import { NewTeamOption, TeamOption } from "./TeamMenuOptions"
 
 /**

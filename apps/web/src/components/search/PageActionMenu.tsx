@@ -1,3 +1,4 @@
+import { cn } from "@carlnotes/nightshift/classNames"
 import { Bot, EllipsisVertical, Flag, Plus } from "lucide-react"
 import { useState } from "react"
 import { AddToAiDialog } from "@/components/common/AddToAiDialog"
@@ -7,7 +8,6 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives
 import { useNewTopicDialog } from "@/components/topic/TopicEditorChoiceDialog"
 import { useOrigin } from "@/hooks/useBrowserValue"
 import { MENU_OPTION_CLASS, SEARCH_BAR_ICON_CLASS } from "@/lib/styleClasses"
-import { cn } from "@/lib/utils"
 import { type PageActionOption, type PageActions, usePageActions } from "@/stores/pageActionsStore"
 
 // what the menu offers on a page that registers no actions

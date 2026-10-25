@@ -7,6 +7,7 @@ import type { FindingSearchRow, SearchResultsPage, SearchRow, TopicSearchRow } f
 import { toTopicPath } from "@carlnotes/contracts/seo"
 import { toDotSeparatedText } from "@carlnotes/contracts/text"
 import { toAgeLabel, toCountLabel } from "@carlnotes/core/lib/labels"
+import { cn } from "@carlnotes/nightshift/classNames"
 import type { LucideIcon } from "lucide-react"
 import type { ComponentProps, ReactNode } from "react"
 import { TeamAvatar } from "@/components/branding/TeamAvatar"
@@ -17,7 +18,6 @@ import { PodcastEpisodeNumberPill } from "@/components/podcast/PodcastEpisodePil
 import { ResourceSkeleton } from "@/components/topic/TopicFeedSkeleton"
 import { TopicResource } from "@/components/topic/TopicResource"
 import { DASHED_ROW_CLASS, LIST_ROW_HOVER_CLASS, RESOURCE_LIST_CARD_CLASS } from "@/lib/styleClasses"
-import { cn } from "@/lib/utils"
 import type { TopicFeedHandlers } from "@/providers/TopicFeedProvider"
 import { SEARCH_RESULT_KIND_ICON } from "./searchFilterOptions"
 

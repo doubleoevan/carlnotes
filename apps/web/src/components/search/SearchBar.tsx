@@ -161,7 +161,7 @@ export function SearchBar() {
 		: undefined
 	return (
 		<div className="relative">
-			<div className="bg-card border-border flex items-center gap-2 rounded-lg border py-2 pr-2 pl-3 shadow-lift">
+			<div className="bg-card border-border flex items-center gap-2 rounded-lg border py-2 pr-2 pl-3 shadow-raised">
 				{/* the magnifying glass, then the search input */}
 				<Search className="text-muted-foreground size-4 shrink-0" />
 				<Input
@@ -214,7 +214,7 @@ export function SearchBar() {
 					role="listbox"
 					aria-label="Search suggestions"
 					onMouseDown={(event) => event.preventDefault()}
-					className="bg-popover text-popover-foreground absolute top-full right-0 left-0 z-30 mt-1 overflow-hidden rounded-md border p-1 shadow-lift"
+					className="bg-popover text-popover-foreground absolute top-full right-0 left-0 z-30 mt-1 overflow-hidden rounded-md border p-1 shadow-raised"
 				>
 					{searchRows.map((searchRow, index) => (
 						<SearchRowOption

@@ -1,6 +1,7 @@
 import { useAllTeamChatMentions, useAllTopicChatMentions } from "@carlnotes/core/stores/chatRoomStore"
 import { useAllNoteBadges } from "@carlnotes/core/stores/noteBadgeStore"
 import { useTopicInviteBadges } from "@carlnotes/core/stores/topicInviteStore"
+import { cn } from "@carlnotes/nightshift/classNames"
 import { useLocation } from "@tanstack/react-router"
 import { Activity, CircleUserRound, Columns3Cog, LogOut, ShieldUser, User, Users } from "lucide-react"
 import { useState } from "react"
@@ -11,7 +12,6 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/primitives
 import { signOutAndReload } from "@/components/session/signOut"
 import { type TopicTutorialVideoOpener, TopicTutorialVideoOption } from "@/components/topic/TopicTutorialVideoDialog"
 import { MENU_DIVIDER_CLASS, MENU_OPTION_CLASS, MENU_OPTION_SELECTED_CLASS } from "@/lib/styleClasses"
-import { cn } from "@/lib/utils"
 import { DocsLink } from "./DocsLink"
 
 /**

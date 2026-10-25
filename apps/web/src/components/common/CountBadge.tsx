@@ -1,4 +1,4 @@
-import { cn } from "@/lib/utils"
+import { cn } from "@carlnotes/nightshift/classNames"
 
 // the largest count a badge shows as a number. anything past it reads as 9+
 const LARGEST_SHOWN_COUNT = 9

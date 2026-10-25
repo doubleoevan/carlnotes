@@ -3,10 +3,10 @@ import { CHAT_NAME } from "@carlnotes/contracts/chat"
 import type { MonthlyBudgetCutoff } from "@carlnotes/contracts/plans"
 import { PODCAST_NAME } from "@carlnotes/contracts/podcastEpisodes"
 import { toCentsLabel, toSharePercent, toSharePercentLabel } from "@carlnotes/core/lib/labels"
+import { cn } from "@carlnotes/nightshift/classNames"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { TooltipSection } from "@/components/common/UpdateCountBadge"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
-import { cn } from "@/lib/utils"
 import { MONTHLY_BUDGET_CUTOFF_COPY, SPENT_BUDGET_LIST_LINE, toCutoffListLine } from "./monthlyBudgetCutoffCopy"
 
 // messages for each percentage of the budget spent, lowest threshold last so the first match wins. a budget with

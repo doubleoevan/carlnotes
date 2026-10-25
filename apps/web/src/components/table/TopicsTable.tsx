@@ -2,6 +2,7 @@ import { fetchTopicPage, sendSubscriptionEmail } from "@carlnotes/client/topicCl
 import type { Topic } from "@carlnotes/contracts/profiles"
 import type { TopicResponse } from "@carlnotes/contracts/topics"
 import { toCountLabel, toMonthYearLabel } from "@carlnotes/core/lib/labels"
+import { cn } from "@carlnotes/nightshift/classNames"
 import { X } from "lucide-react"
 import { useState } from "react"
 import { CoffeeLoading } from "@/components/branding/CoffeeLoading"
@@ -18,7 +19,6 @@ import {
 	TABLE_HEAD_CLASS,
 	TABLE_SCROLL_CLASS,
 } from "@/lib/styleClasses"
-import { cn } from "@/lib/utils"
 import { TopicVisibility } from "./OwnerTopicsTable"
 import { SortableHeader } from "./SortableHeader"
 import { TableCard } from "./TableCard"

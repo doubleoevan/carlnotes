@@ -5,9 +5,9 @@ import { RadiusScale, TokenSwatches } from "./TokenSwatches"
 
 # Tokens
 
-This page shows every Nightshift color token and radius step, read from the TypeScript source in `packages/nightshift`.
-To change one, edit `colors.ts` or `radius.ts` there, then run `bun run nightshift:write`. The last section lists the
-colors and radii the web app still writes outside the source.
+This page shows every Nightshift color token, every radius step, and the elevation, read from the TypeScript source in
+`packages/nightshift`. To change one, edit `colors.ts`, `radius.ts`, or `elevation.ts` there, then run
+`bun run nightshift:write`. The last section lists the colors and radii the web app still writes outside the source.
 
 The writer writes `tokens.css` and two Figma variable files, `figma/light.tokens.json` and `figma/dark.tokens.json`,
 from the source. `packages/nightshift/tokens.test.ts` fails if any of the three differs from what the source writes.
@@ -35,6 +35,13 @@ utilities read those steps. The Figma files write each step in pixels.
 
 <RadiusScale />
 
+## Elevation
+
+The raised shadow is Nightshift's one elevation, under every raised surface: cards, tables, the search bar, popups,
+buttons, and tiles. `elevation.ts` holds its two shadows, a short close one and a long soft one. The writer writes them
+as the `shadow-raised` utility into `tokens.css` and into `uniwind.css`, so the web app and the mobile app draw the
+same raised shadow, and as a `shadow` token in each Figma file.
+
 ## Emails
 
 Every email inlines the Latte values from `packages/nightshift/email.ts` as literal colors, because not every email
@@ -50,8 +57,8 @@ The web app still writes these values itself, so a change to the source does not
   dark one in `apps/web/public/site.webmanifest`. `useTheme.test.ts` fails if they differ from the `hero` token.
 - The emoji picker's red, green, and blue triplets in `apps/web/src/globals.css`, hand-written copies of the light and
   dark `popover`, `popoverForeground`, and `primary` values.
-- Black at an opacity in the dialog, chat panel, avatar, and YouTube player overlays, the `shadow-lift` utility, and the
-  chat panel's shadow and light-mode ring.
+- Black at an opacity in the dialog, chat panel, avatar, and YouTube player overlays, and the chat panel's shadow and
+  light-mode ring.
 - Black at an opacity in Tailwind's own shadows: `shadow-xs` on the input, textarea, select trigger, switch, and topic
   prompt composer, and `drop-shadow-lg` on the YouTube play icon.
 - White at an opacity in the header's hover and current-page tints, the header's avatar border, and the chat panel's
@@ -60,10 +67,13 @@ The web app still writes these values itself, so a change to the source does not
 - Plain white in the destructive button's text, the avatar overlays' text, the coffee cup icon, the YouTube play
   triangle, and the shimmer animation's glint.
 - The favicon chip in dark mode: a white fill and border, and Tailwind's `neutral-600` on its globe.
-- Brand colors: the Google logo in `OAuthProviderIcons.tsx`, the YouTube logo in `BrandIcon.tsx`, and the CarlNotes
-  icon art in `public/favicon.svg` and `public/carl-bimi.svg`.
+- Brand colors: the YouTube logo in `BrandIcon.tsx` and the CarlNotes icon art in `public/favicon.svg` and
+  `public/carl-bimi.svg`.
 - Toast colors, which the Sonner toast library sets from its own light and dark themes and its `richColors` option,
   except the light success, info, warning, and error text, which `primitives/sonner.tsx` darkens to 4.5:1 on their
   fills.
 - The `rounded`, `rounded-2xl`, and `rounded-full` utilities and `border-radius: 9999px` in the CSS, which keep
   Tailwind's own values or draw a full circle. The tooltip's arrow writes its own `rounded-[2px]`.
+
+The Google logo's colors sit beside its paths in Nightshift's `oauthProviderIcons.ts`, outside the color tokens, and
+both apps draw the logo from there.

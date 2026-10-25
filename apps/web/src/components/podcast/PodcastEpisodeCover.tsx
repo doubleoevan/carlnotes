@@ -1,6 +1,6 @@
 import type { PodcastEpisode } from "@carlnotes/contracts/podcast"
+import { cn } from "@carlnotes/nightshift/classNames"
 import { COVER_PLACEHOLDER_CLASS } from "@/lib/styleClasses"
-import { cn } from "@/lib/utils"
 
 // the podcast episode whose cover shows, and the classes that size the square
 type PodcastEpisodeCoverProps = { podcastEpisode: Pick<PodcastEpisode, "smallCoverUrl" | "title">; className?: string }

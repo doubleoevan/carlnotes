@@ -1,8 +1,8 @@
 // the link preview card, its loading note, and the check for a link worth previewing
 import type { ChatLinkPreview } from "@carlnotes/contracts/chat"
+import { cn } from "@carlnotes/nightshift/classNames"
 import { useMemo } from "react"
 import { CoffeeLoading } from "@/components/branding/CoffeeLoading"
-import { cn } from "@/lib/utils"
 import { AnchorLink } from "./AnchorLink"
 import { HostFavicon } from "./HostFavicon"
 import { YoutubePlayer } from "./YoutubePlayer"

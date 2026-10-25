@@ -1,7 +1,7 @@
 // the persona credit: who inspired Carl, with links to his company, videos, and school
+import { cn } from "@carlnotes/nightshift/classNames"
 import type { Meta, StoryObj } from "@storybook/tanstack-react"
 import { SECTION_LABEL_CLASS } from "@/lib/styleClasses"
-import { cn } from "@/lib/utils"
 import { Attribution } from "./Attribution"
 
 const meta = {
@@ -14,7 +14,7 @@ const meta = {
 	// size, with the "The Real Carl" section label over the credit
 	decorators: [
 		(Story) => (
-			<div className="bg-popover text-popover-foreground w-80 rounded-md border p-4 text-sm shadow-lift">
+			<div className="bg-popover text-popover-foreground w-80 rounded-md border p-4 text-sm shadow-raised">
 				<div className={cn(SECTION_LABEL_CLASS, "mb-1 text-center")}>The Real Carl</div>
 				<Story />
 			</div>

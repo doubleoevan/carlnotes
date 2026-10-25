@@ -1,4 +1,5 @@
 import type { TopicResponse } from "@carlnotes/contracts/topics"
+import { cn } from "@carlnotes/nightshift/classNames"
 import { ChevronRight, Download, ExternalLink, Paperclip, X } from "lucide-react"
 import type * as React from "react"
 import { useRef, useState } from "react"
@@ -6,7 +7,7 @@ import { AnchorLink } from "@/components/common/AnchorLink"
 import { Textarea } from "@/components/primitives/textarea"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import { STANDALONE_LINK_CLASS } from "@/lib/styleClasses"
-import { cn, FILE_PICKER_ACCEPT } from "@/lib/utils"
+import { FILE_PICKER_ACCEPT } from "@/lib/utils"
 import { ScrollNote } from "./TopicScanRecap"
 
 // one stored attachment, whose context the owner can read and correct

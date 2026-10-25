@@ -1,11 +1,12 @@
 import { TOPIC_PROMPT_CHARS } from "@carlnotes/contracts/topics"
+import { cn } from "@carlnotes/nightshift/classNames"
 import { FileText, Paperclip, X } from "lucide-react"
 import type * as React from "react"
 import { useEffect, useRef, useState } from "react"
 import { FileDropZone } from "@/components/common/FileDropZone"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import { ICON_BUTTON_CLASS } from "@/lib/styleClasses"
-import { cn, FILE_PICKER_ACCEPT } from "@/lib/utils"
+import { FILE_PICKER_ACCEPT } from "@/lib/utils"
 import { toAttachmentFileKey } from "./TopicAttachmentEditor"
 
 // how tall the prompt box may grow before it scrolls

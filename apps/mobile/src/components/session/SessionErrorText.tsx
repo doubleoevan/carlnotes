@@ -1,6 +1,6 @@
 // the line a failed sign-in, sign-up, or close shows
 import { Text } from "react-native"
-import { toTypeRoleStyle } from "../../typeRoleStyles"
+import { toTypeRoleStyle } from "@/typeRoleStyles"
 
 /**
  * The line a failed sign-in, sign-up, or close shows, announced to the screen reader.

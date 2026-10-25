@@ -1,12 +1,13 @@
 // the menu option and the hero's button that open the video on making a topic, and the dialog that plays it
 import { TOPIC_TUTORIAL_VIDEO, toYoutubeWatchUrl } from "@carlnotes/contracts/youtube"
+import { cn } from "@carlnotes/nightshift/classNames"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { YoutubePlayIcon } from "@/components/common/BrandIcon"
 import { YoutubePlayer } from "@/components/common/YoutubePlayer"
 import { Dialog, DialogContent, DialogTitle } from "@/components/primitives/dialog"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import { MENU_OPTION_CLASS } from "@/lib/styleClasses"
-import { cn, toLinkClickHandler } from "@/lib/utils"
+import { toLinkClickHandler } from "@/lib/utils"
 import { captureVisitEvent } from "@/lib/visitAnalytics"
 
 // where the video's dialog was opened from

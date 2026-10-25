@@ -1,6 +1,7 @@
 import type { ActivityResponse } from "@carlnotes/contracts/activity"
 import { isPaidPlan } from "@carlnotes/contracts/enums"
 import type { BillingState } from "@carlnotes/contracts/profiles"
+import { cn } from "@carlnotes/nightshift/classNames"
 import { Settings } from "lucide-react"
 import { useState } from "react"
 import { AnchorLink } from "@/components/common/AnchorLink"
@@ -8,7 +9,6 @@ import { Button, buttonVariants } from "@/components/primitives/button"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import { openBillingPortal } from "@/lib/billingRedirects"
 import { CARD_CLASS } from "@/lib/styleClasses"
-import { cn } from "@/lib/utils"
 import { SpendMeter } from "./SpendMeter"
 
 /**

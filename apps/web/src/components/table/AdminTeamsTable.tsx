@@ -3,6 +3,7 @@ import type { OwnerTopic } from "@carlnotes/contracts/activity"
 import type { AdminTeamRow } from "@carlnotes/contracts/admin"
 import type { TeamPageResponse } from "@carlnotes/contracts/teams"
 import { toCentsLabel, toCountLabel, toDateLabel } from "@carlnotes/core/lib/labels"
+import { cn } from "@carlnotes/nightshift/classNames"
 import { useState } from "react"
 import { toast } from "sonner"
 import { CoffeeLoading } from "@/components/branding/CoffeeLoading"
@@ -15,7 +16,6 @@ import {
 	TABLE_HEAD_CLASS,
 	TABLE_SCROLL_CLASS,
 } from "@/lib/styleClasses"
-import { cn } from "@/lib/utils"
 import { TopicsSubtableRow } from "./OwnerTopicsTable"
 import { SortableHeader } from "./SortableHeader"
 import { SubtableCountButton } from "./SubtableCountButton"

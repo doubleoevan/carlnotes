@@ -1,9 +1,9 @@
 import type { PodcastEpisodeNote } from "@carlnotes/contracts/chatQuestionNotes"
 import type { PodcastEpisodeChapterRef } from "@carlnotes/contracts/payloads"
+import { cn } from "@carlnotes/nightshift/classNames"
 import { Headphones } from "lucide-react"
 import { IconButton } from "@/components/common/IconButton"
 import { QUESTION_BUBBLE_WIDTH_CLASS } from "@/lib/styleClasses"
-import { cn } from "@/lib/utils"
 import { playPodcastEpisodeChapter } from "@/stores/podcastEpisodePlayActions"
 
 /**

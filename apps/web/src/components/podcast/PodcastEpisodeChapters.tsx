@@ -3,6 +3,7 @@ import type { TopicFinding } from "@carlnotes/contracts/findings"
 import type { PodcastEpisode, PodcastEpisodeChapter } from "@carlnotes/contracts/podcast"
 import { toHostWithoutWww } from "@carlnotes/contracts/seo"
 import { toClockLabel } from "@carlnotes/core/lib/labels"
+import { cn } from "@carlnotes/nightshift/classNames"
 import type * as React from "react"
 import { useState } from "react"
 import { RatingThumbs } from "@/components/common/RatingThumbs"
@@ -14,7 +15,6 @@ import {
 	LIST_ROW_HOVER_CLASS,
 	SCRIPTED_HIDDEN_CLASS,
 } from "@/lib/styleClasses"
-import { cn } from "@/lib/utils"
 import type { TopicFeedHandlers } from "@/providers/TopicFeedProvider"
 import { playPodcastEpisode } from "@/stores/podcastEpisodePlayerStore"
 import { PodcastEpisodeChapterPill } from "./PodcastEpisodePill"

@@ -1,5 +1,5 @@
+import { cn } from "@carlnotes/nightshift/classNames"
 import { RESOURCE_LIST_CARD_CLASS } from "@/lib/styleClasses"
-import { cn } from "@/lib/utils"
 
 // placeholder sections mirroring "Your topics", "Featured topics" and "Popular topics"
 const SECTION_SKELETONS = [

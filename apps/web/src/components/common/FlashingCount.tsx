@@ -1,5 +1,5 @@
+import { cn } from "@carlnotes/nightshift/classNames"
 import { useEffect, useRef, useState } from "react"
-import { cn } from "@/lib/utils"
 
 /**
  * Shows a count after its label, as in "Viewers: 12", with the number highlighted. The number flashes once each time the

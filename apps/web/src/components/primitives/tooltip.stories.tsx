@@ -41,7 +41,7 @@ const meta = {
 				<button
 					type="button"
 					aria-label="Copy Markdown for AI"
-					className="bg-card/90 text-muted-foreground hover:text-foreground grid size-7 place-items-center rounded-md border shadow-lift"
+					className="bg-card/90 text-muted-foreground hover:text-foreground grid size-7 place-items-center rounded-md border shadow-raised"
 				>
 					<Copy className="size-3.5" />
 				</button>

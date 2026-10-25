@@ -1,6 +1,7 @@
 import { authClient } from "@carlnotes/client/authClient"
 import { toAvatarVersion } from "@carlnotes/contracts/avatars"
 import { isAdminRole } from "@carlnotes/contracts/enums"
+import { cn } from "@carlnotes/nightshift/classNames"
 import { useLocation } from "@tanstack/react-router"
 import { useState } from "react"
 import { CoffeeMug } from "@/components/branding/CoffeeMug"
@@ -17,8 +18,8 @@ import {
 } from "@/components/topic/TopicTutorialVideoDialog"
 import { useIsSignedInBeforeSession } from "@/hooks/useIsSignedInBeforeSession"
 import { useTheme } from "@/hooks/useTheme"
-import { HERO_BUTTON_HOVER_CLASS, SECTION_LABEL_CLASS } from "@/lib/styleClasses"
-import { cn, toLinkClickHandler, toSafeRedirectPath } from "@/lib/utils"
+import { HERO_BUTTON_HOVER_CLASS, LOGO_CLASS, SECTION_LABEL_CLASS } from "@/lib/styleClasses"
+import { toLinkClickHandler, toSafeRedirectPath } from "@/lib/utils"
 import { useTopicFeed } from "@/providers/TopicFeedProvider"
 import { clearSearchBar, useSearchBarPath } from "@/stores/searchBarStore"
 import { Attribution } from "./Attribution"
@@ -92,7 +93,7 @@ export function Header() {
 						>
 							{/* nudge the cup up to align with the text */}
 							<CoffeeMug className="text-hero-accent -translate-y-0.5" />
-							<span className="animate-hydrate font-display text-xl">CarlNotes</span>
+							<span className={cn("animate-hydrate", LOGO_CLASS)}>CarlNotes</span>
 						</AnchorLink>
 						{!isHeroShown && (
 							<TopicTutorialVideoButton

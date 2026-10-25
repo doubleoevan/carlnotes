@@ -1,9 +1,9 @@
+import { cn } from "@carlnotes/nightshift/classNames"
 import { Check, ChevronsUpDown, Plus, X } from "lucide-react"
 import { useId, useState } from "react"
 import { Badge } from "@/components/primitives/badge"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/primitives/popover"
 import { MENU_OPTION_CLASS, MENU_OPTION_SELECTED_CLASS } from "@/lib/styleClasses"
-import { cn } from "@/lib/utils"
 
 // one choice the combobox offers
 export type ComboboxOption = { value: string; label: string }

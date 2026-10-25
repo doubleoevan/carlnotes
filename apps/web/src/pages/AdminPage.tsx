@@ -4,6 +4,7 @@ import type { AdminConsoleResponse, AdminTeamRow, AdminTotals, AdminUserRow } fr
 import { plans } from "@carlnotes/contracts/enums"
 import { toSessionProfileIdentity } from "@carlnotes/contracts/profiles"
 import { toBytesLabel, toCentsLabel } from "@carlnotes/core/lib/labels"
+import { cn } from "@carlnotes/nightshift/classNames"
 import { Settings, ShieldUser } from "lucide-react"
 import { useCallback, useEffect, useState } from "react"
 import { ManageAdminsModal } from "@/components/admin/ManageAdminsModal"
@@ -15,7 +16,6 @@ import { AdminTeamsTable } from "@/components/table/AdminTeamsTable"
 import { AdminUsersTable } from "@/components/table/AdminUsersTable"
 import { usePageTitle } from "@/hooks/usePageTitle"
 import { PAGE_CLASS, PAGE_HEADER_CLASS, PAGE_TITLE_CLASS } from "@/lib/styleClasses"
-import { cn } from "@/lib/utils"
 
 /**
  * The admin-only console: a totals summary and a per-user table with inline role and budget-override edits.
@@ -136,7 +136,7 @@ function TotalSummaries({
 // a card counting something per plan, one row per plan in order
 function PlanCountCard({ label, counts }: { label: string; counts: number[] }) {
 	return (
-		<div className="bg-card rounded-lg border p-3 shadow-lift">
+		<div className="bg-card rounded-lg border p-3 shadow-raised">
 			<div className="text-muted-foreground text-xs">{label}</div>
 			<div className="mt-1 space-y-0.5 text-sm">
 				{plans.map((plan, index) => (
@@ -153,7 +153,7 @@ function PlanCountCard({ label, counts }: { label: string; counts: number[] }) {
 // a card with a labeled summary figure
 function TotalCard({ label, figure }: { label: string; figure: string }) {
 	return (
-		<div className="bg-card rounded-lg border p-3 shadow-lift">
+		<div className="bg-card rounded-lg border p-3 shadow-raised">
 			<div className="text-muted-foreground text-xs">{label}</div>
 			<div className="mt-1 font-semibold">{figure}</div>
 		</div>

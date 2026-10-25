@@ -32,8 +32,6 @@
 		"@tanstack/react-router": "1.170.45",
 		"@tanstack/react-start": "1.169.3",
 		"better-auth": "~1.7.11",
-		"class-variance-authority": "^0.7.1",
-		"clsx": "^2.1.1",
 		"heic-to": "^1.6.6",
 		"lucide-react": "^1.59.0",
 		"markdown-to-jsx": "^9.10.3",
@@ -45,7 +43,6 @@
 		"simple-icons": "^16.35.0",
 		"sonner": "^2.0.8",
 		"streamdown": "^2.7.1",
-		"tailwind-merge": "^3.7.0",
 		"y-prosemirror": "1.3.7",
 		"y-protocols": "1.0.7",
 		"yjs": "13.6.33"

@@ -1,7 +1,6 @@
+import { cn } from "@carlnotes/nightshift/classNames"
 import * as SwitchPrimitive from "@radix-ui/react-switch"
 import type * as React from "react"
-
-import { cn } from "@/lib/utils"
 
 // on/off slider toggle — shadcn new-york
 function Switch({ className, ...props }: React.ComponentProps<typeof SwitchPrimitive.Root>) {

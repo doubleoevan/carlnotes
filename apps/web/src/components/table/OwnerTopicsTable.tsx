@@ -2,6 +2,7 @@ import { sendSubscriptionEmail } from "@carlnotes/client/topicClient"
 import type { OwnerTopic } from "@carlnotes/contracts/activity"
 import { frequencies, isDailyFrequency } from "@carlnotes/contracts/enums"
 import { toCentsLabel, toCountLabel, toMonthYearLabel } from "@carlnotes/core/lib/labels"
+import { cn } from "@carlnotes/nightshift/classNames"
 import { ChevronDown, Globe, Lock, Mail } from "lucide-react"
 import { Fragment, useState } from "react"
 import { CoffeeLoading } from "@/components/branding/CoffeeLoading"
@@ -14,7 +15,6 @@ import {
 	TABLE_HEAD_CLASS,
 	TABLE_SCROLL_CLASS,
 } from "@/lib/styleClasses"
-import { cn } from "@/lib/utils"
 import { SortableHeader } from "./SortableHeader"
 import { SubtableCountButton } from "./SubtableCountButton"
 import { TableCard } from "./TableCard"

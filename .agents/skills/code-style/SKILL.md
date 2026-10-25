@@ -344,10 +344,10 @@ single `../` are fine. Never include `.ts`/`.tsx` extensions in import
 specifiers.
 
     // wrong — the reader counts dots to locate the file
-    import { cn } from "../../lib/utils.ts"
+    import { CARD_CLASS } from "../../lib/styleClasses.ts"
 
     // right — the alias reads as an absolute address
-    import { cn } from "@/lib/utils"
+    import { CARD_CLASS } from "@/lib/styleClasses"
 
 ### 15. Explicit return types
 

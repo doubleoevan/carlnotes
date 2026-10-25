@@ -8,6 +8,7 @@ import {
 	toScanFailureLabel,
 } from "@carlnotes/contracts/scanFailure"
 import type { TopicResponse } from "@carlnotes/contracts/topics"
+import { cn } from "@carlnotes/nightshift/classNames"
 import { type UseNavigateResult, useNavigate } from "@tanstack/react-router"
 import { CirclePause, Coffee } from "lucide-react"
 import { useCallback, useEffect, useRef } from "react"
@@ -17,7 +18,6 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives
 import { useManualScanProgress, usePollWhileScanning } from "@/hooks/useTopicScan"
 import { MENU_BUTTON_CLASS, MENU_BUTTON_HIGHLIGHT_CLASS, RAIL_ICON_INSET } from "@/lib/styleClasses"
 import { toSeeAccountToastAction, toSeePlansToastAction } from "@/lib/toastActions"
-import { cn } from "@/lib/utils"
 
 // how long after a scan finishes the page keeps looking for the podcast episode that the scan starts
 const PODCAST_EPISODE_START_WAIT_MS = 90_000

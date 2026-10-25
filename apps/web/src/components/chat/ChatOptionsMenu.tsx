@@ -1,6 +1,7 @@
 // the chat room switcher, a row under the title that opens the chat room list
 import type { ChatMention } from "@carlnotes/contracts/chat"
 import { useAllChatMentions } from "@carlnotes/core/stores/chatRoomStore"
+import { cn } from "@carlnotes/nightshift/classNames"
 import { Check, ChevronDown, Plus, Trash2, Users } from "lucide-react"
 import { useState } from "react"
 import { HostAvatar } from "@/components/branding/HostAvatar"
@@ -10,7 +11,6 @@ import { CountBadge } from "@/components/common/CountBadge"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/primitives/popover"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import { MENU_OPTION_CLASS, MENU_OPTION_SELECTED_CLASS } from "@/lib/styleClasses"
-import { cn } from "@/lib/utils"
 
 /** A chat room the panel can switch to: a team's own conversation, or one about a topic it holds. */
 export type ChatRoomOption = {

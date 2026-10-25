@@ -1,9 +1,9 @@
 import { isModelChatMessage } from "@carlnotes/contracts/chatMentions"
 import type { PodcastEpisodeSpeaker } from "@carlnotes/contracts/enums"
+import { cn } from "@carlnotes/nightshift/classNames"
 import { HostAvatar } from "@/components/branding/HostAvatar"
 import { UserAvatar } from "@/components/branding/UserAvatar"
 import { AnchorLink } from "@/components/common/AnchorLink"
-import { cn } from "@/lib/utils"
 
 /**
  * The author line every chat message includes, in the private chat and the team chat room alike.

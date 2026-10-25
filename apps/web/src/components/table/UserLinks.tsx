@@ -1,10 +1,10 @@
 import type { Plan } from "@carlnotes/contracts/plans"
+import { cn } from "@carlnotes/nightshift/classNames"
 import type { ReactNode } from "react"
 import { UserAvatar } from "@/components/branding/UserAvatar"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import { STANDALONE_LINK_CLASS } from "@/lib/styleClasses"
-import { cn } from "@/lib/utils"
 
 // the user that a user table row names
 type UserLinkUser = { userId: string; username: string }

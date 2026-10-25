@@ -2,10 +2,10 @@ import type { PodcastEpisode, PodcastEpisodeSummary } from "@carlnotes/contracts
 import { AI_VOICES_NOTE, PODCAST_NAME } from "@carlnotes/contracts/podcastEpisodes"
 import { toDotSeparatedText } from "@carlnotes/contracts/text"
 import { toCountLabel, toPodcastEpisodeDayAndDurationLabels } from "@carlnotes/core/lib/labels"
+import { cn } from "@carlnotes/nightshift/classNames"
 import type * as React from "react"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
-import { cn } from "@/lib/utils"
 import { ThemeSongNote } from "./ThemeSongNote"
 
 // the podcast episode, the path of its own page if the title links there, the index of the player's chapter,

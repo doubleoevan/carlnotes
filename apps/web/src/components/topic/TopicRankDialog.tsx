@@ -1,10 +1,10 @@
 import type { TopicResponse } from "@carlnotes/contracts/topics"
+import { cn } from "@carlnotes/nightshift/classNames"
 import { Check, GripVertical, X } from "lucide-react"
 import { useState } from "react"
 import { Button } from "@/components/primitives/button"
 import { Dialog, DialogContent, DialogFooter, DialogTitle } from "@/components/primitives/dialog"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
-import { cn } from "@/lib/utils"
 
 // one row in the working order: the topic and its name
 type RankedTopic = { topicId: string; label: string }

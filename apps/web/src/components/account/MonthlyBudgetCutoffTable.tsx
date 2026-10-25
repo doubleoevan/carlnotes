@@ -1,9 +1,9 @@
 import { plans } from "@carlnotes/contracts/enums"
 import { type MonthlyBudgetCutoffKind, monthlyBudgetCutoffKinds, PLANS, type Plan } from "@carlnotes/contracts/plans"
 import { toSharePercentLabel } from "@carlnotes/core/lib/labels"
+import { cn } from "@carlnotes/nightshift/classNames"
 import { TableCard } from "@/components/table/TableCard"
 import { ONE_PAGE_TABLE_CARD_CLASS, TABLE_CLASS, TABLE_HEAD_CLASS, TABLE_SCROLL_CLASS } from "@/lib/styleClasses"
-import { cn } from "@/lib/utils"
 import { MONTHLY_BUDGET_CUTOFF_COPY, SPENT_BUDGET_LIST_LINE, toCutoffTableLine } from "./monthlyBudgetCutoffCopy"
 
 // one row of the monthly budget cutoff table: what stops, and the share of the monthly budget it stops at on each plan

@@ -11,13 +11,14 @@ import {
 import * as WebBrowser from "expo-web-browser"
 import { useState } from "react"
 import { Alert } from "react-native"
-import { verifyInstallForSignup } from "../src/appSignupGate"
-import { mobileAuthClient } from "../src/authClient"
-import { SessionButton } from "../src/components/session/SessionButton"
-import { SessionErrorText } from "../src/components/session/SessionErrorText"
-import { SessionFooterLink } from "../src/components/session/SessionLink"
-import { SessionScreen } from "../src/components/session/SessionScreen"
-import { SessionEmailInput, SessionPasswordInput } from "../src/components/session/SessionTextInput"
+import { verifyInstallForSignup } from "@/appSignupGate"
+import { mobileAuthClient } from "@/authClient"
+import { Button } from "@/components/primitives/button"
+import { Text } from "@/components/primitives/text"
+import { SessionErrorText } from "@/components/session/SessionErrorText"
+import { SessionFooterLink } from "@/components/session/SessionLink"
+import { SessionScreen } from "@/components/session/SessionScreen"
+import { SessionEmailInput, SessionPasswordInput } from "@/components/session/SessionTextInput"
 
 // what the form says for each field the payload rejects
 const EMAIL_INVALID_TEXT = "Enter a valid email address."
@@ -75,12 +76,16 @@ export default function SignUpScreen() {
 
 			{/* the web's sign-up, for an install the gate could not verify */}
 			{isInstallUnverified ? (
-				<SessionButton
-					label="Sign up on carlnotes.com"
+				<Button
+					accessibilityLabel="Sign up on carlnotes.com"
 					onPress={() => WebBrowser.openBrowserAsync(`${SITE_URL}/signup`)}
-				/>
+				>
+					<Text>Sign up on carlnotes.com</Text>
+				</Button>
 			) : (
-				<SessionButton label="Sign up" onPress={handleSubmit} isDisabled={isSubmitting} />
+				<Button accessibilityLabel="Sign up" onPress={handleSubmit} disabled={isSubmitting}>
+					<Text>Sign up</Text>
+				</Button>
 			)}
 
 			{/* the link back to the sign-in screen */}

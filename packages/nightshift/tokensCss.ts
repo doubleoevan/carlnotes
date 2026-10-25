@@ -1,5 +1,7 @@
-// the web app's tokens.css, written from the source: the Tailwind theme, Latte on :root, and Dark roast under .dark
+// the web app's tokens.css, written from the source: the Tailwind theme, the raised shadow, Latte on :root, and Dark
+// roast under .dark
 import { type ColorMode, type ColorName, colors } from "./colors"
+import { toRaisedShadowUtilityCss } from "./elevation"
 import { BASE_RADIUS_REM, type RadiusStep, radiusSteps, toRadiusCssValue } from "./radius"
 import { extraThemeColorNames, shadcnThemeColorNames, toKebabName } from "./theme"
 import { fontFamilies } from "./typography"
@@ -12,7 +14,14 @@ const FILE_HEADER = `/* the design tokens, written by scripts/write-nightshift-t
  * Returns tokens.css as the token writer writes it.
  */
 export function toTokensCss(): string {
-	return `${[FILE_HEADER, toThemeBlock(), toPaletteBlock("light"), toPaletteBlock("dark")].join("\n\n")}\n`
+	const blocks = [
+		FILE_HEADER,
+		toThemeBlock(),
+		toRaisedShadowUtilityCss(),
+		toPaletteBlock("light"),
+		toPaletteBlock("dark"),
+	]
+	return `${blocks.join("\n\n")}\n`
 }
 
 // the @theme inline block: the fonts, the color utilities, and the radius scale

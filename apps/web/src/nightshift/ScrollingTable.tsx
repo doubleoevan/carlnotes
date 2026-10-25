@@ -1,5 +1,6 @@
 // the tables on the Nightshift pages, laid out as the app lays out its data tables. the first column stays put while
 // the rest scrolls sideways under it
+import { cn } from "@carlnotes/nightshift/classNames"
 import type { Markdown } from "@storybook/addon-docs/blocks"
 import type { ComponentProps, ReactNode } from "react"
 import { TableCard } from "@/components/table/TableCard"
@@ -11,7 +12,6 @@ import {
 	TABLE_HEAD_CLASS,
 	TABLE_SCROLL_CLASS,
 } from "@/lib/styleClasses"
-import { cn } from "@/lib/utils"
 import { CODE_STYLE } from "./pageStyles"
 
 // the header and body cells the app's tables write. Tailwind does not scan this folder, so each class here is one an

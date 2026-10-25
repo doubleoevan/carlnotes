@@ -1,7 +1,7 @@
+import { cn } from "@carlnotes/nightshift/classNames"
 import { Paperclip } from "lucide-react"
 import type * as React from "react"
 import { useRef, useState } from "react"
-import { cn } from "@/lib/utils"
 
 // whether a drag includes files, so dragging selected text over a composer never opens the overlay
 function hasDraggedFiles(event: React.DragEvent): boolean {

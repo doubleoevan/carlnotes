@@ -1,5 +1,6 @@
 import { CHAT_QUESTION_CHARS, type KeptChatAttachment } from "@carlnotes/contracts/chat"
 import { toAgeLabel } from "@carlnotes/core/lib/labels"
+import { cn } from "@carlnotes/nightshift/classNames"
 import { ArrowUp, FileText, FileX2, Film, Image, Minus, Paperclip, Square, X } from "lucide-react"
 import { useEffect, useRef } from "react"
 import { AnchorLink } from "@/components/common/AnchorLink"
@@ -15,7 +16,7 @@ import {
 	SEND_BUTTON_CLASS,
 	STANDALONE_LINK_CLASS,
 } from "@/lib/styleClasses"
-import { CHAT_FILE_PICKER_ACCEPT, cn, isSendKey, isTouchScreen, isWideScreen } from "@/lib/utils"
+import { CHAT_FILE_PICKER_ACCEPT, isSendKey, isTouchScreen, isWideScreen } from "@/lib/utils"
 import { ChatAttachmentChips } from "./ChatAttachmentChips"
 import { isMicShown, MicButton } from "./MicButton"
 import { RecordingBar } from "./RecordingBar"

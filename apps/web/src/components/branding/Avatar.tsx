@@ -1,7 +1,7 @@
 import { AVATAR_COLOR, toAvatarInitials, toAvatarTint } from "@carlnotes/contracts/avatars"
+import { cn } from "@carlnotes/nightshift/classNames"
 import { useState } from "react"
 import { AVATAR_CLASS } from "@/lib/styleClasses"
-import { cn } from "@/lib/utils"
 
 /**
  * An avatar: the stored image at imageUrl, or the owner's initials on a tinted circle.

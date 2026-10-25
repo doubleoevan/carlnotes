@@ -17,7 +17,6 @@ import { toSortedTopicFindings } from "@carlnotes/core/lib/topicFindingSorts"
 import { toPossibleSourceUrls } from "@carlnotes/core/lib/topicPromptUrls"
 import { toScanRecapPlaceholder } from "@/components/topic/TopicScanRecap"
 import {
-	cn,
 	isSendKey,
 	NEXT_SCAN_DISCLAIMER,
 	shouldHandleLinkClick,
@@ -26,22 +25,6 @@ import {
 	toSafeRedirectPath,
 	toSubscribeTooltip,
 } from "./utils"
-
-// twMerge makes later tailwind classes win over earlier conflicting ones
-test("cn merges conflicting tailwind classes", () => {
-	expect(cn("p-2", "p-4")).toBe("p-4")
-})
-
-// the app's shadow-lift utility merges as a shadow, so a later shadow-none replaces it
-test("cn lets shadow-none replace the shadow-lift utility", () => {
-	expect(cn("rounded-lg shadow-lift", "bg-sunken shadow-none")).toBe("rounded-lg bg-sunken shadow-none")
-	expect(cn("shadow-none", "shadow-lift")).toBe("shadow-lift")
-})
-
-// clsx drops falsy conditional values and keeps truthy ones
-test("cn handles conditional class values", () => {
-	expect(cn("base", false && "hidden", true && "block")).toBe("base block")
-})
 
 // the age label tests need to freeze the clock so that buckets are deterministic. reset to real time after each test
 afterEach(() => setSystemTime())

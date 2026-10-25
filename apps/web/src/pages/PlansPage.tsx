@@ -4,6 +4,7 @@ import { isPaidPlan, plans } from "@carlnotes/contracts/enums"
 import { type BillingInterval, PLANS, type Plan, SCAN_COST_CENTS } from "@carlnotes/contracts/plans"
 import { toBrewsWord } from "@carlnotes/core/lib/labels"
 import { isUsersPlan, toPlanBadge } from "@carlnotes/core/lib/planCards"
+import { cn } from "@carlnotes/nightshift/classNames"
 import { Check } from "lucide-react"
 import { useEffect, useState } from "react"
 import { MonthlyBudgetCutoffTable } from "@/components/account/MonthlyBudgetCutoffTable"
@@ -16,7 +17,6 @@ import { useCtaPromptToast } from "@/hooks/useCtaPromptToast"
 import { usePageTitle } from "@/hooks/usePageTitle"
 import { openBillingPortal } from "@/lib/billingRedirects"
 import { PAGE_CLASS } from "@/lib/styleClasses"
-import { cn } from "@/lib/utils"
 
 // the one toast that names what a mic sent the user here to upgrade for
 const UPGRADE_PROMPT_TOAST_ID = "upgrade-prompt"
@@ -125,7 +125,7 @@ export function PlansPage() {
 							type="button"
 							onClick={() => setIsYearly(true)}
 							disabled={isYearly}
-							className="bg-card border-card text-link rounded-full border px-2 py-0.5 text-xs font-semibold shadow-lift transition-transform hover:scale-105 disabled:cursor-default disabled:hover:scale-100"
+							className="bg-card border-card text-link rounded-full border px-2 py-0.5 text-xs font-semibold shadow-raised transition-transform hover:scale-105 disabled:cursor-default disabled:hover:scale-100"
 						>
 							2 months free
 						</button>
@@ -201,7 +201,7 @@ function PlanCard({
 	return (
 		<section
 			className={cn(
-				"bg-card relative flex flex-col rounded-xl border p-6 shadow-lift",
+				"bg-card relative flex flex-col rounded-xl border p-6 shadow-raised",
 				isHighlighted && "border-primary ring-primary/40 ring-2",
 			)}
 		>
@@ -263,7 +263,7 @@ function QuotaLink({ label, isRaised }: { label: string; isRaised?: boolean }) {
 			<span>
 				{label}
 				{isRaised && (
-					<span className="bg-card border-card text-link ml-1.5 inline-flex items-center rounded-full border px-1.5 align-middle text-xs font-semibold shadow-lift">
+					<span className="bg-card border-card text-link ml-1.5 inline-flex items-center rounded-full border px-1.5 align-middle text-xs font-semibold shadow-raised">
 						with Yearly plan
 					</span>
 				)}

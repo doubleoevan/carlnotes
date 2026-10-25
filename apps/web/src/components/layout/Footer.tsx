@@ -1,8 +1,8 @@
+import { cn } from "@carlnotes/nightshift/classNames"
 import { useLocation } from "@tanstack/react-router"
 import type * as React from "react"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { STANDALONE_LINK_CLASS } from "@/lib/styleClasses"
-import { cn } from "@/lib/utils"
 import { DocsLink } from "./DocsLink"
 
 // one centered row of footer items that wraps, with a readable gap between items

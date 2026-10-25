@@ -1,10 +1,10 @@
 // the options that the team menus share. a team, a team with an action, and New team
 import type { TeamIdentity } from "@carlnotes/contracts/teams"
+import { cn } from "@carlnotes/nightshift/classNames"
 import { Plus } from "lucide-react"
 import { TeamAvatar } from "@/components/branding/TeamAvatar"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import { MENU_OPTION_CLASS } from "@/lib/styleClasses"
-import { cn } from "@/lib/utils"
 
 /**
  * One team option in a team menu, with the team's avatar and name.

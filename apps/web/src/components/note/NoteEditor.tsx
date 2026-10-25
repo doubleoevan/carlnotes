@@ -21,10 +21,10 @@ import {
 } from "@blocknote/react"
 import { authClient } from "@carlnotes/client/authClient"
 import { fetchNoteUsers, toNoteThreadsUrl } from "@carlnotes/client/noteClient"
+import { cn } from "@carlnotes/nightshift/classNames"
 import { List, ListChecks, ListOrdered, MessageSquareText } from "lucide-react"
 import { useMemo } from "react"
 import { useTheme } from "@/hooks/useTheme"
-import { cn } from "@/lib/utils"
 import { CommentEditorWithMentions, MentionUsernamesProvider } from "./CommentMentions"
 import type { NoteSaveErrorReason, NoteSaveStatus } from "./noteProvider"
 import { type NoteSync, useNoteSync } from "./useNoteSync"
@@ -181,7 +181,7 @@ function ConnectedNoteEditor({
 					    		focused the editor. opening here on the press means one tap either way */}
 							<div
 								onPointerDown={handleSelectThreadOnPress}
-								className="bg-card min-w-0 flex-1 self-stretch sm:rounded-lg sm:border sm:py-6 sm:shadow-lift"
+								className="bg-card min-w-0 flex-1 self-stretch sm:rounded-lg sm:border sm:py-6 sm:shadow-raised"
 							>
 								<BlockNoteViewEditor />
 							</div>

@@ -3,6 +3,7 @@ import { fetchPodcastEpisodePage } from "@carlnotes/client/podcastEpisodeClient"
 import { isPublishedPodcastEpisode } from "@carlnotes/contracts/podcast"
 import type { PodcastEpisodePageResponse } from "@carlnotes/contracts/podcastEpisodePage"
 import { isTopicSlugStale, toPodcastEpisodePath, toTopicPath } from "@carlnotes/contracts/seo"
+import { cn } from "@carlnotes/nightshift/classNames"
 import { useMatch, useNavigate, useParams } from "@tanstack/react-router"
 import { Trash2 } from "lucide-react"
 import { useCallback, useEffect, useState } from "react"
@@ -33,7 +34,6 @@ import {
 import { useLoadInBrowser } from "@/hooks/useBrowserValue"
 import { usePageTitle } from "@/hooks/usePageTitle"
 import { COVER_PLACEHOLDER_CLASS, INFO_CARD_CLASS, PAGE_CLASS } from "@/lib/styleClasses"
-import { cn } from "@/lib/utils"
 import { usePageTopicFeedHandlers } from "@/providers/TopicFeedProvider"
 import { useRegisterPageActions } from "@/stores/pageActionsStore"
 
@@ -269,7 +269,7 @@ function useRegisterPodcastEpisodePageActions({
 const HEADER_CLASS = "mt-3 flex items-start gap-4"
 
 // the cover's square beside the title, with a card's border and shadow. a narrow screen hides the cover
-const COVER_CLASS = "border-separator shadow-lift hidden size-36 shrink-0 rounded-lg border sm:block"
+const COVER_CLASS = "border-separator shadow-raised hidden size-36 shrink-0 rounded-lg border sm:block"
 
 // what hides the chapters section on a narrow screen with JavaScript. the section stays in the html,
 // and a browser without JavaScript shows the section at every width

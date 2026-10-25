@@ -1,11 +1,12 @@
 import type { TopicResponse } from "@carlnotes/contracts/topics"
+import { cn } from "@carlnotes/nightshift/classNames"
 import { PawPrint } from "lucide-react"
 import { useState } from "react"
 import { PageUpdateCountBadge } from "@/components/common/UpdateCountBadge"
 import { Badge } from "@/components/primitives/badge"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import { MENU_BUTTON_CLASS, MENU_BUTTON_HIGHLIGHT_CLASS } from "@/lib/styleClasses"
-import { cn, toSubscribeTooltip } from "@/lib/utils"
+import { toSubscribeTooltip } from "@/lib/utils"
 import { setChatPanelState } from "@/stores/chatPanelStore"
 import { TopicByline, TopicInfoPopover } from "./Topic"
 

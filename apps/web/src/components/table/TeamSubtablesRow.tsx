@@ -1,11 +1,11 @@
 import { fetchTeamPage, sendRemoveTopicFromTeam } from "@carlnotes/client/teamClient"
 import { isLeaderRole } from "@carlnotes/contracts/enums"
 import type { TeamPageResponse, TeamSummary } from "@carlnotes/contracts/teams"
+import { cn } from "@carlnotes/nightshift/classNames"
 import { useState } from "react"
 import { toast } from "sonner"
 import { CoffeeLoading } from "@/components/branding/CoffeeLoading"
 import { SUBTABLE_CARD_CLASS, THIN_SCROLLBAR_CLASS } from "@/lib/styleClasses"
-import { cn } from "@/lib/utils"
 import { TeamMembersTable } from "./TeamMembersTable"
 import { TopicsTable } from "./TopicsTable"
 

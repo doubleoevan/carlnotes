@@ -1,10 +1,10 @@
 import type { VoiceChatPage } from "@carlnotes/contracts/payloads"
+import { cn } from "@carlnotes/nightshift/classNames"
 import { useNavigate } from "@tanstack/react-router"
 import { LoaderCircle, Mic } from "lucide-react"
 import { IconButton } from "@/components/common/IconButton"
 import { toSignupNavigation } from "@/components/session/signupPrompts"
 import { SEND_BUTTON_CLASS } from "@/lib/styleClasses"
-import { cn } from "@/lib/utils"
 import type { VoiceRecording } from "./useVoiceRecording"
 
 // the composer's voice page, its draft, how many files it holds, and whether a send or a post is on its way

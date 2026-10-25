@@ -6,6 +6,7 @@ import { isBudgetError } from "@carlnotes/contracts/scanFailure"
 import { toTopicPath } from "@carlnotes/contracts/seo"
 import type { ScanSourceResults } from "@carlnotes/contracts/topics"
 import { durationMsBetween, toDollarLabel, toDurationLabel } from "@carlnotes/core/lib/labels"
+import { cn } from "@carlnotes/nightshift/classNames"
 import Markdown from "markdown-to-jsx"
 import type * as React from "react"
 import { useEffect, useLayoutEffect, useRef, useState } from "react"
@@ -19,7 +20,6 @@ import {
 	SCROLL_REGION_FOCUS_CLASS,
 	STANDALONE_LINK_CLASS,
 } from "@/lib/styleClasses"
-import { cn } from "@/lib/utils"
 
 // the fields a scan recap popover reads, shared by the topic page's scan history and the Activity subtable
 export type ScanRecapFields = {

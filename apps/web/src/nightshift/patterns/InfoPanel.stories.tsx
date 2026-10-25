@@ -1,5 +1,6 @@
 // the info panel pattern: a wide popover with a centered heading and a close button, as a topic finding's info opens
 import { DAY_MS } from "@carlnotes/contracts/time"
+import { cn } from "@carlnotes/nightshift/classNames"
 import type { Meta, StoryObj } from "@storybook/tanstack-react"
 import { useId, useState } from "react"
 import { Popover, PopoverAnchor, PopoverCloseButton, PopoverContent } from "@/components/primitives/popover"
@@ -14,7 +15,6 @@ import {
 	RESOURCE_LIST_CARD_CLASS,
 	SECTION_LABEL_CLASS,
 } from "@/lib/styleClasses"
-import { cn } from "@/lib/utils"
 import { LLM_TOOLING_TOPIC_FIXTURE } from "../../../.storybook/fixtures"
 import { toStoryTopicFinding } from "../../../.storybook/fixtures/topicFeed"
 import { toOwnFrameDocs } from "../../../.storybook/parameters"

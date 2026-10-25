@@ -20,7 +20,16 @@ the browser bundle and renders pages through the server build, behind its own ro
   `legalMarkdownOptions.ts`, the Markdown options that the terms and privacy pages share; `components/<area>/` —
   components by domain area. `components/markupTestFixtures.ts` holds `toElementClassNames`, which returns the class
   attribute of each element with a tag name in rendered markup, for the render tests.
-- `components/primitives/` is reserved for shadcn; custom shared components go in `components/common/`, among them
+- `components/primitives/` is reserved for shadcn. `button.tsx` and `badge.tsx` are the web's implementations of the
+  Nightshift Button and Badge contracts: each builds on its contract's box and text classes from
+  `@carlnotes/nightshift/components/` and adds only the web's own classes, such as hover, focus-visible, and the aria,
+  svg, and `has-` selectors, in records keyed by the contract's variant and size names. A call site imports the
+  implementation, never the contract. `primitiveClasses.test.tsx` holds every variant and size to the recorded classes
+  in `primitiveClassesTestFixtures.ts`. An intended style change rewrites the fixture in the same change. The shadcn
+  CLI reads `apps/web/components.json`, so add a component with `bunx shadcn@latest add <name> --cwd apps/web`. The
+  component it writes imports `cn` from the `cn` package and adds that package to `package.json`, which no setting
+  changes. Move the import to `@carlnotes/nightshift/classNames` and remove the dependency. Biome fails an import from
+  `cn` until then. Custom shared components go in `components/common/`, among them
   `IconButton.tsx`, the button whose tooltip is also its accessible name, and `FlashingCount.tsx`, a labeled count
   whose highlighted number flashes once when the count changes, and never under reduced motion.
   `SourceResultsChart.tsx` is the Source notes bar chart in a scan recap. It fetches nothing, and it shows a trash
@@ -111,7 +120,9 @@ the browser bundle and renders pages through the server build, behind its own ro
   which opens in a new tab, and `Attribution.tsx` is the persona credit in the hero's popover.
 - `components/admin/` — the admin console's own pieces beyond its tables: `ManageAdminsModal.tsx`, where an admin adds
   and removes other admins.
-- `components/branding/` — the coffee drawings, the loading indicator, the note icon, and the avatars. `Avatar.tsx`
+- `components/branding/` — the coffee drawings, the loading indicator, the note icon, and the avatars. `CoffeeMug.tsx`
+  draws the mug from `@carlnotes/nightshift/coffeeMug`, and `coffeeMugSteam.test.ts` fails if the steam's keyframes
+  and still rules in `animations.css` differ from that module's steam motion. `Avatar.tsx`
   is the one avatar that `UserAvatar` and `TeamAvatar` render: the stored image, or the owner's initials on a tinted
   circle if there is no image or it fails to load. `HostAvatar.tsx` is Carl's or Vienna's own picture.
 - `components/avatar/` — the user and team avatar pickers, over the upload pieces they both use. `AvatarUpload.tsx`
@@ -153,15 +164,15 @@ the browser bundle and renders pages through the server build, behind its own ro
   render and the browser pass, and the route tests' `-loadRouter.ts` calls it the same way.
 - `mcpCards/` — the MCP Apps cards the mcp server's search, topic, and finding tools name: `main.tsx`, the entry
   `vite.mcpCards.config.ts` builds into one script and one stylesheet in `dist/mcp-cards/` as part of `build`, and
-  `McpCardApp.tsx`, which connects to the host with `@modelcontextprotocol/ext-apps`, follows its theme, and renders
-  the card its html names in a one-route memory router, every link opening through the host by `LinkOpenerContext` in
+  `McpCardApp.tsx`, which connects to the host with `@modelcontextprotocol/ext-apps`, follows its theme, and renders the
+  card its html names in a one-route memory router, every link opening through the host by `LinkOpenerContext` in
   `AnchorLink`. `SearchCard.tsx`, `TopicCard.tsx`, and `FindingsCard.tsx` render the site's own components,
-  `CardSubscribeButton.tsx` and `CardPodcastPlayer.tsx` beside them. `cardHost.ts` holds the connected app, the card data
-  a tool result includes in `_meta`, and the tool calls the cards make, and `cardFindingHandlers.ts` the finding note's
-  handlers the search and findings cards share, each a tool call. The card build aliases
+  `CardSubscribeButton.tsx` and `CardPodcastPlayer.tsx` beside them. `cardHost.ts` holds the connected app, the card
+  data a tool result includes in `_meta`, and the tool calls the cards make, and `cardFindingHandlers.ts` the finding
+  note's handlers the search and findings cards share, each a tool call. The card build aliases
   `@carlnotes/client/authClient` to `cardAuthClient.ts`, whose session is the tool result's caller, and
-  `@/lib/visitAnalytics` to `cardVisitAnalytics.ts`, which reports nothing, and `cardFetch.ts` returns a podcast
-  episode read from the tool result and fails every other request, so a card reaches the api only through a tool call.
+  `@/lib/visitAnalytics` to `cardVisitAnalytics.ts`, which reports nothing, and `cardFetch.ts` returns a podcast episode
+  read from the tool result and fails every other request, so a card reaches the api only through a tool call.
 - `stores/` — the stores that reach the browser or a component library, named `<thing>Store.ts` and built the way
   `packages/core/AGENTS.md` describes, on `@carlnotes/core/stores/storeListeners`. Reach for a store only when state
   outlives a page or crosses the tree; `useState` and `providers/` cover everything else. The DOM-free stores,
@@ -204,9 +215,10 @@ the browser bundle and renders pages through the server build, behind its own ro
   link in it. The box draws its focus ring with `SCROLL_REGION_FOCUS_CLASS`. `usePolledCounts` in
   `hooks/usePolledCounts.ts` reads a page's counts once it has mounted, then every minute while the page is visible.
 - `src/globals.css` — the app's stylesheet, with the keyframes in `animations.css` and the note editor's overrides in
-  `components/note/noteEditor.css`. It imports its `@theme inline` block and the `:root` and dark variables from
-  `@carlnotes/nightshift/tokens.css`, which is written from the Nightshift TypeScript source, and keeps Tailwind from
-  scanning stories, so a story never adds a class to the app's css. It defines `sentence-link`, the class of a link
+  `components/note/noteEditor.css`. It imports its `@theme inline` block, the `shadow-raised` utility, and the `:root`
+  and dark variables from `@carlnotes/nightshift/tokens.css`, which is written from the Nightshift TypeScript source,
+  has Tailwind read the component contracts in `packages/nightshift/components/`, and keeps Tailwind from scanning
+  stories, so a story never adds a class to the app's css. It defines `sentence-link`, the class of a link
   inside a sentence: the link color with `faint-underline`, an underline at rest that turns solid on hover. A link in
   its own color inside a sentence, as the hero's is, takes `faint-underline` alone. A link that stands alone, such as a
   table cell, a footer link, or a link alone in its line, takes `STANDALONE_LINK_CLASS` from `lib/styleClasses.ts`, the
@@ -247,18 +259,22 @@ the browser bundle and renders pages through the server build, behind its own ro
   Tokens, Typography, and Inventory pages, the swatch and specimen components they render, `ScrollingTable.tsx`, which
   renders their tables in the app's table classes with the first column fixed, and the pattern stories, each composed
   from `lib/styleClasses.ts` where a shared class exists, the section label from `SECTION_LABEL_CLASS`, which
-  `lib/styleClasses.test.ts` checks against the sectionLabel type role in `@carlnotes/nightshift/typography`.
+  `lib/styleClasses.test.ts` checks against the sectionLabel type role in `@carlnotes/nightshift/typography`, as it
+  checks `LOGO_CLASS`, the name beside the mug in the logo, against the logo role.
   `src/nightshift/` also holds the fetch guard and the in-memory storage the preview installs, outside `.storybook/` so
   that `bun test` finds their tests. `bun run dev:storybook` serves the component browser on port 6006 with Storybook's
   MCP server at `http://localhost:6006/mcp`, registered in `.mcp.json` and `opencode.json`: search its catalog before
   writing a component, and reuse what is there. `bun run build:storybook` writes the component browser to
   `dist/nightshift/`, which the api serves at `/nightshift`.
-- Imports: `@carlnotes/contracts/*`, `@carlnotes/client/*`, `@carlnotes/core/*`, and `@carlnotes/nightshift/tokens.css`,
-  plus types only from `@carlnotes/api`, such as `AppType` and `auth`. A test, a story, `.storybook/`, and
-  `src/nightshift/` may read `@carlnotes/nightshift`'s TypeScript, so the browser bundle includes no palette module.
-  Only a story, `.storybook/`, and `src/nightshift/` may import a story or Storybook. Never a server package
-  (`@carlnotes/server`, `@carlnotes/db`, `@carlnotes/emails`, `@carlnotes/models`, `@carlnotes/pipeline`) and never
-  another app. The preflight boundary check, `scripts/check-package-boundaries.ts`, fails an import outside this list.
+- Imports: `@carlnotes/contracts/*`, `@carlnotes/client/*`, `@carlnotes/core/*`, `@carlnotes/nightshift/tokens.css`,
+  `@carlnotes/nightshift/classNames`, the `cn` class merge, the coffee mug and the sign-in providers' icons both apps
+  draw, `@carlnotes/nightshift/coffeeMug` and `@carlnotes/nightshift/oauthProviderIcons`, plus types only from
+  `@carlnotes/api`, such as `AppType` and `auth`. A Nightshift component contract reaches the app only through its
+  implementation in `components/primitives/`. A test, a story, `.storybook/`, and `src/nightshift/` may read the rest of
+  `@carlnotes/nightshift`'s TypeScript, so the browser bundle includes no palette module. Only a story,
+  `.storybook/`, and `src/nightshift/` may import a story or Storybook. Never a server package (`@carlnotes/server`,
+  `@carlnotes/db`, `@carlnotes/emails`, `@carlnotes/models`, `@carlnotes/pipeline`) and never another app. The
+  preflight boundary check, `scripts/check-package-boundaries.ts`, fails an import outside this list.
 - `.tsx` is exempt from the comment-groups hook; keep the comment style anyway.
 - Dev: `bun run dev:ui` (port 5173), `bun run dev:storybook` (port 6006). Build: `bun run build:ui`, which builds the
   mcp cards too, and `bun run build:storybook`. Tests: `bun test apps/web`.

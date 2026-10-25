@@ -12,9 +12,9 @@ import {
 	useBlockNoteContext,
 	useBlockNoteEditor,
 } from "@blocknote/react"
+import { cn } from "@carlnotes/nightshift/classNames"
 import { createContext, useContext } from "react"
 import { MENU_OPTION_CLASS } from "@/lib/styleClasses"
-import { cn } from "@/lib/utils"
 
 // the usernames the menu offers, passed by context. the components contract has a fixed prop shape
 const MentionUsernamesContext = createContext<string[]>([])
@@ -85,7 +85,7 @@ function UsernameMentionList(props: SuggestionMenuProps<DefaultReactSuggestionIt
 		return null
 	}
 	return (
-		<div className="bg-popover text-popover-foreground z-50 w-52 rounded-md border p-1 shadow-lift">
+		<div className="bg-popover text-popover-foreground z-50 w-52 rounded-md border p-1 shadow-raised">
 			{props.items.map((item, index) => (
 				<button
 					key={item.title}

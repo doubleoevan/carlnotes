@@ -40,7 +40,7 @@ export function ScrollDownButton({
 			type="button"
 			onClick={onScrollDown}
 			aria-label="Jump to the latest message"
-			className="bg-card text-foreground shadow-lift absolute bottom-3 left-1/2 z-10 grid size-8 -translate-x-1/2 place-items-center rounded-full border transition-transform hover:scale-105"
+			className="bg-card text-foreground shadow-raised absolute bottom-3 left-1/2 z-10 grid size-8 -translate-x-1/2 place-items-center rounded-full border transition-transform hover:scale-105"
 		>
 			<ArrowDown className="size-4" />
 		</button>

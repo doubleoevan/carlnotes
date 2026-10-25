@@ -3,8 +3,8 @@ import type {
 	PodcastEpisodeChapter,
 	PublishedPodcastEpisodeSummary,
 } from "@carlnotes/contracts/podcast"
+import { cn } from "@carlnotes/nightshift/classNames"
 import { Headphones, Pause, Play } from "lucide-react"
-import { cn } from "@/lib/utils"
 import { togglePodcastEpisodeChapterPlayback, togglePodcastEpisodePlayback } from "@/stores/podcastEpisodePlayActions"
 import {
 	togglePlayback,
@@ -16,7 +16,7 @@ import {
 import { PodcastEpisodeTooltip } from "./PodcastEpisodeDetails"
 
 // the style that every podcast episode pill shares, with a button's shadow
-const PILL_CLASS = "shadow-lift inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-semibold"
+const PILL_CLASS = "shadow-raised inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-semibold"
 
 // a pill's colors while its podcast episode or chapter plays, and its colors while neither plays.
 // the idle border keeps the pill visible on a highlighted row

@@ -1,9 +1,9 @@
 import type { PodcastEpisodeSummary } from "@carlnotes/contracts/podcast"
+import { cn } from "@carlnotes/nightshift/classNames"
 import { PagedTableSection } from "@/components/table/PagedTableSection"
 import { PodcastEpisodeTitleLink } from "@/components/table/PodcastEpisodeTitleLink"
 import { SortableHeader, type SortValue } from "@/components/table/SortableHeader"
 import { TABLE_WIDE_FIRST_COLUMN_CLASS } from "@/lib/styleClasses"
-import { cn } from "@/lib/utils"
 
 // each sortable column's value: the podcast episode's title and its description
 const podcastEpisodeSortValues: Record<string, (podcastEpisode: PodcastEpisodeSummary) => SortValue> = {

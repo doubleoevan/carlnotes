@@ -1,6 +1,6 @@
+import { cn } from "@carlnotes/nightshift/classNames"
 import type * as React from "react"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/primitives/accordion"
-import { cn } from "@/lib/utils"
 
 /**
  * A titled section of a page that opens by default and collapses on click. The topic page's and the podcast episode

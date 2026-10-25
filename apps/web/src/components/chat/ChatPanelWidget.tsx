@@ -1,5 +1,6 @@
 // the chat panel widget: the pill it collapses to, the docked frame, and the title bar
 import { CHAT_NAME, type ChatMention } from "@carlnotes/contracts/chat"
+import { cn } from "@carlnotes/nightshift/classNames"
 import { Maximize2, Minimize2, Minus } from "lucide-react"
 import type * as React from "react"
 import { createPortal } from "react-dom"
@@ -11,7 +12,6 @@ import { UpdateCountBadge } from "@/components/common/UpdateCountBadge"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import { useIsMounted } from "@/hooks/useBrowserValue"
 import { useKeyboardViewport } from "@/hooks/useKeyboardViewport"
-import { cn } from "@/lib/utils"
 import type { ChatPanelState } from "@/stores/chatPanelStore"
 import { useIsPodcastPlayerShown } from "@/stores/podcastEpisodePlayerStore"
 import {

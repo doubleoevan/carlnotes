@@ -1,9 +1,9 @@
+import { cn } from "@carlnotes/nightshift/classNames"
 import { Check, Mail, MessageSquare } from "lucide-react"
 import type * as React from "react"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { BrandIcon } from "@/components/common/BrandIcon"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
-import { cn } from "@/lib/utils"
 
 // one size for every icon in the share menu, so the labels line up
 export const SHARE_OPTION_ICON_CLASS = "size-4 shrink-0"

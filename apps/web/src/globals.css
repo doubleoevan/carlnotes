@@ -14,19 +14,16 @@
 @custom-variant can-hover (@media (hover: hover));
 
 /* streamdown styles itself with tailwind classes. tailwind has to scan its dist to emit them */
-@source "../../node_modules/streamdown/dist/*.js";
+@source "../node_modules/streamdown/dist/*.js";
+
+/* the Nightshift component contracts hold classes the web's implementations draw. tailwind has to scan their folder to
+   emit them */
+@source "../../../packages/nightshift/components";
 
 /* the component browser's stories, pages, and config never reach the app's css. a story uses the app's own classes */
 @source not "./**/*.stories.tsx";
 @source not "./nightshift";
 @source not "../.storybook";
-
-/* the site's one elevation, under every raised surface: cards, tables, the search bar, popups, buttons, and tiles */
-@utility shadow-lift {
-	box-shadow:
-		0 2px 5px rgba(0, 0, 0, 0.2),
-		0 8px 15px -6px rgba(0, 0, 0, 0.34);
-}
 
 /* add extra horizontal padding to handle safe-area insets on landscape mobile, falling back to the standard 1rem gutter */
 @utility px-safe {

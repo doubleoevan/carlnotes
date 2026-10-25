@@ -1,7 +1,8 @@
+import { cn } from "@carlnotes/nightshift/classNames"
 import { Check, Copy } from "lucide-react"
 import { useState } from "react"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
-import { cn, copyToClipboard } from "@/lib/utils"
+import { copyToClipboard } from "@/lib/utils"
 
 /**
  * How long the copied checkmark stays before the button offers to copy again.
@@ -33,7 +34,7 @@ export function CopyMarkdownButton({ markdown }: { markdown: string }) {
 					onClick={handleCopyMarkdown}
 					aria-label="Copy Markdown for AI"
 					className={cn(
-						"bg-card/90 text-muted-foreground hover:text-foreground absolute top-1.5 right-1.5 grid size-7 place-items-center rounded-md border opacity-0 shadow-lift transition-opacity focus-visible:opacity-100 group-hover:opacity-100",
+						"bg-card/90 text-muted-foreground hover:text-foreground absolute top-1.5 right-1.5 grid size-7 place-items-center rounded-md border opacity-0 shadow-raised transition-opacity focus-visible:opacity-100 group-hover:opacity-100",
 						isCopied && "text-primary opacity-100",
 					)}
 				>

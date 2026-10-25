@@ -6,7 +6,13 @@
 	"exports": {
 		"./tokens.css": "./tokens.css",
 		"./uniwind.css": "./uniwind.css",
+		"./classNames": "./classNames.ts",
 		"./*": "./*.ts"
+	},
+	"dependencies": {
+		"class-variance-authority": "^0.7.1",
+		"clsx": "^2.1.1",
+		"tailwind-merge": "^3.7.0"
 	},
 	"devDependencies": {
 		"tailwindcss": "^4.3.3"

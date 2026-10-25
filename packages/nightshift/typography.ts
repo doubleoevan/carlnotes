@@ -71,6 +71,14 @@ export const typeRoles = {
 		fontWeight: 400,
 		description: "a page's h1, and a dialog's title at a tighter line height",
 	},
+	logo: {
+		family: "display",
+		className: "font-display text-xl",
+		fontSizeRem: 1.25,
+		lineHeightRem: 1.75,
+		fontWeight: 400,
+		description: "the CarlNotes name in the logo, beside the coffee mug, in the header and on the sign-in pages",
+	},
 	sectionHeading: {
 		family: "display",
 		className: "font-display text-lg",

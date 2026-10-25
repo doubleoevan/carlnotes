@@ -1,9 +1,9 @@
+import { cn } from "@carlnotes/nightshift/classNames"
 import Markdown from "markdown-to-jsx"
 import type * as React from "react"
 import { TableCard } from "@/components/table/TableCard"
 import { usePageTitle } from "@/hooks/usePageTitle"
 import { PAGE_CLASS, TABLE_CLASS, TABLE_SCROLL_CLASS } from "@/lib/styleClasses"
-import { cn } from "@/lib/utils"
 import { LEGAL_MARKDOWN_OPTIONS } from "./legalMarkdownOptions"
 
 // the providers table on the shared table card, scrolling instead of cramping on a narrow screen

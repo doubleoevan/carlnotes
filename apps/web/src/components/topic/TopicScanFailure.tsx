@@ -1,7 +1,7 @@
 import { FIRST_SCAN_PAUSED_REASON, isBudgetError, toScanFailureLabel } from "@carlnotes/contracts/scanFailure"
+import { cn } from "@carlnotes/nightshift/classNames"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { buttonVariants } from "@/components/primitives/button"
-import { cn } from "@/lib/utils"
 
 /**
  * Why a scan failed, followed by an Upgrade button if the budget is what stopped it, or a See account link if the

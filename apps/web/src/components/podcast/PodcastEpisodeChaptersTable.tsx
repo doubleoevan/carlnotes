@@ -2,6 +2,7 @@ import type { TopicFinding } from "@carlnotes/contracts/findings"
 import type { PodcastEpisode, PodcastEpisodeChapter } from "@carlnotes/contracts/podcast"
 import { toHostWithoutWww } from "@carlnotes/contracts/seo"
 import { toClockLabel, toCountLabel } from "@carlnotes/core/lib/labels"
+import { cn } from "@carlnotes/nightshift/classNames"
 import { Pause, Play } from "lucide-react"
 import { useState } from "react"
 import { AnchorLink } from "@/components/common/AnchorLink"
@@ -18,7 +19,6 @@ import {
 	TABLE_SCROLL_CLASS,
 	TABLE_WIDE_FIRST_COLUMN_CLASS,
 } from "@/lib/styleClasses"
-import { cn } from "@/lib/utils"
 import { togglePodcastEpisodeChapterPlayback } from "@/stores/podcastEpisodePlayActions"
 import { usePlayerChapterPosition, usePodcastEpisodePlayer } from "@/stores/podcastEpisodePlayerStore"
 import { type ChapterTopicFeed, ChapterTopicFindingNote } from "./PodcastEpisodeChapters"

@@ -4,6 +4,7 @@
 import { authClient } from "@carlnotes/client/authClient"
 import { fetchNotes, type NotePageRef } from "@carlnotes/client/noteClient"
 import type { Note, NotesResponse } from "@carlnotes/contracts/notes"
+import { cn } from "@carlnotes/nightshift/classNames"
 import { useLocation } from "@tanstack/react-router"
 import { Plus } from "lucide-react"
 import { useCallback, useEffect, useRef, useState } from "react"
@@ -12,7 +13,6 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 import { Button, buttonVariants } from "@/components/primitives/button"
 import { toSignupHref } from "@/components/session/signupPrompts"
 import { CARD_CLASS } from "@/lib/styleClasses"
-import { cn } from "@/lib/utils"
 import { NoteDialog } from "./NoteDialog"
 import { NotesTable } from "./NotesTable"
 

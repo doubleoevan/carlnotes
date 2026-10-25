@@ -1,7 +1,7 @@
 import type { ProfileIdentity } from "@carlnotes/contracts/profiles"
+import { cn } from "@carlnotes/nightshift/classNames"
 import type * as React from "react"
 import { UserAvatar } from "@/components/branding/UserAvatar"
-import { cn } from "@/lib/utils"
 import { AnchorLink } from "./AnchorLink"
 
 /**

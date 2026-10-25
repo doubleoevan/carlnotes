@@ -1,10 +1,10 @@
 // the sources editor's add buttons: the add a source link and the Recommend button
 import { MAX_TOPIC_SOURCES } from "@carlnotes/contracts/topics"
+import { cn } from "@carlnotes/nightshift/classNames"
 import { Lightbulb } from "lucide-react"
 import { Button } from "@/components/primitives/button"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import { STANDALONE_LINK_CLASS } from "@/lib/styleClasses"
-import { cn } from "@/lib/utils"
 
 // what the add-source buttons show once the topic has reached its source limit
 export const FULL_SOURCES_NOTE = `Carl reads ${MAX_TOPIC_SOURCES} sources per topic. Drop one to add another.`

@@ -1,4 +1,5 @@
 import type { PodcastEpisodeTranscriptBlock } from "@carlnotes/contracts/podcast"
+import { cn } from "@carlnotes/nightshift/classNames"
 import { useState } from "react"
 import { MoreButton } from "@/components/topic/MoreButton"
 import { useScrollRegionTabStop } from "@/hooks/useScrollRegionTabStop"
@@ -8,7 +9,6 @@ import {
 	SCRIPTED_ONLY_CLASS,
 	SCROLL_REGION_FOCUS_CLASS,
 } from "@/lib/styleClasses"
-import { cn } from "@/lib/utils"
 
 // the collapsed transcript's height, with its last lines fading out. the transcript collapses only with JavaScript
 const COLLAPSED_TRANSCRIPT_CLASS = [

@@ -1,6 +1,7 @@
 import { fetchTeamNameTaken } from "@carlnotes/client/teamClient"
 import { CHAT_NAME } from "@carlnotes/contracts/chat"
 import type { TeamIdentity } from "@carlnotes/contracts/teams"
+import { cn } from "@carlnotes/nightshift/classNames"
 import { useNavigate } from "@tanstack/react-router"
 import { Users } from "lucide-react"
 import { useId, useRef, useState } from "react"
@@ -17,7 +18,6 @@ import { Textarea } from "@/components/primitives/textarea"
 import { createTeamForInviteLink, saveTeam, TEAM_REJECTION_REASONS } from "@/components/team/saveTeam"
 import { EditTopicModal } from "@/components/topic/EditTopicModal"
 import { useObjectUrl } from "@/hooks/useObjectUrl"
-import { cn } from "@/lib/utils"
 
 // a topic the multiselect offers: the user's own, a public one, or an invite topic they can read
 type TopicOption = { id: string; name: string }

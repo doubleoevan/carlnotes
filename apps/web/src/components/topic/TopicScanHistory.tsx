@@ -3,6 +3,7 @@ import type { TopicFinding } from "@carlnotes/contracts/findings"
 import { KEEP_ONE_SOURCE_MESSAGE } from "@carlnotes/contracts/sources"
 import type { ScanNote, TopicScan } from "@carlnotes/contracts/topics"
 import { toMonthDayLabel } from "@carlnotes/core/lib/labels"
+import { cn } from "@carlnotes/nightshift/classNames"
 import { useState } from "react"
 import { toast } from "sonner"
 import { CoffeeLoading } from "@/components/branding/CoffeeLoading"
@@ -29,7 +30,6 @@ import {
 	RESOURCE_LIST_CARD_CLASS,
 	SECTION_LABEL_CLASS,
 } from "@/lib/styleClasses"
-import { cn } from "@/lib/utils"
 import { CollapsibleSection } from "./CollapsibleSection"
 import { TopicScanFailure } from "./TopicScanFailure"
 import { type AllowedScanNoteUrls, TopicScanRecap, toNotesMarkdown } from "./TopicScanRecap"

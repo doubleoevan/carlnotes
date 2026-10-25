@@ -24,8 +24,9 @@ Apps, the deployable entry points:
 - `apps/docs/` — the Starlight docs site, built to static files the api serves at `/docs`, with the design files and
   the release notes convention beside it.
 - `apps/mobile/` — the Expo app: CarlNotes for iOS and Android on a development build, with the routes under
-  `apps/mobile/app/`, the Nightshift theme through Uniwind, and EAS Build and Update. It depends on the universal
-  packages alone, stays out of the production image, and its accessibility bar lives in its AGENTS.md.
+  `apps/mobile/app/`, the Nightshift theme through Uniwind, its implementations of the Nightshift component contracts
+  with an on-device Storybook in development builds, and EAS Build and Update. It depends on the universal packages
+  alone, stays out of the production image, and its accessibility bar lives in its AGENTS.md.
 
 Packages, private `@carlnotes/<name>` workspaces that export source, in dependency order:
 
@@ -33,8 +34,10 @@ Packages, private `@carlnotes/<name>` workspaces that export source, in dependen
   universal modules every workspace may import.
 - `packages/client/` — the typed api clients. An app configures the base url and how an error shows.
 - `packages/core/` — the DOM-free lib, stores, and hooks that the web app shares with any other client.
-- `packages/nightshift/` — Nightshift, the design system: every color token, the radius scale, the fonts, and the type
-  roles in TypeScript, the email values, and the `tokens.css` and Figma files written from them.
+- `packages/nightshift/` — Nightshift, the design system: every color token, the radius scale, the elevation, the
+  fonts, and the type roles in TypeScript, the email values, the `cn` class merge, the coffee mug and the sign-in
+  providers' icons both apps draw, the component contracts under `components/` that each app's implementation builds
+  on, and the `tokens.css`, `uniwind.css`, and Figma files written from the tokens.
 - `packages/server/` — env settings, monitoring, analytics, hmac, retry, concurrency, and the public fetch: everything
   that reads `Bun.env` or a server SDK.
 - `packages/db/` — Drizzle schema, migrations, quotas, the Redis store, object storage, and the database claim. Neon
@@ -65,7 +68,8 @@ Each app and package has its own AGENTS.md with entry points, layout, and comman
 | Model-facing prompt | `packages/models/prompts/*.md` + its thin builder | prompt-authoring | everything outside `packages/models/prompts/` and the builder's own folder |
 | Schema or migration | `packages/db/schema/<domain>.ts`, then `bun run db:generate` | domain-model | `packages/db/migrations/` (generated) |
 | UI screen or component | `apps/web/src/routes/` for the route and its head, `apps/web/src/pages/`, `apps/web/src/components/<area>/`; the Storybook MCP server's catalog (`bun run dev:storybook`) before writing a component; a story beside every primitive and shared component | jsx-conventions | `apps/api/`; the request and response types are in `packages/contracts/` (`payloads.ts`, `topicPayloads.ts`, and the contracts) |
-| Design token, type role, or email color | `packages/nightshift/` (`colors.ts`, `radius.ts`, `typography.ts`, `email.ts`), then `bun run nightshift:write` | — | `packages/nightshift/tokens.css` and `packages/nightshift/figma/` (generated) |
+| Design token, type role, or email color | `packages/nightshift/` (`colors.ts`, `radius.ts`, `elevation.ts`, `typography.ts`, `email.ts`), then `bun run nightshift:write` | — | `packages/nightshift/tokens.css` and `packages/nightshift/figma/` (generated) |
+| Shared component contract, or a variant of one | `packages/nightshift/components/<name>.ts`, then both implementations at `apps/web/src/components/primitives/<name>.tsx` and `apps/mobile/src/components/primitives/<name>.tsx` with their stories | jsx-conventions | every other component; `bun scripts/check-component-parity.ts` names a missing implementation |
 | Tasting note or sync change | `apps/api/note/`, `apps/web/src/components/note/` | domain-model | `apps/worker/`, `packages/pipeline/` |
 | API route or permission | `apps/api/<domain>/`, `apps/api/authorization.ts` | domain-model | `apps/worker/`; `packages/pipeline/` and `packages/models/` beyond the modules the route imports |
 | Temporal workflow change | `apps/worker/workflows/`, `apps/worker/temporal.ts` | — | `apps/web/`, `apps/api/` route files |
@@ -90,6 +94,8 @@ Generated or archived paths that burn context:
   the Nightshift TypeScript source
 - `apps/mobile/uniwind-types.d.ts` — the class-name declarations Uniwind generates from the theme; the source is
   `packages/nightshift/uniwindCss.ts`
+- `apps/mobile/.rnstorybook/storybook.requires.ts` — the stories index Storybook's Metro wrapper writes; the sources are
+  the `*.stories.tsx` files
 - `coverage/` — test coverage output
 - `openspec/changes/archive/` — archived OpenSpec changes
 - `.agents/skills/{ai-sdk,vercel-react-best-practices,web-design-guidelines,impeccable,ponytail}/` — vendored skills,
@@ -99,8 +105,8 @@ Generated or archived paths that burn context:
 
 ## Verification
 
-`bun run check` is the gate: Biome, the package boundary check, `tsc -b`, the Temporal workflow bundle check, and the
-test suite. Green before any hand-off.
+`bun run check` is the gate: Biome, the package boundary check, the component parity check, `tsc -b`, the Temporal
+workflow bundle check, and the test suite. Green before any hand-off.
 
 ## Rules (always-on)
 

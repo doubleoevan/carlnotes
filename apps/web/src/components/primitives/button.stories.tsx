@@ -1,4 +1,5 @@
 // the button primitive: six variants and six sizes, three of them square for an icon
+import { buttonSizeNames, buttonVariantNames } from "@carlnotes/nightshift/components/button"
 import type { Meta, StoryObj } from "@storybook/tanstack-react"
 import { Lightbulb, Plus, ThumbsDown, ThumbsUp, X } from "lucide-react"
 import { fn } from "storybook/test"
@@ -9,11 +10,8 @@ const meta = {
 	component: Button,
 	args: { children: "Save topic", variant: "default", size: "default", disabled: false, onClick: fn() },
 	argTypes: {
-		variant: {
-			control: "inline-radio",
-			options: ["default", "destructive", "outline", "secondary", "ghost", "link"],
-		},
-		size: { control: "inline-radio", options: ["default", "sm", "lg", "icon", "icon-sm", "icon-lg"] },
+		variant: { control: "inline-radio", options: buttonVariantNames },
+		size: { control: "inline-radio", options: buttonSizeNames },
 		children: { control: "text" },
 		disabled: { control: "boolean" },
 		asChild: { control: false },

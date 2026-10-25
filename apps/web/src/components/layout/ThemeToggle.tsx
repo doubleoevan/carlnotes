@@ -1,8 +1,8 @@
+import { cn } from "@carlnotes/nightshift/classNames"
 import { Moon, Sun } from "lucide-react"
 import { Button } from "@/components/primitives/button"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import { HERO_BUTTON_HOVER_CLASS } from "@/lib/styleClasses"
-import { cn } from "@/lib/utils"
 
 /**
  * The theme toggle button. the icon shows the mode you would switch to, the moon for dark and the sun for light

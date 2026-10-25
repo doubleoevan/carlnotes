@@ -1,8 +1,8 @@
 // the host favicon in a round chip, or the globe when the host has none
 
+import { cn } from "@carlnotes/nightshift/classNames"
 import { Globe } from "lucide-react"
 import { useState } from "react"
-import { cn } from "@/lib/utils"
 
 /**
  * A host's favicon in a round chip at the metadata line's size, faint on the light theme and white on the dark one,

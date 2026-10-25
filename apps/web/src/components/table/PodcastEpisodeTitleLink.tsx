@@ -1,9 +1,9 @@
 import type { PodcastEpisodeSummary } from "@carlnotes/contracts/podcast"
+import { cn } from "@carlnotes/nightshift/classNames"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { PodcastEpisodeTooltip } from "@/components/podcast/PodcastEpisodeDetails"
 import { PodcastEpisodePlayButton } from "@/components/podcast/PodcastEpisodePlayButton"
 import { ICON_TILE_BUTTON_CLASS, STANDALONE_LINK_CLASS } from "@/lib/styleClasses"
-import { cn } from "@/lib/utils"
 
 /**
  * A podcast episode's title in a table, linking to its page, with its play button beside the title. The title and the

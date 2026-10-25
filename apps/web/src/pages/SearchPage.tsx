@@ -6,6 +6,7 @@ import {
 	type SearchResultsPage,
 } from "@carlnotes/contracts/search"
 import { toCountLabel } from "@carlnotes/core/lib/labels"
+import { cn } from "@carlnotes/nightshift/classNames"
 import { getRouteApi, Link, useNavigate } from "@tanstack/react-router"
 import { Search } from "lucide-react"
 import { useCallback, useRef, useState } from "react"
@@ -16,7 +17,6 @@ import { toRouteSearchRequest, toSearchRouteSearch } from "@/components/search/s
 import { TagsAndNewTopicRow } from "@/components/topic/TagsAndNewTopicRow"
 import { useLoadInBrowser } from "@/hooks/useBrowserValue"
 import { PAGE_CLASS, PAGE_HEADER_CLASS, PAGE_TITLE_CLASS } from "@/lib/styleClasses"
-import { cn } from "@/lib/utils"
 import { type TopicFeedHandlers, useIsSignedIn, useTopicFeedActions } from "@/providers/TopicFeedProvider"
 import { useRegisterPageActions } from "@/stores/pageActionsStore"
 

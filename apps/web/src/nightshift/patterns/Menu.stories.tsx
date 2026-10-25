@@ -60,7 +60,7 @@ function SearchBarSortMenu({
 	onSelectOption: (optionName: string) => void
 }) {
 	return (
-		<div className="bg-card border-border flex flex-1 items-center gap-2 rounded-lg border py-2 pr-2 pl-3 shadow-lift">
+		<div className="bg-card border-border flex flex-1 items-center gap-2 rounded-lg border py-2 pr-2 pl-3 shadow-raised">
 			{/* the magnifying glass, then the search input */}
 			<Search className="text-muted-foreground size-4 shrink-0" />
 			<Input

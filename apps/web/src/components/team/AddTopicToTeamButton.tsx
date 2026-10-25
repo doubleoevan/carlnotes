@@ -2,12 +2,12 @@ import { fetchLeaderTeams, sendAddTopicTeam, sendRemoveTopicFromTeam } from "@ca
 import { fetchAddableTopics } from "@carlnotes/client/topicClient"
 import type { TeamSummary } from "@carlnotes/contracts/teams"
 import type { TopicResponse } from "@carlnotes/contracts/topics"
+import { cn } from "@carlnotes/nightshift/classNames"
 import { Plus, Users, X } from "lucide-react"
 import { useEffect, useState } from "react"
 import { toast } from "sonner"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/primitives/popover"
 import { MENU_BUTTON_CLASS, MENU_DIVIDER_CLASS } from "@/lib/styleClasses"
-import { cn } from "@/lib/utils"
 import { EditTeamModal } from "./EditTeamModal"
 import { NewTeamOption, TeamActionOption } from "./TeamMenuOptions"
 

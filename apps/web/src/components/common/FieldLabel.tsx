@@ -1,6 +1,6 @@
+import { cn } from "@carlnotes/nightshift/classNames"
 import type * as React from "react"
 import { SECTION_LABEL_CLASS } from "@/lib/styleClasses"
-import { cn } from "@/lib/utils"
 
 /**
  * The uppercase display-font label above a field, tied to it by htmlFor, or a heading over a group of fields without

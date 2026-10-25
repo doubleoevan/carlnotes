@@ -31,7 +31,7 @@ export default defineConfig({
 			description: "How Carl takes his coffee.",
 			// the footer override adds the copyright line under starlight's own rows
 			components: { Footer: "./src/components/Footer.astro" },
-			// sends the header wordmark back to the app, since the docs are one surface of the product
+			// point the header logo at the app instead of the docs home
 			routeMiddleware: "./src/routeData.ts",
 			// the four sections in reading order. Start here names its two pages, which sit at the content
 			// root so their urls stay one segment. the other sections fill from their own folders,

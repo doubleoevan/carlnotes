@@ -5,6 +5,7 @@ import {
 	PODCAST_THEME_SONG_PRODUCTION_CREDIT,
 	PODCAST_THEME_SONG_WRITING_LABEL,
 } from "@carlnotes/contracts/podcastEpisodes"
+import { cn } from "@carlnotes/nightshift/classNames"
 import { NoteIcon } from "@/components/branding/NoteIcon"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { Popover, PopoverCloseButton, PopoverContent, PopoverTrigger } from "@/components/primitives/popover"
@@ -16,7 +17,6 @@ import {
 	POPOVER_PANEL_CLASS,
 	STANDALONE_LINK_CLASS,
 } from "@/lib/styleClasses"
-import { cn } from "@/lib/utils"
 import { THEME_SONG_LYRICS, toLyricsSections } from "./themeSongLyrics"
 
 /**

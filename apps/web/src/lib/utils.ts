@@ -1,8 +1,6 @@
 // the helpers with no larger subject of their own to live under
-import { type ClassValue, clsx } from "clsx"
 import { FileText, Headphones, type LucideIcon, Play } from "lucide-react"
 import { toast } from "sonner"
-import { extendTailwindMerge } from "tailwind-merge"
 import type { ResourceKind } from "@/providers/TopicFeedProvider"
 
 /**
@@ -184,16 +182,6 @@ export function addEventListeners(target: EventTarget, listeners: [string, () =>
 			target.removeEventListener(eventName, listener)
 		}
 	}
-}
-
-// the class merge, taught that the app's own shadow-lift utility is a shadow, so a later shadow-none replaces it
-const twMerge = extendTailwindMerge({ extend: { classGroups: { shadow: [{ shadow: ["lift"] }] } } })
-
-/**
- * Merges class names, resolving Tailwind conflicts.
- */
-export function cn(...inputs: ClassValue[]): string {
-	return twMerge(clsx(inputs))
 }
 
 /**

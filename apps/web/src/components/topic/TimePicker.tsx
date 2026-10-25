@@ -1,7 +1,7 @@
 import { toTimeLabel } from "@carlnotes/core/lib/labels"
+import { cn } from "@carlnotes/nightshift/classNames"
 import * as SelectPrimitive from "@radix-ui/react-select"
 import { Select, SelectContent, SelectTrigger, SelectValue } from "@/components/primitives/select"
-import { cn } from "@/lib/utils"
 
 // every half-hour of the day, paired as an AM slot and its PM counterpart
 const TIME_ROWS = Array.from({ length: 24 }, (_, index) => {

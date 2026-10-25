@@ -411,7 +411,7 @@ bun run build:docs   # build static docs to apps/docs/dist, which the api serves
 bun run dev:storybook # the Nightshift component browser, Storybook with hot reload on localhost:6006, and its MCP server at localhost:6006/mcp that .mcp.json and opencode.json register; no doppler needed
 bun run build:storybook # build the component browser to apps/web/dist/nightshift, which the api serves at /nightshift; run it after build:ui, which can clear apps/web/dist
 bun run nightshift:write # write packages/nightshift/tokens.css, uniwind.css, and the Figma token files from the Nightshift TypeScript source; run it after changing a token. tokens.test.ts fails until you do
-bun run dev:mobile   # Expo dev server for apps/mobile under doppler, with the expo-mcp server on; a development build connects from a simulator, an emulator, or a phone on the LAN
+bun run dev:mobile   # Expo dev server for apps/mobile under doppler, with the expo-mcp server on and Storybook's telemetry off; a development build connects from a simulator, an emulator, or a phone on the LAN, and carlnotes:///storybook opens the component browser in it
 bun run dev:tunnel   # the Cloudflare tunnel that forwards Sign in with Apple's dev callback from apple-dev.carlnotes.com to the local api; run it beside bun run dev to sign in with Apple locally
 bun run mobile:build -- --profile development-simulator # EAS (Expo Application Services) cloud build of the mobile app; profiles: development, development-simulator, preview, production. rebuild the development client after a change that adds a native module, as the sign-in change did
 bun run mobile:update -- --channel production --environment production # publish an EAS Update to a channel's builds, on the fingerprint runtime policy; eas update needs both flags
@@ -496,7 +496,7 @@ net revenue. The gate, plans, and quotas all work without Stripe.
 Checks: `bun run check` runs the full gate, the same `scripts/preflight.sh` that the pre-push hook runs:
 
 ```bash
-bun run check       # biome + package boundaries + tsc + workflow bundles + bun test
+bun run check       # biome + package boundaries + component parity + tsc + workflow bundles + bun test
 ```
 
 Or run them individually:
@@ -504,6 +504,7 @@ Or run them individually:
 ```bash
 bunx biome check .
 bun scripts/check-package-boundaries.ts # every import stays inside the dependencies its workspace declares
+bun scripts/check-component-parity.ts   # every Nightshift component contract is implemented in each app it names
 bunx tsc -b             # add --force after a dependency change. bun run check does that on its own
 bun test
 bun run check:workflows # every Temporal workflow file still bundles

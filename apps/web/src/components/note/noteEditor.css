@@ -20,7 +20,7 @@
 
 /* the formatting strip takes the app's one elevation and scrolls sideways itself with no bar drawn */
 .note-editor.bn-container .bn-toolbar {
-	@apply shadow-lift scrollbar-none;
+	@apply shadow-raised scrollbar-none;
 	/* the same corner radius every other raised surface in the app uses */
 	border-radius: var(--radius-md);
 	max-width: 100%;
@@ -35,7 +35,7 @@
 /* a comment popup is one of the app's dropdown panels: the popover fill, a border, the one elevation,
    and the same tight inset. the composer that opens on a selection is a comment card too */
 .note-editor.bn-container .bn-thread {
-	@apply shadow-lift;
+	@apply shadow-raised;
 	background-color: color-mix(in srgb, var(--primary) 15%, var(--popover));
 	border: 1px solid var(--border);
 	border-radius: var(--radius-md);
@@ -104,7 +104,7 @@
 
 /* Save is the main button, so it takes the primary fill. Cancel is the one mantine gives bn-button */
 .note-editor .bn-comment-actions .mantine-Button-root:not(:has(svg)):not(.bn-button) {
-	@apply shadow-lift;
+	@apply shadow-raised;
 	background-color: var(--primary);
 	color: var(--primary-foreground);
 }

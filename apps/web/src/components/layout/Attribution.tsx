@@ -1,5 +1,5 @@
+import { cn } from "@carlnotes/nightshift/classNames"
 import { AnchorLink } from "@/components/common/AnchorLink"
-import { cn } from "@/lib/utils"
 
 /**
  * The persona credit with links, shown in the hero's persona popover.

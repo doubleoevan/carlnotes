@@ -1,6 +1,6 @@
 // the shimmering "Carl is ___" line shown while carl works on a reply, a scan, or source suggestions
+import { cn } from "@carlnotes/nightshift/classNames"
 import { useState } from "react"
-import { cn } from "@/lib/utils"
 import { randomThinkingLine } from "./thinkingLines"
 
 /**

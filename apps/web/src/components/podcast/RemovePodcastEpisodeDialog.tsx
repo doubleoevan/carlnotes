@@ -1,9 +1,9 @@
 import { sendRemovePodcastEpisode } from "@carlnotes/client/podcastEpisodeClient"
 import type { PodcastEpisode } from "@carlnotes/contracts/podcast"
+import { cn } from "@carlnotes/nightshift/classNames"
 import { Trash2 } from "lucide-react"
 import { toast } from "sonner"
 import { ConfirmDialog } from "@/components/common/ConfirmDialog"
-import { cn } from "@/lib/utils"
 import { unloadPodcastEpisode } from "@/stores/podcastEpisodePlayerStore"
 
 /**

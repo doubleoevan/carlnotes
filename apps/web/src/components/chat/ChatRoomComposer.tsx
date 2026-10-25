@@ -8,6 +8,7 @@ import {
 } from "@carlnotes/contracts/chat"
 import { ALL_USERNAME, CARL_USERNAME, isModelChatMessage, toChatMentions } from "@carlnotes/contracts/chatMentions"
 import type { ChatAttachment, VoiceChatPage } from "@carlnotes/contracts/payloads"
+import { cn } from "@carlnotes/nightshift/classNames"
 import { ArrowUp, Paperclip } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
@@ -19,7 +20,7 @@ import {
 	ICON_BUTTON_CLASS,
 	SEND_BUTTON_CLASS,
 } from "@/lib/styleClasses"
-import { CHAT_FILE_PICKER_ACCEPT, cn, isSendKey, isTouchScreen, isWideScreen } from "@/lib/utils"
+import { CHAT_FILE_PICKER_ACCEPT, isSendKey, isTouchScreen, isWideScreen } from "@/lib/utils"
 import { ChatAttachmentChips } from "./ChatAttachmentChips"
 import { MentionSuggestionList, useMentionAutocomplete } from "./MentionSuggestionList"
 import { isMicShown, MicButton } from "./MicButton"

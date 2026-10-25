@@ -1,10 +1,9 @@
+import { cn } from "@carlnotes/nightshift/classNames"
 import * as PopoverPrimitive from "@radix-ui/react-popover"
 import { X } from "lucide-react"
 import type * as React from "react"
-
 import { useScrollRegionTabStop } from "@/hooks/useScrollRegionTabStop"
 import { HIGHLIGHT_SCROLLBAR_CLASS, SCROLL_REGION_FOCUS_CLASS } from "@/lib/styleClasses"
-import { cn } from "@/lib/utils"
 
 // the shadcn new-york popover root
 function Popover({ ...props }: React.ComponentProps<typeof PopoverPrimitive.Root>) {
@@ -46,7 +45,7 @@ function PopoverContent({
 				// this sits above the spread, and a caller's own handler can override it
 				onOpenAutoFocus={(event) => event.preventDefault()}
 				className={cn(
-					"bg-popover text-popover-foreground data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 relative z-50 flex max-h-(--radix-popover-content-available-height) w-72 flex-col origin-(--radix-popover-content-transform-origin) overflow-hidden rounded-md border shadow-lift outline-hidden",
+					"bg-popover text-popover-foreground data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 relative z-50 flex max-h-(--radix-popover-content-available-height) w-72 flex-col origin-(--radix-popover-content-transform-origin) overflow-hidden rounded-md border shadow-raised outline-hidden",
 					className,
 				)}
 				{...props}

@@ -1,7 +1,7 @@
 import type { TeamIdentity } from "@carlnotes/contracts/teams"
+import { cn } from "@carlnotes/nightshift/classNames"
 import { TeamAvatar } from "@/components/branding/TeamAvatar"
 import { AnchorLink } from "@/components/common/AnchorLink"
-import { cn } from "@/lib/utils"
 
 /**
  * The team's avatar and name, linking to its page: a byline under its default label.

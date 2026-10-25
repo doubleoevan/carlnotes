@@ -1,10 +1,10 @@
 // the team avatar with the camera overlay
 import type { TeamIdentity } from "@carlnotes/contracts/teams"
+import { cn } from "@carlnotes/nightshift/classNames"
 import { Camera } from "lucide-react"
 import { toast } from "sonner"
 import { TeamAvatar } from "@/components/branding/TeamAvatar"
 import { FileDropZone } from "@/components/common/FileDropZone"
-import { cn } from "@/lib/utils"
 import { AVATAR_ACCEPT, AVATAR_REJECTIONS, AvatarDropOverlay, toDroppedImage, toUploadableAvatar } from "./AvatarUpload"
 
 /**
@@ -60,7 +60,7 @@ export function TeamAvatarPicker({
 		<FileDropZone onDropFiles={handleDropFiles} overlay={<AvatarDropOverlay />} className="w-fit">
 			<label className={cn("group relative block cursor-pointer", className)} aria-label="Change the team avatar">
 				{previewUrl ? (
-					<img src={previewUrl} alt="" className="size-full rounded-full border object-cover shadow-lift" />
+					<img src={previewUrl} alt="" className="size-full rounded-full border object-cover shadow-raised" />
 				) : (
 					<TeamAvatar team={team} className="size-full" />
 				)}

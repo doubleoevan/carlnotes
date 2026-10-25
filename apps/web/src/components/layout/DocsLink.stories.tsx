@@ -1,9 +1,9 @@
 // the link to the docs site, which opens in a new tab, styled by each place that shows it
+import { cn } from "@carlnotes/nightshift/classNames"
 import type { Meta, StoryObj } from "@storybook/tanstack-react"
 import { fn } from "storybook/test"
 import { buttonVariants } from "@/components/primitives/button"
 import { HERO_BUTTON_HOVER_CLASS, MENU_OPTION_CLASS, STANDALONE_LINK_CLASS } from "@/lib/styleClasses"
-import { cn } from "@/lib/utils"
 import { DocsLink } from "./DocsLink"
 
 const meta = {
@@ -38,7 +38,7 @@ export const MenuOption: Story = {
 	decorators: [
 		(Story) => (
 			<div
-				className="bg-popover text-popover-foreground rounded-md border shadow-lift"
+				className="bg-popover text-popover-foreground rounded-md border shadow-raised"
 				style={{ width: 208, padding: 4 }}
 			>
 				<Story />

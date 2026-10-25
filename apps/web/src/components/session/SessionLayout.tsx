@@ -2,14 +2,14 @@ import { authClient } from "@carlnotes/client/authClient"
 import { isInAppBrowser, toBrowserPlatform } from "@carlnotes/contracts/userAgent"
 import { toChromeIntentUrl } from "@carlnotes/core/lib/chromeIntentUrl"
 import { OAUTH_ERROR_TEXT } from "@carlnotes/core/lib/sessionCopy"
+import { cn } from "@carlnotes/nightshift/classNames"
 import { type SubmitEvent, useEffect, useRef, useState } from "react"
 import { CoffeeMug } from "@/components/branding/CoffeeMug"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { Button, buttonVariants } from "@/components/primitives/button"
 import { Input } from "@/components/primitives/input"
 import { Label } from "@/components/primitives/label"
-import { SESSION_PAGE_CLASS } from "@/lib/styleClasses"
-import { cn } from "@/lib/utils"
+import { LOGO_CLASS, SESSION_PAGE_CLASS } from "@/lib/styleClasses"
 import { AppleIcon, GithubIcon, GoogleIcon } from "./OAuthProviderIcons"
 import { PasswordInput } from "./PasswordInput"
 
@@ -84,11 +84,11 @@ export function SessionLayout({
 
 	return (
 		<div className={SESSION_PAGE_CLASS}>
-			{/* brand mark */}
+			{/* logo */}
 			<AnchorLink href="/" className="mx-auto mb-8 flex items-center gap-2">
-				{/* nudged up to optically center the cup on the logo's text. the offset scales with the icon size */}
+				{/* nudged up 3 pixels to optically center the cup on the logo's text */}
 				<CoffeeMug className="text-primary -translate-y-[3px] size-10" />
-				<span className="font-display text-xl">CarlNotes</span>
+				<span className={LOGO_CLASS}>CarlNotes</span>
 			</AnchorLink>
 
 			{/* an embedded webview shows the email form first with a notice */}

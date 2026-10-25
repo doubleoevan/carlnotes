@@ -7,6 +7,7 @@ import type { ProfileResponse, ProfileTeamStatus } from "@carlnotes/contracts/pr
 import { toCountLabel } from "@carlnotes/core/lib/labels"
 import { useAllChatMentions } from "@carlnotes/core/stores/chatRoomStore"
 import { useAllNoteBadges } from "@carlnotes/core/stores/noteBadgeStore"
+import { cn } from "@carlnotes/nightshift/classNames"
 import { getRouteApi, useNavigate } from "@tanstack/react-router"
 import { Pencil, Plus, Users } from "lucide-react"
 import { useCallback, useEffect, useMemo, useState } from "react"
@@ -28,7 +29,6 @@ import { NewTopicButton, useNewTopicDialog } from "@/components/topic/TopicEdito
 import { useLoadInBrowser } from "@/hooks/useBrowserValue"
 import { usePageTitle } from "@/hooks/usePageTitle"
 import { CARD_CLASS, PAGE_CLASS, STANDALONE_LINK_CLASS } from "@/lib/styleClasses"
-import { cn } from "@/lib/utils"
 import { openNewTopicChat, useRegisterChatContext } from "@/stores/chatPanelStore"
 import { type PageActionOption, useRegisterPageActions } from "@/stores/pageActionsStore"
 

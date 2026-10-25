@@ -13,6 +13,7 @@ import { isAdminRole } from "@carlnotes/contracts/enums"
 import { toCentsFromDollars } from "@carlnotes/contracts/plans"
 import type { TeamSummary } from "@carlnotes/contracts/teams"
 import { toBytesLabel, toCentsLabel, toDateLabel } from "@carlnotes/core/lib/labels"
+import { cn } from "@carlnotes/nightshift/classNames"
 import { Trash2 } from "lucide-react"
 import { useState } from "react"
 import { toast } from "sonner"
@@ -28,7 +29,6 @@ import {
 	TABLE_HEAD_CLASS,
 	TABLE_SCROLL_CLASS,
 } from "@/lib/styleClasses"
-import { cn } from "@/lib/utils"
 import { TopicsSubtableRow } from "./OwnerTopicsTable"
 import { SubtableCountButton } from "./SubtableCountButton"
 import { TableCard } from "./TableCard"

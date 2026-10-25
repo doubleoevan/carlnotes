@@ -4,6 +4,7 @@
 import { deleteNote, fetchNote, type NotePageRef, sendNoteRead, updateNote } from "@carlnotes/client/noteClient"
 import { NOTE_NAME_MAX_CHARS, type Note } from "@carlnotes/contracts/notes"
 import { markNoteOpened } from "@carlnotes/core/stores/noteBadgeStore"
+import { cn } from "@carlnotes/nightshift/classNames"
 import { Maximize2, MessageSquareText, Minimize2, Pencil, X } from "lucide-react"
 import { lazy, Suspense, useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
@@ -13,7 +14,7 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/compone
 import { Input } from "@/components/primitives/input"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import { MENU_BUTTON_HIGHLIGHT_CLASS } from "@/lib/styleClasses"
-import { cn, isWideScreen } from "@/lib/utils"
+import { isWideScreen } from "@/lib/utils"
 import { CreateNote } from "./CreateNote"
 import { NoteStatic } from "./NoteStatic"
 import { type NoteVisibility, NoteVisibilitySelect, VISIBILITY_TOOLTIPS } from "./NoteVisibilitySelect"
@@ -267,7 +268,7 @@ function OpenNote({
 									// the opened comments takes the standard highlight treatment
 									className={cn(
 										"text-muted-foreground hover:text-foreground grid size-8 shrink-0 place-items-center rounded-md",
-										isThreadsOpen && `${MENU_BUTTON_HIGHLIGHT_CLASS} shadow-lift`,
+										isThreadsOpen && `${MENU_BUTTON_HIGHLIGHT_CLASS} shadow-raised`,
 									)}
 								>
 									<MessageSquareText className="size-4" />

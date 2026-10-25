@@ -1,7 +1,7 @@
 import type { PodcastEpisodeSummary } from "@carlnotes/contracts/podcast"
+import { cn } from "@carlnotes/nightshift/classNames"
 import { Pause, Play } from "lucide-react"
 import { PLAY_BUTTON_CLASS } from "@/lib/styleClasses"
-import { cn } from "@/lib/utils"
 import { togglePodcastEpisodePlayback } from "@/stores/podcastEpisodePlayActions"
 import { useIsPodcastEpisodePlaying } from "@/stores/podcastEpisodePlayerStore"
 import { PodcastEpisodeTooltip } from "./PodcastEpisodeDetails"

@@ -3,11 +3,11 @@
 import type { ChatRoomMessage } from "@carlnotes/contracts/chat"
 import { ALL_USERNAME, CARL_USERNAME } from "@carlnotes/contracts/chatMentions"
 import { PODCAST_EPISODE_SPEAKER_NAMES } from "@carlnotes/contracts/podcastEpisodes"
+import { cn } from "@carlnotes/nightshift/classNames"
 import { ChevronDown, Reply } from "lucide-react"
 import { useState } from "react"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/primitives/popover"
 import { MENU_OPTION_CLASS, MENU_OPTION_SELECTED_CLASS } from "@/lib/styleClasses"
-import { cn } from "@/lib/utils"
 
 /** The reply to user dropdown menu. */
 export function ReplyToDropdown({
