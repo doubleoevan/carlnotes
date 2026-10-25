@@ -184,7 +184,7 @@ continue; never fail the ritual on a missing reviewer.
 
 ## 10. Aggressive audit: comments, naming, and new terms
 
-Right before the manual review, audit the whole diff three ways, aggressively,
+After the ponytail pass, audit the whole diff three ways, aggressively,
 with the codebase as the reference for every finding: name the existing
 convention that a finding compares against. For a large diff, split the read
 across parallel read-only audit agents by area, such as the app code, the evals,
@@ -221,18 +221,47 @@ Apply every clear-cut finding and every judgment call you agree with. Rename
 and rewrite in this pass instead of filing follow-up work, then rerun step 4.
 Report what you changed, and each finding left alone with the reason.
 
-## 11. Manual review handoff
+## 11. Final report: new terms, structure, file names, and long files
+
+Right before the manual review, recheck the diff as it stands after every fix
+above. The reviews, the ponytail pass, and the audit all change the diff after
+steps 2, 7, and 10 ran, so this pass reads the final tree. Build four lists for
+the handoff, and fix what each one finds in this change.
+
+1. **New terminology.** Every term the diff introduces: a new identifier root, a
+   domain noun, and a word new to the copy, comments, or docs. Beside each, name
+   the existing term it matches, or say why no existing name covers it. A term
+   that duplicates an existing name takes that name now. A new domain noun goes
+   into the `domain-model` skill in this change.
+2. **Canonical structure.** Every folder and file that the diff adds, moves, or
+   renames sits where the root module map and its module's AGENTS.md put that
+   kind of thing, inside the package order AGENTS.md sets. A misplaced one moves
+   now, and step 2's docs check runs again for it.
+3. **Idiomatic, self-documenting file names.** Every new or renamed file and
+   folder follows code-style rule 19: the names the tooling requires first, then
+   the framework's canonical layout, then the casing and pattern its siblings
+   already use, with the domain noun in full. A name that needs a comment to say
+   what the file holds, or breaks its siblings' pattern, is renamed now.
+4. **Long files.** Step 7's table, run again on the final diff: every added or
+   changed file, longest first, with its line count beside its count on
+   origin/main, and for each file over the guide, what was split out of it or
+   the reason it stays whole.
+
+Rerun step 4 after any rename or move. The four lists go into the handoff
+report.
+
+## 12. Manual review handoff
 
 Summarize the full diff for human review: each file, what changed, and why.
 Write the long report to `logs/ship-report.md` and give its path in the
-handoff: the reports from steps 5, 6, 7, and 10, every reviewer's findings with
+handoff: the reports from steps 5, 6, 7, 10, and 11, every reviewer's findings with
 the ones dismissed and why, and recommendations. A recommendation is only
 work that needs the user's decision; anything the change could do, it has done.
 Then STOP, show the
 suggested commit message, and wait for explicit approval. Do not proceed
 without it.
 
-## 12. Archive the change
+## 13. Archive the change
 
 Determine the name yourself: run `openspec list`. If exactly one change is
 open, use it without asking. If several are open, ask which one to archive.
@@ -240,7 +269,7 @@ Then run: openspec archive <change-name> --yes
 Always the CLI, never /opsx:archive. The archive is included in the same push as
 the code.
 
-## 13. Commit
+## 14. Commit
 
 Confirm `git status --short` shows no unstaged modifications. Always show
 the suggested commit message first (git-discipline skill, Conventional
