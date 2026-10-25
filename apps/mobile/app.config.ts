@@ -33,7 +33,7 @@ const expoConfig: ExpoConfig = {
 		package: MOBILE_APP_BUNDLE_IDENTIFIER,
 		adaptiveIcon: {
 			foregroundImage: "./assets/adaptive-icon.png",
-			// the table color around the mug in the cover art the foreground is cut from
+			// the cream behind the hand and the mug in the app icon
 			backgroundColor: "#e1d0b8",
 		},
 	},

@@ -66,8 +66,8 @@ and the package boundary check fails anything else, a type-only import of `@carl
   on-device controls and actions and the backgrounds feature, and `preview.tsx` loads the stylesheet, switches the
   Uniwind theme with the light and dark toggle, and puts a `surface: "card"` story on the card fill. `manager.tsx`
   brands the frame as the web's is: `NIGHTSHIFT_STORYBOOK_THEME` maps the web frame's Dark roast fields onto
-  Storybook's native theme in both modes, and `NightshiftStorybookUI` draws Storybook's own `FullUI` with Carl and
-  the name in the logo type role as the brand. The brand is set after Storybook's deep merge of the theme, which
+  Storybook's native theme in both modes, and `NightshiftStorybookUI` draws Storybook's own `FullUI` with the app
+  icon and the name in the logo type role as the brand. The brand is set after Storybook's deep merge of the theme, which
   overflows the stack on a React element. The frame's own text stays in the platform font, since the native theme
   has no font family.
   `storybook.requires.ts` is the stories index Storybook's Metro wrapper writes on each start, committed so `tsc -b`

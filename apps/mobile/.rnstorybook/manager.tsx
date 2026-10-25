@@ -1,5 +1,5 @@
-// the component browser's frame, branded Nightshift as the web's is: Carl beside the name, and the sheet, the search,
-// the story tree, the bottom bar, and the addons panel in the Dark roast palette in both modes
+// the component browser's frame, branded Nightshift as the web's is: the app icon beside the name, and the sheet, the
+// search, the story tree, the bottom bar, and the addons panel in the Dark roast palette in both modes
 import { darkRoast } from "@carlnotes/nightshift/colors"
 import { toRadiusPixels } from "@carlnotes/nightshift/radius"
 import type { ThemePartial } from "@storybook/react-native"
@@ -67,7 +67,7 @@ export function NightshiftStorybookUI({ theme, ...props }: ComponentProps<typeof
 	return <FullUI {...props} theme={brandedTheme} />
 }
 
-// Carl's round picture, the app icon, beside the name in the logo type role, drawn in place of Storybook's wordmark.
+// the app icon, drawn round, beside the name in the logo type role, in place of Storybook's wordmark.
 // the colors are the Dark roast values, not Uniwind utilities, since the frame stays dark while the story toggle
 // switches the Uniwind theme
 function NightshiftBrand() {
@@ -75,7 +75,7 @@ function NightshiftBrand() {
 		<View style={{ flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 4 }}>
 			<Image
 				source={require("../assets/icon.png")}
-				accessibilityLabel="Carl"
+				accessibilityLabel="CarlNotes"
 				style={{ width: 28, height: 28, borderRadius: 14 }}
 			/>
 			<Text
