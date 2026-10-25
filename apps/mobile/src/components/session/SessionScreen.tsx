@@ -1,19 +1,24 @@
 // the frame every session screen renders inside
 import type { ReactNode } from "react"
 import { ScrollView, Text, View } from "react-native"
-import { SafeAreaView } from "react-native-safe-area-context"
 import { CoffeeMug } from "@/components/branding/CoffeeMug"
+import { ClassNameSafeAreaView } from "@/components/common/ClassNameSafeAreaView"
 import { MAX_FONT_SCALE } from "@/hooks/useFontScaledSize"
 import { toTypeRoleStyle } from "@/typeRoleStyles"
 
+// the web's session page column: 24rem wide at most, centered across the screen and down it, and growing to the
+// screen's height so a short form sits in the middle
+const SESSION_COLUMN_CLASS = "w-full max-w-sm grow justify-center gap-4 self-center px-4 py-12"
+
 /**
- * The frame every session screen renders inside, with the safe area, the scroll, and the logo.
+ * The frame every session screen renders inside, with the safe area, the scroll, and the logo, in the web's centered
+ * column.
  */
 export function SessionScreen({ children }: { children: ReactNode }) {
 	return (
 		<View className="flex-1 bg-background">
-			<SafeAreaView className="flex-1">
-				<ScrollView contentContainerClassName="gap-4 p-6" keyboardShouldPersistTaps="handled">
+			<ClassNameSafeAreaView className="flex-1">
+				<ScrollView contentContainerClassName={SESSION_COLUMN_CLASS} keyboardShouldPersistTaps="handled">
 					{/* the logo, the mug beside the name, centered as on the web */}
 					<View
 						className="mb-4 flex-row items-center justify-center gap-2"
@@ -37,7 +42,7 @@ export function SessionScreen({ children }: { children: ReactNode }) {
 					</View>
 					{children}
 				</ScrollView>
-			</SafeAreaView>
+			</ClassNameSafeAreaView>
 		</View>
 	)
 }

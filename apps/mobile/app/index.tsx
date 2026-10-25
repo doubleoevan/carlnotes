@@ -9,7 +9,7 @@ import { useAvatar } from "@carlnotes/core/hooks/useAvatar"
 import { useNow } from "@carlnotes/core/hooks/useNow"
 import { useQuery } from "@tanstack/react-query"
 import { ActivityIndicator, Image, Pressable, ScrollView, Text, View } from "react-native"
-import { SafeAreaView } from "react-native-safe-area-context"
+import { ClassNameSafeAreaView } from "@/components/common/ClassNameSafeAreaView"
 import { SessionTextLink } from "@/components/session/SessionLink"
 import { toTypeRoleStyle } from "@/typeRoleStyles"
 
@@ -45,7 +45,7 @@ export default function HomeScreen() {
 
 	return (
 		<View className="flex-1 bg-background">
-			<SafeAreaView className="flex-1">
+			<ClassNameSafeAreaView className="flex-1">
 				<ScrollView contentContainerClassName="gap-6 p-4">
 					{/* the name and a body line, one in each family */}
 					<Text style={toTypeRoleStyle("display")} className="text-foreground" accessibilityRole="header">
@@ -123,7 +123,7 @@ export default function HomeScreen() {
 						)}
 					</View>
 				</ScrollView>
-			</SafeAreaView>
+			</ClassNameSafeAreaView>
 		</View>
 	)
 }

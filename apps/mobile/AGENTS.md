@@ -43,8 +43,10 @@ and the package boundary check fails anything else, a type-only import of `@carl
   `@carlnotes/nightshift/coffeeMug` with the steam on React Native's `Animated` and its native driver. As on the web,
   the steam holds still below Nightshift's `md` breakpoint and under reduced motion, and rises on a wider screen.
   `common/` holds the components shared across areas: `ClassNameSvg.tsx` is an svg whose className sets the
-  `currentColor` its paths draw in. `session/` holds what the sign-in, sign-up, and settings screens share:
-  `SessionScreen.tsx` (the frame with the logo, the mug beside the name in the `logo` type role), `SessionTextInput.tsx`
+  `currentColor` its paths draw in, and `ClassNameSafeAreaView.tsx` the safe area view whose className sets its style.
+  Uniwind styles only the components it wraps, so a screen's safe area goes through it. `session/` holds what the
+  sign-in, sign-up, and settings screens share: `SessionScreen.tsx` (the frame with the logo, the mug beside the name in
+  the `logo` type role, in the web's session column, 24rem wide at most and centered both ways), `SessionTextInput.tsx`
   (the labeled field and the email and password fields over it), `SessionLink.tsx` (the text link to a route, the one
   way a screen links, and the footer line to the other form, which replaces the screen), `SessionErrorText.tsx`, and
   `OAuthProviderIcons.tsx` (the Google and Apple icons from `@carlnotes/nightshift/oauthProviderIcons`). Their buttons
