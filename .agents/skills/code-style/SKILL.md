@@ -67,14 +67,10 @@ with a bare verb: no `-s` ending, no `-ing` ending, no subject, no "this".
     // parse the request body
 
 A group that declares instead of acting — a type, a schema field, a constant, a
-config object — still leads with a verb. Name what the declaration does for the
-reader: `define`, `list`, `map`, `hold`, `track`.
+config object — has no action to name. State the fact instead.
 
-    // wrong — a bare noun phrase, no action
+    // right — a constant declaration, so a plain statement
     // the source kinds carl can scan
-
-    // right
-    // list the source kinds carl can scan
     export const sourceKinds = ['web', 'rss', 'youtube'] as const
 
 JSDoc runs the other way: third person, never imperative. See rule 11.
@@ -85,7 +81,7 @@ JSDoc runs the other way: third person, never imperative. See rule 11.
     // lifecycle status; running until it succeeds or fails, with the failure reason if it fails
 
     // right — two plain sentences
-    // track the scan status. hold the failure reason in error when it fails
+    // the scan status. running until it succeeds or fails, and error holds the failure reason
 
 ### 2. A comment earns its place
 
@@ -286,24 +282,24 @@ line. Never collapse it onto one line. Describe what it does, not how.
 **Third person, not imperative** — the inverse of rule 1. A `//` comment names
 an action the reader follows down the file. A JSDoc block describes a function
 that already exists. Start with a capitalized verb that takes the `-s`, and end
-without a period.
+with a period.
 
     // wrong — imperative, reads like a step in a procedure
     /**
-     * Score an article against the reader profile
+     * Score an article against the reader profile.
      */
 
     // wrong — no verb, so the reader learns nothing the name did not say
     /**
-     * Article scoring
+     * Article scoring.
      */
 
-    // wrong — collapsed onto one line, and a trailing period
+    // wrong — collapsed onto one line
     /** Scores an article against the reader profile. */
 
     // right
     /**
-     * Scores an article against the reader profile
+     * Scores an article against the reader profile.
      */
     export function scoreArticle(article: Article, profile: ReaderProfile): number { ... }
 
@@ -312,7 +308,7 @@ The two voices side by side:
 | Comment | Voice | Example |
 | --- | --- | --- |
 | `//` | imperative, lowercase, no period | `// parse the request body` |
-| `/** */` | third person, capitalized, no period | `* Parses the request body` |
+| `/** */` | third person, capitalized, period | `* Parses the request body.` |
 
 ### 12. Discriminated unions
 
