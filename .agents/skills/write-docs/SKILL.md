@@ -149,7 +149,7 @@ top to bottom.
 
 ### 11. Appendices hold the detail
 
-The body carries the argument. Supporting material goes in an appendix at the
+The body includes the argument. Supporting material goes in an appendix at the
 end: benchmark tables, full schemas, charts, alternatives considered in depth,
 long logs. Point to it from the body in one line. A reader who trusts the
 summary never has to open it.

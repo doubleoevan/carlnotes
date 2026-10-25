@@ -11,7 +11,7 @@
       "source": "doubleoevan/skills",
       "sourceType": "github",
       "skillPath": "skills/code-style/SKILL.md",
-      "computedHash": "638501c53a6f551b8f6c1f888ab77528557a96219742a00ca4b839e498fe0dd2"
+      "computedHash": "08265321b0d473e37b7c2ee834568476dbd8cbb64d5b3a41125fa6da35662e2b"
     },
     "git-discipline": {
       "source": "doubleoevan/skills",
@@ -53,7 +53,7 @@
       "source": "doubleoevan/skills",
       "sourceType": "github",
       "skillPath": "skills/write-docs/SKILL.md",
-      "computedHash": "ff8c1df5cd89cad5a8be293ed89930576ca95e3f15381a9c0ee7531cfa9766f7"
+      "computedHash": "8148d915df5cc47fd8edb6fc9bee5528c6dfb6bb8dcc7a1f4447609f5c93c954"
     }
   }
 }
