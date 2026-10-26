@@ -1,8 +1,8 @@
 // the Nightshift component browser: Storybook on its TanStack React framework, which loads the app's own vite.config.ts,
 // wraps every story in a memory-backed router, and stubs TanStack Start's server entry points
+import { readFileSync } from "node:fs"
 import { fileURLToPath } from "node:url"
 import { FONT_STYLESHEET_URL } from "@carlnotes/nightshift/typography"
-import type { StorybookConfig } from "@storybook/tanstack-react"
 import { defineMain } from "@storybook/tanstack-react/node"
 import { mergeConfig, type Plugin, type PluginOption } from "vite"
 
@@ -16,8 +16,10 @@ const ROUTER_MOCK_PATH = fileURLToPath(new URL("./mocks/reactRouter.tsx", import
 // the folder of the framework's own mocks, whose router mock imports the real router
 const FRAMEWORK_MOCKS_FOLDER = "export-mocks"
 
-// the CarlNotes icon
-const CARLNOTES_ICON_PATH = fileURLToPath(new URL("../public/favicon.svg", import.meta.url))
+// the web app's favicon, embedded for both standalone and /nightshift builds
+const CARLNOTES_ICON_URL = `data:image/png;base64,${readFileSync(
+	new URL("../public/favicon-96x96.png", import.meta.url),
+).toString("base64")}`
 
 // the script that renames the tab from Storybook to Nightshift each time Storybook sets the title, which it does on
 // every story
@@ -46,8 +48,9 @@ const storybookConfig = defineMain({
 	features: { componentsManifest: true, sidebarOnboardingChecklist: false, menuOnboardingChecklist: false },
 	// telemetry, the what's new notices, and the build's project.json stay off
 	core: { disableTelemetry: true, disableWhatsNewNotifications: true, disableProjectJson: true },
-	// the frame's head: the web fonts its theme names, and the Nightshift tab title
+	// the frame's head: the CarlNotes favicon, web fonts, and Nightshift tab title
 	managerHead: (head) => `${head ?? ""}
+<link rel="icon" type="image/png" sizes="96x96" href="${CARLNOTES_ICON_URL}" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link rel="stylesheet" href="${FONT_STYLESHEET_URL}" />
 ${NIGHTSHIFT_TAB_TITLE_SCRIPT}`,
@@ -89,7 +92,4 @@ function withoutVoiceActivityFiles(plugin: PluginOption): PluginOption {
 	return isVoiceActivityPlugin ? { ...plugin, generateBundle: undefined } : plugin
 }
 
-// the CarlNotes icon as the tab's icon. Storybook reads favicon from the main config, though the config type does not
-// name it
-const nightshiftConfig: StorybookConfig & { favicon: string } = { ...storybookConfig, favicon: CARLNOTES_ICON_PATH }
-export default nightshiftConfig
+export default storybookConfig
