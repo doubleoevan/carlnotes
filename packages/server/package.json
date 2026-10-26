@@ -8,7 +8,7 @@
 	},
 	"dependencies": {
 		"@carlnotes/contracts": "workspace:*",
-		"@sentry/bun": "^11.8.0",
-		"posthog-node": "^5.56.2"
+		"@sentry/bun": "^11.9.0",
+		"posthog-node": "^5.57.1"
 	}
 }
