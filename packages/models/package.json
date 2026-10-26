@@ -11,7 +11,7 @@
 		"@carlnotes/contracts": "workspace:*",
 		"@carlnotes/db": "workspace:*",
 		"@carlnotes/server": "workspace:*",
-		"@langfuse/client": "^5.13.1",
+		"@langfuse/client": "^6.0.2",
 		"@langfuse/otel": "^5.13.1",
 		"@langfuse/tracing": "^5.13.1",
 		"@langfuse/vercel-ai-sdk": "^5.13.1",

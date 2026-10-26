@@ -292,7 +292,7 @@
         "@carlnotes/contracts": "workspace:*",
         "@carlnotes/db": "workspace:*",
         "@carlnotes/server": "workspace:*",
-        "@langfuse/client": "^5.13.1",
+        "@langfuse/client": "^6.0.2",
         "@langfuse/otel": "^5.13.1",
         "@langfuse/tracing": "^5.13.1",
         "@langfuse/vercel-ai-sdk": "^5.13.1",
@@ -1137,9 +1137,9 @@
 
     "@kwsites/promise-deferred": ["@kwsites/promise-deferred@1.1.1", "", {}, "sha512-GaHYm+c0O9MjZRu0ongGBRbinu8gVAMd2UZjji6jVmqKtZluZnptXGWhz1E8j8D2HJ3f/yMxKAUC0b+57wncIw=="],
 
-    "@langfuse/client": ["@langfuse/client@5.13.1", "", { "dependencies": { "@langfuse/core": "^5.13.1", "@langfuse/tracing": "^5.13.1", "mustache": "^4.2.0" }, "peerDependencies": { "@opentelemetry/api": "^1.9.0" } }, "sha512-m9FdxZ4kwoH4k9xFQPG0q9Clpi6VU7bJs9fvJ+0Vv7JHDnsKMw725llPtLuMrHy7BFgGmxgR0lwC+k8BbMDTdw=="],
+    "@langfuse/client": ["@langfuse/client@6.0.2", "", { "dependencies": { "@langfuse/core": "^6.0.2", "@langfuse/tracing": "^6.0.2", "mustache": "^4.2.0" }, "peerDependencies": { "@opentelemetry/api": "^1.9.0" } }, "sha512-lOkMfuHX2AW2MUbbSW/Rr13xLBnjx0xQvia4ect5hE4QnwfPhg0mOYzS2vXbVB4bVpnxezAkBeI9XzaJaqW3WA=="],
 
-    "@langfuse/core": ["@langfuse/core@5.13.1", "", { "peerDependencies": { "@opentelemetry/api": "^1.9.0" } }, "sha512-/p8wfWQVeD58O7EzlQ0FkXYBlE3Q64a3gaQPRRGrAUUzshKZFAh+682Yb4eIpCtsxyMj4ZGlvkQ+Ph8LVKMFDA=="],
+    "@langfuse/core": ["@langfuse/core@6.0.2", "", { "peerDependencies": { "@opentelemetry/api": "^1.9.0" } }, "sha512-S4Aa7IJ27c9pGe8209T2DW3aK5QBM+yjeST1uyIOPg49BNnO778PsBYGPMZHlghhJGLbzwSWvq7v/BvfZdn5xg=="],
 
     "@langfuse/otel": ["@langfuse/otel@5.13.1", "", { "dependencies": { "@langfuse/core": "^5.13.1" }, "peerDependencies": { "@opentelemetry/api": "^1.9.0", "@opentelemetry/core": "^2.0.1", "@opentelemetry/exporter-trace-otlp-http": ">=0.202.0 <1.0.0", "@opentelemetry/otlp-exporter-base": ">=0.202.0 <1.0.0", "@opentelemetry/sdk-trace-base": "^2.0.1" } }, "sha512-uz7CeY/L6wI+Mp13zW4EQJrZzvFf4zuHIRF0/Ndhf2V0KLo7/8bzgtyFzqKApj9o0w9e8CDnVs/P4r/VHO8YDg=="],
 
@@ -5164,6 +5164,14 @@
     "@jsonjoy.com/json-pack/@jsonjoy.com/buffers": ["@jsonjoy.com/buffers@1.2.1", "", { "peerDependencies": { "tslib": "2" } }, "sha512-12cdlDwX4RUM3QxmUbVJWqZ/mrK6dFQH4Zxq6+r1YXKXYBNgZXndx2qbCJwh3+WWkCSn67IjnlG3XYTvmvYtgA=="],
 
     "@jsonjoy.com/util/@jsonjoy.com/buffers": ["@jsonjoy.com/buffers@1.2.1", "", { "peerDependencies": { "tslib": "2" } }, "sha512-12cdlDwX4RUM3QxmUbVJWqZ/mrK6dFQH4Zxq6+r1YXKXYBNgZXndx2qbCJwh3+WWkCSn67IjnlG3XYTvmvYtgA=="],
+
+    "@langfuse/client/@langfuse/tracing": ["@langfuse/tracing@6.0.2", "", { "dependencies": { "@langfuse/core": "^6.0.2" }, "peerDependencies": { "@opentelemetry/api": "^1.9.0" } }, "sha512-8/e8YTcKPfWwsacPaTHk4d45jLV+ER++a3kSpBL4DreQzTVG+nkRwj6a7UpZURE47f/sgNwX+UwI3vlFOQ6ZBQ=="],
+
+    "@langfuse/otel/@langfuse/core": ["@langfuse/core@5.13.1", "", { "peerDependencies": { "@opentelemetry/api": "^1.9.0" } }, "sha512-/p8wfWQVeD58O7EzlQ0FkXYBlE3Q64a3gaQPRRGrAUUzshKZFAh+682Yb4eIpCtsxyMj4ZGlvkQ+Ph8LVKMFDA=="],
+
+    "@langfuse/tracing/@langfuse/core": ["@langfuse/core@5.13.1", "", { "peerDependencies": { "@opentelemetry/api": "^1.9.0" } }, "sha512-/p8wfWQVeD58O7EzlQ0FkXYBlE3Q64a3gaQPRRGrAUUzshKZFAh+682Yb4eIpCtsxyMj4ZGlvkQ+Ph8LVKMFDA=="],
+
+    "@langfuse/vercel-ai-sdk/@langfuse/core": ["@langfuse/core@5.13.1", "", { "peerDependencies": { "@opentelemetry/api": "^1.9.0" } }, "sha512-/p8wfWQVeD58O7EzlQ0FkXYBlE3Q64a3gaQPRRGrAUUzshKZFAh+682Yb4eIpCtsxyMj4ZGlvkQ+Ph8LVKMFDA=="],
 
     "@modelcontextprotocol/sdk/@hono/node-server": ["@hono/node-server@2.1.4", "", { "peerDependencies": { "hono": "^4 || ^5.0.0-0" } }, "sha512-2g1qeHl4BduwDn6L8nkAvDrPUWPMlkQ//a5NhP/zIyaXKMjZNRV+cG9Csu+BiJFf6+68pqzjf4Hi5sJGKHuS1g=="],
 
