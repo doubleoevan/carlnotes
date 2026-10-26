@@ -12,7 +12,7 @@
 		"@carlnotes/db": "workspace:*",
 		"@carlnotes/server": "workspace:*",
 		"@langfuse/client": "^5.13.1",
-		"@langfuse/otel": "^5.13.1",
+		"@langfuse/otel": "^6.0.2",
 		"@langfuse/tracing": "^5.13.1",
 		"@langfuse/vercel-ai-sdk": "^5.13.1",
 		"@opentelemetry/sdk-trace-node": "^2.12.0",
