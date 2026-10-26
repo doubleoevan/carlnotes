@@ -15,7 +15,7 @@ import {
 import { matchesTopicFindingFilter } from "@carlnotes/core/lib/topicFindingFilters"
 import { toSortedTopicFindings } from "@carlnotes/core/lib/topicFindingSorts"
 import { toPossibleSourceUrls } from "@carlnotes/core/lib/topicPromptUrls"
-import { toScanRecapPlaceholder } from "@/components/topic/TopicScanRecap"
+import { toScanRecapPlaceholder } from "@carlnotes/core/lib/topicScanRecap"
 import {
 	isSendKey,
 	NEXT_SCAN_DISCLAIMER,

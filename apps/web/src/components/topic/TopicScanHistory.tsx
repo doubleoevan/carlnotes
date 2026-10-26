@@ -2,7 +2,7 @@ import { type RemoveTopicSourceStatus, removeTopicSource } from "@carlnotes/clie
 import type { TopicFinding } from "@carlnotes/contracts/findings"
 import { KEEP_ONE_SOURCE_MESSAGE } from "@carlnotes/contracts/sources"
 import type { ScanNote, TopicScan } from "@carlnotes/contracts/topics"
-import { toMonthDayLabel } from "@carlnotes/core/lib/labels"
+import { toScanTimestamp } from "@carlnotes/core/lib/labels"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { useState } from "react"
 import { toast } from "sonner"
@@ -346,11 +346,4 @@ function RemoveTopicSourceDialog({
 			brews. Past brews keep what it found.
 		</ConfirmDialog>
 	)
-}
-
-// the timestamp for a scan row. a running scan only has its start time
-function toScanTimestamp(scan: TopicScan): string {
-	const scannedAt = scan.finishedAt ?? scan.startedAt
-	const time = new Date(scannedAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }).toLowerCase()
-	return `${toMonthDayLabel(scannedAt)} · ${time}`
 }

@@ -1,6 +1,7 @@
 import { NO_SCRIPT_ROW_LIMIT } from "@carlnotes/contracts/seo"
-import { toPaginationSlots } from "@carlnotes/core/lib/paginationSlots"
+import { Pagination as SharedPagination } from "@carlnotes/core/components/Pagination"
 import { cn } from "@carlnotes/nightshift/classNames"
+import { paginationClasses } from "@carlnotes/nightshift/pagination"
 import { ChevronLeft, ChevronRight } from "lucide-react"
 import { type MouseEvent, type ReactNode, useLayoutEffect, useRef } from "react"
 import { MENU_BUTTON_CLASS } from "@/lib/styleClasses"
@@ -123,42 +124,28 @@ export function Pagination({
 			className={cn("justify-center pt-2", isShownWithoutScript ? "flex" : "hidden scripted:flex", className)}
 		>
 			<ul className="flex flex-wrap items-center justify-center gap-1">
-				{/* the previous arrow */}
-				<li>
-					{renderPageControl({
-						linkedPageNumber: pageNumber - 1,
-						label: <ChevronLeft aria-label="Previous page" />,
-						isDisabled: pageNumber === 1,
-					})}
-				</li>
-				{/* the page numbers, with a gap where pages are left out */}
-				{toPaginationSlots({ pageNumber, pageCount }).map((paginationSlot) =>
-					typeof paginationSlot === "string" ? (
-						<li
-							key={paginationSlot}
-							aria-hidden
-							className={cn(PAGINATION_SLOT_CLASS, "text-muted-foreground text-center")}
-						>
-							…
-						</li>
-					) : (
-						<li key={paginationSlot}>
-							{renderPageControl({
-								linkedPageNumber: paginationSlot,
-								label: paginationSlot,
-								isCurrentPage: paginationSlot === pageNumber,
-							})}
-						</li>
-					),
-				)}
-				{/* the next arrow */}
-				<li>
-					{renderPageControl({
-						linkedPageNumber: pageNumber + 1,
-						label: <ChevronRight aria-label="Next page" />,
-						isDisabled: pageNumber === pageCount,
-					})}
-				</li>
+				<SharedPagination
+					pageNumber={pageNumber}
+					pageCount={pageCount}
+					label={ariaLabel}
+					components={{
+						renderControl: ({ pageNumber: linkedPageNumber, kind, isCurrentPage, isDisabled }) => (
+							<li>
+								{renderPageControl({
+									linkedPageNumber,
+									isCurrentPage,
+									isDisabled,
+									label: toPageControlLabel(kind, linkedPageNumber),
+								})}
+							</li>
+						),
+						renderGap: () => (
+							<li aria-hidden className={cn(PAGINATION_SLOT_CLASS, "text-muted-foreground text-center")}>
+								…
+							</li>
+						),
+					}}
+				/>
 			</ul>
 		</nav>
 	)
@@ -167,12 +154,22 @@ export function Pagination({
 // every slot in the row is one width, gaps included, so a row of a given length never shifts sideways
 const PAGINATION_SLOT_CLASS = "w-10 shrink-0"
 
+// page numbers stay text and the two arrow controls retain their accessible names
+function toPageControlLabel(kind: "previous" | "page" | "next", pageNumber: number): ReactNode {
+	if (kind === "page") {
+		return pageNumber
+	}
+	return kind === "previous" ? <ChevronLeft aria-label="Previous page" /> : <ChevronRight aria-label="Next page" />
+}
+
 // a page control looks like a menu button, and the current page's control has the highlight color
 function toPageControlClass({ isCurrentPage }: { isCurrentPage: boolean }): string {
 	return cn(
 		MENU_BUTTON_CLASS,
+		paginationClasses.idle.box,
+		paginationClasses.idle.text,
 		PAGINATION_SLOT_CLASS,
 		"justify-center px-0",
-		isCurrentPage && "bg-primary text-primary-foreground border-primary hover:text-primary-foreground",
+		isCurrentPage && [paginationClasses.current.box, paginationClasses.current.text, "hover:text-primary-foreground"],
 	)
 }

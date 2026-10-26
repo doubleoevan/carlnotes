@@ -48,7 +48,10 @@ export function TopicSubscribersTable({ topicId }: { topicId: string }) {
 // a topic's loaded subscribers as a sortable, paged table with email totals
 function LoadedTopicSubscribersTable({ topicSubscribers }: { topicSubscribers: AdminTopicSubscriberRow[] }) {
 	// sort feeds pagination, so a sorted column reorders across every page. rows start in the api's newest-first order
-	const { pageRows, sort, pagination } = usePaginatedRowSort(topicSubscribers, topicSubscriberSortValues)
+	const { pageRows, sort, pagination } = usePaginatedRowSort({
+		rows: topicSubscribers,
+		valueByKey: topicSubscriberSortValues,
+	})
 	// the footer's email totals span every subscriber, not just the visible page
 	const emailOnCount = topicSubscribers.filter((topicSubscriber) => topicSubscriber.isEmailEnabled).length
 	const totalEmailCount = topicSubscribers.reduce((sum, topicSubscriber) => sum + topicSubscriber.emailCount, 0)

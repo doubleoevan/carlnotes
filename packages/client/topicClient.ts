@@ -1,5 +1,4 @@
 // the typed Hono RPC api client for every topic route
-import type { ChatLinkPreview } from "@carlnotes/contracts/chat"
 import {
 	type Invite,
 	type InviteAcceptResponse,
@@ -23,36 +22,9 @@ import {
 	topicGateResponse,
 	topicResponse,
 } from "@carlnotes/contracts/topics"
-import { type ApiResponse, apiClient, fetchApi, readApiErrorMessage, showClientError } from "./apiClient"
+import { type ApiResponse, apiClient, fetchApi, readApiErrorMessage } from "./apiClient"
 
-// tells the user a write was rejected
-async function showFailedWrite(request: Promise<ApiResponse>, action: string, isBackground = false): Promise<void> {
-	// a rejected request never reaches a Response at all, so an offline user is told the same as a rejected write
-	let response: ApiResponse
-	try {
-		response = await request
-	} catch (error) {
-		console.error(`${action} failed to reach the server`, error)
-		showRejectedWrite(isBackground)
-		return
-	}
-
-	// the server answered, so only a rejected status is a failure from here
-	if (response.ok) {
-		return
-	}
-
-	// the log includes the detail. the message shown to the user only says the write failed
-	console.error(`${action} failed: ${response.status} ${await response.text()}`)
-	showRejectedWrite(isBackground)
-}
-
-// the one message a failed write shows, skipped for a write the user never asked for by itself
-function showRejectedWrite(isBackground: boolean): void {
-	if (!isBackground) {
-		showClientError("That didn't save. Carl suggests trying again.")
-	}
-}
+import { showFailedWrite } from "./clientWrite"
 
 // create an invite link for a topic. "limited" is the daily invite limit
 export async function sendCreateTopicInvite(topicId: string, source: InviteSource): Promise<Invite | "limited"> {
@@ -76,15 +48,6 @@ export async function sendAcceptInvite(token: string): Promise<InviteAcceptRespo
 	return inviteAcceptResponse.parse(await response.json())
 }
 
-// a user's exact words about a finding. recording only, so a failure is logged and dropped
-export async function sendFindingFeedback(findingId: string, feedback: string): Promise<void> {
-	const request = apiClient().api["topic-findings"][":id"].feedback.$post({
-		param: { id: findingId },
-		json: { feedback },
-	})
-	await showFailedWrite(request, "finding feedback", true)
-}
-
 // fetch the topic feed. includeConsumed adds already consumed topic findings
 export async function fetchTopicFeed(includeConsumed: boolean): Promise<TopicFeedResponse> {
 	const response = await apiClient().api["topic-feed"].$get({ query: includeConsumed ? { all: "true" } : {} })
@@ -102,48 +65,6 @@ export async function fetchAddableTopics(excludeTeamId?: string): Promise<{ id: 
 	return ((await response.json()) as { topics: { id: string; name: string }[] }).topics
 }
 
-// the link preview card for a topic finding's page, null if the page offers none or the visitor is signed out
-export async function fetchTopicFindingLinkPreview(findingId: string): Promise<ChatLinkPreview | null> {
-	const response = await apiClient().api["topic-findings"][":id"]["link-preview"].$get({ param: { id: findingId } })
-	if (!response.ok) {
-		return null
-	}
-	return ((await response.json()) as { linkPreview: ChatLinkPreview | null }).linkPreview
-}
-
-// set or clear a topic finding's thumbs up or thumbs down rating
-export async function sendTopicFindingRating(findingId: string, rating: "up" | "down" | null): Promise<void> {
-	await showFailedWrite(
-		apiClient().api["topic-findings"][":id"].rating.$post({ param: { id: findingId }, json: { rating } }),
-		"rate topic finding",
-	)
-}
-
-// mark or unmark a topic finding consumed for the current user
-export async function sendTopicFindingConsumed(findingId: string, isConsumed: boolean): Promise<void> {
-	await showFailedWrite(
-		apiClient().api["topic-findings"][":id"].consume.$post({ param: { id: findingId }, json: { isConsumed } }),
-		"mark topic finding consumed",
-	)
-}
-
-// bookmark or unbookmark a topic finding for the current user, keeping it past the max-results filter
-export async function sendTopicFindingBookmark(findingId: string, isBookmarked: boolean): Promise<void> {
-	await showFailedWrite(
-		apiClient().api["topic-findings"][":id"].bookmark.$post({ param: { id: findingId }, json: { isBookmarked } }),
-		"bookmark topic finding",
-	)
-}
-
-// record that the user opened a topic finding resource. marks it consumed and increments its view count.
-export async function sendTopicFindingOpened(findingId: string): Promise<void> {
-	await showFailedWrite(
-		apiClient().api["topic-findings"][":id"].view.$post({ param: { id: findingId } }),
-		"record topic finding view",
-		true,
-	)
-}
-
 // the gate in front of an invite topic, with the topic's name, or null for a name that is not text
 export type TopicGate = { topicName: string | null }
 
@@ -156,7 +77,9 @@ export type TopicPageResult =
 // whether a fetch is the poll that repeats while a scan runs
 export type FetchTopicPageOptions = { isPoll?: boolean }
 
-// fetch one topic's page, or how the topic is gated if this user may not see the topic
+/**
+ * Reads a topic page or its access result, rejecting failed reads.
+ */
 export async function fetchTopicPage(
 	topicId: string,
 	{ isPoll = false }: FetchTopicPageOptions = {},
@@ -168,7 +91,12 @@ export async function fetchTopicPage(
 	if (response.ok) {
 		return { status: "visible", topic: topicResponse.parse(await response.json()) }
 	}
-	// a gated topic shows its gate, and any other response is a missing topic
+	// reject failed reads before replacing a saved topic with an access result
+	if (response.status !== 403 && response.status !== 404) {
+		throw new Error(`topic page load failed: ${response.status}`)
+	}
+
+	// distinguish an invitation gate from a missing or private topic
 	const topicGate = await readTopicGate(response)
 	return topicGate ? { status: "gated", topicGate } : { status: "missing" }
 }
@@ -281,18 +209,18 @@ export async function sendDeleteTopic(topicId: string): Promise<void> {
 
 // activate, reactivate or deactivate the current user's subscription on a topic. deactivating keeps the row
 export async function sendTopicSubscription(topicId: string, isSubscribed: boolean): Promise<void> {
-	await showFailedWrite(
-		apiClient().api.topics[":id"].subscription.$post({ param: { id: topicId }, json: { isSubscribed } }),
-		"update topic subscription",
-	)
+	await showFailedWrite({
+		request: apiClient().api.topics[":id"].subscription.$post({ param: { id: topicId }, json: { isSubscribed } }),
+		action: "update topic subscription",
+	})
 }
 
 // permanently remove the current user's subscription row on a topic, distinct from deactivating it
 export async function sendDeleteSubscription(topicId: string): Promise<void> {
-	await showFailedWrite(
-		apiClient().api.topics[":id"].subscription.$delete({ param: { id: topicId } }),
-		"delete topic subscription",
-	)
+	await showFailedWrite({
+		request: apiClient().api.topics[":id"].subscription.$delete({ param: { id: topicId } }),
+		action: "delete topic subscription",
+	})
 }
 
 // turn the current user's email preference for a topic subscription on or off
@@ -302,13 +230,13 @@ export async function sendSubscriptionEmail(
 	// whose subscription to write, for an admin acting on somebody else's
 	subscriberUserId?: string,
 ): Promise<void> {
-	await showFailedWrite(
-		apiClient().api.topics[":id"]["subscription-email"].$post({
+	await showFailedWrite({
+		request: apiClient().api.topics[":id"]["subscription-email"].$post({
 			param: { id: topicId },
 			json: { isEmailEnabled, subscriberUserId },
 		}),
-		"update subscription email preference",
-	)
+		action: "update subscription email preference",
+	})
 }
 
 // trigger a manual scan, returning the manual scans left today, "budget" if a spent budget rejects the scan, or

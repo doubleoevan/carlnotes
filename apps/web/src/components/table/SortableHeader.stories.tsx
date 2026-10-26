@@ -77,7 +77,7 @@ const topicRowSortValues = {
 
 // a small topics table whose headers drive the real row sort, in the card of a table that fits one page
 function SortedTopicsTable() {
-	const { sortedRows, ...sort } = useRowSort(TOPIC_ROWS, topicRowSortValues)
+	const { sortedRows, ...sort } = useRowSort({ rows: TOPIC_ROWS, valueByKey: topicRowSortValues })
 	return (
 		<StoryTable
 			cardClassName={ONE_PAGE_TABLE_CARD_CLASS}

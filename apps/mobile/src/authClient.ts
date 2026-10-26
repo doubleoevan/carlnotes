@@ -7,6 +7,7 @@ import { GATE_COOKIE_NAME } from "@carlnotes/contracts/signupGate"
 import Constants from "expo-constants"
 import * as SecureStore from "expo-secure-store"
 import { toApiBaseUrl } from "./apiBaseUrl"
+import { retireSession } from "./sessionExit"
 
 // the cookies secure storage keeps: Better Auth's own, and the gate cookie the app gate sets for the sign-up request
 const COOKIE_PREFIXES = ["better-auth", GATE_COOKIE_NAME]
@@ -33,4 +34,16 @@ export const mobileAuthClient = configureAuthClient({
 export function hasSession(): boolean {
 	const sessionState = mobileAuthClient.$store.atoms.session?.get() as { data: unknown } | undefined
 	return Boolean(sessionState?.data)
+}
+
+/**
+ * Retires the current session before a revoked account's sign-out request.
+ */
+export async function retireCurrentSession(): Promise<void> {
+	const sessionState = mobileAuthClient.$store.atoms.session?.get() as
+		| { data: { session: { id: string } } | null }
+		| undefined
+	if (sessionState?.data) {
+		await retireSession(sessionState.data.session.id)
+	}
 }

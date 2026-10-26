@@ -63,16 +63,21 @@ test("toImportViolations flags an app import and passes a type-only api import f
 // the mobile app imports @carlnotes packages only among the universal four. the api's types are no exception
 test("toImportViolations flags a non-universal import from the mobile app and passes a universal one", () => {
 	// a server package fails the mobile rule. the api's types fail the app rule
-	expect(toFileViolations("apps/mobile/app/index.tsx", 'import { topics } from "@carlnotes/db/schema"\n')).toEqual([
-		"apps/mobile: apps/mobile/app/index.tsx:1 imports @carlnotes/db/schema. the mobile app imports only the universal packages",
+	expect(
+		toFileViolations("apps/mobile/app/(tabs)/index.tsx", 'import { topics } from "@carlnotes/db/schema"\n'),
+	).toEqual([
+		"apps/mobile: apps/mobile/app/(tabs)/index.tsx:1 imports @carlnotes/db/schema. the mobile app imports only the universal packages",
 	])
-	expect(toFileViolations("apps/mobile/app/index.tsx", 'import type { AppType } from "@carlnotes/api"\n')).toEqual([
-		"apps/mobile: apps/mobile/app/index.tsx:1 imports @carlnotes/api. an app is never imported",
-	])
+	expect(
+		toFileViolations("apps/mobile/app/(tabs)/index.tsx", 'import type { AppType } from "@carlnotes/api"\n'),
+	).toEqual(["apps/mobile: apps/mobile/app/(tabs)/index.tsx:1 imports @carlnotes/api. an app is never imported"])
 
 	// a declared universal import passes
 	expect(
-		toFileViolations("apps/mobile/app/index.tsx", 'import { searchSite } from "@carlnotes/client/searchClient"\n'),
+		toFileViolations(
+			"apps/mobile/app/(tabs)/index.tsx",
+			'import { searchSite } from "@carlnotes/client/searchClient"\n',
+		),
 	).toEqual([])
 })
 
@@ -105,6 +110,12 @@ test("toImportViolations flags a Nightshift module in a web app page and passes 
 		),
 	).toEqual([])
 	expect(toWebViolations("apps/web/src/routes/__root.tsx", 'import "@carlnotes/nightshift/tokens.css"\n')).toEqual([])
+	expect(
+		toWebViolations(
+			"apps/web/src/components/common/Pagination.tsx",
+			'import { paginationClasses } from "@carlnotes/nightshift/pagination"\n',
+		),
+	).toEqual([])
 	expect(
 		toWebViolations("apps/web/src/pages/HomePage.tsx", 'import { cn } from "@carlnotes/nightshift/classNames"\n'),
 	).toEqual([])
@@ -152,11 +163,16 @@ test("toImportViolations flags a story or Storybook in app code and passes them 
 // the mobile app keeps its stories, Storybook, and Storybook's config inside its component browser
 test("toImportViolations flags Storybook in a mobile screen and passes it in a story, the config, and the route", () => {
 	// a screen that imports Storybook or the config's stories index, and a module that imports a story, fail
-	expect(toFileViolations("apps/mobile/app/settings.tsx", 'import { view } from "@storybook/react-native"\n')).toEqual([
-		"apps/mobile: apps/mobile/app/settings.tsx:1 imports @storybook/react-native. the mobile app imports a story or Storybook only from a story or the component browser",
+	expect(
+		toFileViolations("apps/mobile/app/(tabs)/settings.tsx", 'import { view } from "@storybook/react-native"\n'),
+	).toEqual([
+		"apps/mobile: apps/mobile/app/(tabs)/settings.tsx:1 imports @storybook/react-native. the mobile app imports a story or Storybook only from a story or the component browser",
 	])
 	expect(
-		toFileViolations("apps/mobile/app/index.tsx", 'import { view } from "../.rnstorybook/storybook.requires"\n'),
+		toFileViolations(
+			"apps/mobile/app/(tabs)/index.tsx",
+			'import { view } from "../../.rnstorybook/storybook.requires"\n',
+		),
 	).toHaveLength(1)
 	expect(
 		toFileViolations(

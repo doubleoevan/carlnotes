@@ -12,8 +12,8 @@ import { Popover, PopoverAnchor } from "@/components/primitives/popover"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import { DASHED_ROW_CLASS, LIST_ROW_HIGHLIGHTED_CLASS, LIST_ROW_HOVER_CLASS } from "@/lib/styleClasses"
 import { type TopicFeedHandlers, useIsSignedIn, useTopicFeedActions } from "@/providers/TopicFeedProvider"
-import { ResourceInfo, type ResourceInfoTopic } from "./ResourceInfo"
 import { TopicFindingSummary } from "./TopicFindingSummary"
+import { TopicResourceInfo, type TopicResourceInfoTopic } from "./TopicResourceInfo"
 
 // the row's topic finding and its rank among the topic's auto-kept findings, null if a bookmark pins it
 type TopicResourceProps = {
@@ -23,7 +23,7 @@ type TopicResourceProps = {
 	isBookmarkable: boolean
 	topicFeedHandlers?: TopicFeedHandlers
 	// the topic that the note popover's copied Markdown names, with its visibility
-	topic: ResourceInfoTopic
+	topic: TopicResourceInfoTopic
 	// the topic's latest podcast episode, whose chapters put a pill on the findings that the chapters narrate
 	latestPodcastEpisode?: PodcastEpisode | null
 	className?: string
@@ -130,7 +130,7 @@ export function TopicResource({
 				</Tooltip>
 
 				{/* the note itself, holding the rank, the link out, and Carl's words */}
-				<ResourceInfo
+				<TopicResourceInfo
 					resource={resource}
 					topicFindingRank={rank}
 					podcastEpisode={latestPodcastEpisode}

@@ -1,33 +1,32 @@
+import {
+	type RatingThumbProps,
+	type RatingThumbsProps,
+	RatingThumbs as SharedRatingThumbs,
+} from "@carlnotes/core/components/RatingThumbs"
 import { ThumbsDown, ThumbsUp } from "lucide-react"
 import { Button } from "@/components/primitives/button"
-
-// a rating, the callback that sets or clears the rating, and the text after each thumb's aria label
-type RatingThumbsProps = {
-	rating: "up" | "down" | null
-	onRate: (rating: "up" | "down" | null) => void
-	ariaLabelSuffix?: string
-}
 
 /**
  * A thumbs up and a thumbs down that set a rating. Pressing the thumb that is already on clears the rating.
  */
-export function RatingThumbs({ rating, onRate, ariaLabelSuffix = "" }: RatingThumbsProps) {
+export function RatingThumbs(props: RatingThumbsProps) {
+	return <SharedRatingThumbs {...props} Thumb={RatingThumb} />
+}
+
+// keep the browser's button semantics and responsive touch target in its adapter
+function RatingThumb({ thumb, isSelected, isDisabled, label, onPress }: RatingThumbProps) {
 	return (
-		<>
-			{(["up", "down"] as const).map((thumb) => (
-				<Button
-					key={thumb}
-					type="button"
-					variant={rating === thumb ? "default" : "outline"}
-					size="icon"
-					aria-label={`Thumbs ${thumb}${ariaLabelSuffix}`}
-					aria-pressed={rating === thumb}
-					onClick={() => onRate(rating === thumb ? null : thumb)}
-					className="size-11 shrink-0 sm:size-9"
-				>
-					{thumb === "up" ? <ThumbsUp className="size-4" /> : <ThumbsDown className="size-4" />}
-				</Button>
-			))}
-		</>
+		<Button
+			type="button"
+			variant={isSelected ? "default" : "outline"}
+			size="icon"
+			aria-label={label}
+			aria-pressed={isSelected}
+			disabled={isDisabled}
+			onClick={onPress}
+			className="size-11 shrink-0 sm:size-9"
+		>
+			{thumb === "up" ? <ThumbsUp className="size-4" /> : <ThumbsDown className="size-4" />}
+		</Button>
 	)
 }

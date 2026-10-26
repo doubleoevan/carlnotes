@@ -1,8 +1,10 @@
 // the frame every session screen renders inside
-import { Link } from "expo-router"
+
+import { SITE_URL } from "@carlnotes/core/lib/pageHead"
 import type { ReactNode } from "react"
 import { Pressable, ScrollView, Text, View } from "react-native"
 import { CoffeeMug } from "@/components/branding/CoffeeMug"
+import { AnchorLink } from "@/components/common/AnchorLink"
 import { ClassNameSafeAreaView } from "@/components/common/ClassNameSafeAreaView"
 import { MAX_FONT_SCALE } from "@/hooks/useFontScaledSize"
 import { toTypeRoleStyle } from "@/typeRoleStyles"
@@ -22,9 +24,9 @@ export function SessionScreen({ children }: { children: ReactNode }) {
 				<ScrollView contentContainerClassName={SESSION_COLUMN_CLASS} keyboardShouldPersistTaps="handled">
 					{/* the logo, the mug beside the name, centered as on the web, and a link home as the web's header logo is.
 						the row reaches the 44-point touch target the mug alone falls short of */}
-					<Link href="/" asChild>
+					<AnchorLink href="/" accessibilityLabel="CarlNotes home" asChild>
 						<Pressable
-							className="mb-4 min-h-11 flex-row items-center justify-center gap-2 self-center"
+							className="mb-4 min-h-12 flex-row items-center justify-center gap-2 self-center"
 							accessibilityRole="link"
 							accessibilityLabel="CarlNotes home"
 						>
@@ -42,8 +44,18 @@ export function SessionScreen({ children }: { children: ReactNode }) {
 								CarlNotes
 							</Text>
 						</Pressable>
-					</Link>
+					</AnchorLink>
 					{children}
+					{/* privacy policy */}
+					<AnchorLink
+						href={`${SITE_URL}/privacy`}
+						accessibilityLabel="Privacy policy"
+						className="min-h-12 items-center justify-center"
+					>
+						<Text style={toTypeRoleStyle("caption")} className="text-link">
+							Privacy policy
+						</Text>
+					</AnchorLink>
 				</ScrollView>
 			</ClassNameSafeAreaView>
 		</View>

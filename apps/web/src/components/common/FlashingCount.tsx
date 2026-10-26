@@ -17,7 +17,7 @@ export function FlashingCount({ label, count }: { label: string; count: number }
 	}, [count])
 	return (
 		<span>
-			{label}:{" "}
+			<span className="font-display">{label}:</span>{" "}
 			<span
 				key={flashKey}
 				className={cn(

@@ -12,8 +12,8 @@ import {
 } from "@carlnotes/nightshift/components/button"
 import { toPixels } from "@carlnotes/nightshift/units"
 import { Slot } from "@rn-primitives/slot"
-import { useState } from "react"
-import { type GestureResponderEvent, Pressable, type PressableProps } from "react-native"
+import { type ComponentRef, type Ref, useState } from "react"
+import { type GestureResponderEvent, Platform, Pressable, type PressableProps } from "react-native"
 import { TextClassContext } from "./text"
 
 // the mobile class on every button, a row in place of the web's inline layout
@@ -55,7 +55,7 @@ const MOBILE_BUTTON_SIZE_CLASSES = {
 } satisfies Record<ButtonSize, string>
 
 // the touch target every size reaches through its hit slop, in points
-const TOUCH_TARGET_SIZE = 44
+const TOUCH_TARGET_SIZE = Platform.OS === "android" ? 48 : 44
 
 /**
  * Returns a Button size's drawn height in points, the web's height for that size.
@@ -65,7 +65,7 @@ export function toButtonHeight(sizeName: ButtonSize): number {
 }
 
 /**
- * Returns the hit slop on every side that grows a drawn height to the 44-point touch target.
+ * Returns the hit slop on every side that grows a drawn height to the platform touch target.
  */
 export function toTouchTargetHitSlop(drawnHeight: number): number {
 	return Math.max(0, (TOUCH_TARGET_SIZE - drawnHeight) / 2)
@@ -76,7 +76,7 @@ export function toTouchTargetHitSlop(drawnHeight: number): number {
  * the label the screen reader reads.
  */
 export type ButtonProps = Omit<PressableProps, "accessibilityRole" | "role" | "hitSlop"> &
-	ButtonSharedProps & { accessibilityLabel: string }
+	ButtonSharedProps & { accessibilityLabel: string; ref?: Ref<ComponentRef<typeof Pressable>> }
 
 /**
  * A button in one of the contract's variants and sizes, with the button role and a required label. Pass asChild to

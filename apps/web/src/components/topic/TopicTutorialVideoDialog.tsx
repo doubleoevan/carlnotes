@@ -1,5 +1,10 @@
 // the menu option and the hero's button that open the video on making a topic, and the dialog that plays it
 import { TOPIC_TUTORIAL_VIDEO, toYoutubeWatchUrl } from "@carlnotes/contracts/youtube"
+import {
+	TOPIC_TUTORIAL_WATCH_LABEL,
+	type TopicTutorialVideoOpener,
+	toTopicTutorialPlayProperties,
+} from "@carlnotes/core/lib/topicTutorialVideo"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { YoutubePlayIcon } from "@/components/common/BrandIcon"
@@ -11,7 +16,7 @@ import { toLinkClickHandler } from "@/lib/utils"
 import { captureVisitEvent } from "@/lib/visitAnalytics"
 
 // where the video's dialog was opened from
-export type TopicTutorialVideoOpener = "hero" | "header" | "account-menu" | "mobile-menu"
+export type { TopicTutorialVideoOpener } from "@carlnotes/core/lib/topicTutorialVideo"
 
 /**
  * The menu option, named for the video and marked with YouTube's play button, that opens the video's dialog.
@@ -32,7 +37,7 @@ export function TopicTutorialVideoButton({ className, onSelect }: { className?: 
 	// a primary click with no modifier key opens the dialog. any other click, or a page without JavaScript, opens YouTube
 	const handleClick = toLinkClickHandler(onSelect)
 	// what the button does, as its accessible name
-	const watchLabel = `Watch ${TOPIC_TUTORIAL_VIDEO.name}`
+	const watchLabel = TOPIC_TUTORIAL_WATCH_LABEL
 	return (
 		<Tooltip>
 			<TooltipTrigger asChild>
@@ -66,7 +71,7 @@ export function TopicTutorialVideoDialog({
 }) {
 	// a play reports which video and where its dialog was opened from
 	const handlePlay = (): void => {
-		captureVisitEvent("visit_video_played", { youtubeVideoId: TOPIC_TUTORIAL_VIDEO.youtubeVideoId, opener })
+		captureVisitEvent("visit_video_played", toTopicTutorialPlayProperties(opener))
 	}
 
 	return (

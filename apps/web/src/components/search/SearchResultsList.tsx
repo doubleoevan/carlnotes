@@ -6,7 +6,7 @@ import {
 import type { FindingSearchRow, SearchResultsPage, SearchRow, TopicSearchRow } from "@carlnotes/contracts/search"
 import { toTopicPath } from "@carlnotes/contracts/seo"
 import { toDotSeparatedText } from "@carlnotes/contracts/text"
-import { toAgeLabel, toCountLabel } from "@carlnotes/core/lib/labels"
+import { toAgoLabel, toCountLabel } from "@carlnotes/core/lib/labels"
 import { cn } from "@carlnotes/nightshift/classNames"
 import type { LucideIcon } from "lucide-react"
 import type { ComponentProps, ReactNode } from "react"
@@ -269,15 +269,6 @@ function SearchRowLine({ searchRow }: { searchRow: LinkedSearchRow }) {
 		case "user":
 			return <>Profile</>
 	}
-}
-
-// how long ago a date was, such as 3w ago or today
-function toAgoLabel(date: string | null): string {
-	const ageLabel = toAgeLabel(date)
-	if (!ageLabel) {
-		return ""
-	}
-	return ageLabel === "today" ? "today" : `${ageLabel} ago`
 }
 
 // the topic a podcast episode or a finding is in, linked to its page

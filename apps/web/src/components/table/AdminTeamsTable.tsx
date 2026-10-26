@@ -40,7 +40,7 @@ const teamSortValues = {
  */
 export function AdminTeamsTable({ teams }: { teams: AdminTeamRow[] }) {
 	// sort feeds pagination, so a sorted column reorders across every page
-	const { pageRows, sort, pagination } = usePaginatedRowSort(teams, teamSortValues)
+	const { pageRows, sort, pagination } = usePaginatedRowSort({ rows: teams, valueByKey: teamSortValues })
 	return (
 		<TableCard>
 			<div className={TABLE_SCROLL_CLASS}>

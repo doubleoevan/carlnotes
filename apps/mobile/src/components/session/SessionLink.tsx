@@ -1,6 +1,7 @@
 // the links a session screen draws: a text link to a route, and the footer line that leads to the other form
-import { type Href, Link } from "expo-router"
+import type { Href } from "expo-router"
 import { Text, View } from "react-native"
+import { AnchorLink } from "@/components/common/AnchorLink"
 import { toTypeRoleStyle } from "@/typeRoleStyles"
 
 /**
@@ -17,11 +18,16 @@ export function SessionTextLink({
 	shouldReplace?: boolean
 }) {
 	return (
-		<Link href={href} replace={shouldReplace} accessibilityRole="link" accessibilityLabel={label}>
+		<AnchorLink
+			href={href}
+			shouldReplace={shouldReplace}
+			accessibilityLabel={label}
+			className="min-h-12 justify-center"
+		>
 			<Text style={toTypeRoleStyle("body")} className="text-link underline">
 				{label}
 			</Text>
-		</Link>
+		</AnchorLink>
 	)
 }
 

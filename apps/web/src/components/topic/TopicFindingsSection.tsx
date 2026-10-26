@@ -1,6 +1,7 @@
 import type { TopicFinding } from "@carlnotes/contracts/findings"
 import type { PodcastEpisode } from "@carlnotes/contracts/podcast"
 import { NO_SCRIPT_ROW_LIMIT } from "@carlnotes/contracts/seo"
+import { EMPTY_FILTERED_FINDINGS, EMPTY_TOPIC_FINDINGS } from "@carlnotes/core/lib/topicFeedLabels"
 import { cn } from "@carlnotes/nightshift/classNames"
 import type * as React from "react"
 import { useState } from "react"
@@ -49,11 +50,7 @@ export function TopicFindingsSection({
 				topicFeedHandlers={topicFeedHandlers}
 				topic={topic}
 				latestPodcastEpisode={latestPodcastEpisode}
-				emptyText={
-					hasAnyFindings
-						? "Nothing new worth your time yet. Carl has standards."
-						: "Carl's getting started. The raccoon put a pot on..."
-				}
+				emptyText={hasAnyFindings ? EMPTY_FILTERED_FINDINGS : EMPTY_TOPIC_FINDINGS}
 			/>
 		</CollapsibleSection>
 	)

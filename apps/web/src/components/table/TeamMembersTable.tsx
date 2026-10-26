@@ -58,7 +58,9 @@ export function TeamMembersTable({
 
 	// sort feeds pagination, so a sorted column reorders across every page. the page's rows and the first
 	// NO_SCRIPT_ROW_LIMIT rows render for a reader without JavaScript
-	const { renderedRows, sort, pagination } = usePaginatedRowSort(members, memberSortValues, {
+	const { renderedRows, sort, pagination } = usePaginatedRowSort({
+		rows: members,
+		valueByKey: memberSortValues,
 		initialSort: { key: "member" },
 	})
 	// the totals read activated members alone, so a waiting request never inflates them

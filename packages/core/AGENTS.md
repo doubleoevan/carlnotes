@@ -1,7 +1,16 @@
 # packages/core/
 
-`@carlnotes/core`, the DOM-free stores, hooks, and lib that `apps/web` imports as `@carlnotes/core/<folder>/<name>`:
-state and rules with no browser in them. It imports `@carlnotes/contracts`, `@carlnotes/client`, and `react`.
+`@carlnotes/core`, the DOM-free components, stores, hooks, and lib that web and mobile import as `@carlnotes/core/<folder>/<name>`.
+It imports `@carlnotes/contracts`, `@carlnotes/client`, `react`, and `@tanstack/react-query`.
+
+- `components/` — portable React composition exported as `@carlnotes/core/components/<name>`. `TablePagination`,
+  `Pagination`, `SourceResultsChart`, `TopicScanRecap`, `NumberedTopicFindingList`, `SafeNoteLink`, `TopicScanFailure`,
+  `MoreButton`, `CopyMarkdownButton`, `NotesTable`, `ResourceMetadata`, and `RatingThumbs` own repeated content,
+  visibility, ordering, and interaction state. Each app
+  supplies the small set of typed platform elements the component needs. Keep component adapters at module scope
+  so state changes preserve their identity. Use render callbacks when controls must retain app-local refs or routing.
+  Core imports no DOM or native component library. Platform wrappers keep their existing stories; web integration
+  tests exercise the shared composition through real DOM adapters, and device checks cover native adapters.
 
 - `stores/` — app state one module owns and any component may read, named `<thing>Store.ts`. Each keeps its value in
   module scope and takes its `publish` call and `useStoreVersion` hook from `storeListeners.ts`, the one place the
@@ -34,6 +43,34 @@ state and rules with no browser in them. It imports `@carlnotes/contracts`, `@ca
   is given), `chromeIntentUrl.ts` (the page as an Android intent url that opens it in Chrome, out of an embedded
   webview), `sessionCopy.ts` (the lines the sign-in, sign-out, sign-up, and close-account controls say, shared by the
   web and the mobile app), and `voiceRecordingDecisions.ts` (what the voice recorder decides from each frame).
-- Imports: `@carlnotes/contracts`, `@carlnotes/client`, and `react`. Never a server package or an app. Universal: the
+- Imports: `@carlnotes/contracts`, `@carlnotes/client`, `react`, and `@tanstack/react-query`. Never a server package or an app. Universal: the
   root rule. A module that needs a DOM type is a web module and lives in `apps/web/src`.
 - Tests: `bun test packages/core`.
+
+## Shared Feed
+
+`hooks/usePagination.ts` owns table page selection, row slicing, and clamping after the rows or page size change.
+`hooks/useRowSort.ts` owns column ordering and `usePaginatedRowSort.ts` returns to page one after sorting.
+Web adds its server-rendered row policy; mobile renders the same selection with native page and row-count controls.
+
+`hooks/useTopicFeedState.ts` owns account-keyed Feed reads, optional visitor hydration, filter state, and reheat generations.
+Its exported `useTopicFeedFilters` also serves query-free component stories. Apps reset filters when their navigation changes.
+Reheat advances only when every requested read succeeds. A known-offline refresh returns immediately.
+`hooks/useTopicFindingActions.ts` owns Finding writes and the router-free page handlers. Web keeps its existing non-optimistic timing.
+Mobile opts into pending-mutation presentation and acknowledged cache updates across Home, Topic, and account-scoped search queries.
+A failed write removes only its tentative change. Writes never retry or enter an offline queue.
+Its optional `onChangeConfirmed` callback retains acknowledged edits in a separately mounted Finding sheet.
+
+`lib/topicFeed.ts` owns Feed/tag selection and Resource-kind reset. Existing Finding filters and sorts keep their bookmark and tie rules.
+`lib/topicFindingChanges.ts` applies action fields and unread-count changes without changing source payloads.
+Its search adapter preserves result order and metadata while applying the same Finding edits across loaded pages.
+`lib/topicFeedLabels.ts` owns shared section, sort, view, tag, and empty-state labels, plus the Finding-view menu options and Team bookmark scopes.
+`lib/topicTutorialVideo.ts` owns tutorial openers, event properties, and first-play recording.
+`lib/topicViews.ts` sends one view per Topic per web tab or native app runtime, shared by both Topic screens.
+`lib/sourceResults.ts` shares Source footnote ordering, totals, detail labels, and the earlier-findings row.
+`lib/topicSources.ts` shares default/custom Source ordering, off states, and screening messages between both Topic info views and the web editor.
+`lib/topicScanRecap.ts` shares the diary fields, missing-entry copy, and copied note Markdown. Shared React components
+compose the recap and chart from these rules; platform adapters draw the elements. Web supplies its browser origin
+when building Markdown links.
+Pure tests live beside these modules. Live hook tests use web's React DOM harness in `apps/web/src/hooks/useTopicFeedState.test.tsx`.
+Core imports no router, DOM, React Native, native storage, or device API.

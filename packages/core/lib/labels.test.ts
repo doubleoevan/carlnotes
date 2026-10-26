@@ -1,7 +1,7 @@
 // label tests for the exact duration and dollar labels that a source result's time and cost read, the month and day
 // label, and the short date label
 import { expect, test } from "bun:test"
-import { toDateLabel, toExactDollarLabel, toExactDurationLabel, toMonthDayLabel } from "./labels"
+import { toDateLabel, toExactDollarLabel, toExactDurationLabel, toMonthDayLabel, toScanTimestamp } from "./labels"
 
 // under ten seconds reads to one decimal, and from ten seconds up reads like any other duration
 test("toExactDurationLabel reads to one decimal under ten seconds", () => {
@@ -21,6 +21,14 @@ test("toExactDollarLabel keeps a sub-cent cost readable", () => {
 // a date reads as its short month and day
 test("toMonthDayLabel reads a date as its month and day", () => {
 	expect(toMonthDayLabel("2026-10-22T12:00:00Z")).toBe("Oct 22")
+})
+
+// completed brews use their finish time, and running brews use their start, in the device's local time zone
+test("toScanTimestamp shares the Brew diary's date and time on web and mobile", () => {
+	const startedAt = new Date(2026, 9, 22, 16, 30).toISOString()
+	const finishedAt = new Date(2026, 9, 22, 17, 16).toISOString()
+	expect(toScanTimestamp({ startedAt, finishedAt })).toBe("Oct 22 · 5:16 pm")
+	expect(toScanTimestamp({ startedAt, finishedAt: null })).toBe("Oct 22 · 4:30 pm")
 })
 
 // a date reads in its short numeric form, and a missing one reads None

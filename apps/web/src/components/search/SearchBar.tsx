@@ -1,5 +1,5 @@
 import { searchSite } from "@carlnotes/client/searchClient"
-import { sendTopicFindingOpened } from "@carlnotes/client/topicClient"
+import { sendTopicFindingOpened } from "@carlnotes/client/topicFindingClient"
 import { resourceKinds } from "@carlnotes/contracts/enums"
 import type { TopicFindingSort } from "@carlnotes/contracts/findings"
 import {
@@ -115,7 +115,7 @@ export function SearchBar() {
 	// open a row's page, or a finding's resource in a new tab, then clear the search
 	const openSearchRow = (searchRow: SearchRow): void => {
 		if (searchRow.kind === "finding") {
-			void sendTopicFindingOpened(searchRow.finding.findingId)
+			void sendTopicFindingOpened({ findingId: searchRow.finding.findingId })
 			openInNewTab(searchRow.finding.url)
 		} else {
 			void navigate({ to: searchRow.path })

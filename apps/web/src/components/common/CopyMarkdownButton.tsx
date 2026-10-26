@@ -1,3 +1,10 @@
+import {
+	type CopyMarkdownControlProps,
+	CopyMarkdownButton as SharedCopyMarkdownButton,
+} from "@carlnotes/core/components/CopyMarkdownButton"
+
+export { COPIED_FEEDBACK_MS } from "@carlnotes/core/components/CopyMarkdownButton"
+
 import { cn } from "@carlnotes/nightshift/classNames"
 import { Check, Copy } from "lucide-react"
 import { useState } from "react"
@@ -5,33 +12,25 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives
 import { copyToClipboard } from "@/lib/utils"
 
 /**
- * How long the copied checkmark stays before the button offers to copy again.
- */
-export const COPIED_FEEDBACK_MS = 1500
-
-/**
  * The hover copy button on a notes scroll box: it copies the box's content to the clipboard as Markdown ready to paste into an AI,
  * and confirms with a checkmark before reverting. It sits on the corner of a `group` container, appearing on hover or keyboard focus.
  */
 export function CopyMarkdownButton({ markdown }: { markdown: string }) {
-	const [isCopied, setIsCopied] = useState(false)
-	// controlled so the copied confirmation survives the click. a tooltip closes when its trigger is clicked
-	const [isTooltipOpen, setIsTooltipOpen] = useState(false)
+	return (
+		<SharedCopyMarkdownButton markdown={markdown} copyToClipboard={copyToClipboard} Control={CopyMarkdownControl} />
+	)
+}
 
-	// copy to clipboard, then confirm on the button
-	async function handleCopyMarkdown(): Promise<void> {
-		if (await copyToClipboard(markdown)) {
-			setIsCopied(true)
-			setTimeout(() => setIsCopied(false), COPIED_FEEDBACK_MS)
-		}
-	}
+// keep hover and keyboard tooltip state in the browser adapter
+function CopyMarkdownControl({ isCopied, onCopy }: CopyMarkdownControlProps) {
+	const [isTooltipOpen, setIsTooltipOpen] = useState(false)
 
 	return (
 		<Tooltip open={isCopied || isTooltipOpen} onOpenChange={setIsTooltipOpen}>
 			<TooltipTrigger asChild>
 				<button
 					type="button"
-					onClick={handleCopyMarkdown}
+					onClick={onCopy}
 					aria-label="Copy Markdown for AI"
 					className={cn(
 						"bg-card/90 text-muted-foreground hover:text-foreground absolute top-1.5 right-1.5 grid size-7 place-items-center rounded-md border opacity-0 shadow-raised transition-opacity focus-visible:opacity-100 group-hover:opacity-100",

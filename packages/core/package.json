@@ -4,11 +4,13 @@
 	"private": true,
 	"type": "module",
 	"exports": {
+		"./components/*": "./components/*.tsx",
 		"./*": "./*.ts"
 	},
 	"dependencies": {
 		"@carlnotes/client": "workspace:*",
-		"@carlnotes/contracts": "workspace:*"
+		"@carlnotes/contracts": "workspace:*",
+		"@tanstack/react-query": "^5.104.5"
 	},
 	"peerDependencies": {
 		"react": "^19.3.0"

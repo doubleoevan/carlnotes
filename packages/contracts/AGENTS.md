@@ -4,6 +4,7 @@
 payloads, and the constants that the api validates with and the web app parses against. Every app and package imports
 it, and it imports only `zod`.
 
+`noteTestFixtures.ts` supplies inert Notes table rows to both apps' stories and shared-component tests.
 The contract modules sit at the package root, one per domain, each imported by its own path
 (`@carlnotes/contracts/chat`): `chat.ts`, with the notes a stored question ends with in `chatQuestionNotes.ts`,
 `teams.ts`, `invites.ts`, `activity.ts`, `profiles.ts`, `admin.ts`, `search.ts`, `findings.ts`, `podcast.ts`,
@@ -45,6 +46,7 @@ fields, so the module imports nothing from Temporal. `avatars.ts` is the default
 url's version, `usernames.ts` how a username is shaped, validated, and compared, with the word lists a random one is
 generated from in `usernameWords.ts`, `emails.ts` the canonical form of a Gmail address, and `chatMentions.ts` the chat
 mention parser for the chat room composer and the room's notifications, with the reserved usernames.
+`topicFeedTestFixtures.ts` supplies complete Feed, Topic, and Finding payloads for client/core/mobile tests and native stories.
 `chatTestFixtures.ts` holds the podcast episode note that the contracts and web chat tests share, and
 `textOrderTestFixtures.ts` holds `hasSubstringsInOrder`, the text order check that the api and web tests share.
 

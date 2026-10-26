@@ -1,27 +1,30 @@
 // the source footnotes chart: what each Source read and kept in one scan, as plain HTML bars on Nightshift tokens
 
-import { toFallbackModeLabel } from "@carlnotes/contracts/sources"
 import { toDotSeparatedText } from "@carlnotes/contracts/text"
 import type { SourceResult } from "@carlnotes/contracts/topics"
-import { toCountLabel, toExactDollarLabel, toExactDurationLabel, toMonthDayLabel } from "@carlnotes/core/lib/labels"
+import {
+	SourceResultsChart as SharedSourceResultsChart,
+	type SourceResultsChartComponents,
+	type SourceResultsChartProps,
+} from "@carlnotes/core/components/SourceResultsChart"
+import {
+	toSourceResultDetailParts,
+	toSourceResultStatusLine,
+	toSourceResultTooltipLines,
+} from "@carlnotes/core/lib/sourceResults"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { Trash2 } from "lucide-react"
 import type * as React from "react"
-import { useId, useState } from "react"
+
+export type { SourceRemoval } from "@carlnotes/core/components/SourceResultsChart"
+
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import { RECAP_HEADING_CLASS } from "@/lib/styleClasses"
 import { IconButton } from "./IconButton"
 import { TooltipSection } from "./UpdateCountBadge"
 
-// the id of the row for the findings from earlier scans, always the last row
-export const EARLIER_ROW_ID = "earlier"
-
 // the narrowest kept fill, so one kept finding never reads as a sliver
 const MIN_KEPT_FILL_WIDTH = "6px"
-
-// what the earlier row's detail line says
-const EARLIER_ROW_DETAIL =
-	"Findings already on this topic that Carl re-read this brew and kept. No source returned them this time."
 
 // the rows' three columns: the label, the bar, and the count. the list reaches past the rows' padding to line each
 // row's text up with the heading
@@ -35,132 +38,36 @@ const ROW_BUTTON_CLASS =
 const REMOVE_SOURCE_BUTTON_CLASS =
 	"text-muted-foreground hover:text-destructive grid h-11 w-7 shrink-0 place-items-center sm:size-7"
 
-// the Sources an open row offers to remove, and what a tap on a trash button does
-export type SourceRemoval = {
-	removableSourceIds: ReadonlySet<string>
-	onRemoveSource: (sourceId: string, label: string) => void
+/**
+ * Renders the shared Source chart with browser grid rows and tooltips.
+ */
+export function SourceResultsChart(props: SourceResultsChartProps) {
+	return <SharedSourceResultsChart {...props} components={SOURCE_RESULTS_COMPONENTS} />
 }
 
-/**
- * The source footnotes chart: the heading with the scan's date, the summary line with its hint and legend, and one bar
- * row per Source that opens its detail line. With sourceRemoval, an open row of a removable Source offers to remove it.
- * It renders nothing with no row to show.
- */
-export function SourceResultsChart({
-	sourceResults,
-	scannedAt,
-	earlierKeptCount,
-	earlierFoundCount,
-	initialOpenRowId = null,
-	sourceRemoval,
-}: {
-	sourceResults: SourceResult[]
-	// when the scan finished, or started if it is still running
-	scannedAt: string
-	// the findings from earlier scans that no Source returned this scan, as Carl kept them and read them again
-	earlierKeptCount: number
-	earlierFoundCount: number
-	// the row open on the first render, for a server render and a story
-	initialOpenRowId?: string | null
-	sourceRemoval?: SourceRemoval
-}) {
-	// the one open row, and the prefix of each row's detail line id
-	const [openRowId, setOpenRowId] = useState<string | null>(initialOpenRowId)
-	const detailIdPrefix = useId()
-
-	// the Source rows in order, and the read count that spans the whole track
-	const rows = toSourceResultRows(sourceResults)
-	const maxFoundCount = Math.max(0, ...rows.map((row) => row.foundCount))
-
-	// with no Source row and no earlier row there is nothing to chart
-	const hasEarlierRow = earlierKeptCount > 0 || earlierFoundCount > 0
-	if (rows.length === 0 && !hasEarlierRow) {
-		return null
-	}
-
-	// open a tapped row, or close it if it was already open
-	function handleToggleRow(tappedRowId: string): void {
-		setOpenRowId((openRowId) => (openRowId === tappedRowId ? null : tappedRowId))
-	}
-
-	return (
+// browser elements preserve the chart's subgrid, semantic list, and hover details
+const SOURCE_RESULTS_COMPONENTS: SourceResultsChartComponents = {
+	Frame: ({ heading, dateLabel, summary, children }) => (
 		<section className="mt-4">
-			{/* the heading on the left and the scan's date on the right */}
 			<div className="flex items-baseline justify-between gap-3">
-				<h3 className={RECAP_HEADING_CLASS}>Source footnotes</h3>
-				<span className="text-muted-foreground text-xs">{toMonthDayLabel(scannedAt)}</span>
+				<h3 className={RECAP_HEADING_CLASS}>{heading}</h3>
+				<span className="text-muted-foreground text-xs">{dateLabel}</span>
 			</div>
-			{/* the summary line with its tap hint, and the legend at the right end of its first line. the line wraps under
-			    the legend */}
 			<p className="text-muted-foreground mt-0.5 text-xs">
 				<SourceResultsLegend />
-				{toSourceResultsLine({ rows, earlierKeptCount, earlierFoundCount })} Tap a source for details.
+				{summary}
 			</p>
-			{/* one row per Source, then the row for the findings from earlier scans */}
-			<ul className={cn(ROW_LIST_CLASS, "mt-2")}>
-				{rows.map((row) => (
-					<SourceResultRow
-						key={row.sourceId}
-						row={row}
-						maxFoundCount={maxFoundCount}
-						isOpen={openRowId === row.sourceId}
-						detailId={`${detailIdPrefix}-${row.sourceId}`}
-						onToggle={() => handleToggleRow(row.sourceId)}
-						onRemoveSource={
-							sourceRemoval?.removableSourceIds.has(row.sourceId) ? sourceRemoval.onRemoveSource : undefined
-						}
-					/>
-				))}
-				{hasEarlierRow && (
-					<ChartRow
-						label="Earlier brew findings"
-						tooltipLines={[`read ${earlierFoundCount}`, `kept ${earlierKeptCount}`, EARLIER_ROW_DETAIL]}
-						screenReaderLabel={`Earlier brew findings, ${earlierKeptCount} kept of ${earlierFoundCount} read`}
-						bar={<SourceResultBar foundCount={0} keptCount={0} maxFoundCount={maxFoundCount} />}
-						countLabel={String(earlierKeptCount)}
-						isOpen={openRowId === EARLIER_ROW_ID}
-						detailId={`${detailIdPrefix}-${EARLIER_ROW_ID}`}
-						detail={<p>{EARLIER_ROW_DETAIL}</p>}
-						onToggle={() => handleToggleRow(EARLIER_ROW_ID)}
-					/>
-				)}
-			</ul>
+			<ul className={cn(ROW_LIST_CLASS, "mt-2")}>{children}</ul>
 		</section>
-	)
-}
-
-/**
- * Returns the rows a chart shows: every Source that ran or failed, by kept and then read, both descending. A failed
- * Source follows a Source that ran with the same counts, and the label breaks any tie left.
- */
-export function toSourceResultRows(sourceResults: readonly SourceResult[]): SourceResult[] {
-	// sort by kept, then read, then a failed Source last, then by label
-	return [...sourceResults].sort(
-		(first, second) =>
-			second.keptCount - first.keptCount ||
-			second.foundCount - first.foundCount ||
-			Number(first.status === "failed") - Number(second.status === "failed") ||
-			first.label.localeCompare(second.label),
-	)
-}
-
-/**
- * Returns the chart's summary line: the rows' kept and read counts with the findings from earlier scans in each, and
- * how many Sources the rows show.
- */
-export function toSourceResultsLine({
-	rows,
-	earlierKeptCount,
-	earlierFoundCount,
-}: {
-	rows: readonly SourceResult[]
-	earlierKeptCount: number
-	earlierFoundCount: number
-}): string {
-	// sum the rows' kept and read counts, with the findings from earlier scans in both
-	const keptCount = rows.reduce((sum, row) => sum + row.keptCount, earlierKeptCount)
-	const foundCount = rows.reduce((sum, row) => sum + row.foundCount, earlierFoundCount)
-	return `${keptCount} kept from ${foundCount} read across ${toCountLabel(rows.length, "source")}.`
+	),
+	Row: SourceResultRow,
+	EarlierRow: ({ detail, maxFoundCount, ...props }) => (
+		<ChartRow
+			{...props}
+			bar={<SourceResultBar foundCount={0} keptCount={0} maxFoundCount={maxFoundCount} />}
+			detail={<p>{detail}</p>}
+		/>
+	),
 }
 
 // the legend at the right end of the summary line, with a swatch matching each bar fill. it is hidden from a screen
@@ -352,37 +259,6 @@ function SourceResultDetail({
 			)}
 		</>
 	)
-}
-
-/**
- * Returns a Source row's tooltip lines: its counts, its cost if the api sent one, its time, and its status if it fell
- * back or failed.
- */
-export function toSourceResultTooltipLines(row: SourceResult): string[] {
-	const statusLine = toSourceResultStatusLine(row)
-	return statusLine ? [...toSourceResultDetailParts(row), statusLine] : toSourceResultDetailParts(row)
-}
-
-// a Source row's counts, its cost if the api sent one, and its time
-function toSourceResultDetailParts(row: SourceResult): string[] {
-	const costPart = row.costDollars === null ? [] : [`cost ${toExactDollarLabel(row.costDollars)}`]
-	return [
-		`read ${row.foundCount}`,
-		`kept ${row.keptCount}`,
-		...costPart,
-		`time ${toExactDurationLabel(row.durationMs)}`,
-	]
-}
-
-// the status line of a Source that fell back or failed, and none for a Source that ran its primary path
-function toSourceResultStatusLine(row: SourceResult): string | null {
-	if (row.status === "fallback") {
-		return `Fell back to ${toFallbackModeLabel(row.fallbackMode)}`
-	}
-	if (row.status === "failed") {
-		return row.reason ? `Failed: ${row.reason}` : "Failed"
-	}
-	return null
 }
 
 // a count's share of the track as a css percentage

@@ -1,6 +1,7 @@
 // the note visibility pieces: the icon the table shows, and the picker the dialog and create flow share.
 // every visibility has its own tooltip
 import type { noteVisibilities } from "@carlnotes/contracts/enums"
+import { NOTE_VISIBILITY_LABELS } from "@carlnotes/core/components/NotesTable"
 import { Globe, Lock, Users } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/primitives/select"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
@@ -9,11 +10,6 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives
 export type NoteVisibility = (typeof noteVisibilities)[number]
 
 // the visibilities mapped to their labels, tooltips, and icons
-const VISIBILITY_LABELS: Record<NoteVisibility, string> = {
-	private: "Private",
-	team: "Team",
-	public: "Public",
-}
 export const VISIBILITY_TOOLTIPS: Record<NoteVisibility, string> = {
 	private: "Only you can see this note.",
 	team: "Only your team can see this note.",
@@ -35,7 +31,7 @@ export function NoteVisibilityIcon({ visibility }: { visibility: NoteVisibility 
 			<TooltipTrigger asChild>
 				<span className="text-muted-foreground inline-flex items-center gap-1.5">
 					<Icon className="size-4" />
-					{VISIBILITY_LABELS[visibility]}
+					{NOTE_VISIBILITY_LABELS[visibility]}
 				</span>
 			</TooltipTrigger>
 			<TooltipContent>{VISIBILITY_TOOLTIPS[visibility]}</TooltipContent>
@@ -72,7 +68,7 @@ export function NoteVisibilitySelect({
 							<TooltipTrigger asChild>
 								<SelectItem value={visibilityOption}>
 									<Icon className="size-4" />
-									{VISIBILITY_LABELS[visibilityOption]}
+									{NOTE_VISIBILITY_LABELS[visibilityOption]}
 								</SelectItem>
 							</TooltipTrigger>
 							<TooltipContent side="right">{VISIBILITY_TOOLTIPS[visibilityOption]}</TooltipContent>

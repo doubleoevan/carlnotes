@@ -1,4 +1,4 @@
-import { sendTopicFindingOpened } from "@carlnotes/client/topicClient"
+import { sendTopicFindingOpened } from "@carlnotes/client/topicFindingClient"
 import type { SearchRow } from "@carlnotes/contracts/search"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { ArrowRight } from "lucide-react"
@@ -29,7 +29,7 @@ export function SearchRowOption({
 	const href = searchRow.kind === "finding" ? searchRow.finding.url : searchRow.path
 	const handleClick = (): void => {
 		if (searchRow.kind === "finding") {
-			void sendTopicFindingOpened(searchRow.finding.findingId)
+			void sendTopicFindingOpened({ findingId: searchRow.finding.findingId })
 		}
 		onOpen()
 	}

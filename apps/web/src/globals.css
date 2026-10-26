@@ -15,10 +15,11 @@
 /* streamdown styles itself with tailwind classes. tailwind has to scan its dist to emit them */
 @source "../node_modules/streamdown/dist/*.js";
 
-/* the Nightshift component contracts and the field look hold classes the web's implementations draw. tailwind has to
+/* the Nightshift component contracts, fields, and pagination hold classes the web's implementations draw. tailwind has to
    scan them to emit them */
 @source "../../../packages/nightshift/components";
 @source "../../../packages/nightshift/field.ts";
+@source "../../../packages/nightshift/pagination.ts";
 
 /* the component browser's stories, pages, and config never reach the app's css. a story uses the app's own classes */
 @source not "./**/*.stories.tsx";

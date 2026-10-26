@@ -1,4 +1,5 @@
 import { TOPIC_FINDING_SORTS, type TopicFindingSort } from "@carlnotes/contracts/findings"
+import { TOPIC_FINDING_SORT_LABELS } from "@carlnotes/core/lib/topicFeedLabels"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { ArrowUpDown, Check, Clock, Flame, type LucideIcon, Target } from "lucide-react"
 import { useState } from "react"
@@ -9,9 +10,9 @@ import { useOptionalTopicFeed } from "@/providers/TopicFeedProvider"
 
 // each sort mode's display label and icon
 const SORT_OPTIONS: Record<TopicFindingSort, { label: string; Icon: LucideIcon }> = {
-	relevant: { label: "Relevance", Icon: Target },
-	newest: { label: "Newest", Icon: Clock },
-	trending: { label: "Trending", Icon: Flame },
+	relevant: { label: TOPIC_FINDING_SORT_LABELS.relevant, Icon: Target },
+	newest: { label: TOPIC_FINDING_SORT_LABELS.newest, Icon: Clock },
+	trending: { label: TOPIC_FINDING_SORT_LABELS.trending, Icon: Flame },
 }
 
 /**

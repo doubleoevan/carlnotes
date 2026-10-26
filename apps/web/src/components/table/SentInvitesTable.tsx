@@ -76,7 +76,9 @@ export function SentInvitesTable({
 	onDeleteInvite?: (inviteRow: SentInviteRow) => Promise<void>
 }) {
 	// newest invitation first
-	const { pageRows, sort, pagination } = usePaginatedRowSort(inviteRows, sentInviteSortValues, {
+	const { pageRows, sort, pagination } = usePaginatedRowSort({
+		rows: inviteRows,
+		valueByKey: sentInviteSortValues,
 		initialSort: { key: "invited", isDescending: true },
 	})
 
