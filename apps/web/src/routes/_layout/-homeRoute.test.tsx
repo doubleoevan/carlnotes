@@ -2,6 +2,7 @@
 // closed section still in the html, and with the video's button in a visitor's hero
 
 import { afterAll, beforeAll, expect, test } from "bun:test"
+import { configureApiClient } from "@carlnotes/client/apiClient"
 import type { TopicFinding } from "@carlnotes/contracts/findings"
 import { toTopicPath } from "@carlnotes/contracts/seo"
 import type { TopicFeed, TopicFeedResponse } from "@carlnotes/contracts/topics"
@@ -122,6 +123,15 @@ async function renderHomepage(homepagePath = "/"): Promise<string> {
 	const { router } = await loadRouter(homepagePath)
 	return renderToString(<RouterProvider router={router} />)
 }
+
+// each server render configures its own transport after a browser test resets the shared client
+test("a server route loads its feed after the api client was configured for a browser", async () => {
+	configureApiClient({ apiBaseUrl: "", showError: console.error })
+	topicFeedResponse = toTopicFeedResponse({
+		featuredTopics: [toFeedTopic({ id: TOPIC_ID, name: "Server-rendered coffee" })],
+	})
+	expect(await renderHomepage()).toContain("Server-rendered coffee")
+})
 
 // every request renders its own feed, so a later visitor never sees the feed an earlier request read
 test("each homepage render shows the feed its own request read", async () => {

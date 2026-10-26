@@ -3,9 +3,6 @@ import { type AnyRouter, createMemoryHistory, createRouter } from "@tanstack/rea
 import { configureWebApiClient } from "@/lib/webApiClient"
 import { routeTree } from "@/routeTree.gen"
 
-// configure the api client the way the app does, for the loaders
-configureWebApiClient()
-
 // a redirect the load threw, or the status of a rendered page, as the server load records it
 export type ServerLoadResult =
 	| { type: "redirect"; redirect: { options: { statusCode?: number }; headers: Headers } }
@@ -15,7 +12,8 @@ export type ServerLoadResult =
  * Loads a router at one path the way the server loads a request, and returns it with the result the load recorded.
  */
 export async function loadRouter(path: string): Promise<{ router: AnyRouter; serverLoadResult?: ServerLoadResult }> {
-	// load the router at the path
+	// configure server transport for this request and load the router at the path
+	configureWebApiClient()
 	const router = createRouter({ routeTree, history: createMemoryHistory({ initialEntries: [path] }) })
 	await router.load()
 
