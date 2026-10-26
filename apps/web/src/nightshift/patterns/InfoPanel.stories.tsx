@@ -5,8 +5,8 @@ import type { Meta, StoryObj } from "@storybook/tanstack-react"
 import { useId, useState } from "react"
 import { ScrollBox } from "@/components/common/ScrollBox"
 import { Popover, PopoverAnchor, PopoverCloseButton, PopoverContent } from "@/components/primitives/popover"
-import { TopicFindingHeading, TopicFindingStats } from "@/components/topic/ResourceInfo"
 import { ResourceMetadata, TopicFindingSummary } from "@/components/topic/TopicFindingSummary"
+import { TopicFindingHeading, TopicFindingStats } from "@/components/topic/TopicResourceInfo"
 import { toNotesMarkdown } from "@/components/topic/TopicScanRecap"
 import {
 	DASHED_ROW_CLASS,

@@ -21,6 +21,8 @@ files are written from the tokens.
 - `field.ts` — `FIELD_CLASS`, the border and the fill of a field, a select, and an outline Button in both modes: the
   `input` color as the border and the same color at 30% as the fill. Both stylesheets read the module as a Tailwind
   source, and `contrast.test.ts` checks a value and a placeholder on the fill over a card and a popover.
+- `pagination.ts` — the card fill, border, muted label and current-page highlight used by both apps' numbered
+  pagination and table footer controls. Both stylesheets scan it; native labels read its text classes separately.
 - `components/` — the component contracts, one module per component both apps share: `button.ts` and `badge.ts`. A
   contract exports its variant names, and a Button its size names, as tuples with their unions, its defaults, its box
   classes for the container and its text classes for the label, built with class-variance-authority, its variant props
@@ -55,7 +57,7 @@ files are written from the tokens.
 - Written files: `tokens.css`, which `apps/web/src/globals.css` imports, `uniwind.css`, which `apps/mobile/global.css`
   imports, and `figma/light.tokens.json` and `figma/dark.tokens.json`. Change the source, then run
   `bun run nightshift:write` (`scripts/write-nightshift-tokens.ts`), which writes all four. Never edit them by hand.
-- Importers: `apps/web`, which reads the stylesheet, `classNames.ts`, `field.ts`, `coffeeMug.ts`,
+- Importers: `apps/web`, which reads the stylesheet, `classNames.ts`, `field.ts`, `pagination.ts`, `coffeeMug.ts`,
   `oauthProviderIcons.ts`, `noteHtmlStyle.ts` and `theme.ts`'s `toColorCssVariable` for the note's style, and the
   contracts anywhere as far as the boundary check goes, each contract only from its implementation, a story, or a test
   by the parity check, and the rest of the TypeScript only from its tests, the stories, `.storybook/`, and

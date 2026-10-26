@@ -1,6 +1,7 @@
 // values turned into the text a user sees: dates, durations, money, sizes, and counts
 import type { daysOfWeek, frequencies } from "@carlnotes/contracts/enums"
 import { DAY_MS } from "@carlnotes/contracts/time"
+import type { TopicScan } from "@carlnotes/contracts/topics"
 
 /**
  * An ISO date as its month and year: Jul 2026. Empty for a null date.
@@ -27,6 +28,17 @@ export function toMonthDayLabel(dateString: string): string {
 }
 
 /**
+ * Formats a Scan's completion time, or its start while running, in the local time zone.
+ */
+export function toScanTimestamp(scan: Pick<TopicScan, "finishedAt" | "startedAt">): string {
+	// use the same date and time in both Brew diaries
+	const scannedAt = scan.finishedAt ?? scan.startedAt
+	const formattedTime = new Date(scannedAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })
+	const time = formattedTime.toLowerCase().replace(/\s+/g, " ")
+	return `${toMonthDayLabel(scannedAt)} · ${time}`
+}
+
+/**
  * The short age label for an ISO date: today, 3d, 2w, 5mo, or 2y. Empty for a null date.
  */
 export function toAgeLabel(dateString: string | null): string {
@@ -50,6 +62,14 @@ export function toAgeLabel(dateString: string | null): string {
 		return `${Math.floor(elapsedDayCount / 30)}mo`
 	}
 	return `${Math.floor(elapsedDayCount / 365)}y`
+}
+
+/**
+ * Adds ago to a relative date while keeping today and a missing date unchanged.
+ */
+export function toAgoLabel(date: string | null): string {
+	const age = toAgeLabel(date)
+	return age && age !== "today" ? `${age} ago` : age
 }
 
 /**

@@ -1,29 +1,25 @@
 import { authClient } from "@carlnotes/client/authClient"
 import { resourceKinds as allResourceKinds } from "@carlnotes/contracts/enums"
-import {
-	TAG_MATCH_MODES,
-	type TagMatchMode,
-	TOPIC_FINDING_FILTERS,
-	type TopicFindingFilter,
-} from "@carlnotes/contracts/findings"
+import { TAG_MATCH_MODES, type TagMatchMode, type TopicFindingFilter } from "@carlnotes/contracts/findings"
 import { SEARCH_RESULT_KINDS, type SearchResultKind } from "@carlnotes/contracts/search"
+import { TAG_MATCH_LABELS, toTopicFindingFilterOptions } from "@carlnotes/core/lib/topicFeedLabels"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { Ban, Blend, Check, CircleX, type LucideIcon, SlidersHorizontal, Target } from "lucide-react"
-import { Fragment, useState } from "react"
+import { useState } from "react"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/primitives/popover"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import { MENU_OPTION_CLASS, MENU_OPTION_SELECTED_CLASS, SEARCH_BAR_ICON_CLASS } from "@/lib/styleClasses"
 import { RESOURCE_KIND_ICON } from "@/lib/utils"
 import { type ResourceKind, useTopicFeed } from "@/providers/TopicFeedProvider"
 import { usePageActions } from "@/stores/pageActionsStore"
-import { SEARCH_RESULT_KIND_ICON, SEARCH_RESULT_KIND_LABELS, TOPIC_FINDING_FILTER_LABELS } from "./searchFilterOptions"
+import { SEARCH_RESULT_KIND_ICON, SEARCH_RESULT_KIND_LABELS } from "./searchFilterOptions"
 
 // how the selected tags narrow the feed, one mode at a time
 const TAG_MATCH_OPTIONS: Record<TagMatchMode, { label: string; Icon: LucideIcon }> = {
-	any: { label: "Any Match", Icon: Blend },
-	all: { label: "All Match", Icon: Target },
-	none: { label: "Exclude Tags", Icon: Ban },
-	off: { label: "Off", Icon: CircleX },
+	any: { label: TAG_MATCH_LABELS.any, Icon: Blend },
+	all: { label: TAG_MATCH_LABELS.all, Icon: Target },
+	none: { label: TAG_MATCH_LABELS.none, Icon: Ban },
+	off: { label: TAG_MATCH_LABELS.off, Icon: CircleX },
 }
 
 // the finding, resource kind, and tag filters the menu shows and changes: the topic feed's, or the search page's
@@ -62,9 +58,7 @@ export function SearchFilters({
 	// a team topic's page supports team bookmark filtering, which the search page does not
 	const hasTeamBookmarks = Boolean(usePageActions()?.hasTeamBookmarks) && !searchFindingFilterState
 	const { data: session } = authClient().useSession()
-	const topicFindingFilterOptions = TOPIC_FINDING_FILTERS.filter(
-		(filterOption) => filterOption !== "bookmarked" || Boolean(session),
-	)
+	const topicFindingFilterOptions = toTopicFindingFilterOptions({ hasTeamBookmarks, isSignedIn: Boolean(session) })
 	// the dropdown is controlled so selecting an option closes the menu
 	const [isOpen, setIsOpen] = useState(false)
 	return (
@@ -97,44 +91,24 @@ export function SearchFilters({
 						))}
 						<hr className="border-border my-1" />
 						<div role="radiogroup" aria-label="View">
-							{topicFindingFilterOptions.map((filterOption) =>
-								// a team topic splits the bookmarked filter in two: the user's own bookmarks filter, or the team's
-								filterOption === "bookmarked" && hasTeamBookmarks ? (
-									<Fragment key={filterOption}>
-										<RadioRow
-											radioGroupName="feed-findingFilter"
-											label="My bookmarked"
-											isActive={findingFilter === "bookmarked" && bookmarkScope === "mine"}
-											onChange={() => {
-												setFindingFilter("bookmarked")
-												setBookmarkScope("mine")
-												setIsOpen(false)
-											}}
-										/>
-										<RadioRow
-											radioGroupName="feed-findingFilter"
-											label="Team bookmarked"
-											isActive={findingFilter === "bookmarked" && bookmarkScope === "team"}
-											onChange={() => {
-												setFindingFilter("bookmarked")
-												setBookmarkScope("team")
-												setIsOpen(false)
-											}}
-										/>
-									</Fragment>
-								) : (
-									<RadioRow
-										key={filterOption}
-										radioGroupName="feed-findingFilter"
-										label={TOPIC_FINDING_FILTER_LABELS[filterOption]}
-										isActive={findingFilter === filterOption}
-										onChange={() => {
-											setFindingFilter(filterOption)
-											setIsOpen(false)
-										}}
-									/>
-								),
-							)}
+							{topicFindingFilterOptions.map((option) => (
+								<RadioRow
+									key={option.label}
+									radioGroupName="feed-findingFilter"
+									label={option.label}
+									isActive={
+										findingFilter === option.filter && (!option.bookmarkScope || bookmarkScope === option.bookmarkScope)
+									}
+									onChange={() => {
+										// apply the view and its bookmark scope together
+										setFindingFilter(option.filter)
+										if (option.bookmarkScope) {
+											setBookmarkScope(option.bookmarkScope)
+										}
+										setIsOpen(false)
+									}}
+								/>
+							))}
 						</div>
 						<hr className="border-border my-1" />
 						{/* how the tags selected on the home page filter, one mode at a time */}

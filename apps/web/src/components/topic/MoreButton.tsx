@@ -1,3 +1,4 @@
+import { type MoreButtonComponents, MoreButton as SharedMoreButton } from "@carlnotes/core/components/MoreButton"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { Button } from "@/components/primitives/button"
@@ -27,16 +28,14 @@ export function MoreButton({
 }) {
 	return (
 		<>
-			<Button
-				variant="link"
-				size="sm"
-				onClick={onToggle}
-				className={cn("group h-auto pr-0 hover:no-underline", MORE_TOGGLE_CLASS, SCRIPTED_ONLY_CLASS, className)}
-			>
-				{/* the label has the underline on hover, and the larger arrow stays outside it so the line stays flat */}
-				<span className="underline-offset-4 group-hover:underline">{isExpanded ? lessLabel : moreLabel}</span>
-				<span className="text-lg leading-none">{isExpanded ? "▴" : "▾"}</span>
-			</Button>
+			<SharedMoreButton
+				isExpanded={isExpanded}
+				moreLabel={moreLabel}
+				lessLabel={lessLabel}
+				onToggle={onToggle}
+				className={className}
+				components={MORE_BUTTON_COMPONENTS}
+			/>
 			{/* the link a reader without JavaScript follows in the toggle's place */}
 			{fullListHref && (
 				<AnchorLink
@@ -48,4 +47,21 @@ export function MoreButton({
 			)}
 		</>
 	)
+}
+
+// browser hover styling leaves the arrow outside the label's underline
+const MORE_BUTTON_COMPONENTS: MoreButtonComponents = {
+	Button: ({ onPress, isExpanded, className, children }) => (
+		<Button
+			variant="link"
+			size="sm"
+			onClick={onPress}
+			aria-expanded={isExpanded}
+			className={cn("group h-auto pr-0 hover:no-underline", MORE_TOGGLE_CLASS, SCRIPTED_ONLY_CLASS, className)}
+		>
+			{children}
+		</Button>
+	),
+	Label: ({ children }) => <span className="underline-offset-4 group-hover:underline">{children}</span>,
+	Arrow: ({ children }) => <span className="text-lg leading-none">{children}</span>,
 }

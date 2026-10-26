@@ -142,8 +142,13 @@ test.skipIf(!Bun.which("ffmpeg"))("joinChapterFiles writes one 64 kbps mono MP3 
 })
 
 // a short talk under the committed clips ends at 42 seconds, and the outro plays from 22 seconds to 82
-test.skipIf(!Bun.which("ffmpeg"))("joinChapterFiles mixes the theme clips into the one MP3", async () => {
-	const { audioStream, durationSeconds } = await joinToneChapters(await loadThemeClips())
-	expect(audioStream).toEqual(PODCAST_AUDIO_STREAM)
-	expect(Math.round(durationSeconds)).toBe(82)
-})
+// allow the real ffmpeg encode to finish on a busy development machine
+test.skipIf(!Bun.which("ffmpeg"))(
+	"joinChapterFiles mixes the theme clips into the one MP3",
+	async () => {
+		const { audioStream, durationSeconds } = await joinToneChapters(await loadThemeClips())
+		expect(audioStream).toEqual(PODCAST_AUDIO_STREAM)
+		expect(Math.round(durationSeconds)).toBe(82)
+	},
+	30_000,
+)

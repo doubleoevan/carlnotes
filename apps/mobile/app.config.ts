@@ -58,10 +58,12 @@ const expoConfig: ExpoConfig = {
 		[
 			"expo-splash-screen",
 			{
-				image: "./assets/icon.png",
-				imageWidth: 200,
+				image: "./assets/splash-light.png",
+				imageWidth: 280,
+				resizeMode: "contain",
 				backgroundColor: colors.background.light,
 				dark: {
+					image: "./assets/splash-dark.png",
 					backgroundColor: colors.background.dark,
 				},
 			},

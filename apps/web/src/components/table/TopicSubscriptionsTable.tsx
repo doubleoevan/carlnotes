@@ -48,7 +48,9 @@ export function TopicSubscriptionsTable({
 	isReadOnly?: boolean
 }) {
 	// defaults to the newest subscribed first
-	const { pageRows, sort, pagination } = usePaginatedRowSort(subscriptions, subscriptionSortValues, {
+	const { pageRows, sort, pagination } = usePaginatedRowSort({
+		rows: subscriptions,
+		valueByKey: subscriptionSortValues,
 		initialSort: { key: "subscribed", isDescending: true },
 	})
 	// the subscription waiting for delete confirmation or null

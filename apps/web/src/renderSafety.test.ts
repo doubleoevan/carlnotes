@@ -49,7 +49,14 @@ test("the safety renderer disables raw html and routes anchors through the allow
 	const rendererSource = readFileSync(join(import.meta.dir, SAFETY_RENDERER), "utf8")
 	expect(rendererSource).toContain("disableParsingRawHTML: true")
 	expect(rendererSource).toContain("a: { component: FindingLink, props: { allowedUrls } }")
-	expect(rendererSource).toContain("allowedUrls?.has(href)")
+	expect(rendererSource).toContain("<SafeNoteLink {...props}")
+
+	// both platform renderers now delegate link eligibility to the same portable component
+	const sharedLinkSource = readFileSync(
+		new URL("../../../packages/core/components/SafeNoteLink.tsx", import.meta.url),
+		"utf8",
+	)
+	expect(sharedLinkSource).toContain("allowedUrls?.has(href)")
 })
 
 // the streaming renderer scheme-checks anchors and images

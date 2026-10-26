@@ -9,11 +9,16 @@ import { TextClassContext } from "./text"
 // an icon's props, the Lucide icon to draw and Lucide's own props
 type IconProps = LucideProps & { as: LucideIcon }
 
-// the Lucide icon with its size read from the className's width and its color from the className's text color
-const ClassNameIcon = withUniwind(({ as: IconComponent, ...props }: IconProps) => <IconComponent {...props} />, {
-	size: { fromClassName: "className", styleProperty: "width" },
-	color: { fromClassName: "className", styleProperty: "color" },
-})
+// preserve Lucide's outline unless a caller supplies a fill, with size and color from the className
+const ClassNameIcon = withUniwind(
+	({ as: IconComponent, color, fill = "none", ...props }: IconProps) => (
+		<IconComponent {...props} color={color} fill={fill === "currentColor" ? color : fill} />
+	),
+	{
+		size: { fromClassName: "className", styleProperty: "width" },
+		color: { fromClassName: "className", styleProperty: "color" },
+	},
+)
 
 /**
  * A Lucide icon at 16 points in the text color around it, which its className overrides.

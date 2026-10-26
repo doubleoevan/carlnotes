@@ -9,6 +9,7 @@ import {
 	toSpokenParts,
 	toUnfinishedSpokenParts,
 } from "./spokenText"
+import { toOneLineText } from "./text"
 
 // a link keeps its text, and the marks for emphasis, code, headings, quotes, and lists go
 test("toPlainText writes markdown as plain words", () => {
@@ -16,6 +17,15 @@ test("toPlainText writes markdown as plain words", () => {
 		"## This week\n\n- **Agents** ship [a new SDK](https://example.com) with `tools`.\n> A *quiet* week.\n1. Done."
 	expect(toPlainText(markdown)).toBe("This week\n\nAgents ship a new SDK with tools.\nA quiet week.\nDone.")
 	expect(toPlainText("5 * 3 = 15, and 2*x stays")).toBe("5 * 3 = 15, and 2*x stays")
+})
+
+// the native card keeps image alt text and line-break words in its plain preview
+test("plain finding previews retain links, images, emphasis, headings, lists, and code words", () => {
+	const review =
+		"# Notes\n![coffee beans](https://example.com/beans.png)\n- **Roast** with *care* and `time`.\n[Read more](https://example.com)"
+	expect(toOneLineText(toPlainText(review))).toBe("Notes coffee beans Roast with care and time. Read more")
+	expect(toPlainText("")).toBe("")
+	expect(toOneLineText(toPlainText("First\n\nsecond\r\nthird"))).toBe("First second third")
 })
 
 // fenced code and bare urls are never read aloud, link text is, and each paragraph reads as one spoken part

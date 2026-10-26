@@ -2,10 +2,11 @@
 // markup
 import { expect, test } from "bun:test"
 import type { SourceResult } from "@carlnotes/contracts/topics"
+import { EARLIER_ROW_ID, toSourceResultRows, toSourceResultsLine } from "@carlnotes/core/lib/sourceResults"
 import type { ComponentProps } from "react"
 import { renderToStaticMarkup } from "react-dom/server"
 import { RECAP_HEADING_CLASS } from "@/lib/styleClasses"
-import { EARLIER_ROW_ID, SourceResultsChart, toSourceResultRows, toSourceResultsLine } from "./SourceResultsChart"
+import { SourceResultsChart } from "./SourceResultsChart"
 
 // a Source that ran its primary path with the given counts, labeled by its id, with any field replaced
 function toOkResult({

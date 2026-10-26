@@ -33,7 +33,7 @@ export function TopicScansTable({
 	scans: OwnerTopic["scans"]
 	topic: Pick<OwnerTopic, "id" | "name">
 }) {
-	const { pageRows, sort, pagination } = usePaginatedRowSort(scans, scanSortValues)
+	const { pageRows, sort, pagination } = usePaginatedRowSort({ rows: scans, valueByKey: scanSortValues })
 
 	if (scans.length === 0) {
 		return (

@@ -1,7 +1,7 @@
 # packages/client/
 
 `@carlnotes/client`, the typed api clients, one module per domain named `<domain>Client.ts`. `apps/web` imports them as
-`@carlnotes/client/<domain>Client`, and `@carlnotes/core` reads `authClient.ts` and `profileClient.ts`.
+`@carlnotes/client/<domain>Client`, and `@carlnotes/core` reads `authClient.ts`, `profileClient.ts`, `topicClient.ts`, and `topicFindingClient.ts`.
 
 - `apiClient.ts` — the typed Hono client and the plain fetch beside it. An app calls `configureApiClient` once with
   the api base url and `showError`, and an app with no cookie jar adds `headers`, a function whose headers every
@@ -34,3 +34,10 @@
   `better-auth`, and `zod`. Never `@carlnotes/core`, which comes after it, and never a server package. Universal: the
   root rule.
 - Tests: `bun test packages/client`.
+
+`topicFindingClient.ts` exposes Finding write helpers with named options: finding id, action fields, and optional `shouldThrowOnError`.
+Default calls retain the existing failure message and resolve after reporting. Opt-in calls reject after reporting so optimistic clients can roll back.
+`clientWrite.ts` owns this shared rejection and error-message policy for Topic and Finding writes.
+Opening a Finding always keeps its background failure silent. Topic-page reads in `topicClient.ts` distinguish visible, gated, and missing responses from transport or server failures.
+`sendFindingFeedback` also accepts named options and opt-in rejection, so a details panel only acknowledges a saved note and retains failed text for retry.
+`topicFindingClient.test.ts` covers successful writes, HTTP and network rejection, silent opens, and failed page reads.

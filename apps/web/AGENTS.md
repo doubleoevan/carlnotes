@@ -1,5 +1,11 @@
 # apps/web/
 
+Web components guide mobile. Before changing shared presentation or behavior, inspect the native counterpart and follow
+the reuse and parity checklist in `../mobile/AGENTS.md`. Share portable components, rules, formatting, and visibility gates
+through universal packages. Record a missing native feature instead of silently omitting its controls.
+`common/RatingThumbs.tsx`, `topic/TopicFindingSummary.tsx`, and `note/NotesTable.tsx` supply DOM elements to the
+shared rating, Resource metadata, and Notes table components in core.
+
 TanStack Start app on Vite, the `@carlnotes/web` app and the one browser entry. `apps/web/src/routes/` has one file
 per route. `router.tsx` builds the router from the generated `routeTree.gen.ts` and configures the api client,
 `client.tsx` hydrates it in the browser, and Start's own server entry renders it on the server. `bun run build:ui`
@@ -45,7 +51,9 @@ the browser bundle and renders pages through the server build, behind its own ro
   share. `OwnerTopicsTable.tsx` opens a topic row's scan costs from `TopicScansTable.tsx` and, in the admin console, its
   subscribers from `TopicSubscribersTable.tsx`, which reads them when it opens. `UserLinks.tsx` holds the links the
   user tables share: the avatar and username to the profile, and the email and plan to the activity and account pages.
-  `usePagination` in `TablePagination.tsx` starts a table at ten rows a page unless it asks for another size, and its
+  `usePagination` in `TablePagination.tsx` wraps core's shared pagination hook with server-rendered row handling.
+  `usePaginatedRowSort` adds the same server policy around core's shared sorting and page-reset hook.
+  It starts a table at ten rows a page unless it asks for another size, and its
   `ScriptedTablePagination` shows a paged table's pagination only with JavaScript.
 - `components/chat/` — the chat panel, both composers, the chat message lists, and the hooks behind them.
   `useChatRoom.ts` is the chat room's state, `useChatRoomSpokenAnswer.ts` speaks carl's reply to the browser's spoken
@@ -66,8 +74,8 @@ the browser bundle and renders pages through the server build, behind its own ro
   `chatMessagesTestFixtures.tsx` hold the chat fixtures the chat tests share.
 - `lib/` — `utils.ts` and small client-side helpers that read the browser. `externalLinks.ts` opens a url in a new
   tab with no handle back to the page. `toastActions.ts` builds the See plans and See account toast actions. `visiblePoll.ts` is the poll that runs only while the page is visible, one request at a
-  time, used by the scan poll and the counts poll. `topicViews.ts` sends a topic page's view once per topic per tab,
-  keeping the sent topic ids in memory only. `podcastEpisodePlayback.ts` holds the playback math and the lock screen's
+  time, used by the scan poll and the counts poll. `@carlnotes/core/lib/topicViews` sends a topic page's view once per
+  topic per tab, keeping the sent topic ids in memory only. `podcastEpisodePlayback.ts` holds the playback math and the lock screen's
   media session, with `isMediaSessionAvailable`, which the spoken answer queue shares. `voiceRecorder.ts` records the
   microphone, reads its level through an analyser, ends the recording once the user stops or the limit passes, and
   releases the microphone at every end, a rejected request included, with `@carlnotes/core/lib/voiceRecordingDecisions`
@@ -99,6 +107,7 @@ the browser bundle and renders pages through the server build, behind its own ro
   checks against the docs page's copy, and `monthlyBudgetCutoffCopy.ts` holds the wording both of them use.
 - `components/invite/` — the invite fields, editors, and modals, shared by the topic and team pages.
 - `components/topic/` — the topic page's sections, cards, dialogs, and editors, and the edit topic modal.
+  `TopicResourceInfo.tsx` shows a Finding's details and actions in the popover opened from `TopicResource.tsx` or a Podcast Episode chapter.
   `TagsAndNewTopicRow.tsx` is the Tags picker and New Topic button row above the home feed and the search results.
   `TopicCountsLine.tsx` ends the topic page with its viewer and follower counts, empty in the server render.
   `saveTopic.ts` is the modal's save flow: the create or update, the podcast switch, the attachment uploads, edits, and
@@ -296,3 +305,21 @@ the browser bundle and renders pages through the server build, behind its own ro
 - `.tsx` is exempt from the comment-groups hook; keep the comment style anyway.
 - Dev: `bun run dev:ui` (port 5173), `bun run dev:storybook` (port 6006). Build: `bun run build:ui`, which builds the
   mcp cards too, and `bun run build:storybook`. Tests: `bun test apps/web`.
+
+## Shared Feed adapter
+
+The Brew diary's `TopicScanRecap` and `SourceResultsChart` use shared React components in `packages/core/components/`,
+along with table and section pagination, numbered Findings, safe note links, scan failures, expansion controls,
+and copy feedback. Web wrappers retain DOM semantics, styles, tooltips, SSR handling, and browser APIs. Edit the
+shared composition first; keep component adapters at module scope so rerenders preserve their identity.
+`Pagination` uses render callbacks to retain its clicked DOM node while restoring scroll position after a page change.
+Pure ordering, totals, detail copy, and Markdown construction remain in core's `lib/topicScanRecap.ts` and `sourceResults.ts`.
+
+`providers/TopicFeedProvider.tsx` supplies the session id, visitor loader data, context, pathname reset, and Feed availability.
+State, selection, reheat, and Finding actions live in `@carlnotes/core/hooks/useTopicFeedState` and `useTopicFindingActions`.
+The provider preserves its consumer exports and the web's default non-optimistic timing. Topic pages keep their page reload handlers.
+Matching section, sort, view, empty-state, and tutorial labels come from core.
+`lib/hookTestHarness.tsx` mounts live React hooks and optional rendered state with Happy DOM and TanStack Query, then restores its globals.
+`hooks/useTopicFeedState.test.tsx` verifies shared lifecycle and mutation behavior without importing native components.
+`components/common/sharedComponents.test.tsx` verifies size/sort resets, control identity and focus, pagination scroll
+restoration, and Source detail expansion through the real web adapters.

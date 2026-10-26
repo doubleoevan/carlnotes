@@ -33,7 +33,8 @@ Packages, private `@carlnotes/<name>` workspaces that export source, in dependen
 - `packages/contracts/` — the zod contracts and request payloads, enums, plans, Source definitions, and the other
   universal modules every workspace may import.
 - `packages/client/` — the typed api clients. An app configures the base url and how an error shows.
-- `packages/core/` — the DOM-free lib, stores, and hooks that the web app shares with any other client.
+- `packages/core/` — the DOM-free lib, stores, hooks, and React components that web and mobile share. Portable
+  components compose platform adapters; DOM elements and native controls stay in their apps.
 - `packages/nightshift/` — Nightshift, the design system: every color token, the radius scale, the elevation, the
   fonts, and the type roles in TypeScript, the email values, the `cn` class merge, the coffee mug and the sign-in
   providers' icons both apps draw, the component contracts under `components/` that each app's implementation builds
@@ -110,6 +111,21 @@ workflow bundle check, and the test suite. Green before any hand-off.
 
 ## Rules (always-on)
 
+- Mobile changes start with the matching web implementation and its Nightshift components. Reuse the existing
+  component first; matching its appearance with separately maintained code is not component reuse. Extract portable
+  components into universal packages so both apps consume one implementation; app-to-app imports remain forbidden.
+  Before adding a native renderer, identify the concrete platform dependency that prevents reuse and check whether
+  a small platform adapter resolves it. When a native renderer is necessary, keep it thin, compose existing native
+  Nightshift components, and share the data, formatting, visibility rules, and state logic. Preserve the web's
+  structure, controls, and behavior. Record actual component reuse separately from shared logic and native replacements.
+- Use the same domain terminology, component names, and filenames for corresponding web and mobile concerns.
+  Keep framework-required routes and genuine platform differences. Document the reason when a counterpart needs
+  a different name; avoid mobile-only synonyms for the same component or action.
+- Mobile parity includes formatting, visibility, and styling. Compare rendered web and mobile states before hand-off.
+  Check every section, action, badge, count, permission gate, and loading/empty/error state, plus typography, spacing,
+  colors, icons, button variants, dividers, truncation, and overflow. Fix omissions without waiting for the user to
+  identify them. A platform convention or accessibility need can justify an adaptation; implementation convenience
+  cannot. Record the web references, necessary adaptations, and unverified gaps. Follow `apps/mobile/AGENTS.md`.
 - Comment every logical group: `//` comment line(s) above every group of 2+ statements, one line preferred.
 - A `package.json` lives at the root, in `apps/<name>/`, or in `packages/<name>/`. The module map above has the import
   order. A universal package (`contracts`, `client`, `core`, `nightshift`) depends only on universal packages and holds
@@ -141,6 +157,9 @@ workflow bundle check, and the test suite. Green before any hand-off.
   named with the reason.
 - Commits: ask first. "go ahead" at session start pre-approves commits for that session. Never push unless explicitly asked to.
 - Ship via /ship. Archive OpenSpec changes with the CLI (`openspec archive <name> --yes`), never /opsx:archive.
+- Before any main-spec read, creation, update, or deletion, resolve the candidate path and every existing parent
+  against the selected planning root's real `openspec/specs/` directory. Reject traversal and symlinks that escape
+  that directory. Apply this check to generated OpenSpec workflows as well as direct file operations.
 
 ## Skills
 
@@ -155,3 +174,7 @@ Rules agents and reviewers must honor, source copies at `.agents/skills/`:
 - code-style, jsx-conventions, git-discipline: shared readability and git rules
 - write-docs: clear, persuasive prose for READMEs, design docs, proposals, PR descriptions, and release notes
 - vendored guidance: vercel-react-best-practices, web-design-guidelines, ai-sdk, impeccable, ponytail
+- generated OpenSpec planning: openspec-new-change, openspec-propose, openspec-ff-change,
+  openspec-continue-change, openspec-update-change, openspec-explore, openspec-onboard
+- generated OpenSpec delivery: openspec-apply-change, openspec-verify-change, openspec-sync-specs,
+  openspec-archive-change, openspec-bulk-archive-change. The CLI owns these files; archive through `/ship`.

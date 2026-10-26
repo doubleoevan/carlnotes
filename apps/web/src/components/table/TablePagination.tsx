@@ -1,22 +1,21 @@
 import { DEFAULT_PAGE_SIZE, PAGE_SIZES } from "@carlnotes/contracts/pagination"
+import {
+	TablePagination as SharedTablePagination,
+	type TablePaginationComponents,
+} from "@carlnotes/core/components/TablePagination"
+import {
+	type PaginatedRowSortOptions,
+	usePaginatedRowSort as useSharedPaginatedRowSort,
+} from "@carlnotes/core/hooks/usePaginatedRowSort"
+import { type PaginationState, usePagination as useSharedPagination } from "@carlnotes/core/hooks/usePagination"
+import { cn } from "@carlnotes/nightshift/classNames"
+import { paginationClasses } from "@carlnotes/nightshift/pagination"
 import { ChevronLeft, ChevronRight } from "lucide-react"
-import { useState } from "react"
 import { type RenderedRow, toRenderedRows } from "@/lib/renderedRows"
 import { ONE_PAGE_TABLE_CARD_CLASS, SCRIPTED_PAGINATION_TABLE_CARD_CLASS } from "@/lib/styleClasses"
-import { type SortValue, useRowSort } from "./SortableHeader"
 
 // the smallest page a table can be cut into. below this, the pagination controls are hidden
 export const SMALLEST_PAGE_SIZE = PAGE_SIZES[0]
-
-// the state the usePagination hook returns
-type PaginationState = {
-	page: number
-	pageCount: number
-	pageSize: number
-	rowCount: number
-	setPage: (page: number) => void
-	setPageSize: (pageSize: number) => void
-}
 
 // the page's rows, the rows the table renders, and the pagination state
 type PaginatedRows<Row> = {
@@ -31,41 +30,36 @@ type PaginatedRows<Row> = {
  * unless the table asks for another page size.
  */
 export function usePagination<Row>(rows: Row[], initialPageSize: number = DEFAULT_PAGE_SIZE): PaginatedRows<Row> {
-	const [pageSize, setPageSize] = useState<number>(initialPageSize)
-	const [page, setPage] = useState(0)
-	// clamp the page count so an updated row set or page size never strands the view on an empty page
-	const pageCount = Math.max(1, Math.ceil(rows.length / pageSize))
-	const currentPage = Math.min(page, pageCount - 1)
-	const pageRows = rows.slice(currentPage * pageSize, (currentPage + 1) * pageSize)
-	const renderedRows = toRenderedRows(rows, { pageNumber: currentPage + 1, pageSize })
+	// share the selection rules while keeping the server-rendered row policy on the web
+	const { pageRows, pagination } = useSharedPagination(rows, initialPageSize)
+	const renderedRows = toRenderedRows(rows, { pageNumber: pagination.page + 1, pageSize: pagination.pageSize })
 	return {
 		pageRows,
 		renderedRows,
-		pagination: { page: currentPage, pageCount, pageSize, setPage, setPageSize, rowCount: rows.length },
+		pagination,
 	}
 }
-
-// the column a table starts sorted by, and the page size it starts at
-type UsePaginatedRowSortOptions = { initialSort?: { key: string; isDescending?: boolean }; initialPageSize?: number }
 
 /**
  * Returns the current combined pagination and sort state for a table that uses both.
  */
-export function usePaginatedRowSort<Row>(
-	rows: Row[],
-	valueByKey: Record<string, (row: Row) => SortValue>,
-	{ initialSort, initialPageSize }: UsePaginatedRowSortOptions = {},
-) {
-	const rowSort = useRowSort(rows, valueByKey, initialSort)
-	const { pageRows, renderedRows, pagination } = usePagination(rowSort.sortedRows, initialPageSize)
-	// a sort should start at the top, so a header click returns to page one
-	const sort = {
-		...rowSort,
-		toggleSort: (key: string) => {
-			rowSort.toggleSort(key)
-			pagination.setPage(0)
-		},
-	}
+export function usePaginatedRowSort<Row>({
+	rows,
+	valueByKey,
+	initialSort,
+	initialPageSize,
+}: PaginatedRowSortOptions<Row>) {
+	// keep the server-rendered row policy around the shared sorting and paging hook
+	const { pageRows, sort, pagination } = useSharedPaginatedRowSort({
+		rows,
+		valueByKey,
+		initialSort,
+		initialPageSize,
+	})
+	const renderedRows = toRenderedRows(sort.sortedRows, {
+		pageNumber: pagination.page + 1,
+		pageSize: pagination.pageSize,
+	})
 	return { pageRows, renderedRows, sort, pagination }
 }
 
@@ -95,55 +89,48 @@ export function ScriptedTablePagination(pagination: PaginationState) {
 /**
  * The pagination footer under a table: the page-size select on the left and the pager on the right.
  */
-export function TablePagination({ page, pageCount, pageSize, rowCount, setPage, setPageSize }: PaginationState) {
-	// the whole row hides until there are more rows than the smallest page size
-	if (rowCount <= SMALLEST_PAGE_SIZE) {
-		return null
-	}
-	return (
-		<div className="text-muted-foreground mt-2 flex items-center justify-between text-xs">
-			<label className="flex items-center gap-1.5">
-				Rows
-				<select
-					value={pageSize}
-					onChange={(event) => {
-						setPageSize(Number(event.target.value))
-						setPage(0)
-					}}
-					className="rounded-md border px-1 py-0.5"
-				>
-					{PAGE_SIZES.map((pageSizeOption) => (
-						<option key={pageSizeOption} value={pageSizeOption}>
-							{pageSizeOption}
-						</option>
-					))}
-				</select>
-			</label>
-			{pageCount > 1 && (
-				<div className="flex items-center gap-1.5">
-					<button
-						type="button"
-						onClick={() => setPage(page - 1)}
-						disabled={page === 0}
-						aria-label="Previous page"
-						className="hover:text-foreground grid size-6 place-items-center rounded-md border disabled:opacity-40"
-					>
-						<ChevronLeft className="size-3.5" />
-					</button>
-					<span>
-						Page {page + 1} of {pageCount}
-					</span>
-					<button
-						type="button"
-						onClick={() => setPage(page + 1)}
-						disabled={page >= pageCount - 1}
-						aria-label="Next page"
-						className="hover:text-foreground grid size-6 place-items-center rounded-md border disabled:opacity-40"
-					>
-						<ChevronRight className="size-3.5" />
-					</button>
-				</div>
-			)}
-		</div>
-	)
+export function TablePagination(pagination: PaginationState) {
+	return <SharedTablePagination pagination={pagination} components={TABLE_PAGINATION_COMPONENTS} />
+}
+
+// DOM semantics and browser selection stay in the web adapter
+const TABLE_PAGINATION_COMPONENTS: TablePaginationComponents = {
+	Root: ({ children }) => (
+		<div className="text-muted-foreground mt-2 flex items-center justify-between text-xs">{children}</div>
+	),
+	// biome-ignore lint/a11y/noLabelWithoutControl: the shared component supplies its select inside these children
+	Rows: ({ children }) => <label className="flex items-center gap-1.5">{children}</label>,
+	Text: ({ children }) => <span>{children}</span>,
+	Pager: ({ children }) => <div className="flex items-center gap-1.5">{children}</div>,
+	Select: ({ value, options, onValueChange }) => (
+		<select
+			value={value}
+			onChange={(event) => onValueChange(Number(event.target.value))}
+			className={cn("rounded-md border px-1 py-0.5", paginationClasses.idle.box, paginationClasses.idle.text)}
+		>
+			{options.map((pageSize) => (
+				<option key={pageSize} value={pageSize}>
+					{pageSize}
+				</option>
+			))}
+		</select>
+	),
+	PageButton: ({ direction, label, isDisabled, onPress }) => {
+		const Arrow = direction === "previous" ? ChevronLeft : ChevronRight
+		return (
+			<button
+				type="button"
+				onClick={onPress}
+				disabled={isDisabled}
+				aria-label={label}
+				className={cn(
+					"hover:text-foreground grid size-6 place-items-center rounded-md border disabled:opacity-40",
+					paginationClasses.idle.box,
+					paginationClasses.idle.text,
+				)}
+			>
+				<Arrow className="size-3.5" />
+			</button>
+		)
+	},
 }

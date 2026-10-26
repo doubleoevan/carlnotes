@@ -1,7 +1,7 @@
 // the mobile component browser, a route only a development build shows
 import AsyncStorage from "@react-native-async-storage/async-storage"
 import { useEffect, useMemo } from "react"
-import { Uniwind } from "uniwind"
+import { restoreTheme } from "@/theme"
 import { NIGHTSHIFT_STORYBOOK_THEME, NightshiftStorybookUI } from "../.rnstorybook/manager"
 import { view } from "../.rnstorybook/storybook.requires"
 
@@ -18,7 +18,7 @@ export default function StorybookScreen() {
 		[],
 	)
 
-	// set the theme back to the system's once the component browser closes
-	useEffect(() => () => Uniwind.setTheme("system"), [])
+	// restore the app's appearance once the component browser closes
+	useEffect(() => () => void restoreTheme(), [])
 	return <StorybookUI />
 }

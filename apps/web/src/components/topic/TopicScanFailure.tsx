@@ -1,39 +1,28 @@
-import { FIRST_SCAN_PAUSED_REASON, isBudgetError, toScanFailureLabel } from "@carlnotes/contracts/scanFailure"
-import { cn } from "@carlnotes/nightshift/classNames"
+import {
+	TopicScanFailure as SharedTopicScanFailure,
+	type TopicScanFailureComponents,
+} from "@carlnotes/core/components/TopicScanFailure"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { buttonVariants } from "@/components/primitives/button"
 
 /**
- * Why a scan failed, followed by an Upgrade button if the budget is what stopped it, or a See account link if the
- * manual scans cutoff did.
+ * Renders the shared scan failure with browser links and button styling.
  */
 export function TopicScanFailure({ error }: { error: string | null }) {
-	// the manual scans cutoff is a planned pause, so it reads plainly and links the account meter
-	if (error === FIRST_SCAN_PAUSED_REASON) {
-		return (
-			<p className="text-muted-foreground">
-				{toScanFailureLabel(error)}{" "}
-				<AnchorLink href="/account" className="sentence-link">
-					See account
-				</AnchorLink>
-			</p>
-		)
-	}
+	return <SharedTopicScanFailure error={error} components={SCAN_FAILURE_COMPONENTS} />
+}
 
-	// a budget failure is the only other one a user can act on, so it is the only other one that offers a way out
-	if (!isBudgetError(error)) {
-		return <p className="text-destructive">{toScanFailureLabel(error)}</p>
-	}
-	return (
-		<div className="text-destructive">
-			<p>{toScanFailureLabel(error)}</p>
-			{/* the call to action gets its own line, below the sentence above it */}
-			<p className="mt-2">
-				<AnchorLink href="/plans" className={cn(buttonVariants({ size: "sm" }))}>
-					Upgrade
-				</AnchorLink>
-				{" to keep the pot brewing"}
-			</p>
-		</div>
-	)
+// web text and links retain their paragraph and inline semantics
+const SCAN_FAILURE_COMPONENTS: TopicScanFailureComponents = {
+	Message: ({ isPaused, children }) => (
+		<p className={isPaused ? "text-muted-foreground" : "text-destructive"}>{children}</p>
+	),
+	Budget: ({ children }) => <div className="text-destructive">{children}</div>,
+	UpgradeLine: ({ children }) => <p className="mt-2">{children}</p>,
+	Text: ({ children }) => <span>{children}</span>,
+	Link: ({ href, isButton, children }) => (
+		<AnchorLink href={href} className={isButton ? buttonVariants({ size: "sm" }) : "sentence-link"}>
+			{children}
+		</AnchorLink>
+	),
 }

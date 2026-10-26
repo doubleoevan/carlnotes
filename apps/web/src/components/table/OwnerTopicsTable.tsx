@@ -70,7 +70,7 @@ export function OwnerTopicsTable({
 	// the Emails column sorts on the owner's stored email preference
 	const sortValues = { ...topicSortValues, emails: (topic: OwnerTopic) => (topic.isEmailEnabled ? 1 : 0) }
 	// sort feeds pagination, so a sorted column reorders across every page
-	const { pageRows, sort, pagination } = usePaginatedRowSort(topics, sortValues)
+	const { pageRows, sort, pagination } = usePaginatedRowSort({ rows: topics, valueByKey: sortValues })
 
 	// open a topic's subtable, closing its other one, or close it if it was already open
 	function handleSubtableClick(topicId: string, topicSubtable: TopicSubtable): void {

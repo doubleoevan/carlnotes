@@ -1,59 +1,29 @@
+import {
+	type NumberedTopicFindingListComponents,
+	NumberedTopicFindingList as SharedFindingList,
+} from "@carlnotes/core/components/NumberedTopicFindingList"
+import {
+	SafeNoteLink,
+	type SafeNoteLinkComponents,
+	type SafeNoteLinkProps,
+} from "@carlnotes/core/components/SafeNoteLink"
 // a scan recap is model-written from pages we don't control, so it renders through a limited Markdown subset
 
-import type { scanStatuses } from "@carlnotes/contracts/enums"
 import type { TopicFinding } from "@carlnotes/contracts/findings"
-import { isBudgetError } from "@carlnotes/contracts/scanFailure"
-import { toTopicPath } from "@carlnotes/contracts/seo"
-import type { ScanSourceResults } from "@carlnotes/contracts/topics"
-import { durationMsBetween, toDollarLabel, toDurationLabel } from "@carlnotes/core/lib/labels"
+import {
+	TopicScanRecap as SharedTopicScanRecap,
+	type TopicScanRecapComponents,
+	type TopicScanRecapProps,
+} from "@carlnotes/core/components/TopicScanRecap"
+import { toNotesMarkdown as toSharedNotesMarkdown } from "@carlnotes/core/lib/topicScanRecap"
 import { cn } from "@carlnotes/nightshift/classNames"
 import Markdown from "markdown-to-jsx"
 import type * as React from "react"
 import { useLayoutEffect, useRef, useState } from "react"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { ScrollBox } from "@/components/common/ScrollBox"
-import { type SourceRemoval, SourceResultsChart } from "@/components/common/SourceResultsChart"
+import { SourceResultsChart } from "@/components/common/SourceResultsChart"
 import { POPOVER_HEADING_CLASS, RECAP_HEADING_CLASS, STANDALONE_LINK_CLASS } from "@/lib/styleClasses"
-
-// the fields a scan recap popover reads, shared by the topic page's scan history and the Activity subtable
-export type ScanRecapFields = {
-	// the outcome and, for a failed scan, its recorded reason, so the diary line matches what happened
-	status: (typeof scanStatuses)[number]
-	error: string | null
-	startedAt: string
-	finishedAt: string | null
-	// set when the user stopped the scan, which is a different missing recap from a scan that simply had none written
-	stoppedAt: string | null
-	scanSummary: string | null
-	// what each Source read and kept, null for a scan with no results
-	sourceResults: ScanSourceResults | null
-	costDollars: number | null
-}
-
-/**
- * The diary line standing in for a missing recap, in Carl's own voice: still reading while the scan runs,
- * what stopped a failed one, what a user's cancel interrupted, and for a scan that finished without notes,
- * that the findings are still there.
- */
-export function toScanRecapPlaceholder(scan: Pick<ScanRecapFields, "status" | "error" | "stoppedAt">): string {
-	// a failed scan shows what stopped it, naming the limit Carl hits most often
-	if (scan.status === "failed") {
-		return isBudgetError(scan.error) ? "Today I ran out of coffee." : "This one didn't brew."
-	}
-
-	// the user stopped this scan, so there was never a recap to write. what Carl had already kept still stands
-	if (scan.stoppedAt) {
-		return "Carl stopped brewing.\nThis was in the pot."
-	}
-
-	// a scan that never finished is still being read. the break renders through the placeholder's whitespace-pre-line
-	if (scan.status === "running") {
-		return "I'm on my fifteenth mug.\nThe internet was busy today…"
-	}
-
-	// it succeeded, so the findings are real even though writing them up failed
-	return "No entry for this one.\nThe raccoon stole my keyboard.\nFindings are there though."
-}
 
 // clip a long note to this many pixels when collapsed, measured against the rendered output
 const COLLAPSED_MAX_HEIGHT = 132
@@ -62,33 +32,18 @@ const COLLAPSED_MAX_HEIGHT = 132
 export type AllowedScanNoteUrls = ReadonlySet<string>
 
 // a finding link in a note
-function FindingLink({
-	children,
-	href,
-	allowedUrls,
-}: {
-	children?: React.ReactNode
-	href?: string
-	allowedUrls?: AllowedScanNoteUrls
-}) {
-	// an allowed url renders as a link
-	if (href && allowedUrls?.has(href)) {
-		return (
-			<AnchorLink href={href} isUserContent className="sentence-link">
-				{children}
-			</AnchorLink>
-		)
-	}
+function FindingLink(props: SafeNoteLinkProps) {
+	return <SafeNoteLink {...props} components={NOTE_LINK_COMPONENTS} />
+}
 
-	// anything else prints its label and destination as plain text
-	const [firstChild] = Array.isArray(children) ? children : [children]
-	const label = typeof firstChild === "string" ? firstChild : null
-	return (
-		<span>
+// web links retain user-content attributes and sentence styling
+const NOTE_LINK_COMPONENTS: SafeNoteLinkComponents = {
+	Link: ({ href, children }) => (
+		<AnchorLink href={href} isUserContent className="sentence-link">
 			{children}
-			{href && href !== label ? ` (${href})` : ""}
-		</span>
-	)
+		</AnchorLink>
+	),
+	Text: ({ children }) => <span>{children}</span>,
 }
 
 // a heading at any level renders as one compact display-font line
@@ -147,102 +102,58 @@ export function ScrollNote({
 }
 
 /**
- * The copied notes as Markdown for an AI: the linked topic title, the prompt, the note, and the numbered findings as Markdown links.
+ * Copies note Markdown with this browser's origin, or relative links during server rendering.
  */
-export function toNotesMarkdown({
-	topicId,
-	topicName,
-	prompt,
-	note,
-	findings,
-}: {
-	topicId: string
-	topicName: string
-	prompt?: string
-	note?: string | null
-	findings?: TopicFinding[]
-}): string {
-	// link the topic title to the topic page. a server render has no window, so the link is a bare path
-	const origin = typeof window === "undefined" ? "" : window.location.origin
-	const title = `# [${topicName}](${origin}${toTopicPath({ id: topicId, name: topicName })})`
-	const findingLines = (findings ?? []).map(
-		(finding, index) =>
-			`${index + 1}. [${finding.title ?? finding.url}](${finding.url}) — ${finding.relevanceExplanation}`,
-	)
-	return [title, prompt, note, findingLines.join("\n")].filter(Boolean).join("\n\n")
+export function toNotesMarkdown(options: Parameters<typeof toSharedNotesMarkdown>[0]): string {
+	return toSharedNotesMarkdown({ ...options, origin: typeof window === "undefined" ? "" : window.location.origin })
 }
 
 /**
  * The numbered topic finding list: rank, linked title, host, and relevance explanation.
  */
 export function NumberedTopicFindingList({ findings }: { findings: TopicFinding[] }) {
-	return (
-		<ol className="mt-3 space-y-2.5">
-			{findings.map((finding, index) => (
-				<li key={finding.findingId}>
-					<AnchorLink href={finding.url} isUserContent className={STANDALONE_LINK_CLASS}>
-						{index + 1}. {finding.title ?? finding.url}
-					</AnchorLink>
-					{/* the host under the title, then the model's reason the finding was kept.
-					    the reason reads at the note's own size, only the host line stays small */}
-					{finding.source && <div className="text-muted-foreground text-xs">{finding.source}</div>}
-					<p className="mt-0.5">{finding.relevanceExplanation}</p>
-				</li>
-			))}
-		</ol>
-	)
+	return <SharedFindingList findings={findings} components={FINDING_LIST_COMPONENTS} />
+}
+
+// platform list elements keep the shared Finding composition readable and accessible
+const FINDING_LIST_COMPONENTS: NumberedTopicFindingListComponents = {
+	List: ({ children }) => <ol className="mt-3 space-y-2.5">{children}</ol>,
+	Row: ({ children }) => <li>{children}</li>,
+	Link: ({ href, children }) => (
+		<AnchorLink href={href} isUserContent className={STANDALONE_LINK_CLASS}>
+			{children}
+		</AnchorLink>
+	),
+	Source: ({ children }) => <div className="text-muted-foreground text-xs">{children}</div>,
+	Explanation: ({ children }) => <p className="mt-0.5">{children}</p>,
 }
 
 /**
  * A scan recap popover's body: the full summary with the topic scan's findings numbered below it, the source
  * footnotes chart if the scan has results, then how long the scan took, and its cost.
  */
-export function TopicScanRecap({
-	scan,
-	allowedUrls,
-	findings,
-	copyMarkdown,
-	sourceRemoval,
-}: {
-	scan: ScanRecapFields
-	allowedUrls?: AllowedScanNoteUrls
-	findings?: TopicFinding[]
-	copyMarkdown?: string
-	// the Sources the topic still has, which the chart's open row offers to remove
-	sourceRemoval?: SourceRemoval
-}) {
-	const duration = toDurationLabel(durationMsBetween(scan.startedAt, scan.finishedAt))
-	// the cost waits until the scan settles instead of reading as a finished scan that cost nothing
-	const isCostShown = scan.status !== "running" && scan.costDollars !== null
+export function TopicScanRecap(props: TopicScanRecapProps) {
 	return (
 		<>
 			<h2 className={POPOVER_HEADING_CLASS}>Dear Diary</h2>
-			{scan.scanSummary ? (
-				<ScrollNote note={scan.scanSummary} allowedUrls={allowedUrls} copyMarkdown={copyMarkdown}>
-					{findings && findings.length > 0 && <NumberedTopicFindingList findings={findings} />}
-				</ScrollNote>
-			) : (
-				<p className="whitespace-pre-line">{toScanRecapPlaceholder(scan)}</p>
-			)}
-			{/* what each Source read and kept, which renders nothing with no row to show */}
-			{scan.sourceResults && (
-				<SourceResultsChart
-					sourceResults={scan.sourceResults.sources}
-					scannedAt={scan.finishedAt ?? scan.startedAt}
-					earlierKeptCount={scan.sourceResults.earlierKeptCount}
-					earlierFoundCount={scan.sourceResults.earlierFoundCount}
-					sourceRemoval={sourceRemoval}
-				/>
-			)}
-			{/* how long it took on the left, and the spend on the right when the api shared it with the owner or an admin */}
-			{(duration || isCostShown) && (
-				<div className="text-muted-foreground mt-3 flex items-center justify-between gap-3 text-xs">
-					<span>{duration && `${duration} taken`}</span>
-					{isCostShown && <span>cost: {toDollarLabel(scan.costDollars)}</span>}
-				</div>
-			)}
+			<SharedTopicScanRecap {...props} components={SCAN_RECAP_COMPONENTS} />
 		</>
 	)
+}
+
+// DOM-only typography and note renderers surround the shared diary composition
+const SCAN_RECAP_COMPONENTS: TopicScanRecapComponents = {
+	ScrollBox,
+	SafeNoteText,
+	FindingList: NumberedTopicFindingList,
+	SourceResultsChart,
+	Placeholder: ({ children }) => <p className="whitespace-pre-line">{children}</p>,
+	Footer: ({ duration, costLabel }) => (
+		<div className="text-muted-foreground mt-3 flex items-center justify-between gap-3 text-xs">
+			<span>{duration && `${duration} taken`}</span>
+			{costLabel !== null && <span>cost: {costLabel}</span>}
+		</div>
+	),
 }
 
 /**

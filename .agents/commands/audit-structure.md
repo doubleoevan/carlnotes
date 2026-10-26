@@ -741,6 +741,11 @@ Check for:
      contract keeps `isTopicOwner`), and the `@blocknote/*` packages, `yjs`, `y-prosemirror`, and `y-protocols`
      (removed from `apps/web` and `apps/api`; `react-native-enriched-html` is the editor)
 
+   - `apps/mobile/app/index.tsx` and `apps/mobile/app/settings.tsx` (now inside `apps/mobile/app/(tabs)/`;
+     their public route paths stay `/` and `/settings`), `apps/web/src/components/topic/ResourceInfo.tsx` (now
+     `TopicResourceInfo.tsx`, matching the native component), and `apps/web/src/lib/topicViews.ts` with its test
+     (now `packages/core/lib/topicViews.ts` and `topicViews.test.ts`, shared by web and mobile)
+
 5. **Cross-harness enforcement parity**: `.claude/settings.json` hooks and
    `.opencode/plugin/guardrails.mjs` must gate the same operations with the
    same scripts. Compare the tool/event coverage of each adapter against the

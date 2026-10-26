@@ -40,7 +40,9 @@ export function PagedTableSection<Row>({
 }: PagedTableSectionProps<Row>) {
 	// the sorted rows the table renders: the page shown, and the first NO_SCRIPT_ROW_LIMIT for a browser without
 	// JavaScript, in the order they came in until a column is sorted
-	const { renderedRows, sort, pagination } = usePaginatedRowSort(rows, rowSortValues, {
+	const { renderedRows, sort, pagination } = usePaginatedRowSort({
+		rows,
+		valueByKey: rowSortValues,
 		initialPageSize: SMALLEST_PAGE_SIZE,
 	})
 	if (rows.length === 0) {

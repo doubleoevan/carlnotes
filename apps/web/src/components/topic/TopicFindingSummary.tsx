@@ -1,8 +1,10 @@
 // a topic finding as its row shows it, and the metadata line under its title
 
 import type { TopicFinding } from "@carlnotes/contracts/findings"
-import { toDotSeparatedText } from "@carlnotes/contracts/text"
-import { toAgeLabel } from "@carlnotes/core/lib/labels"
+import {
+	type ResourceMetadataComponents,
+	ResourceMetadata as SharedResourceMetadata,
+} from "@carlnotes/core/components/ResourceMetadata"
 import { cn } from "@carlnotes/nightshift/classNames"
 import type * as React from "react"
 import { AnchorLink } from "@/components/common/AnchorLink"
@@ -76,10 +78,11 @@ export function TopicFindingSummary({
  * The favicon, host, and age under a finding's title.
  */
 export function ResourceMetadata({ resource }: { resource: TopicFinding }) {
-	return (
-		<>
-			{resource.source && <HostFavicon faviconPath={resource.faviconPath} />}
-			{toDotSeparatedText([resource.source, toAgeLabel(resource.publishedAt)])}
-		</>
-	)
+	return <SharedResourceMetadata resource={resource} components={RESOURCE_METADATA_COMPONENTS} />
+}
+
+// retain inline browser text and the existing favicon renderer
+const RESOURCE_METADATA_COMPONENTS: ResourceMetadataComponents = {
+	Favicon: HostFavicon,
+	Text: ({ children }) => <>{children}</>,
 }

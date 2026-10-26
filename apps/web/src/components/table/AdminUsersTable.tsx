@@ -39,7 +39,7 @@ export function AdminUsersTable({
 	onReload: () => void
 }) {
 	// sort feeds pagination, so a sorted column reorders across every page
-	const { pageRows, sort, pagination } = usePaginatedRowSort(users, userSortValues)
+	const { pageRows, sort, pagination } = usePaginatedRowSort({ rows: users, valueByKey: userSortValues })
 
 	return (
 		<TableCard>

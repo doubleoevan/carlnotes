@@ -1,7 +1,7 @@
 import { PODCAST_NAME } from "@carlnotes/contracts/podcastEpisodes"
-import { DEFAULT_SOURCES, toDefaultSource } from "@carlnotes/contracts/sources"
 import type { TopicDetails, TopicResponse } from "@carlnotes/contracts/topics"
 import { toCountLabel } from "@carlnotes/core/lib/labels"
+import { toTopicSourceRows } from "@carlnotes/core/lib/topicSources"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { AudioLines, Diamond, Download, ExternalLink, Globe, Link, Lock, Mail, Plug, Puzzle, Rss } from "lucide-react"
 import type * as React from "react"
@@ -319,27 +319,11 @@ export function InfoSection({
 
 // the sources section: a line per default source first, then one line per custom source
 export function TopicSourcesSection({ sources }: { sources: TopicDetails["sources"] }) {
-	// the default sources that are on, and the custom ones left after them
-	const defaultSourceKeys = new Set(sources.flatMap((source) => toDefaultSource(source.sourceKind)?.key ?? []))
-	const customSources = sources.filter((source) => !toDefaultSource(source.sourceKind))
 	return (
 		<InfoSection label="Sources">
 			<div className="space-y-1">
-				{DEFAULT_SOURCES.map((defaultSource) => (
-					<TopicSource
-						key={defaultSource.key}
-						sourceKind={defaultSource.label}
-						summary={defaultSourceKeys.has(defaultSource.key) ? defaultSource.summary : "off"}
-						isMuted={!defaultSourceKeys.has(defaultSource.key)}
-					/>
-				))}
-				{customSources.map((source) => (
-					<TopicSource
-						key={source.id}
-						sourceKind={source.sourceKind}
-						summary={source.summary}
-						screeningMessage={toScreeningMessage(source)}
-					/>
+				{toTopicSourceRows(sources).map((source) => (
+					<TopicSource key={source.id} {...source} />
 				))}
 			</div>
 		</InfoSection>
@@ -380,12 +364,4 @@ function TopicSource({
 			</Tooltip>
 		</div>
 	)
-}
-
-// the text a source row shows after its summary: "checking" while its screen is pending, or the reason it failed. only its owner sees it
-export function toScreeningMessage(source: { status: string; error: string | null }): string | null {
-	if (source.status === "pending") {
-		return "checking"
-	}
-	return source.status === "failed" ? (source.error ?? "failed") : null
 }

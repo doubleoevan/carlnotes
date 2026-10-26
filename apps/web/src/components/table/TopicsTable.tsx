@@ -61,7 +61,7 @@ export function TopicsTable({
 }) {
 	// the sorted column applies across all the table's pages. the page's rows and the first NO_SCRIPT_ROW_LIMIT rows
 	// render for a reader without JavaScript
-	const { renderedRows, sort, pagination } = usePaginatedRowSort(topics, topicSortValues)
+	const { renderedRows, sort, pagination } = usePaginatedRowSort({ rows: topics, valueByKey: topicSortValues })
 
 	// the switch shows the choice before the page reloads, so the row shows the choice the moment it is made
 	const [emailChoices, setEmailChoices] = useState<Record<string, boolean>>({})

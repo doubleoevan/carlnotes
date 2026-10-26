@@ -96,11 +96,11 @@ test("an app file that imports a contract names its own app's implementation to 
 		...BADGE_FILES,
 		{ filePath: "apps/web/src/pages/HomePage.tsx", fileText: BADGE_IMPLEMENTATION_TEXT },
 		{ filePath: "apps/web/src/pages/HomePage.test.tsx", fileText: BADGE_IMPLEMENTATION_TEXT },
-		{ filePath: "apps/mobile/app/index.tsx", fileText: BADGE_IMPLEMENTATION_TEXT },
+		{ filePath: "apps/mobile/app/(tabs)/index.tsx", fileText: BADGE_IMPLEMENTATION_TEXT },
 	]
 	expect(checkComponentParity({ contracts: [BADGE_CONTRACT], sourceFiles })).toEqual([
 		"apps/web/src/pages/HomePage.tsx imports @carlnotes/nightshift/components/badge. an app imports a contract only from its implementation, a story, or a test. import apps/web/src/components/primitives/badge.tsx instead",
-		"apps/mobile/app/index.tsx imports @carlnotes/nightshift/components/badge. an app imports a contract only from its implementation, a story, or a test. import apps/mobile/src/components/primitives/badge.tsx instead",
+		"apps/mobile/app/(tabs)/index.tsx imports @carlnotes/nightshift/components/badge. an app imports a contract only from its implementation, a story, or a test. import apps/mobile/src/components/primitives/badge.tsx instead",
 	])
 })
 
@@ -109,9 +109,9 @@ test("an app file that imports a contract with no implementation in its app is t
 	const webOnlyContract: ComponentContract = { componentName: "badge", platforms: ["web"] }
 	const sourceFiles = [
 		...BADGE_FILES.slice(0, 2),
-		{ filePath: "apps/mobile/app/index.tsx", fileText: BADGE_IMPLEMENTATION_TEXT },
+		{ filePath: "apps/mobile/app/(tabs)/index.tsx", fileText: BADGE_IMPLEMENTATION_TEXT },
 	]
 	expect(checkComponentParity({ contracts: [webOnlyContract], sourceFiles })).toEqual([
-		"apps/mobile/app/index.tsx imports @carlnotes/nightshift/components/badge. an app imports a contract only from its implementation, a story, or a test. packages/nightshift/components/badge.ts names no implementation in this app",
+		"apps/mobile/app/(tabs)/index.tsx imports @carlnotes/nightshift/components/badge. an app imports a contract only from its implementation, a story, or a test. packages/nightshift/components/badge.ts names no implementation in this app",
 	])
 })

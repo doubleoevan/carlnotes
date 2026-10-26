@@ -11,5 +11,5 @@
 			"path": "../../packages/contracts"
 		}
 	],
-	"include": ["**/*.ts"]
+	"include": ["**/*.ts", "**/*.tsx"]
 }

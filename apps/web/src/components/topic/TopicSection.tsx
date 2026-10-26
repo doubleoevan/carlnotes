@@ -1,4 +1,5 @@
 import type { TopicFeedResponse } from "@carlnotes/contracts/topics"
+import { EMPTY_TOPIC_SECTION, TOPIC_SECTION_TITLES } from "@carlnotes/core/lib/topicFeedLabels"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { getRouteApi, Link } from "@tanstack/react-router"
 import type { MouseEvent } from "react"
@@ -13,14 +14,6 @@ const TOPICS_PER_PAGE = 5
 
 // the homepage route, whose search says which page each section shows
 const homeRoute = getRouteApi("/_layout/")
-
-// the section titles mapped to their section key
-const SECTION_TITLE = {
-	yours: "Your topics",
-	subscribed: "Your subscribed topics",
-	featured: "Featured topics",
-	popular: "Popular topics",
-}
 
 // a topic feed section with its key and its topic feeds, or an empty section's call to action
 type TopicSectionProps = { section: TopicFeedResponse["sections"][number]; onNewTopicChat: () => void }
@@ -37,7 +30,7 @@ export function TopicSection({ section, onNewTopicChat }: TopicSectionProps) {
 	return (
 		<AccordionItem value={section.key}>
 			<AccordionTrigger onClick={scrollTriggerToTop} className="pb-1">
-				<span className="font-display flex-1 text-xl">{SECTION_TITLE[section.key]}</span>
+				<span className="font-display flex-1 text-xl">{TOPIC_SECTION_TITLES[section.key]}</span>
 				{/* the topic count, inset to end on the same line as the quota line above it */}
 				<span className={cn("text-muted-foreground text-sm", RAIL_TEXT_INSET)}>
 					{section.topics.length} {section.topics.length === 1 ? "topic" : "topics"}
@@ -49,7 +42,7 @@ export function TopicSection({ section, onNewTopicChat }: TopicSectionProps) {
 				{section.topics.length === 0 && (
 					<p className="text-muted-foreground pl-4 pb-4 text-sm">
 						<button type="button" onClick={onNewTopicChat} className={STANDALONE_LINK_CLASS}>
-							Give Carl a topic. You know the one.
+							{EMPTY_TOPIC_SECTION}
 						</button>
 					</p>
 				)}
@@ -60,7 +53,7 @@ export function TopicSection({ section, onNewTopicChat }: TopicSectionProps) {
 				{/* the links to the section's pages, with no padding above them */}
 				{pageCount > 1 && (
 					<Pagination
-						ariaLabel={`${SECTION_TITLE[section.key]} pages`}
+						ariaLabel={`${TOPIC_SECTION_TITLES[section.key]} pages`}
 						className="pt-0 pb-2"
 						pageNumber={pageNumber}
 						pageCount={pageCount}

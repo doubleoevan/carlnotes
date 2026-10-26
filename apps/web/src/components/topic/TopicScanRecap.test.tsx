@@ -1,8 +1,9 @@
 // render tests for allowed urls, and for where the source footnotes chart sits in the recap
 import { expect, test } from "bun:test"
 import type { ScanSourceResults } from "@carlnotes/contracts/topics"
+import type { ScanRecapFields } from "@carlnotes/core/lib/topicScanRecap"
 import { renderToStaticMarkup } from "react-dom/server"
-import { type ScanRecapFields, ScrollNote, TopicScanRecap } from "./TopicScanRecap"
+import { ScrollNote, TopicScanRecap } from "./TopicScanRecap"
 
 // one note trying every escape hatch at once: a written link, raw HTML, an image, and a bare url to convert to plain text
 const HOSTILE_NOTE = [

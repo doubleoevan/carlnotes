@@ -8,7 +8,7 @@ import type * as React from "react"
 import { useState } from "react"
 import { RatingThumbs } from "@/components/common/RatingThumbs"
 import { Popover, PopoverAnchor, PopoverTrigger } from "@/components/primitives/popover"
-import { ResourceInfo, type ResourceInfoTopic } from "@/components/topic/ResourceInfo"
+import { TopicResourceInfo, type TopicResourceInfoTopic } from "@/components/topic/TopicResourceInfo"
 import {
 	DASHED_ROW_CLASS,
 	LIST_ROW_HIGHLIGHTED_CLASS,
@@ -33,7 +33,7 @@ const THUMBS_SLOT_CLASS = "relative z-10 hidden shrink-0 items-center gap-2 pr-3
 // whether the user may rate and bookmark the findings, and the calls behind the note's buttons
 export type ChapterTopicFeed = {
 	topicFindings: TopicFinding[]
-	topic: ResourceInfoTopic
+	topic: TopicResourceInfoTopic
 	isRatable: boolean
 	isBookmarkable: boolean
 	topicFeedHandlers: TopicFeedHandlers
@@ -226,7 +226,7 @@ export function ChapterTopicFindingNote({
 		<>
 			<PopoverAnchor className="pointer-events-none absolute top-1.5 right-1 size-11 sm:size-8" />
 			{isNoteOpen && (
-				<ResourceInfo
+				<TopicResourceInfo
 					resource={topicFinding}
 					topicFindingRank={null}
 					podcastEpisode={podcastEpisode}

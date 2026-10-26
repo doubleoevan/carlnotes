@@ -53,7 +53,9 @@ export function TeamsMembershipTable({
 		...receivedInvites.map((invite) => ({ invite })),
 	]
 	// sort feeds pagination, so a sorted column reorders across every page
-	const { pageRows, sort, pagination } = usePaginatedRowSort(rows, teamSortValues, {
+	const { pageRows, sort, pagination } = usePaginatedRowSort({
+		rows,
+		valueByKey: teamSortValues,
 		initialSort: { key: "team", isDescending: false },
 	})
 	return (
