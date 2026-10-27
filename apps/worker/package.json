@@ -17,6 +17,6 @@
 		"drizzle-orm": "^0.45.4"
 	},
 	"devDependencies": {
-		"ai": "^7.0.145"
+		"ai": "^7.0.153"
 	}
 }
