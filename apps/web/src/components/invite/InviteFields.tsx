@@ -1,17 +1,17 @@
 import { authClient } from "@carlnotes/client/authClient"
+import { type InviteFieldElements, InviteFields as SharedInviteFields } from "@carlnotes/core/components/InviteFields"
 import { type EmailProvider, toEmailProviders } from "@carlnotes/core/lib/emailProviders"
 import { Link, Mail } from "lucide-react"
 import { useState } from "react"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { FieldLabel } from "@/components/common/FieldLabel"
 import { Button } from "@/components/primitives/button"
+import { Input } from "@/components/primitives/input"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/primitives/popover"
 import { TagPill } from "@/components/topic/TagPicker"
 import { toInviteUrl } from "@/lib/inviteUrl"
 import { MENU_DIVIDER_CLASS, MENU_OPTION_CLASS } from "@/lib/styleClasses"
 import { copyToClipboard } from "@/lib/utils"
-import { EmailInviteField } from "./EmailInviteField"
-import { UsernameInviteField } from "./UsernameInviteField"
 
 // what the invite-by-link menu needs from its caller
 export type InviteLink = {
@@ -51,20 +51,15 @@ export function InviteFields({
 	inviteLink?: InviteLink
 }) {
 	return (
-		<div className="space-y-2">
-			<FieldLabel>{label}</FieldLabel>
-			{/* the staged invites as chips, each removable until the save that sends them */}
-			{invites.length > 0 && (
-				<div className="flex flex-wrap gap-1.5">
-					{invites.map((invite) => (
-						<TagPill key={invite} label={invite} onRemove={() => onRemoveInvite(invite)} />
-					))}
-				</div>
-			)}
-			<EmailInviteField onInvite={onAddEmail} />
-			<UsernameInviteField onInvite={onAddUsername} />
-			{inviteLink && <InviteLinkMenu inviteLink={inviteLink} />}
-		</div>
+		<SharedInviteFields
+			label={label}
+			invites={invites}
+			onAddEmail={onAddEmail}
+			onAddUsername={onAddUsername}
+			onRemoveInvite={onRemoveInvite}
+			inviteLink={inviteLink && <InviteLinkMenu inviteLink={inviteLink} />}
+			elements={INVITE_FIELD_ELEMENTS}
+		/>
 	)
 }
 
@@ -149,4 +144,41 @@ function InviteLinkMenu({ inviteLink }: { inviteLink: InviteLink }) {
 			</p>
 		</div>
 	)
+}
+
+// browser controls preserve Enter submission and the invitation fields' password-manager exclusions
+const INVITE_FIELD_ELEMENTS: InviteFieldElements = {
+	Group: ({ children }) => <div className="space-y-2">{children}</div>,
+	Row: ({ children }) => <div className="flex gap-2">{children}</div>,
+	Chips: ({ children }) => <div className="flex flex-wrap gap-1.5">{children}</div>,
+	Label: ({ children }) => <FieldLabel>{children}</FieldLabel>,
+	Error: ({ children }) => <p className="text-destructive mt-1 text-xs">{children}</p>,
+	Chip: TagPill,
+	Input: ({ label, value, placeholder, kind, onChange, onSubmit }) => (
+		<Input
+			aria-label={label}
+			type={kind === "email" ? "email" : "text"}
+			value={value}
+			placeholder={placeholder}
+			name={kind === "email" ? "invite-address" : "invite-recipient"}
+			autoComplete="off"
+			data-1p-ignore
+			data-lpignore="true"
+			data-bwignore
+			data-form-type="other"
+			onChange={(event) => onChange(event.target.value)}
+			onKeyDown={(event) => {
+				if (event.key === "Enter") {
+					// stage the invitation without submitting the surrounding form
+					event.preventDefault()
+					onSubmit()
+				}
+			}}
+		/>
+	),
+	Button: ({ onPress, isDisabled }) => (
+		<Button variant="outline" onClick={onPress} disabled={isDisabled}>
+			Invite
+		</Button>
+	),
 }

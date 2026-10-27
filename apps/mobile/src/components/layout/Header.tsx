@@ -10,7 +10,7 @@ import { TopicTutorialVideoDialog, TopicTutorialVideoIcon } from "@/components/t
 import { MAX_FONT_SCALE } from "@/hooks/useFontScaledSize"
 import { useHomeLink } from "@/providers/SearchBarProvider"
 import { toTypeRoleStyle } from "@/typeRoleStyles"
-import { HeaderMenu } from "./HeaderMenu"
+import { UserMenu } from "./UserMenu"
 
 // navigation remains with the screen that supplies the header
 export type HeaderProps = { isHome?: boolean; isReheating?: boolean; onReheat?: () => void }
@@ -62,7 +62,7 @@ export function Header({ isHome = false, isReheating = false, onReheat }: Header
 					>
 						<TopicTutorialVideoIcon size={28} />
 					</Button>
-					<HeaderMenu />
+					<UserMenu />
 				</View>
 			</View>
 			{isTutorialOpen ? (

@@ -1,7 +1,8 @@
-import { type ComponentType, useEffect, useRef, useState } from "react"
+import type { ComponentType } from "react"
+import { useCopyFeedback } from "../hooks/useCopyFeedback"
 
 // the clipboard and its accessible feedback belong to the platform
-export const COPIED_FEEDBACK_MS = 1500
+export { COPIED_FEEDBACK_MS } from "../hooks/useCopyFeedback"
 export type CopyMarkdownControlProps = { isCopied: boolean; onCopy: () => void }
 
 /**
@@ -16,30 +17,13 @@ export function CopyMarkdownButton({
 	copyToClipboard: (markdown: string) => Promise<boolean>
 	Control: ComponentType<CopyMarkdownControlProps>
 }) {
-	// retire pending feedback when its scrollbox closes
-	const [isCopied, setIsCopied] = useState(false)
-	const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-	const isMountedRef = useRef(true)
-	useEffect(() => {
-		isMountedRef.current = true
-		return () => {
-			isMountedRef.current = false
-			if (timeoutRef.current !== null) {
-				clearTimeout(timeoutRef.current)
-			}
-		}
-	}, [])
+	const { copiedLabel, markCopied } = useCopyFeedback()
 
 	// confirm only an accepted copy and restart its feedback window
 	async function handleCopy(): Promise<void> {
-		if (!(await copyToClipboard(markdown)) || !isMountedRef.current) {
-			return
+		if (await copyToClipboard(markdown)) {
+			markCopied("markdown")
 		}
-		if (timeoutRef.current !== null) {
-			clearTimeout(timeoutRef.current)
-		}
-		setIsCopied(true)
-		timeoutRef.current = setTimeout(() => setIsCopied(false), COPIED_FEEDBACK_MS)
 	}
-	return <Control isCopied={isCopied} onCopy={() => void handleCopy()} />
+	return <Control isCopied={copiedLabel !== null} onCopy={() => void handleCopy()} />
 }

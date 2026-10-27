@@ -1,17 +1,12 @@
 import { authClient } from "@carlnotes/client/authClient"
 import { fetchBillingState, fetchCheckoutUrl } from "@carlnotes/client/billingClient"
 import { isPaidPlan, plans } from "@carlnotes/contracts/enums"
-import { type BillingInterval, PLANS, type Plan, SCAN_COST_CENTS } from "@carlnotes/contracts/plans"
-import { toBrewsWord } from "@carlnotes/core/lib/labels"
-import { isUsersPlan, toPlanBadge } from "@carlnotes/core/lib/planCards"
-import { cn } from "@carlnotes/nightshift/classNames"
-import { Check } from "lucide-react"
+import type { BillingInterval, Plan } from "@carlnotes/contracts/plans"
 import { useEffect, useState } from "react"
 import { MonthlyBudgetCutoffTable } from "@/components/account/MonthlyBudgetCutoffTable"
+import { PlanCard } from "@/components/account/PlanCard"
 import { CoffeeLoading } from "@/components/branding/CoffeeLoading"
 import { UPGRADE_PROMPTS } from "@/components/chat/spokenQuestionsPaused"
-import { AnchorLink } from "@/components/common/AnchorLink"
-import { Button, buttonVariants } from "@/components/primitives/button"
 import { Switch } from "@/components/primitives/switch"
 import { useCtaPromptToast } from "@/hooks/useCtaPromptToast"
 import { usePageTitle } from "@/hooks/usePageTitle"
@@ -23,24 +18,6 @@ const UPGRADE_PROMPT_TOAST_ID = "upgrade-prompt"
 
 // the recommended plan that a signed-out visitor sees highlighted
 const RECOMMENDED_PLAN: Plan = "plus"
-
-// the one-line pitch under each plan's name
-const PLAN_TAGLINES: Record<Plan, string> = {
-	free: "Carl reads a little.",
-	plus: "Carl reads plenty.",
-	premium: "Carl reads everything. Twice.",
-}
-
-// whole dollars stay whole, and a fractional effective-monthly price keeps its cents
-function toWholeDollarLabel(cents: number): string {
-	const dollars = cents / 100
-	return Number.isInteger(dollars) ? `$${dollars}` : `$${dollars.toFixed(2)}`
-}
-
-// the plan's monthly budget stated in Brews, rounded up to ten as an estimate
-function toMonthlyScanEstimate(monthlyBudgetCents: number): number {
-	return Math.ceil(monthlyBudgetCents / SCAN_COST_CENTS / 10) * 10
-}
 
 /**
  * The plans page: the three plans side by side with a monthly/yearly toggle, which opens at the
@@ -157,163 +134,5 @@ export function PlansPage() {
 			{/* what each plan pauses as the month's spend climbs, in its own row under the plan cards */}
 			<MonthlyBudgetCutoffTable />
 		</main>
-	)
-}
-
-// one plan card: the name, the price for the plan and its limits at the selected billing interval
-function PlanCard({
-	plan,
-	isYearly,
-	isHighlighted,
-	signedInPlan,
-	subscribedInterval,
-	isRedirecting,
-	onCheckout,
-	onPortal,
-}: {
-	plan: Plan
-	isYearly: boolean
-	isHighlighted: boolean
-	signedInPlan: Plan | null
-	subscribedInterval: BillingInterval | null
-	isRedirecting: boolean
-	onCheckout: (plan: Plan) => void
-	onPortal: () => void
-}) {
-	const planConfig = PLANS[plan]
-	// the plan's monthly price for the selected billing interval
-	const monthlyCents = isYearly ? planConfig.priceYearlyCents / 12 : planConfig.priceMonthlyCents
-
-	// the selected billing interval and if it raises the limits
-	const billingInterval = isYearly ? "yearly" : "monthly"
-	const { dailyTopicLimit, dailyScanLimit } = planConfig
-	const isDailyTopicLimitRaised = isYearly && dailyTopicLimit.yearly > dailyTopicLimit.monthly
-	const isDailyScanLimitRaised = isYearly && dailyScanLimit.yearly > dailyScanLimit.monthly
-
-	// whether this card is what the user is already on, which decides both its badge and its action
-	const isCurrentPlan = isUsersPlan(plan, signedInPlan, billingInterval, subscribedInterval)
-	const planBadge = toPlanBadge(isCurrentPlan, signedInPlan, isHighlighted)
-
-	// the plan's limits at the selected billing interval
-	const dailyTopicLimitForInterval = dailyTopicLimit[billingInterval]
-	const dailyScanLimitForInterval = dailyScanLimit[billingInterval]
-	const monthlyScanEstimate = toMonthlyScanEstimate(planConfig.monthlyBudgetCents)
-	return (
-		<section
-			className={cn(
-				"bg-card relative flex flex-col rounded-xl border p-6 shadow-raised",
-				isHighlighted && "border-primary ring-primary/40 ring-2",
-			)}
-		>
-			{/* the plan badge sits on the top edge of the highlighted card */}
-			{planBadge && (
-				<span className="bg-primary text-primary-foreground absolute -top-3 left-1/2 -translate-x-1/2 rounded-full px-3 py-0.5 text-xs font-semibold whitespace-nowrap">
-					{planBadge}
-				</span>
-			)}
-			<h2 className="font-display text-lg capitalize">{plan}</h2>
-			<p className="text-muted-foreground mt-1 text-sm">{PLAN_TAGLINES[plan]}</p>
-			{/* the price and its billing note */}
-			<div className="mt-4">
-				<span className="text-3xl font-bold">{toWholeDollarLabel(monthlyCents)}</span>
-				<span className="text-muted-foreground text-sm"> /month</span>
-			</div>
-			<p className="text-muted-foreground mt-1 text-xs">
-				{!isPaidPlan(plan)
-					? "Free forever"
-					: isYearly
-						? `Billed ${toWholeDollarLabel(planConfig.priceYearlyCents)} yearly`
-						: "Billed monthly"}
-			</p>
-			{/* the quotas, straight from the plans catalog */}
-			<ul className="mt-4 flex-1 space-y-2 text-sm">
-				<QuotaLink label={`${planConfig.topicLimit} topics`} />
-				<QuotaLink
-					label={`${dailyTopicLimitForInterval} daily ${toBrewsWord(dailyTopicLimitForInterval)}`}
-					isRaised={isDailyTopicLimitRaised}
-				/>
-				<QuotaLink
-					label={`${dailyScanLimitForInterval} craft ${toBrewsWord(dailyScanLimitForInterval)} a day`}
-					isRaised={isDailyScanLimitRaised}
-				/>
-				{/* the monthly budget that the feature windows table's shares are of, and the scans it buys */}
-				<QuotaLink label={`${toWholeDollarLabel(planConfig.monthlyBudgetCents)} coffee fund a month`} />
-				<QuotaLink label={`About ${monthlyScanEstimate} ${toBrewsWord(monthlyScanEstimate)} a month`} />
-				{/* the free plan's short episode with only the latest kept, or a paid plan's full episodes, every one kept */}
-				<QuotaLink label={isPaidPlan(plan) ? "Full podcasts for every brew" : "Short podcast for latest brew only"} />
-			</ul>
-			<PlanButton
-				plan={plan}
-				isCurrentPlan={isCurrentPlan}
-				signedInPlan={signedInPlan}
-				isRedirecting={isRedirecting}
-				onCheckout={onCheckout}
-				onPortal={onPortal}
-			/>
-		</section>
-	)
-}
-
-// one checked quota line, labeled with the year interval if the quota is raised
-function QuotaLink({ label, isRaised }: { label: string; isRaised?: boolean }) {
-	return (
-		<li className="flex items-start gap-2">
-			<Check className="text-primary mt-0.5 size-4 shrink-0" />
-			{/* the marker flows with the words instead of beside them, so a wrapped line keeps its shape */}
-			<span>
-				{label}
-				{isRaised && (
-					<span className="bg-card border-card text-link ml-1.5 inline-flex items-center rounded-full border px-1.5 align-middle text-xs font-semibold shadow-raised">
-						with Yearly plan
-					</span>
-				)}
-			</span>
-		</li>
-	)
-}
-
-// the card's action: signup for a visitor, checkout for a free user's upgrade, the portal for a paying user
-function PlanButton({
-	plan,
-	isCurrentPlan,
-	signedInPlan,
-	isRedirecting,
-	onCheckout,
-	onPortal,
-}: {
-	plan: Plan
-	isCurrentPlan: boolean
-	signedInPlan: Plan | null
-	isRedirecting: boolean
-	onCheckout: (plan: Plan) => void
-	onPortal: () => void
-}) {
-	// a logged-out visitor has no plan and goes to the signup no matter which card they select
-	if (!signedInPlan) {
-		return (
-			<AnchorLink href="/signup?cta=pricing" className={cn(buttonVariants({ variant: "default" }), "mt-6 w-full")}>
-				Get started
-			</AnchorLink>
-		)
-	}
-	if (isCurrentPlan) {
-		return (
-			<Button variant="outline" disabled className="mt-6 w-full">
-				Current plan
-			</Button>
-		)
-	}
-	// a paying user's plan changes go through the Stripe portal
-	if (isPaidPlan(signedInPlan)) {
-		return (
-			<Button variant="outline" onClick={onPortal} disabled={isRedirecting} className="mt-6 w-full">
-				Manage billing
-			</Button>
-		)
-	}
-	return (
-		<Button onClick={() => onCheckout(plan)} disabled={isRedirecting} className="mt-6 w-full">
-			Upgrade
-		</Button>
 	)
 }

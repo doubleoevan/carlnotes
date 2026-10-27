@@ -8,8 +8,8 @@ import { getRouteApi, useNavigate } from "@tanstack/react-router"
 import { Pencil, Share2, Trash2 } from "lucide-react"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
-import { CoffeeLoading } from "@/components/branding/CoffeeLoading"
 import { ConfirmDialog } from "@/components/common/ConfirmDialog"
+import { PageSkeleton } from "@/components/layout/PageSkeleton"
 import { NotesSection } from "@/components/note/NotesSection"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/primitives/accordion"
 import { ShareTeam } from "@/components/share/ShareTeam"
@@ -130,7 +130,11 @@ export function TeamPage() {
 
 	// show the loading animation, then the gate for a private team, or the missing shape for no team at all
 	if (teamResult === undefined) {
-		return <CoffeeLoading />
+		return (
+			<main className={PAGE_CLASS}>
+				<PageSkeleton kind="team" />
+			</main>
+		)
 	}
 	if (teamResult.status === "gated") {
 		return (

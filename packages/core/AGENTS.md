@@ -1,7 +1,7 @@
 # packages/core/
 
 `@carlnotes/core`, the DOM-free components, stores, hooks, and lib that web and mobile import as `@carlnotes/core/<folder>/<name>`.
-It imports `@carlnotes/contracts`, `@carlnotes/client`, `react`, and `@tanstack/react-query`.
+It imports `@carlnotes/contracts`, `@carlnotes/client`, `react`, and `@tanstack/react-query`, and the non-UI `markdown-to-jsx/markdown` parser.
 
 - `components/` — portable React composition exported as `@carlnotes/core/components/<name>`. `TablePagination`,
   `Pagination`, `SourceResultsChart`, `TopicScanRecap`, `NumberedTopicFindingList`, `SafeNoteLink`, `TopicScanFailure`,
@@ -66,6 +66,8 @@ Its optional `onChangeConfirmed` callback retains acknowledged edits in a separa
 Its search adapter preserves result order and metadata while applying the same Finding edits across loaded pages.
 `lib/topicFeedLabels.ts` owns shared section, sort, view, tag, and empty-state labels, plus the Finding-view menu options and Team bookmark scopes.
 `lib/topicTutorialVideo.ts` owns tutorial openers, event properties, and first-play recording.
+`lib/activePoll.ts` serializes requests while an app-supplied activity predicate is true. `lib/scanPoll.ts` supplies the scan backoff shared by both clients.
+`lib/topicSchedule.ts` owns schedule options, daily-slot permission, and allowance copy shared by both Topic forms.
 `lib/topicViews.ts` sends one view per Topic per web tab or native app runtime, shared by both Topic screens.
 `lib/sourceResults.ts` shares Source footnote ordering, totals, detail labels, and the earlier-findings row.
 `lib/topicSources.ts` shares default/custom Source ordering, off states, and screening messages between both Topic info views and the web editor.
@@ -74,3 +76,71 @@ compose the recap and chart from these rules; platform adapters draw the element
 when building Markdown links.
 Pure tests live beside these modules. Live hook tests use web's React DOM harness in `apps/web/src/hooks/useTopicFeedState.test.tsx`.
 Core imports no router, DOM, React Native, native storage, or device API.
+
+## Tasting Notes
+
+`components/NoteEditor`, `NoteStatic`, `NoteToolbar`, `CreateNote`, `NoteConflictNotice`, `NoteComments`, and
+`NoteUnreadBadge` own the composition used by both clients. Their typed platform elements stay at module scope.
+The apps supply the enriched HTML library, routing, keyboard layout, native sharing, and their Nightshift controls.
+`lib/noteFormats.ts` owns format order, labels, commands, selection ranges, and safe link operations.
+`lib/noteLabels.ts` owns visibility descriptions and save/recovery messages. `lib/noteBadges.ts` owns count labels.
+
+`useNoteBodySave` debounces for 1,000 ms, with one request in flight and one pending body. `getDraft` exposes the
+latest HTML, original base version, local revision, conflict, and validation failure. `onDraftChange` runs after
+accepted edits and save outcomes; native storage persists it immediately. An acknowledgement cannot discard newer
+text. A conflict blocks transport but accepts more typing. Only an accepted deliberate Reload replaces that draft.
+Transport failure waits for another edit or explicit retry. Size rejection blocks lifecycle retries until the body
+changes. Unavailable access retires native content. `retire` fences every late callback and pending dispatch.
+`lib/noteDrafts.ts` owns pure edit, acknowledgement, conflict, Reload, and retirement transitions, plus validation of account-owned versioned records. Native storage and its controller registry stay in mobile.
+
+`useCopyFeedback` owns the clipboard confirmation lifetime shared by copy controls and share dialogs.
+
+`useNoteManagement` shares rename, visibility, and deletion permission gates, serialized writes, failure messages, and accepted metadata. Apps own their confirmation controls and close behavior.
+
+`useNoteComments` loads on open, retains failed-post text through the shared composition, and applies accepted writes
+in place. Native comments sit below the note. Web keeps its wide-screen column and phone-browser sheet.
+`useNoteBadges` polls every 45 seconds while focused and online, and refreshes on foreground and reconnect.
+`useNoteRead` runs only after a successful note load. Tentative clearing ends after acknowledgement and refresh;
+failed requests retain confirmed counts. Account generations reject late responses from a replaced session.
+
+`lib/safeNoteMarkdown.ts` parses recaps once through the non-UI Markdown entry point. It transforms the AST before
+web's `astToJSX` or native's `astToNative` renders it. Never serialize and reparse the safe tree. Only exact stored
+HTTP(S) Finding URLs remain links; images disappear, raw HTML stays inert text, and rejected destinations remain
+visible. `SafeNoteLink` repeats the final URL guard. All six recap heading levels use the compact display role.
+Finding explanations remain plain text. Tasting Note editor headings retain the editor's Karla typography.
+
+## Shared menu pages and forms
+
+`components/DataTable` owns table headings, rows, and totals. Pure domain columns live in `lib/ownerTopicsTableColumns.ts`,
+`topicsTableColumns.ts`, `topicScansTableColumns.ts`, `topicSubscriptionsTableColumns.ts`,
+`sentInvitesTableColumns.ts`, `teamMembersTableColumns.ts`, and `teamsMembershipTableColumns.ts`. Each app supplies its link, switch, action, and table elements. Native horizontal scrolling
+and a fixed first column belong to the mobile adapter. Web retains its expandable subtables and server-rendered rows.
+
+`components/AccountBudget`, `AccountFields`, `PlanCard`, `MonthlyBudgetCutoffTable`, `InviteFields`, and `TeamFields`
+share page and form composition. `AccountFields` includes the shared ProfileFields form, with platform identity,
+photo-toggle, and input elements. `useAvatar` owns upload acknowledgement and session refresh for both File and
+FormData uploads. `Footer` owns all footer copy, destinations, and row order for both apps.
+`lib/spendMeter`, `monthlyBudgetCutoffs`, and `monthlyBudgetCutoffCopy` own budget labels and checkpoint calculations.
+
+`hooks/useTopicFields`, `useTopicSourceEditor`, `useTopicTeamChoice`, `useTeamFields`, and `useTopicEmails` own the
+portable form state. `lib/saveTopic`, `saveTeam`, `teamFields`, `teamInvites`, `topicSourceEditor`, and
+`topicTeamChoices` own payloads, validation helpers, retry bookkeeping, and invitation delivery.
+The Topic Team selector remembers accepted writes and adds selected Teams before removing existing memberships.
+Source recommendations merge into current selections and respect the remaining capacity when their response arrives.
+Uploads, file pickers, router destinations, and visible mutation feedback remain app adapters.
+
+`useTeamFields` shares advisory name checks with revision guards. A changed name clears stale errors, and failed
+lookups leave authoritative validation to the save endpoint. Live hook tests cover delayed replies and owned names.
+
+`components/TopicSkeleton` owns the shared Topic loading section order. App adapters supply the header, placeholder
+cards, columns, and motion/accessibility treatment. Web keeps its desktop grid and mobile uses a vertical column.
+
+`components/PageSkeleton` owns the Profile, Teams, Activity, Account, and Team loading layouts, including shared
+identity, table, and budget placeholders. Browser and native adapters supply only elements, animation, and
+accessibility. Its classes are scanned explicitly by both app stylesheets.
+
+`components/PageActionMenu` shares page action ordering and global action visibility. `UserMenuItems` shares main
+navigation destinations, grouping, selection, and the Admin permission gate, with optional platform badge slots.
+`components/AddToAi` and `lib/installDeeplinks` share provider order, labels, instructions, commands, and copy feedback.
+The adapters keep DOM/native icons, storage, clipboard, and desktop install URLs out of core.
+`hooks/useAccount` loads billing and activity together in an account-scoped query and retains loaded data on refresh.

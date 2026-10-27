@@ -1,10 +1,11 @@
+import type { TopicResponse } from "@carlnotes/contracts/topics"
 import type { Meta, StoryObj } from "@storybook/react-native"
 import { ScrollView } from "react-native"
 import { STORY_TOPIC_PAGE, TopicPageStoryProvider } from "@/components/topic/topicPageStories"
 import { NotesSection } from "./NotesSection"
 
 // the complete fixture exercises the matching web card without account requests
-const meta: Meta<typeof NotesSection> = {
+const meta: Meta<{ topic: TopicResponse }> = {
 	title: "Note/NotesSection",
 	component: NotesSection,
 	parameters: { webReference: "apps/web/src/components/note/NotesSection.tsx at 375px" },

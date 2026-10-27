@@ -18,11 +18,23 @@ export function InviteMembersModal({
 	onClose: () => void
 }) {
 	const [pendingInvites, setPendingInvites] = useState<PendingInvite[]>([])
+	const [isSending, setIsSending] = useState(false)
+	const [rejection, setRejection] = useState<string | null>(null)
 
 	// send the staged invites, each reported by its own toast, then close the modal
 	const handleSendInvites = async (): Promise<void> => {
-		await sendPendingInvites(teamId, pendingInvites)
-		onClose()
+		setIsSending(true)
+		setRejection(null)
+		try {
+			await sendPendingInvites(teamId, pendingInvites, (acceptedInvite) =>
+				setPendingInvites((invites) => invites.filter((invite) => invite !== acceptedInvite)),
+			)
+			onClose()
+		} catch (error) {
+			setRejection(error instanceof Error ? error.message : "Those invites didn't send. Try again.")
+		} finally {
+			setIsSending(false)
+		}
 	}
 
 	return (
@@ -36,10 +48,15 @@ export function InviteMembersModal({
 					onPendingInvitesChange={setPendingInvites}
 				/>
 				<DialogFooter>
+					{rejection && (
+						<p role="alert" className="text-sm text-destructive">
+							{rejection}
+						</p>
+					)}
 					<Button variant="outline" onClick={onClose}>
 						Cancel
 					</Button>
-					<Button onClick={() => void handleSendInvites()} disabled={pendingInvites.length === 0}>
+					<Button onClick={() => void handleSendInvites()} disabled={isSending || pendingInvites.length === 0}>
 						Send invites
 					</Button>
 				</DialogFooter>

@@ -51,9 +51,9 @@ export function toKebabName(tokenName: string): string {
 }
 
 /**
- * Returns a color token as the web theme's CSS variable reference, such as var(--color-muted-foreground), for a style
- * value that follows the theme without a re-render.
+ * Returns a color token's runtime palette variable, such as var(--muted-foreground), so styles follow the theme.
+ * Tailwind's inline --color aliases are compiled into utilities and need not exist in the rendered CSS.
  */
 export function toColorCssVariable(colorName: ColorName): string {
-	return `var(--color-${toKebabName(colorName)})`
+	return `var(--${toKebabName(colorName)})`
 }

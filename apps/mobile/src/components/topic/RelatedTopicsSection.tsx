@@ -39,7 +39,7 @@ export function RelatedTopicsSection({ relatedTopics }: Pick<TopicResponse, "rel
 					</TableRow>
 				))}
 				{hasPagination ? (
-					<View className="px-4 pb-2">
+					<View className="px-4">
 						<TablePagination pagination={pagination} />
 					</View>
 				) : null}

@@ -13,8 +13,8 @@
   the api's error message from a failed response, and `ApiResponse` is the `ok`, `status`, `json`, and `text` of a
   response, the part the helpers read.
 - `authClient.ts` — the Better Auth client, typed by the api's `auth` through `inferAdditionalFields`. An app calls
-  `configureAuthClient({ baseURL, plugins })` once at startup, before the first screen, and gets its client typed with
-  its plugins back. `authClient()` returns that client to every importer, or the browser's own client, which sends its
+  `configureAuthClient({ baseURL, plugins, headers })` once at startup, before the first screen, and gets its client typed with
+  its plugins back. Optional headers carry native device descriptions through sign-in. `authClient()` returns that client to every importer, or the browser's own client, which sends its
   `/api/auth` requests to the page's own origin, if no app configured one. Configuring after a first use throws an
   error, and `resetAuthClient` drops the client for a test file that configures its own. `AuthClient` is the client's
   type as the shared code sees it. Beside them the signup-gate calls:
@@ -41,3 +41,15 @@ Default calls retain the existing failure message and resolve after reporting. O
 Opening a Finding always keeps its background failure silent. Topic-page reads in `topicClient.ts` distinguish visible, gated, and missing responses from transport or server failures.
 `sendFindingFeedback` also accepts named options and opt-in rejection, so a details panel only acknowledges a saved note and retains failed text for retry.
 `topicFindingClient.test.ts` covers successful writes, HTTP and network rejection, silent opens, and failed page reads.
+
+`noteClient.ts` reads and writes notes through the existing endpoints. `fetchNote` and `fetchNotes` accept
+`shouldThrowOnError` to distinguish retryable reads from missing or forbidden notes. Comments and badge reads reject
+failures so consumers retain confirmed content. `sendNoteRead` returns whether the server accepted the read.
+`noteClient.test.ts` covers these outcomes, including transport failures and read acknowledgements.
+
+Native forms reuse the existing Topic, Team, profile, invite, and billing clients. Avatar and attachment uploads
+accept a platform-built FormData body. Team member visibility and join-request withdrawal reject failed HTTP writes;
+callers must retain their current state and show failure rather than report success.
+
+`fetchTopicAttachment` downloads attachment bytes with the configured session headers and rejects failed access.
+Native file viewing uses this client so it does not depend on a browser session.

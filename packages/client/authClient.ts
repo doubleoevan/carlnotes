@@ -28,9 +28,11 @@ let configuredAuthClient: AuthClient | undefined
 export function configureAuthClient<Plugins extends BetterAuthClientPlugin[]>({
 	baseURL,
 	plugins,
+	headers,
 }: {
 	baseURL: string
 	plugins: Plugins
+	headers?: Record<string, string>
 }): AppAuthClient<Plugins> {
 	if (configuredAuthClient) {
 		throw new Error("the auth client is already in use. configure it before the first screen renders")
@@ -38,7 +40,11 @@ export function configureAuthClient<Plugins extends BetterAuthClientPlugin[]>({
 
 	// the api's fields first, then the app's plugins. the shared code reads the client by the api's fields alone
 	const appPlugins = [additionalFieldsPlugin, ...plugins] as [typeof additionalFieldsPlugin, ...Plugins]
-	const appAuthClient: AppAuthClient<Plugins> = createAuthClient({ baseURL, plugins: appPlugins })
+	const appAuthClient: AppAuthClient<Plugins> = createAuthClient({
+		baseURL,
+		plugins: appPlugins,
+		fetchOptions: { headers },
+	})
 	configuredAuthClient = appAuthClient as unknown as AuthClient
 	return appAuthClient
 }

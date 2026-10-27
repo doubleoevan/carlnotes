@@ -1,9 +1,10 @@
+import { UserMenuItems as SharedUserMenuItems, type UserMenuElements } from "@carlnotes/core/components/UserMenuItems"
 import { useAllTeamChatMentions, useAllTopicChatMentions } from "@carlnotes/core/stores/chatRoomStore"
 import { useAllNoteBadges } from "@carlnotes/core/stores/noteBadgeStore"
 import { useTopicInviteBadges } from "@carlnotes/core/stores/topicInviteStore"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { useLocation } from "@tanstack/react-router"
-import { Activity, CircleUserRound, Columns3Cog, LogOut, ShieldUser, User, Users } from "lucide-react"
+import { Activity, BookOpen, CircleUserRound, Columns3Cog, LogOut, ShieldUser, User, Users } from "lucide-react"
 import { useState } from "react"
 import { UserAvatar } from "@/components/branding/UserAvatar"
 import { AnchorLink } from "@/components/common/AnchorLink"
@@ -12,7 +13,6 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/primitives
 import { signOutAndReload } from "@/components/session/signOut"
 import { type TopicTutorialVideoOpener, TopicTutorialVideoOption } from "@/components/topic/TopicTutorialVideoDialog"
 import { MENU_DIVIDER_CLASS, MENU_OPTION_CLASS, MENU_OPTION_SELECTED_CLASS } from "@/lib/styleClasses"
-import { DocsLink } from "./DocsLink"
 
 /**
  * The wide-screen user menu is a dropdown opened from the signed-in user's avatar.
@@ -99,100 +99,70 @@ export function UserMenuItems({
 
 	// the open page's row shows the selected tint
 	const pathname = useLocation({ select: (location) => location.pathname })
-	const optionClassName = (href: string): string =>
-		cn(MENU_OPTION_CLASS, pathname === href && MENU_OPTION_SELECTED_CLASS)
-	const isCurrentRoute = (href: string): "page" | undefined => (pathname === href ? "page" : undefined)
 	return (
-		<>
-			<AnchorLink
-				href={`/profiles/${userId}`}
-				onClick={onNavigate}
-				aria-current={isCurrentRoute(`/profiles/${userId}`)}
-				className={optionClassName(`/profiles/${userId}`)}
-			>
-				<CircleUserRound className="size-4" />
-				<span className="flex-1">Profile</span>
-				{/* the topics' unread chat mentions and note changes, in one count */}
-				<UpdateCountBadge
-					chatMentions={topicChatMentions}
-					noteBadges={topicNoteBadges}
-					className="shrink-0"
-					countBadgeClassName="h-5 min-w-5 text-xs"
-				/>
-			</AnchorLink>
-			<AnchorLink
-				href="/teams"
-				onClick={onNavigate}
-				aria-current={isCurrentRoute("/teams")}
-				className={optionClassName("/teams")}
-			>
-				<Users className="size-4" />
-				<span className="flex-1">Teams</span>
-				{/* the teams' own unread chat mentions and note changes, in one count */}
-				<UpdateCountBadge
-					chatMentions={teamChatMentions}
-					noteBadges={teamNoteBadges}
-					className="shrink-0"
-					countBadgeClassName="h-5 min-w-5 text-xs"
-				/>
-			</AnchorLink>
-			<AnchorLink
-				href="/activity"
-				onClick={onNavigate}
-				aria-current={isCurrentRoute("/activity")}
-				className={optionClassName("/activity")}
-			>
-				<Activity className="size-4" />
-				<span className="flex-1">Activity</span>
-				{/* the topic invitations waiting for an answer, each named in the tooltip */}
-				<UpdateCountBadge invites={topicInviteBadges} className="shrink-0" countBadgeClassName="h-5 min-w-5 text-xs" />
-			</AnchorLink>
-			<AnchorLink
-				href="/account"
-				onClick={onNavigate}
-				aria-current={isCurrentRoute("/account")}
-				className={optionClassName("/account")}
-			>
-				<User className="size-4" />
-				Account
-			</AnchorLink>
-			{/* a divider under the account options */}
-			<div className={MENU_DIVIDER_CLASS} />
-			<AnchorLink
-				href="/plans"
-				onClick={onNavigate}
-				aria-current={isCurrentRoute("/plans")}
-				className={optionClassName("/plans")}
-			>
-				<Columns3Cog className="size-4" />
-				Plans
-			</AnchorLink>
-			{/* the video on making a topic, which plays in a dialog */}
-			<TopicTutorialVideoOption
-				onSelect={() => {
-					onNavigate()
-					onPlayTopicTutorialVideo()
-				}}
-			/>
-			{/* the docs open in their own tab */}
-			<DocsLink className={MENU_OPTION_CLASS} hasIcon onNavigate={onNavigate} />
-			{/* a divider above the last group, the admin console and signing out */}
-			<div className={MENU_DIVIDER_CLASS} />
-			{isAdmin ? (
-				<AnchorLink
-					href="/admin"
-					onClick={onNavigate}
-					aria-current={isCurrentRoute("/admin")}
-					className={optionClassName("/admin")}
-				>
-					<ShieldUser className="size-4" />
-					Admin
-				</AnchorLink>
-			) : null}
-			<button type="button" onClick={onSignOut} className={MENU_OPTION_CLASS}>
-				<LogOut className="size-4" />
-				Sign out
-			</button>
-		</>
+		<SharedUserMenuItems
+			elements={USER_MENU_ELEMENTS}
+			userId={userId}
+			isAdmin={isAdmin}
+			pathname={pathname}
+			onNavigate={onNavigate}
+			onPlayTutorial={onPlayTopicTutorialVideo}
+			onSignOut={onSignOut}
+			renderBadge={(label) =>
+				label === "Activity" ? (
+					<UpdateCountBadge
+						invites={topicInviteBadges}
+						className="shrink-0"
+						countBadgeClassName="h-5 min-w-5 text-xs"
+					/>
+				) : (
+					<UpdateCountBadge
+						chatMentions={label === "Profile" ? topicChatMentions : teamChatMentions}
+						noteBadges={label === "Profile" ? topicNoteBadges : teamNoteBadges}
+						className="shrink-0"
+						countBadgeClassName="h-5 min-w-5 text-xs"
+					/>
+				)
+			}
+		/>
 	)
+}
+
+// keep DOM navigation, badges, and tutorial rendering in stable platform adapters
+const MENU_ICONS = {
+	Profile: CircleUserRound,
+	Teams: Users,
+	Activity,
+	Account: User,
+	Plans: Columns3Cog,
+	"What CarlNotes Is": BookOpen,
+	Admin: ShieldUser,
+}
+const USER_MENU_ELEMENTS: UserMenuElements = {
+	Link: ({ label, href, isSelected, onSelect, children }) => {
+		const Icon = MENU_ICONS[label as keyof typeof MENU_ICONS]
+		return (
+			<AnchorLink
+				href={href}
+				isNewTab={href === "/docs"}
+				onClick={onSelect}
+				aria-current={isSelected ? "page" : undefined}
+				className={cn(MENU_OPTION_CLASS, isSelected && MENU_OPTION_SELECTED_CLASS)}
+			>
+				<Icon className="size-4" />
+				<span className="flex-1">{label}</span>
+				{children}
+			</AnchorLink>
+		)
+	},
+	Action: ({ label, onSelect, isDisabled }) =>
+		label === "Brew with Carl" ? (
+			<TopicTutorialVideoOption onSelect={onSelect} />
+		) : (
+			<button type="button" onClick={onSelect} disabled={isDisabled} className={MENU_OPTION_CLASS}>
+				<LogOut className="size-4" />
+				{label}
+			</button>
+		),
+	Divider: () => <div className={MENU_DIVIDER_CLASS} />,
 }

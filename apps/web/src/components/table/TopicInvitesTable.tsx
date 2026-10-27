@@ -1,6 +1,10 @@
 import { sendDeleteTopicInvite } from "@carlnotes/client/activityClient"
 import type { ActivityResponse } from "@carlnotes/contracts/activity"
 import { toTopicPath } from "@carlnotes/contracts/seo"
+import {
+	TOPIC_INVITES_TABLE_LABELS as SHARED_TOPIC_INVITES_TABLE_LABELS,
+	toTopicInviteConfirmation,
+} from "@carlnotes/core/lib/sentInvitesTableColumns"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { STANDALONE_LINK_CLASS } from "@/lib/styleClasses"
 import { type SentInviteRow, SentInvitesTable, type SentInvitesTableLabels } from "./SentInvitesTable"
@@ -12,18 +16,18 @@ type InviteRow = ActivityResponse["invites"][number]
  * The topic invitations table's headers and withdraw confirmation, worded for subscribing to a topic.
  */
 export const TOPIC_INVITES_TABLE_LABELS: SentInvitesTableLabels = {
-	targetLabel: "Topic",
-	acceptedLabel: "Followed",
-	acceptedNoun: "subscribed",
-	confirmTitle: "Delete this invitation?",
-	confirmLabel: "Delete invitation",
-	confirmBody: (row) => (
-		<>
-			{`${row.inviteeEmail ?? row.invitee?.username ?? "This invitee"} loses access to `}
-			<span className="font-semibold">{row.targetName}</span>, and their subscription goes with it. Inviting them again
-			starts over.
-		</>
-	),
+	...SHARED_TOPIC_INVITES_TABLE_LABELS,
+	confirmBody: (row) => {
+		// emphasize the target inside the shared confirmation text
+		const { beforeTarget, target, afterTarget } = toTopicInviteConfirmation(row)
+		return (
+			<>
+				{beforeTarget}
+				<span className="font-semibold">{target}</span>
+				{afterTarget}
+			</>
+		)
+	},
 }
 
 /**

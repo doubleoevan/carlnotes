@@ -1,6 +1,6 @@
-// the send-time scrub that every outgoing Sentry event passes: no content, no query string, and no invite token
+// send-time redaction for selected content fields and URL secrets in Sentry events
 
-// an event on its way to Sentry, as the scrub reads and rewrites it
+// an event on its way to Sentry, as the redaction reads and rewrites it
 type OutgoingEvent = {
 	extra?: Record<string, unknown>
 	contexts?: Record<string, unknown>
@@ -9,37 +9,34 @@ type OutgoingEvent = {
 }
 
 /**
- * Removes content-bearing fields, every query string, and every invite link's token from an outgoing event,
- * keeping the event itself.
+ * Removes named content fields, bounds attached strings, and redacts request, trace, and span URL secrets.
  */
-export function scrubContent<Event extends OutgoingEvent>(event: Event): Event {
-	// scrub extra and contexts, the two places an integration or a caller can attach content
-	const scrubbedEvent = { ...event, extra: withoutContent(event.extra), contexts: withoutContent(event.contexts) }
+export function redactEvent<Event extends OutgoingEvent>(event: Event): Event {
+	// redact extra and contexts, where integrations and callers attach content
+	const redactedEvent = { ...event, extra: withoutContent(event.extra), contexts: withoutContent(event.contexts) }
 
-	// a query string can include a reset token or a consent code, and a path an invite link's token,
-	// so neither leaves on the request, a header, the trace, or a span
-	const traceContext = scrubbedEvent.contexts?.trace as { data?: Record<string, unknown> } | undefined
+	// remove query strings and invite tokens from recorded request, trace, and span URL fields
+	const traceContext = redactedEvent.contexts?.trace as { data?: Record<string, unknown> } | undefined
 	if (traceContext?.data) {
 		traceContext.data = withoutUrlSecrets(traceContext.data)
 	}
 	return {
-		...scrubbedEvent,
+		...redactedEvent,
 		...(event.request ? { request: withoutRequestUrlSecrets(event.request) } : {}),
 		...(event.spans ? { spans: event.spans.map((span) => ({ ...span, data: withoutUrlSecrets(span.data) })) } : {}),
 	}
 }
 
 /**
- * Scrubs an outgoing transaction like any event, then reports each of its urls by its route,
- * so no id or token in a path reaches Sentry either.
+ * Applies event redaction and replaces request and trace URLs with the recorded route when available.
  */
-export function scrubTransaction<Event extends OutgoingEvent>(event: Event): Event {
+export function redactTransaction<Event extends OutgoingEvent>(event: Event): Event {
 	// a transaction the request middleware named has its route, and a page the ui has no route for keeps its path
-	const scrubbedEvent = scrubContent(event)
-	const traceData = (scrubbedEvent.contexts?.trace as { data?: Record<string, unknown> } | undefined)?.data
+	const redactedEvent = redactEvent(event)
+	const traceData = (redactedEvent.contexts?.trace as { data?: Record<string, unknown> } | undefined)?.data
 	const route = traceData?.["http.route"]
 	if (!traceData || typeof route !== "string" || !route.startsWith("/")) {
-		return scrubbedEvent
+		return redactedEvent
 	}
 
 	// the route replaces the path in the trace's urls and in the request's
@@ -50,8 +47,8 @@ export function scrubTransaction<Event extends OutgoingEvent>(event: Event): Eve
 		url: toRouteUrl(traceData.url),
 		"url.path": route,
 	})
-	const request = scrubbedEvent.request && { ...scrubbedEvent.request, url: toRouteUrl(scrubbedEvent.request.url) }
-	return { ...scrubbedEvent, ...(request ? { request } : {}) }
+	const request = redactedEvent.request && { ...redactedEvent.request, url: toRouteUrl(redactedEvent.request.url) }
+	return { ...redactedEvent, ...(request ? { request } : {}) }
 }
 
 // the fields named for a query string, which are dropped whole
@@ -98,16 +95,16 @@ function withoutRequestUrlSecrets<Request extends NonNullable<OutgoingEvent["req
 // event fields that could include a context doc or a page's content. they are dropped before an event is sent.
 const CONTENT_FIELD_PATTERN = /content|context|document|snippet|prompt|markdown|text/i
 
-// an identifier is short and content is long, so any string past this length is treated as content wherever it hides
+// the maximum attached string length retained in a report
 const MAX_REPORT_STRING_CHARS = 500
 
-// a copy of one attached object with every content-bearing field dropped, or undefined when there was nothing to scrub
+// copy an attached object with its content fields removed
 function withoutContent(attached: Record<string, unknown> | undefined): Record<string, unknown> | undefined {
 	if (!attached) {
 		return attached
 	}
 
-	// the name filter removes what is labeled as content, and the length limit catches what is content
+	// remove matching top-level fields and bound strings inside remaining plain objects
 	const seen = new WeakSet<object>([attached])
 	const keptEntries = Object.entries(attached)
 		.filter(([field]) => !CONTENT_FIELD_PATTERN.test(field))
@@ -115,9 +112,9 @@ function withoutContent(attached: Record<string, unknown> | undefined): Record<s
 	return Object.fromEntries(keptEntries)
 }
 
-// truncate every string in a value, walking nested objects so a body can't hide a level down
+// truncate long strings while walking nested plain objects
 function truncateLongStrings(value: unknown, seen = new WeakSet<object>()): unknown {
-	// truncated and marked, so the error report can say something was here without including it
+	// retain a bounded prefix and mark the omitted remainder
 	if (typeof value === "string" && value.length > MAX_REPORT_STRING_CHARS) {
 		return `${value.slice(0, MAX_REPORT_STRING_CHARS)}…[truncated]`
 	}

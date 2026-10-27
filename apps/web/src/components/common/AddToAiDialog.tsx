@@ -1,18 +1,14 @@
-import { Code2, Copy, Link, MessageCircle } from "lucide-react"
+import { AddToAi, type AddToAiElements } from "@carlnotes/core/components/AddToAi"
+import { Check, Code2, Copy, Link, MessageCircle } from "lucide-react"
 import type { ComponentType } from "react"
-import { useState } from "react"
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/primitives/dialog"
-import { CopyLinkOption, SHARE_OPTION_CLASS, SHARE_OPTION_ICON_CLASS } from "@/components/share/ShareOptions"
+import { SHARE_OPTION_CLASS, SHARE_OPTION_ICON_CLASS } from "@/components/share/ShareOptions"
 import {
 	type AiProvider,
-	type DeeplinkAiProvider,
 	type McpServer,
-	PASTE_STEPS,
-	type PasteAiProvider,
 	readLastAiProvider,
 	storeAiProvider,
 	toInstallDeeplink,
-	toSortedAiProviders,
 } from "@/lib/installDeeplinks"
 import { MENU_DIVIDER_CLASS } from "@/lib/styleClasses"
 import { copyToClipboard } from "@/lib/utils"
@@ -50,149 +46,76 @@ const AI_PROVIDER_OPTIONS: Record<AiProvider, { label: string; Icon: ComponentTy
 	vscode: { label: "VS Code", Icon: Code2 },
 }
 
-// what the copy toast says
-const COPIED_MCP_TOAST = "Server URL copied. Paste it wherever your AI keeps its connectors."
-// the command toast names the provider the command introduces
-const toCommandCopiedToast = (aiProviderLabel: string): string =>
-	`Command copied. Run it in your terminal to introduce ${aiProviderLabel} to Carl.`
-
 /**
- * Lists the supported AI providers, the last one used first, and the Copy mcp URL option.
+ * Presents the shared AI provider instructions with web installation links and clipboard feedback.
  */
 export function AddToAiDialog({ mcpServer, onClose }: { mcpServer: McpServer; onClose: () => void }) {
-	// show the sorted list of AI providers, with the last one used first
-	const [sortedAiProviders] = useState(() => toSortedAiProviders(readLastAiProvider()))
-	// the AI provider whose paste steps are open, and whether the url was copied
-	const [openPasteAiProvider, setOpenPasteAiProvider] = useState<PasteAiProvider | null>(null)
-	const [isMcpUrlCopied, setIsMcpUrlCopied] = useState(false)
-
-	// the mcp url also confirms in place, on the copy option
-	const handleCopyMcpUrl = async (): Promise<void> => {
-		if (await copyToClipboard(mcpServer.url, COPIED_MCP_TOAST)) {
-			setIsMcpUrlCopied(true)
-		}
-	}
-	const handleCopyAddMcpCommand = async (addMcpCommand: string, aiProviderLabel: string): Promise<void> => {
-		await copyToClipboard(addMcpCommand, toCommandCopiedToast(aiProviderLabel))
-	}
-
-	// remember the AI provider, and open its paste steps or close them
-	const handleTogglePasteAiProviderSteps = (pasteAiProvider: PasteAiProvider): void => {
-		storeAiProvider(pasteAiProvider)
-		setOpenPasteAiProvider(openPasteAiProvider === pasteAiProvider ? null : pasteAiProvider)
-	}
-
 	return (
 		<Dialog open onOpenChange={onClose}>
 			<DialogContent className="gap-2 p-4 sm:max-w-sm">
-				{/* the title and carl's one line under it */}
+				{/* the title and shared provider list */}
 				<DialogTitle>Add to AI</DialogTitle>
 				<DialogDescription>Carl's ready to collaborate with your AI.</DialogDescription>
-				{/* one list, the remembered provider first, the copy option always last */}
-				<div className="grid">
-					{sortedAiProviders.map((aiProvider) =>
-						aiProvider === "cursor" || aiProvider === "vscode" ? (
-							<DeeplinkAiProviderOption key={aiProvider} deeplinkAiProvider={aiProvider} mcpServer={mcpServer} />
-						) : (
-							<PasteAiProviderOption
-								key={aiProvider}
-								pasteAiProvider={aiProvider}
-								mcpServer={mcpServer}
-								isOpen={openPasteAiProvider === aiProvider}
-								onSelect={() => handleTogglePasteAiProviderSteps(aiProvider)}
-								onCopyServerUrl={handleCopyMcpUrl}
-								onCopyCommand={handleCopyAddMcpCommand}
-							/>
-						),
-					)}
-					<div className={MENU_DIVIDER_CLASS} />
-					<CopyLinkOption
-						label="Copy server URL"
-						icon={<Link className={SHARE_OPTION_ICON_CLASS} />}
-						className={SHARE_OPTION_CLASS}
-						isCopied={isMcpUrlCopied}
-						onCopy={() => void handleCopyMcpUrl()}
-					/>
-				</div>
+				<AddToAi
+					elements={ELEMENTS}
+					mcpServer={mcpServer}
+					lastProvider={readLastAiProvider()}
+					onRemember={storeAiProvider}
+					onCopy={(text) =>
+						copyToClipboard(
+							text,
+							text === mcpServer.url
+								? "Server URL copied. Paste it wherever your AI keeps its connectors."
+								: "Command copied. Run it in your terminal.",
+						)
+					}
+					renderInstall={({ provider, onSelect }) => {
+						const { label, Icon } = AI_PROVIDER_OPTIONS[provider]
+						return (
+							<AnchorLink
+								href={toInstallDeeplink(provider, mcpServer)}
+								onClick={onSelect}
+								className={SHARE_OPTION_CLASS}
+							>
+								<Icon className={SHARE_OPTION_ICON_CLASS} />
+								{label}
+							</AnchorLink>
+						)
+					}}
+				/>
 			</DialogContent>
 		</Dialog>
 	)
 }
 
-// a one-click install option. the click follows the install link and remembers the ai provider
-function DeeplinkAiProviderOption({
-	deeplinkAiProvider,
-	mcpServer,
-}: {
-	deeplinkAiProvider: DeeplinkAiProvider
-	mcpServer: McpServer
-}) {
-	const { label, Icon } = AI_PROVIDER_OPTIONS[deeplinkAiProvider]
-	return (
-		<AnchorLink
-			href={toInstallDeeplink(deeplinkAiProvider, mcpServer)}
-			onClick={() => storeAiProvider(deeplinkAiProvider)}
-			className={SHARE_OPTION_CLASS}
-		>
-			<Icon className={SHARE_OPTION_ICON_CLASS} />
-			{label}
-		</AnchorLink>
-	)
-}
-
-// a paste option. open, it shows the steps, the url, and the add command where there is one, each with a copy button
-function PasteAiProviderOption({
-	pasteAiProvider,
-	mcpServer,
-	isOpen,
-	onSelect,
-	onCopyServerUrl,
-	onCopyCommand,
-}: {
-	pasteAiProvider: PasteAiProvider
-	mcpServer: McpServer
-	isOpen: boolean
-	onSelect: () => void
-	onCopyServerUrl: () => Promise<void>
-	onCopyCommand: (command: string, providerLabel: string) => Promise<void>
-}) {
-	const { label, Icon } = AI_PROVIDER_OPTIONS[pasteAiProvider]
-	const { steps, command } = PASTE_STEPS[pasteAiProvider]
-	return (
-		<div>
+// keep the platform elements stable while the shared instructions expand
+const ELEMENTS: AddToAiElements = {
+	Group: ({ children }) => <div className="grid">{children}</div>,
+	Details: ({ children }) => (
+		<div className="text-muted-foreground mb-2 ml-6 grid gap-2 text-sm leading-relaxed">{children}</div>
+	),
+	Text: ({ children }) => <p>{children}</p>,
+	Option: ({ provider, label, isOpen, onSelect }) => {
+		const Icon = provider ? AI_PROVIDER_OPTIONS[provider].Icon : Link
+		return (
 			<button type="button" onClick={onSelect} aria-expanded={isOpen} className={SHARE_OPTION_CLASS}>
 				<Icon className={SHARE_OPTION_ICON_CLASS} />
 				{label}
 			</button>
-			{/* the steps, the url to paste, and the command to add an AI provider where there is one */}
-			{isOpen && (
-				<div className="text-muted-foreground mb-2 ml-6 grid gap-2 text-sm leading-relaxed">
-					<p>{steps}</p>
-					<CopyBox text={mcpServer.url} copyLabel="Copy server URL" onCopy={onCopyServerUrl} />
-					{command && (
-						<>
-							<p>{`Or in ${command.tool}:`}</p>
-							<CopyBox
-								text={`${command.line} ${mcpServer.url}`}
-								copyLabel={`Copy ${command.tool} command`}
-								onCopy={() => onCopyCommand(`${command.line} ${mcpServer.url}`, label)}
-							/>
-						</>
-					)}
-				</div>
-			)}
-		</div>
-	)
-}
-
-// the text to paste, in a box with its copy button
-function CopyBox({ text, copyLabel, onCopy }: { text: string; copyLabel: string; onCopy: () => Promise<void> }) {
-	return (
+		)
+	},
+	CopyBox: ({ text, label, isCopied, onCopy }) => (
 		<div className="flex items-center gap-2">
 			<code className="bg-muted min-w-0 flex-1 rounded px-2 py-1 text-xs break-all">{text}</code>
-			<button type="button" onClick={() => void onCopy()} aria-label={copyLabel} className="hover:text-foreground">
-				<Copy className="size-4" />
+			<button
+				type="button"
+				onClick={onCopy}
+				aria-label={isCopied ? `${label}, copied` : label}
+				className="hover:text-foreground"
+			>
+				{isCopied ? <Check className="size-4 text-link" /> : <Copy className="size-4" />}
 			</button>
 		</div>
-	)
+	),
+	Divider: () => <div className={MENU_DIVIDER_CLASS} />,
 }

@@ -1,4 +1,5 @@
 import { authClient } from "@carlnotes/client/authClient"
+import { useNoteBadges } from "@carlnotes/core/hooks/useNoteBadges"
 import { type TopicFeedState, useTopicFeedState } from "@carlnotes/core/hooks/useTopicFeedState"
 import type { TopicFeedHandlers } from "@carlnotes/core/hooks/useTopicFindingActions"
 import { useLocation, useMatch } from "@tanstack/react-router"
@@ -57,6 +58,7 @@ export function useIsSignedIn(): boolean {
 function useWebTopicFeedState(): TopicFeedValue {
 	// read the web-only inputs
 	const { data: session } = authClient().useSession()
+	useNoteBadges(session?.user.id)
 	const loadedTopicFeed = useMatch({ from: "/_layout/", shouldThrow: false })?.loaderData
 	const { pathname } = useLocation()
 	const topicFeedState = useTopicFeedState({

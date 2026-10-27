@@ -17,8 +17,8 @@ import { TopicResourceInfo } from "./TopicResourceInfo"
 export type TopicResourceProps = {
 	resource: TopicFinding
 	topic:
-		| Pick<TopicDetails, "id" | "name" | "prompt" | "isTopicOwner" | "isTeamMember" | "canRate">
-		| Pick<FindingSearchTopic, "id" | "name" | "prompt" | "canRate" | "canBookmark">
+		| Pick<TopicDetails, "id" | "name" | "prompt" | "visibility" | "isTopicOwner" | "isTeamMember" | "canRate">
+		| Pick<FindingSearchTopic, "id" | "name" | "prompt" | "visibility" | "canRate" | "canBookmark">
 	latestPodcastEpisode?: PodcastEpisode | null
 	children?: ReactNode
 	isBookmarkOnLine?: boolean

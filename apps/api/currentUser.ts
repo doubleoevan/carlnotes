@@ -1,6 +1,6 @@
 // the single place that resolves the current user. every per-user query goes through here
 import type { AnalyticsEntryPoint } from "@carlnotes/contracts/analyticsEvents"
-import { type DeviceProperties, toDeviceProperties } from "@carlnotes/contracts/userAgent"
+import { type ClientTelemetry, toClientTelemetry } from "@carlnotes/contracts/clientTelemetry"
 import type { Context } from "hono"
 import type { SessionUser } from "./auth"
 import type { ToolCaller } from "./mcp/toolCaller"
@@ -23,16 +23,17 @@ export function currentUser(context: AppContext): string | null {
 }
 
 // the properties every user-triggered analytics event includes
-export type AnalyticsProperties = DeviceProperties & { entryPoint: AnalyticsEntryPoint; plan: string }
+export type AnalyticsProperties = Omit<ClientTelemetry, "entryPoint"> & {
+	entryPoint: AnalyticsEntryPoint
+	plan: string
+}
 
 /**
- * The entry point, the plan, and the device an analytics event from a browser request is attributed to.
- * The plan comes from the session instead of the users table, so an event does not take an extra query.
+ * Returns the request's entry point, account plan, and descriptive client telemetry.
  */
 export function toAnalyticsProperties(context: AppContext): AnalyticsProperties {
 	return {
-		entryPoint: "web",
 		plan: context.get("user")?.plan ?? "free",
-		...toDeviceProperties(context.req.header("user-agent")),
+		...toClientTelemetry((name) => context.req.header(name)),
 	}
 }

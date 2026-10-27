@@ -22,6 +22,13 @@ export async function sendUsername(username: string): Promise<string | null> {
 export async function uploadAvatar(file: File): Promise<string | null> {
 	const body = new FormData()
 	body.append("avatar", file)
+	return uploadAvatarBody(body)
+}
+
+/**
+ * Sends an avatar encoded by either platform through the same upload endpoint.
+ */
+export async function uploadAvatarBody(body: FormData): Promise<string | null> {
 	const response = await fetchApi("/api/avatars", { method: "POST", body })
 	if (response.ok) {
 		return null

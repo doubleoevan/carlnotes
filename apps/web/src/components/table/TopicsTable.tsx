@@ -1,7 +1,9 @@
-import { fetchTopicPage, sendSubscriptionEmail } from "@carlnotes/client/topicClient"
+import { fetchTopicPage } from "@carlnotes/client/topicClient"
 import type { Topic } from "@carlnotes/contracts/profiles"
 import type { TopicResponse } from "@carlnotes/contracts/topics"
-import { toCountLabel, toMonthYearLabel } from "@carlnotes/core/lib/labels"
+import { DataTable } from "@carlnotes/core/components/DataTable"
+import { useTopicEmails } from "@carlnotes/core/hooks/useTopicEmails"
+import { topicSortValues, toTopicsTableColumns } from "@carlnotes/core/lib/topicsTableColumns"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { X } from "lucide-react"
 import { useState } from "react"
@@ -12,36 +14,14 @@ import { Popover, PopoverCloseButton, PopoverContent, PopoverTrigger } from "@/c
 import { Switch } from "@/components/primitives/switch"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import { TopicInfo } from "@/components/topic/TopicInfo"
-import {
-	POPOVER_PANEL_CLASS,
-	STANDALONE_LINK_CLASS,
-	TABLE_CLASS,
-	TABLE_HEAD_CLASS,
-	TABLE_SCROLL_CLASS,
-} from "@/lib/styleClasses"
+import { POPOVER_PANEL_CLASS, STANDALONE_LINK_CLASS } from "@/lib/styleClasses"
+import { DATA_TABLE_ELEMENTS } from "./DataTable"
 import { TopicVisibility } from "./OwnerTopicsTable"
-import { SortableHeader } from "./SortableHeader"
 import { TableCard } from "./TableCard"
 import { SMALLEST_PAGE_SIZE, TablePagination, usePaginatedRowSort } from "./TablePagination"
 import { TopicNameLink } from "./TopicNameLink"
 
-// the sort accessors for the topic columns
-const topicSortValues = {
-	topic: (topic: Topic) => topic.name,
-	created: (topic: Topic) => topic.createdAt,
-	updated: (topic: Topic) => topic.updatedAt,
-	// "kept" divided by "seen" sorts the ratio
-	kept: (topic: Topic) => (topic.seenCount > 0 ? topic.keptCount / topic.seenCount : 0),
-	subscribers: (topic: Topic) => topic.subscriberCount,
-	visibility: (topic: Topic) => topic.visibility,
-	emails: (topic: Topic) => (topic.isEmailEnabled ? 1 : 0),
-}
-
-/**
- * The one topic table the profile page and the team pages share: each topic with its dates,
- * visibility, follower count, and kept-over-seen figures. The team page adds the Active column by
- * passing a detach handler, and each page owns its card and its empty state.
- */
+// share column content and email state; keep DOM popovers and routing local
 export function TopicsTable({
 	topics,
 	includesNonPublicTopics,
@@ -50,190 +30,61 @@ export function TopicsTable({
 	className,
 }: {
 	topics: Topic[]
-	// whether the visibility column renders
 	includesNonPublicTopics: boolean
-	// what the topic column header's tooltip shows
 	topicTooltip?: string
-	// removing a topic from the team, a leader's power on a team page alone
 	onRemoveTopic?: (topic: Topic) => void
-	// the card styles a caller overrides, like the sunken surface a subtable sits on
 	className?: string
 }) {
-	// the sorted column applies across all the table's pages. the page's rows and the first NO_SCRIPT_ROW_LIMIT rows
-	// render for a reader without JavaScript
 	const { renderedRows, sort, pagination } = usePaginatedRowSort({ rows: topics, valueByKey: topicSortValues })
-
-	// the switch shows the choice before the page reloads, so the row shows the choice the moment it is made
-	const [emailChoices, setEmailChoices] = useState<Record<string, boolean>>({})
-	const toEmailChoice = (topic: Topic): boolean | null => emailChoices[topic.id] ?? topic.isEmailEnabled
-	const handleEmailChange = (topicId: string, isEmailEnabled: boolean): void => {
-		setEmailChoices((choices) => ({ ...choices, [topicId]: isEmailEnabled }))
-		void sendSubscriptionEmail(topicId, isEmailEnabled).catch((error) => console.error("email change failed", error))
-	}
-
-	// the column renders only where the user follows at least one of these topics
-	const isEmailShown = topics.some((topic) => topic.isEmailEnabled !== null)
-
-	// the totals sum each topic's kept, seen, and subscriber counts, and count the public topics
-	const totals = {
-		kept: topics.reduce((sum, topic) => sum + topic.keptCount, 0),
-		seen: topics.reduce((sum, topic) => sum + topic.seenCount, 0),
-		subscribers: topics.reduce((sum, topic) => sum + topic.subscriberCount, 0),
-		public: topics.filter((topic) => topic.visibility === "public").length,
-	}
-
-	// each page renders its own empty state in its own card
+	const emails = useTopicEmails()
+	const columns = toTopicsTableColumns({
+		topics,
+		includesNonPublicTopics,
+		topicTooltip,
+		renderText: (text) => <span className="text-muted-foreground">{text}</span>,
+		renderName: (topic) => <TopicNameLink topic={topic} />,
+		renderVisibility: (topic) => <TopicVisibility visibility={topic.visibility} />,
+		renderInfo: (topic) => <TopicPopover topic={topic} />,
+		renderEmail: (topic) => (
+			<Switch
+				aria-label={`Email me ${topic.name}`}
+				checked={emails.choices[topic.id] ?? topic.isEmailEnabled ?? false}
+				disabled={emails.pending[topic.id]}
+				onCheckedChange={(isEnabled) => void emails.setEmail(topic.id, isEnabled)}
+			/>
+		),
+		renderActive: onRemoveTopic
+			? (topic) => (
+					<Switch checked aria-label={`Deactivate ${topic.name}`} onCheckedChange={() => onRemoveTopic(topic)} />
+				)
+			: undefined,
+		renderRemove: onRemoveTopic
+			? (topic) => (
+					<Button
+						size="icon-sm"
+						variant="ghost"
+						aria-label={`Remove ${topic.name} from the team`}
+						onClick={() => onRemoveTopic(topic)}
+					>
+						<X className="size-4" />
+					</Button>
+				)
+			: undefined,
+	})
 	if (topics.length === 0) {
 		return null
 	}
-
 	return (
 		<TableCard className={cn("mb-4", className)}>
-			<div className={TABLE_SCROLL_CLASS}>
-				<table className={cn(TABLE_CLASS, "min-w-2xl")}>
-					<thead className={TABLE_HEAD_CLASS}>
-						<tr>
-							<SortableHeader sort={sort} sortKey="topic" label="Topic" tooltip={topicTooltip} className="py-2 pr-4" />
-							<SortableHeader sort={sort} sortKey="created" label="Created" className="py-2 pr-4" />
-							<SortableHeader sort={sort} sortKey="updated" label="Updated" className="py-2 pr-4" />
-							{/* the visibility column renders only when the set can hold a non-public topic */}
-							{includesNonPublicTopics && (
-								<SortableHeader
-									sort={sort}
-									sortKey="visibility"
-									label="Visibility"
-									tooltip="Who may see this topic"
-									className="py-2 pr-4"
-								/>
-							)}
-							<SortableHeader
-								sort={sort}
-								sortKey="subscribers"
-								label="Followers"
-								tooltip="Topic followers"
-								className="py-2 pr-4"
-							/>
-							<SortableHeader
-								sort={sort}
-								sortKey="kept"
-								label="Kept / reviewed"
-								tooltip="Carl reviewed and kept these findings"
-								className="py-2 pr-4"
-							/>
-							{/* a follower switches their own scan emails per topic, wherever the topic is listed */}
-							{isEmailShown && (
-								<SortableHeader
-									sort={sort}
-									sortKey="emails"
-									label="Emails"
-									tooltip="Email me this topic's scans"
-									className="py-2 pr-4"
-								/>
-							)}
-							{/* the Active column belongs to the team page's leader alone */}
-							{onRemoveTopic && (
-								<th className="py-2 pr-4 font-normal">
-									<Tooltip>
-										<TooltipTrigger asChild>
-											<span>Active</span>
-										</TooltipTrigger>
-										<TooltipContent>Active team topics</TooltipContent>
-									</Tooltip>
-								</th>
-							)}
-							{onRemoveTopic && <th className="py-2" />}
-						</tr>
-					</thead>
-					<tbody>
-						{renderedRows.map(({ row: topic, className }) => (
-							<tr key={topic.id} className={cn("border-b", className)}>
-								<td className="py-2 pr-4">
-									<TopicNameLink topic={topic} />
-								</td>
-								<td className="text-muted-foreground py-2 pr-4">{toMonthYearLabel(topic.createdAt)}</td>
-								<td className="text-muted-foreground py-2 pr-4">{toMonthYearLabel(topic.updatedAt)}</td>
-								{includesNonPublicTopics && (
-									<td className="py-2 pr-4">
-										<TopicVisibility visibility={topic.visibility} />
-									</td>
-								)}
-								<td className="py-2 pr-4">{topic.subscriberCount.toLocaleString()}</td>
-								<td className="py-2 pr-4">
-									<TopicPopover topic={topic} />
-								</td>
-								{isEmailShown && (
-									<td className="py-2 pr-4">
-										{toEmailChoice(topic) !== null && (
-											<Switch
-												checked={toEmailChoice(topic) ?? false}
-												onCheckedChange={(isEmailEnabled) => handleEmailChange(topic.id, isEmailEnabled)}
-												aria-label={`Email me ${topic.name}`}
-											/>
-										)}
-									</td>
-								)}
-								{/* switching a topic off takes it off the team, the same thing the X does */}
-								{onRemoveTopic && (
-									<td className="py-2 pr-4">
-										<Tooltip>
-											{/* the trigger wraps the switch in a span. both write data-state to the same element otherwise */}
-											<TooltipTrigger asChild>
-												<span className="inline-flex">
-													<Switch
-														checked
-														onCheckedChange={() => onRemoveTopic(topic)}
-														aria-label={`Deactivate ${topic.name}`}
-													/>
-												</span>
-											</TooltipTrigger>
-											<TooltipContent>
-												Deactivate <span className="font-semibold">{topic.name}</span>
-											</TooltipContent>
-										</Tooltip>
-									</td>
-								)}
-								{/* the X returns the topic to its creator alone */}
-								{onRemoveTopic && (
-									<td className="py-2 text-right">
-										<Tooltip>
-											<TooltipTrigger asChild>
-												<Button
-													size="icon-sm"
-													variant="ghost"
-													onClick={() => onRemoveTopic(topic)}
-													aria-label={`Remove ${topic.name} from the team`}
-												>
-													<X className="size-4" />
-												</Button>
-											</TooltipTrigger>
-											<TooltipContent>
-												Remove <span className="font-semibold">{topic.name}</span> from the team
-											</TooltipContent>
-										</Tooltip>
-									</td>
-								)}
-							</tr>
-						))}
-					</tbody>
-					{/* the footer sums the columns */}
-					<tfoot>
-						<tr className="text-muted-foreground">
-							<td className="py-2 pr-4">Total</td>
-							<td className="py-2 pr-4" colSpan={2} />
-							{includesNonPublicTopics && <td className="py-2 pr-4">{`${totals.public}/${topics.length} public`}</td>}
-							<td className="py-2 pr-4">{toCountLabel(totals.subscribers, "follower")}</td>
-							<td className="py-2 pr-4">
-								{totals.kept.toLocaleString()} / {totals.seen.toLocaleString()} findings
-							</td>
-							{/* the Emails column has no total, and its empty cell keeps the Active total under its heading */}
-							{isEmailShown && <td className="py-2 pr-4" />}
-							{onRemoveTopic && <td className="py-2 pr-4">{`${topics.length}/${topics.length} active`}</td>}
-							{onRemoveTopic && <td className="py-2" />}
-						</tr>
-					</tfoot>
-				</table>
-			</div>
+			<DataTable
+				columns={columns}
+				renderedRows={renderedRows}
+				getRowId={(topic) => topic.id}
+				sort={sort}
+				elements={DATA_TABLE_ELEMENTS}
+			/>
 			{topics.length > SMALLEST_PAGE_SIZE && <TablePagination {...pagination} />}
+			{emails.error && <p className="text-destructive text-sm">{emails.error}</p>}
 		</TableCard>
 	)
 }

@@ -1,19 +1,10 @@
 import { sendDeleteTeamInvite } from "@carlnotes/client/teamClient"
 import type { TeamsPageResponse } from "@carlnotes/contracts/teams"
+import { TEAM_INVITES_TABLE_LABELS } from "@carlnotes/core/lib/sentInvitesTableColumns"
 import { TeamLink } from "@/components/team/TeamLink"
-import { type SentInviteRow, SentInvitesTable, type SentInvitesTableLabels, toInviteeLabel } from "./SentInvitesTable"
+import { type SentInviteRow, SentInvitesTable } from "./SentInvitesTable"
 
-/**
- * The team invitations table's headers and withdraw confirmation, worded for joining a team.
- */
-export const TEAM_INVITES_TABLE_LABELS: SentInvitesTableLabels = {
-	targetLabel: "Team",
-	acceptedLabel: "Joined",
-	acceptedNoun: "joined",
-	confirmTitle: "Withdraw this invitation?",
-	confirmLabel: "Withdraw it",
-	confirmBody: (row) => `The invitation to ${toInviteeLabel(row)} goes away. Anyone who already joined stays.`,
-}
+export { TEAM_INVITES_TABLE_LABELS } from "@carlnotes/core/lib/sentInvitesTableColumns"
 
 /**
  * The Teams page's team invitations table: who the member invited to their team and whether each one joined.

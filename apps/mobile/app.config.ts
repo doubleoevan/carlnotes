@@ -31,6 +31,7 @@ const expoConfig: ExpoConfig = {
 	},
 	android: {
 		package: MOBILE_APP_BUNDLE_IDENTIFIER,
+		softwareKeyboardLayoutMode: "resize",
 		adaptiveIcon: {
 			foregroundImage: "./assets/adaptive-icon.png",
 			// the cream behind the hand and the mug in the app icon
@@ -55,6 +56,14 @@ const expoConfig: ExpoConfig = {
 		"expo-apple-authentication",
 		"expo-secure-store",
 		"expo-web-browser",
+		[
+			"expo-image-picker",
+			{
+				photosPermission: "Choose a photo for your CarlNotes avatar.",
+				cameraPermission: false,
+				microphonePermission: false,
+			},
+		],
 		[
 			"expo-splash-screen",
 			{

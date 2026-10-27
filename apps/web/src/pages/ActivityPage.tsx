@@ -5,10 +5,10 @@ import { useTopicInviteBadges } from "@carlnotes/core/stores/topicInviteStore"
 import { Activity } from "lucide-react"
 import type * as React from "react"
 import { useEffect, useState } from "react"
-import { CoffeeLoading } from "@/components/branding/CoffeeLoading"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { UpdateCountBadge } from "@/components/common/UpdateCountBadge"
 import { UserProfileLink } from "@/components/common/UserProfileLink"
+import { PageSkeleton } from "@/components/layout/PageSkeleton"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/primitives/accordion"
 import { TopicInvitesTable } from "@/components/table/TopicInvitesTable.tsx"
 import { TopicSubscriptionsTable } from "@/components/table/TopicSubscriptionsTable"
@@ -88,7 +88,7 @@ export function ActivityPage() {
 			) : isLoadFailed ? (
 				<p className="text-muted-foreground mt-6 text-sm">{"Carl couldn't find this activity. He checked twice."}</p>
 			) : (
-				<CoffeeLoading />
+				<PageSkeleton kind="activity" />
 			)}
 			{/* the dialog that the New Topic button opens */}
 			{newTopicDialog}

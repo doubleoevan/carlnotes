@@ -21,13 +21,19 @@ export type TopicFeedControlsProps = {
 	filters: TopicFeedFilters
 	hasTeamBookmarks?: boolean
 	isCompact?: boolean
+	hasSort?: boolean
 }
 type ChoiceSheetProps = TopicFeedControlsProps & { onClose: () => void }
 
 /**
  * Shows the shared sort and view choices in native sheets.
  */
-export function TopicFeedControls({ filters, hasTeamBookmarks = false, isCompact = false }: TopicFeedControlsProps) {
+export function TopicFeedControls({
+	filters,
+	hasTeamBookmarks = false,
+	isCompact = false,
+	hasSort = true,
+}: TopicFeedControlsProps) {
 	// return focus to the control that opened the sheet
 	const [sheet, setSheet] = useState<"sort" | "filter" | null>(null)
 	const sortTriggerRef = useRef<ComponentRef<typeof View>>(null)
@@ -37,16 +43,18 @@ export function TopicFeedControls({ filters, hasTeamBookmarks = false, isCompact
 	return (
 		<View className={isCompact ? "flex-row-reverse items-center" : "flex-row flex-wrap gap-3 px-4 py-3"}>
 			{/* keep both active choices visible */}
-			<Button
-				ref={sortTriggerRef}
-				variant={isCompact ? "ghost" : "outline"}
-				size={isCompact ? "icon" : "default"}
-				accessibilityLabel={`Sort: ${TOPIC_FINDING_SORT_LABELS[filters.sort]}`}
-				onPress={() => setSheet("sort")}
-			>
-				<Icon as={ArrowUpDown} className="text-muted-foreground" />
-				{!isCompact ? <Text>{TOPIC_FINDING_SORT_LABELS[filters.sort]}</Text> : null}
-			</Button>
+			{hasSort && (
+				<Button
+					ref={sortTriggerRef}
+					variant={isCompact ? "ghost" : "outline"}
+					size={isCompact ? "icon" : "default"}
+					accessibilityLabel={`Sort: ${TOPIC_FINDING_SORT_LABELS[filters.sort]}`}
+					onPress={() => setSheet("sort")}
+				>
+					<Icon as={ArrowUpDown} className="text-muted-foreground" />
+					{!isCompact ? <Text>{TOPIC_FINDING_SORT_LABELS[filters.sort]}</Text> : null}
+				</Button>
+			)}
 			<Button
 				ref={filterTriggerRef}
 				variant={isCompact ? "ghost" : "outline"}

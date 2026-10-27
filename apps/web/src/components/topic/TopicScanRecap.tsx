@@ -15,9 +15,10 @@ import {
 	type TopicScanRecapComponents,
 	type TopicScanRecapProps,
 } from "@carlnotes/core/components/TopicScanRecap"
+import { toSafeNoteMarkdown } from "@carlnotes/core/lib/safeNoteMarkdown"
 import { toNotesMarkdown as toSharedNotesMarkdown } from "@carlnotes/core/lib/topicScanRecap"
 import { cn } from "@carlnotes/nightshift/classNames"
-import Markdown from "markdown-to-jsx"
+import { astToJSX } from "markdown-to-jsx/react"
 import type * as React from "react"
 import { useLayoutEffect, useRef, useState } from "react"
 import { AnchorLink } from "@/components/common/AnchorLink"
@@ -60,6 +61,8 @@ function toSafeNoteOptions(allowedUrls?: AllowedScanNoteUrls) {
 			h2: { component: NoteHeading },
 			h3: { component: NoteHeading },
 			h4: { component: NoteHeading },
+			h5: { component: NoteHeading },
+			h6: { component: NoteHeading },
 			p: { props: { className: "my-1.5 leading-relaxed first:mt-0 last:mb-0" } },
 			ul: { props: { className: "my-1.5 list-disc space-y-1 pl-4" } },
 			ol: { props: { className: "my-1.5 list-decimal space-y-1 pl-4" } },
@@ -76,7 +79,7 @@ function toSafeNoteOptions(allowedUrls?: AllowedScanNoteUrls) {
  * Renders model-written Markdown through the safe subset of elements. Only a url in allowedUrls becomes a link
  */
 export function SafeNoteText({ note, allowedUrls }: { note: string; allowedUrls?: AllowedScanNoteUrls }) {
-	return <Markdown options={toSafeNoteOptions(allowedUrls)}>{note}</Markdown>
+	return astToJSX(toSafeNoteMarkdown(note, allowedUrls), toSafeNoteOptions(allowedUrls))
 }
 
 /**

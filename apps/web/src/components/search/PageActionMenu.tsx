@@ -1,3 +1,4 @@
+import { PageActionMenu as SharedPageActionMenu } from "@carlnotes/core/components/PageActionMenu"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { Bot, EllipsisVertical, Flag, Plus } from "lucide-react"
 import { useState } from "react"
@@ -28,11 +29,6 @@ export function PageActionMenu() {
 	const label = `${pageActions.page} actions`
 	// the mcp server the Add to AI dialog offers on every page
 	const mcpServer = { name: "CarlNotes", url: `${origin}/mcp` }
-	// the page's options, then New topic on a page without its own New Topic button
-	const pageActionOptions: PageActionOption[] = [
-		...(pageActions.options ?? []),
-		...(pageActions.hasNewTopicButton ? [] : [{ label: "New topic", Icon: Plus, onSelect: openNewTopicDialog }]),
-	]
 	return (
 		<>
 			<Popover open={isOpen} onOpenChange={setIsOpen}>
@@ -49,57 +45,16 @@ export function PageActionMenu() {
 				</Tooltip>
 				{/* nothing takes focus on open */}
 				<PopoverContent align="end" alignOffset={-9} sideOffset={13} className="w-44" bodyClassName="p-1">
-					{pageActionOptions.map((pageActionOption) => (
-						<button
-							key={pageActionOption.label}
-							type="button"
-							onClick={() => {
-								setIsOpen(false)
-								pageActionOption.onSelect()
-							}}
-							className={MENU_OPTION_CLASS}
-						>
-							<pageActionOption.Icon
-								className={cn(
-									"size-4",
-									pageActionOption.isActive ? "text-primary fill-current" : "text-muted-foreground",
-								)}
-							/>
-							<span className="flex-1 text-left">{pageActionOption.label}</span>
-						</button>
-					))}
-					{/* the Add to AI option */}
-					<button
-						type="button"
-						onClick={() => {
-							setIsOpen(false)
-							setIsAddingToAi(true)
-						}}
-						className={MENU_OPTION_CLASS}
-					>
-						<Bot className="text-muted-foreground size-4" />
-						<span className="flex-1 text-left">Add to AI</span>
-					</button>
-					{pageActions.report && (
-						<Tooltip>
-							<TooltipTrigger asChild>
-								<button
-									type="button"
-									onClick={() => {
-										setIsOpen(false)
-										setIsReporting(true)
-									}}
-									className={MENU_OPTION_CLASS}
-								>
-									<Flag className="text-muted-foreground size-4" />
-									<span className="flex-1 text-left">Report issue</span>
-								</button>
-							</TooltipTrigger>
-							<TooltipContent>
-								Report an issue with <span className="font-semibold">{pageActions.report.subjectLabel}</span>
-							</TooltipContent>
-						</Tooltip>
-					)}
+					<SharedPageActionMenu
+						options={pageActions.options}
+						hasNewTopicButton={pageActions.hasNewTopicButton}
+						icons={{ Plus, Bot, Flag }}
+						onNewTopic={openNewTopicDialog}
+						onAddToAi={() => setIsAddingToAi(true)}
+						onReport={pageActions.report ? () => setIsReporting(true) : undefined}
+						onClose={() => setIsOpen(false)}
+						Option={PageAction}
+					/>
 				</PopoverContent>
 			</Popover>
 			{/* the new topic dialog that the New topic option opens */}
@@ -116,5 +71,15 @@ export function PageActionMenu() {
 				/>
 			)}
 		</>
+	)
+}
+
+// keep row styling in the DOM adapter while the core component owns ordering
+function PageAction({ label, Icon, isActive, isDisabled, onSelect }: PageActionOption) {
+	return (
+		<button type="button" onClick={onSelect} disabled={isDisabled} className={MENU_OPTION_CLASS}>
+			<Icon className={cn("size-4", isActive ? "text-primary fill-current" : "text-muted-foreground")} />
+			<span className="flex-1 text-left">{label}</span>
+		</button>
 	)
 }

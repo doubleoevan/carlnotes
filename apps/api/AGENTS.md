@@ -372,3 +372,5 @@ at the root import it by name.
   builds the fake ui bundle and the requests the page serving tests send through the composed app; only tests import
   either. `analyticsTestFixtures.ts` holds the analytics properties that the tests, the topic tools, invite, and podcast
   feed smoke tests, and the new-topic chat eval pass where a request's own would go.
+
+Native request telemetry uses `contracts/clientTelemetry` in `currentUser.ts`, auth event hooks, and `requestTracing.ts`. Native requests carry descriptive platform/device/app headers; web requests retain user-agent classification. Sentry request scopes and spans share those dimensions. These headers never participate in authentication or authorization.

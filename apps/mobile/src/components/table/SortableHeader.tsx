@@ -1,6 +1,7 @@
 import type { RowSort } from "@carlnotes/core/hooks/useRowSort"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { ArrowDown, ArrowUp, ChevronsUpDown } from "lucide-react-native"
+import { Alert } from "react-native"
 import { Button } from "@/components/primitives/button"
 import { Icon } from "@/components/primitives/icon"
 import { Text } from "@/components/primitives/text"
@@ -13,11 +14,13 @@ export function SortableHeader({
 	sortKey,
 	label,
 	className,
+	tooltip,
 }: {
 	sort: RowSort
 	sortKey: string
 	label: string
 	className?: string
+	tooltip?: string
 }) {
 	// expose the column's direction to readers and assistive technology
 	const isActive = sort.sortKey === sortKey
@@ -29,6 +32,8 @@ export function SortableHeader({
 			className={cn("min-h-11 justify-start gap-1 px-0", className)}
 			accessibilityLabel={`Sort by ${label.toLowerCase()}`}
 			accessibilityValue={{ text: direction }}
+			accessibilityHint={tooltip}
+			onLongPress={tooltip ? () => Alert.alert(label, tooltip) : undefined}
 			onPress={() => sort.toggleSort(sortKey)}
 		>
 			<Text className="text-sm font-normal text-muted-foreground">{label}</Text>

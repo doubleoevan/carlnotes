@@ -8,6 +8,7 @@ import {
 	toScanFailureLabel,
 } from "@carlnotes/contracts/scanFailure"
 import type { TopicResponse } from "@carlnotes/contracts/topics"
+import { isManualScanShown } from "@carlnotes/core/lib/topicActions"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { type UseNavigateResult, useNavigate } from "@tanstack/react-router"
 import { CirclePause, Coffee } from "lucide-react"
@@ -44,10 +45,7 @@ function isPodcastEpisodePending(topic: TopicResponse | null | undefined): boole
 	return topicPodcast.isEnabled && isScanAwaitingPodcastEpisode
 }
 
-// whether this user may brew this topic. only an owner gets a remaining scan count in the payload
-export function isManualScanShown(topic: TopicResponse | null | undefined): boolean {
-	return topic?.manualScansRemaining != null
-}
+export { isManualScanShown } from "@carlnotes/core/lib/topicActions"
 
 /**
  * The topic page's Brew control: the button in its running, blocked, or ready state, the sends for it,

@@ -12,21 +12,32 @@ import type {
 	NoteResponse,
 	NotesResponse,
 } from "@carlnotes/contracts/notes"
-import { apiClient } from "./apiClient"
+import { type ApiResponse, apiClient } from "./apiClient"
 
 // a note visibility and a note page reference
 type NoteVisibility = (typeof noteVisibilities)[number]
 export type NotePageRef = { pageType: "topic" | "team"; pageId: string }
+type NoteReadOptions = { shouldThrowOnError?: boolean }
+
+// a rejected read keeps its status so recovery can distinguish access from availability
+export class NoteReadError extends Error {
+	constructor(readonly status: number) {
+		super(`The note request failed (${status}).`)
+		this.name = "NoteReadError"
+	}
+}
 
 /**
- * The notes payload for a page. Any error status returns null.
+ * Reads a page's notes, optionally rejecting unavailable reads instead of returning null.
  */
-export async function fetchNotes(page: NotePageRef): Promise<NotesResponse | null> {
+export async function fetchNotes(page: NotePageRef, options: NoteReadOptions = {}): Promise<NotesResponse | null> {
+	// request the page's visible notes and creation permissions
 	const response =
 		page.pageType === "topic"
 			? await apiClient().api.topics[":id"].notes.$get({ param: { id: page.pageId } })
 			: await apiClient().api.teams[":id"].notes.$get({ param: { id: page.pageId } })
 	if (!response.ok) {
+		throwFailedNoteRead(response, options)
 		return null
 	}
 
@@ -57,19 +68,23 @@ export async function createNote(page: NotePageRef, name: string, visibility: No
 }
 
 /**
- * One note for its dialog, with the stored HTML body and the version a save names. Any error status, or a request that
- * never arrives, returns null.
+ * Reads a note's body and permissions, optionally preserving transport and server failures.
  */
-export async function fetchNote(noteId: string): Promise<NoteResponse | null> {
+export async function fetchNote(noteId: string, options: NoteReadOptions = {}): Promise<NoteResponse | null> {
 	try {
+		// distinguish a missing or forbidden note from a failed read
 		const response = await apiClient().api.notes[":id"].$get({ param: { id: noteId } })
 		if (!response.ok) {
+			throwFailedNoteRead(response, options)
 			return null
 		}
 
 		// the note with its body and version
 		return (await response.json()) as NoteResponse
-	} catch {
+	} catch (error) {
+		if (options.shouldThrowOnError) {
+			throw error
+		}
 		return null
 	}
 }
@@ -86,7 +101,7 @@ export async function updateNote(
 }
 
 /**
- * Deletes a note. Only the owner may.
+ * Deletes a note when the server grants deletion permission.
  */
 export async function deleteNote(noteId: string): Promise<boolean> {
 	const response = await apiClient().api.notes[":id"].$delete({ param: { id: noteId } })
@@ -115,6 +130,9 @@ export async function saveNoteBody(
 		if (status === 413 || status === 400) {
 			return { status: "tooLarge" }
 		}
+		if (status === 401 || status === 403 || status === 404) {
+			return { status: "unavailable" }
+		}
 		if (!response.ok) {
 			return { status: "failed" }
 		}
@@ -127,20 +145,15 @@ export async function saveNoteBody(
 }
 
 /**
- * The note's comment thread, oldest first. Any error status, or a request that never arrives, returns an empty list.
+ * Reads the oldest-first comment thread and rejects failed requests.
  */
 export async function fetchNoteComments(noteId: string): Promise<NoteComment[]> {
-	try {
-		const response = await apiClient().api.notes[":id"].comments.$get({ param: { id: noteId } })
-		if (!response.ok) {
-			return []
-		}
-
-		// the thread as the api lists it
-		return ((await response.json()) as { comments: NoteComment[] }).comments
-	} catch {
-		return []
+	// a failed read must not look like an empty thread
+	const response = await apiClient().api.notes[":id"].comments.$get({ param: { id: noteId } })
+	if (!response.ok) {
+		throw new NoteReadError(response.status)
 	}
+	return ((await response.json()) as { comments: NoteComment[] }).comments
 }
 
 /**
@@ -176,12 +189,13 @@ export async function deleteNoteComment(noteId: string, commentId: string): Prom
 }
 
 /**
- * Every unread note count the signed-in user has. Any error status returns an empty list.
+ * Reads unread note counts and rejects failed requests so confirmed counts remain visible.
  */
 export async function fetchNoteBadges(): Promise<NoteBadge[]> {
+	// reject failures without replacing the last confirmed counts
 	const response = await apiClient().api["note-badges"].$get()
 	if (!response.ok) {
-		return []
+		throw new NoteReadError(response.status)
 	}
 
 	// the payload holds only the notes with unread edits or comments
@@ -190,8 +204,21 @@ export async function fetchNoteBadges(): Promise<NoteBadge[]> {
 }
 
 /**
- * Marks a note read, which clears both of its counts.
+ * Records a note read and returns whether the server acknowledged it.
  */
-export async function sendNoteRead(noteId: string): Promise<void> {
-	await apiClient().api.notes[":id"].read.$post({ param: { id: noteId } })
+export async function sendNoteRead(noteId: string): Promise<boolean> {
+	try {
+		// wait for acceptance before treating a read as confirmed
+		const response = await apiClient().api.notes[":id"].read.$post({ param: { id: noteId } })
+		return response.ok
+	} catch {
+		return false
+	}
+}
+
+// leave missing and forbidden notes unavailable, and optionally reject other failed reads
+function throwFailedNoteRead(response: ApiResponse, options: NoteReadOptions): void {
+	if (options.shouldThrowOnError && response.status !== 404 && response.status !== 403) {
+		throw new NoteReadError(response.status)
+	}
 }

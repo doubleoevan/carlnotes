@@ -60,7 +60,7 @@ export function SearchResultsList({ pages, state }: { pages: SearchResultsPage[]
 
 // keep mixed results on the same rank and icon columns as the finding summary
 function SearchResultRow({ row, rank, isLast }: { row: LinkedSearchRow; rank: number; isLast: boolean }) {
-	// route Topics natively and preserve the web destination of every other result
+	// route Topics directly and let AnchorLink normalize Team and Profile destinations
 	const rankWidth = useFontScaledSize(16)
 	const href =
 		row.kind === "topic"

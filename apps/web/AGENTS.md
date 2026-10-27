@@ -166,7 +166,7 @@ the browser bundle and renders pages through the server build, behind its own ro
   `stores/podcastEpisodePlayActions.ts` plays or pauses a podcast episode or a chapter by id from a page, and
   `stores/podcastEpisodeListenStore.ts` saves a signed-in user's progress in the podcast episode.
 - `components/note/` — the Tasting Notes section, table, and dialog, the dialog's create flow in `CreateNote.tsx`, and
-  the note's body on `react-native-enriched-html`, whose web build is a Tiptap editor. `NoteDialog.tsx` fetches the
+  the shared core note composition adapted to `react-native-enriched-html`, whose web build is a Tiptap editor. `NoteDialog.tsx` fetches the
   note's html and version on every open, loads the comment thread through `useNoteComments` at the same time, and
   loads the editor or the reader lazily, starting the chunk as the dialog mounts, so neither chunk runs on the server:
   `NoteEditor.tsx` mounts `EnrichedTextInput` over the stored body with `NoteToolbar.tsx` (the inline marks, headings 1
@@ -323,3 +323,37 @@ Matching section, sort, view, empty-state, and tutorial labels come from core.
 `hooks/useTopicFeedState.test.tsx` verifies shared lifecycle and mutation behavior without importing native components.
 `components/common/sharedComponents.test.tsx` verifies size/sort resets, control identity and focus, pagination scroll
 restoration, and Source detail expansion through the real web adapters.
+
+## Shared Tasting Note adapters
+
+`components/note/` keeps the browser-only enriched HTML imports and DOM controls. Core owns editor initialization,
+format order, captured link ranges, conflict Reload, creation validation, comments, and unread badge content.
+Keep `NoteDialog` lazy imports: listing notes must fetch neither bodies nor editor chunks.
+`NoteLayout` preserves the toolbar above the card and the desktop column / phone-browser comment sheet.
+`providers/TopicFeedProvider` mounts `useNoteBadges`; badge polling does not depend on opening chat.
+`TopicScanRecap` renders the shared safe Markdown tree directly. `SafeNoteLink` remains its final destination guard.
+
+## Shared mobile page foundations
+
+The Account budget/settings, plan cards, invite fields, and TeamFields delegate portable composition to core.
+OwnerTopicsTable, TopicsTable, TopicScansTable, TopicSubscriptionsTable, and SentInvitesTable consume shared domain
+columns through `table/DataTable.tsx`'s semantic DOM elements. Team membership/member rows retain web-specific
+expandable controls. The global Footer is a core composition with web routing and active-link styling supplied here.
+
+Topic fields, Source editing, Team choices, and Topic/Team saving now use core hooks and save functions. Web wrappers
+supply browser files, routing, and toast feedback. Retries keep created identities and accepted membership writes;
+unsent invitation chips remain visible. Maintain native adapters when changing any of these shared concerns.
+
+`topic/TopicSkeleton` delegates section order to core while preserving DOM placeholders and the desktop grid.
+Its exported section/player skeletons still serve PodcastEpisodePage. Stories cover unknown and known titles.
+
+`layout/PageSkeleton` renders core's Profile, Teams, Activity, Account, and Team loading layouts. The page keeps known
+headings and actions visible; Profile and Team reserve their identity while it loads. Account keeps Settings usable.
+Its stories cover each page and the Profile topics table loading separately. Motion respects reduced motion.
+
+The menu parity adapters `search/PageActionMenu`, `layout/UserMenu`, and `common/AddToAiDialog` render the shared
+core menu composition. DOM popovers, badges, installation links, storage, and clipboard remain web adapters.
+`AccountPage` uses core's `useAccount`, shared with mobile, for complete budget loading and retries. Teams and own
+Profile topic reads offer retry after a failed initial request instead of presenting an empty table or endless skeleton.
+
+Visit analytics reuses the contracts URL/path privacy redaction and public Topic attribution with native. Its registered device dimensions and environment match native event dimensions while preserving cookieless visits and disabled person profiles.

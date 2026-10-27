@@ -8,3 +8,6 @@
 @source "../../packages/nightshift/components";
 @source "../../packages/nightshift/field.ts";
 @source "../../packages/nightshift/pagination.ts";
+
+/* the portable page skeleton owns the same spacing and shapes on both platforms */
+@source "../../packages/core/components/PageSkeleton.tsx";

@@ -17,12 +17,13 @@ export type YoutubePlayerProps = {
 	title: string | null
 	thumbnailPath: string | null
 	onPlay?: () => void
+	onOpen?: () => void
 }
 
 /**
  * Plays a YouTube video inline after a tap and stops when the app leaves the foreground.
  */
-export function YoutubePlayer({ youtubeVideoId, title, thumbnailPath, onPlay }: YoutubePlayerProps) {
+export function YoutubePlayer({ youtubeVideoId, title, thumbnailPath, onPlay, onOpen }: YoutubePlayerProps) {
 	// mount the embedded player only after the user requests playback
 	const [isRequested, setIsRequested] = useState(false)
 	const [isReady, setIsReady] = useState(false)
@@ -101,6 +102,7 @@ export function YoutubePlayer({ youtubeVideoId, title, thumbnailPath, onPlay }: 
 			{hasPlaybackError ? (
 				<AnchorLink
 					href={toYoutubeWatchUrl(youtubeVideoId)}
+					onPress={onOpen}
 					accessibilityLabel={`Open ${videoTitle} on YouTube`}
 					hitSlop={toTouchTargetHitSlop(44)}
 					className="min-h-11 justify-center px-3 py-2"

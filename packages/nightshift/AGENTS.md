@@ -10,7 +10,8 @@ files are written from the tokens.
   hex or an rgba value's channels and alpha.
 - `radius.ts` — the base radius and each step's offset. `typography.ts` — the font families, the type roles with the
   Tailwind classes each maps to, and the email's system font stack. `theme.ts` — the names the web theme maps, and
-  `toColorCssVariable`, a color token as its `var(--color-<kebab>)`, so a style that reads it follows the theme toggle.
+  `toColorCssVariable`, a color token as its runtime `var(--<kebab>)`, so a style that reads it follows the theme toggle.
+  Tailwind's inline `--color-` aliases are build inputs; library styles must read the runtime palette variables.
   `units.ts` converts rem to pixels at the browser's default 16-pixel rem: `toPixels` and `toRemAndPixels`, a label
   such as "0.625rem, 10px". `breakpoints.ts` — `MD_BREAKPOINT_REM`, Tailwind's `md` breakpoint, for code that reads
   a screen width outside a class.
@@ -40,13 +41,12 @@ files are written from the tokens.
 - `coffeeMug.ts` — the coffee mug in the CarlNotes logo: its view box, the cup and handle paths, the strokes, the
   three steam wisps, and the steam's motion. The steam holds still below the `md` breakpoint, as on a phone.
   `oauthProviderIcons.ts` — the sign-in providers' icons: the Google logo's colored paths and the Apple logo's path.
-- `noteHtmlStyle.ts` — `toNoteHtmlStyle`, the note body's style from a `NotePalette` of six color tokens
-  (foreground, mutedForeground, muted, border, link, primary), which the web app passes to the note editor and its
+- `noteHtmlStyle.ts` — `NOTE_BODY_LEADING`, the shared relaxed line spacing, and `toNoteHtmlStyle`, the note body's
+  style from a `NotePalette` of six color tokens (foreground, mutedForeground, muted, border, link, primary), which both apps pass to the note editor and its
   display component: `h1` at the pageTitle size, `h2` at sectionHeading, `h3` at bodyLarge, all bold and in the body
   family, the quote on the border color in muted text, code on the muted fill, links underlined in the link color, the
-  checkbox in primary, and the code block's radius at the `md` step. The web app passes CSS variables through
-  `toColorCssVariable`. The mobile app has no note code yet, and a mobile note screen will pass `latte` or `darkRoast`
-  for its mode when that change lands.
+  24-pixel checkbox in primary, and the code block's radius at the `md` step. The web app passes CSS variables through
+  `toColorCssVariable`. The mobile note screen resolves the active palette and scales native text through the editor's font-scaling support.
 - `email.ts` — what an email inlines: the Latte palette, the font stack, and a role's size in pixels. Email clients
   do not reliably read CSS custom properties.
 - `tokensCss.ts`, `uniwindCss.ts`, and `figmaTokens.ts` — pure functions that return the text of `tokens.css`, the text
@@ -73,3 +73,6 @@ files are written from the tokens.
   follow the palette, and its code block takes the medium radius, and `components/button.test.ts` that each Button
   size's box classes draw its height.
 - Dependencies: `class-variance-authority`, `clsx`, and `tailwind-merge`, all pure, so the package stays universal.
+
+`uniwindCss.ts` writes `--font-sans` and `--font-display` from `fontFamilies` alongside native theme tokens.
+The mobile Text primitive defaults through `font-sans`; explicit display classes can therefore select Architects Daughter.

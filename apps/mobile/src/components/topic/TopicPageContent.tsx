@@ -2,6 +2,8 @@ import type { TopicFinding } from "@carlnotes/contracts/findings"
 import type { TopicResponse } from "@carlnotes/contracts/topics"
 import type { TopicFeedState } from "@carlnotes/core/hooks/useTopicFeedState"
 import { Text as NativeText, RefreshControl, ScrollView, View } from "react-native"
+import { Footer } from "@/components/layout/Footer"
+import { PageNoteBadge } from "@/components/note/NoteUnreadBadge"
 import { PodcastEpisodePlayerCard } from "@/components/podcast/PodcastEpisodePlayerCard"
 import { Badge } from "@/components/primitives/badge"
 import { Text } from "@/components/primitives/text"
@@ -22,18 +24,20 @@ export function TopicPageContent({
 	findings,
 	state,
 	onRefresh,
+	onScanned,
 }: {
 	topic: TopicResponse
 	findings: TopicFinding[]
 	state: Pick<TopicFeedState, "handlers" | "pendingChanges" | "isReheating">
 	onRefresh: () => void
+	onScanned: () => Promise<void>
 }) {
 	return (
 		<ScrollView
 			refreshControl={<RefreshControl refreshing={state.isReheating} onRefresh={onRefresh} />}
 			contentContainerStyle={{ paddingBottom: 24 }}
 		>
-			<TopicActionBar topic={topic} />
+			<TopicActionBar topic={topic} onRefresh={onRefresh} onScanned={onScanned} />
 			{/* title and byline use the page's own type sizes and insets */}
 			<View className="mx-4 mb-3">
 				<TopicInfoButton topic={topic}>
@@ -45,6 +49,7 @@ export function TopicPageContent({
 						{topic.name}
 					</NativeText>
 				</TopicInfoButton>
+				<PageNoteBadge page={{ pageType: "topic", pageId: topic.id }} />
 				<TopicByline topic={topic} isPage />
 				{topic.tags.length > 0 ? (
 					<View className="mt-2 flex-row flex-wrap gap-1">
@@ -70,6 +75,7 @@ export function TopicPageContent({
 			</View>
 			<TopicPageCards topic={topic} />
 			<TopicCountsLine topic={topic} />
+			<Footer />
 		</ScrollView>
 	)
 }

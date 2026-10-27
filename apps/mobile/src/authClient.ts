@@ -7,6 +7,7 @@ import { GATE_COOKIE_NAME } from "@carlnotes/contracts/signupGate"
 import Constants from "expo-constants"
 import * as SecureStore from "expo-secure-store"
 import { toApiBaseUrl } from "./apiBaseUrl"
+import { deviceTelemetryHeaders } from "./deviceTelemetry"
 import { retireSession } from "./sessionExit"
 
 // the cookies secure storage keeps: Better Auth's own, and the gate cookie the app gate sets for the sign-up request
@@ -18,6 +19,7 @@ export const apiBaseUrl = toApiBaseUrl({ isDevelopment: __DEV__, hostUri: Consta
 // the app's own handle on the client, with the Expo plugin's getCookie. the shared code reads it through authClient()
 export const mobileAuthClient = configureAuthClient({
 	baseURL: apiBaseUrl,
+	headers: deviceTelemetryHeaders,
 	plugins: [
 		expoClient({
 			scheme: MOBILE_APP_SCHEME,

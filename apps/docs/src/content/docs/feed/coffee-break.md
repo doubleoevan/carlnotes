@@ -44,7 +44,7 @@ Then it lists the episodes about what you typed, even if no title says it.
 Subscribe buttons beside it and the small player docked at the bottom with its own
 microphone](../../../assets/screenshots/podcast-player.png)
 
-- **Chapters.** One per finding. The scrubber is split by chapter, and the chapter list shows each one's source and
+- **Chapters.** One per finding. The playback bar is split by chapter, and the chapter list shows each one's source and
   times. A thumbs up or down on a chapter rates its finding, the same as rating it in the list. On a phone, tap a
   chapter to open its finding and rate it there. An episode picks its findings by score. A like, a bookmark, or a page
   that is one of the topic's url sources raises a finding's score. A finding you like or bookmark can come back in later

@@ -13,10 +13,10 @@ import { Pencil, Plus, Users } from "lucide-react"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { EditProfileModal } from "@/components/account/EditProfileModal"
 import { UserAvatarPicker } from "@/components/avatar/UserAvatarPicker"
-import { CoffeeLoading } from "@/components/branding/CoffeeLoading"
 import { UserAvatar } from "@/components/branding/UserAvatar"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { UpdateCountBadge } from "@/components/common/UpdateCountBadge"
+import { PageSkeleton, TableSkeleton } from "@/components/layout/PageSkeleton"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/primitives/accordion"
 import { Button } from "@/components/primitives/button"
 import { toSignupNavigation } from "@/components/session/signupPrompts"
@@ -74,8 +74,14 @@ export function ProfilePage() {
 	// a user on their own profile manages their topics in the owner topics table
 	const isOwnProfile = Boolean(session) && session?.user.id === profile?.userId
 	const [topics, setTopics] = useState<OwnerTopic[] | null>(null)
+	const [isTopicsLoadFailed, setIsTopicsLoadFailed] = useState(false)
 	const handleLoadTopics = useCallback(async (): Promise<void> => {
-		setTopics((await fetchActivity()).topics)
+		setIsTopicsLoadFailed(false)
+		try {
+			setTopics((await fetchActivity()).topics)
+		} catch {
+			setIsTopicsLoadFailed(true)
+		}
 	}, [])
 
 	// reload the profile after a change to its teams or topics
@@ -160,7 +166,11 @@ export function ProfilePage() {
 		return <main className={PAGE_CLASS}>No one here by that name.</main>
 	}
 	if (!profile) {
-		return <CoffeeLoading />
+		return (
+			<main className={PAGE_CLASS}>
+				<PageSkeleton kind="profile" />
+			</main>
+		)
 	}
 
 	// send a visitor to the sign-up page, or open the New team modal with the profile user invited
@@ -200,6 +210,7 @@ export function ProfilePage() {
 			<ProfileSections
 				profile={profile}
 				topics={topics}
+				isTopicsLoadFailed={isTopicsLoadFailed}
 				isOwnProfile={isOwnProfile}
 				onLoadTopics={handleLoadTopics}
 				onReloadProfile={handleReloadProfile}
@@ -215,12 +226,14 @@ export function ProfileSections({
 	profile,
 	isOwnProfile,
 	topics,
+	isTopicsLoadFailed,
 	onLoadTopics,
 	onReloadProfile,
 }: {
 	profile: ProfileResponse
 	isOwnProfile: boolean
 	topics: OwnerTopic[] | null
+	isTopicsLoadFailed: boolean
 	onLoadTopics: () => void
 	onReloadProfile: () => void
 }) {
@@ -237,7 +250,7 @@ export function ProfileSections({
 						    profile has no topics */}
 						{isOwnProfile ? (
 							topics === null ? (
-								<CoffeeLoading className="min-h-0 justify-start py-2 text-sm" />
+								<TopicsLoading isFailed={isTopicsLoadFailed} onRetry={onLoadTopics} />
 							) : topics.length === 0 ? (
 								<div className={cn(CARD_CLASS, "mb-4")}>
 									<button
@@ -363,5 +376,16 @@ function ProfileHeader({
 				{`Joined ${joinDateLabel} · ${toCountLabel(profile.subscriberCount, "follower")}`}
 			</p>
 		</header>
+	)
+}
+
+// offer retry after a failed first read instead of leaving a permanent skeleton
+function TopicsLoading({ isFailed, onRetry }: { isFailed: boolean; onRetry: () => void }) {
+	return isFailed ? (
+		<Button variant="outline" onClick={onRetry}>
+			Retry loading topics
+		</Button>
+	) : (
+		<TableSkeleton />
 	)
 }

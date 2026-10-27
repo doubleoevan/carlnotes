@@ -40,6 +40,11 @@ Check for:
    or removed in a change, add its old name here in the same change. Only
    names that reached `main` belong here. A name renamed within the branch
    that introduced it never shipped, so nothing can still reference it.
+   - `packages/server/monitoringScrub.ts` and `monitoringScrub.test.ts` (now `monitoringRedaction.ts` and
+     `monitoringRedaction.test.ts`). Shared redaction lives in `packages/contracts/monitoringRedaction.ts` with
+     `redactEvent` and `redactTransaction` replacing `scrubContent` and `scrubTransaction`.
+   - `apps/mobile/src/components/layout/HeaderMenu.tsx` and its story (now `UserMenu.tsx` and its story, matching
+     the signed-in web menu). Web's separate `HeaderMenu.tsx` keeps its visitor-header role.
    - `--prompt-only` (now `coderabbit review --agent`)
    - `git diff --cached --name-status main` in the ship ritual's docs check (now
      `git diff --name-status <origin/main sha>` plus `git ls-files --others --exclude-standard`)

@@ -1,11 +1,11 @@
 // the frame every session screen renders inside
 
-import { SITE_URL } from "@carlnotes/core/lib/pageHead"
 import type { ReactNode } from "react"
 import { Pressable, ScrollView, Text, View } from "react-native"
 import { CoffeeMug } from "@/components/branding/CoffeeMug"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { ClassNameSafeAreaView } from "@/components/common/ClassNameSafeAreaView"
+import { Footer } from "@/components/layout/Footer"
 import { MAX_FONT_SCALE } from "@/hooks/useFontScaledSize"
 import { toTypeRoleStyle } from "@/typeRoleStyles"
 
@@ -46,16 +46,7 @@ export function SessionScreen({ children }: { children: ReactNode }) {
 						</Pressable>
 					</AnchorLink>
 					{children}
-					{/* privacy policy */}
-					<AnchorLink
-						href={`${SITE_URL}/privacy`}
-						accessibilityLabel="Privacy policy"
-						className="min-h-12 items-center justify-center"
-					>
-						<Text style={toTypeRoleStyle("caption")} className="text-link">
-							Privacy policy
-						</Text>
-					</AnchorLink>
+					<Footer />
 				</ScrollView>
 			</ClassNameSafeAreaView>
 		</View>

@@ -1,12 +1,14 @@
 import type { TopicFeedFilters } from "@carlnotes/core/hooks/useTopicFeedState"
+import { router } from "expo-router"
 import { Check, Plus, X } from "lucide-react-native"
 import { type ComponentRef, useRef, useState } from "react"
 import { View } from "react-native"
 import { Sheet } from "@/components/common/Sheet"
-import { WebFeatureButton } from "@/components/common/WebFeature"
 import { Button } from "@/components/primitives/button"
 import { Icon } from "@/components/primitives/icon"
 import { Text } from "@/components/primitives/text"
+import { useTopicFeed } from "@/providers/TopicFeedProvider"
+import { EditTopicModal } from "./EditTopicModal"
 
 /**
  * Matches Home's tags and New Topic row with working tag selection.
@@ -75,16 +77,37 @@ export function TopicHomeActions({ filters, knownTags }: { filters: TopicFeedFil
 }
 
 /**
- * Keeps the web's New Topic action visible while creation opens on the web.
+ * Opens the same native creation form from a page button or its action menu.
  */
 export function NewTopicButton() {
+	const { openNewTopicDialog, newTopicDialog } = useNewTopicDialog()
 	return (
-		<WebFeatureButton
-			title="New topic"
-			label="New Topic"
-			className="min-h-11 rounded-lg px-3"
-			description="Create a topic with Carl or the editor on carlnotes.com. The mobile editor is not available yet."
-			icon={Plus}
-		/>
+		<>
+			<Button accessibilityLabel="New Topic" onPress={openNewTopicDialog}>
+				<Icon as={Plus} className="size-4" />
+				<Text>New Topic</Text>
+			</Button>
+			{newTopicDialog}
+		</>
 	)
+}
+
+/**
+ * Shares Topic creation and feed refresh between native entry points.
+ */
+export function useNewTopicDialog(): { openNewTopicDialog: () => void; newTopicDialog: React.ReactNode } {
+	const [isOpen, setIsOpen] = useState(false)
+	const state = useTopicFeed()
+	return {
+		openNewTopicDialog: () => setIsOpen(true),
+		newTopicDialog: isOpen && (
+			<EditTopicModal
+				onClose={() => setIsOpen(false)}
+				onTopicSaved={async (topicId) => {
+					await state.reheat()
+					router.push(`/topics/${topicId}`)
+				}}
+			/>
+		),
+	}
 }

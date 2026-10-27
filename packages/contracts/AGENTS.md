@@ -61,3 +61,5 @@ mention parser for the chat room composer and the room's notifications, with the
   `podcast.ts`, and `findings.ts`, so no two modules load each other.
 - Nothing here touches the database, the network, or the DOM: the modules are values and their shapes.
 - Tests: `bun test packages/contracts`.
+
+`clientTelemetry.ts` defines bounded native device headers and the browser user-agent fallback used by API events and request monitoring. These untrusted descriptions are analytics only. `visitAnalytics.ts` shares URL/path redaction and public Topic attribution between web and native. `monitoringRedaction.ts` contains the universal Sentry content/URL redaction, re-exported by the server and extended by native. `reportedPath.ts` also shapes Topic and Team note routes and removes query strings and fragments.

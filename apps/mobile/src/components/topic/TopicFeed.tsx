@@ -5,6 +5,7 @@ import { FlashList } from "@shopify/flash-list"
 import { ChevronDown, ChevronRight } from "lucide-react-native"
 import { useMemo, useState } from "react"
 import { Text as NativeText, View } from "react-native"
+import { Footer } from "@/components/layout/Footer"
 import { Button } from "@/components/primitives/button"
 import { Icon } from "@/components/primitives/icon"
 import { Text } from "@/components/primitives/text"
@@ -48,6 +49,7 @@ export function TopicFeed({ topicFeed, state, onRefresh }: TopicFeedProps) {
 		setOpenSection((currentSection) => (currentSection === sectionKey ? null : sectionKey))
 	return (
 		<FlashList
+			ListFooterComponent={Footer}
 			data={rows}
 			getItemType={(row) => row.kind}
 			keyExtractor={(row) => row.key}

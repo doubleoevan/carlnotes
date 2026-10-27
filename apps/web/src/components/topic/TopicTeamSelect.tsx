@@ -1,161 +1,15 @@
-// the topic edit modal's teams field: which of the user's leader teams hold the topic after the save
+import type { TopicTeamField } from "@carlnotes/core/hooks/useTopicTeamChoice"
+import { useId } from "react"
 
-import {
-	fetchLeaderTeams,
-	fetchTeamNameTaken,
-	sendAddTopicTeam,
-	sendRemoveTopicFromTeam,
-} from "@carlnotes/client/teamClient"
-import type { TeamSummary } from "@carlnotes/contracts/teams"
-import type { TopicResponse } from "@carlnotes/contracts/topics"
-import { useEffect, useId, useState } from "react"
-import { toast } from "sonner"
+export type { TopicTeamField } from "@carlnotes/core/hooks/useTopicTeamChoice"
+export { useTopicTeamChoice } from "@carlnotes/core/hooks/useTopicTeamChoice"
+
 import { FieldLabel } from "@/components/common/FieldLabel"
 import { MultiCombobox } from "@/components/common/MultiCombobox"
-import { type PendingInvite, sendPendingInvites, TeamInviteFields } from "@/components/invite/TeamInviteFields"
+import { TeamInviteFields } from "@/components/invite/TeamInviteFields"
 import { Input } from "@/components/primitives/input"
 import { Switch } from "@/components/primitives/switch"
-import { createTeam, TEAM_REJECTION_REASONS } from "@/components/team/saveTeam"
-import { NEW_TEAM_CHOICE, NEW_TEAM_OPTION, toTeamChoices } from "@/lib/topicTeamChoices"
-
-// the teams choice with the writes that apply it
-export type TopicTeamField = ReturnType<typeof useTopicTeamChoice>
-
-/**
- * The teams holding the topic after an edit. Led teams toggle on and off, and the New team row creates
- * one more holding team after the save. A holding team the user does not lead is left alone.
- */
-export function useTopicTeamChoice(topic: TopicResponse | undefined, initialTeam?: { teamId: string; name: string }) {
-	const [teams, setTeams] = useState<TeamSummary[] | null>(null)
-	// a create opened from a team page starts on that team. anything else waits for the teams to load
-	const [selectedTeamIds, setSelectedTeamIds] = useState<string[]>(initialTeam ? [initialTeam.teamId] : [])
-	// a new team's fields: its name, its visibility, and the invitations sent once it exists
-	const [newTeamName, setNewTeamName] = useState("")
-	const [isNewTeamPublic, setIsNewTeamPublic] = useState(false)
-	const [pendingInvites, setPendingInvites] = useState<PendingInvite[]>([])
-	const [newTeamRejection, setNewTeamRejection] = useState<string | null>(null)
-
-	// the ids of the user's teams that already hold the topic
-	const holdingTeamIds = (topic?.roomTeams ?? []).map((roomTeam) => roomTeam.teamId)
-
-	// the leader teams load with the modal, seeding the selection with the ones already holding the topic
-	// biome-ignore lint/correctness/useExhaustiveDependencies: the topic id identifies the seed
-	useEffect(() => {
-		fetchLeaderTeams()
-			.then((leaderTeams) => {
-				setTeams(leaderTeams)
-				const holdingLeaderTeamIds = leaderTeams
-					.map((team) => team.teamId)
-					.filter((teamId) => holdingTeamIds.includes(teamId))
-				// an existing topic starts on the leader teams that hold it. a new one takes the first team led, never none
-				setSelectedTeamIds((chosen) => {
-					if (chosen.length > 0) {
-						return chosen
-					}
-					if (topic) {
-						return holdingLeaderTeamIds
-					}
-					return leaderTeams[0] ? [leaderTeams[0].teamId] : []
-				})
-			})
-			.catch(() => setTeams([]))
-	}, [topic?.id])
-
-	// the teams offered: every leader team, plus the create-page team when it is not led
-	const offeredTeams = (teams ?? []).some((team) => team.teamId === initialTeam?.teamId)
-		? (teams ?? [])
-		: [...(teams ?? []), ...(initialTeam ? [initialTeam] : [])]
-
-	// what the field actually selected: the real teams, and whether the New team row is on
-	const selectedRealTeamIds = selectedTeamIds.filter((teamId) => teamId !== NEW_TEAM_CHOICE)
-	const isNewTeamSelected = selectedTeamIds.includes(NEW_TEAM_CHOICE)
-
-	// a non-private topic must land on a team: a led one selected, a new one named, or a team of the
-	// user's that already holds it and is not theirs to manage here
-	const holdingElsewhereCount = holdingTeamIds.filter(
-		(teamId) => !(teams ?? []).some((team) => team.teamId === teamId),
-	).length
-	const isTeamChosen =
-		teams === null ||
-		selectedRealTeamIds.length > 0 ||
-		holdingElsewhereCount > 0 ||
-		(isNewTeamSelected && newTeamName.trim() !== "")
-
-	// apply the selection once the topic is saved: create the named team, add the newly picked, drop the unpicked
-	const assignTopicTeam = async (topicId: string): Promise<void> => {
-		if (teams === null) {
-			return
-		}
-		// the new team is created holding the topic, with its queued invitations sent
-		if (isNewTeamSelected && newTeamName.trim() !== "") {
-			await createNewTeam(topicId, { name: newTeamName, isPublic: isNewTeamPublic, pendingInvites })
-		}
-
-		// the diff against the leader teams that held the topic when the modal opened
-		const holdingLeaderTeamIds = teams.map((team) => team.teamId).filter((teamId) => holdingTeamIds.includes(teamId))
-		const addedTeamIds = selectedRealTeamIds.filter((teamId) => !holdingLeaderTeamIds.includes(teamId))
-		const removedTeamIds = holdingLeaderTeamIds.filter((teamId) => !selectedRealTeamIds.includes(teamId))
-
-		// adds first, so the topic never passes through a moment with no team. a rejection shows in a toast
-		const addRejections = await Promise.all(addedTeamIds.map((teamId) => sendAddTopicTeam(teamId, topicId)))
-		await Promise.all(removedTeamIds.map((teamId) => sendRemoveTopicFromTeam(teamId, topicId)))
-		const addRejection = addRejections.find(Boolean)
-		if (addRejection) {
-			toast.error(addRejection)
-		}
-	}
-
-	// the blur check runs before the save does, and typing again clears the note
-	const checkNewTeamName = (): void => {
-		const teamName = newTeamName.trim()
-		if (teamName === "") {
-			return
-		}
-		void fetchTeamNameTaken(teamName)
-			.then((isTeamNameTaken) => {
-				setNewTeamRejection(isTeamNameTaken ? TEAM_REJECTION_REASONS["name-taken"] : null)
-			})
-			.catch(() => setNewTeamRejection(null))
-	}
-	return {
-		offeredTeams,
-		selectedTeamIds,
-		setSelectedTeamIds,
-		isNewTeamSelected,
-		newTeamName,
-		setNewTeamName,
-		newTeamRejection,
-		checkNewTeamName,
-		isNewTeamPublic,
-		setIsNewTeamPublic,
-		pendingInvites,
-		setPendingInvites,
-		isTeamChosen,
-		assignTopicTeam,
-	}
-}
-
-// create the new team holding the saved topic and send its queued invitations
-async function createNewTeam(
-	topicId: string,
-	newTeam: { name: string; isPublic: boolean; pendingInvites: PendingInvite[] },
-): Promise<void> {
-	if (!newTeam.name.trim()) {
-		return
-	}
-	const createTeamResult = await createTeam({
-		name: newTeam.name.trim(),
-		description: null,
-		topicIds: [topicId],
-		isPublic: newTeam.isPublic,
-	})
-	if ("rejection" in createTeamResult) {
-		toast.error(createTeamResult.rejection)
-		return
-	}
-	await sendPendingInvites(createTeamResult.teamId, newTeam.pendingInvites)
-}
-
+import { NEW_TEAM_OPTION, toTeamChoices } from "@/lib/topicTeamChoices"
 /**
  * The topic teams multiselect: the leader teams this topic may sit on, and a new team created on save.
  */
@@ -165,6 +19,7 @@ export function TopicTeamSelect({ teamField, isTeamMissing }: { teamField: Topic
 	const newTeamNameInputId = useId()
 	return (
 		<div className="space-y-3">
+			{teamField.loadError && <p className="text-destructive text-sm">{teamField.loadError}</p>}
 			<div>
 				<FieldLabel htmlFor={teamsComboboxId} isRequired>
 					Teams

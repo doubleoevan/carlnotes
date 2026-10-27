@@ -157,10 +157,13 @@ export async function sendRemoveTeamMember(teamId: string, userId: string): Prom
 
 // the team member's own visibility opt-out on one team
 export async function setTeamMemberVisibility(teamId: string, userId: string, isMemberVisible: boolean): Promise<void> {
-	await apiClient().api.teams[":id"].members[":userId"]["member-visibility"].$post({
+	const response = await apiClient().api.teams[":id"].members[":userId"]["member-visibility"].$post({
 		param: { id: teamId, userId },
 		json: { isMemberVisible },
 	})
+	if (!response.ok) {
+		throw new Error("Your member visibility didn't save. Try again.")
+	}
 }
 
 // create an invite link for a team. "limited" is the daily invite limit
@@ -181,6 +184,13 @@ export async function sendTeamAvatar(teamId: string, avatarFile: File): Promise<
 	// send the image. a network failure fails the upload instead of throwing an error
 	const body = new FormData()
 	body.append("avatar", avatarFile)
+	return sendTeamAvatarBody(teamId, body)
+}
+
+/**
+ * Uploads a platform-prepared multipart team avatar.
+ */
+export async function sendTeamAvatarBody(teamId: string, body: FormData): Promise<string | null> {
 	const response = await fetchApi(`/api/teams/${teamId}/avatar`, { method: "POST", body }).catch(() => null)
 	if (!response) {
 		return "failed"
@@ -201,7 +211,10 @@ export async function sendJoinRequest(teamId: string): Promise<boolean> {
 
 // take back the user's own request, removing the row the leaders see
 export async function sendDeleteJoinRequest(teamId: string): Promise<void> {
-	await apiClient().api.teams[":id"]["join-requests"].me.$delete({ param: { id: teamId } })
+	const response = await apiClient().api.teams[":id"]["join-requests"].me.$delete({ param: { id: teamId } })
+	if (!response.ok) {
+		throw new Error("Your request wasn't withdrawn. Try again.")
+	}
 }
 
 // admit a requester, a leader's power. limited means the members list is already at its limit

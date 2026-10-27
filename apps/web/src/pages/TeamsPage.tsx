@@ -9,10 +9,10 @@ import { useAllNoteBadges } from "@carlnotes/core/stores/noteBadgeStore"
 import { Plus, Users } from "lucide-react"
 import { useCallback, useEffect, useState } from "react"
 import { toast } from "sonner"
-import { CoffeeLoading } from "@/components/branding/CoffeeLoading"
 import { ConfirmDialog } from "@/components/common/ConfirmDialog"
 import { UpdateCountBadge } from "@/components/common/UpdateCountBadge"
 import { UserProfileLink } from "@/components/common/UserProfileLink"
+import { PageSkeleton } from "@/components/layout/PageSkeleton"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/primitives/accordion"
 import { Button } from "@/components/primitives/button"
 import { SentTeamInvitesTable } from "@/components/table/TeamInvitesTable"
@@ -30,6 +30,7 @@ export function TeamsPage() {
 	usePageTitle("Teams")
 	const { data: session } = authClient().useSession()
 	const [teamsPage, setTeamsPage] = useState<TeamsPageResponse | null>(null)
+	const [isLoadFailed, setIsLoadFailed] = useState(false)
 	// the chat panel's poll feeds this
 	const teamMentions = useAllTeamChatMentions()
 	// every unread change on the teams' notes
@@ -50,9 +51,10 @@ export function TeamsPage() {
 
 	// every team and invitation, reloaded after every change made from this page
 	const reloadTeams = useCallback((): void => {
+		setIsLoadFailed(false)
 		fetchTeams()
 			.then(setTeamsPage)
-			.catch(() => setTeamsPage({ teams: [], receivedInvites: [], sentInvites: [] }))
+			.catch(() => setIsLoadFailed(true))
 	}, [])
 	useEffect(() => reloadTeams(), [reloadTeams])
 
@@ -113,9 +115,20 @@ export function TeamsPage() {
 			{session && <UserProfileLink user={toSessionProfileIdentity(session.user)} className="mt-2 text-sm" />}
 			{/* mt-2 plus the first accordion trigger's own padding matches the account page's mt-6 gap */}
 			<div className="mt-2">
+				{teamsPage && isLoadFailed && (
+					<Button variant="outline" onClick={reloadTeams}>
+						Retry loading teams
+					</Button>
+				)}
 				{/* the loading state, then the two accordion sections */}
 				{teamsPage === null ? (
-					<CoffeeLoading />
+					isLoadFailed ? (
+						<Button variant="outline" onClick={reloadTeams}>
+							Retry loading teams
+						</Button>
+					) : (
+						<PageSkeleton kind="teams" />
+					)
 				) : (
 					<Accordion type="multiple" defaultValue={["teams", "invites"]}>
 						{/* the teams the user belongs to. a user with none starts one from here */}

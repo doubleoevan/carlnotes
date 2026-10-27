@@ -2,6 +2,18 @@
 import { expect, test } from "bun:test"
 import { toReportedPath } from "./reportedPath"
 
+// both clients route notes beneath their parent and may attach private query text
+test("note routes and query strings never include private identities", () => {
+	expect(toReportedPath("/topics/private-topic/notes/private-note?draft=secret#selection")).toBe(
+		"/topics/:id/notes/:noteId",
+	)
+	expect(toReportedPath("/topics/private-topic/private-name/notes/private-note")).toBe(
+		"/topics/:id/:slug/notes/:noteId",
+	)
+	expect(toReportedPath("/teams/private-team/notes/private-note")).toBe("/teams/:teamId/notes/:noteId")
+	expect(toReportedPath("/sign-in?token=secret")).toBe("/sign-in")
+})
+
 // a topic id in the path would make one report row per topic, and would attach that topic to a signed-out visitor
 test("an id segment reports as its route's shape", () => {
 	expect(toReportedPath("/topics/bffe43c2-f706-4f92-88bd-df0c9fd8f9e8")).toBe("/topics/:id")

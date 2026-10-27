@@ -5,6 +5,9 @@ import { toRadiusPixels } from "./radius"
 import { typeRoles } from "./typography"
 import { toPixels } from "./units"
 
+/** The note body's relaxed line spacing, shared by web and native text styles. */
+export const NOTE_BODY_LEADING = 1.625
+
 /** The color tokens a note's style reads, resolved by the app. The web app passes CSS variables. */
 export type NotePalette = Pick<
 	Record<ColorName, string>,
@@ -54,6 +57,7 @@ export function toNoteHtmlStyle(palette: NotePalette): NoteHtmlStyle {
 		a: { color: palette.link, textDecorationLine: "underline" },
 		ol: { markerColor: palette.foreground, marginLeft: LIST_MARGIN_PIXELS, gapWidth: LIST_GAP_PIXELS },
 		ul: { bulletColor: palette.foreground, bulletSize: 6, marginLeft: LIST_MARGIN_PIXELS, gapWidth: LIST_GAP_PIXELS },
-		ulCheckbox: { boxColor: palette.primary, boxSize: 16, marginLeft: LIST_MARGIN_PIXELS, gapWidth: LIST_GAP_PIXELS },
+		// leave the 44-point checkbox touch target clear of editable text
+		ulCheckbox: { boxColor: palette.primary, boxSize: 24, marginLeft: LIST_MARGIN_PIXELS, gapWidth: 10 },
 	}
 }

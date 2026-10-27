@@ -1,3 +1,7 @@
+import { isAddTopicToTeamShown } from "@carlnotes/core/lib/topicActions"
+
+export { isAddTopicToTeamShown } from "@carlnotes/core/lib/topicActions"
+
 import { fetchLeaderTeams, sendAddTopicTeam, sendRemoveTopicFromTeam } from "@carlnotes/client/teamClient"
 import { fetchAddableTopics } from "@carlnotes/client/topicClient"
 import type { TeamSummary } from "@carlnotes/contracts/teams"
@@ -10,16 +14,6 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/primitives
 import { MENU_BUTTON_CLASS, MENU_DIVIDER_CLASS } from "@/lib/styleClasses"
 import { EditTeamModal } from "./EditTeamModal"
 import { NewTeamOption, TeamActionOption } from "./TeamMenuOptions"
-
-/**
- * Whether the user may add the topic to a team, signed in and never on someone else's private topic.
- */
-export function isAddTopicToTeamShown(
-	topic: Pick<TopicResponse, "isTopicOwner" | "visibility">,
-	isSignedIn: boolean,
-): boolean {
-	return isSignedIn && !(topic.visibility === "private" && !topic.isTopicOwner)
-}
 
 // the topic fields that adding the topic to a team reads
 export type AddTopicToTeamTopic = Pick<

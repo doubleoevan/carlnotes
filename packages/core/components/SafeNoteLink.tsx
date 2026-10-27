@@ -1,4 +1,5 @@
 import type { ComponentType, ReactNode } from "react"
+import { isAllowedNoteUrl } from "../lib/safeNoteMarkdown"
 
 // the Markdown parser's link props and platform text/link elements
 export type SafeNoteLinkProps = { children?: ReactNode; href?: string; allowedUrls?: ReadonlySet<string> }
@@ -16,7 +17,7 @@ export function SafeNoteLink({
 	allowedUrls,
 	components: { Link, Text },
 }: SafeNoteLinkProps & { components: SafeNoteLinkComponents }) {
-	if (href && allowedUrls?.has(href)) {
+	if (isAllowedNoteUrl(href, allowedUrls)) {
 		return <Link href={href}>{children}</Link>
 	}
 	// keep a bare destination from appearing twice

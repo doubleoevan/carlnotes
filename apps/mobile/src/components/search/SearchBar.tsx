@@ -16,7 +16,12 @@ const SEARCH_LABEL = "Search topics, podcasts, findings, teams and users"
 /**
  * Matches the web toolbar and keeps the active search visible while browsing Topics.
  */
-export function SearchBar({ filters, hasTeamBookmarks, actions }: TopicFeedControlsProps & { actions?: ReactNode }) {
+export function SearchBar({
+	filters,
+	hasTeamBookmarks,
+	actions,
+	hasSort,
+}: TopicFeedControlsProps & { actions?: ReactNode }) {
 	// keep editing on the current screen and open results only on submission
 	const { searchText, setSearchText, setSearchFilters } = useSearchBar()
 	const handleSubmit = (): void => {
@@ -53,7 +58,7 @@ export function SearchBar({ filters, hasTeamBookmarks, actions }: TopicFeedContr
 			</View>
 			{/* the web's filter, sort, and page actions */}
 			<View className="ml-1 border-l border-separator pl-1">
-				<TopicFeedControls filters={filters} hasTeamBookmarks={hasTeamBookmarks} isCompact />
+				<TopicFeedControls filters={filters} hasTeamBookmarks={hasTeamBookmarks} hasSort={hasSort} isCompact />
 			</View>
 			{actions}
 		</View>

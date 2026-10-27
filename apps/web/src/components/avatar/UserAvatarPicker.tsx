@@ -1,4 +1,5 @@
 import { useAvatar } from "@carlnotes/core/hooks/useAvatar"
+import { AVATAR_UPLOAD_FAILED_TEXT } from "@carlnotes/core/lib/avatarUpload"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { Camera } from "lucide-react"
 import { useState } from "react"
@@ -37,11 +38,11 @@ export function UserAvatarPicker({
 			}
 			const avatarRejection = await uploadAvatarFile(uploadableAvatar.resizedAvatarFile)
 			if (avatarRejection) {
-				setUpdateRejection(AVATAR_REJECTIONS[avatarRejection] ?? "That didn't reach Carl. Try again.")
+				setUpdateRejection(AVATAR_REJECTIONS[avatarRejection] ?? AVATAR_UPLOAD_FAILED_TEXT)
 			}
 		} catch (error) {
 			console.error("avatar upload failed", error)
-			setUpdateRejection("That didn't reach Carl. Try again.")
+			setUpdateRejection(AVATAR_UPLOAD_FAILED_TEXT)
 		} finally {
 			setIsUploading(false)
 		}

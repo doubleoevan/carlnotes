@@ -1,72 +1,73 @@
 import { showClientError } from "@carlnotes/client/apiClient"
-import { sendTopicSubscription } from "@carlnotes/client/topicClient"
-import { toTopicPath } from "@carlnotes/contracts/seo"
+import { sendDeleteTopic, sendTopicSubscription } from "@carlnotes/client/topicClient"
 import type { TopicResponse } from "@carlnotes/contracts/topics"
-import { Coffee, EllipsisVertical, PawPrint, Pencil, Users } from "lucide-react-native"
-import { type ComponentRef, useRef, useState } from "react"
-import { View } from "react-native"
-import { Sheet } from "@/components/common/Sheet"
-import { WebFeatureButton } from "@/components/common/WebFeature"
+import { toTopicActionLayout } from "@carlnotes/core/lib/topicActions"
+import { router } from "expo-router"
+import { PawPrint, Pencil, Share2, Trash2, Users } from "lucide-react-native"
+import { useState } from "react"
+import { Alert, View } from "react-native"
 import { Button } from "@/components/primitives/button"
 import { Icon } from "@/components/primitives/icon"
 import { Text } from "@/components/primitives/text"
-import { ShareTopic } from "@/components/share/ShareTopic"
+import { PageActionMenu, type PageActionOption } from "@/components/search/PageActionMenu"
+import { ShareTopic, ShareTopicSheet } from "@/components/share/ShareTopic"
+import { AddTopicToTeamDialog } from "@/components/team/AddTopicToTeamDialog"
+import { JoinTeamButton } from "@/components/team/JoinTeamButton"
+import { usePageMutation } from "@/hooks/usePageMutation"
+import { useTopicFeed } from "@/providers/TopicFeedProvider"
+import { EditTopicModal } from "./EditTopicModal"
 import { NewTopicButton } from "./TopicHomeActions"
+import { TopicScanButton } from "./TopicScanButton"
 
 /**
- * Places the page's secondary action and call to action as on the web.
+ * Places working native Topic controls according to the shared web action layout.
  */
-export function TopicActionBar({ topic }: { topic: TopicResponse }) {
-	// use the same precedence as the signed-in web action bar
-	const canScan = topic.manualScansRemaining !== null
+export function TopicActionBar({
+	topic,
+	onRefresh,
+	onScanned,
+}: {
+	topic: TopicResponse
+	onRefresh: () => void
+	onScanned: () => Promise<void>
+}) {
+	// keep team selection above the current Topic without losing its scroll position
+	const [isAddingToTeam, setIsAddingToTeam] = useState(false)
+	const layout = toNativeTopicActionLayout(topic)
 	return (
-		<View className="mx-4 mt-1 mb-3 flex-row items-center justify-between gap-3">
-			<TopicSecondaryAction topic={topic} />
-			{canScan ? (
-				<WebFeatureButton
-					title="Brew"
-					description="Start and manage a brew from this topic on carlnotes.com."
-					path={toTopicPath(topic)}
-					icon={Coffee}
-				/>
-			) : (
-				<NewTopicButton />
+		<View className="mx-4 mt-1 mb-3 flex-row flex-wrap items-start justify-between gap-3">
+			{/* secondary action and primary call to action */}
+			<View>
+				{layout.isJoinOnLeft && topic.teamLink && (
+					<JoinTeamButton
+						teamId={topic.teamLink.teamId}
+						name={topic.teamLink.name}
+						hasRequestedToJoin={topic.hasRequestedToJoin}
+						isHighlighted={false}
+						onChanged={onRefresh}
+					/>
+				)}
+				{layout.isAddTopicToTeamOnLeft && (
+					<Button variant="outline" accessibilityLabel="Add topic to team" onPress={() => setIsAddingToTeam(true)}>
+						<Icon as={Users} className="size-4" />
+						<Text>Team Up</Text>
+					</Button>
+				)}
+				{layout.isShareOnLeft && <ShareTopic topic={topic} isLabeled />}
+			</View>
+			<View>
+				<TopicScanButton topic={topic} onScanned={onScanned} />
+				{layout.isNewTopicCallToAction && <NewTopicButton />}
+			</View>
+			{isAddingToTeam && (
+				<AddTopicToTeamDialog topic={topic} onTopicTeamsChanged={onRefresh} onClose={() => setIsAddingToTeam(false)} />
 			)}
 		</View>
 	)
 }
 
-// select the secondary action from the same topic permissions as the web
-function TopicSecondaryAction({ topic }: { topic: TopicResponse }) {
-	const isJoinable = topic.manualScansRemaining === null && topic.roomTeams.length === 0 && topic.teamLink !== null
-	if (isJoinable) {
-		return (
-			<WebFeatureButton
-				title="Join team"
-				description="Request to join this topic’s team on carlnotes.com."
-				path={toTopicPath(topic)}
-				icon={Users}
-				variant="outline"
-			/>
-		)
-	}
-	if (topic.isTopicOwner || topic.visibility !== "private") {
-		return (
-			<WebFeatureButton
-				title="Add topic to team"
-				label="Team Up"
-				description="Choose a team for this topic on carlnotes.com."
-				path={toTopicPath(topic)}
-				icon={Users}
-				variant="outline"
-			/>
-		)
-	}
-	return <ShareTopic topic={topic} isLabeled />
-}
-
 /**
- * Shows the web's page action menu with native refresh and follow actions.
+ * Opens the same Topic actions as web with native editing, team selection, and confirmation.
  */
 export function TopicPageActions({
 	topic,
@@ -77,102 +78,115 @@ export function TopicPageActions({
 	title?: string
 	onRefresh: () => void
 }) {
-	// return focus to the page menu trigger
-	const [isOpen, setIsOpen] = useState(false)
-	const triggerRef = useRef<ComponentRef<typeof View>>(null)
+	// retain each dialog independently of the menu that opens it
+	const [dialog, setDialog] = useState<"edit" | "team" | "share" | null>(null)
+	const mutation = usePageMutation(onRefresh)
+	const feed = useTopicFeed()
+	const actionOptions: PageActionOption[] = []
 
+	// preserve the web's follow, team, share, edit, and delete order
+	if (topic) {
+		const layout = toNativeTopicActionLayout(topic)
+		if (layout.isSubscribeInMenu) {
+			actionOptions.push({
+				label: topic.isSubscribed ? "Unfollow topic" : "Follow topic",
+				icon: PawPrint,
+				isActive: topic.isSubscribed,
+				isDisabled: mutation.isPending,
+				onSelect: () => void mutation.run(() => sendTopicSubscription(topic.id, !topic.isSubscribed)),
+			})
+		}
+		if (layout.isAddTopicToTeamInMenu) {
+			actionOptions.push({ label: "Add topic to team", icon: Users, onSelect: () => setDialog("team") })
+		}
+		actionOptions.push({ label: "Share topic", icon: Share2, onSelect: () => setDialog("share") })
+		if (topic.canEdit) {
+			actionOptions.push(
+				{ label: "Edit topic", icon: Pencil, onSelect: () => setDialog("edit") },
+				{
+					label: "Delete topic",
+					icon: Trash2,
+					isDisabled: mutation.isPending,
+					onSelect: () =>
+						confirmDeleteTopic(topic, async () => {
+							await feed.reheat()
+							router.replace("/")
+						}),
+				},
+			)
+		}
+	}
 	return (
 		<>
-			<Button ref={triggerRef} variant="ghost" size="icon" accessibilityLabel={title} onPress={() => setIsOpen(true)}>
-				<Icon as={EllipsisVertical} className="size-4 text-muted-foreground" />
-			</Button>
-			{isOpen ? (
-				<Sheet title={title} triggerRef={triggerRef} onClose={() => setIsOpen(false)}>
-					{topic ? <SubscribeOption topic={topic} onRefresh={onRefresh} onClose={() => setIsOpen(false)} /> : null}
-					{topic ? <ShareTopic topic={topic} isLabeled /> : null}
-					{topic?.canEdit ? (
-						<WebFeatureButton
-							title="Edit topic"
-							description="Edit the topic, prompt, and Sources on carlnotes.com."
-							path={toTopicPath(topic)}
-							icon={Pencil}
-							variant="ghost"
-							className="min-h-12 justify-start"
-						/>
-					) : null}
-					{topic?.isTopicOwner ? (
-						<WebFeatureButton
-							title="Add topic to team"
-							description="Choose a team for this topic on carlnotes.com."
-							path={toTopicPath(topic)}
-							icon={Users}
-							variant="ghost"
-							className="min-h-12 justify-start"
-						/>
-					) : null}
-					<Button
-						variant="ghost"
-						className="min-h-12 justify-start"
-						accessibilityLabel="Reheat"
-						onPress={() => {
-							onRefresh()
-							setIsOpen(false)
-						}}
-					>
-						<Icon as={Coffee} className="text-muted-foreground" />
-						<Text>Reheat</Text>
-					</Button>
-				</Sheet>
-			) : null}
+			<PageActionMenu
+				page={title.replace(/ actions$/, "")}
+				options={actionOptions}
+				report={topic ? { subjectKind: "topic", subjectId: topic.id, subjectLabel: topic.name } : undefined}
+				hasNewTopicButton={!topic || toNativeTopicActionLayout(topic).isNewTopicCallToAction}
+			/>
+			{mutation.error && (
+				<Text accessibilityRole="alert" className="text-xs text-destructive">
+					{mutation.error}
+				</Text>
+			)}
+			{topic && (
+				<TopicActionDialog topic={topic} dialog={dialog} onClose={() => setDialog(null)} onRefresh={onRefresh} />
+			)}
 		</>
 	)
 }
 
-// save a follow choice only when the user may follow this topic
-function SubscribeOption({
+// keep the chosen form mounted independently of the menu
+function TopicActionDialog({
 	topic,
-	onRefresh,
+	dialog,
 	onClose,
+	onRefresh,
 }: {
 	topic: TopicResponse
-	onRefresh: () => void
+	dialog: "edit" | "team" | "share" | null
 	onClose: () => void
+	onRefresh: () => void
 }) {
-	// prevent overlapping subscription requests
-	const [isSaving, setIsSaving] = useState(false)
-	const handleToggleSubscription = async (): Promise<void> => {
-		if (!topic || isSaving) {
-			return
-		}
-		setIsSaving(true)
-		try {
-			// save the choice and refresh the page before dismissing
-			await sendTopicSubscription(topic.id, !topic.isSubscribed)
-			onRefresh()
-			onClose()
-		} catch {
-			showClientError("That didn't go through. Try again.")
-		} finally {
-			setIsSaving(false)
-		}
-	}
-	if (topic.isTopicOwner || topic.visibility === "private") {
-		return null
-	}
 	return (
-		<Button
-			variant="ghost"
-			className="min-h-12 justify-start"
-			accessibilityLabel={topic.isSubscribed ? "Unfollow topic" : "Follow topic"}
-			disabled={isSaving}
-			onPress={() => void handleToggleSubscription()}
-		>
-			<Icon
-				as={PawPrint}
-				className={topic.isSubscribed ? "text-primary" : "text-muted-foreground"}
-				fill={topic.isSubscribed ? "currentColor" : "none"}
-			/>
-			<Text>{topic.isSubscribed ? "Unfollow topic" : "Follow topic"}</Text>
-		</Button>
+		<>
+			{dialog === "edit" && <EditTopicModal topic={topic} onClose={() => onClose()} onTopicSaved={onRefresh} />}
+			{dialog === "team" && (
+				<AddTopicToTeamDialog topic={topic} onTopicTeamsChanged={onRefresh} onClose={() => onClose()} />
+			)}
+			{dialog === "share" && <ShareTopicSheet topic={topic} onClose={() => onClose()} />}
+		</>
+	)
+}
+
+// the mobile screens require sign-in and use the same join permission as the web
+function toNativeTopicActionLayout(topic: TopicResponse): ReturnType<typeof toTopicActionLayout> {
+	return toTopicActionLayout({
+		topic,
+		isSignedIn: true,
+		isBookmarkedView: false,
+		isJoinable: topic.roomTeams.length === 0 && topic.teamLink !== null,
+	})
+}
+
+// require an explicit destructive choice before deleting a Topic and its history
+function confirmDeleteTopic(topic: TopicResponse, onDeleted: () => Promise<void>): void {
+	Alert.alert(
+		"Delete this topic?",
+		`'${topic.name}' and its ${topic.findings.length} findings and ${topic.scans.length} scans go with it.`,
+		[
+			{ text: "Keep it", style: "cancel" },
+			{
+				text: "Delete topic",
+				style: "destructive",
+				onPress: () => {
+					void sendDeleteTopic(topic.id)
+						.then(onDeleted)
+						.catch((error: unknown) =>
+							showClientError(error instanceof Error ? error.message : "That topic didn't get deleted. Try again."),
+						)
+				},
+			},
+		],
 	)
 }

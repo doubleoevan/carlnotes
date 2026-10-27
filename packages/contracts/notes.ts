@@ -29,11 +29,14 @@ export const NOTE_COMMENT_MAX_CHARS = 2000
 // the longest name a note takes
 export const NOTE_NAME_MAX_CHARS = 120
 
-// one note as the notes table lists it
+// the visibility values a note can use
+export type NoteVisibility = (typeof noteVisibilities)[number]
+
+// the table's note summary with the server's current permissions
 export type Note = {
 	id: string
 	name: string
-	visibility: (typeof noteVisibilities)[number]
+	visibility: NoteVisibility
 	createdAt: string
 	updatedAt: string
 	canEdit: boolean
@@ -69,6 +72,7 @@ export type NoteBodySaveResult =
 	| { status: "saved"; version: number }
 	| ({ status: "conflict" } & NoteConflict)
 	| { status: "tooLarge" }
+	| { status: "unavailable" }
 	| { status: "failed" }
 
 // one comment on a note's thread. a closed account leaves no author

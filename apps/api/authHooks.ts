@@ -3,9 +3,9 @@
 // GitHub profiles
 
 import type { AnalyticsEntryPoint } from "@carlnotes/contracts/analyticsEvents"
+import { toClientTelemetry } from "@carlnotes/contracts/clientTelemetry"
 import { toCanonicalEmail } from "@carlnotes/contracts/emails"
 import { MOBILE_APP_SCHEME_ORIGIN } from "@carlnotes/contracts/mobileApp"
-import { toDeviceProperties } from "@carlnotes/contracts/userAgent"
 import { toProviderUsername } from "@carlnotes/contracts/usernames"
 import { trackBotEvent, trackEvent } from "@carlnotes/server/analytics"
 import { APIError } from "better-auth"
@@ -113,9 +113,9 @@ export const afterAuthRequest = createAuthMiddleware(async (context) => {
 	const loginMethod = toLoginMethod(context.path, context.body)
 	if (newSession && loginMethod) {
 		trackEvent("login_completed", newSession.user.id, {
-			entryPoint: toEntryPoint(context.headers, context.body),
 			plan: (newSession.user as { plan?: string }).plan ?? "free",
-			...toDeviceProperties(context.headers?.get("user-agent")),
+			...toClientTelemetry((name) => context.headers?.get(name)),
+			entryPoint: toEntryPoint(context.headers, context.body),
 			method: loginMethod,
 		})
 	}
@@ -162,7 +162,9 @@ export function toEntryPoint(
 	headers: Headers | undefined,
 	body: Record<string, unknown> | undefined,
 ): AnalyticsEntryPoint {
-	return headers?.has("expo-origin") || body?.idToken !== undefined ? "mobile" : "web"
+	return headers?.has("expo-origin") || body?.idToken !== undefined
+		? "mobile"
+		: toClientTelemetry((name) => headers?.get(name)).entryPoint
 }
 
 // reject a breached password

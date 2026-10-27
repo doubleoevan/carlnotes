@@ -6,28 +6,40 @@ import {
 	setTeamMemberVisibility,
 } from "@carlnotes/client/teamClient"
 import { isLeaderRole } from "@carlnotes/contracts/enums"
-import type { TeamPageResponse } from "@carlnotes/contracts/teams"
-import { toCountLabel } from "@carlnotes/core/lib/labels"
+import { DataTable, type DataTableElements } from "@carlnotes/core/components/DataTable"
+import {
+	memberSortValues,
+	type TeamMember,
+	toTeamMembersTableColumns,
+} from "@carlnotes/core/lib/teamMembersTableColumns"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { X } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/primitives/button"
 import { Switch } from "@/components/primitives/switch"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
-import { TABLE_CLASS, TABLE_HEAD_CLASS, TABLE_SCROLL_CLASS } from "@/lib/styleClasses"
-import { SortableHeader } from "./SortableHeader"
+import { TABLE_CLASS, TABLE_SCROLL_CLASS } from "@/lib/styleClasses"
+import { DATA_TABLE_ELEMENTS } from "./DataTable"
 import { TablePagination, usePaginatedRowSort } from "./TablePagination"
 import { UserNameLink } from "./UserLinks"
 
-// one team member as the team page payload sends them
-type TeamMember = TeamPageResponse["members"][number]
+// keep the existing member-table width while using the shared semantic table elements
+const TEAM_MEMBERS_TABLE_ELEMENTS: DataTableElements = {
+	...DATA_TABLE_ELEMENTS,
+	Table: ({ children }) => (
+		<div className={TABLE_SCROLL_CLASS}>
+			<table className={cn(TABLE_CLASS, "min-w-2xl")}>{children}</table>
+		</div>
+	),
+}
 
-// the sort accessors for the team members' columns
-const memberSortValues = {
-	member: (member: TeamMember) => member.username,
-	role: (member: TeamMember) => member.role,
-	visibility: (member: TeamMember) => String(member.isMemberVisible),
-	active: (member: TeamMember) => String(member.isActive),
+// MemberRow owns the interactive DOM cells; these slots leave the shared headings and totals unchanged
+const MEMBER_ROW_RENDERERS = {
+	renderMember: () => null,
+	renderRole: () => null,
+	renderVisibility: () => null,
+	renderActive: () => null,
+	renderRemove: () => null,
 }
 
 /**
@@ -63,68 +75,34 @@ export function TeamMembersTable({
 		valueByKey: memberSortValues,
 		initialSort: { key: "member" },
 	})
-	// the totals read activated members alone, so a waiting request never inflates them
-	const activeMembers = members.filter((member) => member.isActive)
+	// the shared definition owns every heading, sort key, visibility condition, and total
+	const columns = toTeamMembersTableColumns({
+		members,
+		hiddenMemberCount,
+		hasRemovalColumns,
+		renderText: (text) => text,
+		...MEMBER_ROW_RENDERERS,
+	})
 	return (
 		<div>
-			<div className={TABLE_SCROLL_CLASS}>
-				<table className={cn(TABLE_CLASS, "min-w-2xl")}>
-					<thead className={TABLE_HEAD_CLASS}>
-						<tr>
-							<SortableHeader sort={sort} sortKey="member" label="Member" className="py-2 pr-4" />
-							<SortableHeader sort={sort} sortKey="role" label="Role" className="py-2 pr-4" />
-							<SortableHeader sort={sort} sortKey="visibility" label="Visibility" className="py-2 pr-4" />
-							{hasRemovalColumns && (
-								<SortableHeader
-									sort={sort}
-									sortKey="active"
-									label="Active"
-									tooltip="Active team members"
-									className="py-2 pr-4"
-								/>
-							)}
-							{hasRemovalColumns && <th className="py-2" />}
-						</tr>
-					</thead>
-					<tbody>
-						{renderedRows.map(({ row: member, className }) => (
-							<MemberRow
-								key={member.userId}
-								member={member}
-								teamId={teamId}
-								isTeamLeader={isTeamLeader}
-								hasRemovalColumns={hasRemovalColumns}
-								currentUserId={currentUserId}
-								onChanged={onChanged}
-								className={className}
-							/>
-						))}
-					</tbody>
-					{/* the totals include the hidden members the public page omits */}
-					<tfoot>
-						<tr className="text-muted-foreground">
-							<td className="py-2 pr-4">
-								{hasRemovalColumns
-									? "Total"
-									: `Total ${toCountLabel(activeMembers.length + hiddenMemberCount, "member")}`}
-							</td>
-							<td className="py-2 pr-4">
-								{toCountLabel(activeMembers.filter((member) => isLeaderRole(member.role)).length, "leader")}
-							</td>
-							<td className="py-2 pr-4">
-								{`${activeMembers.filter((member) => member.isMemberVisible).length}/${activeMembers.length} shown`}
-							</td>
-							{/* the member count sits under the Active heading, and the delete column stays empty */}
-							{hasRemovalColumns && (
-								<>
-									<td className="py-2 pr-4">{toCountLabel(activeMembers.length + hiddenMemberCount, "member")}</td>
-									<td className="py-2" />
-								</>
-							)}
-						</tr>
-					</tfoot>
-				</table>
-			</div>
+			<DataTable
+				columns={columns}
+				renderedRows={renderedRows}
+				getRowId={(member) => member.userId}
+				sort={sort}
+				elements={TEAM_MEMBERS_TABLE_ELEMENTS}
+				renderRow={(member, className) => (
+					<MemberRow
+						member={member}
+						teamId={teamId}
+						isTeamLeader={isTeamLeader}
+						hasRemovalColumns={hasRemovalColumns}
+						currentUserId={currentUserId}
+						onChanged={onChanged}
+						className={className}
+					/>
+				)}
+			/>
 			<TablePagination {...pagination} />
 		</div>
 	)
@@ -179,8 +157,12 @@ function MemberRow({
 
 	// the member-visibility opt-out only changes the user's own row
 	const handleMemberVisibilityChange = async (isMemberVisible: boolean): Promise<void> => {
-		await setTeamMemberVisibility(teamId, member.userId, isMemberVisible)
-		onChanged()
+		try {
+			await setTeamMemberVisibility(teamId, member.userId, isMemberVisible)
+			onChanged()
+		} catch {
+			toast.error("Your visibility didn't save. Try again.")
+		}
 	}
 
 	return (

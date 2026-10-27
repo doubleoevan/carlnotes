@@ -1,3 +1,8 @@
+import {
+	TopicSkeleton as SharedTopicSkeleton,
+	type TopicSkeletonElements,
+	type TopicSkeletonSection,
+} from "@carlnotes/core/components/TopicSkeleton"
 import { cn } from "@carlnotes/nightshift/classNames"
 import type * as React from "react"
 import {
@@ -25,9 +30,13 @@ const CHAPTER_NUMBER_SLOT_CLASS = "absolute top-0 left-0 grid size-11 place-item
  * The loading state for the topic below the static button row, with the header, player, findings, and cards.
  */
 export function TopicSkeleton({ topicTitle }: { topicTitle?: string }) {
+	return <SharedTopicSkeleton topicTitle={topicTitle} elements={TOPIC_SKELETON_ELEMENTS} />
+}
+
+// retain the browser's title, byline, and unread count above the shared section composition
+function TopicSkeletonHeader({ topicTitle }: { topicTitle?: string }) {
 	return (
-		<div>
-			{/* title row with the unread count, where the real title sits */}
+		<>
 			<div className="mt-6 flex items-start justify-between gap-3">
 				{topicTitle ? (
 					<h1 className="font-display min-w-0 text-2xl leading-tight">{topicTitle}</h1>
@@ -36,53 +45,55 @@ export function TopicSkeleton({ topicTitle }: { topicTitle?: string }) {
 				)}
 				<div aria-hidden="true" className="bg-muted h-5 w-14 shrink-0 animate-pulse rounded" />
 			</div>
-
-			{/* everything below the title is decorative pulse, hidden from assistive tech as one block */}
-			<div aria-hidden="true">
-				{/* the owner byline placeholder where "Brewed by" sits, with the avatar circle and then the byline bar */}
-				<div className="mt-2 flex items-center gap-2">
-					<div className="bg-muted size-6 shrink-0 animate-pulse rounded-full" />
-					<div className="bg-muted h-4 w-40 animate-pulse rounded" />
-				</div>
-
-				{/* the podcast episode player section, with the expander line under its card */}
-				<CollapsibleSectionSkeleton className="mt-3" titleClassName="w-36">
-					<PodcastEpisodePlayerCardSkeleton />
-					<ExpanderSkeleton />
-				</CollapsibleSectionSkeleton>
-
-				{/* the findings section, with the expander line under its rows */}
-				<CollapsibleSectionSkeleton titleClassName="w-28">
-					<div className={cn(RESOURCE_LIST_CARD_CLASS, "p-1")}>
-						{FINDING_SKELETONS.map((skeletonKey) => (
-							<ResourceSkeleton key={skeletonKey} />
-						))}
-					</div>
-					<ExpanderSkeleton />
-				</CollapsibleSectionSkeleton>
-
-				{/* the info and settings cards on the left, and the podcast episodes and history cards on the right */}
-				<div className="grid gap-x-8 lg:grid-cols-[32rem_minmax(0,1fr)]">
-					<div className="min-w-0">
-						<CollapsibleSectionSkeleton titleClassName="w-24">
-							<InfoCardSkeleton sectionKeys={INFO_SKELETONS} />
-						</CollapsibleSectionSkeleton>
-						<CollapsibleSectionSkeleton titleClassName="w-32">
-							<InfoCardSkeleton sectionKeys={SETTINGS_SKELETONS} />
-						</CollapsibleSectionSkeleton>
-					</div>
-					<div className="min-w-0">
-						<CollapsibleSectionSkeleton titleClassName="w-52">
-							<PodcastEpisodesCardSkeleton />
-						</CollapsibleSectionSkeleton>
-						<CollapsibleSectionSkeleton titleClassName="w-20">
-							<ScanHistorySkeleton />
-						</CollapsibleSectionSkeleton>
-					</div>
-				</div>
+			<div aria-hidden="true" className="mt-2 flex items-center gap-2">
+				<div className="bg-muted size-6 shrink-0 animate-pulse rounded-full" />
+				<div className="bg-muted h-4 w-40 animate-pulse rounded" />
 			</div>
+		</>
+	)
+}
+
+// preserve the existing section widths and first-section spacing
+function TopicSectionSkeleton({ kind, children }: { kind: TopicSkeletonSection; children: React.ReactNode }) {
+	const titleWidths = {
+		podcast: "w-36",
+		findings: "w-28",
+		info: "w-24",
+		settings: "w-32",
+		episodes: "w-52",
+		history: "w-20",
+	}
+	return (
+		<CollapsibleSectionSkeleton titleClassName={titleWidths[kind]} className={kind === "podcast" ? "mt-3" : undefined}>
+			{children}
+		</CollapsibleSectionSkeleton>
+	)
+}
+
+// use the same finding rows as Home while keeping the Topic card's inset
+function FindingListSkeleton() {
+	return (
+		<div className={cn(RESOURCE_LIST_CARD_CLASS, "p-1")}>
+			{FINDING_SKELETONS.map((skeletonKey) => (
+				<ResourceSkeleton key={skeletonKey} />
+			))}
 		</div>
 	)
+}
+
+const TOPIC_SKELETON_ELEMENTS: TopicSkeletonElements = {
+	Root: ({ children }) => <div>{children}</div>,
+	Header: TopicSkeletonHeader,
+	Body: ({ children }) => <div aria-hidden="true">{children}</div>,
+	Section: TopicSectionSkeleton,
+	Cards: ({ children }) => <div className="grid gap-x-8 lg:grid-cols-[32rem_minmax(0,1fr)]">{children}</div>,
+	Column: ({ children }) => <div className="min-w-0">{children}</div>,
+	Podcast: PodcastEpisodePlayerCardSkeleton,
+	Findings: FindingListSkeleton,
+	InfoCard: ({ kind }) => <InfoCardSkeleton sectionKeys={kind === "info" ? INFO_SKELETONS : SETTINGS_SKELETONS} />,
+	Episodes: PodcastEpisodesCardSkeleton,
+	History: ScanHistorySkeleton,
+	Expander: ExpanderSkeleton,
 }
 
 // the title bar's width, and the section's content

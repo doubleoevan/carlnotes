@@ -56,7 +56,7 @@ test("the safety renderer disables raw html and routes anchors through the allow
 		new URL("../../../packages/core/components/SafeNoteLink.tsx", import.meta.url),
 		"utf8",
 	)
-	expect(sharedLinkSource).toContain("allowedUrls?.has(href)")
+	expect(sharedLinkSource).toContain("isAllowedNoteUrl(href, allowedUrls)")
 })
 
 // the streaming renderer scheme-checks anchors and images

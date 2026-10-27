@@ -5,10 +5,10 @@ import { cimd } from "@better-auth/cimd"
 import { fetchClientMetadataResource } from "@better-auth/cimd/node"
 import { expo } from "@better-auth/expo"
 import { mcp } from "@better-auth/mcp"
+import { toClientTelemetry } from "@carlnotes/contracts/clientTelemetry"
 import { MOBILE_APP_SCHEME_ORIGIN } from "@carlnotes/contracts/mobileApp"
 import { SIGNUP_CTA_COOKIE_NAME, toCtaTag } from "@carlnotes/contracts/signupCta"
 import { GATE_COOKIE_NAME, MIN_PASSWORD_LENGTH } from "@carlnotes/contracts/signupGate"
-import { toDeviceProperties } from "@carlnotes/contracts/userAgent"
 import { toNormalizedUsername, toProviderUsername } from "@carlnotes/contracts/usernames"
 import { db, schema } from "@carlnotes/db"
 import { deleteRedisKeys, runWithRedis } from "@carlnotes/db/redis"
@@ -304,9 +304,9 @@ export const auth = betterAuth({
 					// the signup funnel's final event, tagged with what converted and from where
 					const ctaTag = toCtaTag(context?.getCookie(SIGNUP_CTA_COOKIE_NAME) ?? null)
 					trackEvent("signup_completed", user.id, {
-						entryPoint: toEntryPoint(context?.headers, context?.body),
 						plan: "free",
-						...toDeviceProperties(context?.headers?.get("user-agent")),
+						...toClientTelemetry((name) => context?.headers?.get(name)),
+						entryPoint: toEntryPoint(context?.headers, context?.body),
 						...(ctaTag ? { cta: ctaTag } : {}),
 					})
 				},

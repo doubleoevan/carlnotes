@@ -1,14 +1,12 @@
-import { fetchActivity } from "@carlnotes/client/activityClient"
 import { authClient } from "@carlnotes/client/authClient"
-import { fetchBillingState } from "@carlnotes/client/billingClient"
-import type { ActivityResponse } from "@carlnotes/contracts/activity"
-import { type BillingState, toSessionProfileIdentity } from "@carlnotes/contracts/profiles"
+import { toSessionProfileIdentity } from "@carlnotes/contracts/profiles"
+import { useAccount } from "@carlnotes/core/hooks/useAccount"
 import { User } from "lucide-react"
-import { useEffect, useState } from "react"
 import { AccountBudget, PlanButton } from "@/components/account/AccountBudget"
 import { AccountSettings } from "@/components/account/AccountSettings"
-import { CoffeeLoading } from "@/components/branding/CoffeeLoading"
 import { UserProfileLink } from "@/components/common/UserProfileLink"
+import { PageSkeleton } from "@/components/layout/PageSkeleton"
+import { Button } from "@/components/primitives/button"
 import { usePageTitle } from "@/hooks/usePageTitle"
 import { useSearchParams } from "@/hooks/useSearchParams"
 import { PAGE_CLASS, PAGE_HEADER_CLASS, PAGE_TITLE_CLASS } from "@/lib/styleClasses"
@@ -20,33 +18,15 @@ import { PAGE_CLASS, PAGE_HEADER_CLASS, PAGE_TITLE_CLASS } from "@/lib/styleClas
 export function AccountPage() {
 	usePageTitle("Account")
 	const { data: session } = authClient().useSession()
-	const [billing, setBilling] = useState<BillingState | null>(null)
-	const [activity, setActivity] = useState<ActivityResponse | null>(null)
 
 	// the user whose account the page shows, the userId param's user or else the signed-in user
 	const searchParams = useSearchParams()
 	const viewedUserId = searchParams.get("userId") ?? undefined
 	const isOwnView = !viewedUserId || viewedUserId === session?.user.id
 
-	// the billing state drives the panel, and the activity payload includes the budget's numbers
-	useEffect(() => {
-		if (!session) {
-			return
-		}
-		// switching users clears the last one's numbers, and the flag ignores a response that arrives after the switch
-		let isViewCurrent = true
-		setBilling(null)
-		setActivity(null)
-		fetchBillingState(viewedUserId)
-			.then((billingState) => isViewCurrent && setBilling(billingState))
-			.catch(() => isViewCurrent && setBilling(null))
-		fetchActivity(viewedUserId)
-			.then((activityResponse) => isViewCurrent && setActivity(activityResponse))
-			.catch(() => isViewCurrent && setActivity(null))
-		return () => {
-			isViewCurrent = false
-		}
-	}, [session, viewedUserId])
+	// load the same complete budget and retry state as the native account
+	const query = useAccount({ userId: session?.user.id, viewedUserId })
+	const { billing, activity } = query.data ?? {}
 
 	if (!session) {
 		return null
@@ -67,7 +47,15 @@ export function AccountPage() {
 			{/* the user whose account this is with a link to their profile */}
 			{user && <UserProfileLink user={user} className="mt-2 text-sm" />}
 			<div className="mt-6 space-y-6">
-				{billing ? <AccountBudget billing={billing} activity={activity} isReadOnly={!isOwnView} /> : <CoffeeLoading />}
+				{billing && activity ? (
+					<AccountBudget billing={billing} activity={activity} isReadOnly={!isOwnView} />
+				) : query.isError ? (
+					<Button variant="outline" onClick={() => void query.refetch()}>
+						Retry loading account
+					</Button>
+				) : (
+					<PageSkeleton kind="account" />
+				)}
 				{/* account settings only show for the user's own page */}
 				{isOwnView && <AccountSettings />}
 			</div>

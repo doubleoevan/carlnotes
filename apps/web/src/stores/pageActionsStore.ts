@@ -1,4 +1,5 @@
 import type { FlagContentPayload } from "@carlnotes/contracts/payloads"
+import type { PageActionOption as SharedPageActionOption } from "@carlnotes/core/components/PageActionMenu"
 import { toStoreListeners } from "@carlnotes/core/stores/storeListeners"
 import type { LucideIcon } from "lucide-react"
 import { useEffect } from "react"
@@ -6,13 +7,7 @@ import { useEffect } from "react"
 /**
  * An option in the page actions dropdown menu.
  */
-export type PageActionOption = {
-	label: string
-	Icon: LucideIcon
-	// whether the option is already on, which highlights its icon
-	isActive?: boolean
-	onSelect: () => void
-}
+export type PageActionOption = SharedPageActionOption<LucideIcon>
 
 /**
  * What the search bar's vertical "…" menu offers for the current page on screen.

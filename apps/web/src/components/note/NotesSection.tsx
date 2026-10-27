@@ -15,6 +15,7 @@ import { toSignupHref } from "@/components/session/signupPrompts"
 import { CARD_CLASS } from "@/lib/styleClasses"
 import { NoteDialog } from "./NoteDialog"
 import { NotesTable } from "./NotesTable"
+import { PageNoteBadge } from "./NoteUnreadBadge"
 
 /**
  * The Tasting Notes section for a topic page or a team page. The Add note button shares the header row.
@@ -84,6 +85,7 @@ export function NotesSection({
 				<AccordionTrigger className={cn(hasCompactHeader && "py-2")}>
 					<span className={titleClassName}>{sectionTitle}</span>
 				</AccordionTrigger>
+				<PageNoteBadge pageType={pageType} pageId={pageId} />
 				{notes.creatableVisibilities.length > 0 ? (
 					<Button className="shrink-0" onClick={() => setOpenDialog("create")}>
 						<Plus className="size-4" />

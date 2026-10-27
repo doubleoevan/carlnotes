@@ -124,3 +124,6 @@
 		cursor: pointer;
 	}
 }
+
+/* the portable page skeleton owns the same spacing and shapes on both platforms */
+@source "../../../packages/core/components/PageSkeleton.tsx";

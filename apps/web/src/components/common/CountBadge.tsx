@@ -1,7 +1,5 @@
+import { toCountBadgeLabel } from "@carlnotes/core/lib/noteBadges"
 import { cn } from "@carlnotes/nightshift/classNames"
-
-// the largest count a badge shows as a number. anything past it reads as 9+
-const LARGEST_SHOWN_COUNT = 9
 
 /**
  * Shows the count every badge alert uses.
@@ -14,7 +12,7 @@ export function CountBadge({ count, className }: { count: number; className?: st
 				className,
 			)}
 		>
-			{count > LARGEST_SHOWN_COUNT ? "9+" : count}
+			{toCountBadgeLabel(count)}
 		</span>
 	)
 }

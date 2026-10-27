@@ -4,6 +4,7 @@ import { type ColorMode, type ColorName, colors, toColorChannels } from "./color
 import { toRaisedShadowUtilityCss } from "./elevation"
 import { type RadiusStep, radiusSteps, toRadiusPixels } from "./radius"
 import { extraThemeColorNames, shadcnThemeColorNames, toKebabName } from "./theme"
+import { fontFamilies } from "./typography"
 
 // the comment at the top of the file, which names the writer
 const FILE_HEADER = `/* the mobile design tokens, written by scripts/write-nightshift-tokens.ts from this package's TypeScript. change a
@@ -22,7 +23,13 @@ function toRadiusThemeBlock(): string {
 	const radiusLines = (Object.keys(radiusSteps) as RadiusStep[]).map(
 		(radiusStep) => `\t--radius-${radiusStep}: ${toRadiusPixels(radiusStep)}px;`,
 	)
-	return ["@theme {", ...radiusLines, "}"].join("\n")
+	return [
+		"@theme {",
+		`\t--font-sans: "${fontFamilies.sans.name}";`,
+		`\t--font-display: "${fontFamilies.display.name}";`,
+		...radiusLines,
+		"}",
+	].join("\n")
 }
 
 // the @layer theme block: one @variant block per mode under :root. each block defines every mapped name

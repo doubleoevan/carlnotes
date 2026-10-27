@@ -62,3 +62,15 @@ test("a burst of 401s signs out once, and a signed-out client not at all", async
 	settings.onUnauthorized()
 	expect(signOutCount()).toBe(1)
 })
+
+// device descriptions accompany both signed-in and visitor requests without replacing authentication
+test("native attribution preserves the stored cookie", async () => {
+	const deviceHeaders = { "x-carlnotes-platform": "ios", "x-carlnotes-device-model": "iPhone 18 Pro" }
+	const settings = toApiRequestSettings({
+		getCookie: async () => "session=test",
+		hasSession: () => true,
+		signOut: async () => undefined,
+		deviceHeaders,
+	})
+	expect(await settings.headers()).toEqual({ ...deviceHeaders, cookie: "session=test" })
+})

@@ -87,3 +87,11 @@ The topic feed gives you one finding at a time. When the question is "what chang
 sources disagree", ask [Coffee Talk](/docs/feed/chat/). Chat with Carl about what your topic's brews found. On a topic
 one of your teams holds, the panel opens that team's shared chat room, where your teammates join in. For a one-to-one
 conversation, pick **Private chat** in the panel's **…** menu while a topic page is open.
+
+## Copying and sharing Carl's notes on mobile
+
+A Finding's notes box offers **Copy Markdown for AI** and **Share Markdown**. Both include the Finding, its explanation,
+and the Topic link. Share opens your device's sharing choices. Completing or cancelling it leaves the Finding open.
+
+Inspecting a Finding does not count as opening its source. The source title, preview link, or first inline video play
+records that opening. Bookmark and rating changes keep the Finding open too.

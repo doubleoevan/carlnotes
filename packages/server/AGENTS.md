@@ -6,8 +6,8 @@ built-in, or a server SDK, and the package every server package imports. `@carln
 `posthog-node`.
 
 `monitoring.ts` starts Sentry in the api and the worker and defines what tracing reads and writes: the traces sampler, a
-request's transaction name and measurements, the stage and query spans, and the threshold warnings. The send-time scrub
-every outgoing event passes is `scrubContent` and `scrubTransaction` in `monitoringScrub.ts`. `reportError` sends one
+request's transaction name and measurements, the stage and query spans, and the threshold warnings. The send-time redaction
+every outgoing event passes is `redactEvent` and `redactTransaction` in `monitoringRedaction.ts`. `reportError` sends one
 stage's one error ten times an hour and skips the rest, and the next hour's first report says how many were skipped.
 `runtimeGauges.ts` logs a long-running process's connection pool and event loop delay once a minute, reading the delay
 from the histogram in `eventLoopDelay.ts`. Each line's `instance` field names the replica by its host name, so the
@@ -42,3 +42,5 @@ whether a failure is worth a retry: a timeout, an abort, a 429, or a 5xx.
 - Imports: `@carlnotes/contracts` only among the packages, never `db` or anything after it. Only the monitoring and analytics clients and `publicFetch` reach the network, and nothing here touches
   the database.
 - Tests: `bun test packages/server`.
+
+`monitoringRedaction.ts` re-exports the universal redaction from contracts. `withRequestTelemetry` puts device descriptions on a request-specific Sentry isolation scope when monitoring is enabled, including unsampled errors. Concurrent requests retain separate tags.

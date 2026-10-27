@@ -12,7 +12,7 @@ export const noteSortValues = {
 }
 export const NOTE_VISIBILITY_LABELS = { private: "Private", team: "Team", public: "Public" }
 type Container = ComponentType<{ children: ReactNode }>
-export type NotesTableComponents = {
+export type NotesTableElements = {
 	Table: Container
 	Head: Container
 	Body: Container
@@ -32,13 +32,13 @@ export function NotesTable({
 	renderedRows,
 	sort,
 	renderNoteName,
-	components: { Table, Head, Body, Foot, Row, Cell, Header, Text, Visibility },
+	elements: { Table, Head, Body, Foot, Row, Cell, Header, Text, Visibility },
 }: {
 	notes: Note[]
 	renderedRows: { row: Note; className?: string }[]
 	sort: RowSort
 	renderNoteName: (note: Note) => ReactNode
-	components: NotesTableComponents
+	elements: NotesTableElements
 }) {
 	const latestUpdatedAt = notes.reduce<string | null>(
 		(latest, note) => (latest === null || note.updatedAt > latest ? note.updatedAt : latest),

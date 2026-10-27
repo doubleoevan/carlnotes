@@ -2,7 +2,11 @@ import { fetchTopicInviteBadges, sendAcceptInvite, sendDeclineInvite } from "@ca
 import { sendDeleteSubscription, sendSubscriptionEmail, sendTopicSubscription } from "@carlnotes/client/topicClient"
 import type { ActivityResponse } from "@carlnotes/contracts/activity"
 import { toTopicPath } from "@carlnotes/contracts/seo"
-import { toMonthYearLabel } from "@carlnotes/core/lib/labels"
+import { DataTable } from "@carlnotes/core/components/DataTable"
+import {
+	subscriptionSortValues,
+	toTopicSubscriptionsTableColumns,
+} from "@carlnotes/core/lib/topicSubscriptionsTableColumns"
 import { setTopicInviteBadges } from "@carlnotes/core/stores/topicInviteStore"
 import { X } from "lucide-react"
 import { useState } from "react"
@@ -14,24 +18,14 @@ import { Button } from "@/components/primitives/button"
 import { Switch } from "@/components/primitives/switch"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import { TeamLink } from "@/components/team/TeamLink"
-import { TABLE_CLASS, TABLE_HEAD_CLASS, TABLE_SCROLL_CLASS } from "@/lib/styleClasses"
 import { NEXT_SCAN_DISCLAIMER } from "@/lib/utils"
-import { SortableHeader } from "./SortableHeader"
+import { DATA_TABLE_ELEMENTS } from "./DataTable"
 import { TableCard } from "./TableCard"
 import { TablePagination, usePaginatedRowSort } from "./TablePagination"
 import { TopicNameLink } from "./TopicNameLink"
 
 // one subscription the user holds on a topic they do not own
 type SubscriptionRow = ActivityResponse["subscriptions"][number]
-
-// the sort accessors for the subscriptions table
-const subscriptionSortValues = {
-	name: (row: SubscriptionRow) => row.name,
-	owner: (row: SubscriptionRow) => row.team?.name ?? row.owner.username,
-	subscribed: (row: SubscriptionRow) => row.subscribedAt,
-	active: (row: SubscriptionRow) => (row.isActive ? 1 : 0),
-	emails: (row: SubscriptionRow) => (row.isEmailEnabled ? 1 : 0),
-}
 
 /**
  * The Activity page's subscriptions table: the active and email toggles plus delete on a row the user owns.
@@ -106,80 +100,67 @@ export function TopicSubscriptionsTable({
 		onReloadPage()
 	}
 
-	// column totals for the summary line span every row, not just the visible page
-	const activeSubscriptionCount = subscriptions.filter((subscription) => subscription.isActive).length
-	const emailSubscriptionCount = subscriptions.filter((subscription) => subscription.isEmailEnabled).length
-
+	// keep the same column composition and totals on web and mobile
+	const columns = toTopicSubscriptionsTableColumns({
+		subscriptions,
+		renderText: (text) => <span>{text}</span>,
+		renderName: (row) => (
+			<>
+				<TopicNameLink topic={{ id: row.topicId, name: row.name, latestPodcastEpisode: row.latestPodcastEpisode }} />
+				{row.inviteId && <span className="block">Invited</span>}
+			</>
+		),
+		renderOwner: (row) =>
+			row.team ? (
+				<TeamLink team={row.team} label="" className="whitespace-nowrap" />
+			) : (
+				<UserProfileLink user={row.owner} className="whitespace-nowrap" />
+			),
+		renderActive: (row) => (
+			<Switch
+				checked={row.isActive}
+				disabled={isReadOnly}
+				onCheckedChange={(isActive) => void handleActiveChange(row, isActive)}
+				aria-label={row.inviteId ? `Accept the invitation to ${row.name}` : `${row.name} subscription`}
+			/>
+		),
+		renderEmails: (row) => (
+			<Switch
+				checked={row.isEmailEnabled}
+				disabled={isReadOnly || !!row.inviteId}
+				onCheckedChange={(isEnabled) => void handleEmailChange(row.topicId, isEnabled)}
+				aria-label={`${row.name} emails`}
+			/>
+		),
+		renderRemove: (row) =>
+			!isReadOnly && (
+				<Tooltip>
+					<TooltipTrigger asChild>
+						<Button
+							size="icon-sm"
+							variant="ghost"
+							onClick={() => setSubscriptionToDelete(row)}
+							aria-label={`Delete the ${row.inviteId ? "invitation" : "subscription"} to ${row.name}`}
+						>
+							<X className="size-4" />
+						</Button>
+					</TooltipTrigger>
+					<TooltipContent>
+						Delete the {row.inviteId ? "invitation" : "subscription"} to{" "}
+						<span className="font-semibold">{row.name}</span>
+					</TooltipContent>
+				</Tooltip>
+			),
+	})
 	return (
 		<TableCard className="mb-4">
-			<div className={TABLE_SCROLL_CLASS}>
-				<table className={TABLE_CLASS}>
-					<thead className={TABLE_HEAD_CLASS}>
-						<tr>
-							<SortableHeader sort={sort} sortKey="name" label="Topic" className="py-2 pr-4" />
-							<SortableHeader sort={sort} sortKey="owner" label="Owner" className="py-2 pr-4" />
-							<SortableHeader sort={sort} sortKey="subscribed" label="Followed" className="py-2 pr-4" />
-							<SortableHeader sort={sort} sortKey="active" label="Active" className="py-2 pr-4" />
-							<SortableHeader
-								sort={sort}
-								sortKey="emails"
-								label="Emails"
-								tooltip="Receive emails"
-								className="py-2 pr-4"
-							/>
-							<th className="py-2" />
-						</tr>
-					</thead>
-					<tbody>
-						{pageRows.map((subscriptionRow) => (
-							<tr key={subscriptionRow.topicId} className="border-b">
-								<td className="py-2 pr-4">
-									<TopicNameLink
-										topic={{
-											id: subscriptionRow.topicId,
-											name: subscriptionRow.name,
-											latestPodcastEpisode: subscriptionRow.latestPodcastEpisode,
-										}}
-									/>
-									{/* a pending invitation and a switched-off subscription both read inactive, so it shows which */}
-									{subscriptionRow.inviteId && <span className="block">Invited</span>}
-								</td>
-								<td className="py-2 pr-4">
-									{/* the byline: the owning team where one exists, otherwise the creator's profile */}
-									{subscriptionRow.team ? (
-										<TeamLink team={subscriptionRow.team} label="" className="whitespace-nowrap" />
-									) : (
-										<UserProfileLink user={subscriptionRow.owner} className="whitespace-nowrap" />
-									)}
-								</td>
-								<SubscriptionCells
-									subscription={subscriptionRow}
-									isPageReadOnly={isReadOnly}
-									onActiveChange={handleActiveChange}
-									onEmailChange={handleEmailChange}
-									onDeleteRequest={() =>
-										setSubscriptionToDelete({
-											topicId: subscriptionRow.topicId,
-											name: subscriptionRow.name,
-											inviteId: subscriptionRow.inviteId,
-										})
-									}
-								/>
-							</tr>
-						))}
-					</tbody>
-					<tfoot>
-						<tr className="text-muted-foreground">
-							<td className="py-2 pr-4">Total</td>
-							<td className="py-2 pr-4" />
-							<td className="py-2 pr-4" />
-							<td className="py-2 pr-4">{`${activeSubscriptionCount}/${subscriptions.length} active`}</td>
-							<td className="py-2 pr-4">{`${emailSubscriptionCount}/${subscriptions.length} on`}</td>
-							<td className="py-2" />
-						</tr>
-					</tfoot>
-				</table>
-			</div>
+			<DataTable
+				columns={columns}
+				renderedRows={pageRows.map((row) => ({ row }))}
+				getRowId={(row) => row.topicId}
+				sort={sort}
+				elements={DATA_TABLE_ELEMENTS}
+			/>
 			<TablePagination {...pagination} />
 			{/* the delete confirmation, mounted only while a subscription is waiting for it */}
 			{subscriptionToDelete && (
@@ -201,72 +182,5 @@ export function TopicSubscriptionsTable({
 				</ConfirmDialog>
 			)}
 		</TableCard>
-	)
-}
-
-// the subscribed date, the active and email switches, then the delete x
-function SubscriptionCells({
-	subscription,
-	isPageReadOnly,
-	onActiveChange,
-	onEmailChange,
-	onDeleteRequest,
-}: {
-	subscription: SubscriptionRow
-	// the whole page is read-only for an admin reading somebody else
-	isPageReadOnly: boolean
-	onActiveChange: (row: SubscriptionRow, isActive: boolean) => void
-	onEmailChange: (topicId: string, isEmailEnabled: boolean) => void
-	onDeleteRequest: () => void
-}) {
-	const isInvitation = subscription.inviteId !== null
-	return (
-		<>
-			<td className="py-2 pr-4">{toMonthYearLabel(subscription.subscribedAt)}</td>
-			<td className="py-2 pr-4">
-				{/* switching a pending invitation active accepts it */}
-				<Switch
-					checked={subscription.isActive}
-					disabled={isPageReadOnly}
-					onCheckedChange={(isActive) => onActiveChange(subscription, isActive)}
-					aria-label={
-						isInvitation ? `Accept the invitation to ${subscription.name}` : `${subscription.name} subscription`
-					}
-				/>
-			</td>
-			<td className="py-2 pr-4">
-				{/* an invitation has no email preference until it is accepted */}
-				<Switch
-					checked={subscription.isEmailEnabled}
-					disabled={isPageReadOnly || isInvitation}
-					onCheckedChange={(isEmailEnabled) => onEmailChange(subscription.topicId, isEmailEnabled)}
-					aria-label={`${subscription.name} emails`}
-				/>
-			</td>
-			<td className="py-2 text-right">
-				{!isPageReadOnly && (
-					<Tooltip>
-						<TooltipTrigger asChild>
-							<Button
-								size="icon-sm"
-								variant="ghost"
-								onClick={onDeleteRequest}
-								aria-label={
-									isInvitation
-										? `Delete the invitation to ${subscription.name}`
-										: `Delete the subscription to ${subscription.name}`
-								}
-							>
-								<X className="size-4" />
-							</Button>
-						</TooltipTrigger>
-						<TooltipContent>
-							{isInvitation ? "Delete the invitation to " : "Delete the subscription to "}
-							<span className="font-semibold">{subscription.name}</span>
-						</TooltipContent>
-					</Tooltip>
-				)}
-			</td>
-		</>
 	)
 }

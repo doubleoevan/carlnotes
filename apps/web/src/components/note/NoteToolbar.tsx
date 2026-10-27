@@ -1,5 +1,13 @@
 // the note's formatting toolbar: the inline marks, the headings, the lists, the blocks, and the link, each lit from the
 // editor's state and disabled while another active style blocks it
+import {
+	type NoteLinkControlProps,
+	type NoteToolbarButtonProps,
+	type NoteToolbarProps,
+	NoteToolbar as SharedNoteToolbar,
+} from "@carlnotes/core/components/NoteToolbar"
+import { useNoteLink } from "@carlnotes/core/hooks/useNoteLink"
+import type { NoteFormatKey } from "@carlnotes/core/lib/noteFormats"
 import { cn } from "@carlnotes/nightshift/classNames"
 import {
 	Bold,
@@ -20,13 +28,7 @@ import {
 	Underline,
 	Unlink,
 } from "lucide-react"
-import { type FormEvent, Fragment, type RefObject, useRef, useState } from "react"
-import type {
-	EnrichedTextInputInstance,
-	OnChangeSelectionEvent,
-	OnChangeStateEvent,
-	OnLinkDetected,
-} from "react-native-enriched-html"
+import { type FormEvent, type PropsWithChildren, useRef } from "react"
 import { Button } from "@/components/primitives/button"
 import { Input } from "@/components/primitives/input"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/primitives/popover"
@@ -34,104 +36,49 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives
 import { openInNewTab } from "@/lib/externalLinks"
 import { MENU_OPTION_SELECTED_CLASS } from "@/lib/styleClasses"
 
-// a style the toolbar toggles: its name, the state key it lights from, its icon, and the ref method it calls
-type ToolbarControl = {
-	label: string
-	stateKey: Exclude<keyof OnChangeStateEvent, "alignment">
-	Icon: LucideIcon
-	toggle: (editor: EnrichedTextInputInstance) => void
+// map the shared format keys to the web icon library
+const FORMAT_ICONS: Record<NoteFormatKey, LucideIcon> = {
+	bold: Bold,
+	italic: Italic,
+	underline: Underline,
+	strikeThrough: Strikethrough,
+	inlineCode: Code,
+	h1: Heading1,
+	h2: Heading2,
+	h3: Heading3,
+	unorderedList: List,
+	orderedList: ListOrdered,
+	checkboxList: ListChecks,
+	blockQuote: TextQuote,
+	codeBlock: SquareCode,
 }
 
-// the controls in their groups: the inline marks, the headings, the lists, and the blocks
-const TOOLBAR_GROUPS: ToolbarControl[][] = [
-	[
-		{ label: "Bold", stateKey: "bold", Icon: Bold, toggle: (editor) => editor.toggleBold() },
-		{ label: "Italic", stateKey: "italic", Icon: Italic, toggle: (editor) => editor.toggleItalic() },
-		{ label: "Underline", stateKey: "underline", Icon: Underline, toggle: (editor) => editor.toggleUnderline() },
-		{
-			label: "Strikethrough",
-			stateKey: "strikeThrough",
-			Icon: Strikethrough,
-			toggle: (editor) => editor.toggleStrikeThrough(),
-		},
-		{ label: "Inline code", stateKey: "inlineCode", Icon: Code, toggle: (editor) => editor.toggleInlineCode() },
-	],
-	[
-		{ label: "Heading 1", stateKey: "h1", Icon: Heading1, toggle: (editor) => editor.toggleH1() },
-		{ label: "Heading 2", stateKey: "h2", Icon: Heading2, toggle: (editor) => editor.toggleH2() },
-		{ label: "Heading 3", stateKey: "h3", Icon: Heading3, toggle: (editor) => editor.toggleH3() },
-	],
-	[
-		{ label: "Bulleted list", stateKey: "unorderedList", Icon: List, toggle: (editor) => editor.toggleUnorderedList() },
-		{
-			label: "Numbered list",
-			stateKey: "orderedList",
-			Icon: ListOrdered,
-			toggle: (editor) => editor.toggleOrderedList(),
-		},
-		{
-			label: "Checklist",
-			stateKey: "checkboxList",
-			Icon: ListChecks,
-			toggle: (editor) => editor.toggleCheckboxList(false),
-		},
-	],
-	[
-		{ label: "Quote", stateKey: "blockQuote", Icon: TextQuote, toggle: (editor) => editor.toggleBlockQuote() },
-		{ label: "Code block", stateKey: "codeBlock", Icon: SquareCode, toggle: (editor) => editor.toggleCodeBlock() },
-	],
-]
+// stable adapters preserve the editor's selection as its format state changes
+const TOOLBAR_ELEMENTS = { Container: ToolbarContainer, Divider: ToolbarDivider, Button: FormatButton, LinkControl }
 
 /**
- * The toolbar above the note editor. Every control reads the editor's state and calls its ref.
+ * Renders the shared note toolbar with web buttons and a link popover.
  */
-export function NoteToolbar({
-	editorRef,
-	formatState,
-	selection,
-	activeLink,
-}: {
-	editorRef: RefObject<EnrichedTextInputInstance | null>
-	// the editor's style state, null before its first report
-	formatState: OnChangeStateEvent | null
-	// the current selection, and the link the caret last moved onto
-	selection: OnChangeSelectionEvent
-	activeLink: OnLinkDetected | null
-}) {
+export function NoteToolbar(props: NoteToolbarProps) {
+	return <SharedNoteToolbar {...props} elements={TOOLBAR_ELEMENTS} />
+}
+
+// retain the web's compact horizontally scrolling toolbar
+function ToolbarContainer({ children }: PropsWithChildren) {
 	return (
 		<div
 			role="toolbar"
 			aria-label="Formatting"
 			className="bg-card scrollbar-none flex items-center gap-0.5 overflow-x-auto rounded-md border p-1 shadow-raised"
 		>
-			{TOOLBAR_GROUPS.map((group, groupIndex) => (
-				<Fragment key={group[0]?.label}>
-					{groupIndex > 0 && <ToolbarDivider />}
-					{group.map((control) => {
-						const styleState = formatState?.[control.stateKey]
-						return (
-							<ToolbarButton
-								key={control.label}
-								label={control.label}
-								Icon={control.Icon}
-								isPressed={styleState?.isActive ?? false}
-								isDisabled={styleState?.isBlocking ?? false}
-								onClick={() => editorRef.current && control.toggle(editorRef.current)}
-							/>
-						)
-					})}
-				</Fragment>
-			))}
-			<ToolbarDivider />
-			<LinkControl
-				editorRef={editorRef}
-				isLinkActive={formatState?.link.isActive ?? false}
-				isLinkBlocked={formatState?.link.isBlocking ?? false}
-				selection={selection}
-				activeLink={activeLink}
-			/>
+			{children}
 		</div>
 	)
+}
+
+// adapt the shared format button to the web's tooltip and focus behavior
+function FormatButton({ stateKey, onPress, ...props }: NoteToolbarButtonProps) {
+	return <ToolbarButton {...props} Icon={FORMAT_ICONS[stateKey]} onClick={onPress} />
 }
 
 // the thin line between groups
@@ -182,59 +129,16 @@ export function ToolbarButton({
 }
 
 // the link control: a popover that puts a link over the selection, or edits, opens, or removes the one the caret sits in
-function LinkControl({
-	editorRef,
-	isLinkActive,
-	isLinkBlocked,
-	selection,
-	activeLink,
-}: {
-	editorRef: RefObject<EnrichedTextInputInstance | null>
-	isLinkActive: boolean
-	isLinkBlocked: boolean
-	selection: OnChangeSelectionEvent
-	activeLink: OnLinkDetected | null
-}) {
-	// the popover, and the url typed into it
-	const [isOpen, setIsOpen] = useState(false)
-	const [url, setUrl] = useState("")
+function LinkControl({ editorRef, isLinkActive, isLinkBlocked, selection, activeLink }: NoteLinkControlProps) {
+	// keep selection and link state shared while the popover manages browser focus
+	const linkControl = useNoteLink({ editorRef, selection, activeLink, isLinkActive })
+	const { isOpen, url, setUrl, isOneParagraph, linkLabel, handleOpenChange, handleRemoveLink } = linkControl
 	const urlInputRef = useRef<HTMLInputElement>(null)
 
-	// a selection across paragraphs cannot take a link on this editor version
-	const isOneParagraph = !selection.text.includes("\n")
-	const label = isLinkActive ? "Edit link" : "Add link"
-
-	// opening starts from the link under the caret, if there is one
-	function handleOpenChange(nextIsOpen: boolean): void {
-		setIsOpen(nextIsOpen)
-		if (nextIsOpen) {
-			setUrl(isLinkActive ? (activeLink?.url ?? "") : "")
-		}
-	}
-
-	// the link the caret sits in keeps its range and text. a new one spans the selection, or inserts the url as its
-	// own text
+	// submit through the shared captured selection
 	function handleApplyLink(event: FormEvent): void {
 		event.preventDefault()
-		const editor = editorRef.current
-		const linkUrl = toLinkUrl(url)
-		if (!editor || !linkUrl) {
-			return
-		}
-		if (isLinkActive && activeLink) {
-			editor.setLink(activeLink.start, activeLink.end, activeLink.text, linkUrl)
-		} else {
-			editor.setLink(selection.start, selection.end, selection.text || linkUrl, linkUrl)
-		}
-		setIsOpen(false)
-	}
-
-	// the link's text stays, its href goes
-	function handleRemoveLink(): void {
-		if (activeLink) {
-			editorRef.current?.removeLink(activeLink.start, activeLink.end)
-		}
-		setIsOpen(false)
+		linkControl.handleApplyLink()
 	}
 
 	return (
@@ -246,7 +150,7 @@ function LinkControl({
 							type="button"
 							variant="ghost"
 							size="icon-sm"
-							aria-label={label}
+							aria-label={linkLabel}
 							aria-pressed={isLinkActive}
 							disabled={isLinkBlocked || !isOneParagraph}
 							className={cn("shrink-0", isLinkActive && MENU_OPTION_SELECTED_CLASS)}
@@ -256,7 +160,7 @@ function LinkControl({
 						</Button>
 					</PopoverTrigger>
 				</TooltipTrigger>
-				<TooltipContent>{label}</TooltipContent>
+				<TooltipContent>{linkLabel}</TooltipContent>
 			</Tooltip>
 			<PopoverContent
 				className="w-80"
@@ -277,16 +181,22 @@ function LinkControl({
 						inputMode="url"
 					/>
 					<div className="flex flex-wrap items-center gap-2">
-						<Button type="submit" size="sm" disabled={!toLinkUrl(url)}>
-							{isLinkActive ? "Save" : "Add link"}
+						<Button type="submit" size="sm" disabled={!linkControl.canApply}>
+							{linkControl.submitLabel}
 						</Button>
-						{isLinkActive && activeLink && (
+						{linkControl.canRemove && (
 							<>
 								<Button type="button" size="sm" variant="ghost" onClick={handleRemoveLink}>
 									<Unlink className="size-4" />
 									Remove
 								</Button>
-								<Button type="button" size="sm" variant="ghost" onClick={() => openInNewTab(activeLink.url)}>
+								<Button
+									type="button"
+									size="sm"
+									variant="ghost"
+									disabled={!linkControl.openUrl}
+									onClick={() => linkControl.openUrl && openInNewTab(linkControl.openUrl)}
+								>
 									<ExternalLink className="size-4" />
 									Open
 								</Button>
@@ -297,20 +207,4 @@ function LinkControl({
 			</PopoverContent>
 		</Popover>
 	)
-}
-
-// the url a link takes: http, https, or mailto, with https put before a bare host, or null for anything else
-function toLinkUrl(typedUrl: string): string | null {
-	const trimmedUrl = typedUrl.trim()
-	if (trimmedUrl.length === 0) {
-		return null
-	}
-
-	// a bare host reads as https, so the url is http, https, or mailto or does not parse
-	const urlWithScheme = /^(https?:\/\/|mailto:)/i.test(trimmedUrl) ? trimmedUrl : `https://${trimmedUrl}`
-	try {
-		return new URL(urlWithScheme).href
-	} catch {
-		return null
-	}
 }

@@ -2,6 +2,7 @@
 // every visibility has its own tooltip
 import type { noteVisibilities } from "@carlnotes/contracts/enums"
 import { NOTE_VISIBILITY_LABELS } from "@carlnotes/core/components/NotesTable"
+import { NOTE_VISIBILITY_DESCRIPTIONS } from "@carlnotes/core/lib/noteLabels"
 import { Globe, Lock, Users } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/primitives/select"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
@@ -10,11 +11,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives
 export type NoteVisibility = (typeof noteVisibilities)[number]
 
 // the visibilities mapped to their labels, tooltips, and icons
-export const VISIBILITY_TOOLTIPS: Record<NoteVisibility, string> = {
-	private: "Only you can see this note.",
-	team: "Only your team can see this note.",
-	public: "Everyone can see this note.",
-}
+export const VISIBILITY_TOOLTIPS = NOTE_VISIBILITY_DESCRIPTIONS
 const VISIBILITY_ICONS: Record<NoteVisibility, typeof Lock> = {
 	private: Lock,
 	team: Users,

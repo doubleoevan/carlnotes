@@ -1,11 +1,12 @@
 // the api's tracing middleware, which counts a request's queries and cache reads, names a traced request's transaction
 // by its route with the request's gauges, and outside production logs the request and sets its Server-Timing header
 
+import { toClientTelemetry } from "@carlnotes/contracts/clientTelemetry"
 import { toReportedPath } from "@carlnotes/contracts/reportedPath"
 import { readPoolGauges } from "@carlnotes/db"
 import { readRequestCounts, runWithQueryCount } from "@carlnotes/db/queryTracing"
 import { readEventLoopDelay } from "@carlnotes/server/eventLoopDelay"
-import { completeRequestTransaction, readRequestSpan } from "@carlnotes/server/monitoring"
+import { completeRequestTransaction, readRequestSpan, withRequestTelemetry } from "@carlnotes/server/monitoring"
 import type { Context } from "hono"
 import { createMiddleware } from "hono/factory"
 import { routePath } from "hono/route"
@@ -31,42 +32,47 @@ export type RequestReport = {
  * Counts a request's queries and cache reads, names a traced request's transaction by its route with its gauges, and
  * outside production sets the Server-Timing header and in dev logs one line per request.
  */
-export const traceRequest = createMiddleware(async (context, next) => {
-	// a production request Sentry is not recording runs as it is
-	const requestSpan = readRequestSpan()
-	const isRequestSpanRecording = requestSpan?.isRecording() ?? false
-	if (!isRequestSpanRecording && !isServerTimingHeaderSent()) {
-		return next()
-	}
-
-	// count the queries and the cache reads the rest of the chain sends, and report however the chain ends,
-	// so a request that throws is still reported by its route and never by its url
-	const startedAt = performance.now()
-	await runWithQueryCount(isRequestSpanRecording ? requestSpan : undefined, async () => {
-		try {
-			await next()
-		} finally {
-			// name the transaction by its route and attach the request's gauges
-			const requestReport = toRequestReport(context, startedAt)
-			if (isRequestSpanRecording && requestSpan) {
-				completeRequestTransaction({
-					requestSpan,
-					method: requestReport.method,
-					route: requestReport.route,
-					measurements: toRequestMeasurements(requestReport.queryCount),
-				})
-			}
-
-			// set the header outside production
-			if (isServerTimingHeaderSent()) {
-				context.header("Server-Timing", toServerTimingHeader(requestReport))
-			}
-
-			// log the line in dev
-			if (isRequestLogLineLogged()) {
-				console.log(toRequestLogLine(requestReport))
-			}
+export const traceRequest = createMiddleware((context, next) => {
+	// parse the bounded client descriptor once for request context and span attributes
+	const clientTelemetry = toClientTelemetry((name) => context.req.header(name))
+	return withRequestTelemetry(clientTelemetry, async () => {
+		// a production request Sentry is not recording runs as it is
+		const requestSpan = readRequestSpan()
+		requestSpan?.setAttributes(clientTelemetry)
+		const isRequestSpanRecording = requestSpan?.isRecording() ?? false
+		if (!isRequestSpanRecording && !isServerTimingHeaderSent()) {
+			return next()
 		}
+
+		// count the queries and the cache reads the rest of the chain sends, and report however the chain ends,
+		// so a request that throws is still reported by its route and never by its url
+		const startedAt = performance.now()
+		await runWithQueryCount(isRequestSpanRecording ? requestSpan : undefined, async () => {
+			try {
+				await next()
+			} finally {
+				// name the transaction by its route and attach the request's gauges
+				const requestReport = toRequestReport(context, startedAt)
+				if (isRequestSpanRecording && requestSpan) {
+					completeRequestTransaction({
+						requestSpan,
+						method: requestReport.method,
+						route: requestReport.route,
+						measurements: toRequestMeasurements(requestReport.queryCount),
+					})
+				}
+
+				// set the header outside production
+				if (isServerTimingHeaderSent()) {
+					context.header("Server-Timing", toServerTimingHeader(requestReport))
+				}
+
+				// log the line in dev
+				if (isRequestLogLineLogged()) {
+					console.log(toRequestLogLine(requestReport))
+				}
+			}
+		})
 	})
 })
 

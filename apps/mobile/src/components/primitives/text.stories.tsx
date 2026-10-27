@@ -19,6 +19,9 @@ export const Default: Story = {}
 // muted text, as a hint under a field
 export const Muted: Story = { args: { className: "text-sm text-muted-foreground" } }
 
+// a display class must override the body family just as it does on the web
+export const Display: Story = { args: { children: "Account", className: "font-display text-2xl" } }
+
 // the label inside a Button, which takes the button's text classes through the context
 export const InButton: Story = {
 	args: { children: "Save topic" },

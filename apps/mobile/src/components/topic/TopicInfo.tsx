@@ -5,7 +5,7 @@ import { toCountLabel } from "@carlnotes/core/lib/labels"
 import { SITE_URL } from "@carlnotes/core/lib/pageHead"
 import { toNotesMarkdown } from "@carlnotes/core/lib/topicScanRecap"
 import { useRecyclingState } from "@shopify/flash-list"
-import { ExternalLink, Globe, Lock, Mail } from "lucide-react-native"
+import { Globe, Lock, Mail } from "lucide-react-native"
 import { type ComponentRef, type ReactNode, useRef, useState } from "react"
 import { type LayoutChangeEvent, Pressable, Text, View } from "react-native"
 import { Avatar } from "@/components/branding/Avatar"
@@ -18,6 +18,7 @@ import { Button, toTouchTargetHitSlop } from "@/components/primitives/button"
 import { Icon } from "@/components/primitives/icon"
 import { ShareTopic } from "@/components/share/ShareTopic"
 import { toTypeRoleStyle } from "@/typeRoleStyles"
+import { TopicAttachmentLink } from "./TopicAttachmentLink"
 import { NumberedTopicFindingList, SafeNoteText, TopicScanFailure } from "./TopicScanRecap"
 import { TopicSources } from "./TopicSources"
 
@@ -73,7 +74,7 @@ export function TopicInfo({ topic, triggerRef, onClose }: TopicInfoProps) {
  * Shares the Topic roast's content between its sheet and page card.
  */
 export function TopicInfoContent({ topic, isCard = false }: { topic: TopicDetails; isCard?: boolean }) {
-	// the page response includes scans; feed sheets omit them just as they do on the web
+	// include scan details when the topic response provides them
 	const latestScan = isCard && "scans" in topic ? (topic as TopicResponse).scans[0] : null
 	return (
 		<>
@@ -92,7 +93,7 @@ export function TopicInfoContent({ topic, isCard = false }: { topic: TopicDetail
 			{topic.attachments.length > 0 ? (
 				<InfoSection label="Attachments">
 					{topic.attachments.map((attachment) => (
-						<TopicAttachment key={attachment.id} attachment={attachment} isTopicOwner={topic.isTopicOwner} />
+						<TopicAttachmentLink key={attachment.id} attachment={attachment} isTopicOwner={topic.isTopicOwner} />
 					))}
 				</InfoSection>
 			) : null}
@@ -268,41 +269,5 @@ function TopicNotes({ topic, isCard }: { topic: TopicDetails; isCard: boolean })
 				</Button>
 			) : null}
 		</InfoSection>
-	)
-}
-
-// keep pending, failed, and non-owner file attachments non-interactive
-function TopicAttachment({
-	attachment,
-	isTopicOwner,
-}: {
-	attachment: TopicDetails["attachments"][number]
-	isTopicOwner: boolean
-}) {
-	// only a ready attachment may open its source or owner download
-	const suffix = attachment.status === "failed" ? " · failed" : attachment.status === "pending" ? " · processing" : ""
-	const label = `${attachment.sourceUrl || attachment.filename}${suffix}`
-	const href =
-		attachment.status === "ready"
-			? attachment.sourceUrl || (isTopicOwner ? `${SITE_URL}/api/attachments/${attachment.id}/download` : null)
-			: null
-	if (!href) {
-		return (
-			<Text style={toTypeRoleStyle("caption")} className="text-muted-foreground">
-				{label}
-			</Text>
-		)
-	}
-	return (
-		<AnchorLink
-			href={href}
-			accessibilityLabel={`Open ${label}`}
-			className="min-h-11 flex-row items-center gap-1 active:opacity-75"
-		>
-			<Text style={toTypeRoleStyle("caption")} className="shrink text-link">
-				{label}
-			</Text>
-			<Icon as={ExternalLink} className="size-3 text-link" />
-		</AnchorLink>
 	)
 }

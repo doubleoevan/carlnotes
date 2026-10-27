@@ -40,6 +40,8 @@ const meta = {
 		noteCommentThread: {
 			comments: STORY_NOTE_COMMENTS,
 			isLoading: false,
+			hasError: false,
+			retry: fn(),
 			postNoteComment: fn(async () => true),
 			deleteNoteComment: fn(async () => true),
 		},

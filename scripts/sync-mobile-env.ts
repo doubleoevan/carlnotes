@@ -5,6 +5,7 @@
 const MOBILE_VALUES = [
 	{ name: "EXPO_PUBLIC_SENTRY_DSN", visibility: "plaintext" },
 	{ name: "EXPO_PUBLIC_POSTHOG_KEY", visibility: "plaintext" },
+	{ name: "EXPO_PUBLIC_POSTHOG_HOST", visibility: "plaintext" },
 	{ name: "EXPO_PUBLIC_PLAY_CLOUD_PROJECT_NUMBER", visibility: "plaintext" },
 	{ name: "SENTRY_AUTH_TOKEN", visibility: "secret" },
 ] as const

@@ -1,27 +1,28 @@
 import { sendCreateTeamInvite } from "@carlnotes/client/teamClient"
-import { sendUserInvite } from "@carlnotes/client/topicClient"
+import type { PendingInvite } from "@carlnotes/core/lib/teamFields"
+import { sendTeamInvites, toInviteLabel } from "@carlnotes/core/lib/teamInvites"
 import { toast } from "sonner"
 import { InviteFields } from "./InviteFields"
 
 // a pending invitation staged in the members fields, sent when the caller submits
-export type PendingInvite = { email: string } | { username: string }
+export type { PendingInvite } from "@carlnotes/core/lib/teamFields"
 
 // send the invitations staged in the form, each reported by a toast
-export async function sendPendingInvites(teamId: string, pendingInvites: PendingInvite[]): Promise<void> {
-	for (const invite of pendingInvites) {
-		const label = "email" in invite ? invite.email : `@${invite.username}`
-		const rejection = await sendUserInvite({ teamId }, invite)
-
-		// the daily limit stops the whole batch
-		if (rejection === "limited") {
-			toast.error("Daily invite limit reached. The rest didn't send. Add them again tomorrow.")
-			return
-		}
-		if (rejection) {
-			toast.error(`The invitation to ${label} didn't go through.`)
-		} else {
-			toast(`Invited ${label}.`)
-		}
+export async function sendPendingInvites(
+	teamId: string,
+	pendingInvites: PendingInvite[],
+	onSent?: (invite: PendingInvite) => void,
+): Promise<void> {
+	const rejection = await sendTeamInvites({
+		teamId,
+		invites: pendingInvites,
+		onSent: (invite) => {
+			onSent?.(invite)
+			toast(`Invited ${toInviteLabel(invite)}.`)
+		},
+	})
+	if (rejection) {
+		throw new Error(rejection)
 	}
 }
 
@@ -45,12 +46,11 @@ export function TeamInviteFields({
 	onPendingInvitesChange: (invites: PendingInvite[]) => void
 }) {
 	// chips for each staged invitation, told apart by the @ in front of the username
-	const toLabel = (invite: PendingInvite): string => ("email" in invite ? invite.email : `@${invite.username}`)
 	return (
 		<InviteFields
 			label="Members"
-			invites={pendingInvites.map(toLabel)}
-			onRemoveInvite={(chip) => onPendingInvitesChange(pendingInvites.filter((kept) => toLabel(kept) !== chip))}
+			invites={pendingInvites.map(toInviteLabel)}
+			onRemoveInvite={(chip) => onPendingInvitesChange(pendingInvites.filter((kept) => toInviteLabel(kept) !== chip))}
 			onAddEmail={(email) => {
 				onPendingInvitesChange([...pendingInvites, { email }])
 				return null

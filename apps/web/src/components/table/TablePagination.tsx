@@ -1,7 +1,7 @@
 import { DEFAULT_PAGE_SIZE, PAGE_SIZES } from "@carlnotes/contracts/pagination"
 import {
 	TablePagination as SharedTablePagination,
-	type TablePaginationComponents,
+	type TablePaginationElements,
 } from "@carlnotes/core/components/TablePagination"
 import {
 	type PaginatedRowSortOptions,
@@ -90,11 +90,11 @@ export function ScriptedTablePagination(pagination: PaginationState) {
  * The pagination footer under a table: the page-size select on the left and the pager on the right.
  */
 export function TablePagination(pagination: PaginationState) {
-	return <SharedTablePagination pagination={pagination} components={TABLE_PAGINATION_COMPONENTS} />
+	return <SharedTablePagination pagination={pagination} elements={TABLE_PAGINATION_ELEMENTS} />
 }
 
 // DOM semantics and browser selection stay in the web adapter
-const TABLE_PAGINATION_COMPONENTS: TablePaginationComponents = {
+const TABLE_PAGINATION_ELEMENTS: TablePaginationElements = {
 	Root: ({ children }) => (
 		<div className="text-muted-foreground mt-2 flex items-center justify-between text-xs">{children}</div>
 	),

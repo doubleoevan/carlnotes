@@ -1,20 +1,33 @@
 // the text fields the session forms share: a labeled field, and the email and password fields over it
+import { cn } from "@carlnotes/nightshift/classNames"
+import { FIELD_CLASS } from "@carlnotes/nightshift/field"
 import { Text, TextInput, type TextInputProps, View } from "react-native"
 import { toTypeRoleStyle } from "@/typeRoleStyles"
 
 /**
- * A labeled text field on the card surface.
+ * Shows a Nightshift text field with an optional visible label.
  */
-export function SessionTextInput({ label, ...textInputProps }: { label: string } & TextInputProps) {
+export function SessionTextInput({
+	label,
+	isLabelVisible = true,
+	className,
+	style,
+	multiline,
+	...textInputProps
+}: { label: string; isLabelVisible?: boolean } & TextInputProps) {
 	return (
 		<View className="gap-1">
-			<Text style={toTypeRoleStyle("label")} className="text-foreground">
-				{label}
-			</Text>
+			{isLabelVisible && (
+				<Text style={toTypeRoleStyle("label")} className="text-foreground">
+					{label}
+				</Text>
+			)}
 			<TextInput
 				accessibilityLabel={label}
-				className="min-h-11 rounded-lg border border-border bg-card px-3 text-foreground"
-				style={toTypeRoleStyle("body")}
+				className={cn(FIELD_CLASS, "min-h-11 rounded-md border px-3 text-foreground", multiline && "py-2", className)}
+				style={[toTypeRoleStyle("body"), style]}
+				multiline={multiline}
+				textAlignVertical={multiline ? "top" : "center"}
 				autoCapitalize="none"
 				autoCorrect={false}
 				{...textInputProps}

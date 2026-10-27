@@ -1,14 +1,40 @@
 // the note's layout: the page card on a sunken field, the comment thread in the margin beside it on a wide screen, and
 // the sheet a phone slides the thread up in
+
+import type { NoteLayoutProps } from "@carlnotes/core/components/NoteStatic"
 import type { NoteCommentThread } from "@carlnotes/core/hooks/useNoteComments"
+import { cn } from "@carlnotes/nightshift/classNames"
 import type { PointerEvent, ReactNode } from "react"
 import { NoteComments } from "./NoteComments"
+
+/**
+ * Places the shared editor slots in the browser's existing toolbar, notice and comment layout.
+ */
+export function NoteLayout({ header, toolbar, conflict, editorRef, children, ...props }: NoteLayoutProps) {
+	return (
+		<div className="relative flex h-full flex-col">
+			{header}
+			{toolbar && <div className={cn("pb-4", props.isCommentsOpen && "hidden sm:block")}>{toolbar}</div>}
+			{conflict}
+			<NoteBodyLayout
+				{...props}
+				onCardPointerDown={(event) => {
+					if (!(event.target as HTMLElement).closest(".eti-editor")) {
+						editorRef?.current?.focus()
+					}
+				}}
+			>
+				{children}
+			</NoteBodyLayout>
+		</div>
+	)
+}
 
 /**
  * The layout around a note's body, editable or not, with its comment thread in the margin column or the phone's
  * sheet, whichever the screen shows.
  */
-export function NoteLayout({
+function NoteBodyLayout({
 	noteCommentThread,
 	canComment,
 	isCommentsOpen,

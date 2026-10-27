@@ -1,7 +1,16 @@
-import { daysOfWeek, type frequencies, isDailyFrequency } from "@carlnotes/contracts/enums"
+import {
+	FREQUENCY_OPTIONS,
+	isPlanLimitedFrequency,
+	toDailyTopicQuotaDescription,
+	toDailyTopicQuotaLabel,
+} from "@carlnotes/core/lib/topicSchedule"
+
+export { hasDailySlotLeft } from "@carlnotes/core/lib/topicSchedule"
+
+import { daysOfWeek, type frequencies } from "@carlnotes/contracts/enums"
 import { ADMIN_QUOTA } from "@carlnotes/contracts/plans"
 import { MAX_TOPIC_SOURCES } from "@carlnotes/contracts/topics"
-import { capitalize, toBrewsWord } from "@carlnotes/core/lib/labels"
+import { capitalize } from "@carlnotes/core/lib/labels"
 import { useNavigate } from "@tanstack/react-router"
 import { Coffee, X } from "lucide-react"
 import { useId, useState } from "react"
@@ -15,9 +24,6 @@ import { TimePicker } from "./TimePicker"
 // the field unions that the frequency and day-of-week selects offer
 export type Frequency = (typeof frequencies)[number]
 export type DayOfWeek = (typeof daysOfWeek)[number]
-
-// the topic scan frequencies in the order the menu offers them, cheapest first
-const FREQUENCY_OPTIONS = ["weekly", "weekdays", "daily"] as const satisfies readonly Frequency[]
 
 // the frequency select, the scheduled-time picker, and the day select (weekly only)
 export function ScheduleFields({
@@ -51,7 +57,7 @@ export function ScheduleFields({
 	// the closed trigger also reports a plan-limited frequency, and that keeps the current frequency
 	const handleFrequencyChange = (value: string): void => {
 		const pickedFrequency = value as Frequency
-		if (!isPlanLimitedFrequency(pickedFrequency, hasDailySlot)) {
+		if (!isPlanLimitedFrequency({ frequency: pickedFrequency, hasDailySlot })) {
 			onFrequencyChange(pickedFrequency)
 			return
 		}
@@ -125,29 +131,15 @@ function DailyTopicQuotaLink({
 	dailyTopicLimit: number | undefined
 }) {
 	const remainingDailyTopics = dailyTopicsRemaining ?? 0
-	const limit = dailyTopicLimit ?? 0
 	return (
 		<ScanQuotaLink
 			isLoading={dailyTopicsRemaining === undefined}
 			isUnlimited={remainingDailyTopics >= ADMIN_QUOTA}
-			label={`${remainingDailyTopics} daily ${toBrewsWord(remainingDailyTopics)} left`}
+			label={toDailyTopicQuotaLabel(dailyTopicsRemaining)}
 			href="/plans"
-			tooltip={`Your plan gets ${limit} ${limit === 1 ? "pot" : "pots"} daily`}
+			tooltip={toDailyTopicQuotaDescription(dailyTopicLimit)}
 		/>
 	)
-}
-
-// whether the plan has a daily frequency slot left
-export function hasDailySlotLeft(
-	dailyTopicsRemaining: number | undefined,
-	topicFrequency: string | undefined,
-): boolean {
-	return (dailyTopicsRemaining ?? 1) > 0 || isDailyFrequency(topicFrequency ?? "")
-}
-
-// whether the plan has no slot left for a frequency. only a daily scan draws on a slot, so every other frequency is open
-function isPlanLimitedFrequency(frequency: Frequency, hasDailySlot: boolean): boolean {
-	return !hasDailySlot && isDailyFrequency(frequency)
 }
 
 /**
@@ -155,7 +147,7 @@ function isPlanLimitedFrequency(frequency: Frequency, hasDailySlot: boolean): bo
  * select opens the plans page when it is picked.
  */
 export function FrequencyOption({ frequency, hasDailySlot }: { frequency: Frequency; hasDailySlot: boolean }) {
-	if (!isPlanLimitedFrequency(frequency, hasDailySlot)) {
+	if (!isPlanLimitedFrequency({ frequency, hasDailySlot })) {
 		return <SelectItem value={frequency}>{capitalize(frequency)}</SelectItem>
 	}
 	return (

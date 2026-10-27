@@ -1,7 +1,7 @@
 // the avatar setting, read from the session and updated through it
 
 import { authClient } from "@carlnotes/client/authClient"
-import { sendAvatarSource, uploadAvatar } from "@carlnotes/client/profileClient"
+import { sendAvatarSource, uploadAvatar, uploadAvatarBody } from "@carlnotes/client/profileClient"
 import { toAvatarVersion } from "@carlnotes/contracts/avatars"
 
 // the current image and its url's version, whether there is a provider photo to show, and the functions that change it
@@ -11,16 +11,11 @@ type AvatarSetting = {
 	hasProviderPhoto: boolean
 	setAvatarSource: (nextSource: "generated" | "oauth") => Promise<void>
 	uploadAvatarFile: (file: File) => Promise<string | null>
-}
-
-// the signal that better-auth's own plugins raise to make every useSession re-fetch
-function refreshAuthSession(): void {
-	authClient().$store.notify("$sessionSignal")
+	uploadAvatarBody: (body: FormData) => Promise<string | null>
 }
 
 /**
- * Which image this user uses, and the two ways to change it. The session is the one copy every page reads.
- * An update refreshes it instead of each page keeping its own state.
+ * Reads avatar settings and refreshes the shared session after accepted changes.
  */
 export function useAvatar(): AvatarSetting {
 	const { data: session } = authClient().useSession()
@@ -37,9 +32,9 @@ export function useAvatar(): AvatarSetting {
 		}
 	}
 
-	// send an uploaded file, returning the rejection if there is one and refreshing the session if not
-	async function uploadPhoto(file: File): Promise<string | null> {
-		const rejection = await uploadAvatar(file)
+	// send the platform's encoded photo and refresh the session after acceptance
+	async function uploadPhoto(photo: File | FormData): Promise<string | null> {
+		const rejection = await (photo instanceof FormData ? uploadAvatarBody(photo) : uploadAvatar(photo))
 		if (!rejection) {
 			refreshAuthSession()
 		}
@@ -52,5 +47,11 @@ export function useAvatar(): AvatarSetting {
 		hasProviderPhoto: Boolean(providerImageUrl),
 		setAvatarSource,
 		uploadAvatarFile: uploadPhoto,
+		uploadAvatarBody: uploadPhoto,
 	}
+}
+
+// the signal that better-auth's own plugins raise to make every useSession re-fetch
+function refreshAuthSession(): void {
+	authClient().$store.notify("$sessionSignal")
 }

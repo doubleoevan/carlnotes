@@ -2,6 +2,7 @@ import type { ChatMention } from "@carlnotes/contracts/chat"
 import type { TopicInviteBadge } from "@carlnotes/contracts/invites"
 import type { NoteBadge } from "@carlnotes/contracts/notes"
 import { toCountNoun } from "@carlnotes/core/lib/labels"
+import { toNoteChangeLabel } from "@carlnotes/core/lib/noteBadges"
 import { useAllChatMentions, useTeamMentions, useTopicMentions } from "@carlnotes/core/stores/chatRoomStore"
 import { useAllNoteBadges, usePageNoteBadges } from "@carlnotes/core/stores/noteBadgeStore"
 import { useTopicInviteBadges } from "@carlnotes/core/stores/topicInviteStore"
@@ -81,15 +82,6 @@ function toChatMentionLines(chatMentions: ChatMention[]): TooltipLine[] {
  */
 export function toNoteLabel(noteCount: number): string {
 	return noteCount === 1 ? "1 unread note change" : `${noteCount} unread note changes`
-}
-
-// the label for one note's changes. an edit, some comments, or both
-function toNoteChangeLabel(noteBadge: NoteBadge): string {
-	const comments = noteBadge.unreadComments === 1 ? "1 new comment" : `${noteBadge.unreadComments} new comments`
-	if (noteBadge.unreadEdits === 0) {
-		return comments
-	}
-	return noteBadge.unreadComments === 0 ? "edited" : `edited, ${comments}`
 }
 
 // the two numbers of every note in the set, summed

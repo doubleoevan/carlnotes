@@ -7,11 +7,12 @@ import { useRecyclingState } from "@shopify/flash-list"
 import { Check, Flag, Link, Rss, Share2, Share as ShareIcon } from "lucide-react-native"
 import { type ComponentRef, useRef, useState } from "react"
 import { Platform, Pressable, Share, View } from "react-native"
+import { ReportIssueForm } from "@/components/common/ReportIssueDialog"
 import { Sheet, type SheetProps } from "@/components/common/Sheet"
-import { WebFeatureButton } from "@/components/common/WebFeature"
 import { Button, toTouchTargetHitSlop } from "@/components/primitives/button"
 import { Icon } from "@/components/primitives/icon"
 import { Text } from "@/components/primitives/text"
+import { captureVisitEvent, toPublicTopicProperties } from "@/visitAnalytics"
 import { ShareTargets } from "./ShareTargets"
 
 // visibility governs each option without hiding the share menu itself
@@ -64,61 +65,87 @@ export function ShareTopicSheet({
 	...sheetProps
 }: { topic: ShareTopicDetails } & Pick<SheetProps, "triggerRef" | "onClose">) {
 	const actions = useShareTopicActions(topic)
+	const handleShare = (channel: string): void =>
+		captureVisitEvent("visit_share_clicked", { kind: "topic", channel, ...toPublicTopicProperties(topic) })
+	const [isReporting, setIsReporting] = useState(false)
 	return (
-		<Sheet title="Share topic" {...sheetProps}>
-			{/* public posts, followed by private send options */}
-			<ShareTargets topic={topic} topicUrl={actions.topicUrl} kind="post" isEnabled={actions.isPublic} />
-			{!actions.isPublic ? (
-				<Text className="px-2 py-2 text-xs text-muted-foreground">This topic must be public to post it.</Text>
-			) : null}
-			<View className="my-1 border-t border-separator" />
-			{topic.isTopicOwner && actions.canSend ? (
-				<ShareOption
-					label="Share invite link"
-					icon={ShareIcon}
-					isDisabled={actions.isSharingInvite}
-					onPress={() => void actions.handleShareInvite()}
-				/>
-			) : null}
-			<ShareOption
-				label="Share…"
-				icon={ShareIcon}
-				isDisabled={!actions.canSend}
-				onPress={() => void shareTopicUrl({ title: topic.name, url: actions.topicUrl })}
-			/>
-			<ShareTargets topic={topic} topicUrl={actions.topicUrl} kind="send" isEnabled={actions.canSend} />
-			{/* copy feedback stays beside the option that succeeded */}
-			<View className="my-1 border-t border-separator" />
-			<ShareOption
-				label="Copy page link"
-				icon={Link}
-				isCopied={actions.copiedLabel === "page"}
-				onPress={() => void actions.handleCopy({ label: "page", url: actions.topicUrl })}
-			/>
-			<ShareOption
-				label="Copy RSS"
-				icon={Rss}
-				isDisabled={!actions.isPublic}
-				isCopied={actions.copiedLabel === "rss"}
-				onPress={() => void actions.handleCopy({ label: "rss", url: `${SITE_URL}${toTopicFeedPath(topic.id)}` })}
-			/>
-			{actions.copyFallback ? (
-				<View className="gap-2 p-2">
-					<Text className="text-sm text-muted-foreground">Touch and hold the link to copy.</Text>
-					<Text selectable className="text-sm text-link">
-						{actions.copyFallback}
-					</Text>
-				</View>
-			) : null}
-			<View className="my-1 border-t border-separator" />
-			<WebFeatureButton
-				title="Report issue"
-				description="Report an issue from this topic’s actions menu on carlnotes.com."
-				path={toTopicPath(topic)}
-				icon={Flag}
-				variant="ghost"
-				className="min-h-12 justify-start px-2"
-			/>
+		<Sheet title={isReporting ? `Report an issue with ${topic.name}` : "Share topic"} {...sheetProps}>
+			{isReporting ? (
+				<ReportIssueForm subjectKind="topic" subjectId={topic.id} onClose={sheetProps.onClose} />
+			) : (
+				<>
+					{/* public posts, followed by private send options */}
+					<ShareTargets
+						topic={topic}
+						topicUrl={actions.topicUrl}
+						kind="post"
+						isEnabled={actions.isPublic}
+						onShare={handleShare}
+					/>
+					{!actions.isPublic ? (
+						<Text className="px-2 py-2 text-xs text-muted-foreground">This topic must be public to post it.</Text>
+					) : null}
+					<View className="my-1 border-t border-separator" />
+					{topic.isTopicOwner && actions.canSend ? (
+						<ShareOption
+							label="Share invite link"
+							icon={ShareIcon}
+							isDisabled={actions.isSharingInvite}
+							onPress={() => {
+								handleShare("invite")
+								void actions.handleShareInvite()
+							}}
+						/>
+					) : null}
+					<ShareOption
+						label="Share…"
+						icon={ShareIcon}
+						isDisabled={!actions.canSend}
+						onPress={() => {
+							handleShare("share-sheet")
+							void shareTopicUrl({ title: topic.name, url: actions.topicUrl })
+						}}
+					/>
+					<ShareTargets
+						topic={topic}
+						topicUrl={actions.topicUrl}
+						kind="send"
+						isEnabled={actions.canSend}
+						onShare={handleShare}
+					/>
+					{/* copy feedback stays beside the option that succeeded */}
+					<View className="my-1 border-t border-separator" />
+					<ShareOption
+						label="Copy page link"
+						icon={Link}
+						isCopied={actions.copiedLabel === "page"}
+						onPress={() => {
+							handleShare("copy-link")
+							void actions.handleCopy({ label: "page", url: actions.topicUrl })
+						}}
+					/>
+					<ShareOption
+						label="Copy RSS"
+						icon={Rss}
+						isDisabled={!actions.isPublic}
+						isCopied={actions.copiedLabel === "rss"}
+						onPress={() => {
+							handleShare("rss")
+							void actions.handleCopy({ label: "rss", url: `${SITE_URL}${toTopicFeedPath(topic.id)}` })
+						}}
+					/>
+					{actions.copyFallback ? (
+						<View className="gap-2 p-2">
+							<Text className="text-sm text-muted-foreground">Touch and hold the link to copy.</Text>
+							<Text selectable className="text-sm text-link">
+								{actions.copyFallback}
+							</Text>
+						</View>
+					) : null}
+					<View className="my-1 border-t border-separator" />
+					<ShareOption label="Report issue" icon={Flag} onPress={() => setIsReporting(true)} />
+				</>
+			)}
 		</Sheet>
 	)
 }

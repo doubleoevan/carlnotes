@@ -1,9 +1,25 @@
 // error monitoring and request tracing through Sentry
 
+import type { ClientTelemetry } from "@carlnotes/contracts/clientTelemetry"
 import { HOUR_MS } from "@carlnotes/contracts/time"
 import type { Span } from "@sentry/bun"
 import * as Sentry from "@sentry/bun"
-import { scrubContent, scrubTransaction, withoutUrlSecrets } from "./monitoringScrub"
+import { redactEvent, redactTransaction, withoutUrlSecrets } from "./monitoringRedaction"
+
+/**
+ * Labels request errors with isolated client telemetry.
+ */
+export function withRequestTelemetry<Result>(properties: ClientTelemetry, run: () => Result): Result {
+	// the SDK installs asynchronous isolation only when monitoring starts
+	if (!Sentry.getClient()) {
+		return run()
+	}
+	return Sentry.withIsolationScope((scope) => {
+		// keep simultaneous requests from sharing their device tags
+		scope.setTags(properties)
+		return run()
+	})
+}
 
 // Sentry's span type, so a caller can type a span without importing Sentry
 export type { Span }
@@ -74,7 +90,7 @@ export function startMonitoring(): void {
 		return
 	}
 
-	// sample each request by its path, scrub content from errors and transactions alike,
+	// sample each request by its path, redact content from errors and transactions alike,
 	// and keep personal data off by default
 	const tracesSampleRate = Number(Bun.env.SENTRY_TRACES_SAMPLE_RATE ?? DEFAULT_TRACES_SAMPLE_RATE)
 	Sentry.init({
@@ -92,10 +108,10 @@ export function startMonitoring(): void {
 			databaseQueryData: false,
 			stackFrameVariables: false,
 		},
-		beforeSend: scrubContent,
+		beforeSend: redactEvent,
 		// a streamed trace skips beforeSendTransaction, so traces send whole, as transactions
 		traceLifecycle: "static",
-		beforeSendTransaction: scrubTransaction,
+		beforeSendTransaction: redactTransaction,
 		// model calls are traced in Langfuse alone, so Sentry's AI SDK integration is left out
 		integrations: (defaultIntegrations) => defaultIntegrations.filter((integration) => integration.name !== "VercelAI"),
 		// a console call is never sent as a breadcrumb, and an outgoing request's breadcrumb loses the secrets in its url

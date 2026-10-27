@@ -15,7 +15,7 @@ export type TablePageButtonProps = {
 	onPress: () => void
 }
 type Container = ComponentType<{ children: ReactNode }>
-export type TablePaginationComponents = {
+export type TablePaginationElements = {
 	Root: Container
 	Rows: Container
 	Select: ComponentType<PageSizeSelectProps>
@@ -29,10 +29,10 @@ export type TablePaginationComponents = {
  */
 export function TablePagination({
 	pagination,
-	components: { Root, Rows, Select, Pager, PageButton, Text },
+	elements: { Root, Rows, Select, Pager, PageButton, Text },
 }: {
 	pagination: PaginationState
-	components: TablePaginationComponents
+	elements: TablePaginationElements
 }) {
 	const { page, pageCount, pageSize, rowCount, setPage, setPageSize } = pagination
 	if (rowCount <= PAGE_SIZES[0]) {

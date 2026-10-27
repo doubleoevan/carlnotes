@@ -14,6 +14,7 @@ import { Dialog, DialogContent, DialogFooter, DialogTitle } from "@/components/p
 import { Input } from "@/components/primitives/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/primitives/select"
 import { Switch } from "@/components/primitives/switch"
+import { TopicVisibility } from "@/components/table/OwnerTopicsTable"
 import { STANDALONE_LINK_CLASS } from "@/lib/styleClasses"
 import { useTopicFeed } from "@/providers/TopicFeedProvider"
 import { hasDailySlotLeft, PromptSourceUrls, ScheduleFields, SourceLimitNote } from "./EditTopicFields"
@@ -24,9 +25,6 @@ import { TopicPromptComposer } from "./TopicPromptComposer"
 import { TopicSourceEditor } from "./TopicSourceEditor"
 import { TopicTeamSelect, useTopicTeamChoice } from "./TopicTeamSelect"
 import { useTopicFields, type Visibility } from "./useTopicFields"
-
-// the emoji shown for each visibility option
-const VISIBILITY_EMOJI: Record<Visibility, string> = { private: "🔒", public: "🌐", invite: "✉️" }
 
 /**
  * The edit topic modal for editing or creating a new topic.
@@ -209,7 +207,7 @@ export function EditTopicModal({
 							<SelectContent>
 								{visibilities.map((visibilityOption) => (
 									<SelectItem key={visibilityOption} value={visibilityOption}>
-										{VISIBILITY_EMOJI[visibilityOption]} {visibilityOption}
+										<TopicVisibility visibility={visibilityOption} />
 									</SelectItem>
 								))}
 							</SelectContent>

@@ -1,6 +1,6 @@
 import {
 	TablePagination as SharedTablePagination,
-	type TablePaginationComponents,
+	type TablePaginationElements,
 } from "@carlnotes/core/components/TablePagination"
 import type { PaginationState } from "@carlnotes/core/hooks/usePagination"
 import { cn } from "@carlnotes/nightshift/classNames"
@@ -17,13 +17,13 @@ import { Text } from "@/components/primitives/text"
  * Renders the shared web table footer with an anchored native dropdown.
  */
 export function TablePagination({ pagination }: { pagination: PaginationState }) {
-	return <SharedTablePagination pagination={pagination} components={TABLE_PAGINATION_COMPONENTS} />
+	return <SharedTablePagination pagination={pagination} elements={TABLE_PAGINATION_ELEMENTS} />
 }
 
 // native layout and touch targets surround the shared footer composition
-const TABLE_PAGINATION_COMPONENTS: TablePaginationComponents = {
+const TABLE_PAGINATION_ELEMENTS: TablePaginationElements = {
 	Root: ({ children }) => (
-		<View className="mt-2 flex-row flex-wrap items-center justify-between gap-2">{children}</View>
+		<View className="mt-2 flex-row flex-wrap items-center justify-between gap-2 pb-3">{children}</View>
 	),
 	Rows: ({ children }) => <View className="flex-row items-center gap-1.5">{children}</View>,
 	Text: ({ children }) => (

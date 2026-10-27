@@ -1,6 +1,9 @@
 import { authClient } from "@carlnotes/client/authClient"
 import { isAdminRole } from "@carlnotes/contracts/enums"
+import { UserMenuItems as SharedUserMenuItems, type UserMenuElements } from "@carlnotes/core/components/UserMenuItems"
 import { SITE_URL } from "@carlnotes/core/lib/pageHead"
+import { cn } from "@carlnotes/nightshift/classNames"
+import { usePathname } from "expo-router"
 import {
 	Activity,
 	BookOpen,
@@ -29,7 +32,7 @@ import { setThemePreference } from "@/theme"
 /**
  * Matches the web hamburger's appearance controls, destinations, and account groups.
  */
-export function HeaderMenu() {
+export function UserMenu() {
 	// return focus to the hamburger when either sheet closes
 	const [isOpen, setIsOpen] = useState(false)
 	const [isTutorialOpen, setIsTutorialOpen] = useState(false)
@@ -101,75 +104,70 @@ function UserMenuItems({ onClose, onPlayTutorial }: { onClose: () => void; onPla
 	// use the account's real identity and the shared native session cleanup
 	const { data: session } = authClient().useSession()
 	const { isPending, signOut } = useSignOut()
+	const pathname = usePathname()
+	if (!session) {
+		return null
+	}
 	return (
-		<>
-			{/* profile, teams, activity, and account */}
-			{session ? (
-				<MenuLink
-					label="Profile"
-					href={`${SITE_URL}/profiles/${session.user.id}`}
-					icon={CircleUserRound}
-					onClose={onClose}
-				/>
-			) : null}
-			<MenuLink label="Teams" href={`${SITE_URL}/teams`} icon={Users} onClose={onClose} />
-			<MenuLink label="Activity" href={`${SITE_URL}/activity`} icon={Activity} onClose={onClose} />
-			<MenuLink label="Account" href="/settings" icon={User} onClose={onClose} />
-			<MenuDivider />
-			{/* plans, the tutorial, and docs */}
-			<MenuLink label="Plans" href={`${SITE_URL}/plans`} icon={Columns3Cog} onClose={onClose} />
-			<Button
-				variant="ghost"
-				className="min-h-12 justify-start gap-2 px-2"
-				accessibilityLabel="Brew with Carl"
-				onPress={onPlayTutorial}
-			>
-				<TopicTutorialVideoIcon size={16} />
-				<Text>Brew with Carl</Text>
-			</Button>
-			<MenuLink label="What CarlNotes Is" href={`${SITE_URL}/docs`} icon={BookOpen} onClose={onClose} />
-			<MenuDivider />
-			{/* admin access and native sign-out */}
-			{isAdminRole(session?.user.role) ? (
-				<MenuLink label="Admin" href={`${SITE_URL}/admin`} icon={ShieldUser} onClose={onClose} />
-			) : null}
-			<Button
-				variant="ghost"
-				className="min-h-12 justify-start gap-2 px-2"
-				accessibilityLabel="Sign out"
-				disabled={isPending}
-				onPress={() => void signOut()}
-			>
-				<Icon as={LogOut} className="size-4 text-foreground" />
-				<Text>Sign out</Text>
-			</Button>
-		</>
+		<SharedUserMenuItems
+			elements={USER_MENU_ELEMENTS}
+			userId={session.user.id}
+			isAdmin={isAdminRole(session.user.role)}
+			pathname={pathname === "/settings" ? "/account" : pathname}
+			onNavigate={onClose}
+			onPlayTutorial={onPlayTutorial}
+			onSignOut={() => void signOut()}
+			isSigningOut={isPending}
+		/>
 	)
 }
 
-// keep destinations behind the app's link component
-function MenuLink({
-	label,
-	href,
-	icon,
-	onClose,
-}: {
-	label: string
-	href: string
-	icon: typeof User
-	onClose: () => void
-}) {
-	return (
-		<AnchorLink
-			href={href}
+// preserve native routing, hosted docs/Admin, and the web's exact icon choices
+const MENU_ICONS = {
+	Profile: CircleUserRound,
+	Teams: Users,
+	Activity,
+	Account: User,
+	Plans: Columns3Cog,
+	"What CarlNotes Is": BookOpen,
+	Admin: ShieldUser,
+}
+const USER_MENU_ELEMENTS: UserMenuElements = {
+	Link: ({ label, href, isSelected, onSelect }) => {
+		const MenuIcon = MENU_ICONS[label as keyof typeof MENU_ICONS]
+		return (
+			<AnchorLink
+				href={href === "/docs" || href === "/admin" ? `${SITE_URL}${href}` : href}
+				accessibilityLabel={label}
+				onPress={onSelect}
+				accessibilityState={{ selected: isSelected }}
+				className={cn(
+					"min-h-12 flex-row items-center gap-2 rounded-md px-2 active:bg-accent",
+					isSelected && "bg-accent",
+				)}
+			>
+				<Icon as={MenuIcon} className="size-4 text-foreground" />
+				<Text className="text-sm">{label}</Text>
+			</AnchorLink>
+		)
+	},
+	Action: ({ label, onSelect, isDisabled }) => (
+		<Button
+			variant="ghost"
+			className="min-h-12 justify-start gap-2 px-2"
 			accessibilityLabel={label}
-			onPress={onClose}
-			className="min-h-12 flex-row items-center gap-2 rounded-md px-2 active:bg-accent"
+			disabled={isDisabled}
+			onPress={onSelect}
 		>
-			<Icon as={icon} className="size-4 text-foreground" />
-			<Text className="text-sm">{label}</Text>
-		</AnchorLink>
-	)
+			{label === "Brew with Carl" ? (
+				<TopicTutorialVideoIcon size={16} />
+			) : (
+				<Icon as={LogOut} className="size-4 text-foreground" />
+			)}
+			<Text>{label}</Text>
+		</Button>
+	),
+	Divider: MenuDivider,
 }
 
 // separate the same menu groups as the web

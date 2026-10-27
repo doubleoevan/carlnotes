@@ -29,15 +29,15 @@ With tracing on, each request the api serves SHALL be sampled for a transaction,
 - **WHEN** the rate is 0.1 and open tabs poll `/api/rooms/mention-count`
 - **THEN** one poll in a hundred is traced, while one feed request in ten is
 
-### Requirement: Context-doc and source content are scrubbed before any Sentry send
+### Requirement: Context-doc and source content are redacted before any Sentry send
 
-No context-doc text and no fetched source content SHALL be attached to a Sentry event, and a send-time scrub SHALL run over the outgoing event as a backstop, removing content-bearing fields rather than dropping the event. The scrub SHALL run on transactions as well as on errors. A query span SHALL name its statement and SHALL NOT include the query's parameter values, which are where a Topic's text or a user's input would be. No event SHALL include a query string, on its request or any of the request's headers, its url, its span attributes, or its breadcrumbs, since a password reset token, an unsubscribe token, a consent code, or a third party's key can travel there, and a referer header repeats the query string of the page before. A transaction's urls SHALL be reported by its route pattern, so an id or a token in a path never reaches a transaction. An error SHALL keep its request's path, which is what makes the error debuggable, except for an invite link's token, the one bearer token a path includes, which every event SHALL report as `:token`.
+No context-doc text and no fetched source content SHALL be attached to a Sentry event, and a send-time redaction SHALL run over the outgoing event as a backstop, removing content-bearing fields rather than dropping the event. The redaction SHALL run on transactions as well as on errors. A query span SHALL name its statement and SHALL NOT include the query's parameter values, which are where a Topic's text or a user's input would be. No event SHALL include a query string, on its request or any of the request's headers, its url, its span attributes, or its breadcrumbs, since a password reset token, an unsubscribe token, a consent code, or a third party's key can travel there, and a referer header repeats the query string of the page before. A transaction's urls SHALL be reported by its route pattern, so an id or a token in a path never reaches a transaction. An error SHALL keep its request's path, which is what makes the error debuggable, except for an invite link's token, the one bearer token a path includes, which every event SHALL report as `:token`.
 
-The scrub SHALL be local and synchronous — it inspects the event's own fields and makes no network call. It SHALL NOT call the content scanner: error reporting is the one path that must keep working while other things are failing, and a scanner outage would generate the very errors the scan was screening.
+The redaction SHALL be local and synchronous — it inspects the event's own fields and makes no network call. It SHALL NOT call the content scanner: error reporting is the one path that must keep working while other things are failing, and a scanner outage would generate the very errors the scan was screening.
 
-The scrub SHALL defend by field name and by length: fields whose names read like content are dropped, and any remaining string longer than a short identifier bound is truncated, including inside nested objects — an identifier is short and content is long, so length catches what naming misses.
+The redaction SHALL defend by field name and by length: fields whose names read like content are dropped, and any remaining string longer than a short identifier bound is truncated, including inside nested objects — an identifier is short and content is long, so length catches what naming misses.
 
-Console output SHALL NOT leave the box as breadcrumbs. The SDK records every console call as a breadcrumb and attaches it to the next event, which the field scrub above never inspects, so console breadcrumbs SHALL be dropped before an event carries them. A log line is written for an operator reading logs and is free to name a recipient or quote a response body, so nothing a call site did not deliberately attach SHALL ride along. Breadcrumbs the SDK records itself, such as outgoing requests, SHALL survive, without their query strings.
+Console output SHALL NOT leave the box as breadcrumbs. The SDK records every console call as a breadcrumb and attaches it to the next event, which the field redaction above never inspects, so console breadcrumbs SHALL be dropped before an event carries them. A log line is written for an operator reading logs and is free to name a recipient or quote a response body, so nothing a call site did not deliberately attach SHALL ride along. Breadcrumbs the SDK records itself, such as outgoing requests, SHALL survive, without their query strings.
 
 #### Scenario: A log line naming a person never reaches an event
 
@@ -54,15 +54,15 @@ Console output SHALL NOT leave the box as breadcrumbs. The SDK records every con
 - **WHEN** an event carries a page-sized string in a field whose name does not read like content
 - **THEN** the string is truncated to the identifier bound and marked as cut, so the event ships without the body
 
-#### Scenario: The scrub makes no network call
+#### Scenario: The redaction makes no network call
 
-- **WHEN** an event is scrubbed on its way out
-- **THEN** the scrub completes from the event's own fields, so a scanner or network outage cannot delay or fail error reporting
+- **WHEN** an event is redacted on its way out
+- **THEN** the redaction completes from the event's own fields, so a scanner or network outage cannot delay or fail error reporting
 
-#### Scenario: A transaction is scrubbed like an error
+#### Scenario: A transaction is redacted like an error
 
 - **WHEN** a transaction includes a content-named field or a page-sized string in its contexts or extra data
-- **THEN** the same scrub removes or truncates it before the transaction is sent
+- **THEN** the same redaction removes or truncates it before the transaction is sent
 
 #### Scenario: A query's values never reach a span
 

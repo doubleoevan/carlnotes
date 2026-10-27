@@ -4,6 +4,7 @@ import { SITE_URL } from "@carlnotes/core/lib/pageHead"
 import { Text as NativeText, View } from "react-native"
 import { Avatar } from "@/components/branding/Avatar"
 import { AnchorLink } from "@/components/common/AnchorLink"
+import { PageNoteBadge } from "@/components/note/NoteUnreadBadge"
 import { PodcastEpisodePlayButton } from "@/components/podcast/PodcastEpisodePlayButton"
 import { Badge } from "@/components/primitives/badge"
 import { toTouchTargetHitSlop } from "@/components/primitives/button"
@@ -37,6 +38,7 @@ export function Topic({ topic }: { topic: TopicDetails }) {
 						{topic.name}
 					</NativeText>
 				</AnchorLink>
+				<PageNoteBadge page={{ pageType: "topic", pageId: topic.id }} />
 				{topic.latestPodcastEpisode ? <PodcastEpisodePlayButton episode={topic.latestPodcastEpisode} /> : null}
 				<TopicInfoButton topic={topic} />
 			</View>

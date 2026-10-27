@@ -77,7 +77,11 @@ export function SelectContent({ className, children, ...props }: ComponentProps<
 /**
  * Selects an option and shows a checkmark beside the current value.
  */
-export function SelectItem({ className, ...props }: Omit<ComponentProps<typeof SelectPrimitive.Item>, "children">) {
+export function SelectItem({
+	className,
+	children,
+	...props
+}: Omit<ComponentProps<typeof SelectPrimitive.Item>, "children"> & { children?: ReactNode }) {
 	return (
 		<SelectPrimitive.Item
 			className={cn(
@@ -87,10 +91,12 @@ export function SelectItem({ className, ...props }: Omit<ComponentProps<typeof S
 			)}
 			{...props}
 		>
-			<SelectPrimitive.ItemText
-				className="flex-1 text-sm text-foreground"
-				style={{ fontFamily: fontFamilies.sans.name }}
-			/>
+			{children ?? (
+				<SelectPrimitive.ItemText
+					className="flex-1 text-sm text-foreground"
+					style={{ fontFamily: fontFamilies.sans.name }}
+				/>
+			)}
 			<View className="size-4">
 				<SelectPrimitive.ItemIndicator>
 					<Icon as={Check} className="size-4 text-primary" />

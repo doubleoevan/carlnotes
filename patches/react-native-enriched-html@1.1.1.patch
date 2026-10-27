@@ -48,3 +48,61 @@ index 6363a1aaa8ad7925dbfc917ba6beb0ee5f23dae3..77be699e44b2dee929b32afc79814108
      const handleUpdate = () => {
        const value = getValue(editor);
        if (value !== lastValueRef.current) {
+diff --git a/ios/utils/ZeroWidthSpaceUtils.mm b/ios/utils/ZeroWidthSpaceUtils.mm
+--- a/ios/utils/ZeroWidthSpaceUtils.mm
++++ b/ios/utils/ZeroWidthSpaceUtils.mm
+@@ -2,4 +2,3 @@
+ #import "EnrichedTextInputView.h"
+ #import "StyleHeaders.h"
+ #import "TextInsertionUtils.h"
+-#import "UIView+React.h"
+diff --git a/ios/utils/TextInsertionUtils.mm b/ios/utils/TextInsertionUtils.mm
+--- a/ios/utils/TextInsertionUtils.mm
++++ b/ios/utils/TextInsertionUtils.mm
+@@ -1,2 +1,2 @@
+ #import "TextInsertionUtils.h"
+-#import "UIView+React.h"
++#import <React/UIView+React.h>
+diff --git a/ios/styles/LinkStyle.mm b/ios/styles/LinkStyle.mm
+--- a/ios/styles/LinkStyle.mm
++++ b/ios/styles/LinkStyle.mm
+@@ -4,5 +4,5 @@
+ #import "OccurenceUtils.h"
+ #import "StyleHeaders.h"
+ #import "TextInsertionUtils.h"
+-#import "UIView+React.h"
++#import <React/UIView+React.h>
+ #import "WordsUtils.h"
+diff --git a/ios/styles/MentionStyle.mm b/ios/styles/MentionStyle.mm
+--- a/ios/styles/MentionStyle.mm
++++ b/ios/styles/MentionStyle.mm
+@@ -3,5 +3,5 @@
+ #import "EnrichedTextInputView.h"
+ #import "StyleHeaders.h"
+ #import "TextInsertionUtils.h"
+-#import "UIView+React.h"
++#import <React/UIView+React.h>
+ #import "WordsUtils.h"
+diff --git a/ios/EnrichedTextInputView.mm b/ios/EnrichedTextInputView.mm
+--- a/ios/EnrichedTextInputView.mm
++++ b/ios/EnrichedTextInputView.mm
+@@ -15,7 +15,7 @@
+ #import "StyleUtils.h"
+ #import "TextBlockTapGestureRecognizer.h"
+ #import "TextInsertionUtils.h"
+-#import "UIView+React.h"
++#import <React/UIView+React.h>
+ #import "WordsUtils.h"
+ #import "ZeroWidthSpaceUtils.h"
+ #import <React/RCTConversions.h>
+diff --git a/ios/utils/CheckboxHitTestUtils.mm b/ios/utils/CheckboxHitTestUtils.mm
+--- a/ios/utils/CheckboxHitTestUtils.mm
++++ b/ios/utils/CheckboxHitTestUtils.mm
+@@ -83,2 +83,6 @@
+-  return CGRectInset(rect, -kCheckboxHitSlopLeft, -kCheckboxHitSlopVertical);
++  // keep compact checklist markers inside a 44-point touch target
++  CGFloat horizontalInset = MAX(kCheckboxHitSlopLeft, (44.0 - rect.size.width) / 2.0);
++  CGFloat verticalInset = MAX(kCheckboxHitSlopVertical, (44.0 - rect.size.height) / 2.0);
++
++  return CGRectInset(rect, -horizontalInset, -verticalInset);
+ }

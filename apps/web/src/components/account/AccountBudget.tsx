@@ -1,6 +1,10 @@
 import type { ActivityResponse } from "@carlnotes/contracts/activity"
 import { isPaidPlan } from "@carlnotes/contracts/enums"
 import type { BillingState } from "@carlnotes/contracts/profiles"
+import {
+	type AccountBudgetElements,
+	AccountBudget as SharedAccountBudget,
+} from "@carlnotes/core/components/AccountBudget"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { Settings } from "lucide-react"
 import { useState } from "react"
@@ -24,28 +28,23 @@ export function AccountBudget({
 	// an admin viewing another user's account does not see the payment notice
 	isReadOnly?: boolean
 }) {
-	// past_due and unpaid are the failed-payment statuses Stripe reports
-	const isPastDue = billing.status === "past_due" || billing.status === "unpaid"
 	return (
-		<>
-			{isPastDue && !isReadOnly ? <PaymentNotice /> : null}
-			{/* the fund, today's brews, and the plan all show what this account is spending, so one card
-			    holds them, spaced apart instead of ruled off */}
-			<section className={cn(CARD_CLASS, "space-y-4")}>
-				{activity && (
-					<SpendMeter
-						scanSpendCents={activity.scanSpendCents}
-						chatSpendCents={activity.chatSpendCents}
-						podcastEpisodeSpendCents={activity.podcastEpisodeSpendCents}
-						budgetCents={activity.budgetCents}
-						monthlyBudgetCutoffs={activity.monthlyBudgetCutoffs}
-					/>
-				)}
-				<ScanUsageSection billing={billing} />
-				<PlanSection billing={billing} />
-			</section>
-		</>
+		<SharedAccountBudget
+			billing={billing}
+			isReadOnly={isReadOnly}
+			elements={ACCOUNT_BUDGET_ELEMENTS}
+			spendMeter={activity ? <SpendMeter {...activity} /> : null}
+		/>
 	)
+}
+
+// keep the existing card and text styling around shared account content
+const ACCOUNT_BUDGET_ELEMENTS: AccountBudgetElements = {
+	Card: ({ children }) => <section className={cn(CARD_CLASS, "space-y-4")}>{children}</section>,
+	Group: ({ children }) => <div>{children}</div>,
+	Text: ({ children, className }) => <span className={className}>{children}</span>,
+	Heading: ({ children }) => <h2 className="font-semibold">{children}</h2>,
+	PaymentNotice,
 }
 
 // a failed-payment notice with a path to fix payment in the portal
@@ -58,42 +57,6 @@ function PaymentNotice() {
 					Update
 				</Button>
 				your payment method to keep Carl brewing.
-			</p>
-		</div>
-	)
-}
-
-// scan usage against the daily limit, plus the overage or limit-reached note once at the limit
-function ScanUsageSection({ billing }: { billing: BillingState }) {
-	const isAtLimit = billing.dailyScansUsed >= billing.dailyScanLimit
-	return (
-		<div>
-			<h2 className="font-semibold">Brews today</h2>
-			<p className="text-muted-foreground">
-				{billing.dailyScansUsed} of {billing.dailyScanLimit} used
-			</p>
-			{isAtLimit ? (
-				<p className="text-sm">
-					{billing.hasPaymentMethod
-						? "Extra scans beyond your daily limit are billed by the scan."
-						: "You have reached your daily limit."}
-				</p>
-			) : null}
-		</div>
-	)
-}
-
-// the current plan and how often it bills
-function PlanSection({ billing }: { billing: BillingState }) {
-	return (
-		<div>
-			<p>
-				<span className="font-semibold">{"Plan "}</span>
-				<span className="text-muted-foreground capitalize">{billing.plan}</span>
-				{/* monthly or yearly billing interval. free has no subscription */}
-				{isPaidPlan(billing.plan) && (
-					<span className="text-muted-foreground">{`, billed ${billing.billingInterval}`}</span>
-				)}
 			</p>
 		</div>
 	)

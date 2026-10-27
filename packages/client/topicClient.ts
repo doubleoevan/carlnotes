@@ -266,12 +266,31 @@ export async function uploadTopicAttachment(topicId: string, file: File): Promis
 	// send the file as the form's file field
 	const form = new FormData()
 	form.append("file", file)
-	const response = await fetchApi(`/api/topics/${topicId}/attachments`, { method: "POST", body: form })
+	return uploadTopicAttachmentBody(topicId, form)
+}
+
+/**
+ * Uploads an attachment encoded by a browser or native file picker.
+ */
+export async function uploadTopicAttachmentBody(topicId: string, body: FormData): Promise<void> {
+	const response = await fetchApi(`/api/topics/${topicId}/attachments`, { method: "POST", body })
 
 	// surface the rejection reason from the api, falling back to the status
 	if (!response.ok) {
 		throw new Error((await readApiErrorMessage(response)) ?? `upload failed: ${response.status}`)
 	}
+}
+
+/**
+ * Downloads an attachment with the current client's authenticated session.
+ */
+export async function fetchTopicAttachment(attachmentId: string): Promise<Uint8Array> {
+	// preserve the configured native credentials and the server's download permission checks
+	const response = await fetchApi(`/api/attachments/${encodeURIComponent(attachmentId)}/download`)
+	if (!response.ok) {
+		throw new Error((await readApiErrorMessage(response)) ?? "That attachment could not be downloaded.")
+	}
+	return new Uint8Array(await response.arrayBuffer())
 }
 
 // replace an attachment's generated context, the text every later scan reads. throws an error on a rejected edit

@@ -15,12 +15,14 @@ import { Text, View } from "react-native"
 import { CoffeeLoading } from "@/components/branding/CoffeeLoading"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { ScrollBox } from "@/components/common/ScrollBox"
+import { ShareMarkdownButton } from "@/components/common/ShareMarkdownButton"
 import { Sheet, type SheetProps } from "@/components/common/Sheet"
 import { YoutubePlayer } from "@/components/common/YoutubePlayer"
 import { Button, toTouchTargetHitSlop } from "@/components/primitives/button"
 import { Icon } from "@/components/primitives/icon"
 import { Text as ButtonText } from "@/components/primitives/text"
 import { toTypeRoleStyle } from "@/typeRoleStyles"
+import { captureVisitEvent, toPublicTopicProperties } from "@/visitAnalytics"
 import { TopicFindingRating } from "./TopicFindingRating"
 import { ResourceMetadata } from "./TopicFindingSummary"
 import type { TopicResourceProps } from "./TopicResource"
@@ -36,6 +38,21 @@ export function TopicResourceInfo(props: TopicResourceInfoProps) {
 	const { resource, topic, topicFindingRank, topicFeedHandlers, triggerRef, onClose } = props
 	const title = toOneLineText(toPlainText(resource.title ?? "")) || resource.url
 	const handleOpen = (): void => topicFeedHandlers.openTopicFinding(resource.findingId)
+	const handleTitlePress = (): void => {
+		// report the explicit source click using the same public-topic rule as web
+		captureVisitEvent("visit_finding_clicked", {
+			host: toHostWithoutWww(resource.url),
+			...toPublicTopicProperties(topic),
+		})
+		handleOpen()
+	}
+	const markdown = toNotesMarkdown({
+		topicId: topic.id,
+		topicName: topic.name,
+		prompt: topic.prompt,
+		note: `[${resource.title ?? resource.url}](${resource.url})\n\n${resource.relevanceExplanation}`,
+		origin: SITE_URL,
+	})
 	return (
 		<Sheet title="Topic Finding" triggerRef={triggerRef} onClose={onClose}>
 			{/* the source title and metadata */}
@@ -49,7 +66,7 @@ export function TopicResourceInfo(props: TopicResourceInfoProps) {
 					<AnchorLink
 						href={resource.url}
 						accessibilityLabel={`Open ${title}`}
-						onPress={handleOpen}
+						onPress={handleTitlePress}
 						hitSlop={toTouchTargetHitSlop(44)}
 						className="min-h-11 flex-row items-center gap-1 active:opacity-75"
 					>
@@ -68,13 +85,8 @@ export function TopicResourceInfo(props: TopicResourceInfoProps) {
 			</Text>
 			<ScrollBox
 				scrollToTopOn={resource.findingId}
-				copyMarkdown={toNotesMarkdown({
-					topicId: topic.id,
-					topicName: topic.name,
-					prompt: topic.prompt,
-					note: `[${resource.title ?? resource.url}](${resource.url})\n\n${resource.relevanceExplanation}`,
-					origin: SITE_URL,
-				})}
+				copyMarkdown={markdown}
+				actions={<ShareMarkdownButton markdown={markdown} />}
 			>
 				<Text selectable style={toTypeRoleStyle("body")} className="text-popover-foreground">
 					{toPlainText(resource.relevanceExplanation) || "No notes yet."}
@@ -218,6 +230,7 @@ function FindingLinkPreviewCard({ linkPreview, onOpen }: { linkPreview: ChatLink
 					title={linkPreview.title}
 					thumbnailPath={linkPreview.imagePath}
 					onPlay={onOpen}
+					onOpen={onOpen}
 				/>
 				<AnchorLink
 					href={linkPreview.url}

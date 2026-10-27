@@ -20,11 +20,13 @@ export function ShareTargets({
 	topicUrl,
 	kind,
 	isEnabled,
+	onShare,
 }: {
 	topic: { name: string }
 	topicUrl: string
 	kind: "post" | "send"
 	isEnabled: boolean
+	onShare?: (channel: string) => void
 }) {
 	// encode the title and link once for every destination
 	const url = encodeURIComponent(topicUrl)
@@ -32,18 +34,29 @@ export function ShareTargets({
 	const targets =
 		kind === "post"
 			? [
-					{ label: "x.com", href: `https://x.com/intent/post?url=${url}&text=${title}`, brand: siX },
-					{ label: "Bluesky", href: `https://bsky.app/intent/compose?text=${title}%20${url}`, brand: siBluesky },
+					{ label: "x.com", channel: "x.com", href: `https://x.com/intent/post?url=${url}&text=${title}`, brand: siX },
+					{
+						label: "Bluesky",
+						channel: "bluesky",
+						href: `https://bsky.app/intent/compose?text=${title}%20${url}`,
+						brand: siBluesky,
+					},
 					{
 						label: "LinkedIn",
+						channel: "linkedin",
 						href: `https://www.linkedin.com/sharing/share-offsite/?url=${url}`,
 						brand: LINKEDIN_ICON,
 					},
-					{ label: "Reddit", href: `https://reddit.com/submit?url=${url}&title=${title}`, brand: siReddit },
+					{
+						label: "Reddit",
+						channel: "reddit",
+						href: `https://reddit.com/submit?url=${url}&title=${title}`,
+						brand: siReddit,
+					},
 				]
 			: [
-					{ label: "Text", href: `sms:?&body=${title}%20${url}`, brand: null },
-					{ label: "Email", href: `mailto:?subject=${title}&body=${url}`, brand: null },
+					{ label: "Text", channel: "text", href: `sms:?&body=${title}%20${url}`, brand: null },
+					{ label: "Email", channel: "email", href: `mailto:?subject=${title}&body=${url}`, brand: null },
 				]
 	return targets.map((target) => (
 		<Button
@@ -55,7 +68,7 @@ export function ShareTargets({
 			disabled={!isEnabled}
 		>
 			{isEnabled ? (
-				<AnchorLink href={target.href} accessibilityLabel={target.label}>
+				<AnchorLink href={target.href} accessibilityLabel={target.label} onPress={() => onShare?.(target.channel)}>
 					<ShareTargetLabel target={target} />
 				</AnchorLink>
 			) : (

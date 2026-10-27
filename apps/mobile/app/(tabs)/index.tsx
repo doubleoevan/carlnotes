@@ -1,6 +1,7 @@
 import { useNow } from "@carlnotes/core/hooks/useNow"
-import { View } from "react-native"
+import { ScrollView, View } from "react-native"
 import { ClassNameSafeAreaView } from "@/components/common/ClassNameSafeAreaView"
+import { Footer } from "@/components/layout/Footer"
 import { Header } from "@/components/layout/Header"
 import { SearchBar } from "@/components/search/SearchBar"
 import { TopicFeed } from "@/components/topic/TopicFeed"
@@ -39,6 +40,10 @@ export default function HomeScreen() {
 						state={topicFeed}
 						onRefresh={handleRefresh}
 					/>
+				) : !topicFeed.isLoading ? (
+					<ScrollView>
+						<Footer />
+					</ScrollView>
 				) : null}
 			</ClassNameSafeAreaView>
 		</View>

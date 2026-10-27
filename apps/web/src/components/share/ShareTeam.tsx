@@ -1,8 +1,7 @@
 import { sendCreateTeamInvite } from "@carlnotes/client/teamClient"
+import { useCopyFeedback } from "@carlnotes/core/hooks/useCopyFeedback"
 import { Check, Link, Share } from "lucide-react"
-import { useState } from "react"
 import { toast } from "sonner"
-import { COPIED_FEEDBACK_MS } from "@/components/common/CopyMarkdownButton"
 import { Dialog, DialogContent, DialogTitle } from "@/components/primitives/dialog"
 import { useIsMounted, useOrigin } from "@/hooks/useBrowserValue"
 import { toInviteUrl } from "@/lib/inviteUrl"
@@ -42,7 +41,7 @@ export function ShareTeam({
 	canInvite: boolean
 	onClose: () => void
 }) {
-	const [copiedLabel, setCopiedLabel] = useState<string | null>(null)
+	const { copiedLabel, markCopied } = useCopyFeedback()
 	// whether this browser can open a share sheet, false until the component mounts in the browser
 	const isShareSheetAvailable = useIsMounted() && canOpenShareSheet()
 
@@ -58,8 +57,7 @@ export function ShareTeam({
 	async function handleCopyLink(label: string, text: string): Promise<void> {
 		handleShareOptionClick("copy-link")
 		if (await copyToClipboard(text)) {
-			setCopiedLabel(label)
-			setTimeout(() => setCopiedLabel(null), COPIED_FEEDBACK_MS)
+			markCopied(label)
 		}
 	}
 

@@ -7,9 +7,13 @@ import { sendTopicViewOnce } from "@carlnotes/core/lib/topicViews"
 import { useQuery } from "@tanstack/react-query"
 import { useFocusEffect, useLocalSearchParams } from "expo-router"
 import { useCallback, useMemo } from "react"
-import { Text, View } from "react-native"
+import { ScrollView, Text, View } from "react-native"
+import { AnchorLink } from "@/components/common/AnchorLink"
 import { ClassNameSafeAreaView } from "@/components/common/ClassNameSafeAreaView"
+import { Footer } from "@/components/layout/Footer"
 import { Header } from "@/components/layout/Header"
+import { Button } from "@/components/primitives/button"
+import { Text as ButtonText } from "@/components/primitives/text"
 import { SearchBar } from "@/components/search/SearchBar"
 import { TopicFeedStatus } from "@/components/topic/TopicFeedStatus"
 import { TopicPageActions } from "@/components/topic/TopicPageActions"
@@ -17,12 +21,13 @@ import { TopicPageContent } from "@/components/topic/TopicPageContent"
 import { useTopicFeed } from "@/providers/TopicFeedProvider"
 import { selectCachedTopic } from "@/queryCache"
 import { toTypeRoleStyle } from "@/typeRoleStyles"
+import { captureVisitEvent, toPublicTopicProperties } from "@/visitAnalytics"
 
 /**
  * Reads a topic independently of Home and shows every delivered finding.
  */
 export default function TopicScreen() {
-	// key each page by account and topic without carrying the previous page's data
+	// key the query by account and topic and clear data from the previous topic
 	useNow()
 	const { topicId } = useLocalSearchParams<{ topicId: string }>()
 	const { data: session } = authClient().useSession()
@@ -35,14 +40,20 @@ export default function TopicScreen() {
 	})
 	const page = applyTopicPageChanges(query.data, topicFeed.pendingChanges)
 	const topic = page?.status === "visible" ? page.topic : null
+	const isLoadingTopic = !topic && query.isPending && query.fetchStatus !== "paused"
 	// count a loaded Topic once per app runtime, as the web counts it once per tab
 	const loadedTopicId = topic?.id
+	const loadedTopicVisibility = topic?.visibility
 	useFocusEffect(
 		useCallback(() => {
-			if (loadedTopicId) {
+			if (loadedTopicId && loadedTopicVisibility) {
+				captureVisitEvent(
+					"visit_topic_viewed",
+					toPublicTopicProperties({ id: loadedTopicId, visibility: loadedTopicVisibility }),
+				)
 				sendTopicViewOnce(loadedTopicId)
 			}
-		}, [loadedTopicId]),
+		}, [loadedTopicId, loadedTopicVisibility]),
 	)
 	// reuse the Home preview while loading and the current filters once Findings arrive
 	const topicPreview = topicFeed.topicFeed?.sections
@@ -79,19 +90,36 @@ export default function TopicScreen() {
 						findings={findings}
 						state={topicFeed}
 						onRefresh={handleRefresh}
+						onScanned={async () => {
+							await query.refetch({ cancelRefetch: false })
+						}}
 					/>
 				) : null}
 				{page?.status === "gated" ? (
-					<Text
-						style={toTypeRoleStyle("body")}
-						className="p-4 text-muted-foreground"
-					>{`You need access to read ${page.topicGate.topicName ?? "this topic"}.`}</Text>
+					<View className="gap-4 px-4 py-6">
+						<Text accessibilityRole="header" style={toTypeRoleStyle("pageTitle")} className="text-foreground">
+							This topic is invite-only
+						</Text>
+						<Text style={toTypeRoleStyle("body")} className="text-muted-foreground">
+							Ask the topic owner for an invite to see it.
+						</Text>
+						<Button asChild accessibilityLabel="Back to CarlNotes" className="self-start">
+							<AnchorLink href="/" shouldReplace accessibilityLabel="Back to CarlNotes">
+								<ButtonText>Back to CarlNotes</ButtonText>
+							</AnchorLink>
+						</Button>
+					</View>
 				) : null}
 				{page?.status === "missing" ? (
 					<Text style={toTypeRoleStyle("body")} className="p-4 text-muted-foreground">
 						This topic is unavailable.
 					</Text>
 				) : null}
+				{!topic && !isLoadingTopic && (
+					<ScrollView>
+						<Footer />
+					</ScrollView>
+				)}
 			</ClassNameSafeAreaView>
 		</View>
 	)

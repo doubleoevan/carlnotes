@@ -50,7 +50,8 @@ test("the table renders name, visibility, and updated columns", () => {
 test("the static body renders through the display component", async () => {
 	const staticSource = await Bun.file(new URL("./NoteStatic.tsx", import.meta.url)).text()
 	expect(staticSource).toContain("<EnrichedText ")
-	expect(staticSource).toContain("{note.html}")
+	expect(staticSource).toContain("<SharedNoteStatic")
+	expect(staticSource).toContain("{html}")
 	expect(staticSource).not.toContain("dangerouslySetInnerHTML")
 })
 

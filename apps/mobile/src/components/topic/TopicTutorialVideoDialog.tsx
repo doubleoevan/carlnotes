@@ -4,7 +4,6 @@ import {
 	toTopicTutorialPlayProperties,
 	toTutorialPlayRecorder,
 } from "@carlnotes/core/lib/topicTutorialVideo"
-import { usePostHog } from "posthog-react-native"
 import type { ComponentRef } from "react"
 import { type RefObject, useMemo } from "react"
 import { Text, type View } from "react-native"
@@ -16,6 +15,7 @@ import { Sheet } from "@/components/common/Sheet"
 import { YoutubePlayer } from "@/components/common/YoutubePlayer"
 import { useFontScaledSize } from "@/hooks/useFontScaledSize"
 import { toTypeRoleStyle } from "@/typeRoleStyles"
+import { captureVisitEvent } from "@/visitAnalytics"
 
 /**
  * Plays the shared tutorial and reports its first actual play during this opening.
@@ -30,10 +30,9 @@ export function TopicTutorialVideoDialog({
 	triggerRef?: RefObject<ComponentRef<typeof View> | null>
 }) {
 	// report the first actual play during this opening
-	const posthog = usePostHog()
 	const handlePlayerState = useMemo(
-		() => toTutorialPlayRecorder(() => posthog?.capture("visit_video_played", toTopicTutorialPlayProperties(opener))),
-		[posthog, opener],
+		() => toTutorialPlayRecorder(() => captureVisitEvent("visit_video_played", toTopicTutorialPlayProperties(opener))),
+		[opener],
 	)
 	return (
 		<Sheet title={TOPIC_TUTORIAL_VIDEO.name} onClose={onClose} triggerRef={triggerRef}>

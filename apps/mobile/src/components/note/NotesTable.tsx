@@ -1,6 +1,6 @@
 import type { Note } from "@carlnotes/contracts/notes"
 import {
-	type NotesTableComponents,
+	type NotesTableElements,
 	noteSortValues,
 	NotesTable as SharedNotesTable,
 } from "@carlnotes/core/components/NotesTable"
@@ -8,19 +8,21 @@ import { usePaginatedRowSort } from "@carlnotes/core/hooks/usePaginatedRowSort"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { Globe, Lock, Users } from "lucide-react-native"
 import { View } from "react-native"
-import { WebFeatureButton } from "@/components/common/WebFeature"
+import { AnchorLink } from "@/components/common/AnchorLink"
 import { Icon } from "@/components/primitives/icon"
 import { Text } from "@/components/primitives/text"
 import { SortableHeader } from "@/components/table/SortableHeader"
 import { TableCard } from "@/components/table/TableCard"
 import { TablePagination } from "@/components/table/TablePagination"
+import { TableCell, TableScroll } from "@/components/table/TableScroll"
+import { NoteRowBadge } from "./NoteUnreadBadge"
 
 // native columns retain room for text scaling and wrap their labels at narrow widths
-const COLUMN_CLASSES = { name: "flex-1", visibility: "w-24", updated: "w-20" }
+const COLUMN_WIDTHS = { name: 192, visibility: 112, updated: 112 }
 const VISIBILITY_ICONS = { private: Lock, team: Users, public: Globe }
 
 /**
- * Draws the shared Tasting Notes table with native cells and the existing web editor handoff.
+ * Draws the shared Tasting Notes table with native Topic and Team note routes.
  */
 export function NotesTable({ notes, path }: { notes: Note[]; path: string }) {
 	const { pageRows, sort, pagination } = usePaginatedRowSort({ rows: notes, valueByKey: noteSortValues })
@@ -30,19 +32,18 @@ export function NotesTable({ notes, path }: { notes: Note[]; path: string }) {
 				notes={notes}
 				renderedRows={pageRows.map((row) => ({ row }))}
 				sort={sort}
-				components={NOTES_TABLE_COMPONENTS}
+				elements={NOTES_TABLE_ELEMENTS}
 				renderNoteName={(note) => (
-					<WebFeatureButton
-						title={note.name}
-						description={
-							note.canEdit
-								? "Read and edit this Tasting Note on the topic’s web page."
-								: "Read this Tasting Note on the topic’s web page."
-						}
-						path={path}
-						variant="link"
-						className="h-auto min-h-11 justify-start px-0"
-					/>
+					<View className="flex-row items-center gap-1.5">
+						<AnchorLink
+							href={`${path.split("?")[0]}/notes/${note.id}`}
+							accessibilityLabel={`Open ${note.name}`}
+							className="min-h-12 shrink justify-center"
+						>
+							<Text className="text-sm text-link">{note.name}</Text>
+						</AnchorLink>
+						<NoteRowBadge noteId={note.id} />
+					</View>
 				)}
 			/>
 			<View className="px-4">
@@ -53,24 +54,19 @@ export function NotesTable({ notes, path }: { notes: Note[]; path: string }) {
 }
 
 // map the shared table's structure to native layout and accessible controls
-const NOTES_TABLE_COMPONENTS: NotesTableComponents = {
-	Table: ({ children }) => <View>{children}</View>,
+const NOTES_TABLE_ELEMENTS: NotesTableElements = {
+	Table: ({ children }) => <TableScroll columns={COLUMN_WIDTHS}>{children}</TableScroll>,
 	Head: ({ children }) => <View className="border-b border-separator-strong">{children}</View>,
 	Body: ({ children }) => <View>{children}</View>,
 	Foot: ({ children }) => <View>{children}</View>,
 	Row: ({ children, hasSeparator }) => (
-		<View className={cn("min-h-12 flex-row items-center gap-2 px-4 py-2", hasSeparator && "border-b border-separator")}>
-			{children}
-		</View>
+		<View className={cn("min-h-12 flex-row", hasSeparator && "border-b border-separator")}>{children}</View>
 	),
-	Cell: ({ children, column }) => <View className={COLUMN_CLASSES[column]}>{children}</View>,
+	Cell: TableCell,
 	Header: ({ sort, sortKey, label }) => (
-		<SortableHeader
-			sort={sort}
-			sortKey={sortKey}
-			label={label}
-			className={COLUMN_CLASSES[sortKey as keyof typeof COLUMN_CLASSES]}
-		/>
+		<TableCell column={sortKey}>
+			<SortableHeader sort={sort} sortKey={sortKey} label={label} />
+		</TableCell>
 	),
 	Text: ({ children }) => <Text className="text-sm text-muted-foreground">{children}</Text>,
 	Visibility: ({ visibility, label }) => (

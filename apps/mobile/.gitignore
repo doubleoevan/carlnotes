@@ -1,3 +1,7 @@
 # expo's local state and the exported bundles
 .expo/
 dist/
+
+# local development clients are generated from app.config.ts by Expo prebuild
+/ios/
+/android/

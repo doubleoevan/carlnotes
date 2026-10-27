@@ -1,3 +1,7 @@
+import { isSubscribeShown } from "@carlnotes/core/lib/topicActions"
+
+export { isSubscribeShown } from "@carlnotes/core/lib/topicActions"
+
 import type { TopicResponse } from "@carlnotes/contracts/topics"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { PawPrint } from "lucide-react"
@@ -72,13 +76,6 @@ export function TopicHeader({ topic }: { topic: TopicResponse }) {
 	)
 }
 
-/**
- * Whether the Follow button renders: an owner has nothing to follow, and a private topic has no followers.
- */
-export function isFollowShown(topic: Pick<TopicResponse, "isTopicOwner" | "visibility">): boolean {
-	return !topic.isTopicOwner && topic.visibility !== "private"
-}
-
 // the Follow button, subscribe in every identifier
 export function SubscribeButton({
 	topic,
@@ -92,7 +89,7 @@ export function SubscribeButton({
 	isHighlighted?: boolean
 	onToggle: () => void
 }) {
-	if (!isFollowShown(topic)) {
+	if (!isSubscribeShown(topic)) {
 		return null
 	}
 	const tooltip = toSubscribeTooltip(isSignedIn, topic.isSubscribed, topic.visibility === "invite")

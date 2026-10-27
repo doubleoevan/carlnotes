@@ -1,6 +1,8 @@
+import type { NoteVisibility } from "@carlnotes/contracts/notes"
 import type { Meta, StoryObj } from "@storybook/react-native"
 import { useState } from "react"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
+import { NoteVisibilitySelect } from "@/components/note/NoteVisibilitySelect"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./select"
 
 // the web select's states, with native anchoring and option targets
@@ -30,3 +32,17 @@ export default meta
 type Story = StoryObj<typeof meta>
 export const Closed: Story = {}
 export const Disabled: Story = { args: { disabled: true } }
+
+// match the web's icon-bearing visibility options with native selection and touch targets
+export const Small: Story = {
+	render: function VisibilityExample() {
+		const [visibility, setVisibility] = useState<NoteVisibility>("team")
+		return (
+			<NoteVisibilitySelect
+				visibilities={["private", "team", "public"]}
+				visibility={visibility}
+				onNoteVisibilityChange={setVisibility}
+			/>
+		)
+	},
+}

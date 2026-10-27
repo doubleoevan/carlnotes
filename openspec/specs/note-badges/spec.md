@@ -1,8 +1,10 @@
 # note-badges Specification
 
 ## Purpose
-TBD - created by archiving change add-note-badges. Update Purpose after archive.
+Show unread note edits and comments that the current user may see, and clear them consistently after acknowledged reads on web and mobile.
+
 ## Requirements
+
 ### Requirement: A note has two separate unread counts
 
 Every note the user may see SHALL report an unread edit count and an unread comment count as two
@@ -33,10 +35,10 @@ user last read it, excluding the user's own comments and excluding deleted ones.
 
 ### Requirement: Reading a note clears its counts
 
-Opening a note SHALL record that the user has read it, taking both of that note's counts to zero.
-A note SHALL record who edited it last, and an unread edit SHALL require that the last editor was
-somebody else, so a writer is never badged for their own work. A note the user has never read and did
-not write SHALL count as unread, with no backfill making old notes read as read.
+A successful note open on either client SHALL clear its local counts and submit a server read record. Other clients
+SHALL reflect that record on their next successful refresh. Notes SHALL retain the last editor, exclude that editor
+from unread edit counts, and count never-read notes by others as unread. Failed opens or acknowledgements SHALL NOT
+persist a false read or permanently hide counts.
 
 #### Scenario: Opening a note clears it
 
@@ -52,6 +54,23 @@ not write SHALL count as unread, with no backfill making old notes read as read.
 
 - **WHEN** a user who has never opened a note, and did not write it, can see it
 - **THEN** that note reports one unread edit
+- **AND** existing notes are not backfilled as read
+
+#### Scenario: A note fails to open
+
+- **WHEN** a note read fails
+- **THEN** its counts remain and no read record is submitted
+
+#### Scenario: Mobile reading clears web counts
+
+- **WHEN** a user opens a note on mobile and the server accepts the read record
+- **THEN** the note row and Topic rollup clear locally, and the same account's web badges clear on their next successful refresh
+- **AND** reading on web clears mobile counts through the reciprocal refresh path
+
+#### Scenario: An acknowledgement fails
+
+- **WHEN** the note opens but its read acknowledgement fails
+- **THEN** tentative suppression is removed or retried while that note remains open, and no durable false read is recorded
 
 ### Requirement: Counts obey note visibility
 
@@ -116,3 +135,35 @@ remaining count past the same number of lines the mention badge's tooltip lists.
 - **WHEN** more notes are waiting than the tooltip lists
 - **THEN** the remaining ones read as a count on a final line
 
+### Requirement: Native note counts match web presentation
+
+Mobile SHALL show separate unread edit/comment information on note rows and the combined count on rendered Topic titles and the Tasting Notes section. Count copy, outline treatment, and abbreviation SHALL match web. Accessible text and a press or long-press explanation SHALL expose the same details that web supplies by hover. Native Team pages SHALL use the same note counts and controls.
+
+#### Scenario: A Topic has edits and comments waiting
+
+- **WHEN** one Topic note has one unread edit and another has two unread comments
+- **THEN** the Topic and section show three, and each note row identifies its own waiting changes
+
+#### Scenario: A count exceeds nine
+
+- **WHEN** more than nine changes are waiting
+- **THEN** the compact badge reads "9+" and its accessible explanation retains the actual count
+
+### Requirement: Badge refresh belongs to the active account
+
+Both clients SHALL refresh note badges for the current account and clear old-account badge state on session exit or replacement. Mobile SHALL refresh on foregrounding, reconnection, and the active polling interval. Failed refreshes SHALL retain the last confirmed counts. Late responses from an earlier account SHALL never populate the current account's badges.
+
+#### Scenario: A user changes accounts during a poll
+
+- **WHEN** account A's badge response arrives after account B signs in
+- **THEN** no count, note name, or Topic name from A appears for B
+
+#### Scenario: A refresh fails
+
+- **WHEN** mobile loses connectivity or a badge request fails
+- **THEN** known counts remain until a successful refresh confirms different values
+
+#### Scenario: New changes arrive after a read
+
+- **WHEN** another user edits or comments after the read record was accepted
+- **THEN** the next refresh can show those changes and an old local suppression does not hide them indefinitely

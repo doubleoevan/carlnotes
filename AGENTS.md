@@ -26,7 +26,7 @@ Apps, the deployable entry points:
 - `apps/mobile/` — the Expo app: CarlNotes for iOS and Android on a development build, with the routes under
   `apps/mobile/app/`, the Nightshift theme through Uniwind, its implementations of the Nightshift component contracts
   with an on-device Storybook in development builds, and EAS Build and Update. It depends on the universal packages
-  alone, stays out of the production image, and its accessibility bar lives in its AGENTS.md.
+  alone, stays out of the production image, and its native Topic-note routes and account-owned drafts, and its accessibility bar live in its AGENTS.md.
 
 Packages, private `@carlnotes/<name>` workspaces that export source, in dependency order:
 

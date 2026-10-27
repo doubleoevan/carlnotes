@@ -1,7 +1,6 @@
-import { fetchTeamNameTaken } from "@carlnotes/client/teamClient"
-import { CHAT_NAME } from "@carlnotes/contracts/chat"
 import type { TeamIdentity } from "@carlnotes/contracts/teams"
-import { cn } from "@carlnotes/nightshift/classNames"
+import { TeamFields } from "@carlnotes/core/components/TeamFields"
+import { useTeamFields } from "@carlnotes/core/hooks/useTeamFields"
 import { useNavigate } from "@tanstack/react-router"
 import { Users } from "lucide-react"
 import { useId, useRef, useState } from "react"
@@ -12,12 +11,10 @@ import { MultiCombobox } from "@/components/common/MultiCombobox"
 import { type PendingInvite, TeamInviteFields } from "@/components/invite/TeamInviteFields"
 import { Button } from "@/components/primitives/button"
 import { Dialog, DialogContent, DialogFooter, DialogTitle } from "@/components/primitives/dialog"
-import { Input } from "@/components/primitives/input"
-import { Switch } from "@/components/primitives/switch"
-import { Textarea } from "@/components/primitives/textarea"
-import { createTeamForInviteLink, saveTeam, TEAM_REJECTION_REASONS } from "@/components/team/saveTeam"
+import { createTeamForInviteLink, saveTeam } from "@/components/team/saveTeam"
 import { EditTopicModal } from "@/components/topic/EditTopicModal"
 import { useObjectUrl } from "@/hooks/useObjectUrl"
+import { TEAM_FIELD_ELEMENTS } from "./TeamFields"
 
 // a topic the multiselect offers: the user's own, a public one, or an invite topic they can read
 type TopicOption = { id: string; name: string }
@@ -26,47 +23,6 @@ type TopicOption = { id: string; name: string }
 type EditedTeam = Pick<TeamIdentity, "teamId" | "name" | "avatarVersion"> & {
 	description: string | null
 	isPublic: boolean
-}
-
-// the editable team fields, seeded from the team being edited or left empty for a new one
-function useTeamFields(
-	team: EditedTeam | undefined,
-	currentTopics: TopicOption[] | undefined,
-	initialTopicIds: string[] | undefined,
-	initialInvites: PendingInvite[] | undefined,
-) {
-	const [name, setName] = useState(team?.name ?? "")
-	const [description, setDescription] = useState(team?.description ?? "")
-	// the team page's visibility
-	const [isPublic, setIsPublic] = useState(team?.isPublic ?? false)
-	const [selectedTopicIds, setSelectedTopicIds] = useState<string[]>(
-		team ? (currentTopics ?? []).map((topic) => topic.id) : (initialTopicIds ?? []),
-	)
-	// the invitations to send once the team is saved.
-	const [pendingInvites, setPendingInvites] = useState<PendingInvite[]>(initialInvites ?? [])
-	// the selected image, uploaded once the team is saved
-	const [avatarFile, setAvatarFile] = useState<File | null>(null)
-	return {
-		name,
-		setName,
-		description,
-		setDescription,
-		isPublic,
-		setIsPublic,
-		selectedTopicIds,
-		setSelectedTopicIds,
-		pendingInvites,
-		setPendingInvites,
-		avatarFile,
-		setAvatarFile,
-		// what a save writes, with an empty description stored as nothing at all
-		savedFields: {
-			name,
-			description: description.trim() === "" ? null : description,
-			topicIds: selectedTopicIds,
-			isPublic,
-		},
-	}
 }
 
 /**
@@ -98,6 +54,8 @@ export function EditTeamModal({
 	const {
 		name,
 		setName,
+		nameRejection,
+		checkName,
 		description,
 		setDescription,
 		isPublic,
@@ -109,19 +67,18 @@ export function EditTeamModal({
 		avatarFile,
 		setAvatarFile,
 		savedFields,
-	} = useTeamFields(team, currentTopics, initialTopicIds, initialInvites)
+	} = useTeamFields<File>({ team, currentTopics, initialTopicIds, initialInvites })
 	// the team the invite-link button created. the modal edits that team instead of creating a second one on Save
 	const [createdTeam, setCreatedTeam] = useState<EditedTeam | null>(null)
+	const savedTopicIds = useRef((currentTopics ?? []).map((topic) => topic.id))
 	const editedTeam = team ?? createdTeam ?? undefined
 	// the topics made from the picker's New topic row
 	const [isNewTopicOpen, setIsNewTopicOpen] = useState(false)
 	const [createdTopics, setCreatedTopics] = useState<TopicOption[]>([])
 
 	// the name is what someone opens this to change, so it takes the focus the dialog hands out
-	const nameRef = useRef<HTMLInputElement>(null)
+	const dialogRef = useRef<HTMLDivElement>(null)
 	// the ids that tie each field label to its field
-	const nameInputId = useId()
-	const descriptionInputId = useId()
 	const topicsComboboxId = useId()
 
 	// set by a save click that found the name empty
@@ -152,7 +109,7 @@ export function EditTeamModal({
 		// a missing name stops the save
 		if (!name.trim()) {
 			setWasNameMissed(true)
-			nameRef.current?.focus()
+			dialogRef.current?.querySelector<HTMLInputElement>('[aria-label="Name"]')?.focus()
 			toast.error("Please give the team a name.")
 			return
 		}
@@ -162,9 +119,15 @@ export function EditTeamModal({
 			const saveRejection = await saveTeam({
 				team: editedTeam,
 				fields: savedFields,
-				currentTopicIds: (currentTopics ?? []).map((topic) => topic.id),
+				currentTopicIds: savedTopicIds.current,
 				pendingInvites,
+				onInviteAccepted: (acceptedInvite) =>
+					setPendingInvites((invites) => invites.filter((invite) => invite !== acceptedInvite)),
 				avatarFile,
+				onTeamCreated: (teamId) => setCreatedTeam({ teamId, name, avatarVersion: null, description, isPublic }),
+				onTopicsSaved: (ids) => {
+					savedTopicIds.current = ids
+				},
 				onTeamSaved: (savedTeam) => navigate({ to: "/teams/$teamId", params: { teamId: savedTeam.teamId } }),
 			})
 			if (saveRejection) {
@@ -179,7 +142,7 @@ export function EditTeamModal({
 			onClose()
 		} catch (error) {
 			console.error("team save failed", error)
-			setRejection("That didn't save. Try again.")
+			setRejection(error instanceof Error ? error.message : "That didn't save. Try again.")
 		} finally {
 			setIsSaving(false)
 		}
@@ -195,107 +158,67 @@ export function EditTeamModal({
 		setIsNewTopicOpen(false)
 	}
 
-	// the avatar the team shows: the file just uploaded, otherwise whatever the team has today
-	const previewTeam = { teamId: editedTeam?.teamId ?? "", name: name || "Team", avatarVersion: null }
-	const avatarUrl = useObjectUrl(avatarFile)
-	const storedAvatarUrl = editedTeam?.avatarVersion
-		? `/api/team-avatars/${editedTeam.teamId}?v=${editedTeam.avatarVersion}`
-		: null
-	const previewAvatarUrl = avatarUrl ?? storedAvatarUrl
-
 	// leaving the field checks the name so a taken one shows early. the save checks again, and that is what rejects it
 	const handleNameBlur = (): void => {
-		const teamName = name.trim()
-		if (teamName === "" || teamName.toLowerCase() === editedTeam?.name.trim().toLowerCase()) {
-			return
-		}
-		void fetchTeamNameTaken(teamName).then((isTeamNameTaken) => {
-			if (isTeamNameTaken) {
-				setRejection(TEAM_REJECTION_REASONS["name-taken"])
-			}
-		})
+		void checkName(editedTeam?.name)
 	}
 
 	return (
 		<Dialog open onOpenChange={onClose}>
 			<DialogContent
+				ref={dialogRef}
 				className="sm:max-w-md"
 				onOpenAutoFocus={(event) => {
 					// the avatar's file input is the first thing focusable here
 					event.preventDefault()
-					nameRef.current?.focus()
+					dialogRef.current?.querySelector<HTMLInputElement>('[aria-label="Name"]')?.focus()
 				}}
 			>
 				<DialogTitle className="flex items-center gap-2">
 					<Users className="size-5" />
 					{team ? "Edit team" : "New team"}
 				</DialogTitle>
-				{/* two lines on what a team gives, for the person deciding to make one */}
-				{!team && (
-					<p className="text-muted-foreground text-sm">{`A team shares its topics and a ${CHAT_NAME} group with Carl.`}</p>
-				)}
-				{/* the avatar picker: the picked image, the team's stored one, or its initials */}
-				<TeamAvatarPicker
-					team={previewTeam}
-					previewUrl={previewAvatarUrl}
-					onAvatarChange={setAvatarFile}
-					className="size-14"
+				<TeamFields
+					elements={TEAM_FIELD_ELEMENTS}
+					isNew={!team}
+					name={name}
+					description={description}
+					isPublic={isPublic}
+					onNameChange={setName}
+					onDescriptionChange={setDescription}
+					onPublicChange={setIsPublic}
+					onNameBlur={handleNameBlur}
+					hasNameError={(wasNameMissed && !name.trim()) || Boolean(nameRejection)}
+					avatar={
+						<TeamImagePicker team={editedTeam} name={name} avatarFile={avatarFile} onAvatarChange={setAvatarFile} />
+					}
+					topics={
+						<div>
+							<FieldLabel htmlFor={topicsComboboxId}>Topics</FieldLabel>
+							<MultiCombobox
+								id={topicsComboboxId}
+								options={topicOptions.map((topic) => ({ value: topic.id, label: topic.name }))}
+								values={selectedTopicIds}
+								onUpdateValues={setSelectedTopicIds}
+								placeholder="pick topics…"
+								emptyLabel="No topics to add yet."
+								newOptionLabel="New topic"
+								onNewOption={() => setIsNewTopicOpen(true)}
+							/>
+						</div>
+					}
+					invitations={
+						<TeamInviteFields
+							teamId={editedTeam?.teamId ?? null}
+							onCreateTeam={handleCreateTeam}
+							teamName={name}
+							pendingInvites={pendingInvites}
+							onPendingInvitesChange={setPendingInvites}
+						/>
+					}
 				/>
-				<div>
-					<FieldLabel htmlFor={nameInputId} isRequired>
-						Name
-					</FieldLabel>
-					<Input
-						id={nameInputId}
-						ref={nameRef}
-						aria-required
-						value={name}
-						placeholder="what to call it…"
-						onChange={(event) => setName(event.target.value)}
-						onBlur={handleNameBlur}
-						className={cn(wasNameMissed && !name.trim() && "border-destructive")}
-					/>
-				</div>
-				<div>
-					<FieldLabel htmlFor={descriptionInputId}>Description</FieldLabel>
-					<Textarea
-						id={descriptionInputId}
-						value={description}
-						placeholder="what the team reads about…"
-						onChange={(event) => setDescription(event.target.value)}
-					/>
-				</div>
-				{/* the team's topics, selected from a combobox */}
-				<div>
-					<FieldLabel htmlFor={topicsComboboxId}>Topics</FieldLabel>
-					<MultiCombobox
-						id={topicsComboboxId}
-						options={topicOptions.map((topicOption) => ({ value: topicOption.id, label: topicOption.name }))}
-						values={selectedTopicIds}
-						onUpdateValues={setSelectedTopicIds}
-						placeholder="pick topics…"
-						emptyLabel="No topics to add yet."
-						newOptionLabel="New topic"
-						onNewOption={() => setIsNewTopicOpen(true)}
-					/>
-				</div>
-				{/* a leader's invite fields in both modes: the email and username invitations,
-				    the link an existing team can copy, and the page's visibility below them */}
-				<div className="space-y-3 border-t pt-3">
-					<TeamInviteFields
-						teamId={editedTeam?.teamId ?? null}
-						onCreateTeam={handleCreateTeam}
-						teamName={name}
-						pendingInvites={pendingInvites}
-						onPendingInvitesChange={setPendingInvites}
-					/>
-					<div className="flex items-center gap-2 text-sm">
-						<Switch checked={isPublic} onCheckedChange={setIsPublic} aria-label="Public" />
-						Public
-					</div>
-				</div>
 				{/* a save rejection, shown in place */}
-				{rejection && <p className="text-destructive text-sm">{rejection}</p>}
+				{(rejection || nameRejection) && <p className="text-destructive text-sm">{rejection ?? nameRejection}</p>}
 				<DialogFooter>
 					<Button variant="outline" onClick={onClose}>
 						Cancel
@@ -314,5 +237,35 @@ export function EditTeamModal({
 				/>
 			)}
 		</Dialog>
+	)
+}
+
+// show the selected image over the team's saved avatar
+function TeamImagePicker({
+	team: editedTeam,
+	name,
+	avatarFile,
+	onAvatarChange,
+}: {
+	team?: EditedTeam
+	name: string
+	avatarFile: File | null
+	onAvatarChange: (file: File) => void
+}) {
+	// the avatar the team shows: the file just uploaded, otherwise whatever the team has today
+	const previewTeam = { teamId: editedTeam?.teamId ?? "", name: name || "Team", avatarVersion: null }
+	const avatarUrl = useObjectUrl(avatarFile)
+	const storedAvatarUrl = editedTeam?.avatarVersion
+		? `/api/team-avatars/${editedTeam.teamId}?v=${editedTeam.avatarVersion}`
+		: null
+	const previewAvatarUrl = avatarUrl ?? storedAvatarUrl
+
+	return (
+		<TeamAvatarPicker
+			team={previewTeam}
+			previewUrl={previewAvatarUrl}
+			onAvatarChange={onAvatarChange}
+			className="size-14"
+		/>
 	)
 }

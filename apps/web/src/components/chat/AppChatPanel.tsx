@@ -2,7 +2,6 @@ import { fetchTopicInviteBadges } from "@carlnotes/client/activityClient"
 import { authClient } from "@carlnotes/client/authClient"
 import type { ChatPage } from "@carlnotes/client/chatClient"
 import { fetchChatMentionCount, fetchChatRooms } from "@carlnotes/client/chatRoomClient"
-import { fetchNoteBadges } from "@carlnotes/client/noteClient"
 import type { ChatRoom } from "@carlnotes/contracts/chat"
 import {
 	setChatRooms,
@@ -10,7 +9,6 @@ import {
 	useAllChatMentions,
 	useChatRooms,
 } from "@carlnotes/core/stores/chatRoomStore"
-import { setNoteBadges } from "@carlnotes/core/stores/noteBadgeStore"
 import { setTopicInviteBadges } from "@carlnotes/core/stores/topicInviteStore"
 import { useNavigate } from "@tanstack/react-router"
 import { useCallback, useEffect, useState } from "react"
@@ -316,12 +314,6 @@ function usePollBadges(userId: string | undefined, updateChatRooms: () => void):
 				.catch(() => {})
 		}
 
-		// the note badges are a short list of only what is waiting, read outright on every poll
-		const readNoteBadges = (): void => {
-			fetchNoteBadges()
-				.then(setNoteBadges)
-				.catch(() => {})
-		}
 		// read the topic invitations waiting for an answer
 		const readTopicInviteBadges = (): void => {
 			fetchTopicInviteBadges()
@@ -332,7 +324,6 @@ function usePollBadges(userId: string | undefined, updateChatRooms: () => void):
 		// read every badge once now, then again on each poll
 		const readBadges = (): void => {
 			readChatMentionCount()
-			readNoteBadges()
 			readTopicInviteBadges()
 		}
 		readBadges()

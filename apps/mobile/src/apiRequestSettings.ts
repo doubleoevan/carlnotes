@@ -7,6 +7,7 @@ export type ApiRequestSettingsOptions = {
 	getCookie: () => Promise<string>
 	hasSession: () => boolean
 	signOut: () => Promise<unknown>
+	deviceHeaders?: Record<string, string>
 }
 
 // the three settings the app adds to the api client
@@ -20,6 +21,7 @@ export function toApiRequestSettings({
 	getCookie,
 	hasSession,
 	signOut,
+	deviceHeaders = {},
 }: ApiRequestSettingsOptions): ApiRequestSettings {
 	// whether a sign-out is in flight. a burst of 401s from one screen signs out once
 	let isSigningOut = false
@@ -46,7 +48,7 @@ export function toApiRequestSettings({
 	// the stored cookie as the Cookie header, or no header while no cookie is stored
 	const toHeaders = async (): Promise<Record<string, string>> => {
 		const cookie = await getCookie()
-		return cookie ? { cookie } : {}
+		return cookie ? { ...deviceHeaders, cookie } : deviceHeaders
 	}
 	return { headers: toHeaders, credentials: "omit", onUnauthorized: signOutOnce }
 }

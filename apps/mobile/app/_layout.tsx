@@ -4,36 +4,41 @@ import "../global.css"
 import { configureApiClient } from "@carlnotes/client/apiClient"
 import { authClient } from "@carlnotes/client/authClient"
 import { ArchitectsDaughter_400Regular } from "@expo-google-fonts/architects-daughter"
-import { Karla_400Regular, Karla_500Medium, Karla_600SemiBold, Karla_700Bold } from "@expo-google-fonts/karla"
+import {
+	Karla_400Regular,
+	Karla_400Regular_Italic,
+	Karla_500Medium,
+	Karla_500Medium_Italic,
+	Karla_600SemiBold,
+	Karla_600SemiBold_Italic,
+	Karla_700Bold,
+	Karla_700Bold_Italic,
+} from "@expo-google-fonts/karla"
 import { BottomSheetModalProvider } from "@gorhom/bottom-sheet"
 import { PortalHost } from "@rn-primitives/portal"
 import * as Sentry from "@sentry/react-native"
 import { useFonts } from "expo-font"
-import { Stack, usePathname } from "expo-router"
+import { ErrorBoundary as ExpoErrorBoundary, Stack, useNavigationContainerRef, usePathname } from "expo-router"
 import * as SplashScreen from "expo-splash-screen"
-import { PostHogProvider, usePostHog } from "posthog-react-native"
 import { useEffect, useState } from "react"
-import { Alert } from "react-native"
+import { Alert, AppState } from "react-native"
 import { GestureHandlerRootView } from "react-native-gesture-handler"
 import { toApiRequestSettings } from "@/apiRequestSettings"
 import { apiBaseUrl, hasSession, mobileAuthClient, retireCurrentSession } from "@/authClient"
+import { deviceTelemetryHeaders } from "@/deviceTelemetry"
+import { navigationIntegration, startMonitoring } from "@/monitoring"
+import { NoteDraftProvider } from "@/providers/NoteDraftProvider"
 import { ReadingProvider } from "@/providers/TopicFeedProvider"
 import { TopicResourceInfoProvider } from "@/providers/TopicResourceInfoProvider"
 import { useIsSessionRetired } from "@/sessionExit"
 import { restoreTheme } from "@/theme"
+import { captureVisit, visitAnalytics } from "@/visitAnalytics"
 
 // hold the splash screen until the fonts and the session load
 SplashScreen.preventAutoHideAsync()
 
-// report errors only when the build has a DSN. a build without one sends nothing and skips the instrumentation
-const sentryDsn = process.env.EXPO_PUBLIC_SENTRY_DSN
-if (sentryDsn) {
-	Sentry.init({ dsn: sentryDsn })
-}
-
-// the posthog project key the web app already sends to. the host is code instead of a value
-const posthogApiKey = process.env.EXPO_PUBLIC_POSTHOG_KEY ?? ""
-const POSTHOG_HOST = "https://us.i.posthog.com"
+// configure crash and route monitoring before the first screen
+startMonitoring()
 
 // configure the shared api client once before the first screen renders, after the auth client that its headers read.
 // every request sends the stored session cookie, and a 401 signs a revoked session out. an error shows as a native alert
@@ -42,6 +47,7 @@ configureApiClient({
 	showError: (message) => Alert.alert("CarlNotes", message),
 	...toApiRequestSettings({
 		getCookie: () => mobileAuthClient.getCookie(),
+		deviceHeaders: deviceTelemetryHeaders,
 		hasSession,
 		signOut: async () => {
 			await retireCurrentSession()
@@ -50,10 +56,11 @@ configureApiClient({
 	}),
 })
 
-// expo router's own error boundary. sentry's router integration captures through it
-export { ErrorBoundary } from "expo-router"
+// report route render failures while retaining Expo Router's retry screen
+export const ErrorBoundary = Sentry.wrapExpoRouterErrorBoundary(ExpoErrorBoundary)
 
 function RootLayout() {
+	const navigationRef = useNavigationContainerRef()
 	// restore the saved appearance behind the splash screen
 	const [isThemeReady, setIsThemeReady] = useState(false)
 	useEffect(() => {
@@ -66,9 +73,13 @@ function RootLayout() {
 			fontFamily: "Karla",
 			fontDefinitions: [
 				{ path: Karla_400Regular, weight: 400 },
+				{ path: Karla_400Regular_Italic, weight: 400, style: "italic" },
 				{ path: Karla_500Medium, weight: 500 },
+				{ path: Karla_500Medium_Italic, weight: 500, style: "italic" },
 				{ path: Karla_600SemiBold, weight: 600 },
+				{ path: Karla_600SemiBold_Italic, weight: 600, style: "italic" },
 				{ path: Karla_700Bold, weight: 700 },
+				{ path: Karla_700Bold_Italic, weight: 700, style: "italic" },
 			],
 		},
 		{
@@ -82,6 +93,13 @@ function RootLayout() {
 	const isSessionRetired = useIsSessionRetired(session?.session.id)
 	const isReady = isThemeReady && (isFontLoaded || Boolean(fontLoadError)) && !isSessionPending
 
+	// attach monitoring after the guarded navigator has mounted
+	useEffect(() => {
+		if (isReady && Sentry.getClient()) {
+			navigationIntegration.registerNavigationContainer(navigationRef)
+		}
+	}, [isReady, navigationRef])
+
 	// hide the splash screen once the fonts and the session are in
 	useEffect(() => {
 		if (isReady) {
@@ -94,54 +112,65 @@ function RootLayout() {
 		return null
 	}
 
-	// posthog stays disabled without a key. such a build records nothing
+	// gate screens by the current session
 	const isSignedIn = Boolean(session) && !isSessionRetired
 	return (
-		<PostHogProvider
-			apiKey={posthogApiKey}
-			options={{ host: POSTHOG_HOST, disabled: !posthogApiKey }}
-			autocapture={false}
-		>
-			<GestureHandlerRootView style={{ flex: 1 }}>
-				<ReadingProvider userId={isSignedIn ? (session?.user.id ?? null) : null}>
-					{/* keep sheet content inside the account's query and search contexts */}
-					<BottomSheetModalProvider>
-						<TopicResourceInfoProvider userId={isSignedIn ? (session?.user.id ?? null) : null}>
-							<ScreenViewRecorder />
-							{/* the sign-in guard. a user sees the app's screens, and a visitor the sign-in and sign-up screens */}
-							<Stack screenOptions={{ headerShown: false }}>
-								<Stack.Protected guard={isSignedIn}>
-									<Stack.Screen name="(tabs)" />
-									<Stack.Screen name="topics/[topicId]" />
-								</Stack.Protected>
-								<Stack.Protected guard={!isSignedIn}>
-									<Stack.Screen name="sign-in" />
-									<Stack.Screen name="sign-up" />
-								</Stack.Protected>
+		<GestureHandlerRootView style={{ flex: 1 }}>
+			<ReadingProvider userId={isSignedIn ? (session?.user.id ?? null) : null}>
+				<NoteDraftProvider userId={isSignedIn ? (session?.user.id ?? null) : null} />
+				{/* keep sheet content inside the account's query and search contexts */}
+				<BottomSheetModalProvider>
+					<TopicResourceInfoProvider userId={isSignedIn ? (session?.user.id ?? null) : null}>
+						<ScreenViewRecorder />
+						{/* the sign-in guard. a user sees the app's screens, and a visitor the sign-in and sign-up screens */}
+						<Stack screenOptions={{ headerShown: false }}>
+							<Stack.Protected guard={isSignedIn}>
+								<Stack.Screen name="(tabs)" />
+								<Stack.Screen name="account" />
+								<Stack.Screen name="plans" />
+								<Stack.Screen name="activity" />
+								<Stack.Screen name="profiles/[userId]" />
+								<Stack.Screen name="teams/index" />
+								<Stack.Screen name="teams/[teamId]" />
+								<Stack.Screen name="teams/[teamId]/notes/[noteId]" />
+								<Stack.Screen name="topics/[topicId]" />
+								<Stack.Screen name="topics/[topicId]/notes/[noteId]" />
+							</Stack.Protected>
+							<Stack.Protected guard={!isSignedIn}>
+								<Stack.Screen name="sign-in" />
+								<Stack.Screen name="sign-up" />
+							</Stack.Protected>
 
-								{/* the component browser, in a development build only */}
-								<Stack.Protected guard={__DEV__}>
-									<Stack.Screen name="storybook" />
-								</Stack.Protected>
-							</Stack>
-							{/* anchor dropdowns above screens without replacing them with a sheet */}
-							<PortalHost />
-						</TopicResourceInfoProvider>
-					</BottomSheetModalProvider>
-				</ReadingProvider>
-			</GestureHandlerRootView>
-		</PostHogProvider>
+							{/* the component browser, in a development build only */}
+							<Stack.Protected guard={__DEV__}>
+								<Stack.Screen name="storybook" />
+							</Stack.Protected>
+						</Stack>
+						{/* anchor dropdowns above screens without replacing them with a sheet */}
+						<PortalHost />
+					</TopicResourceInfoProvider>
+				</BottomSheetModalProvider>
+			</ReadingProvider>
+		</GestureHandlerRootView>
 	)
 }
 
 // record a screen view per route from the router's own hook, the documented way for expo router. only the path goes.
 // a sign-in code or token in a route's params never reaches analytics
 function ScreenViewRecorder() {
-	const posthog = usePostHog()
 	const pathname = usePathname()
 	useEffect(() => {
-		posthog.screen(pathname)
-	}, [posthog, pathname])
+		captureVisit(pathname)
+	}, [pathname])
+	// flush memory-backed events when the app backgrounds
+	useEffect(() => {
+		const subscription = AppState.addEventListener("change", (state) => {
+			if (state !== "active") {
+				void visitAnalytics?.flush().catch(() => undefined)
+			}
+		})
+		return () => subscription.remove()
+	}, [])
 	return null
 }
 

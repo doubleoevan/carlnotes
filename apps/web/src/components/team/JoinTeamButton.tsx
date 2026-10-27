@@ -39,7 +39,12 @@ export function JoinTeamButton({
 			return
 		}
 		if (isJoinRequested) {
-			await sendDeleteJoinRequest(teamId)
+			try {
+				await sendDeleteJoinRequest(teamId)
+			} catch {
+				toast.error("Your join request couldn't be withdrawn. Try again.")
+				return
+			}
 			setIsJoinRequested(false)
 			toast("Join request deleted.")
 			onChangeRequest()

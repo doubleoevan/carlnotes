@@ -4,6 +4,10 @@ import { toStoreListeners } from "./storeListeners"
 
 // the notes opened this session, which clear their badge before the next poll confirms it
 const openedNoteIds = new Set<string>()
+const readTokens = new Map<string, number>()
+let nextReadToken = 0
+let accountId: string | null = null
+let generation = 0
 // what the poll last read
 let noteBadges: NoteBadge[] = []
 const { publish, useStoreVersion } = toStoreListeners()
@@ -11,8 +15,50 @@ const { publish, useStoreVersion } = toStoreListeners()
 /**
  * Marks a note opened, which clears its badges everywhere they show.
  */
-export function markNoteOpened(noteId: string): void {
+export function markNoteOpened(noteId: string): number {
+	const token = ++nextReadToken
+	readTokens.set(noteId, token)
 	openedNoteIds.add(noteId)
+	publish()
+	return token
+}
+
+/**
+ * Resets account-owned counts and invalidates requests from the previous account.
+ */
+export function resetNoteBadges(nextAccountId: string | null): number {
+	accountId = nextAccountId
+	generation += 1
+	noteBadges = []
+	openedNoteIds.clear()
+	readTokens.clear()
+	publish()
+	return generation
+}
+
+/**
+ * Checks a captured request lifetime before it updates shared counts.
+ */
+export function isNoteBadgeAccount(userId: string, expectedGeneration?: number): boolean {
+	return accountId === userId && (expectedGeneration === undefined || expectedGeneration === generation)
+}
+
+/**
+ * Captures the current account lifetime for an acknowledgement or badge refresh.
+ */
+export function toNoteBadgeGeneration(): number {
+	return generation
+}
+
+/**
+ * Releases tentative suppression after acknowledgement/refetch or failure, never suppressing future edits forever.
+ */
+export function settleNoteOpened(noteId: string, token: number): void {
+	if (readTokens.get(noteId) !== token) {
+		return
+	}
+	readTokens.delete(noteId)
+	openedNoteIds.delete(noteId)
 	publish()
 }
 

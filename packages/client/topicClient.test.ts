@@ -3,14 +3,39 @@
 // topics
 import { afterEach, expect, test } from "bun:test"
 import { MANUAL_SCAN_PAUSED_LABEL, SCAN_SPENT_BUDGET_LABEL } from "@carlnotes/contracts/scanFailure"
+import { configureApiClient } from "./apiClient"
 import { stubFetch } from "./fetchTestFixtures"
 import { fetchPodcastEpisodePage } from "./podcastEpisodeClient"
-import { fetchTopicPage, sendManualScan } from "./topicClient"
+import { fetchTopicAttachment, fetchTopicPage, sendManualScan } from "./topicClient"
 
 // the real fetch to put back after each test
 const originalFetch = globalThis.fetch
 afterEach(() => {
 	globalThis.fetch = originalFetch
+	configureApiClient({ apiBaseUrl: "", showError: () => {} })
+})
+
+test("attachment downloads preserve native session headers and reject forbidden content", async () => {
+	// download through the configured client instead of a browser's separate cookie jar
+	configureApiClient({
+		apiBaseUrl: "https://attachments.test",
+		headers: () => ({ Cookie: "test-session=owner" }),
+		showError: () => {},
+	})
+	let downloadUrl = ""
+	const sessionHeaders: (string | null)[] = []
+	globalThis.fetch = (async (input, init) => {
+		downloadUrl = String(input)
+		sessionHeaders.push(new Headers(init?.headers).get("Cookie"))
+		return new Response(new Uint8Array([1, 2, 3]))
+	}) as typeof fetch
+	expect(await fetchTopicAttachment("file-one")).toEqual(new Uint8Array([1, 2, 3]))
+	expect(downloadUrl).toBe("https://attachments.test/api/attachments/file-one/download")
+	expect(sessionHeaders).toEqual(["test-session=owner"])
+
+	// leave an access failure visible and never pass its response body to the file viewer
+	stubFetch(Response.json({ error: "forbidden" }, { status: 403 }))
+	await expect(fetchTopicAttachment("file-one")).rejects.toThrow("forbidden")
 })
 
 // a 402 from the scan route is a spent budget unless it has the paused label, and a started scan returns the scans

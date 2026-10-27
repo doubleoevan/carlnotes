@@ -24,6 +24,7 @@ test("someone else's profile with no topics says so, as it does for no teams", a
 			profile={emptyProfile}
 			isOwnProfile={false}
 			topics={null}
+			isTopicsLoadFailed={false}
 			onLoadTopics={() => {}}
 			onReloadProfile={() => {}}
 		/>,

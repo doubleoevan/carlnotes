@@ -1,0 +1,71 @@
+import { expect, test } from "bun:test"
+import { redactMobileEvent } from "./monitoringRedaction"
+
+// preserve useful diagnostics while removing native form state and request credentials
+test("mobile errors retain stacks and device diagnostics without private data", () => {
+	const event = {
+		user: { email: "private@example.com" },
+		transaction: "/topics/topic-secret/notes/note-secret",
+		spans: [
+			{
+				description: "GET https://carlnotes.com/api/notes/note-secret?token=secret",
+				data: { "url.path": "/api/notes/note-secret" },
+			},
+		],
+		request: {
+			url: "https://carlnotes.com/api/notes/note-secret?token=secret",
+			headers: { cookie: "secret" },
+			data: "private comment",
+			query_string: "token=secret",
+		},
+		extra: { nested: { params: { noteId: "note-secret" }, prompt: "private prompt", count: 2 } },
+		contexts: {
+			device: { model: "iPhone 18 Pro", id: "install-secret" },
+			route: { params: { noteId: "note-secret" }, path: "/topics/topic-secret/notes/note-secret" },
+		},
+		breadcrumbs: [
+			{ category: "console", message: "private comment" },
+			{
+				category: "http",
+				message: "private URL",
+				data: {
+					url: "https://carlnotes.com/api/notes/note-secret?token=secret",
+					headers: { authorization: "secret" },
+					status_code: 200,
+				},
+			},
+		],
+		exception: {
+			values: [{ type: "Error", value: "Save failed", stacktrace: { frames: [{ filename: "index.js", lineno: 12 }] } }],
+		},
+	}
+	const result = redactMobileEvent(event)
+	expect(JSON.stringify(result)).not.toContain("secret")
+	expect(JSON.stringify(result)).not.toContain("private")
+	expect(result.exception).toEqual(event.exception)
+	expect<unknown>(result.contexts?.device).toEqual({ model: "iPhone 18 Pro" })
+	expect(result.transaction).toBe("/topics/:id/notes/:noteId")
+	expect<unknown>(result.extra?.nested).toEqual({ count: 2 })
+	expect<unknown>(result.request).toEqual({ url: "https://carlnotes.com" })
+})
+
+test("native URLs are redacted in requests, navigation, breadcrumbs, and span descriptions", () => {
+	for (const url of [
+		"carlnotes://invite/private-secret?code=secret",
+		"CARLNOTES://topics/private-secret/notes/note-secret",
+		"exp+carlnotes://expo-development-client/?url=secret",
+		"mailto:private-secret@example.com",
+	]) {
+		// custom schemes must not carry bearer tokens or private routes through any event field
+		const result = redactMobileEvent({
+			request: { url },
+			transaction: url,
+			breadcrumbs: [{ category: "navigation", data: { url } }],
+			spans: [{ description: `Open ${url}`, data: { target: url } }],
+			extra: { target: `Open ${url}` },
+		})
+		expect(JSON.stringify(result)).not.toContain("secret")
+		expect(result.transaction).toBe("[url]")
+		expect(result.spans?.[0]?.description).toBe("Open [url]")
+	}
+})

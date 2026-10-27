@@ -1,9 +1,8 @@
 // the three ways a topic gets shared, and the copied confirmation they share between them
 
 import { sendCreateTopicInvite } from "@carlnotes/client/topicClient"
-import { useState } from "react"
+import { useCopyFeedback } from "@carlnotes/core/hooks/useCopyFeedback"
 import { toast } from "sonner"
-import { COPIED_FEEDBACK_MS } from "@/components/common/CopyMarkdownButton"
 import { toInviteUrl } from "@/lib/inviteUrl"
 import { canOpenShareSheet, openShareSheet } from "@/lib/shareSheet"
 import { copyToClipboard } from "@/lib/utils"
@@ -29,13 +28,12 @@ export function useShareTopicActions(
 	topicUrl: string,
 	onShared: () => void,
 ): ShareTopicActions {
-	const [copiedLabel, setCopiedLabel] = useState<string | null>(null)
+	const { copiedLabel, markCopied } = useCopyFeedback()
 
 	// copy a link to the topic to the clipboard and show a confirmation label
 	const copyLink = async (label: string, text: string): Promise<void> => {
 		if (await copyToClipboard(text)) {
-			setCopiedLabel(label)
-			setTimeout(() => setCopiedLabel(null), COPIED_FEEDBACK_MS)
+			markCopied(label)
 		}
 	}
 

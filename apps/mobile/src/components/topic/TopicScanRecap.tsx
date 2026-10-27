@@ -17,9 +17,10 @@ import {
 	type TopicScanRecapComponents,
 } from "@carlnotes/core/components/TopicScanRecap"
 import { SITE_URL } from "@carlnotes/core/lib/pageHead"
+import { toSafeNoteMarkdown } from "@carlnotes/core/lib/safeNoteMarkdown"
 import { type ScanRecapFields, toNotesMarkdown } from "@carlnotes/core/lib/topicScanRecap"
 import { fontFamilies } from "@carlnotes/nightshift/typography"
-import Markdown from "markdown-to-jsx/native"
+import { astToNative } from "markdown-to-jsx/native"
 import { View } from "react-native"
 import { useCSSVariable } from "uniwind"
 import { AnchorLink } from "@/components/common/AnchorLink"
@@ -100,27 +101,23 @@ export function SafeNoteText({ note, allowedUrls }: { note: string; allowedUrls?
 		marginTop: 10,
 		marginBottom: 4,
 	}
-	return (
-		<Markdown
-			options={{
-				disableParsingRawHTML: true,
-				forceBlock: true,
-				styles: {
-					text: textStyle,
-					paragraph: { marginVertical: 6 },
-					strong: { fontWeight: "600" },
-					heading1: headingStyle,
-					heading2: headingStyle,
-					heading3: headingStyle,
-					heading4: headingStyle,
-					thematicBreak: { borderColor: typeof separator === "string" ? separator : undefined, marginVertical: 10 },
-				},
-				overrides: { a: { component: FindingLink, props: { allowedUrls } }, img: { component: () => null } },
-			}}
-		>
-			{note}
-		</Markdown>
-	)
+	return astToNative(toSafeNoteMarkdown(note, allowedUrls), {
+		disableParsingRawHTML: true,
+		forceBlock: true,
+		styles: {
+			text: textStyle,
+			paragraph: { marginVertical: 6 },
+			strong: { fontWeight: "600" },
+			heading1: headingStyle,
+			heading2: headingStyle,
+			heading3: headingStyle,
+			heading4: headingStyle,
+			heading5: headingStyle,
+			heading6: headingStyle,
+			thematicBreak: { borderColor: typeof separator === "string" ? separator : undefined, marginVertical: 10 },
+		},
+		overrides: { a: { component: FindingLink, props: { allowedUrls } }, img: { component: () => null } },
+	})
 }
 
 // keep unsupported destinations visible as text and route allowed links through the app's link component

@@ -1,123 +1,112 @@
-// the note's comment thread: each comment with its author and time, the author's delete, and the composer for anyone
-// who may write the note
-import { NOTE_COMMENT_MAX_CHARS, type NoteComment } from "@carlnotes/contracts/notes"
-import type { NoteCommentThread } from "@carlnotes/core/hooks/useNoteComments"
-import { toAgeLabel } from "@carlnotes/core/lib/labels"
+import {
+	type NoteCommentComposerProps,
+	type NoteCommentsElements,
+	type NoteCommentsProps,
+	NoteComments as SharedNoteComments,
+} from "@carlnotes/core/components/NoteComments"
+import { NOTE_COMMENT_DELETE } from "@carlnotes/core/lib/noteLabels"
 import { Trash2 } from "lucide-react"
-import { type FormEvent, type KeyboardEvent, useState } from "react"
+import { useState } from "react"
 import { toast } from "sonner"
+import { ConfirmDialog } from "@/components/common/ConfirmDialog"
 import { IconButton } from "@/components/common/IconButton"
 import { UserProfileLink } from "@/components/common/UserProfileLink"
 import { Button } from "@/components/primitives/button"
 import { Textarea } from "@/components/primitives/textarea"
 
+// retain the web thread's exact spacing and author controls around shared behavior
+const ELEMENTS: NoteCommentsElements = {
+	Container: ({ children }) => <div className="flex flex-col gap-3 text-sm">{children}</div>,
+	Message: ({ children }) => <p className="text-muted-foreground">{children}</p>,
+	Retry: ({ onPress }) => (
+		<Button variant="link" size="sm" onClick={onPress}>
+			Try again
+		</Button>
+	),
+	List: ({ children }) => <ul className="flex flex-col gap-3">{children}</ul>,
+	Row: ({ children }) => <li className="flex flex-col gap-1">{children}</li>,
+	Header: ({ children }) => <div className="flex items-center gap-2">{children}</div>,
+	Author: ({ author }) =>
+		author ? (
+			<UserProfileLink user={author} className="min-w-0 truncate font-semibold" />
+		) : (
+			<span className="text-muted-foreground truncate font-semibold">A closed account</span>
+		),
+	Age: ({ children }) => <span className="text-muted-foreground shrink-0 text-xs">{children}</span>,
+	Body: ({ children }) => <p className="whitespace-pre-wrap break-words">{children}</p>,
+	Delete: DeleteCommentButton,
+	Composer: CommentComposer,
+}
+
 /**
- * The thread beside a note, oldest first, with a composer for a user with edit access and nobody else.
+ * Adapts the shared thread to the existing desktop column and phone-browser sheet.
  */
-export function NoteComments({
-	comments,
-	isLoading,
-	postNoteComment,
-	deleteNoteComment,
-	canComment,
-}: NoteCommentThread & { canComment: boolean }) {
-	// the comment being written
-	const [noteCommentDraft, setNoteCommentDraft] = useState("")
+export function NoteComments(props: Omit<NoteCommentsProps, "onError">) {
+	return <SharedNoteComments {...props} onError={toast.error} elements={ELEMENTS} />
+}
 
-	// post the trimmed draft. the box empties as the post leaves, and a post the api does not take goes back into the
-	// box if nothing new is there
-	async function handlePostNoteComment(): Promise<void> {
-		const body = noteCommentDraft.trim()
-		if (body.length === 0) {
-			return
-		}
-		setNoteCommentDraft("")
-		const isPosted = await postNoteComment(body)
-		if (!isPosted) {
-			toast.error("That comment didn't post. Carl suggests trying again.")
-			setNoteCommentDraft((currentDraft) => (currentDraft.length === 0 ? body : currentDraft))
-		}
-	}
-
-	// the command or control key with enter posts from the box
-	function handleDraftKeyDown(event: KeyboardEvent<HTMLTextAreaElement>): void {
-		if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
-			event.preventDefault()
-			void handlePostNoteComment()
-		}
-	}
-
-	// the form's submit and the author's delete
-	function handleSubmit(event: FormEvent): void {
-		event.preventDefault()
-		void handlePostNoteComment()
-	}
-	async function handleDeleteNoteComment(commentId: string): Promise<void> {
-		if (!(await deleteNoteComment(commentId))) {
-			toast.error("Carl couldn't remove that comment. Try again in a moment.")
-		}
-	}
-
+// keep the comment in place until its author confirms deletion
+function DeleteCommentButton({ onPress, isPending }: { onPress: () => void; isPending: boolean }) {
+	const [isConfirmingDelete, setIsConfirmingDelete] = useState(false)
 	return (
-		<div className="flex flex-col gap-3 text-sm">
-			{/* the thread, oldest first */}
-			{isLoading && <p className="text-muted-foreground">Unfolding the comments…</p>}
-			{!isLoading && comments.length === 0 && <p className="text-muted-foreground">No comments yet.</p>}
-			{comments.length > 0 && (
-				<ul className="flex flex-col gap-3">
-					{comments.map((comment) => (
-						<li key={comment.id}>
-							<NoteCommentRow comment={comment} onDelete={() => void handleDeleteNoteComment(comment.id)} />
-						</li>
-					))}
-				</ul>
+		<>
+			<IconButton
+				tooltip="Delete comment"
+				isDisabled={isPending}
+				className="text-muted-foreground hover:text-foreground ml-auto grid size-6 shrink-0 place-items-center"
+				onClick={() => setIsConfirmingDelete(true)}
+			>
+				<Trash2 className="size-3.5" />
+			</IconButton>
+			{isConfirmingDelete && (
+				<ConfirmDialog
+					title={NOTE_COMMENT_DELETE.title}
+					confirmLabel={NOTE_COMMENT_DELETE.confirmLabel}
+					cancelLabel={NOTE_COMMENT_DELETE.cancelLabel}
+					onConfirm={() => {
+						// close the prompt before the shared thread starts its guarded request
+						setIsConfirmingDelete(false)
+						onPress()
+					}}
+					onClose={() => setIsConfirmingDelete(false)}
+				>
+					{NOTE_COMMENT_DELETE.description}
+				</ConfirmDialog>
 			)}
-
-			{/* the composer, for anyone who may write the note */}
-			{canComment && (
-				<form className="flex flex-col gap-2" onSubmit={handleSubmit}>
-					<Textarea
-						value={noteCommentDraft}
-						onChange={(event) => setNoteCommentDraft(event.target.value)}
-						onKeyDown={handleDraftKeyDown}
-						placeholder="Add a comment"
-						aria-label="Comment"
-						rows={2}
-						maxLength={NOTE_COMMENT_MAX_CHARS}
-						className="bg-card"
-					/>
-					<Button type="submit" size="sm" className="self-end" disabled={noteCommentDraft.trim().length === 0}>
-						Comment
-					</Button>
-				</form>
-			)}
-		</div>
+		</>
 	)
 }
 
-// one comment: the author's profile link, when it was written, the author's own delete, and the text
-function NoteCommentRow({ comment, onDelete }: { comment: NoteComment; onDelete: () => void }) {
+// preserve form submission and the command-enter shortcut
+function CommentComposer({ value, onChange, onSubmit, isPending, canSubmit, maxLength }: NoteCommentComposerProps) {
 	return (
-		<div className="flex flex-col gap-1">
-			<div className="flex items-center gap-2">
-				{/* the author, or the words for a closed account */}
-				{comment.author ? (
-					<UserProfileLink user={comment.author} className="min-w-0 truncate font-semibold" />
-				) : (
-					<span className="text-muted-foreground truncate font-semibold">A closed account</span>
-				)}
-				<span className="text-muted-foreground shrink-0 text-xs">{toAgeLabel(comment.createdAt)}</span>
-				{comment.canDelete && (
-					<IconButton
-						tooltip="Delete comment"
-						className="text-muted-foreground hover:text-foreground ml-auto grid size-6 shrink-0 place-items-center"
-						onClick={onDelete}
-					>
-						<Trash2 className="size-3.5" />
-					</IconButton>
-				)}
-			</div>
-			<p className="whitespace-pre-wrap break-words">{comment.body}</p>
-		</div>
+		<form
+			className="flex flex-col gap-2"
+			onSubmit={(event) => {
+				// post the comment without navigating
+				event.preventDefault()
+				onSubmit()
+			}}
+		>
+			<Textarea
+				value={value}
+				onChange={(event) => onChange(event.target.value)}
+				onKeyDown={(event) => {
+					if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+						// post the comment through the keyboard shortcut
+						event.preventDefault()
+						onSubmit()
+					}
+				}}
+				placeholder="Add a comment"
+				aria-label="Comment"
+				rows={2}
+				maxLength={maxLength}
+				className="bg-card"
+			/>
+			<Button type="submit" size="sm" className="self-end" disabled={!canSubmit || isPending}>
+				{isPending ? "Posting…" : "Comment"}
+			</Button>
+		</form>
 	)
 }

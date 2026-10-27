@@ -9,6 +9,7 @@ import { type ComponentRef, useEffect, useRef, useState } from "react"
 import { ScrollView, View } from "react-native"
 import { CoffeeLoading } from "@/components/branding/CoffeeLoading"
 import { Pagination } from "@/components/common/Pagination"
+import { Footer } from "@/components/layout/Footer"
 import { Button } from "@/components/primitives/button"
 import { Icon } from "@/components/primitives/icon"
 import { Text } from "@/components/primitives/text"
@@ -18,7 +19,7 @@ import { toTypeRoleStyle } from "@/typeRoleStyles"
 import { SearchResultsList } from "./SearchResultsList"
 
 /**
- * Searches the existing API and opens native Topics or the other results' web pages.
+ * Searches the existing API and opens native Topic, Team, Profile, and Finding destinations.
  */
 export function SearchResults({
 	filters,
@@ -74,6 +75,7 @@ export function SearchResults({
 					}}
 				/>
 			) : null}
+			<Footer />
 		</ScrollView>
 	)
 }
