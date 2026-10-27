@@ -79,6 +79,8 @@ at the root import it by name.
 - `chat/roomStream.ts` fans a stored chat message out across replicas over Redis pub/sub through `@carlnotes/db/redis`.
   It delivers to its own instance's subscribers first, publishes a payload that names the instance, and skips the echo
   of its own publish. Nothing missed while a subscriber was down is replayed. Chat catches up from its cursor.
+  `chat/roomEvents.ts` serializes catch-up and live SSE deliveries. It checks the original session and current room
+  access before each delivery and on heartbeats, closing the connection when access ends.
 - `mcp/` — the mcp server on `@modelcontextprotocol/server`: `server.ts` (the `/mcp` and `/mcp/t/:topicId` routes and
   the web-standard transport), `tools.ts` (the reads, the site search, and the per-user writes it registers, with their
   schemas and annotations), `topicEditTools.ts` (`edit_topic`, `suggest_sources`, and `create_topic`), `toolShapes.ts`

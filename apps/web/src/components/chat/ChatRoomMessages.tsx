@@ -1,6 +1,8 @@
 import { sendDeleteChatRoomAttachment, sendDeleteChatRoomMessage } from "@carlnotes/client/chatRoomClient"
 import type { ChatRoomMessage } from "@carlnotes/contracts/chat"
 import { useNow } from "@carlnotes/core/hooks/useNow"
+import { DELETE_CHAT_MESSAGE_COPY, toEmptyChatRoomCopy } from "@carlnotes/core/lib/chatCopy"
+import { toChatMessageQuotes } from "@carlnotes/core/lib/chatRoomMessages"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 import { Virtuoso, type VirtuosoHandle } from "react-virtuoso"
@@ -61,23 +63,20 @@ export function ChatRoomMessages({
 			.then(async (isDeleted) => {
 				// a toast shows what happened either way
 				if (!isDeleted) {
-					toast("That message could not be deleted.")
+					toast(DELETE_CHAT_MESSAGE_COPY.failed)
 					return
 				}
 				await chatRoom.reloadChatMessages()
-				toast("Message deleted.")
+				toast(DELETE_CHAT_MESSAGE_COPY.succeeded)
 			})
 			.catch((error) => {
 				console.error("delete chat room chat message failed", error)
-				toast("That message could not be deleted.")
+				toast(DELETE_CHAT_MESSAGE_COPY.failed)
 			})
 	})
 
 	// one lookup table from chat message id, so a reply reference costs no scan per bubble
-	const chatMessagesById = useMemo(
-		() => new Map(chatMessages.map((chatMessage) => [chatMessage.id, chatMessage])),
-		[chatMessages],
-	)
+	const chatMessageQuotes = useMemo(() => toChatMessageQuotes(chatMessages), [chatMessages])
 
 	// one clock for every footer, ticking by the minute so the chat bubble time ago label stays up to date
 	const now = useNow()
@@ -170,14 +169,8 @@ export function ChatRoomMessages({
 		<p className="text-muted-foreground px-3 pb-1 text-center text-xs">That message is no longer in this chat room.</p>
 	) : null
 
-	// answering the chat message directly above needs no quote, only a reply to an earlier chat message needs one
-	const toRepliedChatMessage = (chatMessage: ChatRoomMessage, index: number): ChatRoomMessage | undefined =>
-		chatMessage.replyToChatMessageId === null || chatMessage.replyToChatMessageId === chatMessages[index - 1]?.id
-			? undefined
-			: chatMessagesById.get(chatMessage.replyToChatMessageId)
-
 	// one chat bubble with its props, shared by the plain and virtualized paths
-	const renderChatMessageBubble = (chatMessage: ChatRoomMessage, index: number) => (
+	const renderChatMessageBubble = (chatMessage: ChatRoomMessage) => (
 		<ChatRoomMessageBubble
 			chatMessage={chatMessage}
 			topicId={topicId}
@@ -186,7 +179,7 @@ export function ChatRoomMessages({
 			isLinkPreviewLoading={chatRoom.loadingChatMessageIds.has(chatMessage.id)}
 			voiceChatPage={chatRoom.voiceChatPage}
 			onAttachmentDelete={handleDeleteAttachment}
-			repliedChatMessage={toRepliedChatMessage(chatMessage, index)}
+			repliedChatMessage={chatMessageQuotes.get(chatMessage.id)}
 			isOwnChatMessage={chatMessage.authorUserId === userId}
 			now={now}
 			onReply={handleReplyChatMessage}
@@ -223,9 +216,7 @@ export function ChatRoomMessages({
 					components={virtuosoComponents}
 					atBottomStateChange={setIsAtBottom}
 					atBottomThreshold={atBottomThreshold}
-					itemContent={(index, chatMessage) => (
-						<div className="px-3 py-2">{renderChatMessageBubble(chatMessage, index - firstItemIndex)}</div>
-					)}
+					itemContent={(_, chatMessage) => <div className="px-3 py-2">{renderChatMessageBubble(chatMessage)}</div>}
 				/>
 				{missingChatMessageNotice}
 				<ScrollDownButton isScrollDownShown={!isAtBottom} onScrollDown={scrollToLatestChatMessage} />
@@ -240,13 +231,11 @@ export function ChatRoomMessages({
 				className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-3 py-3 wrap-anywhere"
 			>
 				{chatMessages.length === 0 && (
-					<p className="text-muted-foreground px-1 py-6 text-center text-sm">
-						{`Join the conversation, or ask @carl for a hot take on ${chatName || "this chat"}.`}
-					</p>
+					<p className="text-muted-foreground px-1 py-6 text-center text-sm">{toEmptyChatRoomCopy(chatName)}</p>
 				)}
-				{chatMessages.map((chatMessage, index) => (
+				{chatMessages.map((chatMessage) => (
 					<div key={chatMessage.id} id={`room-message-${chatMessage.id}`}>
-						{renderChatMessageBubble(chatMessage, index)}
+						{renderChatMessageBubble(chatMessage)}
 					</div>
 				))}
 				{isMessageLoading && <ModelThinkingBubble />}

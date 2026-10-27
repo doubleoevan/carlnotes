@@ -43,9 +43,12 @@ const UNRESTRICTED_NIGHTSHIFT_IMPORT_PATHS = new Set([
 	`${NIGHTSHIFT_PACKAGE_NAME}/field`,
 	`${NIGHTSHIFT_PACKAGE_NAME}/pagination`,
 	`${NIGHTSHIFT_PACKAGE_NAME}/coffeeMug`,
+	`${NIGHTSHIFT_PACKAGE_NAME}/coffeeCup`,
 	`${NIGHTSHIFT_PACKAGE_NAME}/oauthProviderIcons`,
 	`${NIGHTSHIFT_PACKAGE_NAME}/noteHtmlStyle`,
 	`${NIGHTSHIFT_PACKAGE_NAME}/theme`,
+	`${NIGHTSHIFT_PACKAGE_NAME}/assets/carl-avatar.png`,
+	`${NIGHTSHIFT_PACKAGE_NAME}/assets/vienna-avatar.png`,
 ])
 
 /** The import path of a Nightshift component contract, before the component's name. */

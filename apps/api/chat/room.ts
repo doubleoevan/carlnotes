@@ -9,8 +9,6 @@ import { maxChatTurnDollars, toAttachmentChars } from "@carlnotes/pipeline/chat/
 import { trackEvent } from "@carlnotes/server/analytics"
 import { reportError } from "@carlnotes/server/monitoring"
 import { and, eq } from "drizzle-orm"
-import type { Context } from "hono"
-import { streamSSE } from "hono/streaming"
 import type { AnalyticsProperties } from "../currentUser"
 import { loadUsername } from "../usernames"
 import { encryptChatText } from "./encryption"
@@ -18,13 +16,9 @@ import { saveLinkPreviews } from "./linkPreviews"
 import { saveChatMentions } from "./mentions"
 import { loadChatRoom, toTopicFilter } from "./roomAccess"
 import { prepareChatRoomAttachments, storeChatRoomAttachment } from "./roomAttachments"
-import { loadChatRoomDeltas, loadChatRoomMessages } from "./roomMessages"
 import { loadModelRoomQuestionChars } from "./roomQuestion"
-import { notifyChatRoomMessage, onChatRoomMessage } from "./roomStream"
+import { notifyChatRoomMessage } from "./roomStream"
 import { postModelRejection, runModelChatRoomTurn } from "./roomTurns"
-
-// how long one SSE stream may stay open. the api client's cursor resume makes the reconnect free
-const CHAT_ROOM_STREAM_MAX_AGE_MS = 15 * 60 * 1000
 
 // what a post reports with, and whether the chat message was spoken, which marks it and carl's reply
 export type PostChatRoomMessageOptions = { analyticsProperties?: AnalyticsProperties; isSpoken?: boolean }
@@ -281,71 +275,4 @@ async function loadRepliedToChatMessage({
 			),
 		)
 	return repliedToChatMessage ?? null
-}
-
-/**
- * Returns the SSE stream of one chat room, which catches up from the cursor and then sends each new message.
- */
-export function streamChatRoomEvents(context: Context, topicId: string | null, teamId: string): Response {
-	return streamSSE(context, async (stream) => {
-		// catch up from the cursor first, so a reconnect misses nothing and replays nothing
-		let cursor = toChatMessageIdParam(context.req.query("after"))
-		for (const chatMessage of await loadChatRoomMessages(topicId, teamId, cursor)) {
-			await stream.writeSSE({ id: String(chatMessage.id), event: "message", data: JSON.stringify(chatMessage) })
-			cursor = chatMessage.id
-		}
-
-		// the heartbeat keeps the stream detectably alive, and starts once the catch-up is done. a dead socket behind a
-		// proxy stays silent
-		const heartbeat = setInterval(() => void stream.writeSSE({ event: "ping", data: "" }), 25_000)
-
-		// each notification's delivery chains onto the last, so a burst never reads the cursor before the prior delta advanced it
-		await new Promise<void>((resolve) => {
-			let notificationDeliveryChain = Promise.resolve()
-			const stopListening = onChatRoomMessage(topicId, teamId, (chatMessageId, roomToolCalls) => {
-				// each notification delivers everything past the cursor, and the api client dedupes replays by id
-				notificationDeliveryChain = notificationDeliveryChain
-					.then(async () => {
-						// write each new chat message and advance the cursor past it
-						for (const chatMessage of await loadChatRoomDeltas(topicId, teamId, cursor, chatMessageId)) {
-							await stream.writeSSE({ id: String(chatMessage.id), event: "message", data: JSON.stringify(chatMessage) })
-							cursor = Math.max(cursor, chatMessage.id)
-						}
-						// send the toast lines and any proposed topic edit carl's topic tools left
-						if (
-							roomToolCalls.topicSaves.length > 0 ||
-							roomToolCalls.topicSaveRejections.length > 0 ||
-							roomToolCalls.proposedToUserId !== undefined
-						) {
-							await stream.writeSSE({ event: "topicToolCalls", data: JSON.stringify(roomToolCalls) })
-						}
-					})
-					// log a failed delivery and keep the chain running
-					.catch((error) => console.error("chat room delta delivery failed", error))
-			})
-
-			// one teardown for both endings
-			const endStream = (): void => {
-				clearInterval(heartbeat)
-				clearTimeout(maxAge)
-				stopListening()
-				resolve()
-			}
-
-			// the age limit closes the socket, and the api client's cursor resume reconnects for free
-			const maxAge = setTimeout(() => {
-				endStream()
-				void stream.close()
-			}, CHAT_ROOM_STREAM_MAX_AGE_MS)
-			stream.onAbort(endStream)
-		})
-	})
-}
-
-/**
- * Returns the chat message id a cursor param names, or zero for a param that names none.
- */
-export function toChatMessageIdParam(chatMessageIdParam: string | undefined): number {
-	const chatMessageId = Number(chatMessageIdParam)
-	return Number.isSafeInteger(chatMessageId) && chatMessageId > 0 ? chatMessageId : 0
 }

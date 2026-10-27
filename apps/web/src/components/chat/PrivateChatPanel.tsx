@@ -1,6 +1,7 @@
 import { authClient } from "@carlnotes/client/authClient"
 import type { ChatPage } from "@carlnotes/client/chatClient"
 import { toAvatarVersion } from "@carlnotes/contracts/avatars"
+import { CLEAR_CHAT_COPY } from "@carlnotes/core/lib/chatCopy"
 import { useNavigate } from "@tanstack/react-router"
 import { lazy, Suspense, useState } from "react"
 import { toSignupNavigation } from "@/components/session/signupPrompts"
@@ -36,14 +37,14 @@ function toChatCopy(
 		return {
 			headerName: "Private chat",
 			placeholder: CHAT_QUESTION_PLACEHOLDER,
-			clearNote: "Carl forgets this whole conversation.",
+			clearNote: CLEAR_CHAT_COPY.private,
 		}
 	}
 	return {
 		headerName: "Give Carl a topic. You know the one.",
 		placeholder: isFirstTopic ? FIRST_TOPIC_PLACEHOLDER : NEW_TOPIC_PLACEHOLDER,
 		openingLine: NEW_TOPIC_OPENING_LINE,
-		clearNote: "Carl forgets this whole conversation.",
+		clearNote: CLEAR_CHAT_COPY.private,
 	}
 }
 

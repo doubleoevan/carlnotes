@@ -9,7 +9,7 @@ sidebar:
   order: 2
 ---
 
-Coffee Talk is the chat panel docked to the bottom-right corner of every page. The panel lives in the app shell, so the
+On the web, Coffee Talk is the chat panel docked to the bottom-right corner of every page. The panel lives in the app shell, so the
 conversation you have open stays open as you move around the app. On a topic one of your teams holds, the panel opens in
 that team's shared chat room. The panel's **…** menu lists the other rooms you can join and your private chat on this
 topic (see [Group chat with Carl](/docs/teams/group-chat/)). Carl answers anyone from what the open conversation is
@@ -19,6 +19,25 @@ against the coffee fund on your CarlNotes account.
 
 ![A private Coffee Talk: the question above Carl's answer, each behind its author's avatar and name, drawn from the
 topic's own findings](../../../assets/screenshots/feed-coffee-talk.png)
+
+## Coffee Talk on your phone
+
+Tap the orange **Coffee Talk** pill at the bottom right of any page. A topic held by one of your teams opens that
+team's room. Tap the selector above the conversation to open a full-width sheet. It lists **Private chat** first,
+then rooms alphabetically, with Team avatars and an orange scroll indicator. On Profile pages, the same shared-Team
+and Topic-room preferences as web choose the conversation. Other pages use the web default room. If you have no rooms,
+choose a topic from your Feed for private chat.
+The conversation fills the phone screen. **Close** returns to the page and reading position you came from. The pill
+sits above the phone's safe area and gets out of the way while you type.
+
+Type above the keyboard and tap **Send**. Carl's private answer appears as it arrives; **Stop** interrupts it. Copy an
+answer with its copy button. The **…** menu offers **Clear private chat** behind a confirmation. Returning to a
+conversation reloads its saved history. A connection interruption never sends your question a second time automatically.
+
+The phone uses the same conversation, permissions, Topic proposals, and rejection wording as the web. Tables in answers
+become cards with a label for each column. Raw HTML remains text, and only HTTP and HTTPS links open. Files already in
+history appear as name chips. To add or manage files, speak with Carl, hear an answer, or create a topic through chat,
+use the web. Those controls are not part of mobile text chat.
 
 ## Questions worth asking
 
@@ -34,7 +53,7 @@ That last one doubles as a source audit. The gaps Carl names are gaps in your so
 
 ## Bringing a file into the conversation
 
-There are three ways, all on the message box:
+On the web there are three ways, all on the message box:
 
 1. **The paperclip** opens a file picker.
 2. **Drag a file onto the message box.** The box turns into a drop zone that reads "Drop to attach".
@@ -60,7 +79,7 @@ open what you attach. Context that should describe how a topic is brewed belongs
 
 ## Talk to Carl
 
-While the message box is empty, the send button is a microphone. Tap it and ask. Carl listens while you talk. He sends
+On the web, while the message box is empty, the send button is a microphone. Tap it and ask. Carl listens while you talk. He sends
 the question on his own 1.5 seconds after you stop, so there is nothing to press when you are done. A bar takes the
 box's place, with a cancel button, a level meter, a timer, and a send button for sending early. A question sends itself
 after one minute. If Carl hears no words, he says he didn't catch that, and the box comes back empty.

@@ -1,12 +1,11 @@
+import { isSafeHref, NEW_TOPIC_CHAT_HREF, toNewTopicChatLinkedMarkdown } from "@carlnotes/core/lib/safeChatMarkdown"
+
+export { isSafeHref, toNewTopicChatLinkedMarkdown } from "@carlnotes/core/lib/safeChatMarkdown"
+
 import type * as React from "react"
 import { defaultRehypePlugins, Streamdown } from "streamdown"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { openNewTopicChat } from "@/stores/chatPanelStore"
-
-// the words that name the new-topic chat, which carl writes when he points a user at it, and the href they get
-// once they are linked. a url fragment, which streamdown's harden plugin passes through and no page reads
-const NEW_TOPIC_CHAT_WORDS = "Give Carl a topic. You know the one."
-const NEW_TOPIC_CHAT_HREF = "#new-topic-chat"
 
 // streamdown's raw plugin is left out, so HTML inside a reply is rendered as characters instead of becoming a live tag
 const SAFE_REHYPE_PLUGINS = [defaultRehypePlugins.sanitize, defaultRehypePlugins.harden].filter(
@@ -26,20 +25,6 @@ export function ChatMarkdown({ markdown, className }: { markdown: string; classN
 			{toNewTopicChatLinkedMarkdown(markdown)}
 		</Streamdown>
 	)
-}
-
-/**
- * The Markdown with the words that name the new-topic chat turned into a link to that chat.
- */
-export function toNewTopicChatLinkedMarkdown(markdown: string): string {
-	return markdown.replaceAll(NEW_TOPIC_CHAT_WORDS, `[${NEW_TOPIC_CHAT_WORDS}](${NEW_TOPIC_CHAT_HREF})`)
-}
-
-/**
- * Whether a model-written href may render as a live link: web schemes only, never javascript: or data:.
- */
-export function isSafeHref(href: string | undefined): href is string {
-	return typeof href === "string" && (href.startsWith("https://") || href.startsWith("http://"))
 }
 
 // a web-scheme link renders through the shared link component

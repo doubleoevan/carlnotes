@@ -107,7 +107,7 @@ export async function sendChatTurn({
 		return await readChatStream(response.body, chatReplyHandlers)
 	} catch (error) {
 		// the user's own stop is not a failure, and a broken stream leaves what already arrived on screen
-		if (error instanceof DOMException && error.name === "AbortError") {
+		if (signal?.aborted || (error instanceof Error && error.name === "AbortError")) {
 			return "stopped"
 		}
 		console.error("chat stream failed", error)

@@ -33,9 +33,9 @@ export function TopicEditorChoiceDialog({
 		if (topicId === undefined) {
 			openNewTopicChat(initialTeam)
 		} else {
-			// mark the topic as being edited, then open the panel on its chat
-			startEditingTopic(topicId)
+			// open the private conversation and mark its topic as being edited
 			setChatId({ kind: "private", topicId })
+			startEditingTopic(topicId)
 			setChatPanelState(isWideScreen() ? "open" : "enlarged")
 		}
 		onClose()

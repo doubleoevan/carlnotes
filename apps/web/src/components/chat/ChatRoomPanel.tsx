@@ -1,10 +1,10 @@
-// the chat room panel: one shared conversation streaming live, clearable by a leader alone
+import { CLEAR_CHAT_COPY } from "@carlnotes/core/lib/chatCopy"
+// the chat room panel: one shared conversation streaming live, clearable by a leader or admin
 
 import { authClient } from "@carlnotes/client/authClient"
 import { sendChatMentionsViewed, sendClearChatRoom } from "@carlnotes/client/chatRoomClient"
-import { fetchTeamPage } from "@carlnotes/client/teamClient"
-import { CHAT_ROOM_ATTACHMENT_LIMIT } from "@carlnotes/contracts/chat"
-import { isAdminRole, isLeaderRole } from "@carlnotes/contracts/enums"
+import { isAdminRole } from "@carlnotes/contracts/enums"
+import { useRoomMembers } from "@carlnotes/core/hooks/useRoomMembers"
 import { markChatRoomOpened } from "@carlnotes/core/stores/chatRoomStore"
 import { X } from "lucide-react"
 import { lazy, Suspense, useEffect, useState } from "react"
@@ -24,37 +24,6 @@ import { useRoomReply } from "./useRoomReply"
 const ChatRoomMessages = lazy(() =>
 	import("./ChatRoomMessages").then((chatMessages) => ({ default: chatMessages.ChatRoomMessages })),
 )
-
-// the team's active members for the @ autocomplete, plus whether the user leads it
-function useRoomMembers(
-	teamId: string,
-	userId: string | undefined,
-): { memberUsernames: string[]; isTeamLeader: boolean } {
-	const [members, setMembers] = useState<{ userId: string; username: string }[]>([])
-	const [isTeamLeader, setIsTeamLeader] = useState(false)
-	useEffect(() => {
-		let isStale = false
-		fetchTeamPage(teamId)
-			.then((teamPage) => {
-				if (isStale) {
-					return
-				}
-				const team = teamPage.status === "visible" ? teamPage.team : null
-				const activeMembers = (team?.members ?? []).filter((member) => member.isActive)
-				setMembers(activeMembers.map((member) => ({ userId: member.userId, username: member.username })))
-				setIsTeamLeader(isLeaderRole(team?.role))
-			})
-			.catch(() => setMembers([]))
-		return () => {
-			isStale = true
-		}
-	}, [teamId])
-	const memberUsernames = members
-		.filter((member) => member.userId !== userId)
-		.map((member) => member.username)
-		.sort()
-	return { memberUsernames, isTeamLeader }
-}
 
 /**
  * The shared chat room panel. A null topic is the team's own chat room.
@@ -222,7 +191,7 @@ export function ChatRoomPanel({
 					}}
 					onClose={() => setIsClearChatOpen(false)}
 				>
-					{"This clears the whole conversation for every member of the team, and the attachment files are deleted too."}
+					{CLEAR_CHAT_COPY.room}
 				</ClearChatDialog>
 			)}
 		</ChatPanelWidget>
@@ -230,12 +199,7 @@ export function ChatRoomPanel({
 }
 
 // why a post's files did not post, shown only to the poster
-const ATTACHMENT_REJECTION_TEXT = {
-	attachmentLimitReached: `That would pass the ${CHAT_ROOM_ATTACHMENT_LIMIT} files you can share in this chat room. Delete some to share more.`,
-	attachmentRejected: "Those files didn't post. One of them may be unreadable.",
-	attachmentTooLarge: "Those files didn't post. One of them is too large to read. Share a smaller one.",
-	attachmentBusy: "Those files didn't post. Carl is busy reading other files, so share them again in a moment.",
-}
+import { CHAT_ROOM_REJECTION_COPY as ATTACHMENT_REJECTION_TEXT } from "@carlnotes/core/lib/chatRejectionCopy"
 
 /**
  * Renders why a chat room post was rejected: the plans link for a spent budget, or why its files did not post.

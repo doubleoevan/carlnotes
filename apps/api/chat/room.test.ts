@@ -10,15 +10,17 @@ import { stubReservedUserSpend } from "@carlnotes/models/spendReservationTestFix
 import * as analytics from "@carlnotes/server/analytics"
 import { saveEnvSettings } from "@carlnotes/server/savedEnvSettings"
 import { Hono } from "hono"
+import type { AppEnv } from "../currentUser"
 import { CALLER_RATE_LIMIT } from "../rateLimit"
 import { toJsonRequest, toSignedInApp } from "../testSession"
 import { decryptChatText } from "./encryption"
 import * as linkPreviews from "./linkPreviews"
 import * as mentions from "./mentions"
-import { postChatRoomMessage, streamChatRoomEvents, toChatMessageIdParam } from "./room"
+import { postChatRoomMessage } from "./room"
 import * as roomAccess from "./roomAccess"
 import * as roomAttachments from "./roomAttachments"
 import { canDeleteChatRoomMessage } from "./roomDeletes"
+import { streamChatRoomEvents, toChatMessageIdParam } from "./roomEvents"
 import * as roomMessages from "./roomMessages"
 import * as roomQuestion from "./roomQuestion"
 import { chatRoomRoute, TEAM_ROOM_PATH, toBeforeChatMessageId, toChatMessagePage } from "./roomRoute"
@@ -296,9 +298,10 @@ test("a failed catch-up starts no heartbeat", async () => {
 	)
 	spyOn(console, "error").mockImplementation(() => {})
 	const setIntervalSpy = spyOn(globalThis, "setInterval")
+	spyOn(roomStream, "onChatRoomMessage").mockReturnValue(() => {})
 
 	// the stream opens with a cursor that is not an id, and ends with the failed catch-up
-	const streamApp = new Hono().get("/events", (context) => streamChatRoomEvents(context, null, "team-1"))
+	const streamApp = new Hono<AppEnv>().get("/events", (context) => streamChatRoomEvents(context, null, "team-1"))
 	const response = await streamApp.request("/events?after=abc")
 	await response.text()
 

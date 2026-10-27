@@ -10,7 +10,7 @@ export function toNativePath(href: string): string {
 	}
 	const url = new URL(href, SITE_URL)
 	// direct note links keep the owning page context in the native editor
-	if (/^\/(topics|teams)\/[^/]+\/notes\/[^/]+\/?$/.test(url.pathname)) {
+	if (/^\/(topics|teams)\/[^/]+\/(?:notes\/[^/]+|chat)\/?$/.test(url.pathname)) {
 		return `${url.pathname}${url.search}${url.hash}`
 	}
 	const topic = url.pathname.match(/^\/topics\/([^/]+)(?:\/(?!notes(?:\/|$))[^/]+)?\/?$/)

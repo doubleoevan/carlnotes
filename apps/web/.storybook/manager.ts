@@ -1,11 +1,12 @@
 // the component browser's frame, branded Nightshift: Carl's avatar beside the name, linked to carlnotes.com, and the
 // sidebar and toolbar in the Dark roast palette and Karla
+
+import carlAvatar from "@carlnotes/nightshift/assets/carl-avatar.png"
 import { darkRoast } from "@carlnotes/nightshift/colors"
 import { toRadiusPixels } from "@carlnotes/nightshift/radius"
 import { fontFamilies } from "@carlnotes/nightshift/typography"
 import { addons } from "storybook/manager-api"
 import { create } from "storybook/theming"
-import carlAvatar from "../src/assets/carl-avatar.png"
 
 // Carl's round avatar beside the name in the display font. Storybook hides the title when a brandImage is set, so the
 // avatar is in the title's markup

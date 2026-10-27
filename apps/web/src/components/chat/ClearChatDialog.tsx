@@ -1,3 +1,4 @@
+import { CLEAR_CHAT_COPY } from "@carlnotes/core/lib/chatCopy"
 // the clear confirmation both chat panels open from their ... menu
 import { toast } from "sonner"
 import { ConfirmDialog } from "@/components/common/ConfirmDialog"
@@ -20,12 +21,12 @@ export function ClearChatDialog({
 }) {
 	return (
 		<ConfirmDialog
-			title="Clear this chat?"
-			confirmLabel="Clear it"
-			cancelLabel="Keep it"
+			title={CLEAR_CHAT_COPY.title}
+			confirmLabel={CLEAR_CHAT_COPY.confirm}
+			cancelLabel={CLEAR_CHAT_COPY.cancel}
 			onConfirm={async () => {
 				if (await onConfirm()) {
-					toast("Chat cleared.")
+					toast(CLEAR_CHAT_COPY.succeeded)
 				}
 				onClose()
 			}}

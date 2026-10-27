@@ -14,7 +14,7 @@ import { toStoredFileHeaders } from "../topic/attachments"
 import { loadLinkPreviewImage } from "./linkPreviews"
 import { saveSeenChatMentions } from "./mentions"
 import { chatBodyLimit } from "./privateChat"
-import { postChatRoomMessage, streamChatRoomEvents, toChatMessageIdParam } from "./room"
+import { postChatRoomMessage } from "./room"
 import { loadChatRoom } from "./roomAccess"
 import {
 	clearChatRoom,
@@ -24,6 +24,7 @@ import {
 	loadChatRoomAttachment,
 	loadChatRoomMessage,
 } from "./roomDeletes"
+import { streamChatRoomEvents, toChatMessageIdParam } from "./roomEvents"
 import {
 	CHAT_ROOM_LOAD_LIMIT,
 	loadChatRoomMessageLinkPreviews,

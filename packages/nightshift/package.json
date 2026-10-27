@@ -7,7 +7,8 @@
 		"./tokens.css": "./tokens.css",
 		"./uniwind.css": "./uniwind.css",
 		"./classNames": "./classNames.ts",
-		"./*": "./*.ts"
+		"./*": "./*.ts",
+		"./assets/*": "./assets/*"
 	},
 	"dependencies": {
 		"class-variance-authority": "^0.7.1",

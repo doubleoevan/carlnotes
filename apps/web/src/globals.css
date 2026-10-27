@@ -15,11 +15,29 @@
 /* streamdown styles itself with tailwind classes. tailwind has to scan its dist to emit them */
 @source "../node_modules/streamdown/dist/*.js";
 
+/* keep Streamdown's streaming, copy, download, and fullscreen behavior on Nightshift's table surface */
+[data-streamdown="table-wrapper"],
+[data-streamdown="table"] {
+	@apply bg-card;
+}
+[data-streamdown="table-header"] {
+	@apply bg-card text-muted-foreground;
+}
+[data-streamdown="table-header-cell"] {
+	@apply font-normal;
+}
+[data-streamdown="table-body"] > [data-streamdown="table-row"]:hover {
+	@apply bg-accent;
+}
+
 /* the Nightshift component contracts, fields, and pagination hold classes the web's implementations draw. tailwind has to
    scan them to emit them */
 @source "../../../packages/nightshift/components";
 @source "../../../packages/nightshift/field.ts";
 @source "../../../packages/nightshift/pagination.ts";
+
+/* the shared chat action owns its position and Nightshift appearance */
+@source "../../../packages/core/components/ScrollDownButton.tsx";
 
 /* the component browser's stories, pages, and config never reach the app's css. a story uses the app's own classes */
 @source not "./**/*.stories.tsx";

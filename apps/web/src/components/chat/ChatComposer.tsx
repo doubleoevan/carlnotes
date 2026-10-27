@@ -1,4 +1,5 @@
 import { CHAT_QUESTION_CHARS, type KeptChatAttachment } from "@carlnotes/contracts/chat"
+import { CHAT_QUESTION_PLACEHOLDER } from "@carlnotes/core/lib/chatCopy"
 import { toAgeLabel } from "@carlnotes/core/lib/labels"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { ArrowUp, FileText, FileX2, Film, Image, Minus, Paperclip, Square, X } from "lucide-react"
@@ -30,7 +31,7 @@ const MAX_QUESTION_BOX_HEIGHT_PX = 120
  * The chat composer: the question box, its attachment chips, and the send button that becomes a stop button while a reply streams.
  */
 // what the private chat's question box shows while it is empty
-export const CHAT_QUESTION_PLACEHOLDER = "Hand-crafted notes are richer…"
+export { CHAT_QUESTION_PLACEHOLDER } from "@carlnotes/core/lib/chatCopy"
 
 export function ChatComposer({
 	chat,

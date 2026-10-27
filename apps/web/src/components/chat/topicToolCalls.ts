@@ -1,57 +1,32 @@
 import type { TopicToolCalls, TopicToolToasts } from "@carlnotes/contracts/chat"
-import { toStandingTopicEditCall } from "@carlnotes/contracts/chat"
-import type { ChatToolCall } from "@carlnotes/contracts/payloads"
-import { type ProposeTopicEditPayload, proposeTopicEditPayload } from "@carlnotes/contracts/topicPayloads"
+import {
+	applyTopicEditToolCalls as applySharedTopicEditToolCalls,
+	showTopicToolCalls,
+} from "@carlnotes/core/lib/topicToolCalls"
 import { toast } from "sonner"
 import { clearProposedTopicEdit, startEditingTopic } from "@/stores/chatPanelStore"
 
+// share stored proposal parsing with native chat
+export { toProposedTopicEdit } from "@carlnotes/core/lib/topicToolCalls"
+
 /**
- * Toasts what carl's topic tools saved and what they would not. Shared by the private chat and a topic's team room.
+ * Presents topic tool outcomes through the browser's toast host.
  */
 export function toastTopicToolCalls(topicToolToasts: TopicToolToasts): void {
-	for (const topicSave of topicToolToasts.topicSaves) {
-		toast(topicSave)
-	}
-	for (const topicSaveRejection of topicToolToasts.topicSaveRejections) {
-		toast.error(topicSaveRejection)
-	}
+	showTopicToolCalls({ topicToolToasts, onSaved: toast, onRejected: toast.error })
 }
 
 /**
- * Keeps the topic's card up to date with what carl did, previewing the change he proposed,
- * taking it back off when the user turns it down, and settling it back to the topic itself once a tool saves.
+ * Applies shared topic edit transitions to the browser's selected conversation.
  */
 export function applyTopicEditToolCalls(
 	topicId: string,
 	toolCalls: Pick<TopicToolCalls, "proposedTopicEdit" | "isTopicEditCancelled" | "topicSaves">,
 ): void {
-	if (toolCalls.proposedTopicEdit) {
-		startEditingTopic(topicId, toolCalls.proposedTopicEdit)
-		return
-	}
-	// clear the preview when the user turns the change down, leaving the edit under way
-	if (toolCalls.isTopicEditCancelled) {
-		clearProposedTopicEdit()
-		return
-	}
-	// a save applies whatever was proposed, so the card drops it and reads the topic as it now stands.
-	// leaving it would list every added source twice, once from the re-read topic and once from the proposal over it
-	if (toolCalls.topicSaves.length > 0) {
-		clearProposedTopicEdit()
-		startEditingTopic(topicId)
-	}
-}
-
-/**
- * The proposal a conversation is still sitting on, read back from the tools its chat turns called.
- * Null when carl cancelled it, when a tool saved after it, and when none was ever proposed.
- */
-export function toProposedTopicEdit(chatTurns: { toolCalls?: ChatToolCall[] }[]): ProposeTopicEditPayload | null {
-	const standingTopicEditCall = toStandingTopicEditCall(chatTurns.flatMap((chatTurn) => chatTurn.toolCalls ?? []))
-	if (!standingTopicEditCall) {
-		return null
-	}
-	// parse the stored proposal, reading an older shape as none
-	const proposedTopicEditResult = proposeTopicEditPayload.safeParse(standingTopicEditCall.input)
-	return proposedTopicEditResult.success ? proposedTopicEditResult.data : null
+	applySharedTopicEditToolCalls({
+		topicId,
+		toolCalls,
+		onStartEditingTopic: startEditingTopic,
+		onClearProposedTopicEdit: clearProposedTopicEdit,
+	})
 }

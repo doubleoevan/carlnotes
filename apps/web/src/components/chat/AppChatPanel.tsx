@@ -1,8 +1,14 @@
 import { fetchTopicInviteBadges } from "@carlnotes/client/activityClient"
 import { authClient } from "@carlnotes/client/authClient"
-import type { ChatPage } from "@carlnotes/client/chatClient"
 import { fetchChatMentionCount, fetchChatRooms } from "@carlnotes/client/chatRoomClient"
 import type { ChatRoom } from "@carlnotes/contracts/chat"
+import {
+	toChatRoomMenuOrder,
+	toPrivateChatId,
+	toPrivateChatName,
+	toPrivateChatPage,
+} from "@carlnotes/core/lib/chatConversations"
+import { activateChatAccount, toCurrentChatAccountGuard } from "@carlnotes/core/stores/chatConversationStore"
 import {
 	setChatRooms,
 	toFirstChatMention,
@@ -56,7 +62,11 @@ function toChatRoomOptions(
 		},
 		isHighlighted: isPageChatRoom(chatRoomOption, pageContext),
 		isTeamRoom: chatRoomOption.topicId === null,
-		isActive: isSameChat(chatId, { kind: "room", teamId: chatRoomOption.teamId, topicId: chatRoomOption.topicId }),
+		isActive: isSameChat(chatId, {
+			kind: "room",
+			teamId: chatRoomOption.teamId,
+			topicId: chatRoomOption.topicId,
+		}),
 		chatMentions: chatRoomOption.chatMentions,
 		chatRoomMembers: chatRoomOption.chatRoomMembers,
 		onSelect: () => {
@@ -74,7 +84,7 @@ function toChatRoomOptions(
 	// add the join team option, which opens the join panel, if the page's team has no chat room in the list
 	const joinTeam = pageContext?.joinTeam
 	if (!joinTeam || chatRoomOptions.some((room) => room.teamId === joinTeam.teamId)) {
-		return toMenuOrder(chatRoomChoices)
+		return toChatRoomMenuOrder(chatRoomChoices)
 	}
 	const joinChatId: ChatId = {
 		kind: "room",
@@ -88,44 +98,7 @@ function toChatRoomOptions(
 		isActive: isSameChat(chatId, joinChatId),
 		onSelect: () => setChatId(joinChatId),
 	})
-	return toMenuOrder(chatRoomChoices)
-}
-
-// sort alphabetically so that topic options with the same name can be told apart by their team
-function toMenuOrder(chatRoomOptions: ChatRoomOption[]): ChatRoomOption[] {
-	return [...chatRoomOptions].sort((first, second) => first.name.localeCompare(second.name))
-}
-
-// return the topic or team id for the page to start a private chat with
-function toPrivateChatId(pageContext: ChatPageContext | null, chatId: ChatId | null): ChatId | null {
-	if (pageContext?.topicId) {
-		return { kind: "private", topicId: pageContext.topicId }
-	}
-	const teamId = pageContext?.teamId ?? (chatId?.kind !== "private" ? (chatId?.teamId ?? null) : null)
-	return teamId ? { kind: "private", teamId } : null
-}
-
-// the conversation page a private chat id addresses: the new-topic chat, a topic, or a team
-function toPrivateChatPage(chatId: ChatId & { kind: "private" }): ChatPage {
-	if (chatId.newTopic) {
-		return { newTopic: true, initialTeam: chatId.initialTeam }
-	}
-	return chatId.topicId !== undefined ? { topicId: chatId.topicId } : { teamId: chatId.teamId }
-}
-
-// return the placeholder text for a private chat
-function toPrivateChatName(
-	chatId: ChatId & { kind: "private" },
-	chatRooms: ChatRoom[],
-	pageContext: ChatPageContext | null,
-): string {
-	if (chatId.newTopic) {
-		return "a new topic"
-	}
-	if (chatId.teamId !== undefined) {
-		return chatRooms.find((chatRoom) => chatRoom.teamId === chatId.teamId)?.teamName ?? pageContext?.name ?? "this team"
-	}
-	return pageContext?.name ?? "this topic"
+	return toChatRoomMenuOrder(chatRoomChoices)
 }
 
 // the menu handler that opens the new-topic chat: for a signed-in user, and left out of that chat's own menu
@@ -165,16 +138,31 @@ export function AppChatPanel() {
 
 	// the chat rooms for the dropdown menu, re-read whenever the badge count says something changed
 	const userId = session?.user.id
+	useEffect(() => activateChatAccount(userId ?? null), [userId])
 	const updateChatRooms = useCallback((): void => {
 		if (!userId) {
 			setChatRooms([])
 			setHasLoadedChatRooms(true)
 			return
 		}
+		// ignore rooms returned for a replaced account
+		const isCurrentChatAccount = toCurrentChatAccountGuard()
 		fetchChatRooms()
-			.then(setChatRooms)
-			.catch(() => setChatRooms([]))
-			.finally(() => setHasLoadedChatRooms(true))
+			.then((chatRooms) => {
+				if (isCurrentChatAccount()) {
+					setChatRooms(chatRooms)
+				}
+			})
+			.catch(() => {
+				if (isCurrentChatAccount()) {
+					setChatRooms([])
+				}
+			})
+			.finally(() => {
+				if (isCurrentChatAccount()) {
+					setHasLoadedChatRooms(true)
+				}
+			})
 	}, [userId])
 	useEffect(() => {
 		// a user change reloads the list from scratch
@@ -241,7 +229,7 @@ export function AppChatPanel() {
 	if (chatId?.kind === "private") {
 		return (
 			<PrivateChatPanel
-				key={`private:${chatId.topicId ?? chatId.teamId ?? "new-topic"}`}
+				key={`${userId}:private:${chatId.topicId ?? chatId.teamId ?? "new-topic"}`}
 				page={toPrivateChatPage(chatId)}
 				chatName={toPrivateChatName(chatId, chatRooms, pageContext)}
 				panelState={panelState}
@@ -258,7 +246,7 @@ export function AppChatPanel() {
 		)
 		return (
 			<ChatRoomPanel
-				key={`${chatId.topicId ?? "team"}:${chatId.teamId}`}
+				key={`${userId}:${chatId.topicId ?? "team"}:${chatId.teamId}`}
 				topicId={chatId.topicId}
 				contextName={openChatRoom?.name ?? pageContext?.name ?? "this team"}
 				teamId={chatId.teamId}
@@ -298,15 +286,19 @@ export function AppChatPanel() {
 // poll the chat mention count, the note badges, and the topic invitations while a user is signed in
 function usePollBadges(userId: string | undefined, updateChatRooms: () => void): void {
 	useEffect(() => {
+		// clear the previous account's invite badges
+		setTopicInviteBadges([])
 		if (!userId) {
 			return
 		}
 		// reload the chat rooms whenever the chat mention count changes
+		let isBadgePollActive = true
+		const isCurrentAccount = toCurrentChatAccountGuard()
 		let previousChatMentionCount = -1
 		const readChatMentionCount = (): void => {
 			fetchChatMentionCount()
 				.then((chatMentionCount) => {
-					if (chatMentionCount !== previousChatMentionCount) {
+					if (isBadgePollActive && isCurrentAccount() && chatMentionCount !== previousChatMentionCount) {
 						previousChatMentionCount = chatMentionCount
 						updateChatRooms()
 					}
@@ -317,7 +309,11 @@ function usePollBadges(userId: string | undefined, updateChatRooms: () => void):
 		// read the topic invitations waiting for an answer
 		const readTopicInviteBadges = (): void => {
 			fetchTopicInviteBadges()
-				.then(setTopicInviteBadges)
+				.then((topicInviteBadges) => {
+					if (isBadgePollActive && isCurrentAccount()) {
+						setTopicInviteBadges(topicInviteBadges)
+					}
+				})
 				.catch(() => {})
 		}
 
@@ -326,9 +322,14 @@ function usePollBadges(userId: string | undefined, updateChatRooms: () => void):
 			readChatMentionCount()
 			readTopicInviteBadges()
 		}
+		// poll both badge sources
 		readBadges()
 		const badgePollInterval = setInterval(readBadges, BADGE_POLL_MS)
-		return () => clearInterval(badgePollInterval)
+		// retire the interval and its pending callbacks
+		return () => {
+			isBadgePollActive = false
+			clearInterval(badgePollInterval)
+		}
 	}, [userId, updateChatRooms])
 }
 

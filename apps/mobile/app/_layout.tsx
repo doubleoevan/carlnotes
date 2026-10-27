@@ -3,6 +3,7 @@
 import "../global.css"
 import { configureApiClient } from "@carlnotes/client/apiClient"
 import { authClient } from "@carlnotes/client/authClient"
+import { activateChatAccount } from "@carlnotes/core/stores/chatConversationStore"
 import { ArchitectsDaughter_400Regular } from "@expo-google-fonts/architects-daughter"
 import {
 	Karla_400Regular,
@@ -23,9 +24,9 @@ import * as SplashScreen from "expo-splash-screen"
 import { useEffect, useState } from "react"
 import { Alert, AppState } from "react-native"
 import { GestureHandlerRootView } from "react-native-gesture-handler"
-import { toApiRequestSettings } from "@/apiRequestSettings"
-import { apiBaseUrl, hasSession, mobileAuthClient, retireCurrentSession } from "@/authClient"
-import { deviceTelemetryHeaders } from "@/deviceTelemetry"
+import { apiBaseUrl } from "@/authClient"
+import { AppChatPanel } from "@/components/chat/AppChatPanel"
+import { mobileApiRequestSettings } from "@/mobileApiRequestSettings"
 import { navigationIntegration, startMonitoring } from "@/monitoring"
 import { NoteDraftProvider } from "@/providers/NoteDraftProvider"
 import { ReadingProvider } from "@/providers/TopicFeedProvider"
@@ -45,15 +46,7 @@ startMonitoring()
 configureApiClient({
 	apiBaseUrl,
 	showError: (message) => Alert.alert("CarlNotes", message),
-	...toApiRequestSettings({
-		getCookie: () => mobileAuthClient.getCookie(),
-		deviceHeaders: deviceTelemetryHeaders,
-		hasSession,
-		signOut: async () => {
-			await retireCurrentSession()
-			return mobileAuthClient.signOut()
-		},
-	}),
+	...mobileApiRequestSettings,
 })
 
 // report route render failures while retaining Expo Router's retry screen
@@ -91,6 +84,11 @@ function RootLayout() {
 	// the session, seeded from secure storage before the first read answers. a user sees no loading state
 	const { data: session, isPending: isSessionPending } = authClient().useSession()
 	const isSessionRetired = useIsSessionRetired(session?.session.id)
+	// activate chat state for the current account
+	const chatAccountId = isSessionRetired ? null : (session?.user.id ?? null)
+	useEffect(() => {
+		activateChatAccount(chatAccountId)
+	}, [chatAccountId])
 	const isReady = isThemeReady && (isFontLoaded || Boolean(fontLoadError)) && !isSessionPending
 
 	// attach monitoring after the guarded navigator has mounted
@@ -125,6 +123,7 @@ function RootLayout() {
 						{/* the sign-in guard. a user sees the app's screens, and a visitor the sign-in and sign-up screens */}
 						<Stack screenOptions={{ headerShown: false }}>
 							<Stack.Protected guard={isSignedIn}>
+								<Stack.Screen name="chat" />
 								<Stack.Screen name="(tabs)" />
 								<Stack.Screen name="account" />
 								<Stack.Screen name="plans" />
@@ -133,8 +132,10 @@ function RootLayout() {
 								<Stack.Screen name="teams/index" />
 								<Stack.Screen name="teams/[teamId]" />
 								<Stack.Screen name="teams/[teamId]/notes/[noteId]" />
+								<Stack.Screen name="teams/[teamId]/chat" />
 								<Stack.Screen name="topics/[topicId]" />
 								<Stack.Screen name="topics/[topicId]/notes/[noteId]" />
+								<Stack.Screen name="topics/[topicId]/chat" />
 							</Stack.Protected>
 							<Stack.Protected guard={!isSignedIn}>
 								<Stack.Screen name="sign-in" />
@@ -146,6 +147,7 @@ function RootLayout() {
 								<Stack.Screen name="storybook" />
 							</Stack.Protected>
 						</Stack>
+						{isSignedIn && <AppChatPanel />}
 						{/* anchor dropdowns above screens without replacing them with a sheet */}
 						<PortalHost />
 					</TopicResourceInfoProvider>

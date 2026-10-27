@@ -17,9 +17,7 @@ export function LinkPreviewLoading() {
 /**
  * Whether a text holds a link that could have a link preview card.
  */
-export function hasPreviewableLink(text: string): boolean {
-	return /https?:\/\//i.test(text)
-}
+export { hasPreviewableLink } from "@carlnotes/core/lib/chatLinkPreviews"
 
 /**
  * The link preview card for a link: the page's own title, description, and image, all served from this origin.

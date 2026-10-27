@@ -17,6 +17,8 @@ import { Header } from "@/components/layout/Header"
 import { Button } from "@/components/primitives/button"
 import { Icon } from "@/components/primitives/icon"
 import { Text } from "@/components/primitives/text"
+import { useFontScaledSize } from "@/hooks/useFontScaledSize"
+import { useIsKeyboardVisible } from "@/hooks/useIsKeyboardVisible"
 import { useNoteDraftSnapshot, useNoteDraftStore } from "@/noteDraftStorage"
 import { loadNote, type OpenedNote } from "@/noteRead"
 import type { NoteDraftStore } from "@/stores/noteDraftStore"
@@ -33,6 +35,8 @@ export function NoteScreen() {
 	const { data: session, isPending: isSessionPending } = authClient().useSession()
 	const store = useNoteDraftStore()
 	const [headerHeight, setHeaderHeight] = useState(0)
+	const isKeyboardVisible = useIsKeyboardVisible()
+	const chatPillClearance = useFontScaledSize(44) + 24
 	return (
 		<View className="flex-1 bg-background">
 			<View onLayout={(event) => setHeaderHeight(event.nativeEvent.layout.height)}>
@@ -44,16 +48,19 @@ export function NoteScreen() {
 					keyboardVerticalOffset={headerHeight}
 					behavior={Platform.OS === "ios" ? "padding" : undefined}
 				>
-					{!isSessionPending && (!session || store?.accountId === session.user.id) ? (
-						<NoteScreenContent
-							key={`${session?.user.id ?? "visitor"}:${noteId}`}
-							store={session ? store : null}
-							page={page}
-							noteId={noteId}
-						/>
-					) : (
-						<CoffeeLoading label="Loading your Tasting Note" />
-					)}
+					{/* reserve launcher space inside the keyboard-adjusted viewport */}
+					<View className="flex-1" style={{ paddingBottom: isKeyboardVisible ? 0 : chatPillClearance }}>
+						{!isSessionPending && (!session || store?.accountId === session.user.id) ? (
+							<NoteScreenContent
+								key={`${session?.user.id ?? "visitor"}:${noteId}`}
+								store={session ? store : null}
+								page={page}
+								noteId={noteId}
+							/>
+						) : (
+							<CoffeeLoading label="Loading your Tasting Note" />
+						)}
+					</View>
 				</KeyboardAvoidingView>
 			</ClassNameSafeAreaView>
 		</View>

@@ -1,10 +1,9 @@
-import { showClientError } from "@carlnotes/client/apiClient"
 import {
 	type CopyMarkdownControlProps,
 	CopyMarkdownButton as SharedCopyMarkdownButton,
 } from "@carlnotes/core/components/CopyMarkdownButton"
 import { Check, Copy } from "lucide-react-native"
-import { AccessibilityInfo } from "react-native"
+import { copyText } from "@/clipboard"
 import { Button } from "@/components/primitives/button"
 import { Icon } from "@/components/primitives/icon"
 
@@ -15,7 +14,7 @@ export function CopyMarkdownButton({ markdown, isInline = false }: { markdown: s
 	return (
 		<SharedCopyMarkdownButton
 			markdown={markdown}
-			copyToClipboard={copyMarkdown}
+			copyToClipboard={copyText}
 			Control={isInline ? InlineCopyMarkdownControl : CopyMarkdownControl}
 		/>
 	)
@@ -42,17 +41,4 @@ function CopyMarkdownControl({ isCopied, onCopy, isInline }: CopyMarkdownControl
 			/>
 		</Button>
 	)
-}
-
-// announce a successful native copy and report clipboard failures
-async function copyMarkdown(markdown: string): Promise<boolean> {
-	try {
-		const clipboard = await import("expo-clipboard")
-		await clipboard.setStringAsync(markdown)
-		AccessibilityInfo.announceForAccessibility("Copied")
-		return true
-	} catch {
-		showClientError("That didn't copy. Try again.")
-		return false
-	}
 }

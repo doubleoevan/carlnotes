@@ -1,5 +1,6 @@
 // the chat panel widget: the pill it collapses to, the docked frame, and the title bar
 import { CHAT_NAME, type ChatMention } from "@carlnotes/contracts/chat"
+import { type ChatPillElements, ChatPill as SharedChatPill } from "@carlnotes/core/components/ChatPill"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { Maximize2, Minimize2, Minus } from "lucide-react"
 import type * as React from "react"
@@ -114,14 +115,35 @@ export function ChatPanelWidget({
 	)
 }
 
-// the minimized state is a labeled pill button with a chat mentions badge on its top right corner
+/**
+ * Renders the shared chat launcher in the browser portal.
+ */
 export function ChatPill({ onOpenChat, chatMentions }: { onOpenChat: () => void; chatMentions?: ChatMention[] }) {
-	// the pill sits above the podcast player while the podcast player shows
-	const isPodcastPlayerShown = useIsPodcastPlayerShown()
 	return (
 		<BodyPortal>
+			<SharedChatPill
+				onOpenChat={onOpenChat}
+				elements={CHAT_PILL_ELEMENTS}
+				badge={
+					<UpdateCountBadge
+						chatMentions={chatMentions ?? []}
+						className="absolute -top-1.5 -right-1"
+						countBadgeClassName="bg-card text-card-foreground h-5 min-w-5 border text-xs"
+					/>
+				}
+			/>
+		</BodyPortal>
+	)
+}
+
+// keep the browser's portal position, player clearance, and hover effects in its button adapter
+const CHAT_PILL_ELEMENTS: ChatPillElements = {
+	Button: function ChatPillButton({ children, onOpenChat, label }) {
+		const isPodcastPlayerShown = useIsPodcastPlayerShown()
+		return (
 			<button
 				type="button"
+				aria-label={label}
 				onClick={onOpenChat}
 				className={cn(
 					"bg-primary text-primary-foreground font-display fixed right-3 z-50 flex items-center gap-2 rounded-full py-2.5 pr-4 pl-3 text-sm transition-transform hover:scale-105",
@@ -129,17 +151,12 @@ export function ChatPill({ onOpenChat, chatMentions }: { onOpenChat: () => void;
 					CHAT_PANEL_ELEVATION_CLASS,
 				)}
 			>
-				<CoffeeCup className="size-5.5" />
-				{CHAT_NAME}
-				{/* the unread chat mentions badge, on the chat pill's top right corner */}
-				<UpdateCountBadge
-					chatMentions={chatMentions ?? []}
-					className="absolute -top-1.5 -right-1"
-					countBadgeClassName="bg-card text-card-foreground h-5 min-w-5 border text-xs"
-				/>
+				{children}
 			</button>
-		</BodyPortal>
-	)
+		)
+	},
+	Label: ({ children }) => <>{children}</>,
+	CoffeeCup: () => <CoffeeCup className="size-5.5" />,
 }
 
 // the chat panel title display with coffee cups

@@ -1,0 +1,38 @@
+diff --git a/index.js b/index.js
+--- a/index.js
++++ b/index.js
+@@ -1,3 +1,3 @@
+-const EventSource = require('./src/EventSource')
++const EventSource = require('./src/EventSource').default
+ 
+ module.exports = EventSource;
+\ No newline at end of file
+diff --git a/src/EventSource.js b/src/EventSource.js
+--- a/src/EventSource.js
++++ b/src/EventSource.js
+@@ -107,24 +107,25 @@
+ 
+         if (xhr.status >= 200 && xhr.status < 400) {
+           if (this.status === this.CONNECTING) {
+             this.status = this.OPEN;
+             this.dispatch('open', { type: 'open' });
+             this._logDebug('[EventSource][onreadystatechange][OPEN] Connection opened.');
+           }
+ 
+           this._handleEvent(xhr.responseText || '');
+ 
+           if (xhr.readyState === XMLHttpRequest.DONE) {
+             this._logDebug('[EventSource][onreadystatechange][DONE] Operation done.');
++            this.dispatch('done', { type: 'done' });
+             this._pollAgain(this.interval, false);
+           }
+         } else if (xhr.status !== 0) {
+           this.status = this.ERROR;
+           this.dispatch('error', {
+             type: 'error',
+             message: xhr.responseText,
+             xhrStatus: xhr.status,
+             xhrState: xhr.readyState,
+           });
+ 
+           if (xhr.readyState === XMLHttpRequest.DONE) {

@@ -1,19 +1,10 @@
 // the @ mention autocomplete behind the chat room composer: the suggestions, the hook that owns them, and the list
-import { CARL_USERNAME } from "@carlnotes/contracts/chatMentions"
+import { toActiveChatMention, toChatMentionSuggestions, toInsertedChatMention } from "@carlnotes/core/lib/chatMentions"
+
+export { toChatMentionSuggestions } from "@carlnotes/core/lib/chatMentions"
+
 import { cn } from "@carlnotes/nightshift/classNames"
 import { useState } from "react"
-
-// the active username chat mention token behind the caret: an @ at a word start and whatever prefix follows it
-const ACTIVE_CHAT_MENTION_PATTERN = /(^|[^\w@.-])@([\w-]*)$/
-
-/**
- * What the @ autocomplete username suggests: Carl pinned first, then the room's members, filtered by the typed-in prefix.
- */
-export function toChatMentionSuggestions(mentionQuery: string, memberUsernames: string[]): string[] {
-	return [CARL_USERNAME, ...memberUsernames.filter((username) => username.toLowerCase() !== CARL_USERNAME)].filter(
-		(username) => username.toLowerCase().startsWith(mentionQuery.toLowerCase()),
-	)
-}
 
 // what the autocomplete shows the composer: the open list and the handlers the chat message box wires in
 type MentionAutocomplete = {
@@ -41,8 +32,7 @@ export function useMentionAutocomplete(options: {
 
 	// each keystroke re-reads the token behind the caret to suggest the users to mention
 	const readMentionQuery = (chatMessageStart: string): void => {
-		const activeMentionQuery = chatMessageStart.match(ACTIVE_CHAT_MENTION_PATTERN)
-		setMentionQuery(activeMentionQuery ? (activeMentionQuery[2] ?? "") : null)
+		setMentionQuery(toActiveChatMention(chatMessageStart))
 		setHighlightMentionIndex(0)
 	}
 
@@ -55,8 +45,8 @@ export function useMentionAutocomplete(options: {
 
 		// selecting a username replaces the typed prefix with the full one
 		const caret = chatMessageBox.selectionStart ?? chatMessage.length
-		const chatMessageStart = chatMessage.slice(0, caret).replace(ACTIVE_CHAT_MENTION_PATTERN, `$1@${username} `)
-		setChatMessage(chatMessageStart + chatMessage.slice(caret))
+		const insertedChatMention = toInsertedChatMention({ message: chatMessage, caret, username })
+		setChatMessage(insertedChatMention.message)
 		setMentionQuery(null)
 		chatMessageBox.focus()
 	}

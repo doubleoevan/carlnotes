@@ -1,8 +1,9 @@
 import type { NoteLayoutProps } from "@carlnotes/core/components/NoteStatic"
-import { createContext, useContext, useEffect, useState } from "react"
+import { createContext, useContext, useState } from "react"
 import { Keyboard as NativeKeyboard, ScrollView, View } from "react-native"
 import { Button } from "@/components/primitives/button"
 import { Text } from "@/components/primitives/text"
+import { useIsKeyboardVisible } from "@/hooks/useIsKeyboardVisible"
 import { toTypeRoleStyle } from "@/typeRoleStyles"
 import { NoteComments } from "./NoteComments"
 
@@ -31,15 +32,7 @@ export function NoteLayout({
 }: NoteLayoutProps) {
 	// measure the remaining body space and show dismissal only for an open keyboard
 	const [viewportHeight, setViewportHeight] = useState(300)
-	const [isKeyboardVisible, setIsKeyboardVisible] = useState(() => NativeKeyboard.isVisible())
-	useEffect(() => {
-		const showSubscription = NativeKeyboard.addListener("keyboardDidShow", () => setIsKeyboardVisible(true))
-		const hideSubscription = NativeKeyboard.addListener("keyboardDidHide", () => setIsKeyboardVisible(false))
-		return () => {
-			showSubscription.remove()
-			hideSubscription.remove()
-		}
-	}, [])
+	const isKeyboardVisible = useIsKeyboardVisible()
 	return (
 		<View className="min-h-0 flex-1">
 			{/* keep the title and formatting together above the body */}

@@ -34,7 +34,7 @@ export function ScrollBox({
 		scrollY.setValue(0)
 	}, [scrollToTopOn, scrollY])
 	return (
-		<View className="relative rounded-md border border-primary/50">
+		<View className="relative shrink rounded-md border border-primary/50">
 			<NativeViewGestureHandler disallowInterruption>
 				<AnimatedScrollView
 					ref={scrollRef}

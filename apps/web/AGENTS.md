@@ -56,8 +56,8 @@ the browser bundle and renders pages through the server build, behind its own ro
   It starts a table at ten rows a page unless it asks for another size, and its
   `ScriptedTablePagination` shows a paged table's pagination only with JavaScript.
 - `components/chat/` — the chat panel, both composers, the chat message lists, and the hooks behind them.
-  `useChatRoom.ts` is the chat room's state, `useChatRoomSpokenAnswer.ts` speaks carl's reply to the browser's spoken
-  message, and `useChatRoomLinkPreviews.ts` polls for fresh chat messages' link preview cards. `MicButton.tsx` is the
+  `useChatRoom.ts` adapts core's room state, `useChatRoomSpokenAnswer.ts` speaks carl's reply to the browser's spoken
+  message, and `useChatRoomLinkPreviews.ts` re-exports core's bounded preview polling. `MicButton.tsx` is the
   mic in an empty composer's send slot, `RecordingBar.tsx` the bar that replaces the box while a recording runs, and
   `useVoiceRecording.ts` the recording's state machine from the mic tap to the transcript, which loads
   `lib/voiceRecorder.ts` on the first tap, with its rules in `voiceRecordingRules.ts` and listen mode in
@@ -68,9 +68,8 @@ the browser bundle and renders pages through the server build, behind its own ro
   `SpokenAnswerAudio.tsx` the audio element that the hosts' spoken answers play through, which `Layout` mounts beside
   the podcast's. Only a question asked from the podcast player gets a `cohost` answer. Past the spoken questions cutoff,
   a mic opens the plans page through `spokenQuestionsPaused.ts`, which holds the plans page's upgrade toasts.
-  `chatRejectionCopy.ts` holds the sentence for each chat rejection, the voice recording's toasts, the label and path of
-  the link that opens the plans page, and `toastChatRejection`, which toasts a rejection. `chatTurns.ts` builds the chat
-  panel's chat turns, and finds, replaces, and drops a chat turn by its spoken answer key. `chatRoomTestFixtures.ts` and
+  `chatRejectionCopy.ts` imports core's chat rejection sentences. It retains the voice recording toasts, the plans link, and `toastChatRejection`.
+  `chatTurns.ts` re-exports core's turn helpers. `chatRoomTestFixtures.ts` and
   `chatMessagesTestFixtures.tsx` hold the chat fixtures the chat tests share.
 - `lib/` — `utils.ts` and small client-side helpers that read the browser. `externalLinks.ts` opens a url in a new
   tab with no handle back to the page. `toastActions.ts` builds the See plans and See account toast actions. `visiblePoll.ts` is the poll that runs only while the page is visible, one request at a
@@ -357,3 +356,21 @@ core menu composition. DOM popovers, badges, installation links, storage, and cl
 Profile topic reads offer retry after a failed initial request instead of presenting an empty table or endless skeleton.
 
 Visit analytics reuses the contracts URL/path privacy redaction and public Topic attribution with native. Its registered device dimensions and environment match native event dimensions while preserving cookieless visits and disabled person profiles.
+
+## Shared chat
+
+`ScrollDownButton` adapts core's centered latest-message action and retains the browser's hover feedback.
+`ChatPanelWidget` renders core's shared `ChatPill` with browser elements, preserving its portal, badge, hover, and
+podcast-player clearance. `branding/CoffeeCup` reads the same Nightshift vector paths as mobile.
+
+`components/chat/ChatAuthor`, `ChatTurnBlock`, `ChatRoomMessageBubble`, and `TopicDraftCard` are DOM element adapters
+for the same-named core components. The turn's rejection uses core `ChatRejectionNotice`; web retains its plans link.
+`ChatMarkdown` retains Streamdown and re-exports `safeChatMarkdown` helpers. Host portraits come from Nightshift's
+shared `assets/`, also used by mobile.
+
+`useTopicChat` injects voice, new-topic, attachment, and podcast effects into the core hook. `useChatRoom` injects
+browser streaming and spoken-answer effects. `useChatRoomStream` supplies browser EventSource to the shared lifecycle
+controller. `useChatConversationLoad`, `useEditableTopicDraft`, `useRoomReply`, both preview hooks, `chatHistoryTurns`,
+and `topicToolCalls` retain compatible imports over core. Member loading is core `useRoomMembers`; mention and reply
+rules are core `chatMentions`/`chatRoomReplies`. Keep these wrappers thin. `chatPanelStore` retains panel dimensions,
+open state, and browser effects while core `chatConversationStore` owns account/conversation selection and proposals.

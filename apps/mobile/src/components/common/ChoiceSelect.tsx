@@ -1,29 +1,79 @@
-import type { LucideIcon } from "lucide-react-native"
-import { View } from "react-native"
+import { Check, ChevronDown, type LucideIcon } from "lucide-react-native"
+import { type ComponentRef, isValidElement, type ReactElement, useRef, useState } from "react"
+import { useWindowDimensions, View } from "react-native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
+import { Button } from "@/components/primitives/button"
 import { Icon } from "@/components/primitives/icon"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/primitives/select"
 import { Text } from "@/components/primitives/text"
+import { Sheet } from "./Sheet"
 
 /**
- * Adapts a compact web choice to the native anchored Nightshift dropdown.
+ * Adapts a web choice to a native dropdown or full-width sheet.
  */
 export function ChoiceSelect({
 	label,
 	value,
 	options,
 	isDisabled,
+	presentation = "dropdown",
 	onChange,
 }: {
 	label: string
 	value: string
-	options: { value: string; label: string; icon?: LucideIcon }[]
+	options: { value: string; label: string; icon?: LucideIcon | ReactElement }[]
 	isDisabled?: boolean
+	presentation?: "dropdown" | "sheet"
 	onChange: (value: string) => void
 }) {
 	// resolve the selected option and keep its menu inside the safe area
 	const insets = useSafeAreaInsets()
+	const { width } = useWindowDimensions()
+	const [triggerWidth, setTriggerWidth] = useState(0)
+	const [isOpen, setIsOpen] = useState(false)
+	const triggerRef = useRef<ComponentRef<typeof View>>(null)
 	const selectedOption = options.find((option) => option.value === value)
+	if (presentation === "sheet") {
+		return (
+			<>
+				{/* retain the selected label while the full-width choice list opens */}
+				<Button
+					ref={triggerRef}
+					variant="outline"
+					className="min-h-12 justify-between px-2"
+					accessibilityLabel={label}
+					accessibilityState={{ expanded: isOpen }}
+					disabled={isDisabled}
+					onPress={() => setIsOpen(true)}
+				>
+					<ChoiceLabel label={selectedOption?.label ?? label} icon={selectedOption?.icon} />
+					<Icon as={ChevronDown} className="size-4 text-muted-foreground" />
+				</Button>
+				{/* reuse the shared sheet's scrolling, dismissal, safe area, and focus return */}
+				{isOpen && (
+					<Sheet title={label} triggerRef={triggerRef} onClose={() => setIsOpen(false)} hasHighlightedScrollIndicator>
+						{options.map((option) => (
+							<Button
+								key={option.value}
+								variant="ghost"
+								className="min-h-12 justify-between px-2 py-3"
+								accessibilityLabel={option.label}
+								accessibilityState={{ selected: option.value === value }}
+								onPress={() => {
+									// select the option and close the sheet
+									onChange(option.value)
+									setIsOpen(false)
+								}}
+							>
+								<ChoiceLabel {...option} />
+								{option.value === value && <Icon as={Check} className="size-4 text-primary" />}
+							</Button>
+						))}
+					</Sheet>
+				)}
+			</>
+		)
+	}
 	return (
 		<Select
 			value={selectedOption}
@@ -34,28 +84,33 @@ export function ChoiceSelect({
 			}}
 			disabled={isDisabled}
 		>
-			<SelectTrigger accessibilityLabel={label} className="min-w-0 px-2">
-				{selectedOption?.icon ? (
-					<View className="flex-row items-center gap-2">
-						<Icon as={selectedOption.icon} className="size-4 text-muted-foreground" />
-						<Text className="text-sm">{selectedOption.label}</Text>
-					</View>
-				) : (
-					<SelectValue placeholder={label} />
-				)}
+			<SelectTrigger
+				accessibilityLabel={label}
+				className="min-w-0 px-2"
+				onLayout={(event) => setTriggerWidth(event.nativeEvent.layout.width)}
+			>
+				{selectedOption?.icon ? <ChoiceLabel {...selectedOption} /> : <SelectValue placeholder={label} />}
 			</SelectTrigger>
-			<SelectContent insets={insets} className="min-w-48">
+			<SelectContent
+				insets={insets}
+				style={{ width: Math.min(Math.max(192, triggerWidth), width - insets.left - insets.right - 24) }}
+			>
 				{options.map((option) => (
 					<SelectItem key={option.value} value={option.value} label={option.label} accessibilityLabel={option.label}>
-						{option.icon ? (
-							<>
-								<Icon as={option.icon} className="size-4 text-muted-foreground" />
-								<Text className="flex-1 text-sm">{option.label}</Text>
-							</>
-						) : undefined}
+						{option.icon ? <ChoiceLabel {...option} /> : undefined}
 					</SelectItem>
 				))}
 			</SelectContent>
 		</Select>
+	)
+}
+
+// keep avatar, icon, and label spacing identical in both choice presentations
+function ChoiceLabel({ label, icon }: { label: string; icon?: LucideIcon | ReactElement }) {
+	return (
+		<View className="min-w-0 shrink flex-row items-center gap-2">
+			{icon && (isValidElement(icon) ? icon : <Icon as={icon} className="size-4 text-muted-foreground" />)}
+			<Text className="shrink text-left text-sm">{label}</Text>
+		</View>
 	)
 }

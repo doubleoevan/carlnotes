@@ -22,27 +22,28 @@ export function useAtBottom() {
 }
 
 /**
- * The jump back down to the newest chat message button, shown over the end of a chat message list.
- * It only shows once the user has scrolled away from the bottom.
+ * Adapts the shared latest-message action to the browser's button.
  */
-export function ScrollDownButton({
-	isScrollDownShown,
-	onScrollDown,
-}: {
-	isScrollDownShown: boolean
-	onScrollDown: () => void
-}) {
-	if (!isScrollDownShown) {
-		return null
-	}
-	return (
+export function ScrollDownButton(props: Omit<React.ComponentProps<typeof SharedScrollDownButton>, "elements">) {
+	return <SharedScrollDownButton {...props} elements={SCROLL_DOWN_BUTTON_ELEMENTS} />
+}
+
+// retain pointer hover feedback beside the shared position and appearance
+const SCROLL_DOWN_BUTTON_ELEMENTS: ScrollDownButtonElements = {
+	Button: ({ children, onPress, label, className }) => (
 		<button
 			type="button"
-			onClick={onScrollDown}
-			aria-label="Jump to the latest message"
-			className="bg-card text-foreground shadow-raised absolute bottom-3 left-1/2 z-10 grid size-8 -translate-x-1/2 place-items-center rounded-full border transition-transform hover:scale-105"
+			onClick={onPress}
+			aria-label={label}
+			className={`${className} grid size-8 place-items-center transition-transform hover:scale-105`}
 		>
-			<ArrowDown className="size-4" />
+			{children}
 		</button>
-	)
+	),
+	ArrowDown: () => <ArrowDown className="size-4" />,
 }
+
+import {
+	type ScrollDownButtonElements,
+	ScrollDownButton as SharedScrollDownButton,
+} from "@carlnotes/core/components/ScrollDownButton"

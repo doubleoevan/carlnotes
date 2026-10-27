@@ -30,6 +30,16 @@ export function setChatRooms(updatedChatRooms: ChatRoom[]): void {
 }
 
 /**
+ * Clears the previous account's rooms, mention excerpts, and opened-room state.
+ */
+export function resetChatRooms(): void {
+	// clear account-owned rooms and mention state
+	chatRooms = []
+	openedChatRoomKeys.clear()
+	publish()
+}
+
+/**
  * The unopened chat mentions waiting on a topic from the chat rooms the panel last read.
  */
 export function useTopicMentions(topicId: string): ChatMention[] {

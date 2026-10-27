@@ -61,7 +61,13 @@ test("the safety renderer disables raw html and routes anchors through the allow
 
 // the streaming renderer scheme-checks anchors and images
 test("the streaming renderer disables raw html and scheme-checks every destination", () => {
-	const rendererSource = readFileSync(join(import.meta.dir, STREAMING_CHAT_RENDERER), "utf8")
+	// the renderer delegates its scheme policy to the same module used by native chat
+	const rendererSource =
+		readFileSync(join(import.meta.dir, STREAMING_CHAT_RENDERER), "utf8") +
+		readFileSync(new URL("../../../packages/core/lib/safeChatMarkdown.ts", import.meta.url), "utf8")
+	expect(rendererSource).toContain('from "@carlnotes/core/lib/safeChatMarkdown"')
+	expect(rendererSource).toContain("!isSafeHref(href)")
+	expect(rendererSource).toContain("!isSafeHref(src)")
 	expect(rendererSource).toContain("[defaultRehypePlugins.sanitize, defaultRehypePlugins.harden]")
 	expect(rendererSource).not.toContain("defaultRehypePlugins.raw")
 	expect(rendererSource).toContain("rehypePlugins={SAFE_REHYPE_PLUGINS}")

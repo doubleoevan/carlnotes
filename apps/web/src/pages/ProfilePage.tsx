@@ -4,13 +4,14 @@ import { fetchProfile, fetchProfileTeamStatuses } from "@carlnotes/client/profil
 import { fetchAddableTopics } from "@carlnotes/client/topicClient"
 import type { OwnerTopic } from "@carlnotes/contracts/activity"
 import type { ProfileResponse, ProfileTeamStatus } from "@carlnotes/contracts/profiles"
+import { toProfileChatContext } from "@carlnotes/core/lib/chatConversations"
 import { toCountLabel } from "@carlnotes/core/lib/labels"
 import { useAllChatMentions } from "@carlnotes/core/stores/chatRoomStore"
 import { useAllNoteBadges } from "@carlnotes/core/stores/noteBadgeStore"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { getRouteApi, useNavigate } from "@tanstack/react-router"
 import { Pencil, Plus, Users } from "lucide-react"
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { EditProfileModal } from "@/components/account/EditProfileModal"
 import { UserAvatarPicker } from "@/components/avatar/UserAvatarPicker"
 import { UserAvatar } from "@/components/branding/UserAvatar"
@@ -106,24 +107,8 @@ export function ProfilePage() {
 	useEffect(() => handleLoadProfileTeamStatuses(), [handleLoadProfileTeamStatuses])
 
 	// the teams shared with this profile for the chat context
-	const profileTeamIds = useMemo(
-		() =>
-			(profileTeamStatuses ?? [])
-				.filter((profileTeamStatus) => profileTeamStatus.status === "member")
-				.map((profileTeamStatus) => profileTeamStatus.teamId),
-		[profileTeamStatuses],
-	)
 	useRegisterChatContext(
-		profile
-			? {
-					topicId: null,
-					teamId: null,
-					name: profile.username,
-					joinTeam: null,
-					pageTeamIds: isOwnProfile ? [] : profileTeamIds,
-					preferredChatRoomKind: "topic",
-				}
-			: null,
+		toProfileChatContext({ profile, profileTeamStatuses: profileTeamStatuses ?? [], isOwnProfile }),
 	)
 
 	// this page's action menu options

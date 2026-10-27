@@ -4,9 +4,10 @@ import { useNow } from "@carlnotes/core/hooks/useNow"
 import { selectTopicFindings } from "@carlnotes/core/lib/topicFeed"
 import { applyTopicPageChanges } from "@carlnotes/core/lib/topicFindingChanges"
 import { sendTopicViewOnce } from "@carlnotes/core/lib/topicViews"
+import { useTopicChangeCount } from "@carlnotes/core/stores/chatConversationStore"
 import { useQuery } from "@tanstack/react-query"
 import { useFocusEffect, useLocalSearchParams } from "expo-router"
-import { useCallback, useMemo } from "react"
+import { useCallback, useEffect, useMemo } from "react"
 import { ScrollView, Text, View } from "react-native"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { ClassNameSafeAreaView } from "@/components/common/ClassNameSafeAreaView"
@@ -38,6 +39,14 @@ export default function TopicScreen() {
 		queryFn: () => fetchTopicPage(topicId),
 		enabled: Boolean(session),
 	})
+	// refresh the mounted Topic after accepted chat edits
+	const topicChangeCount = useTopicChangeCount(topicId)
+	const { refetch } = query
+	useEffect(() => {
+		if (topicChangeCount > 0) {
+			void refetch()
+		}
+	}, [topicChangeCount, refetch])
 	const page = applyTopicPageChanges(query.data, topicFeed.pendingChanges)
 	const topic = page?.status === "visible" ? page.topic : null
 	const isLoadingTopic = !topic && query.isPending && query.fetchStatus !== "paused"

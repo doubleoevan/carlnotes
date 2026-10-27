@@ -38,6 +38,8 @@ files are written from the tokens.
   missing an implementation, an implementation imports no value from its contract or has no story, or an app file other
   than the implementation, a story, or a test imports a contract. The contracts keep the web's variant names, unused
   ones included. Renaming or removing a variant is a change of its own.
+- `assets/` — the shared Carl and Vienna avatar PNGs, imported by both apps through `@carlnotes/nightshift/assets/`.
+- `coffeeCup.ts` — the chat launcher's shared white cup, saucer, and steam paths. Both apps render these paths.
 - `coffeeMug.ts` — the coffee mug in the CarlNotes logo: its view box, the cup and handle paths, the strokes, the
   three steam wisps, and the steam's motion. The steam holds still below the `md` breakpoint, as on a phone.
   `oauthProviderIcons.ts` — the sign-in providers' icons: the Google logo's colored paths and the Apple logo's path.

@@ -47,6 +47,48 @@ It imports `@carlnotes/contracts`, `@carlnotes/client`, `react`, and `@tanstack/
   root rule. A module that needs a DOM type is a web module and lives in `apps/web/src`.
 - Tests: `bun test packages/core`.
 
+## Shared chat
+
+`lib/chatTurns.ts` owns turn identities, attachments, and stopped/finished turn handling.
+`lib/chatHistoryTurns.ts` selects the history sent with the next question, retaining tool-only turns.
+Web keeps import-compatible re-exports; both apps use the same implementation and existing contracts/client compaction.
+Core tests cover interrupted and rejected turns, alongside the unchanged web regression tests.
+
+`components/ChatAuthor`, `ChatTurnBlock`, `ChatRoomMessageBubble`, `ChatRejectionNotice`, and `TopicDraftCard` own
+shared author, message, rejection, and draft field composition. Apps supply stable element adapters, Markdown, links,
+and action controls. `lib/chatStoryFixtures.ts` supplies fictional conversations to both component browsers.
+
+`hooks/useChatConversationLoad` owns history/access gates and proposal restoration; `useTopicChat` owns send, stop,
+retry, clear, and tool outcomes. Browser voice, attachments, new-topic creation, and podcast effects remain injected
+web extensions. `useEditableTopicDraft` reads authoritative settings and overlays proposed changes.
+`lib/topicToolCalls` interprets accepted/rejected tools with injected notice effects; `lib/chatRejectionCopy` keeps
+both clients' wording together. `stores/chatConversationStore` scopes selection, proposals, and delayed callbacks by
+account and conversation; `lib/chatConversations` holds selection rules, private conversation addressing, names,
+alphabetical room ordering, and `toProfileChatContext` for both apps. Reset the account on sign-out.
+`lib/chatCopy` holds shared composer, confirmation, empty-room, and completion wording. Account replacement also
+clears `chatRoomStore` and its opened-room markers. Member reads can reuse the current account's loaded Team page.
+
+`components/ScrollDownButton` shares the centered latest-message action, visibility, label, and Nightshift classes.
+Its adapters supply the browser button or native touch control and the Lucide arrow.
+`components/ChatPill` composes the launcher icon, label, action, and optional badge for both apps. Native safe-area
+placement and browser portals/player clearance stay in their adapters.
+
+`hooks/useChatRoom` owns posting, access state, and tool events. `hooks/useChatMessagePages` owns room history,
+earlier pages, and virtual list indices. The room hook reconciles pending Carl replies
+against recovered history and ignores model replies older than the pending question. `lib/chatRoomMessages` deduplicates
+and orders rows without dropping loaded metadata. `hooks/useChatRoomStream` binds React lifetime to the controller
+in `lib/chatRoomStream`: monotonic cursor, backoff, heartbeat recovery, and retired-connection guards. Apps supply
+transport and activity; core imports neither EventSource nor AppState. `useRoomMembers`, `useRoomReply`,
+`lib/chatMentions`, and `lib/chatRoomReplies` share member/reply/caret rules. `useLinkPreviewRefresh` and
+`useChatRoomLinkPreviews` bound polling to six attempts and retire delayed reads. `lib/chatLinkPreviews` and
+`lib/chatMessages` hold portable link/message helpers. Existing `chatRoomStore` owns mention acknowledgement.
+
+`lib/safeChatMarkdown` holds the web's HTTP(S) link predicate and new-topic invitation rule. Recap link safety stays
+separate. `lib/nativeChatMarkdown` transforms parsed chat Markdown into safe text segments and labeled table rows:
+raw HTML stays literal, rejected links retain their labels, images become links, and incomplete table rows wait.
+Apps still guard link actions at the renderer boundary. Shared hook tests use the existing web DOM harness; core's
+pure/controller/store tests remain platform-free.
+
 ## Shared Feed
 
 `hooks/usePagination.ts` owns table page selection, row slicing, and clamping after the rows or page size change.

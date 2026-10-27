@@ -1,3 +1,13 @@
+import {
+	type ChatRejectionElements,
+	ChatRejectionNotice as SharedChatRejectionNotice,
+} from "@carlnotes/core/components/ChatRejectionNotice"
+import {
+	type ChatMessageAuthor,
+	type ChatTurnBlockProps,
+	type ChatTurnElements,
+	ChatTurnBlock as SharedChatTurnBlock,
+} from "@carlnotes/core/components/ChatTurnBlock"
 // one chat turn as the private chat renders it: the question bubble, carl's answer bubble, and the compaction line
 
 import { type ChatRejection, toChatAttachmentUrl } from "@carlnotes/client/chatClient"
@@ -14,54 +24,27 @@ import { ChatAuthor } from "./ChatAuthor"
 import { ChatBudgetNotice } from "./ChatBudgetNotice"
 import { ChatMarkdown } from "./ChatMarkdown"
 import { ChatVideo, CopyButton, ModelThinkingBubble, toTimeAgoLabel } from "./ChatMessageParts"
-import { CHAT_REJECTION_COPY } from "./chatRejectionCopy"
 import type { ChatTurn } from "./chatTurns"
 import { PodcastEpisodeChapterTag } from "./PodcastEpisodeChapterTag"
 import { SpokenAnswerButton } from "./SpokenAnswerButton"
 
-// who a chat message renders as: the account when one exists, and the recorded name either way
-export type ChatMessageAuthor = { userId: string | null; username: string; avatarVersion: string | null }
+export type { ChatMessageAuthor } from "@carlnotes/core/components/ChatTurnBlock"
 
 /**
- * One chat turn as the chat message list renders it. The compaction line comes above the uncompacted chat turn if it
- * exists.
+ * Adapts shared chat turns and rejections to browser elements.
  */
-export function ChatTurnBlock({
-	chatTurn,
-	index,
-	uncompactedChatTurnStart,
-	isLast,
-	isStreaming,
-	now,
-	author,
-	voiceChatPage,
-	onRetry,
-}: {
-	chatTurn: ChatTurn
-	index: number
-	uncompactedChatTurnStart: number
-	isLast: boolean
-	isStreaming: boolean
-	now: number
-	author: ChatMessageAuthor
-	// the page the answer's play button names, null while voice is off
-	voiceChatPage: VoiceChatPage | null
-	onRetry?: (question: string) => void
-}) {
-	return (
-		<div className="space-y-3">
-			{uncompactedChatTurnStart > 0 && index === uncompactedChatTurnStart && <CompactionNotice />}
-			<QuestionBubble chatTurn={chatTurn} now={now} author={author} />
-			<AnswerBubble
-				chatTurn={chatTurn}
-				isLast={isLast}
-				isStreaming={isStreaming}
-				now={now}
-				voiceChatPage={voiceChatPage}
-				onRetry={onRetry}
-			/>
-		</div>
-	)
+export function ChatTurnBlock(props: ChatTurnBlockProps) {
+	return <SharedChatTurnBlock {...props} elements={chatTurnElements} />
+}
+
+// the browser turn elements
+const chatTurnElements: ChatTurnElements = {
+	Frame: ({ children }) => <div className="space-y-3">{children}</div>,
+	Compaction: CompactionNotice,
+	Question: QuestionBubble,
+	Answer: AnswerBubble,
+	Thinking: ModelThinkingBubble,
+	Rejection: ChatRejectionNotice,
 }
 
 // the divider marking where the model's compaction ends
@@ -152,34 +135,15 @@ function ChatImage({ attachment }: { attachment: ChatMessageAttachment & { dataU
 // before the response starts streaming
 function AnswerBubble({
 	chatTurn,
-	isLast,
-	isStreaming,
+	isStreamingAnswer,
 	now,
 	voiceChatPage,
-	onRetry,
 }: {
 	chatTurn: ChatTurn
-	isLast: boolean
-	isStreaming: boolean
+	isStreamingAnswer: boolean
 	now: number
 	voiceChatPage: VoiceChatPage | null
-	// re-asks a failed chat turn's question, offered on the failure notice
-	onRetry?: (question: string) => void
 }) {
-	// the two live states, waiting while showing the thinking chat message and streaming the response
-	const isWaitingForAnswer = isLast && isStreaming && chatTurn.answer === ""
-	const isStreamingAnswer = isLast && isStreaming && chatTurn.answer !== ""
-	if (isWaitingForAnswer && !chatTurn.rejection) {
-		return <ModelThinkingBubble />
-	}
-
-	// a rejected chat turn shows the failure or a call to action instead of an empty bubble
-	if (chatTurn.rejection) {
-		return (
-			<ChatRejectionNotice rejection={chatTurn.rejection} onRetry={onRetry && (() => onRetry(chatTurn.question))} />
-		)
-	}
-
 	return (
 		<ChatAuthor
 			authorUserId={null}
@@ -201,7 +165,7 @@ function AnswerBubble({
 					chatTurn.linkPreviewsPending &&
 					chatTurn.answerLinkPreviews.length === 0 &&
 					hasPreviewableLink(chatTurn.answer) && <LinkPreviewLoading />}
-				{!isWaitingForAnswer && !isStreamingAnswer && chatTurn.answer !== "" && (
+				{!isStreamingAnswer && chatTurn.answer !== "" && (
 					<AnswerFooter chatTurn={chatTurn} now={now} voiceChatPage={voiceChatPage} />
 				)}
 			</div>
@@ -238,39 +202,18 @@ function AnswerFooter({
 	)
 }
 
-// what a rejected chat turn shows with a possible call to action
+// retain the web's plan action and retry icon around the shared rejection wording
 function ChatRejectionNotice({ rejection, onRetry }: { rejection: ChatRejection; onRetry?: () => void }) {
-	// a stream that broke mid-reply invites another attempt, and the invitation re-asks the question
-	if (rejection === "failed") {
-		return (
-			<p className="text-muted-foreground text-sm">
-				{`${CHAT_REJECTION_COPY.failed} `}
-				{onRetry ? (
-					<button type="button" onClick={onRetry} className="sentence-link">
-						Try again?
-						<RotateCcw className="ml-1.5 inline size-3.5 align-middle" aria-hidden="true" />
-					</button>
-				) : (
-					"Try again?"
-				)}
-			</p>
-		)
-	}
-
-	// ask a user past the per-minute limit to wait, and say why a file was not read. the retry above resends the question
-	// alone, so a file the server was too busy to read asks to be sent again instead
-	if (
-		rejection === "rateLimited" ||
-		rejection === "attachmentTooLarge" ||
-		rejection === "attachmentUnreadable" ||
-		rejection === "attachmentBusy"
-	) {
-		return <p className="text-muted-foreground text-sm">{CHAT_REJECTION_COPY[rejection]}</p>
-	}
-
-	// an exhausted budget shows a call-to-action to upgrade at the plans page. anything forbidden shows a rejection
-	if (rejection === "budget") {
-		return <ChatBudgetNotice />
-	}
-	return <p className="text-muted-foreground text-sm">{CHAT_REJECTION_COPY.forbidden}</p>
+	return <SharedChatRejectionNotice rejection={rejection} onRetry={onRetry} elements={chatRejectionElements} />
+}
+// the browser rejection elements
+const chatRejectionElements: ChatRejectionElements = {
+	Text: ({ children }) => <p className="text-muted-foreground text-sm">{children}</p>,
+	Retry: ({ onRetry }) => (
+		<button type="button" onClick={onRetry} className="sentence-link">
+			Try again?
+			<RotateCcw className="ml-1.5 inline size-3.5 align-middle" aria-hidden="true" />
+		</button>
+	),
+	Budget: ChatBudgetNotice,
 }

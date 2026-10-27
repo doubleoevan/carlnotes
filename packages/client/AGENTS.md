@@ -53,3 +53,7 @@ callers must retain their current state and show failure rather than report succ
 
 `fetchTopicAttachment` downloads attachment bytes with the configured session headers and rejects failed access.
 Native file viewing uses this client so it does not depend on a browser session.
+
+`chatClient.ts` keeps the shared incremental UTF-8/NDJSON reader for `sendChatTurn`. The caller supplies a streaming
+fetch and AbortSignal; native aborts can be plain Errors, so an aborted signal is authoritative. `chatStreaming.test.ts`
+checks byte-split multibyte text, tool callbacks before EOF, and native cancellation. No transport retries a chat POST.

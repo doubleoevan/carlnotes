@@ -101,6 +101,16 @@ test("toImportViolations flags a Nightshift module in a web app page and passes 
 	expect(toWebViolations("apps/web/.storybook/manager.ts", colorsImport)).toEqual([])
 	expect(toWebViolations("apps/web/src/nightshift/TokenSwatches.tsx", colorsImport)).toEqual([])
 
+	// the two host portraits are shared host portrait imports
+	for (const host of ["carl", "vienna"]) {
+		expect(
+			toWebViolations(
+				"apps/web/src/components/branding/HostAvatar.tsx",
+				`import portrait from "@carlnotes/nightshift/assets/${host}-avatar.png"\n`,
+			),
+		).toEqual([])
+	}
+
 	// the stylesheet, the class merge, the coffee mug, the sign-in providers' icons, and a component contract pass
 	// anywhere
 	expect(

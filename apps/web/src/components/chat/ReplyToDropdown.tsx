@@ -1,7 +1,6 @@
 // the reply target dropdown of the chat room composer, and the chat message helpers that swap its chat mention
 
 import type { ChatRoomMessage } from "@carlnotes/contracts/chat"
-import { ALL_USERNAME, CARL_USERNAME } from "@carlnotes/contracts/chatMentions"
 import { PODCAST_EPISODE_SPEAKER_NAMES } from "@carlnotes/contracts/podcastEpisodes"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { ChevronDown, Reply } from "lucide-react"
@@ -79,29 +78,4 @@ export function ReplyToDropdown({
 	)
 }
 
-/** Returns what the menu calls a chat mention: carl by name, @all as typed, anyone else by their username. */
-export function toMentionLabel(username: string): string {
-	if (username === CARL_USERNAME) {
-		return PODCAST_EPISODE_SPEAKER_NAMES.host
-	}
-	return username === ALL_USERNAME ? "@all" : username
-}
-
-/** Swaps the current chat mention for the selected chat mention if there is one. */
-export function toChangedMentionChatMessage(chatMessage: string, username: string, memberUsernames: string[]): string {
-	return `@${username} ${toChatMessage(chatMessage, memberUsernames)}`
-}
-
-/** Returns the chat message without its leading chat mention. */
-export function toChatMessage(chatMessage: string, memberUsernames: string[]): string {
-	const currentMentions = chatMessage.match(/^@([\w-]+)\s*/)
-	const chatUsernames = [
-		CARL_USERNAME,
-		ALL_USERNAME,
-		...memberUsernames.map((memberUsername) => memberUsername.toLowerCase()),
-	]
-	if (currentMentions && chatUsernames.includes((currentMentions[1] ?? "").toLowerCase())) {
-		return chatMessage.slice(currentMentions[0].length)
-	}
-	return chatMessage
-}
+export { toChangedMentionChatMessage, toChatMessage, toMentionLabel } from "@carlnotes/core/lib/chatMentions"

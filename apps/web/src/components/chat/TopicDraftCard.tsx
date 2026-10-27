@@ -1,244 +1,103 @@
 import { toTopicPath } from "@carlnotes/contracts/seo"
-import { DEFAULT_SOURCES } from "@carlnotes/contracts/sources"
-import type { TopicDraft } from "@carlnotes/contracts/topicPayloads"
-import { toScheduleLabel } from "@carlnotes/core/lib/labels"
+import {
+	TopicDraftCard as SharedTopicDraftCard,
+	type TopicDraftCardElements,
+	type TopicDraftCardProps,
+} from "@carlnotes/core/components/TopicDraftCard"
 import { X } from "lucide-react"
-import type { ReactNode } from "react"
 import { CoffeeLoading } from "@/components/branding/CoffeeLoading"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { ScrollBox } from "@/components/common/ScrollBox"
 import { POPOVER_HEADING_CLASS, SECTION_LABEL_CLASS, STANDALONE_LINK_CLASS } from "@/lib/styleClasses"
 
-// how the card words each visibility
-const VISIBILITY_LABELS: Record<TopicDraft["visibility"], string> = {
-	public: "Public",
-	invite: "Shared by invite",
-	private: "Private",
-}
-
 /**
- * Shows a topic in the chat above the composer. In the new-topic chat it is Carl's topic draft so far, with the files
- * waiting to become the topic's attachments. While a topic is being edited it is the topic draft.
- * Every setting shows whether or not it is set, so the user sees what is there to change.
+ * Adapts the shared Topic draft card to browser elements.
  */
-export function TopicDraftCard({
-	topicDraft,
-	topicId,
-	isTopicEditProposed = false,
-	isCarlReplying = false,
-	attachmentFiles = [],
-	onRemoveAttachmentFile,
-	onDismissTopicEdit,
-}: {
-	topicDraft: TopicDraft
-	// the topic the card shows, which makes its name a link. absent in the new-topic chat, where none exists yet
-	topicId?: string | null
-	// whether the card shows a change carl proposed, not saved to the topic yet
-	isTopicEditProposed?: boolean
-	// whether carl owes this chat a reply, which is when a rewrite can arrive
-	isCarlReplying?: boolean
-	attachmentFiles?: File[]
-	onRemoveAttachmentFile?: (index: number) => void
-	// takes a proposed edit off the card, shown as the dismiss button on a proposed edit
-	onDismissTopicEdit?: () => void
-}) {
-	// a team alone is not a topic draft. opening this chat from a team page starts the draft on that team,
-	// and a create clears every other field but keeps the team for the next topic, so counting it would leave the card up for good
-	const isTopicDraftEmpty =
-		topicDraft.name === "" &&
-		topicDraft.prompt === "" &&
-		topicDraft.sources.length === 0 &&
-		topicDraft.inviteEmails.length === 0 &&
-		topicDraft.tags.length === 0
-	if (isTopicDraftEmpty && attachmentFiles.length === 0) {
-		return null
-	}
-	// the heading, which is also the card's aria label. an existing topic is a draft the user iterates on, and a
-	// new one is a preview of what the create will save
-	const heading = topicId ? "Topic draft" : "Topic preview"
-	const topicSourceLines = toTopicSourceLines({ topicDraft, isNewTopicDraft: !topicId })
-	const tagsLabel = topicDraft.tags.join(", ") || "None"
-	const scheduleLabel = toScheduleLabel(topicDraft.frequency, topicDraft.scheduledTime, topicDraft.scheduledDayOfWeek)
+export function TopicDraftCard(props: TopicDraftCardProps) {
+	return <SharedTopicDraftCard {...props} elements={topicDraftCardElements} />
+}
 
-	// the card shrinks and scrolls if the chat panel runs short, as it does over a phone keyboard,
-	// so the composer under it stays whole
-	return (
+// keep topic draft elements stable through streamed proposals
+const topicDraftCardElements: TopicDraftCardElements = {
+	Frame: ({ children, heading }) => (
 		<section className="flex min-h-0 shrink flex-col border-t px-3 py-2 text-sm" aria-label={heading}>
-			<ScrollBox
-				scrollToTopOn={topicDraft}
-				boxClassName="flex min-h-0 flex-col"
-				className="max-h-48 min-h-0 overscroll-contain sm:max-h-72"
-			>
-				{/* the heading centers over the fields, so the dismiss button sits in the corner */}
-				<div className="relative">
-					<h2 className={POPOVER_HEADING_CLASS}>{heading}</h2>
-					{/* clear the proposed edit */}
-					{isTopicEditProposed && onDismissTopicEdit && (
-						<button
-							type="button"
-							aria-label="Dismiss proposed edit"
-							onClick={onDismissTopicEdit}
-							className="text-muted-foreground hover:text-foreground absolute top-0 right-0"
-						>
-							<X className="size-3.5" />
-						</button>
-					)}
-				</div>
-				{/* the app's loading in place of the fields while carl replies, and every field fades in after */}
-				{isCarlReplying ? (
-					<CoffeeLoading className="min-h-24 text-base" />
-				) : (
-					<>
-						{/* the topic name leads the card with no label of its own */}
-						{topicDraft.name && (
-							<p key={topicDraft.name} className="text-foreground animate-in fade-in mb-2 break-words duration-500">
-								{/* the name opens the topic behind the panel, and reads as plain text before one exists */}
-								{topicId ? (
-									<AnchorLink
-										href={toTopicPath({ id: topicId, name: topicDraft.name })}
-										className={STANDALONE_LINK_CLASS}
-									>
-										{topicDraft.name}
-									</AnchorLink>
-								) : (
-									topicDraft.name
-								)}
-							</p>
-						)}
-						{/* the fields in the edit modal's own order, so the two read the same */}
-						<dl>
-							{topicDraft.prompt && (
-								<TopicDraftField label="Carl's Prompt" fieldText={topicDraft.prompt}>
-									{topicDraft.prompt}
-								</TopicDraftField>
-							)}
-							<TopicDraftField label="Tags" fieldText={tagsLabel}>
-								{tagsLabel}
-							</TopicDraftField>
-							<TopicDraftField label="Frequency" fieldText={scheduleLabel}>
-								{scheduleLabel}
-							</TopicDraftField>
-							<TopicDraftField label="Max findings" fieldText={String(topicDraft.maxTopicFindings)}>
-								{topicDraft.maxTopicFindings} findings per brew
-							</TopicDraftField>
-							<TopicDraftPodcastField isPodcastEnabled={topicDraft.isPodcastEnabled} />
-							<TopicDraftField label="Visibility" fieldText={topicDraft.visibility}>
-								{VISIBILITY_LABELS[topicDraft.visibility]}
-							</TopicDraftField>
-							{topicDraft.team && (
-								<TopicDraftField label="Team" fieldText={topicDraft.team.name}>
-									{topicDraft.team.name}
-								</TopicDraftField>
-							)}
-							{topicDraft.inviteEmails.length > 0 && (
-								<TopicDraftField label="Invites" fieldText={topicDraft.inviteEmails.join(", ")}>
-									<ul className="grid gap-0.5">
-										{topicDraft.inviteEmails.map((email, index) => (
-											// biome-ignore lint/suspicious/noArrayIndexKey: the list is rebuilt whole from the topic draft
-											<li key={`${index}-${email}`}>{email}</li>
-										))}
-									</ul>
-								</TopicDraftField>
-							)}
-							<TopicDraftField label="Sources" fieldText={topicSourceLines.join(", ")}>
-								{/* numbered, so the user can count the topic's sources and name one back to carl */}
-								<ol className="list-decimal space-y-0.5 pl-5">
-									{topicSourceLines.map((line, index) => (
-										// biome-ignore lint/suspicious/noArrayIndexKey: the list is rebuilt whole from the topic draft
-										<li key={`${index}-${line}`}>{line}</li>
-									))}
-								</ol>
-							</TopicDraftField>
-							{attachmentFiles.length > 0 && (
-								<TopicDraftField label="Files">
-									<ul className="flex flex-wrap gap-1">
-										{attachmentFiles.map((attachmentFile, index) => (
-											<li
-												key={`${attachmentFile.name}-${attachmentFile.size}-${attachmentFile.lastModified}`}
-												className="bg-muted flex items-center gap-1 rounded px-2 py-0.5 text-xs"
-											>
-												{attachmentFile.name}
-												{/* show the remove button only in the new-topic chat */}
-												{onRemoveAttachmentFile && (
-													<button
-														type="button"
-														aria-label={`Remove ${attachmentFile.name}`}
-														onClick={() => onRemoveAttachmentFile(index)}
-														className="hover:text-foreground"
-													>
-														<X className="size-3" />
-													</button>
-												)}
-											</li>
-										))}
-									</ul>
-								</TopicDraftField>
-							)}
-						</dl>
-					</>
-				)}
-			</ScrollBox>
+			{children}
 		</section>
-	)
-}
-
-// one line per source the topic would read, with the built-in sources a new topic's create will add
-function toTopicSourceLines({
-	topicDraft,
-	isNewTopicDraft,
-}: {
-	topicDraft: TopicDraft
-	isNewTopicDraft: boolean
-}): string[] {
-	const defaultSourceLabels = new Map<string, string>(
-		DEFAULT_SOURCES.map((defaultSource) => [defaultSource.key, defaultSource.label]),
-	)
-	const topicDraftSources = topicDraft.sources.map(
-		(topicSource) =>
-			defaultSourceLabels.get(topicSource.sourceOption) ?? `${topicSource.sourceOption} ${topicSource.value}`.trim(),
-	)
-	if (!isNewTopicDraft) {
-		return topicDraftSources
-	}
-	// name the built-in sources a create will add, skipping any the topic draft already names
-	const topicDraftSourceKeys = new Set<string>(topicDraft.sources.map((topicSource) => topicSource.sourceOption))
-	const missingDefaultSourceLabels = DEFAULT_SOURCES.filter(
-		(defaultSource) => !topicDraftSourceKeys.has(defaultSource.key),
-	).map((defaultSource) => defaultSource.label)
-	return [...missingDefaultSourceLabels, ...topicDraftSources]
-}
-
-// the field that says whether the topic's podcast is on
-function TopicDraftPodcastField({ isPodcastEnabled }: { isPodcastEnabled?: boolean }) {
-	// a topic with no podcast shows no podcast field
-	if (isPodcastEnabled === undefined) {
-		return null
-	}
-	return (
-		<TopicDraftField label="Podcast" fieldText={String(isPodcastEnabled)}>
-			{isPodcastEnabled ? "Coffee Break episode after every brew" : "Off"}
-		</TopicDraftField>
-	)
-}
-
-// one labeled field of the topic draft
-function TopicDraftField({
-	label,
-	fieldText,
-	children,
-}: {
-	label: string
-	// the field's text. a new value remounts the field and fades it in. the files field leaves it off, so its
-	// remove button keeps focus
-	fieldText?: string
-	children: ReactNode
-}) {
-	return (
+	),
+	Scroll: ({ children, topicDraft }) => (
+		<ScrollBox
+			scrollToTopOn={topicDraft}
+			boxClassName="flex min-h-0 flex-col"
+			className="max-h-48 min-h-0 overscroll-contain sm:max-h-72"
+		>
+			{children}
+		</ScrollBox>
+	),
+	HeadingRow: ({ children }) => <div className="relative">{children}</div>,
+	Heading: ({ children }) => <h2 className={POPOVER_HEADING_CLASS}>{children}</h2>,
+	Dismiss: ({ onDismiss }) => (
+		<button
+			type="button"
+			aria-label="Dismiss proposed edit"
+			onClick={onDismiss}
+			className="text-muted-foreground hover:text-foreground absolute top-0 right-0"
+		>
+			<X className="size-3.5" />
+		</button>
+	),
+	Loading: () => <CoffeeLoading className="min-h-24 text-base" />,
+	Name: ({ name, topicId }) => (
+		<p className="text-foreground animate-in fade-in mb-2 break-words duration-500">
+			{topicId ? (
+				<AnchorLink href={toTopicPath({ id: topicId, name })} className={STANDALONE_LINK_CLASS}>
+					{name}
+				</AnchorLink>
+			) : (
+				name
+			)}
+		</p>
+	),
+	Fields: ({ children }) => <dl>{children}</dl>,
+	Field: ({ label, fieldText, children }) => (
 		<div className="py-1.5 first:pt-0 last:pb-0">
 			<dt className={SECTION_LABEL_CLASS}>{label}</dt>
 			<dd key={fieldText} className="text-foreground animate-in fade-in mt-1 min-w-0 break-words duration-500">
 				{children}
 			</dd>
 		</div>
-	)
+	),
+	List: ({ items, isNumbered }) => {
+		// render the ordered or unordered topic field entries
+		const List = isNumbered ? "ol" : "ul"
+		return (
+			<List className={isNumbered ? "list-decimal space-y-0.5 pl-5" : "grid gap-0.5"}>
+				{items.map((item, index) => (
+					// biome-ignore lint/suspicious/noArrayIndexKey: a draft replaces the whole ordered list
+					<li key={`${index}-${item}`}>{item}</li>
+				))}
+			</List>
+		)
+	},
+	Files: ({ files, onRemove }) => (
+		<ul className="flex flex-wrap gap-1">
+			{files.map((file, index) => (
+				<li
+					key={`${file.name}-${file.size}-${file.lastModified}`}
+					className="bg-muted flex items-center gap-1 rounded px-2 py-0.5 text-xs"
+				>
+					{file.name}
+					{onRemove && (
+						<button
+							type="button"
+							aria-label={`Remove ${file.name}`}
+							onClick={() => onRemove(index)}
+							className="hover:text-foreground"
+						>
+							<X className="size-3" />
+						</button>
+					)}
+				</li>
+			))}
+		</ul>
+	),
 }

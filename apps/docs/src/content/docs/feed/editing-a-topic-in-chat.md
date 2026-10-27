@@ -25,6 +25,13 @@ The topic's card sits above the message box once an edit starts. That is the mom
 moment Carl answers a request with a proposal. The card updates with each save. It does not show while you only ask
 about findings.
 
+## On your phone
+
+Tap **Coffee Talk** on the topic and ask Carl for a change in the private chat or Team room. His proposal opens the same
+Topic draft card as the web, with the proposed values over the current settings. The card is a preview: answer Carl in
+the conversation to confirm. A successful save shows a notice and reloads the Topic and card from the server. A rejected
+save shows its reason and does not pretend the settings changed. You can dismiss the proposed preview without saving.
+
 ## The toast is the confirmation
 
 A change is saved when a toast says so: "Carl saved the new prompt", "Carl added reddit — r/austin", "Carl removed rss —

@@ -13,7 +13,7 @@ at the table. Carl knows the topic's findings, sources, and brew history, the sa
 
 ## One panel, every page
 
-There is one Coffee Talk panel, docked bottom-right on every page. It keeps the conversation you opened, at the size you
+On the web there is one Coffee Talk panel, docked bottom-right on every page. It keeps the conversation you opened, at the size you
 left it, as you move around the app. The panel belongs to the conversation, not to the page.
 
 Each team's chat room is its own conversation. What one team says about a topic does not show in another team's room. A
@@ -32,13 +32,25 @@ A team also has a room of its own, which covers every topic the team has added.
 ![The team's own room: members talking across the team's topics, Carl answering from all of
 them](../../../assets/screenshots/teams-team-room.png)
 
+## On your phone
+
+Tap **Coffee Talk** on a topic or team. Pick a room or private chat above the messages. Type **@** for member
+suggestions, use the reply selector, or tap **Reply** under a message. A quoted reply takes you to the original message
+when it is loaded. **Earlier messages** loads more history without moving you away from what you are reading.
+
+You can delete your own messages. Team leaders and admins can also delete others' messages and clear the room, with
+confirmation before clearing. A failed action leaves the history intact. Opening a room marks its mentions viewed.
+Messages reconnect when you return to the app. Changes to deleted messages on another device appear when the room
+reloads; deletion does not currently have its own live event. Existing files appear as name chips; file management
+and voice are available on the web.
+
 ## Who hears you
 
 The name above the message box shows who your message goes to. A message goes to **@all** by default. Every member is
 notified, and Carl answers. To reply to one person instead, type their @username, or pick them from the menu. To reply
 to an earlier message, press **Reply** below it.
 
-A spoken message always goes to Carl, as if you had mentioned him. Tap the microphone in the empty message box and talk.
+On the web, a spoken message always goes to Carl, as if you had mentioned him. Tap the microphone in the empty message box and talk.
 Your words post to the room with **@carl** in front. The whole room reads them, Carl answers out loud, and nobody else
 is notified. If you are recording again when his answer arrives, the answer waits on the screen with its play button
 instead of talking over you. When he finishes talking, the microphone opens again on its own for your next question, the
@@ -53,7 +65,7 @@ Opening its chat room clears the count.
 
 ## Sharing files
 
-The paperclip attaches a file to your next message: an image, a PDF, a Word or Excel file, a text file, or a video (MP4,
+On the web, the paperclip attaches a file to your next message: an image, a PDF, a Word or Excel file, a text file, or a video (MP4,
 QuickTime, or WebM). In a private Coffee Talk, a file stays yours. A file shared here belongs to the room:
 
 - **Every member can download it** from the chip under the message.

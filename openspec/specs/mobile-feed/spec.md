@@ -199,7 +199,7 @@ Initial loading, empty sections, an empty filtered Feed, and failed reads SHALL 
 #### Scenario: A user has no Topics
 
 - **WHEN** Yours is empty
-- **THEN** its empty state uses the web's matching line and offers native Topic creation; deferred chat is not presented as an available native action
+- **THEN** its empty state uses the web's matching line and offers native Topic creation; deferred new-topic chat is not presented as an available native action
 
 #### Scenario: A refresh fails after data loaded
 
@@ -330,8 +330,14 @@ Profile, Teams, Team details, Activity, Account, and Plans SHALL render natively
 
 #### Scenario: A destination requires its existing browser flow
 
-- **WHEN** a user opens Admin, hosted checkout, document links, podcast playback, or chat
+- **WHEN** a user opens Admin, hosted checkout, document links, podcast playback, or an explicitly deferred chat workflow
 - **THEN** the app opens the existing web destination explicitly
+
+#### Scenario: A supported text conversation is opened
+
+- **WHEN** a user opens the global chat pill from any signed-in page
+- **THEN** the app opens its native conversation screen with the shared web behavior
+- **AND** deferred new-topic chat, voice, and attachment management do not prevent reading or sending supported text
 
 ### Requirement: Native forms preserve web action semantics
 

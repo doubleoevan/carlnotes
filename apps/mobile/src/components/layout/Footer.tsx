@@ -14,7 +14,7 @@ export function Footer() {
 
 // native links open the existing public pages in the system browser view
 const FOOTER_ELEMENTS: FooterElements = {
-	Root: ({ children }) => <View className="w-full max-w-5xl self-center px-4 py-6">{children}</View>,
+	Root: ({ children }) => <View className="w-full max-w-5xl self-center px-4 pt-6 pb-20">{children}</View>,
 	Legal: ({ children }) => <View className="mt-3 gap-1.5">{children}</View>,
 	Row: ({ children }) => (
 		<View className="flex-row flex-wrap items-center justify-center gap-x-6 gap-y-1">{children}</View>

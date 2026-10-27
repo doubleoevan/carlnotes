@@ -1,3 +1,4 @@
+import { toChatTopicLimitCopy } from "@carlnotes/core/lib/chatRejectionCopy"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { PLANS_ACTION_LABEL, PLANS_PATH } from "./chatRejectionCopy"
 
@@ -5,7 +6,7 @@ import { PLANS_ACTION_LABEL, PLANS_PATH } from "./chatRejectionCopy"
 export function ChatTopicLimitNotice({ topicLimit }: { topicLimit: number }) {
 	return (
 		<p className="text-muted-foreground border-t px-3 py-3 text-sm whitespace-pre-line">
-			{`Your plan has ${topicLimit} topics, and you used them all.\n`}
+			{`${toChatTopicLimitCopy(topicLimit)}\n`}
 			<AnchorLink href={PLANS_PATH} className="sentence-link">
 				{PLANS_ACTION_LABEL}
 			</AnchorLink>

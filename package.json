@@ -117,6 +117,7 @@
 	],
 	"patchedDependencies": {
 		"markdown-to-jsx@9.10.3": "patches/markdown-to-jsx@9.10.3.patch",
-		"react-native-enriched-html@1.1.1": "patches/react-native-enriched-html@1.1.1.patch"
+		"react-native-enriched-html@1.1.1": "patches/react-native-enriched-html@1.1.1.patch",
+		"react-native-sse@1.2.1": "patches/react-native-sse@1.2.1.patch"
 	}
 }

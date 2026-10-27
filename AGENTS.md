@@ -36,7 +36,8 @@ Packages, private `@carlnotes/<name>` workspaces that export source, in dependen
 - `packages/core/` — the DOM-free lib, stores, hooks, and React components that web and mobile share. Portable
   components compose platform adapters; DOM elements and native controls stay in their apps.
 - `packages/nightshift/` — Nightshift, the design system: every color token, the radius scale, the elevation, the
-  fonts, and the type roles in TypeScript, the email values, the `cn` class merge, the coffee mug and the sign-in
+  fonts, and the type roles in TypeScript, the email values, the `cn` class merge, Carl and Vienna's shared portraits,
+  the coffee mug and the sign-in
   providers' icons both apps draw, the component contracts under `components/` that each app's implementation builds
   on, and the `tokens.css`, `uniwind.css`, and Figma files written from the tokens.
 - `packages/server/` — env settings, monitoring, analytics, hmac, retry, concurrency, and the public fetch: everything

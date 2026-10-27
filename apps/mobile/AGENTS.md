@@ -18,6 +18,7 @@ and the package boundary check fails anything else, a type-only import of `@carl
   does. `appleSignIn.ts` is the native Sign in with Apple sheet. `appSignupGate.ts` attests the install through
   `@expo/app-integrity` and passes the gate, over `appSignupProofPlatform.ts`, which says which proof a build sends.
   `apiBaseUrl.ts` chooses the api url, and `typeRoleStyles.ts` maps the Nightshift type roles to native text styles.
+  `clipboard.ts` copies text with accessible success feedback and shared failure handling for chat and Markdown.
   `theme.ts` restores and saves the device's appearance preference. It defaults to system detection and keeps native
   controls and Uniwind on the same light or dark palette.
   The root loads regular and italic Karla faces at each supported weight so rich-text emphasis keeps the web's font.
@@ -218,7 +219,7 @@ Search shows one API page with shared pagination controls. Changing the query or
 Its `site-search` queries stay in memory, expire when unused, and never enter saved reading data.
 `podcast/PodcastEpisodePill.tsx` shares episode and chapter links across search, feed rows, and Finding sheets.
 Topic, Team, and profile results navigate natively. Podcast results retain their web handoff. `TopicHomeActions.tsx` supplies Tags
-and native New Topic. `TopicPageActions.tsx` supplies the shared web action bar, refresh, follow, native editing and brewing, and explicit podcast/chat handoffs.
+and native New Topic. `TopicPageActions.tsx` supplies the shared web action bar, refresh, follow, native editing and scanning, and explicit podcast handoff. chat uses the shared global launcher.
 
 `TopicPageContent.tsx` owns the Topic screen’s single scroll area. `CollapsibleSection.tsx` matches its open-by-default
 section headings. `TopicPageCards.tsx` renders Topic roast, Artisanal Blend, and Similar topics. `TopicScanHistory.tsx`
@@ -255,7 +256,7 @@ serves Notes. The pagination footer stays inside its table card. Future native t
 `table/TablePagination.tsx` supplies native controls to core's shared table footer and `usePagination` state.
 Rows opens the anchored `Select` dropdown; changing size or sort returns to page one.
 `topicPageStories.tsx` supplies complete page fixtures and an isolated Query client for the card stories.
-`common/WebFeature.tsx` supplies the labeled browser handoff for Admin and deferred podcast and chat workflows.
+`common/WebFeature.tsx` supplies the labeled browser handoff for Admin and deferred podcast workflows.
 Topic creation, editing, team management, manual scans, reporting, and Topic and Team notes run natively.
 Native audio playback and a standalone Finding route remain outside this pass.
 
@@ -440,7 +441,7 @@ The Text primitive supplies a default class, without an inline family overriding
 web. Compact links retain native hit slop. Privacy, Terms, License, docs, Releases, Source Code, and Nightshift use
 existing web destinations in iOS's dismissible browser sheet. Android uses its browser custom tab. Note editors and
 modal forms keep their focused layout without a footer. Hosted checkout and billing management use their existing
-browser flows. Admin, podcast playback, and chat retain explicit web handoffs; broader live counts remain separate work.
+browser flows. Admin and podcast playback retain explicit web handoffs; broader live counts remain separate work.
 
 Topic loading uses `core/components/TopicSkeleton` with the web section order, native card shapes, and a pulse that
 stops for reduced motion. Known Topic names stay visible, and a known Topic without a podcast omits its player.
@@ -473,3 +474,59 @@ The Account route uses `useAccount` from core, so a partial or failed budget loa
 The system browser sheet has a separate cookie store from the native SecureStore session. Admin and hosted account flows can require web sign-in. Do not copy session cookies into a browser URL or claim automatic sign-in.
 
 `hooks/useTopicScan.ts` adapts core's serialized scan polling to route focus, app activity, and connectivity. It refreshes only the Topic page and shares web's backoff.
+
+## Chat
+
+`app/chat.tsx`, `app/topics/[topicId]/chat.tsx`, and `app/teams/[teamId]/chat.tsx` render `components/chat/ChatScreen`.
+`AppChatPanel` mounts once in `_layout` and puts the shared `ChatPill` at the bottom right of every signed-in screen,
+above the safe area. `ChatPanelWidget` supplies native Nightshift elements to the core launcher and the conversation's
+keyboard-safe frame. Room stories use that same frame for device checks. `branding/CoffeeCup`
+draws the same Nightshift cup paths as web. The pill hides while the keyboard or conversation is open and in Storybook.
+Footer padding and note-screen clearance keep the final controls reachable. `hooks/useIsKeyboardVisible` is shared
+by the launcher and note layout. `chatNavigation` retains Topic/Team context on their note routes and delegates default
+selection to core. Profile routes retain the web's shared-Team and preferred-Topic context through
+`toProfileChatContext`. Other screens open the web default room; accounts without rooms can choose a private Topic from their
+loaded Feed. An empty Feed links back to Topics without offering deferred new-topic chat. The conversation selector
+uses `ChoiceSelect`'s full-width sheet presentation, with Carl's private chat first, alphabetized rooms, Team avatars,
+and a checked selection. Its shared `Sheet` opts into `ScrollIndicator` for orange overflow. Compact form and reply
+choices retain anchored dropdowns; the Select primitive bounds long menus to the safe viewport. Close
+returns to the prior screen. Account identity is activated in `_layout`.
+`PrivateChatPanel` and `ChatRoomPanel` wire core state to native lists and composers. The latter exports
+`ChatRoomContent` so stories exercise the connected room's presentation with local fixtures. `ChatMessageList` uses FlatList,
+preserves older messages, and retries quoted-message jumps after native row measurement. `ScrollDownButton`
+shares the web's centered position, arrow, label, and Nightshift styling through core composition, with native touch
+targets. `ChatComposer` bounds its draft and scrollable header to the remaining keyboard-safe space.
+`ChatRoomComposer` adapts native caret selection to shared mention/reply helpers. Its reply controls occupy
+`ChatComposer`'s padded header below the divider. Mention suggestions temporarily replace the reply selector
+while choosing a name, keeping both the suggestion and Send reachable on small phones with enlarged text.
+`ChatOptionsMenu` confirms clearing.
+
+The native `ChatAuthor`, `ChatTurnBlock`, `ChatRoomMessageBubble`, `ChatRejectionNotice`, and `TopicDraftCard` reuse
+core composition with native elements. Retain matching names, field order, Nightshift fonts/colors, Lucide icons,
+spacing, and shared rejection wording. `ChatMessageParts` supplies native copy, previews, and attachment-name chips.
+`branding/HostAvatar` draws Nightshift's shared host portraits for both message authors and the private-chat choice.
+Draft cards preview all current settings with the proposed overlay;
+accepted tool results clear it and reread the Topic. Replies confirm edits through the same API as web.
+
+`PrivateChatPanel` adds native activity cancellation to the core hook and the existing client `sendChatTurn`. Expo 58's
+default fetch is `expo/fetch`; its streaming body reader is required. Do not opt into buffered legacy RN fetch.
+`mobileApiRequestSettings.ts` supplies the same session/device headers and revoked-session handling to API requests
+and `chatRoomEvents.ts`. The latter adapts `react-native-sse@1.2.1`; its patch fixes the CommonJS export and emits
+`done` only on clean XHR completion; its regression test rejects a completion during LOADING. Library polling is disabled; core owns cursor/backoff/recovery. Native
+`useChatRoomStream` resolves current headers for each connection. `useIsChatActive` combines route focus and AppState:
+background/close closes SSE and aborts private sends, foreground reloads history, and a POST is never replayed.
+
+`ChatMarkdown` uses `react-native-enriched-markdown@1.1.1`, compatible with React Native 0.88. It requires a rebuilt
+native client, not an OTA update to an old binary. Core's parsed safety adapter keeps HTML literal and images as
+safe link labels. Press and long-press both accept HTTP(S) only; automatic previews/task editing are disabled.
+Generated tables become labeled row cards with incomplete rows withheld. Native streaming honors reduced motion.
+The new-topic invitation stays plain text. Stories beside the adapters use shared fictional fixtures in light/dark.
+
+Room members can reply, mention, copy, and delete their own messages; leaders/admins can moderate and clear the room.
+Only the opened room's mentions are acknowledged. Local delete/clear reloads accepted state; server SSE currently has
+no deletion event, so other clients reconcile when reopened. Voice, new-topic chat, attachment management, podcast
+chat, pricing links, and broad live badge subscriptions remain outside native text chat.
+
+Monitoring retains existing PostHog/Sentry platform/device context and redaction. Never log message text, prompts,
+tool/attachment payloads, session headers, or authenticated URLs from the new transports. Client/server analytics
+must not double-count a posted chat turn.

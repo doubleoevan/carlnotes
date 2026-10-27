@@ -69,3 +69,28 @@ test("native URLs are redacted in requests, navigation, breadcrumbs, and span de
 		expect(result.spans?.[0]?.description).toBe("Open [url]")
 	}
 })
+
+// chat transport failures keep platform diagnostics but no conversation or session material
+test("chat failures redact tool content, session headers, and authenticated stream URLs", () => {
+	const result = redactMobileEvent({
+		request: {
+			url: "https://carlnotes.com/api/topics/private-secret/chat/events?after=99",
+			headers: { Cookie: "secret" },
+			data: "private message",
+		},
+		contexts: {
+			device: { model: "iPhone", os: "iOS" },
+			chat: {
+				prompt: "private prompt",
+				toolCalls: [{ input: "private proposal" }],
+				attachments: [{ name: "private file" }],
+				content: "private answer",
+			},
+		},
+		breadcrumbs: [{ category: "console", message: "private response", data: { headers: { Authorization: "secret" } } }],
+	})
+	expect(JSON.stringify(result)).not.toContain("private")
+	expect(JSON.stringify(result)).not.toContain("secret")
+	expect(result.contexts?.device).toEqual({ model: "iPhone", os: "iOS" })
+	expect<unknown>(result.request).toEqual({ url: "https://carlnotes.com" })
+})

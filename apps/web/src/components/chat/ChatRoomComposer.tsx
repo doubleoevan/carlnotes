@@ -1,3 +1,4 @@
+import { toComposerPlaceholder, toReplyUser } from "@carlnotes/core/lib/chatRoomReplies"
 // the chat room composer: the chat message box with its attachments, the @ autocomplete, and the reply selector
 
 import {
@@ -6,7 +7,7 @@ import {
 	type ChatRoomMessage,
 	clipAttachmentText,
 } from "@carlnotes/contracts/chat"
-import { ALL_USERNAME, CARL_USERNAME, isModelChatMessage, toChatMentions } from "@carlnotes/contracts/chatMentions"
+import { ALL_USERNAME, CARL_USERNAME } from "@carlnotes/contracts/chatMentions"
 import type { ChatAttachment, VoiceChatPage } from "@carlnotes/contracts/payloads"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { ArrowUp, Paperclip } from "lucide-react"
@@ -355,36 +356,4 @@ export function ChatRoomComposer({
 			</FileDropZone>
 		</form>
 	)
-}
-
-// the draft, the members it may mention, the reply chat message selected, and whether that reply was auto-selected
-type ToReplyUserOptions = {
-	chatMessage: string
-	memberUsernames: string[]
-	replyTo: ChatRoomMessage | null
-	isAutoReply: boolean
-}
-
-// who the chat message is sent to: its first mention, else the reply chat message's author, else everyone. a
-// mention outranks an auto-selected reply, and a tapped reply outranks a mention
-function toReplyUser({ chatMessage, memberUsernames, replyTo, isAutoReply }: ToReplyUserOptions): {
-	hasMention: boolean
-	replyUser: string
-} {
-	const mentionedUser = toChatMentions(chatMessage, [CARL_USERNAME, ALL_USERNAME, ...memberUsernames])[0] ?? null
-	const hasMention = mentionedUser !== null && (replyTo === null || isAutoReply)
-	if (hasMention) {
-		return { hasMention, replyUser: mentionedUser }
-	}
-
-	// the reply chat message's author, or everyone with no reply selected
-	if (replyTo === null) {
-		return { hasMention, replyUser: ALL_USERNAME }
-	}
-	return { hasMention, replyUser: isModelChatMessage(replyTo) ? CARL_USERNAME : replyTo.authorUsername }
-}
-
-// the placeholder starts with the selected target's chat mention
-function toComposerPlaceholder(replyUsername: string): string {
-	return `@${replyUsername}, penny for your thoughts…`
 }

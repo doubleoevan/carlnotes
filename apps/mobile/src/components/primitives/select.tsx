@@ -3,9 +3,10 @@ import { FIELD_CLASS } from "@carlnotes/nightshift/field"
 import { fontFamilies } from "@carlnotes/nightshift/typography"
 import * as SelectPrimitive from "@rn-primitives/select"
 import { Check, ChevronDown } from "lucide-react-native"
-import { type ComponentProps, Fragment, type ReactNode } from "react"
-import { Platform, StyleSheet, View } from "react-native"
+import { type ComponentProps, Fragment, type ReactNode, useRef, useState } from "react"
+import { Animated, Platform, StyleSheet, useWindowDimensions, View } from "react-native"
 import { FullWindowOverlay } from "react-native-screens"
+import { ScrollIndicator } from "@/components/common/ScrollIndicator"
 import { Icon } from "./icon"
 import { TextClassContext } from "./text"
 
@@ -54,6 +55,12 @@ export function SelectTrigger({
  * Places the menu beside its trigger and dismisses it when the backdrop is pressed.
  */
 export function SelectContent({ className, children, ...props }: ComponentProps<typeof SelectPrimitive.Content>) {
+	// bound long menus to the safe viewport and retain the orange overflow cue
+	const { height } = useWindowDimensions()
+	const scrollOffset = useRef(new Animated.Value(0)).current
+	const [viewportHeight, setViewportHeight] = useState(0)
+	const [contentHeight, setContentHeight] = useState(0)
+	const safeHeight = height - (props.insets?.top ?? 0) - (props.insets?.bottom ?? 0)
 	return (
 		<SelectPrimitive.Portal>
 			<OverlayContainer>
@@ -65,7 +72,21 @@ export function SelectContent({ className, children, ...props }: ComponentProps<
 							className={cn("min-w-24 rounded-md border border-border bg-popover p-1 shadow-raised", className)}
 							{...props}
 						>
-							{children}
+							<Animated.ScrollView
+								style={{ maxHeight: Math.min(320, safeHeight / 2) }}
+								keyboardShouldPersistTaps="handled"
+								nestedScrollEnabled
+								showsVerticalScrollIndicator={false}
+								onLayout={(event) => setViewportHeight(event.nativeEvent.layout.height)}
+								onContentSizeChange={(_, contentHeight) => setContentHeight(contentHeight)}
+								onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollOffset } } }], {
+									useNativeDriver: true,
+								})}
+								scrollEventThrottle={16}
+							>
+								{children}
+							</Animated.ScrollView>
+							<ScrollIndicator scrollOffset={scrollOffset} viewportSize={viewportHeight} contentSize={contentHeight} />
 						</SelectPrimitive.Content>
 					</TextClassContext.Provider>
 				</SelectPrimitive.Overlay>
