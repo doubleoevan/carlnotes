@@ -465,6 +465,14 @@ reader parse vocabulary instead of reading the sentence.
 - `rides with` / `travels with` → **goes with**
 - `disown` → **deny**
 
+**Prefer platform wording when native is generic.** Use `platform` in identifiers,
+comments, and docs. Name the target (`web`, `mobile`, `iOS`, or `Android`) when
+that is clearer, and omit redundant qualifiers. Keep `native` when the technical
+distinction matters: native modules, compiled builds, OS controls, or React
+Native's animation driver. Preserve library and API names such as `React Native`,
+`react-native`, `useNativeDriver`, and `nativeEvent`. Apply the preference by
+meaning, without blanket replacement.
+
 Accuracy beats both rules. When the swap changes the meaning, rewrite instead of
 substituting.
 
