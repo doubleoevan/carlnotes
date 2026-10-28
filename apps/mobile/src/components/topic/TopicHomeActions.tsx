@@ -3,6 +3,7 @@ import { router } from "expo-router"
 import { Check, Plus, X } from "lucide-react-native"
 import { type ComponentRef, useRef, useState } from "react"
 import { View } from "react-native"
+import { hasSession } from "@/authClient"
 import { Sheet } from "@/components/common/Sheet"
 import { Button } from "@/components/primitives/button"
 import { Icon } from "@/components/primitives/icon"
@@ -99,7 +100,13 @@ export function useNewTopicDialog(): { openNewTopicDialog: () => void; newTopicD
 	const [isOpen, setIsOpen] = useState(false)
 	const state = useTopicFeed()
 	return {
-		openNewTopicDialog: () => setIsOpen(true),
+		openNewTopicDialog: () => {
+			if (!hasSession()) {
+				router.push("/sign-up")
+				return
+			}
+			setIsOpen(true)
+		},
 		newTopicDialog: isOpen && (
 			<EditTopicModal
 				onClose={() => setIsOpen(false)}

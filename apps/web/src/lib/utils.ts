@@ -183,19 +183,3 @@ export function addEventListeners(target: EventTarget, listeners: [string, () =>
 		}
 	}
 }
-
-/**
- * A uniformly shuffled copy of the items. The input array stays untouched.
- */
-export function shuffle<T>(items: T[]): T[] {
-	// Fisher-Yates over a copy
-	const shuffled = [...items]
-	for (let index = shuffled.length - 1; index > 0; index--) {
-		// swap this slot with one at or before it
-		const swapIndex = Math.floor(Math.random() * (index + 1))
-		const heldItem = shuffled[index] as T
-		shuffled[index] = shuffled[swapIndex] as T
-		shuffled[swapIndex] = heldItem
-	}
-	return shuffled
-}

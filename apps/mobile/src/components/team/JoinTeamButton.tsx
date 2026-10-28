@@ -1,6 +1,8 @@
 import { sendDeleteJoinRequest, sendJoinRequest } from "@carlnotes/client/teamClient"
+import { router } from "expo-router"
 import { Minus, Plus } from "lucide-react-native"
 import { Alert, View } from "react-native"
+import { hasSession } from "@/authClient"
 import { Button } from "@/components/primitives/button"
 import { Icon } from "@/components/primitives/icon"
 import { Text } from "@/components/primitives/text"
@@ -29,7 +31,11 @@ export function JoinTeamButton({
 				variant={isHighlighted ? "default" : "outline"}
 				accessibilityLabel={hasRequestedToJoin ? `Delete request to join ${name}` : `Ask to join ${name}`}
 				disabled={mutation.isPending}
-				onPress={() =>
+				onPress={() => {
+					if (!hasSession()) {
+						router.push("/sign-up")
+						return
+					}
 					void mutation.run(async () => {
 						if (hasRequestedToJoin) {
 							await sendDeleteJoinRequest(teamId)
@@ -40,7 +46,7 @@ export function JoinTeamButton({
 							Alert.alert(`You've asked to join ${name}.`, "A team leader can add you.")
 						}
 					})
-				}
+				}}
 			>
 				<Icon as={hasRequestedToJoin ? Minus : Plus} className="size-4" />
 				<Text>Join Team</Text>

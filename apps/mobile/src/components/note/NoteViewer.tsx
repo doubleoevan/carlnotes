@@ -1,8 +1,8 @@
 import {
 	type NoteReaderProps,
-	type NoteStaticProps,
-	NoteStatic as SharedNoteStatic,
-} from "@carlnotes/core/components/NoteStatic"
+	type NoteViewerProps,
+	NoteViewer as SharedNoteViewer,
+} from "@carlnotes/core/components/NoteViewer"
 import { EnrichedText } from "react-native-enriched-html"
 import { openExternalLink } from "@/components/common/AnchorLink"
 import { NoteLayout } from "./NoteLayout"
@@ -14,8 +14,8 @@ const ELEMENTS = { Layout: NoteLayout, Reader: NoteReader }
 /**
  * Renders shared read-only note composition with the native display component.
  */
-export function NoteStatic(props: Omit<NoteStaticProps, "onOpenLink">) {
-	return <SharedNoteStatic {...props} onOpenLink={(url) => void openExternalLink(url)} elements={ELEMENTS} />
+export function NoteViewer(props: Omit<NoteViewerProps, "onOpenLink">) {
+	return <SharedNoteViewer {...props} onOpenLink={(url) => void openExternalLink(url)} elements={ELEMENTS} />
 }
 
 // render the stored HTML with the editor's own typography and safe destination handling

@@ -64,11 +64,11 @@ export function SpendMeter(props: SpendMeterProps) {
 
 			{/* the key to each budget percent segment. the podcast episode entry shows only if there is podcast episode
 			    spend */}
-			<div className="text-muted-foreground mt-2 flex gap-4 text-xs">
+			<div className="text-muted-foreground mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs">
 				{legendSegments.map(({ key, colorClass, label, cents }) => (
-					<span key={key} className="flex items-center gap-1.5">
-						<span className={cn(colorClass, "size-2 rounded-full")} />
-						{`${label} ${toCentsLabel(cents)}`}
+					<span key={key} className="flex max-w-full items-center gap-1.5">
+						<span className={cn(colorClass, "size-2 shrink-0 rounded-full")} />
+						<span>{`${label} ${toCentsLabel(cents)}`}</span>
 					</span>
 				))}
 			</div>

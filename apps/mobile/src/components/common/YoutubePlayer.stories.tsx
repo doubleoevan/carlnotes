@@ -25,6 +25,7 @@ export default meta
 type Story = StoryObj<typeof meta>
 
 // playback starts only after pressing the preview
-export const Default: Story = {}
-export const WithoutThumbnail: Story = { args: { thumbnailPath: null } }
+export const Thumbnail: Story = {}
+export const YoutubePlayButton: Story = { args: { hasYoutubePlayButton: true } }
+export const NoThumbnail: Story = { args: { thumbnailPath: null } }
 export const UnavailableVideo: Story = { args: { youtubeVideoId: "unavailable" } }

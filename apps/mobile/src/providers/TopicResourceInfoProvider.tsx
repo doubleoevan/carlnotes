@@ -64,8 +64,7 @@ export function TopicResourceInfoProvider({ userId, children }: { userId: string
 	const resource = selection?.resource
 	const isPending = actions.pendingChanges.some((change) => change.findingId === resource?.findingId)
 	const presentedResource = resource ? applyFindingChanges(resource, actions.pendingChanges) : resource
-	const context =
-		userId && pathname !== "/storybook" ? { findingId: resource?.findingId ?? null, open: setSelection } : null
+	const context = pathname !== "/storybook" ? { findingId: resource?.findingId ?? null, open: setSelection } : null
 	return (
 		<TopicResourceInfoContext.Provider value={context}>
 			{children}

@@ -8,8 +8,10 @@ import {
 } from "@carlnotes/core/components/NoteComments"
 import { NOTE_COMMENT_DELETE } from "@carlnotes/core/lib/noteLabels"
 import { SITE_URL } from "@carlnotes/core/lib/pageHead"
+import { BottomSheetTextInput } from "@gorhom/bottom-sheet"
 import { Trash2 } from "lucide-react-native"
-import { Alert, TextInput, View } from "react-native"
+import type { ComponentType } from "react"
+import { Alert, TextInput, type TextInputProps, View } from "react-native"
 import { Avatar } from "@/components/branding/Avatar"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { Button, toTouchTargetHitSlop } from "@/components/primitives/button"
@@ -72,19 +74,35 @@ const ELEMENTS: NoteCommentsElements = {
 	),
 	Composer: CommentComposer,
 }
-
-/**
- * Shows the same complete note thread as web below the native note body.
- */
-export function NoteComments(props: Omit<NoteCommentsProps, "onError">) {
-	return <SharedNoteComments {...props} onError={showClientError} elements={ELEMENTS} />
+// let the sheet follow the composer's keyboard while sharing every other comment element
+const SHEET_ELEMENTS: NoteCommentsElements = {
+	...ELEMENTS,
+	Composer: (props) => <CommentComposer {...props} Input={BottomSheetTextInput} />,
 }
 
-// allow multiline native input and keep failed text in the shared composer
-function CommentComposer({ value, onChange, onSubmit, isPending, canSubmit, maxLength }: NoteCommentComposerProps) {
+/**
+ * Shows the shared note thread with mobile controls.
+ */
+export function NoteComments({
+	isInSheet = false,
+	...props
+}: Omit<NoteCommentsProps, "onError"> & { isInSheet?: boolean }) {
+	return <SharedNoteComments {...props} onError={showClientError} elements={isInSheet ? SHEET_ELEMENTS : ELEMENTS} />
+}
+
+// allow multiline input and keep failed text in the shared composer
+function CommentComposer({
+	value,
+	onChange,
+	onSubmit,
+	isPending,
+	canSubmit,
+	maxLength,
+	Input = TextInput,
+}: NoteCommentComposerProps & { Input?: ComponentType<TextInputProps> }) {
 	return (
 		<View className="gap-2">
-			<TextInput
+			<Input
 				accessibilityLabel="Comment"
 				value={value}
 				onChangeText={onChange}

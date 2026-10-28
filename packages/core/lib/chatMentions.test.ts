@@ -34,3 +34,13 @@ test("reply targeting keeps the web's default and explicit selection rules", () 
 	expect(toReplyUser({ ...base, isAutoReply: true })).toEqual({ hasMention: true, replyUser: "carl" })
 	expect(toReplyUser({ ...base, chatMessage: "hello", replyTo: null })).toEqual({ hasMention: false, replyUser: "all" })
 })
+
+// choosing everyone clears the parent selection while retaining the draft's words
+test("switching a message reply to everyone preserves the draft body", () => {
+	const chatMessage = toChangedMentionChatMessage("@reader keep this question", "all", ["reader"])
+	expect(chatMessage).toBe("@all keep this question")
+	expect(toReplyUser({ chatMessage, memberUsernames: ["reader"], replyTo: null, isAutoReply: false })).toEqual({
+		hasMention: true,
+		replyUser: "all",
+	})
+})

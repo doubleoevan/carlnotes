@@ -45,9 +45,9 @@ test("the table render opens no request", () => {
 test("the dialog module never imports the editor package statically", async () => {
 	const dialogSource = await Bun.file(new URL("./NoteDialog.tsx", import.meta.url)).text()
 	expect(dialogSource).toContain('import("./NoteEditor")')
-	expect(dialogSource).toContain('import("./NoteStatic")')
+	expect(dialogSource).toContain('import("./NoteViewer")')
 	expect(dialogSource).toContain("lazy(loadNoteEditor)")
-	expect(dialogSource).toContain("lazy(loadNoteStatic)")
+	expect(dialogSource).toContain("lazy(loadNoteViewer)")
 	expect(dialogSource).not.toMatch(/^import .*react-native-enriched-html/m)
 })
 

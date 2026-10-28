@@ -54,9 +54,13 @@ export function toTopicFeedRows({ topicFeed, openSection, expandedTopicKeys }: T
 }
 
 /**
- * Opens followed topics first only when the user owns none.
+ * Selects Featured for visitors and the account's initial Topic section.
  */
 export function toInitialTopicSection(topicFeed: TopicFeedResponse): TopicSectionKey {
+	// the public feed has no account-owned section
+	if (!topicFeed.sections.some((section) => section.key === "yours")) {
+		return "featured"
+	}
 	// the web's first-open-section rule
 	const ownTopicCount = topicFeed.sections.find((section) => section.key === "yours")?.topics.length ?? 0
 	const subscribedTopicCount = topicFeed.sections.find((section) => section.key === "subscribed")?.topics.length ?? 0

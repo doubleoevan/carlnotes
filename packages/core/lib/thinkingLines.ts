@@ -1,5 +1,4 @@
 // the lines the app shows while waiting for a response. each one has to finish the sentence "Carl is ___"
-import { shuffle } from "@/lib/utils"
 
 export const THINKING_LINES = [
 	"consulting the raccoon",
@@ -75,11 +74,25 @@ export const THINKING_LINES = [
 let undealtLines: string[] = []
 
 /**
- * One thinking line, dealt from a shuffled array so that every line shows once before any repeat.
+ * Returns a thinking line, dealing every phrase once before repeating.
  */
 export function randomThinkingLine(): string {
 	if (undealtLines.length === 0) {
 		undealtLines = shuffle(THINKING_LINES)
 	}
 	return undealtLines.pop() ?? "thinking"
+}
+
+// shuffle a copy so every phrase is dealt once before the deck refills
+function shuffle<T>(items: T[]): T[] {
+	// apply Fisher-Yates without changing the phrase list
+	const shuffled = [...items]
+	for (let index = shuffled.length - 1; index > 0; index--) {
+		// swap this slot with one at or before it
+		const swapIndex = Math.floor(Math.random() * (index + 1))
+		const heldItem = shuffled[index] as T
+		shuffled[index] = shuffled[swapIndex] as T
+		shuffled[swapIndex] = heldItem
+	}
+	return shuffled
 }

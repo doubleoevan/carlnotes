@@ -37,8 +37,8 @@ export function SessionTextLink({
  */
 export function SessionFooterLink({ prompt, linkLabel, href }: { prompt: string; linkLabel: string; href: Href }) {
 	return (
-		<View className="mt-4 flex-row flex-wrap justify-center gap-1">
-			<Text style={toTypeRoleStyle("body")} className="text-muted-foreground">
+		<View className="mt-4 flex-row flex-wrap items-center justify-center gap-1">
+			<Text style={toTypeRoleStyle("body")} className="text-center text-muted-foreground">
 				{prompt}
 			</Text>
 			<SessionTextLink label={linkLabel} href={href} shouldReplace />

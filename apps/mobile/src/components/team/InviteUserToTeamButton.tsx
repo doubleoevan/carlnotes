@@ -5,6 +5,7 @@ import { sendUserInvite } from "@carlnotes/client/topicClient"
 import { isLeaderRole } from "@carlnotes/contracts/enums"
 import type { ProfileTeamStatus } from "@carlnotes/contracts/profiles"
 import { useQuery } from "@tanstack/react-query"
+import { router } from "expo-router"
 import { Plus, Users, X } from "lucide-react-native"
 import { useState } from "react"
 import { View } from "react-native"
@@ -32,6 +33,7 @@ export function InviteUserToTeamButton({
 	const query = useQuery({
 		queryKey: ["profile-team-statuses", session?.user.id, profileUserId],
 		queryFn: () => fetchProfileTeamStatuses(profileUserId),
+		enabled: Boolean(session),
 	})
 	const mutation = usePageMutation(() => {
 		void query.refetch()
@@ -42,6 +44,11 @@ export function InviteUserToTeamButton({
 			<Button
 				accessibilityLabel="Team Up"
 				onPress={() => {
+					if (!session) {
+						router.push("/sign-up")
+						return
+					}
+					// load team choices for the signed-in account
 					setIsOpen(true)
 					void query.refetch()
 				}}

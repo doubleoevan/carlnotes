@@ -1,4 +1,5 @@
 import { toApiUrl } from "@carlnotes/client/apiClient"
+import { authClient } from "@carlnotes/client/authClient"
 import { fetchTopicFindingLinkPreview } from "@carlnotes/client/topicFindingClient"
 import type { ChatLinkPreview } from "@carlnotes/contracts/chat"
 import { toHostWithoutWww } from "@carlnotes/contracts/seo"
@@ -28,12 +29,17 @@ import { ResourceMetadata } from "./TopicFindingSummary"
 import type { TopicResourceProps } from "./TopicResource"
 
 // a sheet keeps the row's confirmed and pending state live
-export type TopicResourceInfoProps = TopicResourceProps & Pick<SheetProps, "triggerRef" | "onClose">
+export type TopicResourceInfoProps = TopicResourceProps &
+	Pick<SheetProps, "triggerRef" | "onClose"> & { isSignedIn?: boolean }
 
 /**
  * Presents the web's finding details and actions in a native sheet.
  */
 export function TopicResourceInfo(props: TopicResourceInfoProps) {
+	// resolve action visibility from the current session or story override
+	const { data: session } = authClient().useSession()
+	const isSignedIn = props.isSignedIn ?? Boolean(session)
+
 	// record source openings and inline playback as views
 	const { resource, topic, topicFindingRank, topicFeedHandlers, triggerRef, onClose } = props
 	const title = toOneLineText(toPlainText(resource.title ?? "")) || resource.url
@@ -111,10 +117,12 @@ export function TopicResourceInfo(props: TopicResourceInfoProps) {
 				</View>
 			</View>
 			{/* permission-aware actions keep the same order and words as the web */}
-			<View className="gap-3 border-t border-border pt-3" accessibilityState={{ busy: props.isPending }}>
-				{topic.canRate ? <TopicFindingRating {...props} /> : null}
-				<FindingActions {...props} />
-			</View>
+			{isSignedIn && (
+				<View className="gap-3 border-t border-border pt-3" accessibilityState={{ busy: props.isPending }}>
+					{topic.canRate ? <TopicFindingRating {...props} /> : null}
+					<FindingActions {...props} />
+				</View>
+			)}
 		</Sheet>
 	)
 }
@@ -230,7 +238,6 @@ function FindingLinkPreviewCard({ linkPreview, onOpen }: { linkPreview: ChatLink
 					title={linkPreview.title}
 					thumbnailPath={linkPreview.imagePath}
 					onPlay={onOpen}
-					onOpen={onOpen}
 				/>
 				<AnchorLink
 					href={linkPreview.url}

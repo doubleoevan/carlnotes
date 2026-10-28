@@ -13,16 +13,18 @@ export type NoteLayoutProps = PropsWithChildren<{
 	noteCommentThread: NoteCommentThread
 	canComment: boolean
 	isCommentsOpen: boolean
+	onCloseComments?: () => void
 	header?: ReactNode
 	toolbar?: ReactNode
 	conflict?: ReactNode
 	editorRef?: RefObject<NoteEditorInstance | null>
 }>
-export type NoteStaticProps = {
+export type NoteViewerProps = {
 	header?: ReactNode
 	note: NoteResponse
 	noteCommentThread: NoteCommentThread
 	isCommentsOpen: boolean
+	onCloseComments?: () => void
 	onOpenLink: (url: string) => void
 }
 export type NoteReaderProps = { html: string; onOpenLink: (url: string) => void }
@@ -30,14 +32,15 @@ export type NoteReaderProps = { html: string; onOpenLink: (url: string) => void 
 /**
  * Shares the read-only note composition while leaving library rendering and layout to each platform.
  */
-export function NoteStatic({
+export function NoteViewer({
 	note,
 	header,
 	noteCommentThread,
 	isCommentsOpen,
+	onCloseComments,
 	onOpenLink,
 	elements: { Layout, Reader },
-}: NoteStaticProps & {
+}: NoteViewerProps & {
 	elements: { Layout: ComponentType<NoteLayoutProps>; Reader: ComponentType<NoteReaderProps> }
 }) {
 	// guard stored destinations even when the display library recognizes a link
@@ -48,7 +51,13 @@ export function NoteStatic({
 		}
 	}
 	return (
-		<Layout header={header} noteCommentThread={noteCommentThread} canComment={false} isCommentsOpen={isCommentsOpen}>
+		<Layout
+			header={header}
+			noteCommentThread={noteCommentThread}
+			canComment={false}
+			isCommentsOpen={isCommentsOpen}
+			onCloseComments={onCloseComments}
+		>
 			<Reader html={note.html} onOpenLink={handleOpenLink} />
 		</Layout>
 	)

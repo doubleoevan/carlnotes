@@ -6,7 +6,7 @@ import * as WebBrowser from "expo-web-browser"
 import { type ReactNode, useState } from "react"
 import { Platform, Pressable, StyleSheet, useColorScheme, View } from "react-native"
 import { signInWithAppleSheet } from "@/appleSignIn"
-import { hasSession, mobileAuthClient } from "@/authClient"
+import { mobileAuthClient } from "@/authClient"
 import { Button, toButtonHeight, toTouchTargetHitSlop } from "@/components/primitives/button"
 import { Text } from "@/components/primitives/text"
 import { AppleIcon, GoogleIcon } from "@/components/session/OAuthProviderIcons"
@@ -30,16 +30,19 @@ export default function SignInScreen() {
 	const [oauthError, setOauthError] = useState<string | null>(null)
 	const [isEmailFormOpen, setIsEmailFormOpen] = useState(false)
 
-	// open a provider's sign-in in the system browser. the session arrives when the browser returns to the app, and a
-	// browser closed before then returns with no error and no session
+	// refresh the session after the browser returns, before deciding whether sign-in completed
 	const handleBrowserSignIn = async (provider: OAuthProviderId): Promise<void> => {
 		setOauthError(null)
 		try {
 			const { error } = await mobileAuthClient.signIn.social({ provider, callbackURL: "/" })
-			if (!error && hasSession()) {
-				return
+			if (!error) {
+				const { data: session } = await mobileAuthClient.getSession()
+				if (session) {
+					return
+				}
+			} else {
+				console.error(`the ${provider} sign-in did not complete`, error)
 			}
-			console.error(`the ${provider} sign-in did not complete`, error)
 		} catch (networkError) {
 			console.error(`the ${provider} sign-in request failed`, networkError)
 		}

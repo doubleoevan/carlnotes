@@ -29,7 +29,7 @@ import { AppChatPanel } from "@/components/chat/AppChatPanel"
 import { mobileApiRequestSettings } from "@/mobileApiRequestSettings"
 import { navigationIntegration, startMonitoring } from "@/monitoring"
 import { NoteDraftProvider } from "@/providers/NoteDraftProvider"
-import { ReadingProvider } from "@/providers/TopicFeedProvider"
+import { TopicFeedProvider } from "@/providers/TopicFeedProvider"
 import { TopicResourceInfoProvider } from "@/providers/TopicResourceInfoProvider"
 import { useIsSessionRetired } from "@/sessionExit"
 import { restoreTheme } from "@/theme"
@@ -114,27 +114,29 @@ function RootLayout() {
 	const isSignedIn = Boolean(session) && !isSessionRetired
 	return (
 		<GestureHandlerRootView style={{ flex: 1 }}>
-			<ReadingProvider userId={isSignedIn ? (session?.user.id ?? null) : null}>
+			<TopicFeedProvider userId={isSignedIn ? (session?.user.id ?? null) : null} canBrowse={!isSessionRetired}>
 				<NoteDraftProvider userId={isSignedIn ? (session?.user.id ?? null) : null} />
 				{/* keep sheet content inside the account's query and search contexts */}
 				<BottomSheetModalProvider>
 					<TopicResourceInfoProvider userId={isSignedIn ? (session?.user.id ?? null) : null}>
 						<ScreenViewRecorder />
-						{/* the sign-in guard. a user sees the app's screens, and a visitor the sign-in and sign-up screens */}
+						{/* allow public reading while keeping account screens and chat behind sign-in */}
 						<Stack screenOptions={{ headerShown: false }}>
+							<Stack.Protected guard={!isSessionRetired}>
+								<Stack.Screen name="(tabs)" />
+								<Stack.Screen name="profiles/[userId]" />
+								<Stack.Screen name="teams/[teamId]" />
+								<Stack.Screen name="topics/[topicId]" />
+								<Stack.Screen name="topics/[topicId]/notes/[noteId]" />
+								<Stack.Screen name="teams/[teamId]/notes/[noteId]" />
+							</Stack.Protected>
 							<Stack.Protected guard={isSignedIn}>
 								<Stack.Screen name="chat" />
-								<Stack.Screen name="(tabs)" />
 								<Stack.Screen name="account" />
 								<Stack.Screen name="plans" />
 								<Stack.Screen name="activity" />
-								<Stack.Screen name="profiles/[userId]" />
 								<Stack.Screen name="teams/index" />
-								<Stack.Screen name="teams/[teamId]" />
-								<Stack.Screen name="teams/[teamId]/notes/[noteId]" />
 								<Stack.Screen name="teams/[teamId]/chat" />
-								<Stack.Screen name="topics/[topicId]" />
-								<Stack.Screen name="topics/[topicId]/notes/[noteId]" />
 								<Stack.Screen name="topics/[topicId]/chat" />
 							</Stack.Protected>
 							<Stack.Protected guard={!isSignedIn}>
@@ -148,11 +150,11 @@ function RootLayout() {
 							</Stack.Protected>
 						</Stack>
 						{isSignedIn && <AppChatPanel />}
-						{/* anchor dropdowns above screens without replacing them with a sheet */}
-						<PortalHost />
 					</TopicResourceInfoProvider>
 				</BottomSheetModalProvider>
-			</ReadingProvider>
+				{/* anchor dropdowns above both screens and the modal provider's sheets */}
+				<PortalHost />
+			</TopicFeedProvider>
 		</GestureHandlerRootView>
 	)
 }

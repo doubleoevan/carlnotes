@@ -12,8 +12,8 @@ import type { NoteCommentThread } from "../hooks/useNoteComments"
 import type { NoteFormatState, NoteLink, NoteSelection } from "../lib/noteFormats"
 import { NOTE_LABELS } from "../lib/noteLabels"
 import type { NoteConflictNoticeProps } from "./NoteConflictNotice"
-import type { NoteEditorInstance, NoteLayoutProps } from "./NoteStatic"
 import type { NoteToolbarProps } from "./NoteToolbar"
+import type { NoteEditorInstance, NoteLayoutProps } from "./NoteViewer"
 
 // the shared editor state and the platform elements that display it
 export type NoteEditorProps = {
@@ -22,6 +22,7 @@ export type NoteEditorProps = {
 	pageName: string
 	noteCommentThread: NoteCommentThread
 	isCommentsOpen: boolean
+	onCloseComments?: () => void
 	onSaveStatus: (status: NoteSaveStatus) => void
 	onSaveError: (reason: NoteSaveErrorReason) => void
 	onError: (message: string) => void
@@ -52,6 +53,7 @@ export function NoteEditor({
 	pageName,
 	noteCommentThread,
 	isCommentsOpen,
+	onCloseComments,
 	onSaveStatus,
 	onSaveError,
 	onError,
@@ -147,6 +149,7 @@ export function NoteEditor({
 			noteCommentThread={noteCommentThread}
 			canComment
 			isCommentsOpen={isCommentsOpen}
+			onCloseComments={onCloseComments}
 			editorRef={editorRef}
 			toolbar={
 				<Toolbar editorRef={editorRef} formatState={formatState} selection={selection} activeLink={activeLink} />

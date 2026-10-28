@@ -1,8 +1,11 @@
 import { useTopicFeedFilters } from "@carlnotes/core/hooks/useTopicFeedState"
 import type { Meta, StoryObj } from "@storybook/react-native"
+import { Coffee } from "lucide-react-native"
+import { useState } from "react"
 import { View } from "react-native"
+import { Text } from "@/components/primitives/text"
 import { TopicHomeActions } from "@/components/topic/TopicHomeActions"
-import { TopicPageActions } from "@/components/topic/TopicPageActions"
+import { PageActionMenu } from "./PageActionMenu"
 import { SearchBar } from "./SearchBar"
 
 // the full web toolbar keeps the real filters and site search interactive
@@ -18,10 +21,21 @@ export const Default: Story = {}
 // keep selections within the story's own lifetime
 function SearchBarStory() {
 	const filters = useTopicFeedFilters()
+	const [reheatCount, setReheatCount] = useState(0)
 	return (
 		<View className="w-full pt-4">
-			<SearchBar filters={filters} actions={<TopicPageActions onRefresh={() => undefined} />} />
+			<SearchBar
+				filters={filters}
+				actions={
+					<PageActionMenu
+						page="Home"
+						hasNewTopicButton
+						options={[{ label: "Reheat", icon: Coffee, onSelect: () => setReheatCount((count) => count + 1) }]}
+					/>
+				}
+			/>
 			<TopicHomeActions filters={filters} knownTags={["coffee", "brewing", "technology"]} />
+			<Text className="px-4">Feed refreshed {reheatCount} times</Text>
 		</View>
 	)
 }

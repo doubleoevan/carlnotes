@@ -40,6 +40,10 @@ Check for:
    or removed in a change, add its old name here in the same change. Only
    names that reached `main` belong here. A name renamed within the branch
    that introduced it never shipped, so nothing can still reference it.
+   - `apps/web/src/components/common/thinkingLines.ts` and its test (now `packages/core/lib/thinkingLines.ts`
+     and its test). Web and mobile share the phrase deck and selection.
+   - `NoteStatic.tsx` and `NoteStatic.stories.tsx` in the shared, web, and mobile note components (now
+     `NoteViewer.tsx` and `NoteViewer.stories.tsx`). The component displays a read-only tasting note.
    - `packages/server/monitoringScrub.ts` and `monitoringScrub.test.ts` (now `monitoringRedaction.ts` and
      `monitoringRedaction.test.ts`). Shared redaction lives in `packages/contracts/monitoringRedaction.ts` with
      `redactEvent` and `redactTransaction` replacing `scrubContent` and `scrubTransaction`.

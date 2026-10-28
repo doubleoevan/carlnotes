@@ -8,10 +8,12 @@ import {
 	type ChatRoomMessageElements,
 	ChatRoomMessageBubble as SharedChatRoomMessageBubble,
 } from "@carlnotes/core/components/ChatRoomMessageBubble"
+import { DELETE_CHAT_MESSAGE_COPY } from "@carlnotes/core/lib/chatCopy"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { FileText, Film, Image, Paperclip, Reply, Trash2, X } from "lucide-react"
-import { memo } from "react"
+import { memo, useState } from "react"
 import { AnchorLink } from "@/components/common/AnchorLink"
+import { ConfirmDialog } from "@/components/common/ConfirmDialog"
 import { LinkPreviewCard, LinkPreviewLoading } from "@/components/common/LinkPreviewCard"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import { toChatRoomSpokenAnswerKey } from "@/stores/spokenAnswerQueue"
@@ -134,6 +136,7 @@ function RoomFooter({
 	onReply,
 	now,
 }: ChatRoomMessageBubbleProps & { isModel: boolean }) {
+	const [isConfirmingDelete, setIsConfirmingDelete] = useState(false)
 	return (
 		<div
 			className={cn(
@@ -159,7 +162,7 @@ function RoomFooter({
 						<button
 							type="button"
 							aria-label="Delete message"
-							onClick={() => onDeleteChatMessage(chatMessage.id)}
+							onClick={() => setIsConfirmingDelete(true)}
 							className="hover:text-foreground flex items-center"
 						>
 							<Trash2 className="size-3" />
@@ -177,6 +180,22 @@ function RoomFooter({
 				Reply
 			</button>
 			<span>{toTimeAgoLabel(new Date(chatMessage.createdAt).getTime(), now)}</span>
+			{/* message deletion confirmation */}
+			{canDelete && isConfirmingDelete && (
+				<ConfirmDialog
+					title={DELETE_CHAT_MESSAGE_COPY.title}
+					confirmLabel={DELETE_CHAT_MESSAGE_COPY.confirm}
+					cancelLabel={DELETE_CHAT_MESSAGE_COPY.cancel}
+					onClose={() => setIsConfirmingDelete(false)}
+					onConfirm={() => {
+						// close confirmation before the existing server-accepted deletion flow
+						setIsConfirmingDelete(false)
+						onDeleteChatMessage(chatMessage.id)
+					}}
+				>
+					{DELETE_CHAT_MESSAGE_COPY.description}
+				</ConfirmDialog>
+			)}
 		</div>
 	)
 }

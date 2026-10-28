@@ -68,6 +68,12 @@ alphabetical room ordering, and `toProfileChatContext` for both apps. Reset the 
 `lib/chatCopy` holds shared composer, confirmation, empty-room, and completion wording. Account replacement also
 clears `chatRoomStore` and its opened-room markers. Member reads can reuse the current account's loaded Team page.
 
+`components/ThinkingLine` owns the stable waiting phrase with app-supplied text rendering. `lib/thinkingLines` owns
+the shared phrase deck and shuffle, moved from web's common components and utilities. Web retains CSS shimmer;
+native motion and app activity stay in the mobile adapter. `lib/chatCopy` also owns individual-message deletion
+confirmation wording; platform adapters use the web confirmation dialog and native alert.
+`lib/chatRoomActions` shares confirmed deletion, accepted history refresh, failure notices, and retired-conversation guards.
+
 `components/ScrollDownButton` shares the centered latest-message action, visibility, label, and Nightshift classes.
 Its adapters supply the browser button or native touch control and the Lucide arrow.
 `components/ChatPill` composes the launcher icon, label, action, and optional badge for both apps. Native safe-area
@@ -112,7 +118,9 @@ Its search adapter preserves result order and metadata while applying the same F
 `lib/topicSchedule.ts` owns schedule options, daily-slot permission, and allowance copy shared by both Topic forms.
 `lib/topicViews.ts` sends one view per Topic per web tab or native app runtime, shared by both Topic screens.
 `lib/sourceResults.ts` shares Source footnote ordering, totals, detail labels, and the earlier-findings row.
-`lib/topicSources.ts` shares default/custom Source ordering, off states, and screening messages between both Topic info views and the web editor.
+`lib/topicSources.ts` shares default/custom Source ordering, off states, screening messages, and staged Source summaries between both apps.
+`components/TopicSource` exports the shared `TopicSource` row and `TopicDefaultSource` enabled/add composition.
+Web supplies its existing DOM badges and tooltips; mobile supplies native Nightshift badges and buttons.
 `lib/topicScanRecap.ts` shares the diary fields, missing-entry copy, and copied note Markdown. Shared React components
 compose the recap and chart from these rules; platform adapters draw the elements. Web supplies its browser origin
 when building Markdown links.
@@ -121,7 +129,7 @@ Core imports no router, DOM, React Native, native storage, or device API.
 
 ## Tasting Notes
 
-`components/NoteEditor`, `NoteStatic`, `NoteToolbar`, `CreateNote`, `NoteConflictNotice`, `NoteComments`, and
+`components/NoteEditor`, `NoteViewer`, `NoteToolbar`, `CreateNote`, `NoteConflictNotice`, `NoteComments`, and
 `NoteUnreadBadge` own the composition used by both clients. Their typed platform elements stay at module scope.
 The apps supply the enriched HTML library, routing, keyboard layout, native sharing, and their Nightshift controls.
 `lib/noteFormats.ts` owns format order, labels, commands, selection ranges, and safe link operations.
@@ -140,7 +148,8 @@ changes. Unavailable access retires native content. `retire` fences every late c
 `useNoteManagement` shares rename, visibility, and deletion permission gates, serialized writes, failure messages, and accepted metadata. Apps own their confirmation controls and close behavior.
 
 `useNoteComments` loads on open, retains failed-post text through the shared composition, and applies accepted writes
-in place. Native comments sit below the note. Web keeps its wide-screen column and phone-browser sheet.
+in place. Native comments open in a sheet from a visible button. Web keeps its wide-screen column and phone-browser sheet.
+The editor and reader forward the optional comments-close callback to the platform layout without remounting the body.
 `useNoteBadges` polls every 45 seconds while focused and online, and refreshes on foreground and reconnect.
 `useNoteRead` runs only after a successful note load. Tentative clearing ends after acknowledgement and refresh;
 failed requests retain confirmed counts. Account generations reject late responses from a replaced session.
@@ -163,6 +172,7 @@ share page and form composition. `AccountFields` includes the shared ProfileFiel
 photo-toggle, and input elements. `useAvatar` owns upload acknowledgement and session refresh for both File and
 FormData uploads. `Footer` owns all footer copy, destinations, and row order for both apps.
 `lib/spendMeter`, `monthlyBudgetCutoffs`, and `monthlyBudgetCutoffCopy` own budget labels and checkpoint calculations.
+`lib/spendMeterStoryFixtures` supplies the same spend and cutoff examples to both component browsers.
 
 `hooks/useTopicFields`, `useTopicSourceEditor`, `useTopicTeamChoice`, `useTeamFields`, and `useTopicEmails` own the
 portable form state. `lib/saveTopic`, `saveTeam`, `teamFields`, `teamInvites`, `topicSourceEditor`, and

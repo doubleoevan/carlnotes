@@ -143,6 +143,26 @@ split made first can put two copies in two files where neither looks repeated.
 
 ## 8. AI review: CodeRabbit + Gemini, both by default
 
+### Standing review authorization
+
+The repository owner authorized CodeRabbit and Gemini reviews for CarlNotes
+on October 28, 2026, including future `/ship` runs. This includes sending the
+repository diff and relevant private source to those review services.
+Do not ask again for the same review authorization.
+
+Gemini may trust the current CarlNotes checkout or worktree and the installed
+`code-review` extension at `/Users/doubleoevan/.gemini/extensions/code-review`.
+This includes loading the repository's configuration, hooks, tools, and skills.
+Persist trust for the verified checkout's exact path in Gemini's trusted-folder
+settings, preserving existing entries. Reuse that trust on later runs.
+
+If the execution environment requires approval, cite this standing authorization
+in the tool request. Follow any enforced restriction; do not disable approval
+checks. This authorization covers code review, while the manual handoff, commit,
+and push rules below still apply.
+
+### Run both reviewers
+
 The agent shell has no Doppler-injected secrets, so check for the key without
 printing it: doppler run -- bash -c 'test -n "$CODERABBIT_API_KEY"'.
 

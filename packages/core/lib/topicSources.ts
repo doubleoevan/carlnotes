@@ -1,5 +1,6 @@
-import { DEFAULT_SOURCES, toDefaultSource } from "@carlnotes/contracts/sources"
+import { DEFAULT_SOURCES, toCustomSourceOption, toDefaultSource, toSourceSummary } from "@carlnotes/contracts/sources"
 import type { TopicDetails } from "@carlnotes/contracts/topics"
+import type { AddedSource } from "../hooks/useTopicFields"
 
 // both renderers use the same source identity, order, and status
 export type TopicSourceRow = {
@@ -43,4 +44,17 @@ export function toScreeningMessage(source: { status: string; error: string | nul
 		return "checking"
 	}
 	return source.status === "failed" ? (source.error ?? "failed") : null
+}
+
+/**
+ * Describes a staged Source by its resolved name, configuration, or entered value.
+ */
+export function toStagedTopicSourceSummary(addedSource: AddedSource): string {
+	if (addedSource.name) {
+		return addedSource.name
+	}
+	// resolve the source's configuration before falling back to the entered value
+	const option = toCustomSourceOption(addedSource.optionKey)
+	const config = option?.toConfig(addedSource.value)
+	return (option && config && toSourceSummary(option.sourceKind, config)) || addedSource.value
 }

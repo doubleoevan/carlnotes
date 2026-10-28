@@ -1,5 +1,7 @@
-import { CHAT_STORY_NOW, toStoryRoomMessage } from "@carlnotes/core/lib/chatStoryFixtures"
+import { CHAT_STORY_NOW, CHAT_STORY_VIDEO_PREVIEW, toStoryRoomMessage } from "@carlnotes/core/lib/chatStoryFixtures"
 import type { Meta, StoryObj } from "@storybook/react-native"
+import { useState } from "react"
+import { Text } from "@/components/primitives/text"
 import { ChatRoomMessageBubble } from "./ChatRoomMessageBubble"
 
 // the component fixture and preview layout
@@ -26,6 +28,24 @@ export default meta
 type Story = StoryObj<typeof meta>
 // rendered component states
 export const OwnMessage: Story = {}
+export const VideoLink: Story = {
+	args: {
+		chatMessage: toStoryRoomMessage({
+			content: CHAT_STORY_VIDEO_PREVIEW.url,
+			linkPreviews: [CHAT_STORY_VIDEO_PREVIEW],
+		}),
+	},
+}
+export const DeleteConfirmation: Story = {
+	render: function DeleteConfirmationStory(args) {
+		const [isDeleted, setIsDeleted] = useState(false)
+		return isDeleted ? (
+			<Text>Message deleted.</Text>
+		) : (
+			<ChatRoomMessageBubble {...args} onDeleteChatMessage={() => setIsDeleted(true)} />
+		)
+	},
+}
 export const MentionAndReply: Story = {
 	args: {
 		chatMessage: toStoryRoomMessage({

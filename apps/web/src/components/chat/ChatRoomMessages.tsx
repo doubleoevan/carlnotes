@@ -1,7 +1,8 @@
-import { sendDeleteChatRoomAttachment, sendDeleteChatRoomMessage } from "@carlnotes/client/chatRoomClient"
+import { sendDeleteChatRoomAttachment } from "@carlnotes/client/chatRoomClient"
 import type { ChatRoomMessage } from "@carlnotes/contracts/chat"
 import { useNow } from "@carlnotes/core/hooks/useNow"
-import { DELETE_CHAT_MESSAGE_COPY, toEmptyChatRoomCopy } from "@carlnotes/core/lib/chatCopy"
+import { toEmptyChatRoomCopy } from "@carlnotes/core/lib/chatCopy"
+import { deleteChatRoomMessage } from "@carlnotes/core/lib/chatRoomActions"
 import { toChatMessageQuotes } from "@carlnotes/core/lib/chatRoomMessages"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
@@ -57,22 +58,15 @@ export function ChatRoomMessages({
 			.catch((error) => console.error("delete chat room attachment failed", error))
 	})
 
-	// a removed chat message re-reads the same way and takes its shared files with it
+	// share accepted refresh, failed deletion, and retired-conversation behavior with mobile
 	const handleDeleteChatMessage = useStableCallback((chatMessageId: number) => {
-		void sendDeleteChatRoomMessage(topicId, teamId, chatMessageId)
-			.then(async (isDeleted) => {
-				// a toast shows what happened either way
-				if (!isDeleted) {
-					toast(DELETE_CHAT_MESSAGE_COPY.failed)
-					return
-				}
-				await chatRoom.reloadChatMessages()
-				toast(DELETE_CHAT_MESSAGE_COPY.succeeded)
-			})
-			.catch((error) => {
-				console.error("delete chat room chat message failed", error)
-				toast(DELETE_CHAT_MESSAGE_COPY.failed)
-			})
+		void deleteChatRoomMessage({
+			topicId,
+			teamId,
+			chatMessageId,
+			onReload: chatRoom.reloadChatMessages,
+			onNotice: toast,
+		})
 	})
 
 	// one lookup table from chat message id, so a reply reference costs no scan per bubble

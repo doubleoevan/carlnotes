@@ -1,17 +1,18 @@
 import { useNow } from "@carlnotes/core/hooks/useNow"
+import { Coffee } from "lucide-react-native"
 import { ScrollView, View } from "react-native"
 import { ClassNameSafeAreaView } from "@/components/common/ClassNameSafeAreaView"
 import { Footer } from "@/components/layout/Footer"
 import { Header } from "@/components/layout/Header"
+import { PageActionMenu } from "@/components/search/PageActionMenu"
 import { SearchBar } from "@/components/search/SearchBar"
 import { TopicFeed } from "@/components/topic/TopicFeed"
 import { TopicFeedStatus } from "@/components/topic/TopicFeedStatus"
 import { TopicHomeActions } from "@/components/topic/TopicHomeActions"
-import { TopicPageActions } from "@/components/topic/TopicPageActions"
 import { useTopicFeed } from "@/providers/TopicFeedProvider"
 
 /**
- * Shows the signed-in user's feed with shared selection and refresh.
+ * Shows the current account's feed or the public feed with shared selection and refresh.
  */
 export default function HomeScreen() {
 	// tick relative ages once for the list and refresh its shared query
@@ -24,7 +25,16 @@ export default function HomeScreen() {
 		<View className="flex-1 bg-background">
 			<Header isHome isReheating={topicFeed.isReheating} onReheat={handleRefresh} />
 			<ClassNameSafeAreaView edges={["left", "right"]} className="w-full max-w-3xl flex-1 self-center">
-				<SearchBar filters={topicFeed} actions={<TopicPageActions onRefresh={handleRefresh} />} />
+				<SearchBar
+					filters={topicFeed}
+					actions={
+						<PageActionMenu
+							page="Home"
+							hasNewTopicButton
+							options={[{ label: "Reheat", icon: Coffee, onSelect: handleRefresh }]}
+						/>
+					}
+				/>
 				<TopicHomeActions filters={topicFeed} knownTags={topicFeed.knownTags} />
 				<TopicFeedStatus
 					topicLabel="topics"

@@ -2,12 +2,12 @@ import { NOTE_FORMATS_HTML, toTestNote } from "@carlnotes/contracts/noteTestFixt
 import type { Meta, StoryObj } from "@storybook/tanstack-react"
 import { fn } from "storybook/test"
 import { STORY_NOTE_COMMENTS } from "../../../.storybook/fixtures/notes"
-import { NoteStatic } from "./NoteStatic"
+import { NoteViewer } from "./NoteViewer"
 
 // exercise the same format fixture as the native reader
 const meta = {
-	title: "Note/NoteStatic",
-	component: NoteStatic,
+	title: "Note/NoteViewer",
+	component: NoteViewer,
 	args: {
 		note: toTestNote({ html: NOTE_FORMATS_HTML, canEdit: false }),
 		isCommentsOpen: true,
@@ -22,10 +22,10 @@ const meta = {
 	},
 	render: (args) => (
 		<div className="flex h-[560px] flex-col">
-			<NoteStatic {...args} />
+			<NoteViewer {...args} />
 		</div>
 	),
-} satisfies Meta<typeof NoteStatic>
+} satisfies Meta<typeof NoteViewer>
 export default meta
 type Story = StoryObj<typeof meta>
 export const EveryFormat: Story = {}

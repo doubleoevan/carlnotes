@@ -14,6 +14,7 @@ const meta = {
 	component: TopicResourceInfoExample,
 	parameters: { webReference: FEED_WEB_REFERENCES.resource },
 	args: {
+		isSignedIn: true,
 		resource: toTestTopicFinding(),
 		topic: toTestTopicFeed(),
 		topicFindingRank: 1,
@@ -34,6 +35,9 @@ type Story = StoryObj<typeof meta>
 
 // the normal and constrained states share the same native sheet
 export const Default: Story = {}
+export const Visitor: Story = {
+	args: { isSignedIn: false, topic: toTestTopicFeed({ isTopicOwner: false, isTeamMember: false, canRate: false }) },
+}
 export const ReadOnly: Story = {
 	args: { topic: toTestTopicFeed({ isTopicOwner: false, isTeamMember: false, canRate: false }) },
 }

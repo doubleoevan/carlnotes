@@ -20,7 +20,7 @@ export function ChatAuthor(props: ChatAuthorProps) {
 
 // native elements for the shared chat author
 const CHAT_AUTHOR_ELEMENTS: ChatAuthorElements = {
-	Frame: ({ children, isOwn }) => <View className={cn("min-w-0", isOwn && "items-end")}>{children}</View>,
+	Frame: ({ children, isOwn }) => <View className={cn("w-full min-w-0", isOwn && "items-end")}>{children}</View>,
 	Row: ({ children, isOwn, userId }) => {
 		// render the linked or plain author row
 		const className = cn("mb-1 flex-row items-center gap-2", isOwn && "flex-row-reverse")

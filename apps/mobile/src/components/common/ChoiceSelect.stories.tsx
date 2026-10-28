@@ -3,7 +3,10 @@ import { Globe, Lock, Mail } from "lucide-react-native"
 import { useState } from "react"
 import { View } from "react-native"
 import { Avatar } from "@/components/branding/Avatar"
+import { Button } from "@/components/primitives/button"
+import { Text } from "@/components/primitives/text"
 import { ChoiceSelect } from "./ChoiceSelect"
+import { Sheet } from "./Sheet"
 
 // keep labels and both icons readable even when the trigger shares a narrow form row
 const meta: Meta<typeof ChoiceSelect> = {
@@ -31,6 +34,36 @@ const meta: Meta<typeof ChoiceSelect> = {
 export default meta
 type Story = StoryObj<typeof meta>
 export const Visibility: Story = {}
+
+// exercise the same dropdown above the form sheet instead of underneath its backdrop
+export const InSheet: Story = {
+	render: function Example() {
+		const [isOpen, setIsOpen] = useState(false)
+		const [frequency, setFrequency] = useState("weekly")
+		return (
+			<View>
+				<Button accessibilityLabel="Open topic form" onPress={() => setIsOpen(true)}>
+					<Text>Open topic form</Text>
+				</Button>
+				{isOpen && (
+					<Sheet title="Topic form" onClose={() => setIsOpen(false)}>
+						<ChoiceSelect
+							label="Frequency"
+							value={frequency}
+							onChange={setFrequency}
+							options={[
+								{ value: "weekly", label: "Weekly" },
+								{ value: "weekdays", label: "Weekdays" },
+								{ value: "daily", label: "Daily" },
+							]}
+						/>
+						<Text>Selected frequency: {frequency}</Text>
+					</Sheet>
+				)}
+			</View>
+		)
+	},
+}
 
 export const WithAvatar: Story = {
 	render: function Example() {

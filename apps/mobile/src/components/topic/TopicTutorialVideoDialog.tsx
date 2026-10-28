@@ -1,4 +1,4 @@
-import { TOPIC_TUTORIAL_VIDEO, toYoutubeWatchUrl, YOUTUBE_PLAY_TRIANGLE_PATH } from "@carlnotes/contracts/youtube"
+import { TOPIC_TUTORIAL_VIDEO } from "@carlnotes/contracts/youtube"
 import {
 	type TopicTutorialVideoOpener,
 	toTopicTutorialPlayProperties,
@@ -6,15 +6,9 @@ import {
 } from "@carlnotes/core/lib/topicTutorialVideo"
 import type { ComponentRef } from "react"
 import { type RefObject, useMemo } from "react"
-import { Text, type View } from "react-native"
-import { Path } from "react-native-svg"
-import { siYoutube } from "simple-icons"
-import { AnchorLink } from "@/components/common/AnchorLink"
-import { ClassNameSvg } from "@/components/common/ClassNameSvg"
+import { View } from "react-native"
 import { Sheet } from "@/components/common/Sheet"
 import { YoutubePlayer } from "@/components/common/YoutubePlayer"
-import { useFontScaledSize } from "@/hooks/useFontScaledSize"
-import { toTypeRoleStyle } from "@/typeRoleStyles"
 import { captureVisitEvent } from "@/visitAnalytics"
 
 /**
@@ -37,35 +31,15 @@ export function TopicTutorialVideoDialog({
 	return (
 		<Sheet title={TOPIC_TUTORIAL_VIDEO.name} onClose={onClose} triggerRef={triggerRef}>
 			{/* the player stays in a readable column on a tablet */}
-			<YoutubePlayer
-				youtubeVideoId={TOPIC_TUTORIAL_VIDEO.youtubeVideoId}
-				title={TOPIC_TUTORIAL_VIDEO.name}
-				thumbnailPath={TOPIC_TUTORIAL_VIDEO.thumbnailPath}
-				onPlay={() => handlePlayerState("playing")}
-			/>
-			{/* a browser fallback never records an unobserved play */}
-			<AnchorLink
-				href={toYoutubeWatchUrl(TOPIC_TUTORIAL_VIDEO.youtubeVideoId)}
-				accessibilityLabel={`Open ${TOPIC_TUTORIAL_VIDEO.name} on YouTube`}
-				className="min-h-12 justify-center py-3"
-			>
-				<Text style={toTypeRoleStyle("body")} className="text-link underline">
-					Open on YouTube
-				</Text>
-			</AnchorLink>
+			<View className="overflow-hidden rounded-md">
+				<YoutubePlayer
+					youtubeVideoId={TOPIC_TUTORIAL_VIDEO.youtubeVideoId}
+					title={TOPIC_TUTORIAL_VIDEO.name}
+					thumbnailPath={TOPIC_TUTORIAL_VIDEO.thumbnailPath}
+					hasYoutubePlayButton
+					onPlay={() => handlePlayerState("playing")}
+				/>
+			</View>
 		</Sheet>
-	)
-}
-
-/**
- * Shows the tutorial's YouTube mark at the user's text scale.
- */
-export function TopicTutorialVideoIcon({ size = 16 }: { size?: number }) {
-	const iconSize = useFontScaledSize(size)
-	return (
-		<ClassNameSvg width={iconSize} height={iconSize} viewBox="0 0 24 24">
-			<Path d={siYoutube.path} fill={`#${siYoutube.hex}`} />
-			<Path d={YOUTUBE_PLAY_TRIANGLE_PATH} fill="white" />
-		</ClassNameSvg>
 	)
 }

@@ -1,3 +1,4 @@
+import { authClient } from "@carlnotes/client/authClient"
 import { SEARCH_MAX_CHARS, SEARCH_MIN_CHARS } from "@carlnotes/contracts/search"
 import { router } from "expo-router"
 import { Search, X } from "lucide-react-native"
@@ -24,6 +25,7 @@ export function SearchBar({
 }: TopicFeedControlsProps & { actions?: ReactNode }) {
 	// keep editing on the current screen and open results only on submission
 	const { searchText, setSearchText, setSearchFilters } = useSearchBar()
+	const { data: session } = authClient().useSession()
 	const handleSubmit = (): void => {
 		if (searchText.trim().length < SEARCH_MIN_CHARS) {
 			return
@@ -58,7 +60,13 @@ export function SearchBar({
 			</View>
 			{/* the web's filter, sort, and page actions */}
 			<View className="ml-1 border-l border-separator pl-1">
-				<TopicFeedControls filters={filters} hasTeamBookmarks={hasTeamBookmarks} hasSort={hasSort} isCompact />
+				<TopicFeedControls
+					filters={filters}
+					hasTeamBookmarks={hasTeamBookmarks}
+					hasSort={hasSort}
+					isSignedIn={Boolean(session)}
+					isCompact
+				/>
 			</View>
 			{actions}
 		</View>

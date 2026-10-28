@@ -4,6 +4,8 @@ import { toNoteBodySave } from "@carlnotes/core/hooks/useNoteBodySave"
 import type { Meta, StoryObj } from "@storybook/react-native"
 import { useState } from "react"
 import { View } from "react-native"
+import { Button } from "@/components/primitives/button"
+import { Text } from "@/components/primitives/text"
 import { NoteEditor } from "./NoteEditor"
 import { NOTE_STORY_THREAD } from "./noteStoryFixtures"
 
@@ -14,7 +16,7 @@ const meta: Meta<typeof NoteEditor> = {
 		note: toTestNote({ html: NOTE_FORMATS_HTML }),
 		pageName: "Coffee",
 		noteCommentThread: NOTE_STORY_THREAD,
-		isCommentsOpen: true,
+		isCommentsOpen: false,
 		onSaveStatus: () => {},
 		onSaveError: () => {},
 	},
@@ -25,8 +27,12 @@ export default meta
 type Story = StoryObj<typeof meta>
 export const EveryFormat: Story = {}
 export const LongNote: Story = { args: { note: toTestNote({ html: NOTE_FORMATS_HTML.repeat(10) }) } }
+export const CommentsClosed: Story = {}
+export const CommentsOpen: Story = { args: { isCommentsOpen: true } }
 // save into a disposable controller so story typing never reaches an account
 function EditorStory(props: React.ComponentProps<typeof NoteEditor>) {
+	// retain editor and comments independently so opening a thread cannot discard body changes
+	const [isCommentsOpen, setIsCommentsOpen] = useState(props.isCommentsOpen)
 	const [controller] = useState(() =>
 		toNoteBodySave({
 			noteId: props.note.id,
@@ -38,7 +44,21 @@ function EditorStory(props: React.ComponentProps<typeof NoteEditor>) {
 	)
 	return (
 		<View style={{ height: 600 }}>
-			<NoteEditor {...props} controller={controller} />
+			<Button
+				accessibilityLabel="Show comments"
+				variant="outline"
+				size="sm"
+				className="mb-3 self-end"
+				onPress={() => setIsCommentsOpen(true)}
+			>
+				<Text>Comments</Text>
+			</Button>
+			<NoteEditor
+				{...props}
+				controller={controller}
+				isCommentsOpen={isCommentsOpen}
+				onCloseComments={() => setIsCommentsOpen(false)}
+			/>
 		</View>
 	)
 }

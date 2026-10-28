@@ -10,6 +10,10 @@ export const CLEAR_CHAT_COPY = {
 	failed: "That chat could not be cleared.",
 } as const
 export const DELETE_CHAT_MESSAGE_COPY = {
+	title: "Delete this message?",
+	description: "This removes the message and its attachments for everyone in this chat.",
+	confirm: "Delete message",
+	cancel: "Keep it",
 	succeeded: "Message deleted.",
 	failed: "That message could not be deleted.",
 } as const

@@ -47,12 +47,12 @@ test("the table renders name, visibility, and updated columns", () => {
 
 // the reader renders the stored body through the editor package's display component, which needs a browser, and
 // never injects it as raw html
-test("the static body renders through the display component", async () => {
-	const staticSource = await Bun.file(new URL("./NoteStatic.tsx", import.meta.url)).text()
-	expect(staticSource).toContain("<EnrichedText ")
-	expect(staticSource).toContain("<SharedNoteStatic")
-	expect(staticSource).toContain("{html}")
-	expect(staticSource).not.toContain("dangerouslySetInnerHTML")
+test("the read-only body renders through the viewer component", async () => {
+	const viewerSource = await Bun.file(new URL("./NoteViewer.tsx", import.meta.url)).text()
+	expect(viewerSource).toContain("<EnrichedText ")
+	expect(viewerSource).toContain("<SharedNoteViewer")
+	expect(viewerSource).toContain("{html}")
+	expect(viewerSource).not.toContain("dangerouslySetInnerHTML")
 })
 
 // the footer counts the notes and splits them by visibility, skipping empty visibilities

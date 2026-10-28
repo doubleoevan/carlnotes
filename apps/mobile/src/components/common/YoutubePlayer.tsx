@@ -1,29 +1,34 @@
 import { toApiUrl } from "@carlnotes/client/apiClient"
-import { toYoutubeWatchUrl } from "@carlnotes/contracts/youtube"
 import { Image } from "expo-image"
 import { Play } from "lucide-react-native"
 import { useEffect, useRef, useState } from "react"
 import { AppState, Pressable, View } from "react-native"
 import NativeYoutubePlayer from "react-native-youtube-iframe"
 import { CoffeeLoading } from "@/components/branding/CoffeeLoading"
-import { toTouchTargetHitSlop } from "@/components/primitives/button"
 import { Icon } from "@/components/primitives/icon"
 import { Text } from "@/components/primitives/text"
-import { AnchorLink } from "./AnchorLink"
+import { shouldLoadYoutubePlayerUrl, YOUTUBE_PLAYER_BASE_URL } from "@/youtubePlayer"
+import { YoutubePlayIcon } from "./BrandIcon"
 
 // the source video and the thumbnail served by CarlNotes
 export type YoutubePlayerProps = {
 	youtubeVideoId: string
 	title: string | null
 	thumbnailPath: string | null
+	hasYoutubePlayButton?: boolean
 	onPlay?: () => void
-	onOpen?: () => void
 }
 
 /**
  * Plays a YouTube video inline after a tap and stops when the app leaves the foreground.
  */
-export function YoutubePlayer({ youtubeVideoId, title, thumbnailPath, onPlay, onOpen }: YoutubePlayerProps) {
+export function YoutubePlayer({
+	youtubeVideoId,
+	title,
+	thumbnailPath,
+	hasYoutubePlayButton,
+	onPlay,
+}: YoutubePlayerProps) {
 	// mount the embedded player only after the user requests playback
 	const [isRequested, setIsRequested] = useState(false)
 	const [isReady, setIsReady] = useState(false)
@@ -49,12 +54,17 @@ export function YoutubePlayer({ youtubeVideoId, title, thumbnailPath, onPlay, on
 			onPlay?.()
 		}
 	}
+	// retain inline playback when YouTube requests a watch page or an app intent
+	const handleNavigation = ({ url }: { url: string }): boolean => {
+		return shouldLoadYoutubePlayerUrl(url)
+	}
 	return (
 		<View onLayout={(event) => setWidth(event.nativeEvent.layout.width)}>
 			{/* keep the preview in place until playback is requested */}
 			{isRequested && !hasPlaybackError && width > 0 ? (
 				<View style={{ height }}>
 					<NativeYoutubePlayer
+						baseUrlOverride={YOUTUBE_PLAYER_BASE_URL}
 						videoId={youtubeVideoId}
 						width={width}
 						height={height}
@@ -67,6 +77,13 @@ export function YoutubePlayer({ youtubeVideoId, title, thumbnailPath, onPlay, on
 							allowsInlineMediaPlayback: true,
 							allowsFullscreenVideo: true,
 							mediaPlaybackRequiresUserAction: false,
+							// intercept every scheme before the OS can hand it to another app
+							originWhitelist: ["*"],
+							onShouldStartLoadWithRequest: handleNavigation,
+							onOpenWindow: () => {
+								// keep player popups from launching another app
+							},
+							onError: () => setHasPlaybackError(true),
 						}}
 					/>
 					{!isReady ? (
@@ -93,22 +110,22 @@ export function YoutubePlayer({ youtubeVideoId, title, thumbnailPath, onPlay, on
 							accessible={false}
 						/>
 					) : null}
-					<View className="size-12 items-center justify-center rounded-full bg-primary shadow-raised">
-						<Icon as={Play} className="size-5 text-primary-foreground" fill="currentColor" />
-					</View>
+					{hasYoutubePlayButton ? (
+						<YoutubePlayIcon size={80} />
+					) : (
+						<View className="absolute inset-0 items-center justify-center bg-black/30">
+							<View className="size-12 items-center justify-center rounded-full bg-primary">
+								<Icon as={Play} className="ml-0.5 size-5 text-primary-foreground" fill="currentColor" />
+							</View>
+						</View>
+					)}
 				</Pressable>
 			)}
-			{/* retain a working destination when the publisher disables embedding */}
+			{/* explain unavailable playback in place */}
 			{hasPlaybackError ? (
-				<AnchorLink
-					href={toYoutubeWatchUrl(youtubeVideoId)}
-					onPress={onOpen}
-					accessibilityLabel={`Open ${videoTitle} on YouTube`}
-					hitSlop={toTouchTargetHitSlop(44)}
-					className="min-h-11 justify-center px-3 py-2"
-				>
-					<Text className="text-sm text-link">This video needs to open on YouTube.</Text>
-				</AnchorLink>
+				<Text accessibilityRole="alert" className="px-3 py-2 text-sm text-muted-foreground">
+					{"This video can't play here."}
+				</Text>
 			) : null}
 		</View>
 	)

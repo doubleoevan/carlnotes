@@ -2,7 +2,8 @@ import { CHAT_NAME } from "@carlnotes/contracts/chat"
 import { type ChatPillElements, ChatPill as SharedChatPill } from "@carlnotes/core/components/ChatPill"
 import { Coffee, X } from "lucide-react-native"
 import type { ReactNode } from "react"
-import { KeyboardAvoidingView, Platform, View } from "react-native"
+import { KeyboardAvoidingView, Platform, StatusBar, View } from "react-native"
+import { useUniwind } from "uniwind"
 import { CoffeeCup } from "@/components/branding/CoffeeCup"
 import { ClassNameSafeAreaView } from "@/components/common/ClassNameSafeAreaView"
 import { Button } from "@/components/primitives/button"
@@ -13,8 +14,10 @@ import { Text } from "@/components/primitives/text"
  * Frames a native conversation above the keyboard and device safe areas.
  */
 export function ChatPanelWidget({ children, onClose }: { children: ReactNode; onClose: () => void }) {
+	const { theme } = useUniwind()
 	return (
 		<ClassNameSafeAreaView className="w-full flex-1 bg-card">
+			<StatusBar barStyle={theme === "dark" ? "light-content" : "dark-content"} />
 			<KeyboardAvoidingView className="flex-1" behavior={Platform.OS === "ios" ? "padding" : "height"}>
 				{/* conversation heading */}
 				<View className="flex-row items-center justify-between gap-2 px-3 pt-2">

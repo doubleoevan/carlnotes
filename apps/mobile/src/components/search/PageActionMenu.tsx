@@ -1,3 +1,4 @@
+import { authClient } from "@carlnotes/client/authClient"
 import {
 	PageActionMenu as SharedPageActionMenu,
 	type PageActionOption as SharedPageActionOption,
@@ -36,6 +37,7 @@ export function PageActionMenu({
 	const [isAddingToAi, setIsAddingToAi] = useState(false)
 	const triggerRef = useRef<ComponentRef<typeof View>>(null)
 	const { openNewTopicDialog, newTopicDialog } = useNewTopicDialog()
+	const { data: session } = authClient().useSession()
 	return (
 		<>
 			{/* the shared action list uses the same order and visibility as web */}
@@ -56,7 +58,7 @@ export function PageActionMenu({
 						icons={{ Plus, Bot, Flag }}
 						onNewTopic={openNewTopicDialog}
 						onAddToAi={() => setIsAddingToAi(true)}
-						onReport={report ? () => setIsReporting(true) : undefined}
+						onReport={report && session ? () => setIsReporting(true) : undefined}
 						onClose={() => setIsOpen(false)}
 						Option={PageAction}
 					/>

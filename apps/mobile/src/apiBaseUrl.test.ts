@@ -14,6 +14,11 @@ test("a development build reaches the dev server's host on the api port", () => 
 	expect(toApiBaseUrl({ isDevelopment: true, hostUri: "localhost:8081" })).toBe("http://localhost:3000")
 })
 
+// the browser keeps separate cookies for the two loopback hostnames
+test("an IPv4 loopback dev server uses the OAuth callback's localhost hostname", () => {
+	expect(toApiBaseUrl({ isDevelopment: true, hostUri: "127.0.0.1:8084" })).toBe("http://localhost:3000")
+})
+
 // a development build without a dev server address falls back to localhost
 test("a development build without a host falls back to localhost", () => {
 	expect(toApiBaseUrl({ isDevelopment: true })).toBe("http://localhost:3000")

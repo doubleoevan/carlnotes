@@ -1,10 +1,10 @@
-import type { NoteLayoutProps } from "@carlnotes/core/components/NoteStatic"
+import type { NoteLayoutProps } from "@carlnotes/core/components/NoteViewer"
 import { createContext, useContext, useState } from "react"
 import { Keyboard as NativeKeyboard, ScrollView, View } from "react-native"
+import { Sheet } from "@/components/common/Sheet"
 import { Button } from "@/components/primitives/button"
 import { Text } from "@/components/primitives/text"
 import { useIsKeyboardVisible } from "@/hooks/useIsKeyboardVisible"
-import { toTypeRoleStyle } from "@/typeRoleStyles"
 import { NoteComments } from "./NoteComments"
 
 // the measured viewport bounds native caret scrolling below the toolbar
@@ -18,7 +18,7 @@ export function useNoteEditorHeight(): number {
 }
 
 /**
- * Keeps formatting below the title and comments below the scrolling body.
+ * Keeps formatting below the title and opens comments in the phone's own sheet.
  */
 export function NoteLayout({
 	children,
@@ -29,6 +29,7 @@ export function NoteLayout({
 	noteCommentThread,
 	canComment,
 	isCommentsOpen,
+	onCloseComments,
 }: NoteLayoutProps) {
 	// measure the remaining body space and show dismissal only for an open keyboard
 	const [viewportHeight, setViewportHeight] = useState(300)
@@ -38,7 +39,7 @@ export function NoteLayout({
 			{/* keep the title and formatting together above the body */}
 			{header}
 			{toolbar && <View className="pb-3">{toolbar}</View>}
-			{/* scroll the bounded editor and comments within the remaining keyboard-safe space */}
+			{/* scroll the bounded editor within the remaining keyboard-safe space */}
 			<ScrollView
 				className="flex-1"
 				keyboardShouldPersistTaps="handled"
@@ -51,15 +52,13 @@ export function NoteLayout({
 				<EditorHeight.Provider value={Math.max(120, Math.min(440, viewportHeight - 32))}>
 					<View className="rounded-lg border border-border bg-card px-4 py-4 shadow-raised">{children}</View>
 				</EditorHeight.Provider>
-				{isCommentsOpen && (
-					<View className="mt-4 gap-2">
-						<Text accessibilityRole="header" style={toTypeRoleStyle("sectionHeading")}>
-							Comments
-						</Text>
-						<NoteComments {...noteCommentThread} canComment={canComment} />
-					</View>
-				)}
 			</ScrollView>
+			{/* expose the complete thread above the editor with the web phone's sheet behavior */}
+			{isCommentsOpen && (
+				<Sheet title="Comments" onClose={() => onCloseComments?.()} hasHighlightedScrollIndicator>
+					<NoteComments {...noteCommentThread} canComment={canComment} isInSheet />
+				</Sheet>
+			)}
 			{/* keep keyboard dismissal separate from the full-width formatting toolbar */}
 			{isKeyboardVisible && (
 				<Button

@@ -63,11 +63,11 @@ export function SpendMeter({ activity }: { activity: SpendMeterProps }) {
 					<CutoffMarkerCircle key={marker.percent} marker={marker} budgetUsedShare={budgetUsedShare} />
 				))}
 			</View>
-			<View className="mt-2 flex-row flex-wrap gap-4">
+			<View className="mt-2 flex-row flex-wrap gap-x-4 gap-y-1">
 				{legendSegments.map((segment) => (
-					<View key={segment.key} className="flex-row items-center gap-1.5">
-						<View className={cn("size-2 rounded-full", segment.colorClass)} />
-						<Text className="text-xs text-muted-foreground">
+					<View key={segment.key} className="max-w-full flex-row items-center gap-1.5">
+						<View className={cn("size-2 shrink-0 rounded-full", segment.colorClass)} />
+						<Text className="shrink text-xs text-muted-foreground">
 							{segment.label} {toCentsLabel(segment.cents)}
 						</Text>
 					</View>

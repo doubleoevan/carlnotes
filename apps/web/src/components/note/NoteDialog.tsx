@@ -32,10 +32,10 @@ import { type NoteVisibility, NoteVisibilitySelect, VISIBILITY_TOOLTIPS } from "
 // starts the one it will show as it mounts, while the note is still on its way
 const loadNoteEditor = () =>
 	import("./NoteEditor").then((noteEditorModule) => ({ default: noteEditorModule.NoteEditor }))
-const loadNoteStatic = () =>
-	import("./NoteStatic").then((noteStaticModule) => ({ default: noteStaticModule.NoteStatic }))
+const loadNoteViewer = () =>
+	import("./NoteViewer").then((noteViewerModule) => ({ default: noteViewerModule.NoteViewer }))
 const NoteEditor = lazy(loadNoteEditor)
-const NoteStatic = lazy(loadNoteStatic)
+const NoteViewer = lazy(loadNoteViewer)
 
 // the line shown while the note is on its way
 const LOADING_LINE = <p className="text-muted-foreground py-2 text-sm">{NOTE_LABELS.loading}</p>
@@ -177,7 +177,7 @@ function OpenNote({
 
 	// the body's chunk starts loading at once, beside the note fetch, instead of after it
 	useEffect(() => {
-		void (note.canEdit ? loadNoteEditor() : loadNoteStatic())
+		void (note.canEdit ? loadNoteEditor() : loadNoteViewer())
 	}, [note.canEdit])
 
 	// every open fetches the stored body and the version a save names. null until it arrives, false if it never does
@@ -303,7 +303,7 @@ function OpenNote({
 								onSaveStatus={setNoteSaveStatus}
 							/>
 						) : (
-							<NoteStatic note={openedNote} noteCommentThread={noteCommentThread} isCommentsOpen={isCommentsOpen} />
+							<NoteViewer note={openedNote} noteCommentThread={noteCommentThread} isCommentsOpen={isCommentsOpen} />
 						)}
 					</Suspense>
 				)}

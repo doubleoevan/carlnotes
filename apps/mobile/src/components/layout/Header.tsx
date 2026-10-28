@@ -4,9 +4,10 @@ import { useRef, useState } from "react"
 import { type GestureResponderEvent, Text, View } from "react-native"
 import { CoffeeMug } from "@/components/branding/CoffeeMug"
 import { AnchorLink } from "@/components/common/AnchorLink"
+import { YoutubePlayIcon } from "@/components/common/BrandIcon"
 import { ClassNameSafeAreaView } from "@/components/common/ClassNameSafeAreaView"
 import { Button } from "@/components/primitives/button"
-import { TopicTutorialVideoDialog, TopicTutorialVideoIcon } from "@/components/topic/TopicTutorialVideoDialog"
+import { TopicTutorialVideoDialog } from "@/components/topic/TopicTutorialVideoDialog"
 import { MAX_FONT_SCALE } from "@/hooks/useFontScaledSize"
 import { useHomeLink } from "@/providers/SearchBarProvider"
 import { toTypeRoleStyle } from "@/typeRoleStyles"
@@ -60,7 +61,7 @@ export function Header({ isHome = false, isReheating = false, onReheat }: Header
 						accessibilityLabel={TOPIC_TUTORIAL_WATCH_LABEL}
 						onPress={() => setIsTutorialOpen(true)}
 					>
-						<TopicTutorialVideoIcon size={28} />
+						<YoutubePlayIcon size={28} />
 					</Button>
 					<UserMenu />
 				</View>

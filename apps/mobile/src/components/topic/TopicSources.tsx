@@ -10,7 +10,15 @@ import { useFontScaledSize } from "@/hooks/useFontScaledSize"
 import { toTypeRoleStyle } from "@/typeRoleStyles"
 
 // source marks match the web's neutral icons and provider logos
-const SOURCE_ICONS = { web: Globe, url: Link, rss: Rss, podcast: AudioLines, composio: Plug, plugin: Puzzle }
+const SOURCE_ICONS = {
+	web: Globe,
+	search: Globe,
+	url: Link,
+	rss: Rss,
+	podcast: AudioLines,
+	composio: Plug,
+	plugin: Puzzle,
+}
 const SOURCE_BRANDS = { reddit: siReddit, youtube: siYoutube, x: siX, bluesky: siBluesky }
 
 /**

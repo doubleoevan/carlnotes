@@ -35,9 +35,8 @@ export default function TopicScreen() {
 	const topicFeed = useTopicFeed()
 	useFocusEffect(useCallback(() => selectCachedTopic(topicId), [topicId]))
 	const query = useQuery({
-		queryKey: ["topic-page", session?.user.id, topicId],
+		queryKey: ["topic-page", session?.user.id ?? null, topicId],
 		queryFn: () => fetchTopicPage(topicId),
-		enabled: Boolean(session),
 	})
 	// refresh the mounted Topic after accepted chat edits
 	const topicChangeCount = useTopicChangeCount(topicId)

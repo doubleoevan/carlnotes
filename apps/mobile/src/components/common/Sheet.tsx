@@ -84,6 +84,7 @@ export function Sheet({ title, children, onClose, triggerRef, hasHighlightedScro
 		>
 			<BottomSheetScrollView
 				ref={scrollRef}
+				keyboardShouldPersistTaps="handled"
 				showsVerticalScrollIndicator={!hasHighlightedScrollIndicator}
 				showsHorizontalScrollIndicator={false}
 				persistentScrollbar

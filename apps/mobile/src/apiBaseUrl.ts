@@ -18,7 +18,8 @@ export function toApiBaseUrl({ isDevelopment, hostUri }: ToApiBaseUrlOptions): s
 		return SITE_URL
 	}
 
-	// the dev server's host without its bundler port. localhost covers a missing address
+	// match the local OAuth callback's hostname so the browser sends its sign-in cookie on return
 	const [host] = (hostUri ?? "").split(":")
-	return `http://${host || "localhost"}:${DEVELOPMENT_API_PORT}`
+	const apiHost = !host || host === "127.0.0.1" ? "localhost" : host
+	return `http://${apiHost}:${DEVELOPMENT_API_PORT}`
 }

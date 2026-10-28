@@ -4,9 +4,10 @@ import { fontFamilies } from "@carlnotes/nightshift/typography"
 import * as SelectPrimitive from "@rn-primitives/select"
 import { Check, ChevronDown } from "lucide-react-native"
 import { type ComponentProps, Fragment, type ReactNode, useRef, useState } from "react"
-import { Animated, Platform, StyleSheet, useWindowDimensions, View } from "react-native"
+import { Animated, Keyboard, Platform, StyleSheet, useWindowDimensions, View } from "react-native"
 import { FullWindowOverlay } from "react-native-screens"
 import { ScrollIndicator } from "@/components/common/ScrollIndicator"
+import { useIsKeyboardVisible } from "@/hooks/useIsKeyboardVisible"
 import { Icon } from "./icon"
 import { TextClassContext } from "./text"
 
@@ -57,10 +58,16 @@ export function SelectTrigger({
 export function SelectContent({ className, children, ...props }: ComponentProps<typeof SelectPrimitive.Content>) {
 	// bound long menus to the safe viewport and retain the orange overflow cue
 	const { height } = useWindowDimensions()
+	const isKeyboardVisible = useIsKeyboardVisible()
 	const scrollOffset = useRef(new Animated.Value(0)).current
 	const [viewportHeight, setViewportHeight] = useState(0)
 	const [contentHeight, setContentHeight] = useState(0)
-	const safeHeight = height - (props.insets?.top ?? 0) - (props.insets?.bottom ?? 0)
+	const keyboardTop = isKeyboardVisible ? Keyboard.metrics()?.screenY : undefined
+	const menuInsets = {
+		...props.insets,
+		bottom: Math.max(props.insets?.bottom ?? 0, keyboardTop === undefined ? 0 : height - keyboardTop),
+	}
+	const safeHeight = Math.max(0, height - (menuInsets.top ?? 0) - menuInsets.bottom)
 	return (
 		<SelectPrimitive.Portal>
 			<OverlayContainer>
@@ -71,6 +78,7 @@ export function SelectContent({ className, children, ...props }: ComponentProps<
 							sideOffset={4}
 							className={cn("min-w-24 rounded-md border border-border bg-popover p-1 shadow-raised", className)}
 							{...props}
+							insets={menuInsets}
 						>
 							<Animated.ScrollView
 								style={{ maxHeight: Math.min(320, safeHeight / 2) }}

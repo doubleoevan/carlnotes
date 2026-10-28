@@ -3,7 +3,7 @@ import { NOTE_NAME_MAX_CHARS, type NoteResponse, type NoteVisibility } from "@ca
 import { useNoteManagement } from "@carlnotes/core/hooks/useNoteManagement"
 import { NOTE_DELETE, toNoteDeleteDescription } from "@carlnotes/core/lib/noteLabels"
 import { Pencil } from "lucide-react-native"
-import { useState } from "react"
+import { type ComponentRef, useRef, useState } from "react"
 import { Alert, TextInput, View } from "react-native"
 import { Button } from "@/components/primitives/button"
 import { Icon } from "@/components/primitives/icon"
@@ -35,6 +35,7 @@ export function NoteManagement({
 		onError: showClientError,
 	})
 	const [isNameFocused, setIsNameFocused] = useState(false)
+	const nameInputRef = useRef<ComponentRef<typeof TextInput>>(null)
 
 	return (
 		<View className="gap-2 pb-3">
@@ -68,6 +69,7 @@ export function NoteManagement({
 			{note.canEdit ? (
 				<View className="relative justify-center">
 					<TextInput
+						ref={nameInputRef}
 						accessibilityLabel="Note name"
 						value={name}
 						onChangeText={setName}
@@ -81,12 +83,19 @@ export function NoteManagement({
 						editable={!isOffline && !isPending}
 						maxLength={NOTE_NAME_MAX_CHARS}
 						style={toTypeRoleStyle("pageTitle")}
-						className="min-h-12 px-8 text-center text-foreground"
+						className="min-h-12 px-12 text-center text-foreground"
 					/>
 					{!isNameFocused && !isOffline && (
-						<View pointerEvents="none" className="absolute right-2">
-							<Icon as={Pencil} className="size-4 text-muted-foreground" />
-						</View>
+						<Button
+							accessibilityLabel="Edit note name"
+							variant="ghost"
+							size="icon"
+							className="absolute right-0"
+							disabled={isPending}
+							onPress={() => nameInputRef.current?.focus()}
+						>
+							<Icon as={Pencil} className="size-4 text-foreground" />
+						</Button>
 					)}
 				</View>
 			) : (

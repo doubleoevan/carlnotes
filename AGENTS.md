@@ -115,13 +115,18 @@ workflow bundle check, and the test suite. Green before any hand-off.
 - Mobile changes start with the matching web implementation and its Nightshift components. Reuse the existing
   component first; matching its appearance with separately maintained code is not component reuse. Extract portable
   components into universal packages so both apps consume one implementation; app-to-app imports remain forbidden.
-  Before adding a native renderer, identify the concrete platform dependency that prevents reuse and check whether
-  a small platform adapter resolves it. When a native renderer is necessary, keep it thin, compose existing native
+  Before adding a mobile renderer, identify the concrete platform dependency that prevents reuse and check whether
+  a small platform adapter resolves it. When a mobile renderer is necessary, keep it thin, compose existing mobile
   Nightshift components, and share the data, formatting, visibility rules, and state logic. Preserve the web's
-  structure, controls, and behavior. Record actual component reuse separately from shared logic and native replacements.
+  structure, controls, and behavior. Record actual component reuse separately from shared logic and platform replacements.
 - Use the same domain terminology, component names, and filenames for corresponding web and mobile concerns.
   Keep framework-required routes and genuine platform differences. Document the reason when a counterpart needs
   a different name; avoid mobile-only synonyms for the same component or action.
+- Prefer `platform` over generic `native` wording in identifiers, comments, and docs. Name the specific target
+  (`web`, `mobile`, `iOS`, or `Android`) when that is clearer, and omit redundant qualifiers. Keep `native` when
+  the technical distinction matters, such as native modules, compiled builds, OS controls, and React Native's
+  animation driver. Preserve library and API names such as `React Native`, `react-native`, `useNativeDriver`,
+  and `nativeEvent`; apply this preference by meaning, without blanket replacement.
 - Mobile parity includes formatting, visibility, and styling. Compare rendered web and mobile states before hand-off.
   Check every section, action, badge, count, permission gate, and loading/empty/error state, plus typography, spacing,
   colors, icons, button variants, dividers, truncation, and overflow. Fix omissions without waiting for the user to

@@ -1,4 +1,5 @@
 import { showClientError } from "@carlnotes/client/apiClient"
+import { authClient } from "@carlnotes/client/authClient"
 import { sendDeleteTopic, sendTopicSubscription } from "@carlnotes/client/topicClient"
 import type { TopicResponse } from "@carlnotes/contracts/topics"
 import { toTopicActionLayout } from "@carlnotes/core/lib/topicActions"
@@ -20,7 +21,7 @@ import { NewTopicButton } from "./TopicHomeActions"
 import { TopicScanButton } from "./TopicScanButton"
 
 /**
- * Places working native Topic controls according to the shared web action layout.
+ * Places Topic controls according to the shared action layout.
  */
 export function TopicActionBar({
 	topic,
@@ -33,7 +34,8 @@ export function TopicActionBar({
 }) {
 	// keep team selection above the current Topic without losing its scroll position
 	const [isAddingToTeam, setIsAddingToTeam] = useState(false)
-	const layout = toNativeTopicActionLayout(topic)
+	const { data: session } = authClient().useSession()
+	const layout = toTopicPageActionLayout({ topic, isSignedIn: Boolean(session) })
 	return (
 		<View className="mx-4 mt-1 mb-3 flex-row flex-wrap items-start justify-between gap-3">
 			{/* secondary action and primary call to action */}
@@ -58,6 +60,20 @@ export function TopicActionBar({
 			<View>
 				<TopicScanButton topic={topic} onScanned={onScanned} />
 				{layout.isNewTopicCallToAction && <NewTopicButton />}
+				{layout.isSubscribeCallToAction && (
+					<Button accessibilityLabel="Follow topic" onPress={() => router.push("/sign-up")}>
+						<Icon as={PawPrint} className="size-4" />
+						<Text>Follow topic</Text>
+					</Button>
+				)}
+				{layout.isJoinCallToAction && topic.teamLink && (
+					<JoinTeamButton
+						teamId={topic.teamLink.teamId}
+						name={topic.teamLink.name}
+						hasRequestedToJoin={topic.hasRequestedToJoin}
+						onChanged={onRefresh}
+					/>
+				)}
 			</View>
 			{isAddingToTeam && (
 				<AddTopicToTeamDialog topic={topic} onTopicTeamsChanged={onRefresh} onClose={() => setIsAddingToTeam(false)} />
@@ -67,7 +83,7 @@ export function TopicActionBar({
 }
 
 /**
- * Opens the same Topic actions as web with native editing, team selection, and confirmation.
+ * Opens the shared Topic actions with editing, team selection, and confirmation.
  */
 export function TopicPageActions({
 	topic,
@@ -82,18 +98,22 @@ export function TopicPageActions({
 	const [dialog, setDialog] = useState<"edit" | "team" | "share" | null>(null)
 	const mutation = usePageMutation(onRefresh)
 	const feed = useTopicFeed()
+	const { data: session } = authClient().useSession()
 	const actionOptions: PageActionOption[] = []
 
 	// preserve the web's follow, team, share, edit, and delete order
 	if (topic) {
-		const layout = toNativeTopicActionLayout(topic)
+		const layout = toTopicPageActionLayout({ topic, isSignedIn: Boolean(session) })
 		if (layout.isSubscribeInMenu) {
 			actionOptions.push({
 				label: topic.isSubscribed ? "Unfollow topic" : "Follow topic",
 				icon: PawPrint,
 				isActive: topic.isSubscribed,
 				isDisabled: mutation.isPending,
-				onSelect: () => void mutation.run(() => sendTopicSubscription(topic.id, !topic.isSubscribed)),
+				onSelect: () =>
+					session
+						? void mutation.run(() => sendTopicSubscription(topic.id, !topic.isSubscribed))
+						: router.push("/sign-up"),
 			})
 		}
 		if (layout.isAddTopicToTeamInMenu) {
@@ -122,7 +142,9 @@ export function TopicPageActions({
 				page={title.replace(/ actions$/, "")}
 				options={actionOptions}
 				report={topic ? { subjectKind: "topic", subjectId: topic.id, subjectLabel: topic.name } : undefined}
-				hasNewTopicButton={!topic || toNativeTopicActionLayout(topic).isNewTopicCallToAction}
+				hasNewTopicButton={
+					!topic || toTopicPageActionLayout({ topic, isSignedIn: Boolean(session) }).isNewTopicCallToAction
+				}
 			/>
 			{mutation.error && (
 				<Text accessibilityRole="alert" className="text-xs text-destructive">
@@ -159,11 +181,20 @@ function TopicActionDialog({
 	)
 }
 
-// the mobile screens require sign-in and use the same join permission as the web
-function toNativeTopicActionLayout(topic: TopicResponse): ReturnType<typeof toTopicActionLayout> {
+// the signed-in state for the active Topic
+type ToTopicPageActionLayoutOptions = {
+	topic: TopicResponse
+	isSignedIn: boolean
+}
+
+// apply the same visitor and account permissions as the web
+function toTopicPageActionLayout({
+	topic,
+	isSignedIn,
+}: ToTopicPageActionLayoutOptions): ReturnType<typeof toTopicActionLayout> {
 	return toTopicActionLayout({
 		topic,
-		isSignedIn: true,
+		isSignedIn,
 		isBookmarkedView: false,
 		isJoinable: topic.roomTeams.length === 0 && topic.teamLink !== null,
 	})

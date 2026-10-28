@@ -6,6 +6,10 @@ through universal packages. Record a missing native feature instead of silently 
 `common/RatingThumbs.tsx`, `topic/TopicFindingSummary.tsx`, and `note/NotesTable.tsx` supply DOM elements to the
 shared rating, Resource metadata, and Notes table components in core.
 
+`common/ThinkingLine.tsx` supplies the CSS shimmer to core's shared `ThinkingLine` component. The phrase deck and
+shuffle now live in `packages/core/lib/thinkingLines.ts`. Room message deletion uses `common/ConfirmDialog` with
+core's shared confirmation wording before the existing delete operation.
+
 TanStack Start app on Vite, the `@carlnotes/web` app and the one browser entry. `apps/web/src/routes/` has one file
 per route. `router.tsx` builds the router from the generated `routeTree.gen.ts` and configures the api client,
 `client.tsx` hydrates it in the browser, and Start's own server entry renders it on the server. `bun run build:ui`
@@ -102,6 +106,8 @@ the browser bundle and renders pages through the server build, behind its own ro
   `toSignupNavigation` and `toSignupHref`, which every such action goes through.
 - `components/account/` — the account page's sections. `SpendMeter.tsx` is the monthly budget's bar, with a circle
   above it for each monthly budget cutoff, a tooltip on each circle, and the list of what each cutoff stops.
+  `globals.css` scans `core/lib/spendMeter.ts` for the shared bar and legend colors. The legend uses compact row gaps
+  when wrapping, matching native. Cutoffs come from the API; an admin without a budget override has none.
   `MonthlyBudgetCutoffTable.tsx` is the plans page's monthly budget cutoff table of every plan's cutoffs, which a test
   checks against the docs page's copy, and `monthlyBudgetCutoffCopy.ts` holds the wording both of them use.
 - `components/invite/` — the invite fields, editors, and modals, shared by the topic and team pages.
@@ -113,6 +119,8 @@ the browser bundle and renders pages through the server build, behind its own ro
   removals, then the invites and the team change, with `MISSING_FIELD_NOTES` and `showSaveError` beside it;
   `EditTopicModal.test.tsx` covers both modules. `TopicSourceEditor.tsx` is the modal's sources field, with its source
   rows in `TopicSource.tsx` and its add a source link and Recommend button in `AddSourceButtons.tsx`.
+  `TopicSource` and `TopicDefaultSource` adapt core's shared components, preserving the DOM badges, summaries, and
+  tooltips. `core/lib/topicSources.ts` owns the staged summary formatter used by both editors.
 - `components/team/` — the team page's header, gate, menu, dialogs, and buttons, and the team modal. `saveTeam.ts` is
   the team save flow the team modal and the topic modal's teams field share: `createTeam`, `createTeamForInviteLink`,
   `saveTeam`, and `TEAM_REJECTION_REASONS`, the sentence for each team rejection.
@@ -172,7 +180,7 @@ the browser bundle and renders pages through the server build, behind its own ro
   to 3, the bulleted, numbered, and checklists, the quote and code block, and the link popover, each a `ToolbarButton`,
   a Nightshift ghost `Button` lit from the editor's state, which the dialog's own controls reuse), schedules the save
   through `@carlnotes/core/hooks/useNoteBodySave`, flushes it on unmount, and shows `NoteConflictNotice.tsx` with its
-  Reload button if somebody else saved since the open; `NoteStatic.tsx` renders `EnrichedText` for a read-only open.
+  Reload button if somebody else saved since the open; `NoteViewer.tsx` renders `EnrichedText` for a read-only open.
   Both sit in `NoteLayout.tsx`, the page card with the thread of `NoteComments.tsx` beside it on a wide screen and in a
   sheet on a phone. `noteStyle.ts` holds `NOTE_HTML_STYLE`, the Nightshift note style over the theme's CSS variables,
   `NOTE_PLACEHOLDER_COLOR`, and `NOTE_BODY_CLASS`. `src/reactNativeTypes.d.ts` declares the React

@@ -22,6 +22,7 @@ export type TopicFeedControlsProps = {
 	hasTeamBookmarks?: boolean
 	isCompact?: boolean
 	hasSort?: boolean
+	isSignedIn?: boolean
 }
 type ChoiceSheetProps = TopicFeedControlsProps & { onClose: () => void }
 
@@ -33,13 +34,14 @@ export function TopicFeedControls({
 	hasTeamBookmarks = false,
 	isCompact = false,
 	hasSort = true,
+	isSignedIn = true,
 }: TopicFeedControlsProps) {
 	// return focus to the control that opened the sheet
 	const [sheet, setSheet] = useState<"sort" | "filter" | null>(null)
 	const sortTriggerRef = useRef<ComponentRef<typeof View>>(null)
 	const filterTriggerRef = useRef<ComponentRef<typeof View>>(null)
 	const handleClose = (): void => setSheet(null)
-	const filterLabel = toFilterLabel({ filters, hasTeamBookmarks })
+	const filterLabel = toFilterLabel({ filters, hasTeamBookmarks, isSignedIn })
 	return (
 		<View className={isCompact ? "flex-row-reverse items-center" : "flex-row flex-wrap gap-3 px-4 py-3"}>
 			{/* keep both active choices visible */}
@@ -73,7 +75,12 @@ export function TopicFeedControls({
 			) : null}
 			{sheet === "filter" ? (
 				<Sheet title="Filters" triggerRef={filterTriggerRef} onClose={handleClose}>
-					<FilterChoices filters={filters} hasTeamBookmarks={hasTeamBookmarks} onClose={handleClose} />
+					<FilterChoices
+						filters={filters}
+						hasTeamBookmarks={hasTeamBookmarks}
+						isSignedIn={isSignedIn}
+						onClose={handleClose}
+					/>
 				</Sheet>
 			) : null}
 		</View>
@@ -81,8 +88,11 @@ export function TopicFeedControls({
 }
 
 // name the active bookmark scope on eligible topics
-function toFilterLabel({ filters, hasTeamBookmarks }: TopicFeedControlsProps): string {
-	const options = toTopicFindingFilterOptions({ hasTeamBookmarks: Boolean(hasTeamBookmarks), isSignedIn: true })
+function toFilterLabel({ filters, hasTeamBookmarks, isSignedIn }: TopicFeedControlsProps): string {
+	const options = toTopicFindingFilterOptions({
+		hasTeamBookmarks: Boolean(hasTeamBookmarks),
+		isSignedIn: Boolean(isSignedIn),
+	})
 	return (
 		options.find(
 			(option) =>
@@ -114,7 +124,7 @@ function SortChoices({ filters, onClose }: ChoiceSheetProps) {
 }
 
 // keep team bookmark choices available until their scope is selected
-function FilterChoices({ filters, hasTeamBookmarks, onClose }: ChoiceSheetProps) {
+function FilterChoices({ filters, hasTeamBookmarks, isSignedIn, onClose }: ChoiceSheetProps) {
 	return (
 		<View className="gap-3">
 			{/* resource kinds remain selectable without closing the sheet */}
@@ -131,7 +141,10 @@ function FilterChoices({ filters, hasTeamBookmarks, onClose }: ChoiceSheetProps)
 			</View>
 			<View className="border-t border-separator" />
 			{/* the web's direct personal and Team bookmark choices */}
-			{toTopicFindingFilterOptions({ hasTeamBookmarks: Boolean(hasTeamBookmarks), isSignedIn: true }).map((option) => (
+			{toTopicFindingFilterOptions({
+				hasTeamBookmarks: Boolean(hasTeamBookmarks),
+				isSignedIn: Boolean(isSignedIn),
+			}).map((option) => (
 				<Choice
 					key={option.label}
 					label={option.label}

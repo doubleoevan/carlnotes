@@ -1,11 +1,20 @@
-import type { ChatRoomMessage } from "@carlnotes/contracts/chat"
+import type { ChatLinkPreview, ChatRoomMessage } from "@carlnotes/contracts/chat"
 import { EMPTY_TOPIC_DRAFT, type TopicDraft } from "@carlnotes/contracts/topicPayloads"
+import { TOPIC_TUTORIAL_VIDEO, toYoutubeWatchUrl } from "@carlnotes/contracts/youtube"
 import type { ChatTurn } from "./chatTurns"
 import { NEW_TOPIC_CHAT_WORDS } from "./safeChatMarkdown"
 
 // both component browsers use fictional, deterministic conversations
 export const CHAT_STORY_NOW = Date.parse("2026-10-27T12:00:00Z")
 export const CHAT_STORY_AUTHOR = { userId: null, username: "reader", avatarVersion: null }
+export const CHAT_STORY_VIDEO_PREVIEW: ChatLinkPreview = {
+	url: toYoutubeWatchUrl(TOPIC_TUTORIAL_VIDEO.youtubeVideoId),
+	title: TOPIC_TUTORIAL_VIDEO.name,
+	description: null,
+	imagePath: TOPIC_TUTORIAL_VIDEO.thumbnailPath,
+	faviconPath: null,
+	youtubeVideoId: TOPIC_TUTORIAL_VIDEO.youtubeVideoId,
+}
 export const CHAT_STORY_MARKDOWN = `Two useful changes, with the details kept together.
 
 | Approach | Why it helps |

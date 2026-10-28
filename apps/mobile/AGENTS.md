@@ -7,8 +7,8 @@ and the package boundary check fails anything else, a type-only import of `@carl
 ## Layout
 
 - `app/` — the Expo Router routes. `_layout.tsx` configures the api client with the session cookie on every request,
-  loads the fonts and the session behind the splash screen, stacks the TanStack Query providers and Sentry's wrap, mounts the Reusables `PortalHost` for anchored controls, and guards the screens with `Stack.Protected`: a user sees `(tabs)/index.tsx`, the Home Feed,
-  `(tabs)/search.tsx`, the retained site search, `(tabs)/settings.tsx`, a retained alias for Account, and `topics/[topicId].tsx`. Profile, Teams, Activity, Account, Plans, and Topic/Team notes have native routes; a visitor sees `sign-in.tsx`, the three
+  loads the fonts and the session behind the splash screen, stacks the TanStack Query providers and Sentry's wrap, mounts the Reusables `PortalHost` after the sheet provider so anchored controls appear above sheets, and guards the screens with `Stack.Protected`: a user sees `(tabs)/index.tsx`, the Home Feed,
+  `(tabs)/search.tsx`, the retained site search, `(tabs)/settings.tsx`, a retained alias for Account, and `topics/[topicId].tsx`. Visitors may read Home, Search, public Topics, Profiles, Teams, and permitted Topic/Team notes through the same native routes. Account, Activity, personal Teams, Plans, Settings, and chat require sign-in. Retired sessions cannot open public reading until their session is cleared. A visitor also sees `sign-in.tsx`, the three
   sign-in methods and the email form, and `sign-up.tsx`, the email form behind the app signup gate. `storybook.tsx` is
   the component browser, which the layout shows only in a development build. A route's component is a screen
   (`HomeScreen`), the native word for what the web calls a page.
@@ -55,12 +55,13 @@ and the package boundary check fails anything else, a type-only import of `@carl
   sign-in, sign-up, and settings screens share: `SessionScreen.tsx` (the frame with the logo, the mug beside the name in
   the `logo` type role, in the web's session column, 24rem wide at most and centered both ways), `SessionTextInput.tsx`
   (the labeled field and the email and password fields over it), `SessionLink.tsx` (a session text link through `common/AnchorLink.tsx`, also used by the logo and the
-  footer line that replaces the current form), `SessionErrorText.tsx`, and
+  footer line that replaces the current form, with stories for both prompts, narrow wrapping, and the footer-free frame), `SessionErrorText.tsx`, and
   `OAuthProviderIcons.tsx` (the Google and Apple icons from `@carlnotes/nightshift/oauthProviderIcons`). Their buttons
   are the primitives' `Button`. A route imports `src/` through the `@/` alias, and so does a module whose relative
   import would climb two folders, as in `apps/web`.
 - `global.css` — the stylesheet: tailwind, uniwind, and `@carlnotes/nightshift/uniwind.css`, the theme and the
   `shadow-raised` utility Nightshift writes, with the component contracts and `field.ts` read as Tailwind sources.
+  It also scans `core/lib/spendMeter.ts` for the budget bar and legend colors returned by the shared model.
   Change a token in `packages/nightshift/`, never here.
 - `metro.config.js` — Sentry's base config inside Storybook's `withStorybook`, inside `withUniwindConfig`, which must
   stay the outermost wrapper. Storybook is on outside production. In an export, a release build, or an update,
@@ -108,9 +109,13 @@ the build as a runtime pass. A bundle-only check uses `bun run --cwd apps/mobile
 
 ## The api in development
 
-`apiBaseUrl.ts` points the client at port 3000 on the host the device reached the dev server on, so the iOS simulator,
-the Android emulator, and a phone on the same network all reach `bun run dev:api` with no setting. The one gap is a
-USB-connected Android device in localhost mode, which needs `adb reverse tcp:3000 tcp:3000`.
+`apiBaseUrl.ts` points the client at port 3000 on the host the device reached the dev server on. It normalizes
+`127.0.0.1` to `localhost`, matching the local OAuth callback's hostname so the browser sends the sign-in cookie on
+return. An Android device or emulator in localhost mode needs `adb reverse tcp:3000 tcp:3000` for the API and
+`adb reverse tcp:5173 tcp:5173` for the browser callback through the running web server. Reconnect these after a
+device restart, alongside the Metro port. A phone using a LAN address also needs a reachable OAuth callback URL.
+The authorization proxy rejects a browser that already holds a CarlNotes session. Sign out of CarlNotes in the
+Android browser before starting native Google sign-in. The native session arrives asynchronously after the callback.
 
 ## Accessibility bar
 
@@ -155,6 +160,7 @@ release build without the project number cannot attest and sends sign-ups to the
 
 `providers/TopicFeedProvider.tsx` adapts the shared core hook to Expo navigation, connectivity, and foreground events.
 It restores one account's queries before their first request. It removes network and app-focus listeners on teardown.
+Visitors use the same hook in an isolated memory-only query client; their feed opens Featured and never persists account data. The visitor menu links to native Log in and Sign up. Public finding details hide read/bookmark/rating controls, and account actions require authentication.
 `topicFeedRows.ts` flattens Home into section, Topic, Finding-card, empty, and expansion rows with distinct recycling types.
 Only one section opens at a time. Each Topic initially shows five Findings. `MoreButton.tsx` expands them in place
 with the web's `+ N more ▾` and `show less ▴` controls. Topic titles link to the independent Topic page query.
@@ -167,13 +173,19 @@ system appearance is the silent fallback when no preference is saved. `hooks/use
 error handling between the menu and Settings, through the account's session cleanup.
 `components/common/AnchorLink.tsx` owns internal navigation, replacement, in-app browser links, and supported system schemes.
 `common/Sheet.tsx` owns bottom-sheet dismissal, safe insets, Android Back, and accessibility focus return.
-`common/YoutubePlayer.tsx` shares the inline video player between Finding previews and the tutorial. A tap loads
-YouTube, closing the sheet or backgrounding the app stops playback, and unavailable embeds link to YouTube.
+`common/YoutubePlayer.tsx` shares the inline video player between chat, Finding previews, and the tutorial. A tap loads
+YouTube, closing the sheet or backgrounding the app stops playback, and unavailable embeds show an inline error.
+`youtubePlayer.ts` limits WebView navigation to the player document and YouTube embed frames. Player popups and
+app intents stay blocked. The WebView keeps its popup
+handler and all-scheme interception so Android cannot bypass the navigation check for a new window.
+`common/BrandIcon.tsx` supplies `YoutubePlayIcon` to the tutorial, header, and menu with the web's shared SVG paths.
+The tutorial uses its red play mark over a full-color thumbnail; chat and Finding previews use the orange play button
+over a dimmed thumbnail. Neither adds a separate Open on YouTube link.
 The Icon primitive resolves a `currentColor` fill to its Nightshift text color for consistent play triangles.
 `branding/CoffeeLoading.tsx` gives loading labels the Architects Daughter font and trailing dots, with a native spinner.
 Its scroll indicator contrasts with the active theme and flashes when the sheet opens or its content grows.
 Nested sheets push above their parent, preserving its content and scroll position when sharing closes.
-Its modal provider sits inside `ReadingProvider` so sheet content retains the account's query and search contexts.
+Its modal provider sits inside `TopicFeedProvider` so sheet content retains the account's query and search contexts.
 `components/account/SettingsContent.tsx` shows account identity and the account controls without another session header.
 
 `components/topic/TopicFeed.tsx` renders Home's flattened FlashList. `TopicFindingsSection.tsx` uses the same five-row
@@ -220,6 +232,11 @@ Its `site-search` queries stay in memory, expire when unused, and never enter sa
 `podcast/PodcastEpisodePill.tsx` shares episode and chapter links across search, feed rows, and Finding sheets.
 Topic, Team, and profile results navigate natively. Podcast results retain their web handoff. `TopicHomeActions.tsx` supplies Tags
 and native New Topic. `TopicPageActions.tsx` supplies the shared web action bar, refresh, follow, native editing and scanning, and explicit podcast handoff. chat uses the shared global launcher.
+Home supplies Reheat, with Lucide Coffee, to the existing shared `PageActionMenu` and calls the feed's shared reheat handler.
+`topic/TopicSource.tsx` adapts core's actual `TopicSource` and `TopicDefaultSource` components with native Badge and Button
+elements. Both editors use the same enabled row, remove action, disabled add action, and staged summary formatter.
+Web retains hover tooltips; native summaries wrap and controls retain touch targets. `ChoiceSelect`'s InSheet story
+checks dropdown selection above a form sheet, using the root portal order.
 
 `TopicPageContent.tsx` owns the Topic screen’s single scroll area. `CollapsibleSection.tsx` matches its open-by-default
 section headings. `TopicPageCards.tsx` renders Topic roast, Artisanal Blend, and Similar topics. `TopicScanHistory.tsx`
@@ -364,7 +381,7 @@ Source footnotes, with a native scroll indicator and gesture handling inside its
 `app/topics/[topicId]/notes/[noteId].tsx` and `app/teams/[teamId]/notes/[noteId].tsx` open `components/note/NoteScreen`.
 The route checks membership in the owning page and fresh permissions before displaying server content.
 Public readers do not need a draft store. Draft records include their Topic or Team page context.
-`NoteEditor`, `NoteStatic`, `NoteToolbar`, `CreateNote`, `NoteComments`, `NoteConflictNotice`, and `NoteUnreadBadge`
+`NoteEditor`, `NoteViewer`, `NoteToolbar`, `CreateNote`, `NoteComments`, `NoteConflictNotice`, and `NoteUnreadBadge`
 adapt actual shared core components. The native editor and reader use the same pinned enriched HTML 1.1.1 as web.
 The existing patch preserves web initialization and qualifies iOS React headers for the current native build.
 Generated `ios/` and `android/` projects are ignored; Expo configuration remains their source.
@@ -375,7 +392,10 @@ The editor has bounded internal scrolling. The full-width toolbar stays below th
 A Done control below the body appears while the software keyboard is open and explicitly blurs the editor.
 The screen gives the metadata 16 points of top padding. The top-right Close note control returns to the owning Topic or Team route and its table position;
 iOS edge-swipe navigation remains available.
-Comments remain below the body in the outer scroll view. A link sheet captures the selected
+The visible Comments button beside Close opens the shared thread in the existing native Sheet, matching web's phone layout.
+The sheet uses BottomSheetTextInput for keyboard handling. Read-only notes show the thread without a composer.
+The standard ghost Button makes the title pencil actionable and focuses the existing name input; pencil and close use foreground contrast.
+A link sheet captures the selected
 range before blurring. Metadata uses canEdit for rename, isNoteOwner for visibility, and canDelete for confirmed deletion.
 Deleting a comment opens a native confirmation with the web's shared wording before invoking the shared delete handler.
 Creation offers only server-returned visibilities. Read-only notes expose no editor, toolbar, or comment composer.
@@ -437,10 +457,10 @@ server-provided cutoffs and core's budget calculations. An admin without a budge
 `font-display` uses Architects Daughter and `font-sans` uses Karla from Nightshift's generated Uniwind font tokens.
 The Text primitive supplies a default class, without an inline family overriding a selected type role.
 
-`layout/Footer` adapts `core/components/Footer` in scrolling page content and on sign-in. Its words and links match
+`layout/Footer` adapts `core/components/Footer` in scrolling page content. Its words and links match
 web. Compact links retain native hit slop. Privacy, Terms, License, docs, Releases, Source Code, and Nightshift use
 existing web destinations in iOS's dismissible browser sheet. Android uses its browser custom tab. Note editors and
-modal forms keep their focused layout without a footer. Hosted checkout and billing management use their existing
+modal forms, sign-in, and sign-up keep their focused layout without a footer. Session prompts center vertically beside their links while retaining native touch targets. Hosted checkout and billing management use their existing
 browser flows. Admin and podcast playback retain explicit web handoffs; broader live counts remain separate work.
 
 Topic loading uses `core/components/TopicSkeleton` with the web section order, native card shapes, and a pulse that
@@ -500,6 +520,12 @@ targets. `ChatComposer` bounds its draft and scrollable header to the remaining 
 `ChatComposer`'s padded header below the divider. Mention suggestions temporarily replace the reply selector
 while choosing a name, keeping both the suggestion and Send reachable on small phones with enlarged text.
 `ChatOptionsMenu` confirms clearing.
+`ChatRoomComposer` clears a message reply through the @all selector choice, preserving draft text without a separate
+cancel icon. `ChatRoomMessageBubble` confirms deletion with the native alert and core's shared wording.
+
+`common/ThinkingLine` adapts core's shared phrase component to native text. Its decorative highlight uses native
+transforms, stops while the app is inactive or unmounted, and remains static with Reduce Motion. It shares the web's
+phrase deck and sits beside `branding/CoffeeMug` in Carl's waiting bubble. Its stories cover narrow text and the bubble.
 
 The native `ChatAuthor`, `ChatTurnBlock`, `ChatRoomMessageBubble`, `ChatRejectionNotice`, and `TopicDraftCard` reuse
 core composition with native elements. Retain matching names, field order, Nightshift fonts/colors, Lucide icons,

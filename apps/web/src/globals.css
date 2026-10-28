@@ -39,6 +39,9 @@
 /* the shared chat action owns its position and Nightshift appearance */
 @source "../../../packages/core/components/ScrollDownButton.tsx";
 
+/* budget segments and legend dots use the color classes returned by the shared model */
+@source "../../../packages/core/lib/spendMeter.ts";
+
 /* the component browser's stories, pages, and config never reach the app's css. a story uses the app's own classes */
 @source not "./**/*.stories.tsx";
 @source not "./nightshift";

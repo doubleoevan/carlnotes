@@ -5,7 +5,6 @@ import { Pressable, ScrollView, Text, View } from "react-native"
 import { CoffeeMug } from "@/components/branding/CoffeeMug"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { ClassNameSafeAreaView } from "@/components/common/ClassNameSafeAreaView"
-import { Footer } from "@/components/layout/Footer"
 import { MAX_FONT_SCALE } from "@/hooks/useFontScaledSize"
 import { toTypeRoleStyle } from "@/typeRoleStyles"
 
@@ -46,7 +45,6 @@ export function SessionScreen({ children }: { children: ReactNode }) {
 						</Pressable>
 					</AnchorLink>
 					{children}
-					<Footer />
 				</ScrollView>
 			</ClassNameSafeAreaView>
 		</View>

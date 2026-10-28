@@ -1,13 +1,6 @@
-import {
-	CUSTOM_SOURCE_OPTIONS,
-	DEFAULT_SOURCES,
-	toCustomSourceOption,
-	toSourceSummary,
-} from "@carlnotes/contracts/sources"
-// a source staged by the picker or by a suggestion: the custom source option it came from, and its typed value
-import type { AddedSource } from "@carlnotes/core/hooks/useTopicFields"
+import { CUSTOM_SOURCE_OPTIONS, DEFAULT_SOURCES, toCustomSourceOption } from "@carlnotes/contracts/sources"
 import { useTopicSourceEditor } from "@carlnotes/core/hooks/useTopicSourceEditor"
-import { toScreeningMessage } from "@carlnotes/core/lib/topicSources"
+import { toScreeningMessage, toStagedTopicSourceSummary } from "@carlnotes/core/lib/topicSources"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { X } from "lucide-react"
 import type * as React from "react"
@@ -24,16 +17,6 @@ export type { AddedSource } from "@carlnotes/core/hooks/useTopicFields"
 
 // how many sources one suggestion request asks for at most
 const MAX_SUGGESTIONS = 3
-
-// a staged row reads as its resolved name, then as its config summary, then as what was typed
-function toStagedSummary(added: AddedSource): string {
-	if (added.name) {
-		return added.name
-	}
-	const option = toCustomSourceOption(added.optionKey)
-	const config = option?.toConfig(added.value)
-	return (option && config && toSourceSummary(option.sourceKind, config)) || added.value
-}
 
 // the editor reads and writes the topic being edited, taking its fields whole
 type TopicSourceEditorProps = { fields: TopicFields }
@@ -102,7 +85,7 @@ export function TopicSourceEditor({ fields }: TopicSourceEditorProps) {
 					<TopicSource
 						key={`${source.optionKey}-${source.value}`}
 						sourceKind={toCustomSourceOption(source.optionKey)?.label ?? source.optionKey}
-						summary={toStagedSummary(source)}
+						summary={toStagedTopicSourceSummary(source)}
 						onRemoveTopicSource={() =>
 							removeSource(() => setAddedSources(addedSources.filter((_, addedIndex) => addedIndex !== sourceIndex)))
 						}

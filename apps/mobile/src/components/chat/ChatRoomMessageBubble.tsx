@@ -3,10 +3,11 @@ import {
 	type ChatRoomMessageElements,
 	ChatRoomMessageBubble as SharedChatRoomMessageBubble,
 } from "@carlnotes/core/components/ChatRoomMessageBubble"
+import { DELETE_CHAT_MESSAGE_COPY } from "@carlnotes/core/lib/chatCopy"
 import { toTimeAgoLabel } from "@carlnotes/core/lib/chatMessages"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { Reply, Trash2 } from "lucide-react-native"
-import { View } from "react-native"
+import { Alert, View } from "react-native"
 import { Button } from "@/components/primitives/button"
 import { Icon } from "@/components/primitives/icon"
 import { Text } from "@/components/primitives/text"
@@ -66,7 +67,24 @@ const CHAT_ROOM_MESSAGE_ELEMENTS: ChatRoomMessageElements = {
 		<View className={cn("mt-1 flex-row flex-wrap items-center gap-2", isOwnChatMessage && "flex-row-reverse")}>
 			<CopyButton text={chatMessage.content} />
 			{canDelete && (
-				<ChatMessageAction accessibilityLabel="Delete message" onPress={() => onDeleteChatMessage(chatMessage.id)}>
+				<ChatMessageAction
+					accessibilityLabel="Delete message"
+					onPress={() =>
+						Alert.alert(
+							DELETE_CHAT_MESSAGE_COPY.title,
+							DELETE_CHAT_MESSAGE_COPY.description,
+							[
+								{ text: DELETE_CHAT_MESSAGE_COPY.cancel, style: "cancel" },
+								{
+									text: DELETE_CHAT_MESSAGE_COPY.confirm,
+									style: "destructive",
+									onPress: () => onDeleteChatMessage(chatMessage.id),
+								},
+							],
+							{ cancelable: true },
+						)
+					}
+				>
 					<Icon as={Trash2} className="size-3 text-muted-foreground" />
 				</ChatMessageAction>
 			)}

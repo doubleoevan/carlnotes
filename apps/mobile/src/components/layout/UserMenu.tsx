@@ -1,6 +1,10 @@
 import { authClient } from "@carlnotes/client/authClient"
 import { isAdminRole } from "@carlnotes/contracts/enums"
-import { UserMenuItems as SharedUserMenuItems, type UserMenuElements } from "@carlnotes/core/components/UserMenuItems"
+import {
+	UserMenuItems as SharedUserMenuItems,
+	type UserMenuElements,
+	type UserMenuLinkProps,
+} from "@carlnotes/core/components/UserMenuItems"
 import { SITE_URL } from "@carlnotes/core/lib/pageHead"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { usePathname } from "expo-router"
@@ -9,23 +13,26 @@ import {
 	BookOpen,
 	CircleUserRound,
 	Columns3Cog,
+	LogIn,
 	LogOut,
 	Menu,
 	Moon,
 	ShieldUser,
 	Sun,
 	User,
+	UserPlus,
 	Users,
 } from "lucide-react-native"
 import { type ComponentRef, useRef, useState } from "react"
 import { View } from "react-native"
 import { useUniwind } from "uniwind"
 import { AnchorLink } from "@/components/common/AnchorLink"
+import { YoutubePlayIcon } from "@/components/common/BrandIcon"
 import { Sheet } from "@/components/common/Sheet"
 import { Button } from "@/components/primitives/button"
 import { Icon } from "@/components/primitives/icon"
 import { Text } from "@/components/primitives/text"
-import { TopicTutorialVideoDialog, TopicTutorialVideoIcon } from "@/components/topic/TopicTutorialVideoDialog"
+import { TopicTutorialVideoDialog } from "@/components/topic/TopicTutorialVideoDialog"
 import { useSignOut } from "@/hooks/useSignOut"
 import { setThemePreference } from "@/theme"
 
@@ -106,7 +113,15 @@ function UserMenuItems({ onClose, onPlayTutorial }: { onClose: () => void; onPla
 	const { isPending, signOut } = useSignOut()
 	const pathname = usePathname()
 	if (!session) {
-		return null
+		return (
+			<>
+				<USER_MENU_ELEMENTS.Action label="Brew with Carl" onSelect={onPlayTutorial} />
+				<USER_MENU_ELEMENTS.Link label="What CarlNotes Is" href="/docs" isSelected={false} onSelect={onClose} />
+				<MenuDivider />
+				<MenuLink label="Log in" href="/sign-in" isSelected={false} onSelect={onClose} />
+				<MenuLink label="Sign up" href="/sign-up" isSelected={false} onSelect={onClose} />
+			</>
+		)
 	}
 	return (
 		<SharedUserMenuItems
@@ -131,26 +146,33 @@ const MENU_ICONS = {
 	Plans: Columns3Cog,
 	"What CarlNotes Is": BookOpen,
 	Admin: ShieldUser,
+	"Log in": LogIn,
+	"Sign up": UserPlus,
 }
+// render visitor and account destinations with the same link component
+function MenuLink({
+	label,
+	href,
+	isSelected,
+	onSelect,
+}: Omit<UserMenuLinkProps, "label"> & { label: UserMenuLinkProps["label"] | "Log in" | "Sign up" }) {
+	const MenuIcon = MENU_ICONS[label as keyof typeof MENU_ICONS]
+	return (
+		<AnchorLink
+			href={href === "/docs" || href === "/admin" ? `${SITE_URL}${href}` : href}
+			accessibilityLabel={label}
+			onPress={onSelect}
+			accessibilityState={{ selected: isSelected }}
+			className={cn("min-h-12 flex-row items-center gap-2 rounded-md px-2 active:bg-accent", isSelected && "bg-accent")}
+		>
+			<Icon as={MenuIcon} className="size-4 text-foreground" />
+			<Text className="text-sm">{label}</Text>
+		</AnchorLink>
+	)
+}
+
 const USER_MENU_ELEMENTS: UserMenuElements = {
-	Link: ({ label, href, isSelected, onSelect }) => {
-		const MenuIcon = MENU_ICONS[label as keyof typeof MENU_ICONS]
-		return (
-			<AnchorLink
-				href={href === "/docs" || href === "/admin" ? `${SITE_URL}${href}` : href}
-				accessibilityLabel={label}
-				onPress={onSelect}
-				accessibilityState={{ selected: isSelected }}
-				className={cn(
-					"min-h-12 flex-row items-center gap-2 rounded-md px-2 active:bg-accent",
-					isSelected && "bg-accent",
-				)}
-			>
-				<Icon as={MenuIcon} className="size-4 text-foreground" />
-				<Text className="text-sm">{label}</Text>
-			</AnchorLink>
-		)
-	},
+	Link: MenuLink,
 	Action: ({ label, onSelect, isDisabled }) => (
 		<Button
 			variant="ghost"
@@ -160,7 +182,7 @@ const USER_MENU_ELEMENTS: UserMenuElements = {
 			onPress={onSelect}
 		>
 			{label === "Brew with Carl" ? (
-				<TopicTutorialVideoIcon size={16} />
+				<YoutubePlayIcon size={16} />
 			) : (
 				<Icon as={LogOut} className="size-4 text-foreground" />
 			)}

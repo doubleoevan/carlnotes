@@ -12,10 +12,10 @@ import { Check, Copy, Paperclip } from "lucide-react-native"
 import type { ReactNode } from "react"
 import { Pressable, View } from "react-native"
 import { copyText } from "@/clipboard"
-import { CoffeeLoading } from "@/components/branding/CoffeeLoading"
+import { CoffeeMug } from "@/components/branding/CoffeeMug"
 import { AnchorLink } from "@/components/common/AnchorLink"
+import { ThinkingLine } from "@/components/common/ThinkingLine"
 import { YoutubePlayer } from "@/components/common/YoutubePlayer"
-import { toTouchTargetHitSlop } from "@/components/primitives/button"
 import { Icon } from "@/components/primitives/icon"
 import { Text } from "@/components/primitives/text"
 import { ChatAuthor } from "./ChatAuthor"
@@ -28,11 +28,7 @@ export function CopyButton({ text }: { text: string }) {
 }
 function CopyControl({ isCopied, onCopy }: CopyMarkdownControlProps) {
 	return (
-		<ChatMessageAction
-			className="w-6 justify-center"
-			accessibilityLabel={isCopied ? "Copied" : "Copy message"}
-			onPress={onCopy}
-		>
+		<ChatMessageAction accessibilityLabel={isCopied ? "Copied" : "Copy message"} onPress={onCopy}>
 			<Icon as={isCopied ? Check : Copy} className="size-3.5 text-muted-foreground" />
 		</ChatMessageAction>
 	)
@@ -57,8 +53,10 @@ export function ChatMessageAction({
 			accessibilityRole="button"
 			accessibilityLabel={accessibilityLabel}
 			onPress={onPress}
-			hitSlop={toTouchTargetHitSlop(12)}
-			className={cn("min-h-6 flex-row items-center gap-1 rounded-md active:bg-accent", className)}
+			className={cn(
+				"min-h-12 min-w-12 flex-row items-center justify-center gap-1 rounded-md active:bg-accent",
+				className,
+			)}
 		>
 			{children}
 		</Pressable>
@@ -86,7 +84,7 @@ export function ChatAttachmentChips({ attachments }: { attachments: ChatMessageA
  */
 export function ChatLinkPreviews({ previews }: { previews: ChatLinkPreview[] }) {
 	return (
-		<View className="w-full max-w-[92%] gap-2">
+		<View className="w-[92%] gap-2">
 			{previews
 				.filter((preview) => isSafeHref(preview.url))
 				.map((preview) =>
@@ -143,8 +141,9 @@ function toPreviewHost(url: string): string {
 export function ModelThinkingBubble() {
 	return (
 		<ChatAuthor authorUserId={null} authorUsername={PODCAST_EPISODE_SPEAKER_NAMES.host}>
-			<View className="rounded-2xl rounded-bl-sm bg-bubble px-3.5 py-2">
-				<CoffeeLoading />
+			<View className="max-w-[92%] flex-row items-center gap-2 rounded-2xl rounded-bl-sm bg-bubble px-3.5 py-2">
+				<CoffeeMug size={16} className="text-muted-foreground" />
+				<ThinkingLine />
 			</View>
 		</ChatAuthor>
 	)

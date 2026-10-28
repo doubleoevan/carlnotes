@@ -1,4 +1,4 @@
-import { sendChatMentionsViewed, sendClearChatRoom, sendDeleteChatRoomMessage } from "@carlnotes/client/chatRoomClient"
+import { sendChatMentionsViewed, sendClearChatRoom } from "@carlnotes/client/chatRoomClient"
 import type { ChatRoomMessage } from "@carlnotes/contracts/chat"
 import type { TeamPageResponse } from "@carlnotes/contracts/teams"
 import { type ChatRoomState, useChatRoom } from "@carlnotes/core/hooks/useChatRoom"
@@ -6,8 +6,9 @@ import { useEditableTopicDraft } from "@carlnotes/core/hooks/useEditableTopicDra
 import { useNow } from "@carlnotes/core/hooks/useNow"
 import { useRoomMembers } from "@carlnotes/core/hooks/useRoomMembers"
 import { type ChatRoomReply, useRoomReply } from "@carlnotes/core/hooks/useRoomReply"
-import { DELETE_CHAT_MESSAGE_COPY, toEmptyChatRoomCopy } from "@carlnotes/core/lib/chatCopy"
+import { toEmptyChatRoomCopy } from "@carlnotes/core/lib/chatCopy"
 import { CHAT_ROOM_REJECTION_COPY } from "@carlnotes/core/lib/chatRejectionCopy"
+import { deleteChatRoomMessage } from "@carlnotes/core/lib/chatRoomActions"
 import { toChatMessageQuotes } from "@carlnotes/core/lib/chatRoomMessages"
 import { clearProposedTopicEdit, toCurrentChatGuard } from "@carlnotes/core/stores/chatConversationStore"
 import { markChatRoomOpened } from "@carlnotes/core/stores/chatRoomStore"
@@ -64,20 +65,15 @@ export function ChatRoomPanel({
 		void sendChatMentionsViewed(topicId, teamId).catch(() => {})
 	}, [topicId, teamId, chatRoom.isLoaded, chatRoom.isRejected])
 
-	// refresh accepted deletions and ignore completions from a retired conversation
-	const handleDeleteChatMessage = async (chatMessageId: number): Promise<void> => {
-		const isCurrentChat = toCurrentChatGuard()
-		const isChatMessageDeleted = await sendDeleteChatRoomMessage(topicId, teamId, chatMessageId).catch(() => false)
-		if (!isCurrentChat()) {
-			return
-		}
-		if (isChatMessageDeleted) {
-			await chatRoom.reloadChatMessages()
-		}
-		if (isCurrentChat()) {
-			Alert.alert(isChatMessageDeleted ? DELETE_CHAT_MESSAGE_COPY.succeeded : DELETE_CHAT_MESSAGE_COPY.failed)
-		}
-	}
+	// share accepted refresh, failed deletion, and retired-conversation behavior with web
+	const handleDeleteChatMessage = (chatMessageId: number): Promise<void> =>
+		deleteChatRoomMessage({
+			topicId,
+			teamId,
+			chatMessageId,
+			onReload: chatRoom.reloadChatMessages,
+			onNotice: (message) => Alert.alert(message),
+		})
 
 	// reload accepted clears before the menu reports success
 	const handleClearChatRoom = async (): Promise<boolean> => {

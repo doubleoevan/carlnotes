@@ -7,9 +7,9 @@ import { useNoteComments } from "@carlnotes/core/hooks/useNoteComments"
 import { NOTE_LABELS, NOTE_SAVE_ERRORS, NOTE_SAVE_STATUS_LABELS } from "@carlnotes/core/lib/noteLabels"
 import { onlineManager, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useLocalSearchParams, useRouter } from "expo-router"
-import { X } from "lucide-react-native"
+import { MessageSquareText, X } from "lucide-react-native"
 import { useEffect, useState } from "react"
-import { KeyboardAvoidingView, Platform, View } from "react-native"
+import { Keyboard, KeyboardAvoidingView, Platform, View } from "react-native"
 import { CoffeeLoading } from "@/components/branding/CoffeeLoading"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { ClassNameSafeAreaView } from "@/components/common/ClassNameSafeAreaView"
@@ -24,7 +24,7 @@ import { loadNote, type OpenedNote } from "@/noteRead"
 import type { NoteDraftStore } from "@/stores/noteDraftStore"
 import { NoteEditor } from "./NoteEditor"
 import { NoteManagement } from "./NoteManagement"
-import { NoteStatic } from "./NoteStatic"
+import { NoteViewer } from "./NoteViewer"
 
 /**
  * Opens a Topic or Team note using fresh permissions or this account's recoverable offline draft.
@@ -78,6 +78,7 @@ function NoteScreenContent({
 	noteId: string
 }) {
 	const snapshot = useNoteDraftSnapshot(store)
+	const [isCommentsOpen, setIsCommentsOpen] = useState(false)
 	const query = useQuery({
 		queryKey: ["mobile-note", store?.accountId ?? "visitor", page.pageType, page.pageId, noteId],
 		queryFn: () => loadNote({ store, page, noteId, isOnline: onlineManager.isOnline() }),
@@ -89,17 +90,35 @@ function NoteScreenContent({
 	const isUnavailable = openedNote === null || (openedNote?.note.canEdit && snapshot.unavailableIds.has(noteId))
 	return (
 		<View className="flex-1 px-4 pt-4">
-			{/* return to the owning page and keep its table position */}
-			<AnchorLink
-				href={`/${page.pageType === "topic" ? "topics" : "teams"}/${page.pageId}`}
-				shouldDismissTo
-				accessibilityLabel="Close note"
-				asChild
-			>
-				<Button accessibilityLabel="Close note" variant="ghost" size="icon" className="mb-2 self-end">
-					<Icon as={X} className="size-4 text-muted-foreground" />
-				</Button>
-			</AnchorLink>
+			{/* expose comments beside the close control, above the note and its scrolling editor */}
+			<View className="mb-2 flex-row items-center justify-end gap-2">
+				{openedNote && !isUnavailable && (
+					<Button
+						accessibilityLabel="Show comments"
+						variant="outline"
+						size="sm"
+						onPress={() => {
+							// dismiss the editor keyboard before opening comments
+							Keyboard.dismiss()
+							setIsCommentsOpen(true)
+						}}
+					>
+						<Icon as={MessageSquareText} className="size-4 text-foreground" />
+						<Text>Comments</Text>
+					</Button>
+				)}
+				{/* return to the owning page and keep its table position */}
+				<AnchorLink
+					href={`/${page.pageType === "topic" ? "topics" : "teams"}/${page.pageId}`}
+					shouldDismissTo
+					accessibilityLabel="Close note"
+					asChild
+				>
+					<Button accessibilityLabel="Close note" variant="ghost" size="icon">
+						<Icon as={X} className="size-4 text-foreground" />
+					</Button>
+				</AnchorLink>
+			</View>
 			{query.isPending && <CoffeeLoading label="Loading your Tasting Note" />}
 			{query.isError && (
 				<View className="gap-3 py-4">
@@ -120,6 +139,8 @@ function NoteScreenContent({
 					key={`${noteId}:${openedNote.note.canEdit}`}
 					openedNote={openedNote}
 					store={store}
+					isCommentsOpen={isCommentsOpen}
+					onCloseComments={() => setIsCommentsOpen(false)}
 					onRefresh={() => void query.refetch()}
 				/>
 			)}
@@ -132,10 +153,14 @@ function OpenNote({
 	openedNote,
 	store,
 	onRefresh,
+	isCommentsOpen,
+	onCloseComments,
 }: {
 	openedNote: OpenedNote
 	store: NoteDraftStore | null
 	onRefresh: () => void
+	isCommentsOpen: boolean
+	onCloseComments: () => void
 }) {
 	// open the account controller after commit. refreshing its baseline can notify another mounted screen
 	const [initialOpenedNote] = useState(openedNote)
@@ -207,7 +232,8 @@ function OpenNote({
 					pageName={context.pageName}
 					controller={controller}
 					noteCommentThread={comments}
-					isCommentsOpen
+					isCommentsOpen={isCommentsOpen}
+					onCloseComments={onCloseComments}
 					onSaveStatus={setStatus}
 					onSaveError={(reason) => {
 						if (reason === "unavailable") {
@@ -217,7 +243,13 @@ function OpenNote({
 					}}
 				/>
 			) : (
-				<NoteStatic header={header} note={note} noteCommentThread={comments} isCommentsOpen />
+				<NoteViewer
+					header={header}
+					note={note}
+					noteCommentThread={comments}
+					isCommentsOpen={isCommentsOpen}
+					onCloseComments={onCloseComments}
+				/>
 			)}
 			{note.canEdit && (
 				<View className="flex-row items-center justify-end gap-3 py-2">

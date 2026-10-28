@@ -1,7 +1,7 @@
 // the note's layout: the page card on a sunken field, the comment thread in the margin beside it on a wide screen, and
 // the sheet a phone slides the thread up in
 
-import type { NoteLayoutProps } from "@carlnotes/core/components/NoteStatic"
+import type { NoteLayoutProps } from "@carlnotes/core/components/NoteViewer"
 import type { NoteCommentThread } from "@carlnotes/core/hooks/useNoteComments"
 import { cn } from "@carlnotes/nightshift/classNames"
 import type { PointerEvent, ReactNode } from "react"

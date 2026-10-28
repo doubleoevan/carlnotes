@@ -31,6 +31,17 @@ type Story = StoryObj<typeof meta>
 
 // own, empty, followed, and repeated-topic sections
 export const Yours: Story = {}
+export const Visitor: Story = {
+	args: {
+		topicFeed: {
+			...toTestTopicFeedResponse([]),
+			sections: [
+				{ key: "featured", topics: [toTestTopicFeed({ isTopicOwner: false, isTeamMember: false, canRate: false })] },
+				{ key: "popular", topics: [] },
+			],
+		},
+	},
+}
 export const Empty: Story = { args: { topicFeed: toTestTopicFeedResponse([]) } }
 export const Followed: Story = {
 	args: {

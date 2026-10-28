@@ -9,12 +9,11 @@ import {
 	toInsertedChatMention,
 } from "@carlnotes/core/lib/chatMentions"
 import { toComposerPlaceholder, toReplyUser } from "@carlnotes/core/lib/chatRoomReplies"
-import { Reply, X } from "lucide-react-native"
+import { Reply } from "lucide-react-native"
 import { type ComponentRef, useEffect, useRef, useState } from "react"
 import { ScrollView, type TextInput, View } from "react-native"
 import { ChoiceSelect } from "@/components/common/ChoiceSelect"
 import { Button } from "@/components/primitives/button"
-import { Icon } from "@/components/primitives/icon"
 import { Text } from "@/components/primitives/text"
 import { ChatComposer } from "./ChatComposer"
 
@@ -125,11 +124,6 @@ export function ChatRoomComposer({
 						]}
 						onChange={handleSelectTarget}
 					/>
-					{reply.replyTo && (
-						<Button accessibilityLabel="Cancel reply" variant="ghost" size="icon-sm" onPress={reply.clear}>
-							<Icon as={X} className="size-4" />
-						</Button>
-					)}
 				</View>
 			)}
 			{/* mention suggestions */}

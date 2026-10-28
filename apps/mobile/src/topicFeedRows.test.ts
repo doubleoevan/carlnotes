@@ -6,6 +6,19 @@ import {
 } from "@carlnotes/contracts/topicFeedTestFixtures"
 import { toInitialTopicSection, toTopicFeedRows, toTopicFindingRows } from "./topicFeedRows"
 
+test("visitors open Featured and receive no account-owned feed sections", () => {
+	// use the API's public section shape rather than an empty signed-in feed
+	const feed = toTestTopicFeedResponse([])
+	feed.sections = [
+		{ key: "featured", topics: [toTestTopicFeed({ isTopicOwner: false, isTeamMember: false, canRate: false })] },
+		{ key: "popular", topics: [] },
+	]
+	const rows = toTopicFeedRows({ topicFeed: feed, openSection: toInitialTopicSection(feed) })
+	expect(toInitialTopicSection(feed)).toBe("featured")
+	expect(rows.filter((row) => row.kind === "section").map((row) => row.sectionKey)).toEqual(["featured", "popular"])
+	expect(rows.some((row) => row.kind === "topic")).toBe(true)
+})
+
 test("Home opens followed topics only when the user owns none", () => {
 	// own topics take precedence, then followed topics, then an empty Yours
 	const feed = toTestTopicFeedResponse([])

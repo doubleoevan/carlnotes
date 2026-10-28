@@ -2,7 +2,9 @@
 
 ## Purpose
 TBD - created by archiving change add-teams. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: A room exists exactly where a Team does
 
 Every team holding a Topic — the owning team and every team it is shared into — SHALL have its own shared, persistent Coffee talk room on it, addressed by team: the routes are `/topics/:id/rooms/:teamId` for the transcript and posts and `/topics/:id/rooms/:teamId/events` for the stream. A Topic no team holds SHALL have no room, and creating one for it SHALL be rejected at the API. A public team Topic still has its rooms, because exposure comes from who can post, not who can read: a follower who is not a member of the addressed team SHALL receive 404 from the room's read, stream, and post routes alike. Both rules are enforced at the API, not by hiding controls.
@@ -557,3 +559,20 @@ instead of an orphaned object.
 - **WHEN** the api dies after storing the bytes and before inserting the row
 - **THEN** the key is pending, and the sweep deletes the object after the grace period
 
+### Requirement: Deleting a room message requires confirmation
+
+Web and mobile SHALL ask for confirmation before deleting an individual room message. The confirmation SHALL explain that the message and its attachments are removed for everyone in the chat. Both clients SHALL retain existing author, leader, and admin permissions and remove local history only after server acceptance.
+
+#### Scenario: A person confirms deletion
+- **WHEN** an authorized person chooses Delete and confirms
+- **THEN** the existing deletion operation runs once for that message
+- **AND** accepted deletion refreshes the room
+
+#### Scenario: A person keeps the message
+- **WHEN** the person cancels or dismisses confirmation
+- **THEN** no deletion request is sent and the message and attachments remain
+
+#### Scenario: Deletion fails or permission changes
+- **WHEN** the server rejects a confirmed deletion
+- **THEN** the existing error notice appears and the message remains
+- **AND** confirmation never bypasses server authorization

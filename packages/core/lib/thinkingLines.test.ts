@@ -1,4 +1,4 @@
-// the shuffle deals every line once before any repeat
+// both clients deal every line once before any repeat
 import { expect, test } from "bun:test"
 import { randomThinkingLine, THINKING_LINES } from "./thinkingLines"
 
