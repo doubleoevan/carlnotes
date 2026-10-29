@@ -7,7 +7,7 @@
 			"developmentClient": true,
 			"distribution": "internal",
 			"environment": "development",
-			"bun": "1.4.3"
+			"bun": "1.4.4"
 		},
 		"development-simulator": {
 			"extends": "development",
@@ -19,12 +19,12 @@
 			"distribution": "internal",
 			"environment": "preview",
 			"channel": "preview",
-			"bun": "1.4.3"
+			"bun": "1.4.4"
 		},
 		"production": {
 			"environment": "production",
 			"channel": "production",
-			"bun": "1.4.3"
+			"bun": "1.4.4"
 		}
 	},
 	"submit": {

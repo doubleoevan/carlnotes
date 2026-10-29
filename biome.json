@@ -1,5 +1,5 @@
 {
-	"$schema": "https://biomejs.dev/schemas/2.5.15/schema.json",
+	"$schema": "https://biomejs.dev/schemas/2.6.3/schema.json",
 	"vcs": {
 		"enabled": true,
 		"clientKind": "git",
@@ -23,7 +23,8 @@
 			"!packages/nightshift/uniwind.css",
 			"!packages/nightshift/figma",
 			"!apps/mobile/uniwind-types.d.ts",
-			"!apps/mobile/.rnstorybook/storybook.requires.ts"
+			"!apps/mobile/.rnstorybook/storybook.requires.ts",
+			"!**/*.md"
 		]
 	},
 	"formatter": {
@@ -119,9 +120,19 @@
 			}
 		},
 		{
+			"includes": ["**/*.test.ts", "**/*.test.tsx", "**/*.stories.tsx", "apps/web/src/lib/hookTestHarness.tsx"],
+			"linter": { "rules": { "correctness": { "noComponentHookFactories": "off" } } }
+		},
+		{
 			"includes": ["apps/mobile/**", "!**/*.test.ts", "!**/*.test.tsx", "!**/*TestFixtures.ts"],
 			"linter": {
 				"rules": {
+					"correctness": {
+						"noReactNativeRawText": {
+							"level": "error",
+							"options": { "skip": ["NativeText", "ButtonText", "ShimmerText", "ELEMENTS.Text"] }
+						}
+					},
 					"style": {
 						"noRestrictedGlobals": {
 							"level": "error",

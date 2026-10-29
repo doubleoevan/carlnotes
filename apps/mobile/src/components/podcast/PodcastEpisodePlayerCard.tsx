@@ -64,6 +64,7 @@ export function PodcastEpisodePlayerCard({
 	const platformElements = useMemo(
 		() => ({
 			...elements,
+			// biome-ignore lint/correctness/noComponentHookFactories: memoized on the ref, so the renderer stays mounted
 			FeedButton: (buttonProps: ComponentProps<typeof FeedButton>) => (
 				<FeedButton {...buttonProps} triggerRef={feedButtonRef} />
 			),
