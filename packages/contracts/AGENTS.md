@@ -63,3 +63,6 @@ mention parser for the chat room composer and the room's notifications, with the
 - Tests: `bun test packages/contracts`.
 
 `clientTelemetry.ts` defines bounded native device headers and the browser user-agent fallback used by API events and request monitoring. These untrusted descriptions are analytics only. `visitAnalytics.ts` shares URL/path redaction and public Topic attribution between web and native. `monitoringRedaction.ts` contains the universal Sentry content/URL redaction, re-exported by the server and extended by native. `reportedPath.ts` also shapes Topic and Team note routes and removes query strings and fragments.
+
+`podcast.ts` also validates the audio-resolution response: an HTTPS `audioUrl` and ISO `expiresAt`. These credentials
+are transient. `monitoringRedaction` removes signed URL queries and private podcast-feed path tokens.

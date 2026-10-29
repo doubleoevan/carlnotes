@@ -40,6 +40,13 @@ Check for:
    or removed in a change, add its old name here in the same change. Only
    names that reached `main` belong here. A name renamed within the branch
    that introduced it never shipped, so nothing can still reference it.
+   - `apps/mobile/src/nativePath.ts`, `nativePath.test.ts`, and `toNativePath` (now `platformPath.ts`,
+     `platformPath.test.ts`, and `toPlatformPath` in the same module),
+   - `apps/web/src/components/podcast/ThemeSongNote.tsx`, `themeSongLyrics.ts`, `themeSongLyrics.test.ts`,
+     and `THEME_SONG_LYRICS` (now `PodcastThemeSongNote.tsx`, `podcastThemeSongLyrics.ts`,
+     `podcastThemeSongLyrics.test.ts`, and `PODCAST_THEME_SONG_LYRICS`),
+   - `apps/mobile/src/components/chat/useIsChatActive.ts` (now `apps/mobile/src/hooks/useIsScreenActive.ts`),
+     shared by chat streams and the podcast recording poll for route focus and app activity.
    - `apps/web/src/components/common/thinkingLines.ts` and its test (now `packages/core/lib/thinkingLines.ts`
      and its test). Web and mobile share the phrase deck and selection.
    - `NoteStatic.tsx` and `NoteStatic.stories.tsx` in the shared, web, and mobile note components (now

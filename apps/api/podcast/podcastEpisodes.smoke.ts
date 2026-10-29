@@ -9,6 +9,7 @@ import {
 	checkListenerProgress,
 	checkPodcastEpisodeAccess,
 	checkPodcastEpisodeAudio,
+	checkPodcastEpisodeAudioJson,
 	checkPodcastEpisodeCovers,
 	checkPodcastEpisodeRemoval,
 	checkPodcastSwitch,
@@ -33,6 +34,7 @@ try {
 	// the feeds, the episode pages, the related topics and episodes, the covers, and removal
 	await checkPublicPodcastFeed()
 	await checkListenerPodcastFeeds()
+	await checkPodcastEpisodeAudioJson()
 	await checkGatedPodcastEpisodePages()
 	await checkPublicPodcastEpisodePage()
 	await checkRelatedTopicsAndPodcastEpisodes()

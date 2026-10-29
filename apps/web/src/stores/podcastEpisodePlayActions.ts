@@ -1,61 +1,30 @@
-// the play buttons' actions on a podcast episode or one of its chapters, by id: the loaded podcast episode plays or
-// pauses, and any other podcast episode is fetched and played
-
-import { fetchPodcastEpisode } from "@carlnotes/client/podcastEpisodeClient"
 import type { PodcastEpisode, PodcastEpisodeChapter } from "@carlnotes/contracts/podcast"
-import { toChapterAtPosition } from "@/lib/podcastEpisodePlayback"
-import {
-	playPodcastEpisode,
-	togglePlayback,
-	toLoadedPodcastEpisode,
-	toPlayerChapterPosition,
-} from "./podcastEpisodePlayerStore"
+import { toPodcastEpisodePlayActions } from "@carlnotes/core/stores/podcastEpisodePlayActions"
+import * as playerStore from "./podcastEpisodePlayerStore"
+
+// bind the shared actions to the browser player exports
+const playActions = toPodcastEpisodePlayActions(playerStore)
 
 /**
- * Plays or pauses the player's chapter, and plays the podcast episode from any other chapter.
+ * Toggles the current chapter or plays another from its start.
  */
 export function togglePodcastEpisodeChapterPlayback(
 	podcastEpisode: PodcastEpisode,
 	chapter: PodcastEpisodeChapter,
 ): void {
-	// pause or play the player's chapter, and play any other chapter from its start
-	const isPlayerChapter = toPlayerChapterPosition(podcastEpisode.id) === chapter.position
-	if (isPlayerChapter) {
-		togglePlayback()
-	} else {
-		void playPodcastEpisode(podcastEpisode, chapter.startSeconds)
-	}
+	playActions.togglePodcastEpisodeChapterPlayback(podcastEpisode, chapter)
 }
 
 /**
- * Plays or pauses the loaded podcast episode if the id matches, and fetches and plays any other podcast episode.
+ * Toggles a loaded episode or fetches and plays the requested one.
  */
 export async function togglePodcastEpisodePlayback(podcastEpisodeId: string): Promise<void> {
-	if (toLoadedPodcastEpisode()?.id === podcastEpisodeId) {
-		togglePlayback()
-		return
-	}
-
-	// fetch the podcast episode with its chapters, then play the podcast episode
-	const fetchedPodcastEpisode = await fetchPodcastEpisode(podcastEpisodeId)
-	if (fetchedPodcastEpisode) {
-		await playPodcastEpisode(fetchedPodcastEpisode)
-	}
+	await playActions.togglePodcastEpisodePlayback(podcastEpisodeId)
 }
 
 /**
- * Plays a podcast episode from the start of one of its chapters, fetching the podcast episode unless it is loaded.
+ * Plays the requested chapter, falling back to saved progress if it is missing.
  */
 export async function playPodcastEpisodeChapter(podcastEpisodeId: string, chapterPosition: number): Promise<void> {
-	// the loaded podcast episode, or the fetched one with its chapters
-	const loadedPodcastEpisode = toLoadedPodcastEpisode()
-	const podcastEpisode =
-		loadedPodcastEpisode?.id === podcastEpisodeId ? loadedPodcastEpisode : await fetchPodcastEpisode(podcastEpisodeId)
-	if (!podcastEpisode) {
-		return
-	}
-
-	// play from the chapter's start, or from where the user left off if the chapter is gone
-	const chapter = toChapterAtPosition(podcastEpisode.chapters, chapterPosition)
-	await playPodcastEpisode(podcastEpisode, chapter?.startSeconds)
+	await playActions.playPodcastEpisodeChapter(podcastEpisodeId, chapterPosition)
 }

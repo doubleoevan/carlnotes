@@ -70,9 +70,24 @@ latest](../../../assets/screenshots/podcast-episodes-card.png)
 The email for a brew names its episode and links to it. If you open the link before the recording is done, the player
 says so. It shows the episode once it's ready.
 
+On the iPhone and Android apps, episodes play inside CarlNotes. The same player serves Home, topics, search, episode
+pages, and chapter tags in Coffee Talk. Its small player stays across screens, with Coffee Talk above it, and sits
+above the keyboard while you type. The progress bar folds away during typing; the title and playback buttons stay
+within reach. Playback continues when you leave the app or lock the phone.
+
+A chapter's title starts it from the beginning. Its numbered pill pauses or resumes the current chapter, or jumps to
+another. Tap or drag the progress bar to seek; seeking a paused episode leaves it paused. Expand the chapter list to
+see every chapter without restarting playback. The episode page has its full transcript, **Read more** and **Read
+less**, other episodes, and similar podcasts. The note beside the title opens the theme-song credits and lyrics.
+
+On reopening the app, your last authorized episode returns paused at its saved position and speed. Press play to
+continue. A sudden shutdown can lose the seconds since the last save. Signing out stops playback and clears this
+account's local resume position. If access to a private episode is revoked, playback stops when the app next checks
+access. A connection problem pauses playback so you can retry.
+
 ## Talk with Carl and Vienna
 
-The small player at the bottom of the screen has a microphone beside play. The player on the topic page has one beside
+On the web, the small player at the bottom of the screen has a microphone beside play. The player on the topic page has one beside
 the speed button. Tap either one while an episode plays, and ask out loud about what you just listened to: "what did he
 mean by that?" or "Vienna, would you buy one?" The episode pauses, and Carl and Vienna listen. Your question sends
 itself 1.5 seconds after you stop talking, so your hands can stay busy. The bottom player shows **Listening**, then
@@ -98,17 +113,20 @@ spends from the same coffee fund as Coffee Talk. Speaking pauses once the month'
 ![A question asked from the podcast player in the topic's private chat, tagged with its episode and chapter, and
 Vienna's answer under her picture and name](../../../assets/screenshots/chat-podcast-question.png)
 
+The mobile player currently supports listening. Spoken questions and answers are not part of the mobile player yet.
+
 ## Subscribe in a podcast app
 
-Press **Subscribe** on the player. On an iPhone, it opens Apple Podcasts. On Android, it opens your podcast app. **Copy
-feed link** works everywhere. Paste the link into Apple Podcasts, Overcast, Pocket Casts, Castro, AntennaPod, or any app
+Press **Subscribe** on the player, then choose **Open in Apple Podcasts** on an iPhone or the podcast-app button on
+Android. If no supported app is available, use **Copy feed link**, which stays available everywhere. Paste the link into Apple Podcasts, Overcast, Pocket Casts, Castro, AntennaPod, or any app
 that adds a show by its link.
 
 ![The Subscribe to Coffee Break dialog, with the Copy feed link
 button](../../../assets/screenshots/podcast-subscribe.png)
 
 A public topic's feed is public. A private or invite topic's feed link is yours alone. Anyone who has the link can
-listen to the topic's episodes, so keep it to yourself. **Reset my link** makes a new link and stops the old one. If you
+listen to the topic's episodes, so keep it to yourself. **Reset my link** asks for confirmation before making a new link and stopping the old one. Choose **Keep my link** to
+cancel. If you
 unfollow the topic, your link stops working.
 
 Each episode also has its own page with the full transcript. On a public topic, a search engine reads that page. Every
@@ -136,8 +154,8 @@ Blend card shows whether it's on. Off means no new podcast episodes. The podcast
 brew](../../../assets/screenshots/podcast-switch.png)
 
 The owner can also remove one episode. Use the trash button in the episodes list, or pick **Remove episode** in an
-episode page's **⋮** actions menu. The episode leaves the topic page, every feed, and its own page for
-good. Its number is not used again.
+episode page's **⋮** actions menu. Confirm **Remove episode**, or choose **Keep it** to cancel. Removal stops that
+episode if it is playing and clears its saved position on this app. The episode leaves the topic page, every feed, and its own page for good. Its number is not used again.
 
 ## When the mugs rest
 

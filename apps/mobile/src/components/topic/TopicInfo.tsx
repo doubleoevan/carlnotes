@@ -173,7 +173,11 @@ function TopicPrompt({ topic, isCard }: { topic: TopicDetails; isCard: boolean }
 		<>
 			{!isCard && topic.latestPodcastEpisode?.pagePath ? (
 				<InfoSection label={PODCAST_NAME} isFirst={!topic.owner}>
-					<PodcastEpisodeRow episode={topic.latestPodcastEpisode} isLatestEpisode />
+					<PodcastEpisodeRow
+						podcastEpisode={topic.latestPodcastEpisode}
+						podcastEpisodePath={topic.latestPodcastEpisode.pagePath}
+						isLatestPodcastEpisode
+					/>
 				</InfoSection>
 			) : null}
 			<InfoSection label="Carl's Prompt" isFirst={!topic.owner && !topic.latestPodcastEpisode?.pagePath}>

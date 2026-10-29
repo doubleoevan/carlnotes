@@ -1,4 +1,5 @@
 import { showClientError } from "@carlnotes/client/apiClient"
+import type { PodcastEpisodePageResult } from "@carlnotes/client/podcastEpisodeClient"
 import type { TopicPageResult } from "@carlnotes/client/topicClient"
 import {
 	sendTopicFindingBookmark,
@@ -18,6 +19,7 @@ import {
 } from "@tanstack/react-query"
 import { useCallback, useMemo, useRef } from "react"
 import {
+	applyFindingChanges,
 	applySearchFindingChanges,
 	applyTopicFeedChanges,
 	applyTopicPageChanges,
@@ -152,6 +154,7 @@ function commitFindingChange({ queryClient, userId, change }: CommitFindingChang
 	void queryClient.cancelQueries({ queryKey: ["topic-feed", userId] })
 	void queryClient.cancelQueries({ queryKey: ["topic-page", userId] })
 	void queryClient.cancelQueries({ queryKey: ["site-search", userId] })
+	void queryClient.cancelQueries({ queryKey: ["podcast-episode-page", userId] })
 	queryClient.setQueriesData<TopicFeedResponse>(
 		{ queryKey: ["topic-feed", userId] },
 		(topicFeed) => applyTopicFeedChanges(topicFeed ?? null, [change]) ?? undefined,
@@ -165,8 +168,23 @@ function commitFindingChange({ queryClient, userId, change }: CommitFindingChang
 			: undefined,
 	)
 
+	queryClient.setQueriesData<PodcastEpisodePageResult>({ queryKey: ["podcast-episode-page", userId] }, (page) =>
+		page?.status === "visible"
+			? {
+					...page,
+					podcastEpisodePage: {
+						...page.podcastEpisodePage,
+						topicFindings: page.podcastEpisodePage.topicFindings.map((finding) =>
+							applyFindingChanges(finding, [change]),
+						),
+					},
+				}
+			: page,
+	)
+
 	// reconcile active reads without delaying settlement of the action
 	void queryClient.invalidateQueries({ queryKey: ["topic-feed", userId] })
 	void queryClient.invalidateQueries({ queryKey: ["topic-page", userId] })
 	void queryClient.invalidateQueries({ queryKey: ["site-search", userId] })
+	void queryClient.invalidateQueries({ queryKey: ["podcast-episode-page", userId] })
 }

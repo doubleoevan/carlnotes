@@ -46,12 +46,12 @@ test("the channel has the tags a podcast app requires, with the show's cover and
 	const feedXml = toPodcastFeedXml(podcastFeed)
 
 	// the namespaces, the title, and the escaped topic text, which ends with the theme song's credits and its link
-	const themeSongCredit = `${PODCAST_THEME_SONG_HEADING}: ${PODCAST_THEME_SONG.youtubeUrl}. ${PODCAST_THEME_SONG_WRITING_CREDIT}. ${PODCAST_THEME_SONG_PERFORMANCE_CREDIT}. ${PODCAST_THEME_SONG_PRODUCTION_CREDIT}. ${PODCAST_THEME_SONG_DRUMMING_CREDIT}.`
+	const podcastThemeSongCredit = `${PODCAST_THEME_SONG_HEADING}: ${PODCAST_THEME_SONG.youtubeUrl}. ${PODCAST_THEME_SONG_WRITING_CREDIT}. ${PODCAST_THEME_SONG_PERFORMANCE_CREDIT}. ${PODCAST_THEME_SONG_PRODUCTION_CREDIT}. ${PODCAST_THEME_SONG_DRUMMING_CREDIT}.`
 	expect(feedXml).toContain('xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd"')
 	expect(feedXml).toContain('xmlns:podcast="https://podcastindex.org/namespace/1.0"')
 	expect(feedXml).toContain("<title>Home &lt;espresso&gt;: Coffee Break podcast with Carl and Vienna</title>")
 	expect(feedXml).toContain(
-		`<description>${toXmlText(`Gear & technique. Carl and Vienna are AI voices. ${themeSongCredit}`)}</description>`,
+		`<description>${toXmlText(`Gear & technique. Carl and Vienna are AI voices. ${podcastThemeSongCredit}`)}</description>`,
 	)
 
 	// what Apple requires of a channel, and the Podcasting 2.0 tags

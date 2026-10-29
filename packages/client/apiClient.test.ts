@@ -82,3 +82,17 @@ test("a client configured with no headers adds none", async () => {
 		expect(recordedRequest.init.credentials).toBeUndefined()
 	}
 })
+
+test("an account-retired request never dispatches after delayed session headers", async () => {
+	// hold session headers until the originating account has retired
+	const requests = stubRecordingFetch(200)
+	const headers = Promise.withResolvers<Record<string, string>>()
+	const controller = new AbortController()
+	configureApiClient({ apiBaseUrl: "https://api.example", showError: () => {}, headers: () => headers.promise })
+	const pendingRequest = fetchApi("/api/episodes/episode-1/listen", { method: "POST", signal: controller.signal })
+	// cancel before headers resolve and verify that no request leaves the client
+	controller.abort()
+	headers.resolve({ Cookie: "retired-session" })
+	await expect(pendingRequest).rejects.toThrow()
+	expect(requests).toHaveLength(0)
+})

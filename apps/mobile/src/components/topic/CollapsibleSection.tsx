@@ -11,10 +11,12 @@ export function CollapsibleSection({
 	title,
 	children,
 	titleAside,
+	titleNote,
 }: {
 	title: string
 	children: ReactNode
 	titleAside?: ReactNode
+	titleNote?: ReactNode
 }) {
 	const [isExpanded, setIsExpanded] = useState(true)
 	return (
@@ -33,6 +35,7 @@ export function CollapsibleSection({
 						{title}
 					</Text>
 				</Pressable>
+				{titleNote}
 				{titleAside}
 			</View>
 			{isExpanded ? children : null}

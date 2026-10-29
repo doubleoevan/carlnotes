@@ -206,7 +206,7 @@ export async function getResourceContent(contentKey: string): Promise<string> {
 }
 
 // how long a presigned podcast episode audio url works. the url only has to last until a download or a playback starts
-const PODCAST_EPISODE_AUDIO_URL_LIFETIME_SECONDS = 60 * 60
+export const PODCAST_EPISODE_AUDIO_URL_LIFETIME_SECONDS = 60 * 60
 
 // the object key for a Podcast Episode's finished audio
 export function toPodcastEpisodeAudioKey(podcastEpisodeId: string): string {

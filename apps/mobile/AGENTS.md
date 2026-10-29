@@ -8,7 +8,7 @@ and the package boundary check fails anything else, a type-only import of `@carl
 
 - `app/` — the Expo Router routes. `_layout.tsx` configures the api client with the session cookie on every request,
   loads the fonts and the session behind the splash screen, stacks the TanStack Query providers and Sentry's wrap, mounts the Reusables `PortalHost` after the sheet provider so anchored controls appear above sheets, and guards the screens with `Stack.Protected`: a user sees `(tabs)/index.tsx`, the Home Feed,
-  `(tabs)/search.tsx`, the retained site search, `(tabs)/settings.tsx`, a retained alias for Account, and `topics/[topicId].tsx`. Visitors may read Home, Search, public Topics, Profiles, Teams, and permitted Topic/Team notes through the same native routes. Account, Activity, personal Teams, Plans, Settings, and chat require sign-in. Retired sessions cannot open public reading until their session is cleared. A visitor also sees `sign-in.tsx`, the three
+  `(tabs)/search.tsx`, the retained site search, `(tabs)/settings.tsx`, a retained alias for Account, and `topics/[topicId].tsx`. Visitors may read Home, Search, public Topics, Profiles, Teams, and permitted Topic/Team notes through the same platform routes. Account, Activity, personal Teams, Plans, Settings, and chat require sign-in. Retired sessions cannot open public reading until their session is cleared. A visitor also sees `sign-in.tsx`, the three
   sign-in methods and the email form, and `sign-up.tsx`, the email form behind the app signup gate. `storybook.tsx` is
   the component browser, which the layout shows only in a development build. A route's component is a screen
   (`HomeScreen`), the native word for what the web calls a page.
@@ -22,6 +22,7 @@ and the package boundary check fails anything else, a type-only import of `@carl
   `theme.ts` restores and saves the device's appearance preference. It defaults to system detection and keeps native
   controls and Uniwind on the same light or dark palette.
   The root loads regular and italic Karla faces at each supported weight so rich-text emphasis keeps the web's font.
+  `hooks/useIsScreenActive.ts` shares route focus and app activity for chat and episode recording polls.
   `hooks/useFontScaledSize.ts` grows a size with the system text size, up to double, and
   `hooks/useIsReduceMotionEnabled.ts` follows the system's reduce motion setting. The pure modules have `bun test`
   coverage beside them. No test renders a React Native component or imports a native module.
@@ -167,7 +168,7 @@ with the web's `+ N more ▾` and `show less ▴` controls. Topic titles link to
 
 `components/layout/Header.tsx` supplies the compact brand and tutorial on Home, Topic, and Account.
 `UserMenu.tsx` restores the hamburger’s secondary destinations through a native sheet. Profile, Teams, Activity,
-Account, and Plans use native routes. Docs and permission-gated Admin open their existing web pages. The groups and dividers
+Account, and Plans use platform routes. Docs and permission-gated Admin open their existing web pages. The groups and dividers
 follow the web menu. The menu matches the web's Light mode or Dark mode toggle. The choice survives relaunch;
 system appearance is the silent fallback when no preference is saved. `hooks/useSignOut.ts` shares pending state and
 error handling between the menu and Settings, through the account's session cleanup.
@@ -196,7 +197,7 @@ Settings. `share/ShareTopic.tsx` shows the web sharing options in a native sheet
 and direct-message destinations. Native Share, owner-only invite creation, Copy page link, and public Copy RSS
 preserve the web visibility gates. Expo Clipboard needs a rebuilt native client; an older client shows selectable
 link text instead of reporting a successful copy.
-Team and profile bylines navigate to their native routes through `nativePath.ts`. Canonical Topic slugs and absolute note links also resolve to native routes.
+Team and profile bylines navigate to their platform routes through `platformPath.ts`. Canonical Topic slugs and absolute note links also resolve to platform routes.
 `TopicFindingList.tsx` owns each list's single border, background, rounded corners, and raised shadow. Home recycles whole
 Finding cards; rows within a card are keyed by Finding identity and have no shadow. The Topic screen scrolls its header, Findings, and metadata cards together.
 `TopicResource.tsx` opens details from compact rows. `providers/TopicResourceInfoProvider.tsx` holds the open Finding outside recycled rows,
@@ -230,8 +231,8 @@ It adds result ranks, parent Topic links, and metadata for Topics, podcasts, Tea
 Search shows one API page with shared pagination controls. Changing the query or filters starts at page one.
 Its `site-search` queries stay in memory, expire when unused, and never enter saved reading data.
 `podcast/PodcastEpisodePill.tsx` shares episode and chapter links across search, feed rows, and Finding sheets.
-Topic, Team, and profile results navigate natively. Podcast results retain their web handoff. `TopicHomeActions.tsx` supplies Tags
-and native New Topic. `TopicPageActions.tsx` supplies the shared web action bar, refresh, follow, native editing and scanning, and explicit podcast handoff. chat uses the shared global launcher.
+Topic, Team, profile, and Podcast Episode results navigate to their app screens. `TopicHomeActions.tsx` supplies Tags
+and native New Topic. `TopicPageActions.tsx` supplies the shared web action bar, refresh, follow, native editing and scanning, and the shared podcast player. Chat uses the shared global launcher.
 Home supplies Reheat, with Lucide Coffee, to the existing shared `PageActionMenu` and calls the feed's shared reheat handler.
 `topic/TopicSource.tsx` adapts core's actual `TopicSource` and `TopicDefaultSource` components with native Badge and Button
 elements. Both editors use the same enabled row, remove action, disabled add action, and staged summary formatter.
@@ -240,7 +241,7 @@ checks dropdown selection above a form sheet, using the root portal order.
 
 `TopicPageContent.tsx` owns the Topic screen’s single scroll area. `CollapsibleSection.tsx` matches its open-by-default
 section headings. `TopicPageCards.tsx` renders Topic roast, Artisanal Blend, and Similar topics. `TopicScanHistory.tsx`
-loads a selected scan note on demand. `note/NotesSection.tsx` lists Topic and Team Tasting Notes and opens their native routes.
+loads a selected scan note on demand. `note/NotesSection.tsx` lists Topic and Team Tasting Notes and opens their platform routes.
 Its `NotesTable.tsx` draws core's shared table with sortable Note, Visibility, and Updated columns, totals, and pagination.
 `TopicSettingsCard.tsx` owns Artisanal Blend under the same filename as the web.
 The Brew diary uses the shared Scan timestamp, each scan's episode pill, and the notebook button. The note opens
@@ -256,11 +257,11 @@ Tasting Notes uses the web's primary Add Note button and linked empty invitation
 and the API's creatable visibilities determine whether either action appears.
 `podcast/PodcastEpisodePlayerCard.tsx` shows the latest episode and chapters. `PodcastEpisodesCard.tsx` lists season
 tabs and episodes. `PodcastEpisodeRow.tsx` and `PodcastEpisodePlayButton.tsx` also serve Topic roast, Topic headings,
-and tables; playback opens the web player.
+and tables; all playback enters the single root-owned player.
 Older seasons use the existing client in account-scoped transient queries. Episodes and Brew diary use five-row pages
 and `common/Pagination.tsx`, which supplies native controls to core's shared pagination component.
 Chapter rows share `PodcastEpisodeChapterPill` with Findings. Their source line opens the Finding sheet, while
-their title and pill open the web player. The native chapter list omits rating thumbs, as the narrow web layout does.
+their title starts the chapter and their current pill toggles playback. The native chapter list omits rating thumbs, as the narrow web layout does.
 `TopicCountsLine.tsx` shows Viewers and Followers in the web's display font and footer spacing. It refreshes every minute
 while its Topic route is active, retains counts when offline, and reserves the footer space before the first read.
 The Topic screen records its view through the shared core helper, once per app runtime.
@@ -268,14 +269,14 @@ Its `PodcastEpisodeRow` also supplies Topic roast's play button, numbered title,
 Topic roast uses the labeled Share button from the web.
 `table/TableCard.tsx` shares the native table surface, header, and row separators. `table/TopicNameLink.tsx` shares
 linked Topic names with the same podcast play button. `RelatedTopicsSection.tsx` uses them for Similar topics,
-including name sorting and the existing web player handoff. `SortableHeader.tsx` draws core's sort state and also
+including name sorting and the same shared play action. `SortableHeader.tsx` draws core's sort state and also
 serves Notes. The pagination footer stays inside its table card. Future native tables reuse these components.
 `table/TablePagination.tsx` supplies native controls to core's shared table footer and `usePagination` state.
 Rows opens the anchored `Select` dropdown; changing size or sort returns to page one.
 `topicPageStories.tsx` supplies complete page fixtures and an isolated Query client for the card stories.
-`common/WebFeature.tsx` supplies the labeled browser handoff for Admin and deferred podcast workflows.
+`common/WebFeature.tsx` supplies the labeled browser handoff for Admin.
 Topic creation, editing, team management, manual scans, reporting, and Topic and Team notes run natively.
-Native audio playback and a standalone Finding route remain outside this pass.
+Finding details continue to use the existing shared screen-level sheet.
 
 ## Saved reading data
 
@@ -461,7 +462,7 @@ The Text primitive supplies a default class, without an inline family overriding
 web. Compact links retain native hit slop. Privacy, Terms, License, docs, Releases, Source Code, and Nightshift use
 existing web destinations in iOS's dismissible browser sheet. Android uses its browser custom tab. Note editors and
 modal forms, sign-in, and sign-up keep their focused layout without a footer. Session prompts center vertically beside their links while retaining native touch targets. Hosted checkout and billing management use their existing
-browser flows. Admin and podcast playback retain explicit web handoffs; broader live counts remain separate work.
+browser flows. Admin retains its explicit web handoff; broader live counts remain separate work.
 
 Topic loading uses `core/components/TopicSkeleton` with the web section order, native card shapes, and a pulse that
 stops for reduced motion. Known Topic names stay visible, and a known Topic without a podcast omits its player.
@@ -539,7 +540,7 @@ default fetch is `expo/fetch`; its streaming body reader is required. Do not opt
 `mobileApiRequestSettings.ts` supplies the same session/device headers and revoked-session handling to API requests
 and `chatRoomEvents.ts`. The latter adapts `react-native-sse@1.2.1`; its patch fixes the CommonJS export and emits
 `done` only on clean XHR completion; its regression test rejects a completion during LOADING. Library polling is disabled; core owns cursor/backoff/recovery. Native
-`useChatRoomStream` resolves current headers for each connection. `useIsChatActive` combines route focus and AppState:
+`useChatRoomStream` resolves current headers for each connection. `hooks/useIsScreenActive` combines route focus and AppState:
 background/close closes SSE and aborts private sends, foreground reloads history, and a POST is never replayed.
 
 `ChatMarkdown` uses `react-native-enriched-markdown@1.1.1`, compatible with React Native 0.88. It requires a rebuilt
@@ -556,3 +557,81 @@ chat, pricing links, and broad live badge subscriptions remain outside native te
 Monitoring retains existing PostHog/Sentry platform/device context and redaction. Never log message text, prompts,
 tool/attachment payloads, session headers, or authenticated URLs from the new transports. Client/server analytics
 must not double-count a posted chat turn.
+
+## Coffee Break audio
+
+`components/podcast/PodcastEpisodeAudio` owns one Expo audio instance across navigation. The platform adapter in
+`podcastEpisodeAudioAdapter.ts` supplies source readiness, status, interruption/pause, system metadata, and release
+to core. `podcastEpisodeCheckpoint.ts` stores only account-owned episode ID, position, completion, rate, and time;
+restoration is paused and fetches the authorized episode without resolving an audio source. Session exit pauses
+immediately; successful sign-out retires queued listens and removes the checkpoint. Foreground return, resume,
+and a one-minute foreground interval recheck current episode access. Buffered media cannot be revoked instantly.
+
+Expo audio 58.0.10 and `patches/expo-audio@58.0.10.patch` add single-file system chapter commands. The small patch
+adds ordered chapter targets and metadata updates on iOS and Android; timed skips remain 15/30 seconds. The audio
+config plugin enables iOS background audio and the Android playback service and disables recording permissions.
+The fingerprint changes, so this needs a rebuilt development/store client; an EAS Update alone is insufficient.
+No mobile microphone or recording UI is added.
+
+
+`app/topics/[topicId]/episodes/[season]/[episodeNumber].tsx` renders `podcast/PodcastEpisodeScreen.tsx`.
+`platformPath.ts` recognizes canonical episode links, including stale slugs, before the generic Topic matcher;
+`sessionReturnPath.ts` retains a gated episode's requested route through sign-in. The screen scopes protected queries
+to the account, refetches on focus, and retains no persisted episode-page payload. It uses the existing Finding reader,
+Topic actions, reporting, and team/share sheets. The listener display takes the existing count response without a new polling loop.
+
+The actual compositions in core are `PodcastEpisodePlayerCard`, `UnpublishedPodcastEpisodeCard`,
+`PodcastEpisodeDetails`, `PodcastEpisodePlayButton`, `PodcastEpisodePill`, `PlaybackControlButtons`,
+`PodcastEpisodeSeekBar`, `PodcastEpisodeChapters`, `PodcastEpisodeRow`, `PodcastPlayer`, `PodcastEpisodeTranscript`,
+`PodcastThemeSongCredits`, `PodcastFeedDialog`, `RemovePodcastEpisodeDialog`, `PodcastEpisodesCard`, and
+`PodcastEpisodeChapterTag`. Their counterparts here supply platform
+View/Text, Nightshift controls, images, sheets, and links. `PodcastEpisodePlayer` supplies the route parameter to core's
+`useShownPodcastEpisode`; `PodcastEpisodesCard` supplies account-scoped requests and routing to shared season tabs and pagination. `PodcastEpisodesSection`
+and the wide-screen `PodcastEpisodeChaptersTable` reuse the existing DataTable and shared column/total rules.
+Phone episode pages hide the extra cover and chapter table, as web does.
+
+The root dock reserves layout height below the navigator; Coffee Talk stays inside the remaining area. The dock hides
+on authentication screens and in Storybook. Playback continues independently. While an episode is loaded, the root
+owns keyboard avoidance for the navigator and dock together. Chat and note screens disable their inner avoidance;
+the composer remains above the player, which remains above the keyboard. Without a player, those screens retain their
+own keyboard handling. While typing, the dock omits its progress strip and bottom device inset; its title, skips, and
+play/pause remain visible. Chat hides its duplicate context line and limits the choice trigger to one line while typing;
+the choice sheet retains the full label. Note body editing hides the brand header and note metadata until Done.
+Name editing retains its focused field. These adaptations keep the composer and editor reachable on the iPhone SE
+at increased text sizes. Opening a sheet dismisses the previous screen's keyboard.
+Its progress control reserves its full 44-point touch height inside the dock, keeping page and playback buttons outside
+the seek target. This makes the phone dock taller than the web's pointer-sized progress strip.
+`PodcastEpisodeSeekBar` overlays the SDK-compatible system slider on shared chapter segments for touch. Its accessible
+wrapper supplies bounded 30-second forward and 15-second backward actions through the shared playback rules.
+`PodcastEpisodeTranscript` uses a bounded platform ScrollView, orange scrollbar, theme-aware
+fade, and the shared expansion state. `PodcastThemeSongNote` opens the shared credits and full lyrics in a sheet.
+A chapter's source opens the current Finding reader; an eligible missing Finding exposes chapter ratings in a sheet.
+`chat/PodcastEpisodeChapterTag` adapts the same shared tag as web, so earlier podcast questions retain chapter playback.
+The bottom player's linked cover and title open the loaded episode's screen without restarting audio. Its accessibility
+label includes the full episode title even when the visible title truncates. Topic and episode screens use the same
+player card and segmented seek control.
+Episode titles and theme-song credit buttons use sibling elements. React Native text grouping otherwise hides the
+embedded button from screen readers; each heading and credit button remains independently accessible. Credits and
+feed sheets receive concrete trigger refs so closing them returns screen-reader focus to the opener.
+
+`PodcastFeedDialog` uses core's account-scoped request hook and composition. `podcastFeedActions.ts` adapts only
+supported podcast schemes; app config declares iOS `podcast` and Android `pcast` queries. Copy is always available.
+Reset requires confirmation in both apps. Closing, changing account/Topic/link, or denied access retires private link
+work. Feed tokens and signed audio URLs stay out of logs and telemetry. `RemovePodcastEpisodeDialog` confirms the same
+copy as web, unloads matching playback, removes that episode's checkpoint, and refreshes affected lists/pages.
+`common/ConfirmDialog` supplies the platform alert for these shared confirmations.
+
+Checkpoint writes occur at playback start, every 30 seconds of playing progress, seek, speed change, pause, replacement,
+background transition, completion, and orderly exit. Storage holds no audio URL, title, transcript, or session header.
+Forced termination can lose progress since the last completed checkpoint; network progress remains best effort.
+Confirmed episode access loss clears playback, metadata, and the checkpoint. A transient check failure pauses and
+retains retry. A signed stream can remain buffered until a later access check; this is not instant remote revocation.
+
+The audio patch and configuration change the runtime fingerprint and require a new development/store build; an OTA
+update cannot add them to an old binary. See `patches/README.md` for the patch boundary and upgrade checks.
+Stories exercise playback, buffering/error, long titles, missing Findings, recording/failure, transcript, credits,
+feed states, reset confirmation, and the dock. Device QA for this change uses only the existing iPhone SE simulator.
+Voice, recording, verified store app links, and broader count polling remain separate changes.
+
+`common/ShimmerText.tsx` shares the existing foreground-only, reduced-motion-aware highlight across Coffee Talk,
+recording cards, and feed loading. `ThinkingLine` supplies its shared phrase; no JavaScript frame loop is added.

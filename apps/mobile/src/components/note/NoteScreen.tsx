@@ -5,6 +5,7 @@ import { useNoteRead } from "@carlnotes/core/hooks/useNoteBadges"
 import type { NoteBodySave, NoteSaveStatus } from "@carlnotes/core/hooks/useNoteBodySave"
 import { useNoteComments } from "@carlnotes/core/hooks/useNoteComments"
 import { NOTE_LABELS, NOTE_SAVE_ERRORS, NOTE_SAVE_STATUS_LABELS } from "@carlnotes/core/lib/noteLabels"
+import { useIsPodcastPlayerShown } from "@carlnotes/core/stores/podcastEpisodePlayerStore"
 import { onlineManager, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useLocalSearchParams, useRouter } from "expo-router"
 import { MessageSquareText, X } from "lucide-react-native"
@@ -36,15 +37,20 @@ export function NoteScreen() {
 	const store = useNoteDraftStore()
 	const [headerHeight, setHeaderHeight] = useState(0)
 	const isKeyboardVisible = useIsKeyboardVisible()
+	const isPodcastPlayerShown = useIsPodcastPlayerShown()
 	const chatPillClearance = useFontScaledSize(44) + 24
 	return (
 		<View className="flex-1 bg-background">
 			<View onLayout={(event) => setHeaderHeight(event.nativeEvent.layout.height)}>
-				<Header />
+				{!isKeyboardVisible && <Header />}
 			</View>
-			<ClassNameSafeAreaView edges={["left", "right", "bottom"]} className="w-full max-w-3xl flex-1 self-center">
+			<ClassNameSafeAreaView
+				edges={isKeyboardVisible ? ["top", "left", "right", "bottom"] : ["left", "right", "bottom"]}
+				className="w-full max-w-3xl flex-1 self-center"
+			>
 				<KeyboardAvoidingView
 					className="flex-1"
+					enabled={!isPodcastPlayerShown}
 					keyboardVerticalOffset={headerHeight}
 					behavior={Platform.OS === "ios" ? "padding" : undefined}
 				>

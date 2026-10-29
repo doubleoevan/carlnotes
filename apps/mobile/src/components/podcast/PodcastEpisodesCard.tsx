@@ -1,94 +1,110 @@
 import { authClient } from "@carlnotes/client/authClient"
 import { fetchSeasonPodcastEpisodes } from "@carlnotes/client/podcastEpisodeClient"
-import { PODCAST_NAME } from "@carlnotes/contracts/podcastEpisodes"
 import type { TopicResponse } from "@carlnotes/contracts/topics"
-import { usePagination } from "@carlnotes/core/hooks/usePagination"
-import { cn } from "@carlnotes/nightshift/classNames"
-import { useQuery } from "@tanstack/react-query"
-import { useState } from "react"
+import {
+	type PodcastEpisodesCardElements,
+	PodcastEpisodesCard as SharedPodcastEpisodesCard,
+	toShownPodcastEpisodeId,
+	toShownPodcastSeason,
+} from "@carlnotes/core/components/PodcastEpisodesCard"
+import { usePodcastEpisodePlayer } from "@carlnotes/core/stores/podcastEpisodePlayerStore"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
+import { router, useLocalSearchParams } from "expo-router"
 import { Pressable, ScrollView, View } from "react-native"
 import { CoffeeLoading } from "@/components/branding/CoffeeLoading"
 import { Pagination } from "@/components/common/Pagination"
-import { Button } from "@/components/primitives/button"
+import { Button, toTouchTargetHitSlop } from "@/components/primitives/button"
 import { Text } from "@/components/primitives/text"
 import { CollapsibleSection } from "@/components/topic/CollapsibleSection"
 import { PodcastEpisodeRow } from "./PodcastEpisodeRow"
+import { RemovePodcastEpisodeDialog } from "./RemovePodcastEpisodeDialog"
+
+// adapt scrolling tabs and accessible list controls without duplicating episode visibility or actions
+const elements: PodcastEpisodesCardElements = {
+	Section: CollapsibleSection,
+	Card: ({ children }) => (
+		<View className="rounded-lg border border-separator bg-card p-1 shadow-raised">{children}</View>
+	),
+	Tabs: ({ children }) => (
+		<ScrollView
+			horizontal
+			accessibilityLabel="Seasons"
+			showsHorizontalScrollIndicator
+			contentContainerClassName="gap-1 px-2"
+		>
+			{children}
+		</ScrollView>
+	),
+	Tab: ({ season, className, onPress, isSelected }) => (
+		<Pressable
+			accessibilityRole="tab"
+			accessibilityLabel={`Season ${season}`}
+			accessibilityState={{ selected: isSelected }}
+			onPress={onPress}
+			hitSlop={toTouchTargetHitSlop(44)}
+			className={`${className} justify-center`}
+		>
+			<Text className={isSelected ? "text-sm font-bold" : "text-sm font-semibold text-muted-foreground"}>{season}</Text>
+		</Pressable>
+	),
+	Loading: () => <CoffeeLoading label="Loading your episodes" className="min-h-80 text-base sm:min-h-70" />,
+	List: ({ children, label, isLoading }) => (isLoading ? null : <View accessibilityLabel={label}>{children}</View>),
+	Row: PodcastEpisodeRow,
+	Pagination,
+	Remove: RemovePodcastEpisodeDialog,
+	Failure: ({ onRetry }) => (
+		<Button variant="link" accessibilityLabel="Retry episodes" onPress={onRetry}>
+			<Text>Try again</Text>
+		</Button>
+	),
+	Empty: () => <Text className="py-3 text-sm text-muted-foreground">No episodes yet.</Text>,
+}
 
 /**
- * Lists each season's episodes using the web's five-row pages and shared client.
+ * Adapts shared season cards to account-scoped queries and app routing.
  */
 export function PodcastEpisodesCard({ topic }: { topic: TopicResponse }) {
-	// scope older seasons to this account, and keep the delivered latest season live
+	// scope fetched seasons to the current account and retire requests when the route changes
 	const { data: session } = authClient().useSession()
-	const [selectedSeason, setSelectedSeason] = useState(0)
-	const podcast = topic.podcast
-	const seasons = podcast?.seasons ?? []
-	const season = seasons.includes(selectedSeason) ? selectedSeason : seasons[0]
+	const params = useLocalSearchParams<{ season?: string; episode?: string }>()
+	const queryClient = useQueryClient()
+	const { podcastEpisode } = usePodcastEpisodePlayer()
+	const seasons = topic.podcast?.seasons ?? []
+	const shownSeason = toShownPodcastSeason(seasons, params.season)
+	const isOlderSeason = shownSeason !== seasons[0]
 	const query = useQuery({
-		queryKey: ["mobile-podcast-season", session?.user.id, topic.id, season],
-		queryFn: () =>
-			season === undefined ? Promise.resolve({ podcastEpisodes: [] }) : fetchSeasonPodcastEpisodes(topic.id, season),
-		enabled: season !== undefined && season !== seasons[0],
+		queryKey: ["mobile-podcast-season", session?.user.id, topic.id, shownSeason],
+		queryFn: ({ signal }) =>
+			fetchSeasonPodcastEpisodes({ topicId: topic.id, season: shownSeason ?? 0, signal, shouldThrowOnError: true }),
+		enabled: shownSeason !== undefined && isOlderSeason,
 		gcTime: 0,
 	})
-	const allEpisodes = (season === seasons[0] ? podcast?.latestSeasonPodcastEpisodes : query.data)?.podcastEpisodes ?? []
-	const { pageRows: episodes, pagination } = usePagination(allEpisodes, 5)
-	const isLoading = season !== seasons[0] && query.isPending
-	if (season === undefined) {
-		return null
-	}
+	const episodes = (isOlderSeason ? query.data : topic.podcast?.latestSeasonPodcastEpisodes)?.podcastEpisodes ?? []
 	return (
-		<CollapsibleSection title={`${PODCAST_NAME} episodes`}>
-			<View className="rounded-lg border border-separator bg-card px-4 py-2 shadow-raised">
-				{/* season tabs remain reachable when a Topic spans several years */}
-				<ScrollView horizontal accessibilityLabel="Seasons" showsHorizontalScrollIndicator>
-					{seasons.map((item) => (
-						<Pressable
-							key={item}
-							accessibilityRole="tab"
-							accessibilityLabel={`Season ${item}`}
-							accessibilityState={{ selected: item === season }}
-							onPress={() => {
-								// start each season at its first episode
-								setSelectedSeason(item)
-								pagination.setPage(0)
-							}}
-							className={cn(
-								"min-h-12 items-center justify-center border-b-[3px] px-3.5",
-								item === season ? "border-primary" : "border-transparent",
-							)}
-						>
-							<Text className={item === season ? "text-sm font-bold" : "text-sm font-semibold text-muted-foreground"}>
-								{item}
-							</Text>
-						</Pressable>
-					))}
-				</ScrollView>
-				{/* retain a full card while an older season loads and provide a retry for thrown failures */}
-				{isLoading ? <CoffeeLoading label="Loading your episodes" className="min-h-80" /> : null}
-				{season !== seasons[0] && query.isError ? (
-					<Button variant="link" accessibilityLabel="Retry episodes" onPress={() => void query.refetch()}>
-						<Text>Try again</Text>
-					</Button>
-				) : null}
-				{!isLoading && !query.isError && episodes.length === 0 ? (
-					<Text className="py-3 text-sm text-muted-foreground">No episodes yet.</Text>
-				) : null}
-				{episodes.map((episode, i) => (
-					<View
-						key={episode.id}
-						className={cn("py-2.5", i < episodes.length - 1 && "border-b border-dashed border-separator-strong")}
-					>
-						<PodcastEpisodeRow episode={episode} isLatestEpisode={episode.id === topic.latestPodcastEpisode?.id} />
-					</View>
-				))}
-			</View>
-			<Pagination
-				label="Episodes"
-				pageNumber={pagination.page + 1}
-				pageCount={pagination.pageCount}
-				onOpenPage={(page) => pagination.setPage(page - 1)}
-			/>
-		</CollapsibleSection>
+		<SharedPodcastEpisodesCard
+			topic={topic}
+			shownSeason={shownSeason}
+			episodes={episodes}
+			isLoading={isOlderSeason && query.isPending}
+			isError={isOlderSeason && query.isError}
+			search=""
+			selectedEpisodeId={toShownPodcastEpisodeId({
+				topic,
+				loadedPodcastEpisode: podcastEpisode,
+				linkedPodcastEpisodeId: params.episode,
+			})}
+			onOpenSeason={(season) => router.setParams({ season: season === seasons[0] ? undefined : String(season) })}
+			onReload={async () => {
+				if (isOlderSeason) {
+					await query.refetch()
+				}
+			}}
+			onRemoved={async () => {
+				// refresh both existing Topic payloads before reloading the selected season
+				await queryClient.invalidateQueries({ queryKey: ["topic-page"] })
+				await queryClient.invalidateQueries({ queryKey: ["topic-feed"] })
+			}}
+			elements={elements}
+		/>
 	)
 }

@@ -1,73 +1,84 @@
 import type { PodcastEpisode, PodcastEpisodeChapter, PodcastEpisodeSummary } from "@carlnotes/contracts/podcast"
-import { SITE_URL } from "@carlnotes/core/lib/pageHead"
-import { Headphones, Play } from "lucide-react-native"
-import { AnchorLink } from "@/components/common/AnchorLink"
+import {
+	type FindingChapterPillProps,
+	type PodcastEpisodePillElements,
+	PodcastEpisodeChapterPill as SharedChapterPill,
+	FindingChapterPill as SharedFindingChapterPill,
+	PodcastEpisodeNumberPill as SharedNumberPill,
+	PodcastEpisodePlaybackPill as SharedPlaybackPill,
+} from "@carlnotes/core/components/PodcastEpisodePill"
+
+import { Headphones, Pause, Play } from "lucide-react-native"
+import { Pressable } from "react-native"
 import { toTouchTargetHitSlop } from "@/components/primitives/button"
 import { Icon } from "@/components/primitives/icon"
-import { Text } from "@/components/primitives/text"
+import { Text, TextClassContext } from "@/components/primitives/text"
 
-/**
- * Shows the web's chapter pill on the finding it narrates.
- */
-export function FindingChapterPill({
-	podcastEpisode,
-	findingId,
-}: {
-	podcastEpisode?: PodcastEpisode | null
-	findingId: string
-}) {
-	const chapter = podcastEpisode?.chapters.find((chapter) => chapter.findingId === findingId)
-	if (!podcastEpisode || !chapter) {
-		return null
-	}
-	return <PodcastEpisodeChapterPill podcastEpisode={podcastEpisode} chapter={chapter} />
+export { useIsFindingChapterPlaying } from "@carlnotes/core/components/PodcastEpisodePill"
+
+const elements: PodcastEpisodePillElements = {
+	Button: ({ children, label, onPress, className, isHighlighted }) => (
+		<TextClassContext.Provider value={isHighlighted ? "text-primary-foreground" : "text-link"}>
+			<Pressable
+				accessibilityRole="button"
+				accessibilityLabel={label}
+				hitSlop={toTouchTargetHitSlop(24)}
+				className={`${className} shrink-0 flex-row active:opacity-75`}
+				onPress={(event) => {
+					event.stopPropagation()
+					onPress()
+				}}
+			>
+				{typeof children === "string" ? <Text className="text-xs font-semibold">{children}</Text> : children}
+			</Pressable>
+		</TextClassContext.Provider>
+	),
+	Body: ({ text, isPlaying }) => (
+		<>
+			<Icon as={Headphones} className="size-3" strokeWidth={2.5} />
+			<Text className="text-xs font-semibold">{text}</Text>
+			<Icon as={isPlaying ? Pause : Play} className="size-2.5" fill="currentColor" strokeWidth={2.5} />
+		</>
+	),
+	Tooltip: ({ children }) => children,
 }
 
 /**
- * Shares the web's chapter pill between Finding rows and the podcast's chapter list.
+ * Adapts the shared chapter pill to the app's standard controls.
  */
-export function PodcastEpisodeChapterPill({
-	podcastEpisode,
-	chapter,
-}: {
+export function PodcastEpisodeChapterPill(props: {
 	podcastEpisode: PodcastEpisode
 	chapter: PodcastEpisodeChapter
+	className?: string
 }) {
-	return <PodcastEpisodePill podcastEpisode={podcastEpisode} chapterNumber={chapter.position + 1} />
+	return <SharedChapterPill {...props} elements={elements} />
 }
 
 /**
- * Shows an episode's numbered pill with the existing web player as its destination.
+ * Selects a Finding's narrated chapter and renders its shared pill.
  */
-export function PodcastEpisodeNumberPill({ podcastEpisode }: { podcastEpisode: PodcastEpisodeSummary | null }) {
-	return podcastEpisode ? <PodcastEpisodePill podcastEpisode={podcastEpisode} /> : null
+export function FindingChapterPill(props: FindingChapterPillProps) {
+	return <SharedFindingChapterPill {...props} elements={elements} />
 }
 
-// keep the same pill body and native touch target for episodes and chapters
-function PodcastEpisodePill({
+/**
+ * Adapts the shared episode-number playback pill.
+ */
+export function PodcastEpisodeNumberPill({
 	podcastEpisode,
-	chapterNumber,
+	className,
 }: {
-	podcastEpisode: PodcastEpisodeSummary
-	chapterNumber?: number
+	podcastEpisode: PodcastEpisodeSummary | null
+	className?: string
 }) {
-	if (!podcastEpisode.pagePath || podcastEpisode.episodeNumber === null) {
-		return null
-	}
-	// name the chapter while the accessible hint identifies the web player handoff
-	const text = `E${podcastEpisode.episodeNumber}${chapterNumber ? ` · ch ${chapterNumber}` : ""}`
-	return (
-		<AnchorLink
-			href={`${SITE_URL}${podcastEpisode.pagePath}`}
-			accessibilityLabel={`Open player for episode ${podcastEpisode.episodeNumber}${chapterNumber ? `, chapter ${chapterNumber}` : ""}`}
-			accessibilityHint="Opens the player on carlnotes.com"
-			onPress={(event) => event.stopPropagation()}
-			hitSlop={toTouchTargetHitSlop(24)}
-			className="shrink-0 flex-row items-center gap-1 rounded-full border border-separator-strong bg-muted px-2 py-0.5 shadow-raised active:opacity-75"
-		>
-			<Icon as={Headphones} className="size-3 text-link" strokeWidth={2.5} />
-			<Text className="text-xs font-semibold text-link">{text}</Text>
-			<Icon as={Play} className="size-2.5 text-link" fill="currentColor" strokeWidth={2.5} />
-		</AnchorLink>
-	)
+	return podcastEpisode ? (
+		<SharedNumberPill podcastEpisode={podcastEpisode} className={className} elements={elements} />
+	) : null
+}
+
+/**
+ * Adapts the shared playing or paused toggle.
+ */
+export function PodcastEpisodePlaybackPill() {
+	return <SharedPlaybackPill elements={elements} />
 }

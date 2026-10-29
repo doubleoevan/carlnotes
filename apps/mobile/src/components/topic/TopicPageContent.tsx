@@ -4,7 +4,7 @@ import type { TopicFeedState } from "@carlnotes/core/hooks/useTopicFeedState"
 import { Text as NativeText, RefreshControl, ScrollView, View } from "react-native"
 import { Footer } from "@/components/layout/Footer"
 import { PageNoteBadge } from "@/components/note/NoteUnreadBadge"
-import { PodcastEpisodePlayerCard } from "@/components/podcast/PodcastEpisodePlayerCard"
+import { PodcastEpisodePlayer } from "@/components/podcast/PodcastEpisodePlayer"
 import { Badge } from "@/components/primitives/badge"
 import { Text } from "@/components/primitives/text"
 import { toTypeRoleStyle } from "@/typeRoleStyles"
@@ -15,6 +15,7 @@ import { TopicFindingsSection } from "./TopicFindingsSection"
 import { TopicInfoButton } from "./TopicInfo"
 import { TopicActionBar } from "./TopicPageActions"
 import { TopicPageCards } from "./TopicPageCards"
+import { TopicScanButton } from "./TopicScanButton"
 
 /**
  * Keeps the web Topic page's header, Findings, and cards in one native scroll area.
@@ -63,7 +64,11 @@ export function TopicPageContent({
 			</View>
 			{/* full-width cards match the web's narrow reading column */}
 			<View className="mx-4">
-				<PodcastEpisodePlayerCard topic={topic} topicFeedHandlers={state.handlers} />
+				<PodcastEpisodePlayer
+					topic={topic}
+					topicFeedHandlers={state.handlers}
+					scanControl={<TopicScanButton topic={topic} onScanned={onScanned} />}
+				/>
 				<CollapsibleSection
 					title="Topic findings"
 					titleAside={

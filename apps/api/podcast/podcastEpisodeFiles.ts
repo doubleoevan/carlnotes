@@ -2,7 +2,7 @@
 
 import { db } from "@carlnotes/db"
 import { podcastEpisodeChapters, podcastEpisodes } from "@carlnotes/db/schema/podcast"
-import { toPodcastEpisodeAudioUrl } from "@carlnotes/db/store"
+import { PODCAST_EPISODE_AUDIO_URL_LIFETIME_SECONDS, toPodcastEpisodeAudioUrl } from "@carlnotes/db/store"
 import { eq } from "drizzle-orm"
 import type { Context } from "hono"
 import { PRIVATE_NO_STORE_CACHE_CONTROL } from "../edgeCache"
@@ -13,6 +13,10 @@ import type { PodcastEpisodeRow } from "./podcastEpisodeRows"
  * Returns a podcast episode's audio length and type for a HEAD, and a redirect to its presigned url for a GET.
  */
 export function toPodcastEpisodeAudioResponse(context: Context, podcastEpisodeRow: PodcastEpisodeRow): Response {
+	// prevent caching either representation, including missing audio
+	context.header("Cache-Control", PRIVATE_NO_STORE_CACHE_CONTROL)
+	context.header("Vary", "Accept")
+
 	// respond 404 if the podcast episode has no audio
 	if (!podcastEpisodeRow.audioKey) {
 		return context.json({ error: "not found" }, 404)
@@ -27,9 +31,20 @@ export function toPodcastEpisodeAudioResponse(context: Context, podcastEpisodeRo
 		})
 	}
 
-	// redirect to the short-lived presigned url, and never cache the redirect
-	context.header("Cache-Control", PRIVATE_NO_STORE_CACHE_CONTROL)
-	return context.redirect(toPodcastEpisodeAudioUrl(podcastEpisodeRow.audioKey), 302)
+	// resolve a source for platform players without forwarding their session to storage
+	const audioUrl = toPodcastEpisodeAudioUrl(podcastEpisodeRow.audioKey)
+	if (
+		context.req
+			.header("Accept")
+			?.split(",")
+			.some((type) => type.trim().toLowerCase() === "application/json")
+	) {
+		return context.json({
+			audioUrl,
+			expiresAt: new Date(Date.now() + PODCAST_EPISODE_AUDIO_URL_LIFETIME_SECONDS * 1000).toISOString(),
+		})
+	}
+	return context.redirect(audioUrl, 302)
 }
 
 /**

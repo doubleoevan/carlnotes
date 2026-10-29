@@ -1,24 +1,18 @@
 import { authClient } from "@carlnotes/client/authClient"
-import { toClockLabel, toPodcastEpisodeTitleLabel } from "@carlnotes/core/lib/labels"
-import { toPodcastEpisodeQuestionLabel } from "@carlnotes/core/stores/podcastEpisodeQuestionRules"
-import { cn } from "@carlnotes/nightshift/classNames"
-import { Pause, Play } from "lucide-react"
-import { type ReactNode, useEffect, useRef } from "react"
-import { AnchorLink } from "@/components/common/AnchorLink"
-import { toChapterIndexAt } from "@/lib/podcastEpisodePlayback"
-import { PLAY_BUTTON_CLASS } from "@/lib/styleClasses"
+import type { PodcastEpisode } from "@carlnotes/contracts/podcast"
 import {
-	registerPodcastEpisodeAudio,
-	seekPlaybackTo,
-	setIsUserSignedIn,
-	togglePlayback,
-	usePlayerPositionSeconds,
-	usePodcastEpisodePlayer,
-} from "@/stores/podcastEpisodePlayerStore"
+	type PodcastPlayerElements,
+	PodcastPlayer as SharedPodcastPlayer,
+} from "@carlnotes/core/components/PodcastPlayer"
+import { toPodcastEpisodeQuestionLabel } from "@carlnotes/core/stores/podcastEpisodeQuestionRules"
+import { useEffect, useRef } from "react"
+import { AnchorLink } from "@/components/common/AnchorLink"
+import { registerPodcastEpisodeAudio, seekPlaybackTo, setIsUserSignedIn } from "@/stores/podcastEpisodePlayerStore"
 import { usePodcastEpisodeQuestion } from "@/stores/podcastEpisodeQuestionStore"
 import { SkipPlaybackButtons } from "./PlaybackControlButtons"
 import { PodcastEpisodeCover } from "./PodcastEpisodeCover"
 import { PodcastEpisodeTooltip } from "./PodcastEpisodeDetails"
+import { PodcastEpisodePlayButton } from "./PodcastEpisodePlayButton"
 import {
 	isPodcastEpisodeQuestionButtonShown,
 	PodcastEpisodeQuestionButton,
@@ -46,91 +40,62 @@ export function PodcastEpisodeAudio() {
 	)
 }
 
-// the podcast player, fixed to the bottom of the page while a podcast episode is loaded, with the mic that asks carl
-// and vienna about it if voice is on
+// adapt the shared mini player while preserving browser voice controls
 function PodcastPlayer() {
-	const { podcastEpisode, isPlaying } = usePodcastEpisodePlayer()
-	const positionSeconds = usePlayerPositionSeconds()
-	const podcastEpisodeQuestion = usePodcastEpisodeQuestion()
-	if (!podcastEpisode) {
-		return null
-	}
-
-	// how much of the podcast episode has played, the player's chapter, the title line, and the play button's label
-	const durationSeconds = podcastEpisode.durationSeconds ?? 0
-	const playedPercent = Math.min(100, (positionSeconds / Math.max(1, durationSeconds)) * 100)
-	const playerChapterIndex = toChapterIndexAt(podcastEpisode.chapters, positionSeconds)
-	const playerChapter = podcastEpisode.chapters[playerChapterIndex]
-	const podcastEpisodeTitle = toPodcastEpisodeTitleLabel(podcastEpisode)
-	const playButtonLabel = `${isPlaying ? "Pause" : "Play"} episode ${podcastEpisode.episodeNumber ?? ""}`.trim()
-
-	// a question in progress names its phase in the chapter line, and its stop takes the skip buttons' place
-	const podcastEpisodeQuestionLabel = toPodcastEpisodeQuestionLabel(podcastEpisodeQuestion)
-	return (
-		<div className="bg-card border-separator-strong fixed inset-x-0 bottom-0 z-40 border-t pb-[env(safe-area-inset-bottom)]">
-			{/* the progress line, under the seek input */}
-			<div className="bg-muted relative h-0.75">
-				<div className="bg-primary h-full" style={{ width: `${playedPercent}%` }} aria-hidden="true" />
-				{/* the seek input over the line, taller than the line for a bigger click area */}
-				<input
-					type="range"
-					aria-label="Seek"
-					min={0}
-					max={durationSeconds}
-					value={Math.min(positionSeconds, durationSeconds)}
-					onChange={(event) => seekPlaybackTo(Number(event.target.value))}
-					className="absolute inset-x-0 -inset-y-2.5 cursor-pointer opacity-0"
-				/>
-			</div>
-			<div className="mx-auto flex max-w-5xl items-center gap-2 py-2.5 pr-3 pl-4 sm:gap-3">
-				{/* the podcast episode's cover and title, which link to its page once it has one */}
-				<PodcastEpisodeLink pagePath={podcastEpisode.pagePath}>
-					<PodcastEpisodeCover podcastEpisode={podcastEpisode} className="size-11" />
-					{/* the podcast episode's number and title with the episode's details as a tooltip, over the player's
-					    chapter or the position */}
-					<div className="min-w-0 flex-1">
-						<PodcastEpisodeTooltip podcastEpisode={podcastEpisode}>
-							<div className="truncate text-sm font-bold group-hover:underline">{podcastEpisodeTitle}</div>
-						</PodcastEpisodeTooltip>
-						<div className="text-muted-foreground truncate text-xs">
-							{podcastEpisodeQuestionLabel ??
-								(playerChapter
-									? `Ch ${playerChapterIndex + 1} of ${podcastEpisode.chapters.length} · ${playerChapter.title}`
-									: toClockLabel(positionSeconds))}
-						</div>
-						{/* the question's phase, announced to a screen reader */}
-						<span className="sr-only" aria-live="polite">
-							{podcastEpisodeQuestionLabel ?? ""}
-						</span>
-					</div>
-				</PodcastEpisodeLink>
-				{/* the skip buttons, or the question's stop, then the mic and the play button */}
-				{podcastEpisodeQuestionLabel ? <PodcastEpisodeQuestionStopButton /> : <SkipPlaybackButtons />}
-				{isPodcastEpisodeQuestionButtonShown(podcastEpisode) && (
-					<PodcastEpisodeQuestionButton podcastEpisode={podcastEpisode} />
-				)}
-				<button
-					type="button"
-					aria-label={playButtonLabel}
-					onClick={togglePlayback}
-					className={cn(PLAY_BUTTON_CLASS, "size-11")}
-				>
-					{isPlaying ? <Pause className="size-4.5 fill-current" /> : <Play className="size-4.5 fill-current" />}
-				</button>
-			</div>
-		</div>
-	)
+	const question = usePodcastEpisodeQuestion()
+	return <SharedPodcastPlayer phaseLabel={toPodcastEpisodeQuestionLabel(question)} elements={elements} />
 }
 
-// the link to the podcast episode's page around the cover and the title, or a plain box before the episode has a page.
-// a hover anywhere in it underlines the title
-function PodcastEpisodeLink({ pagePath, children }: { pagePath: string | null; children: ReactNode }) {
-	const podcastEpisodeLinkClass = "group flex min-w-0 flex-1 items-center gap-3"
-	return pagePath ? (
-		<AnchorLink href={pagePath} className={podcastEpisodeLinkClass}>
+const elements: PodcastPlayerElements = {
+	Frame: ({ children }) => (
+		<div className="bg-card border-separator-strong fixed inset-x-0 bottom-0 z-40 border-t pb-[env(safe-area-inset-bottom)]">
 			{children}
-		</AnchorLink>
-	) : (
-		<div className={podcastEpisodeLinkClass}>{children}</div>
+		</div>
+	),
+	Group: ({ children, className }) => <div className={className}>{children}</div>,
+	Text: ({ children, className }) => <div className={className}>{children}</div>,
+	Link: ({ pagePath, children }) =>
+		pagePath ? (
+			<AnchorLink href={pagePath} className="group flex min-w-0 flex-1 items-center gap-3">
+				{children}
+			</AnchorLink>
+		) : (
+			<div className="group flex min-w-0 flex-1 items-center gap-3">{children}</div>
+		),
+	Cover: PodcastEpisodeCover,
+	Tooltip: PodcastEpisodeTooltip,
+	Announcement: ({ children }) => (
+		<span className="sr-only" aria-live="polite">
+			{children}
+		</span>
+	),
+	Progress: ({ positionSeconds, durationSeconds, playedPercent }) => (
+		<div className="bg-muted relative h-0.75">
+			<div className="bg-primary h-full" style={{ width: `${playedPercent}%` }} aria-hidden="true" />
+			<input
+				type="range"
+				aria-label="Seek"
+				min={0}
+				max={durationSeconds}
+				value={Math.min(positionSeconds, durationSeconds)}
+				onChange={(event) => seekPlaybackTo(Number(event.target.value))}
+				className="absolute inset-x-0 -inset-y-2.5 cursor-pointer opacity-0"
+			/>
+		</div>
+	),
+	Controls: PodcastPlayerControls,
+	Play: ({ podcastEpisode }) => <PodcastEpisodePlayButton podcastEpisode={podcastEpisode} size="default" />,
+}
+
+// preserve the spoken-question replacement for skips and the optional microphone
+function PodcastPlayerControls({ podcastEpisode }: { podcastEpisode: PodcastEpisode }) {
+	const question = usePodcastEpisodeQuestion()
+	return (
+		<>
+			{toPodcastEpisodeQuestionLabel(question) ? <PodcastEpisodeQuestionStopButton /> : <SkipPlaybackButtons />}
+			{isPodcastEpisodeQuestionButtonShown(podcastEpisode) && (
+				<PodcastEpisodeQuestionButton podcastEpisode={podcastEpisode} />
+			)}
+		</>
 	)
 }

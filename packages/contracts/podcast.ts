@@ -128,3 +128,11 @@ export type PodcastEpisodeScript = {
 	segments: { transition: PodcastEpisodeTurn[]; chapters: PodcastEpisodeChapterScript[] }[]
 	signOff: PodcastEpisodeTurn[]
 }
+
+// a session-authorized, short-lived media source kept only in a player's memory
+export const podcastEpisodeAudio = z.object({
+	audioUrl: z.url().refine((url) => url.startsWith("https://")),
+	expiresAt: z.iso.datetime(),
+})
+
+export type PodcastEpisodeAudio = z.infer<typeof podcastEpisodeAudio>

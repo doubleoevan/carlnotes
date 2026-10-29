@@ -15,8 +15,8 @@ import { PodcastEpisodePlayerCard } from "@/components/podcast/PodcastEpisodePla
 import { PodcastEpisodesSection } from "@/components/podcast/PodcastEpisodesSection"
 import { PodcastEpisodeTranscript } from "@/components/podcast/PodcastEpisodeTranscript"
 import { PodcastFeedDialog } from "@/components/podcast/PodcastFeedDialog"
+import { PodcastThemeSongNote } from "@/components/podcast/PodcastThemeSongNote"
 import { RemovePodcastEpisodeDialog } from "@/components/podcast/RemovePodcastEpisodeDialog"
-import { ThemeSongNote } from "@/components/podcast/ThemeSongNote"
 import { ShareTopic } from "@/components/share/ShareTopic"
 import { TableCard } from "@/components/table/TableCard"
 import { isAddTopicToTeamShown } from "@/components/team/AddTopicToTeamButton"
@@ -153,7 +153,7 @@ export function PodcastEpisodePage() {
 					</div>
 					<h1 className="font-display mt-1.5 text-2xl leading-tight sm:text-3xl">
 						{podcastEpisode.title}
-						<ThemeSongNote />
+						<PodcastThemeSongNote />
 					</h1>
 					{podcastEpisode.description && <p className="mt-1.5 text-sm">{podcastEpisode.description}</p>}
 					<TopicByline topic={topic} className="mt-1.5 text-sm sm:hidden" />

@@ -1,6 +1,7 @@
 import type { AnalyticsEventProperties, VisitAnalyticsEvent } from "@carlnotes/contracts/analyticsEvents"
+import type { PodcastEpisode } from "@carlnotes/contracts/podcast"
 import { toReportedPath } from "@carlnotes/contracts/reportedPath"
-import { toReportedEvent } from "@carlnotes/contracts/visitAnalytics"
+import { toPublicPodcastEpisodeProperties, toReportedEvent } from "@carlnotes/contracts/visitAnalytics"
 import PostHog from "posthog-react-native"
 import { deviceTelemetry } from "./deviceTelemetry"
 
@@ -49,3 +50,13 @@ export function captureVisit(pathname: string): void {
 
 // public topic attribution follows the same rule in both clients
 export { toPublicTopicProperties } from "@carlnotes/contracts/visitAnalytics"
+
+/**
+ * Records episode actions with the shared public-only attribution policy and platform context.
+ */
+export function captureEpisodeVisitEvent(
+	event: "visit_episode_played" | "visit_episode_completed",
+	episode: PodcastEpisode,
+): void {
+	captureVisitEvent(event, toPublicPodcastEpisodeProperties(episode))
+}

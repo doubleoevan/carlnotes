@@ -1,150 +1,82 @@
-import type {
-	PodcastEpisode,
-	PodcastEpisodeChapter,
-	PublishedPodcastEpisodeSummary,
-} from "@carlnotes/contracts/podcast"
-import { cn } from "@carlnotes/nightshift/classNames"
-import { Headphones, Pause, Play } from "lucide-react"
-import { togglePodcastEpisodeChapterPlayback, togglePodcastEpisodePlayback } from "@/stores/podcastEpisodePlayActions"
+import type { PodcastEpisode, PodcastEpisodeChapter, PodcastEpisodeSummary } from "@carlnotes/contracts/podcast"
 import {
-	togglePlayback,
-	useIsPodcastEpisodePlaying,
-	usePlayerChapter,
-	usePlayerChapterPosition,
-	usePodcastEpisodePlayer,
-} from "@/stores/podcastEpisodePlayerStore"
+	type FindingChapterPillProps,
+	type PodcastEpisodePillElements,
+	PodcastEpisodeChapterPill as SharedChapterPill,
+	FindingChapterPill as SharedFindingChapterPill,
+	PodcastEpisodeNumberPill as SharedNumberPill,
+	PodcastEpisodePlaybackPill as SharedPlaybackPill,
+} from "@carlnotes/core/components/PodcastEpisodePill"
+
+export { useIsFindingChapterPlaying } from "@carlnotes/core/components/PodcastEpisodePill"
+
+import { Headphones, Pause, Play } from "lucide-react"
 import { PodcastEpisodeTooltip } from "./PodcastEpisodeDetails"
 
-// the style that every podcast episode pill shares, with a button's shadow
-const PILL_CLASS = "shadow-raised inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-semibold"
+const elements: PodcastEpisodePillElements = {
+	Button: ({ children, label, onPress, className }) => (
+		<button
+			type="button"
+			aria-label={label}
+			className={className}
+			onClick={(event) => {
+				event.stopPropagation()
+				onPress()
+			}}
+		>
+			{children}
+		</button>
+	),
+	Body: ({ text, isPlaying }) => (
+		<>
+			<Headphones className="size-3" strokeWidth={2.5} />
+			{text}
+			{isPlaying ? (
+				<Pause className="size-2.5 fill-current" strokeWidth={2.5} />
+			) : (
+				<Play className="size-2.5 fill-current" strokeWidth={2.5} />
+			)}
+		</>
+	),
+	Tooltip: PodcastEpisodeTooltip,
+}
 
-// a pill's colors while its podcast episode or chapter plays, and its colors while neither plays.
-// the idle border keeps the pill visible on a highlighted row
-const HIGHLIGHTED_PILL_CLASS = "bg-primary text-primary-foreground border-transparent font-bold"
-const IDLE_PILL_CLASS = "border-separator-strong bg-muted text-link"
-
-// the podcast episode, the chapter that the pill plays, and the pill's own classes
-type PodcastEpisodeChapterPillProps = {
+/**
+ * Adapts the shared chapter pill to the app's standard controls.
+ */
+export function PodcastEpisodeChapterPill(props: {
 	podcastEpisode: PodcastEpisode
 	chapter: PodcastEpisodeChapter
 	className?: string
-}
-
-/**
- * The pill of a podcast episode chapter, on the finding that the chapter narrates and on the chapter's own row.
- * A click plays or pauses the chapter.
- */
-export function PodcastEpisodeChapterPill({ podcastEpisode, chapter, className }: PodcastEpisodeChapterPillProps) {
-	// whether the player is at the chapter, and whether the chapter is playing
-	const { isPlaying } = usePodcastEpisodePlayer()
-	const isPlayerChapter = usePlayerChapterPosition(podcastEpisode.id) === chapter.position
-	const isChapterPlaying = isPlayerChapter && isPlaying
-
-	// the button's label, which names the action, the podcast episode, and the chapter
-	const playbackAction = isChapterPlaying ? "Pause" : "Play"
-	const chapterPillLabel = `${playbackAction} episode ${podcastEpisode.episodeNumber}, chapter ${chapter.position + 1}`
-	return (
-		<button
-			type="button"
-			aria-label={chapterPillLabel}
-			// keep the click from the row behind the pill
-			onClick={(event) => {
-				event.stopPropagation()
-				togglePodcastEpisodeChapterPlayback(podcastEpisode, chapter)
-			}}
-			className={cn(PILL_CLASS, isChapterPlaying ? HIGHLIGHTED_PILL_CLASS : IDLE_PILL_CLASS, className)}
-		>
-			<PodcastEpisodePillBody
-				text={`E${podcastEpisode.episodeNumber} · ch ${chapter.position + 1}`}
-				isPlaying={isChapterPlaying}
-			/>
-		</button>
-	)
-}
-
-/**
- * The pill of the podcast episode chapter that narrates a finding, or nothing if no chapter narrates the finding.
- */
-export function FindingChapterPill({
-	podcastEpisode,
-	findingId,
-	className,
-}: {
-	podcastEpisode: PodcastEpisode | null | undefined
-	findingId: string
-	className?: string
 }) {
-	const findingChapter = podcastEpisode?.chapters.find((chapter) => chapter.findingId === findingId)
-	return podcastEpisode && findingChapter ? (
-		<PodcastEpisodeChapterPill podcastEpisode={podcastEpisode} chapter={findingChapter} className={className} />
-	) : null
+	return <SharedChapterPill {...props} elements={elements} />
 }
 
 /**
- * The pill on the loaded podcast episode, which reads "Playing" or "Paused". A click pauses or plays the episode.
+ * Selects a Finding's narrated chapter and renders its shared pill.
  */
-export function PodcastEpisodePlaybackPill() {
-	const { isPlaying } = usePodcastEpisodePlayer()
-	return (
-		<button
-			type="button"
-			aria-label={isPlaying ? "Playing. Pause" : "Paused. Play"}
-			// keep the click from the row behind the pill
-			onClick={(event) => {
-				event.stopPropagation()
-				togglePlayback()
-			}}
-			className={cn(PILL_CLASS, HIGHLIGHTED_PILL_CLASS, "hover:bg-primary/90")}
-		>
-			{isPlaying ? "Playing" : "Paused"}
-		</button>
-	)
+export function FindingChapterPill(props: FindingChapterPillProps) {
+	return <SharedFindingChapterPill {...props} elements={elements} />
 }
 
 /**
- * Returns whether the chapter that narrates this finding is playing.
- */
-export function useIsFindingChapterPlaying(
-	podcastEpisode: PodcastEpisode | null | undefined,
-	findingId: string,
-): boolean {
-	const playerChapter = usePlayerChapter()
-	return useIsPodcastEpisodePlaying(podcastEpisode?.id) && playerChapter?.findingId === findingId
-}
-
-/**
- * The pill with a podcast episode's number, with the episode's tooltip. A click plays or pauses the episode.
+ * Adapts the shared episode-number playback pill.
  */
 export function PodcastEpisodeNumberPill({
 	podcastEpisode,
 	className,
 }: {
-	podcastEpisode: PublishedPodcastEpisodeSummary
+	podcastEpisode: PodcastEpisodeSummary | null
 	className?: string
 }) {
-	const isPodcastEpisodePlaying = useIsPodcastEpisodePlaying(podcastEpisode.id)
-	return (
-		<PodcastEpisodeTooltip podcastEpisode={podcastEpisode}>
-			<button
-				type="button"
-				aria-label={`${isPodcastEpisodePlaying ? "Pause" : "Play"} episode ${podcastEpisode.episodeNumber}`}
-				onClick={() => void togglePodcastEpisodePlayback(podcastEpisode.id)}
-				className={cn(PILL_CLASS, isPodcastEpisodePlaying ? HIGHLIGHTED_PILL_CLASS : IDLE_PILL_CLASS, className)}
-			>
-				<PodcastEpisodePillBody text={`E${podcastEpisode.episodeNumber}`} isPlaying={isPodcastEpisodePlaying} />
-			</button>
-		</PodcastEpisodeTooltip>
-	)
+	return podcastEpisode ? (
+		<SharedNumberPill podcastEpisode={podcastEpisode} className={className} elements={elements} />
+	) : null
 }
 
-// a pill's headphones, its text, and the icon of what a click does
-function PodcastEpisodePillBody({ text, isPlaying }: { text: string; isPlaying: boolean }) {
-	const PlaybackIcon = isPlaying ? Pause : Play
-	return (
-		<>
-			<Headphones className="size-3" strokeWidth={2.5} />
-			{text}
-			<PlaybackIcon className="size-2.5 fill-current" strokeWidth={2.5} />
-		</>
-	)
+/**
+ * Adapts the shared playing or paused toggle.
+ */
+export function PodcastEpisodePlaybackPill() {
+	return <SharedPlaybackPill elements={elements} />
 }

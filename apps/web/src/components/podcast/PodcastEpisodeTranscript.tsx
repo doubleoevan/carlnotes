@@ -1,6 +1,10 @@
 import type { PodcastEpisodeTranscriptBlock } from "@carlnotes/contracts/podcast"
+import {
+	type PodcastEpisodeTranscriptElements,
+	PodcastEpisodeTranscript as SharedPodcastEpisodeTranscript,
+} from "@carlnotes/core/components/PodcastEpisodeTranscript"
 import { cn } from "@carlnotes/nightshift/classNames"
-import { useState } from "react"
+import type { ReactNode } from "react"
 import { MoreButton } from "@/components/topic/MoreButton"
 import { useScrollRegionTabStop } from "@/hooks/useScrollRegionTabStop"
 import {
@@ -10,73 +14,47 @@ import {
 	SCROLL_REGION_FOCUS_CLASS,
 } from "@/lib/styleClasses"
 
-// the collapsed transcript's height, with its last lines fading out. the transcript collapses only with JavaScript
-const COLLAPSED_TRANSCRIPT_CLASS = [
-	"scripted:max-h-80 scripted:overflow-hidden",
-	"scripted:[mask-image:linear-gradient(to_bottom,black_60%,transparent)]",
-].join(" ")
-
-// how tall the expanded transcript grows before the transcript scrolls
-const EXPANDED_TRANSCRIPT_CLASS = "max-h-160 overflow-y-auto"
-
-// a dashed separator on each side of a chapter's title
-const CHAPTER_TITLE_SEPARATOR_CLASS = [
-	"before:border-separator-strong before:min-w-6 before:flex-1 before:border-t before:border-dashed",
-	"after:border-separator-strong after:min-w-6 after:flex-1 after:border-t after:border-dashed",
-].join(" ")
+const elements: PodcastEpisodeTranscriptElements = {
+	Card: TranscriptCard,
+	Group: ({ children, className }) => <div className={className}>{children}</div>,
+	Text: ({ children, className }) => <p className={className}>{children}</p>,
+	Strong: ({ children, className }) => <span className={className}>{children}</span>,
+	Heading: ({ children, className }) => (
+		<h3
+			className={cn(
+				"flex items-center gap-3 before:border-separator-strong before:min-w-6 before:flex-1 before:border-t before:border-dashed after:border-separator-strong after:min-w-6 after:flex-1 after:border-t after:border-dashed",
+				className,
+			)}
+		>
+			{children}
+		</h3>
+	),
+	Divider: () => <hr className="border-separator-strong mb-3 border-t border-dashed" />,
+	More: (props) => <MoreButton {...props} className={SCRIPTED_ONLY_CLASS} />,
+}
 
 /**
- * A podcast episode's transcript, each chapter under its title. With JavaScript the transcript collapses behind a
- * control, and the expanded transcript scrolls.
+ * Adapts the shared transcript to server-visible text and a keyboard-scrollable browser card.
  */
 export function PodcastEpisodeTranscript({ transcript }: { transcript: PodcastEpisodeTranscriptBlock[] }) {
-	const [isExpanded, setIsExpanded] = useState(false)
-	// the card's tab stop, so a keyboard can scroll a transcript that holds no link
-	const { ref: transcriptCardRef, tabIndex } = useScrollRegionTabStop<HTMLDivElement>()
+	return <SharedPodcastEpisodeTranscript transcript={transcript} elements={elements} />
+}
+
+// collapse only after hydration and expose the expanded region to keyboard scrolling
+function TranscriptCard({ children, isExpanded }: { children: ReactNode; isExpanded: boolean }) {
+	const { ref, tabIndex } = useScrollRegionTabStop<HTMLDivElement>()
 	return (
-		<>
-			{/* the transcript card. the collapsed card clips its overflow instead of scrolling, so only the expanded card
-			takes the tab stop */}
-			<div
-				ref={transcriptCardRef}
-				tabIndex={isExpanded ? tabIndex : undefined}
-				className={cn(
-					INFO_CARD_CLASS,
-					isExpanded
-						? [EXPANDED_TRANSCRIPT_CLASS, HIGHLIGHT_SCROLLBAR_CLASS, SCROLL_REGION_FOCUS_CLASS]
-						: COLLAPSED_TRANSCRIPT_CLASS,
-				)}
-			>
-				{transcript.map((transcriptBlock, transcriptBlockIndex) => (
-					// biome-ignore lint/suspicious/noArrayIndexKey: a transcript's blocks never reorder
-					<div key={transcriptBlockIndex} className="mb-4 last:mb-0">
-						{/* a chapter's title inside a dashed separator, or a plain dashed separator over any later block */}
-						{transcriptBlock.heading ? (
-							<h3 className={cn("mb-2 flex items-center gap-3 text-center font-bold", CHAPTER_TITLE_SEPARATOR_CLASS)}>
-								{transcriptBlock.heading}
-							</h3>
-						) : (
-							transcriptBlockIndex > 0 && <hr className="border-separator-strong mb-3 border-t border-dashed" />
-						)}
-						{/* the block's turns, each after its speaker's name */}
-						{transcriptBlock.turns.map((transcriptTurn, transcriptTurnIndex) => (
-							// biome-ignore lint/suspicious/noArrayIndexKey: a block's turns never reorder
-							<p key={transcriptTurnIndex} className="mb-1.5 leading-relaxed">
-								<span className="font-semibold">{`${transcriptTurn.speakerName}: `}</span>
-								{transcriptTurn.text}
-							</p>
-						))}
-					</div>
-				))}
-			</div>
-			{/* the read more control */}
-			<MoreButton
-				isExpanded={isExpanded}
-				moreLabel="read more "
-				lessLabel="read less "
-				onToggle={() => setIsExpanded(!isExpanded)}
-				className={SCRIPTED_ONLY_CLASS}
-			/>
-		</>
+		<div
+			ref={ref}
+			tabIndex={isExpanded ? tabIndex : undefined}
+			className={cn(
+				INFO_CARD_CLASS,
+				isExpanded
+					? ["max-h-160 overflow-y-auto", HIGHLIGHT_SCROLLBAR_CLASS, SCROLL_REGION_FOCUS_CLASS]
+					: "scripted:max-h-80 scripted:overflow-hidden scripted:[mask-image:linear-gradient(to_bottom,black_60%,transparent)]",
+			)}
+		>
+			{children}
+		</div>
 	)
 }

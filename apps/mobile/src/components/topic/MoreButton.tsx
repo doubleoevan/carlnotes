@@ -3,16 +3,23 @@ import { Button } from "@/components/primitives/button"
 import { Text } from "@/components/primitives/text"
 
 // the web's in-place finding-list toggle
-type MoreButtonProps = { isExpanded: boolean; moreCount: number; moreLabel?: string; onToggle: () => void }
+type MoreButtonProps = {
+	isExpanded: boolean
+	moreCount?: number
+	moreLabel?: string
+	lessLabel?: string
+	onToggle: () => void
+}
 
 /**
  * Expands or collapses a finding list with the web's label, arrow, and inset.
  */
-export function MoreButton({ isExpanded, moreCount, moreLabel, onToggle }: MoreButtonProps) {
+export function MoreButton({ isExpanded, moreCount = 0, moreLabel, lessLabel, onToggle }: MoreButtonProps) {
 	return (
 		<SharedMoreButton
 			isExpanded={isExpanded}
 			moreLabel={moreLabel ?? `+ ${moreCount} more`}
+			lessLabel={lessLabel}
 			onToggle={onToggle}
 			components={MORE_BUTTON_COMPONENTS}
 		/>

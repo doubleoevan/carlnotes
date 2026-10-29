@@ -22,14 +22,16 @@ export function DataTable<Row>({
 	valueByKey,
 	getRowId,
 	initialSort,
+	initialPageSize,
 }: {
 	rows: Row[]
 	columns: TableColumn<Row>[]
 	valueByKey: RowSortOptions<Row>["valueByKey"]
 	getRowId: (row: Row) => string
 	initialSort?: RowSortOptions<Row>["initialSort"]
+	initialPageSize?: number
 }) {
-	const { pageRows, sort, pagination } = usePaginatedRowSort({ rows, valueByKey, initialSort })
+	const { pageRows, sort, pagination } = usePaginatedRowSort({ rows, valueByKey, initialSort, initialPageSize })
 	return (
 		<TableCard>
 			<SharedDataTable

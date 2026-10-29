@@ -78,7 +78,7 @@ the browser bundle and renders pages through the server build, behind its own ro
 - `lib/` — `utils.ts` and small client-side helpers that read the browser. `externalLinks.ts` opens a url in a new
   tab with no handle back to the page. `toastActions.ts` builds the See plans and See account toast actions. `visiblePoll.ts` is the poll that runs only while the page is visible, one request at a
   time, used by the scan poll and the counts poll. `@carlnotes/core/lib/topicViews` sends a topic page's view once per
-  topic per tab, keeping the sent topic ids in memory only. `podcastEpisodePlayback.ts` holds the playback math and the lock screen's
+  topic per tab, keeping the sent topic ids in memory only. `podcastEpisodePlayback.ts` adapts core's playback rules and metadata to the lock screen's
   media session, with `isMediaSessionAvailable`, which the spoken answer queue shares. `voiceRecorder.ts` records the
   microphone, reads its level through an analyser, ends the recording once the user stops or the limit passes, and
   releases the microphone at every end, a rejected request included, with `@carlnotes/core/lib/voiceRecordingDecisions`
@@ -165,13 +165,13 @@ the browser bundle and renders pages through the server build, behind its own ro
   `podcastEpisodeTestFixtures.ts` (the web tests' podcast episode summary, chapter, and full
   podcast episode), `PlaybackControlButtons.tsx` (the skip and playback speed buttons, in the player card and the bottom
   player),
-  `ThemeSongNote.tsx` (the note icon whose popup credits the theme song, beside the podcast's name and episode titles,
-  with the lyrics from `themeSongLyrics.ts`),
+  `PodcastThemeSongNote.tsx` (the note icon whose popup credits the theme song, beside the podcast's name and episode titles,
+  with the lyrics from `podcastThemeSongLyrics.ts`),
   `PodcastEpisodeCover.tsx` (an episode's cover square), and `PodcastEpisodeAudio.tsx`, the one audio element and the
   podcast player that `Layout` mounts.
-  `stores/podcastEpisodePlayerStore.ts` drives that element, so playback continues from one page to the next,
+  `stores/podcastEpisodePlayerStore.ts` binds that element and browser lifecycle/voice hooks to the core player, so playback continues from one page to the next,
   `stores/podcastEpisodePlayActions.ts` plays or pauses a podcast episode or a chapter by id from a page, and
-  `stores/podcastEpisodeListenStore.ts` saves a signed-in user's progress in the podcast episode.
+  `stores/podcastEpisodeListenStore.ts` re-exports the shared listen save interval. Core `useShownPodcastEpisode` owns selection and recording polling; the web supplies its search parameter.
 - `components/note/` — the Tasting Notes section, table, and dialog, the dialog's create flow in `CreateNote.tsx`, and
   the shared core note composition adapted to `react-native-enriched-html`, whose web build is a Tiptap editor. `NoteDialog.tsx` fetches the
   note's html and version on every open, loads the comment thread through `useNoteComments` at the same time, and
@@ -382,3 +382,16 @@ controller. `useChatConversationLoad`, `useEditableTopicDraft`, `useRoomReply`, 
 and `topicToolCalls` retain compatible imports over core. Member loading is core `useRoomMembers`; mention and reply
 rules are core `chatMentions`/`chatRoomReplies`. Keep these wrappers thin. `chatPanelStore` retains panel dimensions,
 open state, and browser effects while core `chatConversationStore` owns account/conversation selection and proposals.
+
+
+Coffee Break player/card/details/pills/controls, chapter list, episode row, season card, chat chapter tag, mini player, transcript, theme-song
+credits, feed dialog, unpublished card, and removal confirmation compose the corresponding core components.
+The web files retain DOM markup, responsive/SSR behavior, popovers, tooltips, the audio element, Media Session,
+clipboard, and spoken-question adapters. `PodcastEpisodeSeekBar.tsx` adapts shared segments to browser pointer and
+keyboard input. `UnpublishedPodcastEpisodeCard.tsx` retains browser shimmer and cover styling over shared content.
+`usePodcastFeed` and `usePodcastEpisodeChapterRating` live in core; reset-private-feed now confirms before sending,
+while failure retains the old link and denial clears it. Stories use shared fictional episode/transcript fixtures.
+Existing playback and spoken-question regression assertions remain the compatibility gate.
+`PodcastEpisodesCard` keeps server-loaded seasons and no-JavaScript rows around the shared card. Its season links use
+`AnchorLink` with replace-history and retained-scroll options. Both episode tables use core's column/total definitions;
+web retains its server-rendered table, while mobile uses its existing fixed-first-column table.

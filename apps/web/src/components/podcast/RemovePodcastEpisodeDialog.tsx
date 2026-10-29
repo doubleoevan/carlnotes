@@ -1,46 +1,18 @@
-import { sendRemovePodcastEpisode } from "@carlnotes/client/podcastEpisodeClient"
-import type { PodcastEpisode } from "@carlnotes/contracts/podcast"
+import { authClient } from "@carlnotes/client/authClient"
+import {
+	type RemovePodcastEpisodeDialogProps,
+	RemovePodcastEpisodeDialog as SharedRemovePodcastEpisodeDialog,
+} from "@carlnotes/core/components/RemovePodcastEpisodeDialog"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { Trash2 } from "lucide-react"
-import { toast } from "sonner"
 import { ConfirmDialog } from "@/components/common/ConfirmDialog"
-import { unloadPodcastEpisode } from "@/stores/podcastEpisodePlayerStore"
 
 /**
- * The dialog that confirms removing a podcast episode, then removes the episode and unloads the episode from the player.
+ * Adapts shared episode removal to the browser's confirmation dialog.
  */
-export function RemovePodcastEpisodeDialog({
-	podcastEpisode,
-	onPodcastEpisodeRemoved,
-	onClose,
-}: {
-	podcastEpisode: Pick<PodcastEpisode, "id" | "title" | "episodeNumber">
-	onPodcastEpisodeRemoved: () => Promise<void> | void
-	onClose: () => void
-}) {
-	// remove the podcast episode and close the dialog. on success, unload the podcast episode from the player and call
-	// onPodcastEpisodeRemoved, or else show an error toast
-	const handleRemovePodcastEpisode = async (): Promise<void> => {
-		const isPodcastEpisodeRemoved = await sendRemovePodcastEpisode(podcastEpisode.id).catch(() => false)
-		onClose()
-		if (!isPodcastEpisodeRemoved) {
-			toast.error("That episode didn't budge. Carl suggests trying again.")
-			return
-		}
-		unloadPodcastEpisode(podcastEpisode.id)
-		await onPodcastEpisodeRemoved()
-	}
-	return (
-		<ConfirmDialog
-			title="Remove this episode?"
-			confirmLabel="Remove episode"
-			cancelLabel="Keep it"
-			onConfirm={handleRemovePodcastEpisode}
-			onClose={onClose}
-		>
-			{`${toPodcastEpisodeName(podcastEpisode)} leaves the topic page, every podcast feed, and its own page for good. Its number is not used again.`}
-		</ConfirmDialog>
-	)
+export function RemovePodcastEpisodeDialog(props: RemovePodcastEpisodeDialogProps) {
+	const { data: session } = authClient().useSession()
+	return <SharedRemovePodcastEpisodeDialog {...props} userId={session?.user.id ?? null} Confirm={ConfirmDialog} />
 }
 
 /**
@@ -68,11 +40,4 @@ export function RemovePodcastEpisodeButton({
 			<Trash2 className="size-4" />
 		</button>
 	)
-}
-
-// the episode's number and title, or its title alone if the episode has no number
-function toPodcastEpisodeName(podcastEpisode: Pick<PodcastEpisode, "title" | "episodeNumber">): string {
-	return podcastEpisode.episodeNumber === null
-		? `"${podcastEpisode.title}"`
-		: `Episode ${podcastEpisode.episodeNumber}, "${podcastEpisode.title}",`
 }

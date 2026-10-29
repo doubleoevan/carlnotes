@@ -14,6 +14,7 @@ import {
 	ownerId,
 	paidOwnerId,
 	paidTopicId,
+	privatePodcastEpisodeId,
 	publicPodcastEpisodeId,
 	publicTopicId,
 	request,
@@ -29,6 +30,12 @@ const audioPath = `/episodes/${publicPodcastEpisodeId}/audio.mp3`
  * Checks who may listen to a podcast episode, and returns the owner's read of the public topic's episode.
  */
 export async function checkPodcastEpisodeAccess(): Promise<{ smallCoverUrl: string }> {
+	// reject route numbers outside the database integer range before querying episodes
+	for (const suffix of ["2147483648/1", "2026/2147483648", "-1/1", "2026/0", "?season=2147483648"]) {
+		const path = `/topics/${publicTopicId}/episodes${suffix.startsWith("?") ? "" : "/"}${suffix}`
+		check(`invalid episode coordinates ${suffix} return 400`, (await request({ path, userId: ownerId })).status === 400)
+	}
+
 	// who may listen to a podcast episode
 	const ownerPodcastEpisode = await (
 		await request({ path: `/episodes/${publicPodcastEpisodeId}`, userId: ownerId })
@@ -139,6 +146,7 @@ export async function checkPodcastEpisodeAudio(): Promise<void> {
 		"a GET redirects to a presigned url, uncached",
 		isGetRedirected && getResponse.headers.get("Cache-Control") === "private, no-store",
 	)
+
 	check(
 		"an invite topic's audio is missing for a visitor",
 		(await request({ path: `/episodes/${invitePodcastEpisodeId}/audio.mp3`, userId: null })).status === 404,
@@ -276,4 +284,29 @@ export async function checkPodcastEpisodeRemoval(): Promise<void> {
 		"the topic's public feed is gone with its only episode",
 		(await request({ path: `/topics/${publicTopicId}/podcast.xml`, userId: null })).status === 404,
 	)
+}
+
+/**
+ * Checks the authorized JSON audio representation after the independent listener-count assertions.
+ */
+export async function checkPodcastEpisodeAudioJson(): Promise<void> {
+	// the JSON representation retains the same access gate for every visibility
+	for (const [id, userId, expectedStatus] of [
+		[publicPodcastEpisodeId, null, 200],
+		[invitePodcastEpisodeId, null, 404],
+		[invitePodcastEpisodeId, ownerId, 200],
+		[privatePodcastEpisodeId, null, 404],
+		[privatePodcastEpisodeId, subscriberId, 404],
+		[privatePodcastEpisodeId, paidOwnerId, 200],
+	] as const) {
+		const response = await request({
+			path: `/episodes/${id}/audio.mp3`,
+			userId,
+			init: { headers: { Accept: "application/json" } },
+		})
+		check(
+			"audio JSON retains visibility and no-store",
+			response.status === expectedStatus && response.headers.get("Cache-Control") === "private, no-store",
+		)
+	}
 }

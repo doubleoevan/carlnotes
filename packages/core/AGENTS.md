@@ -1,7 +1,7 @@
 # packages/core/
 
 `@carlnotes/core`, the DOM-free components, stores, hooks, and lib that web and mobile import as `@carlnotes/core/<folder>/<name>`.
-It imports `@carlnotes/contracts`, `@carlnotes/client`, `react`, and `@tanstack/react-query`, and the non-UI `markdown-to-jsx/markdown` parser.
+It imports `@carlnotes/contracts`, `@carlnotes/client`, `@carlnotes/nightshift`, `react`, and `@tanstack/react-query`, and the non-UI `markdown-to-jsx/markdown` parser.
 
 - `components/` — portable React composition exported as `@carlnotes/core/components/<name>`. `TablePagination`,
   `Pagination`, `SourceResultsChart`, `TopicScanRecap`, `NumberedTopicFindingList`, `SafeNoteLink`, `TopicScanFailure`,
@@ -43,9 +43,15 @@ It imports `@carlnotes/contracts`, `@carlnotes/client`, `react`, and `@tanstack/
   is given), `chromeIntentUrl.ts` (the page as an Android intent url that opens it in Chrome, out of an embedded
   webview), `sessionCopy.ts` (the lines the sign-in, sign-out, sign-up, and close-account controls say, shared by the
   web and the mobile app), and `voiceRecordingDecisions.ts` (what the voice recorder decides from each frame).
-- Imports: `@carlnotes/contracts`, `@carlnotes/client`, `react`, and `@tanstack/react-query`. Never a server package or an app. Universal: the
+- Imports: `@carlnotes/contracts`, `@carlnotes/client`, `@carlnotes/nightshift`, `react`, and `@tanstack/react-query`. Never a server package or an app. Universal: the
   root rule. A module that needs a DOM type is a web module and lives in `apps/web/src`.
 - Tests: `bun test packages/core`.
+
+## Shared podcast playback
+
+`lib/podcastEpisodePlayback.ts` owns chapter lookup, seek bounds, skip lengths, playback speed, and portable system
+metadata. `lib/podcastEpisodeTestFixtures.ts` supplies the episode, summary, and chapter fixtures shared by tests and
+component stories. Web keeps its Media Session objects in its own playback adapter.
 
 ## Shared chat
 
@@ -196,3 +202,37 @@ navigation destinations, grouping, selection, and the Admin permission gate, wit
 `components/AddToAi` and `lib/installDeeplinks` share provider order, labels, instructions, commands, and copy feedback.
 The adapters keep DOM/native icons, storage, clipboard, and desktop install URLs out of core.
 `hooks/useAccount` loads billing and activity together in an account-scoped query and retains loaded data on refresh.
+
+`stores/podcastEpisodePlayerStore`, `podcastEpisodePlayActions`, and `podcastEpisodeListenStore` own the loaded
+Podcast Episode, chapter selection, seek/rate actions, deferred-request retirement, next-episode selection, and
+personal listen save interval. `lib/podcastEpisodeAudio` defines the small audio/status adapter each app supplies.
+`stores/podcastEpisodePlayerState` keeps snapshots and subscriptions separate from playback commands. Progress ticks
+notify position readers; chapter changes also notify controls. The established player-store imports remain compatible.
+`hooks/useShownPodcastEpisode` selects the Topic's shown episode and polls a linked recording without autoplay.
+Its lifecycle tests use the web's DOM hook harness; its selection rules and player state tests run in core.
+
+
+Podcast presentation is shared as actual React composition under `components/`: `PodcastEpisodePlayerCard`,
+`UnpublishedPodcastEpisodeCard`, `PodcastEpisodeDetails`, `PodcastEpisodePlayButton`, `PodcastEpisodePill`,
+`PlaybackControlButtons`, `PodcastEpisodeSeekBar`, `PodcastEpisodeChapters`, `PodcastEpisodeRow`, `PodcastPlayer`,
+`PodcastEpisodeTranscript`, `PodcastThemeSongCredits`, `PodcastFeedDialog`, `RemovePodcastEpisodeDialog`,
+`PodcastEpisodesCard`, and `PodcastEpisodeChapterTag`.
+Apps inject controls, links, images, scroll containers, and confirmation renderers; core owns ordering, labels,
+formatting, visibility, expansion, and action selection. `lib/podcastEpisodeStories.ts` supplies fictional shared
+fixtures and an inert player for both component browsers, without account writes or audio downloads.
+The season card owns five-row pagination, selection, season query preservation, and removal visibility. Web supplies
+its server-rendered overflow rows; mobile supplies scrolling tabs. Chat chapter tags share their labels and playback action.
+`lib/podcastEpisodesTableColumns.ts` and `podcastEpisodeChaptersTableColumns.ts` share table values, formatting,
+and totals. Web retains its DOM/SSR table renderers; mobile composes the existing shared DataTable.
+
+`hooks/usePodcastEpisodeChapterRating` owns chapter-rating selection, duplicate prevention, and rollback.
+`hooks/usePodcastFeed` scopes requests to account/Topic and requires confirmation before resetting a private feed.
+`lib/podcastFeed.ts` owns supported app-link construction and reset copy; clipboard and Linking stay in the apps.
+`lib/podcastThemeSongLyrics.ts` owns full lyrics and parsed blocks; the matching web module re-exports them.
+`useTopicFindingActions` reconciles open episode-page Finding data after a rating or bookmark mutation.
+
+The player accepts one audio adapter and rejects retired load/request events. A replay clears completed state;
+seek and rate changes checkpoint immediately. Listens retain one actual-play start per load and the existing
+30-second progress-save interval, with account-owned cancellation. Audio sources and persistent storage belong to each
+app; core neither resolves signed URLs nor stores protected episode content. Lifecycle adapters pause/unload on
+confirmed access loss and sign-out, and the mobile checkpoint saves only resume fields.

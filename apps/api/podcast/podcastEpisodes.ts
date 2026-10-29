@@ -20,6 +20,7 @@ import { z } from "zod"
 import { isAllowed } from "../authorization"
 import { countPodcastEpisodeListen, countWithinRateLimit, toRequestSender } from "../counts/viewerCounts"
 import { type AppEnv, currentUser, toAnalyticsProperties } from "../currentUser"
+import { PRIVATE_NO_STORE_CACHE_CONTROL } from "../edgeCache"
 import { toPodcastEpisodePreview } from "../share/podcastEpisodeImage"
 import { toCachedPodcastEpisodePreviewPng, toPreviewPngResponse } from "../share/preview"
 import { updateTopicFields } from "../tool/topicTools"
@@ -41,13 +42,14 @@ import {
 import { loadPodcastEpisode } from "./podcastEpisodeShapes"
 
 // which season's podcast episodes to list
-const seasonPodcastEpisodesQuery = z.object({ season: z.coerce.number().int() })
+const podcastEpisodeNumberParam = z.coerce.number().pipe(z.int32().positive())
+const seasonPodcastEpisodesQuery = z.object({ season: podcastEpisodeNumberParam })
 
 // a podcast episode page's topic id, season, and episode number, from its url
 const podcastEpisodePageParam = z.object({
 	id: z.string(),
-	season: z.coerce.number().int(),
-	episodeNumber: z.coerce.number().int(),
+	season: podcastEpisodeNumberParam,
+	episodeNumber: podcastEpisodeNumberParam,
 })
 
 // a chapter's podcast episode id and position, from its url
@@ -140,6 +142,9 @@ export const podcastEpisodesRoute = new Hono<AppEnv>()
 	// the stable audio url. hono runs this route for a HEAD too and drops the body. an mcp card's audio element sends no
 	// session, so its play token names the caller instead, and a token that names none reads as missing
 	.get("/episodes/:id/audio.mp3", async (context) => {
+		// keep denied and successful sources out of shared caches
+		context.header("Cache-Control", PRIVATE_NO_STORE_CACHE_CONTROL)
+		context.header("Vary", "Accept")
 		const podcastEpisodeId = context.req.param("id")
 		const playToken = context.req.query("play")
 		const playTokenCaller = playToken ? readPlayToken({ playToken, podcastEpisodeId }) : null

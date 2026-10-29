@@ -1,6 +1,6 @@
 // theme song lyrics tests: the sections that the theme song's note shows, from made-up lines
 import { expect, test } from "bun:test"
-import { toLyricsSections } from "./themeSongLyrics"
+import { toLyricsSections } from "./podcastThemeSongLyrics"
 
 // a blank line starts a section, and each section's first line is its heading
 test("toLyricsSections splits the lyrics at blank lines and heads each section with its first line", () => {

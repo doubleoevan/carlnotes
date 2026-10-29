@@ -127,3 +127,5 @@ and `@carlnotes/contracts`, with `drizzle-orm` and `@neondatabase/serverless`.
 - Imports: `@carlnotes/server` and `@carlnotes/contracts` only; never `emails`, `models`, `pipeline`, or an app, which
   all come after it.
 - Tests: `bun test packages/db`; `*.smoke.ts` run under `doppler run`.
+
+`store.ts` exports the podcast audio URL lifetime beside its signer so the API reports the same expiry it signs.

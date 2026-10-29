@@ -1,0 +1,247 @@
+--- a/android/src/main/java/expo/modules/audio/AudioModule.kt
++++ b/android/src/main/java/expo/modules/audio/AudioModule.kt
+@@ -712,6 +712,10 @@
+         }
+       }
+ 
++      Function("setChapterTargets") { ref: AudioPlayer, targets: List<ChapterTarget> ->
++        runOnMain { ref.setChapterTargets(targets) }
++      }
++
+       Function("setActiveForLockScreen") { ref: AudioPlayer, active: Boolean, metadata: Metadata?, options: AudioLockScreenOptions? ->
+         runOnMain {
+           ref.setActiveForLockScreen(active, metadata, options)
+--- a/android/src/main/java/expo/modules/audio/AudioPlayer.kt
++++ b/android/src/main/java/expo/modules/audio/AudioPlayer.kt
+@@ -59,6 +59,39 @@
+   statusEventName = PLAYBACK_STATUS_UPDATE
+ ),
+   LockScreenPlayable {
++  private var chapterTargets: List<ChapterTarget> = emptyList()
++  override val supportsNextTrack: Boolean get() = chapterTargets.isNotEmpty()
++  override val supportsPreviousTrack: Boolean get() = chapterTargets.isNotEmpty()
++
++  fun setChapterTargets(targets: List<ChapterTarget>) {
++    chapterTargets = targets.filter { it.startSeconds.isFinite() && it.startSeconds >= 0 }
++      .sortedBy { it.startSeconds }
++    updateChapterMetadata()
++    if (isActiveForLockScreen) {
++      setActiveForLockScreen(true, metadata, lockScreenOptions)
++    }
++  }
++
++  override fun nextTrack() { seekChapter(1) }
++
++  override fun previousTrack() { seekChapter(-1) }
++
++  private fun seekChapter(offset: Int) {
++    val index = chapterTargets.indexOfLast { it.startSeconds <= currentTime }.coerceAtLeast(0)
++    val target = chapterTargets.getOrNull(index + offset) ?: return
++    ref.seekTo((target.startSeconds * 1000).toLong())
++    sendStatusUpdate()
++  }
++
++  private fun updateChapterMetadata() {
++    val index = chapterTargets.indexOfLast { it.startSeconds <= currentTime }.coerceAtLeast(0)
++    val target = chapterTargets.getOrNull(index) ?: return
++    val current = metadata ?: return
++    if (current.title != target.title) {
++      updateLockScreenMetadata(Metadata(target.title, current.artist, current.albumTitle, current.artworkUrl))
++    }
++  }
++
+   var preservesPitch = true
+   var keepAudioSessionActive = false
+ 
+@@ -97,6 +130,7 @@
+   }
+ 
+   fun setMediaSource(source: MediaSource) {
++    chapterTargets = emptyList()
+     previousPlaybackState = Player.STATE_IDLE
+     ref.setMediaSource(source)
+     ref.prepare()
+@@ -104,6 +138,7 @@
+   }
+ 
+   fun clearMediaSource() {
++    chapterTargets = emptyList()
+     previousPlaybackState = Player.STATE_IDLE
+     ref.pause()
+     ref.clearMediaItems()
+@@ -161,6 +196,7 @@
+   }
+ 
+   override fun currentStatus(): Map<String, Any?> {
++    updateChapterMetadata()
+     val isMuted = ref.volume == 0f
+     val isLooping = ref.repeatMode == Player.REPEAT_MODE_ONE
+     val isLoaded = ref.playbackState == Player.STATE_READY
+--- a/android/src/main/java/expo/modules/audio/AudioRecords.kt
++++ b/android/src/main/java/expo/modules/audio/AudioRecords.kt
+@@ -53,6 +53,12 @@
+ }
+ 
+ @OptimizedRecord
++class ChapterTarget(
++  @Field val startSeconds: Double = 0.0,
++  @Field val title: String = ""
++) : Record
++
++@OptimizedRecord
+ class Metadata(
+   @Field val title: String?,
+   @Field val artist: String?,
+--- a/android/src/main/java/expo/modules/audio/service/AudioControlsService.kt
++++ b/android/src/main/java/expo/modules/audio/service/AudioControlsService.kt
+@@ -419,8 +419,19 @@
+         seekTo((currentPosition - backwardMs).coerceAtLeast(0))
+       }
+ 
++      override fun seekToNext() { playable.nextTrack() }
++      override fun seekToNextMediaItem() { playable.nextTrack() }
++      override fun seekToPrevious() { playable.previousTrack() }
++      override fun seekToPreviousMediaItem() { playable.previousTrack() }
++
+       override fun getAvailableCommands(): Player.Commands {
+         val commands = super.getAvailableCommands().buildUpon()
++        if (playable.supportsNextTrack) {
++          commands.add(Player.COMMAND_SEEK_TO_NEXT).add(Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM)
++        }
++        if (playable.supportsPreviousTrack) {
++          commands.add(Player.COMMAND_SEEK_TO_PREVIOUS).add(Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM)
++        }
+         if (isLive) {
+           commands.remove(Player.COMMAND_SEEK_IN_CURRENT_MEDIA_ITEM)
+         }
+--- a/build/AudioModule.types.d.ts
++++ b/build/AudioModule.types.d.ts
+@@ -183,6 +183,9 @@
+      * This will clear the lock screen's now playing info.
+      */
+     clearLockScreenControls(): void;
++
++  /** Sets ordered chapter targets for system next/previous commands within one source. */
++  setChapterTargets(chapters: { startSeconds: number; title: string }[]): void;
+     /**
+      * Remove the player from memory to free up resources.
+      */
+--- a/ios/AudioModule.swift
++++ b/ios/AudioModule.swift
+@@ -275,6 +275,10 @@
+         if player.samplingEnabled != enabled {
+           player.setSamplingEnabled(enabled: enabled)
+         }
++      }
++
++      Function("setChapterTargets") { (player: AudioPlayer, targets: [ChapterTarget]) in
++        player.setChapterTargets(targets)
+       }
+ 
+       Function("setActiveForLockScreen") { (player: AudioPlayer, active: Bool, metadata: Metadata?, options: LockScreenOptions?) in
+--- a/ios/AudioPlayer.swift
++++ b/ios/AudioPlayer.swift
+@@ -11,6 +11,9 @@
+   var shouldCorrectPitch = true
+   var pitchCorrectionQuality: AVAudioTimePitchAlgorithm = .timeDomain
+   var isActiveForLockScreen = false
++  var chapterTargets: [ChapterTarget] = []
++  var supportsNextTrack: Bool { !chapterTargets.isEmpty }
++  var supportsPreviousTrack: Bool { !chapterTargets.isEmpty }
+   var metadata: Metadata?
+   var lockScreenOptions: LockScreenOptions?
+   var currentRate: Float = 1.0 {
+@@ -128,6 +131,35 @@
+     if isActiveForLockScreen {
+       MediaController.shared.updateNowPlayingInfo(for: self)
+     }
++  }
++
++  func setChapterTargets(_ targets: [ChapterTarget]) {
++    chapterTargets = targets.filter { $0.startSeconds.isFinite && $0.startSeconds >= 0 }
++      .sorted { $0.startSeconds < $1.startSeconds }
++    updateChapterMetadata()
++    if isActiveForLockScreen {
++      MediaController.shared.refreshActivePlayable(self, options: lockScreenOptions)
++    }
++  }
++
++  func nextTrack() { seekChapter(offset: 1) }
++
++  func previousTrack() { seekChapter(offset: -1) }
++
++  private func seekChapter(offset: Int) {
++    let currentIndex = chapterTargets.lastIndex { $0.startSeconds <= currentTime } ?? 0
++    let targetIndex = currentIndex + offset
++    guard chapterTargets.indices.contains(targetIndex) else { return }
++    let time = CMTime(seconds: chapterTargets[targetIndex].startSeconds, preferredTimescale: 1000)
++    ref.seek(to: time, toleranceBefore: .zero, toleranceAfter: .zero) { [weak self] _ in
++      self?.updateStatus(with: [:])
++    }
++  }
++
++  private func updateChapterMetadata(at positionSeconds: Double? = nil) {
++    let index = chapterTargets.lastIndex { $0.startSeconds <= (positionSeconds ?? currentTime) } ?? 0
++    guard chapterTargets.indices.contains(index) else { return }
++    metadata?.title = chapterTargets[index].title
+   }
+ 
+   func setSamplingEnabled(enabled: Bool) {
+@@ -183,6 +215,7 @@
+   }
+ 
+   func updateStatus(with dict: [String: Any]) {
++    updateChapterMetadata(at: dict["currentTime"] as? Double)
+     // Reading currentTime waits on the player's lock while a source swap pauses it.
+     var arguments = currentStatus(knownCurrentTime: dict["currentTime"] as? Double)
+     arguments.merge(dict) { _, new in
+@@ -268,6 +301,7 @@
+   }
+ 
+   func replaceWithPreloadedItem(_ item: AVPlayerItem?) {
++    chapterTargets = []
+     let wasPlaying = ref.timeControlStatus == .playing
+     let wasSamplingEnabled = samplingEnabled
+     removeQueuedLoopItems()
+@@ -288,6 +322,7 @@
+   }
+ 
+   func replaceCurrentSource(source: AudioSource?) {
++    chapterTargets = []
+     self.source = source
+     let wasPlaying = ref.timeControlStatus == .playing
+     let wasSamplingEnabled = samplingEnabled
+@@ -532,6 +567,7 @@
+   }
+ 
+   public override func sharedObjectWillRelease() {
++    chapterTargets = []
+     onRelease?()
+     onRelease = nil
+     ref.currentItem?.cancelPendingSeeks()
+--- a/ios/AudioRecords.swift
++++ b/ios/AudioRecords.swift
+@@ -67,6 +67,11 @@
+ enum RecordingDirectory: String, Enumerable {
+   case cache
+   case document
++}
++
++struct ChapterTarget: Record {
++  @Field var startSeconds: Double = 0
++  @Field var title: String = ""
+ }
+ 
+ struct Metadata: Record {
+--- a/src/AudioModule.types.ts
++++ b/src/AudioModule.types.ts
+@@ -239,6 +239,9 @@
+    */
+   clearLockScreenControls(): void;
+ 
++  /** Sets ordered chapter targets for system next/previous commands within one source. */
++  setChapterTargets(chapters: { startSeconds: number; title: string }[]): void;
++
+   /**
+    * Remove the player from memory to free up resources.
+    */

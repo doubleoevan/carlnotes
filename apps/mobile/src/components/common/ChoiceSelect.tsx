@@ -17,6 +17,7 @@ export function ChoiceSelect({
 	options,
 	isDisabled,
 	presentation = "dropdown",
+	numberOfLines,
 	onChange,
 }: {
 	label: string
@@ -24,6 +25,7 @@ export function ChoiceSelect({
 	options: { value: string; label: string; icon?: LucideIcon | ReactElement }[]
 	isDisabled?: boolean
 	presentation?: "dropdown" | "sheet"
+	numberOfLines?: number
 	onChange: (value: string) => void
 }) {
 	// resolve the selected option and keep its menu inside the safe area
@@ -46,7 +48,11 @@ export function ChoiceSelect({
 					disabled={isDisabled}
 					onPress={() => setIsOpen(true)}
 				>
-					<ChoiceLabel label={selectedOption?.label ?? label} icon={selectedOption?.icon} />
+					<ChoiceLabel
+						label={selectedOption?.label ?? label}
+						icon={selectedOption?.icon}
+						numberOfLines={numberOfLines}
+					/>
 					<Icon as={ChevronDown} className="size-4 text-muted-foreground" />
 				</Button>
 				{/* reuse the shared sheet's scrolling, dismissal, safe area, and focus return */}
@@ -89,7 +95,11 @@ export function ChoiceSelect({
 				className="min-w-0 px-2"
 				onLayout={(event) => setTriggerWidth(event.nativeEvent.layout.width)}
 			>
-				{selectedOption?.icon ? <ChoiceLabel {...selectedOption} /> : <SelectValue placeholder={label} />}
+				{selectedOption?.icon ? (
+					<ChoiceLabel {...selectedOption} numberOfLines={numberOfLines} />
+				) : (
+					<SelectValue placeholder={label} />
+				)}
 			</SelectTrigger>
 			<SelectContent
 				insets={insets}
@@ -106,11 +116,21 @@ export function ChoiceSelect({
 }
 
 // keep avatar, icon, and label spacing identical in both choice presentations
-function ChoiceLabel({ label, icon }: { label: string; icon?: LucideIcon | ReactElement }) {
+function ChoiceLabel({
+	label,
+	icon,
+	numberOfLines,
+}: {
+	label: string
+	icon?: LucideIcon | ReactElement
+	numberOfLines?: number
+}) {
 	return (
 		<View className="min-w-0 shrink flex-row items-center gap-2">
 			{icon && (isValidElement(icon) ? icon : <Icon as={icon} className="size-4 text-muted-foreground" />)}
-			<Text className="shrink text-left text-sm">{label}</Text>
+			<Text className="shrink text-left text-sm" numberOfLines={numberOfLines}>
+				{label}
+			</Text>
 		</View>
 	)
 }

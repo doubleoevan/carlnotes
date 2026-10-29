@@ -62,7 +62,7 @@ async function fetchLinkedSeason(topicId: string, season: unknown): Promise<Fetc
 
 	// the season's podcast episodes, or null if their read fails
 	return readWithDegradedFallback(async () => {
-		const seasonPodcastEpisodes = await fetchSeasonPodcastEpisodes(topicId, season)
+		const seasonPodcastEpisodes = await fetchSeasonPodcastEpisodes({ topicId, season })
 		return { season, seasonPodcastEpisodes }
 	}, null)
 }

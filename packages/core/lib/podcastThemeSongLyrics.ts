@@ -1,6 +1,6 @@
 // the theme song's lyrics, which the theme song's note shows under its credits. an empty string shows no lyrics.
 // a blank line starts a section, and a section's first line is its heading, such as Verse 1 or Chorus
-export const THEME_SONG_LYRICS =
+export const PODCAST_THEME_SONG_LYRICS =
 	"Verse 1\n" +
 	"You shine the brightest light around you\n" +
 	"Love that about you, honey\n" +

@@ -1,7 +1,8 @@
 import type { TopicFinding } from "@carlnotes/contracts/findings"
 import type { PodcastEpisode, PodcastEpisodeChapter } from "@carlnotes/contracts/podcast"
 import { toHostWithoutWww } from "@carlnotes/contracts/seo"
-import { toClockLabel, toCountLabel } from "@carlnotes/core/lib/labels"
+import { toClockLabel } from "@carlnotes/core/lib/labels"
+import { toPodcastEpisodeChapterTotals } from "@carlnotes/core/lib/podcastEpisodeChaptersTableColumns"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { Pause, Play } from "lucide-react"
 import { useState } from "react"
@@ -43,8 +44,7 @@ export function PodcastEpisodeChaptersTable({ podcastEpisode, chapterTopicFeed }
 	const playerChapterPosition = usePlayerChapterPosition(podcastEpisode.id)
 
 	// how long the chapters run in total, and how many hosts their sources come from
-	const totalChapterSeconds = chapters.reduce((sum, chapter) => sum + chapter.endSeconds - chapter.startSeconds, 0)
-	const sourceHostCount = new Set(chapters.map((chapter) => toHostWithoutWww(chapter.sourceUrl))).size
+	const { chapterCountLabel, durationLabel, sourceCountLabel } = toPodcastEpisodeChapterTotals(chapters)
 	return (
 		<TableCard>
 			<div className={TABLE_SCROLL_CLASS}>
@@ -80,10 +80,10 @@ export function PodcastEpisodeChaptersTable({ podcastEpisode, chapterTopicFeed }
 					{/* the totals row */}
 					<tfoot>
 						<tr className="text-muted-foreground">
-							<td className="py-2 pr-4">{toCountLabel(chapters.length, "chapter")}</td>
+							<td className="py-2 pr-4">{chapterCountLabel}</td>
 							<td className="py-2 pr-4" />
-							<td className="py-2 pr-4 tabular-nums">{toClockLabel(totalChapterSeconds)}</td>
-							<td className="py-2">{toCountLabel(sourceHostCount, "source")}</td>
+							<td className="py-2 pr-4 tabular-nums">{durationLabel}</td>
+							<td className="py-2">{sourceCountLabel}</td>
 						</tr>
 					</tfoot>
 				</table>

@@ -8,7 +8,16 @@ import {
 import { X } from "lucide-react-native"
 import type { ComponentRef } from "react"
 import { type ReactNode, type RefObject, useEffect, useRef, useState } from "react"
-import { AccessibilityInfo, Animated, BackHandler, findNodeHandle, type ScrollView, Text, View } from "react-native"
+import {
+	AccessibilityInfo,
+	Animated,
+	BackHandler,
+	findNodeHandle,
+	Keyboard,
+	type ScrollView,
+	Text,
+	View,
+} from "react-native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 import { useUniwind } from "uniwind"
 import { Button } from "@/components/primitives/button"
@@ -39,6 +48,8 @@ export function Sheet({ title, children, onClose, triggerRef, hasHighlightedScro
 	const [viewportHeight, setViewportHeight] = useState(0)
 	const [contentHeight, setContentHeight] = useState(0)
 	useEffect(() => {
+		// keep the previous screen's keyboard from covering the sheet's actions
+		Keyboard.dismiss()
 		sheetRef.current?.present()
 		const back = BackHandler.addEventListener("hardwareBackPress", () => {
 			sheetRef.current?.dismiss()

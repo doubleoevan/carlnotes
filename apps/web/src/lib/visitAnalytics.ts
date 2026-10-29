@@ -3,7 +3,10 @@
 import type { AnalyticsEventProperties, VisitAnalyticsEvent } from "@carlnotes/contracts/analyticsEvents"
 import { toClientTelemetry } from "@carlnotes/contracts/clientTelemetry"
 import type { PodcastEpisode } from "@carlnotes/contracts/podcast"
-import { toReportedEvent as toReportedVisitEvent } from "@carlnotes/contracts/visitAnalytics"
+import {
+	toPublicPodcastEpisodeProperties,
+	toReportedEvent as toReportedVisitEvent,
+} from "@carlnotes/contracts/visitAnalytics"
 import posthog, { type CaptureResult } from "posthog-js"
 
 /**
@@ -72,12 +75,7 @@ export function captureEpisodeVisitEvent(
 	event: "visit_episode_played" | "visit_episode_completed",
 	podcastEpisode: PodcastEpisode,
 ): void {
-	captureVisitEvent(
-		event,
-		podcastEpisode.topicVisibility === "public"
-			? { episodeId: podcastEpisode.id, topicId: podcastEpisode.topicId }
-			: {},
-	)
+	captureVisitEvent(event, toPublicPodcastEpisodeProperties(podcastEpisode))
 }
 
 // share the privacy policy with native visit analytics

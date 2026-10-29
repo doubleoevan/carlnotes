@@ -31,6 +31,8 @@ export function AnchorLink({
 	href,
 	isUserContent,
 	isNewTab,
+	replace,
+	resetScroll,
 	children,
 	...props
 }: React.ComponentProps<"a"> & {
@@ -38,6 +40,8 @@ export function AnchorLink({
 	isUserContent?: boolean
 	// opens a server path or an internal route in a new tab. an external link always opens in one
 	isNewTab?: boolean
+	replace?: boolean
+	resetScroll?: boolean
 }) {
 	// a link under a link opener opens its absolute url through it, such as in the host around an mcp card, whose
 	// document's base url is the site that served it. only a web url opens, and any other scheme renders its text
@@ -99,6 +103,8 @@ export function AnchorLink({
 				to={url.pathname}
 				search={defaultParseSearch(url.search)}
 				hash={url.hash.slice(1)}
+				replace={replace}
+				resetScroll={resetScroll}
 				{...newTabProps}
 				{...props}
 				onClick={handleClick}

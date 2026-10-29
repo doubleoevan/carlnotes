@@ -1,5 +1,6 @@
 import { CHAT_NAME } from "@carlnotes/contracts/chat"
 import { type ChatPillElements, ChatPill as SharedChatPill } from "@carlnotes/core/components/ChatPill"
+import { useIsPodcastPlayerShown } from "@carlnotes/core/stores/podcastEpisodePlayerStore"
 import { Coffee, X } from "lucide-react-native"
 import type { ReactNode } from "react"
 import { KeyboardAvoidingView, Platform, StatusBar, View } from "react-native"
@@ -14,11 +15,17 @@ import { Text } from "@/components/primitives/text"
  * Frames a native conversation above the keyboard and device safe areas.
  */
 export function ChatPanelWidget({ children, onClose }: { children: ReactNode; onClose: () => void }) {
+	// let the root reserve keyboard space for the conversation and its loaded podcast together
 	const { theme } = useUniwind()
+	const isPodcastPlayerShown = useIsPodcastPlayerShown()
 	return (
 		<ClassNameSafeAreaView className="w-full flex-1 bg-card">
 			<StatusBar barStyle={theme === "dark" ? "light-content" : "dark-content"} />
-			<KeyboardAvoidingView className="flex-1" behavior={Platform.OS === "ios" ? "padding" : "height"}>
+			<KeyboardAvoidingView
+				className="flex-1"
+				enabled={!isPodcastPlayerShown}
+				behavior={Platform.OS === "ios" ? "padding" : "height"}
+			>
 				{/* conversation heading */}
 				<View className="flex-row items-center justify-between gap-2 px-3 pt-2">
 					<View className="flex-row items-center gap-2">

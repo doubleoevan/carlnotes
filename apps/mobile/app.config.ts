@@ -3,6 +3,7 @@ import { MOBILE_APP_BUNDLE_IDENTIFIER, MOBILE_APP_SCHEME } from "@carlnotes/cont
 import { colors } from "@carlnotes/nightshift/colors"
 import { withSentry } from "@sentry/react-native/expo"
 import type { ExpoConfig } from "expo/config"
+import { withAndroidManifest } from "expo/config-plugins"
 
 // the EAS project the app links to. eas init cannot write into a dynamic config, so the id lives here
 const EAS_PROJECT_ID = "7b874ce7-cb2a-4d50-a8d7-fb89e078b247"
@@ -22,6 +23,7 @@ const expoConfig: ExpoConfig = {
 		supportsTablet: true,
 		// the native Sign in with Apple sheet
 		usesAppleSignIn: true,
+		infoPlist: { LSApplicationQueriesSchemes: ["podcast"] },
 		// App Attest in Apple's production environment on every build. a store or TestFlight build ignores the setting
 		// and uses production anyway, and an ad hoc preview build follows it. a preview build then attests against the
 		// production api
@@ -57,6 +59,15 @@ const expoConfig: ExpoConfig = {
 		"expo-secure-store",
 		"expo-web-browser",
 		[
+			"expo-audio",
+			{
+				enableBackgroundPlayback: true,
+				enableBackgroundRecording: false,
+				microphonePermission: false,
+				recordAudioAndroid: false,
+			},
+		],
+		[
 			"expo-image-picker",
 			{
 				photosPermission: "Choose a photo for your CarlNotes avatar.",
@@ -82,8 +93,31 @@ const expoConfig: ExpoConfig = {
 
 // sentry wraps the config. an EAS release build then uploads its bundles and source maps, reading SENTRY_AUTH_TOKEN
 // from the EAS environment. the organization and project are not secrets and live here instead of Doppler
-export default withSentry(expoConfig, {
+export default withSentry(withPodcastAppQueries(expoConfig), {
 	url: "https://sentry.io/",
 	organization: "carlnotes",
 	project: "carlnotes-mobile",
 })
+
+// query only apps that handle podcast feeds, preserving other plugins' manifest entries
+function withPodcastAppQueries(config: ExpoConfig): ExpoConfig {
+	return withAndroidManifest(config, (result) => {
+		const manifest = result.modResults.manifest
+		const queries = manifest.queries ?? []
+		const hasPodcastQuery = queries.some((query) =>
+			query.intent?.some((intent) => intent.data?.some((data) => data.$["android:scheme"] === "pcast")),
+		)
+		if (!hasPodcastQuery) {
+			queries.push({
+				intent: [
+					{
+						action: [{ $: { "android:name": "android.intent.action.VIEW" } }],
+						data: [{ $: { "android:scheme": "pcast" } }],
+					},
+				],
+			})
+		}
+		manifest.queries = queries
+		return result
+	})
+}

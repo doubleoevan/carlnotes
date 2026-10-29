@@ -89,13 +89,8 @@ export const MENU_BUTTON_CLASS =
 export const PODCAST_EPISODE_QUESTION_BUTTON_CLASS =
 	"bg-muted text-foreground hover:bg-accent grid size-11 shrink-0 place-items-center rounded-full disabled:opacity-40"
 
-/**
- * A skip or playback rate button beside a play button.
- */
-export const PLAYBACK_CONTROL_BUTTON_CLASS = cn(
-	MENU_BUTTON_CLASS,
-	"bg-muted hover:bg-accent min-w-11 justify-center font-bold sm:min-w-9",
-)
+// the shared skip and playback speed button classes
+export { PLAYBACK_CONTROL_BUTTON_CLASS } from "@carlnotes/core/components/PlaybackControlButtons"
 
 /**
  * The thin visible scrollbar, sized on both axes for vertical and horizontal overflow alike.

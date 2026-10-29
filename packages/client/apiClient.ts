@@ -53,16 +53,18 @@ export function toApiUrl(path: string): string {
  */
 export async function fetchApi(path: string, init: RequestInit = {}): Promise<Response> {
 	// the configured headers under the call's own
+	const settings = apiClientSettings
 	const headers = new Headers(init.headers)
-	for (const [name, value] of Object.entries((await apiClientSettings.headers?.()) ?? {})) {
+	for (const [name, value] of Object.entries((await settings.headers?.()) ?? {})) {
 		if (!headers.has(name)) {
 			headers.set(name, value)
 		}
 	}
 
 	// the configured credentials, if the app set them
-	const credentials = apiClientSettings.credentials ?? init.credentials
-	return fetchAndReportUnauthorized(toApiUrl(path), { ...init, headers, credentials })
+	init.signal?.throwIfAborted()
+	const credentials = settings.credentials ?? init.credentials
+	return fetchAndReportUnauthorized(`${settings.apiBaseUrl}${path}`, { ...init, headers, credentials })
 }
 
 /**

@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from "@storybook/react-native"
 import { ScrollView } from "react-native"
 import { STORY_TOPIC_FEED_HANDLERS } from "@/components/topic/topicFeedStories"
 import { STORY_PODCAST_EPISODE, STORY_TOPIC_PAGE, TopicPageStoryProvider } from "@/components/topic/topicPageStories"
-import { PodcastEpisodePlayerCard } from "./PodcastEpisodePlayerCard"
+import { PodcastEpisodePlayer } from "./PodcastEpisodePlayer"
 import { PodcastEpisodesCard } from "./PodcastEpisodesCard"
 
 // the complete fixture exercises the matching web card without account requests
@@ -45,5 +45,5 @@ export const SeasonsAndPages: Story = {
 	},
 }
 export const Chapters: Story = {
-	render: () => <PodcastEpisodePlayerCard topic={STORY_TOPIC_PAGE} topicFeedHandlers={STORY_TOPIC_FEED_HANDLERS} />,
+	render: () => <PodcastEpisodePlayer topic={STORY_TOPIC_PAGE} topicFeedHandlers={STORY_TOPIC_FEED_HANDLERS} />,
 }

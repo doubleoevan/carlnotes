@@ -3,13 +3,15 @@
 import type { PodcastEpisodeListenPayload } from "@carlnotes/contracts/payloads"
 import {
 	type PodcastEpisode,
+	type PodcastEpisodeAudio,
 	podcastEpisode,
+	podcastEpisodeAudio,
 	type SeasonPodcastEpisodes,
 	seasonPodcastEpisodes,
 } from "@carlnotes/contracts/podcast"
 import { type PodcastEpisodePageResponse, podcastEpisodePageResponse } from "@carlnotes/contracts/podcastEpisodePage"
 import { z } from "zod"
-import { apiClient, fetchApi } from "./apiClient"
+import { type ApiResponse, apiClient, fetchApi } from "./apiClient"
 import { readTopicGate, type TopicGate } from "./topicClient"
 
 // what a podcast feed url request returns
@@ -22,26 +24,34 @@ export type PodcastEpisodePageParams = { topicId: string; season: string; episod
  * Loads one podcast episode with its chapters and the user's progress,
  * or null if the episode is missing or the user may not listen to the episode.
  */
-export async function fetchPodcastEpisode(podcastEpisodeId: string): Promise<PodcastEpisode | null> {
-	const response = await apiClient().api.episodes[":id"].$get({ param: { id: podcastEpisodeId } })
+export async function fetchPodcastEpisode(
+	podcastEpisodeId: string,
+	options: PodcastEpisodeRequestOptions = {},
+): Promise<PodcastEpisode | null> {
+	// validate the response under the caller's error policy
+	const response = await fetchApi(`/api/episodes/${encodeURIComponent(podcastEpisodeId)}`, { signal: options.signal })
+	assertPodcastEpisodeResponse(response, options)
 	return response.ok ? podcastEpisode.parse(await response.json()) : null
 }
 
 /**
  * Loads a podcast episode's page, the gate in front of its topic, or nothing if the topic has no such episode.
  */
-export async function fetchPodcastEpisodePage({
-	topicId,
-	season,
-	episodeNumber,
-}: PodcastEpisodePageParams): Promise<PodcastEpisodePageResult> {
-	const response = await apiClient().api.topics[":id"].episodes[":season"][":episodeNumber"].$get({
-		param: { id: topicId, season, episodeNumber },
-	})
+export async function fetchPodcastEpisodePage(
+	{ topicId, season, episodeNumber }: PodcastEpisodePageParams,
+	options: PodcastEpisodeRequestOptions = {},
+): Promise<PodcastEpisodePageResult> {
+	const response = await fetchApi(
+		`/api/topics/${encodeURIComponent(topicId)}/episodes/${encodeURIComponent(season)}/${encodeURIComponent(episodeNumber)}`,
+		{ signal: options.signal },
+	)
 	if (response.ok) {
 		return { status: "visible", podcastEpisodePage: podcastEpisodePageResponse.parse(await response.json()) }
 	}
 
+	if (response.status >= 500) {
+		assertPodcastEpisodeResponse(response, options)
+	}
 	// a gated podcast episode shows the gate in front of its topic, and any other response is a missing episode
 	const topicGate = await readTopicGate(response)
 	return topicGate ? { status: "gated", topicGate } : { status: "missing" }
@@ -59,11 +69,26 @@ export type FetchedSeason = { season: number; seasonPodcastEpisodes: SeasonPodca
 /**
  * Loads a season's podcast episodes, or none if the request fails.
  */
-export async function fetchSeasonPodcastEpisodes(topicId: string, season: number): Promise<SeasonPodcastEpisodes> {
-	// a request that throws an error has no response, and returns no podcast episodes
+export async function fetchSeasonPodcastEpisodes({
+	topicId,
+	season,
+	...options
+}: FetchSeasonPodcastEpisodesOptions): Promise<SeasonPodcastEpisodes> {
+	// preserve the empty fallback unless the caller requests an error
 	const response = await apiClient()
-		.api.topics[":id"].episodes.$get({ param: { id: topicId }, query: { season: String(season) } })
-		.catch(() => null)
+		.api.topics[":id"].episodes.$get(
+			{ param: { id: topicId }, query: { season: String(season) } },
+			{ init: { signal: options.signal } },
+		)
+		.catch((error) => {
+			if (options.shouldThrowOnError) {
+				throw error
+			}
+			return null
+		})
+	if (response) {
+		assertPodcastEpisodeResponse(response, options)
+	}
 	return response?.ok ? seasonPodcastEpisodes.parse(await response.json()) : { podcastEpisodes: [] }
 }
 
@@ -82,15 +107,17 @@ export async function fetchNextUnplayedPodcastEpisode(currentTopicId: string): P
 /**
  * Saves the user's progress in a podcast episode with a request that outlives the page. A failed save is dropped.
  */
-export function sendPodcastEpisodeListen(
-	podcastEpisodeId: string,
-	podcastEpisodeListen: PodcastEpisodeListenPayload,
-): void {
+export function sendPodcastEpisodeListen({
+	podcastEpisodeId,
+	podcastEpisodeListen,
+	signal,
+}: SendPodcastEpisodeListenOptions): void {
 	fetchApi(`/api/episodes/${podcastEpisodeId}/listen`, {
 		method: "POST",
 		headers: { "Content-Type": "application/json" },
 		body: JSON.stringify(podcastEpisodeListen),
 		keepalive: true,
+		signal,
 	}).catch(() => {})
 }
 
@@ -147,8 +174,13 @@ export async function sendRemovePodcastEpisode(podcastEpisodeId: string): Promis
 /**
  * Loads the url of the user's podcast feed for a topic, or null if the url does not load.
  */
-export async function fetchPodcastFeedUrl(topicId: string): Promise<string | null> {
-	const response = await apiClient().api.topics[":id"]["podcast-feed"].$get({ param: { id: topicId } })
+export async function fetchPodcastFeedUrl(
+	topicId: string,
+	options: PodcastEpisodeRequestOptions = {},
+): Promise<string | null> {
+	// load the account-owned feed under the caller's error policy
+	const response = await fetchApi(`/api/topics/${encodeURIComponent(topicId)}/podcast-feed`, { signal: options.signal })
+	assertPodcastEpisodeResponse(response, options)
 	return response.ok ? podcastFeedUrlResponse.parse(await response.json()).podcastFeedUrl : null
 }
 
@@ -156,7 +188,75 @@ export async function fetchPodcastFeedUrl(topicId: string): Promise<string | nul
  * Replaces the user's own podcast feed url and returns the new url, or null if the reset fails.
  * The old url stops working.
  */
-export async function sendResetPodcastFeed(topicId: string): Promise<string | null> {
-	const response = await apiClient().api.topics[":id"]["podcast-feed"].reset.$post({ param: { id: topicId } })
+export async function sendResetPodcastFeed(
+	topicId: string,
+	options: PodcastEpisodeRequestOptions = {},
+): Promise<string | null> {
+	// replace the account-owned token and validate the new feed URL
+	const response = await fetchApi(`/api/topics/${encodeURIComponent(topicId)}/podcast-feed/reset`, {
+		method: "POST",
+		signal: options.signal,
+	})
+	assertPodcastEpisodeResponse(response, options)
 	return response.ok ? podcastFeedUrlResponse.parse(await response.json()).podcastFeedUrl : null
+}
+
+// request cancellation and optional errors for retryable failures and denied access
+export type PodcastEpisodeRequestOptions = { shouldThrowOnError?: boolean; signal?: AbortSignal }
+type FetchSeasonPodcastEpisodesOptions = PodcastEpisodeRequestOptions & { topicId: string; season: number }
+type SendPodcastEpisodeListenOptions = {
+	podcastEpisodeId: string
+	podcastEpisodeListen: PodcastEpisodeListenPayload
+	signal?: AbortSignal
+}
+
+/**
+ * Reports a podcast request failure without retaining private response bodies or URLs.
+ */
+export class PodcastEpisodeRequestError extends Error {
+	readonly status: number
+	readonly isAccessDenied: boolean
+
+	constructor(status: number) {
+		// retain the status without private response details
+		super("The podcast request could not be completed.")
+		this.name = "PodcastEpisodeRequestError"
+		this.status = status
+		this.isAccessDenied = status === 401 || status === 403 || status === 404
+	}
+}
+
+/**
+ * Resolves an authorized audio source without following a redirect with session headers.
+ */
+export async function fetchPodcastEpisodeAudio(
+	podcastEpisodeId: string,
+	signal?: AbortSignal,
+): Promise<PodcastEpisodeAudio> {
+	// resolve audio through the authenticated API without forwarding credentials to storage
+	const response = await fetchApi(`/api/episodes/${encodeURIComponent(podcastEpisodeId)}/audio.mp3`, {
+		headers: { Accept: "application/json" },
+		signal,
+		redirect: "error",
+		cache: "no-store",
+	})
+	assertPodcastEpisodeResponse(response, { shouldThrowOnError: true })
+	const source = podcastEpisodeAudio.safeParse(await response.json())
+	if (!source.success) {
+		throw new Error("The audio source could not be read.")
+	}
+	return source.data
+}
+
+/**
+ * Identifies a confirmed podcast access denial separately from transport failures.
+ */
+export function isPodcastEpisodeAccessDenied(error: unknown): boolean {
+	return error instanceof PodcastEpisodeRequestError && error.isAccessDenied
+}
+
+function assertPodcastEpisodeResponse(response: ApiResponse, options: PodcastEpisodeRequestOptions): void {
+	if (!response.ok && options.shouldThrowOnError) {
+		throw new PodcastEpisodeRequestError(response.status)
+	}
 }

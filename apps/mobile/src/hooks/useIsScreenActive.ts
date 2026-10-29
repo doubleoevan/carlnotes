@@ -3,9 +3,9 @@ import { useCallback, useEffect, useState } from "react"
 import { AppState } from "react-native"
 
 /**
- * Tracks whether the chat screen is focused and the app is active.
+ * Tracks whether the screen is focused and the app is active.
  */
-export function useIsChatActive(): boolean {
+export function useIsScreenActive(): boolean {
 	// track route focus
 	const [isFocused, setIsFocused] = useState(false)
 	useFocusEffect(

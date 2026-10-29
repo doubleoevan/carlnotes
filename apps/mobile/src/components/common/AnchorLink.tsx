@@ -5,7 +5,7 @@ import * as Linking from "expo-linking"
 import { type Href, Link } from "expo-router"
 import * as WebBrowser from "expo-web-browser"
 import { type GestureResponderEvent, Pressable, type PressableProps } from "react-native"
-import { toNativePath } from "@/nativePath"
+import { toPlatformPath } from "@/platformPath"
 import { captureVisitEvent } from "@/visitAnalytics"
 
 // every mobile link supplies a destination and an accessible name
@@ -28,7 +28,7 @@ export function AnchorLink({
 	onPress,
 	...props
 }: AnchorLinkProps) {
-	const href = typeof destination === "string" ? toNativePath(destination) : destination
+	const href = typeof destination === "string" ? toPlatformPath(destination) : destination
 	// let Expo Router own internal navigation and replacement
 	const Component = asChild ? Slot : Pressable
 	const isInternal = typeof href !== "string" || href.startsWith("/")

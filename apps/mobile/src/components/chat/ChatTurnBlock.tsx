@@ -12,6 +12,7 @@ import { ChatAuthor } from "./ChatAuthor"
 import { ChatMarkdown } from "./ChatMarkdown"
 import { ChatAttachmentChips, ChatLinkPreviews, CopyButton, ModelThinkingBubble } from "./ChatMessageParts"
 import { ChatRejectionNotice } from "./ChatRejectionNotice"
+import { PodcastEpisodeChapterTag } from "./PodcastEpisodeChapterTag"
 
 /**
  * Adapts the shared private turn, preserving web authors, bubbles and action order.
@@ -45,10 +46,11 @@ const CHAT_TURN_ELEMENTS: ChatTurnElements = {
 					<Text className="max-w-[85%] rounded-2xl rounded-br-sm bg-primary px-3.5 py-2 text-sm text-primary-foreground">
 						{question}
 					</Text>
-					{podcastEpisodeNote && (
-						<Text className="text-xs text-muted-foreground">
-							{podcastEpisodeNote.podcastEpisodeTitle} · ch {podcastEpisodeNote.chapterPosition + 1}
-						</Text>
+					{chatTurn.podcastEpisodeChapter && podcastEpisodeNote && (
+						<PodcastEpisodeChapterTag
+							podcastEpisodeChapter={chatTurn.podcastEpisodeChapter}
+							podcastEpisodeNote={podcastEpisodeNote}
+						/>
 					)}
 					{/* attachments and previews */}
 					<ChatAttachmentChips attachments={chatTurn.attachments} />

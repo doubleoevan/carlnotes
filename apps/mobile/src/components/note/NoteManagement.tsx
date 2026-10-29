@@ -8,6 +8,7 @@ import { Alert, TextInput, View } from "react-native"
 import { Button } from "@/components/primitives/button"
 import { Icon } from "@/components/primitives/icon"
 import { Text } from "@/components/primitives/text"
+import { useIsKeyboardVisible } from "@/hooks/useIsKeyboardVisible"
 import { toTypeRoleStyle } from "@/typeRoleStyles"
 import { NoteVisibilitySelect } from "./NoteVisibilitySelect"
 
@@ -36,6 +37,11 @@ export function NoteManagement({
 	})
 	const [isNameFocused, setIsNameFocused] = useState(false)
 	const nameInputRef = useRef<ComponentRef<typeof TextInput>>(null)
+	const isKeyboardVisible = useIsKeyboardVisible()
+	// keep the focused editor visible and retain metadata when its own name field is being edited
+	if (isKeyboardVisible && !isNameFocused) {
+		return null
+	}
 
 	return (
 		<View className="gap-2 pb-3">

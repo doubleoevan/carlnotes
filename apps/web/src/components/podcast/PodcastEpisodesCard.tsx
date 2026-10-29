@@ -1,13 +1,17 @@
 import { fetchSeasonPodcastEpisodes } from "@carlnotes/client/podcastEpisodeClient"
-import type { PodcastEpisode, SeasonPodcastEpisodes } from "@carlnotes/contracts/podcast"
-import { isPublishedPodcastEpisode } from "@carlnotes/contracts/podcast"
-import { PODCAST_NAME } from "@carlnotes/contracts/podcastEpisodes"
-import { toPodcastEpisodePath, toTopicPath } from "@carlnotes/contracts/seo"
+import type { SeasonPodcastEpisodes } from "@carlnotes/contracts/podcast"
 import type { TopicResponse } from "@carlnotes/contracts/topics"
+import {
+	type PodcastEpisodesCardElements,
+	PodcastEpisodesCard as SharedPodcastEpisodesCard,
+	toShownPodcastEpisodeId,
+	toShownPodcastSeason,
+} from "@carlnotes/core/components/PodcastEpisodesCard"
 import { cn } from "@carlnotes/nightshift/classNames"
-import { defaultParseSearch, Link, useMatch } from "@tanstack/react-router"
+import { useMatch } from "@tanstack/react-router"
 import { useCallback, useEffect, useState } from "react"
 import { CoffeeLoading } from "@/components/branding/CoffeeLoading"
+import { AnchorLink } from "@/components/common/AnchorLink"
 import { Pagination } from "@/components/common/Pagination"
 import { CollapsibleSection } from "@/components/topic/CollapsibleSection"
 import { useSearchParams } from "@/hooks/useSearchParams"
@@ -17,140 +21,78 @@ import { usePodcastEpisodePlayer } from "@/stores/podcastEpisodePlayerStore"
 import { PodcastEpisodeRow } from "./PodcastEpisodeRow"
 import { RemovePodcastEpisodeDialog } from "./RemovePodcastEpisodeDialog"
 
-// a season with no podcast episodes, which shows while an older season loads
+// retain browser loading, SSR links, and no-JavaScript rows around the shared list composition
 const EMPTY_SEASON_PODCAST_EPISODES: SeasonPodcastEpisodes = { podcastEpisodes: [] }
-
-// how many of a season's podcast episodes the card shows on one page
-const SEASON_PODCAST_EPISODES_PER_PAGE = 5
-
-// the loading animation, as tall as a full page of rows. the card keeps its height while a season loads
-const SEASON_LOADING_CLASS = "min-h-80 text-base sm:min-h-70"
-
-// the topic, and the call that runs after a podcast episode is removed
-type PodcastEpisodesCardProps = { topic: TopicResponse; onPodcastEpisodeRemoved: () => Promise<void> }
+const elements: PodcastEpisodesCardElements = {
+	Section: ({ title, children }) => (
+		<CollapsibleSection value="episodes" title={title}>
+			{children}
+		</CollapsibleSection>
+	),
+	Card: ({ children }) => <div className={cn(RESOURCE_LIST_CARD_CLASS, "p-1")}>{children}</div>,
+	Tabs: ({ children }) => (
+		<nav aria-label="Seasons" className="flex gap-1 px-2">
+			{children}
+		</nav>
+	),
+	Tab: ({ season, topicPath, search, className, isSelected }) => (
+		<AnchorLink
+			href={`${topicPath}${search}`}
+			replace
+			resetScroll={false}
+			aria-current={isSelected ? "page" : undefined}
+			className={className}
+		>
+			{season}
+		</AnchorLink>
+	),
+	Loading: () => <CoffeeLoading className="min-h-80 text-base sm:min-h-70" />,
+	List: ({ children, label, isLoading }) => (
+		<ol aria-label={label} className={cn(isLoading && "hidden")}>
+			{children}
+		</ol>
+	),
+	Row: PodcastEpisodeRow,
+	Pagination: ({ label, ...props }) => <Pagination ariaLabel={label} {...props} />,
+	Remove: RemovePodcastEpisodeDialog,
+}
 
 /**
- * The topic page's card of a topic's podcast episodes, one season and one page of episodes at a time.
+ * Adapts shared season cards to browser routing and server-provided season data.
  */
-export function PodcastEpisodesCard({ topic, onPodcastEpisodeRemoved }: PodcastEpisodesCardProps) {
-	// the topic's seasons, newest first, the id of its latest podcast episode, and the episode that the player has loaded
-	const seasons = topic.podcast?.seasons ?? []
-	const latestPodcastEpisodeId = topic.latestPodcastEpisode?.id
-	const { podcastEpisode: loadedPodcastEpisode } = usePodcastEpisodePlayer()
-
-	// the id of the podcast episode that the player card shows. the loaded episode of this topic comes first,
-	// then the linked episode, then the topic's latest
+export function PodcastEpisodesCard({
+	topic,
+	onPodcastEpisodeRemoved,
+}: {
+	topic: TopicResponse
+	onPodcastEpisodeRemoved: () => Promise<void>
+}) {
+	// retain loaded, linked, and latest selection and the browser's existing season loader
+	const { podcastEpisode } = usePodcastEpisodePlayer()
 	const searchParams = useSearchParams()
-	const linkedPodcastEpisodeId = searchParams.get("episode")
-	const topicLoadedPodcastEpisodeId = loadedPodcastEpisode?.topicId === topic.id ? loadedPodcastEpisode.id : undefined
-	const playerCardPodcastEpisodeId = topicLoadedPodcastEpisodeId ?? linkedPodcastEpisodeId ?? latestPodcastEpisodeId
-
-	// the season shown is the season that the url names if the topic has that season, and the latest season otherwise
-	const linkedSeason = Number(searchParams.get("season"))
-	const shownSeason = seasons.includes(linkedSeason) ? linkedSeason : seasons[0]
-
-	// the page that was opened, with its season. another season opens on its first page.
-	// the podcast episode that the confirm dialog is about to remove
-	const [openedPage, setOpenedPage] = useState({ season: shownSeason, pageNumber: 1 })
-	const openedPageNumber = openedPage.season === shownSeason ? openedPage.pageNumber : 1
-	const [podcastEpisodeToRemove, setPodcastEpisodeToRemove] = useState<PodcastEpisode | null>(null)
-
-	// the topic page's query with a season's tab selected. the latest season needs no season in the url
-	const toSeasonSearch = (season: number): string => {
-		const seasonSearchParams = new URLSearchParams(searchParams)
-		seasonSearchParams.delete("season")
-		if (season !== seasons[0]) {
-			seasonSearchParams.set("season", String(season))
-		}
-		return `?${seasonSearchParams}`
-	}
-
-	// the shown season's podcast episodes, whether the season is loading, and the call that loads an older season again
+	const shownSeason = toShownPodcastSeason(topic.podcast?.seasons ?? [], searchParams.get("season"))
 	const { seasonPodcastEpisodes, isSeasonLoading, loadSeasonPodcastEpisodes } = useSeasonPodcastEpisodes({
 		topic,
 		shownSeason,
 	})
-
-	// how many pages the season has, and the page shown, kept within those pages. the card renders the page shown,
-	// and the season's first NO_SCRIPT_ROW_LIMIT episodes for a reader without JavaScript
-	const pageCount = Math.ceil(seasonPodcastEpisodes.podcastEpisodes.length / SEASON_PODCAST_EPISODES_PER_PAGE)
-	const pageNumber = Math.min(openedPageNumber, Math.max(1, pageCount))
-	const renderedPodcastEpisodes = toRenderedRows(seasonPodcastEpisodes.podcastEpisodes, {
-		pageNumber,
-		pageSize: SEASON_PODCAST_EPISODES_PER_PAGE,
-	})
-
-	if (seasons.length === 0) {
-		return null
-	}
 	return (
-		<CollapsibleSection value="episodes" title={`${PODCAST_NAME} episodes`}>
-			<div className={cn(RESOURCE_LIST_CARD_CLASS, "p-1")}>
-				{/* one tab per season, the newest first. a tab is a link, so a season opens without JavaScript too */}
-				<nav aria-label="Seasons" className="flex gap-1 px-2">
-					{seasons.map((season) => (
-						<Link
-							key={season}
-							to={toTopicPath(topic)}
-							search={defaultParseSearch(toSeasonSearch(season))}
-							replace
-							resetScroll={false}
-							// mark a tab current only on an exact url match. a partial match also marks the latest season's tab
-							activeOptions={{ exact: true }}
-							className={cn(
-								"flex min-h-11 items-center border-b-[3px] px-3.5 text-sm sm:min-h-9",
-								season === shownSeason
-									? "border-primary font-bold"
-									: "text-muted-foreground border-transparent font-semibold",
-							)}
-						>
-							{season}
-						</Link>
-					))}
-				</nav>
-				{/* the loading animation while the season loads */}
-				{isSeasonLoading && <CoffeeLoading className={SEASON_LOADING_CLASS} />}
-				{/* the season's podcast episodes. with JavaScript, only the rows of the page shown stay visible */}
-				<ol aria-label={`Season ${shownSeason} episodes`} className={cn(isSeasonLoading && "hidden")}>
-					{renderedPodcastEpisodes.map(({ row: podcastEpisode, className }) => (
-						<PodcastEpisodeRow
-							key={podcastEpisode.id}
-							podcastEpisode={podcastEpisode}
-							className={className}
-							isLatestPodcastEpisode={podcastEpisode.id === latestPodcastEpisodeId}
-							isPlayButtonMuted={podcastEpisode.id !== playerCardPodcastEpisodeId}
-							podcastEpisodePath={
-								isPublishedPodcastEpisode(podcastEpisode) ? toPodcastEpisodePath(topic, podcastEpisode) : null
-							}
-							onRemovePodcastEpisode={
-								topic.podcast?.canRemovePodcastEpisodes ? () => setPodcastEpisodeToRemove(podcastEpisode) : undefined
-							}
-						/>
-					))}
-				</ol>
-			</div>
-			{/* the page numbers under the card */}
-			{pageCount > 1 && (
-				<Pagination
-					ariaLabel={`Season ${shownSeason} episode pages`}
-					pageNumber={pageNumber}
-					pageCount={pageCount}
-					onOpenPage={(nextPageNumber) => setOpenedPage({ season: shownSeason, pageNumber: nextPageNumber })}
-				/>
-			)}
-			{/* the dialog that confirms removing a podcast episode */}
-			{podcastEpisodeToRemove && (
-				<RemovePodcastEpisodeDialog
-					podcastEpisode={podcastEpisodeToRemove}
-					onPodcastEpisodeRemoved={async () => {
-						// call onPodcastEpisodeRemoved, then reload the season
-						await onPodcastEpisodeRemoved()
-						await loadSeasonPodcastEpisodes()
-					}}
-					onClose={() => setPodcastEpisodeToRemove(null)}
-				/>
-			)}
-		</CollapsibleSection>
+		<SharedPodcastEpisodesCard
+			topic={topic}
+			shownSeason={shownSeason}
+			episodes={seasonPodcastEpisodes.podcastEpisodes}
+			isLoading={isSeasonLoading}
+			search={searchParams.toString()}
+			selectedEpisodeId={toShownPodcastEpisodeId({
+				topic,
+				loadedPodcastEpisode: podcastEpisode,
+				linkedPodcastEpisodeId: searchParams.get("episode"),
+			})}
+			onOpenSeason={() => {}}
+			onReload={loadSeasonPodcastEpisodes}
+			onRemoved={onPodcastEpisodeRemoved}
+			renderRows={toRenderedRows}
+			elements={elements}
+		/>
 	)
 }
 
@@ -183,7 +125,7 @@ function useSeasonPodcastEpisodes({ topic, shownSeason }: UseSeasonPodcastEpisod
 		if (shownSeason === undefined || isLatestSeason) {
 			return
 		}
-		const seasonPodcastEpisodes = await fetchSeasonPodcastEpisodes(topic.id, shownSeason)
+		const seasonPodcastEpisodes = await fetchSeasonPodcastEpisodes({ topicId: topic.id, season: shownSeason })
 		setFetchedSeasons((previousFetchedSeasons) =>
 			new Map(previousFetchedSeasons).set(shownSeason, seasonPodcastEpisodes),
 		)

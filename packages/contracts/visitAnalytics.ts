@@ -53,3 +53,14 @@ export function toPublicTopicProperties(topic: {
 }): AnalyticsEventProperties {
 	return topic.visibility === "public" ? { topicId: topic.id } : {}
 }
+
+/**
+ * Includes episode and Topic attribution only for public podcast episodes.
+ */
+export function toPublicPodcastEpisodeProperties(episode: {
+	id: string
+	topicId: string
+	topicVisibility: (typeof visibilities)[number]
+}): AnalyticsEventProperties {
+	return episode.topicVisibility === "public" ? { episodeId: episode.id, topicId: episode.topicId } : {}
+}

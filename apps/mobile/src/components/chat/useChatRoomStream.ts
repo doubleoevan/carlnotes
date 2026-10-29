@@ -3,14 +3,14 @@ import { useChatRoomStream as useSharedChatRoomStream } from "@carlnotes/core/ho
 import type { ChatRoomHandlers, ConnectChatRoomEvents } from "@carlnotes/core/lib/chatRoomStream"
 import { toCurrentChatGuard } from "@carlnotes/core/stores/chatConversationStore"
 import { openChatRoomEvents } from "@/chatRoomEvents"
+import { useIsScreenActive } from "@/hooks/useIsScreenActive"
 import { mobileApiRequestSettings } from "@/mobileApiRequestSettings"
-import { useIsChatActive } from "./useIsChatActive"
 
 /**
  * Keeps one authenticated native room stream while this screen is active.
  */
 export function useChatRoomStream(topicId: string | null, teamId: string, handlers: ChatRoomHandlers): void {
-	const isActive = useIsChatActive()
+	const isActive = useIsScreenActive()
 	useSharedChatRoomStream({ topicId, teamId, handlers, connectEvents, isActive })
 }
 

@@ -57,9 +57,12 @@ const QUERY_STRING_FIELDS = new Set(["url.query", "http.query", "query_string"])
 // a value that reads as a url or a path, whose query string starts at its "?" and its fragment at its "#"
 const URL_OR_PATH_PATTERN = /^(https?:\/\/|\/)/
 
-// an invite link's token in a path, on the invite page and its accept route,
-// and on the api routes that read the link for its page head and its preview image
-const INVITE_TOKEN_PATTERNS = [/(\/invite\/)[^/?#]+/g, /(\/invites\/)[^/?#]+(?=\/(?:head|preview\.png)(?:$|[/?#]))/g]
+// private invitation and podcast-feed tokens in paths
+const PRIVATE_TOKEN_PATH_PATTERNS = [
+	/(\/invite\/)[^/?#]+/g,
+	/(\/invites\/)[^/?#]+(?=\/(?:head|preview\.png)(?:$|[/?#]))/g,
+	/(\/podcast-feeds\/)[^/?#]+/g,
+]
 
 /**
  * Returns a record without its query string fields, and every url or path in it without its query, fragment, or token.
@@ -77,10 +80,10 @@ export function withoutUrlSecrets(record: Record<string, unknown> | undefined): 
 	return Object.fromEntries(keptEntries)
 }
 
-// a url or a path cut at its query string or its fragment, with an invite link's token replaced by :token
+// remove query fields and fragments, and replace private path tokens
 function toRedactedUrl(url: string): string {
 	const urlWithoutQueryOrFragment = url.split(/[?#]/)[0] ?? url
-	return INVITE_TOKEN_PATTERNS.reduce(
+	return PRIVATE_TOKEN_PATH_PATTERNS.reduce(
 		(redactedUrl, pattern) => redactedUrl.replace(pattern, "$1:token"),
 		urlWithoutQueryOrFragment,
 	)
@@ -115,6 +118,9 @@ function withoutContent(attached: Record<string, unknown> | undefined): Record<s
 // truncate long strings while walking nested plain objects
 function truncateLongStrings(value: unknown, seen = new WeakSet<object>()): unknown {
 	// retain a bounded prefix and mark the omitted remainder
+	if (typeof value === "string" && URL_OR_PATH_PATTERN.test(value)) {
+		return toRedactedUrl(value)
+	}
 	if (typeof value === "string" && value.length > MAX_REPORT_STRING_CHARS) {
 		return `${value.slice(0, MAX_REPORT_STRING_CHARS)}…[truncated]`
 	}

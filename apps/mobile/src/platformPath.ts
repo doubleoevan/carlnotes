@@ -1,17 +1,22 @@
 import { SITE_URL } from "@carlnotes/core/lib/pageHead"
 
 /**
- * Keeps implemented CarlNotes pages native, including bylines and canonical Topic slugs.
+ * Maps implemented CarlNotes pages to platform routes, including bylines and canonical Topic slugs.
  */
-export function toNativePath(href: string): string {
+export function toPlatformPath(href: string): string {
 	const isRelative = href.startsWith("/") && !href.startsWith("//")
 	if (!isRelative && !href.startsWith(`${SITE_URL}/`)) {
 		return href
 	}
 	const url = new URL(href, SITE_URL)
-	// direct note links keep the owning page context in the native editor
+	// direct note links keep the owning page context in the app editor
 	if (/^\/(topics|teams)\/[^/]+\/(?:notes\/[^/]+|chat)\/?$/.test(url.pathname)) {
 		return `${url.pathname}${url.search}${url.hash}`
+	}
+	// match canonical and app episode paths before the generic Topic route
+	const episode = url.pathname.match(/^\/topics\/([^/]+)(?:\/[^/]+)?\/episodes\/(\d+)\/(\d+)\/?$/)
+	if (episode) {
+		return `/topics/${episode[1]}/episodes/${episode[2]}/${episode[3]}${url.search}${url.hash}`
 	}
 	const topic = url.pathname.match(/^\/topics\/([^/]+)(?:\/(?!notes(?:\/|$))[^/]+)?\/?$/)
 	if (topic) {

@@ -1,26 +1,28 @@
-import { sendPodcastEpisodeChapterRating } from "@carlnotes/client/podcastEpisodeClient"
+import {
+	type ChapterTopicFeed,
+	PodcastEpisodeChapters as SharedPodcastEpisodeChapters,
+	toPodcastEpisodeChapterSourceLabel,
+} from "@carlnotes/core/components/PodcastEpisodeChapters"
+import { usePodcastEpisodeChapterRating } from "@carlnotes/core/hooks/usePodcastEpisodeChapterRating"
+
+export { SHOWN_CHAPTER_COUNT } from "@carlnotes/core/components/PodcastEpisodeChapters"
+
 import type { TopicFinding } from "@carlnotes/contracts/findings"
 import type { PodcastEpisode, PodcastEpisodeChapter } from "@carlnotes/contracts/podcast"
-import { toHostWithoutWww } from "@carlnotes/contracts/seo"
-import { toClockLabel } from "@carlnotes/core/lib/labels"
 import { cn } from "@carlnotes/nightshift/classNames"
 import type * as React from "react"
 import { useState } from "react"
 import { RatingThumbs } from "@/components/common/RatingThumbs"
 import { Popover, PopoverAnchor, PopoverTrigger } from "@/components/primitives/popover"
-import { TopicResourceInfo, type TopicResourceInfoTopic } from "@/components/topic/TopicResourceInfo"
+import { TopicResourceInfo } from "@/components/topic/TopicResourceInfo"
 import {
 	DASHED_ROW_CLASS,
 	LIST_ROW_HIGHLIGHTED_CLASS,
 	LIST_ROW_HOVER_CLASS,
 	SCRIPTED_HIDDEN_CLASS,
 } from "@/lib/styleClasses"
-import type { TopicFeedHandlers } from "@/providers/TopicFeedProvider"
 import { playPodcastEpisode } from "@/stores/podcastEpisodePlayerStore"
 import { PodcastEpisodeChapterPill } from "./PodcastEpisodePill"
-
-// how many podcast episode chapters to show before the list is expanded
-export const SHOWN_CHAPTER_COUNT = 3
 
 // where a chapter's number sits in its row
 const CHAPTER_NUMBER_SLOT_CLASS =
@@ -29,15 +31,7 @@ const CHAPTER_NUMBER_SLOT_CLASS =
 // where a chapter's thumbs sit in its row, over the row's click area. a phone shows no chapter thumbs
 const THUMBS_SLOT_CLASS = "relative z-10 hidden shrink-0 items-center gap-2 pr-3 sm:flex"
 
-// what a chapter's topic finding note reads. the topic's findings that the user sees, the topic that a note names,
-// whether the user may rate and bookmark the findings, and the calls behind the note's buttons
-export type ChapterTopicFeed = {
-	topicFindings: TopicFinding[]
-	topic: TopicResourceInfoTopic
-	isRatable: boolean
-	isBookmarkable: boolean
-	topicFeedHandlers: TopicFeedHandlers
-}
+export type { ChapterTopicFeed } from "@carlnotes/core/components/PodcastEpisodeChapters"
 
 // the podcast episode, the player's chapter index or null if the episode is not loaded, whether the list is expanded,
 // and what the chapters' topic finding notes read
@@ -60,18 +54,22 @@ export function PodcastEpisodeChapters({
 	chapterTopicFeed,
 }: PodcastEpisodeChaptersProps) {
 	return (
-		// the rows run close to the card's side edges, and to the card's bottom edge on a wide screen
+		<SharedPodcastEpisodeChapters
+			podcastEpisode={podcastEpisode}
+			playerChapterIndex={playerChapterIndex}
+			isExpanded={isExpanded}
+			chapterTopicFeed={chapterTopicFeed}
+			List={ChapterList}
+			Row={PodcastEpisodeChapterRow}
+		/>
+	)
+}
+
+// retain every chapter in server-rendered HTML and collapse rows only after hydration
+function ChapterList({ children }: { children: React.ReactNode }) {
+	return (
 		<ol aria-label="Chapters" className="-mx-4 sm:-mb-4">
-			{podcastEpisode.chapters.map((chapter, chapterIndex) => (
-				<PodcastEpisodeChapterRow
-					key={`${podcastEpisode.id}-${chapter.position}`}
-					podcastEpisode={podcastEpisode}
-					chapter={chapter}
-					isPlayerChapter={chapterIndex === playerChapterIndex}
-					isHiddenUntilExpanded={chapterIndex >= SHOWN_CHAPTER_COUNT && !isExpanded}
-					chapterTopicFeed={chapterTopicFeed}
-				/>
-			))}
+			{children}
 		</ol>
 	)
 }
@@ -100,8 +98,7 @@ function PodcastEpisodeChapterRow({
 	const { topicFindings, isRatable, topicFeedHandlers } = chapterTopicFeed
 	const chapterTopicFinding = topicFindings.find((topicFinding) => topicFinding.findingId === chapter.findingId)
 	const [isNoteOpen, setIsNoteOpen] = useState(false)
-	const chapterTimesLabel = `${toClockLabel(chapter.startSeconds)} to ${toClockLabel(chapter.endSeconds)}`
-	const chapterSourceLabel = `${toHostWithoutWww(chapter.sourceUrl)} · ${chapterTimesLabel}`
+	const chapterSourceLabel = toPodcastEpisodeChapterSourceLabel(chapter)
 
 	// open the note from a click anywhere on the row except its buttons
 	const handleRowClick = (event: React.MouseEvent<HTMLLIElement>): void => {
@@ -246,25 +243,12 @@ type PodcastEpisodeChapterThumbsProps = { podcastEpisodeId: string; chapter: Pod
 // the thumbs that rate a chapter whose finding was filtered out.
 // the new rating shows at once and goes back if it fails to save
 function PodcastEpisodeChapterThumbs({ podcastEpisodeId, chapter }: PodcastEpisodeChapterThumbsProps) {
-	const [rating, setRating] = useState(chapter.rating)
-
-	// show the new rating, then save it, and show the previous rating again if the save fails
-	const handleRateChapter = async (nextRating: "up" | "down" | null): Promise<void> => {
-		const previousRating = rating
-		setRating(nextRating)
-		const isRatingSaved = await sendPodcastEpisodeChapterRating({
-			podcastEpisodeId,
-			position: chapter.position,
-			rating: nextRating,
-		})
-		if (!isRatingSaved) {
-			setRating(previousRating)
-		}
-	}
+	const { rating, isSaving, rate } = usePodcastEpisodeChapterRating(podcastEpisodeId, chapter)
 	return (
 		<RatingThumbs
 			rating={rating}
-			onRate={(nextRating) => void handleRateChapter(nextRating)}
+			isDisabled={isSaving}
+			onRate={(nextRating) => void rate(nextRating)}
 			ariaLabelSuffix={`, chapter ${chapter.position + 1}`}
 		/>
 	)

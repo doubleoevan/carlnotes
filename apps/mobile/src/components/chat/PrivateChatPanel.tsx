@@ -11,13 +11,13 @@ import { Alert, type FlatList, View } from "react-native"
 import { CoffeeLoading } from "@/components/branding/CoffeeLoading"
 import { Button } from "@/components/primitives/button"
 import { Text } from "@/components/primitives/text"
+import { useIsScreenActive } from "@/hooks/useIsScreenActive"
 import { ChatComposer } from "./ChatComposer"
 import { ChatMessageList } from "./ChatMessageList"
 import { ChatOptionsMenu } from "./ChatOptionsMenu"
 import { ChatRejectionNotice } from "./ChatRejectionNotice"
 import { ChatTurnBlock } from "./ChatTurnBlock"
 import { TopicDraftCard } from "./TopicDraftCard"
-import { useIsChatActive } from "./useIsChatActive"
 
 /**
  * Uses the web conversation state, with native cancellation and authoritative history on return.
@@ -41,7 +41,7 @@ export function PrivateChatPanel({
 	})
 	const topicChatRef = useRef(topicChat)
 	topicChatRef.current = topicChat
-	const isActive = useIsChatActive()
+	const isActive = useIsScreenActive()
 	const hasBeenActiveRef = useRef(false)
 	const listRef = useRef<FlatList<ChatTurn>>(null)
 	const now = useNow()

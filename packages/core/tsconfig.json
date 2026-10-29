@@ -9,6 +9,9 @@
 		},
 		{
 			"path": "../../packages/contracts"
+		},
+		{
+			"path": "../../packages/nightshift"
 		}
 	],
 	"include": ["**/*.ts", "**/*.tsx"]

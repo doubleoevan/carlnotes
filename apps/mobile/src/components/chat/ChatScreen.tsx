@@ -28,6 +28,7 @@ import { HostAvatar } from "@/components/branding/HostAvatar"
 import { ChoiceSelect } from "@/components/common/ChoiceSelect"
 import { Button } from "@/components/primitives/button"
 import { Text } from "@/components/primitives/text"
+import { useIsKeyboardVisible } from "@/hooks/useIsKeyboardVisible"
 import { useTopicFeed } from "@/providers/TopicFeedProvider"
 import { ChatPanelWidget } from "./ChatPanelWidget"
 import { ChatRoomPanel } from "./ChatRoomPanel"
@@ -79,6 +80,8 @@ export function ChatScreen({ topicId, teamId, profileUserId }: ChatScreenProps) 
 
 // keep loading and access gates outside the mounted conversation state
 function ChatScreenContent({ state: chatPageState }: { state: ChatPageState }) {
+	// leave typing room at larger text sizes while retaining the conversation in its selector
+	const isKeyboardVisible = useIsKeyboardVisible()
 	const {
 		query: chatPageQuery,
 		session,
@@ -108,12 +111,15 @@ function ChatScreenContent({ state: chatPageState }: { state: ChatPageState }) {
 		<>
 			{/* conversation selector */}
 			<View className="gap-2 px-3 pb-2">
-				<Text className="text-sm text-muted-foreground" numberOfLines={2}>
-					{chatName}
-				</Text>
+				{!isKeyboardVisible && (
+					<Text className="text-sm text-muted-foreground" numberOfLines={2}>
+						{chatName}
+					</Text>
+				)}
 				<ChoiceSelect
 					label="Choose conversation"
 					presentation="sheet"
+					numberOfLines={isKeyboardVisible ? 1 : undefined}
 					value={toChatKey(selectedChatId ?? null)}
 					options={chatChoices.map((choice) => ({
 						value: toChatKey(choice.id),

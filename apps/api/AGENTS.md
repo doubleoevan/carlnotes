@@ -376,3 +376,8 @@ at the root import it by name.
   feed smoke tests, and the new-topic chat eval pass where a request's own would go.
 
 Native request telemetry uses `contracts/clientTelemetry` in `currentUser.ts`, auth event hooks, and `requestTracing.ts`. Native requests carry descriptive platform/device/app headers; web requests retain user-agent classification. Sentry request scopes and spans share those dimensions. These headers never participate in authentication or authorization.
+
+The existing authorized episode audio route additionally serves JSON for `Accept: application/json`: the signed
+media URL and its expiry. Both representations and denials are private/no-store and vary by Accept. Legacy GET
+redirects and HEAD range metadata remain unchanged, including listen counting only on GET. The JSON path uses
+the same access gate; platform players never forward a CarlNotes session header to object storage.
