@@ -1,3 +1,4 @@
+import { CONTACT_LABEL, SUPPORT_MAILTO_HREF } from "@carlnotes/contracts/contact"
 import type { ComponentType, ReactNode } from "react"
 
 type Container = ComponentType<{ children: ReactNode }>
@@ -34,11 +35,12 @@ export function Footer({ elements: { Root, Legal, Row, Text, Closing, Link } }: 
 						Nightshift Design System
 					</Link>
 				</Row>
-				{/* the same public legal pages before and after sign-in */}
+				{/* the same public legal pages before and after sign-in, and the support address */}
 				<Row>
 					<Link href="https://github.com/doubleoevan/carlnotes/blob/main/LICENSE">License</Link>
 					<Link href="/privacy">Privacy</Link>
 					<Link href="/terms">Terms</Link>
+					<Link href={SUPPORT_MAILTO_HREF}>{CONTACT_LABEL}</Link>
 				</Row>
 			</Legal>
 			<Closing>Carl read all of it.</Closing>

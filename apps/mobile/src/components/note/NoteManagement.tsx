@@ -1,10 +1,12 @@
 import { showClientError } from "@carlnotes/client/apiClient"
+import { authClient } from "@carlnotes/client/authClient"
 import { NOTE_NAME_MAX_CHARS, type NoteResponse, type NoteVisibility } from "@carlnotes/contracts/notes"
 import { useNoteManagement } from "@carlnotes/core/hooks/useNoteManagement"
-import { NOTE_DELETE, toNoteDeleteDescription } from "@carlnotes/core/lib/noteLabels"
-import { Pencil } from "lucide-react-native"
+import { NOTE_DELETE, REPORT_NOTE_LABEL, toNoteDeleteDescription } from "@carlnotes/core/lib/noteLabels"
+import { Flag, Pencil } from "lucide-react-native"
 import { type ComponentRef, useRef, useState } from "react"
 import { Alert, TextInput, View } from "react-native"
+import { ReportIssueDialog } from "@/components/common/ReportIssueDialog"
 import { Button } from "@/components/primitives/button"
 import { Icon } from "@/components/primitives/icon"
 import { Text } from "@/components/primitives/text"
@@ -36,8 +38,10 @@ export function NoteManagement({
 		onError: showClientError,
 	})
 	const [isNameFocused, setIsNameFocused] = useState(false)
+	const [isReporting, setIsReporting] = useState(false)
 	const nameInputRef = useRef<ComponentRef<typeof TextInput>>(null)
 	const isKeyboardVisible = useIsKeyboardVisible()
+	const { data: session } = authClient().useSession()
 	// keep the focused editor visible and retain metadata when its own name field is being edited
 	if (isKeyboardVisible && !isNameFocused) {
 		return null
@@ -71,7 +75,28 @@ export function NoteManagement({
 						<Text>Delete</Text>
 					</Button>
 				)}
+				{/* the report action */}
+				{Boolean(session) && !note.canDelete && note.owner && !isOffline && (
+					<Button
+						accessibilityLabel={REPORT_NOTE_LABEL}
+						variant="outline"
+						size="sm"
+						onPress={() => setIsReporting(true)}
+					>
+						<Icon as={Flag} className="size-3.5 text-muted-foreground" />
+						<Text>{REPORT_NOTE_LABEL}</Text>
+					</Button>
+				)}
 			</View>
+			{isReporting && note.owner && (
+				<ReportIssueDialog
+					subjectKind="note"
+					subjectId={note.id}
+					subjectLabel={savedName}
+					author={note.owner}
+					onClose={() => setIsReporting(false)}
+				/>
+			)}
 			{note.canEdit ? (
 				<View className="relative justify-center">
 					<TextInput

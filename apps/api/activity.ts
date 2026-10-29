@@ -19,6 +19,7 @@ import { toProfileIdentity, withAvatarVersion } from "./avatars"
 import type { AppEnv } from "./currentUser"
 import { loadUserEmail, toInviteAddressedToUserFilter } from "./invite/inviteAcceptance"
 import { loadLatestPodcastEpisodeSummaries } from "./podcast/podcastEpisodeShapes"
+import { toUnblockedAuthorFilter } from "./userBlocks"
 
 // the subscription row fields that the queries read, with the subscribed time as a date
 export type SubscriptionRowFields = Omit<SubscriptionRow, "subscribedAt" | "latestPodcastEpisode"> & {
@@ -232,6 +233,8 @@ export async function loadInvitedTopicSubscriptions(userId: string): Promise<Sub
 				isNull(invites.declinedAt),
 				or(isNull(invites.expiresAt), gt(invites.expiresAt, new Date())),
 				notInArray(topics.id, subscribedTopicIdQuery),
+				// an invitation from a person the user has blocked is not shown
+				toUnblockedAuthorFilter(userId, invites.invitedByUserId),
 			),
 		)
 		.orderBy(desc(invites.invitedAt))

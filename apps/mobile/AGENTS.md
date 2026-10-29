@@ -574,6 +574,15 @@ spacing, and shared rejection wording. `ChatMessageParts` supplies native copy, 
 Draft cards preview all current settings with the proposed overlay;
 accepted tool results clear it and reread the Topic. Replies confirm edits through the same API as web.
 
+Reporting and blocking share core's rules. `common/ReportIssueDialog.tsx` takes the subject and, for a chat message, a
+note, or a comment, its author, and offers the author's block in the same sheet, as the web's switch does.
+`chat/ChatRoomMessageBubble.tsx`, `note/NoteComments.tsx`, `note/NoteManagement.tsx`, and the profile screen's action
+menu open it. A reply to a message the member cannot see shows core's hidden quote. `account/AccountFields.tsx`
+supplies the Blocked people rows under core's `BlockedUsersSection`. `session/TermsAcceptanceSheet.tsx` renders core's
+`TermsAcceptanceNotice` in a sheet at the root for a stale account, and `session/TermsAgreementText.tsx` is the
+sign-in and sign-up screens' acceptance line. The sheet fails open: Not now closes it until the next write the api
+rejects for the Terms, and a session without a version field, from an api that predates the column, asks for nothing.
+
 `PrivateChatPanel` adds native activity cancellation to the core hook and the existing client `sendChatTurn`. Expo 58's
 default fetch is `expo/fetch`; its streaming body reader is required. Do not opt into buffered legacy RN fetch.
 `mobileApiRequestSettings.ts` supplies the same session/device headers and revoked-session handling to API requests

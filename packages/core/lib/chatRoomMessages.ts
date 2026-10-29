@@ -1,20 +1,26 @@
 import type { ChatRoomMessage } from "@carlnotes/contracts/chat"
 
 /**
- * Indexes replies to earlier messages, omitting replies to the row directly above.
+ * Indexes replies to earlier messages, omitting replies to the row directly above. A reply whose quoted message sits
+ * in the loaded range but not in the list, one the user reported, by someone they blocked, or deleted, maps to null,
+ * which the bubble shows as a hidden quote. A reply to a message older than the loaded range is left out.
  */
-export function toChatMessageQuotes(chatMessages: ChatRoomMessage[]): Map<number, ChatRoomMessage> {
+export function toChatMessageQuotes(chatMessages: ChatRoomMessage[]): Map<number, ChatRoomMessage | null> {
 	// index loaded chat messages and their quoted replies
 	const chatMessagesById = new Map(chatMessages.map((chatMessage) => [chatMessage.id, chatMessage]))
-	const quotedChatMessagesByReplyId = new Map<number, ChatRoomMessage>()
+	const oldestChatMessageId = chatMessages[0]?.id ?? 0
+	const quotedChatMessagesByReplyId = new Map<number, ChatRoomMessage | null>()
 	for (const [index, chatMessage] of chatMessages.entries()) {
 		const repliedChatMessageId = chatMessage.replyToChatMessageId
 		if (repliedChatMessageId === null || repliedChatMessageId === chatMessages[index - 1]?.id) {
 			continue
 		}
+
+		// the quoted message, or null for one hidden from the user inside the loaded range
 		const repliedChatMessage = chatMessagesById.get(repliedChatMessageId)
-		if (repliedChatMessage) {
-			quotedChatMessagesByReplyId.set(chatMessage.id, repliedChatMessage)
+		const isHidden = repliedChatMessageId >= oldestChatMessageId && repliedChatMessageId < chatMessage.id
+		if (repliedChatMessage || isHidden) {
+			quotedChatMessagesByReplyId.set(chatMessage.id, repliedChatMessage ?? null)
 		}
 	}
 	return quotedChatMessagesByReplyId

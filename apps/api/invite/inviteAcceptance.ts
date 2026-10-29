@@ -13,6 +13,7 @@ import type { AnalyticsProperties } from "../currentUser"
 import { joinTeam, toTeamRole } from "../team/members"
 import { loadDirectSubscription } from "../topic/permissions"
 import { activateSubscription } from "../topic/subscriptions"
+import { isUserBlocked } from "../userBlocks"
 
 // how an acceptance ended: the topic or team page to open, or which way the token failed
 export type InviteAcceptResult =
@@ -34,6 +35,11 @@ export async function acceptInviteToken(
 	// the token is the whole credential, so it is looked up on its own
 	const [invite] = await db.select().from(invites).where(eq(invites.token, token))
 	if (!invite) {
+		return { status: "unknown" }
+	}
+
+	// a link from a person the user has blocked reads as unknown, like one that never existed
+	if (invite.invitedByUserId && (await isUserBlocked(userId, invite.invitedByUserId))) {
 		return { status: "unknown" }
 	}
 

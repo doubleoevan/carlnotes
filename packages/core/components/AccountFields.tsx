@@ -3,7 +3,7 @@ import { sendInviteAccess } from "@carlnotes/client/profileClient"
 import { type ComponentType, type ReactNode, useState } from "react"
 import { useAvatar } from "../hooks/useAvatar"
 import { type UsernameChange, useUsernameChange } from "../hooks/useUsernameChange"
-import { REQUEST_FAILED_TEXT } from "../lib/sessionCopy"
+import { REQUEST_FAILED_TEXT, SAVE_FAILED_TEXT } from "../lib/sessionCopy"
 
 type Container = ComponentType<{ children: ReactNode; className?: string }>
 export type AccountFieldElements = {
@@ -251,7 +251,7 @@ export function InvitationsSection({ elements }: { elements: AccountFieldElement
 			await sendInviteAccess(inviteAccess)
 			await refetch()
 		} catch {
-			setError("That didn't save. Try again.")
+			setError(SAVE_FAILED_TEXT)
 		} finally {
 			setIsSaving(false)
 		}

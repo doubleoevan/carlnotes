@@ -4,8 +4,9 @@ import { db } from "@carlnotes/db"
 import { notes } from "@carlnotes/db/schema/notes"
 import { teams } from "@carlnotes/db/schema/teams"
 import { topics } from "@carlnotes/db/schema/topics"
-import { eq } from "drizzle-orm"
+import { and, eq } from "drizzle-orm"
 import { loadUserAccess, memberTopicIds } from "../authorization"
+import { toUnreportedFilter } from "../report/reports"
 import { toTeamRole } from "../team/members"
 import { assertNever, canSeeTopic, gatedTopicColumns } from "../topic/permissions"
 
@@ -158,12 +159,22 @@ export function creatableNoteVisibilities(
 /**
  * The note row with its page resolved, or null when either is missing.
  */
-export async function loadNoteWithPage(noteId: string): Promise<{ note: NoteRow; page: NotePage } | null> {
+export async function loadNoteWithPage(
+	noteId: string,
+	// the user whose reported notes read as missing, or null for a visitor
+	userId: string | null = null,
+): Promise<{ note: NoteRow; page: NotePage } | null> {
 	// the row names exactly one page by its check constraint
-	const [note] = await db.select().from(notes).where(eq(notes.id, noteId))
+	const reportFilter = userId ? toUnreportedFilter(userId, "note", notes.id) : undefined
+	const [note] = await db
+		.select()
+		.from(notes)
+		.where(and(eq(notes.id, noteId), reportFilter))
 	if (!note) {
 		return null
 	}
+
+	// the page the row points at
 	const page = await loadNotePage(note)
 	return page ? { note, page } : null
 }

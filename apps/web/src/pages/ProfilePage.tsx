@@ -7,10 +7,13 @@ import type { ProfileResponse, ProfileTeamStatus } from "@carlnotes/contracts/pr
 import { useUserMenuUpdateBadges } from "@carlnotes/core/hooks/useUpdateCounts"
 import { toProfileChatContext } from "@carlnotes/core/lib/chatConversations"
 import { toCountLabel } from "@carlnotes/core/lib/labels"
+import { REQUEST_FAILED_TEXT } from "@carlnotes/core/lib/sessionCopy"
+import { toBlockLabel, toggleUserBlock } from "@carlnotes/core/lib/userBlocks"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { getRouteApi, useNavigate } from "@tanstack/react-router"
-import { Pencil, Plus, Users } from "lucide-react"
+import { Ban, Pencil, Plus, Users } from "lucide-react"
 import { useCallback, useEffect, useState } from "react"
+import { toast } from "sonner"
 import { EditProfileModal } from "@/components/account/EditProfileModal"
 import { UserAvatarPicker } from "@/components/avatar/UserAvatarPicker"
 import { UserAvatar } from "@/components/branding/UserAvatar"
@@ -32,22 +35,26 @@ import { CARD_CLASS, PAGE_CLASS, STANDALONE_LINK_CLASS } from "@/lib/styleClasse
 import { openNewTopicChat, useRegisterChatContext } from "@/stores/chatPanelStore"
 import { type PageActionOption, useRegisterPageActions } from "@/stores/pageActionsStore"
 
-// editing the profile and starting a team are both owner actions
+// the owner's edit and new-team actions, or the block of another person
 function toProfileActionOptions({
 	isOwnProfile,
+	isBlocked,
 	onEditProfile,
 	onNewTeam,
+	onToggleBlock,
 }: {
 	isOwnProfile: boolean
+	isBlocked: boolean
 	onEditProfile: () => void
 	onNewTeam: () => void
+	onToggleBlock: () => void
 }): PageActionOption[] {
 	return isOwnProfile
 		? [
 				{ label: "Edit profile", Icon: Pencil, onSelect: onEditProfile },
 				{ label: "New team", Icon: Plus, onSelect: onNewTeam },
 			]
-		: []
+		: [{ label: toBlockLabel(isBlocked), Icon: Ban, onSelect: onToggleBlock }]
 }
 
 // the profile route, whose loader reads the profile on the server
@@ -117,14 +124,34 @@ export function ProfilePage() {
 					page: "Profile",
 					options: toProfileActionOptions({
 						isOwnProfile,
+						isBlocked: profile.isBlocked,
 						onEditProfile: () => setIsEditingProfile(true),
 						onNewTeam: () => void handleOpenNewTeamModal(),
+						onToggleBlock: () => void handleToggleBlock(),
 					}),
-					report: { subjectKind: "profile", subjectId: profile.userId, subjectLabel: profile.username },
+					report: {
+						subjectKind: "profile",
+						subjectId: profile.userId,
+						subjectLabel: profile.username,
+						author: { id: profile.userId, username: profile.username },
+					},
 					hasNewTopicButton: isOwnProfile,
 				}
 			: null,
 	)
+
+	// block or unblock this person, then reload the profile
+	const handleToggleBlock = async (): Promise<void> => {
+		if (!profile) {
+			return
+		}
+		try {
+			await toggleUserBlock({ userId: profile.userId, isBlocked: profile.isBlocked })
+			reloadProfilePage()
+		} catch {
+			toast.error(REQUEST_FAILED_TEXT)
+		}
+	}
 
 	// load the topics that the New team modal offers, then open the modal
 	const handleOpenNewTeamModal = async (): Promise<void> => {

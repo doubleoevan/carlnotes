@@ -1,3 +1,4 @@
+import { toApiUrl } from "@carlnotes/client/apiClient"
 import {
 	fetchPodcastEpisode,
 	fetchPodcastEpisodeAudio,
@@ -21,17 +22,21 @@ import type { AudioPlayer, AudioStatus } from "expo-audio"
 // inject only the platform operations needed by the single root-owned player
 export type PodcastEpisodeAudioPlayer = Pick<
 	AudioPlayer,
+	// the source and the transport
 	| "replace"
 	| "play"
 	| "pause"
 	| "seekTo"
 	| "setPlaybackRate"
+	// the system controls and the status
 	| "setChapterTargets"
 	| "setActiveForLockScreen"
 	| "clearLockScreenControls"
 	| "addListener"
 	| "isLoaded"
 >
+
+// the platform player, the event sink, and the api calls a test replaces
 type ToPodcastEpisodeAudioAdapterOptions = {
 	player: PodcastEpisodeAudioPlayer
 	onEvent: (event: PodcastEpisodeAudioEvent) => void
@@ -58,6 +63,8 @@ export function toPodcastEpisodeAudioAdapter({
 	let sourceExpiresAt = 0
 	let statusSubscription: { remove: () => void } | undefined
 	let cancelReadiness: (() => void) | undefined
+
+	// where the loaded source stands, and the version that retires a stale play
 	let isReady = false
 	let hasFinished = false
 	let lastIsPlaying = false
@@ -72,6 +79,8 @@ export function toPodcastEpisodeAudioAdapter({
 		statusSubscription = undefined
 		currentLoad = undefined
 		isReady = false
+
+		// drop the source and the system controls
 		player.pause()
 		player.clearLockScreenControls()
 		player.replace(null)
@@ -112,20 +121,25 @@ export function toPodcastEpisodeAudioAdapter({
 				if (controller.signal.aborted || !isReady) {
 					return
 				}
+				// report the position and the buffering
 				options.positionSeconds = status.currentTime
 				onEvent({ type: "position", loadId: options.loadId, positionSeconds: status.currentTime })
 				onEvent({ type: "buffering", loadId: options.loadId, isBuffering: status.isBuffering })
+
+				// report the end, an error, or a playing change
 				if (status.didJustFinish && !hasFinished) {
 					hasFinished = true
 					onEvent({ type: "ended", loadId: options.loadId })
 				} else if (status.error) {
 					onEvent({ type: "error", loadId: options.loadId })
 				} else if (!status.isBuffering && status.playing !== lastIsPlaying) {
+					// report a playing change once the buffering settles
 					lastIsPlaying = status.playing
 					onEvent({ type: "playback", loadId: options.loadId, isPlaying: status.playing })
 				}
 			})
 		} catch (error) {
+			// a confirmed denial unloads, and any failure leaves a retry
 			if (!controller.signal.aborted && isPodcastEpisodeAccessDenied(error)) {
 				onAccessDenied()
 			}
@@ -153,6 +167,8 @@ export function toPodcastEpisodeAudioAdapter({
 			if (!isPlayCurrent(version, selectedLoad)) {
 				return
 			}
+
+			// refresh a source about to expire, then play
 			if (sourceExpiresAt <= Date.now() + 30_000) {
 				const refreshedPlayVersion = playVersion + 1
 				await load(selectedLoad)
@@ -160,9 +176,12 @@ export function toPodcastEpisodeAudioAdapter({
 					return
 				}
 			}
+
+			// play
 			hasFinished = false
 			player.play()
 		} catch (error) {
+			// a denial while this play is still current unloads, and any failure leaves a retry
 			if (isPlayCurrent(version, selectedLoad) && isPodcastEpisodeAccessDenied(error)) {
 				onAccessDenied()
 			}
@@ -197,24 +216,34 @@ export function toPodcastEpisodeAudioAdapter({
 			if (currentLoad) {
 				currentLoad.positionSeconds = state.positionSeconds
 			}
+
+			// the lock screen's title, people, and cover. the cover is an api path, which Android takes only as an
+			// absolute url
 			const metadata = toPodcastEpisodeMediaMetadata(state.podcastEpisode, state.positionSeconds)
-			player.setActiveForLockScreen(
-				true,
-				{
-					title: metadata.title,
-					artist: metadata.artist,
-					albumTitle: metadata.album,
-					artworkUrl: metadata.artwork[0]?.src,
-				},
-				{
-					showSeekBackward: true,
-					showSeekForward: true,
-					showPreviousTrack: true,
-					showNextTrack: true,
-					seekBackwardIntervalSeconds: SKIP_BACK_SECONDS,
-					seekForwardIntervalSeconds: SKIP_FORWARD_SECONDS,
-				},
-			)
+			const artworkPath = metadata.artwork[0]?.src
+			const lockScreenMetadata = {
+				title: metadata.title,
+				artist: metadata.artist,
+				albumTitle: metadata.album,
+				artworkUrl: artworkPath ? toApiUrl(artworkPath) : undefined,
+			}
+
+			// the lock screen's controls: the skips and the chapter steps
+			const lockScreenOptions = {
+				showSeekBackward: true,
+				showSeekForward: true,
+				showPreviousTrack: true,
+				showNextTrack: true,
+				seekBackwardIntervalSeconds: SKIP_BACK_SECONDS,
+				seekForwardIntervalSeconds: SKIP_FORWARD_SECONDS,
+			}
+
+			// log a rejected lock screen update and leave playback alone
+			try {
+				player.setActiveForLockScreen(true, lockScreenMetadata, lockScreenOptions)
+			} catch (error) {
+				console.error("podcast lock screen update failed", error)
+			}
 		},
 	}
 }
@@ -248,12 +277,15 @@ function toAudioReadiness(
 			clearTimeout(timer)
 			subscription.remove()
 			signal.removeEventListener("abort", cancel)
+
+			// settle the readiness
 			if (error) {
 				reject(error)
 			} else {
 				resolve()
 			}
 		}
+		// the source's first loaded status settles it, and its first error rejects it
 		const subscription = player.addListener("playbackStatusUpdate", (status: AudioStatus) => {
 			if (status.error) {
 				finish(new Error("Audio unavailable"))
@@ -261,9 +293,13 @@ function toAudioReadiness(
 				finish()
 			}
 		})
+
+		// the time bound, and the cancel that an abort or a retirement runs
 		const timer = setTimeout(() => finish(new Error("Audio timed out")), 20_000)
 		cancel = () => finish(new Error("Audio load cancelled"))
 		signal.addEventListener("abort", cancel, { once: true })
+
+		// a source already aborted or already loaded settles at once
 		if (signal.aborted) {
 			cancel()
 		} else if (player.isLoaded) {

@@ -13,6 +13,7 @@ const emptyProfile: ProfileResponse = {
 	joinedAt: "2026-07-01T00:00:00.000Z",
 	subscriberCount: 0,
 	includesNonPublicTopics: false,
+	isBlocked: false,
 	topics: [],
 	teams: [],
 }

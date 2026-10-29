@@ -1,19 +1,22 @@
 import { showClientError } from "@carlnotes/client/apiClient"
+import { authClient } from "@carlnotes/client/authClient"
 import { toAvatarImagePath } from "@carlnotes/contracts/avatars"
+import type { NoteComment } from "@carlnotes/contracts/notes"
 import {
 	type NoteCommentComposerProps,
 	type NoteCommentsElements,
 	type NoteCommentsProps,
 	NoteComments as SharedNoteComments,
 } from "@carlnotes/core/components/NoteComments"
-import { NOTE_COMMENT_DELETE } from "@carlnotes/core/lib/noteLabels"
+import { NOTE_COMMENT_DELETE, REPORT_COMMENT_LABEL, toReportedCommentLabel } from "@carlnotes/core/lib/noteLabels"
 import { SITE_URL } from "@carlnotes/core/lib/pageHead"
 import { BottomSheetTextInput } from "@gorhom/bottom-sheet"
-import { Trash2 } from "lucide-react-native"
-import type { ComponentType } from "react"
+import { Flag, Trash2 } from "lucide-react-native"
+import { type ComponentType, useState } from "react"
 import { Alert, TextInput, type TextInputProps, View } from "react-native"
 import { Avatar } from "@/components/branding/Avatar"
 import { AnchorLink } from "@/components/common/AnchorLink"
+import { ReportIssueDialog } from "@/components/common/ReportIssueDialog"
 import { Button, toTouchTargetHitSlop } from "@/components/primitives/button"
 import { Icon } from "@/components/primitives/icon"
 import { Text } from "@/components/primitives/text"
@@ -72,6 +75,11 @@ const ELEMENTS: NoteCommentsElements = {
 			<Icon as={Trash2} className="size-3.5 text-muted-foreground" />
 		</Button>
 	),
+	Report: ({ onPress }) => (
+		<Button accessibilityLabel={REPORT_COMMENT_LABEL} variant="ghost" size="icon" className="ml-auto" onPress={onPress}>
+			<Icon as={Flag} className="size-3.5 text-muted-foreground" />
+		</Button>
+	),
 	Composer: CommentComposer,
 }
 // let the sheet follow the composer's keyboard while sharing every other comment element
@@ -86,8 +94,29 @@ const SHEET_ELEMENTS: NoteCommentsElements = {
 export function NoteComments({
 	isInSheet = false,
 	...props
-}: Omit<NoteCommentsProps, "onError"> & { isInSheet?: boolean }) {
-	return <SharedNoteComments {...props} onError={showClientError} elements={isInSheet ? SHEET_ELEMENTS : ELEMENTS} />
+}: Omit<NoteCommentsProps, "onError" | "onReport"> & { isInSheet?: boolean }) {
+	// a signed-in user can report another person's comment, and block its author from the report
+	const { data: session } = authClient().useSession()
+	const [reportedComment, setReportedComment] = useState<NoteComment | null>(null)
+	return (
+		<>
+			<SharedNoteComments
+				{...props}
+				onError={showClientError}
+				onReport={session ? setReportedComment : undefined}
+				elements={isInSheet ? SHEET_ELEMENTS : ELEMENTS}
+			/>
+			{reportedComment?.author && (
+				<ReportIssueDialog
+					subjectKind="noteComment"
+					subjectId={reportedComment.id}
+					subjectLabel={toReportedCommentLabel(reportedComment.author.username)}
+					author={{ id: reportedComment.author.userId, username: reportedComment.author.username }}
+					onClose={() => setReportedComment(null)}
+				/>
+			)}
+		</>
+	)
 }
 
 // allow multiline input and keep failed text in the shared composer

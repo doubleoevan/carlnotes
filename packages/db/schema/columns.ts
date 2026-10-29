@@ -14,6 +14,8 @@ import {
 	podcastEpisodeStatuses,
 	promptVersionOrigins,
 	ratings,
+	reportResolutions,
+	reportSubjectKinds,
 	resourceKinds,
 	scanStatuses,
 	sourceKinds,
@@ -56,6 +58,9 @@ export const inviteAccess = pgEnum("invite_access", inviteAccesses)
 export const noteVisibility = pgEnum("note_visibility", noteVisibilities)
 // where a topic prompt version was saved from
 export const promptVersionOrigin = pgEnum("prompt_version_origin", promptVersionOrigins)
+// what a report names, and how an admin closed it
+export const reportSubjectKind = pgEnum("report_subject_kind", reportSubjectKinds)
+export const reportResolution = pgEnum("report_resolution", reportResolutions)
 
 /**
  * Returns every table's text primary key column, defaulted by our code and overridden by Better Auth on its own inserts.

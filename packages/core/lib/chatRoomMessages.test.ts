@@ -34,6 +34,17 @@ test("quote lookup skips ordinary messages, adjacent replies and missing parents
 	expect([...toChatMessageQuotes(messages)]).toEqual([[4, toChatRoomMessage(1)]])
 })
 
+// a reply to a message missing from inside the loaded range quotes a hidden message, and one to a message older than
+// the range quotes nothing
+test("quote lookup marks a hidden quote and leaves an unloaded one out", () => {
+	const messages = [
+		toChatRoomMessage(10),
+		{ ...toChatRoomMessage(12), replyToChatMessageId: 11 },
+		{ ...toChatRoomMessage(13), replyToChatMessageId: 2 },
+	]
+	expect([...toChatMessageQuotes(messages)]).toEqual([[12, null]])
+})
+
 // use complete server-shaped messages so merge tests exercise real ids and metadata
 function toChatRoomMessage(id: number): ChatRoomMessage {
 	return {

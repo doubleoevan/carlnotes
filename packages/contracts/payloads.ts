@@ -21,6 +21,7 @@ import {
 	noteVisibilities,
 	podcastEpisodeSpeakers,
 	ratings,
+	reportSubjectKinds,
 	teamRoles,
 } from "./enums"
 import { inviteSources } from "./invites"
@@ -77,11 +78,14 @@ export const checkoutPayload = z.object({
 // the update username body. the validation rules live in toUsernameRejection
 export const usernamePayload = z.object({ username: z.string() })
 
-// the flag issue body. the subject is a topic, profile, or team id, named by which kind it is so the api can look it up
+// the report body. the subject is named by its kind and id so the api can look it up, and a report of an authored
+// subject can block its author in the same submission
 export const flagContentPayload = z.object({
-	subjectKind: z.enum(["topic", "profile", "team"]),
+	subjectKind: z.enum(reportSubjectKinds),
 	subjectId: z.string().min(1),
-	reason: z.string().trim().min(1).max(FLAG_REASON_MAX_CHARS),
+	// what is wrong, in the reporter's words, or nothing
+	reason: z.string().trim().max(FLAG_REASON_MAX_CHARS),
+	shouldBlockAuthor: z.boolean().optional(),
 })
 
 export type FlagContentPayload = z.infer<typeof flagContentPayload>

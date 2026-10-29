@@ -64,6 +64,8 @@ export type ProfileResponse = {
 	subscriberCount: number
 	// whether the topics below include the user's private and invite ones, which only the owner and an admin view
 	includesNonPublicTopics: boolean
+	// whether the signed-in user has blocked this person. false for a visitor and on the user's own profile
+	isBlocked: boolean
 	topics: Topic[]
 	// the teams this user belongs to. their own profile lists them all
 	teams: TeamSummary[]

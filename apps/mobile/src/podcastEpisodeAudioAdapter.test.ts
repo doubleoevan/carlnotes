@@ -1,4 +1,5 @@
 import { expect, mock, test } from "bun:test"
+import { configureApiClient } from "@carlnotes/client/apiClient"
 import { PodcastEpisodeRequestError } from "@carlnotes/client/podcastEpisodeClient"
 import type { LoadPodcastEpisodeAudioOptions, PodcastEpisodeAudioEvent } from "@carlnotes/core/lib/podcastEpisodeAudio"
 import { toPodcastEpisodeFixture } from "@carlnotes/core/lib/podcastEpisodeTestFixtures"
@@ -189,4 +190,45 @@ test("an unloaded or interrupted platform status does not count as a second play
 	emit({ didJustFinish: true })
 	expect(events.filter((event) => event.type === "ended")).toHaveLength(1)
 	adapter.unload()
+})
+
+// the lock screen takes the cover at the api's absolute url, and its failure leaves playback alone
+test("the lock screen metadata resolves the cover against the api and a rejected update does not throw", async () => {
+	configureApiClient({ apiBaseUrl: "https://api.test", showError: () => {} })
+	const { player } = toPlayerFixture()
+	const podcastEpisode = toPodcastEpisodeFixture({ smallCoverUrl: "/api/podcast-covers/episode/one-300.jpg" })
+	const adapter = toPodcastEpisodeAudioAdapter({
+		player,
+		onEvent: () => {},
+		onAccessDenied: () => {},
+		checkAccess: async () => podcastEpisode,
+		resolveAudio: async () => ({ audioUrl: "https://media.example/audio.mp3", expiresAt: "2099-01-01T00:00:00Z" }),
+	})
+	await adapter.load({ ...toLoad(), podcastEpisode })
+	const state = {
+		podcastEpisode,
+		positionSeconds: 45,
+		playbackRate: 1.5,
+		isPlaying: false,
+		isLoading: false,
+		errorMessage: null,
+	}
+	adapter.updateMetadata(state)
+	expect(player.setActiveForLockScreen).toHaveBeenCalledWith(
+		true,
+		expect.objectContaining({ artworkUrl: "https://api.test/api/podcast-covers/episode/one-300.jpg" }),
+		expect.anything(),
+	)
+
+	// a lock screen the platform rejects is logged, and the update returns
+	;(player.setActiveForLockScreen as ReturnType<typeof mock>).mockImplementation(() => {
+		throw new Error("Call to function 'AudioPlayer.setActiveForLockScreen' has been rejected.")
+	})
+	const logError = console.error
+	console.error = () => {}
+	try {
+		expect(() => adapter.updateMetadata(state)).not.toThrow()
+	} finally {
+		console.error = logError
+	}
 })

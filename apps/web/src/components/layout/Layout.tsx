@@ -6,6 +6,7 @@ import { AppChatPanel } from "@/components/chat/AppChatPanel"
 import { SpokenAnswerAudio } from "@/components/chat/SpokenAnswerAudio"
 import { PodcastEpisodeAudio } from "@/components/podcast/PodcastEpisodeAudio"
 import { SearchBar } from "@/components/search/SearchBar"
+import { TermsAcceptanceDialog } from "@/components/session/TermsAcceptanceDialog"
 import { Footer } from "./Footer"
 import { Header } from "./Header"
 
@@ -38,6 +39,8 @@ export function Layout() {
 			<PodcastEpisodeAudio />
 			{/* the audio element carl's spoken answers play through, mounted here so a reply outlives a route change */}
 			<SpokenAnswerAudio />
+			{/* the Terms acceptance a signed-in user owes once, on whichever page the session loads */}
+			<TermsAcceptanceDialog />
 		</div>
 	)
 }

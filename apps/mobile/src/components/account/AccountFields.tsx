@@ -1,7 +1,10 @@
 import type { AccountFieldElements, ProfileFieldElements } from "@carlnotes/core/components/AccountFields"
+import type { BlockedUsersElements } from "@carlnotes/core/components/BlockedUsersSection"
+import { SITE_URL } from "@carlnotes/core/lib/pageHead"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { Check, Info } from "lucide-react-native"
 import { Alert, Pressable, View } from "react-native"
+import { AnchorLink } from "@/components/common/AnchorLink"
 import { PreferenceSwitch } from "@/components/common/PreferenceSwitch"
 import { Button } from "@/components/primitives/button"
 import { Icon } from "@/components/primitives/icon"
@@ -62,6 +65,29 @@ export const ACCOUNT_FIELD_ELEMENTS: AccountFieldElements = {
 				</Button>
 			)}
 		</View>
+	),
+}
+
+// the blocked people section's rows around the shared account elements
+export const BLOCKED_USERS_ELEMENTS: BlockedUsersElements = {
+	Card: ACCOUNT_FIELD_ELEMENTS.Card,
+	Group: ACCOUNT_FIELD_ELEMENTS.Group,
+	Heading: ACCOUNT_FIELD_ELEMENTS.Heading,
+	Text: ACCOUNT_FIELD_ELEMENTS.Text,
+	Button: ({ label, onPress, isDisabled }) => (
+		<Button variant="outline" size="sm" accessibilityLabel={label} onPress={onPress} disabled={isDisabled}>
+			<Text>{label}</Text>
+		</Button>
+	),
+	Row: ({ children }) => <View className="flex-row items-center justify-between gap-3">{children}</View>,
+	Username: ({ userId, username }) => (
+		<AnchorLink
+			href={`${SITE_URL}/profiles/${userId}`}
+			accessibilityLabel={`Open ${username}'s profile`}
+			className="min-h-6 shrink"
+		>
+			<Text className="shrink text-sm font-semibold text-link">{username}</Text>
+		</AnchorLink>
 	),
 }
 

@@ -1,8 +1,8 @@
-import type { FlagContentPayload } from "@carlnotes/contracts/payloads"
 import type { PageActionOption as SharedPageActionOption } from "@carlnotes/core/components/PageActionMenu"
 import { toStoreListeners } from "@carlnotes/core/stores/storeListeners"
 import type { LucideIcon } from "lucide-react"
 import { useEffect } from "react"
+import type { ReportSubject } from "@/components/common/ReportIssueDialog"
 
 /**
  * An option in the page actions dropdown menu.
@@ -22,11 +22,7 @@ export type PageActions = {
 	// whether the bookmarked filter can scope to a team
 	hasTeamBookmarks?: boolean
 	// what the report issue option from this page flags
-	report?: {
-		subjectKind: FlagContentPayload["subjectKind"]
-		subjectId: string
-		subjectLabel: string
-	}
+	report?: ReportSubject
 }
 
 // the page on screen owns the menu, so only one registration stands at a time

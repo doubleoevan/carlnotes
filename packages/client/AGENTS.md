@@ -25,7 +25,10 @@
 - Most clients build on `apiClient()`. Some calls, and all of `chatClient.ts`, `flagContentClient.ts`, and
   `voiceClient.ts`, use `fetchApi` instead. `pageHeadClient.ts` reads a page's head data.
   `viewerCountsClient.ts` sends a topic page's view and reads a topic's or a podcast episode's counts, a public
-  topic's without credentials so the edge can cache them.
+  topic's without credentials so the edge can cache them. `blockClient.ts` blocks and unblocks a user and reads the
+  block list, `reportClient.ts` reads the admin console's open reports and resolves one, and `termsClient.ts` records
+  the signed-in user's acceptance of the published Terms. `apiClient()`'s fetch calls the app's `onTermsOutdated` on a
+  403 whose body is the terms rejection, so the app opens its acceptance dialog.
   `voiceClientTestFixtures.ts` holds the voice tests' topic voice chat page and spoken question timings.
   `fetchTestFixtures.ts` holds `stubFetch` and `stubFailingFetch`, the fetch stubs the client tests share.
 - A client returns values and never touches the browser. `billingClient.ts` returns the Checkout and Customer Portal

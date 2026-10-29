@@ -1,5 +1,6 @@
 import { authClient } from "@carlnotes/client/authClient"
 import { toAvatarImagePath } from "@carlnotes/contracts/avatars"
+import { CONTACT_LABEL, SUPPORT_MAILTO_HREF } from "@carlnotes/contracts/contact"
 import { useAvatar } from "@carlnotes/core/hooks/useAvatar"
 import { SITE_URL } from "@carlnotes/core/lib/pageHead"
 import { CLOSE_ACCOUNT_CONFIRMATION, CLOSE_ACCOUNT_SECTION_TEXT } from "@carlnotes/core/lib/sessionCopy"
@@ -57,6 +58,12 @@ export function SettingsContent({ identity, closeError, isPending, onSignOut, on
 			<Button variant="link" asChild accessibilityLabel="Privacy policy">
 				<AnchorLink href={`${SITE_URL}/privacy`} accessibilityLabel="Privacy policy">
 					<Text>Privacy policy</Text>
+				</AnchorLink>
+			</Button>
+			{/* the support address, beside the legal link */}
+			<Button variant="link" asChild accessibilityLabel={CONTACT_LABEL}>
+				<AnchorLink href={SUPPORT_MAILTO_HREF} accessibilityLabel={CONTACT_LABEL}>
+					<Text>{CONTACT_LABEL}</Text>
 				</AnchorLink>
 			</Button>
 			{/* account closure keeps the web's wording and destructive placement */}

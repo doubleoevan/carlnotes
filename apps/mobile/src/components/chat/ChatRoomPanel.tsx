@@ -6,7 +6,7 @@ import { useEditableTopicDraft } from "@carlnotes/core/hooks/useEditableTopicDra
 import { useNow } from "@carlnotes/core/hooks/useNow"
 import { useRoomMembers } from "@carlnotes/core/hooks/useRoomMembers"
 import { type ChatRoomReply, useRoomReply } from "@carlnotes/core/hooks/useRoomReply"
-import { toEmptyChatRoomCopy } from "@carlnotes/core/lib/chatCopy"
+import { toEmptyChatRoomCopy, toReportedChatMessageLabel } from "@carlnotes/core/lib/chatCopy"
 import { CHAT_ROOM_REJECTION_COPY } from "@carlnotes/core/lib/chatRejectionCopy"
 import { deleteChatRoomMessage } from "@carlnotes/core/lib/chatRoomActions"
 import { toChatMessageQuotes } from "@carlnotes/core/lib/chatRoomMessages"
@@ -15,6 +15,7 @@ import { markChatRoomOpened } from "@carlnotes/core/stores/chatRoomStore"
 import { useEffect, useMemo, useRef, useState } from "react"
 import { Alert, type FlatList, ScrollView, View } from "react-native"
 import { CoffeeLoading } from "@/components/branding/CoffeeLoading"
+import { ReportIssueDialog } from "@/components/common/ReportIssueDialog"
 import { Button } from "@/components/primitives/button"
 import { Text } from "@/components/primitives/text"
 import { ChatMessageList } from "./ChatMessageList"
@@ -133,6 +134,8 @@ export function ChatRoomContent({
 	const listRef = useRef<FlatList<ChatRoomMessage>>(null)
 	const [scrollTarget, setScrollTarget] = useState<{ key: string }>()
 	const now = useNow()
+	// the chat message whose report sheet is open, which can block its author
+	const [reportedChatMessage, setReportedChatMessage] = useState<ChatRoomMessage | null>(null)
 	const chatMessageQuotes = useMemo(() => toChatMessageQuotes(chatRoom.chatMessages), [chatRoom.chatMessages])
 	if (chatRoom.isRejected) {
 		return <Text className="p-3 text-muted-foreground">Join this team to start the conversation</Text>
@@ -194,9 +197,20 @@ export function ChatRoomContent({
 						onQuoteClick={(chatMessageId) => setScrollTarget({ key: String(chatMessageId) })}
 						onAttachmentDelete={() => {}}
 						onDeleteChatMessage={(chatMessageId) => void onDeleteChatMessage(chatMessageId)}
+						onReport={setReportedChatMessage}
 					/>
 				)}
 			/>
+			{/* the report sheet, mounted while a message is being reported */}
+			{reportedChatMessage?.authorUserId && (
+				<ReportIssueDialog
+					subjectKind="chatMessage"
+					subjectId={String(reportedChatMessage.id)}
+					subjectLabel={toReportedChatMessageLabel(reportedChatMessage.authorUsername)}
+					author={{ id: reportedChatMessage.authorUserId, username: reportedChatMessage.authorUsername }}
+					onClose={() => setReportedChatMessage(null)}
+				/>
+			)}
 			{/* rejection */}
 			{chatRoom.rejection && (
 				<ScrollView className="max-h-36 shrink" style={{ flexGrow: 0 }} contentContainerStyle={{ padding: 12 }}>

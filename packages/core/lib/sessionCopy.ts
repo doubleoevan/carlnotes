@@ -6,6 +6,9 @@ export const OAUTH_ERROR_TEXT = "That sign-in didn't open. Try another one, or e
 // what a request that never reached the api says
 export const REQUEST_FAILED_TEXT = "That didn't reach Carl. Try again."
 
+// what a form says if a save is rejected
+export const SAVE_FAILED_TEXT = "That didn't save. Try again."
+
 // what a sign-out that failed says, with the reason if there is one
 export function toSignOutFailedText(reason: string | undefined): string {
 	return `Carl could not sign you out. ${reason ?? "Try again in a moment."}`
@@ -31,3 +34,12 @@ export const VERIFY_EMAIL_TITLE = "Check your email"
 export function toVerifyEmailNoticeText(email: string): string {
 	return `We sent a link to confirm ${email}. You don't have to click it now. You can start using CarlNotes right away.`
 }
+
+// the line every sign-up path shows above its buttons: continuing accepts the Terms and the Privacy Policy
+export const TERMS_AGREEMENT_COPY = {
+	prompt: "By continuing you agree to the ",
+	termsLink: "Terms of Service",
+	joiner: " and the ",
+	privacyLink: "Privacy Policy",
+	ending: ".",
+} as const

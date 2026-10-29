@@ -11,6 +11,7 @@ import { chatAttachments, chatTurns } from "@carlnotes/db/schema/chat"
 import { EMBED_DIMENSIONS, findings, resources, scans } from "@carlnotes/db/schema/scans"
 import { teamMembers, teams } from "@carlnotes/db/schema/teams"
 import { attachments, subscriptions, topicEmailSends, topics } from "@carlnotes/db/schema/topics"
+import { userBlocks } from "@carlnotes/db/schema/userBlocks"
 import { users } from "@carlnotes/db/schema/users"
 import { readLiteLLMKeySpend } from "@carlnotes/models/litellmProxy"
 import { toPositiveInteger } from "@carlnotes/server/envSettings"
@@ -304,11 +305,15 @@ export async function loadAdminTotals(userRows: AdminUserRow[]): Promise<AdminTo
 	// pull Stripe's netted revenue for the month and derive the contribution, minus an optional flat fixed-cost constant
 	const netRevenueCents = await readStripeTotalRevenueCents(Math.floor(startOfUtcMonth(new Date()).getTime() / 1000))
 	const fixedMonthlyCostCents = toPositiveInteger(Bun.env.FIXED_MONTHLY_COST_CENTS, 0)
+
+	// the blocks between users, as a count alone
+	const [blockCountRow] = await db.select({ blockCount: count() }).from(userBlocks)
 	return {
 		attributedBytes,
 		monthVariableCostCents,
 		netRevenueCents,
 		contributionCents: computeContributionCents(netRevenueCents, monthVariableCostCents, fixedMonthlyCostCents),
+		blockCount: blockCountRow?.blockCount ?? 0,
 	}
 }
 

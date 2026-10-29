@@ -1,12 +1,15 @@
 import { fetchActivity } from "@carlnotes/client/activityClient"
+import { showClientError } from "@carlnotes/client/apiClient"
 import { authClient } from "@carlnotes/client/authClient"
 import { fetchProfile } from "@carlnotes/client/profileClient"
 import { toAvatarImagePath } from "@carlnotes/contracts/avatars"
 import type { ProfileResponse } from "@carlnotes/contracts/profiles"
 import { toCountLabel } from "@carlnotes/core/lib/labels"
+import { REQUEST_FAILED_TEXT } from "@carlnotes/core/lib/sessionCopy"
+import { toBlockLabel, toggleUserBlock } from "@carlnotes/core/lib/userBlocks"
 import { useQuery } from "@tanstack/react-query"
 import { useLocalSearchParams } from "expo-router"
-import { Pencil, Plus } from "lucide-react-native"
+import { Ban, Pencil, Plus } from "lucide-react-native"
 import { useState } from "react"
 import { View } from "react-native"
 import { ProfileFields } from "@/components/account/AccountSettings"
@@ -50,6 +53,19 @@ export default function ProfileScreen() {
 			void activity.refetch()
 		}
 	}
+
+	// block or unblock this person, then reload the profile
+	async function handleToggleBlock(): Promise<void> {
+		if (!profile) {
+			return
+		}
+		try {
+			await toggleUserBlock({ userId, isBlocked: profile.isBlocked })
+			handleReload()
+		} catch {
+			showClientError(REQUEST_FAILED_TEXT)
+		}
+	}
 	return (
 		<PageScreen
 			hasNewTopicButton={isOwnProfile}
@@ -57,14 +73,25 @@ export default function ProfileScreen() {
 			contentClassName={query.isPending ? "mt-0 gap-0" : "mt-2 gap-0"}
 			onRefresh={handleReload}
 			isRefreshing={query.isRefetching}
-			report={profile ? { subjectKind: "profile", subjectId: userId, subjectLabel: profile.username } : undefined}
+			report={
+				profile
+					? {
+							subjectKind: "profile",
+							subjectId: userId,
+							subjectLabel: profile.username,
+							author: { id: userId, username: profile.username },
+						}
+					: undefined
+			}
 			options={
 				isOwnProfile
 					? [
 							{ label: "Edit profile", icon: Pencil, onSelect: () => setIsEditing(true) },
 							{ label: "New team", icon: Plus, onSelect: () => setIsCreatingTeam(true) },
 						]
-					: []
+					: profile && session
+						? [{ label: toBlockLabel(profile.isBlocked), icon: Ban, onSelect: () => void handleToggleBlock() }]
+						: []
 			}
 			header={
 				query.isPending

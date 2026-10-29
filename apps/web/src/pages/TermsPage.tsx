@@ -1,3 +1,5 @@
+import { SUPPORT_EMAIL_ADDRESS, SUPPORT_MAILTO_HREF } from "@carlnotes/contracts/contact"
+import { TERMS_VERSION } from "@carlnotes/contracts/terms"
 import Markdown from "markdown-to-jsx"
 import { usePageTitle } from "@/hooks/usePageTitle"
 import { PAGE_CLASS } from "@/lib/styleClasses"
@@ -16,7 +18,7 @@ If you run your own instance, you may do anything the AGPL-3.0 license permits. 
 
 ## 3. Eligibility and accounts
 
-You are responsible for your account credentials and for everything done under your account. Tell us promptly at [support@carlnotes.com](mailto:support@carlnotes.com) if you suspect unauthorized access. One person per account. Do not share logins.
+You are responsible for your account credentials and for everything done under your account. Tell us promptly at [${SUPPORT_EMAIL_ADDRESS}](${SUPPORT_MAILTO_HREF}) if you suspect unauthorized access. One person per account. Do not share logins.
 
 ## 4. What the service does
 
@@ -58,11 +60,21 @@ Do not:
 - Resell, rent, or white-label the hosted service, or use it to build a directly competing product
 - Use the service to generate spam, harassment, malware, or deceptive content
 - Publish a topic that promotes illegal activity, harassment, hate, or sexual content involving minors
+- Post a message, note, or comment that harasses, threatens, or demeans another person, or that is sexual, violent, hateful, or otherwise objectionable
+- Post sexual content involving minors, or any other content that exploits or endangers a child. We remove it, and we report it to the National Center for Missing and Exploited Children or the equivalent authority
 - Scrape or bulk-export other users' public feeds through automated means
 
 We may suspend or terminate an account that breaks these rules, with notice where practical and without notice where the harm is immediate.
 
-## 7. Plans, limits, and billing
+## 7. Objectionable content, reports, and removals
+
+We have no tolerance for objectionable content or abusive people. Messages, notes, comments, topic names and prompts, team names, and usernames are read by other people, so each one is checked before it posts, and a post the check rejects is not published. A check is not a guarantee, so anyone can report content or a person from the page where they see it, and can block a person so that person's messages, comments, and invitations no longer reach them.
+
+We read every report. We act on a report within one day of receiving it: we remove content that breaks these rules, and we may suspend or close the account that posted it. Content we remove is removed for everyone. Removal and suspension are at our discretion, and we tell the person whose content was removed where that is practical.
+
+To report content outside the app, or to reach us about a removal, email [${SUPPORT_EMAIL_ADDRESS}](${SUPPORT_MAILTO_HREF}).
+
+## 8. Plans, limits, and billing
 
 Free trials, plan tiers, and usage limits are described on our plans page and may change with notice.
 
@@ -79,23 +91,23 @@ When paid plans are live:
 - Failed payments may lead to suspension after notice
 - We will give at least 30 days' notice before a price increase applies to you
 
-## 8. Availability
+## 9. Availability
 
 The service is provided as is and may change. We may add, alter, or remove features, and we may suspend the service for maintenance. There is no uptime commitment unless we have signed a separate agreement with you.
 
 CarlNotes depends on third-party sources and APIs. Sources can break, change terms, or go away. We are not responsible when they do.
 
-## 9. Termination
+## 10. Termination
 
 You may delete your account at any time. We may suspend or close an account for a breach of these terms, for a legal requirement, or if we discontinue the service. If we discontinue the service, we will give reasonable notice and a window to export your data.
 
 On termination, your right to use the service ends and your data is deleted on the schedule in the Privacy Policy. Sections 5, 10, 11, 12, and 14 survive.
 
-## 10. Disclaimers
+## 11. Disclaimers
 
 THE SERVICE IS PROVIDED "AS IS" AND "AS AVAILABLE", WITHOUT WARRANTIES OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, AND NON-INFRINGEMENT. WE DO NOT WARRANT THAT THE SERVICE WILL BE UNINTERRUPTED, ERROR-FREE, OR THAT AI-GENERATED OUTPUT WILL BE ACCURATE.
 
-## 11. Limitation of liability
+## 12. Limitation of liability
 
 TO THE MAXIMUM EXTENT PERMITTED BY LAW, WE ARE NOT LIABLE FOR INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, OR PUNITIVE DAMAGES, OR FOR LOST PROFITS, DATA, OR GOODWILL.
 
@@ -103,31 +115,32 @@ OUR TOTAL LIABILITY FOR ANY CLAIM IS LIMITED TO THE GREATER OF THE AMOUNT YOU PA
 
 Some jurisdictions do not allow these limits. Where that is the case, they apply to the fullest extent permitted.
 
-## 12. Indemnity
+## 13. Indemnity
 
 You agree to defend and hold us harmless from claims arising out of your content, your use of the service, or your breach of these terms.
 
-## 13. Copyright complaints
+## 14. Copyright complaints
 
-If you believe content on the hosted service infringes your copyright, send a notice to [support@carlnotes.com](mailto:support@carlnotes.com) with the work, the location, your contact details, a good-faith statement, and your signature. We remove infringing material and terminate repeat infringers.
+If you believe content on the hosted service infringes your copyright, send a notice to [${SUPPORT_EMAIL_ADDRESS}](${SUPPORT_MAILTO_HREF}) with the work, the location, your contact details, a good-faith statement, and your signature. We remove infringing material and terminate repeat infringers.
 
 Note that findings link to third-party content. Requests about the underlying content should go to the site hosting it.
 
-## 14. Governing law and disputes
+## 15. Governing law and disputes
 
 These terms are governed by the laws of the State of California, without regard to conflict of laws rules. Disputes go to the state or federal courts in San Mateo County, California, and both sides consent to that venue.
 
-## 15. Changes
+## 16. Changes
 
 We may update these terms. We will post the new version here and update the date. If the change is material, we will email account holders at least 30 days before it takes effect. Continuing to use the service after that means you accept the new terms.
 
-## 16. General
+## 17. General
 
 These terms plus the Privacy Policy are the entire agreement between us. If a provision is unenforceable, the rest stays in force. Our not enforcing a provision is not a waiver of it. You may not assign these terms. We may assign them in a merger or sale of the business.
 
 ## Contact
 
-[support@carlnotes.com](mailto:support@carlnotes.com)`
+Questions about these terms, a report, or a removal go to [${SUPPORT_EMAIL_ADDRESS}](${SUPPORT_MAILTO_HREF}).
+`
 
 /**
  * CarlNotes' terms of service for the hosted service.
@@ -138,9 +151,7 @@ export function TermsPage() {
 		<main className={PAGE_CLASS}>
 			{/* the title and the effective / last-updated dates */}
 			<h1 className="font-display text-2xl">Terms of Service</h1>
-			<p className="text-muted-foreground mt-2 text-sm">
-				Effective date: July 24, 2026 · Last updated: October 1, 2026
-			</p>
+			<p className="text-muted-foreground mt-2 text-sm">Effective date: July 24, 2026 · Version {TERMS_VERSION}</p>
 			{/* the numbered sections, rendered from the markdown body */}
 			<Markdown options={LEGAL_MARKDOWN_OPTIONS}>{TERMS_BODY}</Markdown>
 		</main>

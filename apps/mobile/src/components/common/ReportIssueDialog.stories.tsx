@@ -16,3 +16,12 @@ const meta = {
 export default meta
 type Story = StoryObj<typeof meta>
 export const Empty: Story = {}
+// a chat message's report, with the author's block offered in the same sheet
+export const WithAuthorBlock: Story = {
+	args: {
+		subjectKind: "chatMessage",
+		subjectId: "12",
+		subjectLabel: "a message from carlos",
+		author: { id: "user-carlos", username: "carlos" },
+	},
+}

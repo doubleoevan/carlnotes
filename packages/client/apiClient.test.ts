@@ -128,3 +128,37 @@ test("an account-retired request never dispatches after delayed session headers"
 	await expect(pendingRequest).rejects.toThrow()
 	expect(requests).toHaveLength(0)
 })
+
+// a write rejected for the Terms waits for the dialog. accepted, the same request is sent again and its response
+// returned. dismissed, the rejection is returned as it came
+test("a terms rejection is sent again after acceptance and returned as is after a dismissal", async () => {
+	const termsRejection = JSON.stringify({ rejection: "termsOutdated", termsVersion: "2026-10-29" })
+	const recordedRequests: RecordedRequest[] = []
+	let dialogOutcome: "accepted" | "dismissed" = "accepted"
+	globalThis.fetch = (async (input: RequestInfo | URL, init: RequestInit = {}) => {
+		recordedRequests.push({ url: String(input), init })
+		const isFirstTry = recordedRequests.length % 2 === 1
+		return new Response(isFirstTry ? termsRejection : "{}", {
+			status: isFirstTry ? 403 : 200,
+			headers: { "content-type": "application/json" },
+		})
+	}) as unknown as typeof fetch
+	configureApiClient({
+		apiBaseUrl: "https://api.example",
+		showError: () => {},
+		onTermsOutdated: async () => dialogOutcome,
+	})
+
+	// accepted: the second response comes back, from the same body
+	const acceptedResponse = await fetchApi("/api/notes", { method: "POST", body: '{"name":"kept"}' })
+	expect(acceptedResponse.status).toBe(200)
+	expect(recordedRequests).toHaveLength(2)
+	expect(recordedRequests[1]?.init.body).toBe('{"name":"kept"}')
+
+	// dismissed: the rejection stands, with its body still readable
+	dialogOutcome = "dismissed"
+	const dismissedResponse = await fetchApi("/api/notes", { method: "POST", body: "{}" })
+	expect(dismissedResponse.status).toBe(403)
+	expect(await dismissedResponse.json()).toMatchObject({ rejection: "termsOutdated" })
+	expect(recordedRequests).toHaveLength(3)
+})

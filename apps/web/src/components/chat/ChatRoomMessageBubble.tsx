@@ -8,9 +8,9 @@ import {
 	type ChatRoomMessageElements,
 	ChatRoomMessageBubble as SharedChatRoomMessageBubble,
 } from "@carlnotes/core/components/ChatRoomMessageBubble"
-import { DELETE_CHAT_MESSAGE_COPY } from "@carlnotes/core/lib/chatCopy"
+import { DELETE_CHAT_MESSAGE_COPY, HIDDEN_QUOTE_TEXT, REPORT_CHAT_MESSAGE_LABEL } from "@carlnotes/core/lib/chatCopy"
 import { cn } from "@carlnotes/nightshift/classNames"
-import { FileText, Film, Image, Paperclip, Reply, Trash2, X } from "lucide-react"
+import { FileText, Film, Flag, Image, Paperclip, Reply, Trash2, X } from "lucide-react"
 import { memo, useState } from "react"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { ConfirmDialog } from "@/components/common/ConfirmDialog"
@@ -51,6 +51,11 @@ const chatRoomMessageElements: ChatRoomMessageElements = {
 			{/* quoted message */}
 			<span className="mt-0.5 line-clamp-3 block">{message.content}</span>
 		</button>
+	),
+	HiddenQuote: () => (
+		<div className="text-muted-foreground bg-bubble/60 border-border mb-0.5 max-w-[92%] rounded-lg border-l-2 px-2.5 py-1 text-xs italic @lg:max-w-[75%]">
+			{HIDDEN_QUOTE_TEXT}
+		</div>
 	),
 	Body: ({ content, isOwn, isModel }) => (
 		<div
@@ -134,6 +139,7 @@ function RoomFooter({
 	canDelete,
 	onDeleteChatMessage,
 	onReply,
+	onReport,
 	now,
 }: ChatRoomMessageBubbleProps & { isModel: boolean }) {
 	const [isConfirmingDelete, setIsConfirmingDelete] = useState(false)
@@ -179,6 +185,22 @@ function RoomFooter({
 				<Reply className="size-3" />
 				Reply
 			</button>
+			{/* the report action */}
+			{onReport && !isOwnChatMessage && !isModel && chatMessage.authorUserId && (
+				<Tooltip>
+					<TooltipTrigger asChild>
+						<button
+							type="button"
+							aria-label={REPORT_CHAT_MESSAGE_LABEL}
+							onClick={() => onReport(chatMessage)}
+							className="hover:text-foreground flex items-center"
+						>
+							<Flag className="size-3" />
+						</button>
+					</TooltipTrigger>
+					<TooltipContent side="top">{REPORT_CHAT_MESSAGE_LABEL}</TooltipContent>
+				</Tooltip>
+			)}
 			<span>{toTimeAgoLabel(new Date(chatMessage.createdAt).getTime(), now)}</span>
 			{/* message deletion confirmation */}
 			{canDelete && isConfirmingDelete && (

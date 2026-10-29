@@ -10,7 +10,8 @@ Workers by `SCREEN_CONCURRENCY`, and a Worker of its own for the `scan-closing` 
 apart from the scan slots), `schedule.ts` (the sweep, `bun run schedule`, or `bun run dev:worker` on a minute's
 interval: it starts as many scheduled scans as the backlog allows, a daily topic past its owner's daily scans cutoff
 once a week, then copies the viewer and listener counts through `syncViewerCounts.ts`, retries the pending object
-deletions through `retryPendingObjectDeletions.ts`, and reports the day's spend across every user through
+deletions through `retryPendingObjectDeletions.ts`, mails the support inbox one reminder for each content report open
+past twelve hours through `reportReminders.ts`, and reports the day's spend across every user through
 `dailySpend.ts`, which warns past `GLOBAL_DAILY_SPEND_ALERT_USD`), `scanQueue.ts` (the
 sweep's view of the scan queue: the start of the rows a dying caller never dispatched, the queue's report, and how many
 Scans a sweep may start, `SCAN_DISPATCH_LIMIT` minus the backlog), `scheduledTopicLimits.ts` (the limits that the sweep
@@ -35,6 +36,9 @@ for a question about the app; a section whose hash is unchanged is not embedded 
   active followers, and finding openers, and each podcast episode's listeners. A shown count never drops, and the
   views counted since the last sweep are lost with a restart. A topic or podcast episode whose save fails is listed as
   changed again for the next sweep.
+- `reportReminders.ts` reads the content reports still open and never reminded twelve hours after they were made,
+  mails each one to `SUPPORT_EMAIL` through the report email template with its admin console link, and writes the
+  report's reminded time, so a report is reminded once. Without `SUPPORT_EMAIL` it reads nothing.
 - `retryPendingObjectDeletions.ts` retries the pending keys in `pending_object_deletions` after the claimed sweep,
   outside its claim, with a doubling backoff up to a day, and reports a key pending for over a day once, deleting each
   through `deleteStoredObject` in `@carlnotes/db/store`. Before the sweep starts a Scan row that was opened and never

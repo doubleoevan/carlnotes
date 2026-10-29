@@ -51,3 +51,14 @@ export const NOTE_DELETE = {
 export function toNoteDeleteDescription(name: string): string {
 	return `"${name}" and its comments go in the bin. Carl can't fish them back out.`
 }
+
+// the report actions on another person's note and comment, and the label a reported comment's dialog shows
+export const REPORT_NOTE_LABEL = "Report note"
+export const REPORT_COMMENT_LABEL = "Report comment"
+
+/**
+ * Returns the label a reported comment's dialog shows for its subject.
+ */
+export function toReportedCommentLabel(authorUsername: string): string {
+	return `a comment from ${authorUsername}`
+}

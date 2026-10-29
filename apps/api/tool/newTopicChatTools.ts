@@ -1,6 +1,8 @@
 // the new-topic chat's own tools: writing the topic draft, suggesting its sources, and proposing the topic, and the
 // create that an agreed proposal runs
 
+import { toModerationRejectionMessage } from "@carlnotes/contracts/moderation"
+import { TERMS_OUTDATED_LINE } from "@carlnotes/contracts/terms"
 import {
 	addTopicSourcePayload,
 	type TopicDraft,
@@ -226,6 +228,11 @@ export function toCreateTopicText(createTopicFromDraftResult: CreateTopicFromDra
 			return `${createTopicFromDraftResult.email} does not take invites. Drop that address from the draft, then create again.`
 		case "inviteLimit":
 			return "That many invites is past the plan's limit. Trim the invite list, then create again."
+		// the moderation check's rejection, in Carl's own words
+		case "objectionable":
+			return `${toModerationRejectionMessage(createTopicFromDraftResult.category)} Nothing was created.`
+		case "termsOutdated":
+			return `${TERMS_OUTDATED_LINE} Nothing was created.`
 		// the gate's rejection
 		default:
 			return "The reader may not create a topic."
@@ -261,6 +268,11 @@ export function toCreateTopicReason(
 			return `That's more than the ${createTopicFromDraftResult.limit} sources a topic can have.`
 		case "inviteeRejected":
 			return `${createTopicFromDraftResult.email} doesn't take invites.`
+		// the moderation check's rejection, in Carl's own words
+		case "objectionable":
+			return toModerationRejectionMessage(createTopicFromDraftResult.category)
+		case "termsOutdated":
+			return TERMS_OUTDATED_LINE
 		// the rest read from the map
 		default:
 			return CREATE_REJECTION_LINES[createTopicFromDraftResult.status]

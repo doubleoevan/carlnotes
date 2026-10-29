@@ -1,7 +1,15 @@
 // text helper tests: whitespace runs and line breaks become single spaces with the ends trimmed, and parts join on
 // middle dots without the empty ones
 import { expect, test } from "bun:test"
-import { toDotSeparatedText, toOneLineText } from "./text"
+import { toDotSeparatedText, toHtmlText, toOneLineText } from "./text"
+
+// tags go, entities decode, a link keeps its text, and the whitespace collapses
+test("toHtmlText returns an html body's readable text", () => {
+	expect(toHtmlText('<p>Hello &amp; <a href="https://x.test">welcome</a></p><ul><li>one</li><li>two</li></ul>')).toBe(
+		"Hello & welcome one two",
+	)
+	expect(toHtmlText("&#169; &#x1F600; &nbsp;x &unknown;")).toBe("© 😀 x &unknown;")
+})
 
 // tabs, line breaks, and padding all collapse into one space between words
 test("toOneLineText puts text on one line", () => {

@@ -13,15 +13,16 @@ import { withAvatarVersion } from "./avatars"
 import { type AppEnv, currentUser } from "./currentUser"
 import { loadProfileTeamStatuses, loadPublicTeams, loadTeamSummaries } from "./team/helpers"
 import { toTopicTableRows } from "./topic/topicTableRows"
+import { isUserBlocked, toUnblockedAuthorFilter } from "./userBlocks"
 
 // the trimmed query and the most rows to read
-type SearchUsersOptions = { query: string; limit: number }
+type SearchUsersOptions = { query: string; limit: number; userId: string | null }
 
 /**
  * Returns the users whose username contains the query, matched on the normalized username and query, shorter names
  * first.
  */
-export async function searchUsers({ query, limit }: SearchUsersOptions): Promise<UserSearchRow[]> {
+export async function searchUsers({ query, limit, userId }: SearchUsersOptions): Promise<UserSearchRow[]> {
 	// normalized usernames are lowercase alphanumerics, so anything else in a query could only act as a LIKE wildcard
 	const normalizedUsername = toNormalizedUsername(query).replaceAll(/[^a-z0-9]/g, "")
 	// too short a username matches most of the table
@@ -30,7 +31,7 @@ export async function searchUsers({ query, limit }: SearchUsersOptions): Promise
 	}
 
 	// read the matching users and shape each as a search row with its avatar version
-	const userRows = await toUserSearchQuery({ normalizedUsername, limit })
+	const userRows = await toUserSearchQuery({ normalizedUsername, limit, userId })
 	return userRows.map((userRow) => {
 		const user = withAvatarVersion(userRow)
 		return {
@@ -49,7 +50,17 @@ export async function searchUsers({ query, limit }: SearchUsersOptions): Promise
  * Returns the username search's query, shorter names first.
  */
 // biome-ignore lint/nursery/useExplicitReturnType: drizzle's select builder type is generated, and naming it here would break on an upgrade
-export function toUserSearchQuery({ normalizedUsername, limit }: { normalizedUsername: string; limit: number }) {
+export function toUserSearchQuery({
+	normalizedUsername,
+	limit,
+	userId,
+}: {
+	normalizedUsername: string
+	limit: number
+	userId: string | null
+}) {
+	// a signed-in user's results leave out the people they blocked
+	const blockFilter = userId ? toUnblockedAuthorFilter(userId, users.id) : undefined
 	return db
 		.select({
 			userId: users.id,
@@ -58,7 +69,7 @@ export function toUserSearchQuery({ normalizedUsername, limit }: { normalizedUse
 			avatarKey: users.avatarKey,
 		})
 		.from(users)
-		.where(like(users.usernameNormalized, `%${normalizedUsername}%`))
+		.where(and(like(users.usernameNormalized, `%${normalizedUsername}%`), blockFilter))
 		.orderBy(sql`length(${users.usernameNormalized})`, users.id)
 		.limit(limit)
 }
@@ -84,6 +95,9 @@ export async function loadProfile(profileUserId: string, userId: string | null):
 
 	// only an owner or an admin can see the non-public topics on the profile page
 	const includesNonPublicTopics = userId === user.id || (userId !== null && (await isAllowed(userId, "admin:console")))
+
+	// whether the signed-in user has blocked this person
+	const isBlocked = userId !== null && userId !== user.id && (await isUserBlocked(userId, user.id))
 	return {
 		userId: user.id,
 		username: user.username,
@@ -92,6 +106,7 @@ export async function loadProfile(profileUserId: string, userId: string | null):
 		joinedAt: user.createdAt.toISOString(),
 		subscriberCount: await countDistinctSubscribers(user.id),
 		includesNonPublicTopics,
+		isBlocked,
 		topics: await loadProfileTopics(user.id, includesNonPublicTopics, userId),
 		// a user's own profile shows every team they belong to.
 		// other users only see the public teams they are a member of.

@@ -10,6 +10,7 @@ export const TEST_NOTES: Note[] = Array.from({ length: 12 }, (_, index) => ({
 	canEdit: index % 3 === 0,
 	isNoteOwner: index % 3 === 0,
 	canDelete: index % 3 === 0,
+	owner: { id: index % 3 === 0 ? "user-carl" : "user-vienna", username: index % 3 === 0 ? "carl" : "vienna" },
 }))
 
 /**
@@ -25,6 +26,7 @@ export function toTestNote(overrides: Partial<NoteResponse> = {}): NoteResponse 
 		canEdit: true,
 		isNoteOwner: true,
 		canDelete: true,
+		owner: { id: "user-carl", username: "carl" },
 		html: "<p>Stored words</p>",
 		version: 3,
 		...overrides,

@@ -15,6 +15,7 @@ function note(visibility: "private" | "team" | "public", name = "Ideas") {
 		canEdit: true,
 		isNoteOwner: true,
 		canDelete: true,
+		owner: { id: "user-carl", username: "carl" },
 	}
 }
 

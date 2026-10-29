@@ -3,10 +3,10 @@ import {
 	type ChatRoomMessageElements,
 	ChatRoomMessageBubble as SharedChatRoomMessageBubble,
 } from "@carlnotes/core/components/ChatRoomMessageBubble"
-import { DELETE_CHAT_MESSAGE_COPY } from "@carlnotes/core/lib/chatCopy"
+import { DELETE_CHAT_MESSAGE_COPY, HIDDEN_QUOTE_TEXT, REPORT_CHAT_MESSAGE_LABEL } from "@carlnotes/core/lib/chatCopy"
 import { toTimeAgoLabel } from "@carlnotes/core/lib/chatMessages"
 import { cn } from "@carlnotes/nightshift/classNames"
-import { Reply, Trash2 } from "lucide-react-native"
+import { Flag, Reply, Trash2 } from "lucide-react-native"
 import { Alert, View } from "react-native"
 import { Button } from "@/components/primitives/button"
 import { Icon } from "@/components/primitives/icon"
@@ -42,6 +42,11 @@ const CHAT_ROOM_MESSAGE_ELEMENTS: ChatRoomMessageElements = {
 			</Text>
 		</Button>
 	),
+	HiddenQuote: () => (
+		<View className="mb-0.5 max-w-[92%] rounded-lg border-l-2 border-border bg-bubble/60 px-2.5 py-1">
+			<Text className="text-xs italic text-muted-foreground">{HIDDEN_QUOTE_TEXT}</Text>
+		</View>
+	),
 	Body: ({ content, isOwn, isModel }) => (
 		<View
 			className={cn(
@@ -63,7 +68,7 @@ const CHAT_ROOM_MESSAGE_ELEMENTS: ChatRoomMessageElements = {
 		</>
 	),
 	Attachments: ({ chatMessage }) => <ChatAttachmentChips attachments={chatMessage.attachments} />,
-	Footer: ({ chatMessage, isOwnChatMessage, canDelete, onDeleteChatMessage, onReply, now }) => (
+	Footer: ({ chatMessage, isOwnChatMessage, isModel, canDelete, onDeleteChatMessage, onReply, onReport, now }) => (
 		<View className={cn("mt-1 flex-row flex-wrap items-center gap-2", isOwnChatMessage && "flex-row-reverse")}>
 			<CopyButton text={chatMessage.content} />
 			{canDelete && (
@@ -92,6 +97,12 @@ const CHAT_ROOM_MESSAGE_ELEMENTS: ChatRoomMessageElements = {
 				<Icon as={Reply} className="size-3 text-muted-foreground" />
 				<Text className="text-xs text-muted-foreground">Reply</Text>
 			</ChatMessageAction>
+			{/* the report action */}
+			{onReport && !isOwnChatMessage && !isModel && chatMessage.authorUserId && (
+				<ChatMessageAction accessibilityLabel={REPORT_CHAT_MESSAGE_LABEL} onPress={() => onReport(chatMessage)}>
+					<Icon as={Flag} className="size-3 text-muted-foreground" />
+				</ChatMessageAction>
+			)}
 			<Text className="text-xs text-muted-foreground">
 				{toTimeAgoLabel(new Date(chatMessage.createdAt).getTime(), now)}
 			</Text>

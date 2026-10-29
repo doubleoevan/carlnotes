@@ -6,13 +6,17 @@ It imports `@carlnotes/contracts`, `@carlnotes/client`, `@carlnotes/nightshift`,
 - `components/` — portable React composition exported as `@carlnotes/core/components/<name>`. `TablePagination`,
   `Pagination`, `SourceResultsChart`, `TopicScanRecap`, `NumberedTopicFindingList`, `SafeNoteLink`, `TopicScanFailure`,
   `MoreButton`, `CopyMarkdownButton`, `NotesTable`, `ResourceMetadata`, and `RatingThumbs` own repeated content,
-  visibility, ordering, and interaction state. Each app
+  visibility, ordering, and interaction state. `BlockedUsersSection` lists the people the user blocked with their
+  Unblock, over `BlockedUsersCard`, which the stories render from a fixture list. `TermsAcceptanceNotice` asks a stale
+  account to accept the published Terms or put it off, and `useIsTermsAcceptanceDialogOpen` says when it shows. Each app
   supplies the small set of typed platform elements the component needs. Keep component adapters at module scope
   so state changes preserve their identity. Use render callbacks when controls must retain app-local refs or routing.
   Core imports no DOM or native component library. Platform wrappers keep their existing stories; web integration
   tests exercise the shared composition through real DOM adapters, and device checks cover native adapters.
 
-- `stores/` — app state one module owns and any component may read, named `<thing>Store.ts`. Each keeps its value in
+- `stores/` — app state one module owns and any component may read, named `<thing>Store.ts`.
+  `termsAcceptanceStore.ts` holds whether the Terms dialog is open: a write rejected for the Terms opens it, Not now
+  puts it off for that user, and the acceptance clears it. Each keeps its value in
   module scope and takes its `publish` call and `useStoreVersion` hook from `storeListeners.ts`, the one place the
   `useSyncExternalStore` contract lives, beside `toEventListeners` for a store's subscribe and announce of an event, so
   two components read one live value with no provider wrapping them. Every store hook calls `useStoreVersion`, which
@@ -22,7 +26,8 @@ It imports `@carlnotes/contracts`, `@carlnotes/client`, `@carlnotes/nightshift`,
   `podcastEpisodeQuestionRules.ts` holds a podcast player question's phases, endings, resume rule, and chapter line
   label, which `apps/web/src/stores/podcastEpisodeQuestionStore.ts` drives. A store that reaches an audio element, the
   media session, or a component library stays in `apps/web/src/stores/`.
-- `hooks/` — `useNow.ts`, the current time re-read on a tick for relative labels, one clock per list; `useAvatar.ts`,
+- `hooks/` — `useBlockedUsers.ts`, the user's block list and the unblock that shortens it once the server accepts;
+  `useNow.ts`, the current time re-read on a tick for relative labels, one clock per list; `useAvatar.ts`,
   the avatar setting read from the session and updated through it; `useUsernameChange.ts`, changing the signed-in
   user's username, shared by the account page and the profile page's edit modal; `useNoteBodySave.ts`, the save
   schedule of the note an editor has open and the hook that reads it (`toNoteBodySave`: a save a second after the
@@ -35,7 +40,7 @@ It imports `@carlnotes/contracts`, `@carlnotes/client`, `@carlnotes/nightshift`,
   waiting topic invitations while the app is focused and online, which reloads the chat rooms into the store when the
   count changes and drops a response from a replaced account; and `usePolledCounts.ts`, a page's viewer, follower, or
   listener counts read once the page shows and then every minute while the app is focused and online.
-- `lib/` — pure rules and formatting: `labels.ts` (values as the text a user sees: dates, durations, money, sizes, and
+- `lib/` — pure rules and formatting: `reportCopy.ts` (the report dialog's words on both apps), `labels.ts` (values as the text a user sees: dates, durations, money, sizes, and
   counts), `pageHead.ts` (a `PageHead`, or a fixed title and path, as the tags a route's `head()` returns),
   `paginationSlots.ts` (the slots a row of page links shows), `planCards.ts` (which plan card matches the user's plan
   and billing interval, and which badge shows), `streamReconnect.ts` (how long a silent SSE stream runs before it counts

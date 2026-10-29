@@ -12,7 +12,9 @@ import { zValidator } from "@hono/zod-validator"
 import { Hono } from "hono"
 import { z } from "zod"
 import { type AppEnv, currentUser, toAnalyticsProperties } from "../currentUser"
+import { toObjectionableTextResponse } from "../moderation"
 import { toolCallerRateLimiter } from "../rateLimit"
+import { toTermsOutdatedRejection } from "../termsAcceptance"
 import { removeTopicSource } from "../tool/topicSourceTools"
 import { deleteTopic } from "./deleteTopic"
 import { readVisitorTopicPage, TOPIC_PAGE_KEY_PREFIX } from "./feeds"
@@ -41,10 +43,19 @@ export const topicsRoute = new Hono<AppEnv>()
 			return context.json({ id: createTopicResult.id })
 		}
 
-		// each rejection is named: a rejecting invitee, a spent invite limit, or a topic quota
+		// each rejection is named: a violating name or prompt, a rejecting invitee, a spent invite limit, or a quota
+		if (createTopicResult.status === "objectionable") {
+			return toObjectionableTextResponse(context, createTopicResult.category)
+		}
+
+		// the Terms and the invitee rejections
+		if (createTopicResult.status === "termsOutdated") {
+			return toTermsOutdatedRejection(context)
+		}
 		if (createTopicResult.status === "inviteeRejected") {
 			return context.json({ error: "invitee-not-accepting", email: createTopicResult.email }, 409)
 		}
+
 		if (createTopicResult.status === "inviteLimit") {
 			return context.json({ error: "daily invite limit reached" }, 429)
 		}
@@ -140,6 +151,13 @@ export const topicsRoute = new Hono<AppEnv>()
 			return context.json({ ok: true })
 		}
 
+		// a violating name or prompt is rejected in Carl's words
+		if (updateTopicResult.status === "objectionable") {
+			return toObjectionableTextResponse(context, updateTopicResult.category)
+		}
+		if (updateTopicResult.status === "termsOutdated") {
+			return toTermsOutdatedRejection(context)
+		}
 		// a daily frequency past the plan's limit is a quota rejection
 		if (updateTopicResult.status === "dailyFrequency") {
 			return context.json({ error: "daily topic limit reached", dailyTopicLimit: updateTopicResult.limit }, 429)

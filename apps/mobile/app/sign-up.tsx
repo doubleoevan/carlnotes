@@ -21,6 +21,7 @@ import { SessionErrorText } from "@/components/session/SessionErrorText"
 import { SessionFooterLink } from "@/components/session/SessionLink"
 import { SessionScreen } from "@/components/session/SessionScreen"
 import { SessionEmailInput, SessionPasswordInput } from "@/components/session/SessionTextInput"
+import { TermsAgreementText } from "@/components/session/TermsAgreementText"
 
 // what the form says for each field the payload rejects
 const EMAIL_INVALID_TEXT = "Enter a valid email address."
@@ -94,6 +95,8 @@ export default function SignUpScreen() {
 				</Button>
 			)}
 
+			{/* continuing by any path accepts the Terms and the Privacy Policy */}
+			<TermsAgreementText />
 			{/* the link back to the sign-in screen */}
 			<SessionFooterLink prompt="Already have an account?" linkLabel="Log in" href="/sign-in" />
 		</SessionScreen>

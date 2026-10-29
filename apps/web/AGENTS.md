@@ -48,7 +48,8 @@ the browser bundle and renders pages through the server build, behind its own ro
   names as removable.
 - `components/table/` — the page tables and their cells: `TopicNameLink.tsx`, a topic's linked name with its latest
   podcast episode's play button, and `PodcastEpisodeTitleLink.tsx`, a podcast episode's linked title with its play
-  button. `TeamMembershipRows.tsx` holds the teams table's membership and invite rows, `TeamSubtablesRow.tsx` the
+  button. `AdminReportsTable.tsx` is the admin console's open content reports, the one the email linked to first, each
+  with Remove and Keep. `TeamMembershipRows.tsx` holds the teams table's membership and invite rows, `TeamSubtablesRow.tsx` the
   members or topics subtable a membership row opens under itself, with `useTeamSubtables`, the hook that holds which one
   is open and the team page payload that fills it, `AdminUserRows.tsx` the admin users table's row with its subtables,
   and `PagedTableSection.tsx` the titled section of a paged, sortable table that Similar topics and both episode tables
@@ -101,11 +102,16 @@ the browser bundle and renders pages through the server build, behind its own ro
   still asks for.
 - `components/session/` — the login and signup pages' layout and their sign-in pieces. `SessionLayout.tsx` opens the
   Google, GitHub, and Apple sign-ins and says so if one does not open. `VerifyEmailNotice.tsx` is the
-  notice the signup page shows after a password signup, with a button straight into the app. `signupPrompts.ts` holds
+  notice the signup page shows after a password signup, with a button straight into the app.
+  `TermsAcceptanceDialog.tsx` renders core's `TermsAcceptanceNotice` in a dialog the layout mounts, for a signed-in
+  user whose accepted Terms version is stale or whose write the api rejected for the Terms. It fails open: Not now and
+  the close control put it off until the next rejected write, and a session without a version field never sees it. `signupPrompts.ts` holds
   `toSignupNavigation` and `toSignupHref`, which every action that sends a visitor to signup goes through, tagged with
   the action's cta from `@carlnotes/core/lib/signupPrompts`, whose prompt the signup page shows as a toast on arrival.
 - `components/account/` — the account page's sections. `SpendMeter.tsx` is the monthly budget's bar, with a circle
   above it for each monthly budget cutoff, a tooltip on each circle, and the list of what each cutoff stops.
+  `AccountFields.tsx` holds the DOM elements of core's account sections, the Blocked people rows among them, which
+  `BlockedUsersSection.stories.tsx` shows in every state.
   `globals.css` scans `core/lib/spendMeter.ts` for the shared bar and legend colors. The legend uses compact row gaps
   when wrapping, matching native. Cutoffs come from the API; an admin without a budget override has none.
   `MonthlyBudgetCutoffTable.tsx` is the plans page's monthly budget cutoff table of every plan's cutoffs, which a test

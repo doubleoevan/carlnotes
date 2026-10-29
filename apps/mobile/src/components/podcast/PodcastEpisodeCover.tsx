@@ -23,7 +23,7 @@ export function PodcastEpisodeCover({
 		<View className={`shrink-0 items-center justify-center overflow-hidden rounded-lg bg-muted ${className ?? ""}`}>
 			{
 				<Image
-					source={{ uri: coverUrl ?? placeholder }}
+					source={{ uri: coverUrl ? toApiUrl(coverUrl) : placeholder }}
 					onError={() => setFailedUrl(podcastEpisode.smallCoverUrl)}
 					accessibilityLabel={podcastEpisode.title ? `Cover of ${podcastEpisode.title}` : "Episode cover"}
 					style={{ width: "100%", height: "100%" }}

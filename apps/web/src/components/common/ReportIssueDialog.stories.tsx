@@ -1,4 +1,5 @@
-// the report dialog: the user's reason for flagging a Topic, a profile, or a Team, sent to the moderators
+// the report dialog: the user's reason for flagging a Topic, a profile, a Team, a chat message, a note, or a note
+// comment, sent to the moderators, with the author's block offered on an authored subject
 import { sendFlagContent } from "@carlnotes/client/flagContentClient"
 import type { Meta, StoryObj } from "@storybook/tanstack-react"
 import { expect, fn, mocked, screen, spyOn, waitFor } from "storybook/test"
@@ -23,7 +24,10 @@ const meta = {
 	component: ReportIssueDialog,
 	args: { subjectKind: "topic", subjectId: "topic-llm-tooling", subjectLabel: "LLM tooling", onClose: fn() },
 	argTypes: {
-		subjectKind: { control: "inline-radio", options: ["topic", "profile", "team"] },
+		subjectKind: {
+			control: "inline-radio",
+			options: ["topic", "profile", "team", "chatMessage", "note", "noteComment"],
+		},
 		subjectId: { control: "text" },
 		subjectLabel: { control: "text" },
 		onClose: { control: false },
@@ -39,7 +43,7 @@ const meta = {
 export default meta
 type Story = StoryObj<typeof meta>
 
-// a Topic's report with no reason yet, so the send button is disabled
+// a Topic's report with no reason yet, which can be sent as it is
 export const Topic: Story = {}
 
 // a profile's report
@@ -56,8 +60,26 @@ export const LongTeamName: Story = {
 	},
 }
 
-// a typed reason, which enables the send button
+// a typed reason
 export const WithReason: Story = { play: typeReportReason }
+
+// a chat message's report, with the author's block switched on before the send
+export const WithAuthorBlock: Story = {
+	args: {
+		subjectKind: "chatMessage",
+		subjectId: "chat-message-12",
+		subjectLabel: "a message from carlos",
+		author: { id: STORY_PEOPLE[1].userId, username: STORY_PEOPLE[1].username },
+	},
+	play: async (context) => {
+		await typeReportReason(context)
+		await context.userEvent.click(screen.getByRole("switch", { name: "Block @carlos" }))
+		await context.userEvent.click(screen.getByRole("button", { name: "Send report" }))
+		await waitFor(() =>
+			expect(mocked(sendFlagContent)).toHaveBeenCalledWith(expect.objectContaining({ shouldBlockAuthor: true })),
+		)
+	},
+}
 
 // the send in progress, with the button showing its progress
 export const Sending: Story = {

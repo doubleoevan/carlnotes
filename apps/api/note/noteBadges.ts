@@ -5,6 +5,7 @@ import { noteComments, noteReads, notes } from "@carlnotes/db/schema/notes"
 import { teamMembers, teams, teamTopics } from "@carlnotes/db/schema/teams"
 import { topics } from "@carlnotes/db/schema/topics"
 import { and, count, eq, gt, inArray, isNull, ne, or } from "drizzle-orm"
+import { toUnblockedAuthorFilter } from "../userBlocks"
 
 /**
  * Every unread edit and comment count the signed-in user has. One entry per note that holds something.
@@ -152,7 +153,7 @@ async function loadBadgedPages(
 	return { topicIds: [...teamIdsByTopicId.keys()], teamIds, teamIdsByTopicId }
 }
 
-// how many comments each note received since the user last read it, their own left out
+// how many comments each note received since the user last read it, their own and their blocked people's left out
 async function loadUnreadCommentCounts(userId: string, noteIds: string[]): Promise<Map<string, number>> {
 	if (noteIds.length === 0) {
 		return new Map()
@@ -167,6 +168,7 @@ async function loadUnreadCommentCounts(userId: string, noteIds: string[]): Promi
 			and(
 				inArray(noteComments.noteId, noteIds),
 				or(isNull(noteComments.authorUserId), ne(noteComments.authorUserId, userId)),
+				toUnblockedAuthorFilter(userId, noteComments.authorUserId),
 				or(isNull(noteReads.readAt), gt(noteComments.createdAt, noteReads.readAt)),
 			),
 		)

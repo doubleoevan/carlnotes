@@ -53,8 +53,10 @@ export function ChatMessageAction({
 			accessibilityRole="button"
 			accessibilityLabel={accessibilityLabel}
 			onPress={onPress}
+			// the box is as compact as the web's, and the hit slop keeps the 48 point touch target around it
+			hitSlop={12}
 			className={cn(
-				"min-h-12 min-w-12 flex-row items-center justify-center gap-1 rounded-md active:bg-accent",
+				"min-h-6 min-w-6 flex-row items-center justify-center gap-1 rounded-md px-1 active:bg-accent",
 				className,
 			)}
 		>

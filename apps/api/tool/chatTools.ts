@@ -181,7 +181,7 @@ export function toGateReason(status: "missing" | "forbidden"): string {
 // a create rejection that names nothing, and the line each one shows
 type PlainCreateRejection = Exclude<
 	CreateTopicFromDraftResult,
-	{ status: "created" | "invalid" | "limit" | "inviteeRejected" }
+	{ status: "created" | "invalid" | "limit" | "inviteeRejected" | "objectionable" | "termsOutdated" }
 >
 // the line each one shows
 export const CREATE_REJECTION_LINES: Record<PlainCreateRejection["status"], string> = {

@@ -6,6 +6,7 @@ import {
 	PasswordSection,
 	ProfileFields as SharedProfileFields,
 } from "@carlnotes/core/components/AccountFields"
+import { BlockedUsersSection } from "@carlnotes/core/components/BlockedUsersSection"
 import type { UsernameChange } from "@carlnotes/core/hooks/useUsernameChange"
 import {
 	CLOSE_ACCOUNT_CONFIRMATION,
@@ -19,10 +20,11 @@ import { UserAvatarPicker } from "@/components/avatar/UserAvatarPicker"
 import { ConfirmDialog } from "@/components/common/ConfirmDialog"
 import { Button } from "@/components/primitives/button"
 import { CARD_CLASS } from "@/lib/styleClasses"
-import { ACCOUNT_FIELD_ELEMENTS, PROFILE_FIELD_ELEMENTS } from "./AccountFields"
+import { ACCOUNT_FIELD_ELEMENTS, BLOCKED_USERS_ELEMENTS, PROFILE_FIELD_ELEMENTS } from "./AccountFields"
 
 /**
- * The settings sections on the account page: profile, email, password, invitations, and closing the account.
+ * The settings sections on the account page: profile, email, password, invitations, blocked people, and closing the
+ * account.
  */
 export function AccountSettings() {
 	return (
@@ -36,6 +38,7 @@ export function AccountSettings() {
 			<EmailSection elements={ACCOUNT_FIELD_ELEMENTS} callbackURL="/account" />
 			<PasswordSection elements={ACCOUNT_FIELD_ELEMENTS} />
 			<InvitationsSection elements={ACCOUNT_FIELD_ELEMENTS} />
+			<BlockedUsersSection elements={BLOCKED_USERS_ELEMENTS} />
 			{/* closing the account comes last. it is the one thing on this page that cannot be undone */}
 			<DeleteAccountSection />
 		</>

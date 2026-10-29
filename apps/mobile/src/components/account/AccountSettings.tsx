@@ -6,6 +6,7 @@ import {
 	PasswordSection,
 	ProfileFields as SharedProfileFields,
 } from "@carlnotes/core/components/AccountFields"
+import { BlockedUsersSection } from "@carlnotes/core/components/BlockedUsersSection"
 import { SITE_URL } from "@carlnotes/core/lib/pageHead"
 import {
 	CLOSE_ACCOUNT_CONFIRMATION,
@@ -20,7 +21,7 @@ import { UserAvatarPicker } from "@/components/avatar/UserAvatarPicker"
 import { Button } from "@/components/primitives/button"
 import { Icon } from "@/components/primitives/icon"
 import { Text } from "@/components/primitives/text"
-import { ACCOUNT_FIELD_ELEMENTS, PROFILE_FIELD_ELEMENTS } from "./AccountFields"
+import { ACCOUNT_FIELD_ELEMENTS, BLOCKED_USERS_ELEMENTS, PROFILE_FIELD_ELEMENTS } from "./AccountFields"
 
 /**
  * Shows every web account setting using shared forms and native profile and session adapters.
@@ -41,6 +42,7 @@ export function AccountSettings() {
 			<EmailSection elements={ACCOUNT_FIELD_ELEMENTS} callbackURL={`${SITE_URL}/account`} />
 			<PasswordSection elements={ACCOUNT_FIELD_ELEMENTS} />
 			<InvitationsSection elements={ACCOUNT_FIELD_ELEMENTS} />
+			<BlockedUsersSection elements={BLOCKED_USERS_ELEMENTS} />
 			<DeleteAccountSection />
 		</>
 	)

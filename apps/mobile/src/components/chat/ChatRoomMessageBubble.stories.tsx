@@ -46,6 +46,17 @@ export const DeleteConfirmation: Story = {
 		)
 	},
 }
+// another member's message with its Report action
+export const Reportable: Story = { args: { isOwnChatMessage: false, canDelete: false, onReport: () => {} } }
+// a reply to a message the user cannot see, with a hidden quote in its place
+export const HiddenQuote: Story = {
+	args: {
+		chatMessage: toStoryRoomMessage({ replyToChatMessageId: 1 }),
+		repliedChatMessage: null,
+		isOwnChatMessage: false,
+		canDelete: false,
+	},
+}
 export const MentionAndReply: Story = {
 	args: {
 		chatMessage: toStoryRoomMessage({

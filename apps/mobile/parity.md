@@ -38,6 +38,8 @@ capability the app will never need, with the reason, or `deferred` for one an ac
 | `pageHeadClient.fetchTeamPageHead` | web-only | Server-rendered head tags. The app has no document head |
 | `pageHeadClient.fetchTopicPageHead` | web-only | Server-rendered head tags. The app has no document head |
 | `profileClient.sendAvatarDecodeFailure` | web-only | A browser's image decode telemetry. The system photo picker returns images the app decodes |
+| `reportClient.fetchAdminReports` | web-only | The admin console's open reports. Admin stays on the web |
+| `reportClient.sendReportResolution` | web-only | The admin console's Remove and Keep. Admin stays on the web |
 | `teamClient.sendTeamAvatar` | web-only | The browser's File upload. The app uploads to the same route through `teamClient.sendTeamAvatarBody` |
 | `voiceClient.fetchSpokenAnswerAudio` | deferred | Prompt 54, voice in the mobile chat and the podcast question |
 | `voiceClient.fetchSpokenQuestionsStatus` | deferred | Prompt 54, voice in the mobile chat and the podcast question |
@@ -68,7 +70,9 @@ their reason.
 | Teams | `teams/index.tsx` | component | the shared membership table and the title badge |
 | Team | `teams/[teamId].tsx` | component | the shared tables, the header's update badge |
 | Activity | `activity.tsx` | component | the shared subscription and invite tables, the title badge |
-| Account, Settings | `account.tsx`, `(tabs)/settings.tsx` | component | `AccountBudget`, `AccountFields`, `PlanCard` from core |
+| Account, Settings | `account.tsx`, `(tabs)/settings.tsx` | component | `AccountBudget`, `AccountFields`, `BlockedUsersSection`, `PlanCard` from core, and the Contact entry |
+| Report and block | `common/ReportIssueDialog.tsx` from the message and comment footers, note management, and the profile menu | component, logic | the shared report, the block switch, the hidden quote, and the blocked content filters from core |
+| Terms acceptance | `session/TermsAcceptanceSheet.tsx` at the root | component | core's `TermsAcceptanceNotice` in a sheet, with Not now putting it off until the next rejected write |
 | Plans | `plans.tsx` | component | the shared plan cards, open to a visitor with the recommended plan highlighted |
 | Invite | `invite/[token].tsx`, `invite/InviteNotice.tsx` | logic | the rejection copy and the follow-ups from `core/lib/inviteRejections.ts` |
 | Login, Signup | `sign-in.tsx`, `sign-up.tsx` | logic | Google, GitHub, and Apple, the prompts from `core/lib/signupPrompts.ts` |
@@ -115,3 +119,8 @@ a React Native Storybook story; the device comparison runs on the rebuilt develo
 | The sign-in buttons with GitHub | none, the sign-in screen is a route | not yet |
 | The menu's appearance items | none, the item follows the saved choice | not yet |
 | The visitor's chat sign-up sheet | none, opened from the launcher | not yet |
+| The report sheet with the author's block | `Common/ReportIssueDialog`, WithAuthorBlock | not yet, stories only |
+| A reply to a hidden message | `Chat/ChatRoomMessageBubble`, HiddenQuote | not yet, stories only |
+| The Blocked people section's states | `Account/BlockedUsersSection` | not yet, stories only |
+| The Terms acceptance sheet | `Session/TermsAcceptanceSheet` | not yet, stories only |
+| The sign-up screens' acceptance line | `Session/TermsAgreementText` | not yet, stories only |

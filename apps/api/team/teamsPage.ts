@@ -9,6 +9,7 @@ import { and, desc, eq, gt, inArray, isNotNull, isNull, or, sql } from "drizzle-
 import { alias } from "drizzle-orm/pg-core"
 import { toProfileIdentity } from "../avatars"
 import { verifiedEmailQuery } from "../topic/permissions"
+import { toUnblockedAuthorFilter } from "../userBlocks"
 import { loadTeamSummaries, senders, toCountsByTeamId, toSpendByTeamId } from "./helpers"
 
 /**
@@ -48,6 +49,8 @@ export async function loadTeamsPage(userId: string): Promise<TeamsPageResponse> 
 				eq(invites.usedCount, 0),
 				isNull(invites.declinedAt),
 				or(isNull(invites.expiresAt), gt(invites.expiresAt, new Date())),
+				// an invitation from a person the user has blocked is not shown
+				toUnblockedAuthorFilter(userId, invites.invitedByUserId),
 			),
 		)
 		.orderBy(desc(invites.invitedAt))

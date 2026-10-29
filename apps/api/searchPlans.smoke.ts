@@ -77,7 +77,7 @@ assertPlan(
 
 // each name search reads its trigram index
 const userSearchPlan = await readPlan(
-	() => toUserSearchQuery({ normalizedUsername: "agent", limit: SEARCH_KIND_LIMIT }),
+	() => toUserSearchQuery({ normalizedUsername: "agent", limit: SEARCH_KIND_LIMIT, userId: null }),
 	["enable_seqscan"],
 )
 assertPlan(

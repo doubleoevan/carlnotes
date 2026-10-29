@@ -69,6 +69,8 @@ export type AdminTotals = {
 	netRevenueCents: number | null
 	// net revenue minus tracked variable cost and an optional fixed cost
 	contributionCents: number | null
+	// how many blocks users hold between them
+	blockCount: number
 }
 
 // the admin-console payload: the users and teams tables with the totals summary

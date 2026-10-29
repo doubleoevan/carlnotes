@@ -136,6 +136,8 @@ at the root import it by name.
   `topicTools.smoke.ts` runs `topicUpdateSmokeSections.ts`, `topicSourceSmokeSections.ts`, and
   `topicDraftSmokeSections.ts` over `topicToolsSmokeFixtures.ts`, and stops the first scan of the topic it creates
   through `topic/firstScanSmoke.ts`.
+- `topic/saveTopicGate.ts` — the Terms and moderation check a topic other people read passes before a save, skipped
+  for a private topic and, on an edit that changed neither the name nor the prompt, not classified again.
 - `topic/helpers.ts` — the topic page's reads; `topic/saveHelpers.ts` — the daily slot a frequency takes, a topic's
   new source rows, and its first scan; `topic/firstScanSmoke.ts` — the smoke helper that waits for a created topic's
   first scan to reach Temporal, then stops it and waits for its workflow to end; `topic/teamTopicOptions.ts` — the
@@ -299,7 +301,27 @@ at the root import it by name.
   and the release job send. `edgeCache.purge.ts` (`bun run edge:purge`) is the deploy job that clears the `rendered` tag
   right after the app deploys.
 - `admin.ts` — the admin writes (a user's role and budget override) and the admin console routes, over `adminConsole.ts`
-  (the users and teams tables, the platform totals, and the expandable rows, a topic's subscribers among them).
+  (the users and teams tables, the platform totals, and the expandable rows, a topic's subscribers among them) and
+  `report/adminReports.ts` (the open content reports, and resolving one by removing its content through the
+  content's own delete path or keeping it).
+- `report/` — content reports: `report/flagContent.ts` (the `POST /api/flag-content` route, the daily limit in Redis,
+  the stored report, and the email to `SUPPORT_EMAIL` with the admin console link), `report/reportSubjects.ts` (what a
+  report names, a Topic, profile, Team, chat room message, note, or note comment, each resolved under the same read rule
+  that lets the reporter see it), and `report/reports.ts` (writing a report, and the filters that hide a reported
+  subject from its reporter in the room, comment, and note reads).
+- `moderation.ts` — the check every text other users read goes through before it is stored: `toObjectionableCategory`
+  classifies it through `@carlnotes/models/moderation` and returns the category it violates or null, failing open on a
+  skipped or failed classification with a report that names the subject and never the text, and
+  `toObjectionableTextResponse` is the 422 the clients turn into Carl's rejection. The room post, note create, rename,
+  and body save, comment post, username save, team create and update, and `topic/saveTopic.ts` for an invite or public
+  Topic all call it.
+- `termsAcceptance.ts` — the Terms acceptance gate and route: `toTermsOutdatedResponse` is the 403 a user-content
+  write gets while the session's accepted version is older than `TERMS_VERSION`, `hasAcceptedCurrentTerms` reads the
+  row for a write with no session, and `POST /api/users/me/terms-acceptance` records the published version and
+  refreshes the user's sessions. Better Auth's user-create hook in `auth.ts` records the version on every sign-up path.
+- `userBlocks.ts` — one user blocking another: the block, unblock, and list routes' functions, and
+  `toUnblockedAuthorFilter`, which keeps a blocked person's rows out of the blocker's reads. `chat/roomVisibility.ts`
+  applies the report and block filters to a room's loaded messages for one member, after the shared load.
   `loadAdminTopicSubscribers` lists a topic's subscribers by `isActiveNonOwnerTopicSubscription`, the rule
   `topic/subscriberCounts.ts` counts with.
 - `activity.ts` — the activity page and its route, over `activityTopics.ts` (each topic's month scans, counts, chat

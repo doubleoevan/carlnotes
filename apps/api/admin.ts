@@ -1,6 +1,7 @@
 // the admin writes: a user's role and budget override, and the admin console routes
 
 import { budgetOverridePayload, setRolePayload } from "@carlnotes/contracts/payloads"
+import { resolveReportPayload } from "@carlnotes/contracts/reports"
 import { db } from "@carlnotes/db"
 import { users } from "@carlnotes/db/schema/users"
 import { replaceUserLiteLLMKey } from "@carlnotes/models/litellm"
@@ -18,6 +19,7 @@ import {
 } from "./adminConsole"
 import { isAdminRole, isAllowed } from "./authorization"
 import { type AppEnv, currentUser } from "./currentUser"
+import { loadOpenReports, resolveReport } from "./report/adminReports"
 import { refreshSessionUser } from "./sessions"
 import { loadAdminTeamTopics } from "./team/helpers"
 
@@ -173,6 +175,36 @@ export const adminRoute = new Hono<AppEnv>()
 		return topicSubscribers
 			? context.json({ subscribers: topicSubscribers })
 			: context.json({ error: "not found" }, 404)
+	})
+	.get("/admin/reports", async (context) => {
+		// reject a signed-out visitor
+		const userId = currentUser(context)
+		if (!userId) {
+			return context.json({ error: "unauthorized" }, 401)
+		}
+		// the open reports, newest first, admin only
+		if (!(await isAllowed(userId, "admin:console"))) {
+			return context.json({ error: "forbidden" }, 403)
+		}
+		return context.json({ reports: await loadOpenReports() })
+	})
+	.post("/admin/reports/:id/resolve", zValidator("json", resolveReportPayload), async (context) => {
+		// reject a signed-out visitor
+		const userId = currentUser(context)
+		if (!userId) {
+			return context.json({ error: "unauthorized" }, 401)
+		}
+		// remove the reported content or keep it, and close the report, admin only
+		if (!(await isAllowed(userId, "admin:console"))) {
+			return context.json({ error: "forbidden" }, 403)
+		}
+		const isResolved = await resolveReport({
+			context,
+			adminUserId: userId,
+			reportId: context.req.param("id"),
+			resolution: context.req.valid("json").resolution,
+		})
+		return isResolved ? context.json({ ok: true }) : context.json({ error: "not found" }, 404)
 	})
 	.post("/admin/users/:id/budget", zValidator("json", budgetOverridePayload), async (context) => {
 		// reject a signed-out visitor

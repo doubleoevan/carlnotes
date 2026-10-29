@@ -306,7 +306,7 @@ Check for:
      `api/rateLimit.ts` (now `toolCallerRateLimitStore` over the same counter)
    - `RATE_WINDOW_MS` in `api/rateLimit.ts`, `FLAG_WINDOW_MS` in `api/flagContent.ts`, and
      `CREDENTIAL_RATE_WINDOW_SECONDS`
-     in `api/auth.ts` (now `RATE_LIMIT_WINDOW_MS`, `FLAG_RATE_LIMIT_WINDOW_MS`, and
+     in `api/auth.ts` (now `RATE_LIMIT_WINDOW_MS`, `REPORT_RATE_LIMIT_WINDOW_MS`, and
      `CREDENTIAL_RATE_LIMIT_WINDOW_SECONDS`)
    - `sendTopicScanEmail` in `worker/notify.ts` (now `planScanDigest` and `sendScanDigestBatch`), `sendManualScanEmail`
      (now `sendScanReport`), and `finishScan`'s `trigger` argument (now `sendScanEmailWorkflow` in
@@ -781,6 +781,9 @@ Check for:
      `PageUpdateCountBadge` in `apps/mobile/src/components/common/UpdateCountBadge.tsx`; the notes section keeps
      `PageNoteBadge`), and `ApiClientSettings.headers` as an argument-less function (now takes an `ApiRequestContext`
      with the call's credentials mode)
+   - `apps/api/flagContent.ts` with its test (now `apps/api/report/flagContent.ts`, beside `report/reportSubjects.ts`,
+     `report/reports.ts`, and `report/adminReports.ts`), and its inline `toFlagHtml` (now the
+     `packages/emails/report-email.tsx` template)
 
 5. **Cross-harness enforcement parity**: `.claude/settings.json` hooks and
    `.opencode/plugin/guardrails.mjs` must gate the same operations with the

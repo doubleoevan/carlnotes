@@ -1,6 +1,7 @@
 import type { TeamIdentity } from "@carlnotes/contracts/teams"
 import { TeamFields } from "@carlnotes/core/components/TeamFields"
 import { useTeamFields } from "@carlnotes/core/hooks/useTeamFields"
+import { SAVE_FAILED_TEXT } from "@carlnotes/core/lib/sessionCopy"
 import { useNavigate } from "@tanstack/react-router"
 import { Users } from "lucide-react"
 import { useId, useRef, useState } from "react"
@@ -142,7 +143,7 @@ export function EditTeamModal({
 			onClose()
 		} catch (error) {
 			console.error("team save failed", error)
-			setRejection(error instanceof Error ? error.message : "That didn't save. Try again.")
+			setRejection(error instanceof Error ? error.message : SAVE_FAILED_TEXT)
 		} finally {
 			setIsSaving(false)
 		}

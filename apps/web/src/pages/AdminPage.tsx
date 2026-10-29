@@ -1,20 +1,25 @@
 import { authClient } from "@carlnotes/client/authClient"
 import { fetchAdminConsole } from "@carlnotes/client/billingClient"
+import { fetchAdminReports } from "@carlnotes/client/reportClient"
 import type { AdminConsoleResponse, AdminTeamRow, AdminTotals, AdminUserRow } from "@carlnotes/contracts/admin"
 import { plans } from "@carlnotes/contracts/enums"
 import { toSessionProfileIdentity } from "@carlnotes/contracts/profiles"
-import { toBytesLabel, toCentsLabel } from "@carlnotes/core/lib/labels"
+import type { AdminReport } from "@carlnotes/contracts/reports"
+import { toBytesLabel, toCentsLabel, toCountLabel } from "@carlnotes/core/lib/labels"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { Settings, ShieldUser } from "lucide-react"
 import { useCallback, useEffect, useState } from "react"
 import { ManageAdminsModal } from "@/components/admin/ManageAdminsModal"
 import { CoffeeLoading } from "@/components/branding/CoffeeLoading"
+import { CountBadge } from "@/components/common/CountBadge"
 import { UserProfileLink } from "@/components/common/UserProfileLink"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/primitives/accordion"
 import { Button } from "@/components/primitives/button"
+import { AdminReportsTable } from "@/components/table/AdminReportsTable"
 import { AdminTeamsTable } from "@/components/table/AdminTeamsTable"
 import { AdminUsersTable } from "@/components/table/AdminUsersTable"
 import { usePageTitle } from "@/hooks/usePageTitle"
+import { useSearchParams } from "@/hooks/useSearchParams"
 import { PAGE_CLASS, PAGE_HEADER_CLASS, PAGE_TITLE_CLASS } from "@/lib/styleClasses"
 
 /**
@@ -26,12 +31,18 @@ export function AdminPage() {
 	const [adminConsole, setAdminConsole] = useState<AdminConsoleResponse | null>(null)
 	const [isForbidden, setIsForbidden] = useState(false)
 	const [isManagingAdmins, setIsManagingAdmins] = useState(false)
+	// the open reports, and the one the report email linked to
+	const [reports, setReports] = useState<AdminReport[]>([])
+	const focusedReportId = useSearchParams().get("report")
 
-	// load the console payload, and again after each inline edit
+	// load the console payload and the open reports, and again after each inline edit or resolution
 	const loadConsole = useCallback(() => {
 		fetchAdminConsole()
 			.then(setAdminConsole)
 			.catch(() => setIsForbidden(true))
+		fetchAdminReports()
+			.then(setReports)
+			.catch(() => setReports([]))
 	}, [])
 
 	useEffect(() => {
@@ -69,6 +80,12 @@ export function AdminPage() {
 					<h1 className={PAGE_TITLE_CLASS}>
 						<ShieldUser className="size-6" />
 						Admin
+						{/* the open report count */}
+						{reports.length > 0 && (
+							<span title={toCountLabel(reports.length, "open report")}>
+								<CountBadge count={reports.length} />
+							</span>
+						)}
 					</h1>
 					<Button className="shrink-0" onClick={() => setIsManagingAdmins(true)}>
 						<Settings className="size-4" />
@@ -81,8 +98,14 @@ export function AdminPage() {
 			<div className="px-safe">
 				<TotalSummaries totals={adminConsole.totals} users={adminConsole.users} teams={adminConsole.teams} />
 				{/* the two sections as accordions, the shape every other page's sections take */}
-				<Accordion type="multiple" defaultValue={["users", "teams"]} className="mt-4">
-					{/* drop the divider line between the Users and Teams sections */}
+				<Accordion type="multiple" defaultValue={["reports", "users", "teams"]} className="mt-4">
+					{/* the open reports first, resolved from here. drop the divider lines between the sections */}
+					<AccordionItem value="reports" className="border-b-0">
+						<AccordionTrigger className="font-semibold">{`Reports (${reports.length})`}</AccordionTrigger>
+						<AccordionContent>
+							<AdminReportsTable reports={reports} focusedReportId={focusedReportId} onResolved={loadConsole} />
+						</AccordionContent>
+					</AccordionItem>
 					<AccordionItem value="users" className="border-b-0">
 						<AccordionTrigger className="font-semibold">Users</AccordionTrigger>
 						<AccordionContent>
@@ -122,13 +145,14 @@ function TotalSummaries({
 	// the users on each plan. a count, not a plan gate
 	const usersByPlan = Map.groupBy(users, (user) => user.plan)
 	return (
-		<div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
+		<div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-7">
 			<PlanCountCard label="Users" counts={plans.map((countedPlan) => usersByPlan.get(countedPlan)?.length ?? 0)} />
 			<TotalCard label="Teams" figure={String(teams.length)} />
 			<TotalCard label="Storage" figure={toBytesLabel(totals.attributedBytes)} />
 			<TotalCard label="Cost this month" figure={toCentsLabel(totals.monthVariableCostCents)} />
 			<TotalCard label="Net revenue" figure={toCentsLabel(totals.netRevenueCents)} />
 			<TotalCard label="Contribution" figure={toCentsLabel(totals.contributionCents)} />
+			<TotalCard label="Blocks" figure={String(totals.blockCount)} />
 		</div>
 	)
 }

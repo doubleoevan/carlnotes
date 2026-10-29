@@ -29,7 +29,6 @@ import { VOICE_TRANSCRIPTION_PATH, voiceRoute } from "./chat/voiceRoute"
 import { countsRoute } from "./counts/countsRoute"
 import { type AppEnv, currentUser } from "./currentUser"
 import { renderedCacheHeaders } from "./edgeCache"
-import { flagContentRoute } from "./flagContent"
 import { invitesRoute, toInviteTarget } from "./invite/invites"
 import { receivedInvitesRoute } from "./invite/receivedInvites"
 import { userInvitesRoute } from "./invite/userInvites"
@@ -39,6 +38,7 @@ import { NOTE_BODY_PATH, notesRoute } from "./note/notes"
 import { podcastEpisodesRoute } from "./podcast/podcastEpisodes"
 import { podcastFeedsRoute } from "./podcast/podcastFeeds"
 import { profilesRoute } from "./profiles"
+import { flagContentRoute } from "./report/flagContent"
 import { searchRoute } from "./search/search"
 import { pageHeadRoute } from "./share/pageHead"
 import {
@@ -53,6 +53,7 @@ import {
 } from "./share/preview"
 import { setGateCookie, signGateToken, verifyGateToken, verifyTurnstileToken } from "./signupGate"
 import { teamsRoute } from "./team/teamsRoute"
+import { termsAcceptanceRoute } from "./termsAcceptance"
 import { TOPIC_ATTACHMENT_UPLOAD_PATH, topicAttachmentsRoute } from "./topic/attachments"
 import { featuringRoute } from "./topic/featuring"
 import { buildTopicFeeds, readVisitorTopicFeeds } from "./topic/feeds"
@@ -67,6 +68,7 @@ import {
 	unsubscribe,
 	unsubscribedPage,
 } from "./unsubscribe"
+import { userBlocksRoute } from "./userBlocks"
 import { usernamesRoute } from "./usernames"
 import { usersRoute } from "./users"
 
@@ -310,6 +312,10 @@ export const apiRoute = new Hono<AppEnv>()
 	.route("/", usernamesRoute)
 	// closing an account, by an admin or by its own user
 	.route("/", usersRoute)
+	// blocking a user, unblocking them, and the block list
+	.route("/", userBlocksRoute)
+	// accepting the published Terms
+	.route("/", termsAcceptanceRoute)
 	// the mcp client name route
 	.route("/", mcpClientsRoute)
 	// the admin console routes

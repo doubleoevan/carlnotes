@@ -10,6 +10,11 @@ import { zValidator } from "@hono/zod-validator"
 import { and, asc, eq } from "drizzle-orm"
 import { Hono } from "hono"
 import { type AppEnv, toAnalyticsProperties } from "../currentUser"
+import { toObjectionableCategory, toObjectionableTextResponse } from "../moderation"
+import { toolCallerRateLimiter } from "../rateLimit"
+import { toUnreportedFilter } from "../report/reports"
+import { toTermsOutdatedResponse } from "../termsAcceptance"
+import { toUnblockedAuthorFilter } from "../userBlocks"
 import { loadVisibleNote } from "./notePayloads"
 import { canEditNote } from "./permissions"
 
@@ -65,17 +70,47 @@ function toNoteComment(noteCommentRow: NoteCommentRow, userId: string | null): N
 	}
 }
 
-// the note's thread, oldest first, with each author joined
+// the note's thread, oldest first, with each author joined. a signed-in user's thread leaves out the comments they
+// reported and the ones by people they blocked
 async function loadNoteComments(noteId: string, userId: string | null): Promise<NoteComment[]> {
+	const hiddenCommentFilter = userId
+		? and(
+				toUnreportedFilter(userId, "noteComment", noteComments.id),
+				toUnblockedAuthorFilter(userId, noteComments.authorUserId),
+			)
+		: undefined
 	const noteCommentRows = await db
 		.select(noteCommentColumns)
 		.from(noteComments)
 		.leftJoin(users, eq(users.id, noteComments.authorUserId))
-		.where(eq(noteComments.noteId, noteId))
+		.where(and(eq(noteComments.noteId, noteId), hiddenCommentFilter))
 		.orderBy(asc(noteComments.createdAt))
 
 	// each row shaped for the thread
 	return noteCommentRows.map((noteCommentRow) => toNoteComment(noteCommentRow, userId))
+}
+
+// which comment to delete, on which note, and by which author. a null author is an admin's delete of anyone's comment
+type DeleteNoteCommentOptions = { noteCommentId: string; noteId: string; authorUserId: string | null }
+
+/**
+ * Deletes one comment on a note, the author's own or any for an admin. Returns the deleted rows, empty if none matched.
+ */
+export async function deleteNoteComment({
+	noteCommentId,
+	noteId,
+	authorUserId,
+}: DeleteNoteCommentOptions): Promise<{ id: string }[]> {
+	return db
+		.delete(noteComments)
+		.where(
+			and(
+				eq(noteComments.id, noteCommentId),
+				eq(noteComments.noteId, noteId),
+				authorUserId === null ? undefined : eq(noteComments.authorUserId, authorUserId),
+			),
+		)
+		.returning({ id: noteComments.id })
 }
 
 // the note comment routes. every access rejection is a 404, like the note routes
@@ -88,12 +123,12 @@ export const noteCommentsRoute = new Hono<AppEnv>()
 		}
 		return context.json({ comments: await loadNoteComments(visibleNote.note.id, visibleNote.userId) })
 	})
-	.post("/notes/:id/comments", zValidator("json", noteCommentPayload), async (context) => {
+	.post("/notes/:id/comments", toolCallerRateLimiter, zValidator("json", noteCommentPayload), async (context) => {
 		// a post takes edit access, the same gate as writing the body
 		const visibleNote = await loadVisibleNote(context, context.req.param("id"))
 		const sessionUser = context.get("user")
 
-		// a visitor, an unreadable note, and a reader without edit access all see a missing note
+		// a visitor, an unreadable note, and a user without edit access all see a missing note
 		if (
 			!visibleNote?.userId ||
 			!sessionUser ||
@@ -102,8 +137,25 @@ export const noteCommentsRoute = new Hono<AppEnv>()
 			return context.json({ error: "not found" }, 404)
 		}
 
-		// write the comment, and take the row back as the thread reads it
+		// a user who has not accepted the current Terms is asked to first
+		const termsOutdatedResponse = toTermsOutdatedResponse(context)
+		if (termsOutdatedResponse) {
+			return termsOutdatedResponse
+		}
+
+		// a comment that reads as a violation is rejected in Carl's words before it is stored
 		const { body } = context.req.valid("json")
+		const objectionableCategory = await toObjectionableCategory({
+			text: body,
+			textKind: "a comment on a note",
+			subjectKind: "noteComment",
+			subjectId: visibleNote.note.id,
+		})
+		if (objectionableCategory) {
+			return toObjectionableTextResponse(context, objectionableCategory)
+		}
+
+		// write the comment, and take the row back as the thread reads it
 		const [insertedRow] = await db
 			.insert(noteComments)
 			.values({ noteId: visibleNote.note.id, authorUserId: visibleNote.userId, body })
@@ -130,23 +182,19 @@ export const noteCommentsRoute = new Hono<AppEnv>()
 		return context.json(toNoteComment(noteCommentRow, visibleNote.userId))
 	})
 	.delete("/notes/:id/comments/:commentId", async (context) => {
-		// a delete is the author's alone, on a note they may read
+		// a delete is the author's or an admin's, on a note they may read
 		const visibleNote = await loadVisibleNote(context, context.req.param("id"))
 		if (!visibleNote?.userId) {
 			return context.json({ error: "not found" }, 404)
 		}
 
-		// the delete names the note and the author, so another user's comment id changes nothing
-		const deletedRows = await db
-			.delete(noteComments)
-			.where(
-				and(
-					eq(noteComments.id, context.req.param("commentId")),
-					eq(noteComments.noteId, visibleNote.note.id),
-					eq(noteComments.authorUserId, visibleNote.userId),
-				),
-			)
-			.returning({ id: noteComments.id })
+		// the delete names the note and, for anyone but an admin, the author, so another user's comment id changes
+		// nothing
+		const deletedRows = await deleteNoteComment({
+			noteCommentId: context.req.param("commentId"),
+			noteId: visibleNote.note.id,
+			authorUserId: visibleNote.access.isAdmin ? null : visibleNote.userId,
+		})
 
 		// no row means somebody else's comment, or one already gone
 		if (deletedRows.length === 0) {

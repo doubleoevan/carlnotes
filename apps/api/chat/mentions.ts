@@ -8,6 +8,8 @@ import { chatRoomMentions, chatRoomMessages } from "@carlnotes/db/schema/chat"
 import { teamMembers } from "@carlnotes/db/schema/teams"
 import { users } from "@carlnotes/db/schema/users"
 import { and, desc, eq, inArray, isNull, type SQL } from "drizzle-orm"
+import { toUnreportedFilter } from "../report/reports"
+import { toUnblockedAuthorFilter } from "../userBlocks"
 import { decryptChatText } from "./encryption"
 import { toTopicFilter } from "./roomAccess"
 
@@ -66,7 +68,8 @@ async function loadUnseenChatMentions(userId: string, roomFilter: SQL | undefine
 		.from(chatRoomMessages)
 		.as("replied_to")
 
-	// select each unseen chat mention with its chat message and the replied-to author, latest first
+	// select each unseen chat mention with its chat message and the replied-to author, latest first. a mention by a
+	// blocked person, or in a message the user reported, is not shown
 	return db
 		.select({
 			topicId: chatRoomMessages.topicId,
@@ -79,7 +82,15 @@ async function loadUnseenChatMentions(userId: string, roomFilter: SQL | undefine
 		.from(chatRoomMentions)
 		.innerJoin(chatRoomMessages, eq(chatRoomMentions.messageId, chatRoomMessages.id))
 		.leftJoin(repliedChatMessages, eq(chatRoomMessages.replyToMessageId, repliedChatMessages.id))
-		.where(and(eq(chatRoomMentions.userId, userId), isNull(chatRoomMentions.seenAt), roomFilter))
+		.where(
+			and(
+				eq(chatRoomMentions.userId, userId),
+				isNull(chatRoomMentions.seenAt),
+				toUnblockedAuthorFilter(userId, chatRoomMessages.authorUserId),
+				toUnreportedFilter(userId, "chatMessage", chatRoomMessages.id),
+				roomFilter,
+			),
+		)
 		.orderBy(desc(chatRoomMessages.id))
 }
 

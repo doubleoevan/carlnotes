@@ -16,6 +16,7 @@ import { toPositiveInteger } from "@carlnotes/server/envSettings"
 import { reportError, shutdownMonitoring, startMonitoring } from "@carlnotes/server/monitoring"
 import { and, eq, inArray, isNull, lt, or, type SQL, sql } from "drizzle-orm"
 import { reportDailySpend } from "./dailySpend"
+import { remindOpenReports } from "./reportReminders"
 import { retryPendingObjectDeletions } from "./retryPendingObjectDeletions"
 import { reportScanQueue, startUndispatchedScans, toDispatchableScanCount } from "./scanQueue"
 import { isWithinDailyTopicLimit, loadScheduledTopicLimits } from "./scheduledTopicLimits"
@@ -266,12 +267,13 @@ export function frequencyWindowMs(frequency: Topic["frequency"]): number {
 	return frequency === "weekly" ? 7 * DAY_MS : DAY_MS
 }
 
-// run the claimed sweep and the claimed viewer count sync, then retry the pending object deletions and report the day's
-// spend once the claims are released
+// run the claimed sweep and the claimed viewer count sync, then retry the pending object deletions, remind the support
+// inbox of reports left open, and report the day's spend once the claims are released
 async function runSweep(): Promise<void> {
 	await runScheduledTopicScans()
 	await syncViewerCounts()
 	await retryPendingObjectDeletions()
+	await remindOpenReports()
 	await reportDailySpend()
 }
 

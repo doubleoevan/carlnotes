@@ -1,7 +1,7 @@
 import { authClient } from "@carlnotes/client/authClient"
 import { isInAppBrowser, toBrowserPlatform } from "@carlnotes/contracts/userAgent"
 import { toChromeIntentUrl } from "@carlnotes/core/lib/chromeIntentUrl"
-import { OAUTH_ERROR_TEXT } from "@carlnotes/core/lib/sessionCopy"
+import { OAUTH_ERROR_TEXT, TERMS_AGREEMENT_COPY } from "@carlnotes/core/lib/sessionCopy"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { type SubmitEvent, useEffect, useRef, useState } from "react"
 import { CoffeeMug } from "@/components/branding/CoffeeMug"
@@ -105,8 +105,20 @@ export function SessionLayout({
 				</>
 			)}
 
+			{/* continuing by any path accepts the Terms and the Privacy Policy */}
+			<p className="text-muted-foreground mt-6 text-center text-xs">
+				{TERMS_AGREEMENT_COPY.prompt}
+				<AnchorLink href="/terms" className="sentence-link" isNewTab>
+					{TERMS_AGREEMENT_COPY.termsLink}
+				</AnchorLink>
+				{TERMS_AGREEMENT_COPY.joiner}
+				<AnchorLink href="/privacy" className="sentence-link" isNewTab>
+					{TERMS_AGREEMENT_COPY.privacyLink}
+				</AnchorLink>
+				{TERMS_AGREEMENT_COPY.ending}
+			</p>
 			{/* the link to the other auth route */}
-			<p className="text-muted-foreground mt-6 text-center text-sm">
+			<p className="text-muted-foreground mt-3 text-center text-sm">
 				{footerPrompt}
 				<AnchorLink href={footerHref} className="sentence-link">
 					{footerLinkLabel}

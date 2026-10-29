@@ -15,7 +15,10 @@ import { zValidator } from "@hono/zod-validator"
 import { eq, inArray } from "drizzle-orm"
 import { Hono } from "hono"
 import { type AppEnv, currentUser } from "./currentUser"
+import { toObjectionableCategory, toObjectionableTextResponse } from "./moderation"
+import { toolCallerRateLimiter } from "./rateLimit"
 import { refreshSessionUser } from "./sessions"
+import { toTermsOutdatedResponse } from "./termsAcceptance"
 
 // how many proposals a username batch offers. enough for a real choice, small enough to stay a cheap query
 const USERNAME_BATCH_SIZE = 5
@@ -137,6 +140,7 @@ export async function saveDefaultUsername(userId: string, username: string): Pro
 // the username update route
 export const usernamesRoute = new Hono<AppEnv>().post(
 	"/usernames",
+	toolCallerRateLimiter,
 	zValidator("json", usernamePayload),
 	async (context) => {
 		// reject a signed-out visitor
@@ -144,8 +148,32 @@ export const usernamesRoute = new Hono<AppEnv>().post(
 		if (!userId) {
 			return context.json({ error: "unauthorized" }, 401)
 		}
+		// a user who has not accepted the current Terms is asked to first
+		const termsOutdatedResponse = toTermsOutdatedResponse(context)
+		if (termsOutdatedResponse) {
+			return termsOutdatedResponse
+		}
+
+		// an invalid username is rejected before anything is classified
+		const { username } = context.req.valid("json")
+		const usernameRejection = toUsernameRejection(username)
+		if (usernameRejection) {
+			return context.json({ error: usernameRejection }, 409)
+		}
+
+		// a username that reads as a violation is rejected in Carl's words before it is saved
+		const objectionableCategory = await toObjectionableCategory({
+			text: username,
+			textKind: "a username",
+			subjectKind: "profile",
+			subjectId: userId,
+		})
+		if (objectionableCategory) {
+			return toObjectionableTextResponse(context, objectionableCategory)
+		}
+
 		// set the username, or say which way it was rejected
-		const rejection = await saveUsername(userId, context.req.valid("json").username)
+		const rejection = await saveUsername(userId, username)
 		return rejection ? context.json({ error: rejection }, 409) : context.json({ ok: true })
 	},
 )

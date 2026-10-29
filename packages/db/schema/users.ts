@@ -34,6 +34,9 @@ export const users = pgTable(
 		budgetOverrideCents: integer("budget_override_cents"),
 		// when this user last signed in, written on every session creation. null until they sign in again
 		lastLoginAt: timestamp("last_login_at", { withTimezone: true }),
+		// the Terms version the user accepted and when. null until they accept
+		termsAcceptedVersion: text("terms_accepted_version"),
+		termsAcceptedAt: timestamp("terms_accepted_at", { withTimezone: true }),
 		// plain timestamps, as Better Auth's own schema has them
 		createdAt: timestamp("created_at").defaultNow().notNull(),
 		updatedAt: timestamp("updated_at")

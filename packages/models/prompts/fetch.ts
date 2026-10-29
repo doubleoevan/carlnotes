@@ -18,6 +18,7 @@ import chatSpokenTemplate from "./chat-spoken.md" with { type: "text" }
 import chatTeamTemplate from "./chat-team.md" with { type: "text" }
 import chatTopicTemplate from "./chat-topic.md" with { type: "text" }
 import checkAgreementTemplate from "./check-agreement.md" with { type: "text" }
+import moderateUserTextTemplate from "./moderate-user-text.md" with { type: "text" }
 import outlinePodcastEpisodeTemplate from "./outline-podcast-episode.md" with { type: "text" }
 import podcastEpisodeHostsTemplate from "./podcast-episode-hosts.md" with { type: "text" }
 import searchTopicTemplate from "./search-topic.md" with { type: "text" }
@@ -48,6 +49,7 @@ export const FALLBACK_PROMPT_TEMPLATES = {
 	"chat-team": chatTeamTemplate,
 	"chat-room-turn": chatRoomTurnTemplate,
 	"check-agreement": checkAgreementTemplate,
+	"moderate-user-text": moderateUserTextTemplate,
 	"suggest-sources": suggestSourcesTemplate,
 	"podcast-episode-hosts": podcastEpisodeHostsTemplate,
 	"outline-podcast-episode": outlinePodcastEpisodeTemplate,

@@ -136,3 +136,7 @@ export const maxTopicFindingsOptions = [5, 10, 15, 20] as const
 export const noteVisibilities = ["private", "team", "public"] as const
 // where a prompt version comes from: the topic editor, a chat tool, or an MCP tool
 export const promptVersionOrigins = ["editor", "chat", "mcp"] as const
+// what a report names: a Topic, a profile, a Team, a chat room message, a note, or a note comment
+export const reportSubjectKinds = ["topic", "profile", "team", "chatMessage", "note", "noteComment"] as const
+// how an admin closes a report: the content was removed, or kept
+export const reportResolutions = ["removed", "kept"] as const

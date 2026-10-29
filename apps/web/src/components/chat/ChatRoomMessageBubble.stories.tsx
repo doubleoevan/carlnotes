@@ -75,6 +75,23 @@ export const OtherMember: Story = {
 	},
 }
 export const LeaderModeration: Story = { args: { isOwnChatMessage: false, canDelete: true } }
+// another member's message with its Report action, which sends the message to the report dialog
+export const Reportable: Story = {
+	args: { isOwnChatMessage: false, canDelete: false, onReport: fn() },
+	play: async ({ canvas, args }) => {
+		await userEvent.click(canvas.getByRole("button", { name: "Report message" }))
+		await expect(args.onReport).toHaveBeenCalledWith(args.chatMessage)
+	},
+}
+// a reply to a message the user cannot see, reported or from someone they blocked, with a hidden quote in its place
+export const HiddenQuote: Story = {
+	args: {
+		chatMessage: toStoryRoomMessage({ replyToChatMessageId: 1 }),
+		repliedChatMessage: null,
+		isOwnChatMessage: false,
+		canDelete: false,
+	},
+}
 export const AttachmentChips: Story = {
 	args: {
 		chatMessage: toStoryRoomMessage({ attachments: [{ id: "story-file", name: "Research.pdf", kind: "document" }] }),

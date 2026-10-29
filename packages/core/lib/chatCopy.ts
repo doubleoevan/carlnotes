@@ -29,3 +29,14 @@ export const DELETE_CHAT_MESSAGE_COPY = {
 export function toEmptyChatRoomCopy(name: string): string {
 	return `Join the conversation, or ask @carl for a hot take on ${name || "this chat"}.`
 }
+
+// the quote of a reply whose message the member cannot see, and the report action's label
+export const HIDDEN_QUOTE_TEXT = "a hidden message"
+export const REPORT_CHAT_MESSAGE_LABEL = "Report message"
+
+/**
+ * Returns the label a reported message's dialog shows for its subject.
+ */
+export function toReportedChatMessageLabel(authorUsername: string): string {
+	return `a message from ${authorUsername}`
+}

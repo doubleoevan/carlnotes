@@ -16,6 +16,9 @@ import { and, eq, sql } from "drizzle-orm"
 import { Hono } from "hono"
 import { isLeaderRole } from "../authorization"
 import { type AppEnv, currentUser, toAnalyticsProperties } from "../currentUser"
+import { toObjectionableCategory, toObjectionableTextResponse } from "../moderation"
+import { toolCallerRateLimiter } from "../rateLimit"
+import { toTermsOutdatedResponse } from "../termsAcceptance"
 import { deleteTeam } from "./deleteTeam"
 import {
 	approveJoinTeamRequest,
@@ -28,6 +31,11 @@ import {
 import { loadTeamPage } from "./teamPage"
 import { addTopicToTeam, createTeam, removeTopicFromTeam, updateTeam } from "./teams"
 import { loadTeamsPage } from "./teamsPage"
+
+// the text other people read on a team: its name and its description, if any
+function toTeamText(teamPayload: { name?: string; description?: string | null }): string {
+	return [teamPayload.name, teamPayload.description].filter(Boolean).join("\n")
+}
 
 // the team routes. reads return a 404 for anything the user may not know exists
 export const teamsRoute = new Hono<AppEnv>()
@@ -51,14 +59,32 @@ export const teamsRoute = new Hono<AppEnv>()
 		}
 		return context.json(await loadTeamsPage(userId))
 	})
-	.post("/teams", zValidator("json", createTeamPayload), async (context) => {
+	.post("/teams", toolCallerRateLimiter, zValidator("json", createTeamPayload), async (context) => {
 		// reject a signed-out visitor
 		const userId = currentUser(context)
 		if (!userId) {
 			return context.json({ error: "unauthorized" }, 401)
 		}
+		// a user who has not accepted the current Terms is asked to first
+		const termsOutdatedResponse = toTermsOutdatedResponse(context)
+		if (termsOutdatedResponse) {
+			return termsOutdatedResponse
+		}
+
+		// a name or description that reads as a violation is rejected in Carl's words before anything is written
+		const teamPayload = context.req.valid("json")
+		const objectionableCategory = await toObjectionableCategory({
+			text: toTeamText(teamPayload),
+			textKind: "a team's name and description",
+			subjectKind: "team",
+			subjectId: userId,
+		})
+		if (objectionableCategory) {
+			return toObjectionableTextResponse(context, objectionableCategory)
+		}
+
 		// create the team, answering which way a rejection went so the modal can say so
-		const created = await createTeam(userId, context.req.valid("json"))
+		const created = await createTeam(userId, teamPayload)
 		if (created.status === "created") {
 			trackEvent("team_created", userId, { ...toAnalyticsProperties(context), teamId: created.teamId })
 			return context.json(created)
@@ -128,14 +154,36 @@ export const teamsRoute = new Hono<AppEnv>()
 		})
 		return context.json({ ok: true })
 	})
-	.patch("/teams/:id", zValidator("json", updateTeamPayload), async (context) => {
-		// reject a signed-out visitor
+	.patch("/teams/:id", toolCallerRateLimiter, zValidator("json", updateTeamPayload), async (context) => {
+		// reject a signed-out visitor, and anyone but a leader, before anything is classified
 		const userId = currentUser(context)
 		if (!userId) {
 			return context.json({ error: "unauthorized" }, 401)
 		}
+		if (!isLeaderRole(await toTeamRole(userId, context.req.param("id")))) {
+			return context.json({ error: "not found" }, 404)
+		}
+
+		// a user who has not accepted the current Terms is asked to first
+		const termsOutdatedResponse = toTermsOutdatedResponse(context)
+		if (termsOutdatedResponse) {
+			return termsOutdatedResponse
+		}
+
+		// a name or description that reads as a violation is rejected in Carl's words before anything is written
+		const teamPayload = context.req.valid("json")
+		const objectionableCategory = await toObjectionableCategory({
+			text: toTeamText(teamPayload),
+			textKind: "a team's name and description",
+			subjectKind: "team",
+			subjectId: context.req.param("id"),
+		})
+		if (objectionableCategory) {
+			return toObjectionableTextResponse(context, objectionableCategory)
+		}
+
 		// a taken name is reported by name, and everything else by whether the save held
-		const saved = await updateTeam(userId, context.req.param("id"), context.req.valid("json"))
+		const saved = await updateTeam(userId, context.req.param("id"), teamPayload)
 		if (saved === "name-taken") {
 			return context.json({ error: "name-taken" }, 409)
 		}

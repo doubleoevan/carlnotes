@@ -28,6 +28,7 @@ test("the table render opens no request", () => {
 						canEdit: true,
 						isNoteOwner: false,
 						canDelete: false,
+						owner: { id: "user-vienna", username: "vienna" },
 					},
 				]}
 				onOpenNote={() => {}}
@@ -52,7 +53,7 @@ test("the dialog module never imports the editor package statically", async () =
 })
 
 // the save status belongs to a note that can change, so it sits behind the edit right. a reader without it has no
-// save and nothing that could be saving, and the whole row goes when they hold neither right
+// save and nothing that could be saving, and the whole row goes when they hold neither right and nothing to report
 test("the save status renders only for an editor", async () => {
 	const dialogSource = await Bun.file(new URL("./NoteDialog.tsx", import.meta.url)).text()
 	const noteFooter = dialogSource.slice(
@@ -60,5 +61,5 @@ test("the save status renders only for an editor", async () => {
 		dialogSource.indexOf("function OpenNote"),
 	)
 	expect(noteFooter.slice(0, noteFooter.indexOf("SAVE_STATUS_LABELS"))).toContain("canEdit && (")
-	expect(noteFooter).toContain("if (!canEdit && !canDelete) {")
+	expect(noteFooter).toContain("if (!canEdit && !canDelete && !reportSubject) {")
 })

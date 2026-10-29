@@ -5,7 +5,12 @@ import type { NoteCommentThread } from "../hooks/useNoteComments"
 import { toAgeLabel } from "../lib/labels"
 
 // the shared comment thread, composer state, and platform elements
-export type NoteCommentsProps = NoteCommentThread & { canComment: boolean; onError: (message: string) => void }
+export type NoteCommentsProps = NoteCommentThread & {
+	canComment: boolean
+	onError: (message: string) => void
+	// opens the report of another person's comment, which can block its author. absent for a visitor
+	onReport?: (comment: NoteComment) => void
+}
 export type NoteCommentComposerProps = {
 	value: string
 	onChange: (value: string) => void
@@ -25,6 +30,7 @@ export type NoteCommentsElements = {
 	Age: ComponentType<PropsWithChildren>
 	Body: ComponentType<PropsWithChildren>
 	Delete: ComponentType<{ onPress: () => void; isPending: boolean }>
+	Report: ComponentType<{ onPress: () => void }>
 	Composer: ComponentType<NoteCommentComposerProps>
 }
 
@@ -40,7 +46,8 @@ export function NoteComments({
 	deleteNoteComment,
 	canComment,
 	onError,
-	elements: { Container, Message, Retry, List, Row, Header, Author, Age, Body, Delete, Composer },
+	onReport,
+	elements: { Container, Message, Retry, List, Row, Header, Author, Age, Body, Delete, Report, Composer },
 }: NoteCommentsProps & { elements: NoteCommentsElements }) {
 	// retain a failed post verbatim and fence duplicate actions before a render
 	const [draft, setDraft] = useState("")
@@ -105,6 +112,8 @@ export function NoteComments({
 								{comment.canDelete && (
 									<Delete onPress={() => void handleDelete(comment)} isPending={deletingIds.has(comment.id)} />
 								)}
+								{/* the report action */}
+								{onReport && comment.author && !comment.canDelete && <Report onPress={() => onReport(comment)} />}
 							</Header>
 							<Body>{comment.body}</Body>
 						</Row>

@@ -63,12 +63,7 @@ export function PageActionMenu() {
 			{isAddingToAi && <AddToAiDialog mcpServer={mcpServer} onClose={() => setIsAddingToAi(false)} />}
 			{/* the report issue dialog mounts only while open. its state resets on each close */}
 			{isReporting && pageActions.report && (
-				<ReportIssueDialog
-					subjectKind={pageActions.report.subjectKind}
-					subjectId={pageActions.report.subjectId}
-					subjectLabel={pageActions.report.subjectLabel}
-					onClose={() => setIsReporting(false)}
-				/>
+				<ReportIssueDialog {...pageActions.report} onClose={() => setIsReporting(false)} />
 			)}
 		</>
 	)

@@ -9,7 +9,9 @@ import { type Context, Hono } from "hono"
 import type { z } from "zod"
 import { toSignedOutRejection } from "../bodyLimit"
 import { type AppEnv, currentUser, toAnalyticsProperties } from "../currentUser"
+import { toObjectionableCategory, toObjectionableTextResponse } from "../moderation"
 import { toolCallerRateLimiter } from "../rateLimit"
+import { toTermsOutdatedResponse } from "../termsAcceptance"
 import { toStoredFileHeaders } from "../topic/attachments"
 import { loadLinkPreviewImage } from "./linkPreviews"
 import { saveSeenChatMentions } from "./mentions"
@@ -31,6 +33,7 @@ import {
 	loadChatRoomMessages,
 	toChatMessageIds,
 } from "./roomMessages"
+import { toVisibleChatRoomMessages } from "./roomVisibility"
 
 // how long a cache may keep a link preview image. the bytes for one link preview id never change,
 // and one stored image is the same for everyone who loads it
@@ -52,10 +55,14 @@ export function toBeforeChatMessageId(beforeParam: string | undefined): number |
  * One page of chat messages, saying whether another sits above it so the list knows when to stop, and whether voice
  * chat is on.
  */
-export function toChatMessagePage(chatMessages: ChatRoomMessagePage["chatMessages"]): ChatRoomMessagePage {
+export function toChatMessagePage(
+	chatMessages: ChatRoomMessagePage["chatMessages"],
+	// how many rows the page loaded before the user's own filter, which decides whether earlier rows exist
+	loadedCount = chatMessages.length,
+): ChatRoomMessagePage {
 	return {
 		chatMessages,
-		hasEarlierChatMessages: chatMessages.length === CHAT_ROOM_LOAD_LIMIT,
+		hasEarlierChatMessages: loadedCount === CHAT_ROOM_LOAD_LIMIT,
 		isVoiceChatConfigured: isVoiceChatConfigured(),
 	}
 }
@@ -76,6 +83,24 @@ async function postChatRoomMessageRoute(
 		return context.json({ error: "not found" }, 404)
 	}
 	const { content, replyToChatMessageId, attachments, isSpoken } = context.req.valid("json")
+
+	// a member who has not accepted the current Terms is asked to first
+	const termsOutdatedResponse = toTermsOutdatedResponse(context)
+	if (termsOutdatedResponse) {
+		return termsOutdatedResponse
+	}
+
+	// a message that reads as a violation is rejected in Carl's words before anything posts
+	const objectionableCategory = await toObjectionableCategory({
+		text: content,
+		textKind: "a chat room message",
+		subjectKind: "chatMessage",
+		subjectId: `${topicId ?? "team"}:${teamId}`,
+	})
+	if (objectionableCategory) {
+		return toObjectionableTextResponse(context, objectionableCategory)
+	}
+
 	// one rejected file returns a 400 for the whole chat message, while a missing chat room returns a 404
 	const postChatMessageResult = await postChatRoomMessage(
 		userId,
@@ -118,11 +143,11 @@ export const chatRoomRoute = new Hono<AppEnv>()
 			return context.json({ error: "not found" }, 404)
 		}
 
-		// no cursor returns the latest chat messages, a cursor returns the page above that chat message
+		// no cursor returns the latest chat messages, a cursor returns the page above that chat message, less the ones
+		// this member reported or blocked
 		const beforeChatMessageId = toBeforeChatMessageId(context.req.query("before"))
-		return context.json(
-			toChatMessagePage(await loadChatRoomMessages(context.req.param("id"), chatRoom.teamId, 0, beforeChatMessageId)),
-		)
+		const chatMessages = await loadChatRoomMessages(context.req.param("id"), chatRoom.teamId, 0, beforeChatMessageId)
+		return context.json(toChatMessagePage(await toVisibleChatRoomMessages(userId, chatMessages), chatMessages.length))
 	})
 	.get(TEAM_ROOM_PATH, async (context) => {
 		// the team's own chat room's latest chat messages, members only
@@ -132,9 +157,11 @@ export const chatRoomRoute = new Hono<AppEnv>()
 			return context.json({ error: "not found" }, 404)
 		}
 
-		// no cursor returns the latest chat messages, a cursor returns the page above that chat message
+		// no cursor returns the latest chat messages, a cursor returns the page above that chat message, less the ones
+		// this member reported or blocked
 		const beforeChatMessageId = toBeforeChatMessageId(context.req.query("before"))
-		return context.json(toChatMessagePage(await loadChatRoomMessages(null, chatRoom.teamId, 0, beforeChatMessageId)))
+		const chatMessages = await loadChatRoomMessages(null, chatRoom.teamId, 0, beforeChatMessageId)
+		return context.json(toChatMessagePage(await toVisibleChatRoomMessages(userId, chatMessages), chatMessages.length))
 	})
 	.get("/topics/:id/rooms/:teamId/link-previews", async (context) => {
 		// the cards for a few loading chat messages, members only, so the poll never reloads the chat room

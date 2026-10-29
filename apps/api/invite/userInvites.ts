@@ -16,6 +16,7 @@ import { isAllowed } from "../authorization"
 import { isConnected } from "../connections"
 import { type AppEnv, currentUser } from "../currentUser"
 import { toTeamRole } from "../team/members"
+import { isUserBlocked } from "../userBlocks"
 import { startUserInviteEmail } from "./emails"
 import { toInvite } from "./invites"
 
@@ -48,7 +49,7 @@ export async function createUserInvite(
 
 	// the recipient's invite-access setting and the sender's connection to them, read once and used twice
 	const isConnectedRecipient = inviteRecipient ? await isConnected(senderUserId, inviteRecipient.id) : false
-	if (inviteRecipient && isInviteRejected(inviteRecipient.inviteAccess, isConnectedRecipient)) {
+	if (inviteRecipient && (await isRejectedByRecipient(inviteRecipient, senderUserId, isConnectedRecipient))) {
 		return "not-accepting"
 	}
 
@@ -73,6 +74,19 @@ export async function createUserInvite(
 		startUserInviteEmail(inviteTarget, senderUserId, inviteRecipientEmail, inviteStatus.invite.token)
 	}
 	return inviteStatus.invite
+}
+
+// whether the recipient's invite-access setting, or their block of the sender, rejects the invite. a block rejects in
+// the same words as the setting. the sender never learns of the block
+async function isRejectedByRecipient(
+	inviteRecipient: InviteRecipient,
+	senderUserId: string,
+	isConnectedRecipient: boolean,
+): Promise<boolean> {
+	if (isInviteRejected(inviteRecipient.inviteAccess, isConnectedRecipient)) {
+		return true
+	}
+	return isUserBlocked(inviteRecipient.id, senderUserId)
 }
 
 // write the user's invite row: an existing pending invite is a no-op
@@ -228,7 +242,7 @@ export async function checkTopicInvitees(
 		const isNewlyInvited = !pendingEmails.has(email)
 		if (isNewlyInvited && inviteRecipient) {
 			const isConnectedRecipient = await isConnected(senderUserId, inviteRecipient.id)
-			if (isInviteRejected(inviteRecipient.inviteAccess, isConnectedRecipient)) {
+			if (await isRejectedByRecipient(inviteRecipient, senderUserId, isConnectedRecipient)) {
 				return { status: "inviteeRejected", email }
 			}
 		}

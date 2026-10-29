@@ -13,13 +13,15 @@ import {
 	NOTE_LABELS,
 	NOTE_SAVE_ERRORS,
 	NOTE_SAVE_STATUS_LABELS,
+	REPORT_NOTE_LABEL,
 	toNoteDeleteDescription,
 } from "@carlnotes/core/lib/noteLabels"
 import { cn } from "@carlnotes/nightshift/classNames"
-import { Maximize2, MessageSquareText, Minimize2, Pencil, X } from "lucide-react"
+import { Flag, Maximize2, MessageSquareText, Minimize2, Pencil, X } from "lucide-react"
 import { lazy, Suspense, useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
 import { ConfirmDialog } from "@/components/common/ConfirmDialog"
+import { ReportIssueDialog, type ReportSubject } from "@/components/common/ReportIssueDialog"
 import { Button } from "@/components/primitives/button"
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/primitives/dialog"
 import { Input } from "@/components/primitives/input"
@@ -122,13 +124,17 @@ function NoteFooter({
 	canDelete,
 	noteSaveStatus,
 	onDelete,
+	reportSubject,
 }: {
 	canEdit: boolean
 	canDelete: boolean
 	noteSaveStatus: NoteSaveStatus
 	onDelete: () => void
+	// another person's note as a report names it, or null for the owner, an admin, and a visitor
+	reportSubject: ReportSubject | null
 }) {
-	if (!canEdit && !canDelete) {
+	const [isReporting, setIsReporting] = useState(false)
+	if (!canEdit && !canDelete && !reportSubject) {
 		return null
 	}
 	return (
@@ -138,13 +144,40 @@ function NoteFooter({
 					{SAVE_STATUS_LABELS[noteSaveStatus]}
 				</p>
 			)}
+			{/* the report action */}
+			{reportSubject && (
+				<Button variant="outline" onClick={() => setIsReporting(true)}>
+					<Flag className="size-4" />
+					{REPORT_NOTE_LABEL}
+				</Button>
+			)}
 			{canDelete && (
 				<Button variant="destructive" onClick={onDelete}>
 					Delete
 				</Button>
 			)}
+			{/* the report dialog */}
+			{isReporting && reportSubject && <ReportIssueDialog {...reportSubject} onClose={() => setIsReporting(false)} />}
 		</div>
 	)
+}
+
+// the report a signed-in user who cannot delete the note may send about it, or null
+function toNoteReportSubject({
+	noteId,
+	noteName,
+	owner,
+	canReport,
+}: {
+	noteId: string
+	noteName: string
+	owner: Note["owner"] | undefined
+	canReport: boolean
+}): ReportSubject | null {
+	if (!canReport || !owner) {
+		return null
+	}
+	return { subjectKind: "note", subjectId: noteId, subjectLabel: noteName, author: owner }
 }
 
 // an open note: the header row, the body as an editor or a reader, and the footer
@@ -314,6 +347,12 @@ function OpenNote({
 				canDelete={canDelete}
 				noteSaveStatus={noteSaveStatus}
 				onDelete={() => setIsConfirmingDelete(true)}
+				reportSubject={toNoteReportSubject({
+					noteId: note.id,
+					noteName: savedName,
+					owner: permissions?.owner,
+					canReport: Boolean(session) && !canDelete,
+				})}
 			/>
 
 			{/* the delete confirmation */}

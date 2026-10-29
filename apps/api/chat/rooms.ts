@@ -2,12 +2,14 @@
 import { toAvatarKeyVersion } from "@carlnotes/contracts/avatars"
 import type { ChatRoom } from "@carlnotes/contracts/chat"
 import { db } from "@carlnotes/db"
-import { chatRoomMentions } from "@carlnotes/db/schema/chat"
+import { chatRoomMentions, chatRoomMessages } from "@carlnotes/db/schema/chat"
 import { teamMembers, teams, teamTopics } from "@carlnotes/db/schema/teams"
 import { topics } from "@carlnotes/db/schema/topics"
 import { users } from "@carlnotes/db/schema/users"
 import { and, count, eq, inArray, isNull } from "drizzle-orm"
 import { withAvatarVersion } from "../avatars"
+import { toUnreportedFilter } from "../report/reports"
+import { toUnblockedAuthorFilter } from "../userBlocks"
 import { loadTeamChatMentions, loadTopicChatMentions } from "./mentions"
 
 /**
@@ -116,9 +118,18 @@ async function loadTeamMembersByTeam(teamIds: string[]): Promise<Map<string, Cha
  * How many unseen chat mentions the user has across every chat room, as one indexed count.
  */
 export async function countUnseenChatMentions(userId: string): Promise<number> {
+	// the unseen mentions, less the ones by people the user has blocked and in messages the user reported
 	const [chatMentionRow] = await db
 		.select({ unseen: count() })
 		.from(chatRoomMentions)
-		.where(and(eq(chatRoomMentions.userId, userId), isNull(chatRoomMentions.seenAt)))
+		.innerJoin(chatRoomMessages, eq(chatRoomMessages.id, chatRoomMentions.messageId))
+		.where(
+			and(
+				eq(chatRoomMentions.userId, userId),
+				isNull(chatRoomMentions.seenAt),
+				toUnblockedAuthorFilter(userId, chatRoomMessages.authorUserId),
+				toUnreportedFilter(userId, "chatMessage", chatRoomMessages.id),
+			),
+		)
 	return chatMentionRow?.unseen ?? 0
 }

@@ -6,6 +6,7 @@ import { authClient } from "@carlnotes/client/authClient"
 import { reloadChatRooms, useUpdateBadges } from "@carlnotes/core/hooks/useUpdateBadges"
 import { activateChatAccount } from "@carlnotes/core/stores/chatConversationStore"
 import { useIsPodcastPlayerShown } from "@carlnotes/core/stores/podcastEpisodePlayerStore"
+import { requestTermsAcceptance } from "@carlnotes/core/stores/termsAcceptanceStore"
 import { ArchitectsDaughter_400Regular } from "@expo-google-fonts/architects-daughter"
 import {
 	Karla_400Regular,
@@ -31,6 +32,7 @@ import { apiBaseUrl } from "@/authClient"
 import { AppChatPanel } from "@/components/chat/AppChatPanel"
 import { PodcastEpisodeAudio } from "@/components/podcast/PodcastEpisodeAudio"
 import { PodcastPlayer } from "@/components/podcast/PodcastPlayer"
+import { TermsAcceptanceSheet } from "@/components/session/TermsAcceptanceSheet"
 import { mobileApiRequestSettings } from "@/mobileApiRequestSettings"
 import { navigationIntegration, startMonitoring } from "@/monitoring"
 import { NoteDraftProvider } from "@/providers/NoteDraftProvider"
@@ -52,6 +54,7 @@ startMonitoring()
 configureApiClient({
 	apiBaseUrl,
 	showError: (message) => Alert.alert("CarlNotes", message),
+	onTermsOutdated: requestTermsAcceptance,
 	...mobileApiRequestSettings,
 })
 
@@ -142,6 +145,8 @@ function RootLayout() {
 					<TopicResourceInfoProvider userId={userId}>
 						<ScreenViewRecorder />
 						<AppIconBadge userId={chatAccountId} />
+						{/* the Terms acceptance a signed-in user owes once, on whichever screen the session loads */}
+						{isSignedIn && <TermsAcceptanceSheet />}
 						{!isSessionRetired && <PodcastEpisodeAudio userId={userId} />}
 						{/* allow public reading while keeping account screens and chat behind sign-in */}
 						<KeyboardAvoidingView

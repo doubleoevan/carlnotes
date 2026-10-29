@@ -1,5 +1,6 @@
 // how the web app configures the shared api client: where its requests go, and how a client error reaches the user
 import { configureApiClient } from "@carlnotes/client/apiClient"
+import { requestTermsAcceptance } from "@carlnotes/core/stores/termsAcceptanceStore"
 import { toast } from "sonner"
 
 /**
@@ -10,5 +11,6 @@ export function configureWebApiClient(): void {
 	configureApiClient({
 		apiBaseUrl: typeof window === "undefined" ? "http://localhost:3000" : "",
 		showError: (message) => toast.error(message),
+		onTermsOutdated: requestTermsAcceptance,
 	})
 }

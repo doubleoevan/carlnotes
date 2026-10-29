@@ -9,6 +9,7 @@ import { toClientTelemetry } from "@carlnotes/contracts/clientTelemetry"
 import { MOBILE_APP_SCHEME_ORIGIN } from "@carlnotes/contracts/mobileApp"
 import { SIGNUP_CTA_COOKIE_NAME, toCtaTag } from "@carlnotes/contracts/signupCta"
 import { GATE_COOKIE_NAME, MIN_PASSWORD_LENGTH } from "@carlnotes/contracts/signupGate"
+import { TERMS_VERSION } from "@carlnotes/contracts/terms"
 import { toNormalizedUsername, toProviderUsername } from "@carlnotes/contracts/usernames"
 import { db, schema } from "@carlnotes/db"
 import { deleteRedisKeys, runWithRedis } from "@carlnotes/db/redis"
@@ -244,6 +245,9 @@ export const auth = betterAuth({
 			avatarKey: { type: "string", required: false, input: false, returned: true },
 			// the access requirements to send an invite to this user
 			inviteAccess: { type: "string", required: false, input: false, returned: true },
+			// the Terms version the user accepted and when
+			termsAcceptedVersion: { type: "string", required: false, input: false, returned: true },
+			termsAcceptedAt: { type: "date", required: false, input: false, returned: true },
 		},
 	},
 	// try to create a LiteLLM key for every new user. the password path also requires a passing turnstile check
@@ -278,6 +282,8 @@ export const auth = betterAuth({
 						providerUsername !== null && (await toFreeUsernames([providerUsername])).length > 0
 					const username = isProviderUsernameFree && providerUsername ? providerUsername : await toAssignedUsername()
 					const avatarSource = toSignupAvatarSource(user.image)
+
+					// every sign-up path accepts the published Terms by continuing, recorded by the server's own version
 					return {
 						data: {
 							...user,
@@ -285,6 +291,8 @@ export const auth = betterAuth({
 							username,
 							usernameNormalized: toNormalizedUsername(username),
 							avatarSource,
+							termsAcceptedVersion: TERMS_VERSION,
+							termsAcceptedAt: new Date(),
 						},
 					}
 				},

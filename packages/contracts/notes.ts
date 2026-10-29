@@ -2,6 +2,7 @@
 // and the badges
 import type { noteVisibilities } from "./enums"
 import type { ProfileIdentity } from "./profiles"
+import type { ReportUser } from "./reports"
 
 // one note's unread counts for the signed-in user
 export type NoteBadge = {
@@ -44,6 +45,8 @@ export type Note = {
 	isNoteOwner: boolean
 	// whether the user may delete it: its owner, or an admin
 	canDelete: boolean
+	// who created it. null once the account closed
+	owner: ReportUser | null
 }
 
 // the notes payload for one page

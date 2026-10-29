@@ -92,6 +92,13 @@ export const toolCallerRateLimitStore = toRateLimitStore("rate-limit")
 // the per-tool-caller limiter, which counts hits in the Redis store
 export const toolCallerRateLimiter = toRateLimiter({ limit: CALLER_RATE_LIMIT, store: toolCallerRateLimitStore })
 
+// the note body save's own limiter. the editor saves a second after each pause, so the caller limit is too low for it
+export const NOTE_BODY_SAVE_RATE_LIMIT = 120
+export const noteBodySaveRateLimiter = toRateLimiter({
+	limit: NOTE_BODY_SAVE_RATE_LIMIT,
+	store: toRateLimitStore("rate-limit:note-body"),
+})
+
 // the visitors' page render limiter, keyed by the client address. a request with a session cookie, or with an unknown
 // or internal address, which a missed proxy hop gives every visitor, is skipped. it sets no rate limit headers on the
 // pages the edge shares

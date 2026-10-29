@@ -1,13 +1,14 @@
 import { sendDeleteChatRoomAttachment } from "@carlnotes/client/chatRoomClient"
 import type { ChatRoomMessage } from "@carlnotes/contracts/chat"
 import { useNow } from "@carlnotes/core/hooks/useNow"
-import { toEmptyChatRoomCopy } from "@carlnotes/core/lib/chatCopy"
+import { toEmptyChatRoomCopy, toReportedChatMessageLabel } from "@carlnotes/core/lib/chatCopy"
 import { deleteChatRoomMessage } from "@carlnotes/core/lib/chatRoomActions"
 import { toChatMessageQuotes } from "@carlnotes/core/lib/chatRoomMessages"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 import { Virtuoso, type VirtuosoHandle } from "react-virtuoso"
 import { toast } from "sonner"
+import { ReportIssueDialog } from "@/components/common/ReportIssueDialog"
 import { clearMentionedChatMessage, useChatMessageMentioned } from "@/stores/chatPanelStore"
 import { ModelThinkingBubble } from "./ChatMessageParts"
 import { ChatRoomMessageBubble } from "./ChatRoomMessageBubble"
@@ -108,6 +109,8 @@ export function ChatRoomMessages({
 	// the chat room message a mention badge is trying to load, and whether the search for it ran out of pages
 	const chatMessageMentioned = useChatMessageMentioned()
 	const [isMentionedChatMessageMissing, setIsMentionedChatMessageMissing] = useState(false)
+	// the chat message whose report dialog is open, which can block its author
+	const [reportedChatMessage, setReportedChatMessage] = useState<ChatRoomMessage | null>(null)
 
 	// the jump down to the latest chat message
 	const scrollToLatestChatMessage = useCallback(() => {
@@ -179,8 +182,20 @@ export function ChatRoomMessages({
 			onReply={handleReplyChatMessage}
 			onQuoteClick={scrollToChatMessage}
 			onDeleteChatMessage={handleDeleteChatMessage}
+			onReport={setReportedChatMessage}
 		/>
 	)
+
+	// the report dialog, mounted while a message is being reported
+	const reportDialog = reportedChatMessage?.authorUserId ? (
+		<ReportIssueDialog
+			subjectKind="chatMessage"
+			subjectId={String(reportedChatMessage.id)}
+			subjectLabel={toReportedChatMessageLabel(reportedChatMessage.authorUsername)}
+			author={{ id: reportedChatMessage.authorUserId, username: reportedChatMessage.authorUsername }}
+			onClose={() => setReportedChatMessage(null)}
+		/>
+	) : null
 
 	// the footer object keeps one reference per thinking state, so virtuoso does not remount it every render
 	const virtuosoComponents = useMemo(
@@ -214,6 +229,7 @@ export function ChatRoomMessages({
 				/>
 				{missingChatMessageNotice}
 				<ScrollDownButton isScrollDownShown={!isAtBottom} onScrollDown={scrollToLatestChatMessage} />
+				{reportDialog}
 			</div>
 		)
 	}
@@ -237,6 +253,7 @@ export function ChatRoomMessages({
 			</div>
 			{missingChatMessageNotice}
 			<ScrollDownButton isScrollDownShown={!isAtBottom} onScrollDown={scrollToLatestChatMessage} />
+			{reportDialog}
 		</div>
 	)
 }

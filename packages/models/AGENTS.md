@@ -48,6 +48,10 @@ and the evals all start. It imports `@carlnotes/db`, `@carlnotes/server`, and `@
   it resolves from this package. With `LLM_GUARD_URL` unset it returns skipped before the text recognition code loads,
   so an image costs no call and no wait. `guardTestFixtures.ts` runs a test against a fake scanner that returns one
   verdict, or with no scanner at all.
+- `moderation.ts` — `classifyUserText`, the check of one text a user wrote for other users: one cheap-tier call on
+  the master key, through `prompts/moderate-user-text.md` with the text fenced as data, that returns the shared
+  `moderationVerdict`. It records no input or output in its trace, returns skipped with `LITELLM_BASE_URL` unset, and
+  returns failed instead of throwing on a timeout, an error, or a verdict outside the schema, so every caller fails open.
 - `prompts/` — the model-facing Markdown templates, each with YAML frontmatter and a `{{variable}}` body, loaded by
   thin builders: `write.ts` fills a template, `fetch.ts` loads a prompt from the Langfuse registry first and falls back
   to the bundled Markdown, with `promptTelemetry` naming the version that served it, and `sync.ts` (`bun run

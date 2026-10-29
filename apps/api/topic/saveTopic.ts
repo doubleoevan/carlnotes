@@ -29,6 +29,7 @@ import {
 	toNewSourceRow,
 	toPodcastNames,
 } from "./saveHelpers"
+import { type ObjectionableRejection, type TermsOutdatedRejection, toTopicSaveRejection } from "./saveTopicGate"
 
 // the outcome of a topic creation request
 type CreateTopicResult =
@@ -36,6 +37,8 @@ type CreateTopicResult =
 	| { status: "quota" }
 	| DailyFrequencyRejection
 	| InviteeRejection
+	| ObjectionableRejection
+	| TermsOutdatedRejection
 
 // the outcome of a topic edit
 export type UpdateTopicResult =
@@ -44,6 +47,8 @@ export type UpdateTopicResult =
 	| { status: "missing" }
 	| DailyFrequencyRejection
 	| InviteeRejection
+	| ObjectionableRejection
+	| TermsOutdatedRejection
 
 // a save stopped by its invitee list: a recipient who is not accepting invites, or the sender's invite limit
 type InviteeRejection = { status: "inviteeRejected"; email: string } | { status: "inviteLimit" }
@@ -124,8 +129,20 @@ export async function createTopic(
 		return dailyFrequency
 	}
 
-	// one transaction writes the topic and everything hanging off it
+	// a topic other people read is checked before anything is written
 	const { name, prompt, tags, frequency, scheduledTime, scheduledDayOfWeek, visibility, maxTopicFindings } = payload
+	const topicSaveRejection = await toTopicSaveRejection({
+		name,
+		prompt,
+		visibility,
+		subjectId: userId,
+		userId,
+	})
+	if (topicSaveRejection) {
+		return topicSaveRejection
+	}
+
+	// one transaction writes the topic and everything hanging off it
 	// the deduped invite emails, shared by the insert inside the transaction and the emails after it
 	const inviteEmails = [...new Set(payload.inviteEmails)]
 	// each invitee resolves to an account and passes their invite-access setting before anything writes
@@ -231,8 +248,21 @@ export async function updateTopic(
 		return dailyFrequency
 	}
 
-	// one transaction covers the fields and both reconciled invitee and source lists
+	// a topic other people read is checked before anything is written, including the edit that opens a private one
 	const { name, prompt, tags, frequency, scheduledTime, scheduledDayOfWeek, visibility, maxTopicFindings } = payload
+	const topicSaveRejection = await toTopicSaveRejection({
+		name,
+		prompt,
+		visibility,
+		subjectId: topicId,
+		userId,
+		isTextChanged: topic.visibility === "private" || name !== topic.name || prompt !== topic.prompt,
+	})
+	if (topicSaveRejection) {
+		return topicSaveRejection
+	}
+
+	// one transaction covers the fields and both reconciled invitee and source lists
 	const newSources = payload.sources.flatMap((topicSource) => ("id" in topicSource ? [] : [topicSource]))
 	// only the owner manages invites, so a team editor's save leaves the invite list untouched
 	const mayReconcileInvites = await isAllowed(userId, "topic:invite", topic)

@@ -16,10 +16,12 @@ import * as invites from "./schema/invites"
 import * as notes from "./schema/notes"
 import * as podcast from "./schema/podcast"
 import * as releases from "./schema/releases"
+import * as reports from "./schema/reports"
 import * as scans from "./schema/scans"
 import * as storage from "./schema/storage"
 import * as teams from "./schema/teams"
 import * as topics from "./schema/topics"
+import * as userBlocks from "./schema/userBlocks"
 import * as users from "./schema/users"
 import * as vectors from "./schema/vectors"
 import * as viewerCounts from "./schema/viewerCounts"
@@ -59,10 +61,12 @@ export const schema = {
 	...notes,
 	...podcast,
 	...releases,
+	...reports,
 	...scans,
 	...storage,
 	...teams,
 	...topics,
+	...userBlocks,
 	...users,
 	...vectors,
 	...viewerCounts,

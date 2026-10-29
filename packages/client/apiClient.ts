@@ -2,6 +2,8 @@
 // readApiErrorMessage, which reads the api's error message. the types-only AppType import adds no api code to an app's
 // bundle
 import type { AppType } from "@carlnotes/api"
+import { isObjectionableTextResponse, toModerationRejectionMessage } from "@carlnotes/contracts/moderation"
+import { isTermsOutdatedResponse, TERMS_OUTDATED_LINE } from "@carlnotes/contracts/terms"
 import { hc } from "hono/client"
 
 // what the headers function may read of the call: the credentials mode the call asked for
@@ -16,6 +18,9 @@ export type ApiClientSettings = {
 	headers?: (request?: ApiRequestContext) => Record<string, string> | Promise<Record<string, string>>
 	credentials?: RequestCredentials
 	onUnauthorized?: () => void
+	// what a write rejected for the Terms does: the app opens its acceptance dialog and says how it closed. an
+	// accepted dialog sends the write again, and a dismissed one returns the rejection to the caller
+	onTermsOutdated?: () => Promise<"accepted" | "dismissed">
 }
 
 // the parts of a response the client helpers read, which Hono's typed response and the runtime's Response both have
@@ -70,7 +75,14 @@ export function showClientError(message: string): void {
  */
 export async function readApiErrorMessage(response: ApiResponse): Promise<string | undefined> {
 	const body = (await response.json().catch(() => null)) as { error?: string } | null
-	return body?.error
+	// a rejected text and a write waiting on the Terms each have Carl's own words
+	if (isObjectionableTextResponse(body)) {
+		return toModerationRejectionMessage(body.category)
+	}
+	if (isTermsOutdatedResponse(body)) {
+		return TERMS_OUTDATED_LINE
+	}
+	return body?.error ?? undefined
 }
 
 // the typed client at the base url, every call going through the settings' headers, credentials, and 401 report
@@ -97,11 +109,27 @@ async function fetchWithSettings(input: RequestInfo | URL, init: RequestInit = {
 	return fetchAndReportUnauthorized(input, { ...init, headers, credentials })
 }
 
-// fetch a request, and report a 401 to the app once per response
+// fetch a request, report a 401 to the app, and send a write rejected for the Terms again once they are accepted
 async function fetchAndReportUnauthorized(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
 	const response = await fetch(input, init)
 	if (response.status === 401) {
 		apiClientSettings.onUnauthorized?.()
 	}
-	return response
+	if (response.status !== 403 || !apiClientSettings.onTermsOutdated) {
+		return response
+	}
+
+	// a 403 is read from a copy, so the caller still reads the body
+	const body = await response
+		.clone()
+		.json()
+		.catch(() => null)
+	if (!isTermsOutdatedResponse(body)) {
+		return response
+	}
+
+	// the terms rejection opens the app's acceptance dialog. the kept draft is sent again once the Terms are accepted,
+	// and the rejection stands if the dialog is dismissed
+	const dialogOutcome = await apiClientSettings.onTermsOutdated()
+	return dialogOutcome === "accepted" ? fetch(input, init) : response
 }

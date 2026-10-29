@@ -14,6 +14,7 @@ import { SessionErrorText } from "@/components/session/SessionErrorText"
 import { SessionFooterLink } from "@/components/session/SessionLink"
 import { SessionScreen } from "@/components/session/SessionScreen"
 import { SessionEmailInput, SessionPasswordInput } from "@/components/session/SessionTextInput"
+import { TermsAgreementText } from "@/components/session/TermsAgreementText"
 import { useFontScaledSize } from "@/hooks/useFontScaledSize"
 
 // the providers that open the system browser. Apple opens the native sheet on iOS instead
@@ -76,6 +77,8 @@ export default function SignInScreen() {
 				</Button>
 			)}
 
+			{/* continuing by any path accepts the Terms and the Privacy Policy */}
+			<TermsAgreementText />
 			{/* the link to the sign-up screen */}
 			<SessionFooterLink prompt={"Don't have an account?"} linkLabel="Sign up" href="/sign-up" />
 		</SessionScreen>

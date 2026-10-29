@@ -4,9 +4,11 @@ import type { SSEStreamingApi } from "hono/streaming"
 import { streamSSE } from "hono/streaming"
 import { auth } from "../auth"
 import { type AppContext, currentUser } from "../currentUser"
+import { loadBlockedUserIds } from "../userBlocks"
 import { loadChatRoom } from "./roomAccess"
 import { loadChatRoomDeltas, loadChatRoomMessages } from "./roomMessages"
 import { onChatRoomMessage } from "./roomStream"
+import { toUnblockedChatRoomMessages, toVisibleChatRoomMessages } from "./roomVisibility"
 
 // the maximum room connection age before reconnecting
 const CHAT_ROOM_STREAM_MAX_AGE_MS = 15 * 60 * 1000
@@ -69,21 +71,45 @@ async function runChatRoomStream({ context, stream, topicId, teamId }: RunChatRo
 			return canReadRoom && !isClosed
 		}
 
+		// the people this member blocked, read as the stream opens and again on each heartbeat
+		let blockedUserIds = new Set<string>()
+		const toMemberChatMessages = async (
+			chatMessages: ChatRoomMessage[],
+			isHistory: boolean,
+		): Promise<ChatRoomMessage[]> => {
+			if (!userId) {
+				return chatMessages
+			}
+			return isHistory
+				? toVisibleChatRoomMessages(userId, chatMessages, blockedUserIds)
+				: toUnblockedChatRoomMessages(chatMessages, blockedUserIds)
+		}
+
+		// the pending messages: the room past the cursor at first, then the deltas up to a published message
+		const loadPendingChatMessages = (chatMessageId?: number): Promise<ChatRoomMessage[]> =>
+			chatMessageId === undefined
+				? loadChatRoomMessages(topicId, teamId, cursor)
+				: loadChatRoomDeltas(topicId, teamId, cursor, chatMessageId)
+
 		// check access after each read, before any message or Topic edit leaves the server
 		const deliverChatMessages = async (chatMessageId?: number, roomToolCalls?: RoomTopicToolCalls): Promise<void> => {
 			if (isClosed) {
 				return
 			}
-			// read pending messages and recheck access before delivery
-			const chatMessages =
-				chatMessageId === undefined
-					? await loadChatRoomMessages(topicId, teamId, cursor)
-					: await loadChatRoomDeltas(topicId, teamId, cursor, chatMessageId)
+			// read pending messages, drop the ones this member reported or blocked, and recheck access before delivery.
+			// the history is filtered by a query, and a delta by the blocked people the stream holds
+			const loadedChatMessages = await loadPendingChatMessages(chatMessageId)
+			const chatMessages = await toMemberChatMessages(loadedChatMessages, chatMessageId === undefined)
 			if (!(await checkAccess())) {
 				return
 			}
-			// deliver the authorized batch and Topic edit results
-			cursor = await writeChatMessages({ stream, chatMessages, cursor, isClosed: () => isClosed })
+			// deliver the authorized batch and Topic edit results. the cursor moves past hidden messages too
+			cursor = await writeChatMessages({
+				stream,
+				chatMessages,
+				cursor: Math.max(cursor, ...loadedChatMessages.map((chatMessage) => chatMessage.id)),
+				isClosed: () => isClosed,
+			})
 			if (roomToolCalls && !isClosed) {
 				await writeRoomToolCalls(stream, roomToolCalls)
 			}
@@ -99,6 +125,7 @@ async function runChatRoomStream({ context, stream, topicId, teamId }: RunChatRo
 		}
 		// deliver initial history before installing heartbeat timers
 		enqueueDelivery(async () => {
+			blockedUserIds = userId ? await loadBlockedUserIds(userId) : blockedUserIds
 			await deliverChatMessages()
 			if (isClosed) {
 				return
@@ -107,10 +134,12 @@ async function runChatRoomStream({ context, stream, topicId, teamId }: RunChatRo
 			heartbeatInterval = setInterval(() => {
 				enqueueDelivery(async () => {
 					if (await checkAccess()) {
+						blockedUserIds = userId ? await loadBlockedUserIds(userId) : blockedUserIds
 						await stream.writeSSE({ event: "ping", data: "" })
 					}
 				})
 			}, 25_000)
+			// the connection ends at its age limit whatever the room does
 			maxAgeTimeout = setTimeout(endStream, CHAT_ROOM_STREAM_MAX_AGE_MS)
 		})
 		// subscribe before delayed catch-up finishes
@@ -144,6 +173,7 @@ async function writeChatMessages({
 	cursor,
 	isClosed,
 }: WriteChatMessagesOptions): Promise<number> {
+	// write each message as its own event until the stream closes, moving the cursor past it
 	for (const chatMessage of chatMessages) {
 		if (isClosed()) {
 			break
@@ -151,17 +181,20 @@ async function writeChatMessages({
 		await stream.writeSSE({ id: String(chatMessage.id), event: "message", data: JSON.stringify(chatMessage) })
 		cursor = Math.max(cursor, chatMessage.id)
 	}
+
 	return cursor
 }
 
 // publish every Topic edit outcome, including an explicit cancellation
 async function writeRoomToolCalls(stream: SSEStreamingApi, roomToolCalls: RoomTopicToolCalls): Promise<void> {
+	// one event if there is any outcome to tell
 	if (
 		roomToolCalls.topicSaves.length > 0 ||
 		roomToolCalls.topicSaveRejections.length > 0 ||
 		roomToolCalls.proposedToUserId !== undefined ||
 		roomToolCalls.isTopicEditCancelled === true
 	) {
+		// write the outcomes as one event
 		await stream.writeSSE({ event: "topicToolCalls", data: JSON.stringify(roomToolCalls) })
 	}
 }

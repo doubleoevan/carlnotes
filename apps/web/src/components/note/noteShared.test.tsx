@@ -296,6 +296,7 @@ test("shared comments retain failed drafts, prevent duplicate posts and only off
 		Age: Wrap,
 		Body: Wrap,
 		Retry: () => null,
+		Report: () => null,
 		Author: () => <span>Closed account</span>,
 		Delete: ({ onPress }) => {
 			remove = onPress

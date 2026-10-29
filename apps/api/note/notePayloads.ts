@@ -2,9 +2,12 @@
 import type { Note, NotesResponse } from "@carlnotes/contracts/notes"
 import { db } from "@carlnotes/db"
 import { notes } from "@carlnotes/db/schema/notes"
+import { users } from "@carlnotes/db/schema/users"
 import { and, eq, ne, or } from "drizzle-orm"
 import type { Context } from "hono"
 import { currentUser } from "../currentUser"
+import { toUnreportedFilter } from "../report/reports"
+import { loadUsername } from "../usernames"
 import {
 	canDeleteNote,
 	canEditNote,
@@ -37,9 +40,9 @@ export async function loadVisibleNote(
 	context: Context,
 	noteId: string,
 ): Promise<{ note: NoteRow; access: PageAccess; userId: string | null } | null> {
-	// the row and its page
+	// the row and its page. a note the user reported reads as missing to them
 	const userId = currentUser(context)
-	const noteWithPage = await loadNoteWithPage(noteId)
+	const noteWithPage = await loadNoteWithPage(noteId, userId)
 	if (!noteWithPage) {
 		return null
 	}
@@ -55,7 +58,13 @@ export async function loadVisibleNote(
 /**
  * Returns one note row shaped for the api.
  */
-export function toNote(note: NoteListRow, userId: string | null, access: PageAccess): Note {
+export function toNote(
+	note: NoteListRow,
+	userId: string | null,
+	access: PageAccess,
+	// the owner's current username, null once the account closed
+	ownerUsername: string | null,
+): Note {
 	return {
 		id: note.id,
 		name: note.name,
@@ -65,6 +74,7 @@ export function toNote(note: NoteListRow, userId: string | null, access: PageAcc
 		canEdit: canEditNote(userId, note, access),
 		isNoteOwner: userId !== null && note.ownerUserId === userId,
 		canDelete: canDeleteNote(userId, note, access),
+		owner: ownerUsername ? { id: note.ownerUserId, username: ownerUsername } : null,
 	}
 }
 
@@ -84,7 +94,13 @@ export async function loadNotesPayload(userId: string | null, page: NotePage): P
 	const privateFilter = pageAccess.isAdmin
 		? undefined
 		: or(ne(notes.visibility, "private"), eq(notes.ownerUserId, userId ?? ""))
-	const noteRows = await db.select(noteListColumns).from(notes).where(and(pageFilter, privateFilter))
+	// a signed-in user's list leaves out the notes they reported
+	const reportFilter = userId ? toUnreportedFilter(userId, "note", notes.id) : undefined
+	const noteRows = await db
+		.select({ ...noteListColumns, ownerUsername: users.username })
+		.from(notes)
+		.leftJoin(users, eq(users.id, notes.ownerUserId))
+		.where(and(pageFilter, privateFilter, reportFilter))
 	const visibleNotes = noteRows.filter((noteRow) => canSeeNote(userId, noteRow, pageAccess))
 
 	// newest first
@@ -94,7 +110,7 @@ export async function loadNotesPayload(userId: string | null, page: NotePage): P
 	return {
 		pageName: page.kind === "topic" ? page.topic.name : page.team.name,
 		creatableVisibilities: creatableNoteVisibilities(userId, pageAccess),
-		notes: sortedNotes.map((noteRow) => toNote(noteRow, userId, pageAccess)),
+		notes: sortedNotes.map((noteRow) => toNote(noteRow, userId, pageAccess, noteRow.ownerUsername)),
 	}
 }
 
@@ -126,5 +142,5 @@ export async function createNote(
 			bodyEditedAt: new Date(),
 		})
 		.returning()
-	return noteRow ? toNote(noteRow, userId, access) : null
+	return noteRow ? toNote(noteRow, userId, access, await loadUsername(userId)) : null
 }

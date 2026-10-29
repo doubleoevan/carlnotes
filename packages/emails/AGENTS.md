@@ -8,9 +8,10 @@ auth, invite, and unsubscribe mail, and `@carlnotes/pipeline` for a Scan's diges
 - The templates, one `.tsx` file each, imported by name without the extension (`@carlnotes/emails/auth-email`):
   `topic-scan-email.tsx` (the scheduled Scan's digest), `manual-scan-email.tsx` (the report of a Scan the user started
   by hand),
-  `auth-email.tsx` (the mail Better Auth asks for), `topic-invite-email.tsx`, and `team-invite-email.tsx`. Each exports
-  its component, a `render<Name>Email` for the HTML and a `render<Name>EmailText` for the plain text, and the invite and
-  manual scan templates their subject line.
+  `auth-email.tsx` (the mail Better Auth asks for), `topic-invite-email.tsx`, `team-invite-email.tsx`, and
+  `report-email.tsx` (a content report to the support inbox, and the sweep's reminder for one left open, with the
+  reported text and the admin console link). Each exports its component, a `render<Name>Email` for the HTML and a
+  `render<Name>EmailText` for the plain text, and the invite, report, and manual scan templates their subject line.
 - `emailShell.tsx` — the shell every template renders inside: `EmailShell`, `EmailIntro`, `EmailFooter`, `LinkOrText`,
   and the `summaryLink` and `footerBrandLink` styles.
 - Colors and sizes: every color and font size a template writes comes from `@carlnotes/nightshift/email`: a Latte token

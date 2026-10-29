@@ -40,6 +40,17 @@ type Story = StoryObj<typeof meta>
 // the thread for a user who may write the note, composer included
 export const Thread: Story = {}
 
+// a signed-in user's Report on another person's comment, which opens the report dialog with that author's block
+export const ReportAnotherPersonsComment: Story = {
+	parameters: { session: "user" },
+	play: async ({ canvas, canvasElement }) => {
+		await userEvent.click(canvas.getAllByRole("button", { name: "Report comment" })[0] as HTMLElement)
+		const page = within(canvasElement.ownerDocument.body)
+		await expect(await page.findByRole("dialog")).toBeVisible()
+		await expect(page.getByRole("switch", { name: "Block @carlos" })).toBeInTheDocument()
+	},
+}
+
 // cancellation leaves the comment alone and only explicit confirmation reaches deletion
 export const DeleteConfirmation: Story = {
 	args: { deleteNoteComment: fn(async () => true) },

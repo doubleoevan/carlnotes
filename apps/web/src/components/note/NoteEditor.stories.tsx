@@ -18,6 +18,7 @@ const STORY_NOTE: NoteResponse = {
 	canEdit: true,
 	isNoteOwner: true,
 	canDelete: true,
+	owner: { id: "user-carl", username: "carl" },
 	version: 3,
 	html:
 		'<h1>Eval checklist</h1><p>What we <b>keep</b>, what we <i>drop</i>, and <a href="https://carlnotes.com">why</a>.</p>' +

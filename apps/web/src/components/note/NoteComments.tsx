@@ -1,15 +1,18 @@
+import { authClient } from "@carlnotes/client/authClient"
+import type { NoteComment } from "@carlnotes/contracts/notes"
 import {
 	type NoteCommentComposerProps,
 	type NoteCommentsElements,
 	type NoteCommentsProps,
 	NoteComments as SharedNoteComments,
 } from "@carlnotes/core/components/NoteComments"
-import { NOTE_COMMENT_DELETE } from "@carlnotes/core/lib/noteLabels"
-import { Trash2 } from "lucide-react"
+import { NOTE_COMMENT_DELETE, REPORT_COMMENT_LABEL, toReportedCommentLabel } from "@carlnotes/core/lib/noteLabels"
+import { Flag, Trash2 } from "lucide-react"
 import { useState } from "react"
 import { toast } from "sonner"
 import { ConfirmDialog } from "@/components/common/ConfirmDialog"
 import { IconButton } from "@/components/common/IconButton"
+import { ReportIssueDialog } from "@/components/common/ReportIssueDialog"
 import { UserProfileLink } from "@/components/common/UserProfileLink"
 import { Button } from "@/components/primitives/button"
 import { Textarea } from "@/components/primitives/textarea"
@@ -35,14 +38,44 @@ const ELEMENTS: NoteCommentsElements = {
 	Age: ({ children }) => <span className="text-muted-foreground shrink-0 text-xs">{children}</span>,
 	Body: ({ children }) => <p className="whitespace-pre-wrap break-words">{children}</p>,
 	Delete: DeleteCommentButton,
+	Report: ({ onPress }) => (
+		<IconButton
+			tooltip={REPORT_COMMENT_LABEL}
+			className="text-muted-foreground hover:text-foreground ml-auto grid size-6 shrink-0 place-items-center"
+			onClick={onPress}
+		>
+			<Flag className="size-3.5" />
+		</IconButton>
+	),
 	Composer: CommentComposer,
 }
 
 /**
- * Adapts the shared thread to the existing desktop column and phone-browser sheet.
+ * Adapts the shared thread to the existing desktop column and phone-browser sheet. A signed-in user can report
+ * another person's comment, and block its author from the report.
  */
-export function NoteComments(props: Omit<NoteCommentsProps, "onError">) {
-	return <SharedNoteComments {...props} onError={toast.error} elements={ELEMENTS} />
+export function NoteComments(props: Omit<NoteCommentsProps, "onError" | "onReport">) {
+	const { data: session } = authClient().useSession()
+	const [reportedComment, setReportedComment] = useState<NoteComment | null>(null)
+	return (
+		<>
+			<SharedNoteComments
+				{...props}
+				onError={toast.error}
+				onReport={session ? setReportedComment : undefined}
+				elements={ELEMENTS}
+			/>
+			{reportedComment?.author && (
+				<ReportIssueDialog
+					subjectKind="noteComment"
+					subjectId={reportedComment.id}
+					subjectLabel={toReportedCommentLabel(reportedComment.author.username)}
+					author={{ id: reportedComment.author.userId, username: reportedComment.author.username }}
+					onClose={() => setReportedComment(null)}
+				/>
+			)}
+		</>
+	)
 }
 
 // keep the comment in place until its author confirms deletion
