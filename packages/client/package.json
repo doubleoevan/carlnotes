@@ -8,8 +8,8 @@
 	},
 	"dependencies": {
 		"@carlnotes/contracts": "workspace:*",
-		"better-auth": "~1.7.11",
-		"hono": "^4.13.13",
+		"better-auth": "~1.7.13",
+		"hono": "^4.13.14",
 		"zod": "^4.6.7"
 	},
 	"devDependencies": {
