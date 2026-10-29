@@ -17,6 +17,7 @@ import { Icon } from "@/components/primitives/icon"
 import { Text } from "@/components/primitives/text"
 import { CollapsibleSection } from "@/components/topic/CollapsibleSection"
 import { useNoteDraftSnapshot, useNoteDraftStore } from "@/noteDraftStorage"
+import { openSessionScreen } from "@/sessionReturnPath"
 import { CreateNote } from "./CreateNote"
 import { NotesTable } from "./NotesTable"
 import { PageNoteBadge } from "./NoteUnreadBadge"
@@ -27,13 +28,20 @@ import { PageNoteBadge } from "./NoteUnreadBadge"
 export function NotesSection(props: { topic: TopicResponse } | { pageType: "topic" | "team"; pageId: string }) {
 	const page = "topic" in props ? { pageType: "topic" as const, pageId: props.topic.id } : props
 	const path = `/${page.pageType === "topic" ? "topics" : "teams"}/${page.pageId}`
-	// open the same action from the header button and the empty invitation
+	// open the same action from the header button and the empty invitation. a visitor is sent to sign-up with the
+	// web's note prompt and returns to this page
+	const { data: session } = authClient().useSession()
 	const [isAddingNote, setIsAddingNote] = useState(false)
 	const triggerRef = useRef<ComponentRef<typeof View>>(null)
-	const handleAddNote = (): void => setIsAddingNote(true)
+	const handleAddNote = (): void => {
+		if (!session) {
+			openSessionScreen({ screen: "/sign-up", returnPath: path, cta: "note" })
+			return
+		}
+		setIsAddingNote(true)
+	}
 
 	// separate these transient reads from saved feed data
-	const { data: session } = authClient().useSession()
 	const router = useRouter()
 	const queryClient = useQueryClient()
 	const store = useNoteDraftStore()
@@ -59,7 +67,8 @@ export function NotesSection(props: { topic: TopicResponse } | { pageType: "topi
 		networkMode: "always",
 		retry: false,
 	})
-	const canCreate = (query.data?.creatableVisibilities.length ?? 0) > 0 && isOnline
+	// a visitor sees the button too, as the web does, and it prompts for an account
+	const canCreate = ((query.data?.creatableVisibilities.length ?? 0) > 0 && isOnline) || !session
 	return (
 		<>
 			<CollapsibleSection

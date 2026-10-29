@@ -1,18 +1,6 @@
-// the actions that send a visitor to the signup page, each tagged with the call to action it names and the toast the
-// signup page shows on arrival. a sign-up link the visitor picks on purpose names no prompt and shows no toast
-export const SIGNUP_PROMPTS = {
-	chat: "Sign up to chat",
-	"chat-voice": "Sign up to speak with Carl",
-	"podcast-question": "Sign up to speak with Carl and Vienna",
-	"new-topic": "Sign up to create a topic",
-	subscribe: "Sign up to follow this topic",
-	"team-join": "Sign up to join this team",
-	"profile-team-up": "Sign up to team up",
-	note: "Sign up to add a note",
-} as const
-
-// the call to action of an action that sends a visitor to the signup page
-export type SignupPromptCta = keyof typeof SIGNUP_PROMPTS
+// where the web sends a visitor who tried an action that needs an account: the signup page, tagged with the action's
+// call to action and the page to come back to. the prompts themselves are shared with the app in core
+import type { SignupPromptCta } from "@carlnotes/core/lib/signupPrompts"
 
 /**
  * Returns the navigation to the signup page for an action a visitor tried, named by its call to action, with the

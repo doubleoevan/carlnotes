@@ -4,8 +4,7 @@ import { fetchAddableTopics } from "@carlnotes/client/topicClient"
 import { CHAT_NAME } from "@carlnotes/contracts/chat"
 import { toSessionProfileIdentity } from "@carlnotes/contracts/profiles"
 import type { TeamSummary, TeamsPageResponse } from "@carlnotes/contracts/teams"
-import { useAllTeamChatMentions } from "@carlnotes/core/stores/chatRoomStore"
-import { useAllNoteBadges } from "@carlnotes/core/stores/noteBadgeStore"
+import { useUserMenuUpdateBadges } from "@carlnotes/core/hooks/useUpdateCounts"
 import { Plus, Users } from "lucide-react"
 import { useCallback, useEffect, useState } from "react"
 import { toast } from "sonner"
@@ -31,10 +30,8 @@ export function TeamsPage() {
 	const { data: session } = authClient().useSession()
 	const [teamsPage, setTeamsPage] = useState<TeamsPageResponse | null>(null)
 	const [isLoadFailed, setIsLoadFailed] = useState(false)
-	// the chat panel's poll feeds this
-	const teamMentions = useAllTeamChatMentions()
-	// every unread change on the teams' notes
-	const teamNoteBadges = useAllNoteBadges().filter((noteBadge) => noteBadge.teamId !== null)
+	// the teams' own chat mentions and note changes, the user menu's Teams row
+	const teamsUpdateBadges = useUserMenuUpdateBadges().Teams
 	// the panel leads with a team's own chat room and falls back to a topic's
 	useRegisterChatContext({
 		topicId: null,
@@ -100,11 +97,7 @@ export function TeamsPage() {
 					<Users className="size-6" />
 					Teams
 					{/* the unread chat mentions across every chat room and the unread notes on the teams, in one count */}
-					<UpdateCountBadge
-						chatMentions={teamMentions}
-						noteBadges={teamNoteBadges}
-						countBadgeClassName="h-6 min-w-6 text-sm"
-					/>
+					<UpdateCountBadge {...teamsUpdateBadges} countBadgeClassName="h-6 min-w-6 text-sm" />
 				</h1>
 				<Button className="shrink-0" onClick={() => void handleCreateOpen()}>
 					<Plus className="size-4" />

@@ -1,6 +1,9 @@
 // the plan cards' identity rules: which plan the user is on, and which badge displays on the plans page cards
 import type { BillingInterval, Plan } from "@carlnotes/contracts/plans"
 
+// the recommended plan that a signed-out visitor sees highlighted
+export const RECOMMENDED_PLAN: Plan = "plus"
+
 /**
  * Whether a plans page plan card matches the plan and billing interval the user is on
  */

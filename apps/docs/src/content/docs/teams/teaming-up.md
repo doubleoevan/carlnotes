@@ -82,7 +82,8 @@ There are three ways to invite someone:
 
 - **By email.** The address gets an invitation email with a link.
 - **By @username.** CarlNotes sends no email. The invitation waits on their **Teams** page.
-- **Invite by link.** Anyone with the link can join.
+- **Invite by link.** Anyone with the link can join. The link opens in the CarlNotes app too, and someone who opens it
+  before signing in comes back to it after they do.
 
 Email and link invitations count against a daily allowance. @username invitations don't.
 

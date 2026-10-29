@@ -101,9 +101,9 @@ the browser bundle and renders pages through the server build, behind its own ro
   still asks for.
 - `components/session/` — the login and signup pages' layout and their sign-in pieces. `SessionLayout.tsx` opens the
   Google, GitHub, and Apple sign-ins and says so if one does not open. `VerifyEmailNotice.tsx` is the
-  notice the signup page shows after a password signup, with a button straight into the app. `signupPrompts.ts` names
-  each action that sends a visitor to signup, with the toast the signup page shows on arrival, and
-  `toSignupNavigation` and `toSignupHref`, which every such action goes through.
+  notice the signup page shows after a password signup, with a button straight into the app. `signupPrompts.ts` holds
+  `toSignupNavigation` and `toSignupHref`, which every action that sends a visitor to signup goes through, tagged with
+  the action's cta from `@carlnotes/core/lib/signupPrompts`, whose prompt the signup page shows as a toast on arrival.
 - `components/account/` — the account page's sections. `SpendMeter.tsx` is the monthly budget's bar, with a circle
   above it for each monthly budget cutoff, a tooltip on each circle, and the list of what each cutoff stops.
   `globals.css` scans `core/lib/spendMeter.ts` for the shared bar and legend colors. The legend uses compact row gaps
@@ -134,8 +134,9 @@ the browser bundle and renders pages through the server build, behind its own ro
   values. On `/search` the bar's input, Filters menu, and sort show and change the page's url.
 - `components/layout/` — the app shell every route shares: `Layout.tsx` holds the header, search bar, page content, and
   footer. `Header.tsx` is the global header, with `UserMenu.tsx`, the signed-in user's dropdown, `HeaderMenu.tsx`, the
-  mobile-only menu, and `ThemeToggle.tsx`. `Footer.tsx` is the global footer, `DocsLink.tsx` is every link to the docs,
-  which opens in a new tab, and `Attribution.tsx` is the persona credit in the hero's popover.
+  mobile-only menu, and `ThemeToggle.tsx`. `HomeHero.tsx` is a visitor's home page hero below the header's top bar,
+  with its pitch and persona note buttons. `Footer.tsx` is the global footer, `DocsLink.tsx` is every link to the
+  docs, which opens in a new tab, and `Attribution.tsx` is the persona credit in the hero's popover.
 - `components/admin/` — the admin console's own pieces beyond its tables: `ManageAdminsModal.tsx`, where an admin adds
   and removes other admins.
 - `components/branding/` — the coffee drawings, the loading indicator, the note icon, and the avatars. `CoffeeMug.tsx`
@@ -245,8 +246,8 @@ the browser bundle and renders pages through the server build, behind its own ro
   element before any script runs, so nothing a crawler or a browser without JavaScript reads starts hidden. A box that
   scrolls takes its tab stop from `useScrollRegionTabStop` in `hooks/useScrollRegionTabStop.ts`, which returns
   `{ ref, tabIndex }` for the box, with a tab stop while its content overflows, so a keyboard can scroll text with no
-  link in it. The box draws its focus ring with `SCROLL_REGION_FOCUS_CLASS`. `usePolledCounts` in
-  `hooks/usePolledCounts.ts` reads a page's counts once it has mounted, then every minute while the page is visible.
+  link in it. The box draws its focus ring with `SCROLL_REGION_FOCUS_CLASS`. The counts lines read their counts
+  through `@carlnotes/core/hooks/usePolledCounts`, once the page has mounted and then every minute while it is focused.
 - `src/globals.css` — the app's stylesheet, with the keyframes in `animations.css` and the `scrollbar-none` utility
   the note toolbar scrolls sideways with. It imports its `@theme inline` block, the `shadow-raised` utility, and the
   `:root` and dark variables from `@carlnotes/nightshift/tokens.css`, which is written from the Nightshift TypeScript

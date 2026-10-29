@@ -11,6 +11,8 @@ const meta = {
 export default meta
 type Story = StoryObj<typeof meta>
 export const Home: Story = { args: { isHome: true } }
+// a visitor's Home brand row, without the tutorial button the hero below it holds
+export const VisitorHome: Story = { args: { isHome: true, isHeroShown: true } }
 export const Reheating: Story = { args: { isHome: true, isReheating: true } }
 export const Topic: Story = {}
 export const Settings: Story = {}

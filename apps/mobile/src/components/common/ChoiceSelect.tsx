@@ -19,14 +19,18 @@ export function ChoiceSelect({
 	presentation = "dropdown",
 	numberOfLines,
 	onChange,
+	onOpen,
 }: {
 	label: string
 	value: string
-	options: { value: string; label: string; icon?: LucideIcon | ReactElement }[]
+	// each choice's value, label, icon, and a count badge beside its label
+	options: { value: string; label: string; icon?: LucideIcon | ReactElement; badge?: ReactElement }[]
 	isDisabled?: boolean
 	presentation?: "dropdown" | "sheet"
 	numberOfLines?: number
 	onChange: (value: string) => void
+	// what opening the choice list does besides showing it
+	onOpen?: () => void
 }) {
 	// resolve the selected option and keep its menu inside the safe area
 	const insets = useSafeAreaInsets()
@@ -46,11 +50,15 @@ export function ChoiceSelect({
 					accessibilityLabel={label}
 					accessibilityState={{ expanded: isOpen }}
 					disabled={isDisabled}
-					onPress={() => setIsOpen(true)}
+					onPress={() => {
+						onOpen?.()
+						setIsOpen(true)
+					}}
 				>
 					<ChoiceLabel
 						label={selectedOption?.label ?? label}
 						icon={selectedOption?.icon}
+						badge={selectedOption?.badge}
 						numberOfLines={numberOfLines}
 					/>
 					<Icon as={ChevronDown} className="size-4 text-muted-foreground" />
@@ -88,6 +96,11 @@ export function ChoiceSelect({
 					onChange(option.value)
 				}
 			}}
+			onOpenChange={(isMenuOpen) => {
+				if (isMenuOpen) {
+					onOpen?.()
+				}
+			}}
 			disabled={isDisabled}
 		>
 			<SelectTrigger
@@ -115,14 +128,16 @@ export function ChoiceSelect({
 	)
 }
 
-// keep avatar, icon, and label spacing identical in both choice presentations
+// keep avatar, icon, label, and badge spacing identical in both choice presentations
 function ChoiceLabel({
 	label,
 	icon,
+	badge,
 	numberOfLines,
 }: {
 	label: string
 	icon?: LucideIcon | ReactElement
+	badge?: ReactElement
 	numberOfLines?: number
 }) {
 	return (
@@ -131,6 +146,7 @@ function ChoiceLabel({
 			<Text className="shrink text-left text-sm" numberOfLines={numberOfLines}>
 				{label}
 			</Text>
+			{badge}
 		</View>
 	)
 }

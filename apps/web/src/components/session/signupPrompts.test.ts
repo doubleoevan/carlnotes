@@ -1,7 +1,7 @@
 // the signup page's toast for each action that sends a visitor there, and none for a link they picked on purpose
 import { expect, test } from "bun:test"
-import { toCtaPrompt } from "@/hooks/useCtaPromptToast"
-import { SIGNUP_PROMPTS, toSignupHref } from "./signupPrompts"
+import { SIGNUP_PROMPTS, toCtaPrompt } from "@carlnotes/core/lib/signupPrompts"
+import { toSignupHref } from "./signupPrompts"
 
 // an action's call to action names its prompt, and a header or menu link names none
 test("a signup prompt names what an action unlocks and nothing for a sign-up link", () => {

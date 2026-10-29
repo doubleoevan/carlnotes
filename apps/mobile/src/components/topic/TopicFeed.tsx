@@ -3,7 +3,7 @@ import type { TopicFeedState } from "@carlnotes/core/hooks/useTopicFeedState"
 import { TOPIC_SECTION_TITLES } from "@carlnotes/core/lib/topicFeedLabels"
 import { FlashList } from "@shopify/flash-list"
 import { ChevronDown, ChevronRight } from "lucide-react-native"
-import { useMemo, useState } from "react"
+import { type ReactNode, useMemo, useState } from "react"
 import { Text as NativeText, View } from "react-native"
 import { Footer } from "@/components/layout/Footer"
 import { Button } from "@/components/primitives/button"
@@ -15,17 +15,18 @@ import { MoreButton } from "./MoreButton"
 import { Topic } from "./Topic"
 import { TopicFindingList } from "./TopicFindingList"
 
-// the loaded feed resets its open section only after a successful reheat
+// the loaded feed resets its open section only after a successful reheat. listHeader scrolls above the first section
 export type TopicFeedProps = {
 	topicFeed: TopicFeedResponse
 	state: Pick<TopicFeedState, "handlers" | "pendingChanges" | "isReheating">
 	onRefresh: () => void
+	listHeader?: ReactNode
 }
 
 /**
  * Renders Home's sections and five-finding previews in one recycled list.
  */
-export function TopicFeed({ topicFeed, state, onRefresh }: TopicFeedProps) {
+export function TopicFeed({ topicFeed, state, onRefresh, listHeader }: TopicFeedProps) {
 	// preserve a user's collapsed section until this feed generation ends
 	const [openSection, setOpenSection] = useState<TopicSectionKey | null>(() => toInitialTopicSection(topicFeed))
 	const [expandedTopicKeys, setExpandedTopicKeys] = useState<ReadonlySet<string>>(() => new Set())
@@ -49,6 +50,7 @@ export function TopicFeed({ topicFeed, state, onRefresh }: TopicFeedProps) {
 		setOpenSection((currentSection) => (currentSection === sectionKey ? null : sectionKey))
 	return (
 		<FlashList
+			ListHeaderComponent={listHeader ? <>{listHeader}</> : undefined}
 			ListFooterComponent={Footer}
 			data={rows}
 			getItemType={(row) => row.kind}

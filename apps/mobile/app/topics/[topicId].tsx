@@ -9,14 +9,12 @@ import { useQuery } from "@tanstack/react-query"
 import { useFocusEffect, useLocalSearchParams } from "expo-router"
 import { useCallback, useEffect, useMemo } from "react"
 import { ScrollView, Text, View } from "react-native"
-import { AnchorLink } from "@/components/common/AnchorLink"
 import { ClassNameSafeAreaView } from "@/components/common/ClassNameSafeAreaView"
 import { Footer } from "@/components/layout/Footer"
 import { Header } from "@/components/layout/Header"
-import { Button } from "@/components/primitives/button"
-import { Text as ButtonText } from "@/components/primitives/text"
 import { SearchBar } from "@/components/search/SearchBar"
 import { TopicFeedStatus } from "@/components/topic/TopicFeedStatus"
+import { TopicGateNotice } from "@/components/topic/TopicGateNotice"
 import { TopicPageActions } from "@/components/topic/TopicPageActions"
 import { TopicPageContent } from "@/components/topic/TopicPageContent"
 import { useTopicFeed } from "@/providers/TopicFeedProvider"
@@ -104,19 +102,7 @@ export default function TopicScreen() {
 					/>
 				) : null}
 				{page?.status === "gated" ? (
-					<View className="gap-4 px-4 py-6">
-						<Text accessibilityRole="header" style={toTypeRoleStyle("pageTitle")} className="text-foreground">
-							This topic is invite-only
-						</Text>
-						<Text style={toTypeRoleStyle("body")} className="text-muted-foreground">
-							Ask the topic owner for an invite to see it.
-						</Text>
-						<Button asChild accessibilityLabel="Back to CarlNotes" className="self-start">
-							<AnchorLink href="/" shouldReplace accessibilityLabel="Back to CarlNotes">
-								<ButtonText>Back to CarlNotes</ButtonText>
-							</AnchorLink>
-						</Button>
-					</View>
+					<TopicGateNotice isSignedIn={Boolean(session)} returnPath={`/topics/${topicId}`} />
 				) : null}
 				{page?.status === "missing" ? (
 					<Text style={toTypeRoleStyle("body")} className="p-4 text-muted-foreground">

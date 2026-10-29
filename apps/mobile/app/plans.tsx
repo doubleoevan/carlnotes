@@ -3,6 +3,7 @@ import { fetchBillingPortalUrl, fetchBillingState, fetchCheckoutUrl } from "@car
 import { isPaidPlan, plans } from "@carlnotes/contracts/enums"
 import type { Plan } from "@carlnotes/contracts/plans"
 import { MonthlyBudgetCutoffTable } from "@carlnotes/core/components/MonthlyBudgetCutoffTable"
+import { RECOMMENDED_PLAN } from "@carlnotes/core/lib/planCards"
 import { useQuery } from "@tanstack/react-query"
 import { useState } from "react"
 import { Alert, View } from "react-native"
@@ -15,6 +16,7 @@ import { Button } from "@/components/primitives/button"
 import { Text } from "@/components/primitives/text"
 import { DATA_TABLE_ELEMENTS } from "@/components/table/DataTable"
 import { TableCard } from "@/components/table/TableCard"
+import { openSessionScreen } from "@/sessionReturnPath"
 
 /**
  * Compares the existing plans with shared cards and native navigation to hosted billing.
@@ -30,7 +32,9 @@ export default function PlansScreen() {
 	const [selectedInterval, setSelectedInterval] = useState<"monthly" | "yearly" | null>(null)
 	const [isRedirecting, setIsRedirecting] = useState(false)
 	const interval = selectedInterval ?? query.data?.billingInterval ?? "monthly"
-	const signedInPlan = (session?.user.plan ?? "free") as Plan
+	// the highlighted plan: the user's own, or the recommended plan for a visitor
+	const signedInPlan = session ? ((session.user.plan ?? "free") as Plan) : null
+	const highlightedPlan = signedInPlan ?? RECOMMENDED_PLAN
 	async function handleBilling(plan?: Plan): Promise<void> {
 		if (isRedirecting) {
 			return
@@ -83,7 +87,7 @@ export default function PlansScreen() {
 					<Text className="text-xs text-link">2 months free</Text>
 				</Button>
 			</View>
-			{query.isPending ? (
+			{session && query.isPending ? (
 				<CoffeeLoading />
 			) : query.isError ? (
 				<Button variant="outline" accessibilityLabel="Retry loading plans" onPress={() => void query.refetch()}>
@@ -95,12 +99,13 @@ export default function PlansScreen() {
 						key={plan}
 						plan={plan}
 						isYearly={interval === "yearly"}
-						isHighlighted={plan === signedInPlan}
+						isHighlighted={plan === highlightedPlan}
 						signedInPlan={signedInPlan}
-						subscribedInterval={query.data.billingInterval}
+						subscribedInterval={query.data?.billingInterval ?? null}
 						isRedirecting={isRedirecting}
 						onCheckout={(plan) => void handleBilling(plan)}
 						onPortal={() => void handleBilling()}
+						onSignup={() => openSessionScreen({ screen: "/sign-up", returnPath: "/plans" })}
 					/>
 				))
 			)}

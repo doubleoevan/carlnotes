@@ -8,6 +8,8 @@ import {
 	toVerifyEmailNoticeText,
 	VERIFY_EMAIL_TITLE,
 } from "@carlnotes/core/lib/sessionCopy"
+import { SIGNUP_PROMPTS, toCtaPrompt } from "@carlnotes/core/lib/signupPrompts"
+import { useLocalSearchParams } from "expo-router"
 import * as WebBrowser from "expo-web-browser"
 import { useState } from "react"
 import { Alert } from "react-native"
@@ -68,8 +70,12 @@ export default function SignUpScreen() {
 		}
 	}
 
+	// the prompt for the action that sent a visitor here, in Carl's words, as the web's toast on arrival
+	const { cta } = useLocalSearchParams<{ cta?: string }>()
+	const signupPrompt = toCtaPrompt(SIGNUP_PROMPTS, cta ?? null)
 	return (
 		<SessionScreen>
+			{signupPrompt ? <Text className="text-center font-display text-lg">{signupPrompt}</Text> : null}
 			<SessionEmailInput value={email} onChangeText={setEmail} />
 			<SessionPasswordInput value={password} onChangeText={setPassword} isNewPassword />
 			<SessionErrorText text={error} />

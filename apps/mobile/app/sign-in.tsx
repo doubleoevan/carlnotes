@@ -1,4 +1,4 @@
-// the sign-in screen: Google and Apple, the email form, the reset link to the web, and the sign-up path
+// the sign-in screen: Google, GitHub, and Apple, the email form, the reset link to the web, and the sign-up path
 import { SITE_URL } from "@carlnotes/core/lib/pageHead"
 import { OAUTH_ERROR_TEXT, REQUEST_FAILED_TEXT } from "@carlnotes/core/lib/sessionCopy"
 import * as AppleAuthentication from "expo-apple-authentication"
@@ -9,7 +9,7 @@ import { signInWithAppleSheet } from "@/appleSignIn"
 import { mobileAuthClient } from "@/authClient"
 import { Button, toButtonHeight, toTouchTargetHitSlop } from "@/components/primitives/button"
 import { Text } from "@/components/primitives/text"
-import { AppleIcon, GoogleIcon } from "@/components/session/OAuthProviderIcons"
+import { AppleIcon, GithubIcon, GoogleIcon } from "@/components/session/OAuthProviderIcons"
 import { SessionErrorText } from "@/components/session/SessionErrorText"
 import { SessionFooterLink } from "@/components/session/SessionLink"
 import { SessionScreen } from "@/components/session/SessionScreen"
@@ -17,7 +17,7 @@ import { SessionEmailInput, SessionPasswordInput } from "@/components/session/Se
 import { useFontScaledSize } from "@/hooks/useFontScaledSize"
 
 // the providers that open the system browser. Apple opens the native sheet on iOS instead
-type OAuthProviderId = "google" | "apple"
+type OAuthProviderId = "google" | "github" | "apple"
 
 // the oauth buttons' hero fill and pressed fill, and the color of their label and icon, as on the web
 const OAUTH_BUTTON_CLASS = "bg-hero active:bg-hero/90"
@@ -59,6 +59,11 @@ export default function SignInScreen() {
 		<SessionScreen>
 			{/* the oauth buttons, in the web's order */}
 			<OAuthButton label="Continue with Google" icon={<GoogleIcon />} onPress={() => handleBrowserSignIn("google")} />
+			<OAuthButton
+				label="Continue with GitHub"
+				icon={<GithubIcon className={OAUTH_BUTTON_LABEL_CLASS} />}
+				onPress={() => handleBrowserSignIn("github")}
+			/>
 			<AppleSignInButton onPress={Platform.OS === "ios" ? handleAppleSheet : () => handleBrowserSignIn("apple")} />
 			<SessionErrorText text={oauthError} />
 

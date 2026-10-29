@@ -1,5 +1,5 @@
 import type { TopicFeedFilters } from "@carlnotes/core/hooks/useTopicFeedState"
-import { router } from "expo-router"
+import { router, usePathname } from "expo-router"
 import { Check, Plus, X } from "lucide-react-native"
 import { type ComponentRef, useRef, useState } from "react"
 import { View } from "react-native"
@@ -9,6 +9,7 @@ import { Button } from "@/components/primitives/button"
 import { Icon } from "@/components/primitives/icon"
 import { Text } from "@/components/primitives/text"
 import { useTopicFeed } from "@/providers/TopicFeedProvider"
+import { openSessionScreen } from "@/sessionReturnPath"
 import { EditTopicModal } from "./EditTopicModal"
 
 /**
@@ -99,10 +100,12 @@ export function NewTopicButton() {
 export function useNewTopicDialog(): { openNewTopicDialog: () => void; newTopicDialog: React.ReactNode } {
 	const [isOpen, setIsOpen] = useState(false)
 	const state = useTopicFeed()
+	// a visitor is sent to sign-up with the web's new-topic prompt, and returns to this screen
+	const pathname = usePathname()
 	return {
 		openNewTopicDialog: () => {
 			if (!hasSession()) {
-				router.push("/sign-up")
+				openSessionScreen({ screen: "/sign-up", returnPath: pathname, cta: "new-topic" })
 				return
 			}
 			setIsOpen(true)

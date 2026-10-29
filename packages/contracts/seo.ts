@@ -149,7 +149,7 @@ export function isTopicSlugStale(topic: { id: string; name: string }, topicSlug:
  * Returns an invite token's page path.
  */
 export function toInvitePath(token: string): string {
-	return `/invite/${token}`
+	return `/invite/${encodeURIComponent(token)}`
 }
 
 /**

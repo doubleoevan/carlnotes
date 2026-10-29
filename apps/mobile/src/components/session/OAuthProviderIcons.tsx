@@ -5,6 +5,7 @@ import {
 	OAUTH_PROVIDER_ICON_VIEW_BOX,
 } from "@carlnotes/nightshift/oauthProviderIcons"
 import Svg, { Path } from "react-native-svg"
+import { siGithub } from "simple-icons"
 import { ClassNameSvg } from "@/components/common/ClassNameSvg"
 import { useFontScaledSize } from "@/hooks/useFontScaledSize"
 
@@ -22,6 +23,24 @@ export function GoogleIcon() {
 				<Path key={googleIconPath.fill} fill={googleIconPath.fill} d={googleIconPath.d} />
 			))}
 		</Svg>
+	)
+}
+
+/**
+ * The GitHub mark, from the same simple-icons path the web draws, in the text color its className gives.
+ */
+export function GithubIcon({ className }: { className?: string }) {
+	const iconSize = useFontScaledSize(ICON_SIZE)
+	return (
+		<ClassNameSvg
+			className={className}
+			width={iconSize}
+			height={iconSize}
+			viewBox="0 0 24 24"
+			accessibilityElementsHidden
+		>
+			<Path d={siGithub.path} fill="currentColor" />
+		</ClassNameSvg>
 	)
 }
 

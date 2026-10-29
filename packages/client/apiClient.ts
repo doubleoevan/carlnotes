@@ -4,13 +4,16 @@
 import type { AppType } from "@carlnotes/api"
 import { hc } from "hono/client"
 
+// what the headers function may read of the call: the credentials mode the call asked for
+export type ApiRequestContext = { credentials?: RequestCredentials }
+
 // what an app gives the client: the api's base url, "" for the page's own origin, how an error is shown to the user,
-// and for an app with no cookie jar the headers every request sends, read per request, its credentials mode, and
-// what a 401 does
+// and for an app with no cookie jar the headers every request sends, read per request with the call's own
+// credentials mode, its credentials mode, and what a 401 does
 export type ApiClientSettings = {
 	apiBaseUrl: string
 	showError: (message: string) => void
-	headers?: () => Record<string, string> | Promise<Record<string, string>>
+	headers?: (request?: ApiRequestContext) => Record<string, string> | Promise<Record<string, string>>
 	credentials?: RequestCredentials
 	onUnauthorized?: () => void
 }
@@ -52,19 +55,7 @@ export function toApiUrl(path: string): string {
  * Fetches an api path at the configured base url with the configured headers and credentials, and reports a 401.
  */
 export async function fetchApi(path: string, init: RequestInit = {}): Promise<Response> {
-	// the configured headers under the call's own
-	const settings = apiClientSettings
-	const headers = new Headers(init.headers)
-	for (const [name, value] of Object.entries((await settings.headers?.()) ?? {})) {
-		if (!headers.has(name)) {
-			headers.set(name, value)
-		}
-	}
-
-	// the configured credentials, if the app set them
-	init.signal?.throwIfAborted()
-	const credentials = settings.credentials ?? init.credentials
-	return fetchAndReportUnauthorized(`${settings.apiBaseUrl}${path}`, { ...init, headers, credentials })
+	return fetchWithSettings(`${apiClientSettings.apiBaseUrl}${path}`, init)
 }
 
 /**
@@ -82,13 +73,28 @@ export async function readApiErrorMessage(response: ApiResponse): Promise<string
 	return body?.error
 }
 
-// the typed client with the settings' headers, credentials, and 401 report
+// the typed client at the base url, every call going through the settings' headers, credentials, and 401 report
 function toConfiguredApiClient(settings: ApiClientSettings): ApiClient {
-	return hc<AppType>(settings.apiBaseUrl, {
-		headers: settings.headers,
-		init: settings.credentials ? { credentials: settings.credentials } : undefined,
-		fetch: fetchAndReportUnauthorized,
-	})
+	return hc<AppType>(settings.apiBaseUrl, { fetch: fetchWithSettings })
+}
+
+// fetch a request with the configured headers under the call's own, read with the call's credentials mode, and the
+// configured credentials over the call's, if the app set them
+async function fetchWithSettings(input: RequestInfo | URL, init: RequestInit = {}): Promise<Response> {
+	// await the configured headers only if an app configured them
+	const settings = apiClientSettings
+	const headers = new Headers(init.headers)
+	const configuredHeaders = settings.headers ? await settings.headers({ credentials: init.credentials }) : {}
+	for (const [name, value] of Object.entries(configuredHeaders)) {
+		if (!headers.has(name)) {
+			headers.set(name, value)
+		}
+	}
+
+	// a call aborted while its headers were read never leaves the client
+	init.signal?.throwIfAborted()
+	const credentials = settings.credentials ?? init.credentials
+	return fetchAndReportUnauthorized(input, { ...init, headers, credentials })
 }
 
 // fetch a request, and report a 401 to the app once per response

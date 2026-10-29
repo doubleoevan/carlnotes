@@ -6,11 +6,8 @@ import { useLocation } from "@tanstack/react-router"
 import { useState } from "react"
 import { CoffeeMug } from "@/components/branding/CoffeeMug"
 import { CoffeeRings } from "@/components/branding/CoffeeRings"
-import { NoteIcon } from "@/components/branding/NoteIcon"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { buttonVariants } from "@/components/primitives/button"
-import { Popover, PopoverCloseButton, PopoverContent, PopoverTrigger } from "@/components/primitives/popover"
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import {
 	TopicTutorialVideoButton,
 	TopicTutorialVideoDialog,
@@ -18,29 +15,15 @@ import {
 } from "@/components/topic/TopicTutorialVideoDialog"
 import { useIsSignedInBeforeSession } from "@/hooks/useIsSignedInBeforeSession"
 import { useTheme } from "@/hooks/useTheme"
-import { HERO_BUTTON_HOVER_CLASS, LOGO_CLASS, SECTION_LABEL_CLASS } from "@/lib/styleClasses"
+import { HERO_BUTTON_HOVER_CLASS, LOGO_CLASS } from "@/lib/styleClasses"
 import { toLinkClickHandler, toSafeRedirectPath } from "@/lib/utils"
 import { useTopicFeed } from "@/providers/TopicFeedProvider"
 import { clearSearchBar, useSearchBarPath } from "@/stores/searchBarStore"
-import { Attribution } from "./Attribution"
 import { DocsLink } from "./DocsLink"
 import { HeaderMenu } from "./HeaderMenu"
+import { HomeHero } from "./HomeHero"
 import { ThemeToggle } from "./ThemeToggle"
 import { UserMenu } from "./UserMenu"
-
-// the hero headline's type, which the base heading and its two overlay copies share so their letters line up
-const HERO_HEADLINE_CLASS = "font-display text-2xl leading-tight sm:text-4xl"
-
-// the hero headline's last sentence in the accent color. the glint copy keeps only its nowrap
-const HERO_HEADLINE_ACCENT_CLASS = "text-hero-accent faint-underline whitespace-nowrap"
-
-// the hero headline's two sentences, which every copy of the headline writes
-const HERO_HEADLINE_FIRST_SENTENCE = "He already read it."
-const HERO_HEADLINE_LAST_SENTENCE = "All of it."
-
-// Carl's pitch, shown inline on wide screens and inside the phone's note popover
-const CARL_PITCH =
-	"Carl doesn't check the news. The news checks in with Carl. Carl never sleeps. He drinks coffee and reads everything. He finished the internet. Now he checks nightly for new stuff. And when you drop by, he has notes and a podcast."
 
 // the desktop nav link's classes on the dark hero band. the current page is marked with a white wash at twice the hover fill
 function menuLinkClassName(pathname: string, href: string): string {
@@ -158,77 +141,13 @@ export function Header() {
 						onPlayTopicTutorialVideo={setTopicTutorialVideoOpener}
 					/>
 				</div>
-				{/* the hero: the headline shimmers and the copy fades in.
-				    on a narrow screen, the headline spans both columns above Carl. on a wide screen, Carl takes the left and the headline goes right */}
+				{/* the hero pitches the app to a visitor */}
 				{isHeroShown && (
-					<div className="mt-6 grid grid-cols-[auto_minmax(0,1fr)] items-end gap-x-4">
-						{/* the headline with the video's button after it, centered on a narrow screen, left-aligned on a wide one.
-						    "All of it." stays on one line in every copy, so a narrow screen breaks the headline before it,
-						    and the button sits beside that last line */}
-						<div className="col-span-2 flex items-end justify-center gap-2 sm:col-span-1 sm:col-start-2 sm:items-center sm:justify-start sm:gap-3">
-							{/* the hero headline: a light wipes across the dimmed text, revealing it in full color.
-						        keyed to the pathname to replay per route. the overlay copies stay letter-aligned */}
-							<div key={pathname} className="shimmer-reveal min-w-0 text-center sm:text-left">
-								{/* the dimmed heading that the light reveals. the page's real h1. only this copy is a link.
-							        the overlay copies are pointer-transparent */}
-								<h1 className={cn("shimmer-reveal-base", HERO_HEADLINE_CLASS)}>
-									{`${HERO_HEADLINE_FIRST_SENTENCE} `}
-									<AnchorLink href="/" onClick={handleHomeClick} className={HERO_HEADLINE_ACCENT_CLASS}>
-										{HERO_HEADLINE_LAST_SENTENCE}
-									</AnchorLink>
-								</h1>
-								{/* the full-color copy the light wipes in from the left */}
-								<div aria-hidden="true" className={cn("shimmer-reveal-top", HERO_HEADLINE_CLASS)}>
-									{`${HERO_HEADLINE_FIRST_SENTENCE} `}
-									<span className={HERO_HEADLINE_ACCENT_CLASS}>{HERO_HEADLINE_LAST_SENTENCE}</span>
-								</div>
-								{/* a white highlight on the reveal edge */}
-								<div aria-hidden="true" className={cn("shimmer-reveal-glint", HERO_HEADLINE_CLASS)}>
-									{`${HERO_HEADLINE_FIRST_SENTENCE} `}
-									<span className="whitespace-nowrap">{HERO_HEADLINE_LAST_SENTENCE}</span>
-								</div>
-							</div>
-							<TopicTutorialVideoButton
-								onSelect={() => setTopicTutorialVideoOpener("hero")}
-								className="size-8 sm:size-11"
-							/>
-						</div>
-						{/* Carl links home. the image is pulled down so his lower half starts behind the search bar */}
-						<AnchorLink
-							href="/"
-							onClick={handleHomeClick}
-							aria-label="CarlNotes home"
-							className="row-start-2 shrink-0 sm:row-span-2 sm:row-start-1 sm:ml-4"
-						>
-							<img
-								src="/carl-hero.png"
-								width={472}
-								height={535}
-								alt="Carl, holding a raccoon and a machine learning textbook"
-								className="w-28 pb-6 -mb-4 sm:w-52"
-							/>
-						</AnchorLink>
-						{/* the copy clears the search bar overlapping the hero's bottom edge */}
-						<div className="col-start-2 row-start-2 min-w-0 pb-10">
-							{/* Carl's pitch, then the call to action and the tagline.
-						    the pitch on a narrow screen is hidden and shows up in a popup */}
-							<div className="animate-hydrate mt-3 text-sm" style={{ animationDelay: "80ms" }}>
-								<p className="hidden max-w-xl sm:block">
-									{CARL_PITCH}
-									<AttributionButton />
-								</p>
-								<p className="mt-3 font-bold">
-									{"Give Carl a topic. You know the one. He'll brew a hot cup of what you just missed."}
-									<PitchButton />
-								</p>
-								<p className="text-hero-accent mt-1 font-bold">
-									<AnchorLink href="/" onClick={handleHomeClick} className="hover:underline">
-										Carl stays up. You stay informed.
-									</AnchorLink>
-								</p>
-							</div>
-						</div>
-					</div>
+					<HomeHero
+						pathname={pathname}
+						onHomeClick={handleHomeClick}
+						onPlayTopicTutorialVideo={() => setTopicTutorialVideoOpener("hero")}
+					/>
 				)}
 			</div>
 			{/* the dialog that plays the video on making a topic, opened from the hero or either menu */}
@@ -255,56 +174,4 @@ function useLogoLink(
 	return searchBarPath
 		? { href: searchBarPath, ariaLabel: "CarlNotes search", onClick: undefined }
 		: { href: "/", ariaLabel: "CarlNotes home", onClick: handleHomeClick }
-}
-
-// the narrow screen note button after the call to action
-function PitchButton() {
-	return (
-		<Popover>
-			<Tooltip>
-				<TooltipTrigger asChild>
-					<PopoverTrigger
-						className="hover:opacity-75 ml-1 inline-grid size-5 translate-y-0.5 place-items-center align-text-bottom sm:hidden"
-						aria-label="Meet Carl"
-					>
-						{/* the tile fills this inline box exactly */}
-						<NoteIcon className="size-5 rounded-sm" />
-					</PopoverTrigger>
-				</TooltipTrigger>
-				<TooltipContent>A note from Carl</TooltipContent>
-			</Tooltip>
-			<PopoverContent align="end" className="w-72 text-sm font-normal">
-				<PopoverCloseButton />
-				{/* the title label. the first line clears the close button */}
-				<div className={cn(SECTION_LABEL_CLASS, "mb-2 text-center")}>Meet Carl</div>
-				<p>{CARL_PITCH}</p>
-			</PopoverContent>
-		</Popover>
-	)
-}
-
-// the note button tucked after the pitch. it opens the persona credit in a popover with a close ✕
-function AttributionButton() {
-	return (
-		<Popover>
-			<Tooltip>
-				<TooltipTrigger asChild>
-					<PopoverTrigger
-						className="hover:opacity-75 ml-1 inline-grid size-5 translate-y-0.5 place-items-center align-text-bottom"
-						aria-label="About the CarlNotes persona"
-					>
-						{/* the tile fills this inline box exactly */}
-						<NoteIcon className="size-5 rounded-sm" />
-					</PopoverTrigger>
-				</TooltipTrigger>
-				<TooltipContent>A note from Carl</TooltipContent>
-			</Tooltip>
-			<PopoverContent align="start" className="w-80 text-sm">
-				<PopoverCloseButton />
-				{/* the persona credit's label. the first line clears the close button */}
-				<div className={cn(SECTION_LABEL_CLASS, "mb-1 text-center")}>The Real Carl</div>
-				<Attribution />
-			</PopoverContent>
-		</Popover>
-	)
 }

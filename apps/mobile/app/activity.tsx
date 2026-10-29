@@ -3,6 +3,7 @@ import { authClient } from "@carlnotes/client/authClient"
 import { useQuery } from "@tanstack/react-query"
 import { Activity } from "lucide-react-native"
 import { AnchorLink } from "@/components/common/AnchorLink"
+import { UserMenuUpdateCountBadge } from "@/components/common/UpdateCountBadge"
 import { UserProfileLink } from "@/components/common/UserProfileLink"
 import { PageScreen } from "@/components/layout/PageScreen"
 import { PageSkeleton } from "@/components/layout/PageSkeleton"
@@ -32,6 +33,7 @@ export default function ActivityScreen() {
 			hasNewTopicButton={true}
 			title="Activity"
 			icon={Activity}
+			titleBadge={<UserMenuUpdateCountBadge label="Activity" />}
 			byline={query.data && <UserProfileLink user={query.data.user} />}
 			contentClassName="mt-2 gap-0"
 			action={<NewTopicButton />}

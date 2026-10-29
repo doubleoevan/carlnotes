@@ -5,7 +5,9 @@ import {
 	type UserMenuElements,
 	type UserMenuLinkProps,
 } from "@carlnotes/core/components/UserMenuItems"
+import { useAllUpdateBadges, useUserMenuUpdateBadges } from "@carlnotes/core/hooks/useUpdateCounts"
 import { SITE_URL } from "@carlnotes/core/lib/pageHead"
+import { toMenuTriggerLabel } from "@carlnotes/core/lib/updateCounts"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { usePathname } from "expo-router"
 import {
@@ -16,25 +18,23 @@ import {
 	LogIn,
 	LogOut,
 	Menu,
-	Moon,
 	ShieldUser,
-	Sun,
 	User,
 	UserPlus,
 	Users,
 } from "lucide-react-native"
 import { type ComponentRef, useRef, useState } from "react"
 import { View } from "react-native"
-import { useUniwind } from "uniwind"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { YoutubePlayIcon } from "@/components/common/BrandIcon"
 import { Sheet } from "@/components/common/Sheet"
+import { UpdateCountBadge } from "@/components/common/UpdateCountBadge"
 import { Button } from "@/components/primitives/button"
 import { Icon } from "@/components/primitives/icon"
 import { Text } from "@/components/primitives/text"
 import { TopicTutorialVideoDialog } from "@/components/topic/TopicTutorialVideoDialog"
 import { useSignOut } from "@/hooks/useSignOut"
-import { setThemePreference } from "@/theme"
+import { ThemeMenu } from "./ThemeMenu"
 
 /**
  * Matches the web hamburger's appearance controls, destinations, and account groups.
@@ -50,6 +50,9 @@ export function UserMenu() {
 		setIsOpen(false)
 		setIsTutorialOpen(true)
 	}
+
+	// the button's name reads the one summed badge: its own name, then each waiting group
+	const updateBadges = useAllUpdateBadges()
 	return (
 		<>
 			<Button
@@ -57,14 +60,21 @@ export function UserMenu() {
 				variant="ghost"
 				size="icon-lg"
 				className="ml-auto"
-				accessibilityLabel="Menu"
+				accessibilityLabel={toMenuTriggerLabel("Menu", updateBadges)}
 				onPress={() => setIsOpen(true)}
 			>
 				<Icon as={Menu} className="size-5 text-hero-foreground" />
+				<UpdateCountBadge
+					{...updateBadges}
+					isDecorative
+					className="absolute -top-0.5 -right-0.5"
+					countBadgeClassName="text-xs"
+				/>
 			</Button>
 			{isOpen ? (
 				<Sheet title="Menu" triggerRef={triggerRef} onClose={handleClose}>
 					<ThemeMenu onClose={handleClose} />
+					<MenuDivider />
 					<UserMenuItems onClose={handleClose} onPlayTutorial={handleTutorial} />
 				</Sheet>
 			) : null}
@@ -79,39 +89,14 @@ export function UserMenu() {
 	)
 }
 
-// match the web's light and dark toggle
-function ThemeMenu({ onClose }: { onClose: () => void }) {
-	// offer the opposite palette and save the explicit choice
-	const { theme } = useUniwind()
-	const isDark = theme === "dark"
-	const label = isDark ? "Light mode" : "Dark mode"
-	const handleChange = (nextTheme: "light" | "dark"): void => {
-		// apply and save the choice, then close the menu
-		void setThemePreference(nextTheme)
-		onClose()
-	}
-	return (
-		<>
-			<Button
-				variant="ghost"
-				className="min-h-12 justify-start gap-2 px-2"
-				accessibilityLabel={label}
-				onPress={() => handleChange(isDark ? "light" : "dark")}
-			>
-				<Icon as={isDark ? Sun : Moon} className="size-4 text-foreground" />
-				<Text>{label}</Text>
-			</Button>
-			<MenuDivider />
-		</>
-	)
-}
-
 // preserve the web user menu's order and permission gate
 function UserMenuItems({ onClose, onPlayTutorial }: { onClose: () => void; onPlayTutorial: () => void }) {
 	// use the account's real identity and the shared native session cleanup
 	const { data: session } = authClient().useSession()
 	const { isPending, signOut } = useSignOut()
 	const pathname = usePathname()
+	// what each row sums into its badge, the web's split
+	const userMenuUpdateBadges = useUserMenuUpdateBadges()
 	if (!session) {
 		return (
 			<>
@@ -133,6 +118,7 @@ function UserMenuItems({ onClose, onPlayTutorial }: { onClose: () => void; onPla
 			onPlayTutorial={onPlayTutorial}
 			onSignOut={() => void signOut()}
 			isSigningOut={isPending}
+			renderBadge={(label) => <UpdateCountBadge {...userMenuUpdateBadges[label]} countBadgeClassName="text-xs" />}
 		/>
 	)
 }

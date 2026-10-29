@@ -5,7 +5,6 @@ import { sendUserInvite } from "@carlnotes/client/topicClient"
 import { isLeaderRole } from "@carlnotes/contracts/enums"
 import type { ProfileTeamStatus } from "@carlnotes/contracts/profiles"
 import { useQuery } from "@tanstack/react-query"
-import { router } from "expo-router"
 import { Plus, Users, X } from "lucide-react-native"
 import { useState } from "react"
 import { View } from "react-native"
@@ -15,6 +14,7 @@ import { Button } from "@/components/primitives/button"
 import { Icon } from "@/components/primitives/icon"
 import { Text } from "@/components/primitives/text"
 import { usePageMutation } from "@/hooks/usePageMutation"
+import { openSessionScreen } from "@/sessionReturnPath"
 import { EditTeamModal } from "./EditTeamModal"
 
 /**
@@ -45,7 +45,11 @@ export function InviteUserToTeamButton({
 				accessibilityLabel="Team Up"
 				onPress={() => {
 					if (!session) {
-						router.push("/sign-up")
+						openSessionScreen({
+							screen: "/sign-up",
+							returnPath: `/profiles/${profileUserId}`,
+							cta: "profile-team-up",
+						})
 						return
 					}
 					// load team choices for the signed-in account

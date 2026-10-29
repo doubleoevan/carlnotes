@@ -73,7 +73,9 @@ again, and turn its email back on, from the Activity page.
 
 An invitation you haven't answered shows as a count in three places: the **Activity** row of your menu, the Activity
 page's title, and the tab title. The count's tooltip names who invited you to which topic. The badge on your avatar adds
-invitations to your unread chats and notes, and its tooltip lists all three.
+invitations to your unread chats and notes, and its tooltip lists all three. The app shows the same counts on its menu
+button, its Activity item and title, and its app icon, and a long press on a count lists what is waiting. An invitation
+link opens in the app too, and a link you open before signing in comes back to the invitation after you do.
 
 ## The Brew diary is your topic brew's history
 

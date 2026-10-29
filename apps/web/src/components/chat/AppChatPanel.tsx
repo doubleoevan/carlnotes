@@ -1,13 +1,14 @@
-import { fetchTopicInviteBadges } from "@carlnotes/client/activityClient"
 import { authClient } from "@carlnotes/client/authClient"
-import { fetchChatMentionCount, fetchChatRooms } from "@carlnotes/client/chatRoomClient"
+import { fetchChatRooms } from "@carlnotes/client/chatRoomClient"
 import type { ChatRoom } from "@carlnotes/contracts/chat"
+import { useUpdateBadges } from "@carlnotes/core/hooks/useUpdateBadges"
 import {
 	toChatRoomMenuOrder,
 	toPrivateChatId,
 	toPrivateChatName,
 	toPrivateChatPage,
 } from "@carlnotes/core/lib/chatConversations"
+import { VISITOR_CHAT_COPY } from "@carlnotes/core/lib/chatCopy"
 import { activateChatAccount, toCurrentChatAccountGuard } from "@carlnotes/core/stores/chatConversationStore"
 import {
 	setChatRooms,
@@ -15,7 +16,6 @@ import {
 	useAllChatMentions,
 	useChatRooms,
 } from "@carlnotes/core/stores/chatRoomStore"
-import { setTopicInviteBadges } from "@carlnotes/core/stores/topicInviteStore"
 import { useNavigate } from "@tanstack/react-router"
 import { useCallback, useEffect, useState } from "react"
 import { Button } from "@/components/primitives/button"
@@ -40,9 +40,6 @@ import type { ChatRoomOption } from "./ChatOptionsMenu"
 import { ChatLoadingPanel, ChatPill } from "./ChatPanelWidget"
 import { ChatRoomPanel } from "./ChatRoomPanel"
 import { PrivateChatPanel } from "./PrivateChatPanel"
-
-// how often the chat mention, note, and topic invitation badges are polled, kept under a minute
-const BADGE_POLL_MS = 45_000
 
 /**
  * The chat menu's dropdown options, one option for each chat room the user can open plus an option to join the page's team.
@@ -165,13 +162,16 @@ export function AppChatPanel() {
 			})
 	}, [userId])
 	useEffect(() => {
-		// a user change reloads the list from scratch
+		// a user change starts the list over. the badge poll's first read loads a user's rooms, so only a visitor's
+		// empty list is set here
 		setHasLoadedChatRooms(false)
-		updateChatRooms()
-	}, [updateChatRooms])
+		if (!userId) {
+			updateChatRooms()
+		}
+	}, [userId, updateChatRooms])
 
-	// poll the chat mention, note, and topic invitation badges
-	usePollBadges(userId, updateChatRooms)
+	// poll the chat mention count and the topic invitation badges while the tab is visible and online
+	useUpdateBadges(userId, updateChatRooms)
 
 	// a chat mention badge links to its team or topic page
 	const linkedTeamId = useSearchParams().get("chat")
@@ -283,56 +283,6 @@ export function AppChatPanel() {
 	return <NoConversationPanel panelState={panelState} />
 }
 
-// poll the chat mention count, the note badges, and the topic invitations while a user is signed in
-function usePollBadges(userId: string | undefined, updateChatRooms: () => void): void {
-	useEffect(() => {
-		// clear the previous account's invite badges
-		setTopicInviteBadges([])
-		if (!userId) {
-			return
-		}
-		// reload the chat rooms whenever the chat mention count changes
-		let isBadgePollActive = true
-		const isCurrentAccount = toCurrentChatAccountGuard()
-		let previousChatMentionCount = -1
-		const readChatMentionCount = (): void => {
-			fetchChatMentionCount()
-				.then((chatMentionCount) => {
-					if (isBadgePollActive && isCurrentAccount() && chatMentionCount !== previousChatMentionCount) {
-						previousChatMentionCount = chatMentionCount
-						updateChatRooms()
-					}
-				})
-				.catch(() => {})
-		}
-
-		// read the topic invitations waiting for an answer
-		const readTopicInviteBadges = (): void => {
-			fetchTopicInviteBadges()
-				.then((topicInviteBadges) => {
-					if (isBadgePollActive && isCurrentAccount()) {
-						setTopicInviteBadges(topicInviteBadges)
-					}
-				})
-				.catch(() => {})
-		}
-
-		// read every badge once now, then again on each poll
-		const readBadges = (): void => {
-			readChatMentionCount()
-			readTopicInviteBadges()
-		}
-		// poll both badge sources
-		readBadges()
-		const badgePollInterval = setInterval(readBadges, BADGE_POLL_MS)
-		// retire the interval and its pending callbacks
-		return () => {
-			isBadgePollActive = false
-			clearInterval(badgePollInterval)
-		}
-	}, [userId, updateChatRooms])
-}
-
 // the panel where a visitor has no conversation to open, which asks for an account
 function NoConversationPanel({ panelState }: { panelState: ChatPanelState }) {
 	const navigate = useNavigate()
@@ -340,8 +290,8 @@ function NoConversationPanel({ panelState }: { panelState: ChatPanelState }) {
 		<ChatCallToActionPanel
 			isEnlarged={panelState === "enlarged"}
 			onPanelState={setChatPanelState}
-			actionLine="Sign up to begin the conversation"
-			placeholder="Carl is waiting for your topic…"
+			actionLine={VISITOR_CHAT_COPY.actionLine}
+			placeholder={VISITOR_CHAT_COPY.placeholder}
 		>
 			<Button className="shrink-0" onClick={() => navigate(toSignupNavigation("chat"))}>
 				Sign up

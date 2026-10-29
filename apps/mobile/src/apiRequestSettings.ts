@@ -1,6 +1,6 @@
-// what the api client sends on every request from the app, and what a 401 does: the stored session cookie, no
-// platform credentials, and a sign-out of a revoked session
-import type { ApiClientSettings } from "@carlnotes/client/apiClient"
+// what the api client sends on every request from the app, and what a 401 does: the stored session cookie, left off
+// a public read, no platform credentials, and a sign-out of a revoked session
+import type { ApiClientSettings, ApiRequestContext } from "@carlnotes/client/apiClient"
 
 // where the settings read the cookie and the session, and how they sign out
 export type ApiRequestSettingsOptions = {
@@ -14,8 +14,8 @@ export type ApiRequestSettingsOptions = {
 export type ApiRequestSettings = Required<Pick<ApiClientSettings, "headers" | "credentials" | "onUnauthorized">>
 
 /**
- * Returns the request settings for the api client: the stored cookie as the Cookie header, no platform credentials,
- * and a 401 that signs out once while the client still holds a session.
+ * Returns the request settings for the api client: the stored cookie as the Cookie header on every call but a public
+ * read, no platform credentials, and a 401 that signs out once while the client still holds a session.
  */
 export function toApiRequestSettings({
 	getCookie,
@@ -45,9 +45,10 @@ export function toApiRequestSettings({
 			})
 	}
 
-	// the stored cookie as the Cookie header, or no header while no cookie is stored
-	const toHeaders = async (): Promise<Record<string, string>> => {
-		const cookie = await getCookie()
+	// the stored cookie as the Cookie header, or no header while no cookie is stored. a call that asked for no
+	// credentials gets no cookie
+	const toHeaders = async ({ credentials }: ApiRequestContext = {}): Promise<Record<string, string>> => {
+		const cookie = credentials === "omit" ? "" : await getCookie()
 		return cookie ? { ...deviceHeaders, cookie } : deviceHeaders
 	}
 	return { headers: toHeaders, credentials: "omit", onUnauthorized: signOutOnce }

@@ -59,6 +59,38 @@ test("a typed call and a plain fetch send the configured headers and credentials
 	expect(recordedRequests[1]?.init.method).toBe("DELETE")
 })
 
+// the headers function reads the credentials the call asked for, on a typed call and on a plain fetch alike
+test("the headers function reads the call's credentials mode", async () => {
+	const recordedRequests = stubRecordingFetch(200)
+	configureApiClient({
+		apiBaseUrl: "https://api.example",
+		showError: () => {},
+		headers: ({ credentials } = {}): Record<string, string> =>
+			credentials === "omit" ? {} : { cookie: "better-auth.session_token=abc" },
+		credentials: "omit",
+	})
+
+	// a public read asks for no credentials, and a default call asks for none in particular
+	await apiClient().api.counts.topics[":id"].$get({ param: { id: "topic-1" } }, { init: { credentials: "omit" } })
+	await fetchApi("/api/counts/topics/topic-2", { credentials: "omit" })
+	await apiClient().api.search.$get({ query: { q: "coffee" } })
+	await fetchApi("/api/users/me")
+
+	// the public reads send no cookie, the others do, and every request keeps the configured credentials
+	expect(recordedRequests.map(toCookieHeader)).toEqual([
+		null,
+		null,
+		"better-auth.session_token=abc",
+		"better-auth.session_token=abc",
+	])
+	expect(recordedRequests.map((recordedRequest) => recordedRequest.init.credentials)).toEqual([
+		"omit",
+		"omit",
+		"omit",
+		"omit",
+	])
+})
+
 // a 401 reaches the app once per response, from a typed call and from a plain fetch
 test("a 401 calls onUnauthorized once per response", async () => {
 	stubRecordingFetch(401)

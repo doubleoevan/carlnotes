@@ -5,7 +5,8 @@
 
 - `apiClient.ts` — the typed Hono client and the plain fetch beside it. An app calls `configureApiClient` once with
   the api base url and `showError`, and an app with no cookie jar adds `headers`, a function whose headers every
-  request sends, `credentials`, and `onUnauthorized`, which a 401 from any request calls. `apiClient()` returns the
+  request sends, read per request with the call's own credentials mode so a public read can leave the session cookie
+  off, `credentials`, and `onUnauthorized`, which a 401 from any request calls. `apiClient()` returns the
   `hc` client over `AppType`, `fetchApi(path, init)` is the one plain fetch, at the base url with the configured
   headers and credentials, `toApiUrl` prefixes a path with the base url for a url the platform loads itself, such as
   an avatar image or an `EventSource`, and `showClientError` shows a message the way the app configured. Until an app

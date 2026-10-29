@@ -4,10 +4,9 @@ import { fetchProfile, fetchProfileTeamStatuses } from "@carlnotes/client/profil
 import { fetchAddableTopics } from "@carlnotes/client/topicClient"
 import type { OwnerTopic } from "@carlnotes/contracts/activity"
 import type { ProfileResponse, ProfileTeamStatus } from "@carlnotes/contracts/profiles"
+import { useUserMenuUpdateBadges } from "@carlnotes/core/hooks/useUpdateCounts"
 import { toProfileChatContext } from "@carlnotes/core/lib/chatConversations"
 import { toCountLabel } from "@carlnotes/core/lib/labels"
-import { useAllChatMentions } from "@carlnotes/core/stores/chatRoomStore"
-import { useAllNoteBadges } from "@carlnotes/core/stores/noteBadgeStore"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { getRouteApi, useNavigate } from "@tanstack/react-router"
 import { Pencil, Plus, Users } from "lucide-react"
@@ -297,9 +296,8 @@ function ProfileHeader({
 	onLoadProfileTeamStatuses: () => void
 }) {
 	const { data: session } = authClient().useSession()
-	// the unread chat mentions and note changes the user has, across topics and teams, summed on the avatar badge
-	const chatMentions = useAllChatMentions()
-	const noteBadges = useAllNoteBadges()
+	// the topics' unread chat mentions and note changes, the user menu's Profile row, summed on the avatar badge
+	const profileUpdateBadges = useUserMenuUpdateBadges().Profile
 	// the join month and year label
 	const joinDateLabel = new Date(profile.joinedAt).toLocaleDateString(undefined, { month: "long", year: "numeric" })
 
@@ -313,8 +311,7 @@ function ProfileHeader({
 						<span className="relative inline-block">
 							<UserAvatarPicker userId={profile.userId} username={profile.username} className="size-16" />
 							<UpdateCountBadge
-								chatMentions={chatMentions}
-								noteBadges={noteBadges}
+								{...profileUpdateBadges}
 								className="absolute -top-1 -right-1"
 								countBadgeClassName="h-5 min-w-5 text-xs"
 							/>

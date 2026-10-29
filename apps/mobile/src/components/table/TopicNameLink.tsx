@@ -1,6 +1,7 @@
 import type { PodcastEpisodeSummary } from "@carlnotes/contracts/podcast"
 import { View } from "react-native"
 import { AnchorLink } from "@/components/common/AnchorLink"
+import { PageUpdateCountBadge } from "@/components/common/UpdateCountBadge"
 import { PodcastEpisodePlayButton } from "@/components/podcast/PodcastEpisodePlayButton"
 import { toTouchTargetHitSlop } from "@/components/primitives/button"
 import { Text } from "@/components/primitives/text"
@@ -24,6 +25,7 @@ export function TopicNameLink({
 			>
 				<Text className="text-sm text-link">{topic.name}</Text>
 			</AnchorLink>
+			<PageUpdateCountBadge topicId={topic.id} />
 			{topic.latestPodcastEpisode ? <PodcastEpisodePlayButton episode={topic.latestPodcastEpisode} /> : null}
 		</View>
 	)

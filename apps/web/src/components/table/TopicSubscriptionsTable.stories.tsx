@@ -95,7 +95,11 @@ const meta = {
 		mocked(sendTopicSubscription).mockResolvedValue(undefined)
 		mocked(sendSubscriptionEmail).mockResolvedValue(undefined)
 		mocked(sendDeleteSubscription).mockResolvedValue(undefined)
-		mocked(sendAcceptInvite).mockResolvedValue({ status: "joined", topicId: "topic-home-espresso" })
+		mocked(sendAcceptInvite).mockResolvedValue({
+			status: "joined",
+			topicId: "topic-home-espresso",
+			topicName: "Home espresso",
+		})
 		mocked(sendDeclineInvite).mockResolvedValue(undefined)
 		mocked(fetchTopicInviteBadges).mockResolvedValue([])
 	},

@@ -2,7 +2,9 @@
 
 ## Purpose
 TBD - created by archiving change add-invite-links. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: An invite is a token, and a link is how it travels
 
 An invite SHALL have a token, and the token SHALL be acceptable at an absolute `/invite/:token` url. An email invite SHALL name one address and carry a single use, and a link invite SHALL name no address and carry a limited number of uses. Every token is deliberately a bearer credential, the email invite's included: any signed-in holder SHALL be able to accept it, bounded by its use limit, with acceptance never checking the accepter's address — the recipient-only path is accepting from the invitations list. Both SHALL grant the same access to the same Topic.
@@ -26,7 +28,7 @@ Creating one SHALL be available only to a user authorized to invite to the Topic
 
 ### Requirement: The join route accepts a token and subscribes the accepter
 
-`GET /invite/:token` SHALL resolve the token and, for a signed-in visitor holding a valid one, create an active subscription to the Topic and land them on it. Acceptance SHALL increment the token's use count.
+`GET /invite/:token` SHALL resolve the token and, for a signed-in visitor holding a valid one, create an active subscription to the Topic and land them on it. Acceptance SHALL increment the token's use count. The mobile app SHALL open the same path natively, on the web's page or on the `carlnotes://` scheme, accept the token once, show "Carl is checking your invitation…" while it runs, offer a retry when the request fails, say which way a rejected token failed in the web's words, and open the joined Topic or Team in place of the invitation.
 
 Accepting a valid token for a Topic the visitor already actively subscribes to SHALL answer joined before the limit is consulted: no use is spent, no second subscription is created, and it is never reported as a failure.
 
@@ -47,9 +49,27 @@ What the new subscriber may then see SHALL follow the rule already in force for 
 - **WHEN** a visitor accepts a token and opens the Topic
 - **THEN** they see Findings from Scans that ran after their subscription became active, with the next-scheduled-scan disclaimer
 
+#### Scenario: The app accepts a token
+
+- **WHEN** a signed-in user opens `carlnotes://invite/<token>` for a valid Topic invitation
+- **THEN** the app shows "Carl is checking your invitation…", the subscription is created, and the Topic screen replaces
+  the invitation
+
+#### Scenario: The app says which way a token failed
+
+- **WHEN** a signed-in user opens an expired, exhausted, or unknown token in the app
+- **THEN** the screen reads "That invitation went cold.", "That invitation is all poured out.", or "Carl doesn't know
+  that invitation.", with the web's follow-up line, and a full team reads "That team is full to the brim."
+
+#### Scenario: The app's request fails
+
+- **WHEN** the acceptance request throws in the app
+- **THEN** the screen reads "Carl couldn't check your invitation." with a retry, and the token is not reported as
+  rejected
+
 ### Requirement: A signed-out visitor is carried through sign-in and back
 
-A signed-out visitor opening an invite URL SHALL be sent to sign in and returned to the same invite URL afterwards, with the join intent preserved across the round trip. It SHALL be sent in the `next` search parameter the sign-in page already reads, instead of by a mechanism of its own.
+A signed-out visitor opening an invite URL SHALL be sent to sign in and returned to the same invite URL afterwards, with the join intent preserved across the round trip. On the web it SHALL be sent in the `next` search parameter the sign-in page already reads, instead of by a mechanism of its own. In the mobile app it SHALL be kept as the app's pending destination, the one the app already uses to return a visitor after sign-in, and consumed when the session arrives.
 
 The sign-in step SHALL render the app's shared session layout, so that its embedded-webview handling applies. An invite link is opened inside a mail client or a chat application more often than not, and Google's OAuth rejects an embedded webview, so a sign-in surface without that handling would put a dead provider button at the end of the funnel.
 
@@ -63,6 +83,12 @@ The sign-in step SHALL render the app's shared session layout, so that its embed
 
 - **WHEN** the join route asks a visitor to sign in
 - **THEN** it renders the shared session layout, so an embedded webview leads with email sign-in instead of a provider button that cannot work
+
+#### Scenario: The app carries a visitor through sign-in
+
+- **GIVEN** a visitor opening `carlnotes://invite/<token>` in the app
+- **WHEN** they sign in with any provider or sign up by email
+- **THEN** the invitation screen opens again and the token is accepted
 
 ### Requirement: Provider compose buttons hand the invite to a webmail composer
 
@@ -222,4 +248,3 @@ An expired or exhausted token SHALL be rejected with a rendered message in Carl'
 
 - **WHEN** a visitor opens an invite URL for a token whose uses are spent
 - **THEN** they are told the link has been used up, and no subscription is created
-

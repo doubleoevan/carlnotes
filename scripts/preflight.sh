@@ -11,6 +11,10 @@ bun scripts/check-package-boundaries.ts
 # app imports a contract only from its implementation, a story, or a test
 bun scripts/check-component-parity.ts
 
+# check that every api client capability the web reaches is reachable from the mobile app, or listed in
+# apps/mobile/parity.md with its reason, and that no listed row has gone stale
+bun scripts/check-client-parity.ts
+
 # type-check the whole project via the solution file. tsc -b only rechecks a project whose own files changed, so a
 # lockfile that changed since the last check, or a fresh install, rebuilds every project against the new dependencies
 saved_lockfile_hash_path="node_modules/.cache/preflight-lockfile.sha"

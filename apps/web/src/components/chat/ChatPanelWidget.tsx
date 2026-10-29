@@ -118,15 +118,16 @@ export function ChatPanelWidget({
 /**
  * Renders the shared chat launcher in the browser portal.
  */
-export function ChatPill({ onOpenChat, chatMentions }: { onOpenChat: () => void; chatMentions?: ChatMention[] }) {
+export function ChatPill({ onOpenChat, chatMentions }: { onOpenChat: () => void; chatMentions: ChatMention[] }) {
 	return (
 		<BodyPortal>
 			<SharedChatPill
 				onOpenChat={onOpenChat}
+				chatMentions={chatMentions}
 				elements={CHAT_PILL_ELEMENTS}
 				badge={
 					<UpdateCountBadge
-						chatMentions={chatMentions ?? []}
+						chatMentions={chatMentions}
 						className="absolute -top-1.5 -right-1"
 						countBadgeClassName="bg-card text-card-foreground h-5 min-w-5 border text-xs"
 					/>

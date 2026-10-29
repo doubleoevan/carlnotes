@@ -111,7 +111,11 @@ const meta = {
 	// the subtables load the team page, and answering an invitation succeeds, all without a request
 	beforeEach: () => {
 		mocked(fetchTeamPage).mockResolvedValue({ status: "visible", team: MODEL_WATCHERS_PAGE })
-		mocked(sendAcceptInvite).mockResolvedValue({ status: "joined", teamId: BATTERY_READERS_INVITE.teamId })
+		mocked(sendAcceptInvite).mockResolvedValue({
+			status: "joinedTeam",
+			teamId: BATTERY_READERS_INVITE.teamId,
+			teamName: BATTERY_READERS_INVITE.name,
+		})
 		mocked(sendDeclineInvite).mockResolvedValue(undefined)
 	},
 } satisfies Meta<typeof TeamMembershipRow>

@@ -107,7 +107,8 @@ Generated or archived paths that burn context:
 
 ## Verification
 
-`bun run check` is the gate: Biome, the package boundary check, the component parity check, `tsc -b`, the Temporal
+`bun run check` is the gate: Biome, the package boundary check, the component parity check, the client parity check
+against `apps/mobile/parity.md`, `tsc -b`, the Temporal
 workflow bundle check, and the test suite. Green before any hand-off.
 
 ## Rules (always-on)

@@ -17,6 +17,7 @@ import { Alert, View } from "react-native"
 import { chooseAvatarBody } from "@/components/avatar/avatarUpload"
 import { Avatar } from "@/components/branding/Avatar"
 import { AnchorLink } from "@/components/common/AnchorLink"
+import { PageUpdateCountBadge } from "@/components/common/UpdateCountBadge"
 import { InviteMembersModal } from "@/components/invite/InviteMembersModal"
 import { PageScreen } from "@/components/layout/PageScreen"
 import { PageSkeleton } from "@/components/layout/PageSkeleton"
@@ -157,9 +158,13 @@ function TeamHeader({
 						size={64}
 					/>
 				)}
-				<Text accessibilityRole="header" className="flex-1 font-display text-2xl">
+				<Text accessibilityRole="header" className="shrink font-display text-2xl">
 					{team.name}
 				</Text>
+				{/* the team chat room's unseen mentions and the team's note changes. the press opens the chat room */}
+				<View className="flex-1">
+					<PageUpdateCountBadge topicId={null} teamId={teamId} className="self-start" />
+				</View>
 				{team.role ? (
 					<Button accessibilityLabel="Add member" onPress={() => onInvite()}>
 						<Icon as={Plus} className="size-4" />

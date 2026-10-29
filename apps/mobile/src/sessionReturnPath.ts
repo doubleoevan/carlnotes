@@ -1,3 +1,6 @@
+import type { SignupPromptCta } from "@carlnotes/core/lib/signupPrompts"
+import { router } from "expo-router"
+
 let returnPath: string | null = null
 
 /**
@@ -15,4 +18,21 @@ export function takeSessionReturnPath(): string | null {
 	const path = returnPath
 	returnPath = null
 	return path
+}
+
+/**
+ * Sends a visitor to a session screen for an action that needs an account, remembering the screen they left so sign-in
+ * or sign-up returns there, with the web's prompt for the action on the sign-up screen.
+ */
+export function openSessionScreen({
+	screen,
+	returnPath,
+	cta,
+}: {
+	screen: "/sign-in" | "/sign-up"
+	returnPath: string
+	cta?: SignupPromptCta
+}): void {
+	rememberSessionReturnPath(returnPath)
+	router.push(screen === "/sign-up" && cta ? { pathname: "/sign-up", params: { cta } } : screen)
 }

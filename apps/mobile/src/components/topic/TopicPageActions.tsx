@@ -16,9 +16,15 @@ import { AddTopicToTeamDialog } from "@/components/team/AddTopicToTeamDialog"
 import { JoinTeamButton } from "@/components/team/JoinTeamButton"
 import { usePageMutation } from "@/hooks/usePageMutation"
 import { useTopicFeed } from "@/providers/TopicFeedProvider"
+import { openSessionScreen } from "@/sessionReturnPath"
 import { EditTopicModal } from "./EditTopicModal"
 import { NewTopicButton } from "./TopicHomeActions"
 import { TopicScanButton } from "./TopicScanButton"
+
+// a visitor's follow sends them to sign-up with the web's follow prompt, and returns them to the Topic
+function openSubscribeSignup(topicId: string): void {
+	openSessionScreen({ screen: "/sign-up", returnPath: `/topics/${topicId}`, cta: "subscribe" })
+}
 
 /**
  * Places Topic controls according to the shared action layout.
@@ -61,7 +67,7 @@ export function TopicActionBar({
 				<TopicScanButton topic={topic} onScanned={onScanned} />
 				{layout.isNewTopicCallToAction && <NewTopicButton />}
 				{layout.isSubscribeCallToAction && (
-					<Button accessibilityLabel="Follow topic" onPress={() => router.push("/sign-up")}>
+					<Button accessibilityLabel="Follow topic" onPress={() => openSubscribeSignup(topic.id)}>
 						<Icon as={PawPrint} className="size-4" />
 						<Text>Follow topic</Text>
 					</Button>
@@ -113,7 +119,7 @@ export function TopicPageActions({
 				onSelect: () =>
 					session
 						? void mutation.run(() => sendTopicSubscription(topic.id, !topic.isSubscribed))
-						: router.push("/sign-up"),
+						: openSubscribeSignup(topic.id),
 			})
 		}
 		if (layout.isAddTopicToTeamInMenu) {

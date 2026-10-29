@@ -70,8 +70,8 @@ const IMPORT_PATTERN =
 const TYPE_ONLY_STATEMENT_PATTERN = /^(?:import|export)\s+type\s/
 const NAMED_IMPORT_SPECIFIERS_PATTERN = /^import\s*\{([^}]*)\}\s*from/
 
-/** An import found in a file: its path, the line it starts on, and whether it brings in types only. */
-export type ParsedImport = { importPath: string; lineNumber: number; isTypeOnly: boolean }
+/** An import found in a file: its statement, its path, the line it starts on, and whether it brings in types only. */
+export type ParsedImport = { statementText: string; importPath: string; lineNumber: number; isTypeOnly: boolean }
 
 // the workspaces and the file whose imports are checked
 type ToImportViolationsOptions = { workspaces: Workspace[]; sourceFile: SourceFile }
@@ -110,7 +110,12 @@ export function toParsedImports(fileText: string): ParsedImport[] {
 	for (const importMatch of fileText.matchAll(IMPORT_PATTERN)) {
 		const importPath = importMatch[1] ?? importMatch[2] ?? ""
 		const lineNumber = fileText.slice(0, importMatch.index).split("\n").length
-		parsedImports.push({ importPath, lineNumber, isTypeOnly: isTypeOnlyImport(importMatch[0]) })
+		parsedImports.push({
+			statementText: importMatch[0],
+			importPath,
+			lineNumber,
+			isTypeOnly: isTypeOnlyImport(importMatch[0]),
+		})
 	}
 	return parsedImports
 }

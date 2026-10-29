@@ -1,7 +1,5 @@
 import { UserMenuItems as SharedUserMenuItems, type UserMenuElements } from "@carlnotes/core/components/UserMenuItems"
-import { useAllTeamChatMentions, useAllTopicChatMentions } from "@carlnotes/core/stores/chatRoomStore"
-import { useAllNoteBadges } from "@carlnotes/core/stores/noteBadgeStore"
-import { useTopicInviteBadges } from "@carlnotes/core/stores/topicInviteStore"
+import { useUserMenuUpdateBadges } from "@carlnotes/core/hooks/useUpdateCounts"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { useLocation } from "@tanstack/react-router"
 import { Activity, BookOpen, CircleUserRound, Columns3Cog, LogOut, ShieldUser, User, Users } from "lucide-react"
@@ -89,13 +87,8 @@ export function UserMenuItems({
 	onPlayTopicTutorialVideo: () => void
 	onSignOut: () => void
 }) {
-	// what the last poll read, split into the topics' and the teams' own. each row sums its own into one badge
-	const topicChatMentions = useAllTopicChatMentions()
-	const teamChatMentions = useAllTeamChatMentions()
-	const noteBadges = useAllNoteBadges()
-	const topicNoteBadges = noteBadges.filter((noteBadge) => noteBadge.topicId !== null)
-	const teamNoteBadges = noteBadges.filter((noteBadge) => noteBadge.teamId !== null)
-	const topicInviteBadges = useTopicInviteBadges()
+	// what the last poll read, split into each row's own. each row sums its own into one badge
+	const userMenuUpdateBadges = useUserMenuUpdateBadges()
 
 	// the open page's row shows the selected tint
 	const pathname = useLocation({ select: (location) => location.pathname })
@@ -108,22 +101,13 @@ export function UserMenuItems({
 			onNavigate={onNavigate}
 			onPlayTutorial={onPlayTopicTutorialVideo}
 			onSignOut={onSignOut}
-			renderBadge={(label) =>
-				label === "Activity" ? (
-					<UpdateCountBadge
-						invites={topicInviteBadges}
-						className="shrink-0"
-						countBadgeClassName="h-5 min-w-5 text-xs"
-					/>
-				) : (
-					<UpdateCountBadge
-						chatMentions={label === "Profile" ? topicChatMentions : teamChatMentions}
-						noteBadges={label === "Profile" ? topicNoteBadges : teamNoteBadges}
-						className="shrink-0"
-						countBadgeClassName="h-5 min-w-5 text-xs"
-					/>
-				)
-			}
+			renderBadge={(label) => (
+				<UpdateCountBadge
+					{...userMenuUpdateBadges[label]}
+					className="shrink-0"
+					countBadgeClassName="h-5 min-w-5 text-xs"
+				/>
+			)}
 		/>
 	)
 }

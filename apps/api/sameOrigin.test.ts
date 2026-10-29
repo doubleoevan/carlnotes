@@ -34,3 +34,11 @@ test("with no Sec-Fetch-Site header, only the app's own Origin header passes", (
 	expect(isSameOriginRequest(toRequest({ origin: "null" }))).toBe(false)
 	expect(isSameOriginRequest(toRequest({}))).toBe(false)
 })
+
+// the mobile app sends its platform header and no Origin. a browser's cross-site request keeps failing with it
+test("the mobile app's platform header passes without an Origin header", () => {
+	expect(isSameOriginRequest(toRequest({ "x-carlnotes-platform": "ios" }))).toBe(true)
+	expect(isSameOriginRequest(toRequest({ "x-carlnotes-platform": "android" }))).toBe(true)
+	expect(isSameOriginRequest(toRequest({ "x-carlnotes-platform": "web" }))).toBe(false)
+	expect(isSameOriginRequest(toRequest({ "sec-fetch-site": "cross-site", "x-carlnotes-platform": "ios" }))).toBe(false)
+})

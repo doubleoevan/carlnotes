@@ -4,6 +4,7 @@ import { toSessionProfileIdentity } from "@carlnotes/contracts/profiles"
 import { useQuery } from "@tanstack/react-query"
 import { Plus, Users } from "lucide-react-native"
 import { useState } from "react"
+import { UserMenuUpdateCountBadge } from "@/components/common/UpdateCountBadge"
 import { UserProfileLink } from "@/components/common/UserProfileLink"
 import { PageScreen } from "@/components/layout/PageScreen"
 import { PageSkeleton } from "@/components/layout/PageSkeleton"
@@ -30,6 +31,7 @@ export default function TeamsScreen() {
 		<PageScreen
 			title="Teams"
 			icon={Users}
+			titleBadge={<UserMenuUpdateCountBadge label="Teams" />}
 			byline={session && <UserProfileLink user={toSessionProfileIdentity(session.user)} />}
 			contentClassName="mt-2 gap-0"
 			onRefresh={handleReload}

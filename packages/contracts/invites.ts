@@ -28,6 +28,19 @@ export const inviteRejections = ["expired", "exhausted", "unknown"] as const
 
 export type InviteRejection = (typeof inviteRejections)[number]
 
+// what an invite page shows as a rejection: a failed token, or a team with no room left
+export type InviteNoticeRejection = InviteRejection | "teamFull"
+
+// the characters an invite token holds. a token is a uuid, and the alphabet keeps a slash or a dot out of the api path
+const INVITE_TOKEN_PATTERN = /^[A-Za-z0-9_-]{1,64}$/
+
+/**
+ * Returns true if a token from a link has the shape of an invite token, so a crafted link never names another route.
+ */
+export function isInviteToken(token: string): boolean {
+	return INVITE_TOKEN_PATTERN.test(token)
+}
+
 // what accepting an invite returns: the topic to open, or which way the token failed
 export const inviteAcceptResponse = z.discriminatedUnion("status", [
 	z.object({ status: z.literal("joined"), topicId: z.string(), topicName: z.string() }),

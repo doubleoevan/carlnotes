@@ -39,9 +39,10 @@ export async function sendCreateTopicInvite(topicId: string, source: InviteSourc
 	return inviteCreateResponse.parse(await response.json()).invite
 }
 
-// accept a join token, which subscribes the signed-in user to the topic it opens
+// accept a join token, which subscribes the signed-in user to the topic it opens. the token is encoded into the
+// path, so a token with a slash in it can never name another route
 export async function sendAcceptInvite(token: string): Promise<InviteAcceptResponse> {
-	const response = await apiClient().api.invite[":token"].$post({ param: { token } })
+	const response = await apiClient().api.invite[":token"].$post({ param: { token: encodeURIComponent(token) } })
 	if (!response.ok) {
 		return { status: "unknown" }
 	}

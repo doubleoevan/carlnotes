@@ -24,7 +24,7 @@ const toFileViolations = toFileViolationsCheck(FIXTURE_WORKSPACES)
 test("toParsedImports reads static, multi-line, side-effect, dynamic, re-export, and require imports", () => {
 	const fileText =
 		'import { a } from "react"\nimport {\n\tb,\n\tc,\n} from "./local"\nimport "./sideEffect"\nconst d = await import("./dynamic")\nexport type { E } from "@carlnotes/contracts/chat"\nconst f = require("./required")\n'
-	expect(toParsedImports(fileText)).toEqual([
+	expect(toParsedImports(fileText)).toMatchObject([
 		{ importPath: "react", lineNumber: 1, isTypeOnly: false },
 		{ importPath: "./local", lineNumber: 2, isTypeOnly: false },
 		{ importPath: "./sideEffect", lineNumber: 6, isTypeOnly: false },

@@ -1,8 +1,8 @@
 // the join page's notice: a request that failed to reach the api offers a retry, and never reads as a rejected invitation
 import { expect, test } from "bun:test"
+import { INVITE_REJECTIONS } from "@carlnotes/core/lib/inviteRejections"
 import { renderWithRouter } from "@/components/chat/renderWithRouter"
 import { InviteNotice } from "./InvitePage"
-import { INVITE_REJECTIONS } from "./inviteRejections"
 
 // a failed request shows the retry, with none of the rejection copy that tells the user to discard the link
 test("a failed acceptance request shows a retry, not an unknown invitation", async () => {

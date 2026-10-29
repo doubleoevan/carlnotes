@@ -1,5 +1,4 @@
 import { sendDeleteJoinRequest, sendJoinRequest } from "@carlnotes/client/teamClient"
-import { router } from "expo-router"
 import { Minus, Plus } from "lucide-react-native"
 import { Alert, View } from "react-native"
 import { hasSession } from "@/authClient"
@@ -7,6 +6,7 @@ import { Button } from "@/components/primitives/button"
 import { Icon } from "@/components/primitives/icon"
 import { Text } from "@/components/primitives/text"
 import { usePageMutation } from "@/hooks/usePageMutation"
+import { openSessionScreen } from "@/sessionReturnPath"
 
 /**
  * Requests or withdraws team membership using the web's join flow.
@@ -33,7 +33,7 @@ export function JoinTeamButton({
 				disabled={mutation.isPending}
 				onPress={() => {
 					if (!hasSession()) {
-						router.push("/sign-up")
+						openSessionScreen({ screen: "/sign-up", returnPath: `/teams/${teamId}`, cta: "team-join" })
 						return
 					}
 					void mutation.run(async () => {

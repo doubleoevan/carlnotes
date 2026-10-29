@@ -163,7 +163,11 @@ const meta = {
 		})
 
 		// answering an invitation, and every control inside an open subtable, resolve without a request
-		mocked(sendAcceptInvite).mockResolvedValue({ status: "joinedTeam", teamId: espressoClubInvite.teamId })
+		mocked(sendAcceptInvite).mockResolvedValue({
+			status: "joinedTeam",
+			teamId: espressoClubInvite.teamId,
+			teamName: espressoClubInvite.name,
+		})
 		mocked(sendDeclineInvite).mockResolvedValue(undefined)
 		mocked(sendRemoveTopicFromTeam).mockResolvedValue(true)
 		mocked(sendTeamMemberRole).mockResolvedValue(true)

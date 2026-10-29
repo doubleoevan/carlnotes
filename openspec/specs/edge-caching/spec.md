@@ -2,7 +2,9 @@
 
 ## Purpose
 TBD - created by archiving change cache-at-the-edge. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: A signed-out page and the signed-out feed are shared at the edge for a minute
 
 The api SHALL send a page the ui's server renders, a blog page, a release page, and `/api/topic-feed` with
@@ -251,7 +253,8 @@ with `Cache-Control: no-cache` and `CDN-Cache-Control: max-age=30`, with no `sta
 `Cache-Tag`, so the edge serves one copy to every visitor for at most 30 seconds. A counts response for any other
 Topic, any request with credentials, and every error SHALL be sent with `Cache-Control: private, no-cache` and no
 `CDN-Cache-Control`. The browser SHALL fetch a public Topic's counts without credentials, so a signed-in person reads
-the shared copy too.
+the shared copy too. The mobile app SHALL send no session cookie on a public Topic's or Podcast Episode's counts read,
+so a signed-in app reads the shared copy too, while every other request keeps the cookie.
 
 #### Scenario: A public topic's counts are shared
 
@@ -268,3 +271,8 @@ the shared copy too.
 - **WHEN** a request with a session cookie fetches the counts of a public Topic
 - **THEN** the response includes `Cache-Control: private, no-cache` and no `CDN-Cache-Control`
 
+#### Scenario: A signed-in app reads public counts without its cookie
+
+- **WHEN** a signed-in mobile app reads the counts of a public Topic
+- **THEN** the request has no `Cookie` header and the response includes `CDN-Cache-Control: max-age=30`, and the app's
+  next request for the Topic page sends the cookie as before

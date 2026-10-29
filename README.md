@@ -494,7 +494,7 @@ net revenue. The gate, plans, and quotas all work without Stripe.
 Checks: `bun run check` runs the full gate, the same `scripts/preflight.sh` that the pre-push hook runs:
 
 ```bash
-bun run check       # biome + package boundaries + component parity + tsc + workflow bundles + bun test
+bun run check       # biome + package boundaries + component parity + client parity + tsc + workflow bundles + bun test
 ```
 
 Or run them individually:
@@ -503,6 +503,7 @@ Or run them individually:
 bunx biome check .
 bun scripts/check-package-boundaries.ts # every import stays inside the dependencies its workspace declares
 bun scripts/check-component-parity.ts   # every Nightshift component contract is implemented in each app it names
+bun scripts/check-client-parity.ts      # every api capability the web reaches is reachable from the app, or listed in apps/mobile/parity.md
 bunx tsc -b             # add --force after a dependency change. bun run check does that on its own
 bun test
 bun run check:workflows # every Temporal workflow file still bundles

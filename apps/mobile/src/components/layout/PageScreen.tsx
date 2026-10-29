@@ -18,6 +18,7 @@ import { Header } from "./Header"
 export function PageScreen({
 	title,
 	icon,
+	titleBadge,
 	action,
 	children,
 	onRefresh,
@@ -31,6 +32,8 @@ export function PageScreen({
 }: {
 	title: string
 	icon?: LucideIcon
+	// the page's update count beside its title
+	titleBadge?: ReactNode
 	action?: ReactNode
 	children: ReactNode
 	onRefresh?: () => void
@@ -67,6 +70,7 @@ export function PageScreen({
 								<Text accessibilityRole="header" className="font-display text-2xl">
 									{title}
 								</Text>
+								{titleBadge}
 							</View>
 							{action}
 						</View>

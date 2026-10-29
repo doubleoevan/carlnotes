@@ -1,3 +1,4 @@
+import { toCtaPrompt } from "@carlnotes/core/lib/signupPrompts"
 import { useEffect } from "react"
 import { toast } from "sonner"
 import { useSearchParams } from "./useSearchParams"
@@ -15,11 +16,4 @@ export function useCtaPromptToast(prompts: Readonly<Record<string, string>>, toa
 			toast(ctaPrompt, { id: toastId })
 		}
 	}, [prompts, ctaParam, toastId])
-}
-
-/**
- * Returns the prompt that a call to action names, or null for one the prompts do not have.
- */
-export function toCtaPrompt(prompts: Readonly<Record<string, string>>, cta: string | null): string | null {
-	return cta !== null && Object.hasOwn(prompts, cta) ? (prompts[cta] ?? null) : null
 }

@@ -2,8 +2,8 @@ import type { TopicFinding } from "@carlnotes/contracts/findings"
 import type { TopicResponse } from "@carlnotes/contracts/topics"
 import type { TopicFeedState } from "@carlnotes/core/hooks/useTopicFeedState"
 import { Text as NativeText, RefreshControl, ScrollView, View } from "react-native"
+import { PageUpdateCountBadge } from "@/components/common/UpdateCountBadge"
 import { Footer } from "@/components/layout/Footer"
-import { PageNoteBadge } from "@/components/note/NoteUnreadBadge"
 import { PodcastEpisodePlayer } from "@/components/podcast/PodcastEpisodePlayer"
 import { Badge } from "@/components/primitives/badge"
 import { Text } from "@/components/primitives/text"
@@ -50,7 +50,8 @@ export function TopicPageContent({
 						{topic.name}
 					</NativeText>
 				</TopicInfoButton>
-				<PageNoteBadge page={{ pageType: "topic", pageId: topic.id }} />
+				{/* the chat mention and note count sits under the name, and its press opens the chat room */}
+				<PageUpdateCountBadge topicId={topic.id} className="self-start" />
 				<TopicByline topic={topic} isPage />
 				{topic.tags.length > 0 ? (
 					<View className="mt-2 flex-row flex-wrap gap-1">

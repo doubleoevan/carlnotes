@@ -1,7 +1,7 @@
 import { fetchPodcastEpisodeCounts } from "@carlnotes/client/viewerCountsClient"
+import { usePolledCounts } from "@carlnotes/core/hooks/usePolledCounts"
 import { useCallback } from "react"
 import { FlashingCount } from "@/components/common/FlashingCount"
-import { usePolledCounts } from "@/hooks/usePolledCounts"
 import { COUNTS_LINE_CLASS } from "@/lib/styleClasses"
 
 /**
@@ -15,7 +15,7 @@ export function PodcastEpisodeCountsLine({
 	isPublic: boolean
 }) {
 	const readPodcastEpisodeCounts = useCallback(
-		() => fetchPodcastEpisodeCounts(podcastEpisodeId, isPublic),
+		(signal: AbortSignal) => fetchPodcastEpisodeCounts(podcastEpisodeId, isPublic, signal),
 		[podcastEpisodeId, isPublic],
 	)
 	const podcastEpisodeCounts = usePolledCounts(readPodcastEpisodeCounts)

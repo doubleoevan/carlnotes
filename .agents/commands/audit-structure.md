@@ -762,6 +762,26 @@ Check for:
      `TopicResourceInfo.tsx`, matching the native component), and `apps/web/src/lib/topicViews.ts` with its test
      (now `packages/core/lib/topicViews.ts` and `topicViews.test.ts`, shared by web and mobile)
 
+   - `usePollBadges` and `BADGE_POLL_MS` in `apps/web/src/components/chat/AppChatPanel.tsx` (now `useUpdateBadges`
+     in `packages/core/hooks/useUpdateBadges.ts` over `packages/core/lib/updateBadgePoll.ts`), and the sum, labels,
+     and tooltip lines of `apps/web/src/components/common/UpdateCountBadge.tsx` (`toChatLabel`, `toNoteLabel`,
+     `toNoteCount`, `toTopicInviteLabel`, `toTopicInviteLines`, `toUpdateLabel`, now `packages/core/lib/updateCounts.ts`,
+     with the store reads in `packages/core/hooks/useUpdateCounts.ts`)
+   - `apps/web/src/pages/inviteRejections.ts` with `INVITE_REJECTIONS` (now `packages/core/lib/inviteRejections.ts`),
+     `SIGNUP_PROMPTS` and `SignupPromptCta` in `apps/web/src/components/session/signupPrompts.ts` and `toCtaPrompt` in
+     `apps/web/src/hooks/useCtaPromptToast.ts` (now `packages/core/lib/signupPrompts.ts`), the hero copy constants
+     `HERO_HEADLINE_FIRST_SENTENCE`, `HERO_HEADLINE_LAST_SENTENCE`, and `CARL_PITCH` in
+     `apps/web/src/components/layout/Header.tsx` (now `packages/core/lib/homeHero.ts`), and `RECOMMENDED_PLAN` in
+     `apps/web/src/pages/PlansPage.tsx` (now `packages/core/lib/planCards.ts`)
+   - `apps/web/src/routes/_layout/teams.index.tsx` (now `apps/web/src/routes/_layout/_signedIn/teams.index.tsx`)
+   - `EpisodeGate` in `apps/mobile/src/components/podcast/PodcastEpisodeScreen.tsx` (now `TopicGateNotice` in
+     `apps/mobile/src/components/topic/TopicGateNotice.tsx`), `COUNTS_POLL_MS` and the query in
+     `apps/mobile/src/components/topic/TopicCountsLine.tsx` and `apps/web/src/hooks/usePolledCounts.ts` with its
+     `COUNTS_POLL_MS` (now `packages/core/hooks/usePolledCounts.ts` on `packages/core/lib/countsPoll.ts`), `PageNoteBadge` on the Topic header and the Feed's Topic card (now
+     `PageUpdateCountBadge` in `apps/mobile/src/components/common/UpdateCountBadge.tsx`; the notes section keeps
+     `PageNoteBadge`), and `ApiClientSettings.headers` as an argument-less function (now takes an `ApiRequestContext`
+     with the call's credentials mode)
+
 5. **Cross-harness enforcement parity**: `.claude/settings.json` hooks and
    `.opencode/plugin/guardrails.mjs` must gate the same operations with the
    same scripts. Compare the tool/event coverage of each adapter against the

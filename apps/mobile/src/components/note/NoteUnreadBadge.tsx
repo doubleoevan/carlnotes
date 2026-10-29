@@ -5,8 +5,8 @@ import {
 } from "@carlnotes/core/components/NoteUnreadBadge"
 import { toNoteBadgeDetails } from "@carlnotes/core/lib/noteBadges"
 import { useNoteBadge, usePageNoteBadges } from "@carlnotes/core/stores/noteBadgeStore"
-import { cn } from "@carlnotes/nightshift/classNames"
 import { Alert, Pressable } from "react-native"
+import { toCountBadgeClassName } from "@/components/common/CountBadge"
 import { toTouchTargetHitSlop } from "@/components/primitives/button"
 import { Text } from "@/components/primitives/text"
 
@@ -24,16 +24,7 @@ const ELEMENTS: NoteUnreadBadgeElements = {
 			{children}
 		</Pressable>
 	),
-	Count: ({ children, isOutline }) => (
-		<Text
-			className={cn(
-				"min-w-4 rounded-full px-1 text-center text-[10px] font-semibold",
-				isOutline ? "border border-primary text-link" : "bg-primary text-primary-foreground",
-			)}
-		>
-			{children}
-		</Text>
-	),
+	Count: ({ children, isOutline }) => <Text className={toCountBadgeClassName(isOutline)}>{children}</Text>,
 }
 
 /**

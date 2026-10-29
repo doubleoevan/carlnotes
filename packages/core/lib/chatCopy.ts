@@ -1,5 +1,10 @@
 // shared chat confirmations and completion notices
 export const CHAT_QUESTION_PLACEHOLDER = "Hand-crafted notes are richer…"
+// what the panel asks a visitor, and the composer it shows them disabled
+export const VISITOR_CHAT_COPY = {
+	actionLine: "Sign up to begin the conversation",
+	placeholder: "Carl is waiting for your topic…",
+} as const
 export const CLEAR_CHAT_COPY = {
 	title: "Clear this chat?",
 	confirm: "Clear it",

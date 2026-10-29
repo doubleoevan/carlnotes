@@ -3,11 +3,12 @@ import { fetchPodcastEpisodePage } from "@carlnotes/client/podcastEpisodeClient"
 import { fetchPodcastEpisodeCounts } from "@carlnotes/client/viewerCountsClient"
 import type { PodcastEpisodePageResponse } from "@carlnotes/contracts/podcastEpisodePage"
 import { toTopicPath } from "@carlnotes/contracts/seo"
+import { usePolledCounts } from "@carlnotes/core/hooks/usePolledCounts"
 import { useTopicFindingActions } from "@carlnotes/core/hooks/useTopicFindingActions"
 import { isAddTopicToTeamShown } from "@carlnotes/core/lib/topicActions"
 import { applyFindingChanges } from "@carlnotes/core/lib/topicFindingChanges"
 import { useQuery } from "@tanstack/react-query"
-import { router, useFocusEffect, useLocalSearchParams } from "expo-router"
+import { router, useFocusEffect, useLocalSearchParams, usePathname } from "expo-router"
 import { Share2, Trash2, Users } from "lucide-react-native"
 import { type ComponentRef, useCallback, useRef, useState } from "react"
 import { View } from "react-native"
@@ -21,8 +22,8 @@ import { ShareTopicSheet } from "@/components/share/ShareTopic"
 import { AddTopicToTeamDialog } from "@/components/team/AddTopicToTeamDialog"
 import { CollapsibleSection } from "@/components/topic/CollapsibleSection"
 import { TopicByline } from "@/components/topic/Topic"
+import { TopicGateNotice } from "@/components/topic/TopicGateNotice"
 import { NewTopicButton } from "@/components/topic/TopicHomeActions"
-import { rememberSessionReturnPath } from "@/sessionReturnPath"
 import { PodcastEpisodeChaptersTable } from "./PodcastEpisodeChaptersTable"
 import { PodcastEpisodeCountsLine } from "./PodcastEpisodeCountsLine"
 import { PodcastEpisodeCover } from "./PodcastEpisodeCover"
@@ -89,7 +90,7 @@ export function PodcastEpisodeScreen() {
 			)}
 			{/* topic access gate */}
 			{query.data?.status === "gated" && (
-				<EpisodeGate
+				<TopicGateNotice
 					isSignedIn={Boolean(session)}
 					returnPath={`/topics/${topicId}/episodes/${season}/${episodeNumber}`}
 				/>
@@ -120,12 +121,16 @@ function EpisodeContent({
 	const feedButtonRef = useRef<ComponentRef<typeof View>>(null)
 	const { podcastEpisode, topic } = page
 	const actions = useTopicFindingActions({ userId, shouldUpdateOptimistically: true, onChangeConfirmed: onReload })
-	const counts = useQuery({
-		queryKey: ["podcast-episode-counts", userId, podcastEpisode.id],
-		queryFn: () => fetchPodcastEpisodeCounts(podcastEpisode.id, topic.visibility === "public"),
-		gcTime: 0,
-		retry: false,
-	})
+	// the listener count, every minute while this episode is the active route, kept through a failed read
+	const pathname = usePathname()
+	const readPodcastEpisodeCounts = useCallback(
+		(signal: AbortSignal) => fetchPodcastEpisodeCounts(podcastEpisode.id, topic.visibility === "public", signal),
+		[podcastEpisode.id, topic.visibility],
+	)
+	const counts = usePolledCounts(
+		readPodcastEpisodeCounts,
+		pathname === `/topics/${topic.id}/episodes/${podcastEpisode.season}/${podcastEpisode.episodeNumber}`,
+	)
 	const chapterTopicFeed = {
 		topic,
 		topicFindings: page.topicFindings.map((finding) => applyFindingChanges(finding, actions.pendingChanges)),
@@ -184,7 +189,7 @@ function EpisodeContent({
 				podcastEpisodes={page.relatedPodcastEpisodes}
 			/>
 			{/* listener count */}
-			<PodcastEpisodeCountsLine listenerCount={counts.data?.listenerCount} />
+			<PodcastEpisodeCountsLine listenerCount={counts?.listenerCount} />
 			{/* action sheets */}
 			{dialog === "feed" && (
 				<PodcastFeedDialog topic={topic} triggerRef={feedButtonRef} onClose={() => setDialog(null)} />
@@ -234,38 +239,6 @@ function EpisodeHeader({ page: { podcastEpisode, topic } }: { page: PodcastEpiso
 					<TopicByline topic={topic} isPage />
 				</View>
 			</View>
-		</View>
-	)
-}
-
-// keep gate copy and the post-sign-in destination aligned with the web
-function EpisodeGate({ isSignedIn, returnPath }: { isSignedIn: boolean; returnPath: string }) {
-	const handleSignIn = (path: "/sign-in" | "/sign-up"): void => {
-		rememberSessionReturnPath(returnPath)
-		router.push(path)
-	}
-	return (
-		<View className="gap-4 py-6">
-			<Text accessibilityRole="header" className="font-display text-2xl">
-				This topic is invite-only
-			</Text>
-			<Text className="text-muted-foreground">
-				{isSignedIn ? "Ask the topic owner for an invite to see it." : "Sign up to see it."}
-			</Text>
-			{isSignedIn ? (
-				<Button accessibilityLabel="Back to CarlNotes" onPress={() => router.replace("/")}>
-					<Text>Back to CarlNotes</Text>
-				</Button>
-			) : (
-				<View className="flex-row gap-3">
-					<Button variant="outline" accessibilityLabel="Log in" onPress={() => handleSignIn("/sign-in")}>
-						<Text>Log in</Text>
-					</Button>
-					<Button accessibilityLabel="Sign up" onPress={() => handleSignIn("/sign-up")}>
-						<Text>Sign up</Text>
-					</Button>
-				</View>
-			)}
 		</View>
 	)
 }

@@ -1,35 +1,22 @@
 import { fetchTopicCounts } from "@carlnotes/client/viewerCountsClient"
 import type { TopicResponse } from "@carlnotes/contracts/topics"
-import { fontFamilies } from "@carlnotes/nightshift/typography"
-import { useQuery } from "@tanstack/react-query"
+import { usePolledCounts } from "@carlnotes/core/hooks/usePolledCounts"
 import { usePathname } from "expo-router"
+import { useCallback } from "react"
 import { View } from "react-native"
-import { Text } from "@/components/primitives/text"
-
-// match the web's minute poll, only while this Topic is the active native route
-const COUNTS_POLL_MS = 60_000
+import { Count } from "@/components/common/Count"
 
 /**
  * Shows the Topic's live Viewers and Followers with the web's display labels and emphasized counts.
  */
 export function TopicCountsLine({ topic }: { topic: TopicResponse }) {
-	// read the same counts endpoint as web; failed refreshes keep the last successful counts
+	// read the same counts endpoint as web, every minute while this Topic is the active route
 	const pathname = usePathname()
-	const { data: counts } = useQuery({
-		queryKey: ["topic-counts", topic.id],
-		queryFn: async () => {
-			const counts = await fetchTopicCounts(topic.id, topic.visibility === "public")
-			if (!counts) {
-				throw new Error("Topic counts are unavailable")
-			}
-			return counts
-		},
-		enabled: pathname === `/topics/${topic.id}`,
-		staleTime: COUNTS_POLL_MS,
-		refetchInterval: COUNTS_POLL_MS,
-		retry: false,
-		gcTime: 0,
-	})
+	const readTopicCounts = useCallback(
+		(signal: AbortSignal) => fetchTopicCounts(topic.id, topic.visibility === "public", signal),
+		[topic.id, topic.visibility],
+	)
+	const counts = usePolledCounts(readTopicCounts, pathname === `/topics/${topic.id}`)
 	return (
 		<View className="mx-4 mt-8 min-h-5 flex-row flex-wrap items-center justify-center gap-x-8 gap-y-2">
 			{counts ? (
@@ -38,22 +25,6 @@ export function TopicCountsLine({ topic }: { topic: TopicResponse }) {
 					<Count label="Followers" count={counts.subscriberCount} />
 				</>
 			) : null}
-		</View>
-	)
-}
-
-// preserve the body font for numbers and the display font for count labels
-function Count({ label, count }: { label: string; count: number }) {
-	return (
-		<View
-			accessible
-			accessibilityLabel={`${label}: ${count.toLocaleString()}`}
-			className="flex-row items-center gap-1.5"
-		>
-			<Text style={{ fontFamily: fontFamilies.display.name }} className="text-sm text-muted-foreground">
-				{label}:
-			</Text>
-			<Text className="px-1.5 text-sm font-semibold tabular-nums">{count.toLocaleString()}</Text>
 		</View>
 	)
 }

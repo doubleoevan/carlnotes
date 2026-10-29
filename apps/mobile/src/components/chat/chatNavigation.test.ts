@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test"
 import type { ChatRoom } from "@carlnotes/contracts/chat"
 import { toPrivateChatId, toPrivateChatPage } from "@carlnotes/core/lib/chatConversations"
-import { toChatHref, toInitialChatId } from "./chatNavigation"
+import { toChatHref, toChatRoomHref, toInitialChatId } from "./chatNavigation"
 
 test("the global launcher retains Topic and Team note context", () => {
 	// context-free pages use the same global destination
@@ -14,6 +14,23 @@ test("the global launcher retains Topic and Team note context", () => {
 	expect(toChatHref("/profiles/reader")).toEqual({ pathname: "/chat", params: { profileUserId: "reader" } })
 })
 
+// a page badge opens the chat room its team names, a topic's in that team or a team's own
+test("a badge's chat room route names the topic's team, and opens first", () => {
+	expect(toChatRoomHref({ topicId: "topic-one", chatTeamId: "team-one" })).toEqual({
+		pathname: "/topics/[topicId]/chat",
+		params: { topicId: "topic-one", chatTeamId: "team-one" },
+	})
+	expect(toChatRoomHref({ topicId: null, teamId: "team-one" })).toEqual({
+		pathname: "/teams/[teamId]/chat",
+		params: { teamId: "team-one" },
+	})
+	expect(toInitialChatId({ rooms: [], topicId: "topic-one", chatTeamId: "team-one" })).toEqual({
+		kind: "room",
+		teamId: "team-one",
+		topicId: "topic-one",
+	})
+})
+
 test("global chat selects an existing room and preserves the private switch", () => {
 	const chatRoom: ChatRoom = {
 		teamId: "team-one",
@@ -24,6 +41,7 @@ test("global chat selects an existing room and preserves the private switch", ()
 		chatMentions: [],
 		chatRoomMembers: [],
 	}
+	// the one room opens first, and its private switch keeps the team
 	const chatId = toInitialChatId({ rooms: [chatRoom] })
 	expect(chatId).toEqual({ kind: "room", teamId: "team-one", topicId: null })
 	const privateChatId = toPrivateChatId(null, chatId)

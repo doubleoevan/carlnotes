@@ -8,6 +8,9 @@ export const WEB_APP_FOLDER = "apps/web"
 /** The mobile app's folder. */
 export const MOBILE_APP_FOLDER = "apps/mobile"
 
+/** The app's Expo Router routes, where a walk of what the app reaches starts. */
+export const MOBILE_ROUTES_FOLDER = `${MOBILE_APP_FOLDER}/app`
+
 /** The app packages' names. */
 export const APP_PACKAGE_NAMES = new Set([
 	"@carlnotes/web",
@@ -38,6 +41,9 @@ export const UNIVERSAL_PACKAGE_NAMES = new Set(
 
 /** A test file or a test fixtures module, matched by the end of its path. */
 export const TEST_FILE_PATTERN = /(?:\.test\.tsx?|TestFixtures\.ts)$/
+
+/** A story file, which no app ships. */
+export const STORY_FILE_PATTERN = /\.stories\.tsx?$/
 
 /**
  * A workspace's package.json and tsconfig: its repo folder, its name, its dependency names, and the folders its tsconfig

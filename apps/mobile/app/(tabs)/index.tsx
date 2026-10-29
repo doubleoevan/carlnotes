@@ -1,9 +1,11 @@
+import { authClient } from "@carlnotes/client/authClient"
 import { useNow } from "@carlnotes/core/hooks/useNow"
 import { Coffee } from "lucide-react-native"
 import { ScrollView, View } from "react-native"
 import { ClassNameSafeAreaView } from "@/components/common/ClassNameSafeAreaView"
 import { Footer } from "@/components/layout/Footer"
 import { Header } from "@/components/layout/Header"
+import { HomeHero } from "@/components/layout/HomeHero"
 import { PageActionMenu } from "@/components/search/PageActionMenu"
 import { SearchBar } from "@/components/search/SearchBar"
 import { TopicFeed } from "@/components/topic/TopicFeed"
@@ -21,40 +23,53 @@ export default function HomeScreen() {
 	const handleRefresh = (): void => {
 		void topicFeed.reheat()
 	}
+
+	// read the session. a visitor's Home shows the web hero, which scrolls with the search bar and the tags as the
+	// phone web's does. a user's search bar and tags stay pinned under the brand row
+	const { data: session } = authClient().useSession()
+	const isHeroShown = !session
+	const homeTop = (
+		<>
+			{isHeroShown && <HomeHero />}
+			<SearchBar
+				filters={topicFeed}
+				actions={
+					<PageActionMenu
+						page="Home"
+						hasNewTopicButton
+						options={[{ label: "Reheat", icon: Coffee, onSelect: handleRefresh }]}
+					/>
+				}
+			/>
+			<TopicHomeActions filters={topicFeed} knownTags={topicFeed.knownTags} />
+			<TopicFeedStatus
+				topicLabel="topics"
+				isLoading={topicFeed.isLoading}
+				hasError={topicFeed.isError}
+				hasContent={topicFeed.topicFeed !== null}
+				onRetry={handleRefresh}
+			/>
+		</>
+	)
 	return (
 		<View className="flex-1 bg-background">
-			<Header isHome isReheating={topicFeed.isReheating} onReheat={handleRefresh} />
+			<Header isHome isHeroShown={isHeroShown} isReheating={topicFeed.isReheating} onReheat={handleRefresh} />
 			<ClassNameSafeAreaView edges={["left", "right"]} className="w-full max-w-3xl flex-1 self-center">
-				<SearchBar
-					filters={topicFeed}
-					actions={
-						<PageActionMenu
-							page="Home"
-							hasNewTopicButton
-							options={[{ label: "Reheat", icon: Coffee, onSelect: handleRefresh }]}
-						/>
-					}
-				/>
-				<TopicHomeActions filters={topicFeed} knownTags={topicFeed.knownTags} />
-				<TopicFeedStatus
-					topicLabel="topics"
-					isLoading={topicFeed.isLoading}
-					hasError={topicFeed.isError}
-					hasContent={topicFeed.topicFeed !== null}
-					onRetry={handleRefresh}
-				/>
+				{!isHeroShown && homeTop}
 				{topicFeed.topicFeed ? (
 					<TopicFeed
 						key={topicFeed.reheatKey}
 						topicFeed={topicFeed.topicFeed}
 						state={topicFeed}
 						onRefresh={handleRefresh}
+						listHeader={isHeroShown ? homeTop : undefined}
 					/>
-				) : !topicFeed.isLoading ? (
-					<ScrollView>
-						<Footer />
+				) : (
+					<ScrollView keyboardShouldPersistTaps="handled">
+						{isHeroShown && homeTop}
+						{!topicFeed.isLoading && <Footer />}
 					</ScrollView>
-				) : null}
+				)}
 			</ClassNameSafeAreaView>
 		</View>
 	)

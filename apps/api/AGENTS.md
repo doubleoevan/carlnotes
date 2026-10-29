@@ -153,7 +153,8 @@ at the root import it by name.
   estimate and the saved column). The audio routes in `podcast/` and a playback start count a listener through it.
   `countWithinRateLimit` limits the topic view and the `/episodes/:id/audio.mp3` listen to 30 a minute per sender.
 - `sameOrigin.ts` — `isSameOriginRequest`, true if the request's `Sec-Fetch-Site` header is `same-origin`, or with no
-  such header, if its `Origin` header is the app's origin.
+  such header, if the mobile app's `x-carlnotes-platform` header names ios or android, or if its `Origin` header is the
+  app's origin. The api serves no CORS headers, so a browser on another origin cannot add the platform header.
 - `topic/promptVersions.ts` — the Prompt Version write the editor's save and the Topic Tools share.
 - `topic/topicTableRows.ts` — `toTopicTableRows`, the topic table rows that the profile page and the team page share,
   each with its latest Podcast Episode.

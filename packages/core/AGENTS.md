@@ -29,8 +29,12 @@ It imports `@carlnotes/contracts`, `@carlnotes/client`, `@carlnotes/nightshift`,
   last change, one on its way and one waiting at most, nothing for a body equal to the saved one or to the one on its
   way, `img` tags stripped first, a failed save read as unsaved and retried on the next change, a conflict that stops
   every save until it is resolved, a waiting save sent on unmount, and `EMPTY_EDITOR_HTML`, the html the editor
-  reports for an empty document); and `useNoteComments.ts`, a note's comment thread loaded when the note opens, with
-  its post and delete.
+  reports for an empty document); `useNoteComments.ts`, a note's comment thread loaded when the note opens, with
+  its post and delete; `useUpdateCounts.ts`, the update badges a menu trigger or one page reads from the chat room,
+  note badge, and topic invite stores; and `useUpdateBadges.ts`, the 45-second poll of the chat mention count and the
+  waiting topic invitations while the app is focused and online, which reloads the chat rooms into the store when the
+  count changes and drops a response from a replaced account; and `usePolledCounts.ts`, a page's viewer, follower, or
+  listener counts read once the page shows and then every minute while the app is focused and online.
 - `lib/` — pure rules and formatting: `labels.ts` (values as the text a user sees: dates, durations, money, sizes, and
   counts), `pageHead.ts` (a `PageHead`, or a fixed title and path, as the tags a route's `head()` returns),
   `paginationSlots.ts` (the slots a row of page links shows), `planCards.ts` (which plan card matches the user's plan
@@ -42,7 +46,14 @@ It imports `@carlnotes/contracts`, `@carlnotes/client`, `@carlnotes/nightshift`,
   `topicPromptUrls.ts` (the urls written inside a topic prompt), `emailProviders.ts` (the webmail compose urls an invite
   is given), `chromeIntentUrl.ts` (the page as an Android intent url that opens it in Chrome, out of an embedded
   webview), `sessionCopy.ts` (the lines the sign-in, sign-out, sign-up, and close-account controls say, shared by the
-  web and the mobile app), and `voiceRecordingDecisions.ts` (what the voice recorder decides from each frame).
+  web and the mobile app), `signupPrompts.ts` (the prompt each account action shows a visitor on the sign-up page, and
+  the lookup by cta tag), `inviteRejections.ts` (what an invite page says while it checks a token, if the check
+  fails, and for each way a token is rejected), `updateCounts.ts` (one badge's count summing chat mentions, note
+  changes, and topic invitations, its accessible labels, and the groups a tooltip or a long-press sheet lists),
+  `updateBadgePoll.ts` (the poll behind `useUpdateBadges`, on `activePoll.ts`), `countsPoll.ts` (the poll behind
+  `usePolledCounts`, on `activePoll.ts`), `focusAndOnline.ts` (whether the app is focused and online through Query's
+  adapters, and how a poll subscribes to a change), `topicGateCopy.ts` (the invite-only gate's words), and
+  `voiceRecordingDecisions.ts` (what the voice recorder decides from each frame).
 - Imports: `@carlnotes/contracts`, `@carlnotes/client`, `@carlnotes/nightshift`, `react`, and `@tanstack/react-query`. Never a server package or an app. Universal: the
   root rule. A module that needs a DOM type is a web module and lives in `apps/web/src`.
 - Tests: `bun test packages/core`.

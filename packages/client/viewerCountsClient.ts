@@ -21,9 +21,13 @@ export function sendTopicView(topicId: string): void {
  * Fetches a topic's viewers and followers, or null if the read fails. A public topic's counts are fetched without
  * credentials.
  */
-export async function fetchTopicCounts(topicId: string, isPublic: boolean): Promise<TopicCounts | null> {
+export async function fetchTopicCounts(
+	topicId: string,
+	isPublic: boolean,
+	signal?: AbortSignal,
+): Promise<TopicCounts | null> {
 	const response = await apiClient()
-		.api.counts.topics[":id"].$get({ param: { id: topicId } }, { init: toCountsRequestInit(isPublic) })
+		.api.counts.topics[":id"].$get({ param: { id: topicId } }, { init: toCountsRequestInit(isPublic, signal) })
 		.catch(() => null)
 	return response?.ok ? topicCounts.parse(await response.json()) : null
 }
@@ -35,14 +39,19 @@ export async function fetchTopicCounts(topicId: string, isPublic: boolean): Prom
 export async function fetchPodcastEpisodeCounts(
 	podcastEpisodeId: string,
 	isPublic: boolean,
+	signal?: AbortSignal,
 ): Promise<PodcastEpisodeCounts | null> {
 	const response = await apiClient()
-		.api.counts.episodes[":id"].$get({ param: { id: podcastEpisodeId } }, { init: toCountsRequestInit(isPublic) })
+		.api.counts.episodes[":id"].$get(
+			{ param: { id: podcastEpisodeId } },
+			{ init: toCountsRequestInit(isPublic, signal) },
+		)
 		.catch(() => null)
 	return response?.ok ? podcastEpisodeCounts.parse(await response.json()) : null
 }
 
-// a public topic's counts leave the session cookie behind, and any other topic's send it for the access check
-function toCountsRequestInit(isPublic: boolean): RequestInit {
-	return { credentials: isPublic ? "omit" : "same-origin" }
+// a public topic's counts leave the session cookie behind, and any other topic's send it for the access check. a
+// read the caller abandons is aborted through its signal
+function toCountsRequestInit(isPublic: boolean, signal?: AbortSignal): RequestInit {
+	return { credentials: isPublic ? "omit" : "same-origin", signal }
 }

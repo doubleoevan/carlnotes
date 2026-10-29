@@ -1,7 +1,9 @@
 // topic invitation badge tests: the label counts, and each bullet bolds who invited the user and to what
+
 import { expect, test } from "bun:test"
+import { toTopicInviteLabel, toTopicInviteLines } from "@carlnotes/core/lib/updateCounts"
 import { renderToStaticMarkup } from "react-dom/server"
-import { toTopicInviteLabel, toTopicInviteLines } from "./UpdateCountBadge"
+import { toTooltipLine } from "./UpdateCountBadge"
 
 // one invitation reads singular, more read plural
 test("the topic invitation label counts invitations", () => {
@@ -11,7 +13,7 @@ test("the topic invitation label counts invitations", () => {
 
 // a bullet names the inviter and the topic, both bold, keyed by the invitation
 test("a tooltip bullet bolds the inviter and the topic", () => {
-	const [tooltipLine] = toTopicInviteLines([
+	const [updateLine] = toTopicInviteLines([
 		{
 			inviteId: "invite-1",
 			topicId: "topic-1",
@@ -19,6 +21,7 @@ test("a tooltip bullet bolds the inviter and the topic", () => {
 			inviterUsername: "Silky-Brew",
 		},
 	])
+	const tooltipLine = updateLine && toTooltipLine(updateLine)
 	expect(tooltipLine?.key).toBe("invite-1")
 	expect(renderToStaticMarkup(tooltipLine?.line)).toBe(
 		'<span class="font-semibold">Silky-Brew</span> invited you to subscribe to <span class="font-semibold">Screenwriting contests worth entering</span>',

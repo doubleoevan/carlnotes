@@ -27,6 +27,7 @@ export function markNoteOpened(noteId: string): number {
  * Resets account-owned counts and invalidates requests from the previous account.
  */
 export function resetNoteBadges(nextAccountId: string | null): number {
+	// the new account's generation, with the previous account's badges and marks cleared
 	accountId = nextAccountId
 	generation += 1
 	noteBadges = []
@@ -66,6 +67,7 @@ export function settleNoteOpened(noteId: string, token: number): void {
  * Replaces the note badge counts with what the poll last read.
  */
 export function setNoteBadges(updatedNoteBadges: NoteBadge[]): void {
+	const isUnchanged = toNoteBadgesKey(updatedNoteBadges) === toNoteBadgesKey(noteBadges)
 	noteBadges = updatedNoteBadges
 
 	// a note the poll no longer counts has been cleared on the server, so the local mark can go
@@ -74,7 +76,16 @@ export function setNoteBadges(updatedNoteBadges: NoteBadge[]): void {
 			openedNoteIds.delete(noteId)
 		}
 	}
-	publish()
+
+	// a read that matches the last one publishes nothing
+	if (!isUnchanged) {
+		publish()
+	}
+}
+
+// the read as one string: each note's id and its two counts
+function toNoteBadgesKey(badges: NoteBadge[]): string {
+	return badges.map((badge) => `${badge.noteId}:${badge.unreadEdits}:${badge.unreadComments}`).join(",")
 }
 
 // the edits and comments waiting on the notes a filter picks, with everything opened this session left out

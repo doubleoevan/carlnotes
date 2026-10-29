@@ -1,6 +1,6 @@
 // the typed api client for the activity routes
 import type { ActivityResponse } from "@carlnotes/contracts/activity"
-import type { TopicInviteBadge } from "@carlnotes/contracts/invites"
+import { type InviteAcceptResponse, inviteAcceptResponse, type TopicInviteBadge } from "@carlnotes/contracts/invites"
 import { apiClient } from "./apiClient"
 
 // the activity payload: monthly spend against budget, owned topics, subscriptions, and sent invitations
@@ -21,14 +21,12 @@ export async function sendDeleteTopicInvite(topicId: string, inviteId: string): 
 }
 
 // answer a received invitation, the same way the join page answers its token
-export async function sendAcceptInvite(
-	inviteId: string,
-): Promise<{ status: string; teamId?: string; topicId?: string }> {
+export async function sendAcceptInvite(inviteId: string): Promise<InviteAcceptResponse> {
 	const response = await apiClient().api.invites[":id"].accept.$post({ param: { id: inviteId } })
 	if (!response.ok) {
 		throw new Error(`invite accept failed: ${response.status}`)
 	}
-	return (await response.json()) as { status: string; teamId?: string; topicId?: string }
+	return inviteAcceptResponse.parse(await response.json())
 }
 
 // decline a received invitation. the sender isn't told

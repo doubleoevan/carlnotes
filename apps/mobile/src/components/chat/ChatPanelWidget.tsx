@@ -1,4 +1,4 @@
-import { CHAT_NAME } from "@carlnotes/contracts/chat"
+import { CHAT_NAME, type ChatMention } from "@carlnotes/contracts/chat"
 import { type ChatPillElements, ChatPill as SharedChatPill } from "@carlnotes/core/components/ChatPill"
 import { useIsPodcastPlayerShown } from "@carlnotes/core/stores/podcastEpisodePlayerStore"
 import { Coffee, X } from "lucide-react-native"
@@ -7,6 +7,7 @@ import { KeyboardAvoidingView, Platform, StatusBar, View } from "react-native"
 import { useUniwind } from "uniwind"
 import { CoffeeCup } from "@/components/branding/CoffeeCup"
 import { ClassNameSafeAreaView } from "@/components/common/ClassNameSafeAreaView"
+import { UpdateCountBadge } from "@/components/common/UpdateCountBadge"
 import { Button } from "@/components/primitives/button"
 import { Icon } from "@/components/primitives/icon"
 import { Text } from "@/components/primitives/text"
@@ -45,10 +46,25 @@ export function ChatPanelWidget({ children, onClose }: { children: ReactNode; on
 }
 
 /**
- * Draws the shared chat pill with Nightshift's native controls.
+ * Draws the shared chat pill with Nightshift's native controls, its unread chat mentions as the web's badge.
  */
-export function ChatPill({ onOpenChat }: { onOpenChat: () => void }) {
-	return <SharedChatPill onOpenChat={onOpenChat} elements={CHAT_PILL_ELEMENTS} />
+export function ChatPill({ onOpenChat, chatMentions }: { onOpenChat: () => void; chatMentions: ChatMention[] }) {
+	// the pill's own name reads the count, so the badge is decorative
+	return (
+		<SharedChatPill
+			onOpenChat={onOpenChat}
+			chatMentions={chatMentions}
+			elements={CHAT_PILL_ELEMENTS}
+			badge={
+				<UpdateCountBadge
+					chatMentions={chatMentions}
+					isDecorative
+					className="absolute -top-1.5 -right-1"
+					countBadgeClassName="border border-border bg-card text-card-foreground text-xs"
+				/>
+			}
+		/>
+	)
 }
 
 // the native button grows for larger text and keeps the platform's minimum touch target

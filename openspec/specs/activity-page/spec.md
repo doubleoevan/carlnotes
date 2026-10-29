@@ -2,7 +2,9 @@
 
 ## Purpose
 TBD - created by archiving change add-activity-page-and-subscriptions. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: The Activity page is the signed-in user's own-data home
 An Activity page SHALL be reachable from the header menu for a signed-in user and SHALL require a session. Every figure and row on it SHALL be the calling user's own data — their spend, their owned Topics, their subscriptions, their pending invites — never another user's, gated the same way the rest of the authenticated app is.
 
@@ -325,7 +327,7 @@ Withdrawing a sent invitation SHALL ask for confirmation, and SHALL remove that 
 - **THEN** its footer reports how many invitations were sent and how many of those invitees subscribed
 
 ### Requirement: A waiting topic invitation shows as a badge on the Activity row, the Activity title, the avatar, and the tab title
-The user menu's Activity row and the Activity page's own title SHALL show a count of the topic invitations waiting for the signed-in user's answer, and the tab title's leading unread count SHALL include them beside the unread chats and notes. Every badge SHALL be one count in one filled style, never two pills side by side: the header's avatar and the mobile menu button sum the unread chats, the unread notes, and the waiting invitations, the Profile row and the profile page's avatar sum the topics' chats and notes, the Teams row and the Teams title sum the teams' own, a topic or team name's badge sums that page's chats and notes, and each badge's tooltip SHALL list its groups under their own headings, chats, then notes, then invitations, as bullets. A page name's badge SHALL open the chat while a chat mention waits, else the notes' page. Every badge tooltip SHALL bold the names it holds, a user, a topic, a team, or a note. The count SHALL come from the same query the Activity page's "Invited" rows come from, through `GET /api/invites/topics/pending`, so the badge and the page always agree. The badge's tooltip SHALL list the invitations as bullets reading "{user} invited you to subscribe to {topic}", the first four in full and the rest as a count. The badge SHALL be read with the other badges on their poll and again the moment the user accepts or declines an invitation on the Activity page.
+The user menu's Activity row and the Activity page's own title SHALL show a count of the topic invitations waiting for the signed-in user's answer, and the tab title's leading unread count SHALL include them beside the unread chats and notes. The mobile app SHALL show the same count on its menu button, its Activity menu item, and its Activity title, read by the same poll and the same query, and SHALL badge its app icon with the summed count the tab title shows, cleared for a visitor and on sign-out. Every badge SHALL be one count in one filled style, never two pills side by side: the header's avatar and the mobile menu button sum the unread chats, the unread notes, and the waiting invitations, the Profile row and the profile page's avatar sum the topics' chats and notes, the Teams row and the Teams title sum the teams' own, a topic or team name's badge sums that page's chats and notes, and each badge's tooltip SHALL list its groups under their own headings, chats, then notes, then invitations, as bullets. A page name's badge SHALL open the chat while a chat mention waits, else the notes' page. Every badge tooltip SHALL bold the names it holds, a user, a topic, a team, or a note. The count SHALL come from the same query the Activity page's "Invited" rows come from, through `GET /api/invites/topics/pending`, so the badge and the page always agree. The badge's tooltip SHALL list the invitations as bullets reading "{user} invited you to subscribe to {topic}", the first four in full and the rest as a count. The badge SHALL be read with the other badges on their poll and again the moment the user accepts or declines an invitation on the Activity page.
 
 #### Scenario: An invitation arrives while the user is elsewhere
 - **WHEN** a user with no waiting invitation is invited to a topic and the badge poll next runs
@@ -339,3 +341,8 @@ The user menu's Activity row and the Activity page's own title SHALL show a coun
 - **WHEN** a request for the waiting invitations arrives with no session
 - **THEN** it is rejected with 401 and no badge shows
 
+#### Scenario: An invitation waits in the app
+- **WHEN** a user of the mobile app is invited to a topic and the badge poll next runs
+- **THEN** the menu button, the Activity item, and the Activity title show a count of 1, the app icon's badge rises
+  by 1, and a long press on the badge reads "{inviter} invited you to subscribe to {topic}" under an "invitations"
+  heading

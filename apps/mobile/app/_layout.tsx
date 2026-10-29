@@ -3,6 +3,7 @@
 import "../global.css"
 import { configureApiClient } from "@carlnotes/client/apiClient"
 import { authClient } from "@carlnotes/client/authClient"
+import { reloadChatRooms, useUpdateBadges } from "@carlnotes/core/hooks/useUpdateBadges"
 import { activateChatAccount } from "@carlnotes/core/stores/chatConversationStore"
 import { useIsPodcastPlayerShown } from "@carlnotes/core/stores/podcastEpisodePlayerStore"
 import { ArchitectsDaughter_400Regular } from "@expo-google-fonts/architects-daughter"
@@ -25,6 +26,7 @@ import * as SplashScreen from "expo-splash-screen"
 import { useEffect, useState } from "react"
 import { Alert, AppState, KeyboardAvoidingView, Platform, View } from "react-native"
 import { GestureHandlerRootView } from "react-native-gesture-handler"
+import { AppIconBadge } from "@/appIconBadge"
 import { apiBaseUrl } from "@/authClient"
 import { AppChatPanel } from "@/components/chat/AppChatPanel"
 import { PodcastEpisodeAudio } from "@/components/podcast/PodcastEpisodeAudio"
@@ -89,11 +91,13 @@ function RootLayout() {
 	// the session, seeded from secure storage before the first read answers. a user sees no loading state
 	const { data: session, isPending: isSessionPending } = authClient().useSession()
 	const isSessionRetired = useIsSessionRetired(session?.session.id)
-	// activate chat state for the current account
+	// activate chat state for the current account, and poll its chat mention count and topic invitations while the
+	// app is in the foreground and online
 	const chatAccountId = isSessionRetired ? null : (session?.user.id ?? null)
 	useEffect(() => {
 		activateChatAccount(chatAccountId)
 	}, [chatAccountId])
+	useUpdateBadges(chatAccountId, reloadChatRooms)
 	const isReady = isThemeReady && (isFontLoaded || Boolean(fontLoadError)) && !isSessionPending
 
 	// attach monitoring after the guarded navigator has mounted
@@ -137,6 +141,7 @@ function RootLayout() {
 				<BottomSheetModalProvider>
 					<TopicResourceInfoProvider userId={userId}>
 						<ScreenViewRecorder />
+						<AppIconBadge userId={chatAccountId} />
 						{!isSessionRetired && <PodcastEpisodeAudio userId={userId} />}
 						{/* allow public reading while keeping account screens and chat behind sign-in */}
 						<KeyboardAvoidingView
@@ -154,11 +159,12 @@ function RootLayout() {
 										<Stack.Screen name="topics/[topicId]/episodes/[season]/[episodeNumber]" />
 										<Stack.Screen name="topics/[topicId]/notes/[noteId]" />
 										<Stack.Screen name="teams/[teamId]/notes/[noteId]" />
+										<Stack.Screen name="plans" />
+										<Stack.Screen name="invite/[token]" />
 									</Stack.Protected>
 									<Stack.Protected guard={isSignedIn}>
 										<Stack.Screen name="chat" />
 										<Stack.Screen name="account" />
-										<Stack.Screen name="plans" />
 										<Stack.Screen name="activity" />
 										<Stack.Screen name="teams/index" />
 										<Stack.Screen name="teams/[teamId]/chat" />
@@ -174,7 +180,7 @@ function RootLayout() {
 										<Stack.Screen name="storybook" />
 									</Stack.Protected>
 								</Stack>
-								{isSignedIn && <AppChatPanel />}
+								{!isSessionRetired && <AppChatPanel />}
 							</View>
 							{!isSessionRetired && <PodcastPlayer />}
 						</KeyboardAvoidingView>

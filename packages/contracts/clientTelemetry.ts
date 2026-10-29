@@ -17,13 +17,23 @@ const DEVICE_HEADERS = {
 	appBuild: "x-carlnotes-app-build",
 } as const
 
+// the header that names the app's platform on every request, and its two values
+export const PLATFORM_HEADER = "x-carlnotes-platform"
+
+/**
+ * Returns true if a platform header value names one of the two native platforms.
+ */
+export function isNativePlatform(platform: string | null | undefined): platform is "ios" | "android" {
+	return platform === "ios" || platform === "android"
+}
+
 /**
  * Returns bounded native telemetry or browser user-agent properties.
  */
 export function toClientTelemetry(readHeader: (name: string) => string | null | undefined): ClientTelemetry {
 	// accept only the two native platforms
-	const platform = readHeader("x-carlnotes-platform")
-	if (platform !== "ios" && platform !== "android") {
+	const platform = readHeader(PLATFORM_HEADER)
+	if (!isNativePlatform(platform)) {
 		return { entryPoint: "web", ...toDeviceProperties(readHeader("user-agent")) }
 	}
 
@@ -42,7 +52,7 @@ export function toClientTelemetry(readHeader: (name: string) => string | null | 
  */
 export function toClientTelemetryHeaders(properties: ClientTelemetry): Record<string, string> {
 	return {
-		"x-carlnotes-platform": properties.browserPlatform,
+		[PLATFORM_HEADER]: properties.browserPlatform,
 		...Object.fromEntries(
 			Object.entries(DEVICE_HEADERS).flatMap(([property, header]) => {
 				const value = properties[property as keyof typeof DEVICE_HEADERS]

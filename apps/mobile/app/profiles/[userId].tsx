@@ -14,6 +14,7 @@ import { UserAvatarPicker } from "@/components/avatar/UserAvatarPicker"
 import { Avatar } from "@/components/branding/Avatar"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { Sheet } from "@/components/common/Sheet"
+import { UserMenuUpdateCountBadge } from "@/components/common/UpdateCountBadge"
 import { PageScreen } from "@/components/layout/PageScreen"
 import { PageSkeleton, TableSkeleton } from "@/components/layout/PageSkeleton"
 import { Text } from "@/components/primitives/text"
@@ -96,7 +97,10 @@ function ProfileHeader({
 		<View className="gap-2">
 			<View className="flex-row flex-wrap items-center gap-3">
 				{isOwnProfile ? (
-					<UserAvatarPicker userId={userId} username={profile.username} />
+					<View>
+						<UserAvatarPicker userId={userId} username={profile.username} />
+						<UserMenuUpdateCountBadge label="Profile" className="absolute -top-1 -right-1" />
+					</View>
 				) : (
 					<Avatar
 						ownerId={userId}

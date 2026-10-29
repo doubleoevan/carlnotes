@@ -2,6 +2,7 @@ import { authClient } from "@carlnotes/client/authClient"
 import { fetchBillingState, fetchCheckoutUrl } from "@carlnotes/client/billingClient"
 import { isPaidPlan, plans } from "@carlnotes/contracts/enums"
 import type { BillingInterval, Plan } from "@carlnotes/contracts/plans"
+import { RECOMMENDED_PLAN } from "@carlnotes/core/lib/planCards"
 import { useEffect, useState } from "react"
 import { MonthlyBudgetCutoffTable } from "@/components/account/MonthlyBudgetCutoffTable"
 import { PlanCard } from "@/components/account/PlanCard"
@@ -15,9 +16,6 @@ import { PAGE_CLASS } from "@/lib/styleClasses"
 
 // the one toast that names what a mic sent the user here to upgrade for
 const UPGRADE_PROMPT_TOAST_ID = "upgrade-prompt"
-
-// the recommended plan that a signed-out visitor sees highlighted
-const RECOMMENDED_PLAN: Plan = "plus"
 
 /**
  * The plans page: the three plans side by side with a monthly/yearly toggle, which opens at the
