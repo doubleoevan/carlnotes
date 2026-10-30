@@ -1,6 +1,7 @@
 // the JSON endpoints the ui fetches, served under /api by the basePath
 
 import { signupGatePayload } from "@carlnotes/contracts/payloads"
+import { topicFeedQuery } from "@carlnotes/contracts/routeShapes"
 import { GATE_COOKIE_NAME } from "@carlnotes/contracts/signupGate"
 import { toDeviceProperties } from "@carlnotes/contracts/userAgent"
 import { cacheJson } from "@carlnotes/db/redis"
@@ -11,7 +12,6 @@ import { isAPIError } from "better-auth/api"
 import { Hono } from "hono"
 import { except } from "hono/combine"
 import { getCookie } from "hono/cookie"
-import { z } from "zod"
 import { activityRoute } from "./activity"
 import { adminRoute } from "./admin"
 import { appSignupGateRoute } from "./appSignupGate"
@@ -98,9 +98,6 @@ const OWN_BODY_LIMIT_PATHS = [
 	TOPIC_ATTACHMENT_UPLOAD_PATH,
 	NOTE_BODY_PATH,
 ].map((routePath) => `${API_BASE_PATH}${routePath}`)
-
-// the "All" vs. "Unread" topic finding toggle
-const topicFeedQuery = z.object({ all: z.enum(["true", "false"]).optional() })
 
 // the api tree, mounted on the server in api/index.ts
 export const apiRoute = new Hono<AppEnv>()

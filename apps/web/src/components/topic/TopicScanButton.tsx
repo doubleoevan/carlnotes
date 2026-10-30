@@ -1,6 +1,7 @@
 import { type FetchTopicPageOptions, sendManualScan, sendStopScan } from "@carlnotes/client/topicClient"
 import { ADMIN_QUOTA } from "@carlnotes/contracts/plans"
 import {
+	DAILY_SCANS_USED_LABEL,
 	FIRST_SCAN_PAUSED_REASON,
 	isBudgetError,
 	MANUAL_SCAN_PAUSED_LABEL,
@@ -220,7 +221,7 @@ function toBlockedScanLine({
 	if (isSpendExhausted) {
 		return "You are out of budget this month."
 	}
-	return isManualScanPaused ? MANUAL_SCAN_PAUSED_LABEL : "You have used today's brews."
+	return isManualScanPaused ? MANUAL_SCAN_PAUSED_LABEL : DAILY_SCANS_USED_LABEL
 }
 
 /**

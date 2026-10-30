@@ -1,14 +1,18 @@
 // the editable topic fields for the edit modal, and the payload they save as
 
-import type { daysOfWeek, frequencies, visibilities } from "@carlnotes/contracts/enums"
+import {
+	type DayOfWeek,
+	type Frequency,
+	toKnownDayOfWeek,
+	toKnownFrequency,
+	type visibilities,
+} from "@carlnotes/contracts/enums"
 import { DEFAULT_SOURCES, toCustomSourceOption, toDefaultSource } from "@carlnotes/contracts/sources"
 import type { UpdateTopicPayload } from "@carlnotes/contracts/topicPayloads"
 import { MAX_ATTACHMENT_CONTEXT_CHARS, type TopicResponse } from "@carlnotes/contracts/topics"
 import { type Dispatch, type SetStateAction, useState } from "react"
 import { toPossibleSourceUrls } from "../lib/topicPromptUrls"
 
-type Frequency = (typeof frequencies)[number]
-type DayOfWeek = (typeof daysOfWeek)[number]
 export type AddedSource = { optionKey: string; value: string; name?: string }
 
 // the field union that the visibility select offers
@@ -72,9 +76,11 @@ export function useTopicFields<Attachment>(
 	const [name, setName] = useState(topic?.name ?? "")
 	const [prompt, setPrompt] = useState(topic?.prompt ?? "")
 	const [tags, setTags] = useState(topic?.tags ?? [])
-	const [frequency, setFrequency] = useState<Frequency>(topic?.frequency ?? "weekly")
+	const [frequency, setFrequency] = useState<Frequency>(toKnownFrequency(topic?.frequency ?? "weekly"))
 	const [scheduledTime, setScheduledTime] = useState(topic?.scheduledTime ?? "09:00")
-	const [scheduledDayOfWeek, setScheduledDayOfWeek] = useState<DayOfWeek>(topic?.scheduledDayOfWeek ?? "monday")
+	const [scheduledDayOfWeek, setScheduledDayOfWeek] = useState<DayOfWeek>(
+		toKnownDayOfWeek(topic?.scheduledDayOfWeek ?? "monday"),
+	)
 	// a new topic defaults to invite for sharing without showing up automatically in the popular section
 	const [visibility, setVisibility] = useState<Visibility>(toStartingVisibility(topic, isMakingTopicPublic))
 	const [maxTopicFindings, setMaxTopicFindings] = useState(topic?.maxTopicFindings ?? 10)

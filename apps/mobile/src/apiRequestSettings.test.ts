@@ -26,6 +26,7 @@ function toTestSettings(cookie: string): {
 				finishSignOut = resolve
 			})
 		},
+		onAppVersionOutdated: () => {},
 	})
 	return {
 		settings,
@@ -79,6 +80,7 @@ test("native attribution preserves the stored cookie", async () => {
 		getCookie: async () => "session=test",
 		hasSession: () => true,
 		signOut: async () => undefined,
+		onAppVersionOutdated: () => {},
 		deviceHeaders,
 	})
 	expect(await settings.headers()).toEqual({ ...deviceHeaders, cookie: "session=test" })

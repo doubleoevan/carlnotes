@@ -9,6 +9,7 @@ import {
 	scanStatuses,
 	sourceKinds,
 	topicSectionKeys,
+	type UnknownCase,
 	visibilities,
 } from "./enums"
 import { topicFinding } from "./findings"
@@ -16,6 +17,7 @@ import { invite } from "./invites"
 import { podcastEpisode, podcastEpisodeSummary, publishedPodcastEpisodeSummary, topicPodcast } from "./podcast"
 import { profileIdentity } from "./profiles"
 import { customSourceKeys, SOURCE_RESULT_LABEL_CHARS } from "./sources"
+import { displayEnum } from "./tolerantReads"
 
 // how long a topic prompt may grow before a copy-paste is treated as an attachment
 export const TOPIC_PROMPT_CHARS = 2_000
@@ -41,10 +43,10 @@ export const topicDetails = z.object({
 	// the prompt for the topic. the design keeps it separate from the topic name
 	prompt: z.string(),
 	tags: z.array(z.string()),
-	frequency: z.enum(frequencies),
+	frequency: displayEnum(frequencies),
 	// the time of day that a scan runs, "HH:MM" 24-hour. scheduledDayOfWeek only matters when frequency is weekly
 	scheduledTime: z.string(),
-	scheduledDayOfWeek: z.enum(daysOfWeek),
+	scheduledDayOfWeek: displayEnum(daysOfWeek),
 	// how many findings a scan is set to keep for this topic
 	maxTopicFindings: z.number(),
 	// the topic owner
@@ -92,7 +94,7 @@ export const topicDetails = z.object({
 			id: z.string(),
 			filename: z.string(),
 			sourceUrl: z.string().nullable(),
-			status: z.enum(attachmentStatuses),
+			status: displayEnum(attachmentStatuses),
 			// the generated context that every later scan uses, for the owner and admins to edit. null for anyone else
 			context: z.string().nullable(),
 			// what a failed attachment tells the owner and admins. null unless the attachment failed, and null for anyone else
@@ -103,11 +105,11 @@ export const topicDetails = z.object({
 	sources: z.array(
 		z.object({
 			id: z.string(),
-			sourceKind: z.enum(sourceKinds),
+			sourceKind: displayEnum(sourceKinds),
 			summary: z.string(),
 			// what the source is identified by, which is what a suggestion is deduped against
 			value: z.string(),
-			status: z.enum(attachmentStatuses),
+			status: displayEnum(attachmentStatuses),
 			error: z.string().nullable(),
 		}),
 	),
@@ -131,7 +133,7 @@ export type TopicFeed = z.infer<typeof topicFeed>
 // a scan in the topic page history
 export const topicScan = z.object({
 	id: z.string(),
-	status: z.enum(scanStatuses),
+	status: displayEnum(scanStatuses),
 	// when the scan ran. finishedAt stays null while it is running
 	startedAt: z.string(),
 	finishedAt: z.string().nullable(),
@@ -328,7 +330,7 @@ export const topicFeedResponse = z.object({
 	// each section pairs its key with its topic feeds
 	sections: z.array(
 		z.object({
-			key: z.enum(topicSectionKeys),
+			key: displayEnum(topicSectionKeys),
 			topics: z.array(topicFeed),
 		}),
 	),
@@ -346,6 +348,11 @@ export type TopicFeedResponse = z.infer<typeof topicFeedResponse>
 // the create-topic response which is the new topic's id
 export const topicCreateResponse = z.object({ id: z.string() })
 
+// the topics a team may add, each by id and name
+export const addableTopicsResponse = z.object({ topics: z.array(z.object({ id: z.string(), name: z.string() })) })
+
+export type AddableTopicsResponse = z.infer<typeof addableTopicsResponse>
+
 // a public topic as the sitemap and llms.txt list it
 export type PublicTopic = {
 	id: string
@@ -356,4 +363,4 @@ export type PublicTopic = {
 }
 
 // the key of one homepage topic section
-export type TopicSectionKey = (typeof topicSectionKeys)[number]
+export type TopicSectionKey = (typeof topicSectionKeys)[number] | UnknownCase

@@ -1,7 +1,8 @@
 // streaming a chat turn's reply to the user, then saving its row, the proposal it leaves standing, its topic draft, and
 // its sent attachments
-import { toChatReplyLineText } from "@carlnotes/contracts/chat"
+
 import { withPodcastEpisodeNote } from "@carlnotes/contracts/chatQuestionNotes"
+import { toChatReplyLineText } from "@carlnotes/contracts/chatTurns"
 import type { PodcastEpisodeSpeaker } from "@carlnotes/contracts/enums"
 import type { TopicDraft } from "@carlnotes/contracts/topicPayloads"
 import { isBudgetRejection, SPENT_BUDGET_REJECTION } from "@carlnotes/models/models"

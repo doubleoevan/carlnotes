@@ -59,6 +59,10 @@ Beside them at the root:
 - `evals/` — the evals that measure the model-facing prompts, their graders, and the review pipeline, one folder each,
   and `evalHarness.ts`, which the promptfoo evals share. They make real model calls, so no eval runs in `bun test`.
   The Evals workflow runs the promptfoo evals in CI, report-only.
+- `contracts/` — the frozen api contracts: `<app-version>.json`, every route the mobile app reaches at that version as
+  standalone JSON Schema, written by `bun run contract:freeze`, and `releases.json`, the app versions submitted,
+  released, or retired. `scripts/check-contract-freeze.ts` fails preflight on an api change an unretired snapshot
+  could not read or send.
 
 Each app and package has its own AGENTS.md with entry points, layout, and commands.
 
@@ -108,8 +112,9 @@ Generated or archived paths that burn context:
 ## Verification
 
 `bun run check` is the gate: Biome, the package boundary check, the component parity check, the client parity check
-against `apps/mobile/parity.md`, `tsc -b`, the Temporal
-workflow bundle check, and the test suite. Green before any hand-off.
+against `apps/mobile/parity.md`, the purchase path check (`scripts/check-purchase-paths.ts`) that keeps checkout and the
+portal out of the mobile app's reach, the contract freeze check against `contracts/`, `tsc -b`, the Temporal workflow
+bundle check, and the test suite. Green before any hand-off.
 
 ## Rules (always-on)
 

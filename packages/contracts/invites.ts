@@ -1,6 +1,6 @@
 // the invite contracts: an invite as its sender sees it, its sources and rejections, and its responses
 import { z } from "zod"
-import type { ProfileIdentity } from "./profiles"
+import { profileIdentity } from "./profiles"
 
 // one pending invite to a topic or a team, as its sender sees it
 export const invite = z.object({
@@ -53,17 +53,26 @@ export const inviteAcceptResponse = z.discriminatedUnion("status", [
 export type InviteAcceptResponse = z.infer<typeof inviteAcceptResponse>
 
 // a topic invitation waiting for the user's answer, as the badges name it
-export type TopicInviteBadge = { inviteId: string; topicId: string; topicName: string; inviterUsername: string }
+export const topicInviteBadge = z.object({
+	inviteId: z.string(),
+	topicId: z.string(),
+	topicName: z.string(),
+	inviterUsername: z.string(),
+})
+
+export type TopicInviteBadge = z.infer<typeof topicInviteBadge>
 
 // an invite the user sent on a topic they own
-export type InviteRow = {
-	inviteId: string
-	topicId: string
-	name: string
+export const inviteRow = z.object({
+	inviteId: z.string(),
+	topicId: z.string(),
+	name: z.string(),
 	// the address the sender used, null on a username invite that renders its username instead
-	inviteeEmail: string | null
+	inviteeEmail: z.string().nullable(),
 	// the invitee's account when the invite resolved to one, for the avatar and profile link
-	invitee: ProfileIdentity | null
-	invitedAt: string
-	subscribedAt: string | null
-}
+	invitee: profileIdentity.nullable(),
+	invitedAt: z.string(),
+	subscribedAt: z.string().nullable(),
+})
+
+export type InviteRow = z.infer<typeof inviteRow>

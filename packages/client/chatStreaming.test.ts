@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from "bun:test"
-import { toChatReplyLineText } from "@carlnotes/contracts/chat"
+import { toChatReplyLineText } from "@carlnotes/contracts/chatTurns"
 import { sendChatTurn } from "./chatClient"
 
 // restore the configured fetch after each test

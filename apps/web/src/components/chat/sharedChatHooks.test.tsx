@@ -1,6 +1,7 @@
 import { afterEach, expect, test } from "bun:test"
 import { configureApiClient } from "@carlnotes/client/apiClient"
-import { type ChatConversation, toChatReplyLineText } from "@carlnotes/contracts/chat"
+import type { ChatConversation } from "@carlnotes/contracts/chat"
+import { toChatReplyLineText } from "@carlnotes/contracts/chatTurns"
 import { toTestTopicResponse } from "@carlnotes/contracts/topicFeedTestFixtures"
 import { type TopicChat, useTopicChat } from "@carlnotes/core/hooks/useTopicChat"
 import {

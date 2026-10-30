@@ -1,7 +1,7 @@
 // chat room broker tests: the local delivery, the skipped echo, another instance's payload,
 // a payload without tool calls, and the catch-up after a subscriber reconnect
 import { afterAll, expect, mock, spyOn, test } from "bun:test"
-import type { RoomTopicToolCalls } from "@carlnotes/contracts/chat"
+import type { RoomTopicToolCalls } from "@carlnotes/contracts/chatTurns"
 import * as redis from "@carlnotes/db/redis"
 import { CATCH_UP_CHAT_MESSAGE_ID, notifyChatRoomMessage, onChatRoomMessage, toChatRoomPayload } from "./roomStream"
 

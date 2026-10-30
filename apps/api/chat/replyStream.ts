@@ -1,5 +1,5 @@
 // writing a chat reply onto its response stream: each text part as it arrives, and the tool calls as each tool returns
-import { type TopicToolCalls, toChatReplyLineText } from "@carlnotes/contracts/chat"
+import { type TopicToolCalls, toChatReplyLineText } from "@carlnotes/contracts/chatTurns"
 import type { ChatToolCall } from "@carlnotes/contracts/payloads"
 import type { ChatReplyStream } from "@carlnotes/pipeline/chat/index"
 import type { ChatTurnToolCalls } from "../tool/chatTools"

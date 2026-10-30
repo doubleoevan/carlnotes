@@ -6,7 +6,7 @@ import type { PodcastEpisode } from "@carlnotes/contracts/podcast"
 import {
 	toPodcastEpisodeChapterFixture,
 	toPodcastEpisodeFixture,
-} from "@/components/podcast/podcastEpisodeTestFixtures"
+} from "@carlnotes/contracts/podcastEpisodeTestFixtures"
 import { playPodcastEpisodeChapter } from "./podcastEpisodePlayActions"
 import * as podcastEpisodePlayerStore from "./podcastEpisodePlayerStore"
 

@@ -4,7 +4,7 @@ import { useEffect } from "react"
 import { isFocusedAndOnline, subscribeToFocusAndOnline } from "../lib/focusAndOnline"
 import { startUpdateBadgePoll } from "../lib/updateBadgePoll"
 import { toCurrentChatAccountGuard } from "../stores/chatConversationStore"
-import { setChatRooms } from "../stores/chatRoomStore"
+import { markChatRoomsLoadFailed, setChatRooms } from "../stores/chatRoomStore"
 import { setTopicInviteBadges } from "../stores/topicInviteStore"
 
 /**
@@ -31,7 +31,8 @@ export function useUpdateBadges(userId: string | null | undefined, reloadChatRoo
 }
 
 /**
- * Reloads the chat rooms into the shared store for the current account, and leaves the store alone for a replaced one.
+ * Reloads the chat rooms into the shared store for the current account, records a failed read there, and leaves the
+ * store alone for a replaced account.
  */
 export async function reloadChatRooms(): Promise<void> {
 	const isCurrentAccount = toCurrentChatAccountGuard()
@@ -41,6 +42,9 @@ export async function reloadChatRooms(): Promise<void> {
 			setChatRooms(chatRooms)
 		}
 	} catch {
-		// the next poll or open retries without clearing the rooms shown
+		// the rooms shown stay
+		if (isCurrentAccount()) {
+			markChatRoomsLoadFailed()
+		}
 	}
 }

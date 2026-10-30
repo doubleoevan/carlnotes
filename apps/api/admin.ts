@@ -1,6 +1,7 @@
-// the admin writes: a user's role and budget override, and the admin console routes
+// the admin writes: a user's role, budget override, and a platform's minimum app version, and the admin console routes
 
-import { budgetOverridePayload, setRolePayload } from "@carlnotes/contracts/payloads"
+import { isNativePlatform } from "@carlnotes/contracts/clientTelemetry"
+import { budgetOverridePayload, mobileMinimumVersionPayload, setRolePayload } from "@carlnotes/contracts/payloads"
 import { resolveReportPayload } from "@carlnotes/contracts/reports"
 import { db } from "@carlnotes/db"
 import { users } from "@carlnotes/db/schema/users"
@@ -19,6 +20,7 @@ import {
 } from "./adminConsole"
 import { isAdminRole, isAllowed } from "./authorization"
 import { type AppEnv, currentUser } from "./currentUser"
+import { loadMobileMinimumVersionRows, saveMobileMinimumVersion } from "./mobileMinimumVersions"
 import { loadOpenReports, resolveReport } from "./report/adminReports"
 import { refreshSessionUser } from "./sessions"
 import { loadAdminTeamTopics } from "./team/helpers"
@@ -88,9 +90,38 @@ export const adminRoute = new Hono<AppEnv>()
 			return context.json({ error: "forbidden" }, 403)
 		}
 		const users = await loadAdminUsers()
-		const [teams, totals] = await Promise.all([loadAdminTeams(), loadAdminTotals(users)])
-		return context.json({ users, teams, totals })
+		const [teams, totals, mobileMinimumVersions] = await Promise.all([
+			loadAdminTeams(),
+			loadAdminTotals(users),
+			loadMobileMinimumVersionRows(),
+		])
+		return context.json({ users, teams, totals, mobileMinimumVersions })
 	})
+	.post(
+		"/admin/mobile-minimum-versions/:platform",
+		zValidator("json", mobileMinimumVersionPayload),
+		async (context) => {
+			// reject a signed-out visitor
+			const userId = currentUser(context)
+			if (!userId) {
+				return context.json({ error: "unauthorized" }, 401)
+			}
+			// save or clear a platform's minimum app version, admin only
+			if (!(await isAllowed(userId, "admin:console"))) {
+				return context.json({ error: "forbidden" }, 403)
+			}
+			const platform = context.req.param("platform")
+			if (!isNativePlatform(platform)) {
+				return context.json({ error: "unknown platform" }, 400)
+			}
+			await saveMobileMinimumVersion({
+				platform,
+				minimumVersion: context.req.valid("json").minimumVersion,
+				adminUserId: userId,
+			})
+			return context.json({ ok: true })
+		},
+	)
 	.post("/admin/users/:id/role", zValidator("json", setRolePayload), async (context) => {
 		// reject a signed-out visitor
 		const userId = currentUser(context)

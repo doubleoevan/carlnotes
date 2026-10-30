@@ -1,5 +1,5 @@
 import { sendDeleteTopicInvite } from "@carlnotes/client/activityClient"
-import type { ActivityResponse } from "@carlnotes/contracts/activity"
+import type { InviteRow } from "@carlnotes/contracts/invites"
 import { toTopicPath } from "@carlnotes/contracts/seo"
 import {
 	TOPIC_INVITES_TABLE_LABELS as SHARED_TOPIC_INVITES_TABLE_LABELS,
@@ -8,9 +8,6 @@ import {
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { STANDALONE_LINK_CLASS } from "@/lib/styleClasses"
 import { type SentInviteRow, SentInvitesTable, type SentInvitesTableLabels } from "./SentInvitesTable"
-
-// one invite the user sent on a topic they own
-type InviteRow = ActivityResponse["invites"][number]
 
 /**
  * The topic invitations table's headers and withdraw confirmation, worded for subscribing to a topic.

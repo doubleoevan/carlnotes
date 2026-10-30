@@ -2,8 +2,19 @@
 import { isLeaderRole } from "@carlnotes/contracts/enums"
 import { type Invite, type InviteSource, inviteCreateResponse } from "@carlnotes/contracts/invites"
 import type { CreateTeamPayload, UpdateTeamPayload } from "@carlnotes/contracts/payloads"
-import type { TeamPageResponse, TeamSummary, TeamsPageResponse } from "@carlnotes/contracts/teams"
-import { apiClient, fetchApi, readApiErrorMessage, showClientError } from "./apiClient"
+import {
+	type TeamDeleteResponse,
+	type TeamPageResponse,
+	type TeamSummary,
+	type TeamsPageResponse,
+	teamCreateResponse,
+	teamDeleteResponse,
+	teamGateResponse,
+	teamNameTakenResponse,
+	teamPageResponse,
+	teamsPageResponse,
+} from "@carlnotes/contracts/teams"
+import { apiClient, fetchApi, readApiErrorMessage, readApiResponse, showClientError } from "./apiClient"
 
 // how creating a team was rejected, for the modal to show which way it went. a failure is any other rejected response
 export type CreateTeamRejection = "quota" | "name-taken" | "failed"
@@ -14,7 +25,7 @@ export async function fetchTeams(): Promise<TeamsPageResponse> {
 	if (!response.ok) {
 		throw new Error(`teams load failed: ${response.status}`)
 	}
-	return (await response.json()) as TeamsPageResponse
+	return readApiResponse(teamsPageResponse, response)
 }
 
 // the teams that the user leads
@@ -42,14 +53,18 @@ export type TeamPageResult =
 export async function fetchTeamPage(teamId: string): Promise<TeamPageResult> {
 	const response = await apiClient().api.teams[":id"].page.$get({ param: { id: teamId } })
 	if (response.ok) {
-		return { status: "visible", team: (await response.json()) as TeamPageResponse }
+		return { status: "visible", team: await readApiResponse(teamPageResponse, response) }
 	}
 
-	// a private team returns only its name, so its page can offer a non-member a way in. the value is checked instead of trusted
-	const body = (await response.json().catch(() => null)) as { teamName?: unknown; hasRequestedToJoin?: unknown } | null
-	return typeof body?.teamName === "string"
-		? { status: "gated", teamName: body.teamName, hasRequestedToJoin: body.hasRequestedToJoin === true }
-		: { status: "missing" }
+	// reject a failed read before replacing a shown team with an access result
+	if (response.status !== 403 && response.status !== 404) {
+		throw new Error(`team page load failed: ${response.status}`)
+	}
+
+	// a private team returns only its name, so its page can offer a non-member a way in. a rejection with no gate in
+	// its body is a missing team
+	const gate = await readApiResponse(teamGateResponse, response).catch(() => null)
+	return gate ? { status: "gated", ...gate } : { status: "missing" }
 }
 
 // create a team, returning the new team's id or which way it was rejected
@@ -65,8 +80,8 @@ export async function sendCreateTeam(
 	}
 	if (response.ok) {
 		// the id names both the new page and where an avatar upload goes
-		const created = (await response.json()) as { teamId: string }
-		return { teamId: created.teamId }
+		const { teamId } = await readApiResponse(teamCreateResponse, response)
+		return { teamId }
 	}
 
 	// a taken name and the daily team limit are each reported by status, and any other rejection is a failure
@@ -103,20 +118,19 @@ export async function fetchTeamNameTaken(name: string): Promise<boolean> {
 	if (!response.ok) {
 		return false
 	}
-	return ((await response.json()) as { isTaken: boolean }).isTaken
+	const { isTaken } = await readApiResponse(teamNameTakenResponse, response)
+	return isTaken
 }
 
 // delete the team, or hand it over: a team with other members survives under a new leader while the caller leaves
-export async function sendDeleteTeam(
-	teamId: string,
-): Promise<{ status: "deleted" } | { status: "handedOver"; newLeaderUsername: string } | null> {
+export async function sendDeleteTeam(teamId: string): Promise<TeamDeleteResponse | null> {
 	try {
 		const response = await apiClient().api.teams[":id"].$delete({ param: { id: teamId } })
 		// return null for a failed delete, and the deleted or handed-over result otherwise
 		if (!response.ok) {
 			return null
 		}
-		return (await response.json()) as { status: "deleted" } | { status: "handedOver"; newLeaderUsername: string }
+		return await readApiResponse(teamDeleteResponse, response)
 	} catch {
 		return null
 	}
@@ -176,7 +190,8 @@ export async function sendCreateTeamInvite(teamId: string, source: InviteSource)
 	if (!response.ok) {
 		throw new Error((await readApiErrorMessage(response)) ?? `invite create failed: ${response.status}`)
 	}
-	return inviteCreateResponse.parse(await response.json()).invite
+	const { invite } = await readApiResponse(inviteCreateResponse, response)
+	return invite
 }
 
 // upload a team's avatar. leader only, and a team with none shows its initials until one is uploaded

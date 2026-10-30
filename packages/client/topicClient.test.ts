@@ -6,7 +6,7 @@ import { MANUAL_SCAN_PAUSED_LABEL, SCAN_SPENT_BUDGET_LABEL } from "@carlnotes/co
 import { configureApiClient } from "./apiClient"
 import { stubFetch } from "./fetchTestFixtures"
 import { fetchPodcastEpisodePage } from "./podcastEpisodeClient"
-import { fetchTopicAttachment, fetchTopicPage, sendManualScan } from "./topicClient"
+import { fetchTopicAttachment, fetchTopicPage, sendAcceptInvite, sendManualScan } from "./topicClient"
 
 // the real fetch to put back after each test
 const originalFetch = globalThis.fetch
@@ -22,6 +22,7 @@ test("attachment downloads preserve native session headers and reject forbidden 
 		headers: () => ({ Cookie: "test-session=owner" }),
 		showError: () => {},
 	})
+	// the url the download asked for, and the session header it sent
 	let downloadUrl = ""
 	const sessionHeaders: (string | null)[] = []
 	globalThis.fetch = (async (input, init) => {
@@ -29,6 +30,7 @@ test("attachment downloads preserve native session headers and reject forbidden 
 		sessionHeaders.push(new Headers(init?.headers).get("Cookie"))
 		return new Response(new Uint8Array([1, 2, 3]))
 	}) as typeof fetch
+	// the bytes, the url, and the session header
 	expect(await fetchTopicAttachment("file-one")).toEqual(new Uint8Array([1, 2, 3]))
 	expect(downloadUrl).toBe("https://attachments.test/api/attachments/file-one/download")
 	expect(sessionHeaders).toEqual(["test-session=owner"])
@@ -77,4 +79,23 @@ test("a topic page and a podcast episode page read the topic gate from a 403, an
 	expect(await fetchPodcastEpisodePage({ topicId: "topic-1", season: "2026", episodeNumber: "1" })).toEqual({
 		status: "missing",
 	})
+
+	// any other rejection throws, so the podcast episode screen shows its error state instead of a missing episode
+	stubFetch(new Response(null, { status: 500 }))
+	await expect(
+		fetchPodcastEpisodePage({ topicId: "topic-1", season: "2026", episodeNumber: "1" }),
+	).rejects.toMatchObject({ status: 500 })
+})
+
+// a visitor's 401 is an unknown token, a rejection the route names comes in the body, and any other rejected status
+// throws so the invite screen offers its retry
+test("sendAcceptInvite reads a 401 as an unknown token and throws on any other rejection", async () => {
+	stubFetch(Response.json({ error: "unauthorized" }, { status: 401 }))
+	expect(await sendAcceptInvite("token")).toEqual({ status: "unknown" })
+	stubFetch(Response.json({ status: "expired" }))
+	expect(await sendAcceptInvite("token")).toEqual({ status: "expired" })
+
+	// a server error
+	stubFetch(new Response(null, { status: 500 }))
+	await expect(sendAcceptInvite("token")).rejects.toThrow("invite accept failed: 500")
 })

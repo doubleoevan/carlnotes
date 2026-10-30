@@ -1,6 +1,6 @@
 // reply stream tests: the text and each tool call are written as they arrive, and no tool call is written twice
 import { expect, test } from "bun:test"
-import { toChatReplyLineText } from "@carlnotes/contracts/chat"
+import { toChatReplyLineText } from "@carlnotes/contracts/chatTurns"
 import type { ChatToolCall } from "@carlnotes/contracts/payloads"
 import { EMPTY_TOPIC_DRAFT } from "@carlnotes/contracts/topicPayloads"
 import type { ChatReplyPart } from "@carlnotes/pipeline/chat/index"

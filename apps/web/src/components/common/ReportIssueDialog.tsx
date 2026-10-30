@@ -1,7 +1,7 @@
 import { sendFlagContent } from "@carlnotes/client/flagContentClient"
 import { FLAG_REASON_MAX_CHARS } from "@carlnotes/contracts/chat"
 import type { FlagContentPayload } from "@carlnotes/contracts/payloads"
-import type { ReportUser } from "@carlnotes/contracts/reports"
+import type { UserIdentity } from "@carlnotes/contracts/profiles"
 import { REPORT_DIALOG_COPY, toReportDialogTitle } from "@carlnotes/core/lib/reportCopy"
 import { toBlockAuthorLabel } from "@carlnotes/core/lib/userBlocks"
 import { useState } from "react"
@@ -17,7 +17,7 @@ export type ReportSubject = {
 	subjectKind: FlagContentPayload["subjectKind"]
 	subjectId: string
 	subjectLabel: string
-	author?: ReportUser
+	author?: UserIdentity
 }
 
 /**

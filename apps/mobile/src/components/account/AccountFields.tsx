@@ -1,6 +1,6 @@
+import { SITE_URL } from "@carlnotes/contracts/site"
 import type { AccountFieldElements, ProfileFieldElements } from "@carlnotes/core/components/AccountFields"
 import type { BlockedUsersElements } from "@carlnotes/core/components/BlockedUsersSection"
-import { SITE_URL } from "@carlnotes/core/lib/pageHead"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { Check, Info } from "lucide-react-native"
 import { Alert, Pressable, View } from "react-native"

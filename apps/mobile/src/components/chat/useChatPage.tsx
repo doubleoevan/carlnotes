@@ -1,3 +1,4 @@
+import { ApiResponseError } from "@carlnotes/client/apiClient"
 import { authClient } from "@carlnotes/client/authClient"
 import { fetchProfile, fetchProfileTeamStatuses } from "@carlnotes/client/profileClient"
 import { fetchTeamPage } from "@carlnotes/client/teamClient"
@@ -168,10 +169,16 @@ async function loadChatPageContext({
 		return pageContext
 	}
 
-	// retain the web fallback if shared-team status is unavailable
+	// retain the web fallback if shared-team status is unavailable. a response that did not match its contract fails
+	// the page
 	const [profile, profileTeamStatuses] = await Promise.all([
 		fetchProfile(profileUserId),
-		fetchProfileTeamStatuses(profileUserId).catch(() => []),
+		fetchProfileTeamStatuses(profileUserId).catch((error: unknown) => {
+			if (error instanceof ApiResponseError) {
+				throw error
+			}
+			return []
+		}),
 	])
 	return toProfileChatContext({ profile, profileTeamStatuses, isOwnProfile: profileUserId === userId })
 }

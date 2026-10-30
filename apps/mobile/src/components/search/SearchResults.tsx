@@ -52,11 +52,11 @@ export function SearchResults({
 					{title}
 				</Text>
 			</View>
-			{/* finding rows and details are the feed's components */}
+			{/* search status and results */}
 			<View className="px-4">
 				<SearchStatus
 					isSearching={query.isFetching && !query.data}
-					hasError={query.isError && !query.data}
+					hasError={query.isError}
 					hasQuery={hasQuery}
 					hasRows={Boolean(rowCount)}
 					searchText={queryText}
@@ -127,8 +127,11 @@ function useSearchResults({ filters, searchText }: Pick<TopicFeedControlsProps, 
 	return { query, queryText, pageNumber, openPage: (page) => setSelection({ key: searchKey, page }) }
 }
 
-// keep request failures distinct from an empty successful search
-function SearchStatus({
+/**
+ * Says the search is loading, failed, needs more characters, or found nothing, keeping a failure distinct from an
+ * empty successful search. A failed refetch shows the failure above the stale rows.
+ */
+export function SearchStatus({
 	isSearching,
 	hasError,
 	hasQuery,

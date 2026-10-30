@@ -3,12 +3,12 @@
 // and nothing at all with no rows
 import { expect, test } from "bun:test"
 import type { PodcastEpisodeSummary } from "@carlnotes/contracts/podcast"
+import { toPodcastEpisodeSummaryFixture } from "@carlnotes/contracts/podcastEpisodeTestFixtures"
 import { NO_SCRIPT_ROW_LIMIT } from "@carlnotes/contracts/seo"
 import { renderWithRouter } from "@/components/chat/renderWithRouter"
 import { toElementClassNames } from "@/components/markupTestFixtures"
 import { SCRIPTED_HIDDEN_CLASS } from "@/lib/styleClasses"
 import { PodcastEpisodesSection } from "./PodcastEpisodesSection"
-import { toPodcastEpisodeSummaryFixture } from "./podcastEpisodeTestFixtures"
 
 // a published podcast episode of a public topic as the tables show it, with its description, numbered
 function toPodcastEpisodeSummary(episodeNumber: number): PodcastEpisodeSummary {

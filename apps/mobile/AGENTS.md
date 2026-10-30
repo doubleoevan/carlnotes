@@ -22,9 +22,15 @@ and the package boundary check fails anything else, a type-only import of `@carl
   `theme.ts` restores and saves the appearance choice and keeps native controls and Uniwind on the same palette.
   `themePreference.ts` names its three values: system, light, and dark. `sessionReturnPath.ts` keeps the screen a
   visitor left and `openSessionScreen` sends them to sign-in or sign-up with the web's prompt for the action,
-  `nativeIntent.ts` decides what a link into the app opens for a visitor, and `appIconBadge.ts` keeps the app icon's
-  badge at the account's update count. The Topic and Podcast Episode counts lines read their counts through
-  `core/hooks/usePolledCounts.ts`, gated to the active route.
+  `nativeIntent.ts` decides what a link into the app opens: a web url maps through `platformPath.ts` the way the in-app
+  links do, so a Topic's slug and a Podcast Episode's path reach their native routes, a listed path with no native route
+  (`hasNativeRoute`) opens `app/open-web.tsx`, which shows the site's own url in the browser sheet and returns Home,
+  and a visitor's link to an account screen opens sign-in. `appIconBadge.ts` keeps the app icon's
+  badge at the account's update count. `appVersionLabel.ts` is the version line the Account screen ends with, drawn
+  by `components/account/AppVersionLine.tsx`. `components/session/AppUpdateNotice.tsx` is the blocking notice an
+  outdated build sees in place of every screen, on `core/stores/appUpdateStore.ts`, which `apiRequestSettings.ts`,
+  `chatRoomEvents.ts`, and `authClient.ts` open on a 426. The Topic and Podcast Episode counts lines read their counts
+  through `core/hooks/usePolledCounts.ts`, gated to the active route.
   The root loads regular and italic Karla faces at each supported weight so rich-text emphasis keeps the web's font.
   `hooks/useIsScreenActive.ts` shares route focus and app activity for chat and episode recording polls.
   `hooks/useFontScaledSize.ts` grows a size with the system text size, up to double, and
@@ -56,7 +62,8 @@ and the package boundary check fails anything else, a type-only import of `@carl
   the steam holds still below Nightshift's `md` breakpoint and under reduced motion, and rises on a wider screen.
   `common/` holds the components shared across areas: `ClassNameSvg.tsx` is an svg whose className sets the
   `currentColor` its paths draw in, and `ClassNameSafeAreaView.tsx` the safe area view whose className sets its style.
-  Uniwind styles only the components it wraps, so a screen's safe area goes through it. `session/` holds what the
+  Uniwind styles only the components it wraps, so a screen's safe area goes through it. `LoadFailedNotice.tsx` says a
+  read failed, with its retry button, in place of a blank screen. `session/` holds what the
   sign-in, sign-up, and settings screens share: `SessionScreen.tsx` (the frame with the logo, the mug beside the name in
   the `logo` type role, in the web's session column, 24rem wide at most and centered both ways), `SessionTextInput.tsx`
   (the labeled field and the email and password fields over it), `SessionLink.tsx` (a session text link through `common/AnchorLink.tsx`, also used by the logo and the
@@ -93,10 +100,17 @@ and the package boundary check fails anything else, a type-only import of `@carl
   Architects Daughter, and foreground and orange brand accent colors at 280 points wide. The mug is an unfilled outline.
   Changing it requires a native rebuild.
 - `app.config.ts` — the identity, the scheme from `@carlnotes/contracts/mobileApp`, the EAS project link, Sign in
-  with Apple, the App Attest production entitlement, and the Sentry, splash screen, Apple sign-in, secure store, and
-  web browser plugins. `eas.json` — the build profiles, each pinned to Bun 1.4.4, the image's Bun, and an EAS environment. EAS is Expo
+  with Apple, the App Attest production entitlement, the associated domain and the Android intent filters for the
+  app link paths in `@carlnotes/contracts/appLinkPaths`, the encryption declaration (`ITSAppUsesNonExemptEncryption`
+  false: TLS and the system keychain alone), and the Sentry, splash screen, Apple sign-in, secure store, and
+  web browser plugins. `eas.json` — the build profiles, each pinned to Bun 1.4.4, the image's Bun, and an EAS
+  environment, the remote app version source with the production build number incrementing on each build, and the
+  production submit profile, whose Play key path the submit script fills for the length of a submit. EAS is Expo
   Application Services, the vendor's name for its cloud build and update services, so identifiers and files keep its
   word. A change that adds a native module, as the sign-in change did, needs a rebuilt development client.
+- `store/` — the store release's own files: `listing.md`, the Apple and Google listing copy and the review notes
+  template, `data-inventory.md`, what the app and each service collect for the privacy and data-safety forms, and
+  `release-checklist.md`, the acceptance list a release passes, each item unverified until someone checks it.
 
 ## Commands
 
@@ -107,6 +121,11 @@ and the package boundary check fails anything else, a type-only import of `@carl
 - `bun run mobile:update` — an EAS Update on the fingerprint runtime policy.
 - `bun run mobile:env:sync` — moves the mobile values from Doppler into the EAS environments. Never type a value into
   the EAS dashboard.
+- `bun run mobile:submit -- --platform ios | android` — submits the latest production build, under Doppler prd, after
+  the contract freeze check. `--dry-run` does everything but the submit.
+- `bun run contract:freeze` — writes `contracts/<app-version>.json`. `-- --check` proves the file is fresh.
+- `bun run reviewer:seed -- --environment prd` — creates or refreshes the store reviewer's account, under
+  `doppler run --config prd`.
 - CI exports both platforms' bundles (`expo export`) to prove Metro resolves the isolated install; preflight does not,
   because the bundle takes minutes.
 
@@ -195,7 +214,6 @@ The Icon primitive resolves a `currentColor` fill to its Nightshift text color f
 Its scroll indicator contrasts with the active theme and flashes when the sheet opens or its content grows.
 Nested sheets push above their parent, preserving its content and scroll position when sharing closes.
 Its modal provider sits inside `TopicFeedProvider` so sheet content retains the account's query and search contexts.
-`components/account/SettingsContent.tsx` shows account identity and the account controls without another session header.
 
 `components/topic/TopicFeed.tsx` renders Home's flattened FlashList. `TopicFindingsSection.tsx` uses the same five-row
 preview and in-place expansion on the Topic screen. Expansion state belongs to the list, so recycling cannot reset it.
@@ -679,7 +697,59 @@ The audio patch and configuration change the runtime fingerprint and require a n
 update cannot add them to an old binary. See `patches/README.md` for the patch boundary and upgrade checks.
 Stories exercise playback, buffering/error, long titles, missing Findings, recording/failure, transcript, credits,
 feed states, reset confirmation, and the dock. Device QA for this change uses only the existing iPhone SE simulator.
-Voice, recording, verified store app links, and broader count polling remain separate changes.
+Voice and recording remain separate changes.
 
 `common/ShimmerText.tsx` shares the existing foreground-only, reduced-motion-aware highlight across Coffee Talk,
 recording cards, and feed loading. `ThinkingLine` supplies its shared phrase; no JavaScript frame loop is added.
+
+## Store release
+
+The path from a commit to a store build, in order. Every secret stays in Doppler prd and is read by `doppler run`.
+
+- Build. Bump `version` in `app.config.ts` for a release that changes native code or that a store will review. Then
+  run `bun run mobile:build -- --profile production --platform ios` and again with `android`. The build number comes
+  from EAS (`appVersionSource: remote`, `autoIncrement` on production). `eas build:version:get` shows it, and the
+  first production build initializes it. `eas build:version:set` starts it higher when a build number has to continue
+  from an earlier store record. A preview build (`--profile preview`) installs beside the store app for the
+  acceptance list.
+- Test. `bun run check` is green, the stories for every new state exist, and `store/release-checklist.md` is worked
+  through on the preview build, each result filled in with a date. An unverified item is named in the release record,
+  never marked passed. TestFlight and the Play internal track take the production build before the public rollout.
+- Freeze. At the submission version, `bun run contract:freeze` writes `contracts/<version>.json`, every api route the
+  app reaches as JSON Schema from `@carlnotes/contracts/apiRouteContracts`. Commit it, and add the version to
+  `contracts/releases.json` as `submitted`. From then on `scripts/check-contract-freeze.ts` fails preflight on an api
+  change that a build of that version could not read or could not send. A read breaks on a dropped required field, a
+  changed type, or an extended response enum. A send breaks on a new required request field, a narrowed type, or a
+  removed enum value. A new optional field or a loosened request passes. The freeze fails on a capability the app
+  reaches with no registry entry. A new client function gets its entry in the same change, or an `API_ROUTE_HELPERS`
+  line if it calls no route.
+- Submit. `bun run mobile:submit -- --platform ios`, then `android`. The script runs `contract:freeze -- --check`.
+  It writes the App Store Connect key or the Play service account from Doppler (`ASC_APP_ID`, `APPLE_TEAM_ID`,
+  `ASC_KEY_ID`, `ASC_ISSUER_ID`, `ASC_API_KEY_BASE64`, `PLAY_SERVICE_ACCOUNT_BASE64`) for the length of the submit.
+  It then runs `eas submit --profile production --latest` and removes the key files. `--dry-run` proves the path
+  without submitting.
+- Rollout. iOS goes TestFlight, then review, then the store. Android goes the internal track, then production with a
+  staged percentage in the Play Console. Once the App Store record exists, set `APP_STORE_ID` in
+  `@carlnotes/contracts/mobileApp`: the web's smart banner and the 426's store url read it. Move the version to
+  `released` in `contracts/releases.json`.
+- Rollback. A store build is withdrawn in App Store Connect or halted in the Play Console. A JavaScript regression on
+  a shipped build is undone with `eas update:republish` of the last good update on the channel. A minimum version
+  raised too soon is cleared from the admin console's Mobile app card, which lifts the gate within a minute.
+- Update or build. A change that touches native code, a config plugin, a native dependency, or a patch changes the
+  runtime fingerprint and needs a store build: `bunx @expo/fingerprint apps/mobile` before and after the change shows
+  it. A JavaScript-only change ships as `bun run mobile:update -- --channel preview --environment preview`, is checked
+  on a preview build, then goes to the production channel. An update never reaches a build on another fingerprint.
+- Minimum version. The admin console's Mobile app card holds the oldest build each platform's api still serves. A
+  build below it gets a 426 on every api call and shows the update notice until it updates. Raise a minimum only above
+  a version whose traffic has drained in PostHog (the `appVersion` property on every mobile event), and never within a
+  day of a release. The gate fails open: no row, or a Redis or database failure, serves every build.
+- Retire a snapshot. Once both minimums are above a version and its traffic has drained, mark it `retired` in
+  `contracts/releases.json` and delete `contracts/<version>.json`. Preflight stops checking against it.
+- App links. The paths the app opens live in `@carlnotes/contracts/appLinkPaths`. The api serves the two association
+  documents from `APPLE_TEAM_ID` and `ANDROID_SIGNING_FINGERPRINTS` (the Play App Signing key's SHA-256 and the upload
+  key's, comma separated, from `eas credentials` and the Play Console). Apple's CDN check is
+  `https://app-site-association.cdn-apple.com/a/v1/carlnotes.com`, and Android's is
+  `adb shell pm verify-app-links --re-verify com.carlnotes.app` then `adb shell pm get-app-links com.carlnotes.app`.
+- Reviewer. `bun run reviewer:seed -- --environment prd` under `doppler run --config prd` creates or refreshes the
+  reviewer's account with its fixtures. The credentials come from `REVIEWER_EMAIL` and `REVIEWER_PASSWORD` in Doppler
+  and go into the review notes by hand, from `store/listing.md`'s template.

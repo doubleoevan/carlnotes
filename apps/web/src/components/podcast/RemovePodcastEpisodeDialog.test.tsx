@@ -1,10 +1,10 @@
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import * as client from "@carlnotes/client/podcastEpisodeClient"
+import { toPodcastEpisodeFixture } from "@carlnotes/contracts/podcastEpisodeTestFixtures"
 import {
 	type PodcastEpisodeRemovalConfirm,
 	RemovePodcastEpisodeDialog,
 } from "@carlnotes/core/components/RemovePodcastEpisodeDialog"
-import { toPodcastEpisodeFixture } from "@carlnotes/core/lib/podcastEpisodeTestFixtures"
 import {
 	clearPodcastEpisodePlayer,
 	registerPodcastEpisodeAudioAdapter,

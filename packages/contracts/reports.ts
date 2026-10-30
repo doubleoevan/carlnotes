@@ -2,6 +2,7 @@
 import { z } from "zod"
 import { reportResolutions, reportSubjectKinds } from "./enums"
 import { NOTE_COMMENT_MAX_CHARS } from "./notes"
+import { userIdentity } from "./profiles"
 
 export type ReportSubjectKind = (typeof reportSubjectKinds)[number]
 
@@ -28,11 +29,6 @@ export const REPORT_SUBJECT_KIND_LABELS: Record<ReportSubjectKind, string> = {
 // how much of the subject's text a report keeps. a note body is cut to this length
 export const REPORT_TEXT_MAX_CHARS = NOTE_COMMENT_MAX_CHARS
 
-// one user a report names: the subject's author or its reporter
-export const reportUser = z.object({ id: z.string(), username: z.string() })
-
-export type ReportUser = z.infer<typeof reportUser>
-
 // an open report as the admin console lists it
 export const adminReport = z.object({
 	id: z.string(),
@@ -43,9 +39,9 @@ export const adminReport = z.object({
 	subjectPath: z.string(),
 	reason: z.string(),
 	createdAt: z.string(),
-	// the author, null for a subject with none or whose account closed
-	author: reportUser.nullable(),
-	reporter: reportUser,
+	// the author, null for a subject with none or whose account closed, and who filed the report
+	author: userIdentity.nullable(),
+	reporter: userIdentity,
 	// whether the console offers Remove for this kind, and whether the subject was already deleted
 	canRemove: z.boolean(),
 	isSubjectDeleted: z.boolean(),

@@ -20,7 +20,10 @@
 		"dev:tunnel": "cloudflared tunnel --config infra/cloudflared/dev-tunnel.yml run carlnotes-dev",
 		"mobile:build": "bun run --cwd apps/mobile eas build",
 		"mobile:update": "bun run --cwd apps/mobile eas update",
+		"mobile:submit": "doppler run --config prd -- bun scripts/submit-mobile.ts",
+		"contract:freeze": "bun scripts/freeze-contract.ts",
 		"mobile:env:sync": "doppler run -- bun scripts/sync-mobile-env.ts && doppler run --config prd -- bun scripts/sync-mobile-env.ts",
+		"reviewer:seed": "bun scripts/seed-reviewer-account.ts",
 		"build:ui": "bun run --cwd apps/web build",
 		"build:docs": "bun run --cwd apps/docs build",
 		"dev:storybook": "STORYBOOK_DISABLE_TELEMETRY=1 bun run --cwd apps/web dev:storybook",
@@ -102,13 +105,15 @@
 		"@temporalio/worker": "^1.24.0",
 		"@types/bun": "~1.4.4",
 		"ai": "^7.0.153",
+		"ajv": "^8",
 		"concurrently": "^10.0.6",
 		"drizzle-kit": "^0.31.11",
 		"drizzle-orm": "^0.45.4",
 		"promptfoo": "^0.125.1",
 		"react": "19.3.1",
 		"react-email": "^6.11.3",
-		"typescript": "^7.0.2"
+		"typescript": "^7.0.2",
+		"zod": "^4.6.7"
 	},
 	"trustedDependencies": [
 		"@swc/core",

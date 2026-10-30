@@ -3,7 +3,9 @@
 import "../global.css"
 import { configureApiClient } from "@carlnotes/client/apiClient"
 import { authClient } from "@carlnotes/client/authClient"
+import { toTolerantResponseSchema } from "@carlnotes/contracts/tolerantReads"
 import { reloadChatRooms, useUpdateBadges } from "@carlnotes/core/hooks/useUpdateBadges"
+import { useAppUpdateRequirement } from "@carlnotes/core/stores/appUpdateStore"
 import { activateChatAccount } from "@carlnotes/core/stores/chatConversationStore"
 import { useIsPodcastPlayerShown } from "@carlnotes/core/stores/podcastEpisodePlayerStore"
 import { requestTermsAcceptance } from "@carlnotes/core/stores/termsAcceptanceStore"
@@ -32,9 +34,10 @@ import { apiBaseUrl } from "@/authClient"
 import { AppChatPanel } from "@/components/chat/AppChatPanel"
 import { PodcastEpisodeAudio } from "@/components/podcast/PodcastEpisodeAudio"
 import { PodcastPlayer } from "@/components/podcast/PodcastPlayer"
+import { AppUpdateNotice } from "@/components/session/AppUpdateNotice"
 import { TermsAcceptanceSheet } from "@/components/session/TermsAcceptanceSheet"
 import { mobileApiRequestSettings } from "@/mobileApiRequestSettings"
-import { navigationIntegration, startMonitoring } from "@/monitoring"
+import { navigationIntegration, reportTolerantReadIssue, startMonitoring } from "@/monitoring"
 import { NoteDraftProvider } from "@/providers/NoteDraftProvider"
 import { TopicFeedProvider } from "@/providers/TopicFeedProvider"
 import { TopicResourceInfoProvider } from "@/providers/TopicResourceInfoProvider"
@@ -50,11 +53,14 @@ SplashScreen.preventAutoHideAsync()
 startMonitoring()
 
 // configure the shared api client once before the first screen renders, after the auth client that its headers read.
-// every request sends the stored session cookie, and a 401 signs a revoked session out. an error shows as a native alert
+// every request sends the stored session cookie, a 401 signs a revoked session out, a 426 opens the update notice, and
+// every response parses through the tolerant form of its contract. an error shows as a native alert
 configureApiClient({
 	apiBaseUrl,
 	showError: (message) => Alert.alert("CarlNotes", message),
 	onTermsOutdated: requestTermsAcceptance,
+	toResponseSchema: toTolerantResponseSchema,
+	onTolerantReadIssue: reportTolerantReadIssue,
 	...mobileApiRequestSettings,
 })
 
@@ -117,6 +123,9 @@ function RootLayout() {
 		}
 	}, [isReady])
 
+	// whether an outdated build is waiting on a store update
+	const appUpdateRequirement = useAppUpdateRequirement()
+
 	// restore a visitor's requested page after the signed-in route tree mounts
 	useEffect(() => {
 		if (!session || !isReady || isSessionRetired) {
@@ -136,6 +145,17 @@ function RootLayout() {
 	// gate screens by the current session
 	const isSignedIn = Boolean(session) && !isSessionRetired
 	const userId = isSignedIn ? (session?.user.id ?? null) : null
+
+	// an outdated build shows the update notice in place of every screen
+	if (appUpdateRequirement) {
+		return (
+			<GestureHandlerRootView style={{ flex: 1 }}>
+				<TopicFeedProvider userId={userId} canBrowse={false}>
+					<AppUpdateNotice minimumVersion={appUpdateRequirement.minimumVersion} />
+				</TopicFeedProvider>
+			</GestureHandlerRootView>
+		)
+	}
 	return (
 		<GestureHandlerRootView style={{ flex: 1 }}>
 			<TopicFeedProvider userId={userId} canBrowse={!isSessionRetired}>

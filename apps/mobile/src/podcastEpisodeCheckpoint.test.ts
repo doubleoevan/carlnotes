@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { toPodcastEpisodeFixture } from "@carlnotes/core/lib/podcastEpisodeTestFixtures"
+import { toPodcastEpisodeFixture } from "@carlnotes/contracts/podcastEpisodeTestFixtures"
 import { createPodcastEpisodeCheckpointStore, toPodcastEpisodeCheckpoint } from "./podcastEpisodeCheckpoint"
 
 test("checkpoints keep only account-owned resume fields and reject corrupt state", async () => {

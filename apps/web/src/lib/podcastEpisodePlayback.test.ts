@@ -6,7 +6,7 @@ import { PODCAST_NAME } from "@carlnotes/contracts/podcastEpisodes"
 import {
 	toPodcastEpisodeChapterFixture,
 	toPodcastEpisodeFixture,
-} from "@/components/podcast/podcastEpisodeTestFixtures"
+} from "@carlnotes/contracts/podcastEpisodeTestFixtures"
 import { toChapterAtPosition, toChapterIndexAt, toPodcastEpisodeSpeakerMediaMetadata } from "./podcastEpisodePlayback"
 
 // three chapters that start at 0, 155, and 298 seconds

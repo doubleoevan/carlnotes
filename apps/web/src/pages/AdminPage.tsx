@@ -10,6 +10,7 @@ import { cn } from "@carlnotes/nightshift/classNames"
 import { Settings, ShieldUser } from "lucide-react"
 import { useCallback, useEffect, useState } from "react"
 import { ManageAdminsModal } from "@/components/admin/ManageAdminsModal"
+import { MobileMinimumVersionsCard } from "@/components/admin/MobileMinimumVersionsCard"
 import { CoffeeLoading } from "@/components/branding/CoffeeLoading"
 import { CountBadge } from "@/components/common/CountBadge"
 import { UserProfileLink } from "@/components/common/UserProfileLink"
@@ -112,10 +113,17 @@ export function AdminPage() {
 							<AdminUsersTable users={adminConsole.users} signedInUserId={session.user.id} onReload={loadConsole} />
 						</AccordionContent>
 					</AccordionItem>
-					<AccordionItem value="teams">
+					<AccordionItem value="teams" className="border-b-0">
 						<AccordionTrigger className="font-semibold">Teams</AccordionTrigger>
 						<AccordionContent>
 							<AdminTeamsTable teams={adminConsole.teams} />
+						</AccordionContent>
+					</AccordionItem>
+					{/* mobile app minimum versions */}
+					<AccordionItem value="mobile">
+						<AccordionTrigger className="font-semibold">Mobile app</AccordionTrigger>
+						<AccordionContent>
+							<MobileMinimumVersionsCard minimumVersions={adminConsole.mobileMinimumVersions} onSaved={loadConsole} />
 						</AccordionContent>
 					</AccordionItem>
 				</Accordion>

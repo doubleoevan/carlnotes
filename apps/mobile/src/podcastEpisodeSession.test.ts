@@ -1,5 +1,5 @@
 import { afterEach, expect, mock, test } from "bun:test"
-import { toPodcastEpisodeFixture } from "@carlnotes/core/lib/podcastEpisodeTestFixtures"
+import { toPodcastEpisodeFixture } from "@carlnotes/contracts/podcastEpisodeTestFixtures"
 import {
 	playPodcastEpisode,
 	registerPodcastEpisodeAudioAdapter,

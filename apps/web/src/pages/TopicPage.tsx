@@ -2,8 +2,7 @@ import { authClient } from "@carlnotes/client/authClient"
 import { sendTopicFeatureOrder, sendTopicSubscription, type TopicGate } from "@carlnotes/client/topicClient"
 import { isAdminRole } from "@carlnotes/contracts/enums"
 import type { TopicResponse } from "@carlnotes/contracts/topics"
-import { matchesTopicFindingFilter } from "@carlnotes/core/lib/topicFindingFilters"
-import { toSortedTopicFindings } from "@carlnotes/core/lib/topicFindingSorts"
+import { selectTopicFindings } from "@carlnotes/core/lib/topicFeed"
 import { sendTopicViewOnce } from "@carlnotes/core/lib/topicViews"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { useNavigate, useParams } from "@tanstack/react-router"
@@ -270,13 +269,13 @@ function TopicFindings({ topic, topicFeedHandlers }: { topic: TopicResponse; top
 	const { findingFilter, sort, resourceKinds, bookmarkScope } = useTopicFeed()
 
 	// the findings this user sees
-	const topicFindings = toSortedTopicFindings(
-		topic.findings.filter(
-			(finding) =>
-				resourceKinds.has(finding.resourceKind) && matchesTopicFindingFilter(finding, findingFilter, bookmarkScope),
-		),
+	const topicFindings = selectTopicFindings({
+		findings: topic.findings,
+		resourceKinds,
+		findingFilter,
 		sort,
-	)
+		bookmarkScope,
+	})
 	const viewKey = `${findingFilter}-${sort}-${bookmarkScope}-${[...resourceKinds].sort().join()}`
 	return (
 		<HydrateSection key={viewKey} index={2}>

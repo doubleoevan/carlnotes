@@ -1,25 +1,32 @@
 // the note contracts: a note, a page's notes, an opened note with its body and version, a save's results, a comment,
 // and the badges
-import type { noteVisibilities } from "./enums"
-import type { ProfileIdentity } from "./profiles"
-import type { ReportUser } from "./reports"
+import { z } from "zod"
+import { noteVisibilities } from "./enums"
+import { profileIdentity, userIdentity } from "./profiles"
 
 // one note's unread counts for the signed-in user
-export type NoteBadge = {
-	noteId: string
+export const noteBadge = z.object({
+	noteId: z.string(),
 	// the page the note sits on, exactly one of the two
-	topicId: string | null
-	teamId: string | null
+	topicId: z.string().nullable(),
+	teamId: z.string().nullable(),
 	// every team the page belongs to, so a team badge counts its topics' notes as well as its own
-	teamIds: string[]
+	teamIds: z.array(z.string()),
 	// the note's own name, and the topic or team holding it, both named in the badge's tooltip
-	noteName: string
-	pageName: string
+	noteName: z.string(),
+	pageName: z.string(),
 	// 1 when somebody else changed the body since the user last opened it, however many edits it took
-	unreadEdits: number
+	unreadEdits: z.number(),
 	// the comments written since then by somebody else
-	unreadComments: number
-}
+	unreadComments: z.number(),
+})
+
+export type NoteBadge = z.infer<typeof noteBadge>
+
+// the badges payload: only the notes with unread edits or comments
+export const noteBadgesResponse = z.object({ badges: z.array(noteBadge) })
+
+export type NoteBadgesResponse = z.infer<typeof noteBadgesResponse>
 
 // the longest HTML body a note keeps. the save route's own body limit admits any UTF-8 encoding of a string this long
 export const NOTE_HTML_MAX_CHARS = 512 * 1024
@@ -34,40 +41,54 @@ export const NOTE_NAME_MAX_CHARS = 120
 export type NoteVisibility = (typeof noteVisibilities)[number]
 
 // the table's note summary with the server's current permissions
-export type Note = {
-	id: string
-	name: string
-	visibility: NoteVisibility
-	createdAt: string
-	updatedAt: string
-	canEdit: boolean
+export const note = z.object({
+	id: z.string(),
+	name: z.string(),
+	visibility: z.enum(noteVisibilities),
+	createdAt: z.string(),
+	updatedAt: z.string(),
+	canEdit: z.boolean(),
 	// whether the user created it, which alone allows changing its visibility
-	isNoteOwner: boolean
+	isNoteOwner: z.boolean(),
 	// whether the user may delete it: its owner, or an admin
-	canDelete: boolean
+	canDelete: z.boolean(),
 	// who created it. null once the account closed
-	owner: ReportUser | null
-}
+	owner: userIdentity.nullable(),
+})
+
+export type Note = z.infer<typeof note>
 
 // the notes payload for one page
-export type NotesResponse = {
+export const notesResponse = z.object({
 	// the page's display name, substituted into the empty state
-	pageName: string
+	pageName: z.string(),
 	// the visibilities the user may create a note in. empty for a visitor
-	creatableVisibilities: (typeof noteVisibilities)[number][]
-	notes: Note[]
-}
+	creatableVisibilities: z.array(z.enum(noteVisibilities)),
+	notes: z.array(note),
+})
+
+export type NotesResponse = z.infer<typeof notesResponse>
 
 // one note opened in its dialog: the stored HTML body, which the editor and the reader both render, and the version
 // the next save names
-export type NoteResponse = Note & { html: string; version: number }
+export const noteResponse = note.extend({ html: z.string(), version: z.number() })
+
+export type NoteResponse = z.infer<typeof noteResponse>
 
 // a save the api kept: the version the body is stored at now
-export type NoteBodyResponse = { version: number }
+export const noteBodyResponse = z.object({ version: z.number() })
+
+export type NoteBodyResponse = z.infer<typeof noteBodyResponse>
 
 // a save that lost to a newer version: the version stored now and who saved it, null for a closed account
-export type NoteConflict = { version: number; lastEditorUsername: string | null }
-export type NoteBodyConflictResponse = { error: "conflict" } & NoteConflict
+const noteConflict = z.object({ version: z.number(), lastEditorUsername: z.string().nullable() })
+
+export type NoteConflict = z.infer<typeof noteConflict>
+
+// the 409 body of a lost save
+export const noteBodyConflictResponse = noteConflict.extend({ error: z.literal("conflict") })
+
+export type NoteBodyConflictResponse = z.infer<typeof noteBodyConflictResponse>
 
 // how a body save ended: kept at a version or lost to a newer one, which the api decides, or too large for the api
 // to keep or never arrived, which the api client reports
@@ -79,11 +100,18 @@ export type NoteBodySaveResult =
 	| { status: "failed" }
 
 // one comment on a note's thread. a closed account leaves no author
-export type NoteComment = {
-	id: string
-	body: string
-	createdAt: string
-	author: ProfileIdentity | null
+export const noteComment = z.object({
+	id: z.string(),
+	body: z.string(),
+	createdAt: z.string(),
+	author: profileIdentity.nullable(),
 	// whether the user may delete it: its author
-	canDelete: boolean
-}
+	canDelete: z.boolean(),
+})
+
+export type NoteComment = z.infer<typeof noteComment>
+
+// the comment thread payload, oldest first
+export const noteCommentsResponse = z.object({ comments: z.array(noteComment) })
+
+export type NoteCommentsResponse = z.infer<typeof noteCommentsResponse>

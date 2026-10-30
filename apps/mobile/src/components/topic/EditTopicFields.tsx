@@ -9,12 +9,10 @@ import {
 	toDailyTopicQuotaLabel,
 } from "@carlnotes/core/lib/topicSchedule"
 import DateTimePicker from "@react-native-community/datetimepicker"
-import { router } from "expo-router"
 import { Coffee } from "lucide-react-native"
 import { useState } from "react"
-import { Platform, View } from "react-native"
+import { Alert, Platform, View } from "react-native"
 import { useCSSVariable, useUniwind } from "uniwind"
-import { AnchorLink } from "@/components/common/AnchorLink"
 import { ChoiceSelect } from "@/components/common/ChoiceSelect"
 import { Button } from "@/components/primitives/button"
 import { Text } from "@/components/primitives/text"
@@ -44,13 +42,10 @@ export function ScheduleFields<Attachment>({
 		<View className="gap-2">
 			<View className="flex-row flex-wrap items-center gap-2">
 				<Text className="text-sm font-medium">Frequency</Text>
-				<AnchorLink
-					href="/plans"
-					accessibilityLabel="Daily topic allowance"
-					accessibilityHint={toDailyTopicQuotaDescription(dailyTopicLimit)}
-				>
-					<Text className="text-xs text-link">{quotaLabel}</Text>
-				</AnchorLink>
+				{/* daily topic allowance */}
+				<Text className="text-xs text-muted-foreground" accessibilityLabel={`Daily topic allowance. ${quotaLabel}`}>
+					{quotaLabel}
+				</Text>
 			</View>
 			<View className="flex-row flex-wrap gap-2">
 				<ChoiceSelect
@@ -63,7 +58,7 @@ export function ScheduleFields<Attachment>({
 					}))}
 					onChange={(frequency) => {
 						if (isPlanLimitedFrequency({ frequency, hasDailySlot })) {
-							router.push("/plans")
+							Alert.alert("Daily topics", toDailyTopicQuotaDescription(dailyTopicLimit))
 						} else {
 							fields.setFrequency(frequency as typeof fields.frequency)
 						}

@@ -4,6 +4,27 @@ import { useAccount } from "@carlnotes/core/hooks/useAccount"
 import { act } from "react"
 import { renderTestHook, waitForHook } from "@/lib/hookTestHarness"
 
+// the two bodies the account read joins, each as its contract parses it
+const BILLING_STATE_RESPONSE = {
+	plan: "free",
+	billingInterval: "monthly",
+	status: null,
+	hasPaymentMethod: false,
+	dailyScansUsed: 0,
+	dailyScanLimit: 5,
+}
+const ACTIVITY_RESPONSE = {
+	user: { userId: "reader", username: "reader", avatarSource: "generated", avatarVersion: null },
+	scanSpendCents: 0,
+	chatSpendCents: 0,
+	podcastEpisodeSpendCents: 0,
+	budgetCents: 300,
+	monthlyBudgetCutoffs: [],
+	topics: [],
+	subscriptions: [],
+	invites: [],
+}
+
 // restore transport after each account read
 const originalFetch = globalThis.fetch
 afterEach(() => {
@@ -14,11 +35,11 @@ afterEach(() => {
 test("a failed account read is retryable and later refresh failures retain the complete budget", async () => {
 	configureApiClient({ apiBaseUrl: "https://account.test", showError: () => {} })
 	let isFailing = true
-	globalThis.fetch = (async () => {
+	globalThis.fetch = (async (input: RequestInfo | URL) => {
 		if (isFailing) {
 			throw new Error("offline")
 		}
-		return Response.json({ plan: "free", topics: [], subscriptions: [], invites: [] })
+		return Response.json(String(input).includes("/billing/") ? BILLING_STATE_RESPONSE : ACTIVITY_RESPONSE)
 	}) as unknown as typeof fetch
 	const harness = await renderTestHook(() => useAccount({ userId: "reader" }))
 	try {

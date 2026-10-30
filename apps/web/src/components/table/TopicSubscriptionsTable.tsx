@@ -1,6 +1,6 @@
 import { fetchTopicInviteBadges, sendAcceptInvite, sendDeclineInvite } from "@carlnotes/client/activityClient"
 import { sendDeleteSubscription, sendSubscriptionEmail, sendTopicSubscription } from "@carlnotes/client/topicClient"
-import type { ActivityResponse } from "@carlnotes/contracts/activity"
+import type { SubscriptionRow } from "@carlnotes/contracts/activity"
 import { toTopicPath } from "@carlnotes/contracts/seo"
 import { DataTable } from "@carlnotes/core/components/DataTable"
 import {
@@ -23,9 +23,6 @@ import { DATA_TABLE_ELEMENTS } from "./DataTable"
 import { TableCard } from "./TableCard"
 import { TablePagination, usePaginatedRowSort } from "./TablePagination"
 import { TopicNameLink } from "./TopicNameLink"
-
-// one subscription the user holds on a topic they do not own
-type SubscriptionRow = ActivityResponse["subscriptions"][number]
 
 /**
  * The Activity page's subscriptions table: the active and email toggles plus delete on a row the user owns.

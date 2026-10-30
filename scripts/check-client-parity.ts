@@ -4,12 +4,11 @@
 
 import { readFileSync } from "node:fs"
 import { checkClientParity, PARITY_INVENTORY_PATH, parseParityInventory } from "./clientParity"
-import { readSourceFiles } from "./sourceFiles"
-import { MOBILE_APP_FOLDER, WEB_APP_FOLDER } from "./workspaces"
+import { readAppSourceFiles } from "./sourceFiles"
 
 // run the rules over both apps and the packages they import, against the inventory, and report
 const clientParityReport = checkClientParity({
-	sourceFiles: readSourceFiles([WEB_APP_FOLDER, MOBILE_APP_FOLDER, "packages"]),
+	sourceFiles: readAppSourceFiles(),
 	inventoryEntries: parseParityInventory(readFileSync(PARITY_INVENTORY_PATH, "utf8")),
 })
 if (clientParityReport.violations.length > 0) {

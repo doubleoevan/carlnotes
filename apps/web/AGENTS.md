@@ -76,30 +76,32 @@ the browser bundle and renders pages through the server build, behind its own ro
   `chatRejectionCopy.ts` imports core's chat rejection sentences. It retains the voice recording toasts, the plans link, and `toastChatRejection`.
   `chatTurns.ts` re-exports core's turn helpers. `chatRoomTestFixtures.ts` and
   `chatMessagesTestFixtures.tsx` hold the chat fixtures the chat tests share.
-- `lib/` — `utils.ts` and small client-side helpers that read the browser. `externalLinks.ts` opens a url in a new
-  tab with no handle back to the page. `toastActions.ts` builds the See plans and See account toast actions. `visiblePoll.ts` is the poll that runs only while the page is visible, one request at a
-  time, used by the scan poll and the counts poll. `@carlnotes/core/lib/topicViews` sends a topic page's view once per
-  topic per tab, keeping the sent topic ids in memory only. `podcastEpisodePlayback.ts` adapts core's playback rules and metadata to the lock screen's
-  media session, with `isMediaSessionAvailable`, which the spoken answer queue shares. `voiceRecorder.ts` records the
-  microphone, reads its level through an analyser, ends the recording once the user stops or the limit passes, and
-  releases the microphone at every end, a rejected request included, with `@carlnotes/core/lib/voiceRecordingDecisions`
-  for what it decides from each frame. `voiceActivity.ts` wraps `@ricky0123/vad-web`, the on-device voice activity
-  detector that ends a podcast player question, loaded on the first question and made once per page. Its worklet, model,
-  and WebAssembly runtime are served from `/assets/voice-activity-<versions>/` by
-  `apps/web/voiceActivityAssetsPlugin.ts`, the Vite plugin that copies them out of the installed packages' folders into
-  the client build and serves them in dev. `@carlnotes/core/lib/pageHead` turns a `PageHead`, or a fixed title and path,
-  into the tags a route's `head()` returns. `loadOnServer.ts` runs a route loader's read on the server only, and its
-  `loadPageOnServer` reads a page's head and page data together. Its `readWithDegradedFallback` returns a fallback for a
-  failed read and marks the response, so the api responds 503. `requireSession.ts` is the sign-in guard the `_signedIn`
-  layout runs before its pages load. `sessionCookie.ts` reads on the server whether the request brings a session cookie.
-  `visitAnalytics.ts` starts the browser's analytics, reports a page view per route change, and captures the named visit
-  events, their urls rewritten like every other event's. `renderedRows.ts` picks the rows a paged list renders: the page
-  shown and the list's first fifty. `billingRedirects.ts` sends the browser to the Stripe Customer Portal at the url
-  `@carlnotes/client/billingClient` returns, and the plans page opens Checkout the same way, and `inviteUrl.ts` builds
-  an invite token's absolute url on the page's origin. Both read `window`. `installDeeplinks.ts` holds the Add to AI
-  dialog's providers, their deeplinks and paste steps, and the remembered choice, `shareSheet.ts` opens the operating
-  system's share sheet, and `staleBundleReload.ts` reloads the page once if a deploy removed a bundle file the open page
-  still asks for.
+- `lib/` — `utils.ts` and small client-side helpers that read the browser. `externalLinks.ts` opens a url in a new tab
+  with no handle back to the page. `toastActions.ts` builds the See plans and See account toast actions.
+  `appStoreBanner.ts` builds the App Store smart banner meta tag a page's head includes once `APP_STORE_ID` is set, with
+  the page's own url as the app argument. `visiblePoll.ts` is the poll that runs only while the page is visible, one
+  request at a time, used by the scan poll and the counts poll. `@carlnotes/core/lib/topicViews` sends a topic page's
+  view once per topic per tab, keeping the sent topic ids in memory only. `podcastEpisodePlayback.ts` adapts core's
+  playback rules and metadata to the lock screen's media session, with `isMediaSessionAvailable`, which the spoken
+  answer queue shares. `voiceRecorder.ts` records the microphone, reads its level through an analyser, ends the
+  recording once the user stops or the limit passes, and releases the microphone at every end, a rejected request
+  included, with `@carlnotes/core/lib/voiceRecordingDecisions` for what it decides from each frame. `voiceActivity.ts`
+  wraps `@ricky0123/vad-web`, the on-device voice activity detector that ends a podcast player question, loaded on the
+  first question and made once per page. Its worklet, model, and WebAssembly runtime are served from
+  `/assets/voice-activity-<versions>/` by `apps/web/voiceActivityAssetsPlugin.ts`, the Vite plugin that copies them out
+  of the installed packages' folders into the client build and serves them in dev. `@carlnotes/core/lib/pageHead` turns
+  a `PageHead`, or a fixed title and path, into the tags a route's `head()` returns. `loadOnServer.ts` runs a route
+  loader's read on the server only, and its `loadPageOnServer` reads a page's head and page data together. Its
+  `readWithDegradedFallback` returns a fallback for a failed read and marks the response, so the api responds 503.
+  `requireSession.ts` is the sign-in guard the `_signedIn` layout runs before its pages load. `sessionCookie.ts` reads
+  on the server whether the request brings a session cookie. `visitAnalytics.ts` starts the browser's analytics, reports
+  a page view per route change, and captures the named visit events, their urls rewritten like every other event's.
+  `renderedRows.ts` picks the rows a paged list renders: the page shown and the list's first fifty.
+  `billingRedirects.ts` sends the browser to the Stripe Customer Portal at the url `@carlnotes/client/billingClient`
+  returns, and the plans page opens Checkout the same way, and `inviteUrl.ts` builds an invite token's absolute url on
+  the page's origin. Both read `window`. `installDeeplinks.ts` holds the Add to AI dialog's providers, their deeplinks
+  and paste steps, and the remembered choice, `shareSheet.ts` opens the operating system's share sheet, and
+  `staleBundleReload.ts` reloads the page once if a deploy removed a bundle file the open page still asks for.
 - `components/session/` — the login and signup pages' layout and their sign-in pieces. `SessionLayout.tsx` opens the
   Google, GitHub, and Apple sign-ins and says so if one does not open. `VerifyEmailNotice.tsx` is the
   notice the signup page shows after a password signup, with a button straight into the app.
@@ -143,7 +145,9 @@ the browser bundle and renders pages through the server build, behind its own ro
   mobile-only menu, and `ThemeToggle.tsx`. `HomeHero.tsx` is a visitor's home page hero below the header's top bar,
   with its pitch and persona note buttons. `Footer.tsx` is the global footer, `DocsLink.tsx` is every link to the
   docs, which opens in a new tab, and `Attribution.tsx` is the persona credit in the hero's popover.
-- `components/admin/` — the admin console's own pieces beyond its tables: `ManageAdminsModal.tsx`, where an admin adds
+- `components/admin/` — the admin console's own pieces beyond its tables: `MobileMinimumVersionsCard.tsx`, each
+  platform's minimum app version with who saved it and the input that raises, lowers, or clears it;
+  `ManageAdminsModal.tsx`, where an admin adds
   and removes other admins.
 - `components/branding/` — the coffee drawings, the loading indicator, the note icon, and the avatars. `CoffeeMug.tsx`
   draws the mug from `@carlnotes/nightshift/coffeeMug`, and `coffeeMugSteam.test.ts` fails if the steam's keyframes
@@ -169,8 +173,7 @@ the browser bundle and renders pages through the server build, behind its own ro
   note icon and in a table's title cell), `PodcastEpisodesSection.tsx` (the episode page's Other episodes and
   Similar podcasts tables, sortable by title and description), `PodcastEpisodeTranscript.tsx` (the episode page's
   transcript), `PodcastEpisodeCountsLine.tsx` (the podcast episode page's listener count, empty in the server render),
-  `podcastEpisodeTestFixtures.ts` (the web tests' podcast episode summary, chapter, and full
-  podcast episode), `PlaybackControlButtons.tsx` (the skip and playback speed buttons, in the player card and the bottom
+  `PlaybackControlButtons.tsx` (the skip and playback speed buttons, in the player card and the bottom
   player),
   `PodcastThemeSongNote.tsx` (the note icon whose popup credits the theme song, beside the podcast's name and episode titles,
   with the lyrics from `podcastThemeSongLyrics.ts`),

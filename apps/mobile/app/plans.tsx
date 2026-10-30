@@ -1,15 +1,15 @@
 import { authClient } from "@carlnotes/client/authClient"
-import { fetchBillingPortalUrl, fetchBillingState, fetchCheckoutUrl } from "@carlnotes/client/billingClient"
-import { isPaidPlan, plans } from "@carlnotes/contracts/enums"
+import { fetchBillingState } from "@carlnotes/client/billingClient"
+import { plans } from "@carlnotes/contracts/enums"
 import type { Plan } from "@carlnotes/contracts/plans"
 import { MonthlyBudgetCutoffTable } from "@carlnotes/core/components/MonthlyBudgetCutoffTable"
 import { RECOMMENDED_PLAN } from "@carlnotes/core/lib/planCards"
 import { useQuery } from "@tanstack/react-query"
 import { useState } from "react"
-import { Alert, View } from "react-native"
+import { View } from "react-native"
 import { PlanCard } from "@/components/account/PlanCard"
 import { CoffeeLoading } from "@/components/branding/CoffeeLoading"
-import { openExternalLink } from "@/components/common/AnchorLink"
+import { LoadFailedNotice } from "@/components/common/LoadFailedNotice"
 import { PreferenceSwitch } from "@/components/common/PreferenceSwitch"
 import { PageScreen } from "@/components/layout/PageScreen"
 import { Button } from "@/components/primitives/button"
@@ -19,7 +19,8 @@ import { TableCard } from "@/components/table/TableCard"
 import { openSessionScreen } from "@/sessionReturnPath"
 
 /**
- * Compares the existing plans with shared cards and native navigation to hosted billing.
+ * Compares the plans with the shared cards, read-only. A visitor's action leads to sign-up, and a user sees their own
+ * plan marked.
  */
 export default function PlansScreen() {
 	// start at the account's billing interval and retain a deliberate comparison choice
@@ -30,30 +31,10 @@ export default function PlansScreen() {
 		queryFn: () => fetchBillingState(),
 	})
 	const [selectedInterval, setSelectedInterval] = useState<"monthly" | "yearly" | null>(null)
-	const [isRedirecting, setIsRedirecting] = useState(false)
 	const interval = selectedInterval ?? query.data?.billingInterval ?? "monthly"
 	// the highlighted plan: the user's own, or the recommended plan for a visitor
 	const signedInPlan = session ? ((session.user.plan ?? "free") as Plan) : null
 	const highlightedPlan = signedInPlan ?? RECOMMENDED_PLAN
-	async function handleBilling(plan?: Plan): Promise<void> {
-		if (isRedirecting) {
-			return
-		}
-		setIsRedirecting(true)
-		try {
-			const url = plan && isPaidPlan(plan) ? await fetchCheckoutUrl(plan, interval) : await fetchBillingPortalUrl()
-			if (url) {
-				await openExternalLink(url)
-			} else {
-				Alert.alert("Plans", "The billing page didn't open. Try again.")
-			}
-			await query.refetch()
-		} catch {
-			Alert.alert("Plans", "The billing page didn't open. Try again.")
-		} finally {
-			setIsRedirecting(false)
-		}
-	}
 	return (
 		<PageScreen
 			title="Plans"
@@ -65,7 +46,7 @@ export default function PlansScreen() {
 			contentClassName="mt-2 gap-6"
 		>
 			<Text className="text-center text-muted-foreground">
-				Carl turns caffeine into notes. Choose how much coffee to buy him.
+				Carl turns caffeine into notes. These are the plans and what each one pours.
 			</Text>
 			{/* use the web's interval switch and yearly offer */}
 			<View className="flex-row flex-wrap items-center justify-center gap-2">
@@ -90,9 +71,11 @@ export default function PlansScreen() {
 			{session && query.isPending ? (
 				<CoffeeLoading />
 			) : query.isError ? (
-				<Button variant="outline" accessibilityLabel="Retry loading plans" onPress={() => void query.refetch()}>
-					<Text>Retry loading plans</Text>
-				</Button>
+				<LoadFailedNotice
+					message="Plans didn't load."
+					retryLabel="Retry loading plans"
+					onRetry={() => void query.refetch()}
+				/>
 			) : (
 				plans.map((plan) => (
 					<PlanCard
@@ -102,9 +85,6 @@ export default function PlansScreen() {
 						isHighlighted={plan === highlightedPlan}
 						signedInPlan={signedInPlan}
 						subscribedInterval={query.data?.billingInterval ?? null}
-						isRedirecting={isRedirecting}
-						onCheckout={(plan) => void handleBilling(plan)}
-						onPortal={() => void handleBilling()}
 						onSignup={() => openSessionScreen({ screen: "/sign-up", returnPath: "/plans" })}
 					/>
 				))

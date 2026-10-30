@@ -3,7 +3,8 @@
 // the api's own validation, the mcp routes' body limit, the content security policy, a public file's cache headers, and
 // the baseline security headers
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
-import { CHAT_HISTORY_TURNS, CHAT_QUESTION_CHARS } from "@carlnotes/contracts/chat"
+import { CHAT_QUESTION_CHARS } from "@carlnotes/contracts/chat"
+import { CHAT_HISTORY_TURNS } from "@carlnotes/contracts/chatTurns"
 import { restoreRedisClient, stubRedisClient } from "@carlnotes/db/redisClientStub"
 import { quietErrorReports } from "@carlnotes/server/monitoringTestFixtures"
 import { PROVIDER_PHOTO_ORIGINS } from "./avatars"

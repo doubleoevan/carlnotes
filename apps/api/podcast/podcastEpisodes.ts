@@ -2,11 +2,13 @@
 // its files and preview card, a listener's progress, a chapter's rating, the owner's podcast switch,
 // and removing an episode
 
+import { podcastEpisodeListenPayload, ratingPayload } from "@carlnotes/contracts/payloads"
 import {
-	PODCAST_EPISODE_CHAPTER_POSITION_MAX,
-	podcastEpisodeListenPayload,
-	ratingPayload,
-} from "@carlnotes/contracts/payloads"
+	nextUnplayedPodcastEpisodeQuery,
+	podcastEpisodeChapterParam,
+	podcastEpisodePageParam,
+	seasonPodcastEpisodesQuery,
+} from "@carlnotes/contracts/routeShapes"
 import { topicPodcastPayload } from "@carlnotes/contracts/topicPayloads"
 import { db } from "@carlnotes/db"
 import { deletePodcastFeedCache } from "@carlnotes/db/podcastFeedCache"
@@ -16,7 +18,6 @@ import { removePodcastEpisode } from "@carlnotes/pipeline/podcast/removePodcastE
 import { zValidator } from "@hono/zod-validator"
 import { and, eq } from "drizzle-orm"
 import { Hono } from "hono"
-import { z } from "zod"
 import { isAllowed } from "../authorization"
 import { countPodcastEpisodeListen, countWithinRateLimit, toRequestSender } from "../counts/viewerCounts"
 import { type AppEnv, currentUser, toAnalyticsProperties } from "../currentUser"
@@ -40,26 +41,6 @@ import {
 	loadPublishedPodcastEpisodeById,
 } from "./podcastEpisodeRows"
 import { loadPodcastEpisode } from "./podcastEpisodeShapes"
-
-// which season's podcast episodes to list
-const podcastEpisodeNumberParam = z.coerce.number().pipe(z.int32().positive())
-const seasonPodcastEpisodesQuery = z.object({ season: podcastEpisodeNumberParam })
-
-// a podcast episode page's topic id, season, and episode number, from its url
-const podcastEpisodePageParam = z.object({
-	id: z.string(),
-	season: podcastEpisodeNumberParam,
-	episodeNumber: podcastEpisodeNumberParam,
-})
-
-// a chapter's podcast episode id and position, from its url
-const podcastEpisodeChapterParam = z.object({
-	id: z.string(),
-	position: z.coerce.number().int().min(0).max(PODCAST_EPISODE_CHAPTER_POSITION_MAX),
-})
-
-// the topic that the listener is on. the next unplayed podcast episode comes from another topic
-const nextUnplayedPodcastEpisodeQuery = z.object({ topicId: z.string().optional() })
 
 // the podcast episode routes
 export const podcastEpisodesRoute = new Hono<AppEnv>()

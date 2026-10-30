@@ -1,5 +1,6 @@
 // the podcast mic: whether a podcast episode shows it, and what every podcast mic slot shows while a question records
 import { afterEach, expect, mock, test } from "bun:test"
+import { toPodcastEpisodeFixture } from "@carlnotes/contracts/podcastEpisodeTestFixtures"
 import { renderWithRouter } from "@/components/chat/renderWithRouter"
 import {
 	endPodcastEpisodeQuestion,
@@ -12,7 +13,6 @@ import {
 	PODCAST_EPISODE_QUESTION_LABEL,
 	PodcastEpisodeQuestionButton,
 } from "./PodcastEpisodeQuestionControls"
-import { toPodcastEpisodeFixture } from "./podcastEpisodeTestFixtures"
 
 // end any question a test left in progress, then put the player store's spies back
 afterEach(() => {

@@ -1,10 +1,10 @@
-import type { TagMatchMode, TopicFindingSort } from "@carlnotes/contracts/findings"
-import type { ResourceKind } from "@carlnotes/core/lib/topicFeed"
+import type { TagMatchMode, TopicFinding, TopicFindingSort } from "@carlnotes/contracts/findings"
 import {
 	Ban,
 	Blend,
 	CircleX,
 	Clock,
+	File,
 	FileText,
 	Flame,
 	Headphones,
@@ -19,10 +19,11 @@ export const TOPIC_FINDING_SORT_ICONS: Record<TopicFindingSort, LucideIcon> = {
 	newest: Clock,
 	trending: Flame,
 }
-export const RESOURCE_KIND_ICON: Record<ResourceKind, LucideIcon> = {
+export const RESOURCE_KIND_ICON: Record<TopicFinding["resourceKind"], LucideIcon> = {
 	read: FileText,
 	watch: Play,
 	listen: Headphones,
+	unknown: File,
 }
 export const TAG_MATCH_ICONS: Record<TagMatchMode, LucideIcon> = {
 	any: Blend,

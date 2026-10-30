@@ -13,6 +13,7 @@ import * as chat from "./schema/chat"
 import * as claims from "./schema/claims"
 import * as columns from "./schema/columns"
 import * as invites from "./schema/invites"
+import * as mobileMinimumVersions from "./schema/mobileMinimumVersions"
 import * as notes from "./schema/notes"
 import * as podcast from "./schema/podcast"
 import * as releases from "./schema/releases"
@@ -58,6 +59,7 @@ export const schema = {
 	...claims,
 	...columns,
 	...invites,
+	...mobileMinimumVersions,
 	...notes,
 	...podcast,
 	...releases,

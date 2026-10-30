@@ -1,6 +1,6 @@
 // the chat adapters for a topic: the preview tools, the in-chat saves the server applies, and the wording every
 // adapter shares
-import type { TopicToolCalls } from "@carlnotes/contracts/chat"
+import type { TopicToolCalls } from "@carlnotes/contracts/chatTurns"
 import { proposeTopicEditPayload } from "@carlnotes/contracts/topicPayloads"
 import { type Tool, tool } from "ai"
 import { z } from "zod"

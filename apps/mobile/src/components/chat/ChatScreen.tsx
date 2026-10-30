@@ -3,10 +3,12 @@ import { isAdminRole } from "@carlnotes/contracts/enums"
 import { reloadChatRooms } from "@carlnotes/core/hooks/useUpdateBadges"
 import { toChatKey, toPrivateChatPage } from "@carlnotes/core/lib/chatConversations"
 import { setChatId } from "@carlnotes/core/stores/chatConversationStore"
+import { useHasChatRoomsLoadFailed } from "@carlnotes/core/stores/chatRoomStore"
 import { router } from "expo-router"
 import { View } from "react-native"
 import { CoffeeLoading } from "@/components/branding/CoffeeLoading"
 import { ChoiceSelect } from "@/components/common/ChoiceSelect"
+import { LoadFailedNotice } from "@/components/common/LoadFailedNotice"
 import { Button } from "@/components/primitives/button"
 import { Text } from "@/components/primitives/text"
 import { useIsKeyboardVisible } from "@/hooks/useIsKeyboardVisible"
@@ -43,6 +45,8 @@ export function ChatScreen({ topicId, teamId, profileUserId, chatTeamId }: ChatS
 function ChatScreenContent({ state: chatPageState }: { state: ChatPageState }) {
 	// leave typing room at larger text sizes while retaining the conversation in its selector
 	const isKeyboardVisible = useIsKeyboardVisible()
+	// whether the chat rooms read failed
+	const hasChatRoomsLoadFailed = useHasChatRoomsLoadFailed()
 	const {
 		query: chatPageQuery,
 		session,
@@ -54,12 +58,12 @@ function ChatScreenContent({ state: chatPageState }: { state: ChatPageState }) {
 	} = chatPageState
 	if (chatPageQuery.isError) {
 		return (
-			<View className="gap-3 p-3">
-				<Text>Carl could not open this conversation.</Text>
-				<Button accessibilityLabel="Retry Coffee Talk" onPress={() => void chatPageQuery.refetch()}>
-					<Text>Try again</Text>
-				</Button>
-			</View>
+			<LoadFailedNotice
+				className="p-3"
+				message="Carl could not open this conversation."
+				retryLabel="Retry conversation"
+				onRetry={() => void chatPageQuery.refetch()}
+			/>
 		)
 	}
 	if (chatPageQuery.isPending || accountId !== userId) {
@@ -92,8 +96,17 @@ function ChatScreenContent({ state: chatPageState }: { state: ChatPageState }) {
 					onOpen={() => void reloadChatRooms()}
 				/>
 			</View>
+			{/* failed conversations read */}
+			{!selectedChatId && hasChatRoomsLoadFailed && (
+				<LoadFailedNotice
+					className="p-3"
+					message="Your conversations didn't load."
+					retryLabel="Retry loading conversations"
+					onRetry={() => void reloadChatRooms()}
+				/>
+			)}
 			{/* empty conversation */}
-			{!selectedChatId && (
+			{!selectedChatId && !hasChatRoomsLoadFailed && (
 				<View className="gap-3 p-3">
 					<Text className="text-sm text-muted-foreground">
 						{chatChoices.length

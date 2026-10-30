@@ -1,10 +1,9 @@
 import { fetchScanNote } from "@carlnotes/client/topicClient"
-import type { scanStatuses } from "@carlnotes/contracts/enums"
-import { EMPTY_SCAN_NOTE, type ScanNote } from "@carlnotes/contracts/topics"
+import { EMPTY_SCAN_NOTE, type ScanNote, type TopicScan } from "@carlnotes/contracts/topics"
 import { useState } from "react"
 
 // a scan's status, which decides whether its note is kept
-type ScanStatus = (typeof scanStatuses)[number]
+type ScanStatus = TopicScan["status"]
 
 // one scan's note and the handlers that read it
 export type ScanNoteState = {

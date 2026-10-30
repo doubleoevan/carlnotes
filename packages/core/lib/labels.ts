@@ -1,7 +1,7 @@
 // values turned into the text a user sees: dates, durations, money, sizes, and counts
-import type { daysOfWeek, frequencies } from "@carlnotes/contracts/enums"
+import { UNKNOWN_CASE } from "@carlnotes/contracts/enums"
 import { DAY_MS } from "@carlnotes/contracts/time"
-import type { TopicScan } from "@carlnotes/contracts/topics"
+import type { TopicDetails, TopicScan } from "@carlnotes/contracts/topics"
 
 /**
  * An ISO date as its month and year: Jul 2026. Empty for a null date.
@@ -161,14 +161,21 @@ export function toTimeLabel(time: string): string {
  * "Weekly on Monday at 9:00 AM".
  */
 export function toScheduleLabel(
-	frequency: (typeof frequencies)[number],
+	frequency: TopicDetails["frequency"],
 	scheduledTime: string,
-	scheduledDayOfWeek: (typeof daysOfWeek)[number],
+	scheduledDayOfWeek: TopicDetails["scheduledDayOfWeek"],
 ): string {
 	const time = toTimeLabel(scheduledTime)
-	// only weekly includes a day, capitalized for display
+	// an unknown frequency names the time alone
+	if (frequency === UNKNOWN_CASE) {
+		return `Scheduled at ${time}`
+	}
+
+	// only weekly includes a day, capitalized for display, and left off for an unknown day
 	if (frequency === "weekly") {
-		return `Weekly on ${capitalize(scheduledDayOfWeek)} at ${time}`
+		return scheduledDayOfWeek === UNKNOWN_CASE
+			? `Weekly at ${time}`
+			: `Weekly on ${capitalize(scheduledDayOfWeek)} at ${time}`
 	}
 	return `${capitalize(frequency)} at ${time}`
 }

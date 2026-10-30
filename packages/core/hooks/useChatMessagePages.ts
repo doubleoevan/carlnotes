@@ -12,6 +12,8 @@ export type ChatMessagePages = {
 	chatMessages: ChatRoomMessage[]
 	loadEarlierChatMessages: () => Promise<number>
 	reloadChatMessages: () => Promise<void>
+	// whether the last reload or earlier page failed
+	hasMessagePageLoadFailed: boolean
 	hasEarlierChatMessages: boolean
 	firstItemIndex: number
 	isVoiceChatConfigured: boolean
@@ -35,6 +37,8 @@ export function useChatMessagePages({
 	// whether a page sits above the earliest chat message loaded, and whether one is already on its way
 	const [hasEarlierChatMessages, setHasEarlierChatMessages] = useState(false)
 	const isLoadingEarlierChatMessagesRef = useRef(false)
+	// whether the last reload or earlier page failed
+	const [hasMessagePageLoadFailed, setHasMessagePageLoadFailed] = useState(false)
 	// the number that the virtualized list gives its first chat message.
 	// a prepend lowers it in the same update that grows the list, so no render shows one moved without the other
 	const [firstItemIndex, setFirstItemIndex] = useState(FIRST_ITEM_INDEX_START)
@@ -57,7 +61,14 @@ export function useChatMessagePages({
 		if (!isCurrentChat()) {
 			return
 		}
-		if (chatMessagePage !== null && chatMessagePage !== "failed") {
+		// a failed reload leaves the list shown and says it is stale
+		if (chatMessagePage === "failed" || chatMessagePage === "unreadable") {
+			setHasMessagePageLoadFailed(true)
+			return
+		}
+		// a loaded page replaces the list, and lost access leaves it
+		setHasMessagePageLoadFailed(false)
+		if (chatMessagePage !== null) {
 			showFirstChatMessagePage(chatMessagePage)
 		}
 	}
@@ -73,9 +84,15 @@ export function useChatMessagePages({
 		try {
 			// the chat message cursor is exclusive, so an earlier page never repeats a chat message already loaded
 			const earlierChatMessagePage = await fetchChatRoomMessages(topicId, teamId, earliestChatMessage.id)
-			if (!isCurrentChat() || earlierChatMessagePage === null || earlierChatMessagePage === "failed") {
+			if (!isCurrentChat() || earlierChatMessagePage === null) {
 				return 0
 			}
+			// a failed earlier page says the list is stale, and a loaded one clears that
+			if (earlierChatMessagePage === "failed" || earlierChatMessagePage === "unreadable") {
+				setHasMessagePageLoadFailed(true)
+				return 0
+			}
+			setHasMessagePageLoadFailed(false)
 			// an empty page means the top was reached
 			setHasEarlierChatMessages(earlierChatMessagePage.hasEarlierChatMessages)
 			if (earlierChatMessagePage.chatMessages.length === 0) {
@@ -98,6 +115,7 @@ export function useChatMessagePages({
 		showFirstChatMessagePage,
 		loadEarlierChatMessages,
 		reloadChatMessages,
+		hasMessagePageLoadFailed,
 		hasEarlierChatMessages,
 		firstItemIndex,
 		isVoiceChatConfigured,

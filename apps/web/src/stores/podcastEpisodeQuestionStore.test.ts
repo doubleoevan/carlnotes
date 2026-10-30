@@ -6,16 +6,17 @@ import { TEST_SPOKEN_QUESTION_TIMINGS } from "@carlnotes/client/voiceClientTestF
 import type { ChatConversation } from "@carlnotes/contracts/chat"
 import { withPodcastEpisodeNote } from "@carlnotes/contracts/chatQuestionNotes"
 import type { PodcastEpisodeSpeaker } from "@carlnotes/contracts/enums"
+import { PURCHASE_COPY } from "@carlnotes/contracts/plans"
 import { PODCAST_NAME } from "@carlnotes/contracts/podcastEpisodes"
+import {
+	toPodcastEpisodeChapterFixture,
+	toPodcastEpisodeFixture,
+} from "@carlnotes/contracts/podcastEpisodeTestFixtures"
 import { RESUME_BEAT_MS } from "@carlnotes/core/stores/podcastEpisodeQuestionRules"
 import { createElement } from "react"
 import { renderToStaticMarkup } from "react-dom/server"
 import * as sonner from "sonner"
-import { CHAT_FAILED_TOAST, CHAT_REJECTION_COPY, PLANS_ACTION_LABEL } from "@/components/chat/chatRejectionCopy"
-import {
-	toPodcastEpisodeChapterFixture,
-	toPodcastEpisodeFixture,
-} from "@/components/podcast/podcastEpisodeTestFixtures"
+import { CHAT_FAILED_TOAST, CHAT_REJECTION_COPY } from "@/components/chat/chatRejectionCopy"
 import {
 	askPodcastEpisodeQuestion,
 	endPodcastEpisodeQuestion,
@@ -212,7 +213,7 @@ test("loadPodcastEpisodeQuestionConversation toasts the budget line and returns 
 	startPodcastEpisodeQuestion(toVoiceRecordingMock())
 	expect(await loadPodcastEpisodeQuestionConversation()).toBe(false)
 	expect(toastSpy).toHaveBeenCalledWith(CHAT_REJECTION_COPY.budget, {
-		action: { label: PLANS_ACTION_LABEL, onClick: expect.any(Function) },
+		action: { label: PURCHASE_COPY.pickUpMoreCoffee, onClick: expect.any(Function) },
 	})
 })
 
@@ -317,7 +318,7 @@ test("a budget result toasts the upgrade line and resumes the podcast episode at
 	// the finished chat turn says why, and the question is over
 	expect(podcastEpisodeQuestionChatTurns.at(-1)?.chatTurn.rejection).toBe("budget")
 	expect(toastSpy).toHaveBeenCalledWith(CHAT_REJECTION_COPY.budget, {
-		action: { label: PLANS_ACTION_LABEL, onClick: expect.any(Function) },
+		action: { label: PURCHASE_COPY.pickUpMoreCoffee, onClick: expect.any(Function) },
 	})
 	expect(toPodcastEpisodeQuestionView()?.phase).toBe("idle")
 	expect(resumeSpy).toHaveBeenCalledTimes(1)

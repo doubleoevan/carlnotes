@@ -17,6 +17,7 @@ import { Hono } from "hono"
 import { serveStatic } from "hono/bun"
 import { HTTPException } from "hono/http-exception"
 import { apiRoute } from "./api"
+import { appVersionGate } from "./appVersionGate"
 import { auth } from "./auth"
 import { PROVIDER_PHOTO_ORIGINS } from "./avatars"
 import { defaultBodyLimit } from "./bodyLimit"
@@ -159,6 +160,8 @@ const server = new Hono<AppEnv>()
 	.get("/api/health", (context) => context.json({ status: "ok" }))
 	// the deep health check a monitor polls, with one trivial query and no session lookup either
 	.get("/api/health/deep", checkDatabaseHealth)
+	// an outdated build is told to update on every api path after the health checks, ahead of the session lookup
+	.use("/api/*", appVersionGate)
 	// an icon request reads one row and never a session, so it sits ahead of the api tree too
 	.route("/api", faviconsRoute)
 	// the oauth discovery documents an mcp client reads under /.well-known, with or without a path appended. every

@@ -1,7 +1,7 @@
 // the helpers with no larger subject of their own to live under
-import { FileText, Headphones, type LucideIcon, Play } from "lucide-react"
+import type { TopicFinding } from "@carlnotes/contracts/findings"
+import { File, FileText, Headphones, type LucideIcon, Play } from "lucide-react"
 import { toast } from "sonner"
-import type { ResourceKind } from "@/providers/TopicFeedProvider"
 
 /**
  * A path safe to send a signed-out visitor back to after login. A browser reads a backslash as a slash
@@ -38,10 +38,11 @@ export function toAuthorizeReturnPath(searchParams: URLSearchParams): string | n
 /**
  * The lucide icon mapped to its resource kind
  */
-export const RESOURCE_KIND_ICON: Record<ResourceKind, LucideIcon> = {
+export const RESOURCE_KIND_ICON: Record<TopicFinding["resourceKind"], LucideIcon> = {
 	read: FileText,
 	watch: Play,
 	listen: Headphones,
+	unknown: File,
 }
 
 /**

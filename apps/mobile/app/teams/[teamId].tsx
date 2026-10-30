@@ -17,6 +17,7 @@ import { Alert, View } from "react-native"
 import { chooseAvatarBody } from "@/components/avatar/avatarUpload"
 import { Avatar } from "@/components/branding/Avatar"
 import { AnchorLink } from "@/components/common/AnchorLink"
+import { LoadFailedNotice } from "@/components/common/LoadFailedNotice"
 import { PageUpdateCountBadge } from "@/components/common/UpdateCountBadge"
 import { InviteMembersModal } from "@/components/invite/InviteMembersModal"
 import { PageScreen } from "@/components/layout/PageScreen"
@@ -264,10 +265,10 @@ function TeamContent({
 		)
 	}
 	if (!team) {
-		return (
-			<Text>
-				{query.error ? "Team didn't load. Pull to try again." : "Carl couldn't find this team. He checked twice."}
-			</Text>
+		return query.error ? (
+			<LoadFailedNotice message="Team didn't load." retryLabel="Retry loading team" onRetry={onReload} />
+		) : (
+			<Text>Carl couldn't find this team. He checked twice.</Text>
 		)
 	}
 	return (

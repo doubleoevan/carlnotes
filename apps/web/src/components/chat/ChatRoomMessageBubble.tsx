@@ -22,7 +22,15 @@ import { ChatMarkdown } from "./ChatMarkdown"
 import { ChatVideo, CopyButton, toTimeAgoLabel } from "./ChatMessageParts"
 import { SpokenAnswerButton } from "./SpokenAnswerButton"
 
-const ATTACHMENT_KIND_ICONS = { image: Image, pdf: FileText, document: FileText, text: Paperclip, video: Film } as const
+// the icon per attachment kind, with the paperclip for a kind this build does not know
+const ATTACHMENT_KIND_ICONS = {
+	image: Image,
+	pdf: FileText,
+	document: FileText,
+	text: Paperclip,
+	video: Film,
+	unknown: Paperclip,
+} as const
 
 /**
  * Adds browser media, downloads, and speech to the shared chat message.

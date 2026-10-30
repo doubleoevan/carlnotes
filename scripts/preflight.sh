@@ -15,6 +15,12 @@ bun scripts/check-component-parity.ts
 # apps/mobile/parity.md with its reason, and that no listed row has gone stale
 bun scripts/check-client-parity.ts
 
+# check that no checkout or billing portal path is reachable from the mobile app
+bun scripts/check-purchase-paths.ts
+
+# check that no api change breaks a frozen contract an unretired app version still reads or sends
+bun scripts/check-contract-freeze.ts
+
 # type-check the whole project via the solution file. tsc -b only rechecks a project whose own files changed, so a
 # lockfile that changed since the last check, or a fresh install, rebuilds every project against the new dependencies
 saved_lockfile_hash_path="node_modules/.cache/preflight-lockfile.sha"

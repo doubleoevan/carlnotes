@@ -1,9 +1,10 @@
 // the typed api client for the billing and admin routes
 import type { OwnerTopic } from "@carlnotes/contracts/activity"
 import type { AdminConsoleResponse, AdminTopicSubscriberRow } from "@carlnotes/contracts/admin"
-import type { BillingState } from "@carlnotes/contracts/profiles"
+import type { MobilePlatform } from "@carlnotes/contracts/clientTelemetry"
+import { type BillingState, billingState } from "@carlnotes/contracts/profiles"
 import type { TeamPageResponse, TeamSummary } from "@carlnotes/contracts/teams"
-import { apiClient } from "./apiClient"
+import { apiClient, readApiResponse } from "./apiClient"
 
 // start Stripe Checkout for a plan and billing interval, returning the hosted page's url
 export async function fetchCheckoutUrl(
@@ -36,7 +37,7 @@ export async function fetchBillingState(userId?: string): Promise<BillingState> 
 	if (!response.ok) {
 		throw new Error(`billing state failed: ${response.status}`)
 	}
-	return (await response.json()) as BillingState
+	return readApiResponse(billingState, response)
 }
 
 // the admin console payload: the users table and the totals summaries throws an error when the user is not an admin
@@ -115,6 +116,19 @@ export async function sendUserBudgetOverride(
 		throw new Error(`budget override failed: ${response.status}`)
 	}
 	return (await response.json()) as { isKeyResized: boolean }
+}
+
+/**
+ * Saves or clears a platform's minimum app version from the admin console. Throws an error on a rejection.
+ */
+export async function sendMobileMinimumVersion(platform: MobilePlatform, minimumVersion: string | null): Promise<void> {
+	const response = await apiClient().api.admin["mobile-minimum-versions"][":platform"].$post({
+		param: { platform },
+		json: { minimumVersion },
+	})
+	if (!response.ok) {
+		throw new Error(`mobile minimum version failed: ${response.status}`)
+	}
 }
 
 // close another user's account from the admin console. throws an error on a rejection, so the table can show it failed

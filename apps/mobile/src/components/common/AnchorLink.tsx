@@ -1,5 +1,6 @@
 import { showClientError } from "@carlnotes/client/apiClient"
 import { toCtaTag } from "@carlnotes/contracts/signupCta"
+import { SITE_URL } from "@carlnotes/contracts/site"
 import { Slot } from "@rn-primitives/slot"
 import * as Linking from "expo-linking"
 import { type Href, Link } from "expo-router"
@@ -43,7 +44,7 @@ export function AnchorLink({
 					onPress?.(event as GestureResponderEvent)
 					const tag = toCtaTag(
 						typeof href === "string"
-							? new URL(href, "https://carlnotes.com").searchParams.get("cta")
+							? new URL(href, SITE_URL).searchParams.get("cta")
 							: typeof href.params?.cta === "string"
 								? href.params.cta
 								: null,

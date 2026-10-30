@@ -11,6 +11,7 @@ import {
 
 export { toCutoffMarkers, toSpendMeterStatusLine } from "@carlnotes/core/lib/spendMeter"
 
+import { PLANS_PATH, PURCHASE_COPY } from "@carlnotes/contracts/plans"
 import { toCentsLabel, toSharePercentLabel } from "@carlnotes/core/lib/labels"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { AnchorLink } from "@/components/common/AnchorLink"
@@ -80,8 +81,8 @@ export function SpendMeter(props: SpendMeterProps) {
 				{isUpgradeVisible && (
 					<>
 						{" "}
-						<AnchorLink href="/plans" className="sentence-link">
-							Pick up some coffee.
+						<AnchorLink href={PLANS_PATH} className="sentence-link">
+							{PURCHASE_COPY.pickUpSomeCoffee}
 						</AnchorLink>
 					</>
 				)}

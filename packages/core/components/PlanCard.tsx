@@ -1,5 +1,5 @@
 import { isPaidPlan } from "@carlnotes/contracts/enums"
-import { type BillingInterval, PLANS, type Plan, SCAN_COST_CENTS } from "@carlnotes/contracts/plans"
+import { type BillingInterval, PLANS, type Plan, PURCHASE_COPY, SCAN_COST_CENTS } from "@carlnotes/contracts/plans"
 import type { ComponentType, ReactNode } from "react"
 import { toBrewsWord } from "../lib/labels"
 import { isUsersPlan, toPlanBadge } from "../lib/planCards"
@@ -21,9 +21,11 @@ export type PlanCardProps = {
 	isHighlighted: boolean
 	signedInPlan: Plan | null
 	subscribedInterval: BillingInterval | null
-	isRedirecting: boolean
-	onCheckout: (plan: Plan) => void
-	onPortal: () => void
+	isRedirecting?: boolean
+	// the purchase actions. an app that offers no purchase passes neither, and a signed-in user's other plans then show
+	// no action
+	onCheckout?: (plan: Plan) => void
+	onPortal?: () => void
 	onSignup?: () => void
 }
 
@@ -43,7 +45,7 @@ export function PlanCard({
 	isHighlighted,
 	signedInPlan,
 	subscribedInterval,
-	isRedirecting,
+	isRedirecting = false,
 	onCheckout,
 	onPortal,
 	onSignup,
@@ -63,7 +65,13 @@ export function PlanCard({
 		: isYearly
 			? `Billed ${toWholeDollarLabel(config.priceYearlyCents)} yearly`
 			: "Billed monthly"
-	const action = toPlanAction({ isCurrentPlan, signedInPlan, onSignup, onPortal, onCheckout: () => onCheckout(plan) })
+	const action = toPlanAction({
+		isCurrentPlan,
+		signedInPlan,
+		onSignup,
+		onPortal,
+		onCheckout: onCheckout && (() => onCheckout(plan)),
+	})
 	return (
 		<Card isHighlighted={isHighlighted}>
 			{badge && <Badge>{badge}</Badge>}
@@ -85,12 +93,12 @@ export function PlanCard({
 				<Quota label={`About ${monthlyScanEstimate} ${toBrewsWord(monthlyScanEstimate)} a month`} />
 				<Quota label={isPaidPlan(plan) ? "Full podcasts for every brew" : "Short podcast for latest brew only"} />
 			</Quotas>
-			<Action {...action} isDisabled={isCurrentPlan || isRedirecting} />
+			{action && <Action {...action} isDisabled={isCurrentPlan || isRedirecting} />}
 		</Card>
 	)
 }
 
-// use the same hosted billing routes after a user chooses an action
+// the card's action: sign-up for a visitor, the current plan marked, and a purchase action where the app offers one
 function toPlanAction({
 	isCurrentPlan,
 	signedInPlan,
@@ -101,19 +109,21 @@ function toPlanAction({
 	isCurrentPlan: boolean
 	signedInPlan: Plan | null
 	onSignup?: () => void
-	onPortal: () => void
-	onCheckout: () => void
-}): { label: string; isOutlined: boolean; onPress: () => void } {
+	onPortal?: () => void
+	onCheckout?: () => void
+}): { label: string; isOutlined: boolean; onPress: () => void } | null {
 	if (!signedInPlan) {
 		return { label: "Get started", isOutlined: false, onPress: () => onSignup?.() }
 	}
 	if (isCurrentPlan) {
 		return { label: "Current plan", isOutlined: true, onPress: () => {} }
 	}
+
+	// a paying user manages billing, and a free user upgrades
 	if (isPaidPlan(signedInPlan)) {
-		return { label: "Manage billing", isOutlined: true, onPress: onPortal }
+		return onPortal ? { label: PURCHASE_COPY.manageBilling, isOutlined: true, onPress: onPortal } : null
 	}
-	return { label: "Upgrade", isOutlined: false, onPress: onCheckout }
+	return onCheckout ? { label: PURCHASE_COPY.upgrade, isOutlined: false, onPress: onCheckout } : null
 }
 
 // whole dollars stay whole; a fractional effective monthly price keeps its cents

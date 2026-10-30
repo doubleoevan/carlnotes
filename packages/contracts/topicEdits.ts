@@ -1,4 +1,5 @@
 // a topic's fields in the topic card's shape, and an edit previewed over them
+import { toKnownDayOfWeek, toKnownFrequency } from "./enums"
 import { CUSTOM_SOURCE_OPTIONS, DEFAULT_SOURCES } from "./sources"
 import type { ProposeTopicEditPayload, TopicDraft } from "./topicPayloads"
 import type { TopicResponse } from "./topics"
@@ -47,9 +48,10 @@ export function toEditableTopicDraft(
 		visibility: proposedTopicEdit?.visibility ?? topic.visibility,
 		team: topic.team ? { teamId: topic.team.teamId, name: topic.team.name } : null,
 		tags: proposedTopicEdit?.tags ?? topic.tags,
-		frequency: proposedTopicEdit?.frequency ?? topic.frequency,
+		// an unknown schedule value seeds the editor's default
+		frequency: proposedTopicEdit?.frequency ?? toKnownFrequency(topic.frequency),
 		scheduledTime: proposedTopicEdit?.scheduledTime ?? topic.scheduledTime,
-		scheduledDayOfWeek: proposedTopicEdit?.scheduledDayOfWeek ?? topic.scheduledDayOfWeek,
+		scheduledDayOfWeek: proposedTopicEdit?.scheduledDayOfWeek ?? toKnownDayOfWeek(topic.scheduledDayOfWeek),
 		maxTopicFindings: proposedTopicEdit?.maxTopicFindings ?? topic.maxTopicFindings,
 		// the podcast setting as proposed or as saved, absent for a topic with no podcast
 		isPodcastEnabled: topic.podcast ? (proposedTopicEdit?.isPodcastEnabled ?? topic.podcast.isEnabled) : undefined,

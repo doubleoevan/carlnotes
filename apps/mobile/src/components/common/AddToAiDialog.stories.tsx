@@ -1,4 +1,4 @@
-import { SITE_URL } from "@carlnotes/core/lib/pageHead"
+import { SITE_URL } from "@carlnotes/contracts/site"
 import type { Meta, StoryObj } from "@storybook/react-native"
 import { AddToAiDialog } from "./AddToAiDialog"
 

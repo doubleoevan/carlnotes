@@ -1,6 +1,6 @@
-// admin tests for the contribution math that the totals summary reports, the self-demotion check, and the route that
-// lists a topic's subscribers
-import { afterEach, expect, test } from "bun:test"
+// admin tests for the contribution math that the totals summary reports, the self-demotion check, the route that
+// lists a topic's subscribers, and the mobile minimum version write
+import { afterEach, beforeEach, expect, test } from "bun:test"
 import {
 	ADMIN_USER_ACCESS_ROW,
 	FREE_USER_ACCESS_ROW,
@@ -8,13 +8,20 @@ import {
 	type SentQuery,
 	stubConnectionPool,
 } from "@carlnotes/db/connectionPoolStub"
+import { restoreRedisClient, stubRedisClient } from "@carlnotes/db/redisClientStub"
 import { adminRoute, isSelfDemotion } from "./admin"
 import { computeContributionCents } from "./adminConsole"
 import { toSignedInApp } from "./testSession"
 
-// put the connection pool back after each test
+// each test writes through an in-memory Redis
+beforeEach(() => {
+	stubRedisClient()
+})
+
+// put the connection pool and Redis back after each test
 afterEach(() => {
 	restoreConnectionPool()
+	restoreRedisClient()
 })
 
 // contribution is net revenue minus tracked variable cost minus the optional fixed-cost constant
@@ -115,4 +122,43 @@ test("an admin reads a topic's subscribers by the subscriber count's rule", asyn
 	expect(subscribersQuery?.text).toContain('"subscriptions"."is_active" = $')
 	expect(subscribersQuery?.text).toContain('is distinct from "topics"."owner_id"')
 	expect(subscribersQuery?.text).toContain('from "topic_email_sends"')
+})
+
+// the mobile minimum version write: the access row for the gate, and nothing else
+function toMinimumVersionRouteRows({ text, values }: SentQuery): unknown[][] {
+	if (text.includes('from "users"')) {
+		return values.includes("admin-1") ? [ADMIN_USER_ACCESS_ROW] : [FREE_USER_ACCESS_ROW]
+	}
+	return []
+}
+
+// save a minimum as the given user, or as a signed-out visitor for null
+async function saveMinimumVersion(userId: string | null, platform: string, minimumVersion: unknown): Promise<Response> {
+	const app = userId ? toSignedInApp(adminRoute, userId) : adminRoute
+	return await app.request(`/admin/mobile-minimum-versions/${platform}`, {
+		method: "POST",
+		headers: { "content-type": "application/json" },
+		body: JSON.stringify({ minimumVersion }),
+	})
+}
+
+test("a visitor gets 401, a non-admin gets 403, and neither writes a minimum version", async () => {
+	const sentQueries = stubConnectionPool(toMinimumVersionRouteRows)
+	expect((await saveMinimumVersion(null, "ios", "1.2.0")).status).toBe(401)
+	expect((await saveMinimumVersion("user-1", "ios", "1.2.0")).status).toBe(403)
+	expect(sentQueries.some(({ text }) => text.includes("mobile_minimum_versions"))).toBe(false)
+})
+
+test("an admin saves a platform's minimum, and clears it with null", async () => {
+	const sentQueries = stubConnectionPool(toMinimumVersionRouteRows)
+	expect((await saveMinimumVersion("admin-1", "ios", "1.2.0")).status).toBe(200)
+	expect(sentQueries.some(({ text }) => text.includes('insert into "mobile_minimum_versions"'))).toBe(true)
+	expect((await saveMinimumVersion("admin-1", "android", null)).status).toBe(200)
+	expect(sentQueries.some(({ text }) => text.includes('delete from "mobile_minimum_versions"'))).toBe(true)
+})
+
+test("an unknown platform and a version that is not dotted integers are rejected", async () => {
+	stubConnectionPool(toMinimumVersionRouteRows)
+	expect((await saveMinimumVersion("admin-1", "web", "1.2.0")).status).toBe(400)
+	expect((await saveMinimumVersion("admin-1", "ios", "soon")).status).toBe(400)
 })

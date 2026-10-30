@@ -10,12 +10,15 @@ export function openChatRoomEvents({
 	events,
 	isCurrent,
 	onUnauthorized,
+	onAppVersionOutdated,
 }: {
 	url: string
 	headers: Record<string, string>
 	events: ChatRoomEvents
 	isCurrent: () => boolean
 	onUnauthorized: () => void
+	// the stream's error event has the status and no body
+	onAppVersionOutdated: () => void
 }): () => void {
 	// disable library polling and recover after clean completion
 	// the patched done event reports a completed request
@@ -37,8 +40,12 @@ export function openChatRoomEvents({
 	eventSource.addEventListener("done", () => acceptChatRoomEvent(events.onError))
 	eventSource.addEventListener("error", (event) =>
 		acceptChatRoomEvent(() => {
+			// a revoked session signs out and an outdated build sees the update notice, then the stream ends
 			if (event.type === "error" && event.xhrStatus === 401) {
 				onUnauthorized()
+			}
+			if (event.type === "error" && event.xhrStatus === 426) {
+				onAppVersionOutdated()
 			}
 			events.onError(event.type === "error" ? event.xhrStatus : undefined)
 		}),

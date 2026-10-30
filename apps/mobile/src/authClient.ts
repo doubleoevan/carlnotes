@@ -4,6 +4,7 @@ import { expoClient } from "@better-auth/expo/client"
 import { configureAuthClient } from "@carlnotes/client/authClient"
 import { MOBILE_APP_SCHEME } from "@carlnotes/contracts/mobileApp"
 import { GATE_COOKIE_NAME } from "@carlnotes/contracts/signupGate"
+import { markAppVersionOutdated } from "@carlnotes/core/stores/appUpdateStore"
 import Constants from "expo-constants"
 import * as SecureStore from "expo-secure-store"
 import { toApiBaseUrl } from "./apiBaseUrl"
@@ -20,6 +21,7 @@ export const apiBaseUrl = toApiBaseUrl({ isDevelopment: __DEV__, hostUri: Consta
 export const mobileAuthClient = configureAuthClient({
 	baseURL: apiBaseUrl,
 	headers: deviceTelemetryHeaders,
+	onAppVersionOutdated: () => markAppVersionOutdated(null),
 	plugins: [
 		expoClient({
 			scheme: MOBILE_APP_SCHEME,

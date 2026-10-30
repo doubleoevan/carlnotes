@@ -1,9 +1,9 @@
 import { authClient } from "@carlnotes/client/authClient"
+import { SITE_URL } from "@carlnotes/contracts/site"
 import {
 	PageActionMenu as SharedPageActionMenu,
 	type PageActionOption as SharedPageActionOption,
 } from "@carlnotes/core/components/PageActionMenu"
-import { SITE_URL } from "@carlnotes/core/lib/pageHead"
 import { Bot, EllipsisVertical, Flag, type LucideIcon, Plus } from "lucide-react-native"
 import { type ComponentRef, useRef, useState } from "react"
 import type { View } from "react-native"

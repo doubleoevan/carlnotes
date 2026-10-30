@@ -2,6 +2,7 @@
 import { z } from "zod"
 import { ratings, visibilities } from "./enums"
 import type { PodcastEpisodeChapterScript, PodcastEpisodeTurn } from "./payloads"
+import { displayEnum } from "./tolerantReads"
 
 // one chapter of a podcast episode, in the shape that the player shows
 export const podcastEpisodeChapter = z.object({
@@ -65,7 +66,7 @@ export const podcastEpisode = podcastEpisodeSummary.extend({
 	topicId: z.string(),
 	// the visibility of the episode's topic
 	topicVisibility: z.enum(visibilities),
-	status: z.enum(["recording", "published", "failed"]),
+	status: displayEnum(["recording", "published", "failed"]),
 	// the stable audio url, null until the podcast episode publishes.
 	// the cover's url at each size, null until the episode has a title
 	audioUrl: z.string().nullable(),
@@ -85,6 +86,16 @@ export type PodcastEpisode = z.infer<typeof podcastEpisode>
 export const seasonPodcastEpisodes = z.object({ podcastEpisodes: z.array(podcastEpisode) })
 
 export type SeasonPodcastEpisodes = z.infer<typeof seasonPodcastEpisodes>
+
+// the newest unplayed podcast episode from another topic that the user owns or subscribes to, or null with none
+export const nextUnplayedPodcastEpisodeResponse = z.object({ podcastEpisode: podcastEpisode.nullable() })
+
+export type NextUnplayedPodcastEpisodeResponse = z.infer<typeof nextUnplayedPodcastEpisodeResponse>
+
+// the url of the user's podcast feed for a topic, which a feed read and a feed reset both return
+export const podcastFeedUrlResponse = z.object({ podcastFeedUrl: z.string() })
+
+export type PodcastFeedUrlResponse = z.infer<typeof podcastFeedUrlResponse>
 
 // one block of a podcast episode's transcript. a chapter under its title,
 // or the cold open, a transition, or the sign-off under no heading

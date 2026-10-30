@@ -1,8 +1,7 @@
+import { DAILY_TOPICS_USED_LABEL } from "@carlnotes/contracts/scanFailure"
 import type { TopicResponse } from "@carlnotes/contracts/topics"
 import { toAgeLabel, toDollarLabel, toDurationLabel, toScheduleLabel } from "@carlnotes/core/lib/labels"
-import { SITE_URL } from "@carlnotes/core/lib/pageHead"
 import { View } from "react-native"
-import { AnchorLink } from "@/components/common/AnchorLink"
 import { Text } from "@/components/primitives/text"
 import { CollapsibleSection } from "./CollapsibleSection"
 import { InfoSection, TopicVisibility } from "./TopicInfo"
@@ -19,15 +18,9 @@ export function TopicSettingsCard({ topic }: { topic: TopicResponse }) {
 					<Text className="text-sm">
 						{toScheduleLabel(topic.frequency, topic.scheduledTime, topic.scheduledDayOfWeek)}
 					</Text>
+					{/* paused daily frequency */}
 					{topic.isDailyFrequencyPaused ? (
-						<AnchorLink
-							href={`${SITE_URL}/plans`}
-							accessibilityLabel="Not brewing. See plans"
-							accessibilityHint="Your plan ran out of daily pots. Carl keeps the ones you've had longest."
-							className="min-h-11 justify-center"
-						>
-							<Text className="text-xs text-link">not brewing</Text>
-						</AnchorLink>
+						<Text className="text-xs text-muted-foreground">{`not brewing. ${DAILY_TOPICS_USED_LABEL}`}</Text>
 					) : null}
 					<Text className="text-xs text-muted-foreground">
 						last scan {topic.lastScanAt ? toAgeLabel(topic.lastScanAt) : "never"}

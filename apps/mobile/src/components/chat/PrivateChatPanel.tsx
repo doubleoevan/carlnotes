@@ -1,5 +1,5 @@
 import type { ChatPage } from "@carlnotes/client/chatClient"
-import { CHAT_HISTORY_TURNS, toUncompactedChatTurnStart } from "@carlnotes/contracts/chat"
+import { CHAT_HISTORY_TURNS, toUncompactedChatTurnStart } from "@carlnotes/contracts/chatTurns"
 import type { ChatMessageAuthor } from "@carlnotes/core/components/ChatTurnBlock"
 import { useNow } from "@carlnotes/core/hooks/useNow"
 import { useTopicChat } from "@carlnotes/core/hooks/useTopicChat"
@@ -9,7 +9,7 @@ import { clearProposedTopicEdit } from "@carlnotes/core/stores/chatConversationS
 import { useEffect, useRef } from "react"
 import { Alert, type FlatList, View } from "react-native"
 import { CoffeeLoading } from "@/components/branding/CoffeeLoading"
-import { Button } from "@/components/primitives/button"
+import { LoadFailedNotice } from "@/components/common/LoadFailedNotice"
 import { Text } from "@/components/primitives/text"
 import { useIsScreenActive } from "@/hooks/useIsScreenActive"
 import { ChatComposer } from "./ChatComposer"
@@ -65,12 +65,12 @@ export function PrivateChatPanel({
 		chatHistoryStart + toUncompactedChatTurnStart(topicChat.chatTurns.slice(-CHAT_HISTORY_TURNS))
 	if (topicChat.hasLoadFailed) {
 		return (
-			<View className="gap-3 p-3">
-				<Text>Carl could not open this conversation.</Text>
-				<Button accessibilityLabel="Retry conversation" onPress={topicChat.reload}>
-					<Text>Try again</Text>
-				</Button>
-			</View>
+			<LoadFailedNotice
+				className="p-3"
+				message="Carl could not open this conversation."
+				retryLabel="Retry conversation"
+				onRetry={topicChat.reload}
+			/>
 		)
 	}
 	if (!topicChat.isLoaded) {

@@ -1,6 +1,7 @@
 // the public profile: who a username belongs to, and the Topics they own.
 import { toAvatarVersion } from "@carlnotes/contracts/avatars"
-import type { ProfileResponse, Topic } from "@carlnotes/contracts/profiles"
+import type { ProfileResponse } from "@carlnotes/contracts/profilePage"
+import type { Topic } from "@carlnotes/contracts/profiles"
 import { SEARCH_MIN_CHARS, type UserSearchRow } from "@carlnotes/contracts/search"
 import { toNormalizedUsername } from "@carlnotes/contracts/usernames"
 import { type DbHandle, db } from "@carlnotes/db"

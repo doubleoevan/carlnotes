@@ -200,6 +200,21 @@ export function resolveImportPath({
 	return null
 }
 
+// what the freeze and the purchase guard ask: the capabilities one app reaches, from the files the check reads
+type ToAppReachedCapabilitiesOptions = { sourceFiles: SourceFile[]; appFolder: string }
+
+/**
+ * Returns the capability keys an app reaches through its own imports and the shared packages, each with the file that
+ * first imported it.
+ */
+export function toAppReachedCapabilities({
+	sourceFiles,
+	appFolder,
+}: ToAppReachedCapabilitiesOptions): Map<string, string> {
+	const filesByPath = new Map(sourceFiles.map((sourceFile) => [sourceFile.filePath, sourceFile]))
+	return toReachedCapabilities({ filesByPath, capabilities: toClientCapabilities(sourceFiles), appFolder })
+}
+
 // the capabilities an app reaches, each with the file that first imported it, walking from the app's routes
 function toReachedCapabilities({
 	filesByPath,
@@ -269,8 +284,10 @@ function recordReachedCapability({
 	}
 }
 
-// a file the app ships: not a test and not a story
-function isShippedFile(filePath: string): boolean {
+/**
+ * Returns true for a file the app ships: not a test, a test fixtures module, or a story.
+ */
+export function isShippedFile(filePath: string): boolean {
 	return !TEST_FILE_PATTERN.test(filePath) && !STORY_FILE_PATTERN.test(filePath)
 }
 

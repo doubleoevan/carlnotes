@@ -3,8 +3,9 @@
 import { showClientError } from "@carlnotes/client/apiClient"
 import { type SendChatRoomMessageOptions, sendChatRoomMessage } from "@carlnotes/client/chatRoomClient"
 import type { SpokenQuestionTimings } from "@carlnotes/client/voiceClient"
-import type { ChatRoomAttachmentRejection, ChatRoomMessage, RoomTopicToolCalls } from "@carlnotes/contracts/chat"
+import type { ChatRoomAttachmentRejection, ChatRoomMessage } from "@carlnotes/contracts/chat"
 import { CARL_USERNAME, hasAllMention, hasModelMention, isModelChatMessage } from "@carlnotes/contracts/chatMentions"
+import type { RoomTopicToolCalls } from "@carlnotes/contracts/chatTurns"
 import type { VoiceChatPage } from "@carlnotes/contracts/payloads"
 import { useMemo, useRef, useState } from "react"
 import { mergeChatRoomMessages } from "../lib/chatRoomMessages"
@@ -38,6 +39,8 @@ export type ChatRoomState = Omit<
 	// true if the chat room routes answered 404, so the panel can fall back to nothing
 	isRejected: boolean
 	hasLoadFailed?: boolean
+	// reads the room again after a page that did not match its contract. null if no page did
+	reloadUnreadableRoom: (() => void) | null
 	// the page the mic and the play buttons name, null while voice is off
 	voiceChatPage: VoiceChatPage | null
 	// why the poster's last post was rejected, shown only to that poster
@@ -56,6 +59,7 @@ export type ChatRoomState = Omit<
 export type UseChatRoomOptions = {
 	useStream: UseChatRoomStream
 	onNotice?: (message: string) => void
+	// the spoken answer hooks
 	awaitSpokenAnswer?: (options: {
 		chatMessageId: number
 		spokenQuestionTimings: SpokenQuestionTimings
@@ -84,6 +88,7 @@ export function useChatRoom({
 	const [isLoaded, setIsLoaded] = useState(false)
 	const [isRejected, setIsRejected] = useState(false)
 	const [hasLoadFailed, setHasLoadFailed] = useState(false)
+	const [reloadUnreadableRoom, setReloadUnreadableRoom] = useState<(() => void) | null>(null)
 	const [rejection, setRejection] = useState<ChatRoomRejection | null>(null)
 	// whether carl owes the chat room an answer. a send that addressed him sets it, and his reply clears it
 	const [isMessageLoading, setIsMessageLoading] = useState(false)
@@ -94,6 +99,7 @@ export function useChatRoom({
 		if (!isModelChatMessage(message)) {
 			return
 		}
+		// carl's latest reply, and the end of the wait a chat mention started
 		latestModelReplyIdRef.current = Math.max(latestModelReplyIdRef.current, message.id)
 		if (pendingReplyIdRef.current !== null && message.id > pendingReplyIdRef.current) {
 			pendingReplyIdRef.current = null
@@ -108,6 +114,7 @@ export function useChatRoom({
 		showFirstChatMessagePage,
 		loadEarlierChatMessages,
 		reloadChatMessages,
+		hasMessagePageLoadFailed,
 		hasEarlierChatMessages,
 		firstItemIndex,
 		isVoiceChatConfigured,
@@ -136,8 +143,10 @@ export function useChatRoom({
 	// the stream owns opening, resuming, and reconnecting. this hook only says what to do with what arrives
 	useStream(topicId, teamId, {
 		onLoadFailed: () => setHasLoadFailed(true),
+		onLoadUnreadable: (reload) => setReloadUnreadableRoom(() => reload),
 		onChatMessagesLoaded: (chatMessagePage) => {
 			setHasLoadFailed(false)
+			setReloadUnreadableRoom(null)
 			// hide the room when access is rejected
 			if (chatMessagePage === null) {
 				setIsRejected(true)
@@ -235,6 +244,7 @@ export function useChatRoom({
 		isLoaded,
 		isRejected,
 		hasLoadFailed,
+		reloadUnreadableRoom,
 		voiceChatPage: isVoiceChatConfigured ? voiceChatPage : null,
 		rejection,
 		isMessageLoading,
@@ -242,6 +252,7 @@ export function useChatRoom({
 		showBudgetRejection: () => setRejection("budget"),
 		postChatMessage,
 		reloadChatMessages,
+		hasMessagePageLoadFailed,
 		loadEarlierChatMessages,
 		hasEarlierChatMessages,
 		firstItemIndex,

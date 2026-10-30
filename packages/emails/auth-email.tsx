@@ -2,6 +2,7 @@
 // one template for all of them, differing only in what they say and what the link is for.
 // the topic invitation email reuses it too, through its own wrapper in topic-invite-email.tsx.
 // authored as a react-email template like the scan emails, so it previews with `bun run dev:email`
+import { SITE_URL } from "@carlnotes/contracts/site"
 import { emailColors, toEmailFontSize } from "@carlnotes/nightshift/email"
 import { Link, Section, Text } from "@react-email/components"
 import { render } from "@react-email/render"
@@ -69,8 +70,8 @@ AuthEmail.PreviewProps = {
 	heading: "Confirm your email",
 	lead: "Carl is ready to start reading for you. Confirm this address so he knows where to send what he finds.",
 	buttonLabel: "Confirm your email",
-	url: "https://carlnotes.com/api/auth/verify-email?token=preview&callbackURL=%2F",
-	appUrl: "https://carlnotes.com",
+	url: `${SITE_URL}/api/auth/verify-email?token=preview&callbackURL=%2F`,
+	appUrl: SITE_URL,
 } satisfies AuthEmailProps
 
 // render the template to an HTML string for sending. the api calls this at send-email time

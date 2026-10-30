@@ -1,47 +1,75 @@
-// the chat contracts: chat room messages, mentions, rooms, chat turns and their tool calls, and their limits
+// the chat room contracts: messages, mentions, rooms, the limits on a chat turn, and the stored conversation
 import { z } from "zod"
-import type { avatarSources, chatAttachmentKinds, PodcastEpisodeSpeaker } from "./enums"
-import type { ChatToolCall, PodcastEpisodeChapterRef } from "./payloads"
+import { avatarSources, chatAttachmentKinds, podcastEpisodeSpeakers } from "./enums"
 import { profileIdentity } from "./profiles"
-import type { ProposeTopicEditPayload, TopicDraft } from "./topicPayloads"
+import { displayEnum } from "./tolerantReads"
+import type { TopicDraft } from "./topicPayloads"
 
 // the chat's name in the app's copy
 export const CHAT_NAME = "Coffee Talk"
 
 // one chat message attachment shown with a chat message
-export type ChatMessageAttachment = { id: string; kind: (typeof chatAttachmentKinds)[number]; name: string }
+export const chatMessageAttachment = z.object({
+	id: z.string(),
+	kind: displayEnum(chatAttachmentKinds),
+	name: z.string(),
+})
 
-// a chat message in a team topic's chat room, decrypted for the member viewing it
-export type ChatRoomMessage = {
-	id: number
-	// the author's account if it still exists, and the name recorded at post-time
-	authorUserId: string | null
-	authorUsername: string
-	// the author's current avatar and the version that its url names, null for carl or for a departed member
-	authorAvatarSource: (typeof avatarSources)[number] | null
-	authorAvatarVersion: string | null
-	replyToChatMessageId: number | null
-	content: string
-	createdAt: string
-	// whether the chat message was spoken, on a member's spoken message and on carl's reply to it
-	isSpoken: boolean
-	// the files this chat message shared with the chat room, earliest first, empty if it shared none
-	attachments: ChatMessageAttachment[]
-	// the cards for the chat message's first links, empty if it holds none or no link preview is stored
-	linkPreviews: ChatLinkPreview[]
-}
+export type ChatMessageAttachment = z.infer<typeof chatMessageAttachment>
 
 // the link preview card a link in a chat message renders as, below the chat message's own text
-export type ChatLinkPreview = {
-	url: string
-	title: string | null
-	description: string | null
+export const chatLinkPreview = z.object({
+	url: z.string(),
+	title: z.string().nullable(),
+	description: z.string().nullable(),
 	// the paths this origin serves the page's image and its host's favicon from, null for one it has not stored
-	imagePath: string | null
-	faviconPath: string | null
+	imagePath: z.string().nullable(),
+	faviconPath: z.string().nullable(),
 	// set when the link is a youtube video, which the card offers to play in place
-	youtubeVideoId: string | null
-}
+	youtubeVideoId: z.string().nullable(),
+})
+
+export type ChatLinkPreview = z.infer<typeof chatLinkPreview>
+
+// a finding's link preview card, or null for a link with none
+export const topicFindingLinkPreviewResponse = z.object({ linkPreview: chatLinkPreview.nullable() })
+
+// a chat message in a team topic's chat room, decrypted for the member viewing it
+export const chatRoomMessage = z.object({
+	id: z.number(),
+	// the author's account if it still exists, and the name recorded at post-time
+	authorUserId: z.string().nullable(),
+	authorUsername: z.string(),
+	// the author's current avatar and the version that its url names, null for carl or for a departed member
+	authorAvatarSource: displayEnum(avatarSources).nullable(),
+	authorAvatarVersion: z.string().nullable(),
+	replyToChatMessageId: z.number().nullable(),
+	content: z.string(),
+	createdAt: z.string(),
+	// whether the chat message was spoken, on a member's spoken message and on carl's reply to it
+	isSpoken: z.boolean(),
+	// the files this chat message shared with the chat room, earliest first, empty if it shared none
+	attachments: z.array(chatMessageAttachment),
+	// the cards for the chat message's first links, empty if it holds none or no link preview is stored
+	linkPreviews: z.array(chatLinkPreview),
+})
+
+export type ChatRoomMessage = z.infer<typeof chatRoomMessage>
+
+// the link preview cards of the chat messages a refresh asked for, by chat message id. a json key is a string
+export const chatRoomMessageLinkPreviewsResponse = z.object({
+	linkPreviews: z.record(z.string(), z.array(chatLinkPreview)),
+})
+
+export type ChatRoomMessageLinkPreviewsResponse = z.infer<typeof chatRoomMessageLinkPreviewsResponse>
+
+// what a chat room post returns: the posted chat message's id, and the budget rejection private to the poster
+export const chatRoomMessagePostResponse = z.object({
+	chatMessageId: z.number(),
+	rejectionReason: z.string().nullable(),
+})
+
+export type ChatRoomMessagePostResponse = z.infer<typeof chatRoomMessagePostResponse>
 
 // the chat room post body
 export const CHAT_ROOM_MESSAGE_MAX_CHARS = 4000
@@ -59,12 +87,14 @@ export type SpokenQuestionsState = { status: "allowed" | "paused" | "budget" }
 export const FLAG_REASON_MAX_CHARS = 1000
 
 // one page of a chat room's chat messages, and whether an earlier page exists above it
-export type ChatRoomMessagePage = {
-	chatMessages: ChatRoomMessage[]
-	hasEarlierChatMessages: boolean
+export const chatRoomMessagePage = z.object({
+	chatMessages: z.array(chatRoomMessage),
+	hasEarlierChatMessages: z.boolean(),
 	// whether voice chat is on, which needs a transcription model and a speech model
-	isVoiceChatConfigured: boolean
-}
+	isVoiceChatConfigured: z.boolean(),
+})
+
+export type ChatRoomMessagePage = z.infer<typeof chatRoomMessagePage>
 
 // one chat mention still waiting for the user in a chat room
 export const chatMention = z.object({
@@ -100,144 +130,11 @@ export const chatRoom = z.object({
 
 export type ChatRoom = z.infer<typeof chatRoom>
 
-// how much conversation the model holds word for word. a character budget, about twenty typical chat turns
-export const CHAT_MEMORY_CHARS = 40_000
+// every chat room the signed-in user may open, latest first
+export const chatRoomsResponse = z.object({ rooms: z.array(chatRoom) })
 
-/**
- * Where the uncompacted chat turns start, walking back from the latest turn until the character budget runs out.
- */
-
-export function toUncompactedChatTurnStart(history: { question: string; answer: string }[]): number {
-	// spend the budget latest-first
-	let budget = CHAT_MEMORY_CHARS
-	for (let index = history.length - 1; index >= 0; index--) {
-		const chatTurn = history[index]
-		budget -= (chatTurn?.question.length ?? 0) + (chatTurn?.answer.length ?? 0)
-
-		// the chat turn that overdraws the budget is the first compacted one, unless it is the latest
-		if (budget < 0) {
-			return Math.min(index + 1, history.length - 1)
-		}
-	}
-	return 0
-}
-
-// how many chat turns a send posts to the llm. the earlier turns beyond the memory budget are compacted
-export const CHAT_HISTORY_TURNS = 100
-
-// what one line of a chat reply stream says. JSON escapes every newline the model writes, so model text never passes
-// for another line. a question asked from the podcast player gets the speaker who answers it before any text
-export type ChatReplyLine =
-	| { type: "text"; text: string }
-	| { type: "speaker"; speaker: PodcastEpisodeSpeaker }
-	| { type: "toolCalls"; toolCalls: TopicToolCalls }
-	| { type: "failed" }
-
-/**
- * One line's text, as the chat reply stream sends it.
- */
-
-export function toChatReplyLineText(chatReplyLine: ChatReplyLine): string {
-	return `${JSON.stringify(chatReplyLine)}\n`
-}
-
-// the toast lines the topic tools leave: one per save and one per rejected change
-export type TopicToolToasts = { topicSaves: string[]; topicSaveRejections: string[] }
-
-// what the tools leave for the api client: the toast lines, the topic draft, the topic a create made,
-// and whether the new-topic chat opened
-export type TopicToolCalls = TopicToolToasts & {
-	topicDraft?: TopicDraft
-	createdTopicId?: string
-	isNewTopicChatOpened?: boolean
-	// what carl proposed changing this turn
-	proposedTopicEdit?: ProposeTopicEditPayload
-	// whether the user turned the proposal down
-	isTopicEditCancelled?: boolean
-	// the tool calls, sent back as history, so the model reads a save as a call
-	chatToolCalls?: ChatToolCall[]
-}
-
-// what a chat room shows every member: the toast lines, and who carl proposed a change to. the proposal names its user,
-// so one member asking never moves another member's panel
-export type RoomTopicToolCalls = Pick<
-	TopicToolCalls,
-	"topicSaves" | "topicSaveRejections" | "proposedTopicEdit" | "isTopicEditCancelled"
-> & {
-	proposedToUserId?: string
-}
-
-// how much of a compacted earlier answer survives
-const COMPACT_ANSWER_CHARS = 280
-
-/**
- * An earlier answer compacted to its opening characters, so the payload and the prompt clip identically.
- */
-
-export function compactChatAnswer(answer: string): string {
-	if (answer.length <= COMPACT_ANSWER_CHARS) {
-		return answer
-	}
-	return `${answer.slice(0, COMPACT_ANSWER_CHARS).trimEnd()}…`
-}
-
-/**
- * A stored tool call clipped to what the chat turn payload accepts. A tool that returned more than the payload allows,
- * as a web search over a long page does, would otherwise reject every later question in that conversation.
- */
-
-export function toSentToolCall(toolCall: ChatToolCall): ChatToolCall {
-	// clip an output past its limit, and drop an input past its own. the output still says what the call did
-	const isInputSendable = JSON.stringify(toolCall.input ?? null).length <= CHAT_HISTORY_TOOL_CALL_INPUT_CHARS
-	const isOutputSendable = toolCall.output.length <= CHAT_HISTORY_ANSWER_CHARS
-	if (isInputSendable && isOutputSendable) {
-		return toolCall
-	}
-	return {
-		toolName: toolCall.toolName,
-		input: isInputSendable ? toolCall.input : null,
-		output: isOutputSendable
-			? toolCall.output
-			: `${toolCall.output.slice(0, CHAT_HISTORY_ANSWER_CHARS - 1).trimEnd()}…`,
-	}
-}
-
-/**
- * One chat turn's tool calls as the next question sends them, keeping the newest when a turn called more than the
- * payload accepts. A turn over that count would otherwise reject every later question in that conversation.
- */
-
-export function toSentToolCalls(toolCalls: ChatToolCall[]): ChatToolCall[] {
-	return toolCalls.slice(-CHAT_HISTORY_TOOL_CALLS).map(toSentToolCall)
-}
-
-// the tools carl calls to put a change on the topic's card or to take it back off, and the ones that save
-export const PROPOSE_TOPIC_EDIT_TOOL = "proposeTopicEdit"
-
-export const CANCEL_TOPIC_EDIT_TOOL = "cancelTopicEdit"
-
-// the tool carl calls in the new-topic chat to propose creating the topic from the draft
-export const PROPOSE_NEW_TOPIC_TOOL = "proposeNewTopic"
-
-export const TOPIC_SAVE_TOOL_NAMES = ["updateTopicPrompt", "addSource", "removeSource", "updateTopicFields"]
-
-/**
- * The proposal a conversation is still sitting on, read from the tools its chat turns called, or null for none.
- * A proposal stands until carl cancels it or a tool saves, so a change already written is never answered twice.
- */
-
-export function toStandingTopicEditCall(toolCalls: ChatToolCall[]): ChatToolCall | null {
-	// the last call that opened a proposal or closed one, by cancelling it or by saving
-	const lastTopicEditCall = toolCalls
-		.filter(
-			(toolCall) =>
-				toolCall.toolName === PROPOSE_TOPIC_EDIT_TOOL ||
-				toolCall.toolName === CANCEL_TOPIC_EDIT_TOOL ||
-				TOPIC_SAVE_TOOL_NAMES.includes(toolCall.toolName),
-		)
-		.at(-1)
-	return lastTopicEditCall?.toolName === PROPOSE_TOPIC_EDIT_TOOL ? lastTopicEditCall : null
-}
+// the user's unviewed chat mentions summed over every chat room
+export const chatMentionCountResponse = z.object({ count: z.number() })
 
 // how many attachments one chat turn may include, and how large each may run
 export const CHAT_MAX_ATTACHMENTS = 4
@@ -317,51 +214,63 @@ export function clipAttachmentText(text: string, pdfPageCount?: number): string 
 	return `${text.slice(0, CHAT_ATTACHMENT_TEXT_CHARS - marker.length)}${marker}`
 }
 
+// one tool a stored chat turn called, as the conversation returns it
+export const chatToolCall = z.object({ toolName: z.string(), input: z.unknown(), output: z.string() })
+
+// the podcast episode and the chapter a stored question was asked during, by its position from zero
+export const podcastEpisodeChapterRef = z.object({ podcastEpisodeId: z.string(), chapterPosition: z.number() })
+
 // one persisted chat turn of a stored conversation, replayed on a later page load
-export type ChatTurnRow = {
-	question: string
-	answer: string
-	at?: string
+export const chatTurnRow = z.object({
+	question: z.string(),
+	answer: z.string(),
+	at: z.string().optional(),
 	// whether the question was spoken and its reply read aloud
-	isSpoken: boolean
-	// the speaker who answered, host unless the cohost answered a podcast chat turn. the podcast episode chapter that a
-	// podcast chat turn was asked during, or null
-	speaker: PodcastEpisodeSpeaker
-	podcastEpisodeChapter: PodcastEpisodeChapterRef | null
+	isSpoken: z.boolean(),
+	// the speaker who answered, host unless the cohost answered a podcast chat turn, and the podcast episode chapter
+	// that a podcast chat turn was asked during, or null
+	speaker: z.enum(podcastEpisodeSpeakers),
+	podcastEpisodeChapter: podcastEpisodeChapterRef.nullable(),
 	// the tools this chat turn called, sent back with the next question
-	toolCalls?: ChatToolCall[]
-	attachments: ChatMessageAttachment[]
+	toolCalls: z.array(chatToolCall).optional(),
+	attachments: z.array(chatMessageAttachment),
 	// the cards for the question's first links, empty if it holds none or no link preview is stored
-	linkPreviews: ChatLinkPreview[]
+	linkPreviews: z.array(chatLinkPreview),
 	// the cards for the answer's first links, under the same rules
-	answerLinkPreviews: ChatLinkPreview[]
-}
+	answerLinkPreviews: z.array(chatLinkPreview),
+})
+
+export type ChatTurnRow = z.infer<typeof chatTurnRow>
 
 // an attachment the user keeps durably for a topic, with when they added it
-export type KeptChatAttachment = {
-	id: string
-	name: string
-	kind: (typeof chatAttachmentKinds)[number]
-	at: string
-}
+export const keptChatAttachment = z.object({
+	id: z.string(),
+	name: z.string(),
+	kind: displayEnum(chatAttachmentKinds),
+	at: z.string(),
+})
+
+export type KeptChatAttachment = z.infer<typeof keptChatAttachment>
 
 // the stored conversation for a topic
-export type ChatConversation = {
-	chatTurns: ChatTurnRow[]
-	canChat: boolean
-	isSignupRequired: boolean
+export const chatConversation = z.object({
+	chatTurns: z.array(chatTurnRow),
+	canChat: z.boolean(),
+	isSignupRequired: z.boolean(),
 	// an exhausted monthly budget keeps the panel open on the upgrade link instead of hiding chat
-	isBudgetExhausted: boolean
+	isBudgetExhausted: z.boolean(),
 	// whether voice chat is on, which needs a transcription model and a speech model
-	isVoiceChatConfigured: boolean
-	keptAttachments: KeptChatAttachment[]
+	isVoiceChatConfigured: z.boolean(),
+	keptAttachments: z.array(keptChatAttachment),
 	// whether the user may edit the topic in the chat
-	canEditTopic: boolean
+	canEditTopic: z.boolean(),
 	// whether the user owns no topic yet
-	isFirstTopic?: boolean
+	isFirstTopic: z.boolean().optional(),
 	// how many more topics the plan lets the user hold, and the plan's limit, on the new-topic conversation alone
-	topicsRemaining?: number
-	topicLimit?: number
+	topicsRemaining: z.number().optional(),
+	topicLimit: z.number().optional(),
 	// the topic draft carl has written so far, on the new-topic conversation alone
-	topicDraft?: TopicDraft
-}
+	topicDraft: z.custom<TopicDraft>((value) => typeof value === "object" && value !== null).optional(),
+})
+
+export type ChatConversation = z.infer<typeof chatConversation>

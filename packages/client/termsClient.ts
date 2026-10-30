@@ -1,6 +1,6 @@
 // the Terms acceptance call: records the signed-in user's acceptance of the published version
 import { type TermsAcceptanceResponse, termsAcceptanceResponse } from "@carlnotes/contracts/terms"
-import { apiClient } from "./apiClient"
+import { apiClient, readApiResponse } from "./apiClient"
 
 /**
  * Records the signed-in user's acceptance of the current Terms and returns the version now on the account. Throws an
@@ -11,5 +11,5 @@ export async function sendTermsAcceptance(): Promise<TermsAcceptanceResponse> {
 	if (!response.ok) {
 		throw new Error(`terms acceptance failed: ${response.status}`)
 	}
-	return termsAcceptanceResponse.parse(await response.json())
+	return readApiResponse(termsAcceptanceResponse, response)
 }

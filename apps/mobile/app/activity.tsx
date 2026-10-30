@@ -3,11 +3,11 @@ import { authClient } from "@carlnotes/client/authClient"
 import { useQuery } from "@tanstack/react-query"
 import { Activity } from "lucide-react-native"
 import { AnchorLink } from "@/components/common/AnchorLink"
+import { LoadFailedNotice } from "@/components/common/LoadFailedNotice"
 import { UserMenuUpdateCountBadge } from "@/components/common/UpdateCountBadge"
 import { UserProfileLink } from "@/components/common/UserProfileLink"
 import { PageScreen } from "@/components/layout/PageScreen"
 import { PageSkeleton } from "@/components/layout/PageSkeleton"
-import { Button } from "@/components/primitives/button"
 import { Text } from "@/components/primitives/text"
 import { TopicInvitesTable } from "@/components/table/TopicInvitesTable"
 import { TopicSubscriptionsTable } from "@/components/table/TopicSubscriptionsTable"
@@ -63,9 +63,7 @@ export default function ActivityScreen() {
 					</CollapsibleSection>
 				</>
 			) : query.isError ? (
-				<Button variant="outline" accessibilityLabel="Retry activity" onPress={handleReload}>
-					<Text>Retry loading activity</Text>
-				</Button>
+				<LoadFailedNotice message="Activity didn't load." retryLabel="Retry loading activity" onRetry={handleReload} />
 			) : (
 				<PageSkeleton kind="activity" />
 			)}

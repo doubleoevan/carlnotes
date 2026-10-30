@@ -6,7 +6,13 @@ import {
 	toTestTopicFinding,
 	toTestTopicResponse,
 } from "@carlnotes/contracts/topicFeedTestFixtures"
-import { filterTopicFeed, matchesTagFilters, selectTopicFindings, toggleTopicResourceKind } from "./topicFeed"
+import {
+	filterTopicFeed,
+	isResourceKindSelected,
+	matchesTagFilters,
+	selectTopicFindings,
+	toggleTopicResourceKind,
+} from "./topicFeed"
 import { applyTopicFeedChanges, applyTopicPageChanges } from "./topicFindingChanges"
 
 // complete findings exercise selection without a component or platform import
@@ -142,4 +148,12 @@ test("sorts retain recency fallback and stable ties, and Resource-kind selection
 			(finding) => finding.findingId,
 		),
 	).toEqual(["older"])
+})
+
+// a Finding whose kind the build does not know shows until the user narrows the kinds
+test("isResourceKindSelected passes an unknown kind while every kind is selected", () => {
+	expect(isResourceKindSelected("unknown", new Set(resourceKinds))).toBe(true)
+	expect(isResourceKindSelected("unknown", new Set(["read"]))).toBe(false)
+	expect(isResourceKindSelected("watch", new Set(["read"]))).toBe(false)
+	expect(isResourceKindSelected("watch", new Set(["read", "watch"]))).toBe(true)
 })

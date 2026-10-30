@@ -1,5 +1,7 @@
 // the expo app config: the identity, the EAS project link, the icon and splash, and the config plugins
+import { toAndroidAppLinkIntentFilters } from "@carlnotes/contracts/appLinkPaths"
 import { MOBILE_APP_BUNDLE_IDENTIFIER, MOBILE_APP_SCHEME } from "@carlnotes/contracts/mobileApp"
+import { SITE_HOST } from "@carlnotes/contracts/site"
 import { colors } from "@carlnotes/nightshift/colors"
 import { withSentry } from "@sentry/react-native/expo"
 import type { ExpoConfig } from "expo/config"
@@ -23,7 +25,10 @@ const expoConfig: ExpoConfig = {
 		supportsTablet: true,
 		// the native Sign in with Apple sheet
 		usesAppleSignIn: true,
-		infoPlist: { LSApplicationQueriesSchemes: ["podcast"] },
+		// the app uses only transport encryption and the system keychain, which the export rules exempt
+		infoPlist: { LSApplicationQueriesSchemes: ["podcast"], ITSAppUsesNonExemptEncryption: false },
+		// the site's links open in the app, and saved sign-ins are shared with the site
+		associatedDomains: [`applinks:${SITE_HOST}`, `webcredentials:${SITE_HOST}`],
 		// App Attest in Apple's production environment on every build. a store or TestFlight build ignores the setting
 		// and uses production anyway, and an ad hoc preview build follows it. a preview build then attests against the
 		// production api
@@ -34,6 +39,8 @@ const expoConfig: ExpoConfig = {
 	android: {
 		package: MOBILE_APP_BUNDLE_IDENTIFIER,
 		softwareKeyboardLayoutMode: "resize",
+		// the site's links open in the app once the asset links verify
+		intentFilters: toAndroidAppLinkIntentFilters(SITE_HOST),
 		adaptiveIcon: {
 			foregroundImage: "./assets/adaptive-icon.png",
 			// the cream behind the hand and the mug in the app icon

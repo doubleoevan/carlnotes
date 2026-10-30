@@ -6,12 +6,9 @@ import {
 	setTeamMemberVisibility,
 } from "@carlnotes/client/teamClient"
 import { isLeaderRole } from "@carlnotes/contracts/enums"
+import type { TeamMember } from "@carlnotes/contracts/teams"
 import { DataTable, type DataTableElements } from "@carlnotes/core/components/DataTable"
-import {
-	memberSortValues,
-	type TeamMember,
-	toTeamMembersTableColumns,
-} from "@carlnotes/core/lib/teamMembersTableColumns"
+import { memberSortValues, toTeamMembersTableColumns } from "@carlnotes/core/lib/teamMembersTableColumns"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { X } from "lucide-react"
 import { toast } from "sonner"

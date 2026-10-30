@@ -1,4 +1,4 @@
-import { SITE_URL } from "@carlnotes/core/lib/pageHead"
+import { SITE_URL } from "@carlnotes/contracts/site"
 import type { LucideIcon } from "lucide-react-native"
 import { type ComponentRef, useRef, useState } from "react"
 import type { View } from "react-native"

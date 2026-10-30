@@ -1,4 +1,5 @@
-import type { ChatRoomMessage, RoomTopicToolCalls } from "@carlnotes/contracts/chat"
+import type { ChatRoomMessage } from "@carlnotes/contracts/chat"
+import type { RoomTopicToolCalls } from "@carlnotes/contracts/chatTurns"
 import { runWithRequestMemo } from "@carlnotes/db/requestMemo"
 import type { SSEStreamingApi } from "hono/streaming"
 import { streamSSE } from "hono/streaming"

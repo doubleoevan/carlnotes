@@ -1,5 +1,10 @@
 // the one shared set of enum values. db builds its pgEnums from these, api validates with them, and ui renders with
 // them
+
+// the case a display enum takes on the app when the api sends a value this version does not know
+export const UNKNOWN_CASE = "unknown"
+export type UnknownCase = typeof UNKNOWN_CASE
+
 export const sourceKinds = [
 	"url",
 	"rss",
@@ -17,6 +22,14 @@ export const visibilities = ["public", "invite", "private"] as const
 // how many findings a public topic needs before it is shown to others
 export const MINIMUM_SHOWN_FINDINGS = 3
 export const frequencies = ["daily", "weekdays", "weekly"] as const
+export type Frequency = (typeof frequencies)[number]
+
+/**
+ * Returns a frequency the editor can offer: the value itself, or weekly for an unknown value.
+ */
+export function toKnownFrequency(frequency: string): Frequency {
+	return toKnownValue(frequencies, frequency, "weekly")
+}
 // the frequencies the plan's daily topic limit applies to
 export const dailyFrequencies = ["daily", "weekdays"] as const
 
@@ -58,6 +71,19 @@ export function isDailyFrequency(frequency: string): boolean {
 
 // the day a weekly scan runs on. ignored for non-weekly frequencies
 export const daysOfWeek = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"] as const
+export type DayOfWeek = (typeof daysOfWeek)[number]
+
+/**
+ * Returns a day the editor can offer: the value itself, or monday for an unknown value.
+ */
+export function toKnownDayOfWeek(dayOfWeek: string): DayOfWeek {
+	return toKnownValue(daysOfWeek, dayOfWeek, "monday")
+}
+
+// the value if the list names it, else the fallback
+function toKnownValue<Value extends string>(values: readonly Value[], value: string, fallback: Value): Value {
+	return values.includes(value as Value) ? (value as Value) : fallback
+}
 export const scanStatuses = ["running", "succeeded", "failed"] as const
 // a podcast episode's status. recording until it publishes or fails,
 // and removed once its topic's owner or an admin removes it

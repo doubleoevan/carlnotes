@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { toPlatformPath } from "./platformPath"
+import { hasNativeRoute, toPlatformPath } from "./platformPath"
 
 test("canonical topic and note links retain platform routes and page context", () => {
 	expect(toPlatformPath("https://carlnotes.com/topics/topic-1/coffee?sort=oldest")).toBe("/topics/topic-1?sort=oldest")
@@ -28,5 +28,21 @@ test("episode links retain season, number, and context before the generic Topic 
 		"//example.test/topics/topic-1/episodes/2026/7",
 	]) {
 		expect(toPlatformPath(url)).toBe(url)
+	}
+})
+
+test("hasNativeRoute is true for a native route path and false for any other", () => {
+	for (const path of [
+		"/",
+		"/search?q=x",
+		"/topics/t1",
+		"/topics/t1/episodes/2026/7",
+		"/teams/t1/notes/n1",
+		"/invite/k",
+	]) {
+		expect(hasNativeRoute(path)).toBe(true)
+	}
+	for (const path of ["/terms", "/docs/quickstart", "/topics", "/topics/t1/something", "/admin"]) {
+		expect(hasNativeRoute(path)).toBe(false)
 	}
 })

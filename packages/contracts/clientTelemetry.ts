@@ -19,12 +19,14 @@ const DEVICE_HEADERS = {
 
 // the header that names the app's platform on every request, and its two values
 export const PLATFORM_HEADER = "x-carlnotes-platform"
+export const MOBILE_PLATFORMS = ["ios", "android"] as const
+export type MobilePlatform = (typeof MOBILE_PLATFORMS)[number]
 
 /**
  * Returns true if a platform header value names one of the two native platforms.
  */
-export function isNativePlatform(platform: string | null | undefined): platform is "ios" | "android" {
-	return platform === "ios" || platform === "android"
+export function isNativePlatform(platform: string | null | undefined): platform is MobilePlatform {
+	return MOBILE_PLATFORMS.includes(platform as MobilePlatform)
 }
 
 /**

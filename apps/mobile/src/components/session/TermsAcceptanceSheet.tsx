@@ -1,9 +1,9 @@
+import { SITE_URL } from "@carlnotes/contracts/site"
 import {
 	type TermsAcceptanceElements,
 	TermsAcceptanceNotice,
 	useIsTermsAcceptanceDialogOpen,
 } from "@carlnotes/core/components/TermsAcceptanceNotice"
-import { SITE_URL } from "@carlnotes/core/lib/pageHead"
 import { View } from "react-native"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { Sheet } from "@/components/common/Sheet"

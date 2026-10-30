@@ -1,18 +1,23 @@
 // the api client for notes: the page's note list, the note lifecycle, the body save, the comment thread, and the
 // badges
-
 import type { noteVisibilities } from "@carlnotes/contracts/enums"
-import type {
-	Note,
-	NoteBadge,
-	NoteBodyConflictResponse,
-	NoteBodyResponse,
-	NoteBodySaveResult,
-	NoteComment,
-	NoteResponse,
-	NotesResponse,
+import {
+	type Note,
+	type NoteBadge,
+	type NoteBodySaveResult,
+	type NoteComment,
+	type NoteResponse,
+	type NotesResponse,
+	note,
+	noteBadgesResponse,
+	noteBodyConflictResponse,
+	noteBodyResponse,
+	noteComment,
+	noteCommentsResponse,
+	noteResponse,
+	notesResponse,
 } from "@carlnotes/contracts/notes"
-import { type ApiResponse, apiClient } from "./apiClient"
+import { type ApiResponse, apiClient, readApiResponse } from "./apiClient"
 
 // a note visibility and a note page reference
 type NoteVisibility = (typeof noteVisibilities)[number]
@@ -42,7 +47,7 @@ export async function fetchNotes(page: NotePageRef, options: NoteReadOptions = {
 	}
 
 	// the payload is the visible notes and the creatable visibilities
-	return (await response.json()) as NotesResponse
+	return readApiResponse(notesResponse, response)
 }
 
 /**
@@ -64,7 +69,7 @@ export async function createNote(page: NotePageRef, name: string, visibility: No
 	}
 
 	// the created row, owned by the caller
-	return (await response.json()) as Note
+	return readApiResponse(note, response)
 }
 
 /**
@@ -79,8 +84,8 @@ export async function fetchNote(noteId: string, options: NoteReadOptions = {}): 
 			return null
 		}
 
-		// the note with its body and version
-		return (await response.json()) as NoteResponse
+		// the note with its body and version, awaited so a parse error reaches the catch below
+		return await readApiResponse(noteResponse, response)
 	} catch (error) {
 		if (options.shouldThrowOnError) {
 			throw error
@@ -122,7 +127,7 @@ export async function saveNoteBody(
 		// a conflict names the newer version and who saved it
 		const status: number = response.status
 		if (status === 409) {
-			const conflict = (await response.json()) as NoteBodyConflictResponse
+			const conflict = await readApiResponse(noteBodyConflictResponse, response)
 			return { status: "conflict", version: conflict.version, lastEditorUsername: conflict.lastEditorUsername }
 		}
 
@@ -130,6 +135,8 @@ export async function saveNoteBody(
 		if (status === 413 || status === 400) {
 			return { status: "tooLarge" }
 		}
+
+		// a note the user may not save, or one that is gone, is unavailable
 		if (status === 401 || status === 403 || status === 404) {
 			return { status: "unavailable" }
 		}
@@ -138,7 +145,7 @@ export async function saveNoteBody(
 		}
 
 		// a kept body comes back with the version it is stored at
-		return { status: "saved", version: ((await response.json()) as NoteBodyResponse).version }
+		return { status: "saved", version: (await readApiResponse(noteBodyResponse, response)).version }
 	} catch {
 		return { status: "failed" }
 	}
@@ -153,7 +160,7 @@ export async function fetchNoteComments(noteId: string): Promise<NoteComment[]> 
 	if (!response.ok) {
 		throw new NoteReadError(response.status)
 	}
-	return ((await response.json()) as { comments: NoteComment[] }).comments
+	return (await readApiResponse(noteCommentsResponse, response)).comments
 }
 
 /**
@@ -166,8 +173,8 @@ export async function postNoteComment(noteId: string, body: string): Promise<Not
 			return null
 		}
 
-		// the posted comment as the thread shows it
-		return (await response.json()) as NoteComment
+		// the posted comment as the thread shows it, awaited so a parse error reaches the catch below
+		return await readApiResponse(noteComment, response)
 	} catch {
 		return null
 	}
@@ -199,8 +206,7 @@ export async function fetchNoteBadges(): Promise<NoteBadge[]> {
 	}
 
 	// the payload holds only the notes with unread edits or comments
-	const payload = (await response.json()) as { badges: NoteBadge[] }
-	return payload.badges
+	return (await readApiResponse(noteBadgesResponse, response)).badges
 }
 
 /**

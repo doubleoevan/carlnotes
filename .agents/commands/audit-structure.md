@@ -798,6 +798,10 @@ Check for:
      `isObjectionableTextResponse`, and `toObjectionableTextResponse` (now `OBJECTIONABLE_CONTENT_REJECTION`,
      `ObjectionableContentResponse`, `objectionableContentResponse`, `isObjectionableContentResponse`, and
      `toObjectionableContentResponse`)
+   - `fetchAndReportUnauthorized` in `packages/client/apiClient.ts` (now `fetchAndHandleRejections`), `SettingsContent.tsx`
+     with its story, `SettingsContentProps`, and `SignedInUserRow` in `apps/mobile/src/components/account/` (removed: the
+     Account screen renders `AccountSettings`), and the mobile `PlanButton` and `ManagePlanButton` in
+     `apps/mobile/src/components/account/AccountBudget.tsx` (removed)
 
 5. **Cross-harness enforcement parity**: `.claude/settings.json` hooks and
    `.opencode/plugin/guardrails.mjs` must gate the same operations with the

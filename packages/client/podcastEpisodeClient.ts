@@ -2,20 +2,18 @@
 
 import type { PodcastEpisodeListenPayload } from "@carlnotes/contracts/payloads"
 import {
+	nextUnplayedPodcastEpisodeResponse,
 	type PodcastEpisode,
 	type PodcastEpisodeAudio,
 	podcastEpisode,
 	podcastEpisodeAudio,
+	podcastFeedUrlResponse,
 	type SeasonPodcastEpisodes,
 	seasonPodcastEpisodes,
 } from "@carlnotes/contracts/podcast"
 import { type PodcastEpisodePageResponse, podcastEpisodePageResponse } from "@carlnotes/contracts/podcastEpisodePage"
-import { z } from "zod"
-import { type ApiResponse, apiClient, fetchApi } from "./apiClient"
+import { type ApiResponse, apiClient, fetchApi, readApiResponse } from "./apiClient"
 import { readTopicGate, type TopicGate } from "./topicClient"
-
-// what a podcast feed url request returns
-const podcastFeedUrlResponse = z.object({ podcastFeedUrl: z.string() })
 
 // the url params of a podcast episode's own page
 export type PodcastEpisodePageParams = { topicId: string; season: string; episodeNumber: string }
@@ -31,11 +29,12 @@ export async function fetchPodcastEpisode(
 	// validate the response under the caller's error policy
 	const response = await fetchApi(`/api/episodes/${encodeURIComponent(podcastEpisodeId)}`, { signal: options.signal })
 	assertPodcastEpisodeResponse(response, options)
-	return response.ok ? podcastEpisode.parse(await response.json()) : null
+	return response.ok ? readApiResponse(podcastEpisode, response) : null
 }
 
 /**
- * Loads a podcast episode's page, the gate in front of its topic, or nothing if the topic has no such episode.
+ * Loads a podcast episode's page, the gate in front of its topic, or nothing if the topic has no such episode. Any
+ * other rejected read throws.
  */
 export async function fetchPodcastEpisodePage(
 	{ topicId, season, episodeNumber }: PodcastEpisodePageParams,
@@ -46,13 +45,13 @@ export async function fetchPodcastEpisodePage(
 		{ signal: options.signal },
 	)
 	if (response.ok) {
-		return { status: "visible", podcastEpisodePage: podcastEpisodePageResponse.parse(await response.json()) }
+		return { status: "visible", podcastEpisodePage: await readApiResponse(podcastEpisodePageResponse, response) }
 	}
 
-	if (response.status >= 500) {
-		assertPodcastEpisodeResponse(response, options)
+	if (response.status !== 403 && response.status !== 404) {
+		throw new PodcastEpisodeRequestError(response.status)
 	}
-	// a gated podcast episode shows the gate in front of its topic, and any other response is a missing episode
+	// a gated podcast episode shows the gate in front of its topic, and a 404 is a missing episode
 	const topicGate = await readTopicGate(response)
 	return topicGate ? { status: "gated", topicGate } : { status: "missing" }
 }
@@ -86,10 +85,12 @@ export async function fetchSeasonPodcastEpisodes({
 			}
 			return null
 		})
+
+	// a response that arrived is checked under the caller's error policy, and only an ok one is read
 	if (response) {
 		assertPodcastEpisodeResponse(response, options)
 	}
-	return response?.ok ? seasonPodcastEpisodes.parse(await response.json()) : { podcastEpisodes: [] }
+	return response?.ok ? readApiResponse(seasonPodcastEpisodes, response) : { podcastEpisodes: [] }
 }
 
 /**
@@ -101,7 +102,7 @@ export async function fetchNextUnplayedPodcastEpisode(currentTopicId: string): P
 	if (!response.ok) {
 		return null
 	}
-	return z.object({ podcastEpisode: podcastEpisode.nullable() }).parse(await response.json()).podcastEpisode
+	return (await readApiResponse(nextUnplayedPodcastEpisodeResponse, response)).podcastEpisode
 }
 
 /**
@@ -181,7 +182,7 @@ export async function fetchPodcastFeedUrl(
 	// load the account-owned feed under the caller's error policy
 	const response = await fetchApi(`/api/topics/${encodeURIComponent(topicId)}/podcast-feed`, { signal: options.signal })
 	assertPodcastEpisodeResponse(response, options)
-	return response.ok ? podcastFeedUrlResponse.parse(await response.json()).podcastFeedUrl : null
+	return response.ok ? (await readApiResponse(podcastFeedUrlResponse, response)).podcastFeedUrl : null
 }
 
 /**
@@ -198,7 +199,7 @@ export async function sendResetPodcastFeed(
 		signal: options.signal,
 	})
 	assertPodcastEpisodeResponse(response, options)
-	return response.ok ? podcastFeedUrlResponse.parse(await response.json()).podcastFeedUrl : null
+	return response.ok ? (await readApiResponse(podcastFeedUrlResponse, response)).podcastFeedUrl : null
 }
 
 // request cancellation and optional errors for retryable failures and denied access
@@ -241,11 +242,7 @@ export async function fetchPodcastEpisodeAudio(
 		cache: "no-store",
 	})
 	assertPodcastEpisodeResponse(response, { shouldThrowOnError: true })
-	const source = podcastEpisodeAudio.safeParse(await response.json())
-	if (!source.success) {
-		throw new Error("The audio source could not be read.")
-	}
-	return source.data
+	return readApiResponse(podcastEpisodeAudio, response)
 }
 
 /**

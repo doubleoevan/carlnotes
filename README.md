@@ -403,6 +403,9 @@ bun run dev:tunnel   # the Cloudflare tunnel that forwards Sign in with Apple's 
 bun run mobile:build -- --profile development-simulator # EAS (Expo Application Services) cloud build of the mobile app; profiles: development, development-simulator, preview, production. rebuild the development client after a change that adds a native module, as the sign-in change did
 bun run mobile:update -- --channel production --environment production # publish an EAS Update to a channel's builds, on the fingerprint runtime policy; eas update needs both flags
 bun run mobile:env:sync # move the mobile values (the Sentry DSN, the PostHog key, the Play Integrity cloud project number, the Sentry auth token) from Doppler dev and prd into the EAS environments
+bun run mobile:submit -- --platform ios # submit the latest production build to App Store Connect or, with android, the Play internal track, under Doppler prd: the store keys (ASC_APP_ID, APPLE_TEAM_ID, ASC_KEY_ID, ASC_ISSUER_ID, ASC_API_KEY_BASE64, PLAY_SERVICE_ACCOUNT_BASE64) are written for the length of the submit and removed after; --dry-run does everything but the submit
+bun run contract:freeze # write contracts/<app-version>.json, every api route the mobile app reaches as JSON Schema; -- --check fails when the file differs from a fresh freeze, and the submit runs it first
+bun run reviewer:seed -- --environment prd # create or refresh the store reviewer's account in the named environment, under doppler run --config of the same name, with a Topic, its Findings and recap, a Note, a Team room, and a followed public Topic with a Podcast Episode; REVIEWER_EMAIL and REVIEWER_PASSWORD come from Doppler and are never printed
 ```
 
 The homepage needs `dev:ui` and `dev:api` running, or `bun run dev` for the whole stack, plus a seeded dev database
@@ -482,7 +485,7 @@ net revenue. The gate, plans, and quotas all work without Stripe.
 Checks: `bun run check` runs the full gate, the same `scripts/preflight.sh` that the pre-push hook runs:
 
 ```bash
-bun run check       # biome + package boundaries + component parity + client parity + tsc + workflow bundles + bun test
+bun run check       # biome + package boundaries + component parity + client parity + purchase paths + contract freeze + tsc + workflow bundles + bun test
 ```
 
 Or run them individually:
@@ -492,6 +495,8 @@ bunx biome check .
 bun scripts/check-package-boundaries.ts # every import stays inside the dependencies its workspace declares
 bun scripts/check-component-parity.ts   # every Nightshift component contract is implemented in each app it names
 bun scripts/check-client-parity.ts      # every api capability the web reaches is reachable from the app, or listed in apps/mobile/parity.md
+bun scripts/check-purchase-paths.ts     # checkout and the billing portal stay out of the mobile app's reach
+bun scripts/check-contract-freeze.ts    # no api change an unretired snapshot in contracts/ could not read or send
 bunx tsc -b             # add --force after a dependency change. bun run check does that on its own
 bun test
 bun run check:workflows # every Temporal workflow file still bundles

@@ -40,6 +40,9 @@ capability the app will never need, with the reason, or `deferred` for one an ac
 | `profileClient.sendAvatarDecodeFailure` | web-only | A browser's image decode telemetry. The system photo picker returns images the app decodes |
 | `reportClient.fetchAdminReports` | web-only | The admin console's open reports. Admin stays on the web |
 | `reportClient.sendReportResolution` | web-only | The admin console's Remove and Keep. Admin stays on the web |
+| `billingClient.sendMobileMinimumVersion` | web-only | The admin console's minimum app version write. Admin stays on the web |
+| `billingClient.fetchBillingPortalUrl` | deferred | Prompt 55, store payments. The app offers no purchase or billing management until a storefront design is approved |
+| `billingClient.fetchCheckoutUrl` | deferred | Prompt 55, store payments. The app offers no purchase until a storefront design is approved |
 | `teamClient.sendTeamAvatar` | web-only | The browser's File upload. The app uploads to the same route through `teamClient.sendTeamAvatarBody` |
 | `voiceClient.fetchSpokenAnswerAudio` | deferred | Prompt 54, voice in the mobile chat and the podcast question |
 | `voiceClient.fetchSpokenQuestionsStatus` | deferred | Prompt 54, voice in the mobile chat and the podcast question |
@@ -48,7 +51,10 @@ capability the app will never need, with the reason, or `deferred` for one an ac
 | `voiceClient.sendTranscription` | deferred | Prompt 54, voice in the mobile chat and the podcast question |
 
 Deferred work with no api capability of its own yet: push notifications (Prompt 52), which will move the app icon badge
-off the foreground poll, and store payments (Prompt 55), which decides what the native Plans screen's checkout opens.
+off the foreground poll, and store payments (Prompt 55), which decides what the native Plans screen offers. Until
+then the app sells nothing: the Plans screen is read-only, the Account header has no Upgrade or Manage plan button,
+the failed-payment notice has no portal button, and the spend meter, topic settings card, scan alert, scan recap,
+and edit topic fields keep their words without the plans link. `scripts/check-purchase-paths.ts` keeps it so.
 The web's document title count has the app icon's badge as its counterpart, so it is not web-only.
 
 ## Page and action inventory
@@ -70,10 +76,11 @@ their reason.
 | Teams | `teams/index.tsx` | component | the shared membership table and the title badge |
 | Team | `teams/[teamId].tsx` | component | the shared tables, the header's update badge |
 | Activity | `activity.tsx` | component | the shared subscription and invite tables, the title badge |
-| Account, Settings | `account.tsx`, `(tabs)/settings.tsx` | component | `AccountBudget`, `AccountFields`, `BlockedUsersSection`, `PlanCard` from core, and the Contact entry |
+| Account, Settings | `account.tsx`, `(tabs)/settings.tsx` | component | `AccountBudget`, `AccountFields`, `BlockedUsersSection`, `PlanCard` from core, and the Contact entry. The closing version line is native: a browser loads the current app on every visit, and an installed build names its version, build, and update for a support request |
+| Update notice | `session/AppUpdateNotice.tsx` at the root | logic | the copy from `contracts/appVersions.ts` and the requirement from `core/stores/appUpdateStore.ts` on the session frame. Native alone: a browser never runs an outdated app |
 | Report and block | `common/ReportIssueDialog.tsx` from the message and comment footers, note management, and the profile menu | component, logic | the shared report, the block switch, the hidden quote, and the blocked content filters from core |
 | Terms acceptance | `session/TermsAcceptanceSheet.tsx` at the root | component | core's `TermsAcceptanceNotice` in a sheet, with Not now putting it off until the next rejected write |
-| Plans | `plans.tsx` | component | the shared plan cards, open to a visitor with the recommended plan highlighted |
+| Plans | `plans.tsx` | component | the shared plan cards, open to a visitor with the recommended plan highlighted, read-only: a user's plan is marked and no card offers a checkout or the portal |
 | Invite | `invite/[token].tsx`, `invite/InviteNotice.tsx` | logic | the rejection copy and the follow-ups from `core/lib/inviteRejections.ts` |
 | Login, Signup | `sign-in.tsx`, `sign-up.tsx` | logic | Google, GitHub, and Apple, the prompts from `core/lib/signupPrompts.ts` |
 | Chat panel and rooms | `chat.tsx`, `topics/…/chat.tsx`, `teams/…/chat.tsx` | component, logic | the shared turn and bubble compositions, the room list from the shared store |
@@ -82,7 +89,7 @@ their reason.
 | Update badges | `common/UpdateCountBadge.tsx` | logic | the sum, labels, and groups from `core/lib/updateCounts.ts`, a long-press sheet for the tooltip |
 | Admin | none | web-only | Admin opens the web from the menu, and its browser session can need its own sign-in |
 | MCP consent | none | web-only | an AI client's OAuth consent, opened in a browser |
-| Privacy, Terms, License | none | web-only | the footer opens the web pages in the browser sheet |
+| Privacy, Terms, License | none | web-only | the footer on every page, Account included, opens the web pages in the browser sheet |
 | Reset password | none | web-only | the sign-in screen's Forgot password opens the web's reset page |
 | Not found | the router's own screen | native | Expo Router's unmatched route |
 
@@ -124,3 +131,7 @@ a React Native Storybook story; the device comparison runs on the rebuilt develo
 | The Blocked people section's states | `Account/BlockedUsersSection` | not yet, stories only |
 | The Terms acceptance sheet | `Session/TermsAcceptanceSheet` | not yet, stories only |
 | The sign-up screens' acceptance line | `Session/TermsAgreementText` | not yet, stories only |
+| The update notice with and without a minimum | `Session/AppUpdateNotice` | not yet, stories only |
+| The Account screen's version line | `Account/AppVersionLine` | not yet, stories only |
+| The read-only plan cards | `Account/PlanCard` | not yet, stories only |
+| A budget failure without the upgrade line | `Topic/TopicScanRecap`, BudgetFailed | not yet, stories only |

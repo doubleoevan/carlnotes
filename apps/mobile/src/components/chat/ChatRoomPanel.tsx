@@ -15,6 +15,7 @@ import { markChatRoomOpened } from "@carlnotes/core/stores/chatRoomStore"
 import { useEffect, useMemo, useRef, useState } from "react"
 import { Alert, type FlatList, ScrollView, View } from "react-native"
 import { CoffeeLoading } from "@/components/branding/CoffeeLoading"
+import { LoadFailedNotice } from "@/components/common/LoadFailedNotice"
 import { ReportIssueDialog } from "@/components/common/ReportIssueDialog"
 import { Button } from "@/components/primitives/button"
 import { Text } from "@/components/primitives/text"
@@ -140,6 +141,16 @@ export function ChatRoomContent({
 	if (chatRoom.isRejected) {
 		return <Text className="p-3 text-muted-foreground">Join this team to start the conversation</Text>
 	}
+	if (!chatRoom.isLoaded && chatRoom.reloadUnreadableRoom) {
+		return (
+			<LoadFailedNotice
+				className="p-3"
+				message="This room couldn't load."
+				retryLabel="Retry loading room"
+				onRetry={chatRoom.reloadUnreadableRoom}
+			/>
+		)
+	}
 	if (!chatRoom.isLoaded) {
 		return chatRoom.hasLoadFailed ? (
 			<Text accessibilityRole="alert" className="p-3 text-muted-foreground">
@@ -156,6 +167,15 @@ export function ChatRoomContent({
 				<View className="flex-row justify-end">
 					<ChatOptionsMenu isRoom isDisabled={!chatRoom.chatMessages.length} onClear={onClear} />
 				</View>
+			)}
+			{/* failed refresh */}
+			{chatRoom.hasMessagePageLoadFailed && (
+				<LoadFailedNotice
+					className="p-3"
+					message="This room couldn't refresh. The messages below may be behind."
+					retryLabel="Retry refreshing room"
+					onRetry={() => void chatRoom.reloadChatMessages()}
+				/>
 			)}
 			{/* messages */}
 			<ChatMessageList

@@ -5,3 +5,6 @@ dist/
 # local development clients are generated from app.config.ts by Expo prebuild
 /ios/
 /android/
+
+# the Play service account key, written from Doppler for the length of a submit
+/play-service-account.json

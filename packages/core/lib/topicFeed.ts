@@ -1,18 +1,37 @@
-import { resourceKinds as allResourceKinds } from "@carlnotes/contracts/enums"
+import { resourceKinds as allResourceKinds, UNKNOWN_CASE } from "@carlnotes/contracts/enums"
 import type { TagMatchMode, TopicFinding, TopicFindingFilter, TopicFindingSort } from "@carlnotes/contracts/findings"
 import type { TopicFeedResponse } from "@carlnotes/contracts/topics"
 import { matchesTopicFindingFilter } from "./topicFindingFilters"
 import { toSortedTopicFindings } from "./topicFindingSorts"
 import { toSortedSectionTopics } from "./topicSorts"
 
-// the feed's selected kinds, view, sort, and bookmark ownership
 export type ResourceKind = (typeof allResourceKinds)[number]
+
+/**
+ * Returns whether a Finding's resource kind passes the kind filter. An unknown kind passes while every kind is
+ * selected.
+ */
+export function isResourceKindSelected(
+	resourceKind: TopicFinding["resourceKind"],
+	resourceKinds: Set<ResourceKind>,
+): boolean {
+	// an unknown kind passes only while every kind is selected
+	if (resourceKind === UNKNOWN_CASE) {
+		// every kind selected is no filter at all
+		return resourceKinds.size === allResourceKinds.length
+	}
+	return resourceKinds.has(resourceKind)
+}
+
+// the feed's selected kinds, view, sort, and bookmark ownership
 export type TopicFindingSelection = {
 	resourceKinds: Set<ResourceKind>
 	findingFilter: TopicFindingFilter
 	sort: TopicFindingSort
 	bookmarkScope?: "mine" | "team"
 }
+
+// what each helper takes beside the selection
 export type SelectTopicFindingsOptions = TopicFindingSelection & { findings: TopicFinding[] }
 type MatchesTagFiltersOptions = { topicTags: string[]; tagFilters: string[]; tagMatchMode: TagMatchMode }
 type ToggleTopicResourceKindOptions = { resourceKinds: Set<ResourceKind>; resourceKind: ResourceKind }
@@ -62,7 +81,8 @@ export function selectTopicFindings({
 	// filter before pinning and sorting
 	const matchingFindings = findings.filter(
 		(finding) =>
-			resourceKinds.has(finding.resourceKind) && matchesTopicFindingFilter(finding, findingFilter, bookmarkScope),
+			isResourceKindSelected(finding.resourceKind, resourceKinds) &&
+			matchesTopicFindingFilter(finding, findingFilter, bookmarkScope),
 	)
 	return toSortedTopicFindings(matchingFindings, sort)
 }
@@ -80,6 +100,8 @@ export function matchesTagFilters({ topicTags, tagFilters, tagMatchMode }: Match
 	if (tagMatchMode === "any") {
 		return matchedTagCount > 0
 	}
+
+	// all needs every tag, and exclusion needs none
 	if (tagMatchMode === "all") {
 		return matchedTagCount === tagFilters.length
 	}

@@ -16,7 +16,9 @@ It imports `@carlnotes/contracts`, `@carlnotes/client`, `@carlnotes/nightshift`,
 
 - `stores/` — app state one module owns and any component may read, named `<thing>Store.ts`.
   `termsAcceptanceStore.ts` holds whether the Terms dialog is open: a write rejected for the Terms opens it, Not now
-  puts it off for that user, and the acceptance clears it. Each keeps its value in
+  puts it off for that user, and the acceptance clears it. `appUpdateStore.ts` holds whether an installed build is
+  waiting on a store update: a 426 from any transport opens the blocking notice, a later body fills in the minimum,
+  and "Check again" clears it, with the notice's words in `@carlnotes/contracts/appVersions`. Each keeps its value in
   module scope and takes its `publish` call and `useStoreVersion` hook from `storeListeners.ts`, the one place the
   `useSyncExternalStore` contract lives, beside `toEventListeners` for a store's subscribe and announce of an event, so
   two components read one live value with no provider wrapping them. Every store hook calls `useStoreVersion`, which
@@ -66,8 +68,8 @@ It imports `@carlnotes/contracts`, `@carlnotes/client`, `@carlnotes/nightshift`,
 ## Shared podcast playback
 
 `lib/podcastEpisodePlayback.ts` owns chapter lookup, seek bounds, skip lengths, playback speed, and portable system
-metadata. `lib/podcastEpisodeTestFixtures.ts` supplies the episode, summary, and chapter fixtures shared by tests and
-component stories. Web keeps its Media Session objects in its own playback adapter.
+metadata. `@carlnotes/contracts/podcastEpisodeTestFixtures` supplies the episode, summary, and chapter fixtures shared
+by tests and component stories. Web keeps its Media Session objects in its own playback adapter.
 
 ## Shared chat
 

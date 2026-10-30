@@ -1,6 +1,8 @@
 // the documents served beside the pages, and the redirects from the old /pricing and /topics paths.
 // the documents are the feeds, the sitemap, the llms files, the IndexNow key, and security.txt
 
+import { toAppleAppSiteAssociation, toAssetLinks } from "@carlnotes/contracts/appLinkPaths"
+import { MOBILE_APP_BUNDLE_IDENTIFIER } from "@carlnotes/contracts/mobileApp"
 import { toBot } from "@carlnotes/contracts/userAgent"
 import { db } from "@carlnotes/db"
 import { podcastFeedTokens } from "@carlnotes/db/schema/podcast"
@@ -161,6 +163,31 @@ export const documentsRoute = new Hono<AppEnv>()
 		const indexNowKey = Bun.env.INDEXNOW_KEY
 		return indexNowKey ? context.text(indexNowKey) : context.notFound()
 	})
+	// the domain association documents the stores verify app links against, each from its Doppler value and 404 while
+	// the value is unset
+	.get("/.well-known/apple-app-site-association", (context) => {
+		const appleTeamId = Bun.env.APPLE_TEAM_ID
+		if (!appleTeamId) {
+			return context.notFound()
+		}
+		return context.body(
+			JSON.stringify(toAppleAppSiteAssociation({ appleTeamId, bundleIdentifier: MOBILE_APP_BUNDLE_IDENTIFIER })),
+			200,
+			toDocumentHeaders("application/json", 3600),
+		)
+	})
+	.get("/.well-known/assetlinks.json", (context) => {
+		// the fingerprints, or 404 while none is set
+		const fingerprints = toSigningFingerprints(Bun.env.ANDROID_SIGNING_FINGERPRINTS)
+		if (fingerprints.length === 0) {
+			return context.notFound()
+		}
+		return context.body(
+			JSON.stringify(toAssetLinks({ packageName: MOBILE_APP_BUNDLE_IDENTIFIER, sha256CertFingerprints: fingerprints })),
+			200,
+			toDocumentHeaders("application/json", 3600),
+		)
+	})
 	// the vulnerability contact file, with an expiry a year from each request
 	.get("/.well-known/security.txt", (context) => {
 		return context.body(toSecurityTxt(appUrl()), 200, {
@@ -177,6 +204,14 @@ export const documentsRoute = new Hono<AppEnv>()
 			toDocumentHeaders("application/xml; charset=utf-8", 3600),
 		)
 	})
+
+// the signing fingerprints as Doppler lists them, comma separated, trimmed, and without empties
+function toSigningFingerprints(value: string | undefined): string[] {
+	return (value ?? "")
+		.split(",")
+		.map((fingerprint) => fingerprint.trim())
+		.filter((fingerprint) => fingerprint.length > 0)
+}
 
 // the headers of a document response, cached publicly for maxAgeSeconds
 function toDocumentHeaders(contentType: string, maxAgeSeconds: number): Record<string, string> {

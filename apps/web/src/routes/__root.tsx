@@ -1,10 +1,11 @@
 import { SITE_TITLE } from "@carlnotes/contracts/seo"
-import { SITE_URL } from "@carlnotes/core/lib/pageHead"
+import { SITE_URL } from "@carlnotes/contracts/site"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { createRootRoute, HeadContent, Outlet, Scripts, useLocation } from "@tanstack/react-router"
 import { type ReactNode, useEffect, useState } from "react"
 import { Toaster } from "@/components/primitives/sonner"
 import { HERO_DARK, HERO_LIGHT, THEME_COLOR_META_NAME, THEME_STORAGE_KEY } from "@/hooks/useTheme"
+import { toAppStoreBannerMeta } from "@/lib/appStoreBanner"
 import { hasSessionCookie } from "@/lib/sessionCookie"
 import { captureVisit } from "@/lib/visitAnalytics"
 import "@/globals.css"
@@ -31,9 +32,11 @@ const FIRST_PAINT_SCRIPT = `(() => {
 
 // the document every route renders inside, with the head defaults a route's own head replaces
 export const Route = createRootRoute({
-	head: () => ({
+	head: ({ matches }) => ({
 		meta: [
 			{ charSet: "utf-8" },
+			// the App Store banner, on every page once the record exists, with the deepest match as the page's path
+			...toAppStoreBannerMeta(matches.at(-1)?.pathname ?? "/"),
 			{
 				name: "viewport",
 				content: "width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content",

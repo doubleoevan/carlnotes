@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test"
+import { toPodcastEpisodeFixture } from "@carlnotes/contracts/podcastEpisodeTestFixtures"
 import { toTestTopicResponse } from "@carlnotes/contracts/topicFeedTestFixtures"
 import {
 	PodcastEpisodesCard,
@@ -6,7 +7,6 @@ import {
 	toShownPodcastEpisodeId,
 	toShownPodcastSeason,
 } from "@carlnotes/core/components/PodcastEpisodesCard"
-import { toPodcastEpisodeFixture } from "@carlnotes/core/lib/podcastEpisodeTestFixtures"
 import { act, type ComponentProps } from "react"
 import { renderTestHook } from "@/lib/hookTestHarness"
 

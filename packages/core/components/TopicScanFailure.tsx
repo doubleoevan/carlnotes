@@ -1,3 +1,4 @@
+import { PURCHASE_COPY } from "@carlnotes/contracts/plans"
 import { FIRST_SCAN_PAUSED_REASON, isBudgetError, toScanFailureLabel } from "@carlnotes/contracts/scanFailure"
 import type { ComponentType, ReactNode } from "react"
 
@@ -16,9 +17,12 @@ export type TopicScanFailureComponents = {
  */
 export function TopicScanFailure({
 	error,
+	upgradePath,
 	components: { Message, Budget, UpgradeLine, Link, Text },
 }: {
 	error: string | null
+	// the plans page a budget failure's upgrade button opens. an app that offers no purchase passes none
+	upgradePath?: string
 	components: TopicScanFailureComponents
 }) {
 	// a planned pause points to the account meter
@@ -33,15 +37,15 @@ export function TopicScanFailure({
 			</Message>
 		)
 	}
-	if (!isBudgetError(error)) {
+	if (!isBudgetError(error) || !upgradePath) {
 		return <Message isPaused={false}>{failureLabel}</Message>
 	}
 	return (
 		<Budget>
 			<Message isPaused={false}>{failureLabel}</Message>
 			<UpgradeLine>
-				<Link href="/plans" isButton>
-					Upgrade
+				<Link href={upgradePath} isButton>
+					{PURCHASE_COPY.upgrade}
 				</Link>
 				<Text>{" to keep the pot brewing"}</Text>
 			</UpgradeLine>

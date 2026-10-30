@@ -1,7 +1,7 @@
 // the chat room's fan-out across instances over Redis pub/sub.
 // a stored chat message reaches this instance's subscribers directly and every other instance through the channel
 import { EventEmitter } from "node:events"
-import type { RoomTopicToolCalls } from "@carlnotes/contracts/chat"
+import type { RoomTopicToolCalls } from "@carlnotes/contracts/chatTurns"
 import { addSubscriberReconnectListener, publishToChannel, subscribeToChannel } from "@carlnotes/db/redis"
 
 // the one channel that every instance subscribes to. the payload names the sending instance, the topic, the team,

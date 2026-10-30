@@ -11,7 +11,6 @@ import {
 } from "@carlnotes/core/lib/spendMeter"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { Alert, Pressable, View } from "react-native"
-import { AnchorLink } from "@/components/common/AnchorLink"
 import { toTouchTargetHitSlop } from "@/components/primitives/button"
 import { Text } from "@/components/primitives/text"
 
@@ -19,14 +18,13 @@ import { Text } from "@/components/primitives/text"
  * Draws the shared budget calculations and cutoff markers using native views and accessible detail buttons.
  */
 export function SpendMeter({ activity }: { activity: SpendMeterProps }) {
-	// read the shared amounts, segments, legend, and upgrade visibility
+	// read the shared amounts, segments, and legend
 	const { budgetCents, monthlyBudgetCutoffs } = activity
 	const {
 		totalCents,
 		budgetUsedShare,
 		budgetUsedPercent,
 		hasMonthlyBudgetCutoffs,
-		isUpgradeVisible,
 		spendSegments,
 		legendSegments,
 		cutoffRows,
@@ -76,11 +74,6 @@ export function SpendMeter({ activity }: { activity: SpendMeterProps }) {
 			<Text className="mt-1 text-xs text-muted-foreground">
 				{budgetUsedPercent}% {toSpendMeterStatusLine({ budgetUsedShare, monthlyBudgetCutoffs })}
 			</Text>
-			{isUpgradeVisible && (
-				<AnchorLink href="/plans" accessibilityLabel="Pick up some coffee" className="min-h-11 justify-center">
-					<Text className="text-link">Pick up some coffee.</Text>
-				</AnchorLink>
-			)}
 			{hasMonthlyBudgetCutoffs && (
 				<View className="mt-3 gap-1">
 					{cutoffRows.map((row) => (

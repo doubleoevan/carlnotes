@@ -34,6 +34,10 @@ type Story = StoryObj<typeof meta>
 export const Default: Story = {}
 export const MissingNote: Story = { args: { scan: { ...SCAN, scanSummary: null } } }
 export const Failed: Story = { args: { scan: { ...SCAN, status: "failed", scanSummary: null, error: "Scan failed" } } }
+// a budget failure shows its label alone
+export const BudgetFailed: Story = {
+	args: { scan: { ...SCAN, status: "failed", scanSummary: null, error: "The budget has been exceeded for this key" } },
+}
 export const Running: Story = {
 	args: { scan: { ...SCAN, status: "running", finishedAt: null, scanSummary: null, sourceResults: null } },
 }

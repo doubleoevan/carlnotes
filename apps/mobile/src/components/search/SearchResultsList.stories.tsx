@@ -15,7 +15,7 @@ const row = {
 	date: "2026-10-25T12:00:00Z",
 	count: 3,
 }
-const page: SearchResultsPage = {
+export const STORY_SEARCH_RESULTS_PAGE: SearchResultsPage = {
 	page: 1,
 	pageSize: 10,
 	pageCount: 1,
@@ -54,7 +54,7 @@ const meta: Meta<typeof SearchResultsList> = {
 	title: "Search/SearchResultsList",
 	component: SearchResultsList,
 	parameters: { webReference: "apps/web/src/components/search/SearchResultsList.tsx" },
-	args: { pages: [page], state: { handlers: STORY_TOPIC_FEED_HANDLERS, pendingChanges: [] } },
+	args: { pages: [STORY_SEARCH_RESULTS_PAGE], state: { handlers: STORY_TOPIC_FEED_HANDLERS, pendingChanges: [] } },
 	decorators: [
 		(Story) => (
 			<ScrollView className="w-full">

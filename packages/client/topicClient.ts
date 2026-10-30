@@ -9,6 +9,8 @@ import {
 import { MANUAL_SCAN_PAUSED_LABEL } from "@carlnotes/contracts/scanFailure"
 import type { SuggestSourcesPayload, UpdateTopicPayload } from "@carlnotes/contracts/topicPayloads"
 import {
+	type AddableTopicsResponse,
+	addableTopicsResponse,
 	EMPTY_SCAN_NOTE,
 	manualScanResponse,
 	type ScanNote,
@@ -22,7 +24,7 @@ import {
 	topicGateResponse,
 	topicResponse,
 } from "@carlnotes/contracts/topics"
-import { type ApiResponse, apiClient, fetchApi, readApiErrorMessage } from "./apiClient"
+import { type ApiResponse, apiClient, fetchApi, readApiErrorMessage, readApiResponse } from "./apiClient"
 
 import { showFailedWrite } from "./clientWrite"
 
@@ -36,34 +38,43 @@ export async function sendCreateTopicInvite(topicId: string, source: InviteSourc
 	if (!response.ok) {
 		throw new Error((await readApiErrorMessage(response)) ?? `invite create failed: ${response.status}`)
 	}
-	return inviteCreateResponse.parse(await response.json()).invite
+	return (await readApiResponse(inviteCreateResponse, response)).invite
 }
 
 // accept a join token, which subscribes the signed-in user to the topic it opens. the token is encoded into the
-// path, so a token with a slash in it can never name another route
+// path, so a token with a slash in it can never name another route. a visitor's 401 is an unknown token, and any
+// other rejected status throws
 export async function sendAcceptInvite(token: string): Promise<InviteAcceptResponse> {
 	const response = await apiClient().api.invite[":token"].$post({ param: { token: encodeURIComponent(token) } })
-	if (!response.ok) {
+	// a visitor's 401 is an unknown token
+	if (response.status === 401) {
 		return { status: "unknown" }
 	}
-	return inviteAcceptResponse.parse(await response.json())
+	// any other rejected status throws, so the invite screen offers its retry
+	if (!response.ok) {
+		throw new Error(`invite accept failed: ${response.status}`)
+	}
+	return readApiResponse(inviteAcceptResponse, response)
 }
 
-// fetch the topic feed. includeConsumed adds already consumed topic findings
+// fetch the topic feed, rejecting a failed read. includeConsumed adds already consumed topic findings
 export async function fetchTopicFeed(includeConsumed: boolean): Promise<TopicFeedResponse> {
 	const response = await apiClient().api["topic-feed"].$get({ query: includeConsumed ? { all: "true" } : {} })
-	return topicFeedResponse.parse(await response.json())
+	if (!response.ok) {
+		throw new Error(`topic feed load failed: ${response.status}`)
+	}
+	return readApiResponse(topicFeedResponse, response)
 }
 
 // the topics a team modal may offer to add
-export async function fetchAddableTopics(excludeTeamId?: string): Promise<{ id: string; name: string }[]> {
+export async function fetchAddableTopics(excludeTeamId?: string): Promise<AddableTopicsResponse["topics"]> {
 	const response = await apiClient().api.topics.addable.$get({
 		query: excludeTeamId ? { excludeTeam: excludeTeamId } : {},
 	})
 	if (!response.ok) {
 		return []
 	}
-	return ((await response.json()) as { topics: { id: string; name: string }[] }).topics
+	return (await readApiResponse(addableTopicsResponse, response)).topics
 }
 
 // the gate in front of an invite topic, with the topic's name, or null for a name that is not text
@@ -90,7 +101,7 @@ export async function fetchTopicPage(
 		query: isPoll ? { poll: "1" } : {},
 	})
 	if (response.ok) {
-		return { status: "visible", topic: topicResponse.parse(await response.json()) }
+		return { status: "visible", topic: await readApiResponse(topicResponse, response) }
 	}
 	// reject failed reads before replacing a saved topic with an access result
 	if (response.status !== 403 && response.status !== 404) {
@@ -122,7 +133,7 @@ export async function fetchScanNote(scanId: string): Promise<ScanNote> {
 	if (!response.ok) {
 		return EMPTY_SCAN_NOTE
 	}
-	return scanNote.parse(await response.json())
+	return readApiResponse(scanNote, response)
 }
 
 // what removing a Source came to: removed, kept by the last source rule, or failed
@@ -140,8 +151,8 @@ export async function removeTopicSource(topicId: string, sourceId: string): Prom
 	}
 
 	// a conflict that names the last source rule kept the Source, and any other status is a failure
-	const conflict: { error?: unknown } = response.status === 409 ? await response.json() : {}
-	return conflict.error === "lastSource" ? "lastSource" : "failed"
+	const conflictMessage = response.status === 409 ? await readApiErrorMessage(response) : undefined
+	return conflictMessage === "lastSource" ? "lastSource" : "failed"
 }
 
 // a topic save that the api rejected because the plan already hit its limit of topics on a daily schedule.
@@ -159,7 +170,7 @@ export async function fetchSourceSuggestions(
 	if (!response.ok) {
 		throw new Error(`source suggestions failed: ${response.status}`)
 	}
-	return suggestSourcesResponse.parse(await response.json()).sources
+	return (await readApiResponse(suggestSourcesResponse, response)).sources
 }
 
 // create a topic and return its id. throws an error on a rejected create, including a reached topic limit
@@ -168,7 +179,7 @@ export async function sendCreateTopic(payload: UpdateTopicPayload): Promise<stri
 	if (!response.ok) {
 		throw (await toTopicWriteError(response)) ?? new Error(`topic create failed: ${response.status}`)
 	}
-	return topicCreateResponse.parse(await response.json()).id
+	return (await readApiResponse(topicCreateResponse, response)).id
 }
 
 // save the edit modal's changes to a topic. throws an error on a rejected save so the modal can surface it
@@ -251,7 +262,7 @@ export async function sendManualScan(topicId: string): Promise<number | "budget"
 	if (!response.ok) {
 		throw new Error((await readApiErrorMessage(response)) ?? `scan request failed: ${response.status}`)
 	}
-	return manualScanResponse.parse(await response.json()).remainingScans
+	return (await readApiResponse(manualScanResponse, response)).remainingScans
 }
 
 // stop the topic's running scan

@@ -3,7 +3,7 @@
 // run the eval with: bun run eval:topic-chat-tools
 
 import { toChatRoomTranscriptLine } from "@carlnotes/api/chat/roomQuestion"
-import { CANCEL_TOPIC_EDIT_TOOL, PROPOSE_TOPIC_EDIT_TOOL } from "@carlnotes/contracts/chat"
+import { CANCEL_TOPIC_EDIT_TOOL, PROPOSE_TOPIC_EDIT_TOOL } from "@carlnotes/contracts/chatTurns"
 import { chatModel } from "@carlnotes/models/models"
 import type { Assertion, EvaluateResult, GradingResult, TestCase } from "promptfoo"
 import { toGradingResult } from "../evalChecks"

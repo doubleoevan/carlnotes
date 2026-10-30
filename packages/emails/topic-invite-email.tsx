@@ -3,6 +3,7 @@
 // and which address it was sent to. the link is the invitee's own invite url, which includes a one-use token.
 // the join page walks a signed-out invitee through login or signup and back to itself.
 // authored as a react-email template like the others, so it previews with `bun run dev:email`
+import { SITE_URL } from "@carlnotes/contracts/site"
 import { Link } from "@react-email/components"
 import { render } from "@react-email/render"
 import type { ReactElement } from "react"
@@ -68,8 +69,8 @@ TopicInviteEmail.PreviewProps = {
 	inviterUsername: "doubleoevan",
 	topicName: "Raccoons in the News",
 	inviteeEmail: "friend@example.com",
-	inviteUrl: "https://carlnotes.com/invite/preview-token",
-	appUrl: "https://carlnotes.com",
+	inviteUrl: `${SITE_URL}/invite/preview-token`,
+	appUrl: SITE_URL,
 } satisfies TopicInviteEmailProps
 
 // render the template to an HTML string for sending. the api calls this at send-email time

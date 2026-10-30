@@ -6,10 +6,11 @@ it, and it imports only `zod`.
 
 `noteTestFixtures.ts` supplies inert Notes table rows to both apps' stories and shared-component tests.
 The contract modules sit at the package root, one per domain, each imported by its own path
-(`@carlnotes/contracts/chat`): `chat.ts`, with the notes a stored question ends with in `chatQuestionNotes.ts`,
-`teams.ts`, `invites.ts`, `activity.ts`, `profiles.ts`, `admin.ts`, `search.ts`, `findings.ts`, `podcast.ts`,
-`podcastEpisodePage.ts`, `topics.ts`, `notes.ts`, `pageHead.ts`, `signupCta.ts`, and `viewerCounts.ts`, a topic's and a
-podcast episode's counts. `payloads.ts` is the request
+(`@carlnotes/contracts/chat`): `chat.ts`, with the notes a stored question ends with in `chatQuestionNotes.ts` and
+the chat turn contracts in `chatTurns.ts` (the memory and history limits, the reply stream line, the tool calls a turn
+leaves, and the sent tool calls), `teams.ts`, `invites.ts`, `activity.ts`, `profiles.ts`, `profilePage.ts`,
+`admin.ts`, `search.ts`, `findings.ts`, `podcast.ts`, `podcastEpisodePage.ts`, `topics.ts`, `notes.ts`, `pageHead.ts`,
+`signupCta.ts`, and `viewerCounts.ts`, a topic's and a podcast episode's counts. `payloads.ts` is the request
 payload schemas the api validates with `zValidator` and the types inferred from them, with the topic ones in
 `topicPayloads.ts`, `enums.ts` and `plans.ts` hold the values that both sides compare, with the role and plan readers
 `isAdminRole`, `isLeaderRole`, `isPaidPlan`, and `isPremiumPlan` that every role or plan check outside the api's gate
@@ -47,8 +48,10 @@ url's version, `usernames.ts` how a username is shaped, validated, and compared,
 generated from in `usernameWords.ts`, `emails.ts` the canonical form of a Gmail address, and `chatMentions.ts` the chat
 mention parser for the chat room composer and the room's notifications, with the reserved usernames.
 `topicFeedTestFixtures.ts` supplies complete Feed, Topic, and Finding payloads for client/core/mobile tests and native stories.
-`chatTestFixtures.ts` holds the podcast episode note that the contracts and web chat tests share, and
-`textOrderTestFixtures.ts` holds `hasSubstringsInOrder`, the text order check that the api and web tests share.
+`chatTestFixtures.ts` holds the podcast episode note that the contracts and web chat tests share,
+`podcastEpisodeTestFixtures.ts` the podcast episode, summary, and chapter fixtures the contracts, core, web, and
+mobile tests and the component stories share, and `textOrderTestFixtures.ts` holds `hasSubstringsInOrder`, the text
+order check that the api and web tests share.
 
 - Universal: the root rule. It imports no `@carlnotes` package.
 - A shape both sides need lives here once. A shape only one module reads stays in that module.
@@ -56,9 +59,13 @@ mention parser for the chat room composer and the room's notifications, with the
   validates with them through `zValidator` and the web app parses responses with them, so a drifted field fails at the
   boundary instead of silently. `payloads.ts` imports the contracts for their constants, and the contracts import only
   types back, so the two never load each other's values. A contract module loads another's values only one way:
-  `chat.ts` and `findings.ts` load `profiles.ts`, `profiles.ts` loads `avatars.ts`, `topics.ts` loads `podcast.ts`,
-  `findings.ts`, `chat.ts`, `invites.ts`, and `profiles.ts`, and `podcastEpisodePage.ts` loads `topics.ts`,
-  `podcast.ts`, and `findings.ts`, so no two modules load each other.
+  `chat.ts`, `findings.ts`, and `invites.ts` load `profiles.ts`, `profiles.ts` loads `avatars.ts` and `podcast.ts`,
+  `profilePage.ts` loads `chat.ts` and `profiles.ts`, `activity.ts` loads `chat.ts`, `invites.ts`, `plans.ts`,
+  `podcast.ts`, and `profiles.ts`, `topics.ts` loads `podcast.ts`,
+  `findings.ts`, `chat.ts`, `invites.ts`, and `profiles.ts`, `podcastEpisodePage.ts` loads `topics.ts`,
+  `podcast.ts`, and `findings.ts`, `routeShapes.ts` loads `chat.ts`, `invites.ts`, `payloads.ts`, and
+  `topicPayloads.ts`, `chatTurns.ts` loads `chat.ts` and the types of `routeShapes.ts`, and the `*RouteContracts.ts`
+  parts that `apiRouteContracts.ts` spreads load them all, so no two modules load each other.
 - Nothing here touches the database, the network, or the DOM: the modules are values and their shapes.
 - Tests: `bun test packages/contracts`.
 
@@ -66,3 +73,25 @@ mention parser for the chat room composer and the room's notifications, with the
 
 `podcast.ts` also validates the audio-resolution response: an HTTPS `audioUrl` and ISO `expiresAt`. These credentials
 are transient. `monitoringRedaction` removes signed URL queries and private podcast-feed path tokens.
+
+The mobile app modules. `appVersions.ts` compares dotted app versions, says whether a build meets its platform's
+minimum (a version that does not parse is served), and holds the 426 body `appVersionOutdatedResponse` with Carl's
+line for it and the blocking update notice's words, `APP_UPDATE_COPY` and `toAppUpdateBody`. `mobileApp.ts` adds
+the store urls: the Play listing from the package name, and the App Store record once `APP_STORE_ID` is set, the docs
+"Get the app" page before. `appLinkPaths.ts` is the one list of web paths the app opens as app links, with the builders
+for `apple-app-site-association`, `assetlinks.json`, and the Android intent filters.
+`site.ts` holds `SITE_HOST` and `SITE_URL`, the site's production host and origin, and imports nothing, since the
+app's config loads it under Node, which resolves no extensionless relative import.
+`tolerantReads.ts` is the app's tolerant parse: `displayEnum(values)` declares a response enum that only drives display
+by adding `UNKNOWN_CASE` from `enums.ts` to its values, so the inferred type includes it on both apps, and
+`toTolerantResponseSchema` walks a contract and rebuilds it so a malformed list or record entry is dropped and counted
+(`takeDroppedEntryCount`), an optional or nullable member that fails takes its default, a display enum's unknown value
+takes the unknown case, and everything else stays strict. `routeShapes.ts` holds the small shapes the routes share:
+the query and param schemas the api validates with, `okResponse`, the chat reply line, and the room events.
+`apiRouteContracts.ts` is the route contracts the contract freeze serializes: every capability the app reaches, keyed as
+the client parity check names it, with its method, path, and schemas, and `API_ROUTE_HELPERS` for a client export that
+calls no route. It holds the `ApiRouteContract` type and spreads five part files, one per area, that import the type
+back: `topicRouteContracts.ts` (topics, topic findings, viewer counts, notes, and the site search),
+`chatRouteContracts.ts` (the private chat and the chat rooms), `teamRouteContracts.ts` (teams, blocks, and reports),
+`accountRouteContracts.ts` (activity, the app sign-up gate, billing, profiles and the account, and the Terms), and
+`podcastRouteContracts.ts` (podcast episodes). The part files load every other contract, and nothing loads them back.

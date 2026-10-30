@@ -2,6 +2,7 @@
 import { z } from "zod"
 import { ratings, resourceKinds } from "./enums"
 import { profileIdentity } from "./profiles"
+import { displayEnum } from "./tolerantReads"
 
 // a topic finding. the AI review about one Resource under a Topic, plus the user's consumed and bookmarked state
 export const topicFinding = z.object({
@@ -11,7 +12,7 @@ export const topicFinding = z.object({
 	resourceId: z.string(),
 	url: z.string(),
 	// the kind of the resource this finding points at, not a kind of finding
-	resourceKind: z.enum(resourceKinds),
+	resourceKind: displayEnum(resourceKinds),
 	title: z.string().nullable(),
 	// shown in the metadata, and the path this origin serves the source host's favicon from, null when it has none
 	source: z.string().nullable(),

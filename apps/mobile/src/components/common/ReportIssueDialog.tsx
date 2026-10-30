@@ -1,7 +1,7 @@
 import { sendFlagContent } from "@carlnotes/client/flagContentClient"
 import { FLAG_REASON_MAX_CHARS } from "@carlnotes/contracts/chat"
 import type { FlagContentPayload } from "@carlnotes/contracts/payloads"
-import type { ReportUser } from "@carlnotes/contracts/reports"
+import type { UserIdentity } from "@carlnotes/contracts/profiles"
 import { REPORT_DIALOG_COPY, toReportDialogTitle } from "@carlnotes/core/lib/reportCopy"
 import { toBlockAuthorLabel } from "@carlnotes/core/lib/userBlocks"
 import { useState } from "react"
@@ -16,7 +16,7 @@ import { Sheet } from "./Sheet"
 // what a report names: its subject, and the subject's author if a report can block them
 export type ReportSubject = Pick<FlagContentPayload, "subjectKind" | "subjectId"> & {
 	subjectLabel: string
-	author?: ReportUser
+	author?: UserIdentity
 }
 
 /**

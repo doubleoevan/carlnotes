@@ -11,6 +11,9 @@ export const MOBILE_APP_FOLDER = "apps/mobile"
 /** The app's Expo Router routes, where a walk of what the app reaches starts. */
 export const MOBILE_ROUTES_FOLDER = `${MOBILE_APP_FOLDER}/app`
 
+/** The app's Expo config, which declares the app version. */
+export const MOBILE_APP_CONFIG_PATH = `${MOBILE_APP_FOLDER}/app.config.ts`
+
 /** The app packages' names. */
 export const APP_PACKAGE_NAMES = new Set([
 	"@carlnotes/web",

@@ -14,6 +14,8 @@ const chatRoom: ChatRoomState = {
 	isLoaded: true,
 	isRejected: false,
 	hasLoadFailed: false,
+	reloadUnreadableRoom: null,
+	hasMessagePageLoadFailed: false,
 	voiceChatPage: null,
 	rejection: null,
 	clearRejection: () => {},
@@ -56,6 +58,12 @@ type Story = StoryObj<typeof meta>
 export const Empty: Story = {}
 export const Loading: Story = { args: { state: { ...chatRoom, isLoaded: false } } }
 export const FailedRead: Story = { args: { state: { ...chatRoom, isLoaded: false, hasLoadFailed: true } } }
+export const UnreadableRoom: Story = {
+	args: { state: { ...chatRoom, isLoaded: false, reloadUnreadableRoom: () => {} } },
+}
+export const RefreshFailed: Story = {
+	args: { state: { ...chatRoom, chatMessages: [toStoryRoomMessage()], hasMessagePageLoadFailed: true } },
+}
 export const NoAccess: Story = { args: { state: { ...chatRoom, isRejected: true } } }
 export const WaitingForCarl: Story = {
 	args: { state: { ...chatRoom, chatMessages: [toStoryRoomMessage()], isMessageLoading: true } },

@@ -12,16 +12,21 @@
   an avatar image or an `EventSource`, and `showClientError` shows a message the way the app configured. Until an app
   configures it, a request goes to the page's own origin and an error goes to the console. `readApiErrorMessage` reads
   the api's error message from a failed response, and `ApiResponse` is the `ok`, `status`, `json`, and `text` of a
-  response, the part the helpers read.
+  response, the part the helpers read. Every response body is read through `readApiResponse(schema, response)`, which
+  parses it with the contract schema through the app's `toResponseSchema` (the web configures none, the app passes
+  `toTolerantResponseSchema`), throws `ApiResponseError` naming the route and never the body when it does not parse,
+  and reports the entries a tolerant parse dropped to `onTolerantReadIssue`. A 426 from any transport calls
+  `onAppVersionOutdated` with the rejection body, so the app opens its update notice, and the response still returns.
 - `authClient.ts` — the Better Auth client, typed by the api's `auth` through `inferAdditionalFields`. An app calls
-  `configureAuthClient({ baseURL, plugins, headers })` once at startup, before the first screen, and gets its client typed with
-  its plugins back. Optional headers carry native device descriptions through sign-in. `authClient()` returns that client to every importer, or the browser's own client, which sends its
-  `/api/auth` requests to the page's own origin, if no app configured one. Configuring after a first use throws an
-  error, and `resetAuthClient` drops the client for a test file that configures its own. `AuthClient` is the client's
-  type as the shared code sees it. Beside them the signup-gate calls:
-  `passSignupGate` for the web's Turnstile token, and `fetchAppSignupChallenge` and `passAppSignupGate` for the mobile
-  app's attestation, the second through the auth client's own fetch, whose cookie jar keeps the gate cookie for the
-  sign-up request.
+  `configureAuthClient({ baseURL, plugins, headers, onAppVersionOutdated })` once at startup, before the first screen,
+  and gets its client typed with its plugins back. Optional headers include native device descriptions through sign-in,
+  and `onAppVersionOutdated` opens the app's update notice on a 426 from an auth request. `authClient()` returns that
+  client to every importer, or the browser's own client, which sends its `/api/auth` requests to the page's own origin,
+  if no app configured one. Configuring after a first use throws an error, and `resetAuthClient` drops the client for a
+  test file that configures its own. `AuthClient` is the client's type as the shared code sees it. Beside them the
+  signup-gate calls: `passSignupGate` for the web's Turnstile token, and `fetchAppSignupChallenge` and
+  `passAppSignupGate` for the mobile app's attestation, the second through the auth client's own fetch, whose cookie jar
+  keeps the gate cookie for the sign-up request.
 - Most clients build on `apiClient()`. Some calls, and all of `chatClient.ts`, `flagContentClient.ts`, and
   `voiceClient.ts`, use `fetchApi` instead. `pageHeadClient.ts` reads a page's head data.
   `viewerCountsClient.ts` sends a topic page's view and reads a topic's or a podcast episode's counts, a public

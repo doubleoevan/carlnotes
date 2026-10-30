@@ -1,3 +1,4 @@
+import { DAILY_TOPICS_USED_LABEL } from "@carlnotes/contracts/scanFailure"
 import type { TopicResponse } from "@carlnotes/contracts/topics"
 import { toAgeLabel, toDollarLabel, toDurationLabel, toScheduleLabel } from "@carlnotes/core/lib/labels"
 import { AnchorLink } from "@/components/common/AnchorLink"
@@ -74,9 +75,7 @@ function PausedFrequencyNote() {
 					not brewing
 				</AnchorLink>
 			</TooltipTrigger>
-			<TooltipContent side="bottom">
-				Your plan ran out of daily pots. Carl keeps the ones you've had longest.
-			</TooltipContent>
+			<TooltipContent side="bottom">{DAILY_TOPICS_USED_LABEL}</TooltipContent>
 		</Tooltip>
 	)
 }

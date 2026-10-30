@@ -29,10 +29,13 @@ export function configureAuthClient<Plugins extends BetterAuthClientPlugin[]>({
 	baseURL,
 	plugins,
 	headers,
+	onAppVersionOutdated,
 }: {
 	baseURL: string
 	plugins: Plugins
 	headers?: Record<string, string>
+	// what a 426 on an auth request does
+	onAppVersionOutdated?: () => void
 }): AppAuthClient<Plugins> {
 	if (configuredAuthClient) {
 		throw new Error("the auth client is already in use. configure it before the first screen renders")
@@ -43,10 +46,26 @@ export function configureAuthClient<Plugins extends BetterAuthClientPlugin[]>({
 	const appAuthClient: AppAuthClient<Plugins> = createAuthClient({
 		baseURL,
 		plugins: appPlugins,
-		fetchOptions: { headers },
+		fetchOptions: {
+			headers,
+			onError: toAuthFetchErrorHandler(onAppVersionOutdated),
+		},
 	})
 	configuredAuthClient = appAuthClient as unknown as AuthClient
 	return appAuthClient
+}
+
+/**
+ * Returns the auth client's fetch error handler: a 426 reports the outdated build through the setting.
+ */
+export function toAuthFetchErrorHandler(
+	onAppVersionOutdated?: () => void,
+): (errorContext: { response: Response }) => void {
+	return (errorContext) => {
+		if (errorContext.response.status === 426) {
+			onAppVersionOutdated?.()
+		}
+	}
 }
 
 /**

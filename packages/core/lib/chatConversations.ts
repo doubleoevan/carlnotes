@@ -1,6 +1,7 @@
 import type { ChatPage } from "@carlnotes/client/chatClient"
 import type { ChatRoom } from "@carlnotes/contracts/chat"
-import type { ProfileResponse, ProfileTeamStatus } from "@carlnotes/contracts/profiles"
+import type { ProfileResponse } from "@carlnotes/contracts/profilePage"
+import type { ProfileTeamStatus } from "@carlnotes/contracts/profiles"
 import type { TopicDraftTeam } from "@carlnotes/contracts/topicPayloads"
 
 /**
@@ -151,6 +152,7 @@ export function toDefaultChatId(pageContext: ChatPageContext | null, chatRooms: 
  * Returns the stable identity of a private conversation or a shared room.
  */
 export function toChatKey(chatId: ChatId | null): string {
+	// a closed panel has one key, and a chat room is keyed by its team and topic
 	if (!chatId) {
 		return "closed"
 	}
@@ -196,6 +198,7 @@ export function toPrivateChatName(
 	chatRooms: ChatRoom[],
 	pageContext: ChatPageContext | null,
 ): string {
+	// the new-topic chat names itself, and a team chat is named by its chat room or the page
 	if (chatId.newTopic) {
 		return "a new topic"
 	}

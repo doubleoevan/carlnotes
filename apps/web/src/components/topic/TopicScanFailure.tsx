@@ -1,3 +1,4 @@
+import { PLANS_PATH } from "@carlnotes/contracts/plans"
 import {
 	TopicScanFailure as SharedTopicScanFailure,
 	type TopicScanFailureComponents,
@@ -9,7 +10,7 @@ import { buttonVariants } from "@/components/primitives/button"
  * Renders the shared scan failure with browser links and button styling.
  */
 export function TopicScanFailure({ error }: { error: string | null }) {
-	return <SharedTopicScanFailure error={error} components={SCAN_FAILURE_COMPONENTS} />
+	return <SharedTopicScanFailure error={error} upgradePath={PLANS_PATH} components={SCAN_FAILURE_COMPONENTS} />
 }
 
 // web text and links retain their paragraph and inline semantics

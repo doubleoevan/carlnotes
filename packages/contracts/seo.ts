@@ -1,5 +1,6 @@
 // the page head helpers. the site and page titles, structured data, topic slugs and paths, and the meta description
 import { PLANS } from "./plans"
+import { SITE_HOST } from "./site"
 import { toPlainText } from "./spokenText"
 import { toOneLineText } from "./text"
 import { type PageYoutubeVideo, toYoutubeEmbedUrl } from "./youtube"
@@ -8,7 +9,7 @@ import { type PageYoutubeVideo, toYoutubeEmbedUrl } from "./youtube"
 export const SITE_TITLE = "CarlNotes — He already read it. All of it."
 
 // the docs site's address without its scheme
-export const DOCS_SITE_ADDRESS = "carlnotes.com/docs"
+export const DOCS_SITE_ADDRESS = `${SITE_HOST}/docs`
 
 // the site's public accounts and its source repository, for the Organization schema's sameAs list
 const ORGANIZATION_PROFILES = [

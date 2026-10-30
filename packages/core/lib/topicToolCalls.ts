@@ -1,5 +1,4 @@
-import type { TopicToolCalls, TopicToolToasts } from "@carlnotes/contracts/chat"
-import { toStandingTopicEditCall } from "@carlnotes/contracts/chat"
+import { type TopicToolCalls, type TopicToolToasts, toStandingTopicEditCall } from "@carlnotes/contracts/chatTurns"
 import type { ChatToolCall } from "@carlnotes/contracts/payloads"
 import { type ProposeTopicEditPayload, proposeTopicEditPayload } from "@carlnotes/contracts/topicPayloads"
 

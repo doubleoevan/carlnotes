@@ -7,6 +7,7 @@ import { type SpokenQuestionTimings, toVoiceChatPage } from "@carlnotes/client/v
 import type { ChatConversation } from "@carlnotes/contracts/chat"
 import { withPodcastEpisodeNote } from "@carlnotes/contracts/chatQuestionNotes"
 import type { PodcastEpisodeSpeaker } from "@carlnotes/contracts/enums"
+import { PLANS_PATH, PURCHASE_COPY } from "@carlnotes/contracts/plans"
 import type { PodcastEpisode } from "@carlnotes/contracts/podcast"
 import {
 	type PodcastEpisodeQuestionEnding,
@@ -18,13 +19,7 @@ import {
 import { toEventListeners, toStoreListeners } from "@carlnotes/core/stores/storeListeners"
 import { toast } from "sonner"
 import { toChatHistoryTurns } from "@/components/chat/chatHistoryTurns"
-import {
-	CHAT_FAILED_TOAST,
-	CHAT_REJECTION_COPY,
-	PLANS_ACTION_LABEL,
-	PLANS_PATH,
-	toastChatRejection,
-} from "@/components/chat/chatRejectionCopy"
+import { CHAT_FAILED_TOAST, CHAT_REJECTION_COPY, toastChatRejection } from "@/components/chat/chatRejectionCopy"
 import { type ChatTurn, toFinishedChatTurns, toLoadedChatTurn, toSentChatTurn } from "@/components/chat/chatTurns"
 import type { VoiceRecording } from "@/components/chat/useVoiceRecording"
 import { toChapterAtPosition, toPodcastEpisodeSpeakerMediaMetadata } from "@/lib/podcastEpisodePlayback"
@@ -328,7 +323,7 @@ function finishPodcastEpisodeQuestionChatTurn(question: PodcastEpisodeQuestion, 
  */
 export function toastSpentBudget(): void {
 	toast(CHAT_REJECTION_COPY.budget, {
-		action: { label: PLANS_ACTION_LABEL, onClick: () => window.location.assign(PLANS_PATH) },
+		action: { label: PURCHASE_COPY.pickUpMoreCoffee, onClick: () => window.location.assign(PLANS_PATH) },
 	})
 }
 

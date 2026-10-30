@@ -1,6 +1,7 @@
 // the email a typed-address team invitation sends: who invited them, which team, and the invite url
 
 import { CHAT_NAME } from "@carlnotes/contracts/chat"
+import { SITE_URL } from "@carlnotes/contracts/site"
 import { Link } from "@react-email/components"
 import { render } from "@react-email/render"
 import type { ReactElement } from "react"
@@ -65,8 +66,8 @@ TeamInviteEmail.PreviewProps = {
 	senderUsername: "doubleoevan",
 	teamName: "Raccoon Crew",
 	recipientEmail: "friend@example.com",
-	inviteUrl: "https://carlnotes.com/invite/preview-token",
-	appUrl: "https://carlnotes.com",
+	inviteUrl: `${SITE_URL}/invite/preview-token`,
+	appUrl: SITE_URL,
 } satisfies TeamInviteEmailProps
 
 // render the template to an HTML string for sending. the api calls this at send-email time

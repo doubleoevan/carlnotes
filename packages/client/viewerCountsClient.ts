@@ -5,7 +5,7 @@ import {
 	type TopicCounts,
 	topicCounts,
 } from "@carlnotes/contracts/viewerCounts"
-import { apiClient } from "./apiClient"
+import { apiClient, readApiResponse } from "./apiClient"
 
 /**
  * Sends a topic page's view, which outlives a page that unloads first. The response says nothing, so a failure is left
@@ -29,7 +29,7 @@ export async function fetchTopicCounts(
 	const response = await apiClient()
 		.api.counts.topics[":id"].$get({ param: { id: topicId } }, { init: toCountsRequestInit(isPublic, signal) })
 		.catch(() => null)
-	return response?.ok ? topicCounts.parse(await response.json()) : null
+	return response?.ok ? readApiResponse(topicCounts, response) : null
 }
 
 /**
@@ -47,7 +47,7 @@ export async function fetchPodcastEpisodeCounts(
 			{ init: toCountsRequestInit(isPublic, signal) },
 		)
 		.catch(() => null)
-	return response?.ok ? podcastEpisodeCounts.parse(await response.json()) : null
+	return response?.ok ? readApiResponse(podcastEpisodeCounts, response) : null
 }
 
 // a public topic's counts leave the session cookie behind, and any other topic's send it for the access check. a

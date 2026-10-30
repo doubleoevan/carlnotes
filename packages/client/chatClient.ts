@@ -1,19 +1,18 @@
 // the topic chat client. the reply arrives as a stream, so it is read chunk by chunk instead of being parsed whole
+import { CHAT_ATTACHMENT_ERRORS, type ChatAttachmentRejection, type ChatConversation } from "@carlnotes/contracts/chat"
 import {
-	CHAT_ATTACHMENT_ERRORS,
 	CHAT_HISTORY_TURNS,
-	type ChatAttachmentRejection,
-	type ChatConversation,
 	type ChatReplyLine,
 	compactChatAnswer,
 	type TopicToolCalls,
 	toSentToolCalls,
 	toUncompactedChatTurnStart,
-} from "@carlnotes/contracts/chat"
+} from "@carlnotes/contracts/chatTurns"
 import { isPodcastEpisodeSpeaker, type PodcastEpisodeSpeaker } from "@carlnotes/contracts/enums"
 import type { ChatAttachment, ChatHistoryTurn, PodcastEpisodeChapterRef } from "@carlnotes/contracts/payloads"
+import { chatConversationResponse } from "@carlnotes/contracts/routeShapes"
 import type { TopicDraft, TopicDraftTeam } from "@carlnotes/contracts/topicPayloads"
-import { fetchApi, readApiErrorMessage } from "./apiClient"
+import { fetchApi, readApiErrorMessage, readApiResponse } from "./apiClient"
 
 // why a chat turn was rejected, kept apart so that the panel can prompt an upgrade or name a file it could not read
 // instead of a generic error
@@ -41,7 +40,7 @@ export async function fetchChatConversation(chatPage: ChatPage): Promise<ChatCon
 			`chat load for ${chatPage.topicId ?? chatPage.teamId ?? "the new topic"} returned ${response.status}`,
 		)
 	}
-	return (await response.json()) as ChatConversation
+	return readApiResponse(chatConversationResponse, response)
 }
 
 // what a reply's stream calls back with: each text chunk, the tool calls, and a podcast chat turn's speaker

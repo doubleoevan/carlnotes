@@ -1,5 +1,5 @@
-import type { ChatLinkPreview } from "@carlnotes/contracts/chat"
-import { apiClient } from "./apiClient"
+import { type ChatLinkPreview, topicFindingLinkPreviewResponse } from "@carlnotes/contracts/chat"
+import { apiClient, readApiResponse } from "./apiClient"
 import { showFailedWrite } from "./clientWrite"
 
 // feedback callers can retain unsent words after a rejected write
@@ -29,7 +29,8 @@ export async function fetchTopicFindingLinkPreview(findingId: string): Promise<C
 	if (!response.ok) {
 		return null
 	}
-	return ((await response.json()) as { linkPreview: ChatLinkPreview | null }).linkPreview
+	const { linkPreview } = await readApiResponse(topicFindingLinkPreviewResponse, response)
+	return linkPreview
 }
 
 // a finding write may reject after reporting its failure

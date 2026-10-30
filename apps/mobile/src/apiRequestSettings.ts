@@ -1,17 +1,20 @@
-// what the api client sends on every request from the app, and what a 401 does: the stored session cookie, left off
-// a public read, no platform credentials, and a sign-out of a revoked session
+// what the api client sends on every request from the app, and what a 401 and a 426 do: the stored session cookie,
+// left off a public read, no platform credentials, a sign-out of a revoked session, and the update notice
 import type { ApiClientSettings, ApiRequestContext } from "@carlnotes/client/apiClient"
 
-// where the settings read the cookie and the session, and how they sign out
+// where the settings read the cookie and the session, and how they sign out and open the update notice
 export type ApiRequestSettingsOptions = {
 	getCookie: () => Promise<string>
 	hasSession: () => boolean
 	signOut: () => Promise<unknown>
+	onAppVersionOutdated: NonNullable<ApiClientSettings["onAppVersionOutdated"]>
 	deviceHeaders?: Record<string, string>
 }
 
-// the three settings the app adds to the api client
-export type ApiRequestSettings = Required<Pick<ApiClientSettings, "headers" | "credentials" | "onUnauthorized">>
+// the four settings the app adds to the api client
+export type ApiRequestSettings = Required<
+	Pick<ApiClientSettings, "headers" | "credentials" | "onUnauthorized" | "onAppVersionOutdated">
+>
 
 /**
  * Returns the request settings for the api client: the stored cookie as the Cookie header on every call but a public
@@ -21,6 +24,7 @@ export function toApiRequestSettings({
 	getCookie,
 	hasSession,
 	signOut,
+	onAppVersionOutdated,
 	deviceHeaders = {},
 }: ApiRequestSettingsOptions): ApiRequestSettings {
 	// whether a sign-out is in flight. a burst of 401s from one screen signs out once
@@ -51,5 +55,5 @@ export function toApiRequestSettings({
 		const cookie = credentials === "omit" ? "" : await getCookie()
 		return cookie ? { ...deviceHeaders, cookie } : deviceHeaders
 	}
-	return { headers: toHeaders, credentials: "omit", onUnauthorized: signOutOnce }
+	return { headers: toHeaders, credentials: "omit", onUnauthorized: signOutOnce, onAppVersionOutdated }
 }

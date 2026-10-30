@@ -26,14 +26,17 @@ test("reconnect resumes after the highest id and rejects retired connection call
 	try {
 		await waitUntil(() => connections.length === 1)
 		expect(connections[0]?.url).toEndWith("after=8")
+		// two chat messages, an error that reconnects, and a chat message to the retired connection
 		connections[0]?.events.onMessage(message(12))
 		connections[0]?.events.onMessage(message(9))
 		connections[0]?.events.onError()
 		connections[0]?.events.onMessage(message(99))
+		// the new connection resumes after the highest id, and the retired one delivered only its two
 		await waitUntil(() => connections.length === 2)
 		expect(connections[0]?.closed).toBe(true)
 		expect(connections[1]?.url).toEndWith("after=12")
 		expect(deliveredChatMessageCount).toEqual([12, 9])
+		// nothing arrives after the close
 		close()
 		connections[1]?.events.onMessage(message(100))
 		expect(deliveredChatMessageCount).toEqual([12, 9])
@@ -116,6 +119,7 @@ test("a transient read retries while denied room access never connects", async (
 		},
 	})
 	try {
+		// one failure, one retry that is denied, and no connection
 		await waitUntil(() => isDenied)
 		expect(failureCount).toBe(1)
 		expect(attemptCount).toBe(2)
@@ -161,6 +165,7 @@ test.each([401, 403, 404])(
 			expect(isClosed).toBe(true)
 			expect(isDenied).toBe(true)
 			expect(deliveredChatMessageCount).toBe(0)
+			// the denial closes the room, and no retry follows
 			await new Promise((resolve) => setTimeout(resolve, 1100))
 			expect(attemptCount).toBe(1)
 		} finally {
@@ -169,9 +174,50 @@ test.each([401, 403, 404])(
 	},
 )
 
+test("an unreadable page stops the load until its reload is asked for", async () => {
+	let attemptCount = 0
+	let reloadUnreadableRoom: (() => void) | undefined
+	let isConnected = false
+	const close = openChatRoomStream({
+		topicId: null,
+		teamId: "team",
+		loadMessages: async () => {
+			attemptCount += 1
+			return attemptCount === 1 ? "unreadable" : page([1])
+		},
+		handlers: {
+			onLoadUnreadable: (reload) => {
+				reloadUnreadableRoom = reload
+			},
+			onChatMessagesLoaded: () => {},
+			onChatMessage: () => {},
+			onTopicToolCalls: () => {},
+		},
+		connectEvents: async () => {
+			isConnected = true
+			return () => {}
+		},
+	})
+	try {
+		// no retry runs on its own, and the room never connects past an unreadable page
+		await waitUntil(() => reloadUnreadableRoom !== undefined)
+		await new Promise((resolve) => setTimeout(resolve, 20))
+		expect(attemptCount).toBe(1)
+		expect(isConnected).toBe(false)
+
+		// the reload reads the room again and connects on a readable page
+		reloadUnreadableRoom?.()
+		await waitUntil(() => isConnected)
+		expect(attemptCount).toBe(2)
+	} finally {
+		close()
+	}
+})
+
 // wait only for observable controller progress, bounded below Bun's test timeout
 async function waitUntil(predicate: () => boolean): Promise<void> {
 	const deadline = Date.now() + 2500
+	// poll every few ms until the deadline
 	while (!predicate()) {
 		if (Date.now() > deadline) {
 			throw new Error("room did not settle")
@@ -179,6 +225,7 @@ async function waitUntil(predicate: () => boolean): Promise<void> {
 		await new Promise((resolve) => setTimeout(resolve, 5))
 	}
 }
+// a page of chat messages with the given ids, and one chat message
 function page(ids: number[]): ChatRoomMessagePage {
 	return { chatMessages: ids.map(message), hasEarlierChatMessages: false, isVoiceChatConfigured: false }
 }

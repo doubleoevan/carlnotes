@@ -1,5 +1,5 @@
 // the sign-in screen: Google, GitHub, and Apple, the email form, the reset link to the web, and the sign-up path
-import { SITE_URL } from "@carlnotes/core/lib/pageHead"
+import { SITE_URL } from "@carlnotes/contracts/site"
 import { OAUTH_ERROR_TEXT, REQUEST_FAILED_TEXT } from "@carlnotes/core/lib/sessionCopy"
 import * as AppleAuthentication from "expo-apple-authentication"
 import * as WebBrowser from "expo-web-browser"

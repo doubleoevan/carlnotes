@@ -1,10 +1,8 @@
 import { isLeaderRole } from "@carlnotes/contracts/enums"
-import type { TeamPageResponse } from "@carlnotes/contracts/teams"
+import type { TeamMember } from "@carlnotes/contracts/teams"
 import type { ReactNode } from "react"
 import type { TableColumn } from "../components/DataTable"
 import { toCountLabel } from "./labels"
-
-export type TeamMember = TeamPageResponse["members"][number]
 
 // the public and member views sort the same fields
 export const memberSortValues = {
@@ -31,6 +29,7 @@ export function toTeamMembersTableColumns({
 	members: TeamMember[]
 	hiddenMemberCount: number
 	hasRemovalColumns: boolean
+	// the cell renderers each app supplies with its own elements
 	renderText: (text: string) => ReactNode
 	renderMember: (member: TeamMember) => ReactNode
 	renderRole: (member: TeamMember) => ReactNode
@@ -41,6 +40,8 @@ export function toTeamMembersTableColumns({
 	// include hidden active members in the total while preserving their privacy
 	const activeMembers = members.filter((member) => member.isActive)
 	const totalLabel = toCountLabel(activeMembers.length + hiddenMemberCount, "member")
+
+	// the member column's footer holds the total
 	return [
 		{
 			key: "member",
@@ -49,6 +50,7 @@ export function toTeamMembersTableColumns({
 			render: renderMember,
 			footer: renderText(hasRemovalColumns ? "Total" : `Total ${totalLabel}`),
 		},
+		// the role and visibility footers count the active members alone
 		{
 			key: "role",
 			label: "Role",
@@ -65,6 +67,7 @@ export function toTeamMembersTableColumns({
 				`${activeMembers.filter((member) => member.isMemberVisible).length}/${activeMembers.length} shown`,
 			),
 		},
+		// the active and remove columns show only to a member who can manage the team
 		...(hasRemovalColumns
 			? [
 					{

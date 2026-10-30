@@ -1,10 +1,11 @@
 // one chat turn's input, and the conversation shaped into the model messages the turn sends
-import { CHAT_HISTORY_TURNS, compactChatAnswer, toUncompactedChatTurnStart } from "@carlnotes/contracts/chat"
+
 import {
 	toPodcastEpisodeNoteParts,
 	withPodcastEpisodeNote,
 	withTrailingNote,
 } from "@carlnotes/contracts/chatQuestionNotes"
+import { CHAT_HISTORY_TURNS, compactChatAnswer, toUncompactedChatTurnStart } from "@carlnotes/contracts/chatTurns"
 import type { ChatAttachment, ChatHistoryTurn, ChatToolCall } from "@carlnotes/contracts/payloads"
 import { toOneLineText } from "@carlnotes/contracts/text"
 import type { TopicDraft, TopicDraftTeam } from "@carlnotes/contracts/topicPayloads"

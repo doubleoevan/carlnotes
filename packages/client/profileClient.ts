@@ -1,11 +1,19 @@
 // the user profile api client
-import type { ProfileResponse, ProfileTeamStatus } from "@carlnotes/contracts/profiles"
-import { apiClient, fetchApi, readApiErrorMessage } from "./apiClient"
+import { type ProfileResponse, profileResponse } from "@carlnotes/contracts/profilePage"
+import { type ProfileTeamStatus, profileTeamStatusesResponse } from "@carlnotes/contracts/profiles"
+import { apiClient, fetchApi, readApiErrorMessage, readApiResponse } from "./apiClient"
 
-// a user's public profile by id, or null if there is no such user
+// a user's public profile by id, or null if there is no such user. any other rejected read throws
 export async function fetchProfile(userId: string): Promise<ProfileResponse | null> {
 	const response = await apiClient().api.profiles[":userId"].$get({ param: { userId } })
-	return response.ok ? ((await response.json()) as ProfileResponse) : null
+	if (response.ok) {
+		return readApiResponse(profileResponse, response)
+	}
+	// an access rejection is no such user, and any other rejection throws
+	if (response.status === 403 || response.status === 404) {
+		return null
+	}
+	throw new Error(`profile load failed: ${response.status}`)
 }
 
 // set the signed-in user's username. returns null on success, or which rule rejected it on failure
@@ -71,7 +79,7 @@ export async function fetchProfileTeamStatuses(profileUserId: string): Promise<P
 	if (!response.ok) {
 		throw new Error(`profile team statuses load failed: ${response.status}`)
 	}
-	return ((await response.json()) as { teams: ProfileTeamStatus[] }).teams
+	return (await readApiResponse(profileTeamStatusesResponse, response)).teams
 }
 
 // set who may invite the user: anyone, connected senders, or nobody

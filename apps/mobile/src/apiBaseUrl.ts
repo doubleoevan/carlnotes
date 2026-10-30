@@ -1,5 +1,5 @@
 // the api base url the app configures the shared client with
-import { SITE_URL } from "@carlnotes/core/lib/pageHead"
+import { SITE_URL } from "@carlnotes/contracts/site"
 
 // the api's port on the machine that serves bun run dev:api
 const DEVELOPMENT_API_PORT = 3000

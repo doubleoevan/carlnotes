@@ -1,4 +1,4 @@
-import type { TopicToolCalls, TopicToolToasts } from "@carlnotes/contracts/chat"
+import type { TopicToolCalls, TopicToolToasts } from "@carlnotes/contracts/chatTurns"
 import {
 	applyTopicEditToolCalls as applySharedTopicEditToolCalls,
 	showTopicToolCalls,

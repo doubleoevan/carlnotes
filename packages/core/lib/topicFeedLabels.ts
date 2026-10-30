@@ -12,6 +12,7 @@ export const TOPIC_SECTION_TITLES: Record<TopicSectionKey, string> = {
 	subscribed: "Your subscribed topics",
 	featured: "Featured topics",
 	popular: "Popular topics",
+	unknown: "More topics",
 }
 export const EMPTY_TOPIC_SECTION = "Give Carl a topic. You know the one."
 export const EMPTY_FILTERED_FINDINGS = "Nothing new worth your time yet. Carl has standards."
@@ -51,12 +52,15 @@ export function toTopicFindingFilterOptions({
 	isSignedIn: boolean
 }): TopicFindingFilterOption[] {
 	return TOPIC_FINDING_FILTERS.flatMap((filter): TopicFindingFilterOption[] => {
+		// every view but Bookmarked is one option, and Bookmarked needs an account
 		if (filter !== "bookmarked") {
 			return [{ filter, label: TOPIC_FINDING_FILTER_LABELS[filter] }]
 		}
 		if (!isSignedIn) {
 			return []
 		}
+
+		// a team member chooses whose bookmarks
 		return hasTeamBookmarks
 			? [
 					{ filter, label: "My bookmarked", bookmarkScope: "mine" },

@@ -6,6 +6,8 @@ import { toStoreListeners } from "./storeListeners"
 const openedChatRoomKeys = new Set<string>()
 // the chat rooms that the chat panel last read
 let chatRooms: ChatRoom[] = []
+// whether the last chat room read failed
+let hasChatRoomsLoadFailed = false
 const { publish, useStoreVersion } = toStoreListeners()
 
 // a chat room's key. the team's own chat room takes "team" in the topic slot, like the chat stream keys
@@ -26,7 +28,24 @@ export function markChatRoomOpened(topicId: string | null, teamId: string): void
  */
 export function setChatRooms(updatedChatRooms: ChatRoom[]): void {
 	chatRooms = updatedChatRooms
+	hasChatRoomsLoadFailed = false
 	publish()
+}
+
+/**
+ * Records a chat room read that failed, keeping the rooms last read on screen.
+ */
+export function markChatRoomsLoadFailed(): void {
+	hasChatRoomsLoadFailed = true
+	publish()
+}
+
+/**
+ * Returns whether the last chat room read failed, and re-renders the caller when it changes.
+ */
+export function useHasChatRoomsLoadFailed(): boolean {
+	useStoreVersion()
+	return hasChatRoomsLoadFailed
 }
 
 /**
@@ -35,6 +54,7 @@ export function setChatRooms(updatedChatRooms: ChatRoom[]): void {
 export function resetChatRooms(): void {
 	// clear account-owned rooms and mention state
 	chatRooms = []
+	hasChatRoomsLoadFailed = false
 	openedChatRoomKeys.clear()
 	publish()
 }

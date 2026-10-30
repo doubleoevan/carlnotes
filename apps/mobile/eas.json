@@ -1,6 +1,7 @@
 {
 	"cli": {
-		"version": ">= 25.3.0"
+		"version": ">= 25.3.0",
+		"appVersionSource": "remote"
 	},
 	"build": {
 		"development": {
@@ -24,10 +25,17 @@
 		"production": {
 			"environment": "production",
 			"channel": "production",
+			"autoIncrement": true,
 			"bun": "1.4.4"
 		}
 	},
 	"submit": {
-		"production": {}
+		"production": {
+			"ios": {},
+			"android": {
+				"serviceAccountKeyPath": "./play-service-account.json",
+				"track": "internal"
+			}
+		}
 	}
 }

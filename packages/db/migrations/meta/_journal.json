@@ -883,6 +883,13 @@
       "when": 1793315429661,
       "tag": "0125_lumpy_squirrel_girl",
       "breakpoints": true
+    },
+    {
+      "idx": 126,
+      "version": "7",
+      "when": 1793322756678,
+      "tag": "0126_mobile_minimum_versions",
+      "breakpoints": true
     }
   ]
 }

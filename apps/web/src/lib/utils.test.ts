@@ -73,6 +73,9 @@ test("toScheduleLabel names the day only for weekly", () => {
 	expect(toScheduleLabel("daily", "09:00", "monday")).toBe("Daily at 9:00 AM")
 	expect(toScheduleLabel("weekdays", "09:00", "monday")).toBe("Weekdays at 9:00 AM")
 	expect(toScheduleLabel("weekly", "09:00", "friday")).toBe("Weekly on Friday at 9:00 AM")
+	// an unknown frequency or day is left out of the label
+	expect(toScheduleLabel("unknown", "09:00", "friday")).toBe("Scheduled at 9:00 AM")
+	expect(toScheduleLabel("weekly", "09:00", "unknown")).toBe("Weekly at 9:00 AM")
 })
 
 // a clock label pads the seconds and adds the hours from one hour up

@@ -1,17 +1,23 @@
-// the typed Hono client for the api and the plain fetch beside it, both configured once by the app that runs them, and
-// readApiErrorMessage, which reads the api's error message. the types-only AppType import adds no api code to an app's
-// bundle
+// the typed Hono client for the api and the plain fetch beside it, both configured once by the app that runs them, with
+// readApiResponse and readApiErrorMessage for reading a response. the AppType import is types only
 import type { AppType } from "@carlnotes/api"
+import {
+	APP_VERSION_OUTDATED_LINE,
+	type AppVersionOutdatedResponse,
+	isAppVersionOutdatedResponse,
+} from "@carlnotes/contracts/appVersions"
 import { isObjectionableContentResponse, toModerationRejectionMessage } from "@carlnotes/contracts/moderation"
+import { toReportedPath } from "@carlnotes/contracts/reportedPath"
 import { isTermsOutdatedResponse, TERMS_OUTDATED_LINE } from "@carlnotes/contracts/terms"
+import { takeDroppedEntryCount } from "@carlnotes/contracts/tolerantReads"
 import { hc } from "hono/client"
+import type { z } from "zod"
 
 // what the headers function may read of the call: the credentials mode the call asked for
 export type ApiRequestContext = { credentials?: RequestCredentials }
 
-// what an app gives the client: the api's base url, "" for the page's own origin, how an error is shown to the user,
-// and for an app with no cookie jar the headers every request sends, read per request with the call's own
-// credentials mode, its credentials mode, and what a 401 does
+// what an app gives the client: the api's base url, with "" for the page's own origin, how an error is shown to the
+// user, the headers every request sends, the credentials mode, and what a 401 does
 export type ApiClientSettings = {
 	apiBaseUrl: string
 	showError: (message: string) => void
@@ -21,6 +27,29 @@ export type ApiClientSettings = {
 	// what a write rejected for the Terms does: the app opens its acceptance dialog and says how it closed. an
 	// accepted dialog sends the write again, and a dismissed one returns the rejection to the caller
 	onTermsOutdated?: () => Promise<"accepted" | "dismissed">
+	// what a 426 does: the app shows its update notice. the body is null when the response had none to read
+	onAppVersionOutdated?: (rejection: AppVersionOutdatedResponse | null) => void
+	// the schema a response schema is parsed through. the web configures none and parses the contract itself, and the
+	// app configures the tolerant schema
+	toResponseSchema?: <Schema extends z.ZodType>(schema: Schema) => z.ZodType<z.output<Schema>>
+	// what a tolerant parse that dropped entries does: the app records the route and the count, with no content
+	onTolerantReadIssue?: (issue: TolerantReadIssue) => void
+}
+
+// a tolerant parse that dropped list or record entries: the route, with each id segment replaced by `:id`, and how many
+export type TolerantReadIssue = { route: string; droppedEntryCount: number }
+
+/**
+ * A response that did not parse as its contract. The message names the route.
+ */
+export class ApiResponseError extends Error {
+	constructor(
+		readonly route: string,
+		readonly issueSummary: string,
+	) {
+		super(`the response for ${route} did not match its contract: ${issueSummary}`)
+		this.name = "ApiResponseError"
+	}
 }
 
 // the parts of a response the client helpers read, which Hono's typed response and the runtime's Response both have
@@ -40,6 +69,7 @@ let configuredApiClient: ApiClient = toConfiguredApiClient(apiClientSettings)
 export function configureApiClient(settings: ApiClientSettings): void {
 	apiClientSettings = settings
 	configuredApiClient = toConfiguredApiClient(settings)
+	configuredResponseSchemas = new WeakMap()
 }
 
 /**
@@ -64,6 +94,67 @@ export async function fetchApi(path: string, init: RequestInit = {}): Promise<Re
 }
 
 /**
+ * Returns a response's body parsed with the configured schema. Throws an ApiResponseError if it does not parse, and
+ * reports the entries a tolerant parse dropped.
+ */
+export async function readApiResponse<Schema extends z.ZodType>(
+	schema: Schema,
+	response: ApiResponse & { url?: string },
+): Promise<z.output<Schema>> {
+	// read the body and parse it with the configured schema
+	const route = toReportedResponsePath(response.url)
+	const body: unknown = await response.json().catch(() => undefined)
+	const parseResult = toConfiguredResponseSchema(schema).safeParse(body)
+
+	// take this parse's dropped count before the throw, or a failed parse's drops count against the next route
+	const droppedEntryCount = takeDroppedEntryCount()
+	if (!parseResult.success) {
+		throw new ApiResponseError(route, parseResult.error.issues.map((issue) => issue.path.join(".")).join(", "))
+	}
+
+	// report what a tolerant parse dropped, by route and count alone
+	if (droppedEntryCount > 0) {
+		apiClientSettings.onTolerantReadIssue?.({ route, droppedEntryCount })
+	}
+	return parseResult.data
+}
+
+// the schema each contract is parsed with, built once per contract and per configuration
+let configuredResponseSchemas = new WeakMap<z.ZodType, z.ZodType>()
+function toConfiguredResponseSchema<Schema extends z.ZodType>(schema: Schema): z.ZodType<z.output<Schema>> {
+	// the contract itself where no schema is configured
+	if (!apiClientSettings.toResponseSchema) {
+		return schema as unknown as z.ZodType<z.output<Schema>>
+	}
+
+	// the schema built for this contract, or a new one
+	const builtSchema = configuredResponseSchemas.get(schema)
+	if (builtSchema) {
+		return builtSchema as z.ZodType<z.output<Schema>>
+	}
+	const configuredSchema = apiClientSettings.toResponseSchema(schema)
+	configuredResponseSchemas.set(schema, configuredSchema)
+	return configuredSchema
+}
+
+// an api path segment that is an id: a number, a uuid, or a token
+const ID_SEGMENT_PATTERN = /^(\d+|[0-9a-f]{8}-[0-9a-f-]{27}|[A-Za-z0-9_-]{20,})$/
+
+// the route a response came from, with each id segment replaced by `:id`, or "(unknown)" for a response without a url
+function toReportedResponsePath(url: string | undefined): string {
+	if (!url) {
+		return "(unknown)"
+	}
+
+	// the path alone, each id segment replaced by `:id`
+	const pathname = url.startsWith("/") ? url : new URL(url, "http://localhost").pathname
+	return toReportedPath(pathname)
+		.split("/")
+		.map((segment) => (ID_SEGMENT_PATTERN.test(segment) ? ":id" : segment))
+		.join("/")
+}
+
+/**
  * Shows an error message to the user the way the app shows one.
  */
 export function showClientError(message: string): void {
@@ -82,16 +173,21 @@ export async function readApiErrorMessage(response: ApiResponse): Promise<string
 	if (isTermsOutdatedResponse(body)) {
 		return TERMS_OUTDATED_LINE
 	}
+
+	// an outdated build gets the update line, and any other body gives its own error
+	if (isAppVersionOutdatedResponse(body)) {
+		return APP_VERSION_OUTDATED_LINE
+	}
 	return body?.error ?? undefined
 }
 
-// the typed client at the base url, every call going through the settings' headers, credentials, and 401 report
+// the typed client at the base url, every call going through fetchWithSettings
 function toConfiguredApiClient(settings: ApiClientSettings): ApiClient {
 	return hc<AppType>(settings.apiBaseUrl, { fetch: fetchWithSettings })
 }
 
-// fetch a request with the configured headers under the call's own, read with the call's credentials mode, and the
-// configured credentials over the call's, if the app set them
+// fetch a request with the configured headers, which the call's own headers override. the configured credentials mode
+// overrides the call's
 async function fetchWithSettings(input: RequestInfo | URL, init: RequestInit = {}): Promise<Response> {
 	// await the configured headers only if an app configured them
 	const settings = apiClientSettings
@@ -106,24 +202,29 @@ async function fetchWithSettings(input: RequestInfo | URL, init: RequestInit = {
 	// a call aborted while its headers were read never leaves the client
 	init.signal?.throwIfAborted()
 	const credentials = settings.credentials ?? init.credentials
-	return fetchAndReportUnauthorized(input, { ...init, headers, credentials })
+	return fetchAndHandleRejections(input, { ...init, headers, credentials })
 }
 
-// fetch a request, report a 401 to the app, and send a write rejected for the Terms again once they are accepted
-async function fetchAndReportUnauthorized(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+// fetch a request, report a 401 and a 426 to the app, and send a write rejected for the Terms again once they are
+// accepted
+async function fetchAndHandleRejections(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
 	const response = await fetch(input, init)
 	if (response.status === 401) {
 		apiClientSettings.onUnauthorized?.()
+	}
+
+	// an outdated build is reported with the body, read from a copy so the caller still reads it
+	if (response.status === 426) {
+		const rejection = await readResponseBodyCopy(response)
+		apiClientSettings.onAppVersionOutdated?.(isAppVersionOutdatedResponse(rejection) ? rejection : null)
+		return response
 	}
 	if (response.status !== 403 || !apiClientSettings.onTermsOutdated) {
 		return response
 	}
 
-	// a 403 is read from a copy, so the caller still reads the body
-	const body = await response
-		.clone()
-		.json()
-		.catch(() => null)
+	// a 403 is read from a copy too
+	const body = await readResponseBodyCopy(response)
 	if (!isTermsOutdatedResponse(body)) {
 		return response
 	}
@@ -132,4 +233,12 @@ async function fetchAndReportUnauthorized(input: RequestInfo | URL, init?: Reque
 	// and the rejection stands if the dialog is dismissed
 	const dialogOutcome = await apiClientSettings.onTermsOutdated()
 	return dialogOutcome === "accepted" ? fetch(input, init) : response
+}
+
+// a response's json body from a copy, or null when it has none
+function readResponseBodyCopy(response: Response): Promise<unknown> {
+	return response
+		.clone()
+		.json()
+		.catch(() => null)
 }

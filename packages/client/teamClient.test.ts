@@ -2,12 +2,29 @@
 // one returns the reason the server names. a team create and a team update each read a rejection by its status
 import { afterEach, expect, test } from "bun:test"
 import { stubFailingFetch, stubFetch } from "./fetchTestFixtures"
-import { sendCreateTeam, sendTeamAvatar, sendUpdateTeam } from "./teamClient"
+import { fetchTeamPage, sendCreateTeam, sendTeamAvatar, sendUpdateTeam } from "./teamClient"
 
 // the real fetch to put back after each test
 const originalFetch = globalThis.fetch
 afterEach(() => {
 	globalThis.fetch = originalFetch
+})
+
+// only an access rejection is an answer about the team. any other rejected read throws, so the team screen shows its
+// error state instead of a missing team
+test("fetchTeamPage reads the gate from a 403, a missing team from a 404, and throws on any other rejection", async () => {
+	stubFetch(Response.json({ teamName: "Espresso club", hasRequestedToJoin: false }, { status: 403 }))
+	expect(await fetchTeamPage("team-1")).toEqual({
+		status: "gated",
+		teamName: "Espresso club",
+		hasRequestedToJoin: false,
+	})
+	stubFetch(new Response(null, { status: 404 }))
+	expect(await fetchTeamPage("team-1")).toEqual({ status: "missing" })
+
+	// a server error
+	stubFetch(new Response(null, { status: 500 }))
+	await expect(fetchTeamPage("team-1")).rejects.toThrow("team page load failed: 500")
 })
 
 test("a team avatar upload fails on a network error and returns the server's reason on a rejection", async () => {

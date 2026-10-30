@@ -1,5 +1,6 @@
 import type { ActivityResponse } from "@carlnotes/contracts/activity"
 import { isPaidPlan } from "@carlnotes/contracts/enums"
+import { PLANS_PATH, PURCHASE_COPY } from "@carlnotes/contracts/plans"
 import type { BillingState } from "@carlnotes/contracts/profiles"
 import {
 	type AccountBudgetElements,
@@ -81,7 +82,7 @@ export function PlanButton({ billing }: { billing: BillingState }) {
 				<TooltipTrigger asChild>
 					<Button onClick={handleManage} disabled={isRedirecting}>
 						<Settings className="size-4" />
-						Manage plan
+						{PURCHASE_COPY.managePlan}
 					</Button>
 				</TooltipTrigger>
 				<TooltipContent>Manage your plan</TooltipContent>
@@ -92,9 +93,9 @@ export function PlanButton({ billing }: { billing: BillingState }) {
 	return (
 		<Tooltip>
 			<TooltipTrigger asChild>
-				<AnchorLink href="/plans" className={cn(buttonVariants({ variant: "default" }))}>
+				<AnchorLink href={PLANS_PATH} className={cn(buttonVariants({ variant: "default" }))}>
 					<Settings className="size-4" />
-					Upgrade
+					{PURCHASE_COPY.upgrade}
 				</AnchorLink>
 			</TooltipTrigger>
 			<TooltipContent>Manage your plan</TooltipContent>

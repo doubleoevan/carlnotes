@@ -1,7 +1,7 @@
 // the sign-up screen: the web's two fields in the web's order, the install's proof behind the gate, and the web's
 // sign-up as the way out for an install that cannot attest
 import { MIN_PASSWORD_LENGTH, signupCredentialsPayload } from "@carlnotes/contracts/signupGate"
-import { SITE_URL } from "@carlnotes/core/lib/pageHead"
+import { SITE_URL } from "@carlnotes/contracts/site"
 import {
 	APP_SIGNUP_GATE_FAILED_TEXT,
 	REQUEST_FAILED_TEXT,

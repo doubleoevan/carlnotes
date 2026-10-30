@@ -1,7 +1,8 @@
 // how the stream reader ends a chat turn and which lines it takes as tool calls. a stream read to the end completes
 // unless the server closed it with the failed line, and a rejected file names why it was not read
 import { expect, test } from "bun:test"
-import { type TopicToolCalls, toChatReplyLineText } from "@carlnotes/contracts/chat"
+import { type TopicToolCalls, toChatReplyLineText } from "@carlnotes/contracts/chatTurns"
+import { configureApiClient } from "./apiClient"
 import { sendChatTurn, toChatRejection, toChatTurnRejection } from "./chatClient"
 
 // a mock stream response built from the given chunks, which need not line up with the lines inside them
@@ -222,4 +223,40 @@ test("sendChatTurn reads a rejected file as too large or unreadable", async () =
 test("toChatRejection reads a 413 and a 422 as failed", () => {
 	expect(toChatRejection(413)).toBe("failed")
 	expect(toChatRejection(422)).toBe("failed")
+})
+
+// a chat turn rejected for the build's age reports the 426 to the app and reads as a failed chat turn
+test("sendChatTurn reports a 426 to the app and fails the chat turn", async () => {
+	// the 426 body, and the app's report of it
+	const originalFetch = globalThis.fetch
+	const outdatedBody = { rejection: "appVersionOutdated", minimumVersion: "1.2.0", storeUrl: "https://example/store" }
+	globalThis.fetch = (async () =>
+		new Response(JSON.stringify(outdatedBody), {
+			status: 426,
+			headers: { "content-type": "application/json" },
+		})) as unknown as typeof fetch
+	const reportedRejections: unknown[] = []
+	configureApiClient({
+		apiBaseUrl: "",
+		showError: () => {},
+		onAppVersionOutdated: (rejection) => reportedRejections.push(rejection),
+	})
+
+	// the chat turn fails, and the app heard the rejection once
+	try {
+		const sendResult = await sendChatTurn({
+			page: { topicId: "t1" },
+			question: "a question",
+			history: [],
+			attachments: [],
+			onChunk: () => {},
+			onToolCalls: () => {},
+			onSpeaker: () => {},
+		})
+		expect(sendResult).toBe("failed")
+		expect(reportedRejections).toEqual([outdatedBody])
+	} finally {
+		globalThis.fetch = originalFetch
+		configureApiClient({ apiBaseUrl: "", showError: () => {} })
+	}
 })

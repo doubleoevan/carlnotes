@@ -14,10 +14,17 @@ at the root import it by name.
   missed. `queryBudgets.test.ts` holds the cached routes' query budgets, each a route requested twice against the
   connection pool and Redis stubs. `index.ts` also serves `/api/health`, which the platform polls and which sends no
   query, and `/api/health/deep`, which runs one query and returns the connection pool's counts for a monitor. Neither
-  looks up a session. `index.ts` responds with a json 404 to a path with a NUL byte, percent-encoded or decoded,
-  ahead of every route. Its tests split between `index.test.ts`, for the routing, the health checks, the api's own
-  validation, and the security headers, `pageRender.test.ts`, for the rendered pages, and `pageGuards.test.ts`, for
-  the click id redirect and the render limit, over the fake bundle and requests in `indexTestFixtures.ts`.
+  looks up a session. After them, `appVersionGate.ts` runs on every `/api` path ahead of the session lookup: a
+  request whose platform header is `ios` or `android` and whose app version is below that platform's minimum is
+  rejected with 426 and the minimum and the store url, and every other request passes. The minimums live in
+  `mobileMinimumVersions.ts`: one row per platform in `mobile_minimum_versions`, read through a one-minute Redis
+  cache, none on any failure, and written from the admin console. `contractFixtures.ts` holds, for each
+  fixtured route contract key, the route, the user, the request, and the stubbed rows that
+  `contractCompatibility.test.ts` sends through the registered routes in-process; only tests import it. `index.ts`
+  responds with a json 404 to a path with a NUL byte, percent-encoded or decoded, ahead of every route. Its tests
+  split between `index.test.ts`, for the routing, the health checks, the api's own validation, and the security
+  headers, `pageRender.test.ts`, for the rendered pages, and `pageGuards.test.ts`, for the click id redirect and the
+  render limit, over the fake bundle and requests in `indexTestFixtures.ts`.
   `index.ts` serves the docs site's static
   build from `apps/docs/dist` at `/docs`, stripping the prefix to find a file, and the web app's browser bundle from
   `apps/web/dist/client`. `nightshift.ts` serves the Nightshift component browser's static Storybook from
@@ -46,10 +53,12 @@ at the root import it by name.
   start with: the pages `content.ts` renders and the unsubscribe page in `unsubscribe.ts`.
   `billingRoute.ts` holds the billing routes over `billing.ts`; its Stripe webhook responds 400 to a bad signature and
   500 to a verified event it could not apply, so Stripe retries it.
-- `documents.ts` — the document routes: the sitemap, the site and topic feeds, the llms files, the IndexNow key, and
-  security.txt. `seo.ts` builds what they read, and `jsonLd.ts` the JSON-LD the topic page head includes. The blog and
-  docs Markdown (`apps/docs/src/content/docs`) are read through `ttlCache.ts`, which keeps the parsed pages for a
-  minute, so a new file appears within that minute without a restart.
+- `documents.ts` — the document routes: the sitemap, the site and topic feeds, the llms files, the IndexNow key,
+  security.txt, and the two domain association documents the stores verify app links against,
+  `/.well-known/apple-app-site-association` from `APPLE_TEAM_ID` and `/.well-known/assetlinks.json` from
+  `ANDROID_SIGNING_FINGERPRINTS`, each 404 while its value is unset. `seo.ts` builds what they read, and `jsonLd.ts`
+  the JSON-LD the topic page head includes. The blog and docs Markdown (`apps/docs/src/content/docs`) are read through
+  `ttlCache.ts`, which keeps the parsed pages for a minute, so a new file appears within that minute without a restart.
 - `share/pageHead.ts` — the `/api/<page>/:id/head` routes that return a topic, profile, team, or invite page's
   `PageHead`, which each ui route's `head()` turns into tags.
 - `releases.ts` — the `/releases` index and each release's own page, both
@@ -299,7 +308,8 @@ at the root import it by name.
   failed purge, logging a skipped one, and never failing the deletion. `purgeEdgeCacheTags` is the purge by tag both it
   and the release job send. `edgeCache.purge.ts` (`bun run edge:purge`) is the deploy job that clears the `rendered` tag
   right after the app deploys.
-- `admin.ts` — the admin writes (a user's role and budget override) and the admin console routes, over `adminConsole.ts`
+- `admin.ts` — the admin writes (a user's role and budget override, and a platform's minimum app version) and the admin
+  console routes, over `adminConsole.ts`
   (the users and teams tables, the platform totals, and the expandable rows, a topic's subscribers among them) and
   `report/adminReports.ts` (the open content reports, and resolving one by removing its content through the
   content's own delete path or keeping it).

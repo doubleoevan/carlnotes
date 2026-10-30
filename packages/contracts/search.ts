@@ -1,12 +1,12 @@
 // the site search contracts: the request the search bar, the search page's url, and the mcp search tool share, the
 // rows it returns, and the query limits
 import { z } from "zod"
-import { resourceKinds, type visibilities } from "./enums"
-import { TAG_MATCH_MODES, TOPIC_FINDING_FILTERS, TOPIC_FINDING_SORTS, type TopicFinding } from "./findings"
+import { resourceKinds, visibilities } from "./enums"
+import { TAG_MATCH_MODES, TOPIC_FINDING_FILTERS, TOPIC_FINDING_SORTS, topicFinding } from "./findings"
 import { DEFAULT_PAGE_SIZE, PAGE_SIZES } from "./pagination"
-import type { PodcastEpisode, PodcastEpisodeSummary } from "./podcast"
-import type { ProfileIdentity } from "./profiles"
-import type { TeamIdentity } from "./teams"
+import { podcastEpisode, podcastEpisodeSummary } from "./podcast"
+import { profileIdentity } from "./profiles"
+import { teamIdentity } from "./teams"
 import { MAX_TOPIC_DRAFT_TAGS, TOPIC_DRAFT_TAG_CHARS } from "./topics"
 
 // how long a query must be before it searches, and the most characters of a query the search reads
@@ -181,68 +181,96 @@ export function toSearchPath(searchRequest: SearchRequest): string {
 }
 
 // the fields every row has: its id, its name, the path of its page on the site, and the date and count the sorts read
-type SearchRowFields = { id: string; name: string; path: string; date: string | null; count: number | null }
+const searchRowFields = z.object({
+	id: z.string(),
+	name: z.string(),
+	path: z.string(),
+	date: z.string().nullable(),
+	count: z.number().nullable(),
+})
 
 // a topic row, with its latest podcast episode the caller may listen to, how many people subscribe to it, and whether a signed-in
 // caller does
-export type TopicSearchRow = SearchRowFields & {
-	kind: "topic"
-	topic: { id: string; name: string; latestPodcastEpisode: PodcastEpisodeSummary | null }
-	subscriberCount: number
-	isSubscribed: boolean | null
-}
+export const topicSearchRow = searchRowFields.extend({
+	kind: z.literal("topic"),
+	topic: z.object({ id: z.string(), name: z.string(), latestPodcastEpisode: podcastEpisodeSummary.nullable() }),
+	subscriberCount: z.number(),
+	isSubscribed: z.boolean().nullable(),
+})
+
+export type TopicSearchRow = z.infer<typeof topicSearchRow>
 
 // a published podcast episode row, with its topic
-export type PodcastEpisodeSearchRow = SearchRowFields & {
-	kind: "podcastEpisode"
-	podcastEpisode: PodcastEpisodeSummary
-	topic: { id: string; name: string }
-}
+export const podcastEpisodeSearchRow = searchRowFields.extend({
+	kind: z.literal("podcastEpisode"),
+	podcastEpisode: podcastEpisodeSummary,
+	topic: z.object({ id: z.string(), name: z.string() }),
+})
 
-// a finding row: the finding as its topic's feed shows it, with the caller's marks, and its topic, whose page is the
-// row's path
-export type FindingSearchRow = SearchRowFields & {
-	kind: "finding"
-	finding: TopicFinding
-	topic: FindingSearchTopic
-}
+export type PodcastEpisodeSearchRow = z.infer<typeof podcastEpisodeSearchRow>
 
 // a finding row's topic: its name and prompt, which the finding's note copies, its visibility, and whether the caller
 // may rate and bookmark its findings
-export type FindingSearchTopic = {
-	id: string
-	name: string
-	prompt: string
-	visibility: (typeof visibilities)[number]
-	canRate: boolean
-	canBookmark: boolean
-}
+export const findingSearchTopic = z.object({
+	id: z.string(),
+	name: z.string(),
+	prompt: z.string(),
+	visibility: z.enum(visibilities),
+	canRate: z.boolean(),
+	canBookmark: z.boolean(),
+})
+
+export type FindingSearchTopic = z.infer<typeof findingSearchTopic>
+
+// a finding row: the finding as its topic's feed shows it, with the caller's marks, and its topic, whose page is the
+// row's path
+export const findingSearchRow = searchRowFields.extend({
+	kind: z.literal("finding"),
+	finding: topicFinding,
+	topic: findingSearchTopic,
+})
+
+export type FindingSearchRow = z.infer<typeof findingSearchRow>
 
 // a team row, in the shape its avatar and link read, with how many topics it holds and how many members it has
-export type TeamSearchRow = SearchRowFields & {
-	kind: "team"
-	team: TeamIdentity
-	topicCount: number
-	memberCount: number
-}
+export const teamSearchRow = searchRowFields.extend({
+	kind: z.literal("team"),
+	team: teamIdentity,
+	topicCount: z.number(),
+	memberCount: z.number(),
+})
+
+export type TeamSearchRow = z.infer<typeof teamSearchRow>
 
 // a profile row, in the shape its avatar and link read
-export type UserSearchRow = SearchRowFields & { kind: "user"; user: ProfileIdentity }
+export const userSearchRow = searchRowFields.extend({ kind: z.literal("user"), user: profileIdentity })
+
+export type UserSearchRow = z.infer<typeof userSearchRow>
 
 // one search result of any kind
-export type SearchRow = TopicSearchRow | PodcastEpisodeSearchRow | FindingSearchRow | TeamSearchRow | UserSearchRow
+export const searchRow = z.discriminatedUnion("kind", [
+	topicSearchRow,
+	podcastEpisodeSearchRow,
+	findingSearchRow,
+	teamSearchRow,
+	userSearchRow,
+])
+
+export type SearchRow = z.infer<typeof searchRow>
 
 // one page of a search: its rows, how many rows the whole search found, where the page sits, and the latest podcast
 // episode the caller may listen to of each finding row's topic, once per topic, whose chapters put a pill on the findings
 // they narrate
-export type SearchResultsPage = {
-	rows: SearchRow[]
-	rowCount: number
-	page: number
-	pageCount: number
-	pageSize: number
-	podcastEpisodes: PodcastEpisode[]
-}
+export const searchResultsPage = z.object({
+	rows: z.array(searchRow),
+	rowCount: z.number(),
+	page: z.number(),
+	pageCount: z.number(),
+	pageSize: z.number(),
+	podcastEpisodes: z.array(podcastEpisode),
+})
+
+export type SearchResultsPage = z.infer<typeof searchResultsPage>
 
 // the result type each row kind belongs to
 export const SEARCH_ROW_RESULT_KINDS: Record<SearchRow["kind"], SearchResultKind> = {

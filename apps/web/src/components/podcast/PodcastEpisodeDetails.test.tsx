@@ -2,9 +2,12 @@
 // inside one
 import { expect, test } from "bun:test"
 import { AI_VOICES_NOTE } from "@carlnotes/contracts/podcastEpisodes"
+import {
+	toPodcastEpisodeFixture,
+	toPodcastEpisodeSummaryFixture,
+} from "@carlnotes/contracts/podcastEpisodeTestFixtures"
 import { renderToStaticMarkup } from "react-dom/server"
 import { PodcastEpisodeDetails } from "./PodcastEpisodeDetails"
-import { toPodcastEpisodeFixture, toPodcastEpisodeSummaryFixture } from "./podcastEpisodeTestFixtures"
 
 // a table row's summary of a published podcast episode with twelve chapters
 const PODCAST_EPISODE_SUMMARY = toPodcastEpisodeSummaryFixture()

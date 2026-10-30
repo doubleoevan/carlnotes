@@ -1,6 +1,6 @@
 import { toAvatarImagePath } from "@carlnotes/contracts/avatars"
+import { SITE_URL } from "@carlnotes/contracts/site"
 import type { TopicDetails } from "@carlnotes/contracts/topics"
-import { SITE_URL } from "@carlnotes/core/lib/pageHead"
 import { Text as NativeText, View } from "react-native"
 import { Avatar } from "@/components/branding/Avatar"
 import { AnchorLink } from "@/components/common/AnchorLink"

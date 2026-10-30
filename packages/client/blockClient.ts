@@ -1,6 +1,6 @@
 // the block calls: block a user, unblock them, and read the user's block list
 import { type BlockedUser, blockedUsersResponse } from "@carlnotes/contracts/blocks"
-import { apiClient } from "./apiClient"
+import { apiClient, readApiResponse } from "./apiClient"
 
 /**
  * Blocks a user for the signed-in user. Throws an error on a rejection.
@@ -30,5 +30,5 @@ export async function fetchBlockedUsers(): Promise<BlockedUser[]> {
 	if (!response.ok) {
 		throw new Error(`block list failed: ${response.status}`)
 	}
-	return blockedUsersResponse.parse(await response.json()).blockedUsers
+	return (await readApiResponse(blockedUsersResponse, response)).blockedUsers
 }

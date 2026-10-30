@@ -2,9 +2,7 @@
 import type { PageHead } from "@carlnotes/contracts/pageHead"
 import { PODCAST_SHOW_NAME } from "@carlnotes/contracts/podcastEpisodes"
 import { toJsonLdText, toPageTitle } from "@carlnotes/contracts/seo"
-
-// the site's origin in production
-export const SITE_URL = "https://carlnotes.com"
+import { SITE_URL } from "@carlnotes/contracts/site"
 
 // the shape a route's head() returns
 export type HeadTags = {

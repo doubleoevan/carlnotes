@@ -1,15 +1,11 @@
-// what a rejected chat turn says in carl's words, the voice recording's toasts, the link that opens the plans page, and
-// the toast that says why a chat turn was rejected
+// what a rejected chat turn says in carl's words, the voice recording's toasts, and the toast that says why a
+// chat turn was rejected
 
 import type { ChatRejection } from "@carlnotes/client/chatClient"
 import { CHAT_REJECTION_COPY } from "@carlnotes/core/lib/chatRejectionCopy"
 import { toast } from "sonner"
 
 export { CHAT_REJECTION_COPY } from "@carlnotes/core/lib/chatRejectionCopy"
-
-// the label and path of the link that opens the plans page
-export const PLANS_ACTION_LABEL = "Pick up more coffee"
-export const PLANS_PATH = "/plans"
 
 // the toasts: the browser rejected the microphone request, no speech was recorded or transcribed, and the chat failed
 export const MICROPHONE_REJECTED_TOAST = "Carl can't hear you. Type it, he reads fast."

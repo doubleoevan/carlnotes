@@ -1,4 +1,8 @@
 import type { PodcastEpisode, PodcastEpisodeTranscriptBlock } from "@carlnotes/contracts/podcast"
+import {
+	toPodcastEpisodeChapterFixture,
+	toPodcastEpisodeFixture,
+} from "@carlnotes/contracts/podcastEpisodeTestFixtures"
 import { toTestTopicFinding, toTestTopicResponse } from "@carlnotes/contracts/topicFeedTestFixtures"
 import { type ReactNode, useEffect } from "react"
 import type { ChapterTopicFeed } from "../components/PodcastEpisodeChapters"
@@ -12,7 +16,6 @@ import {
 	reportPodcastEpisodeAudioEvent,
 } from "../stores/podcastEpisodePlayerStore"
 import type { LoadPodcastEpisodeAudioOptions } from "./podcastEpisodeAudio"
-import { toPodcastEpisodeChapterFixture, toPodcastEpisodeFixture } from "./podcastEpisodeTestFixtures"
 
 // both component browsers use the same six chapters and fictional findings
 export const PODCAST_STORY_EPISODE = toPodcastEpisodeFixture({

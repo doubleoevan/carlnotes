@@ -1,6 +1,6 @@
 // profile page tests: the empty topics and teams sections on someone else's profile
 import { expect, test } from "bun:test"
-import type { ProfileResponse } from "@carlnotes/contracts/profiles"
+import type { ProfileResponse } from "@carlnotes/contracts/profilePage"
 import { renderWithRouter } from "@/components/chat/renderWithRouter"
 import { ProfileSections } from "./ProfilePage"
 

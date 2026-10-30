@@ -42,8 +42,10 @@ export function useChatRoomLinkPreviews({
 		const generation = generationRef.current
 		const loadingLinkPreviewIds = [...linkPreviewAttemptsRef.current.keys()]
 		const linkPreviewsById = await fetchChatRoomMessageLinkPreviews(topicId, teamId, loadingLinkPreviewIds).catch(
-			() => ({}) as Record<number, ChatRoomMessage["linkPreviews"]>,
+			() => ({}) as Record<string, ChatRoomMessage["linkPreviews"]>,
 		)
+
+		// a refresh that outlived its chat, its generation, or the mount merges nothing
 		if (!isMountedRef.current || generation !== generationRef.current || !isCurrentChat()) {
 			return
 		}
@@ -108,6 +110,8 @@ export function useChatRoomLinkPreviews({
 			isMountedRef.current = false
 			generationRef.current += 1
 			linkPreviewAttemptsRef.current.clear()
+
+			// a scheduled refresh never fires after the unmount
 			if (linkPreviewTimerRef.current) {
 				clearTimeout(linkPreviewTimerRef.current)
 				linkPreviewTimerRef.current = null

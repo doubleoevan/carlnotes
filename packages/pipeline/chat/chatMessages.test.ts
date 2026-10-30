@@ -1,8 +1,8 @@
 // chat message tests: the history compaction, the attachments in the newest message, the replayed tool calls, and
 // the fenced podcast episode notes
 import { expect, test } from "bun:test"
-import { CHAT_HISTORY_TURNS, CHAT_MEMORY_CHARS, toUncompactedChatTurnStart } from "@carlnotes/contracts/chat"
 import { withPodcastEpisodeNote } from "@carlnotes/contracts/chatQuestionNotes"
+import { CHAT_HISTORY_TURNS, CHAT_MEMORY_CHARS, toUncompactedChatTurnStart } from "@carlnotes/contracts/chatTurns"
 import type { ChatToolCall } from "@carlnotes/contracts/payloads"
 import { toUntrustedFences, UNTRUSTED_FENCE_PATTERN } from "@carlnotes/models/prompts/untrustedFenceTestFixtures"
 import { toModelMessages } from "./chatMessages"

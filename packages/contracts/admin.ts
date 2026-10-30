@@ -1,5 +1,15 @@
-// the admin console contracts: its user, team, and topic subscriber rows and its totals
+// the admin console contracts: its user, team, and topic subscriber rows, its totals, and the mobile minimum versions
+import type { MobilePlatform } from "./clientTelemetry"
 import type { Plan } from "./plans"
+
+// one platform's stored minimum app version, with when it was saved and by whom. the username is null once the
+// saver's account closed
+export type MobileMinimumVersionRow = {
+	platform: MobilePlatform
+	minimumVersion: string
+	updatedAt: string
+	updatedByUsername: string | null
+}
 
 // an admin-console user row: the user's status plus their attributed storage and month-to-date variable cost
 export type AdminUserRow = {
@@ -74,4 +84,9 @@ export type AdminTotals = {
 }
 
 // the admin-console payload: the users and teams tables with the totals summary
-export type AdminConsoleResponse = { users: AdminUserRow[]; teams: AdminTeamRow[]; totals: AdminTotals }
+export type AdminConsoleResponse = {
+	users: AdminUserRow[]
+	teams: AdminTeamRow[]
+	totals: AdminTotals
+	mobileMinimumVersions: MobileMinimumVersionRow[]
+}

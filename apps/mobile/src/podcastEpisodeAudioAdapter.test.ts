@@ -1,8 +1,8 @@
 import { expect, mock, test } from "bun:test"
 import { configureApiClient } from "@carlnotes/client/apiClient"
 import { PodcastEpisodeRequestError } from "@carlnotes/client/podcastEpisodeClient"
+import { toPodcastEpisodeFixture } from "@carlnotes/contracts/podcastEpisodeTestFixtures"
 import type { LoadPodcastEpisodeAudioOptions, PodcastEpisodeAudioEvent } from "@carlnotes/core/lib/podcastEpisodeAudio"
-import { toPodcastEpisodeFixture } from "@carlnotes/core/lib/podcastEpisodeTestFixtures"
 import type { AudioStatus } from "expo-audio"
 import { type PodcastEpisodeAudioPlayer, toPodcastEpisodeAudioAdapter } from "./podcastEpisodeAudioAdapter"
 

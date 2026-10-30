@@ -1,5 +1,5 @@
 // carl's chat turn in a team chat room
-import type { RoomTopicToolCalls } from "@carlnotes/contracts/chat"
+import type { RoomTopicToolCalls } from "@carlnotes/contracts/chatTurns"
 import type { ChatAttachment } from "@carlnotes/contracts/payloads"
 import { PODCAST_EPISODE_SPEAKER_NAMES } from "@carlnotes/contracts/podcastEpisodes"
 import { db } from "@carlnotes/db"

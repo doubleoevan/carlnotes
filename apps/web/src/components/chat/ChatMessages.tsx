@@ -1,5 +1,5 @@
 // the private chat's scrollable chat message list, virtualized past a long conversation
-import { CHAT_HISTORY_TURNS, toUncompactedChatTurnStart } from "@carlnotes/contracts/chat"
+import { CHAT_HISTORY_TURNS, toUncompactedChatTurnStart } from "@carlnotes/contracts/chatTurns"
 import type { VoiceChatPage } from "@carlnotes/contracts/payloads"
 import { useNow } from "@carlnotes/core/hooks/useNow"
 import { cn } from "@carlnotes/nightshift/classNames"

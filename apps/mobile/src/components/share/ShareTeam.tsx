@@ -1,7 +1,7 @@
 import { sendCreateTeamInvite } from "@carlnotes/client/teamClient"
 import { toInvitePath } from "@carlnotes/contracts/seo"
+import { SITE_URL } from "@carlnotes/contracts/site"
 import { useCopyFeedback } from "@carlnotes/core/hooks/useCopyFeedback"
-import { SITE_URL } from "@carlnotes/core/lib/pageHead"
 import { setStringAsync } from "expo-clipboard"
 import { Link, Share as ShareIcon } from "lucide-react-native"
 import { Share, View } from "react-native"

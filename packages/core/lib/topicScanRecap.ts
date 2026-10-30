@@ -1,13 +1,12 @@
-import type { scanStatuses } from "@carlnotes/contracts/enums"
 import type { TopicFinding } from "@carlnotes/contracts/findings"
 import { isBudgetError } from "@carlnotes/contracts/scanFailure"
 import { toTopicPath } from "@carlnotes/contracts/seo"
-import type { ScanSourceResults } from "@carlnotes/contracts/topics"
+import type { ScanSourceResults, TopicScan } from "@carlnotes/contracts/topics"
 
 // the fields a scan recap popover reads, shared by the topic page's scan history and the Activity subtable
 export type ScanRecapFields = {
 	// the outcome and, for a failed scan, its recorded reason, so the diary line matches what happened
-	status: (typeof scanStatuses)[number]
+	status: TopicScan["status"]
 	error: string | null
 	startedAt: string
 	finishedAt: string | null

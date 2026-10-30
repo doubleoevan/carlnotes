@@ -1,7 +1,8 @@
 // the typed api client for the activity routes
-import type { ActivityResponse } from "@carlnotes/contracts/activity"
+import { type ActivityResponse, activityResponse } from "@carlnotes/contracts/activity"
 import { type InviteAcceptResponse, inviteAcceptResponse, type TopicInviteBadge } from "@carlnotes/contracts/invites"
-import { apiClient } from "./apiClient"
+import { topicInviteBadgesResponse } from "@carlnotes/contracts/routeShapes"
+import { apiClient, readApiResponse } from "./apiClient"
 
 // the activity payload: monthly spend against budget, owned topics, subscriptions, and sent invitations
 export async function fetchActivity(userId?: string): Promise<ActivityResponse> {
@@ -9,7 +10,7 @@ export async function fetchActivity(userId?: string): Promise<ActivityResponse> 
 	if (!response.ok) {
 		throw new Error(`activity failed: ${response.status}`)
 	}
-	return (await response.json()) as ActivityResponse
+	return readApiResponse(activityResponse, response)
 }
 
 // delete one invitation on a topic the user owns, which drops that invitee's subscription with it
@@ -26,7 +27,7 @@ export async function sendAcceptInvite(inviteId: string): Promise<InviteAcceptRe
 	if (!response.ok) {
 		throw new Error(`invite accept failed: ${response.status}`)
 	}
-	return inviteAcceptResponse.parse(await response.json())
+	return readApiResponse(inviteAcceptResponse, response)
 }
 
 // decline a received invitation. the sender isn't told
@@ -45,5 +46,5 @@ export async function fetchTopicInviteBadges(): Promise<TopicInviteBadge[]> {
 	if (!pendingInvitesResponse.ok) {
 		throw new Error(`topic invite badges failed: ${pendingInvitesResponse.status}`)
 	}
-	return (await pendingInvitesResponse.json()) as TopicInviteBadge[]
+	return readApiResponse(topicInviteBadgesResponse, pendingInvitesResponse)
 }

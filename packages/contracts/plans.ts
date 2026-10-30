@@ -1,5 +1,6 @@
 // each billing plan's topic limit, daily topic limit, daily scan limit, monthly spend backstop, monthly budget
 // cutoffs, and price
+import { z } from "zod"
 import type { billingIntervals, plans } from "./enums"
 
 export type Plan = (typeof plans)[number]
@@ -19,7 +20,9 @@ export const monthlyBudgetCutoffKinds = [
 export type MonthlyBudgetCutoffKind = (typeof monthlyBudgetCutoffKinds)[number]
 
 // one cutoff: the kind of spend that stops, and the share of the monthly budget it stops at
-export type MonthlyBudgetCutoff = { kind: MonthlyBudgetCutoffKind; budgetShare: number }
+export const monthlyBudgetCutoff = z.object({ kind: z.enum(monthlyBudgetCutoffKinds), budgetShare: z.number() })
+
+export type MonthlyBudgetCutoff = z.infer<typeof monthlyBudgetCutoff>
 
 // a plan's fixed cutoff shares
 type MonthlyBudgetCutoffShares = Record<Exclude<MonthlyBudgetCutoffKind, "dailyScans">, number | null>
@@ -119,6 +122,17 @@ export const PLANS = {
 		priceYearlyCents: MONTHLY_PRICE_CENTS.premium * YEARLY_MONTHS,
 	},
 } as const satisfies Record<Plan, PlanConfig>
+
+// the path and the labels that lead to a purchase
+export const PLANS_PATH = "/plans"
+export const PURCHASE_COPY = {
+	upgrade: "Upgrade",
+	manageBilling: "Manage billing",
+	managePlan: "Manage plan",
+	seePlans: "See plans",
+	pickUpMoreCoffee: "Pick up more coffee",
+	pickUpSomeCoffee: "Pick up some coffee.",
+} as const
 
 // a user's authority and entitlement inputs, read together
 export type UserAccess = { isAdmin: boolean; plan: Plan; budgetOverrideCents: number | null }

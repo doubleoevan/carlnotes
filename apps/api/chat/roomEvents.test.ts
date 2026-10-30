@@ -1,5 +1,6 @@
 import { afterEach, expect, type Mock, mock, spyOn, test } from "bun:test"
-import type { ChatRoomMessage, RoomTopicToolCalls } from "@carlnotes/contracts/chat"
+import type { ChatRoomMessage } from "@carlnotes/contracts/chat"
+import type { RoomTopicToolCalls } from "@carlnotes/contracts/chatTurns"
 import { Hono } from "hono"
 import type { AppEnv } from "../currentUser"
 import { signInAs, toSignedInApp } from "../testSession"

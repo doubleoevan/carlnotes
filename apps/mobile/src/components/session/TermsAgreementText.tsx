@@ -1,4 +1,4 @@
-import { SITE_URL } from "@carlnotes/core/lib/pageHead"
+import { SITE_URL } from "@carlnotes/contracts/site"
 import { TERMS_AGREEMENT_COPY } from "@carlnotes/core/lib/sessionCopy"
 import { View } from "react-native"
 import { AnchorLink } from "@/components/common/AnchorLink"

@@ -1,6 +1,6 @@
 // the podcast episode fixtures for the ui tests: a published podcast episode's summary, as a table row and its play
 // button read it, a chapter, and a full podcast episode as the player shows it
-import type { PodcastEpisode, PodcastEpisodeChapter, PodcastEpisodeSummary } from "@carlnotes/contracts/podcast"
+import type { PodcastEpisode, PodcastEpisodeChapter, PodcastEpisodeSummary } from "./podcast"
 
 /**
  * Returns a published podcast episode's summary with twelve chapters, with any of its fields replaced.

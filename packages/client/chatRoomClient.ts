@@ -1,24 +1,31 @@
 // the api client for a team topic's chat room and a team's own chat room: the chat messages, the post, and the stream url
 import {
 	CHAT_ROOM_ATTACHMENT_ERRORS,
-	type ChatLinkPreview,
 	type ChatRoom,
 	type ChatRoomAttachmentRejection,
+	type ChatRoomMessageLinkPreviewsResponse,
 	type ChatRoomMessagePage,
+	type ChatRoomMessagePostResponse,
+	chatMentionCountResponse,
+	chatRoomMessageLinkPreviewsResponse,
+	chatRoomMessagePage,
+	chatRoomMessagePostResponse,
+	chatRoomsResponse,
 } from "@carlnotes/contracts/chat"
 import type { ChatAttachment } from "@carlnotes/contracts/payloads"
-import { apiClient, fetchApi, readApiErrorMessage } from "./apiClient"
+import { ApiResponseError, apiClient, fetchApi, readApiErrorMessage, readApiResponse } from "./apiClient"
 
 /**
- * Loads the chat room's latest chat messages. Null means this user has no chat room here,
- * and "failed" means a server or network error the caller should retry.
+ * Loads the chat room's latest chat messages. Null means this user has no chat room here, "failed" means a server or
+ * network error the caller should retry, and "unreadable" means a page that did not match its contract, which a
+ * retry reads the same way.
  */
 export async function fetchChatRoomMessages(
 	topicId: string | null,
 	teamId: string,
 	beforeChatMessageId?: number,
-): Promise<ChatRoomMessagePage | null | "failed"> {
-	// a rejection status is an answer, and any other error is a failure to retry
+): Promise<ChatRoomMessagePage | null | "failed" | "unreadable"> {
+	// a rejection status is a result, a page that did not parse is unreadable, and any other error is a failure to retry
 	try {
 		const chatRoomPath = toChatRoomPath(topicId, teamId)
 		const response = await fetchApi(
@@ -33,11 +40,9 @@ export async function fetchChatRoomMessages(
 
 		// the payload is the decrypted chat messages in id order, with whether a page sits above them and whether
 		// voice is on
-		const { chatMessages, hasEarlierChatMessages, isVoiceChatConfigured } =
-			(await response.json()) as ChatRoomMessagePage
-		return { chatMessages, hasEarlierChatMessages, isVoiceChatConfigured }
-	} catch {
-		return "failed"
+		return await readApiResponse(chatRoomMessagePage, response)
+	} catch (error) {
+		return error instanceof ApiResponseError ? "unreadable" : "failed"
 	}
 }
 
@@ -49,7 +54,7 @@ export async function fetchChatRoomMessageLinkPreviews(
 	topicId: string | null,
 	teamId: string,
 	chatMessageIds: number[],
-): Promise<Record<number, ChatLinkPreview[]>> {
+): Promise<ChatRoomMessageLinkPreviewsResponse["linkPreviews"]> {
 	// a network error, a rejected status, and a body that is not json each read as no cards yet
 	try {
 		const response = await fetchApi(`${toChatRoomPath(topicId, teamId)}/link-previews?ids=${chatMessageIds.join(",")}`)
@@ -58,7 +63,7 @@ export async function fetchChatRoomMessageLinkPreviews(
 		}
 
 		// the payload is a card list per chat message id
-		const { linkPreviews } = (await response.json()) as { linkPreviews: Record<number, ChatLinkPreview[]> }
+		const { linkPreviews } = await readApiResponse(chatRoomMessageLinkPreviewsResponse, response)
 		return linkPreviews
 	} catch {
 		return {}
@@ -106,9 +111,7 @@ export async function sendChatRoomMessage({
 	replyToChatMessageId,
 	attachments,
 	isSpoken = false,
-}: SendChatRoomMessageOptions): Promise<
-	{ chatMessageId: number; rejectionReason: string | null } | ChatRoomAttachmentRejection | null
-> {
+}: SendChatRoomMessageOptions): Promise<ChatRoomMessagePostResponse | ChatRoomAttachmentRejection | null> {
 	const response =
 		topicId === null
 			? await apiClient().api.teams[":id"].room.$post({
@@ -130,8 +133,7 @@ export async function sendChatRoomMessage({
 	}
 
 	// a rejection reason is private to the chat poster, not a chat room message post
-	const postedBody = (await response.json()) as { chatMessageId: number; rejectionReason: string | null }
-	return { chatMessageId: postedBody.chatMessageId, rejectionReason: postedBody.rejectionReason }
+	return readApiResponse(chatRoomMessagePostResponse, response)
 }
 
 /**
@@ -202,15 +204,16 @@ export async function sendDeleteChatRoomMessage(
 }
 
 /**
- * Every chat room the signed-in user may open, latest first. A rejected fetch returns an empty list,
- * so the chat panel shows its call to action instead of an empty menu.
+ * Every chat room the signed-in user may open, latest first. A rejected read throws, so the chat panel shows its
+ * error state instead of an empty menu.
  */
 export async function fetchChatRooms(): Promise<ChatRoom[]> {
 	const response = await apiClient().api.rooms.$get()
 	if (!response.ok) {
-		return []
+		throw new Error(`chat rooms load failed: ${response.status}`)
 	}
-	return (await response.json()).rooms
+	const { rooms } = await readApiResponse(chatRoomsResponse, response)
+	return rooms
 }
 
 /**
@@ -222,5 +225,6 @@ export async function fetchChatMentionCount(): Promise<number> {
 	if (!response.ok) {
 		return 0
 	}
-	return (await response.json()).count
+	const { count } = await readApiResponse(chatMentionCountResponse, response)
+	return count
 }

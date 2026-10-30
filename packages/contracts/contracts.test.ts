@@ -1,14 +1,6 @@
 // tests for the payload contracts that create and update topic are validated through
 import { expect, test } from "bun:test"
-import {
-	CHAT_HISTORY_ANSWER_CHARS,
-	CHAT_HISTORY_TOOL_CALL_INPUT_CHARS,
-	CHAT_HISTORY_TOOL_CALLS,
-	TOPIC_SAVE_TOOL_NAMES,
-	toSentToolCall,
-	toSentToolCalls,
-	toStandingTopicEditCall,
-} from "./chat"
+import { CHAT_HISTORY_ANSWER_CHARS, CHAT_HISTORY_TOOL_CALL_INPUT_CHARS, CHAT_HISTORY_TOOL_CALLS } from "./chat"
 import {
 	PODCAST_EPISODE_NOTE_CHAPTER_TITLE_CHARS,
 	toPodcastEpisodeNoteParts,
@@ -17,6 +9,7 @@ import {
 	withPodcastEpisodeNote,
 } from "./chatQuestionNotes"
 import { TEST_PODCAST_EPISODE_NOTE } from "./chatTestFixtures"
+import { TOPIC_SAVE_TOOL_NAMES, toSentToolCall, toSentToolCalls, toStandingTopicEditCall } from "./chatTurns"
 import {
 	type ChatToolCall,
 	chatRoomMessagePayload,

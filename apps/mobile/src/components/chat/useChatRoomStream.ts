@@ -27,5 +27,6 @@ const connectEvents: ConnectChatRoomEvents = async (path, events) => {
 		events,
 		isCurrent: isCurrentChat,
 		onUnauthorized: mobileApiRequestSettings.onUnauthorized,
+		onAppVersionOutdated: () => mobileApiRequestSettings.onAppVersionOutdated(null),
 	})
 }

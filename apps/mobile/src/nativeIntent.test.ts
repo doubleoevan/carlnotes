@@ -1,6 +1,8 @@
 // native intent tests: a visitor's link to an account screen opens sign-in and is remembered, every other link opens
 import { expect, test } from "bun:test"
-import { isSignedInPath, toLinkedPath, toLinkedPathWithQuery } from "./nativeIntent"
+import { APP_LINK_SAMPLE_PATHS } from "@carlnotes/contracts/appLinkPaths"
+import { SITE_URL } from "@carlnotes/contracts/site"
+import { isSignedInPath, OPEN_WEB_PATH, toLinkedPath, toLinkedPathWithQuery } from "./nativeIntent"
 
 // a scheme link and a web link both give their path with its query. a path is returned as given
 test("a link's path comes without its scheme and host", () => {
@@ -43,4 +45,34 @@ test("a visitor's link to an account screen opens sign-in and is remembered", ()
 		developmentClientLink,
 	)
 	expect(rememberedPaths).toEqual(["/activity"])
+})
+
+// every listed app link path reaches a native route, and a web url with no route opens in the browser
+test("every app link path reaches a native route, and an unlisted web path opens in the browser", () => {
+	const toPath = (path: string): string =>
+		toLinkedPath({ link: `${SITE_URL}${path === "/" ? "" : path}`, hasSession: true, rememberReturnPath: () => {} })
+	for (const samplePath of APP_LINK_SAMPLE_PATHS) {
+		expect(toPath(samplePath).startsWith(OPEN_WEB_PATH)).toBe(false)
+	}
+
+	// a slugged Topic keeps its season, and an episode keeps its numbers
+	expect(toPath("/topics/topic-1/coffee-slug?season=2")).toBe("/topics/topic-1?season=2")
+	expect(toPath("/topics/topic-1/coffee-slug/episodes/2026/7")).toBe("/topics/topic-1/episodes/2026/7")
+
+	// Terms has no native route
+	expect(toPath("/terms")).toBe(`${OPEN_WEB_PATH}?url=${encodeURIComponent(`${SITE_URL}/terms`)}`)
+})
+
+// a visitor's web link to Activity is remembered as its native path and opens sign-in
+test("a visitor's web link to an account screen is remembered as its path", () => {
+	let rememberedPath = ""
+	const path = toLinkedPath({
+		link: `${SITE_URL}/activity`,
+		hasSession: false,
+		rememberReturnPath: (returnPath) => {
+			rememberedPath = returnPath
+		},
+	})
+	expect(path).toBe("/sign-in")
+	expect(rememberedPath).toBe("/activity")
 })

@@ -7,7 +7,7 @@ import {
 
 export { hasDailySlotLeft } from "@carlnotes/core/lib/topicSchedule"
 
-import { daysOfWeek, type frequencies } from "@carlnotes/contracts/enums"
+import { type DayOfWeek, daysOfWeek, type Frequency } from "@carlnotes/contracts/enums"
 import { ADMIN_QUOTA } from "@carlnotes/contracts/plans"
 import { MAX_TOPIC_SOURCES } from "@carlnotes/contracts/topics"
 import { capitalize } from "@carlnotes/core/lib/labels"
@@ -20,10 +20,6 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives
 import { FULL_SOURCES_NOTE } from "./AddSourceButtons"
 import { ScanQuotaLink } from "./ScanQuotaLink"
 import { TimePicker } from "./TimePicker"
-
-// the field unions that the frequency and day-of-week selects offer
-export type Frequency = (typeof frequencies)[number]
-export type DayOfWeek = (typeof daysOfWeek)[number]
 
 // the frequency select, the scheduled-time picker, and the day select (weekly only)
 export function ScheduleFields({

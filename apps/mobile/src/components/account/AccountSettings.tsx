@@ -1,5 +1,6 @@
 import { authClient } from "@carlnotes/client/authClient"
 import { sendDeleteAccount } from "@carlnotes/client/profileClient"
+import { SITE_URL } from "@carlnotes/contracts/site"
 import {
 	EmailSection,
 	InvitationsSection,
@@ -7,7 +8,6 @@ import {
 	ProfileFields as SharedProfileFields,
 } from "@carlnotes/core/components/AccountFields"
 import { BlockedUsersSection } from "@carlnotes/core/components/BlockedUsersSection"
-import { SITE_URL } from "@carlnotes/core/lib/pageHead"
 import {
 	CLOSE_ACCOUNT_CONFIRMATION,
 	CLOSE_ACCOUNT_SECTION_TEXT,

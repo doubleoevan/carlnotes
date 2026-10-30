@@ -1,7 +1,7 @@
 // the chat's proposals: the change carl previewed in a chat turn, recorded with that chat turn, taken back at the
 // user's next message on that page, and applied by the server only if that message agrees to it. a private chat
 // records a keyed digest
-import { CANCEL_TOPIC_EDIT_TOOL, PROPOSE_NEW_TOPIC_TOOL, toStandingTopicEditCall } from "@carlnotes/contracts/chat"
+import { CANCEL_TOPIC_EDIT_TOOL, PROPOSE_NEW_TOPIC_TOOL, toStandingTopicEditCall } from "@carlnotes/contracts/chatTurns"
 import type { ChatToolCall, ChatTurnPayload } from "@carlnotes/contracts/payloads"
 import {
 	type ProposeTopicEditPayload,

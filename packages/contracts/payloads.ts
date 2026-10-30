@@ -1,20 +1,23 @@
 // the request payload schemas the api validates and the ui sends, with the types inferred from them
 import { z } from "zod"
+import { appVersion } from "./appVersions"
 import {
 	CHAT_ATTACHMENT_TEXT_CHARS,
 	CHAT_HISTORY_ANSWER_CHARS,
 	CHAT_HISTORY_QUESTION_CHARS,
 	CHAT_HISTORY_TOOL_CALL_INPUT_CHARS,
 	CHAT_HISTORY_TOOL_CALLS,
-	CHAT_HISTORY_TURNS,
 	CHAT_IMAGE_DATA_CHARS,
 	CHAT_MAX_ATTACHMENTS,
 	CHAT_PDF_DATA_CHARS,
 	CHAT_QUESTION_CHARS,
 	CHAT_ROOM_MESSAGE_MAX_CHARS,
 	CHAT_VIDEO_DATA_CHARS,
+	chatToolCall,
 	FLAG_REASON_MAX_CHARS,
+	podcastEpisodeChapterRef,
 } from "./chat"
+import { CHAT_HISTORY_TURNS } from "./chatTurns"
 import {
 	conversationChatTurnKinds,
 	inviteAccesses,
@@ -176,13 +179,9 @@ export const chatAttachmentPayload = z.discriminatedUnion("kind", [
 
 export type ChatAttachment = z.infer<typeof chatAttachmentPayload>
 
-// one tool a chat turn called, with its input and what it returned
-export const chatToolCallPayload = z
-	.object({
-		toolName: z.string().max(80),
-		input: z.unknown(),
-		output: z.string().max(CHAT_HISTORY_ANSWER_CHARS),
-	})
+// one tool a chat turn called, with the send limits on its name, output, and input
+export const chatToolCallPayload = chatToolCall
+	.extend({ toolName: z.string().max(80), output: z.string().max(CHAT_HISTORY_ANSWER_CHARS) })
 	.refine(
 		(toolCall) => JSON.stringify(toolCall.input ?? null).length <= CHAT_HISTORY_TOOL_CALL_INPUT_CHARS,
 		"tool call input too long",
@@ -225,8 +224,8 @@ const PODCAST_EPISODE_ID_MAX_CHARS = 64
 // a chapter position well past any podcast episode's chapters, which keeps a chapter lookup inside a postgres integer
 export const PODCAST_EPISODE_CHAPTER_POSITION_MAX = 999
 
-// the podcast episode and the chapter a question was asked during, by its position from zero
-export const podcastEpisodeChapterPayload = z.object({
+// the podcast episode chapter reference with the send limits on its id and position
+export const podcastEpisodeChapterPayload = podcastEpisodeChapterRef.extend({
 	podcastEpisodeId: z.string().min(1).max(PODCAST_EPISODE_ID_MAX_CHARS),
 	chapterPosition: z.number().int().min(0).max(PODCAST_EPISODE_CHAPTER_POSITION_MAX),
 })
@@ -297,6 +296,9 @@ export const setRolePayload = z.object({ role: z.enum(["admin", "user"]) })
 
 // the admin budget-override body: a per-user monthly limit in cents, or null to fall back to the plan's backstop
 export const budgetOverridePayload = z.object({ budgetOverrideCents: z.number().int().nonnegative().nullable() })
+
+// the admin mobile minimum version body: the oldest build a platform's api still serves, or null to serve every build
+export const mobileMinimumVersionPayload = z.object({ minimumVersion: appVersion.nullable() })
 
 // what the player saves as a user listens. the user's progress, whether playback just started,
 // and whether playback ended

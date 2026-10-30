@@ -1,12 +1,12 @@
 import { authClient } from "@carlnotes/client/authClient"
 import { isAdminRole } from "@carlnotes/contracts/enums"
+import { SITE_URL } from "@carlnotes/contracts/site"
 import {
 	UserMenuItems as SharedUserMenuItems,
 	type UserMenuElements,
 	type UserMenuLinkProps,
 } from "@carlnotes/core/components/UserMenuItems"
 import { useAllUpdateBadges, useUserMenuUpdateBadges } from "@carlnotes/core/hooks/useUpdateCounts"
-import { SITE_URL } from "@carlnotes/core/lib/pageHead"
 import { toMenuTriggerLabel } from "@carlnotes/core/lib/updateCounts"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { usePathname } from "expo-router"

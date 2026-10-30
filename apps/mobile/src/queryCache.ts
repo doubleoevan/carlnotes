@@ -1,3 +1,4 @@
+import { ApiResponseError } from "@carlnotes/client/apiClient"
 import type { TopicPageResult } from "@carlnotes/client/topicClient"
 import type { SearchResultsPage } from "@carlnotes/contracts/search"
 import type { TopicFeedResponse } from "@carlnotes/contracts/topics"
@@ -12,6 +13,7 @@ export type QueryCacheStorage = {
 	setItem: (key: string, snapshot: string) => Promise<void>
 	removeItem: (key: string) => Promise<void>
 }
+// the cache an account holds
 export type QueryCache = {
 	userId: string
 	client: QueryClient
@@ -21,6 +23,7 @@ export type QueryCache = {
 }
 type CreateQueryCacheOptions = { userId: string; buster: string; storage: QueryCacheStorage }
 
+// the persister options
 type ToConfirmedPersisterOptions = {
 	client: QueryClient
 	storagePersister: Persister
@@ -29,6 +32,7 @@ type ToConfirmedPersisterOptions = {
 	unavailableTopicIds: Set<string>
 	failedSaveCount: () => number
 }
+// the lifetime and tracking options
 type ToStorageLifetimeOptions = { storage: QueryCacheStorage; key: string; onSaveError: () => void }
 type TrackLatestTopicOptions = { client: QueryClient; userId: string }
 
@@ -36,11 +40,26 @@ type TrackLatestTopicOptions = { client: QueryClient; userId: string }
 let activeQueryCache: QueryCache | null = null
 
 /**
+ * Returns true if a failed query reads again: up to three times, and never for a response that did not match its
+ * contract.
+ */
+export function shouldRetryQuery(failureCount: number, error: unknown): boolean {
+	return !(error instanceof ApiResponseError) && failureCount < 3
+}
+
+/**
+ * Returns a query client whose failed queries retry by shouldRetryQuery.
+ */
+export function toQueryClient(): QueryClient {
+	return new QueryClient({ defaultOptions: { queries: { retry: shouldRetryQuery } } })
+}
+
+/**
  * Creates an isolated reading cache whose delayed writes stop at session exit.
  */
 export function createQueryCache({ userId, buster, storage }: CreateQueryCacheOptions): QueryCache {
 	// retain only the two reading families for the lifetime of the account
-	const client = new QueryClient({ defaultOptions: { mutations: { retry: false } } })
+	const client = toQueryClient()
 	client.setQueryDefaults(["topic-feed", userId], { gcTime: Number.POSITIVE_INFINITY })
 	client.setQueryDefaults(["topic-page", userId], { gcTime: Number.POSITIVE_INFINITY })
 	let failedSaveCount = 0
@@ -72,12 +91,14 @@ export function createQueryCache({ userId, buster, storage }: CreateQueryCacheOp
 		if (clearing) {
 			return clearing
 		}
+		// stop the storage and the Topic tracking, then cancel the reads and clear the live data
 		lifetime.deactivate()
 		topics.stop()
 		clearing = client.cancelQueries().then(async () => {
 			client.clear()
 			await lifetime.remove()
 		})
+		// every later caller gets the same clearing
 		return clearing
 	}
 	return {
@@ -154,6 +175,7 @@ function toConfirmedPersister({
 			for (const query of persistedClient.clientState.queries) {
 				confirmedQueries.set(query.queryHash, query)
 			}
+			// the queries to save: the confirmed snapshot of each live query the rules keep
 			const queries = client
 				.getQueryCache()
 				.getAll()
@@ -170,6 +192,7 @@ function toConfirmedPersister({
 							confirmedQueries.set(query.queryHash, confirmedQuery)
 						}
 					}
+					// keep the confirmed snapshot of a query whose last read failed
 					const isRetainedError =
 						query.state.status === "error" &&
 						shouldPersistQuery({
@@ -194,6 +217,7 @@ function toConfirmedPersister({
 				savedBuster === persistedClient.buster &&
 				savedQueries?.length === queries.length &&
 				queries.every((query, index) => {
+					// the same query with the same data from the same time
 					const saved = savedQueries?.[index]
 					return (
 						saved?.queryHash === query.queryHash &&
@@ -202,8 +226,10 @@ function toConfirmedPersister({
 					)
 				})
 			) {
+				// an unchanged snapshot is not written
 				return
 			}
+			// remember what is saved, then write it
 			savedQueries = queries
 			savedBuster = persistedClient.buster
 			savedFailureCount = failedSaveCount()
@@ -213,6 +239,7 @@ function toConfirmedPersister({
 			// restored successes are also the fallback for a failed first refresh
 			try {
 				const persistedClient = await storagePersister.restoreClient()
+				// the restored queries are the confirmed ones
 				for (const query of persistedClient?.clientState.queries ?? []) {
 					confirmedQueries.set(query.queryHash, query)
 				}
@@ -239,6 +266,7 @@ function toStorageLifetime({ storage, key, onSaveError }: ToStorageLifetimeOptio
 	let isActive = true
 	let pendingStorage: Promise<void> = Promise.resolve()
 	const guardedStorage: QueryCacheStorage = {
+		// a read after the lifetime ended returns nothing, and a read that failed logs and returns nothing
 		getItem: async (storageKey) => {
 			try {
 				const snapshot = await storage.getItem(storageKey)
@@ -252,6 +280,7 @@ function toStorageLifetime({ storage, key, onSaveError }: ToStorageLifetimeOptio
 			if (!isActive) {
 				return Promise.resolve()
 			}
+			// queue the write behind the pending ones, and count one that failed
 			pendingStorage = pendingStorage
 				.then(() => (isActive ? storage.setItem(storageKey, snapshot) : undefined))
 				.catch((error) => {
@@ -294,9 +323,11 @@ function trackLatestTopic({ client, userId }: TrackLatestTopicOptions): {
 			latestTopicId = topicId
 		}
 	}
+	// follow each Topic page read: a denied one is removed everywhere, and a visible one becomes the kept page
 	const stop = client.getQueryCache().subscribe((event) => {
 		const query = event.query
 		const [family, queryUserId, topicId] = query.queryKey
+		// only a loaded Topic page of this account
 		if (
 			family !== "topic-page" ||
 			queryUserId !== userId ||
@@ -305,9 +336,11 @@ function trackLatestTopic({ client, userId }: TrackLatestTopicOptions): {
 		) {
 			return
 		}
+		// only a new page or a finished read
 		if (event.type !== "added" && !(event.type === "updated" && event.action.type === "success")) {
 			return
 		}
+		// a denied Topic leaves the kept page and every cached list
 		if ((query.state.data as TopicPageResult)?.status !== "visible") {
 			if (latestTopicId === topicId) {
 				latestTopicId = null
@@ -316,6 +349,7 @@ function trackLatestTopic({ client, userId }: TrackLatestTopicOptions): {
 			void removeUnavailableTopic({ client, userId, topicId })
 			return
 		}
+		// a visible page is kept only if it is the focused one, and the other inactive pages go
 		unavailableTopicIds.delete(topicId)
 		if (focusedTopicId !== null && focusedTopicId !== topicId) {
 			return

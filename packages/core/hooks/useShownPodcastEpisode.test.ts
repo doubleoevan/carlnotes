@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test"
 import type { PodcastEpisode } from "@carlnotes/contracts/podcast"
+import { toPodcastEpisodeFixture } from "@carlnotes/contracts/podcastEpisodeTestFixtures"
 import { toTestTopicResponse } from "@carlnotes/contracts/topicFeedTestFixtures"
-import { toPodcastEpisodeFixture } from "../lib/podcastEpisodeTestFixtures"
 import { toShownPodcastEpisode } from "./useShownPodcastEpisode"
 
 test("shown episode precedence preserves loaded, linked, recording, and latest choices", () => {

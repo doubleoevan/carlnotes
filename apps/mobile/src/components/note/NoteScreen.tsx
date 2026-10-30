@@ -14,6 +14,7 @@ import { Keyboard, KeyboardAvoidingView, Platform, View } from "react-native"
 import { CoffeeLoading } from "@/components/branding/CoffeeLoading"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { ClassNameSafeAreaView } from "@/components/common/ClassNameSafeAreaView"
+import { LoadFailedNotice } from "@/components/common/LoadFailedNotice"
 import { Header } from "@/components/layout/Header"
 import { Button } from "@/components/primitives/button"
 import { Icon } from "@/components/primitives/icon"
@@ -127,12 +128,12 @@ function NoteScreenContent({
 			</View>
 			{query.isPending && <CoffeeLoading label="Loading your Tasting Note" />}
 			{query.isError && (
-				<View className="gap-3 py-4">
-					<Text>{NOTE_LABELS.openError}</Text>
-					<Button accessibilityLabel="Retry note" onPress={() => void query.refetch()}>
-						<Text>Try again</Text>
-					</Button>
-				</View>
+				<LoadFailedNotice
+					className="py-4"
+					message={NOTE_LABELS.openError}
+					retryLabel="Retry note"
+					onRetry={() => void query.refetch()}
+				/>
 			)}
 			{isUnavailable && <Text className="py-4 text-muted-foreground">This note is unavailable.</Text>}
 			{snapshot.hasStorageError && (

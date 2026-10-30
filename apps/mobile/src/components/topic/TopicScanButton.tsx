@@ -1,5 +1,9 @@
 import { sendManualScan, sendStopScan } from "@carlnotes/client/topicClient"
-import { MANUAL_SCAN_PAUSED_LABEL, SCAN_SPENT_BUDGET_LABEL } from "@carlnotes/contracts/scanFailure"
+import {
+	DAILY_SCANS_USED_LABEL,
+	MANUAL_SCAN_PAUSED_LABEL,
+	SCAN_SPENT_BUDGET_LABEL,
+} from "@carlnotes/contracts/scanFailure"
 import type { TopicResponse } from "@carlnotes/contracts/topics"
 import { useManualScanProgress } from "@carlnotes/core/hooks/useManualScanProgress"
 import { isManualScanShown } from "@carlnotes/core/lib/topicActions"
@@ -24,10 +28,11 @@ export function TopicScanButton({ topic, onScanned }: { topic: TopicResponse; on
 	if (!isManualScanShown(topic)) {
 		return null
 	}
-	function handleBlocked(message: string, path: "/account" | "/plans"): void {
+	// alert why a scan is blocked, with a See account button if the block has an account path
+	function handleBlocked(message: string, accountPath: "/account" | null): void {
 		Alert.alert("Brew", message, [
 			{ text: "Close", style: "cancel" },
-			{ text: path === "/account" ? "See account" : "See plans", onPress: () => router.push(path) },
+			...(accountPath ? [{ text: "See account", onPress: () => router.push(accountPath) }] : []),
 		])
 	}
 	async function handleScan(): Promise<void> {
@@ -41,7 +46,7 @@ export function TopicScanButton({ topic, onScanned }: { topic: TopicResponse; on
 			return
 		}
 		if ((topic.manualScansRemaining ?? 0) <= 0) {
-			handleBlocked("You have used today's brews.", "/plans")
+			handleBlocked(DAILY_SCANS_USED_LABEL, null)
 			return
 		}
 

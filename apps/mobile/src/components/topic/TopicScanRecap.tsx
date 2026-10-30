@@ -1,4 +1,5 @@
 import type { TopicFinding } from "@carlnotes/contracts/findings"
+import { SITE_URL } from "@carlnotes/contracts/site"
 import {
 	type NumberedTopicFindingListComponents,
 	NumberedTopicFindingList as SharedFindingList,
@@ -16,7 +17,6 @@ import {
 	TopicScanRecap as SharedTopicScanRecap,
 	type TopicScanRecapComponents,
 } from "@carlnotes/core/components/TopicScanRecap"
-import { SITE_URL } from "@carlnotes/core/lib/pageHead"
 import { toSafeNoteMarkdown } from "@carlnotes/core/lib/safeNoteMarkdown"
 import { type ScanRecapFields, toNotesMarkdown } from "@carlnotes/core/lib/topicScanRecap"
 import { fontFamilies } from "@carlnotes/nightshift/typography"

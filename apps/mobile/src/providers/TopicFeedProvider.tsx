@@ -1,6 +1,6 @@
 import { type TopicFeedState, useTopicFeedState } from "@carlnotes/core/hooks/useTopicFeedState"
 import AsyncStorage from "@react-native-async-storage/async-storage"
-import { focusManager, onlineManager, QueryClient, QueryClientProvider } from "@tanstack/react-query"
+import { focusManager, onlineManager, QueryClientProvider } from "@tanstack/react-query"
 import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client"
 import * as Application from "expo-application"
 import Constants from "expo-constants"
@@ -9,7 +9,7 @@ import { usePathname } from "expo-router"
 import * as Updates from "expo-updates"
 import { createContext, type ReactNode, useContext, useEffect, useRef, useState } from "react"
 import { AppState } from "react-native"
-import { activateQueryCache, createQueryCache } from "@/queryCache"
+import { activateQueryCache, createQueryCache, toQueryClient } from "@/queryCache"
 import { toQueryCacheBuster } from "@/queryCacheRules"
 import { SearchBarProvider } from "./SearchBarProvider"
 
@@ -52,7 +52,7 @@ export function useTopicFeed(): TopicFeedState {
 
 // keep public reading in memory and discard it when the session changes
 function VisitorTopicFeedProvider({ canBrowse, children }: { canBrowse: boolean; children: ReactNode }) {
-	const [queryClient] = useState(() => new QueryClient())
+	const [queryClient] = useState(toQueryClient)
 	return (
 		<QueryClientProvider client={queryClient}>
 			<SearchBarProvider>

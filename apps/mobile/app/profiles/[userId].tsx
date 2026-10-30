@@ -3,7 +3,7 @@ import { showClientError } from "@carlnotes/client/apiClient"
 import { authClient } from "@carlnotes/client/authClient"
 import { fetchProfile } from "@carlnotes/client/profileClient"
 import { toAvatarImagePath } from "@carlnotes/contracts/avatars"
-import type { ProfileResponse } from "@carlnotes/contracts/profiles"
+import type { ProfileResponse } from "@carlnotes/contracts/profilePage"
 import { toCountLabel } from "@carlnotes/core/lib/labels"
 import { REQUEST_FAILED_TEXT } from "@carlnotes/core/lib/sessionCopy"
 import { toBlockLabel, toggleUserBlock } from "@carlnotes/core/lib/userBlocks"
@@ -16,6 +16,7 @@ import { ProfileFields } from "@/components/account/AccountSettings"
 import { UserAvatarPicker } from "@/components/avatar/UserAvatarPicker"
 import { Avatar } from "@/components/branding/Avatar"
 import { AnchorLink } from "@/components/common/AnchorLink"
+import { LoadFailedNotice } from "@/components/common/LoadFailedNotice"
 import { Sheet } from "@/components/common/Sheet"
 import { UserMenuUpdateCountBadge } from "@/components/common/UpdateCountBadge"
 import { PageScreen } from "@/components/layout/PageScreen"
@@ -183,7 +184,7 @@ function ProfileTopics({
 		return <TableSkeleton />
 	}
 	if (activity.error) {
-		return <Text className="text-destructive">Topics didn't load. Pull to try again.</Text>
+		return <LoadFailedNotice message="Topics didn't load." retryLabel="Retry loading topics" onRetry={onReload} />
 	}
 	if (activity.data?.topics.length) {
 		return <OwnerTopicsTable topics={activity.data.topics} onReloadPage={onReload} />
@@ -213,7 +214,11 @@ function ProfileContent({
 		return <PageSkeleton kind="profile" />
 	}
 	if (!profile) {
-		return <Text>{query.error ? "Profile didn't load. Pull to try again." : "No one here by that name."}</Text>
+		return query.error ? (
+			<LoadFailedNotice message="Profile didn't load." retryLabel="Retry loading profile" onRetry={onReload} />
+		) : (
+			<Text>No one here by that name.</Text>
+		)
 	}
 	return (
 		<>

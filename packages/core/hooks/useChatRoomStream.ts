@@ -55,6 +55,11 @@ export function useChatRoomStream({
 						handlersRef.current.onLoadFailed?.()
 					}
 				},
+				onLoadUnreadable: (reload) => {
+					if (isCurrentChat()) {
+						handlersRef.current.onLoadUnreadable?.(reload)
+					}
+				},
 			},
 		})
 	}, [topicId, teamId, connectEvents, isActive, accountId])

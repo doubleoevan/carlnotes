@@ -1,4 +1,6 @@
 import { afterEach, expect, test } from "bun:test"
+import { toTestNote } from "@carlnotes/contracts/noteTestFixtures"
+import { ApiResponseError } from "./apiClient"
 import { stubFailingFetch, stubFetch } from "./fetchTestFixtures"
 import {
 	fetchNote,
@@ -17,10 +19,10 @@ afterEach(() => {
 })
 
 test("strict note reads retain the stored response", async () => {
-	// return the same payload the note screen consumes
-	const note = { id: "note-1", html: "<p>A note</p>", version: 4, canEdit: true }
+	// return the same payload the note screen consumes, read through the note contract
+	const note = toTestNote({ html: "<p>A note</p>", version: 4 })
 	stubFetch(Response.json(note))
-	expect(await fetchNote("note-1", { shouldThrowOnError: true })).toMatchObject(note)
+	expect(await fetchNote("note-1", { shouldThrowOnError: true })).toEqual(note)
 })
 
 test.each([403, 404])("a %i note stays unavailable in strict reads", async (status) => {
@@ -41,6 +43,14 @@ test("strict page reads reject server failures instead of showing no notes", asy
 	await expect(
 		fetchNotes({ pageType: "topic", pageId: "topic-1" }, { shouldThrowOnError: true }),
 	).rejects.toBeInstanceOf(NoteReadError)
+})
+
+test("a note that did not match its contract rejects strict reads and reads null otherwise", async () => {
+	// the parse error reaches the read's own catch, which the caller's error policy decides
+	stubFetch(Response.json({ nonsense: true }))
+	expect(await fetchNote("note-1")).toBeNull()
+	stubFetch(Response.json({ nonsense: true }))
+	await expect(fetchNote("note-1", { shouldThrowOnError: true })).rejects.toBeInstanceOf(ApiResponseError)
 })
 
 test("legacy note reads return null while strict transport failures reject", async () => {

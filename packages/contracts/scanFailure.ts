@@ -8,6 +8,12 @@ export const SCAN_SPENT_BUDGET_LABEL = "Carl hit this month's coffee budget."
 // how a manual scan rejected past the manual scans cutoff reads to a person, on the scan button and its rejection
 export const MANUAL_SCAN_PAUSED_LABEL = "Manual brews are paused until the 1st. Scheduled brews keep running."
 
+// how a manual scan rejected past the daily scan limit reads to a person, on the scan button
+export const DAILY_SCANS_USED_LABEL = "You have used today's brews."
+
+// how a Topic whose daily frequency is paused reads to a person, on the Topic settings card
+export const DAILY_TOPICS_USED_LABEL = "Your plan ran out of daily pots. Carl keeps the ones you've had longest."
+
 // the failure reason stored on a scheduled Scan that never started because its owner's budget is spent
 export const SCHEDULED_SCAN_SPENT_BUDGET_REASON =
 	"Carl ran out of coffee this month, so the scheduled scan didn't start"

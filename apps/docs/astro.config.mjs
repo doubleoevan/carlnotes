@@ -33,13 +33,13 @@ export default defineConfig({
 			components: { Footer: "./src/components/Footer.astro" },
 			// point the header logo at the app instead of the docs home
 			routeMiddleware: "./src/routeData.ts",
-			// the four sections in reading order. Start here names its two pages, which sit at the content
+			// the five sections in reading order. Start here names its three pages, which sit at the content
 			// root so their urls stay one segment. the other sections fill from their own folders,
 			// where a new page joins by being added to the folder and orders itself with sidebar.order
 			sidebar: [
 				{
 					label: "Start here",
-					items: [{ label: "What CarlNotes Is", link: "/" }, { slug: "quickstart" }],
+					items: [{ label: "What CarlNotes Is", link: "/" }, { slug: "quickstart" }, { slug: "get-the-app" }],
 				},
 				{ label: "Topics", items: [{ autogenerate: { directory: "topics" } }] },
 				{ label: "Your topic feed", items: [{ autogenerate: { directory: "feed" } }] },

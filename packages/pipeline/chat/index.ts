@@ -1,6 +1,6 @@
 // the streamed chat reply: the context and prompt one chat turn reads, and the text, tool results, and cost its
 // stream yields
-import type { ChatReplyLine } from "@carlnotes/contracts/chat"
+import type { ChatReplyLine } from "@carlnotes/contracts/chatTurns"
 import type { PodcastEpisodeSpeaker } from "@carlnotes/contracts/enums"
 import type { ChatToolCall } from "@carlnotes/contracts/payloads"
 import { chatModel } from "@carlnotes/models/models"

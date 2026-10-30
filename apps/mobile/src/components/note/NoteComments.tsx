@@ -2,6 +2,7 @@ import { showClientError } from "@carlnotes/client/apiClient"
 import { authClient } from "@carlnotes/client/authClient"
 import { toAvatarImagePath } from "@carlnotes/contracts/avatars"
 import type { NoteComment } from "@carlnotes/contracts/notes"
+import { SITE_URL } from "@carlnotes/contracts/site"
 import {
 	type NoteCommentComposerProps,
 	type NoteCommentsElements,
@@ -9,7 +10,6 @@ import {
 	NoteComments as SharedNoteComments,
 } from "@carlnotes/core/components/NoteComments"
 import { NOTE_COMMENT_DELETE, REPORT_COMMENT_LABEL, toReportedCommentLabel } from "@carlnotes/core/lib/noteLabels"
-import { SITE_URL } from "@carlnotes/core/lib/pageHead"
 import { BottomSheetTextInput } from "@gorhom/bottom-sheet"
 import { Flag, Trash2 } from "lucide-react-native"
 import { type ComponentType, useState } from "react"

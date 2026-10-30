@@ -31,6 +31,8 @@ export function toTestChatRoomState(chatRoomStateFields: Partial<ChatRoomState> 
 		chatMessages: [],
 		isLoaded: true,
 		isRejected: false,
+		reloadUnreadableRoom: null,
+		hasMessagePageLoadFailed: false,
 		voiceChatPage: null,
 		rejection: null,
 		clearRejection: () => {},

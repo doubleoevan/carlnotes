@@ -1,5 +1,9 @@
 import { expect, test } from "bun:test"
 import {
+	toPodcastEpisodeChapterFixture,
+	toPodcastEpisodeFixture,
+} from "@carlnotes/contracts/podcastEpisodeTestFixtures"
+import {
 	SKIP_BACK_SECONDS,
 	SKIP_FORWARD_SECONDS,
 	toChapterIndexAt,
@@ -7,7 +11,6 @@ import {
 	toPodcastEpisodeMediaMetadata,
 	toPodcastEpisodeSeekSeconds,
 } from "./podcastEpisodePlayback"
-import { toPodcastEpisodeChapterFixture, toPodcastEpisodeFixture } from "./podcastEpisodeTestFixtures"
 
 test("chapter selection includes the intro, exact starts, gaps, and sign-off", () => {
 	// retain the chapter through a gap and select the next at its exact start

@@ -2,6 +2,7 @@
 // whom, the text as it stood, the reason, and the link into the admin console
 
 import { REPORT_SUBJECT_KIND_LABELS, type ReportSubjectKind } from "@carlnotes/contracts/reports"
+import { SITE_URL } from "@carlnotes/contracts/site"
 import { appUrl } from "@carlnotes/server/appUrl"
 import { Link } from "@react-email/components"
 import { render } from "@react-email/render"
@@ -73,14 +74,14 @@ export default function ReportEmail(props: ReportEmailProps): ReactElement {
 ReportEmail.PreviewProps = {
 	subjectKind: "chatMessage",
 	subjectLabel: "a message from raccoon",
-	subjectUrl: "https://carlnotes.com/topics/topic-1/raccoons",
+	subjectUrl: `${SITE_URL}/topics/topic-1/raccoons`,
 	subjectText: "You all smell like old coffee grounds.",
 	authorUsername: "raccoon",
 	reporterUsername: "doubleoevan",
 	reason: "Insulting the whole room.",
-	reportUrl: "https://carlnotes.com/admin?report=report-1",
+	reportUrl: `${SITE_URL}/admin?report=report-1`,
 	isReminder: false,
-	appUrl: "https://carlnotes.com",
+	appUrl: SITE_URL,
 } satisfies ReportEmailProps
 
 // render the template to an HTML string for sending. the api and the sweep call this at send-email time

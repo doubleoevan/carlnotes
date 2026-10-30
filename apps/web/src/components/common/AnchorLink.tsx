@@ -1,5 +1,5 @@
 import { toCtaTag } from "@carlnotes/contracts/signupCta"
-import { SITE_URL } from "@carlnotes/core/lib/pageHead"
+import { SITE_URL } from "@carlnotes/contracts/site"
 import { defaultParseSearch, Link } from "@tanstack/react-router"
 import type * as React from "react"
 import { createContext, useContext } from "react"

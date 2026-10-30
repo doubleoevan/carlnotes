@@ -3,7 +3,7 @@
 // since none of them configures the client
 import { beforeAll, expect, test } from "bun:test"
 import type { BetterAuthClientPlugin } from "better-auth/client"
-import { authClient, configureAuthClient, resetAuthClient } from "./authClient"
+import { authClient, configureAuthClient, resetAuthClient, toAuthFetchErrorHandler } from "./authClient"
 
 // every test file in a run shares the module's client, so this file starts with none
 beforeAll(resetAuthClient)
@@ -38,4 +38,17 @@ test("the core hooks read the client through authClient()", async () => {
 		expect(hookSource).toContain("authClient()")
 		expect(hookSource).not.toMatch(/authClient\.[a-z$]/)
 	}
+})
+
+// the Expo client has no cookie jar, so the app's sign-in reaches the gate through the auth client's own fetch
+test("the auth client's fetch error handler reports a 426 and nothing else", () => {
+	const outdatedCalls: number[] = []
+	const handleError = toAuthFetchErrorHandler(() => outdatedCalls.push(1))
+	handleError({ response: new Response(null, { status: 401 }) })
+	expect(outdatedCalls).toHaveLength(0)
+
+	// a 426 reports once, and a handler without the setting ignores it
+	handleError({ response: new Response(null, { status: 426 }) })
+	expect(outdatedCalls).toHaveLength(1)
+	expect(() => toAuthFetchErrorHandler()({ response: new Response(null, { status: 426 }) })).not.toThrow()
 })

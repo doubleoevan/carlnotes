@@ -1,5 +1,5 @@
+import { SITE_URL } from "@carlnotes/contracts/site"
 import { type FooterElements, Footer as SharedFooter } from "@carlnotes/core/components/Footer"
-import { SITE_URL } from "@carlnotes/core/lib/pageHead"
 import { View } from "react-native"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { toTouchTargetHitSlop } from "@/components/primitives/button"

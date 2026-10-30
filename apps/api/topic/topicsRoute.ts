@@ -1,5 +1,6 @@
 // the topic routes: the page, the poll, create, update, delete, removing one Source, and the per-topic settings
 
+import { topicPageQuery } from "@carlnotes/contracts/routeShapes"
 import { suggestSourcesPayload, updateTopicPayload } from "@carlnotes/contracts/topicPayloads"
 import type { TopicResponse } from "@carlnotes/contracts/topics"
 import { incrementDaySuggestionCount } from "@carlnotes/db/quotas"
@@ -10,7 +11,6 @@ import { trackEvent } from "@carlnotes/server/analytics"
 import { traceRequestStage } from "@carlnotes/server/monitoring"
 import { zValidator } from "@hono/zod-validator"
 import { Hono } from "hono"
-import { z } from "zod"
 import { type AppEnv, currentUser, toAnalyticsProperties } from "../currentUser"
 import { toObjectionableContentResponse } from "../moderation"
 import { toolCallerRateLimiter } from "../rateLimit"
@@ -22,9 +22,6 @@ import { loadTopicGateResponse } from "./helpers"
 import { createTopic, updateTopic } from "./saveTopic"
 import { loadTeamTopicOptions } from "./teamTopicOptions"
 import { loadTopicPage } from "./topics"
-
-// the query flag that marks a topic page request as a poll reload
-const topicPageQuery = z.object({ poll: z.literal("1").optional() })
 
 // how long Redis caches a topic page for poll reloads
 const TOPIC_PAGE_POLL_TTL_MS = 2000

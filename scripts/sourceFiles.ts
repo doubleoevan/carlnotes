@@ -2,13 +2,20 @@
 // route tree
 import { readdirSync, readFileSync } from "node:fs"
 import { posix } from "node:path"
-import type { SourceFile } from "./workspaces"
+import { MOBILE_APP_FOLDER, type SourceFile, WEB_APP_FOLDER } from "./workspaces"
 
 // the folders and the files the scan skips
 const SKIPPED_FOLDER_NAMES = new Set(["node_modules", "dist", ".tsbuild", ".astro", ".expo"])
 const SKIPPED_FILE_PATHS = new Set(["apps/web/src/routeTree.gen.ts"])
 const SOURCE_FILE_PATTERN = /\.(?:ts|tsx|mjs|astro)$/
 const DECLARATION_FILE_PATTERN = /\.d\.ts$/
+
+/**
+ * Returns every checked source file under both apps and the packages they import.
+ */
+export function readAppSourceFiles(): SourceFile[] {
+	return readSourceFiles([WEB_APP_FOLDER, MOBILE_APP_FOLDER, "packages"])
+}
 
 /**
  * Returns every checked source file under the folders, with its repo path and its text.

@@ -1,8 +1,8 @@
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import * as podcastEpisodeClient from "@carlnotes/client/podcastEpisodeClient"
 import type { PodcastEpisode } from "@carlnotes/contracts/podcast"
+import { toPodcastEpisodeFixture } from "@carlnotes/contracts/podcastEpisodeTestFixtures"
 import type { LoadPodcastEpisodeAudioOptions, PodcastEpisodeAudioAdapter } from "../lib/podcastEpisodeAudio"
-import { toPodcastEpisodeFixture } from "../lib/podcastEpisodeTestFixtures"
 import { setIsUserSignedIn } from "./podcastEpisodeListenStore"
 import { playPodcastEpisodeChapter, togglePodcastEpisodePlayback } from "./podcastEpisodePlayActions"
 import {

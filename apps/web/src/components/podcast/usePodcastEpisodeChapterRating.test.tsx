@@ -1,7 +1,7 @@
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import * as client from "@carlnotes/client/podcastEpisodeClient"
+import { toPodcastEpisodeChapterFixture } from "@carlnotes/contracts/podcastEpisodeTestFixtures"
 import { usePodcastEpisodeChapterRating } from "@carlnotes/core/hooks/usePodcastEpisodeChapterRating"
-import { toPodcastEpisodeChapterFixture } from "@carlnotes/core/lib/podcastEpisodeTestFixtures"
 import { act } from "react"
 import { renderTestHook } from "@/lib/hookTestHarness"
 

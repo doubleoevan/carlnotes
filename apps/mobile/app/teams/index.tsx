@@ -4,6 +4,7 @@ import { toSessionProfileIdentity } from "@carlnotes/contracts/profiles"
 import { useQuery } from "@tanstack/react-query"
 import { Plus, Users } from "lucide-react-native"
 import { useState } from "react"
+import { LoadFailedNotice } from "@/components/common/LoadFailedNotice"
 import { UserMenuUpdateCountBadge } from "@/components/common/UpdateCountBadge"
 import { UserProfileLink } from "@/components/common/UserProfileLink"
 import { PageScreen } from "@/components/layout/PageScreen"
@@ -67,7 +68,7 @@ export default function TeamsScreen() {
 					)}
 				</>
 			) : (
-				<Text className="text-destructive">Teams didn't load. Pull to try again.</Text>
+				<LoadFailedNotice message="Teams didn't load." retryLabel="Retry loading teams" onRetry={handleReload} />
 			)}
 			{isCreating && <EditTeamModal onClose={() => setIsCreating(false)} />}
 		</PageScreen>

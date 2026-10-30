@@ -5,11 +5,8 @@ import {
 	sendTeamMemberRole,
 	setTeamMemberVisibility,
 } from "@carlnotes/client/teamClient"
-import {
-	memberSortValues,
-	type TeamMember,
-	toTeamMembersTableColumns,
-} from "@carlnotes/core/lib/teamMembersTableColumns"
+import type { TeamMember } from "@carlnotes/contracts/teams"
+import { memberSortValues, toTeamMembersTableColumns } from "@carlnotes/core/lib/teamMembersTableColumns"
 import { X } from "lucide-react-native"
 import { View } from "react-native"
 import { ChoiceSelect } from "@/components/common/ChoiceSelect"
