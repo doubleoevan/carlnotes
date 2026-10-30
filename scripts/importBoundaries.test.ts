@@ -10,7 +10,7 @@ import {
 	WEB_COMPONENT_BROWSER_FOLDERS,
 } from "./importBoundaries"
 import type { Workspace } from "./workspaces"
-import { FIXTURE_WORKSPACES, WEB_WORKSPACE } from "./workspaceTestFixtures"
+import { API_WORKSPACE, FIXTURE_WORKSPACES, MOBILE_WORKSPACE, WEB_WORKSPACE } from "./workspaceTestFixtures"
 
 // the check that returns one file's violations inside a workspace map
 function toFileViolationsCheck(workspaces: Workspace[]): (filePath: string, fileText: string) => string[] {
@@ -217,6 +217,63 @@ test("toImportViolations flags an undeclared @carlnotes import and passes a decl
 	])
 	const fileText = 'import { apiClient } from "@carlnotes/client/apiClient"\nimport { useState } from "react"\n'
 	expect(toFileViolations("apps/web/src/x.ts", fileText)).toEqual([])
+})
+
+// a third-party package is declared by the workspace that imports it, and a sibling's declaration does not count
+test("toImportViolations flags a third-party package another workspace declares and passes a declared one and a built-in", () => {
+	// hono resolves for the api only because the api client package declares it
+	expect(toFileViolations("apps/api/x.ts", 'import { Hono } from "hono"\n')).toEqual([
+		"apps/api: apps/api/x.ts:1 imports hono. the package.json does not declare hono",
+	])
+
+	// a declared package, a built-in, a path alias, and an import-like sentence inside a string pass
+	expect(toFileViolations("packages/client/x.ts", 'import { hc } from "hono/client"\n')).toEqual([])
+	expect(toFileViolations("apps/api/x.ts", 'import { join } from "node:path"\nimport "bun:test"\n')).toEqual([])
+	expect(toFileViolations("apps/web/src/x.ts", 'import { cn } from "@/lib/cn"\n')).toEqual([])
+	expect(toFileViolations("apps/api/x.ts", 'const text = "import left from \\"leftpad\\""\n')).toEqual([])
+
+	// a type-only import passes with its @types package declared
+	const docsWorkspace: Workspace = {
+		folder: "apps/docs",
+		name: "@carlnotes/docs",
+		dependencies: [],
+		devDependencies: ["@types/hast"],
+		peerDependencies: [],
+		references: [],
+	}
+	const toDocsFileViolations = toFileViolationsCheck([...FIXTURE_WORKSPACES, docsWorkspace])
+	expect(toDocsFileViolations("apps/docs/src/plugin.ts", 'import type { Element } from "hast"\n')).toEqual([])
+	expect(toDocsFileViolations("apps/docs/src/plugin.ts", 'import { visit } from "hast"\n')).toHaveLength(1)
+})
+
+// code the image runs imports values from dependencies. tests, type imports, smoke runs, and the mobile app may use a
+// dev dependency
+test("toImportViolations flags a dev dependency in runtime code and passes it in a test, a type import, and a smoke run", () => {
+	// the api with playwright-core as a dev dependency
+	const apiWithDevDependency = { ...API_WORKSPACE, devDependencies: ["playwright-core"] }
+	const toApiFileViolations = toFileViolationsCheck(
+		FIXTURE_WORKSPACES.map((workspace) => (workspace === API_WORKSPACE ? apiWithDevDependency : workspace)),
+	)
+
+	// a value import in the api's own code fails
+	const valueImport = 'import { chromium } from "playwright-core"\n'
+	expect(toApiFileViolations("apps/api/index.ts", valueImport)).toEqual([
+		"apps/api: apps/api/index.ts:1 imports playwright-core. the production install leaves out a dev dependency. move playwright-core to dependencies",
+	])
+
+	// a test, a type import, and a smoke run pass
+	expect(toApiFileViolations("apps/api/index.test.ts", valueImport)).toEqual([])
+	expect(toApiFileViolations("apps/api/index.ts", 'import type { Browser } from "playwright-core"\n')).toEqual([])
+	expect(toApiFileViolations("apps/api/signup.smoke.ts", valueImport)).toEqual([])
+
+	// the mobile app, which the image never runs, passes with a dev dependency in its screens
+	const mobileWithDevDependency = { ...MOBILE_WORKSPACE, devDependencies: ["expo-dev-client"] }
+	const toMobileFileViolations = toFileViolationsCheck(
+		FIXTURE_WORKSPACES.map((workspace) => (workspace === MOBILE_WORKSPACE ? mobileWithDevDependency : workspace)),
+	)
+	expect(
+		toMobileFileViolations("apps/mobile/src/x.ts", 'import { isDevelopmentBuild } from "expo-dev-client"\n'),
+	).toEqual([])
 })
 
 // a universal package's source imports no bun or node module, bare or prefixed, and its tests may

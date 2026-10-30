@@ -11,7 +11,12 @@ import type { Workspace } from "./workspaces"
 const WORKSPACE_PARENT_FOLDERS = ["apps", "packages"]
 
 // a package.json's fields the check reads
-type PackageJson = { name: string; dependencies?: Record<string, string>; devDependencies?: Record<string, string> }
+type PackageJson = {
+	name: string
+	dependencies?: Record<string, string>
+	devDependencies?: Record<string, string>
+	peerDependencies?: Record<string, string>
+}
 
 // a tsconfig's references, the one field the check reads
 type Tsconfig = { references?: { path: string }[] }
@@ -31,6 +36,7 @@ function readWorkspace(folder: string): Workspace {
 		name: packageJson.name,
 		dependencies: Object.keys(packageJson.dependencies ?? {}),
 		devDependencies: Object.keys(packageJson.devDependencies ?? {}),
+		peerDependencies: Object.keys(packageJson.peerDependencies ?? {}),
 		references: references.map((reference) => posix.normalize(posix.join(folder, reference.path))),
 	}
 }

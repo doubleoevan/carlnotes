@@ -43,6 +43,10 @@ ARG VITE_POSTHOG_HOST
 RUN test -n "$VITE_TURNSTILE_SITE_KEY" || (echo "VITE_TURNSTILE_SITE_KEY build arg is required" >&2; exit 1)
 RUN bun run build:ui
 
+# fail the build on a package the web server build leaves external that apps/web does not declare. the runtime stage's
+# production install links only what apps/web declares, so the image would otherwise fail every page render
+RUN bun run check:built-dependencies
+
 # the docs site, built to static files the app service serves under /docs. Astro and Starlight are dev
 # dependencies, so the toolchain stays in this stage and only the built output is copied forward
 RUN bun run build:docs

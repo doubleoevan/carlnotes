@@ -75,7 +75,7 @@ These processes run the app:
 | scheduler | `bun apps/worker/schedule.ts` sweeps for scheduled Topics and starts their scans. One query computes which Topics are scheduled from each Topic's frequency and its last completed Scan. So a sweep is safe to repeat, and no stored queue can drift. A database claim keeps two sweeps from overlapping. In production a Northflank cron job runs one sweep per interval (`bun run schedule`). |
 | budget reset | `bun apps/worker/resetMonthlyBudgets.ts` replaces every LiteLLM key created before the month began, so each user's spend starts the month at zero. The reset replaces four keys at a time, under the same kind of database claim as the sweep. In production a Northflank cron job runs the reset once a day shortly after midnight UTC (`bun run reset:monthly-budgets`). After the first of the month, the reset finds only the keys that an earlier run failed to replace. |
 
-Every process above runs on Northflank, which deploys on a git trigger. `app` and `temporal-worker`
+Every process above runs on Northflank, which deploys a commit on `main` once CI passes it. `app` and `temporal-worker`
 each run as replicas. The state that every `app` replica shares lives in Redis. Temporal gives each scan to one worker.
 Beside them run Neon Postgres (pgvector), a single-node Redis addon reached as `REDIS_URL`, object storage, a
 self-hosted Temporal server, Resend, and Stripe. Object storage goes through Bun's S3 client, and R2 serves it today,
@@ -286,6 +286,25 @@ the client is the rightmost `x-forwarded-for` address outside them. Better Auth 
 same settings. None of Cloudflare's own settings live in this repo. The cache rules, the session cookie bypass, SSL, and
 the rule that lets Northflank renew its certificate are listed in the `cache-at-the-edge` change's design, under
 `openspec/changes/archive/`.
+
+### Deploy safety
+
+A build that cannot render pages never takes the site down quietly. Each layer stops it on its own:
+
+| Layer | What it catches | Where |
+|---|---|---|
+| Declared dependencies | A third-party import the workspace does not declare, or a dev dependency the image runs | `scripts/check-package-boundaries.ts` in preflight |
+| Built dependencies | A package the web server build leaves external that `apps/web` does not declare | `bun run check:built-dependencies` in the Docker build |
+| Image smoke | A built image that fails to migrate, boot, or render `/`, `/plans`, and both health routes | the `image-smoke` CI job, `scripts/image-smoke.sh` |
+| Gated release | Any of the above, before Northflank builds, migrates, or deploys | the `release` CI job, which needs the gate and the image smoke |
+| Fail fast | A production boot whose web server build is missing or cannot import, reported in the `startup` stage | `apps/api/uiServer.ts` |
+| Readiness | A replica that cannot render the privacy page, which the platform sends no traffic | `/api/health/ready`, `infra/northflank/app-health-checks.json` |
+| Alerts | A site that is up but not rendering, a new error in a release, and an error spike | the [deploy alerts](#deploy-alerts) |
+
+`/api/health` is liveness. It responds 200 while the process runs and reads nothing. `/api/health/ready` is readiness.
+It renders the privacy page in-process, with no database, Redis, session, or outgoing request, so a database outage
+never pulls a replica out of traffic. A render that fails is reported in the `page-render` stage with its path, and
+every Sentry report is tagged with the deployed commit.
 
 ## Evals
 
@@ -500,7 +519,11 @@ bun scripts/check-contract-freeze.ts    # no api change an unretired snapshot in
 bunx tsc -b             # add --force after a dependency change. bun run check does that on its own
 bun test
 bun run check:workflows # every Temporal workflow file still bundles
+bun run check:built-dependencies # after build:ui, apps/web declares every package its server build leaves external
 ```
+
+The Docker build runs `check:built-dependencies` right after `build:ui`. The production install links only the packages
+`apps/web` declares, so an undeclared one fails the image build instead of every page render.
 
 Live smoke tests (owner-run) exercise real flows against live services (LiteLLM proxy, Firecrawl, object storage). They
 make paid calls, so they are **not** part of `bun run check`. They need the LiteLLM proxy up
@@ -521,6 +544,7 @@ bun run smoke:review       # the review smoke test: the paid section buys its be
 bun run smoke:subscribers  # the subscriber-count smoke test: both subscription paths against real rows, rolled back after
 bun run smoke:profile      # the profile smoke test: the header's distinct people against the footer's summed rows
 bun run smoke:seo          # the seo smoke test: builds the ui, then checks every public page arrives whole to a browser without JavaScript on its first render, that only public topics are listed, that the edge can share a signed-out page and the feed but never a signed-in one, and that a card is immutable only at its version
+bun run smoke:image <image> # the image smoke test: boots a built image with dummy settings against an empty Postgres and checks the home page, /plans, and both health routes respond 200. needs Docker
 bun run smoke:signup       # the signup smoke test: builds the ui under doppler, then opens the signup page in this machine's Chrome and checks that the Turnstile challenge issues a token the signup gate accepts, with no content security policy violation
 bun run smoke:chat         # the topic chat retrieval smoke test (question → ranked findings → assembled context)
 bun run smoke:eval         # the review pipeline eval's smoke test: one tiny labeled fixture through the real gate and scoring
@@ -600,13 +624,47 @@ public values that ship to every visitor.
 `--platform=linux/amd64` matters on Apple Silicon. The Doppler CLI is copied from `dopplerhq/cli:3.77.0`, which
 publishes amd64 only.
 
-Migrations are a deploy job, not a start-up step. A push to `main` runs the `release-main` pipeline. The pipeline builds
-the image once and runs the migration job against it. Only then does it deploy `app`, purge the edge, deploy
-`temporal-worker`, and finish with the docs embed. So new code never meets an old schema. The pipeline runs in
-Northflank instead of GitHub Actions, and its definition is
-[infra/northflank/release-main.json](infra/northflank/release-main.json). `.github/workflows/` holds checks alone: the
-offline gate, CodeQL, the evals, and the smoke suite. None of them deploy. The
-migration job runs:
+The image smoke test boots a built image the way production does, with no secrets. CI's `image-smoke` job builds the
+image on every pull request and every push to `main`, then runs
+[scripts/image-smoke.sh](scripts/image-smoke.sh) against it. The script starts Postgres with pgvector and Neon's
+WebSocket proxy on one Docker network, migrates the empty database from the image, and starts the api with
+`NODE_ENV=production` and dummy settings. It fails if the api exits, never responds to `/api/health` within 90 seconds,
+or responds with anything but 200 for `/`, `/plans`, `/api/health`, or `/api/health/ready`, and it prints the
+containers' logs on failure. The same steps run locally against an image built with Cloudflare's public always-pass
+Turnstile key:
+
+```bash
+docker build --build-arg VITE_TURNSTILE_SITE_KEY=1x00000000000000000000AA -t carlnotes-smoke:local .
+```
+
+```bash
+bun run smoke:image carlnotes-smoke:local
+```
+
+`DATABASE_WS_PROXY` points the database driver at the proxy. Only the smoke test sets it, and production never does.
+
+Migrations are a deploy job, not a start-up step. CI starts the release. On a push to `main`, once the gate and the
+image smoke pass, the `release` job in [ci.yml](.github/workflows/ci.yml) starts Northflank's `release-main` flow
+through its api with that commit's SHA as the `sha` argument. It reads `NORTHFLANK_API_TOKEN` from the secrets of
+the `production` GitHub environment, whose deployment branch rule allows only `main`, so a pull request's run cannot
+read the token. It reads `NORTHFLANK_PIPELINE_ID` and `NORTHFLANK_RELEASE_STAGE` from the repository variables, and
+skips while the pipeline variable is unset. The flow builds that commit once and runs the migration job against it.
+Only then does it deploy `app`, purge the edge, deploy `temporal-worker`, and finish with the docs embed. So new code
+never meets an old schema. Each deploy step waits up to ten minutes for its replicas to run, and a rollout that never
+runs fails the flow before the next step. The flow's definition is
+[infra/northflank/release-main.json](infra/northflank/release-main.json), which has no git trigger. In an emergency, run
+`release-main` from the Northflank console with the commit's full SHA as `sha`. That skips CI, so it is for a commit
+that already passed it.
+
+The `app` service's startup, readiness, and liveness checks are
+[infra/northflank/app-health-checks.json](infra/northflank/app-health-checks.json), the `healthChecks` body of
+Northflank's `PATCH /v1/projects/carlnotes-prd/services/deployment/app`. Startup polls `/api/health` every 10 seconds
+for up to two minutes. Readiness polls `/api/health/ready` every 10 seconds and takes a replica out of traffic after
+three misses. Liveness restarts a replica after six missed `/api/health` polls. Both Northflank files are applied by
+hand, with the Northflank CLI or console. Apply `release-main.json` before setting `NORTHFLANK_PIPELINE_ID`, so a push
+never deploys twice.
+
+The migration job runs:
 
 ```bash
 doppler run -- bun packages/db/migrate.ts
@@ -671,6 +729,27 @@ report is the check to alert on.
 The LiteLLM proxy builds outside the `release-main` pipeline. [infra/litellm/Dockerfile](infra/litellm/Dockerfile)
 copies [litellm-config.yaml](litellm-config.yaml) into the image, and a Northflank path rule on those two files rebuilds
 and redeploys the service on push. A model swap is the config edit and nothing else.
+
+### Deploy alerts
+
+Four alerts tell the owner that carlnotes.com stopped rendering. They are set up by hand in Sentry and in the
+external monitor, so nothing in the repo applies them. Each one notifies the owner by email and by a push to the Sentry
+mobile app, or to the external monitor's own app. In Sentry, the push needs the mobile app signed in, and **User
+Settings → Notifications → Issue Alerts** and **Metric Alerts** set to deliver by email and mobile push.
+
+1. **The external monitor polls readiness.** In the external uptime monitor, change the monitor's url from
+   `https://carlnotes.com/api/health` to `https://carlnotes.com/api/health/ready`, expecting a 200, and turn on its
+   email and app push alerts. `/api/health` stays the platform's liveness check. It responds 200 even if no page can
+   render.
+2. **A new issue in a release.** In Sentry, **Alerts → Create Alert → Issues**, for the `prd` environment. When "A new
+   issue is created", if "The event is from the latest release", notify the owner. The release is the deployed commit
+   SHA, so the alert names the commit that introduced the error.
+3. **An error rate spike.** In Sentry, **Alerts → Create Alert → Errors → Number of Errors**, for the `prd`
+   environment, critical above 50 errors in 5 minutes, notifying the owner. It catches an error Sentry has seen before
+   that a release makes common again.
+4. **The home page renders.** In Sentry, **Alerts → Create Alert → Uptime Monitor**, for `https://carlnotes.com/`
+   every minute, failing on any status other than 200, notifying the owner. It catches a page that fails while
+   readiness, which renders only the privacy page, still passes.
 
 ## Security
 

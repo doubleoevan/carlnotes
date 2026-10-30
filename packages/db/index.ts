@@ -4,7 +4,7 @@ import { MINIMUM_SHOWN_FINDINGS } from "@carlnotes/contracts/enums"
 import { toPositiveInteger } from "@carlnotes/server/envSettings"
 import { reportError } from "@carlnotes/server/monitoring"
 import type { PoolGauges } from "@carlnotes/server/runtimeGauges"
-import { Pool } from "@neondatabase/serverless"
+import { neonConfig, Pool } from "@neondatabase/serverless"
 import { and, eq, isNotNull, type SQL, type SQLWrapper, sql } from "drizzle-orm"
 import { drizzle } from "drizzle-orm/neon-serverless"
 import { traceQueries } from "./queryTracing"
@@ -38,6 +38,9 @@ const DEFAULT_POOL_COUNT = 8
 
 // the share of max_connections that Neon's connection pooler holds on its server side for one user and database
 const POOLER_SERVER_SHARE = 0.9
+
+// reach a plain Postgres through Neon's WebSocket proxy if DATABASE_WS_PROXY names one
+configureWebSocketProxy(process.env.DATABASE_WS_PROXY)
 
 // one pooled Neon client for the app. a request that waits past the timeout for a connection fails with an error
 export const connectionPool = new Pool({
@@ -140,6 +143,23 @@ export function readPoolGauges(): PoolGauges {
 		idleCount: connectionPool.idleCount,
 		waitingCount: connectionPool.waitingCount,
 	}
+}
+
+/**
+ * Sends every connection through a Neon WebSocket proxy, such as `wsproxy:80/v1`, over plain WebSockets and plain
+ * Postgres. No proxy leaves Neon's own secure defaults.
+ */
+export function configureWebSocketProxy(webSocketProxy: string | undefined): void {
+	if (!webSocketProxy) {
+		return
+	}
+
+	// warn on boot, then turn off the driver's TLS and its pipelined startup. the proxy and Postgres speak no TLS
+	console.warn(`DATABASE_WS_PROXY sends every database connection through ${webSocketProxy} without TLS`)
+	neonConfig.wsProxy = webSocketProxy
+	neonConfig.useSecureWebSocket = false
+	neonConfig.pipelineTLS = false
+	neonConfig.pipelineConnect = false
 }
 
 /**

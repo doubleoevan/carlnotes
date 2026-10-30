@@ -12,7 +12,7 @@ import {
 } from "@carlnotes/pipeline/temporalClient"
 import { shutdownAnalytics } from "@carlnotes/server/analytics"
 import { toPositiveInteger } from "@carlnotes/server/envSettings"
-import { shutdownMonitoring, startMonitoring } from "@carlnotes/server/monitoring"
+import { exitOnFatalError, shutdownMonitoring, startMonitoring } from "@carlnotes/server/monitoring"
 import { runWithRetries } from "@carlnotes/server/retry"
 import { type ExtraGaugesReading, startRuntimeGauges } from "@carlnotes/server/runtimeGauges"
 import { NativeConnection, Worker } from "@temporalio/worker"
@@ -55,6 +55,9 @@ const PODCAST_RECORDING_CONCURRENCY = toPositiveInteger(
 // how often and how long to keep retrying the first connection
 const CONNECT_RETRY_DELAY_MS = 3 * 1000
 const CONNECT_ATTEMPTS = 20
+
+// whether the workers have started polling their queues, which tells a startup failure from a stopped worker
+let hasStartedPolling = false
 
 // connect to Temporal, retrying while its server is still starting. after a reboot this worker and the
 // dockerized server race. the last attempt's failure lets the process exit
@@ -139,6 +142,7 @@ async function run(): Promise<void> {
 	startRuntimeGauges({ processName: "worker", readPoolGauges, readExtraGauges: readWorkerExtraGauges })
 
 	// any worker stopping ends the process
+	hasStartedPolling = true
 	const runningWorkers = workers.map((worker) => worker.run())
 	try {
 		await Promise.race(runningWorkers)
@@ -170,8 +174,7 @@ async function readWorkerExtraGauges(): Promise<ExtraGaugesReading> {
 	}
 }
 
-// a worker failure exits with an error code
-run().catch((error) => {
-	console.error("temporal worker failed", error)
-	process.exit(1)
-})
+// report a worker failure under startup before polling and under worker after. exit once the report sends
+run().catch((error: unknown) =>
+	exitOnFatalError({ error, stage: hasStartedPolling ? "worker" : "startup", message: "temporal worker failed" }),
+)

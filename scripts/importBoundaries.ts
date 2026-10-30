@@ -1,18 +1,21 @@
-// the import rules the boundary check runs over each source file: the app, mobile, declaration, relative import, and
-// runtime module rules, and each app's component browser rule
+// the import rules the boundary check runs over each source file: the app, mobile, declaration, dev dependency,
+// relative import, and runtime module rules, and each app's component browser rule
 import { isBuiltin } from "node:module"
 import { posix } from "node:path"
 import {
 	API_PACKAGE_NAME,
 	APP_PACKAGE_NAMES,
+	IMAGE_APP_FOLDERS,
 	isInsideFolder,
 	MOBILE_APP_FOLDER,
 	type SourceFile,
+	STORY_FILE_PATTERN,
 	TEST_FILE_PATTERN,
 	TYPE_ONLY_API_IMPORTERS,
 	UNIVERSAL_PACKAGE_NAMES,
 	UNIVERSAL_WORKSPACE_FOLDERS,
 	WEB_APP_FOLDER,
+	WEB_SOURCE_FOLDER,
 	type Workspace,
 } from "./workspaces"
 
@@ -60,6 +63,13 @@ const STORY_IMPORT_PATTERN = /\.stories(?:\.tsx?)?$|^(?:storybook|@storybook\/[^
 // a bun or node module
 const RUNTIME_MODULE_PATTERN = /^(?:bun|bun:.+|node:.+)$/
 
+// a path alias or a virtual module, which names no installed package: the @/ source alias, an absolute path, and the
+// astro and vite virtual modules
+const LOCAL_IMPORT_PATTERN = /^(?:@\/|\/|astro:|virtual:)/
+
+// a file the production image never runs: a smoke run, its fixtures, a test harness, or a build tool's config
+const DEVELOPMENT_FILE_PATTERN = /(?:\.smoke\.ts|SmokeFixtures\.ts|TestHarness\.tsx?|\.config\.(?:ts|mjs))$/
+
 // an import or export statement with its quoted path, across any number of lines, a side-effect import, an import(),
 // or a require(). the match stops before the next import or export keyword. the code has no semicolons to end a
 // statement on
@@ -77,8 +87,8 @@ export type ParsedImport = { statementText: string; importPath: string; lineNumb
 type ToImportViolationsOptions = { workspaces: Workspace[]; sourceFile: SourceFile }
 
 /**
- * Returns one file's violations: an app import, a relative import that leaves the workspace, an undeclared @carlnotes
- * import, and a bun or node import inside a universal package.
+ * Returns one file's violations: an app import, a relative import that leaves the workspace, an undeclared package, a
+ * dev dependency in runtime code, and a bun or node import inside a universal package.
  */
 export function toImportViolations({ workspaces, sourceFile }: ToImportViolationsOptions): string[] {
 	// the workspace the file belongs to. a file outside every workspace has no boundary to cross
@@ -87,10 +97,13 @@ export function toImportViolations({ workspaces, sourceFile }: ToImportViolation
 		return []
 	}
 
-	// check each import against the rules
+	// check each import against the rules. a third-party path is checked only if the transpiler also finds it or the
+	// statement brings in types only, so an import-like sentence inside a string never counts
 	const violations: string[] = []
+	const scannedImportPaths = toScannedImportPaths(sourceFile)
 	for (const parsedImport of toParsedImports(sourceFile.fileText)) {
-		const violation = toImportViolation({ workspace, sourceFile, parsedImport })
+		const isCheckedImport = scannedImportPaths.has(parsedImport.importPath) || parsedImport.isTypeOnly
+		const violation = toImportViolation({ workspace, sourceFile, parsedImport, isCheckedImport })
 
 		// name the workspace, the file and line, the import, and the rule it breaks
 		if (violation) {
@@ -139,11 +152,34 @@ export function isTypeOnlyImport(statementText: string): boolean {
 	return namedSpecifiers.length > 0 && namedSpecifiers.every((specifier) => specifier.startsWith("type "))
 }
 
-// the workspace, the file, and the import one rule check runs on
-type ToImportViolationOptions = { workspace: Workspace; sourceFile: SourceFile; parsedImport: ParsedImport }
+// the import paths Bun's transpiler finds in a file, which skips strings and comments. a file it cannot parse, such as
+// an astro component, finds none
+function toScannedImportPaths(sourceFile: SourceFile): Set<string> {
+	try {
+		// scan with the loader the file's extension names
+		const loader = sourceFile.filePath.endsWith(".tsx") ? "tsx" : "ts"
+		const scannedImports = new Bun.Transpiler({ loader }).scanImports(sourceFile.fileText)
+		return new Set(scannedImports.map((scannedImport) => scannedImport.path))
+	} catch {
+		return new Set()
+	}
+}
+
+// the workspace, the file, the import one rule check runs on, and whether the transpiler finds the import or it brings in types only
+type ToImportViolationOptions = {
+	workspace: Workspace
+	sourceFile: SourceFile
+	parsedImport: ParsedImport
+	isCheckedImport: boolean
+}
 
 // the rule one import breaks, or undefined
-function toImportViolation({ workspace, sourceFile, parsedImport }: ToImportViolationOptions): string | undefined {
+function toImportViolation({
+	workspace,
+	sourceFile,
+	parsedImport,
+	isCheckedImport,
+}: ToImportViolationOptions): string | undefined {
 	// each app keeps its stories and Storybook inside its component browser, and the web app keeps the rest of
 	// Nightshift's TypeScript there too
 	const { importPath, isTypeOnly } = parsedImport
@@ -166,12 +202,106 @@ function toImportViolation({ workspace, sourceFile, parsedImport }: ToImportViol
 			: undefined
 	}
 
-	// a package outside @carlnotes is no workspace boundary
-	const packageName = toPackageName(importPath)
-	if (!packageName.startsWith("@carlnotes/")) {
+	// a path alias or a virtual module names no package
+	if (LOCAL_IMPORT_PATTERN.test(importPath)) {
 		return undefined
 	}
+
+	// a @carlnotes package follows the workspace rules, and any other package the third-party rules
+	const packageName = toPackageName(importPath)
+	if (!packageName.startsWith("@carlnotes/")) {
+		return isCheckedImport ? toThirdPartyImportViolation({ workspace, sourceFile, packageName, isTypeOnly }) : undefined
+	}
 	return toCarlnotesImportViolation({ workspace, packageName, isTypeOnly })
+}
+
+/**
+ * Returns a file's value imports of installed packages, each one the transpiler also finds.
+ */
+export function toPackageValueImports(sourceFile: SourceFile): ParsedImport[] {
+	const scannedImportPaths = toScannedImportPaths(sourceFile)
+	return toParsedImports(sourceFile.fileText).filter(
+		(parsedImport) =>
+			!parsedImport.isTypeOnly &&
+			scannedImportPaths.has(parsedImport.importPath) &&
+			isPackageImportPath(parsedImport.importPath),
+	)
+}
+
+/**
+ * Returns whether an import path names an installed package: not a relative path, an alias, a virtual module, or a
+ * bun or node module.
+ */
+export function isPackageImportPath(importPath: string): boolean {
+	const isRuntimeModule = RUNTIME_MODULE_PATTERN.test(importPath) || isBuiltin(importPath)
+	return !importPath.startsWith(".") && !LOCAL_IMPORT_PATTERN.test(importPath) && !isRuntimeModule
+}
+
+// the workspace and the file the runtime check reads
+type IsImageRuntimeFileOptions = { workspace: Workspace; sourceFile: SourceFile }
+
+/**
+ * Returns whether a file is code the production image runs: a file of an app the image runs or of a package, outside
+ * the tests, stories, smoke runs, build configs, and component browser. Of the web app, only its source counts.
+ */
+export function isImageRuntimeFile({ workspace, sourceFile }: IsImageRuntimeFileOptions): boolean {
+	// an app the image runs, or a package, and of the web app only the source its builds bundle
+	const { filePath } = sourceFile
+	const isImageWorkspace = IMAGE_APP_FOLDERS.has(workspace.folder) || workspace.folder.startsWith("packages/")
+	if (!isImageWorkspace || (workspace.folder === WEB_APP_FOLDER && !isInsideFolder(filePath, WEB_SOURCE_FOLDER))) {
+		return false
+	}
+
+	// a test, a story, a smoke run, a build config, and the component browser never run in the image
+	const isDevelopmentFile =
+		TEST_FILE_PATTERN.test(filePath) || STORY_FILE_PATTERN.test(filePath) || DEVELOPMENT_FILE_PATTERN.test(filePath)
+	return !isDevelopmentFile && !isComponentBrowserFile(filePath)
+}
+
+/**
+ * Returns the package an import path names: the first two segments of a scoped path, the first segment otherwise,
+ * without a bundler query such as ?url.
+ */
+export function toPackageName(importPath: string): string {
+	const segments = (importPath.split("?")[0] ?? "").split("/")
+	const segmentCount = importPath.startsWith("@") ? 2 : 1
+	return segments.slice(0, segmentCount).join("/")
+}
+
+// the workspace, the file, the third-party package an import names, and whether the import brings in types only
+type ToThirdPartyImportViolationOptions = {
+	workspace: Workspace
+	sourceFile: SourceFile
+	packageName: string
+	isTypeOnly: boolean
+}
+
+// the third-party rule one import breaks: a package its workspace does not declare, or a dev dependency in runtime code
+function toThirdPartyImportViolation({
+	workspace,
+	sourceFile,
+	packageName,
+	isTypeOnly,
+}: ToThirdPartyImportViolationOptions): string | undefined {
+	// the package.json declares the package, or for a type-only import its @types package. one that only a sibling
+	// workspace or the root declares fails
+	const isRuntimeDeclared =
+		workspace.dependencies.includes(packageName) || workspace.peerDependencies.includes(packageName)
+	const isTypesDeclared = isTypeOnly && workspace.devDependencies.includes(toTypesPackageName(packageName))
+	if (!isRuntimeDeclared && !workspace.devDependencies.includes(packageName) && !isTypesDeclared) {
+		return `the package.json does not declare ${packageName}`
+	}
+
+	// code the image runs imports a value from a dependency. the production install leaves dev dependencies out
+	const isRuntimeValueImport = !isTypeOnly && isImageRuntimeFile({ workspace, sourceFile })
+	return isRuntimeValueImport && !isRuntimeDeclared
+		? `the production install leaves out a dev dependency. move ${packageName} to dependencies`
+		: undefined
+}
+
+// the DefinitelyTyped package that holds a package's types: @types/hast for hast, @types/scope__name for @scope/name
+function toTypesPackageName(packageName: string): string {
+	return `@types/${packageName.replace(/^@/, "").replace("/", "__")}`
 }
 
 // the workspace, the @carlnotes package an import names, and whether the import brings in types only
@@ -241,13 +371,6 @@ function toComponentBrowserImportViolation({
 	return isNightshiftModuleImport && !isNightshiftImporter
 		? "the web app imports this nightshift module only from a test, a story, or the component browser"
 		: undefined
-}
-
-// the package an import path names: the first two segments of a scoped path, the first segment otherwise
-function toPackageName(importPath: string): string {
-	const segments = importPath.split("/")
-	const segmentCount = importPath.startsWith("@") ? 2 : 1
-	return segments.slice(0, segmentCount).join("/")
 }
 
 // whether a repo-relative path is a component browser file in either app: a story, or a file in the component

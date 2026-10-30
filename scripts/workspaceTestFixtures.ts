@@ -1,4 +1,5 @@
-// a small workspace map for the boundary tests: two universal packages, a server package, and three apps
+// a small workspace map for the boundary tests: two universal packages, a server package, and three apps, each
+// declaring the third-party packages the tests import
 import type { Workspace } from "./workspaces"
 
 /** The contracts package, universal, with no workspace dependency. */
@@ -7,6 +8,7 @@ export const CONTRACTS_WORKSPACE: Workspace = {
 	name: "@carlnotes/contracts",
 	dependencies: ["zod"],
 	devDependencies: [],
+	peerDependencies: [],
 	references: [],
 }
 
@@ -16,6 +18,7 @@ export const CLIENT_WORKSPACE: Workspace = {
 	name: "@carlnotes/client",
 	dependencies: ["@carlnotes/contracts", "hono"],
 	devDependencies: ["@carlnotes/api"],
+	peerDependencies: [],
 	references: ["apps/api", "packages/contracts"],
 }
 
@@ -25,6 +28,7 @@ export const DB_WORKSPACE: Workspace = {
 	name: "@carlnotes/db",
 	dependencies: ["@carlnotes/contracts", "drizzle-orm"],
 	devDependencies: [],
+	peerDependencies: [],
 	references: ["packages/contracts"],
 }
 
@@ -34,6 +38,7 @@ export const API_WORKSPACE: Workspace = {
 	name: "@carlnotes/api",
 	dependencies: ["@carlnotes/contracts", "@carlnotes/db"],
 	devDependencies: [],
+	peerDependencies: [],
 	references: ["packages/contracts", "packages/db"],
 }
 
@@ -41,8 +46,9 @@ export const API_WORKSPACE: Workspace = {
 export const WEB_WORKSPACE: Workspace = {
 	folder: "apps/web",
 	name: "@carlnotes/web",
-	dependencies: ["@carlnotes/client", "@carlnotes/contracts"],
-	devDependencies: [],
+	dependencies: ["@carlnotes/client", "@carlnotes/contracts", "react"],
+	devDependencies: ["storybook", "@storybook/addon-themes"],
+	peerDependencies: [],
 	references: ["packages/client", "packages/contracts"],
 }
 
@@ -51,7 +57,8 @@ export const MOBILE_WORKSPACE: Workspace = {
 	folder: "apps/mobile",
 	name: "@carlnotes/mobile",
 	dependencies: ["@carlnotes/client", "@carlnotes/contracts"],
-	devDependencies: [],
+	devDependencies: ["@storybook/react-native"],
+	peerDependencies: [],
 	references: ["packages/client", "packages/contracts"],
 }
 

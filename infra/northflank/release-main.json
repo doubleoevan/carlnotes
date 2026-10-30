@@ -14,6 +14,7 @@
 						"id": "build",
 						"type": "service",
 						"branch": "main",
+						"sha": "${args.sha}",
 						"reuseExistingBuilds": true,
 						"buildRuleFallThroughHandling": "fail"
 					},
@@ -46,7 +47,8 @@
 						},
 						"target": { "id": "app", "type": "service" }
 					},
-					"condition": "running"
+					"condition": "running",
+					"timeoutDuration": 600
 				},
 				{
 					"kind": "JobRun",
@@ -75,7 +77,8 @@
 						},
 						"target": { "id": "temporal-worker", "type": "service" }
 					},
-					"condition": "running"
+					"condition": "running",
+					"timeoutDuration": 600
 				},
 				{
 					"kind": "JobRun",
@@ -95,20 +98,7 @@
 			]
 		}
 	},
-	"arguments": {},
+	"arguments": { "sha": "" },
 	"argumentOverrides": {},
-	"options": { "autorun": false, "concurrencyPolicy": "queue" },
-	"triggers": [
-		{
-			"kind": "vcs-push",
-			"spec": {
-				"vcs": {
-					"vcsService": "github",
-					"accountLogin": "doubleoevan",
-					"repoUrl": "https://github.com/doubleoevan/carlnotes"
-				},
-				"branchNamePatterns": ["main"]
-			}
-		}
-	]
+	"options": { "autorun": false, "concurrencyPolicy": "queue" }
 }

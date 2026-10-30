@@ -61,7 +61,7 @@ export type DecideErrorReportOptions = {
 const errorReportWindows = new Map<string, ErrorReportWindow>()
 
 // the paths never traced: the health checks, which the platform and a monitor poll all day
-const UNTRACED_PATHS = new Set(["/api/health", "/api/health/deep"])
+const UNTRACED_PATHS = new Set(["/api/health", "/api/health/deep", "/api/health/ready"])
 
 // the path prefixes never traced: the built assets, the docs site, and the screenshots the ui serves as files
 const UNTRACED_PATH_PREFIXES = ["/assets/", "/docs", "/screenshots/"]
@@ -96,6 +96,7 @@ export function startMonitoring(): void {
 	Sentry.init({
 		dsn: Bun.env.SENTRY_DSN,
 		environment,
+		release: toSentryRelease(Bun.env),
 		tracesSampler: (samplingContext) =>
 			samplingContext.inheritOrSampleWith(toTracesSampleRate({ spanName: samplingContext.name, tracesSampleRate })),
 		dataCollection: {
@@ -129,6 +130,13 @@ export function isMonitoringStarted(): boolean {
 
 // what a sample rate is decided from: the span's name, which starts with a request's method and path, and the rate
 type ToTracesSampleRateOptions = { spanName: string; tracesSampleRate: number }
+
+/**
+ * Returns the release a report is tagged with: SENTRY_RELEASE, or the commit SHA Northflank deployed, or none.
+ */
+export function toSentryRelease(env: Record<string, string | undefined>): string | undefined {
+	return env.SENTRY_RELEASE || env.NF_DEPLOYMENT_SHA || undefined
+}
 
 /**
  * Returns the share of spans traced for a span's name. The health checks and the static files are never traced,
@@ -232,6 +240,8 @@ const reportedStages = [
 	"page-render",
 	"api-route",
 	"database",
+	"startup",
+	"worker",
 ] as const
 
 // one of the stages above
@@ -341,4 +351,17 @@ export async function shutdownMonitoring(): Promise<void> {
 	} catch (error) {
 		console.error("monitoring shutdown failed", error)
 	}
+}
+
+// the error that stops the process, the stage it is reported under, and the line logged before it
+type ExitOnFatalErrorOptions = { error: unknown; stage: ReportedStage; message: string }
+
+/**
+ * Logs and reports an error that stops the process, waits for the report to send, and exits with code 1.
+ */
+export async function exitOnFatalError({ error, stage, message }: ExitOnFatalErrorOptions): Promise<void> {
+	console.error(message, error)
+	reportError(error, stage)
+	await shutdownMonitoring()
+	process.exit(1)
 }

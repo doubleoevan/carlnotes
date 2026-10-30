@@ -1,9 +1,11 @@
-// a pool setting read from the environment, and the pool size computed from the database at startup
+// a pool setting read from the environment, the pool size computed from the database at startup, and the WebSocket
+// proxy setting
 import { afterEach, beforeEach, expect, mock, spyOn, test } from "bun:test"
 import { quietErrorReports } from "@carlnotes/server/monitoringTestFixtures"
 import { saveEnvSettings } from "@carlnotes/server/savedEnvSettings"
+import { neonConfig } from "@neondatabase/serverless"
 import { restoreConnectionPool, stubConnectionPool } from "./connectionPoolStub"
-import { connectionPool, sizeConnectionPool } from "./index"
+import { configureWebSocketProxy, connectionPool, sizeConnectionPool } from "./index"
 
 // the pool's size and the connection string before a test changes them
 const originalPoolMax = connectionPool.options.max
@@ -81,4 +83,34 @@ test("no connection string keeps the default without a read", async () => {
 	// the default stays, and nothing was read
 	expect(await sizeConnectionPool()).toBe(15)
 	expect(sentQueries).toHaveLength(0)
+})
+
+// a proxy sends every connection over plain WebSockets with the TLS pipeline off, and no proxy changes nothing
+test("configureWebSocketProxy turns off TLS only if a proxy is set", () => {
+	// the driver's settings before the test, put back after it
+	const originalNeonConfig = {
+		wsProxy: neonConfig.wsProxy,
+		useSecureWebSocket: neonConfig.useSecureWebSocket,
+		pipelineTLS: neonConfig.pipelineTLS,
+		pipelineConnect: neonConfig.pipelineConnect,
+	}
+
+	try {
+		// no proxy keeps Neon's secure defaults
+		configureWebSocketProxy(undefined)
+		expect(neonConfig.useSecureWebSocket).toBe(originalNeonConfig.useSecureWebSocket)
+		expect(neonConfig.wsProxy).toBe(originalNeonConfig.wsProxy)
+
+		// a proxy is used over plain WebSockets, with no TLS and no pipelined startup, and a warning says so
+		const consoleWarnSpy = spyOn(console, "warn").mockImplementation(() => {})
+		configureWebSocketProxy("wsproxy:80/v1")
+		expect(consoleWarnSpy).toHaveBeenCalledTimes(1)
+		expect(neonConfig.wsProxy).toBe("wsproxy:80/v1")
+		expect(neonConfig.useSecureWebSocket).toBe(false)
+		expect(neonConfig.pipelineTLS).toBe(false)
+		expect(neonConfig.pipelineConnect).toBe(false)
+	} finally {
+		// put the driver's settings back
+		Object.assign(neonConfig, originalNeonConfig)
+	}
 })

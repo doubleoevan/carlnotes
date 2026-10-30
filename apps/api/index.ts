@@ -1,16 +1,13 @@
 // the server that owns the origin
-import { extname, resolve } from "node:path"
+import { extname } from "node:path"
 import { oauthProviderAuthServerMetadata } from "@better-auth/oauth-provider"
-import { DEGRADED_RENDER_HEADER } from "@carlnotes/contracts/seo"
 import { withTimeLimit } from "@carlnotes/contracts/time"
 import { db, readPoolGauges, sizeConnectionPool } from "@carlnotes/db"
 import { readRedisExtraGauges } from "@carlnotes/db/redisGauges"
 import { runWithRequestMemo } from "@carlnotes/db/requestMemo"
 import { startTelemetry } from "@carlnotes/models/telemetry"
-import { toPositiveInteger } from "@carlnotes/server/envSettings"
 import { reportError, startMonitoring } from "@carlnotes/server/monitoring"
 import { startRuntimeGauges } from "@carlnotes/server/runtimeGauges"
-import { getSessionCookie } from "better-auth/cookies"
 import { sql } from "drizzle-orm"
 import type { Context, Next } from "hono"
 import { Hono } from "hono"
@@ -22,7 +19,7 @@ import { auth } from "./auth"
 import { PROVIDER_PHOTO_ORIGINS } from "./avatars"
 import { defaultBodyLimit } from "./bodyLimit"
 import { trackBotFetches } from "./botAnalytics"
-import { DOCS_BUNDLE_ROOT, UI_CLIENT_ROOT, UI_SERVER_ENTRY } from "./bundlePaths"
+import { DOCS_BUNDLE_ROOT, UI_CLIENT_ROOT } from "./bundlePaths"
 import { BLOG_INDEX_PATH, BLOG_PAGE_PATH, contentRoute } from "./content"
 import { FRAME_SOURCE_DIRECTIVE, toContentSecurityPolicy } from "./contentSecurityPolicy"
 import type { AppEnv } from "./currentUser"
@@ -42,22 +39,13 @@ import { pageRenderRateLimiter, toolCallerRateLimiter } from "./rateLimit"
 import { RELEASE_PATH, RELEASES_PATH, releasesRoute } from "./releases"
 import { traceRequest } from "./requestTracing"
 import { checkTrustedProxies } from "./trustedProxies"
-
-// how long a crawler waits before it retries a page rendered without a read it needs
-const DEGRADED_RENDER_RETRY_AFTER_SECONDS = 60
+import { checkRenderReadiness, importUiServerAtStartup, renderUiPage } from "./uiServer"
 
 // how long the deep health check waits for the database before it responds 503
 const DEEP_HEALTH_TIMEOUT_MS = 2000
 
 // the largest request body the server reads, above CHAT_BODY_LIMIT_BYTES, the largest any route accepts
 const MAX_REQUEST_BODY_BYTES = 32 * 1024 * 1024
-
-// how many visitor pages this replica renders at once unless RENDER_CONCURRENCY sets it. a visitor's render past it is
-// shed
-const DEFAULT_RENDER_CONCURRENCY = 16
-
-// how long the browser waits before retrying a shed render, in seconds
-const BUSY_RENDER_RETRY_AFTER_SECONDS = 2
 
 // the click ids that ad and social platforms append to a shared link
 const CLICK_ID_PARAMETERS = new Set([
@@ -85,15 +73,6 @@ const CLICK_ID_PARAMETERS = new Set([
 // route exactly, so a request passes the page guards once
 const API_PAGE_ROUTE_PATHS = [BLOG_INDEX_PATH, BLOG_PAGE_PATH, RELEASES_PATH, RELEASE_PATH]
 
-// how many visitor pages this replica is rendering now
-let activeVisitorRenderCount = 0
-
-// the ui's server handler, as the server entry exports it
-type UiServer = { fetch: (request: Request) => Promise<Response> }
-
-// how importing the ui's server bundle went: loaded with its handler, missing if build:ui never wrote it, or failed
-type UiServerImport = { status: "loaded"; uiServer: UiServer } | { status: "missing" } | { status: "failed" }
-
 // the ui builds its typed api client from this definition
 export type AppType = typeof apiRoute
 
@@ -103,8 +82,8 @@ startMonitoring()
 startTelemetry()
 await sizeConnectionPool()
 
-// load the ui's server bundle before serving, so a new replica's first page never waits on the import
-await importUiServer()
+// load the ui's server build before serving. a production boot that cannot load it exits here
+await importUiServerAtStartup()
 
 // log the process's connection pool, event loop delay, and Redis gauges once a minute
 startRuntimeGauges({ processName: "api", readPoolGauges, readExtraGauges: readRedisExtraGauges })
@@ -160,6 +139,8 @@ const server = new Hono<AppEnv>()
 	.get("/api/health", (context) => context.json({ status: "ok" }))
 	// the deep health check a monitor polls, with one trivial query and no session lookup either
 	.get("/api/health/deep", checkDatabaseHealth)
+	// the readiness check the platform polls to route traffic to a replica. it renders a page with no database
+	.get("/api/health/ready", checkReadiness)
 	// an outdated build is told to update on every api path after the health checks, ahead of the session lookup
 	.use("/api/*", appVersionGate)
 	// an icon request reads one row and never a session, so it sits ahead of the api tree too
@@ -267,87 +248,6 @@ function toDocsFilePath(path: string): string {
 	return extname(filePath) ? filePath : `${filePath.replace(/\/$/, "")}/index.html`
 }
 
-// import the ui's server handler. bun caches the module after the first import, and a bundle that fails to import is
-// logged and reported
-async function importUiServer(): Promise<UiServerImport> {
-	// a bundle that build:ui never wrote is missing
-	const uiServerEntryPath = resolve(UI_SERVER_ENTRY)
-	if (!(await Bun.file(uiServerEntryPath).exists())) {
-		return { status: "missing" }
-	}
-
-	// import the handler, and log and report a bundle that throws
-	return import(uiServerEntryPath)
-		.then((uiServerEntry): UiServerImport => ({ status: "loaded", uiServer: uiServerEntry.default as UiServer }))
-		.catch((error: unknown): UiServerImport => {
-			console.error("the ui's server bundle failed to import", error)
-			reportError(error, "page-render")
-			return { status: "failed" }
-		})
-}
-
-// render a page with the ui's server. a missing bundle is a 404, and a bundle that fails to import or a page rendered
-// without a read it needs is a 503
-async function renderUiPage(request: Request): Promise<Response> {
-	// a missing bundle is a 404 that names build:ui, and a bundle that fails to import responds 503 so a crawler retries
-	// it later
-	const uiServerImport = await importUiServer()
-	if (uiServerImport.status === "missing") {
-		return new Response("the ui is not built. run bun run build:ui", { status: 404 })
-	}
-	if (uiServerImport.status === "failed") {
-		return new Response("the ui failed to load", { status: 503 })
-	}
-	const { uiServer } = uiServerImport
-
-	// shed a visitor's render past the concurrency limit, with a short retry. a signed-in render is never counted or shed.
-	// the page guards mark the 503 private
-	const isVisitorRender = !getSessionCookie(request)
-	const renderConcurrency = toPositiveInteger(Bun.env.RENDER_CONCURRENCY, DEFAULT_RENDER_CONCURRENCY)
-	if (isVisitorRender && activeVisitorRenderCount >= renderConcurrency) {
-		return new Response("the site is busy, try again in a moment", {
-			status: 503,
-			headers: { "Retry-After": String(BUSY_RENDER_RETRY_AFTER_SECONDS) },
-		})
-	}
-
-	// render the page, counting a visitor's render until the ui's server returns the page's headers
-	if (isVisitorRender) {
-		activeVisitorRenderCount++
-	}
-	try {
-		const page = await uiServer.fetch(request)
-		return toRenderedPageResponse(request, page)
-	} finally {
-		// stop counting the render, whether it returned or threw
-		if (isVisitorRender) {
-			activeVisitorRenderCount--
-		}
-	}
-}
-
-// copy a rendered page into a response whose headers the page guards may set. a page rendered without a read it needs
-// returns a 503 with a Retry-After header
-function toRenderedPageResponse(request: Request, page: Response): Response {
-	// read and drop the marker of a page rendered without a read it needs
-	const pageHeaders = new Headers(page.headers)
-	const isDegradedRender = pageHeaders.has(DEGRADED_RENDER_HEADER)
-	pageHeaders.delete(DEGRADED_RENDER_HEADER)
-
-	// report a degraded render, and ask the client to retry it
-	if (isDegradedRender) {
-		pageHeaders.set("Retry-After", String(DEGRADED_RENDER_RETRY_AFTER_SECONDS))
-		reportError(new Error("a page rendered without a read it needs"), "page-render", {
-			path: new URL(request.url).pathname,
-		})
-	}
-	return new Response(page.body, {
-		status: isDegradedRender ? 503 : page.status,
-		statusText: isDegradedRender ? "Service Unavailable" : page.statusText,
-		headers: pageHeaders,
-	})
-}
-
 // the protected resource metadata for /mcp, which the mcp plugin serves at its own well-known path through the auth
 // handler. a request for any path after it reads the same document
 function toProtectedResourceMetadata(request: Request): Promise<Response> {
@@ -375,6 +275,13 @@ async function checkDatabaseHealth(context: Context): Promise<Response> {
 	// a result responds with the query's latency and the pool's counts
 	const databaseLatencyMs = Math.round(performance.now() - startedAt)
 	return context.json({ status: "ok", databaseLatencyMs, pool: readPoolGauges() })
+}
+
+// respond 200 if the ui's server renders a page, or 503 with the reason. the response is never cached
+async function checkReadiness(context: Context): Promise<Response> {
+	context.header("Cache-Control", NO_STORE_CACHE_CONTROL)
+	const renderReadiness = await checkRenderReadiness()
+	return context.json(renderReadiness, renderReadiness.status === "ok" ? 200 : 503)
 }
 
 // log and report an error no route handles, and respond 500 as Hono's own handler does

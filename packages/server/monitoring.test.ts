@@ -1,8 +1,44 @@
-// monitoring tests for the zero-reporting default, the traces sampler, and the error report windows
-import { expect, test } from "bun:test"
+// monitoring tests for the zero-reporting default, the traces sampler, the error report windows, and the fatal exit
+import { expect, spyOn, test } from "bun:test"
 import { HOUR_MS } from "@carlnotes/contracts/time"
-import { decideErrorReport, type ErrorReportWindow, startMonitoring, toTracesSampleRate } from "./monitoring"
+import * as Sentry from "@sentry/bun"
+import {
+	decideErrorReport,
+	type ErrorReportWindow,
+	exitOnFatalError,
+	startMonitoring,
+	toSentryRelease,
+	toTracesSampleRate,
+} from "./monitoring"
 import { saveEnvSettings } from "./savedEnvSettings"
+
+// a fatal error is logged, reported once under its stage, and exits with code 1 after the report flushes
+test("exitOnFatalError reports the error once and exits 1", async () => {
+	// stub the report, the flush, the log, and the exit, so the test process keeps running
+	const captureExceptionSpy = spyOn(Sentry, "captureException").mockImplementation(() => "")
+	const flushSpy = spyOn(Sentry, "flush").mockResolvedValue(true)
+	const consoleErrorSpy = spyOn(console, "error").mockImplementation(() => {})
+	const exitSpy = spyOn(process, "exit").mockImplementation((() => {}) as typeof process.exit)
+
+	try {
+		// exit on a connection failure, as the worker does if Temporal refuses the connection
+		const connectionError = new Error("temporal connection refused, for the fatal exit test")
+		await exitOnFatalError({ error: connectionError, stage: "startup", message: "temporal worker failed" })
+
+		// the error is logged, sent once under startup, flushed, and the exit code is 1
+		expect(consoleErrorSpy).toHaveBeenCalledWith("temporal worker failed", connectionError)
+		expect(captureExceptionSpy).toHaveBeenCalledTimes(1)
+		expect(captureExceptionSpy.mock.calls[0]?.[1]).toMatchObject({ tags: { stage: "startup" } })
+		expect(flushSpy).toHaveBeenCalledTimes(1)
+		expect(exitSpy).toHaveBeenCalledWith(1)
+	} finally {
+		// restore the real report, flush, log, and exit
+		captureExceptionSpy.mockRestore()
+		flushSpy.mockRestore()
+		consoleErrorSpy.mockRestore()
+		exitSpy.mockRestore()
+	}
+})
 
 // without a sentry dsn set, nothing starts
 test("monitoring is a no-op without its key", () => {
@@ -25,6 +61,7 @@ test("toTracesSampleRate samples each request by its path", () => {
 	// the health checks and the static files are never traced
 	expect(toRate("GET /api/health")).toBe(0)
 	expect(toRate("GET /api/health/deep")).toBe(0)
+	expect(toRate("GET /api/health/ready")).toBe(0)
 	expect(toRate("GET /assets/index-abc123.js")).toBe(0)
 	expect(toRate("GET /docs/quickstart/")).toBe(0)
 	expect(toRate("GET /favicon.ico")).toBe(0)
@@ -72,4 +109,12 @@ test("decideErrorReport drops the oldest error's window past the key limit", () 
 	expect(errorReportWindows.size).toBe(1000)
 	expect(errorReportWindows.has("api-route:error 0")).toBe(false)
 	expect(errorReportWindows.has("api-route:one more")).toBe(true)
+})
+
+// the release is SENTRY_RELEASE if set, then the commit SHA Northflank deployed, then none
+test("toSentryRelease reads SENTRY_RELEASE, then Northflank's deployed commit SHA", () => {
+	expect(toSentryRelease({ SENTRY_RELEASE: "a-release", NF_DEPLOYMENT_SHA: "abc123" })).toBe("a-release")
+	expect(toSentryRelease({ NF_DEPLOYMENT_SHA: "abc123" })).toBe("abc123")
+	expect(toSentryRelease({ SENTRY_RELEASE: "", NF_DEPLOYMENT_SHA: "" })).toBeUndefined()
+	expect(toSentryRelease({})).toBeUndefined()
 })

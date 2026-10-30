@@ -1,12 +1,14 @@
 // the workspace boundary check the check script runs: each file's import rules, each workspace's package.json rules,
-// and the runtime closure of each universal package over the installed packages
-import { toImportViolations } from "./importBoundaries"
+// the runtime closure of each universal package over the installed packages, and the web app's bundled imports
+import { isImageRuntimeFile, toImportViolations, toPackageName, toPackageValueImports } from "./importBoundaries"
 import {
 	API_PACKAGE_NAME,
+	isInsideFolder,
 	MOBILE_APP_FOLDER,
 	type SourceFile,
 	TYPE_ONLY_API_IMPORTERS,
 	UNIVERSAL_WORKSPACE_FOLDERS,
+	WEB_APP_FOLDER,
 	type Workspace,
 } from "./workspaces"
 
@@ -47,16 +49,100 @@ export function checkPackageBoundaries({
 	sourceFiles,
 	resolvePackage,
 }: CheckPackageBoundariesOptions): BoundaryCheckResult {
-	// the import rules, per file, and the package.json rules, per workspace
+	// the import rules, per file, the package.json rules, per workspace, and the web app's bundled imports
 	const importViolations = sourceFiles.flatMap((sourceFile) => toImportViolations({ workspaces, sourceFile }))
 	const packageJsonViolations = workspaces.flatMap((workspace) => toPackageJsonViolations({ workspaces, workspace }))
+	const webClosureViolations = toWebClosureViolations({ workspaces, sourceFiles })
 
 	// the runtime closure of each universal package
 	const universalWorkspaces = workspaces.filter((workspace) => UNIVERSAL_WORKSPACE_FOLDERS.has(workspace.folder))
 	const closureResults = universalWorkspaces.map((workspace) => toClosureViolations({ workspace, resolvePackage }))
 	const closureViolations = closureResults.flatMap((closureResult) => closureResult.violations)
 	const notes = closureResults.flatMap((closureResult) => closureResult.notes)
-	return { violations: [...importViolations, ...packageJsonViolations, ...closureViolations], notes }
+	const violations = [...importViolations, ...packageJsonViolations, ...webClosureViolations, ...closureViolations]
+	return { violations, notes }
+}
+
+// the workspaces, and the source files whose imports the web closure rule reads
+type ToWebClosureViolationsOptions = { workspaces: Workspace[]; sourceFiles: SourceFile[] }
+
+/**
+ * Returns a violation for each third-party package that runtime code in the web app's @carlnotes closure imports and
+ * the web app does not declare in dependencies. The web server build bundles those packages and leaves their imports
+ * external.
+ */
+export function toWebClosureViolations({ workspaces, sourceFiles }: ToWebClosureViolationsOptions): string[] {
+	// the web app, and the @carlnotes packages its runtime dependencies reach
+	const webWorkspace = workspaces.find((workspace) => workspace.folder === WEB_APP_FOLDER)
+	if (!webWorkspace) {
+		return []
+	}
+	const closureWorkspaces = toCarlnotesClosure({ workspaces, workspace: webWorkspace })
+
+	// the first place the closure imports each third-party package
+	const importLocationByPackageName = new Map<string, string>()
+	for (const closureWorkspace of closureWorkspaces) {
+		addImportLocations({ workspace: closureWorkspace, sourceFiles, importLocationByPackageName })
+	}
+
+	// name each package the web app does not declare in dependencies, the only ones the production install links
+	const webDependencyNames = new Set(webWorkspace.dependencies)
+	const undeclaredImports = [...importLocationByPackageName].filter(
+		([packageName]) => !webDependencyNames.has(packageName),
+	)
+	return undeclaredImports.map(
+		([packageName, location]) =>
+			`${WEB_APP_FOLDER}: ${location} imports ${packageName}. the web server build leaves it external. declare it in ${WEB_APP_FOLDER}/package.json dependencies`,
+	)
+}
+
+// the workspaces, and the one whose @carlnotes runtime closure is walked
+type ToCarlnotesClosureOptions = { workspaces: Workspace[]; workspace: Workspace }
+
+// the @carlnotes workspaces a workspace's runtime dependencies reach, each once
+function toCarlnotesClosure({ workspaces, workspace }: ToCarlnotesClosureOptions): Workspace[] {
+	const closureWorkspaces: Workspace[] = []
+	const pendingDependencyNames = [...workspace.dependencies]
+	while (pendingDependencyNames.length > 0) {
+		// skip a name that is no workspace, or a workspace already reached
+		const dependencyName = pendingDependencyNames.shift()
+		const dependencyWorkspace = workspaces.find((candidate) => candidate.name === dependencyName)
+		if (!dependencyWorkspace || closureWorkspaces.includes(dependencyWorkspace)) {
+			continue
+		}
+
+		// keep the workspace, and walk its own runtime dependencies next
+		closureWorkspaces.push(dependencyWorkspace)
+		pendingDependencyNames.push(...dependencyWorkspace.dependencies)
+	}
+	return closureWorkspaces
+}
+
+// the closure workspace whose files are read, the source files, and the map each first import location is added to
+type AddImportLocationsOptions = {
+	workspace: Workspace
+	sourceFiles: SourceFile[]
+	importLocationByPackageName: Map<string, string>
+}
+
+// add the first location of each third-party package that a workspace's runtime files import
+function addImportLocations({ workspace, sourceFiles, importLocationByPackageName }: AddImportLocationsOptions): void {
+	// the workspace's files the image runs
+	const runtimeFiles = sourceFiles.filter(
+		(sourceFile) =>
+			isInsideFolder(sourceFile.filePath, workspace.folder) && isImageRuntimeFile({ workspace, sourceFile }),
+	)
+
+	// each third-party value import, keeping the first location found
+	for (const sourceFile of runtimeFiles) {
+		for (const parsedImport of toPackageValueImports(sourceFile)) {
+			// a @carlnotes import is a workspace the walk already covers
+			const packageName = toPackageName(parsedImport.importPath)
+			if (!packageName.startsWith("@carlnotes/") && !importLocationByPackageName.has(packageName)) {
+				importLocationByPackageName.set(packageName, `${sourceFile.filePath}:${parsedImport.lineNumber}`)
+			}
+		}
+	}
 }
 
 // the workspaces and the one whose package.json is checked

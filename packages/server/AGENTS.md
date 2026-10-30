@@ -9,6 +9,8 @@ built-in, or a server SDK, and the package every server package imports. `@carln
 request's transaction name and measurements, the stage and query spans, and the threshold warnings. The send-time redaction
 every outgoing event passes is `redactEvent` and `redactTransaction` in `monitoringRedaction.ts`. `reportError` sends one
 stage's one error ten times an hour and skips the rest, and the next hour's first report says how many were skipped.
+`exitOnFatalError` logs and reports an error that stops a process, waits for the report to send, and exits with code
+1. Every report is tagged with the release `toSentryRelease` reads, the deployed commit.
 `runtimeGauges.ts` logs a long-running process's connection pool and event loop delay once a minute, reading the delay
 from the histogram in `eventLoopDelay.ts`. Each line's `instance` field names the replica by its host name, so the
 replicas' lines can be told apart. `analytics.ts` holds the PostHog clients: `trackEvent` for the user events keyed to

@@ -13,8 +13,10 @@ at the root import it by name.
   duration and the counts. In dev it also logs one line per request with the same numbers and the cache keys that
   missed. `queryBudgets.test.ts` holds the cached routes' query budgets, each a route requested twice against the
   connection pool and Redis stubs. `index.ts` also serves `/api/health`, which the platform polls and which sends no
-  query, and `/api/health/deep`, which runs one query and returns the connection pool's counts for a monitor. Neither
-  looks up a session. After them, `appVersionGate.ts` runs on every `/api` path ahead of the session lookup: a
+  query, `/api/health/deep`, which runs one query and returns the connection pool's counts for a monitor, and
+  `/api/health/ready`, the readiness probe, which renders the privacy page through `uiServer.ts` with no cookie and
+  responds 503 with a reason if it cannot, reusing one render for five seconds, tested in `readiness.test.ts`. None of
+  them looks up a session. After them, `appVersionGate.ts` runs on every `/api` path ahead of the session lookup: a
   request whose platform header is `ios` or `android` and whose app version is below that platform's minimum is
   rejected with 426 and the minimum and the store url, and every other request passes. The minimums live in
   `mobileMinimumVersions.ts`: one row per platform in `mobile_minimum_versions`, read through a one-minute Redis
@@ -30,21 +32,25 @@ at the root import it by name.
   `apps/web/dist/client`. `nightshift.ts` serves the Nightshift component browser's static Storybook from
   `apps/web/dist/nightshift` at `/nightshift/`. It sets its own frame policy, opener isolation, and `noindex`, gives
   every fixed-name file an `ETag`, and caches only its hashed assets immutably, tested in `nightshift.test.ts`.
-  `index.ts` renders every other page through the web app's server build in `apps/web/dist/server`, the paths
-  `bundlePaths.ts` names. A page render sets the `DEGRADED_RENDER_HEADER` from `@carlnotes/contracts/seo` if a required
-  read fails, and that page returns a 503 with a `Retry-After`, is reported, and is never cached at the edge. Ahead of a
-  page render, `index.ts` limits a visitor's origin requests by address through `rateLimit.ts`, redirects a page url
-  with a click id (`fbclid`, `gclid`, and the like) permanently to the url without it, which is the one the edge caches,
-  and sheds a visitor's render past `RENDER_CONCURRENCY` with a 503 and a two-second retry while the edge serves its
-  stale copy; a signed-in render is never shed. Every response includes the content security policy, `Referrer-Policy`,
-  and `X-Content-Type-Options`, and an unhashed public file from the ui bundle is cached an hour in the browser and a
-  day at the edge under the `rendered` tag. `contentSecurityPolicy.ts` holds `BASELINE_POLICY_DIRECTIVES`, the
-  directives every policy ends with: `object-src 'none'`, and `base-uri` and `form-action` on this origin. Its
-  `toContentSecurityPolicy` builds a policy from a route's own directives and the baseline, for the default policy in
-  `index.ts`, `nightshift.ts`, and `favicons.ts`. It also holds `FRAME_SOURCE_DIRECTIVE`, the frames a page may load:
-  this origin, YouTube's privacy-enhanced player, and Cloudflare's Turnstile challenge. The default policy and the
-  component browser's policy both use it, so a story frames what the app frames. `responseHeaders.ts` holds
-  `NOINDEX_HEADER`, the `X-Robots-Tag: noindex` header that `documents.ts` and `nightshift.ts` set.
+  `index.ts` renders every other page through `uiServer.ts`, which imports the web app's server build in
+  `apps/web/dist/server`, the paths `bundlePaths.ts` names, before the api serves. With `NODE_ENV=production`, a boot
+  that cannot import the build reports the error in the `startup` stage and exits before it listens, tested by booting
+  the entry in `uiServer.test.ts`. A page render sets the `DEGRADED_RENDER_HEADER` from `@carlnotes/contracts/seo` if a
+  required read fails, and that page returns a 503 with a `Retry-After`, is reported, and is never cached at the edge.
+  Any other page rendered with a 5xx status is reported in the `page-render` stage too.
+  Ahead of a page render, `index.ts` limits a visitor's origin requests by address through `rateLimit.ts` and redirects
+  a page url with a click id (`fbclid`, `gclid`, and the like) permanently to the url without it, which is the one the
+  edge caches. `uiServer.ts` sheds a visitor's render past `RENDER_CONCURRENCY` with a 503 and a two-second retry while
+  the edge serves its stale copy; a signed-in render is never shed. Every response includes the content security policy,
+  `Referrer-Policy`, and `X-Content-Type-Options`, and an unhashed public file from the ui bundle is cached an hour in
+  the browser and a day at the edge under the `rendered` tag. `contentSecurityPolicy.ts` holds
+  `BASELINE_POLICY_DIRECTIVES`, the directives every policy ends with: `object-src 'none'`, and `base-uri` and
+  `form-action` on this origin. Its `toContentSecurityPolicy` builds a policy from a route's own directives and the
+  baseline, for the default policy in `index.ts`, `nightshift.ts`, and `favicons.ts`. It also holds
+  `FRAME_SOURCE_DIRECTIVE`, the frames a page may load: this origin, YouTube's privacy-enhanced player, and Cloudflare's
+  Turnstile challenge. The default policy and the component browser's policy both use it, so a story frames what the app
+  frames. `responseHeaders.ts` holds `NOINDEX_HEADER`, the `X-Robots-Tag: noindex` header that `documents.ts` and
+  `nightshift.ts` set.
 - Domain folders: `topic/`, `team/`, `chat/`, `invite/`, `note/`, `podcast/`, `share/`, `tool/`, `mcp/`. Root files
   serve more than one domain (auth, billing, admin, avatars, favicons, profiles, SEO, `likePattern.ts` for the contains
   pattern the name and text searches match with, `canonicalJson.ts` for the json a keyed digest signs, `content.ts` for

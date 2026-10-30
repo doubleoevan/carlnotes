@@ -168,3 +168,18 @@ test("a page rendered without a read it needs responds 503 with no edge copy", a
 	expect(response.headers.has(DEGRADED_RENDER_HEADER)).toBe(false)
 	expect(reportErrorSpy).toHaveBeenCalledWith(expect.any(Error), "page-render", { path: "/topics/abc123" })
 })
+
+// a page the ui's server renders as a 500 reaches the client as a 500, and is reported once with its path
+test("a page rendered as a 500 is reported once and responds 500", async () => {
+	// a server entry whose page is a server error, and the report it sends
+	const reportErrorSpy = spyOn(monitoring, "reportError").mockImplementation(() => {})
+	const bundleDirectory = await createBundleDirectory()
+	const failingServerEntryText = 'export default { fetch: () => new Response("the page failed", { status: 500 }) }'
+	await writeFile(join(bundleDirectory, UI_SERVER_ENTRY), failingServerEntryText)
+	const response = await withWorkingDirectory(bundleDirectory, () => request("/topics/abc123"))
+
+	// the client gets the 500, and Sentry gets one page-render report
+	expect(response.status).toBe(500)
+	expect(reportErrorSpy).toHaveBeenCalledTimes(1)
+	expect(reportErrorSpy).toHaveBeenCalledWith(expect.any(Error), "page-render", { path: "/topics/abc123" })
+})

@@ -1,7 +1,7 @@
 name: CI
 
-# run the quality gate on pushes to main and on PRs into main.
-# no deploy here. Northflank deploys on its own git trigger. no secrets, database, or LiteLLM: the gate is offline
+# run the quality gate and the image smoke test on pushes to main and on PRs into main, and start the release on a push
+# to main once both pass. the gate and the smoke test are offline: no secrets, no hosted database, no LiteLLM
 on:
   push:
     branches: [main]
@@ -39,6 +39,54 @@ jobs:
           disable_search: true
           token: ${{ secrets.CODECOV_TOKEN }}
           fail_ci_if_error: false
+
+  # build the production image and boot it against an empty Postgres with dummy settings. it fails on a build step, a
+  # boot that exits, or any page or health route that does not respond 200
+  image-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # run the builder from a buildkit image pinned by digest
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+        with:
+          driver-opts: image=moby/buildkit@sha256:99368f3e46177c6405b9740e4461d91cee004128daeecca78d4ceac50ec1da5c # v0.34.1
+      # build with Cloudflare's public always-pass Turnstile key and the GitHub Actions layer cache, which only a push to
+      # main writes, so pull requests never evict it
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          load: true
+          tags: carlnotes-smoke:ci
+          build-args: VITE_TURNSTILE_SITE_KEY=1x00000000000000000000AA
+          cache-from: type=gha
+          cache-to: ${{ github.event_name == 'push' && 'type=gha,mode=max' || '' }}
+      # the same script bun run smoke:image runs locally. this job installs no Bun, so it calls the script directly
+      - run: bash scripts/image-smoke.sh carlnotes-smoke:ci
+
+  # start Northflank's release-main flow for the commit that passed the gate and the image smoke, on a push to main only.
+  # the flow builds that commit, migrates, and deploys. a run the api rejects fails this job. it skips until the
+  # NORTHFLANK_PIPELINE_ID repository variable is set. the token is a secret of the production environment, which only
+  # main may deploy to
+  release:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.NORTHFLANK_PIPELINE_ID != ''
+    needs: [gate, image-smoke]
+    environment: production
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          NORTHFLANK_API_TOKEN: ${{ secrets.NORTHFLANK_API_TOKEN }}
+          NORTHFLANK_PIPELINE_ID: ${{ vars.NORTHFLANK_PIPELINE_ID }}
+          NORTHFLANK_RELEASE_STAGE: ${{ vars.NORTHFLANK_RELEASE_STAGE }}
+          RELEASE_SHA: ${{ github.sha }}
+        run: |
+          curl --fail-with-body -sS -X POST \
+            -H "Authorization: Bearer $NORTHFLANK_API_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "{\"arguments\": {\"sha\": \"$RELEASE_SHA\"}}" \
+            "https://api.northflank.com/v1/projects/carlnotes-prd/pipelines/$NORTHFLANK_PIPELINE_ID/release-flows/$NORTHFLANK_RELEASE_STAGE/runs"
 
   # prove Metro bundles the mobile app through Bun's isolated install: export both platforms' JavaScript bundles,
   # with no simulator and no secret. it stays out of preflight because the bundle takes minutes per run

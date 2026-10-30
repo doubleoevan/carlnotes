@@ -23,7 +23,9 @@ and `@carlnotes/contracts`, with `drizzle-orm` and `@neondatabase/serverless`.
   default, or `DATABASE_POOL_COUNT`. `DATABASE_POOL_MAX` sets the size itself instead. Until the read completes, and if
   it fails, the pool holds 15 connections, and a failed read is reported. A process with no `DATABASE_URL`, such as a
   test, keeps the default and reads nothing. The size is logged at startup. A request waiting for a connection fails
-  after `DATABASE_CONNECT_TIMEOUT_MS`, 10 seconds by default. A short-lived job keeps the default. `isUniqueViolation`
+  after `DATABASE_CONNECT_TIMEOUT_MS`, 10 seconds by default. A short-lived job keeps the default. If
+  `DATABASE_WS_PROXY` is set, `configureWebSocketProxy` sends every connection through that Neon WebSocket proxy with
+  TLS off, which only the image smoke test does. `isUniqueViolation`
   is true if an error is Postgres rejecting a duplicate key. `runWithIterativeIndexScan` runs a ranked read in a
   transaction that sets pgvector's `hnsw.iterative_scan` to `strict_order`, so an HNSW scan continues past its first
   candidates until the filters after it fill the read's limit. `isFindingShown` keeps a finding no user rated down,

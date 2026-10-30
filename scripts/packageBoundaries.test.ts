@@ -7,6 +7,7 @@ import {
 	type ResolvePackage,
 	toClosureViolations,
 	toPackageJsonViolations,
+	toWebClosureViolations,
 } from "./packageBoundaries"
 import { UNIVERSAL_WORKSPACE_FOLDERS, type Workspace } from "./workspaces"
 import {
@@ -115,6 +116,29 @@ test("toClosureViolations notes an unresolved package and skips devDependencies"
 	})
 })
 
+// the web app declares each package that runtime code in its @carlnotes closure imports, outside tests and packages it
+// never reaches
+test("toWebClosureViolations flags a package the web app's closure imports that the web app does not declare", () => {
+	// zod in contracts and hono in the api client package, a test's import, and a server package the web never reaches
+	const sourceFiles = [
+		{ filePath: "packages/contracts/chat.ts", fileText: 'import { z } from "zod"\n' },
+		{ filePath: "packages/contracts/chat.test.ts", fileText: 'import fc from "fast-check"\n' },
+		{ filePath: "packages/client/apiClient.ts", fileText: 'import { hc } from "hono/client"\n' },
+		{ filePath: "packages/db/index.ts", fileText: 'import { sql } from "drizzle-orm"\n' },
+	]
+
+	// the web app without zod and hono fails on both
+	expect(toWebClosureViolations({ workspaces: FIXTURE_WORKSPACES, sourceFiles })).toEqual([
+		"apps/web: packages/client/apiClient.ts:1 imports hono. the web server build leaves it external. declare it in apps/web/package.json dependencies",
+		"apps/web: packages/contracts/chat.ts:1 imports zod. the web server build leaves it external. declare it in apps/web/package.json dependencies",
+	])
+
+	// the web app that declares both passes
+	const webWithExternals = { ...WEB_WORKSPACE, dependencies: [...WEB_WORKSPACE.dependencies, "zod", "hono"] }
+	const workspaces = FIXTURE_WORKSPACES.map((workspace) => (workspace === WEB_WORKSPACE ? webWithExternals : workspace))
+	expect(toWebClosureViolations({ workspaces, sourceFiles })).toEqual([])
+})
+
 // the whole check gathers the import, package.json, and closure rules and passes a clean tree
 test("checkPackageBoundaries passes a clean tree and gathers violations across the rules", () => {
 	const sourceFiles = [
@@ -140,6 +164,7 @@ test("checkPackageBoundaries passes a clean tree and gathers violations across t
 		name: "@carlnotes/core",
 		dependencies: ["@carlnotes/db"],
 		devDependencies: [],
+		peerDependencies: [],
 		references: [],
 	}
 	const { violations } = checkPackageBoundaries({

@@ -116,6 +116,11 @@ against `apps/mobile/parity.md`, the purchase path check (`scripts/check-purchas
 portal out of the mobile app's reach, the contract freeze check against `contracts/`, `tsc -b`, the Temporal workflow
 bundle check, and the test suite. Green before any hand-off.
 
+The package boundary check also fails on a third-party import its workspace does not declare, a value import of a dev
+dependency in code the production image runs, and a package that the web app's `@carlnotes` packages import but
+`apps/web` does not declare. The Docker build runs `bun run check:built-dependencies` after `build:ui`. It fails on a
+package that the web server build leaves external but `apps/web` does not declare in `dependencies`.
+
 ## Rules (always-on)
 
 - Mobile changes start with the matching web implementation and its Nightshift components. Reuse the existing

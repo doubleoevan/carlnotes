@@ -7,21 +7,22 @@ sweep reads live here beside it.
 Entries: `temporal.ts` (the worker, run as `bun run temporal` in production and `bun run dev:temporal:watch` in dev,
 with its scan concurrency set by `SCAN_CONCURRENCY`, the concurrency of each of its attachment and Source screening
 Workers by `SCREEN_CONCURRENCY`, and a Worker of its own for the `scan-closing` queue that records a scan's outcome
-apart from the scan slots), `schedule.ts` (the sweep, `bun run schedule`, or `bun run dev:worker` on a minute's
-interval: it starts as many scheduled scans as the backlog allows, a daily topic past its owner's daily scans cutoff
-once a week, then copies the viewer and listener counts through `syncViewerCounts.ts`, retries the pending object
-deletions through `retryPendingObjectDeletions.ts`, mails the support inbox one reminder for each content report open
-past twelve hours through `reportReminders.ts`, and reports the day's spend across every user through
-`dailySpend.ts`, which warns past `GLOBAL_DAILY_SPEND_ALERT_USD`), `scanQueue.ts` (the
-sweep's view of the scan queue: the start of the rows a dying caller never dispatched, the queue's report, and how many
-Scans a sweep may start, `SCAN_DISPATCH_LIMIT` minus the backlog), `scheduledTopicLimits.ts` (the limits that the sweep
-reads once per owner inside one request memo: the daily topic limit, the daily topics that scan weekly past the daily
-scans cutoff, with each owner's cutoff cached in Redis for an hour, and the owners whose key budget is spent, with
-`scheduledTopicTestFixtures.ts` for the scheduled topic that its tests and the sweep's share),
-`resetMonthlyBudgets.ts` (the monthly budget reset, a daily job run as `bun run reset:monthly-budgets`, which replaces
-each user's LiteLLM key through `@carlnotes/models/litellm`), and `docsSync.ts` (`bun run docs:embed`, which splits
-the pages under `apps/docs/src/content/docs` into sections and embeds them into `docs_chunks`, the sections chat quotes
-for a question about the app; a section whose hash is unchanged is not embedded again).
+apart from the scan slots. A failure that stops it is reported in the `startup` stage before its Workers poll and in
+`worker` after, and the process exits once the report sends), `schedule.ts` (the sweep, `bun run schedule`, or
+`bun run dev:worker` on a minute's interval: it starts as many scheduled scans as the backlog allows, a daily topic past
+its owner's daily scans cutoff once a week, then copies the viewer and listener counts through `syncViewerCounts.ts`,
+retries the pending object deletions through `retryPendingObjectDeletions.ts`, mails the support inbox one reminder for
+each content report open past twelve hours through `reportReminders.ts`, and reports the day's spend across every user
+through `dailySpend.ts`, which warns past `GLOBAL_DAILY_SPEND_ALERT_USD`), `scanQueue.ts` (the sweep's view of the scan
+queue: the start of the rows a dying caller never dispatched, the queue's report, and how many Scans a sweep may start,
+`SCAN_DISPATCH_LIMIT` minus the backlog), `scheduledTopicLimits.ts` (the limits that the sweep reads once per owner
+inside one request memo: the daily topic limit, the daily topics that scan weekly past the daily scans cutoff, with each
+owner's cutoff cached in Redis for an hour, and the owners whose key budget is spent, with
+`scheduledTopicTestFixtures.ts` for the scheduled topic that its tests and the sweep's share), `resetMonthlyBudgets.ts`
+(the monthly budget reset, a daily job run as `bun run reset:monthly-budgets`, which replaces each user's LiteLLM key
+through `@carlnotes/models/litellm`), and `docsSync.ts` (`bun run docs:embed`, which splits the pages under
+`apps/docs/src/content/docs` into sections and embeds them into `docs_chunks`, the sections chat quotes for a question
+about the app; a section whose hash is unchanged is not embedded again).
 
 - The sweep and the reset each run under a database claim from `@carlnotes/db/claim`, so two overlapping runs cannot
   do the work twice. Each takes the claim's abort signal and checks it between batches: the sweep before each stage and

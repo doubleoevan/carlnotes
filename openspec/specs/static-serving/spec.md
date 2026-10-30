@@ -2,15 +2,25 @@
 
 ## Purpose
 TBD - created by archiving change serve-ui-bundle-from-api. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: A missing bundle degrades rather than crashing
 
-The server SHALL start and serve the API when `apps/web/dist` is absent, which is the normal state in local development where Vite serves the UI and proxies `/api`. A static lookup or fallback that finds no file SHALL answer 404 rather than throwing.
+Outside production, the server SHALL start and serve the API when `apps/web/dist` is absent, which is the normal state
+in local development where Vite serves the UI and proxies `/api`. A static lookup or fallback that finds no file SHALL
+answer 404 rather than throwing. With `NODE_ENV` set to `production`, a missing or failing web server build SHALL
+instead stop the boot, as the deploy-mechanics capability states.
 
 #### Scenario: The api runs in dev with no bundle built
 
 - **WHEN** the server starts with no `apps/web/dist` directory and a request arrives for `/`
 - **THEN** the server is running, the API routes work, and the request answers 404 without an unhandled error
+
+#### Scenario: Production does not degrade
+
+- **WHEN** the server starts with `NODE_ENV=production` and no web server build
+- **THEN** the process exits non-zero before it listens, instead of serving 404 pages
 
 ### Requirement: Built docs assets cache like the UI bundle's
 
@@ -228,4 +238,3 @@ working and a `/nightshift` request SHALL respond 404.
 
 - **WHEN** the server starts with no built component browser and a request arrives for `/nightshift/`
 - **THEN** every other route works, and the request responds 404 without an unhandled error
-

@@ -48,6 +48,12 @@ export const TEST_FILE_PATTERN = /(?:\.test\.tsx?|TestFixtures\.ts)$/
 /** A story file, which no app ships. */
 export const STORY_FILE_PATTERN = /\.stories\.tsx?$/
 
+/** The apps the production image runs. The image also includes every package. */
+export const IMAGE_APP_FOLDERS = new Set(["apps/api", "apps/worker", WEB_APP_FOLDER])
+
+/** The web app's own source, which its builds bundle. The files beside it configure the builds. */
+export const WEB_SOURCE_FOLDER = `${WEB_APP_FOLDER}/src`
+
 /**
  * A workspace's package.json and tsconfig: its repo folder, its name, its dependency names, and the folders its tsconfig
  * references.
@@ -57,6 +63,7 @@ export type Workspace = {
 	name: string
 	dependencies: string[]
 	devDependencies: string[]
+	peerDependencies: string[]
 	references: string[]
 }
 
