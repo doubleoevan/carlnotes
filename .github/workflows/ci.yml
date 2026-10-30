@@ -66,27 +66,26 @@ jobs:
       # the same script bun run smoke:image runs locally. this job installs no Bun, so it calls the script directly
       - run: bash scripts/image-smoke.sh carlnotes-smoke:ci
 
-  # start Northflank's release-main flow for the commit that passed the gate and the image smoke, on a push to main only.
-  # the flow builds that commit, migrates, and deploys. a run the api rejects fails this job. it skips until the
-  # NORTHFLANK_PIPELINE_ID repository variable is set. the token is a secret of the production environment, which only
-  # main may deploy to
+  # start Northflank's release-main workflow for the commit that passed the gate and the image smoke, on a push to main
+  # only. the workflow builds that commit, migrates, and deploys. a run the api rejects fails this job. it skips until
+  # the NORTHFLANK_WORKFLOW_ID repository variable is set. the token is a secret of the production environment, which
+  # only main may deploy to
   release:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.NORTHFLANK_PIPELINE_ID != ''
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.NORTHFLANK_WORKFLOW_ID != ''
     needs: [gate, image-smoke]
     environment: production
     runs-on: ubuntu-latest
     steps:
       - env:
           NORTHFLANK_API_TOKEN: ${{ secrets.NORTHFLANK_API_TOKEN }}
-          NORTHFLANK_PIPELINE_ID: ${{ vars.NORTHFLANK_PIPELINE_ID }}
-          NORTHFLANK_RELEASE_STAGE: ${{ vars.NORTHFLANK_RELEASE_STAGE }}
+          NORTHFLANK_WORKFLOW_ID: ${{ vars.NORTHFLANK_WORKFLOW_ID }}
           RELEASE_SHA: ${{ github.sha }}
         run: |
           curl --fail-with-body -sS -X POST \
             -H "Authorization: Bearer $NORTHFLANK_API_TOKEN" \
             -H "Content-Type: application/json" \
             -d "{\"arguments\": {\"sha\": \"$RELEASE_SHA\"}}" \
-            "https://api.northflank.com/v1/projects/carlnotes-prd/pipelines/$NORTHFLANK_PIPELINE_ID/release-flows/$NORTHFLANK_RELEASE_STAGE/runs"
+            "https://api.northflank.com/v1/projects/carlnotes-prd/workflows/$NORTHFLANK_WORKFLOW_ID/runs"
 
   # prove Metro bundles the mobile app through Bun's isolated install: export both platforms' JavaScript bundles,
   # with no simulator and no secret. it stays out of preflight because the bundle takes minutes per run

@@ -88,7 +88,7 @@ the web service, and prefix routes for `/api`, `/mcp`, and `/.well-known/oauth-a
 `/.well-known/oauth-protected-resource` route to the app service, with higher-priority routes sending the image and feed
 paths under `/api` (`/api/podcast-covers`, `/api/podcast-feeds`, `/api/favicons`, `/api/avatars`, `/api/team-avatars`,
 and the `preview.png` and `card.png` paths) to the web service. Every Cloudflare cache rule SHALL keep its meaning,
-since no path changes. The `release-main` pipeline SHALL deploy the web service from the same build after the app
+since no path changes. The `release-main` workflow SHALL deploy the web service from the same build after the app
 service. Rolling back SHALL be pointing the base path back at the app service and removing the prefix routes.
 
 #### Scenario: A page and its api call reach different services
