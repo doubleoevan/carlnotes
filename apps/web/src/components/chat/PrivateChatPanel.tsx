@@ -1,7 +1,7 @@
 import { authClient } from "@carlnotes/client/authClient"
 import type { ChatPage } from "@carlnotes/client/chatClient"
 import { toAvatarVersion } from "@carlnotes/contracts/avatars"
-import { CLEAR_CHAT_COPY } from "@carlnotes/core/lib/chatCopy"
+import { CLEAR_CHAT_COPY, NEW_TOPIC_CHAT_COPY } from "@carlnotes/core/lib/chatCopy"
 import { useNavigate } from "@tanstack/react-router"
 import { lazy, Suspense, useState } from "react"
 import { toSignupNavigation } from "@/components/session/signupPrompts"
@@ -21,13 +21,6 @@ const ChatMessages = lazy(() =>
 	import("./ChatMessages").then((chatMessages) => ({ default: chatMessages.ChatMessages })),
 )
 
-// the empty question box's line in the new-topic chat: carl asks for the first topic, then for the next
-const FIRST_TOPIC_PLACEHOLDER = "Let's make your first topic. You know the one."
-const NEW_TOPIC_PLACEHOLDER = "Let's make a topic. You know the one."
-
-// what an empty new-topic chat opens with
-const NEW_TOPIC_OPENING_LINE = "Tell me what you want to keep up with. I'll shape it into a topic."
-
 // the words the panel shows for a conversation: the private chat's, or the new-topic chat's
 function toChatCopy(
 	page: ChatPage,
@@ -41,9 +34,9 @@ function toChatCopy(
 		}
 	}
 	return {
-		headerName: "Give Carl a topic. You know the one.",
-		placeholder: isFirstTopic ? FIRST_TOPIC_PLACEHOLDER : NEW_TOPIC_PLACEHOLDER,
-		openingLine: NEW_TOPIC_OPENING_LINE,
+		headerName: NEW_TOPIC_CHAT_COPY.name,
+		placeholder: isFirstTopic ? NEW_TOPIC_CHAT_COPY.firstTopicPlaceholder : NEW_TOPIC_CHAT_COPY.placeholder,
+		openingLine: NEW_TOPIC_CHAT_COPY.openingLine,
 		clearNote: CLEAR_CHAT_COPY.private,
 	}
 }

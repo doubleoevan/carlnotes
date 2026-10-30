@@ -13,10 +13,11 @@ import { Icon } from "@/components/primitives/icon"
 import { Text } from "@/components/primitives/text"
 import { ChatAuthor } from "./ChatAuthor"
 import { ChatMarkdown } from "./ChatMarkdown"
-import { ChatAttachmentChips, ChatLinkPreviews, ChatMessageAction, CopyButton } from "./ChatMessageParts"
+import { ChatLinkPreviews, ChatMessageAction, CopyButton } from "./ChatMessageParts"
+import { ChatRoomAttachments } from "./ChatRoomAttachments"
 
 /**
- * Adapts the shared room message and attachment chips to native controls.
+ * Adapts the shared room message and its files to native controls.
  */
 export function ChatRoomMessageBubble(props: ChatRoomMessageBubbleProps) {
 	return <SharedChatRoomMessageBubble {...props} elements={CHAT_ROOM_MESSAGE_ELEMENTS} />
@@ -67,7 +68,7 @@ const CHAT_ROOM_MESSAGE_ELEMENTS: ChatRoomMessageElements = {
 			{isLoading && !previews.length && <Text className="text-xs text-muted-foreground">Loading preview…</Text>}
 		</>
 	),
-	Attachments: ({ chatMessage }) => <ChatAttachmentChips attachments={chatMessage.attachments} />,
+	Attachments: ChatRoomAttachments,
 	Footer: ({ chatMessage, isOwnChatMessage, isModel, canDelete, onDeleteChatMessage, onReply, onReport, now }) => (
 		<View className={cn("mt-1 flex-row flex-wrap items-center gap-2", isOwnChatMessage && "flex-row-reverse")}>
 			<CopyButton text={chatMessage.content} />

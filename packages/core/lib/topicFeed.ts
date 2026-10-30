@@ -124,3 +124,17 @@ export function toggleTopicResourceKind({
 	}
 	return nextResourceKinds.size === 0 ? new Set(allResourceKinds) : nextResourceKinds
 }
+
+/**
+ * Returns how many topics a section of the feed has, or null while the feed is still loading.
+ */
+export function toSectionTopicCount(topicFeed: TopicFeedResponse | null, sectionKey: string): number | null {
+	return topicFeed?.sections.find((section) => section.key === sectionKey)?.topics.length ?? null
+}
+
+/**
+ * Returns whether a loaded feed belongs to a user who owns and follows no topics.
+ */
+export function isUserTopicFeedEmpty(topicFeed: TopicFeedResponse | null): boolean {
+	return toSectionTopicCount(topicFeed, "yours") === 0 && toSectionTopicCount(topicFeed, "subscribed") === 0
+}

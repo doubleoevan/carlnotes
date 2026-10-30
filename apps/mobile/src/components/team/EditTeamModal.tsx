@@ -12,7 +12,7 @@ import { router } from "expo-router"
 import { ImagePlus } from "lucide-react-native"
 import { useRef, useState } from "react"
 import { View } from "react-native"
-import { chooseAvatarBody } from "@/components/avatar/avatarUpload"
+import { useAvatarPicker } from "@/components/avatar/avatarUpload"
 import { MultiCombobox } from "@/components/common/MultiCombobox"
 import { Sheet } from "@/components/common/Sheet"
 import { TeamInviteFields } from "@/components/invite/TeamInviteFields"
@@ -50,6 +50,11 @@ export function EditTeamModal({
 	const [isNewTopicOpen, setIsNewTopicOpen] = useState(false)
 	const [createdTopics, setCreatedTopics] = useState<TopicOption[]>([])
 	const mutation = usePageMutation()
+	// the picked team image waits for the save, so its copy is kept until the sheet closes
+	const teamAvatarPicker = useAvatarPicker({
+		onPicked: async (body) => fields.setAvatarFile(body),
+		isFileKept: true,
+	})
 
 	// combine saved, available, and newly created topic choices
 	const topics = useQuery({
@@ -137,22 +142,19 @@ export function EditTeamModal({
 						onNameBlur={() => void fields.checkName(createdTeamName.current ?? team?.name)}
 						hasNameError={Boolean(fields.nameRejection)}
 						avatar={
-							<Button
-								variant="outline"
-								accessibilityLabel="Choose team image"
-								disabled={mutation.isPending}
-								onPress={() =>
-									void mutation.run(async () => {
-										const body = await chooseAvatarBody()
-										if (body) {
-											fields.setAvatarFile(body)
-										}
-									})
-								}
-							>
-								<Icon as={ImagePlus} />
-								<Text>{fields.avatarFile ? "Image selected · change" : "Choose team image"}</Text>
-							</Button>
+							<>
+								<Button
+									ref={teamAvatarPicker.triggerRef}
+									variant="outline"
+									accessibilityLabel="Choose team image"
+									disabled={mutation.isPending || teamAvatarPicker.isPicking}
+									onPress={teamAvatarPicker.openFilePicker}
+								>
+									<Icon as={ImagePlus} />
+									<Text>{fields.avatarFile ? "Image selected · change" : "Choose team image"}</Text>
+								</Button>
+								{teamAvatarPicker.filePickerMenu}
+							</>
 						}
 						topics={
 							<MultiCombobox

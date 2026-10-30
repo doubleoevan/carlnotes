@@ -1,5 +1,6 @@
 // attachment tests: the content-type resolver, the table text, the topic context hash, and the ingestion
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
+import { DOCX_TYPE, XLSX_TYPE } from "@carlnotes/contracts/attachmentTypes"
 import { MAX_ATTACHMENT_CONTEXT_CHARS } from "@carlnotes/contracts/topics"
 import { restoreConnectionPool, stubConnectionPool, toTableRow } from "@carlnotes/db/connectionPoolStub"
 import { attachments } from "@carlnotes/db/schema/topics"
@@ -7,13 +8,7 @@ import * as store from "@carlnotes/db/store"
 import { FetchStatusError } from "@carlnotes/server/publicFetch"
 // the methods to test, and the ingestion, which the pool stub keeps off the database
 import { ingestAttachment, ingestUrlAttachment, toTopicContextHash } from "./attach"
-import {
-	AttachmentValidationError,
-	DOCX_TYPE,
-	isTableFileType,
-	toCanonicalContentType,
-	XLSX_TYPE,
-} from "./attachContentType"
+import { AttachmentValidationError, isTableFileType, toCanonicalContentType } from "./attachContentType"
 import { MAX_TABLE_CHARS, MAX_TABLE_ROWS, toTableText } from "./attachTable"
 import * as scrape from "./scrape"
 import * as temporalClient from "./temporalClient"
@@ -54,8 +49,6 @@ test("isTableFileType admits only the types that have rows", () => {
 
 // a workbook row that reads like a sheet marker must not open one, no matter how its cells were split
 test("toTableText reads a marker-looking workbook row as data", () => {
-	const XLSX_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-
 	// two cells that each pass on their own join into a line that matches the marker
 	const forgedRow = toTableText({
 		serializedText: "=== sheet: Real ===\nHeader\n=== sheet: a,b ===",

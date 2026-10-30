@@ -1,6 +1,17 @@
+import { NEW_TOPIC_CHAT_WORDS } from "./safeChatMarkdown"
+
 // shared chat confirmations and completion notices
 export const CHAT_QUESTION_PLACEHOLDER = "Hand-crafted notes are richer…"
 // what the panel asks a visitor, and the composer it shows them disabled
+// the new-topic chat's words: its name, the empty question box's line for a first topic and for the next, and what
+// an empty conversation opens with
+export const NEW_TOPIC_CHAT_COPY = {
+	name: NEW_TOPIC_CHAT_WORDS,
+	firstTopicPlaceholder: "Let's make your first topic. You know the one.",
+	placeholder: "Let's make a topic. You know the one.",
+	openingLine: "Tell me what you want to keep up with. I'll shape it into a topic.",
+}
+
 export const VISITOR_CHAT_COPY = {
 	actionLine: "Sign up to begin the conversation",
 	placeholder: "Carl is waiting for your topic…",

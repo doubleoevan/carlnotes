@@ -1,4 +1,5 @@
 // the helpers with no larger subject of their own to live under
+import { CHAT_ATTACHMENT_ACCEPT, TOPIC_ATTACHMENT_ACCEPT } from "@carlnotes/contracts/attachmentTypes"
 import type { TopicFinding } from "@carlnotes/contracts/findings"
 import { File, FileText, Headphones, type LucideIcon, Play } from "lucide-react"
 import { toast } from "sonner"
@@ -159,15 +160,12 @@ export function toLinkClickHandler(
 /**
  * What the topic prompt's file picker shows.
  */
-export const FILE_PICKER_ACCEPT =
-	"image/*,application/pdf,.pdf,text/*,.txt,.md,.markdown,.csv,.tsv,.json,.log,.docx,.xlsx"
+export const FILE_PICKER_ACCEPT = TOPIC_ATTACHMENT_ACCEPT.join(",")
 
 /**
- * What the chat composers' file pickers can accept.
- * The topic picker allows types the chat path rejects, so the lists stay separate.
+ * What the chat composers' file pickers can accept, from the shared chat list.
  */
-export const CHAT_FILE_PICKER_ACCEPT =
-	"image/*,application/pdf,.pdf,text/*,.txt,.md,.markdown,.csv,.tsv,.json,.log,.docx,.xlsx,video/mp4,video/quicktime,video/webm"
+export const CHAT_FILE_PICKER_ACCEPT = CHAT_ATTACHMENT_ACCEPT.join(",")
 
 /**
  * Adds a listener for each event on a target, and returns the call that removes them.

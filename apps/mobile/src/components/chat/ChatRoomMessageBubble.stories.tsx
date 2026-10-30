@@ -72,8 +72,20 @@ export const MentionAndReply: Story = {
 }
 export const OtherMember: Story = { args: { isOwnChatMessage: false, canDelete: false } }
 export const LeaderModeration: Story = { args: { isOwnChatMessage: false, canDelete: true } }
-export const AttachmentChips: Story = {
+export const Attachments: Story = {
 	args: {
+		chatMessage: toStoryRoomMessage({
+			attachments: [
+				{ id: "story-file", name: "Research.pdf", kind: "document" },
+				{ id: "story-photo", name: "roast-curve-from-the-cupping-table.jpg", kind: "image" },
+			],
+		}),
+	},
+}
+export const OtherMemberAttachments: Story = {
+	args: {
+		isOwnChatMessage: false,
+		canDelete: false,
 		chatMessage: toStoryRoomMessage({ attachments: [{ id: "story-file", name: "Research.pdf", kind: "document" }] }),
 	},
 }

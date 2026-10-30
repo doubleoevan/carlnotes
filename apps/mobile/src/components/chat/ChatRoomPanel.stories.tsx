@@ -111,6 +111,7 @@ function RoomStory({ state: chatRoomState, hasTopicDraft = false }: { state: Cha
 			canModerate
 			memberUsernames={["reader", "friend"]}
 			onDelete={async () => {}}
+			onAttachmentDelete={() => {}}
 			onClear={async () => false}
 		/>
 	)

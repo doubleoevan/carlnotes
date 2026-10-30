@@ -1,13 +1,13 @@
 // picker agreement test: every file the chat composers offer is one the chat attachment path takes
 import { expect, test } from "bun:test"
-import { CHAT_FILE_PICKER_ACCEPT, FILE_PICKER_ACCEPT } from "@/lib/utils"
 import {
 	DOCUMENT_FILE_SUFFIXES,
 	DOCUMENT_FILE_TYPES,
 	TEXT_FILE_SUFFIXES,
-	toAttachment,
 	VIDEO_FILE_TYPES,
-} from "./useChatAttachments"
+} from "@carlnotes/contracts/attachmentTypes"
+import { CHAT_FILE_PICKER_ACCEPT, FILE_PICKER_ACCEPT } from "@/lib/utils"
+import { toAttachment } from "./useChatAttachments"
 
 // whether one picker accept entry names a file toAttachment takes: an image, a pdf, a document, text, or a video
 function isAcceptedByChat(acceptEntry: string): boolean {
@@ -48,6 +48,7 @@ class StubFileReader {
 	result = ""
 	onload: (() => void) | null = null
 	onerror: (() => void) | null = null
+	// read every file as the same three bytes
 	readAsDataURL(file: File): void {
 		this.result = `data:${file.type || "application/octet-stream"};base64,AQID`
 		this.onload?.()

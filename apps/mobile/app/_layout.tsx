@@ -32,6 +32,7 @@ import { GestureHandlerRootView } from "react-native-gesture-handler"
 import { AppIconBadge } from "@/appIconBadge"
 import { apiBaseUrl } from "@/authClient"
 import { AppChatPanel } from "@/components/chat/AppChatPanel"
+import { clearFileCaches } from "@/components/common/pickedFileCache"
 import { PodcastEpisodeAudio } from "@/components/podcast/PodcastEpisodeAudio"
 import { PodcastPlayer } from "@/components/podcast/PodcastPlayer"
 import { PushNotifications, PushPermissionSheet } from "@/components/push/PushNotifications"
@@ -64,6 +65,9 @@ configureApiClient({
 	onTolerantReadIssue: reportTolerantReadIssue,
 	...mobileApiRequestSettings,
 })
+
+// delete the picked file copies an earlier launch left behind
+clearFileCaches()
 
 // report route render failures while retaining Expo Router's retry screen
 export const ErrorBoundary = Sentry.wrapExpoRouterErrorBoundary(ExpoErrorBoundary)
@@ -106,6 +110,8 @@ function RootLayout() {
 	const chatAccountId = isSessionRetired ? null : (session?.user.id ?? null)
 	useEffect(() => {
 		activateChatAccount(chatAccountId)
+		// delete the files one account picked or previewed before the next account
+		clearFileCaches()
 	}, [chatAccountId])
 	useUpdateBadges(chatAccountId, reloadChatRooms)
 	const isReady = isThemeReady && (isFontLoaded || Boolean(fontLoadError)) && !isSessionPending

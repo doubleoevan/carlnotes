@@ -1,5 +1,5 @@
 import { authClient } from "@carlnotes/client/authClient"
-import type { TopicFeedResponse } from "@carlnotes/contracts/topics"
+import { isUserTopicFeedEmpty, toSectionTopicCount } from "@carlnotes/core/lib/topicFeed"
 import { useNavigate } from "@tanstack/react-router"
 import { Coffee } from "lucide-react"
 import { useState } from "react"
@@ -54,7 +54,7 @@ export function HomePage() {
 					teamId: null,
 					name: "a new topic",
 					joinTeam: null,
-					isUserTopicFeedEmpty: ownTopicCount === 0 && followedTopicCount === 0,
+					isUserTopicFeedEmpty: isUserTopicFeedEmpty(topicFeed),
 				}
 			: null,
 	)
@@ -109,11 +109,6 @@ export function HomePage() {
 			</div>
 		</main>
 	)
-}
-
-// how many topics a section of the feed has, or null while the feed is still loading
-function toSectionTopicCount(topicFeed: TopicFeedResponse | null, sectionKey: string): number | null {
-	return topicFeed?.sections.find((section) => section.key === sectionKey)?.topics.length ?? null
 }
 
 // which section opens first: featured for a visitor, else the user's own topics, else the ones they follow

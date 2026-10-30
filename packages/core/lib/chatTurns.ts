@@ -66,14 +66,16 @@ export function toLoadedChatTurn(chatTurnRow: ChatTurnRow): ChatTurn {
 }
 
 // the question a chat turn sent, its files, and whether it was spoken
-type ToSentChatTurnOptions = { question: string; attachments: ChatAttachment[] }
+type ToSentChatTurnOptions = { question: string; attachments: ChatAttachment[]; isMediaPreviewed?: boolean }
 
 /**
- * Returns a new chat turn with temporary attachments for its sent files.
+ * Returns a new chat turn with temporary attachments for its sent files. A sent image or video keeps its data url
+ * only for an app that previews it in the history.
  */
 export function toSentChatTurn({
 	question: askedQuestion,
 	attachments: sentAttachments,
+	isMediaPreviewed = true,
 }: ToSentChatTurnOptions): ChatTurn {
 	return {
 		question: withAttachmentNote(askedQuestion, sentAttachments),
@@ -86,7 +88,9 @@ export function toSentChatTurn({
 			id: toPlaceholderId(),
 			kind: attachment.kind,
 			name: attachment.name,
-			...(attachment.kind === "image" || attachment.kind === "video" ? { dataUrl: attachment.dataUrl } : {}),
+			...(isMediaPreviewed && (attachment.kind === "image" || attachment.kind === "video")
+				? { dataUrl: attachment.dataUrl }
+				: {}),
 		})),
 		linkPreviews: [],
 		answerLinkPreviews: [],

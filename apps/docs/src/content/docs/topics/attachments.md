@@ -33,6 +33,10 @@ zone](../../../assets/screenshots/attachments-drop-to-attach.png)
 
 A file can be text, PDF, Word (.docx), Excel (.xlsx), or an image, up to 10 MB each.
 
+In the app, both ways offer **Photo library**, **Take photo**, and **Files**. A large photo is made smaller before it
+uploads, and its location data is removed. A file over 10 MB is rejected before it uploads, and the rest of the
+form stays as you left it.
+
 ![The attachments section of the topic editor: an uploaded file with its extracted content
 expanded](../../../assets/screenshots/attachments-upload.png)
 

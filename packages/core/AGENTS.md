@@ -84,8 +84,22 @@ shared author, message, rejection, and draft field composition. Apps supply stab
 and action controls. `lib/chatStoryFixtures.ts` supplies fictional conversations to both component browsers.
 
 `hooks/useChatConversationLoad` owns history/access gates and proposal restoration; `useTopicChat` owns send, stop,
-retry, clear, and tool outcomes. Browser voice, attachments, new-topic creation, and podcast effects remain injected
-web extensions. `useEditableTopicDraft` reads authoritative settings and overlays proposed changes.
+retry, clear, and tool outcomes. Voice, file reading, navigation, and podcast effects remain injected app
+extensions. `useEditableTopicDraft` reads authoritative settings and overlays proposed changes.
+`hooks/useChatAttachments` owns a draft's attachment list, the per-question and keep limits, room mode (nothing kept),
+and the kept-file delete. Each app supplies how it reads its own files and shows a line. `lib/chatAttachmentRules`
+holds the kind a file reads as, each kind's data url limit and its line, the size estimate checked before a read, and
+the shared rejection lines. Its hook tests run in `apps/web/src/components/chat/sharedChatAttachments.test.tsx`.
+`lib/imageUpload` holds the avatar types and rejections, the 512-pixel avatar edge, the 2048-pixel attached photo
+edge, and `toResizedImage`, the size and format both apps' resizers re-encode a picked image to.
+`hooks/useNewTopicDraft` owns the new-topic chat's waiting files: it presets a team page's team, takes the draft at
+creation, uploads each file to the created topic with a line for one that did not attach, and deletes each file's
+copy on remove, reset, and unmount through the app's `deleteAttachmentFile`. Its tests run in
+`apps/web/src/components/chat/sharedNewTopicDraft.test.tsx`. `components/ChatTopicLimitNotice` is the plan's topic
+limit above the new-topic composer, with the plans link only where an app supplies one, and
+`components/TopicEditorChoice` is the New topic and Edit topic choice between "Do it myself" and Carl, which the web
+renders as a dialog and the app as a sheet. `lib/chatCopy`'s `NEW_TOPIC_CHAT_COPY` holds the new-topic chat's name,
+placeholders, and opening line.
 `lib/topicToolCalls` interprets accepted/rejected tools with injected notice effects; `lib/chatRejectionCopy` keeps
 both clients' wording together. `stores/chatConversationStore` scopes selection, proposals, and delayed callbacks by
 account and conversation; `lib/chatConversations` holds selection rules, private conversation addressing, names,
@@ -134,7 +148,8 @@ Mobile opts into pending-mutation presentation and acknowledged cache updates ac
 A failed write removes only its tentative change. Writes never retry or enter an offline queue.
 Its optional `onChangeConfirmed` callback retains acknowledged edits in a separately mounted Finding sheet.
 
-`lib/topicFeed.ts` owns Feed/tag selection and Resource-kind reset. Existing Finding filters and sorts keep their bookmark and tie rules.
+`lib/topicFeed.ts` owns Feed/tag selection and Resource-kind reset, and `isUserTopicFeedEmpty`, which both apps'
+empty home pages read. Existing Finding filters and sorts keep their bookmark and tie rules.
 `lib/topicFindingChanges.ts` applies action fields and unread-count changes without changing source payloads.
 Its search adapter preserves result order and metadata while applying the same Finding edits across loaded pages.
 `lib/topicFeedLabels.ts` owns shared section, sort, view, tag, and empty-state labels, plus the Finding-view menu options and Team bookmark scopes.

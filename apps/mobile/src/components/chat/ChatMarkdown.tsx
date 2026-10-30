@@ -1,6 +1,7 @@
 // biome-ignore-all lint/suspicious/noArrayIndexKey: streamed blocks and read-only fields retain their positions while text appends
 import { toNativeChatMarkdown } from "@carlnotes/core/lib/nativeChatMarkdown"
-import { isSafeHref } from "@carlnotes/core/lib/safeChatMarkdown"
+import { isSafeHref, NEW_TOPIC_CHAT_HREF } from "@carlnotes/core/lib/safeChatMarkdown"
+import { setChatId } from "@carlnotes/core/stores/chatConversationStore"
 import { colors } from "@carlnotes/nightshift/colors"
 import { fontFamilies } from "@carlnotes/nightshift/typography"
 import { type ComponentProps, useMemo } from "react"
@@ -70,8 +71,13 @@ export function ChatMarkdown({ markdown, isStreaming = false }: { markdown: stri
 	)
 }
 
-// guard both press paths before opening an external destination
+// the new-topic invitation opens the new-topic chat in place. every other press path is guarded before opening an
+// external destination
 function handleLink({ url }: { url: string }): void {
+	if (url === NEW_TOPIC_CHAT_HREF) {
+		setChatId({ kind: "private", newTopic: true })
+		return
+	}
 	if (isSafeHref(url)) {
 		void openExternalLink(url)
 	}

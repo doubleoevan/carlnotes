@@ -33,3 +33,16 @@ test("empty and rejected turns never enter the next request's history", () => {
 	})
 	expect(toChatHistoryTurns(rejectedChatTurns)).toEqual([])
 })
+
+// keep a sent photo's data url for the history only where the history previews it
+test("a sent photo keeps its data url only for an app that previews it", () => {
+	const attachments = [
+		{ kind: "image" as const, name: "roast.jpg", dataUrl: "data:image/jpeg;base64,AA==", keep: false },
+	]
+	expect(toSentChatTurn({ question: "this roast?", attachments }).attachments[0]?.dataUrl).toBe(attachments[0]?.dataUrl)
+	expect(toSentChatTurn({ question: "this roast?", attachments, isMediaPreviewed: false }).attachments[0]).toEqual({
+		id: expect.any(String),
+		kind: "image",
+		name: "roast.jpg",
+	})
+})

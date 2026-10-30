@@ -9,6 +9,7 @@ import {
 import {
 	filterTopicFeed,
 	isResourceKindSelected,
+	isUserTopicFeedEmpty,
 	matchesTagFilters,
 	selectTopicFindings,
 	toggleTopicResourceKind,
@@ -156,4 +157,10 @@ test("isResourceKindSelected passes an unknown kind while every kind is selected
 	expect(isResourceKindSelected("unknown", new Set(["read"]))).toBe(false)
 	expect(isResourceKindSelected("watch", new Set(["read"]))).toBe(false)
 	expect(isResourceKindSelected("watch", new Set(["read", "watch"]))).toBe(true)
+})
+
+test("a feed with no own and no followed topics is empty, and a loading feed is not", () => {
+	expect(isUserTopicFeedEmpty(toTestTopicFeedResponse([]))).toBe(true)
+	expect(isUserTopicFeedEmpty(toTestTopicFeedResponse())).toBe(false)
+	expect(isUserTopicFeedEmpty(null)).toBe(false)
 })

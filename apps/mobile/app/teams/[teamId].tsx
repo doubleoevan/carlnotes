@@ -7,14 +7,14 @@ import {
 } from "@carlnotes/client/teamClient"
 import { isLeaderRole } from "@carlnotes/contracts/enums"
 import type { TeamPageResponse } from "@carlnotes/contracts/teams"
-import { TEAM_AVATAR_UPLOAD_FAILED_TEXT, toAvatarRejectionText } from "@carlnotes/core/lib/avatarUpload"
+import { TEAM_AVATAR_UPLOAD_FAILED_TEXT, toAvatarRejectionText } from "@carlnotes/core/lib/imageUpload"
 import { toCountLabel } from "@carlnotes/core/lib/labels"
 import { useQuery } from "@tanstack/react-query"
 import { router, useLocalSearchParams } from "expo-router"
 import { Pencil, Plus, Share2, Trash2 } from "lucide-react-native"
 import { useState } from "react"
 import { Alert, View } from "react-native"
-import { chooseAvatarBody } from "@/components/avatar/avatarUpload"
+import { useAvatarPicker } from "@/components/avatar/avatarUpload"
 import { Avatar } from "@/components/branding/Avatar"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { LoadFailedNotice } from "@/components/common/LoadFailedNotice"
@@ -33,7 +33,7 @@ import { AddTopicButton } from "@/components/team/AddTopicButton"
 import { EditTeamModal } from "@/components/team/EditTeamModal"
 import { JoinTeamButton } from "@/components/team/JoinTeamButton"
 import { CollapsibleSection } from "@/components/topic/CollapsibleSection"
-import { EditTopicModal } from "@/components/topic/EditTopicModal"
+import { NewTopicDialog } from "@/components/topic/TopicEditorChoiceSheet"
 import { usePageMutation } from "@/hooks/usePageMutation"
 
 /**
@@ -123,26 +123,27 @@ function TeamHeader({
 	const { teamId } = team
 	const isTeamLeader = isLeaderRole(team.role)
 	const mutation = usePageMutation(onReload)
+	// a leader's avatar press opens the picker menu, and the picked image uploads at once
+	const teamAvatarPicker = useAvatarPicker({
+		onPicked: (body) =>
+			mutation.run(async () => {
+				const rejection = await sendTeamAvatarBody(teamId, body)
+				if (rejection) {
+					throw new Error(toAvatarRejectionText(rejection, TEAM_AVATAR_UPLOAD_FAILED_TEXT))
+				}
+			}),
+	})
 	return (
 		<View className="gap-2">
 			<View className="flex-row flex-wrap items-center gap-3">
 				{isTeamLeader ? (
 					<Button
+						ref={teamAvatarPicker.triggerRef}
 						variant="ghost"
 						accessibilityLabel="Change team avatar"
 						className="h-auto p-0"
-						disabled={mutation.isPending}
-						onPress={() =>
-							void mutation.run(async () => {
-								const body = await chooseAvatarBody()
-								if (body) {
-									const rejection = await sendTeamAvatarBody(teamId, body)
-									if (rejection) {
-										throw new Error(toAvatarRejectionText(rejection, TEAM_AVATAR_UPLOAD_FAILED_TEXT))
-									}
-								}
-							})
-						}
+						disabled={mutation.isPending || teamAvatarPicker.isPicking}
+						onPress={teamAvatarPicker.openFilePicker}
 					>
 						<Avatar
 							ownerId={teamId}
@@ -159,6 +160,7 @@ function TeamHeader({
 						size={64}
 					/>
 				)}
+				{teamAvatarPicker.filePickerMenu}
 				<Text accessibilityRole="header" className="shrink font-display text-2xl">
 					{team.name}
 				</Text>
@@ -216,8 +218,8 @@ function TeamDialogs({
 				/>
 			)}
 			{team && dialog === "new-topic" && (
-				<EditTopicModal
-					initialTeam={team}
+				<NewTopicDialog
+					initialTeam={{ teamId: team.teamId, name: team.name }}
 					onClose={() => onClose()}
 					onTopicSaved={(id) => {
 						onReload()

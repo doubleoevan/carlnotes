@@ -18,7 +18,7 @@ import { usePageMutation } from "@/hooks/usePageMutation"
 import { useTopicFeed } from "@/providers/TopicFeedProvider"
 import { offerPushPermission } from "@/pushPermission"
 import { openSessionScreen } from "@/sessionReturnPath"
-import { EditTopicModal } from "./EditTopicModal"
+import { EditTopicDialog } from "./TopicEditorChoiceSheet"
 import { NewTopicButton } from "./TopicHomeActions"
 import { TopicScanButton } from "./TopicScanButton"
 
@@ -177,7 +177,7 @@ function TopicActionDialog({
 }) {
 	return (
 		<>
-			{dialog === "edit" && <EditTopicModal topic={topic} onClose={() => onClose()} onTopicSaved={onRefresh} />}
+			{dialog === "edit" && <EditTopicDialog topic={topic} onClose={() => onClose()} onTopicSaved={onRefresh} />}
 			{dialog === "team" && (
 				<AddTopicToTeamDialog topic={topic} onTopicTeamsChanged={onRefresh} onClose={() => onClose()} />
 			)}

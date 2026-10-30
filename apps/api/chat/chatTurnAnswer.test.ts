@@ -1,6 +1,6 @@
 // a private chat turn's reservation: a turn is rejected before any model call once the spend and open reservations
 // reach the budget, a reply that never starts releases its reservation, and a streamed reply takes the reservation
-// along
+// along. a new-topic draft keeps a team only if the user leads it, under the team's saved name
 import { afterEach, beforeEach, expect, mock, spyOn, test } from "bun:test"
 import { restoreRedisClient, stubRedisClient } from "@carlnotes/db/redisClientStub"
 import * as litellm from "@carlnotes/models/litellm"
@@ -9,6 +9,7 @@ import { stubReservedUserSpend } from "@carlnotes/models/spendReservationTestFix
 import * as chat from "@carlnotes/pipeline/chat/index"
 import * as analytics from "@carlnotes/server/analytics"
 import { toJsonRequest, toSignedInApp } from "../testSession"
+import { toLeaderTeam } from "./chatTurnAnswer"
 import * as chatTurnAuthorization from "./chatTurnAuthorization"
 import * as chatTurnStream from "./chatTurnStream"
 import { privateChatRoute } from "./privateChat"
@@ -83,4 +84,14 @@ test("a reply that never starts releases its reservation, and a streamed reply t
 	expect((await postTopicChatTurn("and last week?")).status).toBe(200)
 	expect(reservation.release).toHaveBeenCalledTimes(1)
 	expect(streamChatTurnSpy.mock.calls[0]?.[1].reservation).toBe(reservation)
+})
+
+test("a draft team keeps the name the user leads it by, and a team the user does not lead is dropped", () => {
+	const leaderTeams = [{ teamId: "team-1", name: "Roasters" }]
+	expect(toLeaderTeam({ teamId: "team-1", name: "Personal" }, leaderTeams)).toEqual({
+		teamId: "team-1",
+		name: "Roasters",
+	})
+	expect(toLeaderTeam({ teamId: "team-2", name: "Roasters" }, leaderTeams)).toBeNull()
+	expect(toLeaderTeam(null, leaderTeams)).toBeNull()
 })

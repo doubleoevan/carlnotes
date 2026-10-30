@@ -25,11 +25,7 @@ capability the app will never need, with the reason, or `deferred` for one an ac
 | `billingClient.sendUserBudgetOverride` | web-only | Admin stays on the web |
 | `billingClient.sendUserRole` | web-only | Admin stays on the web |
 | `topicClient.sendTopicFeatureOrder` | web-only | An admin's featuring control. Admin stays on the web |
-| `chatClient.sendDeleteKeptAttachment` | deferred | Prompt 53, new-topic chat, attachments, and shared mobile pickers |
-| `chatClient.toChatAttachmentUrl` | deferred | Prompt 53, new-topic chat, attachments, and shared mobile pickers |
-| `chatRoomClient.sendDeleteChatRoomAttachment` | deferred | Prompt 53, new-topic chat, attachments, and shared mobile pickers |
-| `chatRoomClient.toChatRoomAttachmentUrl` | deferred | Prompt 53, new-topic chat, attachments, and shared mobile pickers |
-| `topicClient.uploadTopicAttachment` | deferred | Prompt 53, new-topic chat, attachments, and shared mobile pickers |
+| `topicClient.uploadTopicAttachment` | web-only | The browser's File upload. The app uploads to the same route through `topicClient.uploadTopicAttachmentBody` |
 | `mcpClient.fetchMcpClientName` | web-only | The MCP OAuth consent page, which an AI client opens in a browser |
 | `mcpClient.sendMcpConsent` | web-only | The MCP OAuth consent page, which an AI client opens in a browser |
 | `pageHeadClient.fetchInvitePageHead` | web-only | Server-rendered head tags for crawlers and link previews. The app has no document head |

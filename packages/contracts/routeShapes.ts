@@ -93,6 +93,7 @@ export const chatRoomEvent = z.discriminatedUnion("event", [
 // the params most routes take
 export const idParam = z.object({ id: z.string() })
 export const idAndTeamParam = z.object({ id: z.string(), teamId: z.string() })
+export const idAndAttachmentParam = z.object({ id: z.string(), attachmentId: z.string() })
 export const idAndUserParam = z.object({ id: z.string(), userId: z.string() })
 export const userIdParam = z.object({ userId: z.string() })
 export const multipartFile = (fieldName: string): z.ZodType => z.object({ [fieldName]: z.any() })

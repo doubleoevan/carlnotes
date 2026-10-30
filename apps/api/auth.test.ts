@@ -5,18 +5,14 @@ import { MOBILE_APP_SCHEME_ORIGIN } from "@carlnotes/contracts/mobileApp"
 import { restoreConnectionPool, stubConnectionPool } from "@carlnotes/db/connectionPoolStub"
 import * as redis from "@carlnotes/db/redis"
 import * as redisRateLimits from "@carlnotes/db/redisRateLimits"
+import { users } from "@carlnotes/db/schema/users"
 import * as litellmProxy from "@carlnotes/models/litellmProxy"
 import { appUrl } from "@carlnotes/server/appUrl"
 import { quietErrorReports } from "@carlnotes/server/monitoringTestFixtures"
 import { saveEnvSettings } from "@carlnotes/server/savedEnvSettings"
-import {
-	auth,
-	loadAppleProviderOptions,
-	sendAuthEmailInBackground,
-	toSignupAvatarSource,
-	toTrustedOrigins,
-} from "./auth"
+import { auth, loadAppleProviderOptions, sendAuthEmailInBackground, toTrustedOrigins } from "./auth"
 import { APPLE_ID_ORIGIN } from "./authHooks"
+import { toPublishedAvatarFromUser } from "./avatars"
 import * as sessions from "./sessions"
 import * as usernames from "./usernames"
 
@@ -28,9 +24,9 @@ afterEach(() => {
 
 // run the user create hook for an oauth signup with no username of its own.
 // return the data that the user is created with
-async function runUserCreateHook(): Promise<Record<string, unknown>> {
+async function runUserCreateHook(image: string | null = null): Promise<Record<string, unknown>> {
 	spyOn(usernames, "toAssignedUsername").mockResolvedValue("steady-owl-12")
-	const signupUser = { email: "new@example.com", name: "New User", emailVerified: true, image: null }
+	const signupUser = { email: "new@example.com", name: "New User", emailVerified: true, image }
 	const userCreateHookResult = await auth.options.databaseHooks?.user?.create?.before?.(
 		signupUser as never,
 		{ path: "/callback/:id" } as never,
@@ -59,16 +55,20 @@ test("a signup whose key creation succeeds creates the user with the key", async
 	expect((await runUserCreateHook()).litellmVirtualKey).toBe("sk-new")
 })
 
-// an oauth signup defaults to the provider's photo, a password signup never has one
-test("a signup with a provider photo defaults to it", () => {
-	expect(toSignupAvatarSource("https://lh3.googleusercontent.com/a/photo.jpg")).toBe("oauth")
-})
-
-// no photo, empty string, or null all fall back to the generated initials
-test("a signup with no provider photo falls back to generated initials", () => {
-	expect(toSignupAvatarSource(null)).toBe("generated")
-	expect(toSignupAvatarSource(undefined)).toBe("generated")
-	expect(toSignupAvatarSource("")).toBe("generated")
+// an oauth signup keeps the provider's photo on the user, and the published avatar stays the generated one until the
+// user chooses the photo
+test("a signup with a provider photo keeps the generated avatar", async () => {
+	const providerPhotoUrl = "https://lh3.googleusercontent.com/a/photo.jpg"
+	spyOn(litellmProxy, "provisionLiteLLMKey").mockResolvedValue("sk-new")
+	const newUser = await runUserCreateHook(providerPhotoUrl)
+	expect(newUser.avatarSource).toBeUndefined()
+	expect(
+		toPublishedAvatarFromUser({
+			avatarSource: users.avatarSource.default as string,
+			avatarKey: null,
+			image: providerPhotoUrl,
+		}),
+	).toBeNull()
 })
 
 // a session that Better Auth deletes from Postgres is deleted from Redis by its token

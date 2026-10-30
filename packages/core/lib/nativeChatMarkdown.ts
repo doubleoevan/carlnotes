@@ -1,5 +1,5 @@
 import { parser, RuleType } from "markdown-to-jsx/markdown"
-import { isSafeHref } from "./safeChatMarkdown"
+import { isSafeHref, NEW_TOPIC_CHAT_HREF, toNewTopicChatLinkedMarkdown } from "./safeChatMarkdown"
 
 type ChatNode = ReturnType<typeof parser>[number]
 export type ChatMarkdownSegment =
@@ -7,11 +7,16 @@ export type ChatMarkdownSegment =
 	| { kind: "table"; rows: { label: string; value: string }[][] }
 
 /**
- * Serializes safe chat Markdown and converts tables into labeled records.
+ * Serializes safe chat Markdown and converts tables into labeled records. The new-topic invitation links to the
+ * new-topic chat, as on web.
  */
 export function toNativeChatMarkdown(markdown: string, isStreaming = false): ChatMarkdownSegment[] {
 	// parse links once, including references, while retaining HTML as literal text
-	const nodes = parser(markdown, { disableParsingRawHTML: true, forceBlock: true, sanitizer: (url) => url })
+	const nodes = parser(toNewTopicChatLinkedMarkdown(markdown), {
+		disableParsingRawHTML: true,
+		forceBlock: true,
+		sanitizer: (url) => url,
+	})
 	const segments: ChatMarkdownSegment[] = []
 	const firstFootnoteNode = nodes.find((node) => node.type === RuleType.footnote)
 	for (const [index, node] of nodes.entries()) {
@@ -35,7 +40,9 @@ export function toNativeChatMarkdown(markdown: string, isStreaming = false): Cha
 		if (node.type === RuleType.footnote && node !== firstFootnoteNode) {
 			continue
 		}
+		// serialize the node, or every footnote at the first one
 		const serializedMarkdown = node.type === RuleType.footnote ? serializeFootnotes(nodes) : serializeNode(node)
+		// extend the previous markdown segment, or start one
 		const previousSegment = segments.at(-1)
 		if (previousSegment?.kind === "markdown") {
 			previousSegment.markdown += serializedMarkdown
@@ -43,6 +50,8 @@ export function toNativeChatMarkdown(markdown: string, isStreaming = false): Cha
 			segments.push({ kind: "markdown", markdown: serializedMarkdown })
 		}
 	}
+
+	// the segments in their order
 	return segments
 }
 
@@ -51,10 +60,12 @@ function isCompleteTableTail(markdown: string, columnCount: number): boolean {
 	if (markdown.endsWith("\n")) {
 		return true
 	}
+	// count the last row's unescaped pipes, and whether the last one closes the row
 	const row = markdown.split("\n").at(-1)?.trim() ?? ""
 	let isEscaped = false
 	let delimiterCount = 0
 	let hasClosingDelimiter = false
+	// walk the row, skipping escaped pipes
 	for (const character of row) {
 		hasClosingDelimiter = character === "|" && !isEscaped
 		if (character === "|" && !isEscaped) {
@@ -62,6 +73,7 @@ function isCompleteTableTail(markdown: string, columnCount: number): boolean {
 		}
 		isEscaped = character === "\\" && !isEscaped
 	}
+	// the row is complete once it closes and holds every column
 	return hasClosingDelimiter && delimiterCount - (row.startsWith("|") ? 1 : 0) >= columnCount
 }
 
@@ -73,6 +85,11 @@ function escapeText(text: string): string {
 // encode link destinations for Markdown syntax
 type SerializeLinkOptions = { label: string; target: string }
 function serializeLink({ label, target }: SerializeLinkOptions): string {
+	// the new-topic chat's exact href is the one link that is not a web destination
+	if (target === NEW_TOPIC_CHAT_HREF) {
+		return `[${label}](${NEW_TOPIC_CHAT_HREF})`
+	}
+	// any other link must be a safe web link, with its parentheses and spaces encoded
 	if (!isSafeHref(target)) {
 		return label
 	}
@@ -91,6 +108,7 @@ function serializeCode({ text, isBlock }: SerializeCodeOptions): string {
 	return isBlock ? `${delimiter}\n${text}\n${delimiter}\n\n` : `${delimiter} ${text} ${delimiter}`
 }
 
+// serialize a run of nodes
 function serializeNodes(nodes: ChatNode[]): string {
 	return nodes.map(serializeNode).join("")
 }
@@ -98,38 +116,45 @@ function serializeNodes(nodes: ChatNode[]): string {
 // serialize supported Markdown blocks
 function serializeNode(node: ChatNode): string {
 	switch (node.type) {
+		// plain text
 		case RuleType.text:
 			return escapeText(node.text)
 		case RuleType.frontmatter:
 			return `${escapeText(node.text)}\n\n`
 		case RuleType.footnoteReference:
 			return escapeText(`[^${node.text}]`)
+		// code
 		case RuleType.codeInline:
 			return serializeCode({ text: node.text, isBlock: false })
 		case RuleType.codeBlock:
 			return serializeCode({ text: node.text, isBlock: true })
+		// links and images, through the safe link rule
 		case RuleType.link:
 			return serializeLink({ label: serializeNodes(node.children), target: node.target ?? "" })
 		case RuleType.image:
 			return serializeLink({ label: escapeText(node.alt || "image"), target: node.target ?? "" })
+		// paragraphs, headings, and formatting
 		case RuleType.paragraph:
 			return `${serializeNodes(node.children)}\n\n`
 		case RuleType.heading:
 			return `${"#".repeat(node.level)} ${serializeNodes(node.children)}\n\n`
 		case RuleType.textFormatted:
 			return serializeFormatted(node)
+		// breaks and task boxes
 		case RuleType.breakLine:
 			return "  \n"
 		case RuleType.breakThematic:
 			return "\n---\n\n"
 		case RuleType.gfmTask:
 			return node.completed ? "[x]" : "[ ]"
+		// quotes
 		case RuleType.blockQuote:
 			return `${serializeNodes(node.children)
 				.trim()
 				.split("\n")
 				.map((line) => `> ${line}`)
 				.join("\n")}\n\n`
+		// lists, and tables as a card per row
 		case RuleType.orderedList:
 		case RuleType.unorderedList:
 			return serializeList(node)
@@ -156,6 +181,7 @@ function serializeList(
 		const listMarkdown = listNodes.map(serializeListChild).join("").trim()
 		return `${marker} ${listMarkdown.replaceAll("\n", `\n${continuationIndent}`)}`
 	})
+	// join the items, one per line
 	return `${listLines.join("\n")}\n\n`
 }
 
@@ -163,6 +189,7 @@ function serializeList(
 function serializeListChild(node: ChatNode): string {
 	const childMarkdown = serializeNode(node)
 	switch (node.type) {
+		// a nested block starts on its own line
 		case RuleType.orderedList:
 		case RuleType.unorderedList:
 		case RuleType.blockQuote:
@@ -171,6 +198,7 @@ function serializeListChild(node: ChatNode): string {
 		case RuleType.breakThematic:
 		case RuleType.table:
 			return `\n${childMarkdown}`
+		// any other child stays inline
 		default:
 			return childMarkdown
 	}
@@ -178,11 +206,13 @@ function serializeListChild(node: ChatNode): string {
 
 // keep unsupported footnotes readable without exposing their generated anchor links
 function serializeFootnotes(nodes: ChatNode[]): string {
+	// collect the footnote references from the reference collections
 	const footnoteLines: string[] = []
 	for (const node of nodes) {
 		if (node.type !== RuleType.refCollection) {
 			continue
 		}
+		// each footnote's line, by its id and target
 		for (const [referenceId, reference] of Object.entries(node.refs)) {
 			if (referenceId.startsWith("^")) {
 				footnoteLines.push(escapeText(`[${referenceId}]: ${reference.target}`))
@@ -192,6 +222,7 @@ function serializeFootnotes(nodes: ChatNode[]): string {
 	return footnoteLines.length > 0 ? `${footnoteLines.join("\n\n")}\n\n` : ""
 }
 
+// wrap formatted text in its markdown delimiter
 function serializeFormatted(node: Extract<ChatNode, { type: typeof RuleType.textFormatted }>): string {
 	const delimiter = node.tag === "strong" ? "**" : node.tag === "em" ? "*" : node.tag === "del" ? "~~" : ""
 	return `${delimiter}${serializeNodes(node.children)}${delimiter}`

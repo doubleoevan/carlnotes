@@ -5,11 +5,11 @@ import {
 	type TopicDraftCardProps,
 } from "@carlnotes/core/components/TopicDraftCard"
 import { X } from "lucide-react-native"
-import { View } from "react-native"
+import { Pressable, View } from "react-native"
 import { CoffeeLoading } from "@/components/branding/CoffeeLoading"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { ScrollBox } from "@/components/common/ScrollBox"
-import { Button } from "@/components/primitives/button"
+import { Button, toTouchTargetHitSlop } from "@/components/primitives/button"
 import { Icon } from "@/components/primitives/icon"
 import { Text } from "@/components/primitives/text"
 
@@ -27,7 +27,12 @@ const TOPIC_DRAFT_ELEMENTS: TopicDraftCardElements = {
 			{children}
 		</View>
 	),
-	Scroll: ({ children, topicDraft }) => <ScrollBox scrollToTopOn={topicDraft}>{children}</ScrollBox>,
+	// the web's phone-width max-h-48, so the conversation keeps its room above the draft
+	Scroll: ({ children, topicDraft }) => (
+		<ScrollBox scrollToTopOn={topicDraft} maxHeight={192}>
+			{children}
+		</ScrollBox>
+	),
 	HeadingRow: ({ children }) => <View className="relative mb-2">{children}</View>,
 	Heading: ({ children }) => (
 		<Text accessibilityRole="header" className="text-center font-display text-lg">
@@ -70,12 +75,26 @@ const TOPIC_DRAFT_ELEMENTS: TopicDraftCardElements = {
 			))}
 		</View>
 	),
-	Files: ({ files }) => (
+	Files: ({ files, onRemove }) => (
 		<View className="flex-row flex-wrap gap-1">
-			{files.map((file) => (
-				<Text key={`${file.name}-${file.size}`} className="rounded bg-muted px-2 py-0.5 text-xs">
-					{file.name}
-				</Text>
+			{files.map((file, index) => (
+				<View
+					key={`${file.name}-${file.size}-${index}`}
+					className="flex-row items-center gap-1 rounded bg-muted py-0.5 pl-2"
+				>
+					<Text className="text-xs">{file.name}</Text>
+					{onRemove && (
+						<Pressable
+							accessibilityRole="button"
+							accessibilityLabel={`Remove ${file.name}`}
+							hitSlop={toTouchTargetHitSlop(24)}
+							className="size-6 items-center justify-center"
+							onPress={() => onRemove(index)}
+						>
+							<Icon as={X} className="size-3 text-muted-foreground" />
+						</Pressable>
+					)}
+				</View>
 			))}
 		</View>
 	),

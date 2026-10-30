@@ -467,20 +467,40 @@ columns scroll horizontally. `ScrollIndicator` keeps an orange thumb visible whi
 has 12 points of bottom padding. Rows remains an anchored dropdown. Small result sets hide pagination.
 Domain table columns, sorting, and totals live in core. Native row actions use the existing clients and permission gates.
 
+`topic/TopicEditorChoiceSheet` renders core's `TopicEditorChoice` in a bottom sheet, the native form of the web's
+dialog: New Topic (Home, the page action menu, and the Team screen, which presets its team) and Edit topic offer "Do
+it myself", which opens the form unchanged, or Carl, which opens the new-topic chat or the Topic's private chat in
+edit mode (`toEditTopicChatHref`). The Team edit sheet's new topic stays the form, as on web.
 `topic/EditTopicModal` uses core's Topic draft, Source editor, Team choices, and save flow. `team/EditTeamModal`
 uses shared TeamFields and saveTeam. Team Up, add-to-Team, member/follower invitations, avatar selection, reporting,
-and account fields stay native. Native adapters own system photo/document/time pickers and destructive confirmations.
+and account fields stay native. Native adapters own the system time pickers and destructive confirmations.
 A failed Team save retains its created identity, accepted memberships, and unsent invitations for retry.
 `useTeamFields` shares name availability checks across clients and ignores replies for a changed name.
-`topic/TopicAttachmentLink` uses the authenticated client for owner downloads and the native file preview.
-Downloaded preview files stay available until the parent view unmounts, then are removed. Attachment content
-reuses the safe Markdown renderer and bounded orange scrollbox, with explicit edit/done controls.
-The prompt paperclip and attachment link share one native file picker. `SessionTextInput` preserves the Nightshift
-field border and fill when a caller changes its size. Report issue hides its extra visible label to match web.
+`topic/TopicAttachmentLink` opens owner downloads through `common/useDownloadedFilePreview`, which downloads with
+the signed-in client, opens the native file preview, and deletes the downloaded copies when the parent view
+unmounts. Attachment content reuses the safe Markdown renderer and bounded orange scrollbox, with explicit edit/done
+controls. `SessionTextInput` preserves the Nightshift field border and fill when a caller changes its size. Report
+issue hides its extra visible label to match web.
+
+Every file action calls `useFilePicker` from `common/FilePickerMenu` with the action's accept list from
+`@carlnotes/contracts/attachmentTypes`. An action that takes images offers Photo library, Take photo, and Files in a
+`Sheet`; one that takes no images opens Files directly. The photo library asks for no permission, and the camera asks
+only when Take photo is picked and takes photos alone. With camera access off, a notice offers Open Settings. A pick
+that returns after the account changed is dropped. `src/pickedFiles.ts` turns picker assets into one `PickedFile` shape,
+and `common/pickedFileCache` resizes an image through core's `toResizedImage`, re-encoding without EXIF (PNG for a
+source that can be transparent, JPEG otherwise), deletes picked copies, and empties the picker, resizer, and preview
+caches from `_layout` at launch and on an account change. `chat/useChatAttachments` binds core's hook to
+`expo-file-system` reads and `showClientError`, resizes photos before the read, and deletes each picked copy once the
+draft holds its data url. `topic/TopicAttachmentEditor`'s `TopicAttachButton` (the prompt's paperclip and the "add an
+attachment" link) stages Topic files from the shared Topic accept list, resized, and rejects one over
+`TOPIC_ATTACHMENT_MAX_BYTES` with the api's own `TOPIC_ATTACHMENT_TOO_LARGE_LINE` before it uploads. A staged copy is
+deleted on remove, after its upload, and when the form closes. `avatar/avatarUpload`'s `useAvatarPicker` serves the user
+avatar, the Team screen's avatar, and the Team edit sheet: images only, re-encoded at the web's 512-pixel rule, and sent
+as the multipart `avatar` field.
 
 `account/AccountBudget`, `AccountFields`, and `PlanCard` adapt shared compositions. Account pause checkpoints use
 server-provided cutoffs and core's budget calculations. An admin without a budget override has no pause checkpoints.
-`avatar/UserAvatarPicker` reveals its camera overlay on the first tap; the next tap opens the system photo picker.
+`avatar/UserAvatarPicker` reveals its camera overlay on the first tap; the next tap opens the picker menu.
 `font-display` uses Architects Daughter and `font-sans` uses Karla from Nightshift's generated Uniwind font tokens.
 The Text primitive supplies a default class, without an inline family overriding a selected type role.
 
@@ -588,8 +608,10 @@ draws the same Nightshift cup paths as web. The pill hides while the keyboard or
 Footer padding and note-screen clearance keep the final controls reachable. `hooks/useIsKeyboardVisible` is shared
 by the launcher and note layout. `chatNavigation` retains Topic/Team context on their note routes and delegates default
 selection to core. Profile routes retain the web's shared-Team and preferred-Topic context through
-`toProfileChatContext`. Other screens open the web default room; accounts without rooms can choose a private Topic from their
-loaded Feed. An empty Feed links back to Topics without offering deferred new-topic chat. The conversation selector
+`toProfileChatContext`. Other screens open the web default: a room, else the new-topic chat. Accounts without rooms
+can also choose a private Topic from their loaded Feed. `toNewTopicChatHref` opens `/chat` straight on the new-topic
+chat, with a Team screen's team, and Home opens it by itself once per launch for an empty Feed
+(`stores/newTopicChatWelcome`, core's `isUserTopicFeedEmpty`). The conversation selector
 uses `ChoiceSelect`'s full-width sheet presentation, with Carl's private chat first, alphabetized rooms, Team avatars,
 and a checked selection. Its shared `Sheet` opts into `ScrollIndicator` for orange overflow. Compact form and reply
 choices retain anchored dropdowns; the Select primitive bounds long menus to the safe viewport. Close
@@ -612,7 +634,16 @@ phrase deck and sits beside `branding/CoffeeMug` in Carl's waiting bubble. Its s
 
 The native `ChatAuthor`, `ChatTurnBlock`, `ChatRoomMessageBubble`, `ChatRejectionNotice`, and `TopicDraftCard` reuse
 core composition with native elements. Retain matching names, field order, Nightshift fonts/colors, Lucide icons,
-spacing, and shared rejection wording. `ChatMessageParts` supplies native copy, previews, and attachment-name chips.
+spacing, and shared rejection wording. `ChatMessageParts` supplies native copy, previews, and the history's
+attachment-name chips (`ChatMessageAttachmentChips`). `ChatAttachmentChips` is the composers' pending chips, as on
+web: an image thumbnail or a kind icon, the truncated name, a pasted text's length, and Delete. `ChatComposer` takes
+the chips and an `attachmentActions` slot beside the draft, and Send is enabled with files alone.
+`ChatComposerAttachments` holds the paperclip (`ChatAttachButton`) and the private Topic chat's kept files
+(`KeptAttachmentsButton`, a "Chat files" sheet whose rows open through `toChatAttachmentUrl` and delete through
+core's `removeKeptAttachment`, which drops a row only after the server accepts). A room message's files render through
+`ChatRoomAttachments`, which opens each through `toChatRoomAttachmentUrl` and shows Delete to the author and the
+room's leaders. Room images show as named rows, not inline as on web. `ChatRoomComposer` uses the attachments hook in
+room mode, which keeps nothing, and clears the files only after an accepted post.
 `branding/HostAvatar` draws Nightshift's shared host portraits for both message authors and the private-chat choice.
 Draft cards preview all current settings with the proposed overlay;
 accepted tool results clear it and reread the Topic. Replies confirm edits through the same API as web.
@@ -638,12 +669,20 @@ background/close closes SSE and aborts private sends, foreground reloads history
 native client, not an OTA update to an old binary. Core's parsed safety adapter keeps HTML literal and images as
 safe link labels. Press and long-press both accept HTTP(S) only; automatic previews/task editing are disabled.
 Generated tables become labeled row cards with incomplete rows withheld. Native streaming honors reduced motion.
-The new-topic invitation stays plain text. Stories beside the adapters use shared fictional fixtures in light/dark.
+The new-topic invitation links to `NEW_TOPIC_CHAT_HREF`, as on web, and that exact href opens the new-topic chat in
+place; every other href still passes `isSafeHref`. Stories beside the adapters use shared fictional fixtures in
+light/dark.
 
 Room members can reply, mention, copy, and delete their own messages; leaders/admins can moderate and clear the room.
 Only the opened room's mentions are acknowledged. Local delete/clear reloads accepted state; server SSE currently has
-no deletion event, so other clients reconcile when reopened. Voice, new-topic chat, attachment management, podcast
-chat, pricing links, and broad live badge subscriptions remain outside native text chat.
+no deletion event, so other clients reconcile when reopened. Voice, podcast chat, pricing links, and broad live badge
+subscriptions remain outside native text chat.
+
+`PrivateChatPanel` runs the new-topic chat with core's `useNewTopicDraft` through `chat/useNewTopicDraft`, which opens
+the created Topic's screen, uploads each picked file through `uploadTopicAttachment`, and deletes each file's cached
+copy once the draft releases it. A new-topic pick keeps its copy for that upload. The panel shows core's new-topic
+placeholders and opening line (`NEW_TOPIC_CHAT_COPY`), the draft card with its removable files, or
+`ChatTopicLimitNotice`, which passes no plans link.
 
 Monitoring retains existing PostHog/Sentry platform/device context and redaction. Never log message text, prompts,
 tool/attachment payloads, session headers, or authenticated URLs from the new transports. Client/server analytics

@@ -9,7 +9,6 @@ import { View } from "react-native"
 import { CoffeeLoading } from "@/components/branding/CoffeeLoading"
 import { ChoiceSelect } from "@/components/common/ChoiceSelect"
 import { LoadFailedNotice } from "@/components/common/LoadFailedNotice"
-import { Button } from "@/components/primitives/button"
 import { Text } from "@/components/primitives/text"
 import { useIsKeyboardVisible } from "@/hooks/useIsKeyboardVisible"
 import { ChatPanelWidget } from "./ChatPanelWidget"
@@ -20,8 +19,9 @@ import { type ChatPageState, type ChatScreenProps, useChatPage } from "./useChat
 /**
  * Opens the page's shared room first, keeping its private conversation one choice away.
  */
-export function ChatScreen({ topicId, teamId, profileUserId, chatTeamId }: ChatScreenProps) {
-	const chatPageState = useChatPage({ topicId, teamId, profileUserId, chatTeamId })
+export function ChatScreen(chatScreenProps: ChatScreenProps) {
+	const { topicId, teamId } = chatScreenProps
+	const chatPageState = useChatPage(chatScreenProps)
 	// return to the originating screen with its list position intact
 	const handleClose = (): void => {
 		if (router.canGoBack()) {
@@ -105,20 +105,9 @@ function ChatScreenContent({ state: chatPageState }: { state: ChatPageState }) {
 					onRetry={() => void reloadChatRooms()}
 				/>
 			)}
-			{/* empty conversation */}
+			{/* empty conversation. the new-topic chat is always a choice */}
 			{!selectedChatId && !hasChatRoomsLoadFailed && (
-				<View className="gap-3 p-3">
-					<Text className="text-sm text-muted-foreground">
-						{chatChoices.length
-							? "Choose a topic to talk with Carl."
-							: "Open a topic to start a conversation with Carl."}
-					</Text>
-					{!chatChoices.length && (
-						<Button accessibilityLabel="Browse topics" onPress={() => router.replace("/")}>
-							<Text>Browse topics</Text>
-						</Button>
-					)}
-				</View>
+				<Text className="p-3 text-sm text-muted-foreground">Choose a conversation to talk with Carl.</Text>
 			)}
 			{/* selected conversation */}
 			{selectedChatId &&

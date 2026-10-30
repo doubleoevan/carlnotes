@@ -87,8 +87,8 @@ const expoConfig: ExpoConfig = {
 		[
 			"expo-image-picker",
 			{
-				photosPermission: "Choose a photo for your CarlNotes avatar.",
-				cameraPermission: false,
+				photosPermission: "Choose photos to attach in chat, add to a topic, or use as an avatar.",
+				cameraPermission: "Take a photo to attach in chat, add to a topic, or use as an avatar.",
 				microphonePermission: false,
 			},
 		],

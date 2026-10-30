@@ -17,6 +17,7 @@ import {
 	chatRoomEventsQuery,
 	chatRoomLinkPreviewsQuery,
 	chatRoomMessagesQuery,
+	idAndAttachmentParam,
 	idAndTeamParam,
 	idParam,
 	okResponse,
@@ -73,6 +74,13 @@ export const chatRouteContracts: Record<string, ApiRouteContract> = {
 		response: okResponse,
 	},
 	"chatClient.sendClearChat#new-topic": { method: "DELETE", path: "/api/chat/new-topic", response: okResponse },
+	"chatClient.sendDeleteKeptAttachment": {
+		method: "DELETE",
+		path: "/api/chat-attachments/:id",
+		params: idParam,
+		response: okResponse,
+	},
+	"chatClient.toChatAttachmentUrl": { method: "GET", path: "/api/chat-attachments/:id/download", params: idParam },
 
 	// chat rooms, on a topic and on a team
 	"chatRoomClient.fetchChatMentionCount": {
@@ -109,6 +117,28 @@ export const chatRouteContracts: Record<string, ApiRouteContract> = {
 		response: chatRoomMessagePage,
 	},
 	"chatRoomClient.fetchChatRooms": { method: "GET", path: "/api/rooms", response: chatRoomsResponse },
+	"chatRoomClient.sendDeleteChatRoomAttachment": {
+		method: "DELETE",
+		path: "/api/topics/:id/room/attachments/:attachmentId",
+		params: idAndAttachmentParam,
+		response: okResponse,
+	},
+	"chatRoomClient.sendDeleteChatRoomAttachment#team": {
+		method: "DELETE",
+		path: "/api/teams/:id/room/attachments/:attachmentId",
+		params: idAndAttachmentParam,
+		response: okResponse,
+	},
+	"chatRoomClient.toChatRoomAttachmentUrl": {
+		method: "GET",
+		path: "/api/topics/:id/room/attachments/:attachmentId/download",
+		params: idAndAttachmentParam,
+	},
+	"chatRoomClient.toChatRoomAttachmentUrl#team": {
+		method: "GET",
+		path: "/api/teams/:id/room/attachments/:attachmentId/download",
+		params: idAndAttachmentParam,
+	},
 	"chatRoomClient.sendChatMentionsViewed": {
 		method: "POST",
 		path: "/api/topics/:id/rooms/:teamId/mentions-seen",

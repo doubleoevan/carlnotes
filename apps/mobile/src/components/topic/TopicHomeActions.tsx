@@ -10,7 +10,7 @@ import { Icon } from "@/components/primitives/icon"
 import { Text } from "@/components/primitives/text"
 import { useTopicFeed } from "@/providers/TopicFeedProvider"
 import { openSessionScreen } from "@/sessionReturnPath"
-import { EditTopicModal } from "./EditTopicModal"
+import { NewTopicDialog } from "./TopicEditorChoiceSheet"
 
 /**
  * Matches Home's tags and New Topic row with working tag selection.
@@ -79,7 +79,7 @@ export function TopicHomeActions({ filters, knownTags }: { filters: TopicFeedFil
 }
 
 /**
- * Opens the same native creation form from a page button or its action menu.
+ * Opens the same New Topic choice from a page button or its action menu.
  */
 export function NewTopicButton() {
 	const { openNewTopicDialog, newTopicDialog } = useNewTopicDialog()
@@ -95,7 +95,7 @@ export function NewTopicButton() {
 }
 
 /**
- * Shares Topic creation and feed refresh between native entry points.
+ * Shares the New Topic choice, Topic creation, and feed refresh between native entry points.
  */
 export function useNewTopicDialog(): { openNewTopicDialog: () => void; newTopicDialog: React.ReactNode } {
 	const [isOpen, setIsOpen] = useState(false)
@@ -111,7 +111,7 @@ export function useNewTopicDialog(): { openNewTopicDialog: () => void; newTopicD
 			setIsOpen(true)
 		},
 		newTopicDialog: isOpen && (
-			<EditTopicModal
+			<NewTopicDialog
 				onClose={() => setIsOpen(false)}
 				onTopicSaved={async (topicId) => {
 					await state.reheat()

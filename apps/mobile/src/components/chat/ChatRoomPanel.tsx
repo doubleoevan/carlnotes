@@ -1,4 +1,8 @@
-import { sendChatMentionsViewed, sendClearChatRoom } from "@carlnotes/client/chatRoomClient"
+import {
+	sendChatMentionsViewed,
+	sendClearChatRoom,
+	sendDeleteChatRoomAttachment,
+} from "@carlnotes/client/chatRoomClient"
 import type { ChatRoomMessage } from "@carlnotes/contracts/chat"
 import type { TeamPageResponse } from "@carlnotes/contracts/teams"
 import { type ChatRoomState, useChatRoom } from "@carlnotes/core/hooks/useChatRoom"
@@ -83,6 +87,13 @@ export function ChatRoomPanel({
 			onNotice: (message) => Alert.alert(message),
 		})
 
+	// the stream never announces a removal, so the messages reread after a file is deleted
+	const handleAttachmentDelete = (attachmentId: string): void => {
+		void sendDeleteChatRoomAttachment(topicId, teamId, attachmentId)
+			.then(() => chatRoom.reloadChatMessages())
+			.catch((error) => console.error("delete chat room attachment failed", error))
+	}
+
 	// reload accepted clears before the menu reports success
 	const handleClearChatRoom = async (): Promise<boolean> => {
 		const isCurrentChat = toCurrentChatGuard()
@@ -104,6 +115,7 @@ export function ChatRoomPanel({
 			canModerate={isTeamLeader || isAdmin}
 			memberUsernames={memberUsernames}
 			onDelete={handleDeleteChatMessage}
+			onAttachmentDelete={handleAttachmentDelete}
 			onClear={handleClearChatRoom}
 		/>
 	)
@@ -123,6 +135,7 @@ export function ChatRoomContent({
 	canModerate,
 	memberUsernames,
 	onDelete: onDeleteChatMessage,
+	onAttachmentDelete,
 	onClear,
 }: {
 	room: ChatRoomState
@@ -135,6 +148,7 @@ export function ChatRoomContent({
 	canModerate: boolean
 	memberUsernames: string[]
 	onDelete: (chatMessageId: number) => Promise<void>
+	onAttachmentDelete: (attachmentId: string) => void
 	onClear: () => Promise<boolean>
 }) {
 	// keep virtual list and clock state local to the rendered room
@@ -221,7 +235,7 @@ export function ChatRoomContent({
 						voiceChatPage={null}
 						onReply={chatRoomReply.selectChatMessage}
 						onQuoteClick={(chatMessageId) => setScrollTarget({ key: String(chatMessageId) })}
-						onAttachmentDelete={() => {}}
+						onAttachmentDelete={onAttachmentDelete}
 						onDeleteChatMessage={(chatMessageId) => void onDeleteChatMessage(chatMessageId)}
 						onReport={setReportedChatMessage}
 					/>

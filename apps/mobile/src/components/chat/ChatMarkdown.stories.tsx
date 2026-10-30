@@ -36,6 +36,7 @@ export const RejectedLinks: Story = {
 			"[Script](javascript:alert(1)) [Data](data:text/html,hi) [File](file:///tmp/test) [Email](mailto:hello@example.com) [Website](https://example.com)\n\n`<b>code</b>`\n\n![Image name](https://example.com/image.png)",
 	},
 }
+// the invitation renders as a link that opens the new-topic chat
 export const NewTopicInvitation: Story = { args: { markdown: NEW_TOPIC_CHAT_WORDS } }
 
 // append real chunks to exercise the native renderer's streaming path

@@ -1,6 +1,7 @@
 import { afterEach, expect, test } from "bun:test"
 import { configureApiClient } from "@carlnotes/client/apiClient"
-import type { ChatConversation } from "@carlnotes/contracts/chat"
+import type { ChatPage } from "@carlnotes/client/chatClient"
+import type { ChatConversation, KeptChatAttachment } from "@carlnotes/contracts/chat"
 import { toChatReplyLineText } from "@carlnotes/contracts/chatTurns"
 import { toTestTopicResponse } from "@carlnotes/contracts/topicFeedTestFixtures"
 import { type TopicChat, useTopicChat } from "@carlnotes/core/hooks/useTopicChat"
@@ -12,14 +13,15 @@ import {
 	startEditingTopic,
 	toTopicEdit,
 } from "@carlnotes/core/stores/chatConversationStore"
-import { act } from "react"
+import { act, useState } from "react"
 import { type HookTestHarness, renderTestHook, waitForHook } from "@/lib/hookTestHarness"
 
 // each hook test owns fetch, the account identity, and its mounted React environment
 const originalFetch = globalThis.fetch
 const cleanups: (() => Promise<void>)[] = []
 afterEach(async () => {
-	for (const close of cleanups.splice(0)) {
+	// close the last mounted harness first. each harness restores the globals from before it
+	for (const close of cleanups.splice(0).reverse()) {
 		await close()
 	}
 	globalThis.fetch = originalFetch
@@ -182,6 +184,26 @@ test("stopping a tool-only answer keeps its tool history and does not replay a P
 	expect(chatPostCount).toBe(1)
 })
 
+test("a sent file joins the kept files on a topic's page and never in the new-topic chat", async () => {
+	// reply to every send at once
+	stubChatFetch(async (_url, init) =>
+		init?.method === "POST" ? toChatReplyResponse("Read it.") : Response.json(toChatConversation()),
+	)
+	// send a kept file from a topic's page, which the api stores the file for
+	setChatId({ kind: "private", topicId: "topic-1" })
+	const topicChatHarness = await mountChatWithKeptFile({ topicId: "topic-1" })
+	await waitForHook(() => topicChatHarness.read().isLoaded)
+	await act(async () => topicChatHarness.read().send())
+	expect(topicChatHarness.read().keptAttachments.map((keptAttachment) => keptAttachment.name)).toEqual(["notes.md"])
+	// send the same file from the new-topic chat, where the api keeps nothing
+	setChatId({ kind: "private", newTopic: true })
+	const newTopicChatHarness = await mountChatWithKeptFile({ newTopic: true })
+	await waitForHook(() => newTopicChatHarness.read().isLoaded)
+	await act(async () => newTopicChatHarness.read().send())
+	expect(newTopicChatHarness.read().chatTurns).toHaveLength(1)
+	expect(newTopicChatHarness.read().keptAttachments).toEqual([])
+})
+
 test("the edit card overlays proposals and rereads authoritative settings after a save", async () => {
 	// serve the authoritative Topic name
 	let topicName = "Original"
@@ -218,6 +240,26 @@ async function mountTopicChat(): Promise<HookTestHarness<TopicChat>> {
 	const topicChatHarness = await renderTestHook(() =>
 		useTopicChat({ page: { topicId: "topic-1" }, effects: { onNotice: () => {} } }),
 	)
+	// retain cleanup until the test finishes
+	cleanups.push(topicChatHarness.close)
+	return topicChatHarness
+}
+// mount a conversation whose composer holds one file marked to keep
+async function mountChatWithKeptFile(page: ChatPage): Promise<HookTestHarness<TopicChat>> {
+	activateChatAccount("account")
+	const topicChatHarness = await renderTestHook(() => {
+		const [keptAttachments, setKeptAttachments] = useState<KeptChatAttachment[]>([])
+		return useTopicChat({
+			page,
+			attachmentState: {
+				attachments: [{ kind: "text", name: "notes.md", text: "the notes", keep: true }],
+				keptAttachments,
+				setKeptAttachments,
+				clearDraft: () => {},
+			},
+			effects: { onNotice: () => {} },
+		})
+	})
 	// retain cleanup until the test finishes
 	cleanups.push(topicChatHarness.close)
 	return topicChatHarness

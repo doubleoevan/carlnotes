@@ -65,13 +65,17 @@ export type ChatAttachmentState = {
 	keptAttachments: KeptChatAttachment[]
 	setKeptAttachments: React.Dispatch<React.SetStateAction<KeptChatAttachment[]>>
 	clearDraft: () => void
+	// whether the history previews a sent image or video, which keeps its data url on the sent chat turn
+	isSentMediaPreviewed?: boolean
 }
+// the topic draft the new-topic chat fills, and how it opens the created topic
 export type ChatTopicDraftState = {
 	topicDraft: TopicDraft
 	setTopicDraft: React.Dispatch<React.SetStateAction<TopicDraft>>
 	openCreatedTopic: (topicId: string) => Promise<void>
 	resetTopicDraft: () => void
 }
+// the notices, navigation, and speech the app provides
 export type ChatEffects = {
 	onNotice?: (message: string) => void
 	openNewTopicChat?: () => void
@@ -104,6 +108,7 @@ export function useTopicChat({ page, attachmentState, draftState, effects = {} }
 		keptAttachments = localKeptAttachments,
 		setKeptAttachments = setLocalKeptAttachments,
 		clearDraft = () => {},
+		isSentMediaPreviewed = true,
 	} = attachmentState ?? {}
 	const {
 		topicDraft = localTopicDraft,
@@ -215,13 +220,13 @@ export function useTopicChat({ page, attachmentState, draftState, effects = {} }
 	// whether a send may go: something to send and no reply streaming. a retry with only attachments to resend says why
 	type CanSendOptions = { askedQuestion: string; sendableAttachmentCount: number; isRetry: boolean }
 	function canSend({ askedQuestion, sendableAttachmentCount, isRetry }: CanSendOptions): boolean {
-		if (
-			isStreaming ||
-			abortRef.current ||
-			!chatConversationGates.isLoaded ||
-			!chatConversationGates.canChat ||
-			chatConversationGates.hasLoadFailed
-		) {
+		// nothing sends while a reply streams
+		if (isStreaming || abortRef.current) {
+			return false
+		}
+		// or before the conversation loads and allows chatting
+		const { isLoaded, canChat, hasLoadFailed } = chatConversationGates
+		if (!isLoaded || !canChat || hasLoadFailed) {
 			return false
 		}
 		// send when there is something to send
@@ -257,7 +262,11 @@ export function useTopicChat({ page, attachmentState, draftState, effects = {} }
 		// a send of the draft posts its attachments and clears the composer
 		const sentAttachments = isDraftSent ? takeDraftAttachments() : []
 		// show the question, on its own if the conversation before it ended with the topic it made
-		const sentChatTurn = toSentChatTurn({ question: askedQuestion, attachments: sentAttachments })
+		const sentChatTurn = toSentChatTurn({
+			question: askedQuestion,
+			attachments: sentAttachments,
+			isMediaPreviewed: isSentMediaPreviewed,
+		})
 		setChatTurns((previousChatTurns) => [...(isConversationEnded ? [] : previousChatTurns), sentChatTurn])
 		// this question is the new conversation, so the next one keeps it
 		setIsConversationEnded(false)
@@ -306,12 +315,17 @@ export function useTopicChat({ page, attachmentState, draftState, effects = {} }
 		finishSend({ spokenAnswerKey: sentChatTurn.spokenAnswerKey, chatSendResult, isCurrentChat })
 	}
 
-	// clear the draft from the composer and return its attachments, which post with this chat turn. the kept
-	// attachments join the manage list right away
+	// clear the draft from the composer and return its attachments. add them to the kept attachments right away on a
+	// topic's page
 	function takeDraftAttachments(): ChatAttachment[] {
 		setQuestion("")
 		clearDraft()
-		setKeptAttachments((previousAttachments) => [...previousAttachments, ...toKeptAttachmentPlaceholders(attachments)])
+		if (page.topicId) {
+			setKeptAttachments((previousKeptAttachments) => [
+				...previousKeptAttachments,
+				...toKeptAttachmentPlaceholders(attachments),
+			])
+		}
 		return attachments
 	}
 

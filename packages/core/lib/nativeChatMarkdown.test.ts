@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
 import { toNativeChatMarkdown } from "./nativeChatMarkdown"
-import { isSafeHref, NEW_TOPIC_CHAT_WORDS } from "./safeChatMarkdown"
+import { isSafeHref, NEW_TOPIC_CHAT_HREF, NEW_TOPIC_CHAT_WORDS } from "./safeChatMarkdown"
 
 test("native answers keep raw HTML literal and remove media and unsafe link actions", () => {
 	const segments = toNativeChatMarkdown(
@@ -36,10 +36,26 @@ test("native links preserve percent escapes while encoding Markdown destination 
 	])
 })
 
-test("the new-topic invitation stays plain on native and escaped entities cannot become HTML", () => {
+test("the new-topic invitation links to the new-topic chat and escaped entities cannot become HTML", () => {
 	const result = toNativeChatMarkdown(`${NEW_TOPIC_CHAT_WORDS}\n\n&lt;img src=x onerror=alert(1)&gt;`)
-	expect(JSON.stringify(result)).not.toContain("carlnotes:")
+	expect(result[0]).toEqual({
+		kind: "markdown",
+		markdown: expect.stringContaining(`](${NEW_TOPIC_CHAT_HREF})`),
+	})
 	expect(JSON.stringify(result)).toContain("\\\\<img")
+})
+
+test("another fragment, a script link, and an invitation split mid-stream stay inert", () => {
+	// another fragment and a script link
+	const otherFragment = JSON.stringify(toNativeChatMarkdown("[Jump](#other)"))
+	expect(otherFragment).not.toContain("](")
+	const scriptLink = JSON.stringify(toNativeChatMarkdown("[Run](javascript:alert(1))"))
+	expect(scriptLink).not.toContain("](")
+	// the invitation's words and its link, each cut off mid-stream
+	const splitInvitation = JSON.stringify(toNativeChatMarkdown(NEW_TOPIC_CHAT_WORDS.slice(0, 20), true))
+	expect(splitInvitation).not.toContain(NEW_TOPIC_CHAT_HREF)
+	const splitLink = JSON.stringify(toNativeChatMarkdown("[Make one](#new-topic-ch", true))
+	expect(splitLink).not.toContain("](")
 })
 
 test("table cards preserve header order, formatting, escaped pipes, empty cells and safe links", () => {

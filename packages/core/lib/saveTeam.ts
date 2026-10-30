@@ -7,7 +7,7 @@ import {
 	sendUpdateTeam,
 } from "@carlnotes/client/teamClient"
 import type { CreateTeamPayload } from "@carlnotes/contracts/payloads"
-import { TEAM_AVATAR_UPLOAD_FAILED_TEXT, toAvatarRejectionText } from "./avatarUpload"
+import { TEAM_AVATAR_UPLOAD_FAILED_TEXT, toAvatarRejectionText } from "./imageUpload"
 import type { PendingInvite } from "./teamFields"
 
 // what each rejection tells the person saving a team, in the team modal and the topic modal's teams field

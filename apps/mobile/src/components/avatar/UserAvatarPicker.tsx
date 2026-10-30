@@ -1,6 +1,6 @@
 import { toAvatarImagePath } from "@carlnotes/contracts/avatars"
 import { useAvatar } from "@carlnotes/core/hooks/useAvatar"
-import { AVATAR_UPLOAD_FAILED_TEXT, toAvatarRejectionText } from "@carlnotes/core/lib/avatarUpload"
+import { AVATAR_UPLOAD_FAILED_TEXT, toAvatarRejectionText } from "@carlnotes/core/lib/imageUpload"
 import { Camera } from "lucide-react-native"
 import { useState } from "react"
 import { View } from "react-native"
@@ -8,58 +8,68 @@ import { Avatar } from "@/components/branding/Avatar"
 import { Button } from "@/components/primitives/button"
 import { Icon } from "@/components/primitives/icon"
 import { Text } from "@/components/primitives/text"
-import { chooseAvatarBody } from "./avatarUpload"
+import { useAvatarPicker } from "./avatarUpload"
 
 /**
- * Uses the system photo picker for the same immediate avatar upload as the web profile.
+ * Uses the picker menu for the same immediate avatar upload as the web profile. `isCameraInitiallyShown` and
+ * `initialError` start it with the camera overlay or an upload error showing.
  */
-export function UserAvatarPicker({ userId, username }: { userId: string; username: string }) {
+export function UserAvatarPicker({
+	userId,
+	username,
+	isCameraInitiallyShown = false,
+	initialError = null,
+}: {
+	userId: string
+	username: string
+	isCameraInitiallyShown?: boolean
+	initialError?: string | null
+}) {
 	// retain a failed upload's feedback and refresh every avatar after success
 	const { avatarVersion, uploadAvatarBody } = useAvatar()
-	const [isCameraShown, setIsCameraShown] = useState(false)
+	const [isCameraShown, setIsCameraShown] = useState(isCameraInitiallyShown)
 	const [isUploading, setIsUploading] = useState(false)
-	const [error, setError] = useState<string | null>(null)
-	async function handleChoose(): Promise<void> {
-		if (isUploading) {
+	const [error, setError] = useState<string | null>(initialError)
+	const avatarPicker = useAvatarPicker({
+		// upload the picked photo at once, keeping a rejection's words under the photo
+		onPicked: async (body) => {
+			setIsUploading(true)
+			try {
+				const rejection = await uploadAvatarBody(body)
+				if (rejection) {
+					setError(toAvatarRejectionText(rejection, AVATAR_UPLOAD_FAILED_TEXT))
+				}
+			} catch {
+				setError(AVATAR_UPLOAD_FAILED_TEXT)
+			} finally {
+				setIsUploading(false)
+				setIsCameraShown(false)
+			}
+		},
+	})
+
+	// replace the web's hover with a tap, then let a second tap open the picker menu
+	function handlePress(): void {
+		if (!isCameraShown) {
+			setIsCameraShown(true)
 			return
 		}
-		setIsUploading(true)
 		setError(null)
-		try {
-			const body = await chooseAvatarBody()
-			if (!body) {
-				return
-			}
-			const rejection = await uploadAvatarBody(body)
-			if (rejection) {
-				setError(toAvatarRejectionText(rejection, AVATAR_UPLOAD_FAILED_TEXT))
-			}
-		} catch {
-			setError(AVATAR_UPLOAD_FAILED_TEXT)
-		} finally {
-			setIsUploading(false)
-			setIsCameraShown(false)
-		}
-	}
-
-	// replace the web's hover with a tap, then let a second tap open the system picker
-	function handlePress(): void {
-		if (isCameraShown) {
-			void handleChoose()
-		} else {
-			setIsCameraShown(true)
-		}
+		avatarPicker.openFilePicker()
 	}
 	return (
 		<View>
 			{/* keep the camera on the photo without adding a separate control beside the name */}
 			<Button
+				ref={avatarPicker.triggerRef}
 				variant="ghost"
 				className="relative h-auto self-start rounded-full p-0"
 				accessibilityLabel={isCameraShown ? "Choose a new avatar photo" : "Change your avatar"}
-				accessibilityHint={isCameraShown ? "Opens your photo library" : "Shows the photo upload control"}
-				accessibilityState={{ busy: isUploading }}
-				disabled={isUploading}
+				accessibilityHint={
+					isCameraShown ? "Opens the photo library, the camera, or Files" : "Shows the photo upload control"
+				}
+				accessibilityState={{ busy: isUploading || avatarPicker.isPicking }}
+				disabled={isUploading || avatarPicker.isPicking}
 				onPress={handlePress}
 				onBlur={() => setIsCameraShown(false)}
 			>
@@ -75,6 +85,7 @@ export function UserAvatarPicker({ userId, username }: { userId: string; usernam
 					</View>
 				)}
 			</Button>
+			{avatarPicker.filePickerMenu}
 			{error && (
 				<Text accessibilityRole="alert" className="mt-1 text-xs text-destructive">
 					{error}

@@ -1,26 +1,35 @@
 import type { ChatPage } from "@carlnotes/client/chatClient"
 import { CHAT_HISTORY_TURNS, toUncompactedChatTurnStart } from "@carlnotes/contracts/chatTurns"
 import type { ChatMessageAuthor } from "@carlnotes/core/components/ChatTurnBlock"
+import type { TopicDraftFile } from "@carlnotes/core/components/TopicDraftCard"
+import type { NewTopicDraft } from "@carlnotes/core/hooks/useNewTopicDraft"
 import { useNow } from "@carlnotes/core/hooks/useNow"
-import { useTopicChat } from "@carlnotes/core/hooks/useTopicChat"
+import { type TopicChat, useTopicChat } from "@carlnotes/core/hooks/useTopicChat"
+import { CHAT_QUESTION_PLACEHOLDER, NEW_TOPIC_CHAT_COPY } from "@carlnotes/core/lib/chatCopy"
 import { CHAT_REJECTION_COPY } from "@carlnotes/core/lib/chatRejectionCopy"
 import type { ChatTurn } from "@carlnotes/core/lib/chatTurns"
-import { clearProposedTopicEdit } from "@carlnotes/core/stores/chatConversationStore"
+import { clearProposedTopicEdit, setChatId } from "@carlnotes/core/stores/chatConversationStore"
 import { useEffect, useRef } from "react"
 import { Alert, type FlatList, View } from "react-native"
 import { CoffeeLoading } from "@/components/branding/CoffeeLoading"
 import { LoadFailedNotice } from "@/components/common/LoadFailedNotice"
 import { Text } from "@/components/primitives/text"
 import { useIsScreenActive } from "@/hooks/useIsScreenActive"
+import type { PickedFile } from "@/pickedFiles"
 import { ChatComposer } from "./ChatComposer"
+import { ChatAttachButton, KeptAttachmentsButton } from "./ChatComposerAttachments"
 import { ChatMessageList } from "./ChatMessageList"
 import { ChatOptionsMenu } from "./ChatOptionsMenu"
 import { ChatRejectionNotice } from "./ChatRejectionNotice"
+import { ChatTopicLimitNotice } from "./ChatTopicLimitNotice"
 import { ChatTurnBlock } from "./ChatTurnBlock"
 import { TopicDraftCard } from "./TopicDraftCard"
+import { useChatAttachments } from "./useChatAttachments"
+import { useNewTopicDraft } from "./useNewTopicDraft"
 
 /**
- * Uses the web conversation state, with native cancellation and authoritative history on return.
+ * Uses the web conversation state, the new-topic chat included, with native cancellation and authoritative history on
+ * return.
  */
 export function PrivateChatPanel({
 	page,
@@ -31,12 +40,16 @@ export function PrivateChatPanel({
 	name: string
 	author: ChatMessageAuthor
 }) {
-	// use the shared conversation with native notices and text-only effects
+	// use the shared conversation with picked files, the new-topic draft, and native notices
+	const chatAttachmentState = useChatAttachments()
+	const topicDraftState = useNewTopicDraft(page)
 	const topicChat = useTopicChat({
 		page,
+		attachmentState: chatAttachmentState,
+		draftState: topicDraftState,
 		effects: {
 			onNotice: (message) => Alert.alert("Coffee Talk", message),
-			openNewTopicChat: () => Alert.alert("Coffee Talk", "New-topic chat is available on the web."),
+			openNewTopicChat: () => setChatId({ kind: "private", newTopic: true }),
 		},
 	})
 	const topicChatRef = useRef(topicChat)
@@ -58,6 +71,16 @@ export function PrivateChatPanel({
 		}
 		return () => topicChatRef.current.stop()
 	}, [isActive])
+
+	// a new-topic chat's files also wait on the draft for the topic it creates, so their copies stay for the upload
+	const handlePickedFiles = async (pickedFiles: PickedFile[]): Promise<void> => {
+		if (!page.newTopic) {
+			await chatAttachmentState.addPickedFiles(pickedFiles)
+			return
+		}
+		const takenFiles = await chatAttachmentState.addPickedFiles(pickedFiles, { isTakenFileRetained: true })
+		topicDraftState.addTopicDraftAttachmentFiles(takenFiles)
+	}
 
 	// retain the shared history boundary and gate before rendering the composer
 	const chatHistoryStart = Math.max(0, topicChat.chatTurns.length - CHAT_HISTORY_TURNS)
@@ -90,7 +113,7 @@ export function PrivateChatPanel({
 				data={topicChat.chatTurns}
 				listRef={listRef}
 				keyExtractor={(chatTurn) => chatTurn.spokenAnswerKey}
-				emptyText={topicChat.isBudgetExhausted ? "" : `Ask me for a hot take on ${chatName || "this chat"}.`}
+				emptyText={toEmptyText({ page, chatName, isBudgetExhausted: topicChat.isBudgetExhausted })}
 				renderItem={(chatTurn, index) => (
 					<ChatTurnBlock
 						chatTurn={chatTurn}
@@ -105,6 +128,8 @@ export function PrivateChatPanel({
 					/>
 				)}
 			/>
+			{/* the new-topic draft with its files, or the limit notice if the plan has no topics left */}
+			{page.newTopic && <TopicDraftOrLimitNotice topicChat={topicChat} topicDraftState={topicDraftState} />}
 			{/* topic draft */}
 			{topicChat.editableTopicDraft && (
 				<TopicDraftCard
@@ -127,8 +152,76 @@ export function PrivateChatPanel({
 					onStop={topicChat.stop}
 					isStreaming={topicChat.isStreaming}
 					isDisabled={!isActive || !topicChat.canChat}
+					placeholder={toPlaceholder(page, topicChat.isFirstTopic)}
+					attachments={topicChat.attachments}
+					onRemoveAttachment={chatAttachmentState.removeAttachment}
+					attachmentActions={
+						<>
+							<ChatAttachButton
+								isDisabled={!isActive || !topicChat.canChat || topicChat.isStreaming}
+								attachmentCount={topicChat.attachments.length}
+								onPicked={handlePickedFiles}
+							/>
+							{topicChat.keptAttachments.length > 0 && (
+								<KeptAttachmentsButton
+									keptAttachments={topicChat.keptAttachments}
+									onRemoveKeptAttachment={chatAttachmentState.removeKeptAttachment}
+								/>
+							)}
+						</>
+					}
 				/>
 			)}
 		</View>
+	)
+}
+
+// the private chat's placeholder, or the new-topic chat's for a first or a next topic
+function toPlaceholder(page: ChatPage, isFirstTopic: boolean): string {
+	if (!page.newTopic) {
+		return CHAT_QUESTION_PLACEHOLDER
+	}
+	return isFirstTopic ? NEW_TOPIC_CHAT_COPY.firstTopicPlaceholder : NEW_TOPIC_CHAT_COPY.placeholder
+}
+
+// a picked file as the draft card lists it
+function toTopicDraftFile(pickedFile: PickedFile): TopicDraftFile {
+	return { name: pickedFile.name, size: pickedFile.byteSize, lastModified: 0 }
+}
+
+// the empty conversation's text, which is nothing once the budget is spent, the new-topic chat's opening line, or a hot take
+function toEmptyText({
+	page,
+	chatName,
+	isBudgetExhausted,
+}: {
+	page: ChatPage
+	chatName: string
+	isBudgetExhausted: boolean
+}): string {
+	if (isBudgetExhausted) {
+		return ""
+	}
+	return page.newTopic ? NEW_TOPIC_CHAT_COPY.openingLine : `Ask me for a hot take on ${chatName || "this chat"}.`
+}
+
+// the limit notice if the plan holds no more topics, or else carl's topic draft and its files
+function TopicDraftOrLimitNotice({
+	topicChat,
+	topicDraftState,
+}: {
+	topicChat: TopicChat
+	topicDraftState: NewTopicDraft<PickedFile>
+}) {
+	if (topicChat.topicsRemaining === 0 && topicChat.topicLimit !== null) {
+		return <ChatTopicLimitNotice topicLimit={topicChat.topicLimit} />
+	}
+	return (
+		<TopicDraftCard
+			topicDraft={topicChat.topicDraft}
+			isCarlReplying={topicChat.isStreaming}
+			attachmentFiles={topicDraftState.topicDraftAttachmentFiles.map(toTopicDraftFile)}
+			onRemoveAttachmentFile={topicDraftState.removeTopicDraftAttachmentFile}
+		/>
 	)
 }

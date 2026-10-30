@@ -1,3 +1,4 @@
+import { TOPIC_ATTACHMENT_MAX_BYTES } from "@carlnotes/contracts/attachmentTypes"
 import { db } from "@carlnotes/db"
 import { attachments, topics } from "@carlnotes/db/schema/topics"
 import {
@@ -30,8 +31,6 @@ type AttachmentUpload = {
 	sourceUrl?: string
 }
 
-// reject uploads larger than this before any storage or model work
-export const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024
 // limit the extracted text fed to the model
 const MAX_EXTRACT_CHARS = 8000
 // a fetched page is stored as markdown
@@ -42,8 +41,8 @@ const MAX_PAGE_NAME_CHARS = MAX_KEY_FILENAME_CHARS - PAGE_EXTENSION.length
 export async function ingestAttachment(attachmentUpload: AttachmentUpload): Promise<Attachment> {
 	const { topicId, filename, contentType, bytes, sourceUrl = null } = attachmentUpload
 	// validate the size and type of the payload before touching storage
-	if (bytes.byteLength > MAX_ATTACHMENT_BYTES) {
-		throw new AttachmentValidationError(`attachment exceeds ${MAX_ATTACHMENT_BYTES} bytes`)
+	if (bytes.byteLength > TOPIC_ATTACHMENT_MAX_BYTES) {
+		throw new AttachmentValidationError(`attachment exceeds ${TOPIC_ATTACHMENT_MAX_BYTES} bytes`)
 	}
 	// an empty upload would store fine and read back as a ready attachment that downloads to nothing, so prevent it here
 	if (bytes.byteLength === 0) {

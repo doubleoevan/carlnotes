@@ -22,3 +22,19 @@ export const Loading: Story = { args: { isCarlReplying: true } }
 export const Saved: Story = { args: { isTopicEditProposed: false } }
 export const Cancelled: Story = { args: { isTopicEditProposed: false } }
 export const Rejected: Story = { args: { isTopicEditProposed: true } }
+// the new-topic chat's draft, with no topic yet: filled with files, and while Carl writes it
+export const NewTopicWithFiles: Story = {
+	args: {
+		topicId: null,
+		isTopicEditProposed: false,
+		onDismissTopicEdit: undefined,
+		attachmentFiles: [
+			{ name: "harvest-report.pdf", size: 120_000, lastModified: 0 },
+			{ name: "a-very-long-photo-name-from-the-camera-roll.jpg", size: 480_000, lastModified: 0 },
+		],
+		onRemoveAttachmentFile: () => {},
+	},
+}
+export const NewTopicLoading: Story = {
+	args: { topicId: null, isTopicEditProposed: false, onDismissTopicEdit: undefined, isCarlReplying: true },
+}

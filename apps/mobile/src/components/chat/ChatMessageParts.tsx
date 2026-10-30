@@ -68,7 +68,7 @@ export function ChatMessageAction({
 /**
  * Shows stored chat attachment names as chips.
  */
-export function ChatAttachmentChips({ attachments }: { attachments: ChatMessageAttachment[] }) {
+export function ChatMessageAttachmentChips({ attachments }: { attachments: ChatMessageAttachment[] }) {
 	return (
 		<View className="mt-1 flex-row flex-wrap gap-1">
 			{attachments.map((attachment) => (

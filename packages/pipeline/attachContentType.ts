@@ -1,24 +1,6 @@
 // an attachment's content type: the canonical type from what the browser sent and the file name, and what each type is
 
-// the OOXML media types a browser reports for word and excel files
-export const DOCX_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-
-export const XLSX_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-
-// the media type each known extension stands for. browsers often misreport these
-export const CONTENT_TYPE_BY_EXTENSION: Record<string, string> = {
-	".txt": "text/plain",
-	".log": "text/plain",
-	".md": "text/markdown",
-	".markdown": "text/markdown",
-	// the table and document extensions, the ones a browser most often reports wrongly
-	".csv": "text/csv",
-	".tsv": "text/tab-separated-values",
-	".json": "application/json",
-	".pdf": "application/pdf",
-	".docx": DOCX_TYPE,
-	".xlsx": XLSX_TYPE,
-}
+import { DOCX_TYPE, toSuffixMimeType, XLSX_TYPE } from "@carlnotes/contracts/attachmentTypes"
 
 /**
  * Returns a content type without its parameters, so a declared charset never breaks an exact match.
@@ -39,12 +21,8 @@ export function toCanonicalContentType(contentType: string, filename: string): s
 		return contentType
 	}
 
-	// a filename without an extension has nothing more to offer, and an unknown one keeps the reported type
-	const dotIndex = filename.lastIndexOf(".")
-	if (dotIndex === -1) {
-		return contentType
-	}
-	return CONTENT_TYPE_BY_EXTENSION[filename.slice(dotIndex).toLowerCase()] ?? contentType
+	// a filename without a known extension keeps the reported type
+	return toSuffixMimeType(filename) ?? contentType
 }
 
 /** Whether an attachment holds rows: csv, tsv, or an Excel workbook. */

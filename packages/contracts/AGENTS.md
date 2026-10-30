@@ -10,11 +10,14 @@ The contract modules sit at the package root, one per domain, each imported by i
 the chat turn contracts in `chatTurns.ts` (the memory and history limits, the reply stream line, the tool calls a turn
 leaves, and the sent tool calls), `teams.ts`, `invites.ts`, `activity.ts`, `profiles.ts`, `profilePage.ts`,
 `admin.ts`, `search.ts`, `findings.ts`, `podcast.ts`, `podcastEpisodePage.ts`, `topics.ts`, `notes.ts`, `pageHead.ts`,
-`signupCta.ts`, and `viewerCounts.ts`, a topic's and a podcast episode's counts. `payloads.ts` is the request
-payload schemas the api validates with `zValidator` and the types inferred from them, with the topic ones in
-`topicPayloads.ts`, `enums.ts` and `plans.ts` hold the values that both sides compare, with the role and plan readers
-`isAdminRole`, `isLeaderRole`, `isPaidPlan`, and `isPremiumPlan` that every role or plan check outside the api's gate
-goes through, `sources.ts` defines the Sources
+`signupCta.ts`, `viewerCounts.ts`, a topic's and a podcast episode's counts, and `attachmentTypes.ts`, the file
+types the chat and topic attachment pickers offer on both apps, the type a file name's suffix stands for, the word
+and workbook types the pipeline reads, the topic attachment size limit, and its rejection line
+(`TOPIC_ATTACHMENT_TOO_LARGE_LINE`, `toTopicAttachmentRejectionLine`). `payloads.ts`
+is the request payload schemas the api validates with `zValidator` and the types inferred from them, with the topic
+ones in `topicPayloads.ts`, `enums.ts` and `plans.ts` hold the values that both sides compare, with the role and
+plan readers `isAdminRole`, `isLeaderRole`, `isPaidPlan`, and `isPremiumPlan` that every role or plan check outside
+the api's gate goes through, `sources.ts` defines the Sources
 that an ingester reads, `seo.ts` builds topic slugs and paths, meta descriptions, and the site's structured data, and
 `podcastEpisodes.ts` holds the podcast episode minutes and findings limits, a cover's sizes and the `PodcastCover`
 shape, the show's and the hosts' names, the theme song's credits, and a turn's transcript text; the speech model setting

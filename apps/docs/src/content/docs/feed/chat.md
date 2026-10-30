@@ -25,8 +25,8 @@ topic's own findings](../../../assets/screenshots/feed-coffee-talk.png)
 Tap the orange **Coffee Talk** pill at the bottom right of any page. A topic held by one of your teams opens that
 team's room. Tap the selector above the conversation to open a full-width sheet. It lists **Private chat** first,
 then rooms alphabetically, with Team avatars and an orange scroll indicator. On Profile pages, the same shared-Team
-and Topic-room preferences as web choose the conversation. Other pages use the web default room. If you have no rooms,
-choose a topic from your Feed for private chat.
+and Topic-room preferences as web choose the conversation. Other pages open the web default room, or the new-topic chat
+if you have no rooms. Without rooms, you can also pick a topic from your Feed for private chat.
 The conversation fills the phone screen. **Close** returns to the page and reading position you came from. The pill
 sits above the phone's safe area and gets out of the way while you type.
 
@@ -36,8 +36,18 @@ conversation reloads its saved history. A connection interruption never sends yo
 
 The phone uses the same conversation, permissions, Topic proposals, and rejection wording as the web. Tables in answers
 become cards with a label for each column. Raw HTML remains text, and only HTTP and HTTPS links open. Files already in
-history appear as name chips. To add or manage files, speak with Carl, hear an answer, or create a topic through chat,
-use the web. Those controls are not part of mobile text chat.
+history appear as name chips. The selector also lists **Give Carl a topic. You know the one.**, the
+[new-topic chat](/docs/feed/making-a-topic-in-chat/). To speak with Carl or hear an answer, use the web.
+
+### Files on your phone
+
+The paperclip beside the message box offers **Photo library**, **Take photo**, and **Files**. The app asks for the
+camera only when you choose **Take photo**, and the app sees only the photos you pick from the library. A large photo is
+made smaller before Carl reads it, and its location data is removed. The file types and limits are the same as on the
+web. Each file shows as a chip above the box with an **X** to remove it.
+
+On a topic, the files Carl keeps for that chat sit behind the file button with an **X** next to the paperclip. Tap a
+file to open it, or its **X** to delete it and free a place for another.
 
 ## Questions worth asking
 

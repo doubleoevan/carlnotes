@@ -10,7 +10,7 @@ import { View } from "react-native"
 import { Text } from "@/components/primitives/text"
 import { ChatAuthor } from "./ChatAuthor"
 import { ChatMarkdown } from "./ChatMarkdown"
-import { ChatAttachmentChips, ChatLinkPreviews, CopyButton, ModelThinkingBubble } from "./ChatMessageParts"
+import { ChatLinkPreviews, ChatMessageAttachmentChips, CopyButton, ModelThinkingBubble } from "./ChatMessageParts"
 import { ChatRejectionNotice } from "./ChatRejectionNotice"
 import { PodcastEpisodeChapterTag } from "./PodcastEpisodeChapterTag"
 
@@ -53,7 +53,7 @@ const CHAT_TURN_ELEMENTS: ChatTurnElements = {
 						/>
 					)}
 					{/* attachments and previews */}
-					<ChatAttachmentChips attachments={chatTurn.attachments} />
+					<ChatMessageAttachmentChips attachments={chatTurn.attachments} />
 					<ChatLinkPreviews previews={chatTurn.linkPreviews} />
 					{/* question actions */}
 					<View className="-mr-1 mt-1 flex-row-reverse items-center gap-2">

@@ -1,8 +1,9 @@
+import { TOPIC_ATTACHMENT_MAX_BYTES, TOPIC_ATTACHMENT_TOO_LARGE_LINE } from "@carlnotes/contracts/attachmentTypes"
 import { attachmentContextPayload, attachmentUrlPayload } from "@carlnotes/contracts/topicPayloads"
 import { db } from "@carlnotes/db"
 import { attachments, topics } from "@carlnotes/db/schema/topics"
 import { attachmentStream, deleteStoredObject, recordPendingObjectDeletions } from "@carlnotes/db/store"
-import { ingestAttachment, ingestUrlAttachment, MAX_ATTACHMENT_BYTES } from "@carlnotes/pipeline/attach"
+import { ingestAttachment, ingestUrlAttachment } from "@carlnotes/pipeline/attach"
 import { AttachmentValidationError, toCanonicalContentType } from "@carlnotes/pipeline/attachContentType"
 import { trackEvent } from "@carlnotes/server/analytics"
 import { zValidator } from "@hono/zod-validator"
@@ -222,10 +223,7 @@ export const topicAttachmentsRoute = new Hono<AppEnv>()
 		TOPIC_ATTACHMENT_UPLOAD_PATH,
 		// reject a visitor, then limit the upload body before it's fully buffered into memory
 		uploadSignedOutRejection,
-		toBodyLimit(
-			MAX_ATTACHMENT_BYTES + MULTIPART_ENVELOPE_BYTES,
-			`That attachment is too large. The limit is ${MAX_ATTACHMENT_BYTES / (1024 * 1024)} MB.`,
-		),
+		toBodyLimit(TOPIC_ATTACHMENT_MAX_BYTES + MULTIPART_ENVELOPE_BYTES, TOPIC_ATTACHMENT_TOO_LARGE_LINE),
 		async (context) => {
 			// reject a signed-out visitor
 			const userId = currentUser(context)

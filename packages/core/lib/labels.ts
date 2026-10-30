@@ -280,3 +280,10 @@ export function toPodcastEpisodeDayAndDurationLabels(podcastEpisode: {
 		toPodcastEpisodeDurationLabel(podcastEpisode.durationSeconds),
 	]
 }
+
+/**
+ * Returns a pasted text attachment's length, such as 12,480 chars.
+ */
+export function toCharacterCountLabel(text: string): string {
+	return `${text.length.toLocaleString()} chars`
+}

@@ -1,7 +1,11 @@
 import { authClient } from "@carlnotes/client/authClient"
 import { useNow } from "@carlnotes/core/hooks/useNow"
+import { isUserTopicFeedEmpty } from "@carlnotes/core/lib/topicFeed"
+import { router } from "expo-router"
 import { Coffee } from "lucide-react-native"
+import { useEffect } from "react"
 import { ScrollView, View } from "react-native"
+import { toNewTopicChatHref } from "@/components/chat/chatNavigation"
 import { ClassNameSafeAreaView } from "@/components/common/ClassNameSafeAreaView"
 import { Footer } from "@/components/layout/Footer"
 import { Header } from "@/components/layout/Header"
@@ -12,6 +16,7 @@ import { TopicFeed } from "@/components/topic/TopicFeed"
 import { TopicFeedStatus } from "@/components/topic/TopicFeedStatus"
 import { TopicHomeActions } from "@/components/topic/TopicHomeActions"
 import { useTopicFeed } from "@/providers/TopicFeedProvider"
+import { takeNewTopicChatWelcome } from "@/stores/newTopicChatWelcome"
 
 /**
  * Shows the current account's feed or the public feed with shared selection and refresh.
@@ -24,9 +29,17 @@ export default function HomeScreen() {
 		void topicFeed.reheat()
 	}
 
-	// read the session. a visitor's Home shows the web hero, which scrolls with the search bar and the tags as the
-	// phone web's does. a user's search bar and tags stay pinned under the brand row
+	// read the session. a signed-in user's empty Feed opens the new-topic chat by itself, once per launch
 	const { data: session } = authClient().useSession()
+	const isTopicFeedEmpty = Boolean(session) && isUserTopicFeedEmpty(topicFeed.topicFeed)
+	useEffect(() => {
+		if (isTopicFeedEmpty && takeNewTopicChatWelcome()) {
+			router.push(toNewTopicChatHref())
+		}
+	}, [isTopicFeedEmpty])
+
+	// a visitor's Home shows the web hero, which scrolls with the search bar and the tags as the
+	// phone web's does. a user's search bar and tags stay pinned under the brand row
 	const isHeroShown = !session
 	const homeTop = (
 		<>

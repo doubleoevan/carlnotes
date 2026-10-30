@@ -41,8 +41,9 @@ when it is loaded. **Earlier messages** loads more history without moving you aw
 You can delete your own messages. Team leaders and admins can also delete others' messages and clear the room, with
 confirmation before clearing. A failed action leaves the history intact. Opening a room marks its mentions viewed.
 Messages reconnect when you return to the app. Changes to deleted messages on another device appear when the room
-reloads; deletion does not currently have its own live event. Existing files appear as name chips; file management
-and voice are available on the web.
+reloads; deletion has no live event of its own. The paperclip shares a photo from the library, one taken
+with the camera, or a file from Files, with the same types and limits as the web. A shared file shows under its message.
+Tap it to open it, or delete it if you shared it or lead the team. Voice is available on the web.
 
 ## Who hears you
 

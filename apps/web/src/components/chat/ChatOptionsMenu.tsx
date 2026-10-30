@@ -1,5 +1,6 @@
 // the chat room switcher, a row under the title that opens the chat room list
 import type { ChatMention } from "@carlnotes/contracts/chat"
+import { NEW_TOPIC_CHAT_COPY } from "@carlnotes/core/lib/chatCopy"
 import { useAllChatMentions } from "@carlnotes/core/stores/chatRoomStore"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { Check, ChevronDown, Plus, Trash2, Users } from "lucide-react"
@@ -134,7 +135,7 @@ export function ChatOptionsMenu({
 				{onNewTopicChat && (
 					<button type="button" onClick={() => handleSelectChatOption(onNewTopicChat)} className={MENU_OPTION_CLASS}>
 						<Plus className="text-muted-foreground size-5" />
-						Give Carl a topic. You know the one.
+						{NEW_TOPIC_CHAT_COPY.name}
 					</button>
 				)}
 				{/* then the selected chat room, then the rest alphabetically */}

@@ -8,11 +8,12 @@ import { MAX_TOPIC_SOURCES, TOPIC_NAME_CHARS, type TopicResponse } from "@carlno
 import { toUpdateTopicPayload, useTopicFields } from "@carlnotes/core/hooks/useTopicFields"
 import { useTopicTeamChoice } from "@carlnotes/core/hooks/useTopicTeamChoice"
 import { MISSING_FIELD_NOTES, saveTopic } from "@carlnotes/core/lib/saveTopic"
-import { Globe, Link, Lock, Mail, Paperclip, X } from "lucide-react-native"
+import { Globe, Link, Lock, Mail, X } from "lucide-react-native"
 import { useRef } from "react"
 import { Share, View } from "react-native"
 import { ChoiceSelect } from "@/components/common/ChoiceSelect"
 import { PreferenceSwitch } from "@/components/common/PreferenceSwitch"
+import { deletePickedFile } from "@/components/common/pickedFileCache"
 import { Sheet } from "@/components/common/Sheet"
 import { InviteFields } from "@/components/invite/InviteFields"
 import { Button } from "@/components/primitives/button"
@@ -24,10 +25,11 @@ import { useTopicFeed } from "@/providers/TopicFeedProvider"
 import { ScheduleFields } from "./EditTopicFields"
 import { TagPicker } from "./TagPicker"
 import {
-	pickTopicAttachments,
+	TopicAttachButton,
 	TopicAttachmentEditor,
 	type TopicAttachmentFile,
 	uploadTopicAttachment,
+	useTopicAttachmentCleanup,
 } from "./TopicAttachmentEditor"
 import { TopicSourceEditor } from "./TopicSourceEditor"
 import { TopicTeamSelect } from "./TopicTeamSelect"
@@ -55,6 +57,7 @@ export function EditTopicModal({
 	const createdTopicId = useRef<string | null>(null)
 	const { knownTags, topicFeed } = useTopicFeed()
 	const mutation = usePageMutation()
+	useTopicAttachmentCleanup(fields.pendingFiles)
 	async function handleSave(): Promise<void> {
 		if (!fields.name.trim()) {
 			throw new Error(MISSING_FIELD_NOTES.name)
@@ -74,7 +77,11 @@ export function EditTopicModal({
 			createdTopicId,
 			fields,
 			topicTeam,
-			uploadAttachment: uploadTopicAttachment,
+			// upload the file, then delete its copy
+			uploadAttachment: async (id, file) => {
+				await uploadTopicAttachment(id, file)
+				deletePickedFile(file)
+			},
 			onWarning: showClientError,
 			sendUsernameInvites: async (id, usernames) => {
 				for (const username of usernames) {
@@ -108,15 +115,7 @@ export function EditTopicModal({
 						placeholder={`Describe your topic.\n${fields.name.trim() || "You know the one."}`}
 					/>
 					<View className="flex-row items-center justify-between">
-						<Button
-							variant="ghost"
-							size="icon"
-							accessibilityLabel="Add files or photos"
-							disabled={mutation.isPending}
-							onPress={() => void mutation.run(() => pickTopicAttachments(fields))}
-						>
-							<Icon as={Paperclip} className="size-4" />
-						</Button>
+						<TopicAttachButton fields={fields} variant="icon" />
 						{fields.prompt !== "" && (
 							<Button
 								variant="ghost"

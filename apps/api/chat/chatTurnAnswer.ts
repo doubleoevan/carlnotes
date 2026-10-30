@@ -4,7 +4,7 @@ import { CHAT_ATTACHMENT_ERRORS, type ChatAttachmentRejection } from "@carlnotes
 import { withAttachmentNote } from "@carlnotes/contracts/chatQuestionNotes"
 import type { TopicChatTurnPayload } from "@carlnotes/contracts/payloads"
 import { ADMIN_QUOTA } from "@carlnotes/contracts/plans"
-import { EMPTY_TOPIC_DRAFT, type TopicDraft } from "@carlnotes/contracts/topicPayloads"
+import { EMPTY_TOPIC_DRAFT, type TopicDraft, type TopicDraftTeam } from "@carlnotes/contracts/topicPayloads"
 import { loadOrProvisionUserLiteLLMKey } from "@carlnotes/models/litellm"
 import { reserveUserSpend, toReleaseOnFailure } from "@carlnotes/models/spendReservations"
 import type { ChatTurnInput } from "@carlnotes/pipeline/chat/chatMessages"
@@ -76,7 +76,13 @@ export async function answerChatTurn(
 
 	// load the topic draft that the new-topic chat's tools read and write
 	const { userId } = authorization
-	const topicDraft = page.newTopic ? await loadNewTopicChatDraft(userId, chatTurnPayload.topicDraft) : undefined
+	const topicDraft = page.newTopic
+		? await loadNewTopicChatDraft({
+				userId,
+				browserTopicDraft: chatTurnPayload.topicDraft,
+				leaderTeams: authorization.leaderTeams,
+			})
+		: undefined
 
 	// reserve the chat turn's largest cost from what it sends, and reject the turn once the spend and open reservations
 	// reach the budget
@@ -192,13 +198,34 @@ function toAttachmentRejectionResponse(context: Context, rejection: ChatAttachme
 }
 
 // load the topic draft that a new-topic chat turn starts from: the stored draft over the browser's copy, with the
-// browser's team if it sends one
-async function loadNewTopicChatDraft(userId: string, browserTopicDraft?: TopicDraft): Promise<TopicDraft | undefined> {
+// browser's team if it names one the user leads
+async function loadNewTopicChatDraft({
+	userId,
+	browserTopicDraft,
+	leaderTeams = [],
+}: {
+	userId: string
+	browserTopicDraft?: TopicDraft
+	leaderTeams?: TopicDraftTeam[]
+}): Promise<TopicDraft | undefined> {
+	// the saved draft, and the team the browser names if the user leads it
 	const storedTopicDraft = await loadTopicDraft(userId)
+	const browserLeaderTeam = toLeaderTeam(browserTopicDraft?.team, leaderTeams)
 	if (!storedTopicDraft) {
-		return browserTopicDraft
+		return browserTopicDraft && { ...browserTopicDraft, team: browserLeaderTeam }
 	}
-	return { ...storedTopicDraft, team: browserTopicDraft?.team ?? storedTopicDraft.team }
+	return { ...storedTopicDraft, team: browserLeaderTeam ?? storedTopicDraft.team }
+}
+
+/**
+ * Returns the led team a draft names, with its saved name, or null for a team the user does not lead. The name the
+ * browser sends is never read.
+ */
+export function toLeaderTeam(
+	team: TopicDraftTeam | null | undefined,
+	leaderTeams: TopicDraftTeam[],
+): TopicDraftTeam | null {
+	return leaderTeams.find((leaderTeam) => leaderTeam.teamId === team?.teamId) ?? null
 }
 
 // the tools that a chat turn offers, in the fields that the reply reads them from

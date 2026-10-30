@@ -15,11 +15,14 @@ export function ScrollBox({
 	copyMarkdown,
 	scrollToTopOn,
 	actions,
+	maxHeight = 288,
 }: {
 	children: ReactNode
 	copyMarkdown?: string
 	scrollToTopOn?: unknown
 	actions?: ReactNode
+	// the web's max-h-72 by default, or a caller's phone-width limit
+	maxHeight?: number
 }) {
 	// measure overflow without updating React state on every scroll frame
 	const scrollRef = useRef<ComponentRef<typeof NativeScrollView>>(null)
@@ -38,7 +41,7 @@ export function ScrollBox({
 			<NativeViewGestureHandler disallowInterruption>
 				<AnimatedScrollView
 					ref={scrollRef}
-					style={{ maxHeight: 288 }}
+					style={{ maxHeight }}
 					nestedScrollEnabled
 					showsVerticalScrollIndicator={false}
 					onLayout={(event) => setViewportHeight(event.nativeEvent.layout.height)}

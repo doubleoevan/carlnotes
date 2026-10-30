@@ -1,5 +1,6 @@
 import { authClient } from "@carlnotes/client/authClient"
 import type { TopicDraftTeam } from "@carlnotes/contracts/topicPayloads"
+import { TopicEditorChoice, type TopicEditorChoiceElements } from "@carlnotes/core/components/TopicEditorChoice"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { useNavigate } from "@tanstack/react-router"
 import { Plus } from "lucide-react"
@@ -41,22 +42,38 @@ export function TopicEditorChoiceDialog({
 		onClose()
 	}
 	return (
+		<TopicEditorChoice
+			isEditingTopic={isEditingTopic}
+			onChooseTopicForm={onChooseTopicForm}
+			onChooseChat={handleChooseChat}
+			onClose={onClose}
+			elements={TOPIC_EDITOR_CHOICE_ELEMENTS}
+		/>
+	)
+}
+
+// the browser dialog, its outlined form button, and the chat button with Carl's cup
+const TOPIC_EDITOR_CHOICE_ELEMENTS: TopicEditorChoiceElements = {
+	Frame: ({ title, description, onClose, children }) => (
 		<Dialog open onOpenChange={(isOpen) => !isOpen && onClose()}>
 			<DialogContent className="sm:max-w-md">
-				<DialogTitle>{isEditingTopic ? "Edit topic" : "New topic"}</DialogTitle>
-				<DialogDescription>{isEditingTopic ? "Let's get to work" : "Let's get started"}</DialogDescription>
-				<DialogFooter className="mt-2 flex-col-reverse sm:flex-row">
-					<Button variant="outline" onClick={onChooseTopicForm}>
-						Do it myself
-					</Button>
-					<Button onClick={handleChooseChat}>
-						<CoffeeCup className="size-6" />
-						{isEditingTopic ? "Edit with Carl" : "Build with Carl"}
-					</Button>
-				</DialogFooter>
+				<DialogTitle>{title}</DialogTitle>
+				<DialogDescription>{description}</DialogDescription>
+				<DialogFooter className="mt-2 flex-col-reverse sm:flex-row">{children}</DialogFooter>
 			</DialogContent>
 		</Dialog>
-	)
+	),
+	FormButton: ({ label, onPress }) => (
+		<Button variant="outline" onClick={onPress}>
+			{label}
+		</Button>
+	),
+	ChatButton: ({ label, onPress }) => (
+		<Button onClick={onPress}>
+			<CoffeeCup className="size-6" />
+			{label}
+		</Button>
+	),
 }
 
 /**

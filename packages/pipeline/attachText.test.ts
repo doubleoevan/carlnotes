@@ -1,7 +1,7 @@
 // extractText tests: a PDF's pages read up to the caller's limit, a Word file, a workbook, a windows-1252 csv, html,
 // and json
 import { expect, test } from "bun:test"
-import { DOCX_TYPE, XLSX_TYPE } from "./attachContentType"
+import { DOCX_TYPE, XLSX_TYPE } from "@carlnotes/contracts/attachmentTypes"
 import { extractText, extractTextUpTo } from "./attachText"
 
 // a Word document fixture built as the minimal OOXML zip: two paragraphs of plain text

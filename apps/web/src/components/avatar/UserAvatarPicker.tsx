@@ -1,5 +1,5 @@
 import { useAvatar } from "@carlnotes/core/hooks/useAvatar"
-import { AVATAR_UPLOAD_FAILED_TEXT, toAvatarRejectionText } from "@carlnotes/core/lib/avatarUpload"
+import { AVATAR_UPLOAD_FAILED_TEXT, toAvatarRejectionText } from "@carlnotes/core/lib/imageUpload"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { Camera } from "lucide-react"
 import { useState } from "react"

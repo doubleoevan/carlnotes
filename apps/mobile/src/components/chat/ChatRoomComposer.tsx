@@ -16,6 +16,8 @@ import { ChoiceSelect } from "@/components/common/ChoiceSelect"
 import { Button } from "@/components/primitives/button"
 import { Text } from "@/components/primitives/text"
 import { ChatComposer } from "./ChatComposer"
+import { ChatAttachButton } from "./ChatComposerAttachments"
+import { useChatAttachments } from "./useChatAttachments"
 
 /**
  * Uses shared mention and reply rules with the native input's caret and accepted-post behavior.
@@ -36,8 +38,10 @@ export function ChatRoomComposer({
 	const [isPosting, setIsPosting] = useState(false)
 	const isPostingRef = useRef(false)
 	const inputRef = useRef<ComponentRef<typeof TextInput>>(null)
+	// a room message's files, which the room never keeps
+	const chatAttachmentState = useChatAttachments({ isRoom: true })
 
-	// focus the composer when the reader chooses a reply
+	// focus the composer when the user chooses a reply
 	useEffect(() => {
 		if (reply.replyTo && !reply.isAutoReply) {
 			inputRef.current?.focus()
@@ -56,7 +60,7 @@ export function ChatRoomComposer({
 
 	// clear text and reply state only after an accepted post
 	const handleSend = async (): Promise<void> => {
-		if (!chatMessage.trim() || isPostingRef.current) {
+		if ((!chatMessage.trim() && chatAttachmentState.attachments.length === 0) || isPostingRef.current) {
 			return
 		}
 		// prevent duplicate sends while the current post is pending
@@ -67,11 +71,12 @@ export function ChatRoomComposer({
 			const isChatMessagePosted = await onPost({
 				content: replyTarget.hasMention || isReplyToChatMessage ? chatMessage.trim() : `@all ${chatMessage.trim()}`,
 				replyToChatMessageId: isReplyToChatMessage ? (reply.replyTo?.id ?? null) : null,
-				attachments: [],
+				attachments: chatAttachmentState.attachments,
 			})
 			if (isChatMessagePosted) {
-				// clear the posted message and reply
+				// clear the posted message, its files, and the reply
 				setChatMessage("")
+				chatAttachmentState.clearDraft()
 				setCaretPosition(0)
 				reply.clear()
 			}
@@ -166,6 +171,15 @@ export function ChatRoomComposer({
 			}}
 			onSend={() => void handleSend()}
 			isDisabled={isPosting}
+			attachments={chatAttachmentState.attachments}
+			onRemoveAttachment={chatAttachmentState.removeAttachment}
+			attachmentActions={
+				<ChatAttachButton
+					isDisabled={isPosting}
+					attachmentCount={chatAttachmentState.attachments.length}
+					onPicked={chatAttachmentState.addPickedFiles}
+				/>
+			}
 			placeholder={toComposerPlaceholder(replyTarget.replyUser)}
 			maxLength={CHAT_ROOM_MESSAGE_MAX_CHARS}
 			inputProps={{

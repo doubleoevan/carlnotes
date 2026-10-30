@@ -124,11 +124,6 @@ export function toTrustedOrigins(request?: Request): string[] {
 	return isAppleCallback ? [APPLE_ID_ORIGIN, ...trustedOrigins] : trustedOrigins
 }
 
-// an oauth signup arrives with the provider's photo already on image. a password signup never has one
-export function toSignupAvatarSource(image: string | null | undefined): "oauth" | "generated" {
-	return image ? "oauth" : "generated"
-}
-
 // the MCP server's url, which every MCP access token is bound to
 export const MCP_RESOURCE_URL = `${appUrl()}/mcp`
 
@@ -284,7 +279,6 @@ export const auth = betterAuth({
 					const isProviderUsernameFree =
 						providerUsername !== null && (await toFreeUsernames([providerUsername])).length > 0
 					const username = isProviderUsernameFree && providerUsername ? providerUsername : await toAssignedUsername()
-					const avatarSource = toSignupAvatarSource(user.image)
 
 					// every sign-up path accepts the published Terms by continuing, recorded by the server's own version
 					return {
@@ -293,7 +287,6 @@ export const auth = betterAuth({
 							litellmVirtualKey,
 							username,
 							usernameNormalized: toNormalizedUsername(username),
-							avatarSource,
 							termsAcceptedVersion: TERMS_VERSION,
 							termsAcceptedAt: new Date(),
 						},

@@ -1,5 +1,5 @@
 import { sendAvatarDecodeFailure } from "@carlnotes/client/profileClient"
-import { AVATAR_JPEG_QUALITY, MAX_AVATAR_PIXELS, TRANSPARENT_IMAGE_TYPES } from "@carlnotes/core/lib/avatarUpload"
+import { AVATAR_JPEG_QUALITY, MAX_AVATAR_PIXELS, toResizedImage } from "@carlnotes/core/lib/imageUpload"
 import { Camera } from "lucide-react"
 
 export {
@@ -7,7 +7,7 @@ export {
 	AVATAR_REJECTIONS,
 	TEAM_AVATAR_UPLOAD_FAILED_TEXT,
 	toAvatarRejectionText,
-} from "@carlnotes/core/lib/avatarUpload"
+} from "@carlnotes/core/lib/imageUpload"
 
 // the file size from which the decode asks the browser for a 512-pixel-wide bitmap
 const MIN_AVATAR_BYTES_FOR_RESIZED_DECODE = 1024 * 1024
@@ -36,10 +36,15 @@ export async function toUploadableAvatar(avatarFile: File): Promise<UploadableAv
 async function resizeAvatar(avatarFile: File): Promise<File | null> {
 	// resize to the stored size. an image already smaller keeps its size, and a canvas with no 2d context fails
 	const bitmap = await decodeAvatar(avatarFile)
-	const scale = Math.min(1, MAX_AVATAR_PIXELS / Math.max(bitmap.width, bitmap.height))
+	const resizedImage = toResizedImage({
+		width: bitmap.width,
+		height: bitmap.height,
+		mimeType: avatarFile.type,
+		maxPixels: MAX_AVATAR_PIXELS,
+	})
 	const canvas = document.createElement("canvas")
-	canvas.width = Math.round(bitmap.width * scale)
-	canvas.height = Math.round(bitmap.height * scale)
+	canvas.width = resizedImage.width
+	canvas.height = resizedImage.height
 	const context = canvas.getContext("2d")
 	if (!context) {
 		bitmap.close()
@@ -50,16 +55,14 @@ async function resizeAvatar(avatarFile: File): Promise<File | null> {
 
 	// re-encode, dropping the metadata: a png for a source that can be transparent, a jpeg for a photo.
 	// a null blob means the encode failed
-	const isTransparencyKept = TRANSPARENT_IMAGE_TYPES.has(avatarFile.type)
-	const resizedType = isTransparencyKept ? "image/png" : "image/jpeg"
 	const resizedBlob = await new Promise<Blob | null>((resolve) => {
-		canvas.toBlob(resolve, resizedType, AVATAR_JPEG_QUALITY)
+		canvas.toBlob(resolve, resizedImage.mimeType, AVATAR_JPEG_QUALITY)
 	})
 	if (!resizedBlob) {
 		return null
 	}
-	const resizedName = `${avatarFile.name.replace(/\.[^.]+$/, "")}.${isTransparencyKept ? "png" : "jpg"}`
-	return new File([resizedBlob], resizedName, { type: resizedType })
+	const resizedName = `${avatarFile.name.replace(/\.[^.]+$/, "")}.${resizedImage.suffix}`
+	return new File([resizedBlob], resizedName, { type: resizedImage.mimeType })
 }
 
 // decode a chosen file with the orientation the camera recorded, 512 pixels wide if the file is large.

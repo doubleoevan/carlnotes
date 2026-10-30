@@ -1,26 +1,33 @@
+import { showClientError } from "@carlnotes/client/apiClient"
 import { uploadTopicAttachmentBody } from "@carlnotes/client/topicClient"
+import {
+	TOPIC_ATTACHMENT_ACCEPT,
+	TOPIC_ATTACHMENT_MAX_BYTES,
+	TOPIC_ATTACHMENT_TOO_LARGE_LINE,
+} from "@carlnotes/contracts/attachmentTypes"
 import { MAX_ATTACHMENT_CONTEXT_CHARS, type TopicDetails } from "@carlnotes/contracts/topics"
 import type { TopicFields } from "@carlnotes/core/hooks/useTopicFields"
-import { type DocumentPickerAsset, getDocumentAsync } from "expo-document-picker"
+import { toCurrentChatAccountGuard } from "@carlnotes/core/stores/chatConversationStore"
 import { ChevronDown, ChevronRight, Paperclip, X } from "lucide-react-native"
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { View } from "react-native"
+import { useFilePicker } from "@/components/common/FilePickerMenu"
+import { deletePickedFile, toReadablePickedFile } from "@/components/common/pickedFileCache"
 import { ScrollBox } from "@/components/common/ScrollBox"
 import { Button } from "@/components/primitives/button"
 import { Icon } from "@/components/primitives/icon"
 import { Text } from "@/components/primitives/text"
 import { SessionTextInput } from "@/components/session/SessionTextInput"
-import { usePageMutation } from "@/hooks/usePageMutation"
+import { type PickedFile, toPreparedPickedFiles } from "@/pickedFiles"
 import { TopicAttachmentLink } from "./TopicAttachmentLink"
 import { SafeNoteText } from "./TopicScanRecap"
 
-export type TopicAttachmentFile = DocumentPickerAsset
+export type TopicAttachmentFile = PickedFile
 
 /**
  * Stages native files and attachment context edits for the shared Topic save.
  */
 export function TopicAttachmentEditor({ fields }: { fields: TopicFields<TopicAttachmentFile> }) {
-	const mutation = usePageMutation()
 	return (
 		<View className="gap-2">
 			{fields.keptAttachments.map((attachment) => (
@@ -54,57 +61,86 @@ export function TopicAttachmentEditor({ fields }: { fields: TopicFields<TopicAtt
 						variant="ghost"
 						size="icon"
 						accessibilityLabel={`Remove ${file.name}`}
-						onPress={() => fields.setPendingFiles((files) => files.filter((pending) => pending !== file))}
+						onPress={() => {
+							fields.setPendingFiles((files) => files.filter((pendingFile) => pendingFile !== file))
+							deletePickedFile(file)
+						}}
 					>
 						<Icon as={X} className="size-4" />
 					</Button>
 					<Text className="flex-1 text-sm">{file.name}</Text>
 				</View>
 			))}
-			<Button
-				variant="link"
-				className="self-start px-0"
-				accessibilityLabel="Add files or photos"
-				disabled={mutation.isPending}
-				onPress={() => void mutation.run(() => pickTopicAttachments(fields))}
-			>
-				<Icon as={Paperclip} className="size-4" />
-				<Text>add an attachment</Text>
-			</Button>
-			{mutation.error && <Text className="text-destructive">{mutation.error}</Text>}
+			<TopicAttachButton fields={fields} variant="link" />
 		</View>
 	)
 }
 
 /**
- * Stages files from the native picker for either attachment action.
+ * Opens the picker menu for a topic's attachments, as a paperclip beside the prompt or a link under the attachments.
+ * Images are resized, a file over the topic limit is rejected before upload, and a file already staged is not staged
+ * twice.
  */
-export async function pickTopicAttachments(fields: TopicFields<TopicAttachmentFile>): Promise<void> {
-	// keep the accepted file formats aligned with the browser picker
-	const selection = await getDocumentAsync({
-		multiple: true,
-		copyToCacheDirectory: true,
-		type: [
-			"image/*",
-			"text/*",
-			"application/pdf",
-			"application/json",
-			"application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-			"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-		],
+export function TopicAttachButton({
+	fields,
+	variant,
+}: {
+	fields: TopicFields<TopicAttachmentFile>
+	variant: "icon" | "link"
+}) {
+	const { openFilePicker, filePickerMenu, isPicking, triggerRef } = useFilePicker({
+		accept: TOPIC_ATTACHMENT_ACCEPT,
+		isMultiple: true,
+		onPicked: async (pickedFiles) => {
+			// prepare the files for the account that picked them, then stage the ones not already staged
+			const preparedFiles = await toPreparedPickedFiles({
+				pickedFiles,
+				prepare: toTopicAttachmentFile,
+				isSameAccount: toCurrentChatAccountGuard(),
+				deleteFile: deletePickedFile,
+			})
+			const isStaged = (preparedFile: PickedFile): boolean =>
+				fields.pendingFiles.some((file) => file.name === preparedFile.name && file.byteSize === preparedFile.byteSize)
+			// a file already staged keeps its first copy, and the second is deleted
+			for (const preparedFile of preparedFiles.filter(isStaged)) {
+				deletePickedFile(preparedFile)
+			}
+			fields.setPendingFiles((files) => [...files, ...preparedFiles.filter((preparedFile) => !isStaged(preparedFile))])
+		},
 	})
-	if (selection.canceled) {
-		return
-	}
-	fields.setPendingFiles((files) => {
-		const addedFiles = selection.assets.filter(
-			(asset) =>
-				!files.some(
-					(file) => file.name === asset.name && file.size === asset.size && file.lastModified === asset.lastModified,
-				),
-		)
-		return [...files, ...addedFiles]
-	})
+	return (
+		<>
+			<Button
+				ref={triggerRef}
+				variant={variant === "icon" ? "ghost" : "link"}
+				size={variant === "icon" ? "icon" : undefined}
+				className={variant === "link" ? "self-start px-0" : undefined}
+				accessibilityLabel="Add files or photos"
+				disabled={isPicking}
+				onPress={openFilePicker}
+			>
+				<Icon as={Paperclip} className="size-4" />
+				{variant === "link" && <Text>add an attachment</Text>}
+			</Button>
+			{filePickerMenu}
+		</>
+	)
+}
+
+/**
+ * Deletes the staged files' copies when the topic form closes. An uploaded file's copy is already gone.
+ */
+export function useTopicAttachmentCleanup(pendingFiles: TopicAttachmentFile[]): void {
+	const pendingFilesRef = useRef(pendingFiles)
+	pendingFilesRef.current = pendingFiles
+	useEffect(
+		() => () => {
+			for (const pendingFile of pendingFilesRef.current) {
+				deletePickedFile(pendingFile)
+			}
+		},
+		[],
+	)
 }
 
 /**
@@ -115,9 +151,24 @@ export async function uploadTopicAttachment(topicId: string, file: TopicAttachme
 	body.append("file", {
 		uri: file.uri,
 		name: file.name,
-		type: file.mimeType ?? "application/octet-stream",
+		type: file.mimeType || "application/octet-stream",
 	} as unknown as Blob)
 	await uploadTopicAttachmentBody(topicId, body)
+}
+
+// a picked file resized if it is an image, or null after a notice if it cannot be read or is over the topic limit. a
+// document's size is checked before anything reads it
+async function toTopicAttachmentFile(pickedFile: PickedFile): Promise<PickedFile | null> {
+	const readableFile = await toReadablePickedFile(pickedFile)
+	if (!readableFile) {
+		return null
+	}
+	if (readableFile.byteSize > TOPIC_ATTACHMENT_MAX_BYTES) {
+		deletePickedFile(readableFile)
+		showClientError(TOPIC_ATTACHMENT_TOO_LARGE_LINE)
+		return null
+	}
+	return readableFile
 }
 
 // read the generated attachment context before editing

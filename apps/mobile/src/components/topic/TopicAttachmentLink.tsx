@@ -1,10 +1,8 @@
-import { fetchTopicAttachment } from "@carlnotes/client/topicClient"
 import type { TopicDetails } from "@carlnotes/contracts/topics"
-import { File, Paths } from "expo-file-system"
 import { Download, ExternalLink } from "lucide-react-native"
-import { useEffect, useRef } from "react"
 import { View } from "react-native"
 import { AnchorLink } from "@/components/common/AnchorLink"
+import { useDownloadedFilePreview } from "@/components/common/useDownloadedFilePreview"
 import { Button } from "@/components/primitives/button"
 import { Icon } from "@/components/primitives/icon"
 import { Text } from "@/components/primitives/text"
@@ -20,23 +18,11 @@ export function TopicAttachmentLink({
 	attachment: TopicDetails["attachments"][number]
 	isTopicOwner: boolean
 }) {
-	// keep files available while the system preview is open, then remove them with the parent view
-	const isMounted = useRef(true)
-	const downloadedFiles = useRef<File[]>([])
+	// open the owner's downloads in the system preview, and delete the copies with the parent view
+	const previewDownloadedFile = useDownloadedFilePreview()
 	const mutation = usePageMutation()
-	useEffect(() => {
-		isMounted.current = true
-		return () => {
-			isMounted.current = false
-			for (const file of downloadedFiles.current.splice(0)) {
-				if (file.exists) {
-					file.delete()
-				}
-			}
-		}
-	}, [])
 
-	// leave pending files and non-owner downloads as status text
+	// label a file by its source or name, with its processing state
 	const suffix = attachment.status === "failed" ? " · failed" : attachment.status === "pending" ? " · processing" : ""
 	const label = `${attachment.sourceUrl || attachment.filename}${suffix}`
 	if (attachment.status !== "ready" || (!attachment.sourceUrl && !isTopicOwner)) {
@@ -55,19 +41,12 @@ export function TopicAttachmentLink({
 		)
 	}
 
-	// download before opening Quick Look. private files never depend on the browser's separate session
-	async function handleOpen(): Promise<void> {
-		const bytes = await fetchTopicAttachment(attachment.id)
-		if (!isMounted.current) {
-			return
-		}
-
-		// write the downloaded attachment to a tracked preview file
-		const filename = attachment.filename.replace(/[/\\]/g, "_")
-		const file = new File(Paths.cache, `carlnotes-${attachment.id}-${Date.now()}-${filename}`)
-		downloadedFiles.current.push(file)
-		file.writeSync(bytes)
-		await file.preview({ title: attachment.filename })
+	// download through the signed-in session before opening Quick Look
+	function handleOpen(): Promise<void> {
+		return previewDownloadedFile({
+			path: `/api/attachments/${encodeURIComponent(attachment.id)}/download`,
+			filename: attachment.filename,
+		})
 	}
 	return (
 		<View className="shrink gap-1">

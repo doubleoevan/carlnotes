@@ -1,12 +1,8 @@
 // the pending attachment chips both chat composers show above their message box
 import type { ChatAttachment } from "@carlnotes/contracts/payloads"
+import { toCharacterCountLabel } from "@carlnotes/core/lib/labels"
 import { FileText, Film, X } from "lucide-react"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
-
-// the number of characters in a large copy-paste text block that is turned into an attachment
-function toCharacterCountLabel(text: string): string {
-	return `${text.length.toLocaleString()} chars`
-}
 
 /**
  * The attachments waiting on the next message, as removable chips. An image gets a thumbnail and

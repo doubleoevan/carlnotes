@@ -807,6 +807,17 @@ Check for:
      Account screen renders `AccountSettings`), and the mobile `PlanButton` and `ManagePlanButton` in
      `apps/mobile/src/components/account/AccountBudget.tsx` (removed)
    - `resolveImportPath` in `scripts/clientParity.ts` (now `toImportResolution` in `scripts/importPaths.ts`)
+   - `packages/core/lib/avatarUpload.ts` (now `packages/core/lib/imageUpload.ts`), `chooseAvatarBody` in
+     `apps/mobile/src/components/avatar/avatarUpload.ts` (now `useAvatarPicker`), `pickTopicAttachments` in
+     `apps/mobile/src/components/topic/TopicAttachmentEditor.tsx` (now `FilePickerMenu` over
+     `apps/mobile/src/pickedFiles.ts`), `toSignupAvatarSource` in `apps/api/auth.ts` (removed), and
+     `TEXT_FILE_SUFFIXES`, `VIDEO_FILE_TYPES`, `DOCUMENT_FILE_TYPES`, and `DOCUMENT_FILE_SUFFIXES` in
+     `apps/web/src/components/chat/useChatAttachments.ts` (now `packages/contracts/attachmentTypes.ts`)
+   - `CONTENT_TYPE_BY_EXTENSION` in `packages/pipeline/attachContentType.ts` (now `toSuffixMimeType` in
+     `packages/contracts/attachmentTypes.ts`)
+   - `MAX_ATTACHMENT_BYTES` in `packages/pipeline/attach.ts` (now `TOPIC_ATTACHMENT_MAX_BYTES` in
+     `packages/contracts/attachmentTypes.ts`), and `DOCX_TYPE` and `XLSX_TYPE` in
+     `packages/pipeline/attachContentType.ts` (now `packages/contracts/attachmentTypes.ts`)
 
 5. **Cross-harness enforcement parity**: `.claude/settings.json` hooks and
    `.opencode/plugin/guardrails.mjs` must gate the same operations with the

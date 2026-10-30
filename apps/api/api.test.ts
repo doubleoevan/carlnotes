@@ -2,9 +2,9 @@
 // oversized body is rejected before its route, and a visitor's chat post and upload are rejected before their bodies
 // are read
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
+import { TOPIC_ATTACHMENT_MAX_BYTES } from "@carlnotes/contracts/attachmentTypes"
 import { NOTE_HTML_MAX_CHARS } from "@carlnotes/contracts/notes"
 import { restoreRedisClient, stubRedisClient } from "@carlnotes/db/redisClientStub"
-import { MAX_ATTACHMENT_BYTES } from "@carlnotes/pipeline/attach"
 import { APIError } from "better-auth"
 import { apiRoute } from "./api"
 import { auth } from "./auth"
@@ -83,7 +83,9 @@ test("a visitor's recording past the default limit is rejected with a 401, never
 test("a visitor's avatar or attachment upload is rejected with a 401 before its body is read", async () => {
 	// a body past both upload limits, posted by a visitor
 	signInAs(null)
-	const oversizedUpload = "x".repeat(Math.max(MAX_AVATAR_BYTES, MAX_ATTACHMENT_BYTES) + MULTIPART_ENVELOPE_BYTES + 1)
+	const oversizedUpload = "x".repeat(
+		Math.max(MAX_AVATAR_BYTES, TOPIC_ATTACHMENT_MAX_BYTES) + MULTIPART_ENVELOPE_BYTES + 1,
+	)
 
 	// each upload responds with the sign-in rejection, never a 413
 	for (const path of ["/api/avatars", "/api/teams/t1/avatar", "/api/topics/t1/attachments"]) {

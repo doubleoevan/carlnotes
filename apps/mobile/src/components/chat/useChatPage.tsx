@@ -3,6 +3,7 @@ import { authClient } from "@carlnotes/client/authClient"
 import { fetchProfile, fetchProfileTeamStatuses } from "@carlnotes/client/profileClient"
 import { fetchTeamPage } from "@carlnotes/client/teamClient"
 import { fetchTopicPage } from "@carlnotes/client/topicClient"
+import type { ChatRoom } from "@carlnotes/contracts/chat"
 import type { TeamPageResponse } from "@carlnotes/contracts/teams"
 import { reloadChatRooms } from "@carlnotes/core/hooks/useUpdateBadges"
 import {
@@ -14,20 +15,33 @@ import {
 	toPrivateChatName,
 	toProfileChatContext,
 } from "@carlnotes/core/lib/chatConversations"
-import { activateChatAccount, setChatId, useChatConversation } from "@carlnotes/core/stores/chatConversationStore"
+import { NEW_TOPIC_CHAT_COPY } from "@carlnotes/core/lib/chatCopy"
+import {
+	activateChatAccount,
+	setChatId,
+	startEditingTopic,
+	useChatConversation,
+} from "@carlnotes/core/stores/chatConversationStore"
 import { toChatRooms, useChatRooms } from "@carlnotes/core/stores/chatRoomStore"
 import { type UseQueryResult, useQuery } from "@tanstack/react-query"
-import { LockKeyhole } from "lucide-react-native"
-import { type ComponentProps, useEffect } from "react"
+import { LockKeyhole, Plus } from "lucide-react-native"
+import { type ComponentProps, useEffect, useRef } from "react"
 import { Avatar } from "@/components/branding/Avatar"
 import { HostAvatar } from "@/components/branding/HostAvatar"
 import type { ChoiceSelect } from "@/components/common/ChoiceSelect"
 import { CountBadge } from "@/components/common/CountBadge"
 import { useTopicFeed } from "@/providers/TopicFeedProvider"
-import { toInitialChatId } from "./chatNavigation"
+import { type NewTopicChatId, toInitialChatId } from "./chatNavigation"
 
-// the page that opened the conversation, and the team whose chat room a badge named
-export type ChatScreenProps = { topicId?: string; teamId?: string; profileUserId?: string; chatTeamId?: string }
+// the page that opened the conversation, the team whose chat room a badge named, and a new-topic chat asked for
+export type ChatScreenProps = {
+	topicId?: string
+	teamId?: string
+	profileUserId?: string
+	chatTeamId?: string
+	newTopicChatId?: NewTopicChatId
+	isEditingTopic?: boolean
+}
 
 // loaded page access, conversation choices, and the selected account
 type ChatPageData = {
@@ -51,7 +65,14 @@ export type ChatPageState = {
 /**
  * Reads account-scoped page access before selecting the initial shared conversation.
  */
-export function useChatPage({ topicId, teamId, profileUserId, chatTeamId }: ChatScreenProps): ChatPageState {
+export function useChatPage({
+	topicId,
+	teamId,
+	profileUserId,
+	chatTeamId,
+	newTopicChatId,
+	isEditingTopic = false,
+}: ChatScreenProps): ChatPageState {
 	// read access for this account, and the rooms into the shared store, before mounting a conversation
 	const { data: session } = authClient().useSession()
 	const { accountId, chatId } = useChatConversation()
@@ -76,54 +97,47 @@ export function useChatPage({ topicId, teamId, profileUserId, chatTeamId }: Chat
 	const chatRooms = useChatRooms()
 	const isPageLoaded = chatPageQuery.data !== undefined
 	const pageContext = chatPageQuery.data?.pageContext
+	// the route params build a new object each render, so the effect follows the new-topic chat's key
+	const newTopicChatKey = newTopicChatId ? toChatKey(newTopicChatId) + (newTopicChatId.initialTeam?.teamId ?? "") : ""
+	const newTopicChatIdRef = useRef(newTopicChatId)
+	newTopicChatIdRef.current = newTopicChatId
+	// biome-ignore lint/correctness/useExhaustiveDependencies: the new-topic chat key replaces its object in the dependencies
 	useEffect(() => {
 		if (!isPageLoaded || !userId) {
 			return
 		}
 		activateChatAccount(userId)
-		setChatId(toInitialChatId({ rooms: toChatRooms(), topicId, teamId, chatTeamId, pageContext }))
+		setChatId(
+			toInitialChatId({
+				rooms: toChatRooms(),
+				topicId,
+				teamId,
+				chatTeamId,
+				pageContext,
+				newTopicChatId: newTopicChatIdRef.current,
+				isEditingTopic,
+			}),
+		)
+		// an Edit topic choice marks the topic as being edited, as the web's does
+		if (isEditingTopic && topicId) {
+			startEditingTopic(topicId)
+		}
 		return () => setChatId(null)
-	}, [isPageLoaded, userId, topicId, teamId, chatTeamId, pageContext])
+	}, [isPageLoaded, userId, topicId, teamId, chatTeamId, pageContext, newTopicChatKey, isEditingTopic])
 
-	// retain page-specific private chat, or offer the selected room's Team conversation
-	const privateChatId = toPrivateChatId(pageContext ?? null, chatId) ?? (chatId?.kind === "private" ? chatId : null)
+	// the conversations to choose from
 	const topics = [
 		...new Map(
 			(topicFeed?.sections.flatMap((section) => section.topics) ?? []).map((topic) => [topic.id, topic]),
 		).values(),
 	]
-	const hasTopicChoices = !topicId && !teamId && !chatRooms.length
-	const chatChoices: ChatChoice[] = [
-		...(privateChatId && !hasTopicChoices
-			? [{ id: privateChatId, label: "Private chat", icon: <HostAvatar speaker="host" size={20} /> }]
-			: []),
-		...toChatRoomMenuOrder(chatRooms).map((chatRoom) => ({
-			id: { kind: "room", topicId: chatRoom.topicId, teamId: chatRoom.teamId } as ChatId,
-			label: chatRoom.topicId ? `${chatRoom.name} · ${chatRoom.teamName}` : chatRoom.teamName,
-			// the room's unread chat mentions, as the web's room list counts them
-			badge:
-				chatRoom.chatMentions.length > 0 ? (
-					<CountBadge count={chatRoom.chatMentions.length} className="text-xs" />
-				) : undefined,
-			icon: (
-				<Avatar
-					ownerId={chatRoom.teamId}
-					name={chatRoom.teamName}
-					size={20}
-					imageUrl={
-						chatRoom.teamAvatarVersion ? `/api/team-avatars/${chatRoom.teamId}?v=${chatRoom.teamAvatarVersion}` : null
-					}
-				/>
-			),
-		})),
-		...(hasTopicChoices
-			? topics.map((topic) => ({
-					id: { kind: "private", topicId: topic.id } as ChatId,
-					label: topic.name,
-					icon: LockKeyhole,
-				}))
-			: []),
-	]
+	const chatChoices = toChatChoices({
+		chatId,
+		pageContext: pageContext ?? null,
+		chatRooms,
+		topics,
+		hasTopicChoices: !topicId && !teamId && !chatRooms.length,
+	})
 	// resolve the selected conversation and its name
 	const selectedChatId = chatChoices.find((choice) => toChatKey(choice.id) === toChatKey(chatId))?.id
 	const selectedChatRoom = chatRooms.find(
@@ -181,4 +195,58 @@ async function loadChatPageContext({
 		}),
 	])
 	return toProfileChatContext({ profile, profileTeamStatuses, isOwnProfile: profileUserId === userId })
+}
+
+// the private chat, the new-topic chat, the rooms, and, for a user with no room and no page, their Feed's topics
+function toChatChoices({
+	chatId,
+	pageContext,
+	chatRooms,
+	topics,
+	hasTopicChoices,
+}: {
+	chatId: ChatId | null
+	pageContext: ChatPageContext | null
+	chatRooms: ChatRoom[]
+	topics: { id: string; name: string }[]
+	hasTopicChoices: boolean
+}): ChatChoice[] {
+	// retain page-specific private chat, or offer the selected room's Team conversation. the new-topic chat has its own
+	// option, keeping the team a team page gave it
+	const pagePrivateChatId = toPrivateChatId(pageContext, chatId) ?? (chatId?.kind === "private" ? chatId : null)
+	const privateChatId = pagePrivateChatId?.kind === "private" && pagePrivateChatId.newTopic ? null : pagePrivateChatId
+	const newTopicChoiceId: ChatId =
+		chatId?.kind === "private" && chatId.newTopic ? chatId : { kind: "private", newTopic: true }
+	return [
+		...(privateChatId && !hasTopicChoices
+			? [{ id: privateChatId, label: "Private chat", icon: <HostAvatar speaker="host" size={20} /> }]
+			: []),
+		{ id: newTopicChoiceId, label: NEW_TOPIC_CHAT_COPY.name, icon: Plus },
+		...toChatRoomMenuOrder(chatRooms).map((chatRoom) => ({
+			id: { kind: "room", topicId: chatRoom.topicId, teamId: chatRoom.teamId } as ChatId,
+			label: chatRoom.topicId ? `${chatRoom.name} · ${chatRoom.teamName}` : chatRoom.teamName,
+			// the room's unread chat mentions, as the web's room list counts them
+			badge:
+				chatRoom.chatMentions.length > 0 ? (
+					<CountBadge count={chatRoom.chatMentions.length} className="text-xs" />
+				) : undefined,
+			icon: (
+				<Avatar
+					ownerId={chatRoom.teamId}
+					name={chatRoom.teamName}
+					size={20}
+					imageUrl={
+						chatRoom.teamAvatarVersion ? `/api/team-avatars/${chatRoom.teamId}?v=${chatRoom.teamAvatarVersion}` : null
+					}
+				/>
+			),
+		})),
+		...(hasTopicChoices
+			? topics.map((topic) => ({
+					id: { kind: "private", topicId: topic.id } as ChatId,
+					label: topic.name,
+					icon: LockKeyhole,
+				}))
+			: []),
+	]
 }
