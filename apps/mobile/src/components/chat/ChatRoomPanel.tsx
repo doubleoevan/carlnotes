@@ -19,6 +19,7 @@ import { LoadFailedNotice } from "@/components/common/LoadFailedNotice"
 import { ReportIssueDialog } from "@/components/common/ReportIssueDialog"
 import { Button } from "@/components/primitives/button"
 import { Text } from "@/components/primitives/text"
+import { offerPushPermission } from "@/pushPermission"
 import { ChatMessageList } from "./ChatMessageList"
 import { ModelThinkingBubble } from "./ChatMessageParts"
 import { ChatOptionsMenu } from "./ChatOptionsMenu"
@@ -57,6 +58,11 @@ export function ChatRoomPanel({
 	const { memberUsernames, isTeamLeader } = useRoomMembers(teamId, userId, loadedTeam)
 	const chatRoomReply = useRoomReply(chatRoom, userId)
 	const editableTopicDraft = useEditableTopicDraft(topicId)
+
+	// offer the notification sheet on a room visit
+	useEffect(() => {
+		void offerPushPermission()
+	}, [])
 
 	// acknowledge mentions only for the room that opened successfully
 	useEffect(() => {

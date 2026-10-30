@@ -1,4 +1,5 @@
-// the account routes the app reaches: activity, the app sign-up gate, billing, profiles and the account, and the Terms
+// the account routes the app reaches: activity, the app sign-up gate, billing, profiles and the account, push, and the
+// Terms
 
 import { z } from "zod"
 import { activityResponse } from "./activity"
@@ -7,6 +8,7 @@ import { inviteAcceptResponse } from "./invites"
 import { inviteAccessPayload, inviteDeletePayload, usernamePayload } from "./payloads"
 import { profileResponse } from "./profilePage"
 import { billingState, profileTeamStatusesResponse } from "./profiles"
+import { pushDeviceDeletePayload, pushDevicePayload, pushPreferencePayload } from "./pushDevices"
 import {
 	appSignupChallengeResponse,
 	idParam,
@@ -110,6 +112,26 @@ export const accountRouteContracts: Record<string, ApiRouteContract> = {
 		method: "POST",
 		path: "/api/avatars",
 		body: { multipart: multipartFile("avatar") },
+		response: okResponse,
+	},
+
+	// push
+	"pushClient.sendDeletePushDevice": {
+		method: "DELETE",
+		path: "/api/push-devices",
+		body: { json: pushDeviceDeletePayload },
+		response: okResponse,
+	},
+	"pushClient.sendPushDevice": {
+		method: "POST",
+		path: "/api/push-devices",
+		body: { json: pushDevicePayload },
+		response: okResponse,
+	},
+	"pushClient.sendPushPreference": {
+		method: "POST",
+		path: "/api/users/me/push-preferences",
+		body: { json: pushPreferencePayload },
 		response: okResponse,
 	},
 

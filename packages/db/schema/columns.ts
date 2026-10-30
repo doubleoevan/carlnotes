@@ -1,4 +1,6 @@
 // the pgEnums and the column helpers that every schema file shares
+
+import { MOBILE_PLATFORMS } from "@carlnotes/contracts/clientTelemetry"
 import {
 	attachmentStatuses,
 	avatarSources,
@@ -13,6 +15,8 @@ import {
 	podcastEpisodeSpeakers,
 	podcastEpisodeStatuses,
 	promptVersionOrigins,
+	pushNotificationKinds,
+	pushReceiptStatuses,
 	ratings,
 	reportResolutions,
 	reportSubjectKinds,
@@ -61,6 +65,10 @@ export const promptVersionOrigin = pgEnum("prompt_version_origin", promptVersion
 // what a report names, and how an admin closed it
 export const reportSubjectKind = pgEnum("report_subject_kind", reportSubjectKinds)
 export const reportResolution = pgEnum("report_resolution", reportResolutions)
+// the platform a push device runs on, what a push is about, and what its receipt said
+export const pushPlatform = pgEnum("push_platform", MOBILE_PLATFORMS)
+export const pushNotificationKind = pgEnum("push_notification_kind", pushNotificationKinds)
+export const pushReceiptStatus = pgEnum("push_receipt_status", pushReceiptStatuses)
 
 /**
  * Returns every table's text primary key column, defaulted by our code and overridden by Better Auth on its own inserts.

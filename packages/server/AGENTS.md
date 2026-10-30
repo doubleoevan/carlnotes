@@ -41,6 +41,12 @@ that a server responds to with an error status throws `FetchStatusError`, `isHos
 the host rejecting the request (a 4xx or an oversized body) instead of a fault, and `isRetryableFetchFailure` says
 whether a failure is worth a retry: a timeout, an abort, a 429, or a 5xx.
 
+`expoPush.ts` wraps `expo-server-sdk` for the pipeline's push delivery: `chunkPushMessages` splits messages at the
+service's 100 per send request, `sendPushMessageChunk` returns a ticket per message in order, `readPushReceipts` reads
+receipts in chunks of 300 and merges them by ticket id, and `isRetryablePushServiceError` says whether a failed request
+is worth sending again (a 429, a 5xx, or no response). The SDK retries a 429 itself. The client authenticates with
+`EXPO_PUSH_ACCESS_TOKEN`, not `EXPO_ACCESS_TOKEN`, which the EAS CLI reads as its own login.
+
 - Imports: `@carlnotes/contracts` only among the packages, never `db` or anything after it. Only the monitoring and analytics clients and `publicFetch` reach the network, and nothing here touches
   the database.
 - Tests: `bun test packages/server`.

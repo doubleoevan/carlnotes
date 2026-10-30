@@ -1,6 +1,7 @@
 // the Temporal client that the api and the sweep use to start durable workflows
 import type { ThresholdCrossing } from "@carlnotes/server/monitoring"
 import { Client, Connection, WorkflowExecutionAlreadyStartedError, WorkflowNotFoundError } from "@temporalio/client"
+import { CHAT_MENTION_PUSH_WORKFLOW, PUSH_TASK_QUEUE } from "./pushWorkflows"
 
 // what asked for a Scan, which decides what its end announces
 export type ScanTrigger = "manual" | "scheduled" | "creation"
@@ -72,6 +73,27 @@ export async function startSourceScreenWorkflow(sourceId: string): Promise<void>
 		)
 	} catch (error) {
 		// a Source whose check is already running needs no second one, and anything else is a real failure
+		if (!(error instanceof WorkflowExecutionAlreadyStartedError)) {
+			throw error
+		}
+	}
+}
+
+/**
+ * Starts the push of a room message's chat mentions, named by the message so a second start for it is ignored.
+ */
+export async function startChatMentionPushWorkflow(chatMessageId: number): Promise<void> {
+	const client = await getClient()
+	try {
+		await withClientDeadline(client, () =>
+			client.workflow.start(CHAT_MENTION_PUSH_WORKFLOW, {
+				taskQueue: PUSH_TASK_QUEUE,
+				workflowId: `chat-mention-push-${chatMessageId}`,
+				args: [{ chatMessageId }],
+			}),
+		)
+	} catch (error) {
+		// a message whose push already started needs no second one, and anything else is a real failure
 		if (!(error instanceof WorkflowExecutionAlreadyStartedError)) {
 			throw error
 		}

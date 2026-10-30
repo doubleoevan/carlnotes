@@ -890,6 +890,20 @@
       "when": 1793322756678,
       "tag": "0126_mobile_minimum_versions",
       "breakpoints": true
+    },
+    {
+      "idx": 127,
+      "version": "7",
+      "when": 1793335634964,
+      "tag": "0127_clever_harpoon",
+      "breakpoints": true
+    },
+    {
+      "idx": 128,
+      "version": "7",
+      "when": 1793373359476,
+      "tag": "0128_wandering_logan",
+      "breakpoints": true
     }
   ]
 }

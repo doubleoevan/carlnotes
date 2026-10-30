@@ -14,6 +14,7 @@ import { Icon } from "@/components/primitives/icon"
 import { Text } from "@/components/primitives/text"
 import { TeamLink } from "@/components/team/TeamLink"
 import { usePageMutation } from "@/hooks/usePageMutation"
+import { offerPushPermission } from "@/pushPermission"
 import { DataTable } from "./DataTable"
 import { TopicNameLink } from "./TopicNameLink"
 
@@ -57,6 +58,11 @@ export function TopicSubscriptionsTable({
 			}
 		} else {
 			await sendTopicSubscription(row.topicId, isActive)
+		}
+
+		// a follow explains the notifications a followed Topic can send
+		if (isActive) {
+			void offerPushPermission()
 		}
 	}
 	const columns = toTopicSubscriptionsTableColumns({

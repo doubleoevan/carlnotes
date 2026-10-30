@@ -6,9 +6,6 @@ import * as Notifications from "expo-notifications"
 import { useEffect } from "react"
 import { Platform } from "react-native"
 
-// whether iOS lets the app badge its icon, asked once per launch
-let isBadgeAllowed: boolean | null = null
-
 /**
  * Keeps the app icon's badge at the signed-in account's update count, and at nothing for a visitor. It renders
  * nothing, so the badge stores re-render this leaf alone on each poll.
@@ -21,8 +18,7 @@ export function AppIconBadge({ userId }: { userId: string | null }): null {
 	return null
 }
 
-// set the badge, asking iOS for the badge permission the first time a count is shown. a denied permission leaves
-// the icon without a badge until the next launch
+// set the badge if the phone allows it. a refused or undetermined permission leaves the icon bare
 async function showAppIconBadge(count: number): Promise<void> {
 	try {
 		if (count > 0 && !(await canShowAppIconBadge())) {
@@ -36,21 +32,11 @@ async function showAppIconBadge(count: number): Promise<void> {
 	}
 }
 
-// iOS needs the notification permission's badge setting. Android launchers badge the icon without one
+// iOS badges only with the notification permission's badge setting. Android launchers badge the icon without one
 async function canShowAppIconBadge(): Promise<boolean> {
 	if (Platform.OS !== "ios") {
 		return true
 	}
-	if (isBadgeAllowed !== null) {
-		return isBadgeAllowed
-	}
-
-	// ask only while the permission is undetermined, with alerts and sounds left off
 	const permissions = await Notifications.getPermissionsAsync()
-	const settledPermissions =
-		permissions.status === "undetermined"
-			? await Notifications.requestPermissionsAsync({ ios: { allowBadge: true, allowAlert: false, allowSound: false } })
-			: permissions
-	isBadgeAllowed = settledPermissions.ios?.allowsBadge === true
-	return isBadgeAllowed
+	return permissions.ios?.allowsBadge === true
 }

@@ -8,8 +8,10 @@ it; it imports `@carlnotes/models`, `@carlnotes/emails`, `@carlnotes/db`, `@carl
 -  `scan.ts` starts a Scan: `startTopicScan` opens the row and the workflow, `stopTopicScan` cancels one, and
   `scanTopic` and `failUnstartedScan` are what the sweep calls for a row it dispatches or fails. `temporalClient.ts` is
   the Temporal client: the task queue names, the `ScanTrigger` type (`manual`, `scheduled`, or `creation`), the workflow
-  starts and the cancel, each giving up after ten seconds, and `describeScanQueue`, which the worker's minute line and
-  the sweep's backlog report read. `stageTimeouts.ts` is how long each Scan stage may run and how many attempts it gets,
+  starts and the cancel, each giving up after ten seconds, `startChatMentionPushWorkflow`, which the api calls after a
+  room post saved mention rows and which ignores a second start for the same message, and `describeScanQueue`, which
+  the worker's minute line and the sweep's backlog report read. `stageTimeouts.ts` is how long each Scan stage may run
+  and how many attempts it gets,
   which the workflows import. `staleScans.ts` is the close-out of a scan that outran its stages or never started, which
   the sweep and the manual scan route run. `screen.ts` starts the url Source screen workflow, which fetches the page and
   marks the Source ready or failed, for every Source still waiting on one.
@@ -52,7 +54,31 @@ it; it imports `@carlnotes/models`, `@carlnotes/emails`, `@carlnotes/db`, `@carl
 - `notify.ts` plans a digest's batches and sends one batch or one report, recording the accepted sends with the Scan's
   id, so a retry never mails anyone twice; the worker's `sendScanEmail` workflow runs it. `scanEmailContent.ts` holds
   what a Scan's email says: the props the digest and the report render from, and one subscriber's rendered message, over
-  the templates and `sendEmail` in `@carlnotes/emails`.
+  the templates and `sendEmail` in `@carlnotes/emails`. `loadDigestSubscribers` is the one digest recipient query, an
+  active subscription with email on whose subscriber can still read the Topic (on a private Topic, its owner and its
+  teams' members through `toTopicRoleFilter`), and `toDigestSubscriberIdsQuery` is the same set as a subquery, which
+  the Topic push joins, so unfollowing, turning a Topic's email off, or losing access stops both deliveries.
+- `pushNotify.ts` picks each kind's recipients and passes their phones to `pushDelivery.ts`, which sends through
+  `@carlnotes/server/expoPush`, one push per live phone (its session not expired, its account's preference for the
+  kind true). `sendScanPush` reaches a succeeded Scan's digest recipients if the Scan kept
+  new Findings, and `sendChatMentionPush` reaches the members a room message's `room_mentions` rows name, checked at
+  send time: still on the Team, the Topic still held, the author not blocked, the message not reported, never the
+  author. Each push names its Topic or room and opens it through `data.url`, with the recipient's id for the app's
+  account check, and a mention push never includes the message text. `pushNotificationCopy.ts` holds the words. In
+  `pushDelivery.ts`, each accepted ticket is recorded in `push_notification_sends` as its chunk returns, so a retry
+  sends only to unrecorded
+  phones; a crash between the service's acceptance and the record repeats at most one chunk. A `DeviceNotRegistered`
+  ticket deletes the phone, `MessageRateExceeded`, `ExpoError`, and `ProviderError` tickets and a 429, 5xx, or
+  unanswered request are retryable, and anything else is final. A chunk the service rejects for mixing Expo projects
+  (`PUSH_TOO_MANY_EXPERIENCE_IDS`) retires the tokens of every project other than `MOBILE_APP_EXPO_PROJECT_NAME` and
+  is sent again, and any other rejected chunk is kept as the send's error while the later chunks still go. A send
+  takes a `PushProgress`, which the worker's activity turns into a heartbeat after each chunk and a stop between chunks
+  once Temporal cancels the attempt. `pushReceipts.ts`'s `checkPushReceipts` reads an
+  event's receipts once the workflow's wait ends, records them with one write per outcome, retires `DeviceNotRegistered`
+  phones, and reports any
+  other code, a missing receipt included, without the token. The service's limits: 100 messages per send request,
+  4096 bytes per payload, 600 notifications a second per project, receipts in chunks of 300, usually ready within 15
+  minutes and kept for 24 hours. The SDK retries a 429 itself.
 - `podcast/` — the steps of the worker's `recordPodcastEpisode` workflow. `planPodcastEpisode.ts` runs the checks that
   stop a recording before it spends anything, inside one request memo, picks the Findings, and marks the podcast
   episode short on a free Topic or past the billed user's full podcast episodes cutoff. `writePodcastEpisodeScript.ts`

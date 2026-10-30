@@ -38,6 +38,7 @@ import { NOTE_BODY_PATH, notesRoute } from "./note/notes"
 import { podcastEpisodesRoute } from "./podcast/podcastEpisodes"
 import { podcastFeedsRoute } from "./podcast/podcastFeeds"
 import { profilesRoute } from "./profiles"
+import { pushDevicesRoute } from "./pushDevices"
 import { flagContentRoute } from "./report/flagContent"
 import { searchRoute } from "./search/search"
 import { pageHeadRoute } from "./share/pageHead"
@@ -106,6 +107,7 @@ export const apiRoute = new Hono<AppEnv>()
 	.use("*", async (context, next) => {
 		const session = await auth.api.getSession({ headers: context.req.raw.headers }).catch(toSignedOutSession)
 		context.set("user", session?.user ?? null)
+		context.set("sessionId", session?.session.id ?? null)
 		await next()
 	})
 	// bound every body on the routes with no limit of their own
@@ -311,6 +313,8 @@ export const apiRoute = new Hono<AppEnv>()
 	.route("/", usersRoute)
 	// blocking a user, unblocking them, and the block list
 	.route("/", userBlocksRoute)
+	// registering a phone for push notifications, unregistering it, and the push preferences
+	.route("/", pushDevicesRoute)
 	// accepting the published Terms
 	.route("/", termsAcceptanceRoute)
 	// the mcp client name route

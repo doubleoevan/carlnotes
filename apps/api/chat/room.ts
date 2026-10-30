@@ -6,6 +6,7 @@ import { chatRoomMessages } from "@carlnotes/db/schema/chat"
 import { isBudgetRejection, MODEL_CHAT_TURN_FAILED_REJECTION, SPENT_BUDGET_REJECTION } from "@carlnotes/models/models"
 import { reserveUserSpend, type SpendReservation, toReleaseOnFailure } from "@carlnotes/models/spendReservations"
 import { maxChatTurnDollars, toAttachmentChars } from "@carlnotes/pipeline/chat/chatTurnCost"
+import { startChatMentionPushWorkflow } from "@carlnotes/pipeline/temporalClient"
 import { trackEvent } from "@carlnotes/server/analytics"
 import { reportError } from "@carlnotes/server/monitoring"
 import { and, eq } from "drizzle-orm"
@@ -189,7 +190,20 @@ async function storeChatRoomMessage({
 	await notifyChatRoomMessage(topicId, teamId, chatMessageRow.id)
 
 	// team member chat mentions and the replied-to author become rows that the chat mention badges read
-	await saveChatMentions(chatRoomTeamId, userId, chatMessageRow.id, content, replyToChatMessageId ?? null)
+	const mentionedUserCount = await saveChatMentions(
+		chatRoomTeamId,
+		userId,
+		chatMessageRow.id,
+		content,
+		replyToChatMessageId ?? null,
+	)
+
+	// start the chat mention push in the background if the message mentioned anyone
+	if (mentionedUserCount > 0) {
+		void startChatMentionPushWorkflow(chatMessageRow.id).catch((error) =>
+			reportError(error, "push", { chatMessageId: String(chatMessageRow.id) }),
+		)
+	}
 
 	// report the post: which kind of room, whether carl was asked, whether a file came with it, and whether it was spoken
 	trackChatRoomMessage({

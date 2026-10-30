@@ -26,6 +26,13 @@ export type AccountFieldElements = {
 		isDisabled: boolean
 		onSelect: () => void
 	}>
+	// a labeled on and off switch
+	Switch: ComponentType<{
+		label: string
+		isChecked: boolean
+		isDisabled: boolean
+		onChange: (isChecked: boolean) => void
+	}>
 }
 
 // the profile's platform controls. the shared form owns labels, visibility, and saving

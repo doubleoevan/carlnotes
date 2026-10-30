@@ -245,6 +245,9 @@ export const auth = betterAuth({
 			avatarKey: { type: "string", required: false, input: false, returned: true },
 			// the access requirements to send an invite to this user
 			inviteAccess: { type: "string", required: false, input: false, returned: true },
+			// whether a Scan's new Findings and a chat mention push to the user's phones, null until the first grant
+			isTopicPushEnabled: { type: "boolean", required: false, input: false, returned: true },
+			isChatMentionPushEnabled: { type: "boolean", required: false, input: false, returned: true },
 			// the Terms version the user accepted and when
 			termsAcceptedVersion: { type: "string", required: false, input: false, returned: true },
 			termsAcceptedAt: { type: "date", required: false, input: false, returned: true },

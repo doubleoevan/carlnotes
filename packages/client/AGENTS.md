@@ -1,7 +1,8 @@
 # packages/client/
 
 `@carlnotes/client`, the typed api clients, one module per domain named `<domain>Client.ts`. `apps/web` imports them as
-`@carlnotes/client/<domain>Client`, and `@carlnotes/core` reads `authClient.ts`, `profileClient.ts`, `topicClient.ts`, and `topicFindingClient.ts`.
+`@carlnotes/client/<domain>Client`, and `@carlnotes/core` reads `authClient.ts`, `profileClient.ts`, `pushClient.ts`,
+`topicClient.ts`, and `topicFindingClient.ts`.
 
 - `apiClient.ts` — the typed Hono client and the plain fetch beside it. An app calls `configureApiClient` once with
   the api base url and `showError`, and an app with no cookie jar adds `headers`, a function whose headers every
@@ -31,7 +32,9 @@
   `voiceClient.ts`, use `fetchApi` instead. `pageHeadClient.ts` reads a page's head data.
   `viewerCountsClient.ts` sends a topic page's view and reads a topic's or a podcast episode's counts, a public
   topic's without credentials so the edge can cache them. `blockClient.ts` blocks and unblocks a user and reads the
-  block list, `reportClient.ts` reads the admin console's open reports and resolves one, and `termsClient.ts` records
+  block list, `pushClient.ts` registers and unregisters the phone's push token and saves one push preference, passing
+  the token through and keeping nothing, `reportClient.ts` reads the admin console's open reports and resolves one, and
+  `termsClient.ts` records
   the signed-in user's acceptance of the published Terms. `apiClient()`'s fetch calls the app's `onTermsOutdated` on a
   403 whose body is the terms rejection, so the app opens its acceptance dialog.
   `voiceClientTestFixtures.ts` holds the voice tests' topic voice chat page and spoken question timings.

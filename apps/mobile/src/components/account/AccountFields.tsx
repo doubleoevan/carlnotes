@@ -66,6 +66,12 @@ export const ACCOUNT_FIELD_ELEMENTS: AccountFieldElements = {
 			)}
 		</View>
 	),
+	Switch: ({ label, isChecked, isDisabled, onChange }) => (
+		<View className="mt-3 flex-row items-center justify-between gap-3">
+			<Text className="flex-1 text-sm">{label}</Text>
+			<PreferenceSwitch label={label} isChecked={isChecked} isDisabled={isDisabled} onChange={onChange} />
+		</View>
+	),
 }
 
 // the blocked people section's rows around the shared account elements

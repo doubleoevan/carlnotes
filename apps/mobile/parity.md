@@ -92,6 +92,7 @@ their reason.
 | Privacy, Terms, License | none | web-only | the footer on every page, Account included, opens the web pages in the browser sheet |
 | Reset password | none | web-only | the sign-in screen's Forgot password opens the web's reset page |
 | Not found | the router's own screen | native | Expo Router's unmatched route |
+| none: push notifications | `push/PushNotifications.tsx`, `account/AccountSettings.tsx` | component, logic, native | The web has no push channel. The Notifications card is `NotificationsCard` from core through the shared `AccountFieldElements`, with the new `Switch` element rendering `PreferenceSwitch` (the web's email `Switch` on the subscriptions table is the switch reference), and the permission sheet composes the shared `Sheet` and `Button`. Shared logic: the copy in `core/lib/pushCopy.ts`, `toNotificationSwitchStates`, the push payload contracts, and the push token redaction. Native replacements: the permission read and request (`pushPermission.ts`, `pushRules.ts`), the token registration (`pushRegistration.ts`), and the tap handler (`pushNotificationRouting.ts`), which have no web counterpart |
 
 ## Roles to verify
 
@@ -135,3 +136,5 @@ a React Native Storybook story; the device comparison runs on the rebuilt develo
 | The Account screen's version line | `Account/AppVersionLine` | not yet, stories only |
 | The read-only plan cards | `Account/PlanCard` | not yet, stories only |
 | A budget failure without the upgrade line | `Topic/TopicScanRecap`, BudgetFailed | not yet, stories only |
+| The Notifications section's states | `Account/NotificationsSection` | no web state to compare: the card and switch follow the web's Invitations card and email switch; stories only |
+| The push permission sheet | `Push/PushPermissionPrompt` | no web state to compare: follows the Terms sheet; stories only |

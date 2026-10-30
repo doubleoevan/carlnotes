@@ -1,6 +1,7 @@
 // the durable Scan: it runs the pipeline's three stages as activities
 
 import { toWorkflowFailureReason } from "@carlnotes/contracts/scanFailure"
+import { PUSH_TASK_QUEUE } from "@carlnotes/pipeline/pushWorkflows"
 // the attempt counts the retry policies that the temporal activities read
 import {
 	FINISH_ATTEMPTS,
@@ -29,6 +30,8 @@ import {
 	recordPodcastEpisodeWorkflow,
 } from "./recordPodcastEpisode"
 import type * as scanActivities from "./runTopicScanActivities"
+// the workflow that pushes a scheduled Scan's new Findings to phones
+import { sendScanPushWorkflow } from "./sendPushNotifications"
 // the workflow that emails a completed Scan's outcome, the queue that it runs on, and the signal that ends its wait
 import {
 	podcastEpisodeOutlineSettledSignal,
@@ -59,12 +62,18 @@ const { reviewForScan } = proxyActivities<typeof scanActivities>({
 
 // the closing writes are idempotent, so they may retry. they are short enough not to need a heartbeat, and they run on
 // their own queue with no schedule-to-close bound, so a closing write can fail only by running and never by waiting
-const { finishScan, failScan, stopScan, reportScanEmailNotStarted, reportPodcastEpisodeRecordingNotStarted } =
-	proxyActivities<typeof scanActivities>({
-		taskQueue: SCAN_CLOSING_TASK_QUEUE,
-		startToCloseTimeout: FINISH_TIMEOUT_MS,
-		retry: { maximumAttempts: FINISH_ATTEMPTS },
-	})
+const {
+	finishScan,
+	failScan,
+	stopScan,
+	reportScanEmailNotStarted,
+	reportScanPushNotStarted,
+	reportPodcastEpisodeRecordingNotStarted,
+} = proxyActivities<typeof scanActivities>({
+	taskQueue: SCAN_CLOSING_TASK_QUEUE,
+	startToCloseTimeout: FINISH_TIMEOUT_MS,
+	retry: { maximumAttempts: FINISH_ATTEMPTS },
+})
 
 /**
  * Runs one Topic's Scan to a terminal status. The Scan row is opened by whoever started this workflow,
@@ -129,6 +138,9 @@ export async function runTopicScanWorkflow(
 		)
 	}
 
+	// a succeeded scheduled Scan pushes its new Findings to phones from its own workflow, beside the digest
+	await startScanPush({ scanId, trigger, finishedScanStatus })
+
 	// start the podcast episode recording after the email workflow, so the email workflow exists before the outline signal.
 	// the Podcast Episode bills the Scan's owner
 	if (isPodcastEpisodeReadyToRecord) {
@@ -167,6 +179,35 @@ async function startScanEmail(scanEmailWorkflowInput: ScanEmailWorkflowInput): P
 			return
 		}
 		await reportScanEmailNotStarted(scanEmailWorkflowInput.scanId, toWorkflowFailureReason(error))
+	}
+}
+
+// the Scan whose push may start, what asked for it, and how its ingest ended
+type StartScanPushOptions = {
+	scanId: string
+	trigger: ScanTrigger
+	finishedScanStatus: scanActivities.IngestStageResult["status"] | undefined
+}
+
+// start a succeeded scheduled Scan's push as a child that outlives this workflow. a Scan replaying from before the
+// patch started no push, an existing child is left alone, and any other failure is reported
+async function startScanPush({ scanId, trigger, finishedScanStatus }: StartScanPushOptions): Promise<void> {
+	if (trigger !== "scheduled" || finishedScanStatus !== "succeeded" || !patched("scan-push-workflow")) {
+		return
+	}
+	try {
+		await startChild(sendScanPushWorkflow, {
+			workflowId: `scan-push-${scanId}`,
+			taskQueue: PUSH_TASK_QUEUE,
+			parentClosePolicy: ParentClosePolicy.ABANDON,
+			args: [{ scanId }],
+		})
+	} catch (error) {
+		// a child with this id is the Scan's push, already on its way
+		if (error instanceof Error && error.name === "WorkflowExecutionAlreadyStartedError") {
+			return
+		}
+		await reportScanPushNotStarted(scanId, toWorkflowFailureReason(error))
 	}
 }
 

@@ -18,3 +18,17 @@ test("monitoring drops signed audio queries and private feed tokens", () => {
 	expect(JSON.stringify(analytics)).not.toContain("private-signature")
 	expect(JSON.stringify(analytics)).not.toContain("private-token")
 })
+
+test("monitoring replaces a push token quoted in an error, a message, or an attached field", () => {
+	// the push service quotes the token in its error, and a caller attaches it
+	const token = "ExponentPushToken[private-push-token]"
+	const event = redactEvent({
+		message: `push to ${token} failed`,
+		exception: { values: [{ value: `"${token}" is not a registered push notification recipient` }] },
+		extra: { pushDevice: { expoPushToken: token }, pushUrl: `https://exp.host/${token}`, pushErrors: [`bad ${token}`] },
+	})
+
+	// every copy is replaced and the rest of the text stays readable
+	expect(JSON.stringify(event)).not.toContain("private-push-token")
+	expect(event.message).toBe("push to ExpoPushToken[:token] failed")
+})

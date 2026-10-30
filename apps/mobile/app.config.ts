@@ -1,6 +1,11 @@
 // the expo app config: the identity, the EAS project link, the icon and splash, and the config plugins
 import { toAndroidAppLinkIntentFilters } from "@carlnotes/contracts/appLinkPaths"
-import { MOBILE_APP_BUNDLE_IDENTIFIER, MOBILE_APP_SCHEME } from "@carlnotes/contracts/mobileApp"
+import {
+	MOBILE_APP_BUNDLE_IDENTIFIER,
+	MOBILE_APP_EXPO_OWNER,
+	MOBILE_APP_EXPO_SLUG,
+	MOBILE_APP_SCHEME,
+} from "@carlnotes/contracts/mobileApp"
 import { SITE_HOST } from "@carlnotes/contracts/site"
 import { colors } from "@carlnotes/nightshift/colors"
 import { withSentry } from "@sentry/react-native/expo"
@@ -13,8 +18,8 @@ const EAS_PROJECT_ID = "7b874ce7-cb2a-4d50-a8d7-fb89e078b247"
 // the app: CarlNotes, its store identifiers, and the url scheme a browser sign-in returns through
 const expoConfig: ExpoConfig = {
 	name: "CarlNotes",
-	slug: "carlnotes",
-	owner: "carlnotes",
+	slug: MOBILE_APP_EXPO_SLUG,
+	owner: MOBILE_APP_EXPO_OWNER,
 	scheme: MOBILE_APP_SCHEME,
 	version: "0.1.0",
 	orientation: "portrait",
@@ -41,6 +46,9 @@ const expoConfig: ExpoConfig = {
 		softwareKeyboardLayoutMode: "resize",
 		// the site's links open in the app once the asset links verify
 		intentFilters: toAndroidAppLinkIntentFilters(SITE_HOST),
+		// Firebase's file for push delivery, which EAS provides as the GOOGLE_SERVICES_JSON file variable. a local build
+		// without it builds, and receives no push
+		googleServicesFile: process.env.GOOGLE_SERVICES_JSON,
 		adaptiveIcon: {
 			foregroundImage: "./assets/adaptive-icon.png",
 			// the cream behind the hand and the mug in the app icon
@@ -65,6 +73,8 @@ const expoConfig: ExpoConfig = {
 		"expo-apple-authentication",
 		"expo-secure-store",
 		"expo-web-browser",
+		// push notifications: the iOS push entitlement and Android's notification accent
+		["expo-notifications", { color: colors.primary.light }],
 		[
 			"expo-audio",
 			{

@@ -1,4 +1,6 @@
-// send-time redaction for selected content fields and URL secrets in Sentry events
+// send-time redaction for selected content fields, URL secrets, and push tokens in Sentry events
+
+import { EXPO_PUSH_TOKEN_PATTERN } from "./pushDevices"
 
 // an event on its way to Sentry, as the redaction reads and rewrites it
 type OutgoingEvent = {
@@ -6,10 +8,16 @@ type OutgoingEvent = {
 	contexts?: Record<string, unknown>
 	request?: { url?: string; query_string?: unknown; headers?: Record<string, string> }
 	spans?: { data?: Record<string, unknown> }[]
+	message?: string
+	exception?: { values?: { value?: string }[] }
 }
 
+// every Expo push token in a text, which the push service quotes in its errors
+const EXPO_PUSH_TOKEN_GLOBAL_PATTERN = new RegExp(EXPO_PUSH_TOKEN_PATTERN.source, "g")
+
 /**
- * Removes named content fields, bounds attached strings, and redacts request, trace, and span URL secrets.
+ * Removes named content fields, bounds attached strings, and redacts request, trace, and span URL secrets and the
+ * push tokens in the event's message and exceptions.
  */
 export function redactEvent<Event extends OutgoingEvent>(event: Event): Event {
 	// redact extra and contexts, where integrations and callers attach content
@@ -20,11 +28,32 @@ export function redactEvent<Event extends OutgoingEvent>(event: Event): Event {
 	if (traceContext?.data) {
 		traceContext.data = withoutUrlSecrets(traceContext.data)
 	}
+
+	// the request and the spans without their url secrets, and the message and exceptions without push tokens
 	return {
 		...redactedEvent,
 		...(event.request ? { request: withoutRequestUrlSecrets(event.request) } : {}),
 		...(event.spans ? { spans: event.spans.map((span) => ({ ...span, data: withoutUrlSecrets(span.data) })) } : {}),
+		...(event.message ? { message: withoutPushTokens(event.message) } : {}),
+		...(event.exception ? { exception: withoutExceptionPushTokens(event.exception) } : {}),
 	}
+}
+
+/**
+ * Returns a text with every Expo push token in it replaced.
+ */
+export function withoutPushTokens(text: string): string {
+	return text.replace(EXPO_PUSH_TOKEN_GLOBAL_PATTERN, "ExpoPushToken[:token]")
+}
+
+// an event's exceptions with the push tokens in their messages replaced
+function withoutExceptionPushTokens(
+	exception: NonNullable<OutgoingEvent["exception"]>,
+): NonNullable<OutgoingEvent["exception"]> {
+	const values = exception.values?.map((value) =>
+		value.value ? { ...value, value: withoutPushTokens(value.value) } : value,
+	)
+	return { ...exception, values }
 }
 
 /**
@@ -80,13 +109,14 @@ export function withoutUrlSecrets(record: Record<string, unknown> | undefined): 
 	return Object.fromEntries(keptEntries)
 }
 
-// remove query fields and fragments, and replace private path tokens
+// remove query fields and fragments, and replace private path tokens and push tokens
 function toRedactedUrl(url: string): string {
 	const urlWithoutQueryOrFragment = url.split(/[?#]/)[0] ?? url
-	return PRIVATE_TOKEN_PATH_PATTERNS.reduce(
-		(redactedUrl, pattern) => redactedUrl.replace(pattern, "$1:token"),
+	const redactedUrl = PRIVATE_TOKEN_PATH_PATTERNS.reduce(
+		(partlyRedactedUrl, pattern) => partlyRedactedUrl.replace(pattern, "$1:token"),
 		urlWithoutQueryOrFragment,
 	)
+	return withoutPushTokens(redactedUrl)
 }
 
 // a request with no query string or invite link's token on its url, its recorded query, or a header such as its referer
@@ -115,14 +145,24 @@ function withoutContent(attached: Record<string, unknown> | undefined): Record<s
 	return Object.fromEntries(keptEntries)
 }
 
-// truncate long strings while walking nested plain objects
+// redact urls and push tokens, and truncate long strings, while walking nested arrays and plain objects
 function truncateLongStrings(value: unknown, seen = new WeakSet<object>()): unknown {
-	// retain a bounded prefix and mark the omitted remainder
+	// a url or path loses its secrets
 	if (typeof value === "string" && URL_OR_PATH_PATTERN.test(value)) {
 		return toRedactedUrl(value)
 	}
-	if (typeof value === "string" && value.length > MAX_REPORT_STRING_CHARS) {
-		return `${value.slice(0, MAX_REPORT_STRING_CHARS)}…[truncated]`
+
+	// any other string loses its push tokens, then keeps a bounded prefix with the omitted remainder marked
+	if (typeof value === "string") {
+		const tokenlessValue = withoutPushTokens(value)
+		return tokenlessValue.length > MAX_REPORT_STRING_CHARS
+			? `${tokenlessValue.slice(0, MAX_REPORT_STRING_CHARS)}…[truncated]`
+			: tokenlessValue
+	}
+
+	// an array's items are walked like a value of their own
+	if (Array.isArray(value)) {
+		return value.map((item) => truncateLongStrings(item, seen))
 	}
 
 	// a Date, Map, or Error has no own enumerable entries, so walking one would replace it with an empty object

@@ -313,6 +313,14 @@ export async function reportScanEmailNotStarted(scanId: string, reason: string):
 }
 
 /**
+ * Reports a Scan whose push workflow could not be started. The Scan and its email are unaffected.
+ */
+export async function reportScanPushNotStarted(scanId: string, reason: string): Promise<void> {
+	console.error(`the push workflow for scan ${scanId} could not be started: ${reason}`)
+	reportError(new Error("a scan push workflow could not be started"), "push", { scanId, reason })
+}
+
+/**
  * Reports a Scan whose podcast episode workflow could not be started.
  * The Scan is already complete, so nothing else changes.
  */

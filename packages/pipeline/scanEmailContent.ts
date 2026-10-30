@@ -158,7 +158,11 @@ async function topicFindingUrls(topicId: string): Promise<string[]> {
 
 // the Findings this Scan first found, joined to their Resources for the email. a Finding an earlier Scan found and this
 // Scan re-scored is not new
-async function newFindingsForScan(scanId: string): Promise<TopicScanEmailFinding[]> {
+/**
+ * Returns the Findings a Scan first found that are still shown, most relevant first, with each Resource's title and
+ * link.
+ */
+export async function newFindingsForScan(scanId: string): Promise<TopicScanEmailFinding[]> {
 	// this topic scan's new Findings joined to their Resource for the title, link
 	return db
 		.select({ title: resources.title, url: resources.url, relevanceExplanation: findings.relevanceExplanation })

@@ -89,6 +89,24 @@ test("a digest plan leaves out recorded recipients and unsendable addresses, and
 	})
 })
 
+// the subscribers read are those with an active subscription and email on who can still read the Topic: on a private Topic, only its
+// owner and the active members of a team that owns or holds it
+test("a digest reads only subscribers who can still read the Topic", async () => {
+	// record every query the plan sends
+	const sentQueries = stubConnectionPool(({ text }) =>
+		text.includes('from "scans"') ? [SUCCEEDED_SCAN_TOPIC_ROW] : [],
+	)
+	await planScanDigest("scan-1")
+
+	// the subscriber read joins the Topic and checks its visibility and the subscriber's role
+	const subscribersQuery = sentQueries.find((sentQuery) => /from "subscriptions"/.test(sentQuery.text))
+	expect(subscribersQuery?.text).toContain('inner join "topics"')
+	expect(subscribersQuery?.text).toContain('"topics"."visibility" <> $')
+	expect(subscribersQuery?.text).toContain('"topics"."owner_id" = "subscriptions"."subscriber_user_id"')
+	expect(subscribersQuery?.text).toContain('from "team_members"')
+	expect(subscribersQuery?.values).toContain("private")
+})
+
 // a large Topic's subscribers are split within Resend's per-call limit
 test("a digest plan batches 205 subscribers into 100, 100, and 5", async () => {
 	stubDatabase([

@@ -103,6 +103,12 @@ test("Better Auth keeps verification values in Postgres", () => {
 	expect(auth.options.verification?.storeInDatabase).toBe(true)
 })
 
+// a sign-out or a revoke deletes the session's Postgres row, so the push devices bound to it cascade away with it
+test("Better Auth deletes a session's Postgres row when the session ends", () => {
+	expect(auth.options.session?.storeSessionInDatabase).toBe(true)
+	expect("preserveSessionInDatabase" in auth.options.session).toBe(false)
+})
+
 // a password reset deletes the user's other reset links from Postgres, and their Redis copies by identifier in one delete
 test("a password reset deletes the user's other reset links from Postgres and from Redis", async () => {
 	// Postgres returns two deleted reset-password rows, and a spy records the Redis key delete

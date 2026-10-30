@@ -6,6 +6,7 @@ import { AnchorLink } from "@/components/common/AnchorLink"
 import { Button } from "@/components/primitives/button"
 import { Input } from "@/components/primitives/input"
 import { Label } from "@/components/primitives/label"
+import { Switch } from "@/components/primitives/switch"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import { CARD_CLASS, STANDALONE_LINK_CLASS } from "@/lib/styleClasses"
 
@@ -60,6 +61,12 @@ export const ACCOUNT_FIELD_ELEMENTS: AccountFieldElements = {
 				</Tooltip>
 			)}
 		</label>
+	),
+	Switch: ({ label, isChecked, isDisabled, onChange }) => (
+		<div className="mt-3 flex max-w-sm items-center justify-between gap-3 text-sm">
+			<span>{label}</span>
+			<Switch checked={isChecked} disabled={isDisabled} onCheckedChange={onChange} aria-label={label} />
+		</div>
 	),
 }
 

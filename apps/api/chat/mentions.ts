@@ -3,13 +3,12 @@
 import type { ChatMention } from "@carlnotes/contracts/chat"
 import { toMentionedUserIds } from "@carlnotes/contracts/chatMentions"
 import { db } from "@carlnotes/db"
+import { toUnblockedAuthorFilter, toUnreportedFilter } from "@carlnotes/db/contentFilters"
 import { deleteRedisKeys } from "@carlnotes/db/redis"
 import { chatRoomMentions, chatRoomMessages } from "@carlnotes/db/schema/chat"
 import { teamMembers } from "@carlnotes/db/schema/teams"
 import { users } from "@carlnotes/db/schema/users"
 import { and, desc, eq, inArray, isNull, type SQL } from "drizzle-orm"
-import { toUnreportedFilter } from "../report/reports"
-import { toUnblockedAuthorFilter } from "../userBlocks"
 import { decryptChatText } from "./encryption"
 import { toTopicFilter } from "./roomAccess"
 
@@ -19,6 +18,7 @@ const CHAT_MESSAGE_SNIPPET_LENGTH = 120
 /**
  * The chat mention rows a chat message writes: one per team member the chat message names, plus the author of the replied-to chat message.
  * Carl does not have a team member row, and the room-wide @all reaches every team member without naming them.
+ * Returns how many members the message mentioned.
  */
 export async function saveChatMentions(
 	teamId: string,
@@ -26,7 +26,7 @@ export async function saveChatMentions(
 	chatMessageId: number,
 	chatMessage: string,
 	replyToChatMessageId: number | null,
-): Promise<void> {
+): Promise<number> {
 	// every notified member becomes one row, inserted in a single statement
 	const teamMembers = await teamMemberUsernames(teamId)
 	const mentionedUserIds = new Set(toMentionedUserIds(chatMessage, teamMembers, senderId))
@@ -48,6 +48,7 @@ export async function saveChatMentions(
 			.values([...mentionedUserIds].map((userId) => ({ messageId: chatMessageId, userId })))
 			.onConflictDoNothing()
 	}
+	return mentionedUserIds.size
 }
 
 // one unseen chat mention row, with the replied-to author resolved

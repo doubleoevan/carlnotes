@@ -1,11 +1,11 @@
 // the unread note badge counts. what changed in a note since a user last opened it, and the read that clears it
 import type { NoteBadge } from "@carlnotes/contracts/notes"
 import { db } from "@carlnotes/db"
+import { toUnblockedAuthorFilter } from "@carlnotes/db/contentFilters"
 import { noteComments, noteReads, notes } from "@carlnotes/db/schema/notes"
 import { teamMembers, teams, teamTopics } from "@carlnotes/db/schema/teams"
 import { topics } from "@carlnotes/db/schema/topics"
 import { and, count, eq, gt, inArray, isNull, ne, or } from "drizzle-orm"
-import { toUnblockedAuthorFilter } from "../userBlocks"
 
 /**
  * Every unread edit and comment count the signed-in user has. One entry per note that holds something.

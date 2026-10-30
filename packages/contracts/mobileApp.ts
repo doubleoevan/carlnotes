@@ -8,6 +8,12 @@ export const MOBILE_APP_BUNDLE_IDENTIFIER = "com.carlnotes.app"
 export const MOBILE_APP_SCHEME = "carlnotes"
 export const MOBILE_APP_SCHEME_ORIGIN = `${MOBILE_APP_SCHEME}://`
 
+// the Expo account and project slug the app builds under, and the project's full name, which the push service groups
+// tokens by
+export const MOBILE_APP_EXPO_OWNER = "carlnotes"
+export const MOBILE_APP_EXPO_SLUG = "carlnotes"
+export const MOBILE_APP_EXPO_PROJECT_NAME = `@${MOBILE_APP_EXPO_OWNER}/${MOBILE_APP_EXPO_SLUG}`
+
 // the App Store record's numeric id, null until the record exists
 export const APP_STORE_ID: string | null = null
 

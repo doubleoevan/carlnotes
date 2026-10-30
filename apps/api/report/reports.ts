@@ -1,8 +1,9 @@
-// the stored reports: writing one, and the filters that hide a reported subject from its reporter
+// the stored reports: writing one, and loading which subjects a user reported
 import type { ReportSubjectKind } from "@carlnotes/contracts/reports"
 import { db } from "@carlnotes/db"
+import { OPEN_OR_KEPT_REPORT_FILTER } from "@carlnotes/db/contentFilters"
 import { reports } from "@carlnotes/db/schema/reports"
-import { and, eq, inArray, isNull, notExists, or, type SQL, type SQLWrapper, sql } from "drizzle-orm"
+import { and, eq, inArray } from "drizzle-orm"
 import type { ReportedSubject } from "./reportSubjects"
 
 // what writing a report needs: the reporter, the subject as resolved, and the reporter's reason
@@ -29,29 +30,6 @@ export async function saveReport({ reporterUserId, subject, reason }: SaveReport
 
 	// no row back means the reporter already reported this subject
 	return insertedReport?.id ?? null
-}
-
-// the reports that hide their subject from the reporter: the open ones and the kept ones
-const OPEN_OR_KEPT_REPORT_FILTER = or(isNull(reports.resolvedAt), eq(reports.resolution, "kept")) as SQL
-
-/**
- * Returns the filter that keeps a user's reported subjects out of a read, by the column that holds the subject id.
- */
-export function toUnreportedFilter(userId: string, subjectKind: ReportSubjectKind, subjectIdColumn: SQLWrapper): SQL {
-	// a message id is a bigint, so the stored text id is compared against the column as text
-	return notExists(
-		db
-			.select({ id: reports.id })
-			.from(reports)
-			.where(
-				and(
-					eq(reports.reporterUserId, userId),
-					eq(reports.subjectKind, subjectKind),
-					eq(reports.subjectId, sql`${subjectIdColumn}::text`),
-					OPEN_OR_KEPT_REPORT_FILTER,
-				),
-			),
-	)
 }
 
 /**

@@ -1,6 +1,7 @@
 // the access checks for a topic's findings: who may see a finding, and who may rate and bookmark one, alone or for
 // many topics at once
 import { db } from "@carlnotes/db"
+import { toTopicRoleFilter } from "@carlnotes/db/contentFilters"
 import { findings, scans } from "@carlnotes/db/schema/scans"
 import { topics } from "@carlnotes/db/schema/topics"
 import { and, eq, inArray } from "drizzle-orm"
@@ -12,7 +13,6 @@ import {
 	loadSubscribedTopicIds,
 	subscriptionActivatedAt,
 	toTopicRole,
-	toTopicRoleFilter,
 } from "./permissions"
 
 /**

@@ -29,6 +29,9 @@ export const SPOKEN_EVENT_RATE_LIMIT = 30
 // how many app signup gate requests one address may send in a rate limit window, the credential paths' number
 export const APP_SIGNUP_GATE_RATE_LIMIT = 10
 
+// how many push device registrations and unregisters one user may send in a rate limit window
+export const PUSH_DEVICE_RATE_LIMIT = 10
+
 // the bucket that visitors share if no client address can be trusted
 const SHARED_BUCKET = "shared"
 
@@ -150,4 +153,10 @@ export const appSignupChallengeRateLimiter = toRateLimiter({
 export const appSignupGateRateLimiter = toRateLimiter({
 	limit: APP_SIGNUP_GATE_RATE_LIMIT,
 	store: toRateLimitStore("rate-limit:app-signup-gate"),
+})
+
+// the push device limiter, keyed by the user, over registering and unregistering a phone
+export const pushDeviceRateLimiter = toRateLimiter({
+	limit: PUSH_DEVICE_RATE_LIMIT,
+	store: toRateLimitStore("rate-limit:push-devices"),
 })

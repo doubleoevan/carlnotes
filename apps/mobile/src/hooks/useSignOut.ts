@@ -2,6 +2,7 @@ import { toSignOutFailedText } from "@carlnotes/core/lib/sessionCopy"
 import { useState } from "react"
 import { Alert } from "react-native"
 import { mobileAuthClient } from "@/authClient"
+import { unregisterPushDevice } from "@/pushRegistration"
 import { exitSession } from "@/sessionExit"
 
 /**
@@ -14,6 +15,10 @@ export function useSignOut(): { isPending: boolean; signOut: () => Promise<void>
 		// prevent repeated requests while the session closes
 		setIsPending(true)
 		try {
+			// unregister the phone's push token while the session can still authenticate the request. a failure
+			// never blocks the sign-out
+			await unregisterPushDevice()
+
 			// clear local account state after the server accepts sign-out
 			const { error } = await exitSession(() => mobileAuthClient.signOut())
 			if (error) {

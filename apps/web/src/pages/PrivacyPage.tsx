@@ -106,6 +106,7 @@ We use third-party providers to run the service. Each one receives only what its
 | OpenAI | Moderation of images other people see | Each avatar you upload and each image you share to a team room. OpenAI does not train its models on data sent through its API |
 | Exa, Firecrawl, and source APIs | Web search and page fetching | Search queries derived from your context |
 | Resend | Email delivery | Email address and scan email contents |
+| Expo, with Apple Push Notification service and Firebase Cloud Messaging | Mobile push notifications you turn on | Your device's push token, and each notification's title, text, and link. A notification names a topic or chat room, a finding's title, or who mentioned you, and never includes a chat message's text |
 | Langfuse | Pipeline tracing | Prompt and response contents |
 | Sentry | Error tracking | Error and crash diagnostics, app and device information, identifiers, and diagnostic or request context |
 | PostHog | Product analytics | Server usage events keyed to your account, browser visit events, bot fetches, and mobile events with SDK identifiers, app and device properties, screen names, and approximate location inferred from IP |
@@ -143,7 +144,7 @@ Our use of information received from Google APIs adheres to the Google API Servi
 
 On the website, we use a session cookie to keep you signed in and a security cookie for bot protection. Both are required for the service to work. Our website visit analytics set no cookie and store nothing on your device.
 
-The mobile app stores sign-in credentials in the operating system's secure storage. It also saves your Feed and the most recently viewed Topic in ordinary app storage so you can read previously loaded content offline. This cache can include private Topic content. Your appearance preference is also saved on the device. Mobile analytics and error-reporting SDKs may keep their own identifiers, settings, and queued reports locally.
+The mobile app stores sign-in credentials in the operating system's secure storage. If you allow notifications, it keeps your device's push token there too, and we store the token with your signed-in session until you sign out, the session ends, the app is uninstalled, or you close your account. It also saves your Feed and the most recently viewed Topic in ordinary app storage so you can read previously loaded content offline. This cache can include private Topic content. Your appearance preference is also saved on the device. Mobile analytics and error-reporting SDKs may keep their own identifiers, settings, and queued reports locally.
 
 The app clears its saved reading cache when you successfully sign out or it detects that your session has ended. A device that is offline may retain previously downloaded content until it reconnects and detects the ended session. These local copies rely on your device's access controls and operating-system protections.
 
@@ -201,7 +202,7 @@ export function PrivacyPage() {
 			{/* the title and the effective / last-updated dates */}
 			<h1 className="font-display text-2xl">Privacy Policy</h1>
 			<p className="text-muted-foreground mt-2 text-sm">
-				Effective date: July 24, 2026 · Last updated: October 29, 2026
+				Effective date: July 24, 2026 · Last updated: October 30, 2026
 			</p>
 			{/* the sections, rendered from the markdown body */}
 			<Markdown options={PRIVACY_MARKDOWN_OPTIONS}>{PRIVACY_BODY}</Markdown>

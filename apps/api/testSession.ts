@@ -31,7 +31,9 @@ export function signInAs(userId: string | null): void {
 export function toSignedInApp(route: Hono<AppEnv>, userId: string): Hono<AppEnv> {
 	return new Hono<AppEnv>()
 		.use(async (context, next) => {
+			// the user and their session's id, as the api's session middleware sets them
 			context.set("user", { id: userId, username: userId, termsAcceptedVersion: TERMS_VERSION } as never)
+			context.set("sessionId", `session-${userId}`)
 			await next()
 		})
 		.route("/", route)

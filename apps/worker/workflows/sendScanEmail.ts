@@ -5,6 +5,7 @@ import { toActivityApplicationFailure } from "@carlnotes/contracts/scanFailure"
 import type { ResendFailure } from "@carlnotes/emails/email"
 import type { ScanTrigger } from "@carlnotes/pipeline/temporalClient"
 import { ActivityFailure, condition, defineSignal, proxyActivities, setHandler } from "@temporalio/workflow"
+import { SEND_RETRY_POLICY, SEND_TIMEOUT_MS } from "./deliveryRetryPolicy"
 import type * as emailActivities from "./sendScanEmailActivities"
 
 // the task queue that this workflow and its activities run on, kept apart from the scan activities' slots
@@ -16,16 +17,6 @@ export const podcastEpisodeOutlineSettledSignal = defineSignal("episode-outline-
 
 // how long an email waits for the outline signal before it sends without the podcast episode section
 const PODCAST_EPISODE_OUTLINE_WAIT_MS = 10 * 60 * 1000
-
-// how long one send may take, and how its retries back off: 15 seconds, doubling up to 10 minutes apart, for at most
-// 10 attempts, about 45 minutes in all
-const SEND_TIMEOUT_MS = 60 * 1000
-const SEND_RETRY_POLICY = {
-	initialInterval: 15 * 1000,
-	backoffCoefficient: 2,
-	maximumInterval: 10 * 60 * 1000,
-	maximumAttempts: 10,
-}
 
 // planning and each send share the retry policy. an activity marks a failure final if waiting cannot fix it
 const { planScanDigest, sendScanDigestBatch, sendScanReport } = proxyActivities<typeof emailActivities>({

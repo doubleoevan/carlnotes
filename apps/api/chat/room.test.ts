@@ -8,7 +8,9 @@ import { SPENT_BUDGET_REJECTION } from "@carlnotes/models/models"
 import * as moderation from "@carlnotes/models/moderation"
 import * as spendReservations from "@carlnotes/models/spendReservations"
 import { stubReservedUserSpend } from "@carlnotes/models/spendReservationTestFixtures"
+import * as temporalClient from "@carlnotes/pipeline/temporalClient"
 import * as analytics from "@carlnotes/server/analytics"
+import * as monitoring from "@carlnotes/server/monitoring"
 import { saveEnvSettings } from "@carlnotes/server/savedEnvSettings"
 import { Hono } from "hono"
 import type { AppEnv } from "../currentUser"
@@ -129,7 +131,7 @@ test("a spoken chat message stores its flag, wakes carl, and reports itself spok
 	// what runs after the post, quiet
 	spyOn(linkPreviews, "saveLinkPreviews").mockResolvedValue(undefined)
 	spyOn(roomStream, "notifyChatRoomMessage").mockResolvedValue(undefined)
-	spyOn(mentions, "saveChatMentions").mockResolvedValue(undefined)
+	spyOn(mentions, "saveChatMentions").mockResolvedValue(0)
 	const runModelChatRoomTurnSpy = spyOn(roomTurns, "runModelChatRoomTurn").mockResolvedValue(undefined)
 	const trackEventSpy = spyOn(analytics, "trackEvent").mockImplementation(() => {})
 
@@ -167,6 +169,50 @@ test("a spoken chat message stores its flag, wakes carl, and reports itself spok
 		sentQuery.text.startsWith('insert into "room_messages"'),
 	)[1]
 	expect(typedInsertQuery?.values.at(-1)).toBe(false)
+})
+
+// a message that mentioned someone starts its push once, a message that mentioned nobody starts none, and a push that
+// cannot start is reported while the post still returns its message
+test("a mention starts its push without holding up the post", async () => {
+	// a member of the team's own chat room, posting text that does not address carl
+	spyOn(roomAccess, "loadChatRoom").mockResolvedValue({ topic: null, teamId: "team-1" })
+	spyOn(roomAttachments, "prepareChatRoomAttachments").mockResolvedValue([])
+	stubConnectionPool(({ text }) => {
+		if (text.includes('from "users"')) {
+			return [["ann"]]
+		}
+		return text.startsWith('insert into "room_messages"') ? [[44]] : []
+	})
+
+	// what runs after the post, quiet, with one mentioned member and a push start that fails the second time
+	spyOn(linkPreviews, "saveLinkPreviews").mockResolvedValue(undefined)
+	spyOn(roomStream, "notifyChatRoomMessage").mockResolvedValue(undefined)
+	spyOn(analytics, "trackEvent").mockImplementation(() => {})
+	const saveChatMentionsSpy = spyOn(mentions, "saveChatMentions").mockResolvedValue(1)
+	const startChatMentionPushWorkflowSpy = spyOn(temporalClient, "startChatMentionPushWorkflow")
+		.mockResolvedValueOnce(undefined)
+		.mockRejectedValueOnce(new Error("temporal is down"))
+	const reportErrorSpy = spyOn(monitoring, "reportError").mockImplementation(() => {})
+
+	// a mention starts one push for the message
+	expect(await room.postChatRoomMessage("user-1", null, "team-1", "@sam look", null, [])).toEqual({
+		chatMessageId: 44,
+		rejectionReason: null,
+	})
+	expect(startChatMentionPushWorkflowSpy).toHaveBeenCalledWith(44)
+
+	// a failed start still posts the message, and the failure is reported
+	expect(await room.postChatRoomMessage("user-1", null, "team-1", "@sam again", null, [])).toEqual({
+		chatMessageId: 44,
+		rejectionReason: null,
+	})
+	await Bun.sleep(0)
+	expect(reportErrorSpy).toHaveBeenCalledWith(expect.any(Error), "push", { chatMessageId: "44" })
+
+	// a message that mentioned nobody starts no push
+	saveChatMentionsSpy.mockResolvedValue(0)
+	await room.postChatRoomMessage("user-1", null, "team-1", "hello all", null, [])
+	expect(startChatMentionPushWorkflowSpy).toHaveBeenCalledTimes(2)
 })
 
 // a reply names a chat message in its own chat room. one from another room, or another team's room on the same topic,
@@ -210,7 +256,7 @@ test("a reply to carl's chat message in the chat room wakes him", async () => {
 	// what runs after the post, quiet
 	spyOn(linkPreviews, "saveLinkPreviews").mockResolvedValue(undefined)
 	spyOn(roomStream, "notifyChatRoomMessage").mockResolvedValue(undefined)
-	spyOn(mentions, "saveChatMentions").mockResolvedValue(undefined)
+	spyOn(mentions, "saveChatMentions").mockResolvedValue(0)
 	const runModelChatRoomTurnSpy = spyOn(roomTurns, "runModelChatRoomTurn").mockResolvedValue(undefined)
 	spyOn(analytics, "trackEvent").mockImplementation(() => {})
 

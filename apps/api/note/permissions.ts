@@ -1,12 +1,12 @@
 // the access checks for notes, decided per visibility from the page access loaded once per request
 import type { noteVisibilities } from "@carlnotes/contracts/enums"
 import { db } from "@carlnotes/db"
+import { toUnreportedFilter } from "@carlnotes/db/contentFilters"
 import { notes } from "@carlnotes/db/schema/notes"
 import { teams } from "@carlnotes/db/schema/teams"
 import { topics } from "@carlnotes/db/schema/topics"
 import { and, eq } from "drizzle-orm"
 import { loadUserAccess, memberTopicIds } from "../authorization"
-import { toUnreportedFilter } from "../report/reports"
 import { toTeamRole } from "../team/members"
 import { assertNever, canSeeTopic, gatedTopicColumns } from "../topic/permissions"
 

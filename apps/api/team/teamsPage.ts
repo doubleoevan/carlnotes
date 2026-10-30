@@ -2,6 +2,7 @@
 import { toAvatarKeyVersion } from "@carlnotes/contracts/avatars"
 import type { TeamsPageResponse } from "@carlnotes/contracts/teams"
 import { db } from "@carlnotes/db"
+import { toUnblockedAuthorFilter } from "@carlnotes/db/contentFilters"
 import { invites } from "@carlnotes/db/schema/invites"
 import { teamMembers, teams } from "@carlnotes/db/schema/teams"
 import { users } from "@carlnotes/db/schema/users"
@@ -9,7 +10,6 @@ import { and, desc, eq, gt, inArray, isNotNull, isNull, or, sql } from "drizzle-
 import { alias } from "drizzle-orm/pg-core"
 import { toProfileIdentity } from "../avatars"
 import { verifiedEmailQuery } from "../topic/permissions"
-import { toUnblockedAuthorFilter } from "../userBlocks"
 import { loadTeamSummaries, senders, toCountsByTeamId, toSpendByTeamId } from "./helpers"
 
 /**

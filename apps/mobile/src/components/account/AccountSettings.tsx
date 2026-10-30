@@ -8,6 +8,7 @@ import {
 	ProfileFields as SharedProfileFields,
 } from "@carlnotes/core/components/AccountFields"
 import { BlockedUsersSection } from "@carlnotes/core/components/BlockedUsersSection"
+import { NotificationsSection } from "@carlnotes/core/components/NotificationsSection"
 import {
 	CLOSE_ACCOUNT_CONFIRMATION,
 	CLOSE_ACCOUNT_SECTION_TEXT,
@@ -15,16 +16,18 @@ import {
 } from "@carlnotes/core/lib/sessionCopy"
 import { Settings } from "lucide-react-native"
 import { useState } from "react"
-import { Alert, View } from "react-native"
+import { Alert, Linking, View } from "react-native"
 import { mobileAuthClient, retireCurrentSession } from "@/authClient"
 import { UserAvatarPicker } from "@/components/avatar/UserAvatarPicker"
 import { Button } from "@/components/primitives/button"
 import { Icon } from "@/components/primitives/icon"
 import { Text } from "@/components/primitives/text"
+import { askForPushPermission, usePushPermission } from "@/pushPermission"
 import { ACCOUNT_FIELD_ELEMENTS, BLOCKED_USERS_ELEMENTS, PROFILE_FIELD_ELEMENTS } from "./AccountFields"
 
 /**
- * Shows every web account setting using shared forms and native profile and session adapters.
+ * Shows every web account setting using shared forms and native profile and session adapters, plus the phone's
+ * Notifications section, which the web has no counterpart for.
  */
 export function AccountSettings() {
 	return (
@@ -42,6 +45,7 @@ export function AccountSettings() {
 			<EmailSection elements={ACCOUNT_FIELD_ELEMENTS} callbackURL={`${SITE_URL}/account`} />
 			<PasswordSection elements={ACCOUNT_FIELD_ELEMENTS} />
 			<InvitationsSection elements={ACCOUNT_FIELD_ELEMENTS} />
+			<PushNotificationsSection />
 			<BlockedUsersSection elements={BLOCKED_USERS_ELEMENTS} />
 			<DeleteAccountSection />
 		</>
@@ -65,6 +69,23 @@ export function ProfileFields({ onUsernameChanged }: { onUsernameChanged?: () =>
 			username={session.user.username}
 			className="mt-3"
 			onUsernameChanged={onUsernameChanged}
+		/>
+	)
+}
+
+// the shared Notifications section over the phone's own permission: asking for it, and the system settings after a
+// refusal. nothing renders until the first permission read
+function PushNotificationsSection() {
+	const pushPermission = usePushPermission()
+	if (!pushPermission) {
+		return null
+	}
+	return (
+		<NotificationsSection
+			elements={ACCOUNT_FIELD_ELEMENTS}
+			pushPermission={pushPermission}
+			onRequestPermission={() => void askForPushPermission()}
+			onOpenSettings={() => void Linking.openSettings()}
 		/>
 	)
 }

@@ -2,6 +2,7 @@
 // the view rules and the subscription activation gate that limit each read to what the user may listen to
 
 import { db, isPublicAndShown } from "@carlnotes/db"
+import { toTopicRoleFilter } from "@carlnotes/db/contentFilters"
 import { loadUserAccess } from "@carlnotes/db/quotas"
 import { podcastEpisodeListens, podcastEpisodes } from "@carlnotes/db/schema/podcast"
 import { scans } from "@carlnotes/db/schema/scans"
@@ -10,7 +11,6 @@ import { isPodcastEpisodeRecordingConfigured } from "@carlnotes/server/podcastEp
 import { and, desc, eq, exists, gt, inArray, or, type SQL } from "drizzle-orm"
 import { isAllowed } from "../authorization"
 import { topicSubscriptionStartDate } from "../topic/helpers"
-import { toTopicRoleFilter } from "../topic/permissions"
 
 // a podcast episode's columns, without its script
 export const podcastEpisodeColumns = {

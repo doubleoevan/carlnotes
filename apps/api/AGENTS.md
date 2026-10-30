@@ -281,7 +281,8 @@ at the root import it by name.
   of the limit, with each topic's latest podcast episode and whether a signed-in user follows it. A user finds the
   listed topics they may open, and a visitor finds public topics with enough findings. Those rules in SQL live in
   `topic/permissions.ts`: `toTopicViewFilter`, `toTopicAccessFilter`, the topics a user reaches through their account,
-  and `toTopicRoleFilter`, a topic the user owns or a team of theirs holds. The related reads and the episode view rules
+  and `toTopicRoleFilter` from `@carlnotes/db/contentFilters`, a topic the user owns or a team of theirs holds. The
+  related reads and the episode view rules
   share them. The name searches here, in `profiles.ts`, in `team/search.ts`, and the finding reader read trigram
   indexes, whose plans `searchPlans.smoke.ts` checks beside the chat ranking's, the related reads', and the episode
   search's.
@@ -322,8 +323,8 @@ at the root import it by name.
 - `report/` — content reports: `report/flagContent.ts` (the `POST /api/flag-content` route, the daily limit in Redis,
   the stored report, and the email to `SUPPORT_EMAIL` with the admin console link), `report/reportSubjects.ts` (what a
   report names, a Topic, profile, Team, chat room message, note, or note comment, each resolved under the same read rule
-  that lets the reporter see it), and `report/reports.ts` (writing a report, and the filters that hide a reported
-  subject from its reporter in the room, comment, and note reads).
+  that lets the reporter see it), and `report/reports.ts` (writing a report). The filter that hides a reported subject
+  from its reporter in the room, comment, and note reads is `toUnreportedFilter` in `@carlnotes/db/contentFilters`.
 -  `moderation.ts` — the check every text and image other users see goes through before it is stored:
   `toObjectionableCategory` classifies a text and `toObjectionableImageCategory` an image through
   `@carlnotes/models/moderation`, and each returns the category it violates or null. The image check also returns
@@ -336,11 +337,23 @@ at the root import it by name.
   write gets while the session's accepted version is older than `TERMS_VERSION`, `hasAcceptedCurrentTerms` reads the
   row for a write with no session, and `POST /api/users/me/terms-acceptance` records the published version and
   refreshes the user's sessions. Better Auth's user-create hook in `auth.ts` records the version on every sign-up path.
-- `userBlocks.ts` — one user blocking another: the block, unblock, and list routes' functions, and
-  `toUnblockedAuthorFilter`, which keeps a blocked person's rows out of the blocker's reads. `chat/roomVisibility.ts`
+- `userBlocks.ts` — one user blocking another: the block, unblock, and list routes' functions.
+  `toUnblockedAuthorFilter` in `@carlnotes/db/contentFilters` keeps a blocked person's rows out of the blocker's reads.
+  `chat/roomVisibility.ts`
   applies the report and block filters to a room's loaded messages for one member, after the shared load.
   `loadAdminTopicSubscribers` lists a topic's subscribers by `isActiveNonOwnerTopicSubscription`, the rule
   `topic/subscriberCounts.ts` counts with.
+- `pushDevices.ts` — the push routes, behind `pushDeviceRateLimiter`. `POST /api/push-devices` binds a phone's Expo
+  push token, at most 256 characters, to the caller's session, taking the row over from any other account or session,
+  removes the session's previous token after a rotation, keeps the account's ten phones seen most recently, and turns
+  on each push preference the user never chose (`users.is_topic_push_enabled` and
+  `users.is_chat_mention_push_enabled`, null until the first grant), rewriting the sessions that return them.
+  `DELETE /api/push-devices` removes a token only for the caller's own session. `POST /api/users/me/push-preferences`
+  saves one kind on or off. Ending the session or closing the account deletes the phone's row by cascade, which
+  `auth.test.ts` keeps true by pinning `preserveSessionInDatabase` unset. The session middleware in `api.ts` sets the
+  session's id beside the user, read through `currentSessionId`. A room post whose `saveChatMentions` wrote rows starts
+  the message's push workflow through `startChatMentionPushWorkflow` without awaiting it, and a failed start is
+  reported under the `push` stage.
 - `activity.ts` — the activity page and its route, over `activityTopics.ts` (each topic's month scans, counts, chat
   mentions, and latest podcast episode).
 - `invite/invites.ts` — the invite links, the topic or team a token opens, and the link routes;

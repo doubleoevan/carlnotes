@@ -9,6 +9,7 @@
 	"dependencies": {
 		"@carlnotes/contracts": "workspace:*",
 		"@sentry/bun": "^11.9.0",
+		"expo-server-sdk": "^8.0.0",
 		"posthog-node": "^5.57.2"
 	}
 }

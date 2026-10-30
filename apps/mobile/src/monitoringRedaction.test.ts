@@ -40,6 +40,8 @@ test("mobile errors retain stacks and device diagnostics without private data", 
 		},
 	}
 	const result = redactMobileEvent(event)
+
+	// the private values are gone, and the stack, the device model, and the route shape stay
 	expect(JSON.stringify(result)).not.toContain("secret")
 	expect(JSON.stringify(result)).not.toContain("private")
 	expect(result.exception).toEqual(event.exception)
@@ -93,4 +95,12 @@ test("chat failures redact tool content, session headers, and authenticated stre
 	expect(JSON.stringify(result)).not.toContain("secret")
 	expect(result.contexts?.device).toEqual({ model: "iPhone", os: "iOS" })
 	expect<unknown>(result.request).toEqual({ url: "https://carlnotes.com" })
+})
+
+test("mobile errors redact a push token quoted in an exception", () => {
+	// the token the push service quotes back in a failed registration
+	const event = redactMobileEvent({
+		exception: { values: [{ value: "registration failed for ExpoPushToken[native-private-token]" }] },
+	})
+	expect(JSON.stringify(event)).not.toContain("native-private-token")
 })

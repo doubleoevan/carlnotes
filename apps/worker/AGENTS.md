@@ -51,9 +51,11 @@ about the app; a section whose hash is unchanged is not embedded again).
 -  `workflows/` — the Temporal workflows and their activities, one pair of files per workflow: `runTopicScan.ts` (the
   durable Scan, which runs the pipeline's three stages as activities and names the `scan-closing` queue),
   `processAttachment.ts` (a topic attachment's extraction and summaries), `screenSource.ts` (a url Source's screen that
-  its page can be read), `sendScanEmail.ts`, and `recordPodcastEpisode.ts`. Temporal bundles a workflow file with
-  webpack, so a workflow file imports only `@carlnotes/contracts/scanFailure`, `@carlnotes/pipeline/stageTimeouts`,
-  types, and its sibling files, and the activities file beside it imports the rest. `temporal.ts` resolves each workflow
+  its page can be read), `sendScanEmail.ts`, `sendPushNotifications.ts`, and `recordPodcastEpisode.ts`, with
+  `deliveryRetryPolicy.ts` holding the send retry policy that the email and push workflows share. Temporal bundles a
+  workflow file with webpack, so a workflow file imports only `@carlnotes/contracts/scanFailure`,
+  `@carlnotes/pipeline/stageTimeouts`, `@carlnotes/pipeline/pushWorkflows`, types, and its sibling files, and the
+  activities file beside it imports the rest. `temporal.ts` resolves each workflow
   by `new URL("./workflows/<name>.ts", import.meta.url)`, and `scripts/check-workflow-bundles.ts` bundles every workflow
   in preflight.
 - `workflows/runTopicScanActivities.ts` — the Scan's three stages. `ingestForScan` passes on the discovered Resources
@@ -68,6 +70,16 @@ about the app; a section whose hash is unchanged is not embedded again).
   file names, with its own Worker in `temporal.ts`. The scan workflow starts it as a child workflow that outlives the
   Scan's own, so a retrying email never holds up or fails the Scan. Each activity sends one batch or one report through
   `@carlnotes/pipeline/notify`.
+- Push notifications run in `workflows/sendPushNotifications.ts` on the `push-notifications` queue that
+  `@carlnotes/pipeline/pushWorkflows` names, with their own Worker in `temporal.ts`. A succeeded scheduled Scan starts
+  `sendScanPushWorkflow` as a child named `scan-push-<scanId>` beside its email, behind `patched("scan-push-workflow")`,
+  and the api starts `sendChatMentionPushWorkflow` named `chat-mention-push-<roomMessageId>` after a post saved mention
+  rows. Each workflow sends once under the shared delivery retry policy, with a ten-minute limit and a heartbeat after
+  each
+  chunk, which stops a cancelled attempt between chunks, sleeps 15 minutes, then reads its receipts, and a send
+  or receipt check that fails for good is reported under the `push` stage without a token. The activities call
+  `@carlnotes/pipeline/pushNotify` and `pushReceipts`, and a push the service did not take throws a `PushFailure`,
+  final if waiting cannot fix it.
 - A succeeded Scan's podcast episode is recorded in its own workflow, `workflows/recordPodcastEpisode.ts`, on the
   `episode-recordings` queue that the file names, with its own Worker in `temporal.ts` whose concurrency is set by
   `PODCAST_RECORDING_CONCURRENCY`. The scan workflow starts it as a child workflow that outlives the Scan's own, after

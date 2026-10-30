@@ -239,8 +239,9 @@ the browser bundle and renders pages through the server build, behind its own ro
   playback start once per load, for the player store.
 - `hooks/` — the React hooks that read the browser or a route, `useTopicPagePayload.ts` among them, the topic page's
   payload and its poll reload, and `useScanNote.ts`, a scan's note behind its recap popover, read once the trigger is
-  pointed at, focused, touched, or opened, and kept once the scan has finished; `providers/` — context providers;
-  `assets/` — images the bundler imports and serves as hashed files. The DOM-free hooks `useNow`, `useAvatar`,
+  pointed at, focused, touched, or opened, and kept once the scan has finished; `providers/` — context providers. The
+  images the bundler imports, Carl's and Vienna's portraits, come from `@carlnotes/nightshift/assets/`. The DOM-free
+  hooks `useNow`, `useAvatar`,
   `useUsernameChange`, `useNoteBodySave`, and `useNoteComments` live in `@carlnotes/core/hooks/`. A component that
   reads the browser during render, `localStorage`, `window`, or `document`, reads it through `useBrowserValue` in
   `hooks/useBrowserValue.ts`, so the server and the first browser render agree. A page that starts from a server

@@ -2,6 +2,7 @@
 // emails whoever ran it or created the Topic. each accepted send is recorded with its Scan, so a retry never repeats it
 
 import { db } from "@carlnotes/db"
+import { toTopicRoleFilter } from "@carlnotes/db/contentFilters"
 import { scans } from "@carlnotes/db/schema/scans"
 import { subscriptions, topicEmailSends, topics } from "@carlnotes/db/schema/topics"
 import { users } from "@carlnotes/db/schema/users"
@@ -19,7 +20,7 @@ import {
 	renderManualScanEmailText,
 	toManualScanSubject,
 } from "@carlnotes/emails/manual-scan-email"
-import { and, eq, inArray } from "drizzle-orm"
+import { and, eq, inArray, ne, or, type SQL, type SQLWrapper } from "drizzle-orm"
 import {
 	type EmailScan,
 	type EmailTopic,
@@ -193,24 +194,51 @@ async function loadUnsentRecipients({
 	topicId,
 	recipientUserIds,
 }: LoadUnsentRecipientsOptions): Promise<Recipient[]> {
-	// only an active subscription with email on gets mail. unsubscribing deactivates the row instead of deleting it
-	const emailSubscriptionFilter = and(
-		eq(subscriptions.topicId, topicId),
-		eq(subscriptions.isActive, true),
-		eq(subscriptions.isEmailEnabled, true),
-		recipientUserIds ? inArray(subscriptions.subscriberUserId, recipientUserIds) : undefined,
-	)
-
-	// read the subscribers and the Scan's sent rows together. one subscription row per user and Topic means no address repeats
+	// read the subscribers and the Scan's sent rows together
 	const [subscriberRows, sentUserIds] = await Promise.all([
-		db
-			.select({ userId: users.id, email: users.email })
-			.from(subscriptions)
-			.innerJoin(users, eq(subscriptions.subscriberUserId, users.id))
-			.where(emailSubscriptionFilter),
+		loadDigestSubscribers(topicId, recipientUserIds),
 		loadScanEmailRecipientUserIds(scanId),
 	])
 	return subscriberRows.filter((subscriberRow) => !sentUserIds.has(subscriberRow.userId))
+}
+
+/**
+ * Returns the Topic's digest subscribers, each user with an active subscription and email on who can still read the
+ * Topic, limited to the given user ids if any.
+ */
+export async function loadDigestSubscribers(topicId: string, userIds?: string[]): Promise<Recipient[]> {
+	// one subscription row per user and Topic means no address repeats
+	return db
+		.select({ userId: users.id, email: users.email })
+		.from(subscriptions)
+		.innerJoin(users, eq(subscriptions.subscriberUserId, users.id))
+		.innerJoin(topics, eq(subscriptions.topicId, topics.id))
+		.where(
+			and(toDigestSubscriptionFilter(topicId), userIds ? inArray(subscriptions.subscriberUserId, userIds) : undefined),
+		)
+}
+
+/**
+ * Returns the user ids of the Topic's digest subscribers as a subquery, for a read that joins them instead of loading
+ * them.
+ */
+export function toDigestSubscriberIdsQuery(topicId: string): SQLWrapper {
+	return db
+		.select({ userId: subscriptions.subscriberUserId })
+		.from(subscriptions)
+		.innerJoin(topics, eq(subscriptions.topicId, topics.id))
+		.where(toDigestSubscriptionFilter(topicId))
+}
+
+// an active subscription with email on, whose subscriber can still read the Topic: any subscriber of a public or
+// invite Topic, and on a private Topic only its owner and its teams' members. unsubscribing deactivates the row instead of deleting it
+function toDigestSubscriptionFilter(topicId: string): SQL | undefined {
+	return and(
+		eq(subscriptions.topicId, topicId),
+		eq(subscriptions.isActive, true),
+		eq(subscriptions.isEmailEnabled, true),
+		or(ne(topics.visibility, "private"), toTopicRoleFilter(subscriptions.subscriberUserId)),
+	)
 }
 
 // the user ids that the Scan's email already reached

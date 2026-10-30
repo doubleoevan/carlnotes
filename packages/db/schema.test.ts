@@ -314,12 +314,14 @@ test("finding feedback and views are written and displayed, never read into rank
 	])
 })
 
-// the chat room's chat messages are the team's conversation. it never reaches scoring, retrieval, or embeddings
+// the chat room's chat messages are the team's conversation. it never reaches scoring, retrieval, or embeddings. the
+// chat mention push reads a message's author, room, and reply reference, and never its text or a summary
 test("room messages and summaries never reach the worker pipeline", () => {
-	const readers = listSourceFiles(["apps/worker", "packages/pipeline"])
-		.filter((file) => /chatRoomMessages|chatRoomSummaries/.test(file.text))
-		.map((file) => file.path)
-	expect(readers).toEqual([])
+	const readerFiles = listSourceFiles(["apps/worker", "packages/pipeline"]).filter((file) =>
+		/chatRoomMessages|chatRoomSummaries/.test(file.text),
+	)
+	expect(readerFiles.map((file) => file.path)).toEqual(["packages/pipeline/pushNotify.ts"])
+	expect(readerFiles.some((file) => /chatRoomMessages\.content|chatRoomSummaries/.test(file.text))).toBe(false)
 })
 
 // a prompt version cascades from its topic and keeps its row when the account that saved it closes.

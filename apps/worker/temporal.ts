@@ -3,6 +3,7 @@
 import { readPoolGauges, sizeConnectionPool } from "@carlnotes/db"
 import { readRedisExtraGauges } from "@carlnotes/db/redisGauges"
 import { shutdownTelemetry, startTelemetry } from "@carlnotes/models/telemetry"
+import { PUSH_TASK_QUEUE } from "@carlnotes/pipeline/pushWorkflows"
 import {
 	ATTACHMENT_TASK_QUEUE,
 	describeScanQueue,
@@ -22,6 +23,7 @@ import * as podcastEpisodeActivities from "./workflows/recordPodcastEpisodeActiv
 import { SCAN_CLOSING_TASK_QUEUE } from "./workflows/runTopicScan"
 import * as scanActivities from "./workflows/runTopicScanActivities"
 import * as sourceActivities from "./workflows/screenSourceActivities"
+import * as pushActivities from "./workflows/sendPushNotificationsActivities"
 import { SCAN_EMAIL_TASK_QUEUE } from "./workflows/sendScanEmail"
 import * as scanEmailActivities from "./workflows/sendScanEmailActivities"
 
@@ -43,6 +45,10 @@ const SCREEN_CONCURRENCY = toPositiveInteger(Bun.env.SCREEN_CONCURRENCY, DEFAULT
 // how many scan email activities may run at once on this replica. a few keep each wait for a Resend slot short,
 // and the rest of a burst waits in the Temporal queue
 const SCAN_EMAIL_CONCURRENCY = 4
+
+// how many push activities may run at once on this replica. each sends its chunks one after another, inside the push
+// service's 600 a second per project, and the rest of a burst waits in the Temporal queue
+const PUSH_CONCURRENCY = 4
 
 // how many podcast episode activities may run at once on this replica, from PODCAST_RECORDING_CONCURRENCY or the default.
 // the rest of a burst of recordings waits in the Temporal queue
@@ -116,6 +122,15 @@ async function run(): Promise<void> {
 			taskQueue: SCAN_EMAIL_TASK_QUEUE,
 			shutdownGraceTime: SHUTDOWN_GRACE_MS,
 			maxConcurrentActivityTaskExecutions: SCAN_EMAIL_CONCURRENCY,
+		}),
+		// pushes a Scan's new Findings and a room message's chat mentions to phones, then reads their receipts
+		Worker.create({
+			connection,
+			workflowsPath: new URL("./workflows/sendPushNotifications.ts", import.meta.url).pathname,
+			activities: pushActivities,
+			taskQueue: PUSH_TASK_QUEUE,
+			shutdownGraceTime: SHUTDOWN_GRACE_MS,
+			maxConcurrentActivityTaskExecutions: PUSH_CONCURRENCY,
 		}),
 		// records a succeeded Scan's Podcast Episode, one activity per script call and per chapter
 		Worker.create({

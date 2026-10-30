@@ -373,6 +373,7 @@
       "dependencies": {
         "@carlnotes/contracts": "workspace:*",
         "@sentry/bun": "^11.9.0",
+        "expo-server-sdk": "^8.0.0",
         "posthog-node": "^5.57.2",
       },
     },
@@ -2935,6 +2936,8 @@
     "expo-secure-store": ["expo-secure-store@58.0.2", "", { "peerDependencies": { "expo": "*" } }, "sha512-VupWWEuQF6IiQ06McSymtn7/tehs8ifThhFwAU4UK8poomZcaa2S0UVt/y7G2XozBdkI3xpiPSx+r0pS2zsuYQ=="],
 
     "expo-server": ["expo-server@58.0.6", "", {}, "sha512-6DBlSZwxk3J0y1j2s4XebAWNiwGaMp32NcWX7b2kJC2+EFf1g+pCcVmx8ylawt2tyLmbDHswm4MHOfrd4bqfvA=="],
+
+    "expo-server-sdk": ["expo-server-sdk@8.0.0", "", { "dependencies": { "promise-limit": "^2.7.0", "promise-retry": "^2.0.1" } }, "sha512-AN0JuacmrO32hxv95EPqPfPIRqj0neCnh0ooxQFAd3lkJXu4ytWduvxzawzHEOSn4jV/1vx8xbtOXpuVV9Tg3Q=="],
 
     "expo-splash-screen": ["expo-splash-screen@58.0.11", "", { "dependencies": { "@expo/config-plugins": "~58.0.10", "@expo/image-utils": "^0.12.5", "xml2js": "0.6.0" }, "peerDependencies": { "expo": "*" } }, "sha512-Xg0VnPcFMzfjyFKgqb8nZWdZEX6AqNmr88wcIKgtS1iNtBxwh/Rg6IO+JYcgx8lRxgav6dzoHffSslOgUqpsFA=="],
 

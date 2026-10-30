@@ -28,7 +28,8 @@ inventory does not find; the policy text needs the same update before the store 
 | Chat messages, Tasting Notes, comments, replies, mentions, reports, blocks | The api | The chat, team rooms, notes, and moderation | Yes | No | None outside the service. A report reaches the admin console | Deleted with the account. A report keeps the quoted content until an admin resolves it |
 | Team memberships and invitations | The api | Teams | Yes | No | None | Deleted with the team or the account |
 | Podcast Episode listening position and completion | The api, and `podcastEpisodeCheckpoint.ts` on the device for the account's own last Podcast Episode: id, position, completion, rate, time | Resuming a Podcast Episode and the listener count | Yes | No | None | The device copy is removed on sign-out. The server copy goes with the account |
-| App icon badge count | `expo-notifications` in `appIconBadge.ts`, from the api's update counts. Badge permission only, no alerts or sounds, no push token | The count of new findings, invitations, and messages on the icon | Yes, on the device only | No | None | Cleared on sign-out. Nothing leaves the device |
+| App icon badge count | `expo-notifications` in `appIconBadge.ts`, from the api's update counts. It asks for nothing: the badge shows only once the notification permission allows it | The count of new findings, invitations, and messages on the icon | Yes, on the device only | No | None | Cleared on sign-out. Nothing leaves the device |
+| Expo push token, with the platform, app version, and last time the phone registered | `expo-notifications` in `pushRegistration.ts`, only after the person allows notifications, sent to the api through `pushClient.sendPushDevice` and stored in `push_devices` bound to the session. The token is also kept in `expo-secure-store` (`push-token`) to replace it when it changes, and deleted from the phone on sign-out. The two account switches are stored on the account | Delivering the notifications the person turned on: new findings on a followed topic, and chat mentions | Yes | No | Expo's push service, which forwards to Apple Push Notification service or Firebase Cloud Messaging. A notification includes the topic or room name, the sender's username, a finding's title, and a link, never a message's text | Removed on sign-out, when the session ends or is revoked, when the push service reports the app uninstalled, and with the account. Send records with each receipt are deleted with the account or the scan or message |
 | Platform, OS version, device model, app version, build number | `deviceTelemetry.ts`, as headers on every api and auth request, as Sentry tags, and on every PostHog event. No advertising, vendor, installation, or account identifier is read | Support, the forced-update check, and separating platforms in the dashboards | Yes on an api request, which the session identifies. No on a PostHog event | No | Sentry, PostHog | Up to 12 months in the error and analytics stores. Not stored with the account |
 | Server usage events: signup, topic created, scan completed, podcast episode played, team joined, account deleted, and the others `packages/server/analytics.ts` sends | The api, keyed to the account id with the plan and the device headers above (`toAnalyticsProperties` in `apps/api/currentUser.ts`) | Product analytics | Yes, by account id. No name or email | No | PostHog | Up to 12 months |
 | Screen views by route pattern and visit events: plays, completions, sign-up taps, shares, follows, naming a public Topic at most | `visitAnalytics.ts`. Persistence is memory only, session replay and autocapture are off, geoip is off, remote flags are off, `$device_id` and `$device_name` are deleted before send, and `$process_person_profile` is false | Product analytics | No. No person profile is created and no identifier survives the app process | No | PostHog | Up to 12 months. Nothing is stored on the device |
@@ -59,7 +60,8 @@ audio in the background and asks for no microphone. The config plugin sets `micr
 ## Apple App Privacy answers
 
 Collected and linked to the person's identity, not used for tracking: Contact info, User content, Identifiers, and Usage
-data. Contact info is the email address and name. User content is the topics, findings, notes, messages, comments, and
+data. The Expo push token is a device identifier linked to the account and used for app functionality only. Contact info
+is the email address and name. User content is the topics, findings, notes, messages, comments, and
 attachments they create, and photos they choose as an avatar. Identifiers are the account id, on server events. Usage
 data is product interaction, on server events keyed to the account.
 
@@ -67,8 +69,9 @@ Collected and not linked to identity, not used for tracking: Diagnostics (crash 
 (the PostHog screen and visit events, which include no person profile or device identifier).
 
 Data Not Collected, which the code shows: Location, Financial info, Health and fitness, Contacts, Browsing history,
-Search history, Sensitive info, Purchases, Advertising data, Device ID, Audio data, and Other user content outside the
-rows above. Location is off because geoip is off and no location module is installed. A search query goes to the api and
+Search history, Sensitive info, Purchases, Advertising data, Audio data, and Other user content outside the rows above.
+Device ID is collected once the person allows notifications: the Expo push token, for app functionality only. Location
+is off because geoip is off and no location module is installed. A search query goes to the api and
 is not stored or sent to analytics. No vendor, advertising, or installation identifier is read. The app uses no
 microphone.
 
@@ -86,9 +89,11 @@ Transparency prompt is never shown.
   `https://carlnotes.com/privacy#delete-your-carlnotes-account`.
 - Data types collected: Personal info (name, email address, user ids), Photos (an avatar the person chooses), Files and
   docs (attachments the person chooses), Messages (chat messages, notes, comments), App activity (app interactions), and
-  App info and performance (crash logs, diagnostics). In-app search history is not retained. Device or other IDs: none.
-- Data types shared: App info and performance with Sentry, App activity with PostHog, as the rows above say. No data
-  is shared for advertising.
+  App info and performance (crash logs, diagnostics). In-app search history is not retained. Device or other IDs: the
+  Expo push token, once the person allows notifications, for app functionality.
+- Data types shared: App info and performance with Sentry, App activity with PostHog, as the rows above say. The push
+  token goes to Expo's push service as a processor that delivers the notification, which Play counts as a service
+  provider, not sharing. No data is shared for advertising.
 - Purposes: App functionality, Analytics, Account management, Fraud prevention and security (the install check).
 - Optional or required: Email is required for an account. Name, avatar, attachments, and messages are optional.
 - Independent security review: No.

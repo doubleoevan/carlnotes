@@ -166,3 +166,7 @@ export const promptVersionOrigins = ["editor", "chat", "mcp"] as const
 export const reportSubjectKinds = ["topic", "profile", "team", "chatMessage", "note", "noteComment"] as const
 // how an admin closes a report: the content was removed, or kept
 export const reportResolutions = ["removed", "kept"] as const
+// what a push notification is about: a scheduled Scan's new Findings, or a chat mention in a team chat room
+export const pushNotificationKinds = ["topic-scan", "chat-mention"] as const
+// what the push service's receipt said about a push it accepted
+export const pushReceiptStatuses = ["ok", "error"] as const

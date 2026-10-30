@@ -2,6 +2,7 @@
 // findingPermissions.ts
 
 import { db, isPublicAndShown } from "@carlnotes/db"
+import { toTopicRoleFilter } from "@carlnotes/db/contentFilters"
 import { memoizeInRequest } from "@carlnotes/db/requestMemo"
 import { invites } from "@carlnotes/db/schema/invites"
 import { teamMembers, teamTopics } from "@carlnotes/db/schema/teams"
@@ -181,25 +182,6 @@ export function toTopicAccessFilter(userId: string): SQL | undefined {
 			or(inArray(topics.id, invitedTopicIds), inArray(topics.id, subscribedTopicIds)),
 		),
 	)
-}
-
-/**
- * Returns whether the user has a role on a topic in SQL: they own it, a team of theirs owns it, or a team of theirs
- * holds it through a share.
- */
-export function toTopicRoleFilter(userId: string): SQL | undefined {
-	// the user's active teams, and the topics shared with those teams
-	const memberTeamIds = db
-		.select({ teamId: teamMembers.teamId })
-		.from(teamMembers)
-		.where(and(eq(teamMembers.userId, userId), eq(teamMembers.isActive, true)))
-	const sharedTopicIds = db
-		.select({ topicId: teamTopics.topicId })
-		.from(teamTopics)
-		.where(inArray(teamTopics.teamId, memberTeamIds))
-
-	// a topic the user owns, or one their teams own or hold
-	return or(eq(topics.ownerId, userId), inArray(topics.teamId, memberTeamIds), inArray(topics.id, sharedTopicIds))
 }
 
 // whether an address the user has verified is on the topic's invite list

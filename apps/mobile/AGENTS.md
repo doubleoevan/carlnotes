@@ -525,8 +525,9 @@ count. `PageUpdateCountBadge` sits beside a Topic or Team name and opens its cha
 `toChatRoomHref`, which names the team room with `chatTeamId`. The placements are the web's: the menu button, the
 Profile, Teams, and Activity items, the chat launcher pill, the room choice list, the Topic and Team headers, the Feed's
 Topic cards, the name links in tables, the Activity and Teams titles, and the profile avatar. `appIconBadge.ts` puts
-the same sum on the app icon, the web tab title's counterpart, asking iOS for the badge permission once when a
-signed-in user first has a count. A signed-in, focused Topic screen sends about five requests a minute: the counts
+the same sum on the app icon, the web tab title's counterpart. It never asks for a permission: iOS badges the icon
+once the notification permission allows the badge, and a push never sets the count. A signed-in, focused Topic screen
+sends about five requests a minute: the counts
 once a minute, and the mention count, the invitations, and the note badges every 45 seconds, plus a room list reload
 when the mention count changes. `apiRequestSettings.ts` leaves the session cookie off a call that asks for
 `credentials: "omit"`, the public counts reads, so the edge shares them with a signed-in app too.
@@ -540,6 +541,30 @@ launcher shows for a visitor and opens `NoConversationSheet`, the web's `NoConve
 invitation the way the web page does, with `invite/InviteNotice.tsx` for its states, and `carlnotes://invite/<token>`
 opens it. The reviewed inventory of web-only capabilities, the page and action inventory, and the roles each action
 is to be verified with are in [parity.md](parity.md), which `scripts/check-client-parity.ts` reads in preflight.
+
+## Push notifications
+
+Push is a delivery beside the digest email and the badges, with no web counterpart. `pushPermission.ts` reads the
+permission (`pushRules.ts`'s `toPushPermission` reads an iOS grant without alerts as refused), makes the Android
+channels `topic-scans` and `chat-mentions`, asks for alerts, sounds, and
+the badge, and owns the in-context sheet: `offerPushPermission` opens it after a follow in `TopicPageActions` or
+`TopicSubscriptionsTable` and when `ChatRoomPanel` mounts, only while the phone was never asked and never showed the
+sheet (`push-permission-sheet-shown` in SecureStore). Nothing asks at launch. `pushRegistration.ts` registers the Expo
+push token for the signed-in session through `pushClient.sendPushDevice`, again on each session and token change,
+keeps the token in SecureStore (`push-token`) so a rotation names the old one, retries a failed registration on each
+return to the foreground, and `useSignOut` unregisters it and forgets it before `exitSession` signs out, ignoring a
+failure, since the session's end deletes the binding on the server anyway.
+`components/push/PushNotifications.tsx` is mounted at the root: it registers, opens a tapped push through
+`pushNotificationRouting.ts` (the push's site link through `toLinkedPath` for the account it was sent to, and Home for
+anything else) from the foreground, the background, or a cold start, and hides the banner of a push for the screen on
+display. `PushPermissionSheet` there renders `PushPermissionPrompt` with the shared `Sheet` and `Button`. Account's
+Notifications section is core's `NotificationsSection` through the `Switch` account field element, with
+`Linking.openSettings()` after a refusal.
+
+Release: push needs a store build, since the plugin adds the iOS push entitlement. Set `EXPO_PUSH_ACCESS_TOKEN` in
+Doppler before turning on enhanced push security in the Expo dashboard, upload the FCM V1 service account key with
+`eas credentials`, and set the `GOOGLE_SERVICES_JSON` EAS file variable that `app.config.ts` reads. The push rows of
+`store/release-checklist.md` and the push token row of `store/data-inventory.md` cover the store forms.
 
 ## Telemetry
 

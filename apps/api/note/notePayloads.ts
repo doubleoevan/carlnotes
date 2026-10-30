@@ -1,12 +1,12 @@
 // the note payloads: a page's note list, one visible note shaped for the api, and a note created on a page
 import type { Note, NotesResponse } from "@carlnotes/contracts/notes"
 import { db } from "@carlnotes/db"
+import { toUnreportedFilter } from "@carlnotes/db/contentFilters"
 import { notes } from "@carlnotes/db/schema/notes"
 import { users } from "@carlnotes/db/schema/users"
 import { and, eq, ne, or } from "drizzle-orm"
 import type { Context } from "hono"
 import { currentUser } from "../currentUser"
-import { toUnreportedFilter } from "../report/reports"
 import { loadUsername } from "../usernames"
 import {
 	canDeleteNote,

@@ -468,6 +468,11 @@ api starts with Apple off. To turn it on:
    `bun run dev`, and sign in from `localhost:5173`. Apple returns to the tunnel, which forwards only that callback to the
    api, and the api sends the browser back to localhost.
 
+Push notifications are optional. The worker sends them through Expo's push service with `EXPO_PUSH_ACCESS_TOKEN` from
+Doppler, named apart from `EXPO_ACCESS_TOKEN`, which the EAS CLI reads as its login. Without the token, sends go out
+unauthenticated, which the push service accepts until enhanced push security is turned on in the Expo dashboard. Set
+the token in Doppler dev and prd first, then turn the setting on, or every send fails.
+
 Backfills (owner-run) are one-time data migrations that pair with a schema change. Each is idempotent, so a second run
 changes nothing. Each runs under `doppler` against the configured database:
 
@@ -552,6 +557,7 @@ bun run smoke:teams        # the team-lifecycle smoke test: creation, join fan-o
 bun run smoke:room         # the team chat-room smoke test: the access matrix, isolation, budget rejection, mention rows, and the room lock
 bun run smoke:rooms        # the chat-rooms smoke test: which rooms a user can open, one per holding team, and the unseen count
 bun run smoke:chat-turns   # the chat turn shapes smoke test: each kind's row and each chat proposal shape is kept, each mismatched row is rejected, rolled back
+bun run smoke:push-devices # the push devices smoke test: ending a session or closing the account deletes its phones, one send per event, recipient, and phone, rolled back
 bun run smoke:mcp          # the mcp smoke test: builds the ui, then checks what a visitor reads and searches, each card's resource, the oauth flow with its consent page, a user's consumed, rating, and bookmark writes, edit_topic and its confirmation, follow_topic, and the rate limit
 bun run smoke:tools        # the topic tools smoke test: the gate inside each tool, the prompt version writes, adding and removing sources up to the limit, and that no tool starts a scan
 bun run smoke:podcast-episodes # the podcast episode routes smoke test: access, audio, feeds, covers, and removal

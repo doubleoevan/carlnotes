@@ -1,7 +1,8 @@
-// Temporal client tests: a failed connection is retried, and a connected client is reused
+// Temporal client tests: a failed connection is retried, a connected client is reused, and a chat mention push starts
+// once per message
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
-import { Connection } from "@temporalio/client"
-import { describeScanQueue } from "./temporalClient"
+import { Connection, WorkflowClient, WorkflowExecutionAlreadyStartedError } from "@temporalio/client"
+import { describeScanQueue, startChatMentionPushWorkflow } from "./temporalClient"
 
 // put the real connect back after each test
 afterEach(() => {
@@ -30,4 +31,25 @@ test("a failed connection is retried and a connected client is reused", async ()
 	await describeScanQueue()
 	expect(connectSpy).toHaveBeenCalledTimes(2)
 	expect(connectSpy.mock.calls[0]?.[0]).toMatchObject({ connectTimeout: 10_000 })
+})
+
+// a mention push starts on the push queue under the message's id, a second start is ignored, and a failure throws
+test("a chat mention push starts once per message", async () => {
+	// a connected client whose start succeeds, then finds the workflow running, then fails
+	spyOn(Connection, "connect").mockResolvedValue(toFakeConnection())
+	const startSpy = spyOn(WorkflowClient.prototype, "start")
+		.mockResolvedValueOnce({} as never)
+		.mockRejectedValueOnce(new WorkflowExecutionAlreadyStartedError("running", "chat-mention-push-7", "workflow"))
+		.mockRejectedValueOnce(new Error("temporal is down"))
+
+	// the first start names the queue and the message, the repeat resolves, and the failure throws
+	await startChatMentionPushWorkflow(7)
+	expect(startSpy.mock.calls[0]?.[0]).toBe("sendChatMentionPushWorkflow")
+	expect(startSpy.mock.calls[0]?.[1]).toMatchObject({
+		taskQueue: "push-notifications",
+		workflowId: "chat-mention-push-7",
+		args: [{ chatMessageId: 7 }],
+	})
+	await startChatMentionPushWorkflow(7)
+	await expect(startChatMentionPushWorkflow(7)).rejects.toThrow("temporal is down")
 })

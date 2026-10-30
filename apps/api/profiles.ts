@@ -5,6 +5,7 @@ import type { Topic } from "@carlnotes/contracts/profiles"
 import { SEARCH_MIN_CHARS, type UserSearchRow } from "@carlnotes/contracts/search"
 import { toNormalizedUsername } from "@carlnotes/contracts/usernames"
 import { type DbHandle, db } from "@carlnotes/db"
+import { toUnblockedAuthorFilter } from "@carlnotes/db/contentFilters"
 import { subscriptions, topics } from "@carlnotes/db/schema/topics"
 import { users } from "@carlnotes/db/schema/users"
 import { and, countDistinct, eq, isNotNull, like, ne, sql } from "drizzle-orm"
@@ -14,7 +15,7 @@ import { withAvatarVersion } from "./avatars"
 import { type AppEnv, currentUser } from "./currentUser"
 import { loadProfileTeamStatuses, loadPublicTeams, loadTeamSummaries } from "./team/helpers"
 import { toTopicTableRows } from "./topic/topicTableRows"
-import { isUserBlocked, toUnblockedAuthorFilter } from "./userBlocks"
+import { isUserBlocked } from "./userBlocks"
 
 // the trimmed query and the most rows to read
 type SearchUsersOptions = { query: string; limit: number; userId: string | null }

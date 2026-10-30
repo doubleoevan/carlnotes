@@ -16,6 +16,7 @@ import { AddTopicToTeamDialog } from "@/components/team/AddTopicToTeamDialog"
 import { JoinTeamButton } from "@/components/team/JoinTeamButton"
 import { usePageMutation } from "@/hooks/usePageMutation"
 import { useTopicFeed } from "@/providers/TopicFeedProvider"
+import { offerPushPermission } from "@/pushPermission"
 import { openSessionScreen } from "@/sessionReturnPath"
 import { EditTopicModal } from "./EditTopicModal"
 import { NewTopicButton } from "./TopicHomeActions"
@@ -117,9 +118,7 @@ export function TopicPageActions({
 				isActive: topic.isSubscribed,
 				isDisabled: mutation.isPending,
 				onSelect: () =>
-					session
-						? void mutation.run(() => sendTopicSubscription(topic.id, !topic.isSubscribed))
-						: openSubscribeSignup(topic.id),
+					session ? void mutation.run(() => toggleTopicSubscription(topic)) : openSubscribeSignup(topic.id),
 			})
 		}
 		if (layout.isAddTopicToTeamInMenu) {
@@ -226,4 +225,12 @@ function confirmDeleteTopic(topic: TopicResponse, onDeleted: () => Promise<void>
 			},
 		],
 	)
+}
+
+// follow or unfollow the Topic, and after a follow, explain the notifications a followed Topic can send
+async function toggleTopicSubscription(topic: TopicResponse): Promise<void> {
+	await sendTopicSubscription(topic.id, !topic.isSubscribed)
+	if (!topic.isSubscribed) {
+		void offerPushPermission()
+	}
 }

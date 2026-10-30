@@ -232,6 +232,7 @@ const reportedStages = [
 	"first-scan",
 	"source-screen",
 	"email",
+	"push",
 	"podcast-episode",
 	"chat",
 	"prompt-registry",

@@ -69,7 +69,14 @@ order check that the api and web tests share.
 - Nothing here touches the database, the network, or the DOM: the modules are values and their shapes.
 - Tests: `bun test packages/contracts`.
 
-`clientTelemetry.ts` defines bounded native device headers and the browser user-agent fallback used by API events and request monitoring. These untrusted descriptions are analytics only. `visitAnalytics.ts` shares URL/path redaction and public Topic attribution between web and native. `monitoringRedaction.ts` contains the universal Sentry content/URL redaction, re-exported by the server and extended by native. `reportedPath.ts` also shapes Topic and Team note routes and removes query strings and fragments.
+`clientTelemetry.ts` defines bounded native device headers and the browser user-agent fallback used by API events and
+request monitoring. These untrusted descriptions are analytics only. `visitAnalytics.ts` shares URL/path redaction and
+public Topic attribution between web and native. `monitoringRedaction.ts` contains the universal Sentry content/URL
+redaction and replaces Expo push tokens in event messages, exceptions, and attached strings, re-exported by the server
+and extended by native. `pushDevices.ts` holds the push registration, unregister, and preference payloads, the data a
+push includes for the app to open (`pushNotificationData`), and `EXPO_PUSH_TOKEN_PATTERN`, the one token shape the api
+accepts and the redaction replaces. It holds no token and sends nothing. `reportedPath.ts` also shapes Topic and Team
+note routes and removes query strings and fragments.
 
 `podcast.ts` also validates the audio-resolution response: an HTTPS `audioUrl` and ISO `expiresAt`. These credentials
 are transient. `monitoringRedaction` removes signed URL queries and private podcast-feed path tokens.

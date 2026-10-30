@@ -6,6 +6,7 @@ import { toCentsFromDollars } from "@carlnotes/contracts/plans"
 import type { PodcastEpisodeSummary } from "@carlnotes/contracts/podcast"
 import type { TeamIdentity } from "@carlnotes/contracts/teams"
 import { db } from "@carlnotes/db"
+import { toUnblockedAuthorFilter } from "@carlnotes/db/contentFilters"
 import { loadMonthlyBudgetCutoffs } from "@carlnotes/db/monthlyBudgetCutoffs"
 import { invites } from "@carlnotes/db/schema/invites"
 import { teamMembers, teams } from "@carlnotes/db/schema/teams"
@@ -19,7 +20,6 @@ import { toProfileIdentity, withAvatarVersion } from "./avatars"
 import type { AppEnv } from "./currentUser"
 import { loadUserEmail, toInviteAddressedToUserFilter } from "./invite/inviteAcceptance"
 import { loadLatestPodcastEpisodeSummaries } from "./podcast/podcastEpisodeShapes"
-import { toUnblockedAuthorFilter } from "./userBlocks"
 
 // the subscription row fields that the queries read, with the subscribed time as a date
 export type SubscriptionRowFields = Omit<SubscriptionRow, "subscribedAt" | "latestPodcastEpisode"> & {

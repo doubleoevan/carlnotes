@@ -2,14 +2,13 @@
 import { toAvatarKeyVersion } from "@carlnotes/contracts/avatars"
 import type { ChatRoom } from "@carlnotes/contracts/chat"
 import { db } from "@carlnotes/db"
+import { toUnblockedAuthorFilter, toUnreportedFilter } from "@carlnotes/db/contentFilters"
 import { chatRoomMentions, chatRoomMessages } from "@carlnotes/db/schema/chat"
 import { teamMembers, teams, teamTopics } from "@carlnotes/db/schema/teams"
 import { topics } from "@carlnotes/db/schema/topics"
 import { users } from "@carlnotes/db/schema/users"
 import { and, count, eq, inArray, isNull } from "drizzle-orm"
 import { withAvatarVersion } from "../avatars"
-import { toUnreportedFilter } from "../report/reports"
-import { toUnblockedAuthorFilter } from "../userBlocks"
 import { loadTeamChatMentions, loadTopicChatMentions } from "./mentions"
 
 /**

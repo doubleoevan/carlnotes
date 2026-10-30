@@ -8,7 +8,10 @@ and `@carlnotes/contracts`, with `drizzle-orm` and `@neondatabase/serverless`.
   (scans, resources, findings, and the finding markers), `teams.ts`, `invites.ts`, `chat.ts`, `notes.ts`, `podcast.ts`,
   `billing.ts`, `releases.ts`, `claims.ts` (the claims' lease rows), `storage.ts` (favicons and the pending object
   deletions), `mobileMinimumVersions.ts` (the minimum app version of each platform), `reports.ts` (content reports),
-  `userBlocks.ts` (the users a user blocked), `viewerCounts.ts` (the saved HyperLogLog counter of each topic's viewers
+  `userBlocks.ts` (the users a user blocked), `pushDevices.ts` (each phone's Expo push token, bound to the session that
+  registered it so ending the session or closing the account deletes it, and the push sends the push service accepted,
+  one per event, recipient, and phone, with each receipt, indexed by phone and recipient for the cascades),
+  `viewerCounts.ts` (the saved HyperLogLog counter of each topic's viewers
   and each podcast episode's listeners), `vectors.ts` (the topic and podcast episode vectors that rank related topics,
   related podcast episodes, and the podcast episode search, each table kept apart from the row it ranks so a read of a
   whole row never includes a vector, and each table's public and shown flag with its partial HNSW index), and
@@ -117,6 +120,14 @@ and `@carlnotes/contracts`, with `drizzle-orm` and `@neondatabase/serverless`.
   transaction back, and `toTableRow` builds a row in a table's column order. The free, plus, and admin access rows
   and `toSpendSumRows`, a spend sum's row from the dollars given for each table, are what the spend tests return. Only
   tests import it.
+- `contentFilters.ts` — the read filters that decide what one user sees: `toUnblockedAuthorFilter` for rows by a
+  person they blocked, `toUnreportedFilter` with `OPEN_OR_KEPT_REPORT_FILTER` for subjects they reported, and
+  `toTopicRoleFilter` for the topics they own or a team of theirs holds. Each takes the user as an id or as a column,
+  so the api's reads and the pipeline's digest and push recipients import the one copy.
+- `pushDevices.smoke.ts` (`bun run smoke:push-devices`) — inside one rolled-back transaction, proves that ending a
+  session or closing the account deletes its push devices, that a repeated send for one event, recipient, and phone
+  breaks the unique index, that a send whose event does not match its kind fails the check, and that retiring a phone
+  keeps its sends with no phone.
 - `chatTurnShapes.smoke.ts` (`bun run smoke:chat-turns`) — inserts a row of every chat turn kind, each chat proposal
   shape, and every mismatched shape inside one rolled-back transaction, proving each check constraint rejects a row
   whose columns do not match its kind.

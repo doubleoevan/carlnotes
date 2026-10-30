@@ -1,11 +1,10 @@
-// user blocks: writing and clearing one, listing a user's, and the filters that keep a blocked person's writing out of
-// the blocker's reads
+// user blocks: writing and clearing one, and listing a user's. the read filter is in @carlnotes/db/contentFilters
 import type { BlockedUser } from "@carlnotes/contracts/blocks"
 import { db } from "@carlnotes/db"
 import { deleteRedisKeys } from "@carlnotes/db/redis"
 import { userBlocks } from "@carlnotes/db/schema/userBlocks"
 import { users } from "@carlnotes/db/schema/users"
-import { and, desc, eq, isNull, notExists, or, type SQL, type SQLWrapper } from "drizzle-orm"
+import { and, desc, eq } from "drizzle-orm"
 import { Hono } from "hono"
 import { toUnseenChatMentionCountKey } from "./chat/mentions"
 import { type AppEnv, currentUser } from "./currentUser"
@@ -70,22 +69,6 @@ export async function loadBlockedUserIds(blockerUserId: string): Promise<Set<str
 		.from(userBlocks)
 		.where(eq(userBlocks.blockerUserId, blockerUserId))
 	return new Set(blockedUserRows.map((blockedUserRow) => blockedUserRow.blockedUserId))
-}
-
-/**
- * Returns the filter that keeps rows by a person the user has blocked out of a read. A row with no author passes.
- */
-export function toUnblockedAuthorFilter(userId: string, authorUserIdColumn: SQLWrapper): SQL {
-	// the row passes with no author, or with an author the user has not blocked
-	return or(
-		isNull(authorUserIdColumn),
-		notExists(
-			db
-				.select({ blockedUserId: userBlocks.blockedUserId })
-				.from(userBlocks)
-				.where(and(eq(userBlocks.blockerUserId, userId), eq(userBlocks.blockedUserId, authorUserIdColumn))),
-		),
-	) as SQL
 }
 
 // the block routes: block a user, unblock them, and list the blocker's blocked people

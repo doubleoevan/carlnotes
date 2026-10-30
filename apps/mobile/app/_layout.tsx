@@ -34,6 +34,7 @@ import { apiBaseUrl } from "@/authClient"
 import { AppChatPanel } from "@/components/chat/AppChatPanel"
 import { PodcastEpisodeAudio } from "@/components/podcast/PodcastEpisodeAudio"
 import { PodcastPlayer } from "@/components/podcast/PodcastPlayer"
+import { PushNotifications, PushPermissionSheet } from "@/components/push/PushNotifications"
 import { AppUpdateNotice } from "@/components/session/AppUpdateNotice"
 import { TermsAcceptanceSheet } from "@/components/session/TermsAcceptanceSheet"
 import { mobileApiRequestSettings } from "@/mobileApiRequestSettings"
@@ -165,8 +166,12 @@ function RootLayout() {
 					<TopicResourceInfoProvider userId={userId}>
 						<ScreenViewRecorder />
 						<AppIconBadge userId={chatAccountId} />
+						{/* the phone's push registration for this session, and opening a tapped push */}
+						<PushNotifications userId={userId} />
 						{/* the Terms acceptance a signed-in user owes once, on whichever screen the session loads */}
 						{isSignedIn && <TermsAcceptanceSheet />}
+						{/* the notification explanation a first follow or room visit opens */}
+						{isSignedIn && <PushPermissionSheet />}
 						{!isSessionRetired && <PodcastEpisodeAudio userId={userId} />}
 						{/* allow public reading while keeping account screens and chat behind sign-in */}
 						<KeyboardAvoidingView

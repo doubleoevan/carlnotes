@@ -28,6 +28,10 @@ export const users = pgTable(
 		role: text("role").notNull().default("user"),
 		// who may address an invite to this user, enforced at invite creation and nowhere else
 		inviteAccess: inviteAccess("invite_access").notNull().default("anyone"),
+		// whether a Scan's new Findings and a chat mention push to the user's phones. null until the user first grants
+		// notification permission, which turns both on, and a push reads null as off
+		isTopicPushEnabled: boolean("is_topic_push_enabled"),
+		isChatMentionPushEnabled: boolean("is_chat_mention_push_enabled"),
 		// the billing plan
 		plan: plan("plan").notNull().default("free"),
 		// a per-user monthly spend override in cents. an admin can raise or lower it, and null falls back to the plan's backstop

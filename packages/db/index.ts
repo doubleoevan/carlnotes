@@ -16,6 +16,7 @@ import * as invites from "./schema/invites"
 import * as mobileMinimumVersions from "./schema/mobileMinimumVersions"
 import * as notes from "./schema/notes"
 import * as podcast from "./schema/podcast"
+import * as pushDevices from "./schema/pushDevices"
 import * as releases from "./schema/releases"
 import * as reports from "./schema/reports"
 import * as scans from "./schema/scans"
@@ -65,6 +66,7 @@ export const schema = {
 	...mobileMinimumVersions,
 	...notes,
 	...podcast,
+	...pushDevices,
 	...releases,
 	...reports,
 	...scans,

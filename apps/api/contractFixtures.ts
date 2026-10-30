@@ -20,6 +20,7 @@ import { TEST_NOTE_ID, TEST_NOTE_VERSION, toNoteQueryRows } from "./note/noteTes
 import { podcastEpisodesRoute } from "./podcast/podcastEpisodes"
 import { podcastFeedsRoute } from "./podcast/podcastFeeds"
 import { profilesRoute } from "./profiles"
+import { pushDevicesRoute } from "./pushDevices"
 import { searchRoute } from "./search/search"
 import { teamsRoute } from "./team/teamsRoute"
 import { termsAcceptanceRoute } from "./termsAcceptance"
@@ -276,6 +277,9 @@ function toNoteFixture(
 	}
 }
 
+// the phone token the push fixtures register and unregister
+const EXPO_PUSH_TOKEN = "ExponentPushToken[contract-fixture]"
+
 // the fixtures, by registry key, in the registry's order
 export const CONTRACT_FIXTURES: Record<string, ContractFixture> = {
 	// activity
@@ -482,6 +486,19 @@ export const CONTRACT_FIXTURES: Record<string, ContractFixture> = {
 		{ users: USER_COLUMNS },
 	),
 	"profileClient.sendUsername": toFixture(usernamesRoute, { body: { username: "Warm-Bean" } }, { users: USER_COLUMNS }),
+
+	// push
+	"pushClient.sendDeletePushDevice": toFixture(pushDevicesRoute, { body: { expoPushToken: EXPO_PUSH_TOKEN } }, {}),
+	"pushClient.sendPushDevice": toFixture(
+		pushDevicesRoute,
+		{ body: { expoPushToken: EXPO_PUSH_TOKEN, platform: "ios", appVersion: "0.1.0" } },
+		{ users: USER_COLUMNS },
+	),
+	"pushClient.sendPushPreference": toFixture(
+		pushDevicesRoute,
+		{ body: { kind: "chat-mention", isEnabled: false } },
+		{ users: USER_COLUMNS },
+	),
 
 	// search
 	"searchClient.searchSite": toFixture(searchRoute, { query: { q: "agents" } }, { users: USER_COLUMNS }),

@@ -52,7 +52,8 @@ It imports `@carlnotes/contracts`, `@carlnotes/client`, `@carlnotes/nightshift`,
   Featured kept in its own order),
   `topicPromptUrls.ts` (the urls written inside a topic prompt), `emailProviders.ts` (the webmail compose urls an invite
   is given), `chromeIntentUrl.ts` (the page as an Android intent url that opens it in Chrome, out of an embedded
-  webview), `sessionCopy.ts` (the lines the sign-in, sign-out, sign-up, and close-account controls say, shared by the
+  webview), `pushCopy.ts` (the push permission sheet's and the Notifications section's words), `sessionCopy.ts` (the
+  lines the sign-in, sign-out, sign-up, and close-account controls say, shared by the
   web and the mobile app), `signupPrompts.ts` (the prompt each account action shows a visitor on the sign-up page, and
   the lookup by cta tag), `inviteRejections.ts` (what an invite page says while it checks a token, if the check
   fails, and for each way a token is rejected), `updateCounts.ts` (one badge's count summing chat mentions, note
@@ -193,7 +194,10 @@ and a fixed first column belong to the mobile adapter. Web retains its expandabl
 
 `components/AccountBudget`, `AccountFields`, `PlanCard`, `MonthlyBudgetCutoffTable`, `InviteFields`, and `TeamFields`
 share page and form composition. `AccountFields` includes the shared ProfileFields form, with platform identity,
-photo-toggle, and input elements. `useAvatar` owns upload acknowledgement and session refresh for both File and
+photo-toggle, and input elements, and the `Switch` element. `NotificationsSection` is the account's Notifications
+section over those elements: `NotificationsCard` over `toNotificationSwitchStates`, with `NotificationsSection` reading
+the session's push preferences. Only the app renders it. `useAvatar` owns upload acknowledgement and session refresh for
+both File and
 FormData uploads. `Footer` owns all footer copy, destinations, and row order for both apps.
 `lib/spendMeter`, `monthlyBudgetCutoffs`, and `monthlyBudgetCutoffCopy` own budget labels and checkpoint calculations.
 `lib/spendMeterStoryFixtures` supplies the same spend and cutoff examples to both component browsers.
