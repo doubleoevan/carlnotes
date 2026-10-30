@@ -1,7 +1,8 @@
 // the chat room routes: the page, the stream, posting, the shared files, and the deletes
 
 import { CHAT_ROOM_ATTACHMENT_ERRORS, type ChatRoomMessagePage } from "@carlnotes/contracts/chat"
-import { chatRoomMessagePayload } from "@carlnotes/contracts/payloads"
+import type { ModerationCategory } from "@carlnotes/contracts/moderation"
+import { type ChatAttachment, chatRoomMessagePayload } from "@carlnotes/contracts/payloads"
 import { attachmentStream } from "@carlnotes/db/store"
 import { isVoiceChatConfigured } from "@carlnotes/server/voiceChat"
 import { zValidator } from "@hono/zod-validator"
@@ -9,7 +10,7 @@ import { type Context, Hono } from "hono"
 import type { z } from "zod"
 import { toSignedOutRejection } from "../bodyLimit"
 import { type AppEnv, currentUser, toAnalyticsProperties } from "../currentUser"
-import { toObjectionableCategory, toObjectionableTextResponse } from "../moderation"
+import { toObjectionableCategory, toObjectionableContentResponse, toObjectionableImageCategory } from "../moderation"
 import { toolCallerRateLimiter } from "../rateLimit"
 import { toTermsOutdatedResponse } from "../termsAcceptance"
 import { toStoredFileHeaders } from "../topic/attachments"
@@ -70,8 +71,25 @@ export function toChatMessagePage(
 // the context of a chat room post, with its validated chat message
 type ChatRoomPostContext = Context<AppEnv, string, { out: { json: z.infer<typeof chatRoomMessagePayload> } }>
 
-// post one member's chat message and answer the result: a 400 for a file problem, a 404 for a chat room the user may
-// not use, and the posted chat message otherwise
+// the category of the first shared image that reads as a violation, unreadable if the moderation could not read one, or
+// null if every image may post. the images are checked in parallel
+async function toObjectionableRoomImageCategory(
+	attachments: ChatAttachment[],
+	subjectId: string,
+): Promise<ModerationCategory | "unreadable" | null> {
+	const imageCategories = await Promise.all(
+		attachments.flatMap((attachment) =>
+			attachment.kind === "image"
+				? [toObjectionableImageCategory({ dataUrl: attachment.dataUrl, subjectKind: "chatRoomImage", subjectId })]
+				: [],
+		),
+	)
+	const objectionableCategory = imageCategories.find(
+		(imageCategory) => imageCategory !== null && imageCategory !== "unreadable",
+	)
+	return objectionableCategory ?? (imageCategories.includes("unreadable") ? "unreadable" : null)
+}
+
 async function postChatRoomMessageRoute(
 	context: ChatRoomPostContext,
 	topicId: string | null,
@@ -90,15 +108,32 @@ async function postChatRoomMessageRoute(
 		return termsOutdatedResponse
 	}
 
-	// a message that reads as a violation is rejected in Carl's words before anything posts
+	// a chat room this user may not post to reads as missing, before any moderation call is spent on the post
+	if (!(await loadChatRoom(userId, topicId, teamId))) {
+		return context.json({ error: "not found" }, 404)
+	}
+
+	// a message that reads as a violation is rejected in Carl's words before anything posts. the room's topic and team
+	// ids name the check in a failure report
+	const moderationSubjectId = `${topicId ?? "team"}:${teamId}`
 	const objectionableCategory = await toObjectionableCategory({
 		text: content,
 		textKind: "a chat room message",
 		subjectKind: "chatMessage",
-		subjectId: `${topicId ?? "team"}:${teamId}`,
+		subjectId: moderationSubjectId,
 	})
 	if (objectionableCategory) {
-		return toObjectionableTextResponse(context, objectionableCategory)
+		return toObjectionableContentResponse(context, objectionableCategory)
+	}
+
+	// a shared image that reads as a violation rejects the whole post the same way, before anything stores
+	// an image the moderation could not read is rejected like any other file that cannot be read
+	const objectionableImageCategory = await toObjectionableRoomImageCategory(attachments, moderationSubjectId)
+	if (objectionableImageCategory === "unreadable") {
+		return context.json({ error: CHAT_ROOM_ATTACHMENT_ERRORS.attachmentRejected }, 400)
+	}
+	if (objectionableImageCategory) {
+		return toObjectionableContentResponse(context, objectionableImageCategory)
 	}
 
 	// one rejected file returns a 400 for the whole chat message, while a missing chat room returns a 404

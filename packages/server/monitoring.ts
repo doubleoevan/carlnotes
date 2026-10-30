@@ -219,7 +219,6 @@ const reportedStages = [
 	"score",
 	"object-storage",
 	"scan-report",
-	"scanner",
 	"scheduled-scan",
 	"manual-scan",
 	"first-scan",

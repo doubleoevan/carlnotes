@@ -5,14 +5,14 @@ ends in: what the api starts, the worker's activities run, and the evals measure
 it; it imports `@carlnotes/models`, `@carlnotes/emails`, `@carlnotes/db`, `@carlnotes/server`, and
 `@carlnotes/contracts`, with `@temporalio/client`, `rss-parser`, `ai`, `unpdf`, `mammoth`, `exceljs`, and `zod`.
 
-- `scan.ts` starts a Scan: `startTopicScan` opens the row and the workflow, `stopTopicScan` cancels one, and `scanTopic`
-  and `failUnstartedScan` are what the sweep calls for a row it dispatches or fails. `temporalClient.ts` is the Temporal
-  client: the task queue names, the `ScanTrigger` type (`manual`, `scheduled`, or `creation`), the workflow starts and
-  the cancel, each giving up after ten seconds, and `describeScanQueue`, which the worker's minute line and the sweep's
-  backlog report read. `stageTimeouts.ts` is how long each Scan stage may run and how many attempts it gets, which the
-  workflows import. `staleScans.ts` is the close-out of a scan that outran its stages or never started, which the sweep
-  and the manual scan route run. `screen.ts` starts the llm-guard screening workflow for every Source still waiting on
-  one.
+-  `scan.ts` starts a Scan: `startTopicScan` opens the row and the workflow, `stopTopicScan` cancels one, and
+  `scanTopic` and `failUnstartedScan` are what the sweep calls for a row it dispatches or fails. `temporalClient.ts` is
+  the Temporal client: the task queue names, the `ScanTrigger` type (`manual`, `scheduled`, or `creation`), the workflow
+  starts and the cancel, each giving up after ten seconds, and `describeScanQueue`, which the worker's minute line and
+  the sweep's backlog report read. `stageTimeouts.ts` is how long each Scan stage may run and how many attempts it gets,
+  which the workflows import. `staleScans.ts` is the close-out of a scan that outran its stages or never started, which
+  the sweep and the manual scan route run. `screen.ts` starts the url Source screen workflow, which fetches the page and
+  marks the Source ready or failed, for every Source still waiting on one.
 - `attach.ts` ingests a topic attachment and builds a topic's scan context, over `attachContentType.ts` (the canonical
   content type and what each type is), `attachText.ts` (the text extracted from an attachment's bytes, a PDF read one
   page at a time, and `extractTextUpTo`, which stops once its text passes the caller's `maxChars`), and `attachTable.ts`
@@ -82,11 +82,12 @@ it; it imports `@carlnotes/models`, `@carlnotes/emails`, `@carlnotes/db`, `@carl
 - A Resource's content hash is taken in the dedupe stage, over the title and snippet as they stand then.
   The fetch that follows may replace a title read off the url and leaves the hash alone, so a retitled
   Resource still matches its Finding's `reviewed_content_hash` and no later Scan pays to score it again.
-- Text goes through `@carlnotes/models/guard` before a model reads it, and a user-supplied url through
-  `fetchPublicUrl` in `@carlnotes/server/publicFetch`. `scrape.ts` reads a reddit thread
-  from reddit's own api and scrapes any other page through Firecrawl, `transcripts.ts` reads a video's captions from
-  YouTube, Vimeo, or Dailymotion and a declared transcript over that path, and `linkPreview.ts` reads a chat link's
-  preview on it.
+-  Untrusted text reaches a model only inside the prompt writer's nonce fence, and a user-supplied url goes through
+  `fetchPublicUrl` in `@carlnotes/server/publicFetch`. Content safety starts at ingest: the Reddit, X, and Bluesky
+  ingesters skip a post their platform marks adult or sensitive, and the scorer's `isUnsafe` marks a Resource that gets
+  no new Finding. `scrape.ts` reads a reddit thread from reddit's own api and scrapes any other page through Firecrawl,
+  `transcripts.ts` reads a video's captions from YouTube, Vimeo, or Dailymotion and a declared transcript over that
+  path, and `linkPreview.ts` reads a chat link's preview on it.
 - `suggest.ts` suggests a Topic's Sources, and `suggestedSourceChecks.ts` resolves each suggested Source to the value
   its ingester stores and checks that its ingester can read it.
 - Smoke scripts: `attach.smoke.ts` (`bun run smoke:attach`) ingests an attachment through its processing workflow,

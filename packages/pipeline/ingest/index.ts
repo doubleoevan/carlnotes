@@ -318,7 +318,7 @@ async function ingestFromSource(source: Source, ingestContext: IngestContext): P
 		label: toSourceResultLabel(source.kind, source.config),
 	}
 
-	// a Source that has not passed its llm-guard screen is skipped before its ingester is reached
+	// a Source that has not passed its screen is skipped before its ingester is reached
 	if (source.status !== "ready") {
 		return { status: "skipped", ...sourceOutcomeFields, durationMs: 0 }
 	}

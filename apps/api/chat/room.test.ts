@@ -5,6 +5,7 @@ import { PODCAST_EPISODE_SPEAKER_NAMES } from "@carlnotes/contracts/podcastEpiso
 import { restoreConnectionPool, stubConnectionPool } from "@carlnotes/db/connectionPoolStub"
 import { restoreRedisClient, stubRedisClient } from "@carlnotes/db/redisClientStub"
 import { SPENT_BUDGET_REJECTION } from "@carlnotes/models/models"
+import * as moderation from "@carlnotes/models/moderation"
 import * as spendReservations from "@carlnotes/models/spendReservations"
 import { stubReservedUserSpend } from "@carlnotes/models/spendReservationTestFixtures"
 import * as analytics from "@carlnotes/server/analytics"
@@ -16,7 +17,7 @@ import { toJsonRequest, toSignedInApp } from "../testSession"
 import { decryptChatText } from "./encryption"
 import * as linkPreviews from "./linkPreviews"
 import * as mentions from "./mentions"
-import { postChatRoomMessage } from "./room"
+import * as room from "./room"
 import * as roomAccess from "./roomAccess"
 import * as roomAttachments from "./roomAttachments"
 import { canDeleteChatRoomMessage } from "./roomDeletes"
@@ -133,7 +134,7 @@ test("a spoken chat message stores its flag, wakes carl, and reports itself spok
 	const trackEventSpy = spyOn(analytics, "trackEvent").mockImplementation(() => {})
 
 	// the post, with the mention the browser prefixed and the spoken flag
-	const postChatRoomMessageResult = await postChatRoomMessage(
+	const postChatRoomMessageResult = await room.postChatRoomMessage(
 		"user-1",
 		null,
 		"team-1",
@@ -160,7 +161,7 @@ test("a spoken chat message stores its flag, wakes carl, and reports itself spok
 	)
 
 	// a typed chat message stores false, and a chat message carl is not asked in reserves nothing
-	await postChatRoomMessage("user-1", null, "team-1", "hello all", null, [])
+	await room.postChatRoomMessage("user-1", null, "team-1", "hello all", null, [])
 	expect(spendReservations.reserveUserSpend).toHaveBeenCalledTimes(1)
 	const typedInsertQuery = sentQueries.filter((sentQuery) =>
 		sentQuery.text.startsWith('insert into "room_messages"'),
@@ -176,7 +177,7 @@ test("a reply to a chat message outside the chat room posts nothing", async () =
 	const sentQueries = stubConnectionPool()
 
 	// the post is rejected like a missing chat room, and nothing is inserted
-	expect(await postChatRoomMessage("user-1", null, "team-1", "agreed", 7, [])).toBeNull()
+	expect(await room.postChatRoomMessage("user-1", null, "team-1", "agreed", 7, [])).toBeNull()
 	expect(sentQueries.some((sentQuery) => sentQuery.text.startsWith('insert into "room_messages"'))).toBe(false)
 
 	// the replied-to read is bounded to this team's own chat room
@@ -214,7 +215,7 @@ test("a reply to carl's chat message in the chat room wakes him", async () => {
 	spyOn(analytics, "trackEvent").mockImplementation(() => {})
 
 	// the reply posts, and carl's turn starts for it
-	expect(await postChatRoomMessage("user-1", "topic-1", "team-1", "say more", 7, [])).toEqual({
+	expect(await room.postChatRoomMessage("user-1", "topic-1", "team-1", "say more", 7, [])).toEqual({
 		chatMessageId: 43,
 		rejectionReason: null,
 	})
@@ -239,7 +240,7 @@ test("a chat message is rejected before it posts once the poster's budget is rea
 	const sentQueries = stubConnectionPool()
 
 	// the rejection comes back privately, with the spent budget's wording
-	expect(await postChatRoomMessage("user-1", null, "team-1", "@carl who is hiring?", null, [])).toEqual({
+	expect(await room.postChatRoomMessage("user-1", null, "team-1", "@carl who is hiring?", null, [])).toEqual({
 		chatMessageId: 0,
 		rejectionReason: SPENT_BUDGET_REJECTION,
 	})
@@ -270,6 +271,53 @@ test("a chat room post past the tool callers' rate limit is rejected with a 429"
 
 		// the next post in the window is rate limited
 		expect((await postToTeamRoom()).status).toBe(429)
+	} finally {
+		restoreRedisClient()
+	}
+})
+
+// a shared image the moderation flags rejects the whole post with Carl's 422, and nothing posts
+test("a chat room post with a flagged image is rejected with its category", async () => {
+	// a room the user may post to, a clean text, a flagged image, and a post that must not run
+	stubRedisClient()
+	spyOn(roomAccess, "loadChatRoom").mockResolvedValue({ topic: null, teamId: "team-1" })
+	spyOn(moderation, "classifyUserText").mockResolvedValue({ outcome: "skipped" })
+	spyOn(moderation, "classifyImage").mockResolvedValue({
+		outcome: "classified",
+		verdict: { isViolation: true, category: "violence" },
+	})
+	const postChatRoomMessageSpy = spyOn(room, "postChatRoomMessage")
+	try {
+		// the post, with one image
+		const image = { kind: "image", name: "shot.png", dataUrl: "data:image/png;base64,AA", keep: false }
+		const response = await toSignedInApp(chatRoomRoute, "user-1").request(
+			TEAM_ROOM_PATH.replace(":id", "team-1"),
+			toJsonRequest({ content: "look", attachments: [image] }),
+		)
+		expect(response.status).toBe(422)
+		expect(await response.json()).toEqual({ rejection: "objectionable", category: "violence" })
+		expect(postChatRoomMessageSpy).not.toHaveBeenCalled()
+	} finally {
+		restoreRedisClient()
+	}
+})
+
+// a post to a chat room the user may not use reads as missing before any moderation call is made
+test("a chat room post the user may not make spends no moderation call", async () => {
+	stubRedisClient()
+	spyOn(roomAccess, "loadChatRoom").mockResolvedValue(null)
+	const classifyUserTextSpy = spyOn(moderation, "classifyUserText")
+	const classifyImageSpy = spyOn(moderation, "classifyImage")
+	try {
+		// the post, with one image
+		const image = { kind: "image", name: "shot.png", dataUrl: "data:image/png;base64,AA", keep: false }
+		const response = await toSignedInApp(chatRoomRoute, "user-1").request(
+			TEAM_ROOM_PATH.replace(":id", "team-1"),
+			toJsonRequest({ content: "look", attachments: [image] }),
+		)
+		expect(response.status).toBe(404)
+		expect(classifyUserTextSpy).not.toHaveBeenCalled()
+		expect(classifyImageSpy).not.toHaveBeenCalled()
 	} finally {
 		restoreRedisClient()
 	}

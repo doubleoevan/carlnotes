@@ -2,7 +2,9 @@
 
 ## Purpose
 TBD - created by archiving change mcp-server-topic-tuning. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: Three Topic Tools live in one module with authorization inside
 `apps/api/tool/` SHALL hold `updateTopicPrompt`, `addTopicSource`, and `removeTopicSource`. Each SHALL take the acting user id, the topic id, and its input, load the Topic, and ask `isAllowed(user, "topic:edit", topic)` itself before writing. Each SHALL return a discriminated result: saved, missing, forbidden, or a named validation failure. No caller SHALL check edit rights on a tool's behalf, and a null user id SHALL be rejected.
 
@@ -30,7 +32,8 @@ TBD - created by archiving change mcp-server-topic-tuning. Update Purpose after 
 - **THEN** three Prompt Versions exist in order, and the previous text of each is readable from the row before it
 
 ### Requirement: Editing a Topic never starts a Scan
-No Topic Tool SHALL start, request, or schedule a Scan. `addTopicSource` SHALL start the pending llm-guard screen for a url kind and nothing more.
+No Topic Tool SHALL start, request, or schedule a Scan. `addTopicSource` SHALL start the pending url Source screen for a
+url kind and nothing more.
 
 #### Scenario: Three edits start no Scan
 - **WHEN** an editor's Carl updates the prompt, adds a Source, and removes a Source
@@ -455,4 +458,3 @@ changed since the preview. An edit with neither change SHALL save on its first c
 #### Scenario: An edit with neither change saves at once
 - **WHEN** an authenticated client calls `edit_topic` with a new prompt and an added Source
 - **THEN** both are saved on the first call with no confirmation
-

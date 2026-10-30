@@ -83,7 +83,6 @@
 		"carl-up": "bash scripts/carl-up.sh",
 		"carl-down": "bash scripts/carl-down.sh",
 		"litellm:restart": "doppler run -- docker compose restart litellm",
-		"llm-guard:up": "docker compose up -d llm-guard",
 		"temporal": "doppler run -- bun apps/worker/temporal.ts",
 		"schedule": "doppler run -- bun apps/worker/schedule.ts",
 		"reset:monthly-budgets": "doppler run -- bun apps/worker/resetMonthlyBudgets.ts"

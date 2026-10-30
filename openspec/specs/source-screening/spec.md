@@ -2,7 +2,9 @@
 
 ## Purpose
 TBD - created by archiving change scan-async-durability-and-url-screening. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: A url Source is saved immediately and screened asynchronously
 
 A url Source SHALL be persisted as soon as its Topic saves, so the edit modal stays fast, and SHALL carry an async
@@ -10,15 +12,14 @@ screening status and a failure reason. The screen SHALL run in a durable workflo
 SHALL be keyed on the Source so a Source never has two screens running at once.
 
 The screen SHALL fetch the page through the same `fetchPublicUrl` a Scan fetches through, which already rejects a
-malformed, non-http, or internal url, and SHALL then screen the fetched markdown as page content. A page that screens
-clean SHALL become ready. A page that is flagged, or that cannot be fetched at all, SHALL become failed with the reason
-recorded on the Source.
+malformed, non-http, or internal url, and SHALL judge only whether the page can be read. A page that fetches SHALL
+become ready, whatever it says, since its text reaches every prompt inside the nonce fence. A page that cannot be
+fetched at all SHALL become failed with the reason recorded on the Source.
 
 A fetch that fails for a reason the next attempt may pass, a rate limit, a server error, a timeout, or a dropped
 connection, SHALL be attempted up to three times, and SHALL leave the Source pending for the next sweep to screen again
 while the Source is less than a day old, so a crawler's brief rate limit during a burst never fails a good Source. Past
-that day the failure SHALL be recorded like any other. A scanner that did not respond SHALL be retried the same way and,
-on the last attempt, SHALL let the Source become ready, so a dead scanner never strands a Source.
+that day the failure SHALL be recorded like any other.
 
 An unfetchable url SHALL be a rejection instead of a warning. A Source whose page never loads produces nothing on every
 future Scan, and this is the only point at which the owner is told so.
@@ -28,15 +29,15 @@ and the readiness gate stays independent of Source kind.
 
 #### Scenario: A url that screens clean
 
-- **GIVEN** a Topic saved with a url Source whose page fetches and screens clean
+- **GIVEN** a Topic saved with a url Source whose page fetches
 - **WHEN** its screening workflow finishes
 - **THEN** the Source is ready with no error recorded
 
 #### Scenario: A url whose page is flagged
 
-- **GIVEN** a Topic saved with a url Source whose fetched page a detector flags
+- **GIVEN** a Topic saved with a url Source whose fetched page holds an instruction addressed to Carl
 - **WHEN** its screening workflow finishes
-- **THEN** the Source is failed and the flagged detectors are recorded as its reason
+- **THEN** the Source is ready, since no content judgment runs, and a Scan reads the page inside the fence
 
 #### Scenario: A url whose page cannot be fetched
 
@@ -162,14 +163,11 @@ A start that fails SHALL NOT mark the Source failed. A start fails because the w
 ### Requirement: Screens run a bounded number at a time per replica
 
 Each worker replica SHALL run at most `SCREEN_CONCURRENCY` screens at once, 8 by default, on each of its attachment and
-Source screening Workers, so a burst of new Topics waits in the queue instead of sending every page to one scanner at
-once. A Source screen's schedule-to-close timeout SHALL be the queued stage timeout, a day, so a screen that waits its
-turn is never failed for the wait, while its start-to-close timeout of two minutes bounds every attempt. The llm-guard
-call inside a Source screen SHALL wait up to twenty seconds, longer than an inline screen a user waits on, since nobody
-waits on a Source screen and a long page should screen instead of timing out.
+Source screening Workers, so a burst of new Topics waits in the queue instead of fetching every page at once. A Source
+screen's schedule-to-close timeout SHALL be the queued stage timeout, a day, so a screen that waits its turn is never
+failed for the wait, while its start-to-close timeout of two minutes bounds every attempt.
 
 #### Scenario: A burst waits its turn
 
 - **WHEN** two hundred Sources are saved in a minute on one worker replica
 - **THEN** eight screen at once, the rest wait in the queue, and none fails for the wait
-

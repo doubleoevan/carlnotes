@@ -43,7 +43,7 @@ export const plan = pgEnum("plan", plans)
 export const billingInterval = pgEnum("billing_interval", billingIntervals)
 // the attachment async-processing status enum, shared by topic attachments and kept chat attachments
 export const attachmentStatus = pgEnum("attachment_status", attachmentStatuses)
-// a source's llm-guard screening status, its own type so the column's type names what it holds
+// a source's screening status, its own type so the column's type names what it holds
 export const sourceStatus = pgEnum("source_status", attachmentStatuses)
 // what a kept chat attachment originally was
 export const chatAttachmentKind = pgEnum("chat_attachment_kind", chatAttachmentKinds)

@@ -262,7 +262,7 @@ async function writeSamplePrompts(): Promise<[string, boolean][]> {
 				"duplicate content": 0,
 				"near-duplicate": 0,
 				"below relevance threshold": 0,
-				"flagged by scanner": 0,
+				"unsafe content": 0,
 				"no text to score": 0,
 			},
 			deferredCount: 0,

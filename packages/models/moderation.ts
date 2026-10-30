@@ -1,7 +1,13 @@
-// the classification of text a user wrote for other users: one cheap call that returns a schema-locked verdict, on the
-// operator's key, with no text in its trace. an unset proxy skips it, and a failed call reports itself without the text
+// the classification of what a user shares with other users. text takes one cheap call that returns a schema-locked
+// verdict, on the operator's key, with no text in its trace. an image takes OpenAI's free moderation endpoint. an unset
+// proxy or key skips the check, and a failed call returns failed without the text or the image
 
-import { type ModerationVerdict, moderationVerdict } from "@carlnotes/contracts/moderation"
+import {
+	imageModerationResponse,
+	type ModerationVerdict,
+	moderationVerdict,
+	toImageModerationCategory,
+} from "@carlnotes/contracts/moderation"
 import { generateText, Output } from "ai"
 import { cheapModel } from "./models"
 import { type BuiltPrompt, fetchPromptTemplate } from "./prompts/fetch"
@@ -21,13 +27,19 @@ export type ModeratedTextKind =
 	| "a comment on a note"
 	| "a username"
 	| "a team's name and description"
-	| "a topic's name and prompt"
+	| "a topic's name, prompt, and tags"
 
-// what the classification came to: a verdict, a skip because no proxy is set, or a failure
+// what the classification came to: a verdict, a skip because no proxy or key is set, a failure, or an image the
+// moderation endpoint could not read
 export type ModerationClassification =
 	| { outcome: "classified"; verdict: ModerationVerdict }
 	| { outcome: "skipped" }
 	| { outcome: "failed"; error: unknown }
+	| { outcome: "unreadable" }
+
+// OpenAI's moderation endpoint and the model that reads images
+const OPENAI_MODERATION_URL = "https://api.openai.com/v1/moderations"
+const IMAGE_MODERATION_MODEL = "omni-moderation-latest"
 
 // the text under review and what it is
 export type ClassifyUserTextOptions = { text: string; textKind: ModeratedTextKind }
@@ -77,4 +89,52 @@ export async function buildModerationPrompt({ text, textKind }: ClassifyUserText
 	const { template, name, registryPrompt } = await fetchPromptTemplate("moderate-user-text")
 	const prompt = writePrompt(template, { userText: text.slice(0, MODERATION_TEXT_MAX_CHARS) }, { textKind })
 	return { prompt, name, registryPrompt }
+}
+
+// the statuses that reject the image itself. any other failure, a bad key included, is the endpoint's trouble
+const UNREADABLE_IMAGE_STATUSES = new Set([400, 413, 415, 422])
+
+// the image under review, as a data url that names its media type
+export type ClassifyImageOptions = { dataUrl: string }
+
+/**
+ * Classifies one image a user shares with other users through OpenAI's free moderation endpoint. Returns skipped with
+ * no key set, unreadable if the endpoint rejects the image itself, as it does a format it does not take, and failed on
+ * a call that errors, times out, is rate limited, or returns a response outside the schema.
+ */
+export async function classifyImage({ dataUrl }: ClassifyImageOptions): Promise<ModerationClassification> {
+	// a stack with no key runs without the check, and reports nothing per image
+	const openaiApiKey = Bun.env.OPENAI_API_KEY
+	if (!openaiApiKey) {
+		return { outcome: "skipped" }
+	}
+
+	// one call with the image as a data url, bounded like the text check
+	try {
+		const response = await fetch(OPENAI_MODERATION_URL, {
+			method: "POST",
+			headers: { Authorization: `Bearer ${openaiApiKey}`, "Content-Type": "application/json" },
+			body: JSON.stringify({
+				model: IMAGE_MODERATION_MODEL,
+				input: [{ type: "image_url", image_url: { url: dataUrl } }],
+			}),
+			signal: AbortSignal.timeout(MODERATION_TIMEOUT_MS),
+		})
+		if (UNREADABLE_IMAGE_STATUSES.has(response.status)) {
+			return { outcome: "unreadable" }
+		}
+		if (!response.ok) {
+			throw new Error(`the moderation endpoint returned ${response.status}`)
+		}
+
+		// the first category that counts and is flagged names the violation
+		const category = toImageModerationCategory(imageModerationResponse.parse(await response.json()))
+		const verdict: ModerationVerdict = category
+			? { isViolation: true, category }
+			: { isViolation: false, category: null }
+		return { outcome: "classified", verdict }
+	} catch (error) {
+		// an error, a timeout, or a response outside the schema fails, without the image
+		return { outcome: "failed", error: toReportableError(error) }
+	}
 }

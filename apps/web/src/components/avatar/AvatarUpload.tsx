@@ -2,7 +2,12 @@ import { sendAvatarDecodeFailure } from "@carlnotes/client/profileClient"
 import { AVATAR_JPEG_QUALITY, MAX_AVATAR_PIXELS, TRANSPARENT_IMAGE_TYPES } from "@carlnotes/core/lib/avatarUpload"
 import { Camera } from "lucide-react"
 
-export { AVATAR_ACCEPT, AVATAR_REJECTIONS } from "@carlnotes/core/lib/avatarUpload"
+export {
+	AVATAR_ACCEPT,
+	AVATAR_REJECTIONS,
+	TEAM_AVATAR_UPLOAD_FAILED_TEXT,
+	toAvatarRejectionText,
+} from "@carlnotes/core/lib/avatarUpload"
 
 // the file size from which the decode asks the browser for a 512-pixel-wide bitmap
 const MIN_AVATAR_BYTES_FOR_RESIZED_DECODE = 1024 * 1024

@@ -21,7 +21,7 @@ import {
 } from "../tool/chatTools"
 import { toNewTopicChatTools, toProposeNewTopicTool, toSuggestTopicSourcesTool } from "../tool/newTopicChatTools"
 import { loadTopicDraft } from "../topic/topicDrafts"
-import { resolveChatAttachments } from "./chatAttachmentScreening"
+import { resolveChatAttachments } from "./chatAttachmentParts"
 import { answerChatProposal } from "./chatProposals"
 import { type ChatTurnAuthorization, rejectChatTurn } from "./chatTurnAuthorization"
 import { streamChatTurn } from "./chatTurnStream"

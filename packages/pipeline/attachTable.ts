@@ -88,80 +88,21 @@ const OMITTED_ROWS_LINE_CHARS = 32
 
 export const MAX_TABLE_CHARS = MAX_ATTACHMENT_CONTEXT_CHARS - OMITTED_ROWS_LINE_CHARS
 
-// a table file's text cut to what its table text can keep, with the data rows the cut dropped
-export type ClippedTableText = { serializedText: string; skippedRows: number }
-
-// the screen reads at most this multiple of the character budget, since redaction can shorten the
-// text and let more rows fit than the raw length suggested
-const SCREEN_CHAR_HEADROOM = 2
-
-/**
- * Cuts a table file's text to the rows its table text could keep, with the count of what it dropped.
- * Screening the rest buys nothing: those rows can never reach a Scan.
- */
-export function toClippedTableText(serializedText: string): ClippedTableText {
-	// the lines kept so far, what they have spent against each budget, and whether the next one names columns
-	const keptLines: string[] = []
-	let rowsKept = 0
-	let charsKept = 0
-	let skippedRows = 0
-	let isHeaderPending = true
-	for (const line of serializedText.split("\n")) {
-		// a line only goes in when it fits whole, so no single long row can carry the text past the limit. a file
-		// of many small sheets would otherwise spend the whole budget on headings and column names
-		if (rowsKept >= MAX_TABLE_ROWS || charsKept + line.length + 1 > MAX_TABLE_CHARS * SCREEN_CHAR_HEADROOM) {
-			// a heading is structure rather than a row. the column names under one are counted with the rows,
-			// which is close enough on a file already too large to keep
-			if (line.trim() && !SHEET_MARKER_PATTERN.test(line)) {
-				skippedRows += 1
-			}
-			continue
-		}
-
-		// a sheet marker is structure, not a row, and the sheet it opens brings its own header
-		if (SHEET_MARKER_PATTERN.test(line)) {
-			keptLines.push(line)
-			charsKept += line.length + 1
-			isHeaderPending = true
-			continue
-		}
-
-		// a sheet's first line with content names its columns, so it rides along without spending a row
-		const isHeader = isHeaderPending && line.trim() !== ""
-		if (isHeader) {
-			keptLines.push(line)
-			charsKept += line.length + 1
-			isHeaderPending = false
-			continue
-		}
-
-		// the line goes in whole, and only a line with content counts against the row budget
-		keptLines.push(line)
-		charsKept += line.length + 1
-		if (line.trim()) {
-			rowsKept += 1
-		}
-	}
-	return { serializedText: keptLines.join("\n"), skippedRows }
-}
-
-// what to write out: the llm-guard screened text, the file it came from, the type that says whether it is a workbook,
-// and the rows skipped before the screen so the trailing line still counts them
+// what to write out: the extracted table text, the file it came from, and the type that says whether it is a workbook
 export type TableTextOptions = {
 	serializedText: string
 	filename: string
 	contentType: string
-	skippedRows?: number
 }
 
 /**
- * Writes llm-guard screened table text into headed sheets of verbatim rows, with a line naming what was left out.
+ * Writes extracted table text into headed sheets of verbatim rows, with a line naming what was left out.
  */
-export function toTableText({ serializedText, filename, contentType, skippedRows = 0 }: TableTextOptions): string {
-	// walk every sheet under one shared budget, starting from what was dropped before the screen
+export function toTableText({ serializedText, filename, contentType }: TableTextOptions): string {
+	// walk every sheet under one shared budget
 	const usage: TableTextUsage = { rowsUsed: 0, charsUsed: 0 }
 	const tableLines: string[] = []
-	let skippedTableRows = skippedRows
+	let skippedTableRows = 0
 	for (const sheet of toParsedSheets(serializedText, contentType)) {
 		skippedTableRows += addSheetLines(sheet, filename, usage, tableLines)
 	}

@@ -311,7 +311,7 @@ async function seedTopic(topic: SeedTopic): Promise<void> {
 					topicId: topic.id,
 					kind: source.kind,
 					config: source.config,
-					// ready because ingest skips a Source that has not passed an llm-guard screen, and nothing screens a seeded source
+					// ready because ingest skips a Source that has not passed its screen, and nothing screens a seeded source
 					status: "ready" as const,
 				})),
 			)

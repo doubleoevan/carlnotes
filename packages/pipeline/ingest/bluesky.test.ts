@@ -69,6 +69,29 @@ test("parseLinks skips posts that link nowhere or back into bluesky, and dedupes
 	expect(resources[0]?.snippet).toBe("Also an ESPN chatbot.")
 })
 
+// a post labeled adult or graphic, or one by an account labeled so, never becomes a Resource. any other label passes
+test("parseLinks skips a post or an account labeled adult or graphic", () => {
+	const toLinkingPost = (
+		path: string,
+		labels: { post?: string[]; author?: string[] },
+	): Parameters<typeof parseLinks>[0][number] => ({
+		author: { handle: "someone.bsky.social", labels: (labels.author ?? []).map((labelValue) => ({ val: labelValue })) },
+		embed: { external: { uri: `https://example.com/${path}` } },
+		labels: (labels.post ?? []).map((labelValue) => ({ val: labelValue })),
+	})
+	const resources = parseLinks([
+		toLinkingPost("post-label", { post: ["porn"] }),
+		toLinkingPost("graphic", { post: ["graphic-media"] }),
+		toLinkingPost("author-label", { author: ["nudity"] }),
+		toLinkingPost("other-label", { post: ["spam"] }),
+		toLinkingPost("no-label", {}),
+	])
+	expect(resources.map((resource) => resource.url)).toEqual([
+		"https://example.com/other-label",
+		"https://example.com/no-label",
+	])
+})
+
 test("toBackoffMs prefers the reset time, falls back to retry-after, and limits the wait", () => {
 	// a reset two seconds out is honored as an interval instead of as a timestamp
 	const resetAt = Math.floor((Date.now() + 2_000) / 1000)

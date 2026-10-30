@@ -1,9 +1,10 @@
-// avatar route tests: an upload is cached long only at its current version, and an upload records its key first.
-// a provider photo's redirect is cached for an hour
+// avatar route tests: an upload is cached long only at its current version, an upload records its key first, and an
+// image the moderation flags is rejected before anything stores. a provider photo's redirect is cached for an hour
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import { restoreConnectionPool, stubConnectionPool } from "@carlnotes/db/connectionPoolStub"
 import { restoreRedisClient, stubRedisClient } from "@carlnotes/db/redisClientStub"
 import * as store from "@carlnotes/db/store"
+import * as moderation from "@carlnotes/models/moderation"
 import * as monitoring from "@carlnotes/server/monitoring"
 import { uploadTeamAvatar } from "./avatars"
 import { avatarsRoute } from "./avatarsRoute"
@@ -119,4 +120,39 @@ test("a team upload records its key before the upload and clears it with the row
 	expect(uploadAttachmentSpy.mock.calls[0]?.[0]).toBe(TEAM_AVATAR_KEY)
 	expect(pendingDeleteIndex).toBeGreaterThan(teamUpdateIndex)
 	expect(sentQueries[pendingDeleteIndex]?.values).toEqual([TEAM_AVATAR_KEY])
+})
+
+// an avatar the moderation flags gets Carl's 422 naming its category, and nothing is written to storage
+test("a flagged avatar upload is rejected with its category and stores nothing", async () => {
+	stubConnectionPool()
+	stubRedisClient()
+	spyOn(moderation, "classifyImage").mockResolvedValue({
+		outcome: "classified",
+		verdict: { isViolation: true, category: "sexual" },
+	})
+	const uploadAttachmentSpy = spyOn(store, "uploadAttachment").mockResolvedValue(undefined)
+
+	// the upload, as the browser's resized png
+	const formData = new FormData()
+	formData.append("avatar", new File([new Uint8Array([137, 80, 78, 71])], "avatar.png", { type: "image/png" }))
+	const response = await toSignedInApp(avatarsRoute, "user-1").request("/avatars", { method: "POST", body: formData })
+	expect(response.status).toBe(422)
+	expect(await response.json()).toEqual({ rejection: "objectionable", category: "sexual" })
+	expect(uploadAttachmentSpy).not.toHaveBeenCalled()
+})
+
+// an avatar the moderation cannot read is rejected as an unsupported type instead of passing unchecked
+test("an unreadable avatar upload is rejected as an unsupported type", async () => {
+	stubConnectionPool()
+	stubRedisClient()
+	spyOn(moderation, "classifyImage").mockResolvedValue({ outcome: "unreadable" })
+	const uploadAttachmentSpy = spyOn(store, "uploadAttachment").mockResolvedValue(undefined)
+
+	// the upload
+	const formData = new FormData()
+	formData.append("avatar", new File([new Uint8Array([137, 80, 78, 71])], "avatar.gif", { type: "image/gif" }))
+	const response = await toSignedInApp(avatarsRoute, "user-1").request("/avatars", { method: "POST", body: formData })
+	expect(response.status).toBe(400)
+	expect(await response.json()).toEqual({ error: "unsupported-type" })
+	expect(uploadAttachmentSpy).not.toHaveBeenCalled()
 })

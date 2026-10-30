@@ -1,4 +1,4 @@
-// starts the llm-guard screen for Sources that are waiting on one
+// starts the url Source screen for Sources that are waiting on one
 
 import { db } from "@carlnotes/db"
 import { sources } from "@carlnotes/db/schema/topics"
@@ -6,13 +6,13 @@ import { reportError } from "@carlnotes/server/monitoring"
 import { and, count, eq } from "drizzle-orm"
 import { startSourceScreenWorkflow } from "./temporalClient"
 
-// how long a Topic's first Scan can wait for its Sources to finish their llm-guard screen, and how often it checks
+// how long a Topic's first Scan can wait for its Sources to finish their screen, and how often it looks
 const SCREEN_WAIT_MS = 30_000
 const SCREEN_POLL_MS = 500
 
 /**
- * Start the llm-guard screening workflow for every Source still waiting on one, for one Topic or across all of them.
- * Safe to repeat: a Source whose llm-guard screen is already running is rejected by its workflow id,
+ * Starts the url Source screen workflow for every Source still waiting on one, for one Topic or across all of them.
+ * Safe to repeat: a Source whose check is already running is rejected by its workflow id,
  * so this starts a freshly saved Source or selects up one whose start never happened.
  */
 export async function screenPendingSources(topicId?: string): Promise<void> {
@@ -36,8 +36,8 @@ export async function screenPendingSources(topicId?: string): Promise<void> {
 }
 
 /**
- * Start this Topic's pending llm-guard screens and wait for them to settle, up to a bound.
- * An llm-guard screen that outlasts the bound leaves its unfinished Sources pending, and the next Scan selects it up.
+ * Starts this Topic's pending url Source screens and wait for them to settle, up to a bound.
+ * A check that outlasts the bound leaves its unfinished Sources pending, and the next Scan picks them up.
  */
 export async function screenTopicSources(topicId: string): Promise<void> {
 	await screenPendingSources(topicId)

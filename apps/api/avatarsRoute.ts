@@ -14,6 +14,7 @@ import { type Context, Hono } from "hono"
 import { stream } from "hono/streaming"
 import { isLeaderRole } from "./authorization"
 import {
+	type AvatarRejection,
 	MAX_AVATAR_BYTES,
 	saveAvatarSource,
 	toAvatarContentType,
@@ -29,6 +30,8 @@ import {
 	toVersionedImageHeaders,
 	UNVERSIONED_CACHE_CONTROL,
 } from "./edgeCache"
+import { toObjectionableContentResponse } from "./moderation"
+import { toolCallerRateLimiter } from "./rateLimit"
 import { toTeamRole } from "./team/members"
 
 // the paths of a user's and a team's avatar upload, after the /api base
@@ -60,6 +63,13 @@ function serveAvatar(context: Context<AppEnv>, avatarKey: string, cacheTag: stri
 	// the content type is read from the key's extension, saved at upload time
 	context.header("Content-Type", toAvatarContentType(avatarKey))
 	return stream(context, (responseStream) => responseStream.pipe(attachmentStream(avatarKey)))
+}
+
+// the response to a rejected upload: Carl's 422 for an image others may not see, and a 400 naming a failed shape check
+function toAvatarRejectionResponse(context: Context<AppEnv>, rejection: AvatarRejection): Response {
+	return typeof rejection === "object"
+		? toObjectionableContentResponse(context, rejection.objectionableCategory)
+		: context.json({ error: rejection }, 400)
 }
 
 // the avatar routes: the published images, the uploads, and the decode failure reports
@@ -110,7 +120,7 @@ export const avatarsRoute = new Hono<AppEnv>()
 			? serveAvatar(context, team.avatarKey, toTeamAvatarCacheTag(teamId))
 			: context.json({ error: "not found" }, 404)
 	})
-	.post(TEAM_AVATAR_UPLOAD_PATH, uploadSignedOutRejection, avatarBodyLimit, async (context) => {
+	.post(TEAM_AVATAR_UPLOAD_PATH, toolCallerRateLimiter, uploadSignedOutRejection, avatarBodyLimit, async (context) => {
 		// reject a signed-out visitor
 		const userId = currentUser(context)
 		if (!userId) {
@@ -134,9 +144,9 @@ export const avatarsRoute = new Hono<AppEnv>()
 			uploadedAvatarFile.type,
 			crypto.randomUUID(),
 		)
-		return rejection ? context.json({ error: rejection }, 400) : context.json({ ok: true })
+		return rejection ? toAvatarRejectionResponse(context, rejection) : context.json({ ok: true })
 	})
-	.post(AVATAR_UPLOAD_PATH, uploadSignedOutRejection, avatarBodyLimit, async (context) => {
+	.post(AVATAR_UPLOAD_PATH, toolCallerRateLimiter, uploadSignedOutRejection, avatarBodyLimit, async (context) => {
 		// reject a signed-out visitor
 		const userId = currentUser(context)
 		if (!userId) {
@@ -163,5 +173,5 @@ export const avatarsRoute = new Hono<AppEnv>()
 			uploadedAvatarFile.type,
 			crypto.randomUUID(),
 		)
-		return rejection ? context.json({ error: rejection }, 400) : context.json({ ok: true })
+		return rejection ? toAvatarRejectionResponse(context, rejection) : context.json({ ok: true })
 	})

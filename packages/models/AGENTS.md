@@ -1,8 +1,8 @@
 # packages/models/
 
-`@carlnotes/models`, every model call, user key, budget, prompt, and screen: where the api, the pipeline, the worker,
-and the evals all start. It imports `@carlnotes/db`, `@carlnotes/server`, and `@carlnotes/contracts`, with `ai`,
-`@ai-sdk/openai`, the Langfuse and OpenTelemetry packages, and `tesseract.js`.
+`@carlnotes/models`, every model call, user key, budget, prompt, and moderation check: where the api, the pipeline, the
+worker, and the evals all start. It imports `@carlnotes/db`, `@carlnotes/server`, and `@carlnotes/contracts`, with `ai`,
+`@ai-sdk/openai`, and the Langfuse and OpenTelemetry packages.
 
 - `models.ts` — every model call, through LiteLLM; `litellm.ts` — the user keys that those calls bill to, over
   `litellmProxy.ts`, the proxy's key api that creates, deletes, and reads a key. A key is created at signup, or by
@@ -43,15 +43,16 @@ and the evals all start. It imports `@carlnotes/db`, `@carlnotes/server`, and `@
   LiteLLM's Gemini pass-through on the user's key with store set to false, so Google keeps no recording. A WAV with no
   samples is silent and makes no call. The pass-through does not meter that route, so the key is never charged for a
   transcription, and the api's spend row, priced by `transcriptionCost` in `budget.ts`, is the only meter.
-- Untrusted text is screened by LLM Guard (`guard.ts`) before any model reads it. `screenImage` screens the text a chat
-  image shows, read with text recognition in `imageText.ts`, using tesseract.js and its installed English data, which
-  it resolves from this package. With `LLM_GUARD_URL` unset it returns skipped before the text recognition code loads,
-  so an image costs no call and no wait. `guardTestFixtures.ts` runs a test against a fake scanner that returns one
-  verdict, or with no scanner at all.
-- `moderation.ts` — `classifyUserText`, the check of one text a user wrote for other users: one cheap-tier call on
-  the master key, through `prompts/moderate-user-text.md` with the text fenced as data, that returns the shared
+-  No scanner reads untrusted text. Injection defense is the nonce fence in `prompts/write.ts`, schema-locked outputs,
+  and model calls with no tools, as the README's "Content safety and injection defense" describes.
+-  `moderation.ts` — `classifyUserText`, the check of one text a user wrote for other users: one cheap-tier call on the
+  master key, through `prompts/moderate-user-text.md` with the text fenced as data, that returns the shared
   `moderationVerdict`. It records no input or output in its trace, returns skipped with `LITELLM_BASE_URL` unset, and
-  returns failed instead of throwing on a timeout, an error, or a verdict outside the schema, so every caller fails open.
+  returns failed instead of throwing on a timeout, an error, or a verdict outside the schema, so every caller fails
+  open. `classifyImage` checks an image others see through OpenAI's free `omni-moderation-latest` endpoint, keyed by
+  `OPENAI_API_KEY`, and maps its flags onto the same categories through `toImageModerationCategory` in
+  `@carlnotes/contracts/moderation`. It returns the same union, skipped with no key set, and unreadable if the endpoint
+  rejects the image itself (HTTP 400, 413, 415, or 422).
 - `prompts/` — the model-facing Markdown templates, each with YAML frontmatter and a `{{variable}}` body, loaded by
   thin builders: `write.ts` fills a template, `fetch.ts` loads a prompt from the Langfuse registry first and falls back
   to the bundled Markdown, with `promptTelemetry` naming the version that served it, and `sync.ts` (`bun run

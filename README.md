@@ -24,7 +24,7 @@ Carl stays up. You stay informed.
 
 Bun + TypeScript · React (TanStack Start + Vite + Tailwind + shadcn) · TanStack Query · Hono · Better Auth · Drizzle +
 Neon Postgres (pgvector) · Temporal · LiteLLM → Fireworks + Gemini speech · Vercel AI SDK + Zod · Exa + Firecrawl +
-TwitterAPI.io · Langfuse · LLM Guard · Sentry + PostHog
+TwitterAPI.io · Langfuse · OpenAI moderation · Sentry + PostHog
 
 ## Architecture
 
@@ -61,23 +61,21 @@ flowchart
     App -->|starts workflows| Temporal
     Temporal --> Worker[temporal-worker]
     Worker --> Sources[Feeds · Reddit · YouTube · Exa]
-    Worker --> Guard[LLM Guard]
     Worker --> LiteLLM[LiteLLM → Fireworks]
     Worker --> Postgres
     Worker --> Resend[Email]
 ```
 
-These processes run the app. Production runs every one but `llm-guard`:
+These processes run the app:
 
 | Process | What it does |
 |---|---|
 | `app` | Serves the api and the web app, rendering public pages on the server. Chat replies and uploads run in-process. |
-| `temporal-worker` | One process hosts six Temporal Workers, each polling one task queue. Attachments, topic scans, the closing writes that record a scan's outcome, scan emails, podcast episode recordings, and source screens each get their own Worker. The closing writes have their own queue, so a backlog of scans waiting for a slot never delays the write for a scan that paid for its review. If any Worker stops, the process exits and the platform restarts it. In production the Northflank service starts it with `bun run temporal`. |
+| `temporal-worker` | One process hosts six Temporal Workers, each polling one task queue. Attachments, topic scans, the closing writes that record a scan's outcome, scan emails, podcast episode recordings, and url Source screens each get their own Worker. The closing writes have their own queue, so a backlog of scans waiting for a slot never delays the write for a scan that paid for its review. If any Worker stops, the process exits and the platform restarts it. In production the Northflank service starts it with `bun run temporal`. |
 | scheduler | `bun apps/worker/schedule.ts` sweeps for scheduled Topics and starts their scans. One query computes which Topics are scheduled from each Topic's frequency and its last completed Scan. So a sweep is safe to repeat, and no stored queue can drift. A database claim keeps two sweeps from overlapping. In production a Northflank cron job runs one sweep per interval (`bun run schedule`). |
 | budget reset | `bun apps/worker/resetMonthlyBudgets.ts` replaces every LiteLLM key created before the month began, so each user's spend starts the month at zero. The reset replaces four keys at a time, under the same kind of database claim as the sweep. In production a Northflank cron job runs the reset once a day shortly after midnight UTC (`bun run reset:monthly-budgets`). After the first of the month, the reset finds only the keys that an earlier run failed to replace. |
-| `llm-guard` | The content scanner is its own service (see below). Production runs without it. |
 
-Every process above but `llm-guard` runs on Northflank, which deploys on a git trigger. `app` and `temporal-worker`
+Every process above runs on Northflank, which deploys on a git trigger. `app` and `temporal-worker`
 each run as replicas. The state that every `app` replica shares lives in Redis. Temporal gives each scan to one worker.
 Beside them run Neon Postgres (pgvector), a single-node Redis addon reached as `REDIS_URL`, object storage, a
 self-hosted Temporal server, Resend, and Stripe. Object storage goes through Bun's S3 client, and R2 serves it today,
@@ -97,7 +95,7 @@ A topic Scan is one Temporal workflow, its email is a second one, and its podcas
 
 ```mermaid
 flowchart
-    Ingest[Ingest Sources] --> Screen[Screen · LLM Guard] --> Score[Score · LiteLLM] --> Review[Keep best Findings] -->|second workflow| Email[Email subscribers · Resend]
+    Ingest[Ingest Sources] --> Score[Score · LiteLLM] --> Review[Keep best Findings] -->|second workflow| Email[Email subscribers · Resend]
     Review -->|third workflow| Episode[Record the podcast episode · Gemini speech + ffmpeg]
 ```
 
@@ -233,43 +231,42 @@ Redis connection that drops reconnects with a backoff from one second to thirty.
 reads a session from Postgres, and each cache calls its loader. Each limit counts in its own replica's memory, so a
 caller gets the full limit on each replica. The storing instance still delivers to its own subscribers.
 
-### Content screening (LLM Guard)
+### Content safety and injection defense
 
-LLM Guard screens untrusted text before any model reads it, protecting the app from prompt injection. A fetched page or
-an uploaded document can include instructions aimed at the model. LLM Guard runs in Python, so it runs in its own
-container. The container is the official `llm-guard-api` image, pinned to one version in `docker-compose.yml`. [A GitHub
-Action](.github/workflows/llm-guard-update.yml) checks weekly for a newer version.
+Two problems sit on every page a Scan reads and every file a user shares. A page can try to instruct the model, which is
+prompt injection. A page or an image can be explicit or abusive, which is content safety. The app handles them with
+different tools.
 
-Locally, `carl-up` starts it with the rest of the Docker infra. It listens on your own machine only, since it accepts
-arbitrary text with no authentication of its own. Its container is limited to 5 GB, so give Docker Desktop 10 GB of
-memory to run it beside the rest of the stack. It restarts on its own if it is killed, and nothing waits on its model
-download. Production runs without it, since the scanner outgrows Northflank's ephemeral storage limit. The app finds it
-through one value, `LLM_GUARD_URL`. Unset it, as production does, and screening turns off while everything else
-behaves the same.
+**Injection defense is structural.** No scanner judges text before a model reads it. These rules hold for every call:
 
-Three kinds of text are screened, each at its entry point:
+- The prompt writer wraps every untrusted value in an `untrusted-data` tag with a random nonce made per call, and
+  strips any tag a value tries to forge, so a value cannot close its own block.
+- Every template restates its task after the last untrusted block, so the model reads the app's own words last.
+- Every model output the pipeline consumes is locked to a Zod schema, and numbers are clamped to their range.
+- Pipeline model calls get no tools. A chat change applies only from a preview the user's next message agrees to.
+- The scan report links only the urls of kept Findings, and the relevance explanation renders as plain text.
 
-- **A document that a user gives us** — chat attachments and a topic attachment added by url, before context is
-  generated. Detectors: prompt injection, secrets, invisible text, adult content, toxicity. A file that a Topic's owner
-  uploads skips the prompt injection check and keeps its personal details, since it has the authority of the owner's
-  own prompt.
-- **A fetched page** — url Sources, before the page is shown or scored. The same set, minus secrets.
-- **A chat image** — the text the image shows, read in the app with text recognition and screened as a document. A
-  flagged image is withheld from a private chat turn, and a team room post that includes one is rejected. With
-  `LLM_GUARD_URL` unset no image text is read at all.
+Attachment text is stored as extracted, and a url Source's page is read as fetched. Their text reaches every prompt
+inside the fence, as data.
 
-Each screen is one HTTP call with a 2.5-second timeout. A screen never blocks the pipeline: on a failure, the text
-passes through unflagged. The prompt loader still wraps every untrusted value in an `untrusted-data` tag with a random
-nonce, so a value cannot close its own tag. Exa always filters for moderate content.
+**Content safety runs in four layers**, each at the point where it costs least:
 
-The scanner also redacts personal details in place, so even a document can come back rewritten. Callers must use the
-returned text. A detector flags content at a score of 0.8 or above. Measured with
-`bun run eval:review-pipeline --guard-only` on 2026-10-17, that threshold flags 4 of 10 articles that only *discuss*
-prompt injection and catches 15 of 16 known attacks. On images it catches the instruction image. It also flags the
-benign screenshot of an article about injection, the same false positive. A long article can also take a CPU scanner
-past the 2.5-second timeout, where the screen fails open. The false positives and the timeouts need fixing before the
-scanner screens production pages. The update check boots each new release, runs that eval, and files an issue with the
-measured false-positive and catch rates needed to decide whether to upgrade.
+-  **Source flags.** Exa search filters out unsafe content (`moderation: true`). The Reddit ingester skips posts marked
+  `over_18`. The X ingester skips tweets from accounts marked possibly sensitive. The Bluesky ingester skips posts, or
+  accounts, labeled `porn`, `sexual`, `nudity`, or `graphic-media`. Reddit's RSS fallback has no flag, so the next layer
+  covers it.
+-  **The scorer.** The relevance score returns `isUnsafe` in the same call, at no extra cost. Content that is itself
+  sexually explicit, hateful, harassing, or violent is marked unsafe on its Resource and gets no new Finding. Reporting
+  on a hard subject is not unsafe. A chat link to an unsafe Resource gets no preview image.
+-  **Text others read.** A room message, a note and its comments, a username, a team's name and description, and an
+  invite or public Topic's name, prompt, and tags are classified by one cheap model call before they post. A violation
+  is rejected in Carl's words with the draft kept.
+-  **Images others see.** An uploaded avatar and an image shared to a team room go through OpenAI's free
+  `omni-moderation-latest` endpoint, set by `OPENAI_API_KEY`. A flagged image gets the same rejection.
+
+The text and image checks fail open. An unset key, a timeout, or an outage lets the post through, and a timeout or
+an outage is reported without the text or the image. An image the endpoint cannot read is rejected like any unreadable
+file. The report button and admin delete back up every layer.
 
 ### Caching at the edge
 
@@ -318,7 +315,7 @@ flowchart
 | Eval | What it measures | Command |
 |---|---|---|
 | Grader calibration | Every eval's rubric graders: an output that keeps a rubric passes, and one that breaks it fails | `bun run eval:grader-calibration` |
-| Review pipeline | Precision, recall, and cost of the relevance gate and the scoring prompt over hand-labeled fixtures, plus LLM Guard's false-positive and catch rates | `bun run eval:review-pipeline` |
+| Review pipeline | Precision, recall, and cost of the relevance gate and the scoring prompt over hand-labeled fixtures | `bun run eval:review-pipeline` |
 | Podcast episode script | The outline and segment prompts: chapters cite real Findings, every claim is supported, quotes are short and named, the title and description fit, three Findings or fewer make one segment and four or more make two to four, with a transition into each one after the first, and the goodbye is left to the show | `bun run eval:podcast-episode-script` |
 | Scan report | Carl's note on every scan: links every kept finding and nothing else, says nothing the scan data lacks, names a failed source, stays short | `bun run eval:scan-report` |
 | Topic chat | The topic chat: opens by answering the question, credits the findings only with what they say, marks what comes from outside them, answers a question about the app from the docs, links only real finding and docs urls, stays brief | `bun run eval:topic-chat` |
@@ -331,9 +328,8 @@ flowchart
 | Attachment summaries | The summary of an attached document and the description of an attached image: nothing the attachment does not show, the facts a user needs, and a long document summarized from the part before its cut | `bun run eval:attachment-summaries` |
 
 The review pipeline's baseline comes from two public topics' fixtures on 2026-10-05. Dev Tools for Builders scored 68%
-precision and 83% recall, and AI Coding Tools 93% and 100%, at $0.10 a fixture. LLM Guard 0.3.16 caught 15 of 16 known
-attacks and flagged 4 of 10 articles that only discuss injection. The fixtures, their labels, and what the numbers can
-and cannot say are in [evals/README.md](evals/README.md).
+precision and 83% recall, and AI Coding Tools 93% and 100%, at $0.10 a fixture. The fixtures, their labels, and what the
+numbers can and cannot say are in [evals/README.md](evals/README.md).
 
 Every eval whose prompt reads outside material that a case can hold also has a case with an instruction planted in that
 material, which the output must not follow. The source suggester reads live search results, which a case cannot hold.
@@ -350,7 +346,6 @@ pipeline's cost depends on its fixtures.
 ```bash
 bun run eval:scan-report --repeat 3                 # run each case three times and print a pass rate per case
 bun run eval:review-pipeline --with-examples        # score with the topic's rated and bookmarked pages as examples
-bun run eval:review-pipeline --guard-only           # only LLM Guard's false-positive and catch rates on text and images, with no model spend
 ```
 
 This command exports a review pipeline fixture from the production database, which holds a public topic's ratings. It
@@ -359,12 +354,6 @@ reads the database only, and it writes the page text to a gitignored page cache:
 ```bash
 doppler run --config prd -- bun evals/review-pipeline/reviewPipelineEval.ts --export <topicId>
 ```
-
-A weekly GitHub Action (`.github/workflows/llm-guard-update.yml`) watches Docker Hub for new LLM Guard releases. It
-boots the candidate on the runner, runs the guard-only eval against it, and files an issue with the measured
-false-positive and catch rates, so a scanner upgrade arrives as a measured decision. Read the two rates together: a
-scanner that flags nothing scores a perfect false-positive rate, and one that flags everything scores a perfect catch
-rate.
 
 The Evals workflow (`.github/workflows/evals.yml`) runs every promptfoo eval one at a time against a LiteLLM container.
 It runs each case once on a push to main that changes a prompt, the code that builds one, the model config, or an eval.
@@ -382,7 +371,7 @@ bun install
 bun run dev          # api, ui, temporal, worker, and the email preview together (concurrently, colored per process); run carl-up first for the Docker infra
                      # `mkdir -p logs && bun run dev 2>&1 | tee logs/dev.log` keeps a copy to tail from another shell; logs/ is gitignored
                      # every line is prefixed with its process, so `grep '^\[api\]' logs/dev.log` reads one of them
-bun run carl-up      # bring up the Docker infra (litellm proxy, temporal dev server, Redis, llm-guard) and create a limited dev key; carl-down stops it
+bun run carl-up      # bring up the Docker infra (litellm proxy, temporal dev server, Redis) and create a limited dev key; carl-down stops it
                      # scans run as Temporal workflows, so dev:temporal must be up for any scan to happen, not only for attachments
 bun run dev:ui       # Vite dev server for the web app in apps/web; wraps itself in doppler run
 bun run dev:api      # Hono API; wraps itself in doppler run for DATABASE_URL; the Vite dev server proxies /api, /mcp, and the api's own pages and documents here
@@ -465,11 +454,10 @@ doppler run -- bun scripts/backfill-resource-content.ts   # upload existing reso
 doppler run -- bun scripts/backfill-vectors.ts            # save every topic's and published podcast episode's vector
 ```
 
-The content scanner (LLM Guard, see Architecture above) is optional. Start it with `bun run llm-guard:up` and set
-`LLM_GUARD_URL`. Error monitoring and product analytics are optional the same way. If `SENTRY_DSN` or
-`POSTHOG_API_KEY` is not set, that service is off, and the app behaves the same. A visitor's search on the MCP server is
-optional too. `bun run carl-up` creates a budgeted `LITELLM_PUBLIC_KEY` for it. Without one, the search returns a
-message that it needs an account, and every other tool still works.
+Image moderation is optional. Set `OPENAI_API_KEY` to turn it on. Error monitoring and product analytics are optional
+the same way. If `SENTRY_DSN` or `POSTHOG_API_KEY` is not set, that service is off, and the app behaves the same. A
+visitor's search on the MCP server is optional too. `bun run carl-up` creates a budgeted `LITELLM_PUBLIC_KEY` for it.
+Without one, the search returns a message that it needs an account, and every other tool still works.
 
 The podcast and talking to Carl need a `GEMINI_API_KEY` on the LiteLLM service and ffmpeg (`brew install ffmpeg`).
 ffmpeg joins an episode's chapters, transcodes a spoken question, and encodes Carl's spoken answer to MP3. These
@@ -612,7 +600,7 @@ the image once and runs the migration job against it. Only then does it deploy `
 `temporal-worker`, and finish with the docs embed. So new code never meets an old schema. The pipeline runs in
 Northflank instead of GitHub Actions, and its definition is
 [infra/northflank/release-main.json](infra/northflank/release-main.json). `.github/workflows/` holds checks alone: the
-offline gate, CodeQL, the evals, the smoke suite, and the weekly LLM Guard version check. None of them deploy. The
+offline gate, CodeQL, the evals, and the smoke suite. None of them deploy. The
 migration job runs:
 
 ```bash

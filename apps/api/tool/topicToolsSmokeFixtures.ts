@@ -6,6 +6,7 @@ import { sources, topicPromptVersions, topics } from "@carlnotes/db/schema/topic
 import { users } from "@carlnotes/db/schema/users"
 import { deleteUserLiteLLMKey } from "@carlnotes/models/litellm"
 import { count, eq, inArray } from "drizzle-orm"
+import { toAcceptedTermsFields } from "../testSession"
 
 // one id per run, and every fixture id derives from it. two runs at once never collide
 export const runId = `tools-smoke-${Date.now()}-${Math.random().toString(36).slice(2)}`
@@ -29,7 +30,7 @@ export function check(label: string, isTestPassing: boolean, detail?: unknown): 
 
 // one account, named by its own id
 function toUserRow(id: string): typeof users.$inferInsert {
-	return { id, name: id, email: `${id}@example.com`, username: id, usernameNormalized: id }
+	return { id, name: id, email: `${id}@example.com`, username: id, usernameNormalized: id, ...toAcceptedTermsFields() }
 }
 
 /** Returns how many versions the topic holds now. */

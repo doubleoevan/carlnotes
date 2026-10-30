@@ -124,7 +124,7 @@ export async function ingestUrlAttachment(topicId: string, url: string): Promise
 		throw error
 	})
 
-	// the processing workflow screens this Markdown as a document, so there is no llm-guard screen here
+	// the processing workflow reads this Markdown as a document
 	return ingestAttachment({
 		topicId,
 		filename: toPageFilename(fetchableUrl),

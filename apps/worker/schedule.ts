@@ -47,7 +47,7 @@ async function sweepScheduledTopics(signal: AbortSignal): Promise<TopicSweepSumm
 	signal.throwIfAborted()
 	await failStaleScans()
 
-	// a Source row is written before its llm-guard screen starts
+	// a Source row is written before its screen starts
 	signal.throwIfAborted()
 	await screenPendingSources()
 

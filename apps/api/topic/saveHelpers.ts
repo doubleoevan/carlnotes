@@ -78,7 +78,7 @@ export async function toPodcastNames(payloadSources: UpdateTopicPayload["sources
 	return new Map(podcasts.flatMap((podcast) => (podcast ? [[podcast.podcastId, podcast.name] as const] : [])))
 }
 
-// start the llm-guard screen for the Topic's newly saved url Sources asynchronously, without delaying the save
+// start the url Source screen for the Topic's newly saved url Sources asynchronously, without delaying the save
 export function startPendingSourceScreens(topicId: string): void {
 	screenPendingSources(topicId).catch((error) => {
 		console.error(`could not start source screens for topic ${topicId}`, error)
@@ -87,7 +87,7 @@ export function startPendingSourceScreens(topicId: string): void {
 }
 
 /**
- * Screens the new Topic's url Sources with llm-guard, then starts the Topic's first Scan.
+ * Screens the new Topic's url Sources, then starts the Topic's first Scan.
  * If the owner's budget is spent, or the owner's spend is past the manual scans cutoff, the first Scan is marked failed
  * instead of started.
  */

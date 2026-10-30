@@ -198,7 +198,7 @@ function AttachmentPill({
 	const isProcessing = attachment.status === "pending"
 	const processing = isProcessing ? <span className="text-muted-foreground shrink-0"> · processing</span> : null
 
-	// a pending attachment's page has been fetched but not screened by llm-guard, so it reads as plain text until it is ready.
+	// a pending attachment's processing may still fail, so its url shows as plain text until it is ready
 	if (attachment.sourceUrl && isProcessing) {
 		return (
 			<span className="text-secondary-foreground flex min-w-0 items-center truncate text-xs">

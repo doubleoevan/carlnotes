@@ -7,7 +7,7 @@ import { toCountLabel } from "@carlnotes/core/lib/labels"
 import { Plus } from "lucide-react"
 import { useState } from "react"
 import { toast } from "sonner"
-import { AVATAR_REJECTIONS } from "@/components/avatar/AvatarUpload"
+import { TEAM_AVATAR_UPLOAD_FAILED_TEXT, toAvatarRejectionText } from "@/components/avatar/AvatarUpload"
 import { TeamAvatarPicker } from "@/components/avatar/TeamAvatarPicker"
 import { TeamAvatar } from "@/components/branding/TeamAvatar"
 import { PageUpdateCountBadge } from "@/components/common/UpdateCountBadge"
@@ -29,7 +29,7 @@ function TeamHeaderAvatar({
 		setIsUploading(true)
 		const rejection = await sendTeamAvatar(team.teamId, avatarFile).finally(() => setIsUploading(false))
 		if (rejection) {
-			toast.error(AVATAR_REJECTIONS[rejection] ?? "That image didn't reach Carl. Try again.")
+			toast.error(toAvatarRejectionText(rejection, TEAM_AVATAR_UPLOAD_FAILED_TEXT))
 			return
 		}
 		onChanged()

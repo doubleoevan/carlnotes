@@ -27,7 +27,7 @@ export const HEARTBEAT_TIMEOUT_MS = 2 * 60 * 1000
 // then the closing writes. it is what has to pass before the Scan is marked failed
 export const MAX_SCAN_DURATION_MS = 2 * QUEUED_STAGE_TIMEOUT_MS + FINISH_TOTAL_TIMEOUT_MS
 
-// how many times a url Source's llm-guard screen may be attempted, and the failure type that names an attempt the next
-// one may pass: a rate limit, a server error, a timeout, a dropped connection, or a scanner that did not answer
+// how many times a url Source's screen may be attempted, and the failure type that names an attempt the next one may
+// pass: a rate limit, a server error, a timeout, or a dropped connection
 export const SCREEN_ATTEMPTS = 3
 export const RETRYABLE_SCREEN_FAILURE_TYPE = "TransientScreenFailure"

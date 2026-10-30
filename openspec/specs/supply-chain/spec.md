@@ -2,11 +2,13 @@
 
 ## Purpose
 TBD - created by archiving change survive-a-viral-day. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: Dependabot keeps the lockfile, the actions, and the image bases current
 
 The repository SHALL configure Dependabot version updates for the Bun lockfile, the GitHub Actions the workflows use,
-and the Docker bases of the app image, the LiteLLM image, and the scanner image, each checked weekly. Minor and patch
+and the Docker bases of the app image and the LiteLLM image, each checked weekly. Minor and patch
 updates SHALL arrive grouped in one pull request, and a major update in a pull request of its own. A security update
 SHALL arrive as soon as GitHub publishes the advisory, outside the weekly schedule, once the repository's Dependabot
 security updates are on.
@@ -84,4 +86,3 @@ keeps the format that Bun reads; a lockfile written by a newer Bun SHALL NOT be 
 
 - **WHEN** a dependency change is pushed
 - **THEN** CI's frozen install reads the lockfile without rewriting it
-

@@ -10,6 +10,13 @@ import type { AppEnv } from "./currentUser"
 export const SESSION_COOKIE = "better-auth.session_token=abc"
 
 /**
+ * Returns the user columns of an account that accepted the published Terms, for a fixture user that writes content.
+ */
+export function toAcceptedTermsFields(): { termsAcceptedVersion: string; termsAcceptedAt: Date } {
+	return { termsAcceptedVersion: TERMS_VERSION, termsAcceptedAt: new Date() }
+}
+
+/**
  * Resolves every session lookup as the given user, or as a visitor for null, until the spies are restored.
  */
 export function signInAs(userId: string | null): void {

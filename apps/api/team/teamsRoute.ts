@@ -16,7 +16,7 @@ import { and, eq, sql } from "drizzle-orm"
 import { Hono } from "hono"
 import { isLeaderRole } from "../authorization"
 import { type AppEnv, currentUser, toAnalyticsProperties } from "../currentUser"
-import { toObjectionableCategory, toObjectionableTextResponse } from "../moderation"
+import { toObjectionableCategory, toObjectionableContentResponse } from "../moderation"
 import { toolCallerRateLimiter } from "../rateLimit"
 import { toTermsOutdatedResponse } from "../termsAcceptance"
 import { deleteTeam } from "./deleteTeam"
@@ -80,7 +80,7 @@ export const teamsRoute = new Hono<AppEnv>()
 			subjectId: userId,
 		})
 		if (objectionableCategory) {
-			return toObjectionableTextResponse(context, objectionableCategory)
+			return toObjectionableContentResponse(context, objectionableCategory)
 		}
 
 		// create the team, answering which way a rejection went so the modal can say so
@@ -179,7 +179,7 @@ export const teamsRoute = new Hono<AppEnv>()
 			subjectId: context.req.param("id"),
 		})
 		if (objectionableCategory) {
-			return toObjectionableTextResponse(context, objectionableCategory)
+			return toObjectionableContentResponse(context, objectionableCategory)
 		}
 
 		// a taken name is reported by name, and everything else by whether the save held

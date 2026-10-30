@@ -2,7 +2,7 @@
 // readApiErrorMessage, which reads the api's error message. the types-only AppType import adds no api code to an app's
 // bundle
 import type { AppType } from "@carlnotes/api"
-import { isObjectionableTextResponse, toModerationRejectionMessage } from "@carlnotes/contracts/moderation"
+import { isObjectionableContentResponse, toModerationRejectionMessage } from "@carlnotes/contracts/moderation"
 import { isTermsOutdatedResponse, TERMS_OUTDATED_LINE } from "@carlnotes/contracts/terms"
 import { hc } from "hono/client"
 
@@ -76,7 +76,7 @@ export function showClientError(message: string): void {
 export async function readApiErrorMessage(response: ApiResponse): Promise<string | undefined> {
 	const body = (await response.json().catch(() => null)) as { error?: string } | null
 	// a rejected text and a write waiting on the Terms each have Carl's own words
-	if (isObjectionableTextResponse(body)) {
+	if (isObjectionableContentResponse(body)) {
 		return toModerationRejectionMessage(body.category)
 	}
 	if (isTermsOutdatedResponse(body)) {

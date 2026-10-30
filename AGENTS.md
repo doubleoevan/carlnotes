@@ -45,14 +45,14 @@ Packages, private `@carlnotes/<name>` workspaces that export source, in dependen
 - `packages/db/` — Drizzle schema, migrations, quotas, the Redis store, object storage, and the database claim. Neon
   Postgres, Redis, and R2.
 - `packages/emails/` — the react-email templates, the send every email goes through, and unsubscribe.
-- `packages/models/` — LiteLLM, the model roles, budgets, the guard, telemetry, speech, transcription, image text,
+- `packages/models/` — LiteLLM, the model roles, budgets, moderation, telemetry, speech, transcription,
   ffmpeg, and the prompts under `prompts/`.
 - `packages/pipeline/` — the scan pipeline: ingesters, review, chat replies and retrieval, attachments, link previews,
   the podcast episode, and the Temporal client.
 
 Beside them at the root:
 
-- `infra/` — the service configs the app runs beside: litellm, llm-guard, the Northflank pipelines, and the cloudflared
+- `infra/` — the service configs the app runs beside: litellm, the Northflank pipelines, and the cloudflared
   dev tunnel that Sign in with Apple's dev callback runs through.
 - `content/blog/` — the blog posts `apps/api/content.ts` serves.
 - `patches/` — the dependency patches `bun install` applies, named in the root package.json's `patchedDependencies`.
@@ -78,7 +78,7 @@ Each app and package has its own AGENTS.md with entry points, layout, and comman
 | Email template or send | `packages/emails/*.tsx`, `packages/emails/email.ts`, `packages/pipeline/notify.ts` | — | `apps/web/` |
 | Release notes | `apps/api/releases.ts`, the convention in `apps/docs/release-notes.md` | domain-model, write-docs | `apps/web/` except the footer link |
 | Docs page | `apps/docs/src/content/`, its shared pieces in `apps/docs/src/components/`, the video plugin `apps/docs/src/topicTutorialVideoPlugin.ts`, then `bun run docs:embed` | write-docs | `apps/docs/dist/` (built) |
-| Eval work | `evals/README.md`, `evals/evalHarness.ts`, `evals/evalChecks.ts`, `evals/<eval>/`, `.github/workflows/evals.yml`, `.github/workflows/llm-guard-update.yml` | prompt-authoring | app modules except the function the eval calls |
+| Eval work | `evals/README.md`, `evals/evalHarness.ts`, `evals/evalChecks.ts`, `evals/<eval>/`, `.github/workflows/evals.yml` | prompt-authoring | app modules except the function the eval calls |
 | Podcast episode, player, feed, or cover | `packages/pipeline/podcast/`, `apps/worker/workflows/recordPodcastEpisode.ts`, `apps/api/podcast/`, `apps/api/share/podcastFeed.ts`, `apps/api/share/podcastCover.ts`, `packages/models/speech.ts`, `packages/contracts/podcastEpisodes.ts`, `packages/server/podcastEpisodeSettings.ts`, `packages/server/podcastCoverPaths.ts`, `apps/web/src/components/podcast/`, `apps/web/src/pages/PodcastEpisodePage.tsx` | domain-model, prompt-authoring | `packages/db/migrations/` |
 | Mobile screen or setup | `apps/mobile/app/` for the routes, `apps/mobile/src/` for the app's own logic, `packages/nightshift/uniwindCss.ts` for the theme, the accessibility bar in `apps/mobile/AGENTS.md` | jsx-conventions | `apps/api/`; every `@carlnotes` package outside the universal four — the boundary check enforces it |
 | MCP tool, MCP card, Topic Tool, or the Add to AI dialog | `apps/api/mcp/`, `apps/api/tool/`, `apps/web/src/mcpCards/`, `apps/web/src/components/common/AddToAiDialog.tsx` | domain-model | `apps/worker/`; `packages/pipeline/` and `packages/models/` beyond `budget.ts` and the modules the tool imports |

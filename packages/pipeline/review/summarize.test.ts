@@ -31,7 +31,7 @@ test("buildScanReportPrompt grounds the report prompt in the scan's data", async
 			"duplicate content": 2,
 			"near-duplicate": 1,
 			"below relevance threshold": 4,
-			"flagged by scanner": 1,
+			"unsafe content": 1,
 			"no text to score": 0,
 		},
 		deferredCount: 1,

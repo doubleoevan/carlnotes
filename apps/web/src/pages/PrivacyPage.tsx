@@ -103,6 +103,7 @@ We use third-party providers to run the service. Each one receives only what its
 | Cloudflare | File storage and bot protection | Attachments, signup signals |
 | Fireworks AI and other model providers | Scoring, summaries, embeddings, podcast scripts | Your context documents and fetched page content |
 | Google Gemini | Podcast audio, spoken questions, and replies read aloud | The script of each podcast episode, which is written from a topic's findings. The recording of each spoken question, which Google transcribes with storage turned off and we never keep. The text of Carl's replies that are read aloud: replies to spoken questions, and any reply you tap play on. Google does not use any of this to train or improve its models. It may log it for a limited time, which its abuse monitoring policy sets at 55 days, only to detect abuse and make legally required disclosures |
+| OpenAI | Moderation of images other people see | Each avatar you upload and each image you share to a team room. OpenAI does not train its models on data sent through its API |
 | Exa, Firecrawl, and source APIs | Web search and page fetching | Search queries derived from your context |
 | Resend | Email delivery | Email address and scan email contents |
 | Langfuse | Pipeline tracing | Prompt and response contents |
@@ -200,7 +201,7 @@ export function PrivacyPage() {
 			{/* the title and the effective / last-updated dates */}
 			<h1 className="font-display text-2xl">Privacy Policy</h1>
 			<p className="text-muted-foreground mt-2 text-sm">
-				Effective date: July 24, 2026 · Last updated: October 26, 2026
+				Effective date: July 24, 2026 · Last updated: October 29, 2026
 			</p>
 			{/* the sections, rendered from the markdown body */}
 			<Markdown options={PRIVACY_MARKDOWN_OPTIONS}>{PRIVACY_BODY}</Markdown>

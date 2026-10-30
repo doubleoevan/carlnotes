@@ -169,6 +169,20 @@ test("parsePosts maps a search response the same way", () => {
 	])
 })
 
+// a post Reddit marks over 18 never becomes a Resource, and the unmarked posts beside it in the listing still do
+test("parsePosts skips a post marked over 18", () => {
+	const resources = parsePosts({
+		data: {
+			children: [
+				{ data: { permalink: "/r/z/comments/d/adult/", title: "Adult", over_18: true } },
+				{ data: { permalink: "/r/z/comments/e/safe/", title: "Safe", over_18: false } },
+				{ data: { permalink: "/r/z/comments/f/unmarked/", title: "Unmarked" } },
+			],
+		},
+	})
+	expect(resources.map((resource) => resource.title)).toEqual(["Safe", "Unmarked"])
+})
+
 // only a thread url names a post, and the id is what the thread endpoint takes
 test("toRedditPostId reads the id from a thread url and rejects everything else", () => {
 	// every host spelling of a thread url yields the id, with or without the slug

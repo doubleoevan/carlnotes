@@ -248,10 +248,10 @@ function toChatRoomToolCalls(toolCalls: ChatTurnToolCalls, billedUserId: string)
 
 /**
  * Loads the images stored with one chat room message as the data urls the model reads.
- * An image whose description the scanner flagged is left out.
+ * An image whose description failed to generate is left out.
  */
 export async function loadPromptMessageImages(promptChatMessageId: number): Promise<ChatAttachment[]> {
-	// only an image with stored bytes can be shown to the model, and never one whose description the scanner flagged
+	// only an image with stored bytes can be shown to the model, and never one whose description failed
 	const imageRows = await db
 		.select({
 			name: chatRoomAttachments.name,

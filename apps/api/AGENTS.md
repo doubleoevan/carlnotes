@@ -235,22 +235,21 @@ at the root import it by name.
   asks, which reads the page's visibility or membership and no spend sum. The voice route tests share their pages,
   transcription request builder, spies, and recorded spoken answer through `chat/voiceRouteTestFixtures.ts`, and
   `chat/voiceRoute.reservations.test.ts` holds the voice calls' reservation cases.
-- `chat/chatAttachmentScreening.ts` — `resolveChatAttachments`, which resolves a chat turn's attachments for the model
-  and withholds one the scanner flags, an image by the text it shows, `screenAttachmentText`, which screens a stored
-  attachment's text, and the data url helpers; `chat/attachments.ts` — storing the rest and deleting them, with the
-  routes. A kept image's description is screened before its row is written. `chat/roomAttachments.ts` screens a shared
-  image before a post stores and its description before its row turns ready; `chat/chatAttachmentReads.ts` — reading
-  them: the kept ones with their context, a chat turn's own, a download, and the object keys behind a user's or a
-  topic's. A chat turn and a chat room post read a PDF's, Word file's, or workbook's text through
-  `readChatAttachmentText` in `chat/chatAttachmentScreening.ts`, once per file: a kept chat attachment stores the text
-  its chat turn read, which the chat turn returns as a `StorableChatAttachment`. The helper calls `extractTextInWorker`
-  in `chat/attachmentExtraction.ts`, which runs `extractTextUpTo` in one persistent worker thread per process,
-  `chat/attachmentExtractionWorker.ts`, so a large file never stalls the event loop. The bytes are transferred to the
-  thread, which reads one file at a time from a queue. A request's files share one 90-second deadline from
-  `toExtractionDeadline`. A file read past it rejects with `AttachmentTimeLimitError` and stops only its own read, and
-  reads as too large: a 413 on a chat turn and `attachment too large` on a chat room post. A file that waited behind
-  other files until it rejects with `AttachmentBusyError`, and reads as busy: a 503 on a chat turn and `attachment busy`
-  on a chat room post.
+-  `chat/chatAttachmentParts.ts` — `resolveChatAttachments`, which resolves a chat turn's attachments into what the
+  model reads, and the data url helpers; `chat/attachments.ts` — storing the rest and deleting them, with the routes.
+  `chat/roomAttachments.ts` prepares a shared file before a post stores and fills an image's description after it, and
+  `chat/roomRoute.ts` moderates a shared image before the post through `toObjectionableImageCategory` in
+  `moderation.ts`; `chat/chatAttachmentReads.ts` — reading them: the kept ones with their context, a chat turn's own, a
+  download, and the object keys behind a user's or a topic's. A chat turn and a chat room post read a PDF's, Word
+  file's, or workbook's text through `readChatAttachmentText` in `chat/chatAttachmentParts.ts`, once per file: a kept
+  chat attachment stores the text its chat turn read, which the chat turn returns as a `StorableChatAttachment`. The
+  helper calls `extractTextInWorker` in `chat/attachmentExtraction.ts`, which runs `extractTextUpTo` in one persistent
+  worker thread per process, `chat/attachmentExtractionWorker.ts`, so a large file never stalls the event loop. The
+  bytes are transferred to the thread, which reads one file at a time from a queue. A request's files share one
+  90-second deadline from `toExtractionDeadline`. A file read past it rejects with `AttachmentTimeLimitError` and stops
+  only its own read, and reads as too large: a 413 on a chat turn and `attachment too large` on a chat room post. A file
+  that waited behind other files until it rejects with `AttachmentBusyError`, and reads as busy: a 503 on a chat turn
+  and `attachment busy` on a chat room post.
 - `team/teams.ts` — creating and updating a team and the topic attach and detach; `team/teamsRoute.ts` — the team
   routes; `team/deleteTeam.ts` — the delete, the handover to a new leader, and the one team row delete an account
   close shares; `team/search.ts` — the site search's team reader; `team/teamPage.ts` — the team
@@ -309,12 +308,14 @@ at the root import it by name.
   report names, a Topic, profile, Team, chat room message, note, or note comment, each resolved under the same read rule
   that lets the reporter see it), and `report/reports.ts` (writing a report, and the filters that hide a reported
   subject from its reporter in the room, comment, and note reads).
-- `moderation.ts` — the check every text other users read goes through before it is stored: `toObjectionableCategory`
-  classifies it through `@carlnotes/models/moderation` and returns the category it violates or null, failing open on a
-  skipped or failed classification with a report that names the subject and never the text, and
-  `toObjectionableTextResponse` is the 422 the clients turn into Carl's rejection. The room post, note create, rename,
-  and body save, comment post, username save, team create and update, and `topic/saveTopic.ts` for an invite or public
-  Topic all call it.
+-  `moderation.ts` — the check every text and image other users see goes through before it is stored:
+  `toObjectionableCategory` classifies a text and `toObjectionableImageCategory` an image through
+  `@carlnotes/models/moderation`, and each returns the category it violates or null. The image check also returns
+  unreadable if the endpoint rejects the image itself. A failed classification fails open with a report that names the
+  subject and never the text or the image, and a skipped one is not reported. `toObjectionableContentResponse` is the
+  422 the clients turn into Carl's rejection. The room post, note create, rename, and body save, comment post, username
+  save, team create and update, and `topic/saveTopic.ts` for an invite or public Topic's name, prompt, and tags all
+  check text. The room post's shared images and the user and team avatar uploads check images.
 - `termsAcceptance.ts` — the Terms acceptance gate and route: `toTermsOutdatedResponse` is the 403 a user-content
   write gets while the session's accepted version is older than `TERMS_VERSION`, `hasAcceptedCurrentTerms` reads the
   row for a write with no session, and `POST /api/users/me/terms-acceptance` records the published version and

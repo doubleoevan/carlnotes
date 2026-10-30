@@ -7,7 +7,7 @@ import {
 } from "@carlnotes/client/teamClient"
 import { isLeaderRole } from "@carlnotes/contracts/enums"
 import type { TeamPageResponse } from "@carlnotes/contracts/teams"
-import { AVATAR_REJECTIONS } from "@carlnotes/core/lib/avatarUpload"
+import { TEAM_AVATAR_UPLOAD_FAILED_TEXT, toAvatarRejectionText } from "@carlnotes/core/lib/avatarUpload"
 import { toCountLabel } from "@carlnotes/core/lib/labels"
 import { useQuery } from "@tanstack/react-query"
 import { router, useLocalSearchParams } from "expo-router"
@@ -137,7 +137,7 @@ function TeamHeader({
 								if (body) {
 									const rejection = await sendTeamAvatarBody(teamId, body)
 									if (rejection) {
-										throw new Error(AVATAR_REJECTIONS[rejection] ?? "That image didn't reach Carl. Try again.")
+										throw new Error(toAvatarRejectionText(rejection, TEAM_AVATAR_UPLOAD_FAILED_TEXT))
 									}
 								}
 							})

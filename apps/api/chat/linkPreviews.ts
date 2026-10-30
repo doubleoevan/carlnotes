@@ -3,7 +3,9 @@ import type { ChatLinkPreview } from "@carlnotes/contracts/chat"
 import { DAY_MS, HOUR_MS } from "@carlnotes/contracts/time"
 import { db } from "@carlnotes/db"
 import { linkPreviews } from "@carlnotes/db/schema/chat"
+import { resources } from "@carlnotes/db/schema/scans"
 import { toLinkPreviewImageKey, uploadAttachment } from "@carlnotes/db/store"
+import { toCanonicalUrl } from "@carlnotes/pipeline/ingest/normalize"
 import {
 	fetchLinkPreviewImage,
 	fetchLinkPreviewMetadata,
@@ -81,7 +83,8 @@ export async function loadOrFetchLinkPreview(url: string): Promise<ChatLinkPrevi
 		.from(linkPreviews)
 		.where(and(eq(linkPreviews.url, linkPreviewUrl), eq(linkPreviews.status, "ready")))
 	// the card, with its host's icon when one is stored
-	const chatLinkPreview = linkPreviewRow ? toLinkPreviewCard(linkPreviewRow) : null
+	const unsafeUrls = await loadUnsafeLinkPreviewUrls(linkPreviewRow ? [linkPreviewRow.url] : [])
+	const chatLinkPreview = linkPreviewRow ? toLinkPreviewCard(linkPreviewRow, unsafeUrls) : null
 	if (chatLinkPreview) {
 		await attachLinkPreviewFaviconPaths([chatLinkPreview])
 	}
@@ -116,6 +119,7 @@ export async function loadChatLinkPreviews(
 		.from(linkPreviews)
 		.where(and(inArray(linkPreviews.url, allUrls), eq(linkPreviews.status, "ready")))
 	const linkPreviewsByUrl = new Map(linkPreviewRows.map((linkPreviewRow) => [linkPreviewRow.url, linkPreviewRow]))
+	const unsafeUrls = await loadUnsafeLinkPreviewUrls(linkPreviewRows.map((linkPreviewRow) => linkPreviewRow.url))
 
 	// each chat message takes the link previews its own links resolved to, and one not stored yet just shows no card
 	const linkPreviewsByChatMessageId = new Map<number, ChatLinkPreview[]>()
@@ -124,7 +128,7 @@ export async function loadChatLinkPreviews(
 		const chatMessageLinkPreviews = urls
 			.map((url) => linkPreviewsByUrl.get(url))
 			.filter((linkPreviewRow) => linkPreviewRow !== undefined)
-			.map(toLinkPreviewCard)
+			.map((linkPreviewRow) => toLinkPreviewCard(linkPreviewRow, unsafeUrls))
 		// a chat message with nothing stored yet is left out entirely
 		if (chatMessageLinkPreviews.length > 0) {
 			linkPreviewsByChatMessageId.set(chatMessageId, chatMessageLinkPreviews)
@@ -143,12 +147,16 @@ export async function loadLinkPreviewImage(
 	linkPreviewId: string,
 ): Promise<{ objectKey: string; contentType: string } | null> {
 	const [linkPreviewRow] = await db
-		.select({ imageObjectKey: linkPreviews.imageObjectKey, imageContentType: linkPreviews.imageContentType })
+		.select({
+			url: linkPreviews.url,
+			imageObjectKey: linkPreviews.imageObjectKey,
+			imageContentType: linkPreviews.imageContentType,
+		})
 		.from(linkPreviews)
 		.where(eq(linkPreviews.id, linkPreviewId))
 
-	// a link preview without a stored image has nothing to show
-	if (!linkPreviewRow?.imageObjectKey) {
+	// a link preview without a stored image, or whose page a Scan judged unsafe, has nothing to show
+	if (!linkPreviewRow?.imageObjectKey || (await loadUnsafeLinkPreviewUrls([linkPreviewRow.url])).size > 0) {
 		return null
 	}
 	return { objectKey: linkPreviewRow.imageObjectKey, contentType: linkPreviewRow.imageContentType ?? "image/png" }
@@ -191,9 +199,11 @@ async function fetchAndStoreLinkPreview(linkPreviewUrl: string, teamId: string |
 			return
 		}
 
-		// the row is stored before the image, so its id names the image's object key
+		// the row is stored before the image, so its id names the image's object key. a url a Scan judged unsafe gets
+		// its title and description and no image
 		const linkPreviewId = await storeReadyLinkPreview(linkPreviewUrl, teamId, previewMetadata)
-		if (linkPreviewId && previewMetadata.imageUrl) {
+		const isUnsafePage = (await loadUnsafeLinkPreviewUrls([linkPreviewUrl])).size > 0
+		if (linkPreviewId && previewMetadata.imageUrl && !isUnsafePage) {
 			await storeLinkPreviewImage(linkPreviewId, previewMetadata.imageUrl)
 		}
 	} catch (error) {
@@ -201,6 +211,25 @@ async function fetchAndStoreLinkPreview(linkPreviewUrl: string, teamId: string |
 		console.error(`link preview failed for ${linkPreviewUrl}`, error)
 		await storeFailedLinkPreview(linkPreviewUrl, teamId)
 	}
+}
+
+/**
+ * Returns the link preview urls whose page a Scan judged unsafe, read in one query from the Resources stored under
+ * their canonical urls.
+ */
+export async function loadUnsafeLinkPreviewUrls(urls: string[]): Promise<Set<string>> {
+	// a batch with no urls needs no query, and each url is matched by the canonical form its Resource is stored under
+	if (urls.length === 0) {
+		return new Set()
+	}
+
+	// the unsafe Resources among the canonical urls, each mapped back to every preview url that shares it
+	const urlsByCanonicalUrl = Map.groupBy(urls, (url) => toCanonicalUrl(url))
+	const unsafeResourceRows = await db
+		.select({ url: resources.url })
+		.from(resources)
+		.where(and(inArray(resources.url, [...urlsByCanonicalUrl.keys()]), eq(resources.isUnsafe, true)))
+	return new Set(unsafeResourceRows.flatMap((resourceRow) => urlsByCanonicalUrl.get(resourceRow.url) ?? []))
 }
 
 // store a fetched link preview and return its id, which the image's object key is named after
@@ -258,13 +287,15 @@ async function storeLinkPreviewImage(linkPreviewId: string, imageUrl: string): P
 }
 
 // a stored row as the card the chat messages render, with its text decrypted
-function toLinkPreviewCard(linkPreviewRow: typeof linkPreviews.$inferSelect): ChatLinkPreview {
+function toLinkPreviewCard(linkPreviewRow: typeof linkPreviews.$inferSelect, unsafeUrls: Set<string>): ChatLinkPreview {
+	// a page a Scan judged unsafe shows its title and description without its image
+	const isImageShown = Boolean(linkPreviewRow.imageObjectKey) && !unsafeUrls.has(linkPreviewRow.url)
 	return {
 		url: linkPreviewRow.url,
 		title: linkPreviewRow.title ? decryptChatText(linkPreviewRow.title) : null,
 		description: linkPreviewRow.description ? decryptChatText(linkPreviewRow.description) : null,
 		// the image is served from this origin by link preview id, and one that stored none has no path
-		imagePath: linkPreviewRow.imageObjectKey ? `/api/link-previews/${linkPreviewRow.id}/image` : null,
+		imagePath: isImageShown ? `/api/link-previews/${linkPreviewRow.id}/image` : null,
 		faviconPath: null,
 		// a YouTube link's card plays the video in place instead of only linking out
 		youtubeVideoId: toYoutubeVideoId(linkPreviewRow.url),

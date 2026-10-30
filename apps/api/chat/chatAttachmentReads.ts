@@ -21,7 +21,7 @@ export async function toKeptAttachmentContext(
 	documentText: string,
 	litellmApiKey?: string,
 ): Promise<string> {
-	// a pdf, word file, or workbook summarizes from the words already screened by llm-guard
+	// a pdf, word file, or workbook summarizes from the words already extracted
 	if (attachment.kind === "pdf" || attachment.kind === "document") {
 		return generateAttachmentContext(documentText, litellmApiKey)
 	}

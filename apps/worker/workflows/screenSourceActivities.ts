@@ -1,16 +1,12 @@
-// source llm-guard screening activities
+// the url Source check activities: fetch the page and mark the Source ready or failed
 import { DAY_MS } from "@carlnotes/contracts/time"
 import { db } from "@carlnotes/db"
 import { sources } from "@carlnotes/db/schema/topics"
-import { screenText, toFlaggedReason } from "@carlnotes/models/guard"
 import { type FetchResult, fetchContent } from "@carlnotes/pipeline/scrape"
-import { RETRYABLE_SCREEN_FAILURE_TYPE, SCREEN_ATTEMPTS } from "@carlnotes/pipeline/stageTimeouts"
+import { RETRYABLE_SCREEN_FAILURE_TYPE } from "@carlnotes/pipeline/stageTimeouts"
 import { isRetryableFetchFailure, toFetchableUrl } from "@carlnotes/server/publicFetch"
-import { ApplicationFailure, Context } from "@temporalio/activity"
+import { ApplicationFailure } from "@temporalio/activity"
 import { eq } from "drizzle-orm"
-
-// how long an llm-guard screen of a Source's page may take, longer than an inline screen a user waits on
-const SOURCE_SCREEN_TIMEOUT_MS = 20_000
 
 // how long after a Source is saved a retryable fetch failure leaves it pending instead of failed
 export const RETRYABLE_FETCH_GRACE_MS = DAY_MS
@@ -28,10 +24,11 @@ const DROPPED_CONNECTION_CODES = new Set([
 ])
 
 /**
- * Fetch the page for a url Source and screen it with llm-guard, then mark it ready or failed with the reason.
+ * Fetches the page for a url Source, then marks it ready or failed with the reason. The screen judges only whether the
+ * page can be read.
  * A url that cannot be fetched is a rejection, not a warning: its page produces nothing on every future Scan,
- * and the owner should be told so. A fetch or a screen that failed for a reason the next attempt may pass, such as a
- * rate limit, a timeout, or a scanner that did not respond, is thrown as a retryable failure that the workflow retries.
+ * and the owner should be told so. A fetch that failed for a reason the next attempt may pass, such as a rate limit or
+ * a timeout, is thrown as a retryable failure that the workflow retries.
  */
 export async function screenSource(sourceId: string): Promise<void> {
 	// a Source that is no longer saved is marked non-retryable
@@ -59,17 +56,7 @@ export async function screenSource(sourceId: string): Promise<void> {
 		return
 	}
 
-	// screen the fetched Markdown with llm-guard. retry a screen that could not run, and pass it on the last attempt
-	const screenVerdict = await screenText(fetched.text, "page", { timeoutMs: SOURCE_SCREEN_TIMEOUT_MS })
-	if (screenVerdict.outcome === "failed" && Context.current().info.attempt < SCREEN_ATTEMPTS) {
-		throw toRetryableScreenFailure("llm-guard did not answer the screen")
-	}
-
-	// record the verdict: a flagged page fails the Source with the reason, and a clean page readies it
-	if (screenVerdict.isFlagged) {
-		await failSource(sourceId, toFlaggedReason(screenVerdict))
-		return
-	}
+	// a page that can be read readies the Source
 	await db.update(sources).set({ status: "ready", error: null }).where(eq(sources.id, sourceId))
 }
 

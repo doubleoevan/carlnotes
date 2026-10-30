@@ -3,11 +3,10 @@ import { ATTACHMENT_NO_TEXT_REASON, MAX_ATTACHMENT_CONTEXT_CHARS } from "@carlno
 import { db } from "@carlnotes/db"
 import { attachments } from "@carlnotes/db/schema/topics"
 import { deleteStoredObject, getAttachmentBytes, recordPendingObjectDeletions } from "@carlnotes/db/store"
-import { screenText, toFlaggedReason } from "@carlnotes/models/guard"
 import { loadOrProvisionTopicOwnerLiteLLMKey } from "@carlnotes/models/litellm"
 import { generateAttachmentContext, generateImageContext, toDataUrl } from "@carlnotes/pipeline/attach"
 import { isImageAttachmentType, isTableFileType } from "@carlnotes/pipeline/attachContentType"
-import { toClippedTableText, toTableText } from "@carlnotes/pipeline/attachTable"
+import { toTableText } from "@carlnotes/pipeline/attachTable"
 import { extractText } from "@carlnotes/pipeline/attachText"
 import { CHUNK_CHARS, chunk, MAX_CHUNKS } from "@carlnotes/pipeline/chunk"
 import { ApplicationFailure } from "@temporalio/activity"
@@ -15,19 +14,13 @@ import { eq } from "drizzle-orm"
 
 // the most characters the workflow can process, so that chunk payloads stay well under Temporal's per-message limit
 const MAX_PROCESS_CHARS = MAX_CHUNKS * CHUNK_CHARS
-// how long the screen of text stored as written may run, long enough for a busy scanner to finish.
-// a summarized document gets the scanner's default
-const VERBATIM_SCREEN_TIMEOUT_MS = 60_000
 
-// the extracted attachment chunks and total size, with a flagged reason or the context stored as written
-export type ExtractedAttachment = {
-	chunks: string[]
-	charCount: number
-	flaggedReason: string | null
-	verbatimContext: string | null
-}
+// the extracted attachment chunks and total size, or the context stored as written
+export type ExtractedAttachment = { chunks: string[]; charCount: number; verbatimContext: string | null }
 
-/** Extracts and screens the stored file's text, and returns the text as written or as chunks to summarize. */
+/**
+ * Extracts the stored file's text, and returns the text as written or as chunks to summarize.
+ */
 export async function extractAttachmentText(attachmentId: string): Promise<ExtractedAttachment> {
 	// load the row for its object key and content type, then read and extract the stored bytes
 	const [attachment] = await db.select().from(attachments).where(eq(attachments.id, attachmentId))
@@ -49,55 +42,30 @@ export async function extractAttachmentText(attachmentId: string): Promise<Extra
 		throw ApplicationFailure.nonRetryable(ATTACHMENT_NO_TEXT_REASON, "NoReadableText")
 	}
 
-	// a table file is screened over only the rows its table text can keep. the rest can never reach a
-	// scan, so screening it spends the scanner on text nobody will read
-	const isTableFile = isTableFileType(attachment.contentType)
-	const clippedTableText = isTableFile ? toClippedTableText(extractedText) : null
-	const screenableText = (clippedTableText?.serializedText ?? extractedText).slice(0, MAX_PROCESS_CHARS)
-
-	// a table file and a short document are stored as written, with no model call in between
-	const isVerbatimAttachment = isTableFile || extractedText.length <= MAX_ATTACHMENT_CONTEXT_CHARS
-
-	// screen the text before any model reads the text, and stop at a flag. a page attached by url gets the whole check,
-	// and an owner's upload gets the upload check. a screen that never finishes passes the text
-	const screenVerdict = await screenText(screenableText, attachment.sourceUrl ? "document" : "upload", {
-		timeoutMs: isVerbatimAttachment ? VERBATIM_SCREEN_TIMEOUT_MS : undefined,
-	})
-	if (screenVerdict.isFlagged) {
-		return {
-			chunks: [],
-			charCount: extractedText.length,
-			flaggedReason: toFlaggedReason(screenVerdict),
-			verbatimContext: null,
-		}
-	}
-
-	// a table file's rows are written from the screened text
-	if (isTableFile) {
+	// a table file's rows are written as table text, with no model call
+	if (isTableFileType(attachment.contentType)) {
 		const tableContext = toTableText({
-			serializedText: screenVerdict.text,
+			serializedText: extractedText,
 			filename: attachment.filename,
 			contentType: attachment.contentType,
-			skippedRows: clippedTableText?.skippedRows ?? 0,
 		})
-		return { chunks: [], charCount: extractedText.length, flaggedReason: null, verbatimContext: tableContext }
+		return { chunks: [], charCount: extractedText.length, verbatimContext: tableContext }
 	}
 
-	// a short document is its own context. redaction can lengthen the text, so the text is limited again
-	if (isVerbatimAttachment) {
-		const verbatimContext = screenVerdict.text.slice(0, MAX_ATTACHMENT_CONTEXT_CHARS)
-		return { chunks: [], charCount: extractedText.length, flaggedReason: null, verbatimContext }
+	// a short document is its own context, with no model call
+	if (extractedText.length <= MAX_ATTACHMENT_CONTEXT_CHARS) {
+		return { chunks: [], charCount: extractedText.length, verbatimContext: extractedText }
 	}
 
-	// mark the cut on a document past the processing limit
+	// a longer document is cut to the processing limit, with the cut marked
 	const markedText =
 		extractedText.length > MAX_PROCESS_CHARS
-			? `${screenVerdict.text}${toCutMarker(extractedText.length)}`
-			: screenVerdict.text
+			? `${extractedText.slice(0, MAX_PROCESS_CHARS)}${toCutMarker(extractedText.length)}`
+			: extractedText
 
-	// chunk the screened text, not the original, so any personal details it redacted never reach a model
+	// chunk the text to summarize
 	const chunks = chunk(markedText, MAX_CHUNKS, CHUNK_CHARS)
-	return { chunks, charCount: extractedText.length, flaggedReason: null, verbatimContext: null }
+	return { chunks, charCount: extractedText.length, verbatimContext: null }
 }
 
 // the line appended where a long document was cut

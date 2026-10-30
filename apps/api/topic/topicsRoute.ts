@@ -12,7 +12,7 @@ import { zValidator } from "@hono/zod-validator"
 import { Hono } from "hono"
 import { z } from "zod"
 import { type AppEnv, currentUser, toAnalyticsProperties } from "../currentUser"
-import { toObjectionableTextResponse } from "../moderation"
+import { toObjectionableContentResponse } from "../moderation"
 import { toolCallerRateLimiter } from "../rateLimit"
 import { toTermsOutdatedRejection } from "../termsAcceptance"
 import { removeTopicSource } from "../tool/topicSourceTools"
@@ -45,7 +45,7 @@ export const topicsRoute = new Hono<AppEnv>()
 
 		// each rejection is named: a violating name or prompt, a rejecting invitee, a spent invite limit, or a quota
 		if (createTopicResult.status === "objectionable") {
-			return toObjectionableTextResponse(context, createTopicResult.category)
+			return toObjectionableContentResponse(context, createTopicResult.category)
 		}
 
 		// the Terms and the invitee rejections
@@ -153,7 +153,7 @@ export const topicsRoute = new Hono<AppEnv>()
 
 		// a violating name or prompt is rejected in Carl's words
 		if (updateTopicResult.status === "objectionable") {
-			return toObjectionableTextResponse(context, updateTopicResult.category)
+			return toObjectionableContentResponse(context, updateTopicResult.category)
 		}
 		if (updateTopicResult.status === "termsOutdated") {
 			return toTermsOutdatedRejection(context)

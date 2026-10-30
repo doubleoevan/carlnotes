@@ -25,7 +25,6 @@ updates:
     directories:
       - /
       - /infra/litellm
-      - /infra/llm-guard
     schedule:
       interval: weekly
       day: monday

@@ -1,6 +1,6 @@
 import { toAvatarImagePath } from "@carlnotes/contracts/avatars"
 import { useAvatar } from "@carlnotes/core/hooks/useAvatar"
-import { AVATAR_REJECTIONS, AVATAR_UPLOAD_FAILED_TEXT } from "@carlnotes/core/lib/avatarUpload"
+import { AVATAR_UPLOAD_FAILED_TEXT, toAvatarRejectionText } from "@carlnotes/core/lib/avatarUpload"
 import { Camera } from "lucide-react-native"
 import { useState } from "react"
 import { View } from "react-native"
@@ -32,7 +32,7 @@ export function UserAvatarPicker({ userId, username }: { userId: string; usernam
 			}
 			const rejection = await uploadAvatarBody(body)
 			if (rejection) {
-				setError(AVATAR_REJECTIONS[rejection] ?? AVATAR_UPLOAD_FAILED_TEXT)
+				setError(toAvatarRejectionText(rejection, AVATAR_UPLOAD_FAILED_TEXT))
 			}
 		} catch {
 			setError(AVATAR_UPLOAD_FAILED_TEXT)

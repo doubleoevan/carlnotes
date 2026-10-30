@@ -1,7 +1,7 @@
 // the paid stages: score each fetched Resource against the topic context with tiered models, and write its Finding
 
 import { db } from "@carlnotes/db"
-import { findings, type scans } from "@carlnotes/db/schema/scans"
+import { findings, resources, type scans } from "@carlnotes/db/schema/scans"
 import {
 	type Budget,
 	CHEAP_COST_PER_MILLION_TOKENS,
@@ -17,7 +17,6 @@ import {
 	toFetchCountField,
 	tokenCost,
 } from "@carlnotes/models/budget"
-import { screenText, toFlaggedReason } from "@carlnotes/models/guard"
 import { cheapModel, isBudgetRejection, scoreModel } from "@carlnotes/models/models"
 // the prompt loader fetches the registry version first, falling back to the bundled markdown
 import { type BuiltPrompt, fetchPromptTemplate, promptTelemetry } from "@carlnotes/models/prompts/fetch"
@@ -26,7 +25,7 @@ import { runWithConcurrency } from "@carlnotes/server/concurrency"
 import { toPositiveInteger } from "@carlnotes/server/envSettings"
 import { reportError } from "@carlnotes/server/monitoring"
 import { generateText, type LanguageModel, Output } from "ai"
-import { sql } from "drizzle-orm"
+import { and, eq, ne, sql } from "drizzle-orm"
 import { z } from "zod"
 import { settleFaviconFetches } from "../favicons"
 import { linkPodcastEpisodeChapters, toPodcastEpisodeChapterRatingSql } from "../podcast/podcastEpisodeChapters"
@@ -58,8 +57,15 @@ export const MAX_SCORED_RESOURCE_DOLLARS =
 	tokenCost(MAX_SCORE_TOKENS, CHEAP_COST_PER_MILLION_TOKENS) +
 	tokenCost(MAX_SCORE_TOKENS, PREMIUM_COST_PER_MILLION_TOKENS)
 
-// the model's structured output
-const scoreSchema = z.object({ score: z.number(), relevanceExplanation: z.string().optional() })
+// the model's structured output. a missing safety judgment reads as safe
+const scoreSchema = z.object({
+	score: z.number(),
+	relevanceExplanation: z.string().optional(),
+	isUnsafe: z.boolean().optional(),
+})
+
+// what one scoring tier returns: the clamped score, the relevance explanation, and whether the content is unsafe
+type ScoredResource = { score: number; relevanceExplanation: string; isUnsafe: boolean }
 
 // a persisted Scan record
 type Scan = typeof scans.$inferSelect
@@ -130,15 +136,12 @@ async function fetchAndScoreResource(
 			return { status: "filtered", reason: "no text to score" }
 		}
 
-		// screen the fetched page before any model reads it
-		const screenVerdict = await screenText(content.slice(0, MAX_SCORE_CHARS), "page")
-		if (screenVerdict.isFlagged) {
-			console.error(`resource ${resource.id} ${toFlaggedReason(screenVerdict)}`)
-			return { status: "filtered", reason: "flagged by scanner" }
+		// score the content, then drop a Resource that a scoring call judged unsafe without writing its Finding
+		const scoredResource = await scoreResource(content, topicContext.scoreText, budget, litellmApiKey)
+		await markResourceSafety(resource.id, scoredResource.isUnsafe)
+		if (scoredResource.isUnsafe) {
+			return { status: "filtered", reason: "unsafe content" }
 		}
-
-		// score the scanner's text, not the original, so any personal details it redacted never reach a model
-		const scoredResource = await scoreResource(screenVerdict.text, topicContext.scoreText, budget, litellmApiKey)
 		const upsertFindingResult = await upsertFinding({
 			scan,
 			topicId,
@@ -191,7 +194,7 @@ export async function scoreResource(
 	topicContext: string,
 	budget: Budget,
 	litellmApiKey?: string,
-): Promise<{ score: number; relevanceExplanation: string }> {
+): Promise<ScoredResource> {
 	// the cheap model scores everything fetched first
 	const cheapTier: ScoreTier = {
 		model: cheapModel(litellmApiKey),
@@ -201,8 +204,9 @@ export async function scoreResource(
 	}
 	const cheapOutcome = await scoreResourceContent(cheapTier, resourceContent, topicContext, budget)
 
-	// only Resources with a high enough cheap model score earn a premium model re-score and only while the Scan is
-	if (!isPromoted(cheapOutcome.score) || !canSpend(budget)) {
+	// unsafe content ends here, and only Resources with a high enough cheap model score earn a premium model re-score
+	// and only while the Scan can spend
+	if (cheapOutcome.isUnsafe || !isPromoted(cheapOutcome.score) || !canSpend(budget)) {
 		return cheapOutcome
 	}
 
@@ -223,7 +227,7 @@ async function scoreResourceContent(
 	resourceContent: string,
 	topicContext: string,
 	budget: Budget,
-): Promise<{ score: number; relevanceExplanation: string }> {
+): Promise<ScoredResource> {
 	// fetch and write the score prompt
 	const scorePrompt = await buildScorePrompt(resourceContent, topicContext, scoreTier.shouldWriteRelevanceExplanation)
 
@@ -235,9 +239,23 @@ async function scoreResourceContent(
 		...promptTelemetry(scorePrompt),
 	})
 
-	// track the estimated cost, then return the clamped score and the relevance explanation the cheap model leaves
+	// track the estimated cost, then return the clamped score, the relevance explanation the cheap model leaves, and
+	// the safety judgment
 	charge(budget, scoreTier.stage, tokenCost(usage.totalTokens ?? 0, scoreTier.ratePerMillion))
-	return { score: clampScore(output.score), relevanceExplanation: output.relevanceExplanation ?? "" }
+	return {
+		score: clampScore(output.score),
+		relevanceExplanation: output.relevanceExplanation ?? "",
+		isUnsafe: output.isUnsafe ?? false,
+	}
+}
+
+// record whether a Resource's content was judged unsafe, so a safe score clears an earlier mark. a row that already
+// holds the judgment is not written again
+async function markResourceSafety(resourceId: string, isUnsafe: boolean): Promise<void> {
+	await db
+		.update(resources)
+		.set({ isUnsafe })
+		.where(and(eq(resources.id, resourceId), ne(resources.isUnsafe, isUnsafe)))
 }
 
 /**

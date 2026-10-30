@@ -15,7 +15,7 @@ import { zValidator } from "@hono/zod-validator"
 import { eq, inArray } from "drizzle-orm"
 import { Hono } from "hono"
 import { type AppEnv, currentUser } from "./currentUser"
-import { toObjectionableCategory, toObjectionableTextResponse } from "./moderation"
+import { toObjectionableCategory, toObjectionableContentResponse } from "./moderation"
 import { toolCallerRateLimiter } from "./rateLimit"
 import { refreshSessionUser } from "./sessions"
 import { toTermsOutdatedResponse } from "./termsAcceptance"
@@ -169,7 +169,7 @@ export const usernamesRoute = new Hono<AppEnv>().post(
 			subjectId: userId,
 		})
 		if (objectionableCategory) {
-			return toObjectionableTextResponse(context, objectionableCategory)
+			return toObjectionableContentResponse(context, objectionableCategory)
 		}
 
 		// set the username, or say which way it was rejected

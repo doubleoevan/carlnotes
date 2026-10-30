@@ -79,7 +79,7 @@ async function run(): Promise<void> {
 	// a Worker polls exactly one queue and takes one workflowsPath
 	const connection = await connectWithRetry()
 	const workers = await Promise.all([
-		// extracts an attachment's text, screens it with llm-guard, and generates its context
+		// extracts an attachment's text and generates its context
 		Worker.create({
 			connection,
 			workflowsPath: new URL("./workflows/processAttachment.ts", import.meta.url).pathname,
@@ -123,7 +123,7 @@ async function run(): Promise<void> {
 			shutdownGraceTime: SHUTDOWN_GRACE_MS,
 			maxConcurrentActivityTaskExecutions: PODCAST_RECORDING_CONCURRENCY,
 		}),
-		// fetches a url Source's page and screens it with llm-guard
+		// fetches a url Source's page to check that it can be read
 		Worker.create({
 			connection,
 			workflowsPath: new URL("./workflows/screenSource.ts", import.meta.url).pathname,

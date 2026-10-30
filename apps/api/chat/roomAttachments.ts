@@ -1,6 +1,6 @@
-// the chat room's shared attachment files: screening and reading an upload before anything stores,
-// the write beside its chat message
-import { CHAT_ROOM_ATTACHMENT_LIMIT } from "@carlnotes/contracts/chat"
+// the chat room's shared attachment files: reading an upload before anything stores, and the write beside its chat
+// message
+import { CHAT_ROOM_ATTACHMENT_LIMIT, clipAttachmentText } from "@carlnotes/contracts/chat"
 import type { ChatAttachment } from "@carlnotes/contracts/payloads"
 import { type DbTransaction, db } from "@carlnotes/db"
 import { chatRoomAttachments } from "@carlnotes/db/schema/chat"
@@ -12,7 +12,6 @@ import {
 	toStoredObjectKeys,
 	uploadAttachment,
 } from "@carlnotes/db/store"
-import { screenImage } from "@carlnotes/models/guard"
 import { loadOrProvisionUserLiteLLMKey } from "@carlnotes/models/litellm"
 import { generateImageContext } from "@carlnotes/pipeline/attach"
 import { toCanonicalContentType } from "@carlnotes/pipeline/attachContentType"
@@ -24,10 +23,8 @@ import {
 	type ExtractableChatAttachment,
 	type PastDeadlineRejection,
 	readChatAttachmentText,
-	reportFlaggedAttachment,
-	screenAttachmentText,
 	VIDEO_ATTACHMENT_CONTEXT,
-} from "./chatAttachmentScreening"
+} from "./chatAttachmentParts"
 import { encryptChatText } from "./encryption"
 import { toTopicFilter } from "./roomAccess"
 
@@ -58,17 +55,11 @@ export type PreparedChatRoomAttachment = {
 	contentType: string | null
 }
 
-// one shared attachment file to prepare: the chat room it posts to, the file, and the post's deadline from
-// toExtractionDeadline
-type PrepareChatRoomAttachmentOptions = {
-	topicId: string | null
-	teamId: string
-	attachment: ChatAttachment
-	deadline: number
-}
+// one shared attachment file to prepare: the file, and the post's deadline from toExtractionDeadline
+type PrepareChatRoomAttachmentOptions = { attachment: ChatAttachment; deadline: number }
 
 /**
- * Screen and read every attachment file a chat message shares, returning null if any one of them is rejected, or
+ * Reads every attachment file a chat message shares, returning null if any one of them is rejected, or
  * why if one was not read before the post's deadline, so a rejected attachment file leaves neither a stored file
  * nor a chat message standing beside one that never landed.
  */
@@ -104,7 +95,7 @@ export async function prepareChatRoomAttachments(
 	const deadline = toExtractionDeadline()
 	for (const attachment of attachments) {
 		// a rejected file stops the post with why
-		const preparedAttachment = await prepareChatRoomAttachment({ topicId, teamId, attachment, deadline })
+		const preparedAttachment = await prepareChatRoomAttachment({ attachment, deadline })
 		if (preparedAttachment === null || typeof preparedAttachment === "string") {
 			return preparedAttachment
 		}
@@ -114,27 +105,21 @@ export async function prepareChatRoomAttachments(
 	return preparedAttachments
 }
 
-// screen and read one shared attachment file, with the uploader's limit already weighed for the whole chat message.
+// read one shared attachment file, with the uploader's limit already checked for the whole chat message.
 // null if the file is rejected, and why if it was not read before the post's deadline
 async function prepareChatRoomAttachment({
-	topicId,
-	teamId,
 	attachment,
 	deadline,
 }: PrepareChatRoomAttachmentOptions): Promise<PreparedChatRoomAttachment | PastDeadlineRejection | null> {
-	// shared text stores its own words, screened like a kept attachment's
+	// shared text stores its own words, clipped like a kept attachment's
 	if (attachment.kind === "text") {
-		const screenedText = await screenAttachmentText(attachment.text, "room attachment", topicId ?? teamId)
-		if (screenedText === null) {
-			return null
-		}
-		return { attachment, contextText: screenedText, bytes: null, contentType: null }
+		return { attachment, contextText: clipAttachmentText(attachment.text), bytes: null, contentType: null }
 	}
 
-	// a PDF's words come out and get screened before its bytes may store. an image has no text yet
+	// decode the file's bytes from its data url
 	const bytes = decodeDataUrl(attachment.dataUrl)
 
-	// a video has no words to screen and carl can't watch it, so its bytes store with a fixed context
+	// a video has no words and carl can't watch it, so its bytes store with a fixed context
 	if (attachment.kind === "video") {
 		return {
 			attachment,
@@ -145,23 +130,15 @@ async function prepareChatRoomAttachment({
 	}
 	// a pdf, word file, or workbook has words to pull out, and the room picker offers all three
 	if (attachment.kind === "pdf" || attachment.kind === "document") {
-		return prepareExtractableChatRoomAttachment({ topicId, teamId, attachment, deadline, bytes })
+		return prepareExtractableChatRoomAttachment({ attachment, deadline, bytes })
 	}
-	// an image is screened by the text it shows, and a flagged one rejects the post before anything stores.
-	// a passed image stores as-is, and its description arrives after the post
-	const imageScreenVerdict = await screenImage(bytes)
-	if (imageScreenVerdict.isFlagged) {
-		reportFlaggedAttachment(imageScreenVerdict, "room image", topicId ?? teamId)
-		return null
-	}
+	// an image stores as-is, and its description is written after the post
 	return { attachment, contextText: "", bytes, contentType: contentTypeFromDataUrl(attachment.dataUrl) }
 }
 
-// read and screen a shared PDF, Word file, or workbook, whose bytes the caller decoded. null if the file is rejected,
+// read a shared PDF, Word file, or workbook, whose bytes the caller decoded. null if the file is rejected,
 // and why if it was not read before the post's deadline
 async function prepareExtractableChatRoomAttachment({
-	topicId,
-	teamId,
 	attachment,
 	deadline,
 	bytes,
@@ -176,13 +153,9 @@ async function prepareExtractableChatRoomAttachment({
 		return chatAttachmentText.rejection === "attachmentUnreadable" ? null : chatAttachmentText.rejection
 	}
 
-	// the screen may also redact in place, so its returned text is the one that stores
+	// the clipped text is the one that stores
 	const contentType = toCanonicalContentType(contentTypeFromDataUrl(attachment.dataUrl), attachment.name)
-	const screenedText = await screenAttachmentText(chatAttachmentText.text, "room attachment", topicId ?? teamId)
-	if (screenedText === null) {
-		return null
-	}
-	return { attachment, contextText: screenedText, bytes, contentType }
+	return { attachment, contextText: clipAttachmentText(chatAttachmentText.text), bytes, contentType }
 }
 
 // store the shared file beside its chat message
@@ -234,36 +207,28 @@ export async function storeChatRoomAttachment(
 	// an image's description arrives after the post, on the uploader's own key
 	if (preparedAttachment.attachment.kind === "image" && "dataUrl" in preparedAttachment.attachment) {
 		const { dataUrl } = preparedAttachment.attachment
-		void describeChatRoomImage({ attachmentId, userId, chatPageId: topicId ?? teamId, dataUrl })
+		void describeChatRoomImage({ attachmentId, userId, dataUrl })
 	}
 }
 
-// the shared image's row, its uploader, the id of the topic or team it was shared on, and its data url
-type DescribeChatRoomImageOptions = { attachmentId: string; userId: string; chatPageId: string; dataUrl: string }
+// the shared image's row, its uploader, and its data url
+type DescribeChatRoomImageOptions = { attachmentId: string; userId: string; dataUrl: string }
 
 /**
- * Describes a shared image in the background, filling the row that carl's chat turns read.
- * The description is screened before the row turns ready, and a flagged one marks the row failed.
+ * Describes a shared image in the background, filling the row that carl's chat turns read as data inside the fence.
+ * A description that fails to generate marks the row failed.
  */
 export async function describeChatRoomImage({
 	attachmentId,
 	userId,
-	chatPageId,
 	dataUrl,
 }: DescribeChatRoomImageOptions): Promise<void> {
 	try {
-		// write the description and screen it. a flagged one marks the row failed, so carl's chat turns never read it
+		// write the description, which fills the row's context and marks it ready
 		const generatedContext = await generateImageContext(dataUrl, await loadOrProvisionUserLiteLLMKey(userId))
-		const screenedImageContext = await screenAttachmentText(generatedContext, "room image description", chatPageId)
-		if (screenedImageContext === null) {
-			await db.update(chatRoomAttachments).set({ status: "failed" }).where(eq(chatRoomAttachments.id, attachmentId))
-			return
-		}
-
-		// the description fills the row's context and marks it ready
 		await db
 			.update(chatRoomAttachments)
-			.set({ context: encryptChatText(screenedImageContext), status: "ready" })
+			.set({ context: encryptChatText(clipAttachmentText(generatedContext)), status: "ready" })
 			.where(eq(chatRoomAttachments.id, attachmentId))
 	} catch (error) {
 		// a failed description is saved to the chat room attachment row, so carl's chat turns skip it instead of reading an empty one

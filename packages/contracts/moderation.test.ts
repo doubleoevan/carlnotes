@@ -1,7 +1,7 @@
 // tests for the moderation contracts: the verdict's shape, the rejection body, and Carl's words for each category
 import { expect, test } from "bun:test"
 import {
-	isObjectionableTextResponse,
+	isObjectionableContentResponse,
 	moderationCategories,
 	moderationVerdict,
 	toModerationRejectionMessage,
@@ -18,7 +18,7 @@ test("the verdict parses a violation with its category and rejects an unknown on
 test("each category has Carl's rejection", () => {
 	for (const category of moderationCategories) {
 		const message = toModerationRejectionMessage(category)
-		expect(message.startsWith("Carl read that twice")).toBe(true)
+		expect(message.startsWith("Carl looked at that twice")).toBe(true)
 		expect(message).not.toContain("undefined")
 	}
 	expect(toModerationRejectionMessage("sexual")).toContain("sexual content")
@@ -26,6 +26,6 @@ test("each category has Carl's rejection", () => {
 
 // the rejection body is recognized by its marker and category
 test("the objectionable-text response is recognized", () => {
-	expect(isObjectionableTextResponse({ rejection: "objectionable", category: "hate" })).toBe(true)
-	expect(isObjectionableTextResponse({ error: "not found" })).toBe(false)
+	expect(isObjectionableContentResponse({ rejection: "objectionable", category: "hate" })).toBe(true)
+	expect(isObjectionableContentResponse({ error: "not found" })).toBe(false)
 })

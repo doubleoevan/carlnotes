@@ -114,6 +114,9 @@ export const resources = pgTable(
 		lastModified: text("last_modified"),
 		// where the source published a transcript of this resource, like a podcast feed's transcript link
 		transcriptUrl: text("transcript_url"),
+		// whether the last score judged the content sexually explicit, hateful, harassing, or violent. an unsafe Resource
+		// never becomes a Finding and its link preview gets no image
+		isUnsafe: boolean("is_unsafe").notNull().default(false),
 		// created and updated timestamps
 		...timestamps(),
 	},

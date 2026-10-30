@@ -16,10 +16,8 @@
 		"@langfuse/tracing": "^6.0.2",
 		"@langfuse/vercel-ai-sdk": "^6.0.2",
 		"@opentelemetry/sdk-trace-node": "^2.12.0",
-		"@tesseract.js-data/eng": "1.0.0",
 		"ai": "^7.0.153",
-		"drizzle-orm": "^0.45.4",
-		"tesseract.js": "7.0.0"
+		"drizzle-orm": "^0.45.4"
 	},
 	"devDependencies": {
 		"@opentelemetry/api": "^1.10.0",

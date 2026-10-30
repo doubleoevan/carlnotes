@@ -15,10 +15,18 @@ const FETCH_TIMEOUT_MS = 10_000
 const DEFAULT_BACKOFF_MS = 5_000
 const MAX_BACKOFF_MS = 30_000
 
+// the labels Bluesky's moderation puts on adult or graphic content. a post with one, or by an account with one, is
+// skipped
+const ADULT_OR_GRAPHIC_LABELS = new Set(["porn", "sexual", "nudity", "graphic-media"])
+
+// a moderation label on a post or an account
+type BlueskyLabel = { val: string }
+
 // the fields this ingester reads from a post. the link card is what holds the article
 type BlueskyPost = {
-	author?: { handle?: string }
+	author?: { handle?: string; labels?: BlueskyLabel[] }
 	embed?: BlueskyEmbed
+	labels?: BlueskyLabel[]
 }
 
 // a post links to a page through an external embed, which a post with its own image nests under media instead
@@ -44,7 +52,8 @@ export const blueskyIngester: SourceIngester = async (source: Source) => {
 }
 
 /**
- * Maps the articles a set of posts link to into Resources, deduped by url. A post that links to nothing is skipped.
+ * Maps the articles a set of posts link to into Resources, deduped by url. A post that links to nothing, or that is
+ * labeled adult or graphic or is by an account labeled so, is skipped.
  */
 export function parseLinks(posts: BlueskyPost[]): IngestedResource[] {
 	// keep the first Resource per url so an account posting the same article twice collapses to one
@@ -53,7 +62,7 @@ export function parseLinks(posts: BlueskyPost[]): IngestedResource[] {
 		// a post has its link as an external embed, which sits under media when the post has its own image too
 		const external = post.embed?.external ?? post.embed?.media?.external
 		const url = external?.uri
-		if (!url || resourceByUrl.has(url) || isInternalLink(url)) {
+		if (!url || resourceByUrl.has(url) || isInternalLink(url) || isAdultOrGraphicLabeled(post)) {
 			continue
 		}
 
@@ -95,6 +104,12 @@ export async function fetchAuthorFeed(handle: string, limit: number = AUTHOR_FEE
 	// each feed entry wraps the post it lists, and a reply or repost entry still holds a post whose link counts
 	const authorFeed = await readJson<AuthorFeedResponse>(response, `getAuthorFeed ${handle}`)
 	return (authorFeed.feed ?? []).map((entry) => entry.post)
+}
+
+// whether the post or its account has a label for adult or graphic content
+function isAdultOrGraphicLabeled(post: BlueskyPost): boolean {
+	const labels = [...(post.labels ?? []), ...(post.author?.labels ?? [])]
+	return labels.some((label) => ADULT_OR_GRAPHIC_LABELS.has(label.val))
 }
 
 // a link back into bluesky is a quote or a profile, not an article worth fetching

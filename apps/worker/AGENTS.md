@@ -5,7 +5,7 @@ workflows the worker bundles. Nothing imports it. Every process starts through a
 sweep reads live here beside it.
 
 Entries: `temporal.ts` (the worker, run as `bun run temporal` in production and `bun run dev:temporal:watch` in dev,
-with its scan concurrency set by `SCAN_CONCURRENCY`, the concurrency of each of its attachment and source-screen
+with its scan concurrency set by `SCAN_CONCURRENCY`, the concurrency of each of its attachment and Source screening
 Workers by `SCREEN_CONCURRENCY`, and a Worker of its own for the `scan-closing` queue that records a scan's outcome
 apart from the scan slots), `schedule.ts` (the sweep, `bun run schedule`, or `bun run dev:worker` on a minute's
 interval: it starts as many scheduled scans as the backlog allows, a daily topic past its owner's daily scans cutoff
@@ -39,22 +39,22 @@ for a question about the app; a section whose hash is unchanged is not embedded 
 - `reportReminders.ts` reads the content reports still open and never reminded twelve hours after they were made,
   mails each one to `SUPPORT_EMAIL` through the report email template with its admin console link, and writes the
   report's reminded time, so a report is reminded once. Without `SUPPORT_EMAIL` it reads nothing.
-- `retryPendingObjectDeletions.ts` retries the pending keys in `pending_object_deletions` after the claimed sweep,
+-  `retryPendingObjectDeletions.ts` retries the pending keys in `pending_object_deletions` after the claimed sweep,
   outside its claim, with a doubling backoff up to a day, and reports a key pending for over a day once, deleting each
   through `deleteStoredObject` in `@carlnotes/db/store`. Before the sweep starts a Scan row that was opened and never
   dispatched, the sweep reads the row owner's key budget and marks the row failed with the budget reason if that budget
   is spent. A Scan that a user started by hand starts without the budget read. The sweep closes out a picked-up Scan
   that runs past its stages' total timeouts, and a Scan still waiting for a worker past the ingest and finish stages'
-  total timeouts, through `failStaleScans` in `@carlnotes/pipeline/staleScans`, and starts the llm-guard screen of
+  total timeouts, through `failStaleScans` in `@carlnotes/pipeline/staleScans`, and starts the url Source screen of
   every Source still waiting on one through `@carlnotes/pipeline/screen`.
-- `workflows/` — the Temporal workflows and their activities, one pair of files per workflow: `runTopicScan.ts` (the
+-  `workflows/` — the Temporal workflows and their activities, one pair of files per workflow: `runTopicScan.ts` (the
   durable Scan, which runs the pipeline's three stages as activities and names the `scan-closing` queue),
-  `processAttachment.ts` (a topic attachment's extraction and summaries), `screenSource.ts` (a Source's llm-guard
-  screen), `sendScanEmail.ts`, and `recordPodcastEpisode.ts`. Temporal bundles a workflow file with webpack, so a
-  workflow file imports only `@carlnotes/contracts/scanFailure`, `@carlnotes/pipeline/stageTimeouts`, types, and its
-  sibling files, and the activities file beside it imports the rest. `temporal.ts` resolves each workflow by
-  `new URL("./workflows/<name>.ts", import.meta.url)`, and `scripts/check-workflow-bundles.ts` bundles every workflow in
-  preflight.
+  `processAttachment.ts` (a topic attachment's extraction and summaries), `screenSource.ts` (a url Source's screen that
+  its page can be read), `sendScanEmail.ts`, and `recordPodcastEpisode.ts`. Temporal bundles a workflow file with
+  webpack, so a workflow file imports only `@carlnotes/contracts/scanFailure`, `@carlnotes/pipeline/stageTimeouts`,
+  types, and its sibling files, and the activities file beside it imports the rest. `temporal.ts` resolves each workflow
+  by `new URL("./workflows/<name>.ts", import.meta.url)`, and `scripts/check-workflow-bundles.ts` bundles every workflow
+  in preflight.
 - `workflows/runTopicScanActivities.ts` — the Scan's three stages. `ingestForScan` passes on the discovered Resources
   with the Source each is credited to, each Source's outcome narrowed by `toScannedSource` in
   `@carlnotes/pipeline/ingest/index` to the four fields the scan report reads, and each Source's result. `finishScan`

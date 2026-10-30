@@ -10,7 +10,7 @@ import { zValidator } from "@hono/zod-validator"
 import { and, asc, eq } from "drizzle-orm"
 import { Hono } from "hono"
 import { type AppEnv, toAnalyticsProperties } from "../currentUser"
-import { toObjectionableCategory, toObjectionableTextResponse } from "../moderation"
+import { toObjectionableCategory, toObjectionableContentResponse } from "../moderation"
 import { toolCallerRateLimiter } from "../rateLimit"
 import { toUnreportedFilter } from "../report/reports"
 import { toTermsOutdatedResponse } from "../termsAcceptance"
@@ -152,7 +152,7 @@ export const noteCommentsRoute = new Hono<AppEnv>()
 			subjectId: visibleNote.note.id,
 		})
 		if (objectionableCategory) {
-			return toObjectionableTextResponse(context, objectionableCategory)
+			return toObjectionableContentResponse(context, objectionableCategory)
 		}
 
 		// write the comment, and take the row back as the thread reads it

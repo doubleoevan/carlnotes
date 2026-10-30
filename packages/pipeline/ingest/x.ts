@@ -80,9 +80,10 @@ export async function readHandle(handle: string): Promise<void> {
 	}
 }
 
-// the fields this ingester reads from an advanced search response
+// the fields this ingester reads from an advanced search response. the provider marks sensitivity on the account, and
+// a tweet has no mark of its own
 type SearchResponse = {
-	tweets: { id?: string; text?: string; author?: { userName?: string } }[]
+	tweets: { id?: string; text?: string; author?: { userName?: string; possiblySensitive?: boolean } }[]
 }
 
 /**
@@ -117,15 +118,17 @@ export function mergeSearchResponses(responses: SearchResponse[]): IngestResult 
 }
 
 /**
- * The deduped "read" Resources in one advanced search response, keyed by the tweet's canonical url.
+ * The deduped "read" Resources in one advanced search response, keyed by the tweet's canonical url. A tweet by an
+ * account X marks possibly sensitive is skipped.
  */
 export function toResources(response: SearchResponse): NewResource[] {
 	// keep the first Resource seen per url so a tweet repeated within one response collapses to one
 	const resourceByUrl = new Map<string, NewResource>()
 	for (const tweet of response.tweets) {
-		// a tweet missing its id or its author handle has no url to key on, and a null url would break the batch insert
+		// a tweet missing its id or its author handle has no url to key on, and a null url would break the batch insert.
+		// a possibly sensitive account's tweet is skipped too
 		const handle = tweet.author?.userName
-		if (!tweet.id || !handle) {
+		if (!tweet.id || !handle || tweet.author?.possiblySensitive) {
 			continue
 		}
 

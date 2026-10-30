@@ -134,6 +134,7 @@ export async function createTopic(
 	const topicSaveRejection = await toTopicSaveRejection({
 		name,
 		prompt,
+		tags,
 		visibility,
 		subjectId: userId,
 		userId,
@@ -253,10 +254,15 @@ export async function updateTopic(
 	const topicSaveRejection = await toTopicSaveRejection({
 		name,
 		prompt,
+		tags,
 		visibility,
 		subjectId: topicId,
 		userId,
-		isTextChanged: topic.visibility === "private" || name !== topic.name || prompt !== topic.prompt,
+		isTextChanged:
+			topic.visibility === "private" ||
+			name !== topic.name ||
+			prompt !== topic.prompt ||
+			tags.join("\n") !== topic.tags.join("\n"),
 	})
 	if (topicSaveRejection) {
 		return topicSaveRejection
@@ -362,7 +368,7 @@ export async function updateTopic(
 	// drop the topic's cached visitor copies
 	await clearVisitorTopicCaches({ topicId, visibility, previousVisibility: topic.visibility, isFeatureOrderReleased })
 
-	// screen whatever this edit added with llm-guard, now that the rows are committed
+	// check whatever url Sources this edit added, now that the rows are committed
 	startPendingSourceScreens(topicId)
 
 	// tell IndexNow if the save made the topic public or changed its url, and save its vectors again if its visibility

@@ -1,10 +1,11 @@
 // moderation gate tests: a violation names its category, a clean text and a skipped or failed check pass, a failed
-// check is reported with the subject and never the text, and a route turns a violation into Carl's 422
+// check is reported with the subject and never the text, an image check does the same, and a route turns a violation
+// into Carl's 422
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import { restoreConnectionPool, stubConnectionPool } from "@carlnotes/db/connectionPoolStub"
 import * as moderation from "@carlnotes/models/moderation"
 import * as monitoring from "@carlnotes/server/monitoring"
-import { toObjectionableCategory } from "./moderation"
+import { toObjectionableCategory, toObjectionableImageCategory } from "./moderation"
 import { noteCommentsRoute } from "./note/noteComments"
 import { TEST_NOTE_ID, TEST_PUBLIC_TEAM_ROW, toNoteQueryRows } from "./note/noteTestFixtures"
 import { toJsonRequest, toSignedInApp } from "./testSession"
@@ -68,4 +69,18 @@ test("a rejected comment returns 422 with its category and stores nothing", asyn
 	expect(response.status).toBe(422)
 	expect(await response.json()).toEqual({ rejection: "objectionable", category: "harassment" })
 	expect(sentQueries.some((sentQuery) => sentQuery.text.startsWith("insert"))).toBe(false)
+})
+
+// an image's violation names its category, and a failed image check passes with a report naming the subject
+test("an image check names a violation and passes a failure with a report", async () => {
+	spyOn(moderation, "classifyImage")
+		.mockResolvedValueOnce({ outcome: "classified", verdict: { isViolation: true, category: "sexual" } })
+		.mockResolvedValueOnce({ outcome: "failed", error: new Error("endpoint down") })
+	const reportErrorSpy = spyOn(monitoring, "reportError").mockImplementation(() => {})
+	const imageOptions = { dataUrl: "data:image/png;base64,AA", subjectKind: "avatar", subjectId: "u1" }
+
+	// the violation, then the failure that passes
+	expect(await toObjectionableImageCategory(imageOptions)).toBe("sexual")
+	expect(await toObjectionableImageCategory(imageOptions)).toBeNull()
+	expect(reportErrorSpy.mock.calls[0]?.[2]).toEqual({ moderationSubjectKind: "avatar", moderationSubjectId: "u1" })
 })

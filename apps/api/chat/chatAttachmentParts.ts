@@ -1,8 +1,7 @@
-// screening the attachments a user sends with a chat turn: what the model reads in place of each one, the text a file
-// is read into, the screen a stored attachment's words take, and the two data url helpers
-import { type ChatAttachmentRejection, clipAttachmentText } from "@carlnotes/contracts/chat"
+// the parts a chat turn's attachments become: what the model reads in place of each one, the text a file is read
+// into, and the two data url helpers
+import type { ChatAttachmentRejection } from "@carlnotes/contracts/chat"
 import type { ChatAttachment } from "@carlnotes/contracts/payloads"
-import { type ScreenVerdict, screenImage, screenText, toFlaggedReason } from "@carlnotes/models/guard"
 import { toCanonicalContentType } from "@carlnotes/pipeline/attachContentType"
 import { reportError } from "@carlnotes/server/monitoring"
 import {
@@ -30,18 +29,16 @@ export type StorableChatAttachment =
 	| Exclude<ChatAttachment, { kind: "pdf" | "document" }>
 	| (ExtractableChatAttachment & { extractedText: string })
 
-// what a chat turn's attachments resolve into: what the model reads, and the sent attachments that may be stored.
-// an image withheld by the screen is left out of what may be stored, so it is never stored or described
+// what a chat turn's attachments resolve into: what the model reads, and the sent attachments that may be stored
 export type ResolvedChatAttachments = {
 	chatAttachments: ChatAttachment[]
 	storableAttachments: StorableChatAttachment[]
 }
 
 /**
- * Resolves a chat turn's attachments into what the model takes. A PDF becomes its extracted text, an image is screened
- * by the text it shows, a video becomes a line saying it can't be watched, and text is screened by llm-guard first.
- * A flagged attachment becomes a line saying it was withheld. The rejection if a file cannot be read, so the route can
- * reject the chat turn with its reason.
+ * Resolves a chat turn's attachments into what the model reads. A PDF becomes its extracted text, an image reaches the
+ * model as an image, a video becomes a line saying it can't be watched, and text is posted as written, inside the
+ * nonce fence. Returns the rejection if a file cannot be read.
  */
 export async function resolveChatAttachments(
 	attachments: ChatAttachment[],
@@ -57,29 +54,22 @@ export async function resolveChatAttachments(
 			return resolvedChatAttachment
 		}
 
-		// what the model reads, and the sent attachment if it may be stored
+		// what the model reads, and the sent attachment that may be stored
 		chatAttachments.push(resolvedChatAttachment.chatAttachment)
-		if (resolvedChatAttachment.storableAttachment) {
-			storableAttachments.push(resolvedChatAttachment.storableAttachment)
-		}
+		storableAttachments.push(resolvedChatAttachment.storableAttachment)
 	}
 	return { chatAttachments, storableAttachments }
 }
 
-// one attachment as the model reads it, and the sent attachment if it may be stored. the rejection if a file cannot be
+// one attachment as the model reads it, and the sent attachment that may be stored. the rejection if a file cannot be
 // read before the chat turn's deadline
 async function resolveChatAttachment(
 	attachment: ChatAttachment,
 	deadline: number,
-): Promise<
-	{ chatAttachment: ChatAttachment; storableAttachment: StorableChatAttachment | null } | ChatAttachmentRejection
-> {
-	// an image is screened by the text it shows. a flagged one is withheld from the turn and never stored
+): Promise<{ chatAttachment: ChatAttachment; storableAttachment: StorableChatAttachment } | ChatAttachmentRejection> {
+	// an image reaches the model as an image
 	if (attachment.kind === "image") {
-		const imageScreenVerdict = await screenImage(decodeDataUrl(attachment.dataUrl))
-		return imageScreenVerdict.isFlagged
-			? { chatAttachment: toWithheldAttachment(attachment.name, imageScreenVerdict), storableAttachment: null }
-			: { chatAttachment: attachment, storableAttachment: attachment }
+		return { chatAttachment: attachment, storableAttachment: attachment }
 	}
 
 	// a video has no words and carl can't watch it, so the model reads only that a clip was attached
@@ -101,14 +91,14 @@ async function resolveChatAttachment(
 		}
 		const extractedText = chatAttachmentText.text
 		return {
-			chatAttachment: await toScreenedTextAttachment(attachment.name, extractedText),
+			chatAttachment: toTextAttachment(attachment.name, extractedText),
 			storableAttachment: { ...attachment, extractedText },
 		}
 	}
 
 	// a text attachment includes its own words
 	return {
-		chatAttachment: await toScreenedTextAttachment(attachment.name, attachment.text),
+		chatAttachment: toTextAttachment(attachment.name, attachment.text),
 		storableAttachment: attachment,
 	}
 }
@@ -145,37 +135,9 @@ function toChatAttachmentRejection(error: unknown): ChatAttachmentRejection {
 	return error instanceof AttachmentTimeLimitError ? "attachmentTooLarge" : "attachmentUnreadable"
 }
 
-// the screened text that gets posted, or the withheld line if the screen flags it. keep stays false on this copy
-async function toScreenedTextAttachment(name: string, text: string): Promise<ChatAttachment> {
-	const screenVerdict = await screenText(text, "document")
-	return screenVerdict.isFlagged
-		? toWithheldAttachment(name, screenVerdict)
-		: { kind: "text", name, text: screenVerdict.text, keep: false }
-}
-
-// the line the model reads in place of a flagged attachment, naming the detectors that fired
-function toWithheldAttachment(name: string, screenVerdict: ScreenVerdict): ChatAttachment {
-	return { kind: "text", name, text: `[This attachment was withheld: ${toFlaggedReason(screenVerdict)}.]`, keep: false }
-}
-
-// the words that a kept attachment stores, or null if the scanner flags it
-export async function screenAttachmentText(text: string, sourceLabel: string, topicId: string): Promise<string | null> {
-	// clip before screening. the scanner fails once it runs past its own deadline. an unbounded body should not skip the
-	// check
-	const screenVerdict = await screenText(clipAttachmentText(text), "document")
-	if (screenVerdict.isFlagged) {
-		reportFlaggedAttachment(screenVerdict, sourceLabel, topicId)
-		return null
-	}
-	return screenVerdict.text
-}
-
-/**
- * Logs and reports an attachment the scanner flagged, naming the detectors that fired.
- */
-export function reportFlaggedAttachment(screenVerdict: ScreenVerdict, sourceLabel: string, topicId: string): void {
-	console.error(`a ${sourceLabel} for topic ${topicId} was ${toFlaggedReason(screenVerdict)}`)
-	reportError(new Error(toFlaggedReason(screenVerdict)), "chat", { topicId })
+// the text that gets posted. keep stays false on this copy
+function toTextAttachment(name: string, text: string): ChatAttachment {
+	return { kind: "text", name, text, keep: false }
 }
 
 // a data url's base64 tail, decoded to the bytes it encodes. new Uint8Array copies the decoded buffer whole, where
@@ -186,5 +148,5 @@ export function decodeDataUrl(dataUrl: string): Uint8Array {
 
 // the media type a data url declares, read from its own prefix instead of being assumed by the attachment kind
 export function contentTypeFromDataUrl(dataUrl: string): string {
-	return dataUrl.slice("data:".length, dataUrl.indexOf(";")) || "application/octet-stream"
+	return dataUrl.slice("data:".length).split(/[;,]/)[0] || "application/octet-stream"
 }

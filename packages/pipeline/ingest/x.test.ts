@@ -52,6 +52,17 @@ test("toResources skips a tweet missing its id or its author handle", () => {
 	expect(resources).toEqual([])
 })
 
+// a tweet by an account X marks possibly sensitive never becomes a Resource, and an unmarked account's tweet does
+test("toResources skips a tweet by a possibly sensitive account", () => {
+	const resources = toResources({
+		tweets: [
+			{ id: "4", text: "marked", author: { userName: "marked", possiblySensitive: true } },
+			{ id: "5", text: "unmarked", author: { userName: "unmarked", possiblySensitive: false } },
+		],
+	})
+	expect(resources.map((resource) => resource.url)).toEqual(["https://x.com/unmarked/status/5"])
+})
+
 // the handle goes straight into a query operator, so anything X would not resolve is rejected instead of sent
 test("toSourceHandle takes a writable handle and rejects the rest", () => {
 	expect(toSourceHandle({ handle: "sama" })).toBe("sama")

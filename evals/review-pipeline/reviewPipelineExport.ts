@@ -87,16 +87,13 @@ export async function exportFixture(topicId: string): Promise<void> {
 	mkdirSync(PAGE_CACHE_DIRECTORY, { recursive: true })
 	writeFileSync(join(PAGE_CACHE_DIRECTORY, `${topicId}.json`), `${JSON.stringify(pageCache, null, "\t")}\n`)
 
-	// write the fixture, keeping the injection sets and the written rows that an earlier fixture had.
-	// a person fills in an empty injection set by hand
+	// write the fixture, keeping the written rows that an earlier fixture had
 	const earlierFixture = existsSync(fixturePath) ? (JSON.parse(readFileSync(fixturePath, "utf8")) as EvalFixture) : null
 	const writtenLabeledResources =
 		earlierFixture?.labeledResources.filter((labeledResource) => labeledResource.labelSource === "written") ?? []
 	const fixture: EvalFixture = {
 		topic: { name: topic.name, context },
 		labeledResources: [...labeledResources, ...writtenLabeledResources],
-		injectionProse: earlierFixture?.injectionProse ?? [],
-		injectionAttacks: earlierFixture?.injectionAttacks ?? [],
 	}
 	writeFileSync(fixturePath, `${JSON.stringify(fixture, null, "\t")}\n`)
 

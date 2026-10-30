@@ -2,7 +2,9 @@
 
 ## Purpose
 TBD - created by archiving change add-topic-attachments. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: Topic file is stored in object storage via a configurable S3 endpoint
 
 Ingesting an attachment SHALL upload the raw file bytes to the configured object-storage bucket through an S3-compatible client whose endpoint, region, bucket, and credentials are read from `S3_ENDPOINT`, `S3_REGION`, `S3_BUCKET`, `S3_ACCESS_KEY_ID`, and `S3_SECRET_ACCESS_KEY`. The object key SHALL be unique per attachment and SHALL be stored on the attachment row so the raw file can be retrieved later. When any required `S3_*` value is missing, ingestion SHALL fail rather than silently default to a public or wrong endpoint.
@@ -124,25 +126,36 @@ the Topic's Findings again, and a context of 8,000 characters or fewer keeps the
 
 ### Requirement: An attachment can be ingested from a URL
 
-Ingesting an attachment from a URL SHALL fetch the page's content as markdown through the Firecrawl seam (`packages/pipeline/scrape.ts`), wrap the result as a `text/markdown` upload, and pass it through the same ingestion path as a file upload — the extraction, context generation, storage, persistence, and failure/orphan cleanup are reused unchanged. The URL SHALL be validated as a well-formed `http`/`https` URL, and rejected if it resolves to an internal address, before any fetch is attempted. A fetch that fails (network error, missing `FIRECRAWL_API_KEY`, or non-ok response) or returns empty content SHALL fail ingestion before anything is stored, so no contextless attachment is ever persisted. The originating URL SHALL be recorded on the attachment's `sourceUrl` column.
+Ingesting an attachment from a URL SHALL fetch the page's content as markdown through the Firecrawl seam
+(`packages/pipeline/scrape.ts`), wrap the result as a `text/markdown` upload, and pass it through the same ingestion
+path as a file upload — the extraction, context generation, storage, persistence, and failure/orphan cleanup are
+reused unchanged. The URL SHALL be validated as a well-formed `http`/`https` URL, and rejected if it resolves to an
+internal address, before any fetch is attempted. A fetch that fails (network error, missing `FIRECRAWL_API_KEY`, or
+non-ok response) or returns empty content SHALL fail ingestion before anything is stored, so no contextless attachment
+is ever persisted. The originating URL SHALL be recorded on the attachment's `sourceUrl` column.
 
-The fetched markdown SHALL be screened as a document before its context is generated, on the same terms as an uploaded file's extracted text, so a url attachment and a url Source cannot disagree about what is fit to read.
+The fetched markdown SHALL be treated exactly as an uploaded file's extracted text, with no screen. Its text reaches
+every prompt inside the nonce fence.
 
-This is a one-time context read at attach time, not a Source: it does not create a Scan, Resource, or Finding, and does not change `generateContext` or a Topic's scan context.
+This is a one-time context read at attach time, not a Source: it does not create a Scan, Resource, or Finding, and does
+not change `generateContext` or a Topic's scan context.
 
 #### Scenario: A URL page is fetched and stored as an attachment
 
 - **WHEN** an attachment is ingested for a Topic from a valid `http(s)` URL whose page fetches to non-empty markdown
-- **THEN** the page markdown is extracted and reduced to a context string, an attachment row is persisted with its `context` and with `sourceUrl` set to the fetched URL, and the raw markdown is stored in object storage
+- **THEN** the page markdown is extracted and reduced to a context string, an attachment row is persisted with its
+  `context` and with `sourceUrl` set to the fetched URL, and the raw markdown is stored in object storage
 
 #### Scenario: URL ingestion reuses the file ingestion path
 
 - **WHEN** the fetched markdown is wrapped as a `text/markdown` upload
-- **THEN** it flows through the same size validation, topic-existence check, extraction, screening, context generation, storage, and orphan-cleanup as a file upload, with no separate ingestion code path
+- **THEN** it flows through the same size validation, topic-existence check, extraction, context generation, storage,
+  and orphan-cleanup as a file upload, with no separate ingestion code path
 
 #### Scenario: A malformed URL is rejected before any fetch
 
-- **WHEN** an attachment is ingested from a value that is not a well-formed `http`/`https` URL, or from one that resolves to an internal address
+- **WHEN** an attachment is ingested from a value that is not a well-formed `http`/`https` URL, or from one that
+  resolves to an internal address
 - **THEN** ingestion fails with an error before Firecrawl is called, and no object is stored and no row is created
 
 #### Scenario: An empty or failed fetch stores no attachment
@@ -152,8 +165,9 @@ This is a one-time context read at attach time, not a Source: it does not create
 
 #### Scenario: A flagged page is rejected
 
-- **WHEN** the scanner flags the fetched markdown as a document
-- **THEN** the attachment fails with the flagged reason and its context is never generated
+- **WHEN** the fetched markdown holds an instruction addressed to Carl
+- **THEN** the attachment is not rejected for it, its context is generated, and the instruction reaches every prompt
+  inside the fence as data
 
 #### Scenario: File uploads carry no source URL
 
@@ -195,7 +209,7 @@ attachment's key as pending before uploading, with a grace period, and SHALL cle
 that inserts the attachment row. If the synchronous half fails, whether storing the bytes, inserting the row, or
 starting the workflow, ingestion SHALL leave no attachment row and SHALL delete the stored object through
 `deleteStoredObject`, and a delete that fails leaves the key pending for the sweep. If processing fails, whether
-extraction, summarization, the merge, or a scanner detection on the extracted text, the workflow SHALL set the
+extraction, summarization, or the merge, the workflow SHALL set the
 attachment's `status` = `failed`, record the reason in `error`, and record the object's key as pending in that same
 transaction, then delete the stored object through `deleteStoredObject`, and the failure stays visible to the owner as
 a `failed` row. Either way
@@ -220,9 +234,8 @@ no orphaned object remains once the sweep has run, and a `failed` attachment SHA
 
 #### Scenario: Scanner-flagged text fails the attachment with a visible reason
 
-- **WHEN** the scanner flags an attachment's extracted text before context generation
-- **THEN** no context is generated, the attachment's `status` becomes `failed` with the scanner's reason in `error` for
-  the owner to see, and its context never reaches a Scan
+- **WHEN** an attachment's extracted text holds what the removed scanner would have flagged
+- **THEN** no scanner runs, the attachment is not failed for its content, and its context is generated
 
 #### Scenario: A failed attachment is excluded from scans
 
@@ -286,7 +299,9 @@ as written, and a table file is written as table text. Neither is summarized, an
 
 ### Requirement: A pending attachment's origin url is not a live link
 
-An attachment whose processing has not finished SHALL NOT render its origin url as a clickable link. Its url has been fetched but its screening verdict is not yet known, so offering it to a reader offers exactly the link that screening exists to withhold. A pending attachment SHALL read as its label with a processing marker, and become a link only once it is ready.
+An attachment whose processing has not finished SHALL NOT render its origin url as a clickable link. Its processing may
+still fail, and a failed attachment's url is not one the product offers. A pending attachment SHALL read as its label
+with a processing marker, and become a link only once it is ready.
 
 #### Scenario: A pending url attachment
 
@@ -332,9 +347,9 @@ Every type the chat picker offers SHALL be a type the chat attachment path accep
 
 ### Requirement: A short document is stored as written
 
-The processing workflow SHALL store a document's screened text as its context, with no model call, if the
+The processing workflow SHALL store a document's extracted text as its context, with no model call, if the
 extracted text is at most `MAX_ATTACHMENT_CONTEXT_CHARS` characters, which SHALL be 20,000. The stored text SHALL be
-limited to that length, since redaction can lengthen it. Only a document whose extracted text is longer SHALL be
+limited to that length. Only a document whose extracted text is longer SHALL be
 chunked and summarized. The same limit SHALL bound the merged summaries of a long document, a table file's whole
 table text with its headings and its omitted-rows line, and an owner's edit to any attachment's context. The worker
 SHALL read it from the shared contract, so the worker never stores a context that the owner can't save after an edit.
@@ -357,12 +372,13 @@ SHALL read it from the shared contract, so the worker never stores a context tha
 ### Requirement: A failed attachment tells its owner why
 
 A failed attachment SHALL show its owner and admins a line that says why it failed: the file had no text, like a
-scanned PDF, or the scanner flagged it. Any other failure SHALL show that Carl couldn't read the file. The worker
-SHALL record the innermost error of a failed activity, never the workflow's wrapper around it. The topic page SHALL
-send that line and never the recorded reason, and anyone else SHALL see no line.
+scanned PDF, or, for a row recorded before the scanner was removed, the scanner flagged it. Any other failure SHALL
+show that Carl couldn't read the file. The worker SHALL record the innermost error of a failed activity, never the
+workflow's wrapper around it. The topic page SHALL send that line and never the recorded reason, and anyone else SHALL
+see no line.
 
-A document stored as written and a table file SHALL each give the scanner a minute to screen them, and the processing
-workflow SHALL wait 15 and then 30 seconds between its tries, so a busy scanner can finish before the text is stored unscreened.
+The processing workflow SHALL wait 15 and then 30 seconds between its tries, so a busy model can finish before the
+attachment fails.
 
 #### Scenario: A file with no text says so
 
@@ -371,7 +387,7 @@ workflow SHALL wait 15 and then 30 seconds between its tries, so a busy scanner 
 
 #### Scenario: A flagged file says so
 
-- **WHEN** the scanner flags an attachment's text
+- **WHEN** an attachment that the scanner failed before its removal is viewed
 - **THEN** the owner sees that Carl's safety check flagged the file, and not which detectors fired
 
 ### Requirement: A url fetch failure is reported by its cause
@@ -393,4 +409,3 @@ shown to the owner as a problem with their url.
 - **WHEN** the fetch fails because `FIRECRAWL_API_KEY` is unset or the network is down
 - **THEN** the original error is rethrown unchanged, nothing is stored, and the api responds with a server error instead
   of a 400 that names the owner's url
-

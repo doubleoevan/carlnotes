@@ -2,7 +2,9 @@
 
 ## Purpose
 TBD - created by archiving change add-deploy-health-and-migrations. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: The app service exposes a liveness route
 
 The app service SHALL answer `GET /api/health` with 200 and a JSON body reporting that the process is up. The route SHALL NOT query the database, and SHALL NOT require or resolve a session, so that an unreachable database never presents as a dead instance.
@@ -62,20 +64,6 @@ Migrations SHALL be applied through the same script locally and in production, a
 
 - **WHEN** the job runs on an image built with production dependencies only
 - **THEN** it resolves its migrator and database driver without a missing-package failure
-
-### Requirement: The scanner runs as its own service reachable by the app and the worker
-
-The LLM Guard scanner SHALL be deployed as its own container service on the platform, addressed by the app and the worker through one configured url rather than embedded in the app image, since it is a Python service and the app runtime is Bun. The local development stack SHALL be able to run the same image, so a scanner-dependent path can be exercised without deploying. Its url SHALL be optional: unset means scanning is off and every path behaves as an unscanned build.
-
-#### Scenario: The app reaches the scanner by url
-
-- **WHEN** the scanner service is deployed and its url is configured
-- **THEN** the app and the worker scan through that url, and no scanner code runs inside the app image
-
-#### Scenario: The stack runs without the scanner
-
-- **WHEN** the scanner url is unset, as in a self-hosted deployment
-- **THEN** every service starts and runs normally with scanning disabled
 
 ### Requirement: An external monitor polls the liveness route
 
@@ -193,4 +181,3 @@ the worker SHALL NOT read it, and they SHALL reach Gemini only through the LiteL
 
 - **WHEN** the app and the worker start with no `GEMINI_API_KEY` in their environment
 - **THEN** they start normally, and a speech request through the proxy still succeeds
-

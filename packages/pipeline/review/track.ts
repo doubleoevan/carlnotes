@@ -5,7 +5,7 @@ export type FilterReason =
 	| "duplicate content"
 	| "near-duplicate"
 	| "below relevance threshold"
-	| "flagged by scanner"
+	| "unsafe content"
 	| "no text to score"
 
 // a finding the review kept, with its resource's title and url
@@ -114,7 +114,7 @@ export function emptyReviewOutcome(): ReviewOutcome {
 			"duplicate content": 0,
 			"near-duplicate": 0,
 			"below relevance threshold": 0,
-			"flagged by scanner": 0,
+			"unsafe content": 0,
 			"no text to score": 0,
 		},
 		deferredCount: 0,

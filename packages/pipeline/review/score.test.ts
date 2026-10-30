@@ -1,18 +1,23 @@
 // score tests for the promotion threshold, bounded concurrency, the plan limit check, the score prompt, the review
-// fields a re-score writes, and the found scan that a re-score keeps
-import { expect, test } from "bun:test"
+// fields a re-score writes, the found scan that a re-score keeps, and the safety judgment that drops unsafe content
+import { afterEach, expect, test } from "bun:test"
 import { restoreConnectionPool, stubConnectionPool } from "@carlnotes/db/connectionPoolStub"
 import type { resources, scans } from "@carlnotes/db/schema/scans"
 import { canScoreResource, charge, newBudget, releaseScanSpend } from "@carlnotes/models/budget"
+import { toChatCompletionResponse } from "@carlnotes/models/chatCompletionTestFixtures"
 import { runWithConcurrency } from "@carlnotes/server/concurrency"
+import { saveEnvSettings } from "@carlnotes/server/savedEnvSettings"
 import {
 	buildScorePrompt,
+	fetchAndScoreResources,
 	isPromoted,
 	MAX_SCORED_RESOURCE_DOLLARS,
 	reserveScoredResource,
+	scoreResource,
 	toFindingReviewFields,
 	upsertFinding,
 } from "./score"
+import { emptyReviewOutcome } from "./track"
 
 // a high cheap-model score earns promotion to the premium score-model's re-score
 test("isPromoted gates on the promotion threshold", () => {
@@ -175,4 +180,114 @@ test("a review keeps a null content hash null", () => {
 		contentHash: null,
 	})
 	expect(review.reviewedContentHash).toBe(null)
+})
+
+// the proxy settings a scoring call needs, the real fetch, and the scoring replies a stubbed proxy returns in order
+const restoreEnvSettings = saveEnvSettings(["LITELLM_BASE_URL", "LITELLM_MASTER_KEY"])
+const originalFetch = globalThis.fetch
+const scoringReplies: object[] = []
+let scoringCallCount = 0
+
+// stub the proxy so each scoring call gets the next reply as its structured output
+function stubScoringReplies(replies: object[]): void {
+	Bun.env.LITELLM_BASE_URL = "http://litellm.test"
+	Bun.env.LITELLM_MASTER_KEY = "master"
+	scoringReplies.splice(0, scoringReplies.length, ...replies)
+	globalThis.fetch = (async () => {
+		// one completion whose content is the next reply, repeating the last one past the end
+		const content = JSON.stringify(scoringReplies[Math.min(scoringCallCount, scoringReplies.length - 1)])
+		scoringCallCount++
+		return toChatCompletionResponse(content)
+	}) as unknown as typeof fetch
+}
+
+// put back the proxy settings, fetch, the call count, and the connection pool
+afterEach(() => {
+	restoreEnvSettings()
+	globalThis.fetch = originalFetch
+	scoringCallCount = 0
+	restoreConnectionPool()
+})
+
+// a cheap-tier unsafe judgment ends the scoring before the premium tier, however high the score
+test("a cheap-tier unsafe judgment skips the premium tier", async () => {
+	stubScoringReplies([{ score: 0.9, isUnsafe: true }])
+	const scoredResource = await scoreResource("explicit page", "topic", newBudget())
+	expect(scoredResource.isUnsafe).toBe(true)
+	expect(scoringCallCount).toBe(1)
+})
+
+// the premium tier's unsafe judgment is the one returned after a safe cheap score promotes the Resource
+test("a premium-tier unsafe judgment is returned", async () => {
+	stubScoringReplies([
+		{ score: 0.9, isUnsafe: false },
+		{ score: 0.9, relevanceExplanation: "x", isUnsafe: true },
+	])
+	const scoredResource = await scoreResource("page", "topic", newBudget())
+	expect(scoredResource.isUnsafe).toBe(true)
+	expect(scoringCallCount).toBe(2)
+})
+
+// a model that leaves the safety judgment out is read as judging the content safe
+test("a missing safety judgment reads as safe", async () => {
+	stubScoringReplies([{ score: 0.2 }])
+	expect(await scoreResource("page", "topic", newBudget())).toEqual({
+		score: 0.2,
+		relevanceExplanation: "",
+		isUnsafe: false,
+	})
+})
+
+// the tweet, the Scan, and the topic context the scoring path tests share. a tweet's snippet is its whole text, so the
+// path makes no paid fetch
+const tweetResource = {
+	id: "resource-1",
+	url: "https://x.com/someone/status/1",
+	title: "@someone on X",
+	snippet: "the tweet's text",
+	contentHash: "content-hash",
+} as unknown as Parameters<typeof fetchAndScoreResources>[0][number]
+const scoringScan = { id: "scan-1" } as typeof scans.$inferSelect
+const topicContext = { name: "t", text: "t", embedding: [], contextHash: "context-hash", scoreText: "topic" }
+
+// scores the tweet through the whole paid path and returns what the review counted and the queries sent
+async function scoreTweet(): Promise<{ filteredCount: number; keptCount: number; queryTexts: string[] }> {
+	const sentQueries = stubConnectionPool(({ text }) =>
+		text.startsWith('insert into "findings"') ? [["finding-1", true, 0.5]] : [],
+	)
+	const reviewOutcome = emptyReviewOutcome()
+	await fetchAndScoreResources(
+		[tweetResource],
+		scoringScan,
+		"topic-1",
+		topicContext,
+		reviewOutcome,
+		newBudget(),
+		new Set(),
+	)
+	return {
+		filteredCount: reviewOutcome.filteredCounts["unsafe content"],
+		keptCount: reviewOutcome.keptFindings.length,
+		queryTexts: sentQueries.map((sentQuery) => sentQuery.text),
+	}
+}
+
+// an unsafe Resource is marked, counted under its own drop reason, and gets no Finding, so a kept Finding and the
+// notes on it are never touched
+test("an unsafe Resource is marked and writes no Finding", async () => {
+	stubScoringReplies([{ score: 0.9, isUnsafe: true }])
+	const { filteredCount, keptCount, queryTexts } = await scoreTweet()
+	expect(filteredCount).toBe(1)
+	expect(keptCount).toBe(0)
+	expect(queryTexts.some((queryText) => queryText.startsWith('update "resources" set "is_unsafe"'))).toBe(true)
+	expect(queryTexts.some((queryText) => queryText.includes('"findings"'))).toBe(false)
+})
+
+// a safe score clears the mark an earlier score left, and the Resource becomes a Finding
+test("a safe score clears the unsafe mark and keeps the Finding", async () => {
+	stubScoringReplies([{ score: 0.3, isUnsafe: false }])
+	const { filteredCount, keptCount, queryTexts } = await scoreTweet()
+	expect(filteredCount).toBe(0)
+	expect(keptCount).toBe(1)
+	expect(queryTexts.some((queryText) => queryText.startsWith('update "resources" set "is_unsafe"'))).toBe(true)
 })

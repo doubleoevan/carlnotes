@@ -171,9 +171,10 @@ export function toRssUrl(request: RedditRequest): string {
 	return `${PUBLIC_HOST}/r/${request.subreddit}/search.rss?${searchQuery}`
 }
 
-// the fields parsePosts reads from a reddit listing response. a search returns this same shape
+// the fields parsePosts reads from a reddit listing response. a search returns this same shape. over_18 marks a post
+// Reddit treats as adult content
 type RedditListing = {
-	data: { children: { data: { permalink: string; title?: string; selftext?: string } }[] }
+	data: { children: { data: { permalink: string; title?: string; selftext?: string; over_18?: boolean } }[] }
 }
 
 // selftext is a post's words, body is a reply's words
@@ -183,6 +184,7 @@ type RedditThreadListing = {
 
 /**
  * Map a reddit listing or search response to "read" Resources, each keyed by its comments permalink and deduped.
+ * A post Reddit marks as adult content is skipped.
  */
 export function parsePosts(json: RedditListing): NewResource[] {
 	// keep the first Resource per permalink so a repeated post collapses to one
@@ -190,7 +192,7 @@ export function parsePosts(json: RedditListing): NewResource[] {
 	for (const child of json.data.children) {
 		// the comments permalink is the canonical url in both OAuth and fallback access modes
 		const url = `${PUBLIC_HOST}${child.data.permalink}`
-		if (resourceByUrl.has(url)) {
+		if (child.data.over_18 || resourceByUrl.has(url)) {
 			continue
 		}
 

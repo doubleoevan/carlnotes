@@ -692,7 +692,7 @@ Check for:
      in `apps/api/chat/privateChat.ts` (now exported from `apps/api/chat/chatTurnAuthorization.ts`)
    - the `serve-pages-from-a-web-service` OpenSpec change (now the unapplied `split-web-from-api`, with its attachment
      extraction moved to `extract-attachment-text-in-a-worker`), and `extractText` called on the api's event loop (now
-     `readChatAttachmentText` in `apps/api/chat/chatAttachmentScreening.ts` over `extractTextInWorker` in
+     `readChatAttachmentText` in `apps/api/chat/chatAttachmentParts.ts` over `extractTextInWorker` in
      `apps/api/chat/attachmentExtraction.ts`)
    - the per-kind search routes `GET /api/topics/search`, `/api/teams/search`, `/api/users`, and
      `/api/episodes/search`, with `topicSearchRoute`, `podcastEpisodeSearchRoute`, `TopicSearchResult`, `TopicResult`,
@@ -784,6 +784,20 @@ Check for:
    - `apps/api/flagContent.ts` with its test (now `apps/api/report/flagContent.ts`, beside `report/reportSubjects.ts`,
      `report/reports.ts`, and `report/adminReports.ts`), and its inline `toFlagHtml` (now the
      `packages/emails/report-email.tsx` template)
+   - `packages/models/guard.ts` with `screenText`, `screenImage`, `toScreenVerdict`, and `toFlaggedReason`,
+     `guardTestFixtures.ts` with `withScanner` and `withoutScanner`, `packages/models/imageText.ts` with tesseract.js,
+     `infra/llm-guard/`, `.github/workflows/llm-guard-update.yml`, `scripts/check-llm-guard-update.sh`, the
+     `llm-guard:up` script, `LLM_GUARD_URL`, `LLM_GUARD_TIMEOUT_MS`, `LLM_GUARD_INJECTION_THRESHOLD`, the
+     `--guard-only` eval mode, `evals/review-pipeline/reviewPipelineScanner.ts`, and the `injectionProse` and
+     `injectionAttacks` fixture sets (now no scanner: the structural injection defense and the content safety layers in
+     the README's "Content safety and injection defense")
+   - `apps/api/chat/chatAttachmentScreening.ts` with `screenAttachmentText` and `reportFlaggedAttachment` (now
+     `apps/api/chat/chatAttachmentParts.ts`, with no screen), `toClippedTableText` in `packages/pipeline/attachTable.ts`
+     (now `toTableText` alone), and the `"flagged by scanner"` drop reason (now `"unsafe content"`)
+   - `OBJECTIONABLE_TEXT_REJECTION`, `ObjectionableTextResponse`, `objectionableTextResponse`,
+     `isObjectionableTextResponse`, and `toObjectionableTextResponse` (now `OBJECTIONABLE_CONTENT_REJECTION`,
+     `ObjectionableContentResponse`, `objectionableContentResponse`, `isObjectionableContentResponse`, and
+     `toObjectionableContentResponse`)
 
 5. **Cross-harness enforcement parity**: `.claude/settings.json` hooks and
    `.opencode/plugin/guardrails.mjs` must gate the same operations with the

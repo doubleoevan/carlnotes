@@ -14,7 +14,7 @@ import {
 	toCanonicalContentType,
 	XLSX_TYPE,
 } from "./attachContentType"
-import { MAX_TABLE_CHARS, MAX_TABLE_ROWS, toClippedTableText, toTableText } from "./attachTable"
+import { MAX_TABLE_CHARS, MAX_TABLE_ROWS, toTableText } from "./attachTable"
 import * as scrape from "./scrape"
 import * as temporalClient from "./temporalClient"
 
@@ -154,33 +154,6 @@ test("toTableText writes both sheets under one shared budget", () => {
 	expect(tableText).toContain("c9")
 	expect(tableText.split("\n")).not.toContain("c10")
 	expect(tableText).toContain("[20 rows omitted]")
-})
-
-// the clip runs before llm-guard, so what it keeps is what the scanner is asked to read
-test("toClippedTableText keeps the rows the table text could keep and counts the rest", () => {
-	const rows = Array.from({ length: MAX_TABLE_ROWS + 40 }, (_, index) => `r${index},value`)
-	const clipped = toClippedTableText(["=== sheet: Only ===", "id,name", ...rows].join("\n"))
-
-	// the heading and the column names ride along, and the rows past the budget are only counted
-	expect(clipped.serializedText).toContain("=== sheet: Only ===")
-	expect(clipped.serializedText).toContain("id,name")
-	expect(clipped.skippedRows).toBe(40)
-	expect(clipped.serializedText).toContain(`r${MAX_TABLE_ROWS - 1},value`)
-	expect(clipped.serializedText).not.toContain(`r${MAX_TABLE_ROWS},value`)
-})
-
-// a workbook of many small sheets would otherwise spend the whole budget on headings and column names
-test("toClippedTableText keeps the same amount however many sheets it is given", () => {
-	const toSheets = (sheetCount: number): string =>
-		Array.from({ length: sheetCount }, (_, index) =>
-			[`=== sheet: Sheet${index} ===`, "column".repeat(60), "a,b"].join("\n"),
-		).join("\n")
-
-	// what the scanner is asked to read is bounded by the budget, not by the size of the file
-	const keptFromFewer = toClippedTableText(toSheets(400)).serializedText
-	const keptFromMore = toClippedTableText(toSheets(800)).serializedText
-	expect(keptFromMore).toBe(keptFromFewer)
-	expect(keptFromFewer.length).toBeLessThan(MAX_TABLE_CHARS * 2 + 500)
 })
 
 // a browser reports a csv as text/plain more often than as text/csv, and a table read as prose is the whole feature lost

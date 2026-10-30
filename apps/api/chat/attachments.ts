@@ -1,7 +1,6 @@
 // storing and deleting the attachments a user sends with a chat turn, different from the topic attachments that an
 // owner uploads, with their routes
-import { CHAT_ATTACHMENT_KEEP_LIMIT } from "@carlnotes/contracts/chat"
-import type { ChatAttachment } from "@carlnotes/contracts/payloads"
+import { CHAT_ATTACHMENT_KEEP_LIMIT, clipAttachmentText } from "@carlnotes/contracts/chat"
 import { db } from "@carlnotes/db"
 import { chatAttachments } from "@carlnotes/db/schema/chat"
 import {
@@ -22,13 +21,8 @@ import { and, eq, inArray } from "drizzle-orm"
 import { Hono } from "hono"
 import { type AppEnv, currentUser } from "../currentUser"
 import { toStoredFileHeaders } from "../topic/attachments"
+import { contentTypeFromDataUrl, decodeDataUrl, type StorableChatAttachment } from "./chatAttachmentParts"
 import { loadDownloadableChatAttachment, streamVideoAttachment, toKeptAttachmentContext } from "./chatAttachmentReads"
-import {
-	contentTypeFromDataUrl,
-	decodeDataUrl,
-	type StorableChatAttachment,
-	screenAttachmentText,
-} from "./chatAttachmentScreening"
 import { toChatRejection } from "./chatTurnAuthorization"
 import { encryptChatText } from "./encryption"
 
@@ -98,10 +92,7 @@ async function storeTopicChatAttachment(
 
 	// a text attachment has no file, so its own words are what gets stored, encrypted like a chat turn's text
 	if (attachment.kind === "text") {
-		const text = await screenAttachmentText(attachment.text, "kept chat attachment", topicId)
-		if (text === null) {
-			return false
-		}
+		const text = clipAttachmentText(attachment.text)
 
 		// summarize the attachment and store the row
 		const context = await generateAttachmentContext(text, litellmApiKey)
@@ -119,16 +110,10 @@ async function storeTopicChatAttachment(
 		return true
 	}
 
-	// a kept PDF's text, extracted once for the chat turn, is screened before any of it is stored, so a flagged one
-	// leaves no object behind
+	// a kept PDF's text was extracted once for the chat turn
 	const bytes = decodeDataUrl(attachment.dataUrl)
 	const documentText =
-		attachment.kind === "pdf" || attachment.kind === "document"
-			? await screenAttachmentText(attachment.extractedText, "kept chat attachment", topicId)
-			: ""
-	if (documentText === null) {
-		return false
-	}
+		attachment.kind === "pdf" || attachment.kind === "document" ? clipAttachmentText(attachment.extractedText) : ""
 
 	// image, PDF, and video attachments keep their original bytes under a key namespaced to the user.
 	// the key is recorded as pending with the upload grace period first
@@ -141,15 +126,10 @@ async function storeTopicChatAttachment(
 	// summarize a kept attachment, then store the chat attachment row and clear the key's pending deletion in one
 	// transaction. a failure deletes the object
 	try {
-		// the kept attachment's context. a kept image's description is screened first, and a flagged one leaves no row
-		// and no object
+		// the kept attachment's context
 		const attachmentContext = isAttachmentKept
-			? await toScreenedKeptAttachmentContext(attachment, documentText, topicId, litellmApiKey)
+			? await toKeptAttachmentContext(attachment, documentText, litellmApiKey)
 			: ""
-		if (attachmentContext === null) {
-			await discardUploadedObject(objectKey)
-			return false
-		}
 
 		// the row, with the key's pending deletion cleared
 		await db.transaction(async (transaction) => {
@@ -175,20 +155,6 @@ async function storeTopicChatAttachment(
 		throw error
 	}
 	return true
-}
-
-// a kept attachment's context, with a kept image's generated description screened as a document.
-// null if the scanner flags the description
-async function toScreenedKeptAttachmentContext(
-	attachment: Exclude<ChatAttachment, { kind: "text" }>,
-	documentText: string,
-	topicId: string,
-	litellmApiKey?: string,
-): Promise<string | null> {
-	const attachmentContext = await toKeptAttachmentContext(attachment, documentText, litellmApiKey)
-	return attachment.kind === "image"
-		? screenAttachmentText(attachmentContext, "kept chat image description", topicId)
-		: attachmentContext
 }
 
 // record an uploaded object's key as pending again, then delete the object

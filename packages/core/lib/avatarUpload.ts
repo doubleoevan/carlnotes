@@ -1,3 +1,5 @@
+import { isModerationRejectionMessage } from "@carlnotes/contracts/moderation"
+
 // the file types an avatar chooser offers. heic and heif are what an iphone camera writes
 export const AVATAR_ACCEPT = "image/png,image/jpeg,image/webp,image/gif,image/heic,image/heif"
 
@@ -20,3 +22,14 @@ export const AVATAR_REJECTIONS: Record<string, string> = {
 
 // the feedback for a failed upload without an api rejection reason
 export const AVATAR_UPLOAD_FAILED_TEXT = "That didn't reach Carl. Try again."
+
+// the feedback for a team avatar upload that failed without an api rejection reason
+export const TEAM_AVATAR_UPLOAD_FAILED_TEXT = "That image didn't reach Carl. Try again."
+
+/**
+ * Returns what a rejected avatar upload shows: the rule it broke, Carl's rejection of an image others may not see, or
+ * the fallback text.
+ */
+export function toAvatarRejectionText(rejection: string, fallbackText: string): string {
+	return AVATAR_REJECTIONS[rejection] ?? (isModerationRejectionMessage(rejection) ? rejection : fallbackText)
+}

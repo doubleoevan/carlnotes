@@ -1,9 +1,8 @@
-// the review pipeline eval runs the real review path over a labeled corpus and reports precision, recall, cost per topic,
-// and the scanner's false-positive and catch rates. the eval makes real model calls and runs as a script:
+// the review pipeline eval runs the real review path over a labeled corpus and reports precision, recall, and cost per
+// topic. the eval makes real model calls and runs as a script:
 //   bun run eval:review-pipeline                      measure every fixture beside this file
 //   bun run eval:review-pipeline --with-examples      score with the topic's rated and bookmarked pages as examples
 //   bun run eval:review-pipeline --export <topicId>   write a fixture from a public Topic, under the prd config
-//   bun run eval:review-pipeline --guard-only         measure only LLM Guard's rates on text and images, with no model spend
 import { existsSync, readdirSync, readFileSync } from "node:fs"
 import { join } from "node:path"
 import { connectionPool } from "@carlnotes/db"
@@ -20,7 +19,6 @@ import {
 import { isPromoted, scoreResource } from "@carlnotes/pipeline/review/score"
 import { toPercentLabel } from "../evalLabels"
 import { type CachedPage, exportFixture, FIXTURES_DIRECTORY, PAGE_CACHE_DIRECTORY } from "./reviewPipelineExport"
-import { measureGuardOnly, toFlaggedRate } from "./reviewPipelineScanner"
 
 // one labeled Resource. what an ingester would have returned, plus the label that the eval measures against
 export type LabeledResource = {
@@ -44,45 +42,18 @@ export type LabeledResource = {
 // a rating or a bookmark, the way a Scan lists the topic's liked, bookmarked, and rated-down pages
 type MeasureFixtureOptions = { name: string; fixture: EvalFixture; isScoredWithExamples?: boolean }
 
-// an image the guard-only run screens by the text it shows: what it shows, its file beside the fixtures, and whether
-// it holds an instruction the scanner should catch
-export type InjectionImage = { title: string; file: string; isAttack: boolean }
+// one topic's fixture: its context and its labeled Resources
+export type EvalFixture = { topic: { name: string; context: string }; labeledResources: LabeledResource[] }
 
-// one topic's fixture: its context, its labeled Resources, articles that discuss injection in benign prose, and
-// known attack strings the scanner should catch. exported so the eval smoke can run one tiny fixture end-to-end
-export type EvalFixture = {
-	topic: { name: string; context: string }
-	labeledResources: LabeledResource[]
-	injectionProse: { title: string; url: string; content: string }[]
-	// public, well-known injection payloads. every one the scanner misses is a miss the false-positive rate cannot show,
-	// since a scanner that flags nothing scores a perfect 0% there
-	injectionAttacks: string[]
-	// benign and attack images, measured on their own lines by the guard-only run
-	injectionImages?: InjectionImage[]
-}
-
-// what one fixture's run produced. the two scanner rates are null together, only if no scanner is configured
-type EvalResult = {
-	name: string
-	precision: number
-	recall: number
-	costUsd: number
-	resourceCount: number
-	// the share of benign articles the scanner flagged. every flag here is wrong and narrows what a user sees
-	falsePositiveRate: number | null
-	// the share of real attacks the scanner caught. read it beside the rate above,
-	// since a scanner that flags nothing scores a perfect false-positive rate while catching nothing
-	attackCatchRate: number | null
-}
+// what one fixture's run produced
+type EvalResult = { name: string; precision: number; recall: number; costUsd: number; resourceCount: number }
 
 // pick the mode from the arguments, only if this file runs as a script
 if (import.meta.main) {
 	const exportTopicId = Bun.argv.includes("--export") ? Bun.argv[Bun.argv.indexOf("--export") + 1] : undefined
 
-	// guard-only is what the ci runs, export writes a fixture to label, and the default measures the whole pipeline
-	if (Bun.argv.includes("--guard-only")) {
-		await measureGuardOnly()
-	} else if (exportTopicId) {
+	// export writes a fixture to label, and the default measures the whole pipeline
+	if (exportTopicId) {
 		await exportFixture(exportTopicId)
 	} else {
 		await measureFixtures()
@@ -124,7 +95,7 @@ async function measureFixtures(): Promise<void> {
 }
 
 /**
- * Run one fixture's Resources through the real embed-filter and tiered scoring, then score the scanner on benign prose.
+ * Runs one fixture's Resources through the real embed-filter and tiered scoring.
  * Exported so the eval smoke can exercise the eval on a tiny inline fixture before a real corpus is labeled.
  */
 export async function measureFixture({
@@ -155,16 +126,13 @@ export async function measureFixture({
 		predictions.push(await isPredictedRelevant(labeledResource, topicEmbedding, topicScoreText, budget))
 	}
 
-	// precision and recall against the labels, then the scanner's two rates: false positives on benign prose,
-	// and the catch rate on real attacks
+	// precision and recall against the labels
 	const labels = labeledResources.map((labeledResource) => labeledResource.isRelevant === true)
 	return {
 		name,
 		...toPrecisionRecall(predictions, labels),
 		costUsd: budget.spentDollars,
 		resourceCount: labeledResources.length,
-		falsePositiveRate: await toFlaggedRate(fixture.injectionProse.map((article) => article.content)),
-		attackCatchRate: await toFlaggedRate(fixture.injectionAttacks),
 	}
 }
 
@@ -186,9 +154,10 @@ async function isPredictedRelevant(
 		return false
 	}
 
-	// then the paid tiered scoring promotion threshold separates a kept Finding from a filtered one
-	const { score } = await scoreResource(resource.content ?? "", topicScoreText, budget)
-	return isPromoted(score)
+	// then the paid tiered scoring promotion threshold separates a kept Finding from a filtered one, and a Resource
+	// judged unsafe is filtered whatever its score
+	const { score, isUnsafe } = await scoreResource(resource.content ?? "", topicScoreText, budget)
+	return !isUnsafe && isPromoted(score)
 }
 
 /**
@@ -213,14 +182,11 @@ function toCosineSimilarity(resourceEmbedding: number[], topicEmbedding: number[
 
 // print the results as the Markdown table the README includes
 function printResults(results: EvalResult[]): void {
-	console.log("\n| topic | resources | precision | recall | cost | scanner false positives | scanner catch rate |")
-	console.log("|---|---|---|---|---|---|---|")
+	console.log("\n| topic | resources | precision | recall | cost |")
+	console.log("|---|---|---|---|---|")
 	for (const result of results) {
-		// null reads as n/a instead of a misleadingly blank cell
-		const falsePositives = result.falsePositiveRate === null ? "n/a" : toPercentLabel(result.falsePositiveRate)
-		const catchRate = result.attackCatchRate === null ? "n/a" : toPercentLabel(result.attackCatchRate)
 		console.log(
-			`| ${result.name} | ${result.resourceCount} | ${toPercentLabel(result.precision)} | ${toPercentLabel(result.recall)} | $${result.costUsd.toFixed(4)} | ${falsePositives} | ${catchRate} |`,
+			`| ${result.name} | ${result.resourceCount} | ${toPercentLabel(result.precision)} | ${toPercentLabel(result.recall)} | $${result.costUsd.toFixed(4)} |`,
 		)
 	}
 }

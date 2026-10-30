@@ -9,6 +9,7 @@ import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/cli
 import { hashPassword } from "better-auth/crypto"
 import { eq, inArray } from "drizzle-orm"
 import { apiRoute } from "../api"
+import { toAcceptedTermsFields } from "../testSession"
 import { mcpRoute } from "./server"
 
 // one id per run, and every fixture id derives from it. parallel runs never collide
@@ -58,6 +59,7 @@ export async function seed(): Promise<void> {
 		email: ownerEmail,
 		username: ownerId,
 		usernameNormalized: ownerId,
+		...toAcceptedTermsFields(),
 	})
 	// the owner's password login
 	await db.insert(accounts).values({

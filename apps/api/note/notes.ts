@@ -13,7 +13,7 @@ import { and, eq, sql } from "drizzle-orm"
 import { Hono } from "hono"
 import { toBodyLimit, toSignedOutRejection } from "../bodyLimit"
 import { type AppEnv, currentUser, toAnalyticsProperties } from "../currentUser"
-import { toObjectionableCategory, toObjectionableTextResponse } from "../moderation"
+import { toObjectionableCategory, toObjectionableContentResponse } from "../moderation"
 import { noteBodySaveRateLimiter, toolCallerRateLimiter } from "../rateLimit"
 import { toTermsOutdatedResponse } from "../termsAcceptance"
 import { loadUsername } from "../usernames"
@@ -118,7 +118,7 @@ export const notesRoute = new Hono<AppEnv>()
 		// an abusive name is rejected before the page loads
 		const objectionableCategory = await toObjectionableNoteNameCategory(name, context.req.param("id"))
 		if (objectionableCategory) {
-			return toObjectionableTextResponse(context, objectionableCategory)
+			return toObjectionableContentResponse(context, objectionableCategory)
 		}
 
 		// create the note on its page
@@ -152,7 +152,7 @@ export const notesRoute = new Hono<AppEnv>()
 		// an abusive name is rejected before the page loads
 		const objectionableCategory = await toObjectionableNoteNameCategory(name, context.req.param("id"))
 		if (objectionableCategory) {
-			return toObjectionableTextResponse(context, objectionableCategory)
+			return toObjectionableContentResponse(context, objectionableCategory)
 		}
 
 		// create the note on its page
@@ -229,7 +229,7 @@ export const notesRoute = new Hono<AppEnv>()
 			? await toObjectionableNoteNameCategory(name, visibleNote.note.id)
 			: null
 		if (objectionableCategory) {
-			return toObjectionableTextResponse(context, objectionableCategory)
+			return toObjectionableContentResponse(context, objectionableCategory)
 		}
 
 		// apply what was sent
@@ -282,7 +282,7 @@ export const notesRoute = new Hono<AppEnv>()
 					})
 				: null
 			if (objectionableCategory) {
-				return toObjectionableTextResponse(context, objectionableCategory)
+				return toObjectionableContentResponse(context, objectionableCategory)
 			}
 
 			// write at the version the editor opened at. a newer version is a conflict

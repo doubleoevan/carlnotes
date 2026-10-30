@@ -1,8 +1,9 @@
 // avatar upload tests over stubbed browser globals: a large photo comes out at the stored size as a jpeg, a png stays
-// a png, a HEIC file the browser rejects goes through the HEIC decoder, and a file nothing can decode is reported and
-// never sent
+// a png, a HEIC file the browser rejects goes through the HEIC decoder, a file nothing can decode is reported and
+// never sent, and a rejection shows its rule, Carl's moderation line, or the fallback
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
-import { AVATAR_REJECTIONS, toUploadableAvatar } from "./AvatarUpload"
+import { toModerationRejectionMessage } from "@carlnotes/contracts/moderation"
+import { AVATAR_REJECTIONS, toAvatarRejectionText, toUploadableAvatar } from "./AvatarUpload"
 
 // the canvases the test's document created, each with the size it was drawn at and the type it was asked to encode
 const createdCanvases: { width: number; height: number; encodedType?: string }[] = []
@@ -140,4 +141,13 @@ test("an undecodable file is reported and never sent", async () => {
 	expect(String(fetchSpy.mock.calls[0]?.[0])).toEndWith("/api/avatars/decode-failures")
 	expect(JSON.parse(String(fetchSpy.mock.calls[0]?.[1]?.body))).toEqual({ contentType: "image/png", byteSize: 2048 })
 	expect(AVATAR_REJECTIONS.undecodable).toBe("That image couldn't be read. Try a JPEG or PNG.")
+})
+
+// a broken rule shows its own line, Carl's rejection of a flagged image shows as he wrote it, and anything else falls back
+test("toAvatarRejectionText shows the rule, Carl's moderation line, or the fallback", () => {
+	expect(toAvatarRejectionText("too-large", "fallback")).toBe("That image is over 2MB.")
+	expect(toAvatarRejectionText(toModerationRejectionMessage("sexual"), "fallback")).toBe(
+		toModerationRejectionMessage("sexual"),
+	)
+	expect(toAvatarRejectionText("unauthorized", "fallback")).toBe("fallback")
 })

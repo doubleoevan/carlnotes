@@ -463,21 +463,26 @@ The unseen mention count route SHALL serve its count from the Redis store's read
 
 ### Requirement: A shared image is screened before it posts and its description before Carl reads it
 
-If the scanner is configured, an image shared to a room SHALL have its visible text read with text recognition and screened as a
-document before anything stores, and a flagged image SHALL reject the whole post, the way a flagged shared PDF does.
-The description generated for a shared image SHALL be screened as a document before its row turns ready, and a flagged
-description SHALL mark the row failed. A room turn SHALL NOT read a failed image row, neither its description nor its
-bytes. With `LLM_GUARD_URL` unset, a shared image SHALL post with no text recognition, no scanner call, and no wait.
+An image shared to a room SHALL be moderated as an image before anything stores, on the terms in `content-moderation`,
+and a flagged image SHALL reject the whole post with Carl's rejection naming its category. The description generated
+for a shared image SHALL be stored as written, with no screen of its own, and SHALL reach every room turn as data
+inside the nonce fence. A room turn SHALL NOT read a failed image row, neither its description nor its bytes. With no
+moderation key set, a shared image SHALL post with no moderation call and no wait.
 
 #### Scenario: A flagged shared image rejects the post
 
-- **WHEN** a member shares an image whose text holds an instruction to Carl
-- **THEN** the post is rejected with the same reason a flagged shared file gets, and nothing is stored
+- **WHEN** a member shares an image the moderation flags as sexual
+- **THEN** the post is rejected with Carl's rejection naming sexual, and nothing is stored
 
 #### Scenario: A flagged description never turns ready
 
-- **WHEN** a shared image passes its text screen and its generated description is flagged
+- **WHEN** a shared image's description fails to generate
 - **THEN** the row is marked failed, and no room turn reads its description or its bytes
+
+#### Scenario: An image holding an instruction posts
+
+- **WHEN** a member shares a clean image whose text tells Carl to ignore the room
+- **THEN** the image posts, and its description reaches the next room turn inside the fence as data
 
 ### Requirement: Carl reads the room's own words as data
 A chat room turn's question SHALL pass the room's running summary, its shared files, and its chat messages to Carl as

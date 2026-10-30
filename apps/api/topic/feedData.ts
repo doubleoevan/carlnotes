@@ -145,7 +145,7 @@ async function loadFeedFindingRows(
 	)
 }
 
-// every topic's sources, with the llm-guard screening status the owner sees
+// every topic's sources, with the screening status the owner sees
 async function loadFeedSourceRows(
 	topicIds: string[],
 ): Promise<Pick<typeof sources.$inferSelect, "topicId" | "id" | "kind" | "config" | "status" | "error">[]> {

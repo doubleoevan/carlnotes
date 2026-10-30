@@ -290,9 +290,10 @@ export const updateTopicSource = z.union([
 // the attachment context limit. a document this short is stored as written, and a longer one is summarized to fit
 export const MAX_ATTACHMENT_CONTEXT_CHARS = 20_000
 
-// the reason that the attachment workflow records for a file with no text, and the start of a flagged file's reason
+// the reason that the attachment workflow records for a file with no text
 export const ATTACHMENT_NO_TEXT_REASON = "the file held no readable text"
 
+// the start of the reason on an attachment that the scanner failed before the scanner was removed. no new row has it
 export const SCANNER_FLAGGED_REASON_PREFIX = "flagged by the scanner"
 
 /**
@@ -300,7 +301,7 @@ export const SCANNER_FLAGGED_REASON_PREFIX = "flagged by the scanner"
  */
 
 export function toAttachmentFailureMessage(failureReason: string | null): string {
-	// a file with no text to read, then a file that the scanner flagged, then any other failure
+	// a file with no text to read, then a file that the scanner flagged before its removal, then any other failure
 	if (failureReason === ATTACHMENT_NO_TEXT_REASON) {
 		return "Carl found no text in this file, like a scanned PDF. Attach a copy whose text can be selected."
 	}

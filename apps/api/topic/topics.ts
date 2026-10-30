@@ -118,7 +118,7 @@ export async function loadTopicPage(
 	// the latest succeeded scan feeds the schedule section, with its recap and duration beside it
 	const { lastSucceededTopicScan, scanSummary, lastScanDurationMs } = toLastTopicScanFields(scanHistory, scanRows)
 
-	// a Source that has not passed its llm-guard screen is only seen by someone who may edit the list.
+	// a Source that has not passed its screen is only seen by someone who may edit the list.
 	// an editor's save deletes every source it does not list, so hiding a row from them would delete it
 	const visibleTopicSourceRows = topicSourceRows.filter(
 		(topicSource) => topicSource.status === "ready" || isAdmin || canEdit,

@@ -1,6 +1,7 @@
 // agreement check tests: a message with no words makes no call, the call sees only the user's words and the proposal,
 // its decision comes back through the schema, and a failed call agrees to nothing
 import { afterEach, expect, mock, test } from "bun:test"
+import { toChatCompletionResponse } from "@carlnotes/models/chatCompletionTestFixtures"
 import { toUntrustedFences } from "@carlnotes/models/prompts/untrustedFenceTestFixtures"
 import { quietErrorReports } from "@carlnotes/server/monitoringTestFixtures"
 import { saveEnvSettings } from "@carlnotes/server/savedEnvSettings"
@@ -17,14 +18,7 @@ function stubProxyReply(content: string): void {
 	Bun.env.LITELLM_MASTER_KEY = "master"
 	globalThis.fetch = (async (_url: string, init: RequestInit) => {
 		sentRequestBodies.push(JSON.parse(String(init.body)))
-		return Response.json({
-			id: "chatcmpl-1",
-			object: "chat.completion",
-			created: 0,
-			model: "cheap-model",
-			choices: [{ index: 0, message: { role: "assistant", content }, finish_reason: "stop" }],
-			usage: { prompt_tokens: 120, completion_tokens: 6, total_tokens: 126 },
-		})
+		return toChatCompletionResponse(content)
 	}) as unknown as typeof fetch
 }
 

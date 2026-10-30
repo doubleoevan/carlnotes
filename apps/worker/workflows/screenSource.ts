@@ -1,4 +1,4 @@
-// the source llm-guard screening workflow
+// the url Source check workflow: fetch the page and mark the Source ready or failed
 
 import { toActivityApplicationFailure } from "@carlnotes/contracts/scanFailure"
 import {
@@ -9,7 +9,7 @@ import {
 import { proxyActivities } from "@temporalio/workflow"
 import type * as activities from "./screenSourceActivities"
 
-// one bounded fetch plus one llm-guard screen, so the per-attempt timeout is short. the schedule-to-close bound covers
+// one bounded fetch, so the per-attempt timeout is short. the schedule-to-close bound covers
 // the wait for a screen slot
 const { screenSource, failSource } = proxyActivities<typeof activities>({
 	startToCloseTimeout: "2 minutes",
@@ -17,7 +17,7 @@ const { screenSource, failSource } = proxyActivities<typeof activities>({
 	retry: { maximumAttempts: SCREEN_ATTEMPTS },
 })
 
-// screen one url Source with llm-guard, marking it failed if the screen itself could not run
+// screen one url Source, marking it failed if the check itself could not run
 export async function screenSourceWorkflow(sourceId: string): Promise<void> {
 	// the activity records its own verdict, so this catch is only for a screen that never reached one
 	try {

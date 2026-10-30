@@ -1,6 +1,7 @@
 // the avatar a user publishes: an upload they chose, the photo their provider supplied, or the username initials
 import { toAvatarVersion } from "@carlnotes/contracts/avatars"
 import type { avatarSources } from "@carlnotes/contracts/enums"
+import type { ModerationCategory } from "@carlnotes/contracts/moderation"
 import type { ProfileIdentity } from "@carlnotes/contracts/profiles"
 import { db } from "@carlnotes/db"
 import { teams } from "@carlnotes/db/schema/teams"
@@ -13,6 +14,7 @@ import {
 	uploadAttachment,
 } from "@carlnotes/db/store"
 import { eq } from "drizzle-orm"
+import { toObjectionableImageCategory } from "./moderation"
 import { refreshSessionUser } from "./sessions"
 
 // an avatar is shown at 64 pixels and under, so a large file buys nothing and costs storage on every account
@@ -35,19 +37,39 @@ export function toAvatarContentType(avatarKey: string): string {
 	return Object.keys(AVATAR_EXTENSIONS).find((type) => AVATAR_EXTENSIONS[type] === fileExtension) ?? "image/png"
 }
 
-// why an upload was rejected, or null if it can be stored
-export type AvatarRejection = "too-large" | "empty" | "unsupported-type"
+// why an upload was rejected. a shape check, or the category of a violating image
+export type AvatarRejection = "too-large" | "empty" | "unsupported-type" | { objectionableCategory: ModerationCategory }
 
-// the shape checks every avatar upload must pass: it has bytes, it is small, and it is an image we serve
-function toAvatarRejection(bytes: Uint8Array, contentType: string): AvatarRejection | null {
+// the uploaded image, and the kind and id that name it in a moderation failure report
+type ToAvatarRejectionOptions = { bytes: Uint8Array; contentType: string; subjectKind: string; subjectId: string }
+
+// the checks every avatar upload must pass: it has bytes, it is small, it is an image we serve, and others may see it
+async function toAvatarRejection({
+	bytes,
+	contentType,
+	subjectKind,
+	subjectId,
+}: ToAvatarRejectionOptions): Promise<AvatarRejection | null> {
+	// the shape checks. the type is checked against what the request claims
 	if (bytes.byteLength === 0) {
 		return "empty"
 	}
 	if (bytes.byteLength > MAX_AVATAR_BYTES) {
 		return "too-large"
 	}
-	// the type is checked against what the request claims, which is enough for a file served back as an image
-	return SUPPORTED_AVATAR_TYPES.has(contentType) ? null : "unsupported-type"
+
+	// an image type we serve
+	if (!SUPPORTED_AVATAR_TYPES.has(contentType)) {
+		return "unsupported-type"
+	}
+
+	// the moderation. an unreadable image is rejected as an unsupported type, and a skipped or failed check lets it through
+	const dataUrl = `data:${contentType};base64,${Buffer.from(bytes).toString("base64")}`
+	const objectionableCategory = await toObjectionableImageCategory({ dataUrl, subjectKind, subjectId })
+	if (objectionableCategory === "unreadable") {
+		return "unsupported-type"
+	}
+	return objectionableCategory ? { objectionableCategory } : null
 }
 
 /**
@@ -60,8 +82,8 @@ export async function uploadAvatar(
 	contentType: string,
 	keyId: string,
 ): Promise<AvatarRejection | null> {
-	// the shape checks run before anything is written, so a rejected upload touches no storage
-	const rejection = toAvatarRejection(bytes, contentType)
+	// the checks run before anything is written, so a rejected upload touches no storage
+	const rejection = await toAvatarRejection({ bytes, contentType, subjectKind: "avatar", subjectId: userId })
 	if (rejection) {
 		return rejection
 	}
@@ -85,8 +107,8 @@ export async function uploadTeamAvatar(
 	contentType: string,
 	keyId: string,
 ): Promise<AvatarRejection | null> {
-	// the same shape checks that a user's upload must pass before anything is written
-	const rejection = toAvatarRejection(bytes, contentType)
+	// the same checks that a user's upload must pass before anything is written
+	const rejection = await toAvatarRejection({ bytes, contentType, subjectKind: "teamAvatar", subjectId: teamId })
 	if (rejection) {
 		return rejection
 	}
