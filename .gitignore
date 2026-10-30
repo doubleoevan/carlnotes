@@ -11,6 +11,9 @@ storybook-static/
 *.tsbuildinfo
 .tsbuild/
 
+# what a UI test run writes: the selection, the captures, the diffs, and the reports
+ui-tests/output/
+
 # Vite
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*

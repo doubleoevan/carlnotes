@@ -201,6 +201,7 @@ both File and
 FormData uploads. `Footer` owns all footer copy, destinations, and row order for both apps.
 `lib/spendMeter`, `monthlyBudgetCutoffs`, and `monthlyBudgetCutoffCopy` own budget labels and checkpoint calculations.
 `lib/spendMeterStoryFixtures` supplies the same spend and cutoff examples to both component browsers.
+`lib/storyFixtures` holds `FIXTURE_DATE`, the date that the web component browser's fixtures share.
 
 `hooks/useTopicFields`, `useTopicSourceEditor`, `useTopicTeamChoice`, `useTeamFields`, and `useTopicEmails` own the
 portable form state. `lib/saveTopic`, `saveTeam`, `teamFields`, `teamInvites`, `topicSourceEditor`, and
@@ -244,6 +245,9 @@ formatting, visibility, expansion, and action selection. `lib/podcastEpisodeStor
 fixtures and an inert player for both component browsers, without account writes or audio downloads.
 The season card owns five-row pagination, selection, season query preservation, and removal visibility. Web supplies
 its server-rendered overflow rows; mobile supplies scrolling tabs. Chat chapter tags share their labels and playback action.
+The pills and the chat chapter tag own their classes, which both app stylesheets scan explicitly. A pill is at least 24
+pixels tall, so it stays a large enough target with text right above it. Their accessible names start with their
+visible text.
 `lib/podcastEpisodesTableColumns.ts` and `podcastEpisodeChaptersTableColumns.ts` share table values, formatting,
 and totals. Web retains its DOM/SSR table renderers; mobile composes the existing shared DataTable.
 

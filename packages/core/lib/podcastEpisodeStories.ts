@@ -33,6 +33,15 @@ export const PODCAST_STORY_EPISODE = toPodcastEpisodeFixture({
 		}),
 	),
 })
+// a podcast episode title and chapter titles long enough to run past a phone's width
+export const PODCAST_STORY_LONG_TITLE_EPISODE: PodcastEpisode = {
+	...PODCAST_STORY_EPISODE,
+	title: "The surprisingly long story of how a small change to grind size changed every morning cup of coffee",
+	chapters: PODCAST_STORY_EPISODE.chapters.map((chapter) => ({
+		...chapter,
+		title: `${chapter.title}: how a finer grind pulls more flavor from the same beans`,
+	})),
+}
 export const PODCAST_STORY_FEED: ChapterTopicFeed = {
 	topic: toTestTopicResponse(),
 	topicFindings: PODCAST_STORY_EPISODE.chapters.map((chapter) =>
@@ -130,12 +139,15 @@ export function PodcastEpisodeStory({
 			unload: () => {},
 			updateMetadata: () => {},
 		})
+		// play the podcast episode from 75 seconds for every state except unloaded
 		let isActive = true
 		if (state !== "unloaded") {
 			void playPodcastEpisode(episode, 75).then(() => {
+				// skip a story that unmounted, or whose audio never loaded
 				if (!isActive || !selectedAudioLoad) {
 					return
 				}
+				// pause a paused story, and mark a buffering story as loading
 				if (state === "paused") {
 					pausePodcastEpisode()
 				}
@@ -144,6 +156,7 @@ export function PodcastEpisodeStory({
 				}
 			})
 		}
+		// on unmount, ignore the pending play and remove the inert audio adapter
 		return () => {
 			isActive = false
 			unregister()

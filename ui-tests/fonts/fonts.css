@@ -1,0 +1,41 @@
+/* the families and weights the app's Google Fonts stylesheet loads, from the font files beside this stylesheet. the
+capture page serves this stylesheet for the Google Fonts request, so it never reaches the network for a font */
+@font-face {
+	font-family: "Architects Daughter";
+	font-style: normal;
+	font-weight: 400;
+	font-display: block;
+	src: url("/ui-tests-fonts/ArchitectsDaughter_400Regular.ttf") format("truetype");
+}
+
+@font-face {
+	font-family: "Karla";
+	font-style: normal;
+	font-weight: 400;
+	font-display: block;
+	src: url("/ui-tests-fonts/Karla_400Regular.ttf") format("truetype");
+}
+
+@font-face {
+	font-family: "Karla";
+	font-style: normal;
+	font-weight: 500;
+	font-display: block;
+	src: url("/ui-tests-fonts/Karla_500Medium.ttf") format("truetype");
+}
+
+@font-face {
+	font-family: "Karla";
+	font-style: normal;
+	font-weight: 600;
+	font-display: block;
+	src: url("/ui-tests-fonts/Karla_600SemiBold.ttf") format("truetype");
+}
+
+@font-face {
+	font-family: "Karla";
+	font-style: normal;
+	font-weight: 700;
+	font-display: block;
+	src: url("/ui-tests-fonts/Karla_700Bold.ttf") format("truetype");
+}

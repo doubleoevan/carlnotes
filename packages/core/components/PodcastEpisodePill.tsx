@@ -27,7 +27,10 @@ export type FindingChapterPillProps = {
 	className?: string
 }
 
-const PILL_CLASS = "shadow-raised inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-semibold"
+// the pill's shape and its highlighted and idle colors. the pill is at least 24 pixels tall, a large enough target
+// with text right above it
+const PILL_CLASS =
+	"shadow-raised inline-flex min-h-6 items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-semibold"
 const HIGHLIGHTED_PILL_CLASS = "bg-primary text-primary-foreground border-transparent font-bold"
 const IDLE_PILL_CLASS = "border-separator-strong bg-muted text-link"
 
@@ -47,14 +50,19 @@ export function PodcastEpisodeChapterPill({
 }) {
 	const { isPlaying } = usePodcastEpisodePlayer()
 	const isChapterPlaying = usePlayerChapterPosition(podcastEpisode.id) === chapter.position && isPlaying
+
+	// the pill's text and its playback action. the accessible name starts with the text, so a voice command that says
+	// the text finds the pill
+	const pillText = `E${podcastEpisode.episodeNumber} · ch ${chapter.position + 1}`
+	const actionText = `${isChapterPlaying ? "pause" : "play"} episode ${podcastEpisode.episodeNumber}, chapter ${chapter.position + 1}`
 	return (
 		<Button
-			label={`${isChapterPlaying ? "Pause" : "Play"} episode ${podcastEpisode.episodeNumber}, chapter ${chapter.position + 1}`}
+			label={`${pillText}, ${actionText}`}
 			onPress={() => togglePodcastEpisodeChapterPlayback(podcastEpisode, chapter)}
 			isHighlighted={isChapterPlaying}
 			className={cn(PILL_CLASS, isChapterPlaying ? HIGHLIGHTED_PILL_CLASS : IDLE_PILL_CLASS, className)}
 		>
-			<Body text={`E${podcastEpisode.episodeNumber} · ch ${chapter.position + 1}`} isPlaying={isChapterPlaying} />
+			<Body text={pillText} isPlaying={isChapterPlaying} />
 		</Button>
 	)
 }
@@ -72,15 +80,19 @@ export function PodcastEpisodeNumberPill({
 	elements: PodcastEpisodePillElements
 }) {
 	const isPlaying = useIsPodcastEpisodePlaying(podcastEpisode.id)
+
+	// the pill's text and its playback action. the accessible name starts with the text, as the chapter pill's does
+	const pillText = `E${podcastEpisode.episodeNumber}`
+	const actionText = `${isPlaying ? "pause" : "play"} episode ${podcastEpisode.episodeNumber}`
 	return (
 		<Tooltip podcastEpisode={podcastEpisode}>
 			<Button
-				label={`${isPlaying ? "Pause" : "Play"} episode ${podcastEpisode.episodeNumber}`}
+				label={`${pillText}, ${actionText}`}
 				onPress={() => void togglePodcastEpisodePlayback(podcastEpisode.id)}
 				isHighlighted={isPlaying}
 				className={cn(PILL_CLASS, isPlaying ? HIGHLIGHTED_PILL_CLASS : IDLE_PILL_CLASS, className)}
 			>
-				<Body text={`E${podcastEpisode.episodeNumber}`} isPlaying={isPlaying} />
+				<Body text={pillText} isPlaying={isPlaying} />
 			</Button>
 		</Tooltip>
 	)

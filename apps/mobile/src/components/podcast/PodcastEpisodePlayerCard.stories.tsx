@@ -1,6 +1,7 @@
 import {
 	PODCAST_STORY_EPISODE,
 	PODCAST_STORY_FEED,
+	PODCAST_STORY_LONG_TITLE_EPISODE,
 	PodcastEpisodeStory,
 } from "@carlnotes/core/lib/podcastEpisodeStories"
 import type { Meta, StoryObj } from "@storybook/react-native"
@@ -33,14 +34,7 @@ export const Playing: Story = { parameters: { playbackState: "playing" } }
 export const Paused: Story = { parameters: { playbackState: "paused" } }
 export const Buffering: Story = { parameters: { playbackState: "buffering" } }
 export const PlaybackError: Story = { parameters: { playbackState: "error" } }
-export const LongTitle: Story = {
-	args: {
-		podcastEpisode: {
-			...PODCAST_STORY_EPISODE,
-			title: "The surprisingly long story of how a small change to grind size changed every morning cup of coffee",
-		},
-	},
-}
+export const LongTitle: Story = { args: { podcastEpisode: PODCAST_STORY_LONG_TITLE_EPISODE } }
 export const MissingFinding: Story = {
 	args: {
 		podcastEpisode: {

@@ -5,6 +5,7 @@ import { STORY_ADMIN, STORY_USER } from "../../../.storybook/fixtures"
 import { seedWaitingUpdates } from "../../../.storybook/fixtures/waitingUpdates"
 import { toOwnFrameDocs } from "../../../.storybook/parameters"
 import { findVisibleByRole, type StoryPlayContext } from "../../../.storybook/play"
+import { DESKTOP_VIEWPORT_GLOBALS } from "../../../.storybook/viewports"
 import { UserMenu } from "./UserMenu"
 
 // the dropdown portals out of an inline story, so each story that opens it gets its own docs frame, tall enough for it
@@ -36,6 +37,8 @@ const meta = {
 	// the header renders the menu only for a signed-in user, and the avatar sits at the right end of the header's dark
 	// hero band
 	parameters: { session: "user", surface: "hero" },
+	// the menu shows only on a wide screen. a phone's header opens HeaderMenu instead
+	globals: DESKTOP_VIEWPORT_GLOBALS,
 } satisfies Meta<typeof UserMenu>
 
 export default meta

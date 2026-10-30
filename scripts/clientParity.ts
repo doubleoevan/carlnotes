@@ -2,6 +2,7 @@
 // inventory with its reason, decided by walking each app's imports from its routes through the shared packages
 import { posix } from "node:path"
 import { toParsedImports } from "./importBoundaries"
+import { toImportResolution } from "./importPaths"
 import {
 	isInsideFolder,
 	MOBILE_APP_FOLDER,
@@ -32,9 +33,6 @@ const CLIENT_EXPORT_PATTERN = /^export\s+(?:async\s+)?(?:function\s+(\w+)|const\
 
 // a table row of the inventory: the capability in backticks, its status, and its reason or prompt
 const INVENTORY_ROW_PATTERN = /^\|\s*`([^`]+)`\s*\|\s*[^|]*\|\s*([^|]*)\|/
-
-// the extensions and index file an import path may leave off
-const RESOLUTION_SUFFIXES = ["", ".ts", ".tsx", "/index.ts"]
 
 // a capability of an api client module, named module.function
 export type ClientCapability = { key: string; modulePath: string; exportName: string }
@@ -172,34 +170,6 @@ export function toNamedImports(fileText: string): NamedImport[] {
 	return namedImports
 }
 
-/**
- * Returns the file an import path names inside the repo, or null for a package outside it.
- */
-export function resolveImportPath({
-	importPath,
-	fromFilePath,
-	filesByPath,
-}: {
-	importPath: string
-	fromFilePath: string
-	filesByPath: Map<string, SourceFile>
-}): string | null {
-	// the path before the extension and index tries
-	const basePath = toImportBasePath(importPath, fromFilePath)
-	if (!basePath) {
-		return null
-	}
-
-	// the first candidate that is a file the check read
-	for (const suffix of RESOLUTION_SUFFIXES) {
-		const candidatePath = `${basePath}${suffix}`
-		if (filesByPath.has(candidatePath)) {
-			return candidatePath
-		}
-	}
-	return null
-}
-
 // what the freeze and the purchase guard ask: the capabilities one app reaches, from the files the check reads
 type ToAppReachedCapabilitiesOptions = { sourceFiles: SourceFile[]; appFolder: string }
 
@@ -260,7 +230,9 @@ function toShippedImports(
 ): { importedPath: string; names: string[] }[] {
 	const fileText = filesByPath.get(filePath)?.fileText ?? ""
 	return toNamedImports(fileText).flatMap(({ importPath, names }) => {
-		const importedPath = resolveImportPath({ importPath, fromFilePath: filePath, filesByPath })
+		// the repo file the import leads to, if it is one the app ships
+		const importResolution = toImportResolution({ importPath, fromFilePath: filePath, knownFilePaths: filesByPath })
+		const importedPath = importResolution.kind === "file" ? importResolution.filePath : null
 		return importedPath && isShippedFile(importedPath) ? [{ importedPath, names }] : []
 	})
 }
@@ -309,25 +281,4 @@ function toSpecifierNames(specifierText: string): string[] {
 	// a default import before the braces, or alone
 	const defaultName = specifierText.replace(NAMED_SPECIFIERS_PATTERN, "").replace(",", "").trim()
 	return defaultName ? [...names, "default"] : names
-}
-
-// the repo path an import names before its extension: a relative path, an app's @/ alias, or a workspace package path
-function toImportBasePath(importPath: string, fromFilePath: string): string | null {
-	// a relative import, from the importing file's folder
-	if (importPath.startsWith(".")) {
-		return posix.normalize(posix.join(posix.dirname(fromFilePath), importPath))
-	}
-
-	// an app's alias to its src folder
-	if (importPath.startsWith("@/")) {
-		const appFolder = [WEB_APP_FOLDER, MOBILE_APP_FOLDER].find((folder) => isInsideFolder(fromFilePath, folder))
-		return appFolder ? `${appFolder}/src/${importPath.slice(2)}` : null
-	}
-
-	// a workspace package's module, or its index
-	const packageMatch = /^@carlnotes\/([^/]+)(?:\/(.+))?$/.exec(importPath)
-	if (packageMatch) {
-		return `packages/${packageMatch[1]}/${packageMatch[2] ?? "index"}`
-	}
-	return null
 }

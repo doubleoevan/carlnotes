@@ -1,0 +1,132 @@
+name: UI tests
+
+# the visual UI checks, report-only, on a push to main, nightly, and by hand. no job here is a required check, and
+# nothing here gates a push, the CI gate, a Northflank deploy, or an EAS release. a failed job shows red, with
+# annotations and a summary. the workflow holds no secret. it reads the repository and its own past runs, nothing more
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "0 9 * * *"
+  workflow_dispatch:
+    inputs:
+      selection:
+        description: every image capture, or only the image captures that a change since main reaches
+        type: choice
+        options: [all, affected]
+        default: all
+
+# a newer push cancels the run in progress for an earlier push, as CI does for its gate. a scheduled or dispatched run
+# has its own group, so a push never cancels it. the selection diffs against the last green run's commit, so a cancelled
+# run's commits are selected again by the next run
+concurrency:
+  group: ui-tests-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'push' }}
+
+# read the repository, and this workflow's own past runs for the selection's base
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  # choose the image captures that this run checks
+  select:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      web: ${{ steps.select.outputs.web }}
+      mcp: ${{ steps.select.outputs.mcp }}
+      native: ${{ steps.select.outputs.native }}
+    steps:
+      # the full history, so the selection can diff against any earlier commit, without the old file contents, which git
+      # fetches only if a diff needs one. the public repo needs no token for that, and no token stays in .git/config
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          filter: blob:none
+          persist-credentials: false
+      # the exact Bun that the CI gate uses, and the locked dependencies
+      - uses: ./.github/actions/setup-bun
+      # the selection reads the last green run of this workflow with the run's own read-only token
+      - id: select
+        run: bun run visual:select
+        env:
+          GH_TOKEN: ${{ github.token }}
+          UI_TESTS_SELECTION: ${{ inputs.selection }}
+      # the selection file, kept even after a failed step so the report job can name what was selected
+      - if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: visual-selection
+          path: ui-tests/output/selection.json
+          retention-days: 7
+          if-no-files-found: error
+
+  # capture the selected web stories in the capture container, and compare each with its approved baseline
+  web:
+    needs: select
+    if: needs.select.outputs.web != 'none'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # the baseline images, which the checkout leaves as Git LFS pointers. the cache is keyed by those pointers, so a run
+      # downloads the images only after an approval changes them, and it saves right after the download, before a
+      # failed comparison ends the job. the public repo needs no token for the download
+      - id: baseline-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .git/lfs/objects
+          key: ui-tests-baselines-${{ hashFiles('ui-tests/baselines/**/*.png') }}
+      - run: git lfs pull
+      - if: steps.baseline-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .git/lfs/objects
+          key: ${{ steps.baseline-cache.outputs.cache-primary-key }}
+      # Bun on the runner starts the capture container, and the step inside it builds the component browser and
+      # captures
+      - uses: ./.github/actions/setup-bun
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: visual-selection
+          path: ui-tests/output
+      # a changed, error, or unstable image capture fails this step, and the upload below still runs
+      - run: bun run visual:web
+      - if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: visual-web
+          path: ui-tests/output
+          retention-days: 7
+          if-no-files-found: warn
+
+  # merge every report into the run's summary, its annotations, and the report page, even after a failed job
+  report:
+    needs: [select, web]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-bun
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: visual-*
+          path: ui-tests/output
+          merge-multiple: true
+      - run: bun run visual:report
+        env:
+          UI_TESTS_NEEDS: ${{ toJSON(needs) }}
+      # the report page beside every image that it names
+      - if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: visual-report
+          path: ui-tests/output
+          retention-days: 7
+          if-no-files-found: warn

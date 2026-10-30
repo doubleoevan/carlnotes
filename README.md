@@ -594,6 +594,21 @@ internet, so every query takes longer than it does next to the database.
 
 The evals and their `eval:*` scripts are described under [Evals](#evals).
 
+The visual UI checks run in the UI tests workflow after a push to main, nightly, and by hand. They report and never
+gate a push or a deploy. CI's gate cancels its run for an earlier push when a newer one arrives, and so does the UI
+tests workflow for push runs. The next UI tests run still selects the cancelled run's commits, because it diffs against
+the last green run's commit. `ui-tests/AGENTS.md` explains how to read a failure and approve a baseline. The approved
+images are stored in Git LFS. Approving needs git-lfs, which `bun run carl-up` installs if it is missing.
+
+```bash
+bun run visual:select -- --base origin/main # choose the stories that a change reaches, written to ui-tests/output/selection.json. --all selects every story
+bun run visual:web      # build the component browser and capture the selected stories in the pinned capture container, then compare each with its approved baseline
+                        # --story <id> captures named stories, --skip-build reuses the last build, and --on-host uses the host's Chrome, which no baseline is approved from
+bun run visual:report   # write ui-tests/output/report.html and the run summary from the latest image captures
+bun run visual:open -- <run id>    # download a UI tests run's report and open it
+bun run visual:approve -- --run <run id> # approve a run's changed and new image captures as baselines in the working tree; never commits
+```
+
 Prompt registry (owner-run): git is the source of truth for prompt wording (`packages/models/prompts/*.md`).
 `prompts:sync` pushes that wording to Langfuse as the `production` version that each prompt is served from. The sync is
 idempotent: an unchanged prompt creates no new version. It needs `LANGFUSE_PUBLIC_KEY` and `LANGFUSE_SECRET_KEY` set.

@@ -15,7 +15,13 @@ function ChangingCount({ label, isMotionReduced }: { label: string; isMotionRedu
 			data-motion={isMotionReduced ? "reduced" : undefined}
 		>
 			<FlashingCount label={label} count={count} />
-			<Button variant="outline" size="sm" onClick={() => setCount((currentCount) => currentCount + 1)}>
+			{/* the story's own button, in the page's text color. only the count is muted */}
+			<Button
+				variant="outline"
+				size="sm"
+				className="text-foreground"
+				onClick={() => setCount((currentCount) => currentCount + 1)}
+			>
 				Add one
 			</Button>
 		</div>

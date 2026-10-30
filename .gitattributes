@@ -1,0 +1,2 @@
+# the UI tests' approved image captures, stored in Git LFS so that the history holds only their pointers
+ui-tests/baselines/**/*.png filter=lfs diff=lfs merge=lfs -text

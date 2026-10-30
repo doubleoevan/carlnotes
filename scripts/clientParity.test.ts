@@ -1,7 +1,7 @@
 // the client parity rules over fixture files: a capability reached through a core hook, a reached file whose other
-// export is not reached, each import form, an unlisted web-only capability, a stale row, and the mobile-only report
+// export is not reached, each specifier form, an unlisted web-only capability, a stale row, and the mobile-only report
 import { expect, test } from "bun:test"
-import { checkClientParity, parseParityInventory, resolveImportPath, toNamedImports } from "./clientParity"
+import { checkClientParity, parseParityInventory, toNamedImports } from "./clientParity"
 import type { SourceFile } from "./workspaces"
 
 // an api client module with two capabilities, a core hook that calls one, and each app's routes
@@ -90,27 +90,6 @@ test("named imports keep each specifier's own name and skip types", () => {
 		{ importPath: "react", names: ["default"] },
 		{ importPath: "./Lazy", names: ["*"] },
 	])
-})
-
-// a relative path, an app alias, and a workspace package path resolve to the files the check read
-test("imports resolve through the relative, alias, and package forms", () => {
-	const filesByPath = new Map(
-		[
-			...SOURCE_FILES,
-			{ filePath: "apps/mobile/src/components/common/Sheet.tsx", fileText: "" },
-			{ filePath: "packages/core/components/index.ts", fileText: "" },
-		].map((sourceFile) => [sourceFile.filePath, sourceFile]),
-	)
-	const resolveFrom = (importPath: string, fromFilePath: string): string | null =>
-		resolveImportPath({ importPath, fromFilePath, filesByPath })
-	expect(resolveFrom("../pages/NotesPage", "apps/web/src/routes/index.tsx")).toBe("apps/web/src/pages/NotesPage.tsx")
-	expect(resolveFrom("@/components/common/Sheet", "apps/mobile/app/index.tsx")).toBe(
-		"apps/mobile/src/components/common/Sheet.tsx",
-	)
-	expect(resolveFrom("@carlnotes/core/components", "apps/web/src/pages/NotesPage.tsx")).toBe(
-		"packages/core/components/index.ts",
-	)
-	expect(resolveFrom("react", "apps/web/src/pages/NotesPage.tsx")).toBeNull()
 })
 
 // the inventory's rows come from the table under its heading, and nothing else

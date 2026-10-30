@@ -21,10 +21,12 @@ updates:
     schedule:
       interval: weekly
       day: monday
+  # the app image, the LiteLLM image, and the image of the UI tests' capture container
   - package-ecosystem: docker
     directories:
       - /
       - /infra/litellm
+      - /ui-tests
     schedule:
       interval: weekly
       day: monday

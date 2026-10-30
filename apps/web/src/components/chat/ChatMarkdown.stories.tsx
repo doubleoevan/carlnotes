@@ -22,7 +22,9 @@ export default meta
 type Story = StoryObj<typeof meta>
 // finished, streaming, and unsafe-content states
 export const TableAndLinks: Story = {}
-export const Streaming: Story = { render: () => <StreamingAnswer /> }
+// the story reveals its text over several seconds, so it takes no screenshot. TableAndLinks shows the same markdown
+// complete
+export const Streaming: Story = { tags: ["no-screenshot"], render: () => <StreamingAnswer /> }
 export const LiteralHtml: Story = {
 	args: {
 		markdown:

@@ -136,7 +136,8 @@ function PodcastEpisodeChapterRow({
 						type="button"
 						onClick={() => void playPodcastEpisode(podcastEpisode, chapter.startSeconds)}
 						className={cn(
-							"truncate text-left hover:underline",
+							// a 24-pixel-tall target that grows up into the row's padding, clear of the source label below
+							"-mt-1 truncate pt-1 text-left hover:underline",
 							!chapterTopicFinding && "after:absolute after:inset-0",
 							isPlayerChapter && "text-link",
 						)}
@@ -147,8 +148,9 @@ function PodcastEpisodeChapterRow({
 				{/* the source and times, then the pill that plays the chapter, over the row's click area */}
 				<div className="text-muted-foreground flex min-w-0 items-center gap-1.5 text-xs">
 					{chapterTopicFinding ? (
+						// the source label, a 24-pixel-tall target that grows down into the row's padding, clear of the title
 						<PopoverTrigger asChild>
-							<button type="button" className="min-w-0 truncate text-left">
+							<button type="button" className="-mb-2 min-w-0 truncate pb-2 text-left">
 								{chapterSourceLabel}
 							</button>
 						</PopoverTrigger>

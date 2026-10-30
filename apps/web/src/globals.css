@@ -39,6 +39,10 @@
 /* the shared chat action owns its position and Nightshift appearance */
 @source "../../../packages/core/components/ScrollDownButton.tsx";
 
+/* the shared podcast episode pills and the chat chapter tag own their shapes and colors */
+@source "../../../packages/core/components/PodcastEpisodeChapterTag.tsx";
+@source "../../../packages/core/components/PodcastEpisodePill.tsx";
+
 /* budget segments and legend dots use the color classes returned by the shared model */
 @source "../../../packages/core/lib/spendMeter.ts";
 

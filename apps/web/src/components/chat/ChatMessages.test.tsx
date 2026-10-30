@@ -116,7 +116,7 @@ test("a podcast chat turn's question shows its tag, and vienna's reply shows her
 	expect(chatMessagesHtml).toContain("why does this matter to me?")
 	expect(chatMessagesHtml).not.toContain("[asked while listening to")
 	expect(chatMessagesHtml).toContain("Grinders get quiet · Ch 3 · The burr set")
-	expect(chatMessagesHtml).toContain('aria-label="Play Grinders get quiet from chapter 3"')
+	expect(chatMessagesHtml).toContain('aria-label="Grinders get quiet · Ch 3 · The burr set, play from this chapter"')
 
 	// vienna answered, under her avatar and name, and carl is nowhere
 	expect(chatMessagesHtml).toContain('alt="Vienna"')

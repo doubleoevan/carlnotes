@@ -199,7 +199,9 @@ the browser bundle and renders pages through the server build, behind its own ro
   declarations never merge into the DOM's and no React Native code reaches the bundle.
   `patches/react-native-enriched-html@1.1.1.patch` makes the package's web editor create its Tiptap instance after
   the component mounts and lets its hooks and ref methods take a null editor until then. Tiptap destroys an editor
-  made during render a millisecond later if nothing has mounted, and a cold open of the dialog lost that race.
+  made during render a millisecond later if nothing has mounted, and a cold open of the dialog lost that race. The
+  patch also names each checklist checkbox in `EnrichedText` by its line's text, since the package's label beside the
+  checkbox is not tied to it.
 - Clients — the typed api clients live in `@carlnotes/client`, imported as `@carlnotes/client/<domain>Client`.
   `lib/webApiClient.ts` holds the app's `configureApiClient` call, with the base url, `""` in the browser and the api on
   port 3000 on the server, and `showError`, which toasts the message; `router.tsx` calls it where both the server
@@ -241,23 +243,22 @@ the browser bundle and renders pages through the server build, behind its own ro
   payload and its poll reload, and `useScanNote.ts`, a scan's note behind its recap popover, read once the trigger is
   pointed at, focused, touched, or opened, and kept once the scan has finished; `providers/` — context providers. The
   images the bundler imports, Carl's and Vienna's portraits, come from `@carlnotes/nightshift/assets/`. The DOM-free
-  hooks `useNow`, `useAvatar`,
-  `useUsernameChange`, `useNoteBodySave`, and `useNoteComments` live in `@carlnotes/core/hooks/`. A component that
-  reads the browser during render, `localStorage`, `window`, or `document`, reads it through `useBrowserValue` in
-  `hooks/useBrowserValue.ts`, so the server and the first browser render agree. A page that starts from a server
-  loader's data loads in the browser through `useLoadInBrowser` in the same file. `useLoadInBrowser` skips the first
-  load while hydrating data the server already read. Code without its route's typed `useSearch` reads the query string
-  as `URLSearchParams` through `useSearchParams` in `hooks/useSearchParams.ts`. `useCtaPromptToast` in
-  `hooks/useCtaPromptToast.ts` toasts the prompt that a page's `cta` param names, on the signup and plans pages.
-  `useIsSignedInBeforeSession` in `hooks/useIsSignedInBeforeSession.ts` says whether the page shows as signed in. The
-  page load's session cookie decides
-  until Better Auth's session request finishes, and the session decides after. An element that fades in as it scrolls
-  into view takes its class from `useRevealClassName` in `hooks/useRevealClassName.ts`, which shows a server-rendered
-  element before any script runs, so nothing a crawler or a browser without JavaScript reads starts hidden. A box that
-  scrolls takes its tab stop from `useScrollRegionTabStop` in `hooks/useScrollRegionTabStop.ts`, which returns
-  `{ ref, tabIndex }` for the box, with a tab stop while its content overflows, so a keyboard can scroll text with no
-  link in it. The box draws its focus ring with `SCROLL_REGION_FOCUS_CLASS`. The counts lines read their counts
-  through `@carlnotes/core/hooks/usePolledCounts`, once the page has mounted and then every minute while it is focused.
+  hooks `useNow`, `useAvatar`, `useUsernameChange`, `useNoteBodySave`, and `useNoteComments` live in
+  `@carlnotes/core/hooks/`. A component that reads the browser during render, `localStorage`, `window`, or `document`,
+  reads it through `useBrowserValue` in `hooks/useBrowserValue.ts`, so the server and the first browser render agree. A
+  page that starts from a server loader's data loads in the browser through `useLoadInBrowser` in the same file.
+  `useLoadInBrowser` skips the first load while hydrating data the server already read. Code without its route's typed
+  `useSearch` reads the query string as `URLSearchParams` through `useSearchParams` in `hooks/useSearchParams.ts`.
+  `useCtaPromptToast` in `hooks/useCtaPromptToast.ts` toasts the prompt that a page's `cta` param names, on the signup
+  and plans pages. `useIsSignedInBeforeSession` in `hooks/useIsSignedInBeforeSession.ts` says whether the page shows as
+  signed in. The page load's session cookie decides until Better Auth's session request finishes, and the session
+  decides after. An element that fades in as it scrolls into view takes its class from `useRevealClassName` in
+  `hooks/useRevealClassName.ts`, which shows a server-rendered element before any script runs, so nothing a crawler or a
+  browser without JavaScript reads starts hidden. A box that scrolls takes its tab stop from `useScrollRegionTabStop` in
+  `hooks/useScrollRegionTabStop.ts`, which returns `{ ref, tabIndex }` for the box, with a tab stop while its content
+  overflows, so a keyboard can scroll text with no link in it. The box draws its focus ring with
+  `SCROLL_REGION_FOCUS_CLASS`. The counts lines read their counts through `@carlnotes/core/hooks/usePolledCounts`, once
+  the page has mounted and then every minute while it is focused.
 - `src/globals.css` — the app's stylesheet, with the keyframes in `animations.css` and the `scrollbar-none` utility
   the note toolbar scrolls sideways with. It imports its `@theme inline` block, the `shadow-raised` utility, and the
   `:root` and dark variables from `@carlnotes/nightshift/tokens.css`, which is written from the Nightshift TypeScript
@@ -294,22 +295,28 @@ the browser bundle and renders pages through the server build, behind its own ro
   and switch it. `play.ts` has `findVisibleByRole`, which waits for a popover, menu, or dialog to fade in,
   `showMouseFocus`, which focuses the dialog's focused element again with no focus ring, as a mouse click leaves it, and
   `StoryPlayContext`, the type of a play function's context. A story that turns an axe rule off does it in its own
-  `a11y.config`, with a comment saying why. A story sits beside its component as `<Component>.stories.tsx`; every
-  component file in `components/primitives`, `common`, `table`, and `layout` has one, which `components/stories.test.ts`
-  checks. A story gets its data from mocked clients and invented fixtures, never from a change to the component. The
-  shared fixtures are in `.storybook/fixtures.ts`, with the date, the sessions, and the people, and in one file per
-  domain under `.storybook/fixtures/`: topics, a visitor's and a user's topic feeds, podcast episodes, teams, admin
-  users, and waiting updates. A story imports them from there, never from another story. `src/nightshift/` holds the
-  Tokens, Typography, and Inventory pages, the swatch and specimen components they render, `ScrollingTable.tsx`, which
-  renders their tables in the app's table classes with the first column fixed, and the pattern stories, each composed
-  from `lib/styleClasses.ts` where a shared class exists, the section label from `SECTION_LABEL_CLASS`, which
+  `a11y.config`, with a comment saying why. The UI tests capture every story in both palettes at the phone and desktop
+  widths, and a story's own viewport or theme globals limit it to that size or palette. A story whose component shows at
+  one width only pins that width: `PHONE_VIEWPORT_GLOBALS` for the phone header's menu, and `DESKTOP_VIEWPORT_GLOBALS`
+  from `.storybook/viewports.ts` for the wide-screen user menu. A story that cannot render the same pixels twice, such
+  as one that reveals its text over seconds, takes the `no-screenshot` tag with a comment saying why.
+  `ui-tests/AGENTS.md` describes the image captures. A story sits beside its component as `<Component>.stories.tsx`;
+  every component file in `components/primitives`, `common`, `table`, and `layout` has one, which
+  `components/stories.test.ts` checks. A story gets its data from mocked clients and invented fixtures, never from a
+  change to the component. The shared fixtures are in `.storybook/fixtures.ts`, with the date from
+  `@carlnotes/core/lib/storyFixtures`, the sessions, and the people, and in one file per domain under
+  `.storybook/fixtures/`: topics, a visitor's and a user's topic feeds, podcast episodes, teams, admin users, and
+  waiting updates. A story imports them from there, never from another story. `src/nightshift/` holds the Tokens,
+  Typography, and Inventory pages, the swatch and specimen components they render, `ScrollingTable.tsx`, which renders
+  their tables in the app's table classes with the first column fixed, and the pattern stories, each composed from
+  `lib/styleClasses.ts` where a shared class exists, the section label from `SECTION_LABEL_CLASS`, which
   `lib/styleClasses.test.ts` checks against the sectionLabel type role in `@carlnotes/nightshift/typography`, as it
-  checks `LOGO_CLASS`, the name beside the mug in the logo, against the logo role.
-  `src/nightshift/` also holds the fetch guard and the in-memory storage the preview installs, outside `.storybook/` so
-  that `bun test` finds their tests. `bun run dev:storybook` serves the component browser on port 6006 with Storybook's
-  MCP server at `http://localhost:6006/mcp`, registered in `.mcp.json` and `opencode.json`: search its catalog before
-  writing a component, and reuse what is there. `bun run build:storybook` writes the component browser to
-  `dist/nightshift/`, which the api serves at `/nightshift`.
+  checks `LOGO_CLASS`, the name beside the mug in the logo, against the logo role. `src/nightshift/` also holds the
+  fetch guard and the in-memory storage the preview installs, outside `.storybook/` so that `bun test` finds their
+  tests. `bun run dev:storybook` serves the component browser on port 6006 with Storybook's MCP server at
+  `http://localhost:6006/mcp`, registered in `.mcp.json` and `opencode.json`: search its catalog before writing a
+  component, and reuse what is there. `bun run build:storybook` writes the component browser to `dist/nightshift/`,
+  which the api serves at `/nightshift`.
 - Imports: `@carlnotes/contracts/*`, `@carlnotes/client/*`, `@carlnotes/core/*`, `@carlnotes/nightshift/tokens.css`,
   `@carlnotes/nightshift/classNames`, the `cn` class merge, the coffee mug and the sign-in providers' icons both apps
   draw, `@carlnotes/nightshift/coffeeMug` and `@carlnotes/nightshift/oauthProviderIcons`, the note's style,

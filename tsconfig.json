@@ -15,6 +15,7 @@
 		{ "path": "./apps/web" },
 		{ "path": "./apps/mobile" },
 		{ "path": "./scripts" },
-		{ "path": "./evals" }
+		{ "path": "./evals" },
+		{ "path": "./ui-tests" }
 	]
 }

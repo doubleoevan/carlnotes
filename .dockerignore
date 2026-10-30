@@ -36,7 +36,10 @@ LICENSE
 AGENTS.md
 CLAUDE.md
 
-# tests and smoke runs stay out of the runtime image
+# tests and smoke runs stay out of the runtime image, and so do the UI tests' approved baselines and a run's output.
+# ui-tests itself stays in for the same reason scripts does: the root tsconfig points at it
+ui-tests/baselines
+ui-tests/output
 **/*.test.ts
 **/*.test.tsx
 **/*.smoke.ts

@@ -11,6 +11,8 @@
 
 /* shared components own their spacing and shapes on both platforms */
 @source "../../packages/core/components/PageSkeleton.tsx";
+@source "../../packages/core/components/PodcastEpisodeChapterTag.tsx";
+@source "../../packages/core/components/PodcastEpisodePill.tsx";
 @source "../../packages/core/components/ScrollDownButton.tsx";
 
 /* budget segments and legend dots use the same classes returned by the shared model */

@@ -22,19 +22,21 @@ export function PodcastEpisodeChapterTag({
 	podcastEpisodeNote,
 	elements: { Button, Headphones, Label },
 }: PodcastEpisodeChapterTagProps & { elements: PodcastEpisodeChapterTagElements }) {
-	// display stored titles while the authorized playback action reloads the episode
+	// display stored titles while the authorized playback action reloads the podcast episode. the accessible name
+	// starts with the tag's text
 	const chapterNumber = podcastEpisodeChapter.chapterPosition + 1
-	const label = `Play ${podcastEpisodeNote.podcastEpisodeTitle} from chapter ${chapterNumber}`
+	const tagText = `${podcastEpisodeNote.podcastEpisodeTitle} · Ch ${chapterNumber} · ${podcastEpisodeNote.chapterTitle}`
+	const actionText = "play from this chapter"
 	return (
 		<Button
-			label={label}
+			label={`${tagText}, ${actionText}`}
 			onPress={() =>
 				void playPodcastEpisodeChapter(podcastEpisodeChapter.podcastEpisodeId, podcastEpisodeChapter.chapterPosition)
 			}
 			className="bg-muted text-muted-foreground hover:text-foreground mt-1 inline-flex min-h-11 max-w-[85%] items-center gap-1.5 rounded-full px-2.5 text-xs sm:min-h-7"
 		>
 			<Headphones />
-			<Label>{`${podcastEpisodeNote.podcastEpisodeTitle} · Ch ${chapterNumber} · ${podcastEpisodeNote.chapterTitle}`}</Label>
+			<Label>{tagText}</Label>
 		</Button>
 	)
 }

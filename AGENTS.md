@@ -63,6 +63,10 @@ Beside them at the root:
   standalone JSON Schema, written by `bun run contract:freeze`, and `releases.json`, the app versions submitted,
   released, or retired. `scripts/check-contract-freeze.ts` fails preflight on an api change an unretired snapshot
   could not read or send.
+- `ui-tests/` — the visual UI checks: the selection of the stories that a push reaches, the web stories' image captures
+  in the pinned capture container, their comparison with the approved baselines, the report, and the approval command,
+  which writes the baselines to `ui-tests/baselines/`. The UI tests workflow runs them after a push, nightly, and by
+  hand, report-only. Its unit tests run in `bun test`, and none of them captures a story.
 
 Each app and package has its own AGENTS.md with entry points, layout, and commands.
 
@@ -87,6 +91,7 @@ Each app and package has its own AGENTS.md with entry points, layout, and comman
 | Mobile screen or setup | `apps/mobile/app/` for the routes, `apps/mobile/src/` for the app's own logic, `packages/nightshift/uniwindCss.ts` for the theme, the accessibility bar in `apps/mobile/AGENTS.md` | jsx-conventions | `apps/api/`; every `@carlnotes` package outside the universal four — the boundary check enforces it |
 | Push notification, push device, or the Notifications section | `packages/pipeline/pushNotify.ts`, `pushDelivery.ts`, `pushReceipts.ts`, `pushWorkflows.ts`, `packages/server/expoPush.ts`, `apps/worker/workflows/sendPushNotifications.ts`, `apps/api/pushDevices.ts`, `packages/db/schema/pushDevices.ts`, `apps/mobile/src/push*.ts`, `apps/mobile/src/components/push/`, `packages/core/components/NotificationsSection.tsx` | domain-model | `apps/web/` beyond the `Switch` account field element |
 | MCP tool, MCP card, Topic Tool, or the Add to AI dialog | `apps/api/mcp/`, `apps/api/tool/`, `apps/web/src/mcpCards/`, `apps/web/src/components/common/AddToAiDialog.tsx` | domain-model | `apps/worker/`; `packages/pipeline/` and `packages/models/` beyond `budget.ts` and the modules the tool imports |
+| UI test, image capture, or baseline approval | `ui-tests/AGENTS.md`, `ui-tests/<step>/`, `.github/workflows/ui-tests.yml` | — | `ui-tests/baselines/` images, `ui-tests/output/`; `apps/api/`, `apps/worker/` |
 
 Domain vocabulary is canonical and enforced, so grepping a domain noun reliably finds its code.
 
@@ -104,6 +109,9 @@ Generated or archived paths that burn context:
 - `apps/mobile/.rnstorybook/storybook.requires.ts` — the stories index Storybook's Metro wrapper writes; the sources are
   the `*.stories.tsx` files
 - `coverage/` — test coverage output
+- `ui-tests/baselines/` — approved image captures, stored in Git LFS, and their manifests; `ui-tests/AGENTS.md`
+  describes them
+- `ui-tests/output/` — a UI test run's image captures, diffs, and reports
 - `openspec/changes/archive/` — archived OpenSpec changes
 - `.agents/skills/{ai-sdk,vercel-react-best-practices,web-design-guidelines,impeccable,ponytail}/` — vendored skills,
   loaded on demand

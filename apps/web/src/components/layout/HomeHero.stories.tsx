@@ -7,9 +7,9 @@ import { HomeHero } from "./HomeHero"
 const meta = {
 	title: "Layout/HomeHero",
 	component: HomeHero,
-	// the header draws the hero background, so the story draws it around the hero
+	// the header draws the hero background and text color, so the story draws them around the hero
 	render: (args) => (
-		<div className="bg-hero px-4 pb-6">
+		<div className="bg-hero text-hero-foreground px-4 pb-6">
 			<HomeHero {...args} />
 		</div>
 	),

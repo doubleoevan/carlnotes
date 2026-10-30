@@ -1,0 +1,93 @@
+/* the report page's styles, in light and dark */
+:root {
+	color-scheme: light dark;
+	--page: #fbf7f0;
+	--text: #2b2118;
+	--muted: #7a6a5a;
+	--line: #e2d6c4;
+	--failure: #b3261e;
+	--waiting: #8a5a00;
+}
+
+@media (prefers-color-scheme: dark) {
+	:root {
+		--page: #1f1913;
+		--text: #f1e6d6;
+		--muted: #b8a58e;
+		--line: #4a3b2c;
+		--failure: #f2b8b5;
+		--waiting: #f0c26b;
+	}
+}
+
+body {
+	margin: 0;
+	padding: 16px;
+	font:
+		14px / 1.5 system-ui,
+		sans-serif;
+	background: var(--page);
+	color: var(--text);
+}
+
+h1 {
+	font-size: 20px;
+	margin: 0 0 8px;
+}
+
+fieldset {
+	border: 1px solid var(--line);
+	border-radius: 8px;
+	margin: 12px 0;
+	display: flex;
+	flex-wrap: wrap;
+	gap: 12px;
+}
+
+article {
+	border-top: 1px solid var(--line);
+	padding: 12px 0;
+}
+
+h2 {
+	font-size: 14px;
+	margin: 0 0 4px;
+	overflow-wrap: anywhere;
+}
+
+article[data-failing="true"] h2 {
+	color: var(--failure);
+}
+
+article[data-status="new"] h2,
+article[data-status="removed"] h2 {
+	color: var(--waiting);
+}
+
+p {
+	margin: 0 0 8px;
+	color: var(--muted);
+	overflow-wrap: anywhere;
+}
+
+.images {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 12px;
+}
+
+figure {
+	margin: 0;
+	max-width: 100%;
+}
+
+figcaption {
+	color: var(--muted);
+	font-size: 12px;
+}
+
+img {
+	max-width: min(100%, 640px);
+	border: 1px solid var(--line);
+	background: repeating-conic-gradient(#ccc 0 25%, #fff 0 50%) 0 0 / 16px 16px;
+}

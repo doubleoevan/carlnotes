@@ -106,3 +106,19 @@ diff --git a/ios/utils/CheckboxHitTestUtils.mm b/ios/utils/CheckboxHitTestUtils.
 +
 +  return CGRectInset(rect, -horizontalInset, -verticalInset);
  }
+diff --git a/lib/module/web/normalization/prepareHtmlForWeb.js b/lib/module/web/normalization/prepareHtmlForWeb.js
+index ffe6abdc1fc017a455a4d42db51de0469e6fe3a8..4f1c06a404ce79665f5470746b243e800ceb4135 100644
+--- a/lib/module/web/normalization/prepareHtmlForWeb.js
++++ b/lib/module/web/normalization/prepareHtmlForWeb.js
+@@ -73,8 +73,11 @@ function checkboxHtmlToWeb(doc) {
+     ul.querySelectorAll('li').forEach(li => {
+       const checked = li.hasAttribute('checked');
+       const labelContent = li.innerHTML;
++      const labelText = li.textContent.trim();
+       li.removeAttribute('checked');
+       li.innerHTML = `<input type="checkbox"${checked ? ' checked' : ''}>` + `<label>${labelContent}</label>`;
++      // name the checkbox by its line's text. the label beside the checkbox has no for attribute
++      li.querySelector('input').setAttribute('aria-label', labelText || 'Empty checklist line');
+     });
+   });
+ }

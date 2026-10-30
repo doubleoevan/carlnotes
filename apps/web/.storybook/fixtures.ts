@@ -2,9 +2,10 @@
 // story holds real user data
 import type { AuthClient } from "@carlnotes/client/authClient"
 import type { ProfileIdentity } from "@carlnotes/contracts/profiles"
+import { FIXTURE_DATE } from "@carlnotes/core/lib/storyFixtures"
 
-/** The instant every fixture was created and updated, so a story renders the same dates on every run. */
-export const FIXTURE_DATE = new Date("2026-10-01T12:00:00.000Z")
+// the instant every fixture was created and updated, so a story renders the same dates on every run
+export { FIXTURE_DATE }
 
 /** Who a story renders for: a visitor, a signed-in user, or an admin. */
 export type StorySessionName = "visitor" | "user" | "admin"

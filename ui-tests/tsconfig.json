@@ -1,0 +1,6 @@
+{
+	"extends": "../tsconfig.base.json",
+	"references": [{ "path": "../scripts" }, { "path": "../packages/core" }, { "path": "../packages/nightshift" }],
+	"include": ["**/*.ts"],
+	"exclude": ["output/**"]
+}

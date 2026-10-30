@@ -1,0 +1,32 @@
+# the build context of the capture container's image, the repo root. Docker reads this file in place of the root
+# .dockerignore when it builds ui-tests/Dockerfile, so that image keeps ui-tests/ and its baselines, which the app image
+# leaves out.
+# everything below is rebuilt in the image, host-only, a run's own output, or a secret that must never reach a layer
+**/node_modules
+**/.tsbuild
+**/dist
+apps/docs/.astro
+ui-tests/output
+
+# secrets and local environment
+.env
+.env.*
+!.env.example
+
+# version control and host tooling
+.git
+.githooks
+.github
+
+# agent and editor tooling, none of which a capture runs
+.agents
+.claude
+.opencode
+.gemini
+.vscode
+.idea
+
+# specs, the mobile workspace, and the logs, none of which the capture step reads
+openspec
+apps/mobile
+logs

@@ -1,2 +1,9 @@
 #!/usr/bin/env bash
-exec bash scripts/preflight.sh
+# the checks, with stdin left to Git LFS, which reads the pushed refs from it
+bash scripts/preflight.sh </dev/null || exit 1
+
+# upload the Git LFS files of the pushed commits before git sends the commits. only git-lfs adds one, so a machine
+# without it has none to upload
+if command -v git-lfs >/dev/null 2>&1; then
+  exec git lfs pre-push "$@"
+fi

@@ -806,6 +806,7 @@ Check for:
      with its story, `SettingsContentProps`, and `SignedInUserRow` in `apps/mobile/src/components/account/` (removed: the
      Account screen renders `AccountSettings`), and the mobile `PlanButton` and `ManagePlanButton` in
      `apps/mobile/src/components/account/AccountBudget.tsx` (removed)
+   - `resolveImportPath` in `scripts/clientParity.ts` (now `toImportResolution` in `scripts/importPaths.ts`)
 
 5. **Cross-harness enforcement parity**: `.claude/settings.json` hooks and
    `.opencode/plugin/guardrails.mjs` must gate the same operations with the

@@ -49,6 +49,14 @@ if ! command -v jq >/dev/null 2>&1; then
   brew install jq
 fi
 
+# ensure git-lfs, which stores the UI tests' approved images, and set up its filter. --skip-repo writes no hook, since
+# the repo's own pre-push hook runs the Git LFS upload
+if ! command -v git-lfs >/dev/null 2>&1; then
+  echo "installing git-lfs (it stores the UI tests' approved images)..."
+  brew install git-lfs
+fi
+git lfs install --skip-repo >/dev/null
+
 # route git hooks through the repo so the pre-push gates are always armed
 git config core.hooksPath .githooks
 

@@ -8,6 +8,8 @@ One script owns setup. No .env files, no shell configuration, no steps that live
 - Bun
 - Doppler CLI (`brew install dopplerhq/cli/doppler`)
 - `jq` (`brew install jq`) - the enforcement hooks use it
+- Git LFS (`brew install git-lfs`, then `git lfs install --skip-repo`) - it stores the UI tests' approved images, and
+  carl-up installs it if it is missing
 
 ### Setup: pick one
 
@@ -38,8 +40,9 @@ carl-up to start, carl-down to stop.
 
 Every push runs `scripts/preflight.sh` through the pre-push hook: Biome, the
 package boundary check, the type check, the workflow bundle check, and the
-test suite, all green or the push is rejected. Run the same gate anytime with
-`bun run check`. Never bypass with `--no-verify`.
+test suite, all green or the push is rejected. The hook then uploads the
+push's Git LFS files. Run the same gate anytime with `bun run check`. Never
+bypass with `--no-verify`.
 Edit-time hooks also block comment-discipline and structure violations as
 agents write; the rules live in `.agents/skills/`.
 
