@@ -1,5 +1,9 @@
 import { DailyTopicLimitError, uploadTopicAttachment } from "@carlnotes/client/topicClient"
-import { type SaveTopicOptions, saveTopic as saveSharedTopic } from "@carlnotes/core/lib/saveTopic"
+import {
+	DAILY_TOPIC_LIMIT_HINTS,
+	type SaveTopicOptions,
+	saveTopic as saveSharedTopic,
+} from "@carlnotes/core/lib/saveTopic"
 import type { UseNavigateResult } from "@tanstack/react-router"
 import { toast } from "sonner"
 import { sendPendingUsernameInvites } from "@/components/invite/InviteEditor"
@@ -26,7 +30,7 @@ export function saveTopic(
  */
 export function showSaveError(error: unknown, navigate: UseNavigateResult<string>): void {
 	if (error instanceof DailyTopicLimitError) {
-		toast.error(`${error.message}\n Move a topic to weekly, or get a bigger pot.`, {
+		toast.error(`${error.message}\n ${DAILY_TOPIC_LIMIT_HINTS.purchase}`, {
 			action: toSeePlansToastAction(navigate),
 		})
 		return

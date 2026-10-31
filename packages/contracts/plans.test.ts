@@ -1,8 +1,15 @@
 // plan catalog tests: rank ordering, limit inheritance across the tiers, the billing interval invariants, the
-// monthly budget cutoffs, and the cents conversions
+// monthly budget cutoffs, the cents conversions, and which subscriptions bill overage
 import { expect, test } from "bun:test"
 import { billingIntervals } from "./enums"
-import { type MonthlyBudgetCutoff, PLANS, toCentsFromDollars, toMeanScanCents, toMonthlyBudgetCutoffs } from "./plans"
+import {
+	isOverageBillable,
+	type MonthlyBudgetCutoff,
+	PLANS,
+	toCentsFromDollars,
+	toMeanScanCents,
+	toMonthlyBudgetCutoffs,
+} from "./plans"
 
 // each higher-ranked plan raises every numeric limit and cost over the plan below it
 test("a higher-rank plan's limits are at least those of every lower-rank plan", () => {
@@ -96,4 +103,19 @@ test("toCentsFromDollars rounds dollars to whole cents", () => {
 test("toMeanScanCents averages the recent scan costs in cents", () => {
 	expect(toMeanScanCents([])).toBeNull()
 	expect(toMeanScanCents([0.08, 0.1])).toBeCloseTo(9)
+})
+
+// only a monthly Stripe subscription with a card bills a scan past the daily limit
+test("isOverageBillable bills a monthly Stripe subscription with a card and no other", () => {
+	const monthlyWithCard = { billingInterval: "monthly", hasPaymentMethod: true } as const
+	expect(isOverageBillable({ ...monthlyWithCard, provider: "stripe" })).toBe(true)
+
+	// a store subscription has no metered price, and a free user has no provider at all
+	expect(isOverageBillable({ ...monthlyWithCard, provider: "app_store" })).toBe(false)
+	expect(isOverageBillable({ ...monthlyWithCard, provider: "play_store" })).toBe(false)
+	expect(isOverageBillable({ ...monthlyWithCard, provider: null })).toBe(false)
+
+	// a yearly Stripe subscription has no overage price, and one without a card has nothing to charge
+	expect(isOverageBillable({ provider: "stripe", billingInterval: "yearly", hasPaymentMethod: true })).toBe(false)
+	expect(isOverageBillable({ provider: "stripe", billingInterval: "monthly", hasPaymentMethod: false })).toBe(false)
 })

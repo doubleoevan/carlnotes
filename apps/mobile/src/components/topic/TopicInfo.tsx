@@ -4,6 +4,7 @@ import { SITE_URL } from "@carlnotes/contracts/site"
 import type { TopicDetails, TopicResponse } from "@carlnotes/contracts/topics"
 import { toCountLabel } from "@carlnotes/core/lib/labels"
 import { toNotesMarkdown } from "@carlnotes/core/lib/topicScanRecap"
+import { usePurchaseOffers } from "@carlnotes/core/stores/purchaseOffersStore"
 import { useRecyclingState } from "@shopify/flash-list"
 import { Globe, Lock, Mail } from "lucide-react-native"
 import { type ComponentRef, type ReactNode, useRef, useState } from "react"
@@ -74,14 +75,15 @@ export function TopicInfo({ topic, triggerRef, onClose }: TopicInfoProps) {
  * Shares the Topic roast's content between its sheet and page card.
  */
 export function TopicInfoContent({ topic, isCard = false }: { topic: TopicDetails; isCard?: boolean }) {
-	// include scan details when the topic response provides them
+	// include scan details if the topic response provides them, and a budget failure's Upgrade where the store sells
 	const latestScan = isCard && "scans" in topic ? (topic as TopicResponse).scans[0] : null
+	const { canPurchase } = usePurchaseOffers()
 	return (
 		<>
 			{/* preserve the web's section order and labels */}
 			{latestScan?.status === "failed" ? (
 				<InfoSection label="Last brew failed" isFirst>
-					<TopicScanFailure error={latestScan.error} />
+					<TopicScanFailure error={latestScan.error} canPurchase={canPurchase} />
 					<Text style={toTypeRoleStyle("caption")} className="text-muted-foreground">
 						Carl will keep trying. Check this topic's sources if it keeps failing.
 					</Text>

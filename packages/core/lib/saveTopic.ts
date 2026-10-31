@@ -96,3 +96,9 @@ export const MISSING_FIELD_NOTES = {
 	prompt: "Please write Carl's prompt first.",
 	team: "Pick a team, create one, or set Visibility to private.",
 } as const
+
+// the way past the daily topic limit after that error's message, with a bigger plan only where one may be bought
+export const DAILY_TOPIC_LIMIT_HINTS = {
+	purchase: "Move a topic to weekly, or get a bigger pot.",
+	gated: "Move a topic to weekly.",
+} as const

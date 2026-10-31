@@ -804,7 +804,7 @@ Check for:
      `apps/worker/workflows/deliveryRetryPolicy.ts`, shared with the push workflows)
    - `fetchAndReportUnauthorized` in `packages/client/apiClient.ts` (now `fetchAndHandleRejections`), `SettingsContent.tsx`
      with its story, `SettingsContentProps`, and `SignedInUserRow` in `apps/mobile/src/components/account/` (removed: the
-     Account screen renders `AccountSettings`), and the mobile `PlanButton` and `ManagePlanButton` in
+     Account screen renders `AccountSettings`), and the mobile `ManagePlanButton` in
      `apps/mobile/src/components/account/AccountBudget.tsx` (removed)
    - `resolveImportPath` in `scripts/clientParity.ts` (now `toImportResolution` in `scripts/importPaths.ts`)
    - `packages/core/lib/avatarUpload.ts` (now `packages/core/lib/imageUpload.ts`), `chooseAvatarBody` in
@@ -840,6 +840,12 @@ Check for:
    - `spokenAnswerQueue.ts`, `streamedSpokenAnswer.ts`, `podcastEpisodeQuestionStore.ts` with `toastSpentBudget`, and
      `podcastEpisodeQuestionTestFixtures.ts` in `apps/web/src/stores/` (now `packages/core/stores/`, with the toast in
      `apps/web/src/components/chat/SpokenAnswerAudio.tsx`)
+   - `stripeCustomerId` and `stripeSubscriptionId` on `billing_subscriptions` (now `providerCustomerId` and
+     `providerSubscriptionId` beside the `provider` column in `packages/db/schema/billing.ts`, mapped to the kept
+     `stripe_customer_id` and `stripe_subscription_id` columns),
+     `PREMIUM_PLAN_PROMPTS` in `packages/core/lib/spokenQuestionsPaused.ts` (now `NO_UPGRADE_PROMPTS` there), and
+     `onPortal` on `packages/core/components/PlanCard.tsx` with `handlePortal` in `apps/web/src/pages/PlansPage.tsx`
+     (now the `planManagementAction` prop, a `PlanManagementAction`, and `handlePlanManagement`)
 
 5. **Cross-harness enforcement parity**: `.claude/settings.json` hooks and
    `.opencode/plugin/guardrails.mjs` must gate the same operations with the

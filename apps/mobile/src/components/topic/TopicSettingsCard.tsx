@@ -1,7 +1,9 @@
 import { DAILY_TOPICS_USED_LABEL } from "@carlnotes/contracts/scanFailure"
 import type { TopicResponse } from "@carlnotes/contracts/topics"
 import { toAgeLabel, toDollarLabel, toDurationLabel, toScheduleLabel } from "@carlnotes/core/lib/labels"
+import { usePurchaseOffers } from "@carlnotes/core/stores/purchaseOffersStore"
 import { View } from "react-native"
+import { PlansLink } from "@/components/account/PlansLink"
 import { Text } from "@/components/primitives/text"
 import { CollapsibleSection } from "./CollapsibleSection"
 import { InfoSection, TopicVisibility } from "./TopicInfo"
@@ -11,6 +13,8 @@ import { TopicSources } from "./TopicSources"
  * Matches the web's Artisanal Blend card using the delivered settings.
  */
 export function TopicSettingsCard({ topic }: { topic: TopicResponse }) {
+	// the paused frequency's plans link where the store sells the user a plan
+	const { canPurchase } = usePurchaseOffers()
 	return (
 		<CollapsibleSection title="Artisanal Blend">
 			<View className="rounded-lg border border-separator bg-card p-5 shadow-raised">
@@ -20,7 +24,10 @@ export function TopicSettingsCard({ topic }: { topic: TopicResponse }) {
 					</Text>
 					{/* paused daily frequency */}
 					{topic.isDailyFrequencyPaused ? (
-						<Text className="text-xs text-muted-foreground">{`not brewing. ${DAILY_TOPICS_USED_LABEL}`}</Text>
+						<Text className="text-xs text-muted-foreground">
+							{canPurchase ? <PlansLink label="not brewing" className="text-xs" /> : "not brewing"}
+							{`. ${DAILY_TOPICS_USED_LABEL}`}
+						</Text>
 					) : null}
 					<Text className="text-xs text-muted-foreground">
 						last scan {topic.lastScanAt ? toAgeLabel(topic.lastScanAt) : "never"}

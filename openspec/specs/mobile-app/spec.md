@@ -141,8 +141,9 @@ number incrementing on each build, and a submit profile per store whose credenti
 stay the one home of every value, its dev config for development and prd for production, and a script under
 `scripts/` SHALL sync the mobile values from Doppler into EAS environments, so no value is typed into the EAS
 dashboard. The design SHALL name every value the app reads, mark which ship in the bundle as public, and keep
-anything secret out of the bundle. The EAS commands, submit included, SHALL get root scripts in the same style as
-`dev:mobile`.
+anything secret out of the bundle. The purchase processor's public SDK keys for each store SHALL be among the public
+values the sync moves, and its secret key and webhook authorization SHALL stay server-side in Doppler. The EAS
+commands, submit included, SHALL get root scripts in the same style as `dev:mobile`.
 
 #### Scenario: The value sync fills an EAS environment
 
@@ -165,6 +166,12 @@ anything secret out of the bundle. The EAS commands, submit included, SHALL get 
 
 - **WHEN** a production build runs
 - **THEN** its build number comes from EAS and is one higher than the previous production build's
+
+#### Scenario: The purchase processor's keys
+
+- **WHEN** the sync script runs and the exported bundles are searched
+- **THEN** the two public SDK keys reach EAS as plaintext and appear in the bundle, and the processor's secret key and
+  webhook authorization appear nowhere in it
 
 ### Requirement: Mobile tests cover pure logic only
 

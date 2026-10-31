@@ -2,7 +2,7 @@
 import { z } from "zod"
 
 // the published Terms' version date. a new date asks every account to accept again
-export const TERMS_VERSION = "2026-10-29"
+export const TERMS_VERSION = "2026-10-31"
 
 // the rejection a write that other users read gets while the account's accepted version is older than the published
 // one

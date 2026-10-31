@@ -78,6 +78,17 @@ export const checkoutPayload = z.object({
 	billingInterval: z.enum(["monthly", "yearly"]),
 })
 
+// the store account's storefront country code, recorded with a store purchase and a sync, or null if the store has none
+const storefrontCountryCode = z.string().trim().max(3).nullable().optional()
+
+// the store purchase body the app sends as the store's purchase sheet opens: the plan, the interval, and the storefront
+export const storeCheckoutPayload = checkoutPayload.extend({ storefrontCountryCode })
+export type StoreCheckoutPayload = z.infer<typeof storeCheckoutPayload>
+
+// the store sync body the app sends after a purchase or a restore: the store account's storefront country code, which
+// its subscription events record
+export const storeSubscriptionSyncPayload = z.object({ storefrontCountryCode })
+
 // the update username body. the validation rules live in toUsernameRejection
 export const usernamePayload = z.object({ username: z.string() })
 

@@ -37,16 +37,17 @@ capability the app will never need, with the reason, or `deferred` for one an ac
 | `reportClient.fetchAdminReports` | web-only | The admin console's open reports. Admin stays on the web |
 | `reportClient.sendReportResolution` | web-only | The admin console's Remove and Keep. Admin stays on the web |
 | `billingClient.sendMobileMinimumVersion` | web-only | The admin console's minimum app version write. Admin stays on the web |
-| `billingClient.fetchBillingPortalUrl` | deferred | Prompt 55, store payments. The app offers no purchase or billing management until a storefront design is approved |
-| `billingClient.fetchCheckoutUrl` | deferred | Prompt 55, store payments. The app offers no purchase until a storefront design is approved |
+| `billingClient.fetchBillingPortalUrl` | web-only | Stripe's billing portal. The app manages a store plan on its store's subscription page, and says a Stripe subscriber's plan is billed on the web, with no link |
+| `billingClient.fetchCheckoutUrl` | web-only | Stripe checkout. The app sells its plans as in-app subscriptions through the App Store and Google Play |
 | `teamClient.sendTeamAvatar` | web-only | The browser's File upload. The app uploads to the same route through `teamClient.sendTeamAvatarBody` |
 
 Deferred work with no api capability of its own yet: push notifications (Prompt 52), which will move the app icon badge
-off the foreground poll, and store payments (Prompt 55), which decides what the native Plans screen offers. Until
-then the app sells nothing: the Plans screen is read-only, the Account header has no Upgrade or Manage plan button,
-the failed-payment notice has no portal button, and the spend meter, topic settings card, scan alert, scan recap,
-and edit topic fields keep their words without the plans link. `scripts/check-purchase-paths.ts` keeps it so.
-The web's document title count has the app icon's badge as its counterpart, so it is not web-only.
+off the foreground poll. The app sells plans through its store under the storefront purchase rules in
+`core/lib/storefrontPurchaseRules.ts`. Before the store's offering loads, with an offering that lacks a plan, and for a
+Stripe subscriber or another store's, the Plans screen offers no purchase, a paid plan's cards open where it is managed,
+and every other entry point keeps its words without the plans link. `scripts/check-purchase-paths.ts` fails an app file
+that names the plans path, a purchase label, or the plans link without reading those rules. The web's document title
+count has the app icon's badge as its counterpart, so it is not web-only.
 
 ## Page and action inventory
 
@@ -71,12 +72,13 @@ their reason.
 | Update notice | `session/AppUpdateNotice.tsx` at the root | logic | the copy from `contracts/appVersions.ts` and the requirement from `core/stores/appUpdateStore.ts` on the session frame. Native alone: a browser never runs an outdated app |
 | Report and block | `common/ReportIssueDialog.tsx` from the message and comment footers, note management, and the profile menu | component, logic | the shared report, the block switch, the hidden quote, and the blocked content filters from core |
 | Terms acceptance | `session/TermsAcceptanceSheet.tsx` at the root | component | core's `TermsAcceptanceNotice` in a sheet, with Not now putting it off until the next rejected write |
-| Plans | `plans.tsx` | component | the shared plan cards, open to a visitor with the recommended plan highlighted, read-only: a user's plan is marked and no card offers a checkout or the portal |
+| Plans | `plans.tsx` | component, logic, native | the shared plan cards at the store's prices, open to a visitor with the recommended plan highlighted. A free user buys and a store subscriber switches through the store where its offering holds every plan, a Stripe subscriber reads that the plan is billed on the web, with no link, the renewal line has the Terms and Privacy links under it, and the screen is read-only before the store's offering loads or with a partial offering. Shared logic: the purchase offers from core. Native: the store purchase through RevenueCat (`storePurchases.ts`) |
+| none: Restore purchases | `account/AccountSettings.tsx` | native | The web sells no store plan. Apple requires a restore control for a subscription bought in the app, and the Android app shows the same control. It reads the store account's purchases and syncs them to the account |
 | Invite | `invite/[token].tsx`, `invite/InviteNotice.tsx` | logic | the rejection copy and the follow-ups from `core/lib/inviteRejections.ts` |
 | Login, Signup | `sign-in.tsx`, `sign-up.tsx` | logic | Google, GitHub, and Apple, the prompts from `core/lib/signupPrompts.ts` |
 | Chat panel and rooms | `chat.tsx`, `topics/…/chat.tsx`, `teams/…/chat.tsx` | component, logic | the shared turn and bubble compositions, the room list from the shared store |
 | Chat launcher | `chat/AppChatPanel.tsx` | component | the shared `ChatPill`, the visitor's sign-up sheet |
-| Spoken questions and answers | `chat/MicButton.tsx`, `chat/RecordingBar.tsx`, `chat/SpokenAnswerButton.tsx`, `podcast/PodcastEpisodeQuestionControls.tsx` | component, logic, native | The mic, the recording bar, the play button, and the podcast question controls go into the shared composer slots, turn and bubble footers, and the shared `PodcastPlayer` and `PodcastEpisodePlayerCard` controls. Shared logic: core's `useVoiceRecording`, `useListenMode`, `useChatRoomSpokenAnswer` inside `useChatRoom`, the spoken answer store and queue, the audio cache, the notice store, and the question store and rules. Native replacements: the recorder over expo-audio (`voiceRecorder.ts`), the microphone permission (`voicePermission.ts`), the answer player over cache files (`spokenAnswerAudio.ts`, `voiceCacheFiles.ts`), the audio mode switch (`voiceAudioMode.ts`), and the notices as system alerts (`chat/chatNotice.ts`). The app has no visitor mic in the chat, and its paused mic says when speaking comes back instead of opening Plans |
+| Spoken questions and answers | `chat/MicButton.tsx`, `chat/RecordingBar.tsx`, `chat/SpokenAnswerButton.tsx`, `podcast/PodcastEpisodeQuestionControls.tsx` | component, logic, native | The mic, the recording bar, the play button, and the podcast question controls go into the shared composer slots, turn and bubble footers, and the shared `PodcastPlayer` and `PodcastEpisodePlayerCard` controls. Shared logic: core's `useVoiceRecording`, `useListenMode`, `useChatRoomSpokenAnswer` inside `useChatRoom`, the spoken answer store and queue, the audio cache, the notice store, and the question store and rules. Native replacements: the recorder over expo-audio (`voiceRecorder.ts`), the microphone permission (`voicePermission.ts`), the answer player over cache files (`spokenAnswerAudio.ts`, `voiceCacheFiles.ts`), the audio mode switch (`voiceAudioMode.ts`), and the notices as system alerts (`chat/chatNotice.ts`). The app has no visitor mic in the chat, and its paused mic opens Plans only where the store sells the user a plan, and says when speaking comes back otherwise |
 | Tasting Notes | `…/notes/[noteId].tsx` | component | the shared editor, viewer, comments, and badges |
 | Update badges | `common/UpdateCountBadge.tsx` | logic | the sum, labels, and groups from `core/lib/updateCounts.ts`, a long-press sheet for the tooltip |
 | Admin | none | web-only | Admin opens the web from the menu, and its browser session can need its own sign-in |

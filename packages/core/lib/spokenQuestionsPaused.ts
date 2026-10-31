@@ -19,9 +19,9 @@ export function toUpgradePromptCta(isPodcastEpisodeQuestion = false): UpgradePro
 	return isPodcastEpisodeQuestion ? "podcast-question" : "chat-voice"
 }
 
-// what each mic says when speaking comes back on the 1st: the line a user on premium reads, which has no plan above
-// it to upgrade to, and the line the mobile app shows on every plan
-export const PREMIUM_PLAN_PROMPTS: Record<UpgradePromptCta, string> = {
+// what each mic says when speaking comes back on the 1st, for a user with no plan to upgrade to: premium, which has
+// no plan above it, and a user who cannot buy a plan where the mic is
+export const NO_UPGRADE_PROMPTS: Record<UpgradePromptCta, string> = {
 	"chat-voice": "Speak with Carl again on the 1st.",
 	"podcast-question": "Speak with Carl and Vienna again on the 1st.",
 }
@@ -32,14 +32,16 @@ export type SpokenQuestionsPausedAction =
 	| { kind: "navigate"; navigation: { to: "/plans"; search: { cta: UpgradePromptCta } } }
 
 /**
- * Returns what a mic does past the spoken questions cutoff for the user's plan. Premium has no plan above it, so its
- * mic toasts that speaking comes back on the 1st. Every other plan opens the plans page.
+ * Returns what a mic does past the spoken questions cutoff for the user's plan. Premium has no plan above it, and a
+ * user who cannot buy a plan where the mic is has no plan to upgrade to, so either mic toasts that speaking comes back
+ * on the 1st. Every other plan opens the plans page.
  */
 export function toSpokenQuestionsPausedAction(
 	plan: string | null | undefined,
 	upgradePromptCta: UpgradePromptCta,
+	canPurchase = true,
 ): SpokenQuestionsPausedAction {
-	return isPremiumPlan(plan)
-		? { kind: "toast", prompt: PREMIUM_PLAN_PROMPTS[upgradePromptCta] }
+	return isPremiumPlan(plan) || !canPurchase
+		? { kind: "toast", prompt: NO_UPGRADE_PROMPTS[upgradePromptCta] }
 		: { kind: "navigate", navigation: { to: "/plans", search: { cta: upgradePromptCta } } }
 }

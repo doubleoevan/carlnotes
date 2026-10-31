@@ -1,4 +1,5 @@
 import { sendManualScan, sendStopScan } from "@carlnotes/client/topicClient"
+import { PLANS_PATH, PURCHASE_COPY } from "@carlnotes/contracts/plans"
 import {
 	DAILY_SCANS_USED_LABEL,
 	MANUAL_SCAN_PAUSED_LABEL,
@@ -7,6 +8,7 @@ import {
 import type { TopicResponse } from "@carlnotes/contracts/topics"
 import { useManualScanProgress } from "@carlnotes/core/hooks/useManualScanProgress"
 import { isManualScanShown } from "@carlnotes/core/lib/topicActions"
+import { usePurchaseOffers } from "@carlnotes/core/stores/purchaseOffersStore"
 import { router } from "expo-router"
 import { CirclePause, Coffee } from "lucide-react-native"
 import { Alert, View } from "react-native"
@@ -25,14 +27,25 @@ export function TopicScanButton({ topic, onScanned }: { topic: TopicResponse; on
 	const mutation = usePageMutation(onScanned)
 	const isRunning = progress.isScanning || progress.isRunningScan
 	usePollWhileScanning({ isScanning: isRunning, reload: onScanned })
+	// the daily quota's alert opens Plans where the store sells the user a plan
+	const { canPurchase } = usePurchaseOffers()
+	const dailyScansBlockedPath = canPurchase ? PLANS_PATH : null
 	if (!isManualScanShown(topic)) {
 		return null
 	}
-	// alert why a scan is blocked, with a See account button if the block has an account path
-	function handleBlocked(message: string, accountPath: "/account" | null): void {
+	// alert why a scan is blocked, with the button to the screen that explains it: See account for a budget stop, and See
+	// plans for the daily quota where the store sells the user a plan
+	function handleBlocked(message: string, blockedPath: "/account" | typeof PLANS_PATH | null): void {
 		Alert.alert("Brew", message, [
 			{ text: "Close", style: "cancel" },
-			...(accountPath ? [{ text: "See account", onPress: () => router.push(accountPath) }] : []),
+			...(blockedPath
+				? [
+						{
+							text: blockedPath === PLANS_PATH ? PURCHASE_COPY.seePlans : "See account",
+							onPress: () => router.push(blockedPath),
+						},
+					]
+				: []),
 		])
 	}
 	async function handleScan(): Promise<void> {
@@ -46,7 +59,7 @@ export function TopicScanButton({ topic, onScanned }: { topic: TopicResponse; on
 			return
 		}
 		if ((topic.manualScansRemaining ?? 0) <= 0) {
-			handleBlocked(DAILY_SCANS_USED_LABEL, null)
+			handleBlocked(DAILY_SCANS_USED_LABEL, dailyScansBlockedPath)
 			return
 		}
 

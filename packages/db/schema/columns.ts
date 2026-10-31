@@ -5,6 +5,7 @@ import {
 	attachmentStatuses,
 	avatarSources,
 	billingIntervals,
+	billingProviders,
 	chatAttachmentKinds,
 	chatTurnKinds,
 	daysOfWeek,
@@ -45,6 +46,8 @@ export const rating = pgEnum("rating", ratings)
 export const plan = pgEnum("plan", plans)
 // how often a subscription bills, this determines its plan limits and whether it supports metered overage
 export const billingInterval = pgEnum("billing_interval", billingIntervals)
+// who bills a subscription: Stripe, the App Store, or Google Play
+export const billingProvider = pgEnum("billing_provider", billingProviders)
 // the attachment async-processing status enum, shared by topic attachments and kept chat attachments
 export const attachmentStatus = pgEnum("attachment_status", attachmentStatuses)
 // a source's screening status, its own type so the column's type names what it holds

@@ -1,10 +1,14 @@
 // each billing plan's topic limit, daily topic limit, daily scan limit, monthly spend backstop, monthly budget
 // cutoffs, and price
 import { z } from "zod"
-import type { billingIntervals, plans } from "./enums"
+import type { billingIntervals, billingProviders, plans } from "./enums"
 
 export type Plan = (typeof plans)[number]
+
+// a paid plan is any plan but free. only a paid plan has a billing subscription
+export type PaidPlan = Exclude<Plan, "free">
 export type BillingInterval = (typeof billingIntervals)[number]
+export type BillingProvider = (typeof billingProviders)[number]
 
 // a limit that differs by how the subscription bills. reading one means naming a billing interval
 type BillingIntervalLimit = Record<BillingInterval, number>
@@ -132,7 +136,26 @@ export const PURCHASE_COPY = {
 	seePlans: "See plans",
 	pickUpMoreCoffee: "Pick up more coffee",
 	pickUpSomeCoffee: "Pick up some coffee.",
+	switchPlan: "Switch plan",
+	manageInAppStore: "Manage in the App Store",
+	manageInGooglePlay: "Manage in Google Play",
+	restorePurchases: "Restore purchases",
 } as const
+
+// the parts of a billing subscription that decide whether a scan past the daily limit can be billed. a free user has
+// no provider
+export type OverageBillingAccess = {
+	provider: BillingProvider | null
+	billingInterval: BillingInterval
+	hasPaymentMethod: boolean
+}
+
+/**
+ * Whether a scan past the daily limit bills as metered overage: only a monthly Stripe subscription with a card does.
+ */
+export function isOverageBillable({ provider, billingInterval, hasPaymentMethod }: OverageBillingAccess): boolean {
+	return provider === "stripe" && billingInterval === "monthly" && hasPaymentMethod
+}
 
 // a user's authority and entitlement inputs, read together
 export type UserAccess = { isAdmin: boolean; plan: Plan; budgetOverrideCents: number | null }

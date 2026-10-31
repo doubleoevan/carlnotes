@@ -9,6 +9,7 @@ import { CHAT_QUESTION_PLACEHOLDER, NEW_TOPIC_CHAT_COPY } from "@carlnotes/core/
 import { CHAT_REJECTION_COPY } from "@carlnotes/core/lib/chatRejectionCopy"
 import type { ChatTurn } from "@carlnotes/core/lib/chatTurns"
 import { clearProposedTopicEdit } from "@carlnotes/core/stores/chatConversationStore"
+import { usePurchaseOffers } from "@carlnotes/core/stores/purchaseOffersStore"
 import { useEffect, useRef } from "react"
 import { type FlatList, View } from "react-native"
 import { CoffeeLoading } from "@/components/branding/CoffeeLoading"
@@ -263,8 +264,10 @@ function TopicDraftOrLimitNotice({
 	topicChat: TopicChat
 	topicDraftState: NewTopicDraft<PickedFile>
 }) {
+	// the limit notice links to the Plans screen where the store sells the user a plan
+	const { canPurchase } = usePurchaseOffers()
 	if (topicChat.topicsRemaining === 0 && topicChat.topicLimit !== null) {
-		return <ChatTopicLimitNotice topicLimit={topicChat.topicLimit} />
+		return <ChatTopicLimitNotice topicLimit={topicChat.topicLimit} canPurchase={canPurchase} />
 	}
 	return (
 		<TopicDraftCard

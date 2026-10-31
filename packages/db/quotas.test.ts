@@ -1,7 +1,7 @@
 // quota tests: the suggestion limit window and daily limit, each invite limit factor with its floor and a connected
 // recipient, the per-request access read, the month's spend and its per-request read, and full podcast episodes
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
-import { PLANS } from "@carlnotes/contracts/plans"
+import { isOverageBillable, PLANS } from "@carlnotes/contracts/plans"
 import { sql } from "drizzle-orm"
 import {
 	ADMIN_USER_ACCESS_ROW,
@@ -15,6 +15,7 @@ import { isMonthlyBudgetCutoffPassed } from "./monthlyBudgetCutoffs"
 import {
 	hasFullPodcastEpisodes,
 	incrementDaySuggestionCount,
+	loadBillingAccess,
 	loadSpendSince,
 	loadUserAccess,
 	monthlySpendDollars,
@@ -138,6 +139,32 @@ test("the access row is read on every call outside a request", async () => {
 	})
 
 	expect(queryCount).toBe(2)
+})
+
+// a monthly store subscription with a card reads its provider, and the provider keeps its daily limit hard
+test("a store billing row reads its provider and bills no overage", async () => {
+	stubConnectionPool(() => [["app_store", true, "monthly"]])
+	try {
+		const billingAccess = await loadBillingAccess("user-1")
+		expect(billingAccess).toEqual({ provider: "app_store", hasPaymentMethod: true, billingInterval: "monthly" })
+		expect(isOverageBillable(billingAccess)).toBe(false)
+	} finally {
+		restoreConnectionPool()
+	}
+})
+
+// a free user has no row, so no provider and nothing to bill
+test("a user with no billing row reads no provider", async () => {
+	stubConnectionPool(() => [])
+	try {
+		expect(await loadBillingAccess("user-1")).toEqual({
+			provider: null,
+			hasPaymentMethod: false,
+			billingInterval: "monthly",
+		})
+	} finally {
+		restoreConnectionPool()
+	}
 })
 
 // the daily suggestion limit allows the thirtieth suggestion and rejects the next

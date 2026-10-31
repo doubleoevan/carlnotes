@@ -1,3 +1,4 @@
+import { PURCHASE_COPY } from "@carlnotes/contracts/plans"
 import { toCentsLabel, toSharePercentLabel } from "@carlnotes/core/lib/labels"
 import { MONTHLY_BUDGET_CUTOFF_COPY } from "@carlnotes/core/lib/monthlyBudgetCutoffCopy"
 import {
@@ -9,15 +10,21 @@ import {
 	toSpendMeterModel,
 	toSpendMeterStatusLine,
 } from "@carlnotes/core/lib/spendMeter"
+import type { PurchaseOffers } from "@carlnotes/core/lib/storefrontPurchaseRules"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { Alert, Pressable, View } from "react-native"
 import { toTouchTargetHitSlop } from "@/components/primitives/button"
 import { Text } from "@/components/primitives/text"
+import { PlansLink } from "./PlansLink"
 
 /**
- * Draws the shared budget calculations and cutoff markers using native views and accessible detail buttons.
+ * Draws the shared budget calculations and cutoff markers using native views and accessible detail buttons, with the
+ * web's plans link once the budget is spent if the store sells the user a plan.
  */
-export function SpendMeter({ activity }: { activity: SpendMeterProps }) {
+export function SpendMeter({
+	activity,
+	canPurchase,
+}: { activity: SpendMeterProps } & Pick<PurchaseOffers, "canPurchase">) {
 	// read the shared amounts, segments, and legend
 	const { budgetCents, monthlyBudgetCutoffs } = activity
 	const {
@@ -25,6 +32,7 @@ export function SpendMeter({ activity }: { activity: SpendMeterProps }) {
 		budgetUsedShare,
 		budgetUsedPercent,
 		hasMonthlyBudgetCutoffs,
+		isUpgradeVisible,
 		spendSegments,
 		legendSegments,
 		cutoffRows,
@@ -73,6 +81,12 @@ export function SpendMeter({ activity }: { activity: SpendMeterProps }) {
 			</View>
 			<Text className="mt-1 text-xs text-muted-foreground">
 				{budgetUsedPercent}% {toSpendMeterStatusLine({ budgetUsedShare, monthlyBudgetCutoffs })}
+				{isUpgradeVisible && canPurchase && (
+					<>
+						{" "}
+						<PlansLink label={PURCHASE_COPY.pickUpSomeCoffee} className="text-xs" />
+					</>
+				)}
 			</Text>
 			{hasMonthlyBudgetCutoffs && (
 				<View className="mt-3 gap-1">

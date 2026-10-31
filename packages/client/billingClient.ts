@@ -2,6 +2,7 @@
 import type { OwnerTopic } from "@carlnotes/contracts/activity"
 import type { AdminConsoleResponse, AdminTopicSubscriberRow } from "@carlnotes/contracts/admin"
 import type { MobilePlatform } from "@carlnotes/contracts/clientTelemetry"
+import type { StoreCheckoutPayload } from "@carlnotes/contracts/payloads"
 import { type BillingState, billingState } from "@carlnotes/contracts/profiles"
 import type { TeamPageResponse, TeamSummary } from "@carlnotes/contracts/teams"
 import { apiClient, readApiResponse } from "./apiClient"
@@ -27,6 +28,27 @@ export async function fetchBillingPortalUrl(): Promise<string | null> {
 	}
 	const { url } = (await response.json()) as { url: string }
 	return url
+}
+
+/**
+ * Records the store purchase that the user is starting. A failed record never blocks the purchase.
+ */
+export async function sendStoreCheckoutStarted(storeCheckout: StoreCheckoutPayload): Promise<void> {
+	await apiClient()
+		.api.billing.store.checkout.$post({ json: storeCheckout })
+		.catch(() => undefined)
+}
+
+/**
+ * Sends the store sync, which re-reads the signed-in user's store subscription, and returns the billing state that it
+ * left. The body holds only the storefront country code.
+ */
+export async function sendStoreSubscriptionSync(storefrontCountryCode: string | null): Promise<BillingState> {
+	const response = await apiClient().api.billing.store.sync.$post({ json: { storefrontCountryCode } })
+	if (!response.ok) {
+		throw new Error(`store subscription sync failed: ${response.status}`)
+	}
+	return readApiResponse(billingState, response)
 }
 
 // the current user's billing state for the account page

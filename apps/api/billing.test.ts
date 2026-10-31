@@ -1,6 +1,7 @@
 // billing tests for the subscription projection that the webhook applies to billing_subscriptions, the webhook's
 // responses: a 400 for a bad signature and a 500 for a verified event that could not be applied, the LiteLLM key
-// that a plan change or a stale key budget reissues, and the 404 a non-admin gets for another user's billing state
+// that a plan change or a stale key budget reissues, the 404 a non-admin gets for another user's billing state, and
+// the account closing that cancels only a Stripe subscription
 import { afterEach, expect, type Mock, mock, spyOn, test } from "bun:test"
 import type { Plan } from "@carlnotes/contracts/plans"
 import { FREE_USER_ACCESS_ROW, restoreConnectionPool, stubConnectionPool } from "@carlnotes/db/connectionPoolStub"
@@ -10,7 +11,7 @@ import { toHmacDigest } from "@carlnotes/server/hmac"
 import type * as monitoring from "@carlnotes/server/monitoring"
 import { quietErrorReports } from "@carlnotes/server/monitoringTestFixtures"
 import { saveEnvSettings } from "@carlnotes/server/savedEnvSettings"
-import { toPaidSubscription } from "./billing"
+import { cancelUserSubscription, toPaidSubscription } from "./billing"
 import { billingRoute } from "./billingRoute"
 import { toSignedInApp } from "./testSession"
 
@@ -197,10 +198,11 @@ test("toPaidSubscription maps an active paid subscription", () => {
 		default_payment_method: "pm_1",
 	})
 	expect(paidSubscription).toEqual({
+		provider: "stripe",
 		plan: "plus",
 		status: "active",
-		stripeCustomerId: "cus_1",
-		stripeSubscriptionId: "sub_1",
+		providerCustomerId: "cus_1",
+		providerSubscriptionId: "sub_1",
 		currentPeriodEnd: new Date(1_800_000_000 * 1000),
 		hasPaymentMethod: true,
 		billingInterval: "monthly",
@@ -324,5 +326,15 @@ test("projectSubscription reports no card and reads the customer id from an obje
 		metadata: { plan: "premium" },
 	})
 	expect(singlePaymentSubscription?.hasPaymentMethod).toBe(false)
-	expect(singlePaymentSubscription?.stripeCustomerId).toBe("cus_2")
+	expect(singlePaymentSubscription?.providerCustomerId).toBe("cus_2")
+})
+
+// a store subscription has no Stripe row, so closing the account reads the Stripe row alone and never reaches Stripe
+test("cancelUserSubscription reads only a Stripe row and leaves a store subscription to the store", async () => {
+	delete Bun.env.STRIPE_SECRET_KEY
+	const sentQueries = stubConnectionPool(() => [])
+	await cancelUserSubscription("user-1")
+	expect(sentQueries).toHaveLength(1)
+	expect(sentQueries[0]?.text).toContain('"billing_subscriptions"."provider" = $2')
+	expect(sentQueries[0]?.values).toEqual(["user-1", "stripe"])
 })

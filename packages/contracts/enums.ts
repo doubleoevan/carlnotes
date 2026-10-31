@@ -1,5 +1,6 @@
 // the one shared set of enum values. db builds its pgEnums from these, api validates with them, and ui renders with
 // them
+import type { PaidPlan } from "./plans"
 
 // the case a display enum takes on the app when the api sends a value this version does not know
 export const UNKNOWN_CASE = "unknown"
@@ -138,7 +139,7 @@ export function isLeaderRole(role: string | null | undefined): boolean {
 /**
  * Whether a plan is paid.
  */
-export function isPaidPlan(plan: string | null | undefined): plan is Exclude<(typeof plans)[number], "free"> {
+export function isPaidPlan(plan: string | null | undefined): plan is PaidPlan {
 	return Boolean(plan) && plan !== "free"
 }
 
@@ -154,6 +155,8 @@ export const inviteAccesses = ["anyone", "connected", "nobody"] as const
 export const plans = ["free", "plus", "premium"] as const
 // how often a subscription bills
 export const billingIntervals = ["monthly", "yearly"] as const
+// who bills a subscription: Stripe on the web, or the App Store or Google Play in the app
+export const billingProviders = ["stripe", "app_store", "play_store"] as const
 // where a user's public avatar comes from. generated uses the username initials
 export const avatarSources = ["generated", "oauth", "upload"] as const
 // how many findings a topic scan may keep

@@ -1,12 +1,14 @@
 // the phone's recording: core's state machine from the mic tap to the transcript, over the phone's microphone, with
-// the line that says when speaking comes back past the spoken questions cutoff
+// the Plans screen or the line that says when speaking comes back past the spoken questions cutoff
+import { authClient } from "@carlnotes/client/authClient"
 import {
 	type UseVoiceRecordingOptions,
 	useVoiceRecording as useSharedVoiceRecording,
 	type VoiceRecording,
 } from "@carlnotes/core/hooks/useVoiceRecording"
-import { PREMIUM_PLAN_PROMPTS, toUpgradePromptCta } from "@carlnotes/core/lib/spokenQuestionsPaused"
+import { toSpokenQuestionsPausedAction, toUpgradePromptCta } from "@carlnotes/core/lib/spokenQuestionsPaused"
 import type { VoiceRecordingSession } from "@carlnotes/core/lib/voiceRecorder"
+import { usePurchaseOffers } from "@carlnotes/core/stores/purchaseOffersStore"
 import { showVoiceNotice } from "@carlnotes/core/stores/voiceNoticeStore"
 import {
 	AudioModule,
@@ -14,7 +16,7 @@ import {
 	type RecordingOptions,
 	requestRecordingPermissionsAsync,
 } from "expo-audio"
-import { useFocusEffect } from "expo-router"
+import { router, useFocusEffect } from "expo-router"
 import { useCallback, useRef } from "react"
 import { AppState, Linking } from "react-native"
 import { deleteCacheFile } from "@/cacheFiles"
@@ -45,16 +47,34 @@ const appVoiceRecorder = toVoiceRecorderAdapter({
 
 /**
  * Owns one recording, a composer's or the podcast player's, through the phone's microphone. Past the spoken questions
- * cutoff the mic says when speaking comes back on every plan.
+ * cutoff the mic opens the Plans screen where the store sells the user a plan, and says when speaking comes back
+ * otherwise.
  */
 export function useVoiceRecording(
 	options: Omit<UseVoiceRecordingOptions<VoiceRecordingSession>, "recorder" | "onSpokenQuestionsPaused">,
 ): VoiceRecording {
+	// the web's action past the cutoff, with the app's purchase offers deciding whether Plans can sell a plan
 	const upgradePromptCta = toUpgradePromptCta(options.isPodcastEpisodeQuestion)
+	const { canPurchase } = usePurchaseOffers()
+	const { data: session } = authClient().useSession()
+
+	// show the toast for a premium plan or where the store sells no plan, as the web's mic does
+	function handleSpokenQuestionsPaused(): void {
+		const spokenQuestionsPausedAction = toSpokenQuestionsPausedAction(session?.user.plan, upgradePromptCta, canPurchase)
+		if (spokenQuestionsPausedAction.kind === "toast") {
+			showVoiceNotice(spokenQuestionsPausedAction.prompt)
+			return
+		}
+
+		// otherwise open the Plans screen with the mic's call to action
+		router.push({ pathname: "/plans", params: spokenQuestionsPausedAction.navigation.search })
+	}
+
+	// core's recording over the phone's microphone
 	return useSharedVoiceRecording({
 		...options,
 		recorder: appVoiceRecorder,
-		onSpokenQuestionsPaused: () => showVoiceNotice(PREMIUM_PLAN_PROMPTS[upgradePromptCta]),
+		onSpokenQuestionsPaused: handleSpokenQuestionsPaused,
 	})
 }
 

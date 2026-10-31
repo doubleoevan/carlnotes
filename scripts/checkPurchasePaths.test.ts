@@ -1,5 +1,5 @@
-// the purchase guard over fixture files: a reached checkout capability, a plans path in an app file, a listed
-// exception, and a shared module the app renders without the purchase handler
+// the purchase guard over fixture files: a reached checkout capability, a plans path in an app file that reads the
+// rules and one that does not, a listed exception, and a shared module the app renders without the purchase handler
 import { expect, test } from "bun:test"
 import { checkPurchasePaths } from "./checkPurchasePaths"
 import type { SourceFile } from "./workspaces"
@@ -17,15 +17,38 @@ const SHARED_CARD: SourceFile = {
 	fileText: 'export const label = "Upgrade"\n',
 }
 
-// the read-only Plans screen, a listed exception
+// the Plans screen, which reads the purchase offers store
 const PLANS_SCREEN: SourceFile = {
 	filePath: "apps/mobile/app/plans.tsx",
 	fileText:
-		'import { fetchBillingState } from "@carlnotes/client/billingClient"\nimport { PlanCard } from "@carlnotes/core/components/PlanCard"\nexport const returnPath = "/plans"\n',
+		'import { fetchBillingState } from "@carlnotes/client/billingClient"\nimport { usePurchaseOffers } from "@carlnotes/core/stores/purchaseOffersStore"\nexport const label = "Switch plan"\n',
 }
 
-test("an app that reaches no purchase capability and names no purchase passes", () => {
-	expect(checkPurchasePaths([BILLING_CLIENT, SHARED_CARD, PLANS_SCREEN])).toEqual([])
+// the sign-up return, a listed exception that reads no rules
+const SESSION_RETURN_PATH: SourceFile = {
+	filePath: "apps/mobile/src/sessionReturnPath.ts",
+	fileText: 'export const returnPath = "/plans"\n',
+}
+
+test("an app that reaches no purchase capability and names a purchase only through the rules passes", () => {
+	expect(checkPurchasePaths([BILLING_CLIENT, SHARED_CARD, PLANS_SCREEN, SESSION_RETURN_PATH])).toEqual([])
+})
+
+test("a file that reads the storefront purchase rules may name the plans path", () => {
+	const budgetNotice: SourceFile = {
+		filePath: "apps/mobile/src/components/chat/ChatBudgetNotice.tsx",
+		fileText: 'import { toPurchaseOffers } from "@carlnotes/core/lib/storefrontPurchaseRules"\nconst href = "/plans"\n',
+	}
+	expect(checkPurchasePaths([BILLING_CLIENT, budgetNotice])).toEqual([])
+})
+
+test("a rules import inside a comment does not let a file name the plans path", () => {
+	const budgetNotice: SourceFile = {
+		filePath: "apps/mobile/src/components/chat/ChatBudgetNotice.tsx",
+		fileText:
+			'// import { toPurchaseOffers } from "@carlnotes/core/lib/storefrontPurchaseRules"\nconst href = "/plans"\n',
+	}
+	expect(checkPurchasePaths([BILLING_CLIENT, budgetNotice])).toHaveLength(1)
 })
 
 test("a reached checkout capability fails", () => {
@@ -55,4 +78,22 @@ test("a plans path or a purchase label in an unlisted app file fails, and a stor
 	}
 	const violations = checkPurchasePaths([BILLING_CLIENT, settingsCard, scanButton, story])
 	expect(violations.map((violation) => violation.split(" ")[0])).toEqual([settingsCard.filePath, scanButton.filePath])
+	expect(violations[0]).toContain("usePurchaseOffers from @carlnotes/core/stores/purchaseOffersStore")
+})
+
+test("the plans path's name, the labels' name, or the plans link in an unlisted app file fails", () => {
+	const spendMeter: SourceFile = {
+		filePath: "apps/mobile/src/components/account/SpendMeter.tsx",
+		fileText: 'import { PLANS_PATH } from "@carlnotes/contracts/plans"\n',
+	}
+	const budgetNotice: SourceFile = {
+		filePath: "apps/mobile/src/components/chat/ChatBudgetNotice.tsx",
+		fileText: "const label = PURCHASE_COPY.pickUpMoreCoffee\nexport const link = <PlansLink label={label} />\n",
+	}
+	const plansLink: SourceFile = {
+		filePath: "apps/mobile/src/components/account/PlansLink.tsx",
+		fileText: "export function PlansLink() { return PLANS_PATH }\n",
+	}
+	const violations = checkPurchasePaths([BILLING_CLIENT, spendMeter, budgetNotice, plansLink])
+	expect(violations.map((violation) => violation.split(" ")[0])).toEqual([spendMeter.filePath, budgetNotice.filePath])
 })

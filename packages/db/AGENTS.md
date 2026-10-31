@@ -6,18 +6,18 @@ and `@carlnotes/contracts`, with `drizzle-orm` and `@neondatabase/serverless`.
 
 - `schema/` — the schema, one file per domain: `users.ts` (users and Better Auth's tables), `topics.ts`, `scans.ts`
   (scans, resources, findings, and the finding markers), `teams.ts`, `invites.ts`, `chat.ts`, `notes.ts`, `podcast.ts`,
-  `billing.ts`, `releases.ts`, `claims.ts` (the claims' lease rows), `storage.ts` (favicons and the pending object
-  deletions), `mobileMinimumVersions.ts` (the minimum app version of each platform), `reports.ts` (content reports),
-  `userBlocks.ts` (the users a user blocked), `pushDevices.ts` (each phone's Expo push token, bound to the session that
-  registered it so ending the session or closing the account deletes it, and the push sends the push service accepted,
-  one per event, recipient, and phone, with each receipt, indexed by phone and recipient for the cascades),
-  `viewerCounts.ts` (the saved HyperLogLog counter of each topic's viewers
-  and each podcast episode's listeners), `vectors.ts` (the topic and podcast episode vectors that rank related topics,
-  related podcast episodes, and the podcast episode search, each table kept apart from the row it ranks so a read of a
-  whole row never includes a vector, and each table's public and shown flag with its partial HNSW index), and
-  `columns.ts` (the pgEnums and the column helpers they share). A table references another file's table through a lazy
-  `references`, so the files import each other freely. `index.ts` spreads every file into the one `schema` object the
-  client is bound to.
+  `billing.ts` (each user's one billing subscription and the provider that bills it), `releases.ts`, `claims.ts` (the
+  claims' lease rows), `storage.ts` (favicons and the pending object deletions), `mobileMinimumVersions.ts` (the minimum
+  app version of each platform), `reports.ts` (content reports), `userBlocks.ts` (the users a user blocked),
+  `pushDevices.ts` (each phone's Expo push token, bound to the session that registered it so ending the session or
+  closing the account deletes it, and the push sends the push service accepted, one per event, recipient, and phone,
+  with each receipt, indexed by phone and recipient for the cascades), `viewerCounts.ts` (the saved HyperLogLog counter
+  of each topic's viewers and each podcast episode's listeners), `vectors.ts` (the topic and podcast episode vectors
+  that rank related topics, related podcast episodes, and the podcast episode search, each table kept apart from the row
+  it ranks so a read of a whole row never includes a vector, and each table's public and shown flag with its partial
+  HNSW index), and `columns.ts` (the pgEnums and the column helpers they share). A table references another file's table
+  through a lazy `references`, so the files import each other freely. `index.ts` spreads every file into the one
+  `schema` object the client is bound to.
 - `index.ts` — the pooled client, the connection pool's counts, `sizeConnectionPool`, `isUniqueViolation`, and the
   `DbTransaction` and `DbHandle` types that a function sharing its caller's transaction takes. Each long-running
   process, the api, the Temporal worker, the sweep, and the budget reset, awaits `sizeConnectionPool` at startup. It

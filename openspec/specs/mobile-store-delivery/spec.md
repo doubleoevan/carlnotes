@@ -77,6 +77,10 @@ The repository SHALL hold the store listing copy in Carl's voice for both stores
 app, the api, analytics, error reporting, and each native module collect, and an encryption declaration that
 matches the dependencies in use. The inventory SHALL name the microphone: the recording of a spoken question reaches
 the api and Google's transcription with storage off, is never kept, and on the phone stays in the app's cache alone.
+The listing SHALL answer the stores' purchase questions as yes, name the in-app subscriptions, and give the reviewer the
+sandbox purchase steps, and the inventory SHALL name the purchase processor, the purchase history it holds against a
+random RevenueCat app user id the api saves per account, never the account id, and the customer's delete when the
+account closes.
 
 #### Scenario: The inventory names every collector
 
@@ -94,11 +98,18 @@ the api and Google's transcription with storage off, is never kept, and on the p
 - **THEN** the inventory's microphone row names the recording, where it goes, that nothing is kept, and the store
   answers follow it
 
+#### Scenario: The listing and the inventory name the purchases
+
+- **WHEN** the store payments change ships
+- **THEN** the listing's rating answers say digital purchases yes, the review notes name the sandbox purchase, and the
+  inventory's purchase row names the processor, the receipt, the random RevenueCat app user id it is keyed to, and
+  its delete when the account closes
+
 ### Requirement: A release passes the acceptance list
 
 A release SHALL pass a written acceptance list covering devices, accessibility, roles, links, forced update, push
-notifications, spoken questions, and the dashboards, and an item not checked SHALL be named in the release record as
-unverified, never marked passed.
+notifications, spoken questions, store purchases, and the dashboards, and an item not checked SHALL be named in the
+release record as unverified, never marked passed.
 
 #### Scenario: Devices and themes
 
@@ -136,6 +147,14 @@ unverified, never marked passed.
   settings guidance, a spoken question in a private chat, a Team room with a second account listening, and the
   podcast player with the episode's resume, a call and a headset removal mid-recording and mid-answer, listen mode,
   and sign-out cleanup pass
+
+#### Scenario: Store purchases
+
+- **WHEN** the list is run
+- **THEN** on a device for each platform with the store's sandbox account, a purchase of each plan at each interval, a
+  plan switch, a restore after a reinstall, a cancellation and its expiry, a refund, a sandbox billing failure, a
+  second account's restore, a storefront with no offering, and the web's account page after each step pass, and the
+  web's own checkout and portal pass unchanged
 
 #### Scenario: An item is unverified
 

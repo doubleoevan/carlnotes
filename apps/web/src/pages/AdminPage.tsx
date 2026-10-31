@@ -158,7 +158,8 @@ function TotalSummaries({
 			<TotalCard label="Teams" figure={String(teams.length)} />
 			<TotalCard label="Storage" figure={toBytesLabel(totals.attributedBytes)} />
 			<TotalCard label="Cost this month" figure={toCentsLabel(totals.monthVariableCostCents)} />
-			<TotalCard label="Net revenue" figure={toCentsLabel(totals.netRevenueCents)} />
+			{/* Stripe's revenue alone. a store's revenue is read in RevenueCat's dashboard */}
+			<TotalCard label="Net web revenue" figure={toCentsLabel(totals.netRevenueCents)} />
 			<TotalCard label="Contribution" figure={toCentsLabel(totals.contributionCents)} />
 			<TotalCard label="Blocks" figure={String(totals.blockCount)} />
 		</div>

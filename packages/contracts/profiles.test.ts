@@ -25,6 +25,9 @@ const billingStateFixture: BillingState = {
 	hasPaymentMethod: true,
 	dailyScansUsed: 2,
 	dailyScanLimit: 10,
+	provider: "stripe",
+	isOverageBillable: false,
+	revenueCatAppUserId: "revenuecat-user-1",
 }
 
 // each payload parses unchanged

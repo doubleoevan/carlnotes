@@ -1,4 +1,5 @@
 import type { TopicFinding } from "@carlnotes/contracts/findings"
+import { PLANS_PATH } from "@carlnotes/contracts/plans"
 import { SITE_URL } from "@carlnotes/contracts/site"
 import {
 	type NumberedTopicFindingListComponents,
@@ -18,7 +19,9 @@ import {
 	type TopicScanRecapComponents,
 } from "@carlnotes/core/components/TopicScanRecap"
 import { toSafeNoteMarkdown } from "@carlnotes/core/lib/safeNoteMarkdown"
+import type { PurchaseOffers } from "@carlnotes/core/lib/storefrontPurchaseRules"
 import { type ScanRecapFields, toNotesMarkdown } from "@carlnotes/core/lib/topicScanRecap"
+import { usePurchaseOffers } from "@carlnotes/core/stores/purchaseOffersStore"
 import { fontFamilies } from "@carlnotes/nightshift/typography"
 import { astToNative } from "markdown-to-jsx/native"
 import { View } from "react-native"
@@ -44,6 +47,8 @@ export function TopicScanRecap({
 	topic: { id: string; name: string; prompt: string; findings: TopicFinding[] }
 	sourceRemoval?: SourceRemoval
 }) {
+	// a budget failure's Upgrade where the store sells the user a plan, and the recap's markdown to copy
+	const { canPurchase } = usePurchaseOffers()
 	const copyMarkdown = toNotesMarkdown({
 		topicId: topic.id,
 		topicName: topic.name,
@@ -54,7 +59,7 @@ export function TopicScanRecap({
 	})
 	return (
 		<View>
-			{scan.status === "failed" && <TopicScanFailure error={scan.error} />}
+			{scan.status === "failed" && <TopicScanFailure error={scan.error} canPurchase={canPurchase} />}
 			<SharedTopicScanRecap
 				scan={scan}
 				findings={findings}
@@ -162,10 +167,17 @@ const FINDING_LIST_COMPONENTS: NumberedTopicFindingListComponents = {
 /**
  * Shares the web's actionable failure feedback between the diary and Topic roast.
  */
-export function TopicScanFailure({ error }: { error: string | null }) {
+export function TopicScanFailure({
+	error,
+	canPurchase,
+}: { error: string | null } & Pick<PurchaseOffers, "canPurchase">) {
 	return (
 		<View className="mb-3">
-			<SharedTopicScanFailure error={error} components={SCAN_FAILURE_COMPONENTS} />
+			<SharedTopicScanFailure
+				error={error}
+				upgradePath={canPurchase ? PLANS_PATH : undefined}
+				components={SCAN_FAILURE_COMPONENTS}
+			/>
 		</View>
 	)
 }

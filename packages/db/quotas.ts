@@ -2,7 +2,7 @@
 import { dailyFrequencies, isAdminRole } from "@carlnotes/contracts/enums"
 import {
 	ADMIN_QUOTA,
-	type BillingInterval,
+	type OverageBillingAccess,
 	PLANS,
 	type Plan,
 	toCentsFromDollars,
@@ -238,18 +238,20 @@ export async function canCreateTeamToday(userId: string): Promise<boolean> {
 	return (teamCountRow?.count ?? 0) < DAILY_TEAM_LIMIT
 }
 
-// how the user's subscription is billed, and whether they have a card on file to bill overages to
-export async function loadBillingAccess(
-	userId: string,
-): Promise<{ hasPaymentMethod: boolean; billingInterval: BillingInterval }> {
+/**
+ * Returns who bills the user's subscription, how often, and whether a card is on file, or no provider for a free user.
+ */
+export async function loadBillingAccess(userId: string): Promise<OverageBillingAccess> {
 	const [subscriptionRow] = await db
 		.select({
+			provider: billingSubscriptions.provider,
 			hasPaymentMethod: billingSubscriptions.hasPaymentMethod,
 			billingInterval: billingSubscriptions.billingInterval,
 		})
 		.from(billingSubscriptions)
 		.where(eq(billingSubscriptions.userId, userId))
 	return {
+		provider: subscriptionRow?.provider ?? null,
 		hasPaymentMethod: subscriptionRow?.hasPaymentMethod ?? false,
 		billingInterval: subscriptionRow?.billingInterval ?? "monthly",
 	}

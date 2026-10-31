@@ -509,11 +509,12 @@ server-provided cutoffs and core's budget calculations. An admin without a budge
 `font-display` uses Architects Daughter and `font-sans` uses Karla from Nightshift's generated Uniwind font tokens.
 The Text primitive supplies a default class, without an inline family overriding a selected type role.
 
-`layout/Footer` adapts `core/components/Footer` in scrolling page content. Its words and links match
-web. Compact links retain native hit slop. Privacy, Terms, License, docs, Releases, Source Code, and Nightshift use
-existing web destinations in iOS's dismissible browser sheet. Android uses its browser custom tab. Note editors and
-modal forms, sign-in, and sign-up keep their focused layout without a footer. Session prompts center vertically beside their links while retaining native touch targets. Hosted checkout and billing management use their existing
-browser flows. Admin retains its explicit web handoff.
+`layout/Footer` adapts `core/components/Footer` in scrolling page content. Its words and links match web. Compact links
+retain native hit slop. Privacy, Terms, License, docs, Releases, Source Code, and Nightshift use existing web
+destinations in iOS's dismissible browser sheet. Android uses its browser custom tab. Note editors and modal forms,
+sign-in, and sign-up keep their focused layout without a footer. Session prompts center vertically beside their links
+while retaining native touch targets. Plans are bought through the store, and a paid plan is managed where it is billed,
+as Store payments describes. Admin retains its explicit web handoff.
 
 Topic loading uses `core/components/TopicSkeleton` with the web section order, native card shapes, and a pulse that
 stops for reduced motion. Known Topic names stay visible, and a known Topic without a podcast omits its player.
@@ -590,6 +591,34 @@ Release: push needs a store build, since the plugin adds the iOS push entitlemen
 Doppler before turning on enhanced push security in the Expo dashboard, upload the FCM V1 service account key with
 `eas credentials`, and set the `GOOGLE_SERVICES_JSON` EAS file variable that `app.config.ts` reads. The push rows of
 `store/release-checklist.md` and the push token row of `store/data-inventory.md` cover the store forms.
+
+## Store payments
+
+The app sells plus and premium as in-app subscriptions through RevenueCat on every storefront, and never opens Stripe
+checkout or the portal. `src/storePurchases.ts` is the store adapter over `react-native-purchases`: it configures
+RevenueCat once at launch with an anonymous id and the build's public key (`EXPO_PUBLIC_REVENUECAT_APPLE_API_KEY` or
+`EXPO_PUBLIC_REVENUECAT_GOOGLE_API_KEY`), logs in with the billing state's `revenueCatAppUserId` before each purchase
+and restore, logs out from `_layout`'s account effect once no one is signed in, reads the offering and the storefront
+the store account buys from, buys or switches a plan (on Google with the replaced product), restores purchases, and
+opens where a paid plan is managed. User changes, purchases, and restores run one at a time in the order they started.
+Each purchase and restore then calls `POST /billing/store/sync`, and `hooks/useStoreBilling.ts` writes the billing state
+it returns into the account's queries and refreshes the session. `src/storeProducts.ts` holds the pure package and price
+mappings, tested in `storeProducts.test.ts`.
+
+Every entry point reads core's purchase offers: `usePurchaseOffers` from `core/stores/purchaseOffersStore`, which takes
+the billing state that Account already has. `src/storePurchases.ts` records the store's offering there. Before the
+store's offering loads, in a build without the key, and with an offering that lacks a plan, every entry point is
+read-only. A Stripe subscriber reads "Your plan is billed on the web." with no link, and a store subscriber's Manage
+plan opens the store's subscription page. The entry points are the Plans screen, Account's Upgrade and Manage plan, the
+failed-payment notice, the spend meter, the chat budget notice and the spoken answer's budget alert, the Topic-limit
+notice, the scan failure's Upgrade, the scan button's daily quota alert, the settings card's paused frequency, the edit
+sheet's daily allowance, plan-limited frequency, and podcast upgrade line, and the paused mic. A notice takes
+`canPurchase` as a prop so its stories show both states, and its parent reads the offers. `account/PlansLink` is the
+app's one plans link.
+
+Account's settings show Restore purchases in a build with the key, and a store subscriber's Close your account section
+names the store, since closing the account cannot cancel a store subscription. The device checks are the Store
+purchases rows of `store/release-checklist.md`.
 
 ## Telemetry
 

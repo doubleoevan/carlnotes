@@ -1,25 +1,23 @@
-// Stripe Billing: Checkout, the Customer Portal
+// Stripe Billing: Checkout, the Customer Portal, the webhook, metered overage, and the account page's billing state
 // SETUP: create plus and premium products with monthly and yearly prices, plus a metered manual-scan overage price in
 // Stripe
 
-import { isPaidPlan } from "@carlnotes/contracts/enums"
 import { checkoutPayload } from "@carlnotes/contracts/payloads"
-import { type BillingInterval, PLANS, type Plan } from "@carlnotes/contracts/plans"
+import { type BillingInterval, isOverageBillable, type PaidPlan, PLANS } from "@carlnotes/contracts/plans"
 import type { BillingState } from "@carlnotes/contracts/profiles"
+import { isStoreProvider } from "@carlnotes/contracts/storeBilling"
+import { DAY_MS } from "@carlnotes/contracts/time"
 import { db } from "@carlnotes/db"
 import { billingSubscriptions } from "@carlnotes/db/schema/billing"
 import { users } from "@carlnotes/db/schema/users"
-import { isUserLiteLLMKeyBudgetStale, replaceUserLiteLLMKey } from "@carlnotes/models/litellm"
-import { trackEvent } from "@carlnotes/server/analytics"
 import { appUrl } from "@carlnotes/server/appUrl"
 import { reportError } from "@carlnotes/server/monitoring"
-import { eq } from "drizzle-orm"
-import Stripe from "stripe"
-import { refreshSessionUser } from "./sessions"
+import { and, eq } from "drizzle-orm"
+import type Stripe from "stripe"
+import { applyBillingProjection, type BillingProjection } from "./billingProjection"
+import { syncStoreSubscription } from "./storeBilling"
+import { stripe } from "./stripeClient"
 import { scansToday } from "./topic/quotas"
-
-// a paid plan is any plan but free. only paid plans map to a Stripe price
-type PaidPlan = Exclude<Plan, "free">
 
 // the error for a webhook with no signature, or a signature Stripe's library rejected
 export class StripeWebhookSignatureError extends Error {}
@@ -36,17 +34,8 @@ type StripeSubscriptionFields = {
 	items?: { data: { price?: { recurring?: { interval?: string | null } | null } | null }[] }
 }
 
-// the billing_subscriptions values for an active paid subscription
-type SubscriptionProjection = {
-	plan: PaidPlan
-	status: string
-	stripeCustomerId: string
-	stripeSubscriptionId: string
-	currentPeriodEnd: Date | null
-	// a card to charge, and how often the subscription bills. only a monthly one includes the metered overage price
-	hasPaymentMethod: boolean
-	billingInterval: BillingInterval
-}
+// how long past its period end a store row waits for its expiration event before the account page re-reads it
+const STALE_STORE_ROW_MS = DAY_MS
 
 /**
  * Start a Stripe Checkout Session for the plan's price and return its URL. Checkout creates the customer from
@@ -82,51 +71,95 @@ export async function createCheckoutSession(
  * row.
  */
 export async function createPortalSession(userId: string): Promise<string | null> {
-	// a user with no active billing subscription has no Stripe customer to manage
-	const [customerRow] = await db
-		.select({ stripeCustomerId: billingSubscriptions.stripeCustomerId })
-		.from(billingSubscriptions)
-		.where(eq(billingSubscriptions.userId, userId))
-	if (!customerRow) {
+	// a user with no Stripe subscription has no Stripe customer to manage
+	const stripeBillingSubscription = await loadStripeBillingSubscription(userId)
+	if (!stripeBillingSubscription) {
 		return null
 	}
 
-	// hand the customer to the portal and return to where it sends them back
+	// open the portal for the customer and return its url. the portal sends the customer back to the home page
 	const session = await stripe().billingPortal.sessions.create({
-		customer: customerRow.stripeCustomerId,
+		customer: stripeBillingSubscription.providerCustomerId,
 		return_url: `${appUrl()}/`,
 	})
 	return session.url
 }
 
 /**
- * The account page's billing state: the current plan and how often it bills,
- * subscription status for delinquent payments, card-on-file, and daily scan usage.
+ * The account page's billing state: the current plan, who bills it and how often, subscription status for delinquent
+ * payments, card-on-file, whether a scan past the limit bills as overage, daily scan usage, and the RevenueCat app user
+ * id the app buys as. A store row more than a
+ * day past its period end re-reads the RevenueCat customer first, so a missed expiration event does not keep the plan.
+ * A failed re-read is reported, and the stored row is read instead.
  */
 export async function loadBillingState(userId: string): Promise<BillingState> {
-	// the plan from the user row, the status and card from the subscription, and today's scan count against the daily
-	// limit
-	const [user] = await db.select({ plan: users.plan }).from(users).where(eq(users.id, userId))
-	const [subscription] = await db
+	// load the billing row, and whether it is a store row more than a day past its period end
+	const storedBillingSubscription = await loadBillingSubscription(userId)
+	const isStaleStoreRow =
+		isStoreProvider(storedBillingSubscription?.provider) &&
+		storedBillingSubscription?.currentPeriodEnd != null &&
+		Date.now() - storedBillingSubscription.currentPeriodEnd.getTime() > STALE_STORE_ROW_MS
+
+	// re-read a stale store row from RevenueCat. a failed re-read is reported, and the stored row is read instead
+	const billingSubscription = isStaleStoreRow
+		? await syncStoreSubscription(userId)
+				.then(() => loadBillingSubscription(userId))
+				.catch((error: unknown) => {
+					reportError(error, "billing", { outcome: "stale store row read failed" })
+					return storedBillingSubscription
+				})
+		: storedBillingSubscription
+
+	// the plan and the RevenueCat app user id from the user row, and today's scan count against the daily limit
+	const [user] = await db
+		.select({ plan: users.plan, revenueCatAppUserId: users.revenueCatAppUserId })
+		.from(users)
+		.where(eq(users.id, userId))
+
+	// a user with no subscription is on the free plan, which bills on no frequency at all, so it defaults to monthly
+	const plan = user?.plan ?? "free"
+	const billingAccess = {
+		provider: billingSubscription?.provider ?? null,
+		hasPaymentMethod: billingSubscription?.hasPaymentMethod ?? false,
+		billingInterval: billingSubscription?.billingInterval ?? "monthly",
+	}
+	return {
+		plan,
+		...billingAccess,
+		status: billingSubscription?.status ?? null,
+		dailyScansUsed: await scansToday(userId),
+		dailyScanLimit: PLANS[plan].dailyScanLimit[billingAccess.billingInterval],
+		isOverageBillable: isOverageBillable(billingAccess),
+		revenueCatAppUserId: user?.revenueCatAppUserId ?? null,
+	}
+}
+
+/**
+ * Whether the user's plan is billed through a store, which only the store can change.
+ */
+export async function hasStoreSubscription(userId: string): Promise<boolean> {
+	return isStoreProvider((await loadBillingSubscription(userId))?.provider)
+}
+
+// the fields of a user's billing row that this file reads
+type BillingSubscriptionRow = Pick<
+	typeof billingSubscriptions.$inferSelect,
+	"provider" | "status" | "currentPeriodEnd" | "hasPaymentMethod" | "billingInterval"
+>
+
+// the user's billing row, or undefined for a free user
+async function loadBillingSubscription(userId: string): Promise<BillingSubscriptionRow | undefined> {
+	const [billingSubscription] = await db
 		.select({
+			provider: billingSubscriptions.provider,
 			status: billingSubscriptions.status,
+			currentPeriodEnd: billingSubscriptions.currentPeriodEnd,
 			hasPaymentMethod: billingSubscriptions.hasPaymentMethod,
 			billingInterval: billingSubscriptions.billingInterval,
 		})
 		.from(billingSubscriptions)
 		.where(eq(billingSubscriptions.userId, userId))
-
-	// a user with no subscription is on the free plan, which bills on no frequency at all, so it defaults to monthly
-	const plan = user?.plan ?? "free"
-	const billingInterval = subscription?.billingInterval ?? "monthly"
-	return {
-		plan,
-		billingInterval,
-		status: subscription?.status ?? null,
-		hasPaymentMethod: subscription?.hasPaymentMethod ?? false,
-		dailyScansUsed: await scansToday(userId),
-		dailyScanLimit: PLANS[plan].dailyScanLimit[billingInterval],
-	}
+	return billingSubscription
 }
 
 /**
@@ -159,15 +192,11 @@ export async function handleStripeWebhook(rawBody: string, signature: string | u
 // the Stripe statuses that earn paid entitlements
 const ENTITLED_STRIPE_STATUSES = new Set(["active", "trialing", "past_due"])
 
-// how many times a subscription event tries to reissue the LiteLLM key, and the backoff interval between tries
-const MAX_REPLACE_LITELLM_KEY_ATTEMPTS = 3
-const REPLACE_LITELLM_KEY_BACKOFF_MS = 1000
-
 /**
  * The billing_subscriptions values a Stripe subscription maps to, or null to clear the row and revert the user to free.
  * Only a paid-up status can update. A subscription without our plan metadata also gets cleared.
  */
-export function toPaidSubscription(subscription: StripeSubscriptionFields): SubscriptionProjection | null {
+export function toPaidSubscription(subscription: StripeSubscriptionFields): BillingProjection | null {
 	// anything not paid up clears the row, reverting the user to free
 	if (!ENTITLED_STRIPE_STATUSES.has(subscription.status)) {
 		return null
@@ -179,12 +208,14 @@ export function toPaidSubscription(subscription: StripeSubscriptionFields): Subs
 		return null
 	}
 
-	const stripeCustomerId = typeof subscription.customer === "string" ? subscription.customer : subscription.customer.id
+	const providerCustomerId =
+		typeof subscription.customer === "string" ? subscription.customer : subscription.customer.id
 	return {
+		provider: "stripe",
 		plan: checkoutPlanResult.data,
 		status: subscription.status,
-		stripeCustomerId,
-		stripeSubscriptionId: subscription.id,
+		providerCustomerId,
+		providerSubscriptionId: subscription.id,
 		currentPeriodEnd: subscription.current_period_end ? new Date(subscription.current_period_end * 1000) : null,
 		hasPaymentMethod: Boolean(subscription.default_payment_method),
 		billingInterval: toBillingInterval(subscription),
@@ -205,19 +236,16 @@ function toBillingInterval(subscription: StripeSubscriptionFields): BillingInter
  * SETUP: the meter for STRIPE_PRICE_MANUAL_SCAN_OVERAGE must use the event_name in STRIPE_MANUAL_SCAN_OVERAGE_EVENT.
  */
 export async function reportManualScanOverage(userId: string): Promise<void> {
-	// only a subscribed user with a card reaches overage, so look up their Stripe customer first
-	const [customerRow] = await db
-		.select({ stripeCustomerId: billingSubscriptions.stripeCustomerId })
-		.from(billingSubscriptions)
-		.where(eq(billingSubscriptions.userId, userId))
-	if (!customerRow) {
+	// only a Stripe subscriber with a card reaches overage, so look up their Stripe customer first
+	const stripeBillingSubscription = await loadStripeBillingSubscription(userId)
+	if (!stripeBillingSubscription) {
 		return
 	}
 	try {
 		// a meter event increments the customer's usage. Stripe rolls it onto the subscription's overage line
 		await stripe().billing.meterEvents.create({
 			event_name: Bun.env.STRIPE_MANUAL_SCAN_OVERAGE_EVENT ?? "manual_scan_overage",
-			payload: { stripe_customer_id: customerRow.stripeCustomerId, value: "1" },
+			payload: { stripe_customer_id: stripeBillingSubscription.providerCustomerId, value: "1" },
 		})
 	} catch (error) {
 		// a metering failure is not worth failing the user's scan over. log it and move on
@@ -247,107 +275,45 @@ export async function readStripeTotalRevenueCents(sinceUnixSeconds: number): Pro
 	}
 }
 
-// upsert the billing subscription keyed by user ID, or clear it, then update the users.plan, and reissue the LiteLLM
-// key if the plan changed or the key's budget is stale
+// apply a Stripe subscription event to the user's billing row, and ignore a subscription without our user id
 async function applySubscriptionState(subscription: Stripe.Subscription): Promise<void> {
-	// subscriptions we created must have a userId. ignore anything else
 	const userId = subscription.metadata?.userId
 	if (!userId) {
 		return
 	}
-
-	// the user's plan before this event
-	const [user] = await db.select({ plan: users.plan }).from(users).where(eq(users.id, userId))
-	const planBeforeEvent = user?.plan ?? "free"
-
-	// a null paid subscription clears the billing_subscriptions row and reverts the user to free
-	const paidSubscription = toPaidSubscription(subscription)
-	if (!paidSubscription) {
-		await db.delete(billingSubscriptions).where(eq(billingSubscriptions.userId, userId))
-		await syncUserPlan({ userId, plan: "free" })
-		// report the cancellation of a paid plan. a repeated clear of a free user reports nothing
-		if (isPaidPlan(planBeforeEvent)) {
-			trackEvent("subscription_canceled", userId, { entryPoint: "webhook", plan: "free", fromPlan: planBeforeEvent })
-		}
-		await syncUserLiteLLMKey({ userId, plan: "free", planBeforeEvent })
-		return
-	}
-
-	// upsert the billing_subscriptions row, then update the users.plan
-	await db
-		.insert(billingSubscriptions)
-		.values({ userId, ...paidSubscription })
-		.onConflictDoUpdate({ target: billingSubscriptions.userId, set: paidSubscription })
-	await syncUserPlan({ userId, plan: paidSubscription.plan })
-
-	// report a subscription that started, or a plan that changed. a repeated event for the same plan reports nothing
-	const planProperties = { entryPoint: "webhook", plan: paidSubscription.plan, fromPlan: planBeforeEvent }
-	if (!isPaidPlan(planBeforeEvent)) {
-		trackEvent("subscription_started", userId, planProperties)
-	} else if (planBeforeEvent !== paidSubscription.plan) {
-		trackEvent("plan_changed", userId, planProperties)
-	}
-	await syncUserLiteLLMKey({ userId, plan: paidSubscription.plan, planBeforeEvent })
-}
-
-// the user a subscription event belongs to, and the plan it leaves them on
-type SyncUserPlanOptions = { userId: string; plan: Plan }
-
-// set users.plan and the user's sessions to the event's plan
-async function syncUserPlan({ userId, plan }: SyncUserPlanOptions): Promise<void> {
-	await db.update(users).set({ plan }).where(eq(users.id, userId))
-	await refreshSessionUser(userId)
-}
-
-// the user a subscription event belongs to, the plan it leaves them on, and the plan they had before it
-type SyncUserLiteLLMKeyOptions = SyncUserPlanOptions & { planBeforeEvent: Plan }
-
-// reissue the LiteLLM key at the user's budget if the plan changed or the key's budget is stale. a new key's spend
-// starts at zero
-async function syncUserLiteLLMKey({ userId, plan, planBeforeEvent }: SyncUserLiteLLMKeyOptions): Promise<void> {
-	// keep the key if the plan is unchanged and the key's maximum budget matches the user's budget
-	if (planBeforeEvent === plan && !(await isUserLiteLLMKeyBudgetStale(userId))) {
-		return
-	}
-
-	// a failed reissue leaves the key sized to the old budget, so retry before reporting the failure
-	for (let attempt = 0; attempt < MAX_REPLACE_LITELLM_KEY_ATTEMPTS; attempt++) {
-		if (await replaceUserLiteLLMKey(userId)) {
-			return
-		}
-		await new Promise((resolve) => setTimeout(resolve, REPLACE_LITELLM_KEY_BACKOFF_MS * (attempt + 1)))
-	}
-
-	// report the failure, then throw an error so the webhook responds 500 and Stripe sends the event again
-	const reissueError = new Error(`litellm key reissue failed for user ${userId}`)
-	reportError(reissueError, "billing", { userId })
-	throw reissueError
+	await applyBillingProjection({ userId, providers: ["stripe"], projection: toPaidSubscription(subscription) })
 }
 
 /**
  * Cancel a user's Stripe subscription right away, so a closed account stops being charged.
- * Does nothing for a user on the free plan, who has no subscription row at all.
+ * Does nothing for a free user, and nothing for a store subscription, which only the store can cancel.
  */
 export async function cancelUserSubscription(userId: string): Promise<void> {
-	// a free user has no subscription row, so there is nothing at Stripe to cancel
-	const [subscription] = await db
-		.select({ stripeSubscriptionId: billingSubscriptions.stripeSubscriptionId })
-		.from(billingSubscriptions)
-		.where(eq(billingSubscriptions.userId, userId))
-	if (!subscription) {
+	// a free user and a store subscriber have no Stripe subscription to cancel
+	const stripeBillingSubscription = await loadStripeBillingSubscription(userId)
+	if (!stripeBillingSubscription) {
 		return
 	}
 	// cancel immediately instead of at the period end. the account it belongs to is going away
-	await stripe().subscriptions.cancel(subscription.stripeSubscriptionId)
+	await stripe().subscriptions.cancel(stripeBillingSubscription.providerSubscriptionId)
 }
 
-// the Stripe client, requiring the secret key
-function stripe(): Stripe {
-	const stripeSecretKey = Bun.env.STRIPE_SECRET_KEY
-	if (!stripeSecretKey) {
-		throw new Error("STRIPE_SECRET_KEY must be set to reach Stripe")
-	}
-	return new Stripe(stripeSecretKey)
+// a Stripe subscriber's customer and subscription ids
+type StripeBillingSubscriptionRow = Pick<
+	typeof billingSubscriptions.$inferSelect,
+	"providerCustomerId" | "providerSubscriptionId"
+>
+
+// the user's Stripe customer and subscription ids, or undefined without a Stripe subscription
+async function loadStripeBillingSubscription(userId: string): Promise<StripeBillingSubscriptionRow | undefined> {
+	const [stripeBillingSubscription] = await db
+		.select({
+			providerCustomerId: billingSubscriptions.providerCustomerId,
+			providerSubscriptionId: billingSubscriptions.providerSubscriptionId,
+		})
+		.from(billingSubscriptions)
+		.where(and(eq(billingSubscriptions.userId, userId), eq(billingSubscriptions.provider, "stripe")))
+	return stripeBillingSubscription
 }
 
 // a paid plan's Stripe price id for a monthly or yearly billing interval

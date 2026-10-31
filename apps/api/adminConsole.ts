@@ -295,7 +295,7 @@ export async function loadAdminTeams(): Promise<AdminTeamRow[]> {
 }
 
 /**
- * The totals summary from the already-loaded user rows, plus Stripe net revenue and the derived contribution.
+ * The totals summary from the already-loaded user rows, plus the web's Stripe net revenue and the derived contribution.
  */
 export async function loadAdminTotals(userRows: AdminUserRow[]): Promise<AdminTotals> {
 	// sum the per-user attributed storage and observed variable cost across the platform

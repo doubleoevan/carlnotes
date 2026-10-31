@@ -1,4 +1,5 @@
 import { isPaidPlan } from "@carlnotes/contracts/enums"
+import type { BillingProvider } from "@carlnotes/contracts/plans"
 import type { BillingState } from "@carlnotes/contracts/profiles"
 import type { ComponentType, ReactNode } from "react"
 
@@ -8,7 +9,8 @@ export type AccountBudgetElements = {
 	Group: Container
 	Text: Container
 	Heading: Container
-	PaymentNotice: ComponentType
+	// the failed-payment notice, whose Update opens where the provider bills the plan
+	PaymentNotice: ComponentType<{ provider: BillingProvider | null }>
 }
 
 /**
@@ -25,12 +27,12 @@ export function AccountBudget({
 	spendMeter: ReactNode
 	elements: AccountBudgetElements
 }) {
-	// preserve the web's payment and daily-limit conditions
+	// the payment and daily-limit conditions
 	const isPastDue = billing.status === "past_due" || billing.status === "unpaid"
 	const isAtLimit = billing.dailyScansUsed >= billing.dailyScanLimit
 	return (
 		<>
-			{isPastDue && !isReadOnly && <PaymentNotice />}
+			{isPastDue && !isReadOnly && <PaymentNotice provider={billing.provider} />}
 			<Card>
 				{spendMeter}
 				<Group>
@@ -40,7 +42,7 @@ export function AccountBudget({
 					</Text>
 					{isAtLimit && (
 						<Text className="text-sm">
-							{billing.hasPaymentMethod
+							{billing.isOverageBillable
 								? "Extra scans beyond your daily limit are billed by the scan."
 								: "You have reached your daily limit."}
 						</Text>

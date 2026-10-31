@@ -1,4 +1,5 @@
 // the users table and Better Auth's tables: sessions, accounts, verifications, and the MCP OAuth server's tables
+import { sql } from "drizzle-orm"
 import { boolean, index, integer, jsonb, pgTable, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core"
 import { avatarSource, inviteAccess, plan, primaryId } from "./columns"
 
@@ -34,6 +35,8 @@ export const users = pgTable(
 		isChatMentionPushEnabled: boolean("is_chat_mention_push_enabled"),
 		// the billing plan
 		plan: plan("plan").notNull().default("free"),
+		// the id the app logs in to RevenueCat with: random, so a known user id never reads someone's store customer
+		revenueCatAppUserId: text("revenuecat_app_user_id").notNull().unique().default(sql`gen_random_uuid()::text`),
 		// a per-user monthly spend override in cents. an admin can raise or lower it, and null falls back to the plan's backstop
 		budgetOverrideCents: integer("budget_override_cents"),
 		// when this user last signed in, written on every session creation. null until they sign in again

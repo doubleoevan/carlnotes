@@ -1,8 +1,8 @@
 ---
 title: Plans and limits
 description: >-
-  What each plan includes and costs, how overage and the coffee fund work, and what happens
-  to your topics when you downgrade or close your account.
+  What each plan includes and costs, buying one in the app, how overage and the coffee fund
+  work, and what happens to your topics when you downgrade or close your account.
 sidebar:
   order: 1
 ---
@@ -33,14 +33,33 @@ against this limit. "Brews a day" counts scheduled and manual brews together. Th
 ![The plans page: Free, Plus, and Premium side by side with yearly billing
 selected](../../../assets/screenshots/billing-plan-picker.png)
 
+## Buy a plan in the app
+
+In the iPhone and Android app, **Plans** sells Plus and Premium through your App Store or Google Play account, monthly
+or yearly. Each card shows the store's price in your store's currency, which can differ from the prices above. The plan
+renews until you cancel it in the store. A plan bought in the app has the same limits and coffee fund as one bought on
+the site, and the site shows it too.
+
+If you already pay on the site, the app's **Plans** and **Account** say "Your plan is billed on the web." instead of
+offering a purchase. Manage that plan on the site's account page. If you bought in the app, the site's **Plans** and
+account page show **Manage in the App Store** or **Manage in Google Play** instead of checkout, and the button opens
+your store's subscription settings. If a plan from the app ranks above the one you pay for on the site, as after a
+restore, the site's subscription is canceled at the end of the period you paid for, so you aren't billed for both.
+
+**Restore purchases** on the app's **Account** screen brings back a plan your store account bought, after a reinstall or
+on a new phone. A store account's plan belongs to one CarlNotes account at a time, so restoring it while signed in to
+another account moves it there.
+
+Where your store doesn't sell CarlNotes plans, **Plans** shows the prices without a purchase.
+
 ## Overage
 
-On a monthly paid plan with a card on file, reaching the daily brew limit doesn't stop you. Manual brews past the limit
-keep working until the month's spend reaches 90% of the coffee fund. Each one bills as metered overage on your monthly
-invoice. The account page says so: "Extra scans beyond your daily limit are billed by the scan."
+On a monthly paid plan bought on the site with a card on file, reaching the daily brew limit doesn't stop you. Manual
+brews past the limit keep working until the month's spend reaches 90% of the coffee fund. Each one bills as metered
+overage on your monthly invoice. The account page says so: "Extra scans beyond your daily limit are billed by the scan."
 
-On the free plan, or without a card, the daily limit stops brews until midnight UTC. Yearly plans don't bill overage.
-Their higher daily limits replace it.
+On the free plan, on a plan bought in the app, or without a card, the daily limit stops brews until midnight UTC. Yearly
+plans don't bill overage. Their higher daily limits replace it.
 
 There is also a monthly limit. Your account page shows **Carl's coffee fund**: the month's AI model spend against your
 plan's monthly limit: $3 on **Free**, $15 on **Plus**, or $35 on **Premium**. The plans page shows each fund, and the
@@ -92,6 +111,10 @@ total](../../../assets/screenshots/activity-spend-bar.png)
 **Manage plan** on the account page opens checkout for upgrades and manages the subscription you have. Canceling puts
 you back on the free plan's limits.
 
+A plan bought in the app is switched on the app's **Plans** screen and canceled in your store's subscription settings,
+which **Manage plan** in the app opens. A canceled store plan lasts to the end of the period you paid for. A refunded
+one ends when the store refunds it.
+
 Downgrading never deletes anything. Every topic and finding stays, and you keep following the topics you follow. Two
 limits tighten:
 
@@ -105,3 +128,8 @@ limits tighten:
 
 **Close account** is at the bottom of the account page. The page states the terms: "Your topics, findings,
 and chats go with it, and you stop following every topic. Any paid plan is canceled. This cannot be undone."
+
+Closing your account can't cancel a plan bought in the app. It keeps billing through the App Store or Google Play until
+you cancel it there, so the section says so and links to your store's subscription settings. Cancel it there before or
+after you close the account. Closing deletes the record RevenueCat, the service that checks app purchases, keeps for
+your account.

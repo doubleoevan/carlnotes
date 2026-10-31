@@ -308,15 +308,15 @@ export function PodcastSwitch({
 				<span className="text-muted-foreground">
 					{isPodcastEnabled ? "Coffee Break episode after every brew" : "Coffee Break is off"}
 				</span>
-				{/* the free plan's short episode, and the owner's link to the plans page */}
+				{/* the free plan's short podcast episode, and the owner's link to the plans page */}
 				{!topicPodcast.hasFullPodcastEpisodes && (
 					<span className="text-muted-foreground text-xs">
-						{`The free plan keeps each topic's latest ${SHORT_PODCAST_EPISODE_MINUTES}-minute episode`}
+						{`The free plan keeps each topic's latest ${SHORT_PODCAST_EPISODE_MINUTES}-minute podcast episode`}
 					</span>
 				)}
 				{!topicPodcast.hasFullPodcastEpisodes && isTopicOwner && (
 					<AnchorLink href="/plans" className={cn(STANDALONE_LINK_CLASS, "text-xs")}>
-						{`Upgrade for ${FULL_PODCAST_EPISODE_MINUTES}-minute episodes, every one kept`}
+						{`Upgrade for ${FULL_PODCAST_EPISODE_MINUTES}-minute podcast episodes, every one kept`}
 					</AnchorLink>
 				)}
 			</div>

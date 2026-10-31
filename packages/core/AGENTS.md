@@ -39,8 +39,10 @@ It imports `@carlnotes/contracts`, `@carlnotes/client`, `@carlnotes/nightshift`,
   `maxBytes` an app sets with `configureSpokenAudioCache`, and drops the least recently played first. The mobile app
   empties it on sign-out through `clearSpokenAnswers`, and the web's sign-out reloads the page.
   `streamedSpokenAnswer.ts` speaks a spoken question's reply as it streams. `voiceNoticeStore.ts` holds the voice
-  notices each app registers, the web's toasts and the app's alert. A
-  store that reaches an audio element, the media session, or a component library stays in its app.
+  notices each app registers, the web's toasts and the app's alert. `purchaseOffersStore.ts` holds what the app's store
+  sells on the user's storefront, which the app sets, and `usePurchaseOffers`, the signed-in user's purchase offers in
+  the app, which read a paid plan's billing provider and stay read-only until it loads. A store that reaches an audio
+  element, the media session, or a component library stays in its app.
 - `hooks/` — `useBlockedUsers.ts`, the user's block list and the unblock that shortens it once the server accepts;
   `useNow.ts`, the current time re-read on a tick for relative labels, one clock per list; `useAvatar.ts`,
   the avatar setting read from the session and updated through it; `useUsernameChange.ts`, changing the signed-in
@@ -79,7 +81,10 @@ It imports `@carlnotes/contracts`, `@carlnotes/client`, `@carlnotes/nightshift`,
   reopened recording's rejection, and the meter's callback), `voiceRecorder.ts` (the recorder adapter each app supplies:
   the session a tap opens, the start, the recording's delete, the rejected microphone's action, and the background
   listener), `spokenAnswerPlayer.ts` (the spoken answer player adapter each app supplies), and
-  `spokenQuestionsPaused.ts` (the mic's action past the spoken questions cutoff, and the plans page's upgrade lines).
+  `spokenQuestionsPaused.ts` (the mic's action past the spoken questions cutoff, and the plans page's upgrade lines),
+  and `storefrontPurchaseRules.ts` (whether a user may buy a plan and where a paid plan is managed, from the platform,
+  the store's offering, and the user's plan and billing provider, with each place's label). `sessionCopy.ts` also
+  holds the closing copy for a store subscriber, whose plan keeps billing through the store.
 - Imports: `@carlnotes/contracts`, `@carlnotes/client`, `@carlnotes/nightshift`, `react`, and `@tanstack/react-query`. Never a server package or an app. Universal: the
   root rule. A module that needs a DOM type is a web module and lives in `apps/web/src`.
 - Tests: `bun test packages/core`.
@@ -235,12 +240,13 @@ Finding explanations remain plain text. Tasting Note editor headings retain the 
 and a fixed first column belong to the mobile adapter. Web retains its expandable subtables and server-rendered rows.
 
 `components/AccountBudget`, `AccountFields`, `PlanCard`, `MonthlyBudgetCutoffTable`, `InviteFields`, and `TeamFields`
-share page and form composition. `AccountFields` includes the shared ProfileFields form, with platform identity,
-photo-toggle, and input elements, and the `Switch` element. `NotificationsSection` is the account's Notifications
-section over those elements: `NotificationsCard` over `toNotificationSwitchStates`, with `NotificationsSection` reading
-the session's push preferences. Only the app renders it. `useAvatar` owns upload acknowledgement and session refresh for
-both File and
-FormData uploads. `Footer` owns all footer copy, destinations, and row order for both apps.
+share page and form composition. `PlanCard` takes the store's price and billing note, a portal action with its label,
+and a plan switch for a subscriber, and `AccountBudget`'s payment notice gets the billing provider. `AccountFields`
+includes the shared ProfileFields form, with platform identity, photo-toggle, and input elements, and the `Switch`
+element. `NotificationsSection` is the account's Notifications section over those elements: `NotificationsCard` over
+`toNotificationSwitchStates`, with `NotificationsSection` reading the session's push preferences. Only the app renders
+it. `useAvatar` owns upload acknowledgement and session refresh for both File and FormData uploads. `Footer` owns all
+footer copy, destinations, and row order for both apps.
 `lib/spendMeter`, `monthlyBudgetCutoffs`, and `monthlyBudgetCutoffCopy` own budget labels and checkpoint calculations.
 `lib/spendMeterStoryFixtures` supplies the same spend and cutoff examples to both component browsers.
 `lib/storyFixtures` holds `FIXTURE_DATE`, the date that the web component browser's fixtures share.

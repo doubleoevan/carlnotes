@@ -12,7 +12,7 @@ import {
 // the dialog's words: the title, what accepting means, and the two choices
 export const TERMS_ACCEPTANCE_COPY = {
 	title: "The Terms have changed",
-	body: "Carl keeps the room classy, and the Terms now say how: what you can post, how reports work, and when content comes down. Read them, then accept to keep posting.",
+	body: "Carl keeps the room classy, and the Terms now say how: what you can post, how reports work, and when content comes down. They also cover plans bought in the App Store and Google Play. Read them, then accept to keep posting.",
 	accept: "Accept the Terms",
 	dismiss: "Not now",
 	termsLink: TERMS_AGREEMENT_COPY.termsLink,

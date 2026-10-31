@@ -2,7 +2,7 @@ import { authClient } from "@carlnotes/client/authClient"
 import { toSessionProfileIdentity } from "@carlnotes/contracts/profiles"
 import { useAccount } from "@carlnotes/core/hooks/useAccount"
 import { User } from "lucide-react-native"
-import { AccountBudget } from "@/components/account/AccountBudget"
+import { AccountBudget, PlanButton } from "@/components/account/AccountBudget"
 import { AccountSettings } from "@/components/account/AccountSettings"
 import { AppVersionLine } from "@/components/account/AppVersionLine"
 import { LoadFailedNotice } from "@/components/common/LoadFailedNotice"
@@ -21,6 +21,7 @@ export default function AccountScreen() {
 		<PageScreen
 			title="Account"
 			icon={User}
+			action={query.data && <PlanButton billing={query.data.billing} />}
 			byline={session && <UserProfileLink user={toSessionProfileIdentity(session.user)} />}
 			onRefresh={() => void query.refetch()}
 			isRefreshing={query.isRefetching}
@@ -36,7 +37,7 @@ export default function AccountScreen() {
 			) : (
 				<PageSkeleton kind="account" />
 			)}
-			<AccountSettings />
+			<AccountSettings provider={query.data?.billing.provider ?? null} />
 			{/* app version */}
 			<AppVersionLine />
 		</PageScreen>

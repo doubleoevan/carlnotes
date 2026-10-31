@@ -12,6 +12,9 @@ const BILLING_STATE_RESPONSE = {
 	hasPaymentMethod: false,
 	dailyScansUsed: 0,
 	dailyScanLimit: 5,
+	provider: null,
+	isOverageBillable: false,
+	revenueCatAppUserId: "revenuecat-user-1",
 }
 const ACTIVITY_RESPONSE = {
 	user: { userId: "reader", username: "reader", avatarSource: "generated", avatarVersion: null },

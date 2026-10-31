@@ -57,7 +57,7 @@ export function AccountPage() {
 					<PageSkeleton kind="account" />
 				)}
 				{/* account settings only show for the user's own page */}
-				{isOwnView && <AccountSettings />}
+				{isOwnView && <AccountSettings provider={billing?.provider ?? null} />}
 			</div>
 		</main>
 	)

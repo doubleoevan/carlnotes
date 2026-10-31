@@ -20,8 +20,9 @@ Vienna about the podcast episode you're playing. You write Tasting Notes and com
 until you reconnect. You play Coffee Break episodes and keep listening with the screen off. Report and block work the
 same way as on the site.
 
-Make a topic as [the Quickstart](/docs/quickstart/) describes. Plans is read-only in the app: it shows the plans and
-marks yours, and changing a plan happens on the site.
+Make a topic as [the Quickstart](/docs/quickstart/) describes. **Plans** in the app sells Plus and Premium through the
+App Store or Google Play, as [Plans and limits](/docs/account/plans-and-limits/#buy-a-plan-in-the-app) describes. A plan
+bought on the site is managed on the site.
 
 ## Links open in the app
 

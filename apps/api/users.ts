@@ -20,6 +20,7 @@ import { loadChatAttachmentObjectKeys } from "./chat/chatAttachmentReads"
 import { type AnalyticsProperties, type AppEnv, currentUser, toAnalyticsProperties } from "./currentUser"
 import { purgeEdgeCacheTagAfterDeletion, toTeamAvatarCacheTag, toUserAvatarCacheTag } from "./edgeCache"
 import { refreshSessionUser, revokeUserSessions } from "./sessions"
+import { deleteRevenueCatCustomer } from "./storeBilling"
 import { deleteTeamRow } from "./team/deleteTeam"
 import { deleteTopic } from "./topic/deleteTopic"
 
@@ -119,6 +120,12 @@ export async function deleteUser(
 	// revoke the account's Sign in with Apple tokens while its accounts rows still exist.
 	// a failed revoke is reported, and the close goes on
 	await revokeAppleTokens(await loadAppleProviderOptions(), targetUserId)
+
+	// delete the account's RevenueCat customer while its users row still names it.
+	// a failed delete is reported, and the close goes on
+	await deleteRevenueCatCustomer(targetUserId).catch((error: unknown) => {
+		reportError(error, "api-route", { userId: targetUserId })
+	})
 
 	// record the keys of everything kept in chat, on any topic, and of the avatar, then delete the user row in one
 	// transaction, so the keys survive the cascade

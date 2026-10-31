@@ -48,6 +48,7 @@ import { TopicFeedProvider } from "@/providers/TopicFeedProvider"
 import { TopicResourceInfoProvider } from "@/providers/TopicResourceInfoProvider"
 import { useIsSessionRetired } from "@/sessionExit"
 import { takeSessionReturnPath } from "@/sessionReturnPath"
+import { configureStorePurchases, logOutStoreUser } from "@/storePurchases"
 import { restoreTheme } from "@/theme"
 import { captureVisit, visitAnalytics } from "@/visitAnalytics"
 
@@ -79,6 +80,9 @@ configureVoiceClient({
 		type: response.headers.get("Content-Type") ?? "audio/mpeg",
 	}),
 })
+
+// configure store purchases at launch with an anonymous id
+configureStorePurchases()
 
 // limit the spoken audio cache to 8 MB, about 17 minutes of 64 kbps answers. the phone holds the cache in the app's own
 // memory beside a podcast playing in the background
@@ -127,6 +131,10 @@ function RootLayout() {
 		activateChatAccount(chatAccountId)
 		// delete the files one account picked or previewed before the next account
 		clearFileCaches()
+		// log the store out to an anonymous id once no one is signed in
+		if (!chatAccountId) {
+			void logOutStoreUser().catch((error) => console.error("store log out failed", error))
+		}
 	}, [chatAccountId])
 	useUpdateBadges(chatAccountId, reloadChatRooms)
 	const isReady = isThemeReady && (isFontLoaded || Boolean(fontLoadError)) && !isSessionPending

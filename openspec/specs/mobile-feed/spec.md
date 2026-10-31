@@ -455,7 +455,8 @@ opener. A signed-in Home SHALL show no hero. The headline's reveal SHALL hold st
 
 The Plans screen SHALL open to a visitor as the web's Plans page does, with the recommended plan highlighted and each
 plan's action leading to sign-up. For a signed-in user the screen SHALL show the plans and their limits with the
-current plan marked and no purchase action, until a storefront design is approved.
+current plan marked, and SHALL offer the store purchase, the plan switch, or no action as the storefront purchase rules
+decide, with the store's price on each card.
 
 #### Scenario: A visitor opens Plans
 
@@ -465,7 +466,8 @@ current plan marked and no purchase action, until a storefront design is approve
 #### Scenario: A user opens Plans
 
 - **WHEN** a signed-in user opens Plans in the app
-- **THEN** the plans render with the user's plan marked and no card offers a checkout or the portal
+- **THEN** the plans render with the user's plan marked, and each other card offers what the storefront rules allow
+  for the account's storefront
 
 ### Requirement: An account action prompts a visitor in Carl's words and returns them
 

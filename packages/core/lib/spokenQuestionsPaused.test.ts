@@ -29,3 +29,23 @@ test("a free or plus mic past the spoken questions cutoff opens the plans page",
 		navigation: { to: "/plans", search: { cta: "chat-voice" } },
 	})
 })
+
+// a user who cannot buy a plan where the mic is, like a Stripe subscriber in the app, toasts on every plan
+test("a mic past the spoken questions cutoff toasts if the user cannot buy a plan there", () => {
+	expect(toSpokenQuestionsPausedAction("free", "chat-voice", false)).toEqual({
+		kind: "toast",
+		prompt: "Speak with Carl again on the 1st.",
+	})
+	expect(toSpokenQuestionsPausedAction("plus", "podcast-question", false)).toEqual({
+		kind: "toast",
+		prompt: "Speak with Carl and Vienna again on the 1st.",
+	})
+})
+
+// a free user the app's store sells to opens the plans page from the app's mic too
+test("a mic past the spoken questions cutoff opens the plans page if the user can buy a plan there", () => {
+	expect(toSpokenQuestionsPausedAction("free", "chat-voice", true)).toEqual({
+		kind: "navigate",
+		navigation: { to: "/plans", search: { cta: "chat-voice" } },
+	})
+})

@@ -1,5 +1,7 @@
 import { authClient } from "@carlnotes/client/authClient"
 import { sendDeleteAccount } from "@carlnotes/client/profileClient"
+import type { BillingProvider } from "@carlnotes/contracts/plans"
+import { STORE_MANAGEMENT_URLS } from "@carlnotes/contracts/storeBilling"
 import {
 	EmailSection,
 	InvitationsSection,
@@ -8,15 +10,13 @@ import {
 } from "@carlnotes/core/components/AccountFields"
 import { BlockedUsersSection } from "@carlnotes/core/components/BlockedUsersSection"
 import type { UsernameChange } from "@carlnotes/core/hooks/useUsernameChange"
-import {
-	CLOSE_ACCOUNT_CONFIRMATION,
-	CLOSE_ACCOUNT_SECTION_TEXT,
-	REQUEST_FAILED_TEXT,
-} from "@carlnotes/core/lib/sessionCopy"
+import { CLOSE_ACCOUNT_CONFIRMATION, REQUEST_FAILED_TEXT, toCloseAccountCopy } from "@carlnotes/core/lib/sessionCopy"
+import { PLAN_MANAGEMENT_LABELS } from "@carlnotes/core/lib/storefrontPurchaseRules"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { Settings } from "lucide-react"
 import { useState } from "react"
 import { UserAvatarPicker } from "@/components/avatar/UserAvatarPicker"
+import { AnchorLink } from "@/components/common/AnchorLink"
 import { ConfirmDialog } from "@/components/common/ConfirmDialog"
 import { Button } from "@/components/primitives/button"
 import { CARD_CLASS } from "@/lib/styleClasses"
@@ -24,9 +24,9 @@ import { ACCOUNT_FIELD_ELEMENTS, BLOCKED_USERS_ELEMENTS, PROFILE_FIELD_ELEMENTS 
 
 /**
  * The settings sections on the account page: profile, email, password, invitations, blocked people, and closing the
- * account.
+ * account, which names the store for a plan bought in the app.
  */
-export function AccountSettings() {
+export function AccountSettings({ provider }: { provider: BillingProvider | null }) {
 	return (
 		<>
 			{/* the section title with its icon */}
@@ -40,7 +40,7 @@ export function AccountSettings() {
 			<InvitationsSection elements={ACCOUNT_FIELD_ELEMENTS} />
 			<BlockedUsersSection elements={BLOCKED_USERS_ELEMENTS} />
 			{/* closing the account comes last. it is the one thing on this page that cannot be undone */}
-			<DeleteAccountSection />
+			<DeleteAccountSection provider={provider} />
 		</>
 	)
 }
@@ -91,7 +91,9 @@ export function ProfileFields({
 	)
 }
 
-function DeleteAccountSection() {
+// closing the account, with the store's subscription page for a store plan, which closing the account cannot cancel
+function DeleteAccountSection({ provider }: { provider: BillingProvider | null }) {
+	const { storeProvider, sectionText, confirmationBody } = toCloseAccountCopy(provider)
 	const [isConfirming, setIsConfirming] = useState(false)
 	const [error, setError] = useState<string | null>(null)
 
@@ -111,11 +113,19 @@ function DeleteAccountSection() {
 	return (
 		<section className={cn(CARD_CLASS, "border-destructive")}>
 			<h3 className="text-destructive font-semibold">Close your account</h3>
-			<p className="text-muted-foreground mt-1 text-sm">{CLOSE_ACCOUNT_SECTION_TEXT}</p>
+			<p className="text-muted-foreground mt-1 text-sm">{sectionText}</p>
 			{error && <p className="text-destructive mt-2 text-sm">{error}</p>}
-			<Button variant="destructive" className="mt-3" onClick={() => setIsConfirming(true)}>
-				Close account
-			</Button>
+			<div className="mt-3 flex flex-wrap gap-2">
+				<Button variant="destructive" onClick={() => setIsConfirming(true)}>
+					Close account
+				</Button>
+				{/* the store's subscription page, where a store plan is canceled */}
+				{storeProvider && (
+					<Button variant="outline" asChild>
+						<AnchorLink href={STORE_MANAGEMENT_URLS[storeProvider]}>{PLAN_MANAGEMENT_LABELS[storeProvider]}</AnchorLink>
+					</Button>
+				)}
+			</div>
 			{isConfirming && (
 				<ConfirmDialog
 					title={CLOSE_ACCOUNT_CONFIRMATION.title}
@@ -124,7 +134,7 @@ function DeleteAccountSection() {
 					onConfirm={handleDeleteAccount}
 					onClose={() => setIsConfirming(false)}
 				>
-					{CLOSE_ACCOUNT_CONFIRMATION.body}
+					{confirmationBody}
 				</ConfirmDialog>
 			)}
 		</section>

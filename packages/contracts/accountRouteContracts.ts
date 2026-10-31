@@ -5,7 +5,13 @@ import { z } from "zod"
 import { activityResponse } from "./activity"
 import type { ApiRouteContract } from "./apiRouteContracts"
 import { inviteAcceptResponse } from "./invites"
-import { inviteAccessPayload, inviteDeletePayload, usernamePayload } from "./payloads"
+import {
+	inviteAccessPayload,
+	inviteDeletePayload,
+	storeCheckoutPayload,
+	storeSubscriptionSyncPayload,
+	usernamePayload,
+} from "./payloads"
 import { profileResponse } from "./profilePage"
 import { billingState, profileTeamStatusesResponse } from "./profiles"
 import { pushDeviceDeletePayload, pushDevicePayload, pushPreferencePayload } from "./pushDevices"
@@ -73,6 +79,18 @@ export const accountRouteContracts: Record<string, ApiRouteContract> = {
 		method: "GET",
 		path: "/api/billing/state",
 		query: userIdQuery,
+		response: billingState,
+	},
+	"billingClient.sendStoreCheckoutStarted": {
+		method: "POST",
+		path: "/api/billing/store/checkout",
+		body: { json: storeCheckoutPayload },
+		response: okResponse,
+	},
+	"billingClient.sendStoreSubscriptionSync": {
+		method: "POST",
+		path: "/api/billing/store/sync",
+		body: { json: storeSubscriptionSyncPayload },
 		response: billingState,
 	},
 

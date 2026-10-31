@@ -9,7 +9,8 @@ PostHog is in `apps/mobile/src/visitAnalytics.ts`, and Sentry is in `apps/mobile
 `monitoringRedaction.ts`. The saved feed is in `apps/mobile/src/queryCache.ts` and `queryCacheRules.ts`, and the session
 cookie is in `apps/mobile/src/authClient.ts`. The permissions are in `apps/mobile/app.config.ts`, and the voice modules
 are in the Voice section of `apps/mobile/AGENTS.md`. The server events are
-in `packages/server/analytics.ts` and `apps/api/currentUser.ts`, and account deletion is in `apps/api/users.ts`.
+in `packages/server/analytics.ts` and `apps/api/currentUser.ts`, and account deletion is in `apps/api/users.ts`. Store
+purchases are in `apps/mobile/src/storePurchases.ts` and `apps/api/storeBilling.ts`.
 `apps/web/src/pages/PrivacyPage.tsx` shows what the policy already discloses.
 
 "Tracking" below is Apple's definition: linking data with third-party data for advertising, or sharing it with a data
@@ -28,6 +29,7 @@ inventory does not find; the policy text needs the same update before the store 
 | Topics, prompts, sources, attachments, findings, scan recaps, bookmarks, ratings, read marks, subscriptions | The api, as the person creates and reads them | The product: what Carl reads, keeps, and shows | Yes | No | The model providers the privacy policy names, for scoring and summaries | Deleted with the topic or the account |
 | Chat messages, Tasting Notes, comments, replies, mentions, reports, blocks | The api | The chat, team rooms, notes, and moderation | Yes | No | None outside the service. A report reaches the admin console | Deleted with the account. A report keeps the quoted content until an admin resolves it |
 | Team memberships and invitations | The api | Teams | Yes | No | None | Deleted with the team or the account |
+| Store purchases: the plan, billing interval, status, period end, the store, and the store's transaction id | `react-native-purchases` in `storePurchases.ts`, configured with an anonymous id and logged in before a purchase or a restore with a random id the api saves for the account, never the account id, buys through the App Store or Google Play. `collectDeviceIdentifiers` is never called. The api reads the subscription from RevenueCat on `POST /billing/store/sync` and the RevenueCat webhook, and stores it in `billing_subscriptions`. The storefront country goes with the purchase's server events | Granting, restoring, and showing the plan the person bought, on the web and in the app | Yes | No | Apple or Google take the payment. RevenueCat validates the purchase and keeps the customer record under the random id | The api's row and the RevenueCat customer record are deleted with the account. The store subscription bills until it is canceled in the store |
 | Podcast Episode listening position and completion | The api, and `podcastEpisodeCheckpoint.ts` on the device for the account's own last Podcast Episode: id, position, completion, rate, time | Resuming a Podcast Episode and the listener count | Yes | No | None | The device copy is removed on sign-out. The server copy goes with the account |
 | App icon badge count | `expo-notifications` in `appIconBadge.ts`, from the api's update counts. It asks for nothing: the badge shows only once the notification permission allows it | The count of new findings, invitations, and messages on the icon | Yes, on the device only | No | None | Cleared on sign-out. Nothing leaves the device |
 | Expo push token, with the platform, app version, and last time the phone registered | `expo-notifications` in `pushRegistration.ts`, only after the person allows notifications, sent to the api through `pushClient.sendPushDevice` and stored in `push_devices` bound to the session. The token is also kept in `expo-secure-store` (`push-token`) to replace it when it changes, and deleted from the phone on sign-out. The two account switches are stored on the account | Delivering the notifications the person turned on: new findings on a followed topic, and chat mentions | Yes | No | Expo's push service, which forwards to Apple Push Notification service or Firebase Cloud Messaging. A notification includes the topic or room name, the sender's username, a finding's title, and a link, never a message's text | Removed on sign-out, when the session ends or is revoked, when the push service reports the app uninstalled, and with the account. Send records with each receipt are deleted with the account or the scan or message |
@@ -64,18 +66,19 @@ line and `recordAudioAndroid: true`, and keeps background recording off.
 ## Apple App Privacy answers
 
 Collected and linked to the person's identity, not used for tracking: Contact info, User content, Audio data,
-Identifiers, and Usage data. The Expo push token is a device identifier linked to the account and used for app
-functionality only. Contact info is the email address and name. User content is the topics, findings, notes, messages,
-comments, and attachments they create, and photos they choose as an avatar. Identifiers are the account id, on server
-events. Usage data is product interaction, on server events keyed to the account. Audio data is a spoken question's
-recording, for app functionality. The api keeps none of it, but Google may log it for abuse monitoring for up to 55
-days, longer than the real-time servicing Apple exempts, so it is declared.
+Identifiers, Purchases, and Usage data. The Expo push token is a device identifier linked to the account and used for
+app functionality only. Contact info is the email address and name. User content is the topics, findings, notes,
+messages, comments, and attachments they create, and photos they choose as an avatar. Identifiers are the account id, on
+server events. Usage data is product interaction, on server events keyed to the account. Audio data is a spoken
+question's recording, for app functionality. The api keeps none of it, but Google may log it for abuse monitoring for up
+to 55 days, longer than the real-time servicing Apple exempts, so it is declared. Purchases is the purchase history of a
+plan bought in the app, for app functionality.
 
 Collected and not linked to identity, not used for tracking: Diagnostics (crash data, performance data), and Usage data
 (the PostHog screen and visit events, which include no person profile or device identifier).
 
 Data Not Collected, which the code shows: Location, Financial info, Health and fitness, Contacts, Browsing history,
-Search history, Sensitive info, Purchases, Advertising data, and Other user content outside the rows above.
+Search history, Sensitive info, Advertising data, and Other user content outside the rows above.
 Device ID is collected once the person allows notifications: the Expo push token, for app functionality only. Location
 is off because geoip is off and no location module is installed. A search query goes to the api and
 is not stored or sent to analytics. No vendor, advertising, or installation identifier is read. The microphone
@@ -88,7 +91,7 @@ Transparency prompt is never shown.
 
 - Does the app collect or share any of the required user data types: Yes.
 - Is all of the user data collected by the app encrypted in transit: Yes. Every request is TLS to the api, Sentry,
-  PostHog, Expo, Apple, or Google.
+  PostHog, Expo, RevenueCat, Apple, or Google.
 - Do you provide a way for users to request that their data is deleted: Yes. In the app, Account, Close your account,
   Close account. On the web, `https://carlnotes.com/account`. Without either, email support@carlnotes.com with the
   subject "Delete my CarlNotes account". Requests are answered within 30 days. The policy's section is
@@ -96,16 +99,16 @@ Transparency prompt is never shown.
 - Data types collected: Personal info (name, email address, user ids), Photos (an avatar the person chooses), Files and
   docs (attachments the person chooses), Messages (chat messages, notes, comments), Audio (voice or sound recordings: a
   spoken question, optional, for app functionality, not processed ephemerally since Google may log it for abuse
-  monitoring), App activity (app interactions), and App info and performance (crash logs, diagnostics). In-app search
-  history is not retained. Device or other IDs: the Expo push token, once the person allows notifications, for app
-  functionality.
+  monitoring), Financial info (purchase history: a plan bought in the app, for app functionality), App activity (app
+  interactions), and App info and performance (crash logs, diagnostics). In-app search history is not retained. Device
+  or other IDs: the Expo push token, once the person allows notifications, for app functionality.
 - Data types shared: App info and performance with Sentry, App activity with PostHog, as the rows above say. The push
   token goes to Expo's push service as a processor that delivers the notification, which Play counts as a service
-  provider, not sharing. A spoken question's recording goes to Google as the service provider that transcribes it. No
-  data is shared for advertising.
+  provider, not sharing. A spoken question's recording goes to Google as the service provider that transcribes it. A
+  purchase goes to RevenueCat as the service provider that validates it. No data is shared for advertising.
 - Purposes: App functionality, Analytics, Account management, Fraud prevention and security (the install check).
-- Optional or required: Email is required for an account. Name, avatar, attachments, messages, and recordings are
-  optional.
+- Optional or required: Email is required for an account. Name, avatar, attachments, messages, recordings, and
+  purchases are optional.
 - Independent security review: No.
 - Government app: No.
 
@@ -123,7 +126,8 @@ these modules that ship or call cryptography:
 | `better-auth` and `@better-auth/expo` | The auth client. The server side signs and hashes. The client stores and sends the cookie | Yes, for sign-in. No encryption runs on the device |
 | `@expo/app-integrity` | App Attest and Play Integrity, which the operating system signs | Yes, on an email sign-up. The operating system signs the attestation |
 | `@sentry/react-native`, `posthog-react-native`, `expo-updates` | TLS to their hosts, nothing else | Yes. Transport encryption only |
+| `react-native-purchases` | StoreKit and Google Play Billing, which the store signs, and TLS to RevenueCat | Yes, for a plan purchase and a restore. Transport encryption only |
 | `react-native-sse`, `react-native-webview`, `expo-audio`, `expo-image`, `expo-file-system` | TLS through the platform's networking | Yes. Transport encryption only |
 
-No dependency implements its own cipher. The declaration holds as long as this table does. Audit date: 2026-10-29.
+No dependency implements its own cipher. The declaration holds as long as this table does. Audit date: 2026-10-31.
 The export classification is the account holder's to confirm in App Store Connect.

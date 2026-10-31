@@ -44,10 +44,12 @@ test("the podcast switch says whether the podcast is on and shows the free plan'
 	expect(toPodcastSwitchHtml({ topicPodcast, isPodcastEnabled: false })).toContain("Coffee Break is off")
 
 	// show the free plan's short episode only if the topic lacks full episodes
-	expect(toPodcastSwitchHtml({ topicPodcast, isPodcastEnabled: true })).not.toContain("latest 10-minute episode")
+	expect(toPodcastSwitchHtml({ topicPodcast, isPodcastEnabled: true })).not.toContain(
+		"latest 10-minute podcast episode",
+	)
 	expect(
 		toPodcastSwitchHtml({ topicPodcast: { ...topicPodcast, hasFullPodcastEpisodes: false }, isPodcastEnabled: true }),
-	).toContain("latest 10-minute episode")
+	).toContain("latest 10-minute podcast episode")
 })
 
 // the switch takes the id its Podcast field label names it by

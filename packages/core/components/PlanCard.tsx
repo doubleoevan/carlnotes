@@ -15,6 +15,13 @@ export type PlanCardElements = {
 	Quota: ComponentType<{ label: string; isRaised?: boolean }>
 	Action: ComponentType<{ label: string; isDisabled: boolean; isOutlined: boolean; onPress: () => void }>
 }
+
+// a plan card's price per month and the line under it that says how it bills
+export type PlanPrice = { price: string; billingNote: string }
+
+// where a paid plan is managed: the action's label and what it opens
+export type PlanManagementAction = { label: string; onPress: () => void }
+
 export type PlanCardProps = {
 	plan: Plan
 	isYearly: boolean
@@ -22,10 +29,12 @@ export type PlanCardProps = {
 	signedInPlan: Plan | null
 	subscribedInterval: BillingInterval | null
 	isRedirecting?: boolean
+	// the store's price for this plan and interval, in place of the catalog's dollars
+	storePrice?: PlanPrice
 	// the purchase actions. an app that offers no purchase passes neither, and a signed-in user's other plans then show
-	// no action
+	// no action. a paid user's checkout switches the plan, and the plan management action opens where the plan is managed
 	onCheckout?: (plan: Plan) => void
-	onPortal?: () => void
+	planManagementAction?: PlanManagementAction
 	onSignup?: () => void
 }
 
@@ -46,8 +55,9 @@ export function PlanCard({
 	signedInPlan,
 	subscribedInterval,
 	isRedirecting = false,
+	storePrice,
 	onCheckout,
-	onPortal,
+	planManagementAction,
 	onSignup,
 	elements: { Card, Badge, Title, Tagline, Price, Quotas, Quota, Action },
 }: PlanCardProps & { elements: PlanCardElements }) {
@@ -65,11 +75,12 @@ export function PlanCard({
 		: isYearly
 			? `Billed ${toWholeDollarLabel(config.priceYearlyCents)} yearly`
 			: "Billed monthly"
+	const planPrice = storePrice ?? { price: toWholeDollarLabel(monthlyCents), billingNote }
 	const action = toPlanAction({
 		isCurrentPlan,
 		signedInPlan,
 		onSignup,
-		onPortal,
+		planManagementAction,
 		onCheckout: onCheckout && (() => onCheckout(plan)),
 	})
 	return (
@@ -77,7 +88,7 @@ export function PlanCard({
 			{badge && <Badge>{badge}</Badge>}
 			<Title>{plan}</Title>
 			<Tagline>{PLAN_TAGLINES[plan]}</Tagline>
-			<Price price={toWholeDollarLabel(monthlyCents)} billingNote={billingNote} />
+			<Price {...planPrice} />
 			{/* the quota ordering and yearly markers are identical on both platforms */}
 			<Quotas>
 				<Quota label={`${config.topicLimit} topics`} />
@@ -103,13 +114,13 @@ function toPlanAction({
 	isCurrentPlan,
 	signedInPlan,
 	onSignup,
-	onPortal,
+	planManagementAction,
 	onCheckout,
 }: {
 	isCurrentPlan: boolean
 	signedInPlan: Plan | null
 	onSignup?: () => void
-	onPortal?: () => void
+	planManagementAction?: PlanManagementAction
 	onCheckout?: () => void
 }): { label: string; isOutlined: boolean; onPress: () => void } | null {
 	if (!signedInPlan) {
@@ -119,9 +130,12 @@ function toPlanAction({
 		return { label: "Current plan", isOutlined: true, onPress: () => {} }
 	}
 
-	// a paying user manages billing, and a free user upgrades
+	// a paying user manages billing where the plan is billed or switches it in the store, and a free user upgrades
 	if (isPaidPlan(signedInPlan)) {
-		return onPortal ? { label: PURCHASE_COPY.manageBilling, isOutlined: true, onPress: onPortal } : null
+		if (planManagementAction) {
+			return { ...planManagementAction, isOutlined: true }
+		}
+		return onCheckout ? { label: PURCHASE_COPY.switchPlan, isOutlined: true, onPress: onCheckout } : null
 	}
 	return onCheckout ? { label: PURCHASE_COPY.upgrade, isOutlined: false, onPress: onCheckout } : null
 }

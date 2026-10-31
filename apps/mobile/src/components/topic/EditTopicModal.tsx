@@ -1,16 +1,20 @@
 import { showClientError } from "@carlnotes/client/apiClient"
-import { sendCreateTopicInvite, sendUserInvite } from "@carlnotes/client/topicClient"
+import { DailyTopicLimitError, sendCreateTopicInvite, sendUserInvite } from "@carlnotes/client/topicClient"
 import { maxTopicFindingsOptions, visibilities } from "@carlnotes/contracts/enums"
+import { PURCHASE_COPY } from "@carlnotes/contracts/plans"
+import { FULL_PODCAST_EPISODE_MINUTES, SHORT_PODCAST_EPISODE_MINUTES } from "@carlnotes/contracts/podcastEpisodes"
 import { toInvitePath } from "@carlnotes/contracts/seo"
 import { SITE_URL } from "@carlnotes/contracts/site"
 import { updateTopicPayload } from "@carlnotes/contracts/topicPayloads"
 import { MAX_TOPIC_SOURCES, TOPIC_NAME_CHARS, type TopicResponse } from "@carlnotes/contracts/topics"
 import { toUpdateTopicPayload, useTopicFields } from "@carlnotes/core/hooks/useTopicFields"
 import { useTopicTeamChoice } from "@carlnotes/core/hooks/useTopicTeamChoice"
-import { MISSING_FIELD_NOTES, saveTopic } from "@carlnotes/core/lib/saveTopic"
+import { DAILY_TOPIC_LIMIT_HINTS, MISSING_FIELD_NOTES, saveTopic } from "@carlnotes/core/lib/saveTopic"
+import { usePurchaseOffers } from "@carlnotes/core/stores/purchaseOffersStore"
 import { Globe, Link, Lock, Mail, X } from "lucide-react-native"
-import { useRef } from "react"
+import { useRef, useState } from "react"
 import { Share, View } from "react-native"
+import { PlansLink } from "@/components/account/PlansLink"
 import { ChoiceSelect } from "@/components/common/ChoiceSelect"
 import { PreferenceSwitch } from "@/components/common/PreferenceSwitch"
 import { deletePickedFile } from "@/components/common/pickedFileCache"
@@ -58,7 +62,12 @@ export function EditTopicModal({
 	const { knownTags, topicFeed } = useTopicFeed()
 	const mutation = usePageMutation()
 	useTopicAttachmentCleanup(fields.pendingFiles)
+
+	// the podcast field's upgrade link and the daily topic limit's plans link where the store sells the user a plan
+	const { canPurchase } = usePurchaseOffers()
+	const [isDailyTopicLimited, setIsDailyTopicLimited] = useState(false)
 	async function handleSave(): Promise<void> {
+		setIsDailyTopicLimited(false)
 		if (!fields.name.trim()) {
 			throw new Error(MISSING_FIELD_NOTES.name)
 		}
@@ -91,6 +100,14 @@ export function EditTopicModal({
 					}
 				}
 			},
+		}).catch((error: unknown) => {
+			// a daily topic limit adds the way past it, as the web's toast does, naming a bigger plan only if one is sold
+			if (error instanceof DailyTopicLimitError) {
+				setIsDailyTopicLimited(true)
+				const dailyTopicLimitHint = canPurchase ? DAILY_TOPIC_LIMIT_HINTS.purchase : DAILY_TOPIC_LIMIT_HINTS.gated
+				throw new Error(`${error.message} ${dailyTopicLimitHint}`)
+			}
+			throw error
 		})
 		await onTopicSaved(topicId, fields.name)
 		onClose()
@@ -232,14 +249,28 @@ export function EditTopicModal({
 					<TopicAttachmentEditor fields={fields} />
 				</View>
 				{topic?.podcast && (
-					<View className="flex-row items-center gap-2">
-						<PreferenceSwitch
-							label="Podcast"
-							isChecked={fields.isPodcastEnabled}
-							isDisabled={!topic.isTopicOwner}
-							onChange={fields.setIsPodcastEnabled}
-						/>
-						<Text>Podcast</Text>
+					<View className="gap-1">
+						<View className="flex-row items-center gap-2">
+							<PreferenceSwitch
+								label="Podcast"
+								isChecked={fields.isPodcastEnabled}
+								isDisabled={!topic.isTopicOwner}
+								onChange={fields.setIsPodcastEnabled}
+							/>
+							<Text>Podcast</Text>
+						</View>
+						{/* the free plan's short podcast episode, and the owner's link to the Plans screen */}
+						{!topic.podcast.hasFullPodcastEpisodes && (
+							<Text className="text-xs text-muted-foreground">
+								{`The free plan keeps each topic's latest ${SHORT_PODCAST_EPISODE_MINUTES}-minute podcast episode`}
+							</Text>
+						)}
+						{!topic.podcast.hasFullPodcastEpisodes && topic.isTopicOwner && canPurchase && (
+							<PlansLink
+								label={`Upgrade for ${FULL_PODCAST_EPISODE_MINUTES}-minute podcast episodes, every one kept`}
+								className="text-xs"
+							/>
+						)}
 					</View>
 				)}
 				{mutation.error && (
@@ -247,6 +278,7 @@ export function EditTopicModal({
 						{mutation.error}
 					</Text>
 				)}
+				{mutation.error && isDailyTopicLimited && canPurchase && <PlansLink label={PURCHASE_COPY.seePlans} />}
 				<View className="flex-row justify-end gap-2">
 					<Button variant="outline" accessibilityLabel="Cancel" disabled={mutation.isPending} onPress={onClose}>
 						<Text>Cancel</Text>

@@ -5,8 +5,8 @@ import { AnchorLink } from "@/components/common/AnchorLink"
 import { Text } from "@/components/primitives/text"
 
 /**
- * Says that continuing by any sign-in path accepts the Terms and the Privacy Policy, with both linked, as the web's
- * session pages do above their footer link.
+ * Says that continuing accepts the Terms and the Privacy Policy, with both linked: by any sign-in path, as the web's
+ * session pages do above their footer link, and by a purchase under the Plans screen's renewal line.
  */
 export function TermsAgreementText() {
 	return (

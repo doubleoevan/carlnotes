@@ -3,7 +3,9 @@ import { dailyFrequencies } from "@carlnotes/contracts/enums"
 import {
 	ADMIN_QUOTA,
 	type BillingInterval,
+	isOverageBillable,
 	type MonthlyBudgetCutoffKind,
+	type OverageBillingAccess,
 	PLANS,
 	type Plan,
 	userBudgetCents,
@@ -250,7 +252,8 @@ export type ManualScanAuthorization =
 
 /**
  * Whether the user may run a manual scan on the topic right now.
- * An owner checks the daily limit, which a payment method makes soft with extra scans billed as overage.
+ * An owner checks the daily limit, which a monthly Stripe subscription with a card makes soft with extra scans billed
+ * as overage.
  * Admins bypass the limit.
  */
 export async function loadManualScanAuthorization(userId: string, topic: GatedTopic): Promise<ManualScanAuthorization> {
@@ -308,24 +311,20 @@ export function authorizeDailyFrequency({
 
 /**
  * Whether a manual scan is allowed, from values the caller already loaded.
- * An owner or an admin may scan. An owner checks the daily limit, which a payment method makes soft
- * with extra scans billed as overage. Admins bypass the limit.
+ * An owner or an admin may scan. An owner checks the daily limit, which a monthly Stripe subscription with a card makes
+ * soft with extra scans billed as overage. Admins bypass the limit.
  */
 export function authorizeManualScan({
 	isAdmin,
 	plan,
 	isTopicOwner,
 	scansUsedToday,
-	hasPaymentMethod,
-	billingInterval,
-}: {
+	...billingAccess
+}: OverageBillingAccess & {
 	isAdmin: boolean
 	plan: Plan
 	isTopicOwner: boolean
 	scansUsedToday: number
-	hasPaymentMethod: boolean
-	// how the subscription bills: monthly or yearly
-	billingInterval: BillingInterval
 }): ManualScanAuthorization {
 	// only the owner or an admin may run a manual scan on the topic
 	if (!isAdmin && !isTopicOwner) {
@@ -337,11 +336,12 @@ export function authorizeManualScan({
 		return { status: "allowed", remainingScans: ADMIN_QUOTA, isOverage: false }
 	}
 
-	// at or past the daily scan limit, a payment method on a monthly subscription allows the scan as billed overage
-	const dailyScanLimit = PLANS[plan].dailyScanLimit[billingInterval]
+	// at or past the daily scan limit, a subscription that bills overage allows the scan as billed overage
+	const dailyScanLimit = PLANS[plan].dailyScanLimit[billingAccess.billingInterval]
 	if (scansUsedToday >= dailyScanLimit) {
-		const isBillable = hasPaymentMethod && billingInterval === "monthly"
-		return isBillable ? { status: "allowed", remainingScans: 0, isOverage: true } : { status: "quota" }
+		return isOverageBillable(billingAccess)
+			? { status: "allowed", remainingScans: 0, isOverage: true }
+			: { status: "quota" }
 	}
 	return { status: "allowed", remainingScans: dailyScanLimit - scansUsedToday - 1, isOverage: false }
 }

@@ -58,7 +58,7 @@ CarlNotes reads public web content on a schedule and scores it against context y
 
 **Connected accounts.** If you connect an external account such as Gmail or YouTube, we store the access grant and the scopes you approved. We never store your password for those services.
 
-**Payment data.** If paid plans are active, our payment processor handles your card. We store only the subscription status, plan, and billing identifiers. We never see or store full card numbers.
+**Payment data.** On the web, Stripe handles your card. In the mobile app, Apple or Google handles your purchase, and RevenueCat, our subscription service, tells us which plan your store account holds. RevenueCat knows your account only by a random id we create for it, and closing your account deletes its record. We store only the subscription status, plan, billing provider, and billing identifiers, and our analytics record the store country of an in-app purchase. We never see or store full card numbers.
 
 **Technical data.** IP address, browser and device type, timestamps, and error diagnostics. Used for security, abuse prevention, and debugging. When mobile error reporting is configured, the app sends crash and error reports to Sentry. Reports can include stack traces, app and device information, identifiers, and diagnostic or request context.
 
@@ -110,7 +110,9 @@ We use third-party providers to run the service. Each one receives only what its
 | Langfuse | Pipeline tracing | Prompt and response contents |
 | Sentry | Error tracking | Error and crash diagnostics, app and device information, identifiers, and diagnostic or request context |
 | PostHog | Product analytics | Server usage events keyed to your account, browser visit events, bot fetches, and mobile events with SDK identifiers, app and device properties, screen names, and approximate location inferred from IP |
-| Stripe | Payments | Billing details, when paid plans are live |
+| Stripe | Payments on the web | Billing details for a plan bought on the web |
+| Apple (App Store) and Google (Google Play) | Subscriptions bought in the mobile app | Your purchase, its payment, and your store account's subscription status |
+| RevenueCat | Subscription status for plans bought in the mobile app | A random id for your account, the store's purchase receipts and subscription events, your store country, and app and device information |
 
 We select providers that do not train models on data submitted through their APIs. Their own terms govern their handling of that data.
 
@@ -202,7 +204,7 @@ export function PrivacyPage() {
 			{/* the title and the effective / last-updated dates */}
 			<h1 className="font-display text-2xl">Privacy Policy</h1>
 			<p className="text-muted-foreground mt-2 text-sm">
-				Effective date: July 24, 2026 · Last updated: October 30, 2026
+				Effective date: July 24, 2026 · Last updated: October 31, 2026
 			</p>
 			{/* the sections, rendered from the markdown body */}
 			<Markdown options={PRIVACY_MARKDOWN_OPTIONS}>{PRIVACY_BODY}</Markdown>

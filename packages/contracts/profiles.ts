@@ -1,7 +1,7 @@
 // the profile contracts: a user's identity, a topic table row, a team's status on a profile, and the billing state
 import { z } from "zod"
 import { toAvatarVersion } from "./avatars"
-import { billingIntervals, plans, teamRoles, visibilities } from "./enums"
+import { billingIntervals, billingProviders, plans, teamRoles, visibilities } from "./enums"
 import { podcastEpisodeSummary } from "./podcast"
 import { displayEnum } from "./tolerantReads"
 
@@ -82,11 +82,16 @@ export const billingState = z.object({
 	plan: displayEnum(plans),
 	// how often the subscription bills. a free user has none and reads monthly for limit lookups
 	billingInterval: z.enum(billingIntervals),
-	// the Stripe payment status (e.g. active, past_due), or null for a free user with no subscription
+	// the subscription's payment status (e.g. active, past_due), or null for a free user with no subscription
 	status: z.string().nullable(),
 	hasPaymentMethod: z.boolean(),
 	dailyScansUsed: z.number(),
 	dailyScanLimit: z.number(),
+	// who bills the subscription, or null for a free user, and whether a scan past the daily limit bills as overage
+	provider: z.enum(billingProviders).nullable(),
+	isOverageBillable: z.boolean(),
+	// the id the app logs in to RevenueCat with before a store purchase or a restore
+	revenueCatAppUserId: z.string().nullable(),
 })
 
 export type BillingState = z.infer<typeof billingState>

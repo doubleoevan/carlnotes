@@ -17,7 +17,9 @@ and workbook types the pipeline reads, the topic attachment size limit, and its 
 is the request payload schemas the api validates with `zValidator` and the types inferred from them, with the topic
 ones in `topicPayloads.ts`, `enums.ts` and `plans.ts` hold the values that both sides compare, with the role and
 plan readers `isAdminRole`, `isLeaderRole`, `isPaidPlan`, and `isPremiumPlan` that every role or plan check outside
-the api's gate goes through, `sources.ts` defines the Sources
+the api's gate goes through, and `isOverageBillable`, the one rule for whether a scan past the daily limit bills,
+`storeBilling.ts` holds the store entitlement ids and their plans, the plan and interval a store product id names, and
+each store's subscription management page, `sources.ts` defines the Sources
 that an ingester reads, `seo.ts` builds topic slugs and paths, meta descriptions, and the site's structured data, and
 `podcastEpisodes.ts` holds the podcast episode minutes and findings limits, a cover's sizes and the `PodcastCover`
 shape, the show's and the hosts' names, the theme song's credits, and a turn's transcript text; the speech model setting

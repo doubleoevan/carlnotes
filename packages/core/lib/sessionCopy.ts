@@ -1,4 +1,6 @@
 // the lines the sign-in, sign-out, sign-up, and close-account controls say, shared by the web and the mobile app
+import type { BillingProvider } from "@carlnotes/contracts/plans"
+import { isStoreProvider, STORE_NAMES, type StoreProvider } from "@carlnotes/contracts/storeBilling"
 
 // what a page says if a provider's sign-in will not open
 export const OAUTH_ERROR_TEXT = "That sign-in didn't open. Try another one, or email."
@@ -15,8 +17,8 @@ export function toSignOutFailedText(reason: string | undefined): string {
 }
 
 // what the close-account section says above its button
-export const CLOSE_ACCOUNT_SECTION_TEXT =
-	"Your topics, findings, and chats go with it, and you stop following every topic. Any paid plan is canceled. This cannot be undone."
+const CLOSE_ACCOUNT_LOSS_TEXT = "Your topics, findings, and chats go with it, and you stop following every topic."
+const CLOSE_ACCOUNT_SECTION_TEXT = `${CLOSE_ACCOUNT_LOSS_TEXT} Any paid plan is canceled. This cannot be undone.`
 
 // the close-account confirmation
 export const CLOSE_ACCOUNT_CONFIRMATION = {
@@ -25,6 +27,31 @@ export const CLOSE_ACCOUNT_CONFIRMATION = {
 	confirmLabel: "Close account",
 	cancelLabel: "Keep it",
 } as const
+
+// what the close-account section and its confirmation say, and the store that keeps billing a store subscriber
+export type CloseAccountCopy = { storeProvider: StoreProvider | null; sectionText: string; confirmationBody: string }
+
+/**
+ * Returns what the close-account section and its confirmation say to a user billed by the provider. A store
+ * subscriber is told the store keeps billing until the plan is canceled there.
+ */
+export function toCloseAccountCopy(provider: BillingProvider | null): CloseAccountCopy {
+	if (!isStoreProvider(provider)) {
+		return {
+			storeProvider: null,
+			sectionText: CLOSE_ACCOUNT_SECTION_TEXT,
+			confirmationBody: CLOSE_ACCOUNT_CONFIRMATION.body,
+		}
+	}
+
+	// the store's billing line in place of the canceled plan
+	const storePlanLine = `Your plan keeps billing through ${STORE_NAMES[provider]} until you cancel it there.`
+	return {
+		storeProvider: provider,
+		sectionText: `${CLOSE_ACCOUNT_LOSS_TEXT} ${storePlanLine} This cannot be undone.`,
+		confirmationBody: `Everything Carl kept for you goes with it. ${storePlanLine} This cannot be undone.`,
+	}
+}
 
 // what the app's sign-up form says if the install could not be verified
 export const APP_SIGNUP_GATE_FAILED_TEXT = "Carl couldn't verify this install. Sign up on carlnotes.com instead."

@@ -56,9 +56,17 @@ at the root import it by name.
   pattern the name and text searches match with, `canonicalJson.ts` for the json a keyed digest signs, `content.ts` for
   the blog under `content/blog/`, and `seed.ts`, the entry behind `bun run db:seed` over `@carlnotes/db/seed`).
   `apiPageStyle.ts` holds `API_PAGE_BASE_STYLE`, the body and link rules in the emails' palette that the api's own pages
-  start with: the pages `content.ts` renders and the unsubscribe page in `unsubscribe.ts`.
-  `billingRoute.ts` holds the billing routes over `billing.ts`; its Stripe webhook responds 400 to a bad signature and
-  500 to a verified event it could not apply, so Stripe retries it.
+  start with: the pages `content.ts` renders and the unsubscribe page in `unsubscribe.ts`. `billingRoute.ts` holds the
+  billing routes over `billing.ts` (Stripe) and `storeBilling.ts` (the App Store and Google Play through RevenueCat);
+  its Stripe webhook responds 400 to a bad signature and its RevenueCat webhook to a missing or wrong Authorization
+  value, and each 500 to a verified event it could not apply, so the provider retries it. `storeBilling.ts` re-reads the
+  RevenueCat customer an event or the app's store sync names and projects it, counting a sandbox purchase only in dev
+  and for the ids in `REVENUECAT_SANDBOX_USER_IDS`, and deletes the customer when the account closes. It reaches a
+  customer by the user's random `revenueCatAppUserId`, never the user id. Both providers write the one billing row
+  through `billingProjection.ts`, where a row from another provider stays unless the new plan ranks higher, and a Stripe
+  subscription that a higher store plan replaces is set to cancel at its period end. `stripeClient.ts` holds the Stripe
+  client that `billing.ts` and `billingProjection.ts` call. Stripe checkout responds 409 to a store subscriber.
+  `storeBillingTestFixtures.ts` holds the RevenueCat customers and the stubbed sync the store billing tests share.
 - `documents.ts` — the document routes: the sitemap, the site and topic feeds, the llms files, the IndexNow key,
   security.txt, and the two domain association documents the stores verify app links against,
   `/.well-known/apple-app-site-association` from `APPLE_TEAM_ID` and `/.well-known/assetlinks.json` from

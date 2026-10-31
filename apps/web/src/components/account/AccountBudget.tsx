@@ -1,18 +1,19 @@
 import type { ActivityResponse } from "@carlnotes/contracts/activity"
 import { isPaidPlan } from "@carlnotes/contracts/enums"
-import { PLANS_PATH, PURCHASE_COPY } from "@carlnotes/contracts/plans"
+import { type BillingProvider, PLANS_PATH, PURCHASE_COPY } from "@carlnotes/contracts/plans"
 import type { BillingState } from "@carlnotes/contracts/profiles"
 import {
 	type AccountBudgetElements,
 	AccountBudget as SharedAccountBudget,
 } from "@carlnotes/core/components/AccountBudget"
+import { PLAN_MANAGEMENT_LABELS, toPlanManagement } from "@carlnotes/core/lib/storefrontPurchaseRules"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { Settings } from "lucide-react"
 import { useState } from "react"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { Button, buttonVariants } from "@/components/primitives/button"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
-import { openBillingPortal } from "@/lib/billingRedirects"
+import { openPlanManagement } from "@/lib/billingRedirects"
 import { CARD_CLASS } from "@/lib/styleClasses"
 import { SpendMeter } from "./SpendMeter"
 
@@ -48,13 +49,13 @@ const ACCOUNT_BUDGET_ELEMENTS: AccountBudgetElements = {
 	PaymentNotice,
 }
 
-// a failed-payment notice with a path to fix payment in the portal
-function PaymentNotice() {
+// a failed-payment notice whose Update opens where the plan is billed: the portal, or the store's subscription page
+function PaymentNotice({ provider }: { provider: BillingProvider | null }) {
 	return (
 		<div className="border-destructive bg-card rounded-md border p-3 text-sm">
 			<p className="text-destructive font-semibold">Your last payment didn't go through.</p>
 			<p className="text-muted-foreground">
-				<Button className="mt-1 mr-2" onClick={() => openBillingPortal()}>
+				<Button className="mt-1 mr-2" onClick={() => void openPlanManagement(toPlanManagement("web", provider))}>
 					Update
 				</Button>
 				your payment method to keep Carl brewing.
@@ -63,15 +64,19 @@ function PaymentNotice() {
 	)
 }
 
-// a subscribed user manages billing through the portal, and a free user selects a plan on the plans page.
+// a subscribed user manages billing where the plan is billed, the portal or the store that sold it, and a free user
+// selects a plan on the plans page. a store subscriber's button names the store
 export function PlanButton({ billing }: { billing: BillingState }) {
 	const [isRedirecting, setIsRedirecting] = useState(false)
+	const planManagement = toPlanManagement("web", billing.provider)
+	const managePlanLabel =
+		planManagement === "portal" ? PURCHASE_COPY.managePlan : PLAN_MANAGEMENT_LABELS[planManagement]
 
-	// send the user to the Stripe billing portal
+	// open the portal, which this tab leaves for, or the store's page in a new tab
 	async function handleManage(): Promise<void> {
 		setIsRedirecting(true)
-		const isOpened = await openBillingPortal()
-		if (!isOpened) {
+		const isLeaving = await openPlanManagement(planManagement)
+		if (!isLeaving) {
 			setIsRedirecting(false)
 		}
 	}
@@ -82,7 +87,7 @@ export function PlanButton({ billing }: { billing: BillingState }) {
 				<TooltipTrigger asChild>
 					<Button onClick={handleManage} disabled={isRedirecting}>
 						<Settings className="size-4" />
-						{PURCHASE_COPY.managePlan}
+						{managePlanLabel}
 					</Button>
 				</TooltipTrigger>
 				<TooltipContent>Manage your plan</TooltipContent>

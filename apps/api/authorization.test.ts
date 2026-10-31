@@ -32,6 +32,7 @@ function scanInput(
 		plan: "free",
 		isTopicOwner: true,
 		scansUsedToday: 0,
+		provider: "stripe",
 		hasPaymentMethod: false,
 		billingInterval: "yearly",
 		...overrides,
@@ -109,6 +110,13 @@ test("authorizeManualScan only makes the daily limit soft when the extra scan ca
 		status: "allowed",
 		remainingScans: 0,
 		isOverage: true,
+	})
+
+	// a monthly store subscription with a card has no metered price, so its limit stays hard
+	const monthlyStoreAtLimit = { ...atLimit, hasPaymentMethod: true, billingInterval: "monthly" } as const
+	expect(authorizeManualScan(scanInput({ ...monthlyStoreAtLimit, provider: "app_store" }))).toEqual({ status: "quota" })
+	expect(authorizeManualScan(scanInput({ ...monthlyStoreAtLimit, provider: "play_store" }))).toEqual({
+		status: "quota",
 	})
 })
 
