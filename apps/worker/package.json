@@ -12,11 +12,11 @@
 		"@carlnotes/server": "workspace:*",
 		"@langfuse/tracing": "^6.0.2",
 		"@temporalio/activity": "^1.24.0",
-		"@temporalio/worker": "^1.24.0",
+		"@temporalio/worker": "^1.25.0",
 		"@temporalio/workflow": "^1.24.0",
 		"drizzle-orm": "^0.45.4"
 	},
 	"devDependencies": {
-		"ai": "^7.0.153"
+		"ai": "^7.0.155"
 	}
 }
