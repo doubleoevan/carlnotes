@@ -23,9 +23,13 @@ import { applyTopicEditToolCalls, showTopicToolCalls } from "../lib/topicToolCal
 import {
 	clearProposedTopicEdit,
 	publishTopicChanged,
+	setChatId,
 	startEditingTopic,
 	toCurrentChatGuard,
 } from "../stores/chatConversationStore"
+import { subscribeToPodcastEpisodeQuestionChatTurn } from "../stores/podcastEpisodeQuestionStore"
+import { stopSpokenAnswerKey } from "../stores/spokenAnswerStore"
+import { toPrivateChatStreamedSpokenAnswer } from "../stores/streamedSpokenAnswer"
 import { type ChatConversationGates, useChatConversationLoad } from "./useChatConversationLoad"
 import { type EditableTopicDraft, useEditableTopicDraft } from "./useEditableTopicDraft"
 import { useLinkPreviewRefresh } from "./useLinkPreviewRefresh"
@@ -75,31 +79,23 @@ export type ChatTopicDraftState = {
 	openCreatedTopic: (topicId: string) => Promise<void>
 	resetTopicDraft: () => void
 }
-// the notices, navigation, and speech the app provides
-export type ChatEffects = {
-	onNotice?: (message: string) => void
-	openNewTopicChat?: () => void
-	stopSpokenAnswer?: (spokenAnswerKey: string) => void
-	createSpokenAnswer?: (
-		options: QuestionSendOptions & { spokenAnswerKey: string; voiceChatPage: VoiceChatPage | null },
-	) => { appendChunk: (answer: string) => void; finish: (answer: string, result: ChatSendResult) => void } | null
-	subscribeToPodcastTurn?: (
-		topicId: string,
-		listener: (turn: { chatTurn: ChatTurn; isDropped: boolean }) => void,
-	) => () => void
-}
+// the chat page, the app's attachment state and topic draft state, and the notice the app shows its own way
 type UseTopicChatOptions = {
 	page: ChatPage
 	attachmentState?: ChatAttachmentState
 	draftState?: ChatTopicDraftState
-	effects?: ChatEffects
+	onNotice?: (message: string) => void
 }
 
 /**
  * Manages loading, sending, streaming, stopping, and clearing a private conversation.
  */
-export function useTopicChat({ page, attachmentState, draftState, effects = {} }: UseTopicChatOptions): TopicChat {
-	const onNotice = effects.onNotice ?? showClientError
+export function useTopicChat({
+	page,
+	attachmentState,
+	draftState,
+	onNotice = showClientError,
+}: UseTopicChatOptions): TopicChat {
 	// provide text-only defaults for attachments and Topic drafts
 	const [localKeptAttachments, setLocalKeptAttachments] = useState<KeptChatAttachment[]>([])
 	const [localTopicDraft, setLocalTopicDraft] = useState<TopicDraft>(EMPTY_TOPIC_DRAFT)
@@ -152,23 +148,23 @@ export function useTopicChat({ page, attachmentState, draftState, effects = {} }
 		if (page.topicId === undefined) {
 			return
 		}
-		return effects.subscribeToPodcastTurn?.(page.topicId, ({ chatTurn, isDropped }) =>
+		return subscribeToPodcastEpisodeQuestionChatTurn(page.topicId, ({ chatTurn, isDropped }) =>
 			setChatTurns((previousChatTurns) =>
 				isDropped
 					? withoutChatTurn(previousChatTurns, chatTurn.spokenAnswerKey)
 					: upsertChatTurn(previousChatTurns, chatTurn),
 			),
 		)
-	}, [page.topicId, effects.subscribeToPodcastTurn])
+	}, [page.topicId])
 
 	// stop the streamed spoken answer on unmount
 	useEffect(
 		() => () => {
 			if (streamingSpokenAnswerKeyRef.current) {
-				effects.stopSpokenAnswer?.(streamingSpokenAnswerKeyRef.current)
+				stopSpokenAnswerKey(streamingSpokenAnswerKeyRef.current)
 			}
 		},
-		[effects.stopSpokenAnswer],
+		[],
 	)
 
 	// toast the saves and rejections, show the topic draft, and open a created topic, else reload the page behind the
@@ -273,7 +269,7 @@ export function useTopicChat({ page, attachmentState, draftState, effects = {} }
 		setIsStreaming(true)
 
 		// a spoken question's reply is spoken as it streams, and keeps the whole answer to split it
-		const streamedSpokenAnswer = effects.createSpokenAnswer?.({
+		const streamedSpokenAnswer = toPrivateChatStreamedSpokenAnswer({
 			spokenAnswerKey: sentChatTurn.spokenAnswerKey,
 			voiceChatPage,
 			...sendOptions,
@@ -342,7 +338,7 @@ export function useTopicChat({ page, attachmentState, draftState, effects = {} }
 		// open the new-topic chat the reply asked for
 		if (shouldOpenNewTopicChatRef.current) {
 			shouldOpenNewTopicChatRef.current = false
-			effects.openNewTopicChat?.()
+			setChatId({ kind: "private", newTopic: true })
 		}
 		if (!isTopicCreatedRef.current) {
 			return

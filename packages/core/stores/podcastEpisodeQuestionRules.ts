@@ -1,13 +1,18 @@
 // the rules of a question asked from the podcast player: its phases and endings, whether the podcast episode resumes
-// once it ends, and what the player's chapter line reads
+// once it ends, what the player's chapter line reads, and what a podcast mic slot shows
 import type { PodcastEpisodeSpeaker } from "@carlnotes/contracts/enums"
+import type { PodcastEpisode } from "@carlnotes/contracts/podcast"
 import { PODCAST_EPISODE_SPEAKER_NAMES } from "@carlnotes/contracts/podcastEpisodes"
+import type { VoiceRecordingState } from "../lib/voiceRecordingRules"
+
+// the podcast mic's accessible name and tooltip
+export const PODCAST_EPISODE_QUESTION_BUTTON_LABEL = "Talk with Carl and Vienna"
 
 // where a question is: none, recording or transcribing, waiting for the answer, or a host answering out loud
 export type PodcastEpisodeQuestionPhase = "idle" | "listening" | "thinking" | "answering"
 
 // how a question ended: the host finished, a stop or a cancel, a failed or rejected question, an answer with nothing to
-// speak, a lock-screen pause, a seek or a chapter skip, the podcast episode played, or the chat mic tapped
+// speak, a lock-screen pause, a seek or a chapter skip, the podcast episode played, the chat mic tapped, or a sign-out
 export const podcastEpisodeQuestionEndings = [
 	"finished",
 	"stopped",
@@ -17,6 +22,7 @@ export const podcastEpisodeQuestionEndings = [
 	"skipped",
 	"played",
 	"chatMic",
+	"signedOut",
 ] as const
 export type PodcastEpisodeQuestionEnding = (typeof podcastEpisodeQuestionEndings)[number]
 
@@ -71,4 +77,48 @@ export function toPodcastEpisodeQuestionLabel({ phase, speaker }: PodcastEpisode
 		return "Listening"
 	}
 	return phase === "thinking" ? "Thinking" : `${PODCAST_EPISODE_SPEAKER_NAMES[speaker ?? "host"]}'s answering`
+}
+
+/**
+ * Returns whether the podcast episode shows the mic that asks carl and vienna: voice is on and the podcast episode has
+ * a topic.
+ */
+export function isPodcastEpisodeQuestionButtonShown(podcastEpisode: PodcastEpisode): boolean {
+	return podcastEpisode.isVoiceChatConfigured && podcastEpisode.topicId !== ""
+}
+
+// what a podcast mic slot shows: Send while the question records, a spinner while it waits, the mic turned off while
+// an answer plays, or the mic
+export type PodcastEpisodeQuestionButtonState = "send" | "waiting" | "disabled" | "mic"
+
+/**
+ * Returns the label of the stop that takes the skip buttons' place: Cancel while the question listens, then Stop.
+ */
+export function toPodcastEpisodeQuestionStopLabel(phase: PodcastEpisodeQuestionPhase): string {
+	return phase === "listening" ? "Cancel" : "Stop"
+}
+
+/**
+ * Returns what a podcast mic slot shows. A recording from this mic or another sends early from every slot, and the
+ * microphone request, the transcript, and the wait for the answer show a spinner in every slot.
+ */
+export function toPodcastEpisodeQuestionButtonState({
+	voiceRecordingState,
+	phase,
+	isVoiceRecording,
+}: {
+	voiceRecordingState: VoiceRecordingState
+	phase: PodcastEpisodeQuestionPhase
+	isVoiceRecording: boolean
+}): PodcastEpisodeQuestionButtonState {
+	// a running recording sends early
+	if (voiceRecordingState === "recording" || isVoiceRecording) {
+		return "send"
+	}
+
+	// a spinner while the question waits, and the mic off while a host answers
+	if (voiceRecordingState !== "idle" || phase === "listening" || phase === "thinking") {
+		return "waiting"
+	}
+	return phase === "idle" ? "mic" : "disabled"
 }

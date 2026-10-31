@@ -10,6 +10,7 @@ import { Text } from "@/components/primitives/text"
 import { isPushForAccount, isPushForPath, toPushOpenPath } from "@/pushNotificationRouting"
 import { closePushPermissionSheet, useIsPushPermissionSheetOpen, usePushPermission } from "@/pushPermission"
 import { registerPushDevice } from "@/pushRegistration"
+import { toPushTokenRegistration } from "@/pushRules"
 
 // the path on screen with its room's team, read by the foreground handler, which runs outside React
 let shownPath = "/"
@@ -52,19 +53,21 @@ export function PushNotifications({ userId }: { userId: string | null }): null {
 		if (!sessionId || pushPermission !== "granted") {
 			return
 		}
+		// register now, with the token listener that registers again only for a changed token
 		let isRegistered = false
-		const register = async (): Promise<void> => {
+		const { register, handlePushToken } = toPushTokenRegistration(async () => {
 			isRegistered = await registerPushDevice()
 
 			// the first registration turns the preferences on, so the session reads them again for the account's switches
 			if (isRegistered && hasUnchosenPushPreferenceRef.current) {
 				authClient().$store.notify("$sessionSignal")
 			}
-		}
+		})
 		void register()
 
-		// a changed token, and a foreground return after a failed registration, register again
-		const tokenSubscription = Notifications.addPushTokenListener(() => void register())
+		// a changed token, and a foreground return after a failed registration, register again. a token report that a
+		// registration's own read sends on iOS registers nothing
+		const tokenSubscription = Notifications.addPushTokenListener(handlePushToken)
 		const appStateSubscription = AppState.addEventListener("change", (appState) => {
 			if (appState === "active" && !isRegistered) {
 				void register()

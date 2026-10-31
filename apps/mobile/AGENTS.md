@@ -34,8 +34,9 @@ and the package boundary check fails anything else, a type-only import of `@carl
   The root loads regular and italic Karla faces at each supported weight so rich-text emphasis keeps the web's font.
   `hooks/useIsScreenActive.ts` shares route focus and app activity for chat and episode recording polls.
   `hooks/useFontScaledSize.ts` grows a size with the system text size, up to double, and
-  `hooks/useIsReduceMotionEnabled.ts` follows the system's reduce motion setting. The pure modules have `bun test`
-  coverage beside them. No test renders a React Native component or imports a native module.
+  `hooks/useIsReduceMotionEnabled.ts` follows the system's reduce motion setting. The `voice*.ts` modules and
+  `spokenAnswerAudio.ts` are listed under Voice. The pure modules have `bun test` coverage beside them. No test renders
+  a React Native component or imports a native module.
 - `src/components/primitives/` — the app's implementation of each Nightshift component contract, at the path and file
   name of the web's implementation, added from React Native Reusables' Uniwind registry with its CLI and rebuilt on the
   contract. `button.tsx` and `badge.tsx` give the contract's box classes to the `Pressable` or `View` and its text
@@ -200,6 +201,8 @@ follow the web menu. `ThemeMenu.tsx` is the menu's appearance items. It matches 
 system appearance is the silent fallback when no preference is saved. `hooks/useSignOut.ts` shares pending state and
 error handling between the menu and Settings, through the account's session cleanup.
 `components/common/AnchorLink.tsx` owns internal navigation, replacement, in-app browser links, and supported system schemes.
+`common/ThemedSpinner.tsx` is the spinner in a theme color, which the mic, the play button, and the podcast question
+button show while they wait.
 `common/Sheet.tsx` owns bottom-sheet dismissal, safe insets, Android Back, and accessibility focus return.
 `common/YoutubePlayer.tsx` shares the inline video player between chat, Finding previews, and the tutorial. A tap loads
 YouTube, closing the sheet or backgrounding the app stops playback, and unavailable embeds show an inline error.
@@ -385,6 +388,7 @@ and [Material Design](https://m3.material.io/).
 | Browser history or custom back links | Edge-swipe gesture; the logo returns Home without a visible Back button | System Back button and gesture; the logo returns Home |
 | Centered dialog, popover, or radio menu | Dismissible bottom sheet with focus return | Dismissible bottom sheet with Back handling and focus return |
 | Destructive confirmation dialog | System confirmation alert with the web's words | System confirmation dialog with the web's words |
+| Transient toast, including the voice notices | System alert with the web's words, its action as a second button | System alert with the web's words, its action as a second button |
 | Hover tint and scale | Pressed feedback | Pressed feedback using the installed native primitives |
 | Tooltip-only action name | Visible label or accessible label and long-press explanation where needed | Visible label or accessible label and long-press explanation where needed |
 | Browser date and time inputs | System picker | System picker |
@@ -413,7 +417,8 @@ adapt actual shared core components. The native editor and reader use the same p
 The existing patch preserves web initialization and qualifies iOS React headers for the current native build.
 Generated `ios/` and `android/` projects are ignored; Expo configuration remains their source.
 
-One screen-level KeyboardAvoidingView owns iOS avoidance with the measured header offset. Android resizes its window.
+One screen-level KeyboardAvoidingView owns avoidance with the measured header offset. Every KeyboardAvoidingView pads
+on both platforms. Edge-to-edge Android draws under the keyboard and never resizes its window.
 The editor has bounded internal scrolling. The full-width toolbar stays below the title and above the body.
 `common/ScrollIndicator.tsx` supplies its persistent orange horizontal thumb and `ScrollBox`'s vertical thumb.
 A Done control below the body appears while the software keyboard is open and explicitly blurs the editor.
@@ -696,12 +701,14 @@ to core. `podcastEpisodeCheckpoint.ts` stores only account-owned episode ID, pos
 restoration is paused and fetches the authorized episode without resolving an audio source. Session exit pauses
 immediately; successful sign-out retires queued listens and removes the checkpoint. Foreground return, resume,
 and a one-minute foreground interval recheck current episode access. Buffered media cannot be revoked instantly.
+`audioPlayerTestFixtures.ts` is the fake expo-audio player that the podcast adapter's and `spokenAnswerAudio.ts`'s tests
+drive.
 
-Expo audio 58.0.10 and `patches/expo-audio@58.0.10.patch` add single-file system chapter commands. The small patch
-adds ordered chapter targets and metadata updates on iOS and Android; timed skips remain 15/30 seconds. The audio
-config plugin enables iOS background audio and the Android playback service and disables recording permissions.
-The fingerprint changes, so this needs a rebuilt development/store client; an EAS Update alone is insufficient.
-No mobile microphone or recording UI is added.
+Expo audio 58.0.10 and `patches/expo-audio@58.0.10.patch` add single-file system chapter commands. The small patch adds
+ordered chapter targets and metadata updates on iOS and Android; timed skips remain 15/30 seconds. The audio config
+plugin enables iOS background audio and the Android playback service. The Voice section covers the microphone
+permission. The fingerprint changes, so this needs a rebuilt development/store client; an EAS Update alone is
+insufficient.
 
 
 `app/topics/[topicId]/episodes/[season]/[episodeNumber].tsx` renders `podcast/PodcastEpisodeScreen.tsx`.
@@ -761,10 +768,106 @@ The audio patch and configuration change the runtime fingerprint and require a n
 update cannot add them to an old binary. See `patches/README.md` for the patch boundary and upgrade checks.
 Stories exercise playback, buffering/error, long titles, missing Findings, recording/failure, transcript, credits,
 feed states, reset confirmation, and the dock. Device QA for this change uses only the existing iPhone SE simulator.
-Voice and recording remain separate changes.
 
 `common/ShimmerText.tsx` shares the existing foreground-only, reduced-motion-aware highlight across Coffee Talk,
 recording cards, and feed loading. `ThinkingLine` supplies its shared phrase; no JavaScript frame loop is added.
+
+## Voice
+
+The web's spoken questions and answers over the phone's microphone and a second audio player. Core owns the state:
+`useVoiceRecording`, `useListenMode`, `useChatRoomSpokenAnswer`, the spoken answer store and queue, the audio cache, and
+the notice store. The app supplies the platform pieces:
+
+- `voicePermission.ts` asks for the microphone on the first mic tap. A denial that the phone will not ask about again
+  adds "Open settings" to Carl's line.
+- `voiceRecorder.ts` records mono AAC at 16 kHz and 32 kbps in an `.m4a` per recording, reads the metering every 100 ms
+  into core's silence rules, and deletes the file on every end but a send. A development build logs one level trace per
+  recording, which the hardware check reads to set `NATIVE_SILENCE_THRESHOLD_SETTINGS`.
+- `voiceAudioMode.ts` is the one audio mode the podcast player and the recorder share, with the microphone allowed only
+  while a recording runs, so spoken answers and podcast episodes play on the playback category over Bluetooth.
+- `spokenAnswerAudio.ts` plays each spoken part from a `spoken-part-*` cache file, deletes it once the part ends or
+  stops, reads a system stop from `playing: false`, and names the host on the lock screen.
+- `voiceCacheFiles.ts` writes those files and sweeps every `spoken-part-*` and `voice-recording-*` file. Each file, like
+  each picked copy, is deleted through `cacheFiles.ts`'s `deleteCacheFile`.
+- `components/chat/SpokenAnswerAudio.tsx`, beside `PodcastEpisodeAudio` in the root layout and restarted for each user
+  id, registers the player and the notices, sweeps at launch, and stops the answer, drops its audio, and sweeps when the
+  account ends. The root layout sets the voice client to read a part as its bytes, and limits core's spoken audio cache
+  to 8 MB. The phone holds those bytes in the app's own memory.
+- `components/chat/useVoiceRecording.ts` wraps core's hook with the recorder. The app leaving for the background ends a
+  recording and listen mode. iOS's inactive state does not end them, and the microphone prompt itself makes the app
+  inactive. Its `useLeaveVoiceRecordingOnBlur` does the same once a chat screen loses focus, so the mic never reopens
+  under a profile or a link pushed on top. Each composer owns its recording, so the meter re-renders the composer alone.
+- `voiceSession.ts` is the voice's part of the session exit: a podcast question ends without resuming the podcast
+  episode, recordings end and the answer stops at once, and an accepted sign-out drops the spoken audio from memory.
+- `components/chat/chatNotice.ts` is the chat's alert, the app's counterpart of the web's transient toast.
+- `components/chat/MicButton.tsx`, `RecordingBar.tsx`, and `SpokenAnswerButton.tsx` are the web's controls of the same
+  names. The mic takes `ChatComposer`'s send slot, the bar its recording bar slot, and the play button sits beside the
+  copy button in the `ChatTurnBlock` and `ChatRoomMessageBubble` footers. `SpokenAnswerControl` draws the play button
+  for a state, which its stories render. `voiceRecordingStoryFixtures.ts` is the stories' voice recording.
+- `components/podcast/PodcastEpisodeQuestionControls.tsx` is the web's podcast mic and stop. The dock's controls show
+  the stop in the skips' place while a question runs and the mic beside it, the card's controls add the mic after the
+  speed button in `MOBILE_PLAYBACK_CONTROL_BUTTON_CLASS`, and the dock reads each phase aloud through
+  `announceForAccessibility`. The stories render `PodcastEpisodeQuestionControl` and
+  `PodcastEpisodeQuestionStopControl`. The button state rule, the label, and the visibility rule are core's, in
+  `podcastEpisodeQuestionRules.ts`, and both apps' podcast adapters register core's
+  `PODCAST_EPISODE_QUESTION_AUDIO_CALLBACKS`, which end a question on a play or a seek.
+
+The answer player reads interruptions from the player's status. A pause while a part plays, not buffering and more than
+a quarter second before its end, is a system stop: a call, a removed headset, or the lock screen's pause. Core then
+stops the answer as a media session pause, which leaves a podcast episode paused. A finished or failed part moves the
+queue on. Once an answer ends, core gives the lock screen back to the loaded podcast episode through the podcast
+adapter's `updateMetadata`.
+
+Every private audio file is a cache file with a known prefix. A spoken part's file is written before it plays and
+deleted when it ends, on a stop, on a newer part, and on a stop during its write. A recording's file is deleted once
+sent and on every other end. `SpokenAnswerAudio` sweeps both prefixes at launch and when the account ends, and its
+cleanup releases the player.
+
+Unverified values, until the hardware check below runs: `NATIVE_SILENCE_THRESHOLD_SETTINGS` in `src/voiceRecorder.ts`
+(`minimum` 0.03, `ambientRatio` 2, `margin` 0.01), and the 300 ms ambient sample and the shared 1.5 s end of speech and
+8 s no-speech waits in `packages/core/lib/voiceRecordingDecisions.ts`. Whether metering is enough without an on-device
+voice activity detector is unmeasured.
+
+The hardware check runs on a real iPhone and a real Android phone, each on a development build of the current native
+config, signed in, with Metro's log open. Each recording logs one `voice level trace` line with the platform, the
+ambient level, the silence threshold, the peak level, and how the recording ended.
+
+1. In a quiet room, through the built-in microphone, ask three short questions in the private chat. Each recording
+   ends as `send` about 1.5 s after the last word.
+2. Repeat in a noisy room, such as a TV at conversation volume. A recording that ends mid-sentence means the threshold
+   is too low for the room, and one that never ends means it is too high.
+3. Tap the mic and stay quiet. The recording ends as `noSpeech` after 8 s with Carl's line.
+4. Repeat the first two steps through a Bluetooth headset, then play Carl's answer. It plays through the headset.
+5. Take a phone call during a recording and again during an answer. The recording ends as `interrupted`, the answer
+   stops, and the app's cache holds no `voice-recording-*` or `spoken-part-*` file afterwards. On Android,
+   `adb shell run-as com.carlnotes.app ls cache` lists the cache.
+6. Remove the headset during an answer. The answer stops and does not move to the speaker.
+7. Ask Vienna a question from the podcast dock and lock the phone while she answers. The lock screen names Vienna, then
+   shows the podcast episode again, which resumes on its own.
+
+Record each room's and route's ambient and peak levels, the chosen `minimum`, `ambientRatio`, and `margin`, and whether
+metering was enough in this section, then replace the guess comment on `NATIVE_SILENCE_THRESHOLD_SETTINGS` in
+`src/voiceRecorder.ts`. Anything not run stays listed as unverified.
+
+The iOS simulator records through the Mac's input. If the Mac has not let the Simulator use the microphone, the
+recorder's prepare never returns, and the mic shows its spinner until Cancel. Expo runs async native calls on one
+shared queue, so every later `expo/fetch` request waits behind the stuck prepare too, and screens stay loading until
+the app restarts. A real iPhone never waits on the Mac, so this is a simulator limit, not an app state.
+
+Reuse, with the web references in `apps/web/src/components/chat/` and `apps/web/src/components/podcast/`:
+
+- Shared composition: `ChatTurnBlock`, the bubble footers, and core's `PodcastPlayer` and `PodcastEpisodePlayerCard`,
+  which take the mic through their element slots.
+- Shared logic: core's `useVoiceRecording`, `useListenMode`, `useChatRoom` with `useChatRoomSpokenAnswer`,
+  `useTopicChat`'s spoken answers, the spoken answer store, queue, and audio cache, the notice store, the question store
+  and rules, `isMicShown`, the spoken questions paused copy (`spokenQuestionsPaused.ts`), and the rejection copy.
+- Native replacements: the recorder, the permission, the answer player and its cache files, the audio mode, the
+  notices as system alerts, and the controls above, each drawn with mobile Nightshift primitives. The app has no
+  visitor mic in the chat, and its paused mic says when speaking comes back on every plan, since the app sells nothing.
+
+The app config declares the microphone's purpose in Carl's words through both the audio and the image picker plugins,
+since a `false` in either removes it, and allows Android's `RECORD_AUDIO`. Background recording stays off. This
+changes the runtime fingerprint, so it needs a new development and store build; an EAS Update cannot add it.
 
 ## Store release
 

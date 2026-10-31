@@ -8,8 +8,16 @@ import {
 	chatRoomMessagePage,
 	chatRoomMessagePostResponse,
 	chatRoomsResponse,
+	spokenQuestionsState,
+	transcriptionResponse,
 } from "./chat"
-import { chatRoomMessagePayload, chatTurnPayload, topicChatTurnPayload } from "./payloads"
+import {
+	chatRoomMessagePayload,
+	chatTurnPayload,
+	spokenAnswerPayload,
+	spokenEventPayload,
+	topicChatTurnPayload,
+} from "./payloads"
 import {
 	chatConversationResponse,
 	chatReplyLine,
@@ -21,6 +29,7 @@ import {
 	idAndTeamParam,
 	idParam,
 	okResponse,
+	voiceRecordingMultipart,
 } from "./routeShapes"
 
 // the entries, in client module order
@@ -204,5 +213,29 @@ export const chatRouteContracts: Record<string, ApiRouteContract> = {
 		query: chatRoomEventsQuery,
 		response: chatRoomEvent,
 		stream: "sse",
+	},
+
+	// voice, on any voice chat page. the speech route returns the spoken part's audio instead of json
+	"voiceClient.fetchSpokenAnswerAudio": {
+		method: "POST",
+		path: "/api/chat/speech",
+		body: { json: spokenAnswerPayload },
+	},
+	"voiceClient.fetchSpokenQuestionsStatus": {
+		method: "GET",
+		path: "/api/chat/spoken-questions",
+		response: spokenQuestionsState,
+	},
+	"voiceClient.sendSpokenEvent": {
+		method: "POST",
+		path: "/api/chat/spoken-events",
+		body: { json: spokenEventPayload },
+		response: okResponse,
+	},
+	"voiceClient.sendTranscription": {
+		method: "POST",
+		path: "/api/chat/transcription",
+		body: { multipart: voiceRecordingMultipart },
+		response: transcriptionResponse,
 	},
 }

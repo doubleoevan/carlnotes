@@ -2,6 +2,7 @@ import { toStoreListeners } from "@carlnotes/core/stores/storeListeners"
 import { toNoteDraftExit } from "./noteDraftStorage"
 import { toPodcastEpisodeExit } from "./podcastEpisodeSession"
 import { clearQueryCache, toQueryCacheCleanup } from "./queryCache"
+import { toVoiceExit } from "./voiceSession"
 
 // retired sessions cannot reopen the authenticated tree after a failed sign-out request
 const retiredSessionIds = new Set<string>()
@@ -13,8 +14,12 @@ const { publish, useStoreVersion } = toStoreListeners()
 export async function retireSession(sessionId: string): Promise<void> {
 	// hide the authenticated tree before awaiting storage or network work
 	const finishPodcastExit = toPodcastEpisodeExit()
+	const finishVoiceExit = toVoiceExit()
 	retiredSessionIds.add(sessionId)
 	publish()
+
+	// drop the account's spoken audio, playback, drafts, and cached reading
+	finishVoiceExit(true)
 	await finishPodcastExit(true)
 	await toNoteDraftExit()(true)
 	await clearQueryCache()
@@ -38,15 +43,21 @@ export async function exitSession(
 	const clear = toQueryCacheCleanup()
 	const finishDraftExit = toNoteDraftExit()
 	const finishPodcastExit = toPodcastEpisodeExit()
+	const finishVoiceExit = toVoiceExit()
 	try {
+		// each exit finishes by the sign-out's result
 		const signOutResult = await signOut()
+		finishVoiceExit(!signOutResult.error)
 		await finishPodcastExit(!signOutResult.error)
 		await finishDraftExit(!signOutResult.error)
+
+		// the cache clears only for an accepted sign-out
 		if (!signOutResult.error) {
 			await clear()
 		}
 		return signOutResult
 	} catch (error) {
+		// a failed request keeps the account's data
 		await finishPodcastExit(false)
 		await finishDraftExit(false)
 		throw error

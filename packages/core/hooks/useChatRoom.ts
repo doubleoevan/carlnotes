@@ -18,6 +18,7 @@ import {
 } from "../stores/chatConversationStore"
 import { type ChatMessagePages, useChatMessagePages } from "./useChatMessagePages"
 import { useChatRoomLinkPreviews } from "./useChatRoomLinkPreviews"
+import { useChatRoomSpokenAnswer } from "./useChatRoomSpokenAnswer"
 import type { UseChatRoomStream } from "./useChatRoomStream"
 
 export { FIRST_ITEM_INDEX_START } from "./useChatMessagePages"
@@ -29,6 +30,13 @@ export type ChatRoomRejection = "budget" | ChatRoomAttachmentRejection
 // what a member posts: the chat message, what it replies to, its files, and for a spoken transcript its timings
 export type ChatRoomPost = Omit<SendChatRoomMessageOptions, "topicId" | "teamId"> & {
 	spokenQuestionTimings?: SpokenQuestionTimings
+}
+
+/**
+ * Returns the post a spoken question makes: its transcript as a new chat message with no files, which addresses carl.
+ */
+export function toSpokenChatRoomPost(transcript: string, spokenQuestionTimings: SpokenQuestionTimings): ChatRoomPost {
+	return { content: transcript, replyToChatMessageId: null, attachments: [], isSpoken: true, spokenQuestionTimings }
 }
 
 export type ChatRoomState = Omit<
@@ -59,13 +67,6 @@ export type ChatRoomState = Omit<
 export type UseChatRoomOptions = {
 	useStream: UseChatRoomStream
 	onNotice?: (message: string) => void
-	// the spoken answer hooks
-	awaitSpokenAnswer?: (options: {
-		chatMessageId: number
-		spokenQuestionTimings: SpokenQuestionTimings
-		isModelReplyRejected: boolean
-	}) => void
-	speakPendingSpokenAnswer?: (message: ChatRoomMessage) => void
 	// a null topic is the team's own chat room on its team page
 	topicId: string | null
 	teamId: string
@@ -81,8 +82,6 @@ export function useChatRoom({
 	userId,
 	useStream,
 	onNotice = showClientError,
-	awaitSpokenAnswer,
-	speakPendingSpokenAnswer,
 }: UseChatRoomOptions): ChatRoomState {
 	// track access, transient reads and rejected posts separately
 	const [isLoaded, setIsLoaded] = useState(false)
@@ -133,6 +132,8 @@ export function useChatRoom({
 	})
 	// the page the voice routes name, built once so the memoized bubbles keep one object
 	const voiceChatPage = useMemo<VoiceChatPage>(() => ({ kind: "room", topicId, teamId }), [topicId, teamId])
+	// carl's reply to this device's spoken message is spoken once, on this device only
+	const { awaitSpokenAnswer, speakPendingSpokenAnswer } = useChatRoomSpokenAnswer(voiceChatPage)
 	// the fresh chat messages whose link preview cards are still loading in the background
 	const { loadingChatMessageIds, startLinkPreviewRefresh } = useChatRoomLinkPreviews({
 		topicId,
@@ -164,7 +165,7 @@ export function useChatRoom({
 			startLinkPreviewRefresh(chatMessage)
 			// carl's arriving chat message ends the wait his chat mention started
 			acceptModelReply(chatMessage)
-			speakPendingSpokenAnswer?.(chatMessage)
+			speakPendingSpokenAnswer(chatMessage)
 		},
 		// toast the saves and the rejections for every member, then reload the topic page behind the panel
 		onTopicToolCalls: (roomToolCalls) => applyChatRoomToolCalls({ roomToolCalls, topicId, userId, onNotice }),
@@ -225,7 +226,7 @@ export function useChatRoom({
 		const isModelReplyRejected = postChatMessageResult.rejectionReason !== null
 		setRejection(isModelReplyRejected ? "budget" : null)
 		if (spokenQuestionTimings) {
-			awaitSpokenAnswer?.({
+			awaitSpokenAnswer({
 				chatMessageId: postChatMessageResult.chatMessageId,
 				spokenQuestionTimings,
 				isModelReplyRejected,

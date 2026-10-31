@@ -2,9 +2,11 @@
 // the container, and when the voice activity detector takes over
 import { expect, test } from "bun:test"
 import {
+	BROWSER_SILENCE_THRESHOLD_SETTINGS,
 	toMeterLevel,
 	toRecordingDecision,
 	toRecordingLevel,
+	toRecordingLevelReader,
 	toRecordingMimeType,
 	toSilenceThreshold,
 	toSpeechFrame,
@@ -33,6 +35,43 @@ test("toQuietFloor keeps a margin above the room and a fixed minimum", () => {
 	expect(toSilenceThreshold(0)).toBe(0.02)
 	expect(toSilenceThreshold(0.005)).toBe(0.02)
 	expect(toSilenceThreshold(0.1)).toBeCloseTo(0.16)
+})
+
+// the browser's settings are the default, so passing them gives the thresholds the default gave, and another
+// platform's settings move the minimum, the ratio, and the margin
+test("toSilenceThreshold reads a platform's silence threshold settings, with the browser's as the default", () => {
+	for (const ambientLevel of [0, 0.005, 0.1, 0.4]) {
+		expect(toSilenceThreshold(ambientLevel, BROWSER_SILENCE_THRESHOLD_SETTINGS)).toBe(toSilenceThreshold(ambientLevel))
+	}
+
+	// another platform's settings move the minimum, the ratio, and the margin
+	const silenceThresholdSettings = { minimum: 0.05, ambientRatio: 2, margin: 0.02 }
+	expect(toSilenceThreshold(0, silenceThresholdSettings)).toBe(0.05)
+	expect(toSilenceThreshold(0.1, silenceThresholdSettings)).toBeCloseTo(0.22)
+})
+
+// the level reader reports each new meter step once, and sets the silence threshold after 300 ms of the room
+test("toRecordingLevelReader reports meter steps and returns the threshold once the room is sampled", () => {
+	// the reader in a platform's settings, with the meter's reports kept
+	const meterLevels: number[] = []
+	const silenceThresholdSettings = { minimum: 0.05, ambientRatio: 2, margin: 0.02 }
+	const recordingLevelReader = toRecordingLevelReader({
+		startedAt: 0,
+		onLevel: (meterLevel) => meterLevels.push(meterLevel),
+		silenceThresholdSettings: silenceThresholdSettings,
+	})
+
+	// the room's frames return no threshold, and the frame that completes the sample decides nothing
+	expect(recordingLevelReader.readAmbientSample()).toEqual({ ambientLevel: 0, silenceThreshold: 0 })
+	expect(recordingLevelReader.readLevel(0.25, 0)).toBeNull()
+	expect(recordingLevelReader.readLevel(0.25, 100)).toBeNull()
+	expect(recordingLevelReader.readLevel(0.25, 300)).toBeNull()
+	const silenceThreshold = toSilenceThreshold(0.25, silenceThresholdSettings)
+	expect(recordingLevelReader.readAmbientSample()).toEqual({ ambientLevel: 0.25, silenceThreshold })
+
+	// every later frame returns the threshold, and the meter reported only the steps that changed
+	expect(recordingLevelReader.readLevel(0.125, 400)).toBe(silenceThreshold)
+	expect(meterLevels).toEqual([toMeterLevel(0.25), toMeterLevel(0.125)])
 })
 
 // a frame's decision: keep while speaking, send once the speaker stops, cancel if nobody spoke, send at the limit

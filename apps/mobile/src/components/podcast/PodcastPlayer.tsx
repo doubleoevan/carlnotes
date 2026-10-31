@@ -1,11 +1,14 @@
+import type { PodcastEpisode } from "@carlnotes/contracts/podcast"
 import {
 	type PodcastPlayerElements,
 	PodcastPlayer as SharedPodcastPlayer,
 } from "@carlnotes/core/components/PodcastPlayer"
 import { seekPlaybackTo } from "@carlnotes/core/stores/podcastEpisodePlayerStore"
+import { toPodcastEpisodeQuestionLabel } from "@carlnotes/core/stores/podcastEpisodeQuestionRules"
+import { usePodcastEpisodeQuestion } from "@carlnotes/core/stores/podcastEpisodeQuestionStore"
 import { usePathname } from "expo-router"
-import { type ComponentProps, useState } from "react"
-import { View } from "react-native"
+import { type ComponentProps, type ReactNode, useEffect, useState } from "react"
+import { AccessibilityInfo, View } from "react-native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { Text } from "@/components/primitives/text"
@@ -13,6 +16,11 @@ import { useIsKeyboardVisible } from "@/hooks/useIsKeyboardVisible"
 import { SkipPlaybackButtons } from "./PlaybackControlButtons"
 import { PodcastEpisodeCover } from "./PodcastEpisodeCover"
 import { PodcastEpisodePlayButton } from "./PodcastEpisodePlayButton"
+import {
+	isPodcastEpisodeQuestionButtonShown,
+	PodcastEpisodeQuestionButton,
+	PodcastEpisodeQuestionStopButton,
+} from "./PodcastEpisodeQuestionControls"
 import { SeekTrack } from "./PodcastEpisodeSeekBar"
 
 export const podcastPlayerElements: PodcastPlayerElements = {
@@ -37,9 +45,9 @@ export const podcastPlayerElements: PodcastPlayerElements = {
 		),
 	Cover: PodcastEpisodeCover,
 	Tooltip: ({ children }) => children,
-	Announcement: () => null,
+	Announcement: PhaseAnnouncement,
 	Progress: PlayerProgress,
-	Controls: SkipPlaybackButtons,
+	Controls: PodcastPlayerControls,
 	Play: ({ podcastEpisode }) => <PodcastEpisodePlayButton episode={podcastEpisode} size="default" />,
 }
 
@@ -47,12 +55,38 @@ export const podcastPlayerElements: PodcastPlayerElements = {
  * Docks the shared player beneath navigation and above the device safe area.
  */
 export function PodcastPlayer() {
-	// keep account screens and the component browser focused on their own controls
+	// read the question, and keep account screens and the component browser focused on their own controls
 	const pathname = usePathname()
+	const question = usePodcastEpisodeQuestion()
 	if (pathname === "/sign-in" || pathname === "/sign-up" || pathname === "/storybook") {
 		return null
 	}
-	return <SharedPodcastPlayer elements={podcastPlayerElements} />
+
+	// the shared dock, with the question's phase in place of the chapter line
+	return <SharedPodcastPlayer phaseLabel={toPodcastEpisodeQuestionLabel(question)} elements={podcastPlayerElements} />
+}
+
+// the skips, or the question's stop while a question is in progress, then the mic if the podcast episode has one
+function PodcastPlayerControls({ podcastEpisode }: { podcastEpisode: PodcastEpisode }) {
+	const question = usePodcastEpisodeQuestion()
+	return (
+		<>
+			{toPodcastEpisodeQuestionLabel(question) ? <PodcastEpisodeQuestionStopButton /> : <SkipPlaybackButtons />}
+			{isPodcastEpisodeQuestionButtonShown(podcastEpisode) && (
+				<PodcastEpisodeQuestionButton podcastEpisode={podcastEpisode} />
+			)}
+		</>
+	)
+}
+
+// the screen reader reads each new phase of a question, the web's polite live region
+function PhaseAnnouncement({ children }: { children: ReactNode }) {
+	useEffect(() => {
+		if (typeof children === "string" && children) {
+			AccessibilityInfo.announceForAccessibility(children)
+		}
+	}, [children])
+	return null
 }
 
 // retain playback controls while giving the composer the progress strip's space during typing

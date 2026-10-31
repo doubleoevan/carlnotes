@@ -87,7 +87,7 @@ access. A connection problem pauses playback so you can retry.
 
 ## Talk with Carl and Vienna
 
-On the web, the small player at the bottom of the screen has a microphone beside play. The player on the topic page has one beside
+The small player at the bottom of the screen has a microphone beside play. The player on the topic page has one beside
 the speed button. Tap either one while an episode plays, and ask out loud about what you just listened to: "what did he
 mean by that?" or "Vienna, would you buy one?" The episode pauses, and Carl and Vienna listen. Your question sends
 itself 1.5 seconds after you stop talking, so your hands can stay busy. The bottom player shows **Listening**, then
@@ -113,7 +113,9 @@ spends from the same coffee fund as Coffee Talk. Speaking pauses once the month'
 ![A question asked from the podcast player in the topic's private chat, tagged with its episode and chapter, and
 Vienna's answer under her picture and name](../../../assets/screenshots/chat-podcast-question.png)
 
-The mobile player currently supports listening. Spoken questions and answers are not part of the mobile player yet.
+The iPhone and Android apps have the same microphones. The first tap asks to use the microphone, and a Bluetooth
+headset works for both the question and the answer. Leaving the app while Carl and Vienna listen cancels the question,
+and the episode picks up again.
 
 ## Subscribe in a podcast app
 

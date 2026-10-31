@@ -13,11 +13,12 @@ teams, and chats are the same ones.
 
 ## What the app does
 
-The app covers reading and talking. Voice questions and the admin console stay on the site. You read your feed and each
-topic's findings and recaps, make a topic with the form or with Carl, and follow a public one. You talk to Carl in
-Coffee Talk and to your team in its room, with photos, camera shots, and files attached. You write Tasting Notes and
-comments, with offline drafts that wait until you reconnect. You play Coffee Break episodes and keep listening with the
-screen off. Report and block work the same way as on the site.
+The app covers reading and talking. The admin console stays on the site. You read your feed and each topic's findings
+and recaps, make a topic with the form or with Carl, and follow a public one. You talk to Carl in Coffee Talk and to
+your team in its room, typing or out loud, with photos, camera shots, and files attached. You can also ask Carl and
+Vienna about the podcast episode you're playing. You write Tasting Notes and comments, with offline drafts that wait
+until you reconnect. You play Coffee Break episodes and keep listening with the screen off. Report and block work the
+same way as on the site.
 
 Make a topic as [the Quickstart](/docs/quickstart/) describes. Plans is read-only in the app: it shows the plans and
 marks yours, and changing a plan happens on the site.

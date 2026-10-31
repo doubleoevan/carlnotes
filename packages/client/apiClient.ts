@@ -1,5 +1,6 @@
 // the typed Hono client for the api and the plain fetch beside it, both configured once by the app that runs them, with
-// readApiResponse and readApiErrorMessage for reading a response. the AppType import is types only
+// readApiResponse and readApiErrorMessage for reading a response, and the native file part a multipart body takes. the
+// AppType import is types only
 import type { AppType } from "@carlnotes/api"
 import {
 	APP_VERSION_OUTDATED_LINE,
@@ -241,4 +242,15 @@ function readResponseBodyCopy(response: Response): Promise<unknown> {
 		.clone()
 		.json()
 		.catch(() => null)
+}
+
+// a native file part, which React Native's FormData reads from the file at its uri
+export type NativeFilePart = { uri: string; name: string; type: string }
+
+/**
+ * Appends a native file part to a multipart body. React Native's FormData takes a local file descriptor in place of a
+ * browser Blob, which the DOM's FormData type does not know.
+ */
+export function appendNativeFilePart(formData: FormData, fieldName: string, nativeFilePart: NativeFilePart): void {
+	formData.append(fieldName, nativeFilePart as unknown as Blob)
 }

@@ -1,6 +1,6 @@
 import { PLANS_PATH, PURCHASE_COPY } from "@carlnotes/contracts/plans"
+import { CHAT_REJECTION_COPY } from "@carlnotes/core/lib/chatRejectionCopy"
 import { AnchorLink } from "@/components/common/AnchorLink"
-import { CHAT_REJECTION_COPY } from "./chatRejectionCopy"
 
 // the call to action to keep on chatting when the user's budget runs out
 export function ChatBudgetNotice() {

@@ -37,6 +37,10 @@
   `termsClient.ts` records
   the signed-in user's acceptance of the published Terms. `apiClient()`'s fetch calls the app's `onTermsOutdated` on a
   403 whose body is the terms rejection, so the app opens its acceptance dialog.
+  `voiceClient.ts` posts a recording as a `VoiceRecordingBody`, the browser's `Blob` or the app's `NativeFilePart`,
+  which `apiClient.ts`'s `appendNativeFilePart` adds to a form as the attachment and avatar uploads do. It reads a
+  spoken part's audio through the reader that `configureVoiceClient({ readSpokenPartAudio })` sets. The browser keeps
+  the `Blob` default, and the mobile app reads the bytes and their content type.
   `voiceClientTestFixtures.ts` holds the voice tests' topic voice chat page and spoken question timings.
   `fetchTestFixtures.ts` holds `stubFetch` and `stubFailingFetch`, the fetch stubs the client tests share.
 - A client returns values and never touches the browser. `billingClient.ts` returns the Checkout and Customer Portal

@@ -10,10 +10,15 @@ import { Button } from "@/components/primitives/button"
 import { Icon } from "@/components/primitives/icon"
 import { Text } from "@/components/primitives/text"
 import { MoreButton } from "@/components/topic/MoreButton"
-import { PlaybackSpeedButton, SkipPlaybackButtons } from "./PlaybackControlButtons"
+import {
+	MOBILE_PLAYBACK_CONTROL_BUTTON_CLASS,
+	PlaybackSpeedButton,
+	SkipPlaybackButtons,
+} from "./PlaybackControlButtons"
 import { type ChapterTopicFeed, PodcastEpisodeChapters } from "./PodcastEpisodeChapters"
 import { PodcastEpisodeDetails } from "./PodcastEpisodeDetails"
 import { PodcastEpisodePlayButton } from "./PodcastEpisodePlayButton"
+import { isPodcastEpisodeQuestionButtonShown, PodcastEpisodeQuestionButton } from "./PodcastEpisodeQuestionControls"
 import { PodcastEpisodeSeekBar } from "./PodcastEpisodeSeekBar"
 
 const elements: PodcastEpisodePlayerCardElements<ChapterTopicFeed> = {
@@ -25,10 +30,16 @@ const elements: PodcastEpisodePlayerCardElements<ChapterTopicFeed> = {
 		<PodcastEpisodePlayButton episode={podcastEpisode} size={size} onPress={onPress} />
 	),
 	Details: PodcastEpisodeDetails,
-	Controls: ({ playbackRate }) => (
+	Controls: ({ podcastEpisode, playbackRate }) => (
 		<>
 			<SkipPlaybackButtons />
 			<PlaybackSpeedButton playbackRate={playbackRate} />
+			{isPodcastEpisodeQuestionButtonShown(podcastEpisode) && (
+				<PodcastEpisodeQuestionButton
+					podcastEpisode={podcastEpisode}
+					className={MOBILE_PLAYBACK_CONTROL_BUTTON_CLASS}
+				/>
+			)}
 		</>
 	),
 	SeekBar: PodcastEpisodeSeekBar,
@@ -48,7 +59,7 @@ const elements: PodcastEpisodePlayerCardElements<ChapterTopicFeed> = {
 }
 
 /**
- * Adapts the shared player card to platform controls and Finding sheets.
+ * Adapts the shared player card to platform controls, Finding sheets, and spoken questions.
  */
 export function PodcastEpisodePlayerCard({
 	feedButtonRef,

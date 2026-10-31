@@ -1,16 +1,19 @@
 // the podcast mic: whether a podcast episode shows it, and what every podcast mic slot shows while a question records
 import { afterEach, expect, mock, test } from "bun:test"
 import { toPodcastEpisodeFixture } from "@carlnotes/contracts/podcastEpisodeTestFixtures"
-import { renderWithRouter } from "@/components/chat/renderWithRouter"
 import {
 	endPodcastEpisodeQuestion,
 	markPodcastEpisodeQuestionRecording,
 	startPodcastEpisodeQuestion,
-} from "@/stores/podcastEpisodeQuestionStore"
-import { spyOnPodcastEpisodePlayer, toVoiceRecordingMock } from "@/stores/podcastEpisodeQuestionTestFixtures"
+} from "@carlnotes/core/stores/podcastEpisodeQuestionStore"
+import {
+	spyOnPodcastEpisodePlayer,
+	toVoiceRecordingMock,
+} from "@carlnotes/core/stores/podcastEpisodeQuestionTestFixtures"
+import { renderWithRouter } from "@/components/chat/renderWithRouter"
 import {
 	isPodcastEpisodeQuestionButtonShown,
-	PODCAST_EPISODE_QUESTION_LABEL,
+	PODCAST_EPISODE_QUESTION_BUTTON_LABEL,
 	PodcastEpisodeQuestionButton,
 } from "./PodcastEpisodeQuestionControls"
 
@@ -36,7 +39,7 @@ test("a podcast mic slot shows send while another mic's recording runs, and a sp
 	// with no question, the slot is the mic
 	const podcastEpisodeQuestionButton = <PodcastEpisodeQuestionButton podcastEpisode={podcastEpisode} />
 	const idleMarkup = await renderWithRouter(podcastEpisodeQuestionButton)
-	expect(idleMarkup).toContain(`aria-label="${PODCAST_EPISODE_QUESTION_LABEL}"`)
+	expect(idleMarkup).toContain(`aria-label="${PODCAST_EPISODE_QUESTION_BUTTON_LABEL}"`)
 	expect(idleMarkup).not.toContain('disabled=""')
 
 	// another mic's question that waits on the microphone shows a disabled spinner here
@@ -49,5 +52,5 @@ test("a podcast mic slot shows send while another mic's recording runs, and a sp
 	markPodcastEpisodeQuestionRecording()
 	const recordingMarkup = await renderWithRouter(podcastEpisodeQuestionButton)
 	expect(recordingMarkup).toContain('aria-label="Send"')
-	expect(recordingMarkup).not.toContain(PODCAST_EPISODE_QUESTION_LABEL)
+	expect(recordingMarkup).not.toContain(PODCAST_EPISODE_QUESTION_BUTTON_LABEL)
 })

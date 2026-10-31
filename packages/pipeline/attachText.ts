@@ -1,6 +1,6 @@
-import { DOCX_TYPE, XLSX_TYPE } from "@carlnotes/contracts/attachmentTypes"
+import { DOCX_TYPE, toBaseContentType, XLSX_TYPE } from "@carlnotes/contracts/attachmentTypes"
 import { getDocumentProxy } from "unpdf"
-import { AttachmentValidationError, isImageAttachmentType, toBaseContentType } from "./attachContentType"
+import { AttachmentValidationError, isImageAttachmentType } from "./attachContentType"
 import { toSerializedWorkbook } from "./attachTable"
 
 // a file's text, and for a PDF whose read stopped before its last page, how many pages the PDF has

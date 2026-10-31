@@ -7,11 +7,10 @@ import {
 	skipPodcastEpisodeChapter,
 	togglePlayback,
 } from "@carlnotes/core/stores/podcastEpisodePlayerStore"
+import { PODCAST_EPISODE_QUESTION_AUDIO_CALLBACKS } from "@carlnotes/core/stores/podcastEpisodeQuestionStore"
 import { SKIP_BACK_SECONDS, SKIP_FORWARD_SECONDS, updatePodcastEpisodeMediaSession } from "@/lib/podcastEpisodePlayback"
 import { addEventListeners } from "@/lib/utils"
 import { captureEpisodeVisitEvent } from "@/lib/visitAnalytics"
-import { endPodcastEpisodeQuestion } from "./podcastEpisodeQuestionStore"
-import { stopSpokenAnswer } from "./spokenAnswerStore"
 
 export { setIsUserSignedIn } from "@carlnotes/core/stores/podcastEpisodeListenStore"
 // expose shared state and actions to the browser's player and voice controls
@@ -46,8 +45,11 @@ export function registerPodcastEpisodeAudio(audioElement: HTMLAudioElement): () 
 		reportPodcastEpisodeAudioEvent({ type: "position", loadId, positionSeconds: audioElement.currentTime })
 	const reportPlayback = (isPlaying: boolean): void =>
 		reportPodcastEpisodeAudioEvent({ type: "playback", loadId, isPlaying })
+
+	// register the element as the shared player's audio adapter
 	const unregisterAdapter = registerPodcastEpisodeAudioAdapter({
 		load: (options) => {
+			// point the element at the loaded podcast episode, its position, and its speed
 			loadId = options.loadId
 			audioElement.src = options.podcastEpisode.audioUrl ?? ""
 			audioElement.currentTime = options.positionSeconds
@@ -76,11 +78,7 @@ export function registerPodcastEpisodeAudio(audioElement: HTMLAudioElement): () 
 				})
 			}
 		},
-		onPlaybackStarted: () => {
-			endPodcastEpisodeQuestion("played")
-			stopSpokenAnswer()
-		},
-		onSeek: () => endPodcastEpisodeQuestion("skipped"),
+		...PODCAST_EPISODE_QUESTION_AUDIO_CALLBACKS,
 		onVisitEvent: captureEpisodeVisitEvent,
 	})
 
@@ -100,6 +98,8 @@ export function registerPodcastEpisodeAudio(audioElement: HTMLAudioElement): () 
 	])
 	document.addEventListener("visibilitychange", handleVisibilityChange)
 	window.addEventListener("pagehide", handlePageHide)
+
+	// return the call that removes every listener and the adapter
 	return () => {
 		removeAudioListeners()
 		document.removeEventListener("visibilitychange", handleVisibilityChange)

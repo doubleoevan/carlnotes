@@ -238,7 +238,7 @@ async function mountTopicChat(): Promise<HookTestHarness<TopicChat>> {
 	activateChatAccount("account")
 	setChatId({ kind: "private", topicId: "topic-1" })
 	const topicChatHarness = await renderTestHook(() =>
-		useTopicChat({ page: { topicId: "topic-1" }, effects: { onNotice: () => {} } }),
+		useTopicChat({ page: { topicId: "topic-1" }, onNotice: () => {} }),
 	)
 	// retain cleanup until the test finishes
 	cleanups.push(topicChatHarness.close)
@@ -257,7 +257,7 @@ async function mountChatWithKeptFile(page: ChatPage): Promise<HookTestHarness<To
 				setKeptAttachments,
 				clearDraft: () => {},
 			},
-			effects: { onNotice: () => {} },
+			onNotice: () => {},
 		})
 	})
 	// retain cleanup until the test finishes

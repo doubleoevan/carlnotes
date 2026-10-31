@@ -1,4 +1,5 @@
-// the file types the chat and topic attachment pickers offer, and the largest file a topic attachment takes
+// the file types the chat and topic attachment pickers offer, the largest file a topic attachment takes, and a content
+// type's media type without its parameters
 
 // the file extensions read as plain text when the picker gives no text/* type of its own
 export const TEXT_FILE_SUFFIXES = [".txt", ".md", ".markdown", ".csv", ".tsv", ".json", ".log"]
@@ -84,6 +85,8 @@ export function toPickerMimeTypes(accept: string[]): string[] {
 			mimeTypes.push(suffixMimeType)
 		}
 	}
+
+	// return each type once
 	return [...new Set(mimeTypes)]
 }
 
@@ -93,4 +96,11 @@ export function toPickerMimeTypes(accept: string[]): string[] {
 export function toSuffixMimeType(name: string): string | null {
 	const suffix = name.toLowerCase().match(/\.[^.]+$/)?.[0] ?? ""
 	return SUFFIX_MIME_TYPES[suffix] ?? null
+}
+
+/**
+ * Returns a content type without its parameters, so a declared charset never breaks an exact match.
+ */
+export function toBaseContentType(contentType: string): string {
+	return contentType.split(";")[0]?.trim().toLowerCase() ?? ""
 }

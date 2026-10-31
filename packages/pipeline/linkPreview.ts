@@ -1,4 +1,5 @@
 // the link preview a link gets: the page's own title, description, and image, every fetch through the public-url guard
+import { toBaseContentType } from "@carlnotes/contracts/attachmentTypes"
 import { toDecodedHtmlEntities, toOneLineText } from "@carlnotes/contracts/text"
 import { toYoutubeWatchUrl } from "@carlnotes/contracts/youtube"
 import { fetchPublicUrl, toFetchableUrl } from "@carlnotes/server/publicFetch"
@@ -203,7 +204,7 @@ export async function fetchLinkPreviewImage(
 	}
 
 	// the type decides this before the bytes are read, and an svg never passes
-	const contentType = response.headers.get("content-type")?.split(";")[0]?.trim().toLowerCase() ?? ""
+	const contentType = toBaseContentType(response.headers.get("content-type") ?? "")
 	if (!imageTypes.has(contentType)) {
 		throw new Error(`link preview image ${imageUrl} is ${contentType || "an unnamed type"}`)
 	}

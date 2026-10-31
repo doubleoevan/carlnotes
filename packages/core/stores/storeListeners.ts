@@ -2,11 +2,13 @@
 import { useSyncExternalStore } from "react"
 
 /**
- * Returns one store's publish call and the hook that re-renders a component on each publish.
+ * Returns one store's publish call, the hook that re-renders a component on each publish, and the subscribe call for a
+ * hook that re-renders only when its own snapshot changes.
  */
 export function toStoreListeners(): {
 	publish: () => void
 	useStoreVersion: () => number
+	subscribe: (listener: () => void) => () => void
 } {
 	// a version instead of the value, so a snapshot stays the same between publishes and React never
 	// re-renders on a fresh object it has not seen change
@@ -24,6 +26,7 @@ export function toStoreListeners(): {
 		},
 		// subscribe a calling component to the store
 		useStoreVersion: () => useSyncExternalStore(subscribe, getVersion, getVersion),
+		subscribe,
 	}
 }
 

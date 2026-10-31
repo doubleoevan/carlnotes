@@ -10,6 +10,7 @@ import { appSignupGateRoute } from "./appSignupGate"
 import { billingRoute } from "./billingRoute"
 import { privateChatRoute } from "./chat/privateChat"
 import { chatRoomRoute } from "./chat/roomRoute"
+import { voiceRoute } from "./chat/voiceRoute"
 import { countsRoute } from "./counts/countsRoute"
 import type { AppEnv } from "./currentUser"
 import { invitesRoute } from "./invite/invites"
@@ -619,6 +620,14 @@ export const CONTRACT_FIXTURES: Record<string, ContractFixture> = {
 		findingsRoute,
 		{ params: FINDING_PARAMS, body: { rating: "up" } },
 		FINDING_TABLES,
+	),
+
+	// voice. the transcription and the speech have no fixture. both call a model
+	"voiceClient.fetchSpokenQuestionsStatus": toFixture(voiceRoute, {}, { users: USER_COLUMNS }),
+	"voiceClient.sendSpokenEvent": toFixture(
+		voiceRoute,
+		{ body: { page: { kind: "topic", topicId: TOPIC_ID }, event: { kind: "answer_played" } } },
+		TOPIC_TABLES,
 	),
 
 	// viewer counts

@@ -1,8 +1,9 @@
 // the voice client: the page a private chat names, how each route's status is read, the spoken questions read, the one
 // retry, and the question event's shape
-import { expect, test } from "bun:test"
+import { expect, spyOn, test } from "bun:test"
 import { SPOKEN_QUESTIONS_PAUSED_ERROR } from "@carlnotes/contracts/chat"
 import {
+	configureVoiceClient,
 	fetchSpokenAnswerAudio,
 	fetchSpokenQuestionsStatus,
 	sendTranscription,
@@ -120,6 +121,58 @@ test("sendTranscription retries a 503 once", async () => {
 	)
 	expect(result).toEqual({ transcript: "hello" })
 	expect(fetchCount).toBe(2)
+})
+
+// a native recording posts as its own file part, which React Native's FormData reads from the uri, with the same one
+// retry and the same cutoff as a Blob
+test("sendTranscription posts a native file part as itself, retried once, and reads the cutoff", async () => {
+	// capture what each FormData is given. Bun's FormData turns the part into a string
+	const appendSpy = spyOn(FormData.prototype, "append")
+	const recordingFile = { uri: "file:///cache/recording.m4a", name: "recording.m4a", type: "audio/mp4" }
+	try {
+		const { result, fetchCount } = await withFetchResponses(
+			[toRetryNowResponse(), Response.json({ transcript: "hello" })],
+			() => sendTranscription({ page: TEST_TOPIC_VOICE_CHAT_PAGE, recording: recordingFile }),
+		)
+		expect(result).toEqual({ transcript: "hello" })
+		expect(fetchCount).toBe(2)
+		expect(appendSpy.mock.calls).toContainEqual(["recording", recordingFile as unknown as Blob])
+
+		// the cutoff's 402 reads the same for a file part
+		const pausedResult = await withFetchResponse(
+			Response.json({ error: SPOKEN_QUESTIONS_PAUSED_ERROR }, { status: 402 }),
+			() => sendTranscription({ page: TEST_TOPIC_VOICE_CHAT_PAGE, recording: recordingFile }),
+		)
+		expect(pausedResult).toBe("spokenQuestionsPaused")
+	} finally {
+		appendSpy.mockRestore()
+	}
+})
+
+// the configured reader reads a 200's audio, which in the mobile app is the bytes and their content type
+test("fetchSpokenAnswerAudio reads the audio through the configured reader", async () => {
+	const page = { kind: "room", topicId: null, teamId: "team-1" } as const
+	configureVoiceClient({
+		readSpokenPartAudio: async (response) => ({
+			bytes: new Uint8Array(await response.arrayBuffer()),
+			type: response.headers.get("Content-Type") ?? "",
+		}),
+	})
+	try {
+		const spokenAnswerAudio = await withFetchResponse(
+			new Response(new Uint8Array([82, 73, 70, 70]), { status: 200, headers: { "Content-Type": "audio/wav" } }),
+			() => fetchSpokenAnswerAudio({ page, text: "hello" }),
+		)
+		expect(spokenAnswerAudio).toEqual({ bytes: new Uint8Array([82, 73, 70, 70]), type: "audio/wav" })
+
+		// a rejection never reaches the reader
+		expect(
+			await withFetchResponse(new Response(null, { status: 402 }), () => fetchSpokenAnswerAudio({ page, text: "hi" })),
+		).toBe("budget")
+	} finally {
+		// the browser's Blob reader goes back for the tests after this one
+		configureVoiceClient({ readSpokenPartAudio: (response) => response.blob() })
+	}
 })
 
 // a 200 is the audio, and a failed status reads as its rejection, so the queue tells a spent budget from the rest

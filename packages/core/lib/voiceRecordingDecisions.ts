@@ -5,18 +5,25 @@ import { VOICE_RECORDING_MAX_SECONDS } from "@carlnotes/contracts/payloads"
 // the containers the recorder tries, in order, taking the first the browser supports
 const RECORDING_MIME_TYPES = ["audio/webm;codecs=opus", "audio/mp4"]
 
-// ponytail: the silence threshold's shape is a guess at a phone in a room. the minimum keeps digital silence from
-// reading every breath as speech, and the ratio and the margin lift the silence threshold over a noisy room. adjust
-// them from device checks
-const SILENCE_THRESHOLD_MINIMUM = 0.02
-const SILENCE_THRESHOLD_AMBIENT_RATIO = 1.5
-const SILENCE_THRESHOLD_MARGIN = 0.01
+// the silence threshold's settings: the minimum keeps digital silence from reading every breath as speech, and the
+// ambient ratio and the margin lift the silence threshold over a noisy room
+export type SilenceThresholdSettings = { minimum: number; ambientRatio: number; margin: number }
+
+// ponytail: the browser's settings are a guess at a phone in a room. adjust them from device checks
+export const BROWSER_SILENCE_THRESHOLD_SETTINGS: SilenceThresholdSettings = {
+	minimum: 0.02,
+	ambientRatio: 1.5,
+	margin: 0.01,
+}
 
 // how long under the silence threshold sends the recording once speech started, how long with no speech cancels it, and
 // the longest recording. the voice activity detector waits the same pause
 export const END_OF_SPEECH_MS = 1_500
 const NO_SPEECH_MS = 8_000
-const RECORDING_LIMIT_MS = VOICE_RECORDING_MAX_SECONDS * 1000
+export const RECORDING_LIMIT_MS = VOICE_RECORDING_MAX_SECONDS * 1000
+
+// how long the start of a recording samples the room's ambient level before the silence threshold is set
+const AMBIENT_SAMPLE_MS = 300
 
 // how much of the meter a level fills, and how many steps the meter draws. speech sits well under full scale, so the
 // meter reaches full before it
@@ -29,6 +36,14 @@ export type RecordingDecision = "keep" | "send" | "cancel"
 // what the voice activity detector heard so far in this recording: whether it is listening, whether speech started,
 // and whether speech ended
 export type VoiceActivityProgress = { isListening: boolean; hasSpeechStarted: boolean; isSpeechEnded: boolean }
+
+// a recording's level reader, which each platform's loop feeds its frames
+export type RecordingLevelReader = {
+	// report the frame's level to the meter, and return the silence threshold, or null while the room is sampled
+	readLevel: (level: number, now: number) => number | null
+	// the room's sampled level and the silence threshold set from it, each 0 until it is known
+	readAmbientSample: () => { ambientLevel: number; silenceThreshold: number }
+}
 
 export type ToRecordingDecisionOptions = {
 	hasSpeechStarted: boolean
@@ -100,11 +115,14 @@ export function toMeterLevel(level: number): number {
 }
 
 /**
- * Returns the level a frame must rise above to count as speech: a margin above the room's ambient level, never
- * under a fixed minimum.
+ * Returns the level that a frame must rise above to count as speech: a margin above the room's ambient level, never
+ * under the settings' minimum. The browser's settings are the default.
  */
-export function toSilenceThreshold(ambientLevel: number): number {
-	return Math.max(SILENCE_THRESHOLD_MINIMUM, ambientLevel * SILENCE_THRESHOLD_AMBIENT_RATIO + SILENCE_THRESHOLD_MARGIN)
+export function toSilenceThreshold(
+	ambientLevel: number,
+	{ minimum, ambientRatio, margin }: SilenceThresholdSettings = BROWSER_SILENCE_THRESHOLD_SETTINGS,
+): number {
+	return Math.max(minimum, ambientLevel * ambientRatio + margin)
 }
 
 /**
@@ -127,6 +145,61 @@ export function toRecordingDecision({
 		return now - lastLoudAt >= END_OF_SPEECH_MS ? "send" : "keep"
 	}
 	return now - startedAt >= NO_SPEECH_MS ? "cancel" : "keep"
+}
+
+/**
+ * Returns the level reader for one recording. The reader reports the meter only if its drawn step changed, samples the
+ * room's ambient level from the first frames, and sets the silence threshold in the platform's settings once the
+ * sample is long enough. The frame that sets the silence threshold decides nothing.
+ */
+export function toRecordingLevelReader({
+	startedAt,
+	onLevel,
+	silenceThresholdSettings,
+}: {
+	startedAt: number
+	onLevel: (meterLevel: number) => void
+	silenceThresholdSettings?: SilenceThresholdSettings
+}): RecordingLevelReader {
+	// the meter's drawn step, the ambient sample, and the silence threshold once it is set
+	let meterLevel = 0
+	let ambientLevelSum = 0
+	let ambientFrameCount = 0
+	let silenceThreshold: number | null = null
+	return {
+		readLevel: (level, now) => {
+			// report the meter only if its drawn step changed
+			const nextMeterLevel = toMeterLevel(level)
+			if (nextMeterLevel !== meterLevel) {
+				meterLevel = nextMeterLevel
+				onLevel(meterLevel)
+			}
+
+			// a set silence threshold decides the frame
+			if (silenceThreshold !== null) {
+				return silenceThreshold
+			}
+
+			// the first frames sample the room, then the silence threshold sits a margin above it
+			ambientLevelSum += level
+			ambientFrameCount += 1
+			if (now - startedAt >= AMBIENT_SAMPLE_MS) {
+				silenceThreshold = toSilenceThreshold(ambientLevelSum / ambientFrameCount, silenceThresholdSettings)
+			}
+			return null
+		},
+		readAmbientSample: () => ({
+			ambientLevel: ambientFrameCount > 0 ? ambientLevelSum / ambientFrameCount : 0,
+			silenceThreshold: silenceThreshold ?? 0,
+		}),
+	}
+}
+
+/**
+ * Returns how many whole seconds a recording lasted, inside the limit.
+ */
+export function toSecondsRecorded(startedAt: number): number {
+	return Math.min(VOICE_RECORDING_MAX_SECONDS, Math.round((Date.now() - startedAt) / 1000))
 }
 
 /**

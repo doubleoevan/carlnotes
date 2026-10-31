@@ -3,7 +3,7 @@
 import { SPOKEN_QUESTIONS_PAUSED_ERROR, type SpokenQuestionsState } from "@carlnotes/contracts/chat"
 import type { ConversationChatTurnKind } from "@carlnotes/contracts/enums"
 import type { SpokenAnswerPayload, SpokenEventPayload, VoiceChatPage } from "@carlnotes/contracts/payloads"
-import { fetchApi, readApiErrorMessage } from "./apiClient"
+import { appendNativeFilePart, fetchApi, type NativeFilePart, readApiErrorMessage } from "./apiClient"
 import { type ChatPage, type ChatRejection, toChatRejection } from "./chatClient"
 
 // the longest wait before the one retry of a 503 or a network failure, and the wait if the response named none
@@ -21,9 +21,29 @@ export type SpokenQuestionTimings = {
 // what a rejected transcription returns: a chat rejection or the spoken questions cutoff
 export type TranscriptionRejection = ChatRejection | "spokenQuestionsPaused"
 
+// a recording as the platform holds it: the browser's Blob, or the native recorder's file part
+export type VoiceRecordingBody = Blob | NativeFilePart
+
+// a spoken part's audio as the platform reads it: a Blob in the browser, or the bytes and their content type in the
+// mobile app. no native player plays a React Native blob url
+export type SpokenPartAudio = Blob | { bytes: Uint8Array<ArrayBuffer>; type: string }
+
+// reads a spoken part's audio from the speech route's response
+export type ReadSpokenPartAudio = (response: Response) => Promise<SpokenPartAudio>
+
 export type SendTranscriptionOptions = {
 	page: VoiceChatPage
-	recording: Blob
+	recording: VoiceRecordingBody
+}
+
+// the speech route's body read as a Blob by default
+let readSpokenPartAudio: ReadSpokenPartAudio = (response) => response.blob()
+
+/**
+ * Sets how the speech route's audio is read, once at startup. The browser keeps the Blob default.
+ */
+export function configureVoiceClient(voiceClientSettings: { readSpokenPartAudio: ReadSpokenPartAudio }): void {
+	readSpokenPartAudio = voiceClientSettings.readSpokenPartAudio
 }
 
 export type SendSpokenQuestionEventOptions = {
@@ -53,10 +73,15 @@ export async function sendTranscription({
 	page,
 	recording,
 }: SendTranscriptionOptions): Promise<{ transcript: string } | TranscriptionRejection> {
-	// the page goes as json beside the recording, which is named for the container the browser recorded
+	// the page goes as json beside the recording. a Blob is named for the container the browser recorded, and a native
+	// file part names itself
 	const formData = new FormData()
 	formData.append("page", JSON.stringify(page))
-	formData.append("recording", recording, toRecordingFileName(recording.type))
+	if ("uri" in recording) {
+		appendNativeFilePart(formData, "recording", recording)
+	} else {
+		formData.append("recording", recording, toRecordingFileName(recording.type))
+	}
 
 	// a failed status is a rejection, and a request that never arrived is a failure
 	try {
@@ -104,13 +129,14 @@ export function toRecordingFileName(mimeType: string): string {
 }
 
 /**
- * Fetches the audio of one spoken part of carl's answer, or the rejection a failed status or a failed request means.
+ * Fetches the audio of one spoken part of carl's answer, read as the platform plays it, or the rejection a failed
+ * status or a failed request means.
  */
 export async function fetchSpokenAnswerAudio({
 	page,
 	text,
 	speaker,
-}: SpokenAnswerPayload): Promise<Blob | ChatRejection> {
+}: SpokenAnswerPayload): Promise<SpokenPartAudio | ChatRejection> {
 	// a failed status is a rejection, and a request that never arrived is a failure
 	try {
 		const response = await fetchWithOneRetry("/api/chat/speech", {
@@ -118,7 +144,7 @@ export async function fetchSpokenAnswerAudio({
 			headers: { "Content-Type": "application/json" },
 			body: JSON.stringify({ page, text, speaker }),
 		})
-		return response.ok ? await response.blob() : toChatRejection(response.status)
+		return response.ok ? await readSpokenPartAudio(response) : toChatRejection(response.status)
 	} catch (error) {
 		// the network's own failure
 		console.error("spoken answer audio failed", error)

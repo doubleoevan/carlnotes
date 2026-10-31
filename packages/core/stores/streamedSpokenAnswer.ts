@@ -6,6 +6,7 @@ import { type SpokenQuestionTimings, sendSpokenQuestionEvent } from "@carlnotes/
 import type { ConversationChatTurnKind, PodcastEpisodeSpeaker } from "@carlnotes/contracts/enums"
 import type { VoiceChatPage } from "@carlnotes/contracts/payloads"
 import { toFinishedSpokenParts, toUnfinishedSpokenParts } from "@carlnotes/contracts/spokenText"
+import type { SpokenAnswerSpeakerMetadata } from "../lib/spokenAnswerPlayer"
 import {
 	appendSpokenAnswerPart,
 	completeSpokenAnswer,
@@ -18,7 +19,7 @@ import {
 export type StreamedSpokenAnswer = {
 	appendChunk: (answer: string) => void
 	finish: (answer: string, chatSendResult: ChatSendResult) => void
-	setSpeaker: (speaker: PodcastEpisodeSpeaker, mediaSessionMetadata?: MediaMetadataInit) => void
+	setSpeaker: (speaker: PodcastEpisodeSpeaker, mediaSessionMetadata?: SpokenAnswerSpeakerMetadata) => void
 }
 
 // the chat turn the reply fills, the page it speaks on, the spoken question's timings, where it was asked from, and
@@ -29,6 +30,30 @@ export type ToStreamedSpokenAnswerOptions = {
 	spokenQuestionTimings: SpokenQuestionTimings
 	chatTurnKind?: ConversationChatTurnKind
 	onPlaying?: () => void
+}
+
+// a private chat's send: the chat turn the reply fills, the chat's voice page if voice is on, and whether the
+// question was spoken, with its timings
+export type ToPrivateChatStreamedSpokenAnswerOptions = {
+	spokenAnswerKey: string
+	voiceChatPage: VoiceChatPage | null
+	isSpoken?: boolean
+	spokenQuestionTimings?: SpokenQuestionTimings
+}
+
+/**
+ * Returns the streamed spoken answer of a private chat's spoken question, or null for a typed question or a chat with
+ * voice off, so only a spoken question's reply speaks.
+ */
+export function toPrivateChatStreamedSpokenAnswer({
+	spokenAnswerKey,
+	voiceChatPage,
+	isSpoken,
+	spokenQuestionTimings,
+}: ToPrivateChatStreamedSpokenAnswerOptions): StreamedSpokenAnswer | null {
+	return isSpoken && voiceChatPage && spokenQuestionTimings
+		? toStreamedSpokenAnswer({ spokenAnswerKey, page: voiceChatPage, spokenQuestionTimings })
+		: null
 }
 
 /**
@@ -46,7 +71,7 @@ export function toStreamedSpokenAnswer({
 	let spokenPartStart = 0
 	let isQuestionEventPosted = false
 	let speaker: PodcastEpisodeSpeaker = "host"
-	let mediaSessionMetadata: MediaMetadataInit | undefined
+	let mediaSessionMetadata: SpokenAnswerSpeakerMetadata | undefined
 
 	// post the spoken question event once, with the first spoken word's delay if a spoken part played, which is when
 	// the host starts answering

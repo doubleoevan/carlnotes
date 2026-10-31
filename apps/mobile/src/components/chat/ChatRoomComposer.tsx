@@ -1,5 +1,6 @@
 import { CHAT_ROOM_MESSAGE_MAX_CHARS } from "@carlnotes/contracts/chat"
-import type { ChatRoomState } from "@carlnotes/core/hooks/useChatRoom"
+import type { VoiceChatPage } from "@carlnotes/contracts/payloads"
+import { type ChatRoomState, toSpokenChatRoomPost } from "@carlnotes/core/hooks/useChatRoom"
 import type { ChatRoomReply } from "@carlnotes/core/hooks/useRoomReply"
 import {
 	toActiveChatMention,
@@ -17,7 +18,10 @@ import { Button } from "@/components/primitives/button"
 import { Text } from "@/components/primitives/text"
 import { ChatComposer } from "./ChatComposer"
 import { ChatAttachButton } from "./ChatComposerAttachments"
+import { isMicShown, MicButton } from "./MicButton"
+import { RecordingBar } from "./RecordingBar"
 import { useChatAttachments } from "./useChatAttachments"
+import { useLeaveVoiceRecordingOnBlur, useVoiceRecording } from "./useVoiceRecording"
 
 /**
  * Uses shared mention and reply rules with the native input's caret and accepted-post behavior.
@@ -25,11 +29,17 @@ import { useChatAttachments } from "./useChatAttachments"
 export function ChatRoomComposer({
 	reply,
 	memberUsernames,
+	voiceChatPage,
 	onPost,
+	onBudgetRejected,
 }: {
 	reply: ChatRoomReply
 	memberUsernames: string[]
+	// the page that the mic names, null while voice is off and the mic never renders
+	voiceChatPage: VoiceChatPage | null
 	onPost: ChatRoomState["postChatMessage"]
+	// shows the spent budget's rejection if the spent budget rejects a recording's transcription
+	onBudgetRejected?: () => void
 }) {
 	// retain the unsent text, caret and native focus through a rejected post
 	const [chatMessage, setChatMessage] = useState("")
@@ -40,6 +50,23 @@ export function ChatRoomComposer({
 	const inputRef = useRef<ComponentRef<typeof TextInput>>(null)
 	// a room message's files, which the room never keeps
 	const chatAttachmentState = useChatAttachments({ isRoom: true })
+
+	// the recording the mic starts, whose transcript posts as a spoken chat message that addresses carl. the recording
+	// and listen mode end once the room's screen loses focus
+	const voiceRecording = useVoiceRecording({
+		page: voiceChatPage,
+		onTranscript: (transcript, timings) => void onPost(toSpokenChatRoomPost(transcript, timings)),
+		onBudgetRejected,
+	})
+	useLeaveVoiceRecordingOnBlur(voiceRecording)
+
+	// the mic takes the send slot of an empty box while voice is on and no post is on its way
+	const isMicInSendSlot = isMicShown({
+		voiceChatPage,
+		draft: chatMessage,
+		attachmentCount: chatAttachmentState.attachments.length,
+		isBusy: isPosting,
+	})
 
 	// focus the composer when the user chooses a reply
 	useEffect(() => {
@@ -63,8 +90,9 @@ export function ChatRoomComposer({
 		if ((!chatMessage.trim() && chatAttachmentState.attachments.length === 0) || isPostingRef.current) {
 			return
 		}
-		// prevent duplicate sends while the current post is pending
+		// prevent duplicate sends while the current post is pending, and end listen mode for a typed chat message
 		isPostingRef.current = true
+		voiceRecording.stopListening()
 		setIsPosting(true)
 		const isReplyToChatMessage = !replyTarget.hasMention && reply.replyTo !== null
 		try {
@@ -180,6 +208,8 @@ export function ChatRoomComposer({
 					onPicked={chatAttachmentState.addPickedFiles}
 				/>
 			}
+			sendSlot={isMicInSendSlot ? <MicButton voiceRecording={voiceRecording} /> : undefined}
+			recordingBar={voiceRecording.state === "recording" ? <RecordingBar voiceRecording={voiceRecording} /> : undefined}
 			placeholder={toComposerPlaceholder(replyTarget.replyUser)}
 			maxLength={CHAT_ROOM_MESSAGE_MAX_CHARS}
 			inputProps={{

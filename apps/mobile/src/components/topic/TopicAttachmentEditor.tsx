@@ -1,4 +1,4 @@
-import { showClientError } from "@carlnotes/client/apiClient"
+import { appendNativeFilePart, showClientError } from "@carlnotes/client/apiClient"
 import { uploadTopicAttachmentBody } from "@carlnotes/client/topicClient"
 import {
 	TOPIC_ATTACHMENT_ACCEPT,
@@ -148,11 +148,11 @@ export function useTopicAttachmentCleanup(pendingFiles: TopicAttachmentFile[]): 
  */
 export async function uploadTopicAttachment(topicId: string, file: TopicAttachmentFile): Promise<void> {
 	const body = new FormData()
-	body.append("file", {
+	appendNativeFilePart(body, "file", {
 		uri: file.uri,
 		name: file.name,
 		type: file.mimeType || "application/octet-stream",
-	} as unknown as Blob)
+	})
 	await uploadTopicAttachmentBody(topicId, body)
 }
 

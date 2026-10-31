@@ -5,6 +5,7 @@ import {
 } from "@carlnotes/core/components/ChatRoomMessageBubble"
 import { DELETE_CHAT_MESSAGE_COPY, HIDDEN_QUOTE_TEXT, REPORT_CHAT_MESSAGE_LABEL } from "@carlnotes/core/lib/chatCopy"
 import { toTimeAgoLabel } from "@carlnotes/core/lib/chatMessages"
+import { toChatRoomSpokenAnswerKey } from "@carlnotes/core/stores/spokenAnswerQueue"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { Flag, Reply, Trash2 } from "lucide-react-native"
 import { Alert, View } from "react-native"
@@ -15,6 +16,7 @@ import { ChatAuthor } from "./ChatAuthor"
 import { ChatMarkdown } from "./ChatMarkdown"
 import { ChatLinkPreviews, ChatMessageAction, CopyButton } from "./ChatMessageParts"
 import { ChatRoomAttachments } from "./ChatRoomAttachments"
+import { SpokenAnswerButton } from "./SpokenAnswerButton"
 
 /**
  * Adapts the shared room message and its files to native controls.
@@ -69,9 +71,29 @@ const CHAT_ROOM_MESSAGE_ELEMENTS: ChatRoomMessageElements = {
 		</>
 	),
 	Attachments: ChatRoomAttachments,
-	Footer: ({ chatMessage, isOwnChatMessage, isModel, canDelete, onDeleteChatMessage, onReply, onReport, now }) => (
+	Footer: ({
+		chatMessage,
+		isOwnChatMessage,
+		isModel,
+		voiceChatPage,
+		canDelete,
+		onDeleteChatMessage,
+		onReply,
+		onReport,
+		now,
+	}) => (
 		<View className={cn("mt-1 flex-row flex-wrap items-center gap-2", isOwnChatMessage && "flex-row-reverse")}>
-			<CopyButton text={chatMessage.content} />
+			{/* the copy and play buttons sit tighter than the rest of the footer */}
+			<View className={cn("flex-row items-center gap-0.5", isOwnChatMessage && "flex-row-reverse")}>
+				<CopyButton text={chatMessage.content} />
+				{isModel && voiceChatPage && (
+					<SpokenAnswerButton
+						spokenAnswerKey={toChatRoomSpokenAnswerKey(chatMessage.id)}
+						page={voiceChatPage}
+						text={chatMessage.content}
+					/>
+				)}
+			</View>
 			{canDelete && (
 				<ChatMessageAction
 					accessibilityLabel="Delete message"

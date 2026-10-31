@@ -32,3 +32,9 @@ test("monitoring replaces a push token quoted in an error, a message, or an atta
 	expect(JSON.stringify(event)).not.toContain("private-push-token")
 	expect(event.message).toBe("push to ExpoPushToken[:token] failed")
 })
+
+test("monitoring drops a spoken question's transcript attached to an event", () => {
+	// attach a transcript beside a duration, and keep only the duration
+	const event = redactEvent({ extra: { transcript: "private spoken question", durationMs: 1_200 } })
+	expect<unknown>(event.extra).toEqual({ durationMs: 1_200 })
+})

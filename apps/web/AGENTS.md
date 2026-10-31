@@ -61,37 +61,37 @@ the browser bundle and renders pages through the server build, behind its own ro
   It starts a table at ten rows a page unless it asks for another size, and its
   `ScriptedTablePagination` shows a paged table's pagination only with JavaScript.
 - `components/chat/` — the chat panel, both composers, the chat message lists, and the hooks behind them.
-  `useChatRoom.ts` adapts core's room state, `useChatRoomSpokenAnswer.ts` speaks carl's reply to the browser's spoken
-  message, and `useChatRoomLinkPreviews.ts` re-exports core's bounded preview polling. `MicButton.tsx` is the
+  `useChatRoom.ts` adapts core's room state with the browser stream and toasts, and `useChatRoomLinkPreviews.ts`
+  re-exports core's bounded preview polling. `MicButton.tsx` is the
   mic in an empty composer's send slot, `RecordingBar.tsx` the bar that replaces the box while a recording runs, and
-  `useVoiceRecording.ts` the recording's state machine from the mic tap to the transcript, which loads
-  `lib/voiceRecorder.ts` on the first tap, with its rules in `voiceRecordingRules.ts` and listen mode in
-  `useListenMode.ts`, which reopens the mic on the tap's audio context once carl finishes his spoken answer. A podcast
-  player question records through `useVoiceRecording.ts` too, with no listen mode, ending on the voice activity
-  detector. `PodcastEpisodeChapterTag.tsx` is the tag under a question asked from the podcast player, which plays that
-  chapter. `SpokenAnswerButton.tsx` is the play button beside the copy button in a host's reply footer, and
-  `SpokenAnswerAudio.tsx` the audio element that the hosts' spoken answers play through, which `Layout` mounts beside
-  the podcast's. Only a question asked from the podcast player gets a `cohost` answer. Past the spoken questions cutoff,
-  a mic opens the plans page through `spokenQuestionsPaused.ts`, which holds the plans page's upgrade toasts.
-  `chatRejectionCopy.ts` imports core's chat rejection sentences. It retains the voice recording toasts, the plans link, and `toastChatRejection`.
-  `chatTurns.ts` re-exports core's turn helpers. `chatRoomTestFixtures.ts` and
-  `chatMessagesTestFixtures.tsx` hold the chat fixtures the chat tests share.
+  `useVoiceRecording.ts` wraps core's recording state machine with the browser's recorder adapter, which loads
+  `lib/voiceRecorder.ts` on the first tap and opens an audio context for each composer's listen session and one for
+  the page's podcast questions. A podcast player question records through `useVoiceRecording.ts` too, with no listen
+  mode, ending on the voice activity detector. `sharedVoiceHooks.test.tsx` tests core's recording and listen mode
+  hooks over a fake recorder. `PodcastEpisodeChapterTag.tsx` is the tag under a question asked from the podcast
+  player, which plays that chapter. `SpokenAnswerButton.tsx` is the play button beside the copy button in a host's
+  reply footer, and `SpokenAnswerAudio.tsx` the audio element that the hosts' spoken answers play through, which
+  `Layout` mounts beside the podcast's, and which registers the voice notices as toasts. Only a question asked from
+  the podcast player gets a `cohost` answer. Past the spoken questions cutoff, a mic opens the plans page, or toasts for
+  a user on premium, through `useSpokenQuestionsPausedAction` in `spokenQuestionsPaused.ts`. `chatTurns.ts` re-exports
+  core's turn helpers. `chatRoomTestFixtures.ts` and `chatMessagesTestFixtures.tsx` hold the chat fixtures the chat
+  tests share.
 - `lib/` — `utils.ts` and small client-side helpers that read the browser. `externalLinks.ts` opens a url in a new tab
   with no handle back to the page. `toastActions.ts` builds the See plans and See account toast actions.
   `appStoreBanner.ts` builds the App Store smart banner meta tag a page's head includes once `APP_STORE_ID` is set, with
   the page's own url as the app argument. `visiblePoll.ts` is the poll that runs only while the page is visible, one
   request at a time, used by the scan poll and the counts poll. `@carlnotes/core/lib/topicViews` sends a topic page's
   view once per topic per tab, keeping the sent topic ids in memory only. `podcastEpisodePlayback.ts` adapts core's
-  playback rules and metadata to the lock screen's media session, with `isMediaSessionAvailable`, which the spoken
-  answer queue shares. `voiceRecorder.ts` records the microphone, reads its level through an analyser, ends the
-  recording once the user stops or the limit passes, and releases the microphone at every end, a rejected request
-  included, with `@carlnotes/core/lib/voiceRecordingDecisions` for what it decides from each frame. `voiceActivity.ts`
-  wraps `@ricky0123/vad-web`, the on-device voice activity detector that ends a podcast player question, loaded on the
-  first question and made once per page. Its worklet, model, and WebAssembly runtime are served from
-  `/assets/voice-activity-<versions>/` by `apps/web/voiceActivityAssetsPlugin.ts`, the Vite plugin that copies them out
-  of the installed packages' folders into the client build and serves them in dev. `@carlnotes/core/lib/pageHead` turns
-  a `PageHead`, or a fixed title and path, into the tags a route's `head()` returns. `loadOnServer.ts` runs a route
-  loader's read on the server only, and its `loadPageOnServer` reads a page's head and page data together. Its
+  playback rules and metadata to the lock screen's media session, with `isMediaSessionAvailable`, which
+  `stores/spokenAnswerStore.ts` uses. `voiceRecorder.ts` records the microphone, reads its level through an analyser,
+  ends the recording once the user stops or the limit passes, and releases the microphone at every end, a rejected
+  request included, with `@carlnotes/core/lib/voiceRecordingDecisions` for what it decides from each frame.
+  `voiceActivity.ts` wraps `@ricky0123/vad-web`, the on-device voice activity detector that ends a podcast player
+  question, loaded on the first question and made once per page. Its worklet, model, and WebAssembly runtime are served
+  from `/assets/voice-activity-<versions>/` by `apps/web/voiceActivityAssetsPlugin.ts`, the Vite plugin that copies them
+  out of the installed packages' folders into the client build and serves them in dev. `@carlnotes/core/lib/pageHead`
+  turns a `PageHead`, or a fixed title and path, into the tags a route's `head()` returns. `loadOnServer.ts` runs a
+  route loader's read on the server only, and its `loadPageOnServer` reads a page's head and page data together. Its
   `readWithDegradedFallback` returns a fallback for a failed read and marks the response, so the api responds 503.
   `requireSession.ts` is the sign-in guard the `_signedIn` layout runs before its pages load. `sessionCookie.ts` reads
   on the server whether the request brings a session cookie. `visitAnalytics.ts` starts the browser's analytics, reports
@@ -224,21 +224,12 @@ the browser bundle and renders pages through the server build, behind its own ro
   `chatPanelStore.ts` (which chat room or private chat the panel shows), `pageActionsStore.ts` (the search bar's page
   actions menu, with its lucide icons), `searchBarStore.ts` (the search page the bar's text opens, which the header's
   logo links to from any other page, and the event the logo sends to empty the bar from the search page), and the
-  podcast and spoken answer stores, which drive audio elements and the media session. `spokenAnswerStore.ts` drives
-  the spoken answer audio element: the queue of one reply's spoken parts, keyed by its spoken answer key, the playing
-  state the play buttons read, and the announcement of each queue's end that listen mode reads, with the queue's
-  shape, its next step, and the lock screen's host name in `spokenAnswerQueue.ts`. It pauses the podcast episode
-  before a host speaks, the podcast store stops the speaking host when the podcast episode plays, and it holds back a
-  chat room's auto-played reply while a composer records. `spokenAudioCache.ts` keeps the session's spoken audio by
-  each spoken part's voice and text within a size limit, and returns a spoken part's audio from the cache, from a
-  fetch already on its way, or from the speech route. `streamedSpokenAnswer.ts` speaks a spoken question's reply as it
-  streams, for the chat and the podcast player alike. `podcastEpisodeQuestionStore.ts` is a question asked from the
-  podcast player: the pause and the resume, the recording's send and cancel, so every podcast mic slot can send, the
-  chat turn it sends with the chapter, and the snapshots a chat panel showing that topic mirrors, with its phases,
-  endings, resume rule, and chapter line label in `@carlnotes/core/stores/podcastEpisodeQuestionRules`, and its tests'
-  player store spies and stubbed recording in `podcastEpisodeQuestionTestFixtures.ts`. `podcastEpisodeListenStore.ts`
-  keeps whether the user is signed in and saves a signed-in user's progress in the loaded podcast episode, its
-  playback start once per load, for the player store.
+  podcast and spoken answer stores, which drive audio elements and the media session. `spokenAnswerStore.ts`
+  registers the spoken answer audio element as core's spoken answer player: each spoken part plays as a blob url, a
+  tap's silence unlocks the element, and the media session names the host, with its play and pause controls stopping the
+  spoken answer. The queue, its state, its end announcement, and the podcast player question are core's, which the web
+  imports from `@carlnotes/core/stores/`. `podcastEpisodeListenStore.ts` keeps whether the user is signed in and saves a
+  signed-in user's progress in the loaded podcast episode, its playback start once per load, for the player store.
 - `hooks/` — the React hooks that read the browser or a route, `useTopicPagePayload.ts` among them, the topic page's
   payload and its poll reload, and `useScanNote.ts`, a scan's note behind its recap popover, read once the trigger is
   pointed at, focused, touched, or opened, and kept once the scan has finished; `providers/` — context providers. The

@@ -8,9 +8,9 @@ import { type TopicChat, useTopicChat } from "@carlnotes/core/hooks/useTopicChat
 import { CHAT_QUESTION_PLACEHOLDER, NEW_TOPIC_CHAT_COPY } from "@carlnotes/core/lib/chatCopy"
 import { CHAT_REJECTION_COPY } from "@carlnotes/core/lib/chatRejectionCopy"
 import type { ChatTurn } from "@carlnotes/core/lib/chatTurns"
-import { clearProposedTopicEdit, setChatId } from "@carlnotes/core/stores/chatConversationStore"
+import { clearProposedTopicEdit } from "@carlnotes/core/stores/chatConversationStore"
 import { useEffect, useRef } from "react"
-import { Alert, type FlatList, View } from "react-native"
+import { type FlatList, View } from "react-native"
 import { CoffeeLoading } from "@/components/branding/CoffeeLoading"
 import { LoadFailedNotice } from "@/components/common/LoadFailedNotice"
 import { Text } from "@/components/primitives/text"
@@ -23,9 +23,13 @@ import { ChatOptionsMenu } from "./ChatOptionsMenu"
 import { ChatRejectionNotice } from "./ChatRejectionNotice"
 import { ChatTopicLimitNotice } from "./ChatTopicLimitNotice"
 import { ChatTurnBlock } from "./ChatTurnBlock"
+import { showChatNotice } from "./chatNotice"
+import { isMicShown, MicButton } from "./MicButton"
+import { RecordingBar } from "./RecordingBar"
 import { TopicDraftCard } from "./TopicDraftCard"
-import { useChatAttachments } from "./useChatAttachments"
+import { type PickedChatAttachments, useChatAttachments } from "./useChatAttachments"
 import { useNewTopicDraft } from "./useNewTopicDraft"
+import { useLeaveVoiceRecordingOnBlur, useVoiceRecording } from "./useVoiceRecording"
 
 /**
  * Uses the web conversation state, the new-topic chat included, with native cancellation and authoritative history on
@@ -47,10 +51,7 @@ export function PrivateChatPanel({
 		page,
 		attachmentState: chatAttachmentState,
 		draftState: topicDraftState,
-		effects: {
-			onNotice: (message) => Alert.alert("Coffee Talk", message),
-			openNewTopicChat: () => setChatId({ kind: "private", newTopic: true }),
-		},
+		onNotice: showChatNotice,
 	})
 	const topicChatRef = useRef(topicChat)
 	topicChatRef.current = topicChat
@@ -123,7 +124,7 @@ export function PrivateChatPanel({
 						isStreaming={topicChat.isStreaming}
 						now={now}
 						author={author}
-						voiceChatPage={null}
+						voiceChatPage={topicChat.voiceChatPage}
 						onRetry={(question) => void topicChat.send(question)}
 					/>
 				)}
@@ -145,34 +146,83 @@ export function PrivateChatPanel({
 					<ChatRejectionNotice rejection="budget" />
 				</View>
 			) : (
-				<ChatComposer
-					value={topicChat.question}
-					onChange={topicChat.setQuestion}
-					onSend={() => void topicChat.send()}
-					onStop={topicChat.stop}
-					isStreaming={topicChat.isStreaming}
-					isDisabled={!isActive || !topicChat.canChat}
-					placeholder={toPlaceholder(page, topicChat.isFirstTopic)}
-					attachments={topicChat.attachments}
-					onRemoveAttachment={chatAttachmentState.removeAttachment}
-					attachmentActions={
-						<>
-							<ChatAttachButton
-								isDisabled={!isActive || !topicChat.canChat || topicChat.isStreaming}
-								attachmentCount={topicChat.attachments.length}
-								onPicked={handlePickedFiles}
-							/>
-							{topicChat.keptAttachments.length > 0 && (
-								<KeptAttachmentsButton
-									keptAttachments={topicChat.keptAttachments}
-									onRemoveKeptAttachment={chatAttachmentState.removeKeptAttachment}
-								/>
-							)}
-						</>
-					}
+				<PrivateChatComposer
+					page={page}
+					topicChat={topicChat}
+					chatAttachmentState={chatAttachmentState}
+					isActive={isActive}
+					onPickedFiles={handlePickedFiles}
 				/>
 			)}
 		</View>
+	)
+}
+
+// the composer with its files and its mic. the composer owns the recording, so the meter re-renders the composer alone
+function PrivateChatComposer({
+	page,
+	topicChat,
+	chatAttachmentState,
+	isActive,
+	onPickedFiles,
+}: {
+	page: ChatPage
+	topicChat: TopicChat
+	chatAttachmentState: PickedChatAttachments
+	isActive: boolean
+	onPickedFiles: (pickedFiles: PickedFile[]) => Promise<void>
+}) {
+	// the recording the mic starts, whose transcript sends as a spoken question. the recording and listen mode end once
+	// the chat's screen loses focus
+	const voiceRecording = useVoiceRecording({
+		page: topicChat.voiceChatPage,
+		onTranscript: (transcript, timings) =>
+			void topicChat.send(transcript, { isSpoken: true, spokenQuestionTimings: timings }),
+	})
+	useLeaveVoiceRecordingOnBlur(voiceRecording)
+
+	// the box is read-only and Send off while the microphone is asked for or the transcript is on its way, so a typed
+	// send never races the spoken one. the mic takes the send slot of an empty box while voice is on and nothing streams
+	const isVoiceRecordingBusy = voiceRecording.state !== "idle"
+	const isMicInSendSlot = isMicShown({
+		voiceChatPage: topicChat.voiceChatPage,
+		draft: topicChat.question,
+		attachmentCount: topicChat.attachments.length,
+		isBusy: topicChat.isStreaming,
+	})
+	return (
+		<ChatComposer
+			value={topicChat.question}
+			onChange={topicChat.setQuestion}
+			onSend={() => {
+				// a typed question ends listen mode
+				voiceRecording.stopListening()
+				void topicChat.send()
+			}}
+			onStop={topicChat.stop}
+			isStreaming={topicChat.isStreaming}
+			isDisabled={!isActive || !topicChat.canChat || isVoiceRecordingBusy}
+			placeholder={toPlaceholder(page, topicChat.isFirstTopic)}
+			attachments={topicChat.attachments}
+			onRemoveAttachment={chatAttachmentState.removeAttachment}
+			attachmentActions={
+				<>
+					<ChatAttachButton
+						isDisabled={!isActive || !topicChat.canChat || topicChat.isStreaming}
+						attachmentCount={topicChat.attachments.length}
+						onPicked={onPickedFiles}
+					/>
+					{topicChat.keptAttachments.length > 0 && (
+						<KeptAttachmentsButton
+							keptAttachments={topicChat.keptAttachments}
+							onRemoveKeptAttachment={chatAttachmentState.removeKeptAttachment}
+						/>
+					)}
+				</>
+			}
+			sendSlot={isMicInSendSlot ? <MicButton voiceRecording={voiceRecording} /> : undefined}
+			recordingBar={voiceRecording.state === "recording" ? <RecordingBar voiceRecording={voiceRecording} /> : undefined}
+		/>
 	)
 }
 

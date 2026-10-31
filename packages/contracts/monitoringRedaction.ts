@@ -125,8 +125,9 @@ function withoutRequestUrlSecrets<Request extends NonNullable<OutgoingEvent["req
 	return request.headers ? { ...keptRequest, headers: withoutUrlSecrets(request.headers) } : keptRequest
 }
 
-// event fields that could include a context doc or a page's content. they are dropped before an event is sent.
-const CONTENT_FIELD_PATTERN = /content|context|document|snippet|prompt|markdown|text/i
+// event fields that could include a context doc, a page's content, or a spoken question's transcript. they are dropped
+// before an event is sent.
+const CONTENT_FIELD_PATTERN = /content|context|document|snippet|prompt|markdown|text|transcript/i
 
 // the maximum attached string length retained in a report
 const MAX_REPORT_STRING_CHARS = 500

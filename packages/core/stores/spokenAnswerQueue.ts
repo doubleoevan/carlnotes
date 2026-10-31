@@ -4,7 +4,7 @@
 import type { PodcastEpisodeSpeaker } from "@carlnotes/contracts/enums"
 import type { VoiceChatPage } from "@carlnotes/contracts/payloads"
 import { PODCAST_EPISODE_SPEAKER_NAMES } from "@carlnotes/contracts/podcastEpisodes"
-import { isMediaSessionAvailable } from "@/lib/podcastEpisodePlayback"
+import type { SpokenAnswerSpeakerMetadata } from "../lib/spokenAnswerPlayer"
 
 // what a play button shows for a reply: nothing playing, a spoken part loading, or a spoken part playing
 export type SpokenAnswerState = "idle" | "loading" | "playing"
@@ -16,7 +16,7 @@ export type SpokenAnswerQueue = {
 	// the speaker whose voice speaks the reply, and what the lock screen shows while they speak, the speaker's name
 	// alone if nothing is given
 	speaker: PodcastEpisodeSpeaker
-	mediaSessionMetadata?: MediaMetadataInit
+	mediaSessionMetadata?: SpokenAnswerSpeakerMetadata
 	// the spoken text of every spoken part appended so far
 	spokenParts: string[]
 	nextSpokenPartIndex: number
@@ -65,20 +65,11 @@ export function toChatRoomSpokenAnswerKey(chatMessageId: number): string {
 }
 
 /**
- * Names the host on the lock screen while they speak, with its play and pause controls stopping them.
+ * Returns what the lock screen shows while a queue's host speaks: the given metadata, or the host's name alone.
  */
-export function showSpeakerOnMediaSession(
-	{ speaker, mediaSessionMetadata }: Pick<SpokenAnswerQueue, "speaker" | "mediaSessionMetadata">,
-	onMediaSessionPause: () => void,
-): void {
-	if (!isMediaSessionAvailable()) {
-		return
-	}
-
-	// the host's name or the given metadata, and the controls that stop the host
-	navigator.mediaSession.metadata = new MediaMetadata(
-		mediaSessionMetadata ?? { title: PODCAST_EPISODE_SPEAKER_NAMES[speaker] },
-	)
-	navigator.mediaSession.setActionHandler("play", onMediaSessionPause)
-	navigator.mediaSession.setActionHandler("pause", onMediaSessionPause)
+export function toSpokenAnswerSpeakerMetadata({
+	speaker,
+	mediaSessionMetadata,
+}: Pick<SpokenAnswerQueue, "speaker" | "mediaSessionMetadata">): SpokenAnswerSpeakerMetadata {
+	return mediaSessionMetadata ?? { title: PODCAST_EPISODE_SPEAKER_NAMES[speaker] }
 }

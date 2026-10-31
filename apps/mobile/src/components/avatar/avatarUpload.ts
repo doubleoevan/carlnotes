@@ -1,3 +1,4 @@
+import { appendNativeFilePart } from "@carlnotes/client/apiClient"
 import { AVATAR_ACCEPT, AVATAR_JPEG_QUALITY, MAX_AVATAR_PIXELS } from "@carlnotes/core/lib/imageUpload"
 import { toCurrentChatAccountGuard } from "@carlnotes/core/stores/chatConversationStore"
 import { useEffect, useRef } from "react"
@@ -60,14 +61,9 @@ export function useAvatarPicker({
 	})
 }
 
-// a resized avatar as the multipart body. React Native's multipart transport takes a local file descriptor in place
-// of a browser File
+// a resized avatar as the multipart body
 function toAvatarBody(avatarFile: PickedFile): FormData {
 	const body = new FormData()
-	body.append("avatar", {
-		uri: avatarFile.uri,
-		name: avatarFile.name,
-		type: avatarFile.mimeType,
-	} as unknown as Blob)
+	appendNativeFilePart(body, "avatar", { uri: avatarFile.uri, name: avatarFile.name, type: avatarFile.mimeType })
 	return body
 }

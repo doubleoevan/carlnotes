@@ -43,7 +43,8 @@ confirmation before clearing. A failed action leaves the history intact. Opening
 Messages reconnect when you return to the app. Changes to deleted messages on another device appear when the room
 reloads; deletion has no live event of its own. The paperclip shares a photo from the library, one taken
 with the camera, or a file from Files, with the same types and limits as the web. A shared file shows under its message.
-Tap it to open it, or delete it if you shared it or lead the team. Voice is available on the web.
+Tap it to open it, or delete it if you shared it or lead the team. Tap the microphone in the empty message box to talk
+to Carl.
 
 ## Who hears you
 
@@ -51,12 +52,13 @@ The name above the message box shows who your message goes to. A message goes to
 notified, and Carl answers. To reply to one person instead, type their @username, or pick them from the menu. To reply
 to an earlier message, press **Reply** below it.
 
-On the web, a spoken message always goes to Carl, as if you had mentioned him. Tap the microphone in the empty message box and talk.
-Your words post to the room with **@carl** in front. The whole room reads them, Carl answers out loud, and nobody else
-is notified. If you are recording again when his answer arrives, the answer waits on the screen with its play button
-instead of talking over you. When he finishes talking, the microphone opens again on its own for your next question, the
-same as in Coffee Talk. Speaking with Carl pauses at the same share of your coffee fund as in Coffee Talk, and typing to
-him keeps working. See [When the coffee fund runs low](/docs/account/plans-and-limits/#when-the-coffee-fund-runs-low).
+A spoken message always goes to Carl, as if you had mentioned him. Tap the microphone in the empty message box and talk.
+Your words post to the room with **@carl** in front. The whole room reads them, Carl answers out loud on your device
+alone, and nobody else is notified. If you are recording again when his answer arrives, the answer waits on the screen
+with its play button instead of talking over you. When he finishes talking, the microphone opens again on its own for
+your next question, the same as in Coffee Talk. Speaking with Carl pauses at the same share of your coffee fund as in
+Coffee Talk, and typing to him keeps working. See [When the coffee fund runs
+low](/docs/account/plans-and-limits/#when-the-coffee-fund-runs-low).
 
 When Carl proposes a change to the topic, only the member he proposed it to can say yes, with their next message to
 him. Another member's yes saves nothing. See [Editing a topic with Coffee Talk](/docs/feed/editing-a-topic-in-chat/).

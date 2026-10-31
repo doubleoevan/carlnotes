@@ -11,8 +11,9 @@ import {
 	savePodcastEpisodeProgress,
 	toPodcastEpisodePlayerState,
 } from "@carlnotes/core/stores/podcastEpisodePlayerStore"
+import { PODCAST_EPISODE_QUESTION_AUDIO_CALLBACKS } from "@carlnotes/core/stores/podcastEpisodeQuestionStore"
 import AsyncStorage from "@react-native-async-storage/async-storage"
-import { createAudioPlayer, setAudioModeAsync } from "expo-audio"
+import { createAudioPlayer } from "expo-audio"
 import { usePathname } from "expo-router"
 import { useEffect } from "react"
 import { AppState } from "react-native"
@@ -20,6 +21,7 @@ import { toPodcastEpisodeAudioAdapter } from "@/podcastEpisodeAudioAdapter"
 import { createPodcastEpisodeCheckpointStore } from "@/podcastEpisodeCheckpoint"
 import { registerPodcastEpisodeCheckpoint } from "@/podcastEpisodeSession"
 import { captureEpisodeVisitEvent } from "@/visitAnalytics"
+import { setIsRecordingAudioMode } from "@/voiceAudioMode"
 
 /**
  * Owns audio across navigation, with account-scoped restoration and foreground access checks.
@@ -46,18 +48,17 @@ export function PodcastEpisodeAudio({ userId }: { userId: string | null }) {
 			onAccessDenied: clearDenied,
 			onCheckpoint: checkpoint?.save,
 		})
-		const unregister = registerPodcastEpisodeAudioAdapter({ ...adapter, onVisitEvent: captureEpisodeVisitEvent })
+		const unregister = registerPodcastEpisodeAudioAdapter({
+			...adapter,
+			...PODCAST_EPISODE_QUESTION_AUDIO_CALLBACKS,
+			onVisitEvent: captureEpisodeVisitEvent,
+		})
 		const version = retirePodcastEpisodeRequests()
 		const isCurrent = (): boolean => isActive && isPodcastEpisodeRequestCurrent(version)
 
 		// configure background playback and restore a paused checkpoint
 		const restore = async (): Promise<void> => {
-			await setAudioModeAsync({
-				playsInSilentMode: true,
-				shouldPlayInBackground: true,
-				interruptionMode: "doNotMix",
-				allowsRecording: false,
-			})
+			await setIsRecordingAudioMode(false)
 
 			// validate access before restoring saved playback
 			const savedCheckpoint = await checkpoint?.read()

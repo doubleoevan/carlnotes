@@ -25,9 +25,22 @@ It imports `@carlnotes/contracts`, `@carlnotes/client`, `@carlnotes/nightshift`,
   reads the same version as the server snapshot. `chatRoomStore.ts` is the user's chat rooms and their chat mention
   badge counts, `noteBadgeStore.ts` the unread note counts the poll last read, with the notes opened this session that
   already cleared, and `topicInviteStore.ts` the topic invitations waiting for the user's answer.
-  `podcastEpisodeQuestionRules.ts` holds a podcast player question's phases, endings, resume rule, and chapter line
-  label, which `apps/web/src/stores/podcastEpisodeQuestionStore.ts` drives. A store that reaches an audio element, the
-  media session, or a component library stays in `apps/web/src/stores/`.
+  `podcastEpisodeQuestionRules.ts` holds a podcast player question's phases, endings, resume rule, chapter line label,
+  the mic's label, whether a podcast episode shows the mic, and what each mic slot shows.
+  `podcastEpisodeQuestionStore.ts` drives the question: the pause and the resume, the recording's send and cancel, the
+  chat turn it sends with the chapter, the audio adapter callbacks that end a question on a play or a seek, the
+  sign-out's end that never resumes the podcast episode, and the snapshots that a chat panel showing that topic mirrors.
+  Its tests' player store spies and stubbed recording are in `podcastEpisodeQuestionTestFixtures.ts`.
+  `spokenAnswerStore.ts` is the queue of one reply's spoken parts, keyed by its spoken answer key. It holds the playing
+  state that each play button reads for its own reply, and the announcement of each queue's end that listen mode reads.
+  Each app registers its player with `registerSpokenAnswerPlayer`, over the `SpokenAnswerPlayerAdapter` in
+  `lib/spokenAnswerPlayer.ts`. `spokenAnswerQueue.ts` has the queue's shape, its next step, and the host's name for the
+  lock screen. `spokenAudioCache.ts` holds the session's spoken audio within a size limit, 40 MB by default or the
+  `maxBytes` an app sets with `configureSpokenAudioCache`, and drops the least recently played first. The mobile app
+  empties it on sign-out through `clearSpokenAnswers`, and the web's sign-out reloads the page.
+  `streamedSpokenAnswer.ts` speaks a spoken question's reply as it streams. `voiceNoticeStore.ts` holds the voice
+  notices each app registers, the web's toasts and the app's alert. A
+  store that reaches an audio element, the media session, or a component library stays in its app.
 - `hooks/` — `useBlockedUsers.ts`, the user's block list and the unblock that shortens it once the server accepts;
   `useNow.ts`, the current time re-read on a tick for relative labels, one clock per list; `useAvatar.ts`,
   the avatar setting read from the session and updated through it; `useUsernameChange.ts`, changing the signed-in
@@ -61,7 +74,12 @@ It imports `@carlnotes/contracts`, `@carlnotes/client`, `@carlnotes/nightshift`,
   `updateBadgePoll.ts` (the poll behind `useUpdateBadges`, on `activePoll.ts`), `countsPoll.ts` (the poll behind
   `usePolledCounts`, on `activePoll.ts`), `focusAndOnline.ts` (whether the app is focused and online through Query's
   adapters, and how a poll subscribes to a change), `topicGateCopy.ts` (the invite-only gate's words), and
-  `voiceRecordingDecisions.ts` (what the voice recorder decides from each frame).
+  `voiceRecordingDecisions.ts` (what the voice recorder decides from each frame, with the `SilenceThresholdSettings`
+  type and the browser's default settings), `voiceRecordingRules.ts` (the mic's visibility, the recording timer, the
+  reopened recording's rejection, and the meter's callback), `voiceRecorder.ts` (the recorder adapter each app supplies:
+  the session a tap opens, the start, the recording's delete, the rejected microphone's action, and the background
+  listener), `spokenAnswerPlayer.ts` (the spoken answer player adapter each app supplies), and
+  `spokenQuestionsPaused.ts` (the mic's action past the spoken questions cutoff, and the plans page's upgrade lines).
 - Imports: `@carlnotes/contracts`, `@carlnotes/client`, `@carlnotes/nightshift`, `react`, and `@tanstack/react-query`. Never a server package or an app. Universal: the
   root rule. A module that needs a DOM type is a web module and lives in `apps/web/src`.
 - Tests: `bun test packages/core`.
@@ -84,8 +102,17 @@ shared author, message, rejection, and draft field composition. Apps supply stab
 and action controls. `lib/chatStoryFixtures.ts` supplies fictional conversations to both component browsers.
 
 `hooks/useChatConversationLoad` owns history/access gates and proposal restoration; `useTopicChat` owns send, stop,
-retry, clear, and tool outcomes. Voice, file reading, navigation, and podcast effects remain injected app
-extensions. `useEditableTopicDraft` reads authoritative settings and overlays proposed changes.
+retry, clear, and tool outcomes. The attachment state, the topic draft state, and the notice remain injected app
+extensions. `useVoiceRecording` is the recording's state machine from the mic tap to the transcript over the app's
+recorder adapter, with listen mode in `useListenMode`, which reopens the mic on the tap's session once Carl finishes his
+spoken answer, and `useChatRoomSpokenAnswer`, which `useChatRoom` calls, speaks Carl's reply to this device's spoken
+room message, once. `useSpokenAnswerButton` is the play button's state and its tap, and
+`usePodcastEpisodeQuestionButton` the podcast player mic's state and its tap. The `useVoiceRecording` and
+`useListenMode` tests run in `apps/web/src/components/chat/sharedVoiceHooks.test.tsx` on the web's hook harness, with
+the notices they collect and the wait for the spoken answer queue in `stores/voiceTestFixtures.ts`.
+`useChatRoomSpokenAnswer.test.ts` sits beside its hook, and the button hooks are tested through each app's
+`SpokenAnswerButton` and `PodcastEpisodeQuestionControls` tests.
+`useEditableTopicDraft` reads authoritative settings and overlays proposed changes.
 `hooks/useChatAttachments` owns a draft's attachment list, the per-question and keep limits, room mode (nothing kept),
 and the kept-file delete. Each app supplies how it reads its own files and shows a line. `lib/chatAttachmentRules`
 holds the kind a file reads as, each kind's data url limit and its line, the size estimate checked before a read, and

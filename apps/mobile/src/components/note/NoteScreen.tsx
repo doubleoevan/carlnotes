@@ -10,7 +10,7 @@ import { onlineManager, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useLocalSearchParams, useRouter } from "expo-router"
 import { MessageSquareText, X } from "lucide-react-native"
 import { useEffect, useState } from "react"
-import { Keyboard, KeyboardAvoidingView, Platform, View } from "react-native"
+import { Keyboard, KeyboardAvoidingView, View } from "react-native"
 import { CoffeeLoading } from "@/components/branding/CoffeeLoading"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { ClassNameSafeAreaView } from "@/components/common/ClassNameSafeAreaView"
@@ -53,7 +53,7 @@ export function NoteScreen() {
 					className="flex-1"
 					enabled={!isPodcastPlayerShown}
 					keyboardVerticalOffset={headerHeight}
-					behavior={Platform.OS === "ios" ? "padding" : undefined}
+					behavior="padding"
 				>
 					{/* reserve launcher space inside the keyboard-adjusted viewport */}
 					<View className="flex-1" style={{ paddingBottom: isKeyboardVisible ? 0 : chatPillClearance }}>

@@ -9,11 +9,14 @@ import { Button } from "@/components/primitives/button"
 import { Icon } from "@/components/primitives/icon"
 import { Text } from "@/components/primitives/text"
 
+// every playback control's shape, in the card and the podcast player
+export const MOBILE_PLAYBACK_CONTROL_BUTTON_CLASS = `${PLAYBACK_CONTROL_BUTTON_CLASS} h-auto w-auto border-separator active:bg-accent`
+
 const Control: PlaybackControlElement = ({ label, onPress, icon, text }) => (
 	<Button
 		variant="ghost"
 		size="icon"
-		className={`${PLAYBACK_CONTROL_BUTTON_CLASS} h-auto w-auto border-separator active:bg-accent`}
+		className={MOBILE_PLAYBACK_CONTROL_BUTTON_CLASS}
 		accessibilityLabel={label}
 		onPress={onPress}
 	>

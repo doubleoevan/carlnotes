@@ -16,6 +16,12 @@ export const CHAT_REJECTION_COPY: Record<ChatRejection, string> = {
 	attachmentUnreadable: "Carl couldn't read that file.",
 }
 
+// what a recording says: the microphone request was rejected, no speech was recorded or transcribed, and the chat
+// failed
+export const MICROPHONE_REJECTED_NOTICE = "Carl can't hear you. Type it, he reads fast."
+export const NO_SPEECH_NOTICE = "Carl didn't catch that. Please try again."
+export const CHAT_FAILED_NOTICE = `${CHAT_REJECTION_COPY.failed} Please try again.`
+
 /** The room's attachment rejection copy, shared with its existing web notice. */
 export const CHAT_ROOM_REJECTION_COPY: Record<ChatRoomAttachmentRejection, string> = {
 	attachmentLimitReached: `That would pass the ${CHAT_ROOM_ATTACHMENT_LIMIT} files you can share in this chat room. Delete some to share more.`,

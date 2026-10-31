@@ -1,4 +1,4 @@
-// the chat room's spoken answer: carl's reply to this browser's spoken message is spoken once, and its first spoken
+// the chat room's spoken answer: carl's reply to this device's spoken message is spoken once, and its first spoken
 // word completes the spoken question event
 
 import { type SpokenQuestionTimings, sendSpokenQuestionEvent } from "@carlnotes/client/voiceClient"
@@ -7,8 +7,8 @@ import { isModelChatMessage } from "@carlnotes/contracts/chatMentions"
 import type { VoiceChatPage } from "@carlnotes/contracts/payloads"
 import { toSpokenParts } from "@carlnotes/contracts/spokenText"
 import { useRef } from "react"
-import { toChatRoomSpokenAnswerKey } from "@/stores/spokenAnswerQueue"
-import { isVoiceRecordingActive, speakSpokenAnswer, stopSpokenAnswerKey } from "@/stores/spokenAnswerStore"
+import { toChatRoomSpokenAnswerKey } from "../stores/spokenAnswerQueue"
+import { isVoiceRecordingActive, speakSpokenAnswer, stopSpokenAnswerKey } from "../stores/spokenAnswerStore"
 
 // the spoken message carl's reply is awaited for, and the timings its spoken question event reports
 type PendingSpokenPost = { chatMessageId: number; spokenQuestionTimings: SpokenQuestionTimings }
@@ -24,13 +24,25 @@ export type ChatRoomSpokenAnswer = {
 }
 
 /**
- * Speaks carl's reply to this browser's spoken message, once, and posts the spoken question event with the reply's
+ * Speaks carl's reply to this device's spoken message, once, and posts the spoken question event with the reply's
  * first spoken word.
  */
 export function useChatRoomSpokenAnswer(voiceChatPage: VoiceChatPage): ChatRoomSpokenAnswer {
-	// the spoken message carl's reply is awaited for, so only the asker's browser speaks the reply, once
+	// the spoken message carl's reply is awaited for, so only the asker's device speaks the reply, once
 	const pendingSpokenPostRef = useRef<PendingSpokenPost | null>(null)
+	return toChatRoomSpokenAnswer({ voiceChatPage, pendingSpokenPostRef })
+}
 
+/**
+ * Returns the room's spoken answer calls over the spoken message this device awaits carl's reply to.
+ */
+export function toChatRoomSpokenAnswer({
+	voiceChatPage,
+	pendingSpokenPostRef,
+}: {
+	voiceChatPage: VoiceChatPage
+	pendingSpokenPostRef: { current: PendingSpokenPost | null }
+}): ChatRoomSpokenAnswer {
 	// a spoken message awaits carl's reply to speak it. a rejected one posts its question event now, with no reply
 	const awaitSpokenAnswer = ({
 		chatMessageId,
@@ -47,7 +59,7 @@ export function useChatRoomSpokenAnswer(voiceChatPage: VoiceChatPage): ChatRoomS
 		pendingSpokenPostRef.current = { chatMessageId, spokenQuestionTimings }
 	}
 
-	// speak carl's reply to this browser's spoken message, once. a reconnect's replay and a teammate's reply never
+	// speak carl's reply to this device's spoken message, once. a reconnect's replay and a teammate's reply never
 	// match, and the reply's first spoken word completes the spoken question event
 	const speakPendingSpokenAnswer = (chatMessage: ChatRoomMessage): void => {
 		const pendingSpokenPost = pendingSpokenPostRef.current

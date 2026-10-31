@@ -13,6 +13,7 @@ import { ChatMarkdown } from "./ChatMarkdown"
 import { ChatLinkPreviews, ChatMessageAttachmentChips, CopyButton, ModelThinkingBubble } from "./ChatMessageParts"
 import { ChatRejectionNotice } from "./ChatRejectionNotice"
 import { PodcastEpisodeChapterTag } from "./PodcastEpisodeChapterTag"
+import { SpokenAnswerButton } from "./SpokenAnswerButton"
 
 /**
  * Adapts the shared private turn, preserving web authors, bubbles and action order.
@@ -66,7 +67,7 @@ const CHAT_TURN_ELEMENTS: ChatTurnElements = {
 			</ChatAuthor>
 		)
 	},
-	Answer: ({ chatTurn, now, isStreamingAnswer }) => (
+	Answer: ({ chatTurn, now, voiceChatPage, isStreamingAnswer }) => (
 		<ChatAuthor
 			authorUserId={null}
 			authorUsername={PODCAST_EPISODE_SPEAKER_NAMES[chatTurn.speaker]}
@@ -82,7 +83,18 @@ const CHAT_TURN_ELEMENTS: ChatTurnElements = {
 				{/* answer actions */}
 				{!isStreamingAnswer && chatTurn.answer !== "" && (
 					<View className="-ml-1 mt-1 flex-row items-center gap-2">
-						<CopyButton text={chatTurn.answer} />
+						{/* the copy and play buttons sit tighter than the rest of the footer */}
+						<View className="flex-row items-center gap-0.5">
+							<CopyButton text={chatTurn.answer} />
+							{voiceChatPage && (
+								<SpokenAnswerButton
+									spokenAnswerKey={chatTurn.spokenAnswerKey}
+									page={voiceChatPage}
+									text={chatTurn.answer}
+									speaker={chatTurn.speaker}
+								/>
+							)}
+						</View>
 						{chatTurn.at !== undefined && (
 							<Text className="text-xs text-muted-foreground">{toTimeAgoLabel(chatTurn.at, now)}</Text>
 						)}

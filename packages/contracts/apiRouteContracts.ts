@@ -28,6 +28,7 @@ export type ApiRouteContract = {
 // the capabilities that are helpers over the client, not routes: the freeze skips them
 export const API_ROUTE_HELPERS: readonly string[] = [
 	"apiClient.apiClient",
+	"apiClient.appendNativeFilePart",
 	"apiClient.configureApiClient",
 	"apiClient.fetchApi",
 	"apiClient.readApiErrorMessage",
@@ -42,6 +43,11 @@ export const API_ROUTE_HELPERS: readonly string[] = [
 	"teamClient.fetchLeaderTeams",
 	"topicClient.readTopicGate",
 	"profileClient.uploadAvatar",
+	"voiceClient.configureVoiceClient",
+	"voiceClient.sendSpokenQuestionEvent",
+	"voiceClient.toRecordingFileName",
+	"voiceClient.toRetryDelayMs",
+	"voiceClient.toSpokenQuestionEvent",
 	"voiceClient.toVoiceChatPage",
 ]
 

@@ -15,6 +15,10 @@ import { withAndroidManifest } from "expo/config-plugins"
 // the EAS project the app links to. eas init cannot write into a dynamic config, so the id lives here
 const EAS_PROJECT_ID = "7b874ce7-cb2a-4d50-a8d7-fb89e078b247"
 
+// why the app asks for the microphone, in Carl's words. both the audio and the image picker plugins write the
+// microphone's purpose, and a false in either would remove it
+const MICROPHONE_PURPOSE = "Ask Carl and Vienna your questions out loud."
+
 // the app: CarlNotes, its store identifiers, and the url scheme a browser sign-in returns through
 const expoConfig: ExpoConfig = {
 	name: "CarlNotes",
@@ -80,8 +84,8 @@ const expoConfig: ExpoConfig = {
 			{
 				enableBackgroundPlayback: true,
 				enableBackgroundRecording: false,
-				microphonePermission: false,
-				recordAudioAndroid: false,
+				microphonePermission: MICROPHONE_PURPOSE,
+				recordAudioAndroid: true,
 			},
 		],
 		[
@@ -89,7 +93,7 @@ const expoConfig: ExpoConfig = {
 			{
 				photosPermission: "Choose photos to attach in chat, add to a topic, or use as an avatar.",
 				cameraPermission: "Take a photo to attach in chat, add to a topic, or use as an avatar.",
-				microphonePermission: false,
+				microphonePermission: MICROPHONE_PURPOSE,
 			},
 		],
 		[

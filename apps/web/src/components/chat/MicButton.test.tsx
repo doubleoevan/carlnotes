@@ -117,6 +117,7 @@ test("the recording bar names cancel and send and shows the timer", async () => 
 		send: () => {},
 		cancel: () => {},
 		stopListening: () => {},
+		leave: () => {},
 	}
 	const recordingBarHtml = await renderWithRouter(<RecordingBar voiceRecording={voiceRecording} />)
 	expect(recordingBarHtml).toContain('aria-label="Cancel"')

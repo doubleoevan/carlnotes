@@ -1,5 +1,5 @@
 // the lines the push permission sheet and the account's Notifications section say, plain facts about what a push
-// notification tells you
+// notification tells you, and the label every action that opens the phone's settings shares
 
 // the sheet that explains the notifications before the system asks
 export const PUSH_PERMISSION_SHEET = {
@@ -19,4 +19,7 @@ export const CHAT_MENTION_PUSH_LABEL = "Mentions and replies in team chats"
 // what the section says before the phone was asked, and after the phone's settings turned notifications off
 export const PUSH_UNDETERMINED_TEXT = "Notifications are off on this phone."
 export const PUSH_DENIED_TEXT = "Notifications are off for CarlNotes in your phone's settings."
-export const PUSH_OPEN_SETTINGS_LABEL = "Open settings"
+
+// the label of every action that opens the phone's settings: the Notifications section's and a rejected microphone
+// request's notice
+export const OPEN_SETTINGS_LABEL = "Open settings"

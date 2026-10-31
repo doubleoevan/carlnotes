@@ -818,6 +818,28 @@ Check for:
    - `MAX_ATTACHMENT_BYTES` in `packages/pipeline/attach.ts` (now `TOPIC_ATTACHMENT_MAX_BYTES` in
      `packages/contracts/attachmentTypes.ts`), and `DOCX_TYPE` and `XLSX_TYPE` in
      `packages/pipeline/attachContentType.ts` (now `packages/contracts/attachmentTypes.ts`)
+   - the web voice modules that moved whole into core: `useListenMode.ts`, `useChatRoomSpokenAnswer.ts`, and
+     `voiceRecordingRules.ts` with its test in `apps/web/src/components/chat/` (now `packages/core/hooks/` and
+     `packages/core/lib/`), `spokenQuestionsPaused.test.ts` there (now `packages/core/lib/`), and
+     `spokenAudioCache.ts` and the tests of `spokenAnswerStore.ts`, `streamedSpokenAnswer.ts`, and
+     `podcastEpisodeQuestionStore.ts` in `apps/web/src/stores/` (now `packages/core/stores/`)
+   - `apps/web/src/components/chat/chatRejectionCopy.ts` with `toastChatRejection`, `MICROPHONE_REJECTED_TOAST`,
+     `NO_SPEECH_TOAST`, and `CHAT_FAILED_TOAST` (now `packages/core/lib/chatRejectionCopy.ts` with the `*_NOTICE`
+     constants, and `showChatRejectionNotice` in `packages/core/stores/voiceNoticeStore.ts`)
+   - `PUSH_OPEN_SETTINGS_LABEL` in `packages/core/lib/pushCopy.ts` (now `OPEN_SETTINGS_LABEL` there),
+     `toBaseContentType` in `packages/pipeline/attachContentType.ts` (now `packages/contracts/attachmentTypes.ts`), and
+     the web recorder's exported `StartVoiceRecordingOptions` in `apps/web/src/lib/voiceRecorder.ts` (now core's
+     `StartVoiceRecordingOptions` in `packages/core/lib/voiceRecorder.ts`)
+   - `useTopicChat`'s `effects` option with its `openNewTopicChat`, `stopSpokenAnswer`, `createSpokenAnswer`, and
+     `subscribeToPodcastTurn` fields in `packages/core/hooks/useTopicChat.ts` (now its `onNotice` option alone)
+   - `useChatRoom`'s `awaitSpokenAnswer` and `speakPendingSpokenAnswer` options in `packages/core/hooks/useChatRoom.ts`
+     (now internal, through `useChatRoomSpokenAnswer`)
+   - `PODCAST_EPISODE_QUESTION_LABEL` (now `PODCAST_EPISODE_QUESTION_BUTTON_LABEL` in
+     `packages/core/stores/podcastEpisodeQuestionRules.ts`) and the mic button's `isListeningForNextTurn` (now
+     `isListeningForNextQuestion` in `packages/core/lib/voiceRecordingRules.ts`)
+   - `spokenAnswerQueue.ts`, `streamedSpokenAnswer.ts`, `podcastEpisodeQuestionStore.ts` with `toastSpentBudget`, and
+     `podcastEpisodeQuestionTestFixtures.ts` in `apps/web/src/stores/` (now `packages/core/stores/`, with the toast in
+     `apps/web/src/components/chat/SpokenAnswerAudio.tsx`)
 
 5. **Cross-harness enforcement parity**: `.claude/settings.json` hooks and
    `.opencode/plugin/guardrails.mjs` must gate the same operations with the

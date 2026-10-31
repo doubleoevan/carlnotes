@@ -97,11 +97,13 @@ by adding `UNKNOWN_CASE` from `enums.ts` to its values, so the inferred type inc
 `toTolerantResponseSchema` walks a contract and rebuilds it so a malformed list or record entry is dropped and counted
 (`takeDroppedEntryCount`), an optional or nullable member that fails takes its default, a display enum's unknown value
 takes the unknown case, and everything else stays strict. `routeShapes.ts` holds the small shapes the routes share:
-the query and param schemas the api validates with, `okResponse`, the chat reply line, and the room events.
+the query and param schemas the api validates with, `okResponse`, the chat reply line, the room events, and a
+recording's multipart post.
 `apiRouteContracts.ts` is the route contracts the contract freeze serializes: every capability the app reaches, keyed as
 the client parity check names it, with its method, path, and schemas, and `API_ROUTE_HELPERS` for a client export that
-calls no route. It holds the `ApiRouteContract` type and spreads five part files, one per area, that import the type
-back: `topicRouteContracts.ts` (topics, topic findings, viewer counts, notes, and the site search),
-`chatRouteContracts.ts` (the private chat and the chat rooms), `teamRouteContracts.ts` (teams, blocks, and reports),
-`accountRouteContracts.ts` (activity, the app sign-up gate, billing, profiles and the account, and the Terms), and
-`podcastRouteContracts.ts` (podcast episodes). The part files load every other contract, and nothing loads them back.
+calls no route or only wraps another export. It holds the `ApiRouteContract` type and spreads five part files, one per
+area, that import the type back: `topicRouteContracts.ts` (topics, topic findings, viewer counts, notes, and the site
+search), `chatRouteContracts.ts` (the private chat, the chat rooms, and the four voice routes), `teamRouteContracts.ts`
+(teams, blocks, and reports), `accountRouteContracts.ts` (activity, the app sign-up gate, billing, profiles and the
+account, and the Terms), and `podcastRouteContracts.ts` (podcast episodes). The part files load every other contract,
+and nothing loads them back.

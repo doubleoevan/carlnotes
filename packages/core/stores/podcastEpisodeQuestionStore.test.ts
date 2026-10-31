@@ -6,27 +6,24 @@ import { TEST_SPOKEN_QUESTION_TIMINGS } from "@carlnotes/client/voiceClientTestF
 import type { ChatConversation } from "@carlnotes/contracts/chat"
 import { withPodcastEpisodeNote } from "@carlnotes/contracts/chatQuestionNotes"
 import type { PodcastEpisodeSpeaker } from "@carlnotes/contracts/enums"
-import { PURCHASE_COPY } from "@carlnotes/contracts/plans"
 import { PODCAST_NAME } from "@carlnotes/contracts/podcastEpisodes"
 import {
 	toPodcastEpisodeChapterFixture,
 	toPodcastEpisodeFixture,
 } from "@carlnotes/contracts/podcastEpisodeTestFixtures"
-import { RESUME_BEAT_MS } from "@carlnotes/core/stores/podcastEpisodeQuestionRules"
-import { createElement } from "react"
-import { renderToStaticMarkup } from "react-dom/server"
-import * as sonner from "sonner"
-import { CHAT_FAILED_TOAST, CHAT_REJECTION_COPY } from "@/components/chat/chatRejectionCopy"
+import { CHAT_FAILED_NOTICE } from "../lib/chatRejectionCopy"
+import { RESUME_BEAT_MS } from "./podcastEpisodeQuestionRules"
 import {
 	askPodcastEpisodeQuestion,
 	endPodcastEpisodeQuestion,
+	endPodcastEpisodeQuestionOnSignOut,
 	loadPodcastEpisodeQuestionConversation,
 	markPodcastEpisodeQuestionRecording,
 	type PodcastEpisodeQuestionChatTurn,
 	sendPodcastEpisodeQuestionRecording,
 	startPodcastEpisodeQuestion,
 	subscribeToPodcastEpisodeQuestionChatTurn,
-	usePodcastEpisodeQuestion,
+	toPodcastEpisodeQuestionView,
 } from "./podcastEpisodeQuestionStore"
 import {
 	type PodcastEpisodePlayerSpies,
@@ -37,6 +34,10 @@ import type { SpokenAnswerEnd } from "./spokenAnswerQueue"
 import * as spokenAnswerStore from "./spokenAnswerStore"
 import type { StreamedSpokenAnswer } from "./streamedSpokenAnswer"
 import * as streamedSpokenAnswer from "./streamedSpokenAnswer"
+import { collectVoiceNotices } from "./voiceTestFixtures"
+
+// the call that removes the notices a test registered
+let unregisterTestNotices: (() => void) | null = null
 
 // end any question a test left in progress while the player store's spies still stand, then put every spy and the
 // real timers back
@@ -44,6 +45,8 @@ afterEach(() => {
 	endPodcastEpisodeQuestion("stopped")
 	mock.restore()
 	jest.useRealTimers()
+	unregisterTestNotices?.()
+	unregisterTestNotices = null
 })
 
 // the loaded podcast episode, with the chapter that plays while the question is asked
@@ -85,19 +88,6 @@ type AskedQuestion = SpokenAnswerSpies & {
 	resumeSpy: PodcastEpisodePlayerSpies["resumeSpy"]
 	sendChatTurnSpy: Mock<typeof chatClient.sendChatTurn>
 	podcastEpisodeQuestionChatTurns: PodcastEpisodeQuestionChatTurn[]
-}
-
-// the question in progress as a component reads it
-function toPodcastEpisodeQuestionView(): ReturnType<typeof usePodcastEpisodeQuestion> | null {
-	let podcastEpisodeQuestionView: ReturnType<typeof usePodcastEpisodeQuestion> | null = null
-	function PodcastEpisodeQuestionProbe(): null {
-		podcastEpisodeQuestionView = usePodcastEpisodeQuestion()
-		return null
-	}
-
-	// render the component once, which reads the question
-	renderToStaticMarkup(createElement(PodcastEpisodeQuestionProbe))
-	return podcastEpisodeQuestionView
 }
 
 // the spoken answer a question streams into, and the listener its spoken answer end calls, both stubbed
@@ -181,13 +171,13 @@ test("a marked recording shows its send to every podcast mic slot until the reco
 	startPodcastEpisodeQuestion(voiceRecording)
 	expect(toPodcastEpisodeQuestionView()).toEqual({ phase: "listening", speaker: null, isVoiceRecording: false })
 	const markRecordingDone = markPodcastEpisodeQuestionRecording()
-	expect(toPodcastEpisodeQuestionView()?.isVoiceRecording).toBe(true)
+	expect(toPodcastEpisodeQuestionView().isVoiceRecording).toBe(true)
 
 	// the store's send sends the recording that runs, and the recording's end clears the mark
 	sendPodcastEpisodeQuestionRecording()
 	expect(voiceRecording.send).toHaveBeenCalledTimes(1)
 	markRecordingDone()
-	expect(toPodcastEpisodeQuestionView()?.isVoiceRecording).toBe(false)
+	expect(toPodcastEpisodeQuestionView().isVoiceRecording).toBe(false)
 
 	// the question's end clears the mark, and the ended question's mark leaves the next question's alone
 	const markEndedRecordingDone = markPodcastEpisodeQuestionRecording()
@@ -196,37 +186,37 @@ test("a marked recording shows its send to every podcast mic slot until the reco
 	startPodcastEpisodeQuestion(toVoiceRecordingMock())
 	markPodcastEpisodeQuestionRecording()
 	markEndedRecordingDone()
-	expect(toPodcastEpisodeQuestionView()?.isVoiceRecording).toBe(true)
+	expect(toPodcastEpisodeQuestionView().isVoiceRecording).toBe(true)
 })
 
-// a spent budget toasts the upgrade line with the plans action, and the question asks nothing
-test("loadPodcastEpisodeQuestionConversation toasts the budget line and returns false on a spent budget", async () => {
+// a spent budget shows the platform's spent budget notice, and the question asks nothing
+test("loadPodcastEpisodeQuestionConversation shows the budget notice and returns false on a spent budget", async () => {
 	spyOnPodcastEpisodePlayer({ podcastEpisode, isPlaying: true })
-	const toastSpy = spyOn(sonner, "toast")
+	const { notices, unregister } = collectVoiceNotices()
+	unregisterTestNotices = unregister
 	spyOn(chatClient, "fetchChatConversation").mockResolvedValue({
 		...chatConversation,
 		canChat: false,
 		isBudgetExhausted: true,
 	})
 
-	// the load says no and toasts the budget line
+	// the load says no and shows the budget notice
 	startPodcastEpisodeQuestion(toVoiceRecordingMock())
 	expect(await loadPodcastEpisodeQuestionConversation()).toBe(false)
-	expect(toastSpy).toHaveBeenCalledWith(CHAT_REJECTION_COPY.budget, {
-		action: { label: PURCHASE_COPY.pickUpMoreCoffee, onClick: expect.any(Function) },
-	})
+	expect(notices).toEqual(["spent budget"])
 })
 
-// a conversation that fails to load toasts the chat's failure, and one that loads lets the question ask
-test("loadPodcastEpisodeQuestionConversation toasts a failed load and returns true once the conversation loads", async () => {
+// a conversation that fails to load says the chat's failure, and one that loads lets the question ask
+test("loadPodcastEpisodeQuestionConversation says a failed load and returns true once the conversation loads", async () => {
 	spyOnPodcastEpisodePlayer({ podcastEpisode, isPlaying: true })
-	const toastSpy = spyOn(sonner, "toast")
+	const { notices, unregister } = collectVoiceNotices()
+	unregisterTestNotices = unregister
 	const fetchChatConversationSpy = spyOn(chatClient, "fetchChatConversation").mockRejectedValue(new Error("offline"))
 
 	// the failed load says no, then the loaded conversation for the podcast episode's topic says yes
 	startPodcastEpisodeQuestion(toVoiceRecordingMock())
 	expect(await loadPodcastEpisodeQuestionConversation()).toBe(false)
-	expect(toastSpy).toHaveBeenCalledWith(CHAT_FAILED_TOAST)
+	expect(notices).toEqual([CHAT_FAILED_NOTICE])
 	fetchChatConversationSpy.mockResolvedValue(chatConversation)
 	expect(await loadPodcastEpisodeQuestionConversation()).toBe(true)
 	expect(fetchChatConversationSpy).toHaveBeenLastCalledWith({ topicId: "topic-1" })
@@ -310,29 +300,29 @@ test("askPodcastEpisodeQuestion announces the sent, speaker, growing, and finish
 	expect(streamedSpokenAnswerMock.finish).toHaveBeenCalledWith("Corners hold the dust.", null)
 })
 
-// a spent budget mid-question toasts the upgrade line, ends the question, and resumes the podcast episode at once
-test("a budget result toasts the upgrade line and resumes the podcast episode at once", async () => {
-	const toastSpy = spyOn(sonner, "toast")
+// a spent budget mid-question shows the budget notice, ends the question, and resumes the podcast episode at once
+test("a budget result shows the budget notice and resumes the podcast episode at once", async () => {
+	const { notices, unregister } = collectVoiceNotices()
+	unregisterTestNotices = unregister
 	const { resumeSpy, podcastEpisodeQuestionChatTurns } = await askQuestion(async () => "budget")
 
 	// the finished chat turn says why, and the question is over
 	expect(podcastEpisodeQuestionChatTurns.at(-1)?.chatTurn.rejection).toBe("budget")
-	expect(toastSpy).toHaveBeenCalledWith(CHAT_REJECTION_COPY.budget, {
-		action: { label: PURCHASE_COPY.pickUpMoreCoffee, onClick: expect.any(Function) },
-	})
-	expect(toPodcastEpisodeQuestionView()?.phase).toBe("idle")
+	expect(notices).toEqual(["spent budget"])
+	expect(toPodcastEpisodeQuestionView().phase).toBe("idle")
 	expect(resumeSpy).toHaveBeenCalledTimes(1)
 })
 
-// a failed chat turn toasts the chat's words, ends the question, and resumes the podcast episode at once
-test("a failed result toasts the chat's failure and resumes the podcast episode at once", async () => {
-	const toastSpy = spyOn(sonner, "toast")
+// a failed chat turn says the chat's words, ends the question, and resumes the podcast episode at once
+test("a failed result says the chat's failure and resumes the podcast episode at once", async () => {
+	const { notices, unregister } = collectVoiceNotices()
+	unregisterTestNotices = unregister
 	const { resumeSpy, podcastEpisodeQuestionChatTurns } = await askQuestion(async () => "failed")
 
 	// the finished chat turn says why, and the question is over
 	expect(podcastEpisodeQuestionChatTurns.at(-1)?.chatTurn.rejection).toBe("failed")
-	expect(toastSpy).toHaveBeenCalledWith(CHAT_FAILED_TOAST)
-	expect(toPodcastEpisodeQuestionView()?.phase).toBe("idle")
+	expect(notices).toEqual([CHAT_FAILED_NOTICE])
+	expect(toPodcastEpisodeQuestionView().phase).toBe("idle")
 	expect(resumeSpy).toHaveBeenCalledTimes(1)
 })
 
@@ -346,9 +336,9 @@ test("an answer played to its end resumes the podcast episode after the beat", a
 
 	// the first word plays, then the answer ends
 	playSpokenAnswer()
-	expect(toPodcastEpisodeQuestionView()?.phase).toBe("answering")
+	expect(toPodcastEpisodeQuestionView().phase).toBe("answering")
 	endSpokenAnswer({ isPlayedToEnd: true })
-	expect(toPodcastEpisodeQuestionView()?.phase).toBe("idle")
+	expect(toPodcastEpisodeQuestionView().phase).toBe("idle")
 
 	// the podcast episode waits for the beat, then resumes
 	jest.advanceTimersByTime(RESUME_BEAT_MS - 1)
@@ -374,7 +364,7 @@ test("a lock-screen pause of the answer leaves the podcast episode paused", asyn
 	// the first word plays, then the lock screen pauses the answer
 	playSpokenAnswer()
 	endSpokenAnswer({ isPlayedToEnd: false, isMediaSessionPause: true })
-	expect(toPodcastEpisodeQuestionView()?.phase).toBe("idle")
+	expect(toPodcastEpisodeQuestionView().phase).toBe("idle")
 	expect(resumeSpy).not.toHaveBeenCalled()
 })
 
@@ -409,4 +399,28 @@ test("a question over a paused podcast episode or ended by a skip never resumes 
 	startPodcastEpisodeQuestion(toVoiceRecordingMock())
 	endPodcastEpisodeQuestion("skipped")
 	expect(resumeSpy).not.toHaveBeenCalled()
+})
+
+// a sign-out drops a waiting beat and ends a question in progress, so the podcast episode stays paused and the next
+// account's mic is free
+test("endPodcastEpisodeQuestionOnSignOut ends the question and never resumes the podcast episode", () => {
+	jest.useFakeTimers()
+	const { resumeSpy } = spyOnPodcastEpisodePlayer({ podcastEpisode, isPlaying: true })
+
+	// a finished question's beat is waiting when the sign-out starts
+	startPodcastEpisodeQuestion(toVoiceRecordingMock())
+	endPodcastEpisodeQuestion("finished")
+	endPodcastEpisodeQuestionOnSignOut()
+	jest.advanceTimersByTime(RESUME_BEAT_MS)
+
+	// a question recording when the sign-out starts is cancelled
+	const voiceRecording = toVoiceRecordingMock()
+	startPodcastEpisodeQuestion(voiceRecording)
+	endPodcastEpisodeQuestionOnSignOut()
+	expect(voiceRecording.cancel).toHaveBeenCalledTimes(1)
+	expect(toPodcastEpisodeQuestionView().phase).toBe("idle")
+
+	// neither resumes the podcast episode, and a new question can start
+	expect(resumeSpy).not.toHaveBeenCalled()
+	expect(startPodcastEpisodeQuestion(toVoiceRecordingMock())).toBe(true)
 })

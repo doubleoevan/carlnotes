@@ -3,7 +3,7 @@ import { type ChatPillElements, ChatPill as SharedChatPill } from "@carlnotes/co
 import { useIsPodcastPlayerShown } from "@carlnotes/core/stores/podcastEpisodePlayerStore"
 import { Coffee, X } from "lucide-react-native"
 import type { ReactNode } from "react"
-import { KeyboardAvoidingView, Platform, StatusBar, View } from "react-native"
+import { KeyboardAvoidingView, StatusBar, View } from "react-native"
 import { useUniwind } from "uniwind"
 import { CoffeeCup } from "@/components/branding/CoffeeCup"
 import { ClassNameSafeAreaView } from "@/components/common/ClassNameSafeAreaView"
@@ -22,11 +22,7 @@ export function ChatPanelWidget({ children, onClose }: { children: ReactNode; on
 	return (
 		<ClassNameSafeAreaView className="w-full flex-1 bg-card">
 			<StatusBar barStyle={theme === "dark" ? "light-content" : "dark-content"} />
-			<KeyboardAvoidingView
-				className="flex-1"
-				enabled={!isPodcastPlayerShown}
-				behavior={Platform.OS === "ios" ? "padding" : "height"}
-			>
+			<KeyboardAvoidingView className="flex-1" enabled={!isPodcastPlayerShown} behavior="padding">
 				{/* conversation heading */}
 				<View className="flex-row items-center justify-between gap-2 px-3 pt-2">
 					<View className="flex-row items-center gap-2">

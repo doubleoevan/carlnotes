@@ -17,7 +17,8 @@ import {
 	SKIP_FORWARD_SECONDS,
 	toPodcastEpisodeMediaMetadata,
 } from "@carlnotes/core/lib/podcastEpisodePlayback"
-import type { AudioPlayer, AudioStatus } from "expo-audio"
+import type { SpokenAnswerSpeakerMetadata } from "@carlnotes/core/lib/spokenAnswerPlayer"
+import type { AudioMetadata, AudioPlayer, AudioStatus } from "expo-audio"
 
 // inject only the platform operations needed by the single root-owned player
 export type PodcastEpisodeAudioPlayer = Pick<
@@ -217,16 +218,10 @@ export function toPodcastEpisodeAudioAdapter({
 				currentLoad.positionSeconds = state.positionSeconds
 			}
 
-			// the lock screen's title, people, and cover. the cover is an api path, which Android takes only as an
-			// absolute url
-			const metadata = toPodcastEpisodeMediaMetadata(state.podcastEpisode, state.positionSeconds)
-			const artworkPath = metadata.artwork[0]?.src
-			const lockScreenMetadata = {
-				title: metadata.title,
-				artist: metadata.artist,
-				albumTitle: metadata.album,
-				artworkUrl: artworkPath ? toApiUrl(artworkPath) : undefined,
-			}
+			// the lock screen's title, people, and cover
+			const lockScreenMetadata = toLockScreenMetadata(
+				toPodcastEpisodeMediaMetadata(state.podcastEpisode, state.positionSeconds),
+			)
 
 			// the lock screen's controls: the skips and the chapter steps
 			const lockScreenOptions = {
@@ -245,6 +240,20 @@ export function toPodcastEpisodeAudioAdapter({
 				console.error("podcast lock screen update failed", error)
 			}
 		},
+	}
+}
+
+/**
+ * Returns the lock screen's metadata from a media session's metadata: the title, the people, the album, and the cover.
+ * The cover is an api path, which Android takes only as an absolute url.
+ */
+export function toLockScreenMetadata(metadata: SpokenAnswerSpeakerMetadata): AudioMetadata {
+	const artworkPath = metadata.artwork?.[0]?.src
+	return {
+		title: metadata.title,
+		artist: metadata.artist,
+		albumTitle: metadata.album,
+		artworkUrl: artworkPath ? toApiUrl(artworkPath) : undefined,
 	}
 }
 

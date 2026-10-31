@@ -1,57 +1,43 @@
 // the voice recorder: the microphone stream, the level meter over it, and the recorder that keeps the audio. the end
 // of speech is the level's silence, or the voice activity detector's once it loads
-import { VOICE_RECORDING_MAX_SECONDS } from "@carlnotes/contracts/payloads"
+import type {
+	StartVoiceRecordingOptions,
+	VoiceRecordingEnd,
+	VoiceRecordingHandle,
+	VoiceRecordingSession,
+} from "@carlnotes/core/lib/voiceRecorder"
 import {
-	toMeterLevel,
 	toRecordingDecision,
 	toRecordingLevel,
+	toRecordingLevelReader,
 	toRecordingMimeType,
-	toSilenceThreshold,
+	toSecondsRecorded,
 	toSpeechFrame,
 	type VoiceActivityProgress,
 } from "@carlnotes/core/lib/voiceRecordingDecisions"
 
-// how long the start of the stream samples the room's ambient level before the silence threshold is set
-const AMBIENT_SAMPLE_MS = 300
-
 // the share of each frame's level that reaches the smoothed level, so the meter moves without flicker
 const LEVEL_SMOOTHING = 0.3
 
-// why a recording was cancelled: nothing rose above the silence threshold, the page was hidden, or the user cancelled
-// it
-export type VoiceRecordingCancelReason = "noSpeech" | "hidden" | "user"
-
-// the running recording's controls: send it early, or cancel it
-export type VoiceRecordingHandle = {
-	send: () => void
-	cancel: () => void
-}
-
-export type StartVoiceRecordingOptions = {
-	// the context the tap created and resumed before the microphone was asked for, which is the order WebKit needs
-	// for the analyser to read a live level on iOS
+// core's recording options with the context that the tap created and resumed before the microphone was asked for.
+// WebKit needs that order for the analyser to read a live level on iOS
+type BrowserVoiceRecordingOptions = Omit<StartVoiceRecordingOptions<VoiceRecordingSession>, "session"> & {
 	audioContext: AudioContext
-	// the meter's fill, 0 to 1 in steps of a twentieth, each time the step changes
-	onLevel: (meterLevel: number) => void
-	// the recording and how many seconds it recorded, once it is sent
-	onFinished: (recording: Blob, secondsRecorded: number) => void
-	onCancelled: (reason: VoiceRecordingCancelReason) => void
-	// what ends the speech: the level's silence, or the voice activity detector once it loads, with the level's
-	// silence until then and for good if it fails to start
-	endOfSpeech?: "level" | "voiceActivity"
 }
 
 /**
- * Asks for the microphone, records it, and watches its level until the user stops, the limit passes, or the
- * recording is sent or cancelled. Throws if the browser rejects the microphone request or cannot record the stream.
+ * Asks for the microphone, records it, and watches its level until the user stops, the limit passes, or the recording
+ * is sent or cancelled. With endOfSpeech set to voiceActivity, the voice activity detector ends the speech once it
+ * loads, with the level's silence until then and for good if it fails to start. Throws if the browser rejects the
+ * microphone request or cannot record the stream.
  */
 export async function startVoiceRecording({
 	audioContext,
 	onLevel,
 	onFinished,
 	onCancelled,
-	endOfSpeech = "level",
-}: StartVoiceRecordingOptions): Promise<VoiceRecordingHandle> {
+	endOfSpeech,
+}: BrowserVoiceRecordingOptions): Promise<VoiceRecordingHandle> {
 	// give the audio session back to the browser before the request, so WebKit sets the capture category itself. an
 	// earlier recording left the session on playback, and iOS keeps that until it is set again
 	setAudioSessionType("auto")
@@ -92,22 +78,19 @@ export async function startVoiceRecording({
 		}
 	})
 
-	// the loop's frame buffer, the smoothed level, and the ambient sample the silence threshold is set from
+	// the loop's frame buffer, the smoothed level, and the reader that sets the meter and the silence threshold
 	const startedAt = Date.now()
 	const sampleBytes = new Uint8Array(analyser.fftSize)
 	let level = 0
-	let meterLevel = 0
-	let ambientLevelSum = 0
-	let ambientFrameCount = 0
+	const recordingLevelReader = toRecordingLevelReader({ startedAt, onLevel })
 
-	// the silence threshold once it is set, when the level was last above it, and the frame the loop waits on
-	let silenceThreshold: number | null = null
+	// whether speech started, when the level was last above the silence threshold, and the frame the loop waits on
 	let hasSpeechStarted = false
 	let lastLoudAt = startedAt
 	let animationFrame = 0
 
 	// how the recording ended, set once
-	let endReason: "send" | VoiceRecordingCancelReason | null = null
+	let endReason: VoiceRecordingEnd | null = null
 
 	// the voice activity detector's progress and its stop, once it loads
 	const voiceActivityProgress: VoiceActivityProgress = {
@@ -121,7 +104,7 @@ export async function startVoiceRecording({
 	let hasLevelSpeechBeforeListening: boolean | null = null
 
 	// end the recording: stop the loop and the recorder, and release the capture
-	const endRecording = (reason: "send" | VoiceRecordingCancelReason): void => {
+	const endRecording = (reason: VoiceRecordingEnd): void => {
 		if (endReason !== null) {
 			return
 		}
@@ -170,22 +153,9 @@ export async function startVoiceRecording({
 		const now = Date.now()
 		level += (toRecordingLevel(sampleBytes) - level) * LEVEL_SMOOTHING
 
-		// report the meter only if its drawn step changed
-		const nextMeterLevel = toMeterLevel(level)
-		if (nextMeterLevel !== meterLevel) {
-			meterLevel = nextMeterLevel
-			onLevel(meterLevel)
-		}
-
-		// the first frames sample the room, then the silence threshold sits a margin above it
+		// the first frames sample the room, and nothing is decided until the silence threshold is set
+		const silenceThreshold = recordingLevelReader.readLevel(level, now)
 		if (silenceThreshold === null) {
-			ambientLevelSum += level
-			ambientFrameCount += 1
-			if (now - startedAt >= AMBIENT_SAMPLE_MS) {
-				silenceThreshold = toSilenceThreshold(ambientLevelSum / ambientFrameCount)
-			}
-
-			// nothing is decided until the silence threshold is set
 			animationFrame = requestAnimationFrame(readLevel)
 			return
 		}
@@ -289,11 +259,6 @@ async function startRecordingVoiceActivity({
 		console.error("voice activity detection could not load", error)
 		return null
 	}
-}
-
-// how many whole seconds the recording lasted, inside the limit
-function toSecondsRecorded(startedAt: number): number {
-	return Math.min(VOICE_RECORDING_MAX_SECONDS, Math.round((Date.now() - startedAt) / 1000))
 }
 
 // release the capture: stop the stream's tracks, and give the audio session back to playback, so a reply never plays

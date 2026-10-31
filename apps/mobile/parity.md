@@ -40,11 +40,6 @@ capability the app will never need, with the reason, or `deferred` for one an ac
 | `billingClient.fetchBillingPortalUrl` | deferred | Prompt 55, store payments. The app offers no purchase or billing management until a storefront design is approved |
 | `billingClient.fetchCheckoutUrl` | deferred | Prompt 55, store payments. The app offers no purchase until a storefront design is approved |
 | `teamClient.sendTeamAvatar` | web-only | The browser's File upload. The app uploads to the same route through `teamClient.sendTeamAvatarBody` |
-| `voiceClient.fetchSpokenAnswerAudio` | deferred | Prompt 54, voice in the mobile chat and the podcast question |
-| `voiceClient.fetchSpokenQuestionsStatus` | deferred | Prompt 54, voice in the mobile chat and the podcast question |
-| `voiceClient.sendSpokenEvent` | deferred | Prompt 54, voice in the mobile chat and the podcast question |
-| `voiceClient.sendSpokenQuestionEvent` | deferred | Prompt 54, voice in the mobile chat and the podcast question |
-| `voiceClient.sendTranscription` | deferred | Prompt 54, voice in the mobile chat and the podcast question |
 
 Deferred work with no api capability of its own yet: push notifications (Prompt 52), which will move the app icon badge
 off the foreground poll, and store payments (Prompt 55), which decides what the native Plans screen offers. Until
@@ -81,6 +76,7 @@ their reason.
 | Login, Signup | `sign-in.tsx`, `sign-up.tsx` | logic | Google, GitHub, and Apple, the prompts from `core/lib/signupPrompts.ts` |
 | Chat panel and rooms | `chat.tsx`, `topics/…/chat.tsx`, `teams/…/chat.tsx` | component, logic | the shared turn and bubble compositions, the room list from the shared store |
 | Chat launcher | `chat/AppChatPanel.tsx` | component | the shared `ChatPill`, the visitor's sign-up sheet |
+| Spoken questions and answers | `chat/MicButton.tsx`, `chat/RecordingBar.tsx`, `chat/SpokenAnswerButton.tsx`, `podcast/PodcastEpisodeQuestionControls.tsx` | component, logic, native | The mic, the recording bar, the play button, and the podcast question controls go into the shared composer slots, turn and bubble footers, and the shared `PodcastPlayer` and `PodcastEpisodePlayerCard` controls. Shared logic: core's `useVoiceRecording`, `useListenMode`, `useChatRoomSpokenAnswer` inside `useChatRoom`, the spoken answer store and queue, the audio cache, the notice store, and the question store and rules. Native replacements: the recorder over expo-audio (`voiceRecorder.ts`), the microphone permission (`voicePermission.ts`), the answer player over cache files (`spokenAnswerAudio.ts`, `voiceCacheFiles.ts`), the audio mode switch (`voiceAudioMode.ts`), and the notices as system alerts (`chat/chatNotice.ts`). The app has no visitor mic in the chat, and its paused mic says when speaking comes back instead of opening Plans |
 | Tasting Notes | `…/notes/[noteId].tsx` | component | the shared editor, viewer, comments, and badges |
 | Update badges | `common/UpdateCountBadge.tsx` | logic | the sum, labels, and groups from `core/lib/updateCounts.ts`, a long-press sheet for the tooltip |
 | Admin | none | web-only | Admin opens the web from the menu, and its browser session can need its own sign-in |
@@ -134,3 +130,7 @@ a React Native Storybook story; the device comparison runs on the rebuilt develo
 | A budget failure without the upgrade line | `Topic/TopicScanRecap`, BudgetFailed | not yet, stories only |
 | The Notifications section's states | `Account/NotificationsSection` | no web state to compare: the card and switch follow the web's Invitations card and email switch; stories only |
 | The push permission sheet | `Push/PushPermissionPrompt` | no web state to compare: follows the Terms sheet; stories only |
+| The mic idle, ringed for listen mode, and waiting | `Chat/MicButton` | not yet, stories only |
+| The recording bar from silence to a full meter | `Chat/RecordingBar` | not yet, stories only |
+| The play button stopped, loading, and playing | `Chat/SpokenAnswerButton` | not yet, stories only |
+| The podcast mic's faces and the dock in each question phase | `Podcast/PodcastEpisodeQuestionControls` | not yet, stories only |

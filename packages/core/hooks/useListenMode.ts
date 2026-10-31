@@ -1,26 +1,27 @@
 // listen mode, which a composer's mic tap starts: the mic reopens on its own once carl finishes his spoken answer,
-// on the audio context the first tap made, until the user stays quiet, stops carl, or cancels
+// on the recording session the first tap opened, until the user stays quiet, stops carl, or cancels
 import { useEffect, useRef, useState } from "react"
-import { usePodcastEpisodeQuestion } from "@/stores/podcastEpisodeQuestionStore"
-import type { SpokenAnswerEnd } from "@/stores/spokenAnswerQueue"
-import { subscribeToSpokenAnswerEnd } from "@/stores/spokenAnswerStore"
+import type { VoiceRecordingSession } from "../lib/voiceRecorder"
+import { usePodcastEpisodeQuestion } from "../stores/podcastEpisodeQuestionStore"
+import type { SpokenAnswerEnd } from "../stores/spokenAnswerQueue"
+import { subscribeToSpokenAnswerEnd } from "../stores/spokenAnswerStore"
 
 // off, listening while the mic is open or the transcript is on its way, or waiting for carl to finish his spoken
 // answer, after which the mic reopens
 type ListenMode = "off" | "listening" | "waiting"
 
 // how long listen mode waits for carl's spoken answer to end before it gives up
-const LISTEN_WAIT_TIMEOUT_MS = 2 * 60 * 1_000
+export const LISTEN_WAIT_TIMEOUT_MS = 2 * 60 * 1_000
 
 // what a composer reads of its listen mode and the calls that move it
-export type ListenModeSession = {
+export type ListenModeSession<Session extends VoiceRecordingSession = VoiceRecordingSession> = {
 	// whether listen mode is on, for the render
 	isListening: boolean
-	// whether the running recording was reopened by listen mode, and the session's audio context, read at once
+	// whether the running recording was reopened by listen mode, and the session's recording session, read at once
 	isReopened: () => boolean
-	getAudioContext: () => AudioContext | null
-	// start a session from a tap, with its audio context, or with none for a recording that has no listen mode
-	startListening: (audioContext: AudioContext | null) => void
+	getSession: () => Session | null
+	// start a session from a tap, with its recording session, or with none for a recording that has no listen mode
+	startListening: (session: Session | null) => void
 	// mark the recording the session reopened, wait for carl's answer once the transcript is sent, or end the session
 	reopenListening: () => void
 	waitForSpokenAnswer: () => void
@@ -30,12 +31,12 @@ export type ListenModeSession = {
 /**
  * Owns one composer's listen mode and calls onReopen once carl's own spoken answer finishes while the session waits.
  */
-export function useListenMode(onReopen: () => void): ListenModeSession {
-	// the mode for the render and for the callbacks, the session's audio context, whether the running recording was
-	// reopened, and the wait for carl's answer to end
+export function useListenMode<Session extends VoiceRecordingSession>(onReopen: () => void): ListenModeSession<Session> {
+	// the mode for the render and for the callbacks, the session's recording session, whether the running recording
+	// was reopened, and the wait for carl's answer to end
 	const [listenMode, setListenMode] = useState<ListenMode>("off")
 	const listenModeRef = useRef<ListenMode>("off")
-	const audioContextRef = useRef<AudioContext | null>(null)
+	const sessionRef = useRef<Session | null>(null)
 	const isReopenedRef = useRef(false)
 	const waitTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -65,12 +66,12 @@ export function useListenMode(onReopen: () => void): ListenModeSession {
 		setListenMode(nextListenMode)
 	}
 
-	// a tap starts listening on its own context, and a recording with no context has no listen mode
-	function startListening(audioContext: AudioContext | null): void {
-		changeListenMode(audioContext ? "listening" : "off")
+	// a tap starts listening on its own session, and a recording with no session has no listen mode
+	function startListening(session: Session | null): void {
+		changeListenMode(session ? "listening" : "off")
 		isReopenedRef.current = false
-		if (audioContext) {
-			audioContextRef.current = audioContext
+		if (session) {
+			sessionRef.current = session
 		}
 	}
 
@@ -97,18 +98,16 @@ export function useListenMode(onReopen: () => void): ListenModeSession {
 		}, LISTEN_WAIT_TIMEOUT_MS)
 	}
 
-	// end listen mode, drop the wait, and close the session's audio context
+	// end listen mode, drop the wait, and close the session's recording session
 	function endListening(): void {
 		clearWaitTimeout()
 		changeListenMode("off")
 		isReopenedRef.current = false
 
-		// the session's context closes with it
-		const audioContext = audioContextRef.current
-		audioContextRef.current = null
-		if (audioContext && audioContext.state !== "closed") {
-			void audioContext.close()
-		}
+		// the recording session closes with listen mode
+		const session = sessionRef.current
+		sessionRef.current = null
+		session?.close()
 	}
 
 	// drop the wait, if one is running
@@ -138,7 +137,7 @@ export function useListenMode(onReopen: () => void): ListenModeSession {
 	return {
 		isListening: listenMode !== "off",
 		isReopened: () => isReopenedRef.current,
-		getAudioContext: () => audioContextRef.current,
+		getSession: () => sessionRef.current,
 		startListening,
 		reopenListening,
 		waitForSpokenAnswer,

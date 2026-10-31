@@ -1,13 +1,6 @@
 // an attachment's content type: the canonical type from what the browser sent and the file name, and what each type is
 
-import { DOCX_TYPE, toSuffixMimeType, XLSX_TYPE } from "@carlnotes/contracts/attachmentTypes"
-
-/**
- * Returns a content type without its parameters, so a declared charset never breaks an exact match.
- */
-export function toBaseContentType(contentType: string): string {
-	return contentType.split(";")[0]?.trim().toLowerCase() ?? ""
-}
+import { DOCX_TYPE, toBaseContentType, toSuffixMimeType, XLSX_TYPE } from "@carlnotes/contracts/attachmentTypes"
 
 /**
  * Resolves an upload's one content type: the reported content type when an extractor knows it, otherwise by extension.

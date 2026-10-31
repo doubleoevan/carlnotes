@@ -1,4 +1,3 @@
-import { toComposerPlaceholder, toReplyUser } from "@carlnotes/core/lib/chatRoomReplies"
 // the chat room composer: the chat message box with its attachments, the @ autocomplete, and the reply selector
 
 import {
@@ -9,6 +8,8 @@ import {
 } from "@carlnotes/contracts/chat"
 import { ALL_USERNAME, CARL_USERNAME } from "@carlnotes/contracts/chatMentions"
 import type { ChatAttachment, VoiceChatPage } from "@carlnotes/contracts/payloads"
+import { toSpokenChatRoomPost } from "@carlnotes/core/hooks/useChatRoom"
+import { toComposerPlaceholder, toReplyUser } from "@carlnotes/core/lib/chatRoomReplies"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { ArrowUp, Paperclip } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
@@ -93,14 +94,7 @@ export function ChatRoomComposer({
 	// the recording the mic starts, whose transcript posts as a spoken message that addresses carl
 	const voiceRecording = useVoiceRecording({
 		page: voiceChatPage,
-		onTranscript: (transcript, timings) =>
-			void onPostChatMessage({
-				content: transcript,
-				replyToChatMessageId: null,
-				attachments: [],
-				isSpoken: true,
-				spokenQuestionTimings: timings,
-			}),
+		onTranscript: (transcript, timings) => void onPostChatMessage(toSpokenChatRoomPost(transcript, timings)),
 		onBudgetRejected,
 	})
 	// the mic takes the send slot of an empty box while voice is on and no post is on its way

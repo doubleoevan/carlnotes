@@ -1,4 +1,8 @@
-import { TOPIC_ATTACHMENT_MAX_BYTES, TOPIC_ATTACHMENT_TOO_LARGE_LINE } from "@carlnotes/contracts/attachmentTypes"
+import {
+	TOPIC_ATTACHMENT_MAX_BYTES,
+	TOPIC_ATTACHMENT_TOO_LARGE_LINE,
+	toBaseContentType,
+} from "@carlnotes/contracts/attachmentTypes"
 import { attachmentContextPayload, attachmentUrlPayload } from "@carlnotes/contracts/topicPayloads"
 import { db } from "@carlnotes/db"
 import { attachments, topics } from "@carlnotes/db/schema/topics"
@@ -133,7 +137,7 @@ const INLINE_VIDEO_TYPES = new Set(["video/mp4", "video/quicktime", "video/webm"
  */
 export function toStoredFileHeaders(filename: string, contentType: string): Record<string, string> {
 	// a stored content type may include parameters, and only the media type before them decides the disposition
-	const mediaType = contentType.split(";")[0]?.trim().toLowerCase() ?? ""
+	const mediaType = toBaseContentType(contentType)
 	const disposition = INLINE_IMAGE_TYPES.has(mediaType) || INLINE_VIDEO_TYPES.has(mediaType) ? "inline" : "attachment"
 
 	const asciiFilename = filename.replace(/[^\x20-\x7e]/g, "_").replace(/["\\]/g, "")

@@ -5,10 +5,10 @@ import {
 	PodcastPlayer as SharedPodcastPlayer,
 } from "@carlnotes/core/components/PodcastPlayer"
 import { toPodcastEpisodeQuestionLabel } from "@carlnotes/core/stores/podcastEpisodeQuestionRules"
+import { usePodcastEpisodeQuestion } from "@carlnotes/core/stores/podcastEpisodeQuestionStore"
 import { useEffect, useRef } from "react"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { registerPodcastEpisodeAudio, seekPlaybackTo, setIsUserSignedIn } from "@/stores/podcastEpisodePlayerStore"
-import { usePodcastEpisodeQuestion } from "@/stores/podcastEpisodeQuestionStore"
 import { SkipPlaybackButtons } from "./PlaybackControlButtons"
 import { PodcastEpisodeCover } from "./PodcastEpisodeCover"
 import { PodcastEpisodeTooltip } from "./PodcastEpisodeDetails"

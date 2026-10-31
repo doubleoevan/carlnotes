@@ -3,11 +3,13 @@
 import "../global.css"
 import { configureApiClient } from "@carlnotes/client/apiClient"
 import { authClient } from "@carlnotes/client/authClient"
+import { configureVoiceClient } from "@carlnotes/client/voiceClient"
 import { toTolerantResponseSchema } from "@carlnotes/contracts/tolerantReads"
 import { reloadChatRooms, useUpdateBadges } from "@carlnotes/core/hooks/useUpdateBadges"
 import { useAppUpdateRequirement } from "@carlnotes/core/stores/appUpdateStore"
 import { activateChatAccount } from "@carlnotes/core/stores/chatConversationStore"
 import { useIsPodcastPlayerShown } from "@carlnotes/core/stores/podcastEpisodePlayerStore"
+import { configureSpokenAudioCache } from "@carlnotes/core/stores/spokenAudioCache"
 import { requestTermsAcceptance } from "@carlnotes/core/stores/termsAcceptanceStore"
 import { ArchitectsDaughter_400Regular } from "@expo-google-fonts/architects-daughter"
 import {
@@ -27,11 +29,12 @@ import { useFonts } from "expo-font"
 import { ErrorBoundary as ExpoErrorBoundary, router, Stack, useNavigationContainerRef, usePathname } from "expo-router"
 import * as SplashScreen from "expo-splash-screen"
 import { useEffect, useState } from "react"
-import { Alert, AppState, KeyboardAvoidingView, Platform, View } from "react-native"
+import { Alert, AppState, KeyboardAvoidingView, View } from "react-native"
 import { GestureHandlerRootView } from "react-native-gesture-handler"
 import { AppIconBadge } from "@/appIconBadge"
 import { apiBaseUrl } from "@/authClient"
 import { AppChatPanel } from "@/components/chat/AppChatPanel"
+import { SpokenAnswerAudio } from "@/components/chat/SpokenAnswerAudio"
 import { clearFileCaches } from "@/components/common/pickedFileCache"
 import { PodcastEpisodeAudio } from "@/components/podcast/PodcastEpisodeAudio"
 import { PodcastPlayer } from "@/components/podcast/PodcastPlayer"
@@ -68,6 +71,18 @@ configureApiClient({
 
 // delete the picked file copies an earlier launch left behind
 clearFileCaches()
+
+// read each spoken part's audio as its bytes and its content type
+configureVoiceClient({
+	readSpokenPartAudio: async (response) => ({
+		bytes: new Uint8Array(await response.arrayBuffer()),
+		type: response.headers.get("Content-Type") ?? "audio/mpeg",
+	}),
+})
+
+// limit the spoken audio cache to 8 MB, about 17 minutes of 64 kbps answers. the phone holds the cache in the app's own
+// memory beside a podcast playing in the background
+configureSpokenAudioCache({ maxBytes: 8_000_000 })
 
 // report route render failures while retaining Expo Router's retry screen
 export const ErrorBoundary = Sentry.wrapExpoRouterErrorBoundary(ExpoErrorBoundary)
@@ -178,13 +193,15 @@ function RootLayout() {
 						{isSignedIn && <TermsAcceptanceSheet />}
 						{/* the notification explanation a first follow or room visit opens */}
 						{isSignedIn && <PushPermissionSheet />}
-						{!isSessionRetired && <PodcastEpisodeAudio userId={userId} />}
+						{/* the podcast episode's player and the hosts' spoken answer player for this account */}
+						{!isSessionRetired && (
+							<>
+								<PodcastEpisodeAudio userId={userId} />
+								<SpokenAnswerAudio userId={userId} />
+							</>
+						)}
 						{/* allow public reading while keeping account screens and chat behind sign-in */}
-						<KeyboardAvoidingView
-							style={{ flex: 1 }}
-							enabled={isPodcastPlayerShown}
-							behavior={Platform.OS === "ios" ? "padding" : undefined}
-						>
+						<KeyboardAvoidingView style={{ flex: 1 }} enabled={isPodcastPlayerShown} behavior="padding">
 							<View style={{ flex: 1 }}>
 								<Stack screenOptions={{ headerShown: false }}>
 									<Stack.Protected guard={!isSessionRetired}>

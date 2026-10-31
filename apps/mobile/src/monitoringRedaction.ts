@@ -22,6 +22,8 @@ export function redactMobileEvent<Event extends MobileEvent>(event: Event): Even
 	if (redactedEvent.transaction) {
 		redactedEvent.transaction = toSafeUrl(redactedEvent.transaction)
 	}
+
+	// filter the private keys in the attached details and the span data
 	if (redactedEvent.extra) {
 		redactedEvent.extra = redactDetails(redactedEvent.extra)
 	}
@@ -35,6 +37,18 @@ export function redactMobileEvent<Event extends MobileEvent>(event: Event): Even
 			data: redactDetails(span.data),
 		}))
 	}
+
+	// replace the urls and file paths in the exception messages
+	if (redactedEvent.exception?.values) {
+		redactedEvent.exception = {
+			...redactedEvent.exception,
+			values: redactedEvent.exception.values.map((exceptionValue) =>
+				exceptionValue.value ? { ...exceptionValue, value: toSafeText(exceptionValue.value) } : exceptionValue,
+			),
+		}
+	}
+
+	// drop typed content breadcrumbs and the messages of the rest
 	if (redactedEvent.breadcrumbs) {
 		redactedEvent.breadcrumbs = redactedEvent.breadcrumbs
 			.filter(({ category }) => !isPrivateBreadcrumbCategory(category))
@@ -52,8 +66,13 @@ export function isPrivateBreadcrumbCategory(category: string | undefined): boole
 
 // fields that may hold private content or credentials, including nested navigation state
 const PRIVATE_FIELD =
-	/params|arguments|headers|cookie|authorization|token|password|email|body|content|prompt|markdown|text|device_id|installation_id|^id$/i
+	/params|arguments|headers|cookie|authorization|token|password|email|body|content|prompt|markdown|text|transcript|device_id|installation_id|^id$/i
 const URL_PATTERN = /(?:[a-z][a-z\d+.-]*:\/\/|mailto:|tel:|data:)[^\s]+/gi
+
+// an app file path on either platform, such as a recording's cache file. FILE_PATH_START matches a value that is a
+// path, and FILE_PATH_PATTERN matches each path in a text
+const FILE_PATH_START = /^(?:\/private)?\/(?:var|data|storage|Users)\//
+const FILE_PATH_PATTERN = /(?:\/private)?\/(?:var|data|storage|Users)\/[^\s'"]+/g
 
 // redact nested context and span data while retaining the SDK's stack frames
 function redactDetails(record: Record<string, unknown> | undefined): Record<string, unknown> | undefined {
@@ -76,17 +95,27 @@ function redactDetails(record: Record<string, unknown> | undefined): Record<stri
 	)
 }
 
-// shape known relative routes, retain HTTP origins, and replace other matched URLs
+// shape known relative routes, and replace the urls and file paths in any other text
 function toSafeUrl(value: string | undefined): string | undefined {
 	if (!value) {
 		return value
 	}
-	if (value.startsWith("/")) {
+
+	// a route keeps its shape, and an api path keeps its first segment
+	if (value.startsWith("/") && !FILE_PATH_START.test(value)) {
 		return value.startsWith("/api/")
 			? `/api/${value.split("/")[2]?.split(/[?#]/)[0] ?? ":route"}`
 			: toReportedPath(value)
 	}
-	return value.replace(URL_PATTERN, (match) => {
+
+	// any other text loses its urls and file paths
+	return toSafeText(value)
+}
+
+// a text with each HTTP url replaced by its origin, every other url replaced, and every file path replaced
+function toSafeText(text: string): string {
+	const textWithSafeUrls = text.replace(URL_PATTERN, (match) => {
+		// an HTTP url keeps its origin, and any other url is replaced
 		try {
 			const url = new URL(match)
 			return /^https?:$/.test(url.protocol) ? url.origin : "[url]"
@@ -94,4 +123,7 @@ function toSafeUrl(value: string | undefined): string | undefined {
 			return "[url]"
 		}
 	})
+
+	// then the file paths
+	return textWithSafeUrls.replace(FILE_PATH_PATTERN, "[path]")
 }

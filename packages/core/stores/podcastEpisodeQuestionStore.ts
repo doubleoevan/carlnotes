@@ -7,29 +7,25 @@ import { type SpokenQuestionTimings, toVoiceChatPage } from "@carlnotes/client/v
 import type { ChatConversation } from "@carlnotes/contracts/chat"
 import { withPodcastEpisodeNote } from "@carlnotes/contracts/chatQuestionNotes"
 import type { PodcastEpisodeSpeaker } from "@carlnotes/contracts/enums"
-import { PLANS_PATH, PURCHASE_COPY } from "@carlnotes/contracts/plans"
 import type { PodcastEpisode } from "@carlnotes/contracts/podcast"
+import { toChatHistoryTurns } from "../lib/chatHistoryTurns"
+import { CHAT_FAILED_NOTICE } from "../lib/chatRejectionCopy"
+import { type ChatTurn, toFinishedChatTurns, toLoadedChatTurn, toSentChatTurn } from "../lib/chatTurns"
+import { toChapterAtPosition, toPodcastEpisodeSpeakerMediaMetadata } from "../lib/podcastEpisodePlayback"
+import type { VoiceRecordingHandle } from "../lib/voiceRecorder"
+import { pausePodcastEpisode, resumePodcastEpisode, toPodcastEpisodeQuestionStart } from "./podcastEpisodePlayerStore"
 import {
 	type PodcastEpisodeQuestionEnding,
 	type PodcastEpisodeQuestionPhase,
 	type PodcastEpisodeQuestionView,
 	RESUME_BEAT_MS,
 	toPodcastEpisodeResume,
-} from "@carlnotes/core/stores/podcastEpisodeQuestionRules"
-import { toEventListeners, toStoreListeners } from "@carlnotes/core/stores/storeListeners"
-import { toast } from "sonner"
-import { toChatHistoryTurns } from "@/components/chat/chatHistoryTurns"
-import { CHAT_FAILED_TOAST, CHAT_REJECTION_COPY, toastChatRejection } from "@/components/chat/chatRejectionCopy"
-import { type ChatTurn, toFinishedChatTurns, toLoadedChatTurn, toSentChatTurn } from "@/components/chat/chatTurns"
-import type { VoiceRecording } from "@/components/chat/useVoiceRecording"
-import { toChapterAtPosition, toPodcastEpisodeSpeakerMediaMetadata } from "@/lib/podcastEpisodePlayback"
-import { pausePodcastEpisode, resumePodcastEpisode, toPodcastEpisodeQuestionStart } from "./podcastEpisodePlayerStore"
+} from "./podcastEpisodeQuestionRules"
 import type { SpokenAnswerEnd } from "./spokenAnswerQueue"
-import { stopSpokenAnswerKey, subscribeToSpokenAnswerEnd } from "./spokenAnswerStore"
+import { stopSpokenAnswer, stopSpokenAnswerKey, subscribeToSpokenAnswerEnd } from "./spokenAnswerStore"
+import { toEventListeners, toStoreListeners } from "./storeListeners"
 import { toStreamedSpokenAnswer } from "./streamedSpokenAnswer"
-
-// the recording's send that ends it early and its cancel, which the question keeps
-type PodcastEpisodeQuestionRecording = Pick<VoiceRecording, "send" | "cancel">
+import { showChatRejectionNotice, showSpentBudgetNotice, showVoiceNotice } from "./voiceNoticeStore"
 
 // the question in progress
 type PodcastEpisodeQuestion = {
@@ -45,7 +41,7 @@ type PodcastEpisodeQuestion = {
 	spokenAnswerKey: string | null
 	abortController: AbortController | null
 	// the recording's send and cancel, and whether it is recording, so every podcast mic slot shows its send
-	voiceRecording: PodcastEpisodeQuestionRecording
+	voiceRecording: VoiceRecordingHandle
 	isVoiceRecording: boolean
 	// the unsubscribe of the listener that ends the question when its spoken answer ends
 	unsubscribeSpokenAnswerEnd: (() => void) | null
@@ -69,6 +65,13 @@ const podcastEpisodeQuestionChatTurnListeners = toEventListeners<PodcastEpisodeQ
  */
 export function usePodcastEpisodeQuestion(): PodcastEpisodeQuestionView & { isVoiceRecording: boolean } {
 	useStoreVersion()
+	return toPodcastEpisodeQuestionView()
+}
+
+/**
+ * Returns the question in progress as the player shows it, with whether its recording runs, for a read outside React.
+ */
+export function toPodcastEpisodeQuestionView(): PodcastEpisodeQuestionView & { isVoiceRecording: boolean } {
 	return {
 		phase: podcastEpisodeQuestion?.phase ?? "idle",
 		speaker: podcastEpisodeQuestion?.speaker ?? null,
@@ -81,7 +84,7 @@ export function usePodcastEpisodeQuestion(): PodcastEpisodeQuestionView & { isVo
  * and the chapter at the playback position, then pauses the podcast episode. Returns false with no podcast episode
  * loaded or with a question already in progress.
  */
-export function startPodcastEpisodeQuestion(voiceRecording: PodcastEpisodeQuestionRecording): boolean {
+export function startPodcastEpisodeQuestion(voiceRecording: VoiceRecordingHandle): boolean {
 	// one question at a time, so a second mic on the page never replaces a question in progress
 	const podcastEpisodeQuestionStart = toPodcastEpisodeQuestionStart()
 	if (!podcastEpisodeQuestionStart || podcastEpisodeQuestion) {
@@ -142,8 +145,8 @@ export function sendPodcastEpisodeQuestionRecording(): void {
 
 /**
  * Loads the topic's private conversation, whose history the question sends, before the microphone is asked for.
- * Returns false if the question cannot be asked: a spent budget toasts the upgrade line, and anything else the chat's
- * own words.
+ * Returns false if the question cannot be asked: a spent budget shows its notice, and anything else the chat's own
+ * words.
  */
 export async function loadPodcastEpisodeQuestionConversation(): Promise<boolean> {
 	const question = podcastEpisodeQuestion
@@ -157,12 +160,12 @@ export async function loadPodcastEpisodeQuestionConversation(): Promise<boolean>
 		return false
 	}
 
-	// a spent budget toasts the upgrade line, and any other rejection the chat's failure
+	// a spent budget shows its notice, and any other rejection the chat's failure
 	if (!chatConversation?.canChat) {
 		if (chatConversation?.isBudgetExhausted) {
-			toastSpentBudget()
+			showSpentBudgetNotice()
 		} else {
-			toast(CHAT_FAILED_TOAST)
+			showVoiceNotice(CHAT_FAILED_NOTICE)
 		}
 		return false
 	}
@@ -289,6 +292,25 @@ export function endPodcastEpisodeQuestion(questionEnding: PodcastEpisodeQuestion
 }
 
 /**
+ * Ends the question in progress for a sign-out, and drops a resume still waiting on its beat, so the podcast episode
+ * stays paused while the account leaves.
+ */
+export function endPodcastEpisodeQuestionOnSignOut(): void {
+	clearResumeTimeout()
+	endPodcastEpisodeQuestion("signedOut")
+}
+
+// the podcast audio adapter's hooks that end the question in progress: the podcast episode playing ends it and any
+// spoken answer, and a seek or a chapter skip ends it and leaves the podcast episode paused
+export const PODCAST_EPISODE_QUESTION_AUDIO_CALLBACKS = {
+	onPlaybackStarted: (): void => {
+		endPodcastEpisodeQuestion("played")
+		stopSpokenAnswer()
+	},
+	onSeek: (): void => endPodcastEpisodeQuestion("skipped"),
+}
+
+/**
  * Calls the listener each time a question on this topic changes or drops its chat turn, and returns the unsubscribe.
  */
 export function subscribeToPodcastEpisodeQuestionChatTurn(
@@ -306,25 +328,16 @@ export function subscribeToPodcastEpisodeQuestionChatTurn(
 	return podcastEpisodeQuestionChatTurnListeners.subscribe(topicListener)
 }
 
-// a chat turn that did not answer ends the question, saying why: a spent budget toasts the upgrade line, and every
-// other rejection the chat's own words. a stop already ended it
+// a chat turn that did not answer ends the question, saying why: a spent budget shows its notice, and every other
+// rejection the chat's own words. a stop already ended it
 function finishPodcastEpisodeQuestionChatTurn(question: PodcastEpisodeQuestion, chatSendResult: ChatSendResult): void {
 	if (podcastEpisodeQuestion !== question || chatSendResult === null || chatSendResult === "stopped") {
 		return
 	}
 
 	// say why, then resume the podcast episode
-	toastChatRejection(chatSendResult, toastSpentBudget)
+	showChatRejectionNotice(chatSendResult, showSpentBudgetNotice)
 	endPodcastEpisodeQuestion("failed")
-}
-
-/**
- * Toasts the spent budget's upgrade line, with the action that opens the plans page.
- */
-export function toastSpentBudget(): void {
-	toast(CHAT_REJECTION_COPY.budget, {
-		action: { label: PURCHASE_COPY.pickUpMoreCoffee, onClick: () => window.location.assign(PLANS_PATH) },
-	})
 }
 
 // the end of the question's spoken answer ends the question. a reply that finished before a word played had nothing to

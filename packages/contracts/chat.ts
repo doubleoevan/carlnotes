@@ -81,7 +81,11 @@ export const SPENT_BUDGET_LINE = "Carl is staring at an empty mug."
 export const SPOKEN_QUESTIONS_PAUSED_ERROR = "spoken questions paused"
 
 // whether spoken questions are allowed, paused by the spoken questions cutoff, or stopped by a spent budget
-export type SpokenQuestionsState = { status: "allowed" | "paused" | "budget" }
+export const spokenQuestionsState = z.object({ status: z.enum(["allowed", "paused", "budget"]) })
+export type SpokenQuestionsState = z.infer<typeof spokenQuestionsState>
+
+// a transcribed recording's text
+export const transcriptionResponse = z.object({ transcript: z.string() })
 
 // how long a flag's reason can be
 export const FLAG_REASON_MAX_CHARS = 1000

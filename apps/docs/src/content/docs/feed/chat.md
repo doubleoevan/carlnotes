@@ -37,7 +37,8 @@ conversation reloads its saved history. A connection interruption never sends yo
 The phone uses the same conversation, permissions, Topic proposals, and rejection wording as the web. Tables in answers
 become cards with a label for each column. Raw HTML remains text, and only HTTP and HTTPS links open. Files already in
 history appear as name chips. The selector also lists **Give Carl a topic. You know the one.**, the
-[new-topic chat](/docs/feed/making-a-topic-in-chat/). To speak with Carl or hear an answer, use the web.
+[new-topic chat](/docs/feed/making-a-topic-in-chat/). Talking to Carl out loud works on the phone too, as
+[Talk to Carl](#talk-to-carl) says.
 
 ### Files on your phone
 
@@ -89,7 +90,7 @@ open what you attach. Context that should describe how a topic is brewed belongs
 
 ## Talk to Carl
 
-On the web, while the message box is empty, the send button is a microphone. Tap it and ask. Carl listens while you talk. He sends
+While the message box is empty, the send button is a microphone. Tap it and ask. Carl listens while you talk. He sends
 the question on his own 1.5 seconds after you stop, so there is nothing to press when you are done. A bar takes the
 box's place, with a cancel button, a level meter, a timer, and a send button for sending early. A question sends itself
 after one minute. If Carl hears no words, he says he didn't catch that, and the box comes back empty.
@@ -111,9 +112,14 @@ question. Say nothing for 8 seconds and the conversation ends quietly, or tap ca
 mid-answer or typing a question also ends it. The next tap starts a new conversation.
 
 Speaking with Carl pauses once the month's spend reaches 15% of the coffee fund on **Free**, 40% on **Plus**, or 50% on
-**Premium**. Past that, the microphone opens the plans page. On **Premium**, it says when speaking comes back instead.
-You can still text with Carl. See
+**Premium**. Past that, the microphone opens the plans page. On **Premium**, and on every plan in the app, it says when
+speaking comes back instead. You can still text with Carl. See
 [When the coffee fund runs low](/docs/account/plans-and-limits/#when-the-coffee-fund-runs-low).
+
+On your phone, the first tap asks to use the microphone. If you say no, Carl says he can't hear you, and if the phone
+won't ask again, **Open settings** opens CarlNotes in your phone's settings. A Bluetooth headset works as the
+microphone and the speaker. Leaving the app while Carl listens cancels the question, and a call or an unplugged headset
+stops his answer. Your lock screen shows Carl while he talks.
 
 A question asked from the podcast player's microphone shows up here too. It sits under a small tag naming the episode
 and the chapter it was asked during. Tap the tag to play that chapter. If Vienna answered it, her answer shows her

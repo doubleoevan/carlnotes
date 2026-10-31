@@ -97,3 +97,6 @@ export const idAndAttachmentParam = z.object({ id: z.string(), attachmentId: z.s
 export const idAndUserParam = z.object({ id: z.string(), userId: z.string() })
 export const userIdParam = z.object({ userId: z.string() })
 export const multipartFile = (fieldName: string): z.ZodType => z.object({ [fieldName]: z.any() })
+
+// a recording's multipart post: its voice chat page as json beside the recording's file
+export const voiceRecordingMultipart = z.object({ page: z.string(), recording: z.any() })

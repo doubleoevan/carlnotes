@@ -11,25 +11,8 @@ import { Button } from "@/components/primitives/button"
 import { Icon } from "@/components/primitives/icon"
 import { ChatAttachmentChips } from "./ChatAttachmentChips"
 
-/**
- * Keeps the web's composer, its attachment chips, and Stop control above the native keyboard.
- */
-export function ChatComposer({
-	value,
-	onChange,
-	onSend,
-	onStop,
-	isStreaming,
-	isDisabled,
-	placeholder = CHAT_QUESTION_PLACEHOLDER,
-	maxLength = CHAT_QUESTION_CHARS,
-	inputProps,
-	inputRef,
-	header,
-	attachments = [],
-	onRemoveAttachment,
-	attachmentActions,
-}: {
+// the draft, its send and stop, and how the box reads and grows
+type ComposerBoxProps = {
 	value: string
 	onChange: (value: string) => void
 	onSend: () => void
@@ -40,16 +23,29 @@ export function ChatComposer({
 	maxLength?: number
 	inputProps?: TextInputProps
 	inputRef?: Ref<ComponentRef<typeof TextInput>>
-	header?: ReactNode
 	// the files waiting on the next send, and the attach and kept-files controls beside the draft
 	attachments?: ChatAttachment[]
-	onRemoveAttachment?: (index: number) => void
 	attachmentActions?: ReactNode
+	// what takes Send's place while nothing streams, such as the mic of an empty box
+	sendSlot?: ReactNode
+}
+
+/**
+ * Keeps the web's composer, its attachment chips, and Stop control above the native keyboard. A send slot takes the
+ * Send button's place, and a recording bar takes the box's place while a recording runs.
+ */
+export function ChatComposer({
+	header,
+	onRemoveAttachment,
+	recordingBar,
+	...composerBoxProps
+}: ComposerBoxProps & {
+	header?: ReactNode
+	onRemoveAttachment?: (index: number) => void
+	// the recording bar, which replaces the box while a recording runs
+	recordingBar?: ReactNode
 }) {
-	// grow the native input within the keyboard-safe composer
-	const { theme } = useUniwind()
-	const [inputContentHeight, setInputContentHeight] = useState(44)
-	const [inputViewportHeight, setInputViewportHeight] = useState(120)
+	// keep the header's content height for the header scroll's minimum height
 	const [headerHeight, setHeaderHeight] = useState(0)
 	// shrink only into a header's scroll, so the chips and the draft never clip under a sibling draft card
 	return (
@@ -66,43 +62,93 @@ export function ChatComposer({
 				</ScrollView>
 			)}
 			{/* the files waiting on the send, each removable until it goes */}
-			{onRemoveAttachment && <ChatAttachmentChips attachments={attachments} onRemove={onRemoveAttachment} />}
-			{/* shrink the draft before allowing Send to leave the keyboard-safe area */}
-			<View
-				className="min-h-16 shrink flex-row items-end gap-2 rounded-xl border border-border bg-bubble p-2"
-				style={{ height: Math.min(120, Math.max(44, inputContentHeight)) + 18 }}
-				onLayout={(event) => setInputViewportHeight(Math.max(44, event.nativeEvent.layout.height - 18))}
-			>
-				{attachmentActions && <View className="flex-row items-center">{attachmentActions}</View>}
-				<TextInput
-					ref={inputRef}
-					{...inputProps}
-					accessibilityLabel="Message"
-					testID="chat-message"
-					value={value}
-					onChangeText={onChange}
-					multiline
-					maxLength={maxLength}
-					editable={!isDisabled && !isStreaming}
-					placeholder={placeholder}
-					placeholderTextColor={colors.mutedForeground[theme === "dark" ? "dark" : "light"]}
-					className="flex-1 font-sans text-sm text-foreground"
-					style={{
-						minHeight: 44,
-						height: inputViewportHeight,
-						textAlignVertical: "top",
-					}}
-					onContentSizeChange={(event) => setInputContentHeight(event.nativeEvent.contentSize.height)}
-				/>
-				<Button
-					size="icon"
-					accessibilityLabel={isStreaming ? "Stop" : "Send"}
-					disabled={!isStreaming && (isDisabled || (!value.trim() && attachments.length === 0))}
-					onPress={isStreaming ? onStop : onSend}
-				>
-					<Icon as={isStreaming ? Square : ArrowUp} className="size-4" fill={isStreaming ? "currentColor" : "none"} />
-				</Button>
-			</View>
+			{onRemoveAttachment && (
+				<ChatAttachmentChips attachments={composerBoxProps.attachments ?? []} onRemove={onRemoveAttachment} />
+			)}
+			{/* the recording bar replaces the box while a recording runs */}
+			{recordingBar ? (
+				<View className="min-h-16 flex-row items-center rounded-xl border border-border bg-bubble p-2">
+					{recordingBar}
+				</View>
+			) : (
+				<ComposerBox {...composerBoxProps} />
+			)}
 		</View>
+	)
+}
+
+// the draft's box, which shrinks before allowing Send to leave the keyboard-safe area
+function ComposerBox({
+	value,
+	onChange,
+	onSend,
+	onStop,
+	isStreaming,
+	isDisabled,
+	placeholder = CHAT_QUESTION_PLACEHOLDER,
+	maxLength = CHAT_QUESTION_CHARS,
+	inputProps,
+	inputRef,
+	attachments = [],
+	attachmentActions,
+	sendSlot,
+}: ComposerBoxProps) {
+	// the native input grows with its draft, or with its placeholder while empty, and stretches to fill the box if
+	// the keyboard leaves the box less room
+	const { theme } = useUniwind()
+	return (
+		<View className="min-h-16 shrink flex-row items-end gap-2 rounded-xl border border-border bg-bubble p-2">
+			{attachmentActions && <View className="flex-row items-center">{attachmentActions}</View>}
+			<TextInput
+				ref={inputRef}
+				{...inputProps}
+				accessibilityLabel="Message"
+				testID="chat-message"
+				value={value}
+				onChangeText={onChange}
+				multiline
+				maxLength={maxLength}
+				editable={!isDisabled && !isStreaming}
+				placeholder={placeholder}
+				placeholderTextColor={colors.mutedForeground[theme === "dark" ? "dark" : "light"]}
+				className="flex-1 font-sans text-sm text-foreground"
+				style={{
+					alignSelf: "stretch",
+					minHeight: 44,
+					maxHeight: 120,
+					textAlignVertical: "top",
+				}}
+			/>
+			{/* the send slot takes Send's place while nothing streams */}
+			{!isStreaming && sendSlot ? (
+				sendSlot
+			) : (
+				<SendButton
+					isStreaming={isStreaming}
+					isDisabled={isDisabled || (!value.trim() && attachments.length === 0)}
+					onSend={onSend}
+					onStop={onStop}
+				/>
+			)}
+		</View>
+	)
+}
+
+// Send, or Stop while an answer streams
+function SendButton({
+	isStreaming,
+	isDisabled,
+	onSend,
+	onStop,
+}: Pick<ComposerBoxProps, "isStreaming" | "isDisabled" | "onSend" | "onStop">) {
+	return (
+		<Button
+			size="icon"
+			accessibilityLabel={isStreaming ? "Stop" : "Send"}
+			disabled={!isStreaming && isDisabled}
+			onPress={isStreaming ? onStop : onSend}
+		>
+			<Icon as={isStreaming ? Square : ArrowUp} className="size-4" fill={isStreaming ? "currentColor" : "none"} />
+		</Button>
 	)
 }

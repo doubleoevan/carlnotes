@@ -4,6 +4,7 @@ import { showClientError } from "@carlnotes/client/apiClient"
 import { MAX_ATTACHMENT_IMAGE_PIXELS, toResizedImage, UNREADABLE_IMAGE_TEXT } from "@carlnotes/core/lib/imageUpload"
 import { Directory, File, Paths } from "expo-file-system"
 import { ImageManipulator, SaveFormat } from "expo-image-manipulator"
+import { deleteCacheFile } from "@/cacheFiles"
 import { isPickedImage, type PickedFile, toRenamedFileName } from "@/pickedFiles"
 
 // the jpeg quality an attached photo re-encodes at
@@ -75,15 +76,7 @@ export function toMeasuredPickedFile(pickedFile: PickedFile): PickedFile {
  * Deletes a picked file's cached copy. A copy already gone is ignored.
  */
 export function deletePickedFile(pickedFile: Pick<PickedFile, "uri">): void {
-	try {
-		// delete the copy if it is still there
-		const file = new File(pickedFile.uri)
-		if (file.exists) {
-			file.delete()
-		}
-	} catch (error) {
-		console.warn("picked file delete failed", error)
-	}
+	deleteCacheFile(pickedFile.uri)
 }
 
 /**

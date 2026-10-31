@@ -1,7 +1,6 @@
-import { XLSX_TYPE } from "@carlnotes/contracts/attachmentTypes"
+import { toBaseContentType, XLSX_TYPE } from "@carlnotes/contracts/attachmentTypes"
 // a table file's text: its sheets serialized to rows, clipped to the limits, and laid out for the model
 import { MAX_ATTACHMENT_CONTEXT_CHARS } from "@carlnotes/contracts/topics"
-import { toBaseContentType } from "./attachContentType"
 
 // the line that starts each Excel sheet's section in a serialized workbook
 const SHEET_MARKER_PATTERN = /^=== sheet: (.*) ===$/

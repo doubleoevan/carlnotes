@@ -8,8 +8,8 @@ import {
 	CHAT_MENTION_PUSH_LABEL,
 	NOTIFICATIONS_SECTION_TEXT,
 	NOTIFICATIONS_SECTION_TITLE,
+	OPEN_SETTINGS_LABEL,
 	PUSH_DENIED_TEXT,
-	PUSH_OPEN_SETTINGS_LABEL,
 	PUSH_PERMISSION_SHEET,
 	PUSH_UNDETERMINED_TEXT,
 	TOPIC_PUSH_LABEL,
@@ -17,7 +17,7 @@ import {
 import { SAVE_FAILED_TEXT } from "../lib/sessionCopy"
 import type { AccountFieldElements } from "./AccountFields"
 
-// whether the phone lets the app notify: allowed, refused in the system settings, or never asked
+// whether the phone lets the app notify: allowed, denied in the system settings, or never asked
 export type PushPermission = "granted" | "denied" | "undetermined"
 
 // the account's saved push preferences, null until the user first grants permission
@@ -61,7 +61,7 @@ export type NotificationsCardProps = {
 
 /**
  * Shows the account's Notifications card: one switch for each kind of push, a button that asks before the phone was ever
- * asked, and a link to the system settings after it refused.
+ * asked, and a link to the system settings after a denial.
  */
 export function NotificationsCard({
 	elements,
@@ -87,7 +87,7 @@ export function NotificationsCard({
 				{...switchStates["chat-mention"]}
 				onChange={(isEnabled) => onChange("chat-mention", isEnabled)}
 			/>
-			{/* the permission prompt before the first ask, and the system settings after a refusal */}
+			{/* the permission prompt before the first ask, and the system settings after a denial */}
 			{pushPermission === "undetermined" && (
 				<>
 					<Text className="text-muted-foreground mt-2 text-sm">{PUSH_UNDETERMINED_TEXT}</Text>
@@ -97,7 +97,7 @@ export function NotificationsCard({
 			{pushPermission === "denied" && (
 				<>
 					<Text className="text-muted-foreground mt-2 text-sm">{PUSH_DENIED_TEXT}</Text>
-					<Button label={PUSH_OPEN_SETTINGS_LABEL} onPress={onOpenSettings} />
+					<Button label={OPEN_SETTINGS_LABEL} onPress={onOpenSettings} />
 				</>
 			)}
 			{error && <Text className="text-destructive mt-2 text-sm">{error}</Text>}

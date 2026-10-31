@@ -7,7 +7,8 @@ submission: a row that no longer matches its module is wrong, not the module.
 The dependencies are in `apps/mobile/package.json`, and the request headers are in `apps/mobile/src/deviceTelemetry.ts`.
 PostHog is in `apps/mobile/src/visitAnalytics.ts`, and Sentry is in `apps/mobile/src/monitoring.ts` and
 `monitoringRedaction.ts`. The saved feed is in `apps/mobile/src/queryCache.ts` and `queryCacheRules.ts`, and the session
-cookie is in `apps/mobile/src/authClient.ts`. The permissions are in `apps/mobile/app.config.ts`. The server events are
+cookie is in `apps/mobile/src/authClient.ts`. The permissions are in `apps/mobile/app.config.ts`, and the voice modules
+are in the Voice section of `apps/mobile/AGENTS.md`. The server events are
 in `packages/server/analytics.ts` and `apps/api/currentUser.ts`, and account deletion is in `apps/api/users.ts`.
 `apps/web/src/pages/PrivacyPage.tsx` shows what the policy already discloses.
 
@@ -37,9 +38,12 @@ inventory does not find; the policy text needs the same update before the store 
 | Saved Feed and the last visible Topic page | `queryCache.ts`, AsyncStorage key `carlnotes:feed:<userId>` | Reading what was already loaded while offline | Yes, keyed by the account's user id on the device | No | None. Nothing leaves the device | Removed on sign-out, on a session the api ends, and on a build identity change. Account deletion retires the session first |
 | Tasting Note drafts | `noteDraftStorage.ts`, AsyncStorage prefix `NOTE_DRAFT_PREFIX` from `packages/core/lib/noteDrafts.ts` (`carlnotes.note-drafts.v1:`) | Keeping typed text through an offline stretch or a restart | Yes, per account and note, on the device | No | None | Removed on a successful save, sign-out, revoked access, and accepted deletion |
 | Appearance choice | AsyncStorage, `theme.ts` | Light or dark | No | No | None | Stays until changed. Not account data |
-| Avatar photo | `expo-image-picker` with the Photos permission, `expo-image-manipulator` to resize, then the api. No camera, no microphone | The profile avatar the person chooses | Yes | No | Cloudflare R2 holds the file | Deleted with the account, or replaced |
+| Avatar photo | `expo-image-picker` with the Photos permission, `expo-image-manipulator` to resize, then the api. No camera. The picker records nothing; its microphone purpose line is the voice row's, which the picker's config would otherwise remove | The profile avatar the person chooses | Yes | No | Cloudflare R2 holds the file | Deleted with the account, or replaced |
 | Team avatar | `expo-image-picker`, the same way, through `teamClient.sendTeamAvatarBody` | The team's avatar | Yes, to the team | No | Cloudflare R2 | Deleted with the team |
 | Topic attachments | `expo-document-picker` in `TopicAttachmentEditor.tsx` for the chosen file, sent through `uploadTopicAttachmentBody`. `expo-file-system` in `TopicAttachmentLink.tsx` downloads an owner's attachment to the app's cache to open it, and removes the file when the screen closes. Chat attachments are deferred to Prompt 53 | What the person attaches to a topic on purpose | Yes | No | Cloudflare R2. The model providers read a topic attachment on a scan | Deleted with the topic or the account |
+| Microphone recording of a spoken question | `expo-audio` in `voiceRecorder.ts`, only after a mic tap and the system's microphone prompt (`voicePermission.ts`). The recording is AAC in a `voice-recording-*` cache file, sent through `voiceClient.sendTranscription`, then deleted. The api transcodes it in memory and has Google's Gemini transcribe it with storage turned off. The api never stores the recording | Asking Carl, or Carl and Vienna, a question out loud | Yes, the request carries the session | No | Google, which transcribes it and may log it for up to 55 days for abuse monitoring only, and never trains on it | The cache file is deleted once sent, on cancel, on a failure, on sign-out, and by the launch sweep (`voiceCacheFiles.ts`). The api keeps none. The transcript is a chat message, as the chat row says |
+| A spoken answer's audio | `spokenAnswerAudio.ts` plays the audio that `voiceClient.fetchSpokenAnswerAudio` returns for a reply's text, from a `spoken-part-*` cache file | Carl reading his reply out loud | Yes, the request carries the session | No | Google, which speaks the reply's text, as the Privacy policy names | Each part's file is deleted once it plays, on stop, on a failure, on sign-out, and by the launch sweep. Nothing is kept on the server |
+| Spoken question timings | `voiceClient.sendSpokenQuestionEvent` and `sendSpokenEvent`: how long the recording, the transcription, and the wait for the first word took, and a play tap | Measuring how fast a spoken answer starts | Yes, by account id. No audio or text | No | PostHog | Up to 12 months |
 | Last chosen AI provider in the Add to AI dialog | AsyncStorage, `AddToAiDialog.tsx` | Preselecting the provider next time | No | No | None | Stays until changed. Not account data |
 | Install integrity evidence | `@expo/app-integrity`: App Attest on iOS, Play Integrity on Android, on an email sign-up only | Proving the sign-up comes from a genuine install | No. The api verifies the evidence and keeps the result of the check | No | Apple or Google issue the evidence | The evidence is not stored with the account |
 | Apple sign-in nonce | `expo-crypto` in `appleSignIn.ts`: a random UUID and its SHA-256, sent to Apple's sheet | Binding the Apple credential to this request | No | No | Apple | Discarded after the sign-in |
@@ -54,26 +58,28 @@ and the UI libraries send nothing of their own. `expo-web-browser` is the system
 store, and is never given the session. `react-native-sse` is the room stream, and it sends the session headers above.
 `react-native-webview` and `react-native-youtube-iframe` are the YouTube player, limited to the player document.
 `expo-apple-authentication` opens Apple's sheet and returns the credential the first row covers. `expo-audio` plays
-audio in the background and asks for no microphone. The config plugin sets `microphonePermission: false` and
-`recordAudioAndroid: false`.
+audio in the background and records a spoken question after a mic tap. The config plugin sets the microphone purpose
+line and `recordAudioAndroid: true`, and keeps background recording off.
 
 ## Apple App Privacy answers
 
-Collected and linked to the person's identity, not used for tracking: Contact info, User content, Identifiers, and Usage
-data. The Expo push token is a device identifier linked to the account and used for app functionality only. Contact info
-is the email address and name. User content is the topics, findings, notes, messages, comments, and
-attachments they create, and photos they choose as an avatar. Identifiers are the account id, on server events. Usage
-data is product interaction, on server events keyed to the account.
+Collected and linked to the person's identity, not used for tracking: Contact info, User content, Audio data,
+Identifiers, and Usage data. The Expo push token is a device identifier linked to the account and used for app
+functionality only. Contact info is the email address and name. User content is the topics, findings, notes, messages,
+comments, and attachments they create, and photos they choose as an avatar. Identifiers are the account id, on server
+events. Usage data is product interaction, on server events keyed to the account. Audio data is a spoken question's
+recording, for app functionality. The api keeps none of it, but Google may log it for abuse monitoring for up to 55
+days, longer than the real-time servicing Apple exempts, so it is declared.
 
 Collected and not linked to identity, not used for tracking: Diagnostics (crash data, performance data), and Usage data
 (the PostHog screen and visit events, which include no person profile or device identifier).
 
 Data Not Collected, which the code shows: Location, Financial info, Health and fitness, Contacts, Browsing history,
-Search history, Sensitive info, Purchases, Advertising data, Audio data, and Other user content outside the rows above.
+Search history, Sensitive info, Purchases, Advertising data, and Other user content outside the rows above.
 Device ID is collected once the person allows notifications: the Expo push token, for app functionality only. Location
 is off because geoip is off and no location module is installed. A search query goes to the api and
-is not stored or sent to analytics. No vendor, advertising, or installation identifier is read. The app uses no
-microphone.
+is not stored or sent to analytics. No vendor, advertising, or installation identifier is read. The microphone
+records only after a mic tap, never in the background.
 
 Tracking: No. The app has no advertising SDK, no data broker, and no cross-app identifier. The App Tracking
 Transparency prompt is never shown.
@@ -88,14 +94,18 @@ Transparency prompt is never shown.
   subject "Delete my CarlNotes account". Requests are answered within 30 days. The policy's section is
   `https://carlnotes.com/privacy#delete-your-carlnotes-account`.
 - Data types collected: Personal info (name, email address, user ids), Photos (an avatar the person chooses), Files and
-  docs (attachments the person chooses), Messages (chat messages, notes, comments), App activity (app interactions), and
-  App info and performance (crash logs, diagnostics). In-app search history is not retained. Device or other IDs: the
-  Expo push token, once the person allows notifications, for app functionality.
+  docs (attachments the person chooses), Messages (chat messages, notes, comments), Audio (voice or sound recordings: a
+  spoken question, optional, for app functionality, not processed ephemerally since Google may log it for abuse
+  monitoring), App activity (app interactions), and App info and performance (crash logs, diagnostics). In-app search
+  history is not retained. Device or other IDs: the Expo push token, once the person allows notifications, for app
+  functionality.
 - Data types shared: App info and performance with Sentry, App activity with PostHog, as the rows above say. The push
   token goes to Expo's push service as a processor that delivers the notification, which Play counts as a service
-  provider, not sharing. No data is shared for advertising.
+  provider, not sharing. A spoken question's recording goes to Google as the service provider that transcribes it. No
+  data is shared for advertising.
 - Purposes: App functionality, Analytics, Account management, Fraud prevention and security (the install check).
-- Optional or required: Email is required for an account. Name, avatar, attachments, and messages are optional.
+- Optional or required: Email is required for an account. Name, avatar, attachments, messages, and recordings are
+  optional.
 - Independent security review: No.
 - Government app: No.
 

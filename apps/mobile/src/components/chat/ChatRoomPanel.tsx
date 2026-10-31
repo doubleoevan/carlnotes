@@ -30,6 +30,7 @@ import { ChatOptionsMenu } from "./ChatOptionsMenu"
 import { ChatRejectionNotice } from "./ChatRejectionNotice"
 import { ChatRoomComposer } from "./ChatRoomComposer"
 import { ChatRoomMessageBubble } from "./ChatRoomMessageBubble"
+import { showChatNotice } from "./chatNotice"
 import { TopicDraftCard } from "./TopicDraftCard"
 import { useChatRoomStream } from "./useChatRoomStream"
 
@@ -57,7 +58,7 @@ export function ChatRoomPanel({
 		teamId,
 		userId,
 		useStream: useChatRoomStream,
-		onNotice: (chatMessage) => Alert.alert("Coffee Talk", chatMessage),
+		onNotice: showChatNotice,
 	})
 	const { memberUsernames, isTeamLeader } = useRoomMembers(teamId, userId, loadedTeam)
 	const chatRoomReply = useRoomReply(chatRoom, userId)
@@ -232,7 +233,7 @@ export function ChatRoomContent({
 						now={now}
 						canDelete={chatMessage.authorUserId === userId || canModerate}
 						isLinkPreviewLoading={chatRoom.loadingChatMessageIds.has(chatMessage.id)}
-						voiceChatPage={null}
+						voiceChatPage={chatRoom.voiceChatPage}
 						onReply={chatRoomReply.selectChatMessage}
 						onQuoteClick={(chatMessageId) => setScrollTarget({ key: String(chatMessageId) })}
 						onAttachmentDelete={onAttachmentDelete}
@@ -274,7 +275,13 @@ export function ChatRoomContent({
 				/>
 			)}
 			{/* composer */}
-			<ChatRoomComposer reply={chatRoomReply} memberUsernames={memberUsernames} onPost={chatRoom.postChatMessage} />
+			<ChatRoomComposer
+				reply={chatRoomReply}
+				memberUsernames={memberUsernames}
+				voiceChatPage={chatRoom.voiceChatPage}
+				onPost={chatRoom.postChatMessage}
+				onBudgetRejected={chatRoom.showBudgetRejection}
+			/>
 		</View>
 	)
 }
