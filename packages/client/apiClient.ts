@@ -35,6 +35,9 @@ export type ApiClientSettings = {
 	toResponseSchema?: <Schema extends z.ZodType>(schema: Schema) => z.ZodType<z.output<Schema>>
 	// what a tolerant parse that dropped entries does: the app records the route and the count, with no content
 	onTolerantReadIssue?: (issue: TolerantReadIssue) => void
+	// the app's read of a local file's bytes, which a native file part posts. the app's fetch encodes a file part from
+	// its bytes and rejects a part that has only a uri
+	readNativeFileBytes?: (uri: string) => Promise<Uint8Array>
 }
 
 // a tolerant parse that dropped list or record entries: the route, with each id segment replaced by `:id`, and how many
@@ -249,8 +252,13 @@ export type NativeFilePart = { uri: string; name: string; type: string }
 
 /**
  * Appends a native file part to a multipart body. React Native's FormData takes a local file descriptor in place of a
- * browser Blob, which the DOM's FormData type does not know.
+ * browser Blob, which the DOM's FormData type does not know. The part reads its bytes through the app's configured
+ * reader.
  */
 export function appendNativeFilePart(formData: FormData, fieldName: string, nativeFilePart: NativeFilePart): void {
-	formData.append(fieldName, nativeFilePart as unknown as Blob)
+	const { readNativeFileBytes } = apiClientSettings
+	const filePart = readNativeFileBytes
+		? { ...nativeFilePart, bytes: () => readNativeFileBytes(nativeFilePart.uri) }
+		: nativeFilePart
+	formData.append(fieldName, filePart as unknown as Blob)
 }

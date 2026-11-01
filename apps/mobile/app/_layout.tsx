@@ -25,6 +25,7 @@ import {
 import { BottomSheetModalProvider } from "@gorhom/bottom-sheet"
 import { PortalHost } from "@rn-primitives/portal"
 import * as Sentry from "@sentry/react-native"
+import { File } from "expo-file-system"
 import { useFonts } from "expo-font"
 import { ErrorBoundary as ExpoErrorBoundary, router, Stack, useNavigationContainerRef, usePathname } from "expo-router"
 import * as SplashScreen from "expo-splash-screen"
@@ -60,13 +61,15 @@ startMonitoring()
 
 // configure the shared api client once before the first screen renders, after the auth client that its headers read.
 // every request sends the stored session cookie, a 401 signs a revoked session out, a 426 opens the update notice, and
-// every response parses through the tolerant form of its contract. an error shows as a native alert
+// every response parses through the tolerant form of its contract. an error shows as a native alert, and a file part
+// posts the bytes of its local file
 configureApiClient({
 	apiBaseUrl,
 	showError: (message) => Alert.alert("CarlNotes", message),
 	onTermsOutdated: requestTermsAcceptance,
 	toResponseSchema: toTolerantResponseSchema,
 	onTolerantReadIssue: reportTolerantReadIssue,
+	readNativeFileBytes: (uri) => new File(uri).bytes(),
 	...mobileApiRequestSettings,
 })
 

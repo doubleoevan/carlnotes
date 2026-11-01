@@ -1,9 +1,39 @@
-// api client tests: the configured headers and credentials on a typed call and a plain fetch, the 401 report, and a
-// client configured with none of them
+// api client tests: the configured headers and credentials on a typed call and a plain fetch, the 401 report, a
+// client configured with none of them, and the bytes reader on a native file part
 import { afterEach, expect, test } from "bun:test"
 import { toTolerantResponseSchema } from "@carlnotes/contracts/tolerantReads"
 import { z } from "zod"
-import { type ApiResponse, apiClient, configureApiClient, fetchApi, readApiResponse } from "./apiClient"
+import {
+	type ApiResponse,
+	apiClient,
+	appendNativeFilePart,
+	configureApiClient,
+	fetchApi,
+	readApiResponse,
+} from "./apiClient"
+
+// a native file part reads its bytes through the configured reader, which the app's fetch encodes
+test("a native file part reads its bytes through the configured reader", async () => {
+	configureApiClient({
+		apiBaseUrl: "",
+		showError: () => {},
+		readNativeFileBytes: async (uri) => new TextEncoder().encode(uri),
+	})
+
+	// record the appended part instead of letting Bun's FormData turn the object into a string
+	const appendedParts: unknown[] = []
+	const formData = { append: (_name: string, part: unknown) => appendedParts.push(part) } as unknown as FormData
+	appendNativeFilePart(formData, "recording", {
+		uri: "file:///recording.m4a",
+		name: "recording.mp4",
+		type: "audio/mp4",
+	})
+
+	// the part keeps its name and type, and its bytes come from the reader
+	const filePart = appendedParts[0] as { name: string; type: string; bytes: () => Promise<Uint8Array> }
+	expect(filePart).toMatchObject({ name: "recording.mp4", type: "audio/mp4" })
+	expect(new TextDecoder().decode(await filePart.bytes())).toBe("file:///recording.m4a")
+})
 
 // what the stubbed fetch records of each request: its url and the init the client built
 type RecordedRequest = { url: string; init: RequestInit }
