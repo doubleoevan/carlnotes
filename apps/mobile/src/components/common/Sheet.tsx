@@ -47,9 +47,11 @@ export function Sheet({ title, children, onClose, triggerRef, hasHighlightedScro
 	const scrollOffset = useRef(new Animated.Value(0)).current
 	const [viewportHeight, setViewportHeight] = useState(0)
 	const [contentHeight, setContentHeight] = useState(0)
+	const isUnmountedRef = useRef(false)
 	useEffect(() => {
 		// keep the previous screen's keyboard from covering the sheet's actions
 		Keyboard.dismiss()
+		isUnmountedRef.current = false
 		sheetRef.current?.present()
 		const back = BackHandler.addEventListener("hardwareBackPress", () => {
 			sheetRef.current?.dismiss()
@@ -57,6 +59,7 @@ export function Sheet({ title, children, onClose, triggerRef, hasHighlightedScro
 		})
 		return () => {
 			// restore focus when a choice unmounts the sheet as well as after a swipe
+			isUnmountedRef.current = true
 			back.remove()
 			const trigger = triggerRef?.current && findNodeHandle(triggerRef.current)
 			if (trigger) {
@@ -65,9 +68,13 @@ export function Sheet({ title, children, onClose, triggerRef, hasHighlightedScro
 		}
 	}, [triggerRef])
 
-	// restore the trigger only after the sheet has left the accessibility tree
+	// restore the trigger only after the sheet has left the accessibility tree. a sheet that its parent replaced, as the
+	// topic editor replaces the editor choice, finishes its close animation after it unmounts, and that dismiss closes
+	// nothing
 	const handleDismiss = (): void => {
-		onClose()
+		if (!isUnmountedRef.current) {
+			onClose()
+		}
 	}
 	const handleChange = (index: number): void => {
 		if (index < 0) {
