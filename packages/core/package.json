@@ -12,7 +12,7 @@
 		"@carlnotes/contracts": "workspace:*",
 		"@carlnotes/nightshift": "workspace:*",
 		"@tanstack/react-query": "^5.105.0",
-		"markdown-to-jsx": "^9.10.3"
+		"markdown-to-jsx": "^9.10.4"
 	},
 	"peerDependencies": {
 		"react": "^19.3.0"
