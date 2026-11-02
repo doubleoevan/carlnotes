@@ -2,12 +2,12 @@
 // a token is no longer good
 
 import { db } from "@carlnotes/db"
+import { loadUserEmail, toInviteAddressedToUserFilter } from "@carlnotes/db/inviteFilters"
 import { invites } from "@carlnotes/db/schema/invites"
 import { teamMembers, teams } from "@carlnotes/db/schema/teams"
 import { topics } from "@carlnotes/db/schema/topics"
-import { users } from "@carlnotes/db/schema/users"
 import { trackEvent } from "@carlnotes/server/analytics"
-import { and, eq, isNull, or, type SQL, sql } from "drizzle-orm"
+import { and, eq, sql } from "drizzle-orm"
 import { isLeaderRole } from "../authorization"
 import type { AnalyticsProperties } from "../currentUser"
 import { joinTeam, toTeamRole } from "../team/members"
@@ -200,20 +200,6 @@ export async function isInviteForUser(
 	return Boolean(userEmail?.isEmailVerified && userEmail.email === invite.email)
 }
 
-// the user's address and whether it is verified
-type UserEmail = { email: string; isEmailVerified: boolean }
-
-/**
- * Loads the user's address and whether it is verified, or undefined for a missing user.
- */
-export async function loadUserEmail(userId: string): Promise<UserEmail | undefined> {
-	const [userEmail] = await db
-		.select({ email: users.email, isEmailVerified: users.emailVerified })
-		.from(users)
-		.where(eq(users.id, userId))
-	return userEmail
-}
-
 /**
  * Whether a live invitation other than the one being accepted admits the accepter on its own.
  */
@@ -244,23 +230,6 @@ async function toAutomaticInvite(
 		.from(invites)
 		.where(and(eq(invites.teamId, teamId), toInviteAddressedToUserFilter({ userId, ...userEmail })))
 	return userInvites.find((invite) => isAutomaticInvite(invite, acceptedInviteId, new Date())) ?? null
-}
-
-// the user an invitation may address, by id or by a verified address
-type InviteAddressedToUserOptions = { userId: string } & UserEmail
-
-/**
- * The filter for the invitations addressed to a user. A username invitation matches by the invited user id, and an
- * email invitation matches by its address only for a verified user.
- */
-export function toInviteAddressedToUserFilter({
-	userId,
-	email,
-	isEmailVerified,
-}: InviteAddressedToUserOptions): SQL | undefined {
-	// a username invitation names the account outright
-	const usernameInviteFilter = and(isNull(invites.email), eq(invites.invitedUserId, userId))
-	return isEmailVerified ? or(usernameInviteFilter, eq(invites.email, email)) : usernameInviteFilter
 }
 
 // one use spent from the token, conditional on the limit. false if the link had none left

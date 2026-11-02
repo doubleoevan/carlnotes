@@ -8,7 +8,9 @@ import { scans } from "@carlnotes/db/schema/scans"
 import { teamMembers, teams, teamTopics } from "@carlnotes/db/schema/teams"
 import { topics } from "@carlnotes/db/schema/topics"
 import { sessions, users } from "@carlnotes/db/schema/users"
+import { loadUpdateCount } from "@carlnotes/db/updateCounts"
 import { appBaseUrl } from "@carlnotes/server/appUrl"
+import { runWithConcurrency } from "@carlnotes/server/concurrency"
 import { and, eq, gt, inArray, ne, type SQLWrapper, sql } from "drizzle-orm"
 import { toDigestSubscriberIdsQuery } from "./notify"
 import { deliverPushes, type PushOutcome, type PushProgress, UNWATCHED_PUSH_PROGRESS } from "./pushDelivery"
@@ -49,10 +51,17 @@ export async function sendScanPush(
 	const { topic } = scanTopic
 	const livePushDevices = await loadLivePushDevices(toDigestSubscriberIdsQuery(topic.id), "topic-scan")
 
-	// every phone gets the same push, which opens the Topic
+	// every phone gets the same push, which opens the Topic, with its recipient's own badge
 	const body = toScanPushBody(newFindings.length, newFindings[0]?.title ?? null)
 	const url = `${appUrl}${toTopicPath(topic)}`
-	const pushTargets = livePushDevices.map((livePushDevice) => ({ ...livePushDevice, title: topic.name, body, url }))
+	const updateCountsByUserId = await loadUpdateCountsByUserId(livePushDevices)
+	const pushTargets = livePushDevices.map((livePushDevice) => ({
+		...livePushDevice,
+		title: topic.name,
+		body,
+		url,
+		badge: updateCountsByUserId.get(livePushDevice.recipientUserId) ?? 0,
+	}))
 	return deliverPushes({ kind: "topic-scan", scanId }, pushTargets, pushProgress)
 }
 
@@ -99,11 +108,13 @@ export async function sendChatMentionPush(
 	const url = chatMessage.topicId
 		? `${appUrl}/topics/${chatMessage.topicId}/chat?chatTeamId=${chatMessage.teamId}`
 		: `${appUrl}/teams/${chatMessage.teamId}/chat`
+	const updateCountsByUserId = await loadUpdateCountsByUserId(livePushDevices)
 	const pushTargets = livePushDevices.map((livePushDevice) => ({
 		...livePushDevice,
 		title,
 		body: toChatMentionPushBody(chatMessage.authorUsername, livePushDevice.recipientUserId === repliedToUserId),
 		url,
+		badge: updateCountsByUserId.get(livePushDevice.recipientUserId) ?? 0,
 	}))
 	return deliverPushes({ kind: "chat-mention", chatMessageId }, pushTargets, pushProgress)
 }
@@ -165,6 +176,16 @@ async function loadRepliedToUserId(replyToMessageId: number | null): Promise<str
 		.from(chatRoomMessages)
 		.where(eq(chatRoomMessages.id, replyToMessageId))
 	return repliedToRow?.authorUserId ?? null
+}
+
+// how many recipients' update counts load at once
+const UPDATE_COUNT_CONCURRENCY = 5
+
+// each recipient's update count, loaded once per account however many phones it has
+async function loadUpdateCountsByUserId(livePushDevices: LivePushDevice[]): Promise<Map<string, number>> {
+	const recipientUserIds = [...new Set(livePushDevices.map((livePushDevice) => livePushDevice.recipientUserId))]
+	const updateCounts = await runWithConcurrency(recipientUserIds, UPDATE_COUNT_CONCURRENCY, loadUpdateCount)
+	return new Map(recipientUserIds.map((recipientUserId, index) => [recipientUserId, updateCounts[index] ?? 0]))
 }
 
 // the phones of the given users who turned this kind on, each bound to a session that has not ended

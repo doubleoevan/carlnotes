@@ -5,6 +5,7 @@ import { NOTE_HTML_MAX_CHARS, type NoteBodySaveResult } from "@carlnotes/contrac
 import { noteBodyPayload, noteCreatePayload, noteUpdatePayload } from "@carlnotes/contracts/payloads"
 import { toHtmlText } from "@carlnotes/contracts/text"
 import { db } from "@carlnotes/db"
+import { loadNoteBadges, saveNoteRead } from "@carlnotes/db/noteBadges"
 import { notes } from "@carlnotes/db/schema/notes"
 import { users } from "@carlnotes/db/schema/users"
 import { trackEvent } from "@carlnotes/server/analytics"
@@ -17,7 +18,6 @@ import { toObjectionableCategory, toObjectionableContentResponse } from "../mode
 import { noteBodySaveRateLimiter, toolCallerRateLimiter } from "../rateLimit"
 import { toTermsOutdatedResponse } from "../termsAcceptance"
 import { loadUsername } from "../usernames"
-import { loadNoteBadges, saveNoteRead } from "./noteBadges"
 import { sanitizeNoteHtml } from "./noteHtml"
 import { createNote, loadNotesPayload, loadVisibleNote, toNote } from "./notePayloads"
 import {

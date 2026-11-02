@@ -96,9 +96,7 @@ at the root import it by name.
   and whether the caller may delete it; `POST /api/notes/:id/comments` behind `canEditNote`, tracking
   `note_comment_added` with the note id; `DELETE /api/notes/:id/comments/:commentId` for the author alone; every
   rejection a 404 and a bad body a 400 before any query), `notePayloads.ts` (a page's note list, one note as the api
-  shapes it, and a note created on a page), `permissions.ts` (visibility access), `noteBadges.ts` (the unread edit and
-  comment counts, the comments counted from `note_comments` by note, and the read time that clears them), and
-  `noteTestFixtures.ts` (the rows the stubbed connection pool returns in the route tests).
+  shapes it, and a note created on a page), `permissions.ts` (visibility access), and `noteTestFixtures.ts` (the rows the stubbed connection pool returns in the route tests).
 - `chat/roomStream.ts` fans a stored chat message out across replicas over Redis pub/sub through `@carlnotes/db/redis`.
   It delivers to its own instance's subscribers first, publishes a payload that names the instance, and skips the echo
   of its own publish. Nothing missed while a subscriber was down is replayed. Chat catches up from its cursor.
@@ -366,8 +364,8 @@ at the root import it by name.
   mentions, and latest podcast episode).
 - `invite/invites.ts` — the invite links, the topic or team a token opens, and the link routes;
   `invite/inviteAcceptance.ts` — accepting an invite: the token acceptance, the topic and team acceptances, the
-  spent use, and `loadUserEmail` with `toInviteAddressedToUserFilter`, the invitation match by account or verified
-  address that `activity.ts` and `invite/receivedInvites.ts` read through. `invites.smoke.ts` runs
+  spent use, with the invitation match by account or verified address in `@carlnotes/db/inviteFilters`.
+  `invites.smoke.ts` runs
   `inviteLinkSmokeSections.ts` and `userInviteSmokeSections.ts` over
   `inviteSmokeFixtures.ts`, and `team/teams.smoke.ts` runs `teamMembershipSmokeSections.ts`,
   `teamTopicSmokeSections.ts`, and `teamPageSmokeSections.ts` over `teamSmokeFixtures.ts`.

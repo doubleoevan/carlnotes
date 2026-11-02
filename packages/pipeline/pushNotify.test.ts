@@ -100,6 +100,31 @@ test("a Scan push reaches each live phone, records the accepted ones, and retire
 	expect(findSentQuery(sentQueries, 'delete from "push_devices"')?.values).toEqual(["device-3"])
 })
 
+// each push sets its recipient's own update count as the app icon badge: user-1 has two unseen chat mentions and one
+// pending topic invitation, and user-2 has nothing
+test("a push sets each recipient's update count as the app icon badge", async () => {
+	// user-1 is on one team, with a verified address, two unseen chat mentions, and one pending topic invitation
+	const scanPushRows = [...SCAN_PUSH_ROWS, { sqlPattern: /from "push_devices"/, rows: LIVE_PUSH_DEVICE_ROWS }]
+	const userOneRows: QueryRows[] = [
+		{ sqlPattern: /from "team_members"/, rows: [["team-1"]] },
+		{ sqlPattern: /from "users"/, rows: [["one@example.com", true]] },
+		{ sqlPattern: /from "room_mentions"/, rows: [[2]] },
+		{ sqlPattern: /from "invites"/, rows: [[1]] },
+	]
+
+	// a read for user-1 finds their rows, and every other read finds the Scan push's
+	stubConnectionPool(({ text: sql, values }) => {
+		const queryRows = values.includes("user-1") ? userOneRows : scanPushRows
+		return sql.startsWith("select") ? (queryRows.find((queryRow) => queryRow.sqlPattern.test(sql))?.rows ?? []) : []
+	})
+	const sendSpy = spyOn(expoPush, "sendPushMessageChunk").mockResolvedValue([])
+	await sendScanPush("scan-1")
+
+	// both of user-1's phones show 3, and user-2's phone clears its badge
+	const [pushMessages] = sendSpy.mock.calls[0] ?? []
+	expect(pushMessages?.map((pushMessage) => pushMessage.badge)).toEqual([3, 3, 0])
+})
+
 // a retry sends only to the phones that no record names
 test("a retried Scan push skips the phones that were already recorded", async () => {
 	// the first phone was reached before the earlier attempt failed

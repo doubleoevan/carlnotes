@@ -49,6 +49,8 @@ export type PushTarget = {
 	title: string
 	body: string
 	url: string
+	// the recipient's update count, which the app icon badge shows
+	badge: number
 }
 
 // the ticket errors that waiting can fix, and the one that retires the phone. any other error is final
@@ -239,7 +241,8 @@ async function settlePushTickets(
 	return pushChunkTally
 }
 
-// the message for one phone: its title and body, the Android channel of its kind, and the data the app opens
+// the message for one phone: its title and body, its app icon badge, the Android channel of its kind, and the data the
+// app opens
 function toPushMessage(kind: PushNotificationKind, pushTarget: PushTarget): ExpoPushMessage {
 	const data: PushNotificationData = { kind, url: pushTarget.url, recipientUserId: pushTarget.recipientUserId }
 	return {
@@ -247,6 +250,7 @@ function toPushMessage(kind: PushNotificationKind, pushTarget: PushTarget): Expo
 		title: pushTarget.title,
 		body: pushTarget.body,
 		data,
+		badge: pushTarget.badge,
 		sound: "default",
 		channelId: PUSH_CHANNEL_IDS[kind],
 	}

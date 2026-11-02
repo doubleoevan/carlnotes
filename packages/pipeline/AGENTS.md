@@ -64,7 +64,8 @@ it; it imports `@carlnotes/models`, `@carlnotes/emails`, `@carlnotes/db`, `@carl
   new Findings, and `sendChatMentionPush` reaches the members a room message's `room_mentions` rows name, checked at
   send time: still on the Team, the Topic still held, the author not blocked, the message not reported, never the
   author. Each push names its Topic or room and opens it through `data.url`, with the recipient's id for the app's
-  account check, and a mention push never includes the message text. `pushNotificationCopy.ts` holds the words. In
+  account check, and a mention push never includes the message text. Each push sets the recipient's update count from
+  `@carlnotes/db/updateCounts` as the app icon badge. `pushNotificationCopy.ts` holds the words. In
   `pushDelivery.ts`, each accepted ticket is recorded in `push_notification_sends` as its chunk returns, so a retry
   sends only to unrecorded
   phones; a crash between the service's acceptance and the record repeats at most one chunk. A `DeviceNotRegistered`

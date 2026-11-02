@@ -1,11 +1,11 @@
 // the unread note badge counts. what changed in a note since a user last opened it, and the read that clears it
 import type { NoteBadge } from "@carlnotes/contracts/notes"
-import { db } from "@carlnotes/db"
-import { toUnblockedAuthorFilter } from "@carlnotes/db/contentFilters"
-import { noteComments, noteReads, notes } from "@carlnotes/db/schema/notes"
-import { teamMembers, teams, teamTopics } from "@carlnotes/db/schema/teams"
-import { topics } from "@carlnotes/db/schema/topics"
 import { and, count, eq, gt, inArray, isNull, ne, or } from "drizzle-orm"
+import { toUnblockedAuthorFilter } from "./contentFilters"
+import { db } from "./index"
+import { noteComments, noteReads, notes } from "./schema/notes"
+import { teamMembers, teams, teamTopics } from "./schema/teams"
+import { topics } from "./schema/topics"
 
 /**
  * Every unread edit and comment count the signed-in user has. One entry per note that holds something.
@@ -116,8 +116,10 @@ function toPageTeamIds(
 	return note.teamId ? [note.teamId] : []
 }
 
-// the pages whose notes a user is badged for: their teams, and the topics those teams own or hold
-async function loadBadgedPages(
+/**
+ * The pages whose notes and chat rooms a user is badged for: their teams, and the topics those teams own or hold.
+ */
+export async function loadBadgedPages(
 	userId: string,
 ): Promise<{ topicIds: string[]; teamIds: string[]; teamIdsByTopicId: Map<string, string[]> }> {
 	// the teams the user is an active member of

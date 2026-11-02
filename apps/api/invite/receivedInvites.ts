@@ -3,6 +3,7 @@
 
 import type { TopicInviteBadge } from "@carlnotes/contracts/invites"
 import { db } from "@carlnotes/db"
+import { loadUserEmail } from "@carlnotes/db/inviteFilters"
 import { invites } from "@carlnotes/db/schema/invites"
 import { trackEvent } from "@carlnotes/server/analytics"
 import { eq } from "drizzle-orm"
@@ -13,7 +14,6 @@ import {
 	acceptTeamInvite,
 	acceptTopicInvite,
 	type InviteAcceptResult,
-	loadUserEmail,
 	toInviteProperties,
 	toInviteRejection,
 } from "./inviteAcceptance"

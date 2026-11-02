@@ -6,19 +6,18 @@ import { toCentsFromDollars } from "@carlnotes/contracts/plans"
 import type { PodcastEpisodeSummary } from "@carlnotes/contracts/podcast"
 import type { TeamIdentity } from "@carlnotes/contracts/teams"
 import { db } from "@carlnotes/db"
-import { toUnblockedAuthorFilter } from "@carlnotes/db/contentFilters"
+import { loadUserEmail, toPendingTopicInviteFilter } from "@carlnotes/db/inviteFilters"
 import { loadMonthlyBudgetCutoffs } from "@carlnotes/db/monthlyBudgetCutoffs"
 import { invites } from "@carlnotes/db/schema/invites"
 import { teamMembers, teams } from "@carlnotes/db/schema/teams"
 import { subscriptions, topics } from "@carlnotes/db/schema/topics"
 import { users } from "@carlnotes/db/schema/users"
-import { and, desc, eq, gt, isNotNull, isNull, ne, notInArray, or, sql } from "drizzle-orm"
+import { and, desc, eq, isNotNull, isNull, ne, or, sql } from "drizzle-orm"
 import { Hono } from "hono"
 import { loadOwnedTopics } from "./activityTopics"
 import { isAdminRole, isAllowed, monthlySpendDollars, userBudgetCents } from "./authorization"
 import { toProfileIdentity, withAvatarVersion } from "./avatars"
 import type { AppEnv } from "./currentUser"
-import { loadUserEmail, toInviteAddressedToUserFilter } from "./invite/inviteAcceptance"
 import { loadLatestPodcastEpisodeSummaries } from "./podcast/podcastEpisodeShapes"
 
 // the subscription row fields that the queries read, with the subscribed time as a date
@@ -184,15 +183,12 @@ export async function loadActivity(userId: string, signedInUserId: string): Prom
  * Loads the topic invitations waiting for the user's answer, shaped as the subscription rows they will become.
  */
 export async function loadInvitedTopicSubscriptions(userId: string): Promise<SubscriptionRowFields[]> {
-	// the user's address, and the topics the user already subscribes to
+	// the user's address, which an email invitation matches
 	const userEmail = await loadUserEmail(userId)
 	if (!userEmail) {
 		return []
 	}
-	const subscribedTopicIdQuery = db
-		.select({ topicId: subscriptions.topicId })
-		.from(subscriptions)
-		.where(eq(subscriptions.subscriberUserId, userId))
+
 	// the pending invitations, each with the topic it opens and the owner who sent it
 	const invitedRows = await db
 		.select({
@@ -224,19 +220,7 @@ export async function loadInvitedTopicSubscriptions(userId: string): Promise<Sub
 			teamMembers,
 			and(eq(teamMembers.teamId, teams.id), eq(teamMembers.userId, userId), eq(teamMembers.isActive, true)),
 		)
-		.where(
-			// pending means unanswered: no spent use, no decline, no passed expiry. only a verified address matches an email
-			// invitation
-			and(
-				toInviteAddressedToUserFilter({ userId, ...userEmail }),
-				eq(invites.usedCount, 0),
-				isNull(invites.declinedAt),
-				or(isNull(invites.expiresAt), gt(invites.expiresAt, new Date())),
-				notInArray(topics.id, subscribedTopicIdQuery),
-				// an invitation from a person the user has blocked is not shown
-				toUnblockedAuthorFilter(userId, invites.invitedByUserId),
-			),
-		)
+		.where(toPendingTopicInviteFilter({ userId, ...userEmail }))
 		.orderBy(desc(invites.invitedAt))
 
 	// a person can hold an email invitation and a username invitation to the same topic. the newest invite is shown.

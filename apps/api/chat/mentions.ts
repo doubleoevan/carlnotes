@@ -3,11 +3,11 @@
 import type { ChatMention } from "@carlnotes/contracts/chat"
 import { toMentionedUserIds } from "@carlnotes/contracts/chatMentions"
 import { db } from "@carlnotes/db"
-import { toUnblockedAuthorFilter, toUnreportedFilter } from "@carlnotes/db/contentFilters"
 import { deleteRedisKeys } from "@carlnotes/db/redis"
 import { chatRoomMentions, chatRoomMessages } from "@carlnotes/db/schema/chat"
 import { teamMembers } from "@carlnotes/db/schema/teams"
 import { users } from "@carlnotes/db/schema/users"
+import { toUnseenChatMentionFilter } from "@carlnotes/db/updateCounts"
 import { and, desc, eq, inArray, isNull, type SQL } from "drizzle-orm"
 import { decryptChatText } from "./encryption"
 import { toTopicFilter } from "./roomAccess"
@@ -83,15 +83,7 @@ async function loadUnseenChatMentions(userId: string, roomFilter: SQL | undefine
 		.from(chatRoomMentions)
 		.innerJoin(chatRoomMessages, eq(chatRoomMentions.messageId, chatRoomMessages.id))
 		.leftJoin(repliedChatMessages, eq(chatRoomMessages.replyToMessageId, repliedChatMessages.id))
-		.where(
-			and(
-				eq(chatRoomMentions.userId, userId),
-				isNull(chatRoomMentions.seenAt),
-				toUnblockedAuthorFilter(userId, chatRoomMessages.authorUserId),
-				toUnreportedFilter(userId, "chatMessage", chatRoomMessages.id),
-				roomFilter,
-			),
-		)
+		.where(and(toUnseenChatMentionFilter(userId), roomFilter))
 		.orderBy(desc(chatRoomMessages.id))
 }
 

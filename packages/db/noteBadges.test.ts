@@ -1,11 +1,6 @@
 // the unread note badge rules: what counts as an edit, and the badge a note with an edit and comments by others gets
 import { afterEach, expect, test } from "bun:test"
-import {
-	FREE_USER_ACCESS_ROW,
-	restoreConnectionPool,
-	type SentQuery,
-	stubConnectionPool,
-} from "@carlnotes/db/connectionPoolStub"
+import { FREE_USER_ACCESS_ROW, restoreConnectionPool, type SentQuery, stubConnectionPool } from "./connectionPoolStub"
 import { loadNoteBadges, toUnreadEdits } from "./noteBadges"
 
 // the times the rules are compared against
