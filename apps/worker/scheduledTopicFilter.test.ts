@@ -3,7 +3,7 @@ import { expect, test } from "bun:test"
 import { DAY_MS } from "@carlnotes/contracts/time"
 import { db } from "@carlnotes/db"
 import { topics } from "@carlnotes/db/schema/topics"
-import { frequencyWindowMs, toScheduledTopicFilter } from "./schedule"
+import { frequencyWindowMs, toScheduledTopicFilter } from "./scheduledTopicFilter"
 import { isWithinDailyTopicLimit } from "./scheduledTopicLimits"
 
 // the sql and the parameters that a select of the scheduled Topics renders on a given day

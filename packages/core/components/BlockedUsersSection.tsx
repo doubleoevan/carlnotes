@@ -3,7 +3,7 @@ import { type BlockedUsersList, useBlockedUsers } from "../hooks/useBlockedUsers
 import type { AccountFieldElements } from "./AccountFields"
 
 // the section's words: its title, what a block does, the empty list, and the unblock control
-export const BLOCKED_USERS_COPY = {
+const BLOCKED_USERS_COPY = {
 	title: "Blocked people",
 	description: "Their messages, comments, and invitations no longer reach you. They are not told.",
 	empty: "Nobody is blocked.",

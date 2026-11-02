@@ -59,7 +59,7 @@ export const topic = z.object({
 export type Topic = z.infer<typeof topic>
 
 // one of the user's teams on another user's profile, with the user's role there and the profile user's status there
-export const profileTeamStatus = z.object({
+const profileTeamStatus = z.object({
 	teamId: z.string(),
 	name: z.string(),
 	avatarVersion: z.string().nullable(),

@@ -1,6 +1,6 @@
 // the mcp cards: the card each tool names, and what a tool result gives its card beside the structured result the
 // model reads
-import type { visibilities } from "./enums"
+import type { Visibility } from "./enums"
 import type { TopicFinding } from "./findings"
 import type { PodcastEpisode, PodcastEpisodeSummary } from "./podcast"
 import type { ProfileIdentity } from "./profiles"
@@ -29,7 +29,7 @@ export type McpCardTopic = {
 	id: string
 	name: string
 	prompt: string
-	visibility: (typeof visibilities)[number]
+	visibility: Visibility
 	// its latest podcast episode, and what the caller may do with it
 	latestPodcastEpisode: PodcastEpisodeSummary | null
 	isSubscribed: boolean | null
@@ -48,7 +48,7 @@ export type McpCardData = {
 
 // the search tool's structured result: the search's page with every row's absolute url, the search that found it, and
 // the search page's absolute url
-export type McpSearchRow = SearchRow & { url: string }
+type McpSearchRow = SearchRow & { url: string }
 
 export type McpSearchPage = Omit<SearchResultsPage, "rows"> & {
 	rows: McpSearchRow[]

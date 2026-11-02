@@ -4,10 +4,7 @@ export {
 	findChatTurn,
 	replaceChatTurn,
 	toFinishedChatTurns,
-	toKeptAttachmentPlaceholders,
 	toLoadedChatTurn,
-	toSentChatTurn,
-	toSpokenAnswerKey,
 	upsertChatTurn,
 	withoutChatTurn,
 } from "@carlnotes/core/lib/chatTurns"

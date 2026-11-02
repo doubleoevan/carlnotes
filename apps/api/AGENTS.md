@@ -159,11 +159,11 @@ at the root import it by name.
   through `topic/firstScanSmoke.ts`.
 - `topic/saveTopicGate.ts` — the Terms and moderation check a topic other people read passes before a save, skipped
   for a private topic and, on an edit that changed neither the name nor the prompt, not classified again.
-- `topic/helpers.ts` — the topic page's reads; `topic/saveHelpers.ts` — the daily slot a frequency takes, a topic's
-  new source rows, and its first scan; `topic/firstScanSmoke.ts` — the smoke helper that waits for a created topic's
-  first scan to reach Temporal, then stops it and waits for its workflow to end; `topic/teamTopicOptions.ts` — the
-  topics a user may add to a team; `topic/accessibleFindings.ts` — the findings a user may read on a topic, with the
-  owning team's bookmarks.
+- `topic/helpers.ts` — the topic page's reads; `topic/subscriptionStartDates.ts` — the subscription start dates that
+  gate an invite topic's findings; `topic/saveHelpers.ts` — the daily slot a frequency takes, a topic's new source rows,
+  and its first scan; `topic/firstScanSmoke.ts` — the smoke helper that waits for a created topic's first scan to reach
+  Temporal, then stops it and waits for its workflow to end; `topic/teamTopicOptions.ts` — the topics a user may add to
+  a team; `topic/accessibleFindings.ts` — the findings a user may read on a topic, with the owning team's bookmarks.
 - `topic/findings.ts` — the finding routes, and `topic/findingFeedback.ts` — the feedback a user gives a finding: the
   rating and its words, the bookmark, consumed, and an open, which counts among the finding's views within the count
   rate limit, a visitor's too when it comes from the app's own origin. `topic/findingPermissions.ts` holds who may see,
@@ -208,12 +208,12 @@ at the root import it by name.
   malformed value, keeps only the `ok`, `fallback`, and `failed` results, and copies each wire field by name. For
   everyone the gate does not grant `topic:viewOwnerDetails`, it nulls each cost and failure reason and labels a url
   Source by its page's host.
-- `topic/feeds.ts` — the topic feed's sections; the visitors' feed and topic page, each read through one Redis copy
-  for half a minute; `clearVisitorTopicCaches`, which a topic's edit and delete and a Source added or removed call to
-  drop its page copy, and the visitors' feed copies if the listing changed; `clearVisitorTopicPages`, which a team
-  attach or detach calls; and `clearSharedTopicFeedCaches`, which drops the feed copies with the featured and popular
-  topic id lists; `topic/feedData.ts` — the batched reads behind every topic in a feed, each table read once for the
-  whole batch.
+- `topic/feeds.ts` — the topic feed's sections; the visitors' feed and topic page, each read through one Redis copy for
+  half a minute; `topic/feedCaches.ts` — the Redis keys of those copies, and `clearVisitorTopicCaches`, which a topic's
+  edit and delete and a Source added or removed call to drop its page copy, and the visitors' feed copies if the listing
+  changed; `clearVisitorTopicPages`, which a team attach or detach calls; and `clearSharedTopicFeedCaches`, which drops
+  the feed copies with the featured and popular topic id lists; `topic/feedData.ts` — the batched reads behind every
+  topic in a feed, each table read once for the whole batch.
 - `chat/room.ts` — posting to a chat room and its stream. A chat message that addresses Carl reserves his turn's largest
   cost before it posts, priced from the room's stored question by `loadModelRoomQuestionChars` in
   `chat/roomQuestion.ts`, which sums stored lengths in the database through `toDecryptedLengthSql` in

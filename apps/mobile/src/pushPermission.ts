@@ -29,7 +29,7 @@ const { publish, useStoreVersion } = toStoreListeners()
 /**
  * Reads the phone's permission and shares it with every screen that shows it.
  */
-export async function readPushPermission(): Promise<PushPermission> {
+async function readPushPermission(): Promise<PushPermission> {
 	pushPermission = toPushPermission(await Notifications.getPermissionsAsync(), Platform.OS)
 	publish()
 	return pushPermission

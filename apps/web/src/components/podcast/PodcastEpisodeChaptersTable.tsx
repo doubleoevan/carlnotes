@@ -3,6 +3,7 @@ import type { PodcastEpisode, PodcastEpisodeChapter } from "@carlnotes/contracts
 import { toHostWithoutWww } from "@carlnotes/contracts/seo"
 import { toClockLabel } from "@carlnotes/core/lib/labels"
 import { toPodcastEpisodeChapterTotals } from "@carlnotes/core/lib/podcastEpisodeChaptersTableColumns"
+import { togglePodcastEpisodeChapterPlayback } from "@carlnotes/core/stores/podcastEpisodePlayActions"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { Pause, Play } from "lucide-react"
 import { useState } from "react"
@@ -20,7 +21,6 @@ import {
 	TABLE_SCROLL_CLASS,
 	TABLE_WIDE_FIRST_COLUMN_CLASS,
 } from "@/lib/styleClasses"
-import { togglePodcastEpisodeChapterPlayback } from "@/stores/podcastEpisodePlayActions"
 import { usePlayerChapterPosition, usePodcastEpisodePlayer } from "@/stores/podcastEpisodePlayerStore"
 import { type ChapterTopicFeed, ChapterTopicFindingNote } from "./PodcastEpisodeChapters"
 

@@ -9,7 +9,7 @@ import type { TopicDraft } from "./topicPayloads"
 export const CHAT_NAME = "Coffee Talk"
 
 // one chat message attachment shown with a chat message
-export const chatMessageAttachment = z.object({
+const chatMessageAttachment = z.object({
 	id: z.string(),
 	kind: displayEnum(chatAttachmentKinds),
 	name: z.string(),
@@ -18,7 +18,7 @@ export const chatMessageAttachment = z.object({
 export type ChatMessageAttachment = z.infer<typeof chatMessageAttachment>
 
 // the link preview card a link in a chat message renders as, below the chat message's own text
-export const chatLinkPreview = z.object({
+const chatLinkPreview = z.object({
 	url: z.string(),
 	title: z.string().nullable(),
 	description: z.string().nullable(),
@@ -116,7 +116,7 @@ export const chatMention = z.object({
 export type ChatMention = z.infer<typeof chatMention>
 
 // one chat room the chat panel's menu offers: a team's own conversation, or one about a topic it has
-export const chatRoom = z.object({
+const chatRoom = z.object({
 	teamId: z.string(),
 	// null on a team's own chat room, which belongs to no topic
 	topicId: z.string().nullable(),
@@ -225,7 +225,7 @@ export const chatToolCall = z.object({ toolName: z.string(), input: z.unknown(),
 export const podcastEpisodeChapterRef = z.object({ podcastEpisodeId: z.string(), chapterPosition: z.number() })
 
 // one persisted chat turn of a stored conversation, replayed on a later page load
-export const chatTurnRow = z.object({
+const chatTurnRow = z.object({
 	question: z.string(),
 	answer: z.string(),
 	at: z.string().optional(),
@@ -247,7 +247,7 @@ export const chatTurnRow = z.object({
 export type ChatTurnRow = z.infer<typeof chatTurnRow>
 
 // an attachment the user keeps durably for a topic, with when they added it
-export const keptChatAttachment = z.object({
+const keptChatAttachment = z.object({
 	id: z.string(),
 	name: z.string(),
 	kind: displayEnum(chatAttachmentKinds),

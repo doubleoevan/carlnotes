@@ -4,7 +4,8 @@
 import { db } from "@carlnotes/db"
 import { toTopicRoleFilter } from "@carlnotes/db/contentFilters"
 import { scans } from "@carlnotes/db/schema/scans"
-import { subscriptions, topicEmailSends, topics } from "@carlnotes/db/schema/topics"
+import { topicEmailSends } from "@carlnotes/db/schema/topicEmailSends"
+import { subscriptions, topics } from "@carlnotes/db/schema/topics"
 import { users } from "@carlnotes/db/schema/users"
 import {
 	type EmailKind,
@@ -206,7 +207,7 @@ async function loadUnsentRecipients({
  * Returns the Topic's digest subscribers, each user with an active subscription and email on who can still read the
  * Topic, limited to the given user ids if any.
  */
-export async function loadDigestSubscribers(topicId: string, userIds?: string[]): Promise<Recipient[]> {
+async function loadDigestSubscribers(topicId: string, userIds?: string[]): Promise<Recipient[]> {
 	// one subscription row per user and Topic means no address repeats
 	return db
 		.select({ userId: users.id, email: users.email })

@@ -10,7 +10,7 @@ import {
 	toNoteBadgeGeneration,
 } from "../stores/noteBadgeStore"
 
-export const NOTE_BADGE_POLL_MS = 45_000
+const NOTE_BADGE_POLL_MS = 45_000
 let refreshVersion = 0
 
 /**
@@ -18,12 +18,15 @@ let refreshVersion = 0
  */
 export function useNoteBadges(userId: string | null | undefined): void {
 	useEffect(() => {
+		// reset the counts for this account, and stop if no user is signed in
 		const generation = resetNoteBadges(userId ?? null)
 		if (!userId) {
 			return
 		}
+		// refresh the counts, one request at a time
 		let isPending = false
 		const refresh = async (): Promise<void> => {
+			// skip if a refresh is running, the account changed, or the app is in the background or offline
 			if (
 				isPending ||
 				!isNoteBadgeAccount(userId, generation) ||
@@ -32,6 +35,7 @@ export function useNoteBadges(userId: string | null | undefined): void {
 			) {
 				return
 			}
+			// hold the pending flag until the request settles
 			isPending = true
 			try {
 				await refreshNoteBadges(userId, generation)
@@ -39,6 +43,7 @@ export function useNoteBadges(userId: string | null | undefined): void {
 				isPending = false
 			}
 		}
+		// refresh now, on an interval, and when the app returns to the foreground
 		void refresh()
 		const timer = setInterval(() => void refresh(), NOTE_BADGE_POLL_MS)
 		const stopFocus = focusManager.subscribe((isFocused) => {
@@ -46,15 +51,18 @@ export function useNoteBadges(userId: string | null | undefined): void {
 				void refresh()
 			}
 		})
+		// refresh when the network comes back
 		const stopOnline = onlineManager.subscribe((isOnline) => {
 			if (isOnline) {
 				void refresh()
 			}
 		})
+		// return a cleanup that stops the interval and both subscriptions
 		return () => {
 			clearInterval(timer)
 			stopFocus()
 			stopOnline()
+			// clear the counts if this account and generation are still current
 			if (isNoteBadgeAccount(userId, generation)) {
 				resetNoteBadges(null)
 			}
@@ -81,6 +89,7 @@ export async function recordNoteRead(noteId: string, userId: string): Promise<bo
 	if (!isNoteBadgeAccount(userId, generation)) {
 		return false
 	}
+	// hide the note's badges, send the read, and refresh the counts if the server acknowledges it
 	const token = markNoteOpened(noteId)
 	try {
 		const isAcknowledged = await sendNoteRead(noteId)
@@ -89,6 +98,7 @@ export async function recordNoteRead(noteId: string, userId: string): Promise<bo
 		}
 		return isAcknowledged
 	} finally {
+		// release the hidden badges if this account and generation are still current
 		if (isNoteBadgeAccount(userId, generation)) {
 			settleNoteOpened(noteId, token)
 		}
@@ -101,6 +111,7 @@ async function refreshNoteBadges(userId: string, generation: number): Promise<vo
 		return
 	}
 	try {
+		// apply the counts only if the account is current and no newer refresh started
 		const requestVersion = ++refreshVersion
 		const badges = await fetchNoteBadges()
 		if (isNoteBadgeAccount(userId, generation) && requestVersion === refreshVersion) {

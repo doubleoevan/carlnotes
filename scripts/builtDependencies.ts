@@ -2,7 +2,7 @@
 import { isPackageImportPath, toPackageName } from "./importBoundaries"
 
 /** A built file: its path, and its JavaScript. */
-export type BuiltFile = { filePath: string; fileText: string }
+type BuiltFile = { filePath: string; fileText: string }
 
 // the built files, and the app's runtime dependency names
 type ToUndeclaredBuiltImportsOptions = { builtFiles: BuiltFile[]; dependencyNames: Set<string> }

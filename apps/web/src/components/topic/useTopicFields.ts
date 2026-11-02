@@ -4,8 +4,6 @@ import {
 	useTopicFields as useSharedTopicFields,
 } from "@carlnotes/core/hooks/useTopicFields"
 
-export type { Visibility } from "@carlnotes/core/hooks/useTopicFields"
-export { toUpdateTopicPayload } from "@carlnotes/core/hooks/useTopicFields"
 export type TopicFields = SharedTopicFields<File>
 
 /**

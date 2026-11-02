@@ -1,30 +1,24 @@
 // the topic feed logic for the homepage route. it batches every topic's data in one pass and builds each feed in memory
-import type { visibilities } from "@carlnotes/contracts/enums"
 import type { TopicFinding } from "@carlnotes/contracts/findings"
 import { toSourceSummary, toSourceValue } from "@carlnotes/contracts/sources"
 import type { TopicFeed, TopicFeedResponse, TopicResponse } from "@carlnotes/contracts/topics"
 import { db, isPublicAndShown } from "@carlnotes/db"
-import { cacheJson, deleteRedisKeys } from "@carlnotes/db/redis"
+import { cacheJson } from "@carlnotes/db/redis"
 import { subscriptions, topics } from "@carlnotes/db/schema/topics"
 import { traceRequestStage } from "@carlnotes/server/monitoring"
 import { and, asc, desc, eq, inArray, isNotNull, isNull, ne } from "drizzle-orm"
 import { toProfileIdentity } from "../avatars"
 import { attachTopicFindingFaviconPaths } from "../favicons"
+import { TOPIC_SECTION_IDS_KEY, toVisitorTopicFeedKey, toVisitorTopicPageKey } from "./feedCaches"
 import { loadTopicFeedData } from "./feedData"
 import { filteredTopicFindings, newTopicFindingCount, toTopicFinding } from "./findings"
 import { toScanDurationMs, toScheduledTimeLabel } from "./helpers"
 
-// the Redis key every replica reads the featured and popular topic id lists through, and how long they are kept
-const TOPIC_SECTION_IDS_KEY = "topic-section-ids"
+// how long the featured and popular topic id lists are kept
 const TOPIC_SECTION_IDS_TTL_MS = 60_000
 
-// the Redis key prefix the visitors' feed is served through, one key per view, and how long a visitor's cached feed or
-// topic page is kept
-const VISITOR_TOPIC_FEED_KEY_PREFIX = "topic-feed:visitor"
+// how long a visitor's cached feed or topic page is kept
 const VISITOR_CACHE_TTL_MS = 30_000
-
-// the Redis key prefix that a topic page is served through, to visitors and to a poll reload
-export const TOPIC_PAGE_KEY_PREFIX = "topic-page"
 
 // how many popular topic ids the homepage keeps, ten pages of its five
 const MAX_POPULAR_TOPIC_IDS = 50
@@ -32,64 +26,12 @@ const MAX_POPULAR_TOPIC_IDS = 50
 // the featured and popular topic id lists
 type TopicSectionIds = { featuredIds: string[]; popularIds: string[] }
 
-// a topic's visibility
-type TopicVisibility = (typeof visibilities)[number]
-
-// the topic whose cached visitor copies to drop, its visibility after the change, its visibility before the change if
-// the change may have set a new one, and whether the change released its feature order
-type ClearVisitorTopicCachesOptions = {
-	topicId: string
-	visibility: TopicVisibility
-	previousVisibility?: TopicVisibility
-	isFeatureOrderReleased?: boolean
-}
-
 // the topic ids this user actively subscribes to
 function activeSubscriptionTopicIdQuery(userId: string) {
 	return db
 		.select({ topicId: subscriptions.topicId })
 		.from(subscriptions)
 		.where(and(eq(subscriptions.isActive, true), eq(subscriptions.subscriberUserId, userId)))
-}
-
-/**
- * Deletes the shared topic section id lists and the visitors' feeds, so the next feed build on any replica reads them fresh.
- */
-export async function clearSharedTopicFeedCaches(): Promise<void> {
-	await deleteRedisKeys(...toSharedTopicFeedKeys())
-}
-
-/**
- * Deletes a topic's cached visitor page, and the visitors' feeds if the topic was or is public or featured.
- */
-export async function clearVisitorTopicCaches({
-	topicId,
-	visibility,
-	previousVisibility = visibility,
-	isFeatureOrderReleased = false,
-}: ClearVisitorTopicCachesOptions): Promise<void> {
-	// the visitors' feeds list public topics with their sources, so a change to a topic that was or is public drops them
-	const isListingChanged = isFeatureOrderReleased || visibility === "public" || previousVisibility === "public"
-	await deleteRedisKeys(toVisitorTopicPageKey(topicId), ...(isListingChanged ? toSharedTopicFeedKeys() : []))
-}
-
-/**
- * Deletes the topics' cached visitor pages alone, in one delete.
- */
-export async function clearVisitorTopicPages(...topicIds: string[]): Promise<void> {
-	await deleteRedisKeys(...topicIds.map(toVisitorTopicPageKey))
-}
-
-// the shared topic section id lists and both views of the visitors' feed
-function toSharedTopicFeedKeys(): string[] {
-	return [TOPIC_SECTION_IDS_KEY, toVisitorTopicFeedKey(true), toVisitorTopicFeedKey(false)]
-}
-
-/**
- * Returns the Redis key a topic's page is served to visitors through.
- */
-export function toVisitorTopicPageKey(topicId: string): string {
-	return `${TOPIC_PAGE_KEY_PREFIX}:visitor-page:${topicId}`
 }
 
 /**
@@ -111,11 +53,6 @@ export function readVisitorTopicFeeds(includeConsumedResources: boolean): Promis
 		ttlMs: VISITOR_CACHE_TTL_MS,
 		load: () => buildTopicFeeds(null, includeConsumedResources),
 	})
-}
-
-// the visitors' feed key for one view
-function toVisitorTopicFeedKey(includeConsumedResources: boolean): string {
-	return `${VISITOR_TOPIC_FEED_KEY_PREFIX}:${includeConsumedResources ? "all" : "unread"}`
 }
 
 /**

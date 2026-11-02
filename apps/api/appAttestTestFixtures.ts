@@ -18,7 +18,7 @@ const UTF8_STRING_TAG = 0x0c
 const UTC_TIME_TAG = 0x17
 
 // a certificate extension: its object identifier and its DER-encoded value
-export type TestExtension = { oid: string; value: Buffer }
+type TestExtension = { oid: string; value: Buffer }
 
 // what a test certificate is made from
 export interface TestCertificateOptions {

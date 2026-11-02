@@ -1,6 +1,7 @@
 import type { Note, NoteBodySaveResult, NoteConflict, NoteResponse, NoteVisibility } from "@carlnotes/contracts/notes"
 // the portable working copy and its transport state never own timers or storage
 export type NoteSaveErrorReason = "tooLarge" | "failed" | "unavailable"
+// the draft a device stores, without the state of a save on its way
 export type NoteBodyDraft = {
 	html: string
 	version: number
@@ -9,17 +10,21 @@ export type NoteBodyDraft = {
 	conflict: NoteConflict | null
 	errorReason: NoteSaveErrorReason | null
 }
+// the full working state of one open note's body
 export type NoteDraftState = {
 	latestHtml: string
 	lastSavedHtml: string
 	savedVersion: number
 	revision: number
+	// the body waiting to save and the body on its way
 	pendingHtml: string | null
 	sendingHtml: string | null
+	// why the note is unsaved, and whether the draft is retired
 	conflict: NoteConflict | null
 	errorReason: NoteSaveErrorReason | null
 	isRetired: boolean
 }
+// the actions that move a draft to its next state
 export type NoteDraftAction =
 	| { type: "edit"; html: string }
 	| { type: "start" }
@@ -53,12 +58,14 @@ export function transitionNoteDraft(state: NoteDraftState, action: NoteDraftActi
 		return state
 	}
 	switch (action.type) {
+		// retire the draft, start a save, or take an edit
 		case "retire":
 			return { ...state, isRetired: true }
 		case "start":
 			return canSaveNoteDraft(state) ? { ...state, sendingHtml: state.pendingHtml, pendingHtml: null } : state
 		case "edit":
 			return editDraft(state, action.html)
+		// take the editor's rendering, without images, as the saved body if no save is waiting or on its way
 		case "baseline": {
 			if (state.pendingHtml !== null || state.sendingHtml !== null) {
 				return state
@@ -66,6 +73,7 @@ export function transitionNoteDraft(state: NoteDraftState, action: NoteDraftActi
 			const html = action.html.replace(/<img\b[^>]*\/?>/gi, "")
 			return { ...state, latestHtml: html, lastSavedHtml: html }
 		}
+		// replace the draft with a reloaded body, or apply a save result
 		case "reload":
 			return { ...toNoteDraftState(action.html, action.version), revision: state.revision + 1 }
 		case "result":
@@ -81,6 +89,7 @@ export function canSaveNoteDraft(state: NoteDraftState): boolean {
 		!state.isRetired &&
 		state.sendingHtml === null &&
 		state.pendingHtml !== null &&
+		// a conflict, a body too large, or an unavailable note blocks the save
 		state.conflict === null &&
 		state.errorReason !== "tooLarge" &&
 		state.errorReason !== "unavailable"
@@ -102,14 +111,16 @@ export function toNoteBodyDraft(state: NoteDraftState): NoteBodyDraft {
 }
 
 // keep device drafts independent of feed-cache versions and deployment identities
-export const NOTE_DRAFT_SCHEMA = 1
-export const NOTE_DRAFT_PREFIX = "carlnotes.note-drafts.v1:"
+const NOTE_DRAFT_SCHEMA = 1
+const NOTE_DRAFT_PREFIX = "carlnotes.note-drafts.v1:"
+// the page a draft was written on, and the visibilities a new note there may have
 export type NoteDraftContext = {
 	pageType: "topic" | "team"
 	pageId: string
 	pageName: string
 	creatableVisibilities: NoteVisibility[]
 }
+// one stored draft, with its page, account, note, and body
 export type NoteDraftRecord = NoteDraftContext & {
 	accountId: string
 	note: Note
@@ -130,6 +141,7 @@ export function parseNoteDrafts(serialized: string | null, accountId: string): N
 	if (!serialized) {
 		return []
 	}
+	// parse the stored drafts, and throw if their format is unsupported
 	const envelope: unknown = JSON.parse(serialized)
 	if (!isRecord(envelope) || envelope.schema !== NOTE_DRAFT_SCHEMA || !Array.isArray(envelope.notes)) {
 		throw new Error("unsupported note draft storage")
@@ -142,6 +154,7 @@ export function parseNoteDrafts(serialized: string | null, accountId: string): N
 		}
 		return entry
 	})
+	// throw if any entry is not a valid draft for this account
 	if (!notes.every((entry) => isNoteDraftRecord(entry, accountId))) {
 		throw new Error("invalid note draft storage")
 	}
@@ -167,12 +180,14 @@ function isNoteDraftRecord(value: unknown, accountId: string): value is NoteDraf
 	if (
 		!isRecord(value) ||
 		value.accountId !== accountId ||
+		// reject a page that is not a topic or a team, or that has no id or name
 		(value.pageType !== "topic" && value.pageType !== "team") ||
 		typeof value.pageId !== "string" ||
 		typeof value.pageName !== "string"
 	) {
 		return false
 	}
+	// accept the record if its visibilities, note, and draft are all valid
 	return (
 		Array.isArray(value.creatableVisibilities) &&
 		value.creatableVisibilities.every(isVisibility) &&
@@ -180,6 +195,7 @@ function isNoteDraftRecord(value: unknown, accountId: string): value is NoteDraf
 		isDraft(value.draft)
 	)
 }
+// check a stored note's id, name, and visibility
 function isNote(value: unknown): value is Note {
 	if (!isRecord(value)) {
 		return false
@@ -188,6 +204,7 @@ function isNote(value: unknown): value is Note {
 		typeof value.id === "string" &&
 		typeof value.name === "string" &&
 		isVisibility(value.visibility) &&
+		// the note's dates, and permission flags that still allow editing
 		typeof value.createdAt === "string" &&
 		typeof value.updatedAt === "string" &&
 		value.canEdit === true &&
@@ -195,6 +212,7 @@ function isNote(value: unknown): value is Note {
 		typeof value.canDelete === "boolean"
 	)
 }
+// check a stored draft's body and the version it edits
 function isDraft(value: unknown): value is NoteBodyDraft {
 	if (!isRecord(value)) {
 		return false
@@ -203,6 +221,7 @@ function isDraft(value: unknown): value is NoteBodyDraft {
 		typeof value.html === "string" &&
 		Number.isSafeInteger(value.version) &&
 		Number(value.version) >= 0 &&
+		// the draft's revision, pending changes, conflict, and error reason
 		Number.isSafeInteger(value.revision) &&
 		Number(value.revision) >= 0 &&
 		value.hasPendingChanges === true &&
@@ -210,6 +229,7 @@ function isDraft(value: unknown): value is NoteBodyDraft {
 		[null, "failed", "tooLarge", "unavailable"].includes(value.errorReason as string | null)
 	)
 }
+// accept no conflict, or a conflict with its version and last editor
 function isConflict(value: unknown): boolean {
 	return (
 		value === null ||
@@ -218,9 +238,11 @@ function isConflict(value: unknown): boolean {
 			(value.lastEditorUsername === null || typeof value.lastEditorUsername === "string"))
 	)
 }
+// accept a private, team, or public visibility
 function isVisibility(value: unknown): value is NoteVisibility {
 	return value === "private" || value === "team" || value === "public"
 }
+// accept an object, excluding null and arrays
 function isRecord(value: unknown): value is Record<string, unknown> {
 	return typeof value === "object" && value !== null && !Array.isArray(value)
 }

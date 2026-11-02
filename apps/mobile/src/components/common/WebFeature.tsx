@@ -51,7 +51,7 @@ export function WebFeatureButton({
 /**
  * Explains a web-only feature before opening CarlNotes in the app browser.
  */
-export function WebFeatureSheet({
+function WebFeatureSheet({
 	title,
 	description,
 	path = "/",

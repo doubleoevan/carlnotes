@@ -56,7 +56,7 @@ function TopicSource({ sourceKind, summary, screeningMessage, isMuted }: TopicSo
 /**
  * Draws a Source provider's brand mark or fallback icon.
  */
-export function SourceIcon({ kind }: { kind: string }) {
+function SourceIcon({ kind }: { kind: string }) {
 	// scale both kinds of source marks with the native text size
 	const size = useFontScaledSize(14)
 	const brand = SOURCE_BRANDS[kind as keyof typeof SOURCE_BRANDS]

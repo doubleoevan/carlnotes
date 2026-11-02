@@ -26,7 +26,7 @@ export const inviteCreateResponse = z.object({ invite })
 // the ways an invite join token can fail, each one its own reason
 export const inviteRejections = ["expired", "exhausted", "unknown"] as const
 
-export type InviteRejection = (typeof inviteRejections)[number]
+type InviteRejection = (typeof inviteRejections)[number]
 
 // what an invite page shows as a rejection: a failed token, or a team with no room left
 export type InviteNoticeRejection = InviteRejection | "teamFull"

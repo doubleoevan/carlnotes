@@ -39,7 +39,8 @@ the browser bundle and renders pages through the server build, behind its own ro
   CLI reads `apps/web/components.json`, so add a component with `bunx shadcn@latest add <name> --cwd apps/web`. The
   component it writes imports `cn` from the `cn` package and adds that package to `package.json`, which no setting
   changes. Move the import to `@carlnotes/nightshift/classNames` and remove the dependency. Biome fails an import from
-  `cn` until then. Custom shared components go in `components/common/`, among them
+  `cn` until then, and an import from `clsx` or `tailwind-merge` anywhere outside `classNames.ts`. Custom shared
+  components go in `components/common/`, among them
   `IconButton.tsx`, the button whose tooltip is also its accessible name, and `FlashingCount.tsx`, a labeled count
   whose highlighted number flashes once when the count changes, and never under reduced motion.
   `ScrollBox.tsx` is the bordered box that scrolls its overflow on the highlight scrollbar with a tab stop, and with
@@ -61,8 +62,7 @@ the browser bundle and renders pages through the server build, behind its own ro
   It starts a table at ten rows a page unless it asks for another size, and its
   `ScriptedTablePagination` shows a paged table's pagination only with JavaScript.
 - `components/chat/` — the chat panel, both composers, the chat message lists, and the hooks behind them.
-  `useChatRoom.ts` adapts core's room state with the browser stream and toasts, and `useChatRoomLinkPreviews.ts`
-  re-exports core's bounded preview polling. `MicButton.tsx` is the
+  `useChatRoom.ts` adapts core's room state with the browser stream and toasts. `MicButton.tsx` is the
   mic in an empty composer's send slot, `RecordingBar.tsx` the bar that replaces the box while a recording runs, and
   `useVoiceRecording.ts` wraps core's recording state machine with the browser's recorder adapter, which loads
   `lib/voiceRecorder.ts` on the first tap and opens an audio context for each composer's listen session and one for
@@ -179,9 +179,10 @@ the browser bundle and renders pages through the server build, behind its own ro
   with the lyrics from `podcastThemeSongLyrics.ts`),
   `PodcastEpisodeCover.tsx` (an episode's cover square), and `PodcastEpisodeAudio.tsx`, the one audio element and the
   podcast player that `Layout` mounts.
-  `stores/podcastEpisodePlayerStore.ts` binds that element and browser lifecycle/voice hooks to the core player, so playback continues from one page to the next,
-  `stores/podcastEpisodePlayActions.ts` plays or pauses a podcast episode or a chapter by id from a page, and
-  `stores/podcastEpisodeListenStore.ts` re-exports the shared listen save interval. Core `useShownPodcastEpisode` owns selection and recording polling; the web supplies its search parameter.
+  `stores/podcastEpisodePlayerStore.ts` binds that element and browser lifecycle/voice hooks to the core player, so
+  playback continues from one page to the next, and core `stores/podcastEpisodePlayActions.ts` plays or pauses a
+  podcast episode or a chapter by id from a page. Core `useShownPodcastEpisode` owns selection and recording polling;
+  the web supplies its search parameter.
 - `components/note/` — the Tasting Notes section, table, and dialog, the dialog's create flow in `CreateNote.tsx`, and
   the shared core note composition adapted to `react-native-enriched-html`, whose web build is a Tiptap editor. `NoteDialog.tsx` fetches the
   note's html and version on every open, loads the comment thread through `useNoteComments` at the same time, and
@@ -228,8 +229,9 @@ the browser bundle and renders pages through the server build, behind its own ro
   registers the spoken answer audio element as core's spoken answer player: each spoken part plays as a blob url, a
   tap's silence unlocks the element, and the media session names the host, with its play and pause controls stopping the
   spoken answer. The queue, its state, its end announcement, and the podcast player question are core's, which the web
-  imports from `@carlnotes/core/stores/`. `podcastEpisodeListenStore.ts` keeps whether the user is signed in and saves a
-  signed-in user's progress in the loaded podcast episode, its playback start once per load, for the player store.
+  imports from `@carlnotes/core/stores/`. Core's `podcastEpisodeListenStore.ts` keeps whether the user is signed in
+  and saves a signed-in user's progress in the loaded podcast episode, its playback start once per load, for the player
+  store.
 - `hooks/` — the React hooks that read the browser or a route, `useTopicPagePayload.ts` among them, the topic page's
   payload and its poll reload, and `useScanNote.ts`, a scan's note behind its recap popover, read once the trigger is
   pointed at, focused, touched, or opened, and kept once the scan has finished; `providers/` — context providers. The
@@ -387,10 +389,10 @@ shared `assets/`, also used by mobile.
 
 `useTopicChat` injects voice, new-topic, attachment, and podcast effects into the core hook. `useChatRoom` injects
 browser streaming and spoken-answer effects. `useChatRoomStream` supplies browser EventSource to the shared lifecycle
-controller. `useChatConversationLoad`, `useEditableTopicDraft`, `useRoomReply`, both preview hooks, `chatHistoryTurns`,
-and `topicToolCalls` retain compatible imports over core. Member loading is core `useRoomMembers`; mention and reply
-rules are core `chatMentions`/`chatRoomReplies`. Keep these wrappers thin. `chatPanelStore` retains panel dimensions,
-open state, and browser effects while core `chatConversationStore` owns account/conversation selection and proposals.
+controller. `useEditableTopicDraft`, `useRoomReply`, `useLinkPreviewRefresh`, and `chatHistoryTurns` retain compatible
+imports over core. Member loading is core `useRoomMembers`; mention and reply rules are core
+`chatMentions`/`chatRoomReplies`. Keep these wrappers thin. `chatPanelStore` retains panel dimensions, open state, and
+browser effects while core `chatConversationStore` owns account/conversation selection and proposals.
 
 
 Coffee Break player/card/details/pills/controls, chapter list, episode row, season card, chat chapter tag, mini player, transcript, theme-song

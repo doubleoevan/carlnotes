@@ -1,14 +1,11 @@
+import type { TopicFinding } from "@carlnotes/contracts/findings"
+import type { PodcastEpisode, PodcastEpisodeChapter } from "@carlnotes/contracts/podcast"
 import {
 	type ChapterTopicFeed,
 	PodcastEpisodeChapters as SharedPodcastEpisodeChapters,
 	toPodcastEpisodeChapterSourceLabel,
 } from "@carlnotes/core/components/PodcastEpisodeChapters"
 import { usePodcastEpisodeChapterRating } from "@carlnotes/core/hooks/usePodcastEpisodeChapterRating"
-
-export { SHOWN_CHAPTER_COUNT } from "@carlnotes/core/components/PodcastEpisodeChapters"
-
-import type { TopicFinding } from "@carlnotes/contracts/findings"
-import type { PodcastEpisode, PodcastEpisodeChapter } from "@carlnotes/contracts/podcast"
 import { cn } from "@carlnotes/nightshift/classNames"
 import type * as React from "react"
 import { useState } from "react"

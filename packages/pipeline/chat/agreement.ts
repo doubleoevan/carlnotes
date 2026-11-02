@@ -16,7 +16,7 @@ const PROPOSAL_CHARS = 6000
 const AGREEMENT_CHECK_TIMEOUT_MS = 10_000
 
 // the one decision the check returns
-export const agreementSchema = z.object({ decision: z.enum(["agree", "decline", "unclear"]) })
+const agreementSchema = z.object({ decision: z.enum(["agree", "decline", "unclear"]) })
 
 export type AgreementDecision = z.infer<typeof agreementSchema>["decision"]
 

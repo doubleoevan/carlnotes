@@ -43,7 +43,7 @@ let activeQueryCache: QueryCache | null = null
  * Returns true if a failed query reads again: up to three times, and never for a response that did not match its
  * contract.
  */
-export function shouldRetryQuery(failureCount: number, error: unknown): boolean {
+function shouldRetryQuery(failureCount: number, error: unknown): boolean {
 	return !(error instanceof ApiResponseError) && failureCount < 3
 }
 

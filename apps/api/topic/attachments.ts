@@ -22,7 +22,7 @@ import { loadOwnedTopic } from "./permissions"
 /**
  * Delete an attachment row and best-effort delete its stored object, restricted to the topic owner.
  */
-export async function deleteTopicAttachment(userId: string, attachmentId: string): Promise<boolean> {
+async function deleteTopicAttachment(userId: string, attachmentId: string): Promise<boolean> {
 	// load the attachment with its topic's owner in one join
 	const [attachment] = await db
 		.select({ id: attachments.id, objectKey: attachments.objectKey, ownerId: topics.ownerId })
@@ -45,7 +45,7 @@ export async function deleteTopicAttachment(userId: string, attachmentId: string
 /**
  * Replace an attachment's context
  */
-export async function updateTopicAttachmentContext(
+async function updateTopicAttachmentContext(
 	userId: string,
 	attachmentId: string,
 	updatedContext: string,
@@ -89,7 +89,7 @@ export async function updateTopicAttachmentContext(
 /**
  * The attachment's storage details for a download, restricted to the topic owner.
  */
-export async function loadDownloadableAttachment(
+async function loadDownloadableAttachment(
 	userId: string,
 	attachmentId: string,
 ): Promise<{ objectKey: string; filename: string; contentType: string } | null> {

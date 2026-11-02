@@ -3,7 +3,7 @@
 import { startActivePoll } from "./activePoll"
 import { isFocusedAndOnline, subscribeToFocusAndOnline } from "./focusAndOnline"
 
-export const COUNTS_POLL_MS = 60_000
+const COUNTS_POLL_MS = 60_000
 
 export type StartCountsPollOptions<Counts> = {
 	// the read, with the signal the stop aborts, and what each read that returns counts feeds

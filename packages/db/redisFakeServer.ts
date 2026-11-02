@@ -6,7 +6,7 @@ import { runFakeSpendReservationCommand } from "./redisFakeSpendReservations"
 import { readFakeBuffer, runFakeViewerCountCommand, toFakeStoredValue } from "./redisFakeViewerCounts"
 
 // a channel listener, with the message and channel arguments that Bun's client passes
-export type ChannelListener = (channelMessage: string, channel: string) => void
+type ChannelListener = (channelMessage: string, channel: string) => void
 
 // the fake server that every fake client shares: the stored values, when each rate limit slot frees, the clients
 // subscribed to each channel, the failures to fake, a connect count, and a gate that holds every subscribe until a test opens it
@@ -26,7 +26,7 @@ export type FakeRedisServer = {
 }
 
 // the real setTimeout, saved before a test replaces it
-export const originalSetTimeout = globalThis.setTimeout
+const originalSetTimeout = globalThis.setTimeout
 
 // a fake client with a connected flag, and a listener registry that survives a dropped connection as in Bun's client
 export type FakeRedisClient = RedisConnectionClient & {
@@ -35,7 +35,7 @@ export type FakeRedisClient = RedisConnectionClient & {
 }
 
 // build a fake client on a shared server
-export function toFakeRedisClient(fakeRedisServer: FakeRedisServer): FakeRedisClient {
+function toFakeRedisClient(fakeRedisServer: FakeRedisServer): FakeRedisClient {
 	// a failing command throws a socket closed error, as a command on a dead socket does
 	const throwIfCommandFailing = (): void => {
 		if (fakeRedisServer.isCommandFailing) {

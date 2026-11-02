@@ -6,7 +6,7 @@ import { STORY_FILE_PATTERN } from "../scripts/workspaces"
 export type StoryAppName = "web" | "mobile"
 
 /** One story: its id and its tags, the file's tags included. */
-export type StoryEntry = { storyId: string; tags: string[] }
+type StoryEntry = { storyId: string; tags: string[] }
 
 /** A story file: its app, its path, and its stories. */
 export type StoryFile = { appName: StoryAppName; filePath: string; storyEntries: StoryEntry[] }

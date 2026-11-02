@@ -22,6 +22,8 @@ import * as reports from "./schema/reports"
 import * as scans from "./schema/scans"
 import * as storage from "./schema/storage"
 import * as teams from "./schema/teams"
+import * as teamTopics from "./schema/teamTopics"
+import * as topicEmailSends from "./schema/topicEmailSends"
 import * as topics from "./schema/topics"
 import * as userBlocks from "./schema/userBlocks"
 import * as users from "./schema/users"
@@ -72,6 +74,8 @@ export const schema = {
 	...scans,
 	...storage,
 	...teams,
+	...teamTopics,
+	...topicEmailSends,
 	...topics,
 	...userBlocks,
 	...users,
@@ -101,7 +105,7 @@ export const ITERATIVE_INDEX_SCAN_SETTING = "set local hnsw.iterative_scan = str
 /**
  * Returns whether a topic, by its id column or a bound id, has enough Findings that no user rated down to be listed.
  */
-export function hasEnoughFindingsToList(topicId: SQLWrapper | string): SQL {
+function hasEnoughFindingsToList(topicId: SQLWrapper | string): SQL {
 	return sql`(select count(*) from ${schema.findings} where ${schema.findings.topicId} = ${topicId} and ${isFindingShown}) >= ${MINIMUM_SHOWN_FINDINGS}`
 }
 

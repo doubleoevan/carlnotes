@@ -1,17 +1,11 @@
 // feed tests for the rate-eligibility rule that the batched feed uses, and for the topic section ids that every
 // replica shares through Redis
 import { afterEach, expect, test } from "bun:test"
-import type { visibilities } from "@carlnotes/contracts/enums"
+import type { Visibility } from "@carlnotes/contracts/enums"
 import { restoreConnectionPool, stubConnectionPool } from "@carlnotes/db/connectionPoolStub"
 import { restoreRedisClient, stubRedisClient } from "@carlnotes/db/redisClientStub"
-import {
-	canRateInFeed,
-	clearSharedTopicFeedCaches,
-	clearVisitorTopicCaches,
-	readPublicSectionTopicIds,
-	readVisitorTopicFeeds,
-	toVisitorTopicPageKey,
-} from "./feeds"
+import { clearSharedTopicFeedCaches, clearVisitorTopicCaches, toVisitorTopicPageKey } from "./feedCaches"
+import { canRateInFeed, readPublicSectionTopicIds, readVisitorTopicFeeds } from "./feeds"
 
 // put the pool and the Redis client back after each test
 afterEach(() => {
@@ -20,7 +14,7 @@ afterEach(() => {
 })
 
 // a topic with just the fields canRateInFeed needs
-function topic(ownerId: string, visibility: (typeof visibilities)[number]): Parameters<typeof canRateInFeed>[0] {
+function topic(ownerId: string, visibility: Visibility): Parameters<typeof canRateInFeed>[0] {
 	return { id: "t1", ownerId, visibility }
 }
 

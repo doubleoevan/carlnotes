@@ -14,10 +14,10 @@ export const SELECTION_PLATFORMS = ["web", "mcp", "native"] as const
 export type SelectionPlatform = (typeof SELECTION_PLATFORMS)[number]
 
 /** How much of a platform a run captures. */
-export type SelectionMode = "all" | "affected" | "none"
+type SelectionMode = "all" | "affected" | "none"
 
 /** A platform's selection: its mode, the reasons for it, the selected story ids, and how many stories it has. */
-export type PlatformSelection = { mode: SelectionMode; reasons: string[]; storyIds: string[]; storyCount: number }
+type PlatformSelection = { mode: SelectionMode; reasons: string[]; storyIds: string[]; storyCount: number }
 
 /** A run's selection: the commits that it compares, the files that changed, and each platform's selection. */
 export type ImageCaptureSelection = {

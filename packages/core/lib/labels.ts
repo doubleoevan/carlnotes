@@ -254,7 +254,7 @@ export function toPodcastEpisodeDurationLabel(durationSeconds: number | null): s
 /**
  * Returns the day that a podcast episode published, such as Sep 25, in the local time zone. Empty for a null date.
  */
-export function toPodcastEpisodeDateLabel(publishedAt: string | null): string {
+function toPodcastEpisodeDateLabel(publishedAt: string | null): string {
 	return publishedAt ? toMonthDayLabel(publishedAt) : ""
 }
 

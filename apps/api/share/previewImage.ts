@@ -8,8 +8,8 @@ import satori from "satori"
 import { MAX_AVATAR_BYTES, type PublishedAvatar, toAvatarContentType } from "../avatars"
 
 // what every platform crops preview images to. 1200x630 is the size X, Slack, and LinkedIn all expect
-export const PREVIEW_WIDTH = 1200
-export const PREVIEW_HEIGHT = 630
+const PREVIEW_WIDTH = 1200
+const PREVIEW_HEIGHT = 630
 
 // bump this when the card's design changes. Slack and X cache preview images hard and ignore cache headers.
 export const PREVIEW_TEMPLATE_VERSION = "v4"

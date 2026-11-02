@@ -137,7 +137,10 @@ export const verifications = pgTable(
 	(table) => [index("verifications_identifier_idx").on(table.identifier)],
 )
 
-// the signing keys that Better Auth's jwt plugin signs MCP access tokens with, published at the auth path's jwks
+/**
+ * the signing keys that Better Auth's jwt plugin signs MCP access tokens with, published at the auth path's jwks
+ * @public Better Auth reads and writes it by model name through the drizzle adapter in apps/api/auth.ts
+ */
 export const jwks = pgTable("jwks", {
 	id: primaryId(),
 	// the key pair as JSON web keys. the private key is encrypted with the auth secret
@@ -204,8 +207,11 @@ export const oauthClients = pgTable(
 	(table) => [index("oauth_clients_user_id_idx").on(table.userId)],
 )
 
-// the oauth resources table. each protected resource a token can be bound to, written from the plugin's config at
-// startup. the MCP server's url is the one resource
+/**
+ * the oauth resources table. each protected resource a token can be bound to, written from the plugin's config at
+ * startup. the MCP server's url is the one resource
+ * @public Better Auth reads and writes it by model name through the drizzle adapter in apps/api/auth.ts
+ */
 export const oauthResources = pgTable("oauth_resources", {
 	id: primaryId(),
 	identifier: text("identifier").notNull().unique(),
@@ -226,7 +232,10 @@ export const oauthResources = pgTable("oauth_resources", {
 	metadata: jsonb("metadata"),
 })
 
-// the oauth client resources table. which resources a client may ask a token for
+/**
+ * the oauth client resources table. which resources a client may ask a token for
+ * @public Better Auth reads and writes it by model name through the drizzle adapter in apps/api/auth.ts
+ */
 export const oauthClientResources = pgTable(
 	"oauth_client_resources",
 	{
@@ -322,7 +331,10 @@ export const oauthAccessTokens = pgTable(
 	],
 )
 
-// the oauth consents table. which scopes a user let a client have
+/**
+ * the oauth consents table. which scopes a user let a client have
+ * @public Better Auth reads and writes it by model name through the drizzle adapter in apps/api/auth.ts
+ */
 export const oauthConsents = pgTable(
 	"oauth_consents",
 	{
@@ -347,7 +359,10 @@ export const oauthConsents = pgTable(
 	],
 )
 
-// the oauth client assertions table. each private key JWT assertion's id, kept until it expires so it is used once
+/**
+ * the oauth client assertions table. each private key JWT assertion's id, kept until it expires so it is used once
+ * @public Better Auth reads and writes it by model name through the drizzle adapter in apps/api/auth.ts
+ */
 export const oauthClientAssertions = pgTable("oauth_client_assertions", {
 	id: primaryId(),
 	expiresAt: timestamp("expires_at").notNull(),

@@ -43,10 +43,15 @@
 					"level": "error",
 					"options": {
 						"paths": {
-							"cn": "import cn from @carlnotes/nightshift/classNames, the class merge that knows the shadow-raised utility"
+							"cn": "import cn from @carlnotes/nightshift/classNames, the class merge that knows the shadow-raised utility",
+							"clsx": "import cn from @carlnotes/nightshift/classNames, the class merge that knows the shadow-raised utility",
+							"tailwind-merge": "import cn from @carlnotes/nightshift/classNames, the class merge that knows the shadow-raised utility"
 						}
 					}
 				}
+			},
+			"suspicious": {
+				"noImportCycles": "error"
 			},
 			"complexity": {
 				"noExcessiveCognitiveComplexity": "error"
@@ -119,6 +124,10 @@
 					}
 				}
 			}
+		},
+		{
+			"includes": ["packages/nightshift/classNames.ts"],
+			"linter": { "rules": { "style": { "noRestrictedImports": "off" } } }
 		},
 		{
 			"includes": ["**/*.test.ts", "**/*.test.tsx", "**/*.stories.tsx", "apps/web/src/lib/hookTestHarness.tsx"],

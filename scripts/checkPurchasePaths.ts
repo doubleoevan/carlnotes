@@ -6,16 +6,16 @@ import { isShippedFile, toAppReachedCapabilities } from "./clientParity"
 import { isInsideFolder, MOBILE_APP_FOLDER, type SourceFile } from "./workspaces"
 
 // the capabilities that start a purchase or open billing management
-export const PURCHASE_CAPABILITIES = ["billingClient.fetchCheckoutUrl", "billingClient.fetchBillingPortalUrl"]
+const PURCHASE_CAPABILITIES = ["billingClient.fetchCheckoutUrl", "billingClient.fetchBillingPortalUrl"]
 
 // the modules that decide whether the app offers a purchase. a file importing one may name the plans path or a label
-export const PURCHASE_RULES_MODULES = [
+const PURCHASE_RULES_MODULES = [
 	"@carlnotes/core/stores/purchaseOffersStore",
 	"@carlnotes/core/lib/storefrontPurchaseRules",
 ]
 
 // the app files that may name the plans path or a purchase label without reading the rules, each with the reason
-export const PURCHASE_PATH_EXCEPTIONS: Record<string, string> = {
+const PURCHASE_PATH_EXCEPTIONS: Record<string, string> = {
 	"apps/mobile/src/platformPath.ts": "maps the web's plans url onto the Plans screen",
 	"apps/mobile/src/nativeIntent.ts": "names the billing path among the signed-in paths a visitor's link waits on",
 	"apps/mobile/src/sessionReturnPath.ts": "returns a visitor to the Plans screen after sign-up",

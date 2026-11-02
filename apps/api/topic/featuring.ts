@@ -7,7 +7,7 @@ import { and, asc, count, eq, gt, gte, isNotNull, sql } from "drizzle-orm"
 import { Hono } from "hono"
 import { isAllowed } from "../authorization"
 import { type AppEnv, currentUser } from "../currentUser"
-import { clearSharedTopicFeedCaches } from "./feeds"
+import { clearSharedTopicFeedCaches } from "./feedCaches"
 
 // whether the feature order was applied, and if not, which rule rejected it
 export type FeatureOrderResult = "ranked" | "missing" | "notPublic"
@@ -17,7 +17,7 @@ export type FeatureOrderResult = "ranked" | "missing" | "notPublic"
  * there and pushes whatever held it, and everything below, down one. A position past the end appends.
  * A topic that is already featured moves: it leaves its old position, and the gap closes before it is inserted into its new position.
  */
-export async function setTopicFeatureOrder(topicId: string, position: number): Promise<FeatureOrderResult> {
+async function setTopicFeatureOrder(topicId: string, position: number): Promise<FeatureOrderResult> {
 	// only a public topic can be featured. the Featured section is visible to a signed-out visitor
 	const [topic] = await db.select({ visibility: topics.visibility }).from(topics).where(eq(topics.id, topicId))
 	if (!topic) {

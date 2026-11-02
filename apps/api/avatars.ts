@@ -166,7 +166,7 @@ export const PROVIDER_PHOTO_ORIGINS = new Set([
 ])
 
 // whether a url is a provider photo the redirect may show. an origin carries the scheme, so http never matches
-export function isProviderPhotoUrl(imageUrl: string): boolean {
+function isProviderPhotoUrl(imageUrl: string): boolean {
 	try {
 		return PROVIDER_PHOTO_ORIGINS.has(new URL(imageUrl).origin)
 	} catch {

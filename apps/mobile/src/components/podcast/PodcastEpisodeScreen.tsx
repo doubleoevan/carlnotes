@@ -5,6 +5,7 @@ import type { PodcastEpisodePageResponse } from "@carlnotes/contracts/podcastEpi
 import { toTopicPath } from "@carlnotes/contracts/seo"
 import { usePolledCounts } from "@carlnotes/core/hooks/usePolledCounts"
 import { useTopicFindingActions } from "@carlnotes/core/hooks/useTopicFindingActions"
+import { PODCAST_EPISODE_LOAD_FAILED_TEXT } from "@carlnotes/core/lib/podcastEpisodeCopy"
 import { isAddTopicToTeamShown } from "@carlnotes/core/lib/topicActions"
 import { applyFindingChanges } from "@carlnotes/core/lib/topicFindingChanges"
 import { useQuery } from "@tanstack/react-query"
@@ -82,8 +83,8 @@ export function PodcastEpisodeScreen() {
 			{/* retryable error */}
 			{query.isError && (
 				<>
-					<Text className="text-sm text-muted-foreground">This episode could not load. Try again.</Text>
-					<Button accessibilityLabel="Retry episode" onPress={() => void refetch()}>
+					<Text className="text-sm text-muted-foreground">{PODCAST_EPISODE_LOAD_FAILED_TEXT}</Text>
+					<Button accessibilityLabel="Retry podcast episode" onPress={() => void refetch()}>
 						<Text>Try again</Text>
 					</Button>
 				</>
@@ -246,7 +247,7 @@ function EpisodeHeader({ page: { podcastEpisode, topic } }: { page: PodcastEpiso
 /**
  * Reserves the phone episode page's title, player, and transcript while its permission-aware payload loads.
  */
-export function PodcastEpisodeSkeleton() {
+function PodcastEpisodeSkeleton() {
 	return (
 		<View accessible accessibilityLabel="Loading episode" accessibilityState={{ busy: true }}>
 			<SkeletonPulse>

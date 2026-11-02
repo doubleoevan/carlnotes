@@ -1,7 +1,8 @@
 // the team smoke's held-topic sections: team deletion, detach succession and deactivation, and the topic role matrix
 
 import { db } from "@carlnotes/db"
-import { teamMembers, teams, teamTopics } from "@carlnotes/db/schema/teams"
+import { teamMembers, teams } from "@carlnotes/db/schema/teams"
+import { teamTopics } from "@carlnotes/db/schema/teamTopics"
 import { attachmentExists, uploadAttachment } from "@carlnotes/db/store"
 import { and, count, eq } from "drizzle-orm"
 import { canSeeTopic, toTopicRole } from "../topic/permissions"

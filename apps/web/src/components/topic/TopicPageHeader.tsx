@@ -1,8 +1,5 @@
-import { isSubscribeShown } from "@carlnotes/core/lib/topicActions"
-
-export { isSubscribeShown } from "@carlnotes/core/lib/topicActions"
-
 import type { TopicResponse } from "@carlnotes/contracts/topics"
+import { isSubscribeShown } from "@carlnotes/core/lib/topicActions"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { PawPrint } from "lucide-react"
 import { useState } from "react"

@@ -12,7 +12,7 @@ const RAW_IMAGE_PATTERN = /https:\/\/raw\.githubusercontent\.com\/doubleoevan\/c
 /**
  * Inlines every repository image in the releaseBody as a data url, so the preview shows images the push has not published.
  */
-export async function toPreviewBody(releaseBody: string): Promise<string> {
+async function toPreviewBody(releaseBody: string): Promise<string> {
 	// each image path once, read from the repository root
 	const imagePaths = new Set(
 		[...releaseBody.matchAll(RAW_IMAGE_PATTERN)].flatMap((imageMatch) => (imageMatch[1] ? [imageMatch[1]] : [])),

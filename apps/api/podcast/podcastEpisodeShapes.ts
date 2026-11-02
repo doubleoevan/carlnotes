@@ -10,7 +10,7 @@ import { toPodcastCoverPath } from "@carlnotes/server/podcastCoverPaths"
 import { isPodcastEpisodeRecordingConfigured } from "@carlnotes/server/podcastEpisodeSettings"
 import { isVoiceChatConfigured } from "@carlnotes/server/voiceChat"
 import { and, count, desc, eq, inArray } from "drizzle-orm"
-import { topicSubscriptionStartDates } from "../topic/helpers"
+import { topicSubscriptionStartDates } from "../topic/subscriptionStartDates"
 import {
 	isAfterSubscriberActivation,
 	loadPodcastEpisodeListenRows,
@@ -211,7 +211,7 @@ export function toPodcastEpisode({
 /**
  * Returns a podcast episode as a table row shows it, with its chapter count.
  */
-export function toPodcastEpisodeSummary({
+function toPodcastEpisodeSummary({
 	podcastEpisodeRow,
 	topic,
 	chapterCount,

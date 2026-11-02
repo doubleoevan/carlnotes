@@ -7,7 +7,8 @@ import { schema } from "./index"
 import { chatProposals, chatRoomMessages, chatTurns } from "./schema/chat"
 import { podcastEpisodeChapters, podcastEpisodes } from "./schema/podcast"
 import { EMBED_DIMENSIONS, EMBED_MODEL_NAME, findings, resources } from "./schema/scans"
-import { subscriptions, topicEmailSends, topicPromptVersions, topics } from "./schema/topics"
+import { topicEmailSends } from "./schema/topicEmailSends"
+import { subscriptions, topicPromptVersions, topics } from "./schema/topics"
 import { oauthAccessTokens, oauthClients, oauthRefreshTokens } from "./schema/users"
 
 // read the generated initial migration once for SQL-level assertions

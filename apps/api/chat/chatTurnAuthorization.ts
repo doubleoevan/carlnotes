@@ -9,7 +9,7 @@ import { isAllowed, isLeaderRole, isMonthlySpendExhausted, topicsRemaining } fro
 import { toAnalyticsProperties } from "../currentUser"
 import { loadTeamSummaries } from "../team/helpers"
 import { toTeamRole } from "../team/members"
-import { type ChatPage, toChatPageId } from "./chatTurns"
+import { type ChatPage, toChatPageId } from "./chatPages"
 
 // the outcomes of a chat turn request. a spent budget names its user.
 // an allowed chat turn names its user, whether the chat turn keeps its text, and what the chat turn may change

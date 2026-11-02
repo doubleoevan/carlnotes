@@ -7,7 +7,7 @@ import type { PlanManagement } from "@carlnotes/core/lib/storefrontPurchaseRules
 /**
  * Sends the browser to the Stripe Customer Portal. Returns false if there is no subscription to manage.
  */
-export async function openBillingPortal(): Promise<boolean> {
+async function openBillingPortal(): Promise<boolean> {
 	const portalUrl = await fetchBillingPortalUrl()
 	if (portalUrl === null) {
 		return false

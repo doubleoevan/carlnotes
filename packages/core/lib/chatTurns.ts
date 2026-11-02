@@ -27,7 +27,7 @@ let spokenAnswerKeyCount = 0
 /**
  * Returns a spoken answer key no other chat turn in this session has, for a loaded or a just-sent chat turn.
  */
-export function toSpokenAnswerKey(): string {
+function toSpokenAnswerKey(): string {
 	spokenAnswerKeyCount += 1
 	return `chat-turn-${spokenAnswerKeyCount}`
 }

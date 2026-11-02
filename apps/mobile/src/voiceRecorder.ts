@@ -32,7 +32,7 @@ export const VOICE_RECORDING_FILE_PREFIX = "voice-recording-"
 
 // ponytail: the phone's silence threshold settings are a guess until the device checks measure a quiet room and a
 // noisy one. Android's metering reads the loudest sample since the last read, so it sits higher than the browser's level
-export const NATIVE_SILENCE_THRESHOLD_SETTINGS: SilenceThresholdSettings = {
+const NATIVE_SILENCE_THRESHOLD_SETTINGS: SilenceThresholdSettings = {
 	minimum: 0.03,
 	ambientRatio: 2,
 	margin: 0.01,
@@ -50,7 +50,7 @@ export type NativeVoiceRecorder = Pick<
 export type PlatformRecordingOptions = Record<string, string | number | boolean>
 
 // one recording's level summary, which a development build logs to measure the silence threshold on hardware
-export type VoiceLevelTrace = {
+type VoiceLevelTrace = {
 	platform: MobilePlatform
 	ambientLevel: number
 	silenceThreshold: number

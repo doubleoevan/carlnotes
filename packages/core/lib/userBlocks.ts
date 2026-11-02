@@ -2,8 +2,8 @@
 import { sendBlockUser, sendUnblockUser } from "@carlnotes/client/blockClient"
 
 // the labels of the profile menu's option, and of the report dialog's block choice
-export const BLOCK_LABEL = "Block"
-export const UNBLOCK_LABEL = "Unblock"
+const BLOCK_LABEL = "Block"
+const UNBLOCK_LABEL = "Unblock"
 
 /**
  * Returns the label of the report dialog's block choice for one author.

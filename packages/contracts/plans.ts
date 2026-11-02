@@ -131,7 +131,6 @@ export const PLANS = {
 export const PLANS_PATH = "/plans"
 export const PURCHASE_COPY = {
 	upgrade: "Upgrade",
-	manageBilling: "Manage billing",
 	managePlan: "Manage plan",
 	seePlans: "See plans",
 	pickUpMoreCoffee: "Pick up more coffee",

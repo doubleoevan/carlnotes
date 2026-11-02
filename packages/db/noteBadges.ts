@@ -4,7 +4,8 @@ import { and, count, eq, gt, inArray, isNull, ne, or } from "drizzle-orm"
 import { toUnblockedAuthorFilter } from "./contentFilters"
 import { db } from "./index"
 import { noteComments, noteReads, notes } from "./schema/notes"
-import { teamMembers, teams, teamTopics } from "./schema/teams"
+import { teamMembers, teams } from "./schema/teams"
+import { teamTopics } from "./schema/teamTopics"
 import { topics } from "./schema/topics"
 
 /**

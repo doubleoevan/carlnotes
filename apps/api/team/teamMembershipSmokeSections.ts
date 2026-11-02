@@ -3,7 +3,8 @@
 
 import { db } from "@carlnotes/db"
 import { teamMembers } from "@carlnotes/db/schema/teams"
-import { subscriptions, topicEmailSends } from "@carlnotes/db/schema/topics"
+import { topicEmailSends } from "@carlnotes/db/schema/topicEmailSends"
+import { subscriptions } from "@carlnotes/db/schema/topics"
 import { and, count, eq, inArray } from "drizzle-orm"
 import { isLeaderRole } from "../authorization"
 import { toTopicRole } from "../topic/permissions"

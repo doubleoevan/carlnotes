@@ -24,11 +24,11 @@ const TEST_NOTE_COLUMNS = {
 }
 
 // the note row as the notes table stores it, and the same note with public visibility
-export const TEST_NOTE_ROW = toTableRow(notes, TEST_NOTE_COLUMNS)
+const TEST_NOTE_ROW = toTableRow(notes, TEST_NOTE_COLUMNS)
 export const TEST_PUBLIC_NOTE_ROW = toTableRow(notes, { ...TEST_NOTE_COLUMNS, visibility: "public" })
 
 // the note's team page, private by default, and its public twin
-export const TEST_TEAM_ROW = ["team-1", false, "Reading Club"]
+const TEST_TEAM_ROW = ["team-1", false, "Reading Club"]
 export const TEST_PUBLIC_TEAM_ROW = ["team-1", true, "Reading Club"]
 
 // the rows a test replaces: the note, its team, the user's membership on it, and the user's access row

@@ -5,7 +5,7 @@ import {
 	type Frequency,
 	toKnownDayOfWeek,
 	toKnownFrequency,
-	type visibilities,
+	type Visibility,
 } from "@carlnotes/contracts/enums"
 import { DEFAULT_SOURCES, toCustomSourceOption, toDefaultSource } from "@carlnotes/contracts/sources"
 import type { UpdateTopicPayload } from "@carlnotes/contracts/topicPayloads"
@@ -14,9 +14,6 @@ import { type Dispatch, type SetStateAction, useState } from "react"
 import { toPossibleSourceUrls } from "../lib/topicPromptUrls"
 
 export type AddedSource = { optionKey: string; value: string; name?: string }
-
-// the field union that the visibility select offers
-export type Visibility = (typeof visibilities)[number]
 
 // every editable field with its setter, plus what the modal derives from them
 export type TopicFields<Attachment> = {

@@ -60,7 +60,7 @@ export async function acceptInviteToken(
 /**
  * Reports an accepted invite with its kind, email, username, or link, and the topic or the team it opens.
  */
-export function trackInviteAccepted(
+function trackInviteAccepted(
 	userId: string,
 	invite: typeof invites.$inferSelect,
 	analyticsProperties?: AnalyticsProperties,
@@ -181,7 +181,7 @@ export async function acceptTeamInvite(
 /**
  * Whether an invitation is addressed to this user: by their resolved account, or by an email they own.
  */
-export async function isInviteForUser(
+async function isInviteForUser(
 	invite: Pick<typeof invites.$inferSelect, "invitedUserId" | "email">,
 	userId: string,
 ): Promise<boolean> {

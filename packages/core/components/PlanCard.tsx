@@ -20,7 +20,7 @@ export type PlanCardElements = {
 export type PlanPrice = { price: string; billingNote: string }
 
 // where a paid plan is managed: the action's label and what it opens
-export type PlanManagementAction = { label: string; onPress: () => void }
+type PlanManagementAction = { label: string; onPress: () => void }
 
 export type PlanCardProps = {
 	plan: Plan

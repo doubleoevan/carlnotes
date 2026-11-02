@@ -4,7 +4,10 @@ import { cva, type VariantProps } from "class-variance-authority"
 import type { ComponentPlatform } from "../componentPlatforms"
 import { FIELD_CLASS } from "../field"
 
-/** The apps that keep an implementation of Button. */
+/**
+ * The apps that keep an implementation of Button.
+ * @public scripts/check-component-parity.ts reads it through a dynamic import of each contract file.
+ */
 export const platforms: ComponentPlatform[] = ["web", "mobile"]
 
 /** The Button variants. */

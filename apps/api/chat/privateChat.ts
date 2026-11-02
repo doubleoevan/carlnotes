@@ -14,6 +14,7 @@ import { type AppEnv, currentUser } from "../currentUser"
 import { toolCallerRateLimiter } from "../rateLimit"
 import { deleteTopicDraft, loadTopicDraft } from "../topic/topicDrafts"
 import { loadKeptTopicAttachments } from "./chatAttachmentReads"
+import type { ChatPage } from "./chatPages"
 import { answerChatTurn } from "./chatTurnAnswer"
 import {
 	authorizeChatTurn,
@@ -24,7 +25,7 @@ import {
 	SIGNUP_REQUIRED_ERROR,
 	toChatRejection,
 } from "./chatTurnAuthorization"
-import { type ChatPage, clearChatTurns, loadChatTurns } from "./chatTurns"
+import { clearChatTurns, loadChatTurns } from "./chatTurns"
 
 // the paths of a topic's chat, a team's chat, and the new-topic chat, after the /api base
 export const TOPIC_CHAT_PATH = "/topics/:id/chat"

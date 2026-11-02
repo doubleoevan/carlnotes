@@ -34,6 +34,28 @@ test("toParsedImports reads static, multi-line, side-effect, dynamic, re-export,
 	])
 })
 
+// a quoted path after "from" in code that follows an export declaration is not an import
+test("toParsedImports reads no import from a declaration, a sql string, or a regex after an export", () => {
+	const fileText =
+		'import * as ns from "./namespace"\nexport type Row = { id: string }\nconst isShown = sql`rating is distinct from \'down\'`\nconst selectMatch = /from "(\\w+)"/.exec(text)\nexport { a as b } from "./renamed"\n'
+	expect(toParsedImports(fileText)).toMatchObject([
+		{ importPath: "./namespace", lineNumber: 1 },
+		{ importPath: "./renamed", lineNumber: 5 },
+	])
+})
+
+// a comment or a quoted name inside the braces stays part of the statement, so its import is still checked, and a
+// comment after an export names no import
+test("toParsedImports reads an import with comments or a quoted name inside its braces", () => {
+	const fileText =
+		'import {\n\t// biome-ignore lint/style/noRestrictedImports: the probe\n\ttwMerge,\n} from "tailwind-merge"\nimport {\n\t/* the row shape */ type Row,\n} from "./rows"\nimport { "kebab-name" as kebabName } from "./kebab"\nexport { a } // re-exported from "./notAnImport"\n'
+	expect(toParsedImports(fileText)).toMatchObject([
+		{ importPath: "tailwind-merge", lineNumber: 1, isTypeOnly: false },
+		{ importPath: "./rows", lineNumber: 5, isTypeOnly: true },
+		{ importPath: "./kebab", lineNumber: 8 },
+	])
+})
+
 // a statement is type-only with import type, export type, or every specifier marked type
 test("isTypeOnlyImport accepts statement-level and all-specifier type imports and rejects a value import", () => {
 	expect(isTypeOnlyImport('import type { AppType } from "@carlnotes/api"')).toBe(true)

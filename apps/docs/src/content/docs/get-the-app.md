@@ -13,16 +13,26 @@ teams, and chats are the same ones.
 
 ## What the app does
 
-The app covers reading and talking. The admin console stays on the site. You read your feed and each topic's findings
-and recaps, make a topic with the form or with Carl, and follow a public one. You talk to Carl in Coffee Talk and to
-your team in its room, typing or out loud, with photos, camera shots, and files attached. You can also ask Carl and
-Vienna about the podcast episode you're playing. You write Tasting Notes and comments, with offline drafts that wait
-until you reconnect. You play Coffee Break episodes and keep listening with the screen off. Report and block work the
-same way as on the site.
+The app covers reading and talking. You read your feed and each topic's findings and recaps, make a topic with the
+form or with Carl, and follow a public one. You talk to Carl in Coffee Talk and to your team in its room, typing or out
+loud, with photos, camera shots, and files attached. You can also ask Carl and Vienna about the podcast episode you're
+playing. You write Tasting Notes and comments, with offline drafts that wait until you reconnect. You play Coffee Break
+episodes and keep listening with the screen off. Report and block work the same way as on the site.
+
+![The app on iPhone and Android: the feed with its findings and chapter pills, Coffee Talk with Carl linking a song's
+video, and the feed in dark mode](../../assets/screenshots/mobile-app-screens.png)
 
 Make a topic as [the Quickstart](/docs/quickstart/) describes. **Plans** in the app sells Plus and Premium through the
 App Store or Google Play, as [Plans and limits](/docs/account/plans-and-limits/#buy-a-plan-in-the-app) describes. A plan
 bought on the site is managed on the site.
+
+## Notifications
+
+A push tells you when a topic finds something new or a teammate mentions you. The app icon counts what is waiting for
+you: unseen mentions, unread note edits and comments, and topic invitations.
+
+![A mention push on an iPhone home screen, and the CarlNotes icon with a badge of
+3](../../assets/screenshots/mobile-push-badge-iphone.png)
 
 ## Links open in the app
 

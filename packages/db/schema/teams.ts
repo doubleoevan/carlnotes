@@ -1,8 +1,7 @@
-// the Team tables: teams, their members, and the topics shared into them
+// the Team tables: teams and their members
 import { sql } from "drizzle-orm"
 import { boolean, index, pgTable, primaryKey, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core"
 import { primaryId, teamRole } from "./columns"
-import { topics } from "./topics"
 import { users } from "./users"
 
 // a team is a named set of people that holds topics together. it is a permissions and identity object
@@ -24,25 +23,6 @@ export const teams = pgTable(
 		uniqueIndex("teams_name_lower_unique").on(sql`lower(${table.name})`),
 		// the trigram index behind the team name search, which matches anywhere in the lowercased name
 		index("teams_name_lower_trgm").using("gin", sql`lower(${table.name}) gin_trgm_ops`),
-	],
-)
-
-// the additional teams a topic is shared into. the owning team lives on topics.team_id alone
-export const teamTopics = pgTable(
-	"team_topics",
-	{
-		teamId: text("team_id")
-			.notNull()
-			.references(() => teams.id, { onDelete: "cascade" }),
-		topicId: text("topic_id")
-			.notNull()
-			.references(() => topics.id, { onDelete: "cascade" }),
-		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-	},
-	(table) => [
-		primaryKey({ columns: [table.teamId, table.topicId] }),
-		// the topic side covers "which teams hold this topic"
-		index("team_topics_topic_id_idx").on(table.topicId),
 	],
 )
 

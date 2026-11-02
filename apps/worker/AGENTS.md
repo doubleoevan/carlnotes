@@ -15,7 +15,8 @@ retries the pending object deletions through `retryPendingObjectDeletions.ts`, m
 each content report open past twelve hours through `reportReminders.ts`, and reports the day's spend across every user
 through `dailySpend.ts`, which warns past `GLOBAL_DAILY_SPEND_ALERT_USD`), `scanQueue.ts` (the sweep's view of the scan
 queue: the start of the rows a dying caller never dispatched, the queue's report, and how many Scans a sweep may start,
-`SCAN_DISPATCH_LIMIT` minus the backlog), `scheduledTopicLimits.ts` (the limits that the sweep reads once per owner
+`SCAN_DISPATCH_LIMIT` minus the backlog), `scheduledTopicFilter.ts` (the filter that selects the scheduled Topics,
+and the frequency window between their Scans), `scheduledTopicLimits.ts` (the limits that the sweep reads once per owner
 inside one request memo: the daily topic limit, the daily topics that scan weekly past the daily scans cutoff, with each
 owner's cutoff cached in Redis for an hour, and the owners whose key budget is spent, with
 `scheduledTopicTestFixtures.ts` for the scheduled topic that its tests and the sweep's share), `resetMonthlyBudgets.ts`

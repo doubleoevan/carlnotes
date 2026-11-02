@@ -10,7 +10,7 @@ import { MicVAD } from "@ricky0123/vad-web"
 declare const __VOICE_ACTIVITY_ASSET_PATH__: string
 
 // what one question listens for: speech starting, speech ending after the pause, and a blip too short to be speech
-export type VoiceActivityHandlers = { onSpeechStart: () => void; onSpeechEnd: () => void; onMisfire: () => void }
+type VoiceActivityHandlers = { onSpeechStart: () => void; onSpeechEnd: () => void; onMisfire: () => void }
 
 // the page's one detector, or null once it failed to start, and the question it is listening to
 let voiceActivityDetectorLoad: Promise<MicVAD | null> | null = null

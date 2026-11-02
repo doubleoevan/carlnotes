@@ -6,7 +6,7 @@ import type { SessionUser } from "./auth"
 import type { ToolCaller } from "./mcp/toolCaller"
 
 // the topic a route loaded, and whether it is public
-export type AnalyticsTopic = { topicId: string; isPublic: boolean }
+type AnalyticsTopic = { topicId: string; isPublic: boolean }
 
 // the hono environment every route shares. Variables holds the session user the auth middleware set, or null, the
 // session's own id, the tool caller an mcp request resolved ahead of its rate limit, and the topic a route loaded for

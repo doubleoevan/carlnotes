@@ -12,8 +12,8 @@ import { toContainsLikePattern } from "../likePattern"
 import { loadLatestPodcastEpisodes } from "../podcast/podcastEpisodeShapes"
 import { loadTopicFindingPermissions } from "../topic/findingPermissions"
 import { toTopicFinding } from "../topic/findings"
-import { topicSubscriptionStartDates } from "../topic/helpers"
 import { toTopicViewFilter } from "../topic/permissions"
+import { topicSubscriptionStartDates } from "../topic/subscriptionStartDates"
 
 // who is searching, whether they are an admin, the trimmed query, the most rows to read, the filter the finding's
 // topic's tags must pass, and the finding filter, the shown findings by default

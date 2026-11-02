@@ -3,7 +3,8 @@
 
 import { connectionPool, db } from "@carlnotes/db"
 import { chatRoomMentions, chatRoomMessages } from "@carlnotes/db/schema/chat"
-import { teamMembers, teams, teamTopics } from "@carlnotes/db/schema/teams"
+import { teamMembers, teams } from "@carlnotes/db/schema/teams"
+import { teamTopics } from "@carlnotes/db/schema/teamTopics"
 import { topics } from "@carlnotes/db/schema/topics"
 import { users } from "@carlnotes/db/schema/users"
 import { eq, inArray } from "drizzle-orm"

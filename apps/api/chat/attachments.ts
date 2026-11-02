@@ -167,7 +167,7 @@ async function discardUploadedObject(objectKey: string): Promise<void> {
  * Delete one kept attachment, scoped to its keeper, freeing its limit slot and best-effort deleting its stored object.
  * False if the attachment is not this user's kept one.
  */
-export async function deleteKeptAttachment(userId: string, keptAttachmentId: string): Promise<boolean> {
+async function deleteKeptAttachment(userId: string, keptAttachmentId: string): Promise<boolean> {
 	// load the row first for its object key and the ownership check
 	const [keptAttachment] = await db
 		.select({ id: chatAttachments.id, objectKey: chatAttachments.objectKey })

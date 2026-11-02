@@ -9,7 +9,7 @@ const GOOGLE_NEWS_LOCALE = "hl=en-US&gl=US&ceid=US:en"
 const PUBLISHER_FILTER = "site:"
 
 // the source kinds a source is saved as
-export type EditableSourceKind = (typeof editableSourceKinds)[number]
+type EditableSourceKind = (typeof editableSourceKinds)[number]
 
 // an x handle: up to fifteen letters, digits, and underscores, the form x itself allows
 export const X_HANDLE_PATTERN = /^[A-Za-z0-9_]{1,15}$/
@@ -17,7 +17,7 @@ export const X_HANDLE_PATTERN = /^[A-Za-z0-9_]{1,15}$/
 /**
  * The X handle a typed value names, from the handle, an @handle, or a profile url on x.com or twitter.com, or null for anything else.
  */
-export function toXHandle(value: string): string | null {
+function toXHandle(value: string): string | null {
 	// a profile url is the host and one path segment. a deeper path such as /i/flow/login names no account
 	const profilePath = value.trim().replace(/^https?:\/\/(?:www\.)?(?:x|twitter)\.com\//i, "")
 	const [handle = "", ...deeperSegments] = profilePath.replace(/[?#].*$/, "").split("/")
@@ -34,7 +34,7 @@ export type CustomSourceKey = (typeof customSourceKeys)[number]
 
 // the default Source keys, one per DEFAULT_SOURCES entry
 export const defaultSourceKeys = ["webSearch"] as const
-export type DefaultSourceKey = (typeof defaultSourceKeys)[number]
+type DefaultSourceKey = (typeof defaultSourceKeys)[number]
 
 // a default Source, on for every new topic, with its sourceKind and toConfig save it, and label and summary to render it
 export type DefaultSource = {

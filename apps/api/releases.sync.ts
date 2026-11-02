@@ -13,7 +13,7 @@ const GITHUB_RELEASES_URL = `https://api.github.com/repos/${GITHUB_REPOSITORY}/r
  * Store every published release the repository holds. Drafts are skipped, and an existing row is
  * updated instead of duplicated, so this is safe to run at any time and as often as needed.
  */
-export async function syncReleases(): Promise<{ storedReleaseCount: number; skippedReleaseCount: number }> {
+async function syncReleases(): Promise<{ storedReleaseCount: number; skippedReleaseCount: number }> {
 	// a GitHub token only matters for a private repository. this one is public, so an unauthenticated read works
 	const githubToken = Bun.env.GITHUB_TOKEN
 
@@ -34,11 +34,13 @@ export async function syncReleases(): Promise<{ storedReleaseCount: number; skip
 	let skippedReleaseCount = 0
 	const releases = (await response.json()) as Parameters<typeof toReleaseUpsert>[0][]
 	for (const release of releases) {
+		// skip a draft, or a release without a tag, a date, or a url
 		const releaseUpsert = toReleaseUpsert(release)
 		if (!releaseUpsert) {
 			skippedReleaseCount += 1
 			continue
 		}
+		// save the release and count it
 		await saveRelease(releaseUpsert)
 		storedReleaseCount += 1
 	}

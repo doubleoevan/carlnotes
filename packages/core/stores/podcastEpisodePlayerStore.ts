@@ -1,6 +1,7 @@
 import { fetchNextUnplayedPodcastEpisode } from "@carlnotes/client/podcastEpisodeClient"
 import type { PodcastEpisode } from "@carlnotes/contracts/podcast"
 import type { PodcastEpisodeAudioAdapter, PodcastEpisodeAudioEvent } from "../lib/podcastEpisodeAudio"
+import { PODCAST_EPISODE_PLAY_FAILED_TEXT } from "../lib/podcastEpisodeCopy"
 import { toChapterIndexAt, toNextPlaybackRate, toPodcastEpisodeSeekSeconds } from "../lib/podcastEpisodePlayback"
 import {
 	isPodcastEpisodeListenDue,
@@ -18,7 +19,6 @@ import {
 // retain the established player imports while state subscriptions live separately
 export {
 	toLoadedPodcastEpisode,
-	toPlayerChapterPosition,
 	toPodcastEpisodePlayerState,
 	toPodcastEpisodeQuestionStart,
 	useIsPodcastEpisodePlaying,
@@ -44,6 +44,7 @@ export function registerPodcastEpisodeAudioAdapter(adapter: PodcastEpisodeAudioA
 	// release the previous adapter before replacing its event owner
 	clearPodcastEpisodePlayer()
 	audioAdapter = adapter
+	// return a cleanup that clears the player if this adapter is still the registered one
 	return () => {
 		if (audioAdapter === adapter) {
 			clearPodcastEpisodePlayer()
@@ -86,9 +87,11 @@ export async function playPodcastEpisode(podcastEpisode: PodcastEpisode, startSe
 		} else if (startSeconds !== undefined || toPodcastEpisodePlayerState().podcastEpisode?.isCompleted) {
 			seekTo(startSeconds ?? 0)
 		}
+		// stop if a newer request started or the adapter changed
 		if (!isPodcastEpisodeRequestCurrent(version) || audioAdapter !== adapter) {
 			return false
 		}
+		// play the audio, and report the visit event if no newer request started meanwhile
 		await adapter.play()
 		if (!isPodcastEpisodeRequestCurrent(version)) {
 			return false
@@ -96,11 +99,12 @@ export async function playPodcastEpisode(podcastEpisode: PodcastEpisode, startSe
 		adapter.onVisitEvent?.("visit_episode_played", podcastEpisode)
 		return true
 	} catch {
+		// show the play error if this request is still the latest
 		if (isPodcastEpisodeRequestCurrent(version)) {
 			updatePodcastEpisodePlayerState({
 				isPlaying: false,
 				isLoading: false,
-				errorMessage: "This episode could not play. Try again.",
+				errorMessage: PODCAST_EPISODE_PLAY_FAILED_TEXT,
 			})
 		}
 		return false
@@ -149,6 +153,7 @@ export function resumePodcastEpisode(): void {
 		void playPodcastEpisode(podcastEpisode, positionSeconds)
 		return
 	}
+	// otherwise resume the loaded audio as the newest request
 	const version = retirePodcastEpisodeRequests()
 	void resumeAudio(audioAdapter, version)
 }
@@ -277,12 +282,14 @@ export function reportPodcastEpisodeAudioEvent(event: PodcastEpisodeAudioEvent):
 	} else if (event.type === "playback") {
 		receivePlayback(event.isPlaying)
 	} else if (event.type === "buffering") {
+		// match the loading state to the buffering state, if it changed
 		if (toPodcastEpisodePlayerState().isLoading !== event.isBuffering) {
 			updatePodcastEpisodePlayerState({ isLoading: event.isBuffering })
 		}
 	} else if (event.type === "ended") {
 		void finishPodcastEpisode()
 	} else {
+		// reload the source after an audio error
 		void reloadPodcastEpisodeAudio()
 	}
 }
@@ -304,6 +311,7 @@ async function loadPodcastEpisode({
 	hasLoadedAudio = false
 	lastAudioReloadAt = 0
 	const currentLoadId = loadId
+	// show the new podcast episode loading at the requested start or its saved progress
 	const savedProgressSeconds = podcastEpisode.isCompleted ? 0 : podcastEpisode.progressSeconds
 	const positionSeconds = toPodcastEpisodeSeekSeconds({
 		positionSeconds: startSeconds ?? savedProgressSeconds,
@@ -316,6 +324,7 @@ async function loadPodcastEpisode({
 		isLoading: true,
 		errorMessage: null,
 	})
+	// load the audio, and mark it ready if no newer load started meanwhile
 	await adapter.load({
 		podcastEpisode,
 		positionSeconds,
@@ -333,8 +342,9 @@ async function resumeAudio(adapter: PodcastEpisodeAudioAdapter, version: number)
 	try {
 		await adapter.play()
 	} catch {
+		// show the play error if this adapter and request are still current
 		if (audioAdapter === adapter && isPodcastEpisodeRequestCurrent(version)) {
-			updatePodcastEpisodePlayerState({ isPlaying: false, errorMessage: "This episode could not play. Try again." })
+			updatePodcastEpisodePlayerState({ isPlaying: false, errorMessage: PODCAST_EPISODE_PLAY_FAILED_TEXT })
 		}
 	}
 }
@@ -376,6 +386,7 @@ function receivePlayback(isPlaying: boolean): void {
 		return
 	}
 	updatePodcastEpisodePlayerState({ isPlaying, isLoading: false, errorMessage: null })
+	// save the progress, and report a playback start if the audio began playing
 	if (isPlaying) {
 		audioAdapter?.onPlaybackStarted?.()
 		refreshPodcastEpisodeMediaSession()
@@ -400,6 +411,7 @@ async function finishPodcastEpisode(): Promise<void> {
 	})
 	savePodcastEpisodeProgress({ isCompleted: true })
 	audioAdapter?.onVisitEvent?.("visit_episode_completed", endedPodcastEpisode)
+	// play the topic's next unplayed podcast episode for a signed-in user, if no newer request started
 	const nextPodcastEpisode = isUserSignedIn()
 		? await fetchNextUnplayedPodcastEpisode(endedPodcastEpisode.topicId).catch(() => null)
 		: null
@@ -419,7 +431,7 @@ async function reloadPodcastEpisodeAudio(): Promise<void> {
 		updatePodcastEpisodePlayerState({
 			isPlaying: false,
 			isLoading: false,
-			errorMessage: "This episode could not play. Try again.",
+			errorMessage: PODCAST_EPISODE_PLAY_FAILED_TEXT,
 		})
 		return
 	}
@@ -435,6 +447,7 @@ async function reloadPodcastEpisodeAudio(): Promise<void> {
 			playbackRate: toPodcastEpisodePlayerState().playbackRate,
 			loadId,
 		})
+		// end the loading state and resume a playing podcast episode, if this request is still current
 		if (isPodcastEpisodeRequestCurrent(version)) {
 			updatePodcastEpisodePlayerState({ isLoading: false })
 			refreshPodcastEpisodeMediaSession()
@@ -443,11 +456,12 @@ async function reloadPodcastEpisodeAudio(): Promise<void> {
 			await adapter.play()
 		}
 	} catch {
+		// show the play error if this request is still current
 		if (isPodcastEpisodeRequestCurrent(version)) {
 			updatePodcastEpisodePlayerState({
 				isPlaying: false,
 				isLoading: false,
-				errorMessage: "This episode could not play. Try again.",
+				errorMessage: PODCAST_EPISODE_PLAY_FAILED_TEXT,
 			})
 		}
 	}

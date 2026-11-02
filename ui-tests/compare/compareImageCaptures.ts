@@ -28,7 +28,7 @@ import {
 import { readJsonFile } from "../jsonFiles"
 
 /** How far a pixel's color may move before it counts as changed: pixelmatch's color distance, from 0 to 1. */
-export const PIXEL_COLOR_THRESHOLD = 0.1
+const PIXEL_COLOR_THRESHOLD = 0.1
 
 /**
  * What comparing two images found: the differing pixels and their share, both sizes, and the diff image, encoded only

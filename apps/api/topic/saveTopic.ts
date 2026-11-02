@@ -19,7 +19,7 @@ import type { AnalyticsProperties } from "../currentUser"
 import { startInviteEmails } from "../invite/emails"
 import { checkTopicInvitees } from "../invite/userInvites"
 import { releaseFeatureOrder } from "./featuring"
-import { clearVisitorTopicCaches } from "./feeds"
+import { clearVisitorTopicCaches } from "./feedCaches"
 import { type PromptVersionOrigin, savePromptVersion } from "./promptVersions"
 import {
 	authorizeNewDailyTopic,

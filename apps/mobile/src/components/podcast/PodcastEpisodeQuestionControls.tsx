@@ -25,7 +25,7 @@ import { openSessionScreen } from "@/sessionReturnPath"
 export { isPodcastEpisodeQuestionButtonShown } from "@carlnotes/core/stores/podcastEpisodeQuestionRules"
 
 // the round button beside play in the dock, the web's question button
-export const PODCAST_EPISODE_QUESTION_BUTTON_CLASS = "size-11 rounded-full bg-muted p-0 active:bg-accent"
+const PODCAST_EPISODE_QUESTION_BUTTON_CLASS = "size-11 rounded-full bg-muted p-0 active:bg-accent"
 
 /**
  * Shows the web's mic that asks carl and vienna about the loaded podcast episode. A tap pauses the podcast episode and

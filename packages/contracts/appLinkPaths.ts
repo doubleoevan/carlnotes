@@ -7,7 +7,7 @@ export type AppLinkPath = {
 	androidDataFilter: { path: string } | { pathPrefix: string }
 }
 
-export const APP_LINK_PATHS: readonly AppLinkPath[] = [
+const APP_LINK_PATHS: readonly AppLinkPath[] = [
 	{ applePathComponent: "/", androidDataFilter: { path: "/" } },
 	{ applePathComponent: "/topics/*", androidDataFilter: { pathPrefix: "/topics/" } },
 	{ applePathComponent: "/teams", androidDataFilter: { path: "/teams" } },

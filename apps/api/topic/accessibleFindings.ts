@@ -2,17 +2,18 @@
 import { toAvatarVersion } from "@carlnotes/contracts/avatars"
 import { db } from "@carlnotes/db"
 import { bookmarks, findings } from "@carlnotes/db/schema/scans"
-import { teamMembers, teamTopics } from "@carlnotes/db/schema/teams"
+import { teamMembers } from "@carlnotes/db/schema/teams"
+import { teamTopics } from "@carlnotes/db/schema/teamTopics"
 import type { topics } from "@carlnotes/db/schema/topics"
 import { users } from "@carlnotes/db/schema/users"
 import { and, eq, inArray, or, sql } from "drizzle-orm"
 import { loadUserAccess } from "../authorization"
 import { attachTopicFindingFaviconPaths } from "../favicons"
 import { type FindingPageWindow, loadTopicFindings } from "./findings"
-import { topicSubscriptionStartDate } from "./helpers"
+import { topicSubscriptionStartDate } from "./subscriptionStartDates"
 
 // attach the bookmarks from the team that owns the topic to its topic findings
-export async function attachTeamBookmarks(
+async function attachTeamBookmarks(
 	topicFindings: Awaited<ReturnType<typeof loadTopicFindings>>,
 	topicId: string,
 	owningTeamId: string | null,

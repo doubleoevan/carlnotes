@@ -26,7 +26,7 @@ export const WEB_COMPONENT_BROWSER_FOLDERS = new Set([
 ])
 
 /** The mobile app's component browser paths: Storybook's config folder and the route that shows it. */
-export const MOBILE_COMPONENT_BROWSER_PATHS = new Set([
+const MOBILE_COMPONENT_BROWSER_PATHS = new Set([
 	`${MOBILE_APP_FOLDER}/.rnstorybook`,
 	`${MOBILE_APP_FOLDER}/app/storybook.tsx`,
 ])
@@ -71,10 +71,14 @@ const LOCAL_IMPORT_PATTERN = /^(?:@\/|\/|astro:|virtual:)/
 const DEVELOPMENT_FILE_PATTERN = /(?:\.smoke\.ts|SmokeFixtures\.ts|TestHarness\.tsx?|\.config\.(?:ts|mjs))$/
 
 // an import or export statement with its quoted path, across any number of lines, a side-effect import, an import(),
-// or a require(). the match stops before the next import or export keyword. the code has no semicolons to end a
+// or a require(). between the keyword and "from" a statement holds only names, braces, commas, an asterisk, comments,
+// and quoted names, and the match stops before the next import or export keyword. the code has no semicolons to end a
 // statement on
 const IMPORT_PATTERN =
-	/\b(?:import|export)\s(?:(?!(?:import|export)\s)[\s\S])*?from\s*["']([^"']+)["']|\b(?:import|require)\s*\(?\s*["']([^"']+)["']/g
+	/\b(?:import|export)\s(?:(?!(?:import|export)\s)(?:[\w$\s,{}*]|\/\/[^\n]*\n|\/\*(?:[^*]|\*(?!\/))*\*\/|"[^"\n]*"|'[^'\n]*'))*?from\s*["']([^"']+)["']|\b(?:import|require)\s*\(?\s*["']([^"']+)["']/g
+
+// a line or block comment, or a quoted string, captured so that a comment marker inside it stays
+const COMMENT_OR_QUOTED_PATTERN = /("[^"\n]*"|'[^'\n]*')|\/\/[^\n]*|\/\*(?:[^*]|\*(?!\/))*\*\//g
 
 // a type-only import or export statement, and the specifiers of a named import
 const TYPE_ONLY_STATEMENT_PATTERN = /^(?:import|export)\s+type\s/
@@ -121,14 +125,11 @@ export function toParsedImports(fileText: string): ParsedImport[] {
 	// each statement's path, line, and type-only flag
 	const parsedImports: ParsedImport[] = []
 	for (const importMatch of fileText.matchAll(IMPORT_PATTERN)) {
+		// the statement without its comments, so that a comment reads as neither a specifier nor a type marker
+		const statementText = importMatch[0].replace(COMMENT_OR_QUOTED_PATTERN, (_, quotedText = "") => quotedText)
 		const importPath = importMatch[1] ?? importMatch[2] ?? ""
 		const lineNumber = fileText.slice(0, importMatch.index).split("\n").length
-		parsedImports.push({
-			statementText: importMatch[0],
-			importPath,
-			lineNumber,
-			isTypeOnly: isTypeOnlyImport(importMatch[0]),
-		})
+		parsedImports.push({ statementText, importPath, lineNumber, isTypeOnly: isTypeOnlyImport(statementText) })
 	}
 	return parsedImports
 }

@@ -4,7 +4,7 @@
 import { parseArgs } from "node:util"
 
 // the environments the reviewer's account can be seeded in, each the name of a Doppler config
-export const REVIEWER_ENVIRONMENTS = ["dev", "prd"] as const
+const REVIEWER_ENVIRONMENTS = ["dev", "prd"] as const
 
 export type ReviewerEnvironment = (typeof REVIEWER_ENVIRONMENTS)[number]
 

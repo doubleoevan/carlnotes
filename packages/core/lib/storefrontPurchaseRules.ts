@@ -34,7 +34,7 @@ export type PurchaseOffersOptions = {
 
 // the label of each place a paid plan is managed, and the line the app shows with no link for a plan billed on the web
 export const PLAN_MANAGEMENT_LABELS: Record<PlanManagement, string> = {
-	portal: PURCHASE_COPY.manageBilling,
+	portal: PURCHASE_COPY.managePlan,
 	app_store: PURCHASE_COPY.manageInAppStore,
 	play_store: PURCHASE_COPY.manageInGooglePlay,
 	web: "Your plan is billed on the web.",

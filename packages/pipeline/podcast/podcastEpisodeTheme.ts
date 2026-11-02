@@ -27,7 +27,7 @@ const THEME_OUTRO_OVERLAP_SECONDS = 20
 const THEME_RISE_SECONDS = 2
 
 // a theme clip on disk and its length
-export type ThemeClip = { path: string; seconds: number }
+type ThemeClip = { path: string; seconds: number }
 
 // the theme clips that exist on disk, each null if its file is missing
 export type ThemeClips = { intro: ThemeClip | null; outro: ThemeClip | null }

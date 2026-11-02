@@ -20,7 +20,7 @@ export const UNREADABLE_IMAGE_TEXT = "That image couldn't be read. Try a JPEG or
 export const AVATAR_JPEG_QUALITY = 0.85
 
 // the source types whose pixels can be transparent. a logo in one of these re-encodes as png, so its background stays clear
-export const TRANSPARENT_IMAGE_TYPES = new Set(["image/png", "image/webp", "image/gif"])
+const TRANSPARENT_IMAGE_TYPES = new Set(["image/png", "image/webp", "image/gif"])
 
 // the size and format a picked image re-encodes to, and its type and file suffix
 export type ResizedImage = {

@@ -23,7 +23,7 @@ export const podcastEpisodeOutlinePayload = z.object({
 		)
 		.min(1),
 })
-export type PodcastEpisodeOutlinePayload = z.infer<typeof podcastEpisodeOutlinePayload>
+type PodcastEpisodeOutlinePayload = z.infer<typeof podcastEpisodeOutlinePayload>
 
 // the outline with each chapter's Finding number mapped back to the Finding's id
 export type PodcastEpisodeOutline = Omit<PodcastEpisodeOutlinePayload, "segments"> & {

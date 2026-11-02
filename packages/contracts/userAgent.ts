@@ -59,7 +59,7 @@ export function toDeviceProperties(userAgent: string | null | undefined): Device
 
 // what a bot does: crawl pages for a search or AI index, unfurl a link into a card, or pull a feed as a podcast app
 // or a feed reader
-export type BotKind = "crawler" | "unfurler" | "podcastApp" | "feedReader"
+type BotKind = "crawler" | "unfurler" | "podcastApp" | "feedReader"
 
 // a known bot or app, by its kind and name
 export type Bot = { kind: BotKind; name: string }

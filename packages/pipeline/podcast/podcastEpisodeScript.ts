@@ -54,7 +54,7 @@ export const podcastEpisodeSegmentPayload = z.object({
 	signOff: z.array(podcastEpisodeTurnPayload).optional(),
 	goodbye: z.array(podcastEpisodeTurnPayload).optional(),
 })
-export type PodcastEpisodeSegmentPayload = z.infer<typeof podcastEpisodeSegmentPayload>
+type PodcastEpisodeSegmentPayload = z.infer<typeof podcastEpisodeSegmentPayload>
 
 // the segment with each chapter's Finding number mapped back to the Finding's id
 export type PodcastEpisodeSegment = Omit<PodcastEpisodeSegmentPayload, "chapters"> & {

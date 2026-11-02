@@ -26,7 +26,7 @@ import { loadPodcastEpisodeSummaries } from "./podcastEpisodeShapes"
 const MAX_MEANING_MATCH_DISTANCE = 0.6
 
 // the shortest query that is matched by meaning. a shorter query's embedding is near unrelated episodes
-export const MEANING_MATCH_MIN_CHARS = 3
+const MEANING_MATCH_MIN_CHARS = 3
 
 // how long Redis keeps a query's vector
 const QUERY_VECTOR_TTL_MS = DAY_MS

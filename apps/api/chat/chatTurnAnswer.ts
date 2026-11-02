@@ -22,10 +22,10 @@ import {
 import { toNewTopicChatTools, toProposeNewTopicTool, toSuggestTopicSourcesTool } from "../tool/newTopicChatTools"
 import { loadTopicDraft } from "../topic/topicDrafts"
 import { resolveChatAttachments } from "./chatAttachmentParts"
+import type { ChatPage } from "./chatPages"
 import { answerChatProposal } from "./chatProposals"
 import { type ChatTurnAuthorization, rejectChatTurn } from "./chatTurnAuthorization"
 import { streamChatTurn } from "./chatTurnStream"
-import type { ChatPage } from "./chatTurns"
 import { saveLinkPreviews } from "./linkPreviews"
 
 // the status a chat turn responds with for a file it could not read: a file too large to read in time takes the 413

@@ -2,7 +2,8 @@
 
 import { db } from "@carlnotes/db"
 import { bookmarks, findings, resources, type scans } from "@carlnotes/db/schema/scans"
-import { teamMembers, teamTopics } from "@carlnotes/db/schema/teams"
+import { teamMembers } from "@carlnotes/db/schema/teams"
+import { teamTopics } from "@carlnotes/db/schema/teamTopics"
 import { topics } from "@carlnotes/db/schema/topics"
 import type { Budget } from "@carlnotes/models/budget"
 import { traceStage } from "@carlnotes/models/telemetry"

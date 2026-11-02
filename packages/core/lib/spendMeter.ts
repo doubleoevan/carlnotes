@@ -30,7 +30,7 @@ export type SpendMeterProps = Pick<
 >
 
 // one ordered spend segment and the shared meter's amounts, legend, and visibility
-export type SpendSegment = {
+type SpendSegment = {
 	key: string
 	colorClass: string
 	label: string
@@ -38,11 +38,14 @@ export type SpendSegment = {
 	widthPercent: number
 }
 export type SpendMeterModel = {
+	// the total spent, and its raw share and rounded percentage of the budget
 	totalCents: number
 	budgetUsedShare: number
 	budgetUsedPercent: number
+	// whether the budget has cutoffs, and whether the upgrade link shows
 	hasMonthlyBudgetCutoffs: boolean
 	isUpgradeVisible: boolean
+	// the bar's segments, the legend's segments, and the cutoff list's rows
 	spendSegments: SpendSegment[]
 	legendSegments: SpendSegment[]
 	cutoffRows: { key: string; budgetShare: number; line: string }[]
@@ -131,6 +134,7 @@ export function toCutoffMarkers(monthlyBudgetCutoffs: MonthlyBudgetCutoff[]): Cu
 			cutoffMarkers.push({ percent, monthlyBudgetCutoffs: [monthlyBudgetCutoff] })
 		}
 	}
+	// return the circles in the cutoffs' order, lowest first
 	return cutoffMarkers
 }
 

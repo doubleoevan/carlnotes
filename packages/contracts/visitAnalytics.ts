@@ -1,5 +1,5 @@
 import type { AnalyticsEventProperties } from "./analyticsEvents"
-import type { visibilities } from "./enums"
+import type { Visibility } from "./enums"
 import { toReportedPath } from "./reportedPath"
 
 // the property of a web vitals event with one metric in it, which repeats the page's url
@@ -47,10 +47,7 @@ function rewritePathsAndUrls(properties: Record<string, unknown>): void {
 /**
  * Includes a Topic ID only when the Topic is public.
  */
-export function toPublicTopicProperties(topic: {
-	id: string
-	visibility: (typeof visibilities)[number]
-}): AnalyticsEventProperties {
+export function toPublicTopicProperties(topic: { id: string; visibility: Visibility }): AnalyticsEventProperties {
 	return topic.visibility === "public" ? { topicId: topic.id } : {}
 }
 
@@ -60,7 +57,7 @@ export function toPublicTopicProperties(topic: {
 export function toPublicPodcastEpisodeProperties(episode: {
 	id: string
 	topicId: string
-	topicVisibility: (typeof visibilities)[number]
+	topicVisibility: Visibility
 }): AnalyticsEventProperties {
 	return episode.topicVisibility === "public" ? { episodeId: episode.id, topicId: episode.topicId } : {}
 }

@@ -30,7 +30,7 @@ export const REPORT_SUBJECT_KIND_LABELS: Record<ReportSubjectKind, string> = {
 export const REPORT_TEXT_MAX_CHARS = NOTE_COMMENT_MAX_CHARS
 
 // an open report as the admin console lists it
-export const adminReport = z.object({
+const adminReport = z.object({
 	id: z.string(),
 	subjectKind: z.enum(reportSubjectKinds),
 	subjectId: z.string(),
@@ -52,12 +52,8 @@ export type AdminReport = z.infer<typeof adminReport>
 // the admin console's open reports
 export const adminReportsResponse = z.object({ reports: z.array(adminReport) })
 
-export type AdminReportsResponse = z.infer<typeof adminReportsResponse>
-
 // the body that resolves a report
 export const resolveReportPayload = z.object({ resolution: z.enum(reportResolutions) })
-
-export type ResolveReportPayload = z.infer<typeof resolveReportPayload>
 
 /**
  * Returns the subject's text cut to what a report keeps.

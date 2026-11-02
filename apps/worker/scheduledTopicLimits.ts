@@ -12,7 +12,8 @@ import { isUserLiteLLMKeyBudgetExhausted } from "@carlnotes/models/litellm"
 import { runWithConcurrency } from "@carlnotes/server/concurrency"
 import { reportError } from "@carlnotes/server/monitoring"
 import { and, eq, gte, inArray } from "drizzle-orm"
-import { frequencyWindowMs, type StartScheduledTopicScansOptions, type Topic } from "./schedule"
+import type { StartScheduledTopicScansOptions, Topic } from "./schedule"
+import { frequencyWindowMs } from "./scheduledTopicFilter"
 
 // how many owners' daily topic allowances the sweep reads at once, and how many owners' key budgets or daily scans
 // cutoffs

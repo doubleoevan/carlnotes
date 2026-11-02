@@ -306,6 +306,7 @@ async function recordScanProgress(scanId: string, budget: Budget): Promise<void>
 
 /**
  * Reports a Scan whose email workflow could not be started. The Scan is already complete, so nothing else changes.
+ * @public Temporal runs it by name through the proxyActivities in runTopicScan.ts.
  */
 export async function reportScanEmailNotStarted(scanId: string, reason: string): Promise<void> {
 	console.error(`the email workflow for scan ${scanId} could not be started: ${reason}`)
@@ -314,6 +315,7 @@ export async function reportScanEmailNotStarted(scanId: string, reason: string):
 
 /**
  * Reports a Scan whose push workflow could not be started. The Scan and its email are unaffected.
+ * @public Temporal runs it by name through the proxyActivities in runTopicScan.ts.
  */
 export async function reportScanPushNotStarted(scanId: string, reason: string): Promise<void> {
 	console.error(`the push workflow for scan ${scanId} could not be started: ${reason}`)
@@ -323,6 +325,7 @@ export async function reportScanPushNotStarted(scanId: string, reason: string): 
 /**
  * Reports a Scan whose podcast episode workflow could not be started.
  * The Scan is already complete, so nothing else changes.
+ * @public Temporal runs it by name through the proxyActivities in runTopicScan.ts.
  */
 export async function reportPodcastEpisodeRecordingNotStarted(scanId: string, reason: string): Promise<void> {
 	console.error(`the episode workflow for scan ${scanId} could not be started: ${reason}`)

@@ -31,7 +31,7 @@ const maxTopicFindingsPayload = z
 	.refine((value) => (maxTopicFindingsOptions as readonly number[]).includes(value))
 
 // the time of day a scan runs, as HH:MM
-export const scheduledTimePayload = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "expected HH:MM")
+const scheduledTimePayload = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "expected HH:MM")
 
 // the settings that a topic and a topic draft both have. each is optional, so a call names only the settings it changes
 export const topicSettingsShape = {

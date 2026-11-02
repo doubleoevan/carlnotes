@@ -120,10 +120,15 @@ Generated or archived paths that burn context:
 
 ## Verification
 
-`bun run check` is the gate: Biome, the package boundary check, the component parity check, the client parity check
-against `apps/mobile/parity.md`, the purchase path check (`scripts/check-purchase-paths.ts`) that keeps checkout and the
-portal out of the mobile app's reach, the contract freeze check against `contracts/`, `tsc -b`, the Temporal workflow
-bundle check, and the test suite. Green before any hand-off.
+`bun run check` is the gate: Biome, the package boundary check, the dead-code check (`bunx knip`), the component parity
+check, the client parity check against `apps/mobile/parity.md`, the purchase path check
+(`scripts/check-purchase-paths.ts`) that keeps checkout and the portal out of the mobile app's reach, the contract
+freeze check against `contracts/`, `tsc -b`, the Temporal workflow bundle check, and the test suite. Green before any
+hand-off.
+
+Knip fails on a file, an export, a type, or a declared dependency that nothing uses. A file that only a script, a
+`new URL(...)`, or a string loads is an entry point in `knip.jsonc`, with a comment that names its loader. An exception
+names one item, never a glob, and an exception that matches nothing fails the check.
 
 The package boundary check also fails on a third-party import its workspace does not declare, a value import of a dev
 dependency in code the production image runs, and a package that the web app's `@carlnotes` packages import but

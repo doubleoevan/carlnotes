@@ -272,12 +272,7 @@ type ApplyChatRoomToolCallsOptions = {
 /**
  * Shows room tool results and limits proposed edits to the intended member.
  */
-export function applyChatRoomToolCalls({
-	roomToolCalls,
-	topicId,
-	userId,
-	onNotice,
-}: ApplyChatRoomToolCallsOptions): void {
+function applyChatRoomToolCalls({ roomToolCalls, topicId, userId, onNotice }: ApplyChatRoomToolCallsOptions): void {
 	// show accepted and rejected saves to every member
 	showTopicToolCalls({ topicToolToasts: roomToolCalls, onSaved: onNotice, onRejected: onNotice })
 	if (!topicId) {

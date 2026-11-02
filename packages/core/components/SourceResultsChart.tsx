@@ -16,7 +16,7 @@ export type SourceResultsChartProps = {
 	initialOpenRowId?: string | null
 	sourceRemoval?: SourceRemoval
 }
-export type SourceResultRowProps = {
+type SourceResultRowProps = {
 	row: SourceResult
 	maxFoundCount: number
 	isOpen: boolean
@@ -24,7 +24,7 @@ export type SourceResultRowProps = {
 	onToggle: () => void
 	onRemoveSource?: SourceRemoval["onRemoveSource"]
 }
-export type EarlierSourceResultRowProps = {
+type EarlierSourceResultRowProps = {
 	label: string
 	countLabel: string
 	screenReaderLabel: string

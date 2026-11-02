@@ -13,38 +13,9 @@ import { isAllowed } from "../authorization"
 import type { AnalyticsProperties } from "../currentUser"
 import { deleteChatAttachments } from "./attachments"
 import { loadTopicChatTurnAttachments } from "./chatAttachmentReads"
+import { type ChatPage, toChatKind, toChatPageId } from "./chatPages"
 import { decryptChatJson, decryptChatText, encryptChatJson, encryptChatText } from "./encryption"
 import { loadChatLinkPreviews } from "./linkPreviews"
-
-// the page that a private conversation lives on: one topic, a whole team, or the new-topic chat, bound to neither
-export type ChatPage =
-	| { topicId: string; teamId?: undefined; newTopic?: undefined }
-	| { teamId: string; topicId?: undefined; newTopic?: undefined }
-	| { newTopic: true; topicId?: undefined; teamId?: undefined }
-
-/**
- * Returns the id of the topic or the team a chat page is on, or an empty string for the new-topic chat.
- */
-export function toChatPageId(page: ChatPage): string {
-	return page.topicId ?? page.teamId ?? ""
-}
-
-// which chat a page holds, as an analytics event names it
-export type ChatKind = "topic" | "team" | "new_topic" | "room"
-
-/**
- * Returns which chat a page holds: a topic's, a team's, the new-topic chat, or a chat room.
- */
-export function toChatKind(page: ChatPage | VoiceChatPage): ChatKind {
-	// a voice page names its kind
-	if ("kind" in page) {
-		return page.kind === "newTopic" ? "new_topic" : page.kind
-	}
-	if (page.newTopic) {
-		return "new_topic"
-	}
-	return page.teamId ? "team" : "topic"
-}
 
 // what a completion spent: its tokens and its web searches
 type ChatTurnSpend = { totalTokens: number; searchCount: number }

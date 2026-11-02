@@ -50,7 +50,7 @@ export function toImageModerationCategory(
 export const OBJECTIONABLE_CONTENT_REJECTION = "objectionable"
 
 // the body of that rejection
-export const objectionableContentResponse = z.object({
+const objectionableContentResponse = z.object({
 	rejection: z.literal(OBJECTIONABLE_CONTENT_REJECTION),
 	category: z.enum(moderationCategories),
 })

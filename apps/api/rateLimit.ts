@@ -30,10 +30,10 @@ export const SPOKEN_EVENT_RATE_LIMIT = 30
 export const APP_SIGNUP_GATE_RATE_LIMIT = 10
 
 // how many push device registrations and unregisters one user may send in a rate limit window
-export const PUSH_DEVICE_RATE_LIMIT = 10
+const PUSH_DEVICE_RATE_LIMIT = 10
 
 // how many store purchase starts and store syncs one user may send in a rate limit window. each sync reads RevenueCat
-export const STORE_BILLING_RATE_LIMIT = 10
+const STORE_BILLING_RATE_LIMIT = 10
 
 // the bucket that visitors share if no client address can be trusted
 const SHARED_BUCKET = "shared"
@@ -99,7 +99,7 @@ export const toolCallerRateLimitStore = toRateLimitStore("rate-limit")
 export const toolCallerRateLimiter = toRateLimiter({ limit: CALLER_RATE_LIMIT, store: toolCallerRateLimitStore })
 
 // the note body save's own limiter. the editor saves a second after each pause, so the caller limit is too low for it
-export const NOTE_BODY_SAVE_RATE_LIMIT = 120
+const NOTE_BODY_SAVE_RATE_LIMIT = 120
 export const noteBodySaveRateLimiter = toRateLimiter({
 	limit: NOTE_BODY_SAVE_RATE_LIMIT,
 	store: toRateLimitStore("rate-limit:note-body"),

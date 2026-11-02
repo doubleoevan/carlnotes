@@ -10,7 +10,7 @@ import { subscriptions, topics } from "@carlnotes/db/schema/topics"
 import { isPodcastEpisodeRecordingConfigured } from "@carlnotes/server/podcastEpisodeSettings"
 import { and, desc, eq, exists, gt, inArray, or, type SQL } from "drizzle-orm"
 import { isAllowed } from "../authorization"
-import { topicSubscriptionStartDate } from "../topic/helpers"
+import { topicSubscriptionStartDate } from "../topic/subscriptionStartDates"
 
 // a podcast episode's columns, without its script
 export const podcastEpisodeColumns = {

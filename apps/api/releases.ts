@@ -152,7 +152,7 @@ function toReleaseCard(release: ReleaseRow): string {
 /**
  * The releases index: every published release newest first, each linking to its own page.
  */
-export async function serveReleaseIndex(): Promise<string> {
+async function serveReleaseIndex(): Promise<string> {
 	const releaseCards = (await loadReleases()).map(toReleaseCard).join("")
 	return toContentHtml({
 		title: "Releases",
@@ -168,7 +168,7 @@ export async function serveReleaseIndex(): Promise<string> {
 /**
  * One release's own page, rendered whole, or null for a tag no published release holds.
  */
-export async function serveRelease(tag: string): Promise<string | null> {
+async function serveRelease(tag: string): Promise<string | null> {
 	const release = (await loadReleases()).find((row) => row.tag === tag)
 	if (!release) {
 		return null

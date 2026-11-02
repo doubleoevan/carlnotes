@@ -21,7 +21,7 @@ export function toUpgradePromptCta(isPodcastEpisodeQuestion = false): UpgradePro
 
 // what each mic says when speaking comes back on the 1st, for a user with no plan to upgrade to: premium, which has
 // no plan above it, and a user who cannot buy a plan where the mic is
-export const NO_UPGRADE_PROMPTS: Record<UpgradePromptCta, string> = {
+const NO_UPGRADE_PROMPTS: Record<UpgradePromptCta, string> = {
 	"chat-voice": "Speak with Carl again on the 1st.",
 	"podcast-question": "Speak with Carl and Vienna again on the 1st.",
 }

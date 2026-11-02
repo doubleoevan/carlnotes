@@ -62,7 +62,11 @@ a path argument or hook JSON on stdin, and fail loud when jq is missing.
 ### A push gate no one can walk around
 `git push` runs [preflight.sh](../../scripts/preflight.sh) through a
 repo-routed [pre-push hook](../../.githooks/pre-push): Biome, the package boundary
-check, tsc, the workflow bundle check, and the tests.
+check, the Knip dead-code check, the component parity, client parity, purchase
+path, and contract freeze checks, tsc, the workflow bundle check, and the tests.
+Knip fails on a file, export, type, or dependency nothing uses, and a file that
+only a script or a `new URL(...)` loads is declared as an entry in
+[knip.jsonc](../../knip.jsonc), beside the name of its loader.
 `bun run check` runs the same script on demand, so "green" has one
 definition. [biome.json](../../biome.json) excludes vendored trees so the
 gate judges only authored code.

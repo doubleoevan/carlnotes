@@ -49,7 +49,7 @@ export function toSpokenParts(markdown: string): string[] {
  * part per paragraph split on blank lines, with the spoken parts that have no letter or digit dropped. A paragraph over
  * SPOKEN_PART_PACKED_CHARS becomes several spoken parts.
  */
-export function toParagraphSpokenParts(markdown: string): string[] {
+function toParagraphSpokenParts(markdown: string): string[] {
 	// drop fenced code, an unclosed fence to the end, before the plain-words pass strips its backticks
 	const spokenWords = toPlainText(markdown.replace(/```[\s\S]*?(?:```|$)/g, "")).replace(/https?:\/\/\S+/g, "")
 	return spokenWords

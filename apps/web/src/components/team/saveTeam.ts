@@ -3,8 +3,7 @@ import { type SaveTeamOptions as SharedSaveTeamOptions, saveTeam as saveSharedTe
 import type { PendingInvite } from "@carlnotes/core/lib/teamFields"
 import { sendPendingInvites } from "@/components/invite/TeamInviteFields"
 
-export type { CreateTeamResult } from "@carlnotes/core/lib/saveTeam"
-export { createTeam, createTeamForInviteLink, TEAM_REJECTION_REASONS } from "@carlnotes/core/lib/saveTeam"
+export { createTeamForInviteLink, TEAM_REJECTION_REASONS } from "@carlnotes/core/lib/saveTeam"
 export type SaveTeamOptions = Omit<SharedSaveTeamOptions<File>, "uploadAvatar" | "sendInvites"> & {
 	onInviteAccepted?: (invite: PendingInvite) => void
 }

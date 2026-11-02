@@ -35,7 +35,7 @@ import { type EditableTopicDraft, useEditableTopicDraft } from "./useEditableTop
 import { useLinkPreviewRefresh } from "./useLinkPreviewRefresh"
 
 // how a question is sent: typed, or spoken with the timings its spoken question event reports
-export type QuestionSendOptions = {
+type QuestionSendOptions = {
 	isSpoken?: boolean
 	spokenQuestionTimings?: SpokenQuestionTimings
 }
@@ -64,7 +64,7 @@ export type TopicChat = ChatConversationGates & {
 }
 
 // adapters keep files, speech, and navigation with the app that provides them
-export type ChatAttachmentState = {
+type ChatAttachmentState = {
 	attachments: ChatAttachment[]
 	keptAttachments: KeptChatAttachment[]
 	setKeptAttachments: React.Dispatch<React.SetStateAction<KeptChatAttachment[]>>
@@ -73,7 +73,7 @@ export type ChatAttachmentState = {
 	isSentMediaPreviewed?: boolean
 }
 // the topic draft the new-topic chat fills, and how it opens the created topic
-export type ChatTopicDraftState = {
+type ChatTopicDraftState = {
 	topicDraft: TopicDraft
 	setTopicDraft: React.Dispatch<React.SetStateAction<TopicDraft>>
 	openCreatedTopic: (topicId: string) => Promise<void>

@@ -20,6 +20,7 @@ export const sourceKinds = [
 ] as const
 export const resourceKinds = ["read", "watch", "listen"] as const
 export const visibilities = ["public", "invite", "private"] as const
+export type Visibility = (typeof visibilities)[number]
 // how many findings a public topic needs before it is shown to others
 export const MINIMUM_SHOWN_FINDINGS = 3
 export const frequencies = ["daily", "weekdays", "weekly"] as const

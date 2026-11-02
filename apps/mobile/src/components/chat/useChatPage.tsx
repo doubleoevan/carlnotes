@@ -48,7 +48,7 @@ type ChatPageData = {
 	pageContext: (ChatPageContext & { team?: TeamPageResponse }) | null
 	isVisible: boolean
 }
-export type ChatChoice = { id: ChatId } & Pick<
+type ChatChoice = { id: ChatId } & Pick<
 	ComponentProps<typeof ChoiceSelect>["options"][number],
 	"label" | "icon" | "badge"
 >

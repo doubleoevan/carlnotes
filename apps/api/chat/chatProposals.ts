@@ -19,7 +19,7 @@ import type { AnalyticsProperties } from "../currentUser"
 import { type ChatTurnToolCalls, TOPIC_EDIT_CANCELLED_TEXT } from "../tool/chatTools"
 import { createTopicInChat, toTopicDraftSummary } from "../tool/newTopicChatTools"
 import { applyTopicEdit } from "../tool/topicEditSaves"
-import type { ChatPage } from "./chatTurns"
+import type { ChatPage } from "./chatPages"
 
 // what carl previewed: an edit to the page's topic, or the topic draft that the new-topic chat would create
 export type ChatProposal =
@@ -249,7 +249,7 @@ export function toChatProposalDigest({ userId, page }: ChatProposalRef, chatProp
 /**
  * Returns a proposal as labeled lines, for the agreement check to read what the user's message answers.
  */
-export function toChatProposalText(chatProposal: ChatProposal): string {
+function toChatProposalText(chatProposal: ChatProposal): string {
 	// the new-topic chat's draft reads the way carl reads it back
 	if (chatProposal.kind === "newTopic") {
 		return `Create a new topic from this draft: ${toTopicDraftSummary(chatProposal.topicDraft)}`

@@ -18,7 +18,7 @@ const GATE_COOKIE_MAX_AGE_SECONDS = SINGLE_USE_TOKEN_LIFETIME_MS / 1000
 export type SingleUsePurpose = { signaturePurpose: string; redisKeyPrefix: string }
 
 // the gate cookie a signup consumes, and the challenge an app's attestation answers
-export const GATE_TOKEN_PURPOSE: SingleUsePurpose = {
+const GATE_TOKEN_PURPOSE: SingleUsePurpose = {
 	signaturePurpose: "the signup-gate cookie",
 	redisKeyPrefix: "signup-gate",
 }

@@ -14,7 +14,7 @@ import { isAllowed } from "../authorization"
 import { loadChatAttachmentObjectKeys } from "../chat/chatAttachmentReads"
 import type { AnalyticsProperties } from "../currentUser"
 import { releaseFeatureOrder } from "./featuring"
-import { clearVisitorTopicCaches } from "./feeds"
+import { clearVisitorTopicCaches } from "./feedCaches"
 
 /**
  * Deletes a topic and everything it includes. Only allowed by an owner or admin.

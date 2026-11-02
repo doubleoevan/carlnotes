@@ -23,7 +23,7 @@ export const CLIENT_WORKSPACE: Workspace = {
 }
 
 /** The database package, a server package. */
-export const DB_WORKSPACE: Workspace = {
+const DB_WORKSPACE: Workspace = {
 	folder: "packages/db",
 	name: "@carlnotes/db",
 	dependencies: ["@carlnotes/contracts", "drizzle-orm"],

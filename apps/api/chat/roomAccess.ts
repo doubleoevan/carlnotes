@@ -1,7 +1,8 @@
 // one chat room and the member's access to it, read before a message is posted, streamed, or deleted
 
 import { db } from "@carlnotes/db"
-import { teamMembers, teams, teamTopics } from "@carlnotes/db/schema/teams"
+import { teamMembers, teams } from "@carlnotes/db/schema/teams"
+import { teamTopics } from "@carlnotes/db/schema/teamTopics"
 import { topics } from "@carlnotes/db/schema/topics"
 import { and, eq, isNull, type SQL } from "drizzle-orm"
 import type { PgColumn } from "drizzle-orm/pg-core"

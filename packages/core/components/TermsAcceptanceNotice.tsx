@@ -10,7 +10,7 @@ import {
 } from "../stores/termsAcceptanceStore"
 
 // the dialog's words: the title, what accepting means, and the two choices
-export const TERMS_ACCEPTANCE_COPY = {
+const TERMS_ACCEPTANCE_COPY = {
 	title: "The Terms have changed",
 	body: "Carl keeps the room classy, and the Terms now say how: what you can post, how reports work, and when content comes down. They also cover plans bought in the App Store and Google Play. Read them, then accept to keep posting.",
 	accept: "Accept the Terms",

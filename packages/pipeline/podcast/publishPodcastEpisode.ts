@@ -36,7 +36,7 @@ export type PublishPodcastEpisodeOptions = {
 }
 
 // a Podcast Episode whose recording failed for good, and the reason
-export type FailPodcastEpisodeOptions = { podcastEpisodeId: string; reason: string }
+type FailPodcastEpisodeOptions = { podcastEpisodeId: string; reason: string }
 
 // what one publish attempt writes. the Topic, the Podcast Episode, the script of its recorded chapters,
 // its chapter rows, its stored audio, and the publish time

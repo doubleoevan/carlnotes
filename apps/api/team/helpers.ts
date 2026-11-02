@@ -9,7 +9,8 @@ import { db } from "@carlnotes/db"
 import { chatTurns } from "@carlnotes/db/schema/chat"
 import { invites } from "@carlnotes/db/schema/invites"
 import { scans } from "@carlnotes/db/schema/scans"
-import { teamMembers, teams, teamTopics } from "@carlnotes/db/schema/teams"
+import { teamMembers, teams } from "@carlnotes/db/schema/teams"
+import { teamTopics } from "@carlnotes/db/schema/teamTopics"
 import { topics } from "@carlnotes/db/schema/topics"
 import { users } from "@carlnotes/db/schema/users"
 import { and, count, eq, gt, gte, inArray, isNull, or, sql } from "drizzle-orm"
@@ -25,7 +26,7 @@ import { loadTeamTopics } from "./teamPage"
 export const senders = alias(users, "senders")
 
 // the users table under a third name, so a membership can join whoever invited the user
-export const inviters = alias(users, "inviters")
+const inviters = alias(users, "inviters")
 
 /**
  * Returns the user's teams, each with the profile user's status there, an active member, invited, or neither.

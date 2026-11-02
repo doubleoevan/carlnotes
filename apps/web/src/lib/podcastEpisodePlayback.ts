@@ -8,7 +8,6 @@ export {
 	SKIP_FORWARD_SECONDS,
 	toChapterAtPosition,
 	toChapterIndexAt,
-	toNextPlaybackRate,
 	toPodcastEpisodeSpeakerMediaMetadata,
 } from "@carlnotes/core/lib/podcastEpisodePlayback"
 

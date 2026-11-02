@@ -1,4 +1,4 @@
-import type { visibilities } from "@carlnotes/contracts/enums"
+import type { Visibility } from "@carlnotes/contracts/enums"
 import { toTopicFeedPath, toTopicPath } from "@carlnotes/contracts/seo"
 import { Check, Flag, Link, Rss, Share, Share2 } from "lucide-react"
 import { useState } from "react"
@@ -61,7 +61,7 @@ export function ShareTopic({
 	onMakeTopicPublic,
 }: {
 	// the topic being shared. only a public topic can be posted, and only its owner can make it public
-	topic: { id: string; name: string; visibility: (typeof visibilities)[number]; isTopicOwner?: boolean }
+	topic: { id: string; name: string; visibility: Visibility; isTopicOwner?: boolean }
 	className?: string
 	// the homepage topic card shows the share icon alone instead of the labeled button
 	isIcon?: boolean
@@ -269,7 +269,7 @@ export function ShareTopicButton({
 	onClose,
 	onMakeTopicPublic,
 }: {
-	topic: { id: string; name: string; visibility: (typeof visibilities)[number]; isTopicOwner: boolean }
+	topic: { id: string; name: string; visibility: Visibility; isTopicOwner: boolean }
 	className?: string
 	isCompact?: boolean
 	// the topic page opens the options as a dialog from its actions menu

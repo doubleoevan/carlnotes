@@ -5,7 +5,7 @@ import { type SearchRequest, searchRequestPayload } from "@carlnotes/contracts/s
 import { restoreConnectionPool, type SentQuery, stubConnectionPool } from "@carlnotes/db/connectionPoolStub"
 import { restoreRedisClient, stubRedisClient } from "@carlnotes/db/redisClientStub"
 import { SEARCH_RATE_LIMIT } from "../rateLimit"
-import * as topicHelpers from "../topic/helpers"
+import * as subscriptionStartDates from "../topic/subscriptionStartDates"
 import { searchFindings } from "./findingSearch"
 import { SEARCH_KIND_LIMIT, searchRoute, searchSite } from "./search"
 
@@ -112,7 +112,7 @@ test("an invite subscriber finds only the findings from scans after their subscr
 			? [toInviteFindingRow("before", "2026-01-01T00:00:00Z"), toInviteFindingRow("after", "2026-03-01T00:00:00Z")]
 			: [],
 	)
-	spyOn(topicHelpers, "topicSubscriptionStartDates").mockResolvedValue(
+	spyOn(subscriptionStartDates, "topicSubscriptionStartDates").mockResolvedValue(
 		new Map([["topic-1", new Date("2026-02-01T00:00:00Z")]]),
 	)
 
@@ -134,7 +134,7 @@ test("a gated topic with no activation keeps none of its findings", async () => 
 	stubConnectionPool(({ text }) =>
 		text.includes('from "resources"') ? [toInviteFindingRow("f1", "2026-03-01T00:00:00Z")] : [],
 	)
-	spyOn(topicHelpers, "topicSubscriptionStartDates").mockResolvedValue(new Map([["topic-1", null]]))
+	spyOn(subscriptionStartDates, "topicSubscriptionStartDates").mockResolvedValue(new Map([["topic-1", null]]))
 	expect(await searchFindings({ userId: "user-1", isAdmin: false, query: "orbit", limit: 50 })).toEqual([])
 })
 

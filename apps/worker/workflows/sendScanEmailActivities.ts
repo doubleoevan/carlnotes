@@ -7,6 +7,7 @@ import { reportError } from "@carlnotes/server/monitoring"
 import { ApplicationFailure } from "@temporalio/activity"
 
 // the digest plan throws only on an unexpected error, which the retry policy covers
+/** @public Temporal runs it by name through the proxyActivities in sendScanEmail.ts. */
 export { planScanDigest } from "@carlnotes/pipeline/notify"
 
 /**
@@ -20,6 +21,7 @@ export async function sendScanDigestBatch(
 
 /**
  * Sends a Scan's report to whoever ran the Scan or created the Topic, throwing a failure if Resend did not accept it.
+ * @public Temporal runs it by name through the proxyActivities in sendScanEmail.ts.
  */
 export async function sendScanReport(sendScanReportOptions: notify.SendScanReportOptions): Promise<void> {
 	throwIfNotSent(await notify.sendScanReport(sendScanReportOptions))

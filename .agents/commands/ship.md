@@ -51,7 +51,10 @@ spec and implementation, and stop if drift is found.
 ## 4. Mechanical gates
 
 Run: bash scripts/preflight.sh
-This runs Biome, the type check, and the test suite. All three must be green.
+This runs Biome, the package boundary check, the Knip dead-code check, the
+component parity, client parity, purchase path, and contract freeze checks, the
+type check, the workflow bundle check, and the test suite. Every step must be
+green.
 
 ## 5. Security and performance audit
 

@@ -7,6 +7,10 @@ bunx biome check .
 # check that every import, package.json, and tsconfig under apps/ and packages/ stays inside its workspace boundary
 bun scripts/check-package-boundaries.ts
 
+# check that no file, export, type, or declared dependency is left unused. knip.jsonc names each entry point that no
+# import reaches
+bunx knip
+
 # check that every Nightshift component contract has an implementation with a story in each app it names, and that an
 # app imports a contract only from its implementation, a story, or a test
 bun scripts/check-component-parity.ts

@@ -1,7 +1,7 @@
 import type { ComponentType, ReactNode } from "react"
 
 // the page shapes and portable elements shared by the browser and native renderers
-export type PageSkeletonKind = "profile" | "teams" | "activity" | "account" | "team"
+type PageSkeletonKind = "profile" | "teams" | "activity" | "account" | "team"
 type Container = ComponentType<{ children: ReactNode; className?: string }>
 export type PageSkeletonElements = {
 	Root: ComponentType<{ children: ReactNode; label: string }>

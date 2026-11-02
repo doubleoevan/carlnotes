@@ -198,7 +198,7 @@ const FINDING_PARAMS = { id: FINDING_ID }
  * column's value from that table's column values by the column's own name, null for a column not given, and "0" for a
  * count or a sum not given. A table not given returns no rows, and a write without returning returns one row.
  */
-export function toColumnRows(sentQuery: SentQuery, columnValuesByTable: Record<string, ColumnValues>): unknown[][] {
+function toColumnRows(sentQuery: SentQuery, columnValuesByTable: Record<string, ColumnValues>): unknown[][] {
 	// the table a select reads, or the table a write names
 	const selectMatch = /^select (?:distinct on \([^)]*\) )?(.*?) from "(\w+)"/s.exec(sentQuery.text)
 	const writeMatch = /^(?:insert into|update|delete from) "(\w+)"/.exec(sentQuery.text)

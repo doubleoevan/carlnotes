@@ -1,7 +1,7 @@
 // a Topic's podcast feed as RSS 2.0 with the iTunes and Podcasting 2.0 namespaces, a podcast episode's chapters file,
 // and its transcript. every value from a Topic or a podcast episode is user or model text and is escaped
 
-import type { visibilities } from "@carlnotes/contracts/enums"
+import type { Visibility } from "@carlnotes/contracts/enums"
 import type {
 	PodcastEpisodeChapter,
 	PodcastEpisodeScript,
@@ -51,7 +51,7 @@ export type PodcastFeedEpisode = {
 // what a feed is built from. the podcast episode files' base url is the public url or the listener's own token path
 export type ToPodcastFeedXmlOptions = {
 	appUrl: string
-	topic: { id: string; name: string; prompt: string; visibility: (typeof visibilities)[number] }
+	topic: { id: string; name: string; prompt: string; visibility: Visibility }
 	feedUrl: string
 	podcastEpisodeFilesBaseUrl: string
 	// a listener's own feed is blocked from podcast directories

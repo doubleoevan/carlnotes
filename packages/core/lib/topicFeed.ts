@@ -24,7 +24,7 @@ export function isResourceKindSelected(
 }
 
 // the feed's selected kinds, view, sort, and bookmark ownership
-export type TopicFindingSelection = {
+type TopicFindingSelection = {
 	resourceKinds: Set<ResourceKind>
 	findingFilter: TopicFindingFilter
 	sort: TopicFindingSort

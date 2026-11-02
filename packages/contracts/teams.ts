@@ -16,7 +16,7 @@ export const teamIdentity = z.object({
 export type TeamIdentity = z.infer<typeof teamIdentity>
 
 // the fields every teams page row shows, shared by memberships and received invitations
-export const teamRowFields = teamIdentity.extend({
+const teamRowFields = teamIdentity.extend({
 	isPublic: z.boolean(),
 	// the description, which the table truncates into its own column
 	description: z.string().nullable(),
@@ -44,7 +44,7 @@ export const teamSummary = teamRowFields.extend({
 export type TeamSummary = z.infer<typeof teamSummary>
 
 // one member of a team page
-export const teamMember = z.object({
+const teamMember = z.object({
 	userId: z.string(),
 	username: z.string(),
 	avatarSource: displayEnum(avatarSources).nullable(),
@@ -78,8 +78,6 @@ export type TeamPageResponse = z.infer<typeof teamPageResponse>
 
 // the gate a private team shows a non-member: its name, and whether the user has already asked to join
 export const teamGateResponse = z.object({ teamName: z.string(), hasRequestedToJoin: z.boolean() })
-
-export type TeamGateResponse = z.infer<typeof teamGateResponse>
 
 // the teams index: memberships and both directions of invitations
 export const teamsPageResponse = z.object({

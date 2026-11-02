@@ -1,7 +1,8 @@
 // what list_topics returns: the topics a tool caller may read, each with a prompt preview and its ready sources
 
 import { db, isPublicAndShown } from "@carlnotes/db"
-import { teamMembers, teamTopics } from "@carlnotes/db/schema/teams"
+import { teamMembers } from "@carlnotes/db/schema/teams"
+import { teamTopics } from "@carlnotes/db/schema/teamTopics"
 import { sources, subscriptions, topics } from "@carlnotes/db/schema/topics"
 import { and, desc, eq, inArray } from "drizzle-orm"
 import { toTopicSourceLabel } from "../tool/topicSourceTools"

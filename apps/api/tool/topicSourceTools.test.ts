@@ -5,7 +5,7 @@ import { SCAN_COST_CENTS } from "@carlnotes/contracts/plans"
 import { MAX_TOPIC_SOURCES } from "@carlnotes/contracts/topics"
 import { restoreConnectionPool, stubConnectionPool } from "@carlnotes/db/connectionPoolStub"
 import { restoreRedisClient, stubRedisClient } from "@carlnotes/db/redisClientStub"
-import { toVisitorTopicPageKey } from "../topic/feeds"
+import { toVisitorTopicPageKey } from "../topic/feedCaches"
 import {
 	addTopicSource,
 	isSameTopicSource,

@@ -114,7 +114,7 @@ export async function runManualScan(
 /**
  * Stop the Scan a Topic is running. Authority alone decides who may do this, never the daily quota.
  */
-export async function stopManualScan(
+async function stopManualScan(
 	userId: string,
 	topicId: string,
 	analyticsProperties: AnalyticsProperties,

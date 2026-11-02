@@ -1,1 +1,1 @@
-export { toLinkPreviewRefresh, useLinkPreviewRefresh } from "@carlnotes/core/hooks/useLinkPreviewRefresh"
+export { toLinkPreviewRefresh } from "@carlnotes/core/hooks/useLinkPreviewRefresh"

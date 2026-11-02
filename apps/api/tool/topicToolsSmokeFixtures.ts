@@ -13,7 +13,7 @@ export const runId = `tools-smoke-${Date.now()}-${Math.random().toString(36).sli
 export const ownerId = `${runId}-owner`
 export const otherUserId = `${runId}-other-user`
 export const topicId = `${runId}-topic`
-export const otherTopicId = `${runId}-other`
+const otherTopicId = `${runId}-other`
 
 // each check reports its own line, and one failure fails the run
 export let failureCount = 0

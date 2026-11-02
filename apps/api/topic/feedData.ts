@@ -3,7 +3,8 @@
 import { toAvatarKeyVersion } from "@carlnotes/contracts/avatars"
 import { db, isFindingShown } from "@carlnotes/db"
 import { bookmarks, consumptions, findings, resources, scans } from "@carlnotes/db/schema/scans"
-import { teamMembers, teams, teamTopics } from "@carlnotes/db/schema/teams"
+import { teamMembers, teams } from "@carlnotes/db/schema/teams"
+import { teamTopics } from "@carlnotes/db/schema/teamTopics"
 import { attachments, sources, topics } from "@carlnotes/db/schema/topics"
 import { users } from "@carlnotes/db/schema/users"
 import { and, count, desc, eq, gte, inArray, lte, sql } from "drizzle-orm"
@@ -15,7 +16,7 @@ import { startOfUtcMonth } from "./quotas"
 
 // the most findings the feed query pulls per topic
 // ponytail: a user who consumed a topic's top 25 findings sees an empty card in the default view, raise this if that shows up
-export const MAX_FEED_FINDINGS_PER_TOPIC = 25
+const MAX_FEED_FINDINGS_PER_TOPIC = 25
 
 /**
  * Reads every dataset the topic feeds need across all topic ids at once, each grouped by topic id.

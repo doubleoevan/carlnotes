@@ -9,13 +9,13 @@ import { isNativePlatform, type MobilePlatform } from "@carlnotes/contracts/clie
 
 // the Doppler names a submit reads, by platform. the App Store Connect key and the Play service account arrive
 // base64 encoded
-export const SUBMIT_VALUE_NAMES: Record<MobilePlatform, readonly string[]> = {
+const SUBMIT_VALUE_NAMES: Record<MobilePlatform, readonly string[]> = {
 	ios: ["ASC_APP_ID", "APPLE_TEAM_ID", "ASC_KEY_ID", "ASC_ISSUER_ID", "ASC_API_KEY_BASE64"],
 	android: ["PLAY_SERVICE_ACCOUNT_BASE64"],
 }
 
 // where the Play key file sits for the length of the submit, the path the submit profile names
-export const PLAY_SERVICE_ACCOUNT_PATH = "apps/mobile/play-service-account.json"
+const PLAY_SERVICE_ACCOUNT_PATH = "apps/mobile/play-service-account.json"
 
 /**
  * Returns the platform the arguments name, or throws an error naming the flag.

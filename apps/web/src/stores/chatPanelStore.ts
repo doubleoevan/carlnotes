@@ -15,14 +15,11 @@ export {
 export {
 	clearMentionedChatMessage,
 	clearProposedTopicEdit,
-	publishTopicChanged,
 	setChatId,
 	setChatIdAtChatMessage,
 	startEditingTopic,
 	toChatId,
 	useChatMessageMentioned,
-	useIsEditingTopic,
-	useProposedTopicEdit,
 	useRegisterChatContext,
 	useTopicChangeCount,
 } from "@carlnotes/core/stores/chatConversationStore"

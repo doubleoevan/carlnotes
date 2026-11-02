@@ -3,7 +3,7 @@
 import type { TopicInviteBadge } from "@carlnotes/contracts/invites"
 import { startActivePoll } from "./activePoll"
 
-export const UPDATE_BADGE_POLL_MS = 45_000
+const UPDATE_BADGE_POLL_MS = 45_000
 
 export type StartUpdateBadgePollOptions = {
 	// whether the app is active, how to subscribe to that change, and the account guard

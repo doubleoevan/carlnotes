@@ -6,7 +6,7 @@ import type { NoteBadge } from "@carlnotes/contracts/notes"
 
 // the topic and the team every fixture sits on
 export const UPDATE_STORY_TOPIC_ID = "topic-llm-tooling"
-export const UPDATE_STORY_TEAM_ID = "team-reading-club"
+const UPDATE_STORY_TEAM_ID = "team-reading-club"
 
 // two chat mentions in the topic's chat room, one of them a reply
 export const UPDATE_STORY_CHAT_MENTIONS: ChatMention[] = [

@@ -4,7 +4,7 @@
 import type { AccessibilityResult } from "../imageCaptures"
 
 /** What Storybook's events say about a story: an error with its text, or finished with its accessibility result. */
-export type StoryRenderResult =
+type StoryRenderResult =
 	| { status: "error"; errorText: string }
 	| { status: "finished"; accessibilityResult: AccessibilityResult }
 

@@ -5,7 +5,7 @@ import type { PodcastEpisodeChapterScript, PodcastEpisodeTurn } from "./payloads
 import { displayEnum } from "./tolerantReads"
 
 // one chapter of a podcast episode, in the shape that the player shows
-export const podcastEpisodeChapter = z.object({
+const podcastEpisodeChapter = z.object({
 	position: z.number(),
 	title: z.string(),
 	// the finding that the chapter narrates, null once a scan filtered the finding out. the source url stays
@@ -46,7 +46,7 @@ export const publishedPodcastEpisodeSummary = podcastEpisodeSummary.extend({
 	episodeNumber: z.number(),
 })
 
-export type PublishedPodcastEpisodeSummary = z.infer<typeof publishedPodcastEpisodeSummary>
+type PublishedPodcastEpisodeSummary = z.infer<typeof publishedPodcastEpisodeSummary>
 
 // the season and number a published podcast episode is given
 export type PublishedPodcastEpisodeNumbers = Pick<PublishedPodcastEpisodeSummary, "season" | "episodeNumber">
@@ -90,12 +90,8 @@ export type SeasonPodcastEpisodes = z.infer<typeof seasonPodcastEpisodes>
 // the newest unplayed podcast episode from another topic that the user owns or subscribes to, or null with none
 export const nextUnplayedPodcastEpisodeResponse = z.object({ podcastEpisode: podcastEpisode.nullable() })
 
-export type NextUnplayedPodcastEpisodeResponse = z.infer<typeof nextUnplayedPodcastEpisodeResponse>
-
 // the url of the user's podcast feed for a topic, which a feed read and a feed reset both return
 export const podcastFeedUrlResponse = z.object({ podcastFeedUrl: z.string() })
-
-export type PodcastFeedUrlResponse = z.infer<typeof podcastFeedUrlResponse>
 
 // one block of a podcast episode's transcript. a chapter under its title,
 // or the cold open, a transition, or the sign-off under no heading

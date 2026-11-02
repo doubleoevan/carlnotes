@@ -160,7 +160,7 @@ export const subscriptionEmailPayload = z.object({
 })
 
 // one attachment on a chat turn. each kind has its own field requirements
-export const chatAttachmentPayload = z.discriminatedUnion("kind", [
+const chatAttachmentPayload = z.discriminatedUnion("kind", [
 	z.strictObject({
 		...chatAttachmentFields,
 		kind: z.literal("image"),
@@ -255,7 +255,7 @@ export const topicChatTurnPayload = chatTurnPayload
 export type TopicChatTurnPayload = z.infer<typeof topicChatTurnPayload>
 
 // the longest spoken part of a reply that the speech route speaks in one call
-export const SPOKEN_PART_CHARS = 2000
+const SPOKEN_PART_CHARS = 2000
 
 // the longest spoken question, in seconds. the recorder stops there, the event payload bounds there, and the
 // transcode cuts one second past it

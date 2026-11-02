@@ -509,7 +509,7 @@ net revenue. The gate, plans, and quotas all work without Stripe.
 Checks: `bun run check` runs the full gate, the same `scripts/preflight.sh` that the pre-push hook runs:
 
 ```bash
-bun run check       # biome + package boundaries + component parity + client parity + purchase paths + contract freeze + tsc + workflow bundles + bun test
+bun run check       # biome + package boundaries + knip + component parity + client parity + purchase paths + contract freeze + tsc + workflow bundles + bun test
 ```
 
 Or run them individually:
@@ -517,6 +517,7 @@ Or run them individually:
 ```bash
 bunx biome check .
 bun scripts/check-package-boundaries.ts # every import stays inside the dependencies its workspace declares
+bunx knip                               # no file, export, type, or declared dependency is left unused
 bun scripts/check-component-parity.ts   # every Nightshift component contract is implemented in each app it names
 bun scripts/check-client-parity.ts      # every api capability the web reaches is reachable from the app, or listed in apps/mobile/parity.md
 bun scripts/check-purchase-paths.ts     # checkout and the billing portal stay out of the mobile app's reach
@@ -529,6 +530,12 @@ bun run check:built-dependencies # after build:ui, apps/web declares every packa
 
 The Docker build runs `check:built-dependencies` right after `build:ui`. The production install links only the packages
 `apps/web` declares, so an undeclared one fails the image build instead of every page render.
+
+Knip reads the import graph from each workspace's entry points, which its plugins find in the package.json scripts and
+the Vite, Expo, Storybook, Astro, and Drizzle configs. A file that only a `doppler run` script, a shell script, a
+`new URL(...)`, or a string loads is declared in `knip.jsonc`, with a comment that names its loader. Every exception
+there names one file, export, or dependency, and one that matches nothing fails the run, so a deleted file's entry
+goes with it.
 
 Live smoke tests (owner-run) exercise real flows against live services (LiteLLM proxy, Firecrawl, object storage). They
 make paid calls, so they are **not** part of `bun run check`. They need the LiteLLM proxy up

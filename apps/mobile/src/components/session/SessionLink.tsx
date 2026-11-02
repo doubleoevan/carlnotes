@@ -8,7 +8,7 @@ import { toTypeRoleStyle } from "@/typeRoleStyles"
  * A text link to another screen, the one way a screen links to a route. A link that replaces opens its screen in place
  * of the current one.
  */
-export function SessionTextLink({
+function SessionTextLink({
 	label,
 	href,
 	shouldReplace = false,

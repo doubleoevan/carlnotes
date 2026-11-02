@@ -15,23 +15,12 @@ import { captureEpisodeVisitEvent } from "@/lib/visitAnalytics"
 export { setIsUserSignedIn } from "@carlnotes/core/stores/podcastEpisodeListenStore"
 // expose shared state and actions to the browser's player and voice controls
 export {
-	cyclePlaybackRate,
-	pausePodcastEpisode,
 	playPodcastEpisode,
-	refreshPodcastEpisodeMediaSession,
-	resumePodcastEpisode,
 	seekPlaybackTo,
-	skipPlaybackBy,
-	togglePlayback,
 	toLoadedPodcastEpisode,
-	toPlayerChapterPosition,
-	toPodcastEpisodeQuestionStart,
 	unloadPodcastEpisode,
-	useIsPodcastEpisodePlaying,
 	useIsPodcastPlayerShown,
-	usePlayerChapter,
 	usePlayerChapterPosition,
-	usePlayerPositionSeconds,
 	usePodcastEpisodePlayer,
 } from "@carlnotes/core/stores/podcastEpisodePlayerStore"
 

@@ -64,13 +64,11 @@ function PaymentNotice({ provider }: { provider: BillingProvider | null }) {
 	)
 }
 
-// a subscribed user manages billing where the plan is billed, the portal or the store that sold it, and a free user
+// a subscribed user manages the plan where it is billed, the portal or the store that sold it, and a free user
 // selects a plan on the plans page. a store subscriber's button names the store
 export function PlanButton({ billing }: { billing: BillingState }) {
 	const [isRedirecting, setIsRedirecting] = useState(false)
 	const planManagement = toPlanManagement("web", billing.provider)
-	const managePlanLabel =
-		planManagement === "portal" ? PURCHASE_COPY.managePlan : PLAN_MANAGEMENT_LABELS[planManagement]
 
 	// open the portal, which this tab leaves for, or the store's page in a new tab
 	async function handleManage(): Promise<void> {
@@ -87,7 +85,7 @@ export function PlanButton({ billing }: { billing: BillingState }) {
 				<TooltipTrigger asChild>
 					<Button onClick={handleManage} disabled={isRedirecting}>
 						<Settings className="size-4" />
-						{managePlanLabel}
+						{PLAN_MANAGEMENT_LABELS[planManagement]}
 					</Button>
 				</TooltipTrigger>
 				<TooltipContent>Manage your plan</TooltipContent>

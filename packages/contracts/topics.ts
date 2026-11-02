@@ -37,7 +37,7 @@ export const TOPIC_DRAFT_TAG_CHARS = 40
 
 // the details of a topic that the homepage card and the topic page both show: its header fields plus its topic
 // finding rows
-export const topicDetails = z.object({
+const topicDetails = z.object({
 	id: z.string(),
 	name: z.string(),
 	// the prompt for the topic. the design keeps it separate from the topic name
@@ -123,7 +123,7 @@ export type TopicDetails = z.infer<typeof topicDetails>
 
 // a topic feed: a topic's details plus what the trending sort reads, which the homepage renders nowhere. how many
 // people opened the topic, and when its newest shown finding was found, or its created time with none
-export const topicFeed = topicDetails.extend({
+const topicFeed = topicDetails.extend({
 	viewerCount: z.number(),
 	feedUpdatedAt: z.string(),
 })
@@ -131,7 +131,7 @@ export const topicFeed = topicDetails.extend({
 export type TopicFeed = z.infer<typeof topicFeed>
 
 // a scan in the topic page history
-export const topicScan = z.object({
+const topicScan = z.object({
 	id: z.string(),
 	status: displayEnum(scanStatuses),
 	// when the scan ran. finishedAt stays null while it is running
@@ -154,7 +154,7 @@ export const topicScan = z.object({
 // how long a failed source result's reason may be, and the most source results one scan note returns. two Source adds
 // at once can pass the ten Source limit
 export const SOURCE_RESULT_REASON_CHARS = 300
-export const MAX_SOURCE_RESULTS = 50
+const MAX_SOURCE_RESULTS = 50
 
 // the fields every stored source result has
 const storedSourceResultFields = {
@@ -168,7 +168,7 @@ const storedSourceResultFields = {
 }
 
 // one Source's result in a scan, as the scans table stores it
-export const storedSourceResult = z.discriminatedUnion("status", [
+const storedSourceResult = z.discriminatedUnion("status", [
 	z.object({ ...storedSourceResultFields, status: z.literal("ok") }),
 	z.object({ ...storedSourceResultFields, status: z.literal("fallback"), fallbackMode: z.string() }),
 	z.object({ ...storedSourceResultFields, status: z.literal("failed"), reason: z.string() }),
@@ -197,7 +197,7 @@ const sourceResultFields = {
 
 // one Source's result in a scan note, which has no skipped status. a reason is null for everyone but the owner and
 // admins
-export const sourceResult = z.discriminatedUnion("status", [
+const sourceResult = z.discriminatedUnion("status", [
 	z.object({ ...sourceResultFields, status: z.literal("ok") }),
 	z.object({ ...sourceResultFields, status: z.literal("fallback"), fallbackMode: z.string() }),
 	z.object({
@@ -296,7 +296,7 @@ export const MAX_ATTACHMENT_CONTEXT_CHARS = 20_000
 export const ATTACHMENT_NO_TEXT_REASON = "the file held no readable text"
 
 // the start of the reason on an attachment that the scanner failed before the scanner was removed. no new row has it
-export const SCANNER_FLAGGED_REASON_PREFIX = "flagged by the scanner"
+const SCANNER_FLAGGED_REASON_PREFIX = "flagged by the scanner"
 
 /**
  * Returns what a failed attachment tells its owner, from the reason that the attachment workflow recorded.

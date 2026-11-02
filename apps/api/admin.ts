@@ -29,7 +29,7 @@ import { loadAdminTeamTopics } from "./team/helpers"
  * Change a user's role. An admin cannot remove their own admin role,
  * so the platform can never get locked out of its last admin.
  */
-export async function setUserRole(
+async function setUserRole(
 	actingUserId: string,
 	targetUserId: string,
 	role: "admin" | "user",
@@ -59,7 +59,7 @@ export function isSelfDemotion(actingUserId: string, targetUserId: string, role:
  * Set or clear a user's budget override, then reissue their LiteLLM key for the new budget.
  * Returns false if no such user exists.
  */
-export async function setUserBudgetOverride(
+async function setUserBudgetOverride(
 	targetUserId: string,
 	budgetOverrideCents: number | null,
 ): Promise<"applied" | "key-unchanged" | "missing"> {

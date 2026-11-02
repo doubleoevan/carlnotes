@@ -1,7 +1,6 @@
 // scans every Topic scheduled by its frequency and emails its new Findings to subscribers
 
 import { SCHEDULED_SCAN_SPENT_BUDGET_REASON } from "@carlnotes/contracts/scanFailure"
-import { DAY_MS, isUtcWeekend } from "@carlnotes/contracts/time"
 import { db, sizeConnectionPool } from "@carlnotes/db"
 import { runWithClaim } from "@carlnotes/db/claim"
 import { scansRemainingToday } from "@carlnotes/db/quotas"
@@ -14,11 +13,12 @@ import { failStaleScans } from "@carlnotes/pipeline/staleScans"
 import { shutdownAnalytics } from "@carlnotes/server/analytics"
 import { toPositiveInteger } from "@carlnotes/server/envSettings"
 import { reportError, shutdownMonitoring, startMonitoring } from "@carlnotes/server/monitoring"
-import { and, eq, inArray, isNull, lt, or, type SQL, sql } from "drizzle-orm"
+import { and, eq } from "drizzle-orm"
 import { reportDailySpend } from "./dailySpend"
 import { remindOpenReports } from "./reportReminders"
 import { retryPendingObjectDeletions } from "./retryPendingObjectDeletions"
 import { reportScanQueue, startUndispatchedScans, toDispatchableScanCount } from "./scanQueue"
+import { toScheduledTopicFilter } from "./scheduledTopicFilter"
 import { isWithinDailyTopicLimit, loadScheduledTopicLimits } from "./scheduledTopicLimits"
 import { syncViewerCounts } from "./syncViewerCounts"
 
@@ -233,38 +233,6 @@ async function saveFailedScan(topic: Topic): Promise<void> {
 			console.error(`could not save the failed scan for topic ${topic.id}`, error)
 			reportError(error, "scheduled-scan", { topicId: topic.id, ownerId: topic.ownerId })
 		})
-}
-
-/**
- * Returns the filter that selects the Topics scheduled for a Scan now.
- * A Topic is scheduled if it has no completed Scan, or if its last completed Scan is older than its frequency window.
- * A failed Scan counts as completed.
- * A scanned weekdays Topic is never scheduled on a UTC weekend.
- */
-export function toScheduledTopicFilter(now: Date): SQL | undefined {
-	// the start of each Topic's last completed Scan. a running Scan never spends the frequency window, and neither does
-	// a failed Scan that was handed to Temporal but never picked up
-	const lastCompletedScanStartedAt = sql`(select max(${scans.startedAt}) from ${scans} where ${scans.topicId} = ${topics.id} and ${scans.status} <> 'running' and not (${scans.status} = 'failed' and ${scans.dispatchedAt} is not null and ${scans.pickedUpAt} is null))`
-
-	// select a Topic never scanned or last scanned longer ago than its frequency window.
-	// a scanned weekdays Topic skips the weekend
-	const scheduledDailyFrequencies = isUtcWeekend(now) ? ["daily" as const] : ["daily" as const, "weekdays" as const]
-	return or(
-		isNull(lastCompletedScanStartedAt),
-		and(
-			eq(topics.frequency, "weekly"),
-			lt(lastCompletedScanStartedAt, new Date(now.getTime() - frequencyWindowMs("weekly"))),
-		),
-		and(
-			inArray(topics.frequency, scheduledDailyFrequencies),
-			lt(lastCompletedScanStartedAt, new Date(now.getTime() - frequencyWindowMs("daily"))),
-		),
-	)
-}
-
-// how long a Topic's frequency keeps it from re-scanning. daily and weekdays rescan after a day, weekly after a week
-export function frequencyWindowMs(frequency: Topic["frequency"]): number {
-	return frequency === "weekly" ? 7 * DAY_MS : DAY_MS
 }
 
 // run the claimed sweep and the claimed viewer count sync, then retry the pending object deletions, remind the support

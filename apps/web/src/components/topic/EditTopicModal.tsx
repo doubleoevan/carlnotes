@@ -1,4 +1,4 @@
-import { maxTopicFindingsOptions, visibilities } from "@carlnotes/contracts/enums"
+import { maxTopicFindingsOptions, type Visibility, visibilities } from "@carlnotes/contracts/enums"
 import type { TopicPodcast } from "@carlnotes/contracts/podcast"
 import { FULL_PODCAST_EPISODE_MINUTES, SHORT_PODCAST_EPISODE_MINUTES } from "@carlnotes/contracts/podcastEpisodes"
 import type { TopicResponse } from "@carlnotes/contracts/topics"
@@ -24,7 +24,7 @@ import { stageFiles, TopicAttachmentEditor } from "./TopicAttachmentEditor"
 import { TopicPromptComposer } from "./TopicPromptComposer"
 import { TopicSourceEditor } from "./TopicSourceEditor"
 import { TopicTeamSelect, useTopicTeamChoice } from "./TopicTeamSelect"
-import { useTopicFields, type Visibility } from "./useTopicFields"
+import { useTopicFields } from "./useTopicFields"
 
 /**
  * The edit topic modal for editing or creating a new topic.

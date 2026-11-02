@@ -3,12 +3,12 @@ import type { ComponentType, ReactNode } from "react"
 import type { PaginationState } from "../hooks/usePagination"
 
 // platform controls supply DOM or native semantics around the same footer
-export type PageSizeSelectProps = {
+type PageSizeSelectProps = {
 	value: number
 	options: readonly number[]
 	onValueChange: (pageSize: number) => void
 }
-export type TablePageButtonProps = {
+type TablePageButtonProps = {
 	direction: "previous" | "next"
 	label: string
 	isDisabled: boolean

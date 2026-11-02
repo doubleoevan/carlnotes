@@ -846,6 +846,19 @@ Check for:
      `PREMIUM_PLAN_PROMPTS` in `packages/core/lib/spokenQuestionsPaused.ts` (now `NO_UPGRADE_PROMPTS` there), and
      `onPortal` on `packages/core/components/PlanCard.tsx` with `handlePortal` in `apps/web/src/pages/PlansPage.tsx`
      (now the `planManagementAction` prop, a `PlanManagementAction`, and `handlePlanManagement`)
+   - the web wrappers the dead-code check removed: `useChatConversationLoad.ts`, `useChatRoomLinkPreviews.ts`, and
+     `topicToolCalls.ts` with its `toastTopicToolCalls` and `applyTopicEditToolCalls` in
+     `apps/web/src/components/chat/` (now core's `hooks/` and `lib/topicToolCalls.ts`), and
+     `podcastEpisodeListenStore.ts` and `podcastEpisodePlayActions.ts` in `apps/web/src/stores/` (now
+     `packages/core/stores/`, with core's `toPodcastEpisodePlayActions` folded into its three play actions);
+     `EmailInviteField.tsx` and `UsernameInviteField.tsx` in `apps/web/src/components/invite/` (removed); and
+     `PURCHASE_COPY.manageBilling` in `packages/contracts/plans.ts` (now `PURCHASE_COPY.managePlan`)
+   - the modules split out to break import cycles: `toScheduledTopicFilter` and `frequencyWindowMs` in
+     `worker/schedule.ts` (now `worker/scheduledTopicFilter.ts`), `topicSubscriptionStartDate` and
+     `topicSubscriptionStartDates` in `api/topic/helpers.ts` (now `api/topic/subscriptionStartDates.ts`), the cache keys
+     and clears in `api/topic/feeds.ts` (now `api/topic/feedCaches.ts`), `ChatPage`, `toChatPageId`, and `toChatKind` in
+     `api/chat/chatTurns.ts` (now `api/chat/chatPages.ts`), `teamTopics` in `db/schema/teams.ts` (now
+     `db/schema/teamTopics.ts`), and `topicEmailSends` in `db/schema/topics.ts` (now `db/schema/topicEmailSends.ts`)
 
 5. **Cross-harness enforcement parity**: `.claude/settings.json` hooks and
    `.opencode/plugin/guardrails.mjs` must gate the same operations with the

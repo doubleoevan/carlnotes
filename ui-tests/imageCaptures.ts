@@ -18,7 +18,7 @@ export const PALETTES = [
 ] as const
 
 /** A Nightshift palette's name in an image capture's file name. */
-export type PaletteName = (typeof PALETTES)[number]["paletteName"]
+type PaletteName = (typeof PALETTES)[number]["paletteName"]
 
 /** The web image capture sizes: the app's phone viewport and a fixed desktop viewport. */
 export const WEB_IMAGE_CAPTURE_SIZES = [
@@ -53,7 +53,7 @@ export type ImageCaptureKey = {
 }
 
 /** One violated accessibility rule: its id, its help text, how many elements break it, and the first few of them. */
-export type AccessibilityViolation = { ruleId: string; help: string; nodeCount: number; nodeSelectors: string[] }
+type AccessibilityViolation = { ruleId: string; help: string; nodeCount: number; nodeSelectors: string[] }
 
 /** The accessibility addon's result for an image capture: the violated rules, or no result at all. */
 export type AccessibilityResult =
@@ -85,10 +85,10 @@ export type ImageCaptureManifest = {
 export type ImageSize = { width: number; height: number }
 
 /** The images that a report entry names, each a path relative to the output folder. */
-export type ReportImagePaths = { baselinePath?: string; currentPath?: string; diffPath?: string; retakePath?: string }
+type ReportImagePaths = { baselinePath?: string; currentPath?: string; diffPath?: string; retakePath?: string }
 
 /** An image capture that differs from its baseline: the differing pixels, their share, and both images' sizes. */
-export type ChangedOutcome = {
+type ChangedOutcome = {
 	status: "changed"
 	accessibilityResult: AccessibilityResult
 	differingPixelCount: number
@@ -101,7 +101,7 @@ export type ChangedOutcome = {
  * An image capture's outcome: passed, changed, new, removed, an error, unstable, or skipped by the story's own
  * globals.
  */
-export type ImageCaptureOutcome =
+type ImageCaptureOutcome =
 	| { status: "passed"; accessibilityResult: AccessibilityResult }
 	| ChangedOutcome
 	| { status: "new"; accessibilityResult: AccessibilityResult }

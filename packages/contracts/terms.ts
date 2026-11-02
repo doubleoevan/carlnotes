@@ -12,7 +12,7 @@ export const TERMS_OUTDATED_REJECTION = "termsOutdated"
 export const TERMS_OUTDATED_LINE = "Carl needs you to accept the current Terms before that posts."
 
 // the body of that rejection
-export const termsOutdatedResponse = z.object({
+const termsOutdatedResponse = z.object({
 	rejection: z.literal(TERMS_OUTDATED_REJECTION),
 	termsVersion: z.string(),
 })

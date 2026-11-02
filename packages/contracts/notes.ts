@@ -5,7 +5,7 @@ import { noteVisibilities } from "./enums"
 import { profileIdentity, userIdentity } from "./profiles"
 
 // one note's unread counts for the signed-in user
-export const noteBadge = z.object({
+const noteBadge = z.object({
 	noteId: z.string(),
 	// the page the note sits on, exactly one of the two
 	topicId: z.string().nullable(),
@@ -32,8 +32,6 @@ export function toNoteCount(noteBadges: NoteBadge[]): number {
 
 // the badges payload: only the notes with unread edits or comments
 export const noteBadgesResponse = z.object({ badges: z.array(noteBadge) })
-
-export type NoteBadgesResponse = z.infer<typeof noteBadgesResponse>
 
 // the longest HTML body a note keeps. the save route's own body limit admits any UTF-8 encoding of a string this long
 export const NOTE_HTML_MAX_CHARS = 512 * 1024
@@ -85,8 +83,6 @@ export type NoteResponse = z.infer<typeof noteResponse>
 // a save the api kept: the version the body is stored at now
 export const noteBodyResponse = z.object({ version: z.number() })
 
-export type NoteBodyResponse = z.infer<typeof noteBodyResponse>
-
 // a save that lost to a newer version: the version stored now and who saved it, null for a closed account
 const noteConflict = z.object({ version: z.number(), lastEditorUsername: z.string().nullable() })
 
@@ -120,5 +116,3 @@ export type NoteComment = z.infer<typeof noteComment>
 
 // the comment thread payload, oldest first
 export const noteCommentsResponse = z.object({ comments: z.array(noteComment) })
-
-export type NoteCommentsResponse = z.infer<typeof noteCommentsResponse>

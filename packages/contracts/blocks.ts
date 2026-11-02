@@ -2,7 +2,7 @@
 import { z } from "zod"
 
 // one blocked user
-export const blockedUser = z.object({ id: z.string(), username: z.string(), blockedAt: z.string() })
+const blockedUser = z.object({ id: z.string(), username: z.string(), blockedAt: z.string() })
 
 export type BlockedUser = z.infer<typeof blockedUser>
 

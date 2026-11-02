@@ -65,7 +65,10 @@ function toAuthEmailProps(props: ReportEmailProps): AuthEmailProps {
 	}
 }
 
-// apply the single link template with the report's words
+/**
+ * Applies the single link template with the report's words.
+ * @public The dev:email preview renders each template's default export by folder.
+ */
 export default function ReportEmail(props: ReportEmailProps): ReactElement {
 	return <AuthEmail {...toAuthEmailProps(props)} />
 }
@@ -90,7 +93,7 @@ export function renderReportEmail(props: ReportEmailProps): Promise<string> {
 }
 
 // the same email as plain text, sent with the HTML so the message is not html-only
-export function renderReportEmailText(props: ReportEmailProps): Promise<string> {
+function renderReportEmailText(props: ReportEmailProps): Promise<string> {
 	return render(<ReportEmail {...props} />, { plainText: true })
 }
 

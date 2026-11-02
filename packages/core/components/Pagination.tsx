@@ -2,7 +2,7 @@ import { Fragment, type ReactNode } from "react"
 import { toPaginationSlots } from "../lib/paginationSlots"
 
 // each platform draws a slot and supplies its own link or press handling
-export type PageControlProps = {
+type PageControlProps = {
 	pageNumber: number
 	kind: "previous" | "page" | "next"
 	label: string

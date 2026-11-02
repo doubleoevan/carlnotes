@@ -89,7 +89,7 @@ export function useFilePicker({ accept, isMultiple = false, maxPhotos, onPicked 
 /**
  * The sheet that lists where a file can come from.
  */
-export function FilePickerMenu({
+function FilePickerMenu({
 	triggerRef,
 	onChoose,
 	onClose,

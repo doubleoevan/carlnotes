@@ -12,6 +12,7 @@ import type {
 	PodcastEpisodeAudioEvent,
 	PodcastEpisodePlayerState,
 } from "@carlnotes/core/lib/podcastEpisodeAudio"
+import { PODCAST_EPISODE_PLAY_FAILED_TEXT } from "@carlnotes/core/lib/podcastEpisodeCopy"
 import {
 	SKIP_BACK_SECONDS,
 	SKIP_FORWARD_SECONDS,
@@ -21,7 +22,7 @@ import type { SpokenAnswerSpeakerMetadata } from "@carlnotes/core/lib/spokenAnsw
 import type { AudioMetadata, AudioPlayer, AudioStatus } from "expo-audio"
 
 // inject only the platform operations needed by the single root-owned player
-export type PodcastEpisodeAudioPlayer = Pick<
+type PodcastEpisodeAudioPlayer = Pick<
 	AudioPlayer,
 	// the source and the transport
 	| "replace"
@@ -144,7 +145,7 @@ export function toPodcastEpisodeAudioAdapter({
 			if (!controller.signal.aborted && isPodcastEpisodeAccessDenied(error)) {
 				onAccessDenied()
 			}
-			throw new Error("This episode could not play. Try again.")
+			throw new Error(PODCAST_EPISODE_PLAY_FAILED_TEXT)
 		}
 	}
 
@@ -186,7 +187,7 @@ export function toPodcastEpisodeAudioAdapter({
 			if (isPlayCurrent(version, selectedLoad) && isPodcastEpisodeAccessDenied(error)) {
 				onAccessDenied()
 			}
-			throw new Error("This episode could not play. Try again.")
+			throw new Error(PODCAST_EPISODE_PLAY_FAILED_TEXT)
 		}
 	}
 	return {

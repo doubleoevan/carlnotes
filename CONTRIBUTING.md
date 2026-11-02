@@ -39,8 +39,12 @@ carl-up to start, carl-down to stop.
 ### Gates
 
 Every push runs `scripts/preflight.sh` through the pre-push hook: Biome, the
-package boundary check, the type check, the workflow bundle check, and the
-test suite, all green or the push is rejected. The hook then uploads the
+package boundary check, the Knip dead-code check, the component parity check,
+the client parity check, the purchase path check, the contract freeze check,
+the type check, the workflow bundle check, and the test suite, all green or the
+push is rejected. Knip fails on a file, export, type, or dependency nothing
+uses. Declare a file that only a script or a `new URL(...)` loads as an entry
+in `knip.jsonc`, with a comment naming its loader. The hook then uploads the
 push's Git LFS files. Run the same gate anytime with `bun run check`. Never
 bypass with `--no-verify`.
 Edit-time hooks also block comment-discipline and structure violations as

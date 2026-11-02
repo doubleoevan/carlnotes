@@ -5,7 +5,7 @@ import { isInternalAddress } from "@carlnotes/server/publicFetch"
 import { getIP } from "better-auth/api"
 
 // the proxies from TRUSTED_PROXIES, as comma-separated IPs or CIDR ranges. in production these are Cloudflare's ranges
-export const trustedProxies = (Bun.env.TRUSTED_PROXIES ?? "")
+const trustedProxies = (Bun.env.TRUSTED_PROXIES ?? "")
 	.split(",")
 	.map((trustedProxy) => trustedProxy.trim())
 	.filter(Boolean)

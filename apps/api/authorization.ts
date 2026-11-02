@@ -13,7 +13,8 @@ import {
 import { db } from "@carlnotes/db"
 import { isMonthlyBudgetCutoffPassed } from "@carlnotes/db/monthlyBudgetCutoffs"
 import { hasFullPodcastEpisodes, loadUserAccess, monthlySpendDollars, toSpendCents } from "@carlnotes/db/quotas"
-import { teamMembers, teamTopics } from "@carlnotes/db/schema/teams"
+import { teamMembers } from "@carlnotes/db/schema/teams"
+import { teamTopics } from "@carlnotes/db/schema/teamTopics"
 import { subscriptions, topics } from "@carlnotes/db/schema/topics"
 import { and, count, eq, inArray } from "drizzle-orm"
 import { canRateTopic } from "./topic/findingPermissions"
@@ -50,7 +51,7 @@ export type Capability =
 
 // the user's budget and the role helpers live in contracts, where the worker can read them
 export { isAdminRole, isLeaderRole } from "@carlnotes/contracts/enums"
-export { type UserAccess, userBudgetCents } from "@carlnotes/contracts/plans"
+export { userBudgetCents } from "@carlnotes/contracts/plans"
 
 // the user's access row and the month's spend, from the loaders that the api shares with the worker
 export { loadUserAccess, monthlySpendDollars }

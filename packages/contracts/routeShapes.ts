@@ -18,7 +18,7 @@ export const topicFeedQuery = z.object({ all: z.enum(["true", "false"]).optional
 export const topicPageQuery = z.object({ poll: z.literal("1").optional() })
 
 // a season or podcast episode number from a url, and the queries and params the podcast routes read
-export const podcastSeasonOrEpisodeNumberParam = z.coerce.number().pipe(z.int32().positive())
+const podcastSeasonOrEpisodeNumberParam = z.coerce.number().pipe(z.int32().positive())
 export const seasonPodcastEpisodesQuery = z.object({ season: podcastSeasonOrEpisodeNumberParam })
 export const podcastEpisodePageParam = z.object({
 	id: z.string(),

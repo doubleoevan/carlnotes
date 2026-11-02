@@ -11,7 +11,7 @@ import { teamIdentity } from "./teams"
 import { displayEnum } from "./tolerantReads"
 
 // one Scan row in an Activity topic's subtable
-export const activityScan = z.object({
+const activityScan = z.object({
 	id: z.string(),
 	// the outcome and, for a failed scan, the recorded reason
 	status: displayEnum(scanStatuses),
@@ -29,7 +29,7 @@ export const activityScan = z.object({
 export type ActivityScan = z.infer<typeof activityScan>
 
 // one owned-Topic row on the Activity page, including its month Scans for the sub-table
-export const ownerTopic = z.object({
+const ownerTopic = z.object({
 	id: z.string(),
 	name: z.string(),
 	// who may see the topic, shown with the same icon the topic page's info card uses
@@ -59,7 +59,7 @@ export const ownerTopic = z.object({
 export type OwnerTopic = z.infer<typeof ownerTopic>
 
 // one row of the Activity page's subscriptions table, kept until manually deleted
-export const subscriptionRow = z.object({
+const subscriptionRow = z.object({
 	topicId: z.string(),
 	name: z.string(),
 	// the byline: the owning team where one exists, otherwise the topic's owner

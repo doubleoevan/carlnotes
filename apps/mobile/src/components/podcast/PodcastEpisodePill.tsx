@@ -14,8 +14,6 @@ import { toTouchTargetHitSlop } from "@/components/primitives/button"
 import { Icon } from "@/components/primitives/icon"
 import { Text, TextClassContext } from "@/components/primitives/text"
 
-export { useIsFindingChapterPlaying } from "@carlnotes/core/components/PodcastEpisodePill"
-
 const elements: PodcastEpisodePillElements = {
 	Button: ({ children, label, onPress, className, isHighlighted }) => (
 		<TextClassContext.Provider value={isHighlighted ? "text-primary-foreground" : "text-link"}>

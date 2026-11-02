@@ -2,7 +2,7 @@
 
 import { fetchTopicFindingLinkPreview, sendFindingFeedback } from "@carlnotes/client/topicFindingClient"
 import type { ChatLinkPreview } from "@carlnotes/contracts/chat"
-import type { visibilities } from "@carlnotes/contracts/enums"
+import type { Visibility } from "@carlnotes/contracts/enums"
 import type { TopicFinding } from "@carlnotes/contracts/findings"
 import type { PodcastEpisode } from "@carlnotes/contracts/podcast"
 import { toHostWithoutWww } from "@carlnotes/contracts/seo"
@@ -37,7 +37,7 @@ export type TopicResourceInfoTopic = {
 	id: string
 	name: string
 	prompt: string
-	visibility: (typeof visibilities)[number]
+	visibility: Visibility
 }
 
 /**

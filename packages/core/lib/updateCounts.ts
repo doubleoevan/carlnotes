@@ -7,10 +7,10 @@ import { toCountNoun } from "./labels"
 import { toNoteChangeLabel } from "./noteBadges"
 
 // how many lines a group lists before folding the rest into a count
-export const LISTED_UPDATE_LINE_COUNT = 4
+const LISTED_UPDATE_LINE_COUNT = 4
 
 // a run of text in an update line, keyed by where it starts. a label names a user, topic, team, or note and draws bold
-export type UpdateLinePart = { key: string; text: string; isLabel: boolean }
+type UpdateLinePart = { key: string; text: string; isLabel: boolean }
 // one line of a group, keyed by the thing it names
 export type UpdateLine = { key: string; parts: UpdateLinePart[] }
 // one waiting group: its heading and its lines

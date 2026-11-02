@@ -23,7 +23,7 @@ if (import.meta.main) {
 }
 
 // resolves or creates the dev demo user through a real signup, then it seeds demo topics for it and one user per plan
-export async function seed(): Promise<void> {
+async function seed(): Promise<void> {
 	// never seed outside of the dev Doppler environment
 	if (process.env.DOPPLER_ENVIRONMENT !== "dev") {
 		const seen = process.env.DOPPLER_ENVIRONMENT ?? "unset"

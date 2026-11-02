@@ -13,8 +13,6 @@ import { AddSourceLink, RecommendButton } from "./AddSourceButtons"
 import { TopicDefaultSource, TopicSource } from "./TopicSource"
 import type { TopicFields } from "./useTopicFields"
 
-export type { AddedSource } from "@carlnotes/core/hooks/useTopicFields"
-
 // how many sources one suggestion request asks for at most
 const MAX_SUGGESTIONS = 3
 

@@ -63,7 +63,7 @@ export function TopicInfoButton({ topic, children }: { topic: TopicDetails; chil
 /**
  * Presents the web's Topic roast content in a dismissible native sheet.
  */
-export function TopicInfo({ topic, triggerRef, onClose }: TopicInfoProps) {
+function TopicInfo({ topic, triggerRef, onClose }: TopicInfoProps) {
 	return (
 		<Sheet title="Topic roast" triggerRef={triggerRef} onClose={onClose}>
 			<TopicInfoContent topic={topic} />

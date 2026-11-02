@@ -80,7 +80,7 @@ export function toUserSearchQuery({
  * A user's public profile by id, or null if there is no such user.
  * An owner viewing their own profile sees their private and invite topics, which are hidden for everyone else except an admin.
  */
-export async function loadProfile(profileUserId: string, userId: string | null): Promise<ProfileResponse | null> {
+async function loadProfile(profileUserId: string, userId: string | null): Promise<ProfileResponse | null> {
 	const [user] = await db
 		.select({
 			id: users.id,

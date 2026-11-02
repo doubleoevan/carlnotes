@@ -14,9 +14,9 @@ import {
 } from "./workspaces"
 
 // the api client modules whose exported functions are the capabilities, and the inventory the check reads
-export const CLIENT_PACKAGE_FOLDER = "packages/client"
+const CLIENT_PACKAGE_FOLDER = "packages/client"
 export const PARITY_INVENTORY_PATH = "apps/mobile/parity.md"
-export const PARITY_INVENTORY_HEADING = "## Web-only client capabilities"
+const PARITY_INVENTORY_HEADING = "## Web-only client capabilities"
 
 // where the web's walk starts: its route files
 const WEB_ROUTES_FOLDER = "apps/web/src/routes"
@@ -35,7 +35,7 @@ const CLIENT_EXPORT_PATTERN = /^export\s+(?:async\s+)?(?:function\s+(\w+)|const\
 const INVENTORY_ROW_PATTERN = /^\|\s*`([^`]+)`\s*\|\s*[^|]*\|\s*([^|]*)\|/
 
 // a capability of an api client module, named module.function
-export type ClientCapability = { key: string; modulePath: string; exportName: string }
+type ClientCapability = { key: string; modulePath: string; exportName: string }
 
 // one inventory row: the capability it lists, and the reason or prompt that keeps it web-only
 export type ParityInventoryEntry = { capability: string; reason: string }
@@ -126,7 +126,7 @@ export function parseParityInventory(markdown: string): ParityInventoryEntry[] {
 /**
  * Returns every api client capability: each exported function or constant of a client module, keyed module.name.
  */
-export function toClientCapabilities(sourceFiles: SourceFile[]): ClientCapability[] {
+function toClientCapabilities(sourceFiles: SourceFile[]): ClientCapability[] {
 	const capabilities: ClientCapability[] = []
 	for (const sourceFile of sourceFiles) {
 		// only a client module that is not a test

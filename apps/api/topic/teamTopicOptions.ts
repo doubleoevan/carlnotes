@@ -2,7 +2,7 @@
 
 import { db } from "@carlnotes/db"
 import { invites } from "@carlnotes/db/schema/invites"
-import { teamTopics } from "@carlnotes/db/schema/teams"
+import { teamTopics } from "@carlnotes/db/schema/teamTopics"
 import { subscriptions, topics } from "@carlnotes/db/schema/topics"
 import { and, desc, eq, exists, inArray, isNull, notInArray, or, sql } from "drizzle-orm"
 import { verifiedEmailQuery } from "./permissions"

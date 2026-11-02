@@ -10,7 +10,7 @@ import { teamRouteContracts } from "./teamRouteContracts"
 import { topicRouteContracts } from "./topicRouteContracts"
 
 // how a route's body travels: json, a multipart form, or none
-export type ApiRouteBody = { json: z.ZodType } | { multipart: z.ZodType }
+type ApiRouteBody = { json: z.ZodType } | { multipart: z.ZodType }
 
 // one route the app calls. a helper that calls no route has no entry
 export type ApiRouteContract = {

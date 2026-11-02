@@ -16,7 +16,6 @@ import { TableCard } from "./TableCard"
 import { TablePagination, usePaginatedRowSort } from "./TablePagination"
 
 export type { SentInviteRow, SentInvitesTableLabels } from "@carlnotes/core/lib/sentInvitesTableColumns"
-export { toInviteeLabel } from "@carlnotes/core/lib/sentInvitesTableColumns"
 
 /**
  * The invitations the user sent, a shared table for topics and teams alike: the target user or email, when the invite was sent,

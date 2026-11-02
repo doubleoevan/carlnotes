@@ -12,12 +12,12 @@ import {
 	transitionNoteDraft,
 } from "../lib/noteDrafts"
 
-export type { NoteBodyDraft, NoteSaveErrorReason } from "../lib/noteDrafts"
+export type { NoteSaveErrorReason } from "../lib/noteDrafts"
 
 import { toEventListeners } from "../stores/storeListeners"
 
 // how long after the last change a save goes out
-export const NOTE_SAVE_DEBOUNCE_MS = 1000
+const NOTE_SAVE_DEBOUNCE_MS = 1000
 
 // the html the editor reports for an empty document, before it loads a body and for a note with none
 export const EMPTY_EDITOR_HTML = "<html><br></html>"
@@ -27,7 +27,7 @@ export const EMPTY_EDITOR_HTML = "<html><br></html>"
 export type NoteSaveStatus = "saving" | "saved" | "unsaved"
 
 // the state a subscriber reads
-export type NoteBodySaveState = { status: NoteSaveStatus; conflict: NoteConflict | null }
+type NoteBodySaveState = { status: NoteSaveStatus; conflict: NoteConflict | null }
 
 // the schedule for one open note
 export type NoteBodySave = {
@@ -106,12 +106,14 @@ export function toNoteBodySave({
 	}
 	let debounceTimer: ReturnType<typeof setTimeout> | null = null
 	const { subscribe, announce } = toEventListeners<void>()
+	// store the status and the latest draft, then notify the draft callback and subscribers
 	function publish(status: NoteSaveStatus): void {
 		noteBodySaveState = { status, conflict: noteDraftState.conflict }
 		noteBodyDraft = toNoteBodyDraft(noteDraftState)
 		onDraftChange?.(noteBodyDraft)
 		announce()
 	}
+	// cancel a waiting debounce timer
 	function clearDebounce(): void {
 		if (debounceTimer) {
 			clearTimeout(debounceTimer)
@@ -125,6 +127,7 @@ export function toNoteBodySave({
 		if (!canSaveNoteDraft(noteDraftState) || noteDraftState.pendingHtml === null) {
 			return
 		}
+		// mark the pending body as sending, and send it
 		const htmlToSave = noteDraftState.pendingHtml
 		noteDraftState = transitionNoteDraft(noteDraftState, { type: "start" })
 		publish("saving")
@@ -132,6 +135,7 @@ export function toNoteBodySave({
 			html: htmlToSave,
 			version: noteDraftState.savedVersion,
 		}).catch(() => ({ status: "failed" }))
+		// apply the result unless the schedule retired during the save
 		if (noteDraftState.isRetired) {
 			return
 		}
@@ -145,6 +149,7 @@ export function toNoteBodySave({
 
 	// notify transport failures once and dispatch only accepted follow-up revisions
 	function finishSave(saveNoteBodyResult: NoteBodySaveResult): void {
+		// mark the note saved, or send the body that waited behind this save
 		if (saveNoteBodyResult.status === "saved") {
 			publish(noteDraftState.pendingHtml === null ? "saved" : "saving")
 			if (noteDraftState.pendingHtml !== null) {
@@ -152,9 +157,11 @@ export function toNoteBodySave({
 			}
 			return
 		}
+		// mark the note unsaved, and report an error other than a conflict
 		publish("unsaved")
 		if (saveNoteBodyResult.status !== "conflict") {
 			onSaveError(saveNoteBodyResult.status)
+			// retry at once if a newer edit cleared the error
 			if (noteDraftState.errorReason === null) {
 				void runSave()
 			}
@@ -169,8 +176,10 @@ export function toNoteBodySave({
 			if (noteDraftState.isRetired) {
 				return
 			}
+			// take the edit and cancel the waiting debounce
 			noteDraftState = transitionNoteDraft(noteDraftState, { type: "edit", html: nextHtml })
 			clearDebounce()
+			// keep the note unsaved if a conflict, a body too large, or an unavailable note blocks the save
 			if (
 				noteDraftState.conflict ||
 				noteDraftState.errorReason === "tooLarge" ||
@@ -179,6 +188,7 @@ export function toNoteBodySave({
 				publish("unsaved")
 				return
 			}
+			// show where the note stands, and save a pending body once typing stops
 			publish(noteDraftState.pendingHtml === null && noteDraftState.sendingHtml === null ? "saved" : "saving")
 			if (noteDraftState.pendingHtml !== null) {
 				debounceTimer = setTimeout(() => void runSave(), debounceMs)

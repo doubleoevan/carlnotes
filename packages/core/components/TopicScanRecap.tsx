@@ -12,8 +12,8 @@ export type TopicScanRecapProps = {
 	copyMarkdown?: string
 	sourceRemoval?: SourceRemoval
 }
-export type SafeNoteTextProps = { note: string; allowedUrls?: ReadonlySet<string> }
-export type ScanRecapFooterProps = { duration: string | null; costLabel: string | null }
+type SafeNoteTextProps = { note: string; allowedUrls?: ReadonlySet<string> }
+type ScanRecapFooterProps = { duration: string | null; costLabel: string | null }
 export type TopicScanRecapComponents = {
 	ScrollBox: ComponentType<{ children: ReactNode; copyMarkdown?: string }>
 	SafeNoteText: ComponentType<SafeNoteTextProps>

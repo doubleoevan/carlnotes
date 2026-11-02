@@ -178,7 +178,7 @@ export type YoutubeIdKind = "channel" | "playlist"
  * What a YouTube id is for, parsed from its prefix. Channel ids are the only ones that start with UC,
  * so everything else is a playlist: PL, and the UU, RD, OL, and LL are the playlists a channel generates.
  */
-export function toYoutubeIdKind(youtubeId: string): YoutubeIdKind {
+function toYoutubeIdKind(youtubeId: string): YoutubeIdKind {
 	return youtubeId.startsWith("UC") ? "channel" : "playlist"
 }
 

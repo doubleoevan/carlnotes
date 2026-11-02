@@ -25,7 +25,7 @@ export type ReportContentResult = "sent" | "unknownSubject" | "limitReached" | "
  * Stores a report and emails it to the support address, or rejects the report if its subject is missing or hidden
  * from the sender. A report the sender already made is accepted again without a second row or email.
  */
-export async function flagContent(userId: string, payload: FlagContentPayload): Promise<ReportContentResult> {
+async function flagContent(userId: string, payload: FlagContentPayload): Promise<ReportContentResult> {
 	const supportEmail = Bun.env.SUPPORT_EMAIL
 	if (!supportEmail) {
 		console.error("SUPPORT_EMAIL must be set to receive reports")

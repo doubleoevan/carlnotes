@@ -28,7 +28,7 @@ export type SubscriptionRowFields = Omit<SubscriptionRow, "subscribedAt" | "late
 /**
  * Assembles the user's Activity payload for the signed-in user: the user, or an admin viewing the user's activity.
  */
-export async function loadActivity(userId: string, signedInUserId: string): Promise<ActivityResponse> {
+async function loadActivity(userId: string, signedInUserId: string): Promise<ActivityResponse> {
 	// select the user's identity, budget inputs, and litellm key
 	const [userRow] = await db
 		.select({

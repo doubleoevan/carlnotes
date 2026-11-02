@@ -70,7 +70,7 @@ export function toRecordedToolCalls(serverToolCalls: RecordedToolCall[]): Record
 }
 
 // one model-graded check. the metric that names it in the report, and the rubric that the grader applies
-export type CaseRubric = { metric: string; rubric: string }
+type CaseRubric = { metric: string; rubric: string }
 
 // a case's rubrics, the output's shape that every rubric starts with, and the material that the writer was given
 type ToRubricAssertionsOptions = {

@@ -3,7 +3,10 @@
 import { cva, type VariantProps } from "class-variance-authority"
 import type { ComponentPlatform } from "../componentPlatforms"
 
-/** The apps that keep an implementation of Badge. */
+/**
+ * The apps that keep an implementation of Badge.
+ * @public scripts/check-component-parity.ts reads it through a dynamic import of each contract file.
+ */
 export const platforms: ComponentPlatform[] = ["web", "mobile"]
 
 /** The Badge variants. */

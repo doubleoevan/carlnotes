@@ -24,7 +24,7 @@ export function toAppUpdateBody(minimumVersion: string | null): string {
 }
 
 // the response body of the outdated build rejection
-export const appVersionOutdatedResponse = z.object({
+const appVersionOutdatedResponse = z.object({
 	rejection: z.literal(APP_VERSION_OUTDATED_REJECTION),
 	minimumVersion: z.string(),
 	storeUrl: z.string(),

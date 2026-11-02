@@ -75,7 +75,8 @@ It imports `@carlnotes/contracts`, `@carlnotes/client`, `@carlnotes/nightshift`,
   changes, and topic invitations, its accessible labels, and the groups a tooltip or a long-press sheet lists),
   `updateBadgePoll.ts` (the poll behind `useUpdateBadges`, on `activePoll.ts`), `countsPoll.ts` (the poll behind
   `usePolledCounts`, on `activePoll.ts`), `focusAndOnline.ts` (whether the app is focused and online through Query's
-  adapters, and how a poll subscribes to a change), `topicGateCopy.ts` (the invite-only gate's words), and
+  adapters, and how a poll subscribes to a change), `topicGateCopy.ts` (the invite-only gate's words),
+  `podcastEpisodeCopy.ts` (the words shown if a podcast episode fails to load or play), and
   `voiceRecordingDecisions.ts` (what the voice recorder decides from each frame, with the `SilenceThresholdSettings`
   type and the browser's default settings), `voiceRecordingRules.ts` (the mic's visibility, the recording timer, the
   reopened recording's rejection, and the meter's callback), `voiceRecorder.ts` (the recorder adapter each app supplies:

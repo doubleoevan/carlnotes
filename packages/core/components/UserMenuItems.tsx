@@ -1,7 +1,7 @@
 import type { ComponentType, ReactNode } from "react"
 
 // the same destination labels double as stable icon names in both platform adapters
-export type UserMenuIcon =
+type UserMenuIcon =
 	| "Profile"
 	| "Teams"
 	| "Activity"

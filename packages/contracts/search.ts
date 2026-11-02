@@ -191,7 +191,7 @@ const searchRowFields = z.object({
 
 // a topic row, with its latest podcast episode the caller may listen to, how many people subscribe to it, and whether a signed-in
 // caller does
-export const topicSearchRow = searchRowFields.extend({
+const topicSearchRow = searchRowFields.extend({
 	kind: z.literal("topic"),
 	topic: z.object({ id: z.string(), name: z.string(), latestPodcastEpisode: podcastEpisodeSummary.nullable() }),
 	subscriberCount: z.number(),
@@ -201,7 +201,7 @@ export const topicSearchRow = searchRowFields.extend({
 export type TopicSearchRow = z.infer<typeof topicSearchRow>
 
 // a published podcast episode row, with its topic
-export const podcastEpisodeSearchRow = searchRowFields.extend({
+const podcastEpisodeSearchRow = searchRowFields.extend({
 	kind: z.literal("podcastEpisode"),
 	podcastEpisode: podcastEpisodeSummary,
 	topic: z.object({ id: z.string(), name: z.string() }),
@@ -211,7 +211,7 @@ export type PodcastEpisodeSearchRow = z.infer<typeof podcastEpisodeSearchRow>
 
 // a finding row's topic: its name and prompt, which the finding's note copies, its visibility, and whether the caller
 // may rate and bookmark its findings
-export const findingSearchTopic = z.object({
+const findingSearchTopic = z.object({
 	id: z.string(),
 	name: z.string(),
 	prompt: z.string(),
@@ -224,7 +224,7 @@ export type FindingSearchTopic = z.infer<typeof findingSearchTopic>
 
 // a finding row: the finding as its topic's feed shows it, with the caller's marks, and its topic, whose page is the
 // row's path
-export const findingSearchRow = searchRowFields.extend({
+const findingSearchRow = searchRowFields.extend({
 	kind: z.literal("finding"),
 	finding: topicFinding,
 	topic: findingSearchTopic,
@@ -233,7 +233,7 @@ export const findingSearchRow = searchRowFields.extend({
 export type FindingSearchRow = z.infer<typeof findingSearchRow>
 
 // a team row, in the shape its avatar and link read, with how many topics it holds and how many members it has
-export const teamSearchRow = searchRowFields.extend({
+const teamSearchRow = searchRowFields.extend({
 	kind: z.literal("team"),
 	team: teamIdentity,
 	topicCount: z.number(),
@@ -243,12 +243,12 @@ export const teamSearchRow = searchRowFields.extend({
 export type TeamSearchRow = z.infer<typeof teamSearchRow>
 
 // a profile row, in the shape its avatar and link read
-export const userSearchRow = searchRowFields.extend({ kind: z.literal("user"), user: profileIdentity })
+const userSearchRow = searchRowFields.extend({ kind: z.literal("user"), user: profileIdentity })
 
 export type UserSearchRow = z.infer<typeof userSearchRow>
 
 // one search result of any kind
-export const searchRow = z.discriminatedUnion("kind", [
+const searchRow = z.discriminatedUnion("kind", [
 	topicSearchRow,
 	podcastEpisodeSearchRow,
 	findingSearchRow,
