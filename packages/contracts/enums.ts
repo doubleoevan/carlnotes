@@ -51,6 +51,20 @@ export function toVisibilitiesSentence(): string {
 	return toOrSentence(visibilities)
 }
 
+// the readers each topic visibility includes
+const VISIBILITY_READERS: Record<Visibility, string> = {
+	public: "anyone",
+	invite: "the people they invite",
+	private: "just them",
+}
+
+/**
+ * Returns each topic visibility with the readers it includes, as one sentence fragment.
+ */
+export function toVisibilityOptionsSentence(): string {
+	return toOrSentence(visibilities.map((visibility) => `${VISIBILITY_READERS[visibility]} (${visibility})`))
+}
+
 /**
  * Every count of findings a scan can keep, as one sentence fragment with "or" before the last, for the prompts that
  * name them.

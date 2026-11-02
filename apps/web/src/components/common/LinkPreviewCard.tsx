@@ -1,38 +1,23 @@
-// the link preview card, its loading note, and the check for a link worth previewing
+// the link preview card for a linked page or an embedded video
 import type { ChatLinkPreview } from "@carlnotes/contracts/chat"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { useMemo } from "react"
-import { CoffeeLoading } from "@/components/branding/CoffeeLoading"
 import { AnchorLink } from "./AnchorLink"
 import { HostFavicon } from "./HostFavicon"
 import { YoutubePlayer } from "./YoutubePlayer"
 
-/**
- * The loading note shown while a link's card is still fetching.
- */
-export function LinkPreviewLoading() {
-	return <CoffeeLoading className="min-h-0 py-1 text-xs" />
-}
-
-/**
- * Whether a text holds a link that could have a link preview card.
- */
-export { hasPreviewableLink } from "@carlnotes/core/lib/chatLinkPreviews"
-
-/**
- * The link preview card for a link: the page's own title, description, and image, all served from this origin.
- * A YouTube link's card plays the video in place, and nothing reaches YouTube until the play button is pressed.
- */
-export function LinkPreviewCard({
-	linkPreview,
-	className,
-	isUserContent,
-}: {
+// the preview's data and presentation, including attribution for user content
+type LinkPreviewCardProps = {
 	linkPreview: ChatLinkPreview
 	className?: string
 	// a user content link, such as a finding's source, gets rel ugc and keeps its referrer
 	isUserContent?: boolean
-}) {
+}
+
+/**
+ * Renders a linked page's preview or a YouTube video that loads on play.
+ */
+export function LinkPreviewCard({ linkPreview, className, isUserContent }: LinkPreviewCardProps) {
 	// the host shown above the page's words
 	const linkPreviewHost = useMemo(() => toLinkPreviewHost(linkPreview.url), [linkPreview.url])
 

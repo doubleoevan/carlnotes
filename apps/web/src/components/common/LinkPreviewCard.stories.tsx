@@ -1,7 +1,8 @@
 // the link preview card: a linked page's host, title, description, and image under a chat message, and its loading note
 import type { ChatLinkPreview } from "@carlnotes/contracts/chat"
 import type { Meta, StoryObj } from "@storybook/tanstack-react"
-import { LinkPreviewCard, LinkPreviewLoading } from "./LinkPreviewCard"
+import { LinkPreviewCard } from "./LinkPreviewCard"
+import { LinkPreviewLoading } from "./LinkPreviewLoading"
 
 // an article's card, its image and its host's favicon served from this origin
 const ARTICLE_LINK_PREVIEW: ChatLinkPreview = {

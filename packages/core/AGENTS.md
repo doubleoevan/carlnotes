@@ -140,7 +140,10 @@ alphabetical room ordering, and `toProfileChatContext` for both apps. Reset the 
 `lib/chatCopy` holds shared composer, confirmation, empty-room, and completion wording. Account replacement also
 clears `chatRoomStore` and its opened-room markers. Member reads can reuse the current account's loaded Team page.
 
-`components/ThinkingLine` owns the stable waiting phrase with app-supplied text rendering. `lib/thinkingLines` owns
+`components/ThinkingLine` owns the stable waiting phrase with app-supplied text rendering. Its `ThinkingLineProps`
+names the component-owned props; `ThinkingLineTextProps` remains the shared adapter contract. Both apps consume a
+`Pick` of the shared props and retain module-level text adapters. This family is in the adopted component-convention
+set; other components remain report-only. `lib/thinkingLines` owns
 the shared phrase deck and shuffle, moved from web's common components and utilities. Web retains CSS shimmer;
 native motion and app activity stay in the mobile adapter. `lib/chatCopy` also owns individual-message deletion
 confirmation wording; platform adapters use the web confirmation dialog and native alert.

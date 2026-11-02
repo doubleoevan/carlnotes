@@ -1,11 +1,15 @@
 // the shimmering "Carl is ___" line shown while carl works on a reply, a scan, or source suggestions
-import { ThinkingLine as SharedThinkingLine, type ThinkingLineTextProps } from "@carlnotes/core/components/ThinkingLine"
+import {
+	ThinkingLine as SharedThinkingLine,
+	type ThinkingLineProps,
+	type ThinkingLineTextProps,
+} from "@carlnotes/core/components/ThinkingLine"
 import { cn } from "@carlnotes/nightshift/classNames"
 
 /**
  * Shows one "Carl is ___" shimmer line, dealt once so a re-render never swaps it.
  */
-export function ThinkingLine({ className }: { className?: string }) {
+export function ThinkingLine({ className }: Pick<ThinkingLineProps, "className">) {
 	return <SharedThinkingLine Text={ThinkingText} className={className} />
 }
 

@@ -4,18 +4,8 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives
 // the button's own look, a muted icon until hovered
 const ICON_BUTTON_CLASS = "text-muted-foreground hover:text-foreground grid h-11 w-7 place-items-center sm:size-7"
 
-/**
- * A button with an action tooltip, a muted icon until hovered unless className gives it another look. The tooltip is
- * the button's accessible name.
- */
-export function IconButton({
-	tooltip,
-	ariaLabel,
-	isDisabled,
-	className = ICON_BUTTON_CLASS,
-	onClick,
-	children,
-}: {
+// the action's label, state, and optional replacement appearance
+type IconButtonProps = {
 	tooltip: React.ReactNode
 	// the plain-text name a markup tooltip cannot provide on its own
 	ariaLabel?: string
@@ -24,7 +14,19 @@ export function IconButton({
 	className?: string
 	onClick: () => void
 	children: React.ReactNode
-}) {
+}
+
+/**
+ * Renders an action button with an accessible label and tooltip.
+ */
+export function IconButton({
+	tooltip,
+	ariaLabel,
+	isDisabled,
+	className = ICON_BUTTON_CLASS,
+	onClick,
+	children,
+}: IconButtonProps) {
 	return (
 		<Tooltip>
 			<TooltipTrigger asChild>

@@ -4,6 +4,7 @@ import {
 	toMaxTopicFindingsSentence,
 	toScanFrequenciesSentence,
 	toVisibilitiesSentence,
+	toVisibilityOptionsSentence,
 } from "@carlnotes/contracts/enums"
 import { toSourceOptionsSentence } from "@carlnotes/contracts/sources"
 import type { TopicDraft, TopicDraftTeam } from "@carlnotes/contracts/topicPayloads"
@@ -191,6 +192,7 @@ export async function buildNewTopicChatPrompt(
 		},
 		{
 			topicLimitBlock: toTopicLimitBlock(topicsRemaining),
+			visibilityOptions: toVisibilityOptionsSentence(),
 			glossaryBlock,
 			docsGuideBlock,
 			spokenBlock,

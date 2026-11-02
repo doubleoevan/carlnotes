@@ -259,6 +259,10 @@ test("the new-topic prompt shows the draft as data and names the tools", async (
 	expect(prompt).toContain("Notes of Carl (teamId: team-1)")
 	expect(prompt).toContain("draftTopic")
 	expect(prompt).toContain("createTopic")
+	// preserve the visibility choices rendered from the contract
+	expect(prompt).toContain(
+		"Ask who should see the topic: anyone (public), the people they invite (invite), or just them (private).",
+	)
 	expect(prompt).not.toContain("{{")
 })
 

@@ -13,8 +13,6 @@
 	"ignoreBinaries": ["doppler", "cloudflared"],
 	"workspaces": {
 		".": {
-			// scripts/preflight.sh and the CI gate run biome through bunx
-			"ignoreDependencies": ["@biomejs/biome"],
 			// knip does not read past `doppler run --`, so each file a doppler script, a shell script, or the README runs is
 			// named here with its loader
 			"entry": [

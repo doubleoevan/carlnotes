@@ -120,12 +120,22 @@ Generated or archived paths that burn context:
 
 ## Verification
 
-`bun run check` is the gate: Biome, the package boundary check, the dead-code check (`bunx knip`), the component parity
+`bun run check` is the gate: Biome, adopted component conventions, the package boundary check, the dead-code check (`bunx knip`), the component parity
 check against the contracts and `apps/mobile/parity.md`, the client parity check against `apps/mobile/parity.md`, the
 purchase path check
 (`scripts/check-purchase-paths.ts`) that keeps checkout and the portal out of the mobile app's reach, the contract
 freeze check against `contracts/`, `tsc -b`, the Temporal workflow bundle check, and the test suite. Green before any
 hand-off.
+
+`scripts/check-component-conventions.ts` runs the focused convention in
+[jsx-conventions](.agents/skills/jsx-conventions/SKILL.md). `componentConventionFiles.ts` owns the feature roots,
+Nightshift mapping, exact compound exceptions, and six adopted files. `componentSyntax.ts` parses module-local TSX;
+`componentConventions.ts` checks primary count/name and local props names. `componentConventionReport.ts` delegates
+export purity, filename matching, and stable nested component identities to Biome through `biome.components.json`.
+This syntax check does not resolve project types or arbitrary wrappers: unresolved identities require review and
+fail strict selection. `bun run report:components` inventories legacy files without failing on findings;
+`bun run check:components` enforces only the adopted set in preflight. Both fail on operational errors. Fixtures in
+`componentConventions.test.ts` and `componentConventionsCli.test.ts` exercise syntax, real Biome rules, and exit codes.
 
 Knip fails on a file, an export, a type, or a declared dependency that nothing uses. A file that only a script, a
 `new URL(...)`, or a string loads is an entry point in `knip.jsonc`, with a comment that names its loader. An exception

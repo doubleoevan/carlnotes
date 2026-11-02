@@ -4,6 +4,9 @@ set -euo pipefail
 # lint and format check
 bunx biome check .
 
+# enforce component conventions for the adopted examples
+bun run check:components
+
 # check that every import, package.json, and tsconfig under apps/ and packages/ stays inside its workspace boundary
 bun scripts/check-package-boundaries.ts
 

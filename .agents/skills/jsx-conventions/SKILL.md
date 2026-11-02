@@ -10,6 +10,39 @@ description: >
 
 # JSX Conventions
 
+### Component modules
+
+An ordinary feature-component file exports one primary React component whose
+public name matches its filename. Named exports and named defaults are both
+valid. Export types as needed; move public runtime helpers, hooks, constants,
+and additional public components to their own appropriate modules.
+
+When a component needs a locally declared named props type, call it
+`ComponentNameProps`. Consume imported shared props and direct compositions
+without adding redundant aliases. A small inline annotation is fine, and a
+props-free component needs no empty type. Private model types and exported
+shared props or adapter types keep their meaningful names.
+
+Keep module-level constants, small private helpers, private supporting types,
+and private subcomponents together when they support the primary component.
+Rendered subcomponents and component adapters stay at module scope so parent
+rerenders preserve their identities. Ordinary event callbacks and render
+callbacks remain valid inside a component.
+
+Routes, entrypoints, stories, tests/fixtures, generated files, Nightshift
+contracted implementations, and explicitly designated compound UI primitives
+are excluded. Preserve Nightshift contracts, exports, filenames, and existing
+web/mobile shared-component relationships. A primitives directory alone is
+not an exception.
+
+The first rollout covers web components/pages, mobile components, and core
+components. `bun run report:components` inventories those roots without
+failing on convention findings. `bun run check:components` enforces the six
+adopted files in `scripts/componentConventionFiles.ts`; legacy files remain
+report-only. Both commands accept explicit paths and fail on scan errors.
+Unknown wrappers or external component re-exports require review. Do not expand
+enforcement or migrate the repository as part of a focused component edit.
+
 ### Event handler naming
 
 Local callback functions use the `handle` prefix. Props that receive a

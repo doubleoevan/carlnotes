@@ -1,0 +1,15 @@
+{
+	"extends": ["./biome.json"],
+	"linter": {
+		"rules": {
+			"style": {
+				"useComponentExportOnlyModules": "error",
+				"useFilenamingConvention": {
+					"level": "error",
+					"options": { "filenameCases": ["export"] }
+				}
+			},
+			"correctness": { "noNestedComponentDefinitions": "error" }
+		}
+	}
+}

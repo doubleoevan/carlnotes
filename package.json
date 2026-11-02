@@ -30,6 +30,8 @@
 		"build:storybook": "STORYBOOK_DISABLE_TELEMETRY=1 bun run --cwd apps/web build:storybook",
 		"nightshift:write": "bun scripts/write-nightshift-tokens.ts",
 		"check:workflows": "bun scripts/check-workflow-bundles.ts",
+		"report:components": "bun scripts/check-component-conventions.ts --report",
+		"check:components": "bun scripts/check-component-conventions.ts --check",
 		"check:built-dependencies": "bun scripts/check-built-dependencies.ts",
 		"check": "bash scripts/preflight.sh",
 		"test": "bun test",
@@ -99,6 +101,7 @@
 		"reset:monthly-budgets": "doppler run -- bun apps/worker/resetMonthlyBudgets.ts"
 	},
 	"devDependencies": {
+		"@babel/parser": "8.0.0",
 		"@biomejs/biome": "^2.6.3",
 		"@carlnotes/api": "workspace:*",
 		"@carlnotes/contracts": "workspace:*",

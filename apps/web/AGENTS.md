@@ -10,6 +10,12 @@ shared rating, Resource metadata, and Notes table components in core.
 shuffle now live in `packages/core/lib/thinkingLines.ts`. Room message deletion uses `common/ConfirmDialog` with
 core's shared confirmation wording before the existing delete operation.
 
+`ThinkingLine` consumes core's `ThinkingLineProps` through a direct `Pick`; its `ThinkingText` adapter stays at module
+scope. `common/LinkPreviewCard.tsx` owns the link/video card and its private host formatter. Its compact loading note
+lives in `common/LinkPreviewLoading.tsx`, with a story beside it; the existing LinkPreviewCard loading story remains.
+Import `hasPreviewableLink` directly from core's `lib/chatLinkPreviews`. These components and `IconButton` are the web
+examples enforced by `bun run check:components`; unrelated feature modules remain in the report-only inventory.
+
 TanStack Start app on Vite, the `@carlnotes/web` app and the one browser entry. `apps/web/src/routes/` has one file
 per route. `router.tsx` builds the router from the generated `routeTree.gen.ts` and configures the api client,
 `client.tsx` hydrates it in the browser, and Start's own server entry renders it on the server. `bun run build:ui`

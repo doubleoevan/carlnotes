@@ -669,6 +669,9 @@ cancel icon. `ChatRoomMessageBubble` confirms deletion with the native alert and
 `common/ThinkingLine` adapts core's shared phrase component to native text. Its decorative highlight uses native
 transforms, stops while the app is inactive or unmounted, and remains static with Reduce Motion. It shares the web's
 phrase deck and sits beside `branding/CoffeeMug` in Carl's waiting bubble. Its stories cover narrow text and the bubble.
+Its props compose core's `ThinkingLineProps` through `Pick`, and the `ShimmerText` adapter keeps its module-level
+identity. This component is the native example enforced by `bun run check:components`; other feature modules remain
+in the report-only inventory. The shared phrase selection, native motion, and Nightshift contracts stay unchanged.
 
 The native `ChatAuthor`, `ChatTurnBlock`, `ChatRoomMessageBubble`, `ChatRejectionNotice`, and `TopicDraftCard` reuse
 core composition with native elements. Retain matching names, field order, Nightshift fonts/colors, Lucide icons,

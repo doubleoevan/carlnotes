@@ -509,13 +509,16 @@ net revenue. The gate, plans, and quotas all work without Stripe.
 Checks: `bun run check` runs the full gate, the same `scripts/preflight.sh` that the pre-push hook runs:
 
 ```bash
-bun run check       # biome + package boundaries + knip + component parity + client parity + purchase paths + contract freeze + tsc + workflow bundles + bun test
+bun run check       # biome + adopted component conventions + package boundaries + knip + component parity + client parity + purchase paths + contract freeze + tsc + workflow bundles + bun test
 ```
 
 Or run them individually:
 
 ```bash
 bunx biome check .
+bun run check:components               # enforce only the six adopted component files
+bun run report:components              # report the wider feature-component inventory without failing on findings
+bun run report:components -- --json    # deterministic classifications, locations, and counts
 bun scripts/check-package-boundaries.ts # every import stays inside the dependencies its workspace declares
 bunx knip                               # no file, export, type, or declared dependency is left unused
 bun scripts/check-component-parity.ts   # every Nightshift component contract is implemented in each app it names, and a component both apps define shares its core component or is listed in apps/mobile/parity.md
@@ -527,6 +530,16 @@ bun test
 bun run check:workflows # every Temporal workflow file still bundles
 bun run check:built-dependencies # after build:ui, apps/web declares every package its server build leaves external
 ```
+
+Component conventions cover web components/pages, mobile components, and core components. Routes, entrypoints,
+stories, tests/fixtures, generated files, Nightshift contracted implementations, and exact designated compound
+primitives are excluded. Other TSX roots remain outside this rollout. The policy and six adopted paths live in
+`scripts/componentConventionFiles.ts`; the convention is documented in `.agents/skills/jsx-conventions/SKILL.md`.
+Both commands accept explicit repository-relative file paths; these replace their default selection. Report mode
+returns 0 even for violations or identities requiring review. Strict mode returns 1 for either, while both return 2
+for invalid input, parse errors, or incomplete tooling results. Neither rewrites source. JSON counts checked,
+excluded, and review files separately; violating files can overlap checked/review, and diagnostic totals count every
+finding. Unsupported wrappers and external component re-exports require review, since this is syntax analysis.
 
 The Docker build runs `check:built-dependencies` right after `build:ui`. The production install links only the packages
 `apps/web` declares, so an undeclared one fails the image build instead of every page render.
