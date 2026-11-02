@@ -11,8 +11,9 @@ bun scripts/check-package-boundaries.ts
 # import reaches
 bunx knip
 
-# check that every Nightshift component contract has an implementation with a story in each app it names, and that an
-# app imports a contract only from its implementation, a story, or a test
+# check that every Nightshift component contract has an implementation with a story in each app it names, that an
+# app imports a contract only from its implementation, a story, or a test, and that a component both apps define
+# shares its core component, or apps/mobile/parity.md lists it with its kind and reason
 bun scripts/check-component-parity.ts
 
 # check that every api client capability the web reaches is reachable from the mobile app, or listed in

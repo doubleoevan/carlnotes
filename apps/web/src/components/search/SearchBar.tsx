@@ -23,7 +23,7 @@ import { openInNewTab } from "@/lib/externalLinks"
 import { saveSearchBarPath, useSearchBarClear } from "@/stores/searchBarStore"
 import { PageActionMenu } from "./PageActionMenu"
 import { type FindingFilterState, SearchFilters } from "./SearchFilters"
-import { SearchRowOption, SeeAllResultsOption } from "./SearchResults"
+import { SearchRowOption, SeeAllResultsOption } from "./SearchResultOptions"
 import { toEnterChoice, toSearchBarPath, toToggledList } from "./searchBarChoices"
 import { toRouteSearchRequest, toSearchRouteSearch } from "./searchRouteSearch"
 

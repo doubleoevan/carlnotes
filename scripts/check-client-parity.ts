@@ -3,13 +3,17 @@
 // reason
 
 import { readFileSync } from "node:fs"
-import { checkClientParity, PARITY_INVENTORY_PATH, parseParityInventory } from "./clientParity"
+import { CLIENT_INVENTORY_HEADING, checkClientParity } from "./clientParity"
+import { PARITY_INVENTORY_PATH, parseInventoryTable } from "./parityInventory"
 import { readAppSourceFiles } from "./sourceFiles"
 
 // run the rules over both apps and the packages they import, against the inventory, and report
 const clientParityReport = checkClientParity({
 	sourceFiles: readAppSourceFiles(),
-	inventoryEntries: parseParityInventory(readFileSync(PARITY_INVENTORY_PATH, "utf8")),
+	inventoryRows: parseInventoryTable({
+		markdown: readFileSync(PARITY_INVENTORY_PATH, "utf8"),
+		heading: CLIENT_INVENTORY_HEADING,
+	}),
 })
 if (clientParityReport.violations.length > 0) {
 	console.error(

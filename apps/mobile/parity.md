@@ -1,11 +1,12 @@
 # Mobile parity inventory
 
 The web is the reference. This file is the reviewed inventory beside the checks: the api capabilities the web reaches
-that the app does not, each with its reason or the prompt that owns it, the page and action inventory with how each
-screen reuses the web, and the roles each action was verified with. `bun scripts/check-client-parity.ts`, in
-preflight, reads the first table: a web-reachable capability missing from the app fails unless a row names it, and a
-row fails once the app reaches its capability, so a shipped feature retires its row in the same change. The Nightshift
-component contracts have their own check, `check-component-parity.ts`, and the reuse rules stay in the AGENTS.md files.
+that the app does not, each with its reason or the prompt that owns it, the components each app builds on its own,
+the page and action inventory with how each screen reuses the web, and the roles each action was verified with.
+`bun scripts/check-client-parity.ts`, in preflight, reads the first table: a web-reachable capability missing from the
+app fails unless a row names it, and a row fails once the app reaches its capability, so a shipped feature retires its
+row in the same change. `bun scripts/check-component-parity.ts` reads the second table the same way, beside its checks
+of the Nightshift component contracts. The reuse rules stay in the AGENTS.md files.
 
 ## Web-only client capabilities
 
@@ -49,6 +50,118 @@ and every other entry point keeps its words without the plans link. `scripts/che
 that names the plans path, a purchase label, or the plans link without reading those rules. The web's document title
 count has the app icon's badge as its counterpart, so it is not web-only.
 
+## Separately built components
+
+A row names a component that both apps define under one file name, outside `src/components/primitives/`, and that
+does not render or adapt the `packages/core/components/` module of that name, or a primitive that both apps keep
+without a Nightshift contract. The check counts a pair as shared when every file of the name imports a value or an
+`…Elements` adapter type from that core module. Kind is `platform API` for a pair whose job is a native capability,
+such as audio playback, sharing, or file picking. It is `platform difference` for one whose interaction follows a
+platform convention, such as hover on web and press on mobile, keyboard handling, or a native virtualized list. It is
+`not yet shared` for one whose differences are leaf elements that a core component's `…Elements` adapter could supply:
+a dialog or popover against a native sheet, a toast or tooltip against an Alert, or a DOM table against a native table
+over shared columns. A row fails once its pair is shared, its primitive has a contract, or an app no longer defines the
+name.
+
+| Component | Kind | Reason |
+| --- | --- | --- |
+| `AccountSettings` | not yet shared | Shares AccountFields and BlockedUsersSection. The section order and close account flow could move to core, with `ConfirmDialog` or `Alert` behind an adapter and mobile's push and store restore sections passed in. |
+| `AddToAiDialog` | platform difference | Shares AddToAi. Web wraps it in a dialog with install deep link anchors. Mobile uses a native sheet with copy-only desktop steps, `expo-clipboard`, and AsyncStorage. |
+| `AddTopicButton` | not yet shared | Web opens a popover with an autofocused filter over topics passed in. Mobile opens a native sheet that fetches addable topics with react-query. An adapter could hold that difference. |
+| `AddTopicToTeamDialog` | not yet shared | Both list the led teams with add and remove toggles. The list logic could move to core, with web's dialog and mobile's native sheet behind an adapter. |
+| `AnchorLink` | platform API | Web routes through the TanStack Router `Link` or plain anchors with new tab rules. Mobile uses the expo-router `Link`, `expo-web-browser`, and `expo-linking`. |
+| `AppChatPanel` | platform difference | Web runs the docked chat panel that picks rooms, private chats, and loading states. Mobile only places the chat pill and pushes to the full screen chat route. |
+| `Avatar` | not yet shared | Both pick the image or the initials the same way. A core component could hold that choice, with the web span and mobile's `expo-image` with FlashList recycling as its elements. |
+| `BrandIcon` | platform difference | Web draws every brand logo and the YouTube play button as DOM svg. Mobile only draws the YouTube play button with react-native-svg at the font scale. |
+| `ChatAttachmentChips` | not yet shared | Both render the same removable chips with a thumbnail or icon, name, and text length. Web adds a hover tooltip and mobile adds a hit slop. |
+| `ChatBudgetNotice` | not yet shared | Both show the spent budget line and the plans link. Mobile hides the link unless the store sells a plan and uses `PlansLink`. |
+| `ChatComposer` | platform difference | Web builds a textarea form with Enter to send, paste and file drop, and popover file lists. Mobile builds a native `TextInput` box that stays above the keyboard. |
+| `ChatMarkdown` | platform difference | Web renders replies with Streamdown and DOM links. Mobile renders with react-native-enriched-markdown and turns tables into labeled cards. |
+| `ChatMessageParts` | platform API | Web plays clips in a video element and copies with the browser clipboard. Mobile copies through `CopyMarkdownButton` and shows link previews with a native `YoutubePlayer`. |
+| `ChatOptionsMenu` | platform difference | Web is a popover chat room switcher with hover tooltips listing members. Mobile is an options button that opens a native sheet with only Clear behind an `Alert`. |
+| `ChatPanelWidget` | platform difference | Shares ChatPill. Web docks a body portal panel with expand and minimize buttons and Escape. Mobile frames a full screen with safe areas and `KeyboardAvoidingView`. |
+| `ChatRoomComposer` | platform difference | Both use the shared reply rules. Web handles autocomplete keys, paste, and file drop in a textarea. Mobile tracks the native caret and uses a `ChoiceSelect` reply picker. |
+| `ChatRoomPanel` | platform difference | Web fills the docked chat panel with lazy loaded messages and a clear dialog. Mobile renders a native virtualized message list with a report sheet and a push permission offer. |
+| `CoffeeCup` | not yet shared | Both draw the shared Nightshift cup paths. Web uses DOM svg with CSS steam animation. Mobile uses react-native-svg with still steam at the font scale. An svg element adapter could hold that difference. |
+| `CoffeeLoading` | platform difference | Web shows the animated coffee mug beside the loading line. Mobile shows the native `ActivityIndicator` spinner beside a label. |
+| `CoffeeMug` | platform difference | Web draws the mug as DOM svg with CSS steam animation. Mobile stacks react-native-svg layers and animates each steam wisp with the native `Animated` driver. |
+| `CollapsibleSection` | not yet shared | Both render an open by default titled section with a note and aside beside the toggle. Web uses the Accordion primitive and mobile uses a `Pressable` with state. |
+| `ConfirmDialog` | platform difference | Web renders a modal dialog with cancel and confirm buttons that wait on the action. Mobile shows the native destructive `Alert` and renders nothing. |
+| `CountBadge` | not yet shared | Both render the same filled pill with `toCountBadgeLabel`. Mobile also exports a class helper for an outlined badge. |
+| `EditTeamModal` | not yet shared | Shares TeamFields and the core save flow. The dialog or native sheet and the file input or native image picker could be adapter elements of one core component. |
+| `EditTopicFields` | not yet shared | The scan time picker is a platform API, @react-native-community/datetimepicker on mobile and a TimePicker on web, but the rest of the fields match. The picker could be an adapter element. |
+| `EditTopicModal` | not yet shared | Web edits the topic in a dialog with toasts. Mobile uses a native sheet with inline errors and the share sheet for the invite link. An adapter could hold that difference. |
+| `Header` | platform difference | Web shows a desktop nav, theme toggle, sign-in links, and a hamburger menu over the hero. Mobile shows a compact brand row in a safe area with the user menu. |
+| `HomeHero` | not yet shared | Both use the copy in core homeHero. Web opens the pitch and persona credit in hover popovers with a CSS shimmer. Mobile opens the pitch in a native sheet. An adapter could hold that difference. |
+| `HostAvatar` | not yet shared | Both show Carl's or Vienna's portrait from the Nightshift assets. Web uses an img tag, mobile an expo-image sized to the font scale. |
+| `InviteMembersModal` | not yet shared | Both wrap the app's own `TeamInviteFields` and send the staged invites. Web shows them in a dialog, mobile in a native sheet. An adapter could hold that difference. |
+| `InviteUserToTeamButton` | not yet shared | Web lists the teams in a popover menu with hover tooltips and toasts. Mobile lists them in a native sheet and loads statuses with react-query. An adapter could hold that difference. |
+| `JoinTeamButton` | not yet shared | Both toggle a join request with the same client calls. Only the feedback differs, sonner toasts and a hover tooltip on web, an Alert and an inline error on mobile, which an adapter could hold. |
+| `MicButton` | not yet shared | Both take their state from core voiceRecordingRules and start the recording. Web adds a tooltip and a visitor signup route, mobile closes the keyboard first. |
+| `MultiCombobox` | platform difference | Web filters the options in a popover dropdown with removable badges. Mobile opens a native sheet with a search field. |
+| `NoteIcon` | not yet shared | Both draw the raised notebook tile. Web uses a span, mobile a View sized to the font scale. |
+| `NoteLayout` | platform difference | Both fill the layout slot of core `NoteViewer`. Web puts comments in a margin column or a CSS sheet. Mobile uses a ScrollView, a native sheet, and a keyboard Done button. |
+| `NoteVisibilitySelect` | not yet shared | Shares `NotesTable` labels. Both show a visibility select, or a fixed label when there is one choice. Only web's per-option hover tooltip differs, which an adapter could hold. |
+| `NotesSection` | platform difference | Web shows notes in an accordion and opens them in a dialog. Mobile uses react-query with an offline state, local drafts, a native sheet to create, and a screen per note. |
+| `OAuthProviderIcons` | not yet shared | Web draws the marks with DOM svg and BrandIcon. Mobile draws the same Nightshift paths with react-native-svg sized to the font scale. An svg element adapter could hold that difference. |
+| `OwnerTopicsTable` | not yet shared | Both build columns with core ownerTopicsTableColumns. Web nests scan and follower subtables in a DOM table. Mobile uses a fixed-column native table and opens scans in a sheet. An adapter could hold that difference. |
+| `PodcastEpisodeAudio` | platform API | Web registers an HTMLAudioElement and renders the mini player. Mobile drives expo-audio with an AsyncStorage checkpoint and AppState access checks. |
+| `PodcastEpisodeChaptersTable` | not yet shared | Web builds a DOM table whose rows open a finding popover. Mobile maps core chapter columns into a fixed-column native table and opens findings in a sheet. An adapter could hold that difference. |
+| `PodcastEpisodeCountsLine` | not yet shared | Web polls the listener count and flashes it when it changes. Mobile only shows a count passed in. |
+| `PodcastEpisodeCover` | not yet shared | Both show the podcast episode cover over a placeholder. Web hides an img that fails to load, mobile swaps to a placeholder image in expo-image. |
+| `PodcastEpisodePlayer` | not yet shared | Both pick the podcast episode with core useShownPodcastEpisode and show the same cards in a collapsible section. Mobile also waits until the screen is active and online. |
+| `PodcastEpisodeQuestionControls` | not yet shared | Both drive the mic, send, and stop slots from core usePodcastEpisodeQuestionButton. Web uses tooltip icon buttons, mobile plain buttons with a spinner. |
+| `PodcastEpisodesSection` | not yet shared | Both build columns with core podcastEpisodesTableColumns. Web renders a sortable DOM table. Mobile renders a fixed-column native table in a collapsible section. An adapter could hold that difference. |
+| `PodcastThemeSongNote` | not yet shared | Shares `PodcastThemeSongCredits`. Web opens the credits in a hover popover, mobile in a native sheet. An adapter could hold that difference. |
+| `PrivateChatPanel` | not yet shared | Both show chat messages, the topic draft card, and a composer. That content could move to core, with web's `ChatPanelWidget` and clear dialog and mobile's FlatList, mic, and file picking as adapter elements. |
+| `RecordingBar` | not yet shared | Both draw cancel, a level meter, the timer, and send for a voice recording. Only the controls differ, DOM buttons on web and native Button and View on mobile. |
+| `RelatedTopicsSection` | not yet shared | Web renders a DOM table through `PagedTableSection` with td cells. Mobile builds a native `TableCard` with rows and pagination inside a `CollapsibleSection`. An adapter could hold that difference. |
+| `ReportIssueDialog` | not yet shared | Web opens a Dialog and reports the result with sonner toasts. Mobile opens a native `Sheet` holding a reusable `ReportIssueForm` and confirms with Alert. An adapter could hold that difference. |
+| `ScrollBox` | platform difference | Web scrolls an overflow div with a CSS scrollbar. Mobile uses a gesture handler ScrollView with an animated `ScrollIndicator` for native nested scrolling. |
+| `SearchBar` | platform difference | Web is a combobox with a typeahead dropdown and arrow key handling. Mobile is a TextInput that opens the search screen on submit. |
+| `SearchResultsList` | not yet shared | Both list ranked results with the same kind icons, metadata line, and podcast episode pill, and reuse `TopicResource` for findings. Each builds the rows with its own controls. |
+| `SentInvitesTable` | not yet shared | Shares the column definitions. Web renders a DOM `DataTable` with hover tooltips and a `ConfirmDialog`, mobile a native `DataTable` with an Alert confirmation. An adapter could hold that difference. |
+| `ShareTeam` | platform API | Web uses the browser share sheet and web clipboard inside a Dialog. Mobile calls the React Native Share sheet and `expo-clipboard` inside a native `Sheet`. |
+| `ShareTopic` | platform API | Web uses the browser share sheet and clipboard from a popover or dialog. Mobile uses React Native Share and `expo-clipboard` in a native sheet with a selectable link fallback. |
+| `SortableHeader` | platform difference | Web renders a th button with a hover tooltip. Mobile renders a native Button with accessibility values and shows the tooltip on long press. |
+| `SpendMeter` | not yet shared | Both draw the same bar, legend, and cutoff list from the core spendMeter lib. Only the cutoff detail differs, a hover tooltip on web and an Alert on tap on mobile, which an adapter could hold. |
+| `SpokenAnswerAudio` | platform API | Web plays spoken answers through an HTML audio element and shows sonner toasts. Mobile creates an `expo-audio` player and clears voice cache files for each account. |
+| `SpokenAnswerButton` | not yet shared | Both use the core `useSpokenAnswerButton` hook and show play, a spinner, or stop. Only the button and icon controls differ. |
+| `TableCard` | platform difference | Web wraps a DOM table in a styled div. Mobile wraps native views and also exports `TableHeader` and `TableRow` for fixed-column native rows. |
+| `TagPicker` | platform difference | Web opens a popover to filter, add, and create tags with Enter key handling. Mobile uses a native `MultiCombobox` plus a text field and an Add button. |
+| `TeamInviteFields` | platform API | Both stage invites through `InviteFields`. Web passes an invite link menu that copies with toasts, mobile shares the invite link through the React Native Share sheet. |
+| `TeamInvitesTable` | not yet shared | Both map team invitations to rows and render `SentInvitesTable` with the same labels. The row mapping and the delete call match. |
+| `TeamLink` | not yet shared | Both link the team's avatar and name to its page. Web adds a byline label, and mobile adds the update count badge. |
+| `TeamMembersTable` | not yet shared | Shares the column definitions. Web renders DOM table rows with select menus and hover tooltips, mobile a native `DataTable` with `ChoiceSelect` and `PreferenceSwitch`. An adapter could hold that difference. |
+| `TeamsMembershipTable` | not yet shared | Shares the column definitions. Web renders a wide DOM table with row components, mobile a native `DataTable` with Alert confirmations and a `Sheet` for team members or topics. An adapter could hold that difference. |
+| `Topic` | not yet shared | Both show the topic title link, byline, new count, share action, and tags. That header could move to core. Web adds the findings list and the note popover around it. |
+| `TopicAttachmentEditor` | platform API | Web stages files from a hidden file input. Mobile picks files through a native file picker, resizes images, and uploads native file parts. |
+| `TopicCountsLine` | not yet shared | Both poll `fetchTopicCounts` with `usePolledCounts` and show Viewers and Followers. Web uses `FlashingCount`, mobile uses `Count` and polls only while the topic route is open. |
+| `TopicFeedSkeleton` | not yet shared | Both draw gray placeholder blocks for the section headers, topic headers, and five finding rows. Each copies its own feed layout, so a core skeleton with a block element would keep the two from drifting. |
+| `TopicFindingSummary` | not yet shared | Shares ResourceMetadata. The trigger differs, a popover on web and a Pressable that opens a native sheet on mobile, and could be an adapter element. Mobile's rank, bookmark, and `expo-image` favicon are a parity gap to settle when it moves. |
+| `TopicFindingsSection` | not yet shared | Both show five findings, a `MoreButton` expander, and the core empty text. Web's `CollapsibleSection` and the hidden rows for visitors without JavaScript could stay in its adapter. |
+| `TopicGateNotice` | not yet shared | Web shows the gate in a modal `Dialog` with log in and sign up links. Mobile puts the same `TOPIC_GATE_COPY` inline on the screen with buttons that open the native session screens. An adapter could hold that difference. |
+| `TopicInfo` | not yet shared | Both build the same sections in the same order: owner, prompt, notes, attachments, sources, and counts. Mobile's native `Sheet` and web's source tooltips could be adapter elements. |
+| `TopicInvitesTable` | not yet shared | Both map topic invites into their own `SentInvitesTable` with the core `TOPIC_INVITES_TABLE_LABELS` and send the same delete call. Only the link and text controls differ. |
+| `TopicNameLink` | not yet shared | Both render the topic name link, the `PageUpdateCountBadge`, and the latest podcast episode play button. Only the link and text controls differ. |
+| `TopicResource` | not yet shared | Web makes the row a `Popover` with a hover tooltip hint and a bookmark tooltip. Mobile uses a Pressable row that opens a native sheet and keeps state with FlashList `useRecyclingState`. An adapter could hold that difference. |
+| `TopicResourceInfo` | not yet shared | Both show the same heading, notes, stats, and actions. Web's `PopoverContent` and mobile's native `Sheet`, share button, `expo-image` preview, and inline `YoutubePlayer` could be adapter elements. |
+| `TopicScanButton` | not yet shared | Both start, stop, and block a scan with the same rules. Only the feedback differs, sonner toasts and hover tooltips on web, `Alert.alert` with a button to account or plans on mobile, which an adapter could hold. |
+| `TopicScanHistory` | not yet shared | Web opens each scan note in a popover and confirms source removal with a `ConfirmDialog` and `sonner`. Mobile opens a native `Sheet` and confirms with `Alert.alert`. An adapter could hold that difference. |
+| `TopicScansTable` | not yet shared | Both use the core `toTopicScansTableColumns`. Web opens the scan recap in a popover on a DOM table, and mobile opens it in a native `Sheet` on its own native `DataTable`. An adapter could hold that difference. |
+| `TopicSettingsCard` | not yet shared | Both build the same settings card: frequency, max findings, visibility, sources, cost, and podcast. Web shows a tooltip on the paused note, and mobile shows a `PlansLink`. |
+| `TopicSourceEditor` | not yet shared | Both run the core `useTopicSourceEditor` and render the same default and custom source rows. Web uses a Radix `Select` and `Input`, mobile uses `ChoiceSelect` and `SessionTextInput`. |
+| `TopicSubscriptionsTable` | not yet shared | Both use the core `toTopicSubscriptionsTableColumns` with the same switch handlers. Web's `ConfirmDialog` and sonner, and mobile's `Alert.alert` and push permission offer, could be adapter elements. |
+| `TopicTeamSelect` | not yet shared | Both render the team multiselect, the new team name, `TeamInviteFields`, and a Public switch from the core `useTopicTeamChoice` field. Each uses its own controls. |
+| `TopicTutorialVideoDialog` | not yet shared | Web plays the tutorial in a modal `Dialog` and also exports the menu option and link button. Mobile plays it in a native `Sheet`. Both use `YoutubePlayer`. An adapter could hold that difference. |
+| `TopicsTable` | not yet shared | Both use the core `toTopicsTableColumns` and `useTopicEmails`. Web opens the topic info in a popover with a hover tooltip, and mobile opens it in a native `Sheet`. An adapter could hold that difference. |
+| `UpdateCountBadge` | platform difference | Web lists the waiting updates in a hover tooltip. Mobile follows the link on press and lists the updates in a native `Sheet` on long press. |
+| `UserAvatarPicker` | platform API | Web picks the photo with a hidden file input and drag and drop. Mobile picks it through `expo-image-picker` and `expo-document-picker` from `useAvatarPicker`. |
+| `UserMenu` | not yet shared | Shares UserMenuItems. Web opens a popover dropdown from the avatar. Mobile opens a native `Sheet` from a menu button, adds the theme menu, and shows log in and sign up when signed out. An adapter could hold that difference. |
+| `UserProfileLink` | not yet shared | Both render the user's avatar and username as a link to their profile. Only the link, avatar, and text controls differ. |
+| `YoutubePlayer` | platform API | Web plays the video in an iframe after a click on the thumbnail. Mobile plays it with `react-native-youtube-iframe` in a WebView and stops when the app leaves the foreground. |
+| `select` | platform difference | Web wraps the Radix `@radix-ui/react-select` DOM listbox. Mobile wraps `@rn-primitives/select` in a native overlay with a scroll view that moves the menu above the keyboard. |
+
 ## Page and action inventory
 
 Each row names the web page, the native screen, and what the screen reuses: `component` for a `packages/core`
@@ -90,9 +203,10 @@ their reason.
 
 ## Roles to verify
 
-Each action is to be exercised with the roles below on the dev api, on a development client. The pass needs a client rebuilt
-with `expo-notifications`, so every cell reads `not yet verified` until that build runs. A cell names what the role sees
-when it differs from the owner's view, such as a hidden control, and `not applicable` where the role has no such action.
+Each action is to be exercised with the roles below on the dev api, on a development client. The pass needs a client
+rebuilt with `expo-notifications`, so every cell reads `not yet verified` until that build runs. A cell names what the
+role sees when it differs from the owner's view, such as a hidden control, and `not applicable` where the role has no
+such action.
 
 | Action | Owner | Member, editor | Read-only follower | Leader | Admin |
 | --- | --- | --- | --- | --- | --- |
@@ -109,8 +223,8 @@ when it differs from the owner's view, such as a hidden control, and `not applic
 
 ## Rendered comparisons to run
 
-The new states to compare with carlnotes.com at 375 pixels, in light and dark, with the result or the gap. Each state has
-a React Native Storybook story; the device comparison runs on the rebuilt development client.
+The new states to compare with carlnotes.com at 375 pixels, in light and dark, with the result or the gap. Each state
+has a React Native Storybook story; the device comparison runs on the rebuilt development client.
 
 | State | Story | Compared |
 | --- | --- | --- |

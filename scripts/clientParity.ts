@@ -3,6 +3,7 @@
 import { posix } from "node:path"
 import { toParsedImports } from "./importBoundaries"
 import { toImportResolution } from "./importPaths"
+import { type InventoryRow, PARITY_INVENTORY_PATH } from "./parityInventory"
 import {
 	isInsideFolder,
 	MOBILE_APP_FOLDER,
@@ -13,10 +14,9 @@ import {
 	WEB_APP_FOLDER,
 } from "./workspaces"
 
-// the api client modules whose exported functions are the capabilities, and the inventory the check reads
+// the api client modules whose exported functions are the capabilities, and the inventory table the check reads
 const CLIENT_PACKAGE_FOLDER = "packages/client"
-export const PARITY_INVENTORY_PATH = "apps/mobile/parity.md"
-const PARITY_INVENTORY_HEADING = "## Web-only client capabilities"
+export const CLIENT_INVENTORY_HEADING = "## Web-only client capabilities"
 
 // where the web's walk starts: its route files
 const WEB_ROUTES_FOLDER = "apps/web/src/routes"
@@ -31,14 +31,8 @@ const NAMESPACE_SPECIFIER_PATTERN = /^\*|\*\s+as\s+\w+/
 // an exported function or constant of an api client module
 const CLIENT_EXPORT_PATTERN = /^export\s+(?:async\s+)?(?:function\s+(\w+)|const\s+(\w+)\s*=)/gm
 
-// a table row of the inventory: the capability in backticks, its status, and its reason or prompt
-const INVENTORY_ROW_PATTERN = /^\|\s*`([^`]+)`\s*\|\s*[^|]*\|\s*([^|]*)\|/
-
 // a capability of an api client module, named module.function
 type ClientCapability = { key: string; modulePath: string; exportName: string }
-
-// one inventory row: the capability it lists, and the reason or prompt that keeps it web-only
-export type ParityInventoryEntry = { capability: string; reason: string }
 
 // what the check found: each failure, and the capabilities one app alone reaches
 export type ClientParityReport = {
@@ -51,13 +45,13 @@ export type ClientParityReport = {
 type NamedImport = { importPath: string; names: string[] }
 
 // the files the check reads, and the inventory rows
-type CheckClientParityOptions = { sourceFiles: SourceFile[]; inventoryEntries: ParityInventoryEntry[] }
+type CheckClientParityOptions = { sourceFiles: SourceFile[]; inventoryRows: InventoryRow[] }
 
 /**
  * Returns the parity report: a capability the web reaches and the app does not, unless listed, a listed capability the
  * app now reaches or that no longer exists, a row without a reason, and the capabilities one app alone reaches.
  */
-export function checkClientParity({ sourceFiles, inventoryEntries }: CheckClientParityOptions): ClientParityReport {
+export function checkClientParity({ sourceFiles, inventoryRows }: CheckClientParityOptions): ClientParityReport {
 	// the capabilities, the files by path, and what each app reaches
 	const capabilities = toClientCapabilities(sourceFiles)
 	const filesByPath = new Map(sourceFiles.map((sourceFile) => [sourceFile.filePath, sourceFile]))
@@ -72,7 +66,7 @@ export function checkClientParity({ sourceFiles, inventoryEntries }: CheckClient
 
 	// a web-only capability needs an inventory row with a reason
 	const violations: string[] = []
-	const listedCapabilities = new Set(inventoryEntries.map((inventoryEntry) => inventoryEntry.capability))
+	const listedCapabilities = new Set(inventoryRows.map((inventoryRow) => inventoryRow.name))
 	for (const key of webOnlyCapabilities) {
 		if (!listedCapabilities.has(key)) {
 			violations.push(
@@ -83,44 +77,19 @@ export function checkClientParity({ sourceFiles, inventoryEntries }: CheckClient
 
 	// a row names a capability that exists, that the app still does not reach, and gives a reason
 	const capabilityKeys = new Set(capabilities.map((capability) => capability.key))
-	for (const inventoryEntry of inventoryEntries) {
-		if (!capabilityKeys.has(inventoryEntry.capability)) {
-			violations.push(`${PARITY_INVENTORY_PATH} lists ${inventoryEntry.capability}, which no api client module exports`)
-		} else if (mobileReachedCapabilities.has(inventoryEntry.capability)) {
-			violations.push(
-				`${PARITY_INVENTORY_PATH} lists ${inventoryEntry.capability}, which the app now reaches. retire the row`,
-			)
+	for (const inventoryRow of inventoryRows) {
+		if (!capabilityKeys.has(inventoryRow.name)) {
+			violations.push(`${PARITY_INVENTORY_PATH} lists ${inventoryRow.name}, which no api client module exports`)
+		} else if (mobileReachedCapabilities.has(inventoryRow.name)) {
+			violations.push(`${PARITY_INVENTORY_PATH} lists ${inventoryRow.name}, which the app now reaches. retire the row`)
 		}
 
 		// and says why it stays web-only, or which prompt owns it
-		if (inventoryEntry.reason.trim() === "") {
-			violations.push(`${PARITY_INVENTORY_PATH} lists ${inventoryEntry.capability} with no reason or prompt`)
+		if (inventoryRow.reason.trim() === "") {
+			violations.push(`${PARITY_INVENTORY_PATH} lists ${inventoryRow.name} with no reason or prompt`)
 		}
 	}
 	return { violations, webOnlyCapabilities, mobileOnlyCapabilities }
-}
-
-/**
- * Returns the inventory's capability rows: the table under the web-only heading, one row per listed capability.
- */
-export function parseParityInventory(markdown: string): ParityInventoryEntry[] {
-	// the table lines after the heading, up to the next heading
-	const headingIndex = markdown.indexOf(PARITY_INVENTORY_HEADING)
-	if (headingIndex === -1) {
-		return []
-	}
-	const section = markdown.slice(headingIndex + PARITY_INVENTORY_HEADING.length).split(/\n## /)[0] ?? ""
-
-	// each row with a backticked capability
-	const inventoryEntries: ParityInventoryEntry[] = []
-	for (const line of section.split("\n")) {
-		const rowMatch = INVENTORY_ROW_PATTERN.exec(line)
-		// a row lists its capability and its reason
-		if (rowMatch) {
-			inventoryEntries.push({ capability: rowMatch[1] ?? "", reason: rowMatch[2]?.trim() ?? "" })
-		}
-	}
-	return inventoryEntries
 }
 
 /**

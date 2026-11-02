@@ -859,6 +859,11 @@ Check for:
      and clears in `api/topic/feeds.ts` (now `api/topic/feedCaches.ts`), `ChatPage`, `toChatPageId`, and `toChatKind` in
      `api/chat/chatTurns.ts` (now `api/chat/chatPages.ts`), `teamTopics` in `db/schema/teams.ts` (now
      `db/schema/teamTopics.ts`), and `topicEmailSends` in `db/schema/topics.ts` (now `db/schema/topicEmailSends.ts`)
+   - `parseParityInventory`, `ParityInventoryEntry`, and `PARITY_INVENTORY_PATH` in `scripts/clientParity.ts` (now
+     `parseInventoryTable`, `InventoryRow`, and `PARITY_INVENTORY_PATH` in `scripts/parityInventory.ts`), and
+     `checkClientParity`'s `inventoryEntries` option (now `inventoryRows`)
+   - `apps/web/src/components/search/SearchResults.tsx` (now `SearchResultOptions.tsx`, the typeahead's options).
+     `SearchResults` in `apps/mobile/src/components/search/` is the search screen's results and keeps its name
 
 5. **Cross-harness enforcement parity**: `.claude/settings.json` hooks and
    `.opencode/plugin/guardrails.mjs` must gate the same operations with the

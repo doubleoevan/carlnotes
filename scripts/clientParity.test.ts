@@ -1,7 +1,7 @@
 // the client parity rules over fixture files: a capability reached through a core hook, a reached file whose other
 // export is not reached, each specifier form, an unlisted web-only capability, a stale row, and the mobile-only report
 import { expect, test } from "bun:test"
-import { checkClientParity, parseParityInventory, toNamedImports } from "./clientParity"
+import { checkClientParity, toNamedImports } from "./clientParity"
 import type { SourceFile } from "./workspaces"
 
 // an api client module with two capabilities, a core hook that calls one, and each app's routes
@@ -31,7 +31,7 @@ const SOURCE_FILES = [CLIENT_MODULE, CORE_HOOK, WEB_ROUTE, WEB_PAGE, MOBILE_ROUT
 
 // a capability the web page imports and no mobile screen reaches fails unless listed, and a hook reaches the other
 test("a web-only capability fails unless listed, and a core hook reaches a capability for both apps", () => {
-	const unlistedReport = checkClientParity({ sourceFiles: SOURCE_FILES, inventoryEntries: [] })
+	const unlistedReport = checkClientParity({ sourceFiles: SOURCE_FILES, inventoryRows: [] })
 	expect(unlistedReport.webOnlyCapabilities).toEqual(["noteClient.fetchNotes"])
 	expect(unlistedReport.violations).toHaveLength(1)
 	expect(unlistedReport.violations[0]).toContain(
@@ -41,7 +41,7 @@ test("a web-only capability fails unless listed, and a core hook reaches a capab
 	// listed with a reason, it passes
 	const listedReport = checkClientParity({
 		sourceFiles: SOURCE_FILES,
-		inventoryEntries: [{ capability: "noteClient.fetchNotes", reason: "the app lists notes" }],
+		inventoryRows: [{ name: "noteClient.fetchNotes", status: "web-only", reason: "the app lists notes" }],
 	})
 	expect(listedReport.violations).toEqual([])
 })
@@ -50,10 +50,10 @@ test("a web-only capability fails unless listed, and a core hook reaches a capab
 test("a stale, unknown, or reasonless inventory row fails", () => {
 	const report = checkClientParity({
 		sourceFiles: SOURCE_FILES,
-		inventoryEntries: [
-			{ capability: "noteClient.fetchNotes", reason: " " },
-			{ capability: "noteClient.sendNoteRead", reason: "Prompt 55" },
-			{ capability: "noteClient.fetchComments", reason: "Prompt 55" },
+		inventoryRows: [
+			{ name: "noteClient.fetchNotes", status: "web-only", reason: " " },
+			{ name: "noteClient.sendNoteRead", status: "web-only", reason: "Prompt 55" },
+			{ name: "noteClient.fetchComments", status: "web-only", reason: "Prompt 55" },
 		],
 	})
 	expect(report.violations).toEqual([
@@ -69,7 +69,7 @@ test("a mobile-only capability is reported and passes", () => {
 		filePath: "apps/mobile/app/index.tsx",
 		fileText: 'import { fetchNotes, sendNoteRead } from "@carlnotes/client/noteClient"\n',
 	}
-	const report = checkClientParity({ sourceFiles: [CLIENT_MODULE, mobileRoute], inventoryEntries: [] })
+	const report = checkClientParity({ sourceFiles: [CLIENT_MODULE, mobileRoute], inventoryRows: [] })
 	expect(report.violations).toEqual([])
 	expect(report.mobileOnlyCapabilities).toEqual(["noteClient.fetchNotes", "noteClient.sendNoteRead"])
 })
@@ -89,27 +89,5 @@ test("named imports keep each specifier's own name and skip types", () => {
 		{ importPath: "expo-notifications", names: ["*"] },
 		{ importPath: "react", names: ["default"] },
 		{ importPath: "./Lazy", names: ["*"] },
-	])
-})
-
-// the inventory's rows come from the table under its heading, and nothing else
-test("the inventory table is read under its heading", () => {
-	const markdown = [
-		"# Parity",
-		"",
-		"## Web-only client capabilities",
-		"",
-		"| Capability | Status | Reason or prompt |",
-		"| --- | --- | --- |",
-		"| `billingClient.fetchCheckoutUrl` | deferred | Prompt 55, store payments |",
-		"| `adminClient.fetchAdminUsers` | web-only | Admin opens the web |",
-		"",
-		"## Roles",
-		"",
-		"| `teamClient.sendDeleteTeam` | not a row | the table above ended |",
-	].join("\n")
-	expect(parseParityInventory(markdown)).toEqual([
-		{ capability: "billingClient.fetchCheckoutUrl", reason: "Prompt 55, store payments" },
-		{ capability: "adminClient.fetchAdminUsers", reason: "Admin opens the web" },
 	])
 })

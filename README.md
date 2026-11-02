@@ -518,7 +518,7 @@ Or run them individually:
 bunx biome check .
 bun scripts/check-package-boundaries.ts # every import stays inside the dependencies its workspace declares
 bunx knip                               # no file, export, type, or declared dependency is left unused
-bun scripts/check-component-parity.ts   # every Nightshift component contract is implemented in each app it names
+bun scripts/check-component-parity.ts   # every Nightshift component contract is implemented in each app it names, and a component both apps define shares its core component or is listed in apps/mobile/parity.md
 bun scripts/check-client-parity.ts      # every api capability the web reaches is reachable from the app, or listed in apps/mobile/parity.md
 bun scripts/check-purchase-paths.ts     # checkout and the billing portal stay out of the mobile app's reach
 bun scripts/check-contract-freeze.ts    # no api change an unretired snapshot in contracts/ could not read or send

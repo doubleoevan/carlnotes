@@ -8,8 +8,8 @@ import { MOBILE_APP_FOLDER, type SourceFile, TEST_FILE_PATTERN, WEB_APP_FOLDER }
 /** The folder that holds one contract module per component. */
 export const COMPONENT_CONTRACTS_FOLDER = "packages/nightshift/components"
 
-// the folder of each app's primitives, where an app's implementation of each component contract lives
-const APP_PRIMITIVES_FOLDER = "src/components/primitives"
+/** The folder of each app's primitives, where an app's implementation of each component contract lives. */
+export const APP_PRIMITIVES_FOLDER = "src/components/primitives"
 
 // the app folder each platform's implementation lives in, and the platforms in that order
 const APP_FOLDERS: Record<ComponentPlatform, string> = { web: WEB_APP_FOLDER, mobile: MOBILE_APP_FOLDER }
@@ -159,8 +159,10 @@ function toImporterImplementationHint({ filePath, contract }: ToImporterImplemen
 	return `import ${toImplementationPath({ platform: importerPlatform, componentName: contract.componentName })} instead`
 }
 
-// the path of a contract's module
-function toContractPath(componentName: string): string {
+/**
+ * Returns the path of a contract's module.
+ */
+export function toContractPath(componentName: string): string {
 	return `${COMPONENT_CONTRACTS_FOLDER}/${componentName}.ts`
 }
 

@@ -121,7 +121,8 @@ Generated or archived paths that burn context:
 ## Verification
 
 `bun run check` is the gate: Biome, the package boundary check, the dead-code check (`bunx knip`), the component parity
-check, the client parity check against `apps/mobile/parity.md`, the purchase path check
+check against the contracts and `apps/mobile/parity.md`, the client parity check against `apps/mobile/parity.md`, the
+purchase path check
 (`scripts/check-purchase-paths.ts`) that keeps checkout and the portal out of the mobile app's reach, the contract
 freeze check against `contracts/`, `tsc -b`, the Temporal workflow bundle check, and the test suite. Green before any
 hand-off.
@@ -129,6 +130,12 @@ hand-off.
 Knip fails on a file, an export, a type, or a declared dependency that nothing uses. A file that only a script, a
 `new URL(...)`, or a string loads is an entry point in `knip.jsonc`, with a comment that names its loader. An exception
 names one item, never a glob, and an exception that matches nothing fails the check.
+
+The component parity check also fails when both apps define a component file of one name, outside their primitives,
+and either file does not import from `packages/core/components/<Name>.tsx` a value it renders or an `…Elements` adapter
+type it implements. It fails on a primitive both apps keep without a Nightshift contract too. Either passes once the
+`## Separately built components` table in `apps/mobile/parity.md` lists it with a kind (`platform API`,
+`platform difference`, or `not yet shared`) and a reason, and a row fails once its pair is shared or its name is gone.
 
 The package boundary check also fails on a third-party import its workspace does not declare, a value import of a dev
 dependency in code the production image runs, and a package that the web app's `@carlnotes` packages import but
@@ -144,6 +151,9 @@ package that the web server build leaves external but `apps/web` does not declar
   a small platform adapter resolves it. When a mobile renderer is necessary, keep it thin, compose existing mobile
   Nightshift components, and share the data, formatting, visibility rules, and state logic. Preserve the web's
   structure, controls, and behavior. Record actual component reuse separately from shared logic and platform replacements.
+  A component both apps define under one name renders or adapts its same-name component in
+  `packages/core/components/`, or `apps/mobile/parity.md` lists it under Separately built components with its kind and
+  reason.
 - Use the same domain terminology, component names, and filenames for corresponding web and mobile concerns.
   Keep framework-required routes and genuine platform differences. Document the reason when a counterpart needs
   a different name; avoid mobile-only synonyms for the same component or action.

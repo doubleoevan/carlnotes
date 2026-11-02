@@ -66,7 +66,10 @@ check, the Knip dead-code check, the component parity, client parity, purchase
 path, and contract freeze checks, tsc, the workflow bundle check, and the tests.
 Knip fails on a file, export, type, or dependency nothing uses, and a file that
 only a script or a `new URL(...)` loads is declared as an entry in
-[knip.jsonc](../../knip.jsonc), beside the name of its loader.
+[knip.jsonc](../../knip.jsonc), beside the name of its loader. The component
+parity check fails when both apps build a component of one name that does not
+share its same-name `packages/core` component, unless
+[parity.md](../mobile/parity.md) lists it with its kind and reason.
 `bun run check` runs the same script on demand, so "green" has one
 definition. [biome.json](../../biome.json) excludes vendored trees so the
 gate judges only authored code.

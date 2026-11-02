@@ -565,8 +565,12 @@ sign-up screen shows as its first line, and the screen they left opens again onc
 process. `topic/TopicGateNotice.tsx` is the invite-only gate on the Topic and Podcast Episode screens. The chat
 launcher shows for a visitor and opens `NoConversationSheet`, the web's `NoConversationPanel` as a sheet. `invite/[token].tsx` accepts an
 invitation the way the web page does, with `invite/InviteNotice.tsx` for its states, and `carlnotes://invite/<token>`
-opens it. The reviewed inventory of web-only capabilities, the page and action inventory, and the roles each action
-is to be verified with are in [parity.md](parity.md), which `scripts/check-client-parity.ts` reads in preflight.
+opens it. The reviewed inventory of web-only capabilities, the components each app builds on its own, the page and
+action inventory, and the roles each action is to be verified with are in [parity.md](parity.md).
+`scripts/check-client-parity.ts` reads its web-only capabilities in preflight. `scripts/check-component-parity.ts`
+reads its Separately built components table, and fails on a component both apps define under one name that does not
+render or adapt its same-name component in `packages/core/components/`, unless a row lists it with its kind and
+reason. A change that shares such a component removes its row in the same change.
 
 ## Push notifications
 
