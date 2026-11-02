@@ -4,8 +4,9 @@ import { db, isPublicAndShown } from "@carlnotes/db"
 import { teamMembers } from "@carlnotes/db/schema/teams"
 import { teamTopics } from "@carlnotes/db/schema/teamTopics"
 import { sources, subscriptions, topics } from "@carlnotes/db/schema/topics"
-import { and, desc, eq, inArray } from "drizzle-orm"
+import { and, desc, eq, inArray, or } from "drizzle-orm"
 import { toTopicSourceLabel } from "../tool/topicSourceTools"
+import { toTopicAccessFilter } from "../topic/permissions"
 import { fromCursor, loadVisibleTopic, MCP_PAGE_MAX_CHARS, MCP_PAGE_SIZE, type McpPage, packPage } from "./results"
 import type { ToolCaller } from "./toolCaller"
 
@@ -86,7 +87,8 @@ async function loadUserTopicRows(userId: string): Promise<McpTopicRow[]> {
 					eq(subscriptions.subscriberUserId, userId),
 					eq(subscriptions.isActive, true),
 				),
-			),
+			)
+			.where(or(eq(topics.visibility, "public"), toTopicAccessFilter(userId))),
 		db
 			.select(topicColumns)
 			.from(topics)

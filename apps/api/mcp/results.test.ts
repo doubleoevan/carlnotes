@@ -5,6 +5,7 @@ import { TOPIC_FINDINGS_READ_LIMIT } from "../topic/findings"
 import {
 	CONNECT_ACCOUNT_TEXT,
 	fromCursor,
+	MCP_PAGE_MAX_CHARS,
 	MCP_PAGE_SIZE,
 	packPage,
 	packPageFromWindow,
@@ -52,10 +53,18 @@ test("a page packs whole items under the character budget and continues with a c
 
 // an entry larger than the budget still goes out whole, on its own page
 test("a page always holds at least one item and never cuts it", () => {
-	const items = [{ text: "z".repeat(500) }, { text: "w".repeat(500) }]
-	const packedPage = packPage(items, 0, 100, 20)
+	const items = [1, 2].map((index) =>
+		toMcpFinding({ kind: "visitor", clientName: "test-app" }, topicFinding(index, MCP_PAGE_MAX_CHARS + 1)),
+	)
+	const packedPage = packPageFromWindow(items, 0)
 	expect(packedPage.items).toEqual(items.slice(0, 1))
+	expect(JSON.stringify(packedPage).length).toBeGreaterThan(MCP_PAGE_MAX_CHARS)
 	expect(packedPage.nextCursor).toBe(toCursor(1))
+
+	// continue to the final whole finding
+	const lastPage = packPageFromWindow(items.slice(1), fromCursor(packedPage.nextCursor))
+	expect(lastPage.items).toEqual(items.slice(1))
+	expect(lastPage.nextCursor).toBeNull()
 })
 
 // the count limit ends a page the same way the character budget does

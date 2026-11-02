@@ -29,12 +29,13 @@ export type AddMcpCommand = { tool: string; line: string }
 // the paste steps for each paste provider, and the command for one that has a terminal tool
 export const PASTE_STEPS: Record<PasteAiProvider, { steps: string; command: AddMcpCommand | null }> = {
 	claude: {
-		steps: "In Claude, open Settings, then Connectors, then Add custom connector, and paste the server URL.",
+		steps:
+			"In Claude, open Customize, then Connectors, then Add custom connector, and paste the server URL. Choose Sign in now if asked.",
 		command: { tool: "Claude Code", line: "claude mcp add --transport http carlnotes" },
 	},
 	chatgpt: {
 		steps:
-			"In ChatGPT, open Settings, then Apps and Connectors, then Advanced settings. Turn on Developer mode, choose Create, and paste the server URL.",
+			"In ChatGPT, open Plugins, select the plus button, then Add custom MCP server. Paste the server URL, choose OAuth, create the plugin, and install it.",
 		command: null,
 	},
 	gemini: {

@@ -32,6 +32,7 @@ import {
 	setStaticFileCacheControl,
 } from "./edgeCache"
 import { faviconsRoute } from "./favicons"
+import { validateMcpOrigin } from "./mcp/origins"
 import { mcpRoute } from "./mcp/server"
 import { resolveToolCaller } from "./mcp/toolCaller"
 import { nightshiftRoute } from "./nightshift"
@@ -153,6 +154,9 @@ const server = new Hono<AppEnv>()
 	.get("/.well-known/oauth-protected-resource/*", (context) => toProtectedResourceMetadata(context.req.raw))
 	// report what a known bot fetched, once the route below has answered: a page, a document, a card, or a feed
 	.use("*", trackBotFetches)
+	// reject foreign browser origins on the transport endpoints before resolving the caller or counting a request
+	.use("/mcp", validateMcpOrigin)
+	.use("/mcp/t/:topicId", validateMcpOrigin)
 	// the tool caller resolves ahead of the limiter, which keys by the user a token names. the wildcard matches /mcp itself
 	.use("/mcp/*", async (context, next) => {
 		context.set("toolCaller", await resolveToolCaller(context.req.raw))

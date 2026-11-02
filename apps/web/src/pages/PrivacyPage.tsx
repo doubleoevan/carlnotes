@@ -138,6 +138,20 @@ Your context documents and the content of pages we fetch are sent to AI model pr
 
 Scores and summaries are machine generated and can be wrong.
 
+## Connections to AI apps (MCP)
+
+You can connect Claude, ChatGPT, or another AI app to CarlNotes through the Model Context Protocol (MCP). The connected app sends tool arguments, such as a search query, a topic ID, or the changes you ask it to make. CarlNotes uses those arguments to carry out the request and returns public or account-authorized topics, findings, search results, and action outcomes, sometimes with an interactive card. Saved changes become part of the account or topic data described in this policy. The connected app receives those results and handles them under its own privacy policy.
+
+**Assistant data.** CarlNotes never reads the assistant's chat history, memory, or uploaded files through this connection. MCP gives CarlNotes no access to them. The app can deliberately include text from your conversation or a file in a tool argument; CarlNotes receives that supplied text as part of the request.
+
+**Sign-in and tokens.** Public reads can work without signing in. After you sign in to CarlNotes and approve an app's access, CarlNotes issues OAuth access and refresh tokens. The app uses these credentials to act with your account's existing permissions. We store the authorization records and hashed refresh tokens needed to maintain and revoke that access.
+
+**Disconnecting and revoking access.** Remove the CarlNotes connection in the AI app to stop that app using it. An OAuth client can revoke its refresh token at CarlNotes' revocation endpoint, advertised in its OAuth discovery document. Revocation prevents that token issuing new access tokens. Removing a connection may only remove the app's stored credentials; it does not guarantee server-side revocation. Already-issued access tokens can remain usable until they expire, including after you sign out of CarlNotes. For help revoking a connection, contact [support@carlnotes.com](mailto:support@carlnotes.com). [Deleting your CarlNotes account](/privacy#delete-your-carlnotes-account) also prevents subsequent MCP account access. Disconnecting does not erase information the AI app has already received.
+
+**Tool-call analytics.** PostHog records the connected app's name, tool name, caller kind (visitor or signed-in user), MCP entry point, timestamp, and outcome (successful, rejected, or failed). This event is keyed to the app name, with person-profile processing disabled. It contains no tool arguments, returned content, or token values. An account action can separately produce the account usage events described elsewhere in this policy. MCP tool-call analytics follow the same retention limit as other analytics: up to 12 months.
+
+See [Add CarlNotes to your AI app](/docs/account/add-to-ai/) for connection instructions and the available tools.
+
 ## Google user data
 
 Our use of information received from Google APIs adheres to the Google API Services User Data Policy, including its Limited Use requirements. Data obtained from a connected Google account is used only to provide the features you enable, is not transferred to others except as necessary to provide those features, comply with the law, or as part of a business transfer, is not used for advertising, and is not read by humans except with your consent, to comply with the law, or for security and abuse prevention.
@@ -204,7 +218,7 @@ export function PrivacyPage() {
 			{/* the title and the effective / last-updated dates */}
 			<h1 className="font-display text-2xl">Privacy Policy</h1>
 			<p className="text-muted-foreground mt-2 text-sm">
-				Effective date: July 24, 2026 · Last updated: October 31, 2026
+				Effective date: July 24, 2026 · Last updated: November 2, 2026
 			</p>
 			{/* the sections, rendered from the markdown body */}
 			<Markdown options={PRIVACY_MARKDOWN_OPTIONS}>{PRIVACY_BODY}</Markdown>

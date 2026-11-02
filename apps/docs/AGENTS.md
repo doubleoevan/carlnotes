@@ -16,6 +16,8 @@ from `apps/docs/dist`, so it runs no process of its own, and nothing imports it.
   Starlight's own loader and frontmatter schema. `apps/api/seo.ts` reads the same Markdown for the llms files, and `bun
   run docs:embed` (`apps/worker/docsSync.ts`) embeds the pages' sections into `docs_chunks` for chat, so a page edit is
   followed by the build and the embed; the deploy runs the embed as a job.
+  `account/add-to-ai.md` is the MCP listing's documentation page: Claude, ChatGPT, and coding-agent setup, all eleven
+  tools, account permissions, cards, limits, and disconnection. Preserve its URL and screenshots when updating it.
 - `src/components/Footer.astro` — the footer override, which adds the copyright line under Starlight's own rows.
   `src/routeData.ts` — the route middleware that points the header logo at the app instead of the docs home.
   `src/topicTutorialVideoPlugin.ts` — the Sätteri plugin that fills a page's video marker with the video on making a

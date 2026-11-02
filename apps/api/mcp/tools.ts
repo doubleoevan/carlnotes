@@ -121,7 +121,7 @@ function registerReadTools({ mcpServer, toolCaller, routeTopicId, clientAddress 
 			title: "Mark a finding consumed",
 			description: "Mark a finding read for the connected account, the way opening it on the page does.",
 			inputSchema: z.object({ finding_id: z.string() }),
-			annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+			annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true },
 		},
 		async ({ finding_id }) => {
 			if (toolCaller.kind !== "user") {
@@ -142,7 +142,7 @@ function registerFeedbackTools({ mcpServer, toolCaller, routeTopicId }: Register
 			description:
 				"Thumb a finding up or down for the connected account, or clear the rating with null. Ratings tell Carl what to keep.",
 			inputSchema: z.object({ finding_id: z.string(), rating: z.enum(ratings).nullable() }),
-			annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+			annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true },
 		},
 		async ({ finding_id, rating }) => {
 			if (toolCaller.kind !== "user") {
@@ -159,7 +159,7 @@ function registerFeedbackTools({ mcpServer, toolCaller, routeTopicId }: Register
 			description:
 				"Keep a finding for the connected account so no later brew filters it out, or drop the bookmark. Bookmarking takes the topic's owner or a team that holds it.",
 			inputSchema: z.object({ finding_id: z.string(), is_bookmarked: z.boolean() }),
-			annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+			annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true },
 		},
 		async ({ finding_id, is_bookmarked }) => {
 			if (toolCaller.kind !== "user") {
@@ -179,7 +179,7 @@ function registerFeedbackTools({ mcpServer, toolCaller, routeTopicId }: Register
 			description:
 				"Follow a topic for the connected account, or unfollow it. Following puts the topic in the account's feed and its list. An owner always follows their own topic.",
 			inputSchema: z.object({ topic_id: topicIdArgument, is_following: z.boolean() }),
-			annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+			annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true },
 		},
 		async ({ topic_id, is_following }) => {
 			const toolTopic = toToolTopicId(routeTopicId, topic_id ?? null)

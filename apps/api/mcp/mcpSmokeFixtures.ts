@@ -8,13 +8,16 @@ import { deleteUserLiteLLMKey } from "@carlnotes/models/litellm"
 import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client"
 import { hashPassword } from "better-auth/crypto"
 import { eq, inArray } from "drizzle-orm"
+import { Hono } from "hono"
 import { apiRoute } from "../api"
+import type { AppEnv } from "../currentUser"
 import { toAcceptedTermsFields } from "../testSession"
+import { validateMcpOrigin } from "./origins"
 import { mcpRoute } from "./server"
 
 // one id per run, and every fixture id derives from it. parallel runs never collide
 export const runId = `mcp-smoke-${Date.now()}-${Math.random().toString(36).slice(2)}`
-const ownerId = `${runId}-owner`
+export const ownerId = `${runId}-owner`
 export const ownerEmail = `${ownerId}@example.com`
 export const ownerPassword = `${runId}-password`
 export const topicId = `${runId}-topic`
@@ -22,6 +25,12 @@ const resourceUrls = [1, 2, 3].map((index) => `https://example.test/${runId}/${i
 
 // each check prints its own line and counts its failure
 export let failureCount = 0
+
+// the standalone transport uses the same Origin guard as the composed production app
+const guardedRoute = new Hono<AppEnv>()
+	.use("/mcp", validateMcpOrigin)
+	.use("/mcp/t/:topicId", validateMcpOrigin)
+	.route("/", mcpRoute)
 
 /** Prints a passed check's line, or counts a failed check and prints what it saw. */
 export function check(label: string, isTestPassing: boolean, detail?: unknown): void {
@@ -53,12 +62,14 @@ export type TopicPage = { items: { topicId: string; sources: { sourceId: string;
 
 /** Seeds a public topic with enough findings to be shown, owned by a user who can sign in. */
 export async function seed(): Promise<void> {
+	// give the isolated owner room for the public, private, large-feed, and newly created topics
 	await db.insert(users).values({
 		id: ownerId,
 		name: ownerId,
 		email: ownerEmail,
 		username: ownerId,
 		usernameNormalized: ownerId,
+		plan: "plus",
 		...toAcceptedTermsFields(),
 	})
 	// the owner's password login
@@ -101,11 +112,15 @@ export async function seed(): Promise<void> {
  * The user delete cascades through the topic.
  */
 export async function cleanUp(registeredClientId: string): Promise<void> {
-	await deleteUserLiteLLMKey(ownerId)
-	await db.delete(users).where(eq(users.id, ownerId))
-	await db.delete(resources).where(inArray(resources.url, resourceUrls))
-	if (registeredClientId) {
-		await db.delete(oauthClients).where(eq(oauthClients.clientId, registeredClientId))
+	try {
+		await deleteUserLiteLLMKey(ownerId)
+	} finally {
+		// remove database fixtures even when the model service cannot delete its key
+		await db.delete(users).where(eq(users.id, ownerId))
+		await db.delete(resources).where(inArray(resources.url, resourceUrls))
+		if (registeredClientId) {
+			await db.delete(oauthClients).where(eq(oauthClients.clientId, registeredClientId))
+		}
 	}
 }
 
@@ -115,10 +130,15 @@ export function toClient(
 	accessToken?: string,
 ): { client: Client; transport: StreamableHTTPClientTransport } {
 	const transport = new StreamableHTTPClientTransport(new URL(`http://carlnotes.test${path}`), {
-		fetch: async (url, init) => mcpRoute.request(url, init),
+		fetch: async (url, init) => guardedRoute.request(url, init),
 		requestInit: accessToken ? { headers: { authorization: `Bearer ${accessToken}` } } : undefined,
 	})
 	return { client: new Client({ name: "mcp-smoke", version: "1.0.0" }), transport }
+}
+
+/** Sends a request through the guarded transport without requiring successful SDK initialization. */
+export async function mcpRequest(path: string, init: RequestInit): Promise<Response> {
+	return guardedRoute.request(`http://carlnotes.test${path}`, init)
 }
 
 /** Sends one request through the api tree, which has the session middleware and the forced consent. */

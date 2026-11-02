@@ -7,7 +7,9 @@ import * as oauthClientNames from "./oauthClientNames"
 import { mcpClientsRoute, trackToolCalls } from "./server"
 
 // a registered tool's handler
-type FakeToolHandler = (...handlerArguments: unknown[]) => Promise<{ content: never[]; isError?: boolean }>
+type FakeToolHandler = (
+	...handlerArguments: unknown[]
+) => Promise<{ content: { type: "text"; text: string }[]; isError?: boolean }>
 
 test("trackToolCalls reports an ok, a rejected, and a failed tool call by the app's name", async () => {
 	const trackBotEventSpy = spyOn(analytics, "trackBotEvent").mockImplementation(() => {})
@@ -26,12 +28,17 @@ test("trackToolCalls reports an ok, a rejected, and a failed tool call by the ap
 	})
 
 	// register one tool per outcome, then call each
-	fakeMcpServer.registerTool("ok_tool", {}, async () => ({ content: [] }))
+	fakeMcpServer.registerTool("ok_tool", {}, async () => ({
+		content: [{ type: "text", text: "private result sentinel" }],
+	}))
 	fakeMcpServer.registerTool("rejected_tool", {}, async () => ({ content: [], isError: true }))
 	fakeMcpServer.registerTool("failed_tool", {}, async () => {
 		throw new Error("boom")
 	})
-	await registeredHandlers.get("ok_tool")?.()
+	await registeredHandlers.get("ok_tool")?.(
+		{ query: "private argument sentinel" },
+		{ authorization: "private credential sentinel" },
+	)
 	await registeredHandlers.get("rejected_tool")?.()
 	await expect(registeredHandlers.get("failed_tool")?.()).rejects.toThrow("boom")
 
@@ -42,6 +49,7 @@ test("trackToolCalls reports an ok, a rejected, and a failed tool call by the ap
 		["mcp_tool_called", "test-app", { ...toolCallProperties, tool: "rejected_tool", outcome: "rejected" }],
 		["mcp_tool_called", "test-app", { ...toolCallProperties, tool: "failed_tool", outcome: "failed" }],
 	])
+	expect(JSON.stringify(trackBotEventSpy.mock.calls)).not.toContain("sentinel")
 	trackBotEventSpy.mockRestore()
 })
 

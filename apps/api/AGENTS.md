@@ -103,7 +103,9 @@ at the root import it by name.
   `chat/roomEvents.ts` serializes catch-up and live SSE deliveries. It checks the original session and current room
   access before each delivery and on heartbeats, closing the connection when access ends.
 - `mcp/` — the mcp server on `@modelcontextprotocol/server`: `server.ts` (the `/mcp` and `/mcp/t/:topicId` routes and
-  the web-standard transport), `tools.ts` (the reads, the site search, and the per-user writes it registers, with their
+  the web-standard transport), `origins.ts` (exact Origin validation on both transports, before caller resolution and
+  limits in `index.ts`, allowing an absent header, production, and the configured app origin), `tools.ts` (the reads,
+  the site search, and the per-user writes it registers, with their
   schemas and annotations), `topicEditTools.ts` (`edit_topic`, `suggest_sources`, and `create_topic`), `toolShapes.ts`
   (the topic id argument, the registration options, and the result shapes every tool shares), `topicEdits.ts` (the
   `edit_topic` flow: the topic read as its page reads it, the preview, and the save through the chat's save path),
@@ -117,7 +119,14 @@ at the root import it by name.
   read), `results.ts` (what the finding tools return for a visitor or a user, paged under a client's result limit, and
   the paging helpers), and `topicResults.ts` (what `list_topics` returns). `mcp.smoke.ts` runs the sections in
   `mcpSmokeSections.ts` and the oauth flow in `mcpOAuthSmokeSections.ts` over the fixtures in `mcpSmokeFixtures.ts`,
-  and stops the first scan of the topic it creates through `topic/firstScanSmoke.ts`.
+  and stops the first scan of the topic it creates through `topic/firstScanSmoke.ts`. `mcpContractTestFixtures.ts`
+  holds the eleven-tool title and annotation matrix shared by unit and smoke checks. `mcpDirectorySmokeFixtures.ts`
+  seeds isolated private access, large feed, and search rows. `mcpDirectorySmokeSections.ts` checks both transports'
+  Origin and identity cases, including a former follower losing private Topic access; `mcpResultSmokeSections.ts`
+  checks complete cursor traversal and measures text,
+  structured results, and card metadata separately. The OAuth smoke verifies discovery, refresh, revocation, and
+  already-issued JWT behavior. All fixture rows are removed in `finally`. Run `bun run smoke:mcp` before handing off
+  an MCP change. Its deterministic Origin and tool-contract assertions also run in `bun run check`.
 - `podcast/` — a Topic's podcast episodes: `podcastEpisodes.ts` (the routes for a season's episodes, an episode page,
   the next unplayed episode, one episode with its files and its preview card, a listener's progress, a chapter's rating,
   the podcast switch, and removing an episode), `podcastEpisodeListens.ts` (saving a listener's progress, with a

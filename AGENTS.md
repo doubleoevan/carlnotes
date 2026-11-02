@@ -52,6 +52,8 @@ Packages, private `@carlnotes/<name>` workspaces that export source, in dependen
 
 Beside them at the root:
 
+- `server.json` — the remote MCP Registry manifest for `com.carlnotes/carlnotes` at `https://carlnotes.com/mcp`.
+  Validate it with the official `mcp-publisher validate server.json`. Namespace proof and publication stay manual.
 - `infra/` — the service configs the app runs beside: litellm, the Northflank pipelines, and the cloudflared
   dev tunnel that Sign in with Apple's dev callback runs through.
 - `content/blog/` — the blog posts `apps/api/content.ts` serves.

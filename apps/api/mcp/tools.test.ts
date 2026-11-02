@@ -6,6 +6,7 @@ import { searchRequestPayload } from "@carlnotes/contracts/search"
 import type { CallToolResult } from "@modelcontextprotocol/server"
 import * as subscriptions from "../topic/subscriptions"
 import * as cardDataModule from "./cardData"
+import { toMcpToolContractIssues } from "./mcpContractTestFixtures"
 import * as results from "./results"
 import { CONNECT_ACCOUNT_TEXT } from "./results"
 import * as searchResults from "./searchResults"
@@ -51,34 +52,32 @@ function toRegisteredTools(
 const VISITOR: ToolCaller = { kind: "visitor", clientName: "test-app" }
 const USER: ToolCaller = { kind: "user", userId: "user-1", plan: "free", clientName: "test-app" }
 
-test("the tool list is the reads, the per-user writes, and the topic tools", () => {
-	expect([...toRegisteredTools(VISITOR).keys()]).toEqual([
-		"list_topics",
-		"read_topic_feed",
-		"search_topic_findings",
-		"search",
-		"mark_finding_consumed",
-		"rate_finding",
-		"bookmark_finding",
-		"follow_topic",
-		"edit_topic",
-		"suggest_sources",
-		"create_topic",
-	])
+test.each([VISITOR, USER])("every tool has its directory title and safety hints for $kind", (toolCaller) => {
+	const tools = [...toRegisteredTools(toolCaller)].map(([name, { config }]) => ({ name, ...config }))
+	expect(toMcpToolContractIssues(tools)).toEqual([])
 })
 
-test("the reads are read-only and the topic edits destructive", () => {
-	// the reads have the read-only hint
-	const registeredTools = toRegisteredTools(VISITOR)
-	for (const readToolName of ["list_topics", "read_topic_feed", "search_topic_findings", "search"]) {
-		expect(registeredTools.get(readToolName)?.config.annotations?.readOnlyHint).toBe(true)
-	}
+test.each([
+	{ title: "" },
+	{ title: undefined },
+	{ annotations: { readOnlyHint: true, destructiveHint: true } },
+	{ annotations: { readOnlyHint: false, destructiveHint: false } },
+	{ annotations: { readOnlyHint: false, destructiveHint: "true" } },
+])("the directory check rejects a broken write annotation %j", (brokenConfig) => {
+	// corrupt an actual registration while retaining the other tools
+	const tools = [...toRegisteredTools(VISITOR)].map(([name, { config }]) => ({
+		name,
+		...config,
+		...(name === "edit_topic" ? brokenConfig : {}),
+	}))
+	expect(toMcpToolContractIssues(tools).some((issue) => issue.startsWith("edit_topic:"))).toBe(true)
+})
 
-	// the topic edits are destructive, and a follow is not
-	for (const editToolName of ["edit_topic", "create_topic"]) {
-		expect(registeredTools.get(editToolName)?.config.annotations?.destructiveHint).toBe(true)
-	}
-	expect(registeredTools.get("follow_topic")?.config.annotations?.destructiveHint).toBe(false)
+test("the directory check rejects unexpected tools", () => {
+	// a newly advertised tool must receive an intentional classification
+	const tools = [...toRegisteredTools(VISITOR)].map(([name, { config }]) => ({ name, ...config }))
+	tools.push({ name: "unclassified_tool", title: "Unclassified", annotations: { readOnlyHint: true } })
+	expect(toMcpToolContractIssues(tools).join("\n")).toContain("unclassified_tool")
 })
 
 // every tool description speaks to the client, and none names an internal identifier

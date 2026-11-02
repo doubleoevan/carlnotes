@@ -22,6 +22,9 @@ import {
 	SELECT_ONE_ROWS,
 	withWorkingDirectory,
 } from "./indexTestFixtures"
+import { CONNECT_ACCOUNT_TEXT } from "./mcp/results"
+import * as toolCallerModule from "./mcp/toolCaller"
+import { toolCallerRateLimitStore } from "./rateLimit"
 import { SESSION_COOKIE, signInAs, toJsonRequest } from "./testSession"
 
 // put each spied console method and the Redis client back, and remove the temporary directories after each test,
@@ -202,6 +205,109 @@ test("an mcp request past the default body limit is rejected with a 413", async 
 	)
 	expect(response.status).toBe(413)
 	expect(await response.json()).toEqual({ error: "request body too large" })
+})
+
+// both transport routes reject a foreign origin before credentials, quotas, or request bodies are processed
+test("mcp origin rejection precedes caller lookup and rate limiting for every method", async () => {
+	// fail if either account work or quota consumption is reached
+	const resolveCallerSpy = spyOn(toolCallerModule, "resolveToolCaller").mockRejectedValue(new Error("caller reached"))
+	const incrementSpy = spyOn(toolCallerRateLimitStore, "increment").mockImplementation(() => {
+		throw new Error("quota reached")
+	})
+	for (const path of ["/mcp", "/mcp/t/topic-1"]) {
+		for (const method of ["POST", "GET", "HEAD", "OPTIONS", "DELETE"]) {
+			const response = await server.fetch(
+				new Request(`http://localhost:3000${path}`, {
+					method,
+					headers: { origin: "https://attacker.example", authorization: "Bearer test-token" },
+				}),
+			)
+			expect(response.status).toBe(403)
+		}
+	}
+
+	// an origin denial performs neither kind of account work
+	expect(resolveCallerSpy).not.toHaveBeenCalled()
+	expect(incrementSpy).not.toHaveBeenCalled()
+})
+
+// allowed and absent origins preserve the transport's anonymous initialization
+test("mcp accepts no Origin or the hosted Origin on both transport routes", async () => {
+	stubRedisClient()
+	for (const path of ["/mcp", "/mcp/t/topic-1"]) {
+		for (const origin of [null, "https://carlnotes.com"]) {
+			// a valid initialize reaches the stateless transport
+			const headers = new Headers({ "content-type": "application/json", accept: "application/json, text/event-stream" })
+			if (origin !== null) {
+				headers.set("origin", origin)
+			}
+			const response = await server.fetch(
+				new Request(`http://localhost:3000${path}`, {
+					method: "POST",
+					headers,
+					body: JSON.stringify({
+						jsonrpc: "2.0",
+						id: 1,
+						method: "initialize",
+						params: {
+							protocolVersion: "2025-06-18",
+							capabilities: {},
+							clientInfo: { name: "origin-test", version: "1" },
+						},
+					}),
+				}),
+			)
+			expect(response.status).toBe(200)
+		}
+	}
+})
+
+// an allowed browser origin grants no account permissions
+test("an allowed Origin still requires an account for writes on either endpoint", async () => {
+	stubRedisClient()
+	for (const path of ["/mcp", "/mcp/t/topic-1"]) {
+		const response = await server.fetch(
+			new Request(`http://localhost:3000${path}`, {
+				method: "POST",
+				headers: {
+					"content-type": "application/json",
+					accept: "application/json, text/event-stream",
+					origin: "https://carlnotes.com",
+				},
+				body: JSON.stringify({
+					jsonrpc: "2.0",
+					id: 1,
+					method: "tools/call",
+					params: { name: "create_topic", arguments: { name: "visitor", prompt: "visitor" } },
+				}),
+			}),
+		)
+		const body = (await response.json()) as { result: { content: { text: string }[] } }
+		expect(response.status).toBe(200)
+		expect(body.result.content[0]?.text).toBe(CONNECT_ACCOUNT_TEXT)
+	}
+})
+
+// discovery and the consent page are not mcp transport endpoints
+test("mcp origin protection leaves discovery and consent reachable", async () => {
+	// serve the consent page through the test bundle under the existing render path
+	stubRedisClient()
+	const bundleDirectory = await createBundleDirectory()
+	const consentResponse = await withWorkingDirectory(bundleDirectory, () =>
+		request("/mcp/consent", { headers: { origin: "https://attacker.example" } }),
+	)
+	expect(consentResponse.status).toBe(200)
+	expect(consentResponse.body).toBe(PAGE_HTML)
+
+	// the client can still discover both the issuer and the topic-bound resource
+	for (const path of [
+		"/.well-known/oauth-authorization-server",
+		"/.well-known/oauth-protected-resource/mcp/t/topic-1",
+	]) {
+		const response = await request(path, { headers: { origin: "https://attacker.example" } })
+		expect(response.status).toBe(200)
+		expect(response.contentType).toContain("application/json")
+	}
 })
 
 // an oauth avatar redirects to its provider, so the policy has to allow that origin

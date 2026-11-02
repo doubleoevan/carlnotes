@@ -1,7 +1,9 @@
 // the oauth section of the mcp smoke: registration, authorize, consent, and the token exchange
 
-import { auth } from "../auth"
+import { oauthProviderAuthServerMetadata } from "@better-auth/oauth-provider"
+import { auth, MCP_RESOURCE_URL } from "../auth"
 import { apiRequest, check, ownerEmail, ownerPassword } from "./mcpSmokeFixtures"
+import { resolveToolCaller } from "./toolCaller"
 
 // the oauth redirect uri, and the app's own origin
 const REDIRECT_URI = "http://localhost:9999/callback"
@@ -9,6 +11,9 @@ const ORIGIN = Bun.env.BETTER_AUTH_URL ?? "http://localhost:5173"
 
 // the client id that the oauth flow registers
 export let registeredClientId = ""
+
+// credentials stay in process; diagnostics report only statuses and public metadata
+let refreshToken = ""
 
 /** Checks the oauth flow from client registration to the access token, and returns it. */
 export async function checkOAuth(): Promise<string> {
@@ -89,13 +94,75 @@ export async function checkOAuth(): Promise<string> {
 			code_verifier: verifier,
 		}),
 	})
-	const tokenJson = (await tokenResponse.json()) as { access_token?: string }
+	const tokenJson = (await tokenResponse.json()) as { access_token?: string; refresh_token?: string }
+	refreshToken = tokenJson.refresh_token ?? ""
 	check(
 		"the token exchange issues an access token",
 		tokenResponse.ok && Boolean(tokenJson.access_token),
 		tokenResponse.status,
 	)
 	return tokenJson.access_token ?? ""
+}
+
+/** Checks discovery, a successful refresh, and refresh revocation without claiming immediate JWT invalidation. */
+export async function checkOAuthRevocation(accessToken: string): Promise<void> {
+	const discovery = await oauthProviderAuthServerMetadata(auth)(
+		new Request(`${ORIGIN}/.well-known/oauth-authorization-server`),
+	)
+	const metadata = (await discovery.json()) as {
+		issuer?: string
+		revocation_endpoint?: string
+		token_endpoint?: string
+	}
+	check(
+		"OAuth discovery advertises token and revocation endpoints",
+		discovery.ok &&
+			metadata.token_endpoint === `${ORIGIN}/api/auth/oauth2/token` &&
+			metadata.revocation_endpoint === `${ORIGIN}/api/auth/oauth2/revoke`,
+	)
+	check("offline access issues a refresh token", Boolean(refreshToken))
+	if (!metadata.revocation_endpoint || !refreshToken) {
+		return
+	}
+
+	// rotate once to prove the refresh credential works before revoking its replacement
+	const refreshed = await requestRefresh(refreshToken)
+	const refreshedBody = (await refreshed.json()) as { access_token?: string; refresh_token?: string }
+	check(
+		"the refresh token issues another access token",
+		refreshed.ok && Boolean(refreshedBody.access_token) && Boolean(refreshedBody.refresh_token),
+		refreshed.status,
+	)
+	refreshToken = refreshedBody.refresh_token ?? refreshToken
+	const revoked = await apiRequest(new URL(metadata.revocation_endpoint).pathname, {
+		method: "POST",
+		headers: { "content-type": "application/x-www-form-urlencoded" },
+		body: new URLSearchParams({ client_id: registeredClientId, token: refreshToken, token_type_hint: "refresh_token" }),
+	})
+	check("the discovered endpoint revokes the refresh token", revoked.ok, revoked.status)
+
+	// the refresh must fail, while the signed JWT remains usable until its own expiry
+	const afterRevoke = await requestRefresh(refreshToken)
+	const rejectedBody = (await afterRevoke.json()) as { error?: string }
+	check(
+		"a revoked refresh token cannot mint an access token",
+		afterRevoke.status === 400 && rejectedBody.error === "invalid_grant",
+		{ status: afterRevoke.status, error: rejectedBody.error },
+	)
+	const caller = await resolveToolCaller(
+		new Request(MCP_RESOURCE_URL, { headers: { authorization: `Bearer ${accessToken}` } }),
+	)
+	check("an already-issued JWT still resolves after refresh revocation", caller.kind === "user")
+	refreshToken = ""
+}
+
+// refresh through the same form endpoint used by a real OAuth client
+function requestRefresh(token: string): Promise<Response> {
+	return apiRequest("/api/auth/oauth2/token", {
+		method: "POST",
+		headers: { "content-type": "application/x-www-form-urlencoded" },
+		body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: token, client_id: registeredClientId }),
+	})
 }
 
 /**

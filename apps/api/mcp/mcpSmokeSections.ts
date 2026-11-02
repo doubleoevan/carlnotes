@@ -9,6 +9,7 @@ import { Hono } from "hono"
 import type { AppEnv } from "../currentUser"
 import { CALLER_RATE_LIMIT, toolCallerRateLimiter, toolCallerRateLimitStore, toRateLimitKey } from "../rateLimit"
 import { stopFirstScan } from "../topic/firstScanSmoke"
+import { toMcpToolContractIssues } from "./mcpContractTestFixtures"
 import {
 	check,
 	type FeedPage,
@@ -27,17 +28,8 @@ export async function checkVisitor(): Promise<void> {
 	const { client, transport } = toClient("/mcp")
 	await client.connect(transport)
 	const { tools } = await client.listTools()
-	check(
-		"initialize and list tools as a visitor",
-		tools.length === 11 && !tools.some((tool) => REMOVED_TOOL_NAMES.includes(tool.name)),
-		tools.map((tool) => tool.name),
-	)
-	check(
-		"the edit tool is annotated destructive and the reads read-only",
-		tools.find((tool) => tool.name === "edit_topic")?.annotations?.destructiveHint === true &&
-			tools.find((tool) => tool.name === "read_topic_feed")?.annotations?.readOnlyHint === true &&
-			tools.find((tool) => tool.name === "search")?.annotations?.readOnlyHint === true,
-	)
+	const contractIssues = toMcpToolContractIssues(tools)
+	check("every visitor tool has its title and classified hints", contractIssues.length === 0, contractIssues)
 
 	// search the seeded public topic by name, and read each card's resource
 	const visitorSearchResult = await client.callTool({
@@ -243,9 +235,6 @@ export async function checkUser(accessToken: string): Promise<void> {
 
 // an edit_topic result's status and the confirmation a preview returns
 type EditTopicToolResult = { structuredContent?: { status?: string; confirmation?: string } }
-
-// tool names the server never lists
-const REMOVED_TOOL_NAMES = ["update_topic_prompt", "update_topic_fields", "add_source", "remove_source"]
 
 // read each card's resource, which is the built bundle's html naming its card
 async function checkCardResources(client: ReturnType<typeof toClient>["client"]): Promise<void> {

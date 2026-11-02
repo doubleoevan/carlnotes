@@ -1,0 +1,18 @@
+{
+	"$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+	"name": "com.carlnotes/carlnotes",
+	"title": "CarlNotes",
+	"description": "Read research findings, search topics, and manage your CarlNotes topics from your AI app.",
+	"version": "1.0.0",
+	"websiteUrl": "https://carlnotes.com/docs/account/add-to-ai/",
+	"repository": {
+		"url": "https://github.com/doubleoevan/carlnotes",
+		"source": "github"
+	},
+	"remotes": [
+		{
+			"type": "streamable-http",
+			"url": "https://carlnotes.com/mcp"
+		}
+	]
+}

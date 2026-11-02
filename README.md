@@ -578,12 +578,32 @@ bun run smoke:room         # the team chat-room smoke test: the access matrix, i
 bun run smoke:rooms        # the chat-rooms smoke test: which rooms a user can open, one per holding team, and the unseen count
 bun run smoke:chat-turns   # the chat turn shapes smoke test: each kind's row and each chat proposal shape is kept, each mismatched row is rejected, rolled back
 bun run smoke:push-devices # the push devices smoke test: ending a session or closing the account deletes its phones, one send per event, recipient, and phone, rolled back
-bun run smoke:mcp          # the mcp smoke test: builds the ui, then checks what a visitor reads and searches, each card's resource, the oauth flow with its consent page, a user's consumed, rating, and bookmark writes, edit_topic and its confirmation, follow_topic, and the rate limit
+bun run smoke:mcp          # builds the ui, then checks both MCP routes: Origin, eleven-tool contracts, private access, result bounds, OAuth and revocation, cards, writes, confirmations, and rate limiting
 bun run smoke:tools        # the topic tools smoke test: the gate inside each tool, the prompt version writes, adding and removing sources up to the limit, and that no tool starts a scan
 bun run smoke:podcast-episodes # the podcast episode routes smoke test: access, audio, feeds, covers, and removal
 bun run smoke:search-plans # the search plans smoke test: no HNSW scan in the topic ranking, trigram indexes in the name searches
 bun run smoke:invites      # the invite smoke test: link authority and races, resolution, who-may-invite, connections, accept-equals-redeem, and each sent invite's avatar version
 ```
+
+Before handing off an MCP change, pass `bun run check` and `bun run smoke:mcp`. The offline gate covers Origin
+rejection and the complete annotation matrix. The live smoke retains consent, writes, cards, and rate limiting,
+and checks private access, complete pagination, separate text and structured result sizes, and refresh revocation.
+It needs development Postgres, Redis, LiteLLM, Temporal, and its worker (`bun run dev:temporal`). Fixtures use isolated
+IDs and are removed in `finally`.
+The existing Smoke workflow selects this test through the smoke suite on pushes to main. That workflow is separate
+from the deployment prerequisite jobs; a passing live run is required release evidence for an MCP change.
+
+The root `server.json` describes the remote server for the official MCP Registry. With the
+[official publisher](https://github.com/modelcontextprotocol/registry/releases) installed, validate it from the repo root:
+
+```sh
+mcp-publisher --version
+mcp-publisher validate server.json
+```
+
+Validation does not publish. Domain proof for `com.carlnotes`, registry publication, directory submissions, reviewer
+credentials, and post-deploy URL checks remain manual. The public guide is `/docs/account/add-to-ai/`; the privacy
+policy is `/privacy`. Confirm hosted analytics retention matches that policy before claiming directory readiness.
 
 Run the reddit smoke test from the deployed environment as well as from a laptop. Reddit's keyless endpoints serve a
 home internet connection but can return 403 to a hosting provider's IP range. So the same test can pass on your machine

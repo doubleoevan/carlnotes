@@ -56,7 +56,7 @@ export function registerTopicEditTools({ mcpServer, toolCaller, routeTopicId }: 
 			description:
 				"Verified sources for a topic name and prompt, each as the option and value create_topic takes. Draws on the account's daily suggestion limit.",
 			inputSchema: z.object({ name: z.string().min(1), prompt: z.string().min(1) }),
-			annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+			annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
 		},
 		async ({ name, prompt }) => {
 			if (toolCaller.kind !== "user") {
