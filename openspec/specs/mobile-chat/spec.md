@@ -391,13 +391,13 @@ open that page's chat room while a mention waits, else the page.
 The app SHALL badge its icon with the sum the web's tab title shows, the unread chat mentions, note changes, and topic
 invitations the badge poll last read. The badge SHALL clear for a visitor and on sign-out. The app SHALL NOT ask for a
 permission to badge the icon. On iOS the badge permission SHALL be requested with the notification permission, and
-until it is granted the icon SHALL stay bare. A push notification SHALL NOT set the count, so the count SHALL change
-only while the app is open.
+until it is granted the icon SHALL stay bare. While the app is closed, each push SHALL set the count the server read
+for the recipient when it sent, so the count changes when a push arrives as well as while the app is open.
 
 #### Scenario: Updates wait when the app closes
 
 - **WHEN** a user with two unread chat mentions sends the app to the background
-- **THEN** the app icon shows 2 until the app opens again and the next poll reads the count
+- **THEN** the app icon shows 2 until a push arrives or the app opens again and the next poll reads the count
 
 #### Scenario: The user signs out
 
@@ -411,8 +411,13 @@ only while the app is open.
 
 #### Scenario: A push leaves the count alone
 
-- **WHEN** a mention push arrives while the app is closed
-- **THEN** the icon keeps the count the last poll read, and the next poll after the app opens updates it
+- **WHEN** a Topic push arrives while the app is closed and the user's count has not changed since the last poll
+- **THEN** the icon keeps the count it shows
+
+#### Scenario: A push raises the count while the app is closed
+
+- **WHEN** a user whose icon shows 2 is mentioned in a chat room while the app is closed
+- **THEN** the mention push sets the icon to 3 without the app opening
 
 ### Requirement: Badge polling runs only in the foreground and online
 

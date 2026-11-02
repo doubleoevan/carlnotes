@@ -1,7 +1,7 @@
-// the read filters that decide what one user sees: rows by a person they blocked, subjects they reported, and the
-// topics they hold a role on
+// the read filters that decide what one user sees: rows by a person they blocked, subjects they reported, the topics
+// they hold a role on, and the topic chat rooms a team still has
 import type { ReportSubjectKind } from "@carlnotes/contracts/reports"
-import { and, eq, inArray, isNull, notExists, or, type SQL, type SQLWrapper, sql } from "drizzle-orm"
+import { and, eq, exists, inArray, isNull, notExists, or, type SQL, type SQLWrapper, sql } from "drizzle-orm"
 import { db } from "./index"
 import { reports } from "./schema/reports"
 import { teamMembers, teamTopics } from "./schema/teams"
@@ -70,4 +70,23 @@ export function toTopicRoleFilter(userId: string | SQLWrapper): SQL | undefined 
 
 	// a topic the user owns, or one their teams own or hold
 	return or(eq(topics.ownerId, userId), inArray(topics.teamId, memberTeamIds), inArray(topics.id, sharedTopicIds))
+}
+
+/**
+ * The filter for whether a team owns a topic or holds a share of it. The team and the topic are ids, or columns for a
+ * read of many chat rooms at once.
+ */
+export function toTeamHoldsTopicFilter(teamId: string | SQLWrapper, topicId: string | SQLWrapper): SQL | undefined {
+	// the team owns the topic
+	const ownedTopicQuery = db
+		.select({ topicId: topics.id })
+		.from(topics)
+		.where(and(eq(topics.id, topicId), eq(topics.teamId, teamId)))
+
+	// the topic was shared with the team
+	const sharedTopicQuery = db
+		.select({ topicId: teamTopics.topicId })
+		.from(teamTopics)
+		.where(and(eq(teamTopics.topicId, topicId), eq(teamTopics.teamId, teamId)))
+	return or(exists(ownedTopicQuery), exists(sharedTopicQuery))
 }

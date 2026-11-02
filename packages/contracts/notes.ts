@@ -23,6 +23,13 @@ export const noteBadge = z.object({
 
 export type NoteBadge = z.infer<typeof noteBadge>
 
+/**
+ * Sums the unread edits and comments of every note badge.
+ */
+export function toNoteCount(noteBadges: NoteBadge[]): number {
+	return noteBadges.reduce((total, noteBadge) => total + noteBadge.unreadEdits + noteBadge.unreadComments, 0)
+}
+
 // the badges payload: only the notes with unread edits or comments
 export const noteBadgesResponse = z.object({ badges: z.array(noteBadge) })
 

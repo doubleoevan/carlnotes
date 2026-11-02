@@ -1,5 +1,5 @@
 // the invitation filters: the invitations addressed to a user, and the topic invitations still waiting for their answer
-import { and, eq, gt, isNull, notInArray, or, type SQL } from "drizzle-orm"
+import { and, eq, gt, isNotNull, isNull, notInArray, or, type SQL } from "drizzle-orm"
 import { toUnblockedAuthorFilter } from "./contentFilters"
 import { db } from "./index"
 import { invites } from "./schema/invites"
@@ -49,6 +49,7 @@ export function toPendingTopicInviteFilter(options: InviteAddressedToUserOptions
 		.where(eq(subscriptions.subscriberUserId, options.userId))
 	return and(
 		toInviteAddressedToUserFilter(options),
+		isNotNull(invites.topicId),
 		eq(invites.usedCount, 0),
 		isNull(invites.declinedAt),
 		or(isNull(invites.expiresAt), gt(invites.expiresAt, new Date())),

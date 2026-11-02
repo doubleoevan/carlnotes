@@ -240,11 +240,12 @@ export const chatRoomMentions = pgTable(
 		// saved when the member loads the chat room, which clears the badge. null is unseen
 		seenAt: timestamp("seen_at", { withTimezone: true }),
 	},
-	// one row per message and member, plus the by-user lookup the chat mention badges read,
-	// where the key starts with message
+	// one row per message and member, the by-user lookup that a closed account's delete reads, and the by-user lookup of
+	// unseen rows that the chat mention badges and each push's badge count read
 	(table) => [
 		primaryKey({ columns: [table.messageId, table.userId] }),
 		index("room_mentions_user_id_idx").on(table.userId),
+		index("room_mentions_unseen_user_id_idx").on(table.userId).where(sql`${table.seenAt} is null`),
 	],
 )
 

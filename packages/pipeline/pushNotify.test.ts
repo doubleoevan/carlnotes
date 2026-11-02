@@ -125,6 +125,26 @@ test("a push sets each recipient's update count as the app icon badge", async ()
 	expect(pushMessages?.map((pushMessage) => pushMessage.badge)).toEqual([3, 3, 0])
 })
 
+// a count that fails to load leaves that recipient's badge alone and never stops the push
+test("a failed update count sends the push without a badge", async () => {
+	// user-1's team read fails, and every other read finds the Scan push's rows
+	const scanPushRows = [...SCAN_PUSH_ROWS, { sqlPattern: /from "push_devices"/, rows: LIVE_PUSH_DEVICE_ROWS }]
+	stubConnectionPool(({ text: sql, values }) => {
+		if (values.includes("user-1") && /from "team_members"/.test(sql)) {
+			throw new Error("connection timeout")
+		}
+		return sql.startsWith("select") ? (scanPushRows.find((queryRow) => queryRow.sqlPattern.test(sql))?.rows ?? []) : []
+	})
+
+	// send the push
+	const sendSpy = spyOn(expoPush, "sendPushMessageChunk").mockResolvedValue([])
+	await sendScanPush("scan-1")
+
+	// user-1's phones still get the push with no badge, and user-2's clears
+	const [pushMessages] = sendSpy.mock.calls[0] ?? []
+	expect(pushMessages?.map((pushMessage) => pushMessage.badge)).toEqual([undefined, undefined, 0])
+})
+
 // a retry sends only to the phones that no record names
 test("a retried Scan push skips the phones that were already recorded", async () => {
 	// the first phone was reached before the earlier attempt failed
@@ -191,7 +211,7 @@ const ROOM_MESSAGE_ROW = ["team-1", "topic-1", "user-alex", "alex", 7, "Home esp
 function toMentionPushRows(chatMessageRow: unknown[]): QueryRows[] {
 	return [
 		{ sqlPattern: /from "room_messages" inner join "teams"/, rows: [chatMessageRow] },
-		{ sqlPattern: /from "team_topics"/, rows: [["topic-1"]] },
+		{ sqlPattern: /^select "id" from "topics" where/, rows: [["topic-1"]] },
 		{ sqlPattern: /from "room_mentions"/, rows: [["user-sam"], ["user-kim"]] },
 		{ sqlPattern: /from "room_messages"/, rows: [["user-sam"]] },
 		{
@@ -231,6 +251,7 @@ test("a mention push names the sender and the room and opens the room", async ()
 	expect(mentionsQuery?.text).toContain('from "user_blocks"')
 	expect(mentionsQuery?.text).toContain('from "reports"')
 	expect(mentionsQuery?.values).toContain("user-alex")
+	expect(mentionsQuery?.text).toMatch(/\$\d+::text is null/)
 
 	// only the reachable members' phones with mention pushes on are read, so a phone that moved to another account
 	// is not among them
@@ -239,6 +260,11 @@ test("a mention push names the sender and the room and opens the room", async ()
 	expect(devicesQuery?.values).toEqual(expect.arrayContaining(["user-sam", "user-kim"]))
 	expect(devicesQuery?.values).not.toContain("user-alex")
 	expect(samMessage?.body).not.toContain("hello")
+
+	// the Topic counts as the Team's if the Team owns it or holds a share of it
+	const heldTopicQuery = sentQueries.find((sentQuery) => /^select "id" from "topics" where/.test(sentQuery.text))
+	expect(heldTopicQuery?.text).toContain('"topics"."team_id" = $')
+	expect(heldTopicQuery?.text).toContain('from "team_topics"')
 })
 
 // the Team's own room is titled with the Team and opens the Team's room
@@ -265,9 +291,7 @@ test("a mention push skips a deleted message and a room the Team no longer holds
 	expect(await sendChatMentionPush(44)).toEqual({ outcome: "skipped" })
 
 	// the Topic left the Team
-	stubDatabase(
-		toMentionPushRows(ROOM_MESSAGE_ROW).filter((queryRow) => !/team_topics/.test(String(queryRow.sqlPattern))),
-	)
+	stubDatabase(toMentionPushRows(ROOM_MESSAGE_ROW).filter((queryRow) => !/"topics"/.test(String(queryRow.sqlPattern))))
 	expect(await sendChatMentionPush(44)).toEqual({ outcome: "skipped" })
 	expect(sendSpy).not.toHaveBeenCalled()
 })
@@ -338,18 +362,18 @@ test("a send reports each chunk and stops once cancelled", async () => {
 		pushMessageChunk.map((_, index) => ({ status: "ok" as const, id: `ticket-${index}` })),
 	)
 
-	// both chunks report
-	const onChunkSent = mock(() => {})
-	expect(await sendScanPush("scan-1", { onChunkSent, isCancelled: () => false })).toEqual({
+	// both chunks report once their badges load and again once they send
+	const onProgress = mock(() => {})
+	expect(await sendScanPush("scan-1", { onProgress, isCancelled: () => false })).toEqual({
 		outcome: "sent",
 		acceptedCount: 150,
 	})
-	expect(onChunkSent).toHaveBeenCalledTimes(2)
+	expect(onProgress).toHaveBeenCalledTimes(4)
 
-	// a cancel after the first chunk stops the second
+	// a cancel during the first chunk stops the second
 	let isCancelled = false
 	const cancelledResult = await sendScanPush("scan-1", {
-		onChunkSent: () => {
+		onProgress: () => {
 			isCancelled = true
 		},
 		isCancelled: () => isCancelled,

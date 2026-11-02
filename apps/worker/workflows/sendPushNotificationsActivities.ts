@@ -25,13 +25,13 @@ export async function sendChatMentionPush(chatMessageId: number): Promise<void> 
 	throwIfNotPushed(await pushNotify.sendChatMentionPush(chatMessageId, toActivityPushProgress()))
 }
 
-// a send's progress as the activity reports it: a heartbeat after each chunk, and a stop once Temporal cancels the
-// attempt. a call outside an activity, as in a test, is unwatched
+// a send's progress as the activity reports it: a heartbeat at each step of a chunk, and a stop once Temporal cancels
+// the attempt. a call outside an activity, as in a test, is unwatched
 function toActivityPushProgress(): PushProgress | undefined {
 	try {
 		const activityContext = Context.current()
 		return {
-			onChunkSent: () => activityContext.heartbeat(),
+			onProgress: () => activityContext.heartbeat(),
 			isCancelled: () => activityContext.cancellationSignal.aborted,
 		}
 	} catch {

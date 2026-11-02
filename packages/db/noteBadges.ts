@@ -11,12 +11,16 @@ import { topics } from "./schema/topics"
  * Every unread edit and comment count the signed-in user has. One entry per note that holds something.
  */
 export async function loadNoteBadges(userId: string | null): Promise<NoteBadge[]> {
-	if (!userId) {
-		return []
-	}
+	return userId ? loadPageNoteBadges(userId, await loadBadgedPages(userId)) : []
+}
 
-	// the pages a badge can name, and the teams holding each of those topics
-	const { topicIds, teamIds, teamIdsByTopicId } = await loadBadgedPages(userId)
+/**
+ * The note badges on pages the caller already loaded with `loadBadgedPages`.
+ */
+export async function loadPageNoteBadges(
+	userId: string,
+	{ topicIds, teamIds, teamIdsByTopicId }: BadgedPages,
+): Promise<NoteBadge[]> {
 	if (topicIds.length === 0 && teamIds.length === 0) {
 		return []
 	}
@@ -116,12 +120,13 @@ function toPageTeamIds(
 	return note.teamId ? [note.teamId] : []
 }
 
+// the pages a badge can name: the user's teams, the topics those teams own or hold, and the teams holding each topic
+export type BadgedPages = { topicIds: string[]; teamIds: string[]; teamIdsByTopicId: Map<string, string[]> }
+
 /**
  * The pages whose notes and chat rooms a user is badged for: their teams, and the topics those teams own or hold.
  */
-export async function loadBadgedPages(
-	userId: string,
-): Promise<{ topicIds: string[]; teamIds: string[]; teamIdsByTopicId: Map<string, string[]> }> {
+export async function loadBadgedPages(userId: string): Promise<BadgedPages> {
 	// the teams the user is an active member of
 	const memberRows = await db
 		.select({ teamId: teamMembers.teamId })

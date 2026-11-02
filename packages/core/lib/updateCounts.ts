@@ -2,7 +2,7 @@
 // screen reader hears, and the groups a tooltip or a long-press sheet lists, chats, then notes, then invitations
 import type { ChatMention } from "@carlnotes/contracts/chat"
 import type { TopicInviteBadge } from "@carlnotes/contracts/invites"
-import type { NoteBadge } from "@carlnotes/contracts/notes"
+import { type NoteBadge, toNoteCount } from "@carlnotes/contracts/notes"
 import { toCountNoun } from "./labels"
 import { toNoteChangeLabel } from "./noteBadges"
 
@@ -120,11 +120,6 @@ function toNoteLines(noteBadges: NoteBadge[]): UpdateLine[] {
 			toTextPart(`: ${toNoteChangeLabel(noteBadge)}`),
 		]),
 	)
-}
-
-// the two numbers of every note in the set, summed
-function toNoteCount(noteBadges: NoteBadge[]): number {
-	return noteBadges.reduce((total, noteBadge) => total + noteBadge.unreadEdits + noteBadge.unreadComments, 0)
 }
 
 // the chat and note groups' headings

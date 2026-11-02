@@ -122,12 +122,14 @@ and `@carlnotes/contracts`, with `drizzle-orm` and `@neondatabase/serverless`.
   tests import it.
 - `contentFilters.ts` — the read filters that decide what one user sees: `toUnblockedAuthorFilter` for rows by a
   person they blocked, `toUnreportedFilter` with `OPEN_OR_KEPT_REPORT_FILTER` for subjects they reported, and
-  `toTopicRoleFilter` for the topics they own or a team of theirs holds. Each takes the user as an id or as a column,
-  so the api's reads and the pipeline's digest and push recipients import the one copy.
+  `toTopicRoleFilter` for the topics they own or a team of theirs holds, and `toTeamHoldsTopicFilter` for whether a
+  team owns a topic or holds a share of it. Each takes its ids or columns, so the api's reads and the pipeline's
+  digest and push recipients import the one copy.
 - `inviteFilters.ts` — `loadUserEmail`, `toInviteAddressedToUserFilter` (the invitations addressed to a user by
   account or verified address), and `toPendingTopicInviteFilter` (the topic invitations still waiting for an answer).
 - `noteBadges.ts` — the unread edit and comment counts on each note a user may see, `loadBadgedPages` (their teams and
-  the topics those teams hold), and `saveNoteRead`, the read time that clears them.
+  the topics those teams hold), `loadPageNoteBadges` for pages already loaded, and `saveNoteRead`, the read time that
+  clears them.
 - `updateCounts.ts` — `loadUpdateCount`, a user's unseen chat mentions, unread note edits and comments, and pending
   topic invitations summed as the apps' update count, which each push sets as the app icon badge, and
   `toUnseenChatMentionFilter`, which the api's chat mention reads share.

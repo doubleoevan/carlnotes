@@ -1,10 +1,11 @@
 // a user's update count, the sum the apps badge their icon with: unseen chat mentions, unread note edits and comments,
 // and the topic invitations waiting for an answer
+import { toNoteCount } from "@carlnotes/contracts/notes"
 import { and, count, countDistinct, eq, inArray, isNull, or, type SQL } from "drizzle-orm"
-import { toUnblockedAuthorFilter, toUnreportedFilter } from "./contentFilters"
+import { toTeamHoldsTopicFilter, toUnblockedAuthorFilter, toUnreportedFilter } from "./contentFilters"
 import { db } from "./index"
 import { loadUserEmail, toPendingTopicInviteFilter } from "./inviteFilters"
-import { loadBadgedPages, loadNoteBadges } from "./noteBadges"
+import { type BadgedPages, loadBadgedPages, loadPageNoteBadges } from "./noteBadges"
 import { chatRoomMentions, chatRoomMessages } from "./schema/chat"
 import { invites } from "./schema/invites"
 import { topics } from "./schema/topics"
@@ -27,28 +28,36 @@ export function toUnseenChatMentionFilter(userId: string): SQL | undefined {
  * topic invitations, one per topic.
  */
 export async function loadUpdateCount(userId: string): Promise<number> {
-	// load the three parts together, and sum each note's edit and comment counts
+	// load the user's pages once for the chat and note counts, then the three parts together, and sum them
+	const badgedPages = await loadBadgedPages(userId)
 	const [chatMentionCount, noteBadges, topicInviteCount] = await Promise.all([
-		loadChatMentionCount(userId),
-		loadNoteBadges(userId),
+		loadChatMentionCount(userId, badgedPages),
+		loadPageNoteBadges(userId, badgedPages),
 		loadTopicInviteCount(userId),
 	])
-	const noteCount = noteBadges.reduce((sum, noteBadge) => sum + noteBadge.unreadEdits + noteBadge.unreadComments, 0)
-	return chatMentionCount + noteCount + topicInviteCount
+	return chatMentionCount + toNoteCount(noteBadges) + topicInviteCount
 }
 
 // the unseen chat mentions in a team's own chat room and in the chat rooms of the topics the user's teams hold
-async function loadChatMentionCount(userId: string): Promise<number> {
+async function loadChatMentionCount(userId: string, { topicIds, teamIds }: BadgedPages): Promise<number> {
 	// a user on no team has no chat rooms
-	const { topicIds, teamIds } = await loadBadgedPages(userId)
 	if (teamIds.length === 0) {
 		return 0
 	}
 
-	// count the mentions in those chat rooms
-	const chatRoomFilter = or(
-		and(isNull(chatRoomMessages.topicId), inArray(chatRoomMessages.teamId, teamIds)),
-		topicIds.length > 0 ? inArray(chatRoomMessages.topicId, topicIds) : undefined,
+	// count the mentions in those teams' chat rooms: each team's own, and its room of each topic that the same team
+	// still owns or holds a share of
+	const chatRoomFilter = and(
+		inArray(chatRoomMessages.teamId, teamIds),
+		or(
+			isNull(chatRoomMessages.topicId),
+			topicIds.length > 0
+				? and(
+						inArray(chatRoomMessages.topicId, topicIds),
+						toTeamHoldsTopicFilter(chatRoomMessages.teamId, chatRoomMessages.topicId),
+					)
+				: undefined,
+		),
 	)
 	const [chatMentionRow] = await db
 		.select({ chatMentionCount: count() })
@@ -58,8 +67,8 @@ async function loadChatMentionCount(userId: string): Promise<number> {
 	return chatMentionRow?.chatMentionCount ?? 0
 }
 
-// the topics with an invitation waiting for the user's answer, since an email and a username invitation to one topic
-// count once
+// the topics with an invitation waiting for the user's answer. an email and a username invitation to one topic count
+// once, as the Activity page shows one row
 async function loadTopicInviteCount(userId: string): Promise<number> {
 	// a missing user has no invitations
 	const userEmail = await loadUserEmail(userId)
