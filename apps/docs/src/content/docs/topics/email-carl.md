@@ -19,10 +19,6 @@ Carl saves your message to the Topics you chose and replies with links to them.
 
 ## Already know where it belongs?
 
-Put `topic: Moss terrarium` in the subject. Carl saves clear matches directly.
-
-A `topic:` hint on the first body line helps Carl find matches, but he still waits for your choice. Only a Topic in the subject skips that step.
-
-You can also reply to a digest with a new link and a few words. Carl skips a simple “thanks” and links quoted from the digest.
+Put `topic:` *`your topic`* in the subject or a `topic:` hint on the first line of the body. Carl searches clear matches directly and replies with a link.
 
 Open **Personal sources** on a topic to see your email message sources. Chats and emails are encrypted. Only you can see them.

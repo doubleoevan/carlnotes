@@ -9,16 +9,16 @@ sidebar:
 
 ## Pick your Topics
 
-Carl shows the Topics you can edit. The closest matches start checked. Search for another Topic, or uncheck one to leave it out. Press **Send this chat** when you’re happy with your choices. One chat counts as one send, however many Topics you pick.
+Carl shows the Topics you can edit. The closest matches start checked. Search for another Topic, or uncheck one to leave it out. Press **Send this chat** when you’re happy with your choices. A chat counts as one send, however many Topics you pick.
 
 ![The CarlNotes Topic picker inside ChatGPT, with two Topics selected and buttons to send the chat or start a Topic.](../../../assets/screenshots/send-ai-chat-topic-picker.png)
 
 If this deserves its own Topic, choose **Start a new topic for this chat**. Edit the name, prompt, tags, and Sources, then press **Create this Topic**. Carl creates the Topic and saves your chat there. In an app that shows a numbered list, tell your AI which numbers you want.
 
-Already know the destination? Try **“Send this chat to Carl for my Moss terrarium Topic.”**
+Already know the destination? Try **“Send this chat to Carl for my *your topic* Topic.”**
 
 ## Find it again
 
-After your chat is added, open **Personal sources** on the Topic to read the summary and links you sent. If your AI supplied a link back to the conversation, the source label opens it. You can delete the item here.
+After your chat is added, open **Personal sources** on the Topic to read the chat summary and links you sent.
 
 Open **Personal sources** on a topic to see your chat sources. Chats and emails are encrypted. Only you can see them.
