@@ -5,7 +5,7 @@ sidebar:
   order: 6
 ---
 
-[Add the CarlNotes MCP](/docs/account/add-to-ai/#installing) and ask your connected AI **“Send this chat to Carl.”** Your AI puts together a short summary of what you worked on, what you decided, what’s still open, and the links worth keeping. You can do this on any CarlNotes plan.
+[Add the CarlNotes MCP](/docs/account/add-to-ai/#installing) and ask your connected AI **“Send this chat to Carl.”** It provides what you’re working on as a topic source. You can do this on any CarlNotes plan.
 
 ## Pick your Topics
 
