@@ -23,4 +23,4 @@ Already know the destination? Try **“Send this chat to Carl for my Moss terrar
 
 Open **Personal sources** on the Topic to read the summary and links you sent. If your AI supplied a link back to the conversation, the source label opens it. You can delete the item here.
 
-Only you can read your copy, including on a shared Topic. Carl receives what your AI sends. He can’t browse your chat history, memory, or uploads.
+Chats and emails are encrypted. Only you can see them.
