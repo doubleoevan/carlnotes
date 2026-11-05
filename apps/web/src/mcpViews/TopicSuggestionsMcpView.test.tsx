@@ -1,11 +1,17 @@
-import { afterEach, expect, mock, spyOn, test } from "bun:test"
+import { afterEach, beforeEach, expect, mock, spyOn, test } from "bun:test"
+import * as siteAuth from "@carlnotes/client/authClient"
 import { act } from "react"
 import { LinkBaseUrlContext, LinkOpenerContext } from "@/components/common/AnchorLink"
 import { type HookTestHarness, renderTestHook } from "@/lib/hookTestHarness"
+import { authClient } from "./mcpViewAuthClient"
 import * as host from "./mcpViewHost"
 import { TopicSuggestionsMcpView } from "./TopicSuggestionsMcpView"
 import { TOPIC_SUGGESTIONS_FIXTURE, TOPIC_SUGGESTIONS_INPUT } from "./topicSuggestionsFixtures"
 
+// match the production MCP bundle: the audio player reads the host session
+beforeEach(() => {
+	spyOn(siteAuth, "authClient").mockReturnValue(authClient() as unknown as siteAuth.AuthClient)
+})
 afterEach(() => mock.restore())
 
 // render the real MCP view controls with the host's links isolated from site navigation
