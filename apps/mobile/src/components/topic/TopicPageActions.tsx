@@ -64,7 +64,7 @@ export function TopicActionBar({
 				)}
 				{layout.isShareOnLeft && <ShareTopic topic={topic} isLabeled />}
 			</View>
-			<View>
+			<View className="flex-row flex-wrap justify-end gap-2">
 				<TopicScanButton topic={topic} onScanned={onScanned} />
 				{layout.isNewTopicCallToAction && <NewTopicButton />}
 				{layout.isSubscribeCallToAction && (

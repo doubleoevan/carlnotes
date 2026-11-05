@@ -24,7 +24,10 @@ files are written from the tokens.
   source, and `contrast.test.ts` checks a value and a placeholder on the fill over a card and a popover.
 - `pagination.ts` — the card fill, border, muted label and current-page highlight used by both apps' numbered
   pagination and table footer controls. Both stylesheets scan it; native labels read its text classes separately.
-- `components/` — the component contracts, one module per component both apps share: `button.ts` and `badge.ts`. A
+- `components/` — the component contracts, one module per component both apps share: `button.ts`, `badge.ts`, and
+  `expandable-row.ts`. The expandable row contract supplies shared content props and item/section classes; the
+  section variant uses the existing muted `sectionLabel` type role without outer vertical padding. Core owns disclosure
+  state and composition, and each app supplies semantic controls at `primitives/expandable-row.tsx`. A
   contract exports its variant names, and a Button its size names, as tuples with their unions, its defaults, its box
   classes for the container and its text classes for the label, built with class-variance-authority, its variant props
   type, the props both platforms share, such as Button's `variant`, `size`, `disabled`, and `asChild`, and `platforms`,
@@ -39,6 +42,7 @@ files are written from the tokens.
   than the implementation, a story, or a test imports a contract. The contracts keep the web's variant names, unused
   ones included. Renaming or removing a variant is a change of its own.
 - `assets/` — the shared Carl and Vienna avatar PNGs, imported by both apps through `@carlnotes/nightshift/assets/`.
+- `aiProviderIcons.ts` — the shared monochrome AI platform paths from Lobe Icons, pinned with its MIT attribution. Claude and Claude Code have distinct marks. Both apps use these paths in conversation links and Add to AI.
 - `coffeeCup.ts` — the chat launcher's shared white cup, saucer, and steam paths. Both apps render these paths.
 - `coffeeMug.ts` — the coffee mug in the CarlNotes logo: its view box, the cup and handle paths, the strokes, the
   three steam wisps, and the steam's motion. The steam holds still below the `md` breakpoint, as on a phone.
@@ -60,7 +64,7 @@ files are written from the tokens.
   imports, and `figma/light.tokens.json` and `figma/dark.tokens.json`. Change the source, then run
   `bun run nightshift:write` (`scripts/write-nightshift-tokens.ts`), which writes all four. Never edit them by hand.
 - Importers: `apps/web`, which reads the stylesheet, `classNames.ts`, `field.ts`, `pagination.ts`, `coffeeMug.ts`,
-  `oauthProviderIcons.ts`, `noteHtmlStyle.ts` and `theme.ts`'s `toColorCssVariable` for the note's style, and the
+  `oauthProviderIcons.ts`, `aiProviderIcons.ts`, `noteHtmlStyle.ts` and `theme.ts`'s `toColorCssVariable` for the note's style, and the
   contracts anywhere as far as the boundary check goes, each contract only from its implementation, a story, or a test
   by the parity check, and the rest of the TypeScript only from its tests, the stories, `.storybook/`, and
   `src/nightshift/`; `apps/mobile`, which reads `uniwind.css` and the TypeScript freely, each contract only from its
@@ -78,3 +82,6 @@ files are written from the tokens.
 
 `uniwindCss.ts` writes `--font-sans` and `--font-display` from `fontFamilies` alongside native theme tokens.
 The mobile Text primitive defaults through `font-sans`; explicit display classes can therefore select Architects Daughter.
+
+
+Entity icons use Lucide Coffee for Topics, Mic for Podcast Episodes, and Globe for Findings. The web search kind map, native search rows, Finding summaries, Podcast Episode pills, chapter tags, and podcast feed actions follow this convention. Media-type icons remain specific to files, video, or audio when describing a Source or attachment.

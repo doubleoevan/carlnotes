@@ -10,11 +10,14 @@ import { toCreateTopicText, toSuggestionsText } from "../tool/newTopicChatTools"
 import { createTopicFromDraft, suggestTopicDraftSources } from "../tool/topicDraftTools"
 import { toPodcastFieldDescription } from "../tool/topicTools"
 import { loadTopicPage } from "../topic/topics"
-import { toCardToolMeta } from "./cards"
+import { toMcpViewMeta } from "./mcpViewData"
 import { CONNECT_ACCOUNT_TEXT, toToolTopicId } from "./results"
 import { type ToolCaller, toMcpAnalyticsProperties } from "./toolCaller"
 import { type RegisterToolsOptions, topicIdArgument, toTextResult } from "./toolShapes"
+import { isTopicDraftConfirmed, toTopicDraftConfirmation, toTopicDraftReceipt } from "./topicDraftConfirmations"
+import { loadTopicDraftMcpViewOptions } from "./topicDraftMcpViewOptions"
 import { type EditTopicResult, editTopic, toEditableTopicFields } from "./topicEdits"
+import { toMcpViewToolMeta } from "./uiResources"
 
 // what edit_topic takes: the topic, the edit carl proposes in chat, and the confirmation a preview returned
 const editTopicPayload = proposeTopicEditPayload.extend({
@@ -36,7 +39,7 @@ export function registerTopicEditTools({ mcpServer, toolCaller, routeTopicId }: 
 			description: `Change a topic you may edit: its name, tags, visibility (public, invite, or private), how often it brews (daily, weekdays, or weekly), the time of day as HH:MM and the day a weekly brew runs, how many findings a brew keeps (5, 10, 15, or 20), the prompt every brew scores against, sources to add as option and value pairs, and source ids to remove, which list_topics shows.${toPodcastFieldDescription()} Name only what changes. Making a topic public or removing a source saves nothing at first: the result shows the topic as it would read and a confirmation. Ask the person, and once they agree, call again with the same edit and that confirmation. Every prompt save keeps a version, and no brew starts.`,
 			inputSchema: editTopicPayload,
 			annotations: { readOnlyHint: false, destructiveHint: true },
-			_meta: toCardToolMeta("topic"),
+			_meta: toMcpViewToolMeta("topic"),
 		},
 		async ({ topic_id, confirmation, ...topicEdit }) => {
 			const topicEditCall = toTopicEditCall({ toolCaller, routeTopicId, topicId: topic_id })
@@ -63,29 +66,55 @@ export function registerTopicEditTools({ mcpServer, toolCaller, routeTopicId }: 
 				return toTextResult(CONNECT_ACCOUNT_TEXT)
 			}
 			const suggestTopicDraftSourcesResult = await suggestTopicDraftSources({ userId: toolCaller.userId, name, prompt })
-			return toTextResult(
-				toSuggestionsText(suggestTopicDraftSourcesResult),
-				suggestTopicDraftSourcesResult.status !== "ok",
-			)
+			return {
+				...toTextResult(
+					toSuggestionsText(suggestTopicDraftSourcesResult),
+					suggestTopicDraftSourcesResult.status !== "ok",
+				),
+				structuredContent: { ...suggestTopicDraftSourcesResult },
+			}
 		},
 	)
 	mcpServer.registerTool(
 		"create_topic",
 		{
 			title: "Create a topic",
-			description: `Create a topic for the connected account from a name, a prompt, sources as option and value pairs, invite emails, a visibility of public, invite, or private, the team it joins as the id and name of a team the account leads, tags, how often it brews (daily, weekdays, or weekly), and how many findings a brew keeps (5, 10, 15, or 20).${toPodcastFieldDescription()} Unsaid fields take the editor's defaults: shared by invite, weekly on Wednesday, ten findings. Its first brew starts.`,
-			inputSchema: createTopicPayload,
+			description: `Preview a Topic Draft for the connected account from a name, prompt, sources as option and value pairs, invite emails, visibility, team, tags, brew frequency, and finding limit.${toPodcastFieldDescription()} Call only when the user chooses to start a Topic. The first call creates nothing and returns the draft and a confirmation. Show the draft and wait for the user to confirm, then repeat the same fields with that confirmation. Creation uses the existing Topic Draft limits and starts its first brew. For a new send destination, set visibility private, team null, inviteEmails empty, and default Coffee Break on when the view's account budget permits it. Other unsaid fields use the editor's defaults: shared by invite, weekly on Wednesday, ten findings.`,
+			inputSchema: createTopicPayload.extend({ confirmation: z.string().max(200).optional() }),
 			annotations: { readOnlyHint: false, destructiveHint: true },
-			_meta: toCardToolMeta("topic"),
+			_meta: toMcpViewToolMeta("topic"),
 		},
-		async (topicDraft) => {
+		async ({ confirmation, ...topicDraft }) => {
 			if (toolCaller.kind !== "user") {
 				return toTextResult(CONNECT_ACCOUNT_TEXT)
+			}
+
+			// preview the shared Topic Draft before any creation, source resolution, quota use, or Scan
+			const subject = { userId: toolCaller.userId, clientId: toolCaller.clientId, topicDraft }
+			if (!isTopicDraftConfirmed(subject, confirmation)) {
+				const topicDraftOptions = await loadTopicDraftMcpViewOptions(toolCaller)
+				const draftConfirmation = toTopicDraftConfirmation(subject)
+				return {
+					_meta: toMcpViewMeta({ session: null, podcastEpisodes: [], topicDraftOptions }),
+					content: [
+						{
+							type: "text" as const,
+							text: `Nothing was created. Show this Topic Draft and wait for the user to confirm. Then call create_topic with the identical draft and confirmation.\n${JSON.stringify({ topicDraft, confirmation: draftConfirmation })}`,
+						},
+					],
+					structuredContent: {
+						status: "createConfirmRequired",
+						topicId: null,
+						afterTopicDraft: topicDraft,
+						confirmation: draftConfirmation,
+					},
+				}
 			}
 
 			// create the topic through the create path's own gate. the result names the topic's id
 			const createTopicFromDraftResult = await createTopicFromDraft({
 				userId: toolCaller.userId,
+				receipt: toTopicDraftReceipt(confirmation),
 				topicDraft,
 				origin: "mcp",
 				analyticsProperties: toMcpAnalyticsProperties(toolCaller),
@@ -94,7 +123,7 @@ export function registerTopicEditTools({ mcpServer, toolCaller, routeTopicId }: 
 				return toTextResult(toCreateTopicText(createTopicFromDraftResult), true)
 			}
 
-			// the new topic as its page reads it, for the topic card
+			// the new topic as its page reads it, for the topic MCP view
 			const { topicId, name } = createTopicFromDraftResult
 			const topicPage = await loadTopicPage(toolCaller.userId, topicId)
 			const afterTopicDraft = topicPage ? toEditableTopicDraft(toEditableTopicFields(topicPage)) : null

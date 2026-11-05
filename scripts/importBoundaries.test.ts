@@ -163,6 +163,12 @@ test("toImportViolations flags a Nightshift module in a web app page and passes 
 			'import { googleIconPaths } from "@carlnotes/nightshift/oauthProviderIcons"\n',
 		),
 	).toEqual([])
+	expect(
+		toWebViolations(
+			"apps/web/src/components/common/BrandIcon.tsx",
+			'import { AI_PROVIDER_ICON_PATHS } from "@carlnotes/nightshift/aiProviderIcons"\n',
+		),
+	).toEqual([])
 })
 
 // a story and Storybook stay inside the component browser, so neither reaches the app's own code

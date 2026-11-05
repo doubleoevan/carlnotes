@@ -32,7 +32,7 @@ const TOPIC_PAGE = {
 } as unknown as TopicResponse
 
 // the user who may edit the topic, connected through an app
-const USER = { kind: "user" as const, userId: "user-1", plan: "free", clientName: "test-app" }
+const USER = { kind: "user" as const, userId: "user-1", plan: "free", clientName: "test-app", clientId: "test-client" }
 
 // the topic page each read returns, which a test changes to stand for an edit made elsewhere
 let topicPage: TopicResponse

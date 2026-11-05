@@ -61,8 +61,15 @@ export function writePrompt(
  * so the value cannot close the delimiter around it.
  */
 export function fenceUntrusted(value: string, nonce: string): string {
-	const fencedValue = value.replace(FORGED_DELIMITER_PATTERN, "").replaceAll("`", "")
+	const fencedValue = toUntrustedPromptText(value)
 	return `<${UNTRUSTED_DATA_TAG}-${nonce}>\n${fencedValue}\n</${UNTRUSTED_DATA_TAG}-${nonce}>`
+}
+
+/**
+ * Removes delimiter syntax from untrusted text before it enters a prompt.
+ */
+export function toUntrustedPromptText(value: string): string {
+	return value.replace(FORGED_DELIMITER_PATTERN, "").replaceAll("`", "")
 }
 
 /**

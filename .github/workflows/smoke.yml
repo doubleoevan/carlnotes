@@ -81,7 +81,7 @@ jobs:
           exit 1
         env:
           DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
-      # the seo and mcp smokes read the built ui and its card bundle, and the signup check opens it in a browser
+      # the seo and mcp smokes read the built ui and its MCP view bundle, and the signup check opens it in a browser
       - name: Build the ui
         run: doppler run -- bun run build:ui
         env:

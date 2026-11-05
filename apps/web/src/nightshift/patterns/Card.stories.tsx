@@ -3,7 +3,8 @@ import { fetchScanNote } from "@carlnotes/client/topicClient"
 import type { Meta, StoryObj } from "@storybook/tanstack-react"
 import type { ComponentProps } from "react"
 import { mocked } from "storybook/test"
-import { InfoSection, TopicSourcesSection, TopicVisibility } from "@/components/topic/TopicInfo"
+import { TopicSourcesSection, TopicVisibility } from "@/components/topic/TopicInfo"
+import { TopicInfoSection as InfoSection } from "@/components/topic/TopicInfoSection"
 import { TopicScanHistoryCard } from "@/components/topic/TopicScanHistory"
 import {
 	CARD_CLASS,

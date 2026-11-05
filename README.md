@@ -89,222 +89,7 @@ finds its code. [apps/docs/ai-scaffolding.md](apps/docs/ai-scaffolding.md) expla
 AI-generated code. Feature work goes through [OpenSpec](https://github.com/Fission-AI/OpenSpec), one change at a time.
 The specs and the changes in progress live in `openspec/`.
 
-### Scan
-
-A topic Scan is one Temporal workflow, its email is a second one, and its podcast episode is a third:
-
-```mermaid
-flowchart
-    Ingest[Ingest Sources] --> Score[Score · LiteLLM] --> Review[Keep best Findings] -->|second workflow| Email[Email subscribers · Resend]
-    Review -->|third workflow| Episode[Record the podcast episode · Gemini speech + ffmpeg]
-```
-
-Each step costs more but handles fewer Resources. Embeddings (`embed-model`) filter and rank what the Sources found. A
-cheap model (`cheap-model`) scores what passes. A more expensive model (`score-model`) re-scores the best Findings and
-writes each Finding's relevance explanation. The cheap model then writes the scan report.
-
-Temporal persists every step and retries failed activities, so the app needs no outbox table of pending sends. Once a
-Scan is complete, its workflow starts the email workflow on the `scan-emails` queue. That workflow runs one activity per
-Resend call. On a rate limit the activity waits for Resend's `retry-after`, and on a 5xx it backs off. A send that fails
-for good is reported to Sentry without failing the Scan. Each accepted batch records its sends with the Scan, so a retry
-never mails anyone twice.
-
-Emails outside workflows (verification, password reset, invites, flag notices) go straight to Resend. The app reports a
-failed one to Sentry and does not replay it. Every call to Resend, from the app or the worker, first takes a rate limit
-slot kept in Redis, which one call holds for 200 milliseconds. So calls leave evenly spaced at five a second, half of
-Resend's limit of ten.
-
-A succeeded Scan also starts the podcast episode workflow, described under Podcast below.
-
-### Podcast
-
-Every Topic has a podcast with two AI hosts, Carl and Vienna. A succeeded Scan starts its episode as a child workflow on
-the `episode-recordings` queue, and an episode never holds up the Topic's next Scan.
-
-```mermaid
-flowchart
-    Scan[Succeeded Scan] -->|child workflow| Plan[Plan · up to 15 Findings]
-    Plan --> Outline[Outline · title and description]
-    Outline -.->|signal| Email[Scan email names the episode]
-    Outline --> Segments[One script call per segment]
-    Segments --> Speech[One Gemini speech call per chapter]
-    Speech --> Encode[ffmpeg joins the chapters into one MP3]
-    Encode --> Publish[(Object storage · season and episode number)]
-    Publish --> Feeds[RSS feeds · public or per listener]
-    Publish --> Player[Topic page player · docked player]
-    Publish --> Page[Episode page with its transcript]
-```
-
-The plan picks up to fifteen Findings by score. It picks from the Scan's new Findings and from the ones a user liked or
-bookmarked or whose page is one of the Topic's url Sources. A like, a bookmark, and a url Source's page each add a score
-bonus of 0.2. A new Finding wins a tie, and the Scan's new ones are narrated first. Any slots left go to the Topic's
-best that no episode has covered, then to ones that earlier episodes covered. A Finding rated thumbs down is never
-narrated.
-
-The outline call saves the episode's title and description and signals the Scan's email workflow. The email workflow
-waits for that signal, so the email can name the episode. One script call per segment writes the two hosts' turns
-against the outline, in up to three drafts. A draft that fails a check is retried with the reason, and a third draft is
-repaired instead of failing the episode. The sign-off ends on two fixed lines and then a goodbye that the writer words
-differently every time. The prompts are in `packages/models/prompts/`.
-
-Each chapter is recorded as one two-speaker Gemini speech call through LiteLLM's pass-through. A manual Scan's
-chapters are recorded on the standard tier, and a scheduled Scan's on Gemini's Flex tier, where a chapter can wait up to
-six hours for capacity. A chapter whose speech fails for good is left out, and the episode publishes the rest. ffmpeg
-joins the chapters into one MP3 in object storage, and the publish gives the episode its season, the UTC year, and its
-number within that season.
-
-An episode reaches listeners three ways:
-
-- A public Topic has a public RSS feed at `/topics/:id/podcast.xml`. A private or invite Topic gives each listener
-  their own feed at `/podcast-feeds/:token.xml`. Redis caches each feed while it lists up to 100 episodes.
-- The topic page has the player, and a docked player follows the listener from page to page. When an episode ends, the
-  next unplayed episode from the listener's other Topics starts.
-- Each published episode has its own page with its transcript, rendered on the server for a public Topic.
-
-Every episode page has its preview card, so a shared link previews whatever the Topic's visibility. A private or invite
-Topic's episode page is marked noindex and shows the Topic's gate to anyone who cannot see the Topic. Covers are drawn
-over `apps/docs/design/podcast/cover-base.png`.
-
-`PODCAST_SPEECH_MODEL` set empty turns episodes off, and `PODCAST_RECORDING_CONCURRENCY` (16 by default) limits the
-episode activities on each worker replica. A free Topic gets a 10-minute episode after every scan and keeps only the
-latest short one, while a paid plan gets 30 minutes and keeps every full episode. A scan that finishes while a Topic's
-short episode is still recording makes no episode, and its findings go into the next one. Each plan's monthly budget
-cutoffs in `packages/contracts/plans.ts` turn a paid plan's episodes short, then pause every plan's episodes, so scans
-keep running.
-
-### Chat
-
-Every Topic has a chat. Chat runs in the `app` process, not as a workflow. A reply streams back while the user waits,
-and the user asks again if a reply is lost.
-
-Chat is retrieval-augmented generation (RAG) over the Topic's own Feed: the app retrieves the relevant Findings, and the
-model writes its reply from them. If the Feed cannot answer, the model can call a live Exa web search, billed per call.
-For a user who can edit the Topic, the model can also preview a change to the Topic's settings, Sources, or prompt. The
-server applies that change through the Topic Tools only if the user's next message agrees.
-
-```mermaid
-flowchart
-    Question --> Embed[Embed the question] --> Retrieve[Pick relevant topic Findings] --> Reply[Model streams the reply] --> Store[(Encrypted Chat Turn)]
-    Search[Exa web search] -.-> Reply
-```
-
-Chat is signed-in only. Every chat turn writes a row, because every chat turn is metered. The model spend is charged to
-the asker's own LiteLLM key, sharing the same budget a topic scan charges. Before a turn, a transcription, or a spoken
-part runs, its largest cost is reserved in Redis. The budget is a soft limit: a call starts while the recorded spend and
-the open reservations are below it, so a user with budget left is never rejected, a second call is rejected while the
-first's reservation holds the rest of the budget, until the first releases its reservation, and the month passes the
-budget by at most about one call's largest cost. A rejected turn is rejected before anything posts, and a reservation is
-released once the turn's spend row is written. If Redis is down, the turn falls back to checking recorded spend against
-the budget. Chat text is encrypted. A chat that outgrows its context budget is compacted. The newest turns stay whole.
-Older answers are clipped to their opening characters.
-
-### Live updates
-
-One feature updates while you watch it: a team chat room. It pushes over Server-Sent Events (SSE), and no WebSocket
-server runs. A Tasting Note does not stream. The editor saves the note's HTML a second after typing stops, with the
-version it opened at, and the api writes only if the stored version still matches. Otherwise the api returns a conflict
-naming who saved last, the words stay in the editor, and the person reloads to take the newer version.
-
-The fan-out between instances is Redis pub/sub. The instance that stored a change delivers the change to its own
-subscribers through an in-process `EventEmitter` first and then publishes the change. Every other instance re-broadcasts
-what it receives to its own subscribers. The instance that published skips its own echo. The same Redis holds the
-sessions, the caches for the mention count, the topic page's scan poll, and the homepage's topic section ids. It also
-holds the shared rate limiters and the Resend rate limit slot, which the worker uses too. So more than one `app` replica
-can run at once. Every database connection goes through Neon's connection pooler. There is no socket tier to operate.
-
-```mermaid
-flowchart
-    Writer[Writer's browser] -->|POST| App1["app instance A"]
-    App1 --> Postgres[(Postgres)]
-    App1 -->|publish| Redis[(Redis)]
-    Redis -->|subscribe| App2["app instance B"]
-    App1 -->|SSE| ReaderA[Reader on A]
-    App2 -->|SSE| ReaderB[Reader on B]
-```
-
-A chat room publishes the new chat message's id and any Topic Tool calls from that chat turn, and subscribers read the
-row.
-
-Redis replays nothing published while a subscriber was disconnected. A chat stream catches up from its cursor on the
-next chat message, and every open chat stream on an instance catches up once its subscriber connection comes back. A
-Redis connection that drops reconnects with a backoff from one second to thirty. While Redis is unreachable, the app
-reads a session from Postgres, and each cache calls its loader. Each limit counts in its own replica's memory, so a
-caller gets the full limit on each replica. The storing instance still delivers to its own subscribers.
-
-### Content safety and injection defense
-
-Two problems sit on every page a Scan reads and every file a user shares. A page can try to instruct the model, which is
-prompt injection. A page or an image can be explicit or abusive, which is content safety. The app handles them with
-different tools.
-
-**Injection defense is structural.** No scanner judges text before a model reads it. These rules hold for every call:
-
-- The prompt writer wraps every untrusted value in an `untrusted-data` tag with a random nonce made per call, and
-  strips any tag a value tries to forge, so a value cannot close its own block.
-- Every template restates its task after the last untrusted block, so the model reads the app's own words last.
-- Every model output the pipeline consumes is locked to a Zod schema, and numbers are clamped to their range.
-- Pipeline model calls get no tools. A chat change applies only from a preview the user's next message agrees to.
-- The scan report links only the urls of kept Findings, and the relevance explanation renders as plain text.
-
-Attachment text is stored as extracted, and a url Source's page is read as fetched. Their text reaches every prompt
-inside the fence, as data.
-
-**Content safety runs in four layers**, each at the point where it costs least:
-
--  **Source flags.** Exa search filters out unsafe content (`moderation: true`). The Reddit ingester skips posts marked
-  `over_18`. The X ingester skips tweets from accounts marked possibly sensitive. The Bluesky ingester skips posts, or
-  accounts, labeled `porn`, `sexual`, `nudity`, or `graphic-media`. Reddit's RSS fallback has no flag, so the next layer
-  covers it.
--  **The scorer.** The relevance score returns `isUnsafe` in the same call, at no extra cost. Content that is itself
-  sexually explicit, hateful, harassing, or violent is marked unsafe on its Resource and gets no new Finding. Reporting
-  on a hard subject is not unsafe. A chat link to an unsafe Resource gets no preview image.
--  **Text others read.** A room message, a note and its comments, a username, a team's name and description, and an
-  invite or public Topic's name, prompt, and tags are classified by one cheap model call before they post. A violation
-  is rejected in Carl's words with the draft kept.
--  **Images others see.** An uploaded avatar and an image shared to a team room go through OpenAI's free
-  `omni-moderation-latest` endpoint, set by `OPENAI_API_KEY`. A flagged image gets the same rejection.
-
-The text and image checks fail open. An unset key, a timeout, or an outage lets the post through, and a timeout or
-an outage is reported without the text or the image. An image the endpoint cannot read is rejected like any unreadable
-file. The report button and admin delete back up every layer.
-
-### Caching at the edge
-
-Cloudflare sits in front of carlnotes.com and serves what it can cache, so the `app` replicas render only what changes
-from person to person.
-
-- A page rendered for a signed-out visitor, a blog or release page, and the signed-out feed look the same to every
-  visitor. Cloudflare caches each for a minute, then serves that copy for up to another minute while it fetches a fresh
-  one. The browser still asks Cloudflare on every load. A request with a session cookie always goes to the app, since
-  the same url shows a signed-in user something else.
-- An avatar or a link-preview card names its version in its url. The browser caches it for a year and Cloudflare for a
-  day, and a new image gets a new url. Hashed assets are cached for a year.
-- Cloudflare compresses every text response on the way out, so the app sends them uncompressed.
-
-Every request reaches the app from a Cloudflare address, so `TRUSTED_PROXIES` lists Cloudflare's published ranges, and
-the client is the rightmost `x-forwarded-for` address outside them. Better Auth and the rate limiter read it with the
-same settings. None of Cloudflare's own settings live in this repo. The cache rules, the session cookie bypass, SSL, and
-the rule that lets Northflank renew its certificate are listed in the `cache-at-the-edge` change's design, under
-`openspec/changes/archive/`.
-
-### Deploy safety
-
-A build that cannot render pages never takes the site down quietly. Each layer stops it on its own:
-
-| Layer | What it catches | Where |
-|---|---|---|
-| Declared dependencies | A third-party import the workspace does not declare, or a dev dependency the image runs | `scripts/check-package-boundaries.ts` in preflight |
-| Built dependencies | A package the web server build leaves external that `apps/web` does not declare | `bun run check:built-dependencies` in the Docker build |
-| Image smoke | A built image that fails to migrate, boot, or render `/`, `/plans`, and both health routes | the `image-smoke` CI job, `scripts/image-smoke.sh` |
-| Gated release | Any of the above, before Northflank builds, migrates, or deploys | the `release` CI job, which needs the gate and the image smoke |
-| Fail fast | A production boot whose web server build is missing or cannot import, reported in the `startup` stage | `apps/api/uiServer.ts` |
-| Readiness | A replica that cannot render the privacy page, which the platform sends no traffic | `/api/health/ready`, `infra/northflank/app-health-checks.json` |
-| Alerts | A site that is up but not rendering, a new error in a release, and an error spike | the [deploy alerts](#deploy-alerts) |
-
-`/api/health` is liveness. It responds 200 while the process runs and reads nothing. `/api/health/ready` is readiness.
-It renders the privacy page in-process, with no database, Redis, session, or outgoing request, so a database outage
-never pulls a replica out of traffic. A render that fails is reported in the `page-render` stage with its path, and
-every Sentry report is tagged with the deployed commit.
+The [runtime architecture guide](apps/docs/runtime-architecture.md) follows a Scan through review, podcast recording and delivery. It also covers chat, live updates, content safety, edge caching, and deploy health checks.
 
 ## Evals
 
@@ -345,6 +130,8 @@ flowchart
 | Source suggestions | The suggested Sources, end to end through Exa and the readability checks: the share of new suggestions that resolve and read, enough readable sources, every one on topic and still publishing | `bun run eval:source-suggestions` |
 | Search queries | The queries that a Scan writes for a topic: within the limit, distinct, plain text, on topic, and respecting what the topic skips | `bun run eval:search-queries` |
 | Attachment summaries | The summary of an attached document and the description of an attached image: nothing the attachment does not show, the facts a user needs, and a long document summarized from the part before its cut | `bun run eval:attachment-summaries` |
+| Personal sources context | Bounded summaries of synthetic received content, deletion, long imports, and adversarial text, using development model configuration | `bun run eval:personal-sources-context` |
+| Personal sources scoring | Two senders, adversarial instructions, exact page evidence, and private annotation isolation with disposable development accounts | `bun run eval:personal-sources-scoring` |
 
 The review pipeline's baseline comes from two public topics' fixtures on 2026-10-05. Dev Tools for Builders scored 68%
 precision and 83% recall, and AI Coding Tools 93% and 100%, at $0.10 a fixture. The fixtures, their labels, and what the
@@ -399,7 +186,7 @@ bun run reset:monthly-budgets # replace every LiteLLM key created before the mon
 bun run temporal     # Temporal worker for topic scans and attachment processing, as the Northflank service starts it; needs a Temporal server (docker-compose `temporal`, or `temporal server start-dev`)
 bun run dev:temporal # the same worker, kept as the dev name beside dev:api and dev:ui
 bun run dev:temporal:watch # the same worker, restarted on save; what `bun run dev` uses. a restart mid-review leaves that scan waiting out its 30-minute activity timeout before it fails
-bun run dev:email    # react-email preview server for the templates in packages/emails/ (localhost:3011); no doppler needed
+bun run dev:email    # React Email preview at localhost:3011; Bun renders templates and approval states to temporary HTML; no Doppler needed
 bun run dev:docs     # Starlight dev server on localhost:4321/docs, reachable on the LAN, with hot reload; also shows draft pages that the production build leaves out
                      # run by an agent, it starts in the background: `cd apps/docs && astro dev stop` ends it, `astro dev logs` tails it
 bun run test:coverage # the test suite with bun's built-in line and function coverage table
@@ -411,14 +198,14 @@ bun run edge:purge   # clear the pages and the signed-out feed that Cloudflare s
 bun run sync:releases # re-read every published GitHub release into the releases table the /releases endpoint serves; it seeds history and repairs a missed webhook delivery, and is safe to re-run
 bun run sync:releases:prd # the same sync against the production database; run it once after the first deploy, since the table starts empty. the webhook writes it going forward
 bun run releases:preview <tag> "<title>" # store release-notes/<tag>.local.md in the dev releases table with the repo's screenshots inlined, so /releases and /releases/<tag> read as they will before the release exists on GitHub
-bun run build:ui     # production build of apps/web to apps/web/dist, the mcp cards' bundle in apps/web/dist/mcp-cards included (no doppler, so it runs in CI and deploys)
+bun run build:ui     # production build of apps/web to apps/web/dist, the MCP views' bundle in apps/web/dist/mcp-views included (no doppler, so it runs in CI and deploys)
 bun run build:docs   # build static docs to apps/docs/dist, which the api serves at /docs
                      # /docs on the api (3000) and through the Vite proxy (5173) is this build, which only changes when you rerun this script and doesn't hot reload
 bun run dev:storybook # the Nightshift component browser, Storybook with hot reload on localhost:6006, and its MCP server at localhost:6006/mcp that .mcp.json and opencode.json register; no doppler needed
 bun run build:storybook # build the component browser to apps/web/dist/nightshift, which the api serves at /nightshift; run it after build:ui, which can clear apps/web/dist
 bun run nightshift:write # write packages/nightshift/tokens.css, uniwind.css, and the Figma token files from the Nightshift TypeScript source; run it after changing a token. tokens.test.ts fails until you do
 bun run dev:mobile   # Expo dev server for apps/mobile under doppler, with the expo-mcp server on and Storybook's telemetry off; a development build connects from a simulator, an emulator, or a phone on the LAN, and carlnotes:///storybook opens the component browser in it
-bun run dev:tunnel   # the Cloudflare tunnel that forwards Sign in with Apple's dev callback from apple-dev.carlnotes.com to the local api; run it beside bun run dev to sign in with Apple locally
+bun run dev:tunnel   # the Cloudflare tunnel for Apple's callback at apple-dev.carlnotes.com and Resend's inbound webhook at resend-dev.carlnotes.com; run it beside the local api
 bun run mobile:build -- --profile development-simulator # EAS (Expo Application Services) cloud build of the mobile app; profiles: development, development-simulator, preview, production. rebuild the development client after a change that adds a native module, as the sign-in change did
 bun run mobile:update -- --channel production --environment production # publish an EAS Update to a channel's builds, on the fingerprint runtime policy; eas update needs both flags
 bun run mobile:env:sync # move the mobile values (the Sentry DSN, the PostHog key, the Play Integrity cloud project number, the Sentry auth token) from Doppler dev and prd into the EAS environments
@@ -431,80 +218,9 @@ The homepage needs `dev:ui` and `dev:api` running, or `bun run dev` for the whol
 (below). Every dev, db, and smoke script except `dev:email`, `dev:docs`, `dev:storybook`, and `db:generate` wraps itself
 in `doppler run`, so those scripts need a Doppler-configured machine.
 
-Database: generate a migration from the Drizzle schema, then apply it:
+For database migration and seeding, Apple sign-in, Resend receiving, push notifications, podcast and billing settings, use the [development services guide](apps/docs/development-services.md).
 
-```bash
-bun run db:generate   # write a migration from the packages/db/schema files (offline, no doppler)
-bun run db:migrate    # apply pending migrations (packages/db/migrate.ts, the same one-shot script the deploy job runs)
-bun run db:seed       # creates the dev demo user and a user per plan using a real signup, then loads idempotent stub data (rejects an attempt to run it outside of the dev config)
-bun run litellm:restart # reload litellm-config.yaml. the file is bind-mounted, so a restart picks up an edit with no rebuild
-```
-
-`db:seed` signs up a real dev account (`DEV_USER_EMAIL` / `DEV_USER_PASSWORD` in `.env.example`) through Better Auth, so
-log in with those credentials locally to see the seeded demo topics. It also signs up `free@carlnotes.dev`,
-`plus@carlnotes.dev`, and `premium@carlnotes.dev`, none of them admins, on those plans with the same password, to check
-each plan's limits and monthly budget cutoffs. Auth needs these Doppler variables locally:
-`BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`,
-`GITHUB_CLIENT_ID`/`GITHUB_CLIENT_SECRET`, and `RESEND_API_KEY`/`RESEND_FROM_EMAIL` — see `.env.example` for what each
-is for. Signup itself is open: no invite code, Google, GitHub, and Apple are one-click, and email/password sits behind a
-"Continue with email" toggle.
-
-Sign in with Apple is optional. Without `APPLE_CLIENT_ID`, `APPLE_TEAM_ID`, `APPLE_KEY_ID`, and `APPLE_PRIVATE_KEY`, the
-api starts with Apple off. To turn it on:
-
-1. Join the Apple Developer Program, and create the App ID `com.carlnotes.app` with Sign in with Apple enabled.
-2. Create a Services ID per environment, and enable Sign in with Apple on it. Its domains are `carlnotes.com` for prd
-   and `apple-dev.carlnotes.com` for dev, and its return URLs are `https://carlnotes.com/api/auth/callback/apple` and
-   `https://apple-dev.carlnotes.com/api/auth/callback/apple`.
-3. Create a key with Sign in with Apple, and download its `.p8` file once.
-4. Set the Services ID, the team id, the key id, and the `.p8` file's text in Doppler dev and prd. The api signs the
-   client secret from them at runtime. No secret is stored. Each one expires after 30 days, and the api signs a new one
-   every week.
-5. Register the Resend sending domain and the `RESEND_FROM_EMAIL` address under Sign in with Apple for Email
-   Communication. Apple's private relay delivers mail to a Hide My Email address only from a registered sender.
-6. For dev, install cloudflared (`brew install cloudflared`), then run `cloudflared tunnel login`,
-   `cloudflared tunnel create carlnotes-dev`, and `cloudflared tunnel route dns carlnotes-dev apple-dev.carlnotes.com`
-   once. Set `APPLE_DEV_REDIRECT_URL` in Doppler dev to the dev return URL above. Then run `bun run dev:tunnel` beside
-   `bun run dev`, and sign in from `localhost:5173`. Apple returns to the tunnel, which forwards only that callback to the
-   api, and the api sends the browser back to localhost.
-
-Push notifications are optional. The worker sends them through Expo's push service with `EXPO_PUSH_ACCESS_TOKEN` from
-Doppler, named apart from `EXPO_ACCESS_TOKEN`, which the EAS CLI reads as its login. Without the token, sends go out
-unauthenticated, which the push service accepts until enhanced push security is turned on in the Expo dashboard. Set
-the token in Doppler dev and prd first, then turn the setting on, or every send fails.
-
-Backfills (owner-run) are one-time data migrations that pair with a schema change. Each is idempotent, so a second run
-changes nothing. Each runs under `doppler` against the configured database:
-
-```bash
-doppler run -- bun scripts/backfill-resource-content.ts   # upload existing resources.content to object storage, set content_key/content_bytes
-doppler run -- bun scripts/backfill-vectors.ts            # save every topic's and published podcast episode's vector
-```
-
-Image moderation is optional. Set `OPENAI_API_KEY` to turn it on. Error monitoring and product analytics are optional
-the same way. If `SENTRY_DSN` or `POSTHOG_API_KEY` is not set, that service is off, and the app behaves the same. A
-visitor's search on the MCP server is optional too. `bun run carl-up` creates a budgeted `LITELLM_PUBLIC_KEY` for it.
-Without one, the search returns a message that it needs an account, and every other tool still works.
-
-The podcast and talking to Carl need a `GEMINI_API_KEY` on the LiteLLM service and ffmpeg (`brew install ffmpeg`).
-ffmpeg joins an episode's chapters, transcodes a spoken question, and encodes Carl's spoken answer to MP3. These
-settings change the defaults:
-
-- `PODCAST_SPEECH_MODEL` names the speech model (default `gemini-3.8-flash-tts`).
-- `CHAT_TRANSCRIPTION_MODEL` names the transcription model (default `gemini-3.5-transcribe`). LiteLLM's Gemini
-  pass-through calls it by Google's name, with no alias.
-- `PODCAST_RECORDING_CONCURRENCY` sets how many recording activities one worker runs at once (default 16).
-- `PODCAST_HOST_VOICE` and `PODCAST_COHOST_VOICE` name the two voices.
-
-To run without the podcast, set `PODCAST_SPEECH_MODEL` empty. No episode is recorded and the topic page shows no player.
-Voice needs both models, so an empty `CHAT_TRANSCRIPTION_MODEL` or an empty `PODCAST_SPEECH_MODEL` turns it off: the
-chat shows no mic and no play button.
-
-Billing (Stripe) is optional locally. Subscriptions map to the free, plus, and premium plans, and a Stripe webhook
-derives the active plan. It needs `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, the per-plan `STRIPE_PRICE_*` ids, and
-a metered `STRIPE_PRICE_MANUAL_SCAN_OVERAGE` (see `.env.example`). Without them, checkout and the Customer Portal cannot
-reach Stripe. A metered overage report logs its failure and lets the scan run, and the admin console shows no Stripe
-net revenue. The gate, plans, and quotas all work without Stripe.
+Run `bun run db:migrate` to apply development migrations and `bun run db:seed` to populate the database. After changing proxy settings, run `bun run litellm:restart`.
 
 Checks: `bun run check` runs the full gate, the same `scripts/preflight.sh` that the pre-push hook runs:
 
@@ -578,7 +294,10 @@ bun run smoke:room         # the team chat-room smoke test: the access matrix, i
 bun run smoke:rooms        # the chat-rooms smoke test: which rooms a user can open, one per holding team, and the unseen count
 bun run smoke:chat-turns   # the chat turn shapes smoke test: each kind's row and each chat proposal shape is kept, each mismatched row is rejected, rolled back
 bun run smoke:push-devices # the push devices smoke test: ending a session or closing the account deletes its phones, one send per event, recipient, and phone, rolled back
-bun run smoke:mcp          # builds the ui, then checks both MCP routes: Origin, eleven-tool contracts, private access, result bounds, OAuth and revocation, cards, writes, confirmations, and rate limiting
+bun run smoke:mcp          # builds the ui, then checks both MCP routes: Origin, thirteen-tool contracts, private access, result bounds, OAuth and revocation, MCP views, writes, confirmations, and rate limiting
+bun run seed:personal-sources owner@example.com # retain synthetic review Topics for an existing development owner
+bun run smoke:personal-sources        # development persistence plus real model/Temporal receive → summarize → Scan → delete; --keep retains synthetic fixtures, and live runs just the integrated section
+bun run smoke:personal-sources imports context links email # rerun selected Personal sources smoke sections after a focused change
 bun run smoke:tools        # the topic tools smoke test: the gate inside each tool, the prompt version writes, adding and removing sources up to the limit, and that no tool starts a scan
 bun run smoke:podcast-episodes # the podcast episode routes smoke test: access, audio, feeds, covers, and removal
 bun run smoke:search-plans # the search plans smoke test: no HNSW scan in the topic ranking, trigram indexes in the name searches
@@ -586,7 +305,7 @@ bun run smoke:invites      # the invite smoke test: link authority and races, re
 ```
 
 Before handing off an MCP change, pass `bun run check` and `bun run smoke:mcp`. The offline gate covers Origin
-rejection and the complete annotation matrix. The live smoke retains consent, writes, cards, and rate limiting,
+rejection and the complete annotation matrix. The live smoke retains consent, writes, MCP views, and rate limiting,
 and checks private access, complete pagination, separate text and structured result sizes, and refresh revocation.
 It needs development Postgres, Redis, LiteLLM, Temporal, and its worker (`bun run dev:temporal`). Fixtures use isolated
 IDs and are removed in `finally`.
@@ -649,169 +368,13 @@ bun run visual:open -- <run id>    # download a UI tests run's report and open i
 bun run visual:approve -- --run <run id> # approve a run's changed and new image captures as baselines in the working tree; never commits
 ```
 
-Prompt registry (owner-run): git is the source of truth for prompt wording (`packages/models/prompts/*.md`).
-`prompts:sync` pushes that wording to Langfuse as the `production` version that each prompt is served from. The sync is
-idempotent: an unchanged prompt creates no new version. It needs `LANGFUSE_PUBLIC_KEY` and `LANGFUSE_SECRET_KEY` set.
-`--candidate` uploads under the `candidate` label instead and leaves the served `production` label alone until someone
-promotes the version in Langfuse by hand. The deploy job runs that form, while the two scripts below write `production`
-directly.
+For the prompt registry, container image, release jobs and rollback, use the [deployment guide](apps/docs/deployment.md).
 
-Each Doppler config points at its own Langfuse project. The `doppler run` call picks the environment, so there is one
-script per environment: `prompts:sync` for dev and `prompts:sync:prd` for production. The script names the environment
-in its summary line, since a run against dev otherwise reads like a run against production:
-
-```bash
-bun run prompts:sync
-```
-
-```bash
-bun run prompts:sync:prd
-```
-
-Container image: the app service is the Hono api plus the built web app it serves. It builds from the repo-root
-`Dockerfile`. The Dockerfile copies the root `package.json`, `bun.lock`, and every workspace's `package.json` before the
-install, so that layer caches until a dependency changes. Then it copies the packages and the two apps the image runs,
-`apps/api` and `apps/worker`, beside the built web app and docs. The image starts under `doppler run`. The LiteLLM proxy
-is a separate service with its own image in `infra/litellm/`. Build the app image with:
-
-```bash
-docker build --platform=linux/amd64 --build-arg VITE_TURNSTILE_SITE_KEY=<site-key> --build-arg VITE_POSTHOG_KEY=<project-key> --build-arg VITE_POSTHOG_HOST=<host> -t carlnotes-app .
-```
-
-`VITE_TURNSTILE_SITE_KEY`, `VITE_POSTHOG_KEY`, and `VITE_POSTHOG_HOST` are the settings that cannot wait for
-`doppler run`. Vite inlines them into the bundle at build time, so they have to be present during the build. They are
-public values that ship to every visitor.
-
-`--platform=linux/amd64` matters on Apple Silicon. The Doppler CLI is copied from `dopplerhq/cli:3.77.0`, which
-publishes amd64 only.
-
-The image smoke test boots a built image the way production does, with no secrets. CI's `image-smoke` job builds the
-image on every pull request and every push to `main`, then runs
-[scripts/image-smoke.sh](scripts/image-smoke.sh) against it. The script starts Postgres with pgvector and Neon's
-WebSocket proxy on one Docker network, migrates the empty database from the image, and starts the api with
-`NODE_ENV=production` and dummy settings. It fails if the api exits, never responds to `/api/health` within 90 seconds,
-or responds with anything but 200 for `/`, `/plans`, `/api/health`, or `/api/health/ready`, and it prints the
-containers' logs on failure. The same steps run locally against an image built with Cloudflare's public always-pass
-Turnstile key:
-
-```bash
-docker build --build-arg VITE_TURNSTILE_SITE_KEY=1x00000000000000000000AA -t carlnotes-smoke:local .
-```
-
-```bash
-bun run smoke:image carlnotes-smoke:local
-```
-
-`DATABASE_WS_PROXY` points the database driver at the proxy. Only the smoke test sets it, and production never does.
-
-Migrations are a deploy job, not a start-up step. CI starts the release. On a push to `main`, once the gate and the
-image smoke pass, the `release` job in [ci.yml](.github/workflows/ci.yml) starts Northflank's `release-main` workflow
-through its api with that commit's SHA as the `sha` argument. It reads `NORTHFLANK_API_TOKEN` from the secrets of
-the `production` GitHub environment, whose deployment branch rule allows only `main`, so a pull request's run cannot
-read the token. The token needs the Northflank permission Project > Workflows > Runs > Start. The job reads
-`NORTHFLANK_WORKFLOW_ID` (`release-main`) from the repository variables and skips while it is unset. The workflow builds
-that commit once and runs the migration job against it. Only then does it deploy `app`, purge the edge, deploy
-`temporal-worker`, and finish with the docs embed. So new code never meets an old schema. Each deploy step waits up to
-ten minutes for its replicas to run, and a rollout that never runs fails the workflow before the next step. The
-workflow's definition is
-[infra/northflank/release-main.json](infra/northflank/release-main.json), which has no git trigger. In an emergency, run
-`release-main` from the Northflank console with the commit's full SHA as `sha`. That skips CI, so it is for a commit
-that already passed it.
-
-The `app` service's startup, readiness, and liveness checks are
-[infra/northflank/app-health-checks.json](infra/northflank/app-health-checks.json), the `healthChecks` body of
-Northflank's `PATCH /v1/projects/carlnotes-prd/services/deployment/app`. Startup polls `/api/health` every 10 seconds
-for up to two minutes. Readiness polls `/api/health/ready` every 10 seconds and takes a replica out of traffic after
-three misses. Liveness restarts a replica after six missed `/api/health` polls. Both Northflank files are applied by
-hand, with the Northflank CLI or console. Apply `release-main.json` with `northflank create workflow`, which upserts
-(`update workflow` returns HTTP 500). Do it before setting `NORTHFLANK_WORKFLOW_ID`, so a push never deploys twice.
-
-The migration job runs:
-
-```bash
-doppler run -- bun packages/db/migrate.ts
-# or
-bun run db:migrate
-```
-
-Prompts are a deploy job too, uploaded as candidates instead of promoted. The registry keeps serving the `production`
-wording until someone promotes a candidate in Langfuse:
-
-```bash
-doppler run -- bun packages/models/prompts/sync.ts --candidate
-# or
-bun run prompts:sync --candidate
-```
-
-Promote a candidate to production in Langfuse once a real scan's note reads right. The runtime falls back to the bundled
-template if a registry template names different variables than the bundled one, so a stale label can never break a
-prompt. The runtime logs a prompt whose live wording differs from the bundled one, once per process.
-
-The docs embed is a deploy job too. It embeds only the new and changed sections and deletes the rows of removed ones, so
-a push that leaves the docs and the embedding model alone makes no embedding calls:
-
-```bash
-doppler run -- bun apps/worker/docsSync.ts
-# or
-bun run docs:embed
-```
-
-The edge purge is a deploy job too. It runs right after `app` deploys and clears the pages and the signed-out feed that
-Cloudflare shares, so no cached page names assets the old build had. It needs `CLOUDFLARE_ZONE_ID` and
-`CLOUDFLARE_API_TOKEN`. Without them, or if Cloudflare rejects the purge, the job logs why and the release goes on.
-Those pages leave the edge within two minutes without a purge:
-
-```bash
-doppler run -- bun apps/api/edgeCache.purge.ts
-# or
-bun run edge:purge
-```
-
-The temporal worker is its own service and the scan sweep a cron job, both built from this same image with the command
-overridden. They pick up new code on every deploy, as the api does. `schedule` decides what to scan and `temporal` does
-the scan work. Each starts through a root script, so the command Northflank runs never names a file path and survives a
-file move.
-
-```bash
-doppler run -- bun apps/worker/temporal.ts
-# or
-bun run temporal
-```
-
-```bash
-doppler run -- bun apps/worker/schedule.ts
-# or
-bun run schedule
-```
-
-Without the `temporal` worker, `workflow.start` still succeeds against a queue nobody polls: scans wait in the queue
-with no error, and the api looks healthy. The scan sweep reports to Sentry if no worker polls the scan queue, and that
-report is the check to alert on.
-
-The LiteLLM proxy builds outside the `release-main` pipeline. [infra/litellm/Dockerfile](infra/litellm/Dockerfile)
-copies [litellm-config.yaml](litellm-config.yaml) into the image, and a Northflank path rule on those two files rebuilds
-and redeploys the service on push. A model swap is the config edit and nothing else.
+The prompt registry commands are `bun run prompts:sync` for development and `bun run prompts:sync:prd` for production.
 
 ### Deploy alerts
 
-Four alerts tell the owner that carlnotes.com stopped rendering. They are set up by hand in Sentry and in the
-external monitor, so nothing in the repo applies them. Each one notifies the owner by email and by a push to the Sentry
-mobile app, or to the external monitor's own app. In Sentry, the push needs the mobile app signed in, and **User
-Settings → Notifications → Issue Alerts** and **Metric Alerts** set to deliver by email and mobile push.
-
-1. **The external monitor polls readiness.** In the external uptime monitor, change the monitor's url from
-   `https://carlnotes.com/api/health` to `https://carlnotes.com/api/health/ready`, expecting a 200, and turn on its
-   email and app push alerts. `/api/health` stays the platform's liveness check. It responds 200 even if no page can
-   render.
-2. **A new issue in a release.** In Sentry, **Alerts → Create Alert → Issues**, for the `prd` environment. When "A new
-   issue is created", if "The event is from the latest release", notify the owner. The release is the deployed commit
-   SHA, so the alert names the commit that introduced the error.
-3. **An error rate spike.** In Sentry, **Alerts → Create Alert → Errors → Number of Errors**, for the `prd`
-   environment, critical above 50 errors in 5 minutes, notifying the owner. It catches an error Sentry has seen before
-   that a release makes common again.
-4. **The home page renders.** In Sentry, **Alerts → Create Alert → Uptime Monitor**, for `https://carlnotes.com/`
-   every minute, failing on any status other than 200, notifying the owner. It catches a page that fails while
-   readiness, which renders only the privacy page, still passes.
+Set up [release and uptime monitoring](apps/docs/deployment.md#deploy-alerts) for the hosted service.
 
 ## Security
 

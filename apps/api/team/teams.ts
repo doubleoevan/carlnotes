@@ -8,7 +8,7 @@ import { and, eq, inArray, isNull, notInArray, sql } from "drizzle-orm"
 import { isLeaderRole } from "../authorization"
 import { deletePodcastFeedToken } from "../podcast/podcastFeedTokens"
 import { clearVisitorTopicPages } from "../topic/feedCaches"
-import { canSeeTopic } from "../topic/permissions"
+import { toTopicAccessFilter } from "../topic/permissions"
 import { updateTopicSubscriberCount } from "../topic/subscriberCounts"
 import { saveTeamTopicSubscriptions, toTeamRole } from "./members"
 
@@ -38,7 +38,7 @@ export async function createTeam(
 			})
 			await transaction.insert(teamMembers).values({ teamId, userId, role: "leader" })
 			// each named topic attaches through the same write the attach route uses
-			for (const topicId of payload.topicIds) {
+			for (const topicId of [...new Set(payload.topicIds)].sort()) {
 				await addTopicInTransaction(transaction, userId, teamId, topicId)
 			}
 		})
@@ -112,12 +112,17 @@ export async function addTopicToTeam(
 	userId: string,
 	teamId: string,
 	topicId: string,
+	transaction?: DbTransaction,
 ): Promise<"added" | "forbidden" | "alreadyAdded"> {
 	// attaching is a leader's power
-	if (!isLeaderRole(await toTeamRole(userId, teamId))) {
+	if (!isLeaderRole(await toTeamRole(userId, teamId, transaction))) {
 		return "forbidden"
 	}
 
+	// a new Topic attaches in its creation transaction before its URL can have a cached page
+	if (transaction) {
+		return addTopicInTransaction(transaction, userId, teamId, topicId)
+	}
 	// attach, then drop the visitors' copies of the topic's page, which names its teams
 	const addTopicResult = await db.transaction((transaction) =>
 		addTopicInTransaction(transaction, userId, teamId, topicId),
@@ -128,6 +133,25 @@ export async function addTopicToTeam(
 	return addTopicResult
 }
 
+// check visibility with the connection that already holds the Topic lock
+async function canAttachTopic(
+	transaction: DbTransaction,
+	userId: string,
+	topic: typeof topics.$inferSelect,
+): Promise<boolean> {
+	if (topic.ownerId === userId || topic.visibility === "public") {
+		return true
+	}
+	if (topic.visibility === "private") {
+		return false
+	}
+	const [visible] = await transaction
+		.select({ id: topics.id })
+		.from(topics)
+		.where(and(eq(topics.id, topic.id), toTopicAccessFilter(userId)))
+	return !!visible
+}
+
 // the attach write shared by creation and the attach route
 async function addTopicInTransaction(
 	transaction: DbTransaction,
@@ -136,15 +160,11 @@ async function addTopicInTransaction(
 	topicId: string,
 ): Promise<"added" | "forbidden" | "alreadyAdded"> {
 	// anyone may hand over a topic they can read, except a private one, which stays its owner's alone
-	const [topic] = await transaction.select().from(topics).where(eq(topics.id, topicId))
-	if (!topic) {
+	const topic = await lockPersonalSourcesTopic(transaction, topicId)
+	if (!topic || !(await canAttachTopic(transaction, userId, topic))) {
 		return "forbidden"
 	}
-	// readable and not someone else's private one
-	const isAddable = (topic.visibility !== "private" || topic.ownerId === userId) && (await canSeeTopic(userId, topic))
-	if (!isAddable) {
-		return "forbidden"
-	}
+	await assertPersonalSourcesConverted(transaction, topicId)
 	// this team having it already, as its owner or through a share, is the one rejection left
 	if (topic.teamId === teamId) {
 		return "alreadyAdded"
@@ -344,3 +364,5 @@ export async function updateTeam(
 	}
 	return "saved"
 }
+
+import { assertPersonalSourcesConverted, lockPersonalSourcesTopic } from "@carlnotes/db/personalSourcesLocks"

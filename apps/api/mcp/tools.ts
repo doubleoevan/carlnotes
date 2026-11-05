@@ -6,8 +6,8 @@ import { searchRequestPayload } from "@carlnotes/contracts/search"
 import type { CallToolResult } from "@modelcontextprotocol/server"
 import { z } from "zod"
 import { setTopicSubscription } from "../topic/subscriptions"
-import { loadFindingsCardData, loadSearchCardData, toCardMeta } from "./cardData"
-import { registerCardResources, toCardToolMeta } from "./cards"
+import { loadFindingsMcpViewData, loadSearchMcpViewData, toMcpViewMeta } from "./mcpViewData"
+import { registerPersonalSourcesTools } from "./personalSourcesTools"
 import {
 	bookmarkFinding,
 	CONNECT_ACCOUNT_TEXT,
@@ -24,6 +24,7 @@ import { type ToolCaller, toMcpAnalyticsProperties } from "./toolCaller"
 import { type RegisterToolsOptions, toPageResult, topicIdArgument, toTextResult } from "./toolShapes"
 import { registerTopicEditTools } from "./topicEditTools"
 import { listTopics } from "./topicResults"
+import { registerMcpUiResources, toMcpViewToolMeta } from "./uiResources"
 
 // the cursor argument the paged reads take
 const cursorArgument = z.string().optional().describe("The cursor a previous page returned.")
@@ -32,10 +33,11 @@ const cursorArgument = z.string().optional().describe("The cursor a previous pag
  * Registers every tool. Every tool caller gets the same list, and only the results differ.
  */
 export function registerTools(registerToolsOptions: RegisterToolsOptions): void {
-	registerCardResources(registerToolsOptions.mcpServer)
+	registerMcpUiResources(registerToolsOptions.mcpServer)
 	registerReadTools(registerToolsOptions)
 	registerFeedbackTools(registerToolsOptions)
 	registerTopicEditTools(registerToolsOptions)
+	registerPersonalSourcesTools(registerToolsOptions)
 }
 
 // register the read tools, the site search, and the consumed write
@@ -59,7 +61,7 @@ function registerReadTools({ mcpServer, toolCaller, routeTopicId, clientAddress 
 				"A topic's findings in relevance order, each with Carl's relevance explanation. A connected account's read includes which findings it read and bookmarked.",
 			inputSchema: z.object({ topic_id: topicIdArgument, cursor: cursorArgument }),
 			annotations: { readOnlyHint: true },
-			_meta: toCardToolMeta("findings"),
+			_meta: toMcpViewToolMeta("findings"),
 		},
 		async ({ topic_id, cursor }) => {
 			const toolTopic = toToolTopicId(routeTopicId, topic_id ?? null)
@@ -67,7 +69,7 @@ function registerReadTools({ mcpServer, toolCaller, routeTopicId, clientAddress 
 				return toTextResult(toolTopic.rejection, true)
 			}
 			const mcpPage = await readTopicFeed(toolCaller, toolTopic.topicId, cursor ?? null)
-			return toFindingsCardResult({ toolCaller, topicId: toolTopic.topicId, mcpPage })
+			return toFindingsMcpViewResult({ toolCaller, topicId: toolTopic.topicId, mcpPage })
 		},
 	)
 	mcpServer.registerTool(
@@ -77,7 +79,7 @@ function registerReadTools({ mcpServer, toolCaller, routeTopicId, clientAddress 
 			description: "The topic's findings closest to a query, ranked by meaning over the same index the chat uses.",
 			inputSchema: z.object({ topic_id: topicIdArgument, query: z.string().min(1).max(2000), cursor: cursorArgument }),
 			annotations: { readOnlyHint: true },
-			_meta: toCardToolMeta("findings"),
+			_meta: toMcpViewToolMeta("findings"),
 		},
 		async ({ topic_id, query, cursor }) => {
 			const toolTopic = toToolTopicId(routeTopicId, topic_id ?? null)
@@ -89,7 +91,7 @@ function registerReadTools({ mcpServer, toolCaller, routeTopicId, clientAddress 
 			if (searchResult && "text" in searchResult) {
 				return toTextResult(searchResult.text)
 			}
-			return toFindingsCardResult({ toolCaller, topicId: toolTopic.topicId, mcpPage: searchResult?.page ?? null })
+			return toFindingsMcpViewResult({ toolCaller, topicId: toolTopic.topicId, mcpPage: searchResult?.page ?? null })
 		},
 	)
 	mcpServer.registerTool(
@@ -100,7 +102,7 @@ function registerReadTools({ mcpServer, toolCaller, routeTopicId, clientAddress 
 				"Find topics, podcast episodes, findings, teams, and profiles by name, the same search the site's search bar and search page run. Rank by relevance, newest, or trending, and page through the results. Each result has its url on carlnotes.com. To rank one topic's findings by meaning, use search_topic_findings.",
 			inputSchema: searchRequestPayload,
 			annotations: { readOnlyHint: true },
-			_meta: toCardToolMeta("search"),
+			_meta: toMcpViewToolMeta("search"),
 		},
 		async (searchRequest) => {
 			// search under the site's search limit. a caller past it reads a message
@@ -111,7 +113,7 @@ function registerReadTools({ mcpServer, toolCaller, routeTopicId, clientAddress 
 			return {
 				content: [{ type: "text", text: toSearchText(searchResult) }],
 				structuredContent: searchResult,
-				_meta: toCardMeta(await loadSearchCardData(toolCaller, searchResult)),
+				_meta: toMcpViewMeta(await loadSearchMcpViewData(toolCaller, searchResult)),
 			}
 		},
 	)
@@ -217,21 +219,21 @@ function toSubscriptionRejectionText(isSubscribing: boolean): string {
 }
 
 // who read the findings, their topic, and the page of them
-type ToFindingsCardResultOptions = { toolCaller: ToolCaller; topicId: string; mcpPage: McpPage<McpFinding> | null }
+type ToFindingsMcpViewResultOptions = { toolCaller: ToolCaller; topicId: string; mcpPage: McpPage<McpFinding> | null }
 
-// a page of findings as a tool result, with the findings card's data in its _meta
-async function toFindingsCardResult({
+// a page of findings as a tool result, with the findings MCP view's data in its _meta
+async function toFindingsMcpViewResult({
 	toolCaller,
 	topicId,
 	mcpPage,
-}: ToFindingsCardResultOptions): Promise<CallToolResult> {
+}: ToFindingsMcpViewResultOptions): Promise<CallToolResult> {
 	const pageResult = toPageResult(mcpPage)
 	if (!mcpPage) {
 		return pageResult
 	}
 
-	// the topic and the page's findings in the site's shape, for the card alone
+	// the topic and the page's findings in the site's shape, for the MCP view alone
 	const findingIds = mcpPage.items.map((mcpFinding) => mcpFinding.findingId)
-	const findingsCardData = await loadFindingsCardData(toolCaller, { topicId, findingIds })
-	return findingsCardData ? { ...pageResult, _meta: toCardMeta(findingsCardData) } : pageResult
+	const findingsMcpViewData = await loadFindingsMcpViewData(toolCaller, { topicId, findingIds })
+	return findingsMcpViewData ? { ...pageResult, _meta: toMcpViewMeta(findingsMcpViewData) } : pageResult
 }

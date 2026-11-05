@@ -1,5 +1,39 @@
 # packages/db/
 
+`personalSourcePayloads.ts` reads encrypted items in byte-bounded batches for the private link queue and context summarization. An oversized import occupies its own batch.
+
+`personalSourcesSend.ts` wraps multiple receiving destinations in one transaction and one accepted-send charge. Sorted destination IDs enter every retry digest; any refusal rolls back the complete batch.
+
+
+`personalSourcesAiAgentRecommendations.ts` derives connected-app suggestions from the owner's live accepted sends in bounded pages. It matches description words locally and persists no index, content copy, or routing counter.
+
+`personalSourcesAiAgentSetup.ts` adds an empty receiving Source from a verified live connection under receipt's lock order.
+It also reads and dismisses the latest consent nudge without importing content or storing assistant history.
+
+`personalSourcesEmailSetup.ts` returns shared-address manual-forwarding guidance and receiving entitlement.
+`personalSourcesEmailReceipts.ts` stores ID-only durable handoffs, bounded retries, terminal refusals, and sweep recovery.
+`resendRateLimit.ts` shares one provider slot between inbound retrieval and the existing outbound email sends.
+
+`personalSourcesImports.ts` revalidates selected transcripts and commits an entire batch with permanent content fingerprints.
+`personalSourcesContext.ts` reads bounded live excerpts and commits encrypted summaries only for the current revision.
+`personalSourcesWork.ts` exposes content-free deadlines and dirty Topic IDs for Temporal and sweep recovery.
+`personalSourcesLinkQueue.ts` claims bounded live links, recovers unfinished leases, and records durable review outcomes.
+Only canonical URL fingerprints and positions live in queue metadata. Private sender preference is read per Topic.
+`quotas.ts` includes `personal_source_distillation_spends` in monthly totals. Unknown attempts keep a conservative cost estimate.
+
+`personalSourcesReceive.ts` accepts encrypted content, links, counters, and retry metadata in one transaction.
+`personalSourcesLocks.ts` locks the sender before the Topic when filing. Competing sends and access changes wait,
+while a Scan can reference both rows. `personalSourcesQuota.ts` reads
+the sum of accepted AI sends and email per UTC day against one shared 200-send ceiling, including existing origin rows. `personalSourcesLifecycle.ts` owns deletion, deadline filters, and context invalidation.
+`personalSourceEntries.ts` bounds sender-only pages by entry count and ciphertext size. Numbered five-item pages derive boundaries from receipt IDs, dates, and byte sizes and decrypt only the selected page; existing cursor reads stay compatible; `personalSources.ts` reads live counts
+and concrete connection state. `aiAgentConnections.ts` derives OAuth connections from existing grants, and
+`aiAgentApiKeys.ts` creates, verifies, lists, and revokes digest-only send credentials. The development persistence
+smoke lives in `apps/api/personalSources/` and runs through `bun run smoke:personal-sources`.
+
+Personal sources migrations establish the existing Topic/Source composite unique keys before creating the Personal sources tables.
+The new context table uses an inline composite unique constraint so its foreign keys can be created in the same
+migration. Personal sources migrations are generated with `bun run db:generate`. The receiving schema uses two final-schema migrations: prerequisites first, then the receiving tables. The additive Finding bonus migration stores a constrained personal-source score bonus for stable re-scoring. Development adopts that chain after a content-preserving schema reconciliation; released migrations stay unchanged.
+
 `@carlnotes/db`: Drizzle + Neon Postgres, the Redis store, and object storage, every store the app writes to.
 `@carlnotes/emails`, `models`, and `pipeline`, `apps/api`, and `apps/worker` import it; it imports `@carlnotes/server`
 and `@carlnotes/contracts`, with `drizzle-orm` and `@neondatabase/serverless`.
@@ -153,4 +187,21 @@ and `@carlnotes/contracts`, with `drizzle-orm` and `@neondatabase/serverless`.
   all come after it.
 - Tests: `bun test packages/db`; `*.smoke.ts` run under `doppler run`.
 
+`authorization.ts` owns the shared capability gate. `topicPermissions.ts` and `findingPermissions.ts` supply its
+existing visibility, subscription, and collection grant rules; the API keeps compatibility exports. `personalSourcesAuthority.ts` adds the
+sender isolation within normal Topic edit authority and preserves cleanup after downgrade.
+`schema/personalSources.ts` stores encrypted Personal sources items, derived context and lasting activation, queue claims, retry
+identities, daily receipt counters, API-key digests, encrypted private annotations and pending replies, durable mail receipts, and
+summarization spend. Composite references keep each entry's Source, Topic, and sender consistent.
+
 `store.ts` exports the podcast audio URL lifetime beside its signer so the API reports the same expiry it signs.
+
+`topicSourceCapacity.ts` enforces the ten fetched Sources under the Topic lock. Personal sources do not count toward that limit.
+
+`personalSourcesMigration.ts` assigns legacy Sources to their original sender and encrypts legacy generated explanations/reports before clearing shared text. `db:migrate` runs it after generated schema migrations. `findingPersonalAnnotations.ts` reads annotations by authenticated sender and current Finding visibility. Context and receiving Source identity are per (Topic, sender); edit authority permits contributions but never widens private reads.
+
+Email receipts retain replay identity and temporary encrypted reply snapshots. `personalSourcesEmailChoices` stores provider/thread references and encrypted Topic choices only, without email bodies. Sender-owned choices support same-thread number/name replies, disappear after successful selection, and cascade on account deletion.
+
+`personalSourceEntries.ts` also reads bounded waiting links for a send receipt after Topic authority, exact entry/Topic/sender matching, send-origin, and retained-entry checks. It reuses durable link outcomes and stored page titles.
+
+Personal sources items, private summaries, and annotations have no automatic expiry. Their content remains encrypted until explicit deletion. Released read contracts retain nullable expiry fields as null. Optional conversation URLs survive the MCP picker outside matching and open from the shared AI sender label; missing references remain plain labels.

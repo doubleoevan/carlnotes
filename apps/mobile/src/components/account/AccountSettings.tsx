@@ -26,6 +26,7 @@ import { useApplyStoreBilling } from "@/hooks/useStoreBilling"
 import { askForPushPermission, usePushPermission } from "@/pushPermission"
 import { isStorePurchasesConfigured, openPlanManagement, restoreStorePurchases, STORE_PROVIDER } from "@/storePurchases"
 import { ACCOUNT_FIELD_ELEMENTS, BLOCKED_USERS_ELEMENTS, PROFILE_FIELD_ELEMENTS } from "./AccountFields"
+import { AiAgentAccountSection } from "./AiAgentAccountSection"
 
 /**
  * Shows every web account setting using shared forms and native profile and session adapters, plus the phone's
@@ -51,6 +52,7 @@ export function AccountSettings({ provider }: { provider: BillingProvider | null
 			<PushNotificationsSection />
 			{isStorePurchasesConfigured() && <RestorePurchasesSection />}
 			<BlockedUsersSection elements={BLOCKED_USERS_ELEMENTS} />
+			<AiAgentAccountSection />
 			<DeleteAccountSection provider={provider} />
 		</>
 	)

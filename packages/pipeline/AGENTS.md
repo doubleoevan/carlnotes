@@ -1,5 +1,32 @@
 # packages/pipeline/
 
+`personalSources/emailMessage.ts` verifies the received message, recipient, sender, and authentication, and reads the headers for same-thread replies. `emailReplies.ts` rechecks live permissions and delivers each reply using its stable provider key.
+
+`personalSources/matchTopics.ts` filters all editable names before ranked MCP cursor paging, leaves weak editable Topics unchecked, uses a relevance floor for email, and marks up to three strong best matches. `send.ts` sends all explicit IDs through one atomic receiver and notifies each accepted Topic.
+
+
+`personalSources/email.ts` processes durable email receipts, rechecks the shared destination, sender authentication and entitlement,
+routes among editable Topics, and passes accepted mail to encrypted receipt storage with a filing reply. Provider failures return
+content-free retry delays. `personalSources/work.ts` dispatches pending receipts and context work after missed notifications.
+`personalSources/emailChoices.test.ts` checks clarification replies and access changes. It shares isolated deliveries and sender fixtures with the receipt tests in `personalSources/emailTestFixtures.ts`.
+
+`podcast/podcastPersonalSourcesMigration.ts` stops legacy output from entering audio until privacy conversion completes.
+Podcast publication takes the same Topic lock as first receipt and verifies that historical explanations have been converted before publishing or indexing.
+
+`personalSources/contextPrompt.ts` builds the nonce-fenced `summarize-personal-sources-context` prompt. `personalSources/summarize.ts` processes one
+revision under a renewable DB claim, with the Topic owner's model key and spend reservation.
+`personalSources/work.ts` notifies Temporal after commit and recovers dirty revisions through the sweep.
+Private text stays inside activities and encrypted DB fields. Workflow messages contain identifiers and deadlines.
+`ingest/aiAgent.ts` and `ingest/email.ts` use `personalSources/linkQueue.ts` to produce public URL-only candidates.
+Review rechecks live claims and records filtered or kept outcomes. Failed, stopped, and deferred links remain queued.
+Queued Personal sources links lead paid scoring and bypass the embedding relevance gate. `packages/contracts/sourceScoring.ts` defines the 0.10 personal bonus beside the custom bonus. `review/saveFinding.ts` persists the strongest actual score bonus on each Finding: deliberate sends/imports/forwards receive 0.10, newsletter or automatic contributions 0.05, and personal/custom bonuses never stack. Safety, explanations, deduplication, ratings, budgets, and final trimming remain active.
+`review/saveFinding.test.ts` checks the fields written by a re-score and the preservation of reader feedback.
+
+`personalSources/send.ts` is the shared explicit-send service for MCP and the send-only API. It resolves current identity,
+checks allowance, and delegates transactional acceptance to DB. `personalSources/matchTopics.ts` ranks eligible editable
+Topics against their names, prompts, and ready attachment context in bounded batches. Stable embeddings remain in memory.
+Email uses the shared matcher to save clear editable matches. Otherwise it offers numbered choices, accepting numbers or existing Topic names, including a clear fuzzy match. `personalSources/email.ts` retrieves originals from Resend only after authenticating the sender and their choice reference. Routing stores only provider/thread references and encrypted Topic choices. `personalSources/emailReplies.ts` delivers stable same-thread confirmation or clarification without restoring deleted content. Selection files atomically once and removes its choice metadata.
+
 `@carlnotes/pipeline`, the scan pipeline, Carl's chat replies, the topic attachments, and the podcast episode a Scan
 ends in: what the api starts, the worker's activities run, and the evals measure. `apps/api` and `apps/worker` import
 it; it imports `@carlnotes/models`, `@carlnotes/emails`, `@carlnotes/db`, `@carlnotes/server`, and
@@ -31,7 +58,7 @@ it; it imports `@carlnotes/models`, `@carlnotes/emails`, `@carlnotes/db`, `@carl
   comes from `@carlnotes/contracts/sources`. `ingester.ts` is the interface, whose optional `ingestContext` includes the
   Scan owner's key: the Topic owner's for a scheduled Scan and the starting user's for a manual one. The search
   ingester's query generation bills that key like every other model call a Scan makes. `review/` — filtering and scoring
-  (`filter.ts` the relevance gate, `dedupe.ts` the content hash and near-duplicate pass, `fetch.ts` the content fetch
+  (`filter.ts` the relevance gate, `topicContext.ts` the public/private review context, hash, and query embedding, `dedupe.ts` the content hash and near-duplicate pass, `fetch.ts` the content fetch
   for a Resource to score, `score.ts` the scoring and the finding writes, each Resource reserving its largest cost
   before its paid section, `track.ts` what became of each Resource, `summarize.ts` the scan report, and `index.ts` the
   stage over them, with `reviewTestFixtures.ts` beside their tests). `chat/` — Carl's streamed chat replies (`index.ts`
@@ -126,3 +153,9 @@ it; it imports `@carlnotes/models`, `@carlnotes/emails`, `@carlnotes/db`, `@carl
   the whole server chain before it. Never an app or a universal package other than `contracts`. The ingester-authoring
   skill owns the ingester rules.
 - Tests: `bun test packages/pipeline`; `*.smoke.ts` hit real services and run under `doppler run`.
+
+`personalSources/contextWriter.ts` is the bounded private model writer used by summarization and the synthetic context eval. Each sender has a separate context, and the Topic owner pays for summarization. The eval never reads real entries.
+
+`personalSources/scoreResource.ts` writes a page-grounded public explanation and isolated sender annotations in one redacted call per sender. `review/saveFinding.ts` commits both layers atomically after sender revision checks. Public reports and podcast inputs use the public fields only. `podcast/podcastPersonalSourcesMigration.ts` blocks only unconverted legacy output.
+
+Personal sources items, private summaries, and annotations have no automatic expiry. Their content remains encrypted until explicit deletion. Released read contracts retain nullable expiry fields as null. Optional conversation URLs survive the MCP picker outside matching and open from the shared AI sender label; missing references remain plain labels.

@@ -1,5 +1,7 @@
 // what one Scan may spend and what it has spent
+
 import { readDollarSetting, toPositiveInteger } from "@carlnotes/server/envSettings"
+import { NoObjectGeneratedError } from "ai"
 
 // the per-Scan spend limit, covering everything that the Scan charges during ingestion, embedding, fetch, and scoring
 const SCAN_BUDGET_USD = readDollarSetting("SCAN_BUDGET_USD", 0.5)
@@ -10,8 +12,38 @@ const MAX_SCORED_RESOURCES_PER_SCAN = toPositiveInteger(Bun.env.MAX_SCORED_RESOU
 // best-effort dollar rates for the soft limit and the per-stage breakdown. LiteLLM meters the authoritative spend
 export const EMBED_COST_PER_MILLION_TOKENS = 0.1
 export const CHEAP_COST_PER_MILLION_TOKENS = 0.2
-export const PREMIUM_COST_PER_MILLION_TOKENS = 0.6
+const PREMIUM_INPUT_COST_PER_MILLION_TOKENS = 1.4
+const PREMIUM_OUTPUT_COST_PER_MILLION_TOKENS = 4.4
 export const FIRECRAWL_COST_PER_FETCH = 0.001
+
+/**
+ * Prices score-model usage at its configured uncached input and output rates.
+ */
+export function premiumModelCost(usage: { inputTokens?: number; outputTokens?: number; totalTokens?: number }): number {
+	if (usage.inputTokens === undefined || usage.outputTokens === undefined) {
+		return tokenCost(usage.totalTokens ?? 0, PREMIUM_OUTPUT_COST_PER_MILLION_TOKENS)
+	}
+	return (
+		tokenCost(usage.inputTokens, PREMIUM_INPUT_COST_PER_MILLION_TOKENS) +
+		tokenCost(usage.outputTokens, PREMIUM_OUTPUT_COST_PER_MILLION_TOKENS)
+	)
+}
+
+/**
+ * Records billed structured-output failures before passing the error to its caller.
+ */
+export function chargeScoringFailure(budget: Budget, stage: "scoringCheap" | "scoringPremium", error: unknown): never {
+	if (NoObjectGeneratedError.isInstance(error) && error.usage) {
+		charge(
+			budget,
+			stage,
+			stage === "scoringPremium"
+				? premiumModelCost(error.usage)
+				: tokenCost(error.usage.totalTokens ?? 0, CHEAP_COST_PER_MILLION_TOKENS),
+		)
+	}
+	throw error
+}
 
 // what one tweet costs to read through TwitterAPI.io, from its $0.15 per 1,000 basis
 export const X_COST_PER_READ = 0.00015

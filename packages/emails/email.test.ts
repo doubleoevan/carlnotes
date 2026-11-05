@@ -26,7 +26,7 @@ function toTestMessage(index: number): EmailMessage {
 
 // the real fetch and env to put back after each test
 const realFetch = globalThis.fetch
-const restoreEnvSettings = saveEnvSettings(["RESEND_API_KEY", "RESEND_FROM_EMAIL"])
+const restoreEnvSettings = saveEnvSettings(["RESEND_API_KEY", "RESEND_FROM_EMAIL", "RESEND_REPLY_EMAIL"])
 
 // give every call the rate limit slot at once so that no test reaches Redis
 let takeRateLimitSlotSpy: ReturnType<typeof spyOn<typeof redisRateLimits, "takeRateLimitSlot">>
@@ -46,6 +46,25 @@ function configureResend(): void {
 	Bun.env.RESEND_API_KEY = "test-key"
 	Bun.env.RESEND_FROM_EMAIL = "carl@example.com"
 }
+
+test("digests and other Carl emails reply to the shared receiving mailbox", async () => {
+	// exercise the shared body builder through both single and batch delivery
+	configureResend()
+	Bun.env.RESEND_FROM_EMAIL = "Carl Notes <carl@example.com>"
+	Bun.env.RESEND_REPLY_EMAIL = "support@example.com"
+	const bodies: Record<string, unknown>[] = []
+	globalThis.fetch = (async (_url, init) => {
+		const body = JSON.parse(String(init?.body))
+		bodies.push(...(Array.isArray(body) ? body : [body]))
+		return Response.json({ id: "fixture", data: [] })
+	}) as typeof fetch
+	await sendScanEmailCall({ scanId: "digest", messages: [toTestMessage(1)] })
+	await sendEmailBatches([
+		{ ...toTestMessage(2), emailKind: "manual-scan" },
+		{ ...toTestMessage(3), emailKind: "verification" },
+	])
+	expect(bodies.map((body) => body.reply_to)).toEqual(["carl@example.com", "carl@example.com", "carl@example.com"])
+})
 
 // the url and the headers that a stubbed Resend call received
 type SentResendCall = { url: string; headers: Record<string, string> }
@@ -259,7 +278,7 @@ test("a scan email call that cannot reach Resend is retried on the backoff", asy
 	}) as unknown as typeof fetch
 	expect(await sendScanEmailCall({ scanId: "scan-1", messages: [toTestMessage(1)] })).toEqual({
 		outcome: "retryable",
-		failure: { httpStatus: null, resendError: "connection refused" },
+		failure: { httpStatus: null, resendError: "network failure" },
 		retryAfterSeconds: null,
 	})
 })

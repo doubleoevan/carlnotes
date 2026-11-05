@@ -1,5 +1,6 @@
 import { PODCAST_NAME } from "@carlnotes/contracts/podcastEpisodes"
 import type { TopicDetails, TopicResponse } from "@carlnotes/contracts/topics"
+import { MAX_TOPIC_SOURCES } from "@carlnotes/contracts/topics"
 import { toCountLabel } from "@carlnotes/core/lib/labels"
 import { toTopicSourceRows } from "@carlnotes/core/lib/topicSources"
 import { cn } from "@carlnotes/nightshift/classNames"
@@ -12,7 +13,9 @@ import { UserProfileLink } from "@/components/common/UserProfileLink"
 import { PodcastEpisodeRow } from "@/components/podcast/PodcastEpisodeRow"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import { ShareTopicButton } from "@/components/share/ShareTopic"
-import { MENU_BUTTON_CLASS, POPOVER_HEADING_CLASS, SECTION_LABEL_CLASS } from "@/lib/styleClasses"
+import { MENU_BUTTON_CLASS, POPOVER_HEADING_CLASS } from "@/lib/styleClasses"
+import { TopicInfoSection as InfoSection } from "./TopicInfoSection"
+import { TopicPersonalSourcesSection } from "./TopicPersonalSourcesSection"
 import { TopicScanFailure } from "./TopicScanFailure"
 import {
 	type AllowedScanNoteUrls,
@@ -42,9 +45,10 @@ const SOURCE_ICON: Record<string, SourceIcon> = {
 type SourceIcon = (props: { className?: string }) => React.ReactNode
 
 // the card variant includes the full topic response for its scan history
-type TopicInfoProps =
+type TopicInfoProps = { personalSources?: React.ReactNode } & (
 	| { topic: TopicDetails; isCard?: false; onMakeTopicPublic?: undefined }
 	| { topic: TopicResponse; isCard: true; onMakeTopicPublic?: () => void }
+)
 
 // the visibility mapped to its icon and label
 const VISIBILITY_METADATA = {
@@ -150,7 +154,9 @@ export function TopicInfo(props: TopicInfoProps) {
 				)}
 
 				{/* the topic sources are only in the popover */}
-				{!props.isCard && <TopicSourcesSection sources={topic.sources} />}
+				{!props.isCard && (
+					<TopicSourcesSection sources={topic.sources} topic={topic} personalSources={props.personalSources} />
+				)}
 
 				{/* the popover's visibility, then the team and follower counts */}
 				<TopicInfoFooter {...props} />
@@ -298,35 +304,39 @@ export function TopicPrompt({ prompt, allowedUrls }: { prompt: string | null; al
 	return prompt.length > SCROLLING_PROMPT_CHARS ? <ScrollBox>{promptText}</ScrollBox> : promptText
 }
 
-// a labeled section with its uppercase label above its content
-export function InfoSection({
-	label,
-	children,
-	className,
+// the sources section: a line per default source first, then one line per custom source
+export function TopicSourcesSection({
+	sources,
+	topic,
+	personalSources,
+	isCard = false,
 }: {
-	label: string
-	children: React.ReactNode
-	className?: string
+	sources: TopicDetails["sources"]
+	topic?: TopicDetails
+	personalSources?: React.ReactNode
+	isCard?: boolean
 }) {
 	return (
-		<div className={cn("py-3 first:pt-0 last:pb-0", className)}>
-			<div className={SECTION_LABEL_CLASS}>{label}</div>
-			{/* a long unbroken token like a url wraps here instead of pushing the card wider than the page */}
-			<div className="text-foreground mt-1 break-words">{children}</div>
-		</div>
-	)
-}
-
-// the sources section: a line per default source first, then one line per custom source
-export function TopicSourcesSection({ sources }: { sources: TopicDetails["sources"] }) {
-	return (
-		<InfoSection label="Sources">
-			<div className="space-y-1">
-				{toTopicSourceRows(sources).map((source) => (
-					<TopicSource key={source.id} {...source} />
+		<>
+			<InfoSection label={`Sources · ${sources.length} of ${MAX_TOPIC_SOURCES}`}>
+				<div className="space-y-1">
+					{toTopicSourceRows(sources).map((source) => (
+						<TopicSource key={source.id} {...source} />
+					))}
+				</div>
+			</InfoSection>
+			{personalSources ??
+				(topic && (
+					<TopicPersonalSourcesSection
+						topic={topic}
+						className={
+							isCard
+								? "border-b border-dashed border-separator-strong"
+								: "border-t border-dashed border-separator-strong"
+						}
+					/>
 				))}
-			</div>
-		</InfoSection>
+		</>
 	)
 }
 

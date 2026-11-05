@@ -1,5 +1,15 @@
 # packages/core/
 
+`AiAgentAccountSection` and `AiAgentAccountCard` share connected-app and one-time API key controls.
+`TopicPersonalSources`, `TopicPersonalSourcesCard`, `PersonalSourceCard`, `PersonalSourceEntryList`, `PersonalSourcesAiAgentPicker`, and `PersonalSourcesEmailControls`
+share Personal sources composition. The editor has no email setup; `PersonalSourcesEmailControls` loads only the empty-content mailbox hint, and `PersonalSourcesEmailAddress` renders that single line and Copy. `PersonalSourcesImportButton` and `PersonalSourcesImportDialog` share the opener,
+guidance, preview selection, paging, and confirmation. Apps supply Nightshift fields, links, confirmations, clipboard,
+and the browser-only file parser.
+`useAiAgentAccount`, `useTopicPersonalSources`, `usePersonalSource`, and `useTopicPersonalSourcesContents` scope reads and actions to the current
+account. Entry pages and metadata leave inactive query caches immediately. Secrets never enter a query cache.
+`personalSourcesCopy.ts` owns privacy, retention, and readiness copy. `personalSourcesStories.ts`, `expandableRowStories.ts`, and `aiAgentAccountStories.ts` supply
+fictional fixtures for both component browsers. `TopicPersonalSourcesSectionStory` shares the in-place section fixtures. Personal sources stay outside the fetched Source count in the shared Source editor.
+
 `@carlnotes/core`, the DOM-free components, stores, hooks, and lib that web and mobile import as `@carlnotes/core/<folder>/<name>`.
 It imports `@carlnotes/contracts`, `@carlnotes/client`, `@carlnotes/nightshift`, `react`, and `@tanstack/react-query`, and the non-UI `markdown-to-jsx/markdown` parser.
 
@@ -314,3 +324,19 @@ seek and rate changes checkpoint immediately. Listens retain one actual-play sta
 30-second progress-save interval, with account-owned cancellation. Audio sources and persistent storage belong to each
 app; core neither resolves signed URLs nor stores protected episode content. Lifecycle adapters pause/unload on
 confirmed access loss and sign-out, and the mobile checkpoint saves only resume fields.
+
+`components/TopicPersonalSourcesSection.tsx` uses sender-only receipt counts to hide empty sections and gates full item-text reads until expansion in Topic info and Artisanal Blend; `TopicPersonalSourcesContents.tsx` and `hooks/useTopicPersonalSourcesContents.ts` share flat five-item numbered paging through the existing Pagination adapters, confirmed deletion, and cache cleanup. `TopicPersonalSourcesSectionStory.tsx` provides both platforms’ fixtures. `ExpandableRow.tsx` owns each inline disclosure. `TopicLinkedFinding.tsx` resolves links against the authorized Topic payload.
+
+`PersonalSourceLink.tsx` shares authorized Finding resolution and local opening state through core. Web adapts it to the existing `TopicResourceInfo` popover; mobile uses its existing sheet. External sources retain the browser icon and only pending sources show Next brew. `core/lib/topicFindingCopy.ts` supplies the common tooltip and native accessibility hint.
+
+`TopicInfoSection.tsx` shares labeled information-section composition through core, with thin same-name platform adapters and paired stories. Topic and Finding details reuse it without importing each other.
+
+`personalSourcesCopy.ts` identifies AI conversation destinations by exact host and distinguishes Claude Code paths. `personalSourcesConversationStories.ts` supplies fictional platform examples, including unknown destinations and local agents without a conversation URL. Both component browsers use the same gallery and expanded-item examples.
+
+`components/SearchResultRow.tsx` shares the rank/leading/title/metadata/action composition used by both search lists and the MCP picker. `TopicSearchResultDetails.tsx` shares Topic count formatting and the published podcast pill; apps supply controls and platform typography.
+
+`PersonalSourceEntryList.tsx` shares date-only received metadata and sender identity. Platform adapters draw AI provider marks or a mail icon with the sender address. The redundant transport suffix is omitted.
+
+Personal sources items, private summaries, and annotations have no automatic expiry. Their content remains encrypted until explicit deletion. Released read contracts retain nullable expiry fields as null. Optional conversation URLs survive the MCP picker outside matching and open from the shared AI sender label; missing references remain plain labels.
+
+Personal sources conversation metadata links the complete date, platform icon, and name when a real reference is supplied. Both apps consume the shared entry list and platform fixtures. A strict existing-chat Codex URI opens the system app; web references use the existing browser adapter. No entry retention sentence is shown.

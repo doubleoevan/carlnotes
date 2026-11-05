@@ -1,7 +1,8 @@
 // send email through Resend's HTTP API. every call first takes the rate limit slot that every process shares
 
-import { takeRateLimitSlot } from "@carlnotes/db/redisRateLimits"
+import { waitForResendSlot } from "@carlnotes/db/resendRateLimit"
 import { reportError } from "@carlnotes/server/monitoring"
+import { toEmailSenderAddress } from "@carlnotes/server/personalSourcesEmailContent"
 import { z } from "zod"
 
 // which kind of email is being sent, so a blocked signup reports differently from a missed scan email
@@ -16,6 +17,7 @@ export type EmailKind =
 	| "topic-scan"
 	| "manual-scan"
 	| "flag-content"
+	| "personal-sources"
 
 // one email to send, shared by the single and batch senders
 export type EmailMessage = {
@@ -26,6 +28,7 @@ export type EmailMessage = {
 	plainTextContent?: string
 	emailKind: EmailKind
 	headers?: Record<string, string>
+	replyTo?: string
 }
 
 // a failed Resend call's HTTP status, null without a response, and Resend's error name
@@ -54,16 +57,6 @@ const RESEND_QUOTA_ERRORS = new Set(["daily_quota_exceeded", "monthly_quota_exce
 
 // how long one Resend call may take before it is abandoned as a network failure
 const RESEND_TIMEOUT_MS = 20_000
-
-// the one rate limit slot that every Resend call from the api or the worker takes, for 200 milliseconds per call.
-// calls leave five a second, half of Resend's ten, and can reach Resend closer together than they left
-const RESEND_SLOT_KEY = "rate-limit:resend-calls"
-const RESEND_SLOT_MS = 200
-
-// how long one call waits for the slot in all before it goes ahead without one, and the jitter each wait adds so
-// waiters that woke together do not ask in lockstep
-const RESEND_SLOT_WAIT_LIMIT_MS = 10_000
-const RESEND_SLOT_JITTER_MS = 50
 
 /**
  * Returns whether Resend will take this address. One address that Resend rejects fails a whole batch.
@@ -168,6 +161,19 @@ export async function sendEmailBatches(messages: EmailMessage[]): Promise<boolea
  * attempt can help.
  */
 export async function sendScanEmailCall({ scanId, messages }: SendScanEmailCallOptions): Promise<ResendCallResult> {
+	return sendIdempotentEmailCall({ deliveryId: scanId, messages })
+}
+
+/** Sends a retryable delivery through the shared provider limiter without logging private request or error text. */
+export async function sendIdempotentEmailCall({
+	deliveryId,
+	messages,
+	hasStableKey = false,
+}: {
+	deliveryId: string
+	messages: EmailMessage[]
+	hasStableKey?: boolean
+}): Promise<ResendCallResult> {
 	// no retry can supply a missing key or from-address
 	const emailKind = messages[0]?.emailKind ?? "topic-scan"
 	const resendConfig = toResendConfig(emailKind)
@@ -180,7 +186,7 @@ export async function sendScanEmailCall({ scanId, messages }: SendScanEmailCallO
 	const isBatch = messages.length > 1
 	const resendBodies = messages.map((message) => toResendEmailBody(message, resendConfig.fromEmail))
 	const requestBody = JSON.stringify(isBatch ? resendBodies : resendBodies[0])
-	const idempotencyKey = `${emailKind}/${scanId}/${Bun.hash(requestBody).toString(36)}`
+	const idempotencyKey = `${emailKind}/${deliveryId}${hasStableKey ? "" : `/${Bun.hash(requestBody).toString(36)}`}`
 
 	// wait for the rate limit slot, then post the call
 	try {
@@ -192,34 +198,20 @@ export async function sendScanEmailCall({ scanId, messages }: SendScanEmailCallO
 			signal: AbortSignal.timeout(RESEND_TIMEOUT_MS),
 		})
 		if (response.ok) {
-			console.log(`resend accepted ${messages.length} ${emailKind} emails for scan ${scanId}`)
+			console.log(`resend accepted ${messages.length} ${emailKind} emails for delivery ${deliveryId}`)
 			return { outcome: "accepted" }
 		}
 
 		// read what Resend rejected and whether waiting can fix it
 		const errorBody = await response.text()
-		console.error(`resend ${emailKind} call for scan ${scanId} failed: ${response.status} ${errorBody}`)
+		console.error(`resend ${emailKind} call for delivery ${deliveryId} failed: ${response.status}`)
 		const resendFailure = { httpStatus: response.status, resendError: toResendErrorName(errorBody) }
 		return toFailedResendCallResult(resendFailure, response.headers.get("retry-after"))
-	} catch (error) {
+	} catch {
 		// a network failure is worth another attempt
-		console.error(`resend ${emailKind} call for scan ${scanId} threw`, error)
-		const resendError = error instanceof Error ? error.message : String(error)
+		console.error(`resend ${emailKind} call for delivery ${deliveryId} failed without a response`)
+		const resendError = "network failure"
 		return { outcome: "retryable", failure: { httpStatus: null, resendError }, retryAfterSeconds: null }
-	}
-}
-
-// wait until the rate limit slot is free, and take it. if Redis cannot be reached, or the wait would pass the deadline,
-// the call goes ahead without the slot
-async function waitForResendSlot(): Promise<void> {
-	const slotWaitDeadlineAt = Date.now() + RESEND_SLOT_WAIT_LIMIT_MS
-	for (;;) {
-		// take the slot, or learn how long until it frees
-		const waitMs = await takeRateLimitSlot({ key: RESEND_SLOT_KEY, slotMs: RESEND_SLOT_MS })
-		if (waitMs === null || waitMs === 0 || Date.now() + waitMs > slotWaitDeadlineAt) {
-			return
-		}
-		await Bun.sleep(waitMs + Math.random() * RESEND_SLOT_JITTER_MS)
 	}
 }
 
@@ -313,9 +305,12 @@ function toResendHeaders(apiKey: string): Record<string, string> {
 
 // the JSON body Resend takes for one email, shared by the single and batch senders
 function toResendEmailBody(message: EmailMessage, fromEmail: string): Record<string, unknown> {
+	// every Carl email replies to the shared receiving mailbox
+	const replyTo = toEmailSenderAddress(fromEmail) ?? undefined
 	return {
-		from: fromEmail,
-		reply_to: Bun.env.RESEND_REPLY_EMAIL,
+		from:
+			message.emailKind === "personal-sources" ? `Carl <${toEmailSenderAddress(fromEmail) ?? fromEmail}>` : fromEmail,
+		reply_to: message.replyTo ?? replyTo,
 		to: message.to,
 		subject: message.subject,
 		html: message.emailContent,

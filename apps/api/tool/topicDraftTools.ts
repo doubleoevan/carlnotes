@@ -3,17 +3,14 @@
 import { DEFAULT_SOURCES } from "@carlnotes/contracts/sources"
 import type { TopicDraft } from "@carlnotes/contracts/topicPayloads"
 import { MAX_TOPIC_SOURCES } from "@carlnotes/contracts/topics"
-import { db } from "@carlnotes/db"
 import { incrementDaySuggestionCount } from "@carlnotes/db/quotas"
-import { teams } from "@carlnotes/db/schema/teams"
 import { loadOrProvisionUserLiteLLMKey } from "@carlnotes/models/litellm"
 import { type SuggestedSource, suggestSources } from "@carlnotes/pipeline/suggest"
-import { eq } from "drizzle-orm"
 import type { AnalyticsProperties } from "../currentUser"
-import { addTopicToTeam } from "../team/teams"
 import type { PromptVersionOrigin } from "../topic/promptVersions"
 import type { NewTopicSource } from "../topic/saveHelpers"
 import { createTopic } from "../topic/saveTopic"
+import type { TopicDraftReceipt } from "../topic/topicDraftReceipts"
 import { isSameTopicSource, toNewTopicSource } from "./topicSourceTools"
 
 // what creating a topic from a draft returns: the editor's own rejections, plus a draft not ready to save
@@ -34,11 +31,13 @@ export async function createTopicFromDraft({
 	topicDraft,
 	origin,
 	analyticsProperties,
+	receipt,
 }: {
 	userId: string | null
 	topicDraft: TopicDraft
 	origin: PromptVersionOrigin
 	analyticsProperties: AnalyticsProperties
+	receipt?: TopicDraftReceipt
 }): Promise<CreateTopicFromDraftResult> {
 	// reject a visitor, and a draft with no name or prompt yet
 	if (!userId) {
@@ -92,45 +91,24 @@ export async function createTopicFromDraft({
 			visibility: topicDraft.visibility,
 			maxTopicFindings: topicDraft.maxTopicFindings,
 			isPodcastEnabled: topicDraft.isPodcastEnabled,
+			draftTeamId: topicDraft.team?.teamId,
 			inviteEmails: topicDraft.inviteEmails,
 			sources: topicSources,
 		},
 		analyticsProperties,
 		origin,
+		receipt,
 	)
 	if (createTopicResult.status !== "created") {
 		return createTopicResult
 	}
-	// put the topic on the topic draft's team through the leader-only path, and name a rejected add beside the topic
-	const addTeamResult = topicDraft.team
-		? await toAddTeamResult({ userId, teamId: topicDraft.team.teamId, topicId: createTopicResult.id })
-		: null
 	return {
 		status: "created",
 		topicId: createTopicResult.id,
 		name: topicDraft.name,
-		teamName: addTeamResult?.teamName ?? null,
-		addTeamRejection: addTeamResult?.addTeamRejection ?? null,
+		teamName: createTopicResult.team?.teamName ?? null,
+		addTeamRejection: createTopicResult.team?.addTeamRejection ?? null,
 	}
-}
-
-// the words for an add the leader check rejected, or the team's own name once the topic is on it
-async function toAddTeamResult({
-	userId,
-	teamId,
-	topicId,
-}: {
-	userId: string
-	teamId: string
-	topicId: string
-}): Promise<{ teamName: string; addTeamRejection: string | null }> {
-	// the add first, so a rejected caller reads no name
-	const addTopicToTeamResult = await addTopicToTeam(userId, teamId, topicId)
-	if (addTopicToTeamResult === "forbidden") {
-		return { teamName: "that team", addTeamRejection: "Only a team's leader can add a topic to it." }
-	}
-	const [teamRow] = await db.select({ name: teams.name }).from(teams).where(eq(teams.id, teamId))
-	return { teamName: teamRow?.name ?? "that team", addTeamRejection: null }
 }
 
 // what suggesting sources for a draft returns

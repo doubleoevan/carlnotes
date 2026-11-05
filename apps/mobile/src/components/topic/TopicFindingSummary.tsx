@@ -19,7 +19,6 @@ import { toTouchTargetHitSlop } from "@/components/primitives/button"
 import { Icon } from "@/components/primitives/icon"
 import { useFontScaledSize } from "@/hooks/useFontScaledSize"
 import { toTypeRoleStyle } from "@/typeRoleStyles"
-import { RESOURCE_KIND_ICON } from "./topicFeedIcons"
 
 // the resource kind remains visible beside the title even when a favicon is available
 type TopicFindingSummaryProps = {
@@ -71,9 +70,9 @@ export function TopicFindingSummary({
 				)}
 			</View>
 			<Icon
-				as={RESOURCE_KIND_ICON[resource.resourceKind]}
+				as={Globe}
 				className={cn("mt-0.5 size-4 text-muted-foreground", resource.isConsumed && "opacity-60")}
-				accessibilityLabel={resource.resourceKind}
+				accessibilityLabel="Finding"
 			/>
 			<View className="flex-1 gap-0.5">
 				{/* expose the details separately from the podcast and parent Topic links */}

@@ -10,7 +10,7 @@ export type PodcastEpisodeChapterTagProps = {
 }
 export type PodcastEpisodeChapterTagElements = {
 	Button: ComponentType<{ children: ReactNode; label: string; onPress: () => void; className: string }>
-	Headphones: ComponentType
+	Icon: ComponentType
 	Label: ComponentType<{ children: string }>
 }
 
@@ -20,7 +20,7 @@ export type PodcastEpisodeChapterTagElements = {
 export function PodcastEpisodeChapterTag({
 	podcastEpisodeChapter,
 	podcastEpisodeNote,
-	elements: { Button, Headphones, Label },
+	elements: { Button, Icon, Label },
 }: PodcastEpisodeChapterTagProps & { elements: PodcastEpisodeChapterTagElements }) {
 	// display stored titles while the authorized playback action reloads the podcast episode. the accessible name
 	// starts with the tag's text
@@ -35,7 +35,7 @@ export function PodcastEpisodeChapterTag({
 			}
 			className="bg-muted text-muted-foreground hover:text-foreground mt-1 inline-flex min-h-11 max-w-[85%] items-center gap-1.5 rounded-full px-2.5 text-xs sm:min-h-7"
 		>
-			<Headphones />
+			<Icon />
 			<Label>{tagText}</Label>
 		</Button>
 	)

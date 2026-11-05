@@ -4,6 +4,7 @@
 import type { PodcastEpisodeScript } from "@carlnotes/contracts/podcast"
 import { toPodcastEpisodePath } from "@carlnotes/contracts/seo"
 import { type DbTransaction, db, isUniqueViolation } from "@carlnotes/db"
+import { assertPersonalSourcesConverted, lockPersonalSourcesTopic } from "@carlnotes/db/personalSourcesLocks"
 import { deletePodcastFeedCache } from "@carlnotes/db/podcastFeedCache"
 import { podcastEpisodeChapters, podcastEpisodes } from "@carlnotes/db/schema/podcast"
 import { findings } from "@carlnotes/db/schema/scans"
@@ -255,6 +256,12 @@ async function savePodcastEpisodeAsPublished({
 }: SavePodcastEpisodeAsPublishedOptions): Promise<SavedPodcastEpisode> {
 	const season = publishedAt.getUTCFullYear()
 	return db.transaction(async (transaction) => {
+		// serialize publication with the first personal sources receipt
+		if (!(await lockPersonalSourcesTopic(transaction, topicId))) {
+			throw new Error("The podcast Topic no longer exists")
+		}
+		await assertPersonalSourcesConverted(transaction, topicId)
+
 		// take the next episode number in the season. a removed Podcast Episode keeps its episode number, so none is reused
 		const [highestPodcastEpisodeNumberRow] = await transaction
 			.select({ highestPodcastEpisodeNumber: max(podcastEpisodes.episodeNumber) })

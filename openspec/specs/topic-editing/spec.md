@@ -2,7 +2,9 @@
 
 ## Purpose
 TBD - created by archiving change add-topic-detail-and-edit-pages. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: Editing happens in a modal, not a route
 The ✎ icon SHALL open a centered edit modal over the dimmed topic page with an `Edit topic` title and a ✕ close. The same modal SHALL serve topic creation (titled `Add topic`) with empty fields, private daily defaults, and every registered default source switched on. The modal SHALL present, top to bottom: Title (text input), Carl's Prompt (textarea), Tags (pill editor with per-pill ✕ and a "+" that opens a search-and-create picker in the style of GitHub's label menu — a filter input over the tags known from the loaded feed, click-to-add rows, and a Create row for a typed tag that matches nothing), Frequency and Visibility as two side-by-side selects (daily/weekly; private/public/invite), Invitees (only when visibility is invite), Sources, Attachments, and a right-aligned Cancel/Save footer. The Sources field SHALL split into a default group — one row per kind in the shared default-Source registry, each labeled from that registry, removable when on and offered as a turn-on control when off, Carl's built-in web scout (`web`) among them — and a custom group listing the other sources with ✕ and an add picker offering the editable source kinds, including `podcast`, which takes a show's podcast id. The `/topics/:id/edit` route SHALL NOT exist.
 
@@ -122,15 +124,15 @@ Save SHALL apply the edit as desired state: one update call carrying the fields,
 
 ### Requirement: A Topic holds at most ten Sources
 
-A Topic SHALL hold at most ten Sources. Every kind counts toward that limit, the built-in web search included, so a reader who turns web search off frees a slot for something else. Urls written into Carl's Prompt count too, since they become Sources on save, and leaving them out would make the prompt a way around the cap.
+A Topic SHALL hold at most ten fetched Sources. Receiving `ai_agent` and `email` Sources SHALL be excluded from the count and displayed in a separate sender-only Personal sources group. Topic info and Artisanal Blend SHALL share a flat item list that expands in place to full details. The condensed scoring context stays internal. Every fetched kind counts toward that limit, the built-in web search included, so a reader who turns web search off frees a slot for something else. Urls written into Carl's Prompt count too, since they become Sources on save, and leaving them out would make the prompt a way around the cap.
 
 The limit SHALL be a flat constant in shared configuration, the same on every plan. It bounds what one Scan fetches, which is a cost every plan pays, and a Topic with fifty feeds is a worse Topic at any price.
 
-The cap SHALL be enforced in the save validation the payload already passes through, beside its source-kind checks, so creating and updating are both covered by one rule rather than two.
+The cap SHALL be enforced in the save validation the payload already passes through, beside its source-kind checks, so creating and updating are both covered by one rule rather than two. First sends, imports, and accepted email SHALL remain eligible when ten fetched Sources exist.
 
 #### Scenario: A save past the cap is rejected
 
-- **WHEN** a save arrives holding eleven Sources
+- **WHEN** a save arrives holding eleven fetched Sources
 - **THEN** it is rejected and nothing about the Topic changes
 
 #### Scenario: Web search occupies a slot
@@ -252,7 +254,7 @@ Google News SHALL NOT be a registry entry: it is a custom Source, because it nee
 
 ### Requirement: The custom source picker offers options, not source kinds
 
-The picker SHALL list custom source **options** from one shared table rather than listing source kinds, because an option is not always a kind of its own. Each option SHALL name the kind it saves as, the label the picker and the staged row show, the placeholder its value input carries, and how it turns the typed value into a Source config. The table SHALL be the single place a custom Source's config is built, so the modal carries no per-kind config branch of its own.
+The picker SHALL list custom source **options** from one shared table rather than listing source kinds, because an option is not always a kind of its own. Each option SHALL name its stored kind, label, and input mode. Typed options SHALL carry a placeholder and config builder. Connected-AI Agent, import, and forwarding options SHALL invoke their dedicated authorized flow without accepting fabricated credentials or client IDs. The table SHALL be the single place a typed custom Source's config is built, so the modal carries no per-kind config branch of its own.
 
 The picker SHALL offer a `google news` option whose input is a publisher domain and whose kind is `rss`, alongside the `url`, `rss`, `reddit`, and `youtube` options. An option that cannot build a config from what was typed SHALL stage no Source.
 
@@ -427,3 +429,33 @@ after the other, never deadlock, and the stored count never ends on the earlier 
 - **WHEN** the recount runs
 - **THEN** the row lock, the count, and the write happen in one transaction
 
+### Requirement: General Topic saves preserve Personal sources
+
+A Topic form or Topic Tool save SHALL preserve Personal sources absent from its payload. Only an explicit sender-authorized Personal source removal SHALL delete one and its entries. Fetched Source editing SHALL retain its existing behavior.
+
+#### Scenario: A send arrives after the editor opened
+- **WHEN** a send creates a Source and the owner then saves an older Topic form
+- **THEN** the new Source and entries remain and the requested Topic edits succeed if otherwise valid
+
+#### Scenario: The sender removes a Personal source
+- **WHEN** the sender confirms the dedicated removal action
+- **THEN** their entries and pending links are removed and their context and derived annotations are invalidated
+- **AND** existing Findings remain and a later accepted delivery may recreate that sender's Source
+
+#### Scenario: Receiving at the fetched Source limit
+- **WHEN** a first accepted email and an AI Agent’s first send run on a Topic with ten fetched Sources
+- **THEN** both can create their receiving Sources without consuming a fetched slot
+- **AND** adding an eleventh fetched Source remains refused
+
+### Requirement: The editor explains sender-private Personal sources
+
+The editor SHALL keep Personal sources outside the fetched Source count and show only the current sender's Sources, items, and setup. Receipt SHALL require normal edit permission. Personal sources SHALL not disable visibility, Team, invitation, or podcast controls.
+
+#### Scenario: An editor opens a shared Topic
+- **WHEN** the editor reads its Source settings
+- **THEN** their Personal sources are a separate group excluded from ten fetched Sources
+- **AND** no other sender's item counts or provenance appear
+
+#### Scenario: A sender removes their Source
+- **WHEN** they confirm removal
+- **THEN** only that sender's Source and items are removed and no other sender's data changes

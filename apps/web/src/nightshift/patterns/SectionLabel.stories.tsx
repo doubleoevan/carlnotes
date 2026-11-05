@@ -6,7 +6,7 @@ import { useId } from "react"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { FieldLabel } from "@/components/common/FieldLabel"
 import { Input } from "@/components/primitives/input"
-import { InfoSection } from "@/components/topic/TopicInfo"
+import { TopicInfoSection as InfoSection } from "@/components/topic/TopicInfoSection"
 import { SECTION_LABEL_CLASS, STANDALONE_LINK_CLASS } from "@/lib/styleClasses"
 
 // the kept attachment the centered story's file link downloads, as the Chat files popover links each kept file

@@ -1,0 +1,1 @@
+DROP TABLE "personal_source_email_approvals" CASCADE;

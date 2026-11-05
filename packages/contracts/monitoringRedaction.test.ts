@@ -38,3 +38,30 @@ test("monitoring drops a spoken question's transcript attached to an event", () 
 	const event = redactEvent({ extra: { transcript: "private spoken question", durationMs: 1_200 } })
 	expect<unknown>(event.extra).toEqual({ durationMs: 1_200 })
 })
+
+test("personalSources secrets and private bodies never reach monitoring", () => {
+	// provider errors, request headers, and nested context each exercise a separate leak boundary
+	const secret = `cnk_v1_${"a".repeat(32)}_${"b".repeat(43)}`
+	const event = redactEvent({
+		message: `send with ${secret}`,
+		exception: { values: [{ value: secret }] },
+		request: {
+			headers: { Authorization: `Bearer ${secret}`, Cookie: "private-session" },
+			data: { summary: "private-canary" },
+		},
+		extra: {
+			nested: {
+				summary: "private-canary",
+				sender: "reader@example.com",
+				secret,
+				chatUrl: "https://claude.ai/chat/private",
+				count: 2,
+			},
+		},
+	})
+	const serialized = JSON.stringify(event)
+	for (const forbidden of [secret, "private-canary", "reader@example.com", "private-session", "/chat/private"]) {
+		expect(serialized).not.toContain(forbidden)
+	}
+	expect(serialized).toContain('"count":2')
+})

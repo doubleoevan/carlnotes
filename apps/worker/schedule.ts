@@ -7,6 +7,7 @@ import { scansRemainingToday } from "@carlnotes/db/quotas"
 import { scans } from "@carlnotes/db/schema/scans"
 import { topics } from "@carlnotes/db/schema/topics"
 import { shutdownTelemetry, startTelemetry } from "@carlnotes/models/telemetry"
+import { recoverPersonalSourcesWork } from "@carlnotes/pipeline/personalSources/work"
 import { startTopicScan } from "@carlnotes/pipeline/scan"
 import { screenPendingSources } from "@carlnotes/pipeline/screen"
 import { failStaleScans } from "@carlnotes/pipeline/staleScans"
@@ -68,6 +69,10 @@ async function sweepScheduledTopics(signal: AbortSignal): Promise<TopicSweepSumm
 		dispatchableScanCount,
 		signal,
 	})
+
+	// ordinary scheduled Scans take precedence over recovery after an outage
+	signal.throwIfAborted()
+	await recoverPersonalSourcesWork(signal)
 
 	// log a summary line for the sweep
 	const {
@@ -236,7 +241,7 @@ async function saveFailedScan(topic: Topic): Promise<void> {
 }
 
 // run the claimed sweep and the claimed viewer count sync, then retry the pending object deletions, remind the support
-// inbox of reports left open, and report the day's spend once the claims are released
+// personal sources of reports left open, and report the day's spend once the claims are released
 async function runSweep(): Promise<void> {
 	await runScheduledTopicScans()
 	await syncViewerCounts()

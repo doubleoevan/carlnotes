@@ -26,6 +26,7 @@ import {
 	toCheckedPodcastEpisodeSegment,
 	toPodcastEpisodeScript,
 } from "./podcastEpisodeScript"
+import { assertPodcastPersonalSourcesConverted } from "./podcastPersonalSourcesMigration"
 
 // what a script call needs. the Podcast Episode, its Topic, the user that the call bills, and the Findings to narrate
 export type PodcastEpisodeScriptCallOptions = {
@@ -53,6 +54,7 @@ export async function outlinePodcastEpisode(
 	const { maxMinutes } = scriptInput
 	const findingIds = scriptInput.podcastEpisodeFindings.map((podcastEpisodeFinding) => podcastEpisodeFinding.findingId)
 	const outline = await writeCheckedScriptDraft(async ({ rejectionReason, isLastScriptDraft }) => {
+		await assertPodcastPersonalSourcesConverted({ topicId: scriptCallOptions.topicId })
 		const { scriptDraft: outlineDraft, costDollars } = await generatePodcastEpisodeOutline({
 			...scriptInput,
 			rejectionReason,
@@ -62,6 +64,7 @@ export async function outlinePodcastEpisode(
 	})
 
 	// save the title and the description while the status is still recording
+	await assertPodcastPersonalSourcesConverted({ topicId: scriptCallOptions.topicId })
 	await db
 		.update(podcastEpisodes)
 		.set({ title: outline.title, description: outline.description })
@@ -82,6 +85,7 @@ export async function writePodcastEpisodeSegment({
 	const scriptInput = await loadScriptInput(scriptCallOptions)
 	return writeCheckedScriptDraft(async ({ rejectionReason, isLastScriptDraft }) => {
 		// write one draft of the segment, with why the draft before it was rejected
+		await assertPodcastPersonalSourcesConverted({ topicId: scriptCallOptions.topicId })
 		const generatePodcastEpisodeSegmentOptions = { ...scriptInput, outline, segmentIndex, rejectionReason }
 		const { scriptDraft: segmentDraft, costDollars } = await generatePodcastEpisodeSegment(
 			generatePodcastEpisodeSegmentOptions,
@@ -89,6 +93,7 @@ export async function writePodcastEpisodeSegment({
 		await addPodcastEpisodeCost(scriptCallOptions.podcastEpisodeId, costDollars)
 
 		// check the draft, and report how many chapters the last draft left out
+		await assertPodcastPersonalSourcesConverted({ topicId: scriptCallOptions.topicId })
 		const checkedSegment = toCheckedPodcastEpisodeSegment({
 			segment: segmentDraft,
 			outline,
@@ -114,6 +119,8 @@ export async function savePodcastEpisodeScript(
 	podcastEpisodeId: string,
 	segments: PodcastEpisodeSegment[],
 ): Promise<number> {
+	// stop queued script writes after personal sources activation
+	await assertPodcastPersonalSourcesConverted({ podcastEpisodeId })
 	const podcastEpisodeScript = toPodcastEpisodeScript(segments)
 	await db.update(podcastEpisodes).set({ script: podcastEpisodeScript }).where(eq(podcastEpisodes.id, podcastEpisodeId))
 	return toChapterTurns(podcastEpisodeScript).length
@@ -137,7 +144,9 @@ async function loadScriptInput({
 	billedUserId,
 	plannedFindings,
 }: PodcastEpisodeScriptCallOptions): Promise<GeneratePodcastEpisodeOutlineOptions> {
-	// read the Topic's own text alone, and whether the Podcast Episode is short.
+	// stop queued script reads after personal sources activation
+	await assertPodcastPersonalSourcesConverted({ topicId })
+	// read the Topic's own text alone, and whether the Podcast Episode is short
 	// the Topic's attachments are the owner's, and a Podcast Episode reaches every listener
 	const [podcastEpisodeTopic] = await db
 		.select({ name: topics.name, prompt: topics.prompt, isShort: podcastEpisodes.isShort })
@@ -158,6 +167,7 @@ async function loadScriptInput({
 		throw new Error(`none of the episode's findings are left on topic ${topicId}`)
 	}
 	// a short Podcast Episode plans fewer minutes
+	await assertPodcastPersonalSourcesConverted({ topicId })
 	const maxMinutes = podcastEpisodeTopic.isShort ? SHORT_PODCAST_EPISODE_MINUTES : FULL_PODCAST_EPISODE_MINUTES
 	return {
 		topicName: podcastEpisodeTopic.name,

@@ -5,7 +5,7 @@ import { ChatPill } from "./ChatPanelWidget"
 const meta: Meta<typeof ChatPill> = {
 	title: "Chat/ChatPill",
 	component: ChatPill,
-	args: { onOpenChat: () => {} },
+	args: { onOpenChat: () => {}, chatMentions: [] },
 }
 export default meta
 type Story = StoryObj<typeof meta>

@@ -5,6 +5,7 @@
 import type { z } from "zod"
 import { accountRouteContracts } from "./accountRouteContracts"
 import { chatRouteContracts } from "./chatRouteContracts"
+import { personalSourcesRouteContracts } from "./personalSourcesRouteContracts"
 import { podcastRouteContracts } from "./podcastRouteContracts"
 import { teamRouteContracts } from "./teamRouteContracts"
 import { topicRouteContracts } from "./topicRouteContracts"
@@ -62,6 +63,7 @@ export function toCapabilityKey(entryKey: string): string {
 export const API_ROUTE_CONTRACTS: Record<string, ApiRouteContract> = {
 	...accountRouteContracts,
 	...chatRouteContracts,
+	...personalSourcesRouteContracts,
 	...podcastRouteContracts,
 	...teamRouteContracts,
 	...topicRouteContracts,

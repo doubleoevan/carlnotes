@@ -10,11 +10,24 @@ of the Nightshift component contracts. The reuse rules stay in the AGENTS.md fil
 
 ## Web-only client capabilities
 
+Personal sources reuse: `AiAgentAccountCard`, `TopicPersonalSourcesCard`, `PersonalSourceCard`, `PersonalSourceEntryList`, `PersonalSourcesAiAgentPicker`,
+and `PersonalSourcesEmailControls` are actual shared React composition. The editor mounts `TopicPersonalSources`; Topic info and Artisanal Blend mount the same sender-scoped `TopicPersonalSourcesSection`. Topic info and full items both render `ExpandableRow`, while `TopicLinkedFinding` resolves the same authorized Finding for each platform. Shared hooks own account identity, pagination, Source capacity, sender visibility, and confirmed actions.
+
+`PersonalSourcesImportButton` and `PersonalSourcesImportDialog` share their core composition. Native controls show
+the web import guidance in a sheet; the browser supplies its file parser and preview fields. `ExpandableRow` has a
+Nightshift contract and matching primitive implementations; each renders `core/components/ExpandableRow`.
+Native replacements are the existing Nightshift elements, link opener, system confirmation, and clipboard.
+Web alone parses exports in a worker; mobile explains the web import and renders the same imported entries.
+Paired stories cover the shared Personal sources section in Topic info and Artisanal Blend, empty, with items, and item-expanded; and the shared expandable row.
+
+November 4 preflight parity: 151 paired component names, 55 using the same-name core component, and 96 documented separate implementations (11 platform API, 22 platform difference, 63 not yet shared). All three Nightshift contracts have matching implementations and stories. One pre-existing uncontracted primitive remains explicitly listed. The iPhone 18 Pro simulator verified both Personal sources placements, five-item paging, page-two state after closing a Finding sheet, stored titles/full-URL fallback, and compact links. Native sign-in after rebuilding and enlarged-text rendering remain unverified. Android was outside this review pass.
+
 A capability is an exported function of a `packages/client` module, named `module.function`. Status is `web-only` for a
 capability the app will never need, with the reason, or `deferred` for one an active prompt owns, with the prompt.
 
 | Capability | Status | Reason or prompt |
 | --- | --- | --- |
+| `personalSourcesClient.sendImportConversations` | web-only | Conversation exports are parsed and explicitly selected in a browser worker. iOS and Android explain the web import and read the resulting entries through the shared Personal sources components. |
 | `authClient.passSignupGate` | web-only | The web's Turnstile gate. The app attests its install through its own signup gate instead |
 | `billingClient.fetchAdminConsole` | web-only | Admin stays on the web, opened from the menu as an explicit web handoff |
 | `billingClient.fetchAdminTeamMembers` | web-only | Admin stays on the web |
@@ -65,6 +78,7 @@ name.
 
 | Component | Kind | Reason |
 | --- | --- | --- |
+| `personalSourcesElements` | platform API | Adapts the shared `TopicPersonalSourcesElements` contract to DOM elements and React Native views, selectable text, links, and confirmation controls. Both apps render the same core Personal sources components. |
 | `AccountSettings` | not yet shared | Shares AccountFields and BlockedUsersSection. The section order and close account flow could move to core, with `ConfirmDialog` or `Alert` behind an adapter and mobile's push and store restore sections passed in. |
 | `AddToAiDialog` | platform difference | Shares AddToAi. Web wraps it in a dialog with install deep link anchors. Mobile uses a native sheet with copy-only desktop steps, `expo-clipboard`, and AsyncStorage. |
 | `AddTopicButton` | not yet shared | Web opens a popover with an autofocused filter over topics passed in. Mobile opens a native sheet that fetches addable topics with react-query. An adapter could hold that difference. |

@@ -152,3 +152,16 @@
 
 /* the portable page skeleton owns the same spacing and shapes on both platforms */
 @source "../../../packages/core/components/PageSkeleton.tsx";
+/* include the text and spacing classes used by the shared Personal sources components */
+@source "../../../packages/core/components/AiAgentAccountCard.tsx";
+@source "../../../packages/core/components/PersonalSourceEntryList.tsx";
+@source "../../../packages/core/components/PersonalSourceCard.tsx";
+@source "../../../packages/core/components/PersonalSourcesEmailControls.tsx";
+@source "../../../packages/core/components/PersonalSourcesAiAgentPicker.tsx";
+@source "../../../packages/core/components/TopicPersonalSourcesCard.tsx";
+
+@source "../../../packages/core/components/ExpandableRow.tsx";
+
+@source "../../../packages/core/components/TopicPersonalSourcesSection.tsx";
+
+@source "../../../packages/core/components/TopicPersonalSourcesContents.tsx";

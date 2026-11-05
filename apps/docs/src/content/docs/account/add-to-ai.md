@@ -1,7 +1,7 @@
 ---
 title: Add to AI
 description: >-
-  Connect CarlNotes to Claude, ChatGPT, and coding agents. Set up OAuth sign-in, understand all eleven MCP tools,
+  Connect CarlNotes to Claude, ChatGPT, and coding AI Agents. Set up OAuth sign-in, understand all thirteen MCP tools,
   and manage access to your topics and findings.
 sidebar:
   order: 2
@@ -111,7 +111,7 @@ without one.
 
 ## Tool reference
 
-The server advertises the same eleven tools to visitors and connected accounts. Sign-in changes permission, not the
+The server advertises the same thirteen tools to visitors and connected accounts. Sign-in changes permission, not the
 tool list. Public tools also read private or invite topics when your account has access.
 
 | Tool | What it does | Account and effects |
@@ -126,30 +126,67 @@ tool list. Public tools also read private or invite topics when your account has
 | `follow_topic` | Follows or unfollows an accessible topic. | Requires an account. Owners cannot unfollow their own topics. Repeating a choice has the same effect. |
 | `edit_topic` | Changes permitted topic fields and sources. | Requires edit permission. Prompt changes keep a version; source additions report projected cost. Public visibility and source removal need confirmation. No brew starts. |
 | `suggest_sources` | Finds verified sources for a name and prompt. | Requires an account. Consumes its daily suggestion allowance and uses external search. It does not save sources to a topic. |
-| `create_topic` | Creates a topic from a draft, optionally with sources, invitations, and a team you lead. | Requires an account and available plan capacity. Saves the topic and starts its first brew. |
+| `create_topic` | Previews a Topic Draft, then creates it after you confirm. | Requires an account and existing plan capacity. Only the confirmed call saves the Topic and starts its first brew. |
+| `send_to_topic` | Saves a summary you explicitly ask an app to send, with up to ten public links. | Requires a live connected account and one to twenty Topics you can edit. Counts once toward the daily send allowance; never pastes a raw conversation. |
+| `suggest_topics` | Lists every editable send destination with the strongest matches first, for the supplied title, summary, and links, with five editable Topics per page. | Requires an account. Stores nothing, spends no send or draft allowance, and uses the existing model budget for transient matching. Uses `list_topics` cursor paging. |
 
 Account tools carry conservative change annotations, so your AI app can ask before calling them. That prompt does
 not replace CarlNotes' permission checks. For a public-visibility change or source removal, `edit_topic` first returns
 a preview and confirmation token. After you agree, the app sends the same edit and token to save it. A stale or
 reused confirmation requires another preview.
 
-The optional endpoint `https://carlnotes.com/mcp/t/<topicId>` binds topic-specific reads and edits to one topic.
-Those calls can omit `topic_id`; naming another topic is rejected. Binding does not grant access or narrow global
-search and topic creation. Use `/mcp` for normal installation.
+The optional endpoint `https://carlnotes.com/mcp/t/<topicId>` binds topic-specific reads, edits, and sends to one topic.
+Reads and edits can omit `topic_id`; sends require explicit IDs. Every send destination must match the bound Topic. Binding does not grant access or narrow global
+search, Topic suggestions, or Topic creation. Use `/mcp` for normal installation.
 
-## Cards
+### Send and suggestion arguments
 
-Claude, ChatGPT, VS Code, and Goose show some results as cards instead of text. A search shows the search page's
-numbered list, which you can page and sort, with play buttons, Follow, and each finding's note. A topic edit shows the
-topic card from Coffee Talk. A change that needs your agreement gets a Save button that names what it changes. A feed
-read shows the findings with Carl's notes, thumbs, bookmark, and done. A card's buttons do what your AI's own calls do,
-under the same account. If an app blocks a card's audio, the card links to the episode's page instead.
+To try it in a chat, follow [Send AI chats to CarlNotes](/docs/topics/send-ai-chats-to-carlnotes/).
 
-The three cards are search, topic, and findings. Clients without MCP Apps support receive text and, where provided,
-structured results. A card is optional; the tools remain usable without it.
+`send_to_topic` takes `topic_ids` with one to twenty distinct editable Topic IDs, `title` (1–200 characters), `summary` (1–2,000 Unicode characters), and
+up to ten distinct safe public `links`. An optional `chat_url` stays a private reference and never joins the crawl
+queue. For one destination, the existing `topic_id` field remains supported; use exactly one destination field.
+An optional `request_id` identifies retries of the same content and destination set. One successful call counts once
+toward the shared daily send ceiling. AI Agent sends on every plan and emails on Plus and Premium share a provisional ceiling of 200 accepted sends per UTC day, solely to stop runaway AI Agents. At the ceiling, Carl says “The day's limit is reached.” Retry after midnight UTC; upgrading does not raise it. If any destination is refused, nothing is saved or charged. With `topic_ids`, acceptance returns a `receipts`
+list with each Topic ID, name, URL, entry ID, and queued-link count, plus the accepted title. Legacy `topic_id` calls return one receipt directly. Refusals explain missing access, disconnection, quota/reset time,
+retry conflicts, or unavailable receiving; they do not claim storage.
 
-![The search card for "freckle" in a Claude chat: numbered rows for a topic, two podcast episodes, and findings with
-their play pills, the page buttons, and See all on CarlNotes](../../../assets/screenshots/mcp-host-search-card.png)
+`suggest_topics` takes the same `title`, `summary`, and `links`, and accepts an optional `chat_url`. It carries that conversation link through to your chosen send. Ranking uses the content you submitted. An optional `query` filters editable names and `cursor` requests another page. It returns `editableTopics`, `nextCursor`, and the number of pages when known. The legacy `publicTopicsToFollow` field is empty; the send picker does not offer public discovery. Each match
+has an ID, name, prompt preview, URL, group, relevance score, and best-match flag. Every Topic you can edit appears, ranked by relevance; strong matches are checked by default and weaker ones remain unchecked. Search filters that editable list by name while preserving your choices. Name autocomplete uses `autocomplete=true` for a name-only read without AI matching.
+Every page adds `newPrivateTopic`, an offer with instructions rather than a saved or generated draft. A missing
+model key or provider failure returns unavailable. Neither tool can read an assistant's chat history, memory, uploaded
+files, or mailbox history; Carl receives only explicit arguments. To email Carl directly for your Topics, use the
+[Email Carl guide](/docs/topics/email-carl/).
+
+### Choosing where to send
+
+Ask your app to send a concise synthesis: what you are working on or asking about, what you concluded, open questions,
+and the links that mattered. It must never paste the raw conversation. `send_to_topic` always takes explicit Topic IDs and stores one entry per destination when accepted. Your text, summary, and private annotations stay visible only to you. The destination Topic uses your text and links for scoring; its public explanations use linked-page evidence alone. Podcasts narrate only the public explanation.
+
+If you ask to send, share, save, add, or forward something to Carl, CarlNotes, or your Topics without naming a Topic, the app first calls `suggest_topics` and waits for your choice. It must never
+call this tool on its own initiative. Carl compares the supplied content with Topic names, prompts, and context. Suggestions list every Topic you can edit, including public, private, invite, and Team Topics. Strong matches appear first and checked; weaker editable Topics remain available unchecked. There is no public-follow group in the send picker. Repeat the same title, summary, links, and active query with `nextCursor` to page further.
+
+Every page and search offers **Start a new topic for this chat**. Nothing is drafted until you pick it. Source suggestions use
+the existing daily allowance, and the draft uses the normal Topic Draft fields and limits. Review the private draft
+before confirming creation. Creation uses the normal plan limits;
+confirming **Create this Topic** also saves this chat into the new Topic. Other checked Topics are not included. If the send fails, retry Send with the created Topic selected; this does not create another Topic. A Topic-bound connection must switch to `/mcp` to send
+to another Topic. Matching stores no input or vectors; an unavailable model key or provider returns an error instead
+of arbitrary choices.
+
+## CarlNotes inside your AI app
+
+Claude, ChatGPT, VS Code, and Goose can show CarlNotes controls right in your chat. Search, turn pages, play podcasts,
+follow Topics, and open Carl's notes. Edit a Topic with the same fields you use in Coffee Talk, then choose Save to
+confirm. Everything uses your connected account. If your AI app blocks audio, use the link to listen on CarlNotes.
+
+The Topic picker asks **Where should this go?** It shows five editable Topics per page with best matches checked. Search offers matching Topic names as you type. Choose a suggestion to add it, or press Enter/Search to filter the list. **Topics to share this chat with** shows every checked destination as a removable tag pill. Checking or unchecking a box updates the pills immediately, and removing a pill unchecks its Topic across pages.
+
+Choose **Send this chat to N topics** to save the summary in all selected Topics with one daily send charge. **Start a new topic for this chat** stays available on every page and search. Edit the proposed settings, then choose **Create this Topic** to create it and save the chat there. Your search, selections, and actions stay visible while results load. The coffee mug and CarlNotes name open the connected site in a new tab. A Topic-bound connection enables only its bound destination.
+
+If your AI app cannot show these controls, CarlNotes still returns readable results. The Topic picker offers the same choices as a numbered list, including the option to start a new Topic.
+
+![CarlNotes search for "freckle" in a Claude chat: numbered rows for a topic, two podcast episodes, and findings with
+their play pills, the page buttons, and See all on CarlNotes](../../../assets/screenshots/mcp-host-search-view.png)
 
 ## Connecting an account
 
@@ -162,7 +199,15 @@ CarlNotes uses OAuth with PKCE and an explicit consent page. The AI app keeps ac
 receive your CarlNotes password. A client that cannot complete OAuth stays a visitor. An invalid or expired bearer
 token grants no account access.
 
-### Disconnecting
+### Connected apps and disconnecting
+
+Open **Account → Connected AI apps** to see current connections and disconnected Source history. Labels come from
+validated registration domains, not an app's self-chosen name. Several registrations for one recognized app appear
+together. A domain label identifies a registration; it is not a certification from that vendor.
+
+Choose **Disconnect** and confirm to revoke your grants for that app group. New sends stop immediately, and those
+refresh grants cannot issue more access tokens. Other accounts' grants remain unchanged. Existing read tokens can
+work until expiry. Reconnecting creates a new consent and can show a new, dismissible Topic setup notice.
 
 Remove the connection in your AI app. For Codex, `codex mcp logout carlnotes` removes stored credentials and
 `codex mcp remove carlnotes` removes the server entry. Other clients have their own disconnect or remove controls.
@@ -171,6 +216,29 @@ Removing local credentials does not guarantee server-side revocation. An OAuth c
 through CarlNotes' discovered revocation endpoint. That token then cannot issue more access tokens. Already-issued
 access tokens can remain usable until expiry, including after signing out of CarlNotes. Contact
 [support@carlnotes.com](mailto:support@carlnotes.com) for help with revocation.
+
+Disconnecting does not delete saved Personal sources items. They stay encrypted until you delete an entry, its receiving
+Source, the Topic, or your account. See [Personal sources](/docs/topics/personal-sources/).
+
+### Send-only API keys
+
+Premium accounts can create up to ten active keys in **Account → AI Agent API keys**. Give each key a label, copy it once,
+and keep it in your coding AI Agent's secret storage. Closing the one-time display hides the secret permanently. Revoke
+a lost key and create a replacement. The list shows its last four characters and last-used date.
+
+These keys start with `cnk_v1_` and authorize only `POST https://carlnotes.com/api/personal-sources/sends`. They do not sign a
+client into MCP or allow it to read your account. OAuth remains the authentication method for MCP.
+
+```sh
+curl https://carlnotes.com/api/personal-sources/sends \
+  -H 'Authorization: Bearer YOUR_SEND_ONLY_KEY' \
+  -H 'Content-Type: application/json' \
+  --data '{"topic_id":"YOUR_PRIVATE_TOPIC_ID","title":"Research priorities","summary":"Focus on local model latency and energy use.","links":[],"request_id":"YOUR_UNIQUE_REQUEST_ID"}'
+```
+
+Keep a request ID stable when retrying the same send. Changing its content or destination produces a conflict.
+Replaying a deleted send cannot restore it. Revocation and loss of Premium immediately stop key sends;
+you can still list and revoke old keys after downgrading.
 
 The [privacy policy's MCP section](/privacy#connections-to-ai-apps-mcp) explains arguments, results, tokens, analytics,
 and retention. CarlNotes cannot read your assistant's chat history, memory, or uploaded files through MCP. It receives
@@ -192,3 +260,30 @@ stored feed does not. Source suggestions also count against the account's daily 
 
 Setup instructions were checked against the linked client documentation on November 2, 2026. Directory submissions
 and approval are separate from connecting by URL.
+
+### Conversation backlinks and retention
+
+When your app can supply the current conversation URL, it can include optional `chat_url` with `suggest_topics` or `send_to_topic`. The picker preserves it into the send. The URL is an encrypted, sender-only reference; it never enters Topic matching or the page queue. The date, platform name, and platform icon form one Nightshift link with a launch icon. Web links open in a new tab; mobile uses its browser. A verified `codex://threads/<thread-id>` reference opens the installed Codex app and requires that local chat to be available on the device. If the host supplies no URL, the label stays plain. CarlNotes never fabricates a URL or automatically creates a shared conversation snapshot.
+
+AI sends, email items, and imported conversations remain encrypted until you delete them. Carl decrypts bounded relevant text for private processing. The app’s sender-only access checks keep other accounts from reading your items, including Topic owners and administrators. See the [privacy policy](/privacy#personal-sources-data) for provider processing and deletion details.
+
+
+Supported conversation destinations were checked on November 4, 2026. These are references supplied by your app or you;
+connecting MCP does not guarantee that your app exposes its current conversation URL.
+
+| Platform | Conversation reference |
+| --- | --- |
+| [Codex](https://learn.chatgpt.com/docs/reference/commands#deep-links) | An existing local chat: `codex://threads/<verified-thread-id>`. CarlNotes accepts only this existing-chat action. |
+| [ChatGPT](https://help.openai.com/en/articles/7925741-sharing-conversations-and-scheduled-tasks-in-chatgpt) | An available ChatGPT conversation URL or an existing shared link. Legacy `chat.openai.com` links retain the ChatGPT mark. |
+| [Claude](https://support.claude.com/en/articles/10593882-share-and-unshare-chats) | An available Claude chat URL or an existing shared snapshot. Ordinary Claude uses the Claude mark. |
+| [Claude Code](https://code.claude.com/docs/en/claude-code-on-the-web) | An existing `claude.ai/code/…` session URL. A terminal-only session without a web URL has no backlink. |
+| [Gemini](https://support.google.com/gemini/answer/13743730) | An available `gemini.google.com` chat URL or an existing `g.co/gemini/share/…` link. |
+| [Grok](https://x.ai/legal/faq) | A supplied `grok.com` conversation or shared link; `x.com/i/grok/…` is also recognized. |
+| [Perplexity](https://www.perplexity.ai/en-GB/changelog/what-we-shipped-may-2nd) | A supplied conversation URL on `perplexity.ai`. CarlNotes does not discover or create its URL. |
+| [DeepSeek](https://cdn.deepseek.com/policies/en-US/deepseek-terms-of-use.html) | A supplied `chat.deepseek.com` conversation URL or an existing shared link. |
+| [Cursor](https://prod.cursor.com/help/ai-features/shared-transcripts) | An available `cursor.com/agents/…` session or existing `cursor.com/s/…` shared transcript. |
+| [Copilot](https://support.microsoft.com/en-us/microsoft-365-copilot/share-conversations-responses-in-microsoft-copilot) | A supplied `copilot.microsoft.com` conversation. Microsoft 365 `m365.cloud.microsoft/chat/…` references use the same platform mark. |
+
+A shared snapshot can expose the conversation to people who hold its link, depending on the platform's access rules.
+CarlNotes preserves a link you already supplied; it never publishes a chat to obtain one. Deleting or restricting the
+original conversation may stop the backlink from opening. Other valid web references use a generic chat icon.

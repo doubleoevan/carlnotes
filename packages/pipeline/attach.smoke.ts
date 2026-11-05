@@ -73,7 +73,7 @@ async function waitForAttachment(attachmentId: string): Promise<Attachment> {
 // run the smoke assertions over the pending attachment row and the finished row, and print a report
 async function check(topicId: string, pendingAttachment: Attachment, readyAttachment: Attachment): Promise<boolean> {
 	// the merged context a scan would read, plus whether the stored object is still in the bucket
-	const { context: scanContext } = await buildTopicScanContext(topicId)
+	const { context: scanContext } = await buildTopicScanContext({ topicId, purpose: "review" })
 	const isObjectStored = await attachmentExists(readyAttachment.objectKey)
 
 	// verify a pending upload, a workflow that finished ready with the document as written, the object stored, and the counts

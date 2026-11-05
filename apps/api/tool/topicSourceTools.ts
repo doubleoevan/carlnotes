@@ -1,3 +1,5 @@
+import { lockPersonalSourcesTopic } from "@carlnotes/db/personalSourcesLocks"
+import { assertFetchedSourceCapacity } from "@carlnotes/db/topicSourceCapacity"
 // the topic source tools: adding and removing a source, and what one more source costs
 
 import type { frequencies } from "@carlnotes/contracts/enums"
@@ -11,7 +13,7 @@ import { scans } from "@carlnotes/db/schema/scans"
 import { sources, topics } from "@carlnotes/db/schema/topics"
 import { EXA_COST_PER_SEARCH, X_COST_PER_READ } from "@carlnotes/models/budget"
 import { trackEvent } from "@carlnotes/server/analytics"
-import { and, count, eq } from "drizzle-orm"
+import { and, count, eq, isNull } from "drizzle-orm"
 import type { AnalyticsProperties } from "../currentUser"
 import { clearVisitorTopicCaches } from "../topic/feedCaches"
 import type { PromptVersionOrigin } from "../topic/promptVersions"
@@ -86,7 +88,7 @@ export async function addTopicSource({
 	const topicSourceRows = await db
 		.select({ id: sources.id, kind: sources.kind, config: sources.config, status: sources.status })
 		.from(sources)
-		.where(eq(sources.topicId, topicId))
+		.where(and(eq(sources.topicId, topicId), isNull(sources.personalSourcesIdentity)))
 	// report a source the topic already has
 	const existingTopicSourceRow = topicSourceRows.find((topicSourceRow) =>
 		isSameTopicSource(topicSourceRow, newTopicSource),
@@ -113,7 +115,13 @@ export async function addTopicSource({
 	// look up a podcast's show name, then insert the source row
 	const podcastNames = await toPodcastNames([newTopicSource])
 	const topicSourceRow = toNewSourceRow(topicId, newTopicSource, podcastNames)
-	const [insertedTopicSource] = await db.insert(sources).values(topicSourceRow).returning({ id: sources.id })
+	const insertedTopicSource = await db.transaction(async (transaction) => {
+		// serialize all Source creation paths against the same cap
+		await lockPersonalSourcesTopic(transaction, topicId)
+		await assertFetchedSourceCapacity(transaction, topicId)
+		const [insertedTopicSource] = await transaction.insert(sources).values(topicSourceRow).returning({ id: sources.id })
+		return insertedTopicSource
+	})
 	if (!insertedTopicSource) {
 		throw new Error(`failed to add a source to topic ${topicId}`)
 	}
@@ -170,7 +178,7 @@ export async function removeTopicSource({
 	if (!topicSourceRow) {
 		return { status: "saved", topicSourceLabel: null }
 	}
-	if (topicSourceRow.topicId !== topicId) {
+	if (topicSourceRow.topicId !== topicId || topicSourceRow.kind === "ai_agent" || topicSourceRow.kind === "email") {
 		return { status: "missing" }
 	}
 
@@ -196,7 +204,7 @@ export async function removeTopicSource({
 		const [sourceCountRow] = await transaction
 			.select({ sourceCount: count() })
 			.from(sources)
-			.where(eq(sources.topicId, topicId))
+			.where(and(eq(sources.topicId, topicId), isNull(sources.personalSourcesIdentity)))
 		if ((sourceCountRow?.sourceCount ?? 0) <= 1) {
 			return "lastSource"
 		}

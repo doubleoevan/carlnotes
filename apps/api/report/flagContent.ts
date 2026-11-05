@@ -4,7 +4,7 @@
 import { type FlagContentPayload, flagContentPayload } from "@carlnotes/contracts/payloads"
 import { DAY_MS } from "@carlnotes/contracts/time"
 import { countRateLimitHit, decrementRateLimitWindow } from "@carlnotes/db/redisRateLimits"
-import { sendReportEmail } from "@carlnotes/emails/report-email"
+import { sendReportEmail } from "@carlnotes/emails/reportEmail"
 import { trackEvent } from "@carlnotes/server/analytics"
 import { zValidator } from "@hono/zod-validator"
 import { Hono } from "hono"

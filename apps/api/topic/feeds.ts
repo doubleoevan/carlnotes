@@ -1,6 +1,5 @@
 // the topic feed logic for the homepage route. it batches every topic's data in one pass and builds each feed in memory
 import type { TopicFinding } from "@carlnotes/contracts/findings"
-import { toSourceSummary, toSourceValue } from "@carlnotes/contracts/sources"
 import type { TopicFeed, TopicFeedResponse, TopicResponse } from "@carlnotes/contracts/topics"
 import { db, isPublicAndShown } from "@carlnotes/db"
 import { cacheJson } from "@carlnotes/db/redis"
@@ -13,6 +12,7 @@ import { TOPIC_SECTION_IDS_KEY, toVisitorTopicFeedKey, toVisitorTopicPageKey } f
 import { loadTopicFeedData } from "./feedData"
 import { filteredTopicFindings, newTopicFindingCount, toTopicFinding } from "./findings"
 import { toScanDurationMs, toScheduledTimeLabel } from "./helpers"
+import { toTopicSourceSummary } from "./topicSourceSummary"
 
 // how long the featured and popular topic id lists are kept
 const TOPIC_SECTION_IDS_TTL_MS = 60_000
@@ -196,14 +196,7 @@ function buildTopicFeed(
 	// read the sources, dropping the grouping key from each row
 	const topicSources = (feedData.sourcesByTopic.get(topic.id) ?? [])
 		.filter((source) => source.status === "ready" || isTopicOwner)
-		.map((source) => ({
-			id: source.id,
-			sourceKind: source.kind,
-			summary: toSourceSummary(source.kind, source.config),
-			value: toSourceValue(source.kind, source.config),
-			status: source.status,
-			error: source.error,
-		}))
+		.flatMap(toTopicSourceSummary)
 
 	// read the attachments, dropping the grouping key from each row
 	const topicAttachments = (feedData.attachmentsByTopic.get(topic.id) ?? []).map((attachment) => ({

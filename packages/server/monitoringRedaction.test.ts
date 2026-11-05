@@ -49,14 +49,15 @@ test("redactEvent truncates long strings wherever they hide", () => {
 	// a body under a name the content filter would never catch, nested and top-level, plus a short id left alone
 	const pageBody = "x".repeat(2000)
 	const redacted = redactEvent({
-		extra: { info: pageBody, topicId: "topic-1", details: { payload: pageBody } },
+		extra: { info: pageBody, topicId: "topic-1", details: { diagnostic: pageBody, payload: pageBody } },
 	})
 
 	// both copies are cut and marked, and the identifier is untouched
-	const extra = redacted.extra as { info: string; topicId: string; details: { payload: string } }
+	const extra = redacted.extra as { info: string; topicId: string; details: { diagnostic: string; payload?: string } }
 	expect(extra.info).toHaveLength(500 + "…[truncated]".length)
 	expect(extra.info.endsWith("…[truncated]")).toBe(true)
-	expect(extra.details.payload.endsWith("…[truncated]")).toBe(true)
+	expect(extra.details.diagnostic.endsWith("…[truncated]")).toBe(true)
+	expect(extra.details.payload).toBeUndefined()
 	expect(extra.topicId).toBe("topic-1")
 })
 

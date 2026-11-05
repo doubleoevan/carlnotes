@@ -4,8 +4,9 @@ import { newBudget } from "@carlnotes/models/budget"
 import * as models from "@carlnotes/models/models"
 import { toTopicContextHash } from "../attach"
 import { isNearDuplicate } from "./dedupe"
-import { gateResources, isRelevant, loadTopicContext, rankBySimilarity, toScoreContextText } from "./filter"
+import { gateResources, isRelevant, rankBySimilarity } from "./filter"
 import { toTestResource } from "./reviewTestFixtures"
+import { loadTopicContext, toScoreContextText } from "./topicContext"
 import { emptyReviewOutcome } from "./track"
 
 // put back the embedding call that a test stubbed
@@ -128,4 +129,26 @@ test("loadTopicContext scores past the embedding limit and hashes the text that 
 		budget: newBudget(),
 	})
 	expect(shortTopicContext.contextHash).toBe(toTopicContextHash("Grinders\n\nBurr grinders under $200."))
+})
+
+// a queued link has already passed Topic matching and needs no global embedding to reach scoring
+test("personal links skip embedding work and the similarity floor, including missing vectors", async () => {
+	const embed = spyOn(models, "embedVectors").mockRejectedValue(new Error("Embedding must not run"))
+	const considered = mock(async () => {})
+	const resources = [
+		{ id: "direct", embedding: null, personalSourceScoreBonus: 0.1, kind: "read" },
+		{ id: "newsletter", embedding: [0, 1], personalSourceScoreBonus: 0.05, kind: "read" },
+		{ id: "ordinary", embedding: [0, 1], kind: "read" },
+	] as Parameters<typeof gateResources>[0]
+	const outcome = { ...emptyReviewOutcome(), onResourceConsidered: considered }
+	const relevant = await gateResources(
+		resources,
+		{ embedding: [1, 0] } as Parameters<typeof gateResources>[1],
+		outcome,
+		newBudget(),
+	)
+	expect(relevant.map(({ resource }) => resource.id)).toEqual(["direct", "newsletter"])
+	expect(embed).not.toHaveBeenCalled()
+	expect(considered).toHaveBeenCalledTimes(1)
+	expect(outcome.filteredCounts["below relevance threshold"]).toBe(1)
 })

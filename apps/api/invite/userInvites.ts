@@ -4,7 +4,8 @@ import type { Invite } from "@carlnotes/contracts/invites"
 import type { UserInvitePayload } from "@carlnotes/contracts/payloads"
 import { userInvitePayload } from "@carlnotes/contracts/payloads"
 import { toNormalizedUsername } from "@carlnotes/contracts/usernames"
-import { db } from "@carlnotes/db"
+import { type DbHandle, db } from "@carlnotes/db"
+import { assertPersonalSourcesConverted, lockPersonalSourcesTopic } from "@carlnotes/db/personalSourcesLocks"
 import { canCreateInvitesToday } from "@carlnotes/db/quotas"
 import { invites } from "@carlnotes/db/schema/invites"
 import { topics } from "@carlnotes/db/schema/topics"
@@ -60,10 +61,17 @@ export async function createUserInvite(
 
 	// save the invite: a pending invite is a no-op, a declined one reopens, a new one inserts
 	const inviteRecipientEmail = address.email ?? null
-	const inviteStatus = await upsertUserInvite(inviteTarget, senderUserId, {
-		recipientUserId: inviteRecipient?.id ?? null,
-		email: inviteRecipientEmail,
-		matchEmail: inviteRecipientEmail ?? inviteRecipient?.email ?? null,
+	const inviteStatus = await db.transaction(async (transaction) => {
+		// serialize Topic invitations with private receipt
+		if ("topicId" in inviteTarget) {
+			await lockPersonalSourcesTopic(transaction, inviteTarget.topicId)
+			await assertPersonalSourcesConverted(transaction, inviteTarget.topicId)
+		}
+		return await upsertUserInvite(transaction, inviteTarget, senderUserId, {
+			recipientUserId: inviteRecipient?.id ?? null,
+			email: inviteRecipientEmail,
+			matchEmail: inviteRecipientEmail ?? inviteRecipient?.email ?? null,
+		})
 	})
 	if (inviteStatus === "forbidden") {
 		return "forbidden"
@@ -91,22 +99,28 @@ async function isRejectedByRecipient(
 
 // write the user's invite row: an existing pending invite is a no-op
 async function upsertUserInvite(
+	transaction: DbHandle,
 	target: InviteTarget,
 	senderUserId: string,
 	recipientIdentity: { recipientUserId: string | null; email: string | null; matchEmail: string | null },
 ): Promise<{ invite: Invite; isCreated: boolean } | "forbidden"> {
 	// check for the person's pending invite to this target by email or user id
-	const pendingInvite = await findUserInvite(target, recipientIdentity.recipientUserId, recipientIdentity.matchEmail)
+	const pendingInvite = await findUserInvite(
+		transaction,
+		target,
+		recipientIdentity.recipientUserId,
+		recipientIdentity.matchEmail,
+	)
 	if (pendingInvite && !pendingInvite.declinedAt) {
 		return { invite: toInvite(pendingInvite), isCreated: false }
 	}
 	if (pendingInvite) {
-		const reopened = await reopenInvite(pendingInvite.id, senderUserId)
+		const reopened = await reopenInvite(transaction, pendingInvite.id, senderUserId)
 		return reopened === "forbidden" ? "forbidden" : { invite: reopened, isCreated: true }
 	}
 
 	// the invite row, one use, storing the email address if any, and the resolved user id if any
-	const [invite] = await db
+	const [invite] = await transaction
 		.insert(invites)
 		.values({
 			...target,
@@ -121,7 +135,12 @@ async function upsertUserInvite(
 	}
 
 	// the race condition backstop: a concurrent creation already wrote this person's row, which is the same no-op
-	const existingInvite = await findUserInvite(target, recipientIdentity.recipientUserId, recipientIdentity.matchEmail)
+	const existingInvite = await findUserInvite(
+		transaction,
+		target,
+		recipientIdentity.recipientUserId,
+		recipientIdentity.matchEmail,
+	)
 	return existingInvite ? { invite: toInvite(existingInvite), isCreated: false } : "forbidden"
 }
 
@@ -133,7 +152,11 @@ async function canInviteToTarget(senderUserId: string, target: InviteTarget): Pr
 
 	// the topic path mirrors the link-invite authority
 	const [topic] = await db.select().from(topics).where(eq(topics.id, target.topicId))
-	return Boolean(topic && (await isAllowed(senderUserId, "topic:edit", topic)))
+	return Boolean(
+		topic &&
+			(await isAllowed(senderUserId, "topic:edit", topic)) &&
+			(await isAllowed(senderUserId, "topic:invite", topic)),
+	)
 }
 
 // the account an email address names, or null if nobody has it yet
@@ -164,6 +187,7 @@ export function isInviteRejected(inviteAccess: InviteRecipient["inviteAccess"], 
 
 // the target's existing row for this user, matched by user id or by address so modes share one slot
 async function findUserInvite(
+	transaction: DbHandle,
 	target: InviteTarget,
 	recipientUserId: string | null,
 	email: string | null,
@@ -174,7 +198,7 @@ async function findUserInvite(
 	}
 	const targetFilter = "topicId" in target ? eq(invites.topicId, target.topicId) : eq(invites.teamId, target.teamId)
 	// either email or username reaches the row, so a resolved email invite and a username invite share one slot
-	const [existingInvite] = await db
+	const [existingInvite] = await transaction
 		.select()
 		.from(invites)
 		.where(
@@ -192,8 +216,12 @@ async function findUserInvite(
 }
 
 // a declined invite row reopens on an explicit re-invite
-async function reopenInvite(inviteId: string, senderUserId: string): Promise<Invite | "forbidden"> {
-	const [reopenedInvite] = await db
+async function reopenInvite(
+	transaction: DbHandle,
+	inviteId: string,
+	senderUserId: string,
+): Promise<Invite | "forbidden"> {
+	const [reopenedInvite] = await transaction
 		.update(invites)
 		.set({ declinedAt: null, invitedAt: new Date(), invitedByUserId: senderUserId })
 		.where(eq(invites.id, inviteId))

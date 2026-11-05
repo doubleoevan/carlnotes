@@ -6,11 +6,11 @@ import {
 	ResourceMetadata as SharedResourceMetadata,
 } from "@carlnotes/core/components/ResourceMetadata"
 import { cn } from "@carlnotes/nightshift/classNames"
+import { Globe } from "lucide-react"
 import type * as React from "react"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { HostFavicon } from "@/components/common/HostFavicon"
 import { PopoverTrigger } from "@/components/primitives/popover"
-import { RESOURCE_KIND_ICON } from "@/lib/utils"
 
 // the finding, whether its kind icon shows, and the children that come after the age on the metadata line
 type TopicFindingSummaryProps = {
@@ -30,7 +30,6 @@ export function TopicFindingSummary({
 	className,
 	children,
 }: TopicFindingSummaryProps) {
-	const ResourceIcon = RESOURCE_KIND_ICON[resource.resourceKind]
 	// unread rows are bold and consumed rows are muted
 	const titleClass = cn(
 		"max-w-full truncate text-left text-sm group-hover:text-foreground",
@@ -40,12 +39,12 @@ export function TopicFindingSummary({
 		<div className={cn("flex min-w-0 items-start gap-2.5", className)}>
 			{/* the resource kind icon */}
 			{isResourceKindIconShown && (
-				<ResourceIcon
+				<Globe
 					className={cn(
 						"mt-0.5 size-4 shrink-0 text-muted-foreground group-hover:text-foreground",
 						resource.isConsumed && "opacity-60",
 					)}
-					aria-label={resource.resourceKind}
+					aria-label="Finding"
 				/>
 			)}
 			<div className="min-w-0 flex-1">

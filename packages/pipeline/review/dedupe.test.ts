@@ -59,6 +59,9 @@ test("the surviving member of a near-duplicate set is the higher-scoring one", (
 	const dedupeKeys = { contentHashes: new Set<string>(), embeddings: [] as number[][] }
 	const dedupedIds: string[] = []
 	for (const relevantResource of rankBySimilarity(relevantResources)) {
+		if (!relevantResource.embedding) {
+			throw new Error("Expected an embedded ordinary candidate")
+		}
 		if (hasNearDuplicateKey(dedupeKeys, relevantResource.embedding)) {
 			continue
 		}
@@ -89,4 +92,44 @@ test("the dedupe passes a url Source's own page through untouched", async () => 
 		urlSourcePageIds: new Set(["first-page", "second-page"]),
 	})
 	expect(resourcesToScore.map((resource) => resource.id)).toEqual(["first-page", "second-page"])
+})
+
+// bypassing the embedding gate must also leave a valid candidate for the dedupe stage
+test("a personal link without an embedding still reaches paid scoring", async () => {
+	const resource = {
+		...toTestResource("personal"),
+		title: null,
+		snippet: null,
+		embedding: null,
+		personalSourceScoreBonus: 0.1 as const,
+	}
+	const candidates = await dedupeResources({
+		relevantResources: [{ resource, embedding: null, similarity: 0 }],
+		candidateIds: [resource.id],
+		reviewOutcome: emptyReviewOutcome(),
+		urlSourcePageIds: new Set(),
+	})
+	expect(candidates.map(({ id }) => id)).toEqual(["personal"])
+})
+
+test("different personal pages with the same URL-derived title both reach scoring", async () => {
+	const relevantResources = ["one.example", "two.example"].map((host) => ({
+		resource: {
+			...toTestResource(host),
+			url: `https://${host}/guide`,
+			title: "guide",
+			snippet: null,
+			embedding: null,
+			personalSourceScoreBonus: 0.1 as const,
+		},
+		embedding: null,
+		similarity: 0,
+	}))
+	const candidates = await dedupeResources({
+		relevantResources,
+		candidateIds: relevantResources.map(({ resource }) => resource.id),
+		reviewOutcome: emptyReviewOutcome(),
+		urlSourcePageIds: new Set(),
+	})
+	expect(candidates).toHaveLength(2)
 })

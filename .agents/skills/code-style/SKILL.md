@@ -232,7 +232,7 @@ Write the full word, always.
     const error = ...
 
 Exceptions that are clearer than the spelled-out version: `url`, `id`, `api`,
-`html`, `css`, `sdk`. Common substitutions: `btn` → `button`, `val` → `value`,
+`html`, `css`, `sdk`, `ai`. Common substitutions: `btn` → `button`, `val` → `value`,
 `cb` → `callback`, `tmp` → a descriptive name for what it actually holds.
 
 ### 9. Boolean prefix

@@ -6,7 +6,7 @@ import type { PaidPlan } from "./plans"
 export const UNKNOWN_CASE = "unknown"
 export type UnknownCase = typeof UNKNOWN_CASE
 
-export const sourceKinds = [
+export const fetchedSourceKinds = [
 	"url",
 	"rss",
 	"reddit",
@@ -18,6 +18,9 @@ export const sourceKinds = [
 	"composio",
 	"plugin",
 ] as const
+// receiving sources use dedicated contracts alongside the frozen fetched-source responses
+export const personalSourceKinds = ["ai_agent", "email"] as const
+export const sourceKinds = [...fetchedSourceKinds, ...personalSourceKinds] as const
 export const resourceKinds = ["read", "watch", "listen"] as const
 export const visibilities = ["public", "invite", "private"] as const
 export type Visibility = (typeof visibilities)[number]

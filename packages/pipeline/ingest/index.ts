@@ -13,7 +13,9 @@ import { reportError } from "@carlnotes/server/monitoring"
 import { isHostRejection } from "@carlnotes/server/publicFetch"
 import { asc, eq, sql } from "drizzle-orm"
 import type { ScannedSource } from "../review/summarize"
+import { aiAgentIngester } from "./aiAgent"
 import { blueskyIngester } from "./bluesky"
+import { emailIngester } from "./email"
 import type {
 	DiscoveredResource,
 	FetchedBody,
@@ -42,6 +44,8 @@ const sourceIngesters: Partial<Record<Source["kind"], SourceIngester>> = {
 	search: searchIngester,
 	bluesky: blueskyIngester,
 	x: xIngester,
+	ai_agent: aiAgentIngester,
+	email: emailIngester,
 }
 
 // the stored Scan row, and one entry of what it records per Source that hit a problem
@@ -76,7 +80,7 @@ export type ScanSummary = {
 export type IngestOutcome = { sourceOutcomes: SourceOutcome[]; summary: ScanSummary }
 
 // the topic whose Sources run, the Scan's Budget, and the Scan owner's LiteLLM key that bills an ingester's model calls
-type IngestFromTopicSourcesOptions = { topicId: string; budget: Budget; litellmApiKey?: string }
+type IngestFromTopicSourcesOptions = { topicId: string; budget: Budget; litellmApiKey?: string; scanId?: string }
 
 /**
  * Ingests every Source on the topic and stores the deduped Resources, charging what the Sources cost to the Budget.
@@ -85,6 +89,7 @@ export async function ingestFromTopicSources({
 	topicId,
 	budget,
 	litellmApiKey,
+	scanId,
 }: IngestFromTopicSourcesOptions): Promise<IngestOutcome> {
 	// read the topic's Sources oldest first, so the merge credits a Resource that two Sources found to the older one
 	const topicSources = await db
@@ -99,7 +104,7 @@ export async function ingestFromTopicSources({
 		budget,
 		async () => {
 			const ranSourceOutcomes = await Promise.all(
-				topicSources.map((source) => ingestFromSource(source, { litellmApiKey })),
+				topicSources.map((source) => ingestFromSource(source, { litellmApiKey, scanId })),
 			)
 			const sourceOutcomes = await relabelSourceOutcomes(topicId, ranSourceOutcomes)
 			const summary = toScanSummary(sourceOutcomes)
@@ -116,7 +121,9 @@ export async function ingestFromTopicSources({
 		const resourceRows = await db
 			.insert(resources)
 			.values(
-				ingestOutcome.summary.resources.map(({ fetchedBody, isFromCustomSource, sourceId, ...resource }) => resource),
+				ingestOutcome.summary.resources.map(
+					({ fetchedBody, isFromCustomSource, sourceId, isFromPersonalSources, ...resource }) => resource,
+				),
 			)
 			.onConflictDoUpdate({ target: resources.url, set: { url: sql`excluded.url` } })
 			.returning({ id: resources.id, url: resources.url })
@@ -210,6 +217,9 @@ export function toScanSummary(outcomes: SourceOutcome[]): ScanSummary {
 			const seenResource = resourceByUrl.get(canonicalUrl)
 			if (seenResource) {
 				seenResource.isFromCustomSource ||= isCustomSource
+				seenResource.isFromPersonalSources = Boolean(
+					seenResource.isFromPersonalSources && resource.isFromPersonalSources,
+				)
 				continue
 			}
 

@@ -10,12 +10,13 @@ import {
 } from "@carlnotes/contracts/plans"
 import { DAY_MS } from "@carlnotes/contracts/time"
 import { and, count, eq, gte, inArray, isNotNull, isNull, lte, ne, or, sql } from "drizzle-orm"
-import { db } from "./index"
+import { type DbHandle, db } from "./index"
 import { countRateLimitHit } from "./redisRateLimits"
 import { memoizeInRequest } from "./requestMemo"
 import { billingSubscriptions } from "./schema/billing"
 import { chatTurns } from "./schema/chat"
 import { invites } from "./schema/invites"
+import { personalSourcesSummarySpends } from "./schema/personalSources"
 import { podcastEpisodes } from "./schema/podcast"
 import { scans } from "./schema/scans"
 import { teamMembers } from "./schema/teams"
@@ -33,7 +34,12 @@ const CONNECTED_LIMIT_FACTOR = 2
 const REPUTATION_AGE_DAYS = 7
 
 // a recorded spend in dollars, split into scans, chat, and podcast episodes
-export type RecordedSpend = { scanDollars: number; chatDollars: number; podcastEpisodeDollars: number }
+export type RecordedSpend = {
+	scanDollars: number
+	chatDollars: number
+	podcastEpisodeDollars: number
+	personalSourcesDollars: number
+}
 
 // when the spend to sum starts, and the one user whose spend to sum, or every user if unset
 export type LoadSpendSinceOptions = { since: Date; userId?: string }
@@ -73,19 +79,30 @@ export function toSuggestionRateLimitWindowKey(userId: string, now: Date): strin
 /**
  * Returns the user's admin status, billing plan, and budget override, read at most once per request.
  */
-export function loadUserAccess(userId: string): Promise<UserAccess> {
-	return memoizeInRequest(`user-access:${userId}`, async () => {
-		// one row read of the three access fields, defaulting a missing user to a plain free user
-		const [user] = await db
-			.select({ role: users.role, plan: users.plan, budgetOverrideCents: users.budgetOverrideCents })
-			.from(users)
-			.where(eq(users.id, userId))
-		return {
-			isAdmin: isAdminRole(user?.role),
-			plan: user?.plan ?? "free",
-			budgetOverrideCents: user?.budgetOverrideCents ?? null,
-		}
-	})
+export function loadUserAccess(userId: string, transaction?: DbHandle): Promise<UserAccess> {
+	if (transaction && transaction !== db) {
+		return readUserAccess(userId, transaction)
+	}
+	return memoizeInRequest(`user-access:${userId}`, () => readUserAccess(userId, db))
+}
+
+// read current authority through the caller's connection while a transaction holds its locks
+async function readUserAccess(userId: string, handle: DbHandle): Promise<UserAccess> {
+	const [user] = await handle
+		.select({
+			role: users.role,
+			plan: users.plan,
+			budgetOverrideCents: users.budgetOverrideCents,
+			freeTopicLimit: users.freeTopicLimit,
+		})
+		.from(users)
+		.where(eq(users.id, userId))
+	return {
+		isAdmin: isAdminRole(user?.role),
+		plan: user?.plan ?? "free",
+		budgetOverrideCents: user?.budgetOverrideCents ?? null,
+		freeTopicLimit: user?.freeTopicLimit ?? PLANS.free.topicLimit,
+	}
 }
 
 // how many topic scans ran for the user since utc midnight, scheduled and manual combined
@@ -241,8 +258,8 @@ export async function canCreateTeamToday(userId: string): Promise<boolean> {
 /**
  * Returns who bills the user's subscription, how often, and whether a card is on file, or no provider for a free user.
  */
-export async function loadBillingAccess(userId: string): Promise<OverageBillingAccess> {
-	const [subscriptionRow] = await db
+export async function loadBillingAccess(userId: string, handle: DbHandle = db): Promise<OverageBillingAccess> {
+	const [subscriptionRow] = await handle
 		.select({
 			provider: billingSubscriptions.provider,
 			hasPaymentMethod: billingSubscriptions.hasPaymentMethod,
@@ -272,7 +289,7 @@ export function monthlySpendDollars(userId: string): Promise<RecordedSpend> {
  */
 export async function loadSpendSince({ since, userId }: LoadSpendSinceOptions): Promise<RecordedSpend> {
 	// sum each table's cost since the start time, for the one user if one is given, even an empty user id
-	const [[scanSpendRow], [chatSpendRow], [podcastEpisodeSpendRow]] = await Promise.all([
+	const [[scanSpendRow], [chatSpendRow], [podcastEpisodeSpendRow], [personalSourcesSpendRow]] = await Promise.all([
 		db
 			.select({ dollars: sql<string>`coalesce(sum(${scans.cost}), 0)` })
 			.from(scans)
@@ -290,19 +307,39 @@ export async function loadSpendSince({ since, userId }: LoadSpendSinceOptions): 
 					gte(podcastEpisodes.createdAt, since),
 				),
 			),
+		db
+			.select({ dollars: sql<string>`coalesce(sum(${personalSourcesSummarySpends.cost}), 0)` })
+			.from(personalSourcesSummarySpends)
+			.where(
+				and(
+					userId !== undefined ? eq(personalSourcesSummarySpends.userId, userId) : undefined,
+					gte(personalSourcesSummarySpends.createdAt, since),
+				),
+			),
 	])
 	return {
 		scanDollars: Number(scanSpendRow?.dollars ?? 0),
 		chatDollars: Number(chatSpendRow?.dollars ?? 0),
 		podcastEpisodeDollars: Number(podcastEpisodeSpendRow?.dollars ?? 0),
+		personalSourcesDollars: Number(personalSourcesSpendRow?.dollars ?? 0),
 	}
 }
 
 /**
  * Returns a recorded spend in cents, summed across scans, chat, and podcast episodes.
  */
-export function toSpendCents({ scanDollars, chatDollars, podcastEpisodeDollars }: RecordedSpend): number {
-	return toCentsFromDollars(scanDollars) + toCentsFromDollars(chatDollars) + toCentsFromDollars(podcastEpisodeDollars)
+export function toSpendCents({
+	scanDollars,
+	chatDollars,
+	podcastEpisodeDollars,
+	personalSourcesDollars,
+}: RecordedSpend): number {
+	return (
+		toCentsFromDollars(scanDollars) +
+		toCentsFromDollars(chatDollars) +
+		toCentsFromDollars(podcastEpisodeDollars) +
+		toCentsFromDollars(personalSourcesDollars)
+	)
 }
 
 /**

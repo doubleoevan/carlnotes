@@ -135,6 +135,7 @@ export function PlansPage() {
 							isYearly={isYearly}
 							isHighlighted={planOption === highlightedPlan}
 							signedInPlan={signedInPlan}
+							freeTopicLimit={session?.user.freeTopicLimit}
 							subscribedInterval={billingInterval}
 							isRedirecting={isRedirecting}
 							onCheckout={canPurchase ? handleCheckout : undefined}

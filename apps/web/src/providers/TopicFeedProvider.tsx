@@ -33,7 +33,7 @@ export function useTopicFeed(): TopicFeedValue {
 }
 
 /**
- * Returns the shared topic feed context value, or null outside the provider, such as in an mcp card.
+ * Returns the shared topic feed context value, or null outside the provider, such as in an MCP view.
  */
 export function useOptionalTopicFeed(): TopicFeedValue | null {
 	return useContext(TopicFeedContext)

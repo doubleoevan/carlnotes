@@ -6,6 +6,7 @@ import { inviteCreatePayload } from "@carlnotes/contracts/payloads"
 import { PLANS } from "@carlnotes/contracts/plans"
 import { DAY_MS } from "@carlnotes/contracts/time"
 import { db } from "@carlnotes/db"
+import { assertPersonalSourcesConverted, lockPersonalSourcesTopic } from "@carlnotes/db/personalSourcesLocks"
 import { canCreateInvitesToday, loadUserAccess } from "@carlnotes/db/quotas"
 import { invites } from "@carlnotes/db/schema/invites"
 import { topics } from "@carlnotes/db/schema/topics"
@@ -34,7 +35,7 @@ export async function createTopicInvite(
 ): Promise<Invite | "forbidden" | "limited"> {
 	// only someone who may edit the topic may invite to it, which is its owner or an admin
 	const [topic] = await db.select().from(topics).where(eq(topics.id, topicId))
-	if (!topic || !(await isAllowed(userId, "topic:edit", topic))) {
+	if (!topic || !(await isAllowed(userId, "topic:edit", topic)) || !(await isAllowed(userId, "topic:invite", topic))) {
 		return "forbidden"
 	}
 
@@ -52,10 +53,16 @@ export async function createTopicInvite(
 
 	// the link names no address, so it has a use limit and an expiry instead
 	const expiresAt = new Date(Date.now() + LINK_INVITE_DAYS * DAY_MS)
-	const [invite] = await db
-		.insert(invites)
-		.values({ topicId, invitedByUserId: userId, maxUses: await toLinkInviteMaxUses(userId), expiresAt })
-		.returning()
+	const invite = await db.transaction(async (transaction) => {
+		// serialize invitation creation with private receipt
+		await lockPersonalSourcesTopic(transaction, topicId)
+		await assertPersonalSourcesConverted(transaction, topicId)
+		const [invite] = await transaction
+			.insert(invites)
+			.values({ topicId, invitedByUserId: userId, maxUses: await toLinkInviteMaxUses(userId), expiresAt })
+			.returning()
+		return invite
+	})
 	if (!invite) {
 		return "forbidden"
 	}

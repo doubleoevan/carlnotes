@@ -291,7 +291,11 @@ async function checkReviewAgain(topicId: string, ownerId: string): Promise<boole
 
 	// ask the selector what a scan with nothing discovered would review. a bookmarked or rated finding
 	// outlives the feed it came from
-	const resourcesToReview = await loadResourcesToReview(topicId, [], "a-context-nothing-was-reviewed-against")
+	const resourcesToReview = await loadResourcesToReview({
+		topicId,
+		discoveredResources: [],
+		topicContextHash: "a-context-nothing-was-reviewed-against",
+	})
 	const resourceIdsToReview = new Set(resourcesToReview.map((resource) => resource.id))
 	// the rated finding's resource, which the resources to review must include
 	const [ratedResource] = await db

@@ -80,3 +80,9 @@ export const StorePricesFailed: Story = {
 		</View>
 	),
 }
+
+// match the web feature states through the same shared PlanCard implementation
+export const Free: Story = { args: { plan: "free", isHighlighted: false } }
+export const Plus: Story = { args: { isHighlighted: false } }
+export const Premium: Story = { args: { plan: "premium", isHighlighted: false } }
+export const PlusYearly: Story = { args: { isYearly: true, isHighlighted: false } }

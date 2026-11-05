@@ -1,4 +1,3 @@
-import { toSourceSummary, toSourceValue } from "@carlnotes/contracts/sources"
 import type { TopicResponse } from "@carlnotes/contracts/topics"
 import { toAttachmentFailureMessage } from "@carlnotes/contracts/topics"
 import { db } from "@carlnotes/db"
@@ -24,6 +23,7 @@ import {
 import { loadDirectSubscription } from "./permissions"
 import { startOfUtcMonth } from "./quotas"
 import { loadRelatedTopics } from "./relatedTopics"
+import { toTopicSourceSummary } from "./topicSourceSummary"
 
 // whether the load is a poll reload while a scan runs, which leaves out the related topics
 type LoadTopicPageOptions = { isPoll?: boolean }
@@ -143,6 +143,8 @@ export async function loadTopicPage(
 		chatMentions: (await loadTopicChatMentions(userId, [topic.id])).get(topic.id) ?? [],
 		canRate,
 		canEdit,
+		canReadPersonalSources:
+			canEdit || Boolean(userId && topicSourceRows.some((source) => source.personalSourcesUserId === userId)),
 		newCount: newTopicFindingCount(topicFindings),
 		subscriberCount: topic.subscriberCount,
 		// the schedule details
@@ -153,7 +155,7 @@ export async function loadTopicPage(
 		scanSummary,
 		// everything connected to the topic
 		attachments: attachmentRows,
-		sources: visibleTopicSourceRows.map((topicSource) => toTopicSourceSummary(topicSource)),
+		sources: visibleTopicSourceRows.flatMap(toTopicSourceSummary),
 		scans: scanHistory,
 		podcast,
 		latestPodcastEpisode,
@@ -230,16 +232,4 @@ async function loadTopicScanRows(topicId: string): Promise<TopicScanRow[]> {
 function toMonthCostDollars(scanRows: Pick<TopicScanRow, "startedAt" | "cost">[]): number {
 	const monthStart = startOfUtcMonth(new Date())
 	return scanRows.filter((scan) => scan.startedAt >= monthStart).reduce((sum, scan) => sum + Number(scan.cost), 0)
-}
-
-// one Source as the topic page lists it
-function toTopicSourceSummary(topicSource: typeof sources.$inferSelect): TopicResponse["sources"][number] {
-	return {
-		id: topicSource.id,
-		sourceKind: topicSource.kind,
-		summary: toSourceSummary(topicSource.kind, topicSource.config),
-		value: toSourceValue(topicSource.kind, topicSource.config),
-		status: topicSource.status,
-		error: topicSource.error,
-	}
 }

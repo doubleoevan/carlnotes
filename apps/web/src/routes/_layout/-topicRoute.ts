@@ -14,13 +14,18 @@ export type TopicRouteData = {
 }
 
 // the topic id from the url, the slug if the url has a slug, and the season from the url's query
-type LoadTopicRouteOptions = { topicId: string; topicSlug?: string; season?: unknown }
+type LoadTopicRouteOptions = { topicId: string; topicSlug?: string; season?: unknown; search?: string }
 
 /**
  * Loads a topic's head and public page on the server, with the podcast episodes of the season that the url names,
  * and redirects a url without the current slug. In the browser loadTopicRoute returns no head, topic, or season.
  */
-export async function loadTopicRoute({ topicId, topicSlug, season }: LoadTopicRouteOptions): Promise<TopicRouteData> {
+export async function loadTopicRoute({
+	topicId,
+	topicSlug,
+	season,
+	search = "",
+}: LoadTopicRouteOptions): Promise<TopicRouteData> {
 	// read the head, the topic page, and the url's season on the server
 	const [[topicHead, topicPage], fetchedSeason] = await Promise.all([
 		loadPageOnServer({
@@ -39,7 +44,7 @@ export async function loadTopicRoute({ topicId, topicSlug, season }: LoadTopicRo
 	const currentTopicPath = topicHead ? new URL(topicHead.cardUrl).pathname : null
 	const requestedTopicPath = topicSlug ? `/topics/${topicId}/${topicSlug}` : `/topics/${topicId}`
 	if (currentTopicPath && currentTopicPath !== requestedTopicPath) {
-		throw redirect({ href: currentTopicPath, statusCode: 301 })
+		throw redirect({ href: `${currentTopicPath}${search}`, statusCode: 301 })
 	}
 
 	// return the head, the topic only if the topic is public, and the fetched season

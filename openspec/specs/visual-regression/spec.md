@@ -1,7 +1,7 @@
 # visual-regression Specification
 
 ## Purpose
-Catch unintended visual changes in the web stories, the MCP cards, and the native stories. Each one is captured the same
+Catch unintended visual changes in the web stories, the MCP views, and the native stories. Each one is captured the same
 way every time and compared with an approved image of its own platform.
 
 ## Requirements
@@ -223,15 +223,15 @@ capture's status.
 - **WHEN** the Select Open story turns off `aria-hidden-focus` in its own accessibility config
 - **THEN** the report lists no `aria-hidden-focus` violation for that story
 
-### Requirement: Every MCP card state is captured in the card test host
+### Requirement: Every MCP view state is captured in the MCP Apps test host
 
-Each card state that the card test host renders from fixtures SHALL be captured in the light and dark host themes, at a
+Each MCP view state that the MCP Apps test host renders from fixtures SHALL be captured in the light and dark host themes, at a
 375-pixel phone host and a 720-pixel chat column. The image capture SHALL use the same environment, statuses,
 comparison, and report as the web stories, under the `mcp` platform with its own baselines.
 
-#### Scenario: The empty search card is captured
+#### Scenario: The empty search MCP view is captured
 
-- **WHEN** the card host renders the search card with no results in the dark theme
+- **WHEN** the MCP Apps host renders the search MCP view with no results in the dark theme
 - **THEN** its image capture is compared with the `mcp` baseline for that state, theme, and width
 
 ### Requirement: Every native story is captured on each platform's pinned device

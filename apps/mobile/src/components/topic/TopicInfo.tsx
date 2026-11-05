@@ -2,6 +2,7 @@ import { toAvatarImagePath } from "@carlnotes/contracts/avatars"
 import { PODCAST_NAME } from "@carlnotes/contracts/podcastEpisodes"
 import { SITE_URL } from "@carlnotes/contracts/site"
 import type { TopicDetails, TopicResponse } from "@carlnotes/contracts/topics"
+import { MAX_TOPIC_SOURCES } from "@carlnotes/contracts/topics"
 import { toCountLabel } from "@carlnotes/core/lib/labels"
 import { toNotesMarkdown } from "@carlnotes/core/lib/topicScanRecap"
 import { usePurchaseOffers } from "@carlnotes/core/stores/purchaseOffersStore"
@@ -20,6 +21,8 @@ import { Icon } from "@/components/primitives/icon"
 import { ShareTopic } from "@/components/share/ShareTopic"
 import { toTypeRoleStyle } from "@/typeRoleStyles"
 import { TopicAttachmentLink } from "./TopicAttachmentLink"
+import { TopicInfoSection as InfoSection } from "./TopicInfoSection"
+import { TopicPersonalSourcesSection } from "./TopicPersonalSourcesSection"
 import { NumberedTopicFindingList, SafeNoteText, TopicScanFailure } from "./TopicScanRecap"
 import { TopicSources } from "./TopicSources"
 
@@ -74,7 +77,15 @@ function TopicInfo({ topic, triggerRef, onClose }: TopicInfoProps) {
 /**
  * Shares the Topic roast's content between its sheet and page card.
  */
-export function TopicInfoContent({ topic, isCard = false }: { topic: TopicDetails; isCard?: boolean }) {
+export function TopicInfoContent({
+	topic,
+	isCard = false,
+	personalSources,
+}: {
+	topic: TopicDetails
+	isCard?: boolean
+	personalSources?: ReactNode
+}) {
 	// include scan details if the topic response provides them, and a budget failure's Upgrade where the store sells
 	const latestScan = isCard && "scans" in topic ? (topic as TopicResponse).scans[0] : null
 	const { canPurchase } = usePurchaseOffers()
@@ -100,9 +111,14 @@ export function TopicInfoContent({ topic, isCard = false }: { topic: TopicDetail
 				</InfoSection>
 			) : null}
 			{!isCard ? (
-				<InfoSection label="Sources">
-					<TopicSources sources={topic.sources} />
-				</InfoSection>
+				<>
+					<InfoSection label={`Sources · ${topic.sources.length} of ${MAX_TOPIC_SOURCES}`}>
+						<TopicSources sources={topic.sources} />
+					</InfoSection>
+					{personalSources ?? (
+						<TopicPersonalSourcesSection topic={topic} className="border-t border-dashed border-separator-strong" />
+					)}
+				</>
 			) : null}
 			<TopicInfoFooter topic={topic} isCard={isCard} />
 		</>
@@ -142,28 +158,6 @@ export function TopicVisibility({ visibility }: Pick<TopicDetails, "visibility">
 			<Text style={toTypeRoleStyle("body")} className="text-foreground">
 				{visibility}
 			</Text>
-		</View>
-	)
-}
-
-/**
- * Labels one section with the web's display type and spacing.
- */
-export function InfoSection({
-	label,
-	children,
-	isFirst = false,
-}: {
-	label: string
-	children: ReactNode
-	isFirst?: boolean
-}) {
-	return (
-		<View className={isFirst ? "pb-3" : "py-3"}>
-			<Text style={toTypeRoleStyle("sectionLabel")} className="text-muted-foreground">
-				{label}
-			</Text>
-			<View className="mt-1">{children}</View>
 		</View>
 	)
 }

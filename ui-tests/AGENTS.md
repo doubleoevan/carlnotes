@@ -17,12 +17,12 @@ run.
 | Check | Platform | Status | Proved by |
 |---|---|---|---|
 | Selection | all | being proven: unit tests pass, and three real commit ranges selected as expected, listed below | not yet run in CI |
-| Story image captures and comparison | web | being proven: in the host's Chrome, two runs gave identical bytes, and a
-full run of all 1,820 image captures had no error, no unstable image capture, and no accessibility violation | not yet
-run in CI | | Capture container | web | not yet run: its image has not been built anywhere yet | not yet run in CI | |
-Report, annotations, and approval | web | being proven: unit tests pass, and the report step ran on local image captures
-| not yet run in CI | | Card image captures and card flows | mcp | not yet built | none | | Story image captures |
-android, ios | not yet built | none | | Functional flows | web, android, ios | not yet built | none |
+| Story image captures and comparison | web | being proven: in the host's Chrome, two runs gave identical bytes, and a full run of all 1,820 image captures had no error, no unstable image capture, and no accessibility violation | not yet run in CI |
+| Capture container | web | not yet run: its image has not been built anywhere yet | not yet run in CI |
+| Report, annotations, and approval | web | being proven: unit tests pass, and the report step ran on local image captures | not yet run in CI |
+| MCP view image captures and flows | mcp | not yet built | none |
+| Story image captures | android, ios | not yet built | none |
+| Functional flows | web, android, ios | not yet built | none |
 
 Selection was checked by hand with `bun run visual:select -- --base <commit>^ --head <commit>` on three commits:
 

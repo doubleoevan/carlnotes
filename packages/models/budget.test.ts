@@ -6,6 +6,7 @@ import {
 	canSpend,
 	charge,
 	newBudget,
+	premiumModelCost,
 	releaseScanSpend,
 	reserveScanSpend,
 	speechCost,
@@ -13,6 +14,12 @@ import {
 	toResumedBudget,
 	transcriptionCost,
 } from "./budget"
+
+test("premium scoring prices input and output at the configured model rates", () => {
+	expect(premiumModelCost({ inputTokens: 7500, outputTokens: 8192 })).toBeCloseTo(0.0465448, 7)
+	expect(premiumModelCost({ inputTokens: 30_000, outputTokens: 8192 })).toBeGreaterThan(0.046544)
+	expect(premiumModelCost({ totalTokens: 15692 })).toBeCloseTo(0.0690448, 7)
+})
 
 // what Temporal does to a value that crosses an activity boundary
 function acrossActivityBoundary(budget: Budget): Budget {

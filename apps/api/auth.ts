@@ -232,6 +232,7 @@ export const auth = betterAuth({
 			litellmVirtualKey: { type: "string", required: false, input: false, returned: false },
 			role: { type: "string", required: false, input: false, returned: true },
 			plan: { type: "string", required: false, input: false, returned: true },
+			freeTopicLimit: { type: "number", required: false, input: false, returned: true },
 			// return the username and avatar source with the session
 			username: { type: "string", required: true, defaultValue: "", input: false, returned: true },
 			// the normalized username for the unique index

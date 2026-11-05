@@ -1,6 +1,11 @@
 import { toTestTopicFeed } from "@carlnotes/contracts/topicFeedTestFixtures"
+import type { ExpandableRowProps } from "@carlnotes/core/components/ExpandableRow"
+import { TopicPersonalSourcesSectionStory } from "@carlnotes/core/components/TopicPersonalSourcesSectionStory"
 import type { Meta, StoryObj } from "@storybook/react-native"
-import { TopicInfoButton } from "./TopicInfo"
+import { Sheet } from "@/components/common/Sheet"
+import { ExpandableRow } from "@/components/primitives/expandable-row"
+import { PERSONAL_SOURCES_ELEMENTS } from "./personalSourcesElements"
+import { TopicInfoButton, TopicInfoContent } from "./TopicInfo"
 import { STORY_TOPIC_PAGE } from "./topicPageStories"
 
 // open the complete topic note from its real trigger
@@ -29,4 +34,50 @@ export const LongNotes: Story = {
 			scanSummary: "Water temperature and grind size both matter.\n\n".repeat(30),
 		}),
 	},
+}
+
+// render both flat item states inside the real platform popover
+export const PersonalSourcesCollapsed: Story = { render: () => <InfoStory isClosed /> }
+export const PersonalSourcesWithItems: Story = { render: () => <InfoStory /> }
+export const PersonalSourcesExpanded: Story = { render: () => <InfoStory isExpanded /> }
+export const PersonalSourcesEmpty: Story = { render: () => <InfoStory isEmpty /> }
+export const Paginated: Story = { render: () => <InfoStory isPaged /> }
+function ExpandedRow(props: ExpandableRowProps) {
+	return <ExpandableRow {...props} initialOpen />
+}
+const EXPANDED_ELEMENTS = { ...PERSONAL_SOURCES_ELEMENTS, ExpandableRow: ExpandedRow }
+function InfoStory({
+	isExpanded = false,
+	isEmpty = false,
+	isClosed = false,
+	isPaged = false,
+}: {
+	isExpanded?: boolean
+	isEmpty?: boolean
+	isClosed?: boolean
+	isPaged?: boolean
+}) {
+	// fictional owner data stays local to the story
+	const topic = toTestTopicFeed({
+		name: "LLM evals",
+		prompt: "New methods for evaluating LLM agents, especially catching drift and regressions before users do.",
+		visibility: "private",
+		findings: [],
+		scanSummary: null,
+	})
+	const personalSources = (
+		<TopicPersonalSourcesSectionStory
+			className="border-t border-dashed border-separator-strong"
+			elements={PERSONAL_SOURCES_ELEMENTS}
+			expandedElements={EXPANDED_ELEMENTS}
+			isItemExpanded={isExpanded}
+			initialOpen={!isClosed}
+			variant={isEmpty ? "empty" : isPaged ? "paged" : "ready"}
+		/>
+	)
+	return (
+		<Sheet title="Topic roast" onClose={() => {}}>
+			<TopicInfoContent topic={topic} personalSources={personalSources} />
+		</Sheet>
+	)
 }

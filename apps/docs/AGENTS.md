@@ -1,5 +1,9 @@
 # apps/docs/
 
+The repository’s [runtime architecture](runtime-architecture.md), [development services](development-services.md), and [deployment](deployment.md) guides live beside the Starlight project. They document contributor and operator workflows.
+`personal-sources-rollout.md` is the operator checklist for receiving flags, encryption, Resend Inbound setup,
+controlled Gmail/newsletter checks, provider retention evidence, and rollback. It is outside the public docs tree.
+
 The Starlight docs site on Astro, the `@carlnotes/docs` app. It builds to static files that the api serves at `/docs`
 from `apps/docs/dist`, so it runs no process of its own, and nothing imports it.
 
@@ -16,8 +20,9 @@ from `apps/docs/dist`, so it runs no process of its own, and nothing imports it.
   Starlight's own loader and frontmatter schema. `apps/api/seo.ts` reads the same Markdown for the llms files, and `bun
   run docs:embed` (`apps/worker/docsSync.ts`) embeds the pages' sections into `docs_chunks` for chat, so a page edit is
   followed by the build and the embed; the deploy runs the embed as a job.
-  `account/add-to-ai.md` is the MCP listing's documentation page: Claude, ChatGPT, and coding-agent setup, all eleven
-  tools, account permissions, cards, limits, and disconnection. Preserve its URL and screenshots when updating it.
+  `topics/personal-sources.md` covers reading, importing, and deleting personal items. `topics/email-carl.md` and `topics/send-ai-chats-to-carlnotes.md` show how to send emails and chats, with screenshots of the picker and reply templates.
+  `account/add-to-ai.md` is the MCP listing's documentation page: Claude, ChatGPT, and coding-agent setup, all thirteen
+  tools, account permissions, MCP views, limits, and disconnection. Preserve its URL and screenshots when updating it.
 - `src/components/Footer.astro` — the footer override, which adds the copyright line under Starlight's own rows.
   `src/routeData.ts` — the route middleware that points the header logo at the app instead of the docs home.
   `src/topicTutorialVideoPlugin.ts` — the Sätteri plugin that fills a page's video marker with the video on making a
@@ -33,3 +38,5 @@ from `apps/docs/dist`, so it runs no process of its own, and nothing imports it.
   video plugin, with `sharp` declared for Astro's image service at build. No other package or app.
 - Dev: `bun run dev:docs`. Build: `bun run build:docs`, which writes `apps/docs/dist/`. Tests: none of its own; the
   build is the check.
+
+`topics/email-carl.md` explains direct email to the digest mailbox, clear-match filing, numbered clarification, written or fuzzy Topic names, same-thread confirmation, privacy, Plus/Premium eligibility, and the shared daily ceiling. The old email-forwarding URL redirects here. Both email and MCP guides describe what Carl never reads.

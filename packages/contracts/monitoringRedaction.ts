@@ -14,6 +14,7 @@ type OutgoingEvent = {
 
 // every Expo push token in a text, which the push service quotes in its errors
 const EXPO_PUSH_TOKEN_GLOBAL_PATTERN = new RegExp(EXPO_PUSH_TOKEN_PATTERN.source, "g")
+const AI_AGENT_API_KEY_PATTERN = /cnk_v1_[a-f0-9]{32}_[A-Za-z0-9_-]{43}/g
 
 /**
  * Removes named content fields, bounds attached strings, and redacts request, trace, and span URL secrets and the
@@ -43,7 +44,9 @@ export function redactEvent<Event extends OutgoingEvent>(event: Event): Event {
  * Returns a text with every Expo push token in it replaced.
  */
 export function withoutPushTokens(text: string): string {
-	return text.replace(EXPO_PUSH_TOKEN_GLOBAL_PATTERN, "ExpoPushToken[:token]")
+	return text
+		.replace(EXPO_PUSH_TOKEN_GLOBAL_PATTERN, "ExpoPushToken[:token]")
+		.replace(AI_AGENT_API_KEY_PATTERN, "cnk_v1_:token")
 }
 
 // an event's exceptions with the push tokens in their messages replaced
@@ -121,13 +124,24 @@ function toRedactedUrl(url: string): string {
 
 // a request with no query string or invite link's token on its url, its recorded query, or a header such as its referer
 function withoutRequestUrlSecrets<Request extends NonNullable<OutgoingEvent["request"]>>(request: Request): Request {
-	const keptRequest = withoutUrlSecrets(request) as Request
-	return request.headers ? { ...keptRequest, headers: withoutUrlSecrets(request.headers) } : keptRequest
+	// request bodies and authentication headers never belong in a diagnostic report
+	const keptRequest = withoutUrlSecrets(
+		Object.fromEntries(Object.entries(request).filter(([field]) => field !== "data" && field !== "body")),
+	) as Request
+	const keptHeaders =
+		request.headers &&
+		Object.fromEntries(
+			Object.entries(request.headers)
+				.filter(([name]) => !/authorization|cookie|svix-signature/i.test(name))
+				.map(([name, value]) => [name, withoutPushTokens(value)]),
+		)
+	return keptHeaders ? { ...keptRequest, headers: withoutUrlSecrets(keptHeaders) } : keptRequest
 }
 
 // event fields that could include a context doc, a page's content, or a spoken question's transcript. they are dropped
 // before an event is sent.
-const CONTENT_FIELD_PATTERN = /content|context|document|snippet|prompt|markdown|text|transcript/i
+const CONTENT_FIELD_PATTERN =
+	/content|context|document|snippet|prompt|markdown|text|transcript|summary|sender|chat.?url|secret|authorization|encryptedPayload|payload/i
 
 // the maximum attached string length retained in a report
 const MAX_REPORT_STRING_CHARS = 500
@@ -175,7 +189,11 @@ function truncateLongStrings(value: unknown, seen = new WeakSet<object>()): unkn
 		return "[circular]"
 	}
 	seen.add(value)
-	return Object.fromEntries(Object.entries(value).map(([field, nested]) => [field, truncateLongStrings(nested, seen)]))
+	return Object.fromEntries(
+		Object.entries(value)
+			.filter(([field]) => !CONTENT_FIELD_PATTERN.test(field))
+			.map(([field, nested]) => [field, truncateLongStrings(nested, seen)]),
+	)
 }
 
 // whether a value is a plain object literal, the only shape worth walking for hidden content

@@ -1,17 +1,18 @@
 // accepting an invite: the token acceptance, the topic and team acceptances behind it, the spent use, and which way
 // a token is no longer good
 
-import { db } from "@carlnotes/db"
+import { type DbHandle, type DbTransaction, db } from "@carlnotes/db"
 import { loadUserEmail, toInviteAddressedToUserFilter } from "@carlnotes/db/inviteFilters"
+import { hasUnconvertedPersonalSources } from "@carlnotes/db/personalSourcesAuthority"
+import { lockPersonalSourcesTopic } from "@carlnotes/db/personalSourcesLocks"
 import { invites } from "@carlnotes/db/schema/invites"
 import { teamMembers, teams } from "@carlnotes/db/schema/teams"
-import { topics } from "@carlnotes/db/schema/topics"
+import { subscriptions, topics } from "@carlnotes/db/schema/topics"
 import { trackEvent } from "@carlnotes/server/analytics"
 import { and, eq, sql } from "drizzle-orm"
 import { isLeaderRole } from "../authorization"
 import type { AnalyticsProperties } from "../currentUser"
 import { joinTeam, toTeamRole } from "../team/members"
-import { loadDirectSubscription } from "../topic/permissions"
 import { activateSubscription } from "../topic/subscriptions"
 import { isUserBlocked } from "../userBlocks"
 
@@ -83,36 +84,64 @@ export async function acceptTopicInvite(
 	invite: typeof invites.$inferSelect,
 	analyticsProperties?: AnalyticsProperties,
 ): Promise<InviteAcceptResult> {
-	// the topic the token opens, with its visibility for the public-topic waiver below
-	const [topic] = await db
-		.select({ id: topics.id, name: topics.name, visibility: topics.visibility })
-		.from(topics)
-		.where(eq(topics.id, invite.topicId ?? ""))
-	if (!topic) {
-		return { status: "unknown" }
+	// spend the invitation and activate its subscription under the Topic's privacy lock
+	const acceptance = await db.transaction((transaction) => acceptLockedTopicInvite({ transaction, userId, invite }))
+	if (acceptance.status !== "joined") {
+		return acceptance
 	}
-
-	// a user arriving twice, by refreshing or by clicking the link again does not spend another token use
-	const joined = { status: "joined", topicId: topic.id, topicName: topic.name } as const
-	if ((await loadDirectSubscription(userId, topic.id))?.isActive) {
-		return joined
+	if (!acceptance.shouldTrack) {
+		return { status: "joined", topicId: acceptance.topicId, topicName: acceptance.topicName }
 	}
-
-	// the token use is spent first. Follow already opens a public topic, so an exhausted link still admits
-	if (!(await spendInviteUse(invite.id)) && topic.visibility !== "public") {
-		return { status: "exhausted" }
-	}
-	await activateSubscription(userId, topic.id)
 
 	// report the acceptance and the subscription it made
 	trackInviteAccepted(userId, invite, analyticsProperties)
 	trackEvent("topic_subscribed", userId, {
 		...analyticsProperties,
-		topicId: topic.id,
-		isTopicPublic: topic.visibility === "public",
+		topicId: acceptance.topicId,
+		isTopicPublic: acceptance.isTopicPublic,
 		subscriptionSource: "invite",
 	})
-	return joined
+	return { status: "joined", topicId: acceptance.topicId, topicName: acceptance.topicName }
+}
+
+// an old invite never broadens access after the Topic has accepted personal content
+async function acceptLockedTopicInvite({
+	transaction,
+	userId,
+	invite,
+}: {
+	transaction: DbTransaction
+	userId: string
+	invite: typeof invites.$inferSelect
+}): Promise<
+	| { status: "unknown" | "exhausted" }
+	| { status: "joined"; topicId: string; topicName: string; shouldTrack: boolean; isTopicPublic: boolean }
+> {
+	// check activation before reusing an old subscription or spending an invitation
+	const topic = await lockPersonalSourcesTopic(transaction, invite.topicId ?? "")
+	if (!topic || (await hasUnconvertedPersonalSources(topic.id, transaction))) {
+		return { status: "unknown" }
+	}
+	const [subscription] = await transaction
+		.select({ isActive: subscriptions.isActive })
+		.from(subscriptions)
+		.where(and(eq(subscriptions.topicId, topic.id), eq(subscriptions.subscriberUserId, userId)))
+	const joined = {
+		status: "joined",
+		topicId: topic.id,
+		topicName: topic.name,
+		isTopicPublic: topic.visibility === "public",
+	} as const
+	if (subscription?.isActive) {
+		return { ...joined, shouldTrack: false }
+	}
+
+	// public Topics remain followable after a link's final use
+	if (!(await spendInviteUse(invite.id, transaction)) && topic.visibility !== "public") {
+		return { status: "exhausted" }
+	}
+	await activateSubscription({ userId, topicId: topic.id, transaction })
+	return { ...joined, shouldTrack: true }
 }
 
 // a team invite's acceptance: the membership with its inactive subscriptions, and the spent use
@@ -233,8 +262,8 @@ async function toAutomaticInvite(
 }
 
 // one use spent from the token, conditional on the limit. false if the link had none left
-async function spendInviteUse(inviteId: string): Promise<boolean> {
-	const spent = await db
+async function spendInviteUse(inviteId: string, transaction: DbHandle = db): Promise<boolean> {
+	const spent = await transaction
 		.update(invites)
 		.set({ usedCount: sql`${invites.usedCount} + 1` })
 		.where(and(eq(invites.id, inviteId), sql`${invites.usedCount} < ${invites.maxUses}`))

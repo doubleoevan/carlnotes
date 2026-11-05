@@ -23,6 +23,7 @@ import { useNewTopicDialog } from "@/components/topic/TopicEditorChoiceDialog"
 import { TopicFindingsSection } from "@/components/topic/TopicFindingsSection"
 import { TopicGateNotice } from "@/components/topic/TopicGateNotice"
 import { TopicInfoCard } from "@/components/topic/TopicInfoCard"
+import { TopicLinkedFinding } from "@/components/topic/TopicLinkedFinding"
 import { TopicHeader } from "@/components/topic/TopicPageHeader"
 import type { FeatureOrderMove } from "@/components/topic/TopicRankDialog"
 import { TopicScanButton } from "@/components/topic/TopicScanButton.tsx"
@@ -235,8 +236,9 @@ export function TopicPage() {
 							}
 						/>
 					</HydrateSection>
+					<TopicLinkedFinding topic={topic} topicFeedHandlers={topicFeedHandlers} />
 					<TopicFindings topic={topic} topicFeedHandlers={topicFeedHandlers} />
-					<TopicCards
+					<TopicViews
 						topic={topic}
 						onMakeTopicPublic={() => setOpenDialog("make-public")}
 						onReloadTopicPage={reloadTopicPage}
@@ -297,7 +299,7 @@ function TopicFindings({ topic, topicFeedHandlers }: { topic: TopicResponse; top
  * The topic info card and its settings on the left, its podcast episodes, scan history, notes, and related topics on
  * the right.
  */
-function TopicCards({
+function TopicViews({
 	topic,
 	onMakeTopicPublic,
 	onReloadTopicPage,

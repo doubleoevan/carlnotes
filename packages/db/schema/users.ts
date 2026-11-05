@@ -33,8 +33,12 @@ export const users = pgTable(
 		// notification permission, which turns both on, and a push reads null as off
 		isTopicPushEnabled: boolean("is_topic_push_enabled"),
 		isChatMentionPushEnabled: boolean("is_chat_mention_push_enabled"),
+		// the latest AI Agent connection the reader dismissed, so a later reconnection can be announced once
+		personalSourcesConnectionDismissedAt: timestamp("personal_source_connection_dismissed_at", { withTimezone: true }),
 		// the billing plan
 		plan: plan("plan").notNull().default("free"),
+		// preserve each existing account's Free allowance when the public plan changes
+		freeTopicLimit: integer("free_topic_limit").notNull().default(1),
 		// the id the app logs in to RevenueCat with: random, so a known user id never reads someone's store customer
 		revenueCatAppUserId: text("revenuecat_app_user_id").notNull().unique().default(sql`gen_random_uuid()::text`),
 		// a per-user monthly spend override in cents. an admin can raise or lower it, and null falls back to the plan's backstop
@@ -54,6 +58,8 @@ export const users = pgTable(
 	// enforces username uniqueness, compared on the normalized form
 	(table) => [
 		uniqueIndex("users_username_normalized_unique").on(table.usernameNormalized),
+		// match inbound senders against account addresses without a full user scan
+		index("users_email_lower_idx").on(sql`lower(${table.email})`),
 		// the trigram index behind the username search, which matches anywhere in the name
 		index("users_username_normalized_trgm").using("gin", table.usernameNormalized.op("gin_trgm_ops")),
 	],

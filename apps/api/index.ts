@@ -3,10 +3,13 @@ import { extname } from "node:path"
 import { oauthProviderAuthServerMetadata } from "@better-auth/oauth-provider"
 import { withTimeLimit } from "@carlnotes/contracts/time"
 import { db, readPoolGauges, sizeConnectionPool } from "@carlnotes/db"
+import { PersonalSourcesConversionError } from "@carlnotes/db/personalSourcesLocks"
 import { readRedisExtraGauges } from "@carlnotes/db/redisGauges"
 import { runWithRequestMemo } from "@carlnotes/db/requestMemo"
+import { FetchedSourceLimitError } from "@carlnotes/db/topicSourceCapacity"
 import { startTelemetry } from "@carlnotes/models/telemetry"
 import { reportError, startMonitoring } from "@carlnotes/server/monitoring"
+import { validatePersonalSourcesEmailSettings } from "@carlnotes/server/personalSourcesSettings"
 import { startRuntimeGauges } from "@carlnotes/server/runtimeGauges"
 import { sql } from "drizzle-orm"
 import type { Context, Next } from "hono"
@@ -81,6 +84,7 @@ export type AppType = typeof apiRoute
 // then size the connection pool from the database
 startMonitoring()
 startTelemetry()
+validatePersonalSourcesEmailSettings()
 await sizeConnectionPool()
 
 // load the ui's server build before serving. a production boot that cannot load it exits here
@@ -290,6 +294,10 @@ async function checkReadiness(context: Context): Promise<Response> {
 
 // log and report an error no route handles, and respond 500 as Hono's own handler does
 function reportRouteError(error: Error, context: Context): Response {
+	// report expected privacy and Source-limit conflicts without sending private request bodies to monitoring
+	if (error instanceof PersonalSourcesConversionError || error instanceof FetchedSourceLimitError) {
+		return context.json({ error: error.message }, 409)
+	}
 	// an HTTPException is the response a route chose, returned as is
 	if (error instanceof HTTPException) {
 		const response = error.getResponse()

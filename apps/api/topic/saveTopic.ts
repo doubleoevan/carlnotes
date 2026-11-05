@@ -1,20 +1,18 @@
 // saving a topic: the create with its default Sources and invites, and the update with its changed-field events
 
-import { toTopicPath } from "@carlnotes/contracts/seo"
 import type { TopicDraft, UpdateTopicPayload } from "@carlnotes/contracts/topicPayloads"
-import { db } from "@carlnotes/db"
+import { type DbTransaction, db } from "@carlnotes/db"
+import { assertPersonalSourcesConverted, lockPersonalSourcesTopic } from "@carlnotes/db/personalSourcesLocks"
 import { invites } from "@carlnotes/db/schema/invites"
 import { scans } from "@carlnotes/db/schema/scans"
 import { sources, subscriptions, topics } from "@carlnotes/db/schema/topics"
+import { users } from "@carlnotes/db/schema/users"
 import { addViewer } from "@carlnotes/db/viewerCounts"
-import { notifyIndexNow } from "@carlnotes/pipeline/indexNow"
-import { saveTopicVectors } from "@carlnotes/pipeline/meanVectors"
 import { trackEvent } from "@carlnotes/server/analytics"
-import { appUrl } from "@carlnotes/server/appUrl"
 import { reportError } from "@carlnotes/server/monitoring"
 import { toUserViewerElement } from "@carlnotes/server/viewerElements"
 import { and, eq, inArray, isNotNull, isNull, notInArray } from "drizzle-orm"
-import { isAllowed } from "../authorization"
+import { isAllowed, topicsRemaining } from "../authorization"
 import type { AnalyticsProperties } from "../currentUser"
 import { startInviteEmails } from "../invite/emails"
 import { checkTopicInvitees } from "../invite/userInvites"
@@ -22,6 +20,7 @@ import { releaseFeatureOrder } from "./featuring"
 import { clearVisitorTopicCaches } from "./feedCaches"
 import { type PromptVersionOrigin, savePromptVersion } from "./promptVersions"
 import {
+	attachDraftTeam,
 	authorizeNewDailyTopic,
 	type DailyFrequencyRejection,
 	startFirstScan,
@@ -30,83 +29,36 @@ import {
 	toPodcastNames,
 } from "./saveHelpers"
 import { type ObjectionableRejection, type TermsOutdatedRejection, toTopicSaveRejection } from "./saveTopicGate"
+import { reconcileTopicSources } from "./saveTopicSources"
+import { claimTopicDraftReceipt, readUsedTopicDraft, type TopicDraftReceipt } from "./topicDraftReceipts"
+
+import { notifyIndexNowOfTopicChange, saveTopicVectorsOnVisibilityChange } from "./topicIndexing"
+
+export { saveTopicVectorsReportingFailure } from "./topicIndexing"
+export { notifyIndexNowOfTopicChange, saveTopicVectorsOnVisibilityChange }
+
+// both creation and editing enforce the same frequency, invitation, and content checks
+type TopicSaveRejection = DailyFrequencyRejection | InviteeRejection | ObjectionableRejection | TermsOutdatedRejection
 
 // the outcome of a topic creation request
 type CreateTopicResult =
-	| { status: "created"; id: string }
+	| { status: "created"; id: string; team?: Awaited<ReturnType<typeof attachDraftTeam>> | null }
+	| { status: "confirmationUsed" }
 	| { status: "quota" }
-	| DailyFrequencyRejection
-	| InviteeRejection
-	| ObjectionableRejection
-	| TermsOutdatedRejection
+	| TopicSaveRejection
 
 // the outcome of a topic edit
 export type UpdateTopicResult =
 	| { status: "saved" }
 	| { status: "forbidden" }
 	| { status: "missing" }
-	| DailyFrequencyRejection
-	| InviteeRejection
-	| ObjectionableRejection
-	| TermsOutdatedRejection
+	| TopicSaveRejection
 
 // a save stopped by its invitee list: a recipient who is not accepting invites, or the sender's invite limit
 type InviteeRejection = { status: "inviteeRejected"; email: string } | { status: "inviteLimit" }
 
-/**
- * Tells IndexNow the urls a save changed: a topic's url if it turns public, its old url if it stops being public,
- * and both if a rename moves a public topic.
- */
-export function notifyIndexNowOfTopicChange({
-	savedTopic,
-	previousTopic,
-}: {
-	savedTopic: { id: string; name: string; visibility: (typeof topics.$inferSelect)["visibility"] }
-	previousTopic: { name: string; visibility: (typeof topics.$inferSelect)["visibility"] } | null
-}): void {
-	// the topic's indexed path after the save and before it. only a public topic's page is indexed
-	const topicPath = savedTopic.visibility === "public" ? toTopicPath(savedTopic) : null
-	const previousTopicPath =
-		previousTopic?.visibility === "public" ? toTopicPath({ id: savedTopic.id, name: previousTopic.name }) : null
-	if (topicPath === previousTopicPath) {
-		return
-	}
-	// send the path that appeared and the path that went away
-	const changedPaths = [topicPath, previousTopicPath].filter((changedPath) => changedPath !== null)
-	void notifyIndexNow(changedPaths.map((changedPath) => `${appUrl()}${changedPath}`))
-}
-
-// the saved topic, and its visibility before and after the save
-type SaveTopicVectorsOnVisibilityChangeOptions = {
-	topicId: string
-	visibility: (typeof topics.$inferSelect)["visibility"]
-	previousVisibility: (typeof topics.$inferSelect)["visibility"]
-}
-
-/**
- * Saves a topic's vectors again if a save changed its visibility. A failed save is reported and never fails the topic's
- * save.
- */
-export async function saveTopicVectorsOnVisibilityChange({
-	topicId,
-	visibility,
-	previousVisibility,
-}: SaveTopicVectorsOnVisibilityChangeOptions): Promise<void> {
-	if (visibility === previousVisibility) {
-		return
-	}
-	await saveTopicVectorsReportingFailure(topicId)
-}
-
-/**
- * Saves a topic's vectors again, reporting a failed save instead of throwing it.
- */
-export async function saveTopicVectorsReportingFailure(topicId: string): Promise<void> {
-	await saveTopicVectors(topicId).catch((error: unknown) => reportError(error, "database", { topicId }))
-}
-
 // the editor's topic fields, and whether the new topic's podcast is on. left out, the podcast starts on
-type CreateTopicPayload = UpdateTopicPayload & Pick<TopicDraft, "isPodcastEnabled">
+type CreateTopicPayload = UpdateTopicPayload & Pick<TopicDraft, "isPodcastEnabled"> & { draftTeamId?: string }
 
 /**
  * Creates a topic for the user with its invites and sources, enforcing the topic limit.
@@ -117,10 +69,16 @@ export async function createTopic(
 	analyticsProperties: AnalyticsProperties,
 	// where the first prompt version is saved from. the editor unless a topic tool says otherwise
 	origin: PromptVersionOrigin = "editor",
+	receipt?: TopicDraftReceipt,
 ): Promise<CreateTopicResult> {
+	// a successful retry returns its owned Topic even after the original creation filled the owner's quota
+	const existing = receipt && (await readUsedTopicDraft(db, userId, receipt))
+	if (existing) {
+		return existing
+	}
 	// enforce the topic limit and user role before writing anything.
 	if (!(await isAllowed(userId, "topic:create"))) {
-		return { status: "quota" }
+		return (receipt && (await readUsedTopicDraft(db, userId, receipt))) || { status: "quota" }
 	}
 
 	// check if a topic asking for a daily frequency can fit under the plan's daily topic limit
@@ -152,11 +110,23 @@ export async function createTopic(
 		return inviteeCheck
 	}
 	const podcastNames = await toPodcastNames(payload.sources)
-	const { topicId, firstScan } = await db.transaction(async (transaction) => {
+	const created = await db.transaction(async (transaction) => {
+		// authorize distinct drafts against the same owner slot, and replay identical confirmations before checking limits
+		const rejection = await guardTopicCreation(transaction, userId, payload, receipt)
+		if (rejection) {
+			return rejection
+		}
+		// consume the preview atomically with every write. Only one caller starts the new Topic's first Scan.
+		const id = crypto.randomUUID()
+		const used = receipt && (await claimTopicDraftReceipt(transaction, userId, receipt, id))
+		if (used) {
+			return used
+		}
 		// insert the topic row owned by the user
 		const [topic] = await transaction
 			.insert(topics)
 			.values({
+				id,
 				ownerId: userId,
 				name,
 				prompt,
@@ -201,8 +171,13 @@ export async function createTopic(
 
 		// open the first scan as running, so the new topic page shows a scan already under way
 		const [firstScan] = await transaction.insert(scans).values({ topicId: topic.id, ownerId: userId }).returning()
-		return { topicId: topic.id, firstScan }
+		const team = payload.draftTeamId ? await attachDraftTeam(transaction, userId, payload.draftTeamId, topic.id) : null
+		return { topicId: topic.id, firstScan, team }
 	})
+	if ("status" in created) {
+		return created
+	}
+	const { topicId, firstScan } = created
 
 	// screen the url Sources that this topic was created with, then start the first Scan,
 	// or mark the first Scan failed if the owner's key budget is spent
@@ -222,7 +197,25 @@ export async function createTopic(
 
 	// track the topic creation event
 	trackEvent("topic_created", userId, { ...analyticsProperties, topicId, origin })
-	return { status: "created", id: topicId }
+	return { status: "created", id: topicId, team: created.team }
+}
+
+// every creator uses this lock, including browser and signed draft requests racing for the final plan slot
+async function guardTopicCreation(
+	transaction: DbTransaction,
+	userId: string,
+	payload: CreateTopicPayload,
+	receipt?: TopicDraftReceipt,
+): Promise<CreateTopicResult | null> {
+	await transaction.select({ id: users.id }).from(users).where(eq(users.id, userId)).for("no key update")
+	const existing = receipt && (await readUsedTopicDraft(transaction, userId, receipt))
+	if (existing) {
+		return existing
+	}
+	if ((await topicsRemaining(userId, transaction)) <= 0) {
+		return { status: "quota" }
+	}
+	return authorizeNewDailyTopic(userId, payload, undefined, transaction)
 }
 
 /**
@@ -290,6 +283,11 @@ export async function updateTopic(
 	// whether the visibility change released the topic's feature order inside the transaction
 	let isFeatureOrderReleased = false
 	const removedSourceKinds = await db.transaction(async (transaction) => {
+		// serialize receipt with publication and invitation reconciliation
+		await lockPersonalSourcesTopic(transaction, topicId)
+		if (visibility !== "private" || inviteeCheck.newInvites.length > 0 || inviteeCheck.reinvitedEmails.length > 0) {
+			await assertPersonalSourcesConverted(transaction, topicId)
+		}
 		// write the editable topic fields
 		await transaction
 			.update(topics)
@@ -344,25 +342,7 @@ export async function updateTopic(
 				.onConflictDoNothing()
 		}
 
-		// reconcile sources: keep the rows the payload names by id, delete the rest, insert the ones without an id
-		const keptSourceIds = payload.sources.flatMap((topicSource) => ("id" in topicSource ? [topicSource.id] : []))
-		const staleSourceFilter =
-			keptSourceIds.length > 0
-				? and(eq(sources.topicId, topicId), notInArray(sources.id, keptSourceIds))
-				: eq(sources.topicId, topicId)
-		// the deleted rows come back with their kinds, for the events reported after the transaction
-		const removedSourceRows = await transaction
-			.delete(sources)
-			.where(staleSourceFilter)
-			.returning({ kind: sources.kind })
-
-		// insert the newly added sources. the flatMap narrows the union to the members with source kind and source config
-		if (newSources.length > 0) {
-			await transaction
-				.insert(sources)
-				.values(newSources.map((topicSource) => toNewSourceRow(topicId, topicSource, podcastNames)))
-		}
-		return removedSourceRows.map((removedSourceRow) => removedSourceRow.kind)
+		return reconcileTopicSources({ transaction, topicId, payloadSources: payload.sources, podcastNames })
 	})
 
 	// drop the topic's cached visitor copies

@@ -1,3 +1,4 @@
+import { personalSourceKinds } from "@carlnotes/contracts/enums"
 // the scan report: a short write-up of what one Scan found, filtered, and spent
 
 import { type Budget, CHEAP_COST_PER_MILLION_TOKENS, charge, tokenCost } from "@carlnotes/models/budget"
@@ -6,7 +7,7 @@ import { type BuiltPrompt, fetchPromptTemplate, promptTelemetry } from "@carlnot
 import { writePrompt } from "@carlnotes/models/prompts/write"
 import { reportError } from "@carlnotes/server/monitoring"
 import { generateText } from "ai"
-import type { TopicContext } from "./filter"
+import type { TopicContext } from "./topicContext"
 import type { KeptFinding, ReviewOutcome } from "./track"
 
 // how many kept findings the report lists in full before it just counts the rest
@@ -155,6 +156,7 @@ function toSourcesBlock(scannedSources: ScannedSource[]): string {
 
 	// one bullet per Source
 	return scannedSources
+		.filter((source) => !personalSourceKinds.some((kind) => kind === source.sourceKind))
 		.map((scannedSource) => {
 			const fallbackNote = scannedSource.fallbackMode ? ` — fell back to ${scannedSource.fallbackMode}` : ""
 			const failureNote = scannedSource.reason ? ` — ${scannedSource.reason}` : ""

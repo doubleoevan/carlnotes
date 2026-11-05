@@ -1,7 +1,11 @@
 // the unpaid stages that decide: the Resources worth scoring, the topic context they are measured against, and the
 // relevance gate over their embeddings
 
-import { toHostWithoutWww } from "@carlnotes/contracts/seo"
+import {
+	AUTOMATIC_PERSONAL_SOURCE_SCORE_BONUS,
+	PERSONAL_SOURCE_SCORE_BONUS,
+	type PersonalSourceScoreBonus,
+} from "@carlnotes/contracts/sourceScoring"
 import { db } from "@carlnotes/db"
 import { EMBED_MODEL_NAME, findings, resources } from "@carlnotes/db/schema/scans"
 import { sources } from "@carlnotes/db/schema/topics"
@@ -13,13 +17,13 @@ import {
 	toEstimatedTokens,
 	tokenCost,
 } from "@carlnotes/models/budget"
-import { embedVector, embedVectors } from "@carlnotes/models/models"
+import { embedVectors } from "@carlnotes/models/models"
 import { reportError } from "@carlnotes/server/monitoring"
 import { cosineSimilarity } from "ai"
 import { and, eq, inArray, notInArray, or, sql } from "drizzle-orm"
-import { toTopicContextHash } from "../attach"
 import type { NewResource } from "../ingest/ingester"
 import { toCanonicalUrl } from "../ingest/normalize"
+import type { TopicContext } from "./topicContext"
 import { type ResourceOutcome, type ReviewOutcome, trackOutcomes } from "./track"
 
 // the relevance bar each resource kind is measured against
@@ -28,30 +32,11 @@ const RELEVANCE_THRESHOLDS: Record<Resource["kind"], number> = { read: 0.35, wat
 // the text limit that bounds embedding tokens and spend
 const MAX_EMBED_CHARS = 8000
 
-// the topic context limit for the score prompt and the scan summary. the limit fits the prompt and one full-length attachment
-const MAX_TOPIC_CONTEXT_CHARS = 24_000
-
-// how many example pages of each kind the score prompt lists
-const MAX_SCORE_EXAMPLE_PAGES = 10
-
-// qwen3 is instruction-aware, so the query side is wrapped with this task instruction while documents stay plain
-const EMBED_QUERY_INSTRUCTION = "Given a topic's interest description, retrieve web resources relevant to it"
-
-// a persisted Resource record
-export type Resource = typeof resources.$inferSelect
-
-// the topic's context. the hash covers all of the context, and the gate embeds the start of the context.
-// the score text adds the pages that the topic's users liked, bookmarked, or rated down
-export type TopicContext = { name: string; text: string; embedding: number[]; contextHash: string; scoreText: string }
-
-// a page from the topic's feed that the score prompt shows as an example
-export type ScoreExamplePage = { title: string | null; url: string }
-
-// the example pages. the pages that the topic's users liked or bookmarked, and the pages that they rated down
-export type ScoreExamplePages = { likedOrBookmarkedPages: ScoreExamplePage[]; ratedDownPages: ScoreExamplePage[] }
+// a persisted Resource with the current Topic queue's transient score bonus
+export type Resource = typeof resources.$inferSelect & { personalSourceScoreBonus?: PersonalSourceScoreBonus }
 
 // a Resource that cleared the relevance gate, with the embedding and the similarity score that ranks it
-export type RelevantResource = { resource: Resource; embedding: number[]; similarity: number }
+export type RelevantResource = { resource: Resource; embedding: number[] | null; similarity: number }
 
 // what the relevance gate makes of one Resource: a relevant one for the ranked pass, or an outcome to record now
 type RelevanceGateOutcome = { status: "relevant"; relevantResource: RelevantResource } | ResourceOutcome
@@ -66,16 +51,31 @@ const EMBED_BATCH_SIZE = 100
  * The stored Resource rows this Scan discovered that are worth scoring. A Resource already scored for this Topic is excluded,
  * so a re-scan never pays to score the same article twice. The pages a url Source names are the exception. its content is pulled for every Scan.
  */
-export async function loadResourcesToReview(
-	topicId: string,
-	discoveredResources: NewResource[],
-	topicContextHash: string,
-): Promise<Resource[]> {
+export async function loadResourcesToReview({
+	topicId,
+	discoveredResources,
+	topicContextHash,
+	personalSourceScoreBonuses = new Map(),
+}: {
+	topicId: string
+	discoveredResources: NewResource[]
+	topicContextHash: string
+	personalSourceScoreBonuses?: ReadonlyMap<string, PersonalSourceScoreBonus>
+}): Promise<Resource[]> {
 	// the urls this scan discovered (already deduped by ingestion)
 	const urls = discoveredResources.map((resource) => resource.url)
 
 	// the url Sources' own pages, which every Scan reads again
 	const urlSourcePageUrls = await loadUrlSourcePageUrls(topicId)
+
+	// a stronger personal contribution earns a fresh review even when content and context match
+	const fullBonusUrls = [...personalSourceScoreBonuses]
+		.filter(([, bonus]) => bonus === PERSONAL_SOURCE_SCORE_BONUS)
+		.map(([url]) => url)
+	const halfBonusUrls = [...personalSourceScoreBonuses]
+		.filter(([, bonus]) => bonus === AUTOMATIC_PERSONAL_SOURCE_SCORE_BONUS)
+		.map(([url]) => url)
+	const requiredBonus = sql`case when ${inArray(resources.url, fullBonusUrls)} then ${PERSONAL_SOURCE_SCORE_BONUS}::real when ${inArray(resources.url, halfBonusUrls)} then ${AUTOMATIC_PERSONAL_SOURCE_SCORE_BONUS}::real else 0::real end`
 
 	// the Resources already reviewed against this context and content, and the Resources rated thumbs down.
 	// a Resource rated thumbs down never scores again
@@ -90,6 +90,7 @@ export async function loadResourcesToReview(
 					and(
 						eq(findings.reviewedContextHash, topicContextHash),
 						sql`${findings.reviewedContentHash} is not distinct from ${resources.contentHash}`,
+						sql`${findings.personalSourceScoreBonus} >= ${requiredBonus}`,
 					),
 					eq(findings.rating, "down"),
 				),
@@ -130,72 +131,10 @@ export async function loadUrlSourcePageUrls(topicId: string): Promise<string[]> 
 }
 
 /**
- * Builds the one context text a Scan reviews against: the topic's name, its prompt, and its attachments.
- */
-export function toTopicContextText(topicScanContext: { name: string; context: string }): string {
-	const { name, context } = topicScanContext
-	return [name, context.trim()].filter(Boolean).join("\n\n").slice(0, MAX_TOPIC_CONTEXT_CHARS)
-}
-
-/**
- * Builds the score prompt's text from the context text, then the pages that the topic's users liked or bookmarked,
- * then the pages that they rated down.
- */
-export function toScoreContextText(contextText: string, scoreExamplePages: ScoreExamplePages): string {
-	// list each kind of example page by title and host, under a label like an attachment's. a kind with no pages is left out
-	const toExampleSections = (label: string, examplePages: ScoreExamplePage[]): string[] => {
-		const examplePageLines = examplePages
-			.slice(0, MAX_SCORE_EXAMPLE_PAGES)
-			.map(({ title, url }) => `- ${title ?? url} (${toHostWithoutWww(url)})`)
-		return examplePageLines.length > 0 ? [`[${label}]\n${examplePageLines.join("\n")}`] : []
-	}
-	return [
-		contextText,
-		...toExampleSections("pages the reader liked or bookmarked", scoreExamplePages.likedOrBookmarkedPages),
-		...toExampleSections("pages the reader rated down", scoreExamplePages.ratedDownPages),
-	].join("\n\n")
-}
-
-// the topic's scan context, the example pages for the score prompt, the Scan's Budget,
-// and the key that the embedding bills
-type LoadTopicContextOptions = {
-	topicScanContext: { name: string; context: string }
-	scoreExamplePages: ScoreExamplePages
-	budget: Budget
-	litellmApiKey?: string
-}
-
-/**
- * Embeds the start of the topic's context for the relevance gate: its name, its prompt, and its attachments' contexts.
- * The text that the score prompt reads also lists the example pages.
- */
-export async function loadTopicContext({
-	topicScanContext,
-	scoreExamplePages,
-	budget,
-	litellmApiKey,
-}: LoadTopicContextOptions): Promise<TopicContext> {
-	// always include the topic name in the scan context
-	const text = toTopicContextText(topicScanContext)
-
-	// embed the start of the context as the query side once and update the estimated embedding cost
-	const contextTextToEmbed = text.slice(0, MAX_EMBED_CHARS)
-	const embedding = await embedQuery(contextTextToEmbed, litellmApiKey)
-	charge(budget, "embedding", tokenCost(toEstimatedTokens(contextTextToEmbed.length), EMBED_COST_PER_MILLION_TOKENS))
-	return {
-		name: topicScanContext.name,
-		text,
-		embedding,
-		contextHash: toTopicContextHash(text),
-		scoreText: toScoreContextText(text, scoreExamplePages),
-	}
-}
-
-/**
- * Embed every candidate and keep the ones relevant to the topic, recording the outcome of the ones dropped.
+ * Gates ordinary candidates by embedding and passes matched Personal sources links directly to review.
  * Embedding is the only metered work here, so a candidate past the Scan's limit is deferred instead of being embedded.
  * A candidate in gateExemptResourceIds passes whatever it measures: a Resource the Topic already holds a Finding for,
- * and a url Source's own page.
+ * and a url Source's own page. Personal-source candidates need no embedding.
  */
 export async function gateResources(
 	resourcesToReview: Resource[],
@@ -229,6 +168,12 @@ export async function gateResources(
 
 		// filtered or failed, so it is counted here and never reaches the ranked pass
 		trackOutcomes(reviewOutcome, gateOutcome)
+		if (gateOutcome.status === "filtered") {
+			await reviewOutcome.onResourceConsidered?.(resource.url, {
+				reviewOutcome: "rejected",
+				reviewReason: gateOutcome.reason,
+			})
+		}
 	}
 
 	// the relevant Resources are still in discovery order. the reviewScan caller ranks them before anything paid runs
@@ -236,10 +181,19 @@ export async function gateResources(
 }
 
 /**
- * Orders the relevant Resources best-first, so a per-Scan limit defers the least relevant one.
+ * Orders queued personal links first, then exempt Resources, then the strongest embedding matches.
  */
-export function rankBySimilarity(relevantResources: RelevantResource[]): RelevantResource[] {
-	return [...relevantResources].sort((first, second) => second.similarity - first.similarity)
+export function rankBySimilarity(
+	relevantResources: RelevantResource[],
+	gateExemptResourceIds: ReadonlySet<string> = new Set(),
+): RelevantResource[] {
+	// queued personal links lead, then existing Findings and chosen pages, then embedding relevance
+	return [...relevantResources].sort(
+		(first, second) =>
+			(second.resource.personalSourceScoreBonus ?? 0) - (first.resource.personalSourceScoreBonus ?? 0) ||
+			Number(gateExemptResourceIds.has(second.resource.id)) - Number(gateExemptResourceIds.has(first.resource.id)) ||
+			second.similarity - first.similarity,
+	)
 }
 
 // measure one candidate against the topic context, using its stored vector or the one the batch pass just embedded
@@ -249,6 +203,11 @@ function gateResource(
 	topicContext: TopicContext,
 	isGateExempt: boolean,
 ): RelevanceGateOutcome {
+	// matched personal links reach scoring without another embedding gate
+	if (resource.personalSourceScoreBonus) {
+		return { status: "relevant", relevantResource: { resource, embedding: resource.embedding, similarity: 0 } }
+	}
+
 	// reuse a Resource's existing global embedding
 	const embedding = resource.embedding ?? embeddedBatch.embeddings.get(resource.id)
 	if (!embedding) {
@@ -275,7 +234,9 @@ async function embedMissingVectors(
 ): Promise<EmbeddedBatchOutcome> {
 	// only a candidate with no stored vector costs anything to embed
 	const embeddedBatchOutcome: EmbeddedBatchOutcome = { embeddings: new Map(), failedIds: new Set() }
-	const resourcesWithoutEmbeddings = resourcesToReview.filter((resource) => !resource.embedding)
+	const resourcesWithoutEmbeddings = resourcesToReview.filter(
+		(resource) => !resource.embedding && !resource.personalSourceScoreBonus,
+	)
 	for (let start = 0; start < resourcesWithoutEmbeddings.length; start += EMBED_BATCH_SIZE) {
 		// embedding costs money, so check the limit before each chunk
 		if (!canSpend(budget, stopSignal)) {
@@ -336,13 +297,6 @@ function embedText(resource: Pick<Resource, "title" | "snippet" | "url">): strin
 	// join title and snippet, then limit the text to bound token limits
 	const text = `${resource.title ?? ""}\n${resource.snippet ?? ""}`.trim()
 	return (text || resource.url).slice(0, MAX_EMBED_CHARS)
-}
-
-/**
- * Embed a query: the topic context wrapped in qwen3's Instruct and Query template, through the truncating helper.
- */
-export async function embedQuery(text: string, litellmApiKey?: string): Promise<number[]> {
-	return embedVector(`Instruct: ${EMBED_QUERY_INSTRUCTION}\nQuery: ${text}`, litellmApiKey)
 }
 
 /**

@@ -5,7 +5,6 @@ import { ArrowRight } from "lucide-react"
 import { TeamAvatar } from "@/components/branding/TeamAvatar"
 import { UserAvatar } from "@/components/branding/UserAvatar"
 import { AnchorLink } from "@/components/common/AnchorLink"
-import { RESOURCE_KIND_ICON } from "@/lib/utils"
 import { SEARCH_RESULT_KIND_ICON } from "./searchFilterOptions"
 
 // what every suggestion option needs to be an announced listbox option that clears the search when clicked
@@ -24,7 +23,9 @@ export function SearchRowOption({
 	searchRow,
 	isActive,
 	onOpen,
-}: SuggestionOptionProps & { searchRow: SearchRow }) {
+	onSelect,
+	isDisabled = false,
+}: SuggestionOptionProps & { searchRow: SearchRow; onSelect?: () => void; isDisabled?: boolean }) {
 	// a finding opens its resource and records the open, and every other row opens its page
 	const href = searchRow.kind === "finding" ? searchRow.finding.url : searchRow.path
 	const handleClick = (): void => {
@@ -32,6 +33,22 @@ export function SearchRowOption({
 			void sendTopicFindingOpened({ findingId: searchRow.finding.findingId })
 		}
 		onOpen()
+	}
+	// a picker selects the Topic in place while the site search keeps its existing navigation
+	if (onSelect) {
+		return (
+			<button
+				type="button"
+				id={suggestionId}
+				role="option"
+				aria-selected={isActive}
+				disabled={isDisabled}
+				onClick={onSelect}
+				className={cn(SUGGESTION_OPTION_CLASS, "w-full text-left", isActive && "bg-accent")}
+			>
+				<SearchRowOptionContent searchRow={searchRow} />
+			</button>
+		)
 	}
 	return (
 		<AnchorLink
@@ -99,13 +116,10 @@ function SearchRowOptionContent({ searchRow }: { searchRow: SearchRow }) {
 			)
 		// a finding, with its resource kind's icon and its source
 		case "finding": {
-			const ResourceKindIcon = RESOURCE_KIND_ICON[searchRow.finding.resourceKind]
+			const FindingIcon = SEARCH_RESULT_KIND_ICON.findings
 			return (
 				<>
-					<ResourceKindIcon
-						className="text-muted-foreground size-4 shrink-0"
-						aria-label={searchRow.finding.resourceKind}
-					/>
+					<FindingIcon className="text-muted-foreground size-4 shrink-0" aria-label="Finding" />
 					<span className="min-w-0 flex-1 truncate">{searchRow.name}</span>
 					<span className="text-muted-foreground shrink-0 text-xs">{searchRow.finding.source}</span>
 				</>

@@ -1,5 +1,14 @@
 # packages/client/
 
+`aiAgentClient.ts` reads and dismisses connection nudges. `personalSourcesClient.ts` adds a verified connected agent to a Topic,
+alongside its private reads, explicit deletions, selected imports, and email controls. These routes require a session.
+
+`personalSourcesClient.ts` reads sender-specific shared-address guidance alongside Personal sources pages.
+
+`personalSourcesClient.ts` reads receiving Sources and paged Personal sources items and sends explicit deletions.
+`aiAgentClient.ts` reads grouped connections and API key metadata and creates or revokes credentials through
+session-only account routes. The one-time key response must remain in the current display, never a store or cache.
+
 `@carlnotes/client`, the typed api clients, one module per domain named `<domain>Client.ts`. `apps/web` imports them as
 `@carlnotes/client/<domain>Client`, and `@carlnotes/core` reads `authClient.ts`, `profileClient.ts`, `pushClient.ts`,
 `topicClient.ts`, and `topicFindingClient.ts`.
@@ -79,3 +88,7 @@ refuses redirects. Only the returned HTTPS media URL reaches a platform player, 
 stay in memory. Episode/feed reads can opt into `PodcastEpisodeRequestError`: 401/403/404 retire access; transport
 and server failures remain retryable. Legacy nullable defaults remain unchanged. Listen writes accept a retirement
 signal, and `fetchApi` checks cancellation after asynchronous session headers, before dispatch.
+
+`personalSourcesClient.ts` includes the sender-only current context and Topic-wide entry pagination used by both Personal sources popovers.
+
+`fetchPersonalSourcesEmailSetup` is the read-only mailbox response used by the empty Personal sources hint. It creates no Source and has no setup UI.

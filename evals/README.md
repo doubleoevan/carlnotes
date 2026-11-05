@@ -366,3 +366,7 @@ Every case checks that the summary is not empty, that a document's summary is sh
 summary says nothing the attachment does not show, and that it keeps the facts a user needs. The cases cover a
 meeting note, a product spec, a document long enough to be cut, a price sheet and an image with an instruction planted
 in each, a chart, and a recipe card.
+
+`personal-sources-context/` exercises the production private-context writer with four bounded synthetic cases: useful context, deletion, adversarial input, and long imports. Run `bun run eval:personal-sources-context --repeat 3`; deterministic case checks also run in `bun test` without model calls.
+
+Its `personalSourcesScoringEval.ts` companion runs three adversarial two-sender cases through the production scorer with disposable development accounts. `bun run eval:personal-sources-scoring` requires page-only public evidence and separate private annotations, caps model spend per case, and removes its accounts and temporary model credential afterward.

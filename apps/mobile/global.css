@@ -11,9 +11,22 @@
 
 /* shared components own their spacing and shapes on both platforms */
 @source "../../packages/core/components/PageSkeleton.tsx";
+/* include the text and spacing classes used by the shared Personal sources components */
+@source "../../packages/core/components/AiAgentAccountCard.tsx";
+@source "../../packages/core/components/PersonalSourceEntryList.tsx";
+@source "../../packages/core/components/PersonalSourceCard.tsx";
+@source "../../packages/core/components/PersonalSourcesEmailControls.tsx";
+@source "../../packages/core/components/PersonalSourcesAiAgentPicker.tsx";
+@source "../../packages/core/components/TopicPersonalSourcesCard.tsx";
 @source "../../packages/core/components/PodcastEpisodeChapterTag.tsx";
 @source "../../packages/core/components/PodcastEpisodePill.tsx";
 @source "../../packages/core/components/ScrollDownButton.tsx";
 
 /* budget segments and legend dots use the same classes returned by the shared model */
 @source "../../packages/core/lib/spendMeter.ts";
+
+@source "../../packages/core/components/ExpandableRow.tsx";
+
+@source "../../packages/core/components/TopicPersonalSourcesSection.tsx";
+
+@source "../../packages/core/components/TopicPersonalSourcesContents.tsx";

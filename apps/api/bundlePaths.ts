@@ -12,5 +12,5 @@ export const UI_CLIENT_ROOT = "./apps/web/dist/client"
 // where build:ui writes the web app's server entry, which renders every page no other route serves
 export const UI_SERVER_ENTRY = "apps/web/dist/server/server.js"
 
-// where build:ui writes the mcp cards' one script and one stylesheet, which the api writes into each card's html
-export const MCP_CARDS_BUNDLE_ROOT = "./apps/web/dist/mcp-cards"
+// where build:ui writes the MCP views' one script and one stylesheet, which the api writes into each MCP view's html
+export const MCP_VIEWS_BUNDLE_ROOT = "./apps/web/dist/mcp-views"

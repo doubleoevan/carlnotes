@@ -1,6 +1,7 @@
 // review turns a Scan's discovered Resources into topic findings
 
 import { db } from "@carlnotes/db"
+import { considerPersonalSourcesLink } from "@carlnotes/db/personalSourcesLinkQueue"
 import { bookmarks, findings, resources, type scans } from "@carlnotes/db/schema/scans"
 import { teamMembers } from "@carlnotes/db/schema/teams"
 import { teamTopics } from "@carlnotes/db/schema/teamTopics"
@@ -8,21 +9,14 @@ import { topics } from "@carlnotes/db/schema/topics"
 import type { Budget } from "@carlnotes/models/budget"
 import { traceStage } from "@carlnotes/models/telemetry"
 import { and, desc, eq, inArray, isNotNull, max, or, sql } from "drizzle-orm"
-import { buildTopicScanContext, toTopicContextHash } from "../attach"
+import { buildTopicScanContext } from "../attach"
 import type { DiscoveredResource } from "../ingest/ingester"
+import { loadPersonalSourcesReviewLinks } from "../personalSources/linkQueue"
 import { dedupeResources } from "./dedupe"
-import {
-	gateResources,
-	loadResourcesToReview,
-	loadTopicContext,
-	loadUrlSourcePageUrls,
-	rankBySimilarity,
-	type ScoreExamplePage,
-	type ScoreExamplePages,
-	toTopicContextText,
-} from "./filter"
+import { gateResources, loadResourcesToReview, loadUrlSourcePageUrls, rankBySimilarity } from "./filter"
 import { fetchAndScoreResources } from "./score"
 import { type ScannedSource, summarizeTopicScan, toTopicScanSummary } from "./summarize"
+import { loadTopicContext, type ScoreExamplePage, type ScoreExamplePages, toReviewContextHash } from "./topicContext"
 import {
 	countAddedOrFilteredFindings,
 	countFilteredResources,
@@ -63,11 +57,30 @@ export async function reviewScan(
 	}
 
 	// read the topic's context once. its hash decides which Findings this Scan reviews again
-	const topicScanContext = await buildTopicScanContext(topicId)
-	const topicContextHash = toTopicContextHash(toTopicContextText(topicScanContext))
+	const personalSourcesReview = await loadPersonalSourcesReviewLinks({ topicId, scanId: scan.id, discoveredResources })
+	discoveredResources = personalSourcesReview.discoveredResources
+	const topicScanContext = await buildTopicScanContext({ topicId, purpose: "review" })
+	const topicContextHash = toReviewContextHash(topicScanContext)
 
 	// select what this Scan has to review: never reviewed, reviewed against another context, or older content
-	const resourcesToReview = await loadResourcesToReview(topicId, discoveredResources, topicContextHash)
+	const resourcesToReview = (
+		await loadResourcesToReview({
+			topicId,
+			discoveredResources,
+			topicContextHash,
+			personalSourceScoreBonuses: personalSourcesReview.personalSourceScoreBonuses,
+		})
+	).map((resource) => ({
+		...resource,
+		personalSourceScoreBonus: personalSourcesReview.personalSourceScoreBonuses.get(resource.url) ?? 0,
+	}))
+	// existing durable Findings already considered these links against this exact context or an explicit down rating
+	const reviewUrls = new Set(resourcesToReview.map(({ url }) => url))
+	for (const url of personalSourcesReview.claimedUrls) {
+		if (!reviewUrls.has(url)) {
+			await considerPersonalSourcesLink({ topicId, scanId: scan.id, url })
+		}
+	}
 	if (resourcesToReview.length === 0) {
 		// filter anyway, so a lowered max topic findings takes effect even when a scan finds nothing new
 		const { filteredFindingCount } = await filterTopicFindings(topicId)
@@ -98,6 +111,13 @@ export async function reviewScan(
 
 	// the running totals for this review. each stage below traces as its own span with what it spent
 	const reviewOutcome = emptyReviewOutcome()
+	if (personalSourcesReview.claimedUrls.size > 0) {
+		reviewOutcome.onResourceConsidered = async (url, outcome) => {
+			if (personalSourcesReview.claimedUrls.has(url)) {
+				await considerPersonalSourcesLink({ topicId, scanId: scan.id, url, ...outcome })
+			}
+		}
+	}
 
 	// embed the topic's effective context once for the relevance gate.
 	// the score prompt also reads the pages that the topic's users liked, bookmarked, or rated down
@@ -105,9 +125,15 @@ export async function reviewScan(
 		return emptyReviewSummary()
 	}
 	const scoreExamplePages = await loadScoreExamplePages(topicId)
-	const topicContext = await loadTopicContext({ topicScanContext, scoreExamplePages, budget, litellmApiKey })
+	const topicContext = await loadTopicContext({
+		topicScanContext,
+		scoreExamplePages,
+		budget,
+		litellmApiKey,
+		shouldEmbed: resourcesToReview.some((resource) => !resource.personalSourceScoreBonus),
+	})
 
-	// the first pass embeds every resource up for review and keeps the ones relevant to the topic
+	// gate ordinary candidates by embedding while passing matched personal links directly to review
 	const relevantResources = await traceStage(
 		"embed-filter",
 		budget,
@@ -124,20 +150,15 @@ export async function reviewScan(
 		(relevantResources) => ({ toReviewCount: resourcesToReview.length, relevantCount: relevantResources.length }),
 	)
 
-	// the second pass dedupes the surviving resources best-first, so a limit defers the least relevant resources. an
-	// exempt Resource walks first, so a new near-duplicate of it is the one dropped and no limit defers its review
+	// dedupe personal links first, followed by exempt Resources and remaining similarity-ranked candidates
 	const resourceIdsToReview = resourcesToReview.map((resource) => resource.id)
-	const rankedResources = rankBySimilarity(relevantResources)
-	const gateExemptResourcesFirst = [
-		...rankedResources.filter((rankedResource) => gateExemptResourceIds.has(rankedResource.resource.id)),
-		...rankedResources.filter((rankedResource) => !gateExemptResourceIds.has(rankedResource.resource.id)),
-	]
+	const rankedResources = rankBySimilarity(relevantResources, gateExemptResourceIds)
 	const resourcesToScore = await traceStage(
 		"dedupe",
 		budget,
 		() =>
 			dedupeResources({
-				relevantResources: gateExemptResourcesFirst,
+				relevantResources: rankedResources,
 				candidateIds: resourceIdsToReview,
 				reviewOutcome,
 				urlSourcePageIds,
@@ -146,7 +167,7 @@ export async function reviewScan(
 	)
 
 	// the paid stage: fetch each of those Resources and score it under the Scan's limits.
-	// a Resource that a custom Source found this Scan earns its Finding a score bonus
+	// persist the strongest source bonus on each Finding
 	const customSourceUrls = new Set(
 		discoveredResources.filter(({ isFromCustomSource }) => isFromCustomSource).map(({ url }) => url),
 	)

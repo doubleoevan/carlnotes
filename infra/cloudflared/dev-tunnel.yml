@@ -1,10 +1,12 @@
-# the dev tunnel for Sign in with Apple. Apple rejects a localhost return url.
-# this named tunnel gives Apple's callback a stable https hostname.
-# the tunnel forwards that one path to the local api and answers 404 for everything else.
+# stable https endpoints for Apple's dev callback and Resend's inbound webhook
+# only the two exact host/path pairs reach the local api; all other requests return 404
 # the tunnel's credentials stay in ~/.cloudflared/. `cloudflared tunnel create carlnotes-dev` writes them
 tunnel: carlnotes-dev
 ingress:
   - hostname: apple-dev.carlnotes.com
     path: ^/api/auth/callback/apple$
+    service: http://localhost:3000
+  - hostname: resend-dev.carlnotes.com
+    path: ^/api/webhooks/resend/inbound$
     service: http://localhost:3000
   - service: http_status:404

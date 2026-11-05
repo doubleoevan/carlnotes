@@ -1,6 +1,6 @@
 // what the mcp search tool returns: the site search's page with every row's absolute url, the search that found it,
 // and the search page's url, under the same search rate limit the site's route counts against
-import type { McpSearchPage } from "@carlnotes/contracts/mcpCards"
+import type { McpSearchPage } from "@carlnotes/contracts/mcpViews"
 import { type SearchRequest, toSearchPath } from "@carlnotes/contracts/search"
 import { appUrl } from "@carlnotes/server/appUrl"
 import { countSearchRateLimitHit } from "../rateLimit"
@@ -42,7 +42,7 @@ export async function searchForTool({
 }
 
 /**
- * Returns a search page as lines a client without a card reads: each row's kind, name, and url, then where the page sits.
+ * Returns a search page as lines a client without an MCP view reads: each row's kind, name, and url, then where the page sits.
  */
 export function toSearchText(mcpSearchPage: McpSearchPage): string {
 	if (mcpSearchPage.rowCount === 0) {

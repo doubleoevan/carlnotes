@@ -124,7 +124,7 @@ export function TopicActionBar({
 				{topic && isShareOnLeft && <ShareTopicButton topic={topic} className={MENU_BUTTON_CLASS} />}
 			</div>
 			{/* the call to action, or a skeleton while the page loads */}
-			<div className="flex items-start gap-2">
+			<div className="flex flex-wrap items-start justify-end gap-2">
 				{topic === undefined && (
 					<div aria-hidden="true" className="bg-muted h-11 w-28 animate-pulse rounded-lg sm:h-9" />
 				)}

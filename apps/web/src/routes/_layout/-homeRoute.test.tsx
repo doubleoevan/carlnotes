@@ -181,15 +181,15 @@ test("a featured page past the last shows the last page with links to every page
 	const homepageHtml = await renderHomepage("/?featured=9")
 
 	// the class of a topic's card, the div above its name
-	const toTopicCardClass = (name: string): string => {
+	const toTopicViewClass = (name: string): string => {
 		const classStart = homepageHtml.lastIndexOf('class="py-1.5', homepageHtml.indexOf(name))
 		return homepageHtml.slice(classStart, homepageHtml.indexOf('"', classStart + 7))
 	}
 
 	// the last page shows the last two topics, and the ten before them are hidden with JavaScript
-	expect(toTopicCardClass("Topic 10")).toContain("scripted:hidden")
-	expect(toTopicCardClass("Topic 11")).not.toContain("scripted:hidden")
-	expect(toTopicCardClass("Topic 12")).not.toContain("scripted:hidden")
+	expect(toTopicViewClass("Topic 10")).toContain("scripted:hidden")
+	expect(toTopicViewClass("Topic 11")).not.toContain("scripted:hidden")
+	expect(toTopicViewClass("Topic 12")).not.toContain("scripted:hidden")
 
 	// the section's page links go to the plain homepage url, then page 2, then the current page 3
 	const paginationStart = homepageHtml.indexOf('aria-label="Featured topics pages"')

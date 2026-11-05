@@ -1,5 +1,9 @@
 // the Temporal worker process
 
+import {
+	PERSONAL_SOURCES_EMAIL_TASK_QUEUE,
+	PERSONAL_SOURCES_TASK_QUEUE,
+} from "@carlnotes/contracts/personalSourcesWork"
 import { readPoolGauges, sizeConnectionPool } from "@carlnotes/db"
 import { readRedisExtraGauges } from "@carlnotes/db/redisGauges"
 import { shutdownTelemetry, startTelemetry } from "@carlnotes/models/telemetry"
@@ -14,10 +18,12 @@ import {
 import { shutdownAnalytics } from "@carlnotes/server/analytics"
 import { toPositiveInteger } from "@carlnotes/server/envSettings"
 import { exitOnFatalError, shutdownMonitoring, startMonitoring } from "@carlnotes/server/monitoring"
+import { validatePersonalSourcesEmailSettings } from "@carlnotes/server/personalSourcesSettings"
 import { runWithRetries } from "@carlnotes/server/retry"
 import { type ExtraGaugesReading, startRuntimeGauges } from "@carlnotes/server/runtimeGauges"
 import { NativeConnection, Worker } from "@temporalio/worker"
 import * as attachmentActivities from "./workflows/processAttachmentActivities"
+import * as personalSourcesEmailActivities from "./workflows/receivePersonalSourcesEmailActivities"
 import { PODCAST_EPISODE_TASK_QUEUE } from "./workflows/recordPodcastEpisode"
 import * as podcastEpisodeActivities from "./workflows/recordPodcastEpisodeActivities"
 import { SCAN_CLOSING_TASK_QUEUE } from "./workflows/runTopicScan"
@@ -26,6 +32,7 @@ import * as sourceActivities from "./workflows/screenSourceActivities"
 import * as pushActivities from "./workflows/sendPushNotificationsActivities"
 import { SCAN_EMAIL_TASK_QUEUE } from "./workflows/sendScanEmail"
 import * as scanEmailActivities from "./workflows/sendScanEmailActivities"
+import * as personalSourcesActivities from "./workflows/summarizePersonalSourcesContextActivities"
 
 // the SDK shuts a Worker down on its own on SIGINT/SIGTERM, but gives a running activity zero time to finish
 const SHUTDOWN_GRACE_MS = 2 * 60 * 1000
@@ -83,11 +90,30 @@ async function run(): Promise<void> {
 	// both do nothing without their keys. then size the connection pool from the database
 	startMonitoring()
 	startTelemetry()
+	validatePersonalSourcesEmailSettings()
 	await sizeConnectionPool()
 
 	// a Worker polls exactly one queue and takes one workflowsPath
 	const connection = await connectWithRetry()
 	const workers = await Promise.all([
+		// receive bounded mail independently of model calls and Scan slots
+		Worker.create({
+			connection,
+			workflowsPath: new URL("./workflows/receivePersonalSourcesEmail.ts", import.meta.url).pathname,
+			activities: personalSourcesEmailActivities,
+			taskQueue: PERSONAL_SOURCES_EMAIL_TASK_QUEUE,
+			shutdownGraceTime: SHUTDOWN_GRACE_MS,
+			maxConcurrentActivityTaskExecutions: SCAN_EMAIL_CONCURRENCY,
+		}),
+		// rebuild private personal sources context independently of Scan and attachment slots
+		Worker.create({
+			connection,
+			workflowsPath: new URL("./workflows/summarizePersonalSourcesContext.ts", import.meta.url).pathname,
+			activities: personalSourcesActivities,
+			taskQueue: PERSONAL_SOURCES_TASK_QUEUE,
+			shutdownGraceTime: SHUTDOWN_GRACE_MS,
+			maxConcurrentActivityTaskExecutions: SCREEN_CONCURRENCY,
+		}),
 		// extracts an attachment's text and generates its context
 		Worker.create({
 			connection,

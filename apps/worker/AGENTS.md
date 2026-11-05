@@ -1,5 +1,12 @@
 # apps/worker/
 
+`workflows/receivePersonalSourcesEmail.ts` and `receivePersonalSourcesEmailActivities.ts` run on `personal-sources-email`, with four activity slots.
+Only receipt IDs and retry delays cross workflow history. The sweep discovers pending or expired processing leases.
+
+`workflows/summarizePersonalSourcesContext.ts` and `summarizePersonalSourcesContextActivities.ts` run on the `personal-sources` queue.
+They debounce committed revisions, rebuild bounded private context, and wake at its earliest expiry.
+The sweep calls `recoverPersonalSourcesWork` even when receiving is disabled. Activity errors and results contain no Personal sources text.
+
 The `@carlnotes/worker` app: the Temporal worker, the sweep, the monthly budget reset, the docs embed, and the
 workflows the worker bundles. Nothing imports it. Every process starts through a root script, and the modules only the
 sweep reads live here beside it.
@@ -62,7 +69,7 @@ about the app; a section whose hash is unchanged is not embedded again).
 - `workflows/runTopicScanActivities.ts` — the Scan's three stages. `ingestForScan` passes on the discovered Resources
   with the Source each is credited to, each Source's outcome narrowed by `toScannedSource` in
   `@carlnotes/pipeline/ingest/index` to the four fields the scan report reads, and each Source's result. `finishScan`
-  reads the urls of the Scan's kept Findings once, and `toScanSourceResults` counts each one for the Source credited
+  reads the urls of the Scan's kept Findings once, and `toScanSourceResults` in `workflows/scanSourceResults.ts` counts each one for the Source credited
   with its Resource, or as earlier if no Source returned it. The found count adds the review's `earlierFoundCount`, the
   earlier Findings it read again that no Source returned. The kept count and `source_results` go in the same update as
   the found count and `problem_sources`, and a payload with no results, from a worker before them, writes `null`. A stop
@@ -101,3 +108,5 @@ about the app; a section whose hash is unchanged is not embedded again).
   `@carlnotes/contracts`, each module by its package path, plus `@temporalio/worker`, `@temporalio/workflow`, and
   `@temporalio/activity`. Never `@carlnotes/api` or another app.
 - Tests: `bun test apps/worker`; `*.smoke.ts` hit real services and run under `doppler run`.
+
+`workflows/personalSourcesContextLoop.ts` shares the durable revision decisions with deterministic virtual-time tests; Temporal supplies replayable waits and activity calls.

@@ -17,7 +17,7 @@ import { loadOAuthClientName } from "./oauthClientNames"
 // who is calling, resolved once to a visitor or a user, with the name of the app the call came from
 export type ToolCaller =
 	| { kind: "visitor"; clientName: string }
-	| { kind: "user"; userId: string; plan: string; clientName: string }
+	| { kind: "user"; userId: string; plan: string; clientName: string; clientId: string | null }
 
 /**
  * Resolves the tool caller. A token the auth server signed for the MCP server means a user, and anything else is a
@@ -47,7 +47,7 @@ export async function resolveToolCaller(request: Request): Promise<ToolCaller> {
 	if (!user) {
 		return visitor
 	}
-	return { kind: "user", userId, plan: user.plan, clientName: clientName ?? visitor.clientName }
+	return { kind: "user", userId, plan: user.plan, clientName: clientName ?? visitor.clientName, clientId }
 }
 
 // the claims a verified access token holds

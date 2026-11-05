@@ -48,6 +48,7 @@ const UNRESTRICTED_NIGHTSHIFT_IMPORT_PATHS = new Set([
 	`${NIGHTSHIFT_PACKAGE_NAME}/coffeeMug`,
 	`${NIGHTSHIFT_PACKAGE_NAME}/coffeeCup`,
 	`${NIGHTSHIFT_PACKAGE_NAME}/oauthProviderIcons`,
+	`${NIGHTSHIFT_PACKAGE_NAME}/aiProviderIcons`,
 	`${NIGHTSHIFT_PACKAGE_NAME}/noteHtmlStyle`,
 	`${NIGHTSHIFT_PACKAGE_NAME}/theme`,
 	`${NIGHTSHIFT_PACKAGE_NAME}/assets/carl-avatar.png`,

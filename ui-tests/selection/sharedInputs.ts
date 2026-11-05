@@ -17,7 +17,7 @@ export type SharedInput = {
 // every platform
 const EVERY_PLATFORM: SelectionPlatform[] = ["web", "mcp", "native"]
 
-// the platforms that the web app renders: its stories and its cards
+// the platforms that the web app renders: its stories and its MCP views
 const WEB_PLATFORMS: SelectionPlatform[] = ["web", "mcp"]
 
 // a dependency manifest, the lockfile, the install settings, a dependency patch, or the Bun version
@@ -27,7 +27,7 @@ const DEPENDENCY_PATH_PATTERN = /(?:^|\/)package\.json$|^bun\.lock$|^bunfig\.tom
 const TYPESCRIPT_CONFIG_PATTERN = /(?:^|\/)tsconfig(?:\.base)?\.json$/
 
 // the web and mobile build configs
-const WEB_BUILD_CONFIG_PATTERN = /^apps\/web\/(?:vite\.config\.ts|vite\.mcpCards\.config\.ts|components\.json)$/
+const WEB_BUILD_CONFIG_PATTERN = /^apps\/web\/(?:vite\.config\.ts|vite\.mcpViews\.config\.ts|components\.json)$/
 const MOBILE_BUILD_CONFIG_PATTERN = /^apps\/mobile\/(?:metro\.config\.js|app\.config\.ts|babel\.config\.js|eas\.json)$/
 
 /** The shared inputs, each with the platforms whose every image capture it selects. */

@@ -1,7 +1,9 @@
 // the subscription writes for the topic routes
 
 import { inviteDeletePayload, subscriptionEmailPayload, subscriptionPayload } from "@carlnotes/contracts/payloads"
-import { db } from "@carlnotes/db"
+import { type DbTransaction, db } from "@carlnotes/db"
+import { hasUnconvertedPersonalSources } from "@carlnotes/db/personalSourcesAuthority"
+import { lockPersonalSourcesTopic, PersonalSourcesConversionError } from "@carlnotes/db/personalSourcesLocks"
 import { invites } from "@carlnotes/db/schema/invites"
 import { subscriptions, topics } from "@carlnotes/db/schema/topics"
 import { users } from "@carlnotes/db/schema/users"
@@ -77,7 +79,7 @@ export async function setTopicSubscription({
 	}
 
 	// subscribing reactivates an existing subscription row or inserts a new one
-	await activateSubscription(userId, topicId)
+	await activateSubscription({ userId, topicId })
 	trackEvent("topic_subscribed", userId, subscriptionProperties)
 	return true
 }
@@ -171,24 +173,36 @@ export async function setSubscriptionEmailEnabled(
 /**
  * Reactivate an existing subscription row or insert a new one. Accepting an invite token joins through here too.
  */
-export async function activateSubscription(userId: string, topicId: string): Promise<void> {
-	// the subscription delivers at the topic's own frequency
-	const [topic] = await db.select({ frequency: topics.frequency }).from(topics).where(eq(topics.id, topicId))
-	const frequency = topic ? { frequency: topic.frequency } : {}
+export async function activateSubscription({
+	userId,
+	topicId,
+	transaction,
+}: {
+	userId: string
+	topicId: string
+	transaction?: DbTransaction
+}): Promise<void> {
+	if (!transaction) {
+		return db.transaction((lockedTransaction) =>
+			activateSubscription({ userId, topicId, transaction: lockedTransaction }),
+		)
+	}
 
-	// the row and the count move together, so a subscriber is never counted before the row exists or after it is deleted
-	await db.transaction(async (transaction) => {
-		// one upsert against the unique index. a re-subscribe re-syncs the frequency and keeps the email choice
-		await transaction
-			.insert(subscriptions)
-			.values({ topicId, subscriberUserId: userId, ...frequency })
-			.onConflictDoUpdate({
-				target: [subscriptions.topicId, subscriptions.subscriberUserId],
-				set: { isActive: true, ...frequency },
-			})
-		// the count is recomputed instead of nudged, so it cannot drift from the rows it summarizes
-		await updateTopicSubscriberCount(topicId, transaction)
-	})
+	// serialize access changes with the first private receipt
+	const topic = await lockPersonalSourcesTopic(transaction, topicId)
+	if (!topic || (topic.ownerId !== userId && (await hasUnconvertedPersonalSources(topicId, transaction)))) {
+		throw new PersonalSourcesConversionError()
+	}
+
+	// restore the subscription and its delivery frequency in the same transaction as the count
+	await transaction
+		.insert(subscriptions)
+		.values({ topicId, subscriberUserId: userId, frequency: topic.frequency })
+		.onConflictDoUpdate({
+			target: [subscriptions.topicId, subscriptions.subscriberUserId],
+			set: { isActive: true, frequency: topic.frequency },
+		})
+	await updateTopicSubscriberCount(topicId, transaction)
 }
 
 // the subscription routes: joining, leaving, deleting an invite, and the email preference

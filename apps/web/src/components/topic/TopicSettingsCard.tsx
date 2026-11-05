@@ -1,6 +1,7 @@
 import { DAILY_TOPICS_USED_LABEL } from "@carlnotes/contracts/scanFailure"
 import type { TopicResponse } from "@carlnotes/contracts/topics"
 import { toAgeLabel, toDollarLabel, toDurationLabel, toScheduleLabel } from "@carlnotes/core/lib/labels"
+import type { ReactNode } from "react"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import {
@@ -10,12 +11,13 @@ import {
 	INFO_SECTION_PAIR_END_CLASS,
 } from "@/lib/styleClasses"
 import { CollapsibleSection } from "./CollapsibleSection"
-import { InfoSection, TopicSourcesSection, TopicVisibility } from "./TopicInfo"
+import { TopicSourcesSection, TopicVisibility } from "./TopicInfo"
+import { TopicInfoSection as InfoSection } from "./TopicInfoSection"
 
 /**
  * The topic page's settings card, with the frequency, max findings, visibility, sources, monthly cost, and podcast.
  */
-export function TopicSettingsCard({ topic }: { topic: TopicResponse }) {
+export function TopicSettingsCard({ topic, personalSources }: { topic: TopicResponse; personalSources?: ReactNode }) {
 	// how long the last scan took, shown under the last scan age
 	const lastScanDuration = toDurationLabel(topic.lastScanDurationMs)
 	return (
@@ -42,7 +44,7 @@ export function TopicSettingsCard({ topic }: { topic: TopicResponse }) {
 					</div>
 
 					{/* where Carl looks */}
-					<TopicSourcesSection sources={topic.sources} />
+					<TopicSourcesSection sources={topic.sources} topic={topic} personalSources={personalSources} isCard />
 
 					{/* the month's scan cost on the left for the owner or an admin,
 					    and whether the podcast is on at the right, in one row */}

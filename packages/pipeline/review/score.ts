@@ -1,23 +1,30 @@
 // the paid stages: score each fetched Resource against the topic context with tiered models, and write its Finding
 
 import { db } from "@carlnotes/db"
-import { findings, resources, type scans } from "@carlnotes/db/schema/scans"
+import type { PersonalSourcesReviewContext } from "@carlnotes/db/personalSourcesContext"
+import { resources, type scans } from "@carlnotes/db/schema/scans"
 import {
 	type Budget,
 	CHEAP_COST_PER_MILLION_TOKENS,
 	canScoreResource,
 	canSpend,
 	charge,
+	chargeScoringFailure,
 	FIRECRAWL_COST_PER_FETCH,
-	PREMIUM_COST_PER_MILLION_TOKENS,
+	premiumModelCost,
 	releaseScanSpend,
 	reserveScanSpend,
-	type StageCosts,
 	toEstimatedTokens,
 	toFetchCountField,
 	tokenCost,
 } from "@carlnotes/models/budget"
-import { cheapModel, isBudgetRejection, scoreModel } from "@carlnotes/models/models"
+import {
+	cheapModel,
+	isBudgetRejection,
+	LOW_REASONING_PROVIDER_OPTIONS,
+	SCORE_OUTPUT_TOKENS,
+	scoreModel,
+} from "@carlnotes/models/models"
 // the prompt loader fetches the registry version first, falling back to the bundled markdown
 import { type BuiltPrompt, fetchPromptTemplate, promptTelemetry } from "@carlnotes/models/prompts/fetch"
 import { filterPremiumPrompt, writePrompt } from "@carlnotes/models/prompts/write"
@@ -25,19 +32,17 @@ import { runWithConcurrency } from "@carlnotes/server/concurrency"
 import { toPositiveInteger } from "@carlnotes/server/envSettings"
 import { reportError } from "@carlnotes/server/monitoring"
 import { generateText, type LanguageModel, Output } from "ai"
-import { and, eq, ne, sql } from "drizzle-orm"
+import { and, eq, ne } from "drizzle-orm"
 import { z } from "zod"
 import { settleFaviconFetches } from "../favicons"
-import { linkPodcastEpisodeChapters, toPodcastEpisodeChapterRatingSql } from "../podcast/podcastEpisodeChapters"
+import { toPrivateReviewError } from "../personalSources/reviewContext"
+import { type PersonalSourceScore, scorePersonalSourceResource } from "../personalSources/scoreResource"
 import { fetchResourceContent } from "./fetch"
-import type { Resource, TopicContext } from "./filter"
+import type { Resource } from "./filter"
+import { upsertFinding } from "./saveFinding"
+import { clampScore, isPromoted } from "./scorePolicy"
+import type { TopicContext } from "./topicContext"
 import { type ResourceOutcome, type ReviewOutcome, trackOutcomes } from "./track"
-
-// the cheap model score that earns a premium model re-score and a relevance explanation. the environment can override it
-const REVIEW_PROMOTION_THRESHOLD = Number(Bun.env.REVIEW_PROMOTION_THRESHOLD ?? "0.6")
-
-// what a finding that a custom Source found adds to its relevance score. the user chose that Source for the topic
-const CUSTOM_SOURCE_SCORE_BONUS = 0.05
 
 // how many resources the paid fetch-and-scoring section works concurrently
 const REVIEW_CONCURRENCY = toPositiveInteger(Bun.env.REVIEW_CONCURRENCY, 4)
@@ -47,15 +52,16 @@ const MAX_SCORE_CHARS = 8000
 
 // the score prompt's largest input beside the content, in characters: the template and the topic's score context,
 // and the largest output one score writes in tokens, a score and its relevance explanation
-const MAX_SCORE_PROMPT_CHARS = 12_000
-const MAX_SCORE_OUTPUT_TOKENS = 1000
+const MAX_SCORE_TOPIC_CONTEXT_CHARS = 32_000
+const MAX_SCORE_PROMPT_CHARS = 48_000
+const MAX_SCORE_OUTPUT_TOKENS = SCORE_OUTPUT_TOKENS
 
 // the largest cost of one Resource's paid section: a paid fetch, then a cheap and a premium score of the largest prompt
-const MAX_SCORE_TOKENS = toEstimatedTokens(MAX_SCORE_CHARS + MAX_SCORE_PROMPT_CHARS) + MAX_SCORE_OUTPUT_TOKENS
+const MAX_SCORE_TOKENS = toEstimatedTokens(MAX_SCORE_PROMPT_CHARS) + MAX_SCORE_OUTPUT_TOKENS
 export const MAX_SCORED_RESOURCE_DOLLARS =
 	FIRECRAWL_COST_PER_FETCH +
 	tokenCost(MAX_SCORE_TOKENS, CHEAP_COST_PER_MILLION_TOKENS) +
-	tokenCost(MAX_SCORE_TOKENS, PREMIUM_COST_PER_MILLION_TOKENS)
+	premiumModelCost({ inputTokens: MAX_SCORE_TOKENS - MAX_SCORE_OUTPUT_TOKENS, outputTokens: MAX_SCORE_OUTPUT_TOKENS })
 
 // the model's structured output. a missing safety judgment reads as safe
 const scoreSchema = z.object({
@@ -65,7 +71,25 @@ const scoreSchema = z.object({
 })
 
 // what one scoring tier returns: the clamped score, the relevance explanation, and whether the content is unsafe
-type ScoredResource = { score: number; relevanceExplanation: string; isUnsafe: boolean }
+type ScoredResource = {
+	score: number
+	relevanceExplanation: string
+	isUnsafe: boolean
+	annotations?: PersonalSourceScore["annotations"]
+}
+
+// an empty public evidence selection settles this link without producing a Finding or retrying the paid call
+function toScoreRejection(
+	score: ScoredResource,
+	needsPublicEvidence: boolean,
+): Extract<ResourceOutcome, { status: "filtered" }> | null {
+	if (score.isUnsafe) {
+		return { status: "filtered", reason: "unsafe content" }
+	}
+	return needsPublicEvidence && !score.relevanceExplanation.trim()
+		? { status: "filtered", reason: "below relevance threshold" }
+		: null
+}
 
 // a persisted Scan record
 type Scan = typeof scans.$inferSelect
@@ -73,8 +97,7 @@ type Scan = typeof scans.$inferSelect
 // a scoring tier holds its model, its cost bucket and rate, and whether it writes the relevance explanation
 type ScoreTier = {
 	model: LanguageModel
-	stage: keyof StageCosts
-	ratePerMillion: number
+	stage: "scoringCheap" | "scoringPremium"
 	shouldWriteRelevanceExplanation: boolean
 }
 
@@ -93,9 +116,26 @@ export async function fetchAndScoreResources(
 	stopSignal?: AbortSignal,
 ): Promise<string[]> {
 	// each Resource reserves its largest cost before it starts
-	const paidOutcomes = await runWithConcurrency(resourcesToScore, REVIEW_CONCURRENCY, (resource) =>
-		fetchAndScoreResource(resource, scan, topicId, topicContext, budget, customSourceUrls, litellmApiKey, stopSignal),
-	)
+	const paidOutcomes = await runWithConcurrency(resourcesToScore, REVIEW_CONCURRENCY, async (resource) => {
+		// settle only completed review decisions, preserving failed and budget-deferred queue work
+		const outcome = await fetchAndScoreResource(
+			resource,
+			scan,
+			topicId,
+			topicContext,
+			budget,
+			customSourceUrls,
+			litellmApiKey,
+			stopSignal,
+		)
+		if (outcome.status === "kept" || outcome.status === "filtered") {
+			await reviewOutcome.onResourceConsidered?.(resource.url, {
+				reviewOutcome: outcome.status === "filtered" && outcome.reason === "no text to score" ? "rejected" : "scored",
+				...(outcome.status === "filtered" ? { reviewReason: outcome.reason } : {}),
+			})
+		}
+		return outcome
+	})
 	for (const paidOutcome of paidOutcomes) {
 		trackOutcomes(reviewOutcome, paidOutcome)
 	}
@@ -122,10 +162,12 @@ async function fetchAndScoreResource(
 ): Promise<ResourceOutcome> {
 	// defer the Resource once the Scan hits its scored-resource limit, once its spent and reserved dollars reach the
 	// dollar limit, or once the user stops the Scan
-	if (!reserveScoredResource(budget, stopSignal)) {
+	const reservedDollars = toScoredResourceReservation(topicContext.personalSources?.length ?? 0)
+	if (!canScoreResource(budget, stopSignal) || !reserveScanSpend(budget, reservedDollars)) {
 		return { status: "deferred" }
 	}
 
+	let reviewStage: "fetch" | "score" | "save" = "fetch"
 	try {
 		// get the content by reuse, revalidation, or a paid fetch, then increment the FetchOutcome
 		const { content, fetchOutcome } = await fetchResourceContent(resource, budget)
@@ -137,11 +179,22 @@ async function fetchAndScoreResource(
 		}
 
 		// score the content, then drop a Resource that a scoring call judged unsafe without writing its Finding
-		const scoredResource = await scoreResource(content, topicContext.scoreText, budget, litellmApiKey)
-		await markResourceSafety(resource.id, scoredResource.isUnsafe)
-		if (scoredResource.isUnsafe) {
-			return { status: "filtered", reason: "unsafe content" }
+		reviewStage = "score"
+		const scoredResource = await scoreResource(
+			content,
+			topicContext.scoreText,
+			budget,
+			litellmApiKey,
+			topicContext.personalSources,
+		)
+		if (!topicContext.personalSourcesVersions) {
+			await markResourceSafety(resource.id, scoredResource.isUnsafe)
 		}
+		const rejection = toScoreRejection(scoredResource, Boolean(topicContext.personalSources?.length))
+		if (rejection) {
+			return rejection
+		}
+		reviewStage = "save"
 		const upsertFindingResult = await upsertFinding({
 			scan,
 			topicId,
@@ -150,13 +203,16 @@ async function fetchAndScoreResource(
 			relevanceExplanation: scoredResource.relevanceExplanation,
 			topicContextHash: topicContext.contextHash,
 			isFromCustomSource: customSourceUrls.has(resource.url),
+			personalSourceScoreBonus: resource.personalSourceScoreBonus,
+			personalSources: topicContext.personalSources,
+			annotations: scoredResource.annotations,
 		})
 
 		// the kept outcome includes the feed-facing details that the report cites
 		const keptFinding = {
 			title: resource.title,
 			url: resource.url,
-			// the stored score, with any custom Source bonus, and the note from the tiered scoring call
+			// the stored score with its source bonus and the explanation from the scoring call
 			relevanceScore: upsertFindingResult.relevanceScore,
 			relevanceExplanation: scoredResource.relevanceExplanation,
 			isNew: upsertFindingResult.isNew,
@@ -165,15 +221,23 @@ async function fetchAndScoreResource(
 	} catch (error) {
 		// a spent budget ends the whole Scan. every Resource left would meet the same rejection
 		if (isBudgetRejection(error)) {
+			if (topicContext.personalSourcesVersions) {
+				throw toPrivateReviewError(error)
+			}
 			throw error
 		}
+
+		// private model failures cannot expose their request through logs or monitoring
+		const reviewError = topicContext.personalSourcesVersions
+			? new Error(`${toPrivateReviewError(error).message} (${reviewStage})`)
+			: error
 		// this Resource was paid for and produced nothing, so it is worth alerting on
-		console.error(`review failed for resource ${resource.id}`, error)
-		reportError(error, "score", { resourceId: resource.id, url: resource.url })
+		console.error(`review failed for resource ${resource.id}`, reviewError)
+		reportError(reviewError, "score", { resourceId: resource.id, url: resource.url })
 		return { status: "failed" }
 	} finally {
 		// what the Resource spent was charged as it ran, so its reservation ends however the paid section ended
-		releaseScanSpend(budget, MAX_SCORED_RESOURCE_DOLLARS)
+		releaseScanSpend(budget, reservedDollars)
 	}
 }
 
@@ -194,12 +258,18 @@ export async function scoreResource(
 	topicContext: string,
 	budget: Budget,
 	litellmApiKey?: string,
+	personalSources?: PersonalSourcesReviewContext[],
 ): Promise<ScoredResource> {
+	if (personalSources?.length) {
+		if (!litellmApiKey) {
+			throw new Error("Private review requires the Topic Scan billing key")
+		}
+		return scorePersonalSourceResource({ resourceContent, topicContext, budget, litellmApiKey, personalSources })
+	}
 	// the cheap model scores everything fetched first
 	const cheapTier: ScoreTier = {
 		model: cheapModel(litellmApiKey),
 		stage: "scoringCheap",
-		ratePerMillion: CHEAP_COST_PER_MILLION_TOKENS,
 		shouldWriteRelevanceExplanation: false,
 	}
 	const cheapOutcome = await scoreResourceContent(cheapTier, resourceContent, topicContext, budget)
@@ -214,7 +284,6 @@ export async function scoreResource(
 	const premiumTier: ScoreTier = {
 		model: scoreModel(litellmApiKey),
 		stage: "scoringPremium",
-		ratePerMillion: PREMIUM_COST_PER_MILLION_TOKENS,
 		// the user-facing note comes only from this tier
 		shouldWriteRelevanceExplanation: true,
 	}
@@ -232,16 +301,26 @@ async function scoreResourceContent(
 	const scorePrompt = await buildScorePrompt(resourceContent, topicContext, scoreTier.shouldWriteRelevanceExplanation)
 
 	// structured output forces a numeric score. the relevance explanation is only asked for on the premium tier
-	const { output, usage } = await generateText({
+	const generated = await generateText({
 		model: scoreTier.model,
+		maxOutputTokens: MAX_SCORE_OUTPUT_TOKENS,
+		maxRetries: 0,
+		...(scoreTier.stage === "scoringPremium" ? { providerOptions: LOW_REASONING_PROVIDER_OPTIONS } : {}),
 		output: Output.object({ schema: scoreSchema }),
 		prompt: scorePrompt.prompt,
 		...promptTelemetry(scorePrompt),
-	})
+	}).catch((error: unknown) => chargeScoringFailure(budget, scoreTier.stage, error))
 
 	// track the estimated cost, then return the clamped score, the relevance explanation the cheap model leaves, and
 	// the safety judgment
-	charge(budget, scoreTier.stage, tokenCost(usage.totalTokens ?? 0, scoreTier.ratePerMillion))
+	charge(
+		budget,
+		scoreTier.stage,
+		scoreTier.stage === "scoringPremium"
+			? premiumModelCost(generated.usage)
+			: tokenCost(generated.usage.totalTokens ?? 0, CHEAP_COST_PER_MILLION_TOKENS),
+	)
+	const output = generated.output
 	return {
 		score: clampScore(output.score),
 		relevanceExplanation: output.relevanceExplanation ?? "",
@@ -272,122 +351,22 @@ export async function buildScorePrompt(
 	// the cheap tier drops the premium-tier wording, then the content is limited to bound tokens and spend
 	const scoreTemplate = shouldWriteRelevanceExplanation ? template : filterPremiumPrompt(template)
 	const prompt = writePrompt(scoreTemplate, {
-		topicContext,
+		topicContext: topicContext.slice(0, MAX_SCORE_TOPIC_CONTEXT_CHARS),
 		resourceContent: resourceContent.slice(0, MAX_SCORE_CHARS),
 	})
+	if (prompt.length > MAX_SCORE_PROMPT_CHARS) {
+		throw new Error("Scoring prompt exceeds its reserved input limit")
+	}
 	return { prompt, name, registryPrompt }
 }
 
-// the finding columns a review writes
-type FindingReviewFields = {
-	scanId: string
-	relevanceScore: number
-	relevanceExplanation: string
-	reviewedContextHash: string
-	reviewedContentHash: string | null
-}
-
-/**
- * Returns the columns a re-score decides, so upserting one leaves a user's rating and view count untouched.
- */
-export function toFindingReviewFields(review: {
-	scanId: string
-	score: number
-	relevanceExplanation: string
-	topicContextHash: string
-	contentHash: string | null
-}): FindingReviewFields {
-	return {
-		scanId: review.scanId,
-		relevanceScore: review.score,
-		relevanceExplanation: review.relevanceExplanation,
-		reviewedContextHash: review.topicContextHash,
-		reviewedContentHash: review.contentHash,
+// reserve bounded prompt input and one annotation output allowance for each sender
+function toScoredResourceReservation(senderCount: number): number {
+	if (senderCount === 0) {
+		return MAX_SCORED_RESOURCE_DOLLARS
 	}
-}
-
-// the scan, topic, and resource a finding belongs to, the review it records, and whether a custom Source found it
-type UpsertFindingOptions = {
-	scan: Scan
-	topicId: string
-	resource: Resource
-	score: number
-	relevanceExplanation: string
-	topicContextHash: string
-	// whether a custom Source found the resource in this Scan
-	isFromCustomSource: boolean
-}
-
-// whether the upsert added the finding to the topic, and the relevance score that it stored
-type UpsertFindingResult = { isNew: boolean; relevanceScore: number }
-
-/**
- * Upserts one finding per topic and resource, and returns whether the finding is new and the score that it stored.
- * The scan that found the finding is written on the insert alone, and a re-score updates the review columns.
- */
-export async function upsertFinding({
-	scan,
-	topicId,
-	resource,
-	score,
-	relevanceExplanation,
-	topicContextHash,
-	isFromCustomSource,
-}: UpsertFindingOptions): Promise<UpsertFindingResult> {
-	// build the whole of what a re-score may change
-	const review = toFindingReviewFields({
-		scanId: scan.id,
-		score,
-		relevanceExplanation,
-		topicContextHash,
-		contentHash: resource.contentHash,
-	})
-
-	// a finding that a custom Source found, in this Scan or an earlier one, gets the score bonus on every re-score
-	const insertedScore = isFromCustomSource ? clampScore(score + CUSTOM_SOURCE_SCORE_BONUS) : score
-	const isFromCustomSourceSql = sql<boolean>`(${findings.isFromCustomSource} or ${isFromCustomSource}::boolean)`
-	const customSourceBonusSql = sql`case when ${isFromCustomSourceSql} then ${CUSTOM_SOURCE_SCORE_BONUS}::real else 0 end`
-	const updatedScoreSql = sql<number>`least(1, ${score}::real + ${customSourceBonusSql})`
-
-	// upsert the topic finding. postgres returns xmax as zero for an inserted row and non-zero for an updated row
-	const topicResourceRef = { topicId, resourceId: resource.id }
-	const [findingRow] = await db
-		.insert(findings)
-		// the finding includes the relevance score and explanation, the scan that produced them and first found the
-		// finding, and a chapter's rating
-		.values({
-			...topicResourceRef,
-			...review,
-			foundScanId: scan.id,
-			relevanceScore: insertedScore,
-			isFromCustomSource,
-			rating: toPodcastEpisodeChapterRatingSql(topicResourceRef),
-		})
-		// a re-score hits the topic and resource unique constraint, so update that row in place. the scan that first
-		// found the finding stays
-		.onConflictDoUpdate({
-			target: [findings.topicId, findings.resourceId],
-			set: { ...review, relevanceScore: updatedScoreSql, isFromCustomSource: isFromCustomSourceSql },
-		})
-		.returning({ id: findings.id, isNew: sql<boolean>`(xmax = 0)`, relevanceScore: findings.relevanceScore })
-
-	// link a new finding to the chapters that narrated its resource
-	if (findingRow?.isNew) {
-		await linkPodcastEpisodeChapters({ ...topicResourceRef, findingId: findingRow.id })
-	}
-	return { isNew: findingRow?.isNew ?? false, relevanceScore: findingRow?.relevanceScore ?? insertedScore }
-}
-
-/**
- * Whether a cheap model score is high enough to earn a premium model re-score.
- */
-export function isPromoted(score: number): boolean {
-	return score >= REVIEW_PROMOTION_THRESHOLD
-}
-
-/**
- * Returns the score limited to the 0 to 1 range.
- */
-export function clampScore(score: number): number {
-	return Math.max(0, Math.min(1, score))
+	return (
+		FIRECRAWL_COST_PER_FETCH +
+		senderCount * premiumModelCost({ inputTokens: 30_000, outputTokens: SCORE_OUTPUT_TOKENS })
+	)
 }

@@ -118,7 +118,7 @@ async function checkSearchPages(client: SmokeClient, path: string): Promise<void
 	check(`${path}: search returns all fifty-one results once`, ids.length === 51 && new Set(ids).size === 51)
 }
 
-// report model-visible representations and card metadata separately
+// report model-visible representations and MCP view metadata separately
 function checkPageBounds(label: string, result: Awaited<ReturnType<SmokeClient["callTool"]>>): void {
 	const textChars = toResultText(result).length
 	const structuredChars = JSON.stringify(result.structuredContent ?? null).length
@@ -129,6 +129,6 @@ function checkPageBounds(label: string, result: Awaited<ReturnType<SmokeClient["
 		{ textChars, structuredChars },
 	)
 	console.log(
-		`      ${label}: text=${textChars}, structured=${structuredChars}, combined=${textChars + structuredChars}, cardMeta=${metaChars}`,
+		`      ${label}: text=${textChars}, structured=${structuredChars}, combined=${textChars + structuredChars}, mcpViewMeta=${metaChars}`,
 	)
 }

@@ -35,6 +35,12 @@ import { userInvitesRoute } from "./invite/userInvites"
 import { mcpClientsRoute } from "./mcp/server"
 import { noteCommentsRoute } from "./note/noteComments"
 import { NOTE_BODY_PATH, notesRoute } from "./note/notes"
+import { aiAgentAccountsRoute } from "./personalSources/aiAgentAccountsRoute"
+import { personalSourcesEmailSetupRoute } from "./personalSources/emailSetupRoute"
+import { PERSONAL_SOURCES_IMPORT_PATH, personalSourcesImportsRoute } from "./personalSources/importsRoute"
+import { personalSourcesInboundRoute } from "./personalSources/inboundRoute"
+import { personalSourcesRoute } from "./personalSources/personalSourcesRoute"
+import { personalSourcesSendsRoute } from "./personalSources/sendsRoute"
 import { podcastEpisodesRoute } from "./podcast/podcastEpisodes"
 import { podcastFeedsRoute } from "./podcast/podcastFeeds"
 import { profilesRoute } from "./profiles"
@@ -98,6 +104,7 @@ const OWN_BODY_LIMIT_PATHS = [
 	TEAM_AVATAR_UPLOAD_PATH,
 	TOPIC_ATTACHMENT_UPLOAD_PATH,
 	NOTE_BODY_PATH,
+	PERSONAL_SOURCES_IMPORT_PATH,
 ].map((routePath) => `${API_BASE_PATH}${routePath}`)
 
 // the api tree, mounted on the server in api/index.ts
@@ -154,6 +161,12 @@ export const apiRoute = new Hono<AppEnv>()
 	})
 	// the app's gate beside it, which sets the same cookie from device attestation
 	.route("/", appSignupGateRoute)
+	.route("/", personalSourcesRoute)
+	.route("/", personalSourcesImportsRoute)
+	.route("/", aiAgentAccountsRoute)
+	.route("/", personalSourcesSendsRoute)
+	.route("/", personalSourcesEmailSetupRoute)
+	.route("/", personalSourcesInboundRoute)
 	// the unsubscribe link of a topic-scan email. the signed token in the url is the auth, so no session is needed, and
 	// a fetch of the link changes nothing, so a mail provider or a scanner that checks the link unsubscribes nobody
 	.get("/unsubscribe", async (context) => {

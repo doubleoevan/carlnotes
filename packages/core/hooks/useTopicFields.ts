@@ -17,6 +17,7 @@ export type AddedSource = { optionKey: string; value: string; name?: string }
 
 // every editable field with its setter, plus what the modal derives from them
 export type TopicFields<Attachment> = {
+	// receiving Sources use dedicated actions and still occupy the shared ten-Source limit
 	name: string
 	setName: (name: string) => void
 	prompt: string

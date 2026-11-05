@@ -1,5 +1,13 @@
 # packages/server/
 
+`resendInbound.ts` verifies raw Svix webhook bytes and retrieves bounded text from Resend's fixed receiving API.
+`personalSourcesEmailContent.ts` extracts text and safe links with Bun's HTMLRewriter and trusts only receiver-computed
+authentication for manual forwarding. `personalSourcesEmailTestFixtures.ts`
+provides synthetic provider payloads and signatures for server, pipeline, and API tests.
+
+`personalSourcesSettings.ts` reads `PERSONAL_SOURCES_RECEIVING_ENABLED` and `PERSONAL_SOURCES_EMAIL_ENABLED`, both disabled by default. Enabled email requires a valid mailbox in `RESEND_FROM_EMAIL`, with or without a display name. Receiving, setup, reply text, and outgoing-email Reply-To share that mailbox. `personalSourcesEmailReplyContent.ts` recognizes replies delivered to Carl and strips quoted history before link extraction. Rich replies derive text from stripped HTML so a flattened plain-text alternative cannot restore quotes; paragraph boundaries preserve first-line Topic hints. Plain-text-only replies use their quote separators. Manual forwards retain their forwarded body.
+These switches stop new content only. Reads, deletions, revocation, expiry, and lasting privacy guards stay active.
+
 `@carlnotes/server`, the server-only part of what every server module shares: everything that reads `Bun.env`, a Node
 built-in, or a server SDK, and the package every server package imports. `@carlnotes/db`, `emails`, `models`, and
 `pipeline`, `apps/api`, and `apps/worker` import it; it imports `@carlnotes/contracts`, `@sentry/bun`, and
@@ -50,5 +58,10 @@ is worth sending again (a 429, a 5xx, or no response). The SDK retries a 429 its
 - Imports: `@carlnotes/contracts` only among the packages, never `db` or anything after it. Only the monitoring and analytics clients and `publicFetch` reach the network, and nothing here touches
   the database.
 - Tests: `bun test packages/server`.
+
+`privateText.ts` encrypts and authenticates private text in the existing `enc1:` AES-256-GCM format. Personal sources storage
+requires `CHAT_TEXT_KEY` in every environment: 32 random bytes encoded as base64. Keep that key when deploying or
+restoring encrypted rows. Chat's compatibility wrapper retains its keyless-development behavior. Literal network
+address classification lives in `@carlnotes/contracts/networkAddress`; `publicFetch.ts` still pins DNS and redirects.
 
 `monitoringRedaction.ts` re-exports the universal redaction from contracts. `withRequestTelemetry` puts device descriptions on a request-specific Sentry isolation scope when monitoring is enabled, including unsampled errors. Concurrent requests retain separate tags.

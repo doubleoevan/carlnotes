@@ -11,13 +11,13 @@ import {
 	LAST_AI_PROVIDER_KEY,
 	type McpServer,
 } from "@carlnotes/core/lib/installDeeplinks"
+import { AI_PROVIDER_ICON_PATHS } from "@carlnotes/nightshift/aiProviderIcons"
 import AsyncStorage from "@react-native-async-storage/async-storage"
 import { setStringAsync } from "expo-clipboard"
-import { Check, Code2, Copy, Link, MessageCircle } from "lucide-react-native"
+import { Check, Code2, Copy, Link } from "lucide-react-native"
 import { useEffect, useState } from "react"
 import { View } from "react-native"
 import { Path } from "react-native-svg"
-import { siClaudecode, siCursor, siDeepseek, siGooglegemini, siPerplexity, siX } from "simple-icons"
 import { Button } from "@/components/primitives/button"
 import { Icon } from "@/components/primitives/icon"
 import { Text } from "@/components/primitives/text"
@@ -76,22 +76,16 @@ function DesktopInstall({ provider, mcpServer, isOpen, isCopied, onSelect, onCop
 	)
 }
 
-// keep the web's Simple Icons brand marks and Lucide fallbacks
-const BRANDS = {
-	claude: siClaudecode,
-	gemini: siGooglegemini,
-	grok: siX,
-	perplexity: siPerplexity,
-	deepseek: siDeepseek,
-	cursor: siCursor,
-}
+// share the same AI platform marks as conversation links
 function ProviderIcon({ provider }: { provider?: AiProvider }) {
-	if (!provider || provider === "chatgpt" || provider === "vscode") {
-		return <Icon as={!provider ? Link : provider === "chatgpt" ? MessageCircle : Code2} className="size-4" />
+	if (!provider || provider === "vscode") {
+		return <Icon as={!provider ? Link : Code2} className="size-4" />
 	}
 	return (
 		<ClassNameSvg width={16} height={16} viewBox="0 0 24 24" className="text-foreground">
-			<Path d={BRANDS[provider].path} fill="currentColor" />
+			{AI_PROVIDER_ICON_PATHS[provider].map((path) => (
+				<Path key={path} d={path} fill="currentColor" fillRule="evenodd" />
+			))}
 		</ClassNameSvg>
 	)
 }

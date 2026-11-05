@@ -245,8 +245,10 @@ export function TopicInfoPopover({
 
 // the "# new" count as its own popover trigger, showing the same info content anchored at the count on the right
 export function NewCountInfo({ topic }: { topic: TopicDetails }) {
+	// close Topic info before opening a Finding from its Personal sources
+	const [isOpen, setIsOpen] = useState(false)
 	return (
-		<Popover>
+		<Popover open={isOpen} onOpenChange={setIsOpen}>
 			<Tooltip>
 				<TooltipTrigger asChild>
 					<PopoverTrigger className="text-badge shrink-0 text-sm font-semibold hover:underline">

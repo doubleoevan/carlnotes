@@ -14,11 +14,11 @@ import { POPOVER_HEADING_CLASS, SECTION_LABEL_CLASS, STANDALONE_LINK_CLASS } fro
  * Adapts the shared Topic draft card to browser elements.
  */
 export function TopicDraftCard(props: TopicDraftCardProps) {
-	return <SharedTopicDraftCard {...props} elements={topicDraftCardElements} />
+	return <SharedTopicDraftCard {...props} elements={topicDraftViewElements} />
 }
 
 // keep topic draft elements stable through streamed proposals
-const topicDraftCardElements: TopicDraftCardElements = {
+const topicDraftViewElements: TopicDraftCardElements = {
 	Frame: ({ children, heading }) => (
 		<section className="flex min-h-0 shrink flex-col border-t px-3 py-2 text-sm" aria-label={heading}>
 			{children}

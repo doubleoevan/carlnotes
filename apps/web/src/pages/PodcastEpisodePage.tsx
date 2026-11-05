@@ -142,9 +142,10 @@ export function PodcastEpisodePage() {
 				<PodcastEpisodeCover podcastEpisode={podcastEpisode} className={COVER_CLASS} />
 				<div className="min-w-0 flex-1">
 					{/* the topic's line, with the new topic button in the header's top right corner */}
-					<div className="flex items-start justify-between gap-3">
+					<div className="flex items-end justify-between gap-3">
 						<p className="text-muted-foreground min-w-0 text-sm">
-							{"Coffee Break podcast · "}
+							<strong>Coffee Break</strong>
+							{" podcast for "}
 							<AnchorLink href={topicPath} className="sentence-link">
 								{topic.name}
 							</AnchorLink>
@@ -288,7 +289,7 @@ function PodcastEpisodeSkeleton() {
 				<div className={cn(COVER_PLACEHOLDER_CLASS, COVER_CLASS)} />
 				<div className="min-w-0 flex-1">
 					{/* the topic's line beside the new topic button */}
-					<div className="flex items-start justify-between gap-3">
+					<div className="flex items-end justify-between gap-3">
 						<div className="bg-muted h-4 w-56 max-w-full animate-pulse rounded" />
 						<div className="bg-muted h-9 w-32 shrink-0 animate-pulse rounded-md" />
 					</div>

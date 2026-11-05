@@ -1,4 +1,10 @@
 // the Temporal client that the api and the sweep use to start durable workflows
+
+import {
+	PERSONAL_SOURCES_CONTEXT_SIGNAL,
+	PERSONAL_SOURCES_EMAIL_TASK_QUEUE,
+	PERSONAL_SOURCES_TASK_QUEUE,
+} from "@carlnotes/contracts/personalSourcesWork"
 import type { ThresholdCrossing } from "@carlnotes/server/monitoring"
 import { Client, Connection, WorkflowExecutionAlreadyStartedError, WorkflowNotFoundError } from "@temporalio/client"
 import { CHAT_MENTION_PUSH_WORKFLOW, PUSH_TASK_QUEUE } from "./pushWorkflows"
@@ -43,6 +49,42 @@ export type ScanCancel = { status: "cancelled"; whenStopped: () => Promise<void>
 
 // the reused client promise, built on first use from the TEMPORAL_ADDRESS endpoint
 let clientPromise: Promise<Client> | undefined
+
+/**
+ * Signals or starts the one private-context workflow for a Topic after a committed personal sources mutation.
+ */
+export async function startPersonalSourcesContextWorkflow(topicId: string): Promise<void> {
+	const client = await getClient()
+	await withClientDeadline(client, () =>
+		client.workflow.signalWithStart("summarizePersonalSourcesContext", {
+			taskQueue: PERSONAL_SOURCES_TASK_QUEUE,
+			workflowId: `personal-sources-context-${topicId}`,
+			args: [topicId],
+			signal: PERSONAL_SOURCES_CONTEXT_SIGNAL,
+			signalArgs: [],
+		}),
+	)
+}
+
+/**
+ * Starts durable received-email work whose only argument is a persisted receipt id.
+ */
+export async function startPersonalSourcesEmailWorkflow(receiptId: string): Promise<void> {
+	const client = await getClient()
+	try {
+		await withClientDeadline(client, () =>
+			client.workflow.start("receivePersonalSourcesEmail", {
+				taskQueue: PERSONAL_SOURCES_EMAIL_TASK_QUEUE,
+				workflowId: `personal-sources-email-${receiptId}`,
+				args: [receiptId],
+			}),
+		)
+	} catch (error) {
+		if (!(error instanceof WorkflowExecutionAlreadyStartedError)) {
+			throw error
+		}
+	}
+}
 
 // start the durable processing workflow for a freshly stored attachment
 export async function startAttachmentWorkflow(attachmentId: string): Promise<void> {

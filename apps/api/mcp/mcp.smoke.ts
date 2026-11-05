@@ -5,6 +5,7 @@ import { connectionPool } from "@carlnotes/db"
 import { cleanUpDirectoryFixtures, seedDirectoryFixtures } from "./mcpDirectorySmokeFixtures"
 import { checkOrigins, checkPrivateAccess, checkSubscriptionAccess } from "./mcpDirectorySmokeSections"
 import { checkOAuth, checkOAuthRevocation, registeredClientId } from "./mcpOAuthSmokeSections"
+import { checkPersonalSourcesRouting } from "./mcpPersonalSourcesSmokeSections"
 import { checkResultBounds } from "./mcpResultSmokeSections"
 import { cleanUp, failureCount, seed } from "./mcpSmokeFixtures"
 import { checkRateLimit, checkUser, checkVisitor } from "./mcpSmokeSections"
@@ -21,6 +22,7 @@ try {
 	await checkPrivateAccess(accessToken)
 	await checkSubscriptionAccess(accessToken)
 	await checkResultBounds(accessToken)
+	await checkPersonalSourcesRouting(accessToken)
 	await checkUser(accessToken)
 
 	// end the grant and prove the rate limit still applies

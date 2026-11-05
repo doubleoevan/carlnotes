@@ -98,16 +98,16 @@ We use third-party providers to run the service. Each one receives only what its
 | Apple (App Attest) and Google (Play Integrity) | Installation checks for mobile email signup | App and device information used to issue integrity evidence; CarlNotes receives the evidence and verification results |
 | Expo (EAS Update) | Mobile app updates | Connection and update information, including IP address, platform, and app/runtime version |
 | YouTube (Google) | Videos you choose to load | IP address, device information, playback activity, and the player's cookies or identifiers |
-| Neon | Application database | Account, topics, findings, feedback |
+| Neon | Application database | Account, topics, findings, feedback, encrypted Personal sources items and derived personal sources context |
 | Northflank | Application hosting | Everything in transit through the app |
 | Cloudflare | File storage and bot protection | Attachments, signup signals |
-| Fireworks AI and other model providers | Scoring, summaries, embeddings, podcast scripts | Your context documents and fetched page content |
+| Fireworks AI and other model providers | Scoring, summaries, embeddings, podcast scripts | Your context documents, fetched page content, and bounded personal sources text for summarization and private relevance scoring |
 | Google Gemini | Podcast audio, spoken questions, and replies read aloud | The script of each podcast episode, which is written from a topic's findings. The recording of each spoken question, which Google transcribes with storage turned off and we never keep. The text of Carl's replies that are read aloud: replies to spoken questions, and any reply you tap play on. Google does not use any of this to train or improve its models. It may log it for a limited time, which its abuse monitoring policy sets at 55 days, only to detect abuse and make legally required disclosures |
 | OpenAI | Moderation of images other people see | Each avatar you upload and each image you share to a team room. OpenAI does not train its models on data sent through its API |
-| Exa, Firecrawl, and source APIs | Web search and page fetching | Search queries derived from your context |
-| Resend | Email delivery | Email address and scan email contents |
+| Exa, Firecrawl, and source APIs | Web search and page fetching | Search queries derived from ordinary Topic context, and public links selected for fetching. Private personal sources text is excluded from search queries |
+| Resend | Email delivery and receiving | Email addresses and outbound email contents, plus messages delivered to the address Carl sends digests from |
 | Expo, with Apple Push Notification service and Firebase Cloud Messaging | Mobile push notifications you turn on | Your device's push token, and each notification's title, text, and link. A notification names a topic or chat room, a finding's title, or who mentioned you, and never includes a chat message's text |
-| Langfuse | Pipeline tracing | Prompt and response contents |
+| Langfuse | Pipeline tracing | Ordinary pipeline prompt and response contents. Private personal sources model calls disable content tracing |
 | Sentry | Error tracking | Error and crash diagnostics, app and device information, identifiers, and diagnostic or request context |
 | PostHog | Product analytics | Server usage events keyed to your account, browser visit events, bot fetches, and mobile events with SDK identifiers, app and device properties, screen names, and approximate location inferred from IP |
 | Stripe | Payments on the web | Billing details for a plan bought on the web |
@@ -124,13 +124,13 @@ We also share when the law requires it, to protect the service or its users from
 
 Topics are private by default.
 
-If you publish a topic, its name, description, context summary, sources, and findings become visible to anyone. Do not publish a topic whose context document contains anything you would not post publicly.
+Publishing makes the Topic name, description, Topic context, fetched sources, and public findings visible to anyone. Review the Topic context and attachments before publishing. Personal sources stay private to each sender.
 
-Content from a connected authenticated source such as a connected email account is never surfaced as a finding and never appears in any shared or public feed. It is used only to inform how findings are scored and searched on your own private topics. Because of this, a topic that uses a connected source can only be private: if you make such a topic invite-only or public, its connected sources are automatically disabled first, so private content can never influence a feed that anyone else can see.
+A source connected directly to an authenticated account can inform scoring and search on a private Topic. CarlNotes disables those connections before the Topic becomes invite-only or public. Personal sources are separate. A chat or email you explicitly send can help select findings on any Topic you can edit. Readers see the public explanation drawn from the linked page.
 
 When you invite someone to a topic, they see only findings from scans that run after they accept the invitation, never the topic's earlier history.
 
-A CarlNotes administrator can open any topic, including a private one, along with its context document, attachments, and findings. This exists so we can answer a support question or debug a problem.
+A CarlNotes administrator can open ordinary topics, including private ones, along with their context documents, attachments, and findings for support and debugging. Personal sources items, their summaries, and private Finding annotations are visible only to the sender. Topic ownership and administrative access do not grant access to another sender's private layer. The shared Finding explanation uses linked-page evidence alone.
 
 ## AI processing
 
@@ -140,17 +140,29 @@ Scores and summaries are machine generated and can be wrong.
 
 ## Connections to AI apps (MCP)
 
-You can connect Claude, ChatGPT, or another AI app to CarlNotes through the Model Context Protocol (MCP). The connected app sends tool arguments, such as a search query, a topic ID, or the changes you ask it to make. CarlNotes uses those arguments to carry out the request and returns public or account-authorized topics, findings, search results, and action outcomes, sometimes with an interactive card. Saved changes become part of the account or topic data described in this policy. The connected app receives those results and handles them under its own privacy policy.
+You can connect Claude, ChatGPT, or another AI app to CarlNotes through the Model Context Protocol (MCP). The connected app sends tool arguments, such as a search query, a topic ID, or the changes you ask it to make. CarlNotes uses those arguments to carry out the request and returns public or account-authorized topics, findings, search results, and action outcomes, sometimes with interactive CarlNotes controls. Saved changes become part of the account or topic data described in this policy. The connected app receives those results and handles them under its own privacy policy.
 
 **Assistant data.** CarlNotes never reads the assistant's chat history, memory, or uploaded files through this connection. MCP gives CarlNotes no access to them. The app can deliberately include text from your conversation or a file in a tool argument; CarlNotes receives that supplied text as part of the request.
 
 **Sign-in and tokens.** Public reads can work without signing in. After you sign in to CarlNotes and approve an app's access, CarlNotes issues OAuth access and refresh tokens. The app uses these credentials to act with your account's existing permissions. We store the authorization records and hashed refresh tokens needed to maintain and revoke that access.
 
-**Disconnecting and revoking access.** Remove the CarlNotes connection in the AI app to stop that app using it. An OAuth client can revoke its refresh token at CarlNotes' revocation endpoint, advertised in its OAuth discovery document. Revocation prevents that token issuing new access tokens. Removing a connection may only remove the app's stored credentials; it does not guarantee server-side revocation. Already-issued access tokens can remain usable until they expire, including after you sign out of CarlNotes. For help revoking a connection, contact [support@carlnotes.com](mailto:support@carlnotes.com). [Deleting your CarlNotes account](/privacy#delete-your-carlnotes-account) also prevents subsequent MCP account access. Disconnecting does not erase information the AI app has already received.
+**Disconnecting and revoking access.** In Account, Connected AI apps lists live connections and disconnected Source history, grouped by validated registration domain. Disconnect revokes your grants for that app group. New personal sources sends stop immediately and those refresh grants cannot issue new access tokens. Other users' grants remain unchanged. An OAuth client can also revoke its refresh token at the discovered revocation endpoint. Removing a connection only inside the AI app may remove local credentials without server-side revocation. Already-issued read tokens can remain usable until expiry, including after sign-out. For help, contact [support@carlnotes.com](mailto:support@carlnotes.com). [Deleting your account](/privacy#delete-your-carlnotes-account) prevents subsequent MCP account access. Disconnecting does not delete accepted Personal sources items or information the AI app already received.
 
 **Tool-call analytics.** PostHog records the connected app's name, tool name, caller kind (visitor or signed-in user), MCP entry point, timestamp, and outcome (successful, rejected, or failed). This event is keyed to the app name, with person-profile processing disabled. It contains no tool arguments, returned content, or token values. An account action can separately produce the account usage events described elsewhere in this policy. MCP tool-call analytics follow the same retention limit as other analytics: up to 12 months.
 
 See [Add CarlNotes to your AI app](/docs/account/add-to-ai/) for connection instructions and the available tools.
+
+## Personal sources data
+
+**What you provide.** AI Agent Sources receive the title, summary, public links, and optional private conversation reference you explicitly send. Web imports preview supported ChatGPT or Claude exports locally and upload only selected conversations, or a transcript you confirm. Email Sources receive messages you send to the same address Carl sends digests from. Carl saves clear matches to Topics you can edit and replies with linked destinations. If clarification is needed, we retain only the provider/thread reference and encrypted Topic choices, not a copy of the email body. Same-thread replies can choose numbers or written editable Topic names. We retrieve the original from Resend after authenticating the sender and recheck Topic permissions before saving. Completed choice metadata is deleted, and account deletion removes outstanding choices. Ordinary acknowledgments are ignored and quoted email history is excluded. Accepted mail must come from an account email with provider-confirmed aligned DKIM and DMARC authentication. Each accepted email counts once across its matching Topics. Emailing Carl grants no mailbox access: CarlNotes does not request Gmail OAuth, browse mail history, or download attachments or raw messages. Resend separately receives the original message, including any attachments it contains.
+
+**Storage and use.** Personal sources item titles, text, sender details, links, conversation references, private Finding annotations, and derived private context are encrypted in our database. We also store sender and Topic IDs, receipt and summarization times, retry fingerprints, delivery state, usage counts, and model cost records. We summarize bounded entry text through model providers and use derived context to score pages on the destination Topic. Carl processes each sender’s context separately. Each call selects evidence from the linked page for the public explanation and writes that sender’s private annotation. Podcasts, shared feeds, and public exports use only the public explanation. Private text is excluded from external search queries, shared Resource fields and vectors, and model content traces. Public links can be fetched through our normal page providers. Model providers still process the text sent to them; their processing and retention terms apply. Application trace suppression is not a promise of zero provider retention.
+
+**Your controls.** Each sender alone can read their items, summary, and private annotations, including on shared Topics. Topic owners and administrators cannot read another sender's content. Changing Topic visibility or ownership does not expose it. You can delete individual items or your receiving Source and revoke app connections or API keys. Stop emailing Carl to stop new mail. App suggestions compare your own accepted sends with your Topic description locally; they do not read an assistant account or save a separate profile.
+
+**Keys and retention.** Premium send-only API keys are displayed once; we store a digest, label, last four characters, and creation, use, and revocation times. They authorize only personal sources sends and stop working immediately on revocation or loss of entitlement. AI sends, emails, and imported conversations remain encrypted until you delete an item or Source, or the associated Topic or account is deleted. Deleted entries stop appearing in reads and invalidate derived context and private Finding annotations immediately; cleanup removes their stored content. Content-free email retry metadata can remain after deletion; other retry metadata can remain while the Topic exists to prevent a replay from restoring deleted text. Quota and billing records are retained separately from content. Deleting an entry does not refund usage or remove existing Findings, backups, or copies held by senders and providers. Resend retains received messages under its own terms independently of CarlNotes. The general deletion, backup, analytics, and billing periods below still apply.
+
+See [Personal sources](/docs/topics/personal-sources/) for setup, limits, and deletion controls.
 
 ## Google user data
 
@@ -172,6 +184,7 @@ For email signup in supported mobile builds, CarlNotes uses Apple App Attest on 
 
 - Account and topic data: kept while your account is active
 - Findings and scan history: kept while the topic exists
+- Personal sources sends, emails, and imported conversations: encrypted until deletion
 - Deleted topics and accounts: purged within 30 days, backups within 90 days
 - Error and analytics data: kept up to 12 months
 - Billing records: kept as long as tax and accounting law requires

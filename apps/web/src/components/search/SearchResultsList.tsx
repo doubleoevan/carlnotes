@@ -17,9 +17,11 @@ import { Pagination } from "@/components/common/Pagination"
 import { PodcastEpisodeNumberPill } from "@/components/podcast/PodcastEpisodePill"
 import { ResourceSkeleton } from "@/components/topic/TopicFeedSkeleton"
 import { TopicResource } from "@/components/topic/TopicResource"
-import { DASHED_ROW_CLASS, LIST_ROW_HOVER_CLASS, RESOURCE_LIST_CARD_CLASS } from "@/lib/styleClasses"
+import { RESOURCE_LIST_CARD_CLASS } from "@/lib/styleClasses"
 import type { TopicFeedHandlers } from "@/providers/TopicFeedProvider"
+import { SearchResultRow } from "./SearchResultRow"
 import { SEARCH_RESULT_KIND_ICON } from "./searchFilterOptions"
+import { TopicSearchResultDetails } from "./TopicSearchResultDetails"
 
 // a row that links to its own page: every kind but a finding, whose row opens its note like the feed's
 type LinkedSearchRow = Exclude<SearchRow, FindingSearchRow>
@@ -76,7 +78,7 @@ export function SearchResultsList({
 								topicFeedHandlers={topicFeedHandlers}
 							/>
 						) : (
-							<SearchResultRow
+							<LinkedSearchResultRow
 								key={`${searchRow.kind}-${searchRow.id}`}
 								searchRow={searchRow}
 								rank={firstRank + index}
@@ -174,38 +176,31 @@ function SearchFindingRow({
 	)
 }
 
-// one result's row: its number, its kind's icon or avatar, its linked name, its line, and the caller's action
-function SearchResultRow({ searchRow, rank, action }: { searchRow: LinkedSearchRow; rank: number; action: ReactNode }) {
+// preserve each result's own link, icon, metadata, and optional action within the shared layout
+function LinkedSearchResultRow({
+	searchRow,
+	rank,
+	action,
+}: {
+	searchRow: LinkedSearchRow
+	rank: number
+	action: ReactNode
+}) {
 	return (
-		<div className={cn(DASHED_ROW_CLASS, LIST_ROW_HOVER_CLASS, "group flex items-center")}>
-			{/* the row's number, in the slot the feed's rank takes */}
-			<span
-				className="text-muted-foreground absolute top-0 left-0 grid size-11 place-items-center sm:top-1.5 sm:size-8"
-				aria-hidden="true"
-			>
-				<span className="font-display text-sm tabular-nums">{rank}</span>
-			</span>
-			{/* the left padding clears the number's slot, and the right padding is the row's own inset */}
-			<div className="flex min-w-0 flex-1 items-start gap-2.5 py-3 pr-3 pl-9">
-				<SearchRowIcon searchRow={searchRow} />
-				<div className="min-w-0 flex-1">
-					{/* the name, linked to its page, or a finding's title to its resource */}
-					<div className="truncate text-sm">
-						<AnchorLink
-							href={searchRow.path}
-							className="text-foreground max-w-full truncate text-left text-sm font-semibold hover:underline"
-						>
-							{searchRow.name}
-						</AnchorLink>
-					</div>
-					{/* the line under the name */}
-					<div className="text-muted-foreground mt-0.5 flex flex-wrap items-center gap-1.5 text-xs group-hover:text-foreground/80">
-						<SearchRowLine searchRow={searchRow} />
-					</div>
-				</div>
-				{action}
-			</div>
-		</div>
+		<SearchResultRow
+			rank={rank}
+			leading={<SearchRowIcon searchRow={searchRow} />}
+			title={
+				<AnchorLink
+					href={searchRow.path}
+					className="text-foreground max-w-full truncate text-left text-sm font-semibold hover:underline"
+				>
+					{searchRow.name}
+				</AnchorLink>
+			}
+			details={<SearchRowLine searchRow={searchRow} />}
+			action={action}
+		/>
 	)
 }
 
@@ -236,14 +231,11 @@ function SearchRowLine({ searchRow }: { searchRow: LinkedSearchRow }) {
 		// a topic, its viewers and followers, and its latest podcast episode's pill
 		case "topic":
 			return (
-				<>
-					{toDotSeparatedText([
-						"Topic",
-						toCountLabel(searchRow.count ?? 0, "viewer"),
-						toCountLabel(searchRow.subscriberCount, "follower"),
-					])}
-					<PodcastEpisodePill podcastEpisode={searchRow.topic.latestPodcastEpisode} />
-				</>
+				<TopicSearchResultDetails
+					viewerCount={searchRow.count ?? 0}
+					subscriberCount={searchRow.subscriberCount}
+					latestPodcastEpisode={searchRow.topic.latestPodcastEpisode}
+				/>
 			)
 		// a podcast episode, the topic it is in, how long ago it was published, its listeners, and its pill
 		case "podcastEpisode":

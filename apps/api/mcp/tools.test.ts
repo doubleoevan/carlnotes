@@ -1,12 +1,12 @@
 // tool registration tests: the tool list and its annotations, what every mcp client and its model read in the tool
 // descriptions, and the follow tool's calls
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
-import { MCP_CARD_META_KEY } from "@carlnotes/contracts/mcpCards"
+import { MCP_VIEW_META_KEY } from "@carlnotes/contracts/mcpViews"
 import { searchRequestPayload } from "@carlnotes/contracts/search"
 import type { CallToolResult } from "@modelcontextprotocol/server"
 import * as subscriptions from "../topic/subscriptions"
-import * as cardDataModule from "./cardData"
 import { toMcpToolContractIssues } from "./mcpContractTestFixtures"
+import * as mcpViewDataModule from "./mcpViewData"
 import * as results from "./results"
 import { CONNECT_ACCOUNT_TEXT } from "./results"
 import * as searchResults from "./searchResults"
@@ -50,7 +50,13 @@ function toRegisteredTools(
 
 // a visitor, and a user connected through an app
 const VISITOR: ToolCaller = { kind: "visitor", clientName: "test-app" }
-const USER: ToolCaller = { kind: "user", userId: "user-1", plan: "free", clientName: "test-app" }
+const USER: ToolCaller = {
+	kind: "user",
+	userId: "user-1",
+	plan: "free",
+	clientName: "test-app",
+	clientId: "test-client",
+}
 
 test.each([VISITOR, USER])("every tool has its directory title and safety hints for $kind", (toolCaller) => {
 	const tools = [...toRegisteredTools(toolCaller)].map(([name, { config }]) => ({ name, ...config }))
@@ -121,9 +127,9 @@ test("a visitor cannot follow, and an owner's unfollow says the owner always fol
 	expect(JSON.stringify(ownerResult.content)).toContain("An owner always follows their own topic.")
 })
 
-// a client that renders no card reads the same structured result and text, and the card's data goes separately in _meta
-test("each card tool returns its structured result and text, with or without the card's data", async () => {
-	// a search page, a feed page, and the card data each may have
+// a client that renders no MCP view reads the same structured result and text, and the MCP view's data goes separately in _meta
+test("each MCP view tool returns its structured result and text, with or without the MCP view's data", async () => {
+	// a search page, a feed page, and the MCP view data each may have
 	const searchPage = {
 		rows: [],
 		rowCount: 0,
@@ -135,41 +141,43 @@ test("each card tool returns its structured result and text, with or without the
 		searchUrl: "https://carlnotes.test/search?q=orbit",
 	}
 	const feedPage = { items: [], nextCursor: null }
-	const cardData = { session: null, podcastEpisodes: [] }
+	const mcpViewData = { session: null, podcastEpisodes: [] }
 	spyOn(searchResults, "searchForTool").mockResolvedValue(searchPage)
 	spyOn(results, "readTopicFeed").mockResolvedValue(feedPage)
-	const loadSearchCardDataSpy = spyOn(cardDataModule, "loadSearchCardData").mockResolvedValue(cardData)
-	const loadFindingsCardDataSpy = spyOn(cardDataModule, "loadFindingsCardData").mockResolvedValue(cardData)
+	const loadSearchMcpViewDataSpy = spyOn(mcpViewDataModule, "loadSearchMcpViewData").mockResolvedValue(mcpViewData)
+	const loadFindingsMcpViewDataSpy = spyOn(mcpViewDataModule, "loadFindingsMcpViewData").mockResolvedValue(mcpViewData)
 
-	// the search and the feed read, with the card's data
+	// the search and the feed read, with the MCP view's data
 	const registeredTools = toRegisteredTools(VISITOR)
 	const searchResult = await registeredTools.get("search")?.handler({ q: "orbit", kinds: ["teams"] })
 	const feedResult = await registeredTools.get("read_topic_feed")?.handler({ topic_id: "topic-1" })
 	expect(searchResult?.structuredContent).toEqual(searchPage)
-	expect(searchResult?._meta).toEqual({ [MCP_CARD_META_KEY]: cardData })
+	expect(searchResult?._meta).toEqual({ [MCP_VIEW_META_KEY]: mcpViewData })
 	expect(feedResult?.structuredContent).toEqual(feedPage)
 
-	// the feed read with no card data returns the same structured result and text
-	loadFindingsCardDataSpy.mockResolvedValue(null)
-	const feedResultWithoutCard = await registeredTools.get("read_topic_feed")?.handler({ topic_id: "topic-1" })
-	expect(feedResultWithoutCard?.structuredContent).toEqual(feedResult?.structuredContent)
-	expect(feedResultWithoutCard?.content).toEqual(feedResult?.content)
-	expect(feedResultWithoutCard?._meta).toBeUndefined()
-	expect(loadSearchCardDataSpy).toHaveBeenCalledTimes(1)
+	// the feed read with no MCP view data returns the same structured result and text
+	loadFindingsMcpViewDataSpy.mockResolvedValue(null)
+	const feedResultWithoutMcpView = await registeredTools.get("read_topic_feed")?.handler({ topic_id: "topic-1" })
+	expect(feedResultWithoutMcpView?.structuredContent).toEqual(feedResult?.structuredContent)
+	expect(feedResultWithoutMcpView?.content).toEqual(feedResult?.content)
+	expect(feedResultWithoutMcpView?._meta).toBeUndefined()
+	expect(loadSearchMcpViewDataSpy).toHaveBeenCalledTimes(1)
 })
 
-test("every tool that names a card names one of the three", () => {
-	const cardToolNames = [...toRegisteredTools(VISITOR)]
+test("every tool that names an MCP view names one of the four", () => {
+	const mcpViewToolNames = [...toRegisteredTools(VISITOR)]
 		.filter(([, { config }]) => (config as { _meta?: { ui?: { resourceUri?: string } } })._meta?.ui?.resourceUri)
 		.map(([toolName, { config }]) => [
 			toolName,
 			(config as { _meta: { ui: { resourceUri: string } } })._meta.ui.resourceUri,
 		])
-	expect(cardToolNames).toEqual([
-		["read_topic_feed", "ui://carlnotes/findings.html"],
-		["search_topic_findings", "ui://carlnotes/findings.html"],
-		["search", "ui://carlnotes/search.html"],
-		["edit_topic", "ui://carlnotes/topic.html"],
-		["create_topic", "ui://carlnotes/topic.html"],
+	expect(mcpViewToolNames).toEqual([
+		["read_topic_feed", "ui://carlnotes/findings.html?v=9"],
+		["search_topic_findings", "ui://carlnotes/findings.html?v=9"],
+		["search", "ui://carlnotes/search.html?v=9"],
+		["edit_topic", "ui://carlnotes/topic.html?v=9"],
+		["create_topic", "ui://carlnotes/topic.html?v=9"],
+		["send_to_topic", "ui://carlnotes/topic.html?v=9"],
+		["suggest_topics", "ui://carlnotes/suggest-topics.html?v=9"],
 	])
 })

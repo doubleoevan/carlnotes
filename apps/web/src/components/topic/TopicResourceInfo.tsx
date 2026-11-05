@@ -27,7 +27,7 @@ import {
 import { captureVisitEvent, toPublicTopicProperties } from "@/lib/visitAnalytics"
 import { type TopicFeedHandlers, useIsSignedIn } from "@/providers/TopicFeedProvider"
 import { ResourceMetadata } from "./TopicFindingSummary"
-import { InfoSection } from "./TopicInfo"
+import { TopicInfoSection as InfoSection } from "./TopicInfoSection"
 import { toNotesMarkdown } from "./TopicScanRecap"
 
 // the bookmark and read toggles' text-button style

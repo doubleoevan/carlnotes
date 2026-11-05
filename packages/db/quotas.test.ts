@@ -128,7 +128,9 @@ test("the access row is read once per request", async () => {
 	})
 
 	expect(queryCount).toBe(1)
-	expect(userAccessList).toEqual(Array(3).fill({ isAdmin: false, plan: "plus", budgetOverrideCents: null }))
+	expect(userAccessList).toEqual(
+		Array(3).fill({ isAdmin: false, plan: "plus", budgetOverrideCents: null, freeTopicLimit: 1 }),
+	)
 })
 
 // the worker checks quotas outside any request, so each of its checks reads the row
@@ -193,7 +195,12 @@ test("monthly spend sums scans, chat, and episodes", async () => {
 		spendDollars: ["2.50", "1.25", "0.41"],
 	}
 	const monthlySpend = await withSpendQueryRows(spendQueryRows as SpendQueryRows, () => monthlySpendDollars("user-1"))
-	expect(monthlySpend).toEqual({ scanDollars: 2.5, chatDollars: 1.25, podcastEpisodeDollars: 0.41 })
+	expect(monthlySpend).toEqual({
+		scanDollars: 2.5,
+		chatDollars: 1.25,
+		podcastEpisodeDollars: 0.41,
+		personalSourcesDollars: 0,
+	})
 	expect(toSpendCents(monthlySpend)).toBe(416)
 })
 
@@ -209,12 +216,12 @@ test("the month's spend is summed once per request until a write", async () => {
 		await runWithRequestMemo(async () => {
 			await Promise.all([isMonthlyBudgetCutoffPassed("user-1", "spokenQuestions"), monthlySpendDollars("user-1")])
 			await isMonthlyBudgetCutoffPassed("user-1", "manualScans")
-			expect(countSpendSums()).toBe(3)
+			expect(countSpendSums()).toBe(4)
 
-			// a spend row's insert clears the memo, so the next read sums the three tables again
+			// a spend row's insert clears the memo, so the next read sums every spend table again
 			await db.execute(sql`insert into chat_turns default values`)
 			await monthlySpendDollars("user-1")
-			expect(countSpendSums()).toBe(6)
+			expect(countSpendSums()).toBe(8)
 		})
 	} finally {
 		restoreConnectionPool()
@@ -223,7 +230,7 @@ test("the month's spend is summed once per request until a write", async () => {
 
 // an empty user id still filters each sum by that id, so it never sums every user's spend
 test("the spend for an empty user id is filtered by that id", async () => {
-	// send the three sums with an empty user id, then put the connection pool's own query back
+	// send each sum with an empty user id, then put the connection pool's own query back
 	const sentQueries = stubConnectionPool(() => [["0"]])
 	try {
 		await loadSpendSince({ since: new Date("2026-10-01T00:00:00Z"), userId: "" })
@@ -232,7 +239,7 @@ test("the spend for an empty user id is filtered by that id", async () => {
 	}
 
 	// every sum is bound to the empty user id
-	expect(sentQueries).toHaveLength(3)
+	expect(sentQueries).toHaveLength(4)
 	for (const sentQuery of sentQueries) {
 		expect(sentQuery.values).toContain("")
 	}

@@ -9,7 +9,7 @@ import { usePodcastFeed } from "@carlnotes/core/hooks/usePodcastFeed"
 import { toPodcastAppLink } from "@carlnotes/core/lib/podcastFeed"
 import * as Clipboard from "expo-clipboard"
 import * as Linking from "expo-linking"
-import { Copy, Podcast } from "lucide-react-native"
+import { Copy, Mic } from "lucide-react-native"
 import { type ComponentRef, type RefObject, useEffect, useRef, useState } from "react"
 import { Platform, View } from "react-native"
 import { ConfirmDialog } from "@/components/common/ConfirmDialog"
@@ -33,7 +33,7 @@ export const podcastFeedDialogElements: PodcastFeedDialogElements = {
 	),
 	Button: ({ children, icon, onPress, ...props }) => (
 		<Button {...props} accessibilityLabel={String(children)} onPress={onPress}>
-			{icon && <Icon as={icon === "copy" ? Copy : Podcast} className="size-4.5" />}
+			{icon && <Icon as={icon === "copy" ? Copy : Mic} className="size-4.5" />}
 			<Text>{children}</Text>
 		</Button>
 	),

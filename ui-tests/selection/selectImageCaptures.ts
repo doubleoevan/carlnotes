@@ -20,10 +20,10 @@ import {
 } from "./imageCaptureSelection"
 import { toSelectionSummary } from "./selectionSummary"
 
-// the card bundle's folder: its entry and the files that the card build aliases in
-const MCP_CARD_FOLDER = "apps/web/src/mcpCards/"
+// the MCP view bundle's folder: its entry and the files that the MCP view build aliases in
+const MCP_VIEW_FOLDER = "apps/web/src/mcpViews/"
 
-// a test or a story file, which the card bundle never includes
+// a test or a story file, which the MCP view bundle never includes
 const TEST_OR_STORY_FILE_PATTERN = /\.(?:test|stories)\.tsx?$/
 
 // the command's options: an explicit base and head commit, or every image capture
@@ -45,10 +45,10 @@ async function toCommandSelection(): Promise<ImageCaptureSelection> {
 		const knownFilePaths = toLines(runCommand(["git", "ls-files", "--cached", "--others", "--exclude-standard"]))
 		const changedFiles = diffBase.baseCommit === null ? [] : readChangedFiles(diffBase.baseCommit, headCommit)
 
-		// the story files and the card bundle's files
+		// the story files and the MCP view bundle's files
 		const { storyFiles, unreadableStoryFiles } = readStoryFiles(knownFilePaths)
-		const mcpCardFilePaths = knownFilePaths.filter(
-			(filePath) => filePath.startsWith(MCP_CARD_FOLDER) && !TEST_OR_STORY_FILE_PATTERN.test(filePath),
+		const mcpViewFilePaths = knownFilePaths.filter(
+			(filePath) => filePath.startsWith(MCP_VIEW_FOLDER) && !TEST_OR_STORY_FILE_PATTERN.test(filePath),
 		)
 
 		// the image captures that the changes reach
@@ -58,7 +58,7 @@ async function toCommandSelection(): Promise<ImageCaptureSelection> {
 			changedFiles,
 			storyFiles,
 			unreadableStoryFiles,
-			mcpCardFilePaths,
+			mcpViewFilePaths,
 			knownFilePaths,
 			readDirectImports: toDirectImportReader({ knownFilePaths: new Set(knownFilePaths), readFileText: readRepoFile }),
 		})

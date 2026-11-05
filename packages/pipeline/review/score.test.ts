@@ -1,22 +1,23 @@
-// score tests for the promotion threshold, bounded concurrency, the plan limit check, the score prompt, the review
-// fields a re-score writes, the found scan that a re-score keeps, and the safety judgment that drops unsafe content
+// Tests for score policy, model requests, bounded concurrency, and paid review.
 import { afterEach, expect, test } from "bun:test"
+import { PERSONAL_SOURCE_SCORE_BONUS } from "@carlnotes/contracts/sourceScoring"
 import { restoreConnectionPool, stubConnectionPool } from "@carlnotes/db/connectionPoolStub"
-import type { resources, scans } from "@carlnotes/db/schema/scans"
+import type { scans } from "@carlnotes/db/schema/scans"
 import { canScoreResource, charge, newBudget, releaseScanSpend } from "@carlnotes/models/budget"
 import { toChatCompletionResponse } from "@carlnotes/models/chatCompletionTestFixtures"
+import { SCORE_OUTPUT_TOKENS } from "@carlnotes/models/models"
 import { runWithConcurrency } from "@carlnotes/server/concurrency"
 import { saveEnvSettings } from "@carlnotes/server/savedEnvSettings"
+import { rankBySimilarity } from "./filter"
+import { findingIdsToFilter } from "./index"
 import {
 	buildScorePrompt,
 	fetchAndScoreResources,
-	isPromoted,
 	MAX_SCORED_RESOURCE_DOLLARS,
 	reserveScoredResource,
 	scoreResource,
-	toFindingReviewFields,
-	upsertFinding,
 } from "./score"
+import { isPromoted } from "./scorePolicy"
 import { emptyReviewOutcome } from "./track"
 
 // a high cheap-model score earns promotion to the premium score-model's re-score
@@ -111,81 +112,11 @@ test("buildScorePrompt includes content and context and gates the relevance expl
 	expect(cheapModelResult.registryPrompt).toBeUndefined()
 })
 
-// a re-score rewrites the review and nothing else, so a user's rating and view count survive it.
-// without this an edited prompt would quietly clear a rating someone left
-test("a review names only the columns a re-score decides", () => {
-	const review = toFindingReviewFields({
-		scanId: "scan-1",
-		score: 0.82,
-		relevanceExplanation: "why this matters",
-		topicContextHash: "abc123",
-		contentHash: "def456",
-	})
-
-	// the review's own columns, and no column a user writes
-	expect(Object.keys(review).sort()).toEqual([
-		"relevanceExplanation",
-		"relevanceScore",
-		"reviewedContentHash",
-		"reviewedContextHash",
-		"scanId",
-	])
-	for (const userColumn of ["rating", "ratedByUserId", "ratedTeamId", "ratedRole", "viewCount"]) {
-		expect({ userColumn, isWritten: userColumn in review }).toEqual({ userColumn, isWritten: false })
-	}
-})
-
-// the scan that first found a finding is written with the insert alone. a re-score moves scan_id to the re-scoring scan
-// and leaves found_scan_id, so a re-scored finding is not new to the digest or the podcast episode's plan again
-test("upsertFinding writes the found scan on the insert and never on the re-score", async () => {
-	// a pool whose upsert returns an updated row
-	const sentQueries = stubConnectionPool(({ text }) =>
-		text.startsWith('insert into "findings"') ? [["finding-1", false, 0.5]] : [],
-	)
-	try {
-		// the re-scoring scan, the resource it scored, and the review it wrote
-		const scan = { id: "scan-2" } as typeof scans.$inferSelect
-		const resource = { id: "resource-1", contentHash: "content-hash" } as typeof resources.$inferSelect
-		const review = { score: 0.5, relevanceExplanation: "why it matters", topicContextHash: "context-hash" }
-
-		// re-score a finding an earlier scan found, which the pool reports as an updated row
-		const upsertFindingResult = await upsertFinding({
-			scan,
-			topicId: "topic-1",
-			resource,
-			...review,
-			isFromCustomSource: false,
-		})
-		expect(upsertFindingResult).toEqual({ isNew: false, relevanceScore: 0.5 })
-
-		// the insert names the found scan, and the conflict update names the latest scan alone
-		const upsertQuery = sentQueries.find((sentQuery) => sentQuery.text.startsWith('insert into "findings"'))
-		const [insertClause = "", updateClause = ""] = (upsertQuery?.text ?? "").split("on conflict")
-		expect(insertClause).toContain('"found_scan_id"')
-		expect(updateClause).toContain('"scan_id"')
-		expect(updateClause).not.toContain('"found_scan_id"')
-	} finally {
-		// put the connection pool's own query back
-		restoreConnectionPool()
-	}
-})
-
-// a resource with no stored content hash is reviewed against no content hash instead of an empty string
-test("a review keeps a null content hash null", () => {
-	const review = toFindingReviewFields({
-		scanId: "scan-1",
-		score: 0.1,
-		relevanceExplanation: "",
-		topicContextHash: "abc123",
-		contentHash: null,
-	})
-	expect(review.reviewedContentHash).toBe(null)
-})
-
 // the proxy settings a scoring call needs, the real fetch, and the scoring replies a stubbed proxy returns in order
 const restoreEnvSettings = saveEnvSettings(["LITELLM_BASE_URL", "LITELLM_MASTER_KEY"])
 const originalFetch = globalThis.fetch
 const scoringReplies: object[] = []
+const scoringRequests: Record<string, unknown>[] = []
 let scoringCallCount = 0
 
 // stub the proxy so each scoring call gets the next reply as its structured output
@@ -193,7 +124,8 @@ function stubScoringReplies(replies: object[]): void {
 	Bun.env.LITELLM_BASE_URL = "http://litellm.test"
 	Bun.env.LITELLM_MASTER_KEY = "master"
 	scoringReplies.splice(0, scoringReplies.length, ...replies)
-	globalThis.fetch = (async () => {
+	globalThis.fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+		scoringRequests.push(JSON.parse(String(init?.body)))
 		// one completion whose content is the next reply, repeating the last one past the end
 		const content = JSON.stringify(scoringReplies[Math.min(scoringCallCount, scoringReplies.length - 1)])
 		scoringCallCount++
@@ -206,6 +138,7 @@ afterEach(() => {
 	restoreEnvSettings()
 	globalThis.fetch = originalFetch
 	scoringCallCount = 0
+	scoringRequests.length = 0
 	restoreConnectionPool()
 })
 
@@ -250,14 +183,45 @@ const tweetResource = {
 const scoringScan = { id: "scan-1" } as typeof scans.$inferSelect
 const topicContext = { name: "t", text: "t", embedding: [], contextHash: "context-hash", scoreText: "topic" }
 
+test("a Resource reserves every sender's scoring cost before another Resource starts", async () => {
+	// two senders require more than the ordinary single-Resource allowance
+	const budget = { ...newBudget(), limitDollars: MAX_SCORED_RESOURCE_DOLLARS * 1.5 }
+	const personalSources = ["alice", "bob"].map((userId) => ({
+		userId,
+		topicId: "topic-1",
+		revision: 1,
+		text: "Private context",
+		expiresAt: null,
+		includedEntryCount: 1,
+		hasIncompleteCoverage: false,
+	}))
+	const emptyResources = ["one", "two"].map((id) => ({ ...tweetResource, id, snippet: "" }))
+	const reviewedIds = await fetchAndScoreResources(
+		emptyResources,
+		scoringScan,
+		"topic-1",
+		{ ...topicContext, personalSources },
+		emptyReviewOutcome(),
+		budget,
+		new Set(),
+		"fixture-key",
+	)
+	expect(reviewedIds).toEqual(["one"])
+	expect(budget.fetchCounts.reusedCount).toBe(1)
+	expect(budget.reservedDollars).toBe(0)
+	expect(scoringCallCount).toBe(0)
+})
+
 // scores the tweet through the whole paid path and returns what the review counted and the queries sent
-async function scoreTweet(): Promise<{ filteredCount: number; keptCount: number; queryTexts: string[] }> {
+async function scoreTweet(
+	personalSourceScoreBonus: 0 | 0.05 | 0.1 = 0,
+): Promise<{ filteredCount: number; keptCount: number; queryTexts: string[] }> {
 	const sentQueries = stubConnectionPool(({ text }) =>
 		text.startsWith('insert into "findings"') ? [["finding-1", true, 0.5]] : [],
 	)
 	const reviewOutcome = emptyReviewOutcome()
 	await fetchAndScoreResources(
-		[tweetResource],
+		[{ ...tweetResource, personalSourceScoreBonus }],
 		scoringScan,
 		"topic-1",
 		topicContext,
@@ -274,9 +238,9 @@ async function scoreTweet(): Promise<{ filteredCount: number; keptCount: number;
 
 // an unsafe Resource is marked, counted under its own drop reason, and gets no Finding, so a kept Finding and the
 // notes on it are never touched
-test("an unsafe Resource is marked and writes no Finding", async () => {
+test("an unsafe personal Resource is marked and writes no Finding despite its bonus", async () => {
 	stubScoringReplies([{ score: 0.9, isUnsafe: true }])
-	const { filteredCount, keptCount, queryTexts } = await scoreTweet()
+	const { filteredCount, keptCount, queryTexts } = await scoreTweet(0.1)
 	expect(filteredCount).toBe(1)
 	expect(keptCount).toBe(0)
 	expect(queryTexts.some((queryText) => queryText.startsWith('update "resources" set "is_unsafe"'))).toBe(true)
@@ -286,8 +250,87 @@ test("an unsafe Resource is marked and writes no Finding", async () => {
 // a safe score clears the mark an earlier score left, and the Resource becomes a Finding
 test("a safe score clears the unsafe mark and keeps the Finding", async () => {
 	stubScoringReplies([{ score: 0.3, isUnsafe: false }])
-	const { filteredCount, keptCount, queryTexts } = await scoreTweet()
+	const { filteredCount, keptCount, queryTexts } = await scoreTweet(0.1)
 	expect(filteredCount).toBe(0)
 	expect(keptCount).toBe(1)
 	expect(queryTexts.some((queryText) => queryText.startsWith('update "resources" set "is_unsafe"'))).toBe(true)
+})
+
+// enforce the same output bound that the paid section reserves
+test("ordinary scoring bounds both model calls and charges invalid premium output", async () => {
+	stubScoringReplies([{ score: 0.9, isUnsafe: false }, {}])
+	const budget = newBudget()
+	await expect(scoreResource("page", "topic", budget)).rejects.toThrow()
+	expect(scoringRequests).toHaveLength(2)
+	for (const request of scoringRequests) {
+		expect(request.max_tokens ?? request.max_completion_tokens).toBe(SCORE_OUTPUT_TOKENS)
+	}
+	expect(scoringRequests[1]?.reasoning_effort).toBe("low")
+	expect(budget.stageCosts.scoringPremium).toBeGreaterThan(0)
+})
+
+// large example titles cannot exceed the reserved prompt input
+test("scoring bounds long Topic examples while retaining the full attachment context", async () => {
+	const content = "x".repeat(8000)
+	const context = `${"a".repeat(24_000)}attachment-end${"example title ".repeat(4000)}outside-boundary`
+	const result = await buildScorePrompt(content, context, true)
+	expect(result.prompt).toContain("attachment-end")
+	expect(result.prompt).not.toContain("outside-boundary")
+	expect(result.prompt.length).toBeLessThanOrEqual(48_000)
+})
+
+// bonus-bearing candidates still call the scoring models and record their page-grounded explanation
+test("personal priority spends the final scoring slot before ordinary links and leaves deferred work unsettled", async () => {
+	// reserve enough for one concurrent Resource while keeping the ordinary candidate first in discovery order
+	stubScoringReplies([{ score: 0.9 }, { score: 0.7, relevanceExplanation: "The page compares evaluation methods." }])
+	const sentQueries = stubConnectionPool(({ text }) =>
+		text.startsWith('insert into "findings"') ? [["personal-finding", false, 0.8]] : [],
+	)
+	const considered: string[] = []
+	const outcome = {
+		...emptyReviewOutcome(),
+		onResourceConsidered: async (url: string) => {
+			considered.push(url)
+		},
+	}
+	const ordinary = { ...tweetResource, id: "ordinary", url: "https://x.com/someone/status/2" }
+	const personal = { ...tweetResource, id: "personal", personalSourceScoreBonus: 0.1 as const }
+	const ranked = rankBySimilarity([
+		{ resource: ordinary, embedding: [1], similarity: 1 },
+		{ resource: personal, embedding: null, similarity: 0 },
+	])
+	const budget = { ...newBudget(), maxScoredResources: 1, limitDollars: MAX_SCORED_RESOURCE_DOLLARS / 2 }
+	const reviewed = await fetchAndScoreResources(
+		ranked.map(({ resource }) => resource),
+		scoringScan,
+		"topic-1",
+		topicContext,
+		outcome,
+		budget,
+		new Set(),
+	)
+
+	// only the queued personal candidate is scored and settled, with a real explanation and persisted score bonus
+	expect(reviewed).toEqual(["personal"])
+	expect(considered).toEqual([personal.url])
+	expect(outcome.deferredCount).toBe(1)
+	expect(scoringCallCount).toBe(2)
+	expect(outcome.keptFindings[0]?.relevanceExplanation).toBe("The page compares evaluation methods.")
+	expect(sentQueries.find(({ text }) => text.startsWith('insert into "findings"'))?.text).toContain(
+		'"personal_source_score_bonus"',
+	)
+})
+
+test("a personal-source bonus cannot save a weak link from the normal max-results trim", () => {
+	// neither personal nor custom provenance grants the bookmark or rating exemption
+	const rows = [
+		{ id: "ordinary", relevanceScore: 0.8, createdAt: new Date(0), isBookmarkedOrRated: false },
+		{
+			id: "personal",
+			relevanceScore: 0.2 + PERSONAL_SOURCE_SCORE_BONUS,
+			createdAt: new Date(1),
+			isBookmarkedOrRated: false,
+		},
+	]
+	expect(findingIdsToFilter(rows, 1)).toEqual(["personal"])
 })

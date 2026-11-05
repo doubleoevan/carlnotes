@@ -5,6 +5,7 @@ import { db } from "@carlnotes/db"
 import { resources } from "@carlnotes/db/schema/scans"
 import { cosineSimilarity } from "ai"
 import { and, cosineDistance, eq, isNotNull, lt, notInArray } from "drizzle-orm"
+import { toFallbackTitle } from "../ingest/normalize"
 import type { RelevantResource, Resource } from "./filter"
 import { type ResourceOutcome, type ReviewOutcome, trackOutcomes } from "./track"
 
@@ -49,6 +50,10 @@ export async function dedupeResources({
 		const dedupeOutcome = await dedupeResource(relevantResource, candidateIds, dedupeKeys)
 		if (dedupeOutcome) {
 			trackOutcomes(reviewOutcome, dedupeOutcome)
+			await reviewOutcome.onResourceConsidered?.(relevantResource.resource.url, {
+				reviewOutcome: "rejected",
+				reviewReason: dedupeOutcome.reason,
+			})
 			continue
 		}
 		resourcesToScore.push(toResourceWithContentHash(relevantResource.resource))
@@ -63,7 +68,7 @@ async function dedupeResource(
 	relevantResource: RelevantResource,
 	candidateIds: string[],
 	dedupeKeys: DedupeKeys,
-): Promise<ResourceOutcome | null> {
+): Promise<Extract<ResourceOutcome, { status: "filtered" }> | null> {
 	const { resource, embedding } = relevantResource
 	// the content hash over the native text, only when the Resource has content. empty rows must not collapse to one hash
 	const contentHash = hasNativeText(resource) ? toContentHash(resource.title, resource.snippet) : null
@@ -78,7 +83,7 @@ async function dedupeResource(
 	}
 
 	// stage 2 checks for a near-duplicate, of a candidate this Scan let through or of a Resource an earlier Scan stored
-	if (hasNearDuplicateKey(dedupeKeys, embedding) || (await hasNearDuplicate(embedding, candidateIds))) {
+	if (embedding && (hasNearDuplicateKey(dedupeKeys, embedding) || (await hasNearDuplicate(embedding, candidateIds)))) {
 		return { status: "filtered", reason: "near-duplicate" }
 	}
 
@@ -87,7 +92,9 @@ async function dedupeResource(
 		dedupeKeys.contentHashes.add(contentHash)
 		await db.update(resources).set({ contentHash }).where(eq(resources.id, resource.id))
 	}
-	dedupeKeys.embeddings.push(embedding)
+	if (embedding) {
+		dedupeKeys.embeddings.push(embedding)
+	}
 	return null
 }
 
@@ -137,6 +144,13 @@ export function hasNearDuplicateKey(dedupeKeys: DedupeKeys, embedding: number[])
 
 // whether a Resource includes any ingester-native text to hash and embed like a title or a snippet
 function hasNativeText(resource: Resource): boolean {
+	if (
+		resource.personalSourceScoreBonus &&
+		!resource.snippet?.trim() &&
+		resource.title === toFallbackTitle(resource.url, null)
+	) {
+		return false
+	}
 	return Boolean(resource.title?.trim() || resource.snippet?.trim())
 }
 

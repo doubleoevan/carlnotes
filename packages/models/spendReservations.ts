@@ -7,10 +7,11 @@ import { loadUserAccess, monthlySpendDollars, toSpendCents } from "@carlnotes/db
 import { runWithRedis } from "@carlnotes/db/redis"
 
 // the kinds of call that reserve: a chat turn, a spoken question's transcription, and one spoken part of a reply
-export type SpendReservationKind = "chatTurn" | "transcription" | "speech"
+export type SpendReservationKind = "chatTurn" | "transcription" | "speech" | "personalSourcesContext"
 
 // how long each kind's reservation lasts if nothing releases it: the call's longest run plus a minute
 const RESERVATION_MS_BY_KIND: Record<SpendReservationKind, number> = {
+	personalSourcesContext: 6 * 60 * 1000,
 	chatTurn: 16 * 60 * 1000,
 	transcription: 6 * 60 * 1000,
 	speech: 6 * 60 * 1000,

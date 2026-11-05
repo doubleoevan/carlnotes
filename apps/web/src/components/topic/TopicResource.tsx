@@ -2,6 +2,7 @@ import { authClient } from "@carlnotes/client/authClient"
 import type { TopicFinding } from "@carlnotes/contracts/findings"
 import type { PodcastEpisode } from "@carlnotes/contracts/podcast"
 import { toSessionProfileIdentity } from "@carlnotes/contracts/profiles"
+import { TOPIC_FINDING_NOTE_TOOLTIP } from "@carlnotes/core/lib/topicFindingCopy"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { Bookmark } from "lucide-react"
 import { type ReactNode, useState } from "react"
@@ -49,7 +50,7 @@ export function TopicResource({
 	children,
 	isBookmarkOnLine = false,
 }: TopicResourceProps) {
-	// the topic page and an mcp card pass their own handlers. the homepage falls back to the shared provider's handlers
+	// the topic page and an MCP view pass their own handlers. the homepage falls back to the shared provider's handlers
 	const providerTopicFeedHandlers = useTopicFeedActions()
 	const resourceTopicFeedHandlers = topicFeedHandlers ?? providerTopicFeedHandlers
 	if (!resourceTopicFeedHandlers) {
@@ -126,7 +127,7 @@ export function TopicResource({
 					<TooltipTrigger asChild>
 						<PopoverAnchor className="pointer-events-none absolute top-1.5 right-1 size-11 sm:size-8" />
 					</TooltipTrigger>
-					<TooltipContent side="top">A topic finding note from Carl</TooltipContent>
+					<TooltipContent side="top">{TOPIC_FINDING_NOTE_TOOLTIP}</TooltipContent>
 				</Tooltip>
 
 				{/* the note itself, holding the rank, the link out, and Carl's words */}

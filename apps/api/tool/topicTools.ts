@@ -6,6 +6,7 @@ import {
 	updateTopicFieldsPayload,
 } from "@carlnotes/contracts/topicPayloads"
 import { db } from "@carlnotes/db"
+import { assertPersonalSourcesConverted, lockPersonalSourcesTopic } from "@carlnotes/db/personalSourcesLocks"
 import { deletePodcastFeedCache } from "@carlnotes/db/podcastFeedCache"
 import { topics } from "@carlnotes/db/schema/topics"
 import { trackEvent } from "@carlnotes/server/analytics"
@@ -131,6 +132,11 @@ export async function updateTopicFields({
 	// write the named fields and release the feature order in one transaction
 	let isFeatureOrderReleased = false
 	await db.transaction(async (transaction) => {
+		// serialize publication and podcast activation against private receipt
+		await lockPersonalSourcesTopic(transaction, topicId)
+		if ((topicFields.visibility && topicFields.visibility !== "private") || topicFields.isPodcastEnabled) {
+			await assertPersonalSourcesConverted(transaction, topicId)
+		}
 		await transaction.update(topics).set(namedFields).where(eq(topics.id, topicId))
 		// drop the topic from the featured topics if it stops being public
 		if (topicFields.visibility && topicFields.visibility !== "public") {

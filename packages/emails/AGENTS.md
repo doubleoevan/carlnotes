@@ -19,7 +19,7 @@ auth, invite, and unsubscribe mail, and `@carlnotes/pipeline` for a Scan's diges
   fails on a hex color or a pixel font size in a template. Line heights, weights, and spacing stay written in the style.
 - `email.ts` — `sendEmail` sends one message through Resend, `sendEmailBatches` sends many, and `sendScanEmailCall`
   sends one Scan's batch and returns the accepted sends or the Resend failure. Every call from the api or the worker
-  first takes a rate limit slot shared in Redis (`takeRateLimitSlot` in `@carlnotes/db/redisRateLimits`), which one call
+  first takes a rate limit slot shared with inbound retrieval (`waitForResendSlot` in `@carlnotes/db/resendRateLimit`), which one call
   holds for 200 milliseconds, so calls leave evenly spaced at five a second. A call that would wait past ten seconds for
   the slot goes ahead without it, and each wait adds a little jitter, so waiters that woke together do not ask in
   lockstep. `EmailMessage` is the message shape, `isSendableAddress` says whether an address parses as an email, and
@@ -30,3 +30,7 @@ auth, invite, and unsubscribe mail, and `@carlnotes/pipeline` for a Scan's diges
 - Imports: `@carlnotes/db`, `@carlnotes/server`, `@carlnotes/contracts`, and `@carlnotes/nightshift`; never `models` or
   `pipeline`, which come after it, and never an app.
 - Dev: `bun run dev:email` opens the React Email preview of this folder on port 3011. Tests: `bun test packages/emails`.
+
+`personal-sources-email.tsx` renders Email Carl confirmations, clarification, and account, plan, or daily limit replies. Numbered clarification accepts numbers and written Topic names. `personalSourcesEmail.ts` uses the shared sender, receipt-bound idempotency, original subject, and In-Reply-To/References headers. Carl's From and Reply-To use RESEND_FROM_EMAIL.
+
+`previewEmails.ts`, started by `bun run dev:email`, renders synthetic examples with Bun and serves temporary HTML through React Email on port 3011. Email Carl previews cover confirmation, numbered clarification, quota, and plan. Retired previews are removed from its temporary catalog. `reportEmail.ts` builds links and sends reports outside the previewable template.

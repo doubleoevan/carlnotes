@@ -1,13 +1,13 @@
 ---
 title: Adding sources
 description: >-
-  The nine source kinds and what each is good for, the Recommend button, results per brew,
+  The fetched and receiving source kinds, the Recommend button, results per brew,
   scheduling, and what to check when a topic goes quiet.
 sidebar:
   order: 2
 ---
 
-Sources are where Carl does his research. A topic holds up to 10. When you reach the limit, the editor says so: "Carl
+Sources are where Carl does his research. A topic holds up to 10 fetched Sources. When you reach the limit, the editor says so: "Carl
 reads 10 sources per topic. Drop one to add another."
 
 ![The sources editor: the web source and three subreddits, under the 10-source
@@ -28,6 +28,8 @@ Every new topic starts with the **web** source on, labeled "Let Carl crawl". It'
 - **youtube**: a channel id or a playlist id. Carl reads the video transcripts, not only the titles.
 - **podcast**: a show, by its podcast id. Carl reads episode transcripts.
 - **bluesky** and **x**: an account on either network, by its handle. Carl reads the links that account shares.
+
+You can also send Carl a chat or an email for any Topic you can edit. These appear in **Personal sources** and leave all ten fetched Source slots available. [How Personal sources work](/docs/topics/personal-sources/)
 
 ## Let Carl recommend sources
 

@@ -1,7 +1,9 @@
 // render tests for AnchorLink, which renders each kind of href its own way
-import { expect, test } from "bun:test"
+import { expect, mock, test } from "bun:test"
+import { act } from "react"
 import { renderWithRouter } from "@/components/chat/renderWithRouter"
-import { AnchorLink } from "./AnchorLink"
+import { renderTestHook } from "@/lib/hookTestHarness"
+import { AnchorLink, LinkBaseUrlContext, LinkOpenerContext } from "./AnchorLink"
 
 // a scheme link and a server path are plain anchors with no target and no rel, and an api file keeps its download
 test("a scheme link and a server path render plain anchors", async () => {
@@ -69,4 +71,51 @@ test("isNewTab opens a server path and an internal route in a new tab", async ()
 	expect(linksHtml).toContain('<a href="/docs" target="_blank" rel="noopener noreferrer">Docs</a>')
 	expect(linksHtml).toMatch(/<a [^>]*href="\/profiles\/u1"[^>]*>Profile<\/a>/)
 	expect(linksHtml).toMatch(/<a [^>]*target="_blank"[^>]*rel="noopener noreferrer"[^>]*>Profile<\/a>/)
+})
+
+test("host links resolve against the connected site when the sandbox rejects a document base", async () => {
+	const openLink = mock<(url: string) => void>(() => {})
+	const hook = await renderTestHook(
+		() => null,
+		() => (
+			<LinkBaseUrlContext.Provider value="http://localhost:5173/">
+				<LinkOpenerContext.Provider value={openLink}>
+					<AnchorLink href="/topics/terrarium" isNewTab>
+						Topic
+					</AnchorLink>
+					<AnchorLink href="https://en.wikipedia.org/wiki/Terrarium">Article</AnchorLink>
+				</LinkOpenerContext.Provider>
+			</LinkBaseUrlContext.Provider>
+		),
+	)
+	try {
+		// the test document has no usable web base, matching an opaque host frame
+		expect(document.baseURI).toBe("about:blank")
+		const links = [...hook.container.querySelectorAll<HTMLAnchorElement>("a")]
+		await act(async () => {
+			links[0]?.click()
+			links[1]?.click()
+		})
+		expect(openLink.mock.calls).toEqual([
+			["http://localhost:5173/topics/terrarium"],
+			["https://en.wikipedia.org/wiki/Terrarium"],
+		])
+	} finally {
+		await hook.close()
+	}
+})
+
+// only an existing local Codex chat may use its native scheme
+test("Codex chat links open the app while action links remain inert", async () => {
+	const reference = "codex://threads/00000000-0000-4000-8000-000000000001"
+	const html = await renderWithRouter(
+		<>
+			<AnchorLink href={reference}>Conversation</AnchorLink>
+			<AnchorLink href="codex://threads/new?prompt=run">New</AnchorLink>
+			<AnchorLink href="codex://settings">Settings</AnchorLink>
+		</>,
+	)
+	expect(html).toContain(`<a href="${reference}">Conversation</a>`)
+	expect(html).not.toContain('href="codex://threads/new')
+	expect(html).not.toContain('href="codex://settings')
 })

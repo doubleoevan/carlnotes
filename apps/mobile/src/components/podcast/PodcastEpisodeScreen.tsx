@@ -221,7 +221,8 @@ function EpisodeHeader({ page: { podcastEpisode, topic } }: { page: PodcastEpiso
 			<View className="min-w-0 flex-1">
 				<View className="flex-row items-start justify-between gap-3">
 					<Text className="min-w-0 flex-1 text-sm text-muted-foreground">
-						{"Coffee Break podcast · "}
+						<Text className="text-sm font-bold text-muted-foreground">Coffee Break</Text>
+						{" podcast for "}
 						<AnchorLink asChild href={toTopicPath(topic)} accessibilityLabel={`Open ${topic.name}`}>
 							<Text className="text-sm text-link">{topic.name}</Text>
 						</AnchorLink>

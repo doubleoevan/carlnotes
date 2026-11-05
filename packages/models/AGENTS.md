@@ -1,5 +1,12 @@
 # packages/models/
 
+`prompts/summarize-personal-sources-context.md` defines the bounded private rewrite. Its pipeline builder fences all received text.
+`spendReservations.ts` includes Personal sources context calls, whose costs live in DB spend rows instead of later Scan costs.
+
+`privateModelOptions.ts` disables SDK content telemetry and asks LiteLLM to redact message content while keeping
+billing metadata. `embedPrivateVectors` in `models.ts` requires the owner's key and uses these options for transient
+Personal sources routing. Provider errors from private calls must be replaced by content-free outcomes before reporting.
+
 `@carlnotes/models`, every model call, user key, budget, prompt, and moderation check: where the api, the pipeline, the
 worker, and the evals all start. It imports `@carlnotes/db`, `@carlnotes/server`, and `@carlnotes/contracts`, with `ai`,
 `@ai-sdk/openai`, and the Langfuse and OpenTelemetry packages.
@@ -17,7 +24,7 @@ worker, and the evals all start. It imports `@carlnotes/db`, `@carlnotes/server`
   with `releaseScanSpend` after. A Resource starts while the spent and reserved dollars are below the Scan's limit, so
   parallel review passes it by at most one Resource's largest cost. The heartbeat checkpoints
   `toCheckpointBudget`, the settled spend without the reservations, and `toResumedBudget` starts a retried attempt with
-  none. It also prices the calls the api meters itself: `speechCost` by its speech tier and `transcriptionCost`, and
+  none. The shared `SCORE_OUTPUT_TOKENS` bounds ordinary and private scoring, and `premiumModelCost` prices their input/output usage before validation. It also prices the calls the api meters itself: `speechCost` by its speech tier and `transcriptionCost`, and
   `toEstimatedTokens` turns a text length into the tokens a cost estimate prices.
 - `spendReservations.ts` — `reserveUserSpend` reserves a chat turn's, a transcription's, or a spoken part's largest cost
   against the user's monthly budget, a soft limit: the call starts while the app's own monthly spend sums and the open
@@ -62,3 +69,7 @@ worker, and the evals all start. It imports `@carlnotes/db`, `@carlnotes/server`
 - Imports: `@carlnotes/db`, `@carlnotes/server`, and `@carlnotes/contracts`; `@carlnotes/emails` comes before it in the
   order and nothing here needs it. Never `pipeline` or an app.
 - Tests: `bun test packages/models`; `*.smoke.ts` hit real services and run under `doppler run`.
+
+The `summarize-personal-sources-context.md` prompt is evaluated through `evals/personal-sources-context/`; ordinary fixture tests make no model calls.
+
+`prompts/score-personal-source-resource.md` produces page-only public explanations, supporting page excerpts, and numbered sender-private annotations in one premium call. Account IDs never enter the model.

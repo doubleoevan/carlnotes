@@ -7,7 +7,7 @@ import {
 } from "@carlnotes/core/components/PodcastFeedDialog"
 import { usePodcastFeed } from "@carlnotes/core/hooks/usePodcastFeed"
 import { toPodcastAppLink } from "@carlnotes/core/lib/podcastFeed"
-import { Copy, Podcast } from "lucide-react"
+import { Copy, Mic } from "lucide-react"
 import { ConfirmDialog } from "@/components/common/ConfirmDialog"
 import { Button } from "@/components/primitives/button"
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/primitives/dialog"
@@ -23,7 +23,7 @@ export const podcastFeedDialogElements: PodcastFeedDialogElements = {
 	Code: ({ children, className }) => <p className={className}>{children}</p>,
 	Button: ({ children, icon, onPress, ...props }) => (
 		<Button {...props} onClick={onPress}>
-			{icon === "copy" ? <Copy className="size-4.5" /> : icon === "podcast" ? <Podcast className="size-4.5" /> : null}
+			{icon === "copy" ? <Copy className="size-4.5" /> : icon === "podcast" ? <Mic className="size-4.5" /> : null}
 			{children}
 		</Button>
 	),

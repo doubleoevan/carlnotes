@@ -1,7 +1,7 @@
 // team membership: who holds
 
 import { PLANS, type Plan } from "@carlnotes/contracts/plans"
-import { type DbTransaction, db } from "@carlnotes/db"
+import { type DbHandle, type DbTransaction, db } from "@carlnotes/db"
 import { chatRoomMentions, chatRoomMessages } from "@carlnotes/db/schema/chat"
 import { teamMembers, teams } from "@carlnotes/db/schema/teams"
 import { teamTopics } from "@carlnotes/db/schema/teamTopics"
@@ -16,14 +16,18 @@ import { updateTopicSubscriberCount } from "../topic/subscriberCounts"
 /**
  * The user's role on a team, or null for a non-member. The one team authority answer routes build on.
  */
-export async function toTeamRole(userId: string | null, teamId: string): Promise<"leader" | "member" | null> {
+export async function toTeamRole(
+	userId: string | null,
+	teamId: string,
+	handle: DbHandle = db,
+): Promise<"leader" | "member" | null> {
 	// a signed-out user is not a team member
 	if (!userId) {
 		return null
 	}
 
 	// the team membership row has the team role. only an active member can be a team member
-	const [membership] = await db
+	const [membership] = await handle
 		.select({ role: teamMembers.role })
 		.from(teamMembers)
 		.where(and(eq(teamMembers.teamId, teamId), eq(teamMembers.userId, userId), eq(teamMembers.isActive, true)))

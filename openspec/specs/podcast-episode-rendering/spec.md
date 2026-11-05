@@ -88,7 +88,7 @@ the feeds, and the transcript. They SHALL never appear in the schema or in ident
 
 - **GIVEN** a Topic whose owner uploaded an attachment that Scans read as context
 - **WHEN** the script prompts are built for one of its Podcast Episodes
-- **THEN** no text from the attachment or from its distilled context is in either prompt
+- **THEN** no text from the attachment or from its summarized context is in either prompt
 
 #### Scenario: Nothing is fetched at render time
 

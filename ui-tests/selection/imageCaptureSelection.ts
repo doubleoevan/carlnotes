@@ -1,5 +1,5 @@
 // which image captures a run checks: every image capture of a platform whose shared input changed or whose graph is
-// uncertain, the stories and cards whose import graphs reach a changed file, or nothing
+// uncertain, the stories and MCP views whose import graphs reach a changed file, or nothing
 
 import type { ImageCapturePlatform } from "../imageCaptures"
 import { type DirectImportReader, type ReachedFiles, toReachedFiles } from "../importGraph"
@@ -7,7 +7,7 @@ import { type StoryAppName, type StoryFile, toStoryAppName } from "../storyFiles
 import type { DiffBase } from "./diffBase"
 import { SHARED_INPUTS, toSharedInputImportSelections } from "./sharedInputs"
 
-/** The groups of image captures that a selection decides on: the web stories, the MCP cards, and the native stories. */
+/** The groups of image captures that a selection decides on: the web stories, the MCP views, and the native stories. */
 export const SELECTION_PLATFORMS = ["web", "mcp", "native"] as const
 
 /** A group of image captures that a selection decides on. */
@@ -35,10 +35,10 @@ export type ToImageCaptureSelectionOptions = {
 	diffBase: DiffBase
 	headCommit: string
 	changedFiles: string[] | null
-	// the story files, the story files that could not be read with why, and the card bundle's files
+	// the story files, the story files that could not be read with why, and the MCP view bundle's files
 	storyFiles: StoryFile[]
 	unreadableStoryFiles: string[]
-	mcpCardFilePaths: string[]
+	mcpViewFilePaths: string[]
 	// every file in the repo, and the repo's imports
 	knownFilePaths: string[]
 	readDirectImports: DirectImportReader
@@ -161,10 +161,10 @@ function selectFromChanges({
 		}
 	}
 
-	// each app's stories and the cards, by their graphs
+	// each app's stories and the MCP views, by their graphs
 	selectStoriesByGraph({ options, pendingSelections, changedFiles, appName: "web" })
 	selectStoriesByGraph({ options, pendingSelections, changedFiles, appName: "mobile" })
-	selectCardsByGraph({ options, pendingSelections, changedFiles })
+	selectMcpViewsByGraph({ options, pendingSelections, changedFiles })
 }
 
 // a changed baseline image selects its own story on its platform, unless the story is gone, as after a deleted baseline
@@ -183,7 +183,7 @@ function selectChangedBaseline({
 		return
 	}
 
-	// android and ios baselines both belong to the native stories, and a card baseline names its card, not a story
+	// android and ios baselines both belong to the native stories, and a MCP view baseline names its MCP view, not a story
 	const platform = toSelectionPlatform(baselineMatch[1] as ImageCapturePlatform)
 	const storyId = baselineMatch[2] as string
 	if (platform !== "mcp" && !allStoryIds[platform].includes(storyId)) {
@@ -315,8 +315,8 @@ function addReachedStories({
 	)
 }
 
-// select every card image capture if the card bundle's graph reaches a changed file, or names a file that is missing
-function selectCardsByGraph({
+// select every MCP view image capture if the MCP view bundle's graph reaches a changed file, or names a file that is missing
+function selectMcpViewsByGraph({
 	options,
 	pendingSelections,
 	changedFiles,
@@ -330,12 +330,16 @@ function selectCardsByGraph({
 		return
 	}
 
-	// the card bundle's graph, from every file in the card folder. the cards share one bundle,
-	// so a change that the graph reaches, or an import in the graph that names no file, selects every card
-	const cardReachedFiles = toReachedFiles(options.mcpCardFilePaths, options.readDirectImports)
-	const cardReason = toGraphReason({ reachedFiles: cardReachedFiles, changedFiles, graphName: "the card bundle" })
-	if (cardReason) {
-		selectPlatform(pendingSelections, "mcp", cardReason)
+	// the MCP view bundle's graph, from every file in the MCP view folder. the MCP views share one bundle,
+	// so a change that the graph reaches, or an import in the graph that names no file, selects every MCP view
+	const mcpViewReachedFiles = toReachedFiles(options.mcpViewFilePaths, options.readDirectImports)
+	const mcpViewReason = toGraphReason({
+		reachedFiles: mcpViewReachedFiles,
+		changedFiles,
+		graphName: "the MCP view bundle",
+	})
+	if (mcpViewReason) {
+		selectPlatform(pendingSelections, "mcp", mcpViewReason)
 	}
 }
 
@@ -412,7 +416,7 @@ function toPlatformSelections(
 	return { web: toPlatformSelection("web"), mcp: toPlatformSelection("mcp"), native: toPlatformSelection("native") }
 }
 
-// every story id of each platform: the web stories, no card ids, and the native stories
+// every story id of each platform: the web stories, no MCP view ids, and the native stories
 function toAllStoryIds(storyFiles: StoryFile[]): Record<SelectionPlatform, string[]> {
 	const toAppStoryIds = (appName: StoryAppName): string[] =>
 		storyFiles

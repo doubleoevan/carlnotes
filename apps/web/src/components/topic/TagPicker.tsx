@@ -143,13 +143,22 @@ export function TagPicker({ tags, knownTags, canCreate = false, openPickerLabel,
 /**
  * A tag pill with an "x" remove button
  */
-export function TagPill({ label, onRemove }: { label: string; onRemove: () => void }) {
+export function TagPill({
+	label,
+	isDisabled = false,
+	onRemove,
+}: {
+	label: string
+	isDisabled?: boolean
+	onRemove: () => void
+}) {
 	return (
 		<Badge variant="secondary" className="gap-1 py-1 pr-1">
 			<span className="max-w-48 truncate">{label}</span>
 			<button
 				type="button"
 				aria-label={`Remove ${label}`}
+				disabled={isDisabled}
 				onClick={onRemove}
 				className="text-muted-foreground hover:text-foreground"
 			>

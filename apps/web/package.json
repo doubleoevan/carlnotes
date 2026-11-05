@@ -5,7 +5,7 @@
 	"type": "module",
 	"scripts": {
 		"dev": "vite",
-		"build": "vite build && vite build --config vite.mcpCards.config.ts",
+		"build": "vite build && vite build --config vite.mcpViews.config.ts",
 		"dev:storybook": "storybook dev -p 6006 --no-open",
 		"build:storybook": "storybook build --output-dir dist/nightshift"
 	},
@@ -28,6 +28,7 @@
 		"@tanstack/react-query": "^5.105.0",
 		"@tanstack/react-router": "1.170.46",
 		"@tanstack/react-start": "1.169.4",
+		"@zip.js/zip.js": "2.24.0",
 		"better-auth": "~1.7.13",
 		"class-variance-authority": "^0.7.1",
 		"clsx": "^2.1.1",

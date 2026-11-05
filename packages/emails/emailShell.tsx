@@ -42,11 +42,11 @@ export function EmailShell({
 /**
  * An email's heading and the lead sentence under it.
  */
-export function EmailIntro({ heading, children }: { heading: string; children: ReactNode }): ReactElement {
+export function EmailIntro({ heading, children }: { heading: string; children?: ReactNode }): ReactElement {
 	return (
 		<Section style={intro}>
 			<Heading style={h1}>{heading}</Heading>
-			<Text style={summaryText}>{children}</Text>
+			{children && <Text style={summaryText}>{children}</Text>}
 		</Section>
 	)
 }

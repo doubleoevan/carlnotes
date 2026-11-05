@@ -42,8 +42,8 @@ ancestor and not the all-zero commit. Without either, the run SHALL select every
 
 The selection SHALL walk each story file's runtime imports through relative paths, the app's `@/` alias, and workspace
 package paths. A story's graph SHALL include the graph of its app's component browser preview, which wraps every story.
-A story SHALL be selected if any changed file is in its graph. A changed file in the card entry's graph SHALL select
-every MCP card image capture. A type-only import SHALL not count.
+A story SHALL be selected if any changed file is in its graph. A changed file in the MCP view entry's graph SHALL select
+every MCP view image capture. A type-only import SHALL not count.
 
 #### Scenario: A component change selects the stories that render it
 
@@ -54,7 +54,7 @@ every MCP card image capture. A type-only import SHALL not count.
 #### Scenario: A shared core change selects both apps
 
 - **WHEN** a push changes a component in `packages/core/components/` that web and mobile stories both render
-- **THEN** the web stories, the native stories, and the MCP cards that reach it are selected
+- **THEN** the web stories, the native stories, and the MCP views that reach it are selected
 
 #### Scenario: A component every story wraps selects everything
 
@@ -63,7 +63,7 @@ every MCP card image capture. A type-only import SHALL not count.
 
 #### Scenario: A server-only change selects nothing
 
-- **WHEN** a push changes only `apps/worker/` and `packages/pipeline/` files that no story or card imports
+- **WHEN** a push changes only `apps/worker/` and `packages/pipeline/` files that no story or MCP view imports
 - **THEN** no image capture is selected
 
 ### Requirement: A shared input selects everything
@@ -158,7 +158,7 @@ that ref's merge base with main.
 #### Scenario: The nightly run checks every story
 
 - **WHEN** the nightly run starts after a day with no pushes
-- **THEN** it captures every web story, MCP card state, and native story
+- **THEN** it captures every web story, MCP view state, and native story
 
 ### Requirement: The selection is recorded
 

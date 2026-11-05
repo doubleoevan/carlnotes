@@ -1,4 +1,4 @@
-// a podcast episode's play token: a keyed signature that lets an mcp card's audio element, which sends no session
+// a podcast episode's play token: a keyed signature that lets an MCP view's audio element, which sends no session
 // cookie, play one podcast episode as the caller who received it, for a day
 import { DAY_MS } from "@carlnotes/contracts/time"
 import { isSameSignature, toAuthSecretSignature } from "@carlnotes/server/hmac"

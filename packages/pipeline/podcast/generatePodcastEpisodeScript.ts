@@ -2,8 +2,8 @@
 // and the retry that writes drafts until one passes its checks. a call returns its draft unchecked, with its cost
 import { PODCAST_EPISODE_DESCRIPTION_MAX_CHARS, PODCAST_EPISODE_TITLE_MAX_CHARS } from "@carlnotes/contracts/podcast"
 import { PODCAST_EPISODE_SPEAKER_NAMES } from "@carlnotes/contracts/podcastEpisodes"
-import { PREMIUM_COST_PER_MILLION_TOKENS, tokenCost } from "@carlnotes/models/budget"
-import { scoreModel } from "@carlnotes/models/models"
+import { premiumModelCost } from "@carlnotes/models/budget"
+import { LOW_REASONING_PROVIDER_OPTIONS, scoreModel } from "@carlnotes/models/models"
 import { type BuiltPrompt, fetchPromptTemplate, promptTelemetry } from "@carlnotes/models/prompts/fetch"
 import { writePrompt } from "@carlnotes/models/prompts/write"
 import { generateText, NoObjectGeneratedError, Output } from "ai"
@@ -17,9 +17,6 @@ import {
 	RejectedScriptError,
 	toGoodbyeOpeningLine,
 } from "./podcastEpisodeScript"
-
-// the script model reasons before it writes. low effort keeps a call to seconds instead of over a minute
-const SCRIPT_PROVIDER_OPTIONS = { openai: { reasoningEffort: "low" } }
 
 // how many words a segment's prompt asks for per planned minute, below the hosts' speaking rate.
 // a model writes past a word count more often than short of it
@@ -70,7 +67,7 @@ export async function generatePodcastEpisodeOutline(
 		model: scoreModel(generatePodcastEpisodeOutlineOptions.litellmApiKey),
 		output: Output.object({ schema: podcastEpisodeOutlinePayload }),
 		prompt: outlinePrompt.prompt,
-		providerOptions: SCRIPT_PROVIDER_OPTIONS,
+		providerOptions: LOW_REASONING_PROVIDER_OPTIONS,
 		...promptTelemetry(outlinePrompt),
 	}).catch(throwScriptDraftError)
 
@@ -83,7 +80,7 @@ export async function generatePodcastEpisodeOutline(
 			findingId: toListedFindingId(findingNumber, podcastEpisodeFindings),
 		})),
 	}))
-	const costDollars = tokenCost(usage.totalTokens ?? 0, PREMIUM_COST_PER_MILLION_TOKENS)
+	const costDollars = premiumModelCost(usage)
 	return { scriptDraft: { ...outlineDraft, segments }, costDollars }
 }
 
@@ -99,7 +96,7 @@ export async function generatePodcastEpisodeSegment(
 		model: scoreModel(generatePodcastEpisodeSegmentOptions.litellmApiKey),
 		output: Output.object({ schema: podcastEpisodeSegmentPayload }),
 		prompt: segmentPrompt.prompt,
-		providerOptions: SCRIPT_PROVIDER_OPTIONS,
+		providerOptions: LOW_REASONING_PROVIDER_OPTIONS,
 		...promptTelemetry(segmentPrompt),
 	}).catch(throwScriptDraftError)
 
@@ -109,7 +106,7 @@ export async function generatePodcastEpisodeSegment(
 		...chapter,
 		findingId: toListedFindingId(findingNumber, segmentFindings),
 	}))
-	const costDollars = tokenCost(usage.totalTokens ?? 0, PREMIUM_COST_PER_MILLION_TOKENS)
+	const costDollars = premiumModelCost(usage)
 	return { scriptDraft: { ...segmentDraft, chapters }, costDollars }
 }
 

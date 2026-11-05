@@ -114,6 +114,7 @@ export default function PlansScreen() {
 					interval={interval}
 					highlightedPlan={highlightedPlan}
 					signedInPlan={signedInPlan}
+					freeTopicLimit={session?.user.freeTopicLimit}
 					subscribedInterval={subscribedInterval}
 					purchaseOffers={purchaseOffers}
 					storeOffering={storeOffering}
@@ -139,6 +140,7 @@ export default function PlansScreen() {
 // the Plans screen's interval, the plan to highlight, the user's plan and billing interval, what the store sells, and
 // whether reading it failed
 type StorePlanCardsProps = {
+	freeTopicLimit?: number | null
 	interval: BillingInterval
 	highlightedPlan: Plan
 	signedInPlan: Plan | null
@@ -152,6 +154,7 @@ type StorePlanCardsProps = {
 // the plan cards at the store's prices with the actions the purchase offers allow, the store's renewal terms, and a
 // retry if the store's prices did not load
 function StorePlanCards({
+	freeTopicLimit,
 	interval,
 	highlightedPlan,
 	signedInPlan,
@@ -186,6 +189,7 @@ function StorePlanCards({
 					isYearly={interval === "yearly"}
 					isHighlighted={plan === highlightedPlan}
 					signedInPlan={signedInPlan}
+					freeTopicLimit={freeTopicLimit}
 					subscribedInterval={subscribedInterval}
 					isRedirecting={isPurchasing}
 					storePrice={isPaidPlan(plan) ? toStorePrice(plan, interval) : undefined}

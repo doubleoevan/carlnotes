@@ -3,6 +3,8 @@
 import { FULL_PODCAST_EPISODE_FINDINGS, SHORT_PODCAST_EPISODE_FINDINGS } from "@carlnotes/contracts/podcastEpisodes"
 import { db } from "@carlnotes/db"
 import { isMonthlyBudgetCutoffPassed } from "@carlnotes/db/monthlyBudgetCutoffs"
+import { hasUnconvertedPersonalSources } from "@carlnotes/db/personalSourcesAuthority"
+import { lockPersonalSourcesTopic } from "@carlnotes/db/personalSourcesLocks"
 import { hasFullPodcastEpisodes } from "@carlnotes/db/quotas"
 import { runWithRequestMemo } from "@carlnotes/db/requestMemo"
 import { podcastEpisodeChapters, podcastEpisodes } from "@carlnotes/db/schema/podcast"
@@ -13,7 +15,7 @@ import { and, desc, eq, inArray } from "drizzle-orm"
 import { toCanonicalUrl } from "../ingest/normalize"
 import { loadUrlSourcePageUrls } from "../review/filter"
 import { loadBookmarkedFindingRows } from "../review/index"
-import { clampScore } from "../review/score"
+import { clampScore } from "../review/scorePolicy"
 
 // the score bonus that a bookmark, a thumbs up, and a url Source's own page each give a Finding when picking a Podcast
 // Episode's Findings. the three add up, and the score stays at 1 or below
@@ -79,6 +81,9 @@ async function planPodcastEpisodeInMemo({
 	if (scan?.status !== "succeeded" || !topic?.isPodcastEnabled) {
 		return skipPodcastEpisode({ scanId, skipReason: "the scan did not succeed, or the topic's podcast is off" })
 	}
+	if (await hasUnconvertedPersonalSources(topicId)) {
+		return skipPodcastEpisode({ scanId, skipReason: "personal sources privacy conversion is pending" })
+	}
 
 	// the row that an earlier attempt created, if any, and whether this Podcast Episode is short, which narrates fewer
 	// Findings
@@ -113,10 +118,21 @@ async function planPodcastEpisodeInMemo({
 	}
 
 	// create the row as recording, with the speech model that records the Podcast Episode and whether it is short
-	const [createdPodcastEpisode] = await db
-		.insert(podcastEpisodes)
-		.values({ topicId, ownerId: billedUserId, scanId, model: speechModel, isShort: isShortPodcastEpisode })
-		.returning({ id: podcastEpisodes.id })
+	const createdPodcastEpisode = await db.transaction(async (transaction) => {
+		// serialize the first receipt with creating a recording
+		const currentTopic = await lockPersonalSourcesTopic(transaction, topicId)
+		if (!currentTopic?.isPodcastEnabled || (await hasUnconvertedPersonalSources(topicId, transaction))) {
+			return null
+		}
+		const [podcastEpisode] = await transaction
+			.insert(podcastEpisodes)
+			.values({ topicId, ownerId: billedUserId, scanId, model: speechModel, isShort: isShortPodcastEpisode })
+			.returning({ id: podcastEpisodes.id })
+		return podcastEpisode
+	})
+	if (createdPodcastEpisode === null) {
+		return skipPodcastEpisode({ scanId, skipReason: "personal sources privacy conversion is pending" })
+	}
 
 	// return the plan, or throw an error if the insert returned no row
 	if (!createdPodcastEpisode) {

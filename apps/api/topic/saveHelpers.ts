@@ -2,15 +2,19 @@
 import { isDailyFrequency } from "@carlnotes/contracts/enums"
 import { FIRST_SCAN_PAUSED_REASON, FIRST_SCAN_SPENT_BUDGET_REASON } from "@carlnotes/contracts/scanFailure"
 import type { UpdateTopicPayload } from "@carlnotes/contracts/topicPayloads"
+import type { DbHandle, DbTransaction } from "@carlnotes/db"
 import { isMonthlyBudgetCutoffPassed } from "@carlnotes/db/monthlyBudgetCutoffs"
 import type { scans } from "@carlnotes/db/schema/scans"
+import { teams } from "@carlnotes/db/schema/teams"
 import type { sources } from "@carlnotes/db/schema/topics"
 import { isUserLiteLLMKeyBudgetExhausted } from "@carlnotes/models/litellm"
 import { lookupPodcast } from "@carlnotes/pipeline/ingest/podcast"
 import { failUnstartedScan, scanTopic } from "@carlnotes/pipeline/scan"
 import { screenPendingSources, screenTopicSources } from "@carlnotes/pipeline/screen"
 import { reportError } from "@carlnotes/server/monitoring"
+import { eq } from "drizzle-orm"
 import { isMonthlySpendExhausted, loadDailyFrequencyAuthorization } from "../authorization"
+import { addTopicToTeam } from "../team/teams"
 
 // a rejected attempt to add one more topic on a daily frequency, including the plan's limit so the message can show it
 export type DailyFrequencyRejection = { status: "dailyFrequency"; limit: number }
@@ -33,12 +37,29 @@ export async function authorizeNewDailyTopic(
 	userId: string,
 	topicPayload: Pick<UpdateTopicPayload, "frequency">,
 	currentFrequency?: string,
+	handle?: DbHandle,
 ): Promise<DailyFrequencyRejection | null> {
 	if (!isTakingDailySlot(topicPayload.frequency, currentFrequency)) {
 		return null
 	}
-	const authorization = await loadDailyFrequencyAuthorization(userId)
+	const authorization = await loadDailyFrequencyAuthorization(userId, handle)
 	return authorization.status === "quota" ? { status: "dailyFrequency", limit: authorization.limit } : null
+}
+
+/**
+ * Attaches the drafted Team in the Topic creation transaction. A denied request keeps the new Topic.
+ */
+export async function attachDraftTeam(
+	transaction: DbTransaction,
+	userId: string,
+	teamId: string,
+	topicId: string,
+): Promise<{ teamName: string; addTeamRejection: string | null }> {
+	if ((await addTopicToTeam(userId, teamId, topicId, transaction)) === "forbidden") {
+		return { teamName: "that team", addTeamRejection: "Only a team's leader can add a topic to it." }
+	}
+	const [team] = await transaction.select({ name: teams.name }).from(teams).where(eq(teams.id, teamId))
+	return { teamName: team?.name ?? "that team", addTeamRejection: null }
 }
 
 // a new topic Source row

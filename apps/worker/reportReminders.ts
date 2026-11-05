@@ -3,7 +3,7 @@
 import { db } from "@carlnotes/db"
 import { reports } from "@carlnotes/db/schema/reports"
 import { users } from "@carlnotes/db/schema/users"
-import { sendReportEmail } from "@carlnotes/emails/report-email"
+import { sendReportEmail } from "@carlnotes/emails/reportEmail"
 import { and, asc, eq, isNull, lt } from "drizzle-orm"
 import { alias } from "drizzle-orm/pg-core"
 

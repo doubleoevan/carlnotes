@@ -19,6 +19,7 @@ import { recordSpeech, SPEECH_BYTES_PER_SECOND, WAV_HEADER_BYTES } from "@carlno
 import { eq } from "drizzle-orm"
 import { toChapterTurns } from "./podcastEpisodeScript"
 import { loadThemeClips, type ThemeClips, toThemedEpisodeTimes, toThemeMix } from "./podcastEpisodeTheme"
+import { assertPodcastPersonalSourcesConverted } from "./podcastPersonalSourcesMigration"
 import { addPodcastEpisodeCost } from "./writePodcastEpisodeScript"
 
 // the podcast loudness. -16 LUFS with a true peak of -1.5 dB, measured as mono
@@ -82,6 +83,7 @@ export async function recordPodcastEpisodeChapter({
 
 	// record the chapter's speech on the billed user's key. only a retryable failure is worth another attempt
 	const litellmApiKey = await loadOrProvisionUserLiteLLMKey(billedUserId)
+	await assertPodcastPersonalSourcesConverted({ podcastEpisodeId })
 	const recordSpeechResult = await recordSpeech({ turns, speechTier, litellmApiKey })
 	if (recordSpeechResult.outcome !== "recorded") {
 		const isRetryable = recordSpeechResult.outcome === "retryable"
@@ -93,6 +95,7 @@ export async function recordPodcastEpisodeChapter({
 	await addPodcastEpisodeCost(podcastEpisodeId, speechCost({ speechTier, inputTokens, audioTokens }))
 
 	// store the audio under the Podcast Episode's temporary chapter prefix
+	await assertPodcastPersonalSourcesConverted({ podcastEpisodeId })
 	const chapterKey = toPodcastEpisodeChapterKey(podcastEpisodeId, position)
 	await uploadAttachment(chapterKey, recordSpeechResult.audioBytes, "audio/wav")
 	return { position, chapterKey, byteSize: recordSpeechResult.audioBytes.byteLength }
@@ -107,6 +110,7 @@ export async function encodePodcastEpisode(
 	recordedChapters: RecordedChapter[],
 ): Promise<EncodedPodcastEpisode> {
 	// download the chapters in Podcast Episode order to a temporary directory that only this call uses
+	await assertPodcastPersonalSourcesConverted({ podcastEpisodeId })
 	const orderedChapters = recordedChapters.toSorted((first, second) => first.position - second.position)
 	const temporaryDirectory = await mkdtemp(join(tmpdir(), "episode-"))
 	try {

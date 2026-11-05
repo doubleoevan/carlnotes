@@ -1,5 +1,23 @@
 # packages/contracts/
 
+`sourceScoring.ts` owns the custom and Personal sources score bonuses. `PersonalSourceScoreBonus` is the actual addition, not a multiplier, so queue priority and Finding persistence use the same values.
+
+`topicSuggestions.ts` owns ranked editable/follow groups, best-match metadata, and numbered text fallback. The send contract accepts one to twenty distinct `topic_ids` or one legacy `topic_id`; receipts include every destination.
+
+
+`personalSourcesAccounts.ts` also defines connection-nudge dismissal and verified agent-setup payloads.
+`personalSourcesRouteContracts.ts` registers these additive session endpoints. The Topic Personal sources response includes the total
+Source count and server receiving availability; it leaves frozen legacy Topic responses unchanged.
+
+`personalSourcesEmail.ts` validates the provider fields receiving uses, excluding raw-message and attachment download URLs.
+
+`personalSourcesImportText.ts` normalizes selected transcripts and extracts public links separately from private references.
+`personalSourcesWork.ts` defines content-free workflow metadata and the 30-second quiet period with a five-minute ceiling.
+
+`personalSourcesAccounts.ts` defines connection/key metadata and shared-mailbox guidance. `aiAgentIdentity.ts` derives stable
+app-domain groups without client-advertised names. `personalSourcesRouteContracts.ts` adds Personal sources routes to the contract
+registry, and `personalSourcesSendText.ts` shares the MCP receipt wording with the Topic MCP view.
+
 `@carlnotes/contracts`, the universal part of what every workspace may import: the zod response shapes, the request
 payloads, and the constants that the api validates with and the web app parses against. Every app and package imports
 it, and it imports only `zod`.
@@ -39,7 +57,7 @@ name, `MIN_PASSWORD_LENGTH`, the credentials rule a sign-up form parses with, an
 shapes.
 `text.ts` holds `toOneLineText`, which puts text on one line for a note, a title, a search query, or a hash, and
 `toDotSeparatedText`, which joins a line's parts on middle dots.
-`mcpCards.ts` names the MCP Apps cards and the data a tool result gives its card, `pagination.ts` holds the page
+`mcpViews.ts` names the MCP Apps views and the data a tool result gives its MCP view, `pagination.ts` holds the page
 sizes a paged list offers, and `topicEdits.ts` turns a saved topic's fields into the editable draft a topic edit starts
 from.
 `analyticsEvents.ts` holds the event types: the user events keyed to a user, the bot events keyed to a bot's or an
@@ -73,6 +91,12 @@ order check that the api and web tests share.
   parts that `apiRouteContracts.ts` spreads load them all, so no two modules load each other.
 - Nothing here touches the database, the network, or the DOM: the modules are values and their shapes.
 - Tests: `bun test packages/contracts`.
+
+`personalSources.ts` holds Personal sources items, receiving Source identities, receipt outcomes, paging, and context limits.
+`personalSourcesPayloads.ts` validates deliberate sends and selected transcript imports. `personalSourcesUrls.ts` separates public
+candidate links from owner references. `canonicalUrl.ts` shares ingestion normalization, and `networkAddress.ts`
+shares literal address classification with server fetching. New Source kinds use dedicated Personal sources responses;
+`fetchedSourceKinds` preserves the generic Topic response enum for released clients.
 
 `clientTelemetry.ts` defines bounded native device headers and the browser user-agent fallback used by API events and
 request monitoring. These untrusted descriptions are analytics only. `visitAnalytics.ts` shares URL/path redaction and
@@ -109,3 +133,5 @@ search), `chatRouteContracts.ts` (the private chat, the chat rooms, and the four
 (teams, blocks, and reports), `accountRouteContracts.ts` (activity, the app sign-up gate, billing, profiles and the
 account, and the Terms), and `podcastRouteContracts.ts` (podcast episodes). The part files load every other contract,
 and nothing loads them back.
+
+The read-only Personal sources email response returns the environment-configured mailbox for the empty-state hint. Finding views show public notes alone. Send and email routing use editable Topics.

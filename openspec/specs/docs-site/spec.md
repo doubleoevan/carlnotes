@@ -238,7 +238,7 @@ The existing `/docs/account/add-to-ai/` page SHALL provide self-contained setup 
 
 ### Requirement: The MCP guide documents every advertised tool
 
-The guide SHALL name each advertised tool and describe its purpose, required identity, permission restrictions, and relevant side effects. It SHALL explain pagination and limits, edit confirmations, and the search, topic, and findings cards with text fallback. Its tool inventory SHALL match the server without implying access to an assistant's history, memory, or uploaded files.
+The guide SHALL name each advertised tool and describe its purpose, required identity, permission restrictions, and relevant side effects. It SHALL explain pagination and limits, edit confirmations, and the search, topic, and findings MCP views with text fallback. Its tool inventory SHALL match the server without implying access to an assistant's history, memory, or uploaded files.
 
 #### Scenario: A reader compares the guide with tools list
 
@@ -246,8 +246,8 @@ The guide SHALL name each advertised tool and describe its purpose, required ide
 - **THEN** the guide covers `list_topics`, `read_topic_feed`, `search_topic_findings`, `search`, `mark_finding_consumed`, `rate_finding`, `bookmark_finding`, `follow_topic`, `edit_topic`, `suggest_sources`, and `create_topic`
 - **AND** it identifies allowance consumption, Topic creation's first Scan, and edits that need confirmation
 
-#### Scenario: A client renders no MCP card
+#### Scenario: A client renders no MCP view
 
 - **WHEN** a reader uses a client without MCP Apps support
 - **THEN** the guide explains that tool text and structured results still work
-- **AND** it does not promise identical card support across clients
+- **AND** it does not promise identical MCP Apps support across clients

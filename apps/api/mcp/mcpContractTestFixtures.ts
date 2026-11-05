@@ -13,6 +13,8 @@ const EXPECTED_TOOL_ANNOTATIONS = {
 	edit_topic: { readOnlyHint: false, destructiveHint: true },
 	suggest_sources: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
 	create_topic: { readOnlyHint: false, destructiveHint: true },
+	send_to_topic: { readOnlyHint: false, destructiveHint: false, idempotentHint: false },
+	suggest_topics: { readOnlyHint: true, destructiveHint: false },
 }
 
 // unknown field values let the checks reject malformed hints as well as missing ones

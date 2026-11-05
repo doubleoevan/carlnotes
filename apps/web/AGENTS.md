@@ -1,5 +1,21 @@
 # apps/web/
 
+`mcpViews/TopicSuggestionsMcpView.tsx` renders every editable Topic in five-row cursor pages, checkboxes, a live selected list using `TagPill`, results-only loading, and explicit multi-Topic sending. `TopicSuggestionsSearch.tsx` reuses site autocomplete rows; `useTopicAutocomplete.ts` debounces name-only host calls. `McpViewBrand.tsx` links the site mug and name through the host to the connected site in a new tab. Both footer actions use the standard Button size and padding: outlined Send first, highlighted new-Topic second. Hidden audio stays outside content spacing. The Nightshift brand link opens the site in a new tab too. `useTopicSuggestionsMcpView.ts` retains selections and retry IDs and opens the existing confirmed Topic Draft flow through `callMcpViewTool`. Its interactive stories use synthetic host results. The MCP host iframe is web-only.
+
+
+`components/account/AiAgentAccountSection.tsx` adapts shared connection and key controls.
+`components/topic/TopicPersonalSources.tsx` mounts the shared Personal sources on the Topic page and editor. `personalSourcesElements.tsx` supplies
+the production adapters and their stories. `PersonalSourcesImportButton` opens `PersonalSourcesImportDialog`; `hooks/usePersonalSourcesImport.ts`
+owns worker cancellation, buffer release, and stable selected-batch retries. `lib/personalSourcesImportSelection.ts` builds
+uploads from selected conversations only. The import tests cover cancellation and unselected-text exclusion.
+
+`lib/personalSourcesExport.worker.ts` parses selected ChatGPT/Claude exports and pasted text locally.
+`personalSourcesExport.ts` recognizes visible conversation records. `personalSourcesExportArchive.ts` uses zip.js with path, count,
+ratio, and declared/actual expansion limits. Attachments are never extracted. The import dialog terminates its worker.
+
+`mcpViews/TopicMcpView.tsx` also renders `send_to_topic` receipts, choices, and refusals. Send states are display-only,
+use the shared text fallback, open Topic links through the host, and never resend a request or fetch private entries.
+
 Web components guide mobile. Before changing shared presentation or behavior, inspect the native counterpart and follow
 the reuse and parity checklist in `../mobile/AGENTS.md`. Share portable components, rules, formatting, and visibility gates
 through universal packages. Record a missing native feature instead of silently omitting its controls.
@@ -140,7 +156,7 @@ the browser bundle and renders pages through the server build, behind its own ro
   `saveTeam`, and `TEAM_REJECTION_REASONS`, the sentence for each team rejection.
 - `components/share/` — the share menus for a topic and a team, over the options they both use.
 - `components/search/` — the header's search bar, its Filters menu, its typeahead rows, and `SearchResultsList.tsx`,
-  the numbered result rows, their skeleton, and the page row that the search page and the mcp search card render.
+  the numbered result rows, their skeleton, and the page row that the search page and the search MCP view render.
   Every kind of match comes from one site search, `GET /api/search`, sent once typing pauses. `searchBarChoices.ts`
   holds what Enter opens, the search page the bar's text opens, and a list after a toggle, `searchFindingChanges.ts`
   shows a finding note's change on its row, `searchFilterOptions.ts` holds the Filters menu's view and kind labels and
@@ -213,17 +229,17 @@ the browser bundle and renders pages through the server build, behind its own ro
   `lib/webApiClient.ts` holds the app's `configureApiClient` call, with the base url, `""` in the browser and the api on
   port 3000 on the server, and `showError`, which toasts the message; `router.tsx` calls it where both the server
   render and the browser pass, and the route tests' `-loadRouter.ts` calls it the same way.
-- `mcpCards/` — the MCP Apps cards the mcp server's search, topic, and finding tools name: `main.tsx`, the entry
-  `vite.mcpCards.config.ts` builds into one script and one stylesheet in `dist/mcp-cards/` as part of `build`, and
-  `McpCardApp.tsx`, which connects to the host with `@modelcontextprotocol/ext-apps`, follows its theme, and renders the
-  card its html names in a one-route memory router, every link opening through the host by `LinkOpenerContext` in
-  `AnchorLink`. `SearchCard.tsx`, `TopicCard.tsx`, and `FindingsCard.tsx` render the site's own components,
-  `CardSubscribeButton.tsx` and `CardPodcastPlayer.tsx` beside them. `cardHost.ts` holds the connected app, the card
-  data a tool result includes in `_meta`, and the tool calls the cards make, and `cardFindingHandlers.ts` the finding
-  note's handlers the search and findings cards share, each a tool call. The card build aliases
-  `@carlnotes/client/authClient` to `cardAuthClient.ts`, whose session is the tool result's caller, and
-  `@/lib/visitAnalytics` to `cardVisitAnalytics.ts`, which reports nothing, and `cardFetch.ts` returns a podcast episode
-  read from the tool result and fails every other request, so a card reaches the api only through a tool call.
+- `mcpViews/` — the MCP Apps views the mcp server's search, topic, and finding tools name: `main.tsx`, the entry
+  `vite.mcpViews.config.ts` builds into one script and one stylesheet in `dist/mcp-views/` as part of `build`, and
+  `McpViewApp.tsx`, which connects to the host with `@modelcontextprotocol/ext-apps`, follows its theme, and renders the
+  MCP view its html names in a one-route memory router, every link opening through the host by `LinkOpenerContext` in
+  `AnchorLink`. `SearchMcpView.tsx`, `TopicMcpView.tsx`, and `FindingsMcpView.tsx` render the site's own components,
+  `McpViewSubscribeButton.tsx` and `McpViewPodcastPlayer.tsx` beside them. `mcpViewHost.ts` holds the connected app, the MCP view
+  data a tool result includes in `_meta`, and the tool calls the MCP views make, and `mcpViewFindingHandlers.ts` the finding
+  note's handlers the search and findings MCP views share, each a tool call. The MCP view build aliases
+  `@carlnotes/client/authClient` to `mcpViewAuthClient.ts`, whose session is the tool result's caller, and
+  `@/lib/visitAnalytics` to `mcpViewVisitAnalytics.ts`, which reports nothing, and `mcpViewFetch.ts` returns a podcast episode
+  read from the tool result and fails every other request, so an MCP view reaches the api only through a tool call.
 - `stores/` — the stores that reach the browser or a component library, named `<thing>Store.ts` and built the way
   `packages/core/AGENTS.md` describes, on `@carlnotes/core/stores/storeListeners`. Reach for a store only when state
   outlives a page or crosses the tree; `useState` and `providers/` cover everything else. The DOM-free stores,
@@ -328,87 +344,8 @@ the browser bundle and renders pages through the server build, behind its own ro
   preflight boundary check, `scripts/check-package-boundaries.ts`, fails an import outside this list.
 - `.tsx` is exempt from the comment-groups hook; keep the comment style anyway.
 - Dev: `bun run dev:ui` (port 5173), `bun run dev:storybook` (port 6006). Build: `bun run build:ui`, which builds the
-  mcp cards too, and `bun run build:storybook`. Tests: `bun test apps/web`.
+  MCP views too, and `bun run build:storybook`. Tests: `bun test apps/web`.
 
-## Shared Feed adapter
+## Shared components
 
-The Brew diary's `TopicScanRecap` and `SourceResultsChart` use shared React components in `packages/core/components/`,
-along with table and section pagination, numbered Findings, safe note links, scan failures, expansion controls,
-and copy feedback. Web wrappers retain DOM semantics, styles, tooltips, SSR handling, and browser APIs. Edit the
-shared composition first; keep component adapters at module scope so rerenders preserve their identity.
-`Pagination` uses render callbacks to retain its clicked DOM node while restoring scroll position after a page change.
-Pure ordering, totals, detail copy, and Markdown construction remain in core's `lib/topicScanRecap.ts` and `sourceResults.ts`.
-
-`providers/TopicFeedProvider.tsx` supplies the session id, visitor loader data, context, pathname reset, and Feed availability.
-State, selection, reheat, and Finding actions live in `@carlnotes/core/hooks/useTopicFeedState` and `useTopicFindingActions`.
-The provider preserves its consumer exports and the web's default non-optimistic timing. Topic pages keep their page reload handlers.
-Matching section, sort, view, empty-state, and tutorial labels come from core.
-`lib/hookTestHarness.tsx` mounts live React hooks and optional rendered state with Happy DOM and TanStack Query, then restores its globals.
-`hooks/useTopicFeedState.test.tsx` verifies shared lifecycle and mutation behavior without importing native components.
-`components/common/sharedComponents.test.tsx` verifies size/sort resets, control identity and focus, pagination scroll
-restoration, and Source detail expansion through the real web adapters.
-
-## Shared Tasting Note adapters
-
-`components/note/` keeps the browser-only enriched HTML imports and DOM controls. Core owns editor initialization,
-format order, captured link ranges, conflict Reload, creation validation, comments, and unread badge content.
-Keep `NoteDialog` lazy imports: listing notes must fetch neither bodies nor editor chunks.
-`NoteLayout` preserves the toolbar above the card and the desktop column / phone-browser comment sheet.
-`providers/TopicFeedProvider` mounts `useNoteBadges`; badge polling does not depend on opening chat.
-`TopicScanRecap` renders the shared safe Markdown tree directly. `SafeNoteLink` remains its final destination guard.
-
-## Shared mobile page foundations
-
-The Account budget/settings, plan cards, invite fields, and TeamFields delegate portable composition to core.
-OwnerTopicsTable, TopicsTable, TopicScansTable, TopicSubscriptionsTable, and SentInvitesTable consume shared domain
-columns through `table/DataTable.tsx`'s semantic DOM elements. Team membership/member rows retain web-specific
-expandable controls. The global Footer is a core composition with web routing and active-link styling supplied here.
-
-Topic fields, Source editing, Team choices, and Topic/Team saving now use core hooks and save functions. Web wrappers
-supply browser files, routing, and toast feedback. Retries keep created identities and accepted membership writes;
-unsent invitation chips remain visible. Maintain native adapters when changing any of these shared concerns.
-
-`topic/TopicSkeleton` delegates section order to core while preserving DOM placeholders and the desktop grid.
-Its exported section/player skeletons still serve PodcastEpisodePage. Stories cover unknown and known titles.
-
-`layout/PageSkeleton` renders core's Profile, Teams, Activity, Account, and Team loading layouts. The page keeps known
-headings and actions visible; Profile and Team reserve their identity while it loads. Account keeps Settings usable.
-Its stories cover each page and the Profile topics table loading separately. Motion respects reduced motion.
-
-The menu parity adapters `search/PageActionMenu`, `layout/UserMenu`, and `common/AddToAiDialog` render the shared
-core menu composition. DOM popovers, badges, installation links, storage, and clipboard remain web adapters.
-`AccountPage` uses core's `useAccount`, shared with mobile, for complete budget loading and retries. Teams and own
-Profile topic reads offer retry after a failed initial request instead of presenting an empty table or endless skeleton.
-
-Visit analytics reuses the contracts URL/path privacy redaction and public Topic attribution with native. Its registered device dimensions and environment match native event dimensions while preserving cookieless visits and disabled person profiles.
-
-## Shared chat
-
-`ScrollDownButton` adapts core's centered latest-message action and retains the browser's hover feedback.
-`ChatPanelWidget` renders core's shared `ChatPill` with browser elements, preserving its portal, badge, hover, and
-podcast-player clearance. `branding/CoffeeCup` reads the same Nightshift vector paths as mobile.
-
-`components/chat/ChatAuthor`, `ChatTurnBlock`, `ChatRoomMessageBubble`, and `TopicDraftCard` are DOM element adapters
-for the same-named core components. The turn's rejection uses core `ChatRejectionNotice`; web retains its plans link.
-`ChatMarkdown` retains Streamdown and re-exports `safeChatMarkdown` helpers. Host portraits come from Nightshift's
-shared `assets/`, also used by mobile.
-
-`useTopicChat` injects voice, new-topic, attachment, and podcast effects into the core hook. `useChatRoom` injects
-browser streaming and spoken-answer effects. `useChatRoomStream` supplies browser EventSource to the shared lifecycle
-controller. `useEditableTopicDraft`, `useRoomReply`, `useLinkPreviewRefresh`, and `chatHistoryTurns` retain compatible
-imports over core. Member loading is core `useRoomMembers`; mention and reply rules are core
-`chatMentions`/`chatRoomReplies`. Keep these wrappers thin. `chatPanelStore` retains panel dimensions, open state, and
-browser effects while core `chatConversationStore` owns account/conversation selection and proposals.
-
-
-Coffee Break player/card/details/pills/controls, chapter list, episode row, season card, chat chapter tag, mini player, transcript, theme-song
-credits, feed dialog, unpublished card, and removal confirmation compose the corresponding core components.
-The web files retain DOM markup, responsive/SSR behavior, popovers, tooltips, the audio element, Media Session,
-clipboard, and spoken-question adapters. `PodcastEpisodeSeekBar.tsx` adapts shared segments to browser pointer and
-keyboard input. `UnpublishedPodcastEpisodeCard.tsx` retains browser shimmer and cover styling over shared content.
-`usePodcastFeed` and `usePodcastEpisodeChapterRating` live in core; reset-private-feed now confirms before sending,
-while failure retains the old link and denial clears it. Stories use shared fictional episode/transcript fixtures.
-Existing playback and spoken-question regression assertions remain the compatibility gate.
-`PodcastEpisodesCard` keeps server-loaded seasons and no-JavaScript rows around the shared card. Its season links use
-`AnchorLink` with replace-history and retained-scroll options. Both episode tables use core's column/total definitions;
-web retains its server-rendered table, while mobile uses its existing fixed-first-column table.
+[Shared web components](shared-components.md) maps Feed, Tasting Notes, menu pages, chat, Coffee Break, Personal sources and MCP Apps views to their core components and browser adapters.

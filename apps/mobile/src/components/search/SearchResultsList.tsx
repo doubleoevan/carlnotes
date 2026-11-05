@@ -6,8 +6,7 @@ import type { TopicFindingActions } from "@carlnotes/core/hooks/useTopicFindingA
 import { toAgoLabel, toCountLabel } from "@carlnotes/core/lib/labels"
 import { applySearchFindingChanges } from "@carlnotes/core/lib/topicFindingChanges"
 import { cn } from "@carlnotes/nightshift/classNames"
-import { Hash, Podcast } from "lucide-react-native"
-import { View } from "react-native"
+import { Coffee, Mic } from "lucide-react-native"
 import { Avatar } from "@/components/branding/Avatar"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { PodcastEpisodeNumberPill } from "@/components/podcast/PodcastEpisodePill"
@@ -16,7 +15,8 @@ import { Icon } from "@/components/primitives/icon"
 import { Text } from "@/components/primitives/text"
 import { TopicFindingListCard } from "@/components/topic/TopicFindingList"
 import { TopicResource } from "@/components/topic/TopicResource"
-import { useFontScaledSize } from "@/hooks/useFontScaledSize"
+import { SearchResultRow } from "./SearchResultRow"
+import { TopicSearchResultDetails } from "./TopicSearchResultDetails"
 
 // findings share the feed's row. every other result links to its own page
 type LinkedSearchRow = Exclude<SearchRow, FindingSearchRow>
@@ -50,7 +50,7 @@ export function SearchResultsList({ pages, state }: { pages: SearchResultsPage[]
 							<TopicLink topic={row.topic} prefix="in " />
 						</TopicResource>
 					) : (
-						<SearchResultRow key={`${row.kind}:${row.id}`} row={row} rank={rank} isLast={isLast} />
+						<LinkedSearchResultRow key={`${row.kind}:${row.id}`} row={row} rank={rank} isLast={isLast} />
 					)
 				}),
 			)}
@@ -58,37 +58,26 @@ export function SearchResultsList({ pages, state }: { pages: SearchResultsPage[]
 	)
 }
 
-// keep mixed results on the same rank and icon columns as the finding summary
-function SearchResultRow({ row, rank, isLast }: { row: LinkedSearchRow; rank: number; isLast: boolean }) {
-	// route Topics directly and let AnchorLink normalize Team and Profile destinations
-	const rankWidth = useFontScaledSize(16)
+// preserve native navigation, touch targets, and separators inside the shared row
+function LinkedSearchResultRow({ row, rank, isLast }: { row: LinkedSearchRow; rank: number; isLast: boolean }) {
 	const href =
 		row.kind === "topic"
 			? { pathname: "/topics/[topicId]" as const, params: { topicId: row.topic.id } }
 			: `${SITE_URL}${row.path}`
 	return (
-		<View
-			className={cn(
-				"min-h-16 flex-row items-start gap-2.5 py-3",
-				!isLast && "border-b border-dashed border-separator-strong",
-			)}
-		>
-			<Text style={{ width: rankWidth }} className="pt-0.5 text-center font-display text-sm text-muted-foreground">
-				{rank}
-			</Text>
-			<SearchRowIcon row={row} />
-			<View className="min-w-0 flex-1 gap-0.5">
-				{/* the linked title keeps the web's foreground and weight */}
+		<SearchResultRow
+			rank={rank}
+			className={cn(!isLast && "border-b border-dashed border-separator-strong")}
+			leading={<SearchRowIcon row={row} />}
+			title={
 				<AnchorLink href={href} accessibilityLabel={`Open ${row.name}`} hitSlop={toTouchTargetHitSlop(20)}>
 					<Text numberOfLines={1} className="text-sm font-semibold text-card-foreground">
 						{row.name}
 					</Text>
 				</AnchorLink>
-				<View className="flex-row flex-wrap items-center gap-1.5">
-					<SearchRowLine row={row} />
-				</View>
-			</View>
-		</View>
+			}
+			details={<SearchRowLine row={row} />}
+		/>
 	)
 }
 
@@ -114,7 +103,7 @@ function SearchRowIcon({ row }: { row: LinkedSearchRow }) {
 			/>
 		)
 	}
-	return <Icon as={row.kind === "topic" ? Hash : Podcast} className="mt-0.5 size-4 text-muted-foreground" />
+	return <Icon as={row.kind === "topic" ? Coffee : Mic} className="mt-0.5 size-4 text-muted-foreground" />
 }
 
 // match each kind's web metadata and reuse the same episode pill as findings
@@ -122,16 +111,11 @@ function SearchRowLine({ row }: { row: LinkedSearchRow }) {
 	switch (row.kind) {
 		case "topic":
 			return (
-				<>
-					<Text className="text-xs text-muted-foreground">
-						{toDotSeparatedText([
-							"Topic",
-							toCountLabel(row.count ?? 0, "viewer"),
-							toCountLabel(row.subscriberCount, "follower"),
-						])}
-					</Text>
-					<PodcastEpisodeNumberPill podcastEpisode={row.topic.latestPodcastEpisode} />
-				</>
+				<TopicSearchResultDetails
+					viewerCount={row.count ?? 0}
+					subscriberCount={row.subscriberCount}
+					latestPodcastEpisode={row.topic.latestPodcastEpisode}
+				/>
 			)
 		case "podcastEpisode":
 			return (

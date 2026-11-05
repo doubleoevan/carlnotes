@@ -120,7 +120,9 @@ test("the topic page reads the user's access and topic role once", async () => {
 	// one access read of this user and one role read among its queries. the owner's access is a separate row
 	const accessReads = sentQueries.filter(
 		(sentQuery) =>
-			sentQuery.text.includes('"budget_override_cents" from "users"') && sentQuery.values.includes("user-1"),
+			sentQuery.text.includes('"budget_override_cents"') &&
+			sentQuery.text.includes('"free_topic_limit" from "users"') &&
+			sentQuery.values.includes("user-1"),
 	)
 	const roleReads = sentQueries.filter((sentQuery) => sentQuery.text.includes('"role" from "team_members"'))
 	expect(accessReads).toHaveLength(1)

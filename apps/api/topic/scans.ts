@@ -155,6 +155,9 @@ export function toSourceResultsView(storedValue: unknown, canViewOwnerDetails: b
 
 // one stored source result as a scan note returns it, copied field by field, or null for a status the note leaves out
 function toSourceResultView(storedSourceResult: StoredSourceResult, canViewOwnerDetails: boolean): SourceResult | null {
+	if (["ai_agent", "email"].includes(storedSourceResult.sourceKind)) {
+		return null
+	}
 	// the fields every result has. everyone but the owner and admins reads a url Source by its host
 	const isUrlHostLabel = storedSourceResult.sourceKind === "url" && !canViewOwnerDetails
 	const sourceResultFields = {

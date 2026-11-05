@@ -48,7 +48,7 @@ const ELEMENTS: TopicSourceElements = {
 					type="button"
 					aria-label={label}
 					onClick={onPress}
-					className="text-muted-foreground hover:text-foreground shrink-0"
+					className="text-muted-foreground hover:text-foreground inline-flex min-h-6 min-w-6 shrink-0 items-center justify-center"
 				>
 					<X className="size-3.5" />
 				</button>

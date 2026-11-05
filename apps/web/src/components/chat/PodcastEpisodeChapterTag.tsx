@@ -4,7 +4,7 @@ import {
 	PodcastEpisodeChapterTag as SharedPodcastEpisodeChapterTag,
 } from "@carlnotes/core/components/PodcastEpisodeChapterTag"
 import { cn } from "@carlnotes/nightshift/classNames"
-import { Headphones } from "lucide-react"
+import { Mic } from "lucide-react"
 import { IconButton } from "@/components/common/IconButton"
 import { QUESTION_BUBBLE_WIDTH_CLASS } from "@/lib/styleClasses"
 
@@ -22,6 +22,6 @@ const elements: PodcastEpisodeChapterTagElements = {
 			{children}
 		</IconButton>
 	),
-	Headphones: () => <Headphones className="size-3.5 shrink-0" />,
+	Icon: () => <Mic className="size-3.5 shrink-0" />,
 	Label: ({ children }) => <span className="truncate">{children}</span>,
 }

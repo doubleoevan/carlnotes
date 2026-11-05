@@ -308,8 +308,13 @@ test("a missing topic responds 404", async () => {
 })
 
 // the id resolves the topic, and the url redirects to the current slug
-test("an id alone and a stale slug both redirect to the current slug", async () => {
-	for (const path of [`/topics/${TOPIC_ID}`, `/topics/${TOPIC_ID}/old-name`]) {
+test("canonical redirects preserve a linked Finding from an id-only or stale-slug path", async () => {
+	for (const path of [
+		`/topics/${TOPIC_ID}`,
+		`/topics/${TOPIC_ID}/old-name`,
+		`/topics/${TOPIC_ID}?finding=kept-finding`,
+		`/topics/${TOPIC_ID}/old-name?finding=kept-finding`,
+	]) {
 		const { serverLoadResult } = await loadRouter(path)
 		if (serverLoadResult?.type !== "redirect") {
 			throw new Error(`${path} did not redirect`)
@@ -319,6 +324,7 @@ test("an id alone and a stale slug both redirect to the current slug", async () 
 		const redirectLocation = serverLoadResult.redirect.headers.get("Location") ?? ""
 		const redirectPath = new URL(redirectLocation, "http://localhost").pathname
 		expect(redirectPath).toBe(`/topics/${TOPIC_ID}/${TOPIC_SLUG}`)
+		expect(new URL(redirectLocation, "http://localhost").search).toBe(new URL(path, "http://localhost").search)
 		expect(serverLoadResult.redirect.options.statusCode).toBe(301)
 	}
 })

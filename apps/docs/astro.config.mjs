@@ -24,6 +24,7 @@ export default defineConfig({
 		"/how-carlnotes-works": "/docs/",
 		"/carlnotes-glossary": "/docs/",
 		"/who-is-carl": "/docs/",
+		"/topics/email-forwarding": "/docs/topics/email-carl/",
 	},
 	integrations: [
 		starlight({

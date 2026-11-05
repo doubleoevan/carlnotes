@@ -1,3 +1,4 @@
+import { isCodexConversationUrl } from "@carlnotes/contracts/personalSourcesUrls"
 import { toCtaTag } from "@carlnotes/contracts/signupCta"
 import { SITE_URL } from "@carlnotes/contracts/site"
 import { defaultParseSearch, Link } from "@tanstack/react-router"
@@ -18,8 +19,12 @@ const SERVER_PATH_PREFIXES = ["/docs", "/blog", "/releases", "/nightshift", "/ap
 const NEW_TAB_PROPS = { target: "_blank", rel: "noopener noreferrer" }
 
 /**
- * Opens a link's absolute url somewhere other than this page, such as the host around an mcp card. A link under a
- * provider of it opens through it.
+ * Provides the connected site URL when an embedded host blocks document base URLs.
+ */
+export const LinkBaseUrlContext = createContext<string | null>(null)
+
+/**
+ * Opens a link through an embedded host.
  */
 export const LinkOpenerContext = createContext<((url: string) => void) | null>(null)
 
@@ -43,12 +48,17 @@ export function AnchorLink({
 	replace?: boolean
 	resetScroll?: boolean
 }) {
-	// a link under a link opener opens its absolute url through it, such as in the host around an mcp card, whose
-	// document's base url is the site that served it. only a web url opens, and any other scheme renders its text
+	// a link under a link opener opens its absolute url through it, such as in the host around an MCP view, whose
+	// document's base url is the site that served it. web urls and existing Codex chat references use the host
 	const openLink = useContext(LinkOpenerContext)
+	const linkBaseUrl = useContext(LinkBaseUrlContext)
 	if (openLink) {
-		const absoluteUrl = new URL(href, globalThis.document?.baseURI ?? SITE_URL).toString()
-		if (!absoluteUrl.startsWith("https://") && !absoluteUrl.startsWith("http://")) {
+		const absoluteUrl = new URL(href, linkBaseUrl ?? globalThis.document?.baseURI ?? SITE_URL).toString()
+		if (
+			!absoluteUrl.startsWith("https://") &&
+			!absoluteUrl.startsWith("http://") &&
+			!isCodexConversationUrl(absoluteUrl)
+		) {
 			return <a {...props}>{children}</a>
 		}
 		const handleOpenerClick = (event: React.MouseEvent<HTMLAnchorElement>): void => {
@@ -64,7 +74,7 @@ export function AnchorLink({
 	}
 
 	// a uri scheme link opens another app, so it gets no target and no rel
-	if (URI_SCHEME_PREFIXES.some((prefix) => href.startsWith(prefix))) {
+	if (URI_SCHEME_PREFIXES.some((prefix) => href.startsWith(prefix)) || isCodexConversationUrl(href)) {
 		return (
 			<a href={href} {...props}>
 				{children}

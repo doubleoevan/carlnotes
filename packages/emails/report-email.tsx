@@ -3,12 +3,10 @@
 
 import { REPORT_SUBJECT_KIND_LABELS, type ReportSubjectKind } from "@carlnotes/contracts/reports"
 import { SITE_URL } from "@carlnotes/contracts/site"
-import { appUrl } from "@carlnotes/server/appUrl"
 import { Link } from "@react-email/components"
 import { render } from "@react-email/render"
 import type { ReactElement } from "react"
 import AuthEmail, { type AuthEmailProps } from "./auth-email"
-import { sendEmail } from "./email"
 import { summaryLink } from "./emailShell"
 
 export type ReportEmailProps = {
@@ -93,38 +91,6 @@ export function renderReportEmail(props: ReportEmailProps): Promise<string> {
 }
 
 // the same email as plain text, sent with the HTML so the message is not html-only
-function renderReportEmailText(props: ReportEmailProps): Promise<string> {
+export function renderReportEmailText(props: ReportEmailProps): Promise<string> {
 	return render(<ReportEmail {...props} />, { plainText: true })
-}
-
-// what a send needs: the inbox, the report's id and its subject's page for the links, and the words
-export type SendReportEmailOptions = Omit<ReportEmailProps, "subjectUrl" | "reportUrl" | "appUrl"> & {
-	to: string
-	reportId: string
-	subjectPath: string
-}
-
-/**
- * Mails one report, or the reminder for one, to the support inbox with the links built from the app url, and returns
- * whether the mailer accepted it.
- */
-export async function sendReportEmail({
-	to,
-	reportId,
-	subjectPath,
-	...words
-}: SendReportEmailOptions): Promise<boolean> {
-	const reportEmailProps: ReportEmailProps = {
-		...words,
-		subjectUrl: `${appUrl()}${subjectPath}`,
-		reportUrl: `${appUrl()}/admin?report=${encodeURIComponent(reportId)}`,
-		appUrl: appUrl(),
-	}
-	return sendEmail({
-		to,
-		subject: toReportEmailSubject(reportEmailProps),
-		emailContent: await renderReportEmail(reportEmailProps),
-		plainTextContent: await renderReportEmailText(reportEmailProps),
-		emailKind: "flag-content",
-	})
 }

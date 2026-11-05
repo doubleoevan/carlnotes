@@ -5,7 +5,6 @@ import { cn } from "@carlnotes/nightshift/classNames"
 import { useLocation } from "@tanstack/react-router"
 import { useState } from "react"
 import { CoffeeMug } from "@/components/branding/CoffeeMug"
-import { CoffeeRings } from "@/components/branding/CoffeeRings"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { buttonVariants } from "@/components/primitives/button"
 import {
@@ -60,7 +59,6 @@ export function Header() {
 	const [topicTutorialVideoOpener, setTopicTutorialVideoOpener] = useState<TopicTutorialVideoOpener | null>(null)
 	return (
 		<header className="bg-hero text-hero-foreground relative overflow-hidden">
-			{isHeroShown && <CoffeeRings />}
 			<div className={cn("relative z-10 mx-auto max-w-5xl px-safe pt-5", !isHeroShown && "pb-10")}>
 				{/* the top bar with the brand icon on the left and the menu on the right */}
 				<div className="flex items-center justify-between">

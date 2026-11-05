@@ -53,33 +53,6 @@
 	}
 }
 
-/* ambient coffee rings that expand out of the hero and fade away */
-@keyframes coffee-ring {
-	0% {
-		transform: translate(-50%, -50%) scale(0.3);
-		opacity: 0;
-	}
-	18% {
-		opacity: 0.22;
-	}
-	100% {
-		transform: translate(-50%, -50%) scale(2);
-		opacity: 0;
-	}
-}
-
-.coffee-ring {
-	position: absolute;
-	left: 50%;
-	top: 50%;
-	height: 16rem;
-	width: 16rem;
-	border-radius: 9999px;
-	border: 1px solid var(--hero-muted);
-	opacity: 0;
-	animation: coffee-ring 10s ease-out infinite;
-}
-
 .animate-hydrate {
 	animation: hydrate-in 0.8s cubic-bezier(0.2, 0.7, 0.2, 1) both;
 }
@@ -365,7 +338,6 @@
 		opacity: 0.5;
 	}
 	/* don't animate the coffe steam rings for reduced-motion preference */
-	.coffee-ring,
 	.coffee-steam {
 		animation: none;
 		opacity: 0;

@@ -24,7 +24,7 @@ export type AuthEmailProps = {
 	// omitted when there is nothing to add
 	linkNote?: string
 	// the optional closing reassurance, it says "didn't ask for this" if an invitation arrives unasked.
-	closingNote?: string
+	closingNote?: string | null
 	appUrl?: string
 }
 
@@ -54,12 +54,14 @@ export default function AuthEmail({
 					{url}
 				</Link>
 			</Section>
-			<Section style={footerSection}>
-				<Text style={authFooterText}>
-					{linkNote ? `${linkNote} ` : ""}
-					{closingNote ?? "If you didn't ask for this, you can ignore this email and nothing will change."}
-				</Text>
-			</Section>
+			{closingNote !== null && (
+				<Section style={footerSection}>
+					<Text style={authFooterText}>
+						{linkNote ? `${linkNote} ` : ""}
+						{closingNote ?? "If you didn't ask for this, you can ignore this email and nothing will change."}
+					</Text>
+				</Section>
+			)}
 		</EmailShell>
 	)
 }

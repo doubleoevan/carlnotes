@@ -23,7 +23,10 @@ const EXA_ENDPOINT = "https://api.exa.ai/search"
 // read the topic's context, generate queries from it, search per query, and merge the deduped Resources
 export const searchIngester: SourceIngester = async (source: Source, ingestContext?: IngestContext) => {
 	// read the topic's context and name
-	const { name: topicName, context: topicContext } = await buildTopicScanContext(source.topicId)
+	const { name: topicName, context: topicContext } = await buildTopicScanContext({
+		topicId: source.topicId,
+		purpose: "search",
+	})
 
 	// generate search queries from the context on the Scan owner's key, then run them and keep whichever succeeds
 	const litellmApiKey = ingestContext?.litellmApiKey

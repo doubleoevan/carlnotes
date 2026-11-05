@@ -5,6 +5,7 @@ import { SPENT_BUDGET_LINE } from "@carlnotes/contracts/chat"
 import { EMBED_DIMENSIONS } from "@carlnotes/db/schema/scans"
 import { toPositiveInteger } from "@carlnotes/server/envSettings"
 import { type EmbeddingModel, embed, embedMany, type LanguageModel } from "ai"
+import { PRIVATE_MODEL_OPTIONS } from "./privateModelOptions"
 
 // how long a model request may run before the request aborts. the default sits above twice the proxy's longest model timeout
 const MODEL_TIMEOUT_MS = toPositiveInteger(Bun.env.MODEL_TIMEOUT_MS, 360000)
@@ -66,6 +67,12 @@ export function scoreModel(litellmApiKey?: string): LanguageModel {
 	return createModelProxyClient(litellmApiKey).chat("score-model")
 }
 
+// the score model needs room for reasoning and structured output
+export const SCORE_OUTPUT_TOKENS = 8192
+
+// bound reasoning for short structured writing tasks
+export const LOW_REASONING_PROVIDER_OPTIONS = { openai: { reasoningEffort: "low" } }
+
 /**
  * Returns the chat model, which writes every chat reply and describes the images that a user attaches.
  */
@@ -76,7 +83,7 @@ export function chatModel(litellmApiKey?: string): LanguageModel {
 /**
  * Returns the embedding model behind LiteLLM's embed-model alias, qwen3-embedding-8b.
  */
-export function embedModel(litellmApiKey?: string): EmbeddingModel {
+function embedModel(litellmApiKey?: string): EmbeddingModel {
 	return createModelProxyClient(litellmApiKey).embeddingModel("embed-model")
 }
 
@@ -95,6 +102,18 @@ export async function embedVector(text: string, litellmApiKey?: string): Promise
 export async function embedVectors(texts: string[], litellmApiKey?: string): Promise<number[][]> {
 	// embed through the proxy, then reduce each vector to the schema's width
 	const { embeddings } = await embedMany({ model: embedModel(litellmApiKey), values: texts })
+	return embeddings.map(toSchemaVector)
+}
+
+/**
+ * Embeds private routing text on its owner's required key without recording input or vectors in telemetry.
+ */
+export async function embedPrivateVectors(texts: string[], litellmApiKey: string): Promise<number[][]> {
+	if (!litellmApiKey) {
+		throw new Error("Private embeddings require the owner's key")
+	}
+	// stable embedding input keeps relevance ordering consistent between pages
+	const { embeddings } = await embedMany({ model: embedModel(litellmApiKey), values: texts, ...PRIVATE_MODEL_OPTIONS })
 	return embeddings.map(toSchemaVector)
 }
 

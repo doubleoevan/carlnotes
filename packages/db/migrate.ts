@@ -3,6 +3,7 @@ import { join } from "node:path"
 import { sql } from "drizzle-orm"
 import { migrate } from "drizzle-orm/neon-serverless/migrator"
 import { connectionPool, db } from "./index"
+import { migratePersonalSourcesPrivacy } from "./personalSourcesMigration"
 
 // how long one statement may run before Postgres cancels it
 const STATEMENT_TIMEOUT_SECONDS = 30
@@ -12,6 +13,7 @@ const migrationsFolder = join(import.meta.dir, "migrations")
 
 // drizzle records what it has applied in its own table, so an already-migrated database is a no-op
 await migrate(db, { migrationsFolder })
+await migratePersonalSourcesPrivacy()
 console.log(`migrations applied from ${migrationsFolder}`)
 
 // set the role's statement timeout in this database alone, and log a role that may not set it

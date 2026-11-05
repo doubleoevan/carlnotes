@@ -3,7 +3,19 @@
 import { maxTopicFindingsOptions } from "@carlnotes/contracts/enums"
 import type { TopicDraft } from "@carlnotes/contracts/topicPayloads"
 import { sql } from "drizzle-orm"
-import { boolean, check, index, integer, jsonb, pgTable, text, time, timestamp, uniqueIndex } from "drizzle-orm/pg-core"
+import {
+	boolean,
+	check,
+	index,
+	integer,
+	jsonb,
+	pgTable,
+	text,
+	time,
+	timestamp,
+	unique,
+	uniqueIndex,
+} from "drizzle-orm/pg-core"
 import {
 	attachmentStatus,
 	dayOfWeek,
@@ -56,6 +68,7 @@ export const topics = pgTable(
 	},
 	// the generalized inverted index for topic tag filtering, and the allowed kept-set sizes
 	(table) => [
+		uniqueIndex("topics_id_owner_unique").on(table.id, table.ownerId),
 		index("topics_tags_gin").using("gin", table.tags),
 		// the trigram index behind the topic name search, which matches anywhere in the lowercased name
 		index("topics_name_lower_trgm").using("gin", sql`lower(${table.name}) gin_trgm_ops`),
@@ -87,6 +100,9 @@ export const sources = pgTable(
 		// the source kind: url, rss, reddit, YouTube, podcast, search, bluesky, x, composio, or plugin
 		kind: sourceKind("kind").notNull(),
 		config: jsonb("config").$type<Record<string, unknown>>().notNull().default({}),
+		// receiving sources identify one concrete sender within their topic
+		personalSourcesIdentity: text("personal_source_identity"),
+		personalSourcesUserId: text("personal_source_user_id").references(() => users.id, { onDelete: "cascade" }),
 		// the async screening status and its failure reason
 		status: sourceStatus("status").notNull().default("pending"),
 		error: text("error"),
@@ -94,7 +110,20 @@ export const sources = pgTable(
 		...timestamps(),
 	},
 	// the feed build and the topic page read a topic's sources by its id
-	(table) => [index("sources_topic_id_idx").on(table.topicId)],
+	(table) => [
+		index("sources_topic_id_idx").on(table.topicId),
+		uniqueIndex("sources_id_topic_unique").on(table.id, table.topicId),
+		unique("sources_id_topic_sender_unique").on(table.id, table.topicId, table.personalSourcesUserId),
+		uniqueIndex("sources_personal_source_sender_identity_unique").on(
+			table.topicId,
+			table.personalSourcesUserId,
+			table.personalSourcesIdentity,
+		),
+		check(
+			"sources_personal_source_identity_shape",
+			sql`(${table.kind}::text in ('ai_agent', 'email')) = (${table.personalSourcesIdentity} is not null)`,
+		),
+	],
 )
 
 // an attachment is a file or url that adds context to a topic

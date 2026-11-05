@@ -1,5 +1,10 @@
 import { TOPIC_ATTACHMENT_MAX_BYTES } from "@carlnotes/contracts/attachmentTypes"
 import { db } from "@carlnotes/db"
+import {
+	loadPersonalSourcesReviewContexts,
+	type PersonalSourcesContextVersion,
+	type PersonalSourcesReviewContext,
+} from "@carlnotes/db/personalSourcesContext"
 import { attachments, topics } from "@carlnotes/db/schema/topics"
 import {
 	clearPendingObjectDeletion,
@@ -33,6 +38,16 @@ type AttachmentUpload = {
 
 // limit the extracted text fed to the model
 const MAX_EXTRACT_CHARS = 8000
+const MAX_REVIEW_CONTEXT_CHARS = 24_000
+
+// the search purpose never loads private personal sources text. review carries only its version alongside the bounded text
+export type TopicScanContext = {
+	name: string
+	context: string
+	personalSourcesVersions?: PersonalSourcesContextVersion[]
+	personalSources?: PersonalSourcesReviewContext[]
+	embeddingContext?: string
+}
 // a fetched page is stored as markdown
 const PAGE_EXTENSION = ".md"
 const MAX_PAGE_NAME_CHARS = MAX_KEY_FILENAME_CHARS - PAGE_EXTENSION.length
@@ -211,7 +226,13 @@ export async function generateImageContext(dataUrl: string, litellmApiKey?: stri
 }
 
 // the context a scan reads for a topic. the topic's prompt merged with every attachment's context
-export async function buildTopicScanContext(topicId: string): Promise<{ name: string; context: string }> {
+export async function buildTopicScanContext({
+	topicId,
+	purpose,
+}: {
+	topicId: string
+	purpose: "review" | "search"
+}): Promise<TopicScanContext> {
 	// read the topic's name and prompt. throw an error if the topic does not exist
 	const [topic] = await db
 		.select({ name: topics.name, prompt: topics.prompt })
@@ -233,7 +254,25 @@ export async function buildTopicScanContext(topicId: string): Promise<{ name: st
 		.filter((contextRow) => (contextRow.context ?? "").trim())
 		.map((contextRow) => `[attachment: ${contextRow.filename}]\n${(contextRow.context ?? "").trim()}`)
 	const context = [topic.prompt.trim(), ...labeledAttachmentContexts].filter(Boolean).join("\n\n")
-	return { name: topic.name, context }
+	if (purpose === "search") {
+		return { name: topic.name, context }
+	}
+
+	// retain public context separately from sender-private review inputs
+	const personalSources = await loadPersonalSourcesReviewContexts(topicId)
+	const publicContext = context.slice(0, Math.max(0, MAX_REVIEW_CONTEXT_CHARS - topic.name.length - 2))
+	if (personalSources.length === 0) {
+		return { name: topic.name, context: publicContext }
+	}
+	const privateShare = Math.floor(4000 / personalSources.length)
+	const privateText = personalSources.map((context) => context.text.slice(0, privateShare)).join("\n")
+	return {
+		name: topic.name,
+		context: publicContext,
+		personalSources,
+		personalSourcesVersions: personalSources.map(({ topicId, userId, revision }) => ({ topicId, userId, revision })),
+		embeddingContext: `${[topic.name, publicContext].join("\n\n").slice(0, 3998)}\n\n${privateText}`,
+	}
 }
 
 /**

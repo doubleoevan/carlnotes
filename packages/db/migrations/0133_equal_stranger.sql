@@ -1,0 +1,1 @@
+ALTER TABLE "users" ADD COLUMN "free_topic_limit" integer DEFAULT 3 NOT NULL;

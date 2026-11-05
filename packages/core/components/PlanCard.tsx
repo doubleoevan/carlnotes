@@ -1,7 +1,14 @@
 import { isPaidPlan } from "@carlnotes/contracts/enums"
-import { type BillingInterval, PLANS, type Plan, PURCHASE_COPY, SCAN_COST_CENTS } from "@carlnotes/contracts/plans"
+import {
+	type BillingInterval,
+	PLANS,
+	type Plan,
+	PURCHASE_COPY,
+	SCAN_COST_CENTS,
+	userTopicLimit,
+} from "@carlnotes/contracts/plans"
 import type { ComponentType, ReactNode } from "react"
-import { toBrewsWord } from "../lib/labels"
+import { toBrewsWord, toCountLabel } from "../lib/labels"
 import { isUsersPlan, toPlanBadge } from "../lib/planCards"
 
 type Container = ComponentType<{ children: ReactNode }>
@@ -26,6 +33,7 @@ export type PlanCardProps = {
 	plan: Plan
 	isYearly: boolean
 	isHighlighted: boolean
+	freeTopicLimit?: number | null
 	signedInPlan: Plan | null
 	subscribedInterval: BillingInterval | null
 	isRedirecting?: boolean
@@ -53,6 +61,7 @@ export function PlanCard({
 	isYearly,
 	isHighlighted,
 	signedInPlan,
+	freeTopicLimit,
 	subscribedInterval,
 	isRedirecting = false,
 	storePrice,
@@ -91,7 +100,9 @@ export function PlanCard({
 			<Price {...planPrice} />
 			{/* the quota ordering and yearly markers are identical on both platforms */}
 			<Quotas>
-				<Quota label={`${config.topicLimit} topics`} />
+				<Quota label={toCountLabel(userTopicLimit({ plan, freeTopicLimit: freeTopicLimit ?? undefined }), "topic")} />
+				<Quota label="Send AI chats to Carl to read for your topics" />
+				{config.canEmailCarl && <Quota label="Send emails to Carl to read for your topics" />}
 				<Quota
 					label={`${dailyTopicLimit} daily ${toBrewsWord(dailyTopicLimit)}`}
 					isRaised={isYearly && config.dailyTopicLimit.yearly > config.dailyTopicLimit.monthly}

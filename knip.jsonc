@@ -13,6 +13,8 @@
 	"ignoreBinaries": ["doppler", "cloudflared"],
 	"workspaces": {
 		".": {
+			// previewEmails.ts starts the react-email CLI with Node. the CLI loads the pinned @react-email/ui
+			"ignoreDependencies": ["react-email", "@react-email/ui"],
 			// knip does not read past `doppler run --`, so each file a doppler script, a shell script, or the README runs is
 			// named here with its loader
 			"entry": [
@@ -30,6 +32,8 @@
 				"scripts/backfill-vectors.ts",
 				// the eval:* scripts and smoke:eval
 				"evals/attachment-summaries/attachmentSummariesEval.ts",
+				"evals/personal-sources-context/personalSourcesContextEval.ts",
+				"evals/personal-sources-context/personalSourcesScoringEval.ts",
 				"evals/grader-calibration/graderCalibrationEval.ts",
 				"evals/new-topic-chat/newTopicChatEval.ts",
 				"evals/podcast-chat/podcastChatEval.ts",
@@ -74,8 +78,8 @@
 			"entry": ["src/routeData.ts"]
 		},
 		"apps/web": {
-			// vite.mcpCards.config.ts swaps the visit analytics module for this one by path
-			"entry": ["src/mcpCards/cardVisitAnalytics.ts"],
+			// vite.mcpViews.config.ts swaps the visit analytics module for this one by path
+			"entry": ["src/mcpViews/mcpViewVisitAnalytics.ts"],
 			// the server build bundles @carlnotes/nightshift and @carlnotes/client, so the package boundary check makes the web
 			// app declare what they import
 			"ignoreDependencies": ["class-variance-authority", "clsx", "hono", "tailwind-merge"]

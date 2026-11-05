@@ -212,6 +212,8 @@ export function toCreateTopicText(createTopicFromDraftResult: CreateTopicFromDra
 		// a topic draft not ready to save
 		case "incomplete":
 			return "The draft needs a title and a prompt first. Write them with draftTopic."
+		case "confirmationUsed":
+			return CREATE_REJECTION_LINES.confirmationUsed
 		// a source the registry could not build
 		case "invalid":
 			return `That source cannot be read: ${createTopicFromDraftResult.value}. Fix it or drop it from the draft, then create again.`

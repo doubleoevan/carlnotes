@@ -21,6 +21,7 @@ import { ConfirmDialog } from "@/components/common/ConfirmDialog"
 import { Button } from "@/components/primitives/button"
 import { CARD_CLASS } from "@/lib/styleClasses"
 import { ACCOUNT_FIELD_ELEMENTS, BLOCKED_USERS_ELEMENTS, PROFILE_FIELD_ELEMENTS } from "./AccountFields"
+import { AiAgentAccountSection } from "./AiAgentAccountSection"
 
 /**
  * The settings sections on the account page: profile, email, password, invitations, blocked people, and closing the
@@ -39,6 +40,7 @@ export function AccountSettings({ provider }: { provider: BillingProvider | null
 			<PasswordSection elements={ACCOUNT_FIELD_ELEMENTS} />
 			<InvitationsSection elements={ACCOUNT_FIELD_ELEMENTS} />
 			<BlockedUsersSection elements={BLOCKED_USERS_ELEMENTS} />
+			<AiAgentAccountSection />
 			{/* closing the account comes last. it is the one thing on this page that cannot be undone */}
 			<DeleteAccountSection provider={provider} />
 		</>

@@ -1,4 +1,5 @@
 import { showClientError } from "@carlnotes/client/apiClient"
+import { isCodexConversationUrl } from "@carlnotes/contracts/personalSourcesUrls"
 import { toCtaTag } from "@carlnotes/contracts/signupCta"
 import { SITE_URL } from "@carlnotes/contracts/site"
 import { Slot } from "@rn-primitives/slot"
@@ -77,13 +78,13 @@ export async function openExternalLink(href: string): Promise<void> {
 	try {
 		if (/^https?:\/\//i.test(href)) {
 			await WebBrowser.openBrowserAsync(href, { presentationStyle: WebBrowser.WebBrowserPresentationStyle.PAGE_SHEET })
-		} else if (/^(mailto|tel|sms):/i.test(href)) {
+		} else if (/^(mailto|tel|sms):/i.test(href) || isCodexConversationUrl(href)) {
 			await Linking.openURL(href)
 		} else {
 			throw new Error("unsupported link scheme")
 		}
-	} catch (error) {
-		console.error("link open failed", error)
+	} catch {
+		console.warn("link open failed")
 		showClientError("That link didn't open. Carl suggests trying again.")
 	}
 }

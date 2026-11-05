@@ -1,7 +1,7 @@
 # functional-ui-tests Specification
 
 ## Purpose
-Prove that the critical user flows work end to end on web, native, and MCP cards, against state that each run creates
+Prove that the critical user flows work end to end on web, native, and MCP views, against state that each run creates
 and throws away, and keep the evidence when one breaks.
 
 ## Requirements
@@ -127,16 +127,16 @@ The session flow SHALL cover each of these:
 - **WHEN** the user signs out and reloads
 - **THEN** the header shows the visitor's controls and the guarded url sends them to sign-in
 
-### Requirement: MCP card flows reach the real MCP server
+### Requirement: MCP view flows reach the real MCP server
 
-The MCP card flow SHALL load each card in the card test host. It SHALL pass the card's tool calls to the local MCP
-server and return the results to the card, as a seeded user with an access token from the same OAuth flow that the MCP
-smoke test uses. It SHALL assert that each action's result renders, and that a reload of the card's data, or a database
+The MCP view flow SHALL load each MCP view in the MCP Apps test host. It SHALL pass the MCP view's tool calls to the local MCP
+server and return the results to the MCP view, as a seeded user with an access token from the same OAuth flow that the MCP
+smoke test uses. It SHALL assert that each action's result renders, and that a reload of the MCP view's data, or a database
 read, shows the write.
 
-#### Scenario: Following from a card is a real subscription
+#### Scenario: Following from an MCP view is a real subscription
 
-- **WHEN** the flow clicks Follow in the findings card
+- **WHEN** the flow clicks Follow in the findings MCP view
 - **THEN** the host calls `follow_topic` on the local MCP server, the button shows Following, and the subscription row
   exists
 
@@ -170,13 +170,13 @@ log.
 
 ### Requirement: A smoke subset runs on each push and every flow runs nightly
 
-A push run SHALL run a smoke subset on web and in the card host:
+A push run SHALL run a smoke subset on web and in the MCP Apps host:
 
 - sign-in with session restore
 - create, save, and reopen a Topic
 - Follow and rate a Finding
 - one filtered search
-- one card action
+- one MCP view action
 
 Nightly and dispatched runs SHALL run every web, MCP, and native flow.
 

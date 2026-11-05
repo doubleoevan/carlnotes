@@ -18,6 +18,7 @@ import { buildAgreementPrompt } from "@carlnotes/pipeline/chat/agreement"
 import { buildSearchPrompt } from "@carlnotes/pipeline/ingest/search"
 import { saveTopicVectors } from "@carlnotes/pipeline/meanVectors"
 import { sendScanReport } from "@carlnotes/pipeline/notify"
+import { buildPersonalSourcesContextPrompt } from "@carlnotes/pipeline/personalSources/contextPrompt"
 import { buildOutlinePrompt, buildSegmentPrompt } from "@carlnotes/pipeline/podcast/generatePodcastEpisodeScript"
 import { buildScorePrompt } from "@carlnotes/pipeline/review/score"
 import { buildScanReportPrompt } from "@carlnotes/pipeline/review/summarize"
@@ -242,6 +243,11 @@ async function writeSamplePrompts(): Promise<[string, boolean][]> {
 	const scoreResult = await buildScorePrompt("sample content", "sample topic context", true)
 	const searchResult = await buildSearchPrompt("sample topic context", "sample topic")
 	const contextResult = await buildContextPrompt("sample document text")
+	const personalSourcesContextResult = await buildPersonalSourcesContextPrompt({
+		topic: "Coffee",
+		entries: "Synthetic personal sources text",
+		hasIncompleteCoverage: false,
+	})
 	const agreementResult = await buildAgreementPrompt("sounds good", "frequency: daily")
 
 	// the report prompt renders over a minimal sample scan
@@ -321,6 +327,7 @@ async function writeSamplePrompts(): Promise<[string, boolean][]> {
 		["score prompt", scoreResult.prompt],
 		["search prompt", searchResult.prompt],
 		["attachment context prompt", contextResult.prompt],
+		["Personal sources context prompt", personalSourcesContextResult.prompt],
 		["agreement check prompt", agreementResult.prompt],
 		["scan report prompt", reportResult.prompt],
 		["episode outline prompt", outlineResult.prompt],

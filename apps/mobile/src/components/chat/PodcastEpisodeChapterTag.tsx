@@ -3,7 +3,7 @@ import {
 	type PodcastEpisodeChapterTagProps,
 	PodcastEpisodeChapterTag as SharedPodcastEpisodeChapterTag,
 } from "@carlnotes/core/components/PodcastEpisodeChapterTag"
-import { Headphones } from "lucide-react-native"
+import { Mic } from "lucide-react-native"
 import { Pressable } from "react-native"
 import { toTouchTargetHitSlop } from "@/components/primitives/button"
 import { Icon } from "@/components/primitives/icon"
@@ -29,7 +29,7 @@ const elements: PodcastEpisodeChapterTagElements = {
 			{children}
 		</Pressable>
 	),
-	Headphones: () => <Icon as={Headphones} className="size-3.5 shrink-0 text-muted-foreground" />,
+	Icon: () => <Icon as={Mic} className="size-3.5 shrink-0 text-muted-foreground" />,
 	Label: ({ children }) => (
 		<Text numberOfLines={1} className="shrink text-xs text-muted-foreground">
 			{children}

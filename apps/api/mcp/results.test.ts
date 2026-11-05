@@ -56,13 +56,13 @@ test("a page always holds at least one item and never cuts it", () => {
 	const items = [1, 2].map((index) =>
 		toMcpFinding({ kind: "visitor", clientName: "test-app" }, topicFinding(index, MCP_PAGE_MAX_CHARS + 1)),
 	)
-	const packedPage = packPageFromWindow(items, 0)
+	const packedPage = packPageFromWindow(items, { offset: 0 })
 	expect(packedPage.items).toEqual(items.slice(0, 1))
 	expect(JSON.stringify(packedPage).length).toBeGreaterThan(MCP_PAGE_MAX_CHARS)
 	expect(packedPage.nextCursor).toBe(toCursor(1))
 
 	// continue to the final whole finding
-	const lastPage = packPageFromWindow(items.slice(1), fromCursor(packedPage.nextCursor))
+	const lastPage = packPageFromWindow(items.slice(1), { offset: fromCursor(packedPage.nextCursor) })
 	expect(lastPage.items).toEqual(items.slice(1))
 	expect(lastPage.nextCursor).toBeNull()
 })
@@ -87,7 +87,7 @@ test("a feed past the read limit pages to its end by windows", () => {
 	// follow each cursor, reading one finding more than fits on a page from its offset, as the feed read does
 	do {
 		const offset = fromCursor(cursor)
-		const windowPage = packPageFromWindow(feed.slice(offset, offset + MCP_PAGE_SIZE + 1), offset)
+		const windowPage = packPageFromWindow(feed.slice(offset, offset + MCP_PAGE_SIZE + 1), { offset })
 		pagedFindingIds.push(...windowPage.items.map((finding) => finding.findingId))
 		cursor = windowPage.nextCursor
 	} while (cursor)
@@ -113,7 +113,7 @@ test("a visitor's finding has no per-user fields and a user's has them", () => {
 
 	// read the same finding as a user
 	const userFinding = toMcpFinding(
-		{ kind: "user", userId: "user-1", plan: "free", clientName: "test-app" },
+		{ kind: "user", userId: "user-1", plan: "free", clientName: "test-app", clientId: "test-client" },
 		topicFinding(1),
 	)
 	expect(userFinding.isConsumed).toBe(true)

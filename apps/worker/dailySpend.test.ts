@@ -18,6 +18,7 @@ test("loadDailySpend sums the day's scan, chat, and episode costs and counts the
 		scans: [["1.5"]],
 		chat_turns: [["0.25"]],
 		episodes: [["2"]],
+		personal_source_distillation_spends: [["0.15"]],
 	}
 	const sentQueries = stubConnectionPool(({ text }) => {
 		const table = Object.keys(rowsByTable).find((name) => text.includes(`"${name}"`))
@@ -30,12 +31,13 @@ test("loadDailySpend sums the day's scan, chat, and episode costs and counts the
 		scanDollars: 1.5,
 		chatDollars: 0.25,
 		podcastEpisodeDollars: 2,
-		totalDollars: 3.75,
+		personalSourcesDollars: 0.15,
+		totalDollars: 3.9,
 		newUserCount: 7,
 	})
 
 	// every read starts at midnight UTC, which the driver sends as its ISO text
-	expect(sentQueries).toHaveLength(4)
+	expect(sentQueries).toHaveLength(5)
 	for (const sentQuery of sentQueries) {
 		expect(sentQuery.values).toEqual(["2026-10-11T00:00:00.000Z"])
 	}
@@ -45,7 +47,14 @@ test("loadDailySpend sums the day's scan, chat, and episode costs and counts the
 test("reportDailySpend logs the spend and warns only past the threshold", async () => {
 	const logSpy = spyOn(console, "log").mockImplementation(() => {})
 	const reportThresholdCrossingSpy = spyOn(monitoring, "reportThresholdCrossing").mockReturnValue(true)
-	const dailySpend = { scanDollars: 1, chatDollars: 0, podcastEpisodeDollars: 0, totalDollars: 1, newUserCount: 0 }
+	const dailySpend = {
+		scanDollars: 1,
+		chatDollars: 0,
+		podcastEpisodeDollars: 0,
+		personalSourcesDollars: 0,
+		totalDollars: 1,
+		newUserCount: 0,
+	}
 	expect(await reportDailySpend(async () => dailySpend)).toEqual(dailySpend)
 	expect(logSpy).toHaveBeenCalledWith(JSON.stringify({ gauges: "daily-spend", ...dailySpend }))
 	expect(reportThresholdCrossingSpy).not.toHaveBeenCalled()

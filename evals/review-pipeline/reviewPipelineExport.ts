@@ -56,7 +56,7 @@ export async function exportFixture(topicId: string): Promise<void> {
 	}
 
 	// load the topic's own Findings first, then other public topics' Findings up to the corpus size
-	const { context } = await buildTopicScanContext(topicId)
+	const { context } = await buildTopicScanContext({ topicId, purpose: "search" })
 	const topicResourceRows = await loadTopicResourceRows(topicId)
 	const topicUrls = new Set(topicResourceRows.map((topicResourceRow) => topicResourceRow.url))
 	const otherResourceRows = await loadOtherPublicResourceRows(topicId, EXPORT_RESOURCE_COUNT - topicResourceRows.length)

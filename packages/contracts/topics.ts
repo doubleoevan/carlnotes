@@ -5,9 +5,9 @@ import {
 	attachmentStatuses,
 	daysOfWeek,
 	editableSourceKinds,
+	fetchedSourceKinds,
 	frequencies,
 	scanStatuses,
-	sourceKinds,
 	topicSectionKeys,
 	type UnknownCase,
 	visibilities,
@@ -53,6 +53,8 @@ const topicDetails = z.object({
 	owner: profileIdentity.nullable(),
 	// isTopicOwner gates attachment downloads. newCount is the user's unconsumed count for the "# new" badge
 	isTopicOwner: z.boolean(),
+	// the sender's own retained history remains available while they can read the Topic
+	canReadPersonalSources: z.boolean().optional(),
 	newCount: z.number(),
 	// whether a team owns the topic
 	isOnTeam: z.boolean(),
@@ -105,7 +107,7 @@ const topicDetails = z.object({
 	sources: z.array(
 		z.object({
 			id: z.string(),
-			sourceKind: displayEnum(sourceKinds),
+			sourceKind: displayEnum(fetchedSourceKinds),
 			summary: z.string(),
 			// what the source is identified by, which is what a suggestion is deduped against
 			value: z.string(),

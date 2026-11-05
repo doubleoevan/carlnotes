@@ -1,0 +1,12 @@
+{
+	"name": "personal-sources-scoring",
+	"passedRunCount": 3,
+	"runCount": 3,
+	"ranOn": "2026-11-03",
+	"commit": "47355aec",
+	"hasUncommittedChanges": true,
+	"writerModelIds": [
+		"score-model"
+	],
+	"graderModelId": "score-model"
+}

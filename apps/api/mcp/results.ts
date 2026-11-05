@@ -74,15 +74,18 @@ export async function readTopicFeed(
 
 	// shape each finding for the tool caller and pack the page from the window
 	const mcpFindings = topicFindings.map((finding) => toMcpFinding(toolCaller, finding))
-	return packPageFromWindow(mcpFindings, offset)
+	return packPageFromWindow(mcpFindings, { offset })
 }
 
 /**
  * Packs one page from a window of entries read at an offset, with the cursor that continues past the page.
  * The window has one entry more than fits on a page, so a cursor is returned only if an entry remains after the page.
  */
-export function packPageFromWindow<Item>(windowItems: Item[], offset: number): McpPage<Item> {
-	const windowPage = packPage(windowItems, 0, MCP_PAGE_MAX_CHARS, MCP_PAGE_SIZE)
+export function packPageFromWindow<Item>(
+	windowItems: Item[],
+	{ offset, pageSize = MCP_PAGE_SIZE }: { offset: number; pageSize?: number },
+): McpPage<Item> {
+	const windowPage = packPage(windowItems, 0, MCP_PAGE_MAX_CHARS, pageSize)
 	return {
 		items: windowPage.items,
 		nextCursor: windowPage.nextCursor ? toCursor(offset + windowPage.items.length) : null,

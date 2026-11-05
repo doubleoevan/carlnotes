@@ -1,3 +1,6 @@
+import { toChatAttachmentUrl } from "@carlnotes/client/chatClient"
+import { toChatRoomAttachmentUrl } from "@carlnotes/client/chatRoomClient"
+import { fetchTopicFindingLinkPreview } from "@carlnotes/client/topicFindingClient"
 // every story's frame: the app's globals.css with the real tokens, the light and dark toggle, the accessibility check,
 // a query client, the toast host, the user a story names, and mocked api clients, so no story reaches a server. every
 // docs page takes the toolbar's theme on the app's page fill, and a story in its own frame there takes the page's theme
@@ -8,7 +11,7 @@ import { DecoratorHelpers } from "@storybook/addon-themes"
 import type { Preview } from "@storybook/tanstack-react"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { Fragment, type PropsWithChildren, type ReactNode, useSyncExternalStore } from "react"
-import { sb } from "storybook/test"
+import { mocked, sb } from "storybook/test"
 import { create, type ThemeVars } from "storybook/theming"
 import { Toaster } from "@/components/primitives/sonner"
 import { toGuardedFetch } from "../src/nightshift/guardedFetch"
@@ -22,6 +25,8 @@ import "../src/globals.css"
 // main.ts aliases the auth client to its hand-written mock. every other api client is automocked, so each function is
 // a spy that returns nothing until a story sets what it returns
 sb.mock(import("@carlnotes/client/activityClient"))
+sb.mock(import("@carlnotes/client/aiAgentClient"))
+sb.mock(import("@carlnotes/client/personalSourcesClient"))
 sb.mock(import("@carlnotes/client/apiClient"))
 sb.mock(import("@carlnotes/client/billingClient"))
 sb.mock(import("@carlnotes/client/blockClient"))
@@ -37,6 +42,7 @@ sb.mock(import("@carlnotes/client/reportClient"))
 sb.mock(import("@carlnotes/client/teamClient"))
 sb.mock(import("@carlnotes/client/termsClient"))
 sb.mock(import("@carlnotes/client/topicClient"))
+sb.mock(import("@carlnotes/client/topicFindingClient"))
 sb.mock(import("@carlnotes/client/voiceClient"))
 
 // the preview runs on the app's own origin, so it keeps its storage in memory, and no story reads or changes a setting
@@ -94,6 +100,10 @@ const preview: Preview = {
 	// without JavaScript. fetch and the class are put back after the story
 	beforeEach: ({ parameters }) => {
 		queryClient.clear()
+		// keep attachment destinations and nested Finding views offline unless a story supplies another state
+		mocked(toChatAttachmentUrl).mockReturnValue("#story-attachment")
+		mocked(toChatRoomAttachmentUrl).mockReturnValue("#story-attachment")
+		mocked(fetchTopicFindingLinkPreview).mockResolvedValue(null)
 		const htmlClassList = document.documentElement.classList
 		htmlClassList.toggle("scripted", parameters.hasJavaScript !== false)
 		const originalFetch = globalThis.fetch

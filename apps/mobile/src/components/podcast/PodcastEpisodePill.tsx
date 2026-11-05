@@ -8,7 +8,7 @@ import {
 	PodcastEpisodePlaybackPill as SharedPlaybackPill,
 } from "@carlnotes/core/components/PodcastEpisodePill"
 
-import { Headphones, Pause, Play } from "lucide-react-native"
+import { Mic, Pause, Play } from "lucide-react-native"
 import { Pressable } from "react-native"
 import { toTouchTargetHitSlop } from "@/components/primitives/button"
 import { Icon } from "@/components/primitives/icon"
@@ -33,7 +33,7 @@ const elements: PodcastEpisodePillElements = {
 	),
 	Body: ({ text, isPlaying }) => (
 		<>
-			<Icon as={Headphones} className="size-3" strokeWidth={2.5} />
+			<Icon as={Mic} className="size-3" strokeWidth={2.5} />
 			<Text className="text-xs font-semibold">{text}</Text>
 			<Icon as={isPlaying ? Pause : Play} className="size-2.5" fill="currentColor" strokeWidth={2.5} />
 		</>

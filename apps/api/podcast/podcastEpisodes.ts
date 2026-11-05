@@ -120,7 +120,7 @@ export const podcastEpisodesRoute = new Hono<AppEnv>()
 		}
 		return context.json(await loadPodcastEpisode({ ...accessiblePodcastEpisode, userId }))
 	})
-	// the stable audio url. hono runs this route for a HEAD too and drops the body. an mcp card's audio element sends no
+	// the stable audio url. hono runs this route for a HEAD too and drops the body. an MCP view's audio element sends no
 	// session, so its play token names the caller instead, and a token that names none reads as missing
 	.get("/episodes/:id/audio.mp3", async (context) => {
 		// keep denied and successful sources out of shared caches

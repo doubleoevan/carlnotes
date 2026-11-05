@@ -27,6 +27,11 @@ export type ResourceOutcome =
 
 // the review outcome the scan report reads
 export type ReviewOutcome = {
+	// a durable personal sources outcome callback stays inside the review activity
+	onResourceConsidered?: (
+		url: string,
+		outcome?: { reviewOutcome: "scored" | "rejected"; reviewReason?: string },
+	) => Promise<void>
 	keptFindings: KeptFinding[]
 	filteredCounts: Record<FilterReason, number>
 	deferredCount: number

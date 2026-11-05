@@ -35,6 +35,7 @@ import {
 	uploadTopicAttachment,
 	useTopicAttachmentCleanup,
 } from "./TopicAttachmentEditor"
+import { TopicPersonalSources } from "./TopicPersonalSources"
 import { TopicSourceEditor } from "./TopicSourceEditor"
 import { TopicTeamSelect } from "./TopicTeamSelect"
 
@@ -243,6 +244,7 @@ export function EditTopicModal({
 						Sources <Text className="text-xs text-link">{`up to ${MAX_TOPIC_SOURCES}`}</Text>
 					</Text>
 					<TopicSourceEditor fields={fields} />
+					{topic && <TopicPersonalSources topic={topic} />}
 				</View>
 				<View className="gap-2">
 					<Text className="text-sm font-medium">Attachments</Text>

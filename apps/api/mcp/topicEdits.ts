@@ -119,7 +119,7 @@ export async function editTopic({
 }
 
 /**
- * Returns a topic page's fields in the shape the topic card previews an edit over.
+ * Returns a topic page's fields in the shape the topic MCP view previews an edit over.
  */
 export function toEditableTopicFields(topicPage: TopicResponse): EditableTopicFields {
 	return {

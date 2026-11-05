@@ -15,14 +15,14 @@ Apps, the deployable entry points:
   providers, and the DOM-bound hooks, lib, and stores. A public page renders on the server for a visitor and a crawler.
   The sign-in pages, a route behind sign-in, and every route when the request brings a session cookie render in the
   browser. Its Storybook, the Nightshift component browser, builds to static files the api serves at `/nightshift`,
-  and its MCP Apps cards build to one bundle the api writes into each card's html.
+  and its MCP Apps views build to one bundle the api writes into each MCP view's html.
 - `apps/api/` — the Hono server: routes, authorization, billing, chat rooms, tasting notes, teams, invites, share cards,
-  the site search, page head data, viewer and listener counts, the MCP server and its MCP Apps cards, and the document
+	  sender-only Personal sources and account-scoped agent routes under `personalSources/`,
+  the site search, page head data, viewer and listener counts, the MCP server and its MCP Apps views, and the document
   routes (the sitemap, the feeds, the llms files, the IndexNow key, and security.txt).
 - `apps/worker/` — the Temporal worker, its workflows and their activities under `workflows/`, the scheduled sweep, the
   monthly budget reset, the docs embed, and the modules only the sweep reads.
-- `apps/docs/` — the Starlight docs site, built to static files the api serves at `/docs`, with the design files and
-  the release notes convention beside it.
+- `apps/docs/` — the Starlight docs site, built to static files the api serves at `/docs`, with the architecture, development services, deployment, design, and release notes guides beside it.
 - `apps/mobile/` — the Expo app: CarlNotes for iOS and Android on a development build, with the routes under
   `apps/mobile/app/`, the Nightshift theme through Uniwind, its implementations of the Nightshift component contracts
   with an on-device Storybook in development builds, and EAS Build and Update. It depends on the universal packages
@@ -48,6 +48,7 @@ Packages, private `@carlnotes/<name>` workspaces that export source, in dependen
 - `packages/models/` — LiteLLM, the model roles, budgets, moderation, telemetry, speech, transcription,
   ffmpeg, and the prompts under `prompts/`.
 - `packages/pipeline/` — the scan pipeline: ingesters, review, chat replies and retrieval, attachments, link previews,
+	  private Personal sources receipt and Topic matching under `personalSources/`,
   the podcast episode, and the Temporal client.
 
 Beside them at the root:
@@ -55,7 +56,7 @@ Beside them at the root:
 - `server.json` — the remote MCP Registry manifest for `com.carlnotes/carlnotes` at `https://carlnotes.com/mcp`.
   Validate it with the official `mcp-publisher validate server.json`. Namespace proof and publication stay manual.
 - `infra/` — the service configs the app runs beside: litellm, the Northflank pipelines, and the cloudflared
-  dev tunnel that Sign in with Apple's dev callback runs through.
+  dev tunnel for Sign in with Apple's callback and Resend's inbound webhook.
 - `content/blog/` — the blog posts `apps/api/content.ts` serves.
 - `patches/` — the dependency patches `bun install` applies, named in the root package.json's `patchedDependencies`.
 - `evals/` — the evals that measure the model-facing prompts, their graders, and the review pipeline, one folder each,
@@ -92,7 +93,7 @@ Each app and package has its own AGENTS.md with entry points, layout, and comman
 | Podcast episode, player, feed, or cover | `packages/pipeline/podcast/`, `apps/worker/workflows/recordPodcastEpisode.ts`, `apps/api/podcast/`, `apps/api/share/podcastFeed.ts`, `apps/api/share/podcastCover.ts`, `packages/models/speech.ts`, `packages/contracts/podcastEpisodes.ts`, `packages/server/podcastEpisodeSettings.ts`, `packages/server/podcastCoverPaths.ts`, `apps/web/src/components/podcast/`, `apps/web/src/pages/PodcastEpisodePage.tsx` | domain-model, prompt-authoring | `packages/db/migrations/` |
 | Mobile screen or setup | `apps/mobile/app/` for the routes, `apps/mobile/src/` for the app's own logic, `packages/nightshift/uniwindCss.ts` for the theme, the accessibility bar in `apps/mobile/AGENTS.md` | jsx-conventions | `apps/api/`; every `@carlnotes` package outside the universal four — the boundary check enforces it |
 | Push notification, push device, or the Notifications section | `packages/pipeline/pushNotify.ts`, `pushDelivery.ts`, `pushReceipts.ts`, `pushWorkflows.ts`, `packages/server/expoPush.ts`, `apps/worker/workflows/sendPushNotifications.ts`, `apps/api/pushDevices.ts`, `packages/db/schema/pushDevices.ts`, `apps/mobile/src/push*.ts`, `apps/mobile/src/components/push/`, `packages/core/components/NotificationsSection.tsx` | domain-model | `apps/web/` beyond the `Switch` account field element |
-| MCP tool, MCP card, Topic Tool, or the Add to AI dialog | `apps/api/mcp/`, `apps/api/tool/`, `apps/web/src/mcpCards/`, `apps/web/src/components/common/AddToAiDialog.tsx` | domain-model | `apps/worker/`; `packages/pipeline/` and `packages/models/` beyond `budget.ts` and the modules the tool imports |
+| MCP tool, MCP view, Topic Tool, or the Add to AI dialog | `apps/api/mcp/`, `apps/api/tool/`, `apps/web/src/mcpViews/`, `apps/web/src/components/common/AddToAiDialog.tsx` | domain-model | `apps/worker/`; `packages/pipeline/` and `packages/models/` beyond `budget.ts` and the modules the tool imports |
 | UI test, image capture, or baseline approval | `ui-tests/AGENTS.md`, `ui-tests/<step>/`, `.github/workflows/ui-tests.yml` | — | `ui-tests/baselines/` images, `ui-tests/output/`; `apps/api/`, `apps/worker/` |
 
 Domain vocabulary is canonical and enforced, so grepping a domain noun reliably finds its code.
@@ -228,3 +229,5 @@ Rules agents and reviewers must honor, source copies at `.agents/skills/`:
   openspec-continue-change, openspec-update-change, openspec-explore, openspec-onboard
 - generated OpenSpec delivery: openspec-apply-change, openspec-verify-change, openspec-sync-specs,
   openspec-archive-change, openspec-bulk-archive-change. The CLI owns these files; archive through `/ship`.
+
+Personal sources items, private summaries, and annotations have no automatic expiry. Their content remains encrypted until explicit deletion. Released read contracts retain nullable expiry fields as null. Optional conversation URLs survive the MCP picker outside matching and open from the shared AI sender label; missing references remain plain labels.

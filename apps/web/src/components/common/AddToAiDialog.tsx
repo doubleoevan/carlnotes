@@ -1,5 +1,5 @@
 import { AddToAi, type AddToAiElements } from "@carlnotes/core/components/AddToAi"
-import { Check, Code2, Copy, Link, MessageCircle } from "lucide-react"
+import { Check, Code2, Copy, Link } from "lucide-react"
 import type { ComponentType } from "react"
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/primitives/dialog"
 import { SHARE_OPTION_CLASS, SHARE_OPTION_ICON_CLASS } from "@/components/share/ShareOptions"
@@ -15,15 +15,19 @@ import { copyToClipboard } from "@/lib/utils"
 import { AnchorLink } from "./AnchorLink"
 import { BrandIcon } from "./BrandIcon"
 
-// the brand logos from simple-icons. it has none for ChatGPT, VS Code, or xAI, so a lucide icon stands in for the
-// first two and the X logo for Grok
+// share the same AI platform marks as conversation links
 const ClaudeIcon: ComponentType<{ className?: string }> = ({ className }) => (
 	<BrandIcon brand="claude" className={className} />
+)
+const ChatgptIcon: ComponentType<{ className?: string }> = ({ className }) => (
+	<BrandIcon brand="chatgpt" className={className} />
 )
 const GeminiIcon: ComponentType<{ className?: string }> = ({ className }) => (
 	<BrandIcon brand="gemini" className={className} />
 )
-const GrokIcon: ComponentType<{ className?: string }> = ({ className }) => <BrandIcon brand="x" className={className} />
+const GrokIcon: ComponentType<{ className?: string }> = ({ className }) => (
+	<BrandIcon brand="grok" className={className} />
+)
 const PerplexityIcon: ComponentType<{ className?: string }> = ({ className }) => (
 	<BrandIcon brand="perplexity" className={className} />
 )
@@ -37,7 +41,7 @@ const CursorIcon: ComponentType<{ className?: string }> = ({ className }) => (
 // the label and icon mapped to each AI provider's option
 const AI_PROVIDER_OPTIONS: Record<AiProvider, { label: string; Icon: ComponentType<{ className?: string }> }> = {
 	claude: { label: "Claude", Icon: ClaudeIcon },
-	chatgpt: { label: "ChatGPT", Icon: MessageCircle },
+	chatgpt: { label: "ChatGPT", Icon: ChatgptIcon },
 	gemini: { label: "Gemini", Icon: GeminiIcon },
 	grok: { label: "Grok", Icon: GrokIcon },
 	perplexity: { label: "Perplexity", Icon: PerplexityIcon },

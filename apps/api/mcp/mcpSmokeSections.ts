@@ -1,9 +1,10 @@
 // the sections of the mcp smoke: a visitor's reads, a user's writes and edits, and the rate limit. the oauth flow is in
 // mcpOAuthSmokeSections.ts
 
-import { MCP_CARDS, toMcpCardUri } from "@carlnotes/contracts/mcpCards"
+import { MCP_VIEWS, toMcpUiResourceUri } from "@carlnotes/contracts/mcpViews"
 import { db } from "@carlnotes/db"
-import { topicPromptVersions } from "@carlnotes/db/schema/topics"
+import { scans } from "@carlnotes/db/schema/scans"
+import { topicPromptVersions, topics } from "@carlnotes/db/schema/topics"
 import { desc, eq } from "drizzle-orm"
 import { Hono } from "hono"
 import type { AppEnv } from "../currentUser"
@@ -20,6 +21,7 @@ import {
 	toResultJson,
 	toResultText,
 } from "./mcpSmokeFixtures"
+import { checkLastDraftSlot } from "./mcpTopicDraftSmoke"
 import { CONNECT_ACCOUNT_TEXT } from "./results"
 import { mcpRoute } from "./server"
 
@@ -31,13 +33,13 @@ export async function checkVisitor(): Promise<void> {
 	const contractIssues = toMcpToolContractIssues(tools)
 	check("every visitor tool has its title and classified hints", contractIssues.length === 0, contractIssues)
 
-	// search the seeded public topic by name, and read each card's resource
+	// search the seeded public topic by name, and read each MCP view's resource
 	const visitorSearchResult = await client.callTool({
 		name: "search",
 		arguments: { q: `${runId} topic`, kinds: ["topics"] },
 	})
 	check("search finds the seeded public topic by name", toResultText(visitorSearchResult).includes(topicId))
-	await checkCardResources(client)
+	await checkMcpUiResources(client)
 
 	// list the topics and read the feed. a visitor sees every explanation and no consumed flag
 	const listTopicsResult = await client.callTool({ name: "list_topics", arguments: {} })
@@ -214,9 +216,31 @@ export async function checkUser(accessToken: string): Promise<void> {
 		sources: [],
 		inviteEmails: [],
 	}
-	const createTopicResult = await client.callTool({ name: "create_topic", arguments: createArguments })
+	const draftPreview = (await client.callTool({
+		name: "create_topic",
+		arguments: createArguments,
+	})) as EditTopicToolResult
+	check("create_topic previews without creating", draftPreview.structuredContent?.status === "createConfirmRequired")
+	const confirmedDraft = {
+		name: "create_topic",
+		arguments: { ...createArguments, confirmation: draftPreview.structuredContent?.confirmation },
+	}
+	// a double click and a lost host response must lead to the same Topic, version, and first Scan
+	const [createTopicResult, retryResult] = await Promise.all([
+		client.callTool(confirmedDraft),
+		client.callTool(confirmedDraft),
+	])
 	const createdTopicId =
 		(createTopicResult as { structuredContent?: { topicId?: string } }).structuredContent?.topicId ?? ""
+	const createdTopics = await db.select({ id: topics.id }).from(topics).where(eq(topics.name, createArguments.name))
+	const createdScans = await db.select({ id: scans.id }).from(scans).where(eq(scans.topicId, createdTopicId))
+	check(
+		"concurrent confirmations return one Topic and start one Scan",
+		createdTopicId !== "" &&
+			(retryResult as EditTopicToolResult).structuredContent?.topicId === createdTopicId &&
+			createdTopics.length === 1 &&
+			createdScans.length === 1,
+	)
 	// the first prompt version the create wrote
 	const [createdVersion] = await db
 		.select({ origin: topicPromptVersions.origin })
@@ -230,18 +254,26 @@ export async function checkUser(accessToken: string): Promise<void> {
 
 	// stop the first scan the create started and wait for it to end. the cleanup deletes the user under it
 	await stopFirstScan(createdTopicId)
+	// deliberately delete only this smoke run's draft. An old confirmation must respect that deletion.
+	await db.delete(topics).where(eq(topics.id, createdTopicId))
+	const deletedRetry = await client.callTool(confirmedDraft)
+	check(
+		"retrying a deleted draft cannot restore the Topic",
+		deletedRetry.isError === true && toResultText(deletedRetry).includes("already been used"),
+	)
+	await checkLastDraftSlot(client)
 	await client.close()
 }
 
 // an edit_topic result's status and the confirmation a preview returns
-type EditTopicToolResult = { structuredContent?: { status?: string; confirmation?: string } }
+type EditTopicToolResult = { structuredContent?: { status?: string; confirmation?: string; topicId?: string } }
 
-// read each card's resource, which is the built bundle's html naming its card
-async function checkCardResources(client: ReturnType<typeof toClient>["client"]): Promise<void> {
-	for (const mcpCard of MCP_CARDS) {
-		const cardResource = await client.readResource({ uri: toMcpCardUri(mcpCard) })
-		const cardHtml = (cardResource.contents[0] as { text?: string } | undefined)?.text ?? ""
-		check(`the ${mcpCard} card's resource is its html`, cardHtml.includes(`data-card="${mcpCard}"`))
+// read each MCP view's resource, which is the built bundle's html naming its MCP view
+async function checkMcpUiResources(client: ReturnType<typeof toClient>["client"]): Promise<void> {
+	for (const mcpView of MCP_VIEWS) {
+		const uiResource = await client.readResource({ uri: toMcpUiResourceUri(mcpView) })
+		const mcpViewHtml = (uiResource.contents[0] as { text?: string } | undefined)?.text ?? ""
+		check(`the ${mcpView} MCP view's resource is its html`, mcpViewHtml.includes(`data-mcp-view="${mcpView}"`))
 	}
 }
 

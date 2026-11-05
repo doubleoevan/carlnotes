@@ -9,6 +9,7 @@ import {
 	toCentsFromDollars,
 	toMeanScanCents,
 	toMonthlyBudgetCutoffs,
+	userTopicLimit,
 } from "./plans"
 
 // each higher-ranked plan raises every numeric limit and cost over the plan below it
@@ -118,4 +119,14 @@ test("isOverageBillable bills a monthly Stripe subscription with a card and no o
 	// a yearly Stripe subscription has no overage price, and one without a card has nothing to charge
 	expect(isOverageBillable({ provider: "stripe", billingInterval: "yearly", hasPaymentMethod: true })).toBe(false)
 	expect(isOverageBillable({ provider: "stripe", billingInterval: "monthly", hasPaymentMethod: false })).toBe(false)
+})
+
+// the migration stamps legacy accounts with three slots while new accounts use the current catalog
+test("Free has one Topic for new accounts and preserves grandfathered three-Topic allowances", () => {
+	expect(PLANS.free.topicLimit).toBe(1)
+	expect(userTopicLimit({ plan: "free", freeTopicLimit: 1 })).toBe(1)
+	expect(userTopicLimit({ plan: "free", freeTopicLimit: 3 })).toBe(3)
+	expect(userTopicLimit({ plan: "free" })).toBe(1)
+	expect(userTopicLimit({ plan: "plus", freeTopicLimit: 3 })).toBe(10)
+	expect(userTopicLimit({ plan: "premium", freeTopicLimit: 3 })).toBe(25)
 })

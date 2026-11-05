@@ -15,6 +15,7 @@ import { Header } from "@/components/layout/Header"
 import { SearchBar } from "@/components/search/SearchBar"
 import { TopicFeedStatus } from "@/components/topic/TopicFeedStatus"
 import { TopicGateNotice } from "@/components/topic/TopicGateNotice"
+import { TopicLinkedFinding } from "@/components/topic/TopicLinkedFinding"
 import { TopicPageActions } from "@/components/topic/TopicPageActions"
 import { TopicPageContent } from "@/components/topic/TopicPageContent"
 import { useTopicFeed } from "@/providers/TopicFeedProvider"
@@ -89,6 +90,7 @@ export default function TopicScreen() {
 					hasContent={topic !== null}
 					onRetry={handleRefresh}
 				/>
+				{topic && <TopicLinkedFinding topic={topic} />}
 				{topic ? (
 					<TopicPageContent
 						key={topic.id}

@@ -10,7 +10,7 @@ import {
 	toImageCaptureSelection,
 } from "./imageCaptureSelection"
 
-// the fixture repo's files and their text: two web stories, one native story, the previews, a card, the web build
+// the fixture repo's files and their text: two web stories, one native story, the previews, a MCP view, the web build
 // config with its plugin, and a worker file
 const FIXTURE_FILES = new Map<string, string>([
 	["apps/web/.storybook/preview.tsx", 'import { Toaster } from "@/components/primitives/sonner"\n'],
@@ -23,7 +23,7 @@ const FIXTURE_FILES = new Map<string, string>([
 	["apps/mobile/app/storybook.tsx", ""],
 	["apps/mobile/src/components/Badge.stories.tsx", 'import { Badge } from "@carlnotes/core/components/Badge"\n'],
 	["packages/core/components/Badge.tsx", ""],
-	["apps/web/src/mcpCards/main.tsx", 'import { IconButton } from "@/components/common/IconButton"\n'],
+	["apps/web/src/mcpViews/main.tsx", 'import { IconButton } from "@/components/common/IconButton"\n'],
 	["apps/worker/scan.ts", ""],
 	["apps/docs/src/content/docs/index.mdx", ""],
 	["packages/nightshift/colors.ts", ""],
@@ -55,7 +55,7 @@ function selectChanges(
 		changedFiles,
 		storyFiles: STORY_FILES,
 		unreadableStoryFiles,
-		mcpCardFilePaths: ["apps/web/src/mcpCards/main.tsx"],
+		mcpViewFilePaths: ["apps/web/src/mcpViews/main.tsx"],
 		knownFilePaths: [...fixtureFiles.keys()],
 		readDirectImports: toDirectImportReader({
 			knownFilePaths: fixtureFiles,
@@ -64,16 +64,16 @@ function selectChanges(
 	})
 }
 
-// a component selects the stories that render it and the cards that import it, and a type-only import selects nothing
-test("a component change selects the stories and cards that reach it", () => {
+// a component selects the stories that render it and the MCP views that import it, and a type-only import selects nothing
+test("a component change selects the stories and MCP views that reach it", () => {
 	const selection = selectChanges(["apps/web/src/components/common/IconButton.tsx"])
 	expect(selection.platforms.web).toMatchObject({ mode: "affected", storyIds: ["common-iconbutton--default"] })
 	expect(selection.platforms.mcp.mode).toBe("all")
 	expect(selection.platforms.native.mode).toBe("none")
 })
 
-// a shared core component reaches web stories through a web component, native stories, and the cards
-test("a shared core change selects both apps and the cards", () => {
+// a shared core component reaches web stories through a web component, native stories, and the MCP views
+test("a shared core change selects both apps and the MCP views", () => {
 	const selection = selectChanges(["packages/core/components/Badge.tsx"])
 	expect(selection.platforms.web.storyIds).toEqual(["common-iconbutton--default"])
 	expect(selection.platforms.native).toMatchObject({ mode: "affected", storyIds: ["primitives-badge--default"] })
@@ -89,7 +89,7 @@ test("a component that every story renders inside selects every web story", () =
 	})
 })
 
-// a file that no story or card imports selects nothing, and the run says so
+// a file that no story or MCP view imports selects nothing, and the run says so
 test("a server-only change and a docs-only change select nothing", () => {
 	for (const changedFile of ["apps/worker/scan.ts", "apps/docs/src/content/docs/index.mdx"]) {
 		const selection = selectChanges([changedFile])
@@ -125,7 +125,7 @@ test("an unreadable story file selects every story of its app", () => {
 	expect(selection.platforms.native.mode).toBe("none")
 })
 
-// a plugin that the web build config loads is part of that config, so it selects every web story and card
+// a plugin that the web build config loads is part of that config, so it selects every web story and MCP view
 test("a file that the web build config imports selects every web image capture", () => {
 	const selection = selectChanges(["apps/web/voiceActivityAssetsPlugin.ts"])
 	expect(selection.platforms.web.mode).toBe("all")
@@ -197,7 +197,7 @@ test("no base selects every image capture for the base's reason", () => {
 		changedFiles: [],
 		storyFiles: STORY_FILES,
 		unreadableStoryFiles: [],
-		mcpCardFilePaths: [],
+		mcpViewFilePaths: [],
 		knownFilePaths: [],
 		readDirectImports: () => ({ importedPaths: [], unresolvedImports: [] }),
 	})

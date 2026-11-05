@@ -17,12 +17,20 @@ a day.
 |---|---|---|---|
 | Price, monthly billing | $0 | $20/month | $40/month |
 | Price, yearly billing | $0 | $200/year | $400/year |
-| Topics | 3 | 10 | 25 |
+| Topics | 1 | 10 | 25 |
 | Topics on a daily schedule | 1 | 3 monthly · 4 yearly | 6 monthly · 7 yearly |
 | Brews a day | 5 | 15 monthly · 20 yearly | 30 monthly · 40 yearly |
 | Coffee fund a month | $3 | $15 | $35 |
+| Send AI chats to Carl to read for your topics | ✓ | ✓ | ✓ |
+| Send emails to Carl to read for your topics | — | ✓ | ✓ |
+| Selected conversation imports | Included | Included | Included |
+| Send-only API keys | — | — | Up to 10 active |
 | Members per team you lead | 15 | Unlimited | Unlimited |
 | Coffee Break podcast episodes | Up to 10 minutes per brew, latest kept | Up to 30 minutes per brew, every full one kept | Up to 30 minutes per brew, every full one kept |
+
+Existing Free accounts keep their three-Topic allowance. New Free accounts can create one Topic.
+
+AI Agent sends and emails share one provisional ceiling of **200 accepted sends per UTC day** on every plan, solely to stop runaway agents. Filing to several Topics still counts once. At the ceiling, Carl says “The day's limit is reached.” Upgrading does not raise this ceiling. Deletion does not refund a send, retries do not charge twice, and imports do not count. The count resets at midnight UTC.
 
 Yearly billing costs ten times the monthly price instead of twelve, so you get two months free. Yearly plans get higher
 daily limits instead of overage. A yearly subscription has no monthly invoice to add overage to.

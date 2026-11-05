@@ -14,6 +14,7 @@
         "@carlnotes/models": "workspace:*",
         "@carlnotes/nightshift": "workspace:*",
         "@carlnotes/pipeline": "workspace:*",
+        "@carlnotes/server": "workspace:*",
         "@react-email/ui": "6.11.3",
         "@resvg/resvg-js": "^2.6.2",
         "@temporalio/worker": "^1.24.0",
@@ -200,6 +201,7 @@
         "@tanstack/react-query": "^5.105.0",
         "@tanstack/react-router": "1.170.46",
         "@tanstack/react-start": "1.169.4",
+        "@zip.js/zip.js": "2.24.0",
         "better-auth": "~1.7.13",
         "class-variance-authority": "^0.7.1",
         "clsx": "^2.1.1",
@@ -301,6 +303,7 @@
         "@carlnotes/server": "workspace:*",
         "@neondatabase/serverless": "^1.2.0",
         "drizzle-orm": "^0.45.4",
+        "zod": "^4.6.7",
       },
     },
     "packages/emails": {
@@ -381,6 +384,7 @@
         "@sentry/bun": "^11.9.0",
         "expo-server-sdk": "^8.0.0",
         "posthog-node": "^5.57.2",
+        "svix": "^2.9.1",
       },
     },
   },
@@ -2282,6 +2286,8 @@
     "@xtuc/ieee754": ["@xtuc/ieee754@1.2.0", "", {}, "sha512-DX8nKgqcGwsc0eJSqYt5lwP4DH5FlHnmuWWBRy7X0NcaGR0ZtuyeESgMwTYVEtxmsNGY+qit4QYT/MIYTOTPeA=="],
 
     "@xtuc/long": ["@xtuc/long@4.2.2", "", {}, "sha512-NuHqBY1PB/D8xU6s/thBgOAiAP7HOYDQ32+BFZILJ8ivkUkAHQnWfn6WhL79Owj1qmUnoN/YPhktdIoucipkAQ=="],
+
+    "@zip.js/zip.js": ["@zip.js/zip.js@2.24.0", "", {}, "sha512-WlaVKzdqBK+RF3bdiXZWbdCnvGB6PdO4IHC1mn/2Yfl3bASgqUNegnU3+PNg61iecwoPfUi5BgLUPqBukXpyWw=="],
 
     "a-sync-waterfall": ["a-sync-waterfall@1.0.1", "", {}, "sha512-RYTOHHdWipFUliRFMCS4X2Yn2X8M87V/OpSqWzKKOGhzqyUxzyVmhHDH9sAvG+ZuQf/TAOFsLCpMw09I1ufUnA=="],
 
@@ -4540,6 +4546,8 @@
     "supports-preserve-symlinks-flag": ["supports-preserve-symlinks-flag@1.0.0", "", {}, "sha512-ot0WnXS9fgdkgIcePe6RHNk1WA8+muPa6cSjeR3V8K27q9BB1rTE3R1p7Hv0z1ZyAc8s6Vvv8DIyWf681MAt0w=="],
 
     "svgo": ["svgo@4.1.0", "", { "dependencies": { "commander": "^11.1.0", "css-select": "^6.0.0", "css-tree": "^3.0.1", "css-what": "^7.0.0", "csso": "^5.0.5", "picocolors": "^1.1.1", "sax": "1.6.1" }, "bin": { "svgo": "bin/svgo.js" } }, "sha512-bkxnTg1kSU0guhIBmibA6UUhrQmPVA1XsQLN+ylCd+UWzbnLkySOcXpyk1mrl05f+pcaCx2eHb+sp6BgMZWX+Q=="],
+
+    "svix": ["svix@2.9.1", "", { "dependencies": { "standardwebhooks": "^1.1.1" } }, "sha512-qeIouYbC4b2nnMAG9hKxglGh1hYlLyMt6HIg+pNqdNkj5T99a9tnhw4pV/mROPSCVGXv1rCBTUVdym3Y5R+UDA=="],
 
     "swc-loader": ["swc-loader@0.2.7", "", { "dependencies": { "@swc/counter": "^0.1.3" }, "peerDependencies": { "@swc/core": "^1.2.147", "webpack": ">=2" } }, "sha512-nwYWw3Fh9ame3Rtm7StS9SBLpHRRnYcK7bnpF3UKZmesAK0gw2/ADvlURFAINmPvKtDLzp+GBiP9yLoEjg6S9w=="],
 

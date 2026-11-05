@@ -187,6 +187,7 @@ type PlainCreateRejection = Exclude<
 export const CREATE_REJECTION_LINES: Record<PlainCreateRejection["status"], string> = {
 	forbidden: "Please log in and try again.",
 	incomplete: "The draft needs a title and a prompt.",
+	confirmationUsed: "This preview has already been used or has expired. Preview the Topic again to create a new one.",
 	quota: "Your plan holds all the topics it allows.",
 	dailyFrequency: "A daily topic doesn't fit the plan right now.",
 	inviteLimit: "That many invites is past the plan's limit.",

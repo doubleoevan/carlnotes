@@ -49,9 +49,10 @@ export function toResultText(toolResult: unknown): string {
 	return resultContent.map((contentPart) => contentPart.text ?? "").join("\n")
 }
 
-/** Returns a tool result's text parsed as json. */
+/** Reads structured tool content, with JSON text support for older tools. */
 export function toResultJson<Shape>(toolResult: unknown): Shape {
-	return JSON.parse(toResultText(toolResult)) as Shape
+	const structuredContent = (toolResult as { structuredContent?: unknown }).structuredContent
+	return (structuredContent ?? JSON.parse(toResultText(toolResult))) as Shape
 }
 
 // the page read_topic_feed returns

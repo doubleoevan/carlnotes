@@ -6,7 +6,7 @@ import { ChatPill } from "./ChatPanelWidget"
 const meta: Meta<typeof ChatPill> = {
 	title: "Chat/ChatPill",
 	component: ChatPill,
-	args: { onOpenChat: () => {} },
+	args: { onOpenChat: () => {}, chatMentions: [] },
 	decorators: [
 		(Story) => (
 			<View className="items-end p-4">

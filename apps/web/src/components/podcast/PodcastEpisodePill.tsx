@@ -10,7 +10,7 @@ import {
 
 export { useIsFindingChapterPlaying } from "@carlnotes/core/components/PodcastEpisodePill"
 
-import { Headphones, Pause, Play } from "lucide-react"
+import { Mic, Pause, Play } from "lucide-react"
 import { PodcastEpisodeTooltip } from "./PodcastEpisodeDetails"
 
 const elements: PodcastEpisodePillElements = {
@@ -29,7 +29,7 @@ const elements: PodcastEpisodePillElements = {
 	),
 	Body: ({ text, isPlaying }) => (
 		<>
-			<Headphones className="size-3" strokeWidth={2.5} />
+			<Mic className="size-3" strokeWidth={2.5} />
 			{text}
 			{isPlaying ? (
 				<Pause className="size-2.5 fill-current" strokeWidth={2.5} />

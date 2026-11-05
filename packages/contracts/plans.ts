@@ -44,6 +44,9 @@ type PlanConfig = {
 	// how many of those topics may run on a daily frequency, which is what actually decides the monthly spend
 	dailyTopicLimit: BillingIntervalLimit
 	dailyScanLimit: BillingIntervalLimit
+	// receiving capabilities are separate from the shared runaway-agent ceiling
+	canEmailCarl: boolean
+	canUseAiAgentApiKeys: boolean
 	// the monthly spend backstop in cents. a limit on our cost to serve the user, not the user's price
 	monthlyBudgetCents: number
 	// the share of the monthly budget at which each kind of spend stops, or null where the plan never has that kind of
@@ -71,12 +74,14 @@ export const PLANS = {
 	// $0, has low limits to offset the cost
 	free: {
 		rank: 0,
-		topicLimit: 3,
+		topicLimit: 1,
 		teamMemberLimit: 15,
 		linkInviteMaxUses: 25,
 		inviteLimit: 30,
 		dailyTopicLimit: { monthly: 1, yearly: 1 },
 		dailyScanLimit: { monthly: 5, yearly: 5 },
+		canEmailCarl: false,
+		canUseAiAgentApiKeys: false,
 		monthlyBudgetCents: 300,
 		monthlyBudgetCutoffShares: {
 			spokenQuestions: 0.15,
@@ -96,6 +101,8 @@ export const PLANS = {
 		inviteLimit: 30,
 		dailyTopicLimit: { monthly: 3, yearly: 4 },
 		dailyScanLimit: { monthly: 15, yearly: 20 },
+		canEmailCarl: true,
+		canUseAiAgentApiKeys: false,
 		monthlyBudgetCents: 1500,
 		monthlyBudgetCutoffShares: {
 			spokenQuestions: 0.4,
@@ -115,6 +122,8 @@ export const PLANS = {
 		inviteLimit: 50,
 		dailyTopicLimit: { monthly: 6, yearly: 7 },
 		dailyScanLimit: { monthly: 30, yearly: 40 },
+		canEmailCarl: true,
+		canUseAiAgentApiKeys: true,
 		monthlyBudgetCents: 3500,
 		monthlyBudgetCutoffShares: {
 			spokenQuestions: 0.5,
@@ -157,7 +166,14 @@ export function isOverageBillable({ provider, billingInterval, hasPaymentMethod 
 }
 
 // a user's authority and entitlement inputs, read together
-export type UserAccess = { isAdmin: boolean; plan: Plan; budgetOverrideCents: number | null }
+export type UserAccess = { isAdmin: boolean; plan: Plan; budgetOverrideCents: number | null; freeTopicLimit?: number }
+
+/**
+ * Returns the account's Topic allowance, preserving its grandfathered Free slots.
+ */
+export function userTopicLimit({ plan, freeTopicLimit }: Pick<UserAccess, "plan" | "freeTopicLimit">): number {
+	return plan === "free" ? (freeTopicLimit ?? PLANS.free.topicLimit) : PLANS[plan].topicLimit
+}
 
 /**
  * The user's monthly budget in cents: their override, otherwise the admin backstop, otherwise the plan's.

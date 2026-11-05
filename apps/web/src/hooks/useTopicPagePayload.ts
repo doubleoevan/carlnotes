@@ -96,7 +96,7 @@ export function useTopicPagePayload({ topicId, topicSlug }: UseTopicPagePayloadO
 	// redirect a url by id alone or with a stale slug to the topic's current path once the url's topic loads
 	useEffect(() => {
 		if (topic?.id === topicId && isTopicSlugStale(topic, topicSlug)) {
-			navigate({ to: toTopicPath(topic), replace: true })
+			navigate({ to: toTopicPath(topic), search: (search) => search, replace: true })
 		}
 	}, [topic, topicId, topicSlug, navigate])
 

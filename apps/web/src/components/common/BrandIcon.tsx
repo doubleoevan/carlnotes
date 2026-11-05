@@ -1,19 +1,9 @@
 // the brand icons used for sharing, sign-in, source rows, the Add to AI dialog, and the tutorial video's player and
 // menu option
 import { YOUTUBE_PLAY_TRIANGLE_PATH } from "@carlnotes/contracts/youtube"
+import { AI_PROVIDER_ICON_PATHS } from "@carlnotes/nightshift/aiProviderIcons"
 import { APPLE_ICON_PATH } from "@carlnotes/nightshift/oauthProviderIcons"
-import {
-	siBluesky,
-	siClaudecode,
-	siCursor,
-	siDeepseek,
-	siGithub,
-	siGooglegemini,
-	siPerplexity,
-	siReddit,
-	siX,
-	siYoutube,
-} from "simple-icons"
+import { siBluesky, siGithub, siReddit, siX, siYoutube } from "simple-icons"
 
 // LinkedIn asked simple-icons to drop its icon, so this is the one shape still kept by hand.
 const LINKEDIN_ICON_PATH =
@@ -21,18 +11,14 @@ const LINKEDIN_ICON_PATH =
 
 // every icon this app draws, by the name the calling code already uses for that platform
 const BRAND_ICON_PATHS = {
-	x: siX.path,
-	bluesky: siBluesky.path,
-	reddit: siReddit.path,
-	youtube: siYoutube.path,
-	github: siGithub.path,
-	apple: APPLE_ICON_PATH,
-	linkedin: LINKEDIN_ICON_PATH,
-	claude: siClaudecode.path,
-	cursor: siCursor.path,
-	deepseek: siDeepseek.path,
-	gemini: siGooglegemini.path,
-	perplexity: siPerplexity.path,
+	x: [siX.path],
+	bluesky: [siBluesky.path],
+	reddit: [siReddit.path],
+	youtube: [siYoutube.path],
+	github: [siGithub.path],
+	apple: [APPLE_ICON_PATH],
+	linkedin: [LINKEDIN_ICON_PATH],
+	...AI_PROVIDER_ICON_PATHS,
 } as const
 
 export type Brand = keyof typeof BRAND_ICON_PATHS
@@ -46,7 +32,9 @@ export const BRANDS = Object.keys(BRAND_ICON_PATHS) as Brand[]
 export function BrandIcon({ brand, className }: { brand: Brand; className?: string }) {
 	return (
 		<svg viewBox="0 0 24 24" className={className} fill="currentColor" role="presentation">
-			<path d={BRAND_ICON_PATHS[brand]} />
+			{BRAND_ICON_PATHS[brand].map((path) => (
+				<path key={path} d={path} fillRule="evenodd" />
+			))}
 		</svg>
 	)
 }

@@ -21,8 +21,10 @@ import checkAgreementTemplate from "./check-agreement.md" with { type: "text" }
 import moderateUserTextTemplate from "./moderate-user-text.md" with { type: "text" }
 import outlinePodcastEpisodeTemplate from "./outline-podcast-episode.md" with { type: "text" }
 import podcastEpisodeHostsTemplate from "./podcast-episode-hosts.md" with { type: "text" }
+import scorePersonalSourceResourceTemplate from "./score-personal-source-resource.md" with { type: "text" }
 import searchTopicTemplate from "./search-topic.md" with { type: "text" }
 import suggestSourcesTemplate from "./suggest-sources.md" with { type: "text" }
+import summarizePersonalSourcesContextTemplate from "./summarize-personal-sources-context.md" with { type: "text" }
 import summarizeResourceTemplate from "./summarize-resource.md" with { type: "text" }
 import summarizeTopicScanTemplate from "./summarize-topic-scan.md" with { type: "text" }
 import { stripFrontmatter } from "./write.ts"
@@ -30,6 +32,8 @@ import writePodcastEpisodeSegmentTemplate from "./write-podcast-episode-segment.
 
 // the prompts this app serves, and their fallback templates for when the registry can't serve them
 export const FALLBACK_PROMPT_TEMPLATES = {
+	"score-personal-source-resource": scorePersonalSourceResourceTemplate,
+	"summarize-personal-sources-context": summarizePersonalSourcesContextTemplate,
 	"summarize-resource": summarizeResourceTemplate,
 	"summarize-topic-scan": summarizeTopicScanTemplate,
 	"search-topic": searchTopicTemplate,

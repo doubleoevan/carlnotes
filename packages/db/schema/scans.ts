@@ -1,8 +1,10 @@
 // the scan pipeline's tables: scans, resources, findings, and the per-user finding markers
+import type { PersonalSourceScoreBonus } from "@carlnotes/contracts/sourceScoring"
 import type { StoredScanSourceResults } from "@carlnotes/contracts/topics"
 import { sql } from "drizzle-orm"
 import {
 	boolean,
+	check,
 	index,
 	integer,
 	jsonb,
@@ -162,6 +164,11 @@ export const findings = pgTable(
 		sourceVisibility: sourceVisibility("source_visibility").notNull().default("public"),
 		// whether a custom Source found this finding
 		isFromCustomSource: boolean("is_from_custom_source").notNull().default(false),
+		// full credit for deliberate sends, half for newsletter or automatic contributions
+		personalSourceScoreBonus: real("personal_source_score_bonus")
+			.$type<PersonalSourceScoreBonus>()
+			.notNull()
+			.default(0),
 		// the owner's optional rating
 		rating: rating("rating"),
 		// who cast the current thumb and the role held then. nothing reads these for scoring
@@ -178,6 +185,10 @@ export const findings = pgTable(
 	(table) => [
 		// one finding per topic and resource. re-scoring updates the existing row instead of adding another
 		unique("findings_topic_resource_unique").on(table.topicId, table.resourceId),
+		check(
+			"findings_personal_source_score_bonus",
+			sql`${table.personalSourceScoreBonus} in (0::real, 0.05::real, 0.1::real)`,
+		),
 		// a topic's findings, most relevant first, for the feed's ranked read and the topic page.
 		// nulls first is what a plain descending order means, so an index scan returns both reads' rows already in order
 		index("findings_topic_relevance_idx").on(table.topicId, table.relevanceScore.desc().nullsFirst()),

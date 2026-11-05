@@ -1,20 +1,26 @@
 import { DAILY_TOPICS_USED_LABEL } from "@carlnotes/contracts/scanFailure"
 import type { TopicResponse } from "@carlnotes/contracts/topics"
+import { MAX_TOPIC_SOURCES } from "@carlnotes/contracts/topics"
 import { toAgeLabel, toDollarLabel, toDurationLabel, toScheduleLabel } from "@carlnotes/core/lib/labels"
 import { usePurchaseOffers } from "@carlnotes/core/stores/purchaseOffersStore"
+import type { ReactNode } from "react"
 import { View } from "react-native"
 import { PlansLink } from "@/components/account/PlansLink"
 import { Text } from "@/components/primitives/text"
 import { CollapsibleSection } from "./CollapsibleSection"
-import { InfoSection, TopicVisibility } from "./TopicInfo"
+import { TopicVisibility } from "./TopicInfo"
+import { TopicInfoSection as InfoSection } from "./TopicInfoSection"
+import { TopicPersonalSourcesSection } from "./TopicPersonalSourcesSection"
 import { TopicSources } from "./TopicSources"
 
 /**
  * Matches the web's Artisanal Blend card using the delivered settings.
  */
-export function TopicSettingsCard({ topic }: { topic: TopicResponse }) {
+export function TopicSettingsCard({ topic, personalSources }: { topic: TopicResponse; personalSources?: ReactNode }) {
 	// the paused frequency's plans link where the store sells the user a plan
 	const { canPurchase } = usePurchaseOffers()
+	const hasFooter = topic.monthCostDollars !== null || Boolean(topic.podcast)
+	const personalSourcesClassName = hasFooter ? undefined : "border-b border-dashed border-separator-strong"
 	return (
 		<CollapsibleSection title="Artisanal Blend">
 			<View className="rounded-lg border border-separator bg-card p-5 shadow-raised">
@@ -45,25 +51,31 @@ export function TopicSettingsCard({ topic }: { topic: TopicResponse }) {
 					</InfoSection>
 				</View>
 				<View className="border-t border-dashed border-separator-strong">
-					<InfoSection label="Sources">
+					<InfoSection label={`Sources · ${topic.sources.length} of ${MAX_TOPIC_SOURCES}`}>
 						<TopicSources sources={topic.sources} />
 					</InfoSection>
 				</View>
-				{topic.monthCostDollars !== null || topic.podcast ? (
-					<View className="flex-row justify-between gap-3 border-t border-dashed border-separator-strong">
-						{topic.monthCostDollars !== null ? (
-							<InfoSection label="Cost this month">
-								<Text className="text-sm">{toDollarLabel(topic.monthCostDollars)}</Text>
-							</InfoSection>
-						) : null}
-						{topic.podcast ? (
-							<InfoSection label="Podcast">
-								<Text className="text-right text-sm">{topic.podcast.isEnabled ? "On" : "Off"}</Text>
-							</InfoSection>
-						) : null}
-					</View>
-				) : null}
+				{personalSources ?? <TopicPersonalSourcesSection topic={topic} className={personalSourcesClassName} />}
+				{hasFooter && <TopicSettingsFooter topic={topic} />}
 			</View>
 		</CollapsibleSection>
+	)
+}
+
+// keep the existing cost and podcast footer independent of Personal sources visibility
+function TopicSettingsFooter({ topic }: { topic: TopicResponse }) {
+	return (
+		<View className="flex-row justify-between gap-3 border-t border-dashed border-separator-strong">
+			{topic.monthCostDollars !== null ? (
+				<InfoSection label="Cost this month">
+					<Text className="text-sm">{toDollarLabel(topic.monthCostDollars)}</Text>
+				</InfoSection>
+			) : null}
+			{topic.podcast ? (
+				<InfoSection label="Podcast">
+					<Text className="text-right text-sm">{topic.podcast.isEnabled ? "On" : "Off"}</Text>
+				</InfoSection>
+			) : null}
+		</View>
 	)
 }

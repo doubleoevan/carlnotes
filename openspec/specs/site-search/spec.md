@@ -1,7 +1,7 @@
 # site-search Specification
 
 ## Purpose
-TBD - created by archiving change add-unified-search-and-mcp-cards. Update Purpose after archive.
+Define one permission-aware search over Topics, Findings, and Podcast Episodes for the site and MCP tools, with consistent ranking, pagination, and result navigation.
 ## Requirements
 ### Requirement: One search function returns every kind of result
 

@@ -32,6 +32,7 @@ export function ScheduleFields({
 	onScheduledTimeChange,
 	scheduledDayOfWeek,
 	onScheduledDayOfWeekChange,
+	shouldShowQuota = true,
 }: {
 	frequency: Frequency
 	onFrequencyChange: (frequency: Frequency) => void
@@ -42,6 +43,7 @@ export function ScheduleFields({
 	onScheduledTimeChange: (scheduledTime: string) => void
 	scheduledDayOfWeek: DayOfWeek
 	onScheduledDayOfWeekChange: (dayOfWeek: DayOfWeek) => void
+	shouldShowQuota?: boolean
 }) {
 	// the navigate that opens the plans page on a pick of a plan-limited frequency, the id that ties the label to the
 	// select, and whether the frequency list is open
@@ -67,7 +69,9 @@ export function ScheduleFields({
 			{/* how many daily slots the plan has left, so the user sees their limit before they select a frequency */}
 			<div className="flex items-baseline gap-2">
 				<FieldLabel htmlFor={frequencySelectId}>Frequency</FieldLabel>
-				<DailyTopicQuotaLink dailyTopicsRemaining={dailyTopicsRemaining} dailyTopicLimit={dailyTopicLimit} />
+				{shouldShowQuota && (
+					<DailyTopicQuotaLink dailyTopicsRemaining={dailyTopicsRemaining} dailyTopicLimit={dailyTopicLimit} />
+				)}
 			</div>
 			<div className="flex flex-wrap gap-2">
 				<Select
