@@ -1,7 +1,7 @@
 # apps/mobile
 
 `components/account/AiAgentAccountSection.tsx` renders the shared connected-app and API key controls.
-`components/topic/TopicPersonalSources.tsx` renders the same Personal sources on the page and editor through `personalSourcesElements.tsx`.
+`components/topic/TopicPersonalSourcesSection.tsx` renders saved items in Topic info and Artisanal Blend through `personalSourcesElements.tsx`. Edit Topic has no Personal sources setup section. `TopicPersonalSources.tsx` remains a standalone Nightshift preview.
 Native adapters use Nightshift controls, selectable text, system confirmations, and `clipboard.ts`.
 Conversation imports stay on the web; the matching position explains that limitation. Both phones read imported
 entries through the same paged composition. The Personal sources stories use the browser's fixtures and name their references.
@@ -270,7 +270,7 @@ expandable row. Loaded fixture states stay local to the stories; production read
 
 `TopicInfoSection.tsx` shares labeled information-section composition through core, with thin same-name platform adapters and paired stories. Topic and Finding details reuse it without importing each other.
 
-The Personal sources editor has no forwarding setup. Only empty Personal sources content renders the shared one-line mailbox hint and Copy. Forwarding instructions remain in docs.
+Edit Topic has no Personal sources setup section. Only empty Personal sources content renders the shared one-line mailbox hint and Copy. Forwarding instructions remain in docs.
 
 Personal sources conversation links say “Open shared conversation in {platform}”, with the destination platform mark before the launch icon. Nightshift’s `Topic/TopicPersonalSourcesSection` includes `ConversationPlatforms` and individual platform examples. A missing conversation URL renders no link; an unrecognized destination uses the generic chat mark.
 

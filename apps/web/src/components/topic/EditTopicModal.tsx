@@ -21,7 +21,6 @@ import { hasDailySlotLeft, PromptSourceUrls, ScheduleFields, SourceLimitNote } f
 import { MISSING_FIELD_NOTES, saveTopic, showSaveError } from "./saveTopic"
 import { TagPicker } from "./TagPicker"
 import { stageFiles, TopicAttachmentEditor } from "./TopicAttachmentEditor"
-import { TopicPersonalSources } from "./TopicPersonalSources"
 import { TopicPromptComposer } from "./TopicPromptComposer"
 import { TopicSourceEditor } from "./TopicSourceEditor"
 import { TopicTeamSelect, useTopicTeamChoice } from "./TopicTeamSelect"
@@ -240,7 +239,6 @@ export function EditTopicModal({
 						<SourceLimitNote />
 					</div>
 					<TopicSourceEditor fields={fields} />
-					{topic && <TopicPersonalSources topic={topic} />}
 				</div>
 
 				{/* attachments: kept attachments, staged uploads and urls, and the add attachment buttons */}

@@ -4,7 +4,7 @@
 
 
 `components/account/AiAgentAccountSection.tsx` adapts shared connection and key controls.
-`components/topic/TopicPersonalSources.tsx` mounts the shared Personal sources on the Topic page and editor. `personalSourcesElements.tsx` supplies
+`components/topic/TopicPersonalSourcesSection.tsx` shows saved items in Topic info and Artisanal Blend. Edit Topic has no Personal sources setup section. `TopicPersonalSources.tsx` remains a standalone Nightshift preview. `personalSourcesElements.tsx` supplies
 the production adapters and their stories. `PersonalSourcesImportButton` opens `PersonalSourcesImportDialog`; `hooks/usePersonalSourcesImport.ts`
 owns worker cancellation, buffer release, and stable selected-batch retries. `lib/personalSourcesImportSelection.ts` builds
 uploads from selected conversations only. The import tests cover cancellation and unselected-text exclusion.

@@ -128,11 +128,12 @@ Both surfaces SHALL render the same core component after fetched Sources: one co
 
 ### Requirement: Email requires no forwarding setup
 
-Topic editors and account controls SHALL NOT show forwarding setup or receiving addresses. AI Agent connection and import controls SHALL remain available. The only in-app receiving-address display SHALL be one hint line with Copy in empty Personal sources content. Topics without live items SHALL retain their existing hidden-section behavior. Detailed instructions SHALL remain in the docs.
+Topic editors SHALL NOT show a Personal sources setup section, source management, connection notices, or import controls. Account controls SHALL NOT show forwarding setup or receiving addresses. AI Agent connections SHALL remain managed through account settings. The only in-app receiving-address display SHALL be one hint line with Copy in empty Personal sources content. Topics without live items SHALL retain their existing hidden-section behavior. Detailed instructions SHALL remain in the docs.
 
 #### Scenario: The sender opens the Topic editor
 - **WHEN** the sender edits a Topic
-- **THEN** no forwarding setup block, address, Topic hint example, or email setup action appears
+- **THEN** no Personal sources setup section, source deletion, connection notice, import action, forwarding address, or Topic hint example appears
+- **AND** saved Personal sources items remain available in Topic info and Artisanal Blend
 
 #### Scenario: Open Personal sources content becomes empty
 - **WHEN** the current item list becomes empty while its content is mounted
@@ -160,7 +161,7 @@ Every new Personal sources feature component SHALL keep its composition in `pack
 
 ### Requirement: Personal sources controls preserve sender privacy
 
-Every private control and response SHALL be scoped to the authenticated sender before decryption, including counts, summary, titles, details, and outcomes. An editor can use the AI Agent connection and import controls in the Topic editor before any item arrives; a former editor with Topic read access can inspect their retained items in the shared Personal sources section. Unmounting or switching accounts SHALL release private cached data and prevent stale requests from repopulating another view.
+Every private control and response SHALL be scoped to the authenticated sender before decryption, including counts, summary, titles, details, and outcomes. Sending a chat or email creates its receiving Source without setup in the Topic editor. A former editor with Topic read access can inspect their retained items in the shared Personal sources section. Unmounting or switching accounts SHALL release private cached data and prevent stale requests from repopulating another view.
 
 #### Scenario: Two editors read one Topic
 - **WHEN** each editor opens Personal sources
