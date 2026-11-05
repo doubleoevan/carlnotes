@@ -7,7 +7,7 @@ sidebar:
 
 Got an email that belongs in one of your Topics? Send or forward it to **carl@updates.carlnotes.com**. Use the verified email on your Plus or Premium account.
 
-**Try it.** Send an article about terrarium humidity and add a sentence about what you want to learn. Carl replies in the same thread with matching Topics. Nothing goes into your Topics until you choose.
+**Try it.** Send an article and add a sentence about what you want to learn. Carl replies in the same thread with matching Topics. Nothing goes into your Topics until you choose.
 
 ![Carl asks which Topics to use, with numbered suggestions and instructions for replying.](../../../assets/screenshots/email-carl-clarification.png)
 
