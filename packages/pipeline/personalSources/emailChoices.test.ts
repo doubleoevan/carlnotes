@@ -8,6 +8,10 @@ import * as provider from "@carlnotes/server/resendInbound"
 import { processPersonalSourcesEmail } from "./email"
 import { restorePersonalSourcesEmail, setReply, stubPersonalSourcesEmail } from "./emailTestFixtures"
 import * as routing from "./emailTopic"
+import * as matching from "./matchTopics"
+
+// exercise the real routing decision through the receipt activity
+const resolveEmailTopics = routing.resolvePersonalSourcesEmailTopics
 
 // Each test receives the account installed in its provider and database stubs.
 let destination: receipts.AccountEmailDestination
@@ -61,6 +65,53 @@ test("clarification saves numbered choices without filing the original", async (
 		topics: choiceTopics,
 	})
 })
+
+test.each(["Coffee notes", "topic:", "Fwd: Coffee notes"])(
+	"strong matches without a subject Topic wait for approval: %s",
+	async (subject) => {
+		// keep a body hint as ranking input, never as approval
+		destination.receipt.id = choiceRequestId
+		spyOn(provider, "fetchReceivedPersonalSourcesEmail").mockResolvedValue({
+			status: "received",
+			email: personalSourcesEmailFixture({
+				subject,
+				text: "topic: Coffee\nRoasting notes https://example.org/coffee",
+				message_id: "<original@example.com>",
+			}),
+		})
+		spyOn(routing, "resolvePersonalSourcesEmailTopics").mockImplementation(resolveEmailTopics)
+		spyOn(matching, "matchPersonalSourcesTopics").mockResolvedValue({
+			status: "matched",
+			totalCount: 1,
+			topics: [
+				{
+					id: "topic",
+					name: "Coffee",
+					url: "https://carlnotes.com/topics/topic",
+					prompt: "Roasting",
+					group: "editable",
+					relevance: 0.99,
+				},
+			],
+		})
+
+		// retain routing references and send the choices in the original thread
+		spyOn(receipts, "savePersonalSourcesEmailChoices").mockResolvedValue()
+		spyOn(receipts, "loadPersonalSourcesEmailChoices").mockResolvedValue({
+			id: choiceRequestId,
+			emailId: originalEmailId,
+			messageId: "<original@example.com>",
+			topics: choiceTopics,
+		})
+		await processPersonalSourcesEmail(choiceRequestId)
+		expect(spyOn(receiving, "receivePersonalSourcesSend")).not.toHaveBeenCalled()
+		expect(spyOn(replies, "sendPersonalSourcesEmailReply").mock.calls[0]?.[0].reply).toMatchObject({
+			kind: "needs_topic",
+			topics: choiceTopics,
+			inReplyTo: "<original@example.com>",
+		})
+	},
+)
 
 test.each([false, true])(
 	"number replies use the sender-owned original, or ignore foreign references: %s",

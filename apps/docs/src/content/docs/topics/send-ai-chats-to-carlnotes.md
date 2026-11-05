@@ -5,9 +5,7 @@ sidebar:
   order: 6
 ---
 
-When a chat gets you somewhere, ask your connected AI **“Send this chat to Carl.”** Your AI puts together a short summary of what you worked on, what you decided, what’s still open, and the links worth keeping. You can do this on any CarlNotes plan.
-
-If this is your first send, [connect CarlNotes to your AI app](/docs/account/add-to-ai/#installing).
+[Add the CarlNotes MCP](/docs/account/add-to-ai/#installing) and ask your connected AI **“Send this chat to Carl.”** Your AI puts together a short summary of what you worked on, what you decided, what’s still open, and the links worth keeping. You can do this on any CarlNotes plan.
 
 ## Pick your Topics
 

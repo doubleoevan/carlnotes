@@ -39,4 +39,4 @@ from `apps/docs/dist`, so it runs no process of its own, and nothing imports it.
 - Dev: `bun run dev:docs`. Build: `bun run build:docs`, which writes `apps/docs/dist/`. Tests: none of its own; the
   build is the check.
 
-`topics/email-carl.md` explains direct email to the digest mailbox, clear-match filing, numbered clarification, written or fuzzy Topic names, same-thread confirmation, privacy, Plus/Premium eligibility, and the shared daily ceiling. The old email-forwarding URL redirects here. Both email and MCP guides describe what Carl never reads.
+`topics/email-carl.md` explains direct email to the digest mailbox, subject-directed filing, numbered approval for mail without a subject Topic, written or fuzzy Topic names, same-thread confirmation, privacy, Plus/Premium eligibility, and the shared daily ceiling. The old email-forwarding URL redirects here. Both email and MCP guides state that chats and emails are encrypted and visible only to the sender.

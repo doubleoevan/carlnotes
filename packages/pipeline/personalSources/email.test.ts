@@ -15,11 +15,16 @@ import * as work from "./work"
 // Each test receives the account installed in its provider and database stubs.
 let destination: receipts.AccountEmailDestination
 beforeEach(() => {
+	// direct filing fixtures name their Topic in the subject
 	destination = stubPersonalSourcesEmail()
+	spyOn(provider, "fetchReceivedPersonalSourcesEmail").mockResolvedValue({
+		status: "received",
+		email: personalSourcesEmailFixture({ subject: "topic: Coffee" }),
+	})
 })
 afterEach(restorePersonalSourcesEmail)
 
-test("a clear request saves once to every matching Topic and sends confirmation", async () => {
+test("a subject-directed request saves once to every matching Topic and sends confirmation", async () => {
 	expect(await processPersonalSourcesEmail("receipt")).toEqual({ retryAfterMs: null })
 	expect(spyOn(receiving, "receivePersonalSourcesSend")).toHaveBeenCalledTimes(1)
 	expect(spyOn(receiving, "receivePersonalSourcesSend").mock.calls[0]?.[0]).toMatchObject({
@@ -260,7 +265,7 @@ for (const original of ["digest", "filing", "clarification", "other-carl-email"]
 		spyOn(provider, "fetchReceivedPersonalSourcesEmail").mockResolvedValue({
 			status: "received",
 			email: personalSourcesEmailFixture({
-				subject: "Re: Carl's email",
+				subject: "Re: topic: Coffee",
 				text: "Also consider https://example.org/new\nOn Monday, Carl wrote:\n> https://example.org/old",
 				headers: { References: `<${original}@resend.dev>` },
 			}),
@@ -294,7 +299,7 @@ test("a full daily budget sends a quota reply before matching or storing choices
 test("a new email with text alone still reaches matching", async () => {
 	spyOn(provider, "fetchReceivedPersonalSourcesEmail").mockResolvedValue({
 		status: "received",
-		email: personalSourcesEmailFixture({ subject: "Fwd: Coffee notes", text: "topic: Coffee\nTry a finer grind." }),
+		email: personalSourcesEmailFixture({ subject: "topic: Coffee", text: "Try a finer grind." }),
 	})
 	await processPersonalSourcesEmail("receipt")
 	expect(spyOn(receiving, "receivePersonalSourcesSend")).toHaveBeenCalledTimes(1)

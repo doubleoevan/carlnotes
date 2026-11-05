@@ -34,7 +34,7 @@ test.each([
 	expect(readEmailTopicHints(String(subject), String(body))).toEqual(hints)
 })
 
-test("hinted and unhinted mail always use the shared matcher and keep every clear editable match", async () => {
+test("only a nonempty subject hint accepts clear matches without approval", async () => {
 	const topic = {
 		id: "coffee",
 		name: "Coffee",
@@ -48,9 +48,13 @@ test("hinted and unhinted mail always use the shared matcher and keep every clea
 		totalCount: 2,
 		topics: [topic, { ...topic, id: "other" }],
 	})
-	for (const subject of ["Newsletter", "topic: COFEE", "topic:"]) {
+	for (const subject of ["Newsletter", "topic: COFEE", "Fwd: RE: ToPiC: Coffee", "topic:"]) {
 		expect(await resolvePersonalSourcesEmailTopics("owner", subject, payload)).toMatchObject({
-			topicIds: ["coffee", "other"],
+			topicIds: subject === "Newsletter" || subject === "topic:" ? [] : ["coffee", "other"],
+			suggestions: [
+				{ id: "coffee", name: "Coffee", url: topic.url },
+				{ id: "other", name: "Coffee", url: topic.url },
+			],
 		})
 		expect(matcher.mock.lastCall?.[0]).toMatchObject({
 			userId: "owner",
@@ -89,7 +93,7 @@ test("moderate matches become choices without being saved automatically", async 
 			},
 		],
 	})
-	expect(await resolvePersonalSourcesEmailTopics("owner", "Notes", payload)).toEqual({
+	expect(await resolvePersonalSourcesEmailTopics("owner", "topic: Coffee", payload)).toEqual({
 		topicIds: [],
 		suggestions: [{ id: "coffee", name: "Coffee", url: "https://carlnotes.com/topics/coffee" }],
 	})

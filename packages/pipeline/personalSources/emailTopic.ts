@@ -25,7 +25,7 @@ export function readEmailTopicHints(subject: string, body: string): string[] {
 }
 
 /**
- * Resolves every clear editable destination without storing routing content or creating a Topic.
+ * Resolves subject-directed destinations or suggests Topics for approval.
  */
 export async function resolvePersonalSourcesEmailTopics(
 	userId: string,
@@ -45,8 +45,13 @@ export async function resolvePersonalSourcesEmailTopics(
 	if (matches.status === "unavailable") {
 		throw new Error("Email Topic matching is temporarily unavailable")
 	}
+
+	// require a subject hint before accepting matches without a reply
+	const hasSubjectTopic = readEmailTopicHints(subject, "").length > 0
 	return {
-		topicIds: matches.topics.filter((topic) => topic.relevance >= EMAIL_TOPIC_RELEVANCE_FLOOR).map((topic) => topic.id),
+		topicIds: hasSubjectTopic
+			? matches.topics.filter((topic) => topic.relevance >= EMAIL_TOPIC_RELEVANCE_FLOOR).map((topic) => topic.id)
+			: [],
 		suggestions: matches.topics.slice(0, 5).map(({ id, name, url }) => ({ id, name, url })),
 	}
 }

@@ -28,11 +28,11 @@ Each environment SHALL accept mail only at its configured `RESEND_FROM_EMAIL` ma
 
 ### Requirement: File clear matches in one delivery
 
-Plus and Premium SHALL be able to send or manually forward mail from their account address. Carl SHALL match email content against editable Topics using the same matcher as AI sends. An optional `topic:` line in the subject or first body line SHALL boost matching names. Every clear match SHALL receive one sender-owned item in one transaction. The entire delivery SHALL use one of the shared 200 daily sends.
+Plus and Premium SHALL be able to email Carl from their account address. The shared matcher SHALL rank editable Topics using content and optional `topic:` hints. Only a nonempty subject hint SHALL allow direct filing of clear matches. All other requests SHALL wait for a selection reply. Accepted destinations SHALL receive one sender-owned item each in one transaction, using one of the shared 200 daily sends.
 
 #### Scenario: Several Topics match
 
-- **WHEN** mail clearly matches several editable Topics, including a Topic with ten fetched Sources
+- **WHEN** mail with a nonempty `topic:` subject hint clearly matches several editable Topics, including a Topic with ten fetched Sources
 - **THEN** all receive an item and one daily charge is recorded
 - **AND** Carl replies “Carl sent your message to these topics:” followed by a numbered list of links to those Topics
 
@@ -46,7 +46,14 @@ Plus and Premium SHALL be able to send or manually forward mail from their accou
 
 ### Requirement: Clarify using the same email thread
 
-If no Topic clearly matches, Carl SHALL ask the sender which existing Topics to use. He SHALL list up to five relevant editable Topics, numbered in stable order, or ask for Topic names when there are no suggestions. The sender MAY reply with numbers, names, or both. Only newly written reply text SHALL choose destinations.
+If the subject has no nonempty `topic:` hint, or no Topic clearly matches, Carl SHALL ask the sender which existing Topics to use. He SHALL list up to five relevant editable Topics, numbered in stable order, or ask for Topic names when there are no suggestions. The sender MAY reply with numbers, names, or both. Only newly written reply text SHALL choose destinations.
+
+#### Scenario: Strong matches without a subject Topic wait for approval
+
+- **WHEN** a new email has no nonempty `topic:` hint in the subject, including when its first body line names a Topic
+- **THEN** Carl sends numbered suggestions in the same thread even when matches are strong
+- **AND** no Personal Source Entry is created, no context work is scheduled, and no daily send is charged before the sender chooses
+- **AND** replying with numbers or existing Topic names files the original once through the existing selection flow
 
 #### Scenario: A reader replies with numbers and a name
 
