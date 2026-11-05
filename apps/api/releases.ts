@@ -160,8 +160,10 @@ async function serveReleaseIndex(): Promise<string> {
 		canonicalUrl: `${appUrl()}/releases`,
 		jsonLd: "",
 		bodyHtml: `
-			<h1>Releases</h1>
-			${releaseCards}`,
+			<div class="release-notes">
+				<h1>Releases</h1>
+				${releaseCards}
+			</div>`,
 	})
 }
 
@@ -182,7 +184,7 @@ async function serveRelease(tag: string): Promise<string | null> {
 		canonicalUrl: `${appUrl()}${toReleasePath(release.tag)}`,
 		jsonLd: "",
 		bodyHtml: `
-			<article>
+			<article class="release-notes">
 				<h1>${Bun.escapeHTML(release.name)}</h1>
 				<div class="post-date">${releasedOn}</div>
 				${toPageHtml(release.body)}

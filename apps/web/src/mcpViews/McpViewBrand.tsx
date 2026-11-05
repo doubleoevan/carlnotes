@@ -14,7 +14,7 @@ export function McpViewBrand({ className }: { className?: string }) {
 			aria-label="Open CarlNotes in a new tab"
 			className={className}
 		>
-			<span className="text-muted-foreground inline-flex items-center gap-2 text-sm font-semibold hover:underline">
+			<span className="text-muted-foreground inline-flex items-center gap-2 font-display text-sm font-normal hover:underline">
 				<CoffeeMug className="text-primary size-5 shrink-0" />
 				CarlNotes
 			</span>

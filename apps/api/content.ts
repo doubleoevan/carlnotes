@@ -2,6 +2,7 @@
 import { readdir } from "node:fs/promises"
 import { toPageTitle } from "@carlnotes/contracts/seo"
 import { emailColors } from "@carlnotes/nightshift/email"
+import { FONT_STYLESHEET_URL, fontFamilies } from "@carlnotes/nightshift/typography"
 import { appUrl } from "@carlnotes/server/appUrl"
 import { Hono } from "hono"
 import Markdown from "markdown-to-jsx"
@@ -93,6 +94,7 @@ const PAGE_STYLE = `${API_PAGE_BASE_STYLE}
 	/* the logo in the header, then the type a page and an index card set */
 	header a { text-decoration: none; font-weight: 700; font-size: 18px; }
 	h1 { font-size: 28px; line-height: 1.25; }
+	.release-notes :is(h1, h2, h3, h4, h5, h6) { font-family: ${fontFamilies.display.stack}; font-weight: 400; }
 	.post-date { color: ${emailColors.mutedForeground}; font-size: 14px; }
 	.post-card { margin-top: 1.5rem; }
 `
@@ -126,6 +128,7 @@ export function toContentHtml({
 		`<link rel="canonical" href="${canonicalUrl}">`,
 		'<link rel="alternate" type="application/rss+xml" title="CarlNotes" href="/feed.xml">',
 		jsonLd,
+		`<link rel="stylesheet" href="${Bun.escapeHTML(FONT_STYLESHEET_URL)}">`,
 		`<style>${PAGE_STYLE}</style>`,
 		"</head>",
 		"<body>",
