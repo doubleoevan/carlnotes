@@ -1,5 +1,6 @@
 // the mcp server. one handler serves /mcp and the topic-bound /mcp/t/:topicId with the same tools
 
+import { SITE_URL } from "@carlnotes/contracts/site"
 import { trackBotEvent } from "@carlnotes/server/analytics"
 import {
 	type CallToolResult,
@@ -38,7 +39,13 @@ export const mcpClientsRoute = new Hono<AppEnv>().get("/mcp/clients/:clientId", 
 // serve one request with the tools registered for the tool caller the rate limit resolved
 async function handleMcpRequest(context: Context<AppEnv>, routeTopicId: string | null): Promise<Response> {
 	const toolCaller = context.get("toolCaller") ?? (await resolveToolCaller(context.req.raw))
-	const mcpServer = new McpServer({ name: SERVER_NAME, version: SERVER_VERSION })
+	const mcpServer = new McpServer({
+		name: SERVER_NAME,
+		title: "CarlNotes",
+		version: SERVER_VERSION,
+		websiteUrl: SITE_URL,
+		icons: [{ src: `${SITE_URL}/carl-avatar.png`, mimeType: "image/png", sizes: ["512x512"] }],
+	})
 	trackToolCalls(mcpServer, toolCaller)
 	registerTools({ mcpServer, toolCaller, routeTopicId, clientAddress: resolveClientAddress(context.req.raw) })
 
