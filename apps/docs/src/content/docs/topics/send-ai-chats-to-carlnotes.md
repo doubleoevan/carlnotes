@@ -21,4 +21,4 @@ Already know the destination? Try **“Send this chat to Carl for my Moss terrar
 
 After your chat is added, open **Personal sources** on the Topic to read the summary and links you sent. If your AI supplied a link back to the conversation, the source label opens it. You can delete the item here.
 
-Chats and emails are encrypted. Only you can see them.
+Open **Personal sources** on a topic to see your chat sources. Chats and emails are encrypted. Only you can see them.
