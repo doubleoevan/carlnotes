@@ -92,7 +92,7 @@ const PAGE_STYLE = `${API_PAGE_BASE_STYLE}
 	/* an image wider than the column shrinks to the column's width */
 	img { max-width: 100%; height: auto; }
 	/* the logo in the header, then the type a page and an index card set */
-	header a { text-decoration: none; font-weight: 700; font-size: 18px; }
+	header a { text-decoration: none; font-family: ${fontFamilies.display.stack}; font-weight: 400; font-size: 18px; }
 	h1 { font-size: 28px; line-height: 1.25; }
 	.release-notes :is(h1, h2, h3, h4, h5, h6) { font-family: ${fontFamilies.display.stack}; font-weight: 400; }
 	.post-date { color: ${emailColors.mutedForeground}; font-size: 14px; }
