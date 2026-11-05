@@ -49,7 +49,10 @@ export async function scanCount(): Promise<number> {
 
 /** Seeds the owner, another user, a weekly topic with one succeeded scan, and a second topic holding one source. */
 export async function seed(): Promise<string> {
-	await db.insert(users).values([toUserRow(ownerId), toUserRow(otherUserId)])
+	// give the owner the grandfathered allowance for two seeded topics and one draft
+	await db.insert(users).values([{ ...toUserRow(ownerId), freeTopicLimit: 3 }, toUserRow(otherUserId)])
+
+	// seed the topics and the first completed scan
 	await db.insert(topics).values([
 		{
 			id: topicId,
