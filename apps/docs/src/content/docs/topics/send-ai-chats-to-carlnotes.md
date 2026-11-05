@@ -5,7 +5,7 @@ sidebar:
   order: 6
 ---
 
-[Add the CarlNotes MCP](/docs/account/add-to-ai/#installing) and ask your connected AI **“Send this chat to Carl.”** It provides what you’re working on as a topic source. You can do this on any CarlNotes plan.
+[Add the CarlNotes MCP](/docs/account/add-to-ai/#installing) and ask your connected AI **“Send this chat to Carl.”** It provides what you’re working on as a topic source.
 
 ## Pick your Topics
 
@@ -19,6 +19,6 @@ Already know the destination? Try **“Send this chat to Carl for my Moss terrar
 
 ## Find it again
 
-Open **Personal sources** on the Topic to read the summary and links you sent. If your AI supplied a link back to the conversation, the source label opens it. You can delete the item here.
+After your chat is added, open **Personal sources** on the Topic to read the summary and links you sent. If your AI supplied a link back to the conversation, the source label opens it. You can delete the item here.
 
 Chats and emails are encrypted. Only you can see them.
