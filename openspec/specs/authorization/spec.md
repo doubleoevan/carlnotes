@@ -319,14 +319,17 @@ topic page SHALL read the same result to show the free plan's hint and upgrade l
 
 ### Requirement: Personal sources capabilities use the shared authority and entitlement gate
 
-Sending and importing SHALL use the central Topic edit gate. Reading private material SHALL require its sender identity and appropriate Topic read access. Deletion SHALL permit senders to clean up their own data. For non-admins, email SHALL require the sender's Plus or Premium capability on each request; AI Agent API keys SHALL retain their Premium gate. Admins SHALL bypass those plan gates while remaining subject to the shared 200-delivery ceiling and sender-only privacy.
+Sending and importing SHALL use the central Topic edit gate. Reading private material SHALL require its sender identity
+and appropriate Topic read access. Deletion SHALL permit senders to clean up their own data. For non-admins, email SHALL
+require the sender's Plus or Premium capability on each request; AI Agent API keys SHALL retain their Premium gate.
+Admins SHALL bypass those plan gates while remaining subject to the shared 200-delivery ceiling and sender-only privacy.
 
 #### Scenario: An owning-Team editor sends
 - **WHEN** the user has ordinary Topic edit authority through the owning Team
 - **THEN** their send may be accepted and its private content remains theirs alone
 
 #### Scenario: A worker processes mail after downgrade or edit revocation
-- **WHEN** the sender loses required entitlement or Topic edit permission after webhook receipt
+- **WHEN** the sender loses required entitlement or Topic edit permission after webhook confirmation
 - **THEN** the worker stores no new entry and does not report successful filing
 
 #### Scenario: Plus includes forwarding

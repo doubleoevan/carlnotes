@@ -122,13 +122,14 @@ export async function checkPersonalSourcesLinkQueue(): Promise<void> {
 	)
 
 	// deletion during a claim removes both candidate and provenance without reviving delivery
-	const receipt = personalSourcesSmokeDelivery(topic, "delete-claim", "queue-a")
-	receipt.payload.links = ["https://example.com/deletion"]
-	receipt.payload.senderKind = "personal_forward"
-	const accepted = await receivePersonalSourceEntry(receipt)
+	const confirmation = personalSourcesSmokeDelivery(topic, "delete-claim", "queue-a")
+	confirmation.payload.links = ["https://example.com/deletion"]
+	confirmation.payload.senderKind = "personal_forward"
+	const accepted = await receivePersonalSourceEntry(confirmation)
 	if (accepted.status !== "accepted") {
 		throw new Error("Deletion queue fixture was refused")
 	}
+	// read the Source that holds the entry
 	const [entry] = await db
 		.select({ sourceId: personalSourceEntries.sourceId })
 		.from(personalSourceEntries)
@@ -136,6 +137,7 @@ export async function checkPersonalSourcesLinkQueue(): Promise<void> {
 	if (!entry) {
 		throw new Error("Deletion queue fixture missing")
 	}
+	// settle the context and remove the administrator role
 	await settleQueueContext(topic.topicId)
 	await db.update(users).set({ role: "user" }).where(eq(users.id, administrator.userId))
 	checkPersonalSources(
@@ -150,19 +152,24 @@ export async function checkPersonalSourcesLinkQueue(): Promise<void> {
 			?.personalSourceScoreBonus === 0.1,
 	)
 	await deletePersonalSourceEntry({ ...topic, entryId: accepted.entryId })
-	await considerPersonalSourcesLink({ topicId: topic.topicId, scanId: scanB.id, url: receipt.payload.links[0] ?? "" })
+	await considerPersonalSourcesLink({
+		topicId: topic.topicId,
+		scanId: scanB.id,
+		url: confirmation.payload.links[0] ?? "",
+	})
 	checkPersonalSources(
 		"deletion during a claim removes its candidate and provenance",
 		(await loadClaimedPersonalSourcesLinks({ topicId: topic.topicId, scanId: scanB.id })).length === 0,
 	)
 
 	// old retained entries still contribute queued links
-	const retainedReceipt = personalSourcesSmokeDelivery(topic, "retained-claim", "queue-a")
-	retainedReceipt.payload.links = ["https://example.com/retained"]
-	const retained = await receivePersonalSourceEntry(retainedReceipt)
+	const retainedConfirmation = personalSourcesSmokeDelivery(topic, "retained-claim", "queue-a")
+	retainedConfirmation.payload.links = ["https://example.com/retained"]
+	const retained = await receivePersonalSourceEntry(retainedConfirmation)
 	if (retained.status !== "accepted") {
 		throw new Error("Retention queue fixture was refused")
 	}
+	// settle the context, claim the links, and age the retained entry
 	await settleQueueContext(topic.topicId)
 	await claimPersonalSourcesLinks({ sourceId: entry.sourceId, scanId: scanB.id })
 	await db

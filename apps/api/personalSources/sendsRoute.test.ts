@@ -48,6 +48,8 @@ test("the HTTP adapter preserves accepted, choice, quota, revocation, conflict, 
 		[{ status: "unavailable", reason: "disabled" }, 503],
 	]
 	const send = spyOn(sends, "sendToPersonalSources")
+
+	// every outcome returns its own status and is never cached
 	for (const [outcome, status] of outcomes) {
 		send.mockResolvedValueOnce(outcome)
 		const response = await app.request("/personal-sources/sends", request(payload))
@@ -55,7 +57,11 @@ test("the HTTP adapter preserves accepted, choice, quota, revocation, conflict, 
 		expect(response.headers.get("cache-control")).toBe("no-store")
 		expect(await response.json()).toEqual(outcome)
 	}
-	expect(send).toHaveBeenLastCalledWith({ sender: { kind: "api_key", secret }, payload })
+	expect(send).toHaveBeenLastCalledWith({
+		sender: { kind: "api_key", secret },
+		payload,
+		analyticsProperties: { entryPoint: "api" },
+	})
 })
 
 test("invalid payloads and oversized bodies stop before any persistence or matching call", async () => {

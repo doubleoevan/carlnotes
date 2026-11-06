@@ -34,6 +34,7 @@
 				"evals/attachment-summaries/attachmentSummariesEval.ts",
 				"evals/personal-sources-context/personalSourcesContextEval.ts",
 				"evals/personal-sources-context/personalSourcesScoringEval.ts",
+				"evals/updates-opener/updatesOpenerEval.ts",
 				"evals/grader-calibration/graderCalibrationEval.ts",
 				"evals/new-topic-chat/newTopicChatEval.ts",
 				"evals/podcast-chat/podcastChatEval.ts",
@@ -45,6 +46,7 @@
 				"evals/source-suggestions/sourceSuggestionsEval.ts",
 				"evals/team-chat/teamChatEval.ts",
 				"evals/topic-chat/topicChatEval.ts",
+				"evals/topic-matching/topicMatchingEval.ts",
 				"evals/topic-chat-tools/topicChatToolsEval.ts"
 			]
 		},
@@ -78,8 +80,15 @@
 			"entry": ["src/routeData.ts"]
 		},
 		"apps/web": {
-			// vite.mcpViews.config.ts swaps the visit analytics module for this one by path
-			"entry": ["src/mcpViews/mcpViewVisitAnalytics.ts"],
+			"entry": [
+				// vite.mcpViews.config.ts swaps the visit analytics module for this one by path
+				"src/mcpViews/mcpViewVisitAnalytics.ts",
+				// vite.mcpViews.config.ts swaps the voice detector for this one by path
+				"src/mcpViews/mcpViewVoiceActivity.ts",
+				// the smoke:mcp-views script, and the page mcpViewTestHost.ts bundles for the browser
+				"src/mcpViews/testHost/mcpViews.smoke.ts",
+				"src/mcpViews/testHost/hostPage.ts"
+			],
 			// the server build bundles @carlnotes/nightshift and @carlnotes/client, so the package boundary check makes the web
 			// app declare what they import
 			"ignoreDependencies": ["class-variance-authority", "clsx", "hono", "tailwind-merge"]

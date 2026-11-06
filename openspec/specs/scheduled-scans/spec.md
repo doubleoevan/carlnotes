@@ -2,7 +2,9 @@
 
 ## Purpose
 TBD - created by archiving change add-scheduled-scans-digest-reuse. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: A Topic is scheduled by its frequency and its recent Scans, without a cursor column
 
 A Topic SHALL be scheduled for a Scan if it has no completed (`succeeded` or `failed`) Scan whose `started_at` falls
@@ -319,8 +321,8 @@ The worker SHALL expose a `runScheduledTopicScans` sweep that selects every sche
 each Topic to the start of its last completed Scan and applying the frequency window in the query, so the sweep never
 loads a Topic that is not scheduled. Until the sweep has started as many Scans as its dispatch limit allows, it starts a
 scheduled (non-manual) Scan for each scheduled Topic through `startTopicScan`, which runs the Scan's Temporal workflow,
-and that workflow sends the topic-scan email once the Scan succeeds. The sweep SHALL run under a database claim: a sweep
-that starts while another holds the claim SHALL exit at once, having done nothing, and return null. A sweep SHALL be
+and that workflow sends the topic-scan email once the Scan succeeds. The sweep SHALL run under a job lease: a sweep
+that starts while another holds the lease SHALL exit at once, having done nothing, and return null. A sweep SHALL be
 idempotent: a second sweep never starts a second Scan for a Topic, since the Scan's workflow id rejects a Topic whose
 Scan is still running, and a Topic whose Scan completed is no longer scheduled. The sweep SHALL isolate per-Topic
 failures so one Topic's error neither aborts the sweep nor stops the remaining Topics. It SHALL emit a per-sweep summary
@@ -355,44 +357,8 @@ starts and then fails is recorded on its own row by its workflow, and the sweep 
 
 #### Scenario: A concurrent sweep exits
 
-- **WHEN** a second sweep starts while a first still holds the claim
+- **WHEN** a second sweep starts while a first still holds the lease
 - **THEN** the second returns null without reading a Topic or starting a Scan
-
-### Requirement: A sweep runs under a database claim
-
-The sweep SHALL take a database claim before it does any work. The claim SHALL be a lease row in the `claims` table,
-keyed by the claim's name, holding the holder's id, when it was taken, and when it expires. Taking the claim SHALL be
-one statement that inserts the row, or takes the row over only if its lease has expired, and the expiry SHALL be
-read from the database clock. While the sweep runs, the runner SHALL renew the lease well inside its expiry, and when
-the sweep ends, however it ends, the runner SHALL delete the row only if it still holds it. No transaction SHALL stay
-open between statements, so the claim works through the connection pooler and pins no server connection. A sweep that
-cannot take the claim SHALL exit at once and return null. A renewal that finds the lease expired or held by another
-holder SHALL abort the sweep through the abort signal the claim passes to it, and the sweep SHALL check that signal
-between its stages and before each Topic it starts, so a sweep that lost its claim stops instead of running beside the
-next one. A sweep that ends after losing its claim SHALL fail with an error naming the lost claim. A process that dies
-SHALL leave a lease that expires on its own, short enough that a sweep killed at its job's time limit frees the claim
-before the next scheduled sweep. The sweep SHALL keep no in-memory guard, since the sweep runs as a cron with one
-process per invocation and a second process cannot see another's memory.
-
-#### Scenario: Two crons overlap
-
-- **WHEN** a cron starts a sweep while the previous cron's sweep still holds a live lease
-- **THEN** the second takes no claim, reads no Topic, starts no Scan, and exits
-
-#### Scenario: A dead sweep releases its claim
-
-- **WHEN** a sweep's process dies mid-run
-- **THEN** its lease expires within the lease length, and the next sweep takes the claim over
-
-#### Scenario: A sweep that loses its lease stops
-
-- **WHEN** a sweep's renewal finds that its lease expired and another sweep took the claim
-- **THEN** the first sweep starts no further Scan and fails with an error naming the lost claim
-
-#### Scenario: Releasing touches only the holder's own row
-
-- **WHEN** a sweep that lost its claim ends while another sweep holds the claim
-- **THEN** its release deletes nothing, and the other sweep's lease stands
 
 ### Requirement: The sweep starts no Scan for an owner whose key budget is spent
 Before it starts any Scans, the sweep SHALL read each scheduled Topic owner's key budget from the LiteLLM proxy once: the key's recorded spend and its maximum budget, which are the numbers that the proxy compares when it rejects a call. The reads SHALL run a few owners at a time, each under the five-second timeout on proxy admin calls. For an owner whose key's spend has reached its maximum budget, the sweep SHALL start no Scan for that owner's scheduled Topics, and no Source of those Topics SHALL run. Each of that owner's scheduled Topics SHALL instead get a Scan row with status `failed`, no dispatch, a cost of zero, and a reason that the budget failure check recognizes, so the Topic page shows the existing budget copy. A Topic whose Scan is still running SHALL get no row. The budget check SHALL come after the daily scan limit and the daily topic limit, so a Topic skipped for either of those gets no row. A Scan row that was opened earlier and never dispatched SHALL take the same check before the sweep starts it, with its own read of the owner's budget: if the key budget of the row's owner is spent, the sweep SHALL mark the row `failed` with the budget reason and SHALL start no workflow for it. A row that a user started by hand SHALL still be started, since the manual scan route checked the budget when it opened the row. The scheduled Topics of an owner with no key yet, or of an owner whose budget read fails or times out, SHALL be scanned as before. The ingest spend on Exa, TwitterAPI.io, and Firecrawl SHALL stay on the operator's account and SHALL NOT count toward the user's budget.
@@ -467,3 +433,43 @@ workflow, so its row SHALL be kept.
 - **WHEN** an owner's manual Scan start fails on the Temporal client's ten-second deadline
 - **THEN** the response is a 503 asking them to try again in a minute, and the Scan row the start opened is kept
 
+### Requirement: A sweep runs under a job lease
+
+The sweep SHALL take a job lease before it does any work. The lease SHALL be a row in the `job_leases` table, keyed
+by the job's name, holding the holder's id, when it was taken, and when it expires. The runner SHALL renew the lease
+while the sweep runs. No transaction SHALL stay open between statements, so the lease works through the connection
+pooler and pins no server connection. The sweep SHALL keep no in-memory guard.
+
+#### Scenario: Two crons overlap
+
+- **WHEN** a cron starts a sweep while the previous cron's sweep still holds a live lease
+- **THEN** the second takes no lease, reads no Topic, starts no Scan, exits at once, and returns null
+
+#### Scenario: Taking the lease is one statement
+
+- **WHEN** a sweep takes the lease
+- **THEN** one statement inserts the row, or takes the row over only if its lease has expired, and the expiry is read
+  from the database clock
+
+#### Scenario: The lease renews inside its expiry
+
+- **WHEN** a sweep runs
+- **THEN** the runner renews the lease well inside its expiry
+
+#### Scenario: A dead sweep releases its lease
+
+- **WHEN** a sweep's process dies mid-run
+- **THEN** its lease expires within the lease length, which is short enough that a sweep killed at its job's time limit
+  frees the lease before the next scheduled sweep, and the next sweep takes the lease over
+
+#### Scenario: A sweep that loses its lease stops
+
+- **WHEN** a sweep's renewal finds that its lease expired and another sweep took the lease
+- **THEN** the renewal aborts the first sweep through the abort signal the lease passes to it, the first sweep checks
+  that signal between its stages and before each Topic it starts, and it starts no further Scan and fails with an
+  error naming the lost lease
+
+#### Scenario: Releasing touches only the holder's own row
+
+- **WHEN** a sweep ends, however it ends, while another sweep holds the lease
+- **THEN** its release deletes nothing, and the other sweep's lease stands

@@ -1,9 +1,7 @@
 import { toTestTopicFeed } from "@carlnotes/contracts/topicFeedTestFixtures"
-import type { ExpandableRowProps } from "@carlnotes/core/components/ExpandableRow"
 import { TopicPersonalSourcesSectionStory } from "@carlnotes/core/components/TopicPersonalSourcesSectionStory"
 import type { Meta, StoryObj } from "@storybook/react-native"
 import { Sheet } from "@/components/common/Sheet"
-import { ExpandableRow } from "@/components/primitives/expandable-row"
 import { PERSONAL_SOURCES_ELEMENTS } from "./personalSourcesElements"
 import { TopicInfoButton, TopicInfoContent } from "./TopicInfo"
 import { STORY_TOPIC_PAGE } from "./topicPageStories"
@@ -42,10 +40,6 @@ export const PersonalSourcesWithItems: Story = { render: () => <InfoStory /> }
 export const PersonalSourcesExpanded: Story = { render: () => <InfoStory isExpanded /> }
 export const PersonalSourcesEmpty: Story = { render: () => <InfoStory isEmpty /> }
 export const Paginated: Story = { render: () => <InfoStory isPaged /> }
-function ExpandedRow(props: ExpandableRowProps) {
-	return <ExpandableRow {...props} initialOpen />
-}
-const EXPANDED_ELEMENTS = { ...PERSONAL_SOURCES_ELEMENTS, ExpandableRow: ExpandedRow }
 function InfoStory({
 	isExpanded = false,
 	isEmpty = false,
@@ -69,8 +63,7 @@ function InfoStory({
 		<TopicPersonalSourcesSectionStory
 			className="border-t border-dashed border-separator-strong"
 			elements={PERSONAL_SOURCES_ELEMENTS}
-			expandedElements={EXPANDED_ELEMENTS}
-			isItemExpanded={isExpanded}
+			isEntryExpanded={isExpanded}
 			initialOpen={!isClosed}
 			variant={isEmpty ? "empty" : isPaged ? "paged" : "ready"}
 		/>

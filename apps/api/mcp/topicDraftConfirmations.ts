@@ -3,7 +3,7 @@ import { MINUTE_MS } from "@carlnotes/contracts/time"
 import type { TopicDraft } from "@carlnotes/contracts/topicPayloads"
 import { isSameSignature, toAuthSecretSignature } from "@carlnotes/server/hmac"
 import { toCanonicalJson } from "../canonicalJson"
-import type { TopicDraftReceipt } from "../topic/topicDraftReceipts"
+import type { TopicDraftConfirmationRecord } from "../topic/topicDraftConfirmationRecords"
 
 type DraftSubject = { userId: string; clientId: string | null; topicDraft: TopicDraft }
 
@@ -40,10 +40,10 @@ export function isTopicDraftConfirmed(
 /**
  * Identifies one verified confirmation without placing its signature or draft contents in the database.
  */
-export function toTopicDraftReceipt(confirmation: string): TopicDraftReceipt {
+export function toTopicDraftConfirmationRecord(confirmation: string): TopicDraftConfirmationRecord {
 	const digest = toAuthSecretSignature({
 		value: confirmation,
-		purpose: "mcp topic draft receipt",
+		purpose: "mcp topic draft confirmation",
 		encoding: "base64url",
 	})
 	return { id: `mcp-topic-draft:${digest}`, expiresAt: new Date(Number(confirmation.split(".")[0])) }

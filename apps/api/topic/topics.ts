@@ -2,13 +2,13 @@ import type { TopicResponse } from "@carlnotes/contracts/topics"
 import { toAttachmentFailureMessage } from "@carlnotes/contracts/topics"
 import { db } from "@carlnotes/db"
 import { scans } from "@carlnotes/db/schema/scans"
-import { attachments, sources, topics } from "@carlnotes/db/schema/topics"
+import { attachments, sources } from "@carlnotes/db/schema/topics"
 import { traceRequestStage } from "@carlnotes/server/monitoring"
 import { desc, eq } from "drizzle-orm"
 import { isAllowed } from "../authorization"
 import { loadTopicChatMentions } from "../chat/mentions"
 import { loadTopicPodcast } from "../podcast/helpers"
-import { loadTopicAccessAndFindings } from "./accessibleFindings"
+import { loadTopicAccessAndFindings, loadViewableTopic } from "./accessibleFindings"
 import { newTopicFindingCount } from "./findings"
 import {
 	loadTopicOwner,
@@ -38,10 +38,7 @@ export async function loadTopicPage(
 	{ isPoll = false }: LoadTopicPageOptions = {},
 ): Promise<TopicResponse | null> {
 	// load the topic behind the visibility gate. a hidden topic looks identical to a missing one
-	const topic = await traceRequestStage("topic_page.gate", async () => {
-		const [topicRow] = await db.select().from(topics).where(eq(topics.id, topicId))
-		return topicRow && (await isAllowed(userId, "topic:view", topicRow)) ? topicRow : null
-	})
+	const topic = await traceRequestStage("topic_page.gate", () => loadViewableTopic(userId, topicId))
 	if (!topic) {
 		return null
 	}

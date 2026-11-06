@@ -15,6 +15,10 @@ export type ExpandableRowSharedProps = {
 	tag?: string
 	ordinal?: number
 	initialOpen?: boolean
+
+	// a list that keeps one row open holds the state, in place of the row's own
+	isExpanded?: boolean
+	onToggleExpanded?: () => void
 	isFirst?: boolean
 	isLast?: boolean
 	variant?: "item" | "section"

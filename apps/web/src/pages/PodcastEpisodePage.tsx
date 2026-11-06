@@ -25,15 +25,12 @@ import { CollapsibleSection } from "@/components/topic/CollapsibleSection"
 import { TopicByline } from "@/components/topic/Topic"
 import { toAddTopicToTeamOption, toShareTopicOption } from "@/components/topic/TopicActions"
 import { NewTopicButton, useNewTopicDialog } from "@/components/topic/TopicEditorChoiceDialog"
+import { ExpanderSkeleton } from "@/components/topic/TopicFeedSkeleton"
 import { TopicGateNotice } from "@/components/topic/TopicGateNotice"
-import {
-	CollapsibleSectionSkeleton,
-	ExpanderSkeleton,
-	PodcastEpisodePlayerCardSkeleton,
-} from "@/components/topic/TopicSkeleton"
+import { CollapsibleSectionSkeleton, PodcastEpisodePlayerCardSkeleton } from "@/components/topic/TopicSkeleton"
 import { useLoadInBrowser } from "@/hooks/useBrowserValue"
 import { usePageTitle } from "@/hooks/usePageTitle"
-import { COVER_PLACEHOLDER_CLASS, INFO_CARD_CLASS, PAGE_CLASS } from "@/lib/styleClasses"
+import { INFO_CARD_CLASS, PAGE_CLASS } from "@/lib/styleClasses"
 import { usePageTopicFeedHandlers } from "@/providers/TopicFeedProvider"
 import { useRegisterPageActions } from "@/stores/pageActionsStore"
 
@@ -286,7 +283,7 @@ function PodcastEpisodeSkeleton() {
 		<div aria-hidden="true">
 			{/* the placeholder cover, beside the topic's line, the title, the description, and on a phone the byline */}
 			<div className={HEADER_CLASS}>
-				<div className={cn(COVER_PLACEHOLDER_CLASS, COVER_CLASS)} />
+				<PodcastEpisodeCover podcastEpisode={{ smallCoverUrl: null, title: null }} className={COVER_CLASS} />
 				<div className="min-w-0 flex-1">
 					{/* the topic's line beside the new topic button */}
 					<div className="flex items-end justify-between gap-3">

@@ -3,6 +3,7 @@
 import { cn } from "@carlnotes/nightshift/classNames"
 import { Globe } from "lucide-react"
 import { useState } from "react"
+import { useSiteAssetUrl } from "@/hooks/useSiteAssetUrl"
 
 /**
  * A host's favicon in a round chip at the metadata line's size, faint on the light theme and white on the dark one,
@@ -25,6 +26,7 @@ function HostGlobe() {
 // the image and its load state, one per path
 function HostFaviconImage({ faviconPath }: { faviconPath: string }) {
 	const [faviconLoadStatus, setFaviconLoadStatus] = useState<"loading" | "loaded" | "broken">("loading")
+	const faviconUrl = useSiteAssetUrl(faviconPath)
 	if (faviconLoadStatus === "broken") {
 		return <HostGlobe />
 	}
@@ -32,7 +34,7 @@ function HostFaviconImage({ faviconPath }: { faviconPath: string }) {
 		<>
 			{faviconLoadStatus === "loading" && <HostGlobe />}
 			<img
-				src={faviconPath}
+				src={faviconUrl}
 				alt=""
 				loading="lazy"
 				className={cn("size-3", faviconLoadStatus === "loading" && "invisible absolute")}

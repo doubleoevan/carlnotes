@@ -1,6 +1,6 @@
 // Clarification replies can file the original delivery only against current, sender-owned choices.
 import { afterEach, beforeEach, expect, spyOn, test } from "bun:test"
-import * as receipts from "@carlnotes/db/personalSourcesEmailReceipts"
+import * as confirmations from "@carlnotes/db/personalSourcesEmailConfirmations"
 import * as receiving from "@carlnotes/db/personalSourcesSend"
 import * as replies from "@carlnotes/emails/personalSourcesEmail"
 import { personalSourcesEmailFixture } from "@carlnotes/server/personalSourcesEmailTestFixtures"
@@ -10,11 +10,11 @@ import { restorePersonalSourcesEmail, setReply, stubPersonalSourcesEmail } from 
 import * as routing from "./emailTopic"
 import * as matching from "./matchTopics"
 
-// exercise the real routing decision through the receipt activity
+// exercise the real routing decision through the confirmation activity
 const resolveEmailTopics = routing.resolvePersonalSourcesEmailTopics
 
 // Each test receives the account installed in its provider and database stubs.
-let destination: receipts.AccountEmailDestination
+let destination: confirmations.AccountEmailDestination
 beforeEach(() => {
 	destination = stubPersonalSourcesEmail()
 })
@@ -27,25 +27,25 @@ const choiceTopics = [{ id: "topic", name: "Coffee", url: "https://carlnotes.com
 
 test("a queued clarification with revoked Topic access never sends the old name or link", async () => {
 	setReply(destination, { kind: "needs_topic", requestId: choiceRequestId, topics: choiceTopics })
-	spyOn(receipts, "loadPersonalSourcesEmailChoices").mockResolvedValue({
+	spyOn(confirmations, "loadPersonalSourcesEmailChoices").mockResolvedValue({
 		id: choiceRequestId,
 		emailId: originalEmailId,
 		messageId: "<original@example.com>",
 		topics: [],
 	})
-	await processPersonalSourcesEmail("receipt")
+	await processPersonalSourcesEmail("confirmation")
 	expect(spyOn(replies, "sendPersonalSourcesEmailReply")).not.toHaveBeenCalled()
 })
 
 test("clarification saves numbered choices without filing the original", async () => {
-	destination.receipt.id = choiceRequestId
+	destination.confirmation.id = choiceRequestId
 	spyOn(provider, "fetchReceivedPersonalSourcesEmail").mockResolvedValue({
 		status: "received",
 		email: personalSourcesEmailFixture({ message_id: "<original@example.com>" }),
 	})
 	spyOn(routing, "resolvePersonalSourcesEmailTopics").mockResolvedValue({ topicIds: [], suggestions: choiceTopics })
-	const saveChoices = spyOn(receipts, "savePersonalSourcesEmailChoices").mockResolvedValue()
-	spyOn(receipts, "loadPersonalSourcesEmailChoices").mockResolvedValue({
+	const saveChoices = spyOn(confirmations, "savePersonalSourcesEmailChoices").mockResolvedValue()
+	spyOn(confirmations, "loadPersonalSourcesEmailChoices").mockResolvedValue({
 		id: choiceRequestId,
 		emailId: originalEmailId,
 		messageId: "<original@example.com>",
@@ -53,7 +53,7 @@ test("clarification saves numbered choices without filing the original", async (
 	})
 	await processPersonalSourcesEmail(choiceRequestId)
 	expect(saveChoices.mock.calls[0]?.[1]).toEqual({
-		receiptId: choiceRequestId,
+		confirmationId: choiceRequestId,
 		userId: "owner",
 		topics: choiceTopics,
 		messageId: "<original@example.com>",
@@ -70,7 +70,7 @@ test.each(["Coffee notes", "topic:", "Fwd: Coffee notes"])(
 	"strong matches without a subject Topic wait for approval: %s",
 	async (subject) => {
 		// keep a body hint as ranking input, never as approval
-		destination.receipt.id = choiceRequestId
+		destination.confirmation.id = choiceRequestId
 		spyOn(provider, "fetchReceivedPersonalSourcesEmail").mockResolvedValue({
 			status: "received",
 			email: personalSourcesEmailFixture({
@@ -96,8 +96,8 @@ test.each(["Coffee notes", "topic:", "Fwd: Coffee notes"])(
 		})
 
 		// retain routing references and send the choices in the original thread
-		spyOn(receipts, "savePersonalSourcesEmailChoices").mockResolvedValue()
-		spyOn(receipts, "loadPersonalSourcesEmailChoices").mockResolvedValue({
+		spyOn(confirmations, "savePersonalSourcesEmailChoices").mockResolvedValue()
+		spyOn(confirmations, "loadPersonalSourcesEmailChoices").mockResolvedValue({
 			id: choiceRequestId,
 			emailId: originalEmailId,
 			messageId: "<original@example.com>",
@@ -116,7 +116,7 @@ test.each(["Coffee notes", "topic:", "Fwd: Coffee notes"])(
 test.each([false, true])(
 	"number replies use the sender-owned original, or ignore foreign references: %s",
 	async (isOwned) => {
-		spyOn(receipts, "loadPersonalSourcesEmailChoices").mockResolvedValue(
+		spyOn(confirmations, "loadPersonalSourcesEmailChoices").mockResolvedValue(
 			isOwned
 				? { id: choiceRequestId, emailId: originalEmailId, messageId: "<original@example.com>", topics: choiceTopics }
 				: null,
@@ -135,8 +135,9 @@ test.each([false, true])(
 				status: "received",
 				email: personalSourcesEmailFixture({ id: originalEmailId, text: "Original request https://example.org/page" }),
 			})
-		await processPersonalSourcesEmail("receipt")
+		await processPersonalSourcesEmail("confirmation")
 		const send = spyOn(receiving, "receivePersonalSourcesSend")
+		// a sender who does not own the request files nothing
 		if (!isOwned) {
 			expect(send).not.toHaveBeenCalled()
 			expect(spyOn(provider, "fetchReceivedPersonalSourcesEmail")).toHaveBeenCalledTimes(1)
@@ -156,7 +157,7 @@ test.each([false, true])(
 )
 
 test("a completed choice request cannot file again or send another confirmation", async () => {
-	spyOn(receipts, "loadPersonalSourcesEmailChoices")
+	spyOn(confirmations, "loadPersonalSourcesEmailChoices")
 		.mockResolvedValueOnce({
 			id: choiceRequestId,
 			emailId: originalEmailId,
@@ -173,7 +174,7 @@ test("a completed choice request cannot file again or send another confirmation"
 			}),
 		})
 		.mockResolvedValueOnce({ status: "received", email: personalSourcesEmailFixture({ id: originalEmailId }) })
-	await processPersonalSourcesEmail("receipt")
+	await processPersonalSourcesEmail("confirmation")
 	expect(spyOn(receiving, "receivePersonalSourcesSend")).not.toHaveBeenCalled()
 	expect(spyOn(replies, "sendPersonalSourcesEmailReply")).not.toHaveBeenCalled()
 })

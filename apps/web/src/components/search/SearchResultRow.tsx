@@ -4,18 +4,15 @@ import {
 	SearchResultRow as SharedSearchResultRow,
 } from "@carlnotes/core/components/SearchResultRow"
 import { cn } from "@carlnotes/nightshift/classNames"
-import { DASHED_ROW_CLASS, LIST_ROW_HOVER_CLASS } from "@/lib/styleClasses"
+import { DASHED_ROW_CLASS, LIST_ROW_HOVER_CLASS, RANK_SLOT_CLASS, ROW_METADATA_LINE_CLASS } from "@/lib/styleClasses"
 
-// search keeps its existing rank slot; selectable rows replace the rank and kind icon with one checkbox
+// a row keeps its rank slot, and a selectable row replaces the rank with one checkbox
 const elements: SearchResultRowElements = {
 	Row: ({ children, className }) => (
 		<div className={cn(DASHED_ROW_CLASS, LIST_ROW_HOVER_CLASS, "group flex items-center", className)}>{children}</div>
 	),
 	Rank: ({ children }) => (
-		<span
-			className="text-muted-foreground absolute top-0 left-0 grid size-11 place-items-center sm:top-1.5 sm:size-8"
-			aria-hidden
-		>
+		<span className={cn("text-muted-foreground", RANK_SLOT_CLASS)} aria-hidden>
 			<span className="font-display text-sm tabular-nums">{children}</span>
 		</span>
 	),
@@ -24,11 +21,7 @@ const elements: SearchResultRowElements = {
 	),
 	Content: ({ children }) => <div className="min-w-0 flex-1">{children}</div>,
 	Title: ({ children }) => <div className="truncate text-sm">{children}</div>,
-	Details: ({ children }) => (
-		<div className="text-muted-foreground mt-0.5 flex flex-wrap items-center gap-1.5 text-xs group-hover:text-foreground/80">
-			{children}
-		</div>
-	),
+	Details: ({ children }) => <div className={ROW_METADATA_LINE_CLASS}>{children}</div>,
 }
 
 /**

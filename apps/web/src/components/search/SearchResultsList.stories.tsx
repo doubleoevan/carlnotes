@@ -24,7 +24,6 @@ const meta = {
 		searchPagination: { control: false },
 		loadingPageNumber: { control: "number" },
 		topicFeedHandlers: { control: false },
-		renderTopicAction: { control: false },
 	},
 	parameters: { session: "visitor" },
 } satisfies Meta<typeof SearchResultsList>

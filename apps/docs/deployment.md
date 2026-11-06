@@ -21,6 +21,24 @@ bun run prompts:sync
 bun run prompts:sync:prd
 ```
 
+## MCP view bundles
+
+A host locks to the MCP view resource a tool named when the host connected, so an old version has to keep working after
+a deploy. `bun run mcp-views:freeze` stores the current version in object storage, then raises it. It builds the current
+bundle, uploads its script and stylesheet, adds the version to `packages/contracts/mcpViewVersions.json`, and raises
+`MCP_VIEW_VERSION` in `packages/contracts/mcpViews.ts`. Run it under production credentials and commit both files with
+the change that ships the new MCP views:
+
+```bash
+doppler run --config prd -- bun run mcp-views:freeze
+```
+
+`--bundle <folder>` stores a bundle built in another checkout, with `bun run --cwd apps/web build:mcp-views`.
+`--mcp-views search,topic` names the MCP views that bundle holds, if they differ from the current ones.
+
+The api reads a stored bundle once and keeps it in memory. If the read fails, the api reports the failure, serves the
+current bundle for that request, and tries again on the next read.
+
 ## Container image
 
 The app service is the Hono api plus the built web app it serves. It builds from the repo-root

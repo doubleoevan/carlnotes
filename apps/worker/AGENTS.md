@@ -1,7 +1,7 @@
 # apps/worker/
 
 `workflows/receivePersonalSourcesEmail.ts` and `receivePersonalSourcesEmailActivities.ts` run on `personal-sources-email`, with four activity slots.
-Only receipt IDs and retry delays cross workflow history. The sweep discovers pending or expired processing leases.
+Only confirmation IDs and retry delays cross workflow history. The sweep discovers pending or expired processing leases.
 
 `workflows/summarizePersonalSourcesContext.ts` and `summarizePersonalSourcesContextActivities.ts` run on the `personal-sources` queue.
 They debounce committed revisions, rebuild bounded private context, and wake at its earliest expiry.
@@ -32,24 +32,24 @@ through `@carlnotes/models/litellm`), and `docsSync.ts` (`bun run docs:embed`, w
 `apps/docs/src/content/docs` into sections and embeds them into `docs_chunks`, the sections chat quotes for a question
 about the app; a section whose hash is unchanged is not embedded again).
 
-- The sweep and the reset each run under a database claim from `@carlnotes/db/claim`, so two overlapping runs cannot
-  do the work twice. Each takes the claim's abort signal and checks it between batches: the sweep before each stage and
-  each Topic, the reset before each user's key. A run that lost its claim stops and rejects, and the job exits non-zero.
+- The sweep and the reset each run under a job lease from `@carlnotes/db/jobLease`, so two overlapping runs cannot
+  do the work twice. Each takes the lease's abort signal and checks it between batches: the sweep before each stage and
+  each Topic, the reset before each user's key. A run that lost its lease stops and rejects, and the job exits non-zero.
   The sweep selects scheduled Topics in one SQL query and reads each owner's quota, key budget, and daily scans cutoff
   once. For a Topic whose owner's key has spent its budget, the sweep saves a failed Scan with the budget reason instead
   of starting a Scan. The Topics of an owner with no key, or of an owner whose budget read fails, are scanned as usual.
-- `syncViewerCounts.ts` runs under its own claim, `viewer-count-sync`. It takes the topics and podcast episodes whose
-  Redis counter changed, raises each one's count column to the counter's estimate and never lowers it, and saves each
-  counter to `viewer_counters`. On the first sync, and after a Redis restart, it first rebuilds Redis from Postgres: it
-  merges every saved counter back and adds the signed-in people that `viewerCountSeeds.ts` loads, each topic's owner,
-  active followers, and finding openers, and each podcast episode's listeners. A shown count never drops, and the
-  views counted since the last sweep are lost with a restart. A topic or podcast episode whose save fails is listed as
-  changed again for the next sweep.
+- `syncViewerCounts.ts` runs under its own job lease, `viewer-count-sync`. It takes the topics and podcast episodes
+  whose Redis counter changed, raises each one's count column to the counter's estimate and never lowers it, and saves
+  each counter to `viewer_counters`. On the first sync, and after a Redis restart, it first rebuilds Redis from
+  Postgres: it merges every saved counter back and adds the signed-in people that `viewerCountSeeds.ts` loads, each
+  topic's owner, active followers, and finding openers, and each podcast episode's listeners. A shown count never drops,
+  and the views counted since the last sweep are lost with a restart. A topic or podcast episode whose save fails is
+  listed as changed again for the next sweep.
 - `reportReminders.ts` reads the content reports still open and never reminded twelve hours after they were made,
   mails each one to `SUPPORT_EMAIL` through the report email template with its admin console link, and writes the
   report's reminded time, so a report is reminded once. Without `SUPPORT_EMAIL` it reads nothing.
--  `retryPendingObjectDeletions.ts` retries the pending keys in `pending_object_deletions` after the claimed sweep,
-  outside its claim, with a doubling backoff up to a day, and reports a key pending for over a day once, deleting each
+-  `retryPendingObjectDeletions.ts` retries the pending keys in `pending_object_deletions` after the leased sweep,
+  outside its lease, with a doubling backoff up to a day, and reports a key pending for over a day once, deleting each
   through `deleteStoredObject` in `@carlnotes/db/store`. Before the sweep starts a Scan row that was opened and never
   dispatched, the sweep reads the row owner's key budget and marks the row failed with the budget reason if that budget
   is spent. A Scan that a user started by hand starts without the budget read. The sweep closes out a picked-up Scan

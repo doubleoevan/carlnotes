@@ -41,7 +41,7 @@ export async function checkPersonalSourcesMultiSend(): Promise<void> {
 	const failed = await receivePersonalSourcesSend({ ...delivery, topicIds: [...topicIds, "zz-missing"] })
 	checkPersonalSources("a refused final destination rolls back the batch", failed.status === "not_found")
 	checkPersonalSources(
-		"rollback leaves no entries or retry receipts",
+		"rollback leaves no entries or retry confirmations",
 		(
 			await db
 				.select({ count: count() })
@@ -72,11 +72,11 @@ export async function checkPersonalSourcesMultiSend(): Promise<void> {
 			results.filter((result) => result.status === "quota").length === 1,
 	)
 	if (accepted?.status !== "accepted") {
-		throw new Error("Missing batch receipt")
+		throw new Error("Missing batch confirmation")
 	}
 	checkPersonalSources(
 		"one acceptance stores both destinations",
-		accepted.receipts?.length === 2 &&
+		accepted.confirmations?.length === 2 &&
 			(
 				await db
 					.select({ count: count() })
@@ -95,7 +95,7 @@ export async function checkPersonalSourcesMultiSend(): Promise<void> {
 	}
 	const replay = await receivePersonalSourcesSend({ ...acceptedDelivery, topicIds: [...topicIds].reverse() })
 	checkPersonalSources(
-		"reordered retry returns the identical batch receipt after quota is exhausted",
+		"reordered retry returns the identical batch confirmation after quota is exhausted",
 		JSON.stringify(replay) === JSON.stringify(accepted),
 	)
 	checkPersonalSources(

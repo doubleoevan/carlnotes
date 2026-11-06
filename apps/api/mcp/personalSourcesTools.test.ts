@@ -14,7 +14,7 @@ beforeEach(() => {
 	spyOn(mcpViewData, "loadSendMcpViewData").mockResolvedValue({
 		session: null,
 		podcastEpisodes: [],
-		sendReceiptLinks: [{ entryId: "entry", links: [{ url: "https://example.com/receipt-only" }] }],
+		sendConfirmationLinks: [{ entryId: "entry", links: [{ url: "https://example.com/confirmation-only" }] }],
 	})
 })
 const caller: ToolCaller = {
@@ -81,10 +81,11 @@ test.each([null, "bound-topic"])(
 			sender: { kind: "oauth", userId: "owner", clientId: "verified-client" },
 			payload: input,
 			routeTopicId,
+			analyticsProperties: expect.objectContaining({ entryPoint: "mcp", plan: "free" }),
 		})
 		expect(response.structuredContent).toEqual(result)
-		expect(JSON.stringify(response.structuredContent)).not.toContain("receipt-only")
-		expect(JSON.stringify(response._meta)).toContain("receipt-only")
+		expect(JSON.stringify(response.structuredContent)).not.toContain("confirmation-only")
+		expect(JSON.stringify(response._meta)).toContain("confirmation-only")
 		expect(JSON.stringify(response)).not.toContain("private-canary")
 		expect(JSON.stringify(response)).not.toContain(input.chat_url)
 	},

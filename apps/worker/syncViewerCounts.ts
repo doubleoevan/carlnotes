@@ -1,7 +1,7 @@
 // the scheduled copy of each topic's viewers and each podcast episode's listeners from Redis into Postgres, and the
 // rebuild of Redis from Postgres on the first sync and after a Redis restart
 import { type DbTransaction, db } from "@carlnotes/db"
-import { runWithClaim } from "@carlnotes/db/claim"
+import { runWithJobLease } from "@carlnotes/db/jobLease"
 import { podcastEpisodes } from "@carlnotes/db/schema/podcast"
 import { topics } from "@carlnotes/db/schema/topics"
 import { viewerCounters } from "@carlnotes/db/schema/viewerCounts"
@@ -22,18 +22,18 @@ import { loadViewerCountSeeds } from "./viewerCountSeeds"
 // how many refs one save transaction writes
 const SAVE_BATCH_SIZE = 100
 
-// the claim that keeps two sweeps from copying the counts at once
-const VIEWER_COUNT_SYNC_CLAIM = "viewer-count-sync"
+// the job name that keeps two sweeps from copying the counts at once
+const VIEWER_COUNT_SYNC_JOB = "viewer-count-sync"
 
 // one ref's estimate and counter, read from Redis
 type ViewerEstimateAndCounter = { viewerCountRef: ViewerCountRef; estimate: number; counter: Uint8Array }
 
 /**
- * Copies every changed count into Postgres under the sync's claim, restoring the saved counters first after a Redis
+ * Copies every changed count into Postgres under the sync's lease, restoring the saved counters first after a Redis
  * restart.
  */
 export async function syncViewerCounts(): Promise<void> {
-	await runWithClaim({ claimName: VIEWER_COUNT_SYNC_CLAIM, runTask: copyViewerCounts })
+	await runWithJobLease({ jobName: VIEWER_COUNT_SYNC_JOB, runTask: copyViewerCounts })
 }
 
 /**

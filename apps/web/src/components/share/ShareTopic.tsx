@@ -1,6 +1,6 @@
 import type { Visibility } from "@carlnotes/contracts/enums"
 import { toTopicFeedPath, toTopicPath } from "@carlnotes/contracts/seo"
-import { Check, Flag, Link, Rss, Share, Share2 } from "lucide-react"
+import { Check, Flag, Link, Rss, Share } from "lucide-react"
 import { useState } from "react"
 import { ReportIssueDialog } from "@/components/common/ReportIssueDialog.tsx"
 import { Dialog, DialogContent, DialogTitle } from "@/components/primitives/dialog"
@@ -236,7 +236,7 @@ export function ShareTopic({
 			<Tooltip>
 				<TooltipTrigger asChild>
 					<PopoverTrigger className={className} aria-label={`Share ${topicName}`}>
-						<Share2 className={isIcon ? "size-3.75" : "size-4"} />
+						<Share className={isIcon ? "size-3.75" : "size-4"} />
 						{!isIcon && "Share"}
 					</PopoverTrigger>
 				</TooltipTrigger>

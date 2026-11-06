@@ -79,6 +79,8 @@ export const scans = pgTable(
 		// one result per Source, each credited with the Resources whose copy survived the merge, and the kept findings
 		// from earlier scans that no Source returned. null for a scan with no closing write
 		sourceResults: jsonb("source_results").$type<StoredScanSourceResults | null>(),
+		// each Source's results as ingest ended
+		ingestSourceResults: jsonb("ingest_source_results").$type<StoredScanSourceResults | null>(),
 	},
 	// covers the topic history read and the per-owner daily count and monthly spend sums
 	(table) => [
@@ -104,6 +106,8 @@ export const resources = pgTable(
 		content: text("content"),
 		contentKey: text("content_key"),
 		contentBytes: integer("content_bytes"),
+		// how long a watch or listen Resource runs, null if its Source never said
+		durationSeconds: integer("duration_seconds"),
 		// the review embedding and its model, EMBED_DIMENSIONS wide for qwen3-embedding-8b
 		embedding: vector("embedding", { dimensions: EMBED_DIMENSIONS }),
 		embeddingModel: text("embedding_model"),
@@ -219,8 +223,12 @@ export const consumptions = pgTable(
 		// when the topic finding was marked consumed
 		consumedAt: timestamp("consumed_at", { withTimezone: true }).defaultNow().notNull(),
 	},
-	// one consumed marker per user and finding. marking twice is a no-op and unmarking deletes the row
-	(table) => [unique("consumptions_user_finding_unique").on(table.userId, table.findingId)],
+	// one consumed marker per user and finding. marking twice is a no-op and unmarking deletes the row. the finding index
+	// serves the delete of a finding
+	(table) => [
+		unique("consumptions_user_finding_unique").on(table.userId, table.findingId),
+		index("consumptions_finding_id_idx").on(table.findingId),
+	],
 )
 
 // a bookmark is the record of a user keeping a topic finding regardless of the max-results filter
@@ -239,27 +247,36 @@ export const bookmarks = pgTable(
 		// when the topic finding was bookmarked
 		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 	},
-	// one bookmark per user and finding. bookmarking twice is a no-op and unbookmarking deletes the row
-	(table) => [unique("bookmarks_user_finding_unique").on(table.userId, table.findingId)],
+	// one bookmark per user and finding. bookmarking twice is a no-op and unbookmarking deletes the row. the finding index
+	// serves the delete of a finding
+	(table) => [
+		unique("bookmarks_user_finding_unique").on(table.userId, table.findingId),
+		index("bookmarks_finding_id_idx").on(table.findingId),
+	],
 )
 
 // a user's own words about a finding
-export const findingFeedback = pgTable("finding_feedback", {
-	id: primaryId(),
-	// the finding and topic the words are about
-	findingId: text("finding_id")
-		.notNull()
-		.references(() => findings.id, { onDelete: "cascade" }),
-	topicId: text("topic_id")
-		.notNull()
-		.references(() => topics.id, { onDelete: "cascade" }),
-	// who wrote it
-	userId: text("user_id")
-		.notNull()
-		.references(() => users.id, { onDelete: "cascade" }),
-	feedback: text("feedback").notNull(),
-	createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-})
+export const findingFeedback = pgTable(
+	"finding_feedback",
+	{
+		id: primaryId(),
+		// the finding and topic the words are about
+		findingId: text("finding_id")
+			.notNull()
+			.references(() => findings.id, { onDelete: "cascade" }),
+		topicId: text("topic_id")
+			.notNull()
+			.references(() => topics.id, { onDelete: "cascade" }),
+		// who wrote it
+		userId: text("user_id")
+			.notNull()
+			.references(() => users.id, { onDelete: "cascade" }),
+		feedback: text("feedback").notNull(),
+		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+	},
+	// the finding index serves the delete of a finding
+	(table) => [index("finding_feedback_finding_id_idx").on(table.findingId)],
+)
 
 // one view event per open or dismissal of a finding, written and never read
 export const findingViews = pgTable(
@@ -278,6 +295,9 @@ export const findingViews = pgTable(
 		dismissedAt: timestamp("dismissed_at", { withTimezone: true }),
 		// how long the user spent on the note, reported when they leave it
 	},
-	// covers the view lookup by user and finding
-	(table) => [index("finding_views_user_finding_idx").on(table.userId, table.findingId)],
+	// covers the view lookup by user and finding. the finding index serves the delete of a finding
+	(table) => [
+		index("finding_views_user_finding_idx").on(table.userId, table.findingId),
+		index("finding_views_finding_id_idx").on(table.findingId),
+	],
 )

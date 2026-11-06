@@ -5,7 +5,7 @@ import { type SearchRequest, toSearchPath } from "@carlnotes/contracts/search"
 import { appUrl } from "@carlnotes/server/appUrl"
 import { countSearchRateLimitHit } from "../rateLimit"
 import { searchSite } from "../search/search"
-import type { ToolCaller } from "./toolCaller"
+import { type ToolCaller, toToolCallerUserId } from "./toolCaller"
 
 // what a visitor or a user past the search rate limit reads
 export const SEARCH_RATE_LIMITED_TEXT = "That's a lot of searching for one minute. Try again in a minute."
@@ -22,7 +22,7 @@ export async function searchForTool({
 	searchRequest,
 }: SearchForToolOptions): Promise<McpSearchPage | { text: string }> {
 	// count the search against the site's search limit under the caller's key
-	const userId = toolCaller.kind === "user" ? toolCaller.userId : null
+	const userId = toToolCallerUserId(toolCaller)
 	if (!(await countSearchRateLimitHit({ userId, clientAddress }))) {
 		return { text: SEARCH_RATE_LIMITED_TEXT }
 	}

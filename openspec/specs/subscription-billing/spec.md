@@ -338,14 +338,16 @@ the old one, the replacement a plan change or a budget override already makes. A
 the budget between resets.
 
 The user's row SHALL record when their current key was created, and a key created before the start of the current
-month SHALL be replaced. A key created during the month, by signup or by any other replacement, SHALL be kept until the next
+month SHALL be replaced. A key created during the month, by signup or by any other replacement, SHALL be kept until the
+next
 first.
 
 The replacement SHALL be done by the reset job, run on its own schedule once a day shortly after midnight UTC and never
 inside the scheduled sweep, so replacing every user's key on the first holds up no Scan. The job SHALL replace keys
 with bounded concurrency, several at a time against the proxy and never all at once, and each user's replacement SHALL
 be its own attempt: a failure is reported, the remaining users are still replaced, and that user is tried again by the
-next day's reset. The job SHALL take its own database claim, the same kind the sweep takes, so two overlapping resets cannot
+next day's reset. The job SHALL take its own database lease, the same kind the sweep takes, so two overlapping resets
+cannot
 replace a key twice. The job's summary SHALL count how many keys it replaced and how many replacements failed. A key the
 job has not yet replaced keeps working until its budget is spent, so the sweep never waits on the job.
 
@@ -368,7 +370,8 @@ job has not yet replaced keeps working until its budget is spent, so the sweep n
 #### Scenario: A failed replacement is retried
 
 - **WHEN** the proxy rejects a replacement for one user
-- **THEN** that user's row still shows last month's key time, the failure is reported, and the next day's reset tries again
+- **THEN** that user's row still shows last month's key time, the failure is reported, and the next day's reset tries
+  again
 
 #### Scenario: The reset holds up no Scan
 
@@ -377,7 +380,7 @@ job has not yet replaced keeps working until its budget is spent, so the sweep n
 
 #### Scenario: A second reset replaces nothing twice
 
-- **WHEN** a reset starts while another holds the claim
+- **WHEN** a reset starts while another holds the lease
 - **THEN** it exits having replaced no key
 
 ### Requirement: Plus costs $20 a month and premium $40, with $15 and $35 budgets
@@ -438,18 +441,6 @@ Transcription and spoken answer spend SHALL be recorded as chat turn cost, so th
 - **WHEN** a user's recording is transcribed and the reply is spoken
 - **THEN** the monthly spend sum rises by both, read by every gate alike
 
-### Requirement: The budget reset stops once it loses its claim
-
-The budget reset SHALL run under the same lease claim the sweep takes, under its own claim name. It SHALL check the
-claim's abort signal before each user's key replacement, so a reset whose lease expired or was taken over replaces no
-further key. A reset that stops this way SHALL exit non-zero, and the keys it did not reach SHALL stay due for the next
-day's reset.
-
-#### Scenario: A reset that lost its claim replaces no further key
-
-- **WHEN** a reset's lease renewal fails while users are still due
-- **THEN** no further key is replaced, the job exits non-zero, and the next day's reset replaces the keys still due
-
 ### Requirement: A guard keeps purchase paths out of the app's reach
 
 Preflight SHALL fail when the mobile app reaches the web's checkout or portal capability, through its own imports or
@@ -472,3 +463,15 @@ route, or return to the Plans screen. The failure SHALL name the file and what t
 
 - **WHEN** an app file names the plans path and reads the purchase offers from the storefront rules
 - **THEN** preflight passes
+
+### Requirement: The budget reset stops once it loses its lease
+
+The budget reset SHALL run under the same kind of job lease the sweep takes, under its own job name. It SHALL check the
+lease's abort signal before each user's key replacement, so a reset whose lease expired or was taken over replaces no
+further key. A reset that stops this way SHALL exit non-zero, and the keys it did not reach SHALL stay due for the next
+day's reset.
+
+#### Scenario: A reset that lost its lease replaces no further key
+
+- **WHEN** a reset's lease renewal fails while users are still due
+- **THEN** no further key is replaced, the job exits non-zero, and the next day's reset replaces the keys still due

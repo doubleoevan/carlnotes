@@ -5,7 +5,8 @@ import { TOPIC_NAME_CHARS } from "@carlnotes/contracts/topics"
 import { db } from "@carlnotes/db"
 import { topics as topicTable } from "@carlnotes/db/schema/topics"
 import { toEditableTopicFilter } from "@carlnotes/db/topicPermissions"
-import { EMAIL_TOPIC_RELEVANCE_FLOOR, matchPersonalSourcesTopics, toTopicNameSimilarity } from "./matchTopics"
+import { matchPersonalSourcesTopics, toTopicNameSimilarity } from "./matchTopics"
+import { MIN_FILED_TOPIC_RELEVANCE } from "./topicRelevance"
 
 /**
  * Reads optional name hints only from the subject and first body line.
@@ -13,6 +14,7 @@ import { EMAIL_TOPIC_RELEVANCE_FLOOR, matchPersonalSourcesTopics, toTopicNameSim
 export function readEmailTopicHints(subject: string, body: string): string[] {
 	const subjectLine = subject.trim().replace(/^(?:(?:fwd?|re):\s*)+/i, "")
 	const firstBodyLine = body.trimStart().split(/\r?\n/, 1)[0] ?? ""
+	// keep the text after a topic prefix on the subject line or the first body line
 	const hints = [subjectLine, firstBodyLine]
 		.filter((line) => /^topic\s*:/i.test(line))
 		.map((line) =>
@@ -50,7 +52,7 @@ export async function resolvePersonalSourcesEmailTopics(
 	const hasSubjectTopic = readEmailTopicHints(subject, "").length > 0
 	return {
 		topicIds: hasSubjectTopic
-			? matches.topics.filter((topic) => topic.relevance >= EMAIL_TOPIC_RELEVANCE_FLOOR).map((topic) => topic.id)
+			? matches.topics.filter((topic) => topic.relevance >= MIN_FILED_TOPIC_RELEVANCE).map((topic) => topic.id)
 			: [],
 		suggestions: matches.topics.slice(0, 5).map(({ id, name, url }) => ({ id, name, url })),
 	}
@@ -77,10 +79,12 @@ export function readEmailTopicSelection(
 	if (/^(yes|all)$/i.test(reply)) {
 		return { topicIds: topics.map(({ id }) => id), names: [] }
 	}
+	// split the reply into one part per number or name
 	const parts = reply.replace(/(\d)\s+(?:and|plus)\s+(?=\d)/gi, "$1,").split(/[,;\n]+/)
 	const topicIds: string[] = []
 	const names: string[] = []
 	for (const part of parts) {
+		// read the name from each part. an empty part makes the reply invalid
 		const name = part
 			.trim()
 			.replace(/^(and|also|plus)\s+/i, "")
@@ -88,6 +92,7 @@ export function readEmailTopicSelection(
 		if (!name) {
 			return null
 		}
+		// a number must match a listed Topic
 		if (/^\d+$/.test(name)) {
 			const topic = topics[Number(name) - 1]
 			if (!topic) {
@@ -95,6 +100,7 @@ export function readEmailTopicSelection(
 			}
 			topicIds.push(topic.id)
 		} else {
+			// any other text is a written Topic name
 			names.push(name)
 		}
 	}
@@ -113,6 +119,7 @@ export async function resolveEmailTopicSelection({
 	text: string
 	topics: PersonalSourcesEmailTopicChoice[]
 }): Promise<string[] | null> {
+	// read the selection. a reply with only numbers needs no Topic lookup
 	const selection = readEmailTopicSelection(text, topics)
 	if (!selection) {
 		return null
@@ -120,12 +127,14 @@ export async function resolveEmailTopicSelection({
 	if (!selection.names.length) {
 		return selection.topicIds
 	}
+	// match each written name against the Topics that the user may edit
 	const catalog = await db
 		.select({ id: topicTable.id, name: topicTable.name })
 		.from(topicTable)
 		.where(toEditableTopicFilter(userId))
 	for (const name of selection.names) {
 		const id = toWrittenTopicId(name, catalog)
+		// a name with no clear match makes the selection invalid
 		if (!id) {
 			return null
 		}
@@ -140,6 +149,7 @@ function toWrittenTopicId(name: string, catalog: { id: string; name: string }[])
 	if (exact.length) {
 		return exact.length === 1 ? (exact[0]?.id ?? null) : null
 	}
+	// rank the fuzzy names. the best name must score high and beat the next name by a margin
 	const ranked = catalog
 		.map((topic) => ({ id: topic.id, score: toTopicNameSimilarity({ name: topic.name, hint: name }) }))
 		.sort((left, right) => right.score - left.score)

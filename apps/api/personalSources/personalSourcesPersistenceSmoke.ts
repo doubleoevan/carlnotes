@@ -66,7 +66,7 @@ export async function checkPersonalSourcesQuotaPersistence(): Promise<void> {
 			throw new Error("Missing accepted quota fixture")
 		}
 		checkPersonalSources(
-			`${account} returns the original receipt on retry`,
+			`${account} returns the original confirmation on retry`,
 			JSON.stringify(await receivePersonalSourceEntry(request)) === JSON.stringify(accepted),
 		)
 		await deletePersonalSourceEntry({ ...topic, entryId: accepted.entryId })
@@ -83,7 +83,7 @@ export async function checkPersonalSourcesQuotaPersistence(): Promise<void> {
 }
 
 /**
- * Checks first-receipt Source uniqueness, the shared cap, ciphertext, and cascading cleanup.
+ * Checks first-confirmation Source uniqueness, the shared limit, ciphertext, and cascading cleanup.
  */
 export async function checkPersonalSourcePersistence(): Promise<void> {
 	const topic = await seedPersonalSourcesTopic("source-race")
@@ -175,7 +175,7 @@ export async function checkPersonalSourcesRetentionPersistence(): Promise<void> 
 		throw new Error("Retention fixture was not accepted")
 	}
 
-	// age the receipt without changing its encrypted content or delivery identity
+	// age the confirmation without changing its encrypted content or delivery identity
 	await db
 		.update(personalSourceEntries)
 		.set({ receivedAt: sql`statement_timestamp() - interval '365 days'` })
@@ -217,7 +217,7 @@ export async function checkPersonalSourcesRetentionPersistence(): Promise<void> 
  * Preserves every item when PostgreSQL timestamps share a microsecond-precision paging boundary.
  */
 export async function checkPersonalSourcesEntryPagination(): Promise<void> {
-	// Real receipts retain valid ciphertext while the database supplies sub-millisecond timestamps.
+	// Real confirmations retain valid ciphertext while the database supplies sub-millisecond timestamps.
 	const topic = await seedPersonalSourcesTopic("entry-pagination")
 	const expectedIds: string[] = []
 	for (let index = 0; index < PERSONAL_SOURCES_PAGE_SIZE + 2; index += 1) {
@@ -254,7 +254,7 @@ export async function checkPersonalSourcesEntryPagination(): Promise<void> {
 }
 
 /**
- * Races publication with first receipt while keeping private content sender-scoped.
+ * Races publication with first confirmation while keeping private content sender-scoped.
  */
 export async function checkPersonalSourcesPublicationRace(): Promise<void> {
 	const topic = await seedPersonalSourcesTopic("publish-race")
@@ -270,7 +270,7 @@ export async function checkPersonalSourcesPublicationRace(): Promise<void> {
 		publish,
 		receivePersonalSourceEntry(personalSourcesSmokeDelivery(topic, "publish-race")),
 	])
-	checkPersonalSources("publication and first receipt both succeed", published && received.status === "accepted")
+	checkPersonalSources("publication and first confirmation both succeed", published && received.status === "accepted")
 	const [storedTopic] = await db.select().from(topics).where(eq(topics.id, topic.topicId))
 	const [activation] = await db
 		.select()

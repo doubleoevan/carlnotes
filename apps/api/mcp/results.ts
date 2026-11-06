@@ -1,16 +1,13 @@
 // what the mcp finding tools return for a visitor or a user, and the pages every tool result is packed into
 import type { TopicFinding } from "@carlnotes/contracts/findings"
-import { db } from "@carlnotes/db"
-import { topics } from "@carlnotes/db/schema/topics"
+import type { topics } from "@carlnotes/db/schema/topics"
 import { loadUserOrPublicLiteLLMKey } from "@carlnotes/models/litellm"
 import { isBudgetRejection, SPENT_BUDGET_REJECTION } from "@carlnotes/models/models"
 import { searchTopicFindings as rankTopicFindings } from "@carlnotes/pipeline/chat/retrieve"
-import { eq } from "drizzle-orm"
-import { isAllowed } from "../authorization"
-import { loadTopicAccessAndFindings } from "../topic/accessibleFindings"
-import { setBookmarked, setConsumed, setRating } from "../topic/findingFeedback"
+import { loadTopicAccessAndFindings, loadViewableTopic } from "../topic/accessibleFindings"
+import { saveFindingFeedback, setBookmarked, setConsumed, setRating } from "../topic/findingFeedback"
 import { loadTopicFindings } from "../topic/findings"
-import { type ToolCaller, toMcpAnalyticsProperties } from "./toolCaller"
+import { type ToolCaller, toMcpAnalyticsProperties, toToolCallerUserId } from "./toolCaller"
 
 // the most characters that one page returns, under a client's limit on one result
 export const MCP_PAGE_MAX_CHARS = 40_000
@@ -112,14 +109,15 @@ export async function searchFindings(
 
 	// bill the embedding to the user's own LiteLLM key or to the public key. a visitor cannot search if the public key
 	// is unset
-	const litellmApiKey = await loadUserOrPublicLiteLLMKey(toolCaller.kind === "user" ? toolCaller.userId : null)
+	const litellmApiKey = await loadUserOrPublicLiteLLMKey(toToolCallerUserId(toolCaller))
 	if (toolCaller.kind === "visitor" && !litellmApiKey) {
 		return { text: SEARCH_NEEDS_ACCOUNT_TEXT }
 	}
 
 	// rank the findings, and return a message for a spent budget
 	try {
-		const rankedFindings = await rankTopicFindings(topic.id, query, MCP_SEARCH_LIMIT, litellmApiKey)
+		const userId = toToolCallerUserId(toolCaller)
+		const rankedFindings = await rankTopicFindings(topic.id, userId, query, MCP_SEARCH_LIMIT, litellmApiKey)
 		// shape the ranked rows as findings, with no per-user fields
 		const mcpFindings = rankedFindings.map((finding) => ({
 			findingId: finding.findingId,
@@ -163,6 +161,22 @@ export async function rateFinding(
 }
 
 /**
+ * Saves the user's own words about a finding, returning false if they may not rate it.
+ */
+export async function sendFindingFeedback(
+	toolCaller: ToolCaller & { kind: "user" },
+	findingId: string,
+	feedback: string,
+): Promise<boolean> {
+	return saveFindingFeedback({
+		userId: toolCaller.userId,
+		findingId,
+		feedback,
+		analyticsProperties: toMcpAnalyticsProperties(toolCaller),
+	})
+}
+
+/**
  * Bookmarks or unbookmarks a finding for the user, returning false when they may not bookmark.
  */
 export async function bookmarkFinding(
@@ -175,15 +189,21 @@ export async function bookmarkFinding(
 
 /**
  * Packs one page from an offset, taking as many whole entries as fit the character budget, at least one, with the
- * cursor that continues past them.
+ * cursor that continues past them. The extra characters count against each entry, for a result that adds to it.
  */
-export function packPage<Item>(items: Item[], offset: number, maxChars: number, maxItems: number): McpPage<Item> {
+export function packPage<Item>(
+	items: Item[],
+	offset: number,
+	maxChars: number,
+	maxItems: number,
+	extraItemChars = 0,
+): McpPage<Item> {
 	const pageItems: Item[] = []
 	let usedChars = 0
 
 	// add entries in order until the next would overflow the budget or the count
 	for (const item of items.slice(offset)) {
-		const itemChars = JSON.stringify(item).length
+		const itemChars = JSON.stringify(item).length + extraItemChars
 		if (pageItems.length > 0 && (usedChars + itemChars > maxChars || pageItems.length >= maxItems)) {
 			break
 		}
@@ -210,9 +230,9 @@ export function fromCursor(cursor: string | null): number {
 	if (!cursor) {
 		return 0
 	}
-	// decode the offset, and fall back to zero when it is not a whole number
+	// decode the offset, and fall back to zero if it is not a whole number the query can read
 	const offset = Number(Buffer.from(cursor, "base64url").toString())
-	return Number.isInteger(offset) && offset >= 0 ? offset : 0
+	return Number.isSafeInteger(offset) && offset >= 0 ? offset : 0
 }
 
 /**
@@ -240,11 +260,7 @@ export async function loadVisibleTopic(
 	toolCaller: ToolCaller,
 	topicId: string,
 ): Promise<typeof topics.$inferSelect | null> {
-	const [topic] = await db.select().from(topics).where(eq(topics.id, topicId))
-	if (!topic || !(await isAllowed(toolCaller.kind === "user" ? toolCaller.userId : null, "topic:view", topic))) {
-		return null
-	}
-	return topic
+	return loadViewableTopic(toToolCallerUserId(toolCaller), topicId)
 }
 
 /**

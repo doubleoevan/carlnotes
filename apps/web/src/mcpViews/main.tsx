@@ -1,6 +1,7 @@
 import { MCP_VIEWS, type McpView } from "@carlnotes/contracts/mcpViews"
 import { createRoot } from "react-dom/client"
 import "@/globals.css"
+import "@carlnotes/nightshift/mcpViewTokens.css"
 import { configureWebApiClient } from "@/lib/webApiClient"
 import { McpViewApp } from "./McpViewApp"
 import { installMcpViewFetch } from "./mcpViewFetch"

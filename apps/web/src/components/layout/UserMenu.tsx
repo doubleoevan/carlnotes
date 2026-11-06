@@ -42,7 +42,7 @@ export function UserMenu({
 
 	return (
 		<Popover open={isOpen} onOpenChange={setIsOpen}>
-			<PopoverTrigger className="relative ml-1 hidden rounded-full sm:block">
+			<PopoverTrigger className="relative ml-1 hidden rounded-full sm:flex">
 				{/* the trigger's name and the one badge, its tooltip listing every waiting group under its own heading */}
 				<MenuTriggerUpdateCountBadge
 					name="User menu"

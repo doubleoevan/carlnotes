@@ -72,8 +72,8 @@ These processes run the app:
 |---|---|
 | `app` | Serves the api and the web app, rendering public pages on the server. Chat replies and uploads run in-process. |
 | `temporal-worker` | One process hosts six Temporal Workers, each polling one task queue. Attachments, topic scans, the closing writes that record a scan's outcome, scan emails, podcast episode recordings, and url Source screens each get their own Worker. The closing writes have their own queue, so a backlog of scans waiting for a slot never delays the write for a scan that paid for its review. If any Worker stops, the process exits and the platform restarts it. In production the Northflank service starts it with `bun run temporal`. |
-| scheduler | `bun apps/worker/schedule.ts` sweeps for scheduled Topics and starts their scans. One query computes which Topics are scheduled from each Topic's frequency and its last completed Scan. So a sweep is safe to repeat, and no stored queue can drift. A database claim keeps two sweeps from overlapping. In production a Northflank cron job runs one sweep per interval (`bun run schedule`). |
-| budget reset | `bun apps/worker/resetMonthlyBudgets.ts` replaces every LiteLLM key created before the month began, so each user's spend starts the month at zero. The reset replaces four keys at a time, under the same kind of database claim as the sweep. In production a Northflank cron job runs the reset once a day shortly after midnight UTC (`bun run reset:monthly-budgets`). After the first of the month, the reset finds only the keys that an earlier run failed to replace. |
+| scheduler | `bun apps/worker/schedule.ts` sweeps for scheduled Topics and starts their scans. One query computes which Topics are scheduled from each Topic's frequency and its last completed Scan. So a sweep is safe to repeat, and no stored queue can drift. A job lease keeps two sweeps from overlapping. In production a Northflank cron job runs one sweep per interval (`bun run schedule`). |
+| budget reset | `bun apps/worker/resetMonthlyBudgets.ts` replaces every LiteLLM key created before the month began, so each user's spend starts the month at zero. The reset replaces four keys at a time, under the same kind of job lease as the sweep. In production a Northflank cron job runs the reset once a day shortly after midnight UTC (`bun run reset:monthly-budgets`). After the first of the month, the reset finds only the keys that an earlier run failed to replace. |
 
 Every process above runs on Northflank, which deploys a commit on `main` once CI passes it. `app` and `temporal-worker`
 each run as replicas. The state that every `app` replica shares lives in Redis. Temporal gives each scan to one worker.
@@ -122,6 +122,8 @@ flowchart
 | Review pipeline | Precision, recall, and cost of the relevance gate and the scoring prompt over hand-labeled fixtures | `bun run eval:review-pipeline` |
 | Podcast episode script | The outline and segment prompts: chapters cite real Findings, every claim is supported, quotes are short and named, the title and description fit, three Findings or fewer make one segment and four or more make two to four, with a transition into each one after the first, and the goodbye is left to the show | `bun run eval:podcast-episode-script` |
 | Scan report | Carl's note on every scan: links every kept finding and nothing else, says nothing the scan data lacks, names a failed source, stays short | `bun run eval:scan-report` |
+| Updates opener | Carl's opener above an updates list: stays true for every list that day, names no Finding or count, and never says what the reader missed | `bun run eval:updates-opener` |
+| Topic matching | How a sent item ranks a user's editable Topics, with no model writing anything: the right Topics rank first, and an item that fits no Topic leaves every Topic unchecked | `bun run eval:topic-matching` |
 | Topic chat | The topic chat: opens by answering the question, credits the findings only with what they say, marks what comes from outside them, answers a question about the app from the docs, links only real finding and docs urls, stays brief | `bun run eval:topic-chat` |
 | Team chat | The chat on a team's page, across the team's topics: names the right topic for each finding, credits the findings only with what they say, links only real finding and docs urls | `bun run eval:team-chat` |
 | Topic chat tools | The topic chat's edit tools, in the solo chat and the team room: a change of settings, sources, or prompt is proposed before it is saved, a yes saves it, a decline takes the preview back, a question or an instruction inside a finding calls nothing, and no reply claims an action that no tool made | `bun run eval:topic-chat-tools` |
@@ -211,6 +213,7 @@ bun run mobile:update -- --channel production --environment production # publish
 bun run mobile:env:sync # move the mobile values (the Sentry DSN, the PostHog key, the Play Integrity cloud project number, the Sentry auth token) from Doppler dev and prd into the EAS environments
 bun run mobile:submit -- --platform ios # submit the latest production build to App Store Connect or, with android, the Play internal track, under Doppler prd: the store keys (ASC_APP_ID, APPLE_TEAM_ID, ASC_KEY_ID, ASC_ISSUER_ID, ASC_API_KEY_BASE64, PLAY_SERVICE_ACCOUNT_BASE64) are written for the length of the submit and removed after; --dry-run does everything but the submit
 bun run contract:freeze # write contracts/<app-version>.json, every api route the mobile app reaches as JSON Schema; -- --check fails when the file differs from a fresh freeze, and the submit runs it first
+bun run mcp-views:freeze # under doppler, store the MCP view bundle a host locks to: upload it to object storage, add it to packages/contracts/mcpViewVersions.json, and raise the current version; -- --bundle names a folder built from another commit, and --mcp-views the MCP views it holds
 bun run reviewer:seed -- --environment prd # create or refresh the store reviewer's account in the named environment, under doppler run --config of the same name, with a Topic, its Findings and recap, a Note, a Team room, and a followed public Topic with a Podcast Episode; REVIEWER_EMAIL and REVIEWER_PASSWORD come from Doppler and are never printed
 ```
 
@@ -272,7 +275,7 @@ make paid calls, so they are **not** part of `bun run check`. They need the Lite
 server (`docker compose up -d temporal`) and the running worker (`bun run dev:temporal`):
 
 ```bash
-bun run smoke              # run every smoke test but smoke:signup
+bun run smoke              # run every smoke test but smoke:signup and smoke:mcp-views
 bun run smoke:scan         # the topic-scan smoke test (ingestion + review, end-to-end)
 bun run smoke:store        # the resource-content object-storage round-trip (put → read → delete)
 bun run smoke:attach       # the URL-attachment smoke test (Firecrawl → store → Temporal workflow → ready)
@@ -294,7 +297,8 @@ bun run smoke:room         # the team chat-room smoke test: the access matrix, i
 bun run smoke:rooms        # the chat-rooms smoke test: which rooms a user can open, one per holding team, and the unseen count
 bun run smoke:chat-turns   # the chat turn shapes smoke test: each kind's row and each chat proposal shape is kept, each mismatched row is rejected, rolled back
 bun run smoke:push-devices # the push devices smoke test: ending a session or closing the account deletes its phones, one send per event, recipient, and phone, rolled back
-bun run smoke:mcp          # builds the ui, then checks both MCP routes: Origin, thirteen-tool contracts, private access, result bounds, OAuth and revocation, MCP views, writes, confirmations, and rate limiting
+bun run smoke:mcp          # builds the ui, then checks both MCP routes: Origin, nineteen-tool contracts, private access, result bounds, OAuth and revocation, MCP views, writes, confirmations, and rate limiting
+bun run smoke:mcp-views    # builds the MCP view bundle, then runs each MCP view in this machine's Chrome under the test host, offline, as part of `bun run check`
 bun run seed:personal-sources owner@example.com # retain synthetic review Topics for an existing development owner
 bun run smoke:personal-sources        # development persistence plus real model/Temporal receive → summarize → Scan → delete; --keep retains synthetic fixtures, and live runs just the integrated section
 bun run smoke:personal-sources imports context links email # rerun selected Personal sources smoke sections after a focused change

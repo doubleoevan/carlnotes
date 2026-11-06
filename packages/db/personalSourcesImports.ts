@@ -96,7 +96,7 @@ async function importLockedConversations({
 	const entryIds = new Set<string>()
 	const importBatch = {}
 	for (const conversation of payload.conversations) {
-		const receipt = await receivePersonalSourceEntry(
+		const confirmation = await receivePersonalSourceEntry(
 			{
 				userId,
 				topicId,
@@ -111,10 +111,12 @@ async function importLockedConversations({
 			},
 			transaction,
 		)
-		if (receipt.status !== "accepted") {
-			throw new PersonalSourcesImportRefused(receipt.status === "conflict" ? receipt : { status: "not_found" })
+		if (confirmation.status !== "accepted") {
+			throw new PersonalSourcesImportRefused(
+				confirmation.status === "conflict" ? confirmation : { status: "not_found" },
+			)
 		}
-		entryIds.add(receipt.entryId)
+		entryIds.add(confirmation.entryId)
 	}
 
 	// the permanent retry record survives entry deletion and contains no transcript or raw fingerprint input

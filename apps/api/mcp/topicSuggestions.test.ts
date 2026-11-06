@@ -5,6 +5,7 @@ import { TOPIC_SUGGESTIONS_PAGE_SIZE } from "@carlnotes/contracts/topicSuggestio
 import { restoreConnectionPool, stubConnectionPool } from "@carlnotes/db/connectionPoolStub"
 import * as matching from "@carlnotes/pipeline/personalSources/matchTopics"
 import * as sends from "@carlnotes/pipeline/personalSources/send"
+import * as analytics from "@carlnotes/server/analytics"
 import type { CallToolResult } from "@modelcontextprotocol/server"
 import * as mcpViewData from "./mcpViewData"
 import { registerPersonalSourcesTools } from "./personalSourcesTools"
@@ -26,6 +27,7 @@ test("both routes advertise a read-only suggestion tool and tell agents to wait 
 		totalCount: 0,
 	})
 	const send = spyOn(sends, "sendToPersonalSources")
+	const trackEventSpy = spyOn(analytics, "trackEvent")
 	spyOn(mcpViewData, "loadSuggestionMcpViewData").mockResolvedValue({ session: null, podcastEpisodes: [] })
 	for (const routeTopicId of [null, "bound"]) {
 		for (const kind of ["visitor", "user"] as const) {
@@ -33,7 +35,7 @@ test("both routes advertise a read-only suggestion tool and tell agents to wait 
 				string,
 				{
 					config: { description: string; annotations: { readOnlyHint: boolean } }
-					handler: (input: typeof payload) => Promise<CallToolResult>
+					handler: (input: typeof payload & { cursor?: string; autocomplete?: boolean }) => Promise<CallToolResult>
 				}
 			>()
 			registerPersonalSourcesTools({
@@ -58,6 +60,12 @@ test("both routes advertise a read-only suggestion tool and tell agents to wait 
 			const result = await tool.handler(payload)
 			expect(JSON.stringify(result)).not.toContain("private-routing-canary")
 			if (kind === "user") {
+				// the first page reports its count, and a later page reports nothing
+				expect(trackEventSpy.mock.lastCall?.slice(0, 2)).toEqual(["topics_suggested", "owner"])
+				expect(trackEventSpy.mock.lastCall?.[2]).toMatchObject({ entryPoint: "mcp", suggestedCount: 0 })
+				trackEventSpy.mockClear()
+				await tool.handler({ ...payload, cursor: toCursor(5) })
+				expect(trackEventSpy).not.toHaveBeenCalled()
 				expect(result.structuredContent).toMatchObject({
 					status: "suggested",
 					editableTopics: [],
@@ -70,7 +78,9 @@ test("both routes advertise a read-only suggestion tool and tell agents to wait 
 			}
 		}
 	}
-	expect(match).toHaveBeenCalledTimes(2)
+
+	// every call read all editable Topics, one page at a time, and nothing was sent
+	expect(match).toHaveBeenCalledTimes(4)
 	expect(
 		match.mock.calls.every(
 			([options]) => options.includeAllEditableTopics && options.limit === TOPIC_SUGGESTIONS_PAGE_SIZE + 1,

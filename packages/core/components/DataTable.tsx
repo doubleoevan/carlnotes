@@ -18,7 +18,7 @@ export type DataTableElements = {
 	Foot: Container
 	Row: ComponentType<{ children: ReactNode; className?: string; hasSeparator?: boolean }>
 	Cell: ComponentType<{ children: ReactNode; column: string }>
-	Details?: ComponentType<{ children: ReactNode; columnCount: number }>
+	Details?: ComponentType<{ children: ReactNode; columnCount: number; hasSeparator: boolean }>
 	Header: ComponentType<{
 		column: { key: string; label: string; tooltip?: string; isSortable?: boolean }
 		sort: RowSort
@@ -62,17 +62,23 @@ export function DataTable<Row>({
 					if (renderRow) {
 						return <Fragment key={getRowId(row)}>{renderRow(row, className)}</Fragment>
 					}
+					// the last row has no line under it unless totals follow it
 					const details = renderDetails?.(row)
+					const hasSeparator = hasFooter || i < renderedRows.length - 1
 					return (
 						<Fragment key={getRowId(row)}>
-							<TableRow className={className} hasSeparator={hasFooter || i < renderedRows.length - 1}>
+							<TableRow className={className} hasSeparator={hasSeparator}>
 								{columns.map((column) => (
 									<Cell key={column.key} column={column.key}>
 										{column.render(row)}
 									</Cell>
 								))}
 							</TableRow>
-							{Details && details && <Details columnCount={columns.length}>{details}</Details>}
+							{Details && details && (
+								<Details columnCount={columns.length} hasSeparator={hasSeparator}>
+									{details}
+								</Details>
+							)}
 						</Fragment>
 					)
 				})}

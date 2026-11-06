@@ -1,12 +1,12 @@
 // the context a team chat room turn reads: the team's topics' findings, sources, and scan summaries
-import { toSourceSummary } from "@carlnotes/contracts/sources"
 import { db } from "@carlnotes/db"
+import { isReadySharedSource } from "@carlnotes/db/contentFilters"
 import { scans } from "@carlnotes/db/schema/scans"
 import { teams } from "@carlnotes/db/schema/teams"
 import { teamTopics } from "@carlnotes/db/schema/teamTopics"
 import { sources, topics } from "@carlnotes/db/schema/topics"
 import { and, desc, eq, inArray, isNotNull } from "drizzle-orm"
-import { MAX_SCAN_SUMMARIES, type RetrievedFinding, retrieveFindings } from "./retrieve"
+import { MAX_SCAN_SUMMARIES, type RetrievedFinding, retrieveFindings, toTopicSourceLine } from "./retrieve"
 import { embedRetrievalQuery, readDocsBlock } from "./retrieveDocs"
 
 // everything one team chat room turn puts in front of the model, drawn from every topic the team holds
@@ -54,7 +54,9 @@ export async function retrieveTeamChatContext(
 	// embed the question once, then rank every held topic's findings against it together
 	const questionVector = await embedRetrievalQuery(question, litellmApiKey)
 	const [retrievedFindings, teamSources, scanSummaries, docsBlock] = await Promise.all([
-		topicIds.length > 0 ? retrieveFindings(topicIds, questionVector, topicNameByTopicId) : Promise.resolve([]),
+		topicIds.length > 0
+			? retrieveFindings(topicIds, questionVector, { topicNameById: topicNameByTopicId })
+			: Promise.resolve([]),
 		topicIds.length > 0 ? readTeamSources(topicIds, topicNameByTopicId) : Promise.resolve([]),
 		topicIds.length > 0 ? readTeamScanSummaries(topicIds) : Promise.resolve([]),
 		readDocsBlock(questionVector),
@@ -74,17 +76,12 @@ async function readTeamSources(topicIds: string[], topicNameById: Map<string, st
 	const topicSourceRows = await db
 		.select({ topicId: sources.topicId, sourceKind: sources.kind, config: sources.config })
 		.from(sources)
-		.where(and(inArray(sources.topicId, topicIds), eq(sources.status, "ready")))
+		.where(and(inArray(sources.topicId, topicIds), isReadySharedSource))
 
-	// the built-in web search stores nothing worth summarizing, so it names itself
+	// each line names its topic, then the source
 	return topicSourceRows.map((topicSourceRow) => {
 		const topicName = topicNameById.get(topicSourceRow.topicId) ?? "a topic"
-		if (topicSourceRow.sourceKind === "search") {
-			return `${topicName}: web search — Carl searches the live web for this topic`
-		}
-		// every other source keeps the topic page's own summary line
-		const sourceSummary = toSourceSummary(topicSourceRow.sourceKind, topicSourceRow.config)
-		return `${topicName}: ${sourceSummary ? `${topicSourceRow.sourceKind} — ${sourceSummary}` : topicSourceRow.sourceKind}`
+		return `${topicName}: ${toTopicSourceLine(topicSourceRow.sourceKind, topicSourceRow.config)}`
 	})
 }
 

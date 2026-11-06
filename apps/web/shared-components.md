@@ -111,7 +111,10 @@ Entity icons use Lucide Coffee for Topics, Mic for Podcast Episodes, and Globe f
 
 MCP views carry their connected site URL in `data-site-url` and provide it through `LinkBaseUrlContext`. They do not depend on an HTML base element, which embedded hosts can reject. Link opening remains delegated to the host. Localhost HTTP media can still be refused by a host CSP even when its storage destination is allowed; keep the playback fallback accurate and do not weaken the host policy or change localhost authentication URLs.
 
-MCP send receipts render one bold-title confirmation with linked Topics and flush numbered next-brew URLs. MCP-view-only `sendReceiptLinks` metadata carries sender-authorized waiting links, never transcripts. Preferred resource URIs are versioned; unversioned aliases remain readable. Host link failures show an error. Expanded Personal sources metadata uses a shared date-only layout with platform/mail icons and sender labels.
+MCP send confirmations render one bold-title confirmation with linked Topics and flush numbered next-brew URLs.
+MCP-view-only `sendConfirmationLinks` metadata carries sender-authorized waiting links, never transcripts. Preferred
+resource URIs are versioned; unversioned aliases remain readable. Host link failures show an error. Expanded Personal
+sources metadata uses a shared date-only layout with platform/mail icons and sender labels.
 
 Personal sources items, private summaries, and annotations have no automatic expiry. Their content remains encrypted until explicit deletion. Released read contracts retain nullable expiry fields as null. Optional conversation URLs survive the MCP picker outside matching and open from the shared AI sender label; missing references remain plain labels.
 

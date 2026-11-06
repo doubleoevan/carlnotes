@@ -12,13 +12,16 @@ import { embedPrivateVectors } from "@carlnotes/models/models"
 import { appUrl } from "@carlnotes/server/appUrl"
 import { cosineSimilarity } from "ai"
 import { and, eq, gt, ilike, inArray, sql } from "drizzle-orm"
+import {
+	MIN_SUGGESTED_TOPIC_RELEVANCE,
+	TOPIC_MATCH_TEXT_CHARS,
+	toTopicNameAndPromptText,
+	toTopicRelevance,
+} from "./topicRelevance"
 
 // bound each read and embedding call without cutting off later eligible destinations
-const TOPIC_RELEVANCE_FLOOR = 0.6
 const TOPIC_MATCH_BATCH_SIZE = 64
-const TOPIC_MATCH_TEXT_CHARS = 8000
 const TOPIC_MATCH_PAGE_SIZE = 21
-export const EMAIL_TOPIC_RELEVANCE_FLOOR = 0.75
 export type MatchedTopic = SuggestedTopic & { group: "editable" }
 
 type TopicMatchCandidate = {
@@ -26,16 +29,19 @@ type TopicMatchCandidate = {
 	name: string
 	prompt: string
 	context: string
+	// the Topic details that a match returns
 	visibility: SuggestedTopic["visibility"]
 	teamName: string | null
 	subscriberCount: number
 }
+// a scored candidate, and the result of a match
 type CandidateMatch = { candidate: TopicMatchCandidate; relevance: number }
 type TopicMatches = { status: "matched"; topics: MatchedTopic[]; totalCount: number } | { status: "unavailable" }
 type MatchTopicsOptions = {
 	userId: string
 	payload: SuggestTopicsPayload
 	includeAllEditableTopics?: boolean
+	// the page to return, the name hints, and the minimum relevance
 	offset?: number
 	limit?: number | null
 	topicNameHints?: string[]
@@ -83,19 +89,21 @@ async function matchCandidatePages({
 	queryVectors: number[][]
 	key: string
 }): Promise<CandidateMatch[]> {
+	// score candidate pages until a short page ends the catalog
 	const matches: CandidateMatch[] = []
 	let candidatePage = firstPage
 	while (candidatePage.length) {
-		// identical descriptions within a batch share one embedding; exact content matches reuse their query vector
+		// identical texts within a batch share one embedding, and an exact content match reuses its query vector
 		const vectorsByText = new Map(queryTexts.map((text, index) => [text, queryVectors[index] ?? []]))
-		const candidateTexts = [...new Set(candidatePage.map(toCandidateText))].filter((text) => !vectorsByText.has(text))
+		const candidateTexts = [...new Set(candidatePage.flatMap(toCandidateTexts))].filter(
+			(text) => !vectorsByText.has(text),
+		)
 		const candidateVectors = await embedMatchingTexts(candidateTexts, key)
 		for (const [index, text] of candidateTexts.entries()) {
 			vectorsByText.set(text, candidateVectors[index] ?? [])
 		}
 		for (const candidate of candidatePage) {
-			const vector = vectorsByText.get(toCandidateText(candidate)) ?? []
-			const contentRelevance = Math.max(...queryVectors.map((queryVector) => cosineSimilarity(queryVector, vector)))
+			const contentRelevance = toContentRelevance(candidate, queryVectors, vectorsByText)
 			const relevance = Math.max(
 				0,
 				Math.min(1, contentRelevance + toNameBoost(candidate.name, options.topicNameHints ?? [])),
@@ -107,12 +115,27 @@ async function matchCandidatePages({
 				matches.push({ candidate, relevance })
 			}
 		}
+		// stop at a short page, or read the next page
 		if (candidatePage.length < TOPIC_MATCH_BATCH_SIZE) {
 			break
 		}
 		candidatePage = await loadCandidatePage(options, { afterId: candidatePage.at(-1)?.id })
 	}
 	return matches
+}
+
+// a Topic's name and prompt lead its score, and its attachment context can only raise it
+function toContentRelevance(
+	candidate: TopicMatchCandidate,
+	queryVectors: number[][],
+	vectorsByText: Map<string, number[]>,
+): number {
+	const toContentScore = (text: string): number =>
+		Math.max(...queryVectors.map((queryVector) => cosineSimilarity(queryVector, vectorsByText.get(text) ?? [])))
+	return toTopicRelevance({
+		nameAndPromptScore: toContentScore(toTopicNameAndPromptText(candidate)),
+		attachmentScore: candidate.context ? toContentScore(candidate.context) : null,
+	})
 }
 
 // recheck edit authority and the context used for matching before exposing destinations
@@ -127,7 +150,8 @@ async function recheckMatchedTopics(
 		const currentTopics = await loadCandidatePage(options, { topicIds: [...matchedById.keys()] })
 		for (const candidate of currentTopics) {
 			const match = matchedById.get(candidate.id)
-			if (!match || toCandidateText(candidate) !== toCandidateText(match.candidate)) {
+			// a changed description fails the whole recheck
+			if (!match || !isSameDescription(candidate, match.candidate)) {
 				return null
 			}
 			currentMatches.push({ candidate, relevance: match.relevance })
@@ -153,7 +177,7 @@ function toMatchedPage(options: MatchTopicsOptions, matches: CandidateMatch[]): 
 			visibility: candidate.visibility,
 			teamName: candidate.teamName,
 			subscriberCount: candidate.subscriberCount,
-			isBestMatch: index < 3 && relevance > TOPIC_RELEVANCE_FLOOR && relevance >= bestScore - 0.02,
+			isBestMatch: index < 3 && relevance > MIN_SUGGESTED_TOPIC_RELEVANCE && relevance >= bestScore - 0.02,
 		}),
 	)
 	return {
@@ -200,6 +224,7 @@ async function embedMatchingTexts(texts: string[], key: string): Promise<number[
 	for (let offset = 0; offset < texts.length; offset += TOPIC_MATCH_BATCH_SIZE) {
 		const batch = texts.slice(offset, offset + TOPIC_MATCH_BATCH_SIZE)
 		const embeddings = await embedPrivateVectors(batch, key)
+		// a short batch or an unusable vector fails the whole embedding
 		if (embeddings.length !== batch.length || embeddings.some((vector) => !isUsableVector(vector))) {
 			throw new Error("Topic matching requires complete embeddings")
 		}
@@ -218,15 +243,18 @@ function toContentChunks(payload: SuggestTopicsPayload): string[] {
 	return chunks.length ? chunks : ["Email"]
 }
 
-// include the name and prompt before bounded ready attachment context
-function toCandidateText(candidate: TopicMatchCandidate): string {
-	return [candidate.name, candidate.prompt, candidate.context]
-		.filter(Boolean)
-		.join("\n")
-		.slice(0, TOPIC_MATCH_TEXT_CHARS)
+// the texts that score one candidate. only a Topic with attachment context costs a second embedding
+function toCandidateTexts(candidate: TopicMatchCandidate): string[] {
+	const nameAndPromptText = toTopicNameAndPromptText(candidate)
+	return candidate.context ? [nameAndPromptText, candidate.context] : [nameAndPromptText]
 }
 
-// hints only boost already relevant content; approximate names never override the content floor
+// a match stands only while its name, prompt, and attachment context still read as they did when it was scored
+function isSameDescription(left: TopicMatchCandidate, right: TopicMatchCandidate): boolean {
+	return toTopicNameAndPromptText(left) === toTopicNameAndPromptText(right) && left.context === right.context
+}
+
+// a hint only boosts content that already clears the minimum suggested relevance
 function toNameBoost(name: string, hints: string[]): number {
 	return 0.1 * Math.max(0, ...hints.map((hint) => toTopicNameSimilarity({ name, hint })))
 }
@@ -242,11 +270,13 @@ export function toTopicNameSimilarity({ name, hint }: { name: string; hint: stri
 			.toLowerCase()
 			.replace(/[^\p{L}\p{N}]+/gu, " ")
 			.trim()
+	// an empty hint has no similarity
 	const normalizedName = normalize(name)
 	const normalizedHint = normalize(hint)
 	if (!normalizedHint) {
 		return 0
 	}
+	// compare the hint with the full name and with each word window of the hint's length
 	const words = normalizedName.split(" ")
 	const wordCount = normalizedHint.split(" ").length
 	let similarity = toTrigramSimilarity(normalizedHint, normalizedName)
@@ -265,6 +295,7 @@ function toTrigramSimilarity(left: string, right: string): number {
 		const characters = [...`  ${text} `]
 		return new Set(characters.slice(0, -2).map((_, index) => characters.slice(index, index + 3).join("")))
 	}
+	// return the share of trigrams that the left and right texts have in common
 	const leftTrigrams = toTrigrams(left)
 	const rightTrigrams = toTrigrams(right)
 	const sharedCount = [...leftTrigrams].filter((trigram) => rightTrigrams.has(trigram)).length
@@ -282,11 +313,11 @@ function isUsableVector(vector: number[]): boolean {
 function isRelevantTopic({
 	contentRelevance,
 	relevance,
-	minimumRelevance = TOPIC_RELEVANCE_FLOOR,
+	minimumRelevance = MIN_SUGGESTED_TOPIC_RELEVANCE,
 }: {
 	contentRelevance: number
 	relevance: number
 	minimumRelevance?: number
 }): boolean {
-	return contentRelevance > TOPIC_RELEVANCE_FLOOR && relevance >= minimumRelevance
+	return contentRelevance > MIN_SUGGESTED_TOPIC_RELEVANCE && relevance >= minimumRelevance
 }

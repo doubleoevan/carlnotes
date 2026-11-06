@@ -30,7 +30,11 @@ import {
 } from "./saveHelpers"
 import { type ObjectionableRejection, type TermsOutdatedRejection, toTopicSaveRejection } from "./saveTopicGate"
 import { reconcileTopicSources } from "./saveTopicSources"
-import { claimTopicDraftReceipt, readUsedTopicDraft, type TopicDraftReceipt } from "./topicDraftReceipts"
+import {
+	claimTopicDraftConfirmation,
+	readUsedTopicDraft,
+	type TopicDraftConfirmationRecord,
+} from "./topicDraftConfirmationRecords"
 
 import { notifyIndexNowOfTopicChange, saveTopicVectorsOnVisibilityChange } from "./topicIndexing"
 
@@ -69,16 +73,16 @@ export async function createTopic(
 	analyticsProperties: AnalyticsProperties,
 	// where the first prompt version is saved from. the editor unless a topic tool says otherwise
 	origin: PromptVersionOrigin = "editor",
-	receipt?: TopicDraftReceipt,
+	confirmationRecord?: TopicDraftConfirmationRecord,
 ): Promise<CreateTopicResult> {
 	// a successful retry returns its owned Topic even after the original creation filled the owner's quota
-	const existing = receipt && (await readUsedTopicDraft(db, userId, receipt))
+	const existing = confirmationRecord && (await readUsedTopicDraft(db, userId, confirmationRecord))
 	if (existing) {
 		return existing
 	}
 	// enforce the topic limit and user role before writing anything.
 	if (!(await isAllowed(userId, "topic:create"))) {
-		return (receipt && (await readUsedTopicDraft(db, userId, receipt))) || { status: "quota" }
+		return (confirmationRecord && (await readUsedTopicDraft(db, userId, confirmationRecord))) || { status: "quota" }
 	}
 
 	// check if a topic asking for a daily frequency can fit under the plan's daily topic limit
@@ -112,13 +116,13 @@ export async function createTopic(
 	const podcastNames = await toPodcastNames(payload.sources)
 	const created = await db.transaction(async (transaction) => {
 		// authorize distinct drafts against the same owner slot, and replay identical confirmations before checking limits
-		const rejection = await guardTopicCreation(transaction, userId, payload, receipt)
+		const rejection = await guardTopicCreation(transaction, userId, payload, confirmationRecord)
 		if (rejection) {
 			return rejection
 		}
 		// consume the preview atomically with every write. Only one caller starts the new Topic's first Scan.
 		const id = crypto.randomUUID()
-		const used = receipt && (await claimTopicDraftReceipt(transaction, userId, receipt, id))
+		const used = confirmationRecord && (await claimTopicDraftConfirmation(transaction, userId, confirmationRecord, id))
 		if (used) {
 			return used
 		}
@@ -205,13 +209,15 @@ async function guardTopicCreation(
 	transaction: DbTransaction,
 	userId: string,
 	payload: CreateTopicPayload,
-	receipt?: TopicDraftReceipt,
+	confirmationRecord?: TopicDraftConfirmationRecord,
 ): Promise<CreateTopicResult | null> {
 	await transaction.select({ id: users.id }).from(users).where(eq(users.id, userId)).for("no key update")
-	const existing = receipt && (await readUsedTopicDraft(transaction, userId, receipt))
+	// a retried confirmation returns the Topic it already created
+	const existing = confirmationRecord && (await readUsedTopicDraft(transaction, userId, confirmationRecord))
 	if (existing) {
 		return existing
 	}
+	// a new Topic needs a Topic left on the plan
 	if ((await topicsRemaining(userId, transaction)) <= 0) {
 		return { status: "quota" }
 	}
@@ -283,7 +289,7 @@ export async function updateTopic(
 	// whether the visibility change released the topic's feature order inside the transaction
 	let isFeatureOrderReleased = false
 	const removedSourceKinds = await db.transaction(async (transaction) => {
-		// serialize receipt with publication and invitation reconciliation
+		// serialize confirmation with publication and invitation reconciliation
 		await lockPersonalSourcesTopic(transaction, topicId)
 		if (visibility !== "private" || inviteeCheck.newInvites.length > 0 || inviteeCheck.reinvitedEmails.length > 0) {
 			await assertPersonalSourcesConverted(transaction, topicId)

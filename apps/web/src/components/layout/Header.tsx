@@ -4,8 +4,8 @@ import { isAdminRole } from "@carlnotes/contracts/enums"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { useLocation } from "@tanstack/react-router"
 import { useState } from "react"
-import { CoffeeMug } from "@/components/branding/CoffeeMug"
 import { AnchorLink } from "@/components/common/AnchorLink"
+import { BrandLink } from "@/components/common/BrandLink"
 import { buttonVariants } from "@/components/primitives/button"
 import {
 	TopicTutorialVideoButton,
@@ -66,16 +66,14 @@ export function Header() {
 					<div className="flex items-center gap-2">
 						{/* the brand links to the search bar's search, or home, emptying the bar from the search page and reheating
 						    the feed if already home */}
-						<AnchorLink
+						<BrandLink
 							href={logoLink.href}
 							aria-label={logoLink.ariaLabel}
 							onClick={logoLink.onClick}
-							className="flex items-center gap-2 rounded-md"
-						>
-							{/* nudge the cup up to align with the text */}
-							<CoffeeMug className="text-hero-accent -translate-y-0.5" />
-							<span className={cn("animate-hydrate", LOGO_CLASS)}>CarlNotes</span>
-						</AnchorLink>
+							// nudge the mug up to align with the text
+							mugClassName="text-hero-accent -translate-y-0.5"
+							nameClassName={cn("animate-hydrate", LOGO_CLASS)}
+						/>
 						{!isHeroShown && (
 							<TopicTutorialVideoButton
 								onSelect={() => setTopicTutorialVideoOpener("header")}

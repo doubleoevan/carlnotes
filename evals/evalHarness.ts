@@ -45,6 +45,12 @@ type SavedEvalResult = {
 	hasUncommittedChanges: boolean
 	writerModelIds: string[]
 	graderModelId: string
+	// what a ranking eval reports beside its pass count
+	attachmentScoreWeight?: number
+	minimumSuggestedRelevance?: number
+	minimumFiledRelevance?: number
+	formulaReports?: unknown[]
+	minimumRelevanceLines?: string[]
 }
 
 // an eval's pass rate, its 95% interval, and whether the rate clears the eval's gate
@@ -260,8 +266,10 @@ export function toGateResult({ passedRunCount, runCount, gatePassRate }: ToGateR
 	return { passRate, ...intervalBounds, gateText, isBelowGate }
 }
 
-// save one eval's result, then rebuild the badge from every eval's saved result
-async function saveEvalResult(savedEvalResult: SavedEvalResult): Promise<void> {
+/**
+ * Saves one eval's result, then rebuilds the badge from every eval's saved result.
+ */
+export async function saveEvalResult(savedEvalResult: SavedEvalResult): Promise<void> {
 	await Bun.write(
 		join(RESULTS_DIRECTORY, `${savedEvalResult.name}.json`),
 		`${JSON.stringify(savedEvalResult, null, "\t")}\n`,
@@ -289,8 +297,10 @@ async function saveEvalResult(savedEvalResult: SavedEvalResult): Promise<void> {
 	await Bun.write(join(RESULTS_DIRECTORY, BADGE_FILE_NAME), `${JSON.stringify(badge, null, "\t")}\n`)
 }
 
-// read the short commit that the eval measured, and whether the working tree had changes beyond the commit
-function readGitState(): { commit: string; hasUncommittedChanges: boolean } {
+/**
+ * Reads the short commit that the eval measured, and whether the working tree had changes beyond the commit.
+ */
+export function readGitState(): { commit: string; hasUncommittedChanges: boolean } {
 	const commit = Bun.spawnSync(["git", "rev-parse", "--short", "HEAD"]).stdout.toString().trim()
 	const gitStatusText = Bun.spawnSync(["git", "status", "--porcelain"]).stdout.toString().trim()
 	return { commit, hasUncommittedChanges: gitStatusText !== "" }

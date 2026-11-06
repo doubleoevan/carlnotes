@@ -22,7 +22,8 @@ export type ExpandableRowProps = ExpandableRowSharedProps & {
 }
 
 /**
- * Shares the Source and item disclosures, mounting private details only while expanded.
+ * Shares the Source and entry disclosures, mounting private details only while expanded. A list that keeps one row open
+ * passes isExpanded and onToggleExpanded, and every other row keeps its own state.
  */
 export function ExpandableRow({
 	elements,
@@ -31,13 +32,16 @@ export function ExpandableRow({
 	tag,
 	ordinal,
 	initialOpen = false,
+	isExpanded,
+	onToggleExpanded,
 	isFirst = false,
 	isLast = false,
 	variant = "item",
 	children,
 }: ExpandableRowProps & { elements: ExpandableRowElements }) {
 	// keep disclosure identity stable through refreshes and retire its children on collapse
-	const [isExpanded, setIsExpanded] = useState(initialOpen)
+	const [isOpen, setIsOpen] = useState(initialOpen)
+	const isShowingDetails = isExpanded ?? isOpen
 	const contentId = useId()
 	const isSection = variant === "section"
 	const { Row, Disclosure, Details, Text, Title, Chevron } = elements
@@ -53,9 +57,9 @@ export function ExpandableRow({
 			{/* one trigger controls the whole disclosure */}
 			<Disclosure
 				label={[ordinal, tag, title, metadata].filter(Boolean).join(", ")}
-				isExpanded={isExpanded}
+				isExpanded={isShowingDetails}
 				contentId={contentId}
-				onPress={() => setIsExpanded(!isExpanded)}
+				onPress={onToggleExpanded ?? (() => setIsOpen(!isOpen))}
 			>
 				{ordinal !== undefined && <Text className={expandableRowClasses.ordinal}>{ordinal}</Text>}
 				{tag && <Text className={expandableRowClasses.tag}>{tag}</Text>}
@@ -66,10 +70,10 @@ export function ExpandableRow({
 					{title}
 				</Title>
 				<Text className={expandableRowClasses.metadata}>{metadata}</Text>
-				<Chevron isExpanded={isExpanded} />
+				<Chevron isExpanded={isShowingDetails} />
 			</Disclosure>
 			{/* links and destructive actions remain outside the trigger */}
-			{isExpanded && (
+			{isShowingDetails && (
 				<Details
 					id={contentId}
 					className={cn(expandableRowClasses.details, !isSection && expandableRowClasses.itemDetails)}

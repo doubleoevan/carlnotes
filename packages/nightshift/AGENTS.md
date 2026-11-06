@@ -2,8 +2,8 @@
 
 `@carlnotes/nightshift`, Nightshift, the CarlNotes design system: the color tokens, the radius scale, the elevation,
 the fonts, and the type roles in TypeScript, which the web app, the mobile app, the emails, and the api's own pages
-read, and the component contracts both apps' implementations build on. `tokens.css`, `uniwind.css`, and the Figma
-files are written from the tokens.
+read, and the component contracts both apps' implementations build on. `tokens.css`, `mcpViewTokens.css`,
+`uniwind.css`, and the Figma files are written from the tokens.
 
 - `colors.ts` — every color token with its Latte (light) value, its Dark roast (dark) value, and its description.
   `latte` and `darkRoast` are each mode's values by name. `colorModes` lists the modes, and `toColorChannels` reads a
@@ -55,14 +55,17 @@ files are written from the tokens.
   `toColorCssVariable`. The mobile note screen resolves the active palette and scales native text through the editor's font-scaling support.
 - `email.ts` — what an email inlines: the Latte palette, the font stack, and a role's size in pixels. Email clients
   do not reliably read CSS custom properties.
+- `mcpViewTokensCss.ts` — a pure function that returns the text of `mcpViewTokens.css`, the tokens an MCP view reads
+  from the host's css variables, each with a Nightshift fallback.
 - `tokensCss.ts`, `uniwindCss.ts`, and `figmaTokens.ts` — pure functions that return the text of `tokens.css`, the text
   of `uniwind.css` (the mobile theme: each mode's resolved values in a `@variant` block, the radius steps in pixels, and
   the raised shadow's utility), and the Design Tokens Community Group 1.0 JSON for Figma, one file per mode, the raised
   shadow as a `shadow` token. `writtenFiles.ts` returns each written file's text by its path, for the writer and
   `tokens.test.ts`.
-- Written files: `tokens.css`, which `apps/web/src/globals.css` imports, `uniwind.css`, which `apps/mobile/global.css`
-  imports, and `figma/light.tokens.json` and `figma/dark.tokens.json`. Change the source, then run
-  `bun run nightshift:write` (`scripts/write-nightshift-tokens.ts`), which writes all four. Never edit them by hand.
+- Written files: `tokens.css`, which `apps/web/src/globals.css` imports, `mcpViewTokens.css`, which the MCP view entry
+  imports, `uniwind.css`, which `apps/mobile/global.css` imports, and `figma/light.tokens.json` and
+  `figma/dark.tokens.json`. Change the source, then run `bun run nightshift:write`
+  (`scripts/write-nightshift-tokens.ts`), which writes all five. Never edit them by hand.
 - Importers: `apps/web`, which reads the stylesheet, `classNames.ts`, `field.ts`, `pagination.ts`, `coffeeMug.ts`,
   `oauthProviderIcons.ts`, `aiProviderIcons.ts`, `noteHtmlStyle.ts` and `theme.ts`'s `toColorCssVariable` for the note's style, and the
   contracts anywhere as far as the boundary check goes, each contract only from its implementation, a story, or a test

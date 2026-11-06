@@ -1,9 +1,9 @@
 {
 	"name": "grader-calibration",
-	"passedRunCount": 40,
-	"runCount": 40,
-	"ranOn": "2026-10-20",
-	"commit": "4c85de75",
+	"passedRunCount": 46,
+	"runCount": 46,
+	"ranOn": "2026-11-05",
+	"commit": "14a06ba2",
 	"hasUncommittedChanges": true,
 	"writerModelIds": [],
 	"graderModelId": "chat-model, score-model"

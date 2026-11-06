@@ -2,7 +2,9 @@
 
 ## Purpose
 TBD - created by archiving change add-request-path-headroom. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: The connection pool fits a request's concurrency and fails loudly when full
 
 Each long-running process SHALL size its connection pool from the database at startup: it reads `SHOW max_connections`
@@ -282,8 +284,7 @@ topic page SHALL be read fresh. While Redis is unreachable each request SHALL bu
 The app's database role SHALL have a `statement_timeout` of 30 seconds in the app's database alone, set by the migration
 job, so a runaway query is cancelled instead of holding a pooled connection, and another database the role reaches keeps
 its own setting. The connection pooler's server connections take the setting as they open. A migration that needs longer
-SHALL set `statement_timeout` to zero locally in its own transaction. A database claim's transaction, which sits idle
-while its task runs, SHALL opt out of any idle-in-transaction timeout for itself.
+SHALL set `statement_timeout` to zero locally in its own transaction.
 
 #### Scenario: A runaway query is cancelled
 
@@ -324,4 +325,3 @@ row. A transcode that ends, read or rejected, SHALL give its slot back.
 #### Scenario: An event loop is limited
 - **WHEN** a caller posts a 31st spoken event in a minute
 - **THEN** it gets a 429, and nothing is counted
-

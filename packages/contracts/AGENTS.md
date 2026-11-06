@@ -2,7 +2,8 @@
 
 `sourceScoring.ts` owns the custom and Personal sources score bonuses. `PersonalSourceScoreBonus` is the actual addition, not a multiplier, so queue priority and Finding persistence use the same values.
 
-`topicSuggestions.ts` owns ranked editable/follow groups, best-match metadata, and numbered text fallback. The send contract accepts one to twenty distinct `topic_ids` or one legacy `topic_id`; receipts include every destination.
+`topicSuggestions.ts` owns ranked editable/follow groups, best-match metadata, and numbered text fallback. The send
+contract accepts one to twenty distinct `topic_ids` or one legacy `topic_id`; confirmations include every destination.
 
 
 `personalSourcesAccounts.ts` also defines connection-nudge dismissal and verified agent-setup payloads.
@@ -16,7 +17,7 @@ Source count and server receiving availability; it leaves frozen legacy Topic re
 
 `personalSourcesAccounts.ts` defines connection/key metadata and shared-mailbox guidance. `aiAgentIdentity.ts` derives stable
 app-domain groups without client-advertised names. `personalSourcesRouteContracts.ts` adds Personal sources routes to the contract
-registry, and `personalSourcesSendText.ts` shares the MCP receipt wording with the Topic MCP view.
+registry, and `personalSourcesSendText.ts` shares the MCP confirmation wording with the Topic MCP view.
 
 `@carlnotes/contracts`, the universal part of what every workspace may import: the zod response shapes, the request
 payloads, and the constants that the api validates with and the web app parses against. Every app and package imports
@@ -57,7 +58,11 @@ name, `MIN_PASSWORD_LENGTH`, the credentials rule a sign-up form parses with, an
 shapes.
 `text.ts` holds `toOneLineText`, which puts text on one line for a note, a title, a search query, or a hash, and
 `toDotSeparatedText`, which joins a line's parts on middle dots.
-`mcpViews.ts` names the MCP Apps views and the data a tool result gives its MCP view, `pagination.ts` holds the page
+`mcpViews.ts` names the MCP Apps views, their version, and the data a tool result gives its MCP view, `mcpViewHtml.ts`
+writes an MCP view's html, `mcpScanStatus.ts` holds the shapes and lines of the Scan tools' results, `updates.ts` the
+updates list, and `mcpViewVersions.ts` reads `mcpViewVersions.json`, the MCP view versions stored in object storage that
+`bun run mcp-views:freeze` writes. `mcpViewStoredResults.test.ts` type checks what a stored bundle reads against the
+tool results. `pagination.ts` holds the page
 sizes a paged list offers, and `topicEdits.ts` turns a saved topic's fields into the editable draft a topic edit starts
 from.
 `analyticsEvents.ts` holds the event types: the user events keyed to a user, the bot events keyed to a bot's or an
@@ -70,6 +75,7 @@ fields, so the module imports nothing from Temporal. `avatars.ts` is the default
 url's version, `usernames.ts` how a username is shaped, validated, and compared, with the word lists a random one is
 generated from in `usernameWords.ts`, `emails.ts` the canonical form of a Gmail address, and `chatMentions.ts` the chat
 mention parser for the chat room composer and the room's notifications, with the reserved usernames.
+`mcpScanStatusTestFixtures.ts` supplies the Scan statuses the api tests and the scan MCP view's stories and smoke tests read.
 `topicFeedTestFixtures.ts` supplies complete Feed, Topic, and Finding payloads for client/core/mobile tests and native stories.
 `chatTestFixtures.ts` holds the podcast episode note that the contracts and web chat tests share,
 `podcastEpisodeTestFixtures.ts` the podcast episode, summary, and chapter fixtures the contracts, core, web, and
@@ -92,11 +98,12 @@ order check that the api and web tests share.
 - Nothing here touches the database, the network, or the DOM: the modules are values and their shapes.
 - Tests: `bun test packages/contracts`.
 
-`personalSources.ts` holds Personal sources items, receiving Source identities, receipt outcomes, paging, and context limits.
-`personalSourcesPayloads.ts` validates deliberate sends and selected transcript imports. `personalSourcesUrls.ts` separates public
-candidate links from owner references. `canonicalUrl.ts` shares ingestion normalization, and `networkAddress.ts`
-shares literal address classification with server fetching. New Source kinds use dedicated Personal sources responses;
-`fetchedSourceKinds` preserves the generic Topic response enum for released clients.
+`personalSources.ts` holds Personal sources items, receiving Source identities, confirmation outcomes, paging, and
+context limits. `personalSourcesPayloads.ts` validates deliberate sends and selected transcript imports.
+`personalSourcesUrls.ts` separates public candidate links from owner references. `canonicalUrl.ts` shares ingestion
+normalization, and `networkAddress.ts` shares literal address classification with server fetching. New Source kinds use
+dedicated Personal sources responses; `fetchedSourceKinds` preserves the generic Topic response enum for released
+clients.
 
 `clientTelemetry.ts` defines bounded native device headers and the browser user-agent fallback used by API events and
 request monitoring. These untrusted descriptions are analytics only. `visitAnalytics.ts` shares URL/path redaction and

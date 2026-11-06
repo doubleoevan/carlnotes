@@ -6,7 +6,7 @@ import { readPersonalSourcesAllowance } from "./personalSourcesQuota"
 // every fixture restores the real pool before the next module uses it
 afterEach(restoreConnectionPool)
 
-test("a shared 200th receipt exhausts the day and the UTC reset starts a fresh allowance", async () => {
+test("a shared 200th confirmation exhausts the day and the UTC reset starts a fresh allowance", async () => {
 	// the database returns its clock and the sum of the persisted origin rows
 	let now = "2026-11-03T23:59:59.999Z"
 	let acceptedCount = "199"

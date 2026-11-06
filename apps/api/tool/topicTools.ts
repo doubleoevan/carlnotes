@@ -132,7 +132,7 @@ export async function updateTopicFields({
 	// write the named fields and release the feature order in one transaction
 	let isFeatureOrderReleased = false
 	await db.transaction(async (transaction) => {
-		// serialize publication and podcast activation against private receipt
+		// serialize publication and podcast activation against private confirmation
 		await lockPersonalSourcesTopic(transaction, topicId)
 		if ((topicFields.visibility && topicFields.visibility !== "private") || topicFields.isPodcastEnabled) {
 			await assertPersonalSourcesConverted(transaction, topicId)

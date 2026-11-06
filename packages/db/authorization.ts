@@ -74,7 +74,7 @@ export { loadUserAccess, monthlySpendDollars }
  * Whether the user may execute a capability, optionally on a given topic.
  */
 export async function isAllowed(userId: string | null, capability: Capability, topic?: GatedTopic): Promise<boolean> {
-	// private receipt authority belongs to its owner before administrative entitlements apply
+	// private confirmation authority belongs to its owner before administrative entitlements apply
 	if (isPersonalSourcesCapability(capability)) {
 		return decidePersonalSourcesCapability({ userId, capability, topic })
 	}

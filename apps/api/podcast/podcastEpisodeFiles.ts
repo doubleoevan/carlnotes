@@ -10,6 +10,13 @@ import { toPodcastEpisodeChaptersJson, toTranscriptHtml } from "../share/podcast
 import type { PodcastEpisodeRow } from "./podcastEpisodeRows"
 
 /**
+ * Returns whether an audio request starts at the first byte.
+ */
+export function isFirstAudioRequest(rangeHeader: string | undefined): boolean {
+	return !rangeHeader || rangeHeader.startsWith("bytes=0-")
+}
+
+/**
  * Returns a podcast episode's audio length and type for a HEAD, and a redirect to its presigned url for a GET.
  */
 export function toPodcastEpisodeAudioResponse(context: Context, podcastEpisodeRow: PodcastEpisodeRow): Response {

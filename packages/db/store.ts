@@ -205,6 +205,11 @@ export async function getResourceContent(contentKey: string): Promise<string> {
 	return bucket().file(contentKey).text()
 }
 
+// the object key of one of a stored MCP view version's two files
+export function toMcpViewBundleKey(version: number, bundleFile: "mcpViews.js" | "mcpViews.css"): string {
+	return `mcp-view-bundles/v${version}/${bundleFile}`
+}
+
 // how long a presigned podcast episode audio url works. the url only has to last until a download or a playback starts
 export const PODCAST_EPISODE_AUDIO_URL_LIFETIME_SECONDS = 60 * 60
 

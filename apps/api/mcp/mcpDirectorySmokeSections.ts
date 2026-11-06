@@ -16,9 +16,9 @@ import {
 	type TopicPage,
 	toClient,
 	toResultJson,
-	toResultText,
 } from "./mcpSmokeFixtures"
 import { CONNECT_ACCOUNT_TEXT } from "./results"
+import { toResultText } from "./toolTestFixtures"
 
 /** Checks present and absent Origins, including a forbidden Origin with a valid account token. */
 export async function checkOrigins(accessToken: string): Promise<void> {

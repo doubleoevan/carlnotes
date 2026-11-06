@@ -12,6 +12,7 @@ import type { AnalyticsProperties } from "../currentUser"
 import {
 	type AccessiblePodcastEpisode,
 	loadAccessiblePodcastEpisode,
+	toPodcastEpisodeAnalyticsProperties,
 	toPodcastEpisodeViewFilter,
 } from "./podcastEpisodeRows"
 
@@ -64,9 +65,7 @@ export async function savePodcastEpisodeListen({
 	// report a playback start and a completion
 	const listenProperties = {
 		...analyticsProperties,
-		topicId: topic.id,
-		isTopicPublic: topic.visibility === "public",
-		episodeId: podcastEpisodeId,
+		...toPodcastEpisodeAnalyticsProperties(topic, podcastEpisodeId),
 	}
 	if (isPlaybackStart) {
 		trackEvent("episode_played", userId, listenProperties)

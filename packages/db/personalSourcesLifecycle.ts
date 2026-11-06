@@ -63,7 +63,7 @@ export async function deletePersonalSourceEntry({
 	entryId: string
 }): Promise<boolean> {
 	return db.transaction(async (transaction) => {
-		// serialize deletion with receipt and context commits
+		// serialize deletion with confirmation and context commits
 		const topic = await lockPersonalSourcesTopic(transaction, topicId)
 		if (
 			!topic ||
@@ -101,7 +101,7 @@ export async function deletePersonalSource({
 	userId: string
 	topicId: string
 	sourceId: string
-}): Promise<boolean> {
+}): Promise<{ deletedSourceKind: string | null } | null> {
 	return db.transaction(async (transaction) => {
 		// authorize explicit removal while holding the same lock as acceptance
 		const topic = await lockPersonalSourcesTopic(transaction, topicId)
@@ -109,7 +109,7 @@ export async function deletePersonalSource({
 			!topic ||
 			!(await decidePersonalSourcesCapability({ userId, capability: "personalSources:delete", topic, transaction }))
 		) {
-			return false
+			return null
 		}
 
 		// parent cascades remove entries, queue claims, and pending reply snapshots
@@ -123,10 +123,10 @@ export async function deletePersonalSource({
 					inArray(sources.kind, personalSourceKinds),
 				),
 			)
-			.returning({ id: sources.id })
+			.returning({ kind: sources.kind })
 		if (deletedSources.length > 0) {
 			await invalidatePersonalSourcesContext(transaction, { topicId, userId })
 		}
-		return true
+		return { deletedSourceKind: deletedSources[0]?.kind ?? null }
 	})
 }

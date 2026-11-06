@@ -16,14 +16,11 @@ import {
 	DASHED_ROW_CLASS,
 	LIST_ROW_HIGHLIGHTED_CLASS,
 	LIST_ROW_HOVER_CLASS,
+	RANK_SLOT_CLASS,
 	SCRIPTED_HIDDEN_CLASS,
 } from "@/lib/styleClasses"
 import { playPodcastEpisode } from "@/stores/podcastEpisodePlayerStore"
 import { PodcastEpisodeChapterPill } from "./PodcastEpisodePill"
-
-// where a chapter's number sits in its row
-const CHAPTER_NUMBER_SLOT_CLASS =
-	"text-muted-foreground absolute top-0 left-0 grid size-11 place-items-center sm:top-1.5 sm:size-8"
 
 // where a chapter's thumbs sit in its row, over the row's click area. a phone shows no chapter thumbs
 const THUMBS_SLOT_CLASS = "relative z-10 hidden shrink-0 items-center gap-2 pr-3 sm:flex"
@@ -120,7 +117,7 @@ function PodcastEpisodeChapterRow({
 			)}
 		>
 			{/* the chapter's number */}
-			<span className={CHAPTER_NUMBER_SLOT_CLASS} aria-hidden="true">
+			<span className={cn("text-muted-foreground", RANK_SLOT_CLASS)} aria-hidden="true">
 				<span className={cn("font-display text-sm tabular-nums", isPlayerChapter && "text-link font-bold")}>
 					{chapter.position + 1}
 				</span>

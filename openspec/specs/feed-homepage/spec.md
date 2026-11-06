@@ -2,7 +2,9 @@
 
 ## Purpose
 TBD - created by archiving change add-feed-homepage. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: The homepage renders the Feed from the committed design export
 The homepage SHALL implement the committed design export at `apps/docs/design/homepage.html`: the dark hero band with Carl's headline, the overlapping search field (visual for now), and the collapsible Topic sections **Your topics**, **Featured**, and **Popular**. Display type SHALL use Architects Daughter and body type SHALL use Karla. The export is the source of truth for layout and interaction; the shipped theming and ambient background have since evolved past it.
 
@@ -174,17 +176,15 @@ reads it, and SHALL hide with JavaScript until opened.
   them only once the section is opened
 
 ### Requirement: Resources are read/watch/listen rows limited to five with an expander
-Each Topic SHALL list its Findings' Resources as rows typed by Resource kind — read, watch, or listen — each with a
-matching type icon, the Resource title, an ⓘ control, and source + age meta, with dashed rules between rows.
-Activating a row SHALL open the Resource link in a new tab. At most five rows SHALL show, with a "+ N more / show
-less" expander for the rest. Without JavaScript the expander SHALL be a plain link to the Topic's page, where every
-Finding is in the html, and the expander button SHALL be hidden. The Resource ⓘ popover SHALL show Carl's summary, a
-mark-read/unread control, and thumbs up/down.
+Each Topic SHALL list its Findings' Resources as rows, each with the Resource title, an ⓘ control, and source + age
+meta, with dashed rules between rows. A row SHALL show no Resource kind icon. Activating a row SHALL open the Resource
+link in a new tab. At most five rows SHALL show, with a "+ N more / show less" expander for the rest. Without JavaScript
+the expander SHALL be a plain link to the Topic's page, where every Finding is in the html, and the expander button
+SHALL be hidden. The Resource ⓘ popover SHALL show Carl's summary, a mark-read/unread control, and thumbs up/down.
 
 #### Scenario: Only five resources show until expanded
 - **WHEN** a Topic has more than five Findings in view
-- **THEN** five Resource rows show, each bearing its read/watch/listen type icon, and a "+ N more" expander reveals the
-  rest
+- **THEN** five Resource rows show with no Resource kind icon, and a "+ N more" expander reveals the rest
 
 #### Scenario: The resource info popover shows summary, read state, and thumbs
 - **WHEN** the user activates a Resource's ⓘ control
@@ -273,4 +273,3 @@ chat or a finding plays the same way and links the same way, with the app's own 
 #### Scenario: A visitor without JavaScript opens the video on YouTube
 - **WHEN** a visitor without JavaScript presses the button
 - **THEN** the browser opens the video's YouTube page
-

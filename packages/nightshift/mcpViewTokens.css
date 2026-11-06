@@ -1,0 +1,57 @@
+/* the MCP views' theme, written by scripts/write-nightshift-tokens.ts from this package's TypeScript. change a
+   token in the source and run bun run nightshift:write, never this file */
+
+:root {
+	--radius: var(--border-radius-md, 0.625rem);
+	--background: var(--color-background-primary, #e2d8c4);
+	--sunken: var(--color-background-secondary, #e2d8c4);
+	--foreground: var(--color-text-primary, #332a22);
+	--card: var(--color-background-primary, #fffdf9);
+	--card-foreground: var(--color-text-primary, #332a22);
+	--popover: var(--color-background-primary, #fffdf9);
+	--popover-foreground: var(--color-text-primary, #332a22);
+	--primary: var(--color-background-inverse, #d9974a);
+	--primary-foreground: var(--color-text-inverse, #2a1c0f);
+	--secondary: var(--color-background-secondary, #f4eee2);
+	--secondary-foreground: var(--color-text-secondary, #75604a);
+	--muted: var(--color-background-secondary, #efe6d8);
+	--muted-foreground: var(--color-text-secondary, #705a40);
+	--bubble: var(--color-background-secondary, #e2d8c4);
+	--accent: var(--color-background-tertiary, #e9dcc8);
+	--accent-foreground: var(--color-text-secondary, #705a40);
+	--destructive: var(--color-text-danger, #a7362f);
+	--border: var(--color-border-primary, #dcccb6);
+	--input: var(--color-border-primary, #a68d64);
+	--ring: var(--color-ring-primary, #d9974a);
+	--link: var(--color-text-info, #8f4c17);
+	--separator: var(--color-border-secondary, #dcccb6);
+	--separator-strong: var(--color-border-primary, #c9b28b);
+	--separator-sunken: var(--color-border-secondary, #a68d64);
+}
+
+.dark {
+	--background: var(--color-background-primary, #584532);
+	--sunken: var(--color-background-secondary, #241a10);
+	--foreground: var(--color-text-primary, #f0e6d6);
+	--card: var(--color-background-primary, #302417);
+	--card-foreground: var(--color-text-primary, #f0e6d6);
+	--popover: var(--color-background-primary, #302417);
+	--popover-foreground: var(--color-text-primary, #f0e6d6);
+	--primary: var(--color-background-inverse, #f09050);
+	--primary-foreground: var(--color-text-inverse, #1a1511);
+	--secondary: var(--color-background-secondary, #75593e);
+	--secondary-foreground: var(--color-text-secondary, #eadfc6);
+	--muted: var(--color-background-secondary, #54422f);
+	--muted-foreground: var(--color-text-secondary, #c6b898);
+	--bubble: var(--color-background-secondary, #584532);
+	--accent: var(--color-background-tertiary, #584531);
+	--accent-foreground: var(--color-text-secondary, #c9ba99);
+	--destructive: var(--color-text-danger, #ffa08b);
+	--border: var(--color-border-primary, #69553f);
+	--input: var(--color-border-primary, #8a7152);
+	--ring: var(--color-ring-primary, #f09050);
+	--link: var(--color-text-info, #ffa367);
+	--separator: var(--color-border-secondary, #614e39);
+	--separator-strong: var(--color-border-primary, #7b6449);
+	--separator-sunken: var(--color-border-secondary, #69553f);
+}

@@ -11,7 +11,13 @@ import { and, count, desc, eq, gte, inArray, lte, sql } from "drizzle-orm"
 import { memberTopicIds, subscribedTopicIds } from "../authorization"
 import { loadTopicChatMentions } from "../chat/mentions"
 import { loadLatestPodcastEpisodes } from "../podcast/podcastEpisodeShapes"
-import type { TopicFindingRow } from "./findings"
+import {
+	TOPIC_FINDING_COLUMNS,
+	type TopicFindingRow,
+	toBookmarkJoinCondition,
+	toConsumptionJoinCondition,
+	USER_FINDING_COLUMNS,
+} from "./findings"
 import { startOfUtcMonth } from "./quotas"
 
 // the most findings the feed query pulls per topic
@@ -85,12 +91,8 @@ async function loadFeedFindingRows(
 ): Promise<(TopicFindingRow & { topicId: string; newestFindingCreatedAt: Date })[]> {
 	// a signed-out visitor has no history, so each join condition is sql`false`.
 	// drizzle's typing rejects comparing user_id to null
-	const consumptionJoinCondition = userId
-		? and(eq(consumptions.findingId, findings.id), eq(consumptions.userId, userId))
-		: sql`false`
-	const bookmarkJoinCondition = userId
-		? and(eq(bookmarks.findingId, findings.id), eq(bookmarks.userId, userId))
-		: sql`false`
+	const consumptionJoinCondition = userId ? toConsumptionJoinCondition(userId) : sql`false`
+	const bookmarkJoinCondition = userId ? toBookmarkJoinCondition(userId) : sql`false`
 	// rank each topic's findings by relevance so the feed query can stop at MAX_FEED_FINDINGS_PER_TOPIC per topic, and
 	// read each topic's newest shown finding time in the same pass
 	const rankedFindings = db
@@ -115,22 +117,9 @@ async function loadFeedFindingRows(
 				// the owning topic's id groups the rows, and every row includes its topic's newest shown finding time
 				topicId: findings.topicId,
 				newestFindingCreatedAt: rankedFindings.newestFindingCreatedAt,
-				// the topic finding's identity, the scan that produced it, and its resource metadata
-				findingId: findings.id,
-				scanId: findings.scanId,
-				resourceId: resources.id,
-				url: resources.url,
-				resourceKind: resources.kind,
-				title: resources.title,
-				resourceCreatedAt: resources.createdAt,
-				fetchedAt: resources.fetchedAt,
-				// the topic finding's metadata, its view count, and the user's consumed and bookmarked dates
-				relevanceScore: findings.relevanceScore,
-				relevanceExplanation: findings.relevanceExplanation,
-				viewCount: findings.viewCount,
-				rating: findings.rating,
-				consumedAt: consumptions.consumedAt,
-				bookmarkedAt: bookmarks.createdAt,
+				// the topic finding, and the user's consumed and bookmarked dates
+				...TOPIC_FINDING_COLUMNS,
+				...USER_FINDING_COLUMNS,
 			})
 			// join the resource and the user's consumed and bookmark rows
 			.from(findings)

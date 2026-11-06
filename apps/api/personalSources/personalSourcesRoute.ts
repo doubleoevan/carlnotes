@@ -12,9 +12,10 @@ import { loadPersonalSourcesAiAgentRecommendations } from "@carlnotes/db/persona
 import { addPersonalSourcesAiAgent } from "@carlnotes/db/personalSourcesAiAgentSetup"
 import { deletePersonalSource, deletePersonalSourceEntry } from "@carlnotes/db/personalSourcesLifecycle"
 import { notifyPersonalSourcesChanged } from "@carlnotes/pipeline/personalSources/work"
+import { trackEvent } from "@carlnotes/server/analytics"
 import { zValidator } from "@hono/zod-validator"
 import { Hono } from "hono"
-import { type AppEnv, currentUser } from "../currentUser"
+import { type AppEnv, currentUser, toAnalyticsProperties } from "../currentUser"
 
 // no authenticated private response may be retained by a browser or intermediary cache
 export const personalSourcesRoute = new Hono<AppEnv>()
@@ -73,6 +74,14 @@ export const personalSourcesRoute = new Hono<AppEnv>()
 				clientId: context.req.valid("json").clientId,
 			})
 			if (outcome === "added") {
+				trackEvent("source_added", userId, {
+					...toAnalyticsProperties(context),
+					topicId: context.req.param("id"),
+					sourceType: "ai_agent",
+				})
+			}
+			// each outcome returns its own http status
+			if (outcome === "added" || outcome === "alreadyAdded") {
 				return context.json({ ok: true as const })
 			}
 			if (outcome === "not_found") {
@@ -159,21 +168,36 @@ export const personalSourcesRoute = new Hono<AppEnv>()
 		})
 		if (deleted) {
 			await notifyPersonalSourcesChanged(context.req.param("id"))
+			trackEvent("personal_source_entry_deleted", userId, {
+				...toAnalyticsProperties(context),
+				topicId: context.req.param("id"),
+			})
 		}
 		return deleted ? context.json({ ok: true as const }) : context.json({ error: "not found" }, 404)
 	})
 	.delete("/topics/:id/personal-sources/sources/:sourceId", async (context) => {
+		// only a signed-in user deletes a Personal source
 		const userId = currentUser(context)
 		if (!userId) {
 			return context.json({ error: "unauthorized" }, 401)
 		}
-		const deleted = await deletePersonalSource({
+		const deletePersonalSourceResult = await deletePersonalSource({
 			userId,
 			topicId: context.req.param("id"),
 			sourceId: context.req.param("sourceId"),
 		})
-		if (deleted) {
-			await notifyPersonalSourcesChanged(context.req.param("id"))
+		if (!deletePersonalSourceResult) {
+			return context.json({ error: "not found" }, 404)
 		}
-		return deleted ? context.json({ ok: true as const }) : context.json({ error: "not found" }, 404)
+		await notifyPersonalSourcesChanged(context.req.param("id"))
+
+		// a repeated delete removes nothing, so it reports nothing
+		if (deletePersonalSourceResult.deletedSourceKind) {
+			trackEvent("source_removed", userId, {
+				...toAnalyticsProperties(context),
+				topicId: context.req.param("id"),
+				sourceType: deletePersonalSourceResult.deletedSourceKind,
+			})
+		}
+		return context.json({ ok: true as const })
 	})

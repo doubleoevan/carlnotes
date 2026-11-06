@@ -449,7 +449,9 @@ A Topic form or Topic Tool save SHALL preserve Personal sources absent from its 
 
 ### Requirement: The editor explains sender-private Personal sources
 
-The editor SHALL keep Personal sources outside the fetched Source count and show only the current sender's Sources, items, and setup. Receipt SHALL require normal edit permission. Personal sources SHALL not disable visibility, Team, invitation, or podcast controls.
+The editor SHALL keep Personal sources outside the fetched Source count and show only the current sender's Sources,
+items, and setup. Confirmation SHALL require normal edit permission. Personal sources SHALL not disable visibility,
+Team, invitation, or podcast controls.
 
 #### Scenario: An editor opens a shared Topic
 - **WHEN** the editor reads its Source settings

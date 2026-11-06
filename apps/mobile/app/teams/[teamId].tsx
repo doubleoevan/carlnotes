@@ -11,7 +11,7 @@ import { TEAM_AVATAR_UPLOAD_FAILED_TEXT, toAvatarRejectionText } from "@carlnote
 import { toCountLabel } from "@carlnotes/core/lib/labels"
 import { useQuery } from "@tanstack/react-query"
 import { router, useLocalSearchParams } from "expo-router"
-import { Pencil, Plus, Share2, Trash2 } from "lucide-react-native"
+import { Pencil, Plus, Share as ShareIcon, Trash2 } from "lucide-react-native"
 import { useState } from "react"
 import { Alert, View } from "react-native"
 import { useAvatarPicker } from "@/components/avatar/avatarUpload"
@@ -87,7 +87,7 @@ export default function TeamScreen() {
 			options={
 				team
 					? [
-							{ label: "Share team", icon: Share2, onSelect: () => setDialog("share") },
+							{ label: "Share team", icon: ShareIcon, onSelect: () => setDialog("share") },
 							...(isTeamLeader
 								? [
 										{ label: "Edit team", icon: Pencil, onSelect: () => setDialog("edit") },

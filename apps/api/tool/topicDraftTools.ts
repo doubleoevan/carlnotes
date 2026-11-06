@@ -10,7 +10,7 @@ import type { AnalyticsProperties } from "../currentUser"
 import type { PromptVersionOrigin } from "../topic/promptVersions"
 import type { NewTopicSource } from "../topic/saveHelpers"
 import { createTopic } from "../topic/saveTopic"
-import type { TopicDraftReceipt } from "../topic/topicDraftReceipts"
+import type { TopicDraftConfirmationRecord } from "../topic/topicDraftConfirmationRecords"
 import { isSameTopicSource, toNewTopicSource } from "./topicSourceTools"
 
 // what creating a topic from a draft returns: the editor's own rejections, plus a draft not ready to save
@@ -31,13 +31,13 @@ export async function createTopicFromDraft({
 	topicDraft,
 	origin,
 	analyticsProperties,
-	receipt,
+	confirmationRecord,
 }: {
 	userId: string | null
 	topicDraft: TopicDraft
 	origin: PromptVersionOrigin
 	analyticsProperties: AnalyticsProperties
-	receipt?: TopicDraftReceipt
+	confirmationRecord?: TopicDraftConfirmationRecord
 }): Promise<CreateTopicFromDraftResult> {
 	// reject a visitor, and a draft with no name or prompt yet
 	if (!userId) {
@@ -97,7 +97,7 @@ export async function createTopicFromDraft({
 		},
 		analyticsProperties,
 		origin,
-		receipt,
+		confirmationRecord,
 	)
 	if (createTopicResult.status !== "created") {
 		return createTopicResult

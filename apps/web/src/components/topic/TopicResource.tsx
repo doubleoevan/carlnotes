@@ -11,7 +11,7 @@ import { TooltipLabel, TooltipSection } from "@/components/common/UpdateCountBad
 import { FindingChapterPill, useIsFindingChapterPlaying } from "@/components/podcast/PodcastEpisodePill"
 import { Popover, PopoverAnchor } from "@/components/primitives/popover"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
-import { DASHED_ROW_CLASS, LIST_ROW_HIGHLIGHTED_CLASS, LIST_ROW_HOVER_CLASS } from "@/lib/styleClasses"
+import { DASHED_ROW_CLASS, LIST_ROW_HIGHLIGHTED_CLASS, LIST_ROW_HOVER_CLASS, RANK_SLOT_CLASS } from "@/lib/styleClasses"
 import { type TopicFeedHandlers, useIsSignedIn, useTopicFeedActions } from "@/providers/TopicFeedProvider"
 import { TopicFindingSummary } from "./TopicFindingSummary"
 import { TopicResourceInfo, type TopicResourceInfoTopic } from "./TopicResourceInfo"
@@ -93,10 +93,7 @@ export function TopicResource({
 				{/* the rank, in the slot the bookmark mark takes over once the finding is bookmarked.
 				    on a phone the taller slot starts at the row top, level with the title */}
 				{rank !== null && (
-					<span
-						className="text-muted-foreground absolute top-0 left-0 grid size-11 place-items-center sm:top-1.5 sm:size-8"
-						aria-hidden="true"
-					>
+					<span className={cn("text-muted-foreground", RANK_SLOT_CLASS)} aria-hidden="true">
 						<span className="font-display text-sm tabular-nums">{rank}</span>
 					</span>
 				)}

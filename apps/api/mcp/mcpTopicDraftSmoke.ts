@@ -6,7 +6,8 @@ import { users } from "@carlnotes/db/schema/users"
 import { count, eq } from "drizzle-orm"
 import { createTeam, removeTopicFromTeam } from "../team/teams"
 import { stopFirstScan } from "../topic/firstScanSmoke"
-import { check, ownerId, runId, type toClient, toResultText } from "./mcpSmokeFixtures"
+import { check, ownerId, runId, type toClient } from "./mcpSmokeFixtures"
+import { toResultText } from "./toolTestFixtures"
 
 /**
  * Checks two different confirmations at the Free limit and the Team selection made by the winning draft.

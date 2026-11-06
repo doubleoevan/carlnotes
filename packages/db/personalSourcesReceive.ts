@@ -1,4 +1,4 @@
-// atomic receipt: current identity, allowance, personal authority, and encrypted persistence
+// atomic confirmation: current identity, allowance, personal authority, and encrypted persistence
 import {
 	type AiAgentSourceConfig,
 	PERSONAL_SOURCES_DAILY_SEND_LIMIT,
@@ -17,6 +17,7 @@ import { decryptPersonalSourceEntry, invalidatePersonalSourcesContext } from "./
 import { toPersonalSourcesLinkFingerprint } from "./personalSourcesLinkQueue"
 import { lockPersonalSourcesSender, lockPersonalSourcesTopic } from "./personalSourcesLocks"
 import { readPersonalSourcesDailyCount } from "./personalSourcesQuota"
+import { toUtcDay } from "./quotas"
 import {
 	personalSourceEntries,
 	personalSourcesDailyCounts,
@@ -56,7 +57,7 @@ export async function receivePersonalSourceEntry(
 	return db.transaction((lockedTransaction) => receiveLockedPersonalSourceEntry(lockedTransaction, options))
 }
 
-// revocation and receipt share this user's lock, including every conversation in an atomic import
+// revocation and confirmation share this user's lock, including every conversation in an atomic import
 async function receiveLockedPersonalSourceEntry(
 	transaction: DbTransaction,
 	options: ReceivePersonalSourceEntryOptions,
@@ -87,17 +88,20 @@ async function acceptIdentifiedEntry(
 			),
 		)
 		.limit(1)
+	// read the database clock
 	const [clock] = await transaction
 		.select({ now: sql<string>`clock_timestamp()::text` })
 		.from(users)
 		.where(eq(users.id, userId))
 	const now = new Date(clock?.now ?? "")
 	if (!Number.isFinite(now.getTime())) {
-		throw new Error("Personal sources receipt requires the database clock")
+		throw new Error("Personal sources confirmation requires the database clock")
 	}
 
 	// an accepted retry bypasses a fresh allowance but still requires current Topic authority
-	const day = now.toISOString().slice(0, 10)
+	const day = toUtcDay(now)
+
+	// a new delivery needs the day's allowance
 	if (
 		!priorDelivery &&
 		options.sendBatch?.isFirstTopic !== false &&
@@ -106,6 +110,8 @@ async function acceptIdentifiedEntry(
 	) {
 		return { status: "quota", resetAt: new Date(Date.parse(`${day}T00:00:00Z`) + DAY_MS).toISOString() }
 	}
+
+	// the Topic must exist, and the sender must hold the capability for this origin
 	const topic = options.importBatch?.topic ?? (await lockPersonalSourcesTopic(transaction, options.topicId))
 	if (!topic) {
 		return { status: "not_found" }
@@ -119,6 +125,8 @@ async function acceptIdentifiedEntry(
 	if (!(await decidePersonalSourcesCapability({ userId, capability, topic, transaction }))) {
 		return { status: "not_found" }
 	}
+
+	// an import's later entries reuse the locked Topic
 	if (options.importBatch) {
 		options.importBatch.topic = topic
 	}
@@ -185,7 +193,7 @@ async function persistPersonalSourceEntry(
 	if (options.importBatch) {
 		options.importBatch.sourceId = topicSource.id
 	}
-	await chargePersonalSourcesReceipt(transaction, options)
+	await chargePersonalSourcesConfirmation(transaction, options)
 
 	// count distinct waiting links without copying their plaintext into retry metadata
 	const queuedLinkCount =
@@ -212,7 +220,7 @@ async function persistPersonalSourceEntry(
 	})
 }
 
-// an existing provider receipt must never recreate a removed Source
+// an existing provider confirmation must never recreate a removed Source
 async function resolvePersonalSource(
 	transaction: DbTransaction,
 	options: ReceivePersonalSourceEntryOptions,
@@ -269,7 +277,7 @@ async function persistPersonalSourcesLinks(
 }
 
 // charge accepted sends and mail only, preserving consumption after deletion
-async function chargePersonalSourcesReceipt(
+async function chargePersonalSourcesConfirmation(
 	transaction: DbTransaction,
 	options: ReceivePersonalSourceEntryOptions & { day: string },
 ): Promise<void> {
@@ -358,7 +366,7 @@ export async function countWaitingPersonalSourcesLinks(
 	return linkCount?.count ?? 0
 }
 
-// cards and text share a receipt without private transcript or chat-reference fields
+// cards and text share a confirmation without private transcript or chat-reference fields
 function toPersonalSourcesConfirmation({
 	topic,
 	entryId,

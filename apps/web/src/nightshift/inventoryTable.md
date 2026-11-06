@@ -25,3 +25,6 @@
 | Copy and share | `copyToClipboard` in 7 files; `CopyMarkdownButton`; `CopyLinkOption` 3; the copied state written three times; `SHARE_OPTION_CLASS` in 4 files | chat, invites, share menus | `CopyButton`, `ShareMenu` |
 | Toast | `toast` from `sonner` in 50 files: `toast.error` 66 calls, `toast()` 52, `toast.success` 3 | everywhere | `Toast` |
 | Separator | `DASHED_ROW_CLASS` 5 files, 4 of them with `LIST_ROW_HOVER_CLASS` for the row under the pointer; `INFO_CARD_SECTIONS_CLASS`, the dashed lines between an info card's sections, 2; a local `DASHED_SEPARATOR_CLASS`; `MENU_DIVIDER_CLASS` | lists, info cards, menus | `Separator` |
+| Brand link | `BrandLink`, the mug and CarlNotes as one link, in the site header and the MCP view shell | header, MCP views | `BrandLink` |
+| Back button | `BackButton`, a ghost button with an arrow, in the MCP view shell and the suggestion checklist's Topic Draft | MCP views | `BackButton` |
+| Finding details and controls | `TopicFindingDetails` (notes, private annotation, stats) over `TopicFindingControls`, which holds `TopicFindingRating` (the thumbs and the feedback box) and the bookmark and read toggles | the note popover, an open MCP view row | `TopicFindingDetails`, `TopicFindingControls`, `TopicFindingRating` |

@@ -1,7 +1,14 @@
 // label tests for the exact duration and dollar labels that a source result's time and cost read, the month and day
 // label, and the short date label
 import { expect, test } from "bun:test"
-import { toDateLabel, toExactDollarLabel, toExactDurationLabel, toMonthDayLabel, toScanTimestamp } from "./labels"
+import {
+	toDateLabel,
+	toExactDollarLabel,
+	toExactDurationLabel,
+	toMonthDayLabel,
+	toReadingTimeLabel,
+	toScanTimestamp,
+} from "./labels"
 
 // under ten seconds reads to one decimal, and from ten seconds up reads like any other duration
 test("toExactDurationLabel reads to one decimal under ten seconds", () => {
@@ -35,4 +42,11 @@ test("toScanTimestamp shares the Brew diary's date and time on web and mobile", 
 test("toDateLabel reads a date, or None for a missing one", () => {
 	expect(toDateLabel("2026-10-22T12:00:00Z")).toBe(new Date("2026-10-22T12:00:00Z").toLocaleDateString())
 	expect(toDateLabel(null)).toBe("None")
+})
+
+test("a list's reading time names its kind in whole minutes, at least one", () => {
+	expect(toReadingTimeLabel({ readingMinutes: 7.6, resourceKind: "read" })).toBe("8 min read")
+	expect(toReadingTimeLabel({ readingMinutes: 12, resourceKind: "watch" })).toBe("12 min watch")
+	expect(toReadingTimeLabel({ readingMinutes: 0.2, resourceKind: "listen" })).toBe("1 min listen")
+	expect(toReadingTimeLabel({ readingMinutes: 5, resourceKind: "unknown" })).toBe("5 min read")
 })

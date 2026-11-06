@@ -66,7 +66,7 @@ export default function PersonalSourcesEmail({
 	)
 }
 
-// preview the same numbered receipt a multi-Topic filing produces
+// preview the same numbered confirmation a multi-Topic filing produces
 PersonalSourcesEmail.PreviewProps = {
 	receivingAddress: "carl@example.com",
 	reply: {

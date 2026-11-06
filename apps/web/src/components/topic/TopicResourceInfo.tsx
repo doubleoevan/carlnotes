@@ -1,37 +1,26 @@
 // a topic finding's note popover, with the link out, the preview, Carl's notes, the user's buttons, and the rating
 
-import { fetchTopicFindingLinkPreview, sendFindingFeedback } from "@carlnotes/client/topicFindingClient"
-import type { ChatLinkPreview } from "@carlnotes/contracts/chat"
 import type { Visibility } from "@carlnotes/contracts/enums"
 import type { TopicFinding } from "@carlnotes/contracts/findings"
 import type { PodcastEpisode } from "@carlnotes/contracts/podcast"
 import { toHostWithoutWww } from "@carlnotes/contracts/seo"
-import { toDateLabel } from "@carlnotes/core/lib/labels"
 import { cn } from "@carlnotes/nightshift/classNames"
-import { Bookmark, Check, Circle, ExternalLink } from "lucide-react"
-import { type ReactNode, useEffect, useState } from "react"
+import { ExternalLink } from "lucide-react"
+import type { ReactNode } from "react"
 import { AnchorLink } from "@/components/common/AnchorLink"
-import { LinkPreviewCard } from "@/components/common/LinkPreviewCard"
-import { LinkPreviewLoading } from "@/components/common/LinkPreviewLoading"
-import { RatingThumbs } from "@/components/common/RatingThumbs"
-import { ScrollBox } from "@/components/common/ScrollBox"
 import { FindingChapterPill } from "@/components/podcast/PodcastEpisodePill"
-import { Input } from "@/components/primitives/input"
 import { PopoverCloseButton, PopoverContent } from "@/components/primitives/popover"
 import {
+	METADATA_LINE_CLASS,
 	POPOVER_HEADING_CLASS,
 	POPOVER_PANEL_CLASS,
-	SECTION_LABEL_CLASS,
 	STANDALONE_LINK_CLASS,
 } from "@/lib/styleClasses"
 import { captureVisitEvent, toPublicTopicProperties } from "@/lib/visitAnalytics"
 import { type TopicFeedHandlers, useIsSignedIn } from "@/providers/TopicFeedProvider"
+import { TopicFindingControls } from "./TopicFindingControls"
+import { TopicFindingDetails } from "./TopicFindingDetails"
 import { ResourceMetadata } from "./TopicFindingSummary"
-import { TopicInfoSection as InfoSection } from "./TopicInfoSection"
-import { toNotesMarkdown } from "./TopicScanRecap"
-
-// the bookmark and read toggles' text-button style
-const TOPIC_FINDING_TOGGLE_CLASS = "hover:text-link flex min-h-11 items-center gap-2 text-sm hover:underline sm:min-h-9"
 
 // the topic that the note popover's copied Markdown names, with its visibility
 export type TopicResourceInfoTopic = {
@@ -67,10 +56,6 @@ export function TopicResourceInfo({
 	// signed-out visitors don't get the per-user read and rating buttons
 	const isSignedIn = useIsSignedIn()
 
-	// the bookmark button's label, flipping with the finding's bookmark state
-	const bookmarkLabel = resource.isBookmarked ? "Remove bookmark" : "Bookmark"
-	// only a topic's owner bookmarks its findings, and an existing bookmark stays removable
-	const isBookmarkShown = isBookmarkable || resource.isBookmarked
 	// the row owns the popover's open state and anchors it, so this holds only the content
 	return (
 		<>
@@ -98,57 +83,16 @@ export function TopicResourceInfo({
 					<FindingChapterPill podcastEpisode={podcastEpisode} findingId={resource.findingId} />
 				</TopicFindingHeading>
 
-				{/* the linked page's link preview card, right above Carl's notes */}
-				<FindingLinkPreview findingId={resource.findingId} />
-
-				{/* the AI explanation of why this resource is relevant, in a scroll box so a long note stays contained */}
-				<div className={cn(SECTION_LABEL_CLASS, "mb-1")}>{"Carl's notes"}</div>
-				<ScrollBox
-					copyMarkdown={toNotesMarkdown({
-						topicId: topic.id,
-						topicName: topic.name,
-						prompt: topic.prompt,
-						note: `[${resource.title ?? resource.url}](${resource.url})\n\n${resource.relevanceExplanation}`,
-					})}
-				>
-					<p>{resource.relevanceExplanation || "No notes yet."}</p>
-				</ScrollBox>
-				{/* when the resource was fetched and how many times it was opened */}
-				<TopicFindingStats fetchedAt={resource.fetchedAt} viewCount={resource.viewCount} />
+				{/* the link preview, Carl's notes, and the stats */}
+				<TopicFindingDetails resource={resource} topic={topic} />
 				{/* the bookmark, read, and rating buttons, only shown to a signed-in user */}
 				{isSignedIn && (
-					<div className="mt-3 border-t pt-2">
-						{/* the rating block leads, shown only on topics this user owns or subscribes to */}
-						{isRatable && (
-							<TopicFindingRating
-								findingId={resource.findingId}
-								rating={resource.rating}
-								onRateTopicFinding={(rating) => topicFeedHandlers.rateTopicFinding(resource.findingId, rating)}
-							/>
-						)}
-						{/* the bookmark and read toggles share one row, and a user who cannot bookmark gets the read toggle alone */}
-						<div className={cn("flex items-center justify-between gap-2", isRatable && "mt-2")}>
-							{isBookmarkShown && (
-								<button
-									type="button"
-									onClick={() => topicFeedHandlers.bookmarkTopicFinding(resource.findingId, !resource.isBookmarked)}
-									aria-pressed={resource.isBookmarked}
-									className={TOPIC_FINDING_TOGGLE_CLASS}
-								>
-									<Bookmark className={cn("size-4", resource.isBookmarked && "text-primary fill-current")} />
-									{bookmarkLabel}
-								</button>
-							)}
-							<button
-								type="button"
-								onClick={() => topicFeedHandlers.consumeTopicFinding(resource.findingId, !resource.isConsumed)}
-								className={TOPIC_FINDING_TOGGLE_CLASS}
-							>
-								{resource.isConsumed ? <Circle className="size-4" /> : <Check className="size-4" />}
-								{resource.isConsumed ? "Mark unread" : "Mark read"}
-							</button>
-						</div>
-					</div>
+					<TopicFindingControls
+						resource={resource}
+						isRatable={isRatable}
+						isBookmarkable={isBookmarkable}
+						topicFeedHandlers={topicFeedHandlers}
+					/>
 				)}
 			</PopoverContent>
 		</>
@@ -191,111 +135,7 @@ export function TopicFindingHeading({
 					{title}
 					<ExternalLink className="mt-0.5 size-3.5 shrink-0" />
 				</AnchorLink>
-				<div className="text-muted-foreground mt-0.5 flex flex-wrap items-center gap-1.5 text-xs">{children}</div>
-			</div>
-		</div>
-	)
-}
-
-/**
- * A topic finding's fetch day on the left and how many times it was opened on the right, in one row of its note popover.
- */
-export function TopicFindingStats({ fetchedAt, viewCount }: { fetchedAt: string; viewCount: number }) {
-	return (
-		<div className="mt-3 flex justify-between gap-4">
-			<InfoSection className="py-0" label="Fetched">
-				{toDateLabel(fetchedAt)}
-			</InfoSection>
-			<InfoSection className="py-0 text-right" label="Views">
-				{viewCount.toLocaleString()}
-			</InfoSection>
-		</div>
-	)
-}
-
-// the linked page's link preview card, fetched for every visitor when the note popover opens
-function FindingLinkPreview({ findingId }: { findingId: string }) {
-	// the fetched preview, and whether its fetch is still in progress
-	const [linkPreview, setLinkPreview] = useState<ChatLinkPreview | null>(null)
-	const [isLinkPreviewLoading, setIsLinkPreviewLoading] = useState(true)
-	useEffect(() => {
-		// a popover that closes mid-fetch must not set state afterward
-		let isTopicFindingOpen = true
-		fetchTopicFindingLinkPreview(findingId)
-			.then((findingLinkPreview) => isTopicFindingOpen && setLinkPreview(findingLinkPreview))
-			.catch(() => {})
-			.finally(() => isTopicFindingOpen && setIsLinkPreviewLoading(false))
-		return () => {
-			isTopicFindingOpen = false
-		}
-	}, [findingId])
-
-	// the loading card until the fetch settles, then the card if the page offers one
-	if (isLinkPreviewLoading) {
-		return <LinkPreviewLoading />
-	}
-	if (!linkPreview) {
-		return null
-	}
-	return (
-		<div className="mb-3">
-			<LinkPreviewCard linkPreview={linkPreview} className="max-w-full" isUserContent />
-		</div>
-	)
-}
-
-/**
- * The rating block: the thumbs set the rating, and a click also sends whatever words sit in the box.
- * The words are stored as written and never fed to scoring.
- */
-function TopicFindingRating({
-	findingId,
-	rating,
-	onRateTopicFinding,
-}: {
-	findingId: string
-	rating: "up" | "down" | null
-	onRateTopicFinding: (rating: "up" | "down" | null) => void
-}) {
-	const [topicFindingFeedback, setTopicFindingFeedback] = useState("")
-	const [isTopicFindingRatingSent, setIsTopicFindingRatingSent] = useState(false)
-	const [isSendingTopicFindingRating, setIsSendingTopicFindingRating] = useState(false)
-
-	// a thumb click sets or clears the rating and sends the box's words with the rating if there are any
-	const handleRateTopicFinding = async (nextRating: "up" | "down" | null): Promise<void> => {
-		onRateTopicFinding(nextRating)
-		if (!topicFindingFeedback.trim() || isSendingTopicFindingRating) {
-			return
-		}
-		setIsSendingTopicFindingRating(true)
-		try {
-			await sendFindingFeedback({ findingId, feedback: topicFindingFeedback.trim(), shouldThrowOnError: true })
-			setIsTopicFindingRatingSent(true)
-		} catch (error) {
-			// the words stay in the input, so the next thumb click can retry the send
-			console.error("finding feedback send failed", error)
-		} finally {
-			setIsSendingTopicFindingRating(false)
-		}
-	}
-
-	return (
-		<div>
-			<span className={SECTION_LABEL_CLASS}>Rate this finding</span>
-			{/* the words sit beside the thumbs that send them, and one line of thanks replaces them once sent */}
-			<div className="mt-2 flex items-center gap-2">
-				{isTopicFindingRatingSent ? (
-					<p className="text-muted-foreground flex-1 text-xs">Noted. Carl reads these later.</p>
-				) : (
-					<Input
-						aria-label="Feedback for Carl"
-						placeholder="Tell Carl why this finding was good or bad…"
-						value={topicFindingFeedback}
-						onChange={(event) => setTopicFindingFeedback(event.target.value)}
-						className="h-8 flex-1 text-xs"
-					/>
-				)}
-				<RatingThumbs rating={rating} onRate={(nextRating) => void handleRateTopicFinding(nextRating)} />
+				<div className={METADATA_LINE_CLASS}>{children}</div>
 			</div>
 		</div>
 	)

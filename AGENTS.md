@@ -39,16 +39,16 @@ Packages, private `@carlnotes/<name>` workspaces that export source, in dependen
   fonts, and the type roles in TypeScript, the email values, the `cn` class merge, Carl and Vienna's shared portraits,
   the coffee mug and the sign-in
   providers' icons both apps draw, the component contracts under `components/` that each app's implementation builds
-  on, and the `tokens.css`, `uniwind.css`, and Figma files written from the tokens.
+  on, and the `tokens.css`, `mcpViewTokens.css`, `uniwind.css`, and Figma files written from the tokens.
 - `packages/server/` — env settings, monitoring, analytics, hmac, retry, concurrency, and the public fetch: everything
   that reads `Bun.env` or a server SDK.
-- `packages/db/` — Drizzle schema, migrations, quotas, the Redis store, object storage, and the database claim. Neon
+- `packages/db/` — Drizzle schema, migrations, quotas, the Redis store, object storage, and the job lease. Neon
   Postgres, Redis, and R2.
 - `packages/emails/` — the react-email templates, the send every email goes through, and unsubscribe.
 - `packages/models/` — LiteLLM, the model roles, budgets, moderation, telemetry, speech, transcription,
   ffmpeg, and the prompts under `prompts/`.
 - `packages/pipeline/` — the scan pipeline: ingesters, review, chat replies and retrieval, attachments, link previews,
-	  private Personal sources receipt and Topic matching under `personalSources/`,
+	  private Personal sources confirmation and Topic matching under `personalSources/`,
   the podcast episode, and the Temporal client.
 
 Beside them at the root:
@@ -81,7 +81,7 @@ Each app and package has its own AGENTS.md with entry points, layout, and comman
 | Model-facing prompt | `packages/models/prompts/*.md` + its thin builder | prompt-authoring | everything outside `packages/models/prompts/` and the builder's own folder |
 | Schema or migration | `packages/db/schema/<domain>.ts`, then `bun run db:generate` | domain-model | `packages/db/migrations/` (generated) |
 | UI screen or component | `apps/web/src/routes/` for the route and its head, `apps/web/src/pages/`, `apps/web/src/components/<area>/`; the Storybook MCP server's catalog (`bun run dev:storybook`) before writing a component; a story beside every primitive and shared component | jsx-conventions | `apps/api/`; the request and response types are in `packages/contracts/` (`payloads.ts`, `topicPayloads.ts`, and the contracts) |
-| Design token, type role, or email color | `packages/nightshift/` (`colors.ts`, `radius.ts`, `elevation.ts`, `typography.ts`, `email.ts`), then `bun run nightshift:write` | — | `packages/nightshift/tokens.css` and `packages/nightshift/figma/` (generated) |
+| Design token, type role, or email color | `packages/nightshift/` (`colors.ts`, `radius.ts`, `elevation.ts`, `typography.ts`, `email.ts`), then `bun run nightshift:write` | — | `packages/nightshift/tokens.css`, `packages/nightshift/mcpViewTokens.css`, and `packages/nightshift/figma/` (generated) |
 | Shared component contract, or a variant of one | `packages/nightshift/components/<name>.ts`, then both implementations at `apps/web/src/components/primitives/<name>.tsx` and `apps/mobile/src/components/primitives/<name>.tsx` with their stories | jsx-conventions | every other component; `bun scripts/check-component-parity.ts` names a missing implementation |
 | Tasting note or sync change | `apps/api/note/`, `apps/web/src/components/note/`, `packages/core/hooks/` | domain-model | `apps/worker/`, `packages/pipeline/` |
 | API route or permission | `apps/api/<domain>/`, `apps/api/authorization.ts` | domain-model | `apps/worker/`; `packages/pipeline/` and `packages/models/` beyond the modules the route imports |
@@ -93,7 +93,7 @@ Each app and package has its own AGENTS.md with entry points, layout, and comman
 | Podcast episode, player, feed, or cover | `packages/pipeline/podcast/`, `apps/worker/workflows/recordPodcastEpisode.ts`, `apps/api/podcast/`, `apps/api/share/podcastFeed.ts`, `apps/api/share/podcastCover.ts`, `packages/models/speech.ts`, `packages/contracts/podcastEpisodes.ts`, `packages/server/podcastEpisodeSettings.ts`, `packages/server/podcastCoverPaths.ts`, `apps/web/src/components/podcast/`, `apps/web/src/pages/PodcastEpisodePage.tsx` | domain-model, prompt-authoring | `packages/db/migrations/` |
 | Mobile screen or setup | `apps/mobile/app/` for the routes, `apps/mobile/src/` for the app's own logic, `packages/nightshift/uniwindCss.ts` for the theme, the accessibility bar in `apps/mobile/AGENTS.md` | jsx-conventions | `apps/api/`; every `@carlnotes` package outside the universal four — the boundary check enforces it |
 | Push notification, push device, or the Notifications section | `packages/pipeline/pushNotify.ts`, `pushDelivery.ts`, `pushReceipts.ts`, `pushWorkflows.ts`, `packages/server/expoPush.ts`, `apps/worker/workflows/sendPushNotifications.ts`, `apps/api/pushDevices.ts`, `packages/db/schema/pushDevices.ts`, `apps/mobile/src/push*.ts`, `apps/mobile/src/components/push/`, `packages/core/components/NotificationsSection.tsx` | domain-model | `apps/web/` beyond the `Switch` account field element |
-| MCP tool, MCP view, Topic Tool, or the Add to AI dialog | `apps/api/mcp/`, `apps/api/tool/`, `apps/web/src/mcpViews/`, `apps/web/src/components/common/AddToAiDialog.tsx` | domain-model | `apps/worker/`; `packages/pipeline/` and `packages/models/` beyond `budget.ts` and the modules the tool imports |
+| MCP tool, MCP view, Topic Tool, or the Add to AI dialog | `apps/api/mcp/`, `apps/api/tool/`, `apps/web/src/mcpViews/`, `packages/contracts/mcpViews.ts`, `apps/web/src/components/common/AddToAiDialog.tsx` | domain-model | `apps/worker/`; `packages/pipeline/` and `packages/models/` beyond `budget.ts` and the modules the tool imports |
 | UI test, image capture, or baseline approval | `ui-tests/AGENTS.md`, `ui-tests/<step>/`, `.github/workflows/ui-tests.yml` | — | `ui-tests/baselines/` images, `ui-tests/output/`; `apps/api/`, `apps/worker/` |
 
 Domain vocabulary is canonical and enforced, so grepping a domain noun reliably finds its code.
@@ -105,8 +105,8 @@ Generated or archived paths that burn context:
 - `packages/db/migrations/` — generated SQL and snapshots; the schema is `packages/db/schema/`
 - `apps/web/src/routeTree.gen.ts` — the route tree Vite generates from `apps/web/src/routes/`; the routes are the files
 - `apps/web/dist/`, `apps/docs/dist/` — built web app, component browser, and docs output
-- `packages/nightshift/tokens.css`, `packages/nightshift/uniwind.css`, `packages/nightshift/figma/` — generated from
-  the Nightshift TypeScript source
+- `packages/nightshift/tokens.css`, `packages/nightshift/mcpViewTokens.css`, `packages/nightshift/uniwind.css`,
+  `packages/nightshift/figma/` — generated from the Nightshift TypeScript source
 - `apps/mobile/uniwind-types.d.ts` — the class-name declarations Uniwind generates from the theme; the source is
   `packages/nightshift/uniwindCss.ts`
 - `apps/mobile/.rnstorybook/storybook.requires.ts` — the stories index Storybook's Metro wrapper writes; the sources are
@@ -127,8 +127,8 @@ Generated or archived paths that burn context:
 check against the contracts and `apps/mobile/parity.md`, the client parity check against `apps/mobile/parity.md`, the
 purchase path check
 (`scripts/check-purchase-paths.ts`) that keeps checkout and the portal out of the mobile app's reach, the contract
-freeze check against `contracts/`, `tsc -b`, the Temporal workflow bundle check, and the test suite. Green before any
-hand-off.
+freeze check against `contracts/`, `tsc -b`, the Temporal workflow bundle check, the test suite, and the MCP view tests,
+which run each MCP view in this machine's Chrome under the test host. Green before any hand-off.
 
 `scripts/check-component-conventions.ts` runs the focused convention in
 [jsx-conventions](.agents/skills/jsx-conventions/SKILL.md). `componentConventionFiles.ts` owns the feature roots,

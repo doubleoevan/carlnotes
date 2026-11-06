@@ -185,8 +185,7 @@ async function retrieveReplyContext(
 		input.userId,
 		// the owner flag scopes the topic's own attachments, and the keep flag the user's chat material
 		input.isTopicOwner,
-		input.litellmApiKey,
-		input.includeAttachments ?? true,
+		{ litellmApiKey: input.litellmApiKey, shouldIncludeAttachments: input.includeAttachments ?? true },
 	)
 }
 

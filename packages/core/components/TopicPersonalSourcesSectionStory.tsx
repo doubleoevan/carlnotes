@@ -8,10 +8,9 @@ import { TopicPersonalSourcesContents } from "./TopicPersonalSourcesContents"
 
 type TopicPersonalSourcesSectionStoryProps = {
 	elements: TopicPersonalSourcesElements
-	expandedElements: TopicPersonalSourcesElements
 	variant?: Parameters<typeof useTopicPersonalSourcesStory>[0]
 	initialOpen?: boolean
-	isItemExpanded?: boolean
+	isEntryExpanded?: boolean
 	isPlatformGallery?: boolean
 	conversationExample?: keyof typeof PERSONAL_SOURCES_CONVERSATION_EXAMPLES
 	canContribute?: boolean
@@ -53,9 +52,8 @@ export function TopicPersonalSourcesSectionStory({
 // render the current fixture page through the same content component as the live view
 function Contents({
 	elements,
-	expandedElements,
 	state,
-	isItemExpanded = false,
+	isEntryExpanded = false,
 	canContribute = true,
 }: Omit<TopicPersonalSourcesSectionStoryProps, "initialOpen"> & { state: TopicPersonalSourcesContentsState }) {
 	return (
@@ -63,7 +61,8 @@ function Contents({
 			topic={PERSONAL_SOURCES_TOPIC_STORY}
 			state={state}
 			canContribute={canContribute}
-			elements={isItemExpanded ? expandedElements : elements}
+			elements={elements}
+			initialExpandedEntryId={isEntryExpanded ? state.page?.entries[0]?.id : undefined}
 			emptyControls={
 				<PersonalSourcesEmailAddress address="carl@example.com" elements={elements} onCopy={async () => true} />
 			}

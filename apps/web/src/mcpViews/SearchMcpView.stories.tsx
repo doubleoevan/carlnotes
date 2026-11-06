@@ -1,19 +1,10 @@
-// the search MCP view: the search tool's page in the search page's list, with Follow on a signed-in caller's topic
-// rows and See all. its paging and sorting call the search tool through the host, which a story has none of
+// the search MCP view: the search tool's page as a table, with Follow on a user's topic rows and See all.
+// its paging and sorting call the search tool through the host. a story has no host
 import type { McpSearchPage } from "@carlnotes/contracts/mcpViews"
-import { searchRequestPayload } from "@carlnotes/contracts/search"
 import type { Meta, StoryObj } from "@storybook/tanstack-react"
-import { SEARCH_PAGE_FIXTURE } from "../../.storybook/fixtures/search"
+import { MCP_SEARCH_PAGE } from "../../.storybook/fixtures/mcpViews"
 import { PHONE_VIEWPORT_GLOBALS } from "../../.storybook/viewports"
 import { SearchMcpView } from "./SearchMcpView"
-
-// the search page fixture as the search tool returns it, each row with its absolute url
-const MCP_SEARCH_PAGE: McpSearchPage = {
-	...SEARCH_PAGE_FIXTURE,
-	rows: SEARCH_PAGE_FIXTURE.rows.map((searchRow) => ({ ...searchRow, url: `https://carlnotes.com${searchRow.path}` })),
-	searchRequest: searchRequestPayload.parse({ q: "espresso" }),
-	searchUrl: "https://carlnotes.com/search?q=espresso",
-}
 
 // the same page as a visitor's search returns it, with no subscription state
 const VISITOR_MCP_SEARCH_PAGE: McpSearchPage = {

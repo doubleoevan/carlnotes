@@ -188,7 +188,7 @@ export async function activateSubscription({
 		)
 	}
 
-	// serialize access changes with the first private receipt
+	// serialize access changes with the first private confirmation
 	const topic = await lockPersonalSourcesTopic(transaction, topicId)
 	if (!topic || (topic.ownerId !== userId && (await hasUnconvertedPersonalSources(topicId, transaction)))) {
 		throw new PersonalSourcesConversionError()

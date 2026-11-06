@@ -229,8 +229,8 @@ export const aiAgentApiKeys = pgTable(
 )
 
 // acknowledged mail is resumable without storing another copy of its body or recipient address
-export const personalSourcesEmailReceipts = pgTable(
-	"personal_source_email_receipts",
+export const personalSourcesEmailConfirmations = pgTable(
+	"personal_source_email_confirmations",
 	{
 		id: primaryId(),
 		emailId: text("email_id").notNull(),
@@ -246,18 +246,18 @@ export const personalSourcesEmailReceipts = pgTable(
 		...timestamps(),
 	},
 	(table) => [
-		uniqueIndex("personal_source_email_receipts_email_unique").on(table.emailId),
-		index("personal_source_email_receipts_pending_idx").on(table.state, table.nextAttemptAt),
+		uniqueIndex("personal_source_email_confirmations_email_unique").on(table.emailId),
+		index("personal_source_email_confirmations_pending_idx").on(table.state, table.nextAttemptAt),
 	],
 )
 
-// numbered email choices retain only Topic metadata and the original receipt reference
+// numbered email choices retain only Topic metadata and the original confirmation reference
 export const personalSourcesEmailChoices = pgTable(
 	"personal_source_email_choices",
 	{
-		receiptId: text("receipt_id")
+		confirmationId: text("confirmation_id")
 			.primaryKey()
-			.references(() => personalSourcesEmailReceipts.id, { onDelete: "cascade" }),
+			.references(() => personalSourcesEmailConfirmations.id, { onDelete: "cascade" }),
 		userId: text("user_id")
 			.notNull()
 			.references(() => users.id, { onDelete: "cascade" }),
@@ -270,13 +270,13 @@ export const personalSourcesEmailChoices = pgTable(
 	],
 )
 
-// pending reply snapshots disappear with their item or account while receipt tombstones remain
+// pending reply snapshots disappear with their item or account while confirmation tombstones remain
 export const personalSourcesEmailReplies = pgTable(
 	"personal_source_email_replies",
 	{
-		receiptId: text("receipt_id")
+		confirmationId: text("confirmation_id")
 			.primaryKey()
-			.references(() => personalSourcesEmailReceipts.id, { onDelete: "cascade" }),
+			.references(() => personalSourcesEmailConfirmations.id, { onDelete: "cascade" }),
 		userId: text("user_id")
 			.notNull()
 			.references(() => users.id, { onDelete: "cascade" }),

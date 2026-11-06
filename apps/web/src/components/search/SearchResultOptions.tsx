@@ -114,17 +114,14 @@ function SearchRowOptionContent({ searchRow }: { searchRow: SearchRow }) {
 					<span className="text-muted-foreground max-w-[40%] shrink-0 truncate text-xs">{searchRow.topic.name}</span>
 				</>
 			)
-		// a finding, with its resource kind's icon and its source
-		case "finding": {
-			const FindingIcon = SEARCH_RESULT_KIND_ICON.findings
+		// a finding, with its source
+		case "finding":
 			return (
 				<>
-					<FindingIcon className="text-muted-foreground size-4 shrink-0" aria-label="Finding" />
 					<span className="min-w-0 flex-1 truncate">{searchRow.name}</span>
 					<span className="text-muted-foreground shrink-0 text-xs">{searchRow.finding.source}</span>
 				</>
 			)
-		}
 		// a team with its avatar
 		case "team":
 			return (

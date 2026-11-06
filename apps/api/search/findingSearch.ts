@@ -1,19 +1,26 @@
 // the site search's finding reader: the findings whose resource title, else its url, contains the query, on the
 // topics the user may open, under the same invite activation gate the topic page reads, each as its topic's feed shows
-// it with the user's marks and whether the user may rate and bookmark it
+// it with the user's consumed and bookmarked states and whether the user may rate and bookmark it
 import type { PodcastEpisode } from "@carlnotes/contracts/podcast"
 import type { FindingSearchRow, FindingSearchTopic, SearchRow } from "@carlnotes/contracts/search"
 import { toTopicPath } from "@carlnotes/contracts/seo"
 import { db, isFindingShown } from "@carlnotes/db"
+import { toActivatedScanFilter } from "@carlnotes/db/contentFilters"
 import { bookmarks, consumptions, findings, resources, scans } from "@carlnotes/db/schema/scans"
 import { topics } from "@carlnotes/db/schema/topics"
 import { and, eq, inArray, like, type SQL, sql } from "drizzle-orm"
 import { toContainsLikePattern } from "../likePattern"
 import { loadLatestPodcastEpisodes } from "../podcast/podcastEpisodeShapes"
 import { loadTopicFindingPermissions } from "../topic/findingPermissions"
-import { toTopicFinding } from "../topic/findings"
+import {
+	TOPIC_FINDING_COLUMNS,
+	toBookmarkJoinCondition,
+	toConsumptionJoinCondition,
+	toTopicFinding,
+	USER_FINDING_COLUMNS,
+	VISITOR_FINDING_COLUMNS,
+} from "../topic/findings"
 import { toTopicViewFilter } from "../topic/permissions"
-import { topicSubscriptionStartDates } from "../topic/subscriptionStartDates"
 
 // who is searching, whether they are an admin, the trimmed query, the most rows to read, the filter the finding's
 // topic's tags must pass, and the finding filter, the shown findings by default
@@ -46,25 +53,14 @@ export async function searchFindings(searchFindingsOptions: SearchFindingsOption
 		return []
 	}
 
-	// the activation date of each invite topic that gates the user's findings
-	const topicRows = findingRows.map((findingRow) => findingRow.topic)
-	const subscriberActivatedAtByTopicId = await topicSubscriptionStartDates(topicRows, searchFindingsOptions.userId)
-
-	// keep a gated topic's findings only from scans after the activation. a gated topic with no activation keeps none
-	// ponytail: the gate filters after the limit, so a user gated out of many matches sees fewer rows. move the gate into
-	// the statement if that happens
-	const readableFindingRows = findingRows.filter((findingRow) =>
-		isReadableFinding(findingRow, subscriberActivatedAtByTopicId),
-	)
-
 	// whether the user may rate and bookmark each topic's findings, read for every topic at once
 	const findingPermissionsByTopicId = await loadTopicFindingPermissions(
 		searchFindingsOptions.userId,
-		readableFindingRows.map((findingRow) => findingRow.topic),
+		findingRows.map((findingRow) => findingRow.topic),
 	)
 
 	// shape each finding as its topic's feed shows it, in a search row linked to its topic's page
-	return readableFindingRows.map((findingRow) => ({
+	return findingRows.map((findingRow) => ({
 		kind: "finding",
 		id: findingRow.findingId,
 		name: findingRow.title ?? findingRow.url,
@@ -76,8 +72,10 @@ export async function searchFindings(searchFindingsOptions: SearchFindingsOption
 	}))
 }
 
-// a finding row's topic, with whether the user may rate and bookmark its findings
-function toFindingSearchTopic(
+/**
+ * Returns a finding row's topic, with whether the user may rate and bookmark its findings.
+ */
+export function toFindingSearchTopic(
 	{ id, name, prompt, visibility }: Pick<typeof topics.$inferSelect, "id" | "name" | "prompt" | "visibility">,
 	findingPermissionsByTopicId: Map<string, { canRate: boolean; canBookmark: boolean }>,
 ): FindingSearchTopic {
@@ -125,31 +123,13 @@ export function toFindingSearchQuery({
 	const titleOrUrl = sql`lower(coalesce(${resources.title}, ${resources.url}))`
 	const isTitleOrUrlMatch = like(titleOrUrl, toContainsLikePattern(query))
 
-	// a user's own columns are consumed and bookmarked. a visitor's are null
-	const userColumns = userId
-		? { consumedAt: consumptions.consumedAt, bookmarkedAt: bookmarks.createdAt }
-		: { consumedAt: sql<Date | null>`null`, bookmarkedAt: sql<Date | null>`null` }
-
 	// each matched resource's findings as the topic feed reads them, their topics, and the scans that last reviewed them
 	const findingQuery = db
 		.select({
-			// the finding, its scan, and its resource
-			findingId: findings.id,
-			scanId: findings.scanId,
-			resourceId: resources.id,
-			url: resources.url,
-			title: resources.title,
-			resourceKind: resources.kind,
-			// the resource's dates, the finding's notes, rating, and view count, and the user's marks
-			resourceCreatedAt: resources.createdAt,
-			fetchedAt: resources.fetchedAt,
-			relevanceScore: findings.relevanceScore,
-			relevanceExplanation: findings.relevanceExplanation,
-			viewCount: findings.viewCount,
-			rating: findings.rating,
-			...userColumns,
-			// when the finding's scan started for the invite gate, and the topic the row names and checks
-			scanStartedAt: scans.startedAt,
+			// the finding as its topic's feed reads it, the user's consumed and bookmarked states, and the topic the row
+			// names and checks
+			...TOPIC_FINDING_COLUMNS,
+			...(userId ? USER_FINDING_COLUMNS : VISITOR_FINDING_COLUMNS),
 			topic: {
 				id: topics.id,
 				name: topics.name,
@@ -168,27 +148,15 @@ export function toFindingSearchQuery({
 	// left join a user's consumed and bookmark rows. a visitor skips the join
 	const markedQuery = userId
 		? findingQuery
-				.leftJoin(consumptions, and(eq(consumptions.findingId, findings.id), eq(consumptions.userId, userId)))
-				.leftJoin(bookmarks, and(eq(bookmarks.findingId, findings.id), eq(bookmarks.userId, userId)))
+				.leftJoin(consumptions, toConsumptionJoinCondition(userId))
+				.leftJoin(bookmarks, toBookmarkJoinCondition(userId))
 		: findingQuery
 
-	// an admin may read every topic's findings, and everyone else the topics the view rules allow, shorter titles first
+	// an admin may read every topic's findings, and everyone else the topics the view rules allow, shorter titles first.
+	// an invite topic's findings start at the user's subscription's activation
 	const topicViewFilter = isAdmin ? undefined : toTopicViewFilter(userId)
 	return markedQuery
-		.where(and(isTitleOrUrlMatch, findingFilter, topicViewFilter, topicTagFilter))
+		.where(and(isTitleOrUrlMatch, findingFilter, topicViewFilter, topicTagFilter, toActivatedScanFilter(userId)))
 		.orderBy(sql`length(${titleOrUrl})`, findings.id)
 		.limit(limit)
-}
-
-// whether a finding is past its topic's invite gate: an ungated topic's finding always is, and a gated one's only if
-// its scan started after the user's subscription activated
-function isReadableFinding(
-	findingRow: { topic: { id: string }; scanStartedAt: Date },
-	subscriberActivatedAtByTopicId: Map<string, Date | null>,
-): boolean {
-	if (!subscriberActivatedAtByTopicId.has(findingRow.topic.id)) {
-		return true
-	}
-	const subscriberActivatedAt = subscriberActivatedAtByTopicId.get(findingRow.topic.id)
-	return subscriberActivatedAt ? findingRow.scanStartedAt > subscriberActivatedAt : false
 }

@@ -1,6 +1,11 @@
 # apps/web/
 
-`mcpViews/TopicSuggestionsMcpView.tsx` renders every editable Topic in five-row cursor pages, checkboxes, a live selected list using `TagPill`, results-only loading, and explicit multi-Topic sending. `TopicSuggestionsSearch.tsx` reuses site autocomplete rows; `useTopicAutocomplete.ts` debounces name-only host calls. `McpViewBrand.tsx` links the site mug and name through the host to the connected site in a new tab. Both footer actions use the standard Button size and padding: outlined Send first, highlighted new-Topic second. Hidden audio stays outside content spacing. The Nightshift brand link opens the site in a new tab too. `useTopicSuggestionsMcpView.ts` retains selections and retry IDs and opens the existing confirmed Topic Draft flow through `callMcpViewTool`. Its interactive stories use synthetic host results. The MCP host iframe is web-only.
+`mcpViews/TopicSuggestionsMcpView.tsx` renders every editable Topic in five-row cursor pages, checkboxes, a live
+selected list using `TagPill`, results-only loading, and explicit multi-Topic sending. `TopicSuggestionsSearch.tsx`
+reuses site autocomplete rows; `useTopicAutocomplete.ts` debounces name-only host calls. Both footer actions use the
+standard Button size and padding: outlined Send first, highlighted new-Topic second. `useTopicSuggestionsMcpView.ts`
+retains selections and retry IDs and opens the existing confirmed Topic Draft flow through `callMcpViewTool`. Its
+interactive stories use synthetic host results. The MCP host iframe is web-only.
 
 
 `components/account/AiAgentAccountSection.tsx` adapts shared connection and key controls.
@@ -13,8 +18,9 @@ uploads from selected conversations only. The import tests cover cancellation an
 `personalSourcesExport.ts` recognizes visible conversation records. `personalSourcesExportArchive.ts` uses zip.js with path, count,
 ratio, and declared/actual expansion limits. Attachments are never extracted. The import dialog terminates its worker.
 
-`mcpViews/TopicMcpView.tsx` also renders `send_to_topic` receipts, choices, and refusals. Send states are display-only,
-use the shared text fallback, open Topic links through the host, and never resend a request or fetch private entries.
+`mcpViews/TopicMcpView.tsx` also renders `send_to_topic` confirmations, choices, and refusals. Send states are
+display-only, use the shared text fallback, open Topic links through the host, and never resend a request or fetch
+private entries.
 
 Web components guide mobile. Before changing shared presentation or behavior, inspect the native counterpart and follow
 the reuse and parity checklist in `../mobile/AGENTS.md`. Share portable components, rules, formatting, and visibility gates
@@ -63,6 +69,8 @@ the browser bundle and renders pages through the server build, behind its own ro
   changes. Move the import to `@carlnotes/nightshift/classNames` and remove the dependency. Biome fails an import from
   `cn` until then, and an import from `clsx` or `tailwind-merge` anywhere outside `classNames.ts`. Custom shared
   components go in `components/common/`, among them
+  `BrandLink.tsx`, the mug and name the header and the MCP view shell share, `BackButton.tsx`, the back control of the
+  MCP view shell and the suggestions MCP view,
   `IconButton.tsx`, the button whose tooltip is also its accessible name, and `FlashingCount.tsx`, a labeled count
   whose highlighted number flashes once when the count changes, and never under reduced motion.
   `ScrollBox.tsx` is the bordered box that scrolls its overflow on the highlight scrollbar with a tab stop, and with
@@ -142,6 +150,8 @@ the browser bundle and renders pages through the server build, behind its own ro
   checks against the docs page's copy, and `monthlyBudgetCutoffCopy.ts` holds the wording both of them use.
 - `components/invite/` — the invite fields, editors, and modals, shared by the topic and team pages.
 - `components/topic/` — the topic page's sections, cards, dialogs, and editors, and the edit topic modal.
+  `TopicFindingControls.tsx` and `TopicFindingDetails.tsx` hold a Finding's controls and its expanded note, which the
+  note popover and the MCP view tables share.
   `TopicResourceInfo.tsx` shows a Finding's details and actions in the popover opened from `TopicResource.tsx` or a Podcast Episode chapter.
   `TagsAndNewTopicRow.tsx` is the Tags picker and New Topic button row above the home feed and the search results.
   `TopicCountsLine.tsx` ends the topic page with its viewer and follower counts, empty in the server render.
@@ -156,7 +166,8 @@ the browser bundle and renders pages through the server build, behind its own ro
   `saveTeam`, and `TEAM_REJECTION_REASONS`, the sentence for each team rejection.
 - `components/share/` — the share menus for a topic and a team, over the options they both use.
 - `components/search/` — the header's search bar, its Filters menu, its typeahead rows, and `SearchResultsList.tsx`,
-  the numbered result rows, their skeleton, and the page row that the search page and the search MCP view render.
+  the numbered result rows, their skeleton, and the page row that the search page and the search MCP view render, over
+  the row pieces in `SearchRowParts.tsx`.
   Every kind of match comes from one site search, `GET /api/search`, sent once typing pauses. `searchBarChoices.ts`
   holds what Enter opens, the search page the bar's text opens, and a list after a toggle, `searchFindingChanges.ts`
   shows a finding note's change on its row, `searchFilterOptions.ts` holds the Filters menu's view and kind labels and
@@ -229,17 +240,30 @@ the browser bundle and renders pages through the server build, behind its own ro
   `lib/webApiClient.ts` holds the app's `configureApiClient` call, with the base url, `""` in the browser and the api on
   port 3000 on the server, and `showError`, which toasts the message; `router.tsx` calls it where both the server
   render and the browser pass, and the route tests' `-loadRouter.ts` calls it the same way.
-- `mcpViews/` — the MCP Apps views the mcp server's search, topic, and finding tools name: `main.tsx`, the entry
-  `vite.mcpViews.config.ts` builds into one script and one stylesheet in `dist/mcp-views/` as part of `build`, and
-  `McpViewApp.tsx`, which connects to the host with `@modelcontextprotocol/ext-apps`, follows its theme, and renders the
-  MCP view its html names in a one-route memory router, every link opening through the host by `LinkOpenerContext` in
-  `AnchorLink`. `SearchMcpView.tsx`, `TopicMcpView.tsx`, and `FindingsMcpView.tsx` render the site's own components,
-  `McpViewSubscribeButton.tsx` and `McpViewPodcastPlayer.tsx` beside them. `mcpViewHost.ts` holds the connected app, the MCP view
-  data a tool result includes in `_meta`, and the tool calls the MCP views make, and `mcpViewFindingHandlers.ts` the finding
-  note's handlers the search and findings MCP views share, each a tool call. The MCP view build aliases
-  `@carlnotes/client/authClient` to `mcpViewAuthClient.ts`, whose session is the tool result's caller, and
-  `@/lib/visitAnalytics` to `mcpViewVisitAnalytics.ts`, which reports nothing, and `mcpViewFetch.ts` returns a podcast episode
-  read from the tool result and fails every other request, so an MCP view reaches the api only through a tool call.
+- `mcpViews/` — the MCP Apps views the mcp server's tools name: `main.tsx`, the entry `vite.mcpViews.config.ts` builds
+  into one script and one stylesheet in `dist/mcp-views/` as part of `build` or alone with `build:mcp-views`, and
+  `McpViewApp.tsx`, which connects to the host with `@modelcontextprotocol/ext-apps` and follows its theme and display
+  mode. `mcpViewRouter.tsx` holds the routes in a memory router, one for each MCP view, and the route the html's MCP
+  view opens on. `McpViewShell.tsx` is the layout around them: the brand link, the back button, the display mode buttons
+  in `McpViewDisplayModeButton.tsx`, the heading in `mcpViewRouteHeading.ts`, and `McpViewToolText.tsx`, the tool's own
+  words if a result has no MCP view data. `mcpViewHistory.ts` keeps each route's tool call in its history entry, so back
+  calls no tool, and opens every other navigation on the site. `McpViewLink.tsx` takes the one hop, or opens the site
+  after it, and every other link opens through the host by `LinkOpenerContext` in `AnchorLink`. `SearchMcpView.tsx`,
+  `TopicMcpView.tsx`, `FindingsMcpView.tsx`, `UpdatesMcpView.tsx`, and `ScanMcpView.tsx` render the site's own
+  components, `McpViewSubscribeButton.tsx` and `McpViewPodcastPlayer.tsx` beside them. `SearchResultsTable.tsx` and
+  `FindingsTable.tsx` lay those components out as tables over `mcpViewTableElements.tsx` and `McpViewFindingCells.tsx`,
+  `useMcpViewFindings.ts` keeps an MCP view's rows as its tool calls change them, `useFindingPages.ts` pages the
+  findings through the tool's cursor, and `useScanStatus.ts` polls `read_scan_status` at its own 10 and 30 second rates.
+  `mcpViewHost.ts` holds the connected app, the MCP view data a tool result includes in `_meta`, and the tool calls the
+  MCP views make, and `mcpViewFindingHandlers.ts` the finding note's handlers the search and findings MCP views share,
+  each a tool call. `testHost/` runs the built bundle in Chrome under the test host: `mcpViews.smoke.ts`, which imports
+  each MCP view's `*McpViewSmokeSections.ts`, runs over `mcpViewTestHarness.ts`, `mcpViewTestHost.ts`, `hostPage.ts`,
+  and `mcpViewFixtures.ts` as `bun run smoke:mcp-views`, and `@carlnotes/contracts/mcpScanStatusTestFixtures` holds the
+  Scan statuses it shares with the stories. The MCP view build aliases `@carlnotes/client/authClient` to
+  `mcpViewAuthClient.ts`, whose session is the tool result's caller, and `@/lib/visitAnalytics` to
+  `mcpViewVisitAnalytics.ts`, which reports nothing, and `@/lib/voiceActivity` to `mcpViewVoiceActivity.ts`, which never
+  starts, and `mcpViewFetch.ts` returns a podcast episode read from the tool result, sends a finding's feedback through
+  its tool, and fails every other request, so an MCP view reaches the api only through a tool call.
 - `stores/` — the stores that reach the browser or a component library, named `<thing>Store.ts` and built the way
   `packages/core/AGENTS.md` describes, on `@carlnotes/core/stores/storeListeners`. Reach for a store only when state
   outlives a page or crosses the tree; `useState` and `providers/` cover everything else. The DOM-free stores,
@@ -255,7 +279,8 @@ the browser bundle and renders pages through the server build, behind its own ro
   and saves a signed-in user's progress in the loaded podcast episode, its playback start once per load, for the player
   store.
 - `hooks/` — the React hooks that read the browser or a route, `useTopicPagePayload.ts` among them, the topic page's
-  payload and its poll reload, and `useScanNote.ts`, a scan's note behind its recap popover, read once the trigger is
+  payload and its poll reload, `useSiteAssetUrl.ts`, a site image's url, absolute in an MCP view's frame, and
+  `useScanNote.ts`, a scan's note behind its recap popover, read once the trigger is
   pointed at, focused, touched, or opened, and kept once the scan has finished; `providers/` — context providers. The
   images the bundler imports, Carl's and Vienna's portraits, come from `@carlnotes/nightshift/assets/`. The DOM-free
   hooks `useNow`, `useAvatar`, `useUsernameChange`, `useNoteBodySave`, and `useNoteComments` live in
@@ -320,11 +345,11 @@ the browser bundle and renders pages through the server build, behind its own ro
   `components/stories.test.ts` checks. A story gets its data from mocked clients and invented fixtures, never from a
   change to the component. The shared fixtures are in `.storybook/fixtures.ts`, with the date from
   `@carlnotes/core/lib/storyFixtures`, the sessions, and the people, and in one file per domain under
-  `.storybook/fixtures/`: topics, a visitor's and a user's topic feeds, podcast episodes, teams, admin users, and
-  waiting updates. A story imports them from there, never from another story. `src/nightshift/` holds the Tokens,
-  Typography, and Inventory pages, the swatch and specimen components they render, `ScrollingTable.tsx`, which renders
-  their tables in the app's table classes with the first column fixed, and the pattern stories, each composed from
-  `lib/styleClasses.ts` where a shared class exists, the section label from `SECTION_LABEL_CLASS`, which
+  `.storybook/fixtures/`: topics, a visitor's and a user's topic feeds, podcast episodes, teams, admin users, waiting
+  updates, and an updates list. A story imports them from there, never from another story. `src/nightshift/` holds the
+  Tokens, Typography, and Inventory pages, the swatch and specimen components they render, `ScrollingTable.tsx`, which
+  renders their tables in the app's table classes with the first column fixed, and the pattern stories, each composed
+  from `lib/styleClasses.ts` where a shared class exists, the section label from `SECTION_LABEL_CLASS`, which
   `lib/styleClasses.test.ts` checks against the sectionLabel type role in `@carlnotes/nightshift/typography`, as it
   checks `LOGO_CLASS`, the name beside the mug in the logo, against the logo role. `src/nightshift/` also holds the
   fetch guard and the in-memory storage the preview installs, outside `.storybook/` so that `bun test` finds their

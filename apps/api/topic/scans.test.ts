@@ -20,8 +20,9 @@ import * as staleScans from "@carlnotes/pipeline/staleScans"
 import { quietErrorReports } from "@carlnotes/server/monitoringTestFixtures"
 import * as authorization from "../authorization"
 import * as billing from "../billing"
+import type { AnalyticsProperties } from "../currentUser"
 import { toSignedInApp } from "../testSession"
-import { scansRoute, toSourceResultsView } from "./scans"
+import { runManualScan, scansRoute, toSourceResultsView } from "./scans"
 
 // put the connection pool's own query, the real fetch, the proxy settings, and the spies back after each test
 afterEach(() => {
@@ -197,6 +198,30 @@ test("a manual Scan whose start throws is reported and responds 503", async () =
 		topicId: "topic-1",
 		userId: "owner-1",
 	})
+})
+
+test("a subscriber with a card past the daily quota starts nothing and bills nothing if the caller may not bill", async () => {
+	// a Scan the gate would allow as a billed overage
+	stubOwnedTopicRows()
+	const { startTopicScanSpy, reportManualScanOverageSpy } = spyOnManualScan(true)
+
+	// the caller that may not bill stops at the quota
+	const scanResult = await runManualScan("owner-1", "topic-1", {} as AnalyticsProperties, { isOverageAllowed: false })
+	expect(scanResult).toEqual({ status: "quota" })
+	expect(startTopicScanSpy).not.toHaveBeenCalled()
+	expect(reportManualScanOverageSpy).not.toHaveBeenCalled()
+})
+
+test("the topic page's request past the daily quota still starts a billed overage", async () => {
+	// a Scan the gate allows as a billed overage, on the path the page calls
+	stubOwnedTopicRows()
+	const { startTopicScanSpy } = spyOnManualScan(true)
+	stubUnreachableProxy()
+
+	// the page's default bills past the daily quota, and a started Scan names its id
+	const response = await sendManualScan("owner-1")
+	expect(response.status).toBe(200)
+	expect(startTopicScanSpy).toHaveBeenCalledWith("topic-1", "owner-1", "manual")
 })
 
 // a url Source with a token in its query that ran, a reddit Source that fell back, an rss feed that failed, and a url

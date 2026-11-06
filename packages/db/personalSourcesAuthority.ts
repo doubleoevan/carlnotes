@@ -1,6 +1,6 @@
 // personal topic eligibility and the lasting boundary around private received context
 import { PLANS } from "@carlnotes/contracts/plans"
-import { and, eq, or } from "drizzle-orm"
+import { and, eq, notInArray, or, type SQL } from "drizzle-orm"
 import { type DbHandle, db } from "./index"
 import { loadUserAccess } from "./quotas"
 import { topicPersonalSourceContexts } from "./schema/personalSources"
@@ -121,4 +121,15 @@ export async function hasUnconvertedPersonalSources(topicId: string, transaction
 		)
 		.limit(1)
 	return personalSourcesContext !== undefined
+}
+
+/**
+ * Returns the filter that keeps Topics with no legacy generated text that still needs private conversion.
+ */
+export function toConvertedPersonalSourcesFilter(): SQL {
+	const unconvertedTopicIds = db
+		.select({ topicId: topicPersonalSourceContexts.topicId })
+		.from(topicPersonalSourceContexts)
+		.where(eq(topicPersonalSourceContexts.publicOutputsVersion, 0))
+	return notInArray(topics.id, unconvertedTopicIds)
 }

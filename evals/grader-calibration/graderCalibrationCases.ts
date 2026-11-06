@@ -11,6 +11,7 @@ import { SOURCE_SUGGESTIONS_RUBRIC_CALIBRATIONS } from "./graderCalibrationSourc
 import { TEAM_CHAT_RUBRIC_CALIBRATIONS } from "./graderCalibrationTeamChatCases"
 import { TOPIC_CHAT_RUBRIC_CALIBRATIONS } from "./graderCalibrationTopicChatCases"
 import { TOPIC_CHAT_TOOLS_RUBRIC_CALIBRATIONS } from "./graderCalibrationTopicChatToolsCases"
+import { UPDATES_OPENER_RUBRIC_CALIBRATIONS } from "./graderCalibrationUpdatesOpenerCases"
 
 // what an eval's rubrics module gives its grader. the grader's model, the output's shape, and the material's label
 type EvalRubrics = { GRADER_MODEL: LanguageModel; OUTPUT_SHAPE_RUBRIC: string; MATERIAL_LABEL: string }
@@ -55,6 +56,7 @@ const RUBRIC_CALIBRATIONS: RubricCalibration[] = [
 	...SEARCH_QUERIES_RUBRIC_CALIBRATIONS,
 	...ATTACHMENT_SUMMARIES_RUBRIC_CALIBRATIONS,
 	...TEAM_CHAT_RUBRIC_CALIBRATIONS,
+	...UPDATES_OPENER_RUBRIC_CALIBRATIONS,
 ]
 
 // every case that the eval runs. each rubric's passing output, then its failing output

@@ -18,6 +18,7 @@ export type TopicChatCase = {
 
 // the finding about a quieter burr set
 export const QUIET_BURR_SET_FINDING: RetrievedFinding = {
+	findingId: "finding-1",
 	title: "A quieter burr set for home grinders",
 	url: "https://burrnotes.example/quiet-burrs",
 	foundAt: new Date("2026-09-30"),
@@ -33,6 +34,7 @@ export const QUIET_BURR_SET_FINDING: RetrievedFinding = {
 const FINDINGS: RetrievedFinding[] = [
 	QUIET_BURR_SET_FINDING,
 	{
+		findingId: "finding-2",
 		title: "Pre-infusion on a budget machine",
 		url: "https://shotlab.example/budget-preinfusion",
 		foundAt: new Date("2026-09-22"),
@@ -44,6 +46,7 @@ const FINDINGS: RetrievedFinding[] = [
 		].join(" "),
 	},
 	{
+		findingId: "finding-3",
 		title: "Water recipes compared",
 		url: "https://forum.example/t/water-recipes",
 		foundAt: new Date("2026-08-14"),
@@ -106,6 +109,7 @@ export const TOPIC_CHAT_CASES: TopicChatCase[] = [
 			findings: [
 				...FINDINGS,
 				{
+					findingId: "finding-4",
 					title: "Grinder deals this week",
 					url: "https://deals.example/grinders",
 					foundAt: new Date("2026-10-01"),

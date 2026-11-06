@@ -1,52 +1,54 @@
 // the MCP views: the MCP view each tool names, and what a tool result gives its MCP view beside the structured result the
 // model reads
-import type { Visibility } from "./enums"
 import type { TopicFinding } from "./findings"
+import type { McpScanStatus } from "./mcpScanStatus"
 import type { PersonalSourcesSendResult } from "./personalSources"
 import type { PodcastEpisode, PodcastEpisodeSummary } from "./podcast"
 import type { ProfileIdentity } from "./profiles"
-import type { SearchRequest, SearchResultsPage, SearchRow } from "./search"
+import type { FindingSearchTopic, SearchRequest, SearchResultsPage, SearchRow } from "./search"
 import type { TopicDraft } from "./topicPayloads"
+import type { Updates } from "./updates"
 
 // the MCP views, and each one's ui resource
-export const MCP_VIEWS = ["search", "topic", "findings", "suggest-topics"] as const
+export const MCP_VIEWS = ["search", "topic", "findings", "suggest-topics", "updates", "scan"] as const
 
 export type McpView = (typeof MCP_VIEWS)[number]
 
+// the version of the MCP view bundle a running api builds, always above every stored version
+export const MCP_VIEW_VERSION = 9
+
 /**
- * Returns an MCP view's ui resource uri.
+ * Returns an MCP view's ui resource uri at a version, the current one by default.
  */
-export function toMcpUiResourceUri(mcpView: McpView): string {
-	return `ui://carlnotes/${mcpView}.html?v=9`
+export function toMcpUiResourceUri(mcpView: McpView, version = MCP_VIEW_VERSION): string {
+	return `ui://carlnotes/${mcpView}.html?v=${version}`
 }
 
 // the key of a tool result's _meta entry that only its MCP view reads
 export const MCP_VIEW_META_KEY = "carlnotes/card"
 
-// the topic a findings MCP view heads its rows with: its name, prompt, and visibility, its latest podcast episode, whether
-// the caller subscribes to it, and whether the caller may rate and bookmark its findings
-export type McpViewTopic = {
-	// the topic as its link and its finding notes name it
-	id: string
-	name: string
-	prompt: string
-	visibility: Visibility
-	// its latest podcast episode, and what the caller may do with it
+// the topic a findings MCP view heads its rows with: a finding row's topic, its latest podcast episode, and whether the
+// caller subscribes to it
+export type McpViewTopic = FindingSearchTopic & {
 	latestPodcastEpisode: PodcastEpisodeSummary | null
 	isSubscribed: boolean | null
-	canRate: boolean
-	canBookmark: boolean
 }
 
 // what an MCP view reads beside the structured result: the signed-in caller, the podcast episodes its play buttons play,
-// and for the findings MCP view, the topic and its findings in the site's own shape
+// for the findings MCP view, the topic and its findings in the site's own shape, for the updates MCP view, each row's
+// Topic and the list, and for the scan MCP view, the status
 export type McpViewData = {
 	session: ProfileIdentity | null
 	podcastEpisodes: PodcastEpisode[]
 	topic?: McpViewTopic
 	topicFindings?: TopicFinding[]
+	updatesTopics?: FindingSearchTopic[]
+	updates?: Updates
+	scanStatus?: McpScanStatus
+	// the caller's own private annotations on the page's findings, by finding id
+	personalAnnotations?: Record<string, string>
 	topicDraftOptions?: { knownTags: string[]; isPodcastEnabledByDefault: boolean }
-	sendReceiptLinks?: { entryId: string; links: { url: string; title?: string }[] }[]
+	sendConfirmationLinks?: { entryId: string; links: { url: string; title?: string }[] }[]
 }
 
 // the search tool's structured result: the search's page with every row's absolute url, the search that found it, and

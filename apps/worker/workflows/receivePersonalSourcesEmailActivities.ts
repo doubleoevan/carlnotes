@@ -3,11 +3,13 @@ import { processPersonalSourcesEmail } from "@carlnotes/pipeline/personalSources
 import { ApplicationFailure } from "@temporalio/activity"
 
 /**
- * Processes one receipt without returning mail content or raw provider errors.
+ * Processes one confirmation without returning mail content or raw provider errors.
  */
-export async function receivePersonalSourcesEmailAttempt(receiptId: string): Promise<{ retryAfterMs: number | null }> {
+export async function receivePersonalSourcesEmailAttempt(
+	confirmationId: string,
+): Promise<{ retryAfterMs: number | null }> {
 	try {
-		return await processPersonalSourcesEmail(receiptId)
+		return await processPersonalSourcesEmail(confirmationId)
 	} catch {
 		throw ApplicationFailure.retryable(
 			"Personal sources email processing is temporarily unavailable",

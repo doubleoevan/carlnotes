@@ -53,6 +53,16 @@ export type AccessiblePodcastEpisode = {
 }
 
 /**
+ * Returns the properties every play and finish reports about a podcast episode and its topic.
+ */
+export function toPodcastEpisodeAnalyticsProperties(
+	topic: Pick<TopicRow, "id" | "visibility">,
+	podcastEpisodeId: string,
+): { topicId: string; isTopicPublic: boolean; episodeId: string } {
+	return { topicId: topic.id, isTopicPublic: topic.visibility === "public", episodeId: podcastEpisodeId }
+}
+
+/**
  * Returns whether a time passes the user's subscription activation gate. No gate passes every time, no active
  * subscription passes none, and an activation passes only a later time.
  */

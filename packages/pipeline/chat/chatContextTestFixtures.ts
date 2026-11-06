@@ -21,6 +21,7 @@ export function toTestChatContext(overrides: Partial<ChatContext> = {}): ChatCon
 		},
 		findings: [
 			{
+				findingId: "finding-1",
 				title: "16 Series B Startups Hiring Right Now",
 				url: "https://example.com/series-b",
 				foundAt: new Date("2026-07-14T09:00:00Z"),

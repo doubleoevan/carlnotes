@@ -1,4 +1,4 @@
-// text-only MCP clients and the Topic card read the same bounded receipt
+// text-only MCP clients and the Topic card read the same bounded confirmation
 import { PERSONAL_SOURCES_DAILY_LIMIT_MESSAGE, type PersonalSourcesSendResult } from "./personalSources"
 
 /**
@@ -7,10 +7,10 @@ import { PERSONAL_SOURCES_DAILY_LIMIT_MESSAGE, type PersonalSourcesSendResult } 
 export function toPersonalSourcesSendText(result: PersonalSourcesSendResult): string {
 	switch (result.status) {
 		case "accepted":
-			return (result.receipts ?? [result])
+			return (result.confirmations ?? [result])
 				.map(
-					(receipt) =>
-						`Saved “${result.title}” to ${receipt.topic.name}. ${receipt.queuedLinkCount} distinct links are waiting for a Scan. ${receipt.topic.url}`,
+					(confirmation) =>
+						`Saved “${result.title}” to ${confirmation.topic.name}. ${confirmation.queuedLinkCount} distinct links are waiting for a Scan. ${confirmation.topic.url}`,
 				)
 				.join("\n")
 		case "quota":

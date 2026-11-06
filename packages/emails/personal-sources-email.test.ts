@@ -1,4 +1,4 @@
-// outgoing receipts are numbered, linked, and private-content-free in both email representations
+// outgoing confirmations are numbered, linked, and private-content-free in both email representations
 import { expect, test } from "bun:test"
 import { renderPersonalSourcesEmail, renderPersonalSourcesEmailText } from "./personalSourcesEmail"
 

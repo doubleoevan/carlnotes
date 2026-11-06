@@ -36,7 +36,10 @@ export type PersonalSourcesEmailTopicChoice = z.infer<typeof personalSourcesEmai
 
 const filedEmailReply = z.object({
 	kind: z.literal("filed"),
-	topics: z.array(z.object({ name: z.string(), url: z.url(), entryId: z.string() })).min(1),
+	// a stored reply may have no topicId
+	topics: z
+		.array(z.object({ name: z.string(), url: z.url(), entryId: z.string(), topicId: z.string().optional() }))
+		.min(1),
 })
 export const personalSourcesEmailReply = z
 	.union([

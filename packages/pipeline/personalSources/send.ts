@@ -1,4 +1,5 @@
 // both external transports converge on one authenticated, accepted-only send path
+import type { AnalyticsEventProperties } from "@carlnotes/contracts/analyticsEvents"
 import type { AiAgentSourceConfig, PersonalSourcesSendResult } from "@carlnotes/contracts/personalSources"
 import {
 	type PersonalSourcesSendPayload,
@@ -10,6 +11,7 @@ import { loadLiveAiAgent } from "@carlnotes/db/aiAgentConnections"
 import { receivePersonalSourceEntry } from "@carlnotes/db/personalSourcesReceive"
 import { receivePersonalSourcesSend } from "@carlnotes/db/personalSourcesSend"
 import { aiAgentApiKeys } from "@carlnotes/db/schema/personalSources"
+import { trackEvent } from "@carlnotes/server/analytics"
 import { personalSourcesReceivingFailure } from "@carlnotes/server/personalSourcesSettings"
 import { eq } from "drizzle-orm"
 import { notifyPersonalSourcesChanged } from "./work"
@@ -33,11 +35,14 @@ export async function sendToPersonalSources({
 	sender,
 	payload,
 	routeTopicId = null,
+	analyticsProperties,
 }: {
 	sender: PersonalSourcesSender
 	payload: PersonalSourcesSendPayload
 	routeTopicId?: string | null
+	analyticsProperties: AnalyticsEventProperties
 }): Promise<PersonalSourcesSendResult> {
+	// a route's Topic limits which Topics the send may name
 	const input = personalSourcesSendPayload.parse(payload)
 	const topicIds = input.topic_ids ?? (input.topic_id ? [input.topic_id] : [])
 	if (routeTopicId && topicIds.some((topicId) => topicId !== routeTopicId)) {
@@ -66,15 +71,50 @@ export async function sendToPersonalSources({
 			chatUrl: input.chat_url ?? null,
 		},
 	}
-	const receipt = input.topic_id
+	const confirmation = input.topic_id
 		? await receivePersonalSourceEntry({ ...delivery, topicId: input.topic_id, origin: "send" })
 		: await receivePersonalSourcesSend({ ...delivery, topicIds })
-	if (receipt.status === "accepted") {
-		for (const savedReceipt of receipt.receipts ?? [receipt]) {
-			await notifyPersonalSourcesChanged(savedReceipt.topic.id)
+
+	// report the send, and notify each Topic that saved it
+	trackPersonalSourcesSend({ userId: identity.userId, confirmation, analyticsProperties })
+	if (confirmation.status === "accepted") {
+		for (const savedConfirmation of confirmation.confirmations ?? [confirmation]) {
+			await notifyPersonalSourcesChanged(savedConfirmation.topic.id)
 		}
 	}
-	return receipt
+	return confirmation
+}
+
+// report an accepted send by its counts, or the reason the send was not saved
+function trackPersonalSourcesSend({
+	userId,
+	confirmation,
+	analyticsProperties,
+}: {
+	userId: string
+	confirmation: PersonalSourcesSendResult
+	analyticsProperties: AnalyticsEventProperties
+}): void {
+	const sendAnalyticsProperties = { ...analyticsProperties, origin: "send" }
+
+	// an accepted send reports its entries and queued links
+	if (confirmation.status === "accepted") {
+		const savedConfirmations = confirmation.confirmations ?? [confirmation]
+		trackEvent("personal_source_entry_received", userId, {
+			...sendAnalyticsProperties,
+			...(savedConfirmations.length === 1 && { topicId: confirmation.topic.id }),
+			entryCount: savedConfirmations.length,
+			queuedLinkCount: savedConfirmations.reduce((linkCount, { queuedLinkCount }) => linkCount + queuedLinkCount, 0),
+		})
+		return
+	}
+
+	// any other send reports why it stopped
+	if (confirmation.status === "quota") {
+		trackEvent("personal_sources_quota_reached", userId, sendAnalyticsProperties)
+		return
+	}
+	trackEvent("personal_sources_send_rejected", userId, { ...sendAnalyticsProperties, reason: confirmation.status })
 }
 
 // the acceptance transaction rechecks the live identity under its per-user revocation lock

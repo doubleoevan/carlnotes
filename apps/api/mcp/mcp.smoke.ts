@@ -9,19 +9,24 @@ import { checkPersonalSourcesRouting } from "./mcpPersonalSourcesSmokeSections"
 import { checkResultBounds } from "./mcpResultSmokeSections"
 import { cleanUp, failureCount, seed } from "./mcpSmokeFixtures"
 import { checkRateLimit, checkUser, checkVisitor } from "./mcpSmokeSections"
+import { checkScanTools, checkTopicToolResults, checkVisitorTopicTools } from "./mcpTopicToolSmokeSections"
 
 // seed, run the sections in order, and always clean up
 try {
 	await seed()
 	await seedDirectoryFixtures()
 	await checkVisitor()
+	await checkVisitorTopicTools()
 
 	// authenticate once and check access, results, and the account's writes
 	const accessToken = await checkOAuth()
 	await checkOrigins(accessToken)
 	await checkPrivateAccess(accessToken)
 	await checkSubscriptionAccess(accessToken)
+	// check the results, the Scan tools, the Personal sources routes, and the account's writes
 	await checkResultBounds(accessToken)
+	await checkTopicToolResults(accessToken)
+	await checkScanTools(accessToken)
 	await checkPersonalSourcesRouting(accessToken)
 	await checkUser(accessToken)
 

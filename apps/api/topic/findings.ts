@@ -7,7 +7,7 @@ import { db, isFindingShown } from "@carlnotes/db"
 import { bookmarks, consumptions, findings, resources, scans } from "@carlnotes/db/schema/scans"
 import { reportThresholdCrossing } from "@carlnotes/server/monitoring"
 import { zValidator } from "@hono/zod-validator"
-import { and, desc, eq, gt, sql } from "drizzle-orm"
+import { and, desc, eq, gt, type SQL, sql } from "drizzle-orm"
 import { Hono } from "hono"
 import { loadOrFetchLinkPreview } from "../chat/linkPreviews"
 import { countSenderRateLimitHit, countWithinRateLimit, isCountedSender, toRequestSender } from "../counts/viewerCounts"
@@ -26,8 +26,42 @@ import { isTopicFindingVisible } from "./findingPermissions"
 // the most findings one read of a topic returns, about forty times the largest topic in production
 export const TOPIC_FINDINGS_READ_LIMIT = 1000
 
+// the columns of a topic finding row: its identity, the scan that produced it, its resource metadata, and its review
+export const TOPIC_FINDING_COLUMNS = {
+	findingId: findings.id,
+	scanId: findings.scanId,
+	resourceId: resources.id,
+	url: resources.url,
+	resourceKind: resources.kind,
+	title: resources.title,
+	resourceCreatedAt: resources.createdAt,
+	fetchedAt: resources.fetchedAt,
+	relevanceScore: findings.relevanceScore,
+	relevanceExplanation: findings.relevanceExplanation,
+	viewCount: findings.viewCount,
+	rating: findings.rating,
+}
+
+// a user's own columns on a finding row are consumed and bookmarked. a visitor's are null
+export const USER_FINDING_COLUMNS = { consumedAt: consumptions.consumedAt, bookmarkedAt: bookmarks.createdAt }
+export const VISITOR_FINDING_COLUMNS = { consumedAt: sql<Date | null>`null`, bookmarkedAt: sql<Date | null>`null` }
+
 // one page of a topic's findings in relevance order: the row it starts at and how many rows it reads
 export type FindingPageWindow = { offset: number; rowCount: number }
+
+/**
+ * Returns the condition that joins a user's consumed row to a finding.
+ */
+export function toConsumptionJoinCondition(userId: string): SQL | undefined {
+	return and(eq(consumptions.findingId, findings.id), eq(consumptions.userId, userId))
+}
+
+/**
+ * Returns the condition that joins a user's bookmark row to a finding.
+ */
+export function toBookmarkJoinCondition(userId: string): SQL | undefined {
+	return and(eq(bookmarks.findingId, findings.id), eq(bookmarks.userId, userId))
+}
 
 // the topic whose findings are read, the user reading them, the invite gate, and an optional page window
 type LoadTopicFindingsOptions = {
@@ -65,31 +99,9 @@ export async function loadTopicFindings({
 		: eq(findings.topicId, topicId)
 	const findingFilter = isRatedDownExcluded ? and(topicFindingFilter, isFindingShown) : topicFindingFilter
 
-	// a user's own columns are consumed and bookmarked. a visitor's are null
-	const userColumns = userId
-		? { consumedAt: consumptions.consumedAt, bookmarkedAt: bookmarks.createdAt }
-		: { consumedAt: sql<Date | null>`null`, bookmarkedAt: sql<Date | null>`null` }
-
-	// join each topic finding with its resource and its scan
+	// join each topic finding with its resource and its scan, with the user's consumed and bookmarked dates
 	const findingQuery = db
-		.select({
-			// load the finding identity, the scan that produced it, and its resource metadata
-			findingId: findings.id,
-			scanId: findings.scanId,
-			resourceId: resources.id,
-			url: resources.url,
-			resourceKind: resources.kind,
-			title: resources.title,
-			resourceCreatedAt: resources.createdAt,
-			fetchedAt: resources.fetchedAt,
-
-			// load the finding metadata, its view count for trending, and the user's consumed and bookmarked dates
-			relevanceScore: findings.relevanceScore,
-			relevanceExplanation: findings.relevanceExplanation,
-			viewCount: findings.viewCount,
-			rating: findings.rating,
-			...userColumns,
-		})
+		.select({ ...TOPIC_FINDING_COLUMNS, ...(userId ? USER_FINDING_COLUMNS : VISITOR_FINDING_COLUMNS) })
 		.from(findings)
 		.innerJoin(resources, eq(findings.resourceId, resources.id))
 		.innerJoin(scans, eq(findings.scanId, scans.id))
@@ -98,8 +110,8 @@ export async function loadTopicFindings({
 	// left join a user's consumed and bookmark rows. a visitor skips the join
 	const markedQuery = userId
 		? findingQuery
-				.leftJoin(consumptions, and(eq(consumptions.findingId, findings.id), eq(consumptions.userId, userId)))
-				.leftJoin(bookmarks, and(eq(bookmarks.findingId, findings.id), eq(bookmarks.userId, userId)))
+				.leftJoin(consumptions, toConsumptionJoinCondition(userId))
+				.leftJoin(bookmarks, toBookmarkJoinCondition(userId))
 		: findingQuery
 
 	// the most relevant first, with the id breaking ties so every page window reads the same order
@@ -142,7 +154,7 @@ export type TopicFindingRow = {
 	bookmarkedAt: Date | null
 }
 
-/** Shapes one joined finding row into a TopicFinding, with the user's marks set. */
+/** Shapes one joined finding row into a TopicFinding, with the user's consumed and bookmarked states set. */
 export function toTopicFinding(findingRow: TopicFindingRow): TopicFinding {
 	return {
 		findingId: findingRow.findingId,

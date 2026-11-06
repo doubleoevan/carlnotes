@@ -65,41 +65,45 @@ export function toScanDurationMs(
 	return scan?.finishedAt ? new Date(scan.finishedAt).getTime() - new Date(scan.startedAt).getTime() : null
 }
 
+// the raw scan columns that the topic response reads
+type TopicScanRow = {
+	id: string
+	status: TopicScan["status"]
+	startedAt: Date
+	finishedAt: Date | null
+	stoppedAt: Date | null
+	// the counts, the cost, and the error
+	foundCount: number
+	keptCount: number
+	filteredCount: number
+	cost: string
+	error: string | null
+}
+
 // the scan rows in the topic response's shape, stopped scans left out and the cost shown only with spend access
-export function toScanHistory(
-	// the raw scan columns, as the page query selects them
-	scanRows: {
-		id: string
-		status: TopicScan["status"]
-		startedAt: Date
-		finishedAt: Date | null
-		stoppedAt: Date | null
-		// the counts, and the cost nulled without spend access
-		foundCount: number
-		keptCount: number
-		filteredCount: number
-		cost: string
-		error: string | null
-	}[],
-	canSeeSpend: boolean,
-): TopicScan[] {
-	return scanRows
-		.filter((scan) => scan.stoppedAt === null)
-		.map((scan) => ({
-			id: scan.id,
-			status: scan.status,
-			// the run times as iso strings, which is what the JSON has
-			startedAt: scan.startedAt.toISOString(),
-			finishedAt: scan.finishedAt?.toISOString() ?? null,
-			stoppedAt: scan.stoppedAt?.toISOString() ?? null,
-			// the counts, and the cost in dollars where spend is visible
-			foundCount: scan.foundCount,
-			keptCount: scan.keptCount,
-			filteredCount: scan.filteredCount,
-			costDollars: canSeeSpend ? Number(scan.cost) : null,
-			error: scan.error,
-			podcastEpisode: null,
-		}))
+export function toScanHistory(scanRows: TopicScanRow[], canSeeSpend: boolean): TopicScan[] {
+	return scanRows.filter((scan) => scan.stoppedAt === null).map((scan) => toTopicScan(scan, canSeeSpend))
+}
+
+/**
+ * Returns one scan row in the topic response's shape, with the cost shown only with spend access.
+ */
+export function toTopicScan(scan: TopicScanRow, canSeeSpend: boolean): TopicScan {
+	return {
+		id: scan.id,
+		status: scan.status,
+		// the Scan's times as iso strings
+		startedAt: scan.startedAt.toISOString(),
+		finishedAt: scan.finishedAt?.toISOString() ?? null,
+		stoppedAt: scan.stoppedAt?.toISOString() ?? null,
+		// the counts, and the cost in dollars where spend is visible
+		foundCount: scan.foundCount,
+		keptCount: scan.keptCount,
+		filteredCount: scan.filteredCount,
+		costDollars: canSeeSpend ? Number(scan.cost) : null,
+		error: scan.error,
+		podcastEpisode: null,
+	}
 }
 
 // the owner fields that the topic page reads

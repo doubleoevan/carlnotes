@@ -2,7 +2,7 @@
 
 import { SCHEDULED_SCAN_SPENT_BUDGET_REASON } from "@carlnotes/contracts/scanFailure"
 import { db, sizeConnectionPool } from "@carlnotes/db"
-import { runWithClaim } from "@carlnotes/db/claim"
+import { runWithJobLease } from "@carlnotes/db/jobLease"
 import { scansRemainingToday } from "@carlnotes/db/quotas"
 import { scans } from "@carlnotes/db/schema/scans"
 import { topics } from "@carlnotes/db/schema/topics"
@@ -23,8 +23,8 @@ import { toScheduledTopicFilter } from "./scheduledTopicFilter"
 import { isWithinDailyTopicLimit, loadScheduledTopicLimits } from "./scheduledTopicLimits"
 import { syncViewerCounts } from "./syncViewerCounts"
 
-// the sweep's claim, so two sweeps cannot run at once
-const TOPIC_SWEEP_CLAIM = "scheduled-scan-sweep"
+// the sweep's job name, so two sweeps cannot run at once
+const TOPIC_SWEEP_JOB = "scheduled-scan-sweep"
 
 // a persisted Topic, and what one topic sweep did
 export type Topic = typeof topics.$inferSelect
@@ -32,15 +32,15 @@ export type Topic = typeof topics.$inferSelect
 export type TopicSweepSummary = { scheduled: number; started: number; skippedOverQuota: number; skippedOverDailyLimit: number; skippedOverDailyScanCutoff: number; skippedOverBudget: number; skippedOverBacklog: number; failed: number }
 
 /**
- * Runs one scheduled sweep under its claim or returns null if another sweep holds the claim.
- * A sweep that loses its claim stops before its next stage or Topic and rejects with a ClaimLostError.
+ * Runs one scheduled sweep under its lease or returns null if another sweep holds the lease.
+ * A sweep that loses its lease stops before its next stage or Topic and rejects with a JobLeaseLostError.
  */
 export function runScheduledTopicScans(): Promise<TopicSweepSummary | null> {
-	return runWithClaim({ claimName: TOPIC_SWEEP_CLAIM, runTask: sweepScheduledTopics })
+	return runWithJobLease({ jobName: TOPIC_SWEEP_JOB, runTask: sweepScheduledTopics })
 }
 
 // one sweep. dispatch what was never started, close out what went quiet, screen new Sources, report the queue,
-// then start each scheduled Topic's Scan. each stage first checks that the sweep still holds its claim
+// then start each scheduled Topic's Scan. each stage first checks that the sweep still holds its lease
 async function sweepScheduledTopics(signal: AbortSignal): Promise<TopicSweepSummary> {
 	// start anything that was opened and never dispatched, then close out anything dispatched that has gone quiet
 	signal.throwIfAborted()
@@ -91,7 +91,7 @@ async function sweepScheduledTopics(signal: AbortSignal): Promise<TopicSweepSumm
 }
 
 // the scheduled Topics, the limits from scheduledTopicLimits.ts, how many Scans this sweep may start, unbounded when
-// unset, and the signal that the sweep's claim aborts
+// unset, and the signal that the sweep's lease aborts
 export type StartScheduledTopicScansOptions = {
 	scheduledTopics: Topic[]
 	dailyTopicIdsByOwner: Map<string, Set<string>>
@@ -105,7 +105,7 @@ export type StartScheduledTopicScansOptions = {
  * Starts a Scan for each scheduled Topic within its owner's quota, daily topic limit, daily scans cutoff, and budget.
  * A Topic whose owner's budget is spent gets a failed Scan instead, unless a Scan of that Topic is still running.
  * Returns what the sweep did. Each owner's remaining scan count is read once and lowered as that owner's Scans start.
- * A sweep whose claim is lost stops before its next Topic.
+ * A sweep whose lease is lost stops before its next Topic.
  */
 export async function startScheduledTopicScans({
 	scheduledTopics,
@@ -121,7 +121,7 @@ export async function startScheduledTopicScans({
 
 	// start a Scan for each scheduled Topic within its owner's quota, daily topic limit, daily scans cutoff, and budget
 	for (const topic of scheduledTopics) {
-		// stop once the sweep's claim is lost
+		// stop once the sweep's lease is lost
 		signal?.throwIfAborted()
 
 		// leave a Topic for the next sweep once this sweep has started as many Scans as the backlog allows
@@ -240,8 +240,8 @@ async function saveFailedScan(topic: Topic): Promise<void> {
 		})
 }
 
-// run the claimed sweep and the claimed viewer count sync, then retry the pending object deletions, remind the support
-// personal sources of reports left open, and report the day's spend once the claims are released
+// run the leased sweep and the leased viewer count sync, then retry the pending object deletions, remind the support
+// personal sources of reports left open, and report the day's spend once the leases are released
 async function runSweep(): Promise<void> {
 	await runScheduledTopicScans()
 	await syncViewerCounts()

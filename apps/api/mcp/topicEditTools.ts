@@ -14,7 +14,11 @@ import { toMcpViewMeta } from "./mcpViewData"
 import { CONNECT_ACCOUNT_TEXT, toToolTopicId } from "./results"
 import { type ToolCaller, toMcpAnalyticsProperties } from "./toolCaller"
 import { type RegisterToolsOptions, topicIdArgument, toTextResult } from "./toolShapes"
-import { isTopicDraftConfirmed, toTopicDraftConfirmation, toTopicDraftReceipt } from "./topicDraftConfirmations"
+import {
+	isTopicDraftConfirmed,
+	toTopicDraftConfirmation,
+	toTopicDraftConfirmationRecord,
+} from "./topicDraftConfirmations"
 import { loadTopicDraftMcpViewOptions } from "./topicDraftMcpViewOptions"
 import { type EditTopicResult, editTopic, toEditableTopicFields } from "./topicEdits"
 import { toMcpViewToolMeta } from "./uiResources"
@@ -36,19 +40,19 @@ export function registerTopicEditTools({ mcpServer, toolCaller, routeTopicId }: 
 		"edit_topic",
 		{
 			title: "Edit a topic",
-			description: `Change a topic you may edit: its name, tags, visibility (public, invite, or private), how often it brews (daily, weekdays, or weekly), the time of day as HH:MM and the day a weekly brew runs, how many findings a brew keeps (5, 10, 15, or 20), the prompt every brew scores against, sources to add as option and value pairs, and source ids to remove, which list_topics shows.${toPodcastFieldDescription()} Name only what changes. Making a topic public or removing a source saves nothing at first: the result shows the topic as it would read and a confirmation. Ask the person, and once they agree, call again with the same edit and that confirmation. Every prompt save keeps a version, and no brew starts.`,
+			description: `Change a CarlNotes topic you may edit: its name, tags, visibility (public, invite, or private), how often it brews (daily, weekdays, or weekly), the time of day as HH:MM and the day a weekly brew runs, how many findings a brew keeps (5, 10, 15, or 20), the prompt every brew scores against, sources to add as option and value pairs, and source ids to remove, which list_topics shows.${toPodcastFieldDescription()} Name only what changes. Making a topic public or removing a source saves nothing at first: the result shows the topic as it would read and a confirmation. Ask the person, and once they agree, call again with the same edit and that confirmation. Every prompt save keeps a version, and no brew starts. Use it when the user asks Carl or CarlNotes to change a topic, with phrases like edit this topic, change the prompt, add a source, or change the schedule.`,
 			inputSchema: editTopicPayload,
 			annotations: { readOnlyHint: false, destructiveHint: true },
 			_meta: toMcpViewToolMeta("topic"),
 		},
 		async ({ topic_id, confirmation, ...topicEdit }) => {
-			const topicEditCall = toTopicEditCall({ toolCaller, routeTopicId, topicId: topic_id })
-			if ("rejectionResult" in topicEditCall) {
-				return topicEditCall.rejectionResult
+			const topicWriteCall = toTopicWriteCall({ toolCaller, routeTopicId, topicId: topic_id })
+			if ("rejectionResult" in topicWriteCall) {
+				return topicWriteCall.rejectionResult
 			}
 
 			// save the edit, or preview one that needs the user's agreement. the saves check edit rights themselves
-			const editTopicResult = await editTopic({ ...topicEditCall, topicEdit, confirmation: confirmation ?? null })
+			const editTopicResult = await editTopic({ ...topicWriteCall, topicEdit, confirmation: confirmation ?? null })
 			return toEditTopicToolResult(editTopicResult)
 		},
 	)
@@ -57,7 +61,7 @@ export function registerTopicEditTools({ mcpServer, toolCaller, routeTopicId }: 
 		{
 			title: "Suggest sources",
 			description:
-				"Verified sources for a topic name and prompt, each as the option and value create_topic takes. Draws on the account's daily suggestion limit.",
+				"Verified sources for a CarlNotes topic name and prompt, each as the option and value create_topic takes. Draws on the account's daily suggestion limit. Use it when the user asks Carl or CarlNotes for sources, with phrases like suggest sources or find sources for this topic.",
 			inputSchema: z.object({ name: z.string().min(1), prompt: z.string().min(1) }),
 			annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
 		},
@@ -79,7 +83,7 @@ export function registerTopicEditTools({ mcpServer, toolCaller, routeTopicId }: 
 		"create_topic",
 		{
 			title: "Create a topic",
-			description: `Preview a Topic Draft for the connected account from a name, prompt, sources as option and value pairs, invite emails, visibility, team, tags, brew frequency, and finding limit.${toPodcastFieldDescription()} Call only when the user chooses to start a Topic. The first call creates nothing and returns the draft and a confirmation. Show the draft and wait for the user to confirm, then repeat the same fields with that confirmation. Creation uses the existing Topic Draft limits and starts its first brew. For a new send destination, set visibility private, team null, inviteEmails empty, and default Coffee Break on when the view's account budget permits it. Other unsaid fields use the editor's defaults: shared by invite, weekly on Wednesday, ten findings.`,
+			description: `Preview a CarlNotes Topic Draft for the connected account from a name, prompt, sources as option and value pairs, invite emails, visibility, team, tags, brew frequency, and finding limit.${toPodcastFieldDescription()} Call only when the user chooses to start a Topic. The first call creates nothing and returns the draft and a confirmation. Show the draft and wait for the user to confirm, then repeat the same fields with that confirmation. Creation uses the existing Topic Draft limits and starts its first brew. For a new send destination, set visibility private, team null, inviteEmails empty, and default Coffee Break on when the view's account budget permits it. Other unsaid fields use the editor's defaults: shared by invite, weekly on Wednesday, ten findings. Use it when the user asks Carl or CarlNotes for a new topic, with phrases like create a topic, start a topic, or have Carl track this.`,
 			inputSchema: createTopicPayload.extend({ confirmation: z.string().max(200).optional() }),
 			annotations: { readOnlyHint: false, destructiveHint: true },
 			_meta: toMcpViewToolMeta("topic"),
@@ -114,7 +118,7 @@ export function registerTopicEditTools({ mcpServer, toolCaller, routeTopicId }: 
 			// create the topic through the create path's own gate. the result names the topic's id
 			const createTopicFromDraftResult = await createTopicFromDraft({
 				userId: toolCaller.userId,
-				receipt: toTopicDraftReceipt(confirmation),
+				confirmationRecord: toTopicDraftConfirmationRecord(confirmation),
 				topicDraft,
 				origin: "mcp",
 				analyticsProperties: toMcpAnalyticsProperties(toolCaller),
@@ -136,15 +140,17 @@ export function registerTopicEditTools({ mcpServer, toolCaller, routeTopicId }: 
 }
 
 // who is calling, the topic the route binds, and the topic id argument
-type ToTopicEditCallOptions = { toolCaller: ToolCaller; routeTopicId: string | null; topicId: string | undefined }
+type ToTopicWriteCallOptions = { toolCaller: ToolCaller; routeTopicId: string | null; topicId: string | undefined }
 
-// the account that an edit saves as and the topic it edits, or the result that rejects the call. a missing or
-// mismatched topic is rejected before a caller with no connected account is
-function toTopicEditCall({
+/**
+ * Returns the account that a tool writes as and the topic it writes to, or the result that rejects the call. A missing or
+ * mismatched topic is rejected before a caller with no connected account is.
+ */
+export function toTopicWriteCall({
 	toolCaller,
 	routeTopicId,
 	topicId,
-}: ToTopicEditCallOptions):
+}: ToTopicWriteCallOptions):
 	| { userId: string; topicId: string; analyticsProperties: AnalyticsProperties }
 	| { rejectionResult: CallToolResult } {
 	const toolTopic = toToolTopicId(routeTopicId, topicId ?? null)
@@ -152,7 +158,7 @@ function toTopicEditCall({
 		return { rejectionResult: toTextResult(toolTopic.rejection, true) }
 	}
 
-	// an edit saves as a connected account, with the call's analytics properties
+	// a write saves as a connected account, with the call's analytics properties
 	if (toolCaller.kind !== "user") {
 		return { rejectionResult: toTextResult(CONNECT_ACCOUNT_TEXT) }
 	}

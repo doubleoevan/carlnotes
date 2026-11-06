@@ -14,8 +14,8 @@ import {
 	checkPersonalSourcesRetentionPersistence,
 } from "./personalSourcesPersistenceSmoke"
 import {
+	checkPersonalSourcesConfirmationRollback,
 	checkPersonalSourcesParentDeletion,
-	checkPersonalSourcesReceiptRollback,
 	checkPersonalSourcesSchema,
 } from "./personalSourcesSchemaSmoke"
 import { checkPersonalSourcesScoreBonus } from "./personalSourcesScoreSmoke"
@@ -38,7 +38,7 @@ const checks: Record<string, () => Promise<void>> = {
 	privacy: checkPersonalSourcesPublicationRace,
 	sharing: checkPersonalSourcesSharing,
 	schema: checkPersonalSourcesSchema,
-	rollback: checkPersonalSourcesReceiptRollback,
+	rollback: checkPersonalSourcesConfirmationRollback,
 	deletion: checkPersonalSourcesParentDeletion,
 	aiAgents: checkPersonalSourcesAiAgentGrants,
 	imports: checkPersonalSourcesImports,

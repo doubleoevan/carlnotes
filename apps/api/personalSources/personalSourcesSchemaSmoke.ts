@@ -6,7 +6,7 @@ import {
 	personalSourceEntries,
 	personalSourcesDailyCounts,
 	personalSourcesDeliveries,
-	personalSourcesEmailReceipts,
+	personalSourcesEmailConfirmations,
 	personalSourcesEmailReplies,
 	topicPersonalSourceContexts,
 } from "@carlnotes/db/schema/personalSources"
@@ -101,7 +101,7 @@ export async function checkPersonalSourcesSchema(): Promise<void> {
 /**
  * Checks transaction rollback and UTC rollover without touching another account's counters.
  */
-export async function checkPersonalSourcesReceiptRollback(): Promise<void> {
+export async function checkPersonalSourcesConfirmationRollback(): Promise<void> {
 	const topic = await seedPersonalSourcesTopic("rollback", "free")
 	const allowance = await readPersonalSourcesAllowance({ userId: topic.userId })
 	const previousDay = new Date(Date.parse(`${allowance.day}T00:00:00Z`) - 86_400_000).toISOString().slice(0, 10)
@@ -112,10 +112,10 @@ export async function checkPersonalSourcesReceiptRollback(): Promise<void> {
 		"the previous UTC day's quota does not consume today's pool",
 		(await readPersonalSourcesAllowance({ userId: topic.userId })).isAvailable,
 	)
-	const invalidReceipt = { ...personalSourcesSmokeDelivery(topic, "rollback"), omittedLinkCount: -1 }
+	const invalidConfirmation = { ...personalSourcesSmokeDelivery(topic, "rollback"), omittedLinkCount: -1 }
 	checkPersonalSources(
 		"a persistence constraint failure rolls back acceptance",
-		(await rejectedCode(() => receivePersonalSourceEntry(invalidReceipt))) === "23514",
+		(await rejectedCode(() => receivePersonalSourceEntry(invalidConfirmation))) === "23514",
 	)
 	checkPersonalSources(
 		"failed persistence leaves no Source or activation",
@@ -145,15 +145,16 @@ export async function checkPersonalSourcesParentDeletion(): Promise<void> {
 		if (result.status !== "accepted") {
 			throw new Error("Deletion fixture was not accepted")
 		}
-		const [receipt] = await db
-			.insert(personalSourcesEmailReceipts)
+		// give the entry an email confirmation
+		const [confirmation] = await db
+			.insert(personalSourcesEmailConfirmations)
 			.values({ userId: topic.userId, emailId: `${topic.topicId}-email`, outcome: "filed" })
-			.returning({ id: personalSourcesEmailReceipts.id })
-		if (!receipt) {
-			throw new Error("Missing email deletion receipt")
+			.returning({ id: personalSourcesEmailConfirmations.id })
+		if (!confirmation) {
+			throw new Error("Missing email deletion confirmation")
 		}
 		await db.insert(personalSourcesEmailReplies).values({
-			receiptId: receipt.id,
+			confirmationId: confirmation.id,
 			userId: topic.userId,
 			entryId: result.entryId,
 			encryptedPayload: encryptPrivateText("synthetic-reply"),
@@ -172,15 +173,20 @@ export async function checkPersonalSourcesParentDeletion(): Promise<void> {
 					await db
 						.select()
 						.from(personalSourcesEmailReplies)
-						.where(eq(personalSourcesEmailReplies.receiptId, receipt.id))
+						.where(eq(personalSourcesEmailReplies.confirmationId, confirmation.id))
 				).length === 0 &&
-				(await db.select().from(personalSourcesEmailReceipts).where(eq(personalSourcesEmailReceipts.id, receipt.id)))
-					.length === 1,
+				// the email confirmation stays as the replay identity
+				(
+					await db
+						.select()
+						.from(personalSourcesEmailConfirmations)
+						.where(eq(personalSourcesEmailConfirmations.id, confirmation.id))
+				).length === 1,
 		)
-		await db.delete(personalSourcesEmailReceipts).where(eq(personalSourcesEmailReceipts.id, receipt.id))
+		await db.delete(personalSourcesEmailConfirmations).where(eq(personalSourcesEmailConfirmations.id, confirmation.id))
 
 		checkPersonalSources(
-			`${parent} deletion cannot be undone by a receipt retry`,
+			`${parent} deletion cannot be undone by a confirmation retry`,
 			(await receivePersonalSourceEntry(personalSourcesSmokeDelivery(topic, "parent"))).status !== "accepted",
 		)
 	}

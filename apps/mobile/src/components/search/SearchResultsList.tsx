@@ -31,26 +31,31 @@ export function SearchResultsList({ pages, state }: { pages: SearchResultsPage[]
 	return (
 		<TopicFindingListCard>
 			{searchPages.flatMap((page) =>
-				page.rows.map((row, index) => {
+				page.rows.map((searchRow, index) => {
 					// carry only search-specific metadata into the existing feed row
 					const rank = (page.page - 1) * page.pageSize + index + 1
 					const isLast = page === lastPage && index === page.rows.length - 1
-					return row.kind === "finding" ? (
+					return searchRow.kind === "finding" ? (
 						<TopicResource
-							key={`${row.kind}:${row.id}`}
-							resource={row.finding}
-							topic={row.topic}
+							key={`${searchRow.kind}:${searchRow.id}`}
+							resource={searchRow.finding}
+							topic={searchRow.topic}
 							topicFindingRank={rank}
 							isBookmarkOnLine
 							isLast={isLast}
-							latestPodcastEpisode={page.podcastEpisodes.find((episode) => episode.topicId === row.topic.id)}
+							latestPodcastEpisode={page.podcastEpisodes.find((episode) => episode.topicId === searchRow.topic.id)}
 							topicFeedHandlers={state.handlers}
-							isPending={state.pendingChanges.some((change) => change.findingId === row.finding.findingId)}
+							isPending={state.pendingChanges.some((change) => change.findingId === searchRow.finding.findingId)}
 						>
-							<TopicLink topic={row.topic} prefix="in " />
+							<TopicLink topic={searchRow.topic} prefix="in " />
 						</TopicResource>
 					) : (
-						<LinkedSearchResultRow key={`${row.kind}:${row.id}`} row={row} rank={rank} isLast={isLast} />
+						<LinkedSearchResultRow
+							key={`${searchRow.kind}:${searchRow.id}`}
+							searchRow={searchRow}
+							rank={rank}
+							isLast={isLast}
+						/>
 					)
 				}),
 			)}
@@ -59,76 +64,103 @@ export function SearchResultsList({ pages, state }: { pages: SearchResultsPage[]
 }
 
 // preserve native navigation, touch targets, and separators inside the shared row
-function LinkedSearchResultRow({ row, rank, isLast }: { row: LinkedSearchRow; rank: number; isLast: boolean }) {
+function LinkedSearchResultRow({
+	searchRow,
+	rank,
+	isLast,
+}: {
+	searchRow: LinkedSearchRow
+	rank: number
+	isLast: boolean
+}) {
 	const href =
-		row.kind === "topic"
-			? { pathname: "/topics/[topicId]" as const, params: { topicId: row.topic.id } }
-			: `${SITE_URL}${row.path}`
+		searchRow.kind === "topic"
+			? { pathname: "/topics/[topicId]" as const, params: { topicId: searchRow.topic.id } }
+			: `${SITE_URL}${searchRow.path}`
 	return (
 		<SearchResultRow
 			rank={rank}
 			className={cn(!isLast && "border-b border-dashed border-separator-strong")}
-			leading={<SearchRowIcon row={row} />}
 			title={
-				<AnchorLink href={href} accessibilityLabel={`Open ${row.name}`} hitSlop={toTouchTargetHitSlop(20)}>
+				<AnchorLink href={href} accessibilityLabel={`Open ${searchRow.name}`} hitSlop={toTouchTargetHitSlop(20)}>
 					<Text numberOfLines={1} className="text-sm font-semibold text-card-foreground">
-						{row.name}
+						{searchRow.name}
 					</Text>
 				</AnchorLink>
 			}
-			details={<SearchRowLine row={row} />}
+			details={<SearchRowLine searchRow={searchRow} />}
 		/>
 	)
 }
 
+// a row's line: its icon where a finding's favicon goes, then its details
+function SearchRowLine({ searchRow }: { searchRow: LinkedSearchRow }) {
+	return (
+		<>
+			<SearchRowIcon searchRow={searchRow} />
+			<SearchRowDetails searchRow={searchRow} />
+		</>
+	)
+}
+
 // reuse the app's avatar fallback and the web's kind icons
-function SearchRowIcon({ row }: { row: LinkedSearchRow }) {
-	if (row.kind === "team") {
+function SearchRowIcon({ searchRow }: { searchRow: LinkedSearchRow }) {
+	if (searchRow.kind === "team") {
 		return (
 			<Avatar
 				size={16}
-				ownerId={row.team.teamId}
-				name={row.team.name}
-				imageUrl={row.team.avatarVersion ? `/api/team-avatars/${row.team.teamId}?v=${row.team.avatarVersion}` : null}
+				ownerId={searchRow.team.teamId}
+				name={searchRow.team.name}
+				imageUrl={
+					searchRow.team.avatarVersion
+						? `/api/team-avatars/${searchRow.team.teamId}?v=${searchRow.team.avatarVersion}`
+						: null
+				}
 			/>
 		)
 	}
-	if (row.kind === "user") {
+	if (searchRow.kind === "user") {
 		return (
 			<Avatar
 				size={16}
-				ownerId={row.user.userId}
-				name={row.user.username}
-				imageUrl={row.user.avatarVersion ? toAvatarImagePath(row.user.userId, row.user.avatarVersion) : null}
+				ownerId={searchRow.user.userId}
+				name={searchRow.user.username}
+				imageUrl={
+					searchRow.user.avatarVersion ? toAvatarImagePath(searchRow.user.userId, searchRow.user.avatarVersion) : null
+				}
 			/>
 		)
 	}
-	return <Icon as={row.kind === "topic" ? Coffee : Mic} className="mt-0.5 size-4 text-muted-foreground" />
+	return <Icon as={searchRow.kind === "topic" ? Coffee : Mic} className="size-4 text-muted-foreground" />
 }
 
 // match each kind's web metadata and reuse the same episode pill as findings
-function SearchRowLine({ row }: { row: LinkedSearchRow }) {
-	switch (row.kind) {
+function SearchRowDetails({ searchRow }: { searchRow: LinkedSearchRow }) {
+	switch (searchRow.kind) {
 		case "topic":
 			return (
 				<TopicSearchResultDetails
-					viewerCount={row.count ?? 0}
-					subscriberCount={row.subscriberCount}
-					latestPodcastEpisode={row.topic.latestPodcastEpisode}
+					viewerCount={searchRow.count ?? 0}
+					subscriberCount={searchRow.subscriberCount}
+					latestPodcastEpisode={searchRow.topic.latestPodcastEpisode}
 				/>
 			)
 		case "podcastEpisode":
 			return (
 				<>
-					<TopicLink topic={row.topic} prefix="Podcast in " />
-					<Text className="text-xs text-muted-foreground">{`· ${toDotSeparatedText([toAgoLabel(row.date), toCountLabel(row.count ?? 0, "listener")])}`}</Text>
-					<PodcastEpisodeNumberPill podcastEpisode={row.podcastEpisode} />
+					<TopicLink topic={searchRow.topic} prefix="Podcast in " />
+					<Text className="text-xs text-muted-foreground">{`· ${toDotSeparatedText([toAgoLabel(searchRow.date), toCountLabel(searchRow.count ?? 0, "listener")])}`}</Text>
+					<PodcastEpisodeNumberPill podcastEpisode={searchRow.podcastEpisode} />
 				</>
 			)
 		case "team":
 			return (
 				<Text className="text-xs text-muted-foreground">
-					{toDotSeparatedText(["Team", toCountLabel(row.topicCount, "topic"), toCountLabel(row.memberCount, "member")])}
+					{toDotSeparatedText([
+						"Team",
+						toCountLabel(searchRow.topicCount, "topic"),
+						toCountLabel(searchRow.memberCount, "member"),
+					])}
 				</Text>
 			)
 		case "user":

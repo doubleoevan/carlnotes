@@ -70,12 +70,13 @@ test("a follower or holding-Team member has no contribution authority", async ()
 	expect(await isAllowed("other-1", "personalSources:send", { ...personalTopic, visibility: "public" })).toBe(false)
 })
 
-test("downgrade stops paid receipt and key creation while retaining cleanup", async () => {
+test("downgrade stops paid confirmation and key creation while retaining cleanup", async () => {
 	stubConnectionPool(({ text }) => (text.includes('from "users"') ? [FREE_USER_ACCESS_ROW] : []))
 	expect(await isAllowed("owner-1", "personalSources:email", personalTopic)).toBe(false)
 	expect(await isAllowed("owner-1", "personalSources:apiKey")).toBe(false)
 	expect(await isAllowed("owner-1", "personalSources:credentials")).toBe(true)
 	expect(await isAllowed("owner-1", "personalSources:delete", personalTopic)).toBe(true)
+	// a paid plan allows both again
 	stubConnectionPool(({ text }) => (text.includes('from "users"') ? [["user", "premium", null]] : []))
 	expect(await isAllowed("owner-1", "personalSources:email", personalTopic)).toBe(true)
 	expect(await isAllowed("owner-1", "personalSources:apiKey")).toBe(true)

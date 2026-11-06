@@ -16,8 +16,17 @@ type FeedItemAddresses = { link?: string; guid?: string; enclosure?: { url?: str
 // the transcript formats worth preferring, whose bytes are the words themselves
 const READABLE_TRANSCRIPT_TYPES = ["text/plain", "text/vtt"]
 
-// one reusable parser handles both RSS 2.0 and Atom
-const parser = new Parser<unknown, { transcripts?: FeedTranscript[] }>({
+// each part of an itunes:duration counts sixty of the part after it, as in 1:02:03
+const SECONDS_PER_DURATION_PART = 60
+
+// seconds, mm:ss, or hh:mm:ss, where a part may hold a decimal
+const DURATION_PATTERN = /^\d+(\.\d+)?(:\d+(\.\d+)?){0,2}$/
+
+// the most seconds the duration column holds
+const MAX_DURATION_SECONDS = 2_147_483_647
+
+// one reusable parser handles both RSS 2.0 and Atom, and reads a podcast item's itunes fields on its own
+const parser = new Parser<unknown, { transcripts?: FeedTranscript[]; itunes?: { duration?: string } }>({
 	customFields: { item: [["podcast:transcript", "transcripts", { keepArray: true }]] },
 })
 
@@ -74,11 +83,28 @@ async function parseNamedFeed(
 			kind: resourceKind,
 			snippet: feedItem.contentSnippet || feedItem.content || feedItem.summary || null,
 			transcriptUrl: toTranscriptUrl(feedItem.transcripts),
+			durationSeconds: toDurationSeconds(feedItem.itunes?.duration),
 			contentHash: null,
 		})
 	}
 	// the feed's own name and the deduped Resources, in feed order
 	return { feedName: feed.title?.trim() || null, resources: [...resourceByUrl.values()] }
+}
+
+/**
+ * Returns an itunes:duration in seconds, written as seconds, mm:ss, or hh:mm:ss. Null if it is missing, malformed,
+ * zero, or past what the column holds.
+ */
+export function toDurationSeconds(duration: string | undefined): number | null {
+	const trimmedDuration = duration?.trim() ?? ""
+	if (!DURATION_PATTERN.test(trimmedDuration)) {
+		return null
+	}
+
+	// add the parts up to whole seconds, and read a zero duration as unknown
+	const durationParts = trimmedDuration.split(":").map(Number)
+	const seconds = Math.round(durationParts.reduce((total, part) => total * SECONDS_PER_DURATION_PART + part, 0))
+	return seconds > 0 && seconds <= MAX_DURATION_SECONDS ? seconds : null
 }
 
 /**

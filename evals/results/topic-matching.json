@@ -1,0 +1,130 @@
+{
+	"name": "topic-matching",
+	"passedRunCount": 25,
+	"runCount": 25,
+	"ranOn": "2026-11-06",
+	"commit": "14a06ba2",
+	"hasUncommittedChanges": true,
+	"writerModelIds": [
+		"embed-model"
+	],
+	"graderModelId": "labels",
+	"attachmentScoreWeight": 0.5,
+	"minimumSuggestedRelevance": 0.55,
+	"minimumFiledRelevance": 0.75,
+	"formulaReports": [
+		{
+			"name": "combined text",
+			"topMatchCount": 13,
+			"expectedCaseCount": 15,
+			"decoysHeldCount": 3,
+			"decoyCount": 5,
+			"suggestedTopicCount": 13,
+			"filedTopicCount": 6,
+			"lowestExpectedScore": 0.3856817805921802,
+			"bestNoMatchScore": 0.4053645912600762,
+			"noMatchCaseCount": 5,
+			"missedCaseLabels": [
+				"observed: CarlNotes development chat ranked nachonacho",
+				"unrelated long attachment: Kubernetes chat ranked marathon"
+			]
+		},
+		{
+			"name": "name and prompt only",
+			"topMatchCount": 13,
+			"expectedCaseCount": 15,
+			"decoysHeldCount": 5,
+			"decoyCount": 5,
+			"suggestedTopicCount": 11,
+			"filedTopicCount": 5,
+			"lowestExpectedScore": 0.34455806148862245,
+			"bestNoMatchScore": 0.388368167865998,
+			"noMatchCaseCount": 5,
+			"missedCaseLabels": [
+				"attachment clarifies: vague project ranked nachonacho",
+				"attachment clarifies: competitor names ranked codingAgents"
+			]
+		},
+		{
+			"name": "weight 0.25",
+			"topMatchCount": 14,
+			"expectedCaseCount": 15,
+			"decoysHeldCount": 5,
+			"decoyCount": 5,
+			"suggestedTopicCount": 12,
+			"filedTopicCount": 5,
+			"lowestExpectedScore": 0.3998804102812846,
+			"bestNoMatchScore": 0.3948998513751019,
+			"noMatchCaseCount": 5,
+			"missedCaseLabels": [
+				"attachment clarifies: vague project ranked nachonacho"
+			]
+		},
+		{
+			"name": "weight 0.35",
+			"topMatchCount": 14,
+			"expectedCaseCount": 15,
+			"decoysHeldCount": 5,
+			"decoyCount": 5,
+			"suggestedTopicCount": 12,
+			"filedTopicCount": 5,
+			"lowestExpectedScore": 0.3998804102812846,
+			"bestNoMatchScore": 0.3975125247787435,
+			"noMatchCaseCount": 5,
+			"missedCaseLabels": [
+				"attachment clarifies: vague project ranked nachonacho"
+			]
+		},
+		{
+			"name": "weight 0.5",
+			"topMatchCount": 15,
+			"expectedCaseCount": 15,
+			"decoysHeldCount": 5,
+			"decoyCount": 5,
+			"suggestedTopicCount": 14,
+			"filedTopicCount": 5,
+			"lowestExpectedScore": 0.3998804102812846,
+			"bestNoMatchScore": 0.4014315348842058,
+			"noMatchCaseCount": 5,
+			"missedCaseLabels": []
+		},
+		{
+			"name": "weight 0.65",
+			"topMatchCount": 14,
+			"expectedCaseCount": 15,
+			"decoysHeldCount": 4,
+			"decoyCount": 5,
+			"suggestedTopicCount": 14,
+			"filedTopicCount": 6,
+			"lowestExpectedScore": 0.3998804102812846,
+			"bestNoMatchScore": 0.40535054498966816,
+			"noMatchCaseCount": 5,
+			"missedCaseLabels": [
+				"observed: CarlNotes development chat ranked nachonacho"
+			]
+		},
+		{
+			"name": "weight 0.75",
+			"topMatchCount": 14,
+			"expectedCaseCount": 15,
+			"decoysHeldCount": 4,
+			"decoyCount": 5,
+			"suggestedTopicCount": 14,
+			"filedTopicCount": 7,
+			"lowestExpectedScore": 0.3998804102812846,
+			"bestNoMatchScore": 0.40796321839330973,
+			"noMatchCaseCount": 5,
+			"missedCaseLabels": [
+				"observed: CarlNotes development chat ranked nachonacho"
+			]
+		}
+	],
+	"minimumRelevanceLines": [
+		"minimum 0.5: 14/15 labeled Topics, 0/5 no-match cases",
+		"minimum 0.55: 14/15 labeled Topics, 0/5 no-match cases",
+		"minimum 0.6: 11/15 labeled Topics, 0/5 no-match cases",
+		"minimum 0.65: 9/15 labeled Topics, 0/5 no-match cases",
+		"minimum 0.7: 8/15 labeled Topics, 0/5 no-match cases",
+		"minimum 0.75: 5/15 labeled Topics, 0/5 no-match cases"
+	]
+}

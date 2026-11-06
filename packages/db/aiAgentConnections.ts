@@ -78,7 +78,7 @@ export async function revokeConnectedAiAgent({
 	aiAgentId: string
 }): Promise<void> {
 	await db.transaction(async (transaction) => {
-		// serialize every group grant with receipt and credential revocation
+		// serialize every group grant with confirmation and credential revocation
 		await transaction.select({ id: users.id }).from(users).where(eq(users.id, userId)).for("update")
 		const clientRows = await transaction
 			.selectDistinct(aiAgentClientColumns)
@@ -137,7 +137,7 @@ async function loadLiveAiAgentRegistrations(
 		)
 }
 
-// history labels were derived from the authenticated registration at receipt time
+// history labels were derived from the authenticated registration at confirmation time
 function appendDisconnectedAiAgent(byIdentity: Map<string, ConnectedAiAgent>, config: Record<string, unknown>): void {
 	if (
 		config.delivery !== "oauth" ||

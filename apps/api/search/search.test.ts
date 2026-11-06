@@ -1,11 +1,10 @@
 // the site search: which kinds it reads, each kind's view rules for a visitor and a user, the finding reader's invite
 // gate, and the route's rate limit
-import { afterEach, beforeEach, expect, mock, spyOn, test } from "bun:test"
+import { afterEach, beforeEach, expect, mock, test } from "bun:test"
 import { type SearchRequest, searchRequestPayload } from "@carlnotes/contracts/search"
 import { restoreConnectionPool, type SentQuery, stubConnectionPool } from "@carlnotes/db/connectionPoolStub"
 import { restoreRedisClient, stubRedisClient } from "@carlnotes/db/redisClientStub"
 import { SEARCH_RATE_LIMIT } from "../rateLimit"
-import * as subscriptionStartDates from "../topic/subscriptionStartDates"
 import { searchFindings } from "./findingSearch"
 import { SEARCH_KIND_LIMIT, searchRoute, searchSite } from "./search"
 
@@ -96,28 +95,26 @@ test("a member finds their own private teams, and a visitor the public teams alo
 })
 
 // one finding row on an invite topic, in the order the finding search selects its columns: the finding, its scan, and
-// its resource, its dates, notes, rating, and view count, the user's marks, its scan's start, and its topic
-function toInviteFindingRow(findingId: string, scanStartedAt: string): unknown[] {
+// its resource, its dates, notes, rating, and view count, the user's consumed and bookmarked states, and its topic
+function toInviteFindingRow(findingId: string): unknown[] {
 	const findingColumns = [findingId, "scan-1", `resource-${findingId}`, `https://example.com/${findingId}`]
-	const resourceColumns = [`Orbit ${findingId}`, "read", "2026-01-01T00:00:00Z", "2026-01-01T00:00:00Z"]
+	const resourceColumns = ["read", `Orbit ${findingId}`, "2026-01-01T00:00:00Z", "2026-01-01T00:00:00Z"]
 	const noteColumns = [0.9, "Why it matters", 0, null, null, null]
 	const topicColumns = ["topic-1", "Orbit", "Orbit news", "owner-1", "invite", null]
-	return [...findingColumns, ...resourceColumns, ...noteColumns, scanStartedAt, ...topicColumns]
+	return [...findingColumns, ...resourceColumns, ...noteColumns, ...topicColumns]
 }
 
-test("an invite subscriber finds only the findings from scans after their subscription activated", async () => {
-	// two findings on one invite topic, one from a scan before the activation and one after
-	stubConnectionPool(({ text }) =>
-		text.includes('from "resources"')
-			? [toInviteFindingRow("before", "2026-01-01T00:00:00Z"), toInviteFindingRow("after", "2026-03-01T00:00:00Z")]
-			: [],
-	)
-	spyOn(subscriptionStartDates, "topicSubscriptionStartDates").mockResolvedValue(
-		new Map([["topic-1", new Date("2026-02-01T00:00:00Z")]]),
+test("an invite subscriber's finding read keeps only the scans after their subscription activated", async () => {
+	// one finding on an invite topic that the read kept
+	const sentQueries = stubConnectionPool(({ text }) =>
+		text.includes('from "resources"') ? [toInviteFindingRow("after")] : [],
 	)
 
-	// the later finding alone, linked to its topic, with its notes, and no rating or bookmark for a non-member
+	// the gate is in the read itself, so a gated finding never takes a place under the limit
 	const findingSearchRows = await searchFindings({ userId: "user-1", isAdmin: false, query: "orbit", limit: 50 })
+	expect(findReadFrom(sentQueries, "resources")?.text).toContain('"scans"."started_at" > (')
+
+	// the finding, linked to its topic, with its notes, and no rating or bookmark for a non-member
 	expect(findingSearchRows.map((findingSearchRow) => findingSearchRow.id)).toEqual(["after"])
 	expect(findingSearchRows[0]?.path).toBe("/topics/topic-1/orbit")
 	expect(findingSearchRows[0]?.finding).toMatchObject({ relevanceExplanation: "Why it matters", isBookmarked: false })
@@ -128,14 +125,6 @@ test("a two-character query reads no finding", async () => {
 	const sentQueries = stubConnectionPool()
 	expect(await searchFindings({ userId: "user-1", isAdmin: false, query: "or", limit: 50 })).toEqual([])
 	expect(findReadFrom(sentQueries, "resources")).toBeUndefined()
-})
-
-test("a gated topic with no activation keeps none of its findings", async () => {
-	stubConnectionPool(({ text }) =>
-		text.includes('from "resources"') ? [toInviteFindingRow("f1", "2026-03-01T00:00:00Z")] : [],
-	)
-	spyOn(subscriptionStartDates, "topicSubscriptionStartDates").mockResolvedValue(new Map([["topic-1", null]]))
-	expect(await searchFindings({ userId: "user-1", isAdmin: false, query: "orbit", limit: 50 })).toEqual([])
 })
 
 test("a search past the limit is rejected with 429 and reads nothing", async () => {

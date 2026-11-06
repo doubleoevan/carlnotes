@@ -66,6 +66,14 @@ export function fenceUntrusted(value: string, nonce: string): string {
 }
 
 /**
+ * Returns a function that fences text under one random nonce, for the untrusted text of one tool result.
+ */
+export function toUntrustedFence(): (text: string) => string {
+	const nonce = crypto.randomUUID()
+	return (text) => fenceUntrusted(text, nonce)
+}
+
+/**
  * Removes delimiter syntax from untrusted text before it enters a prompt.
  */
 export function toUntrustedPromptText(value: string): string {

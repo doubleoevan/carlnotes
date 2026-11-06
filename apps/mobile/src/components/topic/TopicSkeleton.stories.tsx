@@ -21,5 +21,5 @@ type Story = StoryObj<typeof meta>
 export const Default: Story = {}
 export const KnownTopic: Story = { args: { topicPreview: STORY_TOPIC_PAGE } }
 export const WithoutPodcast: Story = {
-	args: { topicPreview: { name: "Better coffee at home", latestPodcastEpisode: null } },
+	args: { topicPreview: { name: "Better coffee at home", latestPodcastEpisode: null, tags: [] } },
 }

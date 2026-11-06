@@ -20,6 +20,13 @@ export type ToolCaller =
 	| { kind: "user"; userId: string; plan: string; clientName: string; clientId: string | null }
 
 /**
+ * Returns the id of the user calling, or null for a visitor.
+ */
+export function toToolCallerUserId(toolCaller: ToolCaller): string | null {
+	return toolCaller.kind === "user" ? toolCaller.userId : null
+}
+
+/**
  * Resolves the tool caller. A token the auth server signed for the MCP server means a user, and anything else is a
  * visitor.
  */

@@ -46,13 +46,15 @@ type PersonalSourceEntryListProps = {
 	isPending: boolean
 	pageNumber: number
 	pageCount: number
+	initialExpandedEntryId?: string
 	onRetry: () => void
 	onOpenPage: (pageNumber: number) => void
 	onDelete: (entry: PersonalSourceEntry) => void
 }
 
 /**
- * Lists a bounded page of private entries with shared retention, detail, and pagination controls.
+ * Lists a bounded page of private entries with one entry open at a time, and shared retention, detail, and pagination
+ * controls.
  */
 export function PersonalSourceEntryList({
 	topic,
@@ -64,6 +66,7 @@ export function PersonalSourceEntryList({
 	isPending,
 	pageNumber,
 	pageCount,
+	initialExpandedEntryId,
 	onRetry,
 	onOpenPage,
 	onDelete,
@@ -71,6 +74,7 @@ export function PersonalSourceEntryList({
 	// show retained items from the current sender-authorized page
 	const { Group, Row, Text, Button, Loading, Pagination } = elements
 	const entries = page?.entries ?? []
+	const [expandedEntryId, setExpandedEntryId] = useState(initialExpandedEntryId)
 	return (
 		<Row className="min-w-0">
 			{/* loading and empty states never reveal a previous page's text */}
@@ -95,6 +99,8 @@ export function PersonalSourceEntryList({
 							isFirst={index === 0}
 							isLast={index === entries.length - 1}
 							isPending={isPending}
+							isExpanded={expandedEntryId === entry.id}
+							onToggleExpanded={() => setExpandedEntryId(expandedEntryId === entry.id ? undefined : entry.id)}
 							onDelete={() => onDelete(entry)}
 						/>
 					))}
@@ -118,6 +124,8 @@ function Entry({
 	isFirst,
 	isLast,
 	isPending,
+	isExpanded,
+	onToggleExpanded,
 	onDelete,
 }: {
 	topic: TopicDetails
@@ -127,6 +135,8 @@ function Entry({
 	isFirst: boolean
 	isLast: boolean
 	isPending: boolean
+	isExpanded: boolean
+	onToggleExpanded: () => void
 	onDelete: () => void
 }) {
 	const { ExpandableRow } = elements
@@ -137,6 +147,8 @@ function Entry({
 			isFirst={isFirst}
 			isLast={isLast}
 			ordinal={ordinal}
+			isExpanded={isExpanded}
+			onToggleExpanded={onToggleExpanded}
 		>
 			<EntryDetails topic={topic} elements={elements} entry={entry} isPending={isPending} onDelete={onDelete} />
 		</ExpandableRow>

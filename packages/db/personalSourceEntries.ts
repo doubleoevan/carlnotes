@@ -78,7 +78,7 @@ export async function loadPersonalSourcesEntries({
 /**
  * Reads this sender's retained send links still waiting for review in one accepted entry.
  */
-export async function loadPersonalSourcesReceiptLinks({
+export async function loadPersonalSourcesConfirmationLinks({
 	userId,
 	topicId,
 	entryId,
@@ -87,7 +87,7 @@ export async function loadPersonalSourcesReceiptLinks({
 	topicId: string
 	entryId: string
 }): Promise<{ url: string; title?: string }[]> {
-	// repeat Topic authority and sender isolation before decrypting a receipt
+	// repeat Topic authority and sender isolation before decrypting a confirmation
 	const [topic] = await db.select().from(topics).where(eq(topics.id, topicId)).limit(1)
 	if (!topic || !(await isAllowed(userId, "personalSources:read", topic))) {
 		return []
@@ -109,8 +109,8 @@ export async function loadPersonalSourcesReceiptLinks({
 	}
 
 	// reuse the Topic's durable outcomes and known page titles
-	const [receiptEntry] = await loadPersonalSourceLinkOutcomes([toPersonalSourceEntry(entry)])
-	const queuedLinks = receiptEntry?.linkOutcomes.filter((link) => link.status === "queued") ?? []
+	const [confirmationEntry] = await loadPersonalSourceLinkOutcomes([toPersonalSourceEntry(entry)])
+	const queuedLinks = confirmationEntry?.linkOutcomes.filter((link) => link.status === "queued") ?? []
 	const uniqueLinks = new Map(queuedLinks.map(({ url, title }) => [url, { url, title }]))
 	return [...uniqueLinks.values()].slice(0, PERSONAL_SOURCES_SEND_LINK_LIMIT)
 }
@@ -161,7 +161,7 @@ async function selectNumberedPage(
 		return { candidates, pagination: { pageNumber, pageCount, entryOffset, totalEntryCount } }
 	}
 
-	// a new receipt or deletion changes this sender's revision, so every later poll can reuse only current page offsets
+	// a new confirmation or deletion changes this sender's revision, so a later poll reuses only current page offsets
 	const [context] = await db
 		.select({ revision: topicPersonalSourceContexts.revision })
 		.from(topicPersonalSourceContexts)

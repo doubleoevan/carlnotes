@@ -1,5 +1,6 @@
 import type { TopicFinding } from "./findings"
 import type { TopicFeed, TopicFeedResponse, TopicResponse } from "./topics"
+import type { UpdatesFinding } from "./updates"
 
 // stable, complete payloads shared by Feed tests and native stories
 const FOUND_AT = "2026-10-25T16:00:00.000Z"
@@ -67,6 +68,20 @@ export function toTestTopicFeed(overrides: Partial<TopicFeed> = {}): TopicFeed {
 		latestPodcastEpisode: null,
 		viewerCount: 4,
 		feedUpdatedAt: FOUND_AT,
+		...overrides,
+	}
+}
+
+/**
+ * Returns an updates list's Finding, with its Topic and its reading time.
+ */
+export function toTestUpdatesFinding(overrides: Partial<UpdatesFinding> = {}): UpdatesFinding {
+	return {
+		...toTestTopicFinding(overrides),
+		topicId: "topic-espresso",
+		topicName: "Home espresso",
+		topicPath: "/topics/topic-espresso/home-espresso",
+		readingMinutes: 4,
 		...overrides,
 	}
 }

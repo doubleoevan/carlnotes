@@ -4,7 +4,7 @@ import { toInvitePath, toTopicFeedPath, toTopicPath } from "@carlnotes/contracts
 import { SITE_URL } from "@carlnotes/contracts/site"
 import type { TopicDetails } from "@carlnotes/contracts/topics"
 import { useRecyclingState } from "@shopify/flash-list"
-import { Check, Flag, Link, Rss, Share2, Share as ShareIcon } from "lucide-react-native"
+import { Check, Flag, Link, Rss, Share as ShareIcon } from "lucide-react-native"
 import { type ComponentRef, useRef, useState } from "react"
 import { Platform, Pressable, Share, View } from "react-native"
 import { ReportIssueForm } from "@/components/common/ReportIssueDialog"
@@ -36,7 +36,7 @@ export function ShareTopic({ topic, isLabeled = false }: { topic: ShareTopicDeta
 					accessibilityState={{ expanded: isOpen }}
 					onPress={() => setIsOpen(true)}
 				>
-					<Icon as={Share2} />
+					<Icon as={ShareIcon} />
 					<Text>Share</Text>
 				</Button>
 			) : (
@@ -49,7 +49,7 @@ export function ShareTopic({ topic, isLabeled = false }: { topic: ShareTopicDeta
 					accessibilityState={{ expanded: isOpen }}
 					onPress={() => setIsOpen(true)}
 				>
-					<Icon as={Share2} className="size-3.75 text-muted-foreground" />
+					<Icon as={ShareIcon} className="size-3.75 text-muted-foreground" />
 				</Pressable>
 			)}
 			{isOpen ? <ShareTopicSheet topic={topic} triggerRef={triggerRef} onClose={() => setIsOpen(false)} /> : null}

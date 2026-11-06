@@ -76,26 +76,26 @@ test("a sweep past its dispatchable scan count leaves the remaining topics for t
 	expect(topicSweepSummary.skippedOverBacklog).toBe(3)
 })
 
-// a sweep whose claim is lost mid-run starts no further Scan and rejects with the claim's error
-test("a sweep whose claim is lost stops before its next topic", async () => {
-	// three topics of one owner, and a start that aborts the sweep's claim after the first Scan starts
+// a sweep whose lease is lost mid-run starts no further Scan and rejects with the lease's error
+test("a sweep whose lease is lost stops before its next topic", async () => {
+	// three topics of one owner, and a start that aborts the sweep's lease after the first Scan starts
 	spyOn(quotas, "scansRemainingToday").mockResolvedValue(10)
-	const claimAbortController = new AbortController()
+	const leaseAbortController = new AbortController()
 	const startedTopicIds: string[] = []
 	spyOn(scan, "startTopicScan").mockImplementation(async (topicId): Promise<scan.TopicScanStart> => {
 		startedTopicIds.push(topicId)
-		claimAbortController.abort(new Error("the scheduled-scan-sweep claim was lost while its task ran"))
+		leaseAbortController.abort(new Error("the scheduled-scan-sweep lease was lost while its task ran"))
 		return { status: "started", scan: {} as never, whenFinished: async () => {} }
 	})
 
-	// the sweep rejects with the claim's error, having started only the first Topic's Scan
+	// the sweep rejects with the lease's error, having started only the first Topic's Scan
 	const sweepPromise = startScheduledTopicScans({
 		scheduledTopics: [toScheduledTopic("topic-0"), toScheduledTopic("topic-1"), toScheduledTopic("topic-2")],
 		dailyTopicIdsByOwner: new Map(),
 		budgetExhaustedOwnerIds: new Set(),
-		signal: claimAbortController.signal,
+		signal: leaseAbortController.signal,
 	})
-	await expect(sweepPromise).rejects.toThrow("claim was lost")
+	await expect(sweepPromise).rejects.toThrow("lease was lost")
 	expect(startedTopicIds).toEqual(["topic-0"])
 })
 

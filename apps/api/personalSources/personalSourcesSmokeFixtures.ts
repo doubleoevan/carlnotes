@@ -2,7 +2,7 @@
 import type { Plan } from "@carlnotes/contracts/plans"
 import { db } from "@carlnotes/db"
 import type { ReceivePersonalSourceEntryOptions } from "@carlnotes/db/personalSourcesReceive"
-import { personalSourcesEmailReceipts } from "@carlnotes/db/schema/personalSources"
+import { personalSourcesEmailConfirmations } from "@carlnotes/db/schema/personalSources"
 import { scans } from "@carlnotes/db/schema/scans"
 import { topics } from "@carlnotes/db/schema/topics"
 import { users } from "@carlnotes/db/schema/users"
@@ -95,8 +95,11 @@ export async function cleanUpPersonalSourcesSmoke(shouldKeepFixtures = false): P
 		console.log("Retained development smoke accounts:", createdUserIds.join(", "))
 		return
 	}
+	// delete the email confirmations first, because a user's deletion keeps them
 	if (createdUserIds.length > 0) {
-		await db.delete(personalSourcesEmailReceipts).where(inArray(personalSourcesEmailReceipts.userId, createdUserIds))
+		await db
+			.delete(personalSourcesEmailConfirmations)
+			.where(inArray(personalSourcesEmailConfirmations.userId, createdUserIds))
 		await db.delete(users).where(inArray(users.id, createdUserIds))
 	}
 }

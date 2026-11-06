@@ -12,6 +12,7 @@ const ESPRESSO_FINDING: RetrievedFinding = { ...QUIET_BURR_SET_FINDING, topicNam
 
 // the team's finding from its roasting topic
 const ROASTING_FINDING: RetrievedFinding = {
+	findingId: "finding-1",
 	title: "A countertop smoke filter for home roasters",
 	url: "https://roastlog.example/smoke-filter",
 	foundAt: new Date("2026-09-28"),

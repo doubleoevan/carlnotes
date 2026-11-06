@@ -71,7 +71,7 @@ paragraph of its own after Product analytics.
 
 ### Requirement: The sweep copies the counts into columns and keeps them through a restart
 
-Every scheduled sweep SHALL, under a claim of its own, copy the estimate of every Topic and Podcast Episode whose
+Every scheduled sweep SHALL, under a job lease of its own, copy the estimate of every Topic and Podcast Episode whose
 counter changed into `topics.viewer_count` and `episodes.listener_count`, never lowering either, and save each changed
 counter's bytes in `viewer_counters`. A Topic or Podcast Episode whose copy fails SHALL be copied by the next sweep.
 After a Redis restart, and on the first sweep after the release, the sweep SHALL rebuild Redis before it copies
@@ -95,7 +95,7 @@ SHALL read the columns alone.
 - **THEN** the Topic's viewers are three, and a second rebuild leaves them at three
 
 #### Scenario: Two sweeps never copy at once
-- **WHEN** a second sweep starts while the first still holds the claim
+- **WHEN** a second sweep starts while the first still holds the lease
 - **THEN** the second copies nothing
 
 ### Requirement: The counts endpoint returns a topic's or a Podcast Episode's counts

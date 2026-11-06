@@ -8,12 +8,13 @@ import { TopicDraftCard } from "@/components/chat/TopicDraftCard"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { Button } from "@/components/primitives/button"
 import { STANDALONE_LINK_CLASS } from "@/lib/styleClasses"
-import { callMcpViewTool, useMcpViewData } from "./mcpViewHost"
+import { McpViewLink } from "./McpViewLink"
+import { callMcpViewTool, toToolResultText, useMcpViewData } from "./mcpViewHost"
 import { TopicDraftEditor } from "./TopicDraftEditor"
 import { createEditedTopicDraft } from "./topicDraftCreation"
 
 /**
- * Shows saved personal sources receipts or the shared Topic Draft preview and confirmation.
+ * Shows saved personal sources confirmations or the shared Topic Draft preview and confirmation.
  */
 export function TopicMcpView({
 	mcpViewTopicResult,
@@ -35,7 +36,7 @@ export function TopicMcpView({
 			shouldFillHeight={shouldFillHeight}
 		/>
 	) : (
-		<PersonalSourcesSendReceipt result={mcpViewTopicResult} />
+		<PersonalSourcesSendConfirmation result={mcpViewTopicResult} />
 	)
 }
 
@@ -175,9 +176,9 @@ function TopicEditMcpView({
 	)
 }
 
-// results are display-only. receipt links describe this send's current waiting work
-function PersonalSourcesSendReceipt({ result }: { result: PersonalSourcesSendResult }) {
-	const { sendReceiptLinks } = useMcpViewData()
+// results are display-only. confirmation links describe this send's current waiting work
+function PersonalSourcesSendConfirmation({ result }: { result: PersonalSourcesSendResult }) {
+	const { sendConfirmationLinks } = useMcpViewData()
 	if (result.status !== "accepted") {
 		return (
 			<p role="status" className="bg-card break-words rounded-lg border p-3 text-sm">
@@ -187,27 +188,28 @@ function PersonalSourcesSendReceipt({ result }: { result: PersonalSourcesSendRes
 	}
 
 	// keep the saved title and each destination separate from its numbered links
-	const receipts = result.receipts ?? [result]
+	const confirmations = result.confirmations ?? [result]
 	return (
 		<section className="bg-card min-w-0 break-words space-y-4 rounded-lg border p-3 text-sm" aria-label="Saved chat">
 			<p role="status">
-				Saved “<strong>{result.title}</strong>” to {receipts.length} {receipts.length === 1 ? "topic" : "topics"}.
+				Saved “<strong>{result.title}</strong>” to {confirmations.length}{" "}
+				{confirmations.length === 1 ? "topic" : "topics"}.
 			</p>
-			{receipts.map((receipt) => {
-				const links = sendReceiptLinks?.find((entry) => entry.entryId === receipt.entryId)?.links
+			{confirmations.map((confirmation) => {
+				const links = sendConfirmationLinks?.find((entry) => entry.entryId === confirmation.entryId)?.links
 				return (
-					<section key={receipt.entryId} className="min-w-0 space-y-2" aria-label={receipt.topic.name}>
-						<AnchorLink
-							href={receipt.topic.url}
-							isNewTab
+					<section key={confirmation.entryId} className="min-w-0 space-y-2" aria-label={confirmation.topic.name}>
+						<McpViewLink
+							topicId={confirmation.topic.id}
+							href={confirmation.topic.url}
 							className={`${STANDALONE_LINK_CLASS} inline-flex min-w-0 max-w-full items-center gap-1`}
 						>
-							<span className="truncate">{receipt.topic.name}</span>
+							<span className="truncate">{confirmation.topic.name}</span>
 							<ExternalLink aria-hidden className="size-3 shrink-0" />
-						</AnchorLink>
+						</McpViewLink>
 						<p className="text-muted-foreground">Links for next brew</p>
 						{links?.length ? (
-							<ol className="space-y-1" aria-label={`Links for ${receipt.topic.name}`}>
+							<ol className="space-y-1" aria-label={`Links for ${confirmation.topic.name}`}>
 								{links.map((link, index) => (
 									<li key={link.url} className="flex min-w-0 items-baseline gap-2">
 										<span aria-hidden className="text-muted-foreground shrink-0">
@@ -237,12 +239,4 @@ function PersonalSourcesSendReceipt({ result }: { result: PersonalSourcesSendRes
 			})}
 		</section>
 	)
-}
-
-// a tool result's text, joined
-function toToolResultText(content: unknown): string {
-	if (!Array.isArray(content)) {
-		return ""
-	}
-	return content.map((contentBlock) => (contentBlock as { text?: string }).text ?? "").join(" ")
 }

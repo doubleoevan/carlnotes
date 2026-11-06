@@ -2,7 +2,9 @@
 
 ## Purpose
 TBD - created by archiving change harden-failure-paths. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: Every stored object is deleted through one path
 
 The app SHALL delete a stored object through one function in `packages/db/store.ts`, and nothing else SHALL call the bucket's
@@ -84,18 +86,17 @@ row write leaves the pending row, and the sweep deletes the object after the gra
 - **WHEN** the process dies after the upload and before the insert
 - **THEN** the key stays pending, and the sweep deletes the object after the grace period
 
-### Requirement: The sweep retries pending keys outside its claim and reports what stays pending
+### Requirement: The sweep retries pending keys outside its lease and reports what stays pending
 
-The scheduled sweep SHALL retry every pending key whose try time has passed, after its claimed work and outside the
-claim's transaction, so no transaction stays open across a bucket call. Each failed retry SHALL raise the attempt count
-and push the next try time back with a doubling delay, up to a day. A key that has been pending for a day SHALL be
-reported to Sentry once, with its key and attempt count, and SHALL keep being retried. Retrying a key two sweeps run at
-once is harmless. A repeated delete of a gone object succeeds.
+The scheduled sweep SHALL retry every pending key whose try time has passed, after it releases its lease, so no
+transaction stays open across a bucket call. Each failed retry SHALL raise the attempt count and push the next try time
+back with a doubling delay, up to a day. A key pending for a day SHALL be reported to Sentry once and keep being
+retried.
 
-#### Scenario: A retry runs outside the claim
+#### Scenario: A retry runs outside the lease
 
 - **WHEN** the sweep reaches its pending keys
-- **THEN** the claim's transaction has already ended, and each retry runs on its own connection
+- **THEN** the sweep has already released its lease, and each retry runs on its own connection
 
 #### Scenario: A failed retry backs off
 
@@ -105,5 +106,10 @@ once is harmless. A repeated delete of a gone object succeeds.
 #### Scenario: A key pending for a day is reported once
 
 - **WHEN** a key has been pending for more than a day across two sweeps
-- **THEN** one Sentry report names it, and the second sweep sends no second report
+- **THEN** one Sentry report names it with its attempt count, the second sweep sends no second report, and the key keeps
+  being retried
 
+#### Scenario: Two sweeps retry one key
+
+- **WHEN** two sweeps running at once retry one key
+- **THEN** both retries are harmless, and a repeated delete of a gone object succeeds

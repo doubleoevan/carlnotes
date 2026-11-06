@@ -1,7 +1,9 @@
 // values turned into the text a user sees: dates, durations, money, sizes, and counts
+
 import { UNKNOWN_CASE } from "@carlnotes/contracts/enums"
 import { DAY_MS } from "@carlnotes/contracts/time"
 import type { TopicDetails, TopicScan } from "@carlnotes/contracts/topics"
+import type { UpdatesFinding } from "@carlnotes/contracts/updates"
 
 /**
  * An ISO date as its month and year: Jul 2026. Empty for a null date.
@@ -287,3 +289,19 @@ export function toPodcastEpisodeDayAndDurationLabels(podcastEpisode: {
 export function toCharacterCountLabel(text: string): string {
 	return `${text.length.toLocaleString()} chars`
 }
+
+/**
+ * Returns how long a list's Finding takes, such as "8 min read" or "12 min watch". The label is at least one minute.
+ */
+export function toReadingTimeLabel({
+	readingMinutes,
+	resourceKind,
+}: Pick<UpdatesFinding, "readingMinutes" | "resourceKind">): string {
+	return `${Math.max(1, Math.round(readingMinutes))} min ${resourceKind === "unknown" ? "read" : resourceKind}`
+}
+
+// the label of the control that stops a running Scan
+export const STOP_SCAN_LABEL = "Stop this Brew"
+
+// the label of a running Scan
+export const SCAN_RUNNING_LABEL = "Carl is Brewing…"

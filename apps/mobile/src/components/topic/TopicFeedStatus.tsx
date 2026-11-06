@@ -1,7 +1,6 @@
 import { onlineManager } from "@tanstack/react-query"
 import { useSyncExternalStore } from "react"
 import { ScrollView, Text, View } from "react-native"
-import { CoffeeLoading } from "@/components/branding/CoffeeLoading"
 import { Button } from "@/components/primitives/button"
 import { Text as ButtonText } from "@/components/primitives/text"
 import { toTypeRoleStyle } from "@/typeRoleStyles"
@@ -38,8 +37,14 @@ export function TopicFeedStatus({
 		return (
 			<ScrollView className="w-full flex-1" contentContainerStyle={{ paddingBottom: 24 }}>
 				{/* announce the read once while the matching page shapes remain decorative */}
-				<CoffeeLoading label={`Loading your ${topicLabel}`} className="justify-start gap-3 px-4 py-3" />
-				{topicLabel === "topic" ? <TopicSkeleton topicPreview={topicPreview} /> : <TopicFeedSkeleton />}
+				<View
+					accessible
+					accessibilityLabel={`Loading your ${topicLabel}`}
+					accessibilityLiveRegion="polite"
+					accessibilityState={{ busy: true }}
+				>
+					{topicLabel === "topic" ? <TopicSkeleton topicPreview={topicPreview} /> : <TopicFeedSkeleton />}
+				</View>
 			</ScrollView>
 		)
 	}

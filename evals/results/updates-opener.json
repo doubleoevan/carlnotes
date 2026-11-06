@@ -1,0 +1,12 @@
+{
+	"name": "updates-opener",
+	"passedRunCount": 39,
+	"runCount": 40,
+	"ranOn": "2026-11-05",
+	"commit": "14a06ba2",
+	"hasUncommittedChanges": true,
+	"writerModelIds": [
+		"score-model"
+	],
+	"graderModelId": "chat-model"
+}

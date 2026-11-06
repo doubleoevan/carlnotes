@@ -5,7 +5,11 @@ import { createTopicPayload } from "@carlnotes/contracts/topicPayloads"
 import type { CallToolResult } from "@modelcontextprotocol/server"
 import * as draftTools from "../tool/topicDraftTools"
 import type { RegisterToolsOptions } from "./toolShapes"
-import { isTopicDraftConfirmed, toTopicDraftConfirmation, toTopicDraftReceipt } from "./topicDraftConfirmations"
+import {
+	isTopicDraftConfirmed,
+	toTopicDraftConfirmation,
+	toTopicDraftConfirmationRecord,
+} from "./topicDraftConfirmations"
 import * as draftOptions from "./topicDraftMcpViewOptions"
 import { registerTopicEditTools } from "./topicEditTools"
 
@@ -39,16 +43,20 @@ test("a confirmation binds exact draft, owner, client, and expiry", () => {
 	}
 	expect(isTopicDraftConfirmed(subject, confirmation, 1000 + 15 * 60_000)).toBe(false)
 	expect(isTopicDraftConfirmed(subject, `${confirmation}.extra`, 1001)).toBe(false)
-	// alternate spellings of the signed timestamp must never open another receipt for the same preview
+	// alternate spellings of the signed timestamp must never open another confirmation record for the same preview
 	for (const prefix of ["0", "+", " "]) {
 		expect(isTopicDraftConfirmed(subject, prefix + confirmation, 1001)).toBe(false)
 	}
 	expect(isTopicDraftConfirmed(subject, undefined, 1001)).toBe(false)
-	// one preview maps to one expiring receipt. The receipt never contains the usable confirmation.
-	expect(toTopicDraftReceipt(confirmation)).toEqual(toTopicDraftReceipt(confirmation))
-	expect(toTopicDraftReceipt(confirmation).expiresAt.getTime()).toBe(1000 + 15 * 60_000)
-	expect(toTopicDraftReceipt(confirmation).id).not.toContain(confirmation.slice(confirmation.indexOf(".") + 1))
-	expect(toTopicDraftReceipt(toTopicDraftConfirmation(subject, 1001)).id).not.toBe(toTopicDraftReceipt(confirmation).id)
+	// one preview maps to one expiring confirmation record. The record never contains the usable confirmation.
+	expect(toTopicDraftConfirmationRecord(confirmation)).toEqual(toTopicDraftConfirmationRecord(confirmation))
+	expect(toTopicDraftConfirmationRecord(confirmation).expiresAt.getTime()).toBe(1000 + 15 * 60_000)
+	expect(toTopicDraftConfirmationRecord(confirmation).id).not.toContain(
+		confirmation.slice(confirmation.indexOf(".") + 1),
+	)
+	expect(toTopicDraftConfirmationRecord(toTopicDraftConfirmation(subject, 1001)).id).not.toBe(
+		toTopicDraftConfirmationRecord(confirmation).id,
+	)
 })
 
 test("preview does no creation or suggestions; confirmation calls the existing plan and source gate", async () => {

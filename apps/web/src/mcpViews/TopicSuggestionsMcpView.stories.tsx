@@ -7,6 +7,8 @@ import { useEffect } from "react"
 import { expect } from "storybook/test"
 import { LinkOpenerContext } from "@/components/common/AnchorLink"
 import { openInNewTab } from "@/lib/externalLinks"
+import { VISITOR_TOOL_RESULT } from "../../.storybook/fixtures/mcpViews"
+import { McpViewToolText } from "./McpViewToolText"
 import { setMcpViewApp } from "./mcpViewHost"
 import { TopicSuggestionsMcpView } from "./TopicSuggestionsMcpView"
 import { TOPIC_SUGGESTIONS_FIXTURE, TOPIC_SUGGESTIONS_INPUT } from "./topicSuggestionsFixtures"
@@ -39,6 +41,12 @@ type Story = StoryObj<typeof meta>
 
 // every action stays interactive without a connected MCP account
 export const Matches: Story = {}
+
+// a visitor's call returns only the tool's words
+export const Visitor: Story = {
+	parameters: { session: "visitor" },
+	render: () => <McpViewToolText toolResult={VISITOR_TOOL_RESULT} />,
+}
 export const Default: Story = {}
 export const Searched: Story = {
 	play: async ({ canvas, userEvent }) => {
@@ -120,7 +128,7 @@ async function replyToStoryTool({
 		return replyToStorySuggestions(input)
 	}
 	if (name === "send_to_topic") {
-		const receipts = (input.topic_ids as string[]).map((id) => ({
+		const confirmations = (input.topic_ids as string[]).map((id) => ({
 			topic: {
 				id,
 				name: TOPIC_SUGGESTIONS_FIXTURE.editableTopics.find((topic) => topic.id === id)?.name ?? "New Topic",
@@ -130,13 +138,13 @@ async function replyToStoryTool({
 			queuedLinkCount: TOPIC_SUGGESTIONS_INPUT.links.length,
 		}))
 		return {
-			structuredContent: { status: "accepted", title: input.title, ...receipts[0], receipts },
+			structuredContent: { status: "accepted", title: input.title, ...confirmations[0], confirmations },
 			_meta: {
 				[MCP_VIEW_META_KEY]: {
 					session: null,
 					podcastEpisodes: [],
-					sendReceiptLinks: receipts.map((receipt) => ({
-						entryId: receipt.entryId,
+					sendConfirmationLinks: confirmations.map((confirmation) => ({
+						entryId: confirmation.entryId,
 						links: TOPIC_SUGGESTIONS_INPUT.links.map((url, index) => ({
 							url,
 							title: index === 0 ? "Evaluating agent reliability" : undefined,

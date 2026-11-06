@@ -1,4 +1,4 @@
-// starting and stopping a Scan by hand from the topic page, and one Scan's recap and source results
+// starting a Scan by hand, the routes that start and stop one, and one Scan's recap and source results
 
 import { MANUAL_SCAN_PAUSED_LABEL, SCAN_SPENT_BUDGET_LABEL } from "@carlnotes/contracts/scanFailure"
 import { toSourceResultLabel, toUrlHost } from "@carlnotes/contracts/sources"
@@ -13,7 +13,7 @@ import { db } from "@carlnotes/db"
 import { scans } from "@carlnotes/db/schema/scans"
 import { topics } from "@carlnotes/db/schema/topics"
 import { isUserLiteLLMKeyBudgetExhausted } from "@carlnotes/models/litellm"
-import { loadScan, startTopicScan, stopTopicScan } from "@carlnotes/pipeline/scan"
+import { loadScan, startTopicScan } from "@carlnotes/pipeline/scan"
 import { failStaleScans } from "@carlnotes/pipeline/staleScans"
 import { trackEvent } from "@carlnotes/server/analytics"
 import { reportError } from "@carlnotes/server/monitoring"
@@ -23,6 +23,10 @@ import { isAllowed, loadManualScanAuthorization, loadMonthlyBudgetCutoffStatus }
 import { reportManualScanOverage } from "../billing"
 import type { AnalyticsProperties } from "../currentUser"
 import { type AppEnv, currentUser, toAnalyticsProperties } from "../currentUser"
+import { stopManualScan } from "./stopManualScan"
+
+// what a start or a stop returns if Temporal is unavailable
+const SCAN_UNAVAILABLE_ERROR = "scanning is temporarily unavailable, try again in a minute"
 
 // the outcomes of a manual scan request. status: running means a scan is already running for the topic.
 // status: budget means the user's monthly budget, or the key that the scan bills, is spent
@@ -31,9 +35,8 @@ import { type AppEnv, currentUser, toAnalyticsProperties } from "../currentUser"
 // biome-ignore format: one line keeps the union under the comment-density hook's limit
 export type ManualScanResult = { status: "started"; remainingScans: number } | { status: "forbidden" } | { status: "quota" } | { status: "budget" } | { status: "paused" } | { status: "running" } | { status: "unavailable" }
 
-// the outcomes of a stop request. status: idle means the Topic had no Scan running to stop
-// biome-ignore format: one line keeps the union under the comment-density hook's limit
-export type StopScanResult = { status: "stopped" } | { status: "idle" } | { status: "forbidden" }
+// whether the caller's request may bill as an overage past the daily quota
+type RunManualScanOptions = { isOverageAllowed?: boolean }
 
 /**
  * Starts a manual scan for the owner or an admin. The scan runs without blocking the request.
@@ -44,6 +47,7 @@ export async function runManualScan(
 	userId: string,
 	topicId: string,
 	analyticsProperties: AnalyticsProperties,
+	{ isOverageAllowed = true }: RunManualScanOptions = {},
 ): Promise<ManualScanResult> {
 	// load the topic, then let the gate decide authority (owner or admin) and the daily quota together
 	const [topic] = await db.select().from(topics).where(eq(topics.id, topicId))
@@ -57,6 +61,12 @@ export async function runManualScan(
 			trackEvent("scan_quota_reached", userId, { ...analyticsProperties, topicId })
 		}
 		return authorization
+	}
+
+	// a caller that may not bill an overage stops at the quota, even with a card on file
+	if (authorization.isOverage && !isOverageAllowed) {
+		trackEvent("scan_quota_reached", userId, { ...analyticsProperties, topicId })
+		return { status: "quota" }
 	}
 
 	// reject the scan if the user's monthly budget is spent or their spend is past the manual scans cutoff. both
@@ -109,29 +119,6 @@ export async function runManualScan(
 	// track the scan request analytics event, then return the quota that the user has left
 	trackEvent("scan_requested", userId, { ...analyticsProperties, topicId })
 	return { status: "started", remainingScans: authorization.remainingScans }
-}
-
-/**
- * Stop the Scan a Topic is running. Authority alone decides who may do this, never the daily quota.
- */
-async function stopManualScan(
-	userId: string,
-	topicId: string,
-	analyticsProperties: AnalyticsProperties,
-): Promise<StopScanResult> {
-	// only a user who can scan a topic may stop a scan on it
-	const [topic] = await db.select().from(topics).where(eq(topics.id, topicId))
-	if (!(topic && (await isAllowed(userId, "scan:request", topic)))) {
-		return { status: "forbidden" }
-	}
-
-	// a Topic whose Scan already finished has nothing to stop, which is an answer instead of a failure
-	const stopped = await stopTopicScan(topicId)
-	if (stopped.status !== "cancelled") {
-		return { status: "idle" }
-	}
-	trackEvent("scan_stopped", userId, { ...analyticsProperties, topicId, isTopicPublic: topic.visibility === "public" })
-	return { status: "stopped" }
 }
 
 /**
@@ -237,7 +224,7 @@ export const scansRoute = new Hono<AppEnv>()
 
 		// a scan that could not start asks the user to try again shortly
 		if (scanResult.status === "unavailable") {
-			return context.json({ error: "scanning is temporarily unavailable, try again in a minute" }, 503)
+			return context.json({ error: SCAN_UNAVAILABLE_ERROR }, 503)
 		}
 
 		// an exhausted quota and a non-owner topic scan fail differently
@@ -254,8 +241,12 @@ export const scansRoute = new Hono<AppEnv>()
 
 		// stop the Topic's running Scan. a Topic with none running returns the same as one that was stopped
 		const stopManualScanResult = await stopManualScan(userId, context.req.param("id"), toAnalyticsProperties(context))
+		// map the stop's status to the response
 		if (stopManualScanResult.status === "forbidden") {
 			return context.json({ error: "forbidden" }, 403)
+		}
+		if (stopManualScanResult.status === "unavailable") {
+			return context.json({ error: SCAN_UNAVAILABLE_ERROR }, 503)
 		}
 		return context.json({ status: stopManualScanResult.status })
 	})

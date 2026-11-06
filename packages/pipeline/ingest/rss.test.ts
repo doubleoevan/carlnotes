@@ -1,6 +1,6 @@
 // RSS parseFeed tests. RSS and Atom both map to deduped "read" Resources, and a podcast entry includes its transcript
 import { expect, test } from "bun:test"
-import { parseFeed, toFeedItemUrl, toTranscriptUrl } from "./feed"
+import { parseFeed, toDurationSeconds, toFeedItemUrl, toTranscriptUrl } from "./feed"
 
 // a minimal RSS 2.0 feed whose third entry repeats the first link, to exercise the shared feed dedupe
 const RSS_FEED = `<?xml version="1.0"?><rss version="2.0"><channel>
@@ -94,4 +94,38 @@ test("toTranscriptUrl prefers a readable transcript format", () => {
 	expect(toTranscriptUrl([transcripts[0] as (typeof transcripts)[number]])).toBe("https://example.com/a.html")
 	expect(toTranscriptUrl([{ $: { type: "text/vtt" } }])).toBeNull()
 	expect(toTranscriptUrl()).toBeNull()
+})
+
+// a podcast item's itunes:duration reaches its Resource, and an item without one stays unknown
+test("parseFeed reads a podcast entry's duration", async () => {
+	const durationFeed = `<?xml version="1.0"?><rss version="2.0" xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd">
+		<channel><title>Show</title>
+			<item><title>One</title><link>https://show.test/1</link><itunes:duration>1:02:03</itunes:duration></item>
+			<item><title>Two</title><link>https://show.test/2</link></item>
+		</channel></rss>`
+	// the first item has a duration and the second item has none
+	const resources = await parseFeed(durationFeed, "listen")
+	expect(resources.map((resource) => resource.durationSeconds)).toEqual([3723, null])
+})
+
+// the three written forms read as seconds, and anything else reads as unknown
+test("toDurationSeconds reads seconds, mm:ss, and hh:mm:ss", () => {
+	expect(toDurationSeconds("95")).toBe(95)
+	expect(toDurationSeconds("12:30")).toBe(750)
+	expect(toDurationSeconds("01:00:00")).toBe(3600)
+	expect(toDurationSeconds("0")).toBeNull()
+	expect(toDurationSeconds("about an hour")).toBeNull()
+	expect(toDurationSeconds(undefined)).toBeNull()
+
+	// a minutes field past 59 is how a feed writes a long podcast episode
+	expect(toDurationSeconds("90:00")).toBe(5400)
+
+	// an empty or extra part is malformed
+	for (const malformedDuration of ["", ":30", "30:", "1::2", "1:2:3:4"]) {
+		expect(toDurationSeconds(malformedDuration)).toBeNull()
+	}
+
+	// a duration past what the column holds reads as unknown
+	expect(toDurationSeconds("2147483647")).toBe(2147483647)
+	expect(toDurationSeconds("2147483648")).toBeNull()
 })

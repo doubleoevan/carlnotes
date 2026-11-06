@@ -17,8 +17,8 @@ export const DATA_TABLE_ELEMENTS: DataTableElements = {
 		<tr className={cn(hasSeparator && "border-b", className)}>{children}</tr>
 	),
 	Cell: ({ children }) => <td className="py-2 pr-4">{children}</td>,
-	Details: ({ children, columnCount }) => (
-		<tr className="border-b">
+	Details: ({ children, columnCount, hasSeparator }) => (
+		<tr className={cn(hasSeparator && "border-b")}>
 			<td colSpan={columnCount} className="py-2">
 				{children}
 			</td>

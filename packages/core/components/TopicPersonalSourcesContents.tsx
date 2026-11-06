@@ -10,6 +10,7 @@ type TopicPersonalSourcesContentsProps = {
 	elements: TopicPersonalSourcesElements
 	emptyControls?: ReactNode
 	canContribute?: boolean
+	initialExpandedEntryId?: string
 }
 
 /**
@@ -21,6 +22,7 @@ export function TopicPersonalSourcesContents({
 	elements,
 	emptyControls,
 	canContribute = true,
+	initialExpandedEntryId,
 }: TopicPersonalSourcesContentsProps) {
 	// empty guidance and populated history share the same sender-only presentation
 	const { Row, Heading, Text, Link, Confirm, Loading } = elements
@@ -59,6 +61,7 @@ export function TopicPersonalSourcesContents({
 					isPending={state.isPending}
 					pageNumber={state.pageNumber}
 					pageCount={state.pageCount}
+					initialExpandedEntryId={initialExpandedEntryId}
 					onRetry={state.retry}
 					onOpenPage={state.openPage}
 					onDelete={state.removeEntry}

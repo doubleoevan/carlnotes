@@ -31,6 +31,9 @@ auth, invite, and unsubscribe mail, and `@carlnotes/pipeline` for a Scan's diges
   `pipeline`, which come after it, and never an app.
 - Dev: `bun run dev:email` opens the React Email preview of this folder on port 3011. Tests: `bun test packages/emails`.
 
-`personal-sources-email.tsx` renders Email Carl confirmations, clarification, and account, plan, or daily limit replies. Numbered clarification accepts numbers and written Topic names. `personalSourcesEmail.ts` uses the shared sender, receipt-bound idempotency, original subject, and In-Reply-To/References headers. Carl's From and Reply-To use RESEND_FROM_EMAIL.
+`personal-sources-email.tsx` renders Email Carl confirmations, clarification, and account, plan, or daily limit replies.
+Numbered clarification accepts numbers and written Topic names. `personalSourcesEmail.ts` uses the shared sender,
+confirmation-bound idempotency, original subject, and In-Reply-To/References headers. Carl's From and Reply-To use
+RESEND_FROM_EMAIL.
 
 `previewEmails.ts`, started by `bun run dev:email`, renders synthetic examples with Bun and serves temporary HTML through React Email on port 3011. Email Carl previews cover confirmation, numbered clarification, quota, and plan. Retired previews are removed from its temporary catalog. `reportEmail.ts` builds links and sends reports outside the previewable template.

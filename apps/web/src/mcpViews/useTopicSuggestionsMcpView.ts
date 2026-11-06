@@ -15,6 +15,7 @@ import {
 } from "@carlnotes/contracts/topicSuggestions"
 import { TOPIC_NAME_CHARS } from "@carlnotes/contracts/topics"
 import { useEffect, useRef, useState } from "react"
+import { replaceMcpViewToolCall } from "./mcpViewHistory"
 import { callMcpViewTool, setMcpViewData, useMcpViewData } from "./mcpViewHost"
 import { toMcpTopicDraftSources } from "./topicDraftSources"
 
@@ -26,10 +27,12 @@ type TopicSuggestionsMcpViewState = {
 	pageCount: number
 	query: string
 	selectedTopics: Map<string, string>
+	// the running request and what the last request returned
 	isWorking: boolean
 	error: string | null
-	receipt: PersonalSourcesSendResult | null
+	confirmation: PersonalSourcesSendResult | null
 	draft: McpViewTopicResult | null
+	// the actions that the MCP view offers
 	search: (query: string) => Promise<void>
 	openPage: (pageNumber: number) => Promise<void>
 	select: (topic: Pick<SuggestedTopic, "id" | "name">) => void
@@ -66,8 +69,9 @@ export function useTopicSuggestionsMcpView({
 	const [query, setQuery] = useState(input.query ?? "")
 	const [isWorking, setIsWorking] = useState(false)
 	const [error, setError] = useState<string | null>(null)
-	const [receipt, setReceipt] = useState<PersonalSourcesSendResult | null>(null)
+	const [confirmation, setConfirmation] = useState<PersonalSourcesSendResult | null>(null)
 	const [draft, setDraft] = useState<McpViewTopicResult | null>(null)
+	// keep the request state and the last send attempt across renders
 	const requestState = useRef({ isActive: true, isWorking: false })
 	const sendAttempt = useRef<{ signature: string; requestId: string } | null>(null)
 	useEffect(() => {
@@ -85,6 +89,7 @@ export function useTopicSuggestionsMcpView({
 		requestState.current.isWorking = true
 		setIsWorking(true)
 		setError(null)
+		// run the action and show a retry message if the action throws an error
 		try {
 			await action()
 		} catch {
@@ -92,12 +97,14 @@ export function useTopicSuggestionsMcpView({
 				setError("The request could not complete. Try again; retrying the same send will not count twice.")
 			}
 		} finally {
+			// end the request and skip the state update after the MCP view is replaced
 			requestState.current.isWorking = false
 			if (requestState.current.isActive) {
 				setIsWorking(false)
 			}
 		}
 	}
+	// load the page for a query and a page index
 	const loadPage = async ({ nextQuery, nextIndex }: { nextQuery: string; nextIndex: number }): Promise<void> => {
 		await perform(async () => {
 			// a numbered control uses the server-issued cursor directly, without paying for intervening pages
@@ -124,12 +131,14 @@ export function useTopicSuggestionsMcpView({
 			setCursors(loaded.cursors)
 		})
 	}
+	// toggle a Topic, except during a request or on a route bound to another Topic
 	const select = (topic: Pick<SuggestedTopic, "id" | "name">): void => {
 		if (requestState.current.isWorking || (suggestions.routeTopicId && suggestions.routeTopicId !== topic.id)) {
 			return
 		}
 		setSelectedTopics((previous) => {
 			const selected = new Map(previous)
+			// remove a selected Topic, or add a new Topic below the send limit
 			if (selected.has(topic.id)) {
 				selected.delete(topic.id)
 			} else if (selected.size < PERSONAL_SOURCES_SEND_TOPIC_LIMIT) {
@@ -145,6 +154,7 @@ export function useTopicSuggestionsMcpView({
 			return
 		}
 		await perform(async () => {
+			// reuse the request id for the same destinations
 			const topicIds = [...destinations.keys()].sort()
 			const signature = JSON.stringify(topicIds)
 			if (sendAttempt.current?.signature !== signature) {
@@ -161,18 +171,21 @@ export function useTopicSuggestionsMcpView({
 			if (!requestState.current.isActive) {
 				return
 			}
+			// show an error if the result has no send confirmation
 			const parsedOutcome = personalSourcesSendResult.safeParse(result.structuredContent)
 			if (!parsedOutcome.success) {
-				setError("No send receipt was returned. Retry the same selection to check the outcome.")
+				setError("No send confirmation was returned. Retry the same selection to check the outcome.")
 				return
 			}
+			// show the send's own text if the send was not accepted
 			const outcome = parsedOutcome.data
 			if (result.isError || outcome.status !== "accepted") {
 				setError(toPersonalSourcesSendText(outcome))
 				return
 			}
-			setMcpViewData(result._meta)
-			setReceipt(outcome)
+			// the route keeps the confirmation, so back from its Topic returns to the confirmation and never to a second send
+			replaceMcpViewToolCall({ toolResult: result, toolArguments: null })
+			setConfirmation(outcome)
 		})
 	}
 
@@ -182,11 +195,13 @@ export function useTopicSuggestionsMcpView({
 			return
 		}
 		await perform(async () => {
+			// suggest Sources for a Topic named after the title
 			const name = input.title.slice(0, TOPIC_NAME_CHARS)
 			const sourcesResult = await callMcpViewTool("suggest_sources", { name, prompt: input.summary })
 			if (!requestState.current.isActive) {
 				return
 			}
+			// show an error if the Source suggestions are unavailable
 			const suggestedSources = sourcesResult.structuredContent as { status?: string; sources?: unknown } | undefined
 			if (sourcesResult.isError || suggestedSources?.status !== "ok") {
 				setError("Source suggestions are unavailable or today's suggestion limit is used. Nothing was created.")
@@ -208,6 +223,7 @@ export function useTopicSuggestionsMcpView({
 			if (!requestState.current.isActive) {
 				return
 			}
+			// show the Topic Draft, or an error if the preview failed
 			const proposedDraft = preview.structuredContent as McpViewTopicResult | undefined
 			if (preview.isError || proposedDraft?.status !== "createConfirmRequired") {
 				setError("The Topic Draft could not be prepared. Nothing was sent.")
@@ -226,7 +242,7 @@ export function useTopicSuggestionsMcpView({
 		selectedTopics,
 		isWorking,
 		error,
-		receipt,
+		confirmation,
 		draft,
 		select,
 		send: () => sendToTopics(selectedTopics),
@@ -260,6 +276,7 @@ function availablePageCursors(
 	for (const [number, cursor] of Object.entries(page.pageCursors ?? {})) {
 		cursors[Number(number) - 1] = cursor
 	}
+	// add the cursor of the page after the shown page
 	if (page.nextCursor) {
 		cursors[pageIndex + 1] = page.nextCursor
 	}
@@ -278,6 +295,7 @@ async function loadSuggestionPage({
 	cursors: Record<number, string | undefined>
 	isActive: () => boolean
 }): Promise<{
+	// the loaded page, its index, the known cursors, and the host's metadata
 	page: ReadySuggestions
 	index: number
 	cursors: Record<number, string | undefined>
@@ -292,6 +310,7 @@ async function loadSuggestionPage({
 	let loadedPage: ReadySuggestions | null = null
 	let meta: Record<string, unknown> | undefined
 	for (let index = loadedIndex; index <= nextIndex; index += 1) {
+		// read each page from the nearest known cursor up to the requested page
 		const result = await callMcpViewTool("suggest_topics", { ...input, cursor: cursors[index] })
 		const parsed = topicSuggestionsResult.safeParse(result.structuredContent)
 		if (!isActive()) {
@@ -310,5 +329,6 @@ async function loadSuggestionPage({
 			break
 		}
 	}
+	// return the last page read, or null if no page loaded
 	return loadedPage ? { page: loadedPage, index: loadedIndex, cursors, meta } : null
 }

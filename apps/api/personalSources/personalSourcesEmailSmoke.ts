@@ -1,7 +1,7 @@
 // real database checks exercise manual forwarding metadata without contacting a mail provider
 import { db } from "@carlnotes/db"
 import {
-	finishPersonalSourcesEmailReceipt,
+	finishPersonalSourcesEmailConfirmation,
 	isPersonalSourcesEmailSenderCurrent,
 	loadPendingPersonalSourcesEmailIds,
 	loadPersonalSourcesEmailChoices,
@@ -12,13 +12,13 @@ import {
 	savePersonalSourcesEmailReply,
 	startPersonalSourcesEmailAttempt,
 	toPersonalSourcesSenderDigest,
-} from "@carlnotes/db/personalSourcesEmailReceipts"
+} from "@carlnotes/db/personalSourcesEmailConfirmations"
 import { loadPersonalSourcesEmailSetup } from "@carlnotes/db/personalSourcesEmailSetup"
 import { receivePersonalSourceEntry } from "@carlnotes/db/personalSourcesReceive"
 import {
 	personalSourceEntries,
 	personalSourcesEmailChoices,
-	personalSourcesEmailReceipts,
+	personalSourcesEmailConfirmations,
 	personalSourcesEmailReplies,
 } from "@carlnotes/db/schema/personalSources"
 import { sources } from "@carlnotes/db/schema/topics"
@@ -41,18 +41,20 @@ export async function checkPersonalSourcesEmailPersistence(): Promise<void> {
 	const restoreSettings = saveEnvSettings(["PERSONAL_SOURCES_RECEIVING_ENABLED", "PERSONAL_SOURCES_EMAIL_ENABLED"])
 	Bun.env.PERSONAL_SOURCES_RECEIVING_ENABLED = "true"
 	Bun.env.PERSONAL_SOURCES_EMAIL_ENABLED = "true"
+	// run the email checks
 	try {
-		await checkEmailReceiptLifecycle()
-		await checkUnregisteredEmailReceipt()
+		await checkEmailConfirmationLifecycle()
+		await checkUnregisteredEmailConfirmation()
 		await checkEmailChoiceMetadata()
 		await checkPersonalSourcesEmailFiling()
 	} finally {
+		// restore the settings even if a check throws
 		restoreSettings()
 	}
 }
 
-// an unregistered address gets one guidance receipt, independent of any reader account
-async function checkUnregisteredEmailReceipt(): Promise<void> {
+// an unregistered address gets one guidance confirmation, independent of any user account
+async function checkUnregisteredEmailConfirmation(): Promise<void> {
 	const emailId = crypto.randomUUID()
 	const event = {
 		type: "email.received" as const,
@@ -60,21 +62,23 @@ async function checkUnregisteredEmailReceipt(): Promise<void> {
 	}
 	const [id] = await queuePersonalSourcesEmailEvent(event)
 	if (!id) {
-		throw new Error("Account guidance receipt missing")
+		throw new Error("Account guidance confirmation missing")
 	}
 	try {
 		const destination = await loadPersonalSourcesEmailDestination(id)
 		checkPersonalSources(
 			"an unregistered sender queues only account guidance",
-			destination?.owner === null && destination.receipt.outcome === "account_required" && destination.reply === null,
+			destination?.owner === null &&
+				destination.confirmation.outcome === "account_required" &&
+				destination.reply === null,
 		)
-		await finishPersonalSourcesEmailReceipt({ receiptId: id, state: "replied" })
+		await finishPersonalSourcesEmailConfirmation({ confirmationId: id, state: "replied" })
 		checkPersonalSources(
 			"an unregistered delivery cannot replay its reply",
 			(await queuePersonalSourcesEmailEvent(event)).length === 0,
 		)
 	} finally {
-		await db.delete(personalSourcesEmailReceipts).where(eq(personalSourcesEmailReceipts.id, id))
+		await db.delete(personalSourcesEmailConfirmations).where(eq(personalSourcesEmailConfirmations.id, id))
 	}
 }
 
@@ -82,17 +86,17 @@ async function checkUnregisteredEmailReceipt(): Promise<void> {
 async function checkEmailChoiceMetadata(): Promise<void> {
 	const topic = await seedPersonalSourcesTopic("email-choices")
 	const from = `${topic.userId}@carlnotes.test`
-	const [receiptId] = await queuePersonalSourcesEmailEvent({
+	const [confirmationId] = await queuePersonalSourcesEmailEvent({
 		type: "email.received",
 		data: { email_id: crypto.randomUUID(), from, to: [readPersonalSourcesEmailAddress()] },
 	})
-	if (!receiptId) {
-		throw new Error("Choice receipt missing")
+	if (!confirmationId) {
+		throw new Error("Choice confirmation missing")
 	}
 	const choices = [{ id: topic.topicId, name: "Coffee", url: `https://carlnotes.com/topics/${topic.topicId}` }]
 	await db.transaction((transaction) =>
 		savePersonalSourcesEmailChoices(transaction, {
-			receiptId,
+			confirmationId,
 			userId: topic.userId,
 			topics: choices,
 			messageId: "<original@carlnotes.test>",
@@ -101,7 +105,7 @@ async function checkEmailChoiceMetadata(): Promise<void> {
 	const [stored] = await db
 		.select()
 		.from(personalSourcesEmailChoices)
-		.where(eq(personalSourcesEmailChoices.receiptId, receiptId))
+		.where(eq(personalSourcesEmailChoices.confirmationId, confirmationId))
 	checkPersonalSources(
 		"choice storage contains only ordered encrypted Topic IDs",
 		!!stored &&
@@ -109,18 +113,18 @@ async function checkEmailChoiceMetadata(): Promise<void> {
 				JSON.stringify([topic.topicId]),
 	)
 	const owned = await loadPersonalSourcesEmailChoices({
-		requestId: receiptId,
+		requestId: confirmationId,
 		userId: topic.userId,
 		senderDigest: toPersonalSourcesSenderDigest(from),
 	})
 	checkPersonalSources("sender can resolve their original provider reference", owned?.topics[0]?.id === topic.topicId)
 	// a late retry cannot undo a delivered clarification
-	await finishPersonalSourcesEmailReceipt({ receiptId, state: "replied" })
-	await finishPersonalSourcesEmailReceipt({ receiptId, state: "refused" })
+	await finishPersonalSourcesEmailConfirmation({ confirmationId, state: "replied" })
+	await finishPersonalSourcesEmailConfirmation({ confirmationId, state: "refused" })
 	checkPersonalSources(
 		"duplicate completion preserves the delivered choices",
 		!!(await loadPersonalSourcesEmailChoices({
-			requestId: receiptId,
+			requestId: confirmationId,
 			userId: topic.userId,
 			senderDigest: toPersonalSourcesSenderDigest(from),
 		})),
@@ -128,22 +132,25 @@ async function checkEmailChoiceMetadata(): Promise<void> {
 	checkPersonalSources(
 		"foreign account cannot read or select choices",
 		(await loadPersonalSourcesEmailChoices({
-			requestId: receiptId,
+			requestId: confirmationId,
 			userId: "foreign",
 			senderDigest: toPersonalSourcesSenderDigest(from),
 		})) === null,
 	)
 	checkPersonalSources(
 		"changed account email invalidates choices",
-		(await loadPersonalSourcesEmailChoices({ requestId: receiptId, userId: topic.userId, senderDigest: "changed" })) ===
-			null,
+		(await loadPersonalSourcesEmailChoices({
+			requestId: confirmationId,
+			userId: topic.userId,
+			senderDigest: "changed",
+		})) === null,
 	)
 	// after selection only the provider replay identity remains
-	await db.transaction((transaction) => retirePersonalSourcesEmailChoices(transaction, receiptId))
+	await db.transaction((transaction) => retirePersonalSourcesEmailChoices(transaction, confirmationId))
 	const [retired] = await db
 		.select()
-		.from(personalSourcesEmailReceipts)
-		.where(eq(personalSourcesEmailReceipts.id, receiptId))
+		.from(personalSourcesEmailConfirmations)
+		.where(eq(personalSourcesEmailConfirmations.id, confirmationId))
 	checkPersonalSources(
 		"a completed choice releases its sender binding",
 		retired?.state === "replied" && retired.senderDigest === null,
@@ -157,7 +164,7 @@ async function checkEmailChoiceMetadata(): Promise<void> {
 	}
 	await db.transaction((transaction) =>
 		savePersonalSourcesEmailChoices(transaction, {
-			receiptId: unanswered,
+			confirmationId: unanswered,
 			userId: topic.userId,
 			topics: choices,
 			messageId: "<unanswered@carlnotes.test>",
@@ -166,13 +173,17 @@ async function checkEmailChoiceMetadata(): Promise<void> {
 	await db.delete(users).where(eq(users.id, topic.userId))
 	checkPersonalSources(
 		"account deletion removes private Topic choices",
-		(await db.select().from(personalSourcesEmailChoices).where(eq(personalSourcesEmailChoices.receiptId, unanswered)))
-			.length === 0,
+		(
+			await db
+				.select()
+				.from(personalSourcesEmailChoices)
+				.where(eq(personalSourcesEmailChoices.confirmationId, unanswered))
+		).length === 0,
 	)
 }
 
 // shared-address deduplication is independent of a Source's lifetime and never stores an unmatched body
-async function checkEmailReceiptLifecycle(): Promise<void> {
+async function checkEmailConfirmationLifecycle(): Promise<void> {
 	const topic = await seedPersonalSourcesTopic("shared-email")
 	const from = `${topic.userId}@carlnotes.test`
 	await db.insert(sources).values(
@@ -200,12 +211,13 @@ async function checkEmailReceiptLifecycle(): Promise<void> {
 	const ids = (await Promise.all([0, 1, 2].map(() => queuePersonalSourcesEmailEvent(event)))).flat()
 	const id = ids[0]
 	if (!id) {
-		throw new Error("Shared email receipt missing")
+		throw new Error("Shared email confirmation missing")
 	}
-	checkPersonalSources("duplicate shared-address handoff stores one global receipt", ids.length === 1)
+	// three racing deliveries store one confirmation, and its work survives a restart
+	checkPersonalSources("duplicate shared-address handoff stores one global confirmation", ids.length === 1)
 	checkPersonalSources("acknowledged work survives restart", (await loadPendingPersonalSourcesEmailIds()).includes(id))
 	checkPersonalSources(
-		"receipt binds current account email before provider fetch",
+		"confirmation binds current account email before provider fetch",
 		(await loadPersonalSourcesEmailDestination(id))?.owner?.id === topic.userId,
 	)
 	await startPersonalSourcesEmailAttempt(id)
@@ -242,12 +254,12 @@ async function checkEmailReceiptLifecycle(): Promise<void> {
 	const pending = await loadPersonalSourcesEmailDestination(id)
 	checkPersonalSources(
 		"filing and encrypted reply commit together",
-		pending?.receipt.outcome === "filed" && !!pending.reply?.encryptedPayload.startsWith("enc1:"),
+		pending?.confirmation.outcome === "filed" && !!pending.reply?.encryptedPayload.startsWith("enc1:"),
 	)
 	await db
-		.update(personalSourcesEmailReceipts)
+		.update(personalSourcesEmailConfirmations)
 		.set({ nextAttemptAt: sql`clock_timestamp() - interval '1 second'` })
-		.where(eq(personalSourcesEmailReceipts.id, id))
+		.where(eq(personalSourcesEmailConfirmations.id, id))
 	checkPersonalSources(
 		"worker-loss processing leases become recoverable",
 		(await loadPendingPersonalSourcesEmailIds()).includes(id),
@@ -257,10 +269,10 @@ async function checkEmailReceiptLifecycle(): Promise<void> {
 	}
 	checkPersonalSources(
 		"item deletion immediately erases its private reply snapshot",
-		(await db.select().from(personalSourcesEmailReplies).where(eq(personalSourcesEmailReplies.receiptId, id)))
+		(await db.select().from(personalSourcesEmailReplies).where(eq(personalSourcesEmailReplies.confirmationId, id)))
 			.length === 0,
 	)
-	await finishPersonalSourcesEmailReceipt({ receiptId: id, state: "refused" })
+	await finishPersonalSourcesEmailConfirmation({ confirmationId: id, state: "refused" })
 	checkPersonalSources(
 		"deleted item replay cannot recreate a delivery",
 		(await queuePersonalSourcesEmailEvent(event)).length === 0,
@@ -273,7 +285,7 @@ async function checkEmailReceiptLifecycle(): Promise<void> {
 	})
 	await db.update(users).set({ emailVerified: false }).where(eq(users.id, topic.userId))
 	checkPersonalSources(
-		"loss of verification revokes a receipt before filing or delivering a private reply",
+		"loss of verification revokes a confirmation before filing or delivering a private reply",
 		!!secondId &&
 			(await loadPersonalSourcesEmailDestination(secondId)) === null &&
 			!(await db.transaction((transaction) =>
@@ -290,9 +302,9 @@ async function checkEmailReceiptLifecycle(): Promise<void> {
 	const guidance = await loadPersonalSourcesEmailDestination(unverified)
 	checkPersonalSources(
 		"an unverified account cannot intercept authentic mail",
-		guidance?.owner === null && guidance.receipt.outcome === "account_required",
+		guidance?.owner === null && guidance.confirmation.outcome === "account_required",
 	)
-	await db.delete(personalSourcesEmailReceipts).where(eq(personalSourcesEmailReceipts.id, unverified))
+	await db.delete(personalSourcesEmailConfirmations).where(eq(personalSourcesEmailConfirmations.id, unverified))
 	await db
 		.update(users)
 		.set({ email: `changed-${from}`, emailVerified: true })

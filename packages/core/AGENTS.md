@@ -67,35 +67,34 @@ It imports `@carlnotes/contracts`, `@carlnotes/client`, `@carlnotes/nightshift`,
   waiting topic invitations while the app is focused and online, which reloads the chat rooms into the store when the
   count changes and drops a response from a replaced account; and `usePolledCounts.ts`, a page's viewer, follower, or
   listener counts read once the page shows and then every minute while the app is focused and online.
-- `lib/` — pure rules and formatting: `reportCopy.ts` (the report dialog's words on both apps), `labels.ts` (values as the text a user sees: dates, durations, money, sizes, and
-  counts), `pageHead.ts` (a `PageHead`, or a fixed title and path, as the tags a route's `head()` returns),
-  `paginationSlots.ts` (the slots a row of page links shows), `planCards.ts` (which plan card matches the user's plan
-  and billing interval, and which badge shows), `streamReconnect.ts` (how long a silent SSE stream runs before it counts
-  as dropped and the wait before reopening it, for the chat room stream),
-  `topicFindingFilters.ts` and `topicFindingSorts.ts` (which findings a feed view shows and in what order),
-  `topicSorts.ts` (the homepage's topic order under Trending: viewers, then followers, then the newest finding, with
-  Featured kept in its own order),
-  `topicPromptUrls.ts` (the urls written inside a topic prompt), `emailProviders.ts` (the webmail compose urls an invite
-  is given), `chromeIntentUrl.ts` (the page as an Android intent url that opens it in Chrome, out of an embedded
-  webview), `pushCopy.ts` (the push permission sheet's and the Notifications section's words), `sessionCopy.ts` (the
-  lines the sign-in, sign-out, sign-up, and close-account controls say, shared by the
-  web and the mobile app), `signupPrompts.ts` (the prompt each account action shows a visitor on the sign-up page, and
-  the lookup by cta tag), `inviteRejections.ts` (what an invite page says while it checks a token, if the check
-  fails, and for each way a token is rejected), `updateCounts.ts` (one badge's count summing chat mentions, note
-  changes, and topic invitations, its accessible labels, and the groups a tooltip or a long-press sheet lists),
+- `lib/` — pure rules and formatting: `reportCopy.ts` (the report dialog's words on both apps), `labels.ts` (values as
+  the text a user sees: dates, durations, money, sizes, and counts), `pageHead.ts` (a `PageHead`, or a fixed title and
+  path, as the tags a route's `head()` returns), `paginationSlots.ts` (the slots a row of page links shows),
+  `planCards.ts` (which plan card matches the user's plan and billing interval, and which badge shows),
+  `streamReconnect.ts` (how long a silent SSE stream runs before it counts as dropped and the wait before reopening it,
+  for the chat room stream), `topicFindingFilters.ts` and `topicFindingSorts.ts` (which findings a feed view shows and
+  in what order), `topicSorts.ts` (the homepage's topic order under Trending: viewers, then followers, then the newest
+  finding, with Featured kept in its own order), `topicPromptUrls.ts` (the urls written inside a topic prompt),
+  `emailProviders.ts` (the webmail compose urls an invite is given), `chromeIntentUrl.ts` (the page as an Android intent
+  url that opens it in Chrome, out of an embedded webview), `pushCopy.ts` (the push permission sheet's and the
+  Notifications section's words), `sessionCopy.ts` (the lines the sign-in, sign-out, sign-up, and close-account controls
+  say, shared by the web and the mobile app), `signupPrompts.ts` (the prompt each account action shows a visitor on the
+  sign-up page, and the lookup by cta tag), `inviteRejections.ts` (what an invite page says while it checks a token, if
+  the check fails, and for each way a token is rejected), `updateCounts.ts` (one badge's count summing chat mentions,
+  note changes, and topic invitations, its accessible labels, and the groups a tooltip or a long-press sheet lists),
   `updateBadgePoll.ts` (the poll behind `useUpdateBadges`, on `activePoll.ts`), `countsPoll.ts` (the poll behind
   `usePolledCounts`, on `activePoll.ts`), `focusAndOnline.ts` (whether the app is focused and online through Query's
   adapters, and how a poll subscribes to a change), `topicGateCopy.ts` (the invite-only gate's words),
-  `podcastEpisodeCopy.ts` (the words shown if a podcast episode fails to load or play), and
-  `voiceRecordingDecisions.ts` (what the voice recorder decides from each frame, with the `SilenceThresholdSettings`
-  type and the browser's default settings), `voiceRecordingRules.ts` (the mic's visibility, the recording timer, the
-  reopened recording's rejection, and the meter's callback), `voiceRecorder.ts` (the recorder adapter each app supplies:
-  the session a tap opens, the start, the recording's delete, the rejected microphone's action, and the background
-  listener), `spokenAnswerPlayer.ts` (the spoken answer player adapter each app supplies), and
-  `spokenQuestionsPaused.ts` (the mic's action past the spoken questions cutoff, and the plans page's upgrade lines),
-  and `storefrontPurchaseRules.ts` (whether a user may buy a plan and where a paid plan is managed, from the platform,
-  the store's offering, and the user's plan and billing provider, with each place's label). `sessionCopy.ts` also
-  holds the closing copy for a store subscriber, whose plan keeps billing through the store.
+  `podcastEpisodeCopy.ts` (the words shown if a podcast episode fails to load or play), and `voiceRecordingDecisions.ts`
+  (what the voice recorder decides from each frame, with the `SilenceThresholdSettings` type and the browser's default
+  settings), `voiceRecordingRules.ts` (the mic's visibility, the recording timer, the reopened recording's rejection,
+  and the meter's callback), `voiceRecorder.ts` (the recorder adapter each app supplies: the session a tap opens, the
+  start, the recording's delete, the rejected microphone's action, and the background listener), `spokenAnswerPlayer.ts`
+  (the spoken answer player adapter each app supplies), and `spokenQuestionsPaused.ts` (the mic's action past the spoken
+  questions cutoff, and the plans page's upgrade lines), and `storefrontPurchaseRules.ts` (whether a user may buy a plan
+  and where a paid plan is managed, from the platform, the store's offering, and the user's plan and billing provider,
+  with each place's label). `sessionCopy.ts` also holds the closing copy for a store subscriber, whose plan keeps
+  billing through the store.
 - Imports: `@carlnotes/contracts`, `@carlnotes/client`, `@carlnotes/nightshift`, `react`, and `@tanstack/react-query`. Never a server package or an app. Universal: the
   root rule. A module that needs a DOM type is a web module and lives in `apps/web/src`.
 - Tests: `bun test packages/core`.
@@ -325,7 +324,12 @@ seek and rate changes checkpoint immediately. Listens retain one actual-play sta
 app; core neither resolves signed URLs nor stores protected episode content. Lifecycle adapters pause/unload on
 confirmed access loss and sign-out, and the mobile checkpoint saves only resume fields.
 
-`components/TopicPersonalSourcesSection.tsx` uses sender-only receipt counts to hide empty sections and gates full item-text reads until expansion in Topic info and Artisanal Blend; `TopicPersonalSourcesContents.tsx` and `hooks/useTopicPersonalSourcesContents.ts` share flat five-item numbered paging through the existing Pagination adapters, confirmed deletion, and cache cleanup. `TopicPersonalSourcesSectionStory.tsx` provides both platforms’ fixtures. `ExpandableRow.tsx` owns each inline disclosure. `TopicLinkedFinding.tsx` resolves links against the authorized Topic payload.
+`components/TopicPersonalSourcesSection.tsx` uses sender-only confirmation counts to hide empty sections and gates full
+item-text reads until expansion in Topic info and Artisanal Blend; `TopicPersonalSourcesContents.tsx` and
+`hooks/useTopicPersonalSourcesContents.ts` share flat five-item numbered paging through the existing Pagination
+adapters, confirmed deletion, and cache cleanup. `TopicPersonalSourcesSectionStory.tsx` provides both platforms’
+fixtures. `ExpandableRow.tsx` owns each inline disclosure, and `PersonalSourceEntryList.tsx` keeps one item open at a
+time. `TopicLinkedFinding.tsx` resolves links against the authorized Topic payload.
 
 `PersonalSourceLink.tsx` shares authorized Finding resolution and local opening state through core. Web adapts it to the existing `TopicResourceInfo` popover; mobile uses its existing sheet. External sources retain the browser icon and only pending sources show Next brew. `core/lib/topicFindingCopy.ts` supplies the common tooltip and native accessibility hint.
 

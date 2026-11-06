@@ -172,7 +172,7 @@ export async function commitPersonalSourcesContext({
 			return false
 		}
 
-		// never publish a result after deletion, a new receipt, or another successful commit
+		// never publish a result after deletion, a new confirmation, or another successful commit
 		const updated = await transaction
 			.update(topicPersonalSourceContexts)
 			.set({

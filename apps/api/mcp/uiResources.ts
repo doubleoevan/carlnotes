@@ -1,8 +1,15 @@
 // the MCP views: the ui resources a host that renders MCP Apps reads, each one html document written from the
 // MCP view bundle build:ui makes in apps/web, and the _meta a tool names its MCP view with
+import {
+	type McpViewBundle,
+	toMcpViewContentSecurityPolicy,
+	toMcpViewHtmlFromBundle,
+} from "@carlnotes/contracts/mcpViewHtml"
 import { MCP_VIEWS, type McpView, toMcpUiResourceUri } from "@carlnotes/contracts/mcpViews"
-import { toPodcastEpisodeAudioUrl } from "@carlnotes/db/store"
+import { STORED_MCP_VIEW_VERSIONS, type StoredMcpViewVersion } from "@carlnotes/contracts/mcpViewVersions"
+import { getResourceContent, toMcpViewBundleKey, toPodcastEpisodeAudioUrl } from "@carlnotes/db/store"
 import { appUrl } from "@carlnotes/server/appUrl"
+import { reportError } from "@carlnotes/server/monitoring"
 import { RESOURCE_MIME_TYPE, RESOURCE_URI_META_KEY } from "@modelcontextprotocol/ext-apps/server"
 import type { McpServer, ReadResourceResult } from "@modelcontextprotocol/server"
 import { MCP_VIEWS_BUNDLE_ROOT } from "../bundlePaths"
@@ -10,8 +17,8 @@ import { MCP_VIEWS_BUNDLE_ROOT } from "../bundlePaths"
 // what a resource read says if build:ui never made the MCP view bundle
 export const MISSING_MCP_VIEW_BUNDLE_MESSAGE = "The MCP view bundle is not built. Run bun run build:ui."
 
-// the origins of the Google Fonts stylesheet the MCP view's stylesheet imports, and of the fonts it names
-const GOOGLE_FONTS_ORIGINS = ["https://fonts.googleapis.com", "https://fonts.gstatic.com"]
+// the versions from before the first stored one, which serve the current build
+const ALIASED_MCP_VIEW_VERSIONS = [2, 3, 4, 5, 6, 7, 8]
 
 // what each MCP view shows, for the resource list
 const MCP_VIEW_DESCRIPTIONS: Record<McpView, string> = {
@@ -20,6 +27,8 @@ const MCP_VIEW_DESCRIPTIONS: Record<McpView, string> = {
 	search: "The search results as a paged table, with play buttons, Follow, and a link to the search page.",
 	topic: "A topic's settings, prompt, and sources, with a proposed edit and its Save button.",
 	findings: "A topic's findings with Carl's notes, the play button, Follow, and thumbs, bookmark, and done.",
+	updates: "Carl's list of unread findings, with his opener and a link to the rest.",
+	scan: "A topic's running brew by stage and source, with stop, then its recap and podcast episode.",
 }
 
 /**
@@ -31,45 +40,53 @@ export function toMcpViewToolMeta(mcpView: McpView): Record<string, unknown> {
 }
 
 /**
- * Registers the MCP view resources.
+ * Registers the MCP view resources: the current version, its aliases, and each stored version of every MCP view it holds.
  */
-export function registerMcpUiResources(mcpServer: McpServer): void {
+export function registerMcpUiResources(
+	mcpServer: McpServer,
+	storedMcpViewVersions: StoredMcpViewVersion[] = STORED_MCP_VIEW_VERSIONS,
+): void {
+	const contentSecurityPolicy = toMcpViewContentSecurityPolicy({
+		siteUrl: appUrl(),
+		objectStorageOrigins: toObjectStorageOrigins(),
+	})
+	const uiResourceMeta = { ui: { csp: contentSecurityPolicy, prefersBorder: true } }
+
+	// register one resource, whose html the read builds
+	const registerUiResource = (
+		mcpView: McpView,
+		{ name, uri, readHtml }: { name: string; uri: string; readHtml: () => Promise<string> },
+	): void => {
+		mcpServer.registerResource(
+			name,
+			uri,
+			{ mimeType: RESOURCE_MIME_TYPE, description: MCP_VIEW_DESCRIPTIONS[mcpView], _meta: uiResourceMeta },
+			async (): Promise<ReadResourceResult> => ({
+				contents: [{ uri, mimeType: RESOURCE_MIME_TYPE, text: await readHtml(), _meta: uiResourceMeta }],
+			}),
+		)
+	}
 	for (const mcpView of MCP_VIEWS) {
-		const resourceUris = [
-			toMcpUiResourceUri(mcpView),
-			`ui://carlnotes/${mcpView}.html`,
-			`ui://carlnotes/${mcpView}.html?v=2`,
-			`ui://carlnotes/${mcpView}.html?v=3`,
-			`ui://carlnotes/${mcpView}.html?v=4`,
-			`ui://carlnotes/${mcpView}.html?v=5`,
-			`ui://carlnotes/${mcpView}.html?v=6`,
-			`ui://carlnotes/${mcpView}.html?v=7`,
-			`ui://carlnotes/${mcpView}.html?v=8`,
-		]
-		const uiResourceMeta = { ui: { csp: toMcpViewContentSecurityPolicy(), prefersBorder: true } }
-		// unversioned aliases keep existing connections readable after a bundle upgrade
-		for (const [index, resourceUri] of resourceUris.entries()) {
-			mcpServer.registerResource(
-				index === 0 ? `${mcpView}-card` : `${mcpView}-legacy-${index}-card`,
-				resourceUri,
-				{ mimeType: RESOURCE_MIME_TYPE, description: MCP_VIEW_DESCRIPTIONS[mcpView], _meta: uiResourceMeta },
-				async (): Promise<ReadResourceResult> => ({
-					contents: [
-						{
-							uri: resourceUri,
-							mimeType: RESOURCE_MIME_TYPE,
-							text: await toMcpViewHtml(mcpView),
-							_meta: uiResourceMeta,
-						},
-					],
-				}),
-			)
+		// the current version, with the aliases that keep existing connections readable after a bundle upgrade
+		const currentUiResourceUris = [toMcpUiResourceUri(mcpView), `ui://carlnotes/${mcpView}.html`]
+		const aliasUiResourceUris = ALIASED_MCP_VIEW_VERSIONS.map((version) => toMcpUiResourceUri(mcpView, version))
+		for (const [index, uiResourceUri] of [...currentUiResourceUris, ...aliasUiResourceUris].entries()) {
+			const uiResourceName = index === 0 ? `${mcpView}-card` : `${mcpView}-legacy-${index}-card`
+			registerUiResource(mcpView, { name: uiResourceName, uri: uiResourceUri, readHtml: () => toMcpViewHtml(mcpView) })
+		}
+
+		// each stored version that holds this MCP view, from its own bundle
+		for (const { version, mcpViews } of storedMcpViewVersions) {
+			if (mcpViews.includes(mcpView)) {
+				registerUiResource(mcpView, {
+					name: `${mcpView}-v${version}-card`,
+					uri: toMcpUiResourceUri(mcpView, version),
+					readHtml: () => toStoredMcpViewHtml(mcpView, version),
+				})
+			}
 		}
 	}
 }
-
-// an MCP view bundle's two files: its one script and its one stylesheet
-export type McpViewBundle = { mcpViewScript: string; mcpViewStylesheet: string }
 
 // each MCP view's html, built once from the bundle, which does not change while the server runs
 const uiResourceHtmlByMcpView = new Map<McpView, string>()
@@ -90,35 +107,31 @@ async function toMcpViewHtml(mcpView: McpView): Promise<string> {
 	return mcpViewHtml
 }
 
-/**
- * Returns an MCP view's html: the bundle's stylesheet and script in one document that names its MCP view, with relative urls
- * resolved against the explicit connected site URL.
- */
-export function toMcpViewHtmlFromBundle({
-	mcpView,
-	mcpViewBundle,
-	siteUrl,
-}: {
-	mcpView: McpView
-	mcpViewBundle: McpViewBundle
-	siteUrl: string
-}): string {
-	// a closing script tag inside the script would end its element, so every one is escaped
-	const escapedMcpViewScript = mcpViewBundle.mcpViewScript.replaceAll("</script", "<\\/script")
-	return [
-		"<!doctype html>",
-		'<html lang="en">',
-		"<head>",
-		'<meta charset="utf-8">',
-		'<meta name="viewport" content="width=device-width, initial-scale=1">',
-		`<style>${mcpViewBundle.mcpViewStylesheet}</style>`,
-		"</head>",
-		`<body data-mcp-view="${mcpView}" data-site-url="${siteUrl.replaceAll("&", "&amp;").replaceAll('"', "&quot;")}/">`,
-		'<div id="root"></div>',
-		`<script type="module">${escapedMcpViewScript}</script>`,
-		"</body>",
-		"</html>",
-	].join("\n")
+// each stored MCP view's html, read once
+const storedUiResourceHtmlByUri = new Map<string, string>()
+
+// a stored version's html from its own bundle. a bundle that cannot be read reports the failure, returns the current
+// html, and is tried again on the next read
+async function toStoredMcpViewHtml(mcpView: McpView, version: number): Promise<string> {
+	const uri = toMcpUiResourceUri(mcpView, version)
+	const storedUiResourceHtml = storedUiResourceHtmlByUri.get(uri)
+	if (storedUiResourceHtml) {
+		return storedUiResourceHtml
+	}
+	try {
+		const [mcpViewScript, mcpViewStylesheet] = await Promise.all([
+			getResourceContent(toMcpViewBundleKey(version, "mcpViews.js")),
+			getResourceContent(toMcpViewBundleKey(version, "mcpViews.css")),
+		])
+		const mcpViewBundle = { mcpViewScript, mcpViewStylesheet }
+		const mcpViewHtml = toMcpViewHtmlFromBundle({ mcpView, mcpViewBundle, siteUrl: appUrl() })
+		storedUiResourceHtmlByUri.set(uri, mcpViewHtml)
+		return mcpViewHtml
+	} catch (error) {
+		// report the failed read and return the current bundle's html
+		reportError(error, "object-storage", { uri })
+		return toMcpViewHtml(mcpView)
+	}
 }
 
 /**
@@ -131,15 +144,6 @@ export async function readMcpViewBundle(bundleRoot: string): Promise<McpViewBund
 		throw new Error(MISSING_MCP_VIEW_BUNDLE_MESSAGE)
 	}
 	return { mcpViewScript: await mcpViewScriptFile.text(), mcpViewStylesheet: await mcpViewStylesheetFile.text() }
-}
-
-// what an MCP view may load: images, fonts, and media from the site, the Google Fonts it imports, and the audio the site
-// redirects to in object storage.
-// an MCP view fetches nothing itself, so it names no connections, and links resolve against the explicit connected site URL
-function toMcpViewContentSecurityPolicy(): { resourceDomains: string[]; baseUriDomains: string[] } {
-	const siteOrigin = new URL(appUrl()).origin
-	const resourceDomains = [siteOrigin, ...GOOGLE_FONTS_ORIGINS, ...toObjectStorageOrigins()]
-	return { resourceDomains, baseUriDomains: [siteOrigin] }
 }
 
 // the origin a presigned audio url points at, read from one presign so it matches the host the presigner signs for.

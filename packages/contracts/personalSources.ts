@@ -7,7 +7,7 @@ import { personalSourcesConversationUrl, personalSourcesReferenceUrl } from "./p
 export const PERSONAL_SOURCES_DAILY_SEND_LIMIT = 200
 export const PERSONAL_SOURCES_DAILY_LIMIT_MESSAGE = "The day's limit is reached."
 
-// receipt, paging, and bounded model context limits
+// confirmation, paging, and bounded model context limits
 export const PERSONAL_SOURCES_PAGE_SIZE = 20
 export const PERSONAL_SOURCES_ITEMS_PER_PAGE = 5
 export const PERSONAL_SOURCES_TITLE_CODE_POINTS = 200
@@ -128,9 +128,9 @@ const personalSourcesContextResponse = z.object({
 })
 export type PersonalSourcesContextResponse = z.infer<typeof personalSourcesContextResponse>
 
-// acceptance contains only a bounded receipt suitable for MCP views
+// acceptance contains only a bounded confirmation suitable for MCP views
 const personalSourcesTopicChoice = z.object({ id: z.string(), name: z.string(), url: z.string() })
-const personalSourcesSendReceipt = z.object({
+const personalSourcesSendConfirmation = z.object({
 	topic: personalSourcesTopicChoice,
 	entryId: z.string(),
 	queuedLinkCount: z.number().int().nonnegative(),
@@ -138,7 +138,7 @@ const personalSourcesSendReceipt = z.object({
 export const personalSourcesSendResult = z.discriminatedUnion("status", [
 	z.object({
 		status: z.literal("accepted"),
-		receipts: z.array(personalSourcesSendReceipt).min(1).max(PERSONAL_SOURCES_SEND_TOPIC_LIMIT).optional(),
+		confirmations: z.array(personalSourcesSendConfirmation).min(1).max(PERSONAL_SOURCES_SEND_TOPIC_LIMIT).optional(),
 		topic: personalSourcesTopicChoice,
 		entryId: z.string(),
 		title: z.string(),
@@ -155,7 +155,7 @@ export const personalSourcesSendResult = z.discriminatedUnion("status", [
 ])
 export type PersonalSourcesSendResult = z.infer<typeof personalSourcesSendResult>
 
-// import receipts confirm only the selected entries, with no transcript echoed into transport logs
+// import confirmations list only the selected entries, with no transcript echoed into transport logs
 export const personalSourcesImportResult = z.discriminatedUnion("status", [
 	z.object({ status: z.literal("accepted"), entryIds: z.array(z.string()).min(1).max(1000) }),
 	z.object({ status: z.literal("not_found") }),

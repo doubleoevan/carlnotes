@@ -14,7 +14,8 @@
   `bunx knip` + `bun scripts/check-component-parity.ts` (the contracts and the separately built components in
   `apps/mobile/parity.md`) + `bun scripts/check-client-parity.ts` +
   `bun scripts/check-purchase-paths.ts` + `bun scripts/check-contract-freeze.ts` + `bunx tsc -b` +
-  `bun scripts/check-workflow-bundles.ts` + `bun test` (enforced on push by `scripts/preflight.sh`).
+  `bun scripts/check-workflow-bundles.ts` + `bun test` + `bun run smoke:mcp-views` (enforced on push by
+  `scripts/preflight.sh`).
 
 ## Skills
 Skills load from `.claude/skills/` (canonical copies at `.agents/skills/`). Follow them; they are not restated here.

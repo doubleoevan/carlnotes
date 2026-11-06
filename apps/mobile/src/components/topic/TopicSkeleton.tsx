@@ -12,7 +12,7 @@ import { toTypeRoleStyle } from "@/typeRoleStyles"
 import { ExpanderSkeleton, FindingListSkeleton } from "./TopicFeedSkeleton"
 
 // use the known Topic header while its full page loads
-export type TopicSkeletonProps = { topicPreview?: Pick<TopicDetails, "name" | "latestPodcastEpisode"> }
+export type TopicSkeletonProps = { topicPreview?: Pick<TopicDetails, "name" | "latestPodcastEpisode" | "tags"> }
 const CHAPTER_KEYS = ["first", "second", "third"]
 const INFO_KEYS = ["owner", "prompt", "notes"]
 
@@ -25,35 +25,36 @@ export function TopicSkeleton({ topicPreview }: TopicSkeletonProps) {
 		<SharedTopicSkeleton
 			topicTitle={topicPreview?.name}
 			hasPodcastEpisode={hasPodcastEpisode}
+			hasTags={Boolean(topicPreview?.tags.length)}
 			elements={TOPIC_SKELETON_ELEMENTS}
 		/>
 	)
 }
 
-// reserve the existing action bar, title, byline, and tags
-function TopicSkeletonHeader({ topicTitle }: { topicTitle?: string }) {
+// reserve the action bar, title, byline, and tags of the Topic
+function TopicSkeletonHeader({ topicTitle, hasTags }: { topicTitle?: string; hasTags: boolean }) {
 	return (
 		<View>
-			{/* the action bar, title, byline, and tags */}
-			<View className="mx-4 mt-1 mb-3 flex-row justify-between">
-				<View className="h-11 w-24 rounded-lg bg-muted" />
-				<View className="h-11 w-24 rounded-lg bg-muted" />
+			{/* the action bar, title, and byline */}
+			<View className="mx-4 mt-1 mb-3 flex-row items-start justify-between">
+				<View className="h-9.5 w-28 rounded-lg bg-muted" />
+				<View className="h-9 w-30 rounded-lg bg-muted" />
 			</View>
 			<View className="mx-4 mb-3">
-				{topicTitle ? (
-					<Text style={toTypeRoleStyle("pageTitle")} className="text-foreground">
-						{topicTitle}
-					</Text>
-				) : (
-					<View className="min-h-11 justify-center">
+				<View className="min-h-11 justify-center">
+					{topicTitle ? (
+						<Text style={toTypeRoleStyle("pageTitle")} className="text-foreground">
+							{topicTitle}
+						</Text>
+					) : (
 						<View className="h-8 w-5/6 rounded bg-muted" />
-					</View>
-				)}
+					)}
+				</View>
 				<View className="min-h-11 flex-row items-center gap-2">
 					<View className="size-6 rounded-full bg-muted" />
 					<View className="h-4 w-40 rounded bg-muted" />
 				</View>
-				<View className="mt-2 h-5 w-20 rounded-full bg-muted" />
+				{hasTags && <View className="mt-2 h-5.5 w-28 rounded-full bg-muted" />}
 			</View>
 		</View>
 	)

@@ -5,13 +5,13 @@ import { defineConfig } from "vite"
 
 /**
  * The Vite config for the MCP views: one script and one stylesheet, with every asset inlined, which the api writes into
- * each MCP view's html. The auth client is the MCP view's own, whose session is the caller the tool result names, and the visit
- * analytics report nothing.
+ * each MCP view's html. The auth client is the MCP view's own, whose session is the caller the tool result names, the visit
+ * analytics report nothing, and the voice detector never starts.
  */
 export default defineConfig({
 	plugins: [react(), tailwindcss()],
 	resolve: {
-		// the MCP view's auth client and its visit analytics, which report nothing, then the path alias for the app's own src
+		// the MCP view's auth client, its visit analytics and voice detector, which do nothing, then the alias for the app's src
 		alias: [
 			{
 				find: "@carlnotes/client/authClient",
@@ -20,6 +20,10 @@ export default defineConfig({
 			{
 				find: "@/lib/visitAnalytics",
 				replacement: path.resolve(__dirname, "./src/mcpViews/mcpViewVisitAnalytics.ts"),
+			},
+			{
+				find: "@/lib/voiceActivity",
+				replacement: path.resolve(__dirname, "./src/mcpViews/mcpViewVoiceActivity.ts"),
 			},
 			{ find: "@", replacement: path.resolve(__dirname, "./src") },
 		],
@@ -34,7 +38,7 @@ export default defineConfig({
 		// one stylesheet, and every font and image inlined, since an MCP view loads nothing it does not hold
 		cssCodeSplit: false,
 		assetsInlineLimit: () => true,
-		// ponytail: the one script holds every component an MCP view renders, about 1.2 MB. split it into served files if a
+		// ponytail: the one script holds every component an MCP view renders, about 1.1 MB. split it into served files if a
 		// host rejects a resource that large
 		chunkSizeWarningLimit: 2000,
 		rolldownOptions: {

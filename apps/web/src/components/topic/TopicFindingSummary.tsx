@@ -6,68 +6,54 @@ import {
 	ResourceMetadata as SharedResourceMetadata,
 } from "@carlnotes/core/components/ResourceMetadata"
 import { cn } from "@carlnotes/nightshift/classNames"
-import { Globe } from "lucide-react"
 import type * as React from "react"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { HostFavicon } from "@/components/common/HostFavicon"
 import { PopoverTrigger } from "@/components/primitives/popover"
+import { ROW_METADATA_LINE_CLASS } from "@/lib/styleClasses"
 
-// the finding, whether its kind icon shows, and the children that come after the age on the metadata line
+// the finding, and the children that come after the age on the metadata line
 type TopicFindingSummaryProps = {
 	resource: TopicFinding
-	isResourceKindIconShown?: boolean
 	className?: string
 	children?: React.ReactNode
 }
 
 /**
- * A topic finding as its row shows it, with its kind icon, title, favicon, host, and age.
+ * Returns a finding's title classes. An unread title is bold and a read title is muted.
+ */
+export function toTopicFindingTitleClass(isConsumed: boolean): string {
+	return cn(
+		"group-hover:text-foreground",
+		isConsumed ? "text-muted-foreground font-normal" : "text-foreground font-semibold",
+	)
+}
+
+/**
+ * A topic finding as its row shows it, with its title, favicon, host, and age.
  * It renders inside a Popover, whose trigger is its title, and inside an element with the group class.
  */
-export function TopicFindingSummary({
-	resource,
-	isResourceKindIconShown = true,
-	className,
-	children,
-}: TopicFindingSummaryProps) {
-	// unread rows are bold and consumed rows are muted
-	const titleClass = cn(
-		"max-w-full truncate text-left text-sm group-hover:text-foreground",
-		resource.isConsumed ? "text-muted-foreground font-normal" : "text-foreground font-semibold",
-	)
+export function TopicFindingSummary({ resource, className, children }: TopicFindingSummaryProps) {
+	const titleClass = cn("max-w-full truncate text-left text-sm", toTopicFindingTitleClass(resource.isConsumed))
 	return (
-		<div className={cn("flex min-w-0 items-start gap-2.5", className)}>
-			{/* the resource kind icon */}
-			{isResourceKindIconShown && (
-				<Globe
-					className={cn(
-						"mt-0.5 size-4 shrink-0 text-muted-foreground group-hover:text-foreground",
-						resource.isConsumed && "opacity-60",
-					)}
-					aria-label="Finding"
-				/>
-			)}
-			<div className="min-w-0 flex-1">
-				{/* the title opens the note, and links out in a browser without JavaScript.
-				    the line is the title's height, level with the icon */}
-				<div className="truncate text-sm">
-					<PopoverTrigger asChild>
-						<AnchorLink
-							href={resource.url}
-							isUserContent
-							onClick={(event) => event.preventDefault()}
-							className={titleClass}
-						>
-							{resource.title ?? resource.url}
-						</AnchorLink>
-					</PopoverTrigger>
-				</div>
-				{/* the metadata line, then the children. the line reads at full muted strength either way,
-				    since the title already marks a read resource */}
-				<div className="text-muted-foreground mt-0.5 flex flex-wrap items-center gap-1.5 text-xs group-hover:text-foreground/80">
-					<ResourceMetadata resource={resource} />
-					{children}
-				</div>
+		<div className={cn("min-w-0", className)}>
+			{/* the title opens the note, and links out in a browser without JavaScript */}
+			<div className="truncate text-sm">
+				<PopoverTrigger asChild>
+					<AnchorLink
+						href={resource.url}
+						isUserContent
+						onClick={(event) => event.preventDefault()}
+						className={titleClass}
+					>
+						{resource.title ?? resource.url}
+					</AnchorLink>
+				</PopoverTrigger>
+			</div>
+			{/* the metadata line, then the children */}
+			<div className={ROW_METADATA_LINE_CLASS}>
+				<ResourceMetadata resource={resource} />
+				{children}
 			</div>
 		</div>
 	)

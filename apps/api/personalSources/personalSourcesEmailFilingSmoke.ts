@@ -25,8 +25,8 @@ async function checkEmailDuringScan(): Promise<void> {
 	await db.transaction(async (scanTransaction) => {
 		// keep the Scan's references locked while a separate connection files the email
 		await scanTransaction.insert(scans).values({ topicId: owner.topicId, ownerId: owner.userId, status: "running" })
-		const receipt = await db.transaction(async (filingTransaction) => {
-			// fail promptly if receipt ever requests an exclusive key lock again
+		const confirmation = await db.transaction(async (filingTransaction) => {
+			// fail promptly if confirmation ever requests an exclusive key lock again
 			await filingTransaction.execute(sql`set local lock_timeout = '3s'`)
 			return receivePersonalSourcesSend(
 				{
@@ -39,7 +39,7 @@ async function checkEmailDuringScan(): Promise<void> {
 				filingTransaction,
 			)
 		})
-		checkPersonalSources("email files while a Scan references its Topic and sender", receipt.status === "accepted")
+		checkPersonalSources("email files while a Scan references its Topic and sender", confirmation.status === "accepted")
 	})
 }
 
@@ -160,7 +160,7 @@ async function checkEmailLargeBatch(): Promise<void> {
 	const replay = await receivePersonalSourcesSend({ ...delivery, topicIds: [...topicIds].reverse() })
 	checkPersonalSources(
 		"email files every clear match beyond the MCP view selection limit",
-		accepted.status === "accepted" && accepted.receipts?.length === 21,
+		accepted.status === "accepted" && accepted.confirmations?.length === 21,
 	)
 	checkPersonalSources(
 		"large email replay returns the original complete filing",

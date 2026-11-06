@@ -39,7 +39,7 @@ function buildSeedTopics(devUserId: string): SeedTopic[] {
 		id: "top_agent_infra",
 		owner: devUserId,
 		name: "Agent infrastructure weekly",
-		prompt: "New tools, patterns, and failure modes in shipping production LLM agents. Bias toward receipts over hype.",
+		prompt: "New tools, patterns, and failure modes in shipping production LLM agents. Bias toward evidence over hype.",
 		tags: ["AI & Engineering", "Infrastructure", "Research"],
 		frequency: "weekly",
 		// an invite topic so the invitee editor and ✉ visibility render against real dev data
@@ -56,7 +56,7 @@ function buildSeedTopics(devUserId: string): SeedTopic[] {
 			{ resourceKind: "read", title: "Why your tool-calling loop stalls at step 3", url: "https://interconnects.ai/p/tool-loops", why: "Names the exact failure your retries paper over.", score: 0.91 },
 			{ resourceKind: "watch", title: "Building durable agents with Temporal", url: "https://www.youtube.com/watch?v=agent-temporal", why: "The retry/signal model you keep reinventing, done right.", score: 0.88 },
 			// these push the topic past the five-row limit so the expander shows
-			{ resourceKind: "read", title: "Structured outputs beat function calling for extraction", url: "https://eugeneyan.com/writing/structured", why: "Receipts, not vibes: a 12-point accuracy gap.", score: 0.86 },
+			{ resourceKind: "read", title: "Structured outputs beat function calling for extraction", url: "https://eugeneyan.com/writing/structured", why: "Evidence, not vibes: a 12-point accuracy gap.", score: 0.86 },
 			{ resourceKind: "listen", title: "Latent Space: the agent runtime wars", url: "https://latent.space/p/agent-runtimes", why: "Two runtime authors argue; you'll select a side.", score: 0.83 },
 			{ resourceKind: "read", title: "Sandboxing untrusted agent code with microVMs", url: "https://fly.io/blog/sandboxing-agents", why: "E2B vs Firecracker, cost per run tabulated.", score: 0.8 },
 			{ resourceKind: "watch", title: "Prompt injection in tool registries", url: "https://www.youtube.com/watch?v=tool-injection", why: "A live demo of the boundary you're building.", score: 0.77 },

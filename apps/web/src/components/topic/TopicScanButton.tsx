@@ -9,6 +9,7 @@ import {
 	toScanFailureLabel,
 } from "@carlnotes/contracts/scanFailure"
 import type { TopicResponse } from "@carlnotes/contracts/topics"
+import { SCAN_RUNNING_LABEL, STOP_SCAN_LABEL } from "@carlnotes/core/lib/labels"
 import { isManualScanShown } from "@carlnotes/core/lib/topicActions"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { type UseNavigateResult, useNavigate } from "@tanstack/react-router"
@@ -133,10 +134,10 @@ export function TopicScanButton({
 	if (isRunningScan || isScanning) {
 		return (
 			<div className={cn(RAIL_ICON_INSET, "flex min-h-11 items-center gap-1 sm:min-h-9")}>
-				<span className="shimmer-text text-base font-semibold sm:text-lg">Carl is Brewing…</span>
+				<span className="shimmer-text text-base font-semibold sm:text-lg">{SCAN_RUNNING_LABEL}</span>
 				{/* only a scan with a row to cancel may be stopped, and the icon disappears once clicked */}
 				{isScanning && !isCancellingScan && (
-					<IconButton tooltip="Stop this Brew" onClick={handleCancelScan}>
+					<IconButton tooltip={STOP_SCAN_LABEL} onClick={handleCancelScan}>
 						<CirclePause className="size-3.75" />
 					</IconButton>
 				)}

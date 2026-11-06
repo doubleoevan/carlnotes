@@ -4,7 +4,9 @@ import { YOUTUBE_ATOM_FALLBACK_MODE } from "@carlnotes/contracts/sources"
 import { toYoutubeWatchUrl } from "@carlnotes/contracts/youtube"
 import { db } from "@carlnotes/db"
 import { sources } from "@carlnotes/db/schema/topics"
+import { reportError } from "@carlnotes/server/monitoring"
 import { eq } from "drizzle-orm"
+import { toYoutubeVideoId } from "../transcripts"
 import { fetchNamedFeed } from "./feed"
 import type { NewResource, Source, SourceIngester } from "./ingester"
 
@@ -52,6 +54,9 @@ type YoutubePlaylist = {
 		snippet?: { title?: string; description?: string; channelTitle?: string; resourceId?: { videoId?: string } }
 	}[]
 }
+
+// the fields addVideoDurations reads from a videos response
+type YoutubeVideoDetails = { items?: { id?: string; contentDetails?: { duration?: string } }[] }
 
 // pull the playlist id from a YouTube playlist page url. any other url returns null
 export function playlistIdFromUrl(url: string): string | null {
@@ -204,7 +209,51 @@ export async function fetchVideos(
 	// the playlist owner's channel title is included on every item, so the first one names the Source
 	const playlist = (await response.json()) as YoutubePlaylist
 	const channelTitle = playlist.items?.[0]?.snippet?.channelTitle?.trim() || null
-	return { channelTitle, resources: parseVideos(playlist) }
+	return { channelTitle, resources: await addVideoDurations(parseVideos(playlist), apiKey) }
+}
+
+// add each video's length with one call for the page. the Resources stay as they are if the call fails
+async function addVideoDurations(resources: NewResource[], apiKey: string): Promise<NewResource[]> {
+	const videoIds = resources.map((resource) => toYoutubeVideoId(resource.url)).filter(Boolean)
+	if (!videoIds.length) {
+		return resources
+	}
+	try {
+		// videos.list costs one quota unit for up to 50 ids
+		const url = `https://www.googleapis.com/youtube/v3/videos?part=contentDetails&id=${videoIds.join(",")}&key=${apiKey}`
+		const response = await fetch(url, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) })
+		if (!response.ok) {
+			throw new Error(`youtube videos returned ${response.status}`)
+		}
+
+		// put each length on its video's Resource
+		const { items = [] } = (await response.json()) as YoutubeVideoDetails
+		const durationSecondsByUrl = new Map(
+			items.map((video) => [toYoutubeWatchUrl(video.id ?? ""), toVideoDurationSeconds(video.contentDetails?.duration)]),
+		)
+		return resources.map((resource) => ({
+			...resource,
+			durationSeconds: durationSecondsByUrl.get(resource.url) ?? null,
+		}))
+	} catch (error) {
+		reportError(error, "ingest", { operation: "video-durations" })
+		return resources
+	}
+}
+
+/**
+ * Returns a YouTube ISO 8601 duration in seconds, as in PT1H2M3S. Null if missing, malformed, or zero, as on a live
+ * video.
+ */
+export function toVideoDurationSeconds(duration: string | undefined): number | null {
+	const durationMatch = /^P(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?)?$/.exec(duration ?? "")
+	if (!durationMatch) {
+		return null
+	}
+
+	// add the days, hours, minutes, and seconds up
+	const [, days = "0", hours = "0", minutes = "0", seconds = "0"] = durationMatch
+	return Number(days) * 86_400 + Number(hours) * 3600 + Number(minutes) * 60 + Number(seconds) || null
 }
 
 // map a playlist response to "watch" Resources, each mapped to its watch url and deduped within the payload

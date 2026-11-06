@@ -5,7 +5,7 @@ import { fetchAddableTopics } from "@carlnotes/client/topicClient"
 import { isLeaderRole } from "@carlnotes/contracts/enums"
 import type { TeamPageResponse } from "@carlnotes/contracts/teams"
 import { getRouteApi, useNavigate } from "@tanstack/react-router"
-import { Pencil, Share2, Trash2 } from "lucide-react"
+import { Pencil, Share, Trash2 } from "lucide-react"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
 import { ConfirmDialog } from "@/components/common/ConfirmDialog"
@@ -79,7 +79,7 @@ export function TeamPage() {
 					page: "Team",
 					options: [
 						// sharing sits directly above editing, the order the topic page's menu uses
-						{ label: "Share team", Icon: Share2, onSelect: () => setIsSharing(true) },
+						{ label: "Share team", Icon: Share, onSelect: () => setIsSharing(true) },
 						...(isLeaderRole(viewedTeam.role)
 							? [
 									{ label: "Edit team", Icon: Pencil, onSelect: () => setOpenDialog("edit") },

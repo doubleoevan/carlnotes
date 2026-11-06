@@ -124,8 +124,9 @@ export function usePersonalSourcesImport(topicId: string): PersonalSourcesImport
 				selectedIds,
 				requestId: retry.current.requestId,
 			})
-			const receipt = await sendImportConversations({ topicId, payload })
-			if (receipt.status !== "accepted") {
+			// send the conversations, and show the error below if the import is rejected
+			const confirmation = await sendImportConversations({ topicId, payload })
+			if (confirmation.status !== "accepted") {
 				throw new Error("import refused")
 			}
 			reset()

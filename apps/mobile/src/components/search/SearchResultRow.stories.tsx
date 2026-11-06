@@ -20,9 +20,13 @@ function SearchResultRowStory({ rank }: { rank?: number }) {
 	return (
 		<SearchResultRow
 			rank={rank}
-			leading={<Icon as={Coffee} className="mt-0.5 size-4 text-muted-foreground" />}
 			title={<Text className="text-sm font-semibold text-card-foreground">AI gone rogue</Text>}
-			details={<TopicSearchResultDetails viewerCount={11} subscriberCount={8} />}
+			details={
+				<>
+					<Icon as={Coffee} className="size-4 text-muted-foreground" />
+					<TopicSearchResultDetails viewerCount={11} subscriberCount={8} />
+				</>
+			}
 		/>
 	)
 }

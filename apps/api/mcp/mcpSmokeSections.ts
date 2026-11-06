@@ -11,19 +11,11 @@ import type { AppEnv } from "../currentUser"
 import { CALLER_RATE_LIMIT, toolCallerRateLimiter, toolCallerRateLimitStore, toRateLimitKey } from "../rateLimit"
 import { stopFirstScan } from "../topic/firstScanSmoke"
 import { toMcpToolContractIssues } from "./mcpContractTestFixtures"
-import {
-	check,
-	type FeedPage,
-	runId,
-	type TopicPage,
-	toClient,
-	topicId,
-	toResultJson,
-	toResultText,
-} from "./mcpSmokeFixtures"
+import { check, type FeedPage, runId, type TopicPage, toClient, topicId, toResultJson } from "./mcpSmokeFixtures"
 import { checkLastDraftSlot } from "./mcpTopicDraftSmoke"
 import { CONNECT_ACCOUNT_TEXT } from "./results"
-import { mcpRoute } from "./server"
+import { mcpRoute, SERVER_INSTRUCTIONS } from "./server"
+import { toResultText } from "./toolTestFixtures"
 
 /** Checks a visitor's results on /mcp, then on the topic-bound route. */
 export async function checkVisitor(): Promise<void> {
@@ -32,6 +24,7 @@ export async function checkVisitor(): Promise<void> {
 	const { tools } = await client.listTools()
 	const contractIssues = toMcpToolContractIssues(tools)
 	check("every visitor tool has its title and classified hints", contractIssues.length === 0, contractIssues)
+	check("the server instructions name Carl and CarlNotes", client.getInstructions() === SERVER_INSTRUCTIONS)
 
 	// search the seeded public topic by name, and read each MCP view's resource
 	const visitorSearchResult = await client.callTool({
@@ -60,6 +53,14 @@ export async function checkVisitor(): Promise<void> {
 		"rate_finding returns the connect text to a visitor",
 		toResultText(visitorRateFindingResult) === CONNECT_ACCOUNT_TEXT,
 	)
+	const visitorFindingFeedbackResult = await client.callTool({
+		name: "send_finding_feedback",
+		arguments: { finding_id: "any", feedback: "Too basic." },
+	})
+	check(
+		"send_finding_feedback returns the connect text to a visitor",
+		toResultText(visitorFindingFeedbackResult) === CONNECT_ACCOUNT_TEXT,
+	)
 	const visitorCreateTopicResult = await client.callTool({
 		name: "create_topic",
 		arguments: { name: "x", prompt: "y" },
@@ -83,6 +84,7 @@ export async function checkVisitor(): Promise<void> {
 	// read through the topic-bound route with no topic named, then with another topic. it rejects the second
 	const topicRouteClient = toClient(`/mcp/t/${topicId}`)
 	await topicRouteClient.client.connect(topicRouteClient.transport)
+	check("the bound route sends the instructions", topicRouteClient.client.getInstructions() === SERVER_INSTRUCTIONS)
 	const routeFeedResult = await topicRouteClient.client.callTool({ name: "read_topic_feed", arguments: {} })
 	check("the bound route reads its topic with no argument", toResultText(routeFeedResult).includes("Finding 1"))
 	const otherTopicFeedResult = await topicRouteClient.client.callTool({
@@ -120,12 +122,17 @@ export async function checkUser(accessToken: string): Promise<void> {
 			feedAgain.items.find((feedItem) => feedItem.findingId === findingId)?.isConsumed === true,
 	)
 
-	// rate and bookmark a finding as the owner
+	// rate, send feedback on, and bookmark a finding as the owner
 	const rateFindingResult = await client.callTool({
 		name: "rate_finding",
 		arguments: { finding_id: findingId, rating: "up" },
 	})
 	check("the owner rates a finding", toResultText(rateFindingResult) === "Rated.", toResultText(rateFindingResult))
+	const feedbackResult = await client.callTool({
+		name: "send_finding_feedback",
+		arguments: { finding_id: findingId, feedback: "Too basic." },
+	})
+	check("the owner sends feedback on a finding", toResultText(feedbackResult) === "Sent.", toResultText(feedbackResult))
 	const bookmarkFindingResult = await client.callTool({
 		name: "bookmark_finding",
 		arguments: { finding_id: findingId, is_bookmarked: true },

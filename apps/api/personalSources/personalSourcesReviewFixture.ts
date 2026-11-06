@@ -146,7 +146,7 @@ async function seedReviewSources({
 	])
 }
 
-// create the paged synthetic history without changing real receipt counters or credentials
+// create the paged synthetic history without changing real confirmation counters or credentials
 async function seedReviewEntries({
 	transaction,
 	topicId,

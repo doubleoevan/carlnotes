@@ -296,7 +296,7 @@ Check for:
    - `DATABASE_URL_DIRECT` and `toDirectConnectionString` in `api/note/noteStream.ts` (removed: the chat and note
      fan-out is Redis pub/sub through `publishToChannel` and `subscribeToChannel` in `db/redis.ts`), and with them
      the brokers' own `Client`, `listener`, `listenRetryMs`, and `NOTIFY_TOOL_CALLS_MAX_BYTES`
-   - `toExclusiveTask` in `worker/schedule.ts` (now `runWithClaim` in `db/claim.ts`), `isTopicScheduled`, and
+   - `toExclusiveTask` in `worker/schedule.ts` (now `runWithJobLease` in `db/jobLease.ts`), `isTopicScheduled`, and
      `loadScheduledTopics` with its JS filter (now `toScheduledTopicFilter` in `worker/schedule.ts`), and the reset
      inside the sweep (now `worker/resetMonthlyBudgets.ts` and `bun run reset:monthly-budgets`)
    - `MAX_CONCURRENT_SCAN_ACTIVITIES` in `worker/temporal.ts` (now `SCAN_CONCURRENCY`, read from the setting of that name)
@@ -574,7 +574,7 @@ Check for:
      `chat_turns.kind`)
    - `in flight` / `in-flight` / `inFlight` (now `running` for a Scan, a task, or an activity, and `in progress` for a
      request, a post, or a render; the concurrency tests count with `runningCount`)
-   - the advisory lock in `db/claim.ts` (now a lease row in the `claims` table)
+   - the advisory lock in `db/claim.ts` (now a row in the `job_leases` table)
    - `toPlainText` as a private helper in `shared/seo.ts` (now exported from `shared/spokenText.ts`, beside
      `toSpokenParts`)
    - `toFailedSpeechResult` in `worker/speech.ts` (now `toModelCallFailure`, beside
@@ -864,6 +864,33 @@ Check for:
      `checkClientParity`'s `inventoryEntries` option (now `inventoryRows`)
    - `apps/web/src/components/search/SearchResults.tsx` (now `SearchResultOptions.tsx`, the typeahead's options).
      `SearchResults` in `apps/mobile/src/components/search/` is the search screen's results and keeps its name
+   - `apps/web/src/mcpViews/McpViewBrand.tsx` with its story (now `BrandLink.tsx` and its story in
+     `apps/web/src/components/common/`), `COVER_PLACEHOLDER_CLASS` in `apps/web/src/lib/styleClasses.ts` (removed:
+     `PodcastEpisodeCover.tsx` shows the placeholder image), `packages/db/claim.ts`, `claim.test.ts`, `schema/claims.ts`,
+     the `claims` table, `runWithClaim`, `ClaimLostError`, and `claimName` (now `packages/db/jobLease.ts`,
+     `jobLease.test.ts`, `schema/jobLeases.ts`, `job_leases`, `runWithJobLease`, `JobLeaseLostError`, and `jobName`),
+     `TOPIC_RELEVANCE_FLOOR` and
+     `EMAIL_TOPIC_RELEVANCE_FLOOR` in `packages/pipeline/personalSources/matchTopics.ts` (now
+     `MIN_SUGGESTED_TOPIC_RELEVANCE` and `MIN_FILED_TOPIC_RELEVANCE` in `topicRelevance.ts`), read mark and the user's
+     marks (now consumption and the user's consumed and bookmarked states), `StopScanResult` in
+     `apps/api/topic/scans.ts` (now `apps/api/topic/stopManualScan.ts`), `toMcpViewHtmlFromBundle` in
+     `apps/api/mcp/uiResources.ts` (now `packages/contracts/mcpViewHtml.ts`), `TopicFindingStats` in
+     `TopicResourceInfo.tsx` (now `TopicFindingDetails.tsx`), and web's `ExpanderSkeleton` in `TopicSkeleton.tsx` (now
+     `TopicFeedSkeleton.tsx`)
+   - `receipt` in owned code (now `confirmation`): `packages/db/personalSourcesEmailReceipts.ts` and
+     `personalSourcesEmailReceipts` (now `personalSourcesEmailConfirmations`), the
+     `personal_source_email_receipts` table and its `receipt_id` columns (now
+     `personal_source_email_confirmations` and `confirmation_id`), `personalSourcesReceiptLinks.test.ts` (now
+     `personalSourcesConfirmationLinks.test.ts`), `apps/api/topic/topicDraftReceipts.ts` (now
+     `topicDraftConfirmationRecords.ts`), `TopicDraftReceipt` and `toTopicDraftReceipt` (now
+     `TopicDraftConfirmationRecord` and `toTopicDraftConfirmationRecord`), `claimTopicDraftReceipt` (now
+     `claimTopicDraftConfirmation`), a send result's `receipts` (now `confirmations`), `sendReceiptLinks` (now
+     `sendConfirmationLinks`), `PersonalSourcesSendReceipt` (now `PersonalSourcesSendConfirmation`),
+     `loadPersonalSourcesReceiptLinks` (now `loadPersonalSourcesConfirmationLinks`),
+     `finishPersonalSourcesEmailReceipt` and `retryPersonalSourcesEmailReceipt` (now
+     `finishPersonalSourcesEmailConfirmation` and `retryPersonalSourcesEmailConfirmation`)
+   - `isItemExpanded` and the `ItemExpanded` story (now `isEntryExpanded` and `EntryExpanded`), `openHostLink` in
+     `apps/web/src/mcpViews/mcpViewHost.ts` (folded into `openMcpViewLink`)
 
 5. **Cross-harness enforcement parity**: `.claude/settings.json` hooks and
    `.opencode/plugin/guardrails.mjs` must gate the same operations with the

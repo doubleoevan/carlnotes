@@ -54,7 +54,7 @@ export async function createTopicInvite(
 	// the link names no address, so it has a use limit and an expiry instead
 	const expiresAt = new Date(Date.now() + LINK_INVITE_DAYS * DAY_MS)
 	const invite = await db.transaction(async (transaction) => {
-		// serialize invitation creation with private receipt
+		// serialize invitation creation with private confirmation
 		await lockPersonalSourcesTopic(transaction, topicId)
 		await assertPersonalSourcesConverted(transaction, topicId)
 		const [invite] = await transaction

@@ -1,4 +1,4 @@
-// the topic finding contract: the review about one resource under a topic, with the user's marks on it
+// the topic finding contract: the review about one resource under a topic, with the user's consumed and bookmarked states
 import { z } from "zod"
 import { ratings, resourceKinds } from "./enums"
 import { profileIdentity } from "./profiles"

@@ -1,6 +1,7 @@
 // what list_topics returns: the topics a tool caller may read, each with a prompt preview and its ready sources
 
 import { db, isPublicAndShown } from "@carlnotes/db"
+import { isReadySharedSource } from "@carlnotes/db/contentFilters"
 import { teamMembers } from "@carlnotes/db/schema/teams"
 import { teamTopics } from "@carlnotes/db/schema/teamTopics"
 import { sources, subscriptions, topics } from "@carlnotes/db/schema/topics"
@@ -140,7 +141,7 @@ async function loadReadyTopicSourcesByTopic(topicIds: string[]): Promise<Map<str
 	const topicSourceRows = await db
 		.select({ id: sources.id, topicId: sources.topicId, kind: sources.kind, config: sources.config })
 		.from(sources)
-		.where(and(inArray(sources.topicId, topicIds), eq(sources.status, "ready")))
+		.where(and(inArray(sources.topicId, topicIds), isReadySharedSource))
 
 	// group the sources by topic, each with its label
 	const sourcesByTopic = new Map<string, McpTopic["sources"]>()

@@ -1,7 +1,7 @@
 ---
 title: Add to AI
 description: >-
-  Connect CarlNotes to Claude, ChatGPT, and coding AI Agents. Set up OAuth sign-in, understand all thirteen MCP tools,
+  Connect CarlNotes to Claude, ChatGPT, and coding AI Agents. Set up OAuth sign-in, understand all nineteen MCP tools,
   and manage access to your topics and findings.
 sidebar:
   order: 2
@@ -102,6 +102,13 @@ Connect an account to unlock the rest:
   starts. Making a topic public or removing a source saves nothing at first: your AI shows you the change and asks,
   and it saves only once you agree. See [Editing a topic with Coffee Talk](/docs/feed/editing-a-topic-in-chat/) for
   the same edits from the panel.
+- **Updates.** Say "what's new" or "catch me up" and Carl picks your unread findings across the topics you
+  follow, or on one topic, trimmed to 5, 15, or 30 minutes of reading. They stay in your feed, marked read.
+- **Brew now.** Start a brew of a topic you own, watch it, and stop it. It takes one of your daily brews, and it
+  records its podcast episode like any other brew. Your AI never charges an overage: past your daily limit, it sends you
+  to CarlNotes.
+- **Ask about a topic.** Your AI reads the closest findings and recent brew reports for your question and writes the
+  reply itself. It uses your model budget for one search and saves no chat.
 - **New topics.** Ask for verified source suggestions for a title and prompt, then create the topic. Fields you leave
   out take these defaults: weekly on Wednesday at 9:00 AM, shared by invite, and the top 10 findings. Its first brew
   starts.
@@ -111,7 +118,7 @@ without one.
 
 ## Tool reference
 
-The server advertises the same thirteen tools to visitors and connected accounts. Sign-in changes permission, not the
+The server advertises the same nineteen tools to visitors and connected accounts. Sign-in changes permission, not the
 tool list. Public tools also read private or invite topics when your account has access.
 
 | Tool | What it does | Account and effects |
@@ -122,6 +129,7 @@ tool list. Public tools also read private or invite topics when your account has
 | `search` | Searches topics, podcast episodes, findings, teams, and profiles with filters and numbered pages. | Results respect your access. Account-only filters use your own read and bookmark state. Read-only. |
 | `mark_finding_consumed` | Marks a readable finding read for you. | Requires an account. Saves your read state. Repeating it has the same effect. |
 | `rate_finding` | Rates a finding up or down, or clears your rating. | Requires an account with rating permission, such as the owner, a team member, or an eligible follower. Repeating a rating has the same effect. |
+| `send_finding_feedback` | Saves your own words about why a finding was good or bad. | Requires an account with rating permission. Your words are stored and never change scoring. Repeating it saves them again. |
 | `bookmark_finding` | Saves or removes a bookmark. | Requires the topic owner or a member of a team holding the topic. Repeating the same choice has the same effect. |
 | `follow_topic` | Follows or unfollows an accessible topic. | Requires an account. Owners cannot unfollow their own topics. Repeating a choice has the same effect. |
 | `edit_topic` | Changes permitted topic fields and sources. | Requires edit permission. Prompt changes keep a version; source additions report projected cost. Public visibility and source removal need confirmation. No brew starts. |
@@ -129,6 +137,11 @@ tool list. Public tools also read private or invite topics when your account has
 | `create_topic` | Previews a Topic Draft, then creates it after you confirm. | Requires an account and existing plan capacity. Only the confirmed call saves the Topic and starts its first brew. |
 | `send_to_topic` | Saves a summary you explicitly ask an app to send, with up to ten public links. | Requires a live connected account and one to twenty Topics you can edit. Counts once toward the daily send allowance; never pastes a raw conversation. |
 | `suggest_topics` | Lists every editable send destination with the strongest matches first, for the supplied title, summary, and links, with five editable Topics per page. | Requires an account. Stores nothing, spends no send or draft allowance, and uses the existing model budget for transient matching. Uses `list_topics` cursor paging. |
+| `read_updates` | Picks your unread findings to read next, across the topics you follow or on one topic, with Carl's opener. Takes `minutes` of 5, 15, or 30, and 15 if you leave it out. | Requires an account. Marks the findings it picks read, so two lists share none. |
+| `start_scan` | Starts a brew of a topic now. | Requires the topic's owner or an admin. Takes one of the account's daily brews, reports and records a podcast episode like any other brew, and never charges an overage. |
+| `read_scan_status` | Reads a topic's running brew by stage, or its latest recap, with what each source found and the state of its podcast episode. | Public topics work without sign-in. Private and invite topics need access. Read-only. |
+| `stop_scan` | Stops a topic's running brew. | Requires the topic's owner or an admin. What Carl kept stays, what the brew spent stays charged, and its daily brew comes back. |
+| `read_topic_context` | Returns what Carl holds on a topic for a question: the closest findings with excerpts, and the recent brew reports. Your AI writes the reply. | Requires an account with access to the topic. Uses the account's model budget for one search. Saves no chat. Read-only. |
 
 Account tools carry conservative change annotations, so your AI app can ask before calling them. That prompt does
 not replace CarlNotes' permission checks. For a public-visibility change or source removal, `edit_topic` first returns
@@ -139,17 +152,47 @@ The optional endpoint `https://carlnotes.com/mcp/t/<topicId>` binds topic-specif
 Reads and edits can omit `topic_id`; sends require explicit IDs. Every send destination must match the bound Topic. Binding does not grant access or narrow global
 search, Topic suggestions, or Topic creation. Use `/mcp` for normal installation.
 
+### Words that reach each tool
+
+Your AI picks a tool from your words. These phrases name each tool's job, and any wording close to them works. Your AI
+calls a tool when you ask, and never on its own.
+
+| You say | Tool |
+| --- | --- |
+| "list my topics", "what topics do I follow", "what does Carl cover" | `list_topics` |
+| "show this topic", "what did Carl find", "read my feed" | `read_topic_feed` |
+| "search this topic", "what does Carl have on…" | `search_topic_findings` |
+| "search CarlNotes", "find a topic", "look up a podcast episode" | `search` |
+| "Carl, mark this read", "I read this" | `mark_finding_consumed` |
+| "Carl, thumbs up", "thumbs down", "more like this" | `rate_finding` |
+| "tell Carl why", "give Carl feedback" | `send_finding_feedback` |
+| "Carl, bookmark this", "keep this finding" | `bookmark_finding` |
+| "CarlNotes, follow this topic", "unfollow this topic" | `follow_topic` |
+| "Carl, edit this topic", "change the prompt", "add a source", "change the schedule" | `edit_topic` |
+| "Carl, suggest sources", "find sources for this topic" | `suggest_sources` |
+| "create a topic", "start a topic", "have Carl track this" | `create_topic` |
+| "send this to Carl", "save this to CarlNotes", "add this to my topic" | `send_to_topic`, or `suggest_topics` first if you name no Topic |
+| "Carl, what's new", "catch me up", "update me", "what's new on…" | `read_updates` |
+| "CarlNotes, brew this topic now", "run this topic now" | `start_scan` |
+| "how is the brew going", "is Carl done", "show the latest brew" | `read_scan_status` |
+| "Carl, stop the brew", "cancel this brew" | `stop_scan` |
+| "ask Carl about this topic", "what does Carl know about…", "what's the latest on…" | `read_topic_context` |
+
 ### Send and suggestion arguments
 
 To try it in a chat, follow [Send AI chats to CarlNotes](/docs/topics/send-ai-chats-to-carlnotes/).
 
-`send_to_topic` takes `topic_ids` with one to twenty distinct editable Topic IDs, `title` (1–200 characters), `summary` (1–2,000 Unicode characters), and
-up to ten distinct safe public `links`. An optional `chat_url` stays a private reference and never joins the crawl
-queue. For one destination, the existing `topic_id` field remains supported; use exactly one destination field.
-An optional `request_id` identifies retries of the same content and destination set. One successful call counts once
-toward the shared daily send ceiling. AI Agent sends on every plan and emails on Plus and Premium share a provisional ceiling of 200 accepted sends per UTC day, solely to stop runaway AI Agents. At the ceiling, Carl says “The day's limit is reached.” Retry after midnight UTC; upgrading does not raise it. If any destination is refused, nothing is saved or charged. With `topic_ids`, acceptance returns a `receipts`
-list with each Topic ID, name, URL, entry ID, and queued-link count, plus the accepted title. Legacy `topic_id` calls return one receipt directly. Refusals explain missing access, disconnection, quota/reset time,
-retry conflicts, or unavailable receiving; they do not claim storage.
+`send_to_topic` takes `topic_ids` with one to twenty distinct editable Topic IDs, `title` (1–200 characters), `summary`
+(1–2,000 Unicode characters), and up to ten distinct safe public `links`. An optional `chat_url` stays a private
+reference and never joins the crawl queue. For one destination, the existing `topic_id` field remains supported; use
+exactly one destination field. An optional `request_id` identifies retries of the same content and destination set. One
+successful call counts once toward the shared daily send ceiling. AI Agent sends on every plan and emails on Plus and
+Premium share a provisional ceiling of 200 accepted sends per UTC day, solely to stop runaway AI Agents. At the ceiling,
+Carl says “The day's limit is reached.” Retry after midnight UTC; upgrading does not raise it. If any destination is
+refused, nothing is saved or charged. With `topic_ids`, acceptance returns a `confirmations` list with each Topic ID,
+name, URL, entry ID, and queued-link count, plus the accepted title. Legacy `topic_id` calls return one confirmation
+directly. Refusals explain missing access, disconnection, quota/reset time, retry conflicts, or unavailable receiving;
+they do not claim storage.
 
 `suggest_topics` takes the same `title`, `summary`, and `links`, and accepts an optional `chat_url`. It carries that conversation link through to your chosen send. Ranking uses the content you submitted. An optional `query` filters editable names and `cursor` requests another page. It returns `editableTopics`, `nextCursor`, and the number of pages when known. The legacy `publicTopicsToFollow` field is empty; the send picker does not offer public discovery. Each match
 has an ID, name, prompt preview, URL, group, relevance score, and best-match flag. Every Topic you can edit appears, ranked by relevance; strong matches are checked by default and weaker ones remain unchecked. Search filters that editable list by name while preserving your choices. Name autocomplete uses `autocomplete=true` for a name-only read without AI matching.
@@ -175,9 +218,16 @@ of arbitrary choices.
 
 ## CarlNotes inside your AI app
 
-Claude, ChatGPT, VS Code, and Goose can show CarlNotes controls right in your chat. Search, turn pages, play podcasts,
-follow Topics, and open Carl's notes. Edit a Topic with the same fields you use in Coffee Talk, then choose Save to
-confirm. Everything uses your connected account. If your AI app blocks audio, use the link to listen on CarlNotes.
+Claude, ChatGPT, VS Code, and Goose can show CarlNotes controls right in your chat. Findings and search results open as
+tables you can page through, and you can sort search results. Open a finding's row for Carl's note and your own private
+annotation, and to rate it, tell Carl why, bookmark it, or mark it read. Search, play podcasts, follow Topics, and edit
+a Topic with the same fields you use in Coffee Talk, then choose Save to confirm. Everything uses your connected
+account. If your AI app blocks audio, use the link to listen on CarlNotes.
+
+**Updates** shows Carl's opener and your findings in order, each with its reading time. Choose a Topic to see its
+findings. **A brew** shows what it has kept so far and what each source found, with a stop control if you own the
+Topic. Once it finishes, you get the same recap as the Topic page, and you can play its podcast episode. Your AI app's
+colors apply where it shares them, and a row or a recap opens one step in the chat. Anything further opens on CarlNotes.
 
 The Topic picker asks **Where should this go?** It shows five editable Topics per page with best matches checked. Search offers matching Topic names as you type. Choose a suggestion to add it, or press Enter/Search to filter the list. **Topics to share this chat with** shows every checked destination as a removable tag pill. Checking or unchecking a box updates the pills immediately, and removing a pill unchecks its Topic across pages.
 

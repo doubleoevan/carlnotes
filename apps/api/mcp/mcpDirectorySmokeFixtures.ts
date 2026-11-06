@@ -1,6 +1,6 @@
 // isolated private access, large feed, and search fixtures for the directory smoke checks
 import { db } from "@carlnotes/db"
-import { findings, resources, scans } from "@carlnotes/db/schema/scans"
+import { EMBED_DIMENSIONS, EMBED_MODEL_NAME, findings, resources, scans } from "@carlnotes/db/schema/scans"
 import { teamMembers, teams } from "@carlnotes/db/schema/teams"
 import { sources, subscriptions, topics } from "@carlnotes/db/schema/topics"
 import { users } from "@carlnotes/db/schema/users"
@@ -14,10 +14,18 @@ export const largeTopicId = `${runId}-large`
 export const subscribedTopicId = `${runId}-subscribed`
 export const subscribedTeamId = `${runId}-team`
 export const searchQuery = runId.replaceAll(/[^a-z0-9]/g, "")
+const SHORT_FINDING_COUNT = 20
 export const expectedFindings = Array.from({ length: 45 }, (_, index) => ({
 	findingId: `${runId}-large-finding-${index}`,
-	relevanceExplanation: `Explanation ${index}: ${"x".repeat(index < 20 ? 40 : 6000)}`,
+	relevanceExplanation: `Explanation ${index}: ${"x".repeat(index < SHORT_FINDING_COUNT ? 40 : 6000)}`,
 }))
+
+// what read_topic_context reads. only the long Findings' Resources have it, so its ranking fills the page
+const embeddedResourceFields = {
+	embedding: Array<number>(EMBED_DIMENSIONS).fill(1),
+	embeddingModel: EMBED_MODEL_NAME,
+	snippet: "x".repeat(2000),
+}
 
 // fifty profiles and the public topic produce a full fifty-row search page and one remaining result
 const profileIds = Array.from({ length: 50 }, (_, index) => `${searchQuery}profile${index}`)
@@ -64,11 +72,12 @@ export async function seedDirectoryFixtures(): Promise<void> {
 
 	// seed resources and findings with fixed IDs for traversal and cleanup assertions
 	await db.insert(resources).values(
-		resourceIds.map((id) => ({
+		resourceIds.map((id, index) => ({
 			id,
 			url: `https://example.test/${id}`,
 			kind: "read" as const,
 			title: id,
+			...(index >= SHORT_FINDING_COUNT && index < expectedFindings.length ? embeddedResourceFields : {}),
 		})),
 	)
 	await seedTopicFindings(largeTopicId, expectedFindings)

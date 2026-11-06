@@ -19,19 +19,22 @@ function SearchResultRowStory({ rank, selected }: { rank?: number; selected?: bo
 		<SearchResultRow
 			rank={rank}
 			leading={
-				selected ? (
+				selected && (
 					<input
 						type="checkbox"
 						defaultChecked
 						aria-label="Select AI gone rogue"
 						className="mt-0.5 size-4 accent-primary"
 					/>
-				) : (
-					<Coffee className="text-muted-foreground mt-0.5 size-4" />
 				)
 			}
 			title={<span className="text-sm font-semibold">AI gone rogue</span>}
-			details={<TopicSearchResultDetails viewerCount={11} subscriberCount={8} />}
+			details={
+				<>
+					{!selected && <Coffee className="size-[18px] shrink-0" />}
+					<TopicSearchResultDetails viewerCount={11} subscriberCount={8} />
+				</>
+			}
 			action={
 				selected && (
 					<span className="bg-secondary text-secondary-foreground rounded-full px-2 py-1 text-xs font-semibold">

@@ -23,6 +23,7 @@ import { buildOutlinePrompt, buildSegmentPrompt } from "@carlnotes/pipeline/podc
 import { buildScorePrompt } from "@carlnotes/pipeline/review/score"
 import { buildScanReportPrompt } from "@carlnotes/pipeline/review/summarize"
 import { loadScan } from "@carlnotes/pipeline/scan"
+import { buildUpdatesOpenerPrompt } from "@carlnotes/pipeline/updatesOpener"
 import { and, eq, inArray, isNotNull } from "drizzle-orm"
 import { finishScan, ingestForScan, reviewForScan } from "./workflows/runTopicScanActivities"
 
@@ -249,6 +250,10 @@ async function writeSamplePrompts(): Promise<[string, boolean][]> {
 		hasIncompleteCoverage: false,
 	})
 	const agreementResult = await buildAgreementPrompt("sounds good", "frequency: daily")
+	const updatesOpenerResult = await buildUpdatesOpenerPrompt({
+		topicNames: ["Coffee"],
+		findingTitles: ["Sample"],
+	})
 
 	// the report prompt renders over a minimal sample scan
 	const sampleFinding = {
@@ -316,6 +321,7 @@ async function writeSamplePrompts(): Promise<[string, boolean][]> {
 		searchResult,
 		contextResult,
 		agreementResult,
+		updatesOpenerResult,
 		reportResult,
 		outlineResult,
 		segmentResult,
@@ -329,6 +335,7 @@ async function writeSamplePrompts(): Promise<[string, boolean][]> {
 		["attachment context prompt", contextResult.prompt],
 		["Personal sources context prompt", personalSourcesContextResult.prompt],
 		["agreement check prompt", agreementResult.prompt],
+		["updates opener prompt", updatesOpenerResult.prompt],
 		["scan report prompt", reportResult.prompt],
 		["episode outline prompt", outlineResult.prompt],
 		["episode segment prompt", segmentResult.prompt],

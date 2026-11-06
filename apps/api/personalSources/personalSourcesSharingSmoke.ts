@@ -76,13 +76,13 @@ async function seedSharingFixture(): Promise<SharingFixture> {
 async function receiveSharedEntries(fixture: SharingFixture): Promise<void> {
 	for (const userId of [fixture.ownerId, fixture.senderId]) {
 		const delivery = personalSourcesSmokeDelivery({ userId, topicId: fixture.topicId }, "shared-send", "same-client")
-		const receipt = await receivePersonalSourceEntry({
+		const confirmation = await receivePersonalSourceEntry({
 			...delivery,
 			payload: { ...delivery.payload, title: userId, text: `Private text for ${userId}` },
 		})
 		checkPersonalSources(
 			"an owning Team editor sends to a public Topic with ten fetched Sources",
-			receipt.status === "accepted",
+			confirmation.status === "accepted",
 		)
 		const metadata = await loadTopicPersonalSources({ userId, topicId: fixture.topicId })
 		checkPersonalSources(

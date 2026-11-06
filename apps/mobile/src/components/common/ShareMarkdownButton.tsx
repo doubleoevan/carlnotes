@@ -1,5 +1,5 @@
 import { showClientError } from "@carlnotes/client/apiClient"
-import { Share2 } from "lucide-react-native"
+import { Share as ShareIcon } from "lucide-react-native"
 import { useRef, useState } from "react"
 import { Share } from "react-native"
 import { Button } from "@/components/primitives/button"
@@ -36,7 +36,7 @@ export function ShareMarkdownButton({ markdown }: { markdown: string }) {
 			disabled={isPending}
 			onPress={() => void handleShare()}
 		>
-			<Icon as={Share2} className="size-4 text-muted-foreground" />
+			<Icon as={ShareIcon} className="size-4 text-muted-foreground" />
 		</Button>
 	)
 }

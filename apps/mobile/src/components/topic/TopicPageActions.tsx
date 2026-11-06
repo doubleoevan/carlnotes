@@ -4,7 +4,7 @@ import { sendDeleteTopic, sendTopicSubscription } from "@carlnotes/client/topicC
 import type { TopicResponse } from "@carlnotes/contracts/topics"
 import { toTopicActionLayout } from "@carlnotes/core/lib/topicActions"
 import { router } from "expo-router"
-import { PawPrint, Pencil, Share2, Trash2, Users } from "lucide-react-native"
+import { PawPrint, Pencil, Share as ShareIcon, Trash2, Users } from "lucide-react-native"
 import { useState } from "react"
 import { Alert, View } from "react-native"
 import { Button } from "@/components/primitives/button"
@@ -124,7 +124,7 @@ export function TopicPageActions({
 		if (layout.isAddTopicToTeamInMenu) {
 			actionOptions.push({ label: "Add topic to team", icon: Users, onSelect: () => setDialog("team") })
 		}
-		actionOptions.push({ label: "Share topic", icon: Share2, onSelect: () => setDialog("share") })
+		actionOptions.push({ label: "Share topic", icon: ShareIcon, onSelect: () => setDialog("share") })
 		if (topic.canEdit) {
 			actionOptions.push(
 				{ label: "Edit topic", icon: Pencil, onSelect: () => setDialog("edit") },

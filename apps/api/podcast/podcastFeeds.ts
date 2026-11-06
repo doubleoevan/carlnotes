@@ -18,7 +18,7 @@ import {
 	toPodcastEpisodeChaptersResponse,
 	toPodcastEpisodeTranscriptResponse,
 } from "./podcastEpisodeFiles"
-import { loadAccessiblePodcastEpisode } from "./podcastEpisodeRows"
+import { loadAccessiblePodcastEpisode, toPodcastEpisodeAnalyticsProperties } from "./podcastEpisodeRows"
 import { deletePodcastFeedToken, loadOrCreatePodcastFeedUrl, loadPodcastFeedTokenListener } from "./podcastFeedTokens"
 
 // a cover's file name, made of its key and its size
@@ -145,9 +145,7 @@ export const podcastFeedsRoute = new Hono<AppEnv>()
 				})
 			trackEvent("episode_played", podcastFeedTokenListener.userId, {
 				entryPoint: "feed",
-				topicId: accessiblePodcastEpisode.topic.id,
-				isTopicPublic: accessiblePodcastEpisode.topic.visibility === "public",
-				episodeId: podcastEpisodeRow.id,
+				...toPodcastEpisodeAnalyticsProperties(accessiblePodcastEpisode.topic, podcastEpisodeRow.id),
 			})
 		}
 		return toPodcastEpisodeAudioResponse(context, podcastEpisodeRow)

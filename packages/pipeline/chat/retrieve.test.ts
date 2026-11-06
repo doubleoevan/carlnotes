@@ -3,7 +3,7 @@
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import { restoreConnectionPool, stubConnectionPool } from "@carlnotes/db/connectionPoolStub"
 import * as models from "@carlnotes/models/models"
-import { searchTopicFindings, toRelevanceThenRecencyOrder } from "./retrieve"
+import { retrieveChatContext, searchTopicFindings, toRelevanceThenRecencyOrder } from "./retrieve"
 
 // put the pool and the embedding spy back after each test
 afterEach(() => {
@@ -16,7 +16,7 @@ test("the topic ranking filters to the topic inside a materialized expression an
 	// a question vector, and a pool that records the statement and returns no rows
 	spyOn(models, "embedVector").mockResolvedValue([0.1, 0.2, 0.3])
 	const sentQueries = stubConnectionPool()
-	expect(await searchTopicFindings("topic-1", "what changed", 8)).toEqual([])
+	expect(await searchTopicFindings("topic-1", null, "what changed", 8)).toEqual([])
 
 	// one statement, with the fence, the topic filter, and the ranking in that order
 	expect(sentQueries).toHaveLength(1)
@@ -33,6 +33,49 @@ test("the topic ranking filters to the topic inside a materialized expression an
 	expect(sentQueries[0]?.values).toContain("topic-1")
 	expect(sentQueries[0]?.values).toContain("[0.1,0.2,0.3]")
 	expect(sentQueries[0]?.values.at(-1)).toBe(8)
+})
+
+// an invite that has not activated reads no finding from a scan before its activation
+test("the topic ranking gates an invite topic's scans on the reader's activation", async () => {
+	spyOn(models, "embedVector").mockResolvedValue([0.1, 0.2, 0.3])
+	const sentQueries = stubConnectionPool()
+	await searchTopicFindings("topic-1", "invited-reader", "what changed", 8)
+
+	// the gate reads the user's own active subscription and leaves a role on the topic and an admin account open
+	const statement = sentQueries[0]?.text ?? ""
+	expect(statement).toContain('"topics"."visibility" <> $')
+	expect(statement).toContain('"scans"."started_at" > ((select min("created_at") from "subscriptions"')
+	expect(statement).toContain('"subscriptions"."is_active" = $')
+	expect(statement).toContain('"users"."role" = $')
+	expect(statement).toContain('"topics"."owner_id" = $')
+	expect(sentQueries[0]?.values).toContain("invited-reader")
+})
+
+// a visitor holds no subscription, so an invite topic's scans stay closed
+test("a visitor's topic ranking reads no invite topic's scans", async () => {
+	spyOn(models, "embedVector").mockResolvedValue([0.1, 0.2, 0.3])
+	const sentQueries = stubConnectionPool()
+	await searchTopicFindings("topic-1", null, "what changed", 8)
+	expect(sentQueries[0]?.text).toContain('"topics"."visibility" <> $')
+	expect(sentQueries[0]?.text).not.toContain('"subscriptions"')
+})
+
+// a chat turn on a shared topic reads no personal Source and no Scan before the user's activation
+test("chat retrieval leaves personal Sources out and gates Scan summaries", async () => {
+	spyOn(models, "embedVector").mockResolvedValue([0.1, 0.2, 0.3])
+	spyOn(models, "embedVectors").mockResolvedValue([[0.1, 0.2, 0.3]])
+	const sentQueries = stubConnectionPool((query) =>
+		query.text.startsWith('select "name"') ? [["Topic", "Prompt", "daily", null, null, "invite", [], 10]] : [],
+	)
+	await retrieveChatContext("topic-1", "what changed", "invited-reader", false, { litellmApiKey: "fixture-key" })
+
+	// the Sources read names the shared kinds, and the summaries read includes the activation gate
+	const sourcesQuery = sentQueries.find((query) => query.text.includes('from "sources"'))
+	expect(sourcesQuery?.text).toContain('"sources"."kind" not in')
+	expect(sourcesQuery?.values).toEqual(expect.arrayContaining(["ai_agent", "email"]))
+	const summariesQuery = sentQueries.find((query) => query.text.includes('"scan_summary"'))
+	expect(summariesQuery?.text).toContain('"scans"."started_at" > ((select min("created_at") from "subscriptions"')
+	expect(summariesQuery?.values).toContain("invited-reader")
 })
 
 // findings that answer the question equally well are ordered by when this topic found them

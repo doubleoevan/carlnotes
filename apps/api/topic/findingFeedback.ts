@@ -4,7 +4,7 @@ import { type DbHandle, db } from "@carlnotes/db"
 import { bookmarks, consumptions, findingFeedback, findings, findingViews } from "@carlnotes/db/schema/scans"
 import { topics } from "@carlnotes/db/schema/topics"
 import { trackEvent } from "@carlnotes/server/analytics"
-import { and, eq, isNotNull, sql } from "drizzle-orm"
+import { and, eq, inArray, isNotNull, sql } from "drizzle-orm"
 import type { AnalyticsProperties } from "../currentUser"
 import { canBookmarkFinding, canRateFinding, isTopicFindingVisible } from "./findingPermissions"
 import { toTopicRole } from "./permissions"
@@ -148,18 +148,54 @@ export async function setConsumed(
 	isConsumed: boolean,
 	analyticsProperties: AnalyticsProperties,
 ): Promise<boolean> {
+	// reject a finding the user may not see
 	if (!(await isTopicFindingVisible(userId, findingId))) {
 		return false
 	}
-	// marking read without ever opening is a dismissal, recorded as its own view event
-	if (isConsumed && !(await hasOpenedFinding(db, userId, findingId))) {
-		await db.insert(findingViews).values({ findingId, userId, dismissedAt: new Date() })
+
+	// a consumption goes through the one write that stores consumptions
+	if (isConsumed) {
+		await setFindingsConsumed(userId, [findingId], analyticsProperties)
+		return true
 	}
-	await saveTopicFindingConsumed(userId, findingId, isConsumed)
+	await saveTopicFindingConsumed(userId, findingId, false)
 
 	// track the event for analytics
-	trackEvent(isConsumed ? "finding_read" : "finding_unread", userId, analyticsProperties)
+	trackEvent("finding_unread", userId, analyticsProperties)
 	return true
+}
+
+/**
+ * Marks many topic findings consumed for one user in one write, which stores what a single consumption stores, and
+ * tracks one event with the count. The caller has checked that the user may see every finding.
+ */
+export async function setFindingsConsumed(
+	userId: string,
+	findingIds: string[],
+	analyticsProperties: AnalyticsProperties,
+): Promise<void> {
+	if (findingIds.length === 0) {
+		return
+	}
+
+	// a consumption on a finding never opened is a dismissal, recorded as its own view event
+	await db.transaction(async (transaction) => {
+		const openedFindingIds = await loadOpenedFindingIds(transaction, userId, findingIds)
+		const dismissedFindingIds = findingIds.filter((findingId) => !openedFindingIds.has(findingId))
+		if (dismissedFindingIds.length > 0) {
+			await transaction
+				.insert(findingViews)
+				.values(dismissedFindingIds.map((findingId) => ({ findingId, userId, dismissedAt: new Date() })))
+		}
+		// give every Finding its consumed row and skip a row that already exists
+		await transaction
+			.insert(consumptions)
+			.values(findingIds.map((findingId) => ({ userId, findingId })))
+			.onConflictDoNothing()
+	})
+
+	// track the one event for analytics
+	trackEvent("finding_read", userId, { ...analyticsProperties, findingCount: findingIds.length })
 }
 
 // who opened which finding, the open's analytics properties, and whether the open counts among the finding's views,
@@ -232,14 +268,17 @@ async function saveTopicFindingConsumed(userId: string, findingId: string, isCon
 	await db.insert(consumptions).values({ userId, findingId }).onConflictDoNothing()
 }
 
-// whether the user has opened the finding before, instead of only dismissing it
-async function hasOpenedFinding(handle: DbHandle, userId: string, findingId: string): Promise<boolean> {
-	const [openedView] = await handle
-		.select({ id: findingViews.id })
+// which of the findings the user has opened
+async function loadOpenedFindingIds(handle: DbHandle, userId: string, findingIds: string[]): Promise<Set<string>> {
+	const openedViews = await handle
+		.selectDistinct({ findingId: findingViews.findingId })
 		.from(findingViews)
 		.where(
-			and(eq(findingViews.findingId, findingId), eq(findingViews.userId, userId), isNotNull(findingViews.openedAt)),
+			and(
+				inArray(findingViews.findingId, findingIds),
+				eq(findingViews.userId, userId),
+				isNotNull(findingViews.openedAt),
+			),
 		)
-		.limit(1)
-	return openedView !== undefined
+	return new Set(openedViews.map((openedView) => openedView.findingId))
 }

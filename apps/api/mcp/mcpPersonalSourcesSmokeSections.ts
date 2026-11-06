@@ -11,8 +11,9 @@ import { loadOrProvisionUserLiteLLMKey } from "@carlnotes/models/litellm"
 import { saveEnvSettings } from "@carlnotes/server/savedEnvSettings"
 import { count, eq, inArray } from "drizzle-orm"
 import { privateTopicId, searchQuery } from "./mcpDirectorySmokeFixtures"
-import { check, ownerId, runId, toClient, toResultJson, toResultText } from "./mcpSmokeFixtures"
+import { check, ownerId, runId, toClient, toResultJson } from "./mcpSmokeFixtures"
 import { fromCursor, MCP_PAGE_MAX_CHARS } from "./results"
+import { toResultText } from "./toolTestFixtures"
 import type { suggestTopics } from "./topicSuggestions"
 
 // identical prompts give the live embedding model unambiguous relevant candidates on two pages
@@ -236,15 +237,15 @@ async function checkMcpMultiSend(accessToken: string): Promise<void> {
 			const response = await client.callTool({ name: "send_to_topic", arguments: input })
 			const accepted = toResultJson<PersonalSourcesSendResult>(response)
 			check(
-				"/mcp: one authenticated send returns two destination receipts",
-				accepted.status === "accepted" && accepted.receipts?.length === 2,
+				"/mcp: one authenticated send returns two destination confirmations",
+				accepted.status === "accepted" && accepted.confirmations?.length === 2,
 			)
 			const retry = await client.callTool({
 				name: "send_to_topic",
 				arguments: { ...input, topic_ids: [...input.topic_ids].reverse() },
 			})
 			check(
-				"/mcp: reordered multi-send retry returns the same receipt",
+				"/mcp: reordered multi-send retry returns the same confirmation",
 				JSON.stringify(toResultJson(retry)) === JSON.stringify(accepted),
 			)
 			const after = await db

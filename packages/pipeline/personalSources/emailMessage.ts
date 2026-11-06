@@ -1,6 +1,9 @@
 // verify a provider message before routing it or replying to its sender
 import type { ReceivedPersonalSourcesEmail } from "@carlnotes/contracts/personalSourcesEmail"
-import { isPersonalSourcesRecipient, toPersonalSourcesSenderDigest } from "@carlnotes/db/personalSourcesEmailReceipts"
+import {
+	isPersonalSourcesRecipient,
+	toPersonalSourcesSenderDigest,
+} from "@carlnotes/db/personalSourcesEmailConfirmations"
 import { waitForResendSlot } from "@carlnotes/db/resendRateLimit"
 import {
 	hasAuthenticatedPersonalSourcesSender,
@@ -17,7 +20,7 @@ export async function loadAuthenticatedEmail({
 	emailId: string
 	senderDigest: string | null
 }): Promise<ReceivedPersonalSourcesEmail | null> {
-	// retry transient provider failures through the existing durable receipt
+	// retry transient provider failures through the existing durable confirmation
 	await waitForResendSlot()
 	const fetched = await fetchReceivedPersonalSourcesEmail(emailId)
 	if (fetched.status === "retry") {

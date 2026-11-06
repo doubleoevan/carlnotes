@@ -4,7 +4,7 @@ import {
 	PERSONAL_SOURCES_CONTEXT_OUTPUT_CHARS,
 } from "@carlnotes/contracts/personalSources"
 import { db } from "@carlnotes/db"
-import { runWithClaim } from "@carlnotes/db/claim"
+import { runWithJobLease } from "@carlnotes/db/jobLease"
 import {
 	commitPersonalSourcesContext,
 	failPersonalSourcesContext,
@@ -16,6 +16,7 @@ import { personalSourcesSummarySpends } from "@carlnotes/db/schema/personalSourc
 import { CHEAP_COST_PER_MILLION_TOKENS, tokenCost } from "@carlnotes/models/budget"
 import { isBudgetRejection } from "@carlnotes/models/models"
 import { reserveUserSpend } from "@carlnotes/models/spendReservations"
+import { trackEvent } from "@carlnotes/server/analytics"
 import { eq } from "drizzle-orm"
 import { writePersonalSourcesContext } from "./contextWriter"
 
@@ -31,8 +32,8 @@ type SummarizationOutcome = "settled" | "stale" | "retry" | "busy" | "idle"
  */
 export async function summarizePersonalSourcesContext(topicId: string): Promise<SummarizationOutcome> {
 	// a renewable database lease also protects against overlapping activity attempts after worker loss
-	const outcome = await runWithClaim({
-		claimName: `personal-sources-context:${topicId}`,
+	const outcome = await runWithJobLease({
+		jobName: `personal-sources-context:${topicId}`,
 		runTask: async (signal) => {
 			const snapshot = await loadPersonalSourcesContextSnapshot(topicId)
 			if (!snapshot) {
@@ -96,7 +97,18 @@ async function generatePersonalSourcesContext(
 			generated.totalTokens === undefined
 				? MAX_SUMMARIZATION_DOLLARS
 				: tokenCost(generated.totalTokens, CHEAP_COST_PER_MILLION_TOKENS)
-		return (await commitPersonalSourcesContext({ snapshot, context, spendId, cost })) ? "settled" : "stale"
+
+		// a stale snapshot saves nothing and reports nothing
+		if (!(await commitPersonalSourcesContext({ snapshot, context, spendId, cost }))) {
+			return "stale"
+		}
+		trackEvent("personal_sources_context_built", snapshot.userId, {
+			entryPoint: "worker",
+			topicId: snapshot.topicId,
+			entryCount: snapshot.entryIds.length,
+			hasIncompleteCoverage: snapshot.hasIncompleteCoverage,
+		})
+		return "settled"
 	} catch (error) {
 		// raw provider errors may include input. retain only the budget classification and ambiguous-cost state
 		const isBudgetFailure = isBudgetRejection(error)

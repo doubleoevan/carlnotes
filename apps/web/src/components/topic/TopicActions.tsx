@@ -4,7 +4,7 @@ export { toTopicActionLayout } from "@carlnotes/core/lib/topicActions"
 
 import type { TopicResponse } from "@carlnotes/contracts/topics"
 import { cn } from "@carlnotes/nightshift/classNames"
-import { ListOrdered, PawPrint, Pencil, Share2, Trash2, Users } from "lucide-react"
+import { ListOrdered, PawPrint, Pencil, Share, Trash2, Users } from "lucide-react"
 import type * as React from "react"
 import { ShareTopicButton } from "@/components/share/ShareTopic"
 import { AddTopicToTeamButton } from "@/components/team/AddTopicToTeamButton"
@@ -77,7 +77,7 @@ export function toAddTopicToTeamOption(onSelect: () => void): PageActionOption {
  * Returns the actions menu's Share topic option.
  */
 export function toShareTopicOption(onSelect: () => void): PageActionOption {
-	return { label: "Share topic", Icon: Share2, onSelect }
+	return { label: "Share topic", Icon: Share, onSelect }
 }
 
 /**

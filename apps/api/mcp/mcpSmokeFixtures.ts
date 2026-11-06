@@ -14,6 +14,7 @@ import type { AppEnv } from "../currentUser"
 import { toAcceptedTermsFields } from "../testSession"
 import { validateMcpOrigin } from "./origins"
 import { mcpRoute } from "./server"
+import { toResultText } from "./toolTestFixtures"
 
 // one id per run, and every fixture id derives from it. parallel runs never collide
 export const runId = `mcp-smoke-${Date.now()}-${Math.random().toString(36).slice(2)}`
@@ -41,12 +42,6 @@ export function check(label: string, isTestPassing: boolean, detail?: unknown): 
 	}
 	failureCount += 1
 	console.error(`FAIL  ${label}`, detail ?? "")
-}
-
-/** Returns the text of a tool result. */
-export function toResultText(toolResult: unknown): string {
-	const resultContent = (toolResult as { content?: { type: string; text?: string }[] }).content ?? []
-	return resultContent.map((contentPart) => contentPart.text ?? "").join("\n")
 }
 
 /** Reads structured tool content, with JSON text support for older tools. */

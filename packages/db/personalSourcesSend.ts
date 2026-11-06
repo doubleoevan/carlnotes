@@ -37,9 +37,9 @@ export async function receivePersonalSourcesSend(
 	try {
 		// a nested savepoint rolls back every destination while the enclosing email transaction can record a refusal
 		return await (transaction ?? db).transaction(async (transaction) => {
-			const receipts: Extract<PersonalSourcesSendResult, { status: "accepted" }>[] = []
+			const confirmations: Extract<PersonalSourcesSendResult, { status: "accepted" }>[] = []
 			for (const [index, topicId] of sortedTopicIds.entries()) {
-				// the first receipt binds the request id to the complete batch. later receipts share its charge
+				// the first confirmation binds the request id to the complete batch. later confirmations share its charge
 				const requestId =
 					index === 0
 						? delivery.requestId
@@ -48,7 +48,7 @@ export async function receivePersonalSourcesSend(
 								purpose: "personal sources send batch",
 								encoding: "hex",
 							})
-				const receipt = await receivePersonalSourceEntry(
+				const confirmation = await receivePersonalSourceEntry(
 					{
 						...delivery,
 						topicId,
@@ -58,18 +58,23 @@ export async function receivePersonalSourcesSend(
 					},
 					transaction,
 				)
-				if (receipt.status !== "accepted") {
-					throw new PersonalSourcesSendRefused(receipt)
+				if (confirmation.status !== "accepted") {
+					throw new PersonalSourcesSendRefused(confirmation)
 				}
-				receipts.push(receipt)
+				confirmations.push(confirmation)
 			}
-			const firstReceipt = receipts[0]
-			if (!firstReceipt) {
-				throw new Error("An accepted send requires a receipt")
+			// the result is the first confirmation with every Topic's confirmation
+			const firstConfirmation = confirmations[0]
+			if (!firstConfirmation) {
+				throw new Error("An accepted send requires a confirmation")
 			}
 			return {
-				...firstReceipt,
-				receipts: receipts.map(({ topic, entryId, queuedLinkCount }) => ({ topic, entryId, queuedLinkCount })),
+				...firstConfirmation,
+				confirmations: confirmations.map(({ topic, entryId, queuedLinkCount }) => ({
+					topic,
+					entryId,
+					queuedLinkCount,
+				})),
 			}
 		})
 	} catch (error) {

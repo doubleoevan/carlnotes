@@ -119,7 +119,7 @@ async function planPodcastEpisodeInMemo({
 
 	// create the row as recording, with the speech model that records the Podcast Episode and whether it is short
 	const createdPodcastEpisode = await db.transaction(async (transaction) => {
-		// serialize the first receipt with creating a recording
+		// serialize the first confirmation with creating a recording
 		const currentTopic = await lockPersonalSourcesTopic(transaction, topicId)
 		if (!currentTopic?.isPodcastEnabled || (await hasUnconvertedPersonalSources(topicId, transaction))) {
 			return null

@@ -1,6 +1,7 @@
 import { AVATAR_COLOR, toAvatarInitials, toAvatarTint } from "@carlnotes/contracts/avatars"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { useState } from "react"
+import { useSiteAssetUrl } from "@/hooks/useSiteAssetUrl"
 import { AVATAR_CLASS } from "@/lib/styleClasses"
 
 /**
@@ -22,10 +23,11 @@ export function Avatar({
 	className?: string
 }) {
 	const [brokenImageUrl, setBrokenImageUrl] = useState<string | null>(null)
+	const siteImageUrl = useSiteAssetUrl(imageUrl)
 	return (
 		<span className={cn(AVATAR_CLASS, "size-8", className)}>
-			{imageUrl && imageUrl !== brokenImageUrl ? (
-				<img src={imageUrl} alt="" onError={() => setBrokenImageUrl(imageUrl)} className="size-full object-cover" />
+			{siteImageUrl && imageUrl !== brokenImageUrl ? (
+				<img src={siteImageUrl} alt="" onError={() => setBrokenImageUrl(imageUrl)} className="size-full object-cover" />
 			) : (
 				<AvatarInitials ownerId={ownerId} name={name} />
 			)}

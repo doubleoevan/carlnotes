@@ -31,7 +31,7 @@ for (const from of ["notes@example.com", "Carl Notes <notes@example.com>"]) {
 		}) as typeof fetch
 		expect(
 			await sendPersonalSourcesEmailReply({
-				receiptId: "receipt",
+				confirmationId: "confirmation",
 				to: "owner@example.com",
 				reply: {
 					kind: "needs_topic",
@@ -62,9 +62,10 @@ test("provider failure retries the identical send key without a second metadata 
 		keys.push(new Headers(init?.headers).get("Idempotency-Key") ?? "")
 		return providerReady ? Response.json({ id: emailId }) : new Response("", { status: 503 })
 	}) as typeof fetch
-	const delivery = { receiptId: "receipt", to: "owner@example.com", reply: { kind: "needs_topic" as const } }
+	// the failed send and its retry use one key
+	const delivery = { confirmationId: "confirmation", to: "owner@example.com", reply: { kind: "needs_topic" as const } }
 	expect((await sendPersonalSourcesEmailReply(delivery)).outcome).toBe("retryable")
 	providerReady = true
 	expect((await sendPersonalSourcesEmailReply(delivery)).outcome).toBe("accepted")
-	expect(keys).toEqual(["personal-sources/receipt", "personal-sources/receipt"])
+	expect(keys).toEqual(["personal-sources/confirmation", "personal-sources/confirmation"])
 })

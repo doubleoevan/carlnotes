@@ -34,7 +34,7 @@ export async function migratePersonalSourcesPrivacy(): Promise<void> {
 		.orderBy(topicPersonalSourceContexts.topicId, topicPersonalSourceContexts.userId)
 	for (const context of contexts) {
 		await db.transaction(async (transaction) => {
-			// hold the same lock that guards visibility, receipt, and Finding publication
+			// hold the same lock that guards visibility, confirmation, and Finding publication
 			await lockPersonalSourcesTopic(transaction, context.topicId)
 			const [current] = await transaction
 				.select()

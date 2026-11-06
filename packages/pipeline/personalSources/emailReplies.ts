@@ -4,9 +4,10 @@ import { db } from "@carlnotes/db"
 import {
 	type AccountEmailDestination,
 	loadPersonalSourcesEmailChoices,
-} from "@carlnotes/db/personalSourcesEmailReceipts"
+} from "@carlnotes/db/personalSourcesEmailConfirmations"
 import { personalSourceEntries } from "@carlnotes/db/schema/personalSources"
 import { sendPersonalSourcesEmailReply } from "@carlnotes/emails/personalSourcesEmail"
+import { trackEvent, trackVisitorEvent } from "@carlnotes/server/analytics"
 import { normalizePersonalSourcesEmail, toEmailSenderAddress } from "@carlnotes/server/personalSourcesEmailContent"
 import { toPersonalSourcesEmailReplyContent } from "@carlnotes/server/personalSourcesEmailReplyContent"
 import { decryptPrivateText } from "@carlnotes/server/privateText"
@@ -17,11 +18,14 @@ import { loadAuthenticatedEmail, toEmailReplyMetadata } from "./emailMessage"
 type ReplyResult = "replied" | "refused" | "retry"
 
 /** Explains which address to use only after Resend authenticates the original From. */
-export async function replyToUnregisteredSender(receipt: AccountEmailDestination["receipt"]): Promise<ReplyResult> {
-	if (!isInsideReplyWindow(receipt.replyStartedAt)) {
+export async function replyToUnregisteredSender(
+	confirmation: AccountEmailDestination["confirmation"],
+): Promise<ReplyResult> {
+	if (!isInsideReplyWindow(confirmation.replyStartedAt)) {
 		return "refused"
 	}
-	const original = await loadAuthenticatedEmail(receipt)
+	// load the authenticated email and its sender
+	const original = await loadAuthenticatedEmail(confirmation)
 	const sender = original && toEmailSenderAddress(original.from)
 	if (!original || !sender) {
 		return "refused"
@@ -35,25 +39,63 @@ export async function replyToUnregisteredSender(receipt: AccountEmailDestination
 	) {
 		return "refused"
 	}
-	return deliverEmailReply({
-		receiptId: receipt.id,
+	const deliverEmailReplyResult = await deliverEmailReply({
+		confirmationId: confirmation.id,
 		to: sender,
 		reply: { kind: "not_filed", reason: "account", ...toEmailReplyMetadata(original) },
 	})
+	if (deliverEmailReplyResult === "replied") {
+		trackVisitorEvent("personal_sources_email_unregistered", { entryPoint: "email" })
+	}
+	return deliverEmailReplyResult
+}
+
+/**
+ * Reports what a new email became: the entries it filed, or the reason it was not filed.
+ */
+export function trackPersonalSourcesEmail({ owner, reply: snapshot }: AccountEmailDestination): void {
+	if (!snapshot?.encryptedPayload) {
+		return
+	}
+	const reply = toStoredEmailReply(snapshot.encryptedPayload)
+	const emailAnalyticsProperties = { entryPoint: "email", plan: owner.plan, origin: "email" }
+
+	// a filed email counts one entry on each of its Topics, and names its Topic if there is only one
+	if (reply.kind === "filed") {
+		const topicId = reply.topics.length === 1 ? reply.topics[0]?.topicId : undefined
+		trackEvent("personal_source_entry_received", owner.id, {
+			...emailAnalyticsProperties,
+			...(topicId && { topicId }),
+			entryCount: reply.topics.length,
+		})
+		return
+	}
+
+	// an email that was not filed reports its reason, and a spent allowance reports the limit too
+	const reason = reply.kind === "needs_topic" ? reply.kind : reply.reason
+	trackEvent("personal_sources_email_unfiled", owner.id, { ...emailAnalyticsProperties, reason })
+	if (reason === "quota") {
+		trackEvent("personal_sources_quota_reached", owner.id, emailAnalyticsProperties)
+	}
+}
+
+// the reply saved with an email's outcome
+function toStoredEmailReply(encryptedPayload: string): PersonalSourcesEmailReply {
+	return personalSourcesEmailReply.parse(JSON.parse(decryptPrivateText(encryptedPayload) ?? "null"))
 }
 
 /**
  * Delivers a stable reply only while its sender and accepted entries remain live.
  */
 export async function replyToPersonalSourcesEmail({
-	receipt,
+	confirmation,
 	owner,
 	reply: snapshot,
 }: AccountEmailDestination): Promise<ReplyResult> {
-	if (!snapshot?.encryptedPayload || !isInsideReplyWindow(receipt.replyStartedAt)) {
+	if (!snapshot?.encryptedPayload || !isInsideReplyWindow(confirmation.replyStartedAt)) {
 		return "refused"
 	}
-	const reply = personalSourcesEmailReply.parse(JSON.parse(decryptPrivateText(snapshot.encryptedPayload) ?? "null"))
+	const reply = toStoredEmailReply(snapshot.encryptedPayload)
 	if (reply.kind === "filed" && !(await areEmailReplyEntriesLive(owner.id, reply))) {
 		return "refused"
 	}
@@ -62,13 +104,13 @@ export async function replyToPersonalSourcesEmail({
 		const current = await loadPersonalSourcesEmailChoices({
 			requestId: reply.requestId,
 			userId: owner.id,
-			senderDigest: receipt.senderDigest ?? "",
+			senderDigest: confirmation.senderDigest ?? "",
 		})
 		if (!current || !reply.topics.every((topic, index) => topic.id === current.topics[index]?.id)) {
 			return "refused"
 		}
 	}
-	return deliverEmailReply({ receiptId: receipt.id, to: owner.email, reply })
+	return deliverEmailReply({ confirmationId: confirmation.id, to: owner.email, reply })
 }
 
 // stop retries before Resend's 24-hour idempotency guarantee ends

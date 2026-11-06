@@ -1,4 +1,4 @@
-// one isolated development receipt runs through real model and Temporal services
+// one isolated development confirmation runs through real model and Temporal services
 import { withTimeLimit } from "@carlnotes/contracts/time"
 import { db } from "@carlnotes/db"
 import { loadPersonalSourcesEntries } from "@carlnotes/db/personalSourceEntries"
@@ -27,7 +27,7 @@ const PUBLIC_URL = "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Refe
 const PRIVATE_CANARY = "personal-sources-live-private-canary-741"
 
 /**
- * Checks real receipt, recovery, owner billing, Scan reuse, and deletion with a single public URL.
+ * Checks real confirmation, recovery, owner billing, Scan reuse, and deletion with a single public URL.
  */
 export async function checkPersonalSourcesLiveFlow(): Promise<void> {
 	// seed no followers, so the fixture has no email or push recipients
@@ -40,7 +40,7 @@ export async function checkPersonalSourcesLiveFlow(): Promise<void> {
 			isPodcastEnabled: false,
 		})
 		.where(eq(topics.id, topic.topicId))
-	const delivery = personalSourcesSmokeDelivery(topic, "live-receipt")
+	const delivery = personalSourcesSmokeDelivery(topic, "live-confirmation")
 	const result = await receivePersonalSourceEntry({
 		...delivery,
 		payload: {
@@ -51,12 +51,12 @@ export async function checkPersonalSourcesLiveFlow(): Promise<void> {
 		},
 	})
 	if (result.status !== "accepted") {
-		throw new Error(`Live receipt was ${result.status}`)
+		throw new Error(`Live confirmation was ${result.status}`)
 	}
 	try {
 		// a missed notification stays discoverable, and a missing key makes no model attempt
 		checkPersonalSources(
-			"live receipt survives a missed workflow notification",
+			"live confirmation survives a missed workflow notification",
 			(await loadPendingPersonalSourcesTopicIds()).includes(topic.topicId),
 		)
 		checkPersonalSources(

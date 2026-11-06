@@ -1,6 +1,6 @@
 // webhook acknowledgement follows authentication and durable storage, with no provider fetch in the route
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
-import * as receipts from "@carlnotes/db/personalSourcesEmailReceipts"
+import * as confirmations from "@carlnotes/db/personalSourcesEmailConfirmations"
 import * as work from "@carlnotes/pipeline/personalSources/work"
 import {
 	FIXTURE_EMAIL_ID,
@@ -23,8 +23,9 @@ afterEach(() => {
 
 test("invalid signatures never resolve addresses or dispatch provider work", async () => {
 	Bun.env.RESEND_INBOUND_WEBHOOK_SECRET = FIXTURE_WEBHOOK_SECRET
-	const queued = spyOn(receipts, "queuePersonalSourcesEmailEvent").mockResolvedValue([])
+	const queued = spyOn(confirmations, "queuePersonalSourcesEmailEvent").mockResolvedValue([])
 	const notified = spyOn(work, "notifyPersonalSourcesEmail").mockResolvedValue()
+	// an unsigned body stops before either step
 	const response = await personalSourcesInboundRoute.request("/webhooks/resend/inbound", { method: "POST", body: "{}" })
 	expect(response.status).toBe(400)
 	expect(queued).not.toHaveBeenCalled()
@@ -35,8 +36,9 @@ test("signed mail acknowledges only after durable handoff, including duplicate d
 	Bun.env.RESEND_INBOUND_WEBHOOK_SECRET = FIXTURE_WEBHOOK_SECRET
 	Bun.env.PERSONAL_SOURCES_RECEIVING_ENABLED = "true"
 	Bun.env.PERSONAL_SOURCES_EMAIL_ENABLED = "true"
-	const queued = spyOn(receipts, "queuePersonalSourcesEmailEvent")
-		.mockResolvedValueOnce(["receipt"])
+	// the first delivery queues one confirmation, and a duplicate queues none
+	const queued = spyOn(confirmations, "queuePersonalSourcesEmailEvent")
+		.mockResolvedValueOnce(["confirmation"])
 		.mockResolvedValue([])
 	const notified = spyOn(work, "notifyPersonalSourcesEmail").mockResolvedValue()
 	const body = JSON.stringify({
@@ -56,5 +58,5 @@ test("signed mail acknowledges only after durable handoff, including duplicate d
 	}
 	expect(queued).toHaveBeenCalledTimes(2)
 	expect(notified).toHaveBeenCalledTimes(1)
-	expect(notified.mock.calls[0]).toEqual(["receipt"])
+	expect(notified.mock.calls[0]).toEqual(["confirmation"])
 })

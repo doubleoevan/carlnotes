@@ -67,7 +67,14 @@ export const chatRoomMessagePayload = z
 	.refine((chatMessage) => chatMessage.content !== "" || chatMessage.attachments.length > 0)
 
 // a user's own words about a finding to use for tuning later
-export const findingFeedbackPayload = z.object({ feedback: z.string().trim().min(1).max(2000) })
+export const feedbackText = z
+	.string()
+	.trim()
+	.min(1)
+	.max(2000)
+	// a Postgres text column holds no NUL character
+	.refine((feedback) => !feedback.includes("\0"))
+export const findingFeedbackPayload = z.object({ feedback: feedbackText })
 
 // the signup-gate body. oauth never calls this endpoint, only the password path needs turnstile
 export const signupGatePayload = z.object({ turnstileToken: z.string() })

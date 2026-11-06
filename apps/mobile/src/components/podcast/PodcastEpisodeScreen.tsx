@@ -10,7 +10,7 @@ import { isAddTopicToTeamShown } from "@carlnotes/core/lib/topicActions"
 import { applyFindingChanges } from "@carlnotes/core/lib/topicFindingChanges"
 import { useQuery } from "@tanstack/react-query"
 import { router, useFocusEffect, useLocalSearchParams, usePathname } from "expo-router"
-import { Share2, Trash2, Users } from "lucide-react-native"
+import { Share as ShareIcon, Trash2, Users } from "lucide-react-native"
 import { type ComponentRef, useCallback, useRef, useState } from "react"
 import { View } from "react-native"
 import { AnchorLink } from "@/components/common/AnchorLink"
@@ -143,7 +143,7 @@ function EpisodeContent({
 		...(isAddTopicToTeamShown(topic, isSignedIn)
 			? [{ label: "Add topic to team", icon: Users, onSelect: () => setDialog("team") }]
 			: []),
-		{ label: "Share topic", icon: Share2, onSelect: () => setDialog("share") },
+		{ label: "Share topic", icon: ShareIcon, onSelect: () => setDialog("share") },
 		...(page.canRemovePodcastEpisode
 			? [{ label: "Remove episode", icon: Trash2, onSelect: () => setDialog("remove") }]
 			: []),

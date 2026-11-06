@@ -64,12 +64,14 @@ export default function HomeScreen() {
 			/>
 		</>
 	)
+	// a scroll view for the hero or the footer if no feed shows. the loading status scrolls on its own
+	const isScrollViewWithoutFeedShown = !topicFeed.topicFeed && (isHeroShown || !topicFeed.isLoading)
 	return (
 		<View className="flex-1 bg-background">
 			<Header isHome isHeroShown={isHeroShown} isReheating={topicFeed.isReheating} onReheat={handleRefresh} />
 			<ClassNameSafeAreaView edges={["left", "right"]} className="w-full max-w-3xl flex-1 self-center">
 				{!isHeroShown && homeTop}
-				{topicFeed.topicFeed ? (
+				{topicFeed.topicFeed && (
 					<TopicFeed
 						key={topicFeed.reheatKey}
 						topicFeed={topicFeed.topicFeed}
@@ -77,7 +79,8 @@ export default function HomeScreen() {
 						onRefresh={handleRefresh}
 						listHeader={isHeroShown ? homeTop : undefined}
 					/>
-				) : (
+				)}
+				{isScrollViewWithoutFeedShown && (
 					<ScrollView keyboardShouldPersistTaps="handled">
 						{isHeroShown && homeTop}
 						{!topicFeed.isLoading && <Footer />}

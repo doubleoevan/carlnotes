@@ -1,4 +1,4 @@
-// reuse the existing email shell for a filing receipt or a content-free request for a Topic
+// reuse the existing email shell for a filing confirmation or a content-free request for a Topic
 import { appUrl } from "@carlnotes/server/appUrl"
 import { readPersonalSourcesEmailAddress } from "@carlnotes/server/personalSourcesSettings"
 import { render } from "@react-email/render"
@@ -13,11 +13,11 @@ import PersonalSourcesEmail, {
  * Replies to the authenticated sender under one stable delivery key.
  */
 export async function sendPersonalSourcesEmailReply({
-	receiptId,
+	confirmationId,
 	to,
 	reply,
 }: {
-	receiptId: string
+	confirmationId: string
 	to: string
 	reply: PersonalSourcesEmailProps["reply"]
 }): Promise<ResendCallResult> {
@@ -27,7 +27,7 @@ export async function sendPersonalSourcesEmailReply({
 		renderPersonalSourcesEmailText(props),
 	])
 	return sendIdempotentEmailCall({
-		deliveryId: receiptId,
+		deliveryId: confirmationId,
 		hasStableKey: true,
 		messages: [
 			{

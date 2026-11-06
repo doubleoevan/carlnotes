@@ -4,6 +4,8 @@ import { MCP_VIEW_META_KEY } from "@carlnotes/contracts/mcpViews"
 import { EMPTY_TOPIC_DRAFT } from "@carlnotes/contracts/topicPayloads"
 import type { Meta, StoryObj } from "@storybook/tanstack-react"
 import { useEffect } from "react"
+import { VISITOR_TOOL_RESULT } from "../../.storybook/fixtures/mcpViews"
+import { McpViewToolText } from "./McpViewToolText"
 import { setMcpViewData } from "./mcpViewHost"
 import { TopicMcpView } from "./TopicMcpView"
 
@@ -35,7 +37,7 @@ const meta = {
 	decorators: [
 		(Story, context) => {
 			const result = context.args.mcpViewTopicResult
-			const receiptLinks = context.parameters.receiptLinks
+			const confirmationLinks = context.parameters.confirmationLinks
 			useEffect(() => {
 				setMcpViewData(
 					result.status === "accepted"
@@ -43,9 +45,9 @@ const meta = {
 								[MCP_VIEW_META_KEY]: {
 									session: null,
 									podcastEpisodes: [],
-									sendReceiptLinks: (result.receipts ?? [result]).map((receipt) => ({
-										entryId: receipt.entryId,
-										links: receiptLinks ?? [
+									sendConfirmationLinks: (result.confirmations ?? [result]).map((confirmation) => ({
+										entryId: confirmation.entryId,
+										links: confirmationLinks ?? [
 											{ url: "https://example.com/burrs", title: "Comparing conical and flat burrs" },
 											{ url: "https://example.com/grinder-testing" },
 										],
@@ -55,7 +57,7 @@ const meta = {
 						: undefined,
 				)
 				return () => setMcpViewData(undefined)
-			}, [result, receiptLinks])
+			}, [result, confirmationLinks])
 			return <Story />
 		},
 	],
@@ -67,12 +69,18 @@ type Story = StoryObj<typeof meta>
 // an edit that makes the topic public, previewed over the topic with its Save button
 export const Preview: Story = {}
 
+// a visitor's edit returns only the tool's words
+export const Visitor: Story = {
+	parameters: { session: "visitor" },
+	render: () => <McpViewToolText toolResult={VISITOR_TOOL_RESULT} />,
+}
+
 // a saved edit, which shows the topic as it now stands with no Save button
 export const Saved: Story = {
 	args: { mcpViewTopicResult: { status: "saved", topicId: "topic-home-espresso", afterTopicDraft: TOPIC_DRAFT } },
 }
 
-// explicit sends show bounded receipts and choices, with no save or automatic retry action
+// explicit sends show bounded confirmations and choices, with no save or automatic retry action
 export const PersonalSourcesAccepted: Story = {
 	args: {
 		mcpViewTopicResult: {
@@ -128,7 +136,7 @@ export const PersonalSourcesLongTitle: Story = {
 // multiple destinations retain their own numbered candidate list
 export const PersonalSourcesMultipleTopics: Story = {
 	parameters: {
-		receiptLinks: [
+		confirmationLinks: [
 			{ url: "https://en.wikipedia.org/wiki/Terrarium", title: "Terrarium - Wikipedia" },
 			{ url: "https://example.com/humidity-sensors" },
 		],
@@ -140,7 +148,7 @@ export const PersonalSourcesMultipleTopics: Story = {
 			topic: { id: "humidity", name: "Moss terrarium humidity", url: "https://carlnotes.com/topics/humidity" },
 			entryId: "humidity-entry",
 			queuedLinkCount: 2,
-			receipts: [
+			confirmations: [
 				{
 					topic: { id: "humidity", name: "Moss terrarium humidity", url: "https://carlnotes.com/topics/humidity" },
 					entryId: "humidity-entry",

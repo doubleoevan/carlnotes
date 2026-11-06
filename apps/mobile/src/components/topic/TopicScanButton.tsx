@@ -7,6 +7,7 @@ import {
 } from "@carlnotes/contracts/scanFailure"
 import type { TopicResponse } from "@carlnotes/contracts/topics"
 import { useManualScanProgress } from "@carlnotes/core/hooks/useManualScanProgress"
+import { SCAN_RUNNING_LABEL } from "@carlnotes/core/lib/labels"
 import { isManualScanShown } from "@carlnotes/core/lib/topicActions"
 import { usePurchaseOffers } from "@carlnotes/core/stores/purchaseOffersStore"
 import { router } from "expo-router"
@@ -80,7 +81,7 @@ export function TopicScanButton({ topic, onScanned }: { topic: TopicResponse; on
 		<View className="gap-2">
 			{isRunning ? (
 				<View className="flex-row items-center gap-2">
-					<Text className="font-display text-link">Carl is Brewing…</Text>
+					<Text className="font-display text-link">{SCAN_RUNNING_LABEL}</Text>
 					{progress.isScanning && (
 						<Button
 							variant="ghost"

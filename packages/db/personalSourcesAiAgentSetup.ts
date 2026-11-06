@@ -67,12 +67,13 @@ export async function addPersonalSourcesAiAgent({
 	userId: string
 	topicId: string
 	clientId: string
-}): Promise<"added" | "disconnected" | "unavailable" | "not_found"> {
+}): Promise<"added" | "alreadyAdded" | "disconnected" | "unavailable" | "not_found"> {
+	// nothing is added while receiving is off
 	if (!isPersonalSourcesReceivingEnabled()) {
 		return "unavailable"
 	}
 	return db.transaction(async (transaction) => {
-		// share receipt's lock order and recheck the concrete client's live grant
+		// share confirmation's lock order and recheck the concrete client's live grant
 		await lockPersonalSourcesSender(transaction, userId)
 		const aiAgent = await loadLiveAiAgent({ userId, clientId, transaction })
 		if (!aiAgent) {
@@ -99,7 +100,7 @@ export async function addPersonalSourcesAiAgent({
 				),
 			)
 		if (existingSource) {
-			return "added"
+			return "alreadyAdded"
 		}
 		await transaction.insert(sources).values({
 			topicId,

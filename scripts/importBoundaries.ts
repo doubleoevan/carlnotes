@@ -42,6 +42,7 @@ const MOBILE_STORYBOOK_CONFIG_IMPORT_PATTERN = /(?:^|\/)\.rnstorybook(?:\/|$)/
 const NIGHTSHIFT_PACKAGE_NAME = "@carlnotes/nightshift"
 const UNRESTRICTED_NIGHTSHIFT_IMPORT_PATHS = new Set([
 	`${NIGHTSHIFT_PACKAGE_NAME}/tokens.css`,
+	`${NIGHTSHIFT_PACKAGE_NAME}/mcpViewTokens.css`,
 	`${NIGHTSHIFT_PACKAGE_NAME}/classNames`,
 	`${NIGHTSHIFT_PACKAGE_NAME}/field`,
 	`${NIGHTSHIFT_PACKAGE_NAME}/pagination`,

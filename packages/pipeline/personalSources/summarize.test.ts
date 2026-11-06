@@ -1,11 +1,12 @@
 // real SDK calls use an in-memory proxy while storage and leases are scoped test doubles
 import { afterEach, beforeEach, expect, mock, spyOn, test } from "bun:test"
-import * as claims from "@carlnotes/db/claim"
 import { restoreConnectionPool, stubConnectionPool } from "@carlnotes/db/connectionPoolStub"
+import * as jobLease from "@carlnotes/db/jobLease"
 import * as contexts from "@carlnotes/db/personalSourcesContext"
 import { toChatCompletionResponse } from "@carlnotes/models/chatCompletionTestFixtures"
 import * as spending from "@carlnotes/models/spendReservations"
 import { stubReservedUserSpend } from "@carlnotes/models/spendReservationTestFixtures"
+import * as analytics from "@carlnotes/server/analytics"
 import { saveEnvSettings } from "@carlnotes/server/savedEnvSettings"
 import { summarizePersonalSourcesContext } from "./summarize"
 
@@ -31,7 +32,7 @@ const restoreEnvSettings = saveEnvSettings([
 let requestHeaders: Headers[] = []
 beforeEach(() => {
 	// a lease exercises its callback without timers or a database connection
-	spyOn(claims, "runWithClaim").mockImplementation(async ({ runTask }) => runTask(new AbortController().signal))
+	spyOn(jobLease, "runWithJobLease").mockImplementation(async ({ runTask }) => runTask(new AbortController().signal))
 
 	spyOn(contexts, "loadPersonalSourcesContextSnapshot").mockResolvedValue({ ...snapshot })
 	spyOn(contexts, "commitPersonalSourcesContext").mockResolvedValue(true)
@@ -137,4 +138,22 @@ test("an ownership transfer before the paid attempt releases the reservation and
 	expect(await summarizePersonalSourcesContext("topic")).toBe("stale")
 	expect(release).toHaveBeenCalledTimes(1)
 	expect(requestHeaders).toHaveLength(0)
+})
+
+test("a committed summary reports its sender's counts, and a stale one reports nothing", async () => {
+	const trackEventSpy = spyOn(analytics, "trackEvent")
+	expect(await summarizePersonalSourcesContext("topic")).toBe("settled")
+	expect(trackEventSpy.mock.calls).toEqual([
+		[
+			"personal_sources_context_built",
+			"team-editor",
+			{ entryPoint: "worker", topicId: snapshot.topicId, entryCount: 1, hasIncompleteCoverage: false },
+		],
+	])
+
+	// another revision committed first, so this summary was never saved
+	trackEventSpy.mockClear()
+	spyOn(contexts, "commitPersonalSourcesContext").mockResolvedValue(false)
+	expect(await summarizePersonalSourcesContext("topic")).toBe("stale")
+	expect(trackEventSpy).not.toHaveBeenCalled()
 })

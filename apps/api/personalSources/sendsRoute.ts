@@ -20,6 +20,7 @@ export const personalSourcesSendsRoute = new Hono<AppEnv>()
 		const result = await sendToPersonalSources({
 			sender: { kind: "api_key", secret },
 			payload: context.req.valid("json"),
+			analyticsProperties: { entryPoint: "api" },
 		})
 		switch (result.status) {
 			case "accepted":

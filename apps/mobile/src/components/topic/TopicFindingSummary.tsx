@@ -20,7 +20,7 @@ import { Icon } from "@/components/primitives/icon"
 import { useFontScaledSize } from "@/hooks/useFontScaledSize"
 import { toTypeRoleStyle } from "@/typeRoleStyles"
 
-// the resource kind remains visible beside the title even when a favicon is available
+// the finding, its place in the list, and the pressable title that opens its details
 type TopicFindingSummaryProps = {
 	resource: TopicFinding
 	topicFindingRank?: number | null
@@ -33,7 +33,7 @@ type TopicFindingSummaryProps = {
 }
 
 /**
- * Shows a finding's rank, kind, title, and source in the web's two-line layout.
+ * Shows a finding's rank, title, and source in the web's two-line layout.
  */
 export function TopicFindingSummary({
 	resource,
@@ -69,11 +69,6 @@ export function TopicFindingSummary({
 					</Text>
 				)}
 			</View>
-			<Icon
-				as={Globe}
-				className={cn("mt-0.5 size-4 text-muted-foreground", resource.isConsumed && "opacity-60")}
-				accessibilityLabel="Finding"
-			/>
 			<View className="flex-1 gap-0.5">
 				{/* expose the details separately from the podcast and parent Topic links */}
 				<Pressable

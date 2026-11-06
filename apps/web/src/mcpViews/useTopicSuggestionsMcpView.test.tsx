@@ -9,14 +9,14 @@ import { useTopicSuggestionsMcpView } from "./useTopicSuggestionsMcpView"
 
 afterEach(() => mock.restore())
 
-// a valid receipt reflects the destinations the host accepted together
-const receipt = {
+// a valid confirmation reflects the destinations the host accepted together
+const confirmation = {
 	status: "accepted" as const,
 	title: input.title,
 	topic: { id: "evals", name: "LLM evals", url: "https://carlnotes.com/topics/evals" },
 	entryId: "entry-evals",
 	queuedLinkCount: 3,
-	receipts: [
+	confirmations: [
 		{
 			topic: { id: "evals", name: "LLM evals", url: "https://carlnotes.com/topics/evals" },
 			entryId: "entry-evals",
@@ -31,7 +31,7 @@ const receipt = {
 }
 
 test("best matches start checked without calling tools, and one send includes every checked Topic", async () => {
-	const call = spyOn(host, "callMcpViewTool").mockResolvedValue({ content: [], structuredContent: receipt })
+	const call = spyOn(host, "callMcpViewTool").mockResolvedValue({ content: [], structuredContent: confirmation })
 	const hook = await renderTestHook(() => useTopicSuggestionsMcpView({ suggestions, input }))
 	try {
 		expect([...hook.read().selectedTopics.keys()]).toEqual(["evals"])
@@ -43,7 +43,7 @@ test("best matches start checked without calling tools, and one send includes ev
 			"send_to_topic",
 			{ ...input, topic_ids: ["evals", "infra"], request_id: expect.any(String) },
 		])
-		expect(hook.read().receipt).toEqual(receipt)
+		expect(hook.read().confirmation).toEqual(confirmation)
 	} finally {
 		await hook.close()
 	}
@@ -147,15 +147,15 @@ test("a jump to page 20 ranks the editable catalog only once", async () => {
 test("lost send responses reuse the same request id and never log private content", async () => {
 	const call = spyOn(host, "callMcpViewTool")
 		.mockRejectedValueOnce(new Error(input.summary))
-		.mockResolvedValue({ content: [], structuredContent: receipt })
+		.mockResolvedValue({ content: [], structuredContent: confirmation })
 	const hook = await renderTestHook(() => useTopicSuggestionsMcpView({ suggestions, input }))
 	try {
 		await act(async () => hook.read().send())
 		expect(hook.read().error).not.toContain(input.summary)
-		expect(hook.read().receipt).toBeNull()
+		expect(hook.read().confirmation).toBeNull()
 		await act(async () => hook.read().send())
 		expect(call.mock.calls[0]).toEqual(call.mock.calls[1])
-		expect(hook.read().receipt?.status).toBe("accepted")
+		expect(hook.read().confirmation?.status).toBe("accepted")
 	} finally {
 		await hook.close()
 	}
@@ -184,7 +184,7 @@ test("the new-topic choice uses source suggestions and an unconfirmed Draft, the
 		expect(call.mock.calls.map(([name]) => name)).toEqual(["suggest_sources", "create_topic"])
 		expect(call.mock.calls[1]?.[1]).not.toHaveProperty("confirmation")
 		expect(hook.read().draft).toEqual(preview)
-		call.mockResolvedValueOnce({ content: [], structuredContent: receipt })
+		call.mockResolvedValueOnce({ content: [], structuredContent: confirmation })
 		await act(async () => hook.read().topicCreated({ id: "created", name: input.title }))
 		expect(hook.read().selectedTopics.has("created")).toBe(true)
 		expect(hook.read().draft).toBeNull()
@@ -230,11 +230,11 @@ test("paging and a failed send preserve the same private backlink through retry"
 		call.mockRejectedValueOnce(new Error("response lost"))
 		await act(async () => hook.read().send())
 		const firstSend = call.mock.calls[1]?.[1]
-		call.mockResolvedValueOnce({ content: [], structuredContent: receipt })
+		call.mockResolvedValueOnce({ content: [], structuredContent: confirmation })
 		await act(async () => hook.read().send())
 		expect(firstSend).toHaveProperty("chat_url", chat_url)
 		expect(call.mock.calls[2]?.[1]).toEqual(firstSend)
-		expect(hook.read().receipt).toEqual(receipt)
+		expect(hook.read().confirmation).toEqual(confirmation)
 	} finally {
 		await hook.close()
 	}
@@ -287,11 +287,11 @@ test("a failed post-creation send retries without another Topic creation or char
 		expect([...hook.read().selectedTopics.keys()]).toEqual(["created"])
 		expect(hook.read().error).not.toBeNull()
 		const firstAttempt = call.mock.calls[0]
-		call.mockResolvedValueOnce({ content: [], structuredContent: receipt })
+		call.mockResolvedValueOnce({ content: [], structuredContent: confirmation })
 		await act(async () => hook.read().send())
 		expect(call.mock.calls[1]).toEqual(firstAttempt)
 		expect(call.mock.calls.every(([name]) => name === "send_to_topic")).toBe(true)
-		expect(hook.read().receipt?.status).toBe("accepted")
+		expect(hook.read().confirmation?.status).toBe("accepted")
 	} finally {
 		await hook.close()
 	}

@@ -267,6 +267,7 @@ export const TOPIC_CHAT_TOOLS_CASES: TopicChatToolsCase[] = [
 			findings: [
 				...TOPIC_CHAT_CONTEXT.findings,
 				{
+					findingId: "finding-1",
 					title: "Grinder deals this week",
 					url: "https://deals.example/grinders",
 					foundAt: new Date("2026-10-01"),

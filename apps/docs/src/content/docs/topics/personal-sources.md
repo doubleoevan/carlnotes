@@ -25,7 +25,7 @@ A link marked **Next brew** is waiting for review. When a link becomes a Finding
 1. [Connect your app](/docs/account/add-to-ai/).
 2. Ask **Send this chat to Carl**. The app writes a concise summary with your work, conclusions, open questions, and useful links. It does not paste the raw conversation.
 3. If you named no Topic, choose destinations in the Topic picker. Named Topics go straight to the send.
-4. Check the saved receipt and its linked Topics. A send to several Topics counts once.
+4. Check the saved confirmation and its linked Topics. A send to several Topics counts once.
 
 A send has a title of at most 200 characters, a summary of at most 2,000 Unicode characters, and at most ten public
 HTTP(S) links. When the connected app supplies a conversation URL, the full date, AI platform icon, and name in the expanded item link back to it with a launch icon. The reference stays encrypted and sender-only, outside matching and crawling. Apps that supply no URL show a plain platform label. CarlNotes never invents a URL or publishes a shared chat to obtain one. CarlNotes cannot

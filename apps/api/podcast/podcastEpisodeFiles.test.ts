@@ -1,9 +1,11 @@
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import * as storage from "@carlnotes/db/store"
+import * as analytics from "@carlnotes/server/analytics"
 import { Hono } from "hono"
 import * as viewerCounts from "../counts/viewerCounts"
 import { toSignedInApp } from "../testSession"
-import { toPodcastEpisodeAudioResponse } from "./podcastEpisodeFiles"
+import { toPlayToken } from "./playTokens"
+import { isFirstAudioRequest, toPodcastEpisodeAudioResponse } from "./podcastEpisodeFiles"
 import type { PodcastEpisodeRow } from "./podcastEpisodeRows"
 import * as episodeRows from "./podcastEpisodeRows"
 import { podcastEpisodesRoute } from "./podcastEpisodes"
@@ -62,4 +64,44 @@ test("JSON audio uses the existing access decision and listen rate limit", async
 	expect(count).toHaveBeenCalledTimes(1)
 	await app.request("/episodes/episode-1/audio.mp3", { ...init, method: "HEAD" })
 	expect(count).toHaveBeenCalledTimes(1)
+})
+
+test("an audio request is first if it has no range or starts at the first byte", () => {
+	expect(isFirstAudioRequest(undefined)).toBe(true)
+	expect(isFirstAudioRequest("bytes=0-")).toBe(true)
+	expect(isFirstAudioRequest("bytes=4096-")).toBe(false)
+})
+
+test("an MCP view's first audio request reports the play of the user its token names", async () => {
+	Bun.env.BETTER_AUTH_SECRET = "test-secret"
+	spyOn(storage, "toPodcastEpisodeAudioUrl").mockReturnValue(audioUrl)
+	spyOn(viewerCounts, "countWithinRateLimit").mockResolvedValue(undefined)
+	const topic = { id: "topic-1", visibility: "private" } as episodeRows.TopicRow
+	spyOn(episodeRows, "loadAccessiblePodcastEpisode").mockResolvedValue({ podcastEpisodeRow: episode, topic })
+	const trackEventSpy = spyOn(analytics, "trackEvent")
+
+	// the audio's url with a play token, requested with a range
+	const requestAudio = (userId: string | null, range: string) => {
+		const playToken = encodeURIComponent(toPlayToken({ podcastEpisodeId: "episode-1", userId }))
+		return podcastEpisodesRoute.request(`/episodes/episode-1/audio.mp3?play=${playToken}`, {
+			headers: { Range: range },
+		})
+	}
+
+	// the first request reports the play, and a seek and a visitor's token report nothing
+	await requestAudio("user-1", "bytes=0-")
+	await requestAudio("user-1", "bytes=4096-")
+	await requestAudio(null, "bytes=0-")
+	expect(trackEventSpy.mock.calls).toEqual([
+		[
+			"episode_played",
+			"user-1",
+			{ entryPoint: "mcp", topicId: "topic-1", isTopicPublic: false, episodeId: "episode-1" },
+		],
+	])
+
+	// a session's play saves a listen, which reports it instead
+	trackEventSpy.mockClear()
+	await toSignedInApp(podcastEpisodesRoute, "owner").request("/episodes/episode-1/audio.mp3")
+	expect(trackEventSpy).not.toHaveBeenCalled()
 })

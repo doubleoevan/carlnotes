@@ -3,60 +3,18 @@
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import { MCP_VIEW_META_KEY } from "@carlnotes/contracts/mcpViews"
 import { searchRequestPayload } from "@carlnotes/contracts/search"
-import type { CallToolResult } from "@modelcontextprotocol/server"
 import * as subscriptions from "../topic/subscriptions"
 import { toMcpToolContractIssues } from "./mcpContractTestFixtures"
 import * as mcpViewDataModule from "./mcpViewData"
 import * as results from "./results"
 import { CONNECT_ACCOUNT_TEXT } from "./results"
 import * as searchResults from "./searchResults"
-import type { ToolCaller } from "./toolCaller"
-import { registerTools } from "./tools"
-
-// a registered tool's title, description, and annotations, and its handler
-type RegisteredToolConfig = {
-	title?: string
-	description?: string
-	annotations?: { readOnlyHint?: boolean; destructiveHint?: boolean }
-}
-type RegisteredToolHandler = (toolArguments: Record<string, unknown>) => Promise<CallToolResult>
+import { type RegisteredToolHandler, toRegisteredTools, USER, VISITOR } from "./toolTestFixtures"
 
 // put the spies back after each test
 afterEach(() => {
 	mock.restore()
 })
-
-// the tools a caller gets, by name, each with its config and handler
-function toRegisteredTools(
-	toolCaller: ToolCaller,
-): Map<string, { config: RegisteredToolConfig; handler: RegisteredToolHandler }> {
-	// a fake server that keeps each registered tool by its name
-	const registeredTools = new Map<string, { config: RegisteredToolConfig; handler: RegisteredToolHandler }>()
-	const fakeMcpServer = {
-		registerTool: (toolName: string, config: RegisteredToolConfig, handler: RegisteredToolHandler) => {
-			registeredTools.set(toolName, { config, handler })
-			return {}
-		},
-		registerResource: () => ({}),
-	}
-	registerTools({
-		mcpServer: fakeMcpServer as unknown as Parameters<typeof registerTools>[0]["mcpServer"],
-		toolCaller,
-		routeTopicId: null,
-		clientAddress: null,
-	})
-	return registeredTools
-}
-
-// a visitor, and a user connected through an app
-const VISITOR: ToolCaller = { kind: "visitor", clientName: "test-app" }
-const USER: ToolCaller = {
-	kind: "user",
-	userId: "user-1",
-	plan: "free",
-	clientName: "test-app",
-	clientId: "test-client",
-}
 
 test.each([VISITOR, USER])("every tool has its directory title and safety hints for $kind", (toolCaller) => {
 	const tools = [...toRegisteredTools(toolCaller)].map(([name, { config }]) => ({ name, ...config }))
@@ -77,6 +35,38 @@ test.each([
 		...(name === "edit_topic" ? brokenConfig : {}),
 	}))
 	expect(toMcpToolContractIssues(tools).some((issue) => issue.startsWith("edit_topic:"))).toBe(true)
+})
+
+// the phrases edit_topic's description lists, which each broken description below keeps or drops on purpose
+const EDIT_TOPIC_PHRASES = "edit this topic, change the prompt, add a source, or change the schedule"
+
+test.each([
+	["names no Carl", `Change a CarlNotes topic with ${EDIT_TOPIC_PHRASES}.`, 'must name "Carl"'],
+	["names no CarlNotes", `Carl changes a topic with ${EDIT_TOPIC_PHRASES}.`, 'must name "CarlNotes"'],
+	["drops a phrase", "Carl changes a CarlNotes topic with edit this topic.", 'must name "change the prompt"'],
+	[
+		"asks for autonomous initiation",
+		`Carl changes a CarlNotes topic. Use it proactively with ${EDIT_TOPIC_PHRASES}.`,
+		"autonomous initiation",
+	],
+])("the directory check rejects a description that %s", (_label, description, expectedIssue) => {
+	// corrupt an actual registration while retaining the other tools
+	const tools = [...toRegisteredTools(VISITOR)].map(([name, { config }]) => ({
+		name,
+		...config,
+		...(name === "edit_topic" ? { description } : {}),
+	}))
+	const issues = toMcpToolContractIssues(tools).join("\n")
+	expect(issues).toContain("edit_topic: description")
+	expect(issues).toContain(expectedIssue)
+})
+
+test("a sentence that forbids autonomous initiation passes the directory check", () => {
+	const tools = [...toRegisteredTools(VISITOR)].map(([name, { config }]) => ({ name, ...config }))
+	expect(tools.find(({ name }) => name === "suggest_topics")?.description).toContain(
+		"Never call it on your own initiative",
+	)
+	expect(toMcpToolContractIssues(tools)).toEqual([])
 })
 
 test("the directory check rejects unexpected tools", () => {
@@ -164,7 +154,7 @@ test("each MCP view tool returns its structured result and text, with or without
 	expect(loadSearchMcpViewDataSpy).toHaveBeenCalledTimes(1)
 })
 
-test("every tool that names an MCP view names one of the four", () => {
+test("every tool that names an MCP view names one of the six", () => {
 	const mcpViewToolNames = [...toRegisteredTools(VISITOR)]
 		.filter(([, { config }]) => (config as { _meta?: { ui?: { resourceUri?: string } } })._meta?.ui?.resourceUri)
 		.map(([toolName, { config }]) => [
@@ -179,5 +169,8 @@ test("every tool that names an MCP view names one of the four", () => {
 		["create_topic", "ui://carlnotes/topic.html?v=9"],
 		["send_to_topic", "ui://carlnotes/topic.html?v=9"],
 		["suggest_topics", "ui://carlnotes/suggest-topics.html?v=9"],
+		["read_updates", "ui://carlnotes/updates.html?v=9"],
+		["start_scan", "ui://carlnotes/scan.html?v=9"],
+		["read_scan_status", "ui://carlnotes/scan.html?v=9"],
 	])
 })

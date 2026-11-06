@@ -45,7 +45,7 @@ reviewer's decision or revise the submitted tool surface before submission. This
 that the transport, annotations, or privacy tests failed.
 
 The privacy policy describes collection, use/storage, sharing, retention, contact, receiving, imports, model/provider
-processing, revocation, deletion, and retained metadata. Review the thirteen-tool inventory, OAuth flow, policy URL,
+processing, revocation, deletion, and retained metadata. Review the nineteen-tool inventory, OAuth flow, policy URL,
 and documentation URL against the live submission form before submitting manually. Production flags remain off
 until controlled forwarding and the operator checklist are complete.
 
@@ -67,6 +67,29 @@ Use the test accounts chosen by the operator. Keep their addresses in the privat
 On November 3, 2026, the restarted development stack accepted controlled Gmail forwards at `carl-dev@updates.carlnotes.com`. Receiver DKIM and DMARC passed. Filing created one sender-private item per matching Topic for one shared charge, and Carl replied with numbered Topic links using the same From/Reply-To mailbox. A replay created no duplicate.
 
 Live rich replies exposed a plain-text alternative that lost quote markers. After the parser fix, new-link replies to both a digest and filing confirmation stored only authored content and the new link. Linkless replies quoting public links produced no item, charge, or reply. Existing review data and the synthetic regression/repeat items remain for manual inspection. The controlled fixtures do not verify Outlook, unknown-account guidance, Free-plan upgrade mail, or production rollout.
+
+## Analytics
+
+PostHog reports Personal sources with ids, counts, and flags. No event holds a title, a summary, a link, an email
+address, a Topic name, or an API key's label or secret.
+
+| Question | Event |
+| --- | --- |
+| What arrived | `personal_source_entry_received`, by `origin`: `send`, `email`, or `import` |
+| What was turned away | `personal_sources_send_rejected`, `personal_sources_email_unfiled`, and `personal_sources_quota_reached` |
+| Who emails without an account | `personal_sources_email_unregistered`, a visitor event with no address |
+| What a sender removed | `personal_source_entry_deleted` and `source_removed` |
+| What a sender connected | `source_added` with `sourceType` `ai_agent`, `ai_agent_api_key_created`, and `ai_agent_api_key_revoked` |
+| What a sender disconnected | `ai_agent_disconnected` |
+| Whether the link nudge helps | `personal_sources_nudge_dismissed` |
+| Whether sends find a Topic | `topics_suggested` with `suggestedCount` |
+| Whether summaries build | `personal_sources_context_built` with `entryCount` |
+| Whether Scans use the material | `scan_completed` with `personalFindingsKept` and `privateAnnotationsSaved` |
+
+Events from an API key send have `entryPoint` `api`. Events from the worker have `entryPoint` `worker`.
+
+An MCP view can reach the server only through a tool call or its audio request. A Finding opened in an MCP view and a
+podcast episode finished there report nothing.
 
 ## Rollback
 

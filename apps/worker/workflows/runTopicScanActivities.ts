@@ -1,8 +1,9 @@
 // the Scan pipeline as three activities: ingest, review, and the write that completes the Scan
 
 import { toTopicPath } from "@carlnotes/contracts/seo"
-import type { StoredSourceResult } from "@carlnotes/contracts/topics"
+import type { StoredScanSourceResults, StoredSourceResult } from "@carlnotes/contracts/topics"
 import { db } from "@carlnotes/db"
+import { findingPersonalAnnotations } from "@carlnotes/db/schema/personalSources"
 import { findings, resources, scans } from "@carlnotes/db/schema/scans"
 import { topics } from "@carlnotes/db/schema/topics"
 import { users } from "@carlnotes/db/schema/users"
@@ -74,7 +75,11 @@ export async function ingestForScan(scanId: string, topicId: string): Promise<In
 		withHeartbeat(budget, async () => {
 			// every later stage charges into the budget this returns ingestion runs every Source at once
 			const { sourceOutcomes, summary } = await ingestFromTopicSources({ topicId, budget, litellmApiKey, scanId })
-			await recordScanProgress(scanId, budget)
+			await recordScanProgress(scanId, budget, {
+				sources: summary.sourceResults,
+				earlierKeptCount: 0,
+				earlierFoundCount: 0,
+			})
 			// drop the fetched page bodies and each Source's own Resources before the result crosses the activity boundary
 			return {
 				resources: summary.resources.map(({ fetchedBody, ...resource }) => resource),
@@ -139,7 +144,7 @@ export async function finishScan(
 	// what the Scan kept, read once from its own Findings instead of from the review, so the kept count and each
 	// Source's kept count agree
 	const keptFindingRows = await db
-		.select({ url: resources.url })
+		.select({ url: resources.url, personalSourceScoreBonus: findings.personalSourceScoreBonus })
 		.from(findings)
 		.innerJoin(resources, eq(resources.id, findings.resourceId))
 		.where(eq(findings.scanId, scanId))
@@ -207,6 +212,8 @@ export async function finishScan(
 		trigger: finishedScan.isManual ? "manual" : "scheduled",
 		findingsKept: finishedScan.keptCount,
 		status: finishedScan.status,
+		personalFindingsKept: keptFindingRows.filter(({ personalSourceScoreBonus }) => personalSourceScoreBonus > 0).length,
+		privateAnnotationsSaved: await countScanPrivateAnnotations(scanId),
 	})
 	if (ingestResult.status === "succeeded" && (await isFirstSucceededScan(ownerId))) {
 		trackEvent("first_scan_completed", ownerId, scanAnalyticsProperties)
@@ -246,9 +253,14 @@ export async function stopScan(scanId: string): Promise<void> {
  * Record what a stage spent and what the Scan has kept, as that stage ends. A Scan that runs to the end overwrites
  * this with its final totals, but a Scan the user stops never gets that far: the workflow drops its cancelled stage's
  * return value, and saves the row before the stage has finished. Saving from inside the stage is what
- * gets the real spend and the real kept count onto a stopped Scan.
+ * gets the real spend and the real kept count onto a stopped Scan. Ingest also saves each Source's results in
+ * ingestSourceResults.
  */
-async function recordScanProgress(scanId: string, budget: Budget): Promise<void> {
+async function recordScanProgress(
+	scanId: string,
+	budget: Budget,
+	ingestSourceResults?: StoredScanSourceResults,
+): Promise<void> {
 	// the Findings are the count, the same source a Scan that runs to the end counts from
 	const [keptRow] = await db.select({ count: count() }).from(findings).where(eq(findings.scanId, scanId))
 	await db
@@ -260,6 +272,7 @@ async function recordScanProgress(scanId: string, budget: Budget): Promise<void>
 			reused: budget.fetchCounts.reusedCount,
 			revalidated: budget.fetchCounts.revalidatedCount,
 			fetched: budget.fetchCounts.fetchedCount,
+			ingestSourceResults,
 		})
 		.where(eq(scans.id, scanId))
 }
@@ -356,6 +369,16 @@ async function requireScan(scanId: string): Promise<Scan> {
 		throw new Error(`scan ${scanId} no longer exists`)
 	}
 	return scan
+}
+
+// how many sender-only annotations the Scan's Findings hold
+async function countScanPrivateAnnotations(scanId: string): Promise<number> {
+	const [annotationCountRow] = await db
+		.select({ count: count() })
+		.from(findingPersonalAnnotations)
+		.innerJoin(findings, eq(findings.id, findingPersonalAnnotations.findingId))
+		.where(eq(findings.scanId, scanId))
+	return annotationCountRow?.count ?? 0
 }
 
 // whether the Scan that just finished is this owner's first Scan to succeed

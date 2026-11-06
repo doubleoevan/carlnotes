@@ -15,6 +15,7 @@ import { deletePodcastFeedCache } from "@carlnotes/db/podcastFeedCache"
 import { podcastEpisodeChapters, podcastEpisodes } from "@carlnotes/db/schema/podcast"
 import { topics } from "@carlnotes/db/schema/topics"
 import { removePodcastEpisode } from "@carlnotes/pipeline/podcast/removePodcastEpisode"
+import { trackEvent } from "@carlnotes/server/analytics"
 import { zValidator } from "@hono/zod-validator"
 import { and, eq } from "drizzle-orm"
 import { Hono } from "hono"
@@ -30,6 +31,7 @@ import { toTopicGateResponse } from "../topic/helpers"
 import { loadPodcastEpisodePage, loadSeasonPodcastEpisodes } from "./helpers"
 import { readPlayToken } from "./playTokens"
 import {
+	isFirstAudioRequest,
 	toPodcastEpisodeAudioResponse,
 	toPodcastEpisodeChaptersResponse,
 	toPodcastEpisodeTranscriptResponse,
@@ -39,6 +41,7 @@ import {
 	loadAccessiblePodcastEpisode,
 	loadPublishedPodcastEpisode,
 	loadPublishedPodcastEpisodeById,
+	toPodcastEpisodeAnalyticsProperties,
 } from "./podcastEpisodeRows"
 import { loadPodcastEpisode } from "./podcastEpisodeShapes"
 
@@ -149,6 +152,14 @@ export const podcastEpisodesRoute = new Hono<AppEnv>()
 				rateLimitName: "podcast-listen",
 				count: () => countPodcastEpisodeListen(requestSender, podcastEpisodeId),
 			})
+
+			// a play token's first audio request reports the play
+			if (playTokenCaller?.userId && isFirstAudioRequest(context.req.header("range"))) {
+				trackEvent("episode_played", playTokenCaller.userId, {
+					entryPoint: "mcp",
+					...toPodcastEpisodeAnalyticsProperties(accessiblePodcastEpisode.topic, podcastEpisodeId),
+				})
+			}
 		}
 		return toPodcastEpisodeAudioResponse(context, accessiblePodcastEpisode.podcastEpisodeRow)
 	})

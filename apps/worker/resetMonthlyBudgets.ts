@@ -2,31 +2,31 @@
 // a platform cron runs the job once a day shortly after midnight utc
 
 import { sizeConnectionPool } from "@carlnotes/db"
-import { runWithClaim } from "@carlnotes/db/claim"
+import { runWithJobLease } from "@carlnotes/db/jobLease"
 import { resetMonthlyBudgets } from "@carlnotes/models/litellm"
 import { shutdownAnalytics } from "@carlnotes/server/analytics"
 import { reportError, shutdownMonitoring, startMonitoring } from "@carlnotes/server/monitoring"
 
-// the reset's claim, so two overlapping resets cannot replace a key twice
-const MONTHLY_BUDGET_RESET_CLAIM = "monthly-budget-reset"
+// the reset's job name, so two overlapping resets cannot replace a key twice
+const MONTHLY_BUDGET_RESET_JOB = "monthly-budget-reset"
 
 // report the reset's errors to Sentry, then size the connection pool from the database
 startMonitoring()
 await sizeConnectionPool()
 
-// run one reset under the claim and log what the reset did
+// run one reset under the lease and log what the reset did
 try {
-	const budgetResetSummary = await runWithClaim({
-		claimName: MONTHLY_BUDGET_RESET_CLAIM,
+	const budgetResetSummary = await runWithJobLease({
+		jobName: MONTHLY_BUDGET_RESET_JOB,
 		runTask: (signal) => resetMonthlyBudgets({ signal }),
 	})
 	console.log(
 		budgetResetSummary
 			? `monthly budget reset: ${budgetResetSummary.replacedCount} keys replaced, ${budgetResetSummary.failedCount} failed`
-			: "monthly budget reset: another reset holds the claim, so this one did nothing",
+			: "monthly budget reset: another reset holds the lease, so this one did nothing",
 	)
 } catch (error) {
-	// report a reset that failed or lost its claim, and exit non-zero so the cron run shows as failed.
+	// report a reset that failed or lost its lease, and exit non-zero so the cron run shows as failed.
 	// the next day's reset tries every key still due
 	console.error("monthly budget reset failed", error)
 	reportError(error, "billing")

@@ -5,6 +5,7 @@
 	"type": "module",
 	"exports": {
 		"./tokens.css": "./tokens.css",
+		"./mcpViewTokens.css": "./mcpViewTokens.css",
 		"./uniwind.css": "./uniwind.css",
 		"./classNames": "./classNames.ts",
 		"./*": "./*.ts",

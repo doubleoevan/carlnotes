@@ -65,9 +65,9 @@ export function PageScreen({
 					{/* the same heading and primary action as the web page */}
 					{header ?? (
 						<View className="flex-row flex-wrap items-center justify-between gap-3">
-							<View className="flex-row items-center gap-2">
+							<View className="max-w-full flex-row items-center gap-2">
 								{icon && <Icon as={icon} className="size-6 text-foreground" />}
-								<Text accessibilityRole="header" className="font-display text-2xl">
+								<Text accessibilityRole="header" className="shrink font-display text-2xl">
 									{title}
 								</Text>
 								{titleBadge}

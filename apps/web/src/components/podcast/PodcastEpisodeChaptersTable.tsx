@@ -169,7 +169,7 @@ function PodcastEpisodeChapterRow({
 				{chapterCells}
 				{/* the topic finding's summary. the cell takes half the table and truncates the title */}
 				<td className="relative w-1/2 max-w-0 py-2">
-					<TopicFindingSummary resource={topicFinding} isResourceKindIconShown={false} />
+					<TopicFindingSummary resource={topicFinding} />
 					{/* the topic finding's note */}
 					<ChapterTopicFindingNote
 						podcastEpisode={podcastEpisode}

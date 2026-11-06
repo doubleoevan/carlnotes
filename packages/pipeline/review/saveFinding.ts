@@ -98,7 +98,7 @@ export async function upsertFinding({
 	// upsert the topic finding. postgres returns xmax as zero for an inserted row and non-zero for an updated row
 	const topicResourceRef = { topicId, resourceId: resource.id }
 	const findingRow = await db.transaction(async (transaction) => {
-		// serialize privacy checks with entry receipt and deletion
+		// serialize privacy checks with entry confirmation and deletion
 		await lockPersonalSourcesTopic(transaction, topicId)
 		for (const context of personalSources ?? []) {
 			if (!(await isPersonalSourcesContextCurrent(context, transaction))) {

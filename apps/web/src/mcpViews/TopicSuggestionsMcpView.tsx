@@ -7,16 +7,15 @@ import {
 	topicSuggestionsResult,
 	toTopicSuggestionsText,
 } from "@carlnotes/contracts/topicSuggestions"
-import { ArrowLeft, Plus } from "lucide-react"
+import { Plus } from "lucide-react"
 import { useId, useRef, useState } from "react"
 import { CoffeeLoading } from "@/components/branding/CoffeeLoading"
+import { BackButton } from "@/components/common/BackButton"
 import { Pagination } from "@/components/common/Pagination"
 import { Button } from "@/components/primitives/button"
 import { SearchResultRow } from "@/components/search/SearchResultRow"
 import { TopicSearchResultDetails } from "@/components/search/TopicSearchResultDetails"
 import { TagPill } from "@/components/topic/TagPicker"
-import { McpViewBrand } from "./McpViewBrand"
-import { McpViewPodcastPlayer } from "./McpViewPodcastPlayer"
 import { TopicMcpView } from "./TopicMcpView"
 import { TopicSuggestionsSearch } from "./TopicSuggestionsSearch"
 import { useTopicSuggestionsMcpView } from "./useTopicSuggestionsMcpView"
@@ -62,8 +61,8 @@ function TopicPicker({
 	const [draftHeight, setDraftHeight] = useState<number | null>(null)
 	const selectedCount = state.selectedTopics.size
 	const selectedTopics = [...state.selectedTopics]
-	if (state.receipt) {
-		return <TopicMcpView mcpViewTopicResult={state.receipt} editTopicArguments={null} />
+	if (state.confirmation) {
+		return <TopicMcpView mcpViewTopicResult={state.confirmation} editTopicArguments={null} />
 	}
 	if (state.draft) {
 		return (
@@ -71,10 +70,7 @@ function TopicPicker({
 				className="mx-auto flex w-full max-w-3xl min-h-0 flex-col gap-3"
 				style={draftHeight ? { height: draftHeight } : undefined}
 			>
-				<Button variant="ghost" className="shrink-0 self-start" onClick={state.closeDraft}>
-					<ArrowLeft aria-hidden className="size-4" />
-					Back to topics
-				</Button>
+				<BackButton label="Back to topics" className="shrink-0 self-start" onClick={state.closeDraft} />
 				<TopicMcpView
 					mcpViewTopicResult={state.draft}
 					editTopicArguments={null}
@@ -93,7 +89,6 @@ function TopicPicker({
 			<div className="space-y-7">
 				{/* the content the reader is choosing destinations for */}
 				<header className="space-y-2">
-					<McpViewBrand />
 					<h1 className="font-display text-3xl">Where should this go?</h1>
 					<p className="text-muted-foreground break-words text-base sm:text-lg">
 						{input.title} · {toLinkCountText(input.links.length)}
@@ -205,8 +200,6 @@ function TopicPicker({
 					</Button>
 				</footer>
 			</div>
-			{/* keep hidden audio outside the content spacing and retain visible player clearance */}
-			<McpViewPodcastPlayer />
 		</section>
 	)
 }

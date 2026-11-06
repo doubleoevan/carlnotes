@@ -4,13 +4,24 @@ import { db } from "@carlnotes/db"
 import { bookmarks, findings } from "@carlnotes/db/schema/scans"
 import { teamMembers } from "@carlnotes/db/schema/teams"
 import { teamTopics } from "@carlnotes/db/schema/teamTopics"
-import type { topics } from "@carlnotes/db/schema/topics"
+import { topics } from "@carlnotes/db/schema/topics"
 import { users } from "@carlnotes/db/schema/users"
 import { and, eq, inArray, or, sql } from "drizzle-orm"
-import { loadUserAccess } from "../authorization"
+import { isAllowed, loadUserAccess } from "../authorization"
 import { attachTopicFindingFaviconPaths } from "../favicons"
 import { type FindingPageWindow, loadTopicFindings } from "./findings"
 import { topicSubscriptionStartDate } from "./subscriptionStartDates"
+
+/**
+ * Loads the topic, or null if it is missing or the user may not see it.
+ */
+export async function loadViewableTopic(
+	userId: string | null,
+	topicId: string,
+): Promise<typeof topics.$inferSelect | null> {
+	const [topic] = await db.select().from(topics).where(eq(topics.id, topicId))
+	return topic && (await isAllowed(userId, "topic:view", topic)) ? topic : null
+}
 
 // attach the bookmarks from the team that owns the topic to its topic findings
 async function attachTeamBookmarks(

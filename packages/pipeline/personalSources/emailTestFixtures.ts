@@ -1,13 +1,13 @@
 // Each email test controls one isolated, synthetic account and delivery.
 import { mock, spyOn } from "bun:test"
 import type { PersonalSourcesEmailReply } from "@carlnotes/contracts/personalSourcesEmail"
-import * as claims from "@carlnotes/db/claim"
 import { restoreConnectionPool, stubConnectionPool, toTableRow } from "@carlnotes/db/connectionPoolStub"
-import * as receipts from "@carlnotes/db/personalSourcesEmailReceipts"
+import * as jobLease from "@carlnotes/db/jobLease"
+import * as confirmations from "@carlnotes/db/personalSourcesEmailConfirmations"
 import * as allowance from "@carlnotes/db/personalSourcesQuota"
 import * as receiving from "@carlnotes/db/personalSourcesSend"
 import * as limiter from "@carlnotes/db/resendRateLimit"
-import { personalSourcesEmailReceipts } from "@carlnotes/db/schema/personalSources"
+import { personalSourcesEmailConfirmations } from "@carlnotes/db/schema/personalSources"
 import * as replies from "@carlnotes/emails/personalSourcesEmail"
 import { FIXTURE_EMAIL_ID, personalSourcesEmailFixture } from "@carlnotes/server/personalSourcesEmailTestFixtures"
 import { encryptPrivateText } from "@carlnotes/server/privateText"
@@ -16,7 +16,7 @@ import { saveEnvSettings } from "@carlnotes/server/savedEnvSettings"
 import * as routing from "./emailTopic"
 import * as work from "./work"
 
-type Destination = receipts.AccountEmailDestination
+type Destination = confirmations.AccountEmailDestination
 const restoreEnvSettings = saveEnvSettings(["BETTER_AUTH_SECRET", "CHAT_TEXT_KEY", "RESEND_FROM_EMAIL"])
 
 /** Installs the account, storage, and provider stubs for one synthetic delivery. */
@@ -26,11 +26,11 @@ export function stubPersonalSourcesEmail(): Destination {
 	Bun.env.BETTER_AUTH_SECRET = "fixture-auth-secret"
 	Bun.env.CHAT_TEXT_KEY = Buffer.alloc(32, 9).toString("base64")
 	const destination = {
-		receipt: {
-			id: "receipt",
+		confirmation: {
+			id: "confirmation",
 			emailId: FIXTURE_EMAIL_ID,
 			userId: "owner",
-			senderDigest: receipts.toPersonalSourcesSenderDigest("owner@example.com"),
+			senderDigest: confirmations.toPersonalSourcesSenderDigest("owner@example.com"),
 			state: "processing",
 			outcome: null,
 		},
@@ -38,27 +38,29 @@ export function stubPersonalSourcesEmail(): Destination {
 		reply: null,
 	} as Destination
 	stubConnectionPool(({ text }) =>
-		text.includes('from "personal_source_email_receipts"')
-			? [toTableRow(personalSourcesEmailReceipts, destination.receipt)]
+		text.includes('from "personal_source_email_confirmations"')
+			? [toTableRow(personalSourcesEmailConfirmations, destination.confirmation)]
 			: text.includes('from "personal_source_entries"')
 				? [["entry"], ["entry-second"]]
 				: [["entry"]],
 	)
-	spyOn(claims, "runWithClaim").mockImplementation(async ({ runTask }) => runTask(new AbortController().signal))
-	spyOn(receipts, "loadPersonalSourcesEmailDestination").mockImplementation(async () => destination)
-	spyOn(receipts, "isPersonalSourcesEmailSenderCurrent").mockResolvedValue(true)
-	spyOn(receipts, "startPersonalSourcesEmailAttempt").mockResolvedValue(1)
+	spyOn(jobLease, "runWithJobLease").mockImplementation(async ({ runTask }) => runTask(new AbortController().signal))
+	spyOn(confirmations, "loadPersonalSourcesEmailDestination").mockImplementation(async () => destination)
+	spyOn(confirmations, "isPersonalSourcesEmailSenderCurrent").mockResolvedValue(true)
+	spyOn(confirmations, "startPersonalSourcesEmailAttempt").mockResolvedValue(1)
 	spyOn(allowance, "readPersonalSourcesAllowance").mockResolvedValue({
 		isAvailable: true,
 		day: "2026-11-04",
 		now: new Date("2026-11-04T14:00:00Z"),
 		resetAt: "2026-11-05T00:00:00Z",
 	})
-	spyOn(receipts, "finishPersonalSourcesEmailReceipt").mockResolvedValue()
-	spyOn(receipts, "retryPersonalSourcesEmailReceipt").mockResolvedValue(30_000)
-	spyOn(receipts, "savePersonalSourcesEmailReply").mockImplementation(async (_transaction, _id, reply, entryId) => {
-		setReply(destination, reply, entryId)
-	})
+	spyOn(confirmations, "finishPersonalSourcesEmailConfirmation").mockResolvedValue()
+	spyOn(confirmations, "retryPersonalSourcesEmailConfirmation").mockResolvedValue(30_000)
+	spyOn(confirmations, "savePersonalSourcesEmailReply").mockImplementation(
+		async (_transaction, _id, reply, entryId) => {
+			setReply(destination, reply, entryId)
+		},
+	)
 	spyOn(limiter, "waitForResendSlot").mockResolvedValue()
 	spyOn(provider, "fetchReceivedPersonalSourcesEmail").mockResolvedValue({
 		status: "received",
@@ -74,7 +76,7 @@ export function stubPersonalSourcesEmail(): Destination {
 		title: "Coffee",
 		queuedLinkCount: 1,
 		topic: { id: "topic", name: "Coffee", url: "https://carlnotes.com/topics/topic" },
-		receipts: [
+		confirmations: [
 			{
 				topic: { id: "topic", name: "Coffee", url: "https://carlnotes.com/topics/topic" },
 				entryId: "entry",
@@ -105,10 +107,10 @@ export function setReply(
 	reply: PersonalSourcesEmailReply,
 	entryId: string | null = null,
 ): void {
-	destination.receipt.outcome = reply.kind
-	destination.receipt.replyStartedAt = new Date()
+	destination.confirmation.outcome = reply.kind
+	destination.confirmation.replyStartedAt = new Date()
 	destination.reply = {
-		receiptId: "receipt",
+		confirmationId: "confirmation",
 		userId: "owner",
 		entryId,
 		encryptedPayload: encryptPrivateText(JSON.stringify(reply)),

@@ -7,12 +7,12 @@
 
 `personalSourcesAiAgentRecommendations.ts` derives connected-app suggestions from the owner's live accepted sends in bounded pages. It matches description words locally and persists no index, content copy, or routing counter.
 
-`personalSourcesAiAgentSetup.ts` adds an empty receiving Source from a verified live connection under receipt's lock order.
-It also reads and dismisses the latest consent nudge without importing content or storing assistant history.
+`personalSourcesAiAgentSetup.ts` adds an empty receiving Source from a verified live connection under confirmation's
+lock order. It also reads and dismisses the latest consent nudge without importing content or storing assistant history.
 
 `personalSourcesEmailSetup.ts` returns shared-address manual-forwarding guidance and receiving entitlement.
-`personalSourcesEmailReceipts.ts` stores ID-only durable handoffs, bounded retries, terminal refusals, and sweep recovery.
-`resendRateLimit.ts` shares one provider slot between inbound retrieval and the existing outbound email sends.
+`personalSourcesEmailConfirmations.ts` stores ID-only durable handoffs, bounded retries, terminal refusals, and sweep
+recovery. `resendRateLimit.ts` shares one provider slot between inbound retrieval and the existing outbound email sends.
 
 `personalSourcesImports.ts` revalidates selected transcripts and commits an entire batch with permanent content fingerprints.
 `personalSourcesContext.ts` reads bounded live excerpts and commits encrypted summaries only for the current revision.
@@ -22,13 +22,15 @@ Only canonical URL fingerprints and positions live in queue metadata. Private se
 `quotas.ts` includes `personal_source_distillation_spends` in monthly totals. Unknown attempts keep a conservative cost estimate.
 
 `personalSourcesReceive.ts` accepts encrypted content, links, counters, and retry metadata in one transaction.
-`personalSourcesLocks.ts` locks the sender before the Topic when filing. Competing sends and access changes wait,
-while a Scan can reference both rows. `personalSourcesQuota.ts` reads
-the sum of accepted AI sends and email per UTC day against one shared 200-send ceiling, including existing origin rows. `personalSourcesLifecycle.ts` owns deletion, deadline filters, and context invalidation.
-`personalSourceEntries.ts` bounds sender-only pages by entry count and ciphertext size. Numbered five-item pages derive boundaries from receipt IDs, dates, and byte sizes and decrypt only the selected page; existing cursor reads stay compatible; `personalSources.ts` reads live counts
-and concrete connection state. `aiAgentConnections.ts` derives OAuth connections from existing grants, and
-`aiAgentApiKeys.ts` creates, verifies, lists, and revokes digest-only send credentials. The development persistence
-smoke lives in `apps/api/personalSources/` and runs through `bun run smoke:personal-sources`.
+`personalSourcesLocks.ts` locks the sender before the Topic when filing. Competing sends and access changes wait, while
+a Scan can reference both rows. `personalSourcesQuota.ts` reads the sum of accepted AI sends and email per UTC day
+against one shared 200-send ceiling, including existing origin rows. `personalSourcesLifecycle.ts` owns deletion,
+deadline filters, and context invalidation. `personalSourceEntries.ts` bounds sender-only pages by entry count and
+ciphertext size. Numbered five-item pages derive boundaries from confirmation IDs, dates, and byte sizes and decrypt
+only the selected page; existing cursor reads stay compatible; `personalSources.ts` reads live counts and concrete
+connection state. `aiAgentConnections.ts` derives OAuth connections from existing grants, and `aiAgentApiKeys.ts`
+creates, verifies, lists, and revokes digest-only send credentials. The development persistence smoke lives in
+`apps/api/personalSources/` and runs through `bun run smoke:personal-sources`.
 
 Personal sources migrations establish the existing Topic/Source composite unique keys before creating the Personal sources tables.
 The new context table uses an inline composite unique constraint so its foreign keys can be created in the same
@@ -42,7 +44,7 @@ and `@carlnotes/contracts`, with `drizzle-orm` and `@neondatabase/serverless`.
   (scans, resources, findings, and the finding markers), `topicEmailSends.ts` (the emails a Topic sent), `teams.ts`,
   `teamTopics.ts` (the topics shared into a team beyond its owning team), `invites.ts`, `chat.ts`, `notes.ts`,
   `podcast.ts`, `billing.ts` (each user's one billing subscription and the provider that bills it), `releases.ts`,
-  `claims.ts` (the claims' lease rows), `storage.ts` (favicons and the pending object deletions),
+  `jobLeases.ts` (each job's lease row), `storage.ts` (favicons and the pending object deletions),
   `mobileMinimumVersions.ts` (the minimum app version of each platform), `reports.ts` (content reports), `userBlocks.ts`
   (the users a user blocked), `pushDevices.ts` (each phone's Expo push token, bound to the session that registered it so
   ending the session or closing the account deletes it, and the push sends the push service accepted, one per event,
@@ -108,12 +110,12 @@ and `@carlnotes/contracts`, with `drizzle-orm` and `@neondatabase/serverless`.
   never fails a request.
 - `memoryRateLimitWindows.ts` — the rate limit windows a process counts in memory while Redis cannot count them,
   bounded by expiry and by a limit of 10,000 keys, the oldest evicted first. A memory count is never written to Redis.
-- `claim.ts` — `runWithClaim` runs the sweep and the budget reset under a database-level claim.
-  The claim is a lease row in `claims`, keyed by the claim's name, taken in one statement that inserts the row or
+- `jobLease.ts` — `runWithJobLease` runs the sweep and the budget reset under a job lease.
+  The lease is a row in `job_leases`, keyed by the job's name, taken in one statement that inserts the row or
   takes over an expired one. The run renews the two-minute lease every 30 seconds by the database clock, and deletes
   its own row when the task ends, however it ends. No transaction stays open between statements.
   A renewal that finds the lease expired or taken aborts the signal the task receives, and the run rejects with a
-  `ClaimLostError`. A process that dies leaves a lease that expires on its own.
+  `JobLeaseLostError`. A process that dies leaves a lease that expires on its own.
   A sweep or reset that starts while another run's lease is live does nothing and returns null.
 - `quotas.ts` — the derived per-user limits, and `loadUserAccess`, the one read of a user's role, plan, and budget
   override, which the api and the worker share.
@@ -188,11 +190,12 @@ and `@carlnotes/contracts`, with `drizzle-orm` and `@neondatabase/serverless`.
 - Tests: `bun test packages/db`; `*.smoke.ts` run under `doppler run`.
 
 `authorization.ts` owns the shared capability gate. `topicPermissions.ts` and `findingPermissions.ts` supply its
-existing visibility, subscription, and collection grant rules; the API keeps compatibility exports. `personalSourcesAuthority.ts` adds the
-sender isolation within normal Topic edit authority and preserves cleanup after downgrade.
-`schema/personalSources.ts` stores encrypted Personal sources items, derived context and lasting activation, queue claims, retry
-identities, daily receipt counters, API-key digests, encrypted private annotations and pending replies, durable mail receipts, and
-summarization spend. Composite references keep each entry's Source, Topic, and sender consistent.
+existing visibility, subscription, and collection grant rules; the API keeps compatibility exports.
+`personalSourcesAuthority.ts` adds the sender isolation within normal Topic edit authority and preserves cleanup after
+downgrade. `schema/personalSources.ts` stores encrypted Personal sources items, derived context and lasting activation,
+queue claims, retry identities, daily confirmation counters, API-key digests, encrypted private annotations and pending
+replies, durable mail confirmations, and summarization spend. Composite references keep each entry's Source, Topic, and
+sender consistent.
 
 `store.ts` exports the podcast audio URL lifetime beside its signer so the API reports the same expiry it signs.
 
@@ -200,8 +203,12 @@ summarization spend. Composite references keep each entry's Source, Topic, and s
 
 `personalSourcesMigration.ts` assigns legacy Sources to their original sender and encrypts legacy generated explanations/reports before clearing shared text. `db:migrate` runs it after generated schema migrations. `findingPersonalAnnotations.ts` reads annotations by authenticated sender and current Finding visibility. Context and receiving Source identity are per (Topic, sender); edit authority permits contributions but never widens private reads.
 
-Email receipts retain replay identity and temporary encrypted reply snapshots. `personalSourcesEmailChoices` stores provider/thread references and encrypted Topic choices only, without email bodies. Sender-owned choices support same-thread number/name replies, disappear after successful selection, and cascade on account deletion.
+Email confirmations retain replay identity and temporary encrypted reply snapshots. `personalSourcesEmailChoices` stores
+provider/thread references and encrypted Topic choices only, without email bodies. Sender-owned choices support
+same-thread number/name replies, disappear after successful selection, and cascade on account deletion.
 
-`personalSourceEntries.ts` also reads bounded waiting links for a send receipt after Topic authority, exact entry/Topic/sender matching, send-origin, and retained-entry checks. It reuses durable link outcomes and stored page titles.
+`personalSourceEntries.ts` also reads bounded waiting links for a send confirmation after Topic authority, exact
+entry/Topic/sender matching, send-origin, and retained-entry checks. It reuses durable link outcomes and stored page
+titles.
 
 Personal sources items, private summaries, and annotations have no automatic expiry. Their content remains encrypted until explicit deletion. Released read contracts retain nullable expiry fields as null. Optional conversation URLs survive the MCP picker outside matching and open from the shared AI sender label; missing references remain plain labels.

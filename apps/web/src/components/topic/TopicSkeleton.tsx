@@ -9,9 +9,10 @@ import {
 	DASHED_ROW_CLASS,
 	INFO_CARD_CLASS,
 	INFO_CARD_SECTIONS_CLASS,
+	RANK_SLOT_CLASS,
 	RESOURCE_LIST_CARD_CLASS,
 } from "@/lib/styleClasses"
-import { ResourceSkeleton } from "./TopicFeedSkeleton"
+import { ChapterPillSkeleton, ExpanderSkeleton, ResourceSkeleton } from "./TopicFeedSkeleton"
 
 // placeholder keys for the skeleton's chapter rows, finding rows, podcast episode rows, and history rows
 const CHAPTER_SKELETONS = ["c1", "c2", "c3"]
@@ -23,9 +24,6 @@ const SCAN_SKELETONS = ["s1", "s2"]
 const INFO_SKELETONS = ["owner", "prompt", "notes"]
 const SETTINGS_SKELETONS = ["frequency", "findings", "sources", "podcast"]
 
-// the slot that a chapter row's number sits in
-const CHAPTER_NUMBER_SLOT_CLASS = "absolute top-0 left-0 grid size-11 place-items-center sm:top-1.5 sm:size-8"
-
 /**
  * The loading state for the topic below the static button row, with the header, player, findings, and cards.
  */
@@ -33,19 +31,18 @@ export function TopicSkeleton({ topicTitle }: { topicTitle?: string }) {
 	return <SharedTopicSkeleton topicTitle={topicTitle} elements={TOPIC_SKELETON_ELEMENTS} />
 }
 
-// retain the browser's title, byline, and unread count above the shared section composition
+// the Topic's title and byline above the shared sections
 function TopicSkeletonHeader({ topicTitle }: { topicTitle?: string }) {
 	return (
 		<>
-			<div className="mt-6 flex items-start justify-between gap-3">
+			<div className="mt-3">
 				{topicTitle ? (
 					<h1 className="font-display min-w-0 text-2xl leading-tight">{topicTitle}</h1>
 				) : (
-					<div aria-hidden="true" className="bg-muted h-8 w-96 max-w-full animate-pulse rounded" />
+					<div aria-hidden="true" className="bg-muted h-7.5 w-96 max-w-full animate-pulse rounded" />
 				)}
-				<div aria-hidden="true" className="bg-muted h-5 w-14 shrink-0 animate-pulse rounded" />
 			</div>
-			<div aria-hidden="true" className="mt-2 flex items-center gap-2">
+			<div aria-hidden="true" className="mt-2 flex h-[31px] items-center gap-2">
 				<div className="bg-muted size-6 shrink-0 animate-pulse rounded-full" />
 				<div className="bg-muted h-4 w-40 animate-pulse rounded" />
 			</div>
@@ -53,7 +50,7 @@ function TopicSkeletonHeader({ topicTitle }: { topicTitle?: string }) {
 	)
 }
 
-// preserve the existing section widths and first-section spacing
+// the section widths, with the podcast and findings sections spaced as the page spaces them
 function TopicSectionSkeleton({ kind, children }: { kind: TopicSkeletonSection; children: React.ReactNode }) {
 	const titleWidths = {
 		podcast: "w-36",
@@ -64,7 +61,11 @@ function TopicSectionSkeleton({ kind, children }: { kind: TopicSkeletonSection; 
 		history: "w-20",
 	}
 	return (
-		<CollapsibleSectionSkeleton titleClassName={titleWidths[kind]} className={kind === "podcast" ? "mt-3" : undefined}>
+		<CollapsibleSectionSkeleton
+			titleClassName={titleWidths[kind]}
+			className={kind === "podcast" || kind === "findings" ? "mt-2" : undefined}
+			titleAside={kind === "findings" && <div className="bg-muted h-4 w-12 animate-pulse rounded" />}
+		>
 			{children}
 		</CollapsibleSectionSkeleton>
 	)
@@ -96,20 +97,31 @@ const TOPIC_SKELETON_ELEMENTS: TopicSkeletonElements = {
 	Expander: ExpanderSkeleton,
 }
 
-// the title bar's width, and the section's content
-type CollapsibleSectionSkeletonProps = { titleClassName: string; className?: string; children: React.ReactNode }
+// the title bar's width, what sits after the title, and the section's content
+type CollapsibleSectionSkeletonProps = {
+	titleClassName: string
+	className?: string
+	titleAside?: React.ReactNode
+	children: React.ReactNode
+}
 
 /**
  * The loading state of a collapsible section. A chevron and a title bar at the accordion trigger's padding,
  * then the section's content.
  */
-export function CollapsibleSectionSkeleton({ titleClassName, className, children }: CollapsibleSectionSkeletonProps) {
+export function CollapsibleSectionSkeleton({
+	titleClassName,
+	className,
+	titleAside,
+	children,
+}: CollapsibleSectionSkeletonProps) {
 	return (
 		<div className={cn("pb-2", className)}>
 			{/* the chevron and the title bar */}
 			<div className="flex items-center gap-2 py-2">
 				<div className="bg-muted size-4 animate-pulse rounded" />
 				<div className={cn("bg-muted h-7 animate-pulse rounded", titleClassName)} />
+				{titleAside}
 			</div>
 			{children}
 		</div>
@@ -117,49 +129,45 @@ export function CollapsibleSectionSkeleton({ titleClassName, className, children
 }
 
 /**
- * The loading state of the line under a card where its "+ more" control sits.
- */
-export function ExpanderSkeleton() {
-	return (
-		<div className="mt-1 flex min-h-9 items-center">
-			<div className="bg-muted h-4 w-16 animate-pulse rounded" />
-		</div>
-	)
-}
-
-/**
  * The loading state of the player card, with the play button, the podcast episode's details, the seek bar,
- * and the chapter rows.
+ * the chapter rows, and on a phone the podcast feed button under them.
  */
 export function PodcastEpisodePlayerCardSkeleton() {
 	return (
 		<div className={cn(INFO_CARD_CLASS, "flex flex-col gap-4")}>
-			{/* the round play button, the season, title, and details lines, and the podcast feed button on a wide screen */}
-			<div className="flex items-center gap-4">
+			{/* the round play button, the season, title, and details lines, and the podcast feed button on a wide screen.
+			    a phone keeps a line's gap under them, where the wide screen's button wraps */}
+			<div className="flex items-center gap-4 pb-4 sm:pb-0">
 				<div className="bg-muted size-14 shrink-0 animate-pulse rounded-full sm:size-16" />
-				<div className="flex min-w-0 flex-1 flex-col gap-1.5">
+				<div className="flex min-w-0 flex-1 flex-col gap-[7px] sm:max-w-87">
 					<div className="bg-muted h-4 w-36 animate-pulse rounded" />
 					<div className="bg-muted h-6 w-72 max-w-full animate-pulse rounded" />
 					<div className="bg-muted h-3.5 w-56 max-w-full animate-pulse rounded" />
 				</div>
 				<div className="bg-muted hidden h-9 w-28 shrink-0 animate-pulse rounded-lg sm:block" />
 			</div>
-			{/* the seek bar at the height of its time labels */}
-			<div className="flex h-4 items-center">
+			{/* the seek bar, at the height of its time labels on a wide screen */}
+			<div className="flex h-1.5 items-center sm:h-4">
 				<div className="bg-muted h-1.5 flex-1 animate-pulse rounded-full" />
 			</div>
-			{/* the chapter rows, which run close to the card's edges. each row is a number, a title, and a source line */}
+			{/* the chapter rows, which run close to the card's edges. each row is a number, a title, a source, and a pill */}
 			<div className="-mx-4 sm:-mb-4">
 				{CHAPTER_SKELETONS.map((skeletonKey) => (
 					<div key={skeletonKey} className={cn(DASHED_ROW_CLASS, "py-3 pr-3 pl-9")}>
-						<div className={CHAPTER_NUMBER_SLOT_CLASS}>
+						<div className={RANK_SLOT_CLASS}>
 							<div className="bg-muted size-3 animate-pulse rounded" />
 						</div>
-						<div className="bg-muted h-4 w-1/2 animate-pulse rounded" />
-						<div className="bg-muted mt-2 h-3 w-1/3 animate-pulse rounded" />
+						<div className="flex h-5 items-center">
+							<div className="bg-muted h-4 w-1/2 animate-pulse rounded" />
+						</div>
+						<div className="flex h-6 items-center gap-1.5">
+							<div className="bg-muted h-3 w-1/3 animate-pulse rounded" />
+							<ChapterPillSkeleton />
+						</div>
 					</div>
 				))}
 			</div>
+			<div className="bg-muted h-11 animate-pulse rounded-lg sm:hidden" />
 		</div>
 	)
 }

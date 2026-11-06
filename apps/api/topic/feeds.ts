@@ -26,8 +26,10 @@ const MAX_POPULAR_TOPIC_IDS = 50
 // the featured and popular topic id lists
 type TopicSectionIds = { featuredIds: string[]; popularIds: string[] }
 
-// the topic ids this user actively subscribes to
-function activeSubscriptionTopicIdQuery(userId: string) {
+/**
+ * Returns the query for the topic ids this user actively subscribes to.
+ */
+export function activeSubscriptionTopicIdQuery(userId: string) {
 	return db
 		.select({ topicId: subscriptions.topicId })
 		.from(subscriptions)

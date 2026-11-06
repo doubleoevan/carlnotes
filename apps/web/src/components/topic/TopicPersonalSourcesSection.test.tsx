@@ -266,17 +266,29 @@ test("expanded metadata shows dates with AI marks or a mail icon and address, wi
 	await waitForHook(() => Boolean(harness.container.querySelector("button[aria-expanded]")))
 	await act(async () => harness.container.querySelector<HTMLButtonElement>("button[aria-expanded]")?.click())
 	await waitForHook(() => Boolean(harness.container.textContent?.includes("AI metadata fixture")))
-	for (const row of [...harness.container.querySelectorAll<HTMLButtonElement>("button[aria-expanded]")].slice(1)) {
-		await act(async () => row.click())
-	}
+	const [, chatGptRow, emailRow] = harness.container.querySelectorAll<HTMLButtonElement>("button[aria-expanded]")
+
+	// the AI send shows its mark, its date, and its sender with no time or transport suffix
+	await act(async () => chatGptRow?.click())
 	expect(harness.container.textContent).toContain("2026-11-04 ·ChatGPT")
-	expect(harness.container.textContent).toContain("2026-11-04 ·doubleoevan@gmail.com")
+	expect(harness.container.querySelector('svg[role="presentation"]')).not.toBeNull()
 	expect(harness.container.textContent).not.toContain("21:16")
 	expect(harness.container.textContent).not.toContain("UTC")
 	expect(harness.container.textContent).not.toContain("· send")
-	expect(harness.container.textContent).not.toContain("· email")
+
+	// the email shows its mail icon and address, and opening it closes the AI send
+	await act(async () => emailRow?.click())
+	expect(harness.container.textContent).toContain("2026-11-04 ·doubleoevan@gmail.com")
 	expect(harness.container.querySelectorAll(".lucide-mail")).toHaveLength(1)
-	expect(harness.container.querySelector('svg[role="presentation"]')).not.toBeNull()
+	expect(harness.container.textContent).not.toContain("· email")
+	expect(harness.container.textContent).not.toContain("2026-11-04 ·ChatGPT")
+	expect(chatGptRow?.getAttribute("aria-expanded")).toBe("false")
+	expect(emailRow?.getAttribute("aria-expanded")).toBe("true")
+
+	// a second press closes the open Personal Source Entry, and the Personal sources section stays open
+	await act(async () => emailRow?.click())
+	expect(harness.container.textContent).not.toContain("2026-11-04 ·doubleoevan@gmail.com")
+	expect(harness.container.textContent).toContain("Email metadata fixture")
 })
 
 test("the shared sender label is the private conversation link, with a launch icon and no duplicate body link", async () => {

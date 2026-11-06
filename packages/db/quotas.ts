@@ -73,7 +73,7 @@ export async function incrementDaySuggestionCount(userId: string): Promise<boole
  * Returns the Redis key for a user's suggestion count on the UTC day of the given time.
  */
 export function toSuggestionRateLimitWindowKey(userId: string, now: Date): string {
-	return `suggestions:${startOfUtcDay(now).toISOString().slice(0, 10)}:${userId}`
+	return `suggestions:${toUtcDay(now)}:${userId}`
 }
 
 /**
@@ -354,6 +354,13 @@ export async function hasFullPodcastEpisodes(ownerId: string): Promise<boolean> 
 // utc midnight starting from the given moment's day. quota days roll over at utc midnight
 export function startOfUtcDay(moment: Date): Date {
 	return new Date(Date.UTC(moment.getUTCFullYear(), moment.getUTCMonth(), moment.getUTCDate()))
+}
+
+/**
+ * Returns a time's UTC day as its ISO date.
+ */
+export function toUtcDay(moment: Date): string {
+	return moment.toISOString().slice(0, 10)
 }
 
 // utc midnight starting the given moment's month, when monthly spend and the key budget roll over

@@ -256,7 +256,7 @@ async function savePodcastEpisodeAsPublished({
 }: SavePodcastEpisodeAsPublishedOptions): Promise<SavedPodcastEpisode> {
 	const season = publishedAt.getUTCFullYear()
 	return db.transaction(async (transaction) => {
-		// serialize publication with the first personal sources receipt
+		// serialize publication with the first personal sources confirmation
 		if (!(await lockPersonalSourcesTopic(transaction, topicId))) {
 			throw new Error("The podcast Topic no longer exists")
 		}

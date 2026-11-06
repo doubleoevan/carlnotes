@@ -235,6 +235,7 @@ const reportedStages = [
 	"push",
 	"podcast-episode",
 	"chat",
+	"updates",
 	"prompt-registry",
 	"billing",
 	"auth",

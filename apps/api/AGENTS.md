@@ -7,10 +7,12 @@
 agent through `POST /api/topics/:id/personal-sources/ai-agents`; it never accepts caller-written Source identity metadata.
 
 `personalSources/emailSetupRoute.ts` provides sender-authorized shared-address guidance and receiving eligibility.
-`personalSources/inboundRoute.ts` authenticates `POST /api/webhooks/resend/inbound` and acknowledges only a durable receipt.
-`personalSources/personalSourcesEmailSmoke.ts` checks shared-recipient validation, quota races, replay, and restart recovery without sending real mail.
-`personalSources/personalSourcesEmailFilingSmoke.ts` exercises the shared allowance, a concurrent Scan, and atomic multi-Topic filing against the development database.
-`personalSources/personalSourcesSharingSmoke.ts` checks two senders on a shared Topic, sender-only routes and annotations, and visibility, ownership, deletion, and permission changes against the development database.
+`personalSources/inboundRoute.ts` authenticates `POST /api/webhooks/resend/inbound` and acknowledges only a durable
+confirmation. `personalSources/personalSourcesEmailSmoke.ts` checks shared-recipient validation, quota races, replay,
+and restart recovery without sending real mail. `personalSources/personalSourcesEmailFilingSmoke.ts` exercises the
+shared allowance, a concurrent Scan, and atomic multi-Topic filing against the development database.
+`personalSources/personalSourcesSharingSmoke.ts` checks two senders on a shared Topic, sender-only routes and
+annotations, and visibility, ownership, deletion, and permission changes against the development database.
 
 `personalSources/personalSourcesLinkSmoke.ts` checks durable link leases, sender score bonuses, duplicate consideration, and deletion races in `smoke:personal-sources`. `personalSources/personalSourcesScoreSmoke.ts` adds the `bonus` section: persisted full/half bonuses, custom-source overlap, repeated review, clamping, and Topic isolation.
 `personalSources/personalSourcesLiveSmoke.ts` runs one synthetic receive through real summarization and a Temporal Scan, then deletes its item and verifies Findings remain. It retires its temporary model key even with `--keep`; the separate manual-review Topics are untouched.
@@ -19,11 +21,12 @@ agent through `POST /api/topics/:id/personal-sources/ai-agents`; it never accept
 `personalSourcesImportSmoke.ts`, `personalSourcesContextSmoke.ts`, `personalSourcesSchemaSmoke.ts`, and `personalSourcesAiAgentSmoke.ts` extend the Personal sources smoke
 with atomic imports, stale context, database constraints, and live grant checks. Optional section names select checks.
 
-`personalSources/` holds the additive sender-only Personal sources routes, session-only agent connection and credential controls, and
-the send-only bearer endpoint. Its `personalSources.smoke.ts` entry runs through `bun run smoke:personal-sources` against development,
-with disposable accounts and cleanup. `personalSourcesSmokeFixtures.ts` owns those accounts and `personalSourcesPersistenceSmoke.ts`
-checks real receipt locks, shared quotas, retry tombstones, retained ciphertext, Source cascades, and the publication race.
-`mcp/personalSourcesTools.ts` registers `send_to_topic` and read-only `suggest_topics` on both MCP routes through the pipeline's shared send service.
+`personalSources/` holds the additive sender-only Personal sources routes, session-only agent connection and credential
+controls, and the send-only bearer endpoint. Its `personalSources.smoke.ts` entry runs through `bun run
+smoke:personal-sources` against development, with disposable accounts and cleanup. `personalSourcesSmokeFixtures.ts`
+owns those accounts and `personalSourcesPersistenceSmoke.ts` checks real confirmation locks, shared quotas, retry
+tombstones, retained ciphertext, Source cascades, and the publication race. `mcp/personalSourcesTools.ts` registers
+`send_to_topic` and read-only `suggest_topics` on both MCP routes through the pipeline's shared send service.
 
 Hono server, the `@carlnotes/api` app. Entry `apps/api/index.ts` mounts the route trees; `apps/api/api.ts` aggregates
 the `/api` routes and bounds every body at a megabyte through `toBodyLimit` in `bodyLimit.ts`, except on the chat,
@@ -134,28 +137,33 @@ authenticated encryption itself lives in `@carlnotes/server/privateText`.
 - `mcp/` — the mcp server on `@modelcontextprotocol/server`: `server.ts` (the `/mcp` and `/mcp/t/:topicId` routes and
   the web-standard transport), `origins.ts` (exact Origin validation on both transports, before caller resolution and
   limits in `index.ts`, allowing an absent header, production, and the configured app origin), `tools.ts` (the reads,
-  the site search, and the per-user writes it registers, with their
-  schemas and annotations), `topicEditTools.ts` (`edit_topic`, `suggest_sources`, and `create_topic`), `toolShapes.ts`
-  (the topic id argument, the registration options, and the result shapes every tool shares), `topicEdits.ts` (the
-  `edit_topic` flow: the topic read as its page reads it, the preview, and the save through the chat's save path),
-  `topicEditConfirmations.ts` (the keyed confirmation that making a topic public or removing a source needs),
-  `searchResults.ts` (what the `search` tool returns, under the search rate limit), `uiResources.ts` (the four MCP Apps view
-  resources, each html written from the bundle `build:ui` makes in `apps/web/dist/mcp-views`, and the `_meta` a tool
-  names its MCP view with), `mcpViewData.ts` (what a tool result gives its MCP view in `_meta`: the caller, the podcast episodes
-  with play tokens, and the findings MCP view's topic and findings), `toolCaller.ts` (the tool caller: the visitor or user
-  an access token resolves to, verified in-process against the auth server's signing keys), `oauthClientNames.ts` (the
-  registered name of each MCP client, which the tool caller, the consent page's route, and the app connection report
-  read), `results.ts` (what the finding tools return for a visitor or a user, paged under a client's result limit, and
-  the paging helpers), and `topicResults.ts` (what `list_topics` returns). `mcp.smoke.ts` runs the sections in
-  `mcpSmokeSections.ts` and the oauth flow in `mcpOAuthSmokeSections.ts` over the fixtures in `mcpSmokeFixtures.ts`,
-  and stops the first scan of the topic it creates through `topic/firstScanSmoke.ts`. `mcpContractTestFixtures.ts`
-  holds the eleven-tool title and annotation matrix shared by unit and smoke checks. `mcpDirectorySmokeFixtures.ts`
-  seeds isolated private access, large feed, and search rows. `mcpDirectorySmokeSections.ts` checks both transports'
-  Origin and identity cases, including a former follower losing private Topic access; `mcpResultSmokeSections.ts`
-  checks complete cursor traversal and measures text,
-  structured results, and MCP view metadata separately. The OAuth smoke verifies discovery, refresh, revocation, and
-  already-issued JWT behavior. All fixture rows are removed in `finally`. Run `bun run smoke:mcp` before handing off
-  an MCP change. Its deterministic Origin and tool-contract assertions also run in `bun run check`.
+  the site search, and the per-user writes it registers, with their schemas and annotations), `topicEditTools.ts`
+  (`edit_topic`, `suggest_sources`, and `create_topic`), `toolShapes.ts` (the topic id argument, the registration
+  options, and the result shapes every tool shares), `topicEdits.ts` (the `edit_topic` flow: the topic read as its page
+  reads it, the preview, and the save through the chat's save path), `topicEditConfirmations.ts` (the keyed confirmation
+  that making a topic public or removing a source needs), `searchResults.ts` (what the `search` tool returns, under the
+  search rate limit), `scanTools.ts` (`start_scan`, `read_scan_status`, and `stop_scan`), `scanResults.ts` (a Scan's
+  status as those tools return it), `updatesTool.ts` (`read_updates`), `topicContextTool.ts` (`read_topic_context`),
+  `topicContextResults.ts` (the Findings and excerpts it returns), `uiResources.ts` (the MCP Apps view resources, each
+  html written from the bundle `build:ui` makes in `apps/web/dist/mcp-views`, every stored bundle's version read back
+  from object storage, and the `_meta` a tool names its MCP view with), `mcpViewData.ts` (what a tool result gives its
+  MCP view in `_meta`: the caller, the podcast episodes with play tokens, the findings MCP view's topic and findings,
+  the updates list's Topics, the Scan status, and the caller's private annotations), `toolCaller.ts` (the tool caller:
+  the visitor or user an access token resolves to, verified in-process against the auth server's signing keys),
+  `oauthClientNames.ts` (the registered name of each MCP client, which the tool caller, the consent page's route, and
+  the app connection report read), `results.ts` (what the finding tools return for a visitor or a user, paged under a
+  client's result limit, and the paging helpers), and `topicResults.ts` (what `list_topics` returns). `mcp.smoke.ts`
+  runs the sections in `mcpSmokeSections.ts` and the oauth flow in `mcpOAuthSmokeSections.ts` over the fixtures in
+  `mcpSmokeFixtures.ts`, and stops the first scan of the topic it creates through `topic/firstScanSmoke.ts`.
+  `mcpContractTestFixtures.ts` holds the nineteen-tool title, annotation, and phrase matrix shared by unit and smoke
+  checks. `mcpDirectorySmokeFixtures.ts` seeds isolated private access, large feed, and search rows.
+  `mcpDirectorySmokeSections.ts` checks both transports' Origin and identity cases, including a former follower losing
+  private Topic access; `mcpResultSmokeSections.ts` checks complete cursor traversal and measures text, structured
+  results, and MCP view metadata separately, and `mcpTopicToolSmokeSections.ts` checks `send_finding_feedback`,
+  `read_updates`, `read_topic_context`, and the Scan tools on both routes. The OAuth smoke verifies discovery, refresh,
+  revocation, and already-issued JWT behavior. All fixture rows are removed in `finally`. Run `bun run smoke:mcp` before
+  handing off an MCP change. Its deterministic Origin and tool-contract assertions also run in `bun run check`.
+  `toolTestFixtures.ts` holds the registered tools and the callers the tool tests share.
 - `podcast/` — a Topic's podcast episodes: `podcastEpisodes.ts` (the routes for a season's episodes, an episode page,
   the next unplayed episode, one episode with its files and its preview card, a listener's progress, a chapter's rating,
   the podcast switch, and removing an episode), `podcastEpisodeListens.ts` (saving a listener's progress, with a
@@ -346,7 +354,8 @@ the same access gate; platform players never forward a CarlNotes session header 
 
 `mcp/topicSuggestions.ts` pages read-only editable Topic suggestions with the shared MCP cursor.
 `mcp/topicDraftConfirmations.ts` binds a creation preview to its caller and exact fields.
-`topic/topicDraftReceipts.ts` consumes that confirmation in the Topic creation transaction. Concurrent retries return the same Topic and first Scan.
+`topic/topicDraftConfirmationRecords.ts` consumes that confirmation in the Topic creation transaction. Concurrent
+retries return the same Topic and first Scan.
 
 `mcp/mcpPersonalSourcesSmokeSections.ts` checks required send targets, read-only routing, cursor traversal, and no persisted draft or Personal sources work on both MCP routes.
 
@@ -356,8 +365,10 @@ the same access gate; platform players never forward a CarlNotes session header 
 
 Personal sources exposes sender-scoped entries, context, and Finding annotations through session-only no-store routes. `emailSetupRoute.ts` returns shared-address guidance; `inboundRoute.ts` accepts only signed shared-address deliveries from known account senders.
 
-MCP Topic suggestions include every editable destination, with only strong matches checked initially. Name search filters that list. Current-page search-row metadata uses bounded viewer/podcast reads; podcast play tokens stay in MCP view-only metadata, including after cursor paging. The MCP picker excludes public discovery; automatic email routing retains its relevance floor. `mcp/topicSuggestionsAutocomplete.ts` reads at most five literal editable names plus one cursor lookahead, with the same authority and no model or write.
+MCP Topic suggestions include every editable destination, with only strong matches checked initially. Name search filters that list. Current-page search-row metadata uses bounded viewer/podcast reads; podcast play tokens stay in MCP view-only metadata, including after cursor paging. The MCP picker excludes public discovery; automatic email routing keeps its minimum filing relevance. `mcp/topicSuggestionsAutocomplete.ts` reads at most five literal editable names plus one cursor lookahead, with the same authority and no model or write.
 
-Accepted MCP sends attach bounded sender-authorized waiting links in MCP view-only metadata. Failure to load display links preserves the accepted receipt. Version-nine UI resources retain unversioned and earlier version aliases for existing tool registrations.
+Accepted MCP sends attach bounded sender-authorized waiting links in MCP view-only metadata. Failure to load display
+links preserves the accepted confirmation. Version-nine UI resources retain unversioned and earlier version aliases for
+existing tool registrations.
 
 Personal sources items, private summaries, and annotations have no automatic expiry. Their content remains encrypted until explicit deletion. Released read contracts retain nullable expiry fields as null. Optional conversation URLs survive the MCP picker outside matching and open from the shared AI sender label; missing references remain plain labels.

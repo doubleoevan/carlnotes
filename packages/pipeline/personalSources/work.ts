@@ -1,6 +1,6 @@
 // durable dirty revisions recover even when the caller stops before notifying Temporal
 
-import { loadPendingPersonalSourcesEmailIds } from "@carlnotes/db/personalSourcesEmailReceipts"
+import { loadPendingPersonalSourcesEmailIds } from "@carlnotes/db/personalSourcesEmailConfirmations"
 import { loadPendingPersonalSourcesTopicIds } from "@carlnotes/db/personalSourcesWork"
 import { runWithConcurrency } from "@carlnotes/server/concurrency"
 import { startPersonalSourcesContextWorkflow, startPersonalSourcesEmailWorkflow } from "../temporalClient"
@@ -21,13 +21,13 @@ export async function notifyPersonalSourcesChanged(topicId: string): Promise<voi
  * Dispatches dirty Topics independently of receiving feature flags.
  */
 export async function recoverPersonalSourcesWork(signal?: AbortSignal): Promise<void> {
-	const [topics, receipts] = await Promise.all([
+	const [topics, confirmations] = await Promise.all([
 		loadPendingPersonalSourcesTopicIds(),
 		loadPendingPersonalSourcesEmailIds(),
 	])
 	const jobs = [
 		...topics.map((id) => () => startPersonalSourcesContextWorkflow(id)),
-		...receipts.map((id) => () => startPersonalSourcesEmailWorkflow(id)),
+		...confirmations.map((id) => () => startPersonalSourcesEmailWorkflow(id)),
 	]
 	// each start has its own transport timeout. A failed batch leaves unstarted jobs durable for the next sweep.
 	const deadline = Date.now() + 10_000
@@ -51,9 +51,9 @@ export async function recoverPersonalSourcesWork(signal?: AbortSignal): Promise<
 /**
  * Dispatches acknowledged email while retaining sweep recovery if Temporal is unavailable.
  */
-export async function notifyPersonalSourcesEmail(receiptId: string): Promise<void> {
+export async function notifyPersonalSourcesEmail(confirmationId: string): Promise<void> {
 	try {
-		await startPersonalSourcesEmailWorkflow(receiptId)
+		await startPersonalSourcesEmailWorkflow(confirmationId)
 	} catch {
 		console.warn("Personal sources email notification deferred to sweep recovery")
 	}

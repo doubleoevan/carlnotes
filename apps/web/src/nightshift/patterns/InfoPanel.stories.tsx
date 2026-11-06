@@ -5,14 +5,16 @@ import type { Meta, StoryObj } from "@storybook/tanstack-react"
 import { useId, useState } from "react"
 import { ScrollBox } from "@/components/common/ScrollBox"
 import { Popover, PopoverAnchor, PopoverCloseButton, PopoverContent } from "@/components/primitives/popover"
+import { TopicFindingStats } from "@/components/topic/TopicFindingDetails"
 import { ResourceMetadata, TopicFindingSummary } from "@/components/topic/TopicFindingSummary"
-import { TopicFindingHeading, TopicFindingStats } from "@/components/topic/TopicResourceInfo"
+import { TopicFindingHeading } from "@/components/topic/TopicResourceInfo"
 import { toNotesMarkdown } from "@/components/topic/TopicScanRecap"
 import {
 	DASHED_ROW_CLASS,
 	LIST_ROW_HOVER_CLASS,
 	POPOVER_HEADING_CLASS,
 	POPOVER_PANEL_CLASS,
+	RANK_SLOT_CLASS,
 	RESOURCE_LIST_CARD_CLASS,
 	SECTION_LABEL_CLASS,
 } from "@/lib/styleClasses"
@@ -68,10 +70,7 @@ function TopicFindingRowPanel({ heading, findingTitle, notes, isOpen }: InfoPane
 					className={cn(DASHED_ROW_CLASS, LIST_ROW_HOVER_CLASS, "group flex cursor-pointer")}
 				>
 					{/* the rank, then the finding with its title as the trigger */}
-					<span
-						className="text-muted-foreground absolute top-0 left-0 grid size-11 place-items-center sm:top-1.5 sm:size-8"
-						aria-hidden="true"
-					>
+					<span className={cn("text-muted-foreground", RANK_SLOT_CLASS)} aria-hidden="true">
 						<span className="font-display text-sm tabular-nums">1</span>
 					</span>
 					<TopicFindingSummary resource={topicFinding} className="flex-1 py-3 pr-3 pl-9" />

@@ -113,20 +113,20 @@ test("the reset runs at most four replacements at once and counts a failure sepa
 	expect(peakRunningCount).toBe(4)
 })
 
-// a reset whose claim is lost replaces no further key and rejects
-test("a reset whose claim is lost stops before the next replacement", async () => {
-	// three due users, and a replacement that loses the claim after the first key
+// a reset whose lease is lost replaces no further key and rejects
+test("a reset whose lease is lost stops before the next replacement", async () => {
+	// three due users, and a replacement that loses the lease after the first key
 	stubConnectionPoolInCallOrder(() => [["u1"], ["u2"], ["u3"]])
-	const claimAbortController = new AbortController()
+	const leaseAbortController = new AbortController()
 	const replacedUserIds: string[] = []
 	const replaceLiteLLMKey = async (userId: string): Promise<boolean> => {
 		replacedUserIds.push(userId)
-		claimAbortController.abort(new Error("the monthly-budget-reset claim was lost while its task ran"))
+		leaseAbortController.abort(new Error("the monthly-budget-reset lease was lost while its task ran"))
 		return true
 	}
 
-	// the first replacement loses the claim, so the reset rejects before it replaces every due key
-	const resetPromise = resetMonthlyBudgets({ signal: claimAbortController.signal, replaceLiteLLMKey })
-	await expect(resetPromise).rejects.toThrow("claim was lost")
+	// the first replacement loses the lease, so the reset rejects before it replaces every due key
+	const resetPromise = resetMonthlyBudgets({ signal: leaseAbortController.signal, replaceLiteLLMKey })
+	await expect(resetPromise).rejects.toThrow("lease was lost")
 	expect(replacedUserIds.length).toBeLessThan(3)
 })

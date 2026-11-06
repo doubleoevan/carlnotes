@@ -27,6 +27,21 @@ export const HERO_BUTTON_HOVER_CLASS = "hover:bg-white/10 hover:text-hero-foregr
 export const STANDALONE_LINK_CLASS = "text-link hover:underline"
 
 /**
+ * A standalone link on a line of its own.
+ */
+export const STANDALONE_LINE_LINK_CLASS = `${STANDALONE_LINK_CLASS} inline-block text-sm`
+
+/**
+ * The metadata line under a row's title.
+ */
+export const METADATA_LINE_CLASS = "text-muted-foreground mt-0.5 flex flex-wrap items-center gap-1.5 text-xs"
+
+/**
+ * The metadata line of a row that brightens on hover.
+ */
+export const ROW_METADATA_LINE_CLASS = `${METADATA_LINE_CLASS} group-hover:text-foreground/80`
+
+/**
  * A list row with a dashed separator over it. The first row has no separator.
  */
 export const DASHED_ROW_CLASS =
@@ -64,11 +79,6 @@ export const SCRIPTED_HIDDEN_CLASS = "scripted:hidden"
  * The muted look that a row's play button adds if its podcast episode or chapter is not the one in the player.
  */
 export const PLAY_BUTTON_MUTED_CLASS = "bg-muted text-muted-foreground hover:bg-accent hover:text-foreground border"
-
-/**
- * The cover with the show's name and no title, which shows behind a podcast cover while the cover loads.
- */
-export const COVER_PLACEHOLDER_CLASS = "bg-[url(/podcast-cover-placeholder.jpg)] bg-cover"
 
 /**
  * The cover that says the hosts are recording.
@@ -263,6 +273,11 @@ export const INFO_SECTION_PAIR_END_CLASS = "ml-auto py-0 text-right"
  * The card around a list of rows, such as a topic's findings, its podcast episodes, or its scan history.
  */
 export const RESOURCE_LIST_CARD_CLASS = "border-separator bg-card rounded-lg border shadow-raised"
+
+/**
+ * The slot at a list row's top left that holds its rank. On a phone the taller slot starts at the row top.
+ */
+export const RANK_SLOT_CLASS = "absolute top-0 left-0 grid size-11 place-items-center sm:top-1.5 sm:size-8"
 
 /**
  * The inset that lines up a right-aligned row with the quota line above it. Text takes the full inset.

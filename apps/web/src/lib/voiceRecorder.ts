@@ -236,7 +236,7 @@ async function startRecordingVoiceActivity({
 }: StartRecordingVoiceActivityOptions): Promise<(() => void) | null> {
 	// the detector's module loads on the first question only
 	try {
-		const { startVoiceActivity } = await import("./voiceActivity")
+		const { startVoiceActivity } = await import("@/lib/voiceActivity")
 		const stopVoiceActivity = await startVoiceActivity({
 			audioContext,
 			stream,

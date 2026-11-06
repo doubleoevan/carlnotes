@@ -1,4 +1,4 @@
-// durable receipt processing keeps received bodies inside one activity's memory
+// durable confirmation processing keeps received bodies inside one activity's memory
 import { isAdminRole } from "@carlnotes/contracts/enums"
 import type {
 	PersonalSourcesEmailReply,
@@ -7,28 +7,28 @@ import type {
 } from "@carlnotes/contracts/personalSourcesEmail"
 import { PLANS } from "@carlnotes/contracts/plans"
 import { type DbTransaction, db } from "@carlnotes/db"
-import { runWithClaim } from "@carlnotes/db/claim"
+import { runWithJobLease } from "@carlnotes/db/jobLease"
 import {
 	type AccountEmailDestination as EmailDestination,
-	finishPersonalSourcesEmailReceipt,
+	finishPersonalSourcesEmailConfirmation,
 	isPersonalSourcesEmailSenderCurrent,
 	loadPersonalSourcesEmailChoices,
 	loadPersonalSourcesEmailDestination,
 	retirePersonalSourcesEmailChoices,
-	retryPersonalSourcesEmailReceipt,
+	retryPersonalSourcesEmailConfirmation,
 	savePersonalSourcesEmailChoices,
 	savePersonalSourcesEmailReply,
 	startPersonalSourcesEmailAttempt,
-} from "@carlnotes/db/personalSourcesEmailReceipts"
+} from "@carlnotes/db/personalSourcesEmailConfirmations"
 import { lockPersonalSourcesSender } from "@carlnotes/db/personalSourcesLocks"
 import { readPersonalSourcesAllowance } from "@carlnotes/db/personalSourcesQuota"
 import { receivePersonalSourcesSend } from "@carlnotes/db/personalSourcesSend"
-import { personalSourcesEmailReceipts } from "@carlnotes/db/schema/personalSources"
+import { personalSourcesEmailConfirmations } from "@carlnotes/db/schema/personalSources"
 import { normalizePersonalSourcesEmail } from "@carlnotes/server/personalSourcesEmailContent"
 import { toPersonalSourcesEmailReplyContent } from "@carlnotes/server/personalSourcesEmailReplyContent"
 import { eq } from "drizzle-orm"
 import { loadAuthenticatedEmail, toEmailReplyMetadata } from "./emailMessage"
-import { replyToPersonalSourcesEmail, replyToUnregisteredSender } from "./emailReplies"
+import { replyToPersonalSourcesEmail, replyToUnregisteredSender, trackPersonalSourcesEmail } from "./emailReplies"
 import { readEmailReferenceIds, resolveEmailTopicSelection, resolvePersonalSourcesEmailTopics } from "./emailTopic"
 import { notifyPersonalSourcesChanged } from "./work"
 
@@ -37,52 +37,66 @@ type EmailAttemptResult = { retryAfterMs: number | null }
 /**
  * Processes one delivery or its pending reply, returning no private content to Temporal.
  */
-export async function processPersonalSourcesEmail(receiptId: string): Promise<EmailAttemptResult> {
-	const outcome = await runWithClaim({
-		claimName: `personal-sources-email:${receiptId}`,
-		runTask: () => processClaimedEmail(receiptId),
+export async function processPersonalSourcesEmail(confirmationId: string): Promise<EmailAttemptResult> {
+	const outcome = await runWithJobLease({
+		jobName: `personal-sources-email:${confirmationId}`,
+		runTask: () => processEmailUnderLease(confirmationId),
 	})
 	return outcome ?? { retryAfterMs: 30_000 }
 }
 
 // a stored outcome goes directly to its reply and is never fetched, matched, or filed again
-async function processClaimedEmail(receiptId: string): Promise<EmailAttemptResult> {
-	const destination = await loadPersonalSourcesEmailDestination(receiptId)
+async function processEmailUnderLease(confirmationId: string): Promise<EmailAttemptResult> {
+	const destination = await loadPersonalSourcesEmailDestination(confirmationId)
 	if (!destination) {
-		await finishPersonalSourcesEmailReceipt({ receiptId, state: "refused" })
+		await finishPersonalSourcesEmailConfirmation({ confirmationId, state: "refused" })
 		return { retryAfterMs: null }
 	}
-	const attemptCount = await startPersonalSourcesEmailAttempt(receiptId)
+	// start the attempt, and try again later if it cannot start
+	const attemptCount = await startPersonalSourcesEmailAttempt(confirmationId)
 	if (attemptCount === null) {
 		return { retryAfterMs: 30_000 }
 	}
 	try {
+		// file the email, or reply to an unregistered sender
 		const replyResult = destination.owner
 			? await processAccountEmail(destination)
-			: await replyToUnregisteredSender(destination.receipt)
+			: await replyToUnregisteredSender(destination.confirmation)
 		if (replyResult === "retry") {
-			return { retryAfterMs: await retryPersonalSourcesEmailReceipt({ receiptId, attemptCount }) }
+			return { retryAfterMs: await retryPersonalSourcesEmailConfirmation({ confirmationId, attemptCount }) }
 		}
-		await finishPersonalSourcesEmailReceipt({ receiptId, state: replyResult })
+		// save the result
+		await finishPersonalSourcesEmailConfirmation({ confirmationId, state: replyResult })
 		return { retryAfterMs: null }
 	} catch {
 		// provider error bodies and model failures may contain private text
-		return { retryAfterMs: await retryPersonalSourcesEmailReceipt({ receiptId, attemptCount }) }
+		return { retryAfterMs: await retryPersonalSourcesEmailConfirmation({ confirmationId, attemptCount }) }
 	}
 }
 
 // an accepted retry uses its original outcome and rechecks the live owner before sending
 async function processAccountEmail(destination: EmailDestination): Promise<"replied" | "refused" | "retry"> {
-	if (!destination.receipt.outcome && !(await receiveEmail(destination))) {
+	const isNewEmail = !destination.confirmation.outcome
+	if (isNewEmail && !(await receiveEmail(destination))) {
 		return "refused"
 	}
-	const current = await loadPersonalSourcesEmailDestination(destination.receipt.id)
-	return current?.owner ? replyToPersonalSourcesEmail(current) : "refused"
+
+	// the owner must still exist before a reply goes out
+	const current = await loadPersonalSourcesEmailDestination(destination.confirmation.id)
+	if (!current?.owner) {
+		return "refused"
+	}
+
+	// a retry replies to an email that was already reported
+	if (isNewEmail) {
+		trackPersonalSourcesEmail(current)
+	}
+	return replyToPersonalSourcesEmail(current)
 }
 
 // authenticate the request and save only clearly matching destinations
 async function receiveEmail(destination: EmailDestination): Promise<boolean> {
-	const fetched = await loadAuthenticatedEmail(destination.receipt)
+	const fetched = await loadAuthenticatedEmail(destination.confirmation)
 	if (!fetched) {
 		return false
 	}
@@ -133,7 +147,7 @@ async function receiveEmailChoice({
 	const request = await loadPersonalSourcesEmailChoices({
 		messageIds,
 		userId: destination.owner.id,
-		senderDigest: destination.receipt.senderDigest ?? "",
+		senderDigest: destination.confirmation.senderDigest ?? "",
 	})
 	if (!request) {
 		return false
@@ -178,7 +192,7 @@ async function loadOriginalEmail(
 	destination: EmailDestination,
 	emailId: string,
 ): Promise<ReturnType<typeof normalizePersonalSourcesEmail> | null> {
-	const original = await loadAuthenticatedEmail({ emailId, senderDigest: destination.receipt.senderDigest })
+	const original = await loadAuthenticatedEmail({ emailId, senderDigest: destination.confirmation.senderDigest })
 	if (!original) {
 		return null
 	}
@@ -201,51 +215,55 @@ type EmailFilingOptions = {
 	canChooseTopics?: boolean
 }
 
-// serialize the account, request receipt, accepted content, and confirmation intent
+// serialize the account, request confirmation, accepted content, and reply intent
 async function recordEmailFiling(options: EmailFilingOptions): Promise<string[] | null> {
 	const { destination } = options
 	return db.transaction(async (transaction) => {
-		// lock the sender before deciding the receipt outcome
+		// lock the sender before deciding the confirmation outcome
 		await lockPersonalSourcesSender(transaction, destination.owner.id)
-		const [receipt] = await transaction
+		// reload the confirmation under the sender's lock
+		const [confirmation] = await transaction
 			.select()
-			.from(personalSourcesEmailReceipts)
-			.where(eq(personalSourcesEmailReceipts.id, destination.receipt.id))
+			.from(personalSourcesEmailConfirmations)
+			.where(eq(personalSourcesEmailConfirmations.id, destination.confirmation.id))
 			.for("update")
+		// stop if another attempt finished it or the sender changed
 		if (
-			receipt?.state !== "processing" ||
-			receipt.outcome ||
-			!receipt.senderDigest ||
-			!(await isPersonalSourcesEmailSenderCurrent(transaction, destination.owner.id, receipt.senderDigest))
+			confirmation?.state !== "processing" ||
+			confirmation.outcome ||
+			!confirmation.senderDigest ||
+			!(await isPersonalSourcesEmailSenderCurrent(transaction, destination.owner.id, confirmation.senderDigest))
 		) {
 			return []
 		}
+		// stop if the numbered choice request is gone
 		if (
 			options.choiceRequestId &&
 			!(await loadPersonalSourcesEmailChoices(
-				{ requestId: options.choiceRequestId, userId: destination.owner.id, senderDigest: receipt.senderDigest },
+				{ requestId: options.choiceRequestId, userId: destination.owner.id, senderDigest: confirmation.senderDigest },
 				transaction,
 			))
 		) {
 			return null
 		}
-		return saveEmailOutcome({ ...options, transaction, receipt })
+		return saveEmailOutcome({ ...options, transaction, confirmation })
 	})
 }
 
-// the account and receipt are locked before this persistence step
+// the account and confirmation are locked before this persistence step
 type LockedEmailFilingOptions = EmailFilingOptions & {
 	transaction: DbTransaction
-	receipt: typeof personalSourcesEmailReceipts.$inferSelect
+	confirmation: typeof personalSourcesEmailConfirmations.$inferSelect
 }
 
 // save clear destinations through the shared atomic send operation
 async function saveEmailOutcome(options: LockedEmailFilingOptions): Promise<string[]> {
-	const { destination, receipt, normalized, topicIds, refusalReason, originalEmailId, transaction } = options
-	const senderDigest = receipt.senderDigest
+	const { destination, confirmation, normalized, topicIds, refusalReason, originalEmailId, transaction } = options
+	const senderDigest = confirmation.senderDigest
 	if (!senderDigest) {
 		return []
 	}
+	// a rejection or no matching Topic gets a clarification reply
 	if (refusalReason || !topicIds.length) {
 		return saveEmailClarification(options)
 	}
@@ -256,7 +274,7 @@ async function saveEmailOutcome(options: LockedEmailFilingOptions): Promise<stri
 			userId: destination.owner.id,
 			topicIds,
 			senderIdentity: "email",
-			requestId: originalEmailId ?? receipt.emailId,
+			requestId: originalEmailId ?? confirmation.emailId,
 			origin: "email",
 			config: {},
 			payload: normalized.payload,
@@ -271,7 +289,7 @@ async function saveEmailOutcome(options: LockedEmailFilingOptions): Promise<stri
 // retain only Topic choices and a provider reference when a reply is needed
 async function saveEmailClarification({
 	destination,
-	receipt,
+	confirmation,
 	transaction,
 	suggestions = [],
 	choiceRequestId,
@@ -284,7 +302,8 @@ async function saveEmailClarification({
 	if (choiceRequestId && !canChooseTopics) {
 		await retirePersonalSourcesEmailChoices(transaction, choiceRequestId)
 	}
-	const requestId = choiceRequestId ?? receipt.id
+	// a reply to a choice keeps its request id, and a new email starts one
+	const requestId = choiceRequestId ?? confirmation.id
 	const canReplyWithChoices = canChooseTopics && (!!choiceRequestId || !!inReplyTo)
 	const reply: PersonalSourcesEmailReply = refusalReason
 		? { kind: "not_filed", reason: refusalReason }
@@ -293,19 +312,19 @@ async function saveEmailClarification({
 	// keep the original body with the provider
 	if (!refusalReason && canReplyWithChoices && !choiceRequestId && inReplyTo) {
 		await savePersonalSourcesEmailChoices(transaction, {
-			receiptId: requestId,
+			confirmationId: requestId,
 			userId: destination.owner.id,
 			topics: suggestions,
 			messageId: inReplyTo,
 		})
 	}
-	await savePersonalSourcesEmailReply(transaction, receipt.id, { ...reply, inReplyTo, references, subject }, null)
+	await savePersonalSourcesEmailReply(transaction, confirmation.id, { ...reply, inReplyTo, references, subject }, null)
 	return []
 }
 
 // bind the confirmation to committed destinations and retire their choice request
 async function saveEmailConfirmation(
-	{ transaction, receipt, choiceRequestId, inReplyTo, references, subject }: LockedEmailFilingOptions,
+	{ transaction, confirmation, choiceRequestId, inReplyTo, references, subject }: LockedEmailFilingOptions,
 	accepted: Awaited<ReturnType<typeof receivePersonalSourcesSend>>,
 ): Promise<string[]> {
 	if (accepted.status !== "accepted") {
@@ -313,21 +332,31 @@ async function saveEmailConfirmation(
 			accepted.status === "not_found"
 				? { kind: "needs_topic" }
 				: { kind: "not_filed", reason: accepted.status === "quota" ? "quota" : "unavailable" }
-		await savePersonalSourcesEmailReply(transaction, receipt.id, { ...reply, inReplyTo, references, subject }, null)
+		await savePersonalSourcesEmailReply(
+			transaction,
+			confirmation.id,
+			{ ...reply, inReplyTo, references, subject },
+			null,
+		)
 		return []
 	}
 
 	// remove only the completed request's routing metadata
-	const receipts = accepted.receipts ?? [accepted]
-	const topics = receipts.map(({ topic, entryId }) => ({ name: topic.name, url: topic.url, entryId }))
+	const confirmations = accepted.confirmations ?? [accepted]
+	const topics = confirmations.map(({ topic, entryId }) => ({
+		name: topic.name,
+		url: topic.url,
+		entryId,
+		topicId: topic.id,
+	}))
 	if (choiceRequestId) {
 		await retirePersonalSourcesEmailChoices(transaction, choiceRequestId)
 	}
 	await savePersonalSourcesEmailReply(
 		transaction,
-		receipt.id,
+		confirmation.id,
 		{ kind: "filed", topics, inReplyTo, references, subject },
 		accepted.entryId,
 	)
-	return receipts.map(({ topic }) => topic.id)
+	return confirmations.map(({ topic }) => topic.id)
 }

@@ -2,19 +2,25 @@
 
 `personalSources/emailMessage.ts` verifies the received message, recipient, sender, and authentication, and reads the headers for same-thread replies. `emailReplies.ts` rechecks live permissions and delivers each reply using its stable provider key.
 
-`personalSources/matchTopics.ts` filters all editable names before ranked MCP cursor paging, leaves weak editable Topics unchecked, uses a relevance floor for email, and marks up to three strong best matches. `send.ts` sends all explicit IDs through one atomic receiver and notifies each accepted Topic.
+`updatesOpener.ts` builds the opener prompt and writes Carl's opener above an updates list.
+`personalSources/topicRelevance.ts` holds the attachment score weight and the minimum relevances, and raises a Topic's
+name and prompt score by its attachment score, and
+`personalSources/matchTopics.ts` filters all editable names before ranked MCP cursor paging, leaves weak editable Topics unchecked, uses the minimum filing relevance for email, and marks up to three strong best matches. `send.ts` sends all explicit IDs through one atomic receiver and notifies each accepted Topic.
 
 
-`personalSources/email.ts` processes durable email receipts, rechecks the shared destination, sender authentication and entitlement,
-routes among editable Topics, and passes accepted mail to encrypted receipt storage with a filing reply. Provider failures return
-content-free retry delays. `personalSources/work.ts` dispatches pending receipts and context work after missed notifications.
-`personalSources/emailChoices.test.ts` checks clarification replies and access changes. It shares isolated deliveries and sender fixtures with the receipt tests in `personalSources/emailTestFixtures.ts`.
+`personalSources/email.ts` processes durable email confirmations, rechecks the shared destination, sender authentication
+and entitlement, routes among editable Topics, and passes accepted mail to encrypted confirmation storage with a filing
+reply. Provider failures return content-free retry delays. `personalSources/work.ts` dispatches pending confirmations
+and context work after missed notifications. `personalSources/emailChoices.test.ts` checks clarification replies and
+access changes. It shares isolated deliveries and sender fixtures with the confirmation tests in
+`personalSources/emailTestFixtures.ts`.
 
 `podcast/podcastPersonalSourcesMigration.ts` stops legacy output from entering audio until privacy conversion completes.
-Podcast publication takes the same Topic lock as first receipt and verifies that historical explanations have been converted before publishing or indexing.
+Podcast publication takes the same Topic lock as first confirmation and verifies that historical explanations have been
+converted before publishing or indexing.
 
 `personalSources/contextPrompt.ts` builds the nonce-fenced `summarize-personal-sources-context` prompt. `personalSources/summarize.ts` processes one
-revision under a renewable DB claim, with the Topic owner's model key and spend reservation.
+revision under a renewable job lease, with the Topic owner's model key and spend reservation.
 `personalSources/work.ts` notifies Temporal after commit and recovers dirty revisions through the sweep.
 Private text stays inside activities and encrypted DB fields. Workflow messages contain identifiers and deadlines.
 `ingest/aiAgent.ts` and `ingest/email.ts` use `personalSources/linkQueue.ts` to produce public URL-only candidates.

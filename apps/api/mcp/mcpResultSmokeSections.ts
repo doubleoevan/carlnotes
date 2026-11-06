@@ -1,11 +1,12 @@
 // measured result bounds and complete cursor traversal against controlled, live MCP fixtures
 import { expectedFindings, largeTopicId, searchQuery } from "./mcpDirectorySmokeFixtures"
-import { check, toClient, toResultJson, toResultText } from "./mcpSmokeFixtures"
+import { check, toClient, toResultJson } from "./mcpSmokeFixtures"
 import { MCP_PAGE_MAX_CHARS, MCP_PAGE_SIZE, type McpFinding, type McpPage } from "./results"
+import { toResultText } from "./toolTestFixtures"
 
 // the serialized page envelope may use this many characters beyond its packed item budget
 const RESULT_MAX_CHARS = MCP_PAGE_MAX_CHARS + 1024
-type SmokeClient = ReturnType<typeof toClient>["client"]
+export type SmokeClient = ReturnType<typeof toClient>["client"]
 
 /** Traverses both endpoint feeds and two search pages, checking text and structured representations separately. */
 export async function checkResultBounds(accessToken: string): Promise<void> {
@@ -118,8 +119,8 @@ async function checkSearchPages(client: SmokeClient, path: string): Promise<void
 	check(`${path}: search returns all fifty-one results once`, ids.length === 51 && new Set(ids).size === 51)
 }
 
-// report model-visible representations and MCP view metadata separately
-function checkPageBounds(label: string, result: Awaited<ReturnType<SmokeClient["callTool"]>>): void {
+/** Reports model-visible representations and MCP view metadata separately. */
+export function checkPageBounds(label: string, result: Awaited<ReturnType<SmokeClient["callTool"]>>): void {
 	const textChars = toResultText(result).length
 	const structuredChars = JSON.stringify(result.structuredContent ?? null).length
 	const metaChars = JSON.stringify(result._meta ?? null).length

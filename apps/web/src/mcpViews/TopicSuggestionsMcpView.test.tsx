@@ -84,29 +84,14 @@ test("loading replaces only results while the header, search, selected pills and
 		]) {
 			expect(hook.container.querySelector(selector)?.closest(".invisible")).toBeNull()
 		}
-		expect(hook.container.querySelector('a[aria-label="Open CarlNotes in a new tab"]')?.getAttribute("target")).toBe(
-			"_blank",
-		)
-		expect(hook.container.querySelector('a[aria-label="Open CarlNotes in a new tab"] svg')).not.toBeNull()
 	} finally {
 		await hook.close()
 	}
 })
 
-test("the brand opens the connected site and the footer places outlined Send before highlighted new Topic", async () => {
-	const openLink = mock(() => {})
-	const hook = await renderPicker(openLink)
+test("the footer places outlined Send before highlighted new Topic", async () => {
+	const hook = await renderPicker()
 	try {
-		// activate the real host link without leaving the MCP view
-		const brand = hook.container.querySelector<HTMLAnchorElement>('a[aria-label="Open CarlNotes in a new tab"]')
-		if (!brand) {
-			throw new Error("Missing CarlNotes link")
-		}
-		await act(async () => brand.click())
-		expect(openLink).toHaveBeenCalledWith("http://localhost:5173/")
-		expect(brand.target).toBe("_blank")
-		expect(brand.rel).toBe("noopener noreferrer")
-
 		// preserve standard variants and action order on every viewport
 		const buttons = [...hook.container.querySelectorAll("footer button")]
 		expect(buttons[0]?.textContent).toStartWith("Send this chat to")

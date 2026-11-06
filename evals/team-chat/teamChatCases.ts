@@ -25,6 +25,7 @@ const ESPRESSO_FINDINGS: RetrievedFinding[] = TOPIC_CHAT_CONTEXT.findings.map((f
 export const ROASTING_TOPIC_NAME = "Home roasting"
 const ROASTING_FINDINGS: RetrievedFinding[] = [
 	{
+		findingId: "finding-1",
 		title: "A countertop smoke filter for home roasters",
 		url: "https://roastlog.example/smoke-filter",
 		foundAt: new Date("2026-09-28"),
@@ -37,6 +38,7 @@ const ROASTING_FINDINGS: RetrievedFinding[] = [
 		topicName: ROASTING_TOPIC_NAME,
 	},
 	{
+		findingId: "finding-2",
 		title: "Logging first crack with a phone app",
 		url: "https://forum.example/t/first-crack-app",
 		foundAt: new Date("2026-09-12"),
@@ -128,6 +130,7 @@ export const TEAM_CHAT_CASES: TeamChatCase[] = [
 			findings: [
 				...TEAM_CHAT_CONTEXT.findings,
 				{
+					findingId: "finding-3",
 					title: "Green coffee deals this week",
 					url: "https://beanbin.example/green-deals",
 					foundAt: new Date("2026-10-01"),

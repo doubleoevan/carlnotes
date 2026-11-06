@@ -2,7 +2,7 @@
 // bot, and visit events that the server records and the browser sends
 
 // where a server event came from
-export type AnalyticsEntryPoint = "web" | "mobile" | "mcp" | "email" | "feed" | "worker" | "webhook"
+export type AnalyticsEntryPoint = "web" | "mobile" | "mcp" | "api" | "email" | "feed" | "worker" | "webhook"
 
 // an event's properties: short identifiers, numbers, and flags, never content
 export type AnalyticsEventProperties = Record<string, string | number | boolean>
@@ -78,10 +78,26 @@ export type UserAnalyticsEvent =
 	| "note_comment_added"
 	// a report of someone's content
 	| "content_flagged"
+	// an updates list on any path
+	| "updates_requested"
+	// Personal sources: entries received or deleted, a send or an email that was not saved, and the sender's summary
+	| "personal_source_entry_received"
+	| "personal_source_entry_deleted"
+	| "personal_sources_send_rejected"
+	| "personal_sources_quota_reached"
+	| "personal_sources_email_unfiled"
+	| "personal_sources_context_built"
+	// the Topics Carl matched to something a user wants to send
+	| "topics_suggested"
+	// an AI Agent's account controls: its nudge, its disconnection, and its send-only keys
+	| "personal_sources_nudge_dismissed"
+	| "ai_agent_disconnected"
+	| "ai_agent_api_key_created"
+	| "ai_agent_api_key_revoked"
 
 // the events keyed to a bot's or an app's name
 export type BotAnalyticsEvent =
-	// an AI app connecting and calling tools
+	// an AI Agent connecting and calling tools
 	| "mcp_connected"
 	| "mcp_tool_called"
 	// a crawler reading a page, an unfurler fetching a link's card, and a podcast app or a feed reader pulling a feed
@@ -92,7 +108,9 @@ export type BotAnalyticsEvent =
 // the events the server records for a visitor with no account yet
 export type VisitorAnalyticsEvent =
 	// an app install whose attestation the signup gate rejected, by platform and reason
-	"signup_gate_rejected"
+	| "signup_gate_rejected"
+	// an email to Carl from an address with no account
+	| "personal_sources_email_unregistered"
 
 // the events the browser sends for an anonymous visit, each named with a visit_ prefix
 export type VisitAnalyticsEvent =

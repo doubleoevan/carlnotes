@@ -13,7 +13,7 @@ export class PersonalSourcesConversionError extends Error {
 }
 
 /**
- * Serializes a sender's receipts and entitlement changes while allowing Scans to reference the account.
+ * Serializes a sender's confirmations and entitlement changes while allowing Scans to reference the account.
  */
 export async function lockPersonalSourcesSender(transaction: DbTransaction, userId: string): Promise<boolean> {
 	const [sender] = await transaction
@@ -25,7 +25,7 @@ export async function lockPersonalSourcesSender(transaction: DbTransaction, user
 }
 
 /**
- * Locks the Topic used by receipt, Source reconciliation, and access-changing writes.
+ * Locks the Topic used by confirmation, Source reconciliation, and access-changing writes.
  */
 export async function lockPersonalSourcesTopic(
 	transaction: DbTransaction,

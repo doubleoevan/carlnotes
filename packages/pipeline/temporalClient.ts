@@ -67,16 +67,16 @@ export async function startPersonalSourcesContextWorkflow(topicId: string): Prom
 }
 
 /**
- * Starts durable received-email work whose only argument is a persisted receipt id.
+ * Starts durable received-email work whose only argument is a persisted confirmation id.
  */
-export async function startPersonalSourcesEmailWorkflow(receiptId: string): Promise<void> {
+export async function startPersonalSourcesEmailWorkflow(confirmationId: string): Promise<void> {
 	const client = await getClient()
 	try {
 		await withClientDeadline(client, () =>
 			client.workflow.start("receivePersonalSourcesEmail", {
 				taskQueue: PERSONAL_SOURCES_EMAIL_TASK_QUEUE,
-				workflowId: `personal-sources-email-${receiptId}`,
-				args: [receiptId],
+				workflowId: `personal-sources-email-${confirmationId}`,
+				args: [confirmationId],
 			}),
 		)
 	} catch (error) {
@@ -181,7 +181,14 @@ export async function cancelTopicScanWorkflow(topicId: string): Promise<ScanCanc
 	const client = await getClient()
 	try {
 		const workflowHandle = client.workflow.getHandle(`scan-${topicId}`)
+
+		// the server accepts a cancel on a finished workflow, so read its status first
+		const { status } = await withClientDeadline(client, () => workflowHandle.describe())
+		if (status.name !== "RUNNING") {
+			return { status: "idle" }
+		}
 		await withClientDeadline(client, () => workflowHandle.cancel())
+
 		// the result rejects with the cancellation once the workflow has wound down, which is the wait's end
 		return {
 			status: "cancelled",
@@ -192,7 +199,7 @@ export async function cancelTopicScanWorkflow(topicId: string): Promise<ScanCanc
 				),
 		}
 	} catch (error) {
-		// a workflow that is missing or already completed leaves nothing to cancel
+		// a workflow that is missing leaves nothing to cancel
 		if (error instanceof WorkflowNotFoundError) {
 			return { status: "idle" }
 		}

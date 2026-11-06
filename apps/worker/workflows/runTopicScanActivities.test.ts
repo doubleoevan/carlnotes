@@ -5,10 +5,12 @@ import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import type { StoredSourceResult } from "@carlnotes/contracts/topics"
 import { restoreConnectionPool, type SentQuery, stubConnectionPool, toTableRow } from "@carlnotes/db/connectionPoolStub"
 import { scans } from "@carlnotes/db/schema/scans"
+import { topics } from "@carlnotes/db/schema/topics"
 import { newBudget } from "@carlnotes/models/budget"
 import * as litellm from "@carlnotes/models/litellm"
 import * as ingest from "@carlnotes/pipeline/ingest/index"
 import type { DiscoveredResource } from "@carlnotes/pipeline/ingest/ingester"
+import * as analytics from "@carlnotes/server/analytics"
 import { ApplicationFailure } from "@temporalio/activity"
 import {
 	failScan,
@@ -186,6 +188,40 @@ test("the finish update writes the source results beside the kept count", async 
 	})
 })
 
+// Personal sources links reach the Scan as Findings with a score bonus, and each sender's annotation on them is private
+test("a finished scan reports its Personal sources Findings and private annotations", async () => {
+	const finishedScanRow = toTableRow(scans, { id: "scan-1", topicId: "topic-1", ownerId: "owner-1", keptCount: 2 })
+	const topicRow = toTableRow(topics, { id: "topic-1", visibility: "private" })
+	stubConnectionPool(({ text }) => {
+		// one kept Finding with a score bonus, and one without
+		if (text.includes('from "findings" inner join "resources"')) {
+			return [
+				["https://a.test/0", 0.1],
+				["https://b.test/0", 0],
+			]
+		}
+		// the private annotations that the Scan saved
+		if (text.includes('from "finding_personal_annotations"')) {
+			return [[3]]
+		}
+
+		// the Topic, and the Scan's finished row
+		if (text.startsWith("select") && text.includes('from "topics"')) {
+			return [topicRow]
+		}
+		return text.startsWith('update "scans"') ? [finishedScanRow] : []
+	})
+
+	// the finish reports the Scan's counts
+	const trackEventSpy = spyOn(analytics, "trackEvent")
+	await finishScan("scan-1", "topic-1", "owner-1", toIngestStageResult({ foundCount: 2 }), {
+		review: EMPTY_REVIEW,
+		budget: newBudget(),
+	})
+	const scanCompleted = trackEventSpy.mock.calls.find(([event]) => event === "scan_completed")
+	expect(scanCompleted?.[2]).toMatchObject({ personalFindingsKept: 1, privateAnnotationsSaved: 3 })
+})
+
 // the read count is what the Sources returned plus the earlier findings the review read again
 test("the finish adds the earlier findings the review read again to the read count", async () => {
 	const sentQueries = stubConnectionPool(toScanUpdateRows)
@@ -238,7 +274,9 @@ test("a stop writes neither the kept count nor the source results", async () => 
 test("the ingest stage passes on each Source's outcome as only the four fields the scan report reads", async () => {
 	// a running scan row, an owner key, and an ingest whose Sources found Resources and fetched a page body
 	const scanRow = toTableRow(scans, { id: "scan-1", ownerId: "owner-1", status: "running" })
-	stubConnectionPool(({ text }) => (text.startsWith("select") && text.includes('from "scans"') ? [scanRow] : []))
+	const sentQueries = stubConnectionPool(({ text }) =>
+		text.startsWith("select") && text.includes('from "scans"') ? [scanRow] : [],
+	)
 	spyOn(litellm, "loadOrProvisionUserLiteLLMKey").mockResolvedValue("sk-owner")
 	const fetchedBody = { markdown: "# The page", etag: null, lastModified: null }
 	const sourceOutcomes: ingest.SourceOutcome[] = [
@@ -271,6 +309,16 @@ test("the ingest stage passes on each Source's outcome as only the four fields t
 
 	// each outcome keeps its kind, status, and detail, the results come with it, and no page body crosses
 	const ingestStageResult = await ingestForScan("scan-1", "topic-1")
+
+	// the Scan's progress saves each Source for a status read, and its results stay unset
+	const progressUpdate = sentQueries.find((query) => query.text.includes('"ingest_source_results" ='))
+	expect(progressUpdate?.text).not.toContain('"source_results" =')
+	const savedProgress = progressUpdate?.values.find(
+		(value): value is string => typeof value === "string" && value.includes("source-a"),
+	)
+	expect(JSON.parse(savedProgress ?? "null").sources.map(({ foundCount }: StoredSourceResult) => foundCount)).toEqual(
+		ingestStageResult.sourceResults?.map(({ foundCount }) => foundCount),
+	)
 	expect(ingestStageResult.sourceOutcomes).toEqual([
 		{ sourceKind: "url", status: "ok" },
 		{ sourceKind: "reddit", status: "fallback", fallbackMode: "reddit-rss" },

@@ -2,6 +2,7 @@
 
 import { toSourceSummary, toUrlHost } from "@carlnotes/contracts/sources"
 import { db, isCurrentModelEmbedding, isFindingShown } from "@carlnotes/db"
+import { isReadySharedSource, toActivatedScanFilter } from "@carlnotes/db/contentFilters"
 import { chatAttachments } from "@carlnotes/db/schema/chat"
 import { findings, resources, scans } from "@carlnotes/db/schema/scans"
 import { attachments, sources, topics } from "@carlnotes/db/schema/topics"
@@ -24,6 +25,7 @@ const SIMILARITY_TIE_RANGE = 0.05
 
 // one finding as the model sees it
 export type RetrievedFinding = {
+	findingId: string
 	title: string | null
 	url: string
 	foundAt: Date
@@ -56,6 +58,14 @@ export type ChatContext = {
 	docsBlock: string
 }
 
+// the key that embeds the question, whether the read includes attachments, and whether a chat turn reads the context
+type RetrieveChatContextOptions = {
+	litellmApiKey?: string
+	shouldIncludeAttachments?: boolean
+	// a read outside a chat turn skips the user's chat attachments and the docs
+	isChatTurn?: boolean
+}
+
 /**
  * Assembles one chat turn's context from what the topic holds, or null if the topic does not exist.
  */
@@ -64,8 +74,7 @@ export async function retrieveChatContext(
 	question: string,
 	userId: string,
 	isTopicOwner: boolean,
-	litellmApiKey?: string,
-	shouldIncludeAttachments = true,
+	{ litellmApiKey, shouldIncludeAttachments = true, isChatTurn = true }: RetrieveChatContextOptions = {},
 ): Promise<ChatContext | null> {
 	// a missing topic has nothing to chat about
 	const [topic] = await db
@@ -91,13 +100,13 @@ export async function retrieveChatContext(
 	// re-rank the findings against the question and read the sources, scan summaries, attachment contexts, and docs
 	const [retrievedFindings, topicSources, scanSummaries, attachmentContext, chatAttachmentContext, docsBlock] =
 		await Promise.all([
-			retrieveFindings([topicId], questionVector),
+			retrieveFindings([topicId], questionVector, { scanFilter: toActivatedScanFilter(userId) }),
 			readSources(topicId),
-			readScanSummaries(topicId),
+			readScanSummaries(topicId, userId),
 			// read the topic's attachments for its owner and the user's kept chat attachments. a chat room turn reads no attachments
 			isTopicOwner && shouldIncludeAttachments ? readAttachmentContext(topicId) : Promise.resolve(""),
-			shouldIncludeAttachments ? readChatAttachmentContext(userId, topicId) : Promise.resolve(""),
-			readDocsBlock(questionVector),
+			shouldIncludeAttachments && isChatTurn ? readChatAttachmentContext(userId, topicId) : Promise.resolve(""),
+			isChatTurn ? readDocsBlock(questionVector) : Promise.resolve(""),
 		])
 	// the name and prompt fill their own lines, and the rest of the row is the settings block
 	const { name, prompt, ...topicSettings } = topic
@@ -141,26 +150,29 @@ export type RankedTopicFinding = {
  */
 export async function searchTopicFindings(
 	topicId: string,
+	userId: string | null,
 	query: string,
 	limit: number,
 	litellmApiKey?: string,
 ): Promise<RankedTopicFinding[]> {
 	const queryVector = await embedRetrievalQuery(query, litellmApiKey)
-	return rankTopicFindings([topicId], queryVector, limit)
+	return rankTopicFindings([topicId], queryVector, limit, toActivatedScanFilter(userId))
 }
 
 /**
  * Returns the topics' findings ranked by how close their resource is to the question, each with its stored text.
+ * A team read names each finding's topic and has no scan filter.
  */
 export async function retrieveFindings(
 	topicIds: string[],
 	questionVector: number[],
-	topicNameById?: Map<string, string>,
+	{ topicNameById, scanFilter }: { topicNameById?: Map<string, string>; scanFilter?: SQL } = {},
 ): Promise<RetrievedFinding[]> {
 	// rank the findings, then read each resource's text
-	const rankedTopicFindings = await rankTopicFindings(topicIds, questionVector, MAX_RETRIEVED_FINDINGS)
+	const rankedTopicFindings = await rankTopicFindings(topicIds, questionVector, MAX_RETRIEVED_FINDINGS, scanFilter)
 	return Promise.all(
 		rankedTopicFindings.map(async (rankedRow) => ({
+			findingId: rankedRow.findingId,
 			title: rankedRow.title,
 			url: rankedRow.url,
 			foundAt: rankedRow.foundAt,
@@ -178,9 +190,12 @@ async function rankTopicFindings(
 	topicIds: string[],
 	questionVector: number[],
 	limit: number,
+	scanFilter?: SQL,
 ): Promise<RankedTopicFinding[]> {
 	// run the ranking query and name each row's columns
-	const { rows } = await db.execute<RankedTopicFindingRow>(toRankTopicFindingsQuery(topicIds, questionVector, limit))
+	const { rows } = await db.execute<RankedTopicFindingRow>(
+		toRankTopicFindingsQuery(topicIds, questionVector, limit, scanFilter),
+	)
 	const rankedTopicFindings = rows.map(toRankedTopicFinding)
 
 	// break near-ties by recency, then add each row's url host as its source
@@ -213,7 +228,12 @@ type RankedTopicFindingRow = {
  * Returns the ranking query: the topics' shown findings whose resources the current model embedded, collected in a
  * materialized common table expression and ordered by distance.
  */
-export function toRankTopicFindingsQuery(topicIds: string[], questionVector: number[], limit: number): SQL {
+export function toRankTopicFindingsQuery(
+	topicIds: string[],
+	questionVector: number[],
+	limit: number,
+	scanFilter?: SQL,
+): SQL {
 	// the topics' findings, each with its distance from the question
 	const questionVectorLiteral = JSON.stringify(questionVector)
 	const topicFindingsQuery = db
@@ -233,7 +253,9 @@ export function toRankTopicFindingsQuery(topicIds: string[], questionVector: num
 		})
 		.from(findings)
 		.innerJoin(resources, eq(findings.resourceId, resources.id))
-		.where(and(inArray(findings.topicId, topicIds), isFindingShown, isCurrentModelEmbedding))
+		.innerJoin(topics, eq(findings.topicId, topics.id))
+		.innerJoin(scans, eq(findings.scanId, scans.id))
+		.where(and(inArray(findings.topicId, topicIds), isFindingShown, isCurrentModelEmbedding, scanFilter))
 
 	// the materialized topic findings, then the ranking over them
 	return sql`with topic_findings as materialized (${topicFindingsQuery}) select * from topic_findings order by distance limit ${limit}`
@@ -295,28 +317,33 @@ async function readSources(topicId: string): Promise<string[]> {
 	const topicSourceRows = await db
 		.select({ id: sources.id, sourceKind: sources.kind, config: sources.config })
 		.from(sources)
-		.where(and(eq(sources.topicId, topicId), eq(sources.status, "ready")))
+		.where(and(eq(sources.topicId, topicId), isReadySharedSource))
 
-	// the built-in web search stores nothing worth summarizing, so it names itself
-	return topicSourceRows.map((topicSourceRow) => {
-		const summary = toSourceSummary(topicSourceRow.sourceKind, topicSourceRow.config)
-		const label =
-			topicSourceRow.sourceKind === "search"
-				? "web search — Carl searches the live web for this topic"
-				: summary
-					? `${topicSourceRow.sourceKind} — ${summary}`
-					: topicSourceRow.sourceKind
-		// end the line with the source id the removeSource tool takes
-		return `${label} [source ${topicSourceRow.id}]`
-	})
+	// end each line with the source id the removeSource tool takes
+	return topicSourceRows.map(
+		(topicSourceRow) =>
+			`${toTopicSourceLine(topicSourceRow.sourceKind, topicSourceRow.config)} [source ${topicSourceRow.id}]`,
+	)
+}
+
+/**
+ * Returns a source's line for the model. The built-in web search stores nothing worth summarizing, so it names itself.
+ */
+export function toTopicSourceLine(sourceKind: string, config: Record<string, unknown>): string {
+	if (sourceKind === "search") {
+		return "web search — Carl searches the live web for this topic"
+	}
+	const summary = toSourceSummary(sourceKind, config)
+	return summary ? `${sourceKind} — ${summary}` : sourceKind
 }
 
 // the topic's most recent scan summaries, newest first, skipping scans that didn't write one
-async function readScanSummaries(topicId: string): Promise<string[]> {
+async function readScanSummaries(topicId: string, userId: string): Promise<string[]> {
 	const summaryRows = await db
 		.select({ scanSummary: scans.scanSummary })
 		.from(scans)
-		.where(and(eq(scans.topicId, topicId), isNotNull(scans.scanSummary)))
+		.innerJoin(topics, eq(scans.topicId, topics.id))
+		.where(and(eq(scans.topicId, topicId), isNotNull(scans.scanSummary), toActivatedScanFilter(userId)))
 		.orderBy(desc(scans.startedAt))
 		.limit(MAX_SCAN_SUMMARIES)
 

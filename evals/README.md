@@ -18,14 +18,16 @@ part of `bun test` or the push gate. Run a prompt's eval before shipping a chang
 | `source-suggestions/` | the Sources suggested for a topic | `bun run eval:source-suggestions` |
 | `search-queries/` | the search queries that a Scan writes for a topic | `bun run eval:search-queries` |
 | `attachment-summaries/` | the summary of an attached document and the description of an attached image | `bun run eval:attachment-summaries` |
+| `updates-opener/` | Carl's opener above an updates list | `bun run eval:updates-opener` |
+| `topic-matching/` | how a sent item ranks a user's editable Topics, with no model writing anything | `bun run eval:topic-matching` |
 
 The promptfoo evals and the review pipeline eval call the local LiteLLM proxy (`bun run carl-up`), under Doppler.
 
 ## How a promptfoo eval works
 
-Every eval except the review pipeline runs [promptfoo](https://www.promptfoo.dev) cases through promptfoo's `evaluate`
-function. The promptfoo CLI does not start under Bun, and the code under test needs Bun. Each eval folder has four
-files:
+Every eval except the review pipeline and topic matching runs [promptfoo](https://www.promptfoo.dev) cases through
+promptfoo's `evaluate` function. The promptfoo CLI does not start under Bun, and the code under test needs Bun. Each
+eval folder has four files:
 
 - `<name>Cases.ts` holds the cases. A case's findings and numbers are made up, so a fact in an output that its case
   lacks is invented. A case never holds a real user's data.
@@ -367,6 +369,18 @@ summary says nothing the attachment does not show, and that it keeps the facts a
 meeting note, a product spec, a document long enough to be cut, a price sheet and an image with an instruction planted
 in each, a chart, and a recipe card.
 
-`personal-sources-context/` exercises the production private-context writer with four bounded synthetic cases: useful context, deletion, adversarial input, and long imports. Run `bun run eval:personal-sources-context --repeat 3`; deterministic case checks also run in `bun test` without model calls.
+## Topic matching eval
 
-Its `personalSourcesScoringEval.ts` companion runs three adversarial two-sender cases through the production scorer with disposable development accounts. `bun run eval:personal-sources-scoring` requires page-only public evidence and separate private annotations, caps model spend per case, and removes its accounts and temporary model credential afterward.
+`topic-matching/` scores made-up sent items against made-up Topics with the real embedding model, through the same
+`toTopicRelevance` that the matcher calls. Its report compares the combined text with each attachment score weight, and
+gives the top match rate, the decoys held, each minimum relevance's clearance, and the best no-match score. Rerun it
+after a change to the attachment score weight or to either minimum relevance in
+`packages/pipeline/personalSources/topicRelevance.ts`. `evals/results/topic-matching.json` saves the whole report.
+
+`personal-sources-context/` exercises the production private-context writer with four bounded synthetic cases: useful
+context, deletion, adversarial input, and long imports. Run `bun run eval:personal-sources-context --repeat 3`;
+deterministic case checks also run in `bun test` without model calls.
+
+Its `personalSourcesScoringEval.ts` companion runs three adversarial two-sender cases through the production scorer with
+disposable development accounts. `bun run eval:personal-sources-scoring` requires page-only public evidence and separate
+private annotations, caps model spend per case, and removes its accounts and temporary model credential afterward.

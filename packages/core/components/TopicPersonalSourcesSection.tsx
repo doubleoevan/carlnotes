@@ -39,7 +39,7 @@ export function TopicPersonalSourcesSection({ topic, elements, onCopy, className
 	)
 }
 
-// only receipt metadata is read while closed; a topic with no live sender items keeps its existing layout
+// only confirmation metadata is read while closed; a topic with no live sender items keeps its existing layout
 function VisibleSection({
 	userId,
 	topic,

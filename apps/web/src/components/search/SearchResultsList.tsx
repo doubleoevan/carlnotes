@@ -1,30 +1,15 @@
-import {
-	isPublishedPodcastEpisode,
-	type PodcastEpisode,
-	type PodcastEpisodeSummary,
-} from "@carlnotes/contracts/podcast"
-import type { FindingSearchRow, SearchResultsPage, SearchRow, TopicSearchRow } from "@carlnotes/contracts/search"
-import { toTopicPath } from "@carlnotes/contracts/seo"
-import { toDotSeparatedText } from "@carlnotes/contracts/text"
-import { toAgoLabel, toCountLabel } from "@carlnotes/core/lib/labels"
+import type { PodcastEpisode } from "@carlnotes/contracts/podcast"
+import type { FindingSearchRow, SearchResultsPage } from "@carlnotes/contracts/search"
 import { cn } from "@carlnotes/nightshift/classNames"
-import type { LucideIcon } from "lucide-react"
-import type { ComponentProps, ReactNode } from "react"
-import { TeamAvatar } from "@/components/branding/TeamAvatar"
-import { UserAvatar } from "@/components/branding/UserAvatar"
+import type { ComponentProps } from "react"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { Pagination } from "@/components/common/Pagination"
-import { PodcastEpisodeNumberPill } from "@/components/podcast/PodcastEpisodePill"
 import { ResourceSkeleton } from "@/components/topic/TopicFeedSkeleton"
 import { TopicResource } from "@/components/topic/TopicResource"
 import { RESOURCE_LIST_CARD_CLASS } from "@/lib/styleClasses"
 import type { TopicFeedHandlers } from "@/providers/TopicFeedProvider"
 import { SearchResultRow } from "./SearchResultRow"
-import { SEARCH_RESULT_KIND_ICON } from "./searchFilterOptions"
-import { TopicSearchResultDetails } from "./TopicSearchResultDetails"
-
-// a row that links to its own page: every kind but a finding, whose row opens its note like the feed's
-type LinkedSearchRow = Exclude<SearchRow, FindingSearchRow>
+import { type LinkedSearchRow, SearchRowLine, SearchRowTopicLink } from "./SearchRowParts"
 
 // how the page row opens a page: links the caller renders, or buttons that call it back
 type SearchPagination =
@@ -32,9 +17,9 @@ type SearchPagination =
 	| { onOpenPage: (pageNumber: number) => void; renderPageLink?: undefined }
 
 /**
- * The site search's results as the feed lists its findings: each row numbered, with its kind's icon, a link to its
- * page, and a line naming its kind, its topic, its age, and its count, with a podcast episode's play pill. A finding's row is
- * the feed's own, whose note opens on a click, with its topic after its age. The numbered page row under the list
+ * The site search's results as the feed lists its findings: each row numbered, with a link to its page and a line
+ * with its kind's icon, its kind, its topic, its age, and its count, and a podcast episode's play pill. A finding's row
+ * is the feed's own, whose note opens on a click, with its topic after its age. The numbered page row under the list
  * opens the search's other pages.
  */
 export function SearchResultsList({
@@ -42,7 +27,6 @@ export function SearchResultsList({
 	searchPagination,
 	loadingPageNumber,
 	topicFeedHandlers,
-	renderTopicAction,
 }: {
 	searchPage: SearchResultsPage
 	searchPagination: SearchPagination
@@ -50,15 +34,13 @@ export function SearchResultsList({
 	loadingPageNumber?: number
 	// what a finding's note does on a read, a rating, a bookmark, or an open. the site's feed provider's if left out
 	topicFeedHandlers?: TopicFeedHandlers
-	// what a topic row shows at its end, such as a card's Follow button
-	renderTopicAction?: (topicSearchRow: TopicSearchRow) => ReactNode
 }) {
 	// the number of the page's first row, counted across every page
 	const firstRank = (searchPage.page - 1) * searchPage.pageSize + 1
 
 	// the page the row marks as current, and how many rows the loading page holds
 	const pageNumber = loadingPageNumber ?? searchPage.page
-	const loadingRowCount = Math.min(searchPage.pageSize, searchPage.rowCount - (pageNumber - 1) * searchPage.pageSize)
+	const loadingRowCount = toSearchPageRowCount(searchPage, pageNumber)
 	return (
 		<>
 			{/* the loading page's skeleton rows, or the page's rows, each drawing its own dashed separator */}
@@ -82,7 +64,6 @@ export function SearchResultsList({
 								key={`${searchRow.kind}-${searchRow.id}`}
 								searchRow={searchRow}
 								rank={firstRank + index}
-								action={searchRow.kind === "topic" ? renderTopicAction?.(searchRow) : null}
 							/>
 						),
 					)}
@@ -95,6 +76,13 @@ export function SearchResultsList({
 			)}
 		</>
 	)
+}
+
+/**
+ * Returns how many rows a page of the search holds.
+ */
+export function toSearchPageRowCount(searchPage: SearchResultsPage, pageNumber: number): number {
+	return Math.min(searchPage.pageSize, searchPage.rowCount - (pageNumber - 1) * searchPage.pageSize)
 }
 
 /**
@@ -111,8 +99,10 @@ export function SearchResultsSkeleton({ rowCount }: { rowCount: number }) {
 	)
 }
 
-// the numbered pages under the list. the html holds one page, so a row of links shows without JavaScript too
-function SearchPageRow({
+/**
+ * The numbered pages under the search results. The html holds one page, so a row of links shows without JavaScript too.
+ */
+export function SearchPageRow({
 	searchPage,
 	pageNumber,
 	searchPagination,
@@ -139,9 +129,8 @@ function SearchPageRow({
 	)
 }
 
-// a finding's row, the feed's own with its note, rating, bookmark, and read toggle, its bookmark mark beside a rank
-// that stays, the pill of the chapter that narrates it, and its topic after its age. the topic's link stops its click,
-// so following it never also opens the note
+// a finding's row: the feed's own, with the pill of the chapter that narrates it and its topic after its age. the
+// topic's link stops its click, so following it never also opens the note
 function SearchFindingRow({
 	findingSearchRow,
 	rank,
@@ -169,27 +158,18 @@ function SearchFindingRow({
 			<span>
 				in{" "}
 				<span onClickCapture={(event) => event.stopPropagation()}>
-					<TopicLink topic={topic} />
+					<SearchRowTopicLink topic={topic} />
 				</span>
 			</span>
 		</TopicResource>
 	)
 }
 
-// preserve each result's own link, icon, metadata, and optional action within the shared layout
-function LinkedSearchResultRow({
-	searchRow,
-	rank,
-	action,
-}: {
-	searchRow: LinkedSearchRow
-	rank: number
-	action: ReactNode
-}) {
+// a row with its own link, icon, and metadata in the shared layout
+function LinkedSearchResultRow({ searchRow, rank }: { searchRow: LinkedSearchRow; rank: number }) {
 	return (
 		<SearchResultRow
 			rank={rank}
-			leading={<SearchRowIcon searchRow={searchRow} />}
 			title={
 				<AnchorLink
 					href={searchRow.path}
@@ -199,90 +179,6 @@ function LinkedSearchResultRow({
 				</AnchorLink>
 			}
 			details={<SearchRowLine searchRow={searchRow} />}
-			action={action}
 		/>
-	)
-}
-
-// a row's icon: its kind's icon, or a team's or profile's avatar
-function SearchRowIcon({ searchRow }: { searchRow: LinkedSearchRow }) {
-	switch (searchRow.kind) {
-		case "topic":
-			return <KindIcon Icon={SEARCH_RESULT_KIND_ICON.topics} label="Topic" />
-		case "podcastEpisode":
-			return <KindIcon Icon={SEARCH_RESULT_KIND_ICON.podcastEpisodes} label="Podcast episode" />
-		case "team":
-			return <TeamAvatar team={searchRow.team} className="mt-px size-4 shrink-0" />
-		case "user":
-			return (
-				<UserAvatar
-					userId={searchRow.user.userId}
-					username={searchRow.user.username}
-					avatarVersion={searchRow.user.avatarVersion}
-					className="mt-px size-4 shrink-0"
-				/>
-			)
-	}
-}
-
-// a row's line: its kind, the topic it is in, its age, its count, and a podcast episode's play pill
-function SearchRowLine({ searchRow }: { searchRow: LinkedSearchRow }) {
-	switch (searchRow.kind) {
-		// a topic, its viewers and followers, and its latest podcast episode's pill
-		case "topic":
-			return (
-				<TopicSearchResultDetails
-					viewerCount={searchRow.count ?? 0}
-					subscriberCount={searchRow.subscriberCount}
-					latestPodcastEpisode={searchRow.topic.latestPodcastEpisode}
-				/>
-			)
-		// a podcast episode, the topic it is in, how long ago it was published, its listeners, and its pill
-		case "podcastEpisode":
-			return (
-				<>
-					Podcast in <TopicLink topic={searchRow.topic} />
-					{` · ${toDotSeparatedText([toAgoLabel(searchRow.date), toCountLabel(searchRow.count ?? 0, "listener")])}`}
-					<PodcastEpisodePill podcastEpisode={searchRow.podcastEpisode} />
-				</>
-			)
-		// a team, how many topics it holds, and how many members it has
-		case "team":
-			return (
-				<>
-					{toDotSeparatedText([
-						"Team",
-						toCountLabel(searchRow.topicCount, "topic"),
-						toCountLabel(searchRow.memberCount, "member"),
-					])}
-				</>
-			)
-		// a profile names its kind alone
-		case "user":
-			return <>Profile</>
-	}
-}
-
-// the topic a podcast episode or a finding is in, linked to its page
-function TopicLink({ topic }: { topic: { id: string; name: string } }) {
-	return (
-		<AnchorLink href={toTopicPath(topic)} className="hover:text-foreground underline-offset-2 hover:underline">
-			{topic.name}
-		</AnchorLink>
-	)
-}
-
-// a published podcast episode's play pill, or nothing for none
-function PodcastEpisodePill({ podcastEpisode }: { podcastEpisode: PodcastEpisodeSummary | null }) {
-	if (!podcastEpisode || !isPublishedPodcastEpisode(podcastEpisode)) {
-		return null
-	}
-	return <PodcastEpisodeNumberPill podcastEpisode={podcastEpisode} />
-}
-
-// a kind's icon, named for a screen reader
-function KindIcon({ Icon, label }: { Icon: LucideIcon; label: string }) {
-	return (
-		<Icon className="text-muted-foreground group-hover:text-foreground mt-0.5 size-4 shrink-0" aria-label={label} />
 	)
 }

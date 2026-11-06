@@ -62,7 +62,7 @@ export async function createUserInvite(
 	// save the invite: a pending invite is a no-op, a declined one reopens, a new one inserts
 	const inviteRecipientEmail = address.email ?? null
 	const inviteStatus = await db.transaction(async (transaction) => {
-		// serialize Topic invitations with private receipt
+		// serialize Topic invitations with private confirmation
 		if ("topicId" in inviteTarget) {
 			await lockPersonalSourcesTopic(transaction, inviteTarget.topicId)
 			await assertPersonalSourcesConverted(transaction, inviteTarget.topicId)

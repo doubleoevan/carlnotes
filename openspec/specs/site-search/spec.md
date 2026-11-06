@@ -2,7 +2,9 @@
 
 ## Purpose
 Define one permission-aware search over Topics, Findings, and Podcast Episodes for the site and MCP tools, with consistent ranking, pagination, and result navigation.
+
 ## Requirements
+
 ### Requirement: One search function returns every kind of result
 
 The api SHALL hold one search function that takes the caller, a query, the result kinds, a sort, a page, and a page
@@ -292,3 +294,14 @@ listed in the sitemap, `llms.txt`, or `llms-full.txt`.
 - **WHEN** a crawler fetches `/search?q=orbit`
 - **THEN** the page declares `noindex, follow`, and neither the sitemap nor the llms files name any `/search` url
 
+### Requirement: A search result shows its icon where a Finding shows its favicon
+
+A search result that is not a Finding SHALL start at its title, level with a Finding's title, on the search page, on
+mobile, and in the search MCP view. Its kind's icon, or a team's or profile's avatar, SHALL sit first on its metadata
+line, where a Finding shows its favicon.
+
+#### Scenario: A Topic row puts its icon on its line
+
+- **WHEN** a search returns a Topic and a Finding
+- **THEN** both titles start at the same inset, and the Topic's icon sits on its metadata line where the Finding's
+  favicon sits

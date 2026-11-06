@@ -1,4 +1,4 @@
-// canonical public page addresses shared by receipt and ingestion
+// canonical public page addresses shared by confirmation and ingestion
 // the query parameters that name a referrer instead of the page. filter them out of the url
 const TRACKING_PARAMETERS = /^(utm_|fbclid$|gclid$|mc_[ce]id$|igshid$|si$|ref$|ref_src$|source$|spm$)/i
 

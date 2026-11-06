@@ -48,4 +48,8 @@ bun scripts/check-workflow-bundles.ts
 # run the test suite
 bun test --coverage
 
+# build the MCP view bundle and run each MCP view in this machine's Chrome, under the test host. bun test leaves this
+# file out, since it needs the bundle and a browser
+bun run smoke:mcp-views
+
 echo "preflight green"

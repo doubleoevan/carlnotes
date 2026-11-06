@@ -1,12 +1,15 @@
 // the MCP view resources: the four resources and their security policy, the MCP view html with its escaped script, and
 // the message a missing build reads
-import { expect, test } from "bun:test"
-import { MCP_VIEW_META_KEY, toMcpUiResourceUri } from "@carlnotes/contracts/mcpViews"
+import { afterEach, expect, mock, spyOn, test } from "bun:test"
+import { toMcpViewHtmlFromBundle } from "@carlnotes/contracts/mcpViewHtml"
+import { MCP_VIEW_META_KEY, MCP_VIEW_VERSION, MCP_VIEWS, toMcpUiResourceUri } from "@carlnotes/contracts/mcpViews"
+import { STORED_MCP_VIEW_VERSIONS, type StoredMcpViewVersion } from "@carlnotes/contracts/mcpViewVersions"
+import * as store from "@carlnotes/db/store"
+import * as monitoring from "@carlnotes/server/monitoring"
 import {
 	MISSING_MCP_VIEW_BUNDLE_MESSAGE,
 	readMcpViewBundle,
 	registerMcpUiResources,
-	toMcpViewHtmlFromBundle,
 	toMcpViewToolMeta,
 } from "./uiResources"
 
@@ -21,7 +24,7 @@ type RegisteredMcpUiResource = {
 }
 
 // the resources a fake server registers
-function toRegisteredMcpUiResources(): RegisteredMcpUiResource[] {
+function toRegisteredMcpUiResources(storedMcpViewVersions?: StoredMcpViewVersion[]): RegisteredMcpUiResource[] {
 	const registeredMcpUiResources: RegisteredMcpUiResource[] = []
 	const fakeMcpServer = {
 		registerResource: (
@@ -34,50 +37,27 @@ function toRegisteredMcpUiResources(): RegisteredMcpUiResource[] {
 			return {}
 		},
 	}
-	registerMcpUiResources(fakeMcpServer as unknown as Parameters<typeof registerMcpUiResources>[0])
+	registerMcpUiResources(
+		fakeMcpServer as unknown as Parameters<typeof registerMcpUiResources>[0],
+		storedMcpViewVersions,
+	)
 	return registeredMcpUiResources
 }
 
-test("four versioned MCP view resources retain unversioned aliases with the same security policy", () => {
+test("six versioned MCP view resources retain unversioned aliases with the same security policy", () => {
 	const registeredMcpUiResources = toRegisteredMcpUiResources()
-	expect(registeredMcpUiResources.map((uiResource) => uiResource.uri)).toEqual([
-		"ui://carlnotes/search.html?v=9",
-		"ui://carlnotes/search.html",
-		"ui://carlnotes/search.html?v=2",
-		"ui://carlnotes/search.html?v=3",
-		"ui://carlnotes/search.html?v=4",
-		"ui://carlnotes/search.html?v=5",
-		"ui://carlnotes/search.html?v=6",
-		"ui://carlnotes/search.html?v=7",
-		"ui://carlnotes/search.html?v=8",
-		"ui://carlnotes/topic.html?v=9",
-		"ui://carlnotes/topic.html",
-		"ui://carlnotes/topic.html?v=2",
-		"ui://carlnotes/topic.html?v=3",
-		"ui://carlnotes/topic.html?v=4",
-		"ui://carlnotes/topic.html?v=5",
-		"ui://carlnotes/topic.html?v=6",
-		"ui://carlnotes/topic.html?v=7",
-		"ui://carlnotes/topic.html?v=8",
-		"ui://carlnotes/findings.html?v=9",
-		"ui://carlnotes/findings.html",
-		"ui://carlnotes/findings.html?v=2",
-		"ui://carlnotes/findings.html?v=3",
-		"ui://carlnotes/findings.html?v=4",
-		"ui://carlnotes/findings.html?v=5",
-		"ui://carlnotes/findings.html?v=6",
-		"ui://carlnotes/findings.html?v=7",
-		"ui://carlnotes/findings.html?v=8",
-		"ui://carlnotes/suggest-topics.html?v=9",
-		"ui://carlnotes/suggest-topics.html",
-		"ui://carlnotes/suggest-topics.html?v=2",
-		"ui://carlnotes/suggest-topics.html?v=3",
-		"ui://carlnotes/suggest-topics.html?v=4",
-		"ui://carlnotes/suggest-topics.html?v=5",
-		"ui://carlnotes/suggest-topics.html?v=6",
-		"ui://carlnotes/suggest-topics.html?v=7",
-		"ui://carlnotes/suggest-topics.html?v=8",
-	])
+	const versionSuffixes = [`?v=${MCP_VIEW_VERSION}`, "", "?v=2", "?v=3", "?v=4", "?v=5", "?v=6", "?v=7", "?v=8"]
+	const storedUris = STORED_MCP_VIEW_VERSIONS.flatMap(({ version, mcpViews }) =>
+		mcpViews.map((mcpView) => toMcpUiResourceUri(mcpView, version)),
+	)
+	expect(registeredMcpUiResources.map((uiResource) => uiResource.uri).sort()).toEqual(
+		[
+			...MCP_VIEWS.flatMap((mcpView) =>
+				versionSuffixes.map((versionSuffix) => `ui://carlnotes/${mcpView}.html${versionSuffix}`),
+			),
+			...storedUris,
+		].sort(),
+	)
 	for (const { config } of registeredMcpUiResources) {
 		expect(config.mimeType).toBe("text/html;profile=mcp-app")
 
@@ -87,6 +67,78 @@ test("four versioned MCP view resources retain unversioned aliases with the same
 		expect(config._meta.ui.csp.baseUriDomains).toEqual([siteOrigin])
 		expect(config._meta.ui.csp.connectDomains).toBeUndefined()
 	}
+})
+
+afterEach(() => {
+	mock.restore()
+})
+
+// the script of the bundle a test reads in place of the build on disk
+const CURRENT_SCRIPT = "console.log('the current build')"
+
+// serve the current build from memory
+function stubCurrentBundle(): void {
+	const toBundleFile = (path: string): unknown => ({
+		exists: async () => true,
+		text: async () => (path.endsWith(".js") ? CURRENT_SCRIPT : "body{color:blue}"),
+	})
+	spyOn(Bun, "file").mockImplementation(toBundleFile as unknown as typeof Bun.file)
+}
+
+test("the current version is above every stored one", () => {
+	const storedVersions = STORED_MCP_VIEW_VERSIONS.map(({ version }) => version)
+	expect(MCP_VIEW_VERSION).toBeGreaterThan(Math.max(0, ...storedVersions))
+})
+
+test("a stored version lists only the MCP views it holds", () => {
+	const registeredMcpUiResources = toRegisteredMcpUiResources([{ version: 100, mcpViews: ["search", "findings"] }])
+	const storedUris = registeredMcpUiResources.map(({ uri }) => uri).filter((uri) => uri.endsWith("?v=100"))
+	expect(storedUris).toEqual([toMcpUiResourceUri("search", 100), toMcpUiResourceUri("findings", 100)])
+})
+
+test("a stored version reads its own bundle once, and names its MCP view", async () => {
+	const getResourceContent = spyOn(store, "getResourceContent").mockImplementation(async (contentKey) =>
+		contentKey.endsWith(".js") ? "console.log('version 101')" : "body{color:green}",
+	)
+	const registeredMcpUiResources = toRegisteredMcpUiResources([{ version: 101, mcpViews: ["findings"] }])
+	const storedResource = registeredMcpUiResources.find(({ uri }) => uri === toMcpUiResourceUri("findings", 101))
+
+	// a second read comes from the first
+	const firstRead = await storedResource?.read()
+	await storedResource?.read()
+	const storedHtml = firstRead?.contents[0]?.text
+	expect(storedHtml).toContain("console.log('version 101')")
+	expect(storedHtml).toContain("<style>body{color:green}</style>")
+	expect(storedHtml).toContain('<body data-mcp-view="findings"')
+	expect(getResourceContent.mock.calls.map(([contentKey]) => contentKey)).toEqual([
+		"mcp-view-bundles/v101/mcpViews.js",
+		"mcp-view-bundles/v101/mcpViews.css",
+	])
+})
+
+test("the current version and an alias never read a stored bundle", async () => {
+	const getResourceContent = spyOn(store, "getResourceContent")
+	stubCurrentBundle()
+	const registeredMcpUiResources = toRegisteredMcpUiResources([{ version: 102, mcpViews: ["topic"] }])
+	// the current version's uri and each alias return the current bundle
+	for (const uri of [toMcpUiResourceUri("topic"), "ui://carlnotes/topic.html", "ui://carlnotes/topic.html?v=2"]) {
+		const uiResource = registeredMcpUiResources.find((registeredResource) => registeredResource.uri === uri)
+		expect((await uiResource?.read())?.contents[0]?.text).toContain(CURRENT_SCRIPT)
+	}
+	expect(getResourceContent).not.toHaveBeenCalled()
+})
+
+test("a stored bundle that cannot be read reports the failure and returns the current bundle", async () => {
+	const readError = new Error("no such object")
+	spyOn(store, "getResourceContent").mockRejectedValue(readError)
+	stubCurrentBundle()
+	const reportError = spyOn(monitoring, "reportError").mockImplementation(() => {})
+	const registeredMcpUiResources = toRegisteredMcpUiResources([{ version: 103, mcpViews: ["scan"] }])
+	const storedResource = registeredMcpUiResources.find(({ uri }) => uri === toMcpUiResourceUri("scan", 103))
+
+	const storedHtml = (await storedResource?.read())?.contents[0]?.text
+	expect(storedHtml).toContain(CURRENT_SCRIPT)
+	expect(reportError).toHaveBeenCalledWith(readError, "object-storage", { uri: toMcpUiResourceUri("scan", 103) })
 })
 
 test("a tool names its MCP view in the current _meta form and the earlier one", () => {

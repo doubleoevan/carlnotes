@@ -13,14 +13,14 @@ export type SearchResultRowElements = {
 export type SearchResultRowProps = {
 	className?: string
 	rank?: ReactNode
-	leading: ReactNode
+	leading?: ReactNode
 	title: ReactNode
 	details: ReactNode
 	action?: ReactNode
 }
 
 /**
- * Shares a search row's leading control, title, metadata, and trailing action.
+ * Shares a search row's optional leading control, title, metadata, and trailing action.
  */
 export function SearchResultRow({
 	className,

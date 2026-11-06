@@ -1,6 +1,25 @@
 // parseVideos tests. verify a playlistItems response gets mapped to deduped watch Resources
-import { expect, test } from "bun:test"
-import { parseVideos, playlistIdFromUrl, toAtomUrl, toYoutubeSourceId } from "./youtube"
+import { afterEach, expect, mock, spyOn, test } from "bun:test"
+import * as monitoring from "@carlnotes/server/monitoring"
+import {
+	fetchVideos,
+	parseVideos,
+	playlistIdFromUrl,
+	toAtomUrl,
+	toVideoDurationSeconds,
+	toYoutubeSourceId,
+} from "./youtube"
+
+// put the fetch and the error report back after each test
+afterEach(() => {
+	mock.restore()
+})
+
+// respond to the playlist read, then to the videos read with the given response
+function stubYoutubeFetch(videosResponse: Response): ReturnType<typeof spyOn> {
+	return spyOn(globalThis, "fetch").mockImplementation((async (url: string) =>
+		url.includes("/playlistItems") ? Response.json({ items: VIDEOS }) : videosResponse) as unknown as typeof fetch)
+}
 
 // two distinct videos plus a third repeating the first videoId, to exercise deduping
 const VIDEOS = [
@@ -87,4 +106,43 @@ test("toYoutubeSourceId reads the id out of every form that already carries one"
 	expect(await toYoutubeSourceId("https://example.com/channel/UCHnyfMqiRRG1u-2MsSQLbXA")).toBeNull()
 	expect(await toYoutubeSourceId("https://www.youtube.com/watch?v=abc123")).toBeNull()
 	expect(await toYoutubeSourceId("not a url")).toBeNull()
+})
+
+// a page of videos makes one videos call, and each Resource takes its length
+test("fetchVideos adds each video's length with one call", async () => {
+	const fetchSpy = stubYoutubeFetch(
+		Response.json({
+			items: [
+				{ id: "aaa", contentDetails: { duration: "PT1H2M3S" } },
+				{ id: "bbb", contentDetails: { duration: "P0D" } },
+			],
+		}),
+	)
+	const { resources } = await fetchVideos("playlist", "fixture-key")
+	expect(resources.map((resource) => resource.durationSeconds)).toEqual([3723, null])
+	expect(fetchSpy).toHaveBeenCalledTimes(2)
+	expect(String(fetchSpy.mock.calls[1]?.[0])).toContain("part=contentDetails&id=aaa,bbb")
+})
+
+// a failed videos call costs the Scan nothing, and the error report never holds the url with its key
+test("a failed videos call keeps the Resources and reports the failure", async () => {
+	stubYoutubeFetch(new Response("quota", { status: 403 }))
+	const reportErrorSpy = spyOn(monitoring, "reportError").mockImplementation(() => undefined)
+	const { resources } = await fetchVideos("playlist", "fixture-key")
+	expect(resources.map((resource) => resource.url)).toEqual([
+		"https://www.youtube.com/watch?v=aaa",
+		"https://www.youtube.com/watch?v=bbb",
+	])
+	expect(reportErrorSpy).toHaveBeenCalledTimes(1)
+	expect(JSON.stringify(reportErrorSpy.mock.calls)).not.toContain("fixture-key")
+})
+
+// days, hours, minutes, and seconds each count, and a live video's zero says nothing
+test("toVideoDurationSeconds reads an ISO 8601 duration", () => {
+	expect(toVideoDurationSeconds("PT45S")).toBe(45)
+	expect(toVideoDurationSeconds("PT3M")).toBe(180)
+	expect(toVideoDurationSeconds("P1DT1S")).toBe(86_401)
+	expect(toVideoDurationSeconds("P0D")).toBeNull()
+	expect(toVideoDurationSeconds("an hour")).toBeNull()
+	expect(toVideoDurationSeconds(undefined)).toBeNull()
 })
