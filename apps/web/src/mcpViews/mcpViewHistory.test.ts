@@ -18,7 +18,12 @@ beforeAll(async () => {
 	document.body.dataset.siteUrl = "https://carlnotes.test/"
 	replaceMcpViewToolCall(MCP_VIEW_TOOL_CALL, "/findings/topic-1")
 })
-afterAll(() => closeHarness())
+
+// restore the host's link for the next test file, and close the DOM
+afterAll(async () => {
+	mock.restore()
+	await closeHarness()
+})
 
 test.each([["/plans"], ["/signup?cta=podcast-question"]])("a navigation to %s opens on the site", async (path) => {
 	mcpViewHistory.push(path)
