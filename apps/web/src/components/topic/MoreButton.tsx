@@ -4,8 +4,9 @@ import { AnchorLink } from "@/components/common/AnchorLink"
 import { Button } from "@/components/primitives/button"
 import { SCRIPTED_HIDDEN_CLASS, SCRIPTED_ONLY_CLASS } from "@/lib/styleClasses"
 
-// the toggle's size and inset, shared by the button and the link in its place
-const MORE_TOGGLE_CLASS = "text-link mt-1 min-h-11 justify-start pl-9 text-sm sm:min-h-9"
+// the toggle's size and inset, shared by the button and the link in its place. the inset centers the + under the
+// column of rank numbers, which narrows from sm up
+const MORE_TOGGLE_CLASS = "text-link mt-1 min-h-11 justify-start pl-5.75 text-sm sm:min-h-9 sm:pl-4.25"
 
 /**
  * The more and less toggle under a card, shown with JavaScript alone. With fullListHref, a reader without JavaScript

@@ -124,7 +124,6 @@ export function Topic({ topic, index, className }: TopicProps) {
 				emptyText="Nothing new worth your time yet. Carl has standards."
 				fullListHref={toTopicPath(topic)}
 				className="mt-1.5"
-				moreButtonClassName="pl-12"
 			/>
 		</div>
 	)

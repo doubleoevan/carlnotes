@@ -57,8 +57,7 @@ export function TopicFindingsSection({
 }
 
 // a topic's findings, what the user may do with the findings, the text shown with no findings, whether the html
-// holds rows for a reader without JavaScript, the page the expander links for one, and the classes of the list's
-// card and of its expander
+// holds rows for a reader without JavaScript, the page the expander links for one, and the class of the list's card
 type TopicFindingListProps = Omit<React.ComponentProps<typeof TopicResource>, "resource" | "rank" | "className"> & {
 	topicFindings: TopicFinding[]
 	emptyText: string
@@ -67,7 +66,6 @@ type TopicFindingListProps = Omit<React.ComponentProps<typeof TopicResource>, "r
 	shouldRenderHiddenRows?: boolean
 	fullListHref?: string
 	className?: string
-	moreButtonClassName?: string
 }
 
 /**
@@ -80,7 +78,6 @@ export function TopicFindingList({
 	shouldRenderHiddenRows = false,
 	fullListHref,
 	className,
-	moreButtonClassName,
 	...topicResourceProps
 }: TopicFindingListProps) {
 	// the rows rendered: every row if expanded, the first NO_SCRIPT_ROW_LIMIT rows if shouldRenderHiddenRows, or five
@@ -114,7 +111,6 @@ export function TopicFindingList({
 					moreLabel={`+ ${moreTopicFindingsCount} more `}
 					fullListHref={fullListHref}
 					onToggle={() => setIsExpanded(!isExpanded)}
-					className={moreButtonClassName}
 				/>
 			)}
 		</>

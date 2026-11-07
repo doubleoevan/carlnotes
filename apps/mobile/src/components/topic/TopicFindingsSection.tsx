@@ -36,10 +36,12 @@ export function TopicFindingsSection({ topic, findings, state }: TopicFindingsSe
 				</Text>
 			)}
 			{findings.length > 5 ? (
+				// the toggle starts at the card's left edge, inside the card's margin
 				<MoreButton
 					isExpanded={isExpanded}
 					moreCount={findings.length - 5}
 					onToggle={() => setIsExpanded(!isExpanded)}
+					className="ml-4"
 				/>
 			) : null}
 		</View>

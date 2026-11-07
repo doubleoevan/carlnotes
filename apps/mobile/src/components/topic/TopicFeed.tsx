@@ -110,10 +110,12 @@ function FeedRow({
 			)
 		case "more":
 			return (
+				// the toggle starts at the findings card's left edge, inside the card's margin
 				<MoreButton
 					isExpanded={row.isExpanded}
 					moreCount={row.findingCount}
 					onToggle={() => onTopicToggle(row.topicKey)}
+					className="ml-4"
 				/>
 			)
 	}
