@@ -117,6 +117,16 @@ The iPhone and Android apps have the same microphones. The first tap asks to use
 headset works for both the question and the answer. Leaving the app while Carl and Vienna listen cancels the question,
 and the episode picks up again.
 
+## Hot takes on the show
+
+Carl and Vienna tackle hot takes in their podcast. A topic's editors share the best
+[hot takes](/docs/feed/hot-takes/) with them, and the next podcast episode reads them out by each writer's username.
+A hot take on a finding comes up in that finding's chapter, and any other comes up just before the sign-off. A short
+podcast episode takes three and a full one five, those with the most reactions first.
+
+![Carl and Vienna in a podcast episode's transcript: Carl reads hotcup's hot take, Vienna answers it, and Carl reads
+Bookish-Postscript's reply](../../../assets/screenshots/hot-takes-on-coffee-break.png)
+
 ## Subscribe in a podcast app
 
 Press **Subscribe** on the player, then choose **Open in Apple Podcasts** on an iPhone or the podcast-app button on
@@ -154,6 +164,9 @@ Blend card shows whether it's on. Off means no new podcast episodes. The podcast
 
 ![The Podcast switch at the bottom of the edit form, on: Coffee Break episode after every
 brew](../../../assets/screenshots/podcast-switch.png)
+
+Below it, **Hot takes for Carl and Vienna** decides whether the podcast takes the hot takes the topic's editors
+share. It starts on, and only the owner can turn it off.
 
 The owner can also remove one episode. Use the trash button in the episodes list, or pick **Remove episode** in an
 episode page's **⋮** actions menu. Confirm **Remove episode**, or choose **Keep it** to cancel. Removal stops that

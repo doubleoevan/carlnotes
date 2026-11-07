@@ -12,6 +12,10 @@ A hot take is what you say about something Carl found, and a reaction is one of 
 press. Both sit on every finding, podcast episode, and topic you can read, and every hot take takes reactions and
 replies of its own.
 
+The best hot takes go on the air. A topic's editors share them with Carl and Vienna, and the hosts of
+[Coffee Break](/docs/feed/coffee-break/) tackle them in the topic's next podcast episode. See
+[Hot takes for Carl and Vienna](#hot-takes-for-carl-and-vienna).
+
 ## React
 
 You see six reactions: Like, Celebrate, Support, Love, Insightful, and Funny. Each shows how many people chose it. On
@@ -32,10 +36,16 @@ The **Hot takes** card sits below **Topic findings** on a topic's page and under
 page. A finding has the same controls in its details. The heading shows how many hot takes and replies the last seven
 days added.
 
+![The Hot takes card on a topic page: the Hot Take button, 2 of 5 for Carl and Vienna at the top right, and a hot
+take with its reactions, a reply, and a reply that mentions someone](../../../assets/screenshots/hot-takes-card.png)
+
 1. Press **Hot Take**.
 2. Write up to 2,000 characters. Line breaks stay.
 3. To mention someone, type `@` and the start of their username, then pick them from the suggestions.
 4. Press **Post**.
+
+![The Add a hot take dialog: the text box, the Share with Carl and Vienna switch turned on, and
+Post](../../../assets/screenshots/hot-take-composer.png)
 
 Hot takes read newest first. Five show at first, the **more** link under the card shows the rest, and **show less**
 returns to the first five. Each one has its reactions after its age and **Reply** under it. A reply answers the hot
@@ -51,7 +61,13 @@ You can edit a hot take for 15 minutes with the pencil. After that the pencil tu
 
 Text shows as plain text. A web address stays text and is not a link. A mention links to that person's profile.
 
-## Share with Carl and Vienna
+## Hot takes for Carl and Vienna
+
+Carl and Vienna, the hosts of Coffee Break, tackle hot takes in their podcast. They read each one out by its
+writer's username and say what they make of it, the way radio hosts take a caller.
+
+![Carl and Vienna in a podcast episode's transcript: Carl reads hotcup's hot take, Vienna answers it, and Carl reads
+Bookish-Postscript's reply](../../../assets/screenshots/hot-takes-on-coffee-break.png)
 
 A topic's owner and the members of the team that owns it can share a hot take with Carl and Vienna. Press the flame
 beside a hot take to share it, and press it again to take it back. Everyone sees the lit flame while the hot take waits
@@ -62,10 +78,13 @@ card's top right shows how many are waiting out of how many may be. A short podc
 five, those with the most reactions first, and any left over wait for the next podcast episode. Once the podcast
 episode's script has read them, the count starts again.
 
-When you write a hot take or a reply on a topic you edit, **Share with Carl and Vienna** is on below the text while a
-slot is free. Turn it off to keep it to the people reading the topic. The same switch shows when you edit one, and a hot
-take that Carl and Vienna have already talked about stays shared. If you can't edit the topic, editing your own hot
-take while it waits takes it back until an editor shares it again.
+![The count at the Hot takes card's top right, 2 of 5 for Carl and Vienna, with its tooltip: Carl and Vienna like to
+tackle hot takes in the podcast](../../../assets/screenshots/hot-takes-podcast-count.png)
+
+When you write a hot take or a reply on a topic you edit, **Share with Carl and Vienna** is on below the text while the
+topic has room for one. Turn it off to keep it to the people reading the topic. The same switch shows when you edit one,
+and a hot take that Carl and Vienna have already talked about stays shared. If you can't edit the topic, editing your
+own hot take while it waits takes it back until an editor shares it again.
 
 What a shared hot take does:
 
@@ -76,7 +95,12 @@ What a shared hot take does:
 - A web address in it goes into the topic's next scan, the way a link you send Carl does.
 - It appears in the topic's sources list under **Hot takes**.
 
-A topic's owner can turn hot takes off in the topic's podcast settings, under **Podcast** in **Edit topic**.
+A topic's owner decides whether Carl and Vienna take hot takes at all, with the **Hot takes for Carl and Vienna**
+switch under **Podcast** in **Edit topic**. It starts on. Turned off, the podcast leaves hot takes out,
+and the shared ones still reach Carl's scoring and the topic's next scan.
+
+![The Podcast settings in Edit topic: Coffee Break episode after every brew, and Hot takes for Carl and Vienna, both
+on](../../../assets/screenshots/hot-takes-podcast-switch.png)
 
 Apart from the check before it posts, Carl never reads a hot take that is not shared. A hot take and a reaction still
 count as a signal when Carl ranks the topic's findings: a finding with a hot take stays in the topic when Carl trims the
