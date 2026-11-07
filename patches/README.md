@@ -1,6 +1,6 @@
 # Dependency patches
 
-`expo-audio@58.0.10.patch` adds single-player chapter targets to Expo audio 58.0.10. The app streams one continuous
+`expo-audio@58.0.11.patch` adds single-player chapter targets to Expo audio 58.0.11. The app streams one continuous
 file; a playlist would change tracks instead of seeking to the next or previous chapter in that file.
 
 The patch adds `setChapterTargets` to the TypeScript interface, generated declaration, iOS module,

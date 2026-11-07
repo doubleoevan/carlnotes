@@ -6,7 +6,7 @@ import { toVisibleAuthorFilter } from "@carlnotes/db/contentFilters"
 import { findings } from "@carlnotes/db/schema/scans"
 import { comments, reactions } from "@carlnotes/db/schema/social"
 import { loadAccountSignalWeights } from "@carlnotes/db/socialLimits"
-import { and, eq, isNotNull } from "drizzle-orm"
+import { and, eq } from "drizzle-orm"
 
 // one thing a user did on a Finding, as the signal reads it: a reaction, or one or more comments
 export type ReactionSignalRow = { findingId: string; userId: string; kind: "reaction" | "comment" }

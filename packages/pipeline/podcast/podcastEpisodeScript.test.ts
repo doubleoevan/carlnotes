@@ -280,7 +280,10 @@ test("toChapterTurns joins the cold open, each transition, and the sign-off to t
 
 test("a segment's closing turns run only if shared comments are placed there, and each author is credited", () => {
 	const closingTurns: PodcastEpisodeTurn[] = [{ speaker: "cohost", text: "Carl, roastfan says the grinder is loud." }]
-	const toChecked = (closingSharedComments: typeof closingTurns | undefined, isLastScriptDraft = false) =>
+	const toChecked = (
+		closingSharedComments: typeof closingTurns | undefined,
+		isLastScriptDraft = false,
+	): PodcastEpisodeSegment =>
 		toCheckedPodcastEpisodeSegment({
 			segment: { ...toSegment(), closingSharedComments },
 			outline,
@@ -297,14 +300,14 @@ test("a segment's closing turns run only if shared comments are placed there, an
 
 	// a credited username is required, and missing closing turns are rejected
 	const segmentSharedComments = { usernames: ["roastfan"], hasClosingSharedComments: true }
-	const toCheckedDraft = (segment: PodcastEpisodeSegment) =>
+	const toCheckedDraft = (segment: PodcastEpisodeSegment): PodcastEpisodeSegment =>
 		toCheckedPodcastEpisodeSegment({ segment, outline, segmentIndex: 0, segmentSharedComments })
 	expect(() => toCheckedDraft(toSegment())).toThrow("no closingSharedComments")
 	const uncreditedSegment = { ...toSegment(), closingSharedComments: [toHostTurn("Someone says it is loud.")] }
 	expect(() => toCheckedDraft(uncreditedSegment)).toThrow("does not credit the hot take by roastfan")
 
 	// a username inside a longer word credits nobody, and any case or punctuation around the name does
-	const toCheckedAnn = (text: string) =>
+	const toCheckedAnn = (text: string): PodcastEpisodeSegment =>
 		toCheckedPodcastEpisodeSegment({
 			segment: { ...toSegment(), closingSharedComments: [{ speaker: "cohost", text }] },
 			outline,

@@ -18,7 +18,7 @@ const outline = {
 }
 
 // a shared comment on the given Finding, or on no Finding
-function toSharedComment(findingId: string | null) {
+function toSharedComment(findingId: string | null): sharedComments.PodcastSharedComment {
 	return { commentId: `comment-${findingId}`, findingId, username: "roastfan", body: "A fair point." }
 }
 

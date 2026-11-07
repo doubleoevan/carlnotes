@@ -106,7 +106,7 @@ and a one-minute foreground interval recheck current episode access. Buffered me
 `audioPlayerTestFixtures.ts` is the fake expo-audio player that the podcast adapter's and `spokenAnswerAudio.ts`'s tests
 drive.
 
-Expo audio 58.0.10 and `patches/expo-audio@58.0.10.patch` add single-file system chapter commands. The small patch adds
+Expo audio 58.0.11 and `patches/expo-audio@58.0.11.patch` add single-file system chapter commands. The small patch adds
 ordered chapter targets and metadata updates on iOS and Android; timed skips remain 15/30 seconds. The audio config
 plugin enables iOS background audio and the Android playback service. The Voice section covers the microphone
 permission. The fingerprint changes, so this needs a rebuilt development/store client; an EAS Update alone is

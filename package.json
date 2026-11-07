@@ -110,8 +110,8 @@
 		"reset:monthly-budgets": "doppler run -- bun apps/worker/resetMonthlyBudgets.ts"
 	},
 	"devDependencies": {
-		"@babel/parser": "8.0.0",
-		"@biomejs/biome": "^2.6.3",
+		"@babel/parser": "8.1.0",
+		"@biomejs/biome": "^2.6.5",
 		"@carlnotes/api": "workspace:*",
 		"@carlnotes/contracts": "workspace:*",
 		"@carlnotes/core": "workspace:*",
@@ -120,23 +120,23 @@
 		"@carlnotes/nightshift": "workspace:*",
 		"@carlnotes/pipeline": "workspace:*",
 		"@carlnotes/server": "workspace:*",
-		"@react-email/ui": "6.11.3",
+		"@react-email/ui": "6.11.6",
 		"@resvg/resvg-js": "^2.6.2",
-		"@temporalio/worker": "^1.24.0",
+		"@temporalio/worker": "^1.25.0",
 		"@types/bun": "~1.4.4",
 		"@types/pngjs": "^6.0.5",
-		"ai": "^7.0.153",
+		"ai": "^7.0.162",
 		"concurrently": "^10.0.6",
 		"drizzle-kit": "^0.31.11",
 		"drizzle-orm": "^0.45.4",
-		"knip": "^6.43.0",
+		"knip": "^6.44.1",
 		"pixelmatch": "^8.0.0",
 		"playwright-core": "^1.64.1",
 		"pngjs": "^7.0.0",
 		"promptfoo": "^0.125.1",
 		"react": "19.3.1",
-		"react-email": "^6.11.3",
-		"storybook": "10.6.4",
+		"react-email": "^6.11.6",
+		"storybook": "10.6.5",
 		"typescript": "^7.0.2",
 		"zod": "^4.6.7"
 	},
@@ -145,8 +145,8 @@
 		"protobufjs"
 	],
 	"patchedDependencies": {
-		"expo-audio@58.0.10": "patches/expo-audio@58.0.10.patch",
-		"markdown-to-jsx@9.10.3": "patches/markdown-to-jsx@9.10.3.patch",
+		"expo-audio@58.0.11": "patches/expo-audio@58.0.11.patch",
+		"markdown-to-jsx@9.10.4": "patches/markdown-to-jsx@9.10.4.patch",
 		"react-native-enriched-html@1.1.1": "patches/react-native-enriched-html@1.1.1.patch",
 		"react-native-sse@1.2.1": "patches/react-native-sse@1.2.1.patch"
 	}

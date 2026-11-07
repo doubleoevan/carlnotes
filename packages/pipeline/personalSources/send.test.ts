@@ -16,12 +16,17 @@ const sender = { kind: "oauth", userId: "owner", clientId: "registered" } as con
 const payload = { topic_id: "bound", title: "A title", summary: "private-canary", links: [] }
 const analyticsProperties = { entryPoint: "mcp", plan: "premium" }
 
-// each test sets its env settings and restores them
+// the confirmation an accepted send returns for each Topic
+type SendConfirmation = { topic: { id: string; name: string; url: string }; entryId: string; queuedLinkCount: number }
+
+// each test sets its env settings
 beforeEach(() => {
 	restoreEnvSettings = saveEnvSettings(["CHAT_TEXT_KEY", "PERSONAL_SOURCES_RECEIVING_ENABLED"])
 	Bun.env.PERSONAL_SOURCES_RECEIVING_ENABLED = "true"
 	Bun.env.CHAT_TEXT_KEY = Buffer.alloc(32, 5).toString("base64")
 })
+
+// each test restores its spies and env settings
 afterEach(() => {
 	mock.restore()
 	restoreEnvSettings()
@@ -125,7 +130,9 @@ test("an accepted send reports its counts, and no event holds its title, text, o
 	connectAiAgent()
 	spyOn(work, "notifyPersonalSourcesChanged").mockResolvedValue()
 	const trackEventSpy = spyOn(analytics, "trackEvent")
-	const toConfirmation = (topicId: string, queuedLinkCount: number) => ({
+
+	// one Topic's confirmation, with the Topic name that no event may include
+	const toConfirmation = (topicId: string, queuedLinkCount: number): SendConfirmation => ({
 		topic: { id: topicId, name: "private-topic-name", url: `https://carlnotes.com/topics/${topicId}` },
 		entryId: `entry-${topicId}`,
 		queuedLinkCount,
