@@ -1,3 +1,4 @@
+import { THEME_STORAGE_KEY } from "@carlnotes/nightshift/theme"
 import { useLayoutEffect, useState } from "react"
 
 /**
@@ -29,9 +30,6 @@ export function useTheme(): { isDark: boolean; toggleTheme: () => void } {
 // client bundle includes no palette
 export const HERO_LIGHT = "#3b2a1d"
 export const HERO_DARK = "#0f0c09"
-
-// the localStorage key that the saved theme lives under
-export const THEME_STORAGE_KEY = "theme"
 
 // the name of the meta tag that the browser tints its toolbar from
 export const THEME_COLOR_META_NAME = "theme-color"

@@ -43,6 +43,17 @@ export const extraThemeColorNames: ColorName[] = [
 	"spendPodcastEpisode",
 ]
 
+// the localStorage key that the saved theme lives under, which the web app and the api's own pages read
+export const THEME_STORAGE_KEY = "theme"
+
+// the script that sets the dark class on the html element before first paint. a theme saved in localStorage wins over
+// the OS setting
+export const DARK_CLASS_SCRIPT = `try {
+  const savedTheme = localStorage.getItem("${THEME_STORAGE_KEY}")
+  const isDark = savedTheme ? savedTheme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches
+  document.documentElement.classList.toggle("dark", isDark)
+} catch {}`
+
 /**
  * Returns a token name as its CSS custom property name, without the leading dashes.
  */

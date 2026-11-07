@@ -1,7 +1,9 @@
 // the server-rendered blog pages: Markdown under content/blog/, rendered to HTML in Hono
 import { readdir } from "node:fs/promises"
 import { toPageTitle } from "@carlnotes/contracts/seo"
+import { darkRoast } from "@carlnotes/nightshift/colors"
 import { emailColors } from "@carlnotes/nightshift/email"
+import { DARK_CLASS_SCRIPT } from "@carlnotes/nightshift/theme"
 import { FONT_STYLESHEET_URL, fontFamilies } from "@carlnotes/nightshift/typography"
 import { appUrl } from "@carlnotes/server/appUrl"
 import { Hono } from "hono"
@@ -96,6 +98,11 @@ const PAGE_STYLE = `${API_PAGE_BASE_STYLE}
 	h1 { font-size: 28px; line-height: 1.25; }
 	.post-date { color: ${emailColors.mutedForeground}; font-size: 14px; }
 	.post-card { margin-top: 1.5rem; }
+	/* the Dark roast page, once the theme script sets the dark class */
+	html.dark { color-scheme: dark; }
+	html.dark body { background: ${darkRoast.background}; color: ${darkRoast.foreground}; }
+	html.dark a { color: ${darkRoast.link}; }
+	html.dark .post-date { color: ${darkRoast.mutedForeground}; }
 `
 
 /**
@@ -128,6 +135,7 @@ export function toContentHtml({
 		'<link rel="alternate" type="application/rss+xml" title="CarlNotes" href="/feed.xml">',
 		jsonLd,
 		`<link rel="stylesheet" href="${Bun.escapeHTML(FONT_STYLESHEET_URL)}">`,
+		`<script>${DARK_CLASS_SCRIPT}</script>`,
 		`<style>${PAGE_STYLE}</style>`,
 		"</head>",
 		"<body>",

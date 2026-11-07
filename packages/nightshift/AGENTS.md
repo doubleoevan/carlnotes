@@ -9,8 +9,10 @@ read, and the component contracts both apps' implementations build on. `tokens.c
   `latte` and `darkRoast` are each mode's values by name. `colorModes` lists the modes, and `toColorChannels` reads a
   hex or an rgba value's channels and alpha.
 - `radius.ts` — the base radius and each step's offset. `typography.ts` — the font families, the type roles with the
-  Tailwind classes each maps to, and the email's system font stack. `theme.ts` — the names the web theme maps, and
-  `toColorCssVariable`, a color token as its runtime `var(--<kebab>)`, so a style that reads it follows the theme toggle.
+  Tailwind classes each maps to, and the email's system font stack. `theme.ts` — the names the web theme maps,
+  `toColorCssVariable`, a color token as its runtime `var(--<kebab>)`, so a style that reads it follows the theme toggle,
+  `THEME_STORAGE_KEY`, and `DARK_CLASS_SCRIPT`, the script that the web app and the api's content pages run before
+  first paint to set the dark class from the saved theme or the OS setting.
   Tailwind's inline `--color-` aliases are build inputs; library styles must read the runtime palette variables.
   `units.ts` converts rem to pixels at the browser's default 16-pixel rem: `toPixels` and `toRemAndPixels`, a label
   such as "0.625rem, 10px". `breakpoints.ts` — `MD_BREAKPOINT_REM`, Tailwind's `md` breakpoint, for code that reads

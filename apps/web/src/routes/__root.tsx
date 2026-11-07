@@ -1,10 +1,11 @@
 import { SITE_TITLE } from "@carlnotes/contracts/seo"
 import { SITE_URL } from "@carlnotes/contracts/site"
+import { DARK_CLASS_SCRIPT } from "@carlnotes/nightshift/theme"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { createRootRoute, HeadContent, Outlet, Scripts, useLocation } from "@tanstack/react-router"
 import { type ReactNode, useEffect, useState } from "react"
 import { Toaster } from "@/components/primitives/sonner"
-import { HERO_DARK, HERO_LIGHT, THEME_COLOR_META_NAME, THEME_STORAGE_KEY } from "@/hooks/useTheme"
+import { HERO_DARK, HERO_LIGHT, THEME_COLOR_META_NAME } from "@/hooks/useTheme"
 import { toAppStoreBannerMeta } from "@/lib/appStoreBanner"
 import { hasSessionCookie } from "@/lib/sessionCookie"
 import { captureVisit } from "@/lib/visitAnalytics"
@@ -17,17 +18,13 @@ const SITE_DESCRIPTION = "Carl keeps up with your topics and turns what matters 
 const SITE_IMAGE_URL = `${SITE_URL}/opengraph-image.png`
 
 // the script that adds the scripted class and sets the theme class before first paint.
-// a theme saved in localStorage wins over the OS setting, and the theme-color meta tag follows the theme's hero color
+// the theme-color meta tag follows the theme's hero color
 const FIRST_PAINT_SCRIPT = `(() => {
   document.documentElement.classList.add("scripted")
-  try {
-    const savedTheme = localStorage.getItem("${THEME_STORAGE_KEY}")
-    const isDark = savedTheme ? savedTheme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches
-    document.documentElement.classList.toggle("dark", isDark)
-    if (isDark) {
-      document.querySelector('meta[name="${THEME_COLOR_META_NAME}"]')?.setAttribute("content", "${HERO_DARK}")
-    }
-  } catch {}
+  ${DARK_CLASS_SCRIPT}
+  if (document.documentElement.classList.contains("dark")) {
+    document.querySelector('meta[name="${THEME_COLOR_META_NAME}"]')?.setAttribute("content", "${HERO_DARK}")
+  }
 })()`
 
 // the document every route renders inside, with the head defaults a route's own head replaces
