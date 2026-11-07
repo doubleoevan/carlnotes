@@ -40,7 +40,7 @@ type HomeHeroProps = {
  */
 export function HomeHero({ pathname, onHomeClick, onPlayTopicTutorialVideo }: HomeHeroProps) {
 	return (
-		<div className="mt-6 grid grid-cols-[auto_minmax(0,1fr)] items-end gap-x-4">
+		<div className="mt-3 grid grid-cols-[auto_minmax(0,1fr)] items-end gap-x-4">
 			{/* the headline with the video's button after it, centered on a narrow screen, left-aligned on a wide one.
 			    "All of it." stays on one line in every copy, so a narrow screen breaks the headline before it,
 			    and the button sits beside that last line */}

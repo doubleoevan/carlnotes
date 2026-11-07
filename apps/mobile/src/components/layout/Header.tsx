@@ -35,7 +35,8 @@ export function Header({ isHome = false, isHeroShown = false, isReheating = fals
 	}
 	return (
 		<ClassNameSafeAreaView edges={["top", "left", "right"]} className="bg-hero">
-			<View className="w-full max-w-3xl self-center px-4 pt-3 pb-6">
+			{/* a visitor's hero sits closer below the brand row, as on the web */}
+			<View className={`w-full max-w-3xl self-center px-4 pt-3 ${isHeroShown ? "pb-3" : "pb-6"}`}>
 				<View className="flex-row flex-wrap items-center gap-2">
 					{/* return to search before home, and reheat if already home */}
 					<AnchorLink
