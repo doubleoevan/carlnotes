@@ -174,6 +174,45 @@ test("only the topic owner and an admin may view the owner details", async () =>
 	expect(await isAllowed(null, "topic:viewOwnerDetails", teamTopic)).toBe(false)
 })
 
+// a post needs an account that can see the topic, and deleting anyone's reaction or comment is the owner's and an admin's
+test("the gate decides who posts and who moderates reactions and comments", async () => {
+	// blocked-1 is under an admin block, owner-1 blocked pair-1, admin-1 is an admin, and everyone else is a free user
+	stubConnectionPool(({ text, values }) => {
+		if (text.includes('from "user_blocks"')) {
+			return values.includes("pair-1") ? [["pair-1"]] : []
+		}
+		if (!text.includes('from "users"')) {
+			return []
+		}
+
+		// each user's access row, the blocked one's with the time an admin blocked them
+		if (values.includes("blocked-1")) {
+			return [["user", "free", null, 1, new Date()]]
+		}
+		return values.includes("admin-1") ? [ADMIN_USER_ACCESS_ROW] : [FREE_USER_ACCESS_ROW]
+	})
+	const publicTopic = { id: "topic-1", ownerId: "owner-1", visibility: "public", teamId: null } as const
+	const privateTopic = { ...publicTopic, id: "topic-2", visibility: "private" } as const
+
+	// a follower posts and does not moderate, and the owner and an admin do both
+	expect(await isAllowed("follower-1", "social:post", publicTopic)).toBe(true)
+	expect(await isAllowed("follower-1", "social:moderate", publicTopic)).toBe(false)
+	expect(await isAllowed("owner-1", "social:post", publicTopic)).toBe(true)
+	expect(await isAllowed("owner-1", "social:moderate", publicTopic)).toBe(true)
+	expect(await isAllowed("admin-1", "social:moderate", publicTopic)).toBe(true)
+
+	// a visitor, a user who cannot see the topic, a user under an admin block, and a user in a user block with the owner
+	// do not post
+	expect(await isAllowed(null, "social:post", publicTopic)).toBe(false)
+	expect(await isAllowed("follower-1", "social:post", privateTopic)).toBe(false)
+	expect(await isAllowed("blocked-1", "social:post", publicTopic)).toBe(false)
+	expect(await isAllowed("pair-1", "social:post", publicTopic)).toBe(false)
+
+	// only an admin sets an admin block
+	expect(await isAllowed("owner-1", "admin:setAdminBlock")).toBe(false)
+	expect(await isAllowed("admin-1", "admin:setAdminBlock")).toBe(true)
+})
+
 // restrict what can be done from the topic chat
 test("the capability union covers chat send and persist", () => {
 	const chatCapabilities: Capability[] = ["chat:send", "chat:persist"]
@@ -201,4 +240,25 @@ test("role and plan comparisons live only in the gate modules", () => {
 		.filter(({ text }) => /\b\w*(role|plan|tier)\s*[!=]==|[!=]==\s*"(leader|admin|free|plus|premium)"/i.test(text))
 		.map(({ path }) => path)
 	expect(offenders).toEqual([])
+})
+
+test("a post on a private Topic with Personal sources left to convert is closed to everyone but its owner", async () => {
+	// the Topic has Personal sources left to convert
+	stubConnectionPool(({ text, values }) => {
+		if (text.includes('from "topic_personal_source_contexts"')) {
+			return [["topic-2"]]
+		}
+
+		// each user's access row
+		if (!text.includes('from "users"')) {
+			return []
+		}
+		return values.includes("admin-1") ? [ADMIN_USER_ACCESS_ROW] : [FREE_USER_ACCESS_ROW]
+	})
+
+	// the owner posts, and an admin and a team member do not
+	const closedTopic = { id: "topic-2", ownerId: "owner-1", visibility: "private", teamId: null } as const
+	expect(await isAllowed("owner-1", "social:post", closedTopic)).toBe(true)
+	expect(await isAllowed("admin-1", "social:post", closedTopic)).toBe(false)
+	expect(await isAllowed("member-1", "social:post", closedTopic)).toBe(false)
 })

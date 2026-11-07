@@ -971,7 +971,7 @@
 				]
 			}
 		},
-		"blockClient.fetchBlockedUsers": {
+		"userBlockClient.fetchUserBlocks": {
 			"method": "GET",
 			"path": "/api/users/me/blocks",
 			"request": {},
@@ -1006,7 +1006,7 @@
 				]
 			}
 		},
-		"blockClient.sendBlockUser": {
+		"userBlockClient.sendUserBlock": {
 			"method": "POST",
 			"path": "/api/users/:id/block",
 			"request": {
@@ -1035,7 +1035,7 @@
 				]
 			}
 		},
-		"blockClient.sendUnblockUser": {
+		"userBlockClient.sendUserUnblock": {
 			"method": "DELETE",
 			"path": "/api/users/:id/block",
 			"request": {

@@ -244,6 +244,8 @@ export const auth = betterAuth({
 			// whether a Scan's new Findings and a chat mention push to the user's phones, null until the first grant
 			isTopicPushEnabled: { type: "boolean", required: false, input: false, returned: true },
 			isChatMentionPushEnabled: { type: "boolean", required: false, input: false, returned: true },
+			// whether the daily notifications email is sent to the user
+			isNotificationsEmailEnabled: { type: "boolean", required: false, input: false, returned: true },
 			// the Terms version the user accepted and when
 			termsAcceptedVersion: { type: "string", required: false, input: false, returned: true },
 			termsAcceptedAt: { type: "date", required: false, input: false, returned: true },

@@ -7,10 +7,10 @@ import { findingIdsToFilter } from "./index"
 function findingRow(
 	id: string,
 	relevanceScore: number,
-	isBookmarkedOrRated = false,
+	isExempt = false,
 	foundAt = 0,
-): { id: string; relevanceScore: number; createdAt: Date; isBookmarkedOrRated: boolean } {
-	return { id, relevanceScore, createdAt: new Date(2026, 0, 1 + foundAt), isBookmarkedOrRated }
+): { id: string; relevanceScore: number; createdAt: Date; isExempt: boolean } {
+	return { id, relevanceScore, createdAt: new Date(2026, 0, 1 + foundAt), isExempt }
 }
 
 // under the limit nothing filters. over it the lowest-ranked findings no user bookmarked or rated go

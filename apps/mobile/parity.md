@@ -20,7 +20,12 @@ Native replacements are the existing Nightshift elements, link opener, system co
 Web alone parses exports in a worker; mobile explains the web import and renders the same imported entries.
 Paired stories cover the shared Personal sources section in Topic info and Artisanal Blend, empty, with items, and item-expanded; and the shared expandable row.
 
-November 4 preflight parity: 151 paired component names, 55 using the same-name core component, and 96 documented separate implementations (11 platform API, 22 platform difference, 63 not yet shared). All three Nightshift contracts have matching implementations and stories. One pre-existing uncontracted primitive remains explicitly listed. The iPhone 18 Pro simulator verified both Personal sources placements, five-item paging, page-two state after closing a Finding sheet, stored titles/full-URL fallback, and compact links. Native sign-in after rebuilding and enlarged-text rendering remain unverified. Android was outside this review pass.
+November 6 preflight parity: 158 paired component names, 60 using the same-name core component, and 98 documented
+separate implementations (12 platform API, 22 platform difference, 64 not yet shared). All three Nightshift contracts
+have matching implementations and stories. One pre-existing uncontracted primitive remains explicitly listed. The iPhone
+18 Pro simulator verified both Personal sources placements, five-item paging, page-two state after closing a Finding
+sheet, stored titles/full-URL fallback, and compact links. Native sign-in after rebuilding and enlarged-text rendering
+remain unverified. Android was outside this review pass.
 
 A capability is an exported function of a `packages/client` module, named `module.function`. Status is `web-only` for a
 capability the app will never need, with the reason, or `deferred` for one an active prompt owns, with the prompt.
@@ -38,6 +43,7 @@ capability the app will never need, with the reason, or `deferred` for one an ac
 | `billingClient.sendDeleteUser` | web-only | Admin stays on the web |
 | `billingClient.sendUserBudgetOverride` | web-only | Admin stays on the web |
 | `billingClient.sendUserRole` | web-only | Admin stays on the web |
+| `billingClient.sendAdminBlock` | web-only | The admin console's admin block of a user from reactions and comments. Admin stays on the web |
 | `topicClient.sendTopicFeatureOrder` | web-only | An admin's featuring control. Admin stays on the web |
 | `topicClient.uploadTopicAttachment` | web-only | The browser's File upload. The app uploads to the same route through `topicClient.uploadTopicAttachmentBody` |
 | `mcpClient.fetchMcpClientName` | web-only | The MCP OAuth consent page, which an AI client opens in a browser |
@@ -49,7 +55,7 @@ capability the app will never need, with the reason, or `deferred` for one an ac
 | `pageHeadClient.fetchTopicPageHead` | web-only | Server-rendered head tags. The app has no document head |
 | `profileClient.sendAvatarDecodeFailure` | web-only | A browser's image decode telemetry. The system photo picker returns images the app decodes |
 | `reportClient.fetchAdminReports` | web-only | The admin console's open reports. Admin stays on the web |
-| `reportClient.sendReportResolution` | web-only | The admin console's Remove and Keep. Admin stays on the web |
+| `reportClient.sendReportResolution` | web-only | The admin console's Remove, Block, and Clear. Admin stays on the web |
 | `billingClient.sendMobileMinimumVersion` | web-only | The admin console's minimum app version write. Admin stays on the web |
 | `billingClient.fetchBillingPortalUrl` | web-only | Stripe's billing portal. The app manages a store plan on its store's subscription page, and says a Stripe subscriber's plan is billed on the web, with no link |
 | `billingClient.fetchCheckoutUrl` | web-only | Stripe checkout. The app sells its plans as in-app subscriptions through the App Store and Google Play |
@@ -79,7 +85,8 @@ name.
 | Component | Kind | Reason |
 | --- | --- | --- |
 | `personalSourcesElements` | platform API | Adapts the shared `TopicPersonalSourcesElements` contract to DOM elements and React Native views, selectable text, links, and confirmation controls. Both apps render the same core Personal sources components. |
-| `AccountSettings` | not yet shared | Shares AccountFields and BlockedUsersSection. The section order and close account flow could move to core, with `ConfirmDialog` or `Alert` behind an adapter and mobile's push and store restore sections passed in. |
+| `socialElements` | platform API | Adapts the shared `SocialElements` contract in `core/lib/socialElements.ts` to DOM elements and React Native views: the composer in a dialog on web and in a bottom sheet with `BottomSheetTextInput` on mobile, a native choice sheet for the chapter, the flame and mugs of a comment shared with Carl with a tooltip on web and an accessibility label on mobile, and hit slops for the touch targets. Both apps render the same core `ReactionRow`, `CommentThread`, and `CommentRow`. |
+| `AccountSettings` | not yet shared | Shares AccountFields and UserBlocksSection. The section order and close account flow could move to core, with `ConfirmDialog` or `Alert` behind an adapter and mobile's push and store restore sections passed in. |
 | `AddToAiDialog` | platform difference | Shares AddToAi. Web wraps it in a dialog with install deep link anchors. Mobile uses a native sheet with copy-only desktop steps, `expo-clipboard`, and AsyncStorage. |
 | `AddTopicButton` | not yet shared | Web opens a popover with an autofocused filter over topics passed in. Mobile opens a native sheet that fetches addable topics with react-query. An adapter could hold that difference. |
 | `AddTopicToTeamDialog` | not yet shared | Both list the led teams with add and remove toggles. The list logic could move to core, with web's dialog and mobile's native sheet behind an adapter. |
@@ -135,6 +142,7 @@ name.
 | `SearchBar` | platform difference | Web is a combobox with a typeahead dropdown and arrow key handling. Mobile is a TextInput that opens the search screen on submit. |
 | `SearchResultsList` | not yet shared | Both list ranked results with the same kind icons, metadata line, and podcast episode pill, and reuse `TopicResource` for findings. Each builds the rows with its own controls. |
 | `SentInvitesTable` | not yet shared | Shares the column definitions. Web renders a DOM `DataTable` with hover tooltips and a `ConfirmDialog`, mobile a native `DataTable` with an Alert confirmation. An adapter could hold that difference. |
+| `ShareMugsIcon` | platform API | Both set Lucide's `Coffee` twice, one mirrored. Web mirrors with a class and fills with a class. Mobile mirrors a wrapping view with a transform and fills through props. |
 | `ShareTeam` | platform API | Web uses the browser share sheet and web clipboard inside a Dialog. Mobile calls the React Native Share sheet and `expo-clipboard` inside a native `Sheet`. |
 | `ShareTopic` | platform API | Web uses the browser share sheet and clipboard from a popover or dialog. Mobile uses React Native Share and `expo-clipboard` in a native sheet with a selectable link fallback. |
 | `SortableHeader` | platform difference | Web renders a th button with a hover tooltip. Mobile renders a native Button with accessibility values and shows the tooltip on long press. |
@@ -192,11 +200,12 @@ their reason.
 | Topic page, Findings, scan recaps | `topics/[topicId].tsx` | component, logic | `TopicScanRecap`, `TopicSource`, `NumberedTopicFindingList` from core |
 | Topic gate | `topic/TopicGateNotice.tsx` | logic | the web gate's words, Log in and Sign up returning to the Topic |
 | Podcast Episode | `topics/[topicId]/episodes/…` | component | the shared player, chapters, and transcript from core |
+| Reactions and the comment thread on a Topic, a Podcast Episode, and a Finding | `topic/TopicPageContent.tsx`, `podcast/PodcastEpisodeScreen.tsx`, `topic/TopicResourceInfo.tsx` | component | `ReactionRow` from core in each header, beside the byline on a Topic, below the description on a Podcast Episode, and below the domain and podcast button on a Finding, and `CommentThread` from core through `social/socialElements.tsx`, in core's `SocialSection` card on a Topic and a Podcast Episode, with the shared comment slots at the card's top right. Each comment has its own reactions, Reply, the share flame, and its replies. The composer opens in a bottom sheet above the keyboard, and the chapter choice is a choice sheet. The Finding's flag and the Podcast Episode's report use the report sheet |
 | Profile | `profiles/[userId].tsx` | component | the shared tables and the avatar's update badge |
 | Teams | `teams/index.tsx` | component | the shared membership table and the title badge |
 | Team | `teams/[teamId].tsx` | component | the shared tables, the header's update badge |
 | Activity | `activity.tsx` | component | the shared subscription and invite tables, the title badge |
-| Account, Settings | `account.tsx`, `(tabs)/settings.tsx` | component | `AccountBudget`, `AccountFields`, `BlockedUsersSection`, `PlanCard` from core, and the Contact entry. The closing version line is native: a browser loads the current app on every visit, and an installed build names its version, build, and update for a support request |
+| Account, Settings | `account.tsx`, `(tabs)/settings.tsx` | component | `AccountBudget`, `AccountFields`, `UserBlocksSection`, `PlanCard` from core, and the Contact entry. The closing version line is native: a browser loads the current app on every visit, and an installed build names its version, build, and update for a support request |
 | Update notice | `session/AppUpdateNotice.tsx` at the root | logic | the copy from `contracts/appVersions.ts` and the requirement from `core/stores/appUpdateStore.ts` on the session frame. Native alone: a browser never runs an outdated app |
 | Report and block | `common/ReportIssueDialog.tsx` from the message and comment footers, note management, and the profile menu | component, logic | the shared report, the block switch, the hidden quote, and the blocked content filters from core |
 | Terms acceptance | `session/TermsAcceptanceSheet.tsx` at the root | component | core's `TermsAcceptanceNotice` in a sheet, with Not now putting it off until the next rejected write |
@@ -251,8 +260,15 @@ has a React Native Storybook story; the device comparison runs on the rebuilt de
 | The menu's appearance items | none, the item follows the saved choice | not yet |
 | The visitor's chat sign-up sheet | none, opened from the launcher | not yet |
 | The report sheet with the author's block | `Common/ReportIssueDialog`, WithAuthorBlock | not yet, stories only |
+| The reaction row on a Topic and in a Finding's sheet, as a visitor | `Social/ReactionRow`, WithReactions and Visitor | not yet |
+| The reaction picker with the user's own type | `Social/ReactionRow`, OwnReaction | not yet |
+| The comment thread on a Topic and in a Finding's sheet, as a visitor | `Social/CommentThread`, WithComments and Empty | not yet |
+| A signed-in save of a type, a comment written in the sheet, and its delete | `Social/ReactionRow`, `Social/CommentThread` | not yet |
+| The report sheet from a hot take's flag | `Common/ReportIssueDialog`, WithAuthorBlock | not yet |
+| Both components at the largest text size | `Social/ReactionRow`, `Social/CommentThread` | not yet |
 | A reply to a hidden message | `Chat/ChatRoomMessageBubble`, HiddenQuote | not yet, stories only |
-| The Blocked people section's states | `Account/BlockedUsersSection` | not yet, stories only |
+| The Blocked people section's states | `Account/UserBlocksSection` | not yet, stories only |
+| The Blocked link and its section scroll | `Account/ProfileSummaryLine`, `/account?section=blocked-people` | not yet, stories only. The web opens the section at `/account#blocked-people`. The app has no hash anchors, so `PageScreen` scrolls to the section from the route's `section` param |
 | The Terms acceptance sheet | `Session/TermsAcceptanceSheet` | not yet, stories only |
 | The sign-up screens' acceptance line | `Session/TermsAgreementText` | not yet, stories only |
 | The update notice with and without a minimum | `Session/AppUpdateNotice` | not yet, stories only |

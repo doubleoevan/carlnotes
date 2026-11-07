@@ -14,6 +14,7 @@ import { except } from "hono/combine"
 import { getCookie } from "hono/cookie"
 import { activityRoute } from "./activity"
 import { adminRoute } from "./admin"
+import { adminBlocksRoute } from "./adminBlocks"
 import { appSignupGateRoute } from "./appSignupGate"
 import { auth, MCP_RESOURCE_URL } from "./auth"
 import { loadDailyTopicQuota, topicLimit, topicsRemaining } from "./authorization"
@@ -59,6 +60,8 @@ import {
 	toTopicPreview,
 } from "./share/preview"
 import { setGateCookie, signGateToken, verifyGateToken, verifyTurnstileToken } from "./signupGate"
+import { commentsRoute } from "./social/commentsRoute"
+import { reactionsRoute } from "./social/reactionsRoute"
 import { teamsRoute } from "./team/teamsRoute"
 import { termsAcceptanceRoute } from "./termsAcceptance"
 import { TOPIC_ATTACHMENT_UPLOAD_PATH, topicAttachmentsRoute } from "./topic/attachments"
@@ -71,7 +74,7 @@ import { topicsRoute } from "./topic/topicsRoute"
 import {
 	confirmUnsubscribePage,
 	invalidUnsubscribePage,
-	readUnsubscribeTopic,
+	readUnsubscribeEmails,
 	unsubscribe,
 	unsubscribedPage,
 } from "./unsubscribe"
@@ -110,6 +113,13 @@ const OWN_BODY_LIMIT_PATHS = [
 // the api tree, mounted on the server in api/index.ts
 export const apiRoute = new Hono<AppEnv>()
 	.basePath(API_BASE_PATH)
+	// a url with a NUL byte names nothing, and Postgres text rejects one
+	.use("*", async (context, next) => {
+		if (context.req.url.includes("%00")) {
+			return context.json({ error: "invalid url" }, 400)
+		}
+		await next()
+	})
 	// resolve the session once per request, so every route that the middleware wraps gets the currentUser
 	.use("*", async (context, next) => {
 		const session = await auth.api.getSession({ headers: context.req.raw.headers }).catch(toSignedOutSession)
@@ -167,13 +177,14 @@ export const apiRoute = new Hono<AppEnv>()
 	.route("/", personalSourcesSendsRoute)
 	.route("/", personalSourcesEmailSetupRoute)
 	.route("/", personalSourcesInboundRoute)
-	// the unsubscribe link of a topic-scan email. the signed token in the url is the auth, so no session is needed, and
-	// a fetch of the link changes nothing, so a mail provider or a scanner that checks the link unsubscribes nobody
+	// the unsubscribe link of a topic scan email or a notifications email. the signed token in the url is the auth, so
+	// no session is needed, and a fetch of the link changes nothing, so a mail provider or a scanner that checks the link
+	// unsubscribes nobody
 	.get("/unsubscribe", async (context) => {
 		const unsubscribeToken = context.req.query("token")
-		const topic = await readUnsubscribeTopic(unsubscribeToken)
-		return topic
-			? context.html(confirmUnsubscribePage(topic, unsubscribeToken ?? "", appUrl()))
+		const unsubscribeEmails = await readUnsubscribeEmails(unsubscribeToken)
+		return unsubscribeEmails
+			? context.html(confirmUnsubscribePage(unsubscribeEmails, unsubscribeToken ?? "", appUrl()))
 			: context.html(invalidUnsubscribePage(appUrl()), 400)
 	})
 	// the page's button and a provider's RFC 8058 one-click both post here. the one-click sends the List-Unsubscribe
@@ -181,14 +192,16 @@ export const apiRoute = new Hono<AppEnv>()
 	.post("/unsubscribe", async (context) => {
 		const formBody = await context.req.parseBody()
 		const isOneClick = formBody["List-Unsubscribe"] === "One-Click"
-		const topic = await unsubscribe(context.req.query("token"), {
+		const unsubscribedEmails = await unsubscribe(context.req.query("token"), {
 			entryPoint: isOneClick ? "one-click" : "page",
 			deviceProperties: toDeviceProperties(context.req.header("user-agent")),
 		})
 		if (isOneClick) {
 			return context.body(null, 200)
 		}
-		return topic ? context.html(unsubscribedPage(topic, appUrl())) : context.html(invalidUnsubscribePage(appUrl()), 400)
+		return unsubscribedEmails
+			? context.html(unsubscribedPage(unsubscribedEmails, appUrl()))
+			: context.html(invalidUnsubscribePage(appUrl()), 400)
 	})
 	// every chat room the user may open, for the chat panel that the app shell mounts once
 	.get("/rooms", async (context) => {
@@ -253,6 +266,9 @@ export const apiRoute = new Hono<AppEnv>()
 	// the note routes and their comment threads
 	.route("/", notesRoute)
 	.route("/", noteCommentsRoute)
+	// reactions, comment threads, and the mention suggestions
+	.route("/", reactionsRoute)
+	.route("/", commentsRoute)
 	// the kept chat attachment routes
 	.route("/", chatAttachmentsRoute)
 	// the subscription routes
@@ -324,7 +340,7 @@ export const apiRoute = new Hono<AppEnv>()
 	.route("/", usernamesRoute)
 	// closing an account, by an admin or by its own user
 	.route("/", usersRoute)
-	// blocking a user, unblocking them, and the block list
+	// user blocks: blocking a user, unblocking them, and the list
 	.route("/", userBlocksRoute)
 	// registering a phone for push notifications, unregistering it, and the push preferences
 	.route("/", pushDevicesRoute)
@@ -334,6 +350,7 @@ export const apiRoute = new Hono<AppEnv>()
 	.route("/", mcpClientsRoute)
 	// the admin console routes
 	.route("/", adminRoute)
+	.route("/", adminBlocksRoute)
 	.route("/", featuringRoute)
 
 // a session read that Better Auth rejects as unauthorized reads as signed out. the session's Postgres row is gone.

@@ -2,7 +2,7 @@
 // and the topic invitations waiting for an answer
 import { toNoteCount } from "@carlnotes/contracts/notes"
 import { and, count, countDistinct, eq, inArray, isNull, or, type SQL } from "drizzle-orm"
-import { toTeamHoldsTopicFilter, toUnblockedAuthorFilter, toUnreportedFilter } from "./contentFilters"
+import { toNotUserBlockedAuthorFilter, toTeamHoldsTopicFilter, toUnreportedFilter } from "./contentFilters"
 import { db } from "./index"
 import { loadUserEmail, toPendingTopicInviteFilter } from "./inviteFilters"
 import { type BadgedPages, loadBadgedPages, loadPageNoteBadges } from "./noteBadges"
@@ -18,7 +18,7 @@ export function toUnseenChatMentionFilter(userId: string): SQL | undefined {
 	return and(
 		eq(chatRoomMentions.userId, userId),
 		isNull(chatRoomMentions.seenAt),
-		toUnblockedAuthorFilter(userId, chatRoomMessages.authorUserId),
+		toNotUserBlockedAuthorFilter(userId, chatRoomMessages.authorUserId),
 		toUnreportedFilter(userId, "chatMessage", chatRoomMessages.id),
 	)
 }

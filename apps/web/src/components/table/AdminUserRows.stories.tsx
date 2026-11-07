@@ -1,9 +1,10 @@
-// the admin users table's row: the user's links, role select, topics and teams subtables, spend, and budget override
-import { fetchAdminUserTeams, fetchAdminUserTopics } from "@carlnotes/client/billingClient"
+// the admin users table's row: the user's links, role select, topics and teams subtables, spend, budget override,
+// and admin block
+import { fetchAdminUserTeams, fetchAdminUserTopics, sendAdminBlock } from "@carlnotes/client/billingClient"
 import type { OwnerTopic } from "@carlnotes/contracts/activity"
 import type { TeamSummary } from "@carlnotes/contracts/teams"
 import type { Meta, StoryObj } from "@storybook/tanstack-react"
-import { expect, fn, mocked } from "storybook/test"
+import { expect, fn, mocked, waitFor } from "storybook/test"
 import { STORY_ADMIN } from "../../../.storybook/fixtures"
 import {
 	ADMIN_USER_ROW_FIXTURES,
@@ -52,6 +53,7 @@ const meta = {
 	beforeEach: () => {
 		mocked(fetchAdminUserTeams).mockResolvedValue(PLUS_USER_TEAM_FIXTURES)
 		mocked(fetchAdminUserTopics).mockResolvedValue(OWNER_TOPIC_FIXTURES)
+		mocked(sendAdminBlock).mockResolvedValue(true)
 	},
 	// the row renders in the users table's body, under its column headers and at its width
 	decorators: [
@@ -78,6 +80,16 @@ export const OwnRow: Story = { args: { user: SIGNED_IN_ADMIN_ROW } }
 // a user past their monthly budget, whose cost shows in the destructive color, with no login date yet
 export const OverBudget: Story = {
 	args: { user: OVER_BUDGET_USER_ROW },
+}
+
+// a user under an admin block, whose block button is pressed. a press clears the admin block
+export const AdminBlocked: Story = {
+	args: { user: { ...PLUS_USER_ROW, isAdminBlocked: true } },
+	play: async ({ canvas, userEvent, args }) => {
+		await userEvent.click(canvas.getByRole("button", { name: /^Block / }))
+		await waitFor(() => expect(mocked(sendAdminBlock)).toHaveBeenCalledWith(PLUS_USER_ROW.id, false))
+		await waitFor(() => expect(args.onReloadPage).toHaveBeenCalled())
+	},
 }
 
 // a budget override in its input, disabled counts at zero, and a dash for a cost the proxy could not report

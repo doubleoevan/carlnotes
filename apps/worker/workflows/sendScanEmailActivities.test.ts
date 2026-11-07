@@ -3,7 +3,7 @@ import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import * as notify from "@carlnotes/pipeline/notify"
 import * as monitoring from "@carlnotes/server/monitoring"
 import { ApplicationFailure } from "@temporalio/activity"
-import { reportUndeliveredScanEmail, sendScanDigestBatch } from "./sendScanEmailActivities"
+import { reportUndeliveredScanEmail, sendTopicScanEmailBatch } from "./sendScanEmailActivities"
 
 // put every stubbed send and report back after each test
 afterEach(() => {
@@ -12,11 +12,11 @@ afterEach(() => {
 
 // run the batch activity with the send stubbed to the given outcome, returning what it threw, if anything
 async function toThrownFailure(scanEmailOutcome: notify.ScanEmailOutcome): Promise<ApplicationFailure | undefined> {
-	spyOn(notify, "sendScanDigestBatch").mockResolvedValue(scanEmailOutcome)
+	spyOn(notify, "sendTopicScanEmailBatch").mockResolvedValue(scanEmailOutcome)
 
 	// run the activity and catch the failure it throws
 	try {
-		await sendScanDigestBatch({ scanId: "scan-1", recipientUserIds: ["user-1"] })
+		await sendTopicScanEmailBatch({ scanId: "scan-1", recipientUserIds: ["user-1"] })
 		return undefined
 	} catch (error) {
 		return error as ApplicationFailure

@@ -1,5 +1,7 @@
 import type { Visibility } from "@carlnotes/contracts/enums"
 import { toTopicFeedPath, toTopicPath } from "@carlnotes/contracts/seo"
+import { useSubjectReportFlag } from "@carlnotes/core/hooks/useSubjectReport"
+import { cn } from "@carlnotes/nightshift/classNames"
 import { Check, Flag, Link, Rss, Share } from "lucide-react"
 import { useState } from "react"
 import { ReportIssueDialog } from "@/components/common/ReportIssueDialog.tsx"
@@ -8,7 +10,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/primitives
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import { useIsMounted, useOrigin } from "@/hooks/useBrowserValue"
 import { canOpenShareSheet } from "@/lib/shareSheet"
-import { MENU_DIVIDER_CLASS } from "@/lib/styleClasses"
+import { ACTIVE_ICON_CLASS, MENU_DIVIDER_CLASS } from "@/lib/styleClasses"
 import { captureVisitEvent, toPublicTopicProperties } from "@/lib/visitAnalytics"
 import {
 	COPY_PAGE_LABEL,
@@ -195,15 +197,7 @@ export function ShareTopic({
 				/>
 			)}
 			{/* a trigger for the report issue dialog from the home page icon only */}
-			{isIcon && (
-				<>
-					<div className={MENU_DIVIDER_CLASS} />
-					<button type="button" onClick={handleReportIssue} className={SHARE_OPTION_CLASS}>
-						<Flag className="size-4" />
-						Report issue
-					</button>
-				</>
-			)}
+			{isIcon && <ReportTopicOption topicId={topicId} onClick={handleReportIssue} />}
 		</>
 	)
 
@@ -255,6 +249,20 @@ export function ShareTopic({
 				/>
 			)}
 		</Popover>
+	)
+}
+
+// the share menu's report option, which reads whether the user reported the topic as the menu opens
+function ReportTopicOption({ topicId, onClick }: { topicId: string; onClick: () => void }) {
+	const reportFlag = useSubjectReportFlag({ subjectKind: "topic", subjectId: topicId }, onClick)
+	return (
+		<>
+			<div className={MENU_DIVIDER_CLASS} />
+			<button type="button" onClick={reportFlag.press} className={SHARE_OPTION_CLASS}>
+				<Flag className={cn("size-4", reportFlag.isReported && ACTIVE_ICON_CLASS)} />
+				{reportFlag.label}
+			</button>
+		</>
 	)
 }
 

@@ -2,6 +2,7 @@
 import { z } from "zod"
 import { ratings, resourceKinds } from "./enums"
 import { profileIdentity } from "./profiles"
+import { reactionSummary } from "./social"
 import { displayEnum } from "./tolerantReads"
 
 // a topic finding. the AI review about one Resource under a Topic, plus the user's consumed and bookmarked state
@@ -30,6 +31,10 @@ export const topicFinding = z.object({
 	isBookmarked: z.boolean(),
 	// the teammates who bookmarked this finding, for the Bookmarked view's Team scope. empty off a team
 	teamBookmarks: z.array(profileIdentity).default([]),
+	// the finding's reactions at a glance. absent from a read that does not load them
+	reactions: reactionSummary.optional(),
+	// how many comments and replies the user sees on the finding. absent from a read that does not load it
+	commentCount: z.number().optional(),
 })
 
 export type TopicFinding = z.infer<typeof topicFinding>

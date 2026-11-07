@@ -40,8 +40,8 @@ export function toSignedInApp(route: Hono<AppEnv>, userId: string): Hono<AppEnv>
 }
 
 /**
- * Returns a json post of the given body.
+ * Returns a json request of the given body, a post unless a test names another method.
  */
-export function toJsonRequest(body: unknown): RequestInit {
-	return { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }
+export function toJsonRequest(body: unknown, method = "POST"): RequestInit {
+	return { method, headers: { "content-type": "application/json" }, body: JSON.stringify(body) }
 }

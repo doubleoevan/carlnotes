@@ -23,6 +23,7 @@ import {
 } from "./results"
 import { registerScanTools } from "./scanTools"
 import { searchForTool, toSearchText } from "./searchResults"
+import { registerSocialTools } from "./socialTools"
 import { type ToolCaller, toMcpAnalyticsProperties } from "./toolCaller"
 import { type RegisterToolsOptions, toPageResult, topicIdArgument, toTextResult } from "./toolShapes"
 import { registerTopicContextTool } from "./topicContextTool"
@@ -43,11 +44,12 @@ export function registerTools(registerToolsOptions: RegisterToolsOptions): void 
 	registerFeedbackTools(registerToolsOptions)
 	registerTopicEditTools(registerToolsOptions)
 	registerPersonalSourcesTools(registerToolsOptions)
-	// register the updates, Scan, Topic context, and finding feedback tools
+	// register the updates, Scan, Topic context, finding feedback, and social tools
 	registerUpdatesTool(registerToolsOptions)
 	registerScanTools(registerToolsOptions)
 	registerTopicContextTool(registerToolsOptions)
 	registerFindingFeedbackTool(registerToolsOptions)
+	registerSocialTools(registerToolsOptions)
 }
 
 // register the read tools, the site search, and the consumed write
@@ -263,10 +265,10 @@ async function toFindingsMcpViewResult({
 	topicId,
 	mcpPage,
 }: ToFindingsMcpViewResultOptions): Promise<CallToolResult> {
-	const pageResult = toPageResult(mcpPage)
 	if (!mcpPage) {
-		return pageResult
+		return toPageResult(mcpPage)
 	}
+	const pageResult = toPageResult(mcpPage)
 
 	// the topic and the page's findings in the site's shape, for the MCP view alone
 	const findingIds = mcpPage.items.map((mcpFinding) => mcpFinding.findingId)

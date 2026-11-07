@@ -12,6 +12,8 @@ test("shown episode precedence preserves loaded, linked, recording, and latest c
 	const loadedPodcastEpisode = toPodcastEpisodeFixture({ id: "loaded" })
 	const select = (loaded: PodcastEpisode | null, linked: PodcastEpisode | null): string | undefined =>
 		toShownPodcastEpisode({ topic, loadedPodcastEpisode: loaded, linkedPodcastEpisode: linked }).podcastEpisode?.id
+
+	// a loaded Podcast Episode wins, then a linked one, then the latest, and another Topic's never shows
 	expect(select(loadedPodcastEpisode, linkedPodcastEpisode)).toBe("loaded")
 	expect(select(null, linkedPodcastEpisode)).toBe("linked")
 	expect(select(null, null)).toBe("latest")
@@ -28,6 +30,7 @@ test("recording and failed episodes obey the existing scan permission", () => {
 		latestPodcastEpisode: toPodcastEpisodeFixture({ id: "latest" }),
 		podcast: {
 			isEnabled: true,
+			isCommentsEnabled: true,
 			hasFullPodcastEpisodes: true,
 			canRemovePodcastEpisodes: false,
 			unpublishedPodcastEpisode,

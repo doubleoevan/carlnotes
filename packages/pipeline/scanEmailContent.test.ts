@@ -1,4 +1,4 @@
-// scan email content tests: a digest's new Findings are the ones the Scan first found, never the ones it re-scored
+// scan email content tests: a topic scan email's new Findings are the ones the Scan first found, never the ones it re-scored
 import { afterEach, expect, test } from "bun:test"
 import { restoreConnectionPool, stubConnectionPool } from "@carlnotes/db/connectionPoolStub"
 import { toTopicScanEmailProps } from "./scanEmailContent"
@@ -6,7 +6,7 @@ import { toTopicScanEmailProps } from "./scanEmailContent"
 // put the connection pool's own query back after each test
 afterEach(restoreConnectionPool)
 
-// a url Source's page is re-scored on every Scan, which moves its scan_id to that Scan, so the digest reads the Scan
+// a url Source's page is re-scored on every Scan, which moves its scan_id to that Scan, so the topic scan email reads the Scan
 // that first found each Finding
 test("toTopicScanEmailProps reads the Scan's new Findings by the Scan that first found them", async () => {
 	// one Finding this Scan first found, selected with its title, url, and explanation, and no podcast episode

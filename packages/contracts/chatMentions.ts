@@ -18,7 +18,7 @@ export function isModelChatMessage(chatMessage: { authorUserId: string | null; a
 }
 
 // a username token after an @: the same characters a username may contain
-const CHAT_MENTION_PATTERN = /(^|[^\w@.-])@([a-zA-Z0-9_-]+)/g
+export const CHAT_MENTION_PATTERN = /(^|[^\w@.-])@([a-zA-Z0-9_-]+)/g
 
 /**
  * The known usernames a chat message can mention, deduped, in the order they appear. An @ inside a longer token,

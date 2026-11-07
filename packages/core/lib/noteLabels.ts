@@ -26,6 +26,15 @@ export const NOTE_COMMENT_DELETE = {
 	cancelLabel: "Keep it",
 }
 
+// the note thread's composer: its box, its submit button, and what the button says during a post
+export const NOTE_COMMENT_COMPOSER_LABELS = {
+	placeholder: "Add a comment",
+	inputLabel: "Comment",
+	submitLabel: "Comment",
+	submitAccessibilityLabel: "Post comment",
+	pendingLabel: "Posting…",
+}
+
 // keep creation and recovery messages alongside the shared components that use them
 export const NOTE_LABELS = {
 	renameError: "That name didn't stick. Carl suggests trying again.",
@@ -59,6 +68,6 @@ export const REPORT_COMMENT_LABEL = "Report comment"
 /**
  * Returns the label a reported comment's dialog shows for its subject.
  */
-export function toReportedCommentLabel(authorUsername: string): string {
+export function toReportedNoteCommentLabel(authorUsername: string): string {
 	return `a comment from ${authorUsername}`
 }

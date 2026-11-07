@@ -46,15 +46,17 @@ and `@carlnotes/contracts`, with `drizzle-orm` and `@neondatabase/serverless`.
   `podcast.ts`, `billing.ts` (each user's one billing subscription and the provider that bills it), `releases.ts`,
   `jobLeases.ts` (each job's lease row), `storage.ts` (favicons and the pending object deletions),
   `mobileMinimumVersions.ts` (the minimum app version of each platform), `reports.ts` (content reports), `userBlocks.ts`
-  (the users a user blocked), `pushDevices.ts` (each phone's Expo push token, bound to the session that registered it so
-  ending the session or closing the account deletes it, and the push sends the push service accepted, one per event,
-  recipient, and phone, with each receipt, indexed by phone and recipient for the cascades), `viewerCounts.ts` (the
-  saved HyperLogLog counter of each topic's viewers and each podcast episode's listeners), `vectors.ts` (the topic and
-  podcast episode vectors that rank related topics, related podcast episodes, and the podcast episode search, each table
-  kept apart from the row it ranks so a read of a whole row never includes a vector, and each table's public and shown
-  flag with its partial HNSW index), and `columns.ts` (the pgEnums and the column helpers they share). A table
-  references another file's table through a lazy `references`, so the files import each other freely. `index.ts` spreads
-  every file into the one `schema` object the client is bound to.
+  (the users a user blocked), `social.ts` (reactions, comments, the users a comment mentions, and the links of a comment
+  shared with Carl, each row on exactly one social target), `notificationsEmailSends.ts` (one row per user per UTC day
+  that a notifications email went out), `pushDevices.ts` (each phone's Expo push token, bound to the session that
+  registered it so ending the session or closing the account deletes it, and the push sends the push service accepted,
+  one per event, recipient, and phone, with each receipt, indexed by phone and recipient for the cascades),
+  `viewerCounts.ts` (the saved HyperLogLog counter of each topic's viewers and each podcast episode's listeners),
+  `vectors.ts` (the topic and podcast episode vectors that rank related topics, related podcast episodes, and the
+  podcast episode search, each table kept apart from the row it ranks so a read of a whole row never includes a vector,
+  and each table's public and shown flag with its partial HNSW index), and `columns.ts` (the pgEnums and the column
+  helpers they share). A table references another file's table through a lazy `references`, so the files import each
+  other freely. `index.ts` spreads every file into the one `schema` object the client is bound to.
 - `index.ts` — the pooled client, the connection pool's counts, `sizeConnectionPool`, `isUniqueViolation`, and the
   `DbTransaction` and `DbHandle` types that a function sharing its caller's transaction takes. Each long-running
   process, the api, the Temporal worker, the sweep, and the budget reset, awaits `sizeConnectionPool` at startup. It
@@ -117,11 +119,18 @@ and `@carlnotes/contracts`, with `drizzle-orm` and `@neondatabase/serverless`.
   A renewal that finds the lease expired or taken aborts the signal the task receives, and the run rejects with a
   `JobLeaseLostError`. A process that dies leaves a lease that expires on its own.
   A sweep or reset that starts while another run's lease is live does nothing and returns null.
-- `quotas.ts` — the derived per-user limits, and `loadUserAccess`, the one read of a user's role, plan, and budget
-  override, which the api and the worker share.
-  `monthlySpendDollars` reads a user's spend for the month on scans, chat turns, and podcast episodes, once per request
-  through the request memo. `hasFullPodcastEpisodes` is true on a paid plan or for an admin, and the free plan gets
-  short podcast episodes.
+- `quotas.ts` — the derived per-user limits, and `loadUserAccess`, the one read of a user's role, plan, budget
+  override, and admin block, which the api and the worker share.
+- `inviteLimits.ts` — the daily invite limit. `toAccountSignalWeight` is the age and reputation factor that the invite
+  limit and a Finding's reaction signal share.
+- `socialLimits.ts` — `countSocialWriteToday`, the flat daily count of an account's reaction saves and comment posts and
+  edits in Redis, and `loadAccountSignalWeights`, each account's signal weight in two reads.
+- `sharedComments.ts` — the comments a Topic's editors share with Carl: the shared comment slots a Topic has for its
+  next Podcast Episode, the share under a per-Topic advisory lock and its taking back, the links a shared comment queues
+  in `comment_links`, what a Scan's scoring context and a Podcast Episode's script read, and the mark that frees a
+  shared comment slot once a script read the comment. `monthlySpendDollars` reads a user's spend for the month on scans,
+  chat turns, and podcast episodes, once per request through the request memo. `hasFullPodcastEpisodes` is true on a
+  paid plan or for an admin, and the free plan gets short podcast episodes.
 - `monthlyBudgetCutoffs.ts` — the monthly budget cutoffs. `isMonthlyBudgetCutoffPassed` is true once the month's spend
   reaches the share of the budget where the plan stops a kind of spend: spoken questions, full podcast episodes,
   podcast episodes, daily scans, or manual scans. The daily scans cutoff moves with the daily scans left this month, at
@@ -157,11 +166,14 @@ and `@carlnotes/contracts`, with `drizzle-orm` and `@neondatabase/serverless`.
   transaction back, and `toTableRow` builds a row in a table's column order. The free, plus, and admin access rows
   and `toSpendSumRows`, a spend sum's row from the dollars given for each table, are what the spend tests return. Only
   tests import it.
-- `contentFilters.ts` — the read filters that decide what one user sees: `toUnblockedAuthorFilter` for rows by a
-  person they blocked, `toUnreportedFilter` with `OPEN_OR_KEPT_REPORT_FILTER` for subjects they reported, and
+- `contentFilters.ts` — the read filters that decide what one user sees: `toNotUserBlockedAuthorFilter` for rows by a
+  user they blocked, `toUnreportedFilter` with `OPEN_OR_CLEARED_REPORT_FILTER` for subjects they reported, and
   `toTopicRoleFilter` for the topics they own or a team of theirs holds, and `toTeamHoldsTopicFilter` for whether a
-  team owns a topic or holds a share of it. Each takes its ids or columns, so the api's reads and the pipeline's
-  digest and push recipients import the one copy.
+  team owns a topic or holds a share of it. Reactions and comments use `toNoUserBlockBetweenFilter`, which hides an
+  author in a user block with the user in either direction, `toNotAdminBlockedAuthorFilter`, and `hasUserBlockBetween`.
+  `toVisibleAuthorFilter` joins the two filters for `commentRows`, `reactionRows`, `sharedComments`, and
+  `reactionSignals`. Each takes its ids or columns, so the api's reads and the pipeline's topic scan email and push
+  recipients import the one copy.
 - `inviteFilters.ts` — `loadUserEmail`, `toInviteAddressedToUserFilter` (the invitations addressed to a user by
   account or verified address), and `toPendingTopicInviteFilter` (the topic invitations still waiting for an answer).
 - `noteBadges.ts` — the unread edit and comment counts on each note a user may see, `loadBadgedPages` (their teams and

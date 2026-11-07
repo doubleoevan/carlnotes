@@ -21,9 +21,9 @@ from `apps/docs/dist`, so it runs no process of its own, and nothing imports it.
   run docs:embed` (`apps/worker/docsSync.ts`) embeds the pages' sections into `docs_chunks` for chat, so a page edit is
   followed by the build and the embed; the deploy runs the embed as a job.
   `topics/personal-sources.md` covers reading, importing, and deleting personal items. `topics/email-carl.md` and `topics/send-ai-chats-to-carlnotes.md` show how to send emails and chats, with screenshots of the picker and reply templates.
-  `account/add-to-ai.md` is the MCP listing's documentation page: Claude, ChatGPT, and coding-agent setup, all nineteen
-  tools and the phrases that reach them, account permissions, MCP views, limits, and disconnection. Preserve its URL and
-  screenshots when updating it.
+  `account/add-to-ai.md` is the MCP listing's documentation page: Claude, ChatGPT, and coding-agent setup, all
+  twenty-two tools and the phrases that reach them, account permissions, MCP views, limits, and disconnection. Preserve
+  its URL and screenshots when updating it.
 - `src/components/Footer.astro` — the footer override, which adds the copyright line under Starlight's own rows.
   `src/routeData.ts` — the route middleware that points the header logo at the app instead of the docs home.
   `src/topicTutorialVideoPlugin.ts` — the Sätteri plugin that fills a page's video marker with the video on making a
@@ -40,4 +40,7 @@ from `apps/docs/dist`, so it runs no process of its own, and nothing imports it.
 - Dev: `bun run dev:docs`. Build: `bun run build:docs`, which writes `apps/docs/dist/`. Tests: none of its own; the
   build is the check.
 
-`topics/email-carl.md` explains direct email to the digest mailbox, subject-directed filing, numbered approval for mail without a subject Topic, written or fuzzy Topic names, same-thread confirmation, privacy, Plus/Premium eligibility, and the shared daily ceiling. The old email-forwarding URL redirects here. Both email and MCP guides state that chats and emails are encrypted and visible only to the sender.
+`topics/email-carl.md` explains direct email to the topic scan email mailbox, subject-directed filing, numbered approval
+for mail without a subject Topic, written or fuzzy Topic names, same-thread confirmation, privacy, Plus/Premium
+eligibility, and the shared daily limit. The old email-forwarding URL redirects here. Both email and MCP guides state
+that chats and emails are encrypted and visible only to the sender.

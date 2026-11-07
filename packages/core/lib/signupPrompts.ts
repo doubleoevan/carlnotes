@@ -9,6 +9,8 @@ export const SIGNUP_PROMPTS = {
 	"team-join": "Sign up to join this team",
 	"profile-team-up": "Sign up to team up",
 	note: "Sign up to add a note",
+	reaction: "Sign up to react",
+	"hot-take": "Sign up to add a hot take",
 } as const
 
 // the call to action of an action that sends a visitor to sign-up

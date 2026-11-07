@@ -1,4 +1,5 @@
 import { showClientError } from "@carlnotes/client/apiClient"
+import { WRITE_FAILED_TEXT } from "@carlnotes/client/clientWrite"
 import { sendFindingFeedback } from "@carlnotes/client/topicFindingClient"
 import type { Rating } from "@carlnotes/core/components/RatingThumbs"
 import { cn } from "@carlnotes/nightshift/classNames"
@@ -48,7 +49,7 @@ export function TopicFindingRating({
 			})
 			setIsFeedbackSent(true)
 		} catch {
-			showClientError("That didn't save. Carl suggests trying again.")
+			showClientError(WRITE_FAILED_TEXT)
 		} finally {
 			setIsSendingFeedback(false)
 		}

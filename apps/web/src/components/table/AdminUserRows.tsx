@@ -1,8 +1,9 @@
-// the admin users table's row, with its topics and teams subtables and its inline role and budget edits
+// the admin users table's row, with its topics and teams subtables and its inline role, budget, and admin block edits
 
 import {
 	fetchAdminUserTeams,
 	fetchAdminUserTopics,
+	sendAdminBlock,
 	sendDeleteUser,
 	sendUserBudgetOverride,
 	sendUserRole,
@@ -14,7 +15,7 @@ import { toCentsFromDollars } from "@carlnotes/contracts/plans"
 import type { TeamSummary } from "@carlnotes/contracts/teams"
 import { toBytesLabel, toCentsLabel, toDateLabel } from "@carlnotes/core/lib/labels"
 import { cn } from "@carlnotes/nightshift/classNames"
-import { Trash2 } from "lucide-react"
+import { Ban, Trash2 } from "lucide-react"
 import { useState } from "react"
 import { toast } from "sonner"
 import { CoffeeLoading } from "@/components/branding/CoffeeLoading"
@@ -89,6 +90,15 @@ export function UserRow({
 		const isRoleSet = await sendUserRole(user.id, role)
 		if (!isRoleSet) {
 			toast.error("Role change failed.")
+		}
+		onReloadPage()
+	}
+
+	// set or clear the admin block from reactions and comments everywhere, then reload the console
+	async function handleAdminBlockChange(): Promise<void> {
+		const isAdminBlockSet = await sendAdminBlock(user.id, !user.isAdminBlocked)
+		if (!isAdminBlockSet) {
+			toast.error(`${user.username}'s block didn't save.`)
 		}
 		onReloadPage()
 	}
@@ -202,7 +212,31 @@ export function UserRow({
 						className="w-16 rounded-md border px-1 py-0.5"
 					/>
 				</td>
-				<td className="py-2">
+				<td className="py-2 whitespace-nowrap">
+					{/* the admin block hides the user's reactions and comments from everyone and stops new ones, until cleared */}
+					{user.id !== signedInUserId && (
+						<Tooltip>
+							<TooltipTrigger asChild>
+								<button
+									type="button"
+									onClick={() => void handleAdminBlockChange()}
+									aria-pressed={user.isAdminBlocked}
+									aria-label={`Block ${user.username} from hot takes and reactions`}
+									className={cn(
+										"hover:text-destructive rounded-md p-2",
+										user.isAdminBlocked ? "text-destructive" : "text-muted-foreground",
+									)}
+								>
+									<Ban className="size-4" />
+								</button>
+							</TooltipTrigger>
+							<TooltipContent>
+								{user.isAdminBlocked ? "Unblock " : "Block "}
+								<span className="font-semibold">{user.username}</span>
+								{user.isAdminBlocked ? " everywhere" : " from hot takes and reactions"}
+							</TooltipContent>
+						</Tooltip>
+					)}
 					{/* an admin can close their own account from their account page, so their own row skips the delete icon */}
 					{user.id !== signedInUserId && (
 						<Tooltip>

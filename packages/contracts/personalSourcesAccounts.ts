@@ -17,10 +17,16 @@ const aiAgentApiKey = z.object({
 	lastFour: z.string(),
 	createdAt: z.iso.datetime(),
 	lastUsedAt: z.iso.datetime().nullable(),
-	revokedAt: z.iso.datetime().nullable(),
 })
+
+// the longest label an AI agent API key takes
+export const AI_AGENT_API_KEY_LABEL_MAX_CHARS = 80
+
+// the bodies of the account's AI agent and key routes
 export const aiAgentApiKeysResponse = z.object({ keys: z.array(aiAgentApiKey), canCreate: z.boolean() })
-export const createAiAgentApiKeyPayload = z.strictObject({ label: z.string().trim().min(1).max(80) })
+export const createAiAgentApiKeyPayload = z.strictObject({
+	label: z.string().trim().min(1).max(AI_AGENT_API_KEY_LABEL_MAX_CHARS),
+})
 export const createdAiAgentApiKeyResponse = z.object({ key: aiAgentApiKey, secret: z.string() })
 export const addPersonalSourcesAiAgentPayload = z.strictObject({ clientId: z.string().min(1).max(2048) })
 export const personalSourcesConnectionNudge = z.object({ consentCreatedAt: z.iso.datetime().nullable() })
@@ -31,6 +37,8 @@ export const personalSourcesEmailSetupResponse = z.object({
 	address: z.email().nullable(),
 	canReceive: z.boolean(),
 })
+
+// the shapes those routes return
 export type ConnectedAiAgent = z.infer<typeof connectedAiAgent>
 export type AiAgentApiKey = z.infer<typeof aiAgentApiKey>
 export type PersonalSourcesEmailSetupResponse = z.infer<typeof personalSourcesEmailSetupResponse>

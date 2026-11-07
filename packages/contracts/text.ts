@@ -7,6 +7,13 @@ export function toOneLineText(text: string): string {
 	return text.replace(/\s+/g, " ").trim()
 }
 
+/**
+ * Returns text cut to a length, with an ellipsis as its last character if the cut removed any.
+ */
+export function toCutText(text: string, maxChars: number): string {
+	return text.length > maxChars ? `${text.slice(0, maxChars - 1)}…` : text
+}
+
 // the HTML entities a page or a sanitized body is likely to write, and the numeric form that names any character by
 // its code point
 const HTML_ENTITIES: Record<string, string> = {

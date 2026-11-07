@@ -1,9 +1,10 @@
 import { afterEach, expect, test } from "bun:test"
 import { configureApiClient } from "@carlnotes/client/apiClient"
+import type { ReactionSummary } from "@carlnotes/contracts/social"
 import { toTestTopicFeedResponse } from "@carlnotes/contracts/topicFeedTestFixtures"
 import type { TopicFeedResponse } from "@carlnotes/contracts/topics"
-import { useTopicFindingActions } from "@carlnotes/core/hooks/useTopicFindingActions"
-import { applyTopicFeedChanges } from "@carlnotes/core/lib/topicFindingChanges"
+import { usePageTopicFeedHandlers, useTopicFindingActions } from "@carlnotes/core/hooks/useTopicFindingActions"
+import { applyTopicFeedChanges, type TopicFindingChange } from "@carlnotes/core/lib/topicFindingChanges"
 import { act } from "react"
 import { renderTestHook, waitForHook } from "@/lib/hookTestHarness"
 
@@ -87,4 +88,62 @@ test("an acknowledged write survives an older response that ignores query cancel
 	expect(
 		harness.client.getQueryData<TopicFeedResponse>(queryKey)?.sections[0]?.topics[0]?.findings[0]?.isBookmarked,
 	).toBe(true)
+})
+
+// the summary a reaction's save returned
+const SAVED_REACTIONS: ReactionSummary = {
+	counts: [{ reactionType: "like", count: 1, users: [] }],
+	ownReactionType: "like",
+}
+
+test("a saved reaction reaches the cached finding and its sheet with no request", async () => {
+	// count every request, and record the confirmed change the mobile sheet keeps
+	const requests: string[] = []
+	const confirmedChanges: TopicFindingChange[] = []
+	configureApiClient({ apiBaseUrl: "https://test.example", showError: () => undefined })
+	globalThis.fetch = (async (input: RequestInfo | URL) => {
+		requests.push(String(input))
+		return new Response(null, { status: 204 })
+	}) as typeof fetch
+	const harness = await renderTestHook(() =>
+		useTopicFindingActions({
+			userId: "alice",
+			shouldUpdateOptimistically: true,
+			onChangeConfirmed: (change) => confirmedChanges.push(change),
+		}),
+	)
+	cleanups.push(harness.close)
+	const queryKey = ["topic-feed", "alice"]
+	harness.client.setQueryData(queryKey, toTestTopicFeedResponse())
+
+	// the summary lands in the cache, so a reopened Finding shows the user's own reaction
+	await act(async () => harness.read().handlers.keepTopicFindingReactions("finding-1", SAVED_REACTIONS))
+	expect(
+		harness.client.getQueryData<TopicFeedResponse>(queryKey)?.sections[0]?.topics[0]?.findings[0]?.reactions,
+	).toEqual(SAVED_REACTIONS)
+	expect(confirmedChanges).toEqual([{ kind: "reactions", findingId: "finding-1", reactions: SAVED_REACTIONS }])
+	expect(requests).toEqual([])
+})
+
+test("page handlers keep a saved reaction on the page with no write or reload", async () => {
+	// count every request and reload, and record the page's change
+	const requests: string[] = []
+	globalThis.fetch = (async (input: RequestInfo | URL) => {
+		requests.push(String(input))
+		return new Response(null, { status: 204 })
+	}) as typeof fetch
+	const changes: TopicFindingChange[] = []
+	let reloadCount = 0
+	const reloadPage = (): void => {
+		reloadCount += 1
+	}
+	const keepChange = (change: TopicFindingChange): void => {
+		changes.push(change)
+	}
+	const page = await renderTestHook(() => usePageTopicFeedHandlers(reloadPage, keepChange))
+	cleanups.push(page.close)
+	await act(async () => page.read().keepTopicFindingReactions("finding-1", SAVED_REACTIONS))
+	expect(changes).toEqual([{ kind: "reactions", findingId: "finding-1", reactions: SAVED_REACTIONS }])
+	expect(reloadCount).toBe(0)
+	expect(requests).toEqual([])
 })

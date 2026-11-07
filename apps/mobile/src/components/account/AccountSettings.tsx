@@ -9,23 +9,25 @@ import {
 	PasswordSection,
 	ProfileFields as SharedProfileFields,
 } from "@carlnotes/core/components/AccountFields"
-import { BlockedUsersSection } from "@carlnotes/core/components/BlockedUsersSection"
 import { NotificationsSection } from "@carlnotes/core/components/NotificationsSection"
+import { UserBlocksSection } from "@carlnotes/core/components/UserBlocksSection"
 import { capitalize } from "@carlnotes/core/lib/labels"
 import { CLOSE_ACCOUNT_CONFIRMATION, REQUEST_FAILED_TEXT, toCloseAccountCopy } from "@carlnotes/core/lib/sessionCopy"
 import { PLAN_MANAGEMENT_LABELS } from "@carlnotes/core/lib/storefrontPurchaseRules"
+import { USER_BLOCKS_SECTION } from "@carlnotes/core/lib/userBlocks"
 import { Settings } from "lucide-react-native"
 import { useState } from "react"
 import { Alert, Linking, View } from "react-native"
 import { mobileAuthClient, retireCurrentSession } from "@/authClient"
 import { UserAvatarPicker } from "@/components/avatar/UserAvatarPicker"
+import { SectionAnchor } from "@/components/layout/SectionAnchor"
 import { Button } from "@/components/primitives/button"
 import { Icon } from "@/components/primitives/icon"
 import { Text } from "@/components/primitives/text"
 import { useApplyStoreBilling } from "@/hooks/useStoreBilling"
 import { askForPushPermission, usePushPermission } from "@/pushPermission"
 import { isStorePurchasesConfigured, openPlanManagement, restoreStorePurchases, STORE_PROVIDER } from "@/storePurchases"
-import { ACCOUNT_FIELD_ELEMENTS, BLOCKED_USERS_ELEMENTS, PROFILE_FIELD_ELEMENTS } from "./AccountFields"
+import { ACCOUNT_FIELD_ELEMENTS, PROFILE_FIELD_ELEMENTS, USER_BLOCKS_ELEMENTS } from "./AccountFields"
 import { AiAgentAccountSection } from "./AiAgentAccountSection"
 
 /**
@@ -51,7 +53,9 @@ export function AccountSettings({ provider }: { provider: BillingProvider | null
 			<InvitationsSection elements={ACCOUNT_FIELD_ELEMENTS} />
 			<PushNotificationsSection />
 			{isStorePurchasesConfigured() && <RestorePurchasesSection />}
-			<BlockedUsersSection elements={BLOCKED_USERS_ELEMENTS} />
+			<SectionAnchor name={USER_BLOCKS_SECTION}>
+				<UserBlocksSection elements={USER_BLOCKS_ELEMENTS} />
+			</SectionAnchor>
 			<AiAgentAccountSection />
 			<DeleteAccountSection provider={provider} />
 		</>

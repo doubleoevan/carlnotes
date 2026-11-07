@@ -12,6 +12,7 @@ import {
 	userTopicLimit,
 } from "@carlnotes/contracts/plans"
 import { and, count, eq, inArray } from "drizzle-orm"
+import { hasUserBlockBetween } from "./contentFilters"
 import { canRateTopic } from "./findingPermissions"
 import { type DbHandle, db } from "./index"
 import { isMonthlyBudgetCutoffPassed } from "./monthlyBudgetCutoffs"
@@ -56,12 +57,16 @@ export type Capability =
 	| "chat:persist"
 	| "podcastEpisode:full"
 	| "podcastEpisode:remove"
+	// reactions and comments: posting one, and deleting anyone's on the topic's social targets
+	| "social:post"
+	| "social:moderate"
 	// the admin console
 	| "admin:console"
 	| "admin:setRole"
 	| "admin:setBudget"
 	| "admin:setFeatureOrder"
 	| "admin:deleteUser"
+	| "admin:setAdminBlock"
 
 // the user's budget and the role helpers live in contracts, where the worker can read them
 export { isAdminRole, isLeaderRole } from "@carlnotes/contracts/enums"
@@ -78,6 +83,8 @@ export async function isAllowed(userId: string | null, capability: Capability, t
 	if (isPersonalSourcesCapability(capability)) {
 		return decidePersonalSourcesCapability({ userId, capability, topic })
 	}
+
+	// a private Topic with personal sources still to convert stays closed to everyone the restriction names
 	if (
 		topic?.visibility === "private" &&
 		isPersonalSourcesRestrictedCapability({ userId, capability, topic }) &&
@@ -106,6 +113,11 @@ export async function isAllowed(userId: string | null, capability: Capability, t
 		return decideChat(userId, capability, topic)
 	}
 
+	// a post needs a signed-in user who can see the topic, is under no admin block, and is in no user block with its owner
+	if (capability === "social:post") {
+		return userId && topic ? canPostOnTopic(userId, topic) : false
+	}
+
 	// everything else checks ownership, subscription, or plan
 	return decideTopicCapability(userId, capability, topic)
 }
@@ -115,7 +127,7 @@ async function decideTopicCapability(
 	userId: string | null,
 	capability: Exclude<
 		Capability,
-		PersonalSourcesCapability | "topic:rate" | "chat:send" | "chat:persist" | "scan:request"
+		PersonalSourcesCapability | "topic:rate" | "chat:send" | "chat:persist" | "scan:request" | "social:post"
 	>,
 	topic?: GatedTopic,
 ): Promise<boolean> {
@@ -126,6 +138,7 @@ async function decideTopicCapability(
 		case "admin:setBudget":
 		case "admin:setFeatureOrder":
 		case "admin:deleteUser":
+		case "admin:setAdminBlock":
 			return false
 		// viewing follows the topic's visibility, invite, and subscription rules
 		case "topic:view":
@@ -139,6 +152,7 @@ async function decideTopicCapability(
 		case "topic:invite":
 		case "topic:viewOwnerDetails":
 		case "podcastEpisode:remove":
+		case "social:moderate":
 			return Boolean(userId) && topic?.ownerId === userId
 		// creating a topic is gated by the plan's topic limit
 		case "topic:create":
@@ -156,6 +170,16 @@ async function decideTopicCapability(
 	}
 }
 
+// whether a user who is not an admin may post a reaction or a comment on one of a topic's social targets
+async function canPostOnTopic(userId: string, topic: GatedTopic): Promise<boolean> {
+	// an admin block stops every post, and so does a user block between the user and the topic's owner
+	const { isAdminBlocked } = await loadUserAccess(userId)
+	if (isAdminBlocked || !(await canSeeTopic(userId, topic))) {
+		return false
+	}
+	return topic.ownerId === userId || !(await hasUserBlockBetween(userId, topic.ownerId))
+}
+
 // personal sources capabilities are decided before the general admin override
 function isPersonalSourcesCapability(capability: Capability): capability is PersonalSourcesCapability {
 	return capability.startsWith("personalSources:")
@@ -171,10 +195,14 @@ function isPersonalSourcesRestrictedCapability({
 	capability: Capability
 	topic: GatedTopic
 }): boolean {
+	// an invite is restricted for everyone, and a read, a chat, or a post for everyone but the owner
 	if (capability === "topic:invite") {
 		return true
 	}
-	return topic.ownerId !== userId && ["topic:view", "topic:viewOwnerDetails", "chat:send"].includes(capability)
+	return (
+		topic.ownerId !== userId &&
+		["topic:view", "topic:viewOwnerDetails", "chat:send", "social:post"].includes(capability)
+	)
 }
 
 /**

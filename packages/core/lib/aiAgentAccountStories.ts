@@ -14,6 +14,14 @@ export function aiAgentAccountStory(overrides: Partial<AiAgentAccountState> = {}
 				isConnected: true,
 				consentCreatedAt: "2026-11-02T00:00:00Z",
 			},
+			{
+				id: "domain:chatgpt.com",
+				label: "ChatGPT",
+				domain: "chatgpt.com",
+				clientIds: ["example-client-two"],
+				isConnected: true,
+				consentCreatedAt: "2026-11-02T00:00:00Z",
+			},
 		],
 		keys: [
 			{
@@ -22,7 +30,6 @@ export function aiAgentAccountStory(overrides: Partial<AiAgentAccountState> = {}
 				lastFour: "demo",
 				createdAt: "2026-11-02T00:00:00Z",
 				lastUsedAt: null,
-				revokedAt: null,
 			},
 		],
 		canCreate: true,

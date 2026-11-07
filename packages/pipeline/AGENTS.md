@@ -23,7 +23,9 @@ converted before publishing or indexing.
 revision under a renewable job lease, with the Topic owner's model key and spend reservation.
 `personalSources/work.ts` notifies Temporal after commit and recovers dirty revisions through the sweep.
 Private text stays inside activities and encrypted DB fields. Workflow messages contain identifiers and deadlines.
-`ingest/aiAgent.ts` and `ingest/email.ts` use `personalSources/linkQueue.ts` to produce public URL-only candidates.
+`ingest/aiAgent.ts` and `ingest/email.ts` use `personalSources/linkQueue.ts` to produce public URL-only candidates, and
+`ingest/index.ts` adds the links of the Topic's shared comments through the same module, which review treats as it
+treats a Personal sources link.
 Review rechecks live claims and records filtered or kept outcomes. Failed, stopped, and deferred links remain queued.
 Queued Personal sources links lead paid scoring and bypass the embedding relevance gate. `packages/contracts/sourceScoring.ts` defines the 0.10 personal bonus beside the custom bonus. `review/saveFinding.ts` persists the strongest actual score bonus on each Finding: deliberate sends/imports/forwards receive 0.10, newsletter or automatic contributions 0.05, and personal/custom bonuses never stack. Safety, explanations, deduplication, ratings, budgets, and final trimming remain active.
 `review/saveFinding.test.ts` checks the fields written by a re-score and the preservation of reader feedback.
@@ -64,36 +66,38 @@ it; it imports `@carlnotes/models`, `@carlnotes/emails`, `@carlnotes/db`, `@carl
   comes from `@carlnotes/contracts/sources`. `ingester.ts` is the interface, whose optional `ingestContext` includes the
   Scan owner's key: the Topic owner's for a scheduled Scan and the starting user's for a manual one. The search
   ingester's query generation bills that key like every other model call a Scan makes. `review/` — filtering and scoring
-  (`filter.ts` the relevance gate, `topicContext.ts` the public/private review context, hash, and query embedding, `dedupe.ts` the content hash and near-duplicate pass, `fetch.ts` the content fetch
-  for a Resource to score, `score.ts` the scoring and the finding writes, each Resource reserving its largest cost
-  before its paid section, `track.ts` what became of each Resource, `summarize.ts` the scan report, and `index.ts` the
-  stage over them, with `reviewTestFixtures.ts` beside their tests). `chat/` — Carl's streamed chat replies (`index.ts`
-  streams a reply, `podcastReply.ts` streams a podcast question's reply as one structured call whose speaker, `host` or
-  `cohost`, comes before the answer, `chatMessages.ts` shapes a conversation into the model messages a turn sends,
-  `chatPrompts.ts` builds each chat's system prompt from its template, `podcastEpisodeQuestionPrompt.ts` the topic chat
-  prompt's blocks for a question asked from the podcast player, `search.ts` the live web search tool a signed-in chat
-  turn may call, and `agreement.ts` checks whether a user's message agrees to the proposal it answers, reading only the
-  user's words and the proposal, `chatTurnCost.ts` the largest cost of one chat turn, which the api reserves before the
-  turn runs, with `chatModelTestFixtures.ts` for the fake models their tests stream from, and
-  `chatContextTestFixtures.ts` and `podcastEpisodeChapterTestFixtures.ts` for the chat context and the chapter their
-  tests read) and their retrieval (`retrieve.ts`, whose topic ranking collects the topics' findings in a materialized
-  common table expression and ranks that set, `retrieveDocs.ts` for the docs sections a question about the app reads and
-  `embedRetrievalQuery`, which embeds a question or a search query with the query instruction, `retrieveTeam.ts` for a
-  team chat room turn's context, and `retrievePodcastEpisodeChapter.ts` for the chapter a podcast question was asked
-  during, with its lines and its Finding). The prompts the builders fill live in `@carlnotes/models/prompts/`, and every
-  model call goes through `@carlnotes/models/models` on a key from `@carlnotes/models/litellm`. `favicons.ts` — a host's
-  favicon, fetched once when review reads a page on it.
+  (`filter.ts` the relevance gate, `topicContext.ts` the public/private review context, hash, and query embedding,
+  `scoreExamplePages.ts` the pages Carl reads as examples, `reactionSignals.ts` a Finding's reaction signal, `dedupe.ts`
+  the content hash and near-duplicate pass, `fetch.ts` the content fetch for a Resource to score, `score.ts` the scoring
+  and the finding writes, each Resource reserving its largest cost before its paid section, `track.ts` what became of
+  each Resource, `summarize.ts` the scan report, and `index.ts` the stage over them, with `reviewTestFixtures.ts` beside
+  their tests). `chat/` — Carl's streamed chat replies (`index.ts` streams a reply, `podcastReply.ts` streams a podcast
+  question's reply as one structured call whose speaker, `host` or `cohost`, comes before the answer, `chatMessages.ts`
+  shapes a conversation into the model messages a turn sends, `chatPrompts.ts` builds each chat's system prompt from its
+  template, `podcastEpisodeQuestionPrompt.ts` the topic chat prompt's blocks for a question asked from the podcast
+  player, `search.ts` the live web search tool a signed-in chat turn may call, and `agreement.ts` checks whether a
+  user's message agrees to the proposal it answers, reading only the user's words and the proposal, `chatTurnCost.ts`
+  the largest cost of one chat turn, which the api reserves before the turn runs, with `chatModelTestFixtures.ts` for
+  the fake models their tests stream from, and `chatContextTestFixtures.ts` and `podcastEpisodeChapterTestFixtures.ts`
+  for the chat context and the chapter their tests read) and their retrieval (`retrieve.ts`, whose topic ranking
+  collects the topics' findings in a materialized common table expression and ranks that set, `retrieveDocs.ts` for the
+  docs sections a question about the app reads and `embedRetrievalQuery`, which embeds a question or a search query with
+  the query instruction, `retrieveTeam.ts` for a team chat room turn's context, and `retrievePodcastEpisodeChapter.ts`
+  for the chapter a podcast question was asked during, with its lines and its Finding). The prompts the builders fill
+  live in `@carlnotes/models/prompts/`, and every model call goes through `@carlnotes/models/models` on a key from
+  `@carlnotes/models/litellm`. `favicons.ts` — a host's favicon, fetched once when review reads a page on it.
 - Every scan stage charges the Scan's one Budget, `@carlnotes/models/budget`.
-- `notify.ts` plans a digest's batches and sends one batch or one report, recording the accepted sends with the Scan's
-  id, so a retry never mails anyone twice; the worker's `sendScanEmail` workflow runs it. `scanEmailContent.ts` holds
-  what a Scan's email says: the props the digest and the report render from, and one subscriber's rendered message, over
-  the templates and `sendEmail` in `@carlnotes/emails`. `loadDigestSubscribers` is the one digest recipient query, an
-  active subscription with email on whose subscriber can still read the Topic (on a private Topic, its owner and its
-  teams' members through `toTopicRoleFilter`), and `toDigestSubscriberIdsQuery` is the same set as a subquery, which
-  the Topic push joins, so unfollowing, turning a Topic's email off, or losing access stops both deliveries.
+- `notify.ts` plans a topic scan email's batches and sends one batch or one report, recording the accepted sends with
+  the Scan's id, so a retry never mails anyone twice; the worker's `sendScanEmail` workflow runs it.
+  `scanEmailContent.ts` holds what a Scan's email says: the props the topic scan email and the report render from, and
+  one subscriber's rendered message, over the templates and `sendEmail` in `@carlnotes/emails`.
+  `loadTopicScanEmailSubscribers` is the one recipient query, an active subscription with email on whose subscriber
+  can still read the Topic (on a private Topic, its owner and its teams' members through `toTopicRoleFilter`), and
+  `toTopicScanEmailSubscriberIdsQuery` is the same set as a subquery, which the Topic push joins, so unfollowing,
+  turning a Topic's email off, or losing access stops both deliveries.
 - `pushNotify.ts` picks each kind's recipients and passes their phones to `pushDelivery.ts`, which sends through
   `@carlnotes/server/expoPush`, one push per live phone (its session not expired, its account's preference for the
-  kind true). `sendScanPush` reaches a succeeded Scan's digest recipients if the Scan kept
+  kind true). `sendScanPush` reaches a succeeded Scan's topic scan email recipients if the Scan kept
   new Findings, and `sendChatMentionPush` reaches the members a room message's `room_mentions` rows name, checked at
   send time: still on the Team, the Topic still held, the author not blocked, the message not reported, never the
   author. Each push names its Topic or room and opens it through `data.url`, with the recipient's id for the app's
@@ -116,8 +120,11 @@ it; it imports `@carlnotes/models`, `@carlnotes/emails`, `@carlnotes/db`, `@carl
   minutes and kept for 24 hours. The SDK retries a 429 itself.
 - `podcast/` — the steps of the worker's `recordPodcastEpisode` workflow. `planPodcastEpisode.ts` runs the checks that
   stop a recording before it spends anything, inside one request memo, picks the Findings, and marks the podcast
-  episode short on a free Topic or past the billed user's full podcast episodes cutoff. `writePodcastEpisodeScript.ts`
-  writes and saves the script. `generatePodcastEpisodeScript.ts` makes its outline and segment calls on `score-model`,
+  episode short on a free Topic or past the billed user's full podcast episodes cutoff.
+  `podcastEpisodeSharedComments.ts` takes the comments shared with Carl by reactions, runs the classification on them,
+  and places each one in a chapter or the closing turns. `writePodcastEpisodeScript.ts` writes and saves the script.
+  Each segment's prompt lists its chapters' shared comments, and the last segment's also lists the closing ones.
+  `generatePodcastEpisodeScript.ts` makes its outline and segment calls on `score-model`,
   and `podcastEpisodeHosts.ts` writes the hosts block that those prompts and the podcast question's chat prompt splice.
   `podcastEpisodeOutline.ts` holds the outline's shape and checks each outline draft, and `podcastEpisodeScript.ts`
   holds the segments' shape, checks each segment draft, and builds the script, with `podcastEpisodeScriptFixtures.ts`

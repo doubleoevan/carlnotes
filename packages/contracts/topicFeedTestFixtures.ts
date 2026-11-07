@@ -1,4 +1,5 @@
 import type { TopicFinding } from "./findings"
+import { EMPTY_REACTION_SUMMARY } from "./social"
 import type { TopicFeed, TopicFeedResponse, TopicResponse } from "./topics"
 import type { UpdatesFinding } from "./updates"
 
@@ -28,6 +29,7 @@ export function toTestTopicFinding(overrides: Partial<TopicFinding> = {}): Topic
 		isConsumed: false,
 		isBookmarked: false,
 		teamBookmarks: [],
+		reactions: EMPTY_REACTION_SUMMARY,
 		...overrides,
 	}
 }

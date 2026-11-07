@@ -56,7 +56,7 @@ export function TopicResource({
 	if (!resourceTopicFeedHandlers) {
 		throw new Error("TopicResource needs its handlers or a <TopicFeedProvider>")
 	}
-	const { openTopicFinding, consumeTopicFinding, rateTopicFinding, bookmarkTopicFinding } = resourceTopicFeedHandlers
+	const { bookmarkTopicFinding } = resourceTopicFeedHandlers
 	// signed-out visitors don't get the per-user read and rating buttons
 	const isSignedIn = useIsSignedIn()
 	// whether the chapter that narrates this finding is playing, which keeps the row highlighted
@@ -135,7 +135,7 @@ export function TopicResource({
 					topic={topic}
 					isRatable={isRatable}
 					isBookmarkable={isBookmarkable}
-					topicFeedHandlers={{ consumeTopicFinding, rateTopicFinding, bookmarkTopicFinding, openTopicFinding }}
+					topicFeedHandlers={resourceTopicFeedHandlers}
 				/>
 			</div>
 		</Popover>

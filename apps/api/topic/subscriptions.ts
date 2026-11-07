@@ -257,7 +257,7 @@ export const subscriptionsRoute = new Hono<AppEnv>()
 		}
 		await setSubscriptionEmailEnabled(subscriberUserId ?? userId, context.req.param("id"), isEmailEnabled)
 
-		// report the switch for the subscriber whose digest it is
+		// report the switch for the subscriber whose topic scan email it is
 		trackEvent("email_digest_toggled", subscriberUserId ?? userId, {
 			...toAnalyticsProperties(context),
 			topicId: context.req.param("id"),

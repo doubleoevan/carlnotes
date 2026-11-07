@@ -16,8 +16,8 @@ export function AddTopicToTeamDialog({
 	const addTopicToTeamState = useAddTopicToTeam({ topic, shouldLoadLeaderTeams: true, onTopicTeamsChanged })
 
 	// show the New team modal in place of the dialog while the modal is open
-	if (addTopicToTeamState.newTeamModal) {
-		return addTopicToTeamState.newTeamModal
+	if (addTopicToTeamState.teamDialog) {
+		return addTopicToTeamState.teamDialog
 	}
 	return (
 		<Dialog open onOpenChange={(isOpen) => !isOpen && onClose()}>

@@ -46,6 +46,7 @@ export const STORY_TOPIC_PAGE = toTestTopicResponse({
 	scanSummary: "Small changes to water temperature and grind size make a better cup.",
 	podcast: {
 		isEnabled: true,
+		isCommentsEnabled: true,
 		hasFullPodcastEpisodes: true,
 		canRemovePodcastEpisodes: false,
 		unpublishedPodcastEpisode: null,

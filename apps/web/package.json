@@ -7,7 +7,7 @@
 		"dev": "vite",
 		"build": "vite build && bun run build:mcp-views",
 		"build:mcp-views": "vite build --config vite.mcpViews.config.ts",
-		"dev:storybook": "storybook dev -p 6006 --no-open",
+		"dev:storybook": "storybook dev -p 6006 --no-open --host 0.0.0.0",
 		"build:storybook": "storybook build --output-dir dist/nightshift"
 	},
 	"dependencies": {

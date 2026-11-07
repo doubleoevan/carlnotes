@@ -34,7 +34,7 @@ test("a preference and push data parse only with a known kind", () => {
 		kind: "chat-mention",
 		isEnabled: false,
 	})
-	expect(pushPreferencePayload.safeParse({ kind: "digest", isEnabled: true }).success).toBe(false)
+	expect(pushPreferencePayload.safeParse({ kind: "topic-email", isEnabled: true }).success).toBe(false)
 	expect(
 		pushNotificationData.safeParse({ kind: "topic-scan", url: "https://carlnotes.com/topics/t", recipientUserId: "u" })
 			.success,

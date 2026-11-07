@@ -11,6 +11,7 @@ export function CollapsibleSection({
 	title,
 	titleNote,
 	titleAside,
+	isContentKept,
 	className,
 	children,
 }: {
@@ -21,6 +22,8 @@ export function CollapsibleSection({
 	titleNote?: React.ReactNode
 	// what sits at the far right of the title row
 	titleAside?: React.ReactNode
+	// whether the content stays mounted while closed, for content that holds its own state
+	isContentKept?: boolean
 	className?: string
 	children: React.ReactNode
 }) {
@@ -36,7 +39,7 @@ export function CollapsibleSection({
 					{titleNote}
 					{titleNote ? <div className="ml-auto">{titleAside}</div> : titleAside}
 				</div>
-				<AccordionContent>{children}</AccordionContent>
+				<AccordionContent forceMount={isContentKept || undefined}>{children}</AccordionContent>
 			</AccordionItem>
 		</Accordion>
 	)

@@ -7,6 +7,7 @@ import { render } from "@react-email/render"
 import { createElement, type ReactElement } from "react"
 import AuthEmail from "./auth-email"
 import ManualScanEmail from "./manual-scan-email"
+import NotificationsEmail from "./notifications-email"
 import PersonalSourcesEmail, { type PersonalSourcesEmailProps } from "./personal-sources-email"
 import ReportEmail from "./report-email"
 import TeamInviteEmail from "./team-invite-email"
@@ -19,6 +20,7 @@ await mkdir(previewRoot, { recursive: true })
 const previews: [string, ReactElement][] = [
 	["auth-email", createElement(AuthEmail, AuthEmail.PreviewProps)],
 	["manual-scan-email", createElement(ManualScanEmail, ManualScanEmail.PreviewProps)],
+	["notifications-email", createElement(NotificationsEmail, NotificationsEmail.PreviewProps)],
 	["report-email", createElement(ReportEmail, ReportEmail.PreviewProps)],
 	["team-invite-email", createElement(TeamInviteEmail, TeamInviteEmail.PreviewProps)],
 	["topic-invite-email", createElement(TopicInviteEmail, TopicInviteEmail.PreviewProps)],
@@ -47,15 +49,21 @@ const preview = Bun.spawn(
 	],
 	{ stdout: "inherit", stderr: "inherit", stdin: "inherit" },
 )
+
+// stop the preview server with this script, however the script ends
 process.on("exit", () => preview.kill())
 process.on("SIGTERM", () => {
 	preview.kill()
 	process.exit(0)
 })
+
+// an interrupt from the terminal stops it too
 process.on("SIGINT", () => {
 	preview.kill()
 	process.exit(0)
 })
+
+// exit with the preview server's own code
 process.exitCode = await preview.exited
 
 // every email outcome renders the production component with synthetic data

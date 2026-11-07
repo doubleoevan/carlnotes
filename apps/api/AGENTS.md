@@ -83,7 +83,8 @@ authenticated encryption itself lives in `@carlnotes/server/privateText`.
   Turnstile challenge. The default policy and the component browser's policy both use it, so a story frames what the app
   frames. `responseHeaders.ts` holds `NOINDEX_HEADER`, the `X-Robots-Tag: noindex` header that `documents.ts` and
   `nightshift.ts` set.
-- Domain folders: `topic/`, `team/`, `chat/`, `invite/`, `note/`, `podcast/`, `share/`, `tool/`, `mcp/`. Root files
+- Domain folders: `topic/`, `team/`, `chat/`, `invite/`, `note/`, `podcast/`, `social/`, `share/`, `tool/`, `mcp/`. Root
+  files
   serve more than one domain (auth, billing, admin, avatars, favicons, profiles, SEO, `likePattern.ts` for the contains
   pattern the name and text searches match with, `canonicalJson.ts` for the json a keyed digest signs, `content.ts` for
   the blog under `content/blog/`, and `seed.ts`, the entry behind `bun run db:seed` over `@carlnotes/db/seed`).
@@ -113,6 +114,26 @@ authenticated encryption itself lives in `@carlnotes/server/privateText`.
   seeds history and repairs a missed delivery, and `releases.preview.ts` (`bun run releases:preview`) stores a
   local notes file through it for reading on the dev server. The convention for writing one is
   `apps/docs/release-notes.md`.
+- `social/` — reactions and comments on a social target: a Finding, a Podcast Episode, a Topic, or, for a reaction, a
+  Comment. `socialTargets.ts` resolves a social target to its Topic, its page's path, and its name under the rule that
+  lets the user open it, so a target the user cannot open reads as missing, and a post is always missing. A Comment
+  opens where what it hangs on does. `socialTargetColumns.ts` maps a kind to its column on both tables.
+  `socialTargetTestFixtures.ts` holds the resolved social targets and the shared comment slots the social tests read.
+  `socialRows.ts` holds what both reads share: the reader, the author joined to a row, a comment's permissions, the
+  column that says the reader reported a comment, and the cursor of a paged read in either order. `reactionRows.ts`
+  loads the summaries of many social targets in one read. `reactions.ts` saves the user's one reaction through an
+  upsert, and a save with no type removes it. `commentRows.ts` loads a thread's page of top-level comments with each
+  one's first replies and reactions, a comment's page of replies, and the shared comment slots for a user who may share.
+  `comments.ts` posts a comment or a reply, shares an editor's comment or reply if the post asks and a shared comment
+  slot is free, a top-level comment by default, edits inside the edit time, deletes, and shares a comment with Carl or
+  takes it back through `@carlnotes/db/sharedComments`. `sharedCommentRows.ts` lists a Topic's shared comments for its
+  sources list. `findingReactions.ts` attaches each Finding's reaction summary and comment count to a feed's Findings.
+  `reactionsRoute.ts` and `commentsRoute.ts` are the routes, the first with `GET /api/reactions/summary` for a list
+  whose read came without summaries, and the second with `GET /api/comments/:id/replies`, `PUT /api/comments/:id/share`,
+  `GET /api/topics/:id/shared-comments`, and `GET /api/usernames` for mention suggestions. `pageCommentThread.ts` loads
+  a Topic page's and a Podcast Episode page's first thread page. A write runs the Terms check, the daily count in
+  `@carlnotes/db/socialLimits`, and the classification, in that order. `bun run smoke:social` runs `social.smoke.ts`
+  against the dev database.
 - `note/` — the tasting-notes routes: `notes.ts` (a page's note list, the create, the badges, the read that returns
   the body's html and version, the rename and visibility change, the delete, and the save, `PUT /api/notes/:id/body`
   at `NOTE_BODY_PATH`: it rejects a visitor with a 404 before reading the body, bounds the body at
@@ -138,7 +159,9 @@ authenticated encryption itself lives in `@carlnotes/server/privateText`.
   the web-standard transport), `origins.ts` (exact Origin validation on both transports, before caller resolution and
   limits in `index.ts`, allowing an absent header, production, and the configured app origin), `tools.ts` (the reads,
   the site search, and the per-user writes it registers, with their schemas and annotations), `topicEditTools.ts`
-  (`edit_topic`, `suggest_sources`, and `create_topic`), `toolShapes.ts` (the topic id argument, the registration
+  (`edit_topic`, `suggest_sources`, and `create_topic`), `socialTools.ts` (`save_reaction`, `read_hot_takes`, and
+  `post_hot_take`, over the same writes and limits as the site's routes, with a thread's bodies fenced), `toolShapes.ts`
+  (the topic id argument, the registration
   options, and the result shapes every tool shares), `topicEdits.ts` (the `edit_topic` flow: the topic read as its page
   reads it, the preview, and the save through the chat's save path), `topicEditConfirmations.ts` (the keyed confirmation
   that making a topic public or removing a source needs), `searchResults.ts` (what the `search` tool returns, under the
@@ -155,7 +178,7 @@ authenticated encryption itself lives in `@carlnotes/server/privateText`.
   client's result limit, and the paging helpers), and `topicResults.ts` (what `list_topics` returns). `mcp.smoke.ts`
   runs the sections in `mcpSmokeSections.ts` and the oauth flow in `mcpOAuthSmokeSections.ts` over the fixtures in
   `mcpSmokeFixtures.ts`, and stops the first scan of the topic it creates through `topic/firstScanSmoke.ts`.
-  `mcpContractTestFixtures.ts` holds the nineteen-tool title, annotation, and phrase matrix shared by unit and smoke
+  `mcpContractTestFixtures.ts` holds the twenty-two-tool title, annotation, and phrase matrix shared by unit and smoke
   checks. `mcpDirectorySmokeFixtures.ts` seeds isolated private access, large feed, and search rows.
   `mcpDirectorySmokeSections.ts` checks both transports' Origin and identity cases, including a former follower losing
   private Topic access; `mcpResultSmokeSections.ts` checks complete cursor traversal and measures text, structured
@@ -208,12 +231,14 @@ authenticated encryption itself lives in `@carlnotes/server/privateText`.
 - `botAnalytics.ts` — the middleware that reports what a known crawler, unfurler, podcast app, or feed reader fetched,
   keyed to the bot's name, from the token list in `@carlnotes/contracts/userAgent`. A route that loaded a topic sets
   `analyticsTopic`, and a public topic's id is sent with the event.
-- `rateLimit.ts` — the five rate limits: the tool caller limit, shared by the chat turn routes, the transcription
+- `rateLimit.ts` — the rate limits: the tool caller limit, shared by the chat turn routes, the transcription
   route, the source suggestions, and the mcp routes, keyed by the user or by the client address; the page render limit
   on a visitor's page renders, which `index.ts` mounts ahead of the blog, release, and ui page renders, keyed by
   address and skipped for a session cookie or an untrusted address; the search limit on the search bar's three
-  routes; the speech limit on the spoken parts of a reply, in its own rate limit window; and the spoken events
-  limit, in its own rate limit window.
+  routes; the speech limit on the spoken parts of a reply, in its own rate limit window; the spoken events
+  limit, in its own rate limit window; the social read limit on the paged reads of reactions and comments and on
+  the mention suggestions, keyed by the user or by the client address; and the note body save, app signup challenge and
+  gate, push device, and store billing limits.
   `trustedProxies.ts` reads that address exactly as Better Auth does: the rightmost `x-forwarded-for` entry outside
   the Cloudflare ranges that `TRUSTED_PROXIES` lists, and logs the warning once if the setting is unset or misses a
   hop.
@@ -240,8 +265,9 @@ authenticated encryption itself lives in `@carlnotes/server/privateText`.
 - `report/` — content reports: `report/flagContent.ts` (the `POST /api/flag-content` route, the daily limit in Redis,
   the stored report, and the email to `SUPPORT_EMAIL` with the admin console link), `report/reportSubjects.ts` (what a
   report names, a Topic, profile, Team, chat room message, note, or note comment, each resolved under the same read rule
-  that lets the reporter see it), and `report/reports.ts` (writing a report). The filter that hides a reported subject
-  from its reporter in the room, comment, and note reads is `toUnreportedFilter` in `@carlnotes/db/contentFilters`.
+  that lets the reporter see it), `report/socialReportSubjects.ts` (the same for a Finding, a Podcast Episode, and a
+  comment), and `report/reports.ts` (writing a report). The filter that hides a reported subject from its reporter in
+  the room, comment, and note reads is `toUnreportedFilter` in `@carlnotes/db/contentFilters`.
 -  `moderation.ts` — the check every text and image other users see goes through before it is stored:
   `toObjectionableCategory` classifies a text and `toObjectionableImageCategory` an image through
   `@carlnotes/models/moderation`, and each returns the category it violates or null. The image check also returns
@@ -255,11 +281,10 @@ authenticated encryption itself lives in `@carlnotes/server/privateText`.
   row for a write with no session, and `POST /api/users/me/terms-acceptance` records the published version and
   refreshes the user's sessions. Better Auth's user-create hook in `auth.ts` records the version on every sign-up path.
 - `userBlocks.ts` — one user blocking another: the block, unblock, and list routes' functions.
-  `toUnblockedAuthorFilter` in `@carlnotes/db/contentFilters` keeps a blocked person's rows out of the blocker's reads.
-  `chat/roomVisibility.ts`
-  applies the report and block filters to a room's loaded messages for one member, after the shared load.
-  `loadAdminTopicSubscribers` lists a topic's subscribers by `isActiveNonOwnerTopicSubscription`, the rule
-  `topic/subscriberCounts.ts` counts with.
+  `toNotUserBlockedAuthorFilter` in `@carlnotes/db/contentFilters` keeps a blocked user's rows out of the blocker's
+  reads. `chat/roomVisibility.ts` applies the report and block filters to a room's loaded messages for one member, after
+  the shared load. `loadAdminTopicSubscribers` lists a topic's subscribers by `isActiveNonOwnerTopicSubscription`, the
+  rule `topic/subscriberCounts.ts` counts with.
 - `pushDevices.ts` — the push routes, behind `pushDeviceRateLimiter`. `POST /api/push-devices` binds a phone's Expo
   push token, at most 256 characters, to the caller's session, taking the row over from any other account or session,
   removes the session's previous token after a rotation, keeps the account's ten phones seen most recently, and turns

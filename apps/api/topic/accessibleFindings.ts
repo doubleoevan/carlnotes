@@ -1,16 +1,18 @@
 // the findings a user may read on a topic, with the owning team's bookmarks attached
 import { toAvatarVersion } from "@carlnotes/contracts/avatars"
+import type { ReactionSummary, SocialTarget } from "@carlnotes/contracts/social"
 import { db } from "@carlnotes/db"
 import { bookmarks, findings } from "@carlnotes/db/schema/scans"
 import { teamMembers } from "@carlnotes/db/schema/teams"
 import { teamTopics } from "@carlnotes/db/schema/teamTopics"
 import { topics } from "@carlnotes/db/schema/topics"
 import { users } from "@carlnotes/db/schema/users"
+import { topicSubscriptionStartDate } from "@carlnotes/db/topicPermissions"
 import { and, eq, inArray, or, sql } from "drizzle-orm"
 import { isAllowed, loadUserAccess } from "../authorization"
 import { attachTopicFindingFaviconPaths } from "../favicons"
+import { attachReactionSummaries } from "../social/findingReactions"
 import { type FindingPageWindow, loadTopicFindings } from "./findings"
-import { topicSubscriptionStartDate } from "./subscriptionStartDates"
 
 /**
  * Loads the topic, or null if it is missing or the user may not see it.
@@ -82,6 +84,10 @@ type LoadTopicAccessAndFindingsOptions = {
 	userId: string | null
 	pageWindow?: FindingPageWindow
 	isRatedDownExcluded?: boolean
+	// the page's own social target, whose reaction summary loads with the findings' in the same reads
+	pageSocialTarget?: SocialTarget
+	// for a caller that keeps only some of the Findings and reads the reactions of those
+	isReactionReadSkipped?: boolean
 }
 
 // the user's topic access and the findings it gates, up to the read limit or within one page window
@@ -90,9 +96,12 @@ export async function loadTopicAccessAndFindings({
 	userId,
 	pageWindow,
 	isRatedDownExcluded,
+	pageSocialTarget,
+	isReactionReadSkipped = false,
 }: LoadTopicAccessAndFindingsOptions): Promise<{
 	isAdmin: boolean
 	topicFindings: Awaited<ReturnType<typeof loadTopicFindings>>
+	reactions: ReactionSummary | undefined
 }> {
 	// only the owner and admins can see the spend
 	const { isAdmin } = userId ? await loadUserAccess(userId) : { isAdmin: false }
@@ -107,5 +116,10 @@ export async function loadTopicAccessAndFindings({
 	})
 	await attachTeamBookmarks(topicFindings, topic.id, topic.teamId)
 	await attachTopicFindingFaviconPaths(topicFindings)
-	return { isAdmin, topicFindings }
+
+	// each Finding's reactions and the page's own, as this user reads them, unless the caller reads its own Findings'
+	const reactions = isReactionReadSkipped
+		? undefined
+		: await attachReactionSummaries({ topicFindings, userId, pageSocialTarget })
+	return { isAdmin, topicFindings, reactions }
 }

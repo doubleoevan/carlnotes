@@ -29,7 +29,7 @@ const { checkPushReceipts, reportPushFailure } = proxyActivities<typeof pushActi
 })
 
 /**
- * Pushes a scheduled Scan's new Findings to its digest recipients, then reads the receipts.
+ * Pushes a scheduled Scan's new Findings to its topic scan email recipients, then reads the receipts.
  */
 export async function sendScanPushWorkflow({ scanId }: { scanId: string }): Promise<void> {
 	await sendThenCheckReceipts({ kind: "topic-scan", scanId }, () => sendScanPush(scanId))

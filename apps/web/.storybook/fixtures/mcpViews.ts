@@ -1,5 +1,7 @@
 import type { McpSearchPage, McpViewData } from "@carlnotes/contracts/mcpViews"
 import { searchRequestPayload } from "@carlnotes/contracts/search"
+import { EMPTY_REACTION_SUMMARY } from "@carlnotes/contracts/social"
+import { toTestReactionSummary } from "@carlnotes/contracts/socialTestFixtures"
 import type { McpViewToolResult } from "@/mcpViews/mcpViewHost"
 import { LATEST_PODCAST_EPISODE_FIXTURE } from "./podcastEpisodes"
 import { SEARCH_PAGE_FIXTURE } from "./search"
@@ -23,7 +25,8 @@ export const MCP_SEARCH_PAGE: McpSearchPage = {
 	searchUrl: "https://carlnotes.com/search?q=espresso",
 }
 
-// a topic's MCP view data for a user who may or may not rate it and subscribe to it, or a visitor
+// a topic's MCP view data for a user who may or may not rate it and subscribe to it, or a visitor. the first finding
+// has reactions and the second has none yet
 export function toFindingsMcpViewData(isSignedIn: boolean): McpViewData {
 	return {
 		session: isSignedIn ? { userId: "user-vienna", username: "vienna", avatarSource: null, avatarVersion: null } : null,
@@ -39,11 +42,16 @@ export function toFindingsMcpViewData(isSignedIn: boolean): McpViewData {
 			canBookmark: isSignedIn,
 		},
 		topicFindings: [
-			toStoryTopicFinding({ findingId: "finding-runtime", title: "A local runtime ships its 2.0 release" }),
+			toStoryTopicFinding({
+				findingId: "finding-runtime",
+				title: "A local runtime ships its 2.0 release",
+				reactions: toTestReactionSummary(),
+			}),
 			toStoryTopicFinding({
 				findingId: "finding-eval",
 				title: "An evaluation harness adds tool-call scoring",
 				rating: "up",
+				reactions: EMPTY_REACTION_SUMMARY,
 			}),
 			toStoryTopicFinding({ findingId: "finding-bench", title: "Benchmarks for small models", isConsumed: true }),
 		],

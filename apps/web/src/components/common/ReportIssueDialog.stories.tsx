@@ -63,7 +63,7 @@ export const LongTeamName: Story = {
 // a typed reason
 export const WithReason: Story = { play: typeReportReason }
 
-// a chat message's report, with the author's block switched on before the send
+// a chat message's report, with the author's user block switched on before the send
 export const WithAuthorBlock: Story = {
 	args: {
 		subjectKind: "chatMessage",

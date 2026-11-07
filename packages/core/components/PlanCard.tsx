@@ -7,6 +7,7 @@ import {
 	SCAN_COST_CENTS,
 	userTopicLimit,
 } from "@carlnotes/contracts/plans"
+import { SHARED_COMMENT_SLOTS } from "@carlnotes/contracts/social"
 import type { ComponentType, ReactNode } from "react"
 import { toBrewsWord, toCountLabel } from "../lib/labels"
 import { isUsersPlan, toPlanBadge } from "../lib/planCards"
@@ -51,6 +52,17 @@ const PLAN_TAGLINES: Record<Plan, string> = {
 	free: "Carl reads a little.",
 	plus: "Carl reads plenty.",
 	premium: "Carl reads everything. Twice.",
+}
+
+// the podcast line, by whether the plan gets full podcast episodes
+const PODCAST_QUOTA_LABELS = {
+	full: "Full podcasts for every brew",
+	short: "Short podcast for latest brew only",
+} as const
+
+// the comments line: how many comments a Topic's editors share with each podcast episode
+function toSharedCommentSlotsQuotaLabel(isPaid: boolean): string {
+	return `${isPaid ? SHARED_COMMENT_SLOTS.full : SHARED_COMMENT_SLOTS.short} hot takes per podcast episode`
 }
 
 /**
@@ -113,7 +125,8 @@ export function PlanCard({
 				/>
 				<Quota label={`${toWholeDollarLabel(config.monthlyBudgetCents)} coffee fund a month`} />
 				<Quota label={`About ${monthlyScanEstimate} ${toBrewsWord(monthlyScanEstimate)} a month`} />
-				<Quota label={isPaidPlan(plan) ? "Full podcasts for every brew" : "Short podcast for latest brew only"} />
+				<Quota label={PODCAST_QUOTA_LABELS[isPaidPlan(plan) ? "full" : "short"]} />
+				<Quota label={toSharedCommentSlotsQuotaLabel(isPaidPlan(plan))} />
 			</Quotas>
 			{action && <Action {...action} isDisabled={isCurrentPlan || isRedirecting} />}
 		</Card>

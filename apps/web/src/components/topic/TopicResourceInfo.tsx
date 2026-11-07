@@ -1,16 +1,23 @@
-// a topic finding's note popover, with the link out, the preview, Carl's notes, the user's buttons, and the rating
+// a topic finding's note popover, with the link out, the finding's reactions, the preview, Carl's notes, the user's
+// buttons, the rating, its comment thread, and its flag
 
 import type { Visibility } from "@carlnotes/contracts/enums"
 import type { TopicFinding } from "@carlnotes/contracts/findings"
 import type { PodcastEpisode } from "@carlnotes/contracts/podcast"
 import { toHostWithoutWww } from "@carlnotes/contracts/seo"
+import { useSubjectReportFlag } from "@carlnotes/core/hooks/useSubjectReport"
+import { isFindingRatedDown } from "@carlnotes/core/lib/topicFindingFilters"
 import { cn } from "@carlnotes/nightshift/classNames"
-import { ExternalLink } from "lucide-react"
+import { ExternalLink, Flag } from "lucide-react"
 import type { ReactNode } from "react"
 import { AnchorLink } from "@/components/common/AnchorLink"
+import { ReportIssueDialog } from "@/components/common/ReportIssueDialog"
 import { FindingChapterPill } from "@/components/podcast/PodcastEpisodePill"
 import { PopoverCloseButton, PopoverContent } from "@/components/primitives/popover"
+import { ReactionRow } from "@/components/social/ReactionRow"
+import { SocialSection } from "@/components/social/SocialSection"
 import {
+	ACTIVE_ICON_CLASS,
 	METADATA_LINE_CLASS,
 	POPOVER_HEADING_CLASS,
 	POPOVER_PANEL_CLASS,
@@ -18,7 +25,7 @@ import {
 } from "@/lib/styleClasses"
 import { captureVisitEvent, toPublicTopicProperties } from "@/lib/visitAnalytics"
 import { type TopicFeedHandlers, useIsSignedIn } from "@/providers/TopicFeedProvider"
-import { TopicFindingControls } from "./TopicFindingControls"
+import { TOPIC_FINDING_TOGGLE_CLASS, TopicFindingControls } from "./TopicFindingControls"
 import { TopicFindingDetails } from "./TopicFindingDetails"
 import { ResourceMetadata } from "./TopicFindingSummary"
 
@@ -28,6 +35,8 @@ export type TopicResourceInfoTopic = {
 	name: string
 	prompt: string
 	visibility: Visibility
+	// whether the user owns the topic
+	isTopicOwner?: boolean
 }
 
 /**
@@ -55,6 +64,10 @@ export function TopicResourceInfo({
 }) {
 	// signed-out visitors don't get the per-user read and rating buttons
 	const isSignedIn = useIsSignedIn()
+	const findingTarget = { kind: "finding", id: resource.findingId } as const
+
+	// a link or a podcast episode chapter can still open a finding rated thumbs down, which has no reactions or comments
+	const isSocialShown = !isFindingRatedDown(resource)
 
 	// the row owns the popover's open state and anchors it, so this holds only the content
 	return (
@@ -70,6 +83,18 @@ export function TopicResourceInfo({
 					topicFindingRank={topicFindingRank}
 					title={resource.title ?? resource.url}
 					url={resource.url}
+					reactionRow={
+						isSocialShown && (
+							<ReactionRow
+								target={findingTarget}
+								summary={resource.reactions}
+								isSignedIn={isSignedIn}
+								onSummaryChange={(reactions) =>
+									topicFeedHandlers.keepTopicFindingReactions(resource.findingId, reactions)
+								}
+							/>
+						)
+					}
 					onClick={() => {
 						// report the click by the finding's host, naming the topic only if it is public
 						captureVisitEvent("visit_finding_clicked", {
@@ -94,25 +119,65 @@ export function TopicResourceInfo({
 						topicFeedHandlers={topicFeedHandlers}
 					/>
 				)}
+
+				{/* the finding's comments, which load as the popover opens */}
+				{isSocialShown && (
+					<div className="-mt-3">
+						<SocialSection
+							target={findingTarget}
+							isSignedIn={isSignedIn}
+							topicId={topic.id}
+							isTopicOwner={topic.isTopicOwner ?? false}
+						/>
+					</div>
+				)}
+
+				{/* a signed-in user's flag of the finding itself */}
+				{isSignedIn && (
+					<FindingReportButton findingId={resource.findingId} subjectLabel={resource.title ?? resource.url} />
+				)}
 			</PopoverContent>
 		</>
 	)
 }
 
+// the finding's report button, which reads whether the user reported the finding as the popover opens
+function FindingReportButton({ findingId, subjectLabel }: { findingId: string; subjectLabel: string }) {
+	const reportFlag = useSubjectReportFlag({ subjectKind: "finding", subjectId: findingId })
+	return (
+		<>
+			<button type="button" onClick={reportFlag.press} className={cn(TOPIC_FINDING_TOGGLE_CLASS, "-mt-1")}>
+				<Flag className={cn("size-4", reportFlag.isReported && ACTIVE_ICON_CLASS)} />
+				{reportFlag.label}
+			</button>
+			{reportFlag.isReporting && (
+				<ReportIssueDialog
+					subjectKind="finding"
+					subjectId={findingId}
+					subjectLabel={subjectLabel}
+					onClose={reportFlag.closeReport}
+				/>
+			)}
+		</>
+	)
+}
+
 /**
- * A topic finding's heading in its note popover: the rank if it is not null, the title linked out to the page, and the
- * metadata line under the title.
+ * A topic finding's heading in its note popover: the rank if it is not null, the title linked out to the page, the
+ * metadata line under the title, and the reactions under that line.
  */
 export function TopicFindingHeading({
 	topicFindingRank,
 	title,
 	url,
+	reactionRow,
 	onClick,
 	children,
 }: {
 	topicFindingRank: number | null
 	title: string
 	url: string
+	reactionRow?: ReactNode
 	onClick?: () => void
 	// the metadata line under the title
 	children: ReactNode
@@ -136,6 +201,7 @@ export function TopicFindingHeading({
 					<ExternalLink className="mt-0.5 size-3.5 shrink-0" />
 				</AnchorLink>
 				<div className={METADATA_LINE_CLASS}>{children}</div>
+				{reactionRow}
 			</div>
 		</div>
 	)

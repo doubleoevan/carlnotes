@@ -21,6 +21,7 @@ const meta = {
 			consumeTopicFinding: fn(),
 			rateTopicFinding: fn(),
 			bookmarkTopicFinding: fn(),
+			keepTopicFindingReactions: fn(),
 		},
 	},
 } satisfies Meta<typeof TopicLinkedFinding>

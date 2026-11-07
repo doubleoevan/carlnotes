@@ -7,6 +7,7 @@ import { accountRouteContracts } from "./accountRouteContracts"
 import { chatRouteContracts } from "./chatRouteContracts"
 import { personalSourcesRouteContracts } from "./personalSourcesRouteContracts"
 import { podcastRouteContracts } from "./podcastRouteContracts"
+import { socialRouteContracts } from "./socialRouteContracts"
 import { teamRouteContracts } from "./teamRouteContracts"
 import { topicRouteContracts } from "./topicRouteContracts"
 
@@ -35,15 +36,17 @@ export const API_ROUTE_HELPERS: readonly string[] = [
 	"apiClient.readApiErrorMessage",
 	"apiClient.readApiResponse",
 	"apiClient.showClientError",
+	"apiClient.showClientMessage",
 	"apiClient.toApiUrl",
 	"authClient.authClient",
 	"authClient.configureAuthClient",
 	"chatClient.toChatRejection",
 	"clientWrite.showFailedWrite",
+	"clientWrite.WRITE_FAILED_TEXT",
 	"podcastEpisodeClient.isPodcastEpisodeAccessDenied",
+	"profileClient.uploadAvatar",
 	"teamClient.fetchLeaderTeams",
 	"topicClient.readTopicGate",
-	"profileClient.uploadAvatar",
 	"voiceClient.configureVoiceClient",
 	"voiceClient.sendSpokenQuestionEvent",
 	"voiceClient.toRecordingFileName",
@@ -65,6 +68,7 @@ export const API_ROUTE_CONTRACTS: Record<string, ApiRouteContract> = {
 	...chatRouteContracts,
 	...personalSourcesRouteContracts,
 	...podcastRouteContracts,
+	...socialRouteContracts,
 	...teamRouteContracts,
 	...topicRouteContracts,
 }

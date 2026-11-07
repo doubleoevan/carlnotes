@@ -5,7 +5,7 @@ import {
 	type PersonalSourceEntryPayload,
 } from "@carlnotes/contracts/personalSources"
 import type { ReceivedPersonalSourcesEmail } from "@carlnotes/contracts/personalSourcesEmail"
-import { personalSourcesCandidateUrl } from "@carlnotes/contracts/personalSourcesUrls"
+import { personalSourcesCandidateUrl, toTextUrls } from "@carlnotes/contracts/personalSourcesUrls"
 import { toHtmlText } from "@carlnotes/contracts/text"
 
 // large messages retain a bounded original excerpt, with the same deterministic URL limit as imports
@@ -36,6 +36,8 @@ export function normalizePersonalSourcesEmail({
 			},
 		})
 		.transform(email.html ?? "")
+
+	// the text, its links, and who sent it
 	const text = (email.text?.trim() || toEmailHtmlText(sanitizedHtml))
 		.replaceAll("\0", "")
 		.slice(0, MAX_EMAIL_TEXT_CHARS)
@@ -91,9 +93,12 @@ function classifyPersonalSourcesSender({
 	isOwnerEmailVerified: boolean
 	hasNewsletterMarker: boolean
 }): PersonalSourceEntryPayload["senderKind"] {
+	// a newsletter says so in its links or its list headers
 	if (hasNewsletterMarker || Object.keys(email.headers).some((name) => /^list-(id|unsubscribe|post)$/i.test(name))) {
 		return "newsletter"
 	}
+
+	// a forward is authenticated mail from the owner's own verified address
 	if (
 		isOwnerEmailVerified &&
 		hasAuthenticatedPersonalSourcesSender(email) &&
@@ -101,6 +106,8 @@ function classifyPersonalSourcesSender({
 	) {
 		return "personal_forward"
 	}
+
+	// any other mail has no sender this can name
 	return "unknown"
 }
 
@@ -113,17 +120,23 @@ function extractEmailLinks(
 	const links = new Set<string>()
 	const excludedLinks = new Set<string>()
 	let hasNewsletterMarker = false
+
+	// a List-Unsubscribe header's urls are the sender's controls, never links to read
 	for (const [name, value] of Object.entries(headers)) {
 		if (!/^list-unsubscribe$/i.test(name)) {
 			continue
 		}
-		for (const match of value.matchAll(/https?:\/\/[^\s<>"']+/g)) {
-			const candidate = personalSourcesCandidateUrl.safeParse(match[0])
+
+		// each url in the header
+		for (const url of toTextUrls(value)) {
+			const candidate = personalSourcesCandidateUrl.safeParse(url)
 			if (candidate.success) {
 				excludedLinks.add(candidate.data)
 			}
 		}
 	}
+
+	// keep a link that is public, belongs to no service, and is no tracking redirect
 	const addLink = (value: string): void => {
 		// recognize newsletter controls before the candidate filter removes their URLs
 		hasNewsletterMarker ||= NEWSLETTER_LINK_PATTERN.test(value)
@@ -134,6 +147,8 @@ function extractEmailLinks(
 		if (SERVICE_LINK_PATTERN.test(value)) {
 			return
 		}
+
+		// a tracking host or a redirect parameter hides where a link goes
 		const url = new URL(candidate.data)
 		if (
 			TRACKING_HOST_PATTERN.test(url.hostname) ||
@@ -141,35 +156,50 @@ function extractEmailLinks(
 		) {
 			return
 		}
+
+		// it passed each filter
 		links.add(candidate.data)
 	}
-	for (const match of text.matchAll(/https?:\/\/[^\s<>"']+/g)) {
-		addLink(match[0].replace(/[.,;:!?)\]}]+$/, ""))
+
+	// the plain text's urls, then each anchor in the html
+	for (const url of toTextUrls(text)) {
+		addLink(url)
 	}
 	let anchorText = ""
 	new HTMLRewriter()
+		// each anchor's href and rel, and its text as it arrives
 		.on("a[href]", {
 			element: (element) => {
 				const href = element.getAttribute("href") ?? ""
 				const isUnsubscribe = /unsubscribe/i.test(element.getAttribute("rel") ?? "")
 				anchorText = ""
+
+				// an unsubscribe control marks a newsletter, and any other anchor is a link
 				element.onEndTag(() => {
 					const candidate = personalSourcesCandidateUrl.safeParse(href)
+
+					// the anchor's whole text is here at its end tag
 					if (
 						candidate.success &&
 						(isUnsubscribe || /unsubscribe|opt out|manage (?:email )?preferences/i.test(anchorText))
 					) {
 						excludedLinks.add(candidate.data)
 						hasNewsletterMarker = true
-					} else {
-						addLink(href)
+						return
 					}
+
+					// any other anchor is a link
+					addLink(href)
 				})
 			},
+
+			// an anchor's text arrives in pieces
 			text: (chunk) => {
 				anchorText += chunk.text
 			},
 		})
 		.transform(html)
+
+	// a link the sender's controls name is no link to read
 	return { links: [...links].filter((url) => !excludedLinks.has(url)), hasNewsletterMarker }
 }

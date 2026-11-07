@@ -166,7 +166,14 @@ export function isOverageBillable({ provider, billingInterval, hasPaymentMethod 
 }
 
 // a user's authority and entitlement inputs, read together
-export type UserAccess = { isAdmin: boolean; plan: Plan; budgetOverrideCents: number | null; freeTopicLimit?: number }
+// isAdminBlocked says an admin blocked the user from reactions and comments everywhere
+export type UserAccess = {
+	isAdmin: boolean
+	plan: Plan
+	budgetOverrideCents: number | null
+	freeTopicLimit?: number
+	isAdminBlocked?: boolean
+}
 
 /**
  * Returns the account's Topic allowance, preserving its grandfathered Free slots.

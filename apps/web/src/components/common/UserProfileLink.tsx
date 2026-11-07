@@ -1,4 +1,5 @@
 import type { ProfileIdentity } from "@carlnotes/contracts/profiles"
+import { toProfilePath } from "@carlnotes/contracts/seo"
 import { cn } from "@carlnotes/nightshift/classNames"
 import type * as React from "react"
 import { UserAvatar } from "@/components/branding/UserAvatar"
@@ -10,6 +11,7 @@ import { AnchorLink } from "./AnchorLink"
 export function UserProfileLink({
 	user,
 	avatarClassName = "size-6",
+	nameClassName = "text-link",
 	className,
 	label,
 	displayName,
@@ -18,6 +20,8 @@ export function UserProfileLink({
 }: {
 	user: ProfileIdentity
 	avatarClassName?: string
+	// the name's color, for a link on a background where the link color does not fit
+	nameClassName?: string
 	className?: string
 	// the words before the username. omitted, the username stands alone
 	label?: string
@@ -28,7 +32,7 @@ export function UserProfileLink({
 } & React.ComponentProps<"a">) {
 	// a display name shows alone, and a screen reader reads the username after it
 	const linkText = (
-		<span className="text-link">
+		<span className={nameClassName}>
 			{displayName ?? user.username}
 			{displayName && displayName !== user.username && <span className="sr-only">{` (@${user.username})`}</span>}
 		</span>
@@ -37,7 +41,7 @@ export function UserProfileLink({
 	// the rest props flow to the anchor, so a tooltip trigger can wrap this link asChild
 	return (
 		<AnchorLink
-			href={`/profiles/${user.userId}`}
+			href={toProfilePath(user.userId)}
 			isNewTab={isNewTab}
 			{...props}
 			className={cn("inline-flex items-center gap-2 hover:underline", className)}

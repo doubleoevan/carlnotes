@@ -1,11 +1,12 @@
 import { authClient } from "@carlnotes/client/authClient"
-import { fetchTopicPage } from "@carlnotes/client/topicClient"
+import { type FetchTopicPageOptions, fetchTopicPage, type TopicPageResult } from "@carlnotes/client/topicClient"
 import { useNow } from "@carlnotes/core/hooks/useNow"
+import { toPolledTopicPageResult } from "@carlnotes/core/lib/scanPoll"
 import { selectTopicFindings } from "@carlnotes/core/lib/topicFeed"
 import { applyTopicPageChanges } from "@carlnotes/core/lib/topicFindingChanges"
 import { sendTopicViewOnce } from "@carlnotes/core/lib/topicViews"
 import { useTopicChangeCount } from "@carlnotes/core/stores/chatConversationStore"
-import { useQuery } from "@tanstack/react-query"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { useFocusEffect, useLocalSearchParams } from "expo-router"
 import { useCallback, useEffect, useMemo } from "react"
 import { ScrollView, Text, View } from "react-native"
@@ -33,10 +34,9 @@ export default function TopicScreen() {
 	const { data: session } = authClient().useSession()
 	const topicFeed = useTopicFeed()
 	useFocusEffect(useCallback(() => selectCachedTopic(topicId), [topicId]))
-	const query = useQuery({
-		queryKey: ["topic-page", session?.user.id ?? null, topicId],
-		queryFn: () => fetchTopicPage(topicId),
-	})
+	const queryClient = useQueryClient()
+	const topicPageKey = ["topic-page", session?.user.id ?? null, topicId]
+	const query = useQuery({ queryKey: topicPageKey, queryFn: () => fetchTopicPage(topicId) })
 	// refresh the mounted Topic after accepted chat edits
 	const topicChangeCount = useTopicChangeCount(topicId)
 	const { refetch } = query
@@ -73,6 +73,18 @@ export default function TopicScreen() {
 	const handleRefresh = (): void => {
 		void topicFeed.reheat(async () => (await query.refetch()).isSuccess)
 	}
+	const handleScanned = async ({ isPoll = false }: FetchTopicPageOptions = {}): Promise<void> => {
+		if (!isPoll) {
+			await query.refetch({ cancelRefetch: false })
+			return
+		}
+
+		// a poll leaves out the related topics, the reactions, and the comment thread, so the page keeps its own
+		const polledTopicPage = await fetchTopicPage(topicId, { isPoll })
+		queryClient.setQueryData<TopicPageResult>(topicPageKey, (topicPage) =>
+			toPolledTopicPageResult(topicPage, polledTopicPage),
+		)
+	}
 	return (
 		<View className="flex-1 bg-background">
 			<Header />
@@ -98,9 +110,7 @@ export default function TopicScreen() {
 						findings={findings}
 						state={topicFeed}
 						onRefresh={handleRefresh}
-						onScanned={async () => {
-							await query.refetch({ cancelRefetch: false })
-						}}
+						onScanned={handleScanned}
 					/>
 				) : null}
 				{page?.status === "gated" ? (

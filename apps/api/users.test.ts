@@ -1,5 +1,5 @@
-// account close tests: a failed revocation before the close begins and after the close has begun,
-// and a LiteLLM key created while the account was closing
+// account tests: a close with a failed revocation before it begins and after it has begun, a LiteLLM key created
+// while the account was closing, and the daily notifications email's switch
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import { restoreConnectionPool, type SentQuery, stubConnectionPool } from "@carlnotes/db/connectionPoolStub"
 import * as store from "@carlnotes/db/store"
@@ -9,7 +9,8 @@ import { quietErrorReports } from "@carlnotes/server/monitoringTestFixtures"
 import { saveEnvSettings } from "@carlnotes/server/savedEnvSettings"
 import { TEST_ANALYTICS_PROPERTIES } from "./analyticsTestFixtures"
 import * as sessions from "./sessions"
-import { deleteUser } from "./users"
+import { toJsonRequest, toSignedInApp } from "./testSession"
+import { deleteUser, usersRoute } from "./users"
 
 // the connection pool's own query and the environment's Redis url, put back after each test along with the spies
 const restoreEnvSettings = saveEnvSettings(["REDIS_URL"])
@@ -219,4 +220,28 @@ test("a close deletes a solo team with its chat room attachments and avatar", as
 		"topics/t1/room-attachments/r1/notes.pdf",
 		"avatars/teams/team-1/9c1b.webp",
 	])
+})
+
+// the switch saves its one column to the row and rewrites the sessions, and a visitor's request writes nothing
+test("the notifications email switch saves to the user's row and refreshes the sessions", async () => {
+	const refreshSessionUserSpy = spyOn(sessions, "refreshSessionUser").mockResolvedValue()
+	const sentQueries = stubConnectionPool(() => [])
+	const response = await toSignedInApp(usersRoute, "user-1").request(
+		"/users/me/notifications-email",
+		toJsonRequest({ isEnabled: false }),
+	)
+	expect(response.status).toBe(200)
+
+	// the one column is written for this user alone
+	const updateQuery = sentQueries.find((sentQuery) => sentQuery.text.startsWith('update "users"'))
+	expect(updateQuery?.text).toContain('"is_notifications_email_enabled" = $1')
+	expect(updateQuery?.values?.[0]).toBe(false)
+	expect(updateQuery?.values?.at(-1)).toBe("user-1")
+	expect(refreshSessionUserSpy).toHaveBeenCalledWith("user-1")
+
+	// a visitor is rejected before any query
+	sentQueries.length = 0
+	const visitorResponse = await usersRoute.request("/users/me/notifications-email", toJsonRequest({ isEnabled: true }))
+	expect(visitorResponse.status).toBe(401)
+	expect(sentQueries).toHaveLength(0)
 })

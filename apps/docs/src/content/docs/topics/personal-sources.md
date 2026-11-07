@@ -57,7 +57,9 @@ The iPhone and Android apps can read and delete imported entries; export selecti
 
 ## Email Carl
 
-Write to **the address Carl sends your digests from**, using your CarlNotes account email. Tell him what you're working on and include useful links. An optional `topic: <Topic name>` in the subject or first line helps him find a match.
+Write to **the address Carl sends your brew reports from**, using your CarlNotes account email. Tell him what you're
+working on and include useful links. An optional `topic: <Topic name>` in the subject or first line helps him find a
+match.
 
 Carl saves clear matches to Topics you can edit and sends a confirmation with links. If he needs clarification, he replies in the same thread with numbered suggestions. Reply with numbers, existing Topic names, or a mix. Clear fuzzy names work; ambiguous names need clarification. No email body is copied into a pending store.
 
@@ -71,9 +73,12 @@ text, sender details, links, private references, and derived context in storage.
 Carl summarizes at most 80,000 characters into at most 8,000 characters of private context. Large imports may exceed that reading allowance. Summarization uses the Topic owner’s model budget. Missing keys, exhausted budgets, and failures
 show a status. Accepted text can help a later brew once rebuilding finishes.
 
-Private context helps relevance scoring on its destination Topic. For each sender, one model call selects exact excerpts from the linked page for the public explanation and writes that sender’s private annotation. Another sender’s private text never enters the same call. Finding views, shared feeds, copied public notes, email digests, and podcasts use only the public explanation. It is excluded from external search queries, shared Resource fields and
-vectors, and model content traces. Model providers still process text needed for summarization and scoring; their
-retention terms apply. Resend independently processes and retains received email under its own terms.
+Private context helps relevance scoring on its destination Topic. For each sender, one model call selects exact excerpts
+from the linked page for the public explanation and writes that sender’s private annotation. Another sender’s private
+text never enters the same call. Finding views, shared feeds, copied public notes, brew reports, and podcasts use only
+the public explanation. It is excluded from external search queries, shared Resource fields and vectors, and model
+content traces. Model providers still process text needed for summarization and scoring; their retention terms apply.
+Resend independently processes and retains received email under its own terms.
 
 Deleting an entry removes its unused links and invalidates old private context. The next rewrite uses only live
 entries. Deleting a Source removes all your entries from it. Deletion also invalidates your derived Finding annotations. Existing Findings stay. Revoking

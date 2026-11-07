@@ -1,6 +1,8 @@
 // public Topic context and sender-private context stay separate throughout review
 import { toHostWithoutWww } from "@carlnotes/contracts/seo"
+import { toSharedCommentLine } from "@carlnotes/contracts/socialText"
 import type { PersonalSourcesContextVersion, PersonalSourcesReviewContext } from "@carlnotes/db/personalSourcesContext"
+import type { SharedCommentText } from "@carlnotes/db/sharedComments"
 import {
 	type Budget,
 	charge,
@@ -32,6 +34,7 @@ export type TopicContext = {
 	embedding: number[]
 	contextHash: string
 	scoreText: string
+	// the private context of each sender, and the versions a private review checks are still current
 	personalSourcesVersions?: PersonalSourcesContextVersion[]
 	personalSources?: PersonalSourcesReviewContext[]
 }
@@ -52,9 +55,14 @@ export function toTopicContextText(topicScanContext: { name: string; context: st
 
 /**
  * Builds the score prompt's text from the context text, then the pages that the topic's users liked or bookmarked,
- * then the pages that they rated down.
+ * then the pages that they rated down, then the comments the topic's editors shared with Carl. No other comment is
+ * read.
  */
-export function toScoreContextText(contextText: string, scoreExamplePages: ScoreExamplePages): string {
+export function toScoreContextText(
+	contextText: string,
+	scoreExamplePages: ScoreExamplePages,
+	sharedCommentTexts: SharedCommentText[] = [],
+): string {
 	// list each kind of example page by title and host, under a label like an attachment's. a kind with no pages is left out
 	const toExampleSections = (label: string, examplePages: ScoreExamplePage[]): string[] => {
 		const examplePageLines = examplePages
@@ -66,15 +74,27 @@ export function toScoreContextText(contextText: string, scoreExamplePages: Score
 		contextText,
 		...toExampleSections("pages the reader liked or bookmarked", scoreExamplePages.likedOrBookmarkedPages),
 		...toExampleSections("pages the reader rated down", scoreExamplePages.ratedDownPages),
+		...toSharedCommentSections(sharedCommentTexts),
 	].join("\n\n")
 }
 
-// the topic's scan context, the example pages for the score prompt, the Scan's Budget,
+// the shared comments under their own label, one line each with its author's name. no shared comment, no section
+function toSharedCommentSections(sharedCommentTexts: SharedCommentText[]): string[] {
+	const sharedCommentLines = sharedCommentTexts.map(
+		(sharedCommentText) => `- ${toSharedCommentLine(sharedCommentText)}`,
+	)
+	return sharedCommentLines.length > 0
+		? [`[what people said about this topic, shared by its editors]\n${sharedCommentLines.join("\n")}`]
+		: []
+}
+
+// the topic's scan context, the example pages and the shared comments for the score prompt, the Scan's Budget,
 // and the key that the embedding bills
 type LoadTopicContextOptions = {
 	shouldEmbed?: boolean
 	topicScanContext: TopicScanContext
 	scoreExamplePages: ScoreExamplePages
+	sharedCommentTexts?: SharedCommentText[]
 	budget: Budget
 	litellmApiKey?: string
 }
@@ -86,6 +106,7 @@ type LoadTopicContextOptions = {
 export async function loadTopicContext({
 	topicScanContext,
 	scoreExamplePages,
+	sharedCommentTexts,
 	budget,
 	litellmApiKey,
 	shouldEmbed = true,
@@ -110,7 +131,7 @@ export async function loadTopicContext({
 		text,
 		embedding,
 		contextHash: toReviewContextHash(topicScanContext),
-		scoreText: toScoreContextText(text, scoreExamplePages),
+		scoreText: toScoreContextText(text, scoreExamplePages, sharedCommentTexts),
 		personalSources: topicScanContext.personalSources,
 		personalSourcesVersions: topicScanContext.personalSourcesVersions,
 	}
@@ -126,20 +147,26 @@ async function embedReviewContext({
 	personalSourcesVersions?: PersonalSourcesContextVersion[]
 	litellmApiKey?: string
 }): Promise<number[]> {
+	// a context with no private text embeds as any query does
 	if (!personalSourcesVersions) {
 		return embedQuery(text, litellmApiKey)
 	}
+
+	// a private context embeds on its owner's key, and only while its versions are current
 	try {
 		await assertPersonalSourcesReviewCurrent(personalSourcesVersions)
 		if (!litellmApiKey) {
 			throw new Error("Private review requires the owner's key")
 		}
+
+		// one private vector for the context as a query
 		const [vector] = await embedPrivateVectors([`Instruct: ${EMBED_QUERY_INSTRUCTION}\nQuery: ${text}`], litellmApiKey)
 		if (!vector) {
 			throw new Error("Private review embedding missing")
 		}
 		return vector
 	} catch (error) {
+		// a private review's failure is reported with nothing of the private text
 		throw toPrivateReviewError(error)
 	}
 }

@@ -308,9 +308,17 @@ Check for:
      `CREDENTIAL_RATE_WINDOW_SECONDS`
      in `api/auth.ts` (now `RATE_LIMIT_WINDOW_MS`, `REPORT_RATE_LIMIT_WINDOW_MS`, and
      `CREDENTIAL_RATE_LIMIT_WINDOW_SECONDS`)
-   - `sendTopicScanEmail` in `worker/notify.ts` (now `planScanDigest` and `sendScanDigestBatch`), `sendManualScanEmail`
-     (now `sendScanReport`), and `finishScan`'s `trigger` argument (now `sendScanEmailWorkflow` in
-     `worker/workflows/sendScanEmail.ts`)
+   - `sendTopicScanEmail` in `worker/notify.ts` (now `planTopicScanEmail` and `sendTopicScanEmailBatch`),
+     `sendManualScanEmail` (now `sendScanReport`), and `finishScan`'s `trigger` argument (now `sendScanEmailWorkflow`
+     in `worker/workflows/sendScanEmail.ts`)
+   - `digest` for the scheduled Scan's email (now `topic scan email` in code and docs, and brew report in customer
+     copy): `planScanDigest`, `sendScanDigestBatch`, `SendScanDigestBatchOptions`, `loadDigestSubscribers`,
+     `toDigestSubscriberIdsQuery`, and `toDigestSubscriptionFilter` (now `planTopicScanEmail`,
+     `sendTopicScanEmailBatch`, `SendTopicScanEmailBatchOptions`, `loadTopicScanEmailSubscribers`,
+     `toTopicScanEmailSubscriberIdsQuery`, and `toTopicScanEmailSubscriptionFilter`). A hash digest (`toHmacDigest`)
+     and the `email_digest_toggled` analytics event keep the word
+   - `NoteCommentComposerProps` in `core/components/NoteComments.tsx` (now `TextComposerElementProps` in
+     `core/components/TextComposer.tsx`)
    - `worker/temporal-client.ts` and the kebab-case files in `worker/workflows/`: `run-topic-scan.ts`,
      `run-topic-scan-activities.ts`, `process-attachment.ts`, `process-attachment-activities.ts`, `screen-source.ts`,
      `screen-source-activities.ts`, and `stage-timeouts.ts` (now `worker/temporalClient.ts`, `runTopicScan.ts`,
@@ -889,6 +897,12 @@ Check for:
      `loadPersonalSourcesReceiptLinks` (now `loadPersonalSourcesConfirmationLinks`),
      `finishPersonalSourcesEmailReceipt` and `retryPersonalSourcesEmailReceipt` (now
      `finishPersonalSourcesEmailConfirmation` and `retryPersonalSourcesEmailConfirmation`)
+   - `packages/contracts/blocks.ts` (now `packages/contracts/userBlocks.ts`)
+   - `packages/client/blockClient.ts`, `packages/core/hooks/useBlockedUsers.ts`, and `BlockedUsersSection.tsx` and its
+     stories (now `userBlockClient.ts`, `useUserBlocks.ts`, and `UserBlocksSection.tsx`), with `BlockedUser` (now
+     `UserBlock`), `fetchBlockedUsers` (now `fetchUserBlocks`), `sendBlockUser` and `sendUnblockUser` (now
+     `sendUserBlock` and `sendUserUnblock`), `blockUser` and `unblockUser` (now `saveUserBlock` and `deleteUserBlock`),
+     `isUserBlocked` (now `hasUserBlock`), and `toUnblockedAuthorFilter` (now `toNotUserBlockedAuthorFilter`)
    - `isItemExpanded` and the `ItemExpanded` story (now `isEntryExpanded` and `EntryExpanded`), `openHostLink` in
      `apps/web/src/mcpViews/mcpViewHost.ts` (folded into `openMcpViewLink`)
 

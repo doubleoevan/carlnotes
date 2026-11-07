@@ -4,9 +4,12 @@ import {
 	PageActionMenu as SharedPageActionMenu,
 	type PageActionOption as SharedPageActionOption,
 } from "@carlnotes/core/components/PageActionMenu"
+import { useSubjectReportFlag } from "@carlnotes/core/hooks/useSubjectReport"
+import { toCarlNotesMcpServer } from "@carlnotes/core/lib/installDeeplinks"
 import { Bot, EllipsisVertical, Flag, type LucideIcon, Plus } from "lucide-react-native"
 import { type ComponentRef, useRef, useState } from "react"
 import type { View } from "react-native"
+import { toActiveIconProps } from "@/activeIconProps"
 import { AddToAiDialog } from "@/components/common/AddToAiDialog"
 import { ReportIssueDialog, type ReportSubject } from "@/components/common/ReportIssueDialog"
 import { Sheet } from "@/components/common/Sheet"
@@ -33,11 +36,12 @@ export function PageActionMenu({
 }) {
 	// each form survives the action sheet closing and returns focus to the same trigger
 	const [isOpen, setIsOpen] = useState(false)
-	const [isReporting, setIsReporting] = useState(false)
 	const [isAddingToAi, setIsAddingToAi] = useState(false)
 	const triggerRef = useRef<ComponentRef<typeof View>>(null)
 	const { openNewTopicDialog, newTopicDialog } = useNewTopicDialog()
 	const { data: session } = authClient().useSession()
+	// whether the user reported this page's subject, read before the sheet opens so its flag is right on the first press
+	const reportFlag = useSubjectReportFlag(report)
 	return (
 		<>
 			{/* the shared action list uses the same order and visibility as web */}
@@ -58,7 +62,8 @@ export function PageActionMenu({
 						icons={{ Plus, Bot, Flag }}
 						onNewTopic={openNewTopicDialog}
 						onAddToAi={() => setIsAddingToAi(true)}
-						onReport={report && session ? () => setIsReporting(true) : undefined}
+						onReport={report && session ? reportFlag.press : undefined}
+						isReported={reportFlag.isReported}
 						onClose={() => setIsOpen(false)}
 						Option={PageAction}
 					/>
@@ -67,12 +72,9 @@ export function PageActionMenu({
 			{/* reuse the same native forms wherever a global action is offered */}
 			{newTopicDialog}
 			{isAddingToAi && (
-				<AddToAiDialog
-					mcpServer={{ name: "CarlNotes", url: `${SITE_URL}/mcp` }}
-					onClose={() => setIsAddingToAi(false)}
-				/>
+				<AddToAiDialog mcpServer={toCarlNotesMcpServer(SITE_URL)} onClose={() => setIsAddingToAi(false)} />
 			)}
-			{isReporting && report && <ReportIssueDialog {...report} onClose={() => setIsReporting(false)} />}
+			{reportFlag.isReporting && report && <ReportIssueDialog {...report} onClose={reportFlag.closeReport} />}
 		</>
 	)
 }
@@ -88,11 +90,7 @@ function PageAction({ label, Icon: ActionIcon, isActive, isDisabled, onSelect }:
 			disabled={isDisabled}
 			onPress={onSelect}
 		>
-			<Icon
-				as={ActionIcon}
-				className={isActive ? "size-4 text-primary" : "size-4 text-muted-foreground"}
-				fill={isActive ? "currentColor" : "none"}
-			/>
+			<Icon as={ActionIcon} {...toActiveIconProps(isActive, "size-4 text-muted-foreground")} />
 			<Text>{label}</Text>
 		</Button>
 	)

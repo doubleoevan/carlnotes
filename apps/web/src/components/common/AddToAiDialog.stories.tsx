@@ -1,5 +1,6 @@
 // the Add to AI dialog: the AI providers Carl's mcp server installs in, the last one used first, and the copy option
 import { SITE_URL } from "@carlnotes/contracts/site"
+import { toCarlNotesMcpServer } from "@carlnotes/core/lib/installDeeplinks"
 import type { Meta, StoryObj } from "@storybook/tanstack-react"
 import { expect, fn, screen } from "storybook/test"
 import { LAST_AI_PROVIDER_KEY, storeAiProvider } from "@/lib/installDeeplinks"
@@ -10,7 +11,7 @@ import { AddToAiDialog } from "./AddToAiDialog"
 const meta = {
 	title: "Common/AddToAiDialog",
 	component: AddToAiDialog,
-	args: { mcpServer: { name: "CarlNotes", url: `${SITE_URL}/mcp` }, onClose: fn() },
+	args: { mcpServer: toCarlNotesMcpServer(SITE_URL), onClose: fn() },
 	argTypes: {
 		mcpServer: { control: "object" },
 		onClose: { control: false },

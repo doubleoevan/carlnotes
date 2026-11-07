@@ -63,6 +63,8 @@ export const topics = pgTable(
 		viewerCount: integer("viewer_count").notNull().default(0),
 		// whether the owner has the topic's podcast on
 		isPodcastEnabled: boolean("is_podcast_enabled").notNull().default(true),
+		// whether the owner lets the topic's podcast talk about Comments
+		isPodcastCommentsEnabled: boolean("is_podcast_comments_enabled").notNull().default(true),
 		// created and updated timestamps
 		...timestamps(),
 	},

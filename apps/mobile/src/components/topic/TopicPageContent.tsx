@@ -1,3 +1,5 @@
+import { authClient } from "@carlnotes/client/authClient"
+import type { FetchTopicPageOptions } from "@carlnotes/client/topicClient"
 import type { TopicFinding } from "@carlnotes/contracts/findings"
 import type { TopicResponse } from "@carlnotes/contracts/topics"
 import type { TopicFeedState } from "@carlnotes/core/hooks/useTopicFeedState"
@@ -7,6 +9,8 @@ import { Footer } from "@/components/layout/Footer"
 import { PodcastEpisodePlayer } from "@/components/podcast/PodcastEpisodePlayer"
 import { Badge } from "@/components/primitives/badge"
 import { Text } from "@/components/primitives/text"
+import { ReactionRow } from "@/components/social/ReactionRow"
+import { SocialSection } from "@/components/social/SocialSection"
 import { toTypeRoleStyle } from "@/typeRoleStyles"
 import { CollapsibleSection } from "./CollapsibleSection"
 import { TopicByline } from "./Topic"
@@ -31,8 +35,10 @@ export function TopicPageContent({
 	findings: TopicFinding[]
 	state: Pick<TopicFeedState, "handlers" | "pendingChanges" | "isReheating">
 	onRefresh: () => void
-	onScanned: () => Promise<void>
+	onScanned: (fetchTopicPageOptions?: FetchTopicPageOptions) => Promise<void>
 }) {
+	// a visitor's press on a reaction or the composer opens sign-up
+	const { data: session } = authClient().useSession()
 	return (
 		<ScrollView
 			refreshControl={<RefreshControl refreshing={state.isReheating} onRefresh={onRefresh} />}
@@ -52,7 +58,15 @@ export function TopicPageContent({
 				</TopicInfoButton>
 				{/* the chat mention and note count sits under the name, and its press opens the chat room */}
 				<PageUpdateCountBadge topicId={topic.id} className="self-start" />
-				<TopicByline topic={topic} isPage />
+				{/* the byline and the topic's reactions */}
+				<View className="flex-row flex-wrap items-center gap-x-3">
+					<TopicByline topic={topic} isPage />
+					<ReactionRow
+						target={{ kind: "topic", id: topic.id }}
+						summary={topic.reactions}
+						isSignedIn={Boolean(session)}
+					/>
+				</View>
 				{topic.tags.length > 0 ? (
 					<View className="mt-2 flex-row flex-wrap gap-1">
 						{topic.tags.map((tag) => (
@@ -78,6 +92,14 @@ export function TopicPageContent({
 				>
 					<TopicFindingsSection topic={topic} findings={findings} state={state} />
 				</CollapsibleSection>
+				{/* the topic's comment thread, whose first page came with the topic */}
+				<SocialSection
+					target={{ kind: "topic", id: topic.id }}
+					firstPage={topic.commentThread}
+					isSignedIn={Boolean(session)}
+					topicId={topic.id}
+					isTopicOwner={topic.isTopicOwner}
+				/>
 			</View>
 			<TopicPageCards topic={topic} />
 			<TopicCountsLine topic={topic} />

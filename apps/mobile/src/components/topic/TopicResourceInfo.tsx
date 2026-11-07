@@ -1,20 +1,24 @@
 import { toApiUrl } from "@carlnotes/client/apiClient"
 import { authClient } from "@carlnotes/client/authClient"
-import { fetchTopicFindingLinkPreview } from "@carlnotes/client/topicFindingClient"
 import type { ChatLinkPreview } from "@carlnotes/contracts/chat"
 import { toHostWithoutWww } from "@carlnotes/contracts/seo"
 import { SITE_URL } from "@carlnotes/contracts/site"
+import type { CommentThreadResponse } from "@carlnotes/contracts/social"
 import { toPlainText } from "@carlnotes/contracts/spokenText"
 import { toOneLineText } from "@carlnotes/contracts/text"
+import { useFindingLinkPreview } from "@carlnotes/core/hooks/useFindingLinkPreview"
+import { useSubjectReportFlag } from "@carlnotes/core/hooks/useSubjectReport"
 import { toDateLabel } from "@carlnotes/core/lib/labels"
+import { isFindingRatedDown } from "@carlnotes/core/lib/topicFindingFilters"
 import { toNotesMarkdown } from "@carlnotes/core/lib/topicScanRecap"
-import { cn } from "@carlnotes/nightshift/classNames"
 import { Image } from "expo-image"
-import { Bookmark, Check, Circle, ExternalLink } from "lucide-react-native"
-import { useEffect, useState } from "react"
+import { Bookmark, Check, Circle, ExternalLink, Flag } from "lucide-react-native"
+import { useState } from "react"
 import { Text, View } from "react-native"
+import { toActiveIconProps } from "@/activeIconProps"
 import { CoffeeLoading } from "@/components/branding/CoffeeLoading"
 import { AnchorLink } from "@/components/common/AnchorLink"
+import { ReportIssueDialog } from "@/components/common/ReportIssueDialog"
 import { ScrollBox } from "@/components/common/ScrollBox"
 import { ShareMarkdownButton } from "@/components/common/ShareMarkdownButton"
 import { Sheet, type SheetProps } from "@/components/common/Sheet"
@@ -22,15 +26,17 @@ import { YoutubePlayer } from "@/components/common/YoutubePlayer"
 import { Button, toTouchTargetHitSlop } from "@/components/primitives/button"
 import { Icon } from "@/components/primitives/icon"
 import { Text as ButtonText } from "@/components/primitives/text"
+import { ReactionRow } from "@/components/social/ReactionRow"
+import { SocialSection } from "@/components/social/SocialSection"
 import { toTypeRoleStyle } from "@/typeRoleStyles"
 import { captureVisitEvent, toPublicTopicProperties } from "@/visitAnalytics"
 import { TopicFindingRating } from "./TopicFindingRating"
 import { ResourceMetadata } from "./TopicFindingSummary"
 import type { TopicResourceProps } from "./TopicResource"
 
-// a sheet keeps the row's confirmed and pending state live
+// a sheet keeps the row's confirmed and pending state live. a supplied comment thread keeps stories offline
 export type TopicResourceInfoProps = TopicResourceProps &
-	Pick<SheetProps, "triggerRef" | "onClose"> & { isSignedIn?: boolean }
+	Pick<SheetProps, "triggerRef" | "onClose"> & { isSignedIn?: boolean; commentThread?: CommentThreadResponse }
 
 /**
  * Presents the web's finding details and actions in a native sheet.
@@ -44,6 +50,10 @@ export function TopicResourceInfo(props: TopicResourceInfoProps) {
 	const { resource, topic, topicFindingRank, topicFeedHandlers, triggerRef, onClose } = props
 	const title = toOneLineText(toPlainText(resource.title ?? "")) || resource.url
 	const handleOpen = (): void => topicFeedHandlers.openTopicFinding(resource.findingId)
+	const findingTarget = { kind: "finding", id: resource.findingId } as const
+	// a link or a podcast episode chapter can still open a finding rated thumbs down, which has no reactions or comments
+	const isSocialShown = !isFindingRatedDown(resource)
+	const reportFlag = useSubjectReportFlag({ subjectKind: "finding", subjectId: resource.findingId })
 	const handleTitlePress = (): void => {
 		// report the explicit source click using the same public-topic rule as web
 		captureVisitEvent("visit_finding_clicked", {
@@ -82,6 +92,16 @@ export function TopicResourceInfo(props: TopicResourceInfoProps) {
 						<Icon as={ExternalLink} className="size-3.5 text-link" />
 					</AnchorLink>
 					<ResourceMetadata resource={resource} latestPodcastEpisode={props.latestPodcastEpisode} />
+					{isSocialShown ? (
+						<ReactionRow
+							target={findingTarget}
+							summary={resource.reactions}
+							isSignedIn={isSignedIn}
+							onSummaryChange={(reactions) =>
+								topicFeedHandlers.keepTopicFindingReactions(resource.findingId, reactions)
+							}
+						/>
+					) : null}
 				</View>
 			</View>
 			<FindingLinkPreview findingId={resource.findingId} linkPreview={props.linkPreview} onOpen={handleOpen} />
@@ -123,6 +143,38 @@ export function TopicResourceInfo(props: TopicResourceInfoProps) {
 					<FindingActions {...props} />
 				</View>
 			)}
+			{/* the finding's comment thread, which loads as the sheet opens */}
+			{isSocialShown ? (
+				<View className="-mt-1">
+					<SocialSection
+						target={findingTarget}
+						firstPage={props.commentThread}
+						isSignedIn={isSignedIn}
+						topicId={topic.id}
+						isTopicOwner={"isTopicOwner" in topic && topic.isTopicOwner}
+					/>
+				</View>
+			) : null}
+			{/* a signed-in user's flag of the finding itself */}
+			{isSignedIn && (
+				<Button
+					variant="ghost"
+					className="-mt-3 self-start px-0"
+					accessibilityLabel={reportFlag.label}
+					onPress={reportFlag.press}
+				>
+					<Icon as={Flag} {...toActiveIconProps(reportFlag.isReported)} />
+					<ButtonText>{reportFlag.label}</ButtonText>
+				</Button>
+			)}
+			{reportFlag.isReporting && (
+				<ReportIssueDialog
+					subjectKind="finding"
+					subjectId={resource.findingId}
+					subjectLabel={title}
+					onClose={reportFlag.closeReport}
+				/>
+			)}
 		</Sheet>
 	)
 }
@@ -146,11 +198,7 @@ function FindingActions({ resource, topic, topicFeedHandlers, isPending }: Topic
 						disabled={isPending}
 						onPress={() => topicFeedHandlers.bookmarkTopicFinding(resource.findingId, !resource.isBookmarked)}
 					>
-						<Icon
-							as={Bookmark}
-							className={cn("size-4", resource.isBookmarked && "text-primary")}
-							fill={resource.isBookmarked ? "currentColor" : "none"}
-						/>
+						<Icon as={Bookmark} {...toActiveIconProps(resource.isBookmarked, "size-4")} />
 						<ButtonText>{bookmarkLabel}</ButtonText>
 					</Button>
 				) : null}
@@ -185,30 +233,11 @@ function FindingLinkPreview({
 	linkPreview?: ChatLinkPreview | null
 	onOpen: () => void
 }) {
-	// discard a late response after the sheet closes
-	const [linkPreview, setLinkPreview] = useState(suppliedLinkPreview ?? null)
-	const [isLoading, setIsLoading] = useState(suppliedLinkPreview === undefined)
-	useEffect(() => {
-		if (suppliedLinkPreview !== undefined) {
-			return
-		}
-		let isFindingOpen = true
-		fetchTopicFindingLinkPreview(findingId)
-			.then((findingLinkPreview) => {
-				if (isFindingOpen) {
-					setLinkPreview(findingLinkPreview)
-				}
-			})
-			.catch(() => {})
-			.finally(() => {
-				if (isFindingOpen) {
-					setIsLoading(false)
-				}
-			})
-		return () => {
-			isFindingOpen = false
-		}
-	}, [findingId, suppliedLinkPreview])
+	const { linkPreview: fetchedLinkPreview, isLoading } = useFindingLinkPreview(
+		findingId,
+		suppliedLinkPreview === undefined,
+	)
+	const linkPreview = suppliedLinkPreview === undefined ? fetchedLinkPreview : suppliedLinkPreview
 	if (isLoading) {
 		return (
 			<View className="mb-3">

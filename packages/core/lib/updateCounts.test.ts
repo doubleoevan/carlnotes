@@ -33,9 +33,10 @@ const INVITES: TopicInviteBadge[] = [
 ]
 const UPDATE_BADGES = { chatMentions: CHAT_MENTIONS, noteBadges: NOTE_BADGES, invites: INVITES }
 
-// the count sums a note's two numbers with the chats and the invitations
+// the count sums a note's two numbers with the chats, the invitations, and an admin's open reports
 test("the update count sums every group", () => {
 	expect(toUpdateCount(UPDATE_BADGES)).toBe(4)
+	expect(toUpdateCount({ ...UPDATE_BADGES, openReportCount: 2 })).toBe(6)
 	expect(toUpdateCount({ chatMentions: [], noteBadges: [], invites: [] })).toBe(0)
 })
 
@@ -65,4 +66,11 @@ test("the sections list each group under its heading", () => {
 		"LLM tooling",
 	])
 	expect(toUpdateSections({ chatMentions: [], noteBadges: [], invites: INVITES })).toHaveLength(1)
+})
+
+// open reports are a heading of their own, with no lines
+test("the open reports list last under their count", () => {
+	const sections = toUpdateSections({ ...UPDATE_BADGES, openReportCount: 2 })
+	expect(sections.at(-1)).toEqual({ heading: "2 open reports", lines: [] })
+	expect(toUpdateSections(UPDATE_BADGES).map((section) => section.heading)).not.toContain("0 open reports")
 })

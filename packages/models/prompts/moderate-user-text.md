@@ -1,9 +1,9 @@
 ---
 title: Moderate user text
-version: 1
+version: 2
 model tier: cheap
 description: Reads one piece of text a reader wrote for other readers and decides whether it is objectionable, and in which category, before it posts.
-updated: 2026-10-29
+updated: 2026-11-06
 ---
 
 A reader wrote the text below for other readers to see. It is {{textKind}}. Decide whether the text itself does harm, and return the one category it falls in if it does.
@@ -15,7 +15,7 @@ A reader wrote the text below for other readers to see. It is {{textKind}}. Deci
 - selfHarm: the text encourages, instructs, or praises self-harm or suicide.
 - childSafety: the text sexualizes, exploits, or endangers a child in any way. Any doubt here is a violation.
 
-A violation is text that does the harm itself. Mentioning a hard subject, quoting what someone else said, reporting news, arguing a position, swearing, or being blunt is not a violation. A topic name or prompt that asks to follow a subject, however grim, is not a violation unless it asks for the harm. Return isViolation false and category null for everything that is not a violation.
+A violation is text that does the harm itself. Mentioning a hard subject, quoting what someone else said, reporting news, arguing a position, swearing, or being blunt is not a violation. A topic name or prompt that asks to follow a subject, however grim, is not a violation unless it asks for the harm. Judge only what the text says. A short or vague text that names no harm is not a violation, and never guess at a harm it might be hinting at. Return isViolation false and category null for everything that is not a violation.
 
 The text:
 {{userText}}

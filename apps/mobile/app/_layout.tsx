@@ -4,6 +4,7 @@ import "../global.css"
 import { configureApiClient } from "@carlnotes/client/apiClient"
 import { authClient } from "@carlnotes/client/authClient"
 import { configureVoiceClient } from "@carlnotes/client/voiceClient"
+import { isAdminRole } from "@carlnotes/contracts/enums"
 import { toTolerantResponseSchema } from "@carlnotes/contracts/tolerantReads"
 import { reloadChatRooms, useUpdateBadges } from "@carlnotes/core/hooks/useUpdateBadges"
 import { useAppUpdateRequirement } from "@carlnotes/core/stores/appUpdateStore"
@@ -66,6 +67,7 @@ startMonitoring()
 configureApiClient({
 	apiBaseUrl,
 	showError: (message) => Alert.alert("CarlNotes", message),
+	showMessage: (message) => Alert.alert("CarlNotes", message),
 	onTermsOutdated: requestTermsAcceptance,
 	toResponseSchema: toTolerantResponseSchema,
 	onTolerantReadIssue: reportTolerantReadIssue,
@@ -139,7 +141,7 @@ function RootLayout() {
 			void logOutStoreUser().catch((error) => console.error("store log out failed", error))
 		}
 	}, [chatAccountId])
-	useUpdateBadges(chatAccountId, reloadChatRooms)
+	useUpdateBadges(chatAccountId, isAdminRole(session?.user.role), reloadChatRooms)
 	const isReady = isThemeReady && (isFontLoaded || Boolean(fontLoadError)) && !isSessionPending
 
 	// attach monitoring after the guarded navigator has mounted

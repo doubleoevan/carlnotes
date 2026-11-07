@@ -1,9 +1,9 @@
-import { sendFlagContent } from "@carlnotes/client/flagContentClient"
 import { FLAG_REASON_MAX_CHARS } from "@carlnotes/contracts/chat"
 import type { FlagContentPayload } from "@carlnotes/contracts/payloads"
 import type { UserIdentity } from "@carlnotes/contracts/profiles"
+import { useSendReport } from "@carlnotes/core/hooks/useSubjectReport"
 import { REPORT_DIALOG_COPY, toReportDialogTitle } from "@carlnotes/core/lib/reportCopy"
-import { toBlockAuthorLabel } from "@carlnotes/core/lib/userBlocks"
+import { toUserBlockAuthorLabel } from "@carlnotes/core/lib/userBlocks"
 import { useState } from "react"
 import { Alert, View } from "react-native"
 import { Button } from "@/components/primitives/button"
@@ -40,8 +40,9 @@ export function ReportIssueForm({
 	onClose,
 }: Omit<ReportSubject, "subjectLabel"> & { onClose: () => void }) {
 	const [reason, setReason] = useState("")
-	const [shouldBlockAuthor, setIsAuthorBlocked] = useState(false)
+	const [shouldBlockAuthor, setShouldBlockAuthor] = useState(false)
 	const mutation = usePageMutation()
+	const sendReport = useSendReport()
 	return (
 		<View className="gap-4">
 			<Text className="text-sm text-muted-foreground">{REPORT_DIALOG_COPY.question}</Text>
@@ -54,12 +55,12 @@ export function ReportIssueForm({
 				maxLength={FLAG_REASON_MAX_CHARS}
 				className="min-h-24"
 			/>
-			{/* the author's block, in the same submission */}
+			{/* the author's user block, in the same submission */}
 			{author && (
 				<PreferenceSwitch
-					label={toBlockAuthorLabel(author.username)}
+					label={toUserBlockAuthorLabel(author.username)}
 					isChecked={shouldBlockAuthor}
-					onChange={() => setIsAuthorBlocked((isBlocked) => !isBlocked)}
+					onChange={() => setShouldBlockAuthor((isBlocked) => !isBlocked)}
 				/>
 			)}
 			{mutation.error && <Text className="text-destructive">{mutation.error}</Text>}
@@ -72,9 +73,9 @@ export function ReportIssueForm({
 					disabled={mutation.isPending}
 					onPress={() =>
 						void mutation.run(async () => {
-							await sendFlagContent({ subjectKind, subjectId, reason: reason.trim(), shouldBlockAuthor })
+							await sendReport({ subjectKind, subjectId, reason: reason.trim(), shouldBlockAuthor })
 							onClose()
-							Alert.alert(shouldBlockAuthor ? REPORT_DIALOG_COPY.sentWithBlock : REPORT_DIALOG_COPY.sent)
+							Alert.alert(shouldBlockAuthor ? REPORT_DIALOG_COPY.sentWithUserBlock : REPORT_DIALOG_COPY.sent)
 						})
 					}
 				>

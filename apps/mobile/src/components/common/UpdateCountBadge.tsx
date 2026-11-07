@@ -22,7 +22,7 @@ import { CountBadge } from "./CountBadge"
 import { Sheet } from "./Sheet"
 
 /**
- * Shows one badge summing chat mentions, note changes, and topic invitations, as nothing while none waits. A press
+ * Shows one badge summing chat mentions, note changes, topic invitations, and open reports, as nothing while none waits. A press
  * follows the badge's destination, and a long press lists each group under its own heading, the web tooltip's
  * native replacement. A decorative badge sits inside a control that reads its count itself.
  */
@@ -30,6 +30,7 @@ export function UpdateCountBadge({
 	chatMentions = [],
 	noteBadges = [],
 	invites = [],
+	openReportCount = 0,
 	href,
 	isDecorative = false,
 	className,
@@ -45,7 +46,7 @@ export function UpdateCountBadge({
 	// the updates sheet's open state and the badge it returns focus to, and the summed count
 	const [isUpdatesSheetOpen, setIsUpdatesSheetOpen] = useState(false)
 	const triggerRef = useRef<ComponentRef<typeof View>>(null)
-	const updateBadges = { chatMentions, noteBadges, invites }
+	const updateBadges = { chatMentions, noteBadges, invites, openReportCount }
 	const unreadCount = toUpdateCount(updateBadges)
 	if (unreadCount === 0) {
 		return null

@@ -23,6 +23,10 @@ export const gatedTopicColumns = {
 	teamId: topics.teamId,
 }
 
+// those columns and the Topic's name, for a read that also shows the Topic
+export const namedTopicColumns = { ...gatedTopicColumns, name: topics.name }
+export type NamedTopic = Pick<TopicRow, keyof typeof namedTopicColumns>
+
 /**
  * The topic row when the user owns it, otherwise undefined. The owner gate that every write shares.
  */
@@ -297,6 +301,37 @@ export async function subscriptionActivatedAtByTopicId(userId: string, topicIds:
  */
 export function isVisibleAfterActivation(scanStartedAt: Date, activatedAt: Date | null): boolean {
 	return activatedAt !== null && scanStartedAt > activatedAt
+}
+
+/**
+ * Returns the invite topic subscription start date that gates what this user reads, null if the user has no active
+ * subscription, or undefined if no gate applies.
+ */
+export async function topicSubscriptionStartDate(
+	topic: Pick<TopicRow, "id" | "ownerId" | "visibility" | "teamId">,
+	userId: string | null,
+	isAdmin: boolean,
+): Promise<Date | null | undefined> {
+	// only an invite topic gates what a user reads, never for an admin, and never for an effective role
+	if (topic.visibility !== "invite" || isAdmin || (await toTopicRole(userId, topic)) !== null) {
+		return undefined
+	}
+	// a signed-out user holds no subscription to activate
+	return userId ? subscriptionActivatedAt(userId, topic.id) : null
+}
+
+/**
+ * Returns whether a time passes the user's subscription activation gate. No gate passes every time, no active
+ * subscription passes none, and an activation passes only a later time.
+ */
+export function isAfterSubscriberActivation(
+	time: Date | null,
+	subscriberActivatedAt: Date | null | undefined,
+): boolean {
+	if (subscriberActivatedAt === undefined) {
+		return true
+	}
+	return subscriberActivatedAt !== null && time !== null && time > subscriberActivatedAt
 }
 
 /**

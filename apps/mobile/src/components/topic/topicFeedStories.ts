@@ -6,6 +6,7 @@ export const STORY_TOPIC_FEED_HANDLERS: TopicFeedHandlers = {
 	consumeTopicFinding: () => undefined,
 	rateTopicFinding: () => undefined,
 	bookmarkTopicFinding: () => undefined,
+	keepTopicFindingReactions: () => undefined,
 }
 
 // the named web counterparts used for phone-width visual comparisons

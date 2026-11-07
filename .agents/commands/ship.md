@@ -245,11 +245,11 @@ Apply every clear-cut finding and every judgment call you agree with. Rename
 and rewrite in this pass instead of filing follow-up work, then rerun step 4.
 Report what you changed, and each finding left alone with the reason.
 
-## 11. Final report: new terms, structure, file names, and long files
+## 11. Final report: new terms, structure, file names, long files, and QA checklist
 
 Right before the manual review, recheck the diff as it stands after every fix
 above. The reviews, the ponytail pass, and the audit all change the diff after
-steps 2, 7, and 10 ran, so this pass reads the final tree. Build four lists for
+steps 2, 7, and 10 ran, so this pass reads the final tree. Build five lists for
 the handoff, and fix what each one finds in this change.
 
 1. **New terminology.** Every term the diff introduces: a new identifier root, a
@@ -271,15 +271,36 @@ the handoff, and fix what each one finds in this change.
    origin/main, and for each file over the guide, what was split out of it or
    the reason it stays whole.
 
-Rerun step 4 after any rename or move. The four lists go into the handoff
+5. **QA checklist.** What the user tests by hand before approving, from the final
+   diff and the change's spec scenarios. Group checks by feature, in short plain
+   sentences of one action and one expected result. Add a Mobile only group for
+   what the agent could not run on a device, and a Still open group for anything
+   waiting on the user. Put the list in `logs/ship-report.md`, then load it into
+   the [QA Checklist](https://claude.ai/artifact/WzMSgMMZJQFD7e4EEPQBp1) with the
+   `ArtifactData` tool, which replaces the last ship's list:
+   - `list` the `items` collection, and `batch` delete every row with its
+     `version` as `if_version`. A batch holds 50 writes, so split a longer list.
+   - `batch` set one `items` row per check: `{ order, group, text, isDone: false,
+     stories }`. `stories` lists the Nightshift stories that show the check, as
+     `{ label, path }`, where `path` is `/story/<id>` or `/docs/<id>` from
+     Storybook's `/index.json`. A check with no story leaves it out.
+   - `update` the `meta/run` document's `change` to the OpenSpec change's name, and
+     its `storybookUrl` to `http://<this Mac's LAN address>:<port>`, so the links open
+     on a phone. Start `bun run dev:storybook` first, leave it running, and use the
+     port it prints.
+
+   Without the `ArtifactData` tool, say so, and the list stays in the report.
+
+Rerun step 4 after any rename or move. The five lists go into the handoff
 report.
 
 ## 12. Manual review handoff
 
 Summarize the full diff for human review: each file, what changed, and why.
 Write the long report to `logs/ship-report.md` and give its path in the
-handoff: the reports from steps 5, 6, 7, 10, and 11, every reviewer's findings with
-the ones dismissed and why, and recommendations. A recommendation is only
+handoff with the QA Checklist link. The report holds the reports from steps 5, 6,
+7, 10, and 11, every reviewer's findings with the ones dismissed and why, and
+recommendations. A recommendation is only
 work that needs the user's decision; anything the change could do, it has done.
 Then STOP, show the
 suggested commit message, and wait for explicit approval. Do not proceed

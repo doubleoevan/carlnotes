@@ -2,7 +2,7 @@
 // declining, the daily count, and each sent invite's avatar version
 import assert from "node:assert/strict"
 import { db } from "@carlnotes/db"
-import { canCreateInvitesToday, toInviteLimit } from "@carlnotes/db/quotas"
+import { canCreateInvitesToday, toInviteLimit } from "@carlnotes/db/inviteLimits"
 import { invites } from "@carlnotes/db/schema/invites"
 import { teamMembers } from "@carlnotes/db/schema/teams"
 import { subscriptions } from "@carlnotes/db/schema/topics"

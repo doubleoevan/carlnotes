@@ -13,6 +13,7 @@ import { and, eq, inArray, sql } from "drizzle-orm"
 import { readResourceText } from "../chat/retrieve"
 import {
 	type GeneratePodcastEpisodeOutlineOptions,
+	type GeneratePodcastEpisodeSegmentOptions,
 	generatePodcastEpisodeOutline,
 	generatePodcastEpisodeSegment,
 	writeCheckedScriptDraft,
@@ -26,6 +27,11 @@ import {
 	toCheckedPodcastEpisodeSegment,
 	toPodcastEpisodeScript,
 } from "./podcastEpisodeScript"
+import {
+	claimPodcastEpisodeSharedComments,
+	releaseUncreditedSharedComments,
+	toSharedCommentPlacements,
+} from "./podcastEpisodeSharedComments"
 import { assertPodcastPersonalSourcesConverted } from "./podcastPersonalSourcesMigration"
 
 // what a script call needs. the Podcast Episode, its Topic, the user that the call bills, and the Findings to narrate
@@ -98,6 +104,7 @@ export async function writePodcastEpisodeSegment({
 			segment: segmentDraft,
 			outline,
 			segmentIndex,
+			segmentSharedComments: toSegmentSharedComments({ ...scriptInput, outline, segmentIndex }),
 			isLastScriptDraft,
 		})
 		const leftOutChapterCount = segmentDraft.chapters.length - checkedSegment.chapters.length
@@ -109,6 +116,24 @@ export async function writePodcastEpisodeSegment({
 		}
 		return checkedSegment
 	})
+}
+
+// the usernames a segment's draft credits, and whether its draft has closing turns about shared comments
+function toSegmentSharedComments({
+	sharedComments = [],
+	outline,
+	segmentIndex,
+}: Pick<GeneratePodcastEpisodeSegmentOptions, "sharedComments" | "outline" | "segmentIndex">): {
+	usernames: string[]
+	hasClosingSharedComments: boolean
+} {
+	const { chapterSharedComments, closingSharedComments } = toSharedCommentPlacements({
+		sharedComments,
+		outline,
+		segmentIndex,
+	})
+	const usernames = [...chapterSharedComments, ...closingSharedComments].flatMap(({ username }) => username ?? [])
+	return { usernames, hasClosingSharedComments: closingSharedComments.length > 0 }
 }
 
 /**
@@ -123,7 +148,12 @@ export async function savePodcastEpisodeScript(
 	await assertPodcastPersonalSourcesConverted({ podcastEpisodeId })
 	const podcastEpisodeScript = toPodcastEpisodeScript(segments)
 	await db.update(podcastEpisodes).set({ script: podcastEpisodeScript }).where(eq(podcastEpisodes.id, podcastEpisodeId))
-	return toChapterTurns(podcastEpisodeScript).length
+
+	// a shared Comment counts as read only if the finished script names its author
+	const chapterTurns = toChapterTurns(podcastEpisodeScript)
+	const spokenText = chapterTurns.flatMap((turns) => turns.map((turn) => turn.text)).join("\n")
+	await releaseUncreditedSharedComments(podcastEpisodeId, spokenText)
+	return chapterTurns.length
 }
 
 /**
@@ -149,7 +179,12 @@ async function loadScriptInput({
 	// read the Topic's own text alone, and whether the Podcast Episode is short
 	// the Topic's attachments are the owner's, and a Podcast Episode reaches every listener
 	const [podcastEpisodeTopic] = await db
-		.select({ name: topics.name, prompt: topics.prompt, isShort: podcastEpisodes.isShort })
+		.select({
+			name: topics.name,
+			prompt: topics.prompt,
+			isShort: podcastEpisodes.isShort,
+			isPodcastCommentsEnabled: topics.isPodcastCommentsEnabled,
+		})
 		.from(podcastEpisodes)
 		.innerJoin(topics, eq(podcastEpisodes.topicId, topics.id))
 		.where(eq(podcastEpisodes.id, podcastEpisodeId))
@@ -157,11 +192,14 @@ async function loadScriptInput({
 		throw new Error(`episode ${podcastEpisodeId} of topic ${topicId} not found`)
 	}
 
-	// load the Findings' text and the billed user's key
+	// load the Findings' text, the billed user's key, and the shared comments that this Podcast Episode takes. the
+	// owner's switch leaves them all waiting
 	const findingIds = plannedFindings.map((plannedFinding) => plannedFinding.findingId)
-	const [podcastEpisodeFindings, litellmApiKey] = await Promise.all([
+	const { isShort, isPodcastCommentsEnabled } = podcastEpisodeTopic
+	const [podcastEpisodeFindings, litellmApiKey, sharedComments] = await Promise.all([
 		loadPodcastEpisodeFindings(findingIds),
 		loadOrProvisionUserLiteLLMKey(billedUserId),
+		isPodcastCommentsEnabled ? claimPodcastEpisodeSharedComments({ topicId, podcastEpisodeId, isShort }) : [],
 	])
 	if (podcastEpisodeFindings.length === 0) {
 		throw new Error(`none of the episode's findings are left on topic ${topicId}`)
@@ -173,6 +211,7 @@ async function loadScriptInput({
 		topicName: podcastEpisodeTopic.name,
 		topicPrompt: podcastEpisodeTopic.prompt,
 		podcastEpisodeFindings,
+		sharedComments,
 		litellmApiKey,
 		maxMinutes,
 	}

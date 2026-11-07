@@ -28,6 +28,10 @@ export const Disconnected: Story = {
 	},
 }
 export const Empty: Story = { args: { account: aiAgentAccountStory({ aiAgents: [], keys: [] }) } }
+// a free account sees no API keys section
+export const WithoutPremium: Story = {
+	args: { account: aiAgentAccountStory({ aiAgents: [], keys: [], canCreate: false }) },
+}
 export const Loading: Story = {
 	args: { account: aiAgentAccountStory({ aiAgents: [], keys: [], isLoading: true, canCreate: false }) },
 }

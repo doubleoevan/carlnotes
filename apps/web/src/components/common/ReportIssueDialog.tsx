@@ -1,9 +1,9 @@
-import { sendFlagContent } from "@carlnotes/client/flagContentClient"
 import { FLAG_REASON_MAX_CHARS } from "@carlnotes/contracts/chat"
 import type { FlagContentPayload } from "@carlnotes/contracts/payloads"
 import type { UserIdentity } from "@carlnotes/contracts/profiles"
+import { useSendReport } from "@carlnotes/core/hooks/useSubjectReport"
 import { REPORT_DIALOG_COPY, toReportDialogTitle } from "@carlnotes/core/lib/reportCopy"
-import { toBlockAuthorLabel } from "@carlnotes/core/lib/userBlocks"
+import { toUserBlockAuthorLabel } from "@carlnotes/core/lib/userBlocks"
 import { useState } from "react"
 import { toast } from "sonner"
 import { Button } from "@/components/primitives/button"
@@ -32,15 +32,16 @@ export function ReportIssueDialog({
 	onClose,
 }: ReportSubject & { onClose: () => void }) {
 	const [reason, setReason] = useState("")
-	const [shouldBlockAuthor, setIsAuthorBlocked] = useState(false)
+	const [shouldBlockAuthor, setShouldBlockAuthor] = useState(false)
 	const [isSending, setIsSending] = useState(false)
+	const sendReport = useSendReport()
 
 	// send the report, then close on success. a failure keeps the dialog open to show the rejection reason
 	const handleSend = async (): Promise<void> => {
 		setIsSending(true)
 		try {
-			await sendFlagContent({ subjectKind, subjectId, reason: reason.trim(), shouldBlockAuthor })
-			toast.success(shouldBlockAuthor ? REPORT_DIALOG_COPY.sentWithBlock : REPORT_DIALOG_COPY.sent)
+			await sendReport({ subjectKind, subjectId, reason: reason.trim(), shouldBlockAuthor })
+			toast.success(shouldBlockAuthor ? REPORT_DIALOG_COPY.sentWithUserBlock : REPORT_DIALOG_COPY.sent)
 			onClose()
 		} catch (error) {
 			console.error("flag failed", error)
@@ -63,11 +64,11 @@ export function ReportIssueDialog({
 					// four lines tall before it grows with the reason. the field sizes to its content, which ignores rows
 					className="min-h-24"
 				/>
-				{/* the author's block, in the same submission */}
+				{/* the author's user block, in the same submission */}
 				{author && (
 					<div className="flex items-center gap-2">
-						<Switch id="block-author" checked={shouldBlockAuthor} onCheckedChange={setIsAuthorBlocked} />
-						<Label htmlFor="block-author">{toBlockAuthorLabel(author.username)}</Label>
+						<Switch id="block-author" checked={shouldBlockAuthor} onCheckedChange={setShouldBlockAuthor} />
+						<Label htmlFor="block-author">{toUserBlockAuthorLabel(author.username)}</Label>
 					</div>
 				)}
 				<DialogFooter>

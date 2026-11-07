@@ -1,9 +1,10 @@
-// the admin console's open reports: each report's text and people, the linked report first, and Remove or Keep
+// the admin console's open reports: each report's text and people, the linked report first, and Remove, Block, or
+// Clear
 import { sendReportResolution } from "@carlnotes/client/reportClient"
 import type { AdminReport } from "@carlnotes/contracts/reports"
 import { SAVE_FAILED_TEXT } from "@carlnotes/core/lib/sessionCopy"
 import type { Meta, StoryObj } from "@storybook/tanstack-react"
-import { expect, fn, mocked, waitFor } from "storybook/test"
+import { expect, fn, mocked, screen, waitFor, within } from "storybook/test"
 import { FIXTURE_DATE, STORY_PEOPLE } from "../../../.storybook/fixtures"
 import { AdminReportsTable } from "./AdminReportsTable"
 
@@ -21,6 +22,7 @@ const ADMIN_REPORT_FIXTURES: AdminReport[] = [
 		reporter: { id: STORY_PEOPLE[2].userId, username: STORY_PEOPLE[2].username },
 		canRemove: true,
 		isSubjectDeleted: false,
+		canAdminBlock: true,
 	},
 	{
 		id: "report-comment",
@@ -34,6 +36,7 @@ const ADMIN_REPORT_FIXTURES: AdminReport[] = [
 		reporter: { id: STORY_PEOPLE[0].userId, username: STORY_PEOPLE[0].username },
 		canRemove: true,
 		isSubjectDeleted: true,
+		canAdminBlock: true,
 	},
 	{
 		id: "report-topic",
@@ -47,6 +50,7 @@ const ADMIN_REPORT_FIXTURES: AdminReport[] = [
 		reporter: { id: STORY_PEOPLE[1].userId, username: STORY_PEOPLE[1].username },
 		canRemove: false,
 		isSubjectDeleted: false,
+		canAdminBlock: false,
 	},
 ]
 
@@ -65,17 +69,29 @@ const meta = {
 export default meta
 type Story = StoryObj<typeof meta>
 
-// three open reports, newest first. the deleted comment shows no Remove, and the topic cannot be removed from here
+// three open reports, newest first. the deleted comment shows no Remove, and the topic, which has no author, shows
+// neither Remove nor Block
 export const Default: Story = {}
 
 // the report the email linked to, sorted first and highlighted
 export const Focused: Story = { args: { focusedReportId: "report-topic" } }
 
-// Keep closes the report and reloads the list
-export const Kept: Story = {
+// Clear asks first, then closes the report and reloads the list
+export const ClearReportedContent: Story = {
 	play: async ({ canvas, userEvent, args }) => {
-		await userEvent.click(canvas.getAllByRole("button", { name: "Keep" })[0] as HTMLElement)
-		await waitFor(() => expect(mocked(sendReportResolution)).toHaveBeenCalledWith("report-message", "kept"))
+		await userEvent.click(canvas.getAllByRole("button", { name: "Clear" })[0] as HTMLElement)
+		await userEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Clear" }))
+		await waitFor(() => expect(mocked(sendReportResolution)).toHaveBeenCalledWith("report-message", "cleared"))
+		await waitFor(() => expect(args.onResolved).toHaveBeenCalled())
+	},
+}
+
+// Block asks first, then resolves the report by blocking its author from reactions and comments
+export const Blocked: Story = {
+	play: async ({ canvas, userEvent, args }) => {
+		await userEvent.click(canvas.getAllByRole("button", { name: "Block" })[0] as HTMLElement)
+		await userEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Block" }))
+		await waitFor(() => expect(mocked(sendReportResolution)).toHaveBeenCalledWith("report-message", "blocked"))
 		await waitFor(() => expect(args.onResolved).toHaveBeenCalled())
 	},
 }
@@ -87,6 +103,7 @@ export const SaveFailed: Story = {
 	},
 	play: async ({ canvas, canvasElement, userEvent }) => {
 		await userEvent.click(canvas.getAllByRole("button", { name: "Remove" })[0] as HTMLElement)
+		await userEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Remove" }))
 		const page = canvasElement.ownerDocument.body
 		await waitFor(() => expect(page.textContent).toContain(SAVE_FAILED_TEXT))
 	},

@@ -40,7 +40,7 @@ type Story = StoryObj<typeof meta>
 // the thread for a user who may write the note, composer included
 export const Thread: Story = {}
 
-// a signed-in user's Report on another person's comment, which opens the report dialog with that author's block
+// a signed-in user's Report on another person's comment, which opens the report dialog with that author's user block
 export const ReportAnotherPersonsComment: Story = {
 	parameters: { session: "user" },
 	play: async ({ canvas, canvasElement }) => {

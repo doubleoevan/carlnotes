@@ -1,6 +1,8 @@
 // the findings MCP view through the test host: its rows, their controls, paging, and a visitor's table
 
 import { expect, test } from "bun:test"
+import { toTestReactionSummary } from "@carlnotes/contracts/socialTestFixtures"
+import { toTestTopicFinding } from "@carlnotes/contracts/topicFeedTestFixtures"
 import { EMPTY_FILTERED_FINDINGS } from "@carlnotes/core/lib/topicFeedLabels"
 import {
 	FINDINGS_MCP_VIEW_DATA,
@@ -69,6 +71,44 @@ test("a finding's row expands to Carl's notes and the sender's note, and its fee
 		// a second click closes the row
 		await findingRow.getByRole("button", { name: "Hide Carl's notes" }).click()
 		await frame.getByText(PERSONAL_ANNOTATION).waitFor({ state: "detached" })
+	})
+})
+
+test("an open row shows the finding's reactions, and a press on a type saves through its tool", async () => {
+	// the first finding came with two types chosen, and the save returns one more Like as the user's
+	const reactionSummary = toTestReactionSummary()
+	const savedSummary = toTestReactionSummary({
+		counts: [
+			{ reactionType: "like", count: 5, users: [] },
+			{ reactionType: "insightful", count: 2, users: [] },
+		],
+		ownReactionType: "like",
+	})
+	const respondToToolCall: ToolCallResponder = () =>
+		toMcpViewToolResult({ mcpViewData: { ...USER_MCP_VIEW_DATA, reactionSummary: savedSummary } })
+	const mcpViewData = {
+		...FINDINGS_MCP_VIEW_DATA,
+		topicFindings: [
+			toTestTopicFinding({ findingId: "finding-1", title: "Agents that read the docs", reactions: reactionSummary }),
+		],
+	}
+	await withMcpView({ mcpView: "findings", respondToToolCall }, async ({ frame, toolCalls, sendToolResult }) => {
+		await sendToolResult(toMcpViewToolResult({ mcpViewData }))
+		await frame.getByRole("button", { name: "Show Carl's notes" }).click()
+
+		// the counts show
+		const detailsRow = frame.getByRole("row").filter({ hasText: "Carl's take:" })
+		await detailsRow.getByRole("button", { name: "Like, 4" }).waitFor()
+
+		// the press calls the tool with the finding and the type, and the row shows the summary the tool returned
+		await detailsRow.getByRole("button", { name: "Like, 4" }).click()
+		await detailsRow.getByRole("button", { name: "Like, 5, your reaction" }).waitFor()
+		expect(toolCalls).toEqual([
+			{
+				name: "save_reaction",
+				arguments: { target_kind: "finding", target_id: "finding-1", reaction_type: "like" },
+			},
+		])
 	})
 })
 

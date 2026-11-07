@@ -1,5 +1,5 @@
-// the workflow that emails a finished Scan's outcome. a scheduled Scan sends its digest one batch at a time, and any
-// other Scan sends its report to whoever ran it or created the Topic
+// the workflow that emails a finished Scan's outcome. a scheduled Scan sends its topic scan email one batch at a
+// time, and any other Scan sends its report to whoever ran it or created the Topic
 
 import { toActivityApplicationFailure } from "@carlnotes/contracts/scanFailure"
 import type { ResendFailure } from "@carlnotes/emails/email"
@@ -19,7 +19,7 @@ export const podcastEpisodeOutlineSettledSignal = defineSignal("episode-outline-
 const PODCAST_EPISODE_OUTLINE_WAIT_MS = 10 * 60 * 1000
 
 // planning and each send share the retry policy. an activity marks a failure final if waiting cannot fix it
-const { planScanDigest, sendScanDigestBatch, sendScanReport } = proxyActivities<typeof emailActivities>({
+const { planTopicScanEmail, sendTopicScanEmailBatch, sendScanReport } = proxyActivities<typeof emailActivities>({
 	startToCloseTimeout: SEND_TIMEOUT_MS,
 	retry: SEND_RETRY_POLICY,
 })
@@ -38,8 +38,8 @@ export type ScanEmailWorkflowInput = { scanId: string; topicId: string; isPodcas
 )
 
 /**
- * Sends a finished Scan's email, the digest one batch at a time or the report to whoever ran the Scan or created the
- * Topic. Either email first waits for the outline of a podcast episode that is ready to record.
+ * Sends a finished Scan's email, the topic scan email one batch at a time or the report to whoever ran the Scan or
+ * created the Topic. Either email first waits for the outline of a podcast episode that is ready to record.
  * A send that fails for good or runs out of attempts is reported, and the next batch still goes out.
  */
 export async function sendScanEmailWorkflow(scanEmailWorkflowInput: ScanEmailWorkflowInput): Promise<void> {
@@ -65,10 +65,10 @@ export async function sendScanEmailWorkflow(scanEmailWorkflowInput: ScanEmailWor
 		return
 	}
 
-	// a scheduled Scan plans its digest. a digest that cannot be planned is reported, and nothing is sent
+	// a scheduled Scan plans its topic scan email. a plan that fails is reported, and nothing is sent
 	let recipientUserIdBatches: string[][]
 	try {
-		recipientUserIdBatches = await planScanDigest(scanId)
+		recipientUserIdBatches = await planTopicScanEmail(scanId)
 	} catch (error) {
 		await reportUndeliveredSend({ scanId, topicId, emailKind: "topic-scan", batchIndex: null, error })
 		return
@@ -77,7 +77,7 @@ export async function sendScanEmailWorkflow(scanEmailWorkflowInput: ScanEmailWor
 	// send each batch on its own, so a batch that fails is reported and the next one still goes out
 	for (const [batchIndex, recipientUserIds] of recipientUserIdBatches.entries()) {
 		try {
-			await sendScanDigestBatch({ scanId, recipientUserIds })
+			await sendTopicScanEmailBatch({ scanId, recipientUserIds })
 		} catch (error) {
 			await reportUndeliveredSend({ scanId, topicId, emailKind: "topic-scan", batchIndex, error })
 		}

@@ -15,7 +15,7 @@ beforeEach(() => {
 })
 afterEach(restore)
 
-test("receiving follows the digest mailbox, including a display name", () => {
+test("receiving follows the topic scan email mailbox, including a display name", () => {
 	for (const from of [" Carl@example.com ", "Carl Notes <Carl@example.com>"]) {
 		Bun.env.RESEND_FROM_EMAIL = from
 		expect(readPersonalSourcesEmailAddress()).toBe("carl@example.com")
@@ -32,6 +32,7 @@ test("enabled receiving rejects missing, multiple, and invalid mailboxes", () =>
 		"first@example.com,second@example.com",
 		"first@example.com, Carl <second@example.com>",
 	]) {
+		// set or clear the address, then expect the rejection
 		if (address === undefined) {
 			delete Bun.env.RESEND_FROM_EMAIL
 		} else {

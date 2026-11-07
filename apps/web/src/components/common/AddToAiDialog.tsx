@@ -53,7 +53,15 @@ const AI_PROVIDER_OPTIONS: Record<AiProvider, { label: string; Icon: ComponentTy
 /**
  * Presents the shared AI provider instructions with web installation links and clipboard feedback.
  */
-export function AddToAiDialog({ mcpServer, onClose }: { mcpServer: McpServer; onClose: () => void }) {
+export function AddToAiDialog({
+	mcpServer,
+	initialProvider,
+	onClose,
+}: {
+	mcpServer: McpServer
+	initialProvider?: AiProvider
+	onClose: () => void
+}) {
 	return (
 		<Dialog open onOpenChange={onClose}>
 			<DialogContent className="gap-2 p-4 sm:max-w-sm">
@@ -64,6 +72,7 @@ export function AddToAiDialog({ mcpServer, onClose }: { mcpServer: McpServer; on
 					elements={ELEMENTS}
 					mcpServer={mcpServer}
 					lastProvider={readLastAiProvider()}
+					initialProvider={initialProvider}
 					onRemember={storeAiProvider}
 					onCopy={(text) =>
 						copyToClipboard(

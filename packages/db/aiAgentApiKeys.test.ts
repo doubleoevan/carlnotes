@@ -19,20 +19,27 @@ const secret = `cnk_v1_${keyId}_${"b".repeat(43)}`
 const secretDigest = new Bun.CryptoHasher("sha256").update(secret).digest("hex")
 
 test("creation returns a bearer once and persists only its digest and four-character suffix", async () => {
+	// no key yet, and a Premium account
 	const queries = stubConnectionPool(({ text, values }) => {
 		if (text.includes("select count(*)")) {
 			return [[0]]
 		}
+
+		// the inserted key, then the account
 		if (text.startsWith('insert into "agent_api_keys"')) {
 			return [[values[0], "Coding agent", values[4], createdAt, null, null]]
 		}
 		return text.includes('from "users"') ? [["user", "premium", null]] : []
 	})
+
+	// the bearer is returned once
 	const result = await createAiAgentApiKey({ userId: "owner", label: "Coding agent" })
 	if (typeof result === "string") {
 		throw new Error(result)
 	}
 	expect(result.secret).toMatch(/^cnk_v1_[a-f0-9]{32}_[A-Za-z0-9_-]{43}$/)
+
+	// the insert stores the digest and the suffix, never the bearer
 	const insertion = queries.find((query) => query.text.startsWith('insert into "agent_api_keys"'))
 	expect(JSON.stringify(insertion)).not.toContain(result.secret)
 	expect(insertion?.values).toContain(new Bun.CryptoHasher("sha256").update(result.secret).digest("hex"))
@@ -53,11 +60,12 @@ test.each(["free", "plus", "premium"])("creation enforces Premium and ten active
 })
 
 test("a credential rechecks a downgrade inside its transaction despite earlier memoized Premium access", async () => {
+	// the plan and the key's row change between the reads
 	let plan = "premium"
-	let revoked = false
+	let isDeleted = false
 	const queries = stubConnectionPool(({ text }) => {
 		if (text.includes('from "agent_api_keys"')) {
-			return revoked
+			return isDeleted
 				? []
 				: [
 						toTableRow(aiAgentApiKeys, {
@@ -81,22 +89,20 @@ test("a credential rechecks a downgrade inside its transaction despite earlier m
 		expect(await authenticateAiAgentApiKey(secret, transaction)).toBeNull()
 	})
 	plan = "premium"
-	revoked = true
+	isDeleted = true
 	expect(await authenticateAiAgentApiKey(secret)).toBeNull()
-	expect(
-		queries
-			.filter((query) => query.text.includes('from "agent_api_keys"'))
-			.every((query) => query.text.includes('"revoked_at" is null')),
-	).toBe(true)
 	expect(JSON.stringify(queries)).not.toContain(secret)
 })
 
 test("malformed credentials avoid database work and lists never select a digest", async () => {
+	// each malformed bearer stops before a query
 	const queries = stubConnectionPool()
 	for (const malformed of ["", "cnk_v1_bad", `${secret}extra`, ` ${secret}`, secret.toUpperCase()]) {
 		expect(await authenticateAiAgentApiKey(malformed)).toBeNull()
 	}
 	expect(queries).toHaveLength(0)
+
+	// the list reads no digest
 	expect(await listAiAgentApiKeys("owner")).toEqual([])
 	expect(queries[0]?.text).not.toContain("secret_digest")
 })
@@ -105,9 +111,11 @@ test("revocation remains available after downgrade and is scoped to the owner", 
 	const queries = stubConnectionPool()
 	await revokeAiAgentApiKey({ userId: "owner", keyId })
 	expect(queries[0]?.text).toContain("for update")
-	const update = queries[1]
-	expect(update?.text).toContain('"user_id" =')
-	expect(update?.text).toContain('"revoked_at" is null')
-	expect(update?.values).toContain("owner")
-	expect(update?.values).toContain(keyId)
+
+	// the delete names the owner and the key
+	const deleteQuery = queries[1]
+	expect(deleteQuery?.text).toStartWith('delete from "agent_api_keys"')
+	expect(deleteQuery?.text).toContain('"user_id" =')
+	expect(deleteQuery?.values).toContain("owner")
+	expect(deleteQuery?.values).toContain(keyId)
 })

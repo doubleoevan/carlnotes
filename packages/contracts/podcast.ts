@@ -106,6 +106,8 @@ export type PodcastEpisodeTranscriptBlock = z.infer<typeof podcastEpisodeTranscr
 export const topicPodcast = z.object({
 	// whether the owner has the podcast on
 	isEnabled: z.boolean(),
+	// whether the owner lets the podcast talk about comments
+	isCommentsEnabled: z.boolean(),
 	// whether the owner's plan gets full podcast episodes. the free plan gets short ones and only keeps the latest
 	hasFullPodcastEpisodes: z.boolean(),
 	// whether this user may remove a podcast episode

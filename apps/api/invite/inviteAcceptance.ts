@@ -14,7 +14,7 @@ import { isLeaderRole } from "../authorization"
 import type { AnalyticsProperties } from "../currentUser"
 import { joinTeam, toTeamRole } from "../team/members"
 import { activateSubscription } from "../topic/subscriptions"
-import { isUserBlocked } from "../userBlocks"
+import { hasUserBlock } from "../userBlocks"
 
 // how an acceptance ended: the topic or team page to open, or which way the token failed
 export type InviteAcceptResult =
@@ -40,7 +40,7 @@ export async function acceptInviteToken(
 	}
 
 	// a link from a person the user has blocked reads as unknown, like one that never existed
-	if (invite.invitedByUserId && (await isUserBlocked(userId, invite.invitedByUserId))) {
+	if (invite.invitedByUserId && (await hasUserBlock(userId, invite.invitedByUserId))) {
 		return { status: "unknown" }
 	}
 
@@ -122,6 +122,8 @@ async function acceptLockedTopicInvite({
 	if (!topic || (await hasUnconvertedPersonalSources(topic.id, transaction))) {
 		return { status: "unknown" }
 	}
+
+	// the user's subscription, if they ever had one, decides what a join does
 	const [subscription] = await transaction
 		.select({ isActive: subscriptions.isActive })
 		.from(subscriptions)

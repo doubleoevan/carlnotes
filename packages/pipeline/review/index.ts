@@ -1,22 +1,22 @@
 // review turns a Scan's discovered Resources into topic findings
 
 import { db } from "@carlnotes/db"
-import { considerPersonalSourcesLink } from "@carlnotes/db/personalSourcesLinkQueue"
-import { bookmarks, findings, resources, type scans } from "@carlnotes/db/schema/scans"
-import { teamMembers } from "@carlnotes/db/schema/teams"
-import { teamTopics } from "@carlnotes/db/schema/teamTopics"
+import { findings, resources, type scans } from "@carlnotes/db/schema/scans"
 import { topics } from "@carlnotes/db/schema/topics"
+import { loadSharedCommentTexts } from "@carlnotes/db/sharedComments"
 import type { Budget } from "@carlnotes/models/budget"
 import { traceStage } from "@carlnotes/models/telemetry"
-import { and, desc, eq, inArray, isNotNull, max, or, sql } from "drizzle-orm"
+import { eq, inArray, isNotNull, sql } from "drizzle-orm"
 import { buildTopicScanContext } from "../attach"
 import type { DiscoveredResource } from "../ingest/ingester"
-import { loadPersonalSourcesReviewLinks } from "../personalSources/linkQueue"
+import { considerReviewLink, loadPersonalSourcesReviewLinks } from "../personalSources/linkQueue"
 import { dedupeResources } from "./dedupe"
 import { gateResources, loadResourcesToReview, loadUrlSourcePageUrls, rankBySimilarity } from "./filter"
+import { loadFindingIdsWithComments } from "./reactionSignals"
 import { fetchAndScoreResources } from "./score"
+import { loadBookmarkedFindingRows, loadScoreExamplePages } from "./scoreExamplePages"
 import { type ScannedSource, summarizeTopicScan, toTopicScanSummary } from "./summarize"
-import { loadTopicContext, type ScoreExamplePage, type ScoreExamplePages, toReviewContextHash } from "./topicContext"
+import { loadTopicContext, toReviewContextHash } from "./topicContext"
 import {
 	countAddedOrFilteredFindings,
 	countFilteredResources,
@@ -29,12 +29,6 @@ export type { ReviewSummary } from "./track"
 
 // a persisted Scan record
 type Scan = typeof scans.$inferSelect
-
-// the topic's owner and owning team, which decide whose bookmarks count
-type BookmarkTopic = { ownerId: string; teamId: string | null }
-
-// one of the topic's bookmarked findings, with its page
-type BookmarkedFindingRow = ScoreExamplePage & { findingId: string }
 
 /**
  * Reviews a Scan's discovered Resources, writes Findings and returns the counts, outcome, and summary.
@@ -78,7 +72,7 @@ export async function reviewScan(
 	const reviewUrls = new Set(resourcesToReview.map(({ url }) => url))
 	for (const url of personalSourcesReview.claimedUrls) {
 		if (!reviewUrls.has(url)) {
-			await considerPersonalSourcesLink({ topicId, scanId: scan.id, url })
+			await considerReviewLink({ topicId, scanId: scan.id, url })
 		}
 	}
 	if (resourcesToReview.length === 0) {
@@ -114,7 +108,7 @@ export async function reviewScan(
 	if (personalSourcesReview.claimedUrls.size > 0) {
 		reviewOutcome.onResourceConsidered = async (url, outcome) => {
 			if (personalSourcesReview.claimedUrls.has(url)) {
-				await considerPersonalSourcesLink({ topicId, scanId: scan.id, url, ...outcome })
+				await considerReviewLink({ topicId, scanId: scan.id, url, ...outcome })
 			}
 		}
 	}
@@ -124,10 +118,14 @@ export async function reviewScan(
 	if (stopSignal?.aborted) {
 		return emptyReviewSummary()
 	}
-	const scoreExamplePages = await loadScoreExamplePages(topicId)
+	const [scoreExamplePages, sharedCommentTexts] = await Promise.all([
+		loadScoreExamplePages(topicId),
+		loadSharedCommentTexts(topicId),
+	])
 	const topicContext = await loadTopicContext({
 		topicScanContext,
 		scoreExamplePages,
+		sharedCommentTexts,
 		budget,
 		litellmApiKey,
 		shouldEmbed: resourcesToReview.some((resource) => !resource.personalSourceScoreBonus),
@@ -227,7 +225,8 @@ export async function reviewScan(
 	}
 }
 
-// keep only the topic's top maxTopicFindings findings by relevance score, except for bookmarked or rated findings
+// keep only the topic's top maxTopicFindings findings by relevance score, except for the exempt ones: a finding that
+// is bookmarked or rated, or that has a Comment
 async function filterTopicFindings(
 	topicId: string,
 ): Promise<{ keptFindingUrls: Set<string>; filteredFindingCount: number }> {
@@ -240,27 +239,32 @@ async function filterTopicFindings(
 		return { keptFindingUrls: new Set(), filteredFindingCount: 0 }
 	}
 
-	// the findings bookmarked by someone who still has access
-	const bookmarkedFindingRows = await loadBookmarkedFindingRows(topicId, topic)
-	const bookmarkedFindingIds = bookmarkedFindingRows.map(({ findingId }) => findingId)
+	// the findings bookmarked by someone who still has access, and the ones that hold someone's comment, which a
+	// re-score must never delete
+	const [bookmarkedFindingRows, findingIdsWithComments] = await Promise.all([
+		loadBookmarkedFindingRows(topicId, topic),
+		loadFindingIdsWithComments(topicId, topic.ownerId),
+	])
+	const exemptFindingIds = [...bookmarkedFindingRows.map(({ findingId }) => findingId), ...findingIdsWithComments]
 
 	// the topic's findings with their ranking scores, when each was found, the url it points at,
-	// and whether a user bookmarked or rated it
+	// and whether it is exempt from the limit
 	const findingRows = await db
 		.select({
 			id: findings.id,
 			relevanceScore: findings.relevanceScore,
 			createdAt: findings.createdAt,
 			url: resources.url,
-			isBookmarkedOrRated:
-				sql<boolean>`(${inArray(findings.id, bookmarkedFindingIds)} or ${isNotNull(findings.rating)})`.mapWith(Boolean),
+			isExempt: sql<boolean>`(${inArray(findings.id, exemptFindingIds)} or ${isNotNull(findings.rating)})`.mapWith(
+				Boolean,
+			),
 		})
 		.from(findings)
 		.innerJoin(resources, eq(findings.resourceId, resources.id))
 		.where(eq(findings.topicId, topicId))
 
 	// decide which findings fall outside the limit. a re-score can lower a score,
-	// and filtering by score alone would delete a finding its user bookmarked
+	// and filtering by score alone would delete a finding its user bookmarked or wrote on
 	const filteredIds = findingIdsToFilter(findingRows, topic.maxTopicFindings)
 	if (filteredIds.length > 0) {
 		await db.delete(findings).where(inArray(findings.id, filteredIds))
@@ -274,99 +278,18 @@ async function filterTopicFindings(
 	return { keptFindingUrls, filteredFindingCount: filteredIds.length }
 }
 
-// load the pages that the score prompt shows as examples. the bookmarked pages by newest bookmark,
-// then the other pages rated thumbs up, then the pages rated thumbs down, each rated group best-scored first
-async function loadScoreExamplePages(topicId: string): Promise<ScoreExamplePages> {
-	// the topic's owner and owning team decide whose bookmarks count
-	const [topic] = await db
-		.select({ ownerId: topics.ownerId, teamId: topics.teamId })
-		.from(topics)
-		.where(eq(topics.id, topicId))
-	if (!topic) {
-		return { likedOrBookmarkedPages: [], ratedDownPages: [] }
-	}
-
-	// the bookmarked findings, and the topic's rated findings best-scored first
-	const [bookmarkedFindingRows, ratedFindingRows] = await Promise.all([
-		loadBookmarkedFindingRows(topicId, topic),
-		db
-			.select({ findingId: findings.id, title: resources.title, url: resources.url, rating: findings.rating })
-			.from(findings)
-			.innerJoin(resources, eq(findings.resourceId, resources.id))
-			.where(and(eq(findings.topicId, topicId), isNotNull(findings.rating)))
-			.orderBy(desc(findings.relevanceScore)),
-	])
-
-	// a rating of thumbs down outweighs a bookmark, and a liked finding that is also bookmarked is listed once
-	const ratedDownPages = ratedFindingRows.filter((ratedFindingRow) => ratedFindingRow.rating === "down")
-	const ratedDownFindingIds = new Set(ratedDownPages.map((ratedDownPage) => ratedDownPage.findingId))
-	const bookmarkedFindingIds = new Set(
-		bookmarkedFindingRows.map((bookmarkedFindingRow) => bookmarkedFindingRow.findingId),
-	)
-	const likedOrBookmarkedPages = [
-		...bookmarkedFindingRows.filter((bookmarkedFindingRow) => !ratedDownFindingIds.has(bookmarkedFindingRow.findingId)),
-		...ratedFindingRows.filter(
-			(ratedFindingRow) => ratedFindingRow.rating === "up" && !bookmarkedFindingIds.has(ratedFindingRow.findingId),
-		),
-	]
-	return { likedOrBookmarkedPages, ratedDownPages }
-}
-
 /**
- * Loads the topic's findings that someone who still has access bookmarked, with their pages, newest bookmark first.
- */
-export async function loadBookmarkedFindingRows(
-	topicId: string,
-	topic: BookmarkTopic,
-): Promise<BookmarkedFindingRow[]> {
-	// a bookmark counts if its user owns the topic or is an active member of a team that holds it
-	const holderHasAccess = or(
-		eq(bookmarks.userId, topic.ownerId),
-		topic.teamId
-			? inArray(
-					bookmarks.userId,
-					db
-						.select({ userId: teamMembers.userId })
-						.from(teamMembers)
-						.where(and(eq(teamMembers.teamId, topic.teamId), eq(teamMembers.isActive, true))),
-				)
-			: sql`false`,
-		inArray(
-			bookmarks.userId,
-			db
-				.select({ userId: teamMembers.userId })
-				.from(teamMembers)
-				.innerJoin(teamTopics, eq(teamTopics.teamId, teamMembers.teamId))
-				.where(and(eq(teamTopics.topicId, topicId), eq(teamMembers.isActive, true))),
-		),
-	)
-
-	// the bookmarked findings of the topic with their pages
-	return (
-		db
-			.select({ findingId: bookmarks.findingId, title: resources.title, url: resources.url })
-			.from(bookmarks)
-			.innerJoin(findings, eq(bookmarks.findingId, findings.id))
-			.innerJoin(resources, eq(findings.resourceId, resources.id))
-			.where(and(eq(findings.topicId, topicId), holderHasAccess))
-			// one row per finding, ordered by its newest bookmark
-			.groupBy(bookmarks.findingId, resources.title, resources.url)
-			.orderBy(desc(max(bookmarks.createdAt)))
-	)
-}
-
-/**
- * The topic's finding ids no user bookmarked or rated, ranked beyond maxTopicFindings by relevance score,
+ * The topic's finding ids that are not exempt, ranked beyond maxTopicFindings by relevance score,
  * which need filtering. A tie goes to the newer finding, so a Topic already full of top-scored ones can
  * still update from a later Scan.
  */
 export function findingIdsToFilter(
-	findingRows: { id: string; relevanceScore: number; createdAt: Date; isBookmarkedOrRated: boolean }[],
+	findingRows: { id: string; relevanceScore: number; createdAt: Date; isExempt: boolean }[],
 	maxTopicFindings: number,
 ): string[] {
-	// rank the rows no user bookmarked or rated and drop everything past the limit
+	// rank the rows that are not exempt and drop everything past the limit
 	const rankedFilterableRows = findingRows
-		.filter((findingRow) => !findingRow.isBookmarkedOrRated)
+		.filter((findingRow) => !findingRow.isExempt)
 		.sort(
 			(first, second) =>
 				second.relevanceScore - first.relevanceScore || second.createdAt.getTime() - first.createdAt.getTime(),

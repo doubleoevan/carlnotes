@@ -4,6 +4,8 @@
 import { and, eq, inArray } from "drizzle-orm"
 import { toTopicRoleFilter } from "./contentFilters"
 import { db } from "./index"
+import { hasUnconvertedPersonalSources } from "./personalSourcesAuthority"
+import { loadUserAccess } from "./quotas"
 import { findings, scans } from "./schema/scans"
 import { topics } from "./schema/topics"
 import {
@@ -122,27 +124,38 @@ export async function isTopicFindingVisible(userId: string | null, findingId: st
 		return false
 	}
 
-	// the owner and every team member see the topic's full history
+	// the owner and every team member see the topic's full history, and a private topic with Personal sources left to
+	// convert stays closed to everyone but its owner
 	if ((await toTopicRole(userId, topic)) !== null) {
-		return true
+		const isOpenToRoles = topic.visibility !== "private" || topic.ownerId === userId
+		return isOpenToRoles || !(await hasUnconvertedPersonalSources(topic.id))
 	}
 
-	// anyone else sees a public topic outright, never a private one
+	// anyone else sees a public topic outright, and a private one only as an admin
 	switch (topic.visibility) {
 		case "public":
 			return true
+		// an invite topic opens on a subscription, which a signed-out visitor holds none of
 		case "invite":
-			// an invite topic opens on a subscription, which a signed-out visitor holds none of
 			if (!userId) {
 				return false
 			}
-			return isVisibleAfterActivation(topic.scanStartedAt, await subscriptionActivatedAt(userId, topic.id))
+			return (
+				isVisibleAfterActivation(topic.scanStartedAt, await subscriptionActivatedAt(userId, topic.id)) ||
+				(await isUserAdmin(userId))
+			)
+		// a private topic with Personal sources left to convert stays closed to an admin
 		case "private":
-			return false
+			return (await isUserAdmin(userId)) && !(await hasUnconvertedPersonalSources(topic.id))
 		// a new visibility value fails to compile here
 		default:
 			return assertNever(topic.visibility)
 	}
+}
+
+// whether a user is an admin, who may open any topic that topic:view allows
+async function isUserAdmin(userId: string | null): Promise<boolean> {
+	return userId !== null && (await loadUserAccess(userId)).isAdmin
 }
 
 // the id, owner, and visibility of a topic finding's topic plus its scan's start time

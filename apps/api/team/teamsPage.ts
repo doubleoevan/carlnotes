@@ -2,7 +2,7 @@
 import { toAvatarKeyVersion } from "@carlnotes/contracts/avatars"
 import type { TeamsPageResponse } from "@carlnotes/contracts/teams"
 import { db } from "@carlnotes/db"
-import { toUnblockedAuthorFilter } from "@carlnotes/db/contentFilters"
+import { toNotUserBlockedAuthorFilter } from "@carlnotes/db/contentFilters"
 import { invites } from "@carlnotes/db/schema/invites"
 import { teamMembers, teams } from "@carlnotes/db/schema/teams"
 import { users } from "@carlnotes/db/schema/users"
@@ -50,7 +50,7 @@ export async function loadTeamsPage(userId: string): Promise<TeamsPageResponse> 
 				isNull(invites.declinedAt),
 				or(isNull(invites.expiresAt), gt(invites.expiresAt, new Date())),
 				// an invitation from a person the user has blocked is not shown
-				toUnblockedAuthorFilter(userId, invites.invitedByUserId),
+				toNotUserBlockedAuthorFilter(userId, invites.invitedByUserId),
 			),
 		)
 		.orderBy(desc(invites.invitedAt))

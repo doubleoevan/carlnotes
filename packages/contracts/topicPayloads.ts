@@ -101,7 +101,10 @@ export const createTopicPayload = topicDraftPayload.extend({
 })
 
 // the body that turns a topic's podcast switch on or off
-export const topicPodcastPayload = z.object({ isPodcastEnabled: z.boolean() })
+export const topicPodcastPayload = z.object({
+	isPodcastEnabled: z.boolean(),
+	isPodcastCommentsEnabled: z.boolean().optional(),
+})
 
 // the source suggestions body
 export const suggestSourcesPayload = z.object({

@@ -18,6 +18,8 @@ export type EmailKind =
 	| "manual-scan"
 	| "flag-content"
 	| "personal-sources"
+	// the daily email about what others wrote on a user's things
+	| "notifications"
 
 // one email to send, shared by the single and batch senders
 export type EmailMessage = {

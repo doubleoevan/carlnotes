@@ -1,5 +1,5 @@
-// what a Scan's email says: the props the digest and the report render from, with the new Findings, Carl's recap, the
-// Podcast Episode, and the links back into the app, and one subscriber's rendered message
+// what a Scan's email says: the props the topic scan email and the report render from, with the new Findings, Carl's
+// recap, the Podcast Episode, and the links back into the app, and one subscriber's rendered message
 
 import { toScanFailureLabel } from "@carlnotes/contracts/scanFailure"
 import { toTopicPath } from "@carlnotes/contracts/seo"
@@ -16,7 +16,7 @@ import {
 	type TopicScanEmailPodcastEpisode,
 	type TopicScanEmailProps,
 } from "@carlnotes/emails/topic-scan-email"
-import { signUnsubscribeToken } from "@carlnotes/emails/unsubscribe"
+import { toUnsubscribeHeaders, toUnsubscribeUrl } from "@carlnotes/emails/unsubscribe"
 import { appBaseUrl } from "@carlnotes/server/appUrl"
 import { toPodcastCoverPath } from "@carlnotes/server/podcastCoverPaths"
 import { and, desc, eq } from "drizzle-orm"
@@ -27,7 +27,7 @@ export type EmailTopic = Pick<typeof topics.$inferSelect, "id" | "name">
 export type Recipient = { userId: string; email: string }
 
 /**
- * Returns the digest's subject and the props every recipient renders from, minus their own unsubscribe link.
+ * Returns the topic scan email's subject and the props every recipient renders from, minus their own unsubscribe link.
  */
 export async function toTopicScanEmailProps(
 	topic: EmailTopic,
@@ -133,7 +133,7 @@ export async function toTopicScanMessage(
 	sharedProps: TopicScanEmailProps,
 ): Promise<EmailMessage> {
 	// the HTML and its plain-text version, rendered from the same email props to be in sync
-	const unsubscribeUrl = await toUnsubscribeUrl(recipient.userId, topicId)
+	const unsubscribeUrl = await toTopicUnsubscribeUrl(recipient.userId, topicId)
 	const emailProps = { ...sharedProps, unsubscribeUrl }
 	return {
 		to: recipient.email,
@@ -141,7 +141,7 @@ export async function toTopicScanMessage(
 		emailContent: await renderTopicScanEmail(emailProps),
 		plainTextContent: await renderTopicScanEmailText(emailProps),
 		emailKind: "topic-scan",
-		headers: toUnsubscribeHeaders(unsubscribeUrl),
+		headers: unsubscribeUrl ? toUnsubscribeHeaders(unsubscribeUrl) : undefined,
 	}
 }
 
@@ -172,22 +172,8 @@ export async function newFindingsForScan(scanId: string): Promise<TopicScanEmail
 		.orderBy(desc(findings.relevanceScore))
 }
 
-// the recipient's signed one-click unsubscribe url, or undefined if the app base url isn't configured
-async function toUnsubscribeUrl(userId: string, topicId: string): Promise<string | undefined> {
-	// without an app base url, there is nowhere for the link to point
+// the recipient's unsubscribe url for a Topic, or undefined if the app base url isn't configured
+async function toTopicUnsubscribeUrl(userId: string, topicId: string): Promise<string | undefined> {
 	const appUrl = appBaseUrl()
-	if (!appUrl) {
-		return undefined
-	}
-	const unsubscribeToken = await signUnsubscribeToken({ userId, topicId })
-	return `${appUrl}/api/unsubscribe?token=${encodeURIComponent(unsubscribeToken)}`
-}
-
-// the List-Unsubscribe headers that let inbox providers offer their own one-click unsubscribe link (RFC 8058)
-function toUnsubscribeHeaders(unsubscribeUrl: string | undefined): Record<string, string> | undefined {
-	// no url means no header
-	if (!unsubscribeUrl) {
-		return undefined
-	}
-	return { "List-Unsubscribe": `<${unsubscribeUrl}>`, "List-Unsubscribe-Post": "List-Unsubscribe=One-Click" }
+	return appUrl ? toUnsubscribeUrl(appUrl, { userId, topicId }) : undefined
 }

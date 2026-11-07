@@ -11,6 +11,7 @@ export function configureWebApiClient(): void {
 	configureApiClient({
 		apiBaseUrl: typeof window === "undefined" ? "http://localhost:3000" : "",
 		showError: (message) => toast.error(message),
+		showMessage: (message) => toast.success(message),
 		onTermsOutdated: requestTermsAcceptance,
 	})
 }

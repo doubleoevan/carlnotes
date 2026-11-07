@@ -27,7 +27,15 @@ import { Sheet } from "./Sheet"
 /**
  * Reuses the web's AI instructions and copy controls inside a native sheet.
  */
-export function AddToAiDialog({ mcpServer, onClose }: { mcpServer: McpServer; onClose: () => void }) {
+export function AddToAiDialog({
+	mcpServer,
+	initialProvider,
+	onClose,
+}: {
+	mcpServer: McpServer
+	initialProvider?: AiProvider
+	onClose: () => void
+}) {
 	// restore the remembered provider before mounting the ordered list
 	const [lastProvider, setLastProvider] = useState<AiProvider | null | undefined>(undefined)
 	useEffect(() => {
@@ -52,6 +60,7 @@ export function AddToAiDialog({ mcpServer, onClose }: { mcpServer: McpServer; on
 					elements={ELEMENTS}
 					mcpServer={mcpServer}
 					lastProvider={lastProvider}
+					initialProvider={initialProvider}
 					onRemember={rememberProvider}
 					onCopy={copyText}
 					renderInstall={(props) => <DesktopInstall {...props} />}

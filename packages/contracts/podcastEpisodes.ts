@@ -3,6 +3,9 @@
 import type { PodcastEpisodeTurn } from "./payloads"
 import { toOneLineText } from "./text"
 
+// a chapter position well past any podcast episode's chapters, which keeps a chapter lookup inside a postgres integer
+export const PODCAST_EPISODE_CHAPTER_POSITION_MAX = 999
+
 // the most minutes of talk that a full podcast episode and a short one may plan.
 // a topic whose owner is on the free plan gets short podcast episodes
 export const FULL_PODCAST_EPISODE_MINUTES = 30

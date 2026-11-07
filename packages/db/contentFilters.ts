@@ -7,6 +7,7 @@ import {
 	eq,
 	exists,
 	inArray,
+	isNotNull,
 	isNull,
 	ne,
 	notExists,
@@ -25,27 +26,93 @@ import { sources, subscriptions, topics } from "./schema/topics"
 import { userBlocks } from "./schema/userBlocks"
 import { users } from "./schema/users"
 
-// the reports that hide their subject from the reporter: the open ones and the kept ones
-export const OPEN_OR_KEPT_REPORT_FILTER = or(isNull(reports.resolvedAt), eq(reports.resolution, "kept")) as SQL
+// the reports that hide their subject from the reporter: the open ones and the cleared ones they did not remove
+export const OPEN_OR_CLEARED_REPORT_FILTER = and(
+	isNull(reports.withdrawnAt),
+	or(isNull(reports.resolvedAt), eq(reports.resolution, "cleared")),
+) as SQL
 
 // the ready Sources every user and visitor of a topic may see. a personal Source belongs to its sender
 export const isReadySharedSource = and(eq(sources.status, "ready"), notInArray(sources.kind, [...personalSourceKinds]))
+
+// the filter that passes a row with no author, or one whose author the query finds nothing for
+function toAuthorFilter(authorUserIdColumn: SQLWrapper, authorQuery: SQLWrapper): SQL {
+	return or(isNull(authorUserIdColumn), notExists(authorQuery)) as SQL
+}
 
 /**
  * Returns the filter that keeps rows by a person the user has blocked out of a read. A row with no author passes.
  * The user is an id, or a column for a read of many users at once.
  */
-export function toUnblockedAuthorFilter(userId: string | SQLWrapper, authorUserIdColumn: SQLWrapper): SQL {
-	// the row passes with no author, or with an author the user has not blocked
+export function toNotUserBlockedAuthorFilter(userId: string | SQLWrapper, authorUserIdColumn: SQLWrapper): SQL {
+	return toAuthorFilter(
+		authorUserIdColumn,
+		db
+			.select({ blockedUserId: userBlocks.blockedUserId })
+			.from(userBlocks)
+			.where(and(eq(userBlocks.blockerUserId, userId), eq(userBlocks.blockedUserId, authorUserIdColumn))),
+	)
+}
+
+/**
+ * Returns the filter that keeps rows by an author in a user block with the user, in either direction, out of a read. A
+ * row with no author passes. A user block hides both people's text from each other.
+ */
+export function toNoUserBlockBetweenFilter(userId: string | SQLWrapper, authorUserIdColumn: SQLWrapper): SQL {
+	return toAuthorFilter(
+		authorUserIdColumn,
+		db
+			.select({ blockedUserId: userBlocks.blockedUserId })
+			.from(userBlocks)
+			.where(toUserBlockBetweenCondition(userId, authorUserIdColumn)),
+	)
+}
+
+// a user block row between two users, whichever of them blocked the other
+function toUserBlockBetweenCondition(userId: string | SQLWrapper, otherUserId: string | SQLWrapper): SQL {
 	return or(
-		isNull(authorUserIdColumn),
-		notExists(
-			db
-				.select({ blockedUserId: userBlocks.blockedUserId })
-				.from(userBlocks)
-				.where(and(eq(userBlocks.blockerUserId, userId), eq(userBlocks.blockedUserId, authorUserIdColumn))),
-		),
+		and(eq(userBlocks.blockerUserId, userId), eq(userBlocks.blockedUserId, otherUserId)),
+		and(eq(userBlocks.blockerUserId, otherUserId), eq(userBlocks.blockedUserId, userId)),
 	) as SQL
+}
+
+/**
+ * Returns whether a user block exists between two users, in either direction.
+ */
+export async function hasUserBlockBetween(userId: string, otherUserId: string): Promise<boolean> {
+	const [userBlockRow] = await db
+		.select({ blockedUserId: userBlocks.blockedUserId })
+		.from(userBlocks)
+		.where(toUserBlockBetweenCondition(userId, otherUserId))
+		.limit(1)
+	return Boolean(userBlockRow)
+}
+
+/**
+ * Returns the filter that keeps rows by an author under an admin block out of a read. A row with no author passes.
+ */
+export function toNotAdminBlockedAuthorFilter(authorUserIdColumn: SQLWrapper): SQL {
+	return toAuthorFilter(
+		authorUserIdColumn,
+		db
+			.select({ id: users.id })
+			.from(users)
+			.where(and(eq(users.id, authorUserIdColumn), isNotNull(users.adminBlockedAt))),
+	)
+}
+
+/**
+ * Returns the filter that keeps a row out of a read: its author is under an admin block, or, for a signed-in user, its
+ * author is in a user block with the user in either direction. The user is an id, a column for a read of many users at
+ * once, or null for a visitor. A row with no author passes.
+ */
+export function toVisibleAuthorFilter(userId: string | SQLWrapper | null, authorUserIdColumn: SQLWrapper): SQL {
+	// a visitor's read hides only an admin-blocked author
+	const notAdminBlockedFilter = toNotAdminBlockedAuthorFilter(authorUserIdColumn)
+	if (!userId) {
+		return notAdminBlockedFilter
+	}
+	return and(notAdminBlockedFilter, toNoUserBlockBetweenFilter(userId, authorUserIdColumn)) as SQL
 }
 
 /**
@@ -67,7 +134,7 @@ export function toUnreportedFilter(
 					eq(reports.reporterUserId, userId),
 					eq(reports.subjectKind, subjectKind),
 					eq(reports.subjectId, sql`${subjectIdColumn}::text`),
-					OPEN_OR_KEPT_REPORT_FILTER,
+					OPEN_OR_CLEARED_REPORT_FILTER,
 				),
 			),
 	)

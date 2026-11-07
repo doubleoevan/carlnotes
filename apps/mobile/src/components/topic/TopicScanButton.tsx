@@ -1,4 +1,4 @@
-import { sendManualScan, sendStopScan } from "@carlnotes/client/topicClient"
+import { type FetchTopicPageOptions, sendManualScan, sendStopScan } from "@carlnotes/client/topicClient"
 import { PLANS_PATH, PURCHASE_COPY } from "@carlnotes/contracts/plans"
 import {
 	DAILY_SCANS_USED_LABEL,
@@ -22,12 +22,18 @@ import { usePollWhileScanning } from "@/hooks/useTopicScan"
 /**
  * Starts and stops manual scans with shared progress tracking.
  */
-export function TopicScanButton({ topic, onScanned }: { topic: TopicResponse; onScanned: () => Promise<void> }) {
+export function TopicScanButton({
+	topic,
+	onScanned,
+}: {
+	topic: TopicResponse
+	onScanned: (fetchTopicPageOptions?: FetchTopicPageOptions) => Promise<void>
+}) {
 	// track manual scan progress and refresh it while the screen is active
 	const progress = useManualScanProgress(topic.scans)
 	const mutation = usePageMutation(onScanned)
 	const isRunning = progress.isScanning || progress.isRunningScan
-	usePollWhileScanning({ isScanning: isRunning, reload: onScanned })
+	usePollWhileScanning({ isScanning: isRunning, reload: () => onScanned({ isPoll: true }) })
 	// the daily quota's alert opens Plans where the store sells the user a plan
 	const { canPurchase } = usePurchaseOffers()
 	const dailyScansBlockedPath = canPurchase ? PLANS_PATH : null

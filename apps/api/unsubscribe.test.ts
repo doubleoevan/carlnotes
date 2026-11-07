@@ -98,7 +98,7 @@ test("a forged token unsubscribes nothing", async () => {
 
 // the confirmation page states the outcome, names the topic, escapes HTML-significant characters, and links to the topic
 test("unsubscribedPage names the topic and links to it", () => {
-	const page = unsubscribedPage({ id: "t1", name: "A & B <topic>" }, "https://carlnotes.example.com")
+	const page = unsubscribedPage({ kind: "topic", id: "t1", name: "A & B <topic>" }, "https://carlnotes.example.com")
 	expect(page).toContain("You're unsubscribed")
 	expect(page).toContain("A &amp; B &lt;topic&gt;")
 	expect(page).toContain("https://carlnotes.example.com/topics/")
@@ -106,10 +106,33 @@ test("unsubscribedPage names the topic and links to it", () => {
 
 // the link's page escapes the topic name and the token in the form's action
 test("confirmUnsubscribePage names the topic and posts the token", () => {
-	const page = confirmUnsubscribePage({ id: "t1", name: "A & B <topic>" }, "a.b&c", "https://carlnotes.example.com")
+	const page = confirmUnsubscribePage(
+		{ kind: "topic", id: "t1", name: "A & B <topic>" },
+		"a.b&c",
+		"https://carlnotes.example.com",
+	)
 	expect(page).toContain("A &amp; B &lt;topic&gt;")
 	expect(page).toContain('action="/api/unsubscribe?token=a.b%26c"')
 	expect(page).toContain("https://carlnotes.example.com/topics/")
+})
+
+// the notifications email's link turns that one switch off and leaves every topic's emails alone
+test("the notifications email's link turns its switch off and no topic's emails", async () => {
+	// a signed token for the notifications email, opened and then posted by the page's button
+	const sentQueries = stubUnsubscribePool()
+	const unsubscribeToken = await signUnsubscribeToken({ userId: "user-1", emailKind: "notifications" })
+	const path = `/api/unsubscribe?token=${encodeURIComponent(unsubscribeToken)}`
+	const page = await (await requestUnsubscribe(path)).text()
+	expect(page).toContain("No more daily notifications emails")
+	expect(sentQueries.some((sentQuery) => sentQuery.text.startsWith("update"))).toBe(false)
+
+	// the post writes the user's switch and no subscription
+	const postResponse = await requestUnsubscribe(path, { method: "POST", body: new FormData() })
+	expect(postResponse.status).toBe(200)
+	const updateQueries = sentQueries.filter((sentQuery) => sentQuery.text.startsWith("update"))
+	expect(updateQueries).toHaveLength(1)
+	expect(updateQueries[0]?.text).toContain('update "users" set "is_notifications_email_enabled"')
+	expect(updateQueries[0]?.values).toContain("user-1")
 })
 
 // the invalid page explains the link failed and links back to the app

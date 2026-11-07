@@ -1,11 +1,13 @@
 import { authClient } from "@carlnotes/client/authClient"
 import { fetchLeaderTeams, sendAddTopicTeam, sendRemoveTopicFromTeam } from "@carlnotes/client/teamClient"
 import type { TopicResponse } from "@carlnotes/contracts/topics"
+import { toRemoveTopicConfirmation } from "@carlnotes/core/lib/confirmationCopy"
 import { useQuery } from "@tanstack/react-query"
 import { Plus, X } from "lucide-react-native"
 import { useState } from "react"
 import { View } from "react-native"
 import { CoffeeLoading } from "@/components/branding/CoffeeLoading"
+import { showConfirmAlert } from "@/components/common/ConfirmDialog"
 import { Sheet } from "@/components/common/Sheet"
 import { Button } from "@/components/primitives/button"
 import { Icon } from "@/components/primitives/icon"
@@ -58,19 +60,24 @@ export function AddTopicToTeamDialog({
 							accessibilityLabel={`${includesTopic ? "Remove topic from" : "Add topic to"} ${team.name}`}
 							disabled={mutation.isPending}
 							onPress={() =>
-								void mutation.run(async () => {
-									if (includesTopic) {
-										if (!(await sendRemoveTopicFromTeam(team.teamId, topic.id))) {
-											throw new Error("That topic didn't get removed.")
-										}
-									} else {
-										const rejection = await sendAddTopicTeam(team.teamId, topic.id)
-										if (rejection) {
-											throw new Error(rejection)
-										}
-									}
-									setChangedIds((ids) => ({ ...ids, [team.teamId]: !includesTopic }))
-								})
+								includesTopic
+									? showConfirmAlert({
+											...toRemoveTopicConfirmation({ topicName: topic.name, teamName: team.name }),
+											onConfirm: () =>
+												void mutation.run(async () => {
+													if (!(await sendRemoveTopicFromTeam(team.teamId, topic.id))) {
+														throw new Error("That topic didn't get removed.")
+													}
+													setChangedIds((ids) => ({ ...ids, [team.teamId]: false }))
+												}),
+										})
+									: void mutation.run(async () => {
+											const rejection = await sendAddTopicTeam(team.teamId, topic.id)
+											if (rejection) {
+												throw new Error(rejection)
+											}
+											setChangedIds((ids) => ({ ...ids, [team.teamId]: true }))
+										})
 							}
 						>
 							<Icon as={includesTopic ? X : Plus} className="size-4" />

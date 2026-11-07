@@ -277,3 +277,64 @@ test("toChapterTurns joins the cold open, each transition, and the sign-off to t
 	const chapterTexts = chapterTurns.map((turns) => turns.map((turn) => turn.text))
 	expect(chapterTexts).toEqual([["cold open", "first"], ["middle"], ["transition", "last", "sign-off"]])
 })
+
+test("a segment's closing turns run only if shared comments are placed there, and each author is credited", () => {
+	const closingTurns: PodcastEpisodeTurn[] = [{ speaker: "cohost", text: "Carl, roastfan says the grinder is loud." }]
+	const toChecked = (closingSharedComments: typeof closingTurns | undefined, isLastScriptDraft = false) =>
+		toCheckedPodcastEpisodeSegment({
+			segment: { ...toSegment(), closingSharedComments },
+			outline,
+			segmentIndex: 0,
+			segmentSharedComments: {
+				usernames: closingSharedComments ? ["roastfan"] : [],
+				hasClosingSharedComments: Boolean(closingSharedComments),
+			},
+			isLastScriptDraft,
+		})
+
+	// closing turns with a closing Comment pass
+	expect(() => toChecked(closingTurns)).not.toThrow()
+
+	// a credited username is required, and missing closing turns are rejected
+	const segmentSharedComments = { usernames: ["roastfan"], hasClosingSharedComments: true }
+	const toCheckedDraft = (segment: PodcastEpisodeSegment) =>
+		toCheckedPodcastEpisodeSegment({ segment, outline, segmentIndex: 0, segmentSharedComments })
+	expect(() => toCheckedDraft(toSegment())).toThrow("no closingSharedComments")
+	const uncreditedSegment = { ...toSegment(), closingSharedComments: [toHostTurn("Someone says it is loud.")] }
+	expect(() => toCheckedDraft(uncreditedSegment)).toThrow("does not credit the hot take by roastfan")
+
+	// a username inside a longer word credits nobody, and any case or punctuation around the name does
+	const toCheckedAnn = (text: string) =>
+		toCheckedPodcastEpisodeSegment({
+			segment: { ...toSegment(), closingSharedComments: [{ speaker: "cohost", text }] },
+			outline,
+			segmentIndex: 0,
+			segmentSharedComments: { usernames: ["ann"], hasClosingSharedComments: true },
+		})
+	expect(() => toCheckedAnn("Carl, the planning team says it is loud.")).toThrow("does not credit the hot take by ann")
+	expect(() => toCheckedAnn("Carl, ANN, says it is loud.")).not.toThrow()
+
+	// Carl never raises a closing Comment, and Vienna does
+	const carlRaisedSegment = { ...toSegment(), closingSharedComments: [toHostTurn("roastfan says it is loud.")] }
+	expect(() => toCheckedDraft(carlRaisedSegment)).toThrow("Carl raises the closing hot take by roastfan")
+
+	// closing turns with nothing to close on are rejected, and the last draft drops them
+	const fillerSegment = { ...toSegment(), closingSharedComments: closingTurns }
+	expect(() => toCheckedPodcastEpisodeSegment({ segment: fillerSegment, outline, segmentIndex: 0 })).toThrow(
+		"no hot takes to close on",
+	)
+	const repairedSegment = toCheckedPodcastEpisodeSegment({
+		segment: fillerSegment,
+		outline,
+		segmentIndex: 0,
+		isLastScriptDraft: true,
+	})
+	expect(repairedSegment.closingSharedComments).toBeUndefined()
+})
+
+test("the script puts the closing turns before the sign-off", () => {
+	const closingTurn = toHostTurn("Vienna, roastfan says the grinder is loud.")
+	const { signOff } = toPodcastEpisodeScript([{ ...toSegment(), closingSharedComments: [closingTurn] }])
+	expect(signOff[0]).toEqual(closingTurn)
+	expect(signOff[1]?.text).toBe("That is the lot.")
+})

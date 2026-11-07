@@ -21,6 +21,9 @@ const EXPECTED_TOOL_ANNOTATIONS = {
 	stop_scan: { readOnlyHint: false, destructiveHint: true },
 	read_topic_context: { readOnlyHint: true },
 	send_finding_feedback: { readOnlyHint: false, destructiveHint: false, idempotentHint: false },
+	save_reaction: { readOnlyHint: false, destructiveHint: true, idempotentHint: true },
+	read_hot_takes: { readOnlyHint: true },
+	post_hot_take: { readOnlyHint: false, destructiveHint: false, idempotentHint: false },
 }
 
 // each advertised tool's phrases, which its description lists so a model finds the tool from the user's words
@@ -50,6 +53,9 @@ const EXPECTED_TOOL_PHRASES: Record<string, readonly string[]> = {
 	stop_scan: ["stop the brew", "cancel this brew"],
 	read_topic_context: ["ask Carl about this topic", "what does Carl know about", "what's the latest on"],
 	send_finding_feedback: ["tell Carl why", "give Carl feedback"],
+	save_reaction: ["react to this", "like this finding"],
+	read_hot_takes: ["what are people saying", "read the hot takes", "read the conversation"],
+	post_hot_take: ["leave a hot take", "post a comment", "reply to the conversation"],
 }
 
 // wording that asks a model to act unprompted. a sentence that opens with Never forbids it instead

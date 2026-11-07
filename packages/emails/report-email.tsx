@@ -8,6 +8,7 @@ import { render } from "@react-email/render"
 import type { ReactElement } from "react"
 import AuthEmail, { type AuthEmailProps } from "./auth-email"
 import { summaryLink } from "./emailShell"
+import { toUnlinkedText } from "./unlinkedText"
 
 export type ReportEmailProps = {
 	subjectKind: ReportSubjectKind
@@ -43,7 +44,7 @@ function toAuthEmailProps(props: ReportEmailProps): AuthEmailProps {
 	const leadEnd = authorUsername ? ` by ${authorUsername}.` : "."
 	return {
 		heading: props.isReminder ? "A report is still open" : "Content reported",
-		lead: `${leadStart}${subjectLabel}${leadEnd}`,
+		lead: toUnlinkedText(`${leadStart}${subjectLabel}${leadEnd}`),
 		leadContent: (
 			<>
 				{leadStart}
@@ -55,7 +56,8 @@ function toAuthEmailProps(props: ReportEmailProps): AuthEmailProps {
 		),
 		buttonLabel: "Open the report",
 		url: props.reportUrl,
-		linkNote: `Reason: ${reason || "none given"} Text as reported: ${subjectText}`,
+		// the reporter's and the author's words, written so that no mail client links a url in them
+		linkNote: toUnlinkedText(`Reason: ${reason || "none given"} Text as reported: ${subjectText}`),
 		closingNote: props.isReminder
 			? "This report has waited twelve hours. Aim to respond within a day."
 			: "Remove the content or keep it from the console. The reporter no longer sees it either way.",

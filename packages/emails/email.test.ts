@@ -47,18 +47,22 @@ function configureResend(): void {
 	Bun.env.RESEND_FROM_EMAIL = "carl@example.com"
 }
 
-test("digests and other Carl emails reply to the shared receiving mailbox", async () => {
+test("topic scan emails and other Carl emails reply to the shared receiving mailbox", async () => {
 	// exercise the shared body builder through both single and batch delivery
 	configureResend()
 	Bun.env.RESEND_FROM_EMAIL = "Carl Notes <carl@example.com>"
 	Bun.env.RESEND_REPLY_EMAIL = "support@example.com"
+
+	// a Resend that records each body it is sent
 	const bodies: Record<string, unknown>[] = []
 	globalThis.fetch = (async (_url, init) => {
 		const body = JSON.parse(String(init?.body))
 		bodies.push(...(Array.isArray(body) ? body : [body]))
 		return Response.json({ id: "fixture", data: [] })
 	}) as typeof fetch
-	await sendScanEmailCall({ scanId: "digest", messages: [toTestMessage(1)] })
+
+	// one scan email, then a batch of the other kinds
+	await sendScanEmailCall({ scanId: "scan-1", messages: [toTestMessage(1)] })
 	await sendEmailBatches([
 		{ ...toTestMessage(2), emailKind: "manual-scan" },
 		{ ...toTestMessage(3), emailKind: "verification" },

@@ -4,6 +4,7 @@ import { fetchTeamPage, sendDeleteTeam, sendRemoveTeamMember } from "@carlnotes/
 import { isLeaderRole } from "@carlnotes/contracts/enums"
 import { toSessionProfileIdentity } from "@carlnotes/contracts/profiles"
 import type { TeamSummary, TeamsPageResponse } from "@carlnotes/contracts/teams"
+import { toDeleteReceivedInviteConfirmation, toLeaveTeamConfirmation } from "@carlnotes/core/lib/confirmationCopy"
 import {
 	type TeamsPageRow,
 	teamSortValues,
@@ -15,6 +16,7 @@ import { ChevronDown, X } from "lucide-react-native"
 import { useState } from "react"
 import { Alert, View } from "react-native"
 import { CoffeeLoading } from "@/components/branding/CoffeeLoading"
+import { showConfirmAlert } from "@/components/common/ConfirmDialog"
 import { PreferenceSwitch } from "@/components/common/PreferenceSwitch"
 import { Sheet } from "@/components/common/Sheet"
 import { UserProfileLink } from "@/components/common/UserProfileLink"
@@ -54,19 +56,15 @@ export function TeamsMembershipTable({
 			setDetails({ teamId: team.teamId, kind: "members" })
 			return
 		}
-		Alert.alert("Leave this team?", `You leave ${team.name} and stop receiving its topics.`, [
-			{ text: "Stay", style: "cancel" },
-			{
-				text: "Leave team",
-				style: "destructive",
-				onPress: () =>
-					void mutation.run(async () => {
-						if (!session || !(await sendRemoveTeamMember(team.teamId, session.user.id))) {
-							throw new Error("Promote another leader first. A team can't lose its last one.")
-						}
-					}),
-			},
-		])
+		showConfirmAlert({
+			...toLeaveTeamConfirmation(team.name),
+			onConfirm: () =>
+				void mutation.run(async () => {
+					if (!session || !(await sendRemoveTeamMember(team.teamId, session.user.id))) {
+						throw new Error("Promote another leader first. A team can't lose its last one.")
+					}
+				}),
+		})
 	}
 	function handleDelete(team: TeamSummary): void {
 		Alert.alert("Delete this team?", "Its topics return to whoever made them, and the room closes with it.", [
@@ -151,7 +149,10 @@ export function TeamsMembershipTable({
 					onPress={() =>
 						"membership" in row
 							? handleDelete(row.membership)
-							: void mutation.run(() => sendDeclineInvite(row.invite.inviteId))
+							: showConfirmAlert({
+									...toDeleteReceivedInviteConfirmation(row.invite.name),
+									onConfirm: () => void mutation.run(() => sendDeclineInvite(row.invite.inviteId)),
+								})
 					}
 				>
 					<Icon as={X} className="size-4" />

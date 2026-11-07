@@ -1,11 +1,10 @@
 // a topic finding's link preview, Carl's notes, the sender's private annotation, and the stats
 
-import { fetchTopicFindingLinkPreview } from "@carlnotes/client/topicFindingClient"
-import type { ChatLinkPreview } from "@carlnotes/contracts/chat"
 import type { TopicFinding } from "@carlnotes/contracts/findings"
+import { useFindingLinkPreview } from "@carlnotes/core/hooks/useFindingLinkPreview"
 import { toDateLabel } from "@carlnotes/core/lib/labels"
 import { cn } from "@carlnotes/nightshift/classNames"
-import { useContext, useEffect, useState } from "react"
+import { useContext } from "react"
 import { LinkOpenerContext } from "@/components/common/AnchorLink"
 import { LinkPreviewCard } from "@/components/common/LinkPreviewCard"
 import { LinkPreviewLoading } from "@/components/common/LinkPreviewLoading"
@@ -78,23 +77,10 @@ export function TopicFindingStats({ fetchedAt, viewCount }: { fetchedAt: string;
 
 // the linked page's link preview card, fetched when the note popover opens
 function FindingLinkPreview({ findingId }: { findingId: string }) {
-	// the fetched preview, and whether its fetch is still in progress
-	const [linkPreview, setLinkPreview] = useState<ChatLinkPreview | null>(null)
-	const [isLinkPreviewLoading, setIsLinkPreviewLoading] = useState(true)
-	useEffect(() => {
-		// a popover that closes mid-fetch must not set state afterward
-		let isTopicFindingOpen = true
-		fetchTopicFindingLinkPreview(findingId)
-			.then((findingLinkPreview) => isTopicFindingOpen && setLinkPreview(findingLinkPreview))
-			.catch(() => {})
-			.finally(() => isTopicFindingOpen && setIsLinkPreviewLoading(false))
-		return () => {
-			isTopicFindingOpen = false
-		}
-	}, [findingId])
+	const { linkPreview, isLoading } = useFindingLinkPreview(findingId)
 
 	// the loading card until the fetch settles, then the card if the page offers one
-	if (isLinkPreviewLoading) {
+	if (isLoading) {
 		return <LinkPreviewLoading />
 	}
 	if (!linkPreview) {

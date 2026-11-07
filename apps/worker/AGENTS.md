@@ -19,7 +19,8 @@ apart from the scan slots. A failure that stops it is reported in the `startup` 
 `bun run dev:worker` on a minute's interval: it starts as many scheduled scans as the backlog allows, a daily topic past
 its owner's daily scans cutoff once a week, then copies the viewer and listener counts through `syncViewerCounts.ts`,
 retries the pending object deletions through `retryPendingObjectDeletions.ts`, mails the support inbox one reminder for
-each content report open past twelve hours through `reportReminders.ts`, and reports the day's spend across every user
+each content report open past twelve hours through `reportReminders.ts`, sends the day's notifications emails through
+`notificationsEmails.ts`, and reports the day's spend across every user
 through `dailySpend.ts`, which warns past `GLOBAL_DAILY_SPEND_ALERT_USD`), `scanQueue.ts` (the sweep's view of the scan
 queue: the start of the rows a dying caller never dispatched, the queue's report, and how many Scans a sweep may start,
 `SCAN_DISPATCH_LIMIT` minus the backlog), `scheduledTopicFilter.ts` (the filter that selects the scheduled Topics,
@@ -48,6 +49,13 @@ about the app; a section whose hash is unchanged is not embedded again).
 - `reportReminders.ts` reads the content reports still open and never reminded twelve hours after they were made,
   mails each one to `SUPPORT_EMAIL` through the report email template with its admin console link, and writes the
   report's reminded time, so a report is reminded once. Without `SUPPORT_EMAIL` it reads nothing.
+- `notificationsEmails.ts` sends the daily notifications email once the UTC send hour has passed, under its own job
+  lease. `notificationsEmailRows.ts` holds its reads. It reads a week of reactions and comments on each owner's Topics,
+  Findings, and published Podcast Episodes, the reactions and replies to someone's comment, and the comments that
+  mention someone, then sends each recipient what happened since their last email, or the last day for a first one. It
+  leaves out the recipient's own writes, an author in a user block with them or under an admin block, a mention on a
+  Topic they may no longer open, and a user whose switch is off. The day's `notifications_email_sends` row is written
+  before the send, and a rejected send deletes it for the next sweep. It makes no model call.
 -  `retryPendingObjectDeletions.ts` retries the pending keys in `pending_object_deletions` after the leased sweep,
   outside its lease, with a doubling backoff up to a day, and reports a key pending for over a day once, deleting each
   through `deleteStoredObject` in `@carlnotes/db/store`. Before the sweep starts a Scan row that was opened and never

@@ -190,7 +190,8 @@ function Choice({
 	onSelect,
 }: {
 	label: string
-	icon?: LucideIcon
+	// a Lucide icon, or an emoji in its place
+	icon?: LucideIcon | string
 	isSelected: boolean
 	onSelect: () => void
 }) {
@@ -202,7 +203,8 @@ function Choice({
 			onPress={onSelect}
 			className="justify-start min-h-12"
 		>
-			{icon ? <Icon as={icon} className="text-muted-foreground" /> : null}
+			{typeof icon === "string" ? <Text>{icon}</Text> : null}
+			{icon && typeof icon !== "string" ? <Icon as={icon} className="text-muted-foreground" /> : null}
 			<Text className="flex-1 text-left">{label}</Text>
 			{isSelected ? <Icon as={Check} /> : null}
 		</Button>

@@ -250,8 +250,8 @@ test("mismatched From, failed authentication, other recipients and acknowledgmen
 	for (const overrides of [
 		...refusedEmails,
 		{
-			text: "Thanks\nOn Monday, Carl wrote:\n> https://example.org/digest",
-			headers: { "In-Reply-To": "<digest@resend.dev>" },
+			text: "Thanks\nOn Monday, Carl wrote:\n> https://example.org/report",
+			headers: { "In-Reply-To": "<report@resend.dev>" },
 		},
 	]) {
 		spyOn(provider, "fetchReceivedPersonalSourcesEmail").mockResolvedValue({
@@ -316,11 +316,11 @@ test("matching outages retry without partial storage or a no-match reply", async
 	expect(spyOn(replies, "sendPersonalSourcesEmailReply")).not.toHaveBeenCalled()
 })
 
-for (const text of ["Thanks", "Thanks\nOn Monday, Carl wrote:\n> https://example.org/digest"]) {
+for (const text of ["Thanks", "Thanks\nOn Monday, Carl wrote:\n> https://example.org/report"]) {
 	test(`a linkless reply cannot match, file, consume allowance, or receive another reply: ${text}`, async () => {
 		spyOn(provider, "fetchReceivedPersonalSourcesEmail").mockResolvedValue({
 			status: "received",
-			email: personalSourcesEmailFixture({ text, headers: { "In-Reply-To": "<digest@resend.dev>" } }),
+			email: personalSourcesEmailFixture({ text, headers: { "In-Reply-To": "<report@resend.dev>" } }),
 		})
 		expect(await processPersonalSourcesEmail("confirmation")).toEqual({ retryAfterMs: null })
 		expect(spyOn(routing, "resolvePersonalSourcesEmailTopics")).not.toHaveBeenCalled()
@@ -329,7 +329,7 @@ for (const text of ["Thanks", "Thanks\nOn Monday, Carl wrote:\n> https://example
 	})
 }
 
-for (const original of ["digest", "filing", "clarification", "other-carl-email"]) {
+for (const original of ["topic-scan-email", "filing", "clarification", "other-carl-email"]) {
 	test(`a reply to ${original} with a new link saves only the new content`, async () => {
 		spyOn(provider, "fetchReceivedPersonalSourcesEmail").mockResolvedValue({
 			status: "received",

@@ -1,4 +1,5 @@
 import type { TagMatchMode, TopicFinding, TopicFindingSort } from "@carlnotes/contracts/findings"
+import { TRENDING_SORT_EMOJI } from "@carlnotes/core/lib/topicFeedLabels"
 import {
 	Ban,
 	Blend,
@@ -6,7 +7,6 @@ import {
 	Clock,
 	File,
 	FileText,
-	Flame,
 	Headphones,
 	type LucideIcon,
 	Play,
@@ -14,10 +14,10 @@ import {
 } from "lucide-react-native"
 
 // native bindings for the web's sort, resource, and tag icons
-export const TOPIC_FINDING_SORT_ICONS: Record<TopicFindingSort, LucideIcon> = {
+export const TOPIC_FINDING_SORT_ICONS: Record<TopicFindingSort, LucideIcon | string> = {
 	relevant: Target,
 	newest: Clock,
-	trending: Flame,
+	trending: TRENDING_SORT_EMOJI,
 }
 export const RESOURCE_KIND_ICON: Record<TopicFinding["resourceKind"], LucideIcon> = {
 	read: FileText,

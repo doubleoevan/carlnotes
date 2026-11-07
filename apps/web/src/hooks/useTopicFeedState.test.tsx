@@ -247,9 +247,12 @@ test("web actions wait for transport and page handlers reload without a router",
 	// page actions await their request before invoking the supplied reload
 	let reloadCount = 0
 	const page = await renderTestHook(() =>
-		usePageTopicFeedHandlers(() => {
-			reloadCount += 1
-		}),
+		usePageTopicFeedHandlers(
+			() => {
+				reloadCount += 1
+			},
+			() => {},
+		),
 	)
 	cleanups.push(page.close)
 	await act(async () => page.read().openTopicFinding("finding-1"))

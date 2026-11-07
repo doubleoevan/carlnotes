@@ -66,20 +66,22 @@ export const PERSONAL_SOURCES_ELEMENTS: TopicPersonalSourcesElements = {
 }
 
 // draw shared Nightshift paths with native SVG
-function ProviderMark({
+export function ProviderMark({
 	provider,
-	isMuted = false,
+	colorClass = "text-link",
+	isLarge = false,
 }: {
 	provider: PersonalSourceConversationProvider
-	isMuted?: boolean
+	colorClass?: string
+	isLarge?: boolean
 }) {
 	const paths = provider === "other" ? null : AI_PROVIDER_ICON_PATHS[provider]
-	const colorClass = isMuted ? "text-muted-foreground" : "text-link"
+	const size = isLarge ? 16 : 12
 	if (!paths) {
-		return <Icon as={MessageCircle} className={`size-3 ${colorClass}`} />
+		return <Icon as={MessageCircle} className={`${isLarge ? "size-4" : "size-3"} ${colorClass}`} />
 	}
 	return (
-		<ClassNameSvg width={12} height={12} viewBox="0 0 24 24" className={colorClass} accessible={false}>
+		<ClassNameSvg width={size} height={size} viewBox="0 0 24 24" className={colorClass} accessible={false}>
 			{paths.map((path) => (
 				<Path key={path} d={path} fill="currentColor" fillRule="evenodd" />
 			))}
@@ -116,7 +118,7 @@ function SenderMetadata({
 			{kind === "email" ? (
 				<Icon as={Mail} className="size-3 text-muted-foreground" />
 			) : (
-				<ProviderMark provider={provider} isMuted />
+				<ProviderMark provider={provider} colorClass="text-muted-foreground" />
 			)}
 			<Text className="shrink text-sm text-muted-foreground">{label}</Text>
 		</View>

@@ -8,6 +8,7 @@ import { inviteAcceptResponse } from "./invites"
 import {
 	inviteAccessPayload,
 	inviteDeletePayload,
+	notificationsEmailPayload,
 	storeCheckoutPayload,
 	storeSubscriptionSyncPayload,
 	usernamePayload,
@@ -118,6 +119,12 @@ export const accountRouteContracts: Record<string, ApiRouteContract> = {
 		method: "POST",
 		path: "/api/users/me/invite-access",
 		body: { json: inviteAccessPayload },
+		response: okResponse,
+	},
+	"profileClient.sendNotificationsEmailPreference": {
+		method: "POST",
+		path: "/api/users/me/notifications-email",
+		body: { json: notificationsEmailPayload },
 		response: okResponse,
 	},
 	"profileClient.sendUsername": {

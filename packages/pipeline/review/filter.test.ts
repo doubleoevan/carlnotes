@@ -78,6 +78,15 @@ test("toScoreContextText lists the example pages after the context text", () => 
 	// a topic with no example pages scores against its context text alone
 	expect(toScoreContextText("context", { likedOrBookmarkedPages: [], ratedDownPages: [] })).toBe("context")
 
+	// the shared comments come last, one line each, a comment with no author as Carl's
+	const sharedContextText = toScoreContextText("context", { likedOrBookmarkedPages: [], ratedDownPages: [] }, [
+		{ username: "roastfan", body: "Worth a\nlisten." },
+		{ username: null, body: "Three of you bookmarked this one." },
+	])
+	expect(sharedContextText).toBe(
+		"context\n\n[what people said about this topic, shared by its editors]\n- roastfan: Worth a listen.\n- Carl: Three of you bookmarked this one.",
+	)
+
 	// a page with no title shows its url, and the list stops at ten pages
 	const bookmarkedPages = Array.from({ length: 12 }, (_, i) => ({
 		title: i === 1 ? null : `Page ${i}`,

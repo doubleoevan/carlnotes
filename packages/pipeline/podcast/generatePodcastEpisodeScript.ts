@@ -2,6 +2,8 @@
 // and the retry that writes drafts until one passes its checks. a call returns its draft unchecked, with its cost
 import { PODCAST_EPISODE_DESCRIPTION_MAX_CHARS, PODCAST_EPISODE_TITLE_MAX_CHARS } from "@carlnotes/contracts/podcast"
 import { PODCAST_EPISODE_SPEAKER_NAMES } from "@carlnotes/contracts/podcastEpisodes"
+import { toSharedCommentLine } from "@carlnotes/contracts/socialText"
+import type { PodcastSharedComment } from "@carlnotes/db/sharedComments"
 import { premiumModelCost } from "@carlnotes/models/budget"
 import { LOW_REASONING_PROVIDER_OPTIONS, scoreModel } from "@carlnotes/models/models"
 import { type BuiltPrompt, fetchPromptTemplate, promptTelemetry } from "@carlnotes/models/prompts/fetch"
@@ -17,6 +19,7 @@ import {
 	RejectedScriptError,
 	toGoodbyeOpeningLine,
 } from "./podcastEpisodeScript"
+import { toSharedCommentPlacements } from "./podcastEpisodeSharedComments"
 
 // how many words a segment's prompt asks for per planned minute, below the hosts' speaking rate.
 // a model writes past a word count more often than short of it
@@ -31,6 +34,9 @@ const SCRIPT_DRAFT_ATTEMPTS = 3
 // what a first draft's prompt says in place of a rejection
 const NO_REJECTION_REASON = "none"
 
+// what a segment's prompt lists if it has no shared comment to talk about
+const NO_SHARED_COMMENTS = "none"
+
 // what one draft is told. why the previous draft was rejected, and whether it is the call's last draft
 export type ScriptDraftAttempt = { rejectionReason?: string; isLastScriptDraft: boolean }
 
@@ -43,6 +49,8 @@ export type GeneratePodcastEpisodeOutlineOptions = {
 	topicName: string
 	topicPrompt: string
 	podcastEpisodeFindings: PodcastEpisodeFinding[]
+	// the comments the topic's editors shared with Carl that this Podcast Episode takes
+	sharedComments?: PodcastSharedComment[]
 	maxMinutes: number
 	litellmApiKey?: string
 	// why the previous draft was rejected
@@ -190,8 +198,13 @@ export async function buildSegmentPrompt(
 ): Promise<BuiltPrompt> {
 	// fetch the segment template, and list the segment's own Findings
 	const { template, name, registryPrompt } = await fetchPromptTemplate("write-podcast-episode-segment")
-	const { outline, segmentIndex, podcastEpisodeFindings } = generatePodcastEpisodeSegmentOptions
+	const { outline, segmentIndex, podcastEpisodeFindings, sharedComments = [] } = generatePodcastEpisodeSegmentOptions
 	const segmentFindings = toSegmentFindings(generatePodcastEpisodeSegmentOptions)
+	const { chapterSharedComments, closingSharedComments } = toSharedCommentPlacements({
+		sharedComments,
+		outline,
+		segmentIndex,
+	})
 
 	// write the prompt. the template's cold open and sign-off rules read the segment's number, the segment count,
 	// and the goodbye's opening turns
@@ -203,6 +216,8 @@ export async function buildSegmentPrompt(
 			podcastEpisodeTitle: outline.title,
 			outlineBlock: toOutlineBlock(outline, podcastEpisodeFindings),
 			findingsBlock: toFindingsBlock(segmentFindings),
+			chapterSharedCommentsBlock: toChapterSharedCommentsBlock(chapterSharedComments, segmentFindings),
+			closingSharedCommentsBlock: toClosingSharedCommentsBlock(closingSharedComments),
 			rejectionReason: generatePodcastEpisodeSegmentOptions.rejectionReason ?? NO_REJECTION_REASON,
 		},
 		{
@@ -274,6 +289,31 @@ function toSegmentFindings({
 		)
 		return podcastEpisodeFinding ? [{ ...podcastEpisodeFinding, minutes: outlinedChapter.minutes }] : []
 	})
+}
+
+// list the shared comments that go in this segment's chapters, each under its Finding's number in the segment's list
+function toChapterSharedCommentsBlock(
+	chapterSharedComments: PodcastSharedComment[],
+	segmentFindings: PodcastEpisodeFinding[],
+): string {
+	if (chapterSharedComments.length === 0) {
+		return NO_SHARED_COMMENTS
+	}
+
+	// each line names the Finding by its place in the segment
+	return chapterSharedComments
+		.map((sharedComment) => {
+			const findingIndex = segmentFindings.findIndex(({ findingId }) => findingId === sharedComment.findingId)
+			return `finding number ${findingIndex + 1}, ${toSharedCommentLine(sharedComment)}`
+		})
+		.join("\n")
+}
+
+// list the shared comments that go in the closing turns before the sign-off
+function toClosingSharedCommentsBlock(closingSharedComments: PodcastSharedComment[]): string {
+	return closingSharedComments.length === 0
+		? NO_SHARED_COMMENTS
+		: closingSharedComments.map(toSharedCommentLine).join("\n")
 }
 
 // list each Finding for a prompt under a number from 1. a draft names each Finding by that number

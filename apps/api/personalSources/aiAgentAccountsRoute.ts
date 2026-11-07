@@ -71,12 +71,12 @@ export const aiAgentAccountsRoute = new Hono<AppEnv>()
 		const userId = currentUser(context) ?? ""
 		const createAiAgentApiKeyResult = await createAiAgentApiKey({ userId, label: context.req.valid("json").label })
 
-		// the plan and the active key limit can reject the new key
+		// the plan and the key limit can reject the new key
 		if (createAiAgentApiKeyResult === "forbidden") {
 			return context.json({ error: "API keys require Premium." }, 403)
 		}
 		if (createAiAgentApiKeyResult === "limit") {
-			return context.json({ error: "Revoke an API key before creating another. The limit is ten active keys." }, 409)
+			return context.json({ error: "Revoke an API key before creating another. The limit is ten keys." }, 409)
 		}
 
 		// only a created key reports an event

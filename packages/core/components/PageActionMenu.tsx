@@ -1,4 +1,5 @@
 import type { ComponentType } from "react"
+import { toReportLabel } from "../lib/socialLabels"
 
 // platform icons remain adapters; ordering and visibility belong to the shared menu
 export type PageActionOption<Icon> = {
@@ -19,6 +20,7 @@ export function PageActionMenu<Icon>({
 	onNewTopic,
 	onAddToAi,
 	onReport,
+	isReported,
 	onClose,
 	Option,
 }: {
@@ -28,6 +30,7 @@ export function PageActionMenu<Icon>({
 	onNewTopic: () => void
 	onAddToAi: () => void
 	onReport?: () => void
+	isReported?: boolean
 	onClose: () => void
 	Option: ComponentType<PageActionOption<Icon>>
 }) {
@@ -35,7 +38,9 @@ export function PageActionMenu<Icon>({
 		...options,
 		...(hasNewTopicButton ? [] : [{ label: "New topic", Icon: icons.Plus, onSelect: onNewTopic }]),
 		{ label: "Add to AI", Icon: icons.Bot, onSelect: onAddToAi },
-		...(onReport ? [{ label: "Report issue", Icon: icons.Flag, onSelect: onReport }] : []),
+		...(onReport
+			? [{ label: toReportLabel(Boolean(isReported)), Icon: icons.Flag, isActive: isReported, onSelect: onReport }]
+			: []),
 	]
 	return actions.map((action) => (
 		<Option

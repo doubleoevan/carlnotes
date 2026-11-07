@@ -33,6 +33,11 @@ export const users = pgTable(
 		// notification permission, which turns both on, and a push reads null as off
 		isTopicPushEnabled: boolean("is_topic_push_enabled"),
 		isChatMentionPushEnabled: boolean("is_chat_mention_push_enabled"),
+		// whether the daily notifications email is sent to the user
+		isNotificationsEmailEnabled: boolean("is_notifications_email_enabled").notNull().default(false),
+		// when an admin blocked the user from reactions and comments everywhere, and which admin. null while not blocked
+		adminBlockedAt: timestamp("admin_blocked_at", { withTimezone: true }),
+		adminBlockedByUserId: text("admin_blocked_by_user_id"),
 		// the latest AI Agent connection the reader dismissed, so a later reconnection can be announced once
 		personalSourcesConnectionDismissedAt: timestamp("personal_source_connection_dismissed_at", { withTimezone: true }),
 		// the billing plan

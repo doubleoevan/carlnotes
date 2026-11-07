@@ -1,5 +1,6 @@
 import { toAvatarImagePath } from "@carlnotes/contracts/avatars"
 import { PODCAST_NAME } from "@carlnotes/contracts/podcastEpisodes"
+import { toProfilePath } from "@carlnotes/contracts/seo"
 import { SITE_URL } from "@carlnotes/contracts/site"
 import type { TopicDetails, TopicResponse } from "@carlnotes/contracts/topics"
 import { MAX_TOPIC_SOURCES } from "@carlnotes/contracts/topics"
@@ -199,7 +200,7 @@ function TopicBarista({ topic }: { topic: TopicDetails }) {
 		<InfoSection label="Carl's Barista" isFirst>
 			<View className="flex-row items-center justify-between gap-3">
 				<AnchorLink
-					href={`${SITE_URL}/profiles/${owner.userId}`}
+					href={`${SITE_URL}${toProfilePath(owner.userId)}`}
 					accessibilityLabel={owner.username}
 					className="min-h-11 shrink flex-row items-center gap-2 active:opacity-75"
 				>

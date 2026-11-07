@@ -31,7 +31,7 @@ export async function replyToUnregisteredSender(
 		return "refused"
 	}
 
-	// a quoted digest link does not make a thank-you a new send
+	// a quoted topic scan email link does not make a thank-you a new send
 	const { email, isReply } = toPersonalSourcesEmailReplyContent(original)
 	if (
 		isReply &&

@@ -19,6 +19,7 @@ import {
 	pushNotificationKinds,
 	pushReceiptStatuses,
 	ratings,
+	reactionTypes,
 	reportResolutions,
 	reportSubjectKinds,
 	resourceKinds,
@@ -68,6 +69,8 @@ export const promptVersionOrigin = pgEnum("prompt_version_origin", promptVersion
 // what a report names, and how an admin closed it
 export const reportSubjectKind = pgEnum("report_subject_kind", reportSubjectKinds)
 export const reportResolution = pgEnum("report_resolution", reportResolutions)
+// the type a Reaction holds
+export const reactionType = pgEnum("reaction_type", reactionTypes)
 // the platform a push device runs on, what a push is about, and what its receipt said
 export const pushPlatform = pgEnum("push_platform", MOBILE_PLATFORMS)
 export const pushNotificationKind = pgEnum("push_notification_kind", pushNotificationKinds)

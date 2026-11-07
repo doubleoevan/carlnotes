@@ -22,8 +22,8 @@ afterEach(() => {
 	restoreEnvSettings()
 })
 
-// the rows a Scan push reads: a succeeded Scan of its Topic and two new Findings. the digest subscribers are a subquery
-// of the phones' read
+// the rows a Scan push reads: a succeeded Scan of its Topic and two new Findings. the topic scan email subscribers
+// are a subquery of the phones' read
 const SCAN_PUSH_ROWS: QueryRows[] = [
 	{ sqlPattern: /from "scans"/, rows: [["succeeded", "topic-1", "Home espresso"]] },
 	{
@@ -54,8 +54,8 @@ function findSentQuery(sentQueries: SentQuery[], sqlStart: string): SentQuery | 
 	return sentQueries.find((sentQuery) => sentQuery.text.startsWith(sqlStart))
 }
 
-// a succeeded Scan with new Findings pushes to each live phone of its digest recipients, records each accepted push,
-// and retires the phone the service no longer knows
+// a succeeded Scan with new Findings pushes to each live phone of its topic scan email recipients, records each
+// accepted push, and retires the phone the service no longer knows
 test("a Scan push reaches each live phone, records the accepted ones, and retires an unregistered one", async () => {
 	// the service accepts the first two pushes and no longer knows the third phone
 	const sentQueries = stubDatabase([
@@ -83,8 +83,8 @@ test("a Scan push reaches each live phone, records the accepted ones, and retire
 		data: { kind: "topic-scan", url: "https://carlnotes.test/topics/topic-1/home-espresso", recipientUserId: "user-1" },
 	})
 
-	// the phones read are the digest recipients' with Topic pushes on and a live session, where a recipient is subscribed
-	// with email on and, on a private Topic, still holds a role on it
+	// the phones read are the topic scan email recipients' with Topic pushes on and a live session, where a recipient
+	// is subscribed with email on and, on a private Topic, still holds a role on it
 	const devicesQuery = sentQueries.find((sentQuery) => /from "push_devices"/.test(sentQuery.text))
 	expect(devicesQuery?.text).toContain('"users"."is_topic_push_enabled" = $')
 	expect(devicesQuery?.text).toContain('"sessions"."expires_at" > $')

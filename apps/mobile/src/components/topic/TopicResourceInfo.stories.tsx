@@ -1,3 +1,5 @@
+import { EMPTY_COMMENT_THREAD } from "@carlnotes/contracts/social"
+import { toTestCommentThread, toTestReactionSummary } from "@carlnotes/contracts/socialTestFixtures"
 import { toTestTopicFeed, toTestTopicFinding } from "@carlnotes/contracts/topicFeedTestFixtures"
 import { TOPIC_TUTORIAL_VIDEO, toYoutubeWatchUrl } from "@carlnotes/contracts/youtube"
 import type { Meta, StoryObj } from "@storybook/react-native"
@@ -20,6 +22,7 @@ const meta = {
 		topicFindingRank: 1,
 		topicFeedHandlers: STORY_TOPIC_FEED_HANDLERS,
 		onSendFeedback: async () => undefined,
+		commentThread: EMPTY_COMMENT_THREAD,
 		linkPreview: {
 			url: "https://example.com/coffee",
 			title: "A better cup of coffee",
@@ -42,6 +45,13 @@ export const ReadOnly: Story = {
 	args: { topic: toTestTopicFeed({ isTopicOwner: false, isTeamMember: false, canRate: false }) },
 }
 export const Pending: Story = { args: { isPending: true } }
+// reactions with their counts, and a comment thread with a mention and Carl's own comment
+export const WithReactionsAndComments: Story = {
+	args: {
+		resource: toTestTopicFinding({ reactions: toTestReactionSummary() }),
+		commentThread: toTestCommentThread(),
+	},
+}
 export const Bookmarked: Story = { args: { resource: toTestTopicFinding({ isBookmarked: true }) } }
 export const UpRated: Story = { args: { resource: toTestTopicFinding({ rating: "up" }) } }
 export const DownRated: Story = { args: { resource: toTestTopicFinding({ rating: "down" }) } }

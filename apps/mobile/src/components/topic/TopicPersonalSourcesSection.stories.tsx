@@ -16,6 +16,7 @@ export const Collapsed: Story = { args: { initialOpen: false } }
 export const Ready: Story = { args: {} }
 export const WithItems: Story = { args: {} }
 export const EntryExpanded: Story = { args: { isEntryExpanded: true } }
+export const SharedComments: Story = { args: { hasSharedComments: true } }
 // show each conversation destination through the production link adapter
 export const ConversationPlatforms: Story = { args: { isPlatformGallery: true } }
 export const Codex: Story = { args: { isEntryExpanded: true, conversationExample: "codex" } }

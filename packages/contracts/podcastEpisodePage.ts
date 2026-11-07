@@ -2,6 +2,7 @@
 import { z } from "zod"
 import { topicFinding } from "./findings"
 import { podcastEpisode, podcastEpisodeSummary, podcastEpisodeTranscriptBlock } from "./podcast"
+import { commentThreadResponse, reactionSummary } from "./social"
 import { topicResponse } from "./topics"
 
 // a podcast episode's page. the episode with its chapters, and the topic with its visibility, byline, and teams.
@@ -28,6 +29,9 @@ export const podcastEpisodePageResponse = z.object({
 	// fifty published podcast episodes of other topics that the user may listen to, most related first
 	topicPodcastEpisodes: z.array(podcastEpisodeSummary),
 	relatedPodcastEpisodes: z.array(podcastEpisodeSummary),
+	// the podcast episode's own reactions and the first page of its comment thread
+	reactions: reactionSummary.optional(),
+	commentThread: commentThreadResponse.optional(),
 })
 
 export type PodcastEpisodePageResponse = z.infer<typeof podcastEpisodePageResponse>

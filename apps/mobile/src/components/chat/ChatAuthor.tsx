@@ -1,4 +1,5 @@
 import { toAvatarImagePath } from "@carlnotes/contracts/avatars"
+import { toProfilePath } from "@carlnotes/contracts/seo"
 import {
 	type ChatAuthorElements,
 	type ChatAuthorProps,
@@ -25,7 +26,7 @@ const CHAT_AUTHOR_ELEMENTS: ChatAuthorElements = {
 		// render the linked or plain author row
 		const className = cn("mb-1 flex-row items-center gap-2", isOwn && "flex-row-reverse")
 		return userId ? (
-			<AnchorLink href={`/profiles/${userId}`} accessibilityLabel="Open author profile" className={className}>
+			<AnchorLink href={toProfilePath(userId)} accessibilityLabel="Open author profile" className={className}>
 				{children}
 			</AnchorLink>
 		) : (

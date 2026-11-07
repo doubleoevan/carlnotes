@@ -12,11 +12,14 @@ export function CollapsibleSection({
 	children,
 	titleAside,
 	titleNote,
+	isContentKept,
 }: {
 	title: string
 	children: ReactNode
 	titleAside?: ReactNode
 	titleNote?: ReactNode
+	// whether the content stays mounted while closed, for content that holds its own state
+	isContentKept?: boolean
 }) {
 	const [isExpanded, setIsExpanded] = useState(true)
 	return (
@@ -38,7 +41,8 @@ export function CollapsibleSection({
 				{titleNote}
 				{titleAside}
 			</View>
-			{isExpanded ? children : null}
+			{isContentKept ? <View className={isExpanded ? "flex" : "hidden"}>{children}</View> : null}
+			{!isContentKept && isExpanded ? children : null}
 		</View>
 	)
 }

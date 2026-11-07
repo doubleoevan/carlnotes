@@ -5,11 +5,16 @@ import { sendMobileMinimumVersion } from "@carlnotes/client/billingClient"
 import type { MobileMinimumVersionRow } from "@carlnotes/contracts/admin"
 import { parseAppVersion } from "@carlnotes/contracts/appVersions"
 import type { MobilePlatform } from "@carlnotes/contracts/clientTelemetry"
+import type { ConfirmationCopy } from "@carlnotes/core/lib/confirmationCopy"
 import { toDateLabel } from "@carlnotes/core/lib/labels"
+import { cn } from "@carlnotes/nightshift/classNames"
 import { useState } from "react"
 import { toast } from "sonner"
 import { Button } from "@/components/primitives/button"
 import { Input } from "@/components/primitives/input"
+import { Label } from "@/components/primitives/label"
+import { useConfirmDialog } from "@/hooks/useConfirmDialog"
+import { CARD_CLASS } from "@/lib/styleClasses"
 
 // the display name of each mobile platform
 const PLATFORM_LABELS: Record<MobilePlatform, string> = { ios: "iOS", android: "Android" }
@@ -25,7 +30,7 @@ type MobileMinimumVersionsCardProps = {
  */
 export function MobileMinimumVersionsCard({ minimumVersions, onSaved }: MobileMinimumVersionsCardProps) {
 	return (
-		<div className="flex flex-col gap-3">
+		<section className={cn(CARD_CLASS, "flex flex-col gap-4")}>
 			<p className="text-sm text-muted-foreground">
 				A build older than a platform's minimum is told to update on its next request. Clear a minimum to serve every
 				build again.
@@ -39,7 +44,7 @@ export function MobileMinimumVersionsCard({ minimumVersions, onSaved }: MobileMi
 					onSaved={onSaved}
 				/>
 			))}
-		</div>
+		</section>
 	)
 }
 
@@ -52,54 +57,78 @@ type MobileMinimumVersionRowFormProps = {
 // one platform's row: its state line and the version input with Save
 function MobileMinimumVersionRowForm({ platform, row, onSaved }: MobileMinimumVersionRowFormProps) {
 	const [versionText, setVersionText] = useState(row?.minimumVersion ?? "")
-	const [isSaving, setIsSaving] = useState(false)
+	const { confirm, confirmDialog } = useConfirmDialog()
 	const platformLabel = PLATFORM_LABELS[platform]
+	const minimumVersion = versionText.trim() === "" ? null : versionText.trim()
 
-	// save the typed version, or clear the minimum on an empty input, then reload the console
-	async function handleSave(): Promise<void> {
-		// a version that is not dotted integers is not sent
-		const minimumVersion = versionText.trim() === "" ? null : versionText.trim()
+	// open the confirmation for an empty input or a version. a version that is not dotted integers is not sent
+	function handleSubmit(): void {
 		if (minimumVersion !== null && !parseAppVersion(minimumVersion)) {
 			toast.error(`${platformLabel} minimum must be a version like 1.2.0.`)
 			return
 		}
-		setIsSaving(true)
+		confirm(toMinimumVersionConfirmation(platformLabel, minimumVersion), handleSave)
+	}
+
+	// save the typed version, or clear the minimum on an empty input, then reload the console
+	async function handleSave(): Promise<void> {
 		try {
 			await sendMobileMinimumVersion(platform, minimumVersion)
 			onSaved()
 		} catch (error) {
 			console.error("mobile minimum version failed", error)
 			toast.error(`${platformLabel} minimum didn't save.`)
-		} finally {
-			setIsSaving(false)
 		}
 	}
 
+	const inputId = `${platform}-minimum-version`
 	return (
-		<div className="flex flex-col gap-1">
+		<form
+			className="space-y-1.5"
+			onSubmit={(event) => {
+				// confirm without navigating
+				event.preventDefault()
+				handleSubmit()
+			}}
+		>
 			{/* the platform and its stored state */}
-			<p className="text-sm font-medium">{platformLabel}</p>
+			<Label htmlFor={inputId}>{platformLabel}</Label>
 			<p className="text-sm text-muted-foreground">{toMinimumVersionStateLine(row)}</p>
 			{/* the input and the save button */}
 			<div className="flex items-center gap-2">
 				<Input
+					id={inputId}
 					aria-label={`${platformLabel} minimum version`}
-					className="max-w-40"
+					className="bg-card"
 					placeholder="1.2.0"
 					value={versionText}
 					onChange={(event) => setVersionText(event.target.value)}
-					onKeyDown={(event) => {
-						if (event.key === "Enter") {
-							void handleSave()
-						}
-					}}
 				/>
-				<Button variant="outline" size="sm" disabled={isSaving} onClick={() => void handleSave()}>
+				<Button type="submit" variant="outline" size="sm">
 					Save
 				</Button>
 			</div>
-		</div>
+			{confirmDialog}
+		</form>
 	)
+}
+
+// what setting a platform's minimum, or clearing it for no version, asks first
+function toMinimumVersionConfirmation(platformLabel: string, minimumVersion: string | null): ConfirmationCopy {
+	if (!minimumVersion) {
+		return {
+			title: `Clear the ${platformLabel} minimum?`,
+			children: `Every ${platformLabel} build is served again.`,
+			confirmLabel: "Clear minimum",
+			cancelLabel: "Cancel",
+		}
+	}
+	return {
+		title: `Set the ${platformLabel} minimum to ${minimumVersion}?`,
+		children: `${platformLabel} builds older than ${minimumVersion} are told to update on their next request.`,
+		confirmLabel: "Set minimum",
+		cancelLabel: "Cancel",
+	}
 }
 
 // the stored minimum with who saved it and when, or the line for a platform with none

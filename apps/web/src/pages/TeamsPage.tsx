@@ -1,10 +1,10 @@
 import { authClient } from "@carlnotes/client/authClient"
 import { fetchTeams, sendDeleteTeam, sendRemoveTeamMember } from "@carlnotes/client/teamClient"
 import { fetchAddableTopics } from "@carlnotes/client/topicClient"
-import { CHAT_NAME } from "@carlnotes/contracts/chat"
 import { toSessionProfileIdentity } from "@carlnotes/contracts/profiles"
 import type { TeamSummary, TeamsPageResponse } from "@carlnotes/contracts/teams"
 import { useUserMenuUpdateBadges } from "@carlnotes/core/hooks/useUpdateCounts"
+import { toLeaveTeamConfirmation } from "@carlnotes/core/lib/confirmationCopy"
 import { Plus, Users } from "lucide-react"
 import { useCallback, useEffect, useState } from "react"
 import { toast } from "sonner"
@@ -175,14 +175,10 @@ export function TeamsPage() {
 			)}
 			{teamToLeave && (
 				<ConfirmDialog
-					title="Leave this team?"
-					confirmLabel="Leave team"
-					cancelLabel="Stay"
+					{...toLeaveTeamConfirmation(teamToLeave.name)}
 					onConfirm={handleLeaveTeam}
 					onClose={() => setTeamToLeave(null)}
-				>
-					{`You lose access to ${teamToLeave.name}'s topics and its ${CHAT_NAME}.`}
-				</ConfirmDialog>
+				/>
 			)}
 		</main>
 	)

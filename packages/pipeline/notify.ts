@@ -55,11 +55,12 @@ export async function createTopicEmailSend({
 }
 
 /**
- * Returns the user ids that a Scan's digest sends to, in batches of up to a hundred, or none if the Scan sends no digest.
+ * Returns the user ids that a Scan's topic scan email sends to, in batches of up to a hundred, or none if the Scan
+ * sends no topic scan email.
  * Subscribers that the Scan's email already reached and addresses Resend would reject are left out.
  */
-export async function planScanDigest(scanId: string): Promise<string[][]> {
-	// only a succeeded Scan of a Topic that still exists sends a digest
+export async function planTopicScanEmail(scanId: string): Promise<string[][]> {
+	// only a succeeded Scan of a Topic that still exists sends a topic scan email
 	const emailScanTopic = await loadEmailScanTopic(scanId)
 	if (emailScanTopic?.scan.status !== "succeeded") {
 		return []
@@ -83,16 +84,17 @@ export async function planScanDigest(scanId: string): Promise<string[][]> {
 	return recipientUserIdBatches
 }
 
-// one digest batch to send, with its Scan and the user ids planned for it
-export type SendScanDigestBatchOptions = { scanId: string; recipientUserIds: string[] }
+// one topic scan email batch to send, with its Scan and the user ids planned for it
+export type SendTopicScanEmailBatchOptions = { scanId: string; recipientUserIds: string[] }
 
 /**
- * Sends one digest batch to the planned recipients who still get it, and records each accepted send with its Scan.
+ * Sends one topic scan email batch to the planned recipients who still get it, and records each accepted send with
+ * its Scan.
  */
-export async function sendScanDigestBatch({
+export async function sendTopicScanEmailBatch({
 	scanId,
 	recipientUserIds,
-}: SendScanDigestBatchOptions): Promise<ScanEmailOutcome> {
+}: SendTopicScanEmailBatchOptions): Promise<ScanEmailOutcome> {
 	// a Topic deleted since the plan sends nothing
 	const emailScanTopic = await loadEmailScanTopic(scanId)
 	if (!emailScanTopic) {
@@ -197,17 +199,17 @@ async function loadUnsentRecipients({
 }: LoadUnsentRecipientsOptions): Promise<Recipient[]> {
 	// read the subscribers and the Scan's sent rows together
 	const [subscriberRows, sentUserIds] = await Promise.all([
-		loadDigestSubscribers(topicId, recipientUserIds),
+		loadTopicScanEmailSubscribers(topicId, recipientUserIds),
 		loadScanEmailRecipientUserIds(scanId),
 	])
 	return subscriberRows.filter((subscriberRow) => !sentUserIds.has(subscriberRow.userId))
 }
 
 /**
- * Returns the Topic's digest subscribers, each user with an active subscription and email on who can still read the
- * Topic, limited to the given user ids if any.
+ * Returns the subscribers a Topic's scan email goes to, each user with an active subscription and email on who can
+ * still read the Topic, limited to the given user ids if any.
  */
-async function loadDigestSubscribers(topicId: string, userIds?: string[]): Promise<Recipient[]> {
+async function loadTopicScanEmailSubscribers(topicId: string, userIds?: string[]): Promise<Recipient[]> {
 	// one subscription row per user and Topic means no address repeats
 	return db
 		.select({ userId: users.id, email: users.email })
@@ -215,25 +217,28 @@ async function loadDigestSubscribers(topicId: string, userIds?: string[]): Promi
 		.innerJoin(users, eq(subscriptions.subscriberUserId, users.id))
 		.innerJoin(topics, eq(subscriptions.topicId, topics.id))
 		.where(
-			and(toDigestSubscriptionFilter(topicId), userIds ? inArray(subscriptions.subscriberUserId, userIds) : undefined),
+			and(
+				toTopicScanEmailSubscriptionFilter(topicId),
+				userIds ? inArray(subscriptions.subscriberUserId, userIds) : undefined,
+			),
 		)
 }
 
 /**
- * Returns the user ids of the Topic's digest subscribers as a subquery, for a read that joins them instead of loading
- * them.
+ * Returns the user ids of the subscribers a Topic's scan email goes to as a subquery, for a read that joins them
+ * instead of loading them.
  */
-export function toDigestSubscriberIdsQuery(topicId: string): SQLWrapper {
+export function toTopicScanEmailSubscriberIdsQuery(topicId: string): SQLWrapper {
 	return db
 		.select({ userId: subscriptions.subscriberUserId })
 		.from(subscriptions)
 		.innerJoin(topics, eq(subscriptions.topicId, topics.id))
-		.where(toDigestSubscriptionFilter(topicId))
+		.where(toTopicScanEmailSubscriptionFilter(topicId))
 }
 
 // an active subscription with email on, whose subscriber can still read the Topic: any subscriber of a public or
 // invite Topic, and on a private Topic only its owner and its teams' members. unsubscribing deactivates the row instead of deleting it
-function toDigestSubscriptionFilter(topicId: string): SQL | undefined {
+function toTopicScanEmailSubscriptionFilter(topicId: string): SQL | undefined {
 	return and(
 		eq(subscriptions.topicId, topicId),
 		eq(subscriptions.isActive, true),

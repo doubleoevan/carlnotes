@@ -19,6 +19,7 @@ const topic = toTestTopicResponse({
 	latestPodcastEpisode: episodes[0],
 	podcast: {
 		isEnabled: true,
+		isCommentsEnabled: true,
 		hasFullPodcastEpisodes: true,
 		unpublishedPodcastEpisode: null,
 		publicFeedUrl: "https://carlnotes.example/feed.xml",

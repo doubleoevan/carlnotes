@@ -9,21 +9,27 @@ import {
 	useTopicMentions,
 } from "../stores/chatRoomStore"
 import { useAllNoteBadges, usePageNoteBadges } from "../stores/noteBadgeStore"
+import { useOpenReportCount } from "../stores/openReportStore"
 import { useTopicInviteBadges } from "../stores/topicInviteStore"
 
 /**
- * Reads every unread chat mention, note change, and topic invitation, for a menu trigger's one badge.
+ * Reads every unread chat mention, note change, topic invitation, and open report, for a menu trigger's one badge.
  */
 export function useAllUpdateBadges(): UpdateBadges {
-	return { chatMentions: useAllChatMentions(), noteBadges: useAllNoteBadges(), invites: useTopicInviteBadges() }
+	return {
+		chatMentions: useAllChatMentions(),
+		noteBadges: useAllNoteBadges(),
+		invites: useTopicInviteBadges(),
+		openReportCount: useOpenReportCount(),
+	}
 }
 
 // the user menu's rows that show a badge
-export type UserMenuBadgeLabel = "Profile" | "Teams" | "Activity"
+export type UserMenuBadgeLabel = "Profile" | "Teams" | "Activity" | "Admin"
 
 /**
  * Reads what each user menu row sums into its badge: the Profile row the topics' chats and notes, the Teams row the
- * teams' own, and the Activity row the topic invitations waiting for an answer.
+ * teams' own, the Activity row the topic invitations waiting for an answer, and the Admin row the open reports.
  */
 export function useUserMenuUpdateBadges(): Record<UserMenuBadgeLabel, UpdateBadges> {
 	// what the last poll read, split into the topics' and the teams' own
@@ -31,6 +37,7 @@ export function useUserMenuUpdateBadges(): Record<UserMenuBadgeLabel, UpdateBadg
 	const teamChatMentions = useAllTeamChatMentions()
 	const noteBadges = useAllNoteBadges()
 	const topicInviteBadges = useTopicInviteBadges()
+	const openReportCount = useOpenReportCount()
 	return {
 		Profile: {
 			chatMentions: topicChatMentions,
@@ -43,6 +50,7 @@ export function useUserMenuUpdateBadges(): Record<UserMenuBadgeLabel, UpdateBadg
 			invites: [],
 		},
 		Activity: { chatMentions: [], noteBadges: [], invites: topicInviteBadges },
+		Admin: { chatMentions: [], noteBadges: [], invites: [], openReportCount },
 	}
 }
 

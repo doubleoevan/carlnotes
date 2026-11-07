@@ -11,6 +11,8 @@ import { and, desc, eq, ne } from "drizzle-orm"
 import { isAllowed } from "../authorization"
 import { attachPodcastEpisodeChapterFaviconPaths } from "../favicons"
 import { toTranscriptBlocks } from "../share/podcastFeed"
+import { attachReactionSummaries } from "../social/findingReactions"
+import { loadPageCommentThread } from "../social/pageCommentThread"
 import { loadTopicAccessAndFindings } from "../topic/accessibleFindings"
 import { canRateTopic } from "../topic/findingPermissions"
 import { loadTopicOwner, toTeamFields } from "../topic/helpers"
@@ -103,6 +105,7 @@ export async function loadTopicPodcast(topic: TopicRow, userId: string | null): 
 	return {
 		podcast: {
 			isEnabled: topic.isPodcastEnabled,
+			isCommentsEnabled: topic.isPodcastCommentsEnabled,
 			hasFullPodcastEpisodes,
 			canRemovePodcastEpisodes,
 			unpublishedPodcastEpisode: accessibleUnpublishedPodcastEpisode
@@ -199,10 +202,11 @@ export async function loadPodcastEpisodePage(
 		{ teamLink, team, roomTeams },
 		topicPodcastEpisodes,
 		relatedPodcastEpisodes,
+		commentThread,
 	] = await Promise.all([
 		db.select({ script: podcastEpisodes.script }).from(podcastEpisodes).where(eq(podcastEpisodes.id, podcastEpisodeId)),
 		loadPodcastEpisode({ podcastEpisodeRow, topic, userId }),
-		loadTopicAccessAndFindings({ topic, userId }),
+		loadTopicAccessAndFindings({ topic, userId, isReactionReadSkipped: true }),
 		canRateTopic(userId, topic),
 		isAllowed(userId, "podcastEpisode:remove", topic),
 		// the owner and the team that the topic's byline credits
@@ -212,14 +216,24 @@ export async function loadPodcastEpisodePage(
 		// and with its chapter count for its play button
 		loadTopicPodcastEpisodeRows({ podcastEpisodeId, topic, subscriberActivatedAt }).then(loadPodcastEpisodeSummaries),
 		loadRelatedPodcastEpisodeRows({ podcastEpisodeId, topic, userId }).then(loadPodcastEpisodeSummaries),
+		// the first page of the podcast episode's comment thread
+		loadPageCommentThread({ userId, topic, target: { kind: "podcastEpisode", id: podcastEpisodeId } }),
 	])
 
-	// keep the findings that the chapters narrate, and fill the chapters' favicons
+	// keep the findings that the chapters narrate, read their reactions and the page's own, and fill the chapters'
+	// favicons
 	const chapterFindingIds = new Set(
 		podcastEpisode.chapters.map((podcastEpisodeChapter) => podcastEpisodeChapter.findingId),
 	)
 	const chapterTopicFindings = topicFindings.filter((topicFinding) => chapterFindingIds.has(topicFinding.findingId))
-	await attachPodcastEpisodeChapterFaviconPaths(podcastEpisode.chapters)
+	const [reactions] = await Promise.all([
+		attachReactionSummaries({
+			topicFindings: chapterTopicFindings,
+			userId,
+			pageSocialTarget: { kind: "podcastEpisode", id: podcastEpisodeId },
+		}),
+		attachPodcastEpisodeChapterFaviconPaths(podcastEpisode.chapters),
+	])
 	const { id, name, prompt, visibility } = topic
 	return {
 		podcastEpisode,
@@ -230,5 +244,7 @@ export async function loadPodcastEpisodePage(
 		transcript: podcastEpisodeScriptRow?.script ? toTranscriptBlocks(podcastEpisodeScriptRow.script) : [],
 		topicPodcastEpisodes,
 		relatedPodcastEpisodes,
+		reactions,
+		commentThread,
 	}
 }

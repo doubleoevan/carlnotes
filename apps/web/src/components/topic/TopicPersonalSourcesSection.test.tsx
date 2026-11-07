@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, expect, mock, spyOn, test } from "bun:test"
 import * as auth from "@carlnotes/client/authClient"
 import * as client from "@carlnotes/client/personalSourcesClient"
+import * as socialClient from "@carlnotes/client/socialClient"
+import { toTestSharedComments } from "@carlnotes/contracts/socialTestFixtures"
 import { PersonalSourceLink, type PersonalSourceLinkElements } from "@carlnotes/core/components/PersonalSourceLink"
 import { TopicPersonalSourcesSection } from "@carlnotes/core/components/TopicPersonalSourcesSection"
 import { PERSONAL_SOURCES_CONVERSATION_EXAMPLES } from "@carlnotes/core/lib/personalSourcesConversationStories"
@@ -359,3 +361,38 @@ test.each(Object.entries(PERSONAL_SOURCES_CONVERSATION_EXAMPLES))(
 		expect(anchor?.getAttribute("target")).toBe(example.href.startsWith("codex:") ? null : "_blank")
 	},
 )
+
+// the shared comments group lists the Topic's shared comments for an editor, and nobody else sees it
+test("the Hot takes group lists the shared comments for an editor", async () => {
+	spyOn(socialClient, "fetchSharedComments").mockResolvedValue(toTestSharedComments("/topics/topic-1"))
+	const harness = await renderTestHook(
+		() => null,
+		() => <TopicPersonalSourcesSection topic={topic} elements={ELEMENTS} onCopy={async () => true} />,
+	)
+	cleanups.push(harness.close)
+	await waitForHook(() => harness.container.textContent?.includes("Hot takes · 2") ?? false)
+
+	// the group opens on its words, each with its author and a link to its page
+	const group = [...harness.container.querySelectorAll<HTMLButtonElement>("button[aria-expanded]")].find((button) =>
+		button.textContent?.includes("Hot takes · 2"),
+	)
+	expect(group?.textContent).toContain("Carl and Vienna read these")
+	await act(async () => group?.click())
+	expect(harness.container.textContent).toContain("roastmaster")
+	expect(harness.container.textContent).toContain("Carl ·")
+	expect(harness.container.querySelectorAll('a[href="/topics/topic-1"]')).toHaveLength(2)
+})
+
+test("the Hot takes group is absent for a user who may not edit", async () => {
+	const fetchSharedComments = spyOn(socialClient, "fetchSharedComments").mockResolvedValue([])
+	const harness = await renderTestHook(
+		() => null,
+		() => (
+			<TopicPersonalSourcesSection topic={{ ...topic, canEdit: false }} elements={ELEMENTS} onCopy={async () => true} />
+		),
+	)
+	cleanups.push(harness.close)
+	await waitForHook(() => Boolean(harness.container.querySelector("button[aria-expanded]")))
+	expect(fetchSharedComments).not.toHaveBeenCalled()
+	expect(harness.container.textContent).not.toContain("Hot takes")
+})

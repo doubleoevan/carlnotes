@@ -120,8 +120,8 @@ test("a podcast episode with no embedded chapter has its vector deleted", async 
 	expect(deleteQuery?.values).toEqual(["episode-1"])
 })
 
-// a removal deletes the removed podcast episodes' vectors in its transaction
-test("marking podcast episodes removed deletes their vectors", async () => {
+// a removal deletes the removed podcast episodes' vectors, reactions, and comments in its transaction
+test("marking podcast episodes removed deletes their vectors, reactions, and comments", async () => {
 	const sentQueries = stubConnectionPool()
 	await markPodcastEpisodesRemoved(db as unknown as DbTransaction, ["episode-1", "episode-2"])
 
@@ -131,6 +131,12 @@ test("marking podcast episodes removed deletes their vectors", async () => {
 	)
 	expect(vectorDeleteQueries).toHaveLength(1)
 	expect(vectorDeleteQueries[0]?.values).toEqual(["episode-1", "episode-2"])
+
+	// the removed row is kept, so its reactions and comments are deleted with the vectors
+	for (const table of ["reactions", "comments"]) {
+		const socialDeleteQuery = sentQueries.find((sentQuery) => sentQuery.text.startsWith(`delete from "${table}"`))
+		expect(socialDeleteQuery?.values).toEqual(["episode-1", "episode-2"])
+	}
 })
 
 // the delete names every podcast episode it was given

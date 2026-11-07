@@ -1,8 +1,7 @@
-// the team routes the app reaches: teams, blocks, and reports
+// the team routes the app reaches: teams, user blocks, and reports
 
 import { z } from "zod"
 import type { ApiRouteContract } from "./apiRouteContracts"
-import { blockedUsersResponse } from "./blocks"
 import { inviteCreateResponse } from "./invites"
 import {
 	addTopicPayload,
@@ -11,8 +10,10 @@ import {
 	inviteCreatePayload,
 	memberRolePayload,
 	memberVisibilityPayload,
+	reportedSubjectQuery,
 	updateTeamPayload,
 } from "./payloads"
+import { reportedSubjectResponse } from "./reports"
 import { idAndUserParam, idParam, multipartFile, okResponse, teamNameQuery } from "./routeShapes"
 import {
 	teamCreateResponse,
@@ -21,6 +22,7 @@ import {
 	teamPageResponse,
 	teamsPageResponse,
 } from "./teams"
+import { userBlocksResponse } from "./userBlocks"
 
 // the entries, in client module order
 export const teamRouteContracts: Record<string, ApiRouteContract> = {
@@ -129,10 +131,15 @@ export const teamRouteContracts: Record<string, ApiRouteContract> = {
 		response: okResponse,
 	},
 
-	// blocks
-	"blockClient.fetchBlockedUsers": { method: "GET", path: "/api/users/me/blocks", response: blockedUsersResponse },
-	"blockClient.sendBlockUser": { method: "POST", path: "/api/users/:id/block", params: idParam, response: okResponse },
-	"blockClient.sendUnblockUser": {
+	// user blocks
+	"userBlockClient.fetchUserBlocks": { method: "GET", path: "/api/users/me/blocks", response: userBlocksResponse },
+	"userBlockClient.sendUserBlock": {
+		method: "POST",
+		path: "/api/users/:id/block",
+		params: idParam,
+		response: okResponse,
+	},
+	"userBlockClient.sendUserUnblock": {
 		method: "DELETE",
 		path: "/api/users/:id/block",
 		params: idParam,
@@ -144,6 +151,18 @@ export const teamRouteContracts: Record<string, ApiRouteContract> = {
 		method: "POST",
 		path: "/api/flag-content",
 		body: { json: flagContentPayload },
+		response: okResponse,
+	},
+	"flagContentClient.fetchIsSubjectReported": {
+		method: "GET",
+		path: "/api/flag-content",
+		query: reportedSubjectQuery,
+		response: reportedSubjectResponse,
+	},
+	"flagContentClient.sendReportRemoval": {
+		method: "DELETE",
+		path: "/api/flag-content",
+		query: reportedSubjectQuery,
 		response: okResponse,
 	},
 }

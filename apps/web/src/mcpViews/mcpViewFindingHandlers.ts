@@ -34,5 +34,7 @@ export function toMcpViewFindingHandlers(onFindingChange: (findingChange: Findin
 				{ toolName: "bookmark_finding", toolArguments: { is_bookmarked: isBookmarked } },
 				{ isBookmarked },
 			),
+		keepTopicFindingReactions: (findingId, reactions) =>
+			onFindingChange({ findingId, topicFindingChange: { reactions } }),
 	}
 }

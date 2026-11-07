@@ -6,12 +6,14 @@ import { fetchLeaderTeams, sendAddTopicTeam, sendRemoveTopicFromTeam } from "@ca
 import { fetchAddableTopics } from "@carlnotes/client/topicClient"
 import type { TeamSummary } from "@carlnotes/contracts/teams"
 import type { TopicResponse } from "@carlnotes/contracts/topics"
+import { toRemoveTopicConfirmation } from "@carlnotes/core/lib/confirmationCopy"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { Plus, Users, X } from "lucide-react"
 import { useEffect, useState } from "react"
 import { toast } from "sonner"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/primitives/popover"
-import { MENU_BUTTON_CLASS, MENU_DIVIDER_CLASS } from "@/lib/styleClasses"
+import { useConfirmDialog } from "@/hooks/useConfirmDialog"
+import { ACTIVE_ICON_CLASS, MENU_BUTTON_CLASS, MENU_DIVIDER_CLASS } from "@/lib/styleClasses"
 import { EditTeamModal } from "./EditTeamModal"
 import { NewTeamOption, TeamActionOption } from "./TeamMenuOptions"
 
@@ -23,7 +25,7 @@ export type AddTopicToTeamTopic = Pick<
 
 // the add topic to team actions on one topic. the user's leader teams with and without the topic,
 // whether the owning team or one of the user's teams holds the topic, adding and removing the topic,
-// and the New team modal
+// and the open dialog
 export type AddTopicToTeamState = {
 	leaderTeams: TeamSummary[] | null
 	leaderTeamsWithTopic: TeamSummary[]
@@ -31,9 +33,9 @@ export type AddTopicToTeamState = {
 	hasHoldingTeams: boolean
 	loadLeaderTeams: () => Promise<TeamSummary[]>
 	addTopicToTeam: (team: TeamSummary) => Promise<void>
-	removeTopicFromTeam: (team: TeamSummary) => Promise<void>
+	removeTopicFromTeam: (team: TeamSummary) => void
 	openNewTeamModal: () => Promise<void>
-	newTeamModal: React.ReactNode
+	teamDialog: React.ReactNode
 }
 
 // the topic, whether to load the user's teams, and the call that runs after the topic's teams change
@@ -53,6 +55,7 @@ export function useAddTopicToTeam({
 }: UseAddTopicToTeamOptions): AddTopicToTeamState {
 	// the teams that the user leads, null until the teams load, and whether the New team modal is open
 	const [leaderTeams, setLeaderTeams] = useState<TeamSummary[] | null>(null)
+	const { confirm, confirmDialog } = useConfirmDialog()
 	const [isNewTeamModalOpen, setIsNewTeamModalOpen] = useState(false)
 	// the topics that the New team modal offers, loaded when the modal opens
 	const [newTeamModalTopics, setNewTeamModalTopics] = useState<{ id: string; name: string }[]>([])
@@ -93,14 +96,16 @@ export function useAddTopicToTeam({
 		onTopicTeamsChanged()
 	}
 
-	// remove the topic from the team, and show a toast if the removal worked
-	const removeTopicFromTeam = async (team: TeamSummary): Promise<void> => {
-		const isTopicRemoved = await sendRemoveTopicFromTeam(team.teamId, topic.id)
-		if (!isTopicRemoved) {
-			return
-		}
-		toast(`Removed topic from ${team.name}.`)
-		onTopicTeamsChanged()
+	// ask first, then remove the topic from the team, and show a toast if the removal worked
+	const removeTopicFromTeam = (team: TeamSummary): void => {
+		confirm(toRemoveTopicConfirmation({ topicName: topic.name, teamName: team.name }), async () => {
+			const isTopicRemoved = await sendRemoveTopicFromTeam(team.teamId, topic.id)
+			if (!isTopicRemoved) {
+				return
+			}
+			toast(`Removed topic from ${team.name}.`)
+			onTopicTeamsChanged()
+		})
 	}
 
 	// open the New team modal with the topics that the user may add, this topic included
@@ -111,14 +116,16 @@ export function useAddTopicToTeam({
 		setIsNewTeamModalOpen(true)
 	}
 
-	// the New team modal, with this topic picked
-	const newTeamModal = isNewTeamModalOpen ? (
+	// the open dialog: the New team modal with this topic picked, or the removal confirmation
+	const teamDialog = isNewTeamModalOpen ? (
 		<EditTeamModal
 			userTopics={newTeamModalTopics}
 			initialTopicIds={[topic.id]}
 			onClose={() => setIsNewTeamModalOpen(false)}
 		/>
-	) : null
+	) : (
+		confirmDialog
+	)
 	return {
 		leaderTeams,
 		leaderTeamsWithTopic,
@@ -128,7 +135,7 @@ export function useAddTopicToTeam({
 		addTopicToTeam,
 		removeTopicFromTeam,
 		openNewTeamModal,
-		newTeamModal,
+		teamDialog,
 	}
 }
 
@@ -153,7 +160,7 @@ export function AddTopicToTeamOptionList({
 					Icon={X}
 					onSelect={() => {
 						onSelect?.()
-						void addTopicToTeamState.removeTopicFromTeam(team)
+						addTopicToTeamState.removeTopicFromTeam(team)
 					}}
 				/>
 			))}
@@ -232,7 +239,7 @@ export function AddTopicToTeamButton({
 				<PopoverTrigger asChild>
 					<button type="button" onClick={() => void handleClick()} className={MENU_BUTTON_CLASS}>
 						{/* the filled icon takes the primary color */}
-						<Users className={cn("size-4", isAddTopicToTeamIconFilled && "text-primary fill-current")} />
+						<Users className={cn("size-4", isAddTopicToTeamIconFilled && ACTIVE_ICON_CLASS)} />
 						Team Up
 					</button>
 				</PopoverTrigger>
@@ -241,7 +248,7 @@ export function AddTopicToTeamButton({
 				</PopoverContent>
 			</Popover>
 			{/* the New team modal, with this topic picked */}
-			{addTopicToTeamState.newTeamModal}
+			{addTopicToTeamState.teamDialog}
 		</>
 	)
 }

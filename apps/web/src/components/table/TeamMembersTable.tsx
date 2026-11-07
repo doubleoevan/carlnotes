@@ -8,6 +8,11 @@ import {
 import { isLeaderRole } from "@carlnotes/contracts/enums"
 import type { TeamMember } from "@carlnotes/contracts/teams"
 import { DataTable, type DataTableElements } from "@carlnotes/core/components/DataTable"
+import {
+	isStepDown,
+	STEP_DOWN_CONFIRMATION,
+	toLeaveOrRemoveMemberConfirmation,
+} from "@carlnotes/core/lib/confirmationCopy"
 import { memberSortValues, toTeamMembersTableColumns } from "@carlnotes/core/lib/teamMembersTableColumns"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { X } from "lucide-react"
@@ -15,6 +20,7 @@ import { toast } from "sonner"
 import { Button } from "@/components/primitives/button"
 import { Switch } from "@/components/primitives/switch"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
+import { useConfirmDialog } from "@/hooks/useConfirmDialog"
 import { TABLE_CLASS, TABLE_SCROLL_CLASS } from "@/lib/styleClasses"
 import { DATA_TABLE_ELEMENTS } from "./DataTable"
 import { TablePagination, usePaginatedRowSort } from "./TablePagination"
@@ -123,12 +129,23 @@ function MemberRow({
 	onChanged: () => void
 	className?: string
 }) {
+	const { confirm, confirmDialog } = useConfirmDialog()
+
 	// the last-leader rejection toast shows what to do first
-	const handleRoleChange = async (nextRole: string): Promise<void> => {
+	const sendRoleChange = async (nextRole: string): Promise<void> => {
 		if (!(await sendTeamMemberRole(teamId, member.userId, isLeaderRole(nextRole) ? "leader" : "member"))) {
 			toast.error("Promote another leader first. A team can't lose its last one.")
 		}
 		onChanged()
+	}
+
+	// a leader who steps down can't take the role back, so that change asks first
+	const handleRoleChange = (nextRole: string): void => {
+		if (isStepDown({ memberUserId: member.userId, currentUserId, role: nextRole })) {
+			confirm(STEP_DOWN_CONFIRMATION, () => sendRoleChange(nextRole))
+			return
+		}
+		void sendRoleChange(nextRole)
 	}
 	const handleRemove = async (): Promise<void> => {
 		if (await sendRemoveTeamMember(teamId, member.userId)) {
@@ -137,6 +154,11 @@ function MemberRow({
 			toast.error("Promote another leader first. A team can't lose its last one.")
 		}
 		onChanged()
+	}
+
+	// removing someone, or leaving, asks first
+	const handleRemovePress = (): void => {
+		confirm(toLeaveOrRemoveMemberConfirmation({ member, currentUserId }), handleRemove)
 	}
 
 	// flipping a waiting request on admits them. A full team shows an error instead
@@ -173,7 +195,7 @@ function MemberRow({
 				{isTeamLeader ? (
 					<select
 						value={member.role}
-						onChange={(event) => void handleRoleChange(event.target.value)}
+						onChange={(event) => handleRoleChange(event.target.value)}
 						aria-label={`${member.username} role`}
 						className="rounded-md border px-1 py-0.5"
 					>
@@ -214,7 +236,7 @@ function MemberRow({
 									<Switch
 										checked={member.isActive}
 										disabled={!member.isActive && !isTeamLeader}
-										onCheckedChange={() => void (member.isActive ? handleRemove() : handleApprove())}
+										onCheckedChange={() => (member.isActive ? handleRemovePress() : void handleApprove())}
 										aria-label={member.isActive ? `Deactivate ${member.username}` : `Activate ${member.username}`}
 									/>
 								</span>
@@ -235,7 +257,7 @@ function MemberRow({
 								<Button
 									size="icon-sm"
 									variant="ghost"
-									onClick={() => void handleRemove()}
+									onClick={handleRemovePress}
 									aria-label={`Remove ${member.username} from the team`}
 								>
 									<X className="size-4" />
@@ -246,6 +268,7 @@ function MemberRow({
 							</TooltipContent>
 						</Tooltip>
 					)}
+					{confirmDialog}
 				</td>
 			)}
 		</tr>

@@ -3,6 +3,8 @@ import type { ProfileIdentity } from "@carlnotes/contracts/profiles"
 import { type ComponentType, type PropsWithChildren, useRef, useState } from "react"
 import type { NoteCommentThread } from "../hooks/useNoteComments"
 import { toAgeLabel } from "../lib/labels"
+import { NOTE_COMMENT_COMPOSER_LABELS } from "../lib/noteLabels"
+import { TextComposer, type TextComposerElementProps } from "./TextComposer"
 
 // the shared comment thread, composer state, and platform elements
 export type NoteCommentsProps = NoteCommentThread & {
@@ -10,14 +12,6 @@ export type NoteCommentsProps = NoteCommentThread & {
 	onError: (message: string) => void
 	// opens the report of another person's comment, which can block its author. absent for a visitor
 	onReport?: (comment: NoteComment) => void
-}
-export type NoteCommentComposerProps = {
-	value: string
-	onChange: (value: string) => void
-	onSubmit: () => void
-	isPending: boolean
-	canSubmit: boolean
-	maxLength: number
 }
 export type NoteCommentsElements = {
 	Container: ComponentType<PropsWithChildren>
@@ -31,11 +25,12 @@ export type NoteCommentsElements = {
 	Body: ComponentType<PropsWithChildren>
 	Delete: ComponentType<{ onPress: () => void; isPending: boolean }>
 	Report: ComponentType<{ onPress: () => void }>
-	Composer: ComponentType<NoteCommentComposerProps>
+	Composer: ComponentType<TextComposerElementProps>
 }
 
 /**
- * Shares comment ordering, pending actions and retained drafts between the web and native layouts.
+ * Shares comment ordering and pending deletes between the web and native layouts. The shared composer keeps a
+ * failed post's draft.
  */
 export function NoteComments({
 	comments,
@@ -49,31 +44,9 @@ export function NoteComments({
 	onReport,
 	elements: { Container, Message, Retry, List, Row, Header, Author, Age, Body, Delete, Report, Composer },
 }: NoteCommentsProps & { elements: NoteCommentsElements }) {
-	// retain a failed post verbatim and fence duplicate actions before a render
-	const [draft, setDraft] = useState("")
-	const [isPending, setIsPending] = useState(false)
-	const isPendingRef = useRef(false)
+	// block a second delete before a render
 	const deletingRef = useRef(new Set<string>())
 	const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set())
-	const canSubmit = canComment && !isLoading && draft.trim().length > 0 && draft.trim().length <= NOTE_COMMENT_MAX_CHARS
-
-	// clear only the submitted draft after acknowledgement, preserving text typed during the request
-	async function handlePost(): Promise<void> {
-		if (!canSubmit || isPendingRef.current) {
-			return
-		}
-		const submittedDraft = draft
-		isPendingRef.current = true
-		setIsPending(true)
-		const isPosted = await postNoteComment(submittedDraft.trim()).catch(() => false)
-		if (isPosted) {
-			setDraft((current) => (current === submittedDraft ? "" : current))
-		} else {
-			onError("That comment didn't post. Carl suggests trying again.")
-		}
-		isPendingRef.current = false
-		setIsPending(false)
-	}
 
 	// hide a comment only after the server accepts its author's delete
 	async function handleDelete(comment: NoteComment): Promise<void> {
@@ -121,13 +94,17 @@ export function NoteComments({
 				</List>
 			)}
 			{canComment && (
-				<Composer
-					value={draft}
-					onChange={setDraft}
-					onSubmit={() => void handlePost()}
-					isPending={isPending}
-					canSubmit={canSubmit}
+				<TextComposer
+					{...NOTE_COMMENT_COMPOSER_LABELS}
+					Composer={Composer}
 					maxLength={NOTE_COMMENT_MAX_CHARS}
+					isEnabled={!isLoading}
+					onSubmit={async (body) =>
+						(await postNoteComment(body).catch(() => false))
+							? { isAccepted: true }
+							: { isAccepted: false, message: null }
+					}
+					onFailure={() => onError("That comment didn't post. Carl suggests trying again.")}
 				/>
 			)}
 		</Container>

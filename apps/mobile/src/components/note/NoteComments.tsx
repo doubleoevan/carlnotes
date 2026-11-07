@@ -2,42 +2,40 @@ import { showClientError } from "@carlnotes/client/apiClient"
 import { authClient } from "@carlnotes/client/authClient"
 import { toAvatarImagePath } from "@carlnotes/contracts/avatars"
 import type { NoteComment } from "@carlnotes/contracts/notes"
+import { toProfilePath } from "@carlnotes/contracts/seo"
 import { SITE_URL } from "@carlnotes/contracts/site"
 import {
-	type NoteCommentComposerProps,
 	type NoteCommentsElements,
 	type NoteCommentsProps,
 	NoteComments as SharedNoteComments,
 } from "@carlnotes/core/components/NoteComments"
-import { NOTE_COMMENT_DELETE, REPORT_COMMENT_LABEL, toReportedCommentLabel } from "@carlnotes/core/lib/noteLabels"
-import { BottomSheetTextInput } from "@gorhom/bottom-sheet"
+import { NOTE_COMMENT_DELETE, REPORT_COMMENT_LABEL } from "@carlnotes/core/lib/noteLabels"
+import { toCommentReportProps } from "@carlnotes/core/lib/reportCopy"
 import { Flag, Trash2 } from "lucide-react-native"
-import { type ComponentType, useState } from "react"
-import { Alert, TextInput, type TextInputProps, View } from "react-native"
+import { useState } from "react"
+import { Alert, TextInput, View } from "react-native"
 import { Avatar } from "@/components/branding/Avatar"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { ReportIssueDialog } from "@/components/common/ReportIssueDialog"
 import { Button, toTouchTargetHitSlop } from "@/components/primitives/button"
 import { Icon } from "@/components/primitives/icon"
 import { Text } from "@/components/primitives/text"
-import { toTypeRoleStyle } from "@/typeRoleStyles"
+import { COMMENT_ELEMENTS, SOCIAL_ELEMENTS, SocialComposer } from "@/components/social/socialElements"
 
 // keep comment content and ordering shared while adapting the web's typography and controls
 const ELEMENTS: NoteCommentsElements = {
+	...COMMENT_ELEMENTS,
 	Container: ({ children }) => <View className="gap-3">{children}</View>,
-	Message: ({ children }) => <Text className="text-sm text-muted-foreground">{children}</Text>,
 	Retry: ({ onPress }) => (
 		<Button accessibilityLabel="Retry comments" variant="link" size="sm" onPress={onPress}>
 			<Text>Try again</Text>
 		</Button>
 	),
-	List: ({ children }) => <View className="gap-3">{children}</View>,
-	Row: ({ children }) => <View className="gap-1">{children}</View>,
-	Header: ({ children }) => <View className="flex-row flex-wrap items-center gap-2">{children}</View>,
+	Header: SOCIAL_ELEMENTS.Header,
 	Author: ({ author }) =>
 		author ? (
 			<AnchorLink
-				href={`${SITE_URL}/profiles/${author.userId}`}
+				href={`${SITE_URL}${toProfilePath(author.userId)}`}
 				accessibilityLabel={`Open ${author.username}'s profile`}
 				className="min-h-6 min-w-6 shrink flex-row items-center gap-2"
 				hitSlop={toTouchTargetHitSlop(24)}
@@ -52,12 +50,6 @@ const ELEMENTS: NoteCommentsElements = {
 		) : (
 			<Text className="text-sm font-semibold text-muted-foreground">A closed account</Text>
 		),
-	Age: ({ children }) => <Text className="text-xs text-muted-foreground">{children}</Text>,
-	Body: ({ children }) => (
-		<Text selectable className="text-sm">
-			{children}
-		</Text>
-	),
 	Delete: ({ onPress, isPending }) => (
 		<Button
 			accessibilityLabel="Delete comment"
@@ -80,13 +72,10 @@ const ELEMENTS: NoteCommentsElements = {
 			<Icon as={Flag} className="size-3.5 text-muted-foreground" />
 		</Button>
 	),
-	Composer: CommentComposer,
+	Composer: (props) => <SocialComposer {...props} Input={TextInput} />,
 }
 // let the sheet follow the composer's keyboard while sharing every other comment element
-const SHEET_ELEMENTS: NoteCommentsElements = {
-	...ELEMENTS,
-	Composer: (props) => <CommentComposer {...props} Input={BottomSheetTextInput} />,
-}
+const SHEET_ELEMENTS: NoteCommentsElements = { ...ELEMENTS, Composer: COMMENT_ELEMENTS.Composer }
 
 /**
  * Shows the shared note thread with mobile controls.
@@ -98,6 +87,7 @@ export function NoteComments({
 	// a signed-in user can report another person's comment, and block its author from the report
 	const { data: session } = authClient().useSession()
 	const [reportedComment, setReportedComment] = useState<NoteComment | null>(null)
+	const commentReportProps = reportedComment && toCommentReportProps("noteComment", reportedComment)
 	return (
 		<>
 			<SharedNoteComments
@@ -106,51 +96,7 @@ export function NoteComments({
 				onReport={session ? setReportedComment : undefined}
 				elements={isInSheet ? SHEET_ELEMENTS : ELEMENTS}
 			/>
-			{reportedComment?.author && (
-				<ReportIssueDialog
-					subjectKind="noteComment"
-					subjectId={reportedComment.id}
-					subjectLabel={toReportedCommentLabel(reportedComment.author.username)}
-					author={{ id: reportedComment.author.userId, username: reportedComment.author.username }}
-					onClose={() => setReportedComment(null)}
-				/>
-			)}
+			{commentReportProps && <ReportIssueDialog {...commentReportProps} onClose={() => setReportedComment(null)} />}
 		</>
-	)
-}
-
-// allow multiline input and keep failed text in the shared composer
-function CommentComposer({
-	value,
-	onChange,
-	onSubmit,
-	isPending,
-	canSubmit,
-	maxLength,
-	Input = TextInput,
-}: NoteCommentComposerProps & { Input?: ComponentType<TextInputProps> }) {
-	return (
-		<View className="gap-2">
-			<Input
-				accessibilityLabel="Comment"
-				value={value}
-				onChangeText={onChange}
-				multiline
-				placeholder="Add a comment"
-				maxLength={maxLength}
-				style={toTypeRoleStyle("bodyLarge")}
-				textAlignVertical="top"
-				className="min-h-16 rounded-md border border-input bg-card px-3 py-2 text-foreground"
-			/>
-			<Button
-				accessibilityLabel="Post comment"
-				size="sm"
-				className="self-end"
-				onPress={onSubmit}
-				disabled={!canSubmit || isPending}
-			>
-				<Text>{isPending ? "Posting…" : "Comment"}</Text>
-			</Button>
-		</View>
 	)
 }

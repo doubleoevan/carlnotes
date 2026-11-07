@@ -9,6 +9,7 @@ import { deletePodcastFeedCache } from "@carlnotes/db/podcastFeedCache"
 import { podcastEpisodeChapters, podcastEpisodes } from "@carlnotes/db/schema/podcast"
 import { findings } from "@carlnotes/db/schema/scans"
 import { topics } from "@carlnotes/db/schema/topics"
+import { releasePodcastEpisodeSharedComments } from "@carlnotes/db/sharedComments"
 import { deleteStoredObjects, recordPendingObjectDeletions, toPodcastEpisodeChapterKey } from "@carlnotes/db/store"
 import { tracePodcastEpisodeRecording } from "@carlnotes/models/telemetry"
 import { appBaseUrl } from "@carlnotes/server/appUrl"
@@ -186,8 +187,10 @@ export async function failPodcastEpisode({ podcastEpisodeId, reason }: FailPodca
 		return
 	}
 
-	// delete any audio that the recording left behind
+	// delete any audio that the recording left behind, and give the shared comments its script read back to the
+	// next Podcast Episode
 	await deleteStoredObjects(toPodcastEpisodeAudioKeys(failedPodcastEpisode))
+	await releasePodcastEpisodeSharedComments(podcastEpisodeId)
 
 	// report the failure with its Topic and its Scan
 	console.error(`episode ${podcastEpisodeId} failed to record: ${reason}`)

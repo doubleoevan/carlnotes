@@ -29,6 +29,7 @@ import {
 } from "./enums"
 import { inviteSources } from "./invites"
 import { NOTE_COMMENT_MAX_CHARS, NOTE_HTML_MAX_CHARS, NOTE_NAME_MAX_CHARS } from "./notes"
+import { PODCAST_EPISODE_CHAPTER_POSITION_MAX } from "./podcastEpisodes"
 import { topicDraftPayload } from "./topicPayloads"
 
 // the shape that every chat attachment includes whatever its kind
@@ -100,7 +101,7 @@ export const storeSubscriptionSyncPayload = z.object({ storefrontCountryCode })
 export const usernamePayload = z.object({ username: z.string() })
 
 // the report body. the subject is named by its kind and id so the api can look it up, and a report of an authored
-// subject can block its author in the same submission
+// subject can put a user block on its author in the same submission
 export const flagContentPayload = z.object({
 	subjectKind: z.enum(reportSubjectKinds),
 	subjectId: z.string().min(1),
@@ -110,6 +111,11 @@ export const flagContentPayload = z.object({
 })
 
 export type FlagContentPayload = z.infer<typeof flagContentPayload>
+
+// the query that asks whether the signed-in user reported a subject
+export const reportedSubjectQuery = flagContentPayload.pick({ subjectKind: true, subjectId: true })
+
+export type ReportedSubjectQuery = z.infer<typeof reportedSubjectQuery>
 
 // the invite-delete body, named by its invite id
 export const inviteDeletePayload = z.object({ inviteId: z.string() })
@@ -144,6 +150,9 @@ export const memberVisibilityPayload = z.object({ isMemberVisible: z.boolean() }
 
 // the invite-access settings body
 export const inviteAccessPayload = z.object({ inviteAccess: z.enum(inviteAccesses) })
+
+// the body that turns the user's daily notifications email on or off
+export const notificationsEmailPayload = z.object({ isEnabled: z.boolean() })
 
 // the user-invite body: exactly one identifier, a username or an email address
 export const userInvitePayload = z
@@ -238,9 +247,6 @@ export type ChatHistoryTurn = ChatTurnPayload["history"][number]
 
 // the longest podcast episode id a chapter reference takes
 const PODCAST_EPISODE_ID_MAX_CHARS = 64
-
-// a chapter position well past any podcast episode's chapters, which keeps a chapter lookup inside a postgres integer
-export const PODCAST_EPISODE_CHAPTER_POSITION_MAX = 999
 
 // the podcast episode chapter reference with the send limits on its id and position
 export const podcastEpisodeChapterPayload = podcastEpisodeChapterRef.extend({

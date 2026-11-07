@@ -6,15 +6,16 @@ import { useState } from "react"
 import { PageUpdateCountBadge } from "@/components/common/UpdateCountBadge"
 import { Badge } from "@/components/primitives/badge"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
-import { MENU_BUTTON_CLASS, MENU_BUTTON_HIGHLIGHT_CLASS } from "@/lib/styleClasses"
+import { ReactionRow } from "@/components/social/ReactionRow"
+import { ACTIVE_ICON_CLASS, MENU_BUTTON_CLASS, MENU_BUTTON_HIGHLIGHT_CLASS } from "@/lib/styleClasses"
 import { toSubscribeTooltip } from "@/lib/utils"
 import { setChatPanelState } from "@/stores/chatPanelStore"
 import { TopicByline, TopicInfoPopover } from "./Topic"
 
 /**
- * the topic header: the title with its chat mention badge, then its tags
+ * the topic header: the title with its chat mention badge, its byline and reactions, then its tags
  */
-export function TopicHeader({ topic }: { topic: TopicResponse }) {
+export function TopicHeader({ topic, isSignedIn }: { topic: TopicResponse; isSignedIn: boolean }) {
 	// both the heading and its note icon open the note and show the hint, so the title holds the state the icon reads
 	const [isNoteOpen, setIsNoteOpen] = useState(false)
 	const [isNoteHintOpen, setIsNoteHintOpen] = useState(false)
@@ -55,9 +56,10 @@ export function TopicHeader({ topic }: { topic: TopicResponse }) {
 					/>
 				</h1>
 			</div>
-			{/* the byline */}
-			<div className="mt-2">
+			{/* the byline and the topic's reactions */}
+			<div className="mt-2 flex flex-wrap items-center gap-x-3">
 				<TopicByline topic={topic} className="text-sm" />
+				<ReactionRow target={{ kind: "topic", id: topic.id }} summary={topic.reactions} isSignedIn={isSignedIn} />
 			</div>
 			{/* tags row, left out entirely by an untagged topic so there is no empty gap */}
 			{topic.tags.length > 0 && (
@@ -100,7 +102,7 @@ export function SubscribeButton({
 					className={cn(MENU_BUTTON_CLASS, isHighlighted && MENU_BUTTON_HIGHLIGHT_CLASS)}
 				>
 					{/* the paw is an outline until subscribed, then fills, matching the homepage topic row */}
-					<PawPrint className={cn("size-4", topic.isSubscribed && "text-primary fill-current")} />
+					<PawPrint className={cn("size-4", topic.isSubscribed && ACTIVE_ICON_CLASS)} />
 					{topic.isSubscribed ? "Unfollow" : "Follow"}
 				</button>
 			</TooltipTrigger>

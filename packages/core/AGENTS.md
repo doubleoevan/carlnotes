@@ -1,14 +1,17 @@
 # packages/core/
 
-`AiAgentAccountSection` and `AiAgentAccountCard` share connected-app and one-time API key controls.
-`TopicPersonalSources`, `TopicPersonalSourcesCard`, `PersonalSourceCard`, `PersonalSourceEntryList`, `PersonalSourcesAiAgentPicker`, and `PersonalSourcesEmailControls`
-share Personal sources composition. The editor has no email setup; `PersonalSourcesEmailControls` loads only the empty-content mailbox hint, and `PersonalSourcesEmailAddress` renders that single line and Copy. `PersonalSourcesImportButton` and `PersonalSourcesImportDialog` share the opener,
+`AiAgentAccountSection`, `AiAgentAccountCard`, and its `AiAgentApiKeys` share connected-app and one-time API key
+controls. `TopicPersonalSources`, `TopicPersonalSourcesCard`, `PersonalSourceCard`, `PersonalSourceEntryList`,
+`PersonalSourcesAiAgentPicker`, and `PersonalSourcesEmailControls` share Personal sources composition. The editor has no
+email setup; `PersonalSourcesEmailControls` loads only the empty-content mailbox hint, and `PersonalSourcesEmailAddress`
+renders that single line and Copy. `PersonalSourcesImportButton` and `PersonalSourcesImportDialog` share the opener,
 guidance, preview selection, paging, and confirmation. Apps supply Nightshift fields, links, confirmations, clipboard,
-and the browser-only file parser.
-`useAiAgentAccount`, `useTopicPersonalSources`, `usePersonalSource`, and `useTopicPersonalSourcesContents` scope reads and actions to the current
-account. Entry pages and metadata leave inactive query caches immediately. Secrets never enter a query cache.
-`personalSourcesCopy.ts` owns privacy, retention, and readiness copy. `personalSourcesStories.ts`, `expandableRowStories.ts`, and `aiAgentAccountStories.ts` supply
-fictional fixtures for both component browsers. `TopicPersonalSourcesSectionStory` shares the in-place section fixtures. Personal sources stay outside the fetched Source count in the shared Source editor.
+and the browser-only file parser. `useAiAgentAccount`, `useTopicPersonalSources`, `usePersonalSource`, and
+`useTopicPersonalSourcesContents` scope reads and actions to the current account. Entry pages and metadata leave
+inactive query caches immediately. Secrets never enter a query cache. `personalSourcesCopy.ts` owns privacy, retention,
+and readiness copy. `personalSourcesStories.ts`, `expandableRowStories.ts`, `aiAgentAccountStories.ts`, and
+`userBlocksStories.ts` supply fictional fixtures for both component browsers. `TopicPersonalSourcesSectionStory` shares
+the in-place section fixtures. Personal sources stay outside the fetched Source count in the shared Source editor.
 
 `@carlnotes/core`, the DOM-free components, stores, hooks, and lib that web and mobile import as `@carlnotes/core/<folder>/<name>`.
 It imports `@carlnotes/contracts`, `@carlnotes/client`, `@carlnotes/nightshift`, `react`, and `@tanstack/react-query`, and the non-UI `markdown-to-jsx/markdown` parser.
@@ -16,15 +19,17 @@ It imports `@carlnotes/contracts`, `@carlnotes/client`, `@carlnotes/nightshift`,
 - `components/` — portable React composition exported as `@carlnotes/core/components/<name>`. `TablePagination`,
   `Pagination`, `SourceResultsChart`, `TopicScanRecap`, `NumberedTopicFindingList`, `SafeNoteLink`, `TopicScanFailure`,
   `MoreButton`, `CopyMarkdownButton`, `NotesTable`, `ResourceMetadata`, and `RatingThumbs` own repeated content,
-  visibility, ordering, and interaction state. `BlockedUsersSection` lists the people the user blocked with their
-  Unblock, over `BlockedUsersCard`, which the stories render from a fixture list. `TermsAcceptanceNotice` asks a stale
-  account to accept the published Terms or put it off, and `useIsTermsAcceptanceDialogOpen` says when it shows. Each app
-  supplies the small set of typed platform elements the component needs. Keep component adapters at module scope
-  so state changes preserve their identity. Use render callbacks when controls must retain app-local refs or routing.
-  Core imports no DOM or native component library. Platform wrappers keep their existing stories; web integration
-  tests exercise the shared composition through real DOM adapters, and device checks cover native adapters.
+  visibility, ordering, and interaction state. `UserBlocksSection` lists the people the user blocked with their
+  confirmed Unblock, over `UserBlocksCard`, which the stories render from a fixture list. `ProfileSummaryLine` is the
+  line under a profile's name, with its Blocked link. `TermsAcceptanceNotice` asks a stale account to accept the
+  published Terms or put it off, and `useIsTermsAcceptanceDialogOpen` says when it shows. Each app supplies the small
+  set of typed platform elements the component needs. Keep component adapters at module scope so state changes preserve
+  their identity. Use render callbacks when controls must retain app-local refs or routing. Core imports no DOM or
+  native component library. Platform wrappers keep their existing stories; web integration tests exercise the shared
+  composition through real DOM adapters, and device checks cover native adapters.
 
-- `stores/` — app state one module owns and any component may read, named `<thing>Store.ts`.
+- `stores/` — app state one module owns and any component may read, named `<thing>Store.ts`. `openReportStore.ts` holds
+  the open report count an admin's badges show.
   `termsAcceptanceStore.ts` holds whether the Terms dialog is open: a write rejected for the Terms opens it, Not now
   puts it off for that user, and the acceptance clears it. `appUpdateStore.ts` holds whether an installed build is
   waiting on a store update: a 426 from any transport opens the blocking notice, a later body fills in the minimum,
@@ -53,21 +58,22 @@ It imports `@carlnotes/contracts`, `@carlnotes/client`, `@carlnotes/nightshift`,
   sells on the user's storefront, which the app sets, and `usePurchaseOffers`, the signed-in user's purchase offers in
   the app, which read a paid plan's billing provider and stay read-only until it loads. A store that reaches an audio
   element, the media session, or a component library stays in its app.
-- `hooks/` — `useBlockedUsers.ts`, the user's block list and the unblock that shortens it once the server accepts;
-  `useNow.ts`, the current time re-read on a tick for relative labels, one clock per list; `useAvatar.ts`,
-  the avatar setting read from the session and updated through it; `useUsernameChange.ts`, changing the signed-in
-  user's username, shared by the account page and the profile page's edit modal; `useNoteBodySave.ts`, the save
-  schedule of the note an editor has open and the hook that reads it (`toNoteBodySave`: a save a second after the
-  last change, one on its way and one waiting at most, nothing for a body equal to the saved one or to the one on its
-  way, `img` tags stripped first, a failed save read as unsaved and retried on the next change, a conflict that stops
-  every save until it is resolved, a waiting save sent on unmount, and `EMPTY_EDITOR_HTML`, the html the editor
-  reports for an empty document); `useNoteComments.ts`, a note's comment thread loaded when the note opens, with
-  its post and delete; `useUpdateCounts.ts`, the update badges a menu trigger or one page reads from the chat room,
-  note badge, and topic invite stores; and `useUpdateBadges.ts`, the 45-second poll of the chat mention count and the
-  waiting topic invitations while the app is focused and online, which reloads the chat rooms into the store when the
-  count changes and drops a response from a replaced account; and `usePolledCounts.ts`, a page's viewer, follower, or
-  listener counts read once the page shows and then every minute while the app is focused and online.
-- `lib/` — pure rules and formatting: `reportCopy.ts` (the report dialog's words on both apps), `labels.ts` (values as
+- `hooks/` — `useUserBlocks.ts`, the user's user block list and the unblock that shortens the list once the server
+  accepts; `useNow.ts`, the current time re-read on a tick for relative labels, one clock per list; `useAvatar.ts`, the
+  avatar setting read from the session and updated through it; `useUsernameChange.ts`, changing the signed-in user's
+  username, shared by the account page and the profile page's edit modal; `useNoteBodySave.ts`, the save schedule of the
+  note an editor has open and the hook that reads it (`toNoteBodySave`: a save a second after the last change, one on
+  its way and one waiting at most, nothing for a body equal to the saved one or to the one on its way, `img` tags
+  stripped first, a failed save read as unsaved and retried on the next change, a conflict that stops every save until
+  it is resolved, a waiting save sent on unmount, and `EMPTY_EDITOR_HTML`, the html the editor reports for an empty
+  document); `useNoteComments.ts`, a note's comment thread loaded when the note opens, with its post and delete;
+  `useUpdateCounts.ts`, the update badges a menu trigger or one page reads from the chat room, note badge, and topic
+  invite stores; and `useUpdateBadges.ts`, the 45-second poll of the chat mention count and the waiting topic
+  invitations while the app is focused and online, which reloads the chat rooms into the store when the count changes
+  and drops a response from a replaced account; and `usePolledCounts.ts`, a page's viewer, follower, or listener counts
+  read once the page shows and then every minute while the app is focused and online.
+- `lib/` — pure rules and formatting: `reportCopy.ts` (the report dialog's words on both apps), `confirmElement.ts` (the
+  props of a confirmation dialog), `confirmationCopy.ts` (the words of each one), `labels.ts` (values as
   the text a user sees: dates, durations, money, sizes, and counts), `pageHead.ts` (a `PageHead`, or a fixed title and
   path, as the tags a route's `head()` returns), `paginationSlots.ts` (the slots a row of page links shows),
   `planCards.ts` (which plan card matches the user's plan and billing interval, and which badge shows),
@@ -192,6 +198,8 @@ Reheat advances only when every requested read succeeds. A known-offline refresh
 Mobile opts into pending-mutation presentation and acknowledged cache updates across Home, Topic, and account-scoped search queries.
 A failed write removes only its tentative change. Writes never retry or enter an offline queue.
 Its optional `onChangeConfirmed` callback retains acknowledged edits in a separately mounted Finding sheet.
+`keepTopicFindingReactions` writes a saved reaction summary into the same caches with no request, and page handlers
+give it to the page's own change callback, so a reopened Finding shows the user's reaction.
 
 `lib/topicFeed.ts` owns Feed/tag selection and Resource-kind reset, and `isUserTopicFeedEmpty`, which both apps'
 empty home pages read. Existing Finding filters and sorts keep their bookmark and tie rules.
@@ -199,18 +207,19 @@ empty home pages read. Existing Finding filters and sorts keep their bookmark an
 Its search adapter preserves result order and metadata while applying the same Finding edits across loaded pages.
 `lib/topicFeedLabels.ts` owns shared section, sort, view, tag, and empty-state labels, plus the Finding-view menu options and Team bookmark scopes.
 `lib/topicTutorialVideo.ts` owns tutorial openers, event properties, and first-play recording.
-`lib/activePoll.ts` serializes requests while an app-supplied activity predicate is true. `lib/scanPoll.ts` supplies the scan backoff shared by both clients.
-`lib/topicSchedule.ts` owns schedule options, daily-slot permission, and allowance copy shared by both Topic forms.
-`lib/topicViews.ts` sends one view per Topic per web tab or native app runtime, shared by both Topic screens.
-`lib/sourceResults.ts` shares Source footnote ordering, totals, detail labels, and the earlier-findings row.
-`lib/topicSources.ts` shares default/custom Source ordering, off states, screening messages, and staged Source summaries between both apps.
-`components/TopicSource` exports the shared `TopicSource` row and `TopicDefaultSource` enabled/add composition.
-Web supplies its existing DOM badges and tooltips; mobile supplies native Nightshift badges and buttons.
-`lib/topicScanRecap.ts` shares the diary fields, missing-entry copy, and copied note Markdown. Shared React components
-compose the recap and chart from these rules; platform adapters draw the elements. Web supplies its browser origin
-when building Markdown links.
-Pure tests live beside these modules. Live hook tests use web's React DOM harness in `apps/web/src/hooks/useTopicFeedState.test.tsx`.
-Core imports no router, DOM, React Native, native storage, or device API.
+`lib/activePoll.ts` serializes requests while an app-supplied activity predicate is true. `lib/scanPoll.ts` supplies the
+scan backoff shared by both clients and `toPolledTopicPage`, which keeps the related Topics, reactions, and comment
+thread that a poll response leaves out. `lib/topicSchedule.ts` owns schedule options, daily-slot permission, and
+allowance copy shared by both Topic forms. `lib/topicViews.ts` sends one view per Topic per web tab or native app
+runtime, shared by both Topic screens. `lib/sourceResults.ts` shares Source footnote ordering, totals, detail labels,
+and the earlier-findings row. `lib/topicSources.ts` shares default/custom Source ordering, off states, screening
+messages, and staged Source summaries between both apps. `components/TopicSource` exports the shared `TopicSource` row
+and `TopicDefaultSource` enabled/add composition. Web supplies its existing DOM badges and tooltips; mobile supplies
+native Nightshift badges and buttons. `lib/topicScanRecap.ts` shares the diary fields, missing-entry copy, and copied
+note Markdown. Shared React components compose the recap and chart from these rules; platform adapters draw the
+elements. Web supplies its browser origin when building Markdown links. Pure tests live beside these modules. Live hook
+tests use web's React DOM harness in `apps/web/src/hooks/useTopicFeedState.test.tsx`. Core imports no router, DOM, React
+Native, native storage, or device API.
 
 ## Tasting Notes
 
@@ -344,3 +353,33 @@ time. `TopicLinkedFinding.tsx` resolves links against the authorized Topic paylo
 Personal sources items, private summaries, and annotations have no automatic expiry. Their content remains encrypted until explicit deletion. Released read contracts retain nullable expiry fields as null. Optional conversation URLs survive the MCP picker outside matching and open from the shared AI sender label; missing references remain plain labels.
 
 Personal sources conversation metadata links the complete date, platform icon, and name when a real reference is supplied. Both apps consume the shared entry list and platform fixtures. A strict existing-chat Codex URI opens the system app; web references use the existing browser adapter. No entry retention sentence is shown.
+
+## Reactions and comment threads
+
+`components/ReactionRow.tsx` shares one social target's reactions between the web, the mobile app, and the MCP view:
+the six types with their counts through `ReactionPicker.tsx`, with the user's own marked. `components/CommentThread.tsx`
+shares the thread between the web and the mobile app: the button that opens the composer, the comments newest first,
+each a `components/CommentRow.tsx` with its author's controls, the share with Carl, its body with each stored mention
+linked, a Podcast Episode's chapter tag, its own reactions through `ReactionRow`, Reply, and its replies oldest first.
+A memoized row with stable handlers from `hooks/useStableCallback.ts` renders only if its own comment changes.
+`components/SocialSection.tsx` holds the thread in the collapsible card on a Topic, a Podcast Episode, and a Finding,
+with the week's count beside its title, the reaction row left to each page's header, and the shared comment slots at the
+card's top right for a user who may share. `components/TopicSharedCommentsSection.tsx` lists the comments a Topic shares
+with Carl in the Topic's sources list, under `TopicPersonalSourcesSection.tsx`. Both render through one `SocialElements`
+set per app, typed in `lib/socialElements.ts`, and take their words from `lib/socialLabels.ts`. `CommentElements` is the
+part of that set the note thread also renders, so each app has one composer. `components/TextComposer.tsx` owns the
+draft for the thread and for the note thread: a failed submit keeps its text, a second submit waits for the first, and a
+trailing `@` token suggests users. `lib/podcastEpisodeSocial.ts` builds a Podcast Episode page's thread props and report
+subject. `hooks/useSubjectReport.ts`'s `useSubjectReportFlag` is a report flag's state, label, and press, and
+`SocialReportControl.tsx` keeps its own read, since a row already lists its reported state.
+
+`hooks/useReactions.ts` holds the summary a page came with, reads it for a list that came without one, and replaces
+it with the summary each save returns. A `ReactionClient` says how a platform reaches the routes: the api by
+default, and a tool call in the MCP view. `ReactionRow` shows the pressed type until the save returns.
+`hooks/useCommentThread.ts` starts from the page's first page or reads it through a query cached for 30 seconds,
+pages older comments and a comment's later replies, and keeps only acknowledged posts, edits, deletes, reactions, and
+shares, with the shared comment slots each write returns. A reload of the same target merges into the loaded comments
+and keeps the shown count, and each write marks the cached page out of date. `hooks/useFindingLinkPreview.ts` caches a
+Finding's link preview the same way for a minute. `hooks/useCommentThreadViewEvent.ts` sends one view event per showing
+through the app's own visit analytics. Their tests render through plain elements in
+`apps/web/src/components/social/socialTestHarness.tsx`.

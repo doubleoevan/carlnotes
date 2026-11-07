@@ -59,7 +59,7 @@ Reporting and blocking share core's rules. `common/ReportIssueDialog.tsx` takes 
 note, or a comment, its author, and offers the author's block in the same sheet, as the web's switch does.
 `chat/ChatRoomMessageBubble.tsx`, `note/NoteComments.tsx`, `note/NoteManagement.tsx`, and the profile screen's action
 menu open it. A reply to a message the member cannot see shows core's hidden quote. `account/AccountFields.tsx`
-supplies the Blocked people rows under core's `BlockedUsersSection`. `session/TermsAcceptanceSheet.tsx` renders core's
+supplies the Blocked people rows under core's `UserBlocksSection`. `session/TermsAcceptanceSheet.tsx` renders core's
 `TermsAcceptanceNotice` in a sheet at the root for a stale account, and `session/TermsAgreementText.tsx` is the
 sign-in and sign-up screens' acceptance line. The sheet fails open: Not now closes it until the next write the api
 rejects for the Terms, and a session without a version field, from an api that predates the column, asks for nothing.

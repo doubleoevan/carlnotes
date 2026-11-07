@@ -12,7 +12,6 @@ import { EMBED_DIMENSIONS, findings, resources, scans } from "@carlnotes/db/sche
 import { teamMembers, teams } from "@carlnotes/db/schema/teams"
 import { topicEmailSends } from "@carlnotes/db/schema/topicEmailSends"
 import { attachments, subscriptions, topics } from "@carlnotes/db/schema/topics"
-import { userBlocks } from "@carlnotes/db/schema/userBlocks"
 import { users } from "@carlnotes/db/schema/users"
 import { readLiteLLMKeySpend } from "@carlnotes/models/litellmProxy"
 import { toPositiveInteger } from "@carlnotes/server/envSettings"
@@ -62,6 +61,7 @@ export async function loadAdminUsers(): Promise<AdminUserRow[]> {
 				avatarSource: users.avatarSource,
 				avatarKey: users.avatarKey,
 				role: users.role,
+				adminBlockedAt: users.adminBlockedAt,
 				plan: users.plan,
 				// the override, signup and last-login times, and the key that bills topic scans
 				budgetOverrideCents: users.budgetOverrideCents,
@@ -119,6 +119,7 @@ export async function loadAdminUsers(): Promise<AdminUserRow[]> {
 			avatarSource: user.avatarSource,
 			avatarVersion: toAvatarVersion(user),
 			role: user.role,
+			isAdminBlocked: user.adminBlockedAt !== null,
 			plan: user.plan,
 			createdAt: user.createdAt.toISOString(),
 			lastLoginAt: user.lastLoginAt?.toISOString() ?? null,
@@ -307,14 +308,11 @@ export async function loadAdminTotals(userRows: AdminUserRow[]): Promise<AdminTo
 	const netRevenueCents = await readStripeTotalRevenueCents(Math.floor(startOfUtcMonth(new Date()).getTime() / 1000))
 	const fixedMonthlyCostCents = toPositiveInteger(Bun.env.FIXED_MONTHLY_COST_CENTS, 0)
 
-	// the blocks between users, as a count alone
-	const [blockCountRow] = await db.select({ blockCount: count() }).from(userBlocks)
 	return {
 		attributedBytes,
 		monthVariableCostCents,
 		netRevenueCents,
 		contributionCents: computeContributionCents(netRevenueCents, monthVariableCostCents, fixedMonthlyCostCents),
-		blockCount: blockCountRow?.blockCount ?? 0,
 	}
 }
 

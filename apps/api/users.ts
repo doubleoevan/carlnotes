@@ -1,6 +1,6 @@
 // closing a user account, whether an admin does it from the console or the user does it from their own account page
 
-import { inviteAccessPayload } from "@carlnotes/contracts/payloads"
+import { inviteAccessPayload, notificationsEmailPayload } from "@carlnotes/contracts/payloads"
 import { db } from "@carlnotes/db"
 import { teamMembers } from "@carlnotes/db/schema/teams"
 import { topics } from "@carlnotes/db/schema/topics"
@@ -26,6 +26,14 @@ import { deleteTopic } from "./topic/deleteTopic"
 
 // the error that both close routes send with a 503 while Redis is unreachable
 const ACCOUNT_CLOSE_UNAVAILABLE_TEXT = "closing an account is unavailable for a moment. try again"
+
+/**
+ * Saves whether a user gets the notifications email, on their row and in their sessions.
+ */
+export async function saveNotificationsEmailSwitch(userId: string, isEnabled: boolean): Promise<void> {
+	await db.update(users).set({ isNotificationsEmailEnabled: isEnabled }).where(eq(users.id, userId))
+	await refreshSessionUser(userId)
+}
 
 // promote a new leader to the team if the user is the only leader and there are more than one team member
 async function setNewTeamLeaders(userId: string): Promise<void> {
@@ -201,6 +209,15 @@ export const usersRoute = new Hono<AppEnv>()
 			.set({ inviteAccess: context.req.valid("json").inviteAccess })
 			.where(eq(users.id, userId))
 		await refreshSessionUser(userId)
+		return context.json({ ok: true })
+	})
+	.post("/users/me/notifications-email", zValidator("json", notificationsEmailPayload), async (context) => {
+		// reject a signed-out visitor
+		const userId = currentUser(context)
+		if (!userId) {
+			return context.json({ error: "unauthorized" }, 401)
+		}
+		await saveNotificationsEmailSwitch(userId, context.req.valid("json").isEnabled)
 		return context.json({ ok: true })
 	})
 	.delete("/users/me", async (context) => {

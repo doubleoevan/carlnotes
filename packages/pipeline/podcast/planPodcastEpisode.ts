@@ -14,7 +14,7 @@ import { podcastEpisodeSpeechModel } from "@carlnotes/server/podcastEpisodeSetti
 import { and, desc, eq, inArray } from "drizzle-orm"
 import { toCanonicalUrl } from "../ingest/normalize"
 import { loadUrlSourcePageUrls } from "../review/filter"
-import { loadBookmarkedFindingRows } from "../review/index"
+import { loadBookmarkedFindingRows } from "../review/scoreExamplePages"
 import { clampScore } from "../review/scorePolicy"
 
 // the score bonus that a bookmark, a thumbs up, and a url Source's own page each give a Finding when picking a Podcast
@@ -124,12 +124,16 @@ async function planPodcastEpisodeInMemo({
 		if (!currentTopic?.isPodcastEnabled || (await hasUnconvertedPersonalSources(topicId, transaction))) {
 			return null
 		}
+
+		// the recording's row
 		const [podcastEpisode] = await transaction
 			.insert(podcastEpisodes)
 			.values({ topicId, ownerId: billedUserId, scanId, model: speechModel, isShort: isShortPodcastEpisode })
 			.returning({ id: podcastEpisodes.id })
 		return podcastEpisode
 	})
+
+	// a Topic whose podcast is off, or whose personal sources are still converting, records nothing
 	if (createdPodcastEpisode === null) {
 		return skipPodcastEpisode({ scanId, skipReason: "personal sources privacy conversion is pending" })
 	}

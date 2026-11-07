@@ -148,12 +148,6 @@ export function useAllNoteBadges(): NoteBadge[] {
 	return noteBadges.filter((noteBadge) => !openedNoteIds.has(noteBadge.noteId))
 }
 
-/** Reads every unread note count the user has. */
-export function useAllNoteCount(): number {
-	useStoreVersion()
-	return toAllNoteCount()
-}
-
 /** One note's two numbers. */
 export function useNoteBadge(noteId: string): { unreadEdits: number; unreadComments: number } {
 	useStoreVersion()

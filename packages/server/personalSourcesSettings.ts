@@ -10,6 +10,8 @@ export function personalSourcesReceivingFailure(): "disabled" | "encryption" | n
 	if (!isPersonalSourcesReceivingEnabled()) {
 		return "disabled"
 	}
+
+	// an encryption that throws means its key is missing or malformed
 	try {
 		encryptPrivateText("")
 		return null
@@ -33,7 +35,7 @@ export function isPersonalSourcesEmailEnabled(): boolean {
 }
 
 /**
- * Reads the digest sender's mailbox as this environment's receiving address.
+ * Reads the topic scan email sender's mailbox as this environment's receiving address.
  */
 export function readPersonalSourcesEmailAddress(): string {
 	const from = Bun.env.RESEND_FROM_EMAIL?.trim() ?? ""

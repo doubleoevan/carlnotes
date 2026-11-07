@@ -69,13 +69,14 @@ export function toTooltipLine(updateLine: UpdateLine): TooltipLine {
 }
 
 /**
- * Shows one badge summing chat mentions, note changes, and topic invitations, its tooltip listing each group under
- * its own heading, as a link when given an href and as nothing while none waits.
+ * Shows one badge summing chat mentions, note changes, topic invitations, and open reports, its tooltip listing each
+ * group under its own heading, as a link if given an href and as nothing while none waits.
  */
 export function UpdateCountBadge({
 	chatMentions = [],
 	noteBadges = [],
 	invites = [],
+	openReportCount = 0,
 	href,
 	onClick,
 	onMouseEnter,
@@ -90,7 +91,7 @@ export function UpdateCountBadge({
 	className?: string
 	countBadgeClassName?: string
 }) {
-	const updateBadges = { chatMentions, noteBadges, invites }
+	const updateBadges = { chatMentions, noteBadges, invites, openReportCount }
 	const unreadCount = toUpdateCount(updateBadges)
 	if (unreadCount === 0) {
 		return null
@@ -138,8 +139,8 @@ export function UpdateCountBadge({
 }
 
 /**
- * Shows a menu trigger's one badge, summing every unread chat mention, note change, and topic invitation, with the
- * trigger's accessible name: its own name, then each waiting group's label.
+ * Shows a menu trigger's one badge, summing every unread chat mention, note change, topic invitation, and open report,
+ * with the trigger's accessible name: its own name, then each waiting group's label.
  */
 export function MenuTriggerUpdateCountBadge({
 	name,
@@ -152,7 +153,7 @@ export function MenuTriggerUpdateCountBadge({
 	className?: string
 	countBadgeClassName?: string
 }) {
-	// every unread chat mention, note change, and topic invitation
+	// every unread chat mention, note change, topic invitation, and open report
 	const updateBadges = useAllUpdateBadges()
 	return (
 		<>

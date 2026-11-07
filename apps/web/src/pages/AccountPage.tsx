@@ -2,6 +2,7 @@ import { authClient } from "@carlnotes/client/authClient"
 import { toSessionProfileIdentity } from "@carlnotes/contracts/profiles"
 import { useAccount } from "@carlnotes/core/hooks/useAccount"
 import { User } from "lucide-react"
+import { useEffect } from "react"
 import { AccountBudget, PlanButton } from "@/components/account/AccountBudget"
 import { AccountSettings } from "@/components/account/AccountSettings"
 import { UserProfileLink } from "@/components/common/UserProfileLink"
@@ -27,6 +28,14 @@ export function AccountPage() {
 	// load the same complete budget and retry state as the native account
 	const query = useAccount({ userId: session?.user.id, viewedUserId })
 	const { billing, activity } = query.data ?? {}
+
+	// the budget changes the page's height once it loads, so scroll to a linked section again after it does
+	const isAccountLoaded = Boolean(billing && activity)
+	useEffect(() => {
+		if (isAccountLoaded && window.location.hash) {
+			document.getElementById(window.location.hash.slice(1))?.scrollIntoView()
+		}
+	}, [isAccountLoaded])
 
 	if (!session) {
 		return null

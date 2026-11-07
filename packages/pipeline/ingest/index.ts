@@ -12,6 +12,7 @@ import { traceStage } from "@carlnotes/models/telemetry"
 import { reportError } from "@carlnotes/server/monitoring"
 import { isHostRejection } from "@carlnotes/server/publicFetch"
 import { asc, eq, sql } from "drizzle-orm"
+import { ingestSharedCommentLinks } from "../personalSources/linkQueue"
 import type { ScannedSource } from "../review/summarize"
 import { aiAgentIngester } from "./aiAgent"
 import { blueskyIngester } from "./bluesky"
@@ -114,6 +115,10 @@ export async function ingestFromTopicSources({
 		},
 		(result) => ({ sourceCount: topicSources.length, foundCount: result.summary.foundCount }),
 	)
+
+	// the links in the topic's shared comments that no Scan reviewed yet join what the Sources found
+	const foundUrls = new Set(ingestOutcome.summary.resources.map((resource) => resource.url))
+	ingestOutcome.summary.resources.push(...(await ingestSharedCommentLinks(topicId, foundUrls)))
 
 	// insert the deduped Resources. a url already stored keeps every field, and its update sets the url to itself only so
 	// the existing row's id comes back beside the new ones

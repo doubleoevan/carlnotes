@@ -1,6 +1,7 @@
 import { authClient } from "@carlnotes/client/authClient"
 import { fetchChatRooms } from "@carlnotes/client/chatRoomClient"
 import type { ChatRoom } from "@carlnotes/contracts/chat"
+import { isAdminRole } from "@carlnotes/contracts/enums"
 import { useUpdateBadges } from "@carlnotes/core/hooks/useUpdateBadges"
 import {
 	toChatRoomMenuOrder,
@@ -170,8 +171,9 @@ export function AppChatPanel() {
 		}
 	}, [userId, updateChatRooms])
 
-	// poll the chat mention count and the topic invitation badges while the tab is visible and online
-	useUpdateBadges(userId, updateChatRooms)
+	// poll the chat mention count, the topic invitation badges, and an admin's open report count while the tab is visible
+	// and online
+	useUpdateBadges(userId, isAdminRole(session?.user.role), updateChatRooms)
 
 	// a chat mention badge links to its team or topic page
 	const linkedTeamId = useSearchParams().get("chat")

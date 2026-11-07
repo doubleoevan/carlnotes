@@ -27,21 +27,49 @@ export function ConfirmDialog({
 
 	// present the committed confirmation copy
 	useEffect(() => {
-		Alert.alert(
+		showConfirmAlert({
 			title,
-			typeof children === "string" ? children : undefined,
-			[
-				{ text: cancelLabel, style: "cancel", onPress: () => callbacks.current.onClose() },
-				{
-					text: confirmLabel,
-					style: "destructive",
-					onPress: () => {
-						void callbacks.current.onConfirm()
-					},
-				},
-			],
-			{ cancelable: true, onDismiss: () => callbacks.current.onClose() },
-		)
+			children,
+			confirmLabel,
+			cancelLabel,
+			onConfirm: () => callbacks.current.onConfirm(),
+			onClose: () => callbacks.current.onClose(),
+		})
 	}, [title, children, cancelLabel, confirmLabel])
 	return null
+}
+
+/**
+ * Asks before an action runs, for a press handler that holds no dialog state.
+ */
+export function showConfirmAlert({
+	title,
+	children,
+	confirmLabel,
+	cancelLabel = "Cancel",
+	onConfirm,
+	onClose,
+}: {
+	title: string
+	children: ReactNode
+	confirmLabel: string
+	cancelLabel?: string
+	onConfirm: () => void | Promise<void>
+	onClose?: () => void
+}): void {
+	Alert.alert(
+		title,
+		typeof children === "string" ? children : undefined,
+		[
+			{ text: cancelLabel, style: "cancel", onPress: onClose },
+			{
+				text: confirmLabel,
+				style: "destructive",
+				onPress: () => {
+					void onConfirm()
+				},
+			},
+		],
+		{ cancelable: true, onDismiss: onClose },
+	)
 }

@@ -6,13 +6,14 @@ import { toAvatarImagePath } from "@carlnotes/contracts/avatars"
 import type { ProfileResponse } from "@carlnotes/contracts/profilePage"
 import { toCountLabel } from "@carlnotes/core/lib/labels"
 import { REQUEST_FAILED_TEXT } from "@carlnotes/core/lib/sessionCopy"
-import { toBlockLabel, toggleUserBlock } from "@carlnotes/core/lib/userBlocks"
+import { toggleUserBlock, toUserBlockLabel } from "@carlnotes/core/lib/userBlocks"
 import { useQuery } from "@tanstack/react-query"
 import { useLocalSearchParams } from "expo-router"
 import { Ban, Pencil, Plus } from "lucide-react-native"
 import { useState } from "react"
 import { View } from "react-native"
 import { ProfileFields } from "@/components/account/AccountSettings"
+import { ProfileSummaryLine } from "@/components/account/ProfileSummaryLine"
 import { UserAvatarPicker } from "@/components/avatar/UserAvatarPicker"
 import { Avatar } from "@/components/branding/Avatar"
 import { AnchorLink } from "@/components/common/AnchorLink"
@@ -56,12 +57,12 @@ export default function ProfileScreen() {
 	}
 
 	// block or unblock this person, then reload the profile
-	async function handleToggleBlock(): Promise<void> {
+	async function handleToggleUserBlock(): Promise<void> {
 		if (!profile) {
 			return
 		}
 		try {
-			await toggleUserBlock({ userId, isBlocked: profile.isBlocked })
+			await toggleUserBlock({ userId, isUserBlocked: profile.isBlocked })
 			handleReload()
 		} catch {
 			showClientError(REQUEST_FAILED_TEXT)
@@ -91,7 +92,7 @@ export default function ProfileScreen() {
 							{ label: "New team", icon: Plus, onSelect: () => setIsCreatingTeam(true) },
 						]
 					: profile && session
-						? [{ label: toBlockLabel(profile.isBlocked), icon: Ban, onSelect: () => void handleToggleBlock() }]
+						? [{ label: toUserBlockLabel(profile.isBlocked), icon: Ban, onSelect: () => void handleToggleUserBlock() }]
 						: []
 			}
 			header={
@@ -156,7 +157,8 @@ function ProfileHeader({
 					<InviteUserToTeamButton profileUserId={userId} profileUsername={profile.username} />
 				)}
 			</View>
-			<Text className="text-sm text-muted-foreground">{`Joined ${new Date(profile.joinedAt).toLocaleDateString(undefined, { month: "long", year: "numeric" })} · ${toCountLabel(profile.subscriberCount, "follower")}`}</Text>
+			{/* when they joined, their followers, and the user's user block of them */}
+			<ProfileSummaryLine profile={profile} />
 		</View>
 	)
 }

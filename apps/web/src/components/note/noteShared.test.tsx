@@ -7,14 +7,11 @@ import {
 	type NoteNameInputProps,
 	type NoteVisibilitySelectProps,
 } from "@carlnotes/core/components/CreateNote"
-import {
-	type NoteCommentComposerProps,
-	NoteComments,
-	type NoteCommentsElements,
-} from "@carlnotes/core/components/NoteComments"
+import { NoteComments, type NoteCommentsElements } from "@carlnotes/core/components/NoteComments"
 import type { NoteConflictNoticeProps } from "@carlnotes/core/components/NoteConflictNotice"
 import { NoteEditor, type NoteEditorElements, type NoteEditorInputProps } from "@carlnotes/core/components/NoteEditor"
 import { NoteToolbar } from "@carlnotes/core/components/NoteToolbar"
+import type { TextComposerElementProps } from "@carlnotes/core/components/TextComposer"
 import { toNoteBodySave } from "@carlnotes/core/hooks/useNoteBodySave"
 import { useNoteLink } from "@carlnotes/core/hooks/useNoteLink"
 import type { NoteEditorCommands } from "@carlnotes/core/lib/noteFormats"
@@ -280,7 +277,7 @@ test("creation preserves failed values and submits only the offered visibility o
 })
 
 test("shared comments retain failed drafts, prevent duplicate posts and only offer author deletion", async () => {
-	let composer: NoteCommentComposerProps | undefined
+	let composer: TextComposerElementProps | undefined
 	let remove: (() => void) | undefined
 	let posted = 0
 	let deleted = 0

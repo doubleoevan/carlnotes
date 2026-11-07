@@ -4,7 +4,7 @@ import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import type { ChatRoomMessage } from "@carlnotes/contracts/chat"
 import * as reports from "../report/reports"
 import * as userBlocks from "../userBlocks"
-import { toUnblockedChatRoomMessages, toVisibleChatRoomMessages } from "./roomVisibility"
+import { toNotUserBlockedChatRoomMessages, toVisibleChatRoomMessages } from "./roomVisibility"
 
 afterEach(() => mock.restore())
 
@@ -30,18 +30,18 @@ function toChatMessage(id: number, authorUserId: string | null): ChatRoomMessage
 
 test("a loaded batch loses the member's reported messages and their blocked people's", async () => {
 	spyOn(reports, "loadReportedSubjectIds").mockResolvedValue(new Set(["2"]))
-	spyOn(userBlocks, "loadBlockedUserIds").mockResolvedValue(new Set(["user-blocked"]))
+	spyOn(userBlocks, "loadUserBlockedIds").mockResolvedValue(new Set(["user-blocked"]))
 	const visibleChatMessages = await toVisibleChatRoomMessages("user-reader", toChatMessages())
 	expect(visibleChatMessages.map((chatMessage) => chatMessage.id)).toEqual([3])
 })
 
 test("a member who hid nothing sees the batch as loaded, and a delta is filtered without a query", async () => {
 	spyOn(reports, "loadReportedSubjectIds").mockResolvedValue(new Set())
-	spyOn(userBlocks, "loadBlockedUserIds").mockResolvedValue(new Set())
+	spyOn(userBlocks, "loadUserBlockedIds").mockResolvedValue(new Set())
 	const chatMessages = toChatMessages()
 	expect(await toVisibleChatRoomMessages("user-reader", chatMessages)).toBe(chatMessages)
 	expect(
-		toUnblockedChatRoomMessages(chatMessages, new Set(["user-blocked"])).map((chatMessage) => chatMessage.id),
+		toNotUserBlockedChatRoomMessages(chatMessages, new Set(["user-blocked"])).map((chatMessage) => chatMessage.id),
 	).toEqual([2, 3])
-	expect(toUnblockedChatRoomMessages(chatMessages, new Set())).toBe(chatMessages)
+	expect(toNotUserBlockedChatRoomMessages(chatMessages, new Set())).toBe(chatMessages)
 })

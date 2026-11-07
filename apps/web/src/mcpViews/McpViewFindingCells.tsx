@@ -12,6 +12,7 @@ import { TopicFindingDetails } from "@/components/topic/TopicFindingDetails"
 import { toTopicFindingTitleClass } from "@/components/topic/TopicFindingSummary"
 import { METADATA_LINE_CLASS } from "@/lib/styleClasses"
 import type { TopicFeedHandlers } from "@/providers/TopicFeedProvider"
+import { McpViewReactionRow } from "./McpViewReactionRow"
 import { useMcpViewData } from "./mcpViewHost"
 
 /**
@@ -71,8 +72,8 @@ export function McpViewFindingExpandButton({
 }
 
 /**
- * A finding's expanded row: Carl's notes, the sender's private annotation, and a user's rating, bookmark, and
- * read toggles, as in the note popover.
+ * A finding's expanded row: Carl's notes, the sender's private annotation, a user's rating, bookmark, and read
+ * toggles, as in the note popover, and the finding's reactions.
  */
 export function McpViewFindingDetails({
 	topicFinding,
@@ -98,6 +99,14 @@ export function McpViewFindingDetails({
 					isBookmarkable={topic.canBookmark}
 					canMarkUnread={false}
 					topicFeedHandlers={topicFeedHandlers}
+				/>
+			)}
+			{/* the finding's reactions, in a view whose tool result came with them */}
+			{topicFinding.reactions && (
+				<McpViewReactionRow
+					target={{ kind: "finding", id: topicFinding.findingId }}
+					summary={topicFinding.reactions}
+					isSignedIn={Boolean(session)}
 				/>
 			)}
 		</div>

@@ -4,11 +4,14 @@ import { sendDeleteTeamInvite, sendRemoveTeamMember } from "@carlnotes/client/te
 import { sendUserInvite } from "@carlnotes/client/topicClient"
 import { isLeaderRole } from "@carlnotes/contracts/enums"
 import type { ProfileTeamStatus } from "@carlnotes/contracts/profiles"
+import { toProfilePath } from "@carlnotes/contracts/seo"
+import { toDeleteSentInviteConfirmation, toRemoveMemberConfirmation } from "@carlnotes/core/lib/confirmationCopy"
 import { useQuery } from "@tanstack/react-query"
 import { Plus, Users, X } from "lucide-react-native"
 import { useState } from "react"
 import { View } from "react-native"
 import { CoffeeLoading } from "@/components/branding/CoffeeLoading"
+import { showConfirmAlert } from "@/components/common/ConfirmDialog"
 import { Sheet } from "@/components/common/Sheet"
 import { Button } from "@/components/primitives/button"
 import { Icon } from "@/components/primitives/icon"
@@ -47,7 +50,7 @@ export function InviteUserToTeamButton({
 					if (!session) {
 						openSessionScreen({
 							screen: "/sign-up",
-							returnPath: `/profiles/${profileUserId}`,
+							returnPath: toProfilePath(profileUserId),
 							cta: "profile-team-up",
 						})
 						return
@@ -99,8 +102,14 @@ export function InviteUserToTeamButton({
 											(team.status === "member" ? !isLeaderRole(team.role) : !team.canDeleteInvite)
 										}
 										onPress={() =>
-											void mutation.run(async () => {
-												await removeProfileTeam({ team, profileUserId })
+											showConfirmAlert({
+												...(team.status === "member"
+													? toRemoveMemberConfirmation({ username: profileUsername, teamName: team.name })
+													: toDeleteSentInviteConfirmation(team.name)),
+												onConfirm: () =>
+													void mutation.run(async () => {
+														await removeProfileTeam({ team, profileUserId })
+													}),
 											})
 										}
 									>

@@ -28,6 +28,8 @@ export type ModeratedTextKind =
 	| "a username"
 	| "a team's name and description"
 	| "a topic's name, prompt, and tags"
+	// a Comment
+	| "a public comment on an article, a podcast episode, or a topic"
 
 // what the classification came to: a verdict, a skip because no proxy or key is set, a failure, or an image the
 // moderation endpoint could not read

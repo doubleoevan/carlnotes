@@ -42,9 +42,9 @@ why](../../../assets/screenshots/feed-thumbs-and-consumed.png)
 Sort the feed by **Relevance**, **Newest**, or **Trending**. Use the **Filters** control to filter by resource kind, by
 tags, or by view. The **Reheat** button reloads the topic feed in place.
 
-**Trending** orders findings by their views, newest first among ties. Your bookmarks stay on
-top. On the homepage, Trending also orders the topics in each section by viewers, then by followers, then by their
-newest finding. Featured topics keep their order.
+**Trending** orders findings by their views and hot takes, newest first among ties, and a hot take counts for five
+views. Your bookmarks stay on top. On the homepage, Trending also orders the topics in each section by viewers, then by
+followers, then by their newest finding. Featured topics keep their order.
 
 ## Viewers, followers, listeners, and views
 

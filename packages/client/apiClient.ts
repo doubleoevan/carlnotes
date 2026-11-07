@@ -22,6 +22,8 @@ export type ApiRequestContext = { credentials?: RequestCredentials }
 export type ApiClientSettings = {
 	apiBaseUrl: string
 	showError: (message: string) => void
+	// how a confirmation is shown, which falls back to showError for an app that sets none
+	showMessage?: (message: string) => void
 	headers?: (request?: ApiRequestContext) => Record<string, string> | Promise<Record<string, string>>
 	credentials?: RequestCredentials
 	onUnauthorized?: () => void
@@ -163,6 +165,14 @@ function toReportedResponsePath(url: string | undefined): string {
  */
 export function showClientError(message: string): void {
 	apiClientSettings.showError(message)
+}
+
+/**
+ * Shows a confirmation to the user the way the app shows one.
+ */
+export function showClientMessage(message: string): void {
+	const showMessage = apiClientSettings.showMessage ?? apiClientSettings.showError
+	showMessage(message)
 }
 
 /**

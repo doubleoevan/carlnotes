@@ -1,10 +1,12 @@
 import { toChatAttachmentUrl } from "@carlnotes/client/chatClient"
 import { CHAT_ATTACHMENT_ACCEPT } from "@carlnotes/contracts/attachmentTypes"
 import { CHAT_MAX_ATTACHMENTS, type KeptChatAttachment } from "@carlnotes/contracts/chat"
+import { toDeleteFileConfirmation } from "@carlnotes/core/lib/confirmationCopy"
 import { toAgeLabel } from "@carlnotes/core/lib/labels"
 import { FileText, FileX2, Film, ImageIcon, Paperclip, X } from "lucide-react-native"
 import { type ComponentRef, useRef, useState } from "react"
 import { Pressable, View } from "react-native"
+import { showConfirmAlert } from "@/components/common/ConfirmDialog"
 import { useFilePicker } from "@/components/common/FilePickerMenu"
 import { Sheet } from "@/components/common/Sheet"
 import { useDownloadedFilePreview } from "@/components/common/useDownloadedFilePreview"
@@ -133,7 +135,12 @@ export function KeptAttachmentList({
 						accessibilityLabel={`Delete ${keptAttachment.name}`}
 						hitSlop={toTouchTargetHitSlop(36)}
 						className="size-9 items-center justify-center"
-						onPress={() => void onRemoveKeptAttachment(keptAttachment.id)}
+						onPress={() =>
+							showConfirmAlert({
+								...toDeleteFileConfirmation(keptAttachment.name),
+								onConfirm: () => onRemoveKeptAttachment(keptAttachment.id),
+							})
+						}
 					>
 						<Icon as={X} className="size-3.5 text-muted-foreground" />
 					</Pressable>

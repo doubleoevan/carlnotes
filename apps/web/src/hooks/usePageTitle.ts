@@ -1,7 +1,6 @@
 import { SITE_TITLE, toPageTitle } from "@carlnotes/contracts/seo"
-import { useAllChatMentions } from "@carlnotes/core/stores/chatRoomStore"
-import { useAllNoteCount } from "@carlnotes/core/stores/noteBadgeStore"
-import { useTopicInviteBadges } from "@carlnotes/core/stores/topicInviteStore"
+import { useAllUpdateBadges } from "@carlnotes/core/hooks/useUpdateCounts"
+import { toUpdateCount } from "@carlnotes/core/lib/updateCounts"
 import { useEffect } from "react"
 
 /**
@@ -9,8 +8,8 @@ import { useEffect } from "react"
  * A null title keeps the last title while the page name loads.
  */
 export function usePageTitle(title: string | null): void {
-	// everything waiting for the user, chats, notes, and topic invitations summed
-	const unreadBadgeCount = useAllChatMentions().length + useAllNoteCount() + useTopicInviteBadges().length
+	// everything waiting for the user, in one count
+	const unreadBadgeCount = toUpdateCount(useAllUpdateBadges())
 	useEffect(() => {
 		// keep the last title while the page name loads
 		if (title === null) {

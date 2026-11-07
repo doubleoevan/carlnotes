@@ -2,7 +2,7 @@
 // blocked. the room's messages load once for every user, so the user's own filter runs after the load
 import type { ChatRoomMessage } from "@carlnotes/contracts/chat"
 import { loadReportedSubjectIds } from "../report/reports"
-import { loadBlockedUserIds } from "../userBlocks"
+import { loadUserBlockedIds } from "../userBlocks"
 
 /**
  * Returns the messages a user sees from a loaded batch, leaving out their reported messages and their blocked
@@ -12,7 +12,7 @@ export async function toVisibleChatRoomMessages(
 	userId: string,
 	chatMessages: ChatRoomMessage[],
 	// the user's blocked people if the caller holds them, which saves the read
-	knownBlockedUserIds?: Set<string>,
+	knownUserBlockedIds?: Set<string>,
 ): Promise<ChatRoomMessage[]> {
 	if (chatMessages.length === 0) {
 		return chatMessages
@@ -25,14 +25,14 @@ export async function toVisibleChatRoomMessages(
 			"chatMessage",
 			chatMessages.map((chatMessage) => String(chatMessage.id)),
 		),
-		knownBlockedUserIds ?? loadBlockedUserIds(userId),
+		knownUserBlockedIds ?? loadUserBlockedIds(userId),
 	])
 	if (reportedChatMessageIds.size === 0 && blockedUserIds.size === 0) {
 		return chatMessages
 	}
 
 	// keep what the user has not hidden
-	return toUnblockedChatRoomMessages(
+	return toNotUserBlockedChatRoomMessages(
 		chatMessages.filter((chatMessage) => !reportedChatMessageIds.has(String(chatMessage.id))),
 		blockedUserIds,
 	)
@@ -41,7 +41,7 @@ export async function toVisibleChatRoomMessages(
 /**
  * Returns the messages not written by the user's blocked people.
  */
-export function toUnblockedChatRoomMessages(
+export function toNotUserBlockedChatRoomMessages(
 	chatMessages: ChatRoomMessage[],
 	blockedUserIds: Set<string>,
 ): ChatRoomMessage[] {

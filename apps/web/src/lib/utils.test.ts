@@ -12,7 +12,7 @@ import {
 	toScheduleLabel,
 	toTimeLabel,
 } from "@carlnotes/core/lib/labels"
-import { matchesTopicFindingFilter } from "@carlnotes/core/lib/topicFindingFilters"
+import { isFindingRatedDown, matchesTopicFindingFilter } from "@carlnotes/core/lib/topicFindingFilters"
 import { toSortedTopicFindings } from "@carlnotes/core/lib/topicFindingSorts"
 import { toPossibleSourceUrls } from "@carlnotes/core/lib/topicPromptUrls"
 import { toScanRecapPlaceholder } from "@carlnotes/core/lib/topicScanRecap"
@@ -105,6 +105,13 @@ test("matchesTopicFindingFilter's team scope includes a teammate's bookmark and 
 	expect(matchesTopicFindingFilter(topicFinding({ isBookmarked: true }), "bookmarked", "team")).toBe(true)
 })
 
+test("matchesTopicFindingFilter leaves a finding rated thumbs down out of every view", () => {
+	const ratedDownFinding = topicFinding({ rating: "down", isBookmarked: true })
+	expect(isFindingRatedDown(ratedDownFinding)).toBe(true)
+	expect(matchesTopicFindingFilter(ratedDownFinding, "bookmarked")).toBe(false)
+	expect(isFindingRatedDown(topicFinding({ rating: "up" }))).toBe(false)
+})
+
 // a topic finding fixture for the view and sort helpers. overrides set the fields that a test case exercises
 function topicFinding(overrides: Partial<TopicFinding>): TopicFinding {
 	return {
@@ -186,6 +193,14 @@ test("toSortedTopicFindings trending orders by view count, then newest", () => {
 		"trending",
 	)
 	expect(trendingOrder.map((finding) => finding.findingId)).toEqual(["most", "viewed", "newer", "older"])
+})
+
+// one comment outweighs a few views under trending
+test("toSortedTopicFindings trending counts a comment as five views", () => {
+	const viewedFinding = topicFinding({ findingId: "viewed", viewCount: 4 })
+	const discussedFinding = topicFinding({ findingId: "discussed", viewCount: 0, commentCount: 1 })
+	const trendingOrder = toSortedTopicFindings([viewedFinding, discussedFinding], "trending")
+	expect(trendingOrder.map((finding) => finding.findingId)).toEqual(["discussed", "viewed"])
 })
 
 // a bookmarked finding stays pinned under trending even with fewer views than the rest

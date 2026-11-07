@@ -1,4 +1,5 @@
 import type { Plan } from "@carlnotes/contracts/plans"
+import { toProfilePath } from "@carlnotes/contracts/seo"
 import { cn } from "@carlnotes/nightshift/classNames"
 import type { ReactNode } from "react"
 import { UserAvatar } from "@/components/branding/UserAvatar"
@@ -15,7 +16,7 @@ type UserLinkUser = { userId: string; username: string }
 export function UserNameLink({ user }: { user: UserLinkUser & { avatarVersion: string | null } }) {
 	return (
 		<UserPageLink
-			href={`/profiles/${user.userId}`}
+			href={toProfilePath(user.userId)}
 			tooltip={`${user.username}'s profile`}
 			className="flex items-center gap-2"
 		>

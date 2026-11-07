@@ -24,63 +24,63 @@ payloads, and the constants that the api validates with and the web app parses a
 it, and it imports only `zod`.
 
 `noteTestFixtures.ts` supplies inert Notes table rows to both apps' stories and shared-component tests.
-The contract modules sit at the package root, one per domain, each imported by its own path
-(`@carlnotes/contracts/chat`): `chat.ts`, with the notes a stored question ends with in `chatQuestionNotes.ts` and
-the chat turn contracts in `chatTurns.ts` (the memory and history limits, the reply stream line, the tool calls a turn
-leaves, and the sent tool calls), `teams.ts`, `invites.ts`, `activity.ts`, `profiles.ts`, `profilePage.ts`,
-`admin.ts`, `search.ts`, `findings.ts`, `podcast.ts`, `podcastEpisodePage.ts`, `topics.ts`, `notes.ts`, `pageHead.ts`,
-`signupCta.ts`, `viewerCounts.ts`, a topic's and a podcast episode's counts, and `attachmentTypes.ts`, the file
-types the chat and topic attachment pickers offer on both apps, the type a file name's suffix stands for, the word
-and workbook types the pipeline reads, the topic attachment size limit, and its rejection line
-(`TOPIC_ATTACHMENT_TOO_LARGE_LINE`, `toTopicAttachmentRejectionLine`). `payloads.ts`
-is the request payload schemas the api validates with `zValidator` and the types inferred from them, with the topic
-ones in `topicPayloads.ts`, `enums.ts` and `plans.ts` hold the values that both sides compare, with the role and
-plan readers `isAdminRole`, `isLeaderRole`, `isPaidPlan`, and `isPremiumPlan` that every role or plan check outside
-the api's gate goes through, and `isOverageBillable`, the one rule for whether a scan past the daily limit bills,
-`storeBilling.ts` holds the store entitlement ids and their plans, the plan and interval a store product id names, and
-each store's subscription management page, `sources.ts` defines the Sources
-that an ingester reads, `seo.ts` builds topic slugs and paths, meta descriptions, and the site's structured data, and
-`podcastEpisodes.ts` holds the podcast episode minutes and findings limits, a cover's sizes and the `PodcastCover`
-shape, the show's and the hosts' names, the theme song's credits, and a turn's transcript text; the speech model setting
-and the cover key and path are `@carlnotes/server/podcastEpisodeSettings`. `spokenText.ts` writes markdown as its plain
-words for the meta description and as the text Carl speaks, with fenced code and bare urls removed, a reply split into
-spoken parts on blank lines, and a streaming reply's spoken parts returned as they finish. `time.ts` holds a minute, an
-hour, and a day in milliseconds, `isUtcWeekend`, which says whether a moment falls on a weekend in UTC, and
-`withTimeLimit`, which fails work that outlasts a time limit with the caller's error. `profiles.ts` also holds
-`toSessionProfileIdentity`, the signed-in user's identity for a profile link, read from the session user.
-`reportedPath.ts` names a page by its route's shape, for PostHog's page views and Sentry's page renders alike.
-`youtube.ts` builds a YouTube video's watch page url and its player url, and holds `TOPIC_TUTORIAL_VIDEO`, the video on
-making a topic that the homepage, the menus, and the docs build all read, with the marker a docs page writes for it.
-`mobileApp.ts` holds `MOBILE_APP_BUNDLE_IDENTIFIER`, the iOS bundle identifier and Android package that the mobile
-app's config and the api's Apple provider both read, and `MOBILE_APP_SCHEME` with its origin, which the app's config
-and the api's trusted origins both read. `signupGate.ts` holds the signup gate as both clients see it: the gate cookie's
-name, `MIN_PASSWORD_LENGTH`, the credentials rule a sign-up form parses with, and the app gate's challenge and proof
-shapes.
-`text.ts` holds `toOneLineText`, which puts text on one line for a note, a title, a search query, or a hash, and
-`toDotSeparatedText`, which joins a line's parts on middle dots.
-`mcpViews.ts` names the MCP Apps views, their version, and the data a tool result gives its MCP view, `mcpViewHtml.ts`
-writes an MCP view's html, `mcpScanStatus.ts` holds the shapes and lines of the Scan tools' results, `updates.ts` the
-updates list, and `mcpViewVersions.ts` reads `mcpViewVersions.json`, the MCP view versions stored in object storage that
-`bun run mcp-views:freeze` writes. `mcpViewStoredResults.test.ts` type checks what a stored bundle reads against the
-tool results. `pagination.ts` holds the page
-sizes a paged list offers, and `topicEdits.ts` turns a saved topic's fields into the editable draft a topic edit starts
-from.
-`analyticsEvents.ts` holds the event types: the user events keyed to a user, the bot events keyed to a bot's or an
-app's name, the browser's visit events, the entry points, and an event's properties; the clients that send them are
-`@carlnotes/server/analytics`. `userAgent.ts` reads a request's device properties and names a known crawler, unfurler,
-podcast app, or feed reader from a token list, and `isCountedUserAgent` says whether a request counts as a viewer or a
-listener: not a crawler or an unfurler. `scanFailure.ts` is how a stored Scan failure reads to a person, the
-failure reason a workflow stores, and the application failure a workflow reads from an activity's failure, by its
-fields, so the module imports nothing from Temporal. `avatars.ts` is the default avatar's letters and tint and an avatar
-url's version, `usernames.ts` how a username is shaped, validated, and compared, with the word lists a random one is
-generated from in `usernameWords.ts`, `emails.ts` the canonical form of a Gmail address, and `chatMentions.ts` the chat
-mention parser for the chat room composer and the room's notifications, with the reserved usernames.
-`mcpScanStatusTestFixtures.ts` supplies the Scan statuses the api tests and the scan MCP view's stories and smoke tests read.
-`topicFeedTestFixtures.ts` supplies complete Feed, Topic, and Finding payloads for client/core/mobile tests and native stories.
-`chatTestFixtures.ts` holds the podcast episode note that the contracts and web chat tests share,
-`podcastEpisodeTestFixtures.ts` the podcast episode, summary, and chapter fixtures the contracts, core, web, and
-mobile tests and the component stories share, and `textOrderTestFixtures.ts` holds `hasSubstringsInOrder`, the text
-order check that the api and web tests share.
+`social.ts` holds a social target, a reaction summary, a Comment with its replies and its thread, the shared comment
+slots, the write payloads, the edit time, and `toSocialEventTarget` and `toCommentEventTarget`, how a kind reads in an
+analytics event's name. `socialText.ts` holds the body limit, the plain-text schema, the mention parsing, and the urls a
+shared Comment's body holds. `socialRouteContracts.ts` holds the routes the social client reaches, and
+`socialTestFixtures.ts` supplies reactions and comments to stories and shared-component tests. The contract modules sit
+at the package root, one per domain, each imported by its own path (`@carlnotes/contracts/chat`): `chat.ts`, with the
+notes a stored question ends with in `chatQuestionNotes.ts` and the chat turn contracts in `chatTurns.ts` (the memory
+and history limits, the reply stream line, the tool calls a turn leaves, and the sent tool calls), `teams.ts`,
+`invites.ts`, `activity.ts`, `profiles.ts`, `profilePage.ts`, `admin.ts`, `search.ts`, `findings.ts`, `podcast.ts`,
+`podcastEpisodePage.ts`, `topics.ts`, `notes.ts`, `pageHead.ts`, `signupCta.ts`, `viewerCounts.ts`, a topic's and a
+podcast episode's counts, and `attachmentTypes.ts`, the file types the chat and topic attachment pickers offer on both
+apps, the type a file name's suffix stands for, the word and workbook types the pipeline reads, the topic attachment
+size limit, and its rejection line (`TOPIC_ATTACHMENT_TOO_LARGE_LINE`, `toTopicAttachmentRejectionLine`). `payloads.ts`
+is the request payload schemas the api validates with `zValidator` and the types inferred from them, with the topic ones
+in `topicPayloads.ts`, `enums.ts` and `plans.ts` hold the values that both sides compare, with the role and plan readers
+`isAdminRole`, `isLeaderRole`, `isPaidPlan`, and `isPremiumPlan` that every role or plan check outside the api's gate
+goes through, and `isOverageBillable`, the one rule for whether a scan past the daily limit bills, `storeBilling.ts`
+holds the store entitlement ids and their plans, the plan and interval a store product id names, and each store's
+subscription management page, `sources.ts` defines the Sources that an ingester reads, `seo.ts` builds topic slugs and
+paths, meta descriptions, and the site's structured data, and `podcastEpisodes.ts` holds the podcast episode minutes and
+findings limits, a cover's sizes and the `PodcastCover` shape, the show's and the hosts' names, the theme song's
+credits, and a turn's transcript text; the speech model setting and the cover key and path are
+`@carlnotes/server/podcastEpisodeSettings`. `spokenText.ts` writes markdown as its plain words for the meta description
+and as the text Carl speaks, with fenced code and bare urls removed, a reply split into spoken parts on blank lines, and
+a streaming reply's spoken parts returned as they finish. `time.ts` holds a minute, an hour, and a day in milliseconds,
+`isUtcWeekend`, which says whether a moment falls on a weekend in UTC, and `withTimeLimit`, which fails work that
+outlasts a time limit with the caller's error. `profiles.ts` also holds `toSessionProfileIdentity`, the signed-in user's
+identity for a profile link, read from the session user. `reportedPath.ts` names a page by its route's shape, for
+PostHog's page views and Sentry's page renders alike. `youtube.ts` builds a YouTube video's watch page url and its
+player url, and holds `TOPIC_TUTORIAL_VIDEO`, the video on making a topic that the homepage, the menus, and the docs
+build all read, with the marker a docs page writes for it. `mobileApp.ts` holds `MOBILE_APP_BUNDLE_IDENTIFIER`, the iOS
+bundle identifier and Android package that the mobile app's config and the api's Apple provider both read, and
+`MOBILE_APP_SCHEME` with its origin, which the app's config and the api's trusted origins both read. `signupGate.ts`
+holds the signup gate as both clients see it: the gate cookie's name, `MIN_PASSWORD_LENGTH`, the credentials rule a
+sign-up form parses with, and the app gate's challenge and proof shapes. `text.ts` holds `toOneLineText`, which puts
+text on one line for a note, a title, a search query, or a hash, and `toDotSeparatedText`, which joins a line's parts on
+middle dots. `mcpViews.ts` names the MCP Apps views, their version, and the data a tool result gives its MCP view,
+`mcpViewHtml.ts` writes an MCP view's html, `mcpScanStatus.ts` holds the shapes and lines of the Scan tools' results,
+`updates.ts` the updates list, and `mcpViewVersions.ts` reads `mcpViewVersions.json`, the MCP view versions stored in
+object storage that `bun run mcp-views:freeze` writes. `mcpViewStoredResults.test.ts` type checks what a stored bundle
+reads against the tool results. `pagination.ts` holds the page sizes a paged list offers, and `topicEdits.ts` turns a
+saved topic's fields into the editable draft a topic edit starts from. `analyticsEvents.ts` holds the event types: the
+user events keyed to a user, the bot events keyed to a bot's or an app's name, the browser's visit events, the entry
+points, and an event's properties; the clients that send them are `@carlnotes/server/analytics`. `userAgent.ts` reads a
+request's device properties and names a known crawler, unfurler, podcast app, or feed reader from a token list, and
+`isCountedUserAgent` says whether a request counts as a viewer or a listener: not a crawler or an unfurler.
+`scanFailure.ts` is how a stored Scan failure reads to a person, the failure reason a workflow stores, and the
+application failure a workflow reads from an activity's failure, by its fields, so the module imports nothing from
+Temporal. `avatars.ts` is the default avatar's letters and tint and an avatar url's version, `usernames.ts` how a
+username is shaped, validated, and compared, with the word lists a random one is generated from in `usernameWords.ts`,
+`emails.ts` the canonical form of a Gmail address, and `chatMentions.ts` the chat mention parser for the chat room
+composer and the room's notifications, with the reserved usernames. `mcpScanStatusTestFixtures.ts` supplies the Scan
+statuses the api tests and the scan MCP view's stories and smoke tests read. `topicFeedTestFixtures.ts` supplies
+complete Feed, Topic, and Finding payloads for client/core/mobile tests and native stories. `chatTestFixtures.ts` holds
+the podcast episode note that the contracts and web chat tests share, `podcastEpisodeTestFixtures.ts` the podcast
+episode, summary, and chapter fixtures the contracts, core, web, and mobile tests and the component stories share, and
+`textOrderTestFixtures.ts` holds `hasSubstringsInOrder`, the text order check that the api and web tests share.
 
 - Universal: the root rule. It imports no `@carlnotes` package.
 - A shape both sides need lives here once. A shape only one module reads stays in that module.

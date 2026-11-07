@@ -1,20 +1,28 @@
 import { fetchTopicInviteBadges } from "@carlnotes/client/activityClient"
 import { fetchChatMentionCount, fetchChatRooms } from "@carlnotes/client/chatRoomClient"
+import { fetchOpenReportCount } from "@carlnotes/client/reportClient"
 import { useEffect } from "react"
 import { isFocusedAndOnline, subscribeToFocusAndOnline } from "../lib/focusAndOnline"
 import { startUpdateBadgePoll } from "../lib/updateBadgePoll"
 import { toCurrentChatAccountGuard } from "../stores/chatConversationStore"
 import { markChatRoomsLoadFailed, setChatRooms } from "../stores/chatRoomStore"
+import { setOpenReportCount } from "../stores/openReportStore"
 import { setTopicInviteBadges } from "../stores/topicInviteStore"
 
 /**
- * Polls the chat mention count and the waiting topic invitations for the signed-in account, using Query's browser or
- * native foreground and connectivity adapters, and reloads the chat rooms when the mention count changes.
+ * Polls the chat mention count, the waiting topic invitations, and an admin's open report count for the signed-in
+ * account, using Query's browser or native foreground and connectivity adapters, and reloads the chat rooms when the
+ * mention count changes.
  */
-export function useUpdateBadges(userId: string | null | undefined, reloadChatRooms: () => void): void {
+export function useUpdateBadges(
+	userId: string | null | undefined,
+	isAdmin: boolean,
+	reloadChatRooms: () => void,
+): void {
 	useEffect(() => {
-		// clear the previous account's invite badges
+		// clear the previous account's invite badges and open report count
 		setTopicInviteBadges([])
+		setOpenReportCount(0)
 		if (!userId) {
 			return
 		}
@@ -24,10 +32,12 @@ export function useUpdateBadges(userId: string | null | undefined, reloadChatRoo
 			isCurrentAccount: toCurrentChatAccountGuard(),
 			fetchChatMentionCount,
 			fetchTopicInviteBadges,
+			fetchOpenReportCount: isAdmin ? fetchOpenReportCount : undefined,
 			onChatMentionCountChange: reloadChatRooms,
 			onTopicInviteBadges: setTopicInviteBadges,
+			onOpenReportCount: setOpenReportCount,
 		})
-	}, [userId, reloadChatRooms])
+	}, [userId, isAdmin, reloadChatRooms])
 }
 
 /**

@@ -1,5 +1,6 @@
 // user blocks: writing and clearing one, and listing a user's. the read filter is in @carlnotes/db/contentFilters
-import type { BlockedUser } from "@carlnotes/contracts/blocks"
+import { toAvatarVersion } from "@carlnotes/contracts/avatars"
+import type { UserBlock } from "@carlnotes/contracts/userBlocks"
 import { db } from "@carlnotes/db"
 import { deleteRedisKeys } from "@carlnotes/db/redis"
 import { userBlocks } from "@carlnotes/db/schema/userBlocks"
@@ -11,18 +12,18 @@ import { type AppEnv, currentUser } from "./currentUser"
 import { loadUsername } from "./usernames"
 
 /**
- * Blocks a user for the blocker and drops the blocker's cached mention count, which the blocked person's mentions
- * no longer count toward. A repeat block writes nothing.
+ * Saves the blocker's user block of a user and drops the blocker's cached mention count, which the blocked user's mentions
+ * no longer count toward. A repeat user block writes nothing.
  */
-export async function blockUser(blockerUserId: string, blockedUserId: string): Promise<void> {
+export async function saveUserBlock(blockerUserId: string, blockedUserId: string): Promise<void> {
 	await db.insert(userBlocks).values({ blockerUserId, blockedUserId }).onConflictDoNothing()
 	await deleteRedisKeys(toUnseenChatMentionCountKey(blockerUserId))
 }
 
 /**
- * Removes the blocker's block of a user.
+ * Removes the blocker's user block of a user.
  */
-export async function unblockUser(blockerUserId: string, blockedUserId: string): Promise<void> {
+export async function deleteUserBlock(blockerUserId: string, blockedUserId: string): Promise<void> {
 	await db
 		.delete(userBlocks)
 		.where(and(eq(userBlocks.blockerUserId, blockerUserId), eq(userBlocks.blockedUserId, blockedUserId)))
@@ -32,49 +33,58 @@ export async function unblockUser(blockerUserId: string, blockedUserId: string):
 /**
  * Returns whether the blocker has blocked the user.
  */
-export async function isUserBlocked(blockerUserId: string, blockedUserId: string): Promise<boolean> {
-	const [blockRow] = await db
+export async function hasUserBlock(blockerUserId: string, blockedUserId: string): Promise<boolean> {
+	const [userBlockRow] = await db
 		.select({ blockedUserId: userBlocks.blockedUserId })
 		.from(userBlocks)
 		.where(and(eq(userBlocks.blockerUserId, blockerUserId), eq(userBlocks.blockedUserId, blockedUserId)))
 		.limit(1)
-	return Boolean(blockRow)
+	return Boolean(userBlockRow)
 }
 
 /**
- * Loads the users a user has blocked, newest block first.
+ * Loads the users a user has blocked, newest user block first.
  */
-export async function loadBlockedUsers(blockerUserId: string): Promise<BlockedUser[]> {
-	// each block joined to the blocked person's current username
-	const blockedUserRows = await db
-		.select({ id: users.id, username: users.username, blockedAt: userBlocks.createdAt })
+export async function loadUserBlocks(blockerUserId: string): Promise<UserBlock[]> {
+	// each user block joined to the blocked user's current username and avatar
+	const userBlockRows = await db
+		.select({
+			id: users.id,
+			username: users.username,
+			avatarSource: users.avatarSource,
+			avatarKey: users.avatarKey,
+			blockedAt: userBlocks.createdAt,
+		})
 		.from(userBlocks)
 		.innerJoin(users, eq(users.id, userBlocks.blockedUserId))
 		.where(eq(userBlocks.blockerUserId, blockerUserId))
 		.orderBy(desc(userBlocks.createdAt))
 
-	// the block time as the api sends dates
-	return blockedUserRows.map((blockedUserRow) => ({
-		...blockedUserRow,
-		blockedAt: blockedUserRow.blockedAt.toISOString(),
+	// the avatar and the user block time as the api sends them
+	return userBlockRows.map((userBlockRow) => ({
+		id: userBlockRow.id,
+		username: userBlockRow.username,
+		avatarSource: userBlockRow.avatarSource,
+		avatarVersion: toAvatarVersion(userBlockRow),
+		blockedAt: userBlockRow.blockedAt.toISOString(),
 	}))
 }
 
 /**
  * Loads the ids of the people a user has blocked, for a read that filters rows after loading them.
  */
-export async function loadBlockedUserIds(blockerUserId: string): Promise<Set<string>> {
-	const blockedUserRows = await db
+export async function loadUserBlockedIds(blockerUserId: string): Promise<Set<string>> {
+	const userBlockRows = await db
 		.select({ blockedUserId: userBlocks.blockedUserId })
 		.from(userBlocks)
 		.where(eq(userBlocks.blockerUserId, blockerUserId))
-	return new Set(blockedUserRows.map((blockedUserRow) => blockedUserRow.blockedUserId))
+	return new Set(userBlockRows.map((userBlockRow) => userBlockRow.blockedUserId))
 }
 
-// the block routes: block a user, unblock them, and list the blocker's blocked people
+// the user block routes: block a user, unblock them, and list the blocker's blocked users
 export const userBlocksRoute = new Hono<AppEnv>()
 	.post("/users/:id/block", async (context) => {
-		// reject a signed-out visitor, a self block, and an unknown user
+		// reject a signed-out visitor, a self user block, and an unknown user
 		const userId = currentUser(context)
 		if (!userId) {
 			return context.json({ error: "unauthorized" }, 401)
@@ -88,8 +98,8 @@ export const userBlocksRoute = new Hono<AppEnv>()
 			return context.json({ error: "not found" }, 404)
 		}
 
-		// write the block
-		await blockUser(userId, blockedUserId)
+		// write the user block
+		await saveUserBlock(userId, blockedUserId)
 		return context.json({ ok: true })
 	})
 	.delete("/users/:id/block", async (context) => {
@@ -99,8 +109,8 @@ export const userBlocksRoute = new Hono<AppEnv>()
 			return context.json({ error: "unauthorized" }, 401)
 		}
 
-		// remove the block
-		await unblockUser(userId, context.req.param("id"))
+		// remove the user block
+		await deleteUserBlock(userId, context.req.param("id"))
 		return context.json({ ok: true })
 	})
 	.get("/users/me/blocks", async (context) => {
@@ -109,5 +119,5 @@ export const userBlocksRoute = new Hono<AppEnv>()
 		if (!userId) {
 			return context.json({ error: "unauthorized" }, 401)
 		}
-		return context.json({ blockedUsers: await loadBlockedUsers(userId) })
+		return context.json({ blockedUsers: await loadUserBlocks(userId) })
 	})

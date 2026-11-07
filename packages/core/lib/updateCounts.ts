@@ -1,9 +1,9 @@
-// the update count: one number summing unread chat mentions, note changes, and topic invitations, the labels a
-// screen reader hears, and the groups a tooltip or a long-press sheet lists, chats, then notes, then invitations
+// the update count: one number summing unread chat mentions, note changes, topic invitations, and an admin's open
+// reports, the labels a screen reader hears, and the groups a tooltip or a long-press sheet lists in that order
 import type { ChatMention } from "@carlnotes/contracts/chat"
 import type { TopicInviteBadge } from "@carlnotes/contracts/invites"
 import { type NoteBadge, toNoteCount } from "@carlnotes/contracts/notes"
-import { toCountNoun } from "./labels"
+import { toCountLabel, toCountNoun } from "./labels"
 import { toNoteChangeLabel } from "./noteBadges"
 
 // how many lines a group lists before folding the rest into a count
@@ -16,18 +16,19 @@ export type UpdateLine = { key: string; parts: UpdateLinePart[] }
 // one waiting group: its heading and its lines
 export type UpdateSection = { heading: string; lines: UpdateLine[] }
 
-// the three groups a badge sums
+// the groups a badge sums. only an admin has open reports
 export type UpdateBadges = {
 	chatMentions: ChatMention[]
 	noteBadges: NoteBadge[]
 	invites: TopicInviteBadge[]
+	openReportCount?: number
 }
 
 /**
- * Sums the chat mentions, the note changes, and the topic invitations into the badge's one count.
+ * Sums the chat mentions, the note changes, the topic invitations, and the open reports into the badge's one count.
  */
-export function toUpdateCount({ chatMentions, noteBadges, invites }: UpdateBadges): number {
-	return chatMentions.length + toNoteCount(noteBadges) + invites.length
+export function toUpdateCount({ chatMentions, noteBadges, invites, openReportCount = 0 }: UpdateBadges): number {
+	return chatMentions.length + toNoteCount(noteBadges) + invites.length + openReportCount
 }
 
 /**
@@ -61,13 +62,20 @@ export function toMenuTriggerLabel(name: string, updateBadges: UpdateBadges): st
 }
 
 /**
- * Lists the waiting groups under their own headings, chats, then notes, then invitations, skipping an empty group.
+ * Lists the waiting groups under their own headings, chats, then notes, then invitations, then open reports, skipping
+ * an empty group. Open reports are a heading with no lines.
  */
-export function toUpdateSections({ chatMentions, noteBadges, invites }: UpdateBadges): UpdateSection[] {
+export function toUpdateSections({
+	chatMentions,
+	noteBadges,
+	invites,
+	openReportCount = 0,
+}: UpdateBadges): UpdateSection[] {
 	const sections = [
 		chatMentions.length > 0 && { heading: toChatLabel(chatMentions), lines: toChatMentionLines(chatMentions) },
 		noteBadges.length > 0 && { heading: toNoteLabel(toNoteCount(noteBadges)), lines: toNoteLines(noteBadges) },
 		invites.length > 0 && { heading: toTopicInviteLabel(invites.length), lines: toTopicInviteLines(invites) },
+		openReportCount > 0 && { heading: toCountLabel(openReportCount, "open report"), lines: [] },
 	]
 	return sections.filter((section) => section !== false)
 }

@@ -2,6 +2,7 @@ import { authClient } from "@carlnotes/client/authClient"
 import { fetchTopicPage } from "@carlnotes/client/topicClient"
 import type { Topic } from "@carlnotes/contracts/profiles"
 import { useTopicEmails } from "@carlnotes/core/hooks/useTopicEmails"
+import { toRemoveTopicConfirmation } from "@carlnotes/core/lib/confirmationCopy"
 import { topicSortValues, toTopicsTableColumns } from "@carlnotes/core/lib/topicsTableColumns"
 import { useQuery } from "@tanstack/react-query"
 import { X } from "lucide-react-native"
@@ -9,6 +10,7 @@ import { useState } from "react"
 import { View } from "react-native"
 import { CoffeeLoading } from "@/components/branding/CoffeeLoading"
 import { NoteIcon } from "@/components/branding/NoteIcon"
+import { showConfirmAlert } from "@/components/common/ConfirmDialog"
 import { PreferenceSwitch } from "@/components/common/PreferenceSwitch"
 import { Sheet } from "@/components/common/Sheet"
 import { Button } from "@/components/primitives/button"
@@ -31,6 +33,14 @@ export function TopicsTable({
 	onRemoveTopic?: (topic: Topic) => void
 }) {
 	const emails = useTopicEmails()
+
+	// taking a topic off the team asks first
+	function handleRemoveTopicPress(topic: Topic): void {
+		showConfirmAlert({
+			...toRemoveTopicConfirmation({ topicName: topic.name }),
+			onConfirm: () => onRemoveTopic?.(topic),
+		})
+	}
 	const columns = toTopicsTableColumns({
 		topics,
 		includesNonPublicTopics,
@@ -48,7 +58,11 @@ export function TopicsTable({
 		),
 		renderActive: onRemoveTopic
 			? (topic) => (
-					<PreferenceSwitch label={`Deactivate ${topic.name}`} isChecked onChange={() => onRemoveTopic(topic)} />
+					<PreferenceSwitch
+						label={`Deactivate ${topic.name}`}
+						isChecked
+						onChange={() => handleRemoveTopicPress(topic)}
+					/>
 				)
 			: undefined,
 		renderRemove: onRemoveTopic
@@ -57,7 +71,7 @@ export function TopicsTable({
 						variant="ghost"
 						size="icon-sm"
 						accessibilityLabel={`Remove ${topic.name} from the team`}
-						onPress={() => onRemoveTopic(topic)}
+						onPress={() => handleRemoveTopicPress(topic)}
 					>
 						<Icon as={X} className="size-4 text-foreground" />
 					</Button>

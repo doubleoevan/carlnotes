@@ -2,6 +2,7 @@ import { maxTopicFindingsOptions, type Visibility, visibilities } from "@carlnot
 import type { TopicPodcast } from "@carlnotes/contracts/podcast"
 import { FULL_PODCAST_EPISODE_MINUTES, SHORT_PODCAST_EPISODE_MINUTES } from "@carlnotes/contracts/podcastEpisodes"
 import type { TopicResponse } from "@carlnotes/contracts/topics"
+import { PODCAST_COMMENTS_LABEL } from "@carlnotes/core/lib/socialLabels"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { useNavigate } from "@tanstack/react-router"
 import { useId, useRef, useState } from "react"
@@ -50,6 +51,7 @@ export function EditTopicModal({
 	const titleInputId = useId()
 	const promptInputId = useId()
 	const maxTopicFindingsSelectId = useId()
+	const commentsSwitchId = useId()
 	const visibilitySelectId = useId()
 	const podcastSwitchId = useId()
 	// sends the user to the plans page when a daily schedule is at the plan's limit
@@ -263,6 +265,21 @@ export function EditTopicModal({
 							isTopicOwner={topic.isTopicOwner}
 							onPodcastChange={fields.setIsPodcastEnabled}
 						/>
+						{/* the owner's switch for comments in the topic's podcast episodes */}
+						{fields.isPodcastEnabled && (
+							<div className="mt-3 flex items-center justify-between gap-3">
+								<label htmlFor={commentsSwitchId} className="text-muted-foreground">
+									{PODCAST_COMMENTS_LABEL}
+								</label>
+								<Switch
+									id={commentsSwitchId}
+									checked={fields.isPodcastCommentsEnabled}
+									disabled={!topic.isTopicOwner}
+									onCheckedChange={fields.setIsPodcastCommentsEnabled}
+									className="h-7.5 w-13 [&>span]:size-6"
+								/>
+							</div>
+						)}
 					</div>
 				)}
 

@@ -1,7 +1,7 @@
 ---
 title: Add to AI
 description: >-
-  Connect CarlNotes to Claude, ChatGPT, and coding AI Agents. Set up OAuth sign-in, understand all nineteen MCP tools,
+  Connect CarlNotes to Claude, ChatGPT, and coding AI Agents. Set up OAuth sign-in, understand all twenty-two MCP tools,
   and manage access to your topics and findings.
 sidebar:
   order: 2
@@ -118,7 +118,7 @@ without one.
 
 ## Tool reference
 
-The server advertises the same nineteen tools to visitors and connected accounts. Sign-in changes permission, not the
+The server advertises the same twenty-two tools to visitors and connected accounts. Sign-in changes permission, not the
 tool list. Public tools also read private or invite topics when your account has access.
 
 | Tool | What it does | Account and effects |
@@ -142,6 +142,9 @@ tool list. Public tools also read private or invite topics when your account has
 | `read_scan_status` | Reads a topic's running brew by stage, or its latest recap, with what each source found and the state of its podcast episode. | Public topics work without sign-in. Private and invite topics need access. Read-only. |
 | `stop_scan` | Stops a topic's running brew. | Requires the topic's owner or an admin. What Carl kept stays, what the brew spent stays charged, and its daily brew comes back. |
 | `read_topic_context` | Returns what Carl holds on a topic for a question: the closest findings with excerpts, and the recent brew reports. Your AI writes the reply. | Requires an account with access to the topic. Uses the account's model budget for one search. Saves no chat. Read-only. |
+| `save_reaction` | Leaves your reaction on a finding, a podcast episode, a topic, or a hot take: one of six positive types. | Requires an account that may read the topic. One reaction per account on each. A new call changes it, and a call with no type removes it. |
+| `read_hot_takes` | Reads the hot takes on a finding, a podcast episode, or a topic, newest first, twenty to a page, each with its first replies. | Public topics work without sign-in. Private and invite topics need access. Other people's words come back marked as data. Read-only. |
+| `post_hot_take` | Posts your hot take on a finding, a podcast episode, or a topic, or a reply to one, up to 2,000 characters, where `@username` mentions someone. | Requires an account that may read the topic. The hot take is public wherever its topic is, and it is checked before it posts. Repeating it posts it twice. |
 
 Account tools carry conservative change annotations, so your AI app can ask before calling them. That prompt does
 not replace CarlNotes' permission checks. For a public-visibility change or source removal, `edit_topic` first returns
@@ -177,6 +180,9 @@ calls a tool when you ask, and never on its own.
 | "how is the brew going", "is Carl done", "show the latest brew" | `read_scan_status` |
 | "Carl, stop the brew", "cancel this brew" | `stop_scan` |
 | "ask Carl about this topic", "what does Carl know about…", "what's the latest on…" | `read_topic_context` |
+| "Carl, react to this", "like this finding" | `save_reaction` | Leaves your reaction on a finding, a podcast episode, a topic, or a hot take: one of six positive types. | Requires an account that may read the topic. One reaction per account on each. A new call changes it, and a call with no type removes it. |
+| "what are people saying", "read the hot takes", "read the conversation" | `read_hot_takes` | Reads the hot takes on a finding, a podcast episode, or a topic, newest first, twenty to a page, each with its first replies. | Public topics work without sign-in. Private and invite topics need access. Other people's words come back marked as data. Read-only. |
+| "leave a hot take", "post a comment", "reply to the conversation" | `post_hot_take` | Posts your hot take on a finding, a podcast episode, or a topic, or a reply to one, up to 2,000 characters, where `@username` mentions someone. | Requires an account that may read the topic. The hot take is public wherever its topic is, and it is checked before it posts. Repeating it posts it twice. |
 
 ### Send and suggestion arguments
 
@@ -257,7 +263,8 @@ together. A domain label identifies a registration; it is not a certification fr
 
 Choose **Disconnect** and confirm to revoke your grants for that app group. New sends stop immediately, and those
 refresh grants cannot issue more access tokens. Other accounts' grants remain unchanged. Existing read tokens can
-work until expiry. Reconnecting creates a new consent and can show a new, dismissible Topic setup notice.
+work until expiry. A disconnected app shows **Reconnect**, which opens Add to AI at that app's steps. You finish in the
+app itself. Reconnecting creates a new consent and can show a new, dismissible Topic setup notice.
 
 Remove the connection in your AI app. For Codex, `codex mcp logout carlnotes` removes stored credentials and
 `codex mcp remove carlnotes` removes the server entry. Other clients have their own disconnect or remove controls.
@@ -287,8 +294,8 @@ curl https://carlnotes.com/api/personal-sources/sends \
 ```
 
 Keep a request ID stable when retrying the same send. Changing its content or destination produces a conflict.
-Replaying a deleted send cannot restore it. Revocation and loss of Premium immediately stop key sends;
-you can still list and revoke old keys after downgrading.
+Replaying a deleted send cannot restore it. Revocation and loss of Premium immediately stop key sends. Revoking deletes
+the key, and what it already sent stays under the name "API key". You can still list and revoke keys after downgrading.
 
 The [privacy policy's MCP section](/privacy#connections-to-ai-apps-mcp) explains arguments, results, tokens, analytics,
 and retention. CarlNotes cannot read your assistant's chat history, memory, or uploaded files through MCP. It receives

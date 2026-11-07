@@ -1,8 +1,9 @@
 import type { AccountFieldElements, ProfileFieldElements } from "@carlnotes/core/components/AccountFields"
-import type { BlockedUsersElements } from "@carlnotes/core/components/BlockedUsersSection"
+import type { UserBlocksElements } from "@carlnotes/core/components/UserBlocksSection"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { Check, Info } from "lucide-react"
-import { AnchorLink } from "@/components/common/AnchorLink"
+import { ConfirmDialog } from "@/components/common/ConfirmDialog"
+import { UserProfileLink } from "@/components/common/UserProfileLink"
 import { Button } from "@/components/primitives/button"
 import { Input } from "@/components/primitives/input"
 import { Label } from "@/components/primitives/label"
@@ -71,7 +72,7 @@ export const ACCOUNT_FIELD_ELEMENTS: AccountFieldElements = {
 }
 
 // the blocked people section's rows around the shared account elements
-export const BLOCKED_USERS_ELEMENTS: BlockedUsersElements = {
+export const USER_BLOCKS_ELEMENTS: UserBlocksElements = {
 	Card: ACCOUNT_FIELD_ELEMENTS.Card,
 	Group: ACCOUNT_FIELD_ELEMENTS.Group,
 	Heading: ACCOUNT_FIELD_ELEMENTS.Heading,
@@ -82,11 +83,8 @@ export const BLOCKED_USERS_ELEMENTS: BlockedUsersElements = {
 		</Button>
 	),
 	Row: ({ children }) => <div className="flex items-center justify-between gap-3 text-sm">{children}</div>,
-	Username: ({ userId, username }) => (
-		<AnchorLink href={`/profiles/${userId}`} className="min-w-0 truncate font-semibold">
-			{username}
-		</AnchorLink>
-	),
+	UserLink: ({ user }) => <UserProfileLink user={user} className="min-w-0 truncate" />,
+	Confirm: ConfirmDialog,
 }
 
 // preserve the web profile's row layout, form submission, and provider-photo toggle

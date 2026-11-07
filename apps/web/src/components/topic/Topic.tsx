@@ -18,7 +18,13 @@ import { toSignupNavigation } from "@/components/session/signupPrompts"
 import { ShareTopic } from "@/components/share/ShareTopic"
 import { TeamLink } from "@/components/team/TeamLink"
 import { useRevealClassName } from "@/hooks/useRevealClassName"
-import { POPOVER_PANEL_CLASS, RAIL_BARE_ICON_INSET, RAIL_TEXT_INSET, STANDALONE_LINK_CLASS } from "@/lib/styleClasses"
+import {
+	ACTIVE_ICON_CLASS,
+	POPOVER_PANEL_CLASS,
+	RAIL_BARE_ICON_INSET,
+	RAIL_TEXT_INSET,
+	STANDALONE_LINK_CLASS,
+} from "@/lib/styleClasses"
 import { useTopicFeed } from "@/providers/TopicFeedProvider"
 import { TopicFindingList } from "./TopicFindingsSection"
 import { TopicInfo } from "./TopicInfo"
@@ -149,7 +155,7 @@ function SubscribeToggle({ topic }: { topic: TopicFeed }) {
 				aria-label={tooltip}
 				className="text-muted-foreground hover:text-foreground grid h-11 w-7 shrink-0 place-items-center sm:size-7"
 			>
-				<PawPrint className={cn("size-3.75", topic.isSubscribed && "text-primary fill-current")} />
+				<PawPrint className={cn("size-3.75", topic.isSubscribed && ACTIVE_ICON_CLASS)} />
 			</TooltipTrigger>
 			<TooltipContent>{tooltip}</TooltipContent>
 		</Tooltip>

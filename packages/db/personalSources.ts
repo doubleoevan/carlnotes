@@ -26,10 +26,13 @@ export async function loadSenderPersonalSourcesContext({
 	userId: string
 	topicId: string
 }): Promise<PersonalSourcesContextResponse | null> {
+	// check sender access before reading private context
 	const [topic] = await db.select().from(topics).where(eq(topics.id, topicId)).limit(1)
 	if (!topic || !(await isAllowed(userId, "personalSources:read", topic))) {
 		return null
 	}
+
+	// the review context, with no expiry
 	const context = await loadPersonalSourcesReviewContext({ topicId, userId })
 	return {
 		text: context?.text ?? null,
@@ -54,6 +57,8 @@ export async function loadTopicPersonalSources({
 	if (!topic || !(await isAllowed(userId, "personalSources:read", topic))) {
 		return null
 	}
+
+	// the sender's sources on the Topic, and how many there are
 	const sourceRows = await db
 		.select()
 		.from(sources)
@@ -171,6 +176,7 @@ function toSourceIdentity({
 	keysById: Map<string, import("@carlnotes/contracts/personalSourcesAccounts").AiAgentApiKey>
 	canUseKey: boolean
 }): { label: string; isConnected: boolean; groupId: string } {
+	// an OAuth client reads as its connected AI agent
 	if (config.delivery === "oauth") {
 		const aiAgent = aiAgentsByClient.get(config.clientId)
 		return {
@@ -187,5 +193,5 @@ function toSourceIdentity({
 		}
 	}
 	const key = keysById.get(config.apiKeyId)
-	return { label: key?.label ?? "API key", isConnected: Boolean(key && !key.revokedAt) && canUseKey, groupId: sourceId }
+	return { label: key?.label ?? "API key", isConnected: Boolean(key) && canUseKey, groupId: sourceId }
 }

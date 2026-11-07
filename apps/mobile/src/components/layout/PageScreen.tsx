@@ -1,6 +1,6 @@
 import { cn } from "@carlnotes/nightshift/classNames"
 import type { LucideIcon } from "lucide-react-native"
-import type { ReactNode } from "react"
+import { type ComponentRef, type ReactNode, useRef } from "react"
 import { RefreshControl, ScrollView, View } from "react-native"
 import { ClassNameSafeAreaView } from "@/components/common/ClassNameSafeAreaView"
 import type { ReportSubject } from "@/components/common/ReportIssueDialog"
@@ -11,6 +11,10 @@ import { PageActionMenu, type PageActionOption } from "@/components/search/PageA
 import { SearchBar } from "@/components/search/SearchBar"
 import { useSearchBar } from "@/providers/SearchBarProvider"
 import { Header } from "./Header"
+import { SectionTargetContext, type SectionTargetRef } from "./SectionAnchor"
+
+// the space left above a section the screen opens at
+const SCROLL_TARGET_GAP = 12
 
 /**
  * Keeps menu screens in the web's reading column with native safe areas and pull-to-refresh.
@@ -46,6 +50,21 @@ export function PageScreen({
 	hasNewTopicButton?: boolean
 }) {
 	const { filters } = useSearchBar()
+
+	// keep the linked section in view as content above it loads, until the user scrolls
+	const scrollViewRef = useRef<ComponentRef<typeof ScrollView>>(null)
+	const sectionTargetRef: SectionTargetRef = useRef(null)
+	const hasUserScrolledRef = useRef(false)
+	function handleContentSizeChange(): void {
+		const contentView = scrollViewRef.current?.getInnerViewRef()
+		if (!sectionTargetRef.current || !contentView || hasUserScrolledRef.current) {
+			return
+		}
+		sectionTargetRef.current.measureLayout(contentView, (_x, y) => {
+			scrollViewRef.current?.scrollTo({ y: y - SCROLL_TARGET_GAP, animated: false })
+		})
+	}
+
 	return (
 		<View className="flex-1 bg-background">
 			<Header />
@@ -58,6 +77,11 @@ export function PageScreen({
 			/>
 			<ClassNameSafeAreaView edges={["left", "right", "bottom"]} className="w-full max-w-3xl flex-1 self-center">
 				<ScrollView
+					ref={scrollViewRef}
+					onContentSizeChange={handleContentSizeChange}
+					onScrollBeginDrag={() => {
+						hasUserScrolledRef.current = true
+					}}
 					keyboardShouldPersistTaps="handled"
 					contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: 32 }}
 					refreshControl={onRefresh ? <RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} /> : undefined}
@@ -76,7 +100,9 @@ export function PageScreen({
 						</View>
 					)}
 					{byline && <View className="mt-2">{byline}</View>}
-					<View className={cn("mt-6 gap-6", contentClassName)}>{children}</View>
+					<View className={cn("mt-6 gap-6", contentClassName)}>
+						<SectionTargetContext value={sectionTargetRef}>{children}</SectionTargetContext>
+					</View>
 					<Footer />
 				</ScrollView>
 			</ClassNameSafeAreaView>

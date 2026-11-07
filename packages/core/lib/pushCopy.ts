@@ -1,5 +1,6 @@
 // the lines the push permission sheet and the account's Notifications section say, plain facts about what a push
-// notification tells you, and the label every action that opens the phone's settings shares
+// notification tells you, the daily notifications email's label, and the label every action that opens the phone's
+// settings shares
 
 // the sheet that explains the notifications before the system asks
 export const PUSH_PERMISSION_SHEET = {
@@ -15,6 +16,9 @@ export const NOTIFICATIONS_SECTION_TITLE = "Notifications"
 export const NOTIFICATIONS_SECTION_TEXT = "A topic notifies you only while you follow it with its emails on."
 export const TOPIC_PUSH_LABEL = "New findings on topics you follow"
 export const CHAT_MENTION_PUSH_LABEL = "Mentions and replies in team chats"
+
+// the label of the daily notifications email's switch
+export const NOTIFICATIONS_EMAIL_LABEL = "Daily notifications email"
 
 // what the section says before the phone was asked, and after the phone's settings turned notifications off
 export const PUSH_UNDETERMINED_TEXT = "Notifications are off on this phone."

@@ -1,5 +1,6 @@
 // the page head helpers. the site and page titles, structured data, topic slugs and paths, and the meta description
 import { PLANS } from "./plans"
+import { isPublishedPodcastEpisode } from "./podcast"
 import { SITE_HOST } from "./site"
 import { toPlainText } from "./spokenText"
 import { toOneLineText } from "./text"
@@ -154,6 +155,13 @@ export function toInvitePath(token: string): string {
 }
 
 /**
+ * Returns a user's profile page path.
+ */
+export function toProfilePath(userId: string): string {
+	return `/profiles/${userId}`
+}
+
+/**
  * Returns a topic's feed path, which names the topic by id alone so a renamed topic keeps its feed url.
  */
 export function toTopicFeedPath(topicId: string): string {
@@ -165,6 +173,32 @@ export function toTopicFeedPath(topicId: string): string {
  */
 export function toPodcastFeedPath(topicId: string): string {
 	return `/topics/${topicId}/podcast.xml`
+}
+
+/**
+ * Returns the path that opens a Finding: its topic page's path with the Finding's id in the query.
+ */
+export function toFindingPath(topic: { id: string; name: string }, findingId: string): string {
+	return `${toTopicPath(topic)}?finding=${encodeURIComponent(findingId)}`
+}
+
+/**
+ * Returns the path of the page that shows what a Reaction or a Comment hangs on: its Finding on the Topic's page, its
+ * published Podcast Episode's own page, or the Topic's page.
+ */
+export function toSocialTargetPath(
+	topic: { id: string; name: string },
+	{
+		findingId,
+		season,
+		episodeNumber,
+	}: { findingId: string | null; season: number | null; episodeNumber: number | null },
+): string {
+	if (findingId) {
+		return toFindingPath(topic, findingId)
+	}
+	const podcastEpisode = { season, episodeNumber }
+	return isPublishedPodcastEpisode(podcastEpisode) ? toPodcastEpisodePath(topic, podcastEpisode) : toTopicPath(topic)
 }
 
 /**

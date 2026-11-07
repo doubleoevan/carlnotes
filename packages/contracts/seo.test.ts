@@ -8,6 +8,7 @@ import {
 	toPageTitle,
 	toPodcastEpisodePath,
 	toPodcastFeedPath,
+	toSocialTargetPath,
 	toTopicFeedPath,
 	toTopicPath,
 	toTopicSlug,
@@ -86,6 +87,17 @@ test("toPodcastFeedPath uses the id alone, and toPodcastEpisodePath adds the sea
 
 // an unpublished podcast episode has a null season and number, which the compiler rejects. the path it would write
 // ends in /episodes/null/null
+test("toSocialTargetPath names the Finding, then the published Podcast Episode, and else the Topic", () => {
+	const topic = { id: TOPIC_ID, name: "Agents" }
+	const noTarget = { findingId: null, season: null, episodeNumber: null }
+	expect(toSocialTargetPath(topic, { ...noTarget, findingId: "finding-1" })).toContain("finding-1")
+	expect(toSocialTargetPath(topic, { ...noTarget, season: 1, episodeNumber: 2 })).toBe(
+		toPodcastEpisodePath(topic, { season: 1, episodeNumber: 2 }),
+	)
+	expect(toSocialTargetPath(topic, noTarget)).toBe(toTopicPath(topic))
+	expect(toSocialTargetPath(topic, { ...noTarget, season: 1 })).toBe(toTopicPath(topic))
+})
+
 test("toPodcastEpisodePath takes a published season and number alone", () => {
 	const topic = { id: TOPIC_ID, name: "Home Espresso" }
 	const unpublishedPodcastEpisode: { season: number | null; episodeNumber: number | null } = {

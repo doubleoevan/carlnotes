@@ -15,12 +15,14 @@ import * as invites from "./schema/invites"
 import * as jobLeases from "./schema/jobLeases"
 import * as mobileMinimumVersions from "./schema/mobileMinimumVersions"
 import * as notes from "./schema/notes"
+import * as notificationsEmailSends from "./schema/notificationsEmailSends"
 import * as personalSources from "./schema/personalSources"
 import * as podcast from "./schema/podcast"
 import * as pushDevices from "./schema/pushDevices"
 import * as releases from "./schema/releases"
 import * as reports from "./schema/reports"
 import * as scans from "./schema/scans"
+import * as social from "./schema/social"
 import * as storage from "./schema/storage"
 import * as teams from "./schema/teams"
 import * as teamTopics from "./schema/teamTopics"
@@ -69,11 +71,13 @@ export const schema = {
 	...personalSources,
 	...mobileMinimumVersions,
 	...notes,
+	...notificationsEmailSends,
 	...podcast,
 	...pushDevices,
 	...releases,
 	...reports,
 	...scans,
+	...social,
 	...storage,
 	...teams,
 	...teamTopics,

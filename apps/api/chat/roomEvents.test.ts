@@ -94,7 +94,7 @@ async function openRoomStream(
 	spyOn(roomMessages, "loadChatRoomMessages").mockImplementation(() => chatMessageHistory)
 	const loadChatRoomDeltasSpy = spyOn(roomMessages, "loadChatRoomDeltas").mockResolvedValue([toChatMessage(2)])
 	spyOn(roomVisibility, "toVisibleChatRoomMessages").mockImplementation(async (_userId, chatMessages) => chatMessages)
-	spyOn(userBlocks, "loadBlockedUserIds").mockResolvedValue(new Set())
+	spyOn(userBlocks, "loadUserBlockedIds").mockResolvedValue(new Set())
 
 	// the room's subscription, which a test fires by hand
 	const stopListening = mock(() => {})

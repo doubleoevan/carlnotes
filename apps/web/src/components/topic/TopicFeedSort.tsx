@@ -1,18 +1,27 @@
 import { TOPIC_FINDING_SORTS, type TopicFindingSort } from "@carlnotes/contracts/findings"
-import { TOPIC_FINDING_SORT_LABELS } from "@carlnotes/core/lib/topicFeedLabels"
+import { TOPIC_FINDING_SORT_LABELS, TRENDING_SORT_EMOJI } from "@carlnotes/core/lib/topicFeedLabels"
 import { cn } from "@carlnotes/nightshift/classNames"
-import { ArrowUpDown, Check, Clock, Flame, type LucideIcon, Target } from "lucide-react"
-import { useState } from "react"
+import { ArrowUpDown, Check, Clock, Target } from "lucide-react"
+import { type ComponentType, useState } from "react"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/primitives/popover"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import { MENU_OPTION_CLASS, MENU_OPTION_SELECTED_CLASS, SEARCH_BAR_ICON_CLASS } from "@/lib/styleClasses"
 import { useOptionalTopicFeed } from "@/providers/TopicFeedProvider"
 
 // each sort mode's display label and icon
-const SORT_OPTIONS: Record<TopicFindingSort, { label: string; Icon: LucideIcon }> = {
+const SORT_OPTIONS: Record<TopicFindingSort, { label: string; Icon: ComponentType<{ className?: string }> }> = {
 	relevant: { label: TOPIC_FINDING_SORT_LABELS.relevant, Icon: Target },
 	newest: { label: TOPIC_FINDING_SORT_LABELS.newest, Icon: Clock },
-	trending: { label: TOPIC_FINDING_SORT_LABELS.trending, Icon: Flame },
+	trending: { label: TOPIC_FINDING_SORT_LABELS.trending, Icon: TrendingSortIcon },
+}
+
+// the Trending sort's emoji, in the space of a menu icon
+function TrendingSortIcon() {
+	return (
+		<span aria-hidden className="grid size-4 place-items-center text-sm leading-none">
+			{TRENDING_SORT_EMOJI}
+		</span>
+	)
 }
 
 /**

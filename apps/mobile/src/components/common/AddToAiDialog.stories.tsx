@@ -1,4 +1,5 @@
 import { SITE_URL } from "@carlnotes/contracts/site"
+import { toCarlNotesMcpServer } from "@carlnotes/core/lib/installDeeplinks"
 import type { Meta, StoryObj } from "@storybook/react-native"
 import { AddToAiDialog } from "./AddToAiDialog"
 
@@ -6,7 +7,7 @@ import { AddToAiDialog } from "./AddToAiDialog"
 const meta = {
 	title: "Common/AddToAiDialog",
 	component: AddToAiDialog,
-	args: { mcpServer: { name: "CarlNotes", url: `${SITE_URL}/mcp` }, onClose: () => undefined },
+	args: { mcpServer: toCarlNotesMcpServer(SITE_URL), onClose: () => undefined },
 	parameters: { webReference: "apps/web/src/components/common/AddToAiDialog.tsx at 375px" },
 } satisfies Meta<typeof AddToAiDialog>
 export default meta

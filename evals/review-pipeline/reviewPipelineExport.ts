@@ -8,7 +8,7 @@ import { findings, resources } from "@carlnotes/db/schema/scans"
 import { attachments, topics } from "@carlnotes/db/schema/topics"
 import { getResourceContent } from "@carlnotes/db/store"
 import { buildTopicScanContext } from "@carlnotes/pipeline/attach"
-import { loadBookmarkedFindingRows } from "@carlnotes/pipeline/review/index"
+import { loadBookmarkedFindingRows } from "@carlnotes/pipeline/review/scoreExamplePages"
 import { and, desc, eq, inArray, isNotNull, ne, notExists, sql } from "drizzle-orm"
 import type { EvalFixture, LabeledResource } from "./reviewPipelineEval"
 

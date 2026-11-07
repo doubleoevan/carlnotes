@@ -10,6 +10,7 @@ import { MAX_TOPIC_SOURCES, TOPIC_NAME_CHARS, type TopicResponse } from "@carlno
 import { toUpdateTopicPayload, useTopicFields } from "@carlnotes/core/hooks/useTopicFields"
 import { useTopicTeamChoice } from "@carlnotes/core/hooks/useTopicTeamChoice"
 import { DAILY_TOPIC_LIMIT_HINTS, MISSING_FIELD_NOTES, saveTopic } from "@carlnotes/core/lib/saveTopic"
+import { PODCAST_COMMENTS_LABEL } from "@carlnotes/core/lib/socialLabels"
 import { usePurchaseOffers } from "@carlnotes/core/stores/purchaseOffersStore"
 import { Globe, Link, Lock, Mail, X } from "lucide-react-native"
 import { useRef, useState } from "react"
@@ -259,6 +260,18 @@ export function EditTopicModal({
 							/>
 							<Text>Podcast</Text>
 						</View>
+						{/* the owner's switch for comments in the topic's podcast episodes */}
+						{fields.isPodcastEnabled && (
+							<View className="flex-row items-center gap-2">
+								<PreferenceSwitch
+									label={PODCAST_COMMENTS_LABEL}
+									isChecked={fields.isPodcastCommentsEnabled}
+									isDisabled={!topic.isTopicOwner}
+									onChange={fields.setIsPodcastCommentsEnabled}
+								/>
+								<Text>{PODCAST_COMMENTS_LABEL}</Text>
+							</View>
+						)}
 						{/* the free plan's short podcast episode, and the owner's link to the Plans screen */}
 						{!topic.podcast.hasFullPodcastEpisodes && (
 							<Text className="text-xs text-muted-foreground">

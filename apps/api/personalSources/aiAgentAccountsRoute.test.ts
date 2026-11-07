@@ -9,8 +9,10 @@ import type { SessionUser } from "../auth"
 import type { AppEnv } from "../currentUser"
 import { aiAgentAccountsRoute } from "./aiAgentAccountsRoute"
 
-// use the route's real session gate with no auth-provider or database setup
+// put the spies back after each test
 afterEach(() => mock.restore())
+
+// use the route's real session gate with no auth-provider or database setup
 function accountApp(userId: string | null): Hono<AppEnv> {
 	return new Hono<AppEnv>()
 		.use("*", async (context, next) => {
@@ -40,7 +42,6 @@ test("creation is the sole response carrying the one-time secret and cannot be c
 		label: "Agent",
 		lastFour: "abcd",
 		createdAt: "2026-11-02T00:00:00.000Z",
-		revokedAt: null,
 		lastUsedAt: null,
 	}
 	const createAiAgentApiKeySpy = spyOn(keys, "createAiAgentApiKey").mockResolvedValue({

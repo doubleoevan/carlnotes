@@ -16,6 +16,7 @@ import { toPositiveInteger } from "@carlnotes/server/envSettings"
 import { reportError, shutdownMonitoring, startMonitoring } from "@carlnotes/server/monitoring"
 import { and, eq } from "drizzle-orm"
 import { reportDailySpend } from "./dailySpend"
+import { sendNotificationsEmails } from "./notificationsEmails"
 import { remindOpenReports } from "./reportReminders"
 import { retryPendingObjectDeletions } from "./retryPendingObjectDeletions"
 import { reportScanQueue, startUndispatchedScans, toDispatchableScanCount } from "./scanQueue"
@@ -241,12 +242,18 @@ async function saveFailedScan(topic: Topic): Promise<void> {
 }
 
 // run the leased sweep and the leased viewer count sync, then retry the pending object deletions, remind the support
-// personal sources of reports left open, and report the day's spend once the leases are released
+// personal sources of reports left open, send the day's notifications emails, and report the day's spend once the
+// leases are released
 async function runSweep(): Promise<void> {
 	await runScheduledTopicScans()
 	await syncViewerCounts()
 	await retryPendingObjectDeletions()
 	await remindOpenReports()
+
+	// a failed email read still leaves the day's spend to report
+	await sendNotificationsEmails().catch((error: unknown) => {
+		reportError(error, "email", { emailKind: "notifications" })
+	})
 	await reportDailySpend()
 }
 

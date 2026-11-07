@@ -57,6 +57,13 @@ export const personalSourcesCandidateUrl = personalSourcesReferenceUrl
 	.transform(toCanonicalUrl)
 
 /**
+ * Returns each url written in free text, in order, without the punctuation that closes its sentence.
+ */
+export function toTextUrls(text: string): string[] {
+	return [...text.matchAll(/https?:\/\/[^\s<>"']+/g)].map((match) => match[0].replace(/[.,;:!?)\]}]+$/, ""))
+}
+
+/**
  * Checks the literal address before any server-side DNS or redirect validation.
  */
 export function isPersonalSourcesPublicUrl(url: string): boolean {
@@ -70,6 +77,8 @@ export function isPersonalSourcesPublicUrl(url: string): boolean {
 		if (!/^https?:$/.test(parsedUrl.protocol) || parsedUrl.username || parsedUrl.password) {
 			return false
 		}
+
+		// an address written out must be public, and a name must have a public suffix
 		const isAddressLiteral = hostname.includes(":") || /^\d+\.\d+\.\d+\.\d+$/.test(hostname)
 		return (
 			!(isAddressLiteral && isInternalAddress(hostname)) &&
@@ -77,6 +86,7 @@ export function isPersonalSourcesPublicUrl(url: string): boolean {
 			!/(?:^|\.)(?:localhost|local|internal|test|invalid|home|lan)$/.test(hostname)
 		)
 	} catch {
+		// a string that does not parse names no page
 		return false
 	}
 }

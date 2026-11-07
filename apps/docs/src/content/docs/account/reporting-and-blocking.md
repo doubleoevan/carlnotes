@@ -18,12 +18,15 @@ Every piece of writing by another person has a **Report** action:
 - A chat message: the flag at the end of the message, beside Reply.
 - A note comment: **Report comment** beside the comment.
 - A note: **Report note** at the foot of the open note.
-- A topic, a team, or a profile: **Report issue** in the page's actions menu, the **⋮** button in the header.
+- A topic, a team, a podcast episode, or a profile: **Report issue** in the page's actions menu, the **⋮** button in the
+  header.
+- A finding or a hot take: **Report issue** beside it.
 
 The report asks what is wrong, in your own words. For a message, a note, a comment, or a profile it also offers to
-block the person in the same step. Once you send it, a reported message, note, or comment disappears for you right
-away. Nobody else sees a
-change until someone has looked.
+block the person in the same step. Once you send it, a reported chat message, note, or note comment disappears for you
+right away. Nobody else sees a change until someone has looked. Anything else stays on your screen, hot takes
+included, and its **Report issue** flag fills in once you have reported it. Press the filled flag to
+remove your report. If someone edits content after a report was cleared, you can report it again.
 
 A person reviews every report within a day and either removes the content or keeps it. Removed content is deleted the
 same way its author would delete it. Either way the report is closed, and you are not asked to do anything more. If
@@ -35,8 +38,9 @@ Blocking someone keeps their messages, comments, notes, and invitations away fro
 write, and they can no longer invite you to a topic or a team. They are not told. A reply to one of their messages
 shows a hidden quote in its place.
 
-Block from a report, or from **Block** in a profile's actions menu. Your blocked people are listed on the Account page
-under **Blocked people**, each with an **Unblock** control.
+Block from a report, or from **Block** in a profile's actions menu. A profile you blocked shows **Blocked** after its
+followers, which opens **Blocked people** on your Account page. That section lists everyone you blocked. **Unblock**
+asks you to confirm first.
 
 ## What Carl declines to post
 

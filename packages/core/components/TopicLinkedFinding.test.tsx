@@ -13,6 +13,7 @@ const props = {
 		consumeTopicFinding: () => {},
 		rateTopicFinding: () => {},
 		bookmarkTopicFinding: () => {},
+		keepTopicFindingReactions: () => {},
 	},
 }
 

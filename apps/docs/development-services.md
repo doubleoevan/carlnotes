@@ -50,10 +50,12 @@ then start or restart `bun run dev:tunnel` beside the local API. Configure Resen
 `http://localhost:3000`; other paths return 404. The receiving domain's MX records remain separate from this webhook
 hostname. `RESEND_API_KEY` must have Resend's **Full access** permission to retrieve received messages; a
 **Sending access** key returns `401 restricted_api_key`. Restart the API and Temporal worker after changing the key.
-Use the mailbox in `RESEND_FROM_EMAIL` for both digest sending and Personal sources receiving. Configure receiving on that mailbox’s domain before enabling email. The setup payload, Copy controls, and Carl’s Reply-To use that same mailbox. Link-bearing replies are handled like forwards; linkless replies are ignored, excluding quoted history.
+Use the mailbox in `RESEND_FROM_EMAIL` for both topic scan email sending and Personal sources receiving. Configure
+receiving on that mailbox’s domain before enabling email. The setup payload, Copy controls, and Carl’s Reply-To use that
+same mailbox. Link-bearing replies are handled like forwards; linkless replies are ignored, excluding quoted history.
 The API and worker validate it at startup; receiving, Copy controls, reply text, and Reply-To all use it. A separate
-development domain needs only this setting and matching Resend/domain configuration.
-Follow [the Personal sources rollout guide](personal-sources-rollout.md) for the controlled forwarding checks.
+development domain needs only this setting and matching Resend/domain configuration. Follow [the Personal sources
+rollout guide](personal-sources-rollout.md) for the controlled forwarding checks.
 
 ## Push notifications
 

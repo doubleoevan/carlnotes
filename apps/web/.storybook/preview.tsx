@@ -1,6 +1,13 @@
 import { toChatAttachmentUrl } from "@carlnotes/client/chatClient"
 import { toChatRoomAttachmentUrl } from "@carlnotes/client/chatRoomClient"
+import {
+	fetchCommentThread,
+	fetchMentionSuggestions,
+	fetchReactionSummary,
+	saveReaction,
+} from "@carlnotes/client/socialClient"
 import { fetchTopicFindingLinkPreview } from "@carlnotes/client/topicFindingClient"
+import { EMPTY_COMMENT_THREAD, EMPTY_REACTION_SUMMARY } from "@carlnotes/contracts/social"
 // every story's frame: the app's globals.css with the real tokens, the light and dark toggle, the accessibility check,
 // a query client, the toast host, the user a story names, and mocked api clients, so no story reaches a server. every
 // docs page takes the toolbar's theme on the app's page fill, and a story in its own frame there takes the page's theme
@@ -29,7 +36,7 @@ sb.mock(import("@carlnotes/client/aiAgentClient"))
 sb.mock(import("@carlnotes/client/personalSourcesClient"))
 sb.mock(import("@carlnotes/client/apiClient"))
 sb.mock(import("@carlnotes/client/billingClient"))
-sb.mock(import("@carlnotes/client/blockClient"))
+sb.mock(import("@carlnotes/client/userBlockClient"))
 sb.mock(import("@carlnotes/client/chatClient"))
 sb.mock(import("@carlnotes/client/chatRoomClient"))
 sb.mock(import("@carlnotes/client/flagContentClient"))
@@ -39,6 +46,7 @@ sb.mock(import("@carlnotes/client/pageHeadClient"))
 sb.mock(import("@carlnotes/client/podcastEpisodeClient"))
 sb.mock(import("@carlnotes/client/profileClient"))
 sb.mock(import("@carlnotes/client/reportClient"))
+sb.mock(import("@carlnotes/client/socialClient"))
 sb.mock(import("@carlnotes/client/teamClient"))
 sb.mock(import("@carlnotes/client/termsClient"))
 sb.mock(import("@carlnotes/client/topicClient"))
@@ -104,6 +112,11 @@ const preview: Preview = {
 		mocked(toChatAttachmentUrl).mockReturnValue("#story-attachment")
 		mocked(toChatRoomAttachmentUrl).mockReturnValue("#story-attachment")
 		mocked(fetchTopicFindingLinkPreview).mockResolvedValue(null)
+		// a finding's reactions and comment thread read as empty, and a save succeeds, unless a story says otherwise
+		mocked(fetchReactionSummary).mockResolvedValue(EMPTY_REACTION_SUMMARY)
+		mocked(fetchCommentThread).mockResolvedValue(EMPTY_COMMENT_THREAD)
+		mocked(fetchMentionSuggestions).mockResolvedValue([])
+		mocked(saveReaction).mockResolvedValue({ status: "saved", summary: EMPTY_REACTION_SUMMARY })
 		const htmlClassList = document.documentElement.classList
 		htmlClassList.toggle("scripted", parameters.hasJavaScript !== false)
 		const originalFetch = globalThis.fetch

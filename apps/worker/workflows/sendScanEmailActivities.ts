@@ -1,22 +1,23 @@
-// the activities that email a finished Scan's outcome: planning its digest, sending one digest batch or its report, and
-// reporting a send that did not go out. a send that Resend did not accept throws a failure that says whether to retry
+// the activities that email a finished Scan's outcome: planning its topic scan email, sending one batch of it or the
+// report, and reporting a send that did not go out. a send that Resend did not accept throws a failure that says
+// whether to retry
 
 import type { EmailKind, ResendFailure } from "@carlnotes/emails/email"
 import * as notify from "@carlnotes/pipeline/notify"
 import { reportError } from "@carlnotes/server/monitoring"
 import { ApplicationFailure } from "@temporalio/activity"
 
-// the digest plan throws only on an unexpected error, which the retry policy covers
+// the topic scan email plan throws only on an unexpected error, which the retry policy covers
 /** @public Temporal runs it by name through the proxyActivities in sendScanEmail.ts. */
-export { planScanDigest } from "@carlnotes/pipeline/notify"
+export { planTopicScanEmail } from "@carlnotes/pipeline/notify"
 
 /**
- * Sends one digest batch, throwing a failure if Resend did not accept it.
+ * Sends one topic scan email batch, throwing a failure if Resend did not accept it.
  */
-export async function sendScanDigestBatch(
-	sendScanDigestBatchOptions: notify.SendScanDigestBatchOptions,
+export async function sendTopicScanEmailBatch(
+	sendTopicScanEmailBatchOptions: notify.SendTopicScanEmailBatchOptions,
 ): Promise<void> {
-	throwIfNotSent(await notify.sendScanDigestBatch(sendScanDigestBatchOptions))
+	throwIfNotSent(await notify.sendTopicScanEmailBatch(sendTopicScanEmailBatchOptions))
 }
 
 /**
@@ -27,12 +28,12 @@ export async function sendScanReport(sendScanReportOptions: notify.SendScanRepor
 	throwIfNotSent(await notify.sendScanReport(sendScanReportOptions))
 }
 
-// a scan email that did not go out, with its Scan, Topic, kind, digest batch, and what Resend said
+// a scan email that did not go out, with its Scan, Topic, kind, topic scan email batch, and what Resend said
 export type UndeliveredScanEmail = {
 	scanId: string
 	topicId: string
 	emailKind: EmailKind
-	// null for the report and for the digest's plan, which are not batches
+	// null for the report and for the topic scan email's plan, which are not batches
 	batchIndex: number | null
 	failure: ResendFailure
 }

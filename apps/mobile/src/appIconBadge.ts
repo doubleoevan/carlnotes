@@ -1,5 +1,5 @@
-// the app icon's badge, the web tab title's unread count: the same sum of chat mentions, note changes, and topic
-// invitations the badge poll last read, cleared for a visitor and on sign-out
+// the app icon's badge, the web tab title's unread count: the same sum of chat mentions, note changes, topic
+// invitations, and open reports the badge poll last read, cleared for a visitor and on sign-out
 import { useAllUpdateBadges } from "@carlnotes/core/hooks/useUpdateCounts"
 import { toUpdateCount } from "@carlnotes/core/lib/updateCounts"
 import * as Notifications from "expo-notifications"

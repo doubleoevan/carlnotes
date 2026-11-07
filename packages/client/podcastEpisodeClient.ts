@@ -147,17 +147,21 @@ export async function sendPodcastEpisodeChapterRating({
 	return Boolean(response?.ok)
 }
 
-// the topic, and whether its podcast should be on
-type SendTopicPodcastOptions = { topicId: string; isPodcastEnabled: boolean }
+// the topic, whether its podcast should be on, and whether the podcast should talk about comments, if that changed
+type SendTopicPodcastOptions = { topicId: string; isPodcastEnabled: boolean; isPodcastCommentsEnabled?: boolean }
 
 /**
  * Turns a topic's podcast on or off and returns whether the change saved.
  * A request that never reaches the api did not save.
  */
-export async function sendTopicPodcast({ topicId, isPodcastEnabled }: SendTopicPodcastOptions): Promise<boolean> {
+export async function sendTopicPodcast({
+	topicId,
+	isPodcastEnabled,
+	isPodcastCommentsEnabled,
+}: SendTopicPodcastOptions): Promise<boolean> {
 	// a request that throws an error has no response
 	const response = await apiClient()
-		.api.topics[":id"].podcast.$put({ param: { id: topicId }, json: { isPodcastEnabled } })
+		.api.topics[":id"].podcast.$put({ param: { id: topicId }, json: { isPodcastEnabled, isPodcastCommentsEnabled } })
 		.catch(() => null)
 
 	// only an ok response saved the change

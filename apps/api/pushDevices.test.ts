@@ -18,11 +18,6 @@ afterEach(() => {
 // a phone's registration as the app sends it
 const registration = { expoPushToken: "ExponentPushToken[phone-a]", platform: "ios", appVersion: "0.2.0" }
 
-// a request with the given method and json body
-function toJsonRequestWithMethod(method: string, body: unknown): RequestInit {
-	return { ...toJsonRequest(body), method }
-}
-
 // the push routes with the given session user, or a visitor for null, and that user's session
 function toPushDevicesApp(sessionUser: ({ id: string } & Record<string, unknown>) | null): Hono<AppEnv> {
 	return new Hono<AppEnv>()
@@ -43,7 +38,7 @@ test("a visitor's registration and unregister are rejected", async () => {
 
 	// both requests are unauthorized and send no query
 	expect((await visitorApp.request("/push-devices", toJsonRequest(registration))).status).toBe(401)
-	expect((await visitorApp.request("/push-devices", toJsonRequestWithMethod("DELETE", registration))).status).toBe(401)
+	expect((await visitorApp.request("/push-devices", toJsonRequest(registration, "DELETE"))).status).toBe(401)
 	expect(sentQueries).toHaveLength(0)
 })
 
@@ -116,7 +111,7 @@ test("an unregister names the caller's own session", async () => {
 	const sentQueries = stubConnectionPool(() => [])
 	const response = await toSignedInApp(pushDevicesRoute, "user-1").request(
 		"/push-devices",
-		toJsonRequestWithMethod("DELETE", { expoPushToken: "ExponentPushToken[phone-a]" }),
+		toJsonRequest({ expoPushToken: "ExponentPushToken[phone-a]" }, "DELETE"),
 	)
 	expect(response.status).toBe(200)
 	const deleteQuery = sentQueries.find((sentQuery) => sentQuery.text.startsWith('delete from "push_devices"'))

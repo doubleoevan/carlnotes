@@ -1,11 +1,11 @@
-import { SITE_URL } from "@carlnotes/contracts/site"
 import type { AccountFieldElements, ProfileFieldElements } from "@carlnotes/core/components/AccountFields"
-import type { BlockedUsersElements } from "@carlnotes/core/components/BlockedUsersSection"
+import type { UserBlocksElements } from "@carlnotes/core/components/UserBlocksSection"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { Check, Info } from "lucide-react-native"
 import { Alert, Pressable, View } from "react-native"
-import { AnchorLink } from "@/components/common/AnchorLink"
+import { ConfirmDialog } from "@/components/common/ConfirmDialog"
 import { PreferenceSwitch } from "@/components/common/PreferenceSwitch"
+import { UserProfileLink } from "@/components/common/UserProfileLink"
 import { Button } from "@/components/primitives/button"
 import { Icon } from "@/components/primitives/icon"
 import { Text } from "@/components/primitives/text"
@@ -75,7 +75,7 @@ export const ACCOUNT_FIELD_ELEMENTS: AccountFieldElements = {
 }
 
 // the blocked people section's rows around the shared account elements
-export const BLOCKED_USERS_ELEMENTS: BlockedUsersElements = {
+export const USER_BLOCKS_ELEMENTS: UserBlocksElements = {
 	Card: ACCOUNT_FIELD_ELEMENTS.Card,
 	Group: ACCOUNT_FIELD_ELEMENTS.Group,
 	Heading: ACCOUNT_FIELD_ELEMENTS.Heading,
@@ -86,15 +86,12 @@ export const BLOCKED_USERS_ELEMENTS: BlockedUsersElements = {
 		</Button>
 	),
 	Row: ({ children }) => <View className="flex-row items-center justify-between gap-3">{children}</View>,
-	Username: ({ userId, username }) => (
-		<AnchorLink
-			href={`${SITE_URL}/profiles/${userId}`}
-			accessibilityLabel={`Open ${username}'s profile`}
-			className="min-h-6 shrink"
-		>
-			<Text className="shrink text-sm font-semibold text-link">{username}</Text>
-		</AnchorLink>
+	UserLink: ({ user }) => (
+		<View className="shrink">
+			<UserProfileLink user={user} />
+		</View>
 	),
+	Confirm: ConfirmDialog,
 }
 
 // keep the native profile controls around the shared identity and username form

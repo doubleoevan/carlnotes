@@ -1,11 +1,12 @@
 import type { TopicFinding } from "@carlnotes/contracts/findings"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { Bookmark, Check, Circle } from "lucide-react"
+import { ACTIVE_ICON_CLASS } from "@/lib/styleClasses"
 import type { TopicFeedHandlers } from "@/providers/TopicFeedProvider"
 import { TopicFindingRating } from "./TopicFindingRating"
 
-// the bookmark and read toggles' text-button style
-const TOPIC_FINDING_TOGGLE_CLASS =
+// the text-button style of the bookmark and read toggles and of the finding's flag
+export const TOPIC_FINDING_TOGGLE_CLASS =
 	"hover:text-link flex min-h-11 items-center gap-2 text-sm hover:underline disabled:pointer-events-none disabled:opacity-50 sm:min-h-9"
 
 /**
@@ -44,7 +45,7 @@ export function TopicFindingControls({
 						aria-pressed={resource.isBookmarked}
 						className={TOPIC_FINDING_TOGGLE_CLASS}
 					>
-						<Bookmark className={cn("size-4", resource.isBookmarked && "text-primary fill-current")} />
+						<Bookmark className={cn("size-4", resource.isBookmarked && ACTIVE_ICON_CLASS)} />
 						{resource.isBookmarked ? "Remove bookmark" : "Bookmark"}
 					</button>
 				)}

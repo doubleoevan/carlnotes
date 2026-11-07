@@ -38,6 +38,7 @@ export function AddToAi({
 	elements,
 	mcpServer,
 	lastProvider,
+	initialProvider,
 	onRemember,
 	onCopy,
 	renderInstall,
@@ -45,13 +46,15 @@ export function AddToAi({
 	elements: AddToAiElements
 	mcpServer: McpServer
 	lastProvider: AiProvider | null
+	// the provider that leads the list with its instructions open
+	initialProvider?: AiProvider
 	onRemember: (provider: AiProvider) => void
 	onCopy: (text: string) => Promise<boolean>
 	renderInstall: (props: AddToAiInstallProps) => ReactNode
 }) {
 	// retain the initial order while opening providers and confirming successful copies
-	const [providers] = useState(() => toSortedAiProviders(lastProvider))
-	const [openProvider, setOpenProvider] = useState<AiProvider | null>(null)
+	const [providers] = useState(() => toSortedAiProviders(initialProvider ?? lastProvider))
+	const [openProvider, setOpenProvider] = useState<AiProvider | null>(initialProvider ?? null)
 	const [copiedText, setCopiedText] = useState<string | null>(null)
 	const { Group, Details, Text, Option, CopyBox, Divider } = elements
 	async function handleCopy(text: string): Promise<void> {

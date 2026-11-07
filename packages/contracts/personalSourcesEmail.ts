@@ -1,7 +1,7 @@
 // Resend wire fields used by receiving. Download URLs and message-supplied authentication headers are ignored
 import { z } from "zod"
 
-// the validated mailbox exposed by the server's digest sender configuration
+// the validated mailbox exposed by the server's topic scan email sender configuration
 export const personalSourcesEmailAddress = z.email()
 
 export const receivedEmailEvent = z.object({

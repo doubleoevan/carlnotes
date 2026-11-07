@@ -11,6 +11,7 @@ import type { TopicFields } from "./useTopicFields"
 // a topic's podcast that is on and gets full episodes, with nothing published
 const topicPodcast: TopicPodcast = {
 	isEnabled: true,
+	isCommentsEnabled: true,
 	hasFullPodcastEpisodes: true,
 	canRemovePodcastEpisodes: true,
 	unpublishedPodcastEpisode: null,

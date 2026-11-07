@@ -28,7 +28,7 @@ test("a review names only the columns a re-score decides", () => {
 })
 
 // the scan that first found a finding is written with the insert alone. a re-score moves scan_id to the re-scoring scan
-// and leaves found_scan_id, so a re-scored finding is not new to the digest or the podcast episode's plan again
+// and leaves found_scan_id, so a re-scored finding is not new to the topic scan email or the podcast episode's plan again
 test("upsertFinding writes the found scan on the insert and never on the re-score", async () => {
 	// a pool whose upsert returns an updated row
 	const sentQueries = stubConnectionPool(({ text }) =>

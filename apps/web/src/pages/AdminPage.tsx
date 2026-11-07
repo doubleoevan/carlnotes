@@ -5,14 +5,15 @@ import type { AdminConsoleResponse, AdminTeamRow, AdminTotals, AdminUserRow } fr
 import { plans } from "@carlnotes/contracts/enums"
 import { toSessionProfileIdentity } from "@carlnotes/contracts/profiles"
 import type { AdminReport } from "@carlnotes/contracts/reports"
-import { toBytesLabel, toCentsLabel, toCountLabel } from "@carlnotes/core/lib/labels"
+import { toBytesLabel, toCentsLabel } from "@carlnotes/core/lib/labels"
+import { setOpenReportCount } from "@carlnotes/core/stores/openReportStore"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { Settings, ShieldUser } from "lucide-react"
 import { useCallback, useEffect, useState } from "react"
 import { ManageAdminsModal } from "@/components/admin/ManageAdminsModal"
 import { MobileMinimumVersionsCard } from "@/components/admin/MobileMinimumVersionsCard"
 import { CoffeeLoading } from "@/components/branding/CoffeeLoading"
-import { CountBadge } from "@/components/common/CountBadge"
+import { UpdateCountBadge } from "@/components/common/UpdateCountBadge"
 import { UserProfileLink } from "@/components/common/UserProfileLink"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/primitives/accordion"
 import { Button } from "@/components/primitives/button"
@@ -21,7 +22,7 @@ import { AdminTeamsTable } from "@/components/table/AdminTeamsTable"
 import { AdminUsersTable } from "@/components/table/AdminUsersTable"
 import { usePageTitle } from "@/hooks/usePageTitle"
 import { useSearchParams } from "@/hooks/useSearchParams"
-import { PAGE_CLASS, PAGE_HEADER_CLASS, PAGE_TITLE_CLASS } from "@/lib/styleClasses"
+import { HIGHLIGHTED_CARD_CLASS, PAGE_CLASS, PAGE_HEADER_CLASS, PAGE_TITLE_CLASS } from "@/lib/styleClasses"
 
 /**
  * The admin-only console: a totals summary and a per-user table with inline role and budget-override edits.
@@ -32,6 +33,8 @@ export function AdminPage() {
 	const [adminConsole, setAdminConsole] = useState<AdminConsoleResponse | null>(null)
 	const [isForbidden, setIsForbidden] = useState(false)
 	const [isManagingAdmins, setIsManagingAdmins] = useState(false)
+	// the Blocks card narrows the users table to the users under an admin block
+	const [isShowingAdminBlockedUsers, setIsShowingAdminBlockedUsers] = useState(false)
 	// the open reports, and the one the report email linked to
 	const [reports, setReports] = useState<AdminReport[]>([])
 	const focusedReportId = useSearchParams().get("report")
@@ -42,7 +45,10 @@ export function AdminPage() {
 			.then(setAdminConsole)
 			.catch(() => setIsForbidden(true))
 		fetchAdminReports()
-			.then(setReports)
+			.then((openReports) => {
+				setReports(openReports)
+				setOpenReportCount(openReports.length)
+			})
 			.catch(() => setReports([]))
 	}, [])
 
@@ -71,6 +77,8 @@ export function AdminPage() {
 		)
 	}
 
+	// the users under an admin block, which the Blocks card counts and filters to
+	const adminBlockedUsers = adminConsole.users.filter((user) => user.isAdminBlocked)
 	return (
 		<main className="mx-auto max-w-6xl pt-3 pb-10">
 			{/* the title and profile link align under the search bar's width, while the tables stay wide.
@@ -80,13 +88,11 @@ export function AdminPage() {
 				<div className={PAGE_HEADER_CLASS}>
 					<h1 className={PAGE_TITLE_CLASS}>
 						<ShieldUser className="size-6" />
-						Admin
-						{/* the open report count */}
-						{reports.length > 0 && (
-							<span title={toCountLabel(reports.length, "open report")}>
-								<CountBadge count={reports.length} />
-							</span>
-						)}
+						{/* the title's top-right corner shows the open report count */}
+						<span className="relative">
+							Admin
+							<UpdateCountBadge openReportCount={reports.length} className="absolute -top-2 -right-3.5 z-10" />
+						</span>
 					</h1>
 					<Button className="shrink-0" onClick={() => setIsManagingAdmins(true)}>
 						<Settings className="size-4" />
@@ -97,9 +103,16 @@ export function AdminPage() {
 				<UserProfileLink user={toSessionProfileIdentity(session.user)} className="mt-2 text-sm" />
 			</div>
 			<div className="px-safe">
-				<TotalSummaries totals={adminConsole.totals} users={adminConsole.users} teams={adminConsole.teams} />
+				<TotalSummaries
+					totals={adminConsole.totals}
+					users={adminConsole.users}
+					teams={adminConsole.teams}
+					adminBlockedUserCount={adminBlockedUsers.length}
+					isShowingAdminBlockedUsers={isShowingAdminBlockedUsers}
+					onToggleAdminBlockedUsers={() => setIsShowingAdminBlockedUsers((isShowing) => !isShowing)}
+				/>
 				{/* the two sections as accordions, the shape every other page's sections take */}
-				<Accordion type="multiple" defaultValue={["reports", "users", "teams"]} className="mt-4">
+				<Accordion type="multiple" defaultValue={["reports", "users", "teams", "mobile"]} className="mt-4">
 					{/* the open reports first, resolved from here. drop the divider lines between the sections */}
 					<AccordionItem value="reports" className="border-b-0">
 						<AccordionTrigger className="font-semibold">{`Reports (${reports.length})`}</AccordionTrigger>
@@ -110,7 +123,11 @@ export function AdminPage() {
 					<AccordionItem value="users" className="border-b-0">
 						<AccordionTrigger className="font-semibold">Users</AccordionTrigger>
 						<AccordionContent>
-							<AdminUsersTable users={adminConsole.users} signedInUserId={session.user.id} onReload={loadConsole} />
+							<AdminUsersTable
+								users={isShowingAdminBlockedUsers ? adminBlockedUsers : adminConsole.users}
+								signedInUserId={session.user.id}
+								onReload={loadConsole}
+							/>
 						</AccordionContent>
 					</AccordionItem>
 					<AccordionItem value="teams" className="border-b-0">
@@ -145,10 +162,16 @@ function TotalSummaries({
 	totals,
 	users,
 	teams,
+	adminBlockedUserCount,
+	isShowingAdminBlockedUsers,
+	onToggleAdminBlockedUsers,
 }: {
 	totals: AdminTotals
 	users: AdminUserRow[]
 	teams: AdminTeamRow[]
+	adminBlockedUserCount: number
+	isShowingAdminBlockedUsers: boolean
+	onToggleAdminBlockedUsers: () => void
 }) {
 	// the users on each plan. a count, not a plan gate
 	const usersByPlan = Map.groupBy(users, (user) => user.plan)
@@ -161,7 +184,11 @@ function TotalSummaries({
 			{/* Stripe's revenue alone. a store's revenue is read in RevenueCat's dashboard */}
 			<TotalCard label="Net web revenue" figure={toCentsLabel(totals.netRevenueCents)} />
 			<TotalCard label="Contribution" figure={toCentsLabel(totals.contributionCents)} />
-			<TotalCard label="Blocks" figure={String(totals.blockCount)} />
+			<AdminBlockedUsersCard
+				adminBlockedUserCount={adminBlockedUserCount}
+				isPressed={isShowingAdminBlockedUsers}
+				onToggle={onToggleAdminBlockedUsers}
+			/>
 		</div>
 	)
 }
@@ -180,6 +207,32 @@ function PlanCountCard({ label, counts }: { label: string; counts: number[] }) {
 				))}
 			</div>
 		</div>
+	)
+}
+
+// the count of users under an admin block, a toggle that filters the users table to them
+function AdminBlockedUsersCard({
+	adminBlockedUserCount,
+	isPressed,
+	onToggle,
+}: {
+	adminBlockedUserCount: number
+	isPressed: boolean
+	onToggle: () => void
+}) {
+	return (
+		<button
+			type="button"
+			onClick={onToggle}
+			aria-pressed={isPressed}
+			className={cn(
+				"bg-card flex flex-col rounded-lg border p-3 text-left shadow-raised",
+				isPressed ? HIGHLIGHTED_CARD_CLASS : "hover:border-primary/50",
+			)}
+		>
+			<div className="text-muted-foreground text-xs">Blocks</div>
+			<div className="mt-1 font-semibold">{adminBlockedUserCount}</div>
+		</button>
 	)
 }
 

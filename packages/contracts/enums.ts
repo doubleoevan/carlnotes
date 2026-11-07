@@ -183,10 +183,18 @@ export const maxTopicFindingsOptions = [5, 10, 15, 20] as const
 export const noteVisibilities = ["private", "team", "public"] as const
 // where a prompt version comes from: the topic editor, a chat tool, or an MCP tool
 export const promptVersionOrigins = ["editor", "chat", "mcp"] as const
-// what a report names: a Topic, a profile, a Team, a chat room message, a note, or a note comment
-export const reportSubjectKinds = ["topic", "profile", "team", "chatMessage", "note", "noteComment"] as const
-// how an admin closes a report: the content was removed, or kept
-export const reportResolutions = ["removed", "kept"] as const
+// what a report names: a Topic, a profile, a Team, a chat room message, a note, a note comment, a Finding, a Podcast
+// Episode, or a Comment
+// biome-ignore format: one line keeps the kinds under the comment-density hook's limit
+export const reportSubjectKinds = ["topic", "profile", "team", "chatMessage", "note", "noteComment", "finding", "podcastEpisode", "comment"] as const
+// how an admin closes a report: the content was removed, it was cleared and stays, or its author got an admin block
+export const reportResolutions = ["removed", "cleared", "blocked"] as const
+// the types a Reaction can hold, every one positive, in the order the picker shows them
+export const reactionTypes = ["like", "celebrate", "support", "love", "insightful", "funny"] as const
+// what a Comment hangs on. a post is not found until posts exist
+export const commentTargetKinds = ["finding", "podcastEpisode", "topic", "post"] as const
+// what a Reaction hangs on: everything a Comment does, and a Comment
+export const socialTargetKinds = [...commentTargetKinds, "comment"] as const
 // what a push notification is about: a scheduled Scan's new Findings, or a chat mention in a team chat room
 export const pushNotificationKinds = ["topic-scan", "chat-mention"] as const
 // what the push service's receipt said about a push it accepted

@@ -1,7 +1,7 @@
 // quota tests: the suggestion limit window and daily limit, each invite limit factor with its floor and a connected
 // recipient, the per-request access read, the month's spend and its per-request read, and full podcast episodes
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
-import { isOverageBillable, PLANS } from "@carlnotes/contracts/plans"
+import { isOverageBillable } from "@carlnotes/contracts/plans"
 import { sql } from "drizzle-orm"
 import {
 	ADMIN_USER_ACCESS_ROW,
@@ -19,7 +19,6 @@ import {
 	loadSpendSince,
 	loadUserAccess,
 	monthlySpendDollars,
-	toInviteLimit,
 	toSpendCents,
 	toSuggestionRateLimitWindowKey,
 } from "./quotas"
@@ -39,70 +38,6 @@ test("the suggestion rate limit window key names the utc day", () => {
 	)
 	expect(toSuggestionRateLimitWindowKey("user-1", new Date("2026-09-30T00:00:00Z"))).toBe(
 		"suggestions:2026-09-30:user-1",
-	)
-})
-
-// each plan's own base, so a limit change in the plans table cannot leave these expectations behind
-const FREE_BASE = PLANS.free.inviteLimit
-const PLUS_BASE = PLANS.plus.inviteLimit
-
-// an account past its first week with no reputation record sits at its plan's base
-test("the plan base holds for an account past its first week with nothing measured", () => {
-	expect(toInviteLimit({ plan: "free", accountAgeDays: 30, acceptedShare: null, isConnectedRecipient: false })).toBe(
-		FREE_BASE,
-	)
-	expect(toInviteLimit({ plan: "plus", accountAgeDays: 30, acceptedShare: null, isConnectedRecipient: false })).toBe(
-		PLUS_BASE,
-	)
-	expect(toInviteLimit({ plan: "premium", accountAgeDays: 30, acceptedShare: null, isConnectedRecipient: false })).toBe(
-		PLANS.premium.inviteLimit,
-	)
-})
-
-// a first-week account reaches a fifth of its base, and the seventh day is the boundary
-test("the age factor cuts a first-week account to a fifth", () => {
-	expect(toInviteLimit({ plan: "free", accountAgeDays: 1, acceptedShare: null, isConnectedRecipient: false })).toBe(
-		Math.floor(FREE_BASE / 5),
-	)
-	expect(toInviteLimit({ plan: "plus", accountAgeDays: 6.9, acceptedShare: null, isConnectedRecipient: false })).toBe(
-		Math.floor(PLUS_BASE / 5),
-	)
-	expect(toInviteLimit({ plan: "plus", accountAgeDays: 7, acceptedShare: null, isConnectedRecipient: false })).toBe(
-		PLUS_BASE,
-	)
-})
-
-// a sender below a fifth accepted has their limit halved, and at the fifth it holds
-test("the reputation factor halves a mostly declined or ignored sender", () => {
-	expect(toInviteLimit({ plan: "free", accountAgeDays: 30, acceptedShare: 0.1, isConnectedRecipient: false })).toBe(
-		Math.floor(FREE_BASE / 2),
-	)
-	expect(toInviteLimit({ plan: "free", accountAgeDays: 30, acceptedShare: 0.2, isConnectedRecipient: false })).toBe(
-		FREE_BASE,
-	)
-	expect(toInviteLimit({ plan: "free", accountAgeDays: 30, acceptedShare: 1, isConnectedRecipient: false })).toBe(
-		FREE_BASE,
-	)
-})
-
-// both factors together still leave at least one invite a day, so a mistake is recoverable
-test("both factors together never take an account below one", () => {
-	// a young account with nothing accepted takes a fifth and then a half, floored at one
-	const youngAndUnpopular = Math.max(1, Math.floor(FREE_BASE / 5 / 2))
-	expect(toInviteLimit({ plan: "free", accountAgeDays: 1, acceptedShare: 0, isConnectedRecipient: false })).toBe(
-		youngAndUnpopular,
-	)
-	expect(youngAndUnpopular).toBeGreaterThanOrEqual(1)
-})
-
-// a connected recipient doubles whatever the factors left
-test("a connected recipient doubles the limit", () => {
-	expect(toInviteLimit({ plan: "free", accountAgeDays: 30, acceptedShare: null, isConnectedRecipient: true })).toBe(
-		FREE_BASE * 2,
-	)
-	// the doubling applies after the floor, so the most reduced account doubles too
-	expect(toInviteLimit({ plan: "free", accountAgeDays: 1, acceptedShare: 0, isConnectedRecipient: true })).toBe(
-		Math.max(1, Math.floor(FREE_BASE / 5 / 2)) * 2,
 	)
 })
 
@@ -129,7 +64,13 @@ test("the access row is read once per request", async () => {
 
 	expect(queryCount).toBe(1)
 	expect(userAccessList).toEqual(
-		Array(3).fill({ isAdmin: false, plan: "plus", budgetOverrideCents: null, freeTopicLimit: 1 }),
+		Array(3).fill({
+			isAdmin: false,
+			isAdminBlocked: false,
+			plan: "plus",
+			budgetOverrideCents: null,
+			freeTopicLimit: 1,
+		}),
 	)
 })
 
@@ -147,6 +88,7 @@ test("the access row is read on every call outside a request", async () => {
 test("a store billing row reads its provider and bills no overage", async () => {
 	stubConnectionPool(() => [["app_store", true, "monthly"]])
 	try {
+		// the row as read, and whether its overage is billable
 		const billingAccess = await loadBillingAccess("user-1")
 		expect(billingAccess).toEqual({ provider: "app_store", hasPaymentMethod: true, billingInterval: "monthly" })
 		expect(isOverageBillable(billingAccess)).toBe(false)

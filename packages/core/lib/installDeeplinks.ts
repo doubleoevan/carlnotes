@@ -20,6 +20,13 @@ export type PasteAiProvider = "claude" | "chatgpt" | "gemini" | "grok" | "perple
 // the mcp server a provider installs: its name and url
 export type McpServer = { name: string; url: string }
 
+/**
+ * Returns the CarlNotes mcp server at an origin.
+ */
+export function toCarlNotesMcpServer(origin: string): McpServer {
+	return { name: "CarlNotes", url: `${origin}/mcp` }
+}
+
 // the storage key for the last chosen provider
 export const LAST_AI_PROVIDER_KEY = "add-to-ai:last"
 

@@ -46,9 +46,14 @@ export async function saveTopic<Attachment>({
 		createdTopicId.current = topicId
 	}
 
-	// save the podcast switch if it changed and report a warning if it did not save
-	if (topic?.podcast && fields.isPodcastEnabled !== topic.podcast.isEnabled) {
-		const isTopicPodcastSaved = await sendTopicPodcast({ topicId: topic.id, isPodcastEnabled: fields.isPodcastEnabled })
+	// save the podcast switches if they changed and report a warning if they did not save
+	const isCommentsSwitchChanged = fields.isPodcastCommentsEnabled !== topic?.podcast?.isCommentsEnabled
+	if (topic?.podcast && (fields.isPodcastEnabled !== topic.podcast.isEnabled || isCommentsSwitchChanged)) {
+		const isTopicPodcastSaved = await sendTopicPodcast({
+			topicId: topic.id,
+			isPodcastEnabled: fields.isPodcastEnabled,
+			isPodcastCommentsEnabled: isCommentsSwitchChanged ? fields.isPodcastCommentsEnabled : undefined,
+		})
 		if (!isTopicPodcastSaved) {
 			onWarning("The podcast switch didn't save. Carl suggests trying again.")
 		}

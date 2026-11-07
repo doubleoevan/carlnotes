@@ -2,7 +2,7 @@
 import { sendMobileMinimumVersion } from "@carlnotes/client/billingClient"
 import type { MobileMinimumVersionRow } from "@carlnotes/contracts/admin"
 import type { Meta, StoryObj } from "@storybook/tanstack-react"
-import { expect, fn, mocked, waitFor } from "storybook/test"
+import { expect, fn, mocked, screen, waitFor, within } from "storybook/test"
 import { FIXTURE_DATE, STORY_PEOPLE } from "../../../.storybook/fixtures"
 import { MobileMinimumVersionsCard } from "./MobileMinimumVersionsCard"
 
@@ -49,6 +49,7 @@ export const Saved: Story = {
 	play: async ({ canvas, userEvent, args }) => {
 		await userEvent.type(canvas.getByLabelText("iOS minimum version"), "1.3.0")
 		await userEvent.click(canvas.getAllByRole("button", { name: "Save" })[0] as HTMLElement)
+		await userEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Set minimum" }))
 		await waitFor(() => expect(mocked(sendMobileMinimumVersion)).toHaveBeenCalledWith("ios", "1.3.0"))
 		await waitFor(() => expect(args.onSaved).toHaveBeenCalled())
 	},
@@ -61,6 +62,7 @@ export const SaveFailed: Story = {
 	},
 	play: async ({ canvas, canvasElement, userEvent }) => {
 		await userEvent.click(canvas.getAllByRole("button", { name: "Save" })[0] as HTMLElement)
+		await userEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Set minimum" }))
 		const documentBody = canvasElement.ownerDocument.body
 		await waitFor(() => expect(documentBody.textContent).toContain("iOS minimum didn't save."))
 	},

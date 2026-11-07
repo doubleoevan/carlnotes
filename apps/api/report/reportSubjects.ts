@@ -13,8 +13,9 @@ import { decryptChatText } from "../chat/encryption"
 import { loadChatRoom } from "../chat/roomAccess"
 import { canSeeNote, loadNoteWithPage, loadPageAccess, type NotePage } from "../note/permissions"
 import { toTeamRole } from "../team/members"
-import { canSeeTopic, gatedTopicColumns } from "../topic/permissions"
+import { canSeeTopic, namedTopicColumns } from "../topic/permissions"
 import { loadUsername } from "../usernames"
+import { toReportedComment, toReportedSocialTarget } from "./socialReportSubjects"
 
 // a report's subject as the reporter could see it: its kind and id, its name for the email's subject line, the page
 // that holds it, its text at report time, and its author if it has one
@@ -51,13 +52,17 @@ const REPORT_SUBJECT_RESOLVERS: Record<
 	chatMessage: toReportedChatMessage,
 	note: toReportedNote,
 	noteComment: toReportedNoteComment,
+	// a social target, and what people write on one
+	finding: (userId, subjectId) => toReportedSocialTarget(userId, { kind: "finding", id: subjectId }),
+	podcastEpisode: (userId, subjectId) => toReportedSocialTarget(userId, { kind: "podcastEpisode", id: subjectId }),
+	comment: toReportedComment,
 }
 
 // a topic under the same visibility rule the Topic page uses, so anyone who can open a Topic can report it
 async function toReportedTopic(userId: string, topicId: string): Promise<ReportedSubject | null> {
 	// the topic's gate columns, name, prompt, and owner
 	const [topic] = await db
-		.select({ ...gatedTopicColumns, name: topics.name, prompt: topics.prompt, ownerId: topics.ownerId })
+		.select({ ...namedTopicColumns, prompt: topics.prompt })
 		.from(topics)
 		.where(eq(topics.id, topicId))
 	if (!topic || !(await canSeeTopic(userId, topic))) {

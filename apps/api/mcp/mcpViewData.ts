@@ -20,6 +20,7 @@ import { withAvatarVersion } from "../avatars"
 import { toPlayToken } from "../podcast/playTokens"
 import { podcastEpisodeColumns } from "../podcast/podcastEpisodeRows"
 import { loadLatestPodcastEpisodeSummaries, loadPodcastEpisodes } from "../podcast/podcastEpisodeShapes"
+import { attachReactionSummaries } from "../social/findingReactions"
 import { loadTopicAccessAndFindings } from "../topic/accessibleFindings"
 import { canBookmarkTopic, canRateTopic } from "../topic/findingPermissions"
 import { hasSubscription } from "../topic/permissions"
@@ -171,7 +172,7 @@ export async function loadFindingsMcpViewData(
 		canBookmark,
 		personalAnnotations,
 	] = await Promise.all([
-		loadTopicAccessAndFindings({ topic, userId, isRatedDownExcluded: true }),
+		loadTopicAccessAndFindings({ topic, userId, isRatedDownExcluded: true, isReactionReadSkipped: true }),
 		loadLatestPodcastEpisodeSummaries([topic], userId),
 		loadMcpViewSession(toolCaller),
 		userId ? hasSubscription(userId, topicId) : Promise.resolve(null),
@@ -181,6 +182,7 @@ export async function loadFindingsMcpViewData(
 	])
 	const topicFindingById = new Map(topicFindings.map((topicFinding) => [topicFinding.findingId, topicFinding]))
 	const pageTopicFindings = findingIds.flatMap((findingId) => topicFindingById.get(findingId) ?? [])
+	await attachReactionSummaries({ topicFindings: pageTopicFindings, userId })
 
 	// the topic header and the podcast episode its play button plays
 	const latestPodcastEpisode = latestPodcastEpisodeByTopicId.get(topic.id) ?? null

@@ -8,6 +8,7 @@ import { desc, eq } from "drizzle-orm"
 import { isAllowed } from "../authorization"
 import { loadTopicChatMentions } from "../chat/mentions"
 import { loadTopicPodcast } from "../podcast/helpers"
+import { loadPageCommentThread } from "../social/pageCommentThread"
 import { loadTopicAccessAndFindings, loadViewableTopic } from "./accessibleFindings"
 import { newTopicFindingCount } from "./findings"
 import {
@@ -46,8 +47,8 @@ export async function loadTopicPage(
 	// the page's independent reads run together
 	const isTopicOwner = topic.ownerId === userId
 	const [
-		// the user's access with the findings, then the sources, the attachments, and the scans
-		{ isAdmin, topicFindings },
+		// the user's access with the findings and the topic's own reactions, then the sources, the attachments, and the scans
+		{ isAdmin, topicFindings, reactions },
 		topicSourceRows,
 		rawAttachmentRows,
 		scanRows,
@@ -64,10 +65,15 @@ export async function loadTopicPage(
 		canViewOwnerDetails,
 		{ podcast, latestPodcastEpisode, podcastEpisodeByScanId },
 		relatedTopics,
+		commentThread,
 	] = await traceRequestStage("topic_page.reads", () =>
 		Promise.all([
 			// the user's access and the findings it gates
-			loadTopicAccessAndFindings({ topic, userId }),
+			loadTopicAccessAndFindings({
+				topic,
+				userId,
+				pageSocialTarget: isPoll ? undefined : { kind: "topic", id: topic.id },
+			}),
 			// every Source row, and the attachment rows and their context, each narrowed once the reads finish
 			db.select().from(sources).where(eq(sources.topicId, topic.id)),
 			loadTopicAttachmentRows(topic.id),
@@ -91,6 +97,8 @@ export async function loadTopicPage(
 			loadTopicPodcast(topic, userId),
 			// the most related topics that the user may open, none for a poll reload
 			isPoll ? [] : loadRelatedTopics(topic, userId),
+			// the first page of the topic's comment thread, none for a poll reload
+			isPoll ? undefined : loadPageCommentThread({ userId, topic, target: { kind: "topic", id: topic.id } }),
 		]),
 	)
 
@@ -166,6 +174,8 @@ export async function loadTopicPage(
 		isOnTeam: topic.teamId !== null,
 		...(await toFeaturedTopics(topic.featureOrder, isAdmin)),
 		relatedTopics,
+		reactions,
+		commentThread,
 	}
 }
 

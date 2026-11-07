@@ -2,6 +2,13 @@
 import type { TopicFinding, TopicFindingFilter } from "@carlnotes/contracts/findings"
 
 /**
+ * Whether a finding is rated thumbs down, which takes it out of the feed and leaves it no reactions or comments.
+ */
+export function isFindingRatedDown(finding: Pick<TopicFinding, "rating">): boolean {
+	return finding.rating === "down"
+}
+
+/**
  * Whether a finding belongs in the given feed view.
  */
 export function matchesTopicFindingFilter(
@@ -10,7 +17,7 @@ export function matchesTopicFindingFilter(
 	bookmarkScope: "mine" | "team" = "mine",
 ): boolean {
 	// a finding rated thumbs down shows in no view
-	if (finding.rating === "down") {
+	if (isFindingRatedDown(finding)) {
 		return false
 	}
 	if (view === "unread") {

@@ -5,7 +5,8 @@ import { z } from "zod"
 import { chatConversation, chatRoomMessage } from "./chat"
 import { podcastEpisodeSpeakers } from "./enums"
 import { topicInviteBadge } from "./invites"
-import { chatToolCallPayload, PODCAST_EPISODE_CHAPTER_POSITION_MAX } from "./payloads"
+import { chatToolCallPayload } from "./payloads"
+import { PODCAST_EPISODE_CHAPTER_POSITION_MAX } from "./podcastEpisodes"
 import { proposeTopicEditPayload, topicDraftPayload } from "./topicPayloads"
 
 // what a write returns

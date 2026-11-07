@@ -3,7 +3,7 @@ import { toAvatarVersion } from "@carlnotes/contracts/avatars"
 import type { NoteComment } from "@carlnotes/contracts/notes"
 import { noteCommentPayload } from "@carlnotes/contracts/payloads"
 import { db } from "@carlnotes/db"
-import { toUnblockedAuthorFilter, toUnreportedFilter } from "@carlnotes/db/contentFilters"
+import { toNotUserBlockedAuthorFilter, toUnreportedFilter } from "@carlnotes/db/contentFilters"
 import { noteComments } from "@carlnotes/db/schema/notes"
 import { users } from "@carlnotes/db/schema/users"
 import { trackEvent } from "@carlnotes/server/analytics"
@@ -75,7 +75,7 @@ async function loadNoteComments(noteId: string, userId: string | null): Promise<
 	const hiddenCommentFilter = userId
 		? and(
 				toUnreportedFilter(userId, "noteComment", noteComments.id),
-				toUnblockedAuthorFilter(userId, noteComments.authorUserId),
+				toNotUserBlockedAuthorFilter(userId, noteComments.authorUserId),
 			)
 		: undefined
 	const noteCommentRows = await db

@@ -1,6 +1,7 @@
 // a change to a finding the search lists: only its row changes, and each feed handler reports the change it makes
 import { describe, expect, mock, test } from "bun:test"
 import type { FindingSearchRow, SearchResultsPage } from "@carlnotes/contracts/search"
+import { EMPTY_REACTION_SUMMARY } from "@carlnotes/contracts/social"
 import { SEARCH_PAGE_FIXTURE } from "../../../.storybook/fixtures/search"
 import { type FindingChange, toReportingFindingHandlers, toSearchPageWithFindingChange } from "./searchFindingChanges"
 
@@ -36,6 +37,7 @@ describe("toReportingFindingHandlers", () => {
 			consumeTopicFinding: mock(),
 			rateTopicFinding: mock(),
 			bookmarkTopicFinding: mock(),
+			keepTopicFindingReactions: mock(),
 		}
 		const findingChanges: FindingChange[] = []
 		const reportingHandlers = toReportingFindingHandlers(feedHandlers, (findingChange) =>
@@ -47,6 +49,7 @@ describe("toReportingFindingHandlers", () => {
 		reportingHandlers.consumeTopicFinding("finding-1", false)
 		reportingHandlers.rateTopicFinding("finding-1", "up")
 		reportingHandlers.bookmarkTopicFinding("finding-1", true)
+		reportingHandlers.keepTopicFindingReactions("finding-1", EMPTY_REACTION_SUMMARY)
 
 		// the feed's handlers ran, and the row heard each change
 		expect(feedHandlers.rateTopicFinding).toHaveBeenCalledWith("finding-1", "up")
@@ -55,6 +58,7 @@ describe("toReportingFindingHandlers", () => {
 			{ isConsumed: false },
 			{ rating: "up" },
 			{ isBookmarked: true },
+			{ reactions: EMPTY_REACTION_SUMMARY },
 		])
 	})
 })

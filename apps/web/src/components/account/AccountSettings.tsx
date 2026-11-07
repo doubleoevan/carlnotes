@@ -8,10 +8,12 @@ import {
 	PasswordSection,
 	ProfileFields as SharedProfileFields,
 } from "@carlnotes/core/components/AccountFields"
-import { BlockedUsersSection } from "@carlnotes/core/components/BlockedUsersSection"
+import { NotificationsSection } from "@carlnotes/core/components/NotificationsSection"
+import { UserBlocksSection } from "@carlnotes/core/components/UserBlocksSection"
 import type { UsernameChange } from "@carlnotes/core/hooks/useUsernameChange"
 import { CLOSE_ACCOUNT_CONFIRMATION, REQUEST_FAILED_TEXT, toCloseAccountCopy } from "@carlnotes/core/lib/sessionCopy"
 import { PLAN_MANAGEMENT_LABELS } from "@carlnotes/core/lib/storefrontPurchaseRules"
+import { USER_BLOCKS_SECTION } from "@carlnotes/core/lib/userBlocks"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { Settings } from "lucide-react"
 import { useState } from "react"
@@ -20,12 +22,12 @@ import { AnchorLink } from "@/components/common/AnchorLink"
 import { ConfirmDialog } from "@/components/common/ConfirmDialog"
 import { Button } from "@/components/primitives/button"
 import { CARD_CLASS } from "@/lib/styleClasses"
-import { ACCOUNT_FIELD_ELEMENTS, BLOCKED_USERS_ELEMENTS, PROFILE_FIELD_ELEMENTS } from "./AccountFields"
+import { ACCOUNT_FIELD_ELEMENTS, PROFILE_FIELD_ELEMENTS, USER_BLOCKS_ELEMENTS } from "./AccountFields"
 import { AiAgentAccountSection } from "./AiAgentAccountSection"
 
 /**
- * The settings sections on the account page: profile, email, password, invitations, blocked people, and closing the
- * account, which names the store for a plan bought in the app.
+ * The settings sections on the account page: profile, email, password, invitations, notifications, blocked people, and
+ * closing the account, which names the store for a plan bought in the app.
  */
 export function AccountSettings({ provider }: { provider: BillingProvider | null }) {
 	return (
@@ -39,7 +41,11 @@ export function AccountSettings({ provider }: { provider: BillingProvider | null
 			<EmailSection elements={ACCOUNT_FIELD_ELEMENTS} callbackURL="/account" />
 			<PasswordSection elements={ACCOUNT_FIELD_ELEMENTS} />
 			<InvitationsSection elements={ACCOUNT_FIELD_ELEMENTS} />
-			<BlockedUsersSection elements={BLOCKED_USERS_ELEMENTS} />
+			<NotificationsSection elements={ACCOUNT_FIELD_ELEMENTS} />
+			{/* the section a blocked profile's link opens */}
+			<div id={USER_BLOCKS_SECTION} className="scroll-mt-4">
+				<UserBlocksSection elements={USER_BLOCKS_ELEMENTS} />
+			</div>
 			<AiAgentAccountSection />
 			{/* closing the account comes last. it is the one thing on this page that cannot be undone */}
 			<DeleteAccountSection provider={provider} />

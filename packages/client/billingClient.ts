@@ -77,6 +77,15 @@ export async function sendUserRole(userId: string, role: "admin" | "user"): Prom
 	return response.ok
 }
 
+/**
+ * Sets or clears a user's admin block from reactions and comments everywhere. Returns false if the api rejects it.
+ */
+export async function sendAdminBlock(userId: string, isAdminBlocked: boolean): Promise<boolean> {
+	const adminBlockRoute = apiClient().api.admin.users[":id"].block
+	const response = await (isAdminBlocked ? adminBlockRoute.$post : adminBlockRoute.$delete)({ param: { id: userId } })
+	return response.ok
+}
+
 // one user's topics, read when an admin opens their row in the console
 export async function fetchAdminUserTopics(userId: string): Promise<OwnerTopic[]> {
 	const response = await apiClient().api.admin.users[":id"].topics.$get({ param: { id: userId } })

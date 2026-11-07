@@ -82,6 +82,16 @@ export async function fetchProfileTeamStatuses(profileUserId: string): Promise<P
 	return (await readApiResponse(profileTeamStatusesResponse, response)).teams
 }
 
+/**
+ * Turns the signed-in user's daily notifications email on or off. Throws an error on a rejection.
+ */
+export async function sendNotificationsEmailPreference(isEnabled: boolean): Promise<void> {
+	const response = await apiClient().api.users.me["notifications-email"].$post({ json: { isEnabled } })
+	if (!response.ok) {
+		throw new Error(`notifications email update failed: ${response.status}`)
+	}
+}
+
 // set who may invite the user: anyone, connected senders, or nobody
 export async function sendInviteAccess(inviteAccess: "anyone" | "connected" | "nobody"): Promise<void> {
 	const response = await apiClient().api.users.me["invite-access"].$post({ json: { inviteAccess } })

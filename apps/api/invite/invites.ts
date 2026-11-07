@@ -6,8 +6,9 @@ import { inviteCreatePayload } from "@carlnotes/contracts/payloads"
 import { PLANS } from "@carlnotes/contracts/plans"
 import { DAY_MS } from "@carlnotes/contracts/time"
 import { db } from "@carlnotes/db"
+import { canCreateInvitesToday } from "@carlnotes/db/inviteLimits"
 import { assertPersonalSourcesConverted, lockPersonalSourcesTopic } from "@carlnotes/db/personalSourcesLocks"
-import { canCreateInvitesToday, loadUserAccess } from "@carlnotes/db/quotas"
+import { loadUserAccess } from "@carlnotes/db/quotas"
 import { invites } from "@carlnotes/db/schema/invites"
 import { topics } from "@carlnotes/db/schema/topics"
 import { trackEvent } from "@carlnotes/server/analytics"
@@ -57,12 +58,16 @@ export async function createTopicInvite(
 		// serialize invitation creation with private confirmation
 		await lockPersonalSourcesTopic(transaction, topicId)
 		await assertPersonalSourcesConverted(transaction, topicId)
+
+		// store the link
 		const [invite] = await transaction
 			.insert(invites)
 			.values({ topicId, invitedByUserId: userId, maxUses: await toLinkInviteMaxUses(userId), expiresAt })
 			.returning()
 		return invite
 	})
+
+	// no row means nothing was created
 	if (!invite) {
 		return "forbidden"
 	}

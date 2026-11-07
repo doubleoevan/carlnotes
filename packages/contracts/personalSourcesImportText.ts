@@ -1,7 +1,7 @@
 // normalized text and safe public links shared by local previews and server revalidation
 import { PERSONAL_SOURCES_IMPORT_LINK_LIMIT, PERSONAL_SOURCES_TITLE_CODE_POINTS } from "./personalSources"
 import type { PersonalSourcesImportConversation } from "./personalSourcesPayloads"
-import { personalSourcesCandidateUrl, personalSourcesReferenceUrl } from "./personalSourcesUrls"
+import { personalSourcesCandidateUrl, personalSourcesReferenceUrl, toTextUrls } from "./personalSourcesUrls"
 
 /**
  * Extracts bounded public links and a separate assistant reference from a selected transcript.
@@ -17,15 +17,18 @@ export function normalizePersonalSourcesConversation({
 }): PersonalSourcesImportConversation {
 	// normalize line endings while preserving the explicitly selected transcript
 	const normalizedText = text.replace(/\r\n?/g, "\n").replaceAll("\0", "").trim()
+
+	// keep each public link, and the first url that names an assistant's conversation
 	const links = new Set<string>()
 	let chatUrl: string | null = null
-	for (const match of normalizedText.matchAll(/https?:\/\/[^\s<>"']+/g)) {
-		const url = match[0].replace(/[.,;:!?)\]}]+$/, "")
+	for (const url of toTextUrls(normalizedText)) {
 		const candidate = personalSourcesCandidateUrl.safeParse(url)
 		if (candidate.success) {
 			links.add(candidate.data)
 			continue
 		}
+
+		// a url that is no public link may still name the conversation
 		const reference = personalSourcesReferenceUrl.safeParse(url)
 		if (reference.success && isAssistantReference(reference.data)) {
 			chatUrl ??= reference.data

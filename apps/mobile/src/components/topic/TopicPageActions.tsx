@@ -1,6 +1,6 @@
 import { showClientError } from "@carlnotes/client/apiClient"
 import { authClient } from "@carlnotes/client/authClient"
-import { sendDeleteTopic, sendTopicSubscription } from "@carlnotes/client/topicClient"
+import { type FetchTopicPageOptions, sendDeleteTopic, sendTopicSubscription } from "@carlnotes/client/topicClient"
 import type { TopicResponse } from "@carlnotes/contracts/topics"
 import { toTopicActionLayout } from "@carlnotes/core/lib/topicActions"
 import { router } from "expo-router"
@@ -37,7 +37,7 @@ export function TopicActionBar({
 }: {
 	topic: TopicResponse
 	onRefresh: () => void
-	onScanned: () => Promise<void>
+	onScanned: (fetchTopicPageOptions?: FetchTopicPageOptions) => Promise<void>
 }) {
 	// keep team selection above the current Topic without losing its scroll position
 	const [isAddingToTeam, setIsAddingToTeam] = useState(false)

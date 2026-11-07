@@ -1,24 +1,12 @@
 import { type FetchTopicPageOptions, fetchTopicPage, type TopicGate } from "@carlnotes/client/topicClient"
 import { isTopicSlugStale, toTopicPath } from "@carlnotes/contracts/seo"
 import type { TopicResponse } from "@carlnotes/contracts/topics"
+import { toPolledTopicPage } from "@carlnotes/core/lib/scanPoll"
+import { applyTopicFindingChanges, type TopicFindingChange } from "@carlnotes/core/lib/topicFindingChanges"
 import { useMatch, useNavigate } from "@tanstack/react-router"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { useTopicChangeCount } from "@/stores/chatPanelStore"
 import { useLoadInBrowser } from "./useBrowserValue"
-
-/**
- * Returns a poll reload's topic page with the related topics of the page it replaces. A topic the page did not show
- * keeps the reload's own.
- */
-export function toPolledTopicPage(
-	previousTopic: TopicResponse | null | undefined,
-	polledTopic: TopicResponse | null,
-): TopicResponse | null {
-	if (!polledTopic || previousTopic?.id !== polledTopic.id) {
-		return polledTopic
-	}
-	return { ...polledTopic, relatedTopics: previousTopic.relatedTopics }
-}
 
 // the topic id from the url, and the slug if the url has one
 type UseTopicPagePayloadOptions = { topicId: string; topicSlug: string | undefined }
@@ -31,6 +19,7 @@ export function useTopicPagePayload({ topicId, topicSlug }: UseTopicPagePayloadO
 	topic: TopicResponse | null | undefined
 	topicGate: TopicGate | null
 	reloadTopicPage: (fetchTopicPageOptions?: FetchTopicPageOptions) => Promise<void>
+	changeTopicFinding: (change: TopicFindingChange) => void
 } {
 	const navigate = useNavigate()
 	// the public topic either topic route loads on the server, or nothing
@@ -61,7 +50,7 @@ export function useTopicPagePayload({ topicId, topicSlug }: UseTopicPagePayloadO
 	const reloadTopicPage = useCallback(
 		async (fetchTopicPageOptions: FetchTopicPageOptions = {}) => {
 			try {
-				// a poll reload leaves out the related topics, so the page keeps the ones it loaded
+				// a poll reload leaves out the related topics, the reactions, and the comment thread, so the page keeps its own
 				const topicPage = await fetchTopicPage(topicId, fetchTopicPageOptions)
 				if (shownTopicIdRef.current !== topicId) {
 					return
@@ -81,6 +70,11 @@ export function useTopicPagePayload({ topicId, topicSlug }: UseTopicPagePayloadO
 		},
 		[topicId],
 	)
+	// keep a finding's change on the page with no request
+	const changeTopicFinding = useCallback((change: TopicFindingChange): void => {
+		setTopic((previousTopic) => previousTopic && applyTopicFindingChanges(previousTopic, [change]))
+	}, [])
+
 	// keep the topic if its id matches the url, otherwise show the skeleton, then reload the page payload. the first
 	// load skips while hydrating the public topic the server loaded, unless a scan was running, whose findings may have
 	// changed since
@@ -107,5 +101,5 @@ export function useTopicPagePayload({ topicId, topicSlug }: UseTopicPagePayloadO
 			void reloadTopicPage()
 		}
 	}, [topicChangeCount, reloadTopicPage])
-	return { topic, topicGate, reloadTopicPage }
+	return { topic, topicGate, reloadTopicPage, changeTopicFinding }
 }

@@ -13,6 +13,7 @@ import { NotesSection } from "@/components/note/NotesSection"
 import { PodcastEpisodePlayer } from "@/components/podcast/PodcastEpisodePlayer"
 import { PodcastEpisodesCard } from "@/components/podcast/PodcastEpisodesCard"
 import { toSignupNavigation } from "@/components/session/signupPrompts"
+import { SocialSection } from "@/components/social/SocialSection"
 import { JoinTeamButton } from "@/components/team/JoinTeamButton"
 import { RelatedTopicsSection } from "@/components/topic/RelatedTopicsSection"
 import { NewCountInfo } from "@/components/topic/Topic"
@@ -45,7 +46,7 @@ import { useRegisterPageActions } from "@/stores/pageActionsStore"
 export function TopicPage() {
 	const { topicId = "", topicSlug } = useParams({ strict: false })
 	// the topic page payload, how the topic is gated, and its reload
-	const { topic, topicGate, reloadTopicPage } = useTopicPagePayload({ topicId, topicSlug })
+	const { topic, topicGate, reloadTopicPage, changeTopicFinding } = useTopicPagePayload({ topicId, topicSlug })
 	const navigate = useNavigate()
 	// the session gates the Follow button. a visitor's click is sent to signup instead
 	const { data: session } = authClient().useSession()
@@ -138,8 +139,8 @@ export function TopicPage() {
 		[reloadTopicPage],
 	)
 
-	// the topic feed handlers, which reload the page after each action
-	const topicFeedHandlers = usePageTopicFeedHandlers(reloadTopicPage)
+	// the topic feed handlers, which reload the page after each action and keep a saved reaction on the page
+	const topicFeedHandlers = usePageTopicFeedHandlers(reloadTopicPage, changeTopicFinding)
 
 	// toggle this user's subscription
 	const handleSubscriptionToggle = async (): Promise<void> => {
@@ -219,7 +220,7 @@ export function TopicPage() {
 				<>
 					{/* the topic header: the title with its chat mention badge, then the tags */}
 					<HydrateSection index={0}>
-						<TopicHeader topic={topic} />
+						<TopicHeader topic={topic} isSignedIn={Boolean(session)} />
 					</HydrateSection>
 					{/* the podcast episode player */}
 					<HydrateSection index={1}>
@@ -238,6 +239,16 @@ export function TopicPage() {
 					</HydrateSection>
 					<TopicLinkedFinding topic={topic} topicFeedHandlers={topicFeedHandlers} />
 					<TopicFindings topic={topic} topicFeedHandlers={topicFeedHandlers} />
+					{/* the topic's comment thread, whose first page came with the page */}
+					<HydrateSection index={3}>
+						<SocialSection
+							target={{ kind: "topic", id: topic.id }}
+							firstPage={topic.commentThread}
+							isSignedIn={Boolean(session)}
+							topicId={topic.id}
+							isTopicOwner={topic.isTopicOwner}
+						/>
+					</HydrateSection>
 					<TopicViews
 						topic={topic}
 						onMakeTopicPublic={() => setOpenDialog("make-public")}
@@ -287,7 +298,13 @@ function TopicFindings({ topic, topicFeedHandlers }: { topic: TopicResponse; top
 				isRatable={topic.canRate}
 				isBookmarkable={topic.isTopicOwner || topic.isTeamMember}
 				topicFeedHandlers={topicFeedHandlers}
-				topic={{ id: topic.id, name: topic.name, prompt: topic.prompt, visibility: topic.visibility }}
+				topic={{
+					id: topic.id,
+					name: topic.name,
+					prompt: topic.prompt,
+					visibility: topic.visibility,
+					isTopicOwner: topic.isTopicOwner,
+				}}
 				newCountInfo={topic.newCount > 0 ? <NewCountInfo topic={topic} /> : undefined}
 				latestPodcastEpisode={topic.latestPodcastEpisode}
 			/>
@@ -309,7 +326,7 @@ function TopicViews({
 	onReloadTopicPage: () => Promise<void>
 }) {
 	return (
-		<HydrateSection index={3}>
+		<HydrateSection index={4}>
 			<div className="grid gap-x-8 lg:grid-cols-[32rem_minmax(0,1fr)]">
 				{/* the topic info card, then the settings card under it */}
 				<div className="min-w-0">

@@ -1,17 +1,19 @@
 # packages/emails/
 
 `@carlnotes/emails`, the React Email templates and the send every email goes through. `apps/api` imports it for the
-auth, invite, and unsubscribe mail, and `@carlnotes/pipeline` for a Scan's digest and report; it imports
+auth, invite, and unsubscribe mail, and `@carlnotes/pipeline` for a Scan's topic scan email and report; it imports
 `@carlnotes/db`, `@carlnotes/server`, `@carlnotes/contracts`, and `@carlnotes/nightshift`, with
 `@react-email/components`, `@react-email/render`, `markdown-to-jsx`, and `react`.
 
 - The templates, one `.tsx` file each, imported by name without the extension (`@carlnotes/emails/auth-email`):
-  `topic-scan-email.tsx` (the scheduled Scan's digest), `manual-scan-email.tsx` (the report of a Scan the user started
-  by hand),
+  `topic-scan-email.tsx` (the scheduled Scan's email to its subscribers), `manual-scan-email.tsx` (the report of a
+  Scan the user started by hand),
   `auth-email.tsx` (the mail Better Auth asks for), `topic-invite-email.tsx`, `team-invite-email.tsx`, and
   `report-email.tsx` (a content report to the support inbox, and the sweep's reminder for one left open, with the
-  reported text and the admin console link). Each exports its component, a `render<Name>Email` for the HTML and a
-  `render<Name>EmailText` for the plain text, and the invite, report, and manual scan templates their subject line.
+  reported text and the admin console link), and `notifications-email.tsx` (the daily email about what others wrote
+  on a user's things, with fixed lines and at most ten quotes). Each exports its component, a `render<Name>Email` for
+  the HTML and a `render<Name>EmailText` for the plain text, and the invite, report, and manual scan templates their
+  subject line.
 - `emailShell.tsx` — the shell every template renders inside: `EmailShell`, `EmailIntro`, `EmailFooter`, `LinkOrText`,
   and the `summaryLink` and `footerBrandLink` styles.
 - Colors and sizes: every color and font size a template writes comes from `@carlnotes/nightshift/email`: a Latte token
@@ -24,8 +26,11 @@ auth, invite, and unsubscribe mail, and `@carlnotes/pipeline` for a Scan's diges
   the slot goes ahead without it, and each wait adds a little jitter, so waiters that woke together do not ask in
   lockstep. `EmailMessage` is the message shape, `isSendableAddress` says whether an address parses as an email, and
   `reportDroppedAddresses` reports the ones dropped by count, never by address.
-- `unsubscribe.ts` — the topic-scan email's one-click unsubscribe tokens: `signUnsubscribeToken` signs a recipient and
-  topic through `@carlnotes/server/hmac` at send time, and `verifyUnsubscribeToken` reads one back, or returns null for
+- `unlinkedText.ts` — `toUnlinkedText` writes each url and domain in a user's text with bracketed dots so no mail
+  client links it, and `toEmailQuote` cuts a quote to a length first. The report and notifications emails use them.
+- `unsubscribe.ts` — the one-click unsubscribe tokens of the topic scan email and the notifications email:
+  `signUnsubscribeToken` signs a recipient with a topic, or with the notifications kind, through
+  `@carlnotes/server/hmac` at send time, and `verifyUnsubscribeToken` reads one back, or returns null for
   a tampered or malformed token. The routes are `apps/api/unsubscribe.ts`.
 - Imports: `@carlnotes/db`, `@carlnotes/server`, `@carlnotes/contracts`, and `@carlnotes/nightshift`; never `models` or
   `pipeline`, which come after it, and never an app.

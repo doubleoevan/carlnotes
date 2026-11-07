@@ -1,11 +1,11 @@
-// scan email tests: which subscribers a digest plans for, what one batch rechecks, sends, and records, and a report that
-// is sent once per Scan
+// scan email tests: which subscribers a topic scan email plans for, what one batch rechecks, sends, and records, and
+// a report that is sent once per Scan
 import { afterEach, beforeEach, expect, mock, spyOn, test } from "bun:test"
 import { restoreConnectionPool, stubConnectionPool } from "@carlnotes/db/connectionPoolStub"
 import * as redisRateLimits from "@carlnotes/db/redisRateLimits"
 import * as monitoring from "@carlnotes/server/monitoring"
 import { saveEnvSettings } from "@carlnotes/server/savedEnvSettings"
-import { planScanDigest, sendScanDigestBatch, sendScanReport } from "./notify"
+import { planTopicScanEmail, sendScanReport, sendTopicScanEmailBatch } from "./notify"
 
 // the rows each query gets, picked by a pattern in its SQL. a query that matches nothing gets no rows
 type QueryRows = { sqlPattern: RegExp; rows: unknown[][] }
@@ -73,7 +73,7 @@ function toSubscriberRows(count: number): unknown[][] {
 }
 
 // the plan leaves out whoever the Scan's email already reached and any address Resend would reject
-test("a digest plan leaves out recorded recipients and unsendable addresses, and reports the drop", async () => {
+test("a plan leaves out recorded recipients and unsendable addresses, and reports the drop", async () => {
 	const reportErrorSpy = spyOn(monitoring, "reportError").mockImplementation(() => {})
 	stubDatabase([
 		{ sqlPattern: /from "scans"/, rows: [SUCCEEDED_SCAN_TOPIC_ROW] },
@@ -82,7 +82,7 @@ test("a digest plan leaves out recorded recipients and unsendable addresses, and
 	])
 
 	// one batch of the two who remain, and a report that one address was dropped
-	expect(await planScanDigest("scan-1")).toEqual([["user-1", "user-3"]])
+	expect(await planTopicScanEmail("scan-1")).toEqual([["user-1", "user-3"]])
 	expect(reportErrorSpy).toHaveBeenCalledWith(expect.any(Error), "email", {
 		emailKind: "topic-scan",
 		droppedCount: "1",
@@ -91,12 +91,12 @@ test("a digest plan leaves out recorded recipients and unsendable addresses, and
 
 // the subscribers read are those with an active subscription and email on who can still read the Topic: on a private Topic, only its
 // owner and the active members of a team that owns or holds it
-test("a digest reads only subscribers who can still read the Topic", async () => {
+test("a topic scan email reads only subscribers who can still read the Topic", async () => {
 	// record every query the plan sends
 	const sentQueries = stubConnectionPool(({ text }) =>
 		text.includes('from "scans"') ? [SUCCEEDED_SCAN_TOPIC_ROW] : [],
 	)
-	await planScanDigest("scan-1")
+	await planTopicScanEmail("scan-1")
 
 	// the subscriber read joins the Topic and checks its visibility and the subscriber's role
 	const subscribersQuery = sentQueries.find((sentQuery) => /from "subscriptions"/.test(sentQuery.text))
@@ -108,23 +108,23 @@ test("a digest reads only subscribers who can still read the Topic", async () =>
 })
 
 // a large Topic's subscribers are split within Resend's per-call limit
-test("a digest plan batches 205 subscribers into 100, 100, and 5", async () => {
+test("a topic scan email plan batches 205 subscribers into 100, 100, and 5", async () => {
 	stubDatabase([
 		{ sqlPattern: /from "scans"/, rows: [SUCCEEDED_SCAN_TOPIC_ROW] },
 		{ sqlPattern: /from "subscriptions"/, rows: toSubscriberRows(205) },
 	])
-	const recipientUserIdBatches = await planScanDigest("scan-1")
+	const recipientUserIdBatches = await planTopicScanEmail("scan-1")
 	expect(recipientUserIdBatches.map((recipientUserIdBatch) => recipientUserIdBatch.length)).toEqual([100, 100, 5])
 })
 
-// only a succeeded Scan sends a digest
-test("a digest plan for a failed Scan has no batches", async () => {
+// only a succeeded Scan sends a topic scan email
+test("a topic scan email plan for a failed Scan has no batches", async () => {
 	stubDatabase([{ sqlPattern: /from "scans"/, rows: [FAILED_SCAN_TOPIC_ROW] }])
-	expect(await planScanDigest("scan-1")).toEqual([])
+	expect(await planTopicScanEmail("scan-1")).toEqual([])
 })
 
 // a batch sends only to the planned recipients who are still subscribed and not yet recorded, then records them
-test("a digest batch rechecks its recipients, sends one call, and records the accepted sends with the Scan", async () => {
+test("a batch rechecks its recipients, sends one call, and records the accepted sends with the Scan", async () => {
 	// user-2 unsubscribed since the plan, so the subscription query no longer returns them, and user-3 was already sent to
 	const recordedInserts = stubDatabase([
 		{ sqlPattern: /from "scans"/, rows: [SUCCEEDED_SCAN_TOPIC_ROW] },
@@ -140,7 +140,7 @@ test("a digest batch rechecks its recipients, sends one call, and records the ac
 	const postedAddressLists = stubResend(200)
 
 	// one call to user-1 alone, recorded once with the Scan's id and deduped on the Scan and the recipient
-	const scanEmailOutcome = await sendScanDigestBatch({
+	const scanEmailOutcome = await sendTopicScanEmailBatch({
 		scanId: "scan-1",
 		recipientUserIds: ["user-1", "user-2", "user-3"],
 	})
@@ -152,14 +152,14 @@ test("a digest batch rechecks its recipients, sends one call, and records the ac
 })
 
 // a rejected batch records nothing, so the send log keeps only accepted sends
-test("a rejected digest batch writes no rows", async () => {
+test("a rejected topic scan email batch writes no rows", async () => {
 	const recordedInserts = stubDatabase([
 		{ sqlPattern: /from "scans"/, rows: [SUCCEEDED_SCAN_TOPIC_ROW] },
 		{ sqlPattern: /from "subscriptions"/, rows: toSubscriberRows(2) },
 	])
 	stubResend(400)
 
-	const scanEmailOutcome = await sendScanDigestBatch({ scanId: "scan-1", recipientUserIds: ["user-1", "user-2"] })
+	const scanEmailOutcome = await sendTopicScanEmailBatch({ scanId: "scan-1", recipientUserIds: ["user-1", "user-2"] })
 	expect(scanEmailOutcome.outcome).toBe("rejected")
 	expect(recordedInserts).toEqual([])
 })

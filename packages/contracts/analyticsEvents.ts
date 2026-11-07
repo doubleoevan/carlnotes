@@ -7,6 +7,11 @@ export type AnalyticsEntryPoint = "web" | "mobile" | "mcp" | "api" | "email" | "
 // an event's properties: short identifiers, numbers, and flags, never content
 export type AnalyticsEventProperties = Record<string, string | number | boolean>
 
+// a social target's kind as an event names it, and the kinds of thing a social flag names
+export type CommentEventTarget = "finding" | "podcast_episode" | "topic"
+export type SocialEventTarget = CommentEventTarget | "hot_take"
+export type SocialEventFlagSubject = SocialEventTarget | "profile"
+
 export type UserAnalyticsEvent =
 	// the account: the signup funnel's start, each sign-in, and the account closing that undoes it
 	| "signup_completed"
@@ -78,6 +83,13 @@ export type UserAnalyticsEvent =
 	| "note_comment_added"
 	// a report of someone's content
 	| "content_flagged"
+	// a Reaction saved or removed, a Comment posted, deleted, or shared with Carl, and a flag of a social subject
+	| `social_${SocialEventTarget}_react`
+	| `social_${CommentEventTarget}_hot_take`
+	| "social_reaction_delete"
+	| "social_hot_take_delete"
+	| "social_hot_take_share"
+	| `social_${SocialEventFlagSubject}_flag`
 	// an updates list on any path
 	| "updates_requested"
 	// Personal sources: entries received or deleted, a send or an email that was not saved, and the sender's summary
@@ -112,7 +124,8 @@ export type VisitorAnalyticsEvent =
 	// an email to Carl from an address with no account
 	| "personal_sources_email_unregistered"
 
-// the events the browser sends for an anonymous visit, each named with a visit_ prefix
+// the events the browser sends: an anonymous visit's, each named with a visit_ prefix, and a comment thread's first
+// showing
 export type VisitAnalyticsEvent =
 	// a topic page view and a listen on it
 	| "visit_topic_viewed"
@@ -124,3 +137,4 @@ export type VisitAnalyticsEvent =
 	| "visit_share_clicked"
 	| "visit_podcast_subscribe_clicked"
 	| "visit_video_played"
+	| `social_${CommentEventTarget}_hot_takes_view`

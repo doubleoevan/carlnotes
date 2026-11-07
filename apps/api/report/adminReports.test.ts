@@ -2,15 +2,20 @@
 // report without touching the content, and Remove deletes a comment through the comment delete before closing
 import { afterEach, expect, test } from "bun:test"
 import { restoreConnectionPool, stubConnectionPool } from "@carlnotes/db/connectionPoolStub"
+import { saveEnvSettings } from "@carlnotes/server/savedEnvSettings"
 import type { Context } from "hono"
 import { loadOpenReports, resolveReport } from "./adminReports"
+import { toReportTextHash } from "./reports"
 
-// put the connection pool back after each test
+// put the connection pool and the auth secret back after each test
+const restoreAuthSecret = saveEnvSettings(["BETTER_AUTH_SECRET"])
 afterEach(() => {
 	restoreConnectionPool()
+	restoreAuthSecret()
 })
 
-// one open report row as the list's read selects it: the report, then the reporter and the author
+// one open report row as the list's read selects it: the report, then the reporter, the author, and when an admin
+// blocked the author
 const OPEN_REPORT_ROW = [
 	"report-1",
 	"noteComment",
@@ -23,6 +28,7 @@ const OPEN_REPORT_ROW = [
 	"doubleoevan",
 	"user-2",
 	"vienna",
+	null,
 ]
 
 // the list shapes the report, and a comment that no longer exists shows as gone
@@ -50,25 +56,29 @@ test("the open list shapes each report and marks gone content", async () => {
 		reporter: { id: "user-1", username: "doubleoevan" },
 		canRemove: true,
 		isSubjectDeleted: false,
+		canAdminBlock: true,
 	})
 	expect(openReports[1]?.isSubjectDeleted).toBe(true)
 })
 
-// Keep writes the resolution and touches no content
+// Clear writes the resolution and touches no content
 test("keeping a report closes it without a delete", async () => {
+	Bun.env.BETTER_AUTH_SECRET = "test-secret"
 	const sentQueries = stubConnectionPool(({ text }) =>
-		text.includes('from "reports"') ? [["report-1", "noteComment", "c1"]] : [],
+		text.includes('from "reports"') ? [["report-1", "noteComment", "c1", null, "the cleared text"]] : [],
 	)
 	const isResolved = await resolveReport({
 		context: {} as Context,
 		adminUserId: "admin-1",
 		reportId: "report-1",
-		resolution: "kept",
+		resolution: "cleared",
 	})
 	expect(isResolved).toBe(true)
 	expect(sentQueries.some((sentQuery) => sentQuery.text.startsWith("delete"))).toBe(false)
 	const updateQuery = sentQueries.find((sentQuery) => sentQuery.text.startsWith('update "reports"'))
-	expect(updateQuery?.values).toEqual(expect.arrayContaining(["kept", "admin-1", "report-1"]))
+	expect(updateQuery?.values).toEqual(
+		expect.arrayContaining(["cleared", "admin-1", "report-1", toReportTextHash("the cleared text")]),
+	)
 })
 
 // Remove deletes the comment by its note and id with no author clause, then closes the report
@@ -94,6 +104,51 @@ test("removing a reported comment deletes it as the admin", async () => {
 	expect(sentQueries.some((sentQuery) => sentQuery.text.startsWith('update "reports"'))).toBe(true)
 })
 
+// Remove deletes a reported comment for everyone
+test.each([["comment", "comments"]] as const)("removing a reported %s deletes it", async (subjectKind, table) => {
+	const sentQueries = stubConnectionPool(({ text }) =>
+		text.includes('from "reports"') ? [["report-1", subjectKind, "subject-1", "author-1"]] : [],
+	)
+	const isResolved = await resolveReport({
+		context: {} as Context,
+		adminUserId: "admin-1",
+		reportId: "report-1",
+		resolution: "removed",
+	})
+	expect(isResolved).toBe(true)
+
+	// the subject is deleted by its id, and its author is not under an admin block
+	const deleteQuery = sentQueries.find((sentQuery) => sentQuery.text.startsWith(`delete from "${table}"`))
+	expect(deleteQuery?.values).toEqual(["subject-1"])
+	expect(sentQueries.some((sentQuery) => sentQuery.text.startsWith('update "users"'))).toBe(false)
+})
+
+// Block sets the admin block on the author, deletes a removable subject, and closes the report as blocked
+test("blocking from a report blocks the author, deletes the comment, and closes the report", async () => {
+	const sentQueries = stubConnectionPool(({ text }) =>
+		text.includes('from "reports"') ? [["report-1", "comment", "comment-1", "author-1"]] : [],
+	)
+	await resolveReport({ context: {} as Context, adminUserId: "admin-1", reportId: "report-1", resolution: "blocked" })
+
+	// the author's row takes the admin block and the admin who set it
+	const blockQuery = sentQueries.find((sentQuery) => sentQuery.text.startsWith('update "users"'))
+	expect(blockQuery?.values).toContain("admin-1")
+	expect(blockQuery?.values).toContain("author-1")
+	expect(sentQueries.some((sentQuery) => sentQuery.text.startsWith('delete from "comments"'))).toBe(true)
+	const closeQuery = sentQueries.find((sentQuery) => sentQuery.text.startsWith('update "reports"'))
+	expect(closeQuery?.values).toContain("blocked")
+})
+
+// Block on a Finding puts an admin block on the Topic's owner and deletes nothing
+test("blocking from a report of a Finding deletes nothing", async () => {
+	const sentQueries = stubConnectionPool(({ text }) =>
+		text.includes('from "reports"') ? [["report-1", "finding", "finding-1", "owner-1"]] : [],
+	)
+	await resolveReport({ context: {} as Context, adminUserId: "admin-1", reportId: "report-1", resolution: "blocked" })
+	expect(sentQueries.some((sentQuery) => sentQuery.text.startsWith('update "users"'))).toBe(true)
+	expect(sentQueries.some((sentQuery) => sentQuery.text.startsWith("delete"))).toBe(false)
+})
+
 // a report already resolved, or one that never existed, resolves nothing
 test("a missing report is not resolved", async () => {
 	stubConnectionPool(() => [])
@@ -101,7 +156,7 @@ test("a missing report is not resolved", async () => {
 		context: {} as Context,
 		adminUserId: "admin-1",
 		reportId: "report-9",
-		resolution: "kept",
+		resolution: "cleared",
 	})
 	expect(isResolved).toBe(false)
 })

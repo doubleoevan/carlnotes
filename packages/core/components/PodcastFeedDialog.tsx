@@ -1,5 +1,6 @@
 import type { ComponentType, ReactNode } from "react"
 import type { PodcastFeedState } from "../hooks/usePodcastFeed"
+import type { ConfirmElementProps } from "../lib/confirmElement"
 import { PODCAST_FEED_RESET_DESCRIPTION, PODCAST_FEED_RESET_TITLE } from "../lib/podcastFeed"
 
 type Container = ComponentType<{ children: ReactNode; className?: string }>
@@ -17,14 +18,7 @@ export type PodcastFeedDialogElements = {
 		disabled?: boolean
 		className?: string
 	}>
-	Confirm: ComponentType<{
-		title: string
-		children: ReactNode
-		onConfirm: () => Promise<void>
-		onClose: () => void
-		confirmLabel: string
-		cancelLabel: string
-	}>
+	Confirm: ComponentType<ConfirmElementProps>
 }
 
 /**

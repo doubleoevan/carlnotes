@@ -3,6 +3,8 @@ import { fetchPodcastEpisodePage } from "@carlnotes/client/podcastEpisodeClient"
 import { isPublishedPodcastEpisode } from "@carlnotes/contracts/podcast"
 import type { PodcastEpisodePageResponse } from "@carlnotes/contracts/podcastEpisodePage"
 import { isTopicSlugStale, toPodcastEpisodePath, toTopicPath } from "@carlnotes/contracts/seo"
+import { toPodcastEpisodeReportSubject, toPodcastEpisodeSocialProps } from "@carlnotes/core/lib/podcastEpisodeSocial"
+import { applyPodcastEpisodePageChanges, type TopicFindingChange } from "@carlnotes/core/lib/topicFindingChanges"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { useMatch, useNavigate, useParams } from "@tanstack/react-router"
 import { Trash2 } from "lucide-react"
@@ -18,6 +20,8 @@ import { PodcastFeedDialog } from "@/components/podcast/PodcastFeedDialog"
 import { PodcastThemeSongNote } from "@/components/podcast/PodcastThemeSongNote"
 import { RemovePodcastEpisodeDialog } from "@/components/podcast/RemovePodcastEpisodeDialog"
 import { ShareTopic } from "@/components/share/ShareTopic"
+import { ReactionRow } from "@/components/social/ReactionRow"
+import { SocialSection } from "@/components/social/SocialSection"
 import { TableCard } from "@/components/table/TableCard"
 import { isAddTopicToTeamShown } from "@/components/team/AddTopicToTeamButton"
 import { AddTopicToTeamDialog } from "@/components/team/AddTopicToTeamDialog"
@@ -98,7 +102,14 @@ export function PodcastEpisodePage() {
 		onOpenDialog: setOpenDialog,
 	})
 
-	const topicFeedHandlers = usePageTopicFeedHandlers(loadPodcastEpisodePage)
+	// the finding handlers, which reload the page after each action and keep a saved reaction on the page
+	const changeTopicFinding = useCallback((change: TopicFindingChange): void => {
+		setPodcastEpisodePage(
+			(previousPodcastEpisodePage) =>
+				previousPodcastEpisodePage && applyPodcastEpisodePageChanges(previousPodcastEpisodePage, [change]),
+		)
+	}, [])
+	const topicFeedHandlers = usePageTopicFeedHandlers(loadPodcastEpisodePage, changeTopicFinding)
 
 	// the loading skeleton, the topic's gate, or the line for an episode that did not load
 	if (podcastEpisodePage === undefined) {
@@ -134,27 +145,34 @@ export function PodcastEpisodePage() {
 	const chapterTopicFeed = { topicFindings, topic, isRatable: canRate, isBookmarkable: false, topicFeedHandlers }
 	return (
 		<main className={PAGE_CLASS}>
-			{/* the cover beside the topic's name, the title, the description, and on a phone the topic's byline */}
+			{/* the cover beside the title, the description, the topic's name, and the topic's byline with the reactions */}
 			<header className={HEADER_CLASS}>
 				<PodcastEpisodeCover podcastEpisode={podcastEpisode} className={COVER_CLASS} />
 				<div className="min-w-0 flex-1">
-					{/* the topic's line, with the new topic button in the header's top right corner */}
-					<div className="flex items-end justify-between gap-3">
-						<p className="text-muted-foreground min-w-0 text-sm">
-							<strong>Coffee Break</strong>
-							{" podcast for "}
-							<AnchorLink href={topicPath} className="sentence-link">
-								{topic.name}
-							</AnchorLink>
-						</p>
+					{/* the title, with the new topic button in the header's top right corner */}
+					<div className="flex items-start justify-between gap-3">
+						<h1 className="font-display min-w-0 text-2xl leading-tight text-balance sm:text-3xl">
+							{podcastEpisode.title}
+							<PodcastThemeSongNote />
+						</h1>
 						<NewTopicButton onNewTopic={openNewTopicDialog} />
 					</div>
-					<h1 className="font-display mt-1.5 text-2xl leading-tight sm:text-3xl">
-						{podcastEpisode.title}
-						<PodcastThemeSongNote />
-					</h1>
 					{podcastEpisode.description && <p className="mt-1.5 text-sm">{podcastEpisode.description}</p>}
-					<TopicByline topic={topic} className="mt-1.5 text-sm sm:hidden" />
+					<p className="text-muted-foreground mt-1.5 text-sm">
+						<strong>Coffee Break</strong>
+						{" podcast for "}
+						<AnchorLink href={topicPath} className="sentence-link">
+							{topic.name}
+						</AnchorLink>
+					</p>
+					<div className="mt-1.5 flex flex-wrap items-center gap-x-3">
+						<TopicByline topic={topic} className="text-sm" />
+						<ReactionRow
+							target={{ kind: "podcastEpisode", id: podcastEpisode.id }}
+							summary={podcastEpisodePage.reactions}
+							isSignedIn={Boolean(session)}
+						/>
+					</div>
 				</div>
 			</header>
 
@@ -166,6 +184,9 @@ export function PodcastEpisodePage() {
 					onOpenPodcastFeedDialog={() => setIsPodcastFeedDialogOpen(true)}
 				/>
 			</div>
+
+			{/* the podcast episode's comment thread, where a comment may name a chapter and a chapter's tag plays from it */}
+			<SocialSection {...toPodcastEpisodeSocialProps(podcastEpisodePage, Boolean(session))} />
 
 			{/* the chapters table */}
 			<CollapsibleSection value="chapters" title="Episode chapters" className={cn(NARROW_SCREEN_HIDDEN_CLASS, "mt-2")}>
@@ -256,7 +277,7 @@ function useRegisterPodcastEpisodePageActions({
 							? [{ label: "Remove episode", Icon: Trash2, onSelect: () => onOpenDialog("remove") }]
 							: []),
 					],
-					report: { subjectKind: "topic", subjectId: podcastEpisodeTopic.id, subjectLabel: podcastEpisodeTopic.name },
+					report: toPodcastEpisodeReportSubject(podcastEpisodePage.podcastEpisode),
 					hasNewTopicButton: true,
 				}
 			: null,
@@ -281,18 +302,18 @@ const TRANSCRIPT_LINE_SKELETONS = ["t1", "t2", "t3", "t4", "t5", "t6"]
 function PodcastEpisodeSkeleton() {
 	return (
 		<div aria-hidden="true">
-			{/* the placeholder cover, beside the topic's line, the title, the description, and on a phone the byline */}
+			{/* the placeholder cover, beside the title, the description, the topic's line, and the byline */}
 			<div className={HEADER_CLASS}>
 				<PodcastEpisodeCover podcastEpisode={{ smallCoverUrl: null, title: null }} className={COVER_CLASS} />
 				<div className="min-w-0 flex-1">
-					{/* the topic's line beside the new topic button */}
-					<div className="flex items-end justify-between gap-3">
-						<div className="bg-muted h-4 w-56 max-w-full animate-pulse rounded" />
+					{/* the title beside the new topic button */}
+					<div className="flex items-start justify-between gap-3">
+						<div className="bg-muted h-8 w-96 max-w-full animate-pulse rounded" />
 						<div className="bg-muted h-9 w-32 shrink-0 animate-pulse rounded-md" />
 					</div>
-					<div className="bg-muted mt-2.5 h-8 w-96 max-w-full animate-pulse rounded" />
 					<div className="bg-muted mt-2.5 h-4 w-full animate-pulse rounded" />
-					<div className="mt-2.5 flex items-center gap-2 sm:hidden">
+					<div className="bg-muted mt-2.5 h-4 w-56 max-w-full animate-pulse rounded" />
+					<div className="mt-2.5 flex items-center gap-2">
 						<div className="bg-muted size-6 shrink-0 animate-pulse rounded-full" />
 						<div className="bg-muted h-4 w-40 animate-pulse rounded" />
 					</div>
@@ -304,6 +325,11 @@ function PodcastEpisodeSkeleton() {
 				<PodcastEpisodePlayerCardSkeleton />
 				<ExpanderSkeleton />
 			</div>
+
+			{/* the comments card */}
+			<CollapsibleSectionSkeleton titleClassName="w-28" className="mt-2">
+				<div className={cn(INFO_CARD_CLASS, "h-32")} />
+			</CollapsibleSectionSkeleton>
 
 			{/* the chapters section and its table rows */}
 			<CollapsibleSectionSkeleton titleClassName="w-36" className={cn(NARROW_SCREEN_HIDDEN_CLASS, "mt-2")}>

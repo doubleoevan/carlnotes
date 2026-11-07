@@ -3,6 +3,7 @@ import { authClient } from "@carlnotes/client/authClient"
 import { isLeaderRole } from "@carlnotes/contracts/enums"
 import { type ProfileIdentity, toSessionProfileIdentity } from "@carlnotes/contracts/profiles"
 import type { TeamSummary, TeamsPageResponse } from "@carlnotes/contracts/teams"
+import { toDeleteReceivedInviteConfirmation } from "@carlnotes/core/lib/confirmationCopy"
 import { toCentsLabel } from "@carlnotes/core/lib/labels"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { X } from "lucide-react"
@@ -14,6 +15,7 @@ import { UserProfileLink } from "@/components/common/UserProfileLink"
 import { Button } from "@/components/primitives/button"
 import { Switch } from "@/components/primitives/switch"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
+import { useConfirmDialog } from "@/hooks/useConfirmDialog"
 import { STANDALONE_LINK_CLASS } from "@/lib/styleClasses"
 import { SubtableCountButton } from "./SubtableCountButton"
 import { TeamSubtablesRow, useTeamSubtables } from "./TeamSubtablesRow"
@@ -178,6 +180,7 @@ export function TeamInviteRow({ invite, onAnswered }: { invite: ReceivedInvite; 
 			toast.error("Accepting that invitation failed.")
 		}
 	}
+	const { confirm, confirmDialog } = useConfirmDialog()
 	const handleDecline = async (): Promise<void> => {
 		try {
 			await sendDeclineInvite(invite.inviteId)
@@ -277,7 +280,7 @@ export function TeamInviteRow({ invite, onAnswered }: { invite: ReceivedInvite; 
 							<Button
 								size="icon-sm"
 								variant="ghost"
-								onClick={() => void handleDecline()}
+								onClick={() => confirm(toDeleteReceivedInviteConfirmation(invite.name), handleDecline)}
 								aria-label={`Delete invitation to ${invite.name}`}
 							>
 								<X className="size-4" />
@@ -287,6 +290,7 @@ export function TeamInviteRow({ invite, onAnswered }: { invite: ReceivedInvite; 
 							Delete invitation to <span className="font-semibold">{invite.name}</span>
 						</TooltipContent>
 					</Tooltip>
+					{confirmDialog}
 				</td>
 			</tr>
 			{/* whichever subtable is open, read-only for an invitee, who has no role yet */}

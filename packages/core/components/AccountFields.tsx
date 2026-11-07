@@ -18,7 +18,13 @@ export type AccountFieldElements = {
 		onChange: (value: string) => void
 		kind?: "email" | "current-password" | "new-password"
 	}>
-	Button: ComponentType<{ label: string; onPress: () => void; isDisabled?: boolean }>
+	Button: ComponentType<{
+		label: string
+		accessibilityLabel?: string
+		onPress: () => void
+		isDisabled?: boolean
+		isHighlighted?: boolean
+	}>
 	Choice: ComponentType<{
 		label: string
 		description?: string

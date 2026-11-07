@@ -3,6 +3,7 @@ import type { Topic } from "@carlnotes/contracts/profiles"
 import type { TopicResponse } from "@carlnotes/contracts/topics"
 import { DataTable } from "@carlnotes/core/components/DataTable"
 import { useTopicEmails } from "@carlnotes/core/hooks/useTopicEmails"
+import { toRemoveTopicConfirmation } from "@carlnotes/core/lib/confirmationCopy"
 import { topicSortValues, toTopicsTableColumns } from "@carlnotes/core/lib/topicsTableColumns"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { X } from "lucide-react"
@@ -14,6 +15,7 @@ import { Popover, PopoverCloseButton, PopoverContent, PopoverTrigger } from "@/c
 import { Switch } from "@/components/primitives/switch"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import { TopicInfo } from "@/components/topic/TopicInfo"
+import { useConfirmDialog } from "@/hooks/useConfirmDialog"
 import { POPOVER_PANEL_CLASS, STANDALONE_LINK_CLASS } from "@/lib/styleClasses"
 import { DATA_TABLE_ELEMENTS } from "./DataTable"
 import { TopicVisibility } from "./OwnerTopicsTable"
@@ -37,6 +39,12 @@ export function TopicsTable({
 }) {
 	const { renderedRows, sort, pagination } = usePaginatedRowSort({ rows: topics, valueByKey: topicSortValues })
 	const emails = useTopicEmails()
+	const { confirm, confirmDialog } = useConfirmDialog()
+
+	// taking a topic off the team asks first
+	const handleRemoveTopicPress = (topic: Topic): void => {
+		confirm(toRemoveTopicConfirmation({ topicName: topic.name }), () => onRemoveTopic?.(topic))
+	}
 	const columns = toTopicsTableColumns({
 		topics,
 		includesNonPublicTopics,
@@ -55,7 +63,11 @@ export function TopicsTable({
 		),
 		renderActive: onRemoveTopic
 			? (topic) => (
-					<Switch checked aria-label={`Deactivate ${topic.name}`} onCheckedChange={() => onRemoveTopic(topic)} />
+					<Switch
+						checked
+						aria-label={`Deactivate ${topic.name}`}
+						onCheckedChange={() => handleRemoveTopicPress(topic)}
+					/>
 				)
 			: undefined,
 		renderRemove: onRemoveTopic
@@ -64,7 +76,7 @@ export function TopicsTable({
 						size="icon-sm"
 						variant="ghost"
 						aria-label={`Remove ${topic.name} from the team`}
-						onClick={() => onRemoveTopic(topic)}
+						onClick={() => handleRemoveTopicPress(topic)}
 					>
 						<X className="size-4" />
 					</Button>
@@ -85,6 +97,7 @@ export function TopicsTable({
 			/>
 			{topics.length > SMALLEST_PAGE_SIZE && <TablePagination {...pagination} />}
 			{emails.error && <p className="text-destructive text-sm">{emails.error}</p>}
+			{confirmDialog}
 		</TableCard>
 	)
 }

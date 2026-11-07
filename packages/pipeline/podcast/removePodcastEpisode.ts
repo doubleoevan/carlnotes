@@ -3,6 +3,7 @@
 
 import { type DbHandle, type DbTransaction, db } from "@carlnotes/db"
 import { podcastEpisodeChapters, podcastEpisodeListens, podcastEpisodes } from "@carlnotes/db/schema/podcast"
+import { comments, reactions } from "@carlnotes/db/schema/social"
 import {
 	deleteStoredObjects,
 	recordPendingObjectDeletions,
@@ -45,7 +46,7 @@ export async function removePodcastEpisode(podcastEpisodeId: string): Promise<bo
 }
 
 /**
- * Deletes the Podcast Episodes' listen state and vectors and marks their rows removed, with no script and no audio
+ * Deletes the Podcast Episodes' listen state, vectors, reactions, and comments and marks their rows removed, with no script and no audio
  * fields. Their chapters stay, so the Findings that they narrated still count as narrated.
  */
 export async function markPodcastEpisodesRemoved(
@@ -57,6 +58,10 @@ export async function markPodcastEpisodesRemoved(
 		.delete(podcastEpisodeListens)
 		.where(inArray(podcastEpisodeListens.podcastEpisodeId, podcastEpisodeIds))
 	await deletePodcastEpisodeVectors(podcastEpisodeIds, transaction)
+
+	// delete the reactions and the comments, which the kept row would otherwise keep
+	await transaction.delete(reactions).where(inArray(reactions.podcastEpisodeId, podcastEpisodeIds))
+	await transaction.delete(comments).where(inArray(comments.podcastEpisodeId, podcastEpisodeIds))
 
 	// mark each row removed, and clear its script and its audio fields
 	await transaction

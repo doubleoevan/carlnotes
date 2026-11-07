@@ -3,10 +3,12 @@ import { sendCreateTopicInvite } from "@carlnotes/client/topicClient"
 import { toInvitePath, toTopicFeedPath, toTopicPath } from "@carlnotes/contracts/seo"
 import { SITE_URL } from "@carlnotes/contracts/site"
 import type { TopicDetails } from "@carlnotes/contracts/topics"
+import { useSubjectReportFlag } from "@carlnotes/core/hooks/useSubjectReport"
 import { useRecyclingState } from "@shopify/flash-list"
 import { Check, Flag, Link, Rss, Share as ShareIcon } from "lucide-react-native"
 import { type ComponentRef, useRef, useState } from "react"
 import { Platform, Pressable, Share, View } from "react-native"
+import { toActiveIconProps } from "@/activeIconProps"
 import { ReportIssueForm } from "@/components/common/ReportIssueDialog"
 import { Sheet, type SheetProps } from "@/components/common/Sheet"
 import { Button, toTouchTargetHitSlop } from "@/components/primitives/button"
@@ -67,10 +69,10 @@ export function ShareTopicSheet({
 	const actions = useShareTopicActions(topic)
 	const handleShare = (channel: string): void =>
 		captureVisitEvent("visit_share_clicked", { kind: "topic", channel, ...toPublicTopicProperties(topic) })
-	const [isReporting, setIsReporting] = useState(false)
+	const reportFlag = useSubjectReportFlag({ subjectKind: "topic", subjectId: topic.id })
 	return (
-		<Sheet title={isReporting ? `Report an issue with ${topic.name}` : "Share topic"} {...sheetProps}>
-			{isReporting ? (
+		<Sheet title={reportFlag.isReporting ? `Report an issue with ${topic.name}` : "Share topic"} {...sheetProps}>
+			{reportFlag.isReporting ? (
 				<ReportIssueForm subjectKind="topic" subjectId={topic.id} onClose={sheetProps.onClose} />
 			) : (
 				<>
@@ -143,7 +145,12 @@ export function ShareTopicSheet({
 						</View>
 					) : null}
 					<View className="my-1 border-t border-separator" />
-					<ShareOption label="Report issue" icon={Flag} onPress={() => setIsReporting(true)} />
+					<ShareOption
+						label={reportFlag.label}
+						icon={Flag}
+						isActive={reportFlag.isReported}
+						onPress={reportFlag.press}
+					/>
 				</>
 			)}
 		</Sheet>
@@ -215,22 +222,25 @@ function ShareOption({
 	onPress,
 	isDisabled = false,
 	isCopied = false,
+	isActive = false,
 }: {
 	label: string
 	icon: typeof Link
 	onPress: () => void
 	isDisabled?: boolean
 	isCopied?: boolean
+	isActive?: boolean
 }) {
 	return (
 		<Button
 			variant="ghost"
 			className="min-h-12 justify-start px-2"
 			accessibilityLabel={isCopied ? `${label}, copied` : label}
+			accessibilityState={{ selected: isActive }}
 			disabled={isDisabled}
 			onPress={onPress}
 		>
-			<Icon as={icon} className="size-4" />
+			<Icon as={icon} {...toActiveIconProps(isActive, "size-4")} />
 			<Text className="flex-1 text-left">{isCopied ? "Copied" : label}</Text>
 			{isCopied ? <Icon as={Check} className="size-4 text-link" /> : null}
 		</Button>

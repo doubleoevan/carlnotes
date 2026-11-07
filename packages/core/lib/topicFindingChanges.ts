@@ -1,7 +1,10 @@
 import type { TopicPageResult } from "@carlnotes/client/topicClient"
 import type { TopicFinding } from "@carlnotes/contracts/findings"
+import type { PodcastEpisodePageResponse } from "@carlnotes/contracts/podcastEpisodePage"
 import type { SearchResultsPage } from "@carlnotes/contracts/search"
+import type { ReactionSummary } from "@carlnotes/contracts/social"
 import type { TopicDetails, TopicFeedResponse } from "@carlnotes/contracts/topics"
+import { matchesTopicFindingFilter } from "./topicFindingFilters"
 
 // each action owns only the fields it changes
 export type TopicFindingChange = { findingId: string } & (
@@ -9,6 +12,7 @@ export type TopicFindingChange = { findingId: string } & (
 	| { kind: "consumed"; isConsumed: boolean }
 	| { kind: "bookmark"; isBookmarked: boolean }
 	| { kind: "rating"; rating: "up" | "down" | null }
+	| { kind: "reactions"; reactions: ReactionSummary }
 )
 
 /**
@@ -44,6 +48,19 @@ export function applyTopicPageChanges(
 }
 
 /**
+ * Applies finding changes to a podcast episode page's findings and leaves the rest of the page as it was.
+ */
+export function applyPodcastEpisodePageChanges(
+	podcastEpisodePage: PodcastEpisodePageResponse,
+	changes: TopicFindingChange[],
+): PodcastEpisodePageResponse {
+	return {
+		...podcastEpisodePage,
+		topicFindings: podcastEpisodePage.topicFindings.map((finding) => applyFindingChanges(finding, changes)),
+	}
+}
+
+/**
  * Applies the same finding changes to search results while preserving their ranks and other kinds.
  */
 export function applySearchFindingChanges(
@@ -58,6 +75,8 @@ export function applySearchFindingChanges(
 		if (row.kind !== "finding") {
 			return row
 		}
+
+		// a row no change touched stays the same object
 		const finding = applyFindingChanges(row.finding, changes)
 		return finding === row.finding ? row : { ...row, finding }
 	})
@@ -75,7 +94,10 @@ export function applyTopicFindingChanges<Topic extends TopicDetails>(
 	let unreadDifference = 0
 	const findings = topic.findings.map((finding) => {
 		const changedFinding = applyFindingChanges(finding, changes)
-		unreadDifference += Number(isUnreadFinding(changedFinding)) - Number(isUnreadFinding(finding))
+
+		// the count follows the unread view, which leaves out a finding rated thumbs down
+		unreadDifference +=
+			Number(matchesTopicFindingFilter(changedFinding, "unread")) - Number(matchesTopicFindingFilter(finding, "unread"))
 		return changedFinding
 	})
 	return { ...topic, findings, newCount: Math.max(0, topic.newCount + unreadDifference) }
@@ -97,18 +119,20 @@ export function applyFindingChanges(finding: TopicFinding, changes: TopicFinding
  */
 export function applyFindingChange(finding: TopicFinding, change: TopicFindingChange): TopicFinding {
 	switch (change.kind) {
+		// an open marks the finding read and counts the view
 		case "opened":
 			return { ...finding, isConsumed: true, viewCount: finding.viewCount + 1 }
+
+		// a read or a bookmark sets the one flag it names
 		case "consumed":
 			return { ...finding, isConsumed: change.isConsumed }
 		case "bookmark":
 			return { ...finding, isBookmarked: change.isBookmarked }
+
+		// a rating or a saved reaction summary replaces the finding's own
 		case "rating":
 			return { ...finding, rating: change.rating }
+		case "reactions":
+			return { ...finding, reactions: change.reactions }
 	}
-}
-
-// count visible unread findings
-function isUnreadFinding(finding: TopicFinding): boolean {
-	return !finding.isConsumed && finding.rating !== "down"
 }

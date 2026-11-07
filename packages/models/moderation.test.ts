@@ -4,7 +4,7 @@
 import { afterEach, expect, mock, test } from "bun:test"
 import { saveEnvSettings } from "@carlnotes/server/savedEnvSettings"
 import { toChatCompletionResponse } from "./chatCompletionTestFixtures"
-import { buildModerationPrompt, classifyImage, classifyUserText } from "./moderation"
+import { buildModerationPrompt, classifyImage, classifyUserText, MODERATION_TEXT_MAX_CHARS } from "./moderation"
 import { toUntrustedFences } from "./prompts/untrustedFenceTestFixtures"
 
 // the proxy settings a model call needs, the real fetch, and the request bodies a stubbed fetch saw
@@ -66,7 +66,8 @@ test("an off-schema verdict and a thrown call both fail", async () => {
 test("the prompt cuts the text and fills every placeholder", async () => {
 	const { prompt } = await buildModerationPrompt({ text: "x".repeat(10_000), textKind: "a note's body" })
 	expect(prompt).not.toContain("{{")
-	expect(prompt.length).toBeLessThan(9500)
+	expect(prompt).toContain("x".repeat(MODERATION_TEXT_MAX_CHARS))
+	expect(prompt).not.toContain("x".repeat(MODERATION_TEXT_MAX_CHARS + 1))
 })
 
 // a tiny png as the data url the image check sends

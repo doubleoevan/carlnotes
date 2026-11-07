@@ -100,12 +100,12 @@ export async function updateTopicFields({
 }: {
 	userId: string | null
 	topicId: string
-	topicFields: UpdateTopicFieldsPayload
+	topicFields: UpdateTopicFieldsPayload & { isPodcastCommentsEnabled?: boolean }
 	promptVersionOrigin: PromptVersionOrigin
 	analyticsProperties?: AnalyticsProperties
 }): Promise<UpdateTopicFieldsResult> {
-	// drop the podcast switch if episode recording is not configured
-	const { isPodcastEnabled, ...topicSettings } = topicFields
+	// drop the podcast switches if Podcast Episode recording is not configured
+	const { isPodcastEnabled, isPodcastCommentsEnabled, ...topicSettings } = topicFields
 	const topicFieldsToSave = isPodcastEpisodeRecordingConfigured() ? topicFields : topicSettings
 
 	// a call that names no field has nothing to save, whatever adapter sent it
@@ -117,6 +117,10 @@ export async function updateTopicFields({
 	const editableTopic = await loadEditableTopic(userId, topicId)
 	if (editableTopic.status !== "ok") {
 		return editableTopic
+	}
+	// only the owner turns the podcast's Comments on or off
+	if (isPodcastCommentsEnabled !== undefined && editableTopic.topic.ownerId !== editableTopic.userId) {
+		return { status: "forbidden" }
 	}
 	// a move onto a daily frequency takes a slot from the owner who funds its scans
 	if (topicFields.frequency) {

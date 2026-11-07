@@ -1,6 +1,10 @@
 # Personal sources rollout
 
-Keep production email receiving off until controlled manual-forwarding checks pass. Receiving must be configured for the mailbox in `RESEND_FROM_EMAIL`, the same address digests come from. Development uses `Carl <carl-dev@updates.carlnotes.com>` with receiving verified on `updates.carlnotes.com`. The planned production sender is `Carl <carl@updates.carlnotes.com>`; production configuration is a separate rollout action. Unit tests cannot establish live delivery, provider retention, or filing replies. The owner has no Outlook account, so Outlook remains unverified.
+Keep production email receiving off until controlled manual-forwarding checks pass. Receiving must be configured for the
+mailbox in `RESEND_FROM_EMAIL`, the same address topic scan emails come from. Development uses `Carl
+<carl-dev@updates.carlnotes.com>` with receiving verified on `updates.carlnotes.com`. The planned production sender is
+`Carl <carl@updates.carlnotes.com>`; production configuration is a separate rollout action. Unit tests cannot establish
+live delivery, provider retention, or filing replies. The owner has no Outlook account, so Outlook remains unverified.
 
 ## Required configuration
 
@@ -18,7 +22,9 @@ Keep production email receiving off until controlled manual-forwarding checks pa
   `bun run dev:tunnel` beside the local API. The tunnel forwards only that exact webhook path on the Resend hostname
   to `http://localhost:3000`; its existing Apple callback rule stays in place.
   Store that endpoint's signing secret as `RESEND_INBOUND_WEBHOOK_SECRET` in the matching API configuration.
-- Preserve the existing `RESEND_FROM_EMAIL` mailbox and sending domain. Personal sources replies use the display name **Carl** and Reply-To set to that same mailbox. Digest replies use it too. No sent-message metadata or thread fingerprints are required.
+- Preserve the existing `RESEND_FROM_EMAIL` mailbox and sending domain. Personal sources replies use the display name
+  **Carl** and Reply-To set to that same mailbox. Topic scan email replies use it too. No sent-message metadata or
+  thread fingerprints are required.
 - Confirm the Temporal worker polls `personal-sources` and `personal-sources-email`, and the sweep runs with the same DB,
   encryption, auth-secret, Resend, and feature-flag configuration. Inbound retrieval shares outbound Resend's Redis limiter.
 - Record the provider's actual received-mail retention and deletion controls before updating the public policy.
@@ -45,7 +51,7 @@ reviewer's decision or revise the submitted tool surface before submission. This
 that the transport, annotations, or privacy tests failed.
 
 The privacy policy describes collection, use/storage, sharing, retention, contact, receiving, imports, model/provider
-processing, revocation, deletion, and retained metadata. Review the nineteen-tool inventory, OAuth flow, policy URL,
+processing, revocation, deletion, and retained metadata. Review the twenty-two-tool inventory, OAuth flow, policy URL,
 and documentation URL against the live submission form before submitting manually. Production flags remain off
 until controlled forwarding and the operator checklist are complete.
 
@@ -54,11 +60,16 @@ until controlled forwarding and the operator checklist are complete.
 Use the test accounts chosen by the operator. Keep their addresses in the private QA notes.
 
 1. Confirm `RESEND_FROM_EMAIL` names the environment’s owned sending and receiving mailbox, with or without a display name. Receiving, Copy, reply copy, and Reply-To use that value. Configure the matching Resend receiving domain and webhook before changing a development mailbox. Enable both receiving flags in development and restart the API and Temporal worker with the current Doppler secrets. Use an account entitled to Plus or Premium email receiving and any Topic that account can edit.
-2. Send a synthetic Gmail message to the mailbox on a development digest. Repeat with a forwarded newsletter and a `topic:` hint in the subject or first line.
+2. Send a synthetic Gmail message to the mailbox on a development topic scan email. Repeat with a forwarded newsletter
+   and a `topic:` hint in the subject or first line.
 3. Verify the authenticated From matches a verified account and both receiver checks pass. A genuinely authenticated unknown or unverified address gets same-thread account guidance. Other mailboxes, failed authentication, automated messages, and linkless acknowledgments stay silent.
 4. With a subject hint or after the sender chooses, check one private item per matching editable Topic, one daily charge, and a same-thread confirmation with a numbered list of Topic links. Check the display name Carl, From, and Reply-To against the environment’s `RESEND_FROM_EMAIL`. The recipient is the authenticated From.
 5. With no `topic:` hint in the subject, confirm Carl requests Topic numbers, names, or both in the same thread, even for strong matches or a first-body-line hint. With no suggestions he asks for names. Confirm the original content is filed only after a clear selection, using its original delivery identity. Check that another Topic editor cannot read it.
-6. Reply “thanks” to a digest and a filing confirmation, leaving their quoted links in place. Verify no matching call, entry, allowance charge, or reply. Reply to each with a new safe public link and verify Topic choices before filing and one shared charge after selection. Verify only newly authored text/links are stored. Redeliver the same webhook and verify unchanged entry/quota counts and no duplicate reply. Delete the accepted item while a reply retry is pending and verify its private snapshot is removed and no content is restored.
+6. Reply “thanks” to a topic scan email and a filing confirmation, leaving their quoted links in place. Verify no
+   matching call, entry, allowance charge, or reply. Reply to each with a new safe public link and verify Topic choices
+   before filing and one shared charge after selection. Verify only newly authored text/links are stored. Redeliver the
+   same webhook and verify unchanged entry/quota counts and no duplicate reply. Delete the accepted item while a reply
+   retry is pending and verify its private snapshot is removed and no content is restored.
 7. Mix AI sends and emails up to the shared 200-per-day ceiling. Count a multi-Topic message once and imports zero times. Email at the ceiling says “The day's email limit is reached.” Plus and Premium include email. The AI Agent API key requires Premium.
 8. Keep the owner's requested review Topics, entries, and Sources. Remove only disposable failure fixtures. Record provider IDs and sanitized authentication evidence, and name the unverified Outlook check.
 
@@ -66,7 +77,11 @@ Use the test accounts chosen by the operator. Keep their addresses in the privat
 
 On November 3, 2026, the restarted development stack accepted controlled Gmail forwards at `carl-dev@updates.carlnotes.com`. Receiver DKIM and DMARC passed. Filing created one sender-private item per matching Topic for one shared charge, and Carl replied with numbered Topic links using the same From/Reply-To mailbox. A replay created no duplicate.
 
-Live rich replies exposed a plain-text alternative that lost quote markers. After the parser fix, new-link replies to both a digest and filing confirmation stored only authored content and the new link. Linkless replies quoting public links produced no item, charge, or reply. Existing review data and the synthetic regression/repeat items remain for manual inspection. The controlled fixtures do not verify Outlook, unknown-account guidance, Free-plan upgrade mail, or production rollout.
+Live rich replies exposed a plain-text alternative that lost quote markers. After the parser fix, new-link replies to
+both a topic scan email and filing confirmation stored only authored content and the new link. Linkless replies quoting
+public links produced no item, charge, or reply. Existing review data and the synthetic regression/repeat items remain
+for manual inspection. The controlled fixtures do not verify Outlook, unknown-account guidance, Free-plan upgrade mail,
+or production rollout.
 
 ## Analytics
 

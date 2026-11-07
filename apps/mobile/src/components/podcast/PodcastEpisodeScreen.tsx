@@ -6,8 +6,9 @@ import { toTopicPath } from "@carlnotes/contracts/seo"
 import { usePolledCounts } from "@carlnotes/core/hooks/usePolledCounts"
 import { useTopicFindingActions } from "@carlnotes/core/hooks/useTopicFindingActions"
 import { PODCAST_EPISODE_LOAD_FAILED_TEXT } from "@carlnotes/core/lib/podcastEpisodeCopy"
+import { toPodcastEpisodeReportSubject, toPodcastEpisodeSocialProps } from "@carlnotes/core/lib/podcastEpisodeSocial"
 import { isAddTopicToTeamShown } from "@carlnotes/core/lib/topicActions"
-import { applyFindingChanges } from "@carlnotes/core/lib/topicFindingChanges"
+import { applyPodcastEpisodePageChanges } from "@carlnotes/core/lib/topicFindingChanges"
 import { useQuery } from "@tanstack/react-query"
 import { router, useFocusEffect, useLocalSearchParams, usePathname } from "expo-router"
 import { Share as ShareIcon, Trash2, Users } from "lucide-react-native"
@@ -20,6 +21,8 @@ import { Button } from "@/components/primitives/button"
 import { Text } from "@/components/primitives/text"
 import type { PageActionOption } from "@/components/search/PageActionMenu"
 import { ShareTopicSheet } from "@/components/share/ShareTopic"
+import { ReactionRow } from "@/components/social/ReactionRow"
+import { SocialSection } from "@/components/social/SocialSection"
 import { AddTopicToTeamDialog } from "@/components/team/AddTopicToTeamDialog"
 import { CollapsibleSection } from "@/components/topic/CollapsibleSection"
 import { TopicByline } from "@/components/topic/Topic"
@@ -134,7 +137,7 @@ function EpisodeContent({
 	)
 	const chapterTopicFeed = {
 		topic,
-		topicFindings: page.topicFindings.map((finding) => applyFindingChanges(finding, actions.pendingChanges)),
+		topicFindings: applyPodcastEpisodePageChanges(page, actions.pendingChanges).topicFindings,
 		isRatable: page.canRate,
 		isBookmarkable: false,
 		topicFeedHandlers: actions.handlers,
@@ -154,8 +157,8 @@ function EpisodeContent({
 			onRefresh={onReload}
 			hasNewTopicButton
 			options={options}
-			report={{ subjectKind: "topic", subjectId: topic.id, subjectLabel: topic.name }}
-			header={<EpisodeHeader page={page} />}
+			report={toPodcastEpisodeReportSubject(podcastEpisode)}
+			header={<PodcastEpisodeHeader page={page} isSignedIn={isSignedIn} />}
 			contentClassName="mt-5 gap-2"
 		>
 			{/* player */}
@@ -165,6 +168,8 @@ function EpisodeContent({
 				onOpenPodcastFeedDialog={() => setDialog("feed")}
 				feedButtonRef={feedButtonRef}
 			/>
+			{/* the podcast episode's comment thread, where a comment may name a chapter and a chapter's tag plays from it */}
+			<SocialSection {...toPodcastEpisodeSocialProps(page, isSignedIn)} />
 			{/* wide-screen chapters */}
 			<View className="hidden sm:flex">
 				<CollapsibleSection title="Episode chapters">
@@ -211,7 +216,13 @@ function EpisodeContent({
 }
 
 // hide the duplicate cover and chapter table at phone width, as the web does
-function EpisodeHeader({ page: { podcastEpisode, topic } }: { page: PodcastEpisodePageResponse }) {
+function PodcastEpisodeHeader({
+	page: { podcastEpisode, topic, reactions },
+	isSignedIn,
+}: {
+	page: PodcastEpisodePageResponse
+	isSignedIn: boolean
+}) {
 	return (
 		<View className="mt-3 flex-row items-start gap-4">
 			<PodcastEpisodeCover
@@ -219,26 +230,33 @@ function EpisodeHeader({ page: { podcastEpisode, topic } }: { page: PodcastEpiso
 				className="hidden size-36 border border-separator shadow-raised sm:flex"
 			/>
 			<View className="min-w-0 flex-1">
-				<View className="flex-row items-start justify-between gap-3">
-					<Text className="min-w-0 flex-1 text-sm text-muted-foreground">
-						<Text className="text-sm font-bold text-muted-foreground">Coffee Break</Text>
-						{" podcast for "}
-						<AnchorLink asChild href={toTopicPath(topic)} accessibilityLabel={`Open ${topic.name}`}>
-							<Text className="text-sm text-link">{topic.name}</Text>
-						</AnchorLink>
-					</Text>
+				{/* the title, with the new topic button in the header's top right corner. the heading and credits stay
+				    separate screen-reader controls */}
+				<View className="flex-row items-start gap-3">
+					<View className="min-w-0 flex-1 flex-row items-end">
+						<Text accessibilityRole="header" className="min-w-0 flex-1 font-display text-2xl leading-tight">
+							{podcastEpisode.title}
+						</Text>
+						<PodcastThemeSongNote />
+					</View>
 					<NewTopicButton />
 				</View>
-				{/* expose the heading and credits as separate screen-reader controls */}
-				<View className="mt-1.5 flex-row items-end">
-					<Text accessibilityRole="header" className="min-w-0 flex-1 font-display text-2xl leading-tight">
-						{podcastEpisode.title}
-					</Text>
-					<PodcastThemeSongNote />
-				</View>
 				{podcastEpisode.description && <Text className="mt-1.5 text-sm">{podcastEpisode.description}</Text>}
-				<View className="mt-1.5 sm:hidden">
+				<Text className="mt-1.5 text-sm text-muted-foreground">
+					<Text className="text-sm font-bold text-muted-foreground">Coffee Break</Text>
+					{" podcast for "}
+					<AnchorLink asChild href={toTopicPath(topic)} accessibilityLabel={`Open ${topic.name}`}>
+						<Text className="text-sm text-link">{topic.name}</Text>
+					</AnchorLink>
+				</Text>
+				{/* the byline and the podcast episode's reactions */}
+				<View className="mt-1.5 flex-row flex-wrap items-center gap-x-3">
 					<TopicByline topic={topic} isPage />
+					<ReactionRow
+						target={{ kind: "podcastEpisode", id: podcastEpisode.id }}
+						summary={reactions}
+						isSignedIn={isSignedIn}
+					/>
 				</View>
 			</View>
 		</View>

@@ -218,6 +218,21 @@ export const SCRIPTED_PAGINATION_TABLE_CARD_CLASS = `${ONE_PAGE_TABLE_CARD_CLASS
 
 export const CARD_CLASS = "bg-card rounded-lg border p-4 shadow-raised"
 
+// the filled primary color of an icon that shows an active state
+export const ACTIVE_ICON_CLASS = "text-primary fill-current"
+
+// the light fill of an active icon. a solid fill hides the lines inside the Funny icon
+export const LIGHT_ICON_FILL_CLASS = "fill-primary/35"
+
+// a comment row's small icon control, muted until hovered
+export const ROW_CONTROL_CLASS = "text-muted-foreground hover:text-foreground grid size-6 shrink-0 place-items-center"
+
+// a comment row's controls or reactions, pulled left by the padding of the first
+export const ROW_CONTROLS_CLASS = "-ml-1 flex flex-wrap items-center"
+
+// the border and outline of a highlighted card. the outline keeps the card's raised shadow, which a ring would lose to
+export const HIGHLIGHTED_CARD_CLASS = "border-primary outline-primary/40 outline-2"
+
 /**
  * The wrapper that scrolls a table sideways. It sits inside the card, and the card's padding and
  * whatever follows the table stay put while the columns move under them. It is positioned, so absolutely positioned

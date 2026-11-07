@@ -21,7 +21,7 @@ import {
 import { isAdminRole, isAllowed } from "./authorization"
 import { type AppEnv, currentUser } from "./currentUser"
 import { loadMobileMinimumVersionRows, saveMobileMinimumVersion } from "./mobileMinimumVersions"
-import { loadOpenReports, resolveReport } from "./report/adminReports"
+import { countOpenReports, loadOpenReports, resolveReport } from "./report/adminReports"
 import { refreshSessionUser } from "./sessions"
 import { loadAdminTeamTopics } from "./team/helpers"
 
@@ -219,21 +219,35 @@ export const adminRoute = new Hono<AppEnv>()
 		}
 		return context.json({ reports: await loadOpenReports() })
 	})
+	.get("/admin/reports/count", async (context) => {
+		// reject a signed-out visitor
+		const userId = currentUser(context)
+		if (!userId) {
+			return context.json({ error: "unauthorized" }, 401)
+		}
+		// the open report count for the badges, admin only
+		if (!(await isAllowed(userId, "admin:console"))) {
+			return context.json({ error: "forbidden" }, 403)
+		}
+		return context.json({ openReportCount: await countOpenReports() })
+	})
 	.post("/admin/reports/:id/resolve", zValidator("json", resolveReportPayload), async (context) => {
 		// reject a signed-out visitor
 		const userId = currentUser(context)
 		if (!userId) {
 			return context.json({ error: "unauthorized" }, 401)
 		}
-		// remove the reported content or keep it, and close the report, admin only
-		if (!(await isAllowed(userId, "admin:console"))) {
+		// remove the reported content, clear it, or put an admin block on its author, and close the report, admin only
+		const { resolution } = context.req.valid("json")
+		const capability = resolution === "blocked" ? "admin:setAdminBlock" : "admin:console"
+		if (!(await isAllowed(userId, capability))) {
 			return context.json({ error: "forbidden" }, 403)
 		}
 		const isResolved = await resolveReport({
 			context,
 			adminUserId: userId,
 			reportId: context.req.param("id"),
-			resolution: context.req.valid("json").resolution,
+			resolution,
 		})
 		return isResolved ? context.json({ ok: true }) : context.json({ error: "not found" }, 404)
 	})

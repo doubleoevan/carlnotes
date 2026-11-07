@@ -143,7 +143,7 @@ the browser bundle and renders pages through the server build, behind its own ro
 - `components/account/` — the account page's sections. `SpendMeter.tsx` is the monthly budget's bar, with a circle
   above it for each monthly budget cutoff, a tooltip on each circle, and the list of what each cutoff stops.
   `AccountFields.tsx` holds the DOM elements of core's account sections, the Blocked people rows among them, which
-  `BlockedUsersSection.stories.tsx` shows in every state.
+  `UserBlocksSection.stories.tsx` shows in every state.
   `globals.css` scans `core/lib/spendMeter.ts` for the shared bar and legend colors. The legend uses compact row gaps
   when wrapping, matching native. Cutoffs come from the API; an admin without a budget override has none.
   `MonthlyBudgetCutoffTable.tsx` is the plans page's monthly budget cutoff table of every plan's cutoffs, which a test
@@ -182,11 +182,12 @@ the browser bundle and renders pages through the server build, behind its own ro
   platform's minimum app version with who saved it and the input that raises, lowers, or clears it;
   `ManageAdminsModal.tsx`, where an admin adds
   and removes other admins.
-- `components/branding/` — the coffee drawings, the loading indicator, the note icon, and the avatars. `CoffeeMug.tsx`
-  draws the mug from `@carlnotes/nightshift/coffeeMug`, and `coffeeMugSteam.test.ts` fails if the steam's keyframes
-  and still rules in `animations.css` differ from that module's steam motion. `Avatar.tsx`
-  is the one avatar that `UserAvatar` and `TeamAvatar` render: the stored image, or the owner's initials on a tinted
-  circle if there is no image or it fails to load. `HostAvatar.tsx` is Carl's or Vienna's own picture.
+- `components/branding/` — the coffee drawings, the loading indicator, the note icon, and the avatars.
+  `ShareMugsIcon.tsx` draws the two mugs of a comment that a Podcast Episode read. `CoffeeMug.tsx` draws the mug from
+  `@carlnotes/nightshift/coffeeMug`, and `coffeeMugSteam.test.ts` fails if the steam's keyframes and still rules in
+  `animations.css` differ from that module's steam motion. `Avatar.tsx` is the one avatar that `UserAvatar` and
+  `TeamAvatar` render: the stored image, or the owner's initials on a tinted circle if there is no image or it fails to
+  load. `HostAvatar.tsx` is Carl's or Vienna's own picture.
 - `components/avatar/` — the user and team avatar pickers, over the upload pieces they both use. `AvatarUpload.tsx`
   turns a chosen file into the resized re-encode the app stores, a PNG for a PNG, WebP, or GIF source so a transparent
   logo keeps its background, and a JPEG for a photo. A file of a megabyte or more decodes at 512 pixels wide,
@@ -216,6 +217,15 @@ the browser bundle and renders pages through the server build, behind its own ro
   playback continues from one page to the next, and core `stores/podcastEpisodePlayActions.ts` plays or pauses a
   podcast episode or a chapter by id from a page. Core `useShownPodcastEpisode` owns selection and recording polling;
   the web supplies its search parameter.
+- `components/social/` — the web's adapters of the shared reaction row and comment thread. `socialElements.tsx` is the
+  web's `SocialElements` set with the six reaction icons and the flame and mugs of a comment shared with Carl. Its
+  `COMMENT_ELEMENTS` are the comment parts and the one composer that `note/NoteComments.tsx` spreads too.
+  `ReactionUsersTooltip.tsx` names who reacted, and `socialTestHarness.tsx` renders the thread for its tests.
+  `ReactionRow.tsx` and `CommentThread.tsx` add sign-up for a visitor, a toast for an error, the report dialog, and
+  the thread's view event. `SocialSection.tsx` holds the thread in the Topic
+  page's, the Podcast Episode page's, and the finding popover's collapsible Hot takes card, with the week's count beside
+  its title and the shared count at the card's top right. `topic/TopicPageHeader.tsx`, `pages/PodcastEpisodePage.tsx`,
+  and `topic/TopicResourceInfo.tsx` place the reaction row in their headers.
 - `components/note/` — the Tasting Notes section, table, and dialog, the dialog's create flow in `CreateNote.tsx`, and
   the shared core note composition adapted to `react-native-enriched-html`, whose web build is a Tiptap editor. `NoteDialog.tsx` fetches the
   note's html and version on every open, loads the comment thread through `useNoteComments` at the same time, and
@@ -254,16 +264,18 @@ the browser bundle and renders pages through the server build, behind its own ro
   `FindingsTable.tsx` lay those components out as tables over `mcpViewTableElements.tsx` and `McpViewFindingCells.tsx`,
   `useMcpViewFindings.ts` keeps an MCP view's rows as its tool calls change them, `useFindingPages.ts` pages the
   findings through the tool's cursor, and `useScanStatus.ts` polls `read_scan_status` at its own 10 and 30 second rates.
-  `mcpViewHost.ts` holds the connected app, the MCP view data a tool result includes in `_meta`, and the tool calls the
-  MCP views make, and `mcpViewFindingHandlers.ts` the finding note's handlers the search and findings MCP views share,
-  each a tool call. `testHost/` runs the built bundle in Chrome under the test host: `mcpViews.smoke.ts`, which imports
-  each MCP view's `*McpViewSmokeSections.ts`, runs over `mcpViewTestHarness.ts`, `mcpViewTestHost.ts`, `hostPage.ts`,
-  and `mcpViewFixtures.ts` as `bun run smoke:mcp-views`, and `@carlnotes/contracts/mcpScanStatusTestFixtures` holds the
-  Scan statuses it shares with the stories. The MCP view build aliases `@carlnotes/client/authClient` to
-  `mcpViewAuthClient.ts`, whose session is the tool result's caller, and `@/lib/visitAnalytics` to
-  `mcpViewVisitAnalytics.ts`, which reports nothing, and `@/lib/voiceActivity` to `mcpViewVoiceActivity.ts`, which never
-  starts, and `mcpViewFetch.ts` returns a podcast episode read from the tool result, sends a finding's feedback through
-  its tool, and fails every other request, so an MCP view reaches the api only through a tool call.
+  `McpViewReactionRow.tsx` renders the shared reaction row in a finding's details where the tool result came with its
+  reactions, saving through `save_reaction`. `mcpViewHost.ts` holds the connected app, the MCP view data a tool result
+  includes in `_meta`, and the tool calls the MCP views make, and `mcpViewFindingHandlers.ts` the finding note's
+  handlers the search and findings MCP views share, each a tool call. `testHost/` runs the built bundle in Chrome under
+  the test host: `mcpViews.smoke.ts`, which imports each MCP view's `*McpViewSmokeSections.ts`, runs over
+  `mcpViewTestHarness.ts`, `mcpViewTestHost.ts`, `hostPage.ts`, and `mcpViewFixtures.ts` as `bun run smoke:mcp-views`,
+  and `@carlnotes/contracts/mcpScanStatusTestFixtures` holds the Scan statuses it shares with the stories. The MCP view
+  build aliases `@carlnotes/client/authClient` to `mcpViewAuthClient.ts`, whose session is the tool result's caller, and
+  `@/lib/visitAnalytics` to `mcpViewVisitAnalytics.ts`, which reports nothing, and `@/lib/voiceActivity` to
+  `mcpViewVoiceActivity.ts`, which never starts, and `mcpViewFetch.ts` returns a podcast episode read from the tool
+  result, sends a finding's feedback through its tool, and fails every other request, so an MCP view reaches the api
+  only through a tool call.
 - `stores/` — the stores that reach the browser or a component library, named `<thing>Store.ts` and built the way
   `packages/core/AGENTS.md` describes, on `@carlnotes/core/stores/storeListeners`. Reach for a store only when state
   outlives a page or crosses the tree; `useState` and `providers/` cover everything else. The DOM-free stores,
@@ -279,26 +291,26 @@ the browser bundle and renders pages through the server build, behind its own ro
   and saves a signed-in user's progress in the loaded podcast episode, its playback start once per load, for the player
   store.
 - `hooks/` — the React hooks that read the browser or a route, `useTopicPagePayload.ts` among them, the topic page's
-  payload and its poll reload, `useSiteAssetUrl.ts`, a site image's url, absolute in an MCP view's frame, and
-  `useScanNote.ts`, a scan's note behind its recap popover, read once the trigger is
-  pointed at, focused, touched, or opened, and kept once the scan has finished; `providers/` — context providers. The
-  images the bundler imports, Carl's and Vienna's portraits, come from `@carlnotes/nightshift/assets/`. The DOM-free
-  hooks `useNow`, `useAvatar`, `useUsernameChange`, `useNoteBodySave`, and `useNoteComments` live in
-  `@carlnotes/core/hooks/`. A component that reads the browser during render, `localStorage`, `window`, or `document`,
-  reads it through `useBrowserValue` in `hooks/useBrowserValue.ts`, so the server and the first browser render agree. A
-  page that starts from a server loader's data loads in the browser through `useLoadInBrowser` in the same file.
-  `useLoadInBrowser` skips the first load while hydrating data the server already read. Code without its route's typed
-  `useSearch` reads the query string as `URLSearchParams` through `useSearchParams` in `hooks/useSearchParams.ts`.
-  `useCtaPromptToast` in `hooks/useCtaPromptToast.ts` toasts the prompt that a page's `cta` param names, on the signup
-  and plans pages. `useIsSignedInBeforeSession` in `hooks/useIsSignedInBeforeSession.ts` says whether the page shows as
-  signed in. The page load's session cookie decides until Better Auth's session request finishes, and the session
-  decides after. An element that fades in as it scrolls into view takes its class from `useRevealClassName` in
-  `hooks/useRevealClassName.ts`, which shows a server-rendered element before any script runs, so nothing a crawler or a
-  browser without JavaScript reads starts hidden. A box that scrolls takes its tab stop from `useScrollRegionTabStop` in
-  `hooks/useScrollRegionTabStop.ts`, which returns `{ ref, tabIndex }` for the box, with a tab stop while its content
-  overflows, so a keyboard can scroll text with no link in it. The box draws its focus ring with
-  `SCROLL_REGION_FOCUS_CLASS`. The counts lines read their counts through `@carlnotes/core/hooks/usePolledCounts`, once
-  the page has mounted and then every minute while it is focused.
+  payload and its poll reload, `useConfirmDialog.tsx`, which asks before an action runs, `useSiteAssetUrl.ts`, a
+  site image's url, absolute in an MCP view's frame, and `useScanNote.ts`, a scan's note behind its recap popover, read
+  once the trigger is pointed at, focused, touched, or opened, and kept once the scan has finished; `providers/` —
+  context providers. The images the bundler imports, Carl's and Vienna's portraits, come from
+  `@carlnotes/nightshift/assets/`. The DOM-free hooks `useNow`, `useAvatar`, `useUsernameChange`, `useNoteBodySave`, and
+  `useNoteComments` live in `@carlnotes/core/hooks/`. A component that reads the browser during render, `localStorage`,
+  `window`, or `document`, reads it through `useBrowserValue` in `hooks/useBrowserValue.ts`, so the server and the first
+  browser render agree. A page that starts from a server loader's data loads in the browser through `useLoadInBrowser`
+  in the same file. `useLoadInBrowser` skips the first load while hydrating data the server already read. Code without
+  its route's typed `useSearch` reads the query string as `URLSearchParams` through `useSearchParams` in
+  `hooks/useSearchParams.ts`. `useCtaPromptToast` in `hooks/useCtaPromptToast.ts` toasts the prompt that a page's `cta`
+  param names, on the signup and plans pages. `useIsSignedInBeforeSession` in `hooks/useIsSignedInBeforeSession.ts` says
+  whether the page shows as signed in. The page load's session cookie decides until Better Auth's session request
+  finishes, and the session decides after. An element that fades in as it scrolls into view takes its class from
+  `useRevealClassName` in `hooks/useRevealClassName.ts`, which shows a server-rendered element before any script runs,
+  so nothing a crawler or a browser without JavaScript reads starts hidden. A box that scrolls takes its tab stop from
+  `useScrollRegionTabStop` in `hooks/useScrollRegionTabStop.ts`, which returns `{ ref, tabIndex }` for the box, with a
+  tab stop while its content overflows, so a keyboard can scroll text with no link in it. The box draws its focus ring
+  with `SCROLL_REGION_FOCUS_CLASS`. The counts lines read their counts through `@carlnotes/core/hooks/usePolledCounts`,
+  once the page has mounted and then every minute while it is focused.
 - `src/globals.css` — the app's stylesheet, with the keyframes in `animations.css` and the `scrollbar-none` utility
   the note toolbar scrolls sideways with. It imports its `@theme inline` block, the `shadow-raised` utility, and the
   `:root` and dark variables from `@carlnotes/nightshift/tokens.css`, which is written from the Nightshift TypeScript

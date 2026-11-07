@@ -18,6 +18,9 @@ export const EMPTY_TOPIC_SECTION = "Give Carl a topic. You know the one."
 export const EMPTY_FILTERED_FINDINGS = "Nothing new worth your time yet. Carl has standards."
 export const EMPTY_TOPIC_FINDINGS = "Carl's getting started. The raccoon put a pot on..."
 
+// the Trending sort's icon
+export const TRENDING_SORT_EMOJI = "🔥"
+
 // the finding view and ordering labels
 export const TOPIC_FINDING_SORT_LABELS: Record<TopicFindingSort, string> = {
 	relevant: "Relevance",

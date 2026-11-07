@@ -4,7 +4,8 @@ import { index, pgTable, text, timestamp, uniqueIndex } from "drizzle-orm/pg-cor
 import { primaryId, reportResolution, reportSubjectKind, timestamps } from "./columns"
 import { users } from "./users"
 
-// one report. open until resolved_at is set, and hidden from its reporter while it is open or kept
+// one report. open until resolved_at is set. a chat room message, note, or note comment is hidden from its reporter
+// while the report is open or cleared
 export const reports = pgTable(
 	"reports",
 	{
@@ -28,6 +29,10 @@ export const reports = pgTable(
 		resolution: reportResolution("resolution"),
 		resolvedAt: timestamp("resolved_at", { withTimezone: true }),
 		resolvedByUserId: text("resolved_by_user_id").references(() => users.id, { onDelete: "set null" }),
+		// a keyed hash of the text an admin cleared, which tells a later report whether the text changed
+		clearedTextHash: text("cleared_text_hash"),
+		// when the reporter removed a resolved report. removing an open report deletes the row
+		withdrawnAt: timestamp("withdrawn_at", { withTimezone: true }),
 		...timestamps(),
 	},
 	(table) => [

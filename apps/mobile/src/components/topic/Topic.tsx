@@ -1,4 +1,5 @@
 import { toAvatarImagePath } from "@carlnotes/contracts/avatars"
+import { toProfilePath } from "@carlnotes/contracts/seo"
 import { SITE_URL } from "@carlnotes/contracts/site"
 import type { TopicDetails } from "@carlnotes/contracts/topics"
 import { Text as NativeText, View } from "react-native"
@@ -88,7 +89,7 @@ export function TopicByline({
 	// use the same identity routes and avatar versions as the web
 	const name = team?.name ?? owner?.username ?? ""
 	const ownerId = team?.teamId ?? owner?.userId ?? ""
-	const path = team ? `/teams/${team.teamId}` : `/profiles/${ownerId}`
+	const path = team ? `/teams/${team.teamId}` : toProfilePath(ownerId)
 	let imageUrl: string | null = null
 	if (team?.avatarVersion) {
 		imageUrl = `/api/team-avatars/${team.teamId}?v=${team.avatarVersion}`

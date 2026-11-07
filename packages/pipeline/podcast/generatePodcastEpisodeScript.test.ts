@@ -161,3 +161,39 @@ test("a draft that does not match its schema is thrown as a rejected draft", () 
 	const proxyError = new Error("the proxy is down")
 	expect(() => throwScriptDraftError(proxyError)).toThrow(proxyError)
 })
+
+test("a segment's prompt lists its own chapters' shared comments, and the last lists the closing ones", async () => {
+	// one shared comment on the first outlined Finding, one on the Topic by Carl, and one on a Finding not narrated
+	const lastSegmentIndex = outline.segments.length - 1
+	const narratedFindingId = outline.segments[0]?.chapters[0]?.findingId ?? ""
+	const sharedComments = [
+		{ commentId: "c1", findingId: narratedFindingId, username: "roastfan", body: "The 62 decibel claim holds." },
+		{ commentId: "c2", findingId: null, username: null, body: "Three of you bookmarked this one." },
+		{ commentId: "c3", findingId: "finding-not-narrated", username: "beanhead", body: "Old news." },
+	]
+
+	// the chapter's comment is under its Finding's number, in the segment that narrates it, fenced
+	const firstSegmentPrompt = await buildSegmentPrompt({ ...promptOptions, sharedComments, outline, segmentIndex: 0 })
+	expect(firstSegmentPrompt.prompt).toMatch(
+		/<untrusted-data-[^>]+>\nfinding number 1, roastfan: The 62 decibel claim holds\./,
+	)
+
+	// the closing comments reach the last segment alone
+	const lastSegmentPrompt = await buildSegmentPrompt({
+		...promptOptions,
+		sharedComments,
+		outline,
+		segmentIndex: lastSegmentIndex,
+	})
+	expect(lastSegmentPrompt.prompt).toMatch(
+		/<untrusted-data-[^>]+>\nCarl: Three of you bookmarked this one\.\nbeanhead: /,
+	)
+	if (lastSegmentIndex > 0) {
+		expect(firstSegmentPrompt.prompt).not.toContain("beanhead")
+	}
+
+	// a segment with nothing shared lists none in both places
+	const quietPrompt = await buildSegmentPrompt({ ...promptOptions, outline, segmentIndex: lastSegmentIndex })
+	expect(quietPrompt.prompt).toMatch(/findings[^\n]*or none:\n<untrusted-data-[^>]+>\nnone\n/)
+	expect(quietPrompt.prompt).toMatch(/closing hot takes[^\n]*or none:\n<untrusted-data-[^>]+>\nnone\n/)
+})

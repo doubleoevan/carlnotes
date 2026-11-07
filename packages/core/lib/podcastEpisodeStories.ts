@@ -54,6 +54,7 @@ export const PODCAST_STORY_FEED: ChapterTopicFeed = {
 		consumeTopicFinding: () => {},
 		rateTopicFinding: () => {},
 		bookmarkTopicFinding: () => {},
+		keepTopicFindingReactions: () => {},
 	},
 }
 export const PODCAST_STORY_TRANSCRIPT: PodcastEpisodeTranscriptBlock[] = Array.from({ length: 4 }, (_, index) => ({

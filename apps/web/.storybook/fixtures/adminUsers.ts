@@ -92,6 +92,7 @@ function toAdminUserRow(overrides: Partial<AdminUserRow> & Pick<AdminUserRow, "i
 		avatarSource: "generated",
 		avatarVersion: null,
 		role: "user",
+		isAdminBlocked: false,
 		plan: "free",
 		createdAt: FIXTURE_DATE.toISOString(),
 		lastLoginAt: FIXTURE_DATE.toISOString(),

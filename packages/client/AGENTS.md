@@ -40,7 +40,7 @@ session-only account routes. The one-time key response must remain in the curren
 - Most clients build on `apiClient()`. Some calls, and all of `chatClient.ts`, `flagContentClient.ts`, and
   `voiceClient.ts`, use `fetchApi` instead. `pageHeadClient.ts` reads a page's head data.
   `viewerCountsClient.ts` sends a topic page's view and reads a topic's or a podcast episode's counts, a public
-  topic's without credentials so the edge can cache them. `blockClient.ts` blocks and unblocks a user and reads the
+  topic's without credentials so the edge can cache them. `userBlockClient.ts` blocks and unblocks a user and reads the
   block list, `pushClient.ts` registers and unregisters the phone's push token and saves one push preference, passing
   the token through and keeping nothing, `reportClient.ts` reads the admin console's open reports and resolves one, and
   `termsClient.ts` records
@@ -66,6 +66,12 @@ Default calls retain the existing failure message and resolve after reporting. O
 Opening a Finding always keeps its background failure silent. Topic-page reads in `topicClient.ts` distinguish visible, gated, and missing responses from transport or server failures.
 `sendFindingFeedback` also accepts named options and opt-in rejection, so a details panel only acknowledges a saved note and retains failed text for retry.
 `topicFindingClient.test.ts` covers successful writes, HTTP and network rejection, silent opens, and failed page reads.
+
+`socialClient.ts` reads and writes reactions and comment threads. A read throws an error on a failure. A write
+returns its result: saved with the summary, or the comment and the shared comment slots, locked for one past its edit
+time, or failed with Carl's words if the text was rejected. `shareComment` returns null if the write fails.
+`fetchReactionSummary` reads one social target's summary for a list whose read came without it, and
+`fetchMentionSuggestions` and `fetchSharedComments` return nothing on a failure.
 
 `noteClient.ts` reads and writes notes through the existing endpoints. `fetchNote` and `fetchNotes` accept
 `shouldThrowOnError` to distinguish retryable reads from missing or forbidden notes. Comments and badge reads reject

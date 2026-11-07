@@ -1,11 +1,13 @@
-// the account's Notifications section: one switch for each kind of push over the session's saved preferences, and the
-// phone's permission states around them
+// the account's Notifications section: the daily notifications email's switch, and on a phone one switch for each kind
+// of push over the session's saved preferences, with the phone's permission states around them
 import { authClient } from "@carlnotes/client/authClient"
+import { sendNotificationsEmailPreference } from "@carlnotes/client/profileClient"
 import { sendPushPreference } from "@carlnotes/client/pushClient"
 import type { PushNotificationKind } from "@carlnotes/contracts/pushDevices"
 import { useState } from "react"
 import {
 	CHAT_MENTION_PUSH_LABEL,
+	NOTIFICATIONS_EMAIL_LABEL,
 	NOTIFICATIONS_SECTION_TEXT,
 	NOTIFICATIONS_SECTION_TITLE,
 	OPEN_SETTINGS_LABEL,
@@ -48,77 +50,97 @@ export function toNotificationSwitchStates({
 	}
 }
 
-// what the Notifications card shows and what its controls do
+// what the Notifications card shows and what its controls do. the web has no push, so it passes no push state
 export type NotificationsCardProps = {
 	elements: AccountFieldElements
-	pushPermission: PushPermission
-	switchStates: NotificationSwitchStates
+	notificationsEmailSwitchState: NotificationSwitchState
+	onNotificationsEmailChange: (isEnabled: boolean) => void
 	error: string | null
-	onChange: (kind: PushNotificationKind, isEnabled: boolean) => void
-	onRequestPermission: () => void
-	onOpenSettings: () => void
+	push?: {
+		pushPermission: PushPermission
+		switchStates: NotificationSwitchStates
+		onChange: (kind: PushNotificationKind, isEnabled: boolean) => void
+		onRequestPermission: () => void
+		onOpenSettings: () => void
+	}
 }
 
 /**
- * Shows the account's Notifications card: one switch for each kind of push, a button that asks before the phone was ever
- * asked, and a link to the system settings after a denial.
+ * Shows the account's Notifications card: on a phone one switch for each kind of push, a button that asks before the
+ * phone was ever asked, and a link to the system settings after a denial, then the daily notifications email's switch.
  */
 export function NotificationsCard({
 	elements,
-	pushPermission,
-	switchStates,
+	notificationsEmailSwitchState,
+	onNotificationsEmailChange,
 	error,
-	onChange,
-	onRequestPermission,
-	onOpenSettings,
+	push,
 }: NotificationsCardProps) {
 	const { Card, Heading, Text, Switch, Button } = elements
 	return (
 		<Card>
 			<Heading>{NOTIFICATIONS_SECTION_TITLE}</Heading>
-			<Text className="text-muted-foreground mt-1 text-sm">{NOTIFICATIONS_SECTION_TEXT}</Text>
-			<Switch
-				label={TOPIC_PUSH_LABEL}
-				{...switchStates["topic-scan"]}
-				onChange={(isEnabled) => onChange("topic-scan", isEnabled)}
-			/>
-			<Switch
-				label={CHAT_MENTION_PUSH_LABEL}
-				{...switchStates["chat-mention"]}
-				onChange={(isEnabled) => onChange("chat-mention", isEnabled)}
-			/>
+			{push && (
+				<>
+					<Text className="text-muted-foreground mt-1 text-sm">{NOTIFICATIONS_SECTION_TEXT}</Text>
+					<Switch
+						label={TOPIC_PUSH_LABEL}
+						{...push.switchStates["topic-scan"]}
+						onChange={(isEnabled) => push.onChange("topic-scan", isEnabled)}
+					/>
+					<Switch
+						label={CHAT_MENTION_PUSH_LABEL}
+						{...push.switchStates["chat-mention"]}
+						onChange={(isEnabled) => push.onChange("chat-mention", isEnabled)}
+					/>
+				</>
+			)}
 			{/* the permission prompt before the first ask, and the system settings after a denial */}
-			{pushPermission === "undetermined" && (
+			{push?.pushPermission === "undetermined" && (
 				<>
 					<Text className="text-muted-foreground mt-2 text-sm">{PUSH_UNDETERMINED_TEXT}</Text>
-					<Button label={PUSH_PERMISSION_SHEET.acceptLabel} onPress={onRequestPermission} />
+					<Button label={PUSH_PERMISSION_SHEET.acceptLabel} onPress={push.onRequestPermission} />
 				</>
 			)}
-			{pushPermission === "denied" && (
+			{push?.pushPermission === "denied" && (
 				<>
 					<Text className="text-muted-foreground mt-2 text-sm">{PUSH_DENIED_TEXT}</Text>
-					<Button label={OPEN_SETTINGS_LABEL} onPress={onOpenSettings} />
+					<Button label={OPEN_SETTINGS_LABEL} onPress={push.onOpenSettings} />
 				</>
 			)}
+			{/* the daily email of reactions, comments, and mentions, whatever the phone allows */}
+			<Switch
+				label={NOTIFICATIONS_EMAIL_LABEL}
+				{...notificationsEmailSwitchState}
+				onChange={onNotificationsEmailChange}
+			/>
 			{error && <Text className="text-destructive mt-2 text-sm">{error}</Text>}
 		</Card>
 	)
 }
 
+// what the section reads from the phone, which the web leaves out
+type NotificationsSectionProps = {
+	elements: AccountFieldElements
+	pushPermission?: PushPermission
+	onRequestPermission?: () => void
+	onOpenSettings?: () => void
+}
+
 /**
- * Composes the account's Notifications card over the session's saved preferences, saving one kind at a time.
+ * Composes the account's Notifications card over the session's saved preferences, saving one switch at a time.
  */
 export function NotificationsSection({
 	elements,
 	pushPermission,
-	onRequestPermission,
-	onOpenSettings,
-}: Omit<NotificationsCardProps, "switchStates" | "error" | "onChange">) {
-	// the saved switches from the shared session, and the kind being saved
+	onRequestPermission = () => {},
+	onOpenSettings = () => {},
+}: NotificationsSectionProps) {
+	// the saved switches from the shared session, and the switch being saved
 	const { data: session, refetch } = authClient().useSession()
-	const [savingKind, setSavingKind] = useState<PushNotificationKind | null>(null)
+	const [savingKind, setSavingKind] = useState<PushNotificationKind | "email" | null>(null)
 	const [error, setError] = useState<string | null>(null)
-	async function handleChange(kind: PushNotificationKind, isEnabled: boolean): Promise<void> {
+	async function handleChange(kind: PushNotificationKind | "email", isEnabled: boolean): Promise<void> {
 		// one save at a time, and a failed save leaves the switch at its saved value
 		if (savingKind) {
 			return
@@ -126,7 +148,7 @@ export function NotificationsSection({
 		setSavingKind(kind)
 		setError(null)
 		try {
-			await sendPushPreference(kind, isEnabled)
+			await (kind === "email" ? sendNotificationsEmailPreference(isEnabled) : sendPushPreference(kind, isEnabled))
 			await refetch()
 		} catch {
 			setError(SAVE_FAILED_TEXT)
@@ -138,20 +160,30 @@ export function NotificationsSection({
 		return null
 	}
 
-	// the switches from the session's saved preferences
+	// the switches from the session's saved preferences. the email is off until the user turns it on
 	const pushPreferences = {
 		isTopicPushEnabled: session.user.isTopicPushEnabled ?? null,
 		isChatMentionPushEnabled: session.user.isChatMentionPushEnabled ?? null,
 	}
+	const pushSavingKind = savingKind === "email" ? null : savingKind
 	return (
 		<NotificationsCard
 			elements={elements}
-			pushPermission={pushPermission}
-			switchStates={toNotificationSwitchStates({ pushPermission, pushPreferences, savingKind })}
+			notificationsEmailSwitchState={{
+				isChecked: session.user.isNotificationsEmailEnabled === true,
+				isDisabled: savingKind !== null,
+			}}
+			onNotificationsEmailChange={(isEnabled) => void handleChange("email", isEnabled)}
 			error={error}
-			onChange={(kind, isEnabled) => void handleChange(kind, isEnabled)}
-			onRequestPermission={onRequestPermission}
-			onOpenSettings={onOpenSettings}
+			push={
+				pushPermission && {
+					pushPermission,
+					switchStates: toNotificationSwitchStates({ pushPermission, pushPreferences, savingKind: pushSavingKind }),
+					onChange: (kind, isEnabled) => void handleChange(kind, isEnabled),
+					onRequestPermission,
+					onOpenSettings,
+				}
+			}
 		/>
 	)
 }

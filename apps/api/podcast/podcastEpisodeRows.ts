@@ -7,10 +7,10 @@ import { loadUserAccess } from "@carlnotes/db/quotas"
 import { podcastEpisodeListens, podcastEpisodes } from "@carlnotes/db/schema/podcast"
 import { scans } from "@carlnotes/db/schema/scans"
 import { subscriptions, topics } from "@carlnotes/db/schema/topics"
+import { isAfterSubscriberActivation, topicSubscriptionStartDate } from "@carlnotes/db/topicPermissions"
 import { isPodcastEpisodeRecordingConfigured } from "@carlnotes/server/podcastEpisodeSettings"
 import { and, desc, eq, exists, gt, inArray, or, type SQL } from "drizzle-orm"
 import { isAllowed } from "../authorization"
-import { topicSubscriptionStartDate } from "../topic/subscriptionStartDates"
 
 // a podcast episode's columns, without its script
 export const podcastEpisodeColumns = {
@@ -60,20 +60,6 @@ export function toPodcastEpisodeAnalyticsProperties(
 	podcastEpisodeId: string,
 ): { topicId: string; isTopicPublic: boolean; episodeId: string } {
 	return { topicId: topic.id, isTopicPublic: topic.visibility === "public", episodeId: podcastEpisodeId }
-}
-
-/**
- * Returns whether a time passes the user's subscription activation gate. No gate passes every time, no active
- * subscription passes none, and an activation passes only a later time.
- */
-export function isAfterSubscriberActivation(
-	time: Date | null,
-	subscriberActivatedAt: Date | null | undefined,
-): boolean {
-	if (subscriberActivatedAt === undefined) {
-		return true
-	}
-	return subscriberActivatedAt !== null && time !== null && time > subscriberActivatedAt
 }
 
 // the user, null for a visitor, and the podcast episode to load

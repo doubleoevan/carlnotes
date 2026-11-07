@@ -44,13 +44,15 @@ export type PodcastEpisodeFinding = {
 }
 
 // what one segment call writes. the transition into the segment and its chapters, each with its Finding's number.
-// the first segment also has the cold open, and the last segment also has the sign-off and the goodbye
+// the first segment also has the cold open, and the last segment also has the closing turns about shared comments if
+// any are placed there, the sign-off, and the goodbye
 export const podcastEpisodeSegmentPayload = z.object({
 	coldOpen: z.array(podcastEpisodeTurnPayload).optional(),
 	transition: z.array(podcastEpisodeTurnPayload),
 	chapters: z
 		.array(podcastEpisodeChapterScriptPayload.omit({ findingId: true }).extend({ findingNumber: z.number().int() }))
 		.min(1),
+	closingSharedComments: z.array(podcastEpisodeTurnPayload).optional(),
 	signOff: z.array(podcastEpisodeTurnPayload).optional(),
 	goodbye: z.array(podcastEpisodeTurnPayload).optional(),
 })
@@ -64,13 +66,25 @@ export type PodcastEpisodeSegment = Omit<PodcastEpisodeSegmentPayload, "chapters
 // a script draft, or a whole script, that failed a check
 export class RejectedScriptError extends Error {}
 
-// a segment draft to check, the outline, the segment's index, and whether it is the call's last draft
+// what breaks a spoken line into words a username could be: anything outside a username's characters
+const USERNAME_BREAK_PATTERN = /[^a-z0-9_-]+/
+
+// what a segment draft must include for the shared comments placed in it: the usernames it credits, and whether it has
+// closing turns
+type SegmentSharedComments = { usernames: string[]; hasClosingSharedComments: boolean }
+
+// a segment draft to check, the outline, the segment's index, its shared comments, and whether it is the call's last
+// draft
 export type ToCheckedPodcastEpisodeSegmentOptions = {
 	segment: PodcastEpisodeSegment
 	outline: PodcastEpisodeOutline
 	segmentIndex: number
+	segmentSharedComments?: SegmentSharedComments
 	isLastScriptDraft?: boolean
 }
+
+// a segment with no shared comments placed in it
+const NO_SEGMENT_SHARED_COMMENTS: SegmentSharedComments = { usernames: [], hasClosingSharedComments: false }
 
 /**
  * Returns the checked segment, or the repaired last draft, and throws a RejectedScriptError if an earlier draft fails.
@@ -79,6 +93,7 @@ export function toCheckedPodcastEpisodeSegment({
 	segment,
 	outline,
 	segmentIndex,
+	segmentSharedComments = NO_SEGMENT_SHARED_COMMENTS,
 	isLastScriptDraft = false,
 }: ToCheckedPodcastEpisodeSegmentOptions): PodcastEpisodeSegment {
 	// cut each chapter title past its limit
@@ -91,7 +106,7 @@ export function toCheckedPodcastEpisodeSegment({
 
 	// repair the last draft, and reject an earlier draft that fails a check
 	if (isLastScriptDraft) {
-		return toRepairedPodcastEpisodeSegment(limitedSegment, outlinedFindingIds)
+		return toRepairedPodcastEpisodeSegment(limitedSegment, outlinedFindingIds, segmentSharedComments)
 	}
 	checkPodcastEpisodeSegment({
 		segment: limitedSegment,
@@ -99,6 +114,7 @@ export function toCheckedPodcastEpisodeSegment({
 		isFirstSegment: segmentIndex === 0,
 		isLastSegment: segmentIndex === outline.segments.length - 1,
 	})
+	checkSegmentSharedComments(limitedSegment, segmentSharedComments)
 	return limitedSegment
 }
 
@@ -114,12 +130,17 @@ export function toPodcastEpisodeScript(segments: PodcastEpisodeSegment[]): Podca
 	}
 
 	// return the first segment's cold open, the narrated segments, and the last segment's sign-off,
-	// then the goodbye's opening turns and the last segment's goodbye
+	// after its closing turns about shared comments, then the goodbye's opening turns and the last segment's goodbye
 	const lastSegment = segments.at(-1)
 	return {
 		coldOpen: segments[0]?.coldOpen ?? [],
 		segments: narratedSegments.map(({ transition, chapters }) => ({ transition, chapters })),
-		signOff: [...(lastSegment?.signOff ?? []), ...GOODBYE_OPENING_TURNS, ...(lastSegment?.goodbye ?? [])],
+		signOff: [
+			...(lastSegment?.closingSharedComments ?? []),
+			...(lastSegment?.signOff ?? []),
+			...GOODBYE_OPENING_TURNS,
+			...(lastSegment?.goodbye ?? []),
+		],
 	}
 }
 
@@ -269,11 +290,49 @@ function checkPodcastEpisodeSegment({
 	}
 }
 
+// throw a RejectedScriptError if closing turns run with no shared comment to close on, or are missing with one, or if
+// a shared comment's author goes uncredited
+function checkSegmentSharedComments(
+	segment: PodcastEpisodeSegment,
+	{ usernames, hasClosingSharedComments }: SegmentSharedComments,
+): void {
+	const closingTurns = segment.closingSharedComments ?? []
+	if (hasClosingSharedComments && closingTurns.length === 0) {
+		throw new RejectedScriptError("the segment has hot takes to close on and no closingSharedComments")
+	}
+	if (!hasClosingSharedComments && closingTurns.length > 0) {
+		throw new RejectedScriptError("the segment has closingSharedComments and no hot takes to close on")
+	}
+
+	// each author is named in a chapter or in the closing turns
+	const spokenTurns = [...segment.chapters.flatMap((chapter) => chapter.turns), ...closingTurns]
+	const spokenText = spokenTurns.map((turn) => turn.text).join("\n")
+	const uncreditedUsername = usernames.find((username) => !isUsernameSpoken(spokenText, username))
+	if (uncreditedUsername) {
+		throw new RejectedScriptError(`the segment does not credit the hot take by ${uncreditedUsername}`)
+	}
+
+	// Vienna asks about each closing Comment, so the first closing turn that names its author is Vienna's
+	const unaskedUsername = usernames.find((username) => {
+		const firstTurn = closingTurns.find((turn) => isUsernameSpoken(turn.text, username))
+		return firstTurn?.speaker === "host"
+	})
+	if (unaskedUsername) {
+		throw new RejectedScriptError(`Carl raises the closing hot take by ${unaskedUsername}, and Vienna asks about it`)
+	}
+}
+
+// whether spoken text names a username as a whole word, in any case
+function isUsernameSpoken(spokenText: string, username: string): boolean {
+	return spokenText.toLowerCase().split(USERNAME_BREAK_PATTERN).includes(username.toLowerCase())
+}
+
 // repair the last segment draft. leave out each chapter of an unknown or repeated Finding, each chapter that quotes too
-// much, and each sign-off or goodbye turn that repeats a goodbye opening turn
+// much, each sign-off or goodbye turn that repeats a goodbye opening turn, and closing turns with no shared comment
 function toRepairedPodcastEpisodeSegment(
 	segment: PodcastEpisodeSegment,
 	outlinedFindingIds: string[],
+	{ hasClosingSharedComments }: SegmentSharedComments,
 ): PodcastEpisodeSegment {
 	// keep each chapter of a new outlined Finding, if the chapter stays within the quote limits
 	const writtenFindingIds = new Set<string>()
@@ -287,7 +346,8 @@ function toRepairedPodcastEpisodeSegment(
 	// return the segment with its kept chapters, even if no chapter is kept, and its other closing turns
 	const signOff = segment.signOff?.filter((turn) => !isRepeatedGoodbyeOpeningTurn(turn))
 	const goodbye = segment.goodbye?.filter((turn) => !isRepeatedGoodbyeOpeningTurn(turn))
-	return { ...segment, chapters, signOff, goodbye }
+	const closingSharedComments = hasClosingSharedComments ? segment.closingSharedComments : undefined
+	return { ...segment, chapters, closingSharedComments, signOff, goodbye }
 }
 
 /**

@@ -4,17 +4,17 @@ import { normalizePersonalSourcesEmail } from "./personalSourcesEmailContent"
 import { toPersonalSourcesEmailReplyContent } from "./personalSourcesEmailReplyContent"
 import { personalSourcesEmailFixture } from "./personalSourcesEmailTestFixtures"
 
-test("quoted digest links do not turn thanks into a send in common mail formats", () => {
+test("quoted topic scan email links do not turn thanks into a send in common mail formats", () => {
 	const alternatives = [
 		{ text: "Thanks\n> https://example.org/old" },
 		{ text: "Thanks\nOn Monday, Carl\n<notes@example.com> wrote:\nhttps://example.org/old" },
 		{ text: "Thanks\n-----Original Message-----\nhttps://example.org/old" },
-		{ text: "Thanks\nFrom: Carl\nSent: Monday\nTo: Reader\nSubject: Digest\nhttps://example.org/old" },
+		{ text: "Thanks\nFrom: Carl\nSent: Monday\nTo: Reader\nSubject: Brew report\nhttps://example.org/old" },
 		{ text: null, html: '<p>Thanks</p><blockquote><a href="https://example.org/old">Old</a></blockquote>' },
 		{ text: null, html: '<p>Thanks</p><div class="gmail_quote"><a href="https://example.org/old">Old</a></div>' },
 		{
-			text: "Thanks\nOld digest https://example.org/old",
-			html: '<p>Thanks</p><div class="gmail_quote"><blockquote>Old digest <a href="https://example.org/old">Old</a></blockquote></div>',
+			text: "Thanks\nOld brew report https://example.org/old",
+			html: '<p>Thanks</p><div class="gmail_quote"><blockquote>Old brew report <a href="https://example.org/old">Old</a></blockquote></div>',
 		},
 		{
 			text: null,
@@ -25,7 +25,7 @@ test("quoted digest links do not turn thanks into a send in common mail formats"
 		const extracted = toPersonalSourcesEmailReplyContent(
 			personalSourcesEmailFixture({
 				...content,
-				headers: { "In-Reply-To": "<digest@example.com>" },
+				headers: { "In-Reply-To": "<report@example.com>" },
 			}),
 		)
 		const { payload } = normalizePersonalSourcesEmail({
@@ -42,8 +42,8 @@ test("quoted digest links do not turn thanks into a send in common mail formats"
 test("new HTML links survive while quoted links and text stay excluded", () => {
 	const { email } = toPersonalSourcesEmailReplyContent(
 		personalSourcesEmailFixture({
-			subject: "Re: A digest",
-			text: "Read this https://example.org/new\nOld digest https://example.org/old",
+			subject: "Re: A brew report",
+			text: "Read this https://example.org/new\nOld brew report https://example.org/old",
 			html: '<p>Read <a href="https://example.org/new">this</a></p><blockquote><a href="https://example.org/old">old</a></blockquote>',
 		}),
 	)
@@ -69,9 +69,9 @@ test("rich replies keep the first-line Topic hint separate from authored content
 	// the plain alternative contains unmarked history that the HTML still identifies
 	const { email } = toPersonalSourcesEmailReplyContent(
 		personalSourcesEmailFixture({
-			subject: "Re: Digest",
-			text: "topic: Moss\nKeep the terrarium moist.\nOld digest https://example.org/old",
-			html: '<p>topic: Moss</p><p>Keep the terrarium moist.<br>Read <a href="https://example.org/new">this</a>.</p><blockquote>Old digest https://example.org/old</blockquote>',
+			subject: "Re: Brew report",
+			text: "topic: Moss\nKeep the terrarium moist.\nOld brew report https://example.org/old",
+			html: '<p>topic: Moss</p><p>Keep the terrarium moist.<br>Read <a href="https://example.org/new">this</a>.</p><blockquote>Old brew report https://example.org/old</blockquote>',
 		}),
 	)
 	const { payload } = normalizePersonalSourcesEmail({
@@ -84,11 +84,11 @@ test("rich replies keep the first-line Topic hint separate from authored content
 })
 
 test("reply detection supports References and Re subjects without trusting copied body headers", () => {
-	for (const content of [{ headers: { References: "<digest@example.com>" } }, { subject: "Re: Digest" }]) {
+	for (const content of [{ headers: { References: "<report@example.com>" } }, { subject: "Re: Brew report" }]) {
 		expect(toPersonalSourcesEmailReplyContent(personalSourcesEmailFixture(content)).isReply).toBe(true)
 	}
 	expect(
-		toPersonalSourcesEmailReplyContent(personalSourcesEmailFixture({ text: "In-Reply-To: <digest@example.com>" }))
+		toPersonalSourcesEmailReplyContent(personalSourcesEmailFixture({ text: "In-Reply-To: <report@example.com>" }))
 			.isReply,
 	).toBe(false)
 })

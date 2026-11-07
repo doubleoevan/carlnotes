@@ -1,3 +1,4 @@
+import { toTestSharedComments } from "@carlnotes/contracts/socialTestFixtures"
 import type { TopicPersonalSourcesContentsState } from "../hooks/useTopicPersonalSourcesContents"
 import { PERSONAL_SOURCES_CONVERSATION_EXAMPLES } from "../lib/personalSourcesConversationStories"
 import { toPersonalSourceSenderIdentity, toPersonalSourcesSectionTitle } from "../lib/personalSourcesCopy"
@@ -5,6 +6,7 @@ import { PERSONAL_SOURCES_TOPIC_STORY, useTopicPersonalSourcesStory } from "../l
 import { PersonalSourcesEmailAddress } from "./PersonalSourcesEmailAddress"
 import type { TopicPersonalSourcesElements } from "./TopicPersonalSources"
 import { TopicPersonalSourcesContents } from "./TopicPersonalSourcesContents"
+import { SharedCommentsGroup } from "./TopicSharedCommentsSection"
 
 type TopicPersonalSourcesSectionStoryProps = {
 	elements: TopicPersonalSourcesElements
@@ -14,6 +16,8 @@ type TopicPersonalSourcesSectionStoryProps = {
 	isPlatformGallery?: boolean
 	conversationExample?: keyof typeof PERSONAL_SOURCES_CONVERSATION_EXAMPLES
 	canContribute?: boolean
+	// whether the Hot takes group lists two shared comments under the section
+	hasSharedComments?: boolean
 	className?: string
 }
 
@@ -35,19 +39,32 @@ export function TopicPersonalSourcesSectionStory({
 		return null
 	}
 	return (
-		<props.elements.Row className={className}>
-			<props.elements.ExpandableRow
-				title={toPersonalSourcesSectionTitle(entryCount)}
-				metadata="Only you can see this"
-				variant="section"
-				initialOpen={initialOpen}
-				isLast
-			>
-				<Contents {...props} state={state} />
-			</props.elements.ExpandableRow>
-		</props.elements.Row>
+		<>
+			<props.elements.Row className={className}>
+				<props.elements.ExpandableRow
+					title={toPersonalSourcesSectionTitle(entryCount)}
+					metadata="Only you can see this"
+					variant="section"
+					initialOpen={initialOpen}
+					isLast
+				>
+					<Contents {...props} state={state} />
+				</props.elements.ExpandableRow>
+			</props.elements.Row>
+			{props.hasSharedComments && (
+				<SharedCommentsGroup
+					sharedComments={SHARED_COMMENTS_STORY}
+					elements={props.elements}
+					className={className}
+					initialOpen={initialOpen}
+				/>
+			)}
+		</>
 	)
 }
+
+// two shared comments, one by Carl
+const SHARED_COMMENTS_STORY = toTestSharedComments(`/topics/${PERSONAL_SOURCES_TOPIC_STORY.id}`)
 
 // render the current fixture page through the same content component as the live view
 function Contents({

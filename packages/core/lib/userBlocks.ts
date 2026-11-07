@@ -1,27 +1,33 @@
-// the block controls both apps share: the profile menu's Block or Unblock label, and the toggle behind it
-import { sendBlockUser, sendUnblockUser } from "@carlnotes/client/blockClient"
+// the user block controls both apps share: the profile menu's Block or Unblock label, and the toggle behind it
+import { sendUserBlock, sendUserUnblock } from "@carlnotes/client/userBlockClient"
 
-// the labels of the profile menu's option, and of the report dialog's block choice
-const BLOCK_LABEL = "Block"
-const UNBLOCK_LABEL = "Unblock"
+// the labels of the profile menu's option, and of the report dialog's user block choice
+const USER_BLOCK_LABEL = "Block"
+const USER_UNBLOCK_LABEL = "Unblock"
+
+// what a profile shows the person who blocked its owner
+export const USER_BLOCKED_LABEL = "Blocked"
+
+// the account page's section that lists blocked people, as its web anchor and its mobile section param
+export const USER_BLOCKS_SECTION = "blocked-people"
 
 /**
- * Returns the label of the report dialog's block choice for one author.
+ * Returns the label of the report dialog's user block choice for one author.
  */
-export function toBlockAuthorLabel(username: string): string {
-	return `${BLOCK_LABEL} @${username}`
+export function toUserBlockAuthorLabel(username: string): string {
+	return `${USER_BLOCK_LABEL} @${username}`
 }
 
 /**
- * Returns the profile menu's Block or Unblock label for the block's current state.
+ * Returns the profile menu's Block or Unblock label for the user block's current state.
  */
-export function toBlockLabel(isBlocked: boolean): string {
-	return isBlocked ? UNBLOCK_LABEL : BLOCK_LABEL
+export function toUserBlockLabel(isUserBlocked: boolean): string {
+	return isUserBlocked ? USER_UNBLOCK_LABEL : USER_BLOCK_LABEL
 }
 
 /**
  * Blocks a user who is not blocked, or unblocks one who is. Throws an error on a rejection.
  */
-export function toggleUserBlock({ userId, isBlocked }: { userId: string; isBlocked: boolean }): Promise<void> {
-	return isBlocked ? sendUnblockUser(userId) : sendBlockUser(userId)
+export function toggleUserBlock({ userId, isUserBlocked }: { userId: string; isUserBlocked: boolean }): Promise<void> {
+	return isUserBlocked ? sendUserUnblock(userId) : sendUserBlock(userId)
 }

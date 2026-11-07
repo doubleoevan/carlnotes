@@ -1,3 +1,5 @@
+import { toDeleteFileConfirmation } from "@carlnotes/core/lib/confirmationCopy"
+import { useConfirmDialog } from "@/hooks/useConfirmDialog"
 // one chat room message as the list renders it: the author line, the reply reference, the chat bubble with its shared
 // files, and the footer
 
@@ -92,6 +94,7 @@ const chatRoomMessageElements: ChatRoomMessageElements = {
 
 // render attached media with downloads and deletion
 function RoomAttachments({ chatMessage, topicId, teamId, canDelete, onAttachmentDelete }: ChatRoomMessageBubbleProps) {
+	const { confirm, confirmDialog } = useConfirmDialog()
 	return (
 		<>
 			{chatMessage.attachments.map((attachment) => {
@@ -120,7 +123,9 @@ function RoomAttachments({ chatMessage, topicId, teamId, canDelete, onAttachment
 										<button
 											type="button"
 											aria-label={`Delete ${attachment.name}`}
-											onClick={() => onAttachmentDelete(attachment.id)}
+											onClick={() =>
+												confirm(toDeleteFileConfirmation(attachment.name), () => onAttachmentDelete(attachment.id))
+											}
 											className="hover:text-foreground"
 										>
 											<X className="size-3" />
@@ -135,6 +140,7 @@ function RoomAttachments({ chatMessage, topicId, teamId, canDelete, onAttachment
 					</div>
 				)
 			})}
+			{confirmDialog}
 		</>
 	)
 }

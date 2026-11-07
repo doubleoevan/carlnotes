@@ -80,3 +80,29 @@ test("provider switches close desktop instructions and clipboard failures never 
 		await harness.close()
 	}
 })
+
+test("an initial provider leads the list with its instructions open", async () => {
+	// mount the list as Reconnect opens it, with another provider remembered
+	const harness = await renderTestHook(
+		() => null,
+		() => (
+			<AddToAi
+				elements={ELEMENTS}
+				mcpServer={{ name: "Test", url: "https://example.com/mcp" }}
+				lastProvider="gemini"
+				initialProvider="chatgpt"
+				onRemember={() => undefined}
+				onCopy={async () => true}
+				renderInstall={(props) => <InstallOption {...props} />}
+			/>
+		),
+	)
+	try {
+		// the first option is the initial provider, already open
+		const firstOption = harness.container.querySelector("button")
+		expect(firstOption?.textContent).toBe("ChatGPT")
+		expect(firstOption?.getAttribute("aria-expanded")).toBe("true")
+	} finally {
+		await harness.close()
+	}
+})

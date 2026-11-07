@@ -203,7 +203,7 @@ bun run releases:preview <tag> "<title>" # store release-notes/<tag>.local.md in
 bun run build:ui     # production build of apps/web to apps/web/dist, the MCP views' bundle in apps/web/dist/mcp-views included (no doppler, so it runs in CI and deploys)
 bun run build:docs   # build static docs to apps/docs/dist, which the api serves at /docs
                      # /docs on the api (3000) and through the Vite proxy (5173) is this build, which only changes when you rerun this script and doesn't hot reload
-bun run dev:storybook # the Nightshift component browser, Storybook with hot reload on localhost:6006, and its MCP server at localhost:6006/mcp that .mcp.json and opencode.json register; no doppler needed
+bun run dev:storybook # the Nightshift component browser, Storybook with hot reload on localhost:6006 and this Mac's LAN address, and its MCP server at localhost:6006/mcp that .mcp.json and opencode.json register; no doppler needed
 bun run build:storybook # build the component browser to apps/web/dist/nightshift, which the api serves at /nightshift; run it after build:ui, which can clear apps/web/dist
 bun run nightshift:write # write packages/nightshift/tokens.css, uniwind.css, and the Figma token files from the Nightshift TypeScript source; run it after changing a token. tokens.test.ts fails until you do
 bun run dev:mobile   # Expo dev server for apps/mobile under doppler, with the expo-mcp server on and Storybook's telemetry off; a development build connects from a simulator, an emulator, or a phone on the LAN, and carlnotes:///storybook opens the component browser in it
@@ -287,6 +287,7 @@ bun run smoke:podcast-episode  # the podcast episode smoke test: one episode fro
 bun run smoke:review       # the review smoke test: the paid section buys its best survivors, bounded by its limit
 bun run smoke:subscribers  # the subscriber-count smoke test: both subscription paths against real rows, rolled back after
 bun run smoke:profile      # the profile smoke test: the header's distinct people against the footer's summed rows
+bun run smoke:social       # the reactions and comments smoke test: one row per user, the edit time, the reads, and the blocks
 bun run smoke:seo          # the seo smoke test: builds the ui, then checks every public page arrives whole to a browser without JavaScript on its first render, that only public topics are listed, that the edge can share a signed-out page and the feed but never a signed-in one, and that a card is immutable only at its version
 bun run smoke:image <image> # the image smoke test: boots a built image with dummy settings against an empty Postgres and checks the home page, /plans, and both health routes respond 200. needs Docker
 bun run smoke:signup       # the signup smoke test: builds the ui under doppler, then opens the signup page in this machine's Chrome and checks that the Turnstile challenge issues a token the signup gate accepts, with no content security policy violation
@@ -297,7 +298,7 @@ bun run smoke:room         # the team chat-room smoke test: the access matrix, i
 bun run smoke:rooms        # the chat-rooms smoke test: which rooms a user can open, one per holding team, and the unseen count
 bun run smoke:chat-turns   # the chat turn shapes smoke test: each kind's row and each chat proposal shape is kept, each mismatched row is rejected, rolled back
 bun run smoke:push-devices # the push devices smoke test: ending a session or closing the account deletes its phones, one send per event, recipient, and phone, rolled back
-bun run smoke:mcp          # builds the ui, then checks both MCP routes: Origin, nineteen-tool contracts, private access, result bounds, OAuth and revocation, MCP views, writes, confirmations, and rate limiting
+bun run smoke:mcp          # builds the ui, then checks both MCP routes: Origin, twenty-two-tool contracts, private access, result bounds, OAuth and revocation, MCP views, writes, confirmations, and rate limiting
 bun run smoke:mcp-views    # builds the MCP view bundle, then runs each MCP view in this machine's Chrome under the test host, offline, as part of `bun run check`
 bun run seed:personal-sources owner@example.com # retain synthetic review Topics for an existing development owner
 bun run smoke:personal-sources        # development persistence plus real model/Temporal receive → summarize → Scan → delete; --keep retains synthetic fixtures, and live runs just the integrated section

@@ -5,6 +5,7 @@ import { sendDeleteTeamInvite, sendRemoveTeamMember } from "@carlnotes/client/te
 import { sendUserInvite } from "@carlnotes/client/topicClient"
 import { isLeaderRole } from "@carlnotes/contracts/enums"
 import type { ProfileTeamStatus } from "@carlnotes/contracts/profiles"
+import { toDeleteSentInviteConfirmation, toRemoveMemberConfirmation } from "@carlnotes/core/lib/confirmationCopy"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { Users, X } from "lucide-react"
 import { type ReactNode, useState } from "react"
@@ -14,6 +15,7 @@ import { TeamAvatar } from "@/components/branding/TeamAvatar"
 import { Button } from "@/components/primitives/button"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/primitives/popover"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
+import { useConfirmDialog } from "@/hooks/useConfirmDialog"
 import { MENU_DIVIDER_CLASS, MENU_OPTION_CLASS } from "@/lib/styleClasses"
 import { NewTeamOption, TeamOption } from "./TeamMenuOptions"
 
@@ -34,6 +36,7 @@ export function InviteUserToTeamButton({
 	onNewTeam: () => void
 }) {
 	const [isMenuOpen, setIsMenuOpen] = useState(false)
+	const { confirm, confirmDialog } = useConfirmDialog()
 
 	// reload the team statuses when the menu opens
 	const handleOpenChange = (isOpening: boolean): void => {
@@ -114,7 +117,12 @@ export function InviteUserToTeamButton({
 											<span className="font-semibold">{profileTeamStatus.name}</span>
 										</>
 									}
-									onRemove={() => void handleRemoveTeamMember(profileTeamStatus)}
+									onRemove={() =>
+										confirm(
+											toRemoveMemberConfirmation({ username: profileUsername, teamName: profileTeamStatus.name }),
+											() => handleRemoveTeamMember(profileTeamStatus),
+										)
+									}
 								/>
 							) : (
 								<TeamOptionRemoveAction
@@ -129,7 +137,11 @@ export function InviteUserToTeamButton({
 											"Must be a leader to delete another member's invitation"
 										)
 									}
-									onRemove={() => void handleDeleteTeamInvite(profileTeamStatus)}
+									onRemove={() =>
+										confirm(toDeleteSentInviteConfirmation(profileTeamStatus.name), () =>
+											handleDeleteTeamInvite(profileTeamStatus),
+										)
+									}
 								/>
 							)}
 						</div>
@@ -145,6 +157,7 @@ export function InviteUserToTeamButton({
 						}}
 					/>
 				)}
+				{confirmDialog}
 			</PopoverContent>
 		</Popover>
 	)

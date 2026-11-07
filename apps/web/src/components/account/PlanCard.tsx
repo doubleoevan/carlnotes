@@ -7,6 +7,7 @@ import { cn } from "@carlnotes/nightshift/classNames"
 import { useNavigate } from "@tanstack/react-router"
 import { Check } from "lucide-react"
 import { Button } from "@/components/primitives/button"
+import { HIGHLIGHTED_CARD_CLASS } from "@/lib/styleClasses"
 
 /**
  * Keeps the web plan card's DOM styling around the shared plan content.
@@ -28,7 +29,7 @@ const PLAN_CARD_ELEMENTS: PlanCardElements = {
 		<section
 			className={cn(
 				"bg-card relative flex flex-col rounded-xl border p-6 shadow-raised",
-				isHighlighted && "border-primary ring-primary/40 ring-2",
+				isHighlighted && HIGHLIGHTED_CARD_CLASS,
 			)}
 		>
 			{children}

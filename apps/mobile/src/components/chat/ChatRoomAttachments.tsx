@@ -1,7 +1,9 @@
 import { toChatRoomAttachmentUrl } from "@carlnotes/client/chatRoomClient"
 import type { ChatRoomMessageBubbleProps } from "@carlnotes/core/components/ChatRoomMessageBubble"
+import { toDeleteFileConfirmation } from "@carlnotes/core/lib/confirmationCopy"
 import { FileText, Film, ImageIcon, type LucideIcon, Paperclip, X } from "lucide-react-native"
 import { Pressable, View } from "react-native"
+import { showConfirmAlert } from "@/components/common/ConfirmDialog"
 import { useDownloadedFilePreview } from "@/components/common/useDownloadedFilePreview"
 import { Button, toTouchTargetHitSlop } from "@/components/primitives/button"
 import { Icon } from "@/components/primitives/icon"
@@ -67,7 +69,12 @@ export function ChatRoomAttachments({
 							accessibilityLabel={`Delete ${attachment.name}`}
 							hitSlop={toTouchTargetHitSlop(28)}
 							className="size-7 items-center justify-center"
-							onPress={() => onAttachmentDelete(attachment.id)}
+							onPress={() =>
+								showConfirmAlert({
+									...toDeleteFileConfirmation(attachment.name),
+									onConfirm: () => onAttachmentDelete(attachment.id),
+								})
+							}
 						>
 							<Icon as={X} className="size-3 text-muted-foreground" />
 						</Pressable>

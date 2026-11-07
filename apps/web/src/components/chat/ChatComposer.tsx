@@ -1,5 +1,6 @@
 import { CHAT_QUESTION_CHARS, type KeptChatAttachment } from "@carlnotes/contracts/chat"
 import { CHAT_QUESTION_PLACEHOLDER } from "@carlnotes/core/lib/chatCopy"
+import { toDeleteFileConfirmation } from "@carlnotes/core/lib/confirmationCopy"
 import { toAgeLabel } from "@carlnotes/core/lib/labels"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { ArrowUp, FileText, FileX2, Film, Image, Minus, Paperclip, Square, X } from "lucide-react"
@@ -8,6 +9,7 @@ import { AnchorLink } from "@/components/common/AnchorLink"
 import { FileDropZone } from "@/components/common/FileDropZone"
 import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from "@/components/primitives/popover"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
+import { useConfirmDialog } from "@/hooks/useConfirmDialog"
 import {
 	COMPOSER_BAR_CLASS,
 	COMPOSER_BOX_CLASS,
@@ -258,6 +260,7 @@ function KeptAttachmentsButton({
 	keptAttachments: KeptChatAttachment[]
 	onRemoveKeptAttachment: (keptAttachmentId: string) => Promise<void>
 }) {
+	const { confirm, confirmDialog } = useConfirmDialog()
 	return (
 		<Popover>
 			<Tooltip>
@@ -312,7 +315,11 @@ function KeptAttachmentsButton({
 								<button
 									type="button"
 									aria-label={`Delete ${keptAttachment.name}`}
-									onClick={() => void onRemoveKeptAttachment(keptAttachment.id)}
+									onClick={() =>
+										confirm(toDeleteFileConfirmation(keptAttachment.name), () =>
+											onRemoveKeptAttachment(keptAttachment.id),
+										)
+									}
 									className="text-muted-foreground hover:text-foreground grid size-9 shrink-0 place-items-center sm:size-5"
 								>
 									<X className="size-3.5" />
@@ -324,6 +331,7 @@ function KeptAttachmentsButton({
 						</Tooltip>
 					</div>
 				))}
+				{confirmDialog}
 			</PopoverContent>
 		</Popover>
 	)

@@ -128,7 +128,7 @@ export async function runTopicScanWorkflow(
 	// a Scan replaying a closing write from before the patch already sent its email, so the patch marker skips the start
 	const isScanEmailReadyToSend = trigger !== "scheduled" || finishedScanStatus === "succeeded"
 	if (finishedScanStatus !== undefined && isScanEmailReadyToSend && patched("scan-email-workflow")) {
-		// a scheduled Scan's digest goes to the subscribers, and any other Scan reports to whoever ran it
+		// a scheduled Scan's topic scan email goes to the subscribers, and any other Scan reports to whoever ran it
 		// or created the Topic. either email waits for the outline of a Podcast Episode that is ready to record
 		const scanEmailInput = { scanId, topicId, isPodcastEpisodeReadyToRecord }
 		await startScanEmail(
@@ -138,7 +138,7 @@ export async function runTopicScanWorkflow(
 		)
 	}
 
-	// a succeeded scheduled Scan pushes its new Findings to phones from its own workflow, beside the digest
+	// a succeeded scheduled Scan pushes its new Findings to phones from its own workflow, beside the topic scan email
 	await startScanPush({ scanId, trigger, finishedScanStatus })
 
 	// start the podcast episode recording after the email workflow, so the email workflow exists before the outline signal.

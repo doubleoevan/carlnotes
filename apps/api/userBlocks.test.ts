@@ -1,5 +1,5 @@
 // user block tests: a block is written once and clears the cached mention count, a self block is rejected, an unblock
-// removes the row, and the list shapes each blocked person
+// removes the row, and the list shapes each blocked user
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import { restoreConnectionPool, stubConnectionPool } from "@carlnotes/db/connectionPoolStub"
 import * as redis from "@carlnotes/db/redis"
@@ -38,22 +38,30 @@ test("a self block and an unknown user are rejected", async () => {
 	expect(unknownResponse.status).toBe(404)
 })
 
-// an unblock deletes the pair and the list shapes each blocked person with the block's time
+// an unblock deletes the pair and the list shapes each blocked user with the user block's time
 test("an unblock removes the pair, and the list names each blocked person", async () => {
 	spyOn(redis, "deleteRedisKeys").mockResolvedValue(1)
 	const sentQueries = stubConnectionPool(({ text }) =>
-		text.includes('from "user_blocks"') ? [["user-2", "vienna", "2026-10-29T10:00:00.000Z"]] : [],
+		text.includes('from "user_blocks"') ? [["user-2", "vienna", "generated", null, "2026-10-29T10:00:00.000Z"]] : [],
 	)
-	const unblockResponse = await toSignedInApp(userBlocksRoute, "user-1").request("/users/user-2/block", {
+	const userUnblockResponse = await toSignedInApp(userBlocksRoute, "user-1").request("/users/user-2/block", {
 		method: "DELETE",
 	})
-	expect(unblockResponse.status).toBe(200)
+	expect(userUnblockResponse.status).toBe(200)
 	const deleteQuery = sentQueries.find((sentQuery) => sentQuery.text.startsWith('delete from "user_blocks"'))
 	expect(deleteQuery?.values).toEqual(["user-1", "user-2"])
 
 	// the list
 	const listResponse = await toSignedInApp(userBlocksRoute, "user-1").request("/users/me/blocks")
 	expect(await listResponse.json()).toEqual({
-		blockedUsers: [{ id: "user-2", username: "vienna", blockedAt: "2026-10-29T10:00:00.000Z" }],
+		blockedUsers: [
+			{
+				id: "user-2",
+				username: "vienna",
+				avatarSource: "generated",
+				avatarVersion: null,
+				blockedAt: "2026-10-29T10:00:00.000Z",
+			},
+		],
 	})
 })

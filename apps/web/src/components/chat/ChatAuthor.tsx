@@ -1,3 +1,4 @@
+import { toProfilePath } from "@carlnotes/contracts/seo"
 import {
 	type ChatAuthorElements,
 	type ChatAuthorProps,
@@ -26,7 +27,7 @@ const chatAuthorElements: ChatAuthorElements = {
 		return userId === null ? (
 			<div className={className}>{children}</div>
 		) : (
-			<AnchorLink href={`/profiles/${userId}`} className={className}>
+			<AnchorLink href={toProfilePath(userId)} className={className}>
 				{children}
 			</AnchorLink>
 		)

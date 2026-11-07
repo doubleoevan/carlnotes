@@ -140,3 +140,34 @@ test("a response from a replaced account or a stopped poll is dropped", async ()
 		jest.useRealTimers()
 	}
 })
+
+// an admin's poll feeds the open report count, and a poll without the read never calls it back
+test("the poll reads the open report count only if it is given the read", async () => {
+	const openReportCounts: number[] = []
+	const pollSettings = {
+		isActive: () => true,
+		isCurrentAccount: () => true,
+		subscribe: () => () => {},
+		fetchChatMentionCount: async () => 0,
+		fetchTopicInviteBadges: async () => [],
+		onChatMentionCountChange: () => {},
+		onTopicInviteBadges: () => {},
+		onOpenReportCount: (openReportCount: number) => openReportCounts.push(openReportCount),
+		pollMs: 60_000,
+	}
+
+	// a poll with no read, then an admin's
+	const stopUserPoll = startUpdateBadgePoll(pollSettings)
+	const stopAdminPoll = startUpdateBadgePoll({ ...pollSettings, fetchOpenReportCount: async () => 3 })
+	await Promise.all([waitForMicrotasks(), waitForMicrotasks()])
+	stopUserPoll()
+	stopAdminPoll()
+	expect(openReportCounts).toEqual([3])
+})
+
+// lets the poll's first reads settle
+async function waitForMicrotasks(): Promise<void> {
+	for (let tick = 0; tick < 10; tick += 1) {
+		await Promise.resolve()
+	}
+}

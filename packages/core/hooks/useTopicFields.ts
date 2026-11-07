@@ -39,6 +39,8 @@ export type TopicFields<Attachment> = {
 	// whether the topic's podcast is on
 	isPodcastEnabled: boolean
 	setIsPodcastEnabled: (isPodcastEnabled: boolean) => void
+	isPodcastCommentsEnabled: boolean
+	setIsPodcastCommentsEnabled: (isPodcastCommentsEnabled: boolean) => void
 	// the subscriber invites queued for the save
 	emailInvites: string[]
 	setEmailInvites: (emailInvites: string[]) => void
@@ -84,6 +86,7 @@ export function useTopicFields<Attachment>(
 	const [maxTopicFindings, setMaxTopicFindings] = useState(topic?.maxTopicFindings ?? 10)
 	// a new topic's podcast starts on
 	const [isPodcastEnabled, setIsPodcastEnabled] = useState(topic?.podcast?.isEnabled ?? true)
+	const [isPodcastCommentsEnabled, setIsPodcastCommentsEnabled] = useState(topic?.podcast?.isCommentsEnabled ?? true)
 	// the email address invite pills to edit
 	const [emailInvites, setEmailInvites] = useState(
 		() => topic?.invites.flatMap((invite) => (invite.email ? [invite.email] : [])) ?? [],
@@ -134,6 +137,8 @@ export function useTopicFields<Attachment>(
 		setMaxTopicFindings,
 		isPodcastEnabled,
 		setIsPodcastEnabled,
+		isPodcastCommentsEnabled,
+		setIsPodcastCommentsEnabled,
 		emailInvites,
 		setEmailInvites,
 		usernameInvites,

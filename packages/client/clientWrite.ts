@@ -1,5 +1,8 @@
 import { type ApiResponse, showClientError } from "./apiClient"
 
+// what the app shows for a write that failed, whichever write it was
+export const WRITE_FAILED_TEXT = "That didn't save. Carl suggests trying again."
+
 // a write's reporting and rejection policy
 type ShowFailedWriteOptions = {
 	request: Promise<ApiResponse>
@@ -22,6 +25,7 @@ export async function showFailedWrite({
 	try {
 		response = await request
 	} catch (error) {
+		// log the failure, show it, and rethrow it for an optimistic caller
 		console.error(`${action} failed to reach the server`, error)
 		showRejectedWrite(isBackground)
 		if (shouldThrowOnError) {
@@ -46,6 +50,6 @@ export async function showFailedWrite({
 // the one message a failed write shows, skipped for a write the user never asked for by itself
 function showRejectedWrite(isBackground: boolean): void {
 	if (!isBackground) {
-		showClientError("That didn't save. Carl suggests trying again.")
+		showClientError(WRITE_FAILED_TEXT)
 	}
 }

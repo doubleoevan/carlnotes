@@ -6,13 +6,13 @@ import { FULL_PODCAST_COVER_SIZE, SMALL_PODCAST_COVER_SIZE } from "@carlnotes/co
 import { toPodcastEpisodePath } from "@carlnotes/contracts/seo"
 import { db } from "@carlnotes/db"
 import { podcastEpisodeChapters, podcastEpisodes } from "@carlnotes/db/schema/podcast"
+import { isAfterSubscriberActivation } from "@carlnotes/db/topicPermissions"
 import { toPodcastCoverPath } from "@carlnotes/server/podcastCoverPaths"
 import { isPodcastEpisodeRecordingConfigured } from "@carlnotes/server/podcastEpisodeSettings"
 import { isVoiceChatConfigured } from "@carlnotes/server/voiceChat"
 import { and, count, desc, eq, inArray } from "drizzle-orm"
 import { topicSubscriptionStartDates } from "../topic/subscriptionStartDates"
 import {
-	isAfterSubscriberActivation,
 	loadPodcastEpisodeListenRows,
 	type PodcastEpisodeListenRow,
 	type PodcastEpisodeRow,

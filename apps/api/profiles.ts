@@ -5,7 +5,7 @@ import type { Topic } from "@carlnotes/contracts/profiles"
 import { SEARCH_MIN_CHARS, type UserSearchRow } from "@carlnotes/contracts/search"
 import { toNormalizedUsername } from "@carlnotes/contracts/usernames"
 import { type DbHandle, db } from "@carlnotes/db"
-import { toUnblockedAuthorFilter } from "@carlnotes/db/contentFilters"
+import { toNotUserBlockedAuthorFilter } from "@carlnotes/db/contentFilters"
 import { subscriptions, topics } from "@carlnotes/db/schema/topics"
 import { users } from "@carlnotes/db/schema/users"
 import { and, countDistinct, eq, isNotNull, like, ne, sql } from "drizzle-orm"
@@ -15,7 +15,7 @@ import { withAvatarVersion } from "./avatars"
 import { type AppEnv, currentUser } from "./currentUser"
 import { loadProfileTeamStatuses, loadPublicTeams, loadTeamSummaries } from "./team/helpers"
 import { toTopicTableRows } from "./topic/topicTableRows"
-import { isUserBlocked } from "./userBlocks"
+import { hasUserBlock } from "./userBlocks"
 
 // the trimmed query and the most rows to read
 type SearchUsersOptions = { query: string; limit: number; userId: string | null }
@@ -62,7 +62,7 @@ export function toUserSearchQuery({
 	userId: string | null
 }) {
 	// a signed-in user's results leave out the people they blocked
-	const blockFilter = userId ? toUnblockedAuthorFilter(userId, users.id) : undefined
+	const userBlockFilter = userId ? toNotUserBlockedAuthorFilter(userId, users.id) : undefined
 	return db
 		.select({
 			userId: users.id,
@@ -71,7 +71,7 @@ export function toUserSearchQuery({
 			avatarKey: users.avatarKey,
 		})
 		.from(users)
-		.where(and(like(users.usernameNormalized, `%${normalizedUsername}%`), blockFilter))
+		.where(and(like(users.usernameNormalized, `%${normalizedUsername}%`), userBlockFilter))
 		.orderBy(sql`length(${users.usernameNormalized})`, users.id)
 		.limit(limit)
 }
@@ -99,7 +99,7 @@ async function loadProfile(profileUserId: string, userId: string | null): Promis
 	const includesNonPublicTopics = userId === user.id || (userId !== null && (await isAllowed(userId, "admin:console")))
 
 	// whether the signed-in user has blocked this person
-	const isBlocked = userId !== null && userId !== user.id && (await isUserBlocked(userId, user.id))
+	const isUserBlocked = userId !== null && userId !== user.id && (await hasUserBlock(userId, user.id))
 	return {
 		userId: user.id,
 		username: user.username,
@@ -108,7 +108,7 @@ async function loadProfile(profileUserId: string, userId: string | null): Promis
 		joinedAt: user.createdAt.toISOString(),
 		subscriberCount: await countDistinctSubscribers(user.id),
 		includesNonPublicTopics,
-		isBlocked,
+		isBlocked: isUserBlocked,
 		topics: await loadProfileTopics(user.id, includesNonPublicTopics, userId),
 		// a user's own profile shows every team they belong to.
 		// other users only see the public teams they are a member of.

@@ -1,3 +1,4 @@
+import { toProfilePath } from "@carlnotes/contracts/seo"
 import type { ComponentType, ReactNode } from "react"
 
 // the same destination labels double as stable icon names in both platform adapters
@@ -46,11 +47,11 @@ export function UserMenuItems({
 	onPlayTutorial: () => void
 	onSignOut: () => void
 	isSigningOut?: boolean
-	renderBadge?: (label: "Profile" | "Teams" | "Activity") => ReactNode
+	renderBadge?: (label: "Profile" | "Teams" | "Activity" | "Admin") => ReactNode
 }) {
 	const { Link, Action, Divider } = elements
 	const destinations = [
-		{ label: "Profile", href: `/profiles/${userId}` },
+		{ label: "Profile", href: toProfilePath(userId) },
 		{ label: "Teams", href: "/teams" },
 		{ label: "Activity", href: "/activity" },
 		{ label: "Account", href: "/account" },
@@ -76,7 +77,11 @@ export function UserMenuItems({
 			<Link label="What CarlNotes Is" href="/docs" isSelected={false} onSelect={onNavigate} />
 			<Divider />
 			{/* admin and session controls */}
-			{isAdmin && <Link label="Admin" href="/admin" isSelected={pathname === "/admin"} onSelect={onNavigate} />}
+			{isAdmin && (
+				<Link label="Admin" href="/admin" isSelected={pathname === "/admin"} onSelect={onNavigate}>
+					{renderBadge?.("Admin")}
+				</Link>
+			)}
 			<Action label="Sign out" isDisabled={isSigningOut} onSelect={onSignOut} />
 		</>
 	)

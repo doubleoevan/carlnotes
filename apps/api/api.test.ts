@@ -34,6 +34,14 @@ test("a session read that fails otherwise fails the request", async () => {
 })
 
 // a body past a megabyte is rejected before the route reads it, on every route with no limit of its own
+// Postgres text rejects a NUL byte, so a url that holds one stops here and not at a query
+test("a url with a NUL byte is rejected with a 400 before the session read", async () => {
+	const getSession = spyOn(auth.api, "getSession")
+	const response = await apiRoute.request("/api/comments/a%00b/replies")
+	expect(response.status).toBe(400)
+	expect(getSession).not.toHaveBeenCalled()
+})
+
 test("an oversized body is rejected with a 413 before the route reads it", async () => {
 	signInAs(null)
 	const response = await apiRoute.request(

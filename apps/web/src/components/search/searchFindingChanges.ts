@@ -48,5 +48,9 @@ export function toReportingFindingHandlers(
 			topicFeedHandlers.bookmarkTopicFinding(findingId, isBookmarked)
 			onFindingChange({ findingId, topicFindingChange: { isBookmarked } })
 		},
+		keepTopicFindingReactions: (findingId, reactions) => {
+			topicFeedHandlers.keepTopicFindingReactions(findingId, reactions)
+			onFindingChange({ findingId, topicFindingChange: { reactions } })
+		},
 	}
 }

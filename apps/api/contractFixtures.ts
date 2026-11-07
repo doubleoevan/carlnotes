@@ -312,14 +312,22 @@ export const CONTRACT_FIXTURES: Record<string, ContractFixture> = {
 	// billing
 	"billingClient.fetchBillingState": toFixture(billingRoute, { query: { userId: USER_ID } }, { users: USER_COLUMNS }),
 
-	// blocks
-	"blockClient.fetchBlockedUsers": toFixture(
+	// user blocks
+	"userBlockClient.fetchUserBlocks": toFixture(
 		userBlocksRoute,
 		{},
-		{ user_blocks: { id: "user-2", username: "vienna", created_at: ROW_TIME } },
+		{
+			user_blocks: {
+				id: "user-2",
+				username: "vienna",
+				avatar_source: "generated",
+				avatar_key: null,
+				created_at: ROW_TIME,
+			},
+		},
 	),
-	"blockClient.sendBlockUser": toFixture(userBlocksRoute, { params: { id: "user-2" } }, { users: USER_COLUMNS }),
-	"blockClient.sendUnblockUser": toFixture(userBlocksRoute, { params: { id: "user-2" } }, {}),
+	"userBlockClient.sendUserBlock": toFixture(userBlocksRoute, { params: { id: "user-2" } }, { users: USER_COLUMNS }),
+	"userBlockClient.sendUserUnblock": toFixture(userBlocksRoute, { params: { id: "user-2" } }, {}),
 
 	// private chat
 	"chatClient.fetchChatConversation": toFixture(privateChatRoute, { params: TOPIC_PARAMS }, TOPIC_TABLES),

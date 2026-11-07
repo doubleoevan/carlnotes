@@ -1,18 +1,25 @@
-// report tests: the daily rate limit window in Redis, the rejection of the eleventh report, a refunded report, a chat
-// message report stored and mailed with its author blocked, and a message in a room the sender is not in rejected
+// report tests: the daily rate limit window in Redis, the rejection of the report past the fiftieth, a refunded report, a chat
+// message report stored and mailed with its author blocked, a message in a room the sender is not in rejected, and a
+// comment's hot take flag event
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import { DAY_MS } from "@carlnotes/contracts/time"
 import { restoreConnectionPool, stubConnectionPool, toTableRow } from "@carlnotes/db/connectionPoolStub"
 import * as redisRateLimits from "@carlnotes/db/redisRateLimits"
 import { chatRoomMessages } from "@carlnotes/db/schema/chat"
 import * as emails from "@carlnotes/emails/email"
+import * as analytics from "@carlnotes/server/analytics"
+import { saveEnvSettings } from "@carlnotes/server/savedEnvSettings"
 import { toJsonRequest, toSignedInApp } from "../testSession"
 import { canReport, flagContentRoute, refundReport } from "./flagContent"
+import * as reportSubjects from "./reportSubjects"
+import * as reports from "./reports"
 
-// put the spied functions and the connection pool back after each test
+// put the spied functions, the connection pool, and the auth secret back after each test
+const restoreAuthSecret = saveEnvSettings(["BETTER_AUTH_SECRET"])
 afterEach(() => {
 	mock.restore()
 	restoreConnectionPool()
+	restoreAuthSecret()
 	Bun.env.SUPPORT_EMAIL = undefined
 })
 
@@ -52,11 +59,25 @@ function toReportQueryRows(isMember: boolean) {
 	}
 }
 
-// the tenth report of a day is allowed and the eleventh is rejected. the reports count under the user's Redis key for a day
-test("the tenth report is allowed and the eleventh is rejected", async () => {
+// the fiftieth report of a day is allowed and the next is rejected. the reports count under the user's Redis key for
+// a day
+test("a user reads whether they reported a subject", async () => {
+	stubConnectionPool(toReportQueryRows(true))
+	spyOn(reports, "hasReportedSubject").mockResolvedValue(true)
+
+	const response = await toSignedInApp(flagContentRoute, "user-1").request(
+		"/flag-content?subjectKind=podcastEpisode&subjectId=episode-1",
+	)
+
+	expect(response.status).toBe(200)
+	expect(await response.json()).toEqual({ isReported: true })
+	expect(reports.hasReportedSubject).toHaveBeenCalledWith("user-1", "podcastEpisode", "episode-1")
+})
+
+test("the fiftieth report is allowed and the next is rejected", async () => {
 	const incrementRateLimitWindowSpy = spyOn(redisRateLimits, "incrementRateLimitWindow")
-		.mockResolvedValueOnce({ count: 10, resetAt: 0 })
-		.mockResolvedValueOnce({ count: 11, resetAt: 0 })
+		.mockResolvedValueOnce({ count: 50, resetAt: 0 })
+		.mockResolvedValueOnce({ count: 51, resetAt: 0 })
 	expect(await canReport("user-1")).toBe(true)
 	expect(await canReport("user-1")).toBe(false)
 	expect(incrementRateLimitWindowSpy).toHaveBeenCalledWith("flags:user-1", DAY_MS)
@@ -69,7 +90,7 @@ test("a refund lowers the count on the user's key", async () => {
 	expect(decrementRateLimitWindowSpy).toHaveBeenCalledWith("flags:user-1")
 })
 
-// a member's report of a room message is stored with the message's author and text, blocks the author on request, and
+// a member's report of a room message is stored with the message's author and text, puts a user block on the author on request, and
 // mails the support inbox with the console link
 test("a room message report is stored, blocks its author, and is mailed", async () => {
 	Bun.env.SUPPORT_EMAIL = "support@carlnotes.test"
@@ -90,9 +111,9 @@ test("a room message report is stored, blocks its author, and is mailed", async 
 		expect.arrayContaining(["chatMessage", "42", "user-2", "user-1", "insults"]),
 	)
 
-	// the block, and the email with the console link
-	const insertBlockQuery = sentQueries.find((sentQuery) => sentQuery.text.startsWith('insert into "user_blocks"'))
-	expect(insertBlockQuery?.values).toEqual(expect.arrayContaining(["user-1", "user-2"]))
+	// the user block, and the email with the console link
+	const insertUserBlockQuery = sentQueries.find((sentQuery) => sentQuery.text.startsWith('insert into "user_blocks"'))
+	expect(insertUserBlockQuery?.values).toEqual(expect.arrayContaining(["user-1", "user-2"]))
 	expect(sendEmailSpy).toHaveBeenCalledTimes(1)
 	const sentEmail = sendEmailSpy.mock.calls[0]?.[0]
 	expect(sentEmail?.to).toBe("support@carlnotes.test")
@@ -115,9 +136,21 @@ test("a message the sender cannot see is rejected without a row or an email", as
 	expect(sendEmailSpy).not.toHaveBeenCalled()
 })
 
+// a report belongs to its sender, so the removal names the signed-in user
+test("removing a report removes the sender's own", async () => {
+	const removeReportSpy = spyOn(reports, "removeReport").mockResolvedValue(undefined)
+	const response = await toSignedInApp(flagContentRoute, "user-1").request(
+		"/flag-content?subjectKind=finding&subjectId=finding-1",
+		{ method: "DELETE" },
+	)
+	expect(response.status).toBe(200)
+	expect(removeReportSpy).toHaveBeenCalledWith("user-1", "finding", "finding-1")
+})
+
 // a report the sender already made is accepted again, with no second row, no email, and its slot given back
 test("a repeat report costs no slot and sends no email", async () => {
 	Bun.env.SUPPORT_EMAIL = "support@carlnotes.test"
+	Bun.env.BETTER_AUTH_SECRET = "test-secret"
 	spyOn(redisRateLimits, "incrementRateLimitWindow").mockResolvedValue({ count: 1, resetAt: 0 })
 	const decrementRateLimitWindowSpy = spyOn(redisRateLimits, "decrementRateLimitWindow").mockResolvedValue(undefined)
 	const sendEmailSpy = spyOn(emails, "sendEmail").mockResolvedValue(true)
@@ -131,4 +164,40 @@ test("a repeat report costs no slot and sends no email", async () => {
 	expect(response.status).toBe(200)
 	expect(decrementRateLimitWindowSpy).toHaveBeenCalledWith("flags:user-1")
 	expect(sendEmailSpy).not.toHaveBeenCalled()
+})
+
+// a flag of a comment sends the hot take flag event beside the general one, with the comment's id and none of its words
+test("a comment's flag sends the hot take flag event with its id and no text", async () => {
+	Bun.env.SUPPORT_EMAIL = "support@carlnotes.test"
+	spyOn(redisRateLimits, "incrementRateLimitWindow").mockResolvedValue({ count: 1, resetAt: 0 })
+	spyOn(emails, "sendEmail").mockResolvedValue(true)
+	spyOn(reportSubjects, "toReportedSubject").mockResolvedValue({
+		kind: "comment",
+		id: "comment-1",
+		label: "a hot take on A Good Page",
+		path: "/topics/topic-1/a-good-page",
+		text: "rude words",
+		authorUserId: "user-2",
+	})
+
+	// the events the route sends, the stored report's id, and the username the email reads
+	const trackEventSpy = spyOn(analytics, "trackEvent").mockImplementation(() => {})
+	stubConnectionPool(({ text }) => {
+		if (text.startsWith('insert into "reports"')) {
+			return [["report-1"]]
+		}
+		return text.includes('from "users"') ? [["vienna"]] : []
+	})
+	const response = await toSignedInApp(flagContentRoute, "user-1").request(
+		"/flag-content",
+		toJsonRequest({ subjectKind: "comment", subjectId: "comment-1", reason: "insults", shouldBlockAuthor: false }),
+	)
+	expect(response.status).toBe(200)
+
+	// the general event names the kind, and the social event names the comment as a hot take
+	const socialFlagCall = trackEventSpy.mock.calls.find(([event]) => event === "social_hot_take_flag")
+	expect(trackEventSpy.mock.calls.map(([event]) => event)).toEqual(["content_flagged", "social_hot_take_flag"])
+	expect(socialFlagCall?.[1]).toBe("user-1")
+	expect(socialFlagCall?.[2]).toMatchObject({ objectId: "comment-1" })
+	expect(JSON.stringify(trackEventSpy.mock.calls)).not.toMatch(/rude words|insults|vienna/)
 })

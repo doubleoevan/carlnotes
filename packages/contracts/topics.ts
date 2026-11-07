@@ -16,6 +16,7 @@ import { topicFinding } from "./findings"
 import { invite } from "./invites"
 import { podcastEpisode, podcastEpisodeSummary, publishedPodcastEpisodeSummary, topicPodcast } from "./podcast"
 import { profileIdentity } from "./profiles"
+import { commentThreadResponse, reactionSummary } from "./social"
 import { customSourceKeys, SOURCE_RESULT_LABEL_CHARS } from "./sources"
 import { displayEnum } from "./tolerantReads"
 
@@ -271,6 +272,9 @@ export const topicResponse = topicDetails.extend({
 	relatedTopics: z.array(
 		z.object({ id: z.string(), name: z.string(), latestPodcastEpisode: podcastEpisodeSummary.nullable() }),
 	),
+	// the topic's own reactions and the first page of its comment thread. absent on a poll reload
+	reactions: reactionSummary.optional(),
+	commentThread: commentThreadResponse.optional(),
 })
 
 export type TopicResponse = z.infer<typeof topicResponse>

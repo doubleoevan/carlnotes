@@ -1,12 +1,13 @@
 import { authClient } from "@carlnotes/client/authClient"
 import type { NoteComment } from "@carlnotes/contracts/notes"
 import {
-	type NoteCommentComposerProps,
 	type NoteCommentsElements,
 	type NoteCommentsProps,
 	NoteComments as SharedNoteComments,
 } from "@carlnotes/core/components/NoteComments"
-import { NOTE_COMMENT_DELETE, REPORT_COMMENT_LABEL, toReportedCommentLabel } from "@carlnotes/core/lib/noteLabels"
+import { NOTE_COMMENT_DELETE, REPORT_COMMENT_LABEL } from "@carlnotes/core/lib/noteLabels"
+import { toCommentReportProps } from "@carlnotes/core/lib/reportCopy"
+import { cn } from "@carlnotes/nightshift/classNames"
 import { Flag, Trash2 } from "lucide-react"
 import { useState } from "react"
 import { toast } from "sonner"
@@ -15,19 +16,18 @@ import { IconButton } from "@/components/common/IconButton"
 import { ReportIssueDialog } from "@/components/common/ReportIssueDialog"
 import { UserProfileLink } from "@/components/common/UserProfileLink"
 import { Button } from "@/components/primitives/button"
-import { Textarea } from "@/components/primitives/textarea"
+import { COMMENT_ELEMENTS } from "@/components/social/socialElements"
+import { ROW_CONTROL_CLASS } from "@/lib/styleClasses"
 
 // retain the web thread's exact spacing and author controls around shared behavior
 const ELEMENTS: NoteCommentsElements = {
+	...COMMENT_ELEMENTS,
 	Container: ({ children }) => <div className="flex flex-col gap-3 text-sm">{children}</div>,
-	Message: ({ children }) => <p className="text-muted-foreground">{children}</p>,
 	Retry: ({ onPress }) => (
 		<Button variant="link" size="sm" onClick={onPress}>
 			Try again
 		</Button>
 	),
-	List: ({ children }) => <ul className="flex flex-col gap-3">{children}</ul>,
-	Row: ({ children }) => <li className="flex flex-col gap-1">{children}</li>,
 	Header: ({ children }) => <div className="flex items-center gap-2">{children}</div>,
 	Author: ({ author }) =>
 		author ? (
@@ -35,19 +35,12 @@ const ELEMENTS: NoteCommentsElements = {
 		) : (
 			<span className="text-muted-foreground truncate font-semibold">A closed account</span>
 		),
-	Age: ({ children }) => <span className="text-muted-foreground shrink-0 text-xs">{children}</span>,
-	Body: ({ children }) => <p className="whitespace-pre-wrap break-words">{children}</p>,
 	Delete: DeleteCommentButton,
 	Report: ({ onPress }) => (
-		<IconButton
-			tooltip={REPORT_COMMENT_LABEL}
-			className="text-muted-foreground hover:text-foreground ml-auto grid size-6 shrink-0 place-items-center"
-			onClick={onPress}
-		>
+		<IconButton tooltip={REPORT_COMMENT_LABEL} className={cn(ROW_CONTROL_CLASS, "ml-auto")} onClick={onPress}>
 			<Flag className="size-3.5" />
 		</IconButton>
 	),
-	Composer: CommentComposer,
 }
 
 /**
@@ -57,6 +50,7 @@ const ELEMENTS: NoteCommentsElements = {
 export function NoteComments(props: Omit<NoteCommentsProps, "onError" | "onReport">) {
 	const { data: session } = authClient().useSession()
 	const [reportedComment, setReportedComment] = useState<NoteComment | null>(null)
+	const commentReportProps = reportedComment && toCommentReportProps("noteComment", reportedComment)
 	return (
 		<>
 			<SharedNoteComments
@@ -65,15 +59,7 @@ export function NoteComments(props: Omit<NoteCommentsProps, "onError" | "onRepor
 				onReport={session ? setReportedComment : undefined}
 				elements={ELEMENTS}
 			/>
-			{reportedComment?.author && (
-				<ReportIssueDialog
-					subjectKind="noteComment"
-					subjectId={reportedComment.id}
-					subjectLabel={toReportedCommentLabel(reportedComment.author.username)}
-					author={{ id: reportedComment.author.userId, username: reportedComment.author.username }}
-					onClose={() => setReportedComment(null)}
-				/>
-			)}
+			{commentReportProps && <ReportIssueDialog {...commentReportProps} onClose={() => setReportedComment(null)} />}
 		</>
 	)
 }
@@ -86,7 +72,7 @@ function DeleteCommentButton({ onPress, isPending }: { onPress: () => void; isPe
 			<IconButton
 				tooltip="Delete comment"
 				isDisabled={isPending}
-				className="text-muted-foreground hover:text-foreground ml-auto grid size-6 shrink-0 place-items-center"
+				className={cn(ROW_CONTROL_CLASS, "ml-auto")}
 				onClick={() => setIsConfirmingDelete(true)}
 			>
 				<Trash2 className="size-3.5" />
@@ -107,39 +93,5 @@ function DeleteCommentButton({ onPress, isPending }: { onPress: () => void; isPe
 				</ConfirmDialog>
 			)}
 		</>
-	)
-}
-
-// preserve form submission and the command-enter shortcut
-function CommentComposer({ value, onChange, onSubmit, isPending, canSubmit, maxLength }: NoteCommentComposerProps) {
-	return (
-		<form
-			className="flex flex-col gap-2"
-			onSubmit={(event) => {
-				// post the comment without navigating
-				event.preventDefault()
-				onSubmit()
-			}}
-		>
-			<Textarea
-				value={value}
-				onChange={(event) => onChange(event.target.value)}
-				onKeyDown={(event) => {
-					if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
-						// post the comment through the keyboard shortcut
-						event.preventDefault()
-						onSubmit()
-					}
-				}}
-				placeholder="Add a comment"
-				aria-label="Comment"
-				rows={2}
-				maxLength={maxLength}
-				className="bg-card"
-			/>
-			<Button type="submit" size="sm" className="self-end" disabled={!canSubmit || isPending}>
-				{isPending ? "Posting…" : "Comment"}
-			</Button>
-		</form>
 	)
 }

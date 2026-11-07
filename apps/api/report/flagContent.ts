@@ -1,21 +1,28 @@
-// a user reporting a Topic, profile, Team, chat room message, note, or note comment. the report is stored, hidden
-// from its reporter, mailed to the SUPPORT_EMAIL address, and resolved in the admin console
+// a user reporting a Topic, profile, Team, chat room message, note, note comment, Finding, Podcast Episode, or
+// comment. the report is stored, mailed to the SUPPORT_EMAIL address, and resolved in the admin console.
+// a chat room message, a note, or a note comment is hidden from its reporter too
 
-import { type FlagContentPayload, flagContentPayload } from "@carlnotes/contracts/payloads"
+import type { SocialEventFlagSubject } from "@carlnotes/contracts/analyticsEvents"
+import { type FlagContentPayload, flagContentPayload, reportedSubjectQuery } from "@carlnotes/contracts/payloads"
+import type { ReportSubjectKind } from "@carlnotes/contracts/reports"
+import { isSocialTargetKind, toSocialEventTarget } from "@carlnotes/contracts/social"
 import { DAY_MS } from "@carlnotes/contracts/time"
 import { countRateLimitHit, decrementRateLimitWindow } from "@carlnotes/db/redisRateLimits"
 import { sendReportEmail } from "@carlnotes/emails/reportEmail"
 import { trackEvent } from "@carlnotes/server/analytics"
 import { zValidator } from "@hono/zod-validator"
 import { Hono } from "hono"
-import { type AppEnv, currentUser, toAnalyticsProperties } from "../currentUser"
-import { blockUser } from "../userBlocks"
+import { type AnalyticsProperties, type AppEnv, currentUser, toAnalyticsProperties } from "../currentUser"
+import { toSocialEventProperties } from "../social/reactions"
+import { loadSocialTarget } from "../social/socialTargets"
+import { saveUserBlock } from "../userBlocks"
 import { loadUsername } from "../usernames"
 import { type ReportedSubject, toReportedSubject } from "./reportSubjects"
-import { saveReport } from "./reports"
+import { hasReportedSubject, removeReport, saveReport } from "./reports"
 
-// how many reports one user may send in a one-day rate limit window, which starts at the window's first report
-const DAILY_REPORT_LIMIT = 10
+// how many reports one user may send in a one-day rate limit window, which starts at its first report. the
+// limit is flat and far above what a person sends
+const DAILY_REPORT_LIMIT = 50
 const REPORT_RATE_LIMIT_WINDOW_MS = DAY_MS
 
 // the result from a report request
@@ -43,12 +50,12 @@ async function flagContent(userId: string, payload: FlagContentPayload): Promise
 		return "unknownSubject"
 	}
 
-	// block the author in the same submission if the sender asked, never the sender themselves
+	// save the user block of the author in the same submission if the sender asked, never the sender themselves
 	if (payload.shouldBlockAuthor && reportedSubject.authorUserId && reportedSubject.authorUserId !== userId) {
-		await blockUser(userId, reportedSubject.authorUserId)
+		await saveUserBlock(userId, reportedSubject.authorUserId)
 	}
 
-	// store the report, which hides the subject from the sender from here on. a repeat costs no slot and no email
+	// store the report. a repeat of unchanged text costs no slot and no email
 	const reportId = await saveReport({ reporterUserId: userId, subject: reportedSubject, reason: payload.reason })
 	if (!reportId) {
 		await refundReport(userId)
@@ -127,16 +134,69 @@ export function refundReport(userId: string): Promise<void> {
 	return decrementRateLimitWindow(toReportRateLimitWindowKey(userId))
 }
 
+// how a subject kind reads in its social flag event's name. the other kinds send content_flagged alone
+function toSocialEventFlagSubject(subjectKind: ReportSubjectKind): SocialEventFlagSubject | null {
+	if (subjectKind === "profile") {
+		return "profile"
+	}
+	return isSocialTargetKind(subjectKind) ? toSocialEventTarget(subjectKind) : null
+}
+
+// what a flag event's properties are read from: the report's subject, who sent it, and the request's properties
+type ToFlagEventPropertiesOptions = {
+	subjectKind: ReportSubjectKind
+	subjectId: string
+	userId: string
+	analyticsProperties: AnalyticsProperties
+}
+
+// a flag event's properties: the subject's Topic and whether the user owns it, if the subject has one. a profile has
+// none
+async function toFlagEventProperties({
+	subjectKind,
+	subjectId,
+	userId,
+	analyticsProperties,
+}: ToFlagEventPropertiesOptions): Promise<AnalyticsProperties & { objectId: string }> {
+	// a report can name a Finding rated thumbs down, which still has its Topic. any other subject has only its id
+	const resolvedSocialTarget = isSocialTargetKind(subjectKind)
+		? await loadSocialTarget({ kind: subjectKind, id: subjectId }, { isRatedDownIncluded: true })
+		: null
+	return resolvedSocialTarget
+		? toSocialEventProperties({ analyticsProperties, userId, resolvedSocialTarget, objectId: subjectId })
+		: { ...analyticsProperties, objectId: subjectId }
+}
+
 // the Redis key that a user's reports count under
 function toReportRateLimitWindowKey(userId: string): string {
 	return `flags:${userId}`
 }
 
-// the report route. the /flag-content path, its payload, and the content_flagged event keep the flag name the clients send
-export const flagContentRoute = new Hono<AppEnv>().post(
-	"/flag-content",
-	zValidator("json", flagContentPayload),
-	async (context) => {
+// the report routes. the /flag-content path, its payload, and the content_flagged event keep the flag name the clients
+// send
+export const flagContentRoute = new Hono<AppEnv>()
+	.get("/flag-content", zValidator("query", reportedSubjectQuery), async (context) => {
+		// a report belongs to the user who sent it, so only that user can ask about it
+		const userId = currentUser(context)
+		if (!userId) {
+			return context.json({ error: "unauthorized" }, 401)
+		}
+		const { subjectKind, subjectId } = context.req.valid("query")
+		return context.json({ isReported: await hasReportedSubject(userId, subjectKind, subjectId) })
+	})
+	.delete("/flag-content", zValidator("query", reportedSubjectQuery), async (context) => {
+		// a report belongs to the user who sent it, so only that user can remove it
+		const userId = currentUser(context)
+		if (!userId) {
+			return context.json({ error: "unauthorized" }, 401)
+		}
+
+		// remove it, whether or not it was there
+		const { subjectKind, subjectId } = context.req.valid("query")
+		await removeReport(userId, subjectKind, subjectId)
+		return context.json({ ok: true })
+	})
+	.post("/flag-content", zValidator("json", flagContentPayload), async (context) => {
 		// only a signed-in user may report content, so a report always names an account that can be held to it
 		const userId = currentUser(context)
 		if (!userId) {
@@ -146,10 +206,23 @@ export const flagContentRoute = new Hono<AppEnv>().post(
 		// store and mail the report, and record what kind of thing was reported
 		const flagResult = await flagContent(userId, context.req.valid("json"))
 		if (flagResult === "sent") {
-			trackEvent("content_flagged", userId, {
-				...toAnalyticsProperties(context),
-				kind: context.req.valid("json").subjectKind,
-			})
+			const { subjectKind, subjectId } = context.req.valid("json")
+			trackEvent("content_flagged", userId, { ...toAnalyticsProperties(context), kind: subjectKind })
+
+			// a flag of a social target or a profile also sends the social event, named by the subject and holding its id
+			const socialEventFlagSubject = toSocialEventFlagSubject(subjectKind)
+			if (socialEventFlagSubject) {
+				trackEvent(
+					`social_${socialEventFlagSubject}_flag`,
+					userId,
+					await toFlagEventProperties({
+						subjectKind,
+						subjectId,
+						userId,
+						analyticsProperties: toAnalyticsProperties(context),
+					}),
+				)
+			}
 			return context.json({ ok: true })
 		}
 		// each rejection reports in its own terms, so the dialog can show what actually went wrong
@@ -163,5 +236,4 @@ export const flagContentRoute = new Hono<AppEnv>().post(
 		return flagResult === "unknownSubject"
 			? context.json({ error: "not found" }, 404)
 			: context.json({ error: "reports are not configured" }, 503)
-	},
-)
+	})

@@ -11,6 +11,7 @@ import {
 import { PersonalSourcesEmailControls } from "./PersonalSourcesEmailControls"
 import type { TopicPersonalSourcesElements } from "./TopicPersonalSources"
 import { TopicPersonalSourcesContents } from "./TopicPersonalSourcesContents"
+import { TopicSharedCommentsSection } from "./TopicSharedCommentsSection"
 
 type TopicPersonalSourcesSectionProps = {
 	topic: TopicDetails & { canEdit?: boolean }
@@ -20,22 +21,28 @@ type TopicPersonalSourcesSectionProps = {
 }
 
 /**
- * Shares the sender's flat item list inside Topic info and Artisanal Blend.
+ * Shares the sender's flat item list inside Topic info and Artisanal Blend, with the comments shared with Carl as a
+ * group of their own under it.
  */
 export function TopicPersonalSourcesSection({ topic, elements, onCopy, className }: TopicPersonalSourcesSectionProps) {
 	const { data: session } = authClient().useSession()
-	if (!session || !canShowTopicPersonalSources(topic)) {
+	if (!session) {
 		return null
 	}
 	return (
-		<VisibleSection
-			key={`${session.user.id}:${topic.id}`}
-			userId={session.user.id}
-			topic={topic}
-			elements={elements}
-			onCopy={onCopy}
-			className={className}
-		/>
+		<>
+			{canShowTopicPersonalSources(topic) && (
+				<VisibleSection
+					key={`${session.user.id}:${topic.id}`}
+					userId={session.user.id}
+					topic={topic}
+					elements={elements}
+					onCopy={onCopy}
+					className={className}
+				/>
+			)}
+			<TopicSharedCommentsSection topic={topic} elements={elements} className={className} />
+		</>
 	)
 }
 

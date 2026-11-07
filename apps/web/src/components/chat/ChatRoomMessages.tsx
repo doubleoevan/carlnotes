@@ -1,6 +1,7 @@
 import { sendDeleteChatRoomAttachment } from "@carlnotes/client/chatRoomClient"
 import type { ChatRoomMessage } from "@carlnotes/contracts/chat"
 import { useNow } from "@carlnotes/core/hooks/useNow"
+import { useStableCallback } from "@carlnotes/core/hooks/useStableCallback"
 import { toEmptyChatRoomCopy, toReportedChatMessageLabel } from "@carlnotes/core/lib/chatCopy"
 import { deleteChatRoomMessage } from "@carlnotes/core/lib/chatRoomActions"
 import { toChatMessageQuotes } from "@carlnotes/core/lib/chatRoomMessages"
@@ -265,14 +266,4 @@ function VirtualizedThinkingFooter() {
 			<ModelThinkingBubble />
 		</div>
 	)
-}
-
-// wraps a callback the parent recreates every render in one function whose identity never changes
-function useStableCallback<Args extends unknown[]>(callback: (...args: Args) => void): (...args: Args) => void {
-	// the ref keeps the latest callback while the returned function stays the same, updated after the render commits
-	const callbackRef = useRef(callback)
-	useLayoutEffect(() => {
-		callbackRef.current = callback
-	}, [callback])
-	return useCallback((...args: Args) => callbackRef.current(...args), [])
 }

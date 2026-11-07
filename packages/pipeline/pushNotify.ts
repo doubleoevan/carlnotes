@@ -1,7 +1,7 @@
 import type { PushNotificationKind } from "@carlnotes/contracts/pushDevices"
 import { toTopicPath } from "@carlnotes/contracts/seo"
 import { db } from "@carlnotes/db"
-import { toTeamHoldsTopicFilter, toUnblockedAuthorFilter, toUnreportedFilter } from "@carlnotes/db/contentFilters"
+import { toNotUserBlockedAuthorFilter, toTeamHoldsTopicFilter, toUnreportedFilter } from "@carlnotes/db/contentFilters"
 import { chatRoomMentions, chatRoomMessages } from "@carlnotes/db/schema/chat"
 import { pushDevices } from "@carlnotes/db/schema/pushDevices"
 import { scans } from "@carlnotes/db/schema/scans"
@@ -10,7 +10,7 @@ import { topics } from "@carlnotes/db/schema/topics"
 import { sessions, users } from "@carlnotes/db/schema/users"
 import { appBaseUrl } from "@carlnotes/server/appUrl"
 import { and, eq, gt, inArray, ne, type SQLWrapper, sql } from "drizzle-orm"
-import { toDigestSubscriberIdsQuery } from "./notify"
+import { toTopicScanEmailSubscriberIdsQuery } from "./notify"
 import { deliverPushes, type PushOutcome, type PushProgress, UNWATCHED_PUSH_PROGRESS } from "./pushDelivery"
 import { toChatMentionPushBody, toScanPushBody } from "./pushNotificationCopy"
 import { newFindingsForScan } from "./scanEmailContent"
@@ -19,8 +19,8 @@ import { newFindingsForScan } from "./scanEmailContent"
 type LivePushDevice = { pushDeviceId: string; expoPushToken: string; recipientUserId: string }
 
 /**
- * Pushes a scheduled Scan's new Findings to the Scan's digest recipients who turned Topic pushes on, one push per
- * live phone. Skips a Scan that did not succeed, has no new Findings, or whose Topic is gone.
+ * Pushes a scheduled Scan's new Findings to the Scan's topic scan email recipients who turned Topic pushes on, one
+ * push per live phone. Skips a Scan that did not succeed, has no new Findings, or whose Topic is gone.
  */
 export async function sendScanPush(
 	scanId: string,
@@ -45,9 +45,9 @@ export async function sendScanPush(
 		return { outcome: "skipped" }
 	}
 
-	// the digest's recipients who turned Topic pushes on, at each live phone
+	// the topic scan email's recipients who turned Topic pushes on, at each live phone
 	const { topic } = scanTopic
-	const livePushDevices = await loadLivePushDevices(toDigestSubscriberIdsQuery(topic.id), "topic-scan")
+	const livePushDevices = await loadLivePushDevices(toTopicScanEmailSubscriberIdsQuery(topic.id), "topic-scan")
 
 	// every phone gets the same push, which opens the Topic
 	const body = toScanPushBody(newFindings.length, newFindings[0]?.title ?? null)
@@ -146,7 +146,7 @@ async function loadReachableMentionedUserIds(
 			and(
 				eq(chatRoomMentions.messageId, chatMessageId),
 				authorUserId ? ne(chatRoomMentions.userId, authorUserId) : undefined,
-				toUnblockedAuthorFilter(chatRoomMentions.userId, sql`${authorUserId}::text`),
+				toNotUserBlockedAuthorFilter(chatRoomMentions.userId, sql`${authorUserId}::text`),
 				toUnreportedFilter(chatRoomMentions.userId, "chatMessage", sql`${chatMessageId}`),
 			),
 		)

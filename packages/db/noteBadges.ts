@@ -1,7 +1,7 @@
 // the unread note badge counts. what changed in a note since a user last opened it, and the read that clears it
 import type { NoteBadge } from "@carlnotes/contracts/notes"
 import { and, count, eq, gt, inArray, isNull, ne, or } from "drizzle-orm"
-import { toUnblockedAuthorFilter } from "./contentFilters"
+import { toNotUserBlockedAuthorFilter } from "./contentFilters"
 import { db } from "./index"
 import { noteComments, noteReads, notes } from "./schema/notes"
 import { teamMembers, teams } from "./schema/teams"
@@ -176,7 +176,7 @@ async function loadUnreadCommentCounts(userId: string, noteIds: string[]): Promi
 			and(
 				inArray(noteComments.noteId, noteIds),
 				or(isNull(noteComments.authorUserId), ne(noteComments.authorUserId, userId)),
-				toUnblockedAuthorFilter(userId, noteComments.authorUserId),
+				toNotUserBlockedAuthorFilter(userId, noteComments.authorUserId),
 				or(isNull(noteReads.readAt), gt(noteComments.createdAt, noteReads.readAt)),
 			),
 		)

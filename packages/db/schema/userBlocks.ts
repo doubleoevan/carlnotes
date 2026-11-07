@@ -2,7 +2,7 @@
 import { index, pgTable, primaryKey, text, timestamp } from "drizzle-orm/pg-core"
 import { users } from "./users"
 
-// one block. the blocker stops seeing what the blocked user writes to them, and either account closing removes it
+// one user block. the blocker stops seeing what the blocked user writes to them, and either account closing removes it
 export const userBlocks = pgTable(
 	"user_blocks",
 	{

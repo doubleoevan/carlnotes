@@ -1,5 +1,6 @@
 import { toAvatarImagePath } from "@carlnotes/contracts/avatars"
 import type { ProfileIdentity } from "@carlnotes/contracts/profiles"
+import { toProfilePath } from "@carlnotes/contracts/seo"
 import { Avatar } from "@/components/branding/Avatar"
 import { toTouchTargetHitSlop } from "@/components/primitives/button"
 import { Text } from "@/components/primitives/text"
@@ -17,7 +18,7 @@ export function UserProfileLink({
 }) {
 	return (
 		<AnchorLink
-			href={`/profiles/${user.userId}`}
+			href={toProfilePath(user.userId)}
 			accessibilityLabel={displayName}
 			className="min-h-6 self-start flex-row items-center gap-2"
 			hitSlop={toTouchTargetHitSlop(24)}

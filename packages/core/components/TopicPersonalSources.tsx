@@ -9,7 +9,11 @@ import { PersonalSourceCard, type PersonalSourceElements } from "./PersonalSourc
 import { PersonalSourcesAiAgentPicker } from "./PersonalSourcesAiAgentPicker"
 import { TopicPersonalSourcesCard } from "./TopicPersonalSourcesCard"
 
-export type TopicPersonalSourcesElements = Omit<AiAgentAccountElements, "Button"> & PersonalSourceElements
+export type TopicPersonalSourcesElements = Omit<
+	AiAgentAccountElements,
+	"Button" | "Row" | "AppName" | "KeyName" | "AddToAiDialog" | "DocsLink"
+> &
+	PersonalSourceElements
 export type PersonalSourcesImportControlProps = {
 	topicId: string
 	isDisabled: boolean

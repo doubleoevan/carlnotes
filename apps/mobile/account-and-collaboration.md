@@ -167,7 +167,7 @@ reason. A change that shares such a component removes its row in the same change
 
 ## Push notifications
 
-Push is a delivery beside the digest email and the badges, with no web counterpart. `pushPermission.ts` reads the
+Push is a delivery beside the topic scan email and the badges, with no web counterpart. `pushPermission.ts` reads the
 permission (`pushRules.ts`'s `toPushPermission` reads an iOS grant without alerts as refused), makes the Android
 channels `topic-scans` and `chat-mentions`, asks for alerts, sounds, and
 the badge, and owns the in-context sheet: `offerPushPermission` opens it after a follow in `TopicPageActions` or

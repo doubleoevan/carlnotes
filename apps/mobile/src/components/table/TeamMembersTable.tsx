@@ -5,11 +5,18 @@ import {
 	sendTeamMemberRole,
 	setTeamMemberVisibility,
 } from "@carlnotes/client/teamClient"
+import { isLeaderRole } from "@carlnotes/contracts/enums"
 import type { TeamMember } from "@carlnotes/contracts/teams"
+import {
+	isStepDown,
+	STEP_DOWN_CONFIRMATION,
+	toLeaveOrRemoveMemberConfirmation,
+} from "@carlnotes/core/lib/confirmationCopy"
 import { memberSortValues, toTeamMembersTableColumns } from "@carlnotes/core/lib/teamMembersTableColumns"
 import { X } from "lucide-react-native"
 import { View } from "react-native"
 import { ChoiceSelect } from "@/components/common/ChoiceSelect"
+import { showConfirmAlert } from "@/components/common/ConfirmDialog"
 import { PreferenceSwitch } from "@/components/common/PreferenceSwitch"
 import { UserProfileLink } from "@/components/common/UserProfileLink"
 import { Button } from "@/components/primitives/button"
@@ -44,7 +51,7 @@ export function TeamMembersTable({
 	const mutation = usePageMutation(onChanged)
 	const canRemove = (member: TeamMember): boolean => canManage || member.userId === currentUserId
 	async function handleRole(member: TeamMember, role: string): Promise<void> {
-		if (!(await sendTeamMemberRole(teamId, member.userId, role === "leader" ? "leader" : "member"))) {
+		if (!(await sendTeamMemberRole(teamId, member.userId, isLeaderRole(role) ? "leader" : "member"))) {
 			throw new Error("Promote another leader first. A team can't lose its last one.")
 		}
 	}
@@ -53,11 +60,25 @@ export function TeamMembersTable({
 			throw new Error("Promote another leader first. A team can't lose its last one.")
 		}
 	}
-	async function handleActive(member: TeamMember): Promise<void> {
-		if (member.isActive) {
-			await handleRemove(member)
+	// removing someone, or leaving, asks first
+	function handleRemovePress(member: TeamMember): void {
+		showConfirmAlert({
+			...toLeaveOrRemoveMemberConfirmation({ member, currentUserId }),
+			onConfirm: () => void mutation.run(() => handleRemove(member)),
+		})
+	}
+	// a leader who steps down can't take the role back, so that change asks first
+	function handleRoleChange(member: TeamMember, role: string): void {
+		if (isStepDown({ memberUserId: member.userId, currentUserId, role })) {
+			showConfirmAlert({
+				...STEP_DOWN_CONFIRMATION,
+				onConfirm: () => void mutation.run(() => handleRole(member, role)),
+			})
 			return
 		}
+		void mutation.run(() => handleRole(member, role))
+	}
+	async function handleApprove(member: TeamMember): Promise<void> {
 		const outcome = await sendApproveJoinRequest(teamId, member.userId)
 		if (outcome === "limited") {
 			throw new Error("The team is full. A paying leader lifts the limit.")
@@ -82,7 +103,7 @@ export function TeamMembersTable({
 						{ value: "leader", label: "leader" },
 					]}
 					isDisabled={mutation.isPending}
-					onChange={(role) => void mutation.run(() => handleRole(member, role))}
+					onChange={(role) => handleRoleChange(member, role)}
 				/>
 			) : (
 				<Text className="text-sm text-muted-foreground">{member.role}</Text>
@@ -110,7 +131,9 @@ export function TeamMembersTable({
 					label={`${member.isActive ? "Deactivate" : "Activate"} ${member.username}`}
 					isChecked={member.isActive}
 					isDisabled={mutation.isPending || (!member.isActive && !canManage)}
-					onChange={() => void mutation.run(() => handleActive(member))}
+					onChange={() =>
+						member.isActive ? handleRemovePress(member) : void mutation.run(() => handleApprove(member))
+					}
 				/>
 			),
 		renderRemove: (member) =>
@@ -120,7 +143,7 @@ export function TeamMembersTable({
 					variant="ghost"
 					accessibilityLabel={`Remove ${member.username} from the team`}
 					disabled={mutation.isPending}
-					onPress={() => void mutation.run(() => handleRemove(member))}
+					onPress={() => handleRemovePress(member)}
 				>
 					<Icon as={X} className="size-4" />
 				</Button>

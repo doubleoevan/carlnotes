@@ -74,11 +74,18 @@ export const PERSONAL_SOURCES_ELEMENTS: TopicPersonalSourcesElements = {
 }
 
 // keep authenticated sender marks and conversation marks consistent
-function ProviderMark({ provider }: { provider: PersonalSourceConversationProvider }) {
+export function ProviderMark({
+	provider,
+	isLarge = false,
+}: {
+	provider: PersonalSourceConversationProvider
+	isLarge?: boolean
+}) {
+	const className = `${isLarge ? "size-4" : "size-3"} shrink-0`
 	return provider !== "other" ? (
-		<BrandIcon brand={provider} className="size-3 shrink-0" />
+		<BrandIcon brand={provider} className={className} />
 	) : (
-		<MessageCircle aria-hidden className="size-3 shrink-0" />
+		<MessageCircle aria-hidden className={className} />
 	)
 }
 

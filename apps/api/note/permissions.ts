@@ -8,15 +8,14 @@ import { topics } from "@carlnotes/db/schema/topics"
 import { and, eq } from "drizzle-orm"
 import { loadUserAccess, memberTopicIds } from "../authorization"
 import { toTeamRole } from "../team/members"
-import { assertNever, canSeeTopic, gatedTopicColumns } from "../topic/permissions"
+import { assertNever, canSeeTopic, type NamedTopic, namedTopicColumns } from "../topic/permissions"
 
 // a note row, and the two row shapes a page can be
 export type NoteRow = typeof notes.$inferSelect
-type PageTopic = Pick<typeof topics.$inferSelect, "id" | "ownerId" | "visibility" | "teamId" | "name">
 type PageTeam = Pick<typeof teams.$inferSelect, "id" | "isPublic" | "name">
 
 // the note's page: the topic page or the team page it lives on
-export type NotePage = { kind: "topic"; topic: PageTopic } | { kind: "team"; team: PageTeam }
+export type NotePage = { kind: "topic"; topic: NamedTopic } | { kind: "team"; team: PageTeam }
 
 // what the visibility checks read about one page
 export type PageAccess = {
@@ -196,10 +195,7 @@ async function loadNotePage(note: Pick<NoteRow, "topicId" | "teamId">): Promise<
  * Loads a topic as a note page: the gate fields plus the name.
  */
 export async function loadTopicPage(topicId: string): Promise<NotePage | null> {
-	const [topic] = await db
-		.select({ ...gatedTopicColumns, name: topics.name })
-		.from(topics)
-		.where(eq(topics.id, topicId))
+	const [topic] = await db.select(namedTopicColumns).from(topics).where(eq(topics.id, topicId))
 	return topic ? { kind: "topic", topic } : null
 }
 

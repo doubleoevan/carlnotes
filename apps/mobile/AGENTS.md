@@ -24,6 +24,7 @@ and the package boundary check fails anything else, a type-only import of `@carl
   does. `appleSignIn.ts` is the native Sign in with Apple sheet. `appSignupGate.ts` attests the install through
   `@expo/app-integrity` and passes the gate, over `appSignupProofPlatform.ts`, which says which proof a build sends.
   `apiBaseUrl.ts` chooses the api url, and `typeRoleStyles.ts` maps the Nightshift type roles to native text styles.
+  `activeIconProps.ts` is the class and fill of an active icon, the counterpart of the web's `ACTIVE_ICON_CLASS`.
   `clipboard.ts` copies text with accessible success feedback and shared failure handling for chat and Markdown.
   `theme.ts` restores and saves the appearance choice and keeps native controls and Uniwind on the same palette.
   `themePreference.ts` names its three values: system, light, and dark. `sessionReturnPath.ts` keeps the screen a
@@ -64,20 +65,21 @@ and the package boundary check fails anything else, a type-only import of `@carl
   choices keep their matching icons while the primitive owns selection and its checkmark. Rows uses this dropdown,
   never a choice sheet.
 - `src/components/<area>/` — the app's own components, one PascalCase file per component, at the web's path and file
-  name where the web has the same component. `branding/CoffeeMug.tsx` is the web's steaming mug, drawn from
-  `@carlnotes/nightshift/coffeeMug` with the steam on React Native's `Animated` and its native driver. As on the web,
-  the steam holds still below Nightshift's `md` breakpoint and under reduced motion, and rises on a wider screen.
-  `common/` holds the components shared across areas: `ClassNameSvg.tsx` is an svg whose className sets the
-  `currentColor` its paths draw in, and `ClassNameSafeAreaView.tsx` the safe area view whose className sets its style.
-  Uniwind styles only the components it wraps, so a screen's safe area goes through it. `LoadFailedNotice.tsx` says a
-  read failed, with its retry button, in place of a blank screen. `session/` holds what the
-  sign-in, sign-up, and settings screens share: `SessionScreen.tsx` (the frame with the logo, the mug beside the name in
-  the `logo` type role, in the web's session column, 24rem wide at most and centered both ways), `SessionTextInput.tsx`
-  (the labeled field and the email and password fields over it), `SessionLink.tsx` (a session text link through `common/AnchorLink.tsx`, also used by the logo and the
-  footer line that replaces the current form, with stories for both prompts, narrow wrapping, and the footer-free frame), `SessionErrorText.tsx`, and
-  `OAuthProviderIcons.tsx` (the Google and Apple icons from `@carlnotes/nightshift/oauthProviderIcons`). Their buttons
-  are the primitives' `Button`. A route imports `src/` through the `@/` alias, and so does a module whose relative
-  import would climb two folders, as in `apps/web`.
+  name where the web has the same component. `branding/ShareMugsIcon.tsx` draws the two mugs of a comment that a Podcast
+  Episode read. `branding/CoffeeMug.tsx` is the web's steaming mug, drawn from `@carlnotes/nightshift/coffeeMug` with
+  the steam on React Native's `Animated` and its native driver. As on the web, the steam holds still below Nightshift's
+  `md` breakpoint and under reduced motion, and rises on a wider screen. `common/` holds the components shared across
+  areas: `ClassNameSvg.tsx` is an svg whose className sets the `currentColor` its paths draw in, and
+  `ClassNameSafeAreaView.tsx` the safe area view whose className sets its style. Uniwind styles only the components it
+  wraps, so a screen's safe area goes through it. `LoadFailedNotice.tsx` says a read failed, with its retry button, in
+  place of a blank screen. `session/` holds what the sign-in, sign-up, and settings screens share: `SessionScreen.tsx`
+  (the frame with the logo, the mug beside the name in the `logo` type role, in the web's session column, 24rem wide at
+  most and centered both ways), `SessionTextInput.tsx` (the labeled field and the email and password fields over it),
+  `SessionLink.tsx` (a session text link through `common/AnchorLink.tsx`, also used by the logo and the footer line that
+  replaces the current form, with stories for both prompts, narrow wrapping, and the footer-free frame),
+  `SessionErrorText.tsx`, and `OAuthProviderIcons.tsx` (the Google and Apple icons from
+  `@carlnotes/nightshift/oauthProviderIcons`). Their buttons are the primitives' `Button`. A route imports `src/`
+  through the `@/` alias, and so does a module whose relative import would climb two folders, as in `apps/web`.
 - `global.css` — the stylesheet: tailwind, uniwind, and `@carlnotes/nightshift/uniwind.css`, the theme and the
   `shadow-raised` utility Nightshift writes, with the component contracts and `field.ts` read as Tailwind sources.
   It also scans `core/lib/spendMeter.ts` for the budget bar and legend colors returned by the shared model.
@@ -197,6 +199,23 @@ release build without the project number cannot attest and sends sign-ups to the
 ## Native Tasting Notes and account features
 
 [Native accounts and collaboration](account-and-collaboration.md) covers Tasting Notes, menu pages, forms, visitor access, live counts, push, store payments, and telemetry.
+
+## Reactions and comment threads
+
+`src/components/layout/SectionAnchor.tsx` is the screen's equivalent of a web anchor. Wrap a section in
+`<SectionAnchor name="...">` and link with `?section=<name>`. `PageScreen` scrolls to it on iOS and Android. A screen
+not built on `PageScreen` needs that scroll added first.
+
+`src/components/social/` adapts core's `ReactionRow` and `CommentThread`. `socialElements.tsx` is the app's
+`SocialElements` set: the six reaction icons from `lucide-react-native`, each drawn in `ReactionOption.tsx` at the web's
+height with a hit slop to the touch target, the composer in a `Sheet` with `BottomSheetTextInput`, and a choice sheet
+for a Podcast Episode's chapter. Its `COMMENT_ELEMENTS` and `SocialComposer` are the comment parts and the one composer
+that `note/NoteComments.tsx` reuses, with a plain `TextInput` outside a sheet. `ReactionRow.tsx` and `CommentThread.tsx`
+add sign-up that returns to the screen, the app's error display, the report sheet, and the thread's view event. The
+flame and mugs of a comment shared with Carl show their label as their accessibility label. `SocialSection.tsx` holds
+the thread in the collapsible Hot takes card that `topic/TopicPageContent.tsx`, `podcast/PodcastEpisodeScreen.tsx`, and
+the Finding's sheet in `topic/TopicResourceInfo.tsx` mount, each with the reaction row in its header, and the sheet has
+the Finding's own flag.
 
 ## Chat and audio
 

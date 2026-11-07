@@ -5,8 +5,8 @@ import type { UserInvitePayload } from "@carlnotes/contracts/payloads"
 import { userInvitePayload } from "@carlnotes/contracts/payloads"
 import { toNormalizedUsername } from "@carlnotes/contracts/usernames"
 import { type DbHandle, db } from "@carlnotes/db"
+import { canCreateInvitesToday } from "@carlnotes/db/inviteLimits"
 import { assertPersonalSourcesConverted, lockPersonalSourcesTopic } from "@carlnotes/db/personalSourcesLocks"
-import { canCreateInvitesToday } from "@carlnotes/db/quotas"
 import { invites } from "@carlnotes/db/schema/invites"
 import { topics } from "@carlnotes/db/schema/topics"
 import { users } from "@carlnotes/db/schema/users"
@@ -17,7 +17,7 @@ import { isAllowed } from "../authorization"
 import { isConnected } from "../connections"
 import { type AppEnv, currentUser } from "../currentUser"
 import { toTeamRole } from "../team/members"
-import { isUserBlocked } from "../userBlocks"
+import { hasUserBlock } from "../userBlocks"
 import { startUserInviteEmail } from "./emails"
 import { toInvite } from "./invites"
 
@@ -85,7 +85,7 @@ export async function createUserInvite(
 }
 
 // whether the recipient's invite-access setting, or their block of the sender, rejects the invite. a block rejects in
-// the same words as the setting. the sender never learns of the block
+// the same words as the setting. the sender never learns of the user block
 async function isRejectedByRecipient(
 	inviteRecipient: InviteRecipient,
 	senderUserId: string,
@@ -94,7 +94,7 @@ async function isRejectedByRecipient(
 	if (isInviteRejected(inviteRecipient.inviteAccess, isConnectedRecipient)) {
 		return true
 	}
-	return isUserBlocked(inviteRecipient.id, senderUserId)
+	return hasUserBlock(inviteRecipient.id, senderUserId)
 }
 
 // write the user's invite row: an existing pending invite is a no-op

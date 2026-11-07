@@ -20,6 +20,8 @@ export type AdminUserRow = {
 	avatarSource: string
 	avatarVersion: string | null
 	role: string
+	// whether an admin blocked the user from reactions and comments everywhere
+	isAdminBlocked: boolean
 	plan: Plan
 	createdAt: string
 	// when they last signed in, null until they sign in again
@@ -79,8 +81,6 @@ export type AdminTotals = {
 	netRevenueCents: number | null
 	// net revenue minus tracked variable cost and an optional fixed cost
 	contributionCents: number | null
-	// how many blocks users hold between them
-	blockCount: number
 }
 
 // the admin-console payload: the users and teams tables with the totals summary

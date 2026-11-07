@@ -1,12 +1,16 @@
 import { sendReportResolution } from "@carlnotes/client/reportClient"
 import { type AdminReport, REPORT_SUBJECT_KIND_LABELS, type ReportResolution } from "@carlnotes/contracts/reports"
+import { toProfilePath } from "@carlnotes/contracts/seo"
+import type { ConfirmationCopy } from "@carlnotes/core/lib/confirmationCopy"
 import { toDateLabel } from "@carlnotes/core/lib/labels"
 import { SAVE_FAILED_TEXT } from "@carlnotes/core/lib/sessionCopy"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { useState } from "react"
 import { toast } from "sonner"
 import { AnchorLink } from "@/components/common/AnchorLink"
+import { ScrollBox } from "@/components/common/ScrollBox"
 import { Button } from "@/components/primitives/button"
+import { useConfirmDialog } from "@/hooks/useConfirmDialog"
 import { STANDALONE_LINK_CLASS, TABLE_CLASS, TABLE_HEAD_CLASS, TABLE_SCROLL_CLASS } from "@/lib/styleClasses"
 import { SortableHeader } from "./SortableHeader"
 import { TableCard } from "./TableCard"
@@ -20,6 +24,9 @@ const SUBJECT_KIND_COLUMN_LABELS = Object.fromEntries(
 	]),
 ) as Record<AdminReport["subjectKind"], string>
 
+// how long a report's text runs before it scrolls inside a box, about what the box shows at once
+const SCROLLING_REPORT_TEXT_CHARS = 300
+
 // the sort accessors for the reports table columns
 const reportSortValues = {
 	reported: (report: AdminReport) => report.createdAt,
@@ -29,8 +36,9 @@ const reportSortValues = {
 }
 
 /**
- * The admin console's open reports, newest first, each with its text, its people, its reason, and the two
- * resolutions: Remove deletes the content through its own delete path, and Keep closes the report.
+ * The admin console's open reports, newest first, each with its text, its people, its reason, and the three
+ * resolutions, each confirmed first: Remove deletes the content through its own delete path, Block deletes it too, sets an admin
+ * block, and hides everything else its author wrote in reactions and comments, and Clear closes the report.
  */
 export function AdminReportsTable({
 	reports,
@@ -82,7 +90,41 @@ export function AdminReportsTable({
 	)
 }
 
-// one report row: when and what, the text as reported, both people linked, the reason, and Keep or Remove
+// a report cell's text. only text long enough to overflow gets the scroll box's border and scrollbar
+function ReportText({ text }: { text: string }) {
+	return text.length > SCROLLING_REPORT_TEXT_CHARS ? <ScrollBox className="max-h-40">{text}</ScrollBox> : text
+}
+
+// what each resolution's confirmation says. Block names the author, and only content still there is deleted or kept
+function toResolutionConfirmation(
+	resolution: ReportResolution,
+	report: AdminReport,
+): Omit<ConfirmationCopy, "cancelLabel"> {
+	const isSubjectRemovable = report.canRemove && !report.isSubjectDeleted
+	if (resolution === "removed") {
+		return {
+			title: "Remove this content?",
+			confirmLabel: "Remove",
+			children: "This deletes the content and closes the report.",
+		}
+	}
+	if (resolution === "blocked") {
+		return {
+			title: `Block ${report.author?.username ?? "this author"}?`,
+			confirmLabel: "Block",
+			children: `This ${isSubjectRemovable ? "deletes the content, hides everything else they wrote" : "hides everything they wrote"} in hot takes and reactions, and stops new ones until an admin clears the block.`,
+		}
+	}
+	return {
+		title: "Clear this content?",
+		confirmLabel: "Clear",
+		children: report.isSubjectDeleted
+			? "This closes the report."
+			: "This closes the report and leaves the content in place.",
+	}
+}
+
+// one report row: when and what, the text as reported, both people linked, the reason, and Clear, Remove, or Block
 function ReportRow({
 	report,
 	isFocused,
@@ -93,6 +135,7 @@ function ReportRow({
 	onResolved: () => void
 }) {
 	const [pendingResolution, setPendingResolution] = useState<ReportResolution | null>(null)
+	const { confirm, confirmDialog } = useConfirmDialog()
 
 	// resolve the report, then reload the list. a failure keeps the row and says so
 	async function handleResolve(resolution: ReportResolution): Promise<void> {
@@ -104,6 +147,11 @@ function ReportRow({
 			toast.error(SAVE_FAILED_TEXT)
 			setPendingResolution(null)
 		}
+	}
+
+	// each resolution asks first
+	function handleResolvePress(resolution: ReportResolution): void {
+		confirm({ ...toResolutionConfirmation(resolution, report), cancelLabel: "Cancel" }, () => handleResolve(resolution))
 	}
 	return (
 		<tr id={`report-${report.id}`} className={cn("border-b align-top", isFocused && "bg-accent/40")}>
@@ -117,12 +165,12 @@ function ReportRow({
 				{report.isSubjectDeleted ? (
 					<span className="text-muted-foreground italic">already deleted</span>
 				) : (
-					report.subjectText
+					<ReportText text={report.subjectText} />
 				)}
 			</td>
 			<td className="py-2 pr-4 whitespace-nowrap">
 				{report.author ? (
-					<AnchorLink href={`/profiles/${report.author.id}`} className={STANDALONE_LINK_CLASS}>
+					<AnchorLink href={toProfilePath(report.author.id)} className={STANDALONE_LINK_CLASS}>
 						{report.author.username}
 					</AnchorLink>
 				) : (
@@ -130,12 +178,16 @@ function ReportRow({
 				)}
 			</td>
 			<td className="py-2 pr-4 whitespace-nowrap">
-				<AnchorLink href={`/profiles/${report.reporter.id}`} className={STANDALONE_LINK_CLASS}>
+				<AnchorLink href={toProfilePath(report.reporter.id)} className={STANDALONE_LINK_CLASS}>
 					{report.reporter.username}
 				</AnchorLink>
 			</td>
 			<td className="max-w-xs py-2 pr-4 whitespace-pre-wrap break-words">
-				{report.reason || <span className="text-muted-foreground">none given</span>}
+				{report.reason ? (
+					<ReportText text={report.reason} />
+				) : (
+					<span className="text-muted-foreground">none given</span>
+				)}
 			</td>
 			<td className="py-2 whitespace-nowrap">
 				<div className="flex gap-2">
@@ -144,20 +196,31 @@ function ReportRow({
 							variant="destructive"
 							size="sm"
 							disabled={pendingResolution !== null}
-							onClick={() => void handleResolve("removed")}
+							onClick={() => handleResolvePress("removed")}
 						>
 							{pendingResolution === "removed" ? "Removing…" : "Remove"}
+						</Button>
+					)}
+					{report.canAdminBlock && (
+						<Button
+							variant="destructive"
+							size="sm"
+							disabled={pendingResolution !== null}
+							onClick={() => handleResolvePress("blocked")}
+						>
+							{pendingResolution === "blocked" ? "Blocking…" : "Block"}
 						</Button>
 					)}
 					<Button
 						variant="outline"
 						size="sm"
 						disabled={pendingResolution !== null}
-						onClick={() => void handleResolve("kept")}
+						onClick={() => handleResolvePress("cleared")}
 					>
-						{pendingResolution === "kept" ? "Keeping…" : "Keep"}
+						{pendingResolution === "cleared" ? "Clearing…" : "Clear"}
 					</Button>
 				</div>
+				{confirmDialog}
 			</td>
 		</tr>
 	)

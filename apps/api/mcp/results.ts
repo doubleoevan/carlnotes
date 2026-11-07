@@ -1,9 +1,11 @@
 // what the mcp finding tools return for a visitor or a user, and the pages every tool result is packed into
 import type { TopicFinding } from "@carlnotes/contracts/findings"
+import type { ReactionSummary } from "@carlnotes/contracts/social"
 import type { topics } from "@carlnotes/db/schema/topics"
 import { loadUserOrPublicLiteLLMKey } from "@carlnotes/models/litellm"
 import { isBudgetRejection, SPENT_BUDGET_REJECTION } from "@carlnotes/models/models"
 import { searchTopicFindings as rankTopicFindings } from "@carlnotes/pipeline/chat/retrieve"
+import { attachReactionSummaries } from "../social/findingReactions"
 import { loadTopicAccessAndFindings, loadViewableTopic } from "../topic/accessibleFindings"
 import { saveFindingFeedback, setBookmarked, setConsumed, setRating } from "../topic/findingFeedback"
 import { loadTopicFindings } from "../topic/findings"
@@ -40,7 +42,12 @@ export type McpFinding = {
 	// the user's own fields, consumed and bookmarked, on a user's result alone
 	isConsumed?: boolean
 	isBookmarked?: boolean
+	// the finding's reactions at a glance, on a finding that has any
+	reactions?: McpFindingReactions
 }
+
+// a finding's reactions as a tool returns them: how many chose each type
+type McpFindingReactions = { counts: { reactionType: string; count: number }[] }
 
 // one page of a result, with the cursor that continues it
 export type McpPage<Item> = { items: Item[]; nextCursor: string | null }
@@ -67,11 +74,21 @@ export async function readTopicFeed(
 		toolCaller.kind === "user"
 			? (await loadTopicAccessAndFindings({ topic, userId: toolCaller.userId, pageWindow, isRatedDownExcluded: true }))
 					.topicFindings
-			: await loadTopicFindings({ topicId: topic.id, userId: null, pageWindow, isRatedDownExcluded: true })
+			: await loadVisitorTopicFindings(topic.id, pageWindow)
 
 	// shape each finding for the tool caller and pack the page from the window
 	const mcpFindings = topicFindings.map((finding) => toMcpFinding(toolCaller, finding))
 	return packPageFromWindow(mcpFindings, { offset })
+}
+
+// a visitor's window of a topic's findings, each with its reactions
+async function loadVisitorTopicFindings(
+	topicId: string,
+	pageWindow: { offset: number; rowCount: number },
+): Promise<TopicFinding[]> {
+	const topicFindings = await loadTopicFindings({ topicId, userId: null, pageWindow, isRatedDownExcluded: true })
+	await attachReactionSummaries({ topicFindings, userId: null })
+	return topicFindings
 }
 
 /**
@@ -248,11 +265,24 @@ export function toMcpFinding(toolCaller: ToolCaller, finding: TopicFinding): Mcp
 		relevanceScore: finding.relevanceScore,
 		relevanceExplanation: finding.relevanceExplanation,
 		publishedAt: finding.publishedAt,
+		...toMcpFindingReactions(finding),
 	}
 	if (toolCaller.kind === "visitor") {
 		return mcpFinding
 	}
 	return { ...mcpFinding, isConsumed: finding.isConsumed, isBookmarked: finding.isBookmarked }
+}
+
+// a finding's reactions for a tool result, or nothing for a finding with none
+function toMcpFindingReactions({ reactions }: TopicFinding): { reactions?: McpFindingReactions } {
+	return reactions && reactions.counts.length > 0 ? { reactions: { counts: toToolReactionCounts(reactions) } } : {}
+}
+
+/**
+ * Returns how many chose each reaction type, for a tool result that a model reads.
+ */
+export function toToolReactionCounts({ counts }: ReactionSummary): McpFindingReactions["counts"] {
+	return counts.map(({ reactionType, count }) => ({ reactionType, count }))
 }
 
 /** Loads the topic, or null if it is missing or the tool caller may not see it. */

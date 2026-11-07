@@ -261,6 +261,8 @@ test("ordinary scoring bounds both model calls and charges invalid premium outpu
 	stubScoringReplies([{ score: 0.9, isUnsafe: false }, {}])
 	const budget = newBudget()
 	await expect(scoreResource("page", "topic", budget)).rejects.toThrow()
+
+	// both calls ask for the same output limit, and the premium one is charged
 	expect(scoringRequests).toHaveLength(2)
 	for (const request of scoringRequests) {
 		expect(request.max_tokens ?? request.max_completion_tokens).toBe(SCORE_OUTPUT_TOKENS)
@@ -324,12 +326,12 @@ test("personal priority spends the final scoring slot before ordinary links and 
 test("a personal-source bonus cannot save a weak link from the normal max-results trim", () => {
 	// neither personal nor custom provenance grants the bookmark or rating exemption
 	const rows = [
-		{ id: "ordinary", relevanceScore: 0.8, createdAt: new Date(0), isBookmarkedOrRated: false },
+		{ id: "ordinary", relevanceScore: 0.8, createdAt: new Date(0), isExempt: false },
 		{
 			id: "personal",
 			relevanceScore: 0.2 + PERSONAL_SOURCE_SCORE_BONUS,
 			createdAt: new Date(1),
-			isBookmarkedOrRated: false,
+			isExempt: false,
 		},
 	]
 	expect(findingIdsToFilter(rows, 1)).toEqual(["personal"])

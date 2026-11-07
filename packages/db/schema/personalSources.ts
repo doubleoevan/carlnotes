@@ -223,7 +223,6 @@ export const aiAgentApiKeys = pgTable(
 		lastFour: text("last_four").notNull(),
 		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 		lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
-		revokedAt: timestamp("revoked_at", { withTimezone: true }),
 	},
 	(table) => [index("agent_api_keys_user_idx").on(table.userId)],
 )

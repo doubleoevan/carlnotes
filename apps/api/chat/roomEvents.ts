@@ -5,11 +5,11 @@ import type { SSEStreamingApi } from "hono/streaming"
 import { streamSSE } from "hono/streaming"
 import { auth } from "../auth"
 import { type AppContext, currentUser } from "../currentUser"
-import { loadBlockedUserIds } from "../userBlocks"
+import { loadUserBlockedIds } from "../userBlocks"
 import { loadChatRoom } from "./roomAccess"
 import { loadChatRoomDeltas, loadChatRoomMessages } from "./roomMessages"
 import { onChatRoomMessage } from "./roomStream"
-import { toUnblockedChatRoomMessages, toVisibleChatRoomMessages } from "./roomVisibility"
+import { toNotUserBlockedChatRoomMessages, toVisibleChatRoomMessages } from "./roomVisibility"
 
 // the maximum room connection age before reconnecting
 const CHAT_ROOM_STREAM_MAX_AGE_MS = 15 * 60 * 1000
@@ -83,7 +83,7 @@ async function runChatRoomStream({ context, stream, topicId, teamId }: RunChatRo
 			}
 			return isHistory
 				? toVisibleChatRoomMessages(userId, chatMessages, blockedUserIds)
-				: toUnblockedChatRoomMessages(chatMessages, blockedUserIds)
+				: toNotUserBlockedChatRoomMessages(chatMessages, blockedUserIds)
 		}
 
 		// the pending messages: the room past the cursor at first, then the deltas up to a published message
@@ -126,7 +126,7 @@ async function runChatRoomStream({ context, stream, topicId, teamId }: RunChatRo
 		}
 		// deliver initial history before installing heartbeat timers
 		enqueueDelivery(async () => {
-			blockedUserIds = userId ? await loadBlockedUserIds(userId) : blockedUserIds
+			blockedUserIds = userId ? await loadUserBlockedIds(userId) : blockedUserIds
 			await deliverChatMessages()
 			if (isClosed) {
 				return
@@ -135,7 +135,7 @@ async function runChatRoomStream({ context, stream, topicId, teamId }: RunChatRo
 			heartbeatInterval = setInterval(() => {
 				enqueueDelivery(async () => {
 					if (await checkAccess()) {
-						blockedUserIds = userId ? await loadBlockedUserIds(userId) : blockedUserIds
+						blockedUserIds = userId ? await loadUserBlockedIds(userId) : blockedUserIds
 						await stream.writeSSE({ event: "ping", data: "" })
 					}
 				})

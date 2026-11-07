@@ -9,13 +9,14 @@ import { useUserMenuUpdateBadges } from "@carlnotes/core/hooks/useUpdateCounts"
 import { toProfileChatContext } from "@carlnotes/core/lib/chatConversations"
 import { toCountLabel } from "@carlnotes/core/lib/labels"
 import { REQUEST_FAILED_TEXT } from "@carlnotes/core/lib/sessionCopy"
-import { toBlockLabel, toggleUserBlock } from "@carlnotes/core/lib/userBlocks"
+import { toggleUserBlock, toUserBlockLabel } from "@carlnotes/core/lib/userBlocks"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { getRouteApi, useNavigate } from "@tanstack/react-router"
 import { Ban, Pencil, Plus, Users } from "lucide-react"
 import { useCallback, useEffect, useState } from "react"
 import { toast } from "sonner"
 import { EditProfileModal } from "@/components/account/EditProfileModal"
+import { ProfileSummaryLine } from "@/components/account/ProfileSummaryLine"
 import { UserAvatarPicker } from "@/components/avatar/UserAvatarPicker"
 import { UserAvatar } from "@/components/branding/UserAvatar"
 import { AnchorLink } from "@/components/common/AnchorLink"
@@ -39,23 +40,23 @@ import { type PageActionOption, useRegisterPageActions } from "@/stores/pageActi
 // the owner's edit and new-team actions, or the block of another person
 function toProfileActionOptions({
 	isOwnProfile,
-	isBlocked,
+	isUserBlocked,
 	onEditProfile,
 	onNewTeam,
-	onToggleBlock,
+	onToggleUserBlock,
 }: {
 	isOwnProfile: boolean
-	isBlocked: boolean
+	isUserBlocked: boolean
 	onEditProfile: () => void
 	onNewTeam: () => void
-	onToggleBlock: () => void
+	onToggleUserBlock: () => void
 }): PageActionOption[] {
 	return isOwnProfile
 		? [
 				{ label: "Edit profile", Icon: Pencil, onSelect: onEditProfile },
 				{ label: "New team", Icon: Plus, onSelect: onNewTeam },
 			]
-		: [{ label: toBlockLabel(isBlocked), Icon: Ban, onSelect: onToggleBlock }]
+		: [{ label: toUserBlockLabel(isUserBlocked), Icon: Ban, onSelect: onToggleUserBlock }]
 }
 
 // the profile route, whose loader reads the profile on the server
@@ -125,10 +126,10 @@ export function ProfilePage() {
 					page: "Profile",
 					options: toProfileActionOptions({
 						isOwnProfile,
-						isBlocked: profile.isBlocked,
+						isUserBlocked: profile.isBlocked,
 						onEditProfile: () => setIsEditingProfile(true),
 						onNewTeam: () => void handleOpenNewTeamModal(),
-						onToggleBlock: () => void handleToggleBlock(),
+						onToggleUserBlock: () => void handleToggleUserBlock(),
 					}),
 					report: {
 						subjectKind: "profile",
@@ -142,12 +143,12 @@ export function ProfilePage() {
 	)
 
 	// block or unblock this person, then reload the profile
-	const handleToggleBlock = async (): Promise<void> => {
+	const handleToggleUserBlock = async (): Promise<void> => {
 		if (!profile) {
 			return
 		}
 		try {
-			await toggleUserBlock({ userId: profile.userId, isBlocked: profile.isBlocked })
+			await toggleUserBlock({ userId: profile.userId, isUserBlocked: profile.isBlocked })
 			reloadProfilePage()
 		} catch {
 			toast.error(REQUEST_FAILED_TEXT)
@@ -326,8 +327,6 @@ function ProfileHeader({
 	const { data: session } = authClient().useSession()
 	// the topics' unread chat mentions and note changes, the user menu's Profile row, summed on the avatar badge
 	const profileUpdateBadges = useUserMenuUpdateBadges().Profile
-	// the join month and year label
-	const joinDateLabel = new Date(profile.joinedAt).toLocaleDateString(undefined, { month: "long", year: "numeric" })
 
 	const isOwnProfile = session?.user.id === profile.userId
 	return (
@@ -381,10 +380,8 @@ function ProfileHeader({
 						))}
 				</div>
 			</div>
-			{/* when they joined, and the number of unique people subscribed to their topics */}
-			<p className="text-muted-foreground mt-2 text-sm">
-				{`Joined ${joinDateLabel} · ${toCountLabel(profile.subscriberCount, "follower")}`}
-			</p>
+			{/* when they joined, the number of unique people subscribed to their topics, and the user's user block of them */}
+			<ProfileSummaryLine profile={profile} />
 		</header>
 	)
 }

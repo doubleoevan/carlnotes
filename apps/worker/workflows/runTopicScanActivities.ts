@@ -231,7 +231,7 @@ export async function finishScan(
  * because its Findings are real and its cost is owed. The stoppedAt timestamp is what gives its daily scan back
  * and what tells the topic page it was stopped.
  * Nothing is emailed: a manual Scan reports to the page whoever stopped it is watching, and a scheduled
- * one sends no digest for a Topic read only part way.
+ * one sends no topic scan email for a Topic read only part way.
  * The spend is left as each stage recorded it. A cancelled stage's own totals never reach the workflow. The topic's
  * vectors are saved from what the Scan kept.
  */

@@ -2,6 +2,7 @@
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import { restoreConnectionPool, stubConnectionPool } from "@carlnotes/db/connectionPoolStub"
 import * as queue from "@carlnotes/db/personalSourcesLinkQueue"
+import * as sharedComments from "@carlnotes/db/sharedComments"
 import { newBudget } from "@carlnotes/models/budget"
 import type { DiscoveredResource } from "../ingest/ingester"
 import { gateResources, type Resource, rankBySimilarity } from "../review/filter"
@@ -27,6 +28,7 @@ test("deleted claims lose their private-only discoveries and sender priority", a
 		discover("https://example.org/live", true),
 		discover("https://example.org/public", false),
 	]
+	spyOn(sharedComments, "loadWaitingCommentLinkUrls").mockResolvedValue([])
 	spyOn(queue, "loadClaimedPersonalSourcesLinks").mockResolvedValue([
 		{ id: "entry", url: "https://example.org/live", personalSourceScoreBonus: 0.1 },
 	])
@@ -40,6 +42,7 @@ test("deleted claims lose their private-only discoveries and sender priority", a
 		"https://example.org/public",
 	])
 	expect([...review.personalSourceScoreBonuses.keys()]).toEqual(["https://example.org/live"])
+	spyOn(sharedComments, "loadWaitingCommentLinkUrls").mockResolvedValue([])
 	spyOn(queue, "loadClaimedPersonalSourcesLinks").mockResolvedValue([])
 	expect(
 		(await loadPersonalSourcesReviewLinks({ topicId: "other", scanId: "other-scan", discoveredResources: resources }))
@@ -68,6 +71,7 @@ test("duplicate personal links keep the full contribution in either arrival orde
 		{ id: "personal", url: "https://example.org/shared", personalSourceScoreBonus: 0.1 as const },
 	]
 	for (const candidates of [links, [...links].reverse()]) {
+		spyOn(sharedComments, "loadWaitingCommentLinkUrls").mockResolvedValue([])
 		spyOn(queue, "loadClaimedPersonalSourcesLinks").mockResolvedValue(candidates)
 		const review = await loadPersonalSourcesReviewLinks({ topicId: "topic", scanId: "scan", discoveredResources: [] })
 		expect(review.personalSourceScoreBonuses.get("https://example.org/shared")).toBe(0.1)

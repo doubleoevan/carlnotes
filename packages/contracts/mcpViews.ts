@@ -6,6 +6,7 @@ import type { PersonalSourcesSendResult } from "./personalSources"
 import type { PodcastEpisode, PodcastEpisodeSummary } from "./podcast"
 import type { ProfileIdentity } from "./profiles"
 import type { FindingSearchTopic, SearchRequest, SearchResultsPage, SearchRow } from "./search"
+import type { ReactionSummary } from "./social"
 import type { TopicDraft } from "./topicPayloads"
 import type { Updates } from "./updates"
 
@@ -49,6 +50,8 @@ export type McpViewData = {
 	personalAnnotations?: Record<string, string>
 	topicDraftOptions?: { knownTags: string[]; isPodcastEnabledByDefault: boolean }
 	sendConfirmationLinks?: { entryId: string; links: { url: string; title?: string }[] }[]
+	// the social target's reactions as they stand after the save_reaction tool saved one
+	reactionSummary?: ReactionSummary
 }
 
 // the search tool's structured result: the search's page with every row's absolute url, the search that found it, and
