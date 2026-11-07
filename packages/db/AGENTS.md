@@ -47,10 +47,10 @@ and `@carlnotes/contracts`, with `drizzle-orm` and `@neondatabase/serverless`.
   `jobLeases.ts` (each job's lease row), `storage.ts` (favicons and the pending object deletions),
   `mobileMinimumVersions.ts` (the minimum app version of each platform), `reports.ts` (content reports), `userBlocks.ts`
   (the users a user blocked), `social.ts` (reactions, comments, the users a comment mentions, and the links of a comment
-  shared with Carl, each row on exactly one social target), `notificationsEmailSends.ts` (one row per user per UTC day
-  that a notifications email went out), `pushDevices.ts` (each phone's Expo push token, bound to the session that
-  registered it so ending the session or closing the account deletes it, and the push sends the push service accepted,
-  one per event, recipient, and phone, with each receipt, indexed by phone and recipient for the cascades),
+  shared with the podcast, each row on exactly one social target), `notificationsEmailSends.ts` (one row per user per
+  UTC day that a notifications email went out), `pushDevices.ts` (each phone's Expo push token, bound to the session
+  that registered it so ending the session or closing the account deletes it, and the push sends the push service
+  accepted, one per event, recipient, and phone, with each receipt, indexed by phone and recipient for the cascades),
   `viewerCounts.ts` (the saved HyperLogLog counter of each topic's viewers and each podcast episode's listeners),
   `vectors.ts` (the topic and podcast episode vectors that rank related topics, related podcast episodes, and the
   podcast episode search, each table kept apart from the row it ranks so a read of a whole row never includes a vector,
@@ -125,12 +125,12 @@ and `@carlnotes/contracts`, with `drizzle-orm` and `@neondatabase/serverless`.
   limit and a Finding's reaction signal share.
 - `socialLimits.ts` — `countSocialWriteToday`, the flat daily count of an account's reaction saves and comment posts and
   edits in Redis, and `loadAccountSignalWeights`, each account's signal weight in two reads.
-- `sharedComments.ts` — the comments a Topic's editors share with Carl: the shared comment slots a Topic has for its
-  next Podcast Episode, the share under a per-Topic advisory lock and its taking back, the links a shared comment queues
-  in `comment_links`, what a Scan's scoring context and a Podcast Episode's script read, and the mark that frees a
-  shared comment slot once a script read the comment. `monthlySpendDollars` reads a user's spend for the month on scans,
-  chat turns, and podcast episodes, once per request through the request memo. `hasFullPodcastEpisodes` is true on a
-  paid plan or for an admin, and the free plan gets short podcast episodes.
+- `sharedComments.ts` — the comments a Topic's editors share with the podcast: the shared comment slots a Topic has for
+  its next Podcast Episode, the share under a per-Topic advisory lock and its taking back, the links a shared comment
+  queues in `comment_links`, what a Scan's scoring context and a Podcast Episode's script read, and the mark that frees
+  a shared comment slot once a script read the comment. `monthlySpendDollars` reads a user's spend for the month on
+  scans, chat turns, and podcast episodes, once per request through the request memo. `hasFullPodcastEpisodes` is true
+  on a paid plan or for an admin, and the free plan gets short podcast episodes.
 - `monthlyBudgetCutoffs.ts` — the monthly budget cutoffs. `isMonthlyBudgetCutoffPassed` is true once the month's spend
   reaches the share of the budget where the plan stops a kind of spend: spoken questions, full podcast episodes,
   podcast episodes, daily scans, or manual scans. The daily scans cutoff moves with the daily scans left this month, at

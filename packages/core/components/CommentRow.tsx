@@ -12,11 +12,11 @@ import type { CommentChapter, SocialElements } from "../lib/socialElements"
 import {
 	COMMENT_THREAD_LABELS,
 	SCROLLING_COMMENT_CHARS,
-	SHARE_WITH_CARL_LABEL,
-	SHARED_WITH_CARL_LABEL,
+	SHARE_WITH_PODCAST_LABEL,
+	SHARED_WITH_PODCAST_LABEL,
 	toMoreRepliesLabel,
 	toSharedCommentSlotsFullLabel,
-	UNSHARE_WITH_CARL_LABEL,
+	UNSHARE_WITH_PODCAST_LABEL,
 } from "../lib/socialLabels"
 import { ReactionRow } from "./ReactionRow"
 import { SocialReportControl } from "./SocialReportControl"
@@ -50,17 +50,17 @@ function toShareToggle(
 	comment: CommentReply,
 	sharedCommentSlots: SharedCommentSlots | null,
 ): { isShown: boolean; label: string; isDisabled: boolean } {
-	const isShown = sharedCommentSlots !== null || comment.isSharedWithCarl
+	const isShown = sharedCommentSlots !== null || comment.isSharedWithPodcast
 	if (comment.isAired || !sharedCommentSlots) {
-		return { isShown, label: SHARED_WITH_CARL_LABEL, isDisabled: false }
+		return { isShown, label: SHARED_WITH_PODCAST_LABEL, isDisabled: false }
 	}
-	if (comment.isSharedWithCarl) {
-		return { isShown, label: UNSHARE_WITH_CARL_LABEL, isDisabled: false }
+	if (comment.isSharedWithPodcast) {
+		return { isShown, label: UNSHARE_WITH_PODCAST_LABEL, isDisabled: false }
 	}
 	const isEverySlotUsed = !hasFreeSharedCommentSlot(sharedCommentSlots)
 	return {
 		isShown,
-		label: isEverySlotUsed ? toSharedCommentSlotsFullLabel(sharedCommentSlots.slotCount) : SHARE_WITH_CARL_LABEL,
+		label: isEverySlotUsed ? toSharedCommentSlotsFullLabel(sharedCommentSlots.slotCount) : SHARE_WITH_PODCAST_LABEL,
 		isDisabled: isEverySlotUsed,
 	}
 }
@@ -138,16 +138,16 @@ export const CommentRow = memo(function CommentRow(props: CommentRowProps) {
 					),
 				)}
 			</Body>
-			{/* the share with Carl, the author's edit, disabled past the edit time, a delete, and a flag of someone else's */}
+			{/* the podcast share, the author's edit, disabled past the edit time, a delete, and a flag of someone else's */}
 			<Controls>
 				{shareToggle.isShown && (
 					<ShareToggle
 						label={shareToggle.label}
-						isShared={comment.isSharedWithCarl}
+						isShared={comment.isSharedWithPodcast}
 						isAired={comment.isAired}
 						isDisabled={shareToggle.isDisabled}
 						onPress={
-							sharedCommentSlots && !comment.isAired ? () => onShare(comment, !comment.isSharedWithCarl) : undefined
+							sharedCommentSlots && !comment.isAired ? () => onShare(comment, !comment.isSharedWithPodcast) : undefined
 						}
 					/>
 				)}

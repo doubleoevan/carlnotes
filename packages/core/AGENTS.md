@@ -359,19 +359,20 @@ Personal sources conversation metadata links the complete date, platform icon, a
 `components/ReactionRow.tsx` shares one social target's reactions between the web, the mobile app, and the MCP view:
 the six types with their counts through `ReactionPicker.tsx`, with the user's own marked. `components/CommentThread.tsx`
 shares the thread between the web and the mobile app: the button that opens the composer, the comments newest first,
-each a `components/CommentRow.tsx` with its author's controls, the share with Carl, its body with each stored mention
-linked, a Podcast Episode's chapter tag, its own reactions through `ReactionRow`, Reply, and its replies oldest first.
-A memoized row with stable handlers from `hooks/useStableCallback.ts` renders only if its own comment changes.
+each a `components/CommentRow.tsx` with its author's controls, the share with the podcast, its body with each stored
+mention linked, a Podcast Episode's chapter tag, its own reactions through `ReactionRow`, Reply, and its replies oldest
+first. A memoized row with stable handlers from `hooks/useStableCallback.ts` renders only if its own comment changes.
 `components/SocialSection.tsx` holds the thread in the collapsible card on a Topic, a Podcast Episode, and a Finding,
 with the week's count beside its title, the reaction row left to each page's header, and the shared comment slots at the
 card's top right for a user who may share. `components/TopicSharedCommentsSection.tsx` lists the comments a Topic shares
-with Carl in the Topic's sources list, under `TopicPersonalSourcesSection.tsx`. Both render through one `SocialElements`
-set per app, typed in `lib/socialElements.ts`, and take their words from `lib/socialLabels.ts`. `CommentElements` is the
-part of that set the note thread also renders, so each app has one composer. `components/TextComposer.tsx` owns the
-draft for the thread and for the note thread: a failed submit keeps its text, a second submit waits for the first, and a
-trailing `@` token suggests users. `lib/podcastEpisodeSocial.ts` builds a Podcast Episode page's thread props and report
-subject. `hooks/useSubjectReport.ts`'s `useSubjectReportFlag` is a report flag's state, label, and press, and
-`SocialReportControl.tsx` keeps its own read, since a row already lists its reported state.
+with the podcast in the Topic's sources list, under `TopicPersonalSourcesSection.tsx`. Both render through one
+`SocialElements` set per app, typed in `lib/socialElements.ts`, and take their words from `lib/socialLabels.ts`.
+`CommentElements` is the part of that set the note thread also renders, so each app has one composer.
+`components/TextComposer.tsx` owns the draft for the thread and for the note thread: a failed submit keeps its text, a
+second submit waits for the first, and a trailing `@` token suggests users. `lib/podcastEpisodeSocial.ts` builds a
+Podcast Episode page's thread props and report subject. `hooks/useSubjectReport.ts`'s `useSubjectReportFlag` is a report
+flag's state, label, and press, and `SocialReportControl.tsx` keeps its own read, since a row already lists its reported
+state.
 
 `hooks/useReactions.ts` holds the summary a page came with, reads it for a list that came without one, and replaces
 it with the summary each save returns. A `ReactionClient` says how a platform reaches the routes: the api by

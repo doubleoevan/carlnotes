@@ -21,8 +21,8 @@ type TopicPersonalSourcesSectionProps = {
 }
 
 /**
- * Shares the sender's flat item list inside Topic info and Artisanal Blend, with the comments shared with Carl as a
- * group of their own under it.
+ * Shares the sender's flat item list inside Topic info and Artisanal Blend, with the comments shared with the podcast
+ * as a group of their own under it.
  */
 export function TopicPersonalSourcesSection({ topic, elements, onCopy, className }: TopicPersonalSourcesSectionProps) {
 	const { data: session } = authClient().useSession()

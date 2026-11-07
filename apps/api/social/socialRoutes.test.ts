@@ -19,7 +19,7 @@ import { EDITOR_SHARED_COMMENT_SLOTS, RESOLVED_FINDING } from "./socialTargetTes
 const TARGET = { kind: "finding", id: "finding-1" }
 const SAVE_BODY = { target: TARGET, reactionType: "like" }
 const POST_BODY = { target: TARGET, body: "a comment" }
-const SHARE_BODY = { isSharedWithCarl: true }
+const SHARE_BODY = { isSharedWithPodcast: true }
 
 // put the spies and the connection pool back after each test
 afterEach(() => {
@@ -70,7 +70,7 @@ test("a body outside the payload is a 400 before any write", async () => {
 		signedInComments.request("/comments", toJsonRequest({ ...POST_BODY, body: "x".repeat(2001) })),
 		signedInComments.request("/comments", toJsonRequest({ ...POST_BODY, chapterPosition: -1 })),
 		signedInComments.request("/comments", toJsonRequest({ ...POST_BODY, parentCommentId: "" })),
-		signedInComments.request("/comments/comment-1/share", toJsonRequest({ isSharedWithCarl: "yes" }, "PUT")),
+		signedInComments.request("/comments/comment-1/share", toJsonRequest({ isSharedWithPodcast: "yes" }, "PUT")),
 	])
 	expect(responses.map((response) => response.status)).toEqual([400, 400, 400, 400, 400, 400])
 	expect(saveReaction).not.toHaveBeenCalled()
@@ -156,7 +156,7 @@ test("a reply passes its parent on", async () => {
 })
 
 test.each([
-	[{ status: "saved", isSharedWithCarl: true, sharedCommentSlots: EDITOR_SHARED_COMMENT_SLOTS } as const, 200],
+	[{ status: "saved", isSharedWithPodcast: true, sharedCommentSlots: EDITOR_SHARED_COMMENT_SLOTS } as const, 200],
 	[{ status: "noFreeSharedCommentSlot" } as const, 409],
 	[{ status: "notFound" } as const, 404],
 ])("a share that ended %j is a %i", async (commentShareResult, status) => {
@@ -166,11 +166,16 @@ test.each([
 		toJsonRequest(SHARE_BODY, "PUT"),
 	)
 	expect(response.status).toBe(status)
-	expect(shareComment).toHaveBeenCalledWith(expect.objectContaining({ commentId: "comment-1", isSharedWithCarl: true }))
+	expect(shareComment).toHaveBeenCalledWith(
+		expect.objectContaining({ commentId: "comment-1", isSharedWithPodcast: true }),
+	)
 
 	// a share returns whether the comment is shared now, with the Topic's shared comment slots
 	if (commentShareResult.status === "saved") {
-		expect(await response.json()).toEqual({ isSharedWithCarl: true, sharedCommentSlots: EDITOR_SHARED_COMMENT_SLOTS })
+		expect(await response.json()).toEqual({
+			isSharedWithPodcast: true,
+			sharedCommentSlots: EDITOR_SHARED_COMMENT_SLOTS,
+		})
 	}
 })
 

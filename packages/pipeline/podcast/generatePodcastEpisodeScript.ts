@@ -49,7 +49,7 @@ export type GeneratePodcastEpisodeOutlineOptions = {
 	topicName: string
 	topicPrompt: string
 	podcastEpisodeFindings: PodcastEpisodeFinding[]
-	// the comments the topic's editors shared with Carl that this Podcast Episode takes
+	// the comments the topic's editors shared with the podcast that this Podcast Episode takes
 	sharedComments?: PodcastSharedComment[]
 	maxMinutes: number
 	litellmApiKey?: string

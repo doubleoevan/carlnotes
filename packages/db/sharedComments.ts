@@ -1,5 +1,5 @@
-// the Comments a Topic's editors share with Carl: the shared comment slots a Topic has for its next Podcast Episode,
-// the share and its taking back, what a Scan and a podcast script read, and the links a shared Comment holds
+// the Comments a Topic's editors share with the podcast: the shared comment slots a Topic has for its next Podcast
+// Episode, the share and its taking back, what a Scan and a podcast script read, and the links a shared Comment holds
 import {
 	hasFreeSharedCommentSlot,
 	SHARED_COMMENT_CONTEXT_COUNT,
@@ -29,7 +29,8 @@ export type PodcastSharedComment = SharedCommentText & { commentId: string; find
 const sharedCommentTextColumns = { username: users.username, body: comments.body }
 
 // the owner of the Topic a shared Comment went to, read beside the Comment
-const sharedCommentOwnerId = sql`(select ${topics.ownerId} from ${topics} where ${topics.id} = ${comments.sharedTopicId})`
+const sharedCommentOwnerId = sql`(select ${topics.ownerId} from ${topics}
+	where ${topics.id} = ${comments.sharedWithPodcastTopicId})`
 
 /**
  * Returns the filter for a shared Comment that counts: its Finding is not rated thumbs down, its author is under no
@@ -54,7 +55,13 @@ export async function loadSharedCommentSlots(
 		handle
 			.select({ usedCount: count() })
 			.from(comments)
-			.where(and(eq(comments.sharedTopicId, topic.id), isNull(comments.airedPodcastEpisodeId), isSharedCommentShown)),
+			.where(
+				and(
+					eq(comments.sharedWithPodcastTopicId, topic.id),
+					isNull(comments.airedPodcastEpisodeId),
+					isSharedCommentShown,
+				),
+			),
 	])
 	return {
 		usedCount: usedRow?.usedCount ?? 0,
@@ -63,8 +70,8 @@ export async function loadSharedCommentSlots(
 }
 
 /**
- * Shares a Comment with Carl if its Topic has a free shared comment slot, and queues the links in its body for the
- * Topic's next Scan. Returns whether the Comment is shared now. One already shared stays shared and takes no second
+ * Shares a Comment with the podcast if its Topic has a free shared comment slot, and queues the links in its body for
+ * the Topic's next Scan. Returns whether the Comment is shared now. One already shared stays shared and takes no second
  * shared comment slot.
  */
 export function shareCommentInFreeSharedCommentSlot({
@@ -80,10 +87,10 @@ export function shareCommentInFreeSharedCommentSlot({
 		// one share at a time per Topic, so two editors never take the last shared comment slot together
 		await transaction.execute(sql`select pg_advisory_xact_lock(hashtext(${`shared-comments:${topic.id}`}))`)
 		const [commentRow] = await transaction
-			.select({ sharedWithCarlAt: comments.sharedWithCarlAt })
+			.select({ sharedWithPodcastAt: comments.sharedWithPodcastAt })
 			.from(comments)
 			.where(eq(comments.id, commentId))
-		if (!commentRow || commentRow.sharedWithCarlAt) {
+		if (!commentRow || commentRow.sharedWithPodcastAt) {
 			return Boolean(commentRow)
 		}
 
@@ -95,7 +102,7 @@ export function shareCommentInFreeSharedCommentSlot({
 		// share it, and queue its links
 		await transaction
 			.update(comments)
-			.set({ sharedWithCarlAt: new Date(), sharedTopicId: topic.id })
+			.set({ sharedWithPodcastAt: new Date(), sharedWithPodcastTopicId: topic.id })
 			.where(eq(comments.id, commentId))
 		await syncCommentLinks({ commentId, topicId: topic.id, body, handle: transaction })
 		return true
@@ -111,7 +118,7 @@ export async function unshareComment(commentId: string, handle: DbHandle = db): 
 		// the comment, then its queued links
 		await transaction
 			.update(comments)
-			.set({ sharedWithCarlAt: null, sharedTopicId: null, airedPodcastEpisodeId: null })
+			.set({ sharedWithPodcastAt: null, sharedWithPodcastTopicId: null, airedPodcastEpisodeId: null })
 			.where(eq(comments.id, commentId))
 		await transaction.delete(commentLinks).where(eq(commentLinks.commentId, commentId))
 	})
@@ -154,7 +161,7 @@ export async function syncCommentLinks({
 }
 
 /**
- * Loads the Comments a Topic most recently shared with Carl, newest first, for a Scan's scoring context.
+ * Loads the Comments a Topic most recently shared with the podcast, newest first, for a Scan's scoring context.
  */
 export function loadSharedCommentTexts(topicId: string): Promise<SharedCommentText[]> {
 	// the newest few shared, with each author's name
@@ -162,8 +169,8 @@ export function loadSharedCommentTexts(topicId: string): Promise<SharedCommentTe
 		.select(sharedCommentTextColumns)
 		.from(comments)
 		.leftJoin(users, eq(users.id, comments.authorUserId))
-		.where(and(eq(comments.sharedTopicId, topicId), isSharedCommentShown))
-		.orderBy(desc(comments.sharedWithCarlAt))
+		.where(and(eq(comments.sharedWithPodcastTopicId, topicId), isSharedCommentShown))
+		.orderBy(desc(comments.sharedWithPodcastAt))
 		.limit(SHARED_COMMENT_CONTEXT_COUNT)
 }
 
@@ -171,7 +178,9 @@ export function loadSharedCommentTexts(topicId: string): Promise<SharedCommentTe
  * Loads the Topic's waiting shared Comments, most reactions first and then oldest shared.
  */
 export function loadWaitingSharedComments(topicId: string): Promise<PodcastSharedComment[]> {
-	return selectRankedSharedComments(and(eq(comments.sharedTopicId, topicId), isNull(comments.airedPodcastEpisodeId)))
+	return selectRankedSharedComments(
+		and(eq(comments.sharedWithPodcastTopicId, topicId), isNull(comments.airedPodcastEpisodeId)),
+	)
 }
 
 /**
@@ -200,7 +209,11 @@ export async function markSharedCommentsAired({
 		.update(comments)
 		.set({ airedPodcastEpisodeId: podcastEpisodeId })
 		.where(
-			and(inArray(comments.id, commentIds), isNotNull(comments.sharedTopicId), isNull(comments.airedPodcastEpisodeId)),
+			and(
+				inArray(comments.id, commentIds),
+				isNotNull(comments.sharedWithPodcastTopicId),
+				isNull(comments.airedPodcastEpisodeId),
+			),
 		)
 }
 
@@ -215,7 +228,7 @@ function selectRankedSharedComments(filter: SQL | undefined): Promise<PodcastSha
 			.leftJoin(reactions, eq(reactions.commentId, comments.id))
 			.where(and(filter, isSharedCommentShown))
 			.groupBy(comments.id, users.username)
-			.orderBy(desc(count(reactions.id)), asc(comments.sharedWithCarlAt))
+			.orderBy(desc(count(reactions.id)), asc(comments.sharedWithPodcastAt))
 	)
 }
 

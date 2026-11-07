@@ -1,5 +1,5 @@
-// the comment routes: a thread's paged read, a comment's replies, a post, an edit, a delete, the share with Carl, a
-// Topic's shared comments, and the mention suggestions
+// the comment routes: a thread's paged read, a comment's replies, a post, an edit, a delete, the share with the
+// podcast, a Topic's shared comments, and the mention suggestions
 import {
 	commentRepliesQuery,
 	commentThreadQuery,
@@ -77,7 +77,7 @@ export const commentsRoute = new Hono<AppEnv>()
 		const commentShareResult = await shareComment({
 			userId,
 			commentId: context.req.param("id"),
-			isSharedWithCarl: context.req.valid("json").isSharedWithCarl,
+			isSharedWithPodcast: context.req.valid("json").isSharedWithPodcast,
 			analyticsProperties: toAnalyticsProperties(context),
 		})
 
@@ -85,7 +85,7 @@ export const commentsRoute = new Hono<AppEnv>()
 		switch (commentShareResult.status) {
 			case "saved":
 				return context.json({
-					isSharedWithCarl: commentShareResult.isSharedWithCarl,
+					isSharedWithPodcast: commentShareResult.isSharedWithPodcast,
 					sharedCommentSlots: commentShareResult.sharedCommentSlots,
 				})
 			case "noFreeSharedCommentSlot":

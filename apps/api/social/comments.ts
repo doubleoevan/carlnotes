@@ -1,4 +1,4 @@
-// the comment writes: a post or a reply, an edit inside the edit time, a delete, and the share with Carl
+// the comment writes: a post or a reply, an edit inside the edit time, a delete, and the share with the podcast
 import type { ModerationCategory } from "@carlnotes/contracts/moderation"
 import {
 	type Comment,
@@ -49,7 +49,7 @@ export type CommentPostResult = Exclude<CommentWriteResult, { status: "deleted" 
 
 // how a share ended: whether the comment is shared now with the Topic's shared comment slots, or why nothing changed
 export type CommentShareResult =
-	| { status: "saved"; isSharedWithCarl: boolean; sharedCommentSlots: SharedCommentSlots }
+	| { status: "saved"; isSharedWithPodcast: boolean; sharedCommentSlots: SharedCommentSlots }
 	| { status: "notFound" }
 	| { status: "noFreeSharedCommentSlot" }
 
@@ -58,7 +58,7 @@ type PostCommentOptions = { userId: string; payload: PostCommentPayload; analyti
 
 /**
  * Posts a comment or a reply on a social target, for a user who may post there. A comment by a user who may edit the
- * Topic is shared with Carl if the Topic has a free shared comment slot, by default for a top-level comment and
+ * Topic is shared with the podcast if the Topic has a free shared comment slot, by default for a top-level comment and
  * otherwise if the post asks.
  */
 export async function postComment({
@@ -113,12 +113,12 @@ export async function postComment({
 		return { status: "notFound" }
 	}
 
-	// an editor's comment is shared with Carl if it is top-level or the post asks, and the Topic has a free shared
+	// an editor's comment is shared with the podcast if it is top-level or the post asks, and the Topic has a free shared
 	// comment slot
 	const { topic } = resolvedSocialTarget
 	const reader = await toSocialReader(userId, topic)
-	const { isSharedWithCarl = parentCommentId === null } = payload
-	if (reader.canShare && isSharedWithCarl) {
+	const { isSharedWithPodcast = parentCommentId === null } = payload
+	if (reader.canShare && isSharedWithPodcast) {
 		await shareCommentInFreeSharedCommentSlot({ commentId: commentRow.id, topic, body })
 	}
 	trackEvent(`social_${toCommentEventTarget(target.kind)}_hot_take`, userId, {
@@ -216,11 +216,11 @@ export async function editComment({ userId, commentId, body }: EditCommentOption
 
 		// an editor approved the words they shared, so a rewrite by an author who may not share takes the share back
 		// until a Podcast Episode reads it. any other shared comment's queued links follow its body
-		const { sharedTopicId, airedPodcastEpisodeId } = ownCommentRow
-		if (sharedTopicId && !reader.canShare && !airedPodcastEpisodeId) {
+		const { sharedWithPodcastTopicId, airedPodcastEpisodeId } = ownCommentRow
+		if (sharedWithPodcastTopicId && !reader.canShare && !airedPodcastEpisodeId) {
 			await unshareComment(commentId, transaction)
-		} else if (sharedTopicId) {
-			await syncCommentLinks({ commentId, topicId: sharedTopicId, body, handle: transaction })
+		} else if (sharedWithPodcastTopicId) {
+			await syncCommentLinks({ commentId, topicId: sharedWithPodcastTopicId, body, handle: transaction })
 		}
 		return true
 	})
@@ -275,23 +275,23 @@ export async function deleteComment({
 type ShareCommentOptions = {
 	userId: string
 	commentId: string
-	isSharedWithCarl: boolean
+	isSharedWithPodcast: boolean
 	analyticsProperties: AnalyticsProperties
 }
 
 /**
- * Shares a comment with Carl or takes it back, for a user who may edit its Topic. A share needs a free shared comment
- * slot.
+ * Shares a comment with the podcast or takes it back, for a user who may edit its Topic. A share needs a free shared
+ * comment slot.
  */
 export async function shareComment({
 	userId,
 	commentId,
-	isSharedWithCarl,
+	isSharedWithPodcast,
 	analyticsProperties,
 }: ShareCommentOptions): Promise<CommentShareResult> {
 	// the comment, for a user who may edit its Topic. a missing one and a rejected share read the same, and a share on
 	// a Finding rated thumbs down can only be taken back
-	const commentWithTarget = await loadCommentWithTarget(commentId, { isRatedDownIncluded: !isSharedWithCarl })
+	const commentWithTarget = await loadCommentWithTarget(commentId, { isRatedDownIncluded: !isSharedWithPodcast })
 	if (!commentWithTarget || !(await isAllowed(userId, "topic:edit", commentWithTarget.resolvedSocialTarget.topic))) {
 		return { status: "notFound" }
 	}
@@ -299,16 +299,16 @@ export async function shareComment({
 	// share it in a free shared comment slot, or take it back
 	const { commentRow, resolvedSocialTarget } = commentWithTarget
 	const { topic } = resolvedSocialTarget
-	if (!isSharedWithCarl) {
+	if (!isSharedWithPodcast) {
 		await unshareComment(commentId)
 	} else if (!(await shareCommentInFreeSharedCommentSlot({ commentId, topic, body: commentRow.body }))) {
 		return { status: "noFreeSharedCommentSlot" }
 	}
 	trackEvent("social_hot_take_share", userId, {
 		...toSocialEventProperties({ analyticsProperties, userId, resolvedSocialTarget, objectId: commentId }),
-		isShared: isSharedWithCarl,
+		isShared: isSharedWithPodcast,
 	})
-	return { status: "saved", isSharedWithCarl, sharedCommentSlots: await loadSharedCommentSlots(topic) }
+	return { status: "saved", isSharedWithPodcast, sharedCommentSlots: await loadSharedCommentSlots(topic) }
 }
 
 // whether a post names a chapter its Podcast Episode has

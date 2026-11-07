@@ -1,6 +1,6 @@
 // a live smoke test for reactions and comments against the dev database: one reaction per user per social target, the
 // summary of one and many, the admin block, the mentions, the replies and their pages, the edit time, the user blocks,
-// the reports, the paged thread, the editor's share with Carl and its shared comment slots, and the deletes
+// the reports, the paged thread, the editor's share with the podcast and its shared comment slots, and the deletes
 // run it with: bun run smoke:social. needs Doppler secrets
 
 import type { Comment } from "@carlnotes/contracts/social"
@@ -183,7 +183,7 @@ async function checkComments(): Promise<void> {
 	const postedComment = toSavedComment(posted)
 	check("a post returns the comment with its one stored mention", postedComment?.mentions.length === 1, posted)
 	check("the mention names the user", postedComment?.mentions[0]?.userId === userIds.owner)
-	check("a follower's post is not shared with Carl", postedComment?.isSharedWithCarl === false)
+	check("a follower's post is not shared with the podcast", postedComment?.isSharedWithPodcast === false)
 	check(
 		"a follower's post returns no shared comment slots",
 		posted.status === "saved" && posted.sharedCommentSlots === null,
@@ -216,7 +216,7 @@ async function checkComments(): Promise<void> {
 	const replyToReply = toSavedComment(await post(userIds.stranger, "second reply", { parentCommentId: reply?.id }))
 	check("a reply names its parent", reply?.parentCommentId === commentId, reply)
 	check("a reply to a reply joins that reply's parent", replyToReply?.parentCommentId === commentId, replyToReply)
-	check("an owner's reply is not shared with Carl", reply?.isSharedWithCarl === false)
+	check("an owner's reply is not shared with the podcast", reply?.isSharedWithPodcast === false)
 	const crossTargetReply = await postComment({
 		userId: userIds.owner,
 		payload: { target: { kind: "topic", id: topicIds.second }, body: "wrong thread", parentCommentId: commentId },
@@ -417,7 +417,11 @@ async function checkSharedComments(): Promise<void> {
 	const ownerPost = await post(userIds.owner, `worth a read https://example.org/${runId}`)
 	const ownerComment = toSavedComment(ownerPost)
 	const ownerPostSharedCommentSlots = ownerPost.status === "saved" ? ownerPost.sharedCommentSlots : null
-	check("an editor's top-level comment is shared with Carl", ownerComment?.isSharedWithCarl === true, ownerPost)
+	check(
+		"an editor's top-level comment is shared with the podcast",
+		ownerComment?.isSharedWithPodcast === true,
+		ownerPost,
+	)
 	check(
 		"the post returns the shared comment slots with one used of three",
 		ownerPostSharedCommentSlots?.usedCount === 1 && ownerPostSharedCommentSlots.slotCount === 3,
@@ -429,8 +433,8 @@ async function checkSharedComments(): Promise<void> {
 	for (const body of ["second take", "third take", "fourth take"]) {
 		followerCommentIds.push(toSavedComment(await post(userIds.follower, body))?.id ?? "")
 	}
-	const share = (userId: string, commentId: string, isSharedWithCarl: boolean): ReturnType<typeof shareComment> =>
-		shareComment({ userId, commentId, isSharedWithCarl, analyticsProperties })
+	const share = (userId: string, commentId: string, isSharedWithPodcast: boolean): ReturnType<typeof shareComment> =>
+		shareComment({ userId, commentId, isSharedWithPodcast, analyticsProperties })
 	const [firstCommentId = "", secondCommentId = "", thirdCommentId = ""] = followerCommentIds
 
 	// two more shares fill the three shared comment slots
@@ -476,7 +480,7 @@ async function checkSharedComments(): Promise<void> {
 	)
 	check(
 		"the page marks the shared comments",
-		ownerPage.comments.filter((comment) => comment.isSharedWithCarl).length === 2,
+		ownerPage.comments.filter((comment) => comment.isSharedWithPodcast).length === 2,
 	)
 
 	// a delete of a shared comment frees its shared comment slot too

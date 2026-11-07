@@ -39,9 +39,9 @@ export function toMoreReactionUsersLabel(moreUserCount: number): string {
 export const REACTION_SAVE_ERROR = "That reaction didn't save. Carl suggests trying again."
 
 // the flame toggle's tooltip
-export const SHARE_WITH_CARL_LABEL = "Share with Carl and Vienna"
-export const SHARED_WITH_CARL_LABEL = "Shared with Carl and Vienna"
-export const UNSHARE_WITH_CARL_LABEL = "Don't share with Carl and Vienna"
+export const SHARE_WITH_PODCAST_LABEL = "Share with Carl and Vienna"
+export const SHARED_WITH_PODCAST_LABEL = "Shared with Carl and Vienna"
+export const UNSHARE_WITH_PODCAST_LABEL = "Don't share with Carl and Vienna"
 
 /**
  * Returns the label of the toggle under a thread with loaded comments not shown yet.
@@ -75,7 +75,7 @@ export function toSharedCommentSlotsLabel({ usedCount, slotCount }: { usedCount:
 }
 
 /**
- * Returns the title of the Topic's sources list group that holds the comments shared with Carl.
+ * Returns the title of the Topic's sources list group that holds the comments shared with the podcast.
  */
 export function toSharedCommentsSectionTitle(sharedCommentCount: number): string {
 	return `Hot takes · ${sharedCommentCount}`

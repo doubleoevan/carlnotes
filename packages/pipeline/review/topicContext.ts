@@ -17,7 +17,8 @@ import { assertPersonalSourcesReviewCurrent, toPrivateReviewError } from "../per
 // the bounded input to the relevance embedding
 const MAX_EMBED_CHARS = 8000
 
-// the topic context limit for the score prompt and the scan summary. the limit fits the prompt and one full-length attachment
+// the topic context limit for the score prompt and the scan summary. the limit fits the prompt and one full-length
+// attachment
 const MAX_TOPIC_CONTEXT_CHARS = 24_000
 
 // how many example pages of each kind the score prompt lists
@@ -54,8 +55,8 @@ export function toTopicContextText(topicScanContext: { name: string; context: st
 }
 
 /**
- * Builds the score prompt's text from the context text, then the pages that the topic's users liked or bookmarked,
- * then the pages that they rated down, then the comments the topic's editors shared with Carl. No other comment is
+ * Builds the score prompt's text from the context text, then the pages that the topic's users liked or bookmarked, then
+ * the pages that they rated down, then the comments the topic's editors shared with the podcast. No other comment is
  * read.
  */
 export function toScoreContextText(
@@ -63,7 +64,8 @@ export function toScoreContextText(
 	scoreExamplePages: ScoreExamplePages,
 	sharedCommentTexts: SharedCommentText[] = [],
 ): string {
-	// list each kind of example page by title and host, under a label like an attachment's. a kind with no pages is left out
+	// list each kind of example page by title and host, under a label like an attachment's. a kind with no pages is left
+	// out
 	const toExampleSections = (label: string, examplePages: ScoreExamplePage[]): string[] => {
 		const examplePageLines = examplePages
 			.slice(0, MAX_SCORE_EXAMPLE_PAGES)

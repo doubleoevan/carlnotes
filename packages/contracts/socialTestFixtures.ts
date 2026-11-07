@@ -36,7 +36,7 @@ export function toTestCommentReply(overrides: Partial<CommentReply> = {}): Comme
 		parentCommentId: "comment-1",
 		createdAt: "2026-11-05T12:05:00Z",
 		reactions: { counts: [], ownReactionType: null },
-		isSharedWithCarl: false,
+		isSharedWithPodcast: false,
 		isAired: false,
 		isReported: false,
 		isAuthor: false,
@@ -101,12 +101,16 @@ export function toTestCommentThread(overrides: Partial<CommentThreadResponse> = 
 }
 
 /**
- * Returns a Topic editor's first page: one comment shared with Carl, one not, and the given shared comment slots.
+ * Returns a Topic editor's first page: one comment shared with the podcast, one not, and the given shared comment
+ * slots.
  */
 export function toTestEditorCommentThread(sharedCommentSlots: SharedCommentSlots): CommentThreadResponse {
 	return {
 		...EMPTY_COMMENT_THREAD,
-		comments: [toTestComment({ isSharedWithCarl: true }), toTestComment({ id: "comment-2", body: "Not shared yet." })],
+		comments: [
+			toTestComment({ isSharedWithPodcast: true }),
+			toTestComment({ id: "comment-2", body: "Not shared yet." }),
+		],
 		sharedCommentSlots,
 	}
 }
@@ -128,7 +132,8 @@ export function toTestChapterCommentThread(): CommentThreadResponse {
 }
 
 /**
- * Returns two Comments a Topic shares with Carl, a person's and his own, the page at the given path showing both.
+ * Returns two Comments a Topic shares with the podcast, a person's and his own, the page at the given path showing
+ * both.
  */
 export function toTestSharedComments(path: string): SharedComment[] {
 	return [

@@ -27,7 +27,7 @@ export type ResolvedSocialTarget = {
 
 /**
  * Returns who reads a Topic's comments: the user, null for a visitor, whether they may delete anyone's there, and
- * whether they may share one with Carl, which a user who may edit the Topic does.
+ * whether they may share one with the podcast, which a user who may edit the Topic does.
  */
 export async function toSocialReader(userId: string | null, topic: NamedTopic): Promise<SocialReader> {
 	const [canModerate, canShare] = await Promise.all([

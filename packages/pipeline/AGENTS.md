@@ -121,21 +121,21 @@ it; it imports `@carlnotes/models`, `@carlnotes/emails`, `@carlnotes/db`, `@carl
 - `podcast/` — the steps of the worker's `recordPodcastEpisode` workflow. `planPodcastEpisode.ts` runs the checks that
   stop a recording before it spends anything, inside one request memo, picks the Findings, and marks the podcast
   episode short on a free Topic or past the billed user's full podcast episodes cutoff.
-  `podcastEpisodeSharedComments.ts` takes the comments shared with Carl by reactions, runs the classification on them,
-  and places each one in a chapter or the closing turns. `writePodcastEpisodeScript.ts` writes and saves the script.
-  Each segment's prompt lists its chapters' shared comments, and the last segment's also lists the closing ones.
-  `generatePodcastEpisodeScript.ts` makes its outline and segment calls on `score-model`,
-  and `podcastEpisodeHosts.ts` writes the hosts block that those prompts and the podcast question's chat prompt splice.
-  `podcastEpisodeOutline.ts` holds the outline's shape and checks each outline draft, and `podcastEpisodeScript.ts`
-  holds the segments' shape, checks each segment draft, and builds the script, with `podcastEpisodeScriptFixtures.ts`
-  for their tests. `podcastEpisodeAudio.ts` records each chapter through `@carlnotes/models/speech`, stores its audio
-  in object storage, and joins the chapters with ffmpeg. `podcastEpisodeTheme.ts` mixes the theme song's intro and outro
-  under the talk in that same pass, from the clips committed in `assets/podcast/`, and shifts the chapter times by the
-  intro's lead. `publishPodcastEpisode.ts` publishes or fails the row, and a short podcast episode's publish replaces
-  the Topic's earlier short ones. `removePodcastEpisode.ts` removes a Podcast Episode and deletes its audio and its
-  vector. `podcastEpisodeChapters.ts` gives a new Finding the newest rating of the chapters that narrated its Resource,
-  and links those chapters to it. The review's `upsertFinding` calls both. `podcastEpisodeSmokeFixtures.ts` seeds the
-  rows for the worker's podcast episode smoke.
+  `podcastEpisodeSharedComments.ts` takes the comments shared with the podcast by reactions, runs the classification on
+  them, and places each one in a chapter or the closing turns. `writePodcastEpisodeScript.ts` writes and saves the
+  script. Each segment's prompt lists its chapters' shared comments, and the last segment's also lists the closing ones.
+  `generatePodcastEpisodeScript.ts` makes its outline and segment calls on `score-model`, and `podcastEpisodeHosts.ts`
+  writes the hosts block that those prompts and the podcast question's chat prompt splice. `podcastEpisodeOutline.ts`
+  holds the outline's shape and checks each outline draft, and `podcastEpisodeScript.ts` holds the segments' shape,
+  checks each segment draft, and builds the script, with `podcastEpisodeScriptFixtures.ts` for their tests.
+  `podcastEpisodeAudio.ts` records each chapter through `@carlnotes/models/speech`, stores its audio in object storage,
+  and joins the chapters with ffmpeg. `podcastEpisodeTheme.ts` mixes the theme song's intro and outro under the talk in
+  that same pass, from the clips committed in `assets/podcast/`, and shifts the chapter times by the intro's lead.
+  `publishPodcastEpisode.ts` publishes or fails the row, and a short podcast episode's publish replaces the Topic's
+  earlier short ones. `removePodcastEpisode.ts` removes a Podcast Episode and deletes its audio and its vector.
+  `podcastEpisodeChapters.ts` gives a new Finding the newest rating of the chapters that narrated its Resource, and
+  links those chapters to it. The review's `upsertFinding` calls both. `podcastEpisodeSmokeFixtures.ts` seeds the rows
+  for the worker's podcast episode smoke.
 - `meanVectors.ts` saves the vectors that rank related topics, related podcast episodes, and the podcast episode search,
   each the mean of the current model's resource embeddings behind it, computed in SQL: a Topic's after every Scan ends,
   succeeded, stopped, or failed, after a save that changes its visibility, and after a rating, from its kept Findings,

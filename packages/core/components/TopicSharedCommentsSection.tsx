@@ -15,8 +15,8 @@ type TopicSharedCommentsSectionProps = {
 }
 
 /**
- * Lists the comments a Topic shares with Carl in the Topic's sources list, as a group of its own for a user who may
- * edit the Topic.
+ * Lists the comments a Topic shares with the podcast in the Topic's sources list, as a group of its own for a user who
+ * may edit the Topic.
  */
 export function TopicSharedCommentsSection({ topic, elements, className }: TopicSharedCommentsSectionProps) {
 	const { data: session } = authClient().useSession()
@@ -54,7 +54,8 @@ type SharedCommentsGroupProps = {
 }
 
 /**
- * The shared comments group: each shared comment with its author, when it was shared, its words, and a link to its page.
+ * The shared comments group: each shared comment with its author, when it was shared, its words, and a link to its
+ * page.
  */
 export function SharedCommentsGroup({ sharedComments, elements, className, initialOpen }: SharedCommentsGroupProps) {
 	const { Row, ExpandableRow, Group, Text, Link } = elements

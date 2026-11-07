@@ -1,5 +1,5 @@
 // the social contracts: what a Reaction or a Comment hangs on, a social target's reaction summary, a Comment with its
-// replies and its thread, the Comments shared with Carl, and the bodies that write them
+// replies and its thread, the Comments shared with the podcast, and the bodies that write them
 import { z } from "zod"
 import type { CommentEventTarget, SocialEventTarget } from "./analyticsEvents"
 import { commentTargetKinds, reactionTypes, socialTargetKinds } from "./enums"
@@ -58,8 +58,8 @@ export const SOCIAL_EDIT_MS = 15 * MINUTE_MS
 export const SOCIAL_PAGE_SIZE = 20
 export const COMMENT_REPLY_PREVIEW_COUNT = 3
 
-// how many Comments a Topic shares with Carl for its next Podcast Episode, by the Podcast Episode's length, and how
-// many of the most recently shared a Scan's scoring reads
+// how many Comments a Topic shares with the podcast for its next Podcast Episode, by the Podcast Episode's length, and
+// how many of the most recently shared a Scan's scoring reads
 export const SHARED_COMMENT_SLOTS = { short: 3, full: 5 } as const
 export const SHARED_COMMENT_CONTEXT_COUNT = 5
 
@@ -121,8 +121,8 @@ const commentReply = z.object({
 	parentCommentId: z.string().nullable(),
 	createdAt: z.string(),
 	reactions: reactionSummary,
-	// whether the Topic's editors shared it with Carl
-	isSharedWithCarl: z.boolean(),
+	// whether the Topic's editors shared it with the podcast
+	isSharedWithPodcast: z.boolean(),
 	// whether a Podcast Episode's script read it
 	isAired: z.boolean(),
 	// whether the user reported it
@@ -172,8 +172,8 @@ export const postCommentPayload = z.object({
 	chapterPosition: commentChapterPosition.optional(),
 	// the Comment a reply answers. a reply to a reply joins that reply's parent
 	parentCommentId: socialId.optional(),
-	// whether an editor's comment is shared with Carl. left out, a top-level comment is shared and a reply is not
-	isSharedWithCarl: z.boolean().optional(),
+	// whether an editor's comment is shared with the podcast. left out, a top-level comment is shared and a reply is not
+	isSharedWithPodcast: z.boolean().optional(),
 })
 export type PostCommentPayload = z.infer<typeof postCommentPayload>
 export const editCommentPayload = z.object({ body: commentBody })
@@ -189,12 +189,12 @@ export const deleteCommentResponse = commentThreadResponse
 	.extend({ ok: z.literal(true) })
 export type DeleteCommentResponse = z.infer<typeof deleteCommentResponse>
 
-// the body that shares a Comment with Carl or takes it back, and what it returns
-export const shareCommentPayload = z.object({ isSharedWithCarl: z.boolean() })
-export const shareCommentResponse = z.object({ isSharedWithCarl: z.boolean(), sharedCommentSlots })
+// the body that shares a Comment with the podcast or takes it back, and what it returns
+export const shareCommentPayload = z.object({ isSharedWithPodcast: z.boolean() })
+export const shareCommentResponse = z.object({ isSharedWithPodcast: z.boolean(), sharedCommentSlots })
 export type ShareCommentResponse = z.infer<typeof shareCommentResponse>
 
-// one Comment a Topic shares with Carl, as the Topic's sources list shows it
+// one Comment a Topic shares with the podcast, as the Topic's sources list shows it
 const sharedComment = commentReply.pick({ id: true, author: true, body: true }).extend({
 	sharedAt: z.string(),
 	// the page that shows it

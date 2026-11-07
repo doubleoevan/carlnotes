@@ -14,9 +14,9 @@ import { COMMENT_DELETE_CONFIRMATION } from "../lib/confirmationCopy"
 import type { CommentChapter, SocialElements } from "../lib/socialElements"
 import {
 	COMMENT_THREAD_LABELS,
-	SHARE_WITH_CARL_LABEL,
+	SHARE_WITH_PODCAST_LABEL,
 	SHARED_COMMENT_SLOTS_TOOLTIP,
-	SHARED_WITH_CARL_LABEL,
+	SHARED_WITH_PODCAST_LABEL,
 	toMoreCommentsLabel,
 	toSharedCommentSlotsFullLabel,
 	toSharedCommentSlotsLabel,
@@ -75,9 +75,9 @@ function toComposerShare({
 	}
 	const { editedComment } = composerState
 	if (editedComment?.isAired) {
-		return { isOffered: true, disabledReason: SHARED_WITH_CARL_LABEL, isShared: true }
+		return { isOffered: true, disabledReason: SHARED_WITH_PODCAST_LABEL, isShared: true }
 	}
-	if (editedComment?.isSharedWithCarl || hasFreeSharedCommentSlot(sharedCommentSlots)) {
+	if (editedComment?.isSharedWithPodcast || hasFreeSharedCommentSlot(sharedCommentSlots)) {
 		return { isOffered: true, isShared: isShareChosen }
 	}
 	return {
@@ -132,7 +132,7 @@ export function CommentThread({
 			: await thread.post(body, {
 					chapterPosition: repliedComment ? null : chapterPosition,
 					parentCommentId: repliedComment ? (repliedComment.parentCommentId ?? repliedComment.id) : null,
-					isSharedWithCarl: composerShare.isShared,
+					isSharedWithPodcast: composerShare.isShared,
 				})
 		if (commentWriteResult.status === "saved") {
 			setComposerState(null)
@@ -155,7 +155,7 @@ export function CommentThread({
 		if (
 			commentWriteResult.status === "saved" &&
 			isShared !== undefined &&
-			isShared !== editedComment.isSharedWithCarl
+			isShared !== editedComment.isSharedWithPodcast
 		) {
 			await handleShare(editedComment, isShared)
 		}
@@ -183,8 +183,8 @@ export function CommentThread({
 		}
 	}
 
-	// share a comment with Carl or take it back. a Topic with no free shared comment slot shows its toggles disabled, so
-	// a share that finds none is a race with another editor and reads as a failed save
+	// share a comment with the podcast or take it back. a Topic with no free shared comment slot shows its toggles
+	// disabled, so a share that finds none is a race with another editor and reads as a failed save
 	async function handleShare(comment: CommentReply, isShared: boolean): Promise<void> {
 		if (!(await thread.share(comment.id, isShared))) {
 			onError(COMMENT_THREAD_LABELS.shareError)
@@ -201,7 +201,7 @@ export function CommentThread({
 	)
 	const handleEdit = useStableCallback((comment: CommentReply) => {
 		setComposerState({ editedComment: comment, repliedComment: null })
-		setIsShareChosen(comment.isSharedWithCarl)
+		setIsShareChosen(comment.isSharedWithPodcast)
 	})
 	const handleShareToggle = useStableCallback(
 		(comment: CommentReply, isShared: boolean) => void handleShare(comment, isShared),
@@ -214,7 +214,7 @@ export function CommentThread({
 	return (
 		<>
 			<Container>
-				{/* the button, and how many comments are shared with Carl for a user who may share */}
+				{/* the button, and how many comments are shared with the podcast for a user who may share */}
 				<ComposerRow>
 					<ComposerButton
 						label={COMMENT_THREAD_LABELS.composeButton}
@@ -249,7 +249,7 @@ export function CommentThread({
 							footerStart={
 								composerShare.isOffered && (
 									<ComposerShareSwitch
-										label={SHARE_WITH_CARL_LABEL}
+										label={SHARE_WITH_PODCAST_LABEL}
 										isChecked={composerShare.isShared === true}
 										disabledReason={composerShare.disabledReason}
 										onChange={setIsShareChosen}

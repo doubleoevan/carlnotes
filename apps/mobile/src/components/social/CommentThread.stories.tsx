@@ -53,7 +53,8 @@ export const OwnAndModerated: Story = {
 export const LockedOwn: Story = {
 	args: { firstPage: toTestCommentThread({ comments: [toTestOwnComment({ isEditable: false })] }) },
 }
-// a Topic's editor, who presses the flame to share a comment with Carl: one shared, two shared comment slots free
+// a Topic's editor, who presses the flame to share a comment with the podcast: one shared, two shared comment slots
+// free
 export const TopicEditor: Story = {
 	args: { isTopicOwner: true, firstPage: toTestEditorCommentThread({ usedCount: 1, slotCount: 3 }) },
 }
@@ -63,7 +64,7 @@ export const NoFreeSlot: Story = {
 }
 // a user who may not share sees the flame on a shared comment alone, with no press
 export const SharedComment: Story = {
-	args: { firstPage: toTestCommentThread({ comments: [toTestComment({ isSharedWithCarl: true })] }) },
+	args: { firstPage: toTestCommentThread({ comments: [toTestComment({ isSharedWithPodcast: true })] }) },
 }
 // a comment with more replies than came with the thread
 export const WithMoreReplies: Story = {

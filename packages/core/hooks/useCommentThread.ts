@@ -27,14 +27,19 @@ const FIRST_SHOWN_COMMENT_COUNT = 5
 const COMMENT_THREAD_STALE_MS = 30_000
 
 // what a post names beside its body: a Podcast Episode's chapter, the top-level comment a reply answers, and whether
-// an editor shares it with Carl, left out to take the api's default
-type PostCommentOptions = { chapterPosition: number | null; parentCommentId: string | null; isSharedWithCarl?: boolean }
+// an editor shares it with the podcast, left out to take the api's default
+type PostCommentOptions = {
+	chapterPosition: number | null
+	parentCommentId: string | null
+	isSharedWithPodcast?: boolean
+}
 
 // a social target's comment thread, newest first, each comment with its replies, and the writes that change it
 export type CommentThreadState = {
 	// the top-level comments shown so far
 	comments: Comment[]
-	// how many comments the Topic shares with Carl and how many it may, for a user who may share. null for anyone else
+	// how many comments the Topic shares with the podcast and how many it may, for a user who may share. null for anyone
+	// else
 	sharedCommentSlots: SharedCommentSlots | null
 	// how many comments and replies the last seven days added
 	weekCommentCount: number
@@ -56,8 +61,8 @@ export type CommentThreadState = {
 	remove: (commentId: string) => Promise<boolean>
 	// keeps the summary a comment's reaction save returned
 	keepReactions: (commentId: string, summary: ReactionSummary) => void
-	// shares a comment with Carl or takes it back, and returns whether the write succeeded
-	share: (commentId: string, isSharedWithCarl: boolean) => Promise<boolean>
+	// shares a comment with the podcast or takes it back, and returns whether the write succeeded
+	share: (commentId: string, isSharedWithPodcast: boolean) => Promise<boolean>
 }
 
 // the comments with one of them changed, a top-level comment or a reply. a top-level comment keeps its replies
@@ -272,14 +277,14 @@ export function useCommentThread(
 	// put a posted comment first, as the newest, and a posted reply last under the comment it answers
 	async function post(
 		body: string,
-		{ chapterPosition, parentCommentId, isSharedWithCarl }: PostCommentOptions,
+		{ chapterPosition, parentCommentId, isSharedWithPodcast }: PostCommentOptions,
 	): Promise<CommentWriteResult> {
 		const commentWriteResult = await postCommentRequest({
 			target,
 			body,
 			chapterPosition: chapterPosition ?? undefined,
 			parentCommentId: parentCommentId ?? undefined,
-			isSharedWithCarl,
+			isSharedWithPodcast,
 		})
 		if (commentWriteResult.status !== "saved") {
 			return commentWriteResult
@@ -335,13 +340,13 @@ export function useCommentThread(
 		invalidateCachedPage()
 	}
 
-	// share a comment with Carl or take it back, and keep the shared comment slots the write returned
-	async function share(commentId: string, isSharedWithCarl: boolean): Promise<boolean> {
-		const sharedComment = await shareCommentRequest(commentId, isSharedWithCarl)
+	// share a comment with the podcast or take it back, and keep the shared comment slots the write returned
+	async function share(commentId: string, isSharedWithPodcast: boolean): Promise<boolean> {
+		const sharedComment = await shareCommentRequest(commentId, isSharedWithPodcast)
 		if (sharedComment) {
 			// the flame and the count change together
 			setComments((currentComments) =>
-				toChangedComments(currentComments, commentId, { isSharedWithCarl: sharedComment.isSharedWithCarl }),
+				toChangedComments(currentComments, commentId, { isSharedWithPodcast: sharedComment.isSharedWithPodcast }),
 			)
 			setSharedCommentSlots(sharedComment.sharedCommentSlots)
 			invalidateCachedPage()

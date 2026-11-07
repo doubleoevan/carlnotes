@@ -1,4 +1,5 @@
-// the social tables: reactions, comments, the users a comment mentions, and the links of a comment shared with Carl
+// the social tables: reactions, comments, the users a comment mentions, and the links of a comment shared with the
+// podcast
 import { sql } from "drizzle-orm"
 import {
 	type AnyPgColumn,
@@ -91,9 +92,9 @@ export const comments = pgTable(
 		// the top-level comment a reply answers, on the same social target. the thread shows one level
 		parentCommentId: text("parent_comment_id").references((): AnyPgColumn => comments.id, { onDelete: "cascade" }),
 		body: text("body").notNull(),
-		// when a Topic editor shared it with Carl, and the Topic its social target belongs to. both are set together
-		sharedWithCarlAt: timestamp("shared_with_carl_at", { withTimezone: true }),
-		sharedTopicId: text("shared_topic_id").references(() => topics.id, { onDelete: "cascade" }),
+		// when a Topic editor shared it with the podcast, and the Topic its social target belongs to. both are set together
+		sharedWithPodcastAt: timestamp("shared_with_podcast_at", { withTimezone: true }),
+		sharedWithPodcastTopicId: text("shared_with_podcast_topic_id").references(() => topics.id, { onDelete: "cascade" }),
 		// the Podcast Episode whose script read it, which frees its shared comment slot
 		airedPodcastEpisodeId: text("aired_podcast_episode_id").references(() => podcastEpisodes.id, {
 			onDelete: "set null",
@@ -110,7 +111,10 @@ export const comments = pgTable(
 			"comments_chapter_on_podcast_episode",
 			sql`${table.chapterPosition} is null or ${table.podcastEpisodeId} is not null`,
 		),
-		check("comments_shared_with_topic", sql`(${table.sharedWithCarlAt} is null) = (${table.sharedTopicId} is null)`),
+		check(
+			"comments_shared_with_podcast_topic",
+			sql`(${table.sharedWithPodcastAt} is null) = (${table.sharedWithPodcastTopicId} is null)`,
+		),
 		// a social target's thread newest first
 		index("comments_finding_created_at_idx")
 			.on(table.findingId, table.createdAt)
@@ -130,9 +134,9 @@ export const comments = pgTable(
 		index("comments_parent_created_at_idx")
 			.on(table.parentCommentId, table.createdAt)
 			.where(sql`${table.parentCommentId} is not null`),
-		index("comments_shared_topic_idx")
-			.on(table.sharedTopicId, table.sharedWithCarlAt)
-			.where(sql`${table.sharedTopicId} is not null`),
+		index("comments_shared_with_podcast_topic_idx")
+			.on(table.sharedWithPodcastTopicId, table.sharedWithPodcastAt)
+			.where(sql`${table.sharedWithPodcastTopicId} is not null`),
 	],
 )
 
@@ -155,7 +159,8 @@ export const commentMentions = pgTable(
 	],
 )
 
-// one url in the body of a comment shared with Carl, which the Topic's next Scan reviews like a Personal sources link
+// one url in the body of a comment shared with the podcast, which the Topic's next Scan reviews like a Personal sources
+// link
 export const commentLinks = pgTable(
 	"comment_links",
 	{

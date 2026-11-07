@@ -212,10 +212,10 @@ height with a hit slop to the touch target, the composer in a `Sheet` with `Bott
 for a Podcast Episode's chapter. Its `COMMENT_ELEMENTS` and `SocialComposer` are the comment parts and the one composer
 that `note/NoteComments.tsx` reuses, with a plain `TextInput` outside a sheet. `ReactionRow.tsx` and `CommentThread.tsx`
 add sign-up that returns to the screen, the app's error display, the report sheet, and the thread's view event. The
-flame and mugs of a comment shared with Carl show their label as their accessibility label. `SocialSection.tsx` holds
-the thread in the collapsible Hot takes card that `topic/TopicPageContent.tsx`, `podcast/PodcastEpisodeScreen.tsx`, and
-the Finding's sheet in `topic/TopicResourceInfo.tsx` mount, each with the reaction row in its header, and the sheet has
-the Finding's own flag.
+flame and mugs of a comment shared with the podcast show their label as their accessibility label. `SocialSection.tsx`
+holds the thread in the collapsible Hot takes card that `topic/TopicPageContent.tsx`,
+`podcast/PodcastEpisodeScreen.tsx`, and the Finding's sheet in `topic/TopicResourceInfo.tsx` mount, each with the
+reaction row in its header, and the sheet has the Finding's own flag.
 
 ## Chat and audio
 

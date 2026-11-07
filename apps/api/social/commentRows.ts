@@ -45,8 +45,8 @@ type CommentRow = SocialAuthorRow &
 		| "body"
 		| "chapterPosition"
 		| "parentCommentId"
-		// when it was shared with Carl, and the Podcast Episode that read it
-		| "sharedWithCarlAt"
+		// when it was shared with the podcast, and the Podcast Episode that read it
+		| "sharedWithPodcastAt"
 		| "airedPodcastEpisodeId"
 		| "createdAt"
 	> & { isReported: boolean }
@@ -60,7 +60,7 @@ function toCommentColumns(reader: SocialReader) {
 		body: comments.body,
 		chapterPosition: comments.chapterPosition,
 		parentCommentId: comments.parentCommentId,
-		sharedWithCarlAt: comments.sharedWithCarlAt,
+		sharedWithPodcastAt: comments.sharedWithPodcastAt,
 		airedPodcastEpisodeId: comments.airedPodcastEpisodeId,
 		createdAt: comments.createdAt,
 		...socialAuthorColumns,
@@ -117,7 +117,7 @@ async function toCommentReplies(commentRows: CommentRow[], reader: SocialReader)
 		createdAt: commentRow.createdAt.toISOString(),
 		reactions:
 			reactionSummaries.get(toSocialTargetKey({ kind: "comment", id: commentRow.id })) ?? EMPTY_REACTION_SUMMARY,
-		isSharedWithCarl: commentRow.sharedWithCarlAt !== null,
+		isSharedWithPodcast: commentRow.sharedWithPodcastAt !== null,
 		isAired: commentRow.airedPodcastEpisodeId !== null,
 		isReported: commentRow.isReported,
 		...toCommentPermissions(commentRow, reader),

@@ -125,15 +125,15 @@ authenticated encryption itself lives in `@carlnotes/server/privateText`.
   upsert, and a save with no type removes it. `commentRows.ts` loads a thread's page of top-level comments with each
   one's first replies and reactions, a comment's page of replies, and the shared comment slots for a user who may share.
   `comments.ts` posts a comment or a reply, shares an editor's comment or reply if the post asks and a shared comment
-  slot is free, a top-level comment by default, edits inside the edit time, deletes, and shares a comment with Carl or
-  takes it back through `@carlnotes/db/sharedComments`. `sharedCommentRows.ts` lists a Topic's shared comments for its
-  sources list. `findingReactions.ts` attaches each Finding's reaction summary and comment count to a feed's Findings.
-  `reactionsRoute.ts` and `commentsRoute.ts` are the routes, the first with `GET /api/reactions/summary` for a list
-  whose read came without summaries, and the second with `GET /api/comments/:id/replies`, `PUT /api/comments/:id/share`,
-  `GET /api/topics/:id/shared-comments`, and `GET /api/usernames` for mention suggestions. `pageCommentThread.ts` loads
-  a Topic page's and a Podcast Episode page's first thread page. A write runs the Terms check, the daily count in
-  `@carlnotes/db/socialLimits`, and the classification, in that order. `bun run smoke:social` runs `social.smoke.ts`
-  against the dev database.
+  slot is free, a top-level comment by default, edits inside the edit time, deletes, and shares a comment with the
+  podcast or takes it back through `@carlnotes/db/sharedComments`. `sharedCommentRows.ts` lists a Topic's shared
+  comments for its sources list. `findingReactions.ts` attaches each Finding's reaction summary and comment count to a
+  feed's Findings. `reactionsRoute.ts` and `commentsRoute.ts` are the routes, the first with `GET
+  /api/reactions/summary` for a list whose read came without summaries, and the second with `GET
+  /api/comments/:id/replies`, `PUT /api/comments/:id/share`, `GET /api/topics/:id/shared-comments`, and `GET
+  /api/usernames` for mention suggestions. `pageCommentThread.ts` loads a Topic page's and a Podcast Episode page's
+  first thread page. A write runs the Terms check, the daily count in `@carlnotes/db/socialLimits`, and the
+  classification, in that order. `bun run smoke:social` runs `social.smoke.ts` against the dev database.
 - `note/` — the tasting-notes routes: `notes.ts` (a page's note list, the create, the badges, the read that returns
   the body's html and version, the rename and visibility change, the delete, and the save, `PUT /api/notes/:id/body`
   at `NOTE_BODY_PATH`: it rejects a visitor with a 404 before reading the body, bounds the body at

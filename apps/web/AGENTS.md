@@ -218,14 +218,14 @@ the browser bundle and renders pages through the server build, behind its own ro
   podcast episode or a chapter by id from a page. Core `useShownPodcastEpisode` owns selection and recording polling;
   the web supplies its search parameter.
 - `components/social/` — the web's adapters of the shared reaction row and comment thread. `socialElements.tsx` is the
-  web's `SocialElements` set with the six reaction icons and the flame and mugs of a comment shared with Carl. Its
-  `COMMENT_ELEMENTS` are the comment parts and the one composer that `note/NoteComments.tsx` spreads too.
+  web's `SocialElements` set with the six reaction icons and the flame and mugs of a comment shared with the podcast.
+  Its `COMMENT_ELEMENTS` are the comment parts and the one composer that `note/NoteComments.tsx` spreads too.
   `ReactionUsersTooltip.tsx` names who reacted, and `socialTestHarness.tsx` renders the thread for its tests.
-  `ReactionRow.tsx` and `CommentThread.tsx` add sign-up for a visitor, a toast for an error, the report dialog, and
-  the thread's view event. `SocialSection.tsx` holds the thread in the Topic
-  page's, the Podcast Episode page's, and the finding popover's collapsible Hot takes card, with the week's count beside
-  its title and the shared count at the card's top right. `topic/TopicPageHeader.tsx`, `pages/PodcastEpisodePage.tsx`,
-  and `topic/TopicResourceInfo.tsx` place the reaction row in their headers.
+  `ReactionRow.tsx` and `CommentThread.tsx` add sign-up for a visitor, a toast for an error, the report dialog, and the
+  thread's view event. `SocialSection.tsx` holds the thread in the Topic page's, the Podcast Episode page's, and the
+  finding popover's collapsible Hot takes card, with the week's count beside its title and the shared count at the
+  card's top right. `topic/TopicPageHeader.tsx`, `pages/PodcastEpisodePage.tsx`, and `topic/TopicResourceInfo.tsx` place
+  the reaction row in their headers.
 - `components/note/` — the Tasting Notes section, table, and dialog, the dialog's create flow in `CreateNote.tsx`, and
   the shared core note composition adapted to `react-native-enriched-html`, whose web build is a Tiptap editor. `NoteDialog.tsx` fetches the
   note's html and version on every open, loads the comment thread through `useNoteComments` at the same time, and

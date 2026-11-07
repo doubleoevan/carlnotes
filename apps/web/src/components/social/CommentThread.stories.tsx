@@ -1,6 +1,5 @@
-// the comment thread in its card: the composer's button, the comments newest first with mentions
-// linked, each with its reactions and its replies, the flame of a comment shared with Carl, and a Podcast Episode's
-// chapter tags
+// the comment thread in its card: the composer's button, the comments newest first with mentions linked, each with its
+// reactions and its replies, the flame of a comment shared with the podcast, and a Podcast Episode's chapter tags
 import { fetchCommentThread, fetchMentionSuggestions, postComment } from "@carlnotes/client/socialClient"
 import { EMPTY_COMMENT_THREAD } from "@carlnotes/contracts/social"
 import {
@@ -52,7 +51,8 @@ export const LockedOwn: Story = {
 	args: { firstPage: toTestCommentThread({ comments: [toTestOwnComment({ isEditable: false })] }) },
 }
 
-// a Topic's editor, who presses the flame to share a comment with Carl: one shared, two shared comment slots free
+// a Topic's editor, who presses the flame to share a comment with the podcast: one shared, two shared comment slots
+// free
 export const TopicEditor: Story = {
 	args: { isTopicOwner: true, firstPage: toTestEditorCommentThread({ usedCount: 1, slotCount: 3 }) },
 }
@@ -64,7 +64,7 @@ export const NoFreeSlot: Story = {
 
 // a user who may not share sees the flame on a shared comment alone, with no press
 export const SharedComment: Story = {
-	args: { firstPage: toTestCommentThread({ comments: [toTestComment({ isSharedWithCarl: true })] }) },
+	args: { firstPage: toTestCommentThread({ comments: [toTestComment({ isSharedWithPodcast: true })] }) },
 }
 
 // a comment with more replies than came with the thread

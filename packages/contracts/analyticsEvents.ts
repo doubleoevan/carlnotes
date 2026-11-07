@@ -83,7 +83,7 @@ export type UserAnalyticsEvent =
 	| "note_comment_added"
 	// a report of someone's content
 	| "content_flagged"
-	// a Reaction saved or removed, a Comment posted, deleted, or shared with Carl, and a flag of a social subject
+	// a Reaction saved or removed, a Comment posted, deleted, or shared with the podcast, and a flag of a social subject
 	| `social_${SocialEventTarget}_react`
 	| `social_${CommentEventTarget}_hot_take`
 	| "social_reaction_delete"

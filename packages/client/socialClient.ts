@@ -1,5 +1,5 @@
-// the api client for reactions and comments on a social target: the reads, the writes, the share with Carl, and the
-// mention suggestions
+// the api client for reactions and comments on a social target: the reads, the writes, the share with the podcast, and
+// the mention suggestions
 import type { ProfileIdentity } from "@carlnotes/contracts/profiles"
 import {
 	type CommentRepliesResponse,
@@ -143,14 +143,17 @@ export async function deleteComment(commentId: string): Promise<DeleteCommentRes
 }
 
 /**
- * Shares a comment with Carl or takes it back, for a user who may edit its Topic. Returns whether the comment is shared
- * now with the Topic's shared comment slots, or null if nothing changed.
+ * Shares a comment with the podcast or takes it back, for a user who may edit its Topic. Returns whether the comment is
+ * shared now with the Topic's shared comment slots, or null if nothing changed.
  */
-export async function shareComment(commentId: string, isSharedWithCarl: boolean): Promise<ShareCommentResponse | null> {
+export async function shareComment(
+	commentId: string,
+	isSharedWithPodcast: boolean,
+): Promise<ShareCommentResponse | null> {
 	try {
 		const response = await apiClient().api.comments[":id"].share.$put({
 			param: { id: commentId },
-			json: { isSharedWithCarl },
+			json: { isSharedWithPodcast },
 		})
 		return response.ok ? await readApiResponse(shareCommentResponse, response) : null
 	} catch {
@@ -159,7 +162,7 @@ export async function shareComment(commentId: string, isSharedWithCarl: boolean)
 }
 
 /**
- * Reads the comments a Topic shares with Carl, for a user who may edit the Topic. A failed read lists none.
+ * Reads the comments a Topic shares with the podcast, for a user who may edit the Topic. A failed read lists none.
  */
 export async function fetchSharedComments(topicId: string): Promise<SharedComment[]> {
 	try {

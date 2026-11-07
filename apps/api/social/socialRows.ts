@@ -6,7 +6,7 @@ import { users } from "@carlnotes/db/schema/users"
 import { and, eq, exists, isNull, type SQL, type SQLWrapper, sql } from "drizzle-orm"
 
 // who reads a comment: the user, null for a visitor, whether they may delete anyone's on this Topic, and whether
-// they may share one with Carl
+// they may share one with the podcast
 export type SocialReader = { userId: string | null; canModerate: boolean; canShare: boolean }
 
 // a cursor's two parts: a creation time in milliseconds and a row id

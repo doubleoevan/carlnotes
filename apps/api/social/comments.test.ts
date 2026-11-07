@@ -1,5 +1,5 @@
 // comment write tests: who may post, a reply's parent, the daily count, the chapter check, the classification, the
-// editor's share with Carl, the delete, and the events
+// editor's share with the podcast, the delete, and the events
 import { afterEach, beforeEach, expect, mock, spyOn, test } from "bun:test"
 import type { CommentTarget, PostCommentPayload } from "@carlnotes/contracts/social"
 import {
@@ -119,7 +119,7 @@ test("a post stores the comment with its mention and sends a hot take event with
 		expect(commentWriteResult.comment.mentions).toEqual([{ userId: "owner-1", username: "owner-1" }])
 		expect(commentWriteResult.comment.chapterPosition).toBe(3)
 		expect(commentWriteResult.comment.isEditable).toBe(true)
-		expect(commentWriteResult.comment.isSharedWithCarl).toBe(false)
+		expect(commentWriteResult.comment.isSharedWithPodcast).toBe(false)
 		expect(commentWriteResult.sharedCommentSlots).toBeNull()
 	}
 
@@ -133,7 +133,7 @@ test("a post stores the comment with its mention and sends a hot take event with
 	expect(JSON.stringify(properties)).not.toContain("hi @")
 })
 
-test("an editor's top-level comment is shared with Carl, and the result holds the Topic's shared comment slots", async () => {
+test("an editor's top-level comment is shared with the podcast, and the result holds the Topic's shared comment slots", async () => {
 	toSocialReader.mockResolvedValue({ ...PLAIN_READER, canShare: true })
 	stubCommentRows()
 	const commentWriteResult = await post("worth a listen")
@@ -151,7 +151,7 @@ test("an editor's top-level comment is shared with Carl, and the result holds th
 test("an editor who turns the share off posts an unshared comment", async () => {
 	toSocialReader.mockResolvedValue({ ...PLAIN_READER, canShare: true })
 	stubCommentRows()
-	expect((await post("just for the team", { isSharedWithCarl: false })).status).toBe("saved")
+	expect((await post("just for the team", { isSharedWithPodcast: false })).status).toBe("saved")
 	expect(shareCommentInFreeSharedCommentSlot).not.toHaveBeenCalled()
 })
 
@@ -166,13 +166,13 @@ test("an editor's reply is shared if the post asks", async () => {
 			createdAt: new Date(),
 		}),
 	})
-	expect((await post("me too", { parentCommentId: "comment-0", isSharedWithCarl: true })).status).toBe("saved")
+	expect((await post("me too", { parentCommentId: "comment-0", isSharedWithPodcast: true })).status).toBe("saved")
 	expect(shareCommentInFreeSharedCommentSlot).toHaveBeenCalledTimes(1)
 })
 
 test("a follower who asks to share posts an unshared comment", async () => {
 	stubCommentRows()
-	expect((await post("share this", { isSharedWithCarl: true })).status).toBe("saved")
+	expect((await post("share this", { isSharedWithPodcast: true })).status).toBe("saved")
 	expect(shareCommentInFreeSharedCommentSlot).not.toHaveBeenCalled()
 })
 
@@ -267,9 +267,9 @@ function stubCommentRead(authorUserId: string): ReturnType<typeof stubConnection
 }
 
 // an edit of the user's own comment, and whether a query that changes it went out
-type StubOwnCommentOptions = { sharedTopicId?: string; airedPodcastEpisodeId?: string }
+type StubOwnCommentOptions = { sharedWithPodcastTopicId?: string; airedPodcastEpisodeId?: string }
 function stubOwnComment({
-	sharedTopicId,
+	sharedWithPodcastTopicId,
 	airedPodcastEpisodeId,
 }: StubOwnCommentOptions = {}): ReturnType<typeof stubConnectionPool> {
 	spyOn(socialTargets, "loadSocialTarget").mockResolvedValue(RESOLVED_PODCAST_EPISODE)
@@ -286,8 +286,8 @@ function stubOwnComment({
 						authorUserId: "user-1",
 						podcastEpisodeId: "episode-1",
 						body: "the first words",
-						sharedTopicId,
-						sharedWithCarlAt: sharedTopicId ? new Date() : undefined,
+						sharedWithPodcastTopicId,
+						sharedWithPodcastAt: sharedWithPodcastTopicId ? new Date() : undefined,
 						airedPodcastEpisodeId,
 						createdAt: new Date(),
 					}),
@@ -329,14 +329,14 @@ test("a rewrite by an author who may not share takes the share back, and an edit
 	const syncCommentLinks = spyOn(sharedComments, "syncCommentLinks").mockResolvedValue()
 
 	// a follower's rewrite of a shared comment
-	stubOwnComment({ sharedTopicId: "topic-1" })
+	stubOwnComment({ sharedWithPodcastTopicId: "topic-1" })
 	await edit("new words")
 	expect(unshareComment).toHaveBeenCalledTimes(1)
 	expect(syncCommentLinks).not.toHaveBeenCalled()
 
 	// an editor's rewrite keeps the share, and its links follow the new body
 	toSocialReader.mockResolvedValue({ ...PLAIN_READER, canShare: true })
-	stubOwnComment({ sharedTopicId: "topic-1" })
+	stubOwnComment({ sharedWithPodcastTopicId: "topic-1" })
 	await edit("new words")
 	expect(unshareComment).toHaveBeenCalledTimes(1)
 	expect(syncCommentLinks).toHaveBeenCalledTimes(1)
@@ -345,7 +345,7 @@ test("a rewrite by an author who may not share takes the share back, and an edit
 test("a rewrite of a comment a Podcast Episode already read keeps the share", async () => {
 	const unshareComment = spyOn(sharedComments, "unshareComment").mockResolvedValue()
 	spyOn(sharedComments, "syncCommentLinks").mockResolvedValue()
-	stubOwnComment({ sharedTopicId: "topic-1", airedPodcastEpisodeId: "episode-1" })
+	stubOwnComment({ sharedWithPodcastTopicId: "topic-1", airedPodcastEpisodeId: "episode-1" })
 	await edit("new words")
 	expect(unshareComment).not.toHaveBeenCalled()
 })
@@ -361,9 +361,9 @@ test("a delete and a take back reach a comment on a Finding rated thumbs down, a
 	await deleteComment({ userId: "user-1", commentId: "comment-9", analyticsProperties })
 	expect(loadSocialTarget.mock.lastCall?.[1]).toEqual({ isRatedDownIncluded: true })
 	spyOn(sharedComments, "unshareComment").mockResolvedValue()
-	await shareComment({ ...shareOptions, isSharedWithCarl: false })
+	await shareComment({ ...shareOptions, isSharedWithPodcast: false })
 	expect(loadSocialTarget.mock.lastCall?.[1]).toEqual({ isRatedDownIncluded: true })
-	await shareComment({ ...shareOptions, isSharedWithCarl: true })
+	await shareComment({ ...shareOptions, isSharedWithPodcast: true })
 	expect(loadSocialTarget.mock.lastCall?.[1]).toEqual({ isRatedDownIncluded: false })
 })
 
@@ -408,16 +408,16 @@ test("a moderator's delete of another person's comment returns the shared commen
 test("the Topic's owner shares a comment, takes it back, and is told when no shared comment slot is free", async () => {
 	// the owner may edit the Topic, so the share runs
 	stubCommentRead("user-2")
-	const share = (isSharedWithCarl: boolean): ReturnType<typeof shareComment> =>
+	const share = (isSharedWithPodcast: boolean): ReturnType<typeof shareComment> =>
 		shareComment({
 			userId: "owner-1",
 			commentId: "comment-9",
-			isSharedWithCarl,
+			isSharedWithPodcast,
 			analyticsProperties: TEST_ANALYTICS_PROPERTIES,
 		})
 	expect(await share(true)).toEqual({
 		status: "saved",
-		isSharedWithCarl: true,
+		isSharedWithPodcast: true,
 		sharedCommentSlots: EDITOR_SHARED_COMMENT_SLOTS,
 	})
 	expect(shareCommentInFreeSharedCommentSlot).toHaveBeenCalledWith({
@@ -437,7 +437,7 @@ test("the Topic's owner shares a comment, takes it back, and is told when no sha
 	const unshareComment = spyOn(sharedComments, "unshareComment").mockResolvedValue(undefined)
 	expect(await share(false)).toEqual({
 		status: "saved",
-		isSharedWithCarl: false,
+		isSharedWithPodcast: false,
 		sharedCommentSlots: EDITOR_SHARED_COMMENT_SLOTS,
 	})
 	expect(unshareComment).toHaveBeenCalledWith("comment-9")
@@ -449,7 +449,7 @@ test("a share by a user who may not edit the Topic reads as missing", async () =
 		await shareComment({
 			userId: "user-1",
 			commentId: "comment-9",
-			isSharedWithCarl: true,
+			isSharedWithPodcast: true,
 			analyticsProperties: TEST_ANALYTICS_PROPERTIES,
 		}),
 	).toEqual({ status: "notFound" })

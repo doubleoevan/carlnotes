@@ -47,8 +47,8 @@ export type SocialElements = {
 	Body: ComponentType<PropsWithChildren<{ isScrolling?: boolean }>>
 	// a comment's replies, indented under it
 	Replies: ComponentType<PropsWithChildren>
-	// the flame that says a comment is shared with Carl, and the mugs once a Podcast Episode read it. a user who may
-	// share presses it, and it is disabled while the Topic has no free shared comment slot. anyone else sees it on a
+	// the flame that says a comment is shared with the podcast, and the mugs once a Podcast Episode read it. a user who
+	// may share presses it, and it is disabled while the Topic has no free shared comment slot. anyone else sees it on a
 	// shared comment, with no press
 	ShareToggle: ComponentType<{
 		label: string
@@ -81,7 +81,7 @@ export type SocialElements = {
 	ComposerButton: ComponentType<{ label: string; onPress: () => void }>
 	ComposerFrame: ComponentType<PropsWithChildren<{ title: string; onClose: () => void }>>
 	Composer: ComponentType<TextComposerElementProps>
-	// the switch at the composer's bottom left that shares the comment with Carl, for a user who may share
+	// the switch at the composer's bottom left that shares the comment with the podcast, for a user who may share
 	ComposerShareSwitch: ComponentType<ComposerShareSwitchProps>
 	// the reaction picker's group and each of its options
 	ReactionGroup: ComponentType<PropsWithChildren>

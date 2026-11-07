@@ -28,7 +28,7 @@ export const WithComments: Story = {}
 // nothing yet: the composer's button
 export const Empty: Story = { args: { firstPage: EMPTY_COMMENT_THREAD } }
 
-// a Topic's editor reads how many comments are shared with Carl at the card's top right, and presses each flame
+// a Topic's editor reads how many comments are shared with the podcast at the card's top right, and presses each flame
 export const TopicEditor: Story = {
 	args: { isTopicOwner: true, firstPage: toTestEditorCommentThread({ usedCount: 1, slotCount: 3 }) },
 }
