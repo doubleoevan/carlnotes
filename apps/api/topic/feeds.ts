@@ -1,5 +1,6 @@
 // the topic feed logic for the homepage route. it batches every topic's data in one pass and builds each feed in memory
 import type { TopicFinding } from "@carlnotes/contracts/findings"
+import { EMPTY_REACTION_SUMMARY, toSocialTargetKey } from "@carlnotes/contracts/social"
 import type { TopicFeed, TopicFeedResponse, TopicResponse } from "@carlnotes/contracts/topics"
 import { db, isPublicAndShown } from "@carlnotes/db"
 import { cacheJson } from "@carlnotes/db/redis"
@@ -8,6 +9,7 @@ import { traceRequestStage } from "@carlnotes/server/monitoring"
 import { and, asc, desc, eq, inArray, isNotNull, isNull, ne } from "drizzle-orm"
 import { toProfileIdentity } from "../avatars"
 import { attachTopicFindingFaviconPaths } from "../favicons"
+import { loadReactionSummaries } from "../social/reactionRows"
 import { TOPIC_SECTION_IDS_KEY, toVisitorTopicFeedKey, toVisitorTopicPageKey } from "./feedCaches"
 import { loadTopicFeedData } from "./feedData"
 import { filteredTopicFindings, newTopicFindingCount, toTopicFinding } from "./findings"
@@ -160,14 +162,23 @@ export async function buildTopicFeeds(
 			] as const,
 	)
 
-	// fill every feed's favicon paths in one query
-	await traceRequestStage("topic_feed.favicons", () =>
-		attachTopicFindingFaviconPaths(
-			[...ownerTopicFeeds, ...subscribedTopicFeeds, ...featuredTopicFeeds, ...popularTopicFeeds].flatMap(
-				(topicFeed) => topicFeed.findings,
-			),
+	// fill every feed's favicon paths in one query, and every topic's own reactions in one read
+	const allTopicFeeds = [...ownerTopicFeeds, ...subscribedTopicFeeds, ...featuredTopicFeeds, ...popularTopicFeeds]
+	const [, reactionSummaries] = await Promise.all([
+		traceRequestStage("topic_feed.favicons", () =>
+			attachTopicFindingFaviconPaths(allTopicFeeds.flatMap((topicFeed) => topicFeed.findings)),
 		),
-	)
+		traceRequestStage("topic_feed.reactions", () =>
+			loadReactionSummaries({
+				userId,
+				targets: allTopicFeeds.map((topicFeed) => ({ kind: "topic" as const, id: topicFeed.id })),
+			}),
+		),
+	])
+	for (const topicFeed of allTopicFeeds) {
+		topicFeed.reactions =
+			reactionSummaries.get(toSocialTargetKey({ kind: "topic", id: topicFeed.id })) ?? EMPTY_REACTION_SUMMARY
+	}
 
 	// only show "yours" and "subscribed" sections to a signed-in visitor
 	const sections: TopicFeedResponse["sections"] = userId

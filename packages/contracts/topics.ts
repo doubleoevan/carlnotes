@@ -120,6 +120,8 @@ const topicDetails = z.object({
 	// the latest published podcast episode that the user may listen to, with its chapters.
 	// null with none, or on an instance with no speech model
 	latestPodcastEpisode: podcastEpisode.nullable(),
+	// the topic's own reactions, shown in the topic roast. absent on a poll reload
+	reactions: reactionSummary.optional(),
 })
 
 export type TopicDetails = z.infer<typeof topicDetails>
@@ -272,8 +274,7 @@ export const topicResponse = topicDetails.extend({
 	relatedTopics: z.array(
 		z.object({ id: z.string(), name: z.string(), latestPodcastEpisode: podcastEpisodeSummary.nullable() }),
 	),
-	// the topic's own reactions and the first page of its comment thread. absent on a poll reload
-	reactions: reactionSummary.optional(),
+	// the first page of the topic's comment thread. absent on a poll reload
 	commentThread: commentThreadResponse.optional(),
 })
 

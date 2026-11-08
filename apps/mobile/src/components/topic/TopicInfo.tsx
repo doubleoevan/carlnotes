@@ -1,3 +1,4 @@
+import { authClient } from "@carlnotes/client/authClient"
 import { toAvatarImagePath } from "@carlnotes/contracts/avatars"
 import { PODCAST_NAME } from "@carlnotes/contracts/podcastEpisodes"
 import { toProfilePath } from "@carlnotes/contracts/seo"
@@ -20,6 +21,7 @@ import { PodcastEpisodeRow } from "@/components/podcast/PodcastEpisodeRow"
 import { Button, toTouchTargetHitSlop } from "@/components/primitives/button"
 import { Icon } from "@/components/primitives/icon"
 import { ShareTopic } from "@/components/share/ShareTopic"
+import { ReactionRow } from "@/components/social/ReactionRow"
 import { toTypeRoleStyle } from "@/typeRoleStyles"
 import { TopicAttachmentLink } from "./TopicAttachmentLink"
 import { TopicInfoSection as InfoSection } from "./TopicInfoSection"
@@ -101,7 +103,7 @@ export function TopicInfoContent({
 					</Text>
 				</InfoSection>
 			) : null}
-			<TopicBarista topic={topic} />
+			<TopicBarista topic={topic} isCard={isCard} />
 			<TopicPrompt topic={topic} isCard={isCard} />
 			<TopicNotes topic={topic} isCard={isCard} />
 			{topic.attachments.length > 0 ? (
@@ -191,28 +193,39 @@ function TopicPrompt({ topic, isCard }: { topic: TopicDetails; isCard: boolean }
 }
 
 // identify the owner even when the feed's byline names a team
-function TopicBarista({ topic }: { topic: TopicDetails }) {
+function TopicBarista({ topic, isCard }: { topic: TopicDetails; isCard: boolean }) {
 	const owner = topic.owner
+	const { data: session } = authClient().useSession()
 	if (!owner) {
 		return null
 	}
 	return (
 		<InfoSection label="Carl's Barista" isFirst>
 			<View className="flex-row items-center justify-between gap-3">
-				<AnchorLink
-					href={`${SITE_URL}${toProfilePath(owner.userId)}`}
-					accessibilityLabel={owner.username}
-					className="min-h-11 shrink flex-row items-center gap-2 active:opacity-75"
-				>
-					<Avatar
-						ownerId={owner.userId}
-						name={owner.username}
-						imageUrl={owner.avatarVersion ? toAvatarImagePath(owner.userId, owner.avatarVersion) : null}
-					/>
-					<Text style={toTypeRoleStyle("body")} className="shrink text-link">
-						{owner.username}
-					</Text>
-				</AnchorLink>
+				{/* the sheet's reactions, under the barista */}
+				<View className="min-w-0 shrink items-start">
+					<AnchorLink
+						href={`${SITE_URL}${toProfilePath(owner.userId)}`}
+						accessibilityLabel={owner.username}
+						className="min-h-11 shrink flex-row items-center gap-2 active:opacity-75"
+					>
+						<Avatar
+							ownerId={owner.userId}
+							name={owner.username}
+							imageUrl={owner.avatarVersion ? toAvatarImagePath(owner.userId, owner.avatarVersion) : null}
+						/>
+						<Text style={toTypeRoleStyle("body")} className="shrink text-link">
+							{owner.username}
+						</Text>
+					</AnchorLink>
+					{!isCard && (
+						<ReactionRow
+							target={{ kind: "topic", id: topic.id }}
+							summary={topic.reactions}
+							isSignedIn={Boolean(session)}
+						/>
+					)}
+				</View>
 				<ShareTopic topic={topic} isLabeled />
 			</View>
 		</InfoSection>

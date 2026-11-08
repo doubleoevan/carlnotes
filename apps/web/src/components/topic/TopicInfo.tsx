@@ -13,7 +13,9 @@ import { UserProfileLink } from "@/components/common/UserProfileLink"
 import { PodcastEpisodeRow } from "@/components/podcast/PodcastEpisodeRow"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import { ShareTopicButton } from "@/components/share/ShareTopic"
+import { ReactionRow } from "@/components/social/ReactionRow"
 import { MENU_BUTTON_CLASS, POPOVER_HEADING_CLASS } from "@/lib/styleClasses"
+import { useIsSignedIn } from "@/providers/TopicFeedProvider"
 import { TopicInfoSection as InfoSection } from "./TopicInfoSection"
 import { TopicPersonalSourcesSection } from "./TopicPersonalSourcesSection"
 import { TopicScanFailure } from "./TopicScanFailure"
@@ -67,7 +69,9 @@ const DASHED_SEPARATOR_CLASS = "border-separator-strong border-t border-dashed"
  * The topic info content shared by the homepage popovers and the topic page card, isCard is used to distinguish the info variant
  */
 export function TopicInfo(props: TopicInfoProps) {
+	// the topic, and whether anyone is signed in to react to it
 	const { topic } = props
+	const isSignedIn = useIsSignedIn()
 	// the topic scan's ranked topic findings list with the content offered to copy to the clipboard as Markdown for AI
 	const topicFindings = topic.findings.length > 0 ? <NumberedTopicFindingList findings={topic.findings} /> : null
 	// the latest scan's recap, empty if the scan wrote none
@@ -92,8 +96,18 @@ export function TopicInfo(props: TopicInfoProps) {
 				{/* who owns this topic */}
 				{topic.owner && (
 					<InfoSection label="Carl's Barista">
+						{/* the popover's reactions, under the barista on a phone */}
 						<div className="flex items-center justify-between gap-3">
-							<UserProfileLink user={topic.owner} />
+							<div className="flex min-w-0 flex-col items-start gap-1 sm:flex-1 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+								<UserProfileLink user={topic.owner} />
+								{!props.isCard && (
+									<ReactionRow
+										target={{ kind: "topic", id: topic.id }}
+										summary={topic.reactions}
+										isSignedIn={isSignedIn}
+									/>
+								)}
+							</div>
 							<ShareTopicButton
 								topic={topic}
 								// the card is already bg-card, so the button takes the muted surface to stand off it
