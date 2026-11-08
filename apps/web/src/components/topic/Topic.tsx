@@ -3,6 +3,7 @@ import { sendTopicSubscription } from "@carlnotes/client/topicClient"
 import { toTopicPath } from "@carlnotes/contracts/seo"
 import type { TopicDetails, TopicFeed } from "@carlnotes/contracts/topics"
 import { cn } from "@carlnotes/nightshift/classNames"
+import { ICON_ACTION_CLASS } from "@carlnotes/nightshift/iconAction"
 import { useNavigate } from "@tanstack/react-router"
 import { PawPrint } from "lucide-react"
 import { useState } from "react"
@@ -34,6 +35,9 @@ import { TopicInfo } from "./TopicInfo"
 // the gap from the title that a heading's row gives
 const INLINE_ICON_BUTTON_CLASS =
 	"relative ml-2.5 inline-grid size-5 -translate-y-1 place-items-center align-middle before:absolute before:-inset-3 before:content-['']"
+// a follow or share icon in the row under a topic card's title, as tall as a touch target on a phone
+const ICON_ACTION_ROW_BUTTON_CLASS =
+	"text-muted-foreground hover:text-foreground grid h-11 shrink-0 place-items-center sm:h-7"
 const ICON_BUTTON_CLASS = "relative grid size-7 place-items-center before:absolute before:-inset-2 before:content-['']"
 
 // the topic feed, the card's classes, and its position on the section's page, which staggers the entrance animation
@@ -90,16 +94,12 @@ export function Topic({ topic, index, className }: TopicProps) {
 					<div
 						className={cn(
 							topic.isTopicOwner && topic.visibility === "private" ? RAIL_TEXT_INSET : RAIL_BARE_ICON_INSET,
-							"flex shrink-0 items-center gap-1",
+							"flex shrink-0 items-center",
 						)}
 					>
 						{topic.newCount > 0 && <NewCountInfo topic={topic} />}
 						{!topic.isTopicOwner && <SubscribeToggle topic={topic} />}
-						<ShareTopic
-							topic={topic}
-							isIcon
-							className="text-muted-foreground hover:text-foreground grid h-11 w-7 shrink-0 place-items-center sm:size-7"
-						/>
+						<ShareTopic topic={topic} isIcon className={cn(ICON_ACTION_ROW_BUTTON_CLASS, ICON_ACTION_CLASS)} />
 					</div>
 				</div>
 				{/* tags, left-padded to line the text up with the resource icons below them.
@@ -152,7 +152,7 @@ function SubscribeToggle({ topic }: { topic: TopicFeed }) {
 				onClick={handleClick}
 				aria-pressed={topic.isSubscribed}
 				aria-label={tooltip}
-				className="text-muted-foreground hover:text-foreground grid h-11 w-7 shrink-0 place-items-center sm:size-7"
+				className={cn(ICON_ACTION_ROW_BUTTON_CLASS, ICON_ACTION_CLASS)}
 			>
 				<PawPrint className={cn("size-3.75", topic.isSubscribed && ACTIVE_ICON_CLASS)} />
 			</TooltipTrigger>
@@ -256,7 +256,7 @@ export function NewCountInfo({ topic }: { topic: TopicDetails }) {
 		<Popover open={isOpen} onOpenChange={setIsOpen}>
 			<Tooltip>
 				<TooltipTrigger asChild>
-					<PopoverTrigger className="text-badge shrink-0 text-sm font-semibold hover:underline">
+					<PopoverTrigger className="text-badge shrink-0 pr-1 text-sm font-semibold hover:underline">
 						{topic.newCount} new
 					</PopoverTrigger>
 				</TooltipTrigger>

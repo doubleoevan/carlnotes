@@ -1,6 +1,7 @@
 import type { ReactionType } from "@carlnotes/contracts/social"
 import type { ReactionOptionProps } from "@carlnotes/core/lib/socialElements"
 import { cn } from "@carlnotes/nightshift/classNames"
+import { ICON_ACTION_CLASS } from "@carlnotes/nightshift/iconAction"
 import { Heart, HeartPlus, Laugh, Lightbulb, type LucideIcon, PartyPopper, ThumbsUp } from "lucide-react-native"
 import { useState } from "react"
 import { Pressable, View } from "react-native"
@@ -57,7 +58,7 @@ export function ReactionOption({
 				disabled={isDisabled}
 				onPress={onPress}
 				onLongPress={hasUsers ? () => setIsShowingUsers(true) : undefined}
-				className="h-8 flex-row items-center gap-1 rounded-full px-1 active:opacity-75"
+				className={cn("h-8 flex-row items-center gap-1 rounded-full active:opacity-75", ICON_ACTION_CLASS)}
 			>
 				<Icon
 					as={REACTION_ICONS[reactionType]}

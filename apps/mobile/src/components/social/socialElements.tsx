@@ -11,6 +11,7 @@ import {
 	toChapterValue,
 } from "@carlnotes/core/lib/socialLabels"
 import { cn } from "@carlnotes/nightshift/classNames"
+import { ICON_ACTION_CLASS } from "@carlnotes/nightshift/iconAction"
 import { BottomSheetTextInput } from "@gorhom/bottom-sheet"
 import { Flag, Flame, type LucideIcon, Pencil, Reply, Trash2 } from "lucide-react-native"
 import type { ComponentType } from "react"
@@ -72,7 +73,11 @@ export const SOCIAL_ELEMENTS: SocialElements = {
 			hitSlop={toTouchTargetHitSlop(ROW_CONTROL_HEIGHT)}
 			disabled={!isDisabled && !onPress}
 			onPress={isDisabled ? () => Alert.alert(label) : onPress}
-			className={cn("h-8 items-center justify-center rounded-md px-1 active:opacity-75", isDisabled && "opacity-50")}
+			className={cn(
+				"h-8 items-center justify-center rounded-md active:opacity-75",
+				ICON_ACTION_CLASS,
+				isDisabled && "opacity-50",
+			)}
 		>
 			{isAired ? (
 				<ShareMugsIcon />
@@ -102,7 +107,7 @@ export const SOCIAL_ELEMENTS: SocialElements = {
 			accessibilityLabel={label}
 			hitSlop={toTouchTargetHitSlop(ROW_CONTROL_HEIGHT)}
 			onPress={onPress}
-			className="h-8 shrink-0 flex-row items-center gap-1 px-1 active:opacity-75"
+			className={cn("h-8 shrink-0 flex-row items-center gap-1 active:opacity-75", ICON_ACTION_CLASS)}
 		>
 			<Icon as={Reply} className="size-4 text-muted-foreground" />
 			<Text className="text-xs text-muted-foreground">{label}</Text>

@@ -2,6 +2,7 @@
 import { CHAT_NAME, type ChatMention } from "@carlnotes/contracts/chat"
 import { type ChatPillElements, ChatPill as SharedChatPill } from "@carlnotes/core/components/ChatPill"
 import { cn } from "@carlnotes/nightshift/classNames"
+import { ICON_ACTION_CLASS } from "@carlnotes/nightshift/iconAction"
 import { Maximize2, Minimize2, Minus } from "lucide-react"
 import type * as React from "react"
 import { createPortal } from "react-dom"
@@ -187,7 +188,7 @@ function ChatPanelHeader({
 			<div className="flex items-center gap-2 px-3 py-2.5">
 				<ChatPanelTitle isRoom={isRoom} />
 				{/* the buttons are grouped to the right */}
-				<div className="flex items-center gap-0.5">
+				<div className="flex items-center">
 					{/* the size toggle reads as an "expand" and "collapse" pair. a phone is always full screen.
 					    the toggle only shows up on a wide screen */}
 					<Tooltip>
@@ -196,7 +197,10 @@ function ChatPanelHeader({
 								type="button"
 								aria-label={isEnlarged ? "Collapse" : "Expand"}
 								onClick={() => onPanelState(isEnlarged ? "open" : "enlarged")}
-								className="text-muted-foreground hover:text-foreground hidden size-8 place-items-center rounded-md sm:grid"
+								className={cn(
+									"text-muted-foreground hover:text-foreground hidden h-8 place-items-center rounded-md sm:grid",
+									ICON_ACTION_CLASS,
+								)}
 							>
 								{isEnlarged ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
 							</button>
@@ -210,7 +214,10 @@ function ChatPanelHeader({
 								type="button"
 								aria-label="Minimize"
 								onClick={() => onPanelState("collapsed")}
-								className="text-muted-foreground hover:text-foreground grid size-8 place-items-center rounded-md"
+								className={cn(
+									"text-muted-foreground hover:text-foreground grid h-8 place-items-center rounded-md",
+									ICON_ACTION_CLASS,
+								)}
 							>
 								<Minus className="size-4" />
 							</button>

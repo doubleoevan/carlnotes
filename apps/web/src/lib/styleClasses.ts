@@ -306,7 +306,7 @@ export const RAIL_ICON_INSET = "mr-1"
  * The inset for a right-aligned row ending in a bare icon button. A phone widens the icon's touch
  * box while the glyph stays centered in it, and the box hangs past the edge to keep the glyph on it.
  */
-export const RAIL_BARE_ICON_INSET = "-mr-2 sm:mr-1"
+export const RAIL_BARE_ICON_INSET = "-mr-1.5 sm:mr-1.5"
 
 /**
  * The page shell every route's main element takes. A page that needs more room overrides the width.
@@ -328,6 +328,12 @@ export const PAGE_TITLE_CLASS = "font-display flex items-center gap-2 text-2xl"
  */
 export const ICON_TILE_BUTTON_CLASS =
 	"relative inline-grid size-5 shrink-0 place-items-center align-middle before:absolute before:-inset-2 before:content-['']"
+
+/**
+ * The icon tile around a table row's small play button, as big as the button's 24px circle so the circle centers in
+ * the row. Its negative margin keeps the row as tall as its text.
+ */
+export const PLAY_BUTTON_TILE_CLASS = cn(ICON_TILE_BUTTON_CLASS, "-my-0.5 size-6")
 
 /**
  * A wide info popover panel: viewport width on a phone, its own max width above that. The popover-panel

@@ -3,7 +3,7 @@ import { toTopicPath } from "@carlnotes/contracts/seo"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { PageUpdateCountBadge } from "@/components/common/UpdateCountBadge"
 import { PodcastEpisodePlayButton } from "@/components/podcast/PodcastEpisodePlayButton"
-import { ICON_TILE_BUTTON_CLASS, STANDALONE_LINK_CLASS } from "@/lib/styleClasses"
+import { PLAY_BUTTON_TILE_CLASS, STANDALONE_LINK_CLASS } from "@/lib/styleClasses"
 
 // the topic that a topic table row names, and its latest podcast episode that the user may listen to
 type TopicNameLinkTopic = { id: string; name: string; latestPodcastEpisode: PodcastEpisodeSummary | null }
@@ -25,7 +25,7 @@ export function TopicNameLink({ topic }: { topic: TopicNameLinkTopic }) {
 
 			{/* the latest podcast episode's play button */}
 			{topic.latestPodcastEpisode && (
-				<PodcastEpisodePlayButton podcastEpisode={topic.latestPodcastEpisode} className={ICON_TILE_BUTTON_CLASS} />
+				<PodcastEpisodePlayButton podcastEpisode={topic.latestPodcastEpisode} className={PLAY_BUTTON_TILE_CLASS} />
 			)}
 		</span>
 	)

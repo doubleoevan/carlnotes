@@ -4,6 +4,8 @@ import { toInvitePath, toTopicFeedPath, toTopicPath } from "@carlnotes/contracts
 import { SITE_URL } from "@carlnotes/contracts/site"
 import type { TopicDetails } from "@carlnotes/contracts/topics"
 import { useSubjectReportFlag } from "@carlnotes/core/hooks/useSubjectReport"
+import { cn } from "@carlnotes/nightshift/classNames"
+import { ICON_ACTION_CLASS } from "@carlnotes/nightshift/iconAction"
 import { useRecyclingState } from "@shopify/flash-list"
 import { Check, Flag, Link, Rss, Share as ShareIcon } from "lucide-react-native"
 import { type ComponentRef, useRef, useState } from "react"
@@ -44,7 +46,7 @@ export function ShareTopic({ topic, isLabeled = false }: { topic: ShareTopicDeta
 			) : (
 				<Pressable
 					ref={triggerRef}
-					className="min-h-11 w-7 items-center justify-center active:opacity-75"
+					className={cn("min-h-11 items-center justify-center active:opacity-75", ICON_ACTION_CLASS)}
 					hitSlop={toTouchTargetHitSlop(28)}
 					accessibilityRole="button"
 					accessibilityLabel={`Share ${topic.name}`}

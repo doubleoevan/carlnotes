@@ -3,7 +3,7 @@ import { cn } from "@carlnotes/nightshift/classNames"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { PodcastEpisodeTooltip } from "@/components/podcast/PodcastEpisodeDetails"
 import { PodcastEpisodePlayButton } from "@/components/podcast/PodcastEpisodePlayButton"
-import { ICON_TILE_BUTTON_CLASS, STANDALONE_LINK_CLASS } from "@/lib/styleClasses"
+import { PLAY_BUTTON_TILE_CLASS, STANDALONE_LINK_CLASS } from "@/lib/styleClasses"
 
 /**
  * A podcast episode's title in a table, linking to its page, with its play button beside the title. The title and the
@@ -24,7 +24,7 @@ export function PodcastEpisodeTitleLink({ podcastEpisode }: { podcastEpisode: Po
 			)}
 
 			{/* the play button */}
-			<PodcastEpisodePlayButton podcastEpisode={podcastEpisode} className={ICON_TILE_BUTTON_CLASS} />
+			<PodcastEpisodePlayButton podcastEpisode={podcastEpisode} className={PLAY_BUTTON_TILE_CLASS} />
 		</span>
 	)
 }

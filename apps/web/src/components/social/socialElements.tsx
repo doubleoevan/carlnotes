@@ -12,6 +12,7 @@ import {
 	toChapterValue,
 } from "@carlnotes/core/lib/socialLabels"
 import { cn } from "@carlnotes/nightshift/classNames"
+import { ICON_ACTION_CLASS } from "@carlnotes/nightshift/iconAction"
 import {
 	Flag,
 	Flame,
@@ -94,7 +95,8 @@ export const SOCIAL_ELEMENTS: SocialElements = {
 	Replies: ({ children }) => <ul className="border-border mt-2 ml-4 flex flex-col gap-3 border-l pl-3">{children}</ul>,
 	ShareToggle: ({ label, isShared, isAired, isDisabled, onPress }) => {
 		const shareToggleClass = cn(
-			"grid h-8 shrink-0 place-items-center rounded-md px-1",
+			"grid h-8 shrink-0 place-items-center rounded-md",
+			ICON_ACTION_CLASS,
 			isShared ? "text-primary" : "text-muted-foreground hover:text-foreground",
 			isDisabled && "opacity-50",
 		)
@@ -130,7 +132,10 @@ export const SOCIAL_ELEMENTS: SocialElements = {
 		<button
 			type="button"
 			onClick={onPress}
-			className="text-muted-foreground hover:text-foreground inline-flex h-6 px-1 shrink-0 items-center gap-1 text-xs"
+			className={cn(
+				"text-muted-foreground hover:text-foreground inline-flex h-6 shrink-0 items-center gap-1 text-xs",
+				ICON_ACTION_CLASS,
+			)}
 		>
 			<Reply className="size-4" aria-hidden />
 			{label}
@@ -187,7 +192,8 @@ export const SOCIAL_ELEMENTS: SocialElements = {
 				ariaLabel={`${label}${count > 0 ? `, ${count}` : ""}${isOwn ? ", your reaction" : ""}`}
 				isDisabled={isDisabled}
 				className={cn(
-					"hover:text-foreground inline-flex h-8 items-center gap-1 rounded-full px-1 text-xs",
+					"hover:text-foreground inline-flex h-8 items-center gap-1 rounded-full text-xs",
+					ICON_ACTION_CLASS,
 					isOwn ? "text-primary font-semibold" : "text-muted-foreground",
 				)}
 				onClick={onPress}

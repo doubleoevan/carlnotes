@@ -21,6 +21,8 @@ read, and the component contracts both apps' implementations build on. `tokens.c
   `shadow-raised` utility both stylesheets hold. `classNames.ts` — `cn`, the class merge both apps build classes with:
   clsx inside a tailwind-merge taught that `shadow-raised` is a shadow. The package exports it by name as well as
   through the wildcard. The shadcn CLI resolves a `components.json` alias only through an exact export.
+- `iconAction.ts` — `ICON_ACTION_CLASS`, the padding of an icon-only action in a row of them, which sets neighbors
+  8px apart with no gap.
 - `field.ts` — `FIELD_CLASS`, the border and the fill of a field, a select, and an outline Button in both modes: the
   `input` color as the border and the same color at 30% as the fill. Both stylesheets read the module as a Tailwind
   source, and `contrast.test.ts` checks a value and a placeholder on the fill over a card and a popover.
@@ -68,8 +70,8 @@ read, and the component contracts both apps' implementations build on. `tokens.c
   imports, `uniwind.css`, which `apps/mobile/global.css` imports, and `figma/light.tokens.json` and
   `figma/dark.tokens.json`. Change the source, then run `bun run nightshift:write`
   (`scripts/write-nightshift-tokens.ts`), which writes all five. Never edit them by hand.
-- Importers: `apps/web`, which reads the stylesheet, `classNames.ts`, `field.ts`, `pagination.ts`, `coffeeMug.ts`,
-  `oauthProviderIcons.ts`, `aiProviderIcons.ts`, `noteHtmlStyle.ts` and `theme.ts`'s `toColorCssVariable` for the note's style, and the
+- Importers: `apps/web`, which reads the stylesheet, `classNames.ts`, `field.ts`, `iconAction.ts`, `pagination.ts`,
+  `coffeeMug.ts`, `oauthProviderIcons.ts`, `aiProviderIcons.ts`, `noteHtmlStyle.ts` and `theme.ts`'s `toColorCssVariable` for the note's style, and the
   contracts anywhere as far as the boundary check goes, each contract only from its implementation, a story, or a test
   by the parity check, and the rest of the TypeScript only from its tests, the stories, `.storybook/`, and
   `src/nightshift/`; `apps/mobile`, which reads `uniwind.css` and the TypeScript freely, each contract only from its

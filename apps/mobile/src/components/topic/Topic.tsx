@@ -46,9 +46,9 @@ export function Topic({ topic }: { topic: TopicDetails }) {
 			{/* the attribution and plain unread count share the next line */}
 			<View className="flex-row items-center justify-between gap-3">
 				<TopicByline topic={topic} />
-				<View className="ml-auto min-h-11 shrink-0 flex-row items-center gap-1">
+				<View className="ml-auto min-h-11 shrink-0 flex-row items-center">
 					{topic.newCount > 0 ? (
-						<NativeText style={toTypeRoleStyle("label")} className="text-badge">
+						<NativeText style={toTypeRoleStyle("label")} className="pr-1 text-badge">
 							{topic.newCount} new
 						</NativeText>
 					) : null}
