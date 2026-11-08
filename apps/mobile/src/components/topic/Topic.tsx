@@ -74,9 +74,11 @@ export function Topic({ topic }: { topic: TopicDetails }) {
  */
 export function TopicByline({
 	topic,
+	label = "Brewed by",
 	isPage = false,
 }: {
 	topic: Pick<TopicDetails, "teamLink" | "owner">
+	label?: string
 	isPage?: boolean
 }) {
 	// prefer the team only when the API supplies its visible byline
@@ -99,7 +101,7 @@ export function TopicByline({
 	return (
 		<AnchorLink
 			href={`${SITE_URL}${path}`}
-			accessibilityLabel={`Brewed by ${name}`}
+			accessibilityLabel={`${label} ${name}`}
 			hitSlop={toTouchTargetHitSlop(44)}
 			className={
 				isPage
@@ -109,7 +111,7 @@ export function TopicByline({
 		>
 			<Avatar imageUrl={imageUrl} ownerId={ownerId} name={name} />
 			<NativeText style={toTypeRoleStyle(isPage ? "body" : "caption")} className="shrink text-muted-foreground">
-				Brewed by <NativeText className="text-link">{name}</NativeText>
+				{label} <NativeText className="text-link">{name}</NativeText>
 			</NativeText>
 		</AnchorLink>
 	)

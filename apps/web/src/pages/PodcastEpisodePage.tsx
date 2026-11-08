@@ -161,7 +161,7 @@ export function PodcastEpisodePage() {
 					{/* the byline, the topic's name, and the reactions on one line */}
 					<div className="mt-1.5 flex flex-wrap items-center gap-x-3">
 						<span className="text-muted-foreground inline-flex flex-wrap items-center gap-x-1 text-sm">
-							<TopicByline topic={topic} className="text-sm" />
+							<TopicByline topic={topic} label="Recorded by" className="text-sm" />
 							<span>
 								{topic.teamLink || topic.owner ? "for " : "Coffee Break podcast for "}
 								<AnchorLink href={topicPath} className="sentence-link">

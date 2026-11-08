@@ -245,7 +245,7 @@ function PodcastEpisodeHeader({
 				{/* the byline, the topic's name, and the podcast episode's reactions on one line */}
 				<View className="mt-1.5 flex-row flex-wrap items-center gap-x-3">
 					<View className="min-w-0 shrink flex-row flex-wrap items-center gap-x-1">
-						<TopicByline topic={topic} isPage />
+						<TopicByline topic={topic} label="Recorded by" isPage />
 						<Text className="text-sm text-muted-foreground">
 							{topic.teamLink || topic.owner ? "for " : "Coffee Break podcast for "}
 							<AnchorLink asChild href={toTopicPath(topic)} accessibilityLabel={`Open ${topic.name}`}>

@@ -39,18 +39,18 @@ const ICON_BUTTON_CLASS = "relative grid size-7 place-items-center before:absolu
 // the topic feed, the card's classes, and its position on the section's page, which staggers the entrance animation
 type TopicProps = { topic: TopicFeed; index: number; className?: string }
 
-// the team and the owner that a topic's byline chooses between
-type TopicBylineProps = { topic: Pick<TopicFeed, "teamLink" | "owner">; className?: string }
+// the team and the owner that a topic's byline chooses between, and the words before the name
+type TopicBylineProps = { topic: Pick<TopicFeed, "teamLink" | "owner">; label?: string; className?: string }
 
 /**
  * A topic's byline, which names the team for anyone who can open the team's page and the topic's owner otherwise.
  */
-export function TopicByline({ topic, className }: TopicBylineProps) {
+export function TopicByline({ topic, label = "Brewed by", className }: TopicBylineProps) {
 	// name the team if there is a team link, and the owner otherwise
 	if (topic.teamLink) {
-		return <TeamLink team={topic.teamLink} className={className} />
+		return <TeamLink team={topic.teamLink} label={label} className={className} />
 	}
-	return topic.owner ? <UserProfileLink user={topic.owner} label="Brewed by" className={className} /> : null
+	return topic.owner ? <UserProfileLink user={topic.owner} label={label} className={className} /> : null
 }
 
 /**
