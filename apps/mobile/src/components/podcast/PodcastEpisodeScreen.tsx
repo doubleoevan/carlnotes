@@ -242,16 +242,17 @@ function PodcastEpisodeHeader({
 					<NewTopicButton />
 				</View>
 				{podcastEpisode.description && <Text className="mt-1.5 text-sm">{podcastEpisode.description}</Text>}
-				<Text className="mt-1.5 text-sm text-muted-foreground">
-					<Text className="text-sm font-bold text-muted-foreground">Coffee Break</Text>
-					{" podcast for "}
-					<AnchorLink asChild href={toTopicPath(topic)} accessibilityLabel={`Open ${topic.name}`}>
-						<Text className="text-sm text-link">{topic.name}</Text>
-					</AnchorLink>
-				</Text>
-				{/* the byline and the podcast episode's reactions */}
+				{/* the byline, the topic's name, and the podcast episode's reactions on one line */}
 				<View className="mt-1.5 flex-row flex-wrap items-center gap-x-3">
-					<TopicByline topic={topic} isPage />
+					<View className="min-w-0 shrink flex-row flex-wrap items-center gap-x-1">
+						<TopicByline topic={topic} isPage />
+						<Text className="text-sm text-muted-foreground">
+							{topic.teamLink || topic.owner ? "for " : "Coffee Break podcast for "}
+							<AnchorLink asChild href={toTopicPath(topic)} accessibilityLabel={`Open ${topic.name}`}>
+								<Text className="text-sm text-link">{topic.name}</Text>
+							</AnchorLink>
+						</Text>
+					</View>
 					<ReactionRow
 						target={{ kind: "podcastEpisode", id: podcastEpisode.id }}
 						summary={reactions}

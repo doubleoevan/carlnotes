@@ -158,15 +158,17 @@ export function PodcastEpisodePage() {
 						<NewTopicButton onNewTopic={openNewTopicDialog} />
 					</div>
 					{podcastEpisode.description && <p className="mt-1.5 text-sm">{podcastEpisode.description}</p>}
-					<p className="text-muted-foreground mt-1.5 text-sm">
-						<strong>Coffee Break</strong>
-						{" podcast for "}
-						<AnchorLink href={topicPath} className="sentence-link">
-							{topic.name}
-						</AnchorLink>
-					</p>
+					{/* the byline, the topic's name, and the reactions on one line */}
 					<div className="mt-1.5 flex flex-wrap items-center gap-x-3">
-						<TopicByline topic={topic} className="text-sm" />
+						<span className="text-muted-foreground inline-flex flex-wrap items-center gap-x-1 text-sm">
+							<TopicByline topic={topic} className="text-sm" />
+							<span>
+								{topic.teamLink || topic.owner ? "for " : "Coffee Break podcast for "}
+								<AnchorLink href={topicPath} className="sentence-link">
+									{topic.name}
+								</AnchorLink>
+							</span>
+						</span>
 						<ReactionRow
 							target={{ kind: "podcastEpisode", id: podcastEpisode.id }}
 							summary={podcastEpisodePage.reactions}
