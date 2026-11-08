@@ -96,9 +96,9 @@ export function TopicInfo(props: TopicInfoProps) {
 				{/* who owns this topic */}
 				{topic.owner && (
 					<InfoSection label="Carl's Barista">
-						{/* the popover's reactions, under the barista on a phone */}
+						{/* the popover's reactions right after the barista, as on the topic page */}
 						<div className="flex items-center justify-between gap-3">
-							<div className="flex min-w-0 flex-col items-start gap-1 sm:flex-1 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+							<div className="flex min-w-0 flex-wrap items-center gap-x-3">
 								<UserProfileLink user={topic.owner} />
 								{!props.isCard && (
 									<ReactionRow

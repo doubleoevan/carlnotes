@@ -202,8 +202,8 @@ function TopicBarista({ topic, isCard }: { topic: TopicDetails; isCard: boolean 
 	return (
 		<InfoSection label="Carl's Barista" isFirst>
 			<View className="flex-row items-center justify-between gap-3">
-				{/* the sheet's reactions, under the barista */}
-				<View className="min-w-0 shrink items-start">
+				{/* the sheet's reactions right after the barista, as on the topic page */}
+				<View className="min-w-0 shrink flex-row flex-wrap items-center gap-x-3">
 					<AnchorLink
 						href={`${SITE_URL}${toProfilePath(owner.userId)}`}
 						accessibilityLabel={owner.username}
