@@ -175,7 +175,17 @@ try {
 	const privateTopicPath = toTopicPath({ id: topicIds.private, name: topicNames.private })
 	const profilePath = `/profiles/${ownerId}`
 	const teamPath = `/teams/${teamId}`
-	const pagePaths = ["/", "/plans", "/terms", "/privacy", publicTopicPath, privateTopicPath, profilePath, teamPath]
+	const pagePaths = [
+		"/",
+		"/topics",
+		"/plans",
+		"/terms",
+		"/privacy",
+		publicTopicPath,
+		privateTopicPath,
+		profilePath,
+		teamPath,
+	]
 
 	// every page arrives whole, with nothing streamed in after the footer and nothing still loading
 	const pages = new Map<string, FetchedPage>()
@@ -206,13 +216,13 @@ try {
 	failUnless(hasHeading(pages.get(profilePath)?.contentHtml ?? "", ownerId), "the profile page has no heading")
 	failUnless(hasHeading(pages.get(teamPath)?.contentHtml ?? "", teamName), "the team page has no heading")
 
-	// the homepage's html links every topic of a visitor's feed sections up to the first fifty of each,
+	// the Topics page's html links every topic of a visitor's feed sections up to the first fifty of each,
 	// including the pages past the first
 	const topicFeed = (await (await fetch(`${API_ORIGIN}/api/topic-feed`)).json()) as TopicFeedResponse
-	const homepageHtml = pages.get("/")?.contentHtml ?? ""
+	const topicsPageHtml = pages.get("/topics")?.contentHtml ?? ""
 	for (const section of topicFeed.sections) {
 		for (const topic of section.topics.slice(0, NO_SCRIPT_ROW_LIMIT)) {
-			failUnless(homepageHtml.includes(`href="${toTopicPath(topic)}"`), `the homepage does not link ${topic.name}`)
+			failUnless(topicsPageHtml.includes(`href="${toTopicPath(topic)}"`), `the Topics page does not link ${topic.name}`)
 		}
 	}
 
