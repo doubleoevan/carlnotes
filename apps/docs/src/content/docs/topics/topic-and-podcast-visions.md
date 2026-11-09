@@ -2,7 +2,7 @@
 title: Topic and podcast visions
 description: >-
   Every topic and every podcast episode has an image Carl draws from what it's about. Where the images show, how Carl
-  draws them, and how a topic's owner draws a new one or uploads their own.
+  draws them, and how a topic's editor draws a new one or uploads their own.
 sidebar:
   order: 7
 ---
@@ -44,20 +44,30 @@ watermark, which marks it as AI-made.
 If the image fails to render, the topic keeps its drawn cover until the next render finishes. Nothing about the topic
 waits on the image.
 
+## Edit an image
+
+A topic's editor can change the topic's image and each of its podcast episodes' images. On a topic's page or a podcast
+episode's page, hover over the image until a camera shows, and click it. **Edit topic image** or **Edit podcast image**
+opens with the image, **Regenerate**, and **Upload**. On a phone, the camera shows in the image's corner, so tap the
+image. The same image section is also in **Edit topic**, and in **Edit podcast**, which a podcast episode page's **⋮**
+actions menu opens.
+
+Each change saves on its own, and the page shows the new image once it is in place.
+
 ## Regenerate
 
-A topic's editor can draw a new image from **Edit topic**. Press **Regenerate** for a new scene in the house style, or
-type an image prompt first, like "a lighthouse in a storm, oil painting". Carl still draws from the topic, adds what the
-prompt asks for, and uses the style it names in place of the house style. An image prompt is checked for sexual,
+Press **Regenerate** for a new scene in the house style, or type an image prompt first, like "a lighthouse in a storm,
+oil painting". Carl still draws from the topic, adds what the prompt asks for, and uses the style it names in place of
+the house style. A podcast episode's image is drawn from what the episode covers. An image prompt is checked for sexual,
 violent, and hateful content before anything is drawn. The new image appears within about a minute and replaces the old
-one everywhere, including the show cover.
+one everywhere, including the show cover for a topic's image.
 
 ![The Image section of Edit topic: the topic's image, the Image prompt field, and the Regenerate
 button](../../../assets/screenshots/topic-image-editor.png)
 
-Each plan has a monthly limit of regenerations, shown beside the Upload button as "X of Y used this month". The button
-is gone once the month's limit is reached, and returns on the 1st. The limits are on the
-[plans page](/docs/account/plans-and-limits/).
+Each plan has a monthly limit of regenerations, shared by a topic's image and its podcast episodes' images, shown beside
+the Upload button as "X of Y used this month". The button is gone once the month's limit is reached, and returns on the
+1st. The limits are on the [plans page](/docs/account/plans-and-limits/).
 
 ## Upload
 

@@ -111,6 +111,8 @@ name.
 | `CollapsibleSection` | not yet shared | Both render an open by default titled section with a note and aside beside the toggle. Web uses the Accordion primitive and mobile uses a `Pressable` with state. |
 | `ConfirmDialog` | platform difference | Web renders a modal dialog with cancel and confirm buttons that wait on the action. Mobile shows the native destructive `Alert` and renders nothing. |
 | `CountBadge` | not yet shared | Both render the same filled pill with `toCountBadgeLabel`. Mobile also exports a class helper for an outlined badge. |
+| `EditImageDialog` | not yet shared | Both render the core `TopicImageEditor` under the same `EDIT_IMAGE_DIALOG_TITLES` title. Web shows it in a dialog and mobile in a native sheet, which an adapter could hold. |
+| `EditPodcastEpisodeDialog` | not yet shared | Both run the core `usePodcastEpisodeFields` with the same labels, field order, and image block. Web shows a dialog with `Input` and `Textarea`, mobile a native sheet with `SessionTextInput`, which an adapter could hold. |
 | `EditTeamModal` | not yet shared | Shares TeamFields and the core save flow. The dialog or native sheet and the file input or native image picker could be adapter elements of one core component. |
 | `EditTopicFields` | not yet shared | The scan time picker is a platform API, @react-native-community/datetimepicker on mobile and a TimePicker on web, but the rest of the fields match. The picker could be an adapter element. |
 | `EditTopicModal` | not yet shared | Web edits the topic in a dialog with toasts. Mobile uses a native sheet with inline errors and the share sheet for the invite link. An adapter could hold that difference. |
@@ -168,6 +170,7 @@ name.
 | `TopicFindingSummary` | not yet shared | Shares ResourceMetadata. The trigger differs, a popover on web and a Pressable that opens a native sheet on mobile, and could be an adapter element. Mobile's rank, bookmark, and `expo-image` favicon are a parity gap to settle when it moves. |
 | `TopicFindingsSection` | not yet shared | Both show five findings, a `MoreButton` expander, and the core empty text. Web's `CollapsibleSection` and the hidden rows for visitors without JavaScript could stay in its adapter. |
 | `TopicGateNotice` | not yet shared | Web shows the gate in a modal `Dialog` with log in and sign up links. Mobile puts the same `TOPIC_GATE_COPY` inline on the screen with buttons that open the native session screens. An adapter could hold that difference. |
+| `TopicImageButton` | platform difference | Both make the topic or podcast episode image a button with a camera over it. Web shows the camera over a dimmed image on hover or keyboard focus. A phone has no hover, so mobile shows the camera in the corner at all times. |
 | `TopicInfo` | not yet shared | Both build the same sections in the same order: owner, prompt, notes, attachments, sources, and counts. Mobile's native `Sheet` and web's source tooltips could be adapter elements. |
 | `TopicInvitesTable` | not yet shared | Both map topic invites into their own `SentInvitesTable` with the core `TOPIC_INVITES_TABLE_LABELS` and send the same delete call. Only the link and text controls differ. |
 | `TopicNameLink` | not yet shared | Both render the topic name link, the `PageUpdateCountBadge`, and the latest podcast episode play button. Only the link and text controls differ. |

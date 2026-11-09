@@ -139,16 +139,18 @@ it; it imports `@carlnotes/models`, `@carlnotes/emails`, `@carlnotes/db`, `@carl
 - `podcast/podcastEpisodeImage.ts` draws a published podcast episode's own image from its title, description, topic
   tags, and chapter titles, in the topic image's house style and at its sizes, billed with the episode. The root
   `podcast-episode-images:backfill` script draws one for every published podcast episode that has none.
+  `podcast/podcastEpisodeImageRenders.ts` reads a podcast episode's scene input for a render, replaces its image (the
+  hash, the origin, the image prompt, and the old files' pending deletions), and removes an upload.
 - `topicImages/` — the steps of the worker's `renderTopicImage` workflow. `writeTopicImageScene.ts` has the prompt
   writer's input (the topic's name, prompt, tags, and up to five finding titles, fenced as untrusted) and the image
-  prompt with the house style appended. `renderTopicImageOriginal.ts` draws a scene through the image model and
-  returns the 3:2 original, or throws a `TopicImageRenderFailure` naming whether the budget is spent, the render was
-  rejected, or another attempt is worth it. `topicImageFiles.ts` decodes an upload by its bytes under a pixel limit,
-  center-crops to 3:2 with sharp, derives the three sizes at 1x and 2x as webp, and stores them under the original's
-  hash. `topicImageRenders.ts` writes a render row and starts its workflow, replaces a topic's image (the row,
-  `topics.image_hash`, and the old files' pending deletions), removes an upload, and marks a render failed; a change
-  to a public topic's image purges its files at the edge. `topicCovers.ts` drops a topic's cached podcast feeds and
-  the stored covers drawn over its image after a change.
+  prompt with the house style appended. `renderTopicImageOriginal.ts` draws a scene through the image model and returns
+  the 3:2 original, or throws a `TopicImageRenderFailure` naming whether the budget is spent, the render was rejected,
+  or another attempt is worth it. `topicImageFiles.ts` decodes an upload by its bytes under a pixel limit, center-crops
+  to 3:2 with sharp, derives the three sizes at 1x and 2x as webp, and stores them under the original's hash.
+  `topicImageRenders.ts` writes a render row, naming a podcast episode for one that draws its image, and starts its
+  workflow, replaces a topic's image (the row, `topics.image_hash`, and the old files' pending deletions), removes an
+  upload, and marks a render failed; a change to a public topic's image purges its files at the edge. `topicCovers.ts`
+  drops a topic's cached podcast feeds and the stored covers drawn over its image after a change.
 - `meanVectors.ts` saves the vectors that rank related topics, related podcast episodes, and the podcast episode search,
   each the mean of the current model's resource embeddings behind it, computed in SQL: a Topic's after every Scan ends,
   succeeded, stopped, or failed, after a save that changes its visibility, and after a rating, from its kept Findings,

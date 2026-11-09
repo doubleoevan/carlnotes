@@ -4,7 +4,7 @@
 import { showClientError } from "@carlnotes/client/apiClient"
 import { fetchTopicImageRender } from "@carlnotes/client/topicImageClient"
 import type { TopicImageUrls } from "@carlnotes/contracts/topicImages"
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { TOPIC_IMAGE_RENDER_FAILED_TEXT } from "../lib/topicImageEditor"
 
 // how long the editor waits between reads of a pending render, and how long it polls before it treats the render as
@@ -14,9 +14,13 @@ const RENDER_POLL_LIMIT_MS = 20 * 60 * 1000
 
 /**
  * Keeps the editor's image current through a render. watchRender starts polling a render by its id until it succeeds,
- * which replaces the image, or fails, which reports it. replaceImage sets the image at once, for an upload.
+ * which replaces the image and calls onImageRendered, or fails, which reports it. replaceImage sets the image at once,
+ * for an upload.
  */
-export function useTopicImageRender(initialImage: TopicImageUrls | null): {
+export function useTopicImageRender(
+	initialImage: TopicImageUrls | null,
+	onImageRendered?: () => void,
+): {
 	image: TopicImageUrls | null
 	isRendering: boolean
 	watchRender: (renderId: string) => void
@@ -25,6 +29,8 @@ export function useTopicImageRender(initialImage: TopicImageUrls | null): {
 	// the image as it stands, and the render under way
 	const [image, setImage] = useState(initialImage)
 	const [renderId, setRenderId] = useState<string | null>(null)
+	const onImageRenderedRef = useRef(onImageRendered)
+	onImageRenderedRef.current = onImageRendered
 
 	// one read at a time per pending render, the next one scheduled once the last returns, until the render settles,
 	// another render starts, or the editor closes. a read that returns after its render was replaced changes nothing
@@ -51,14 +57,17 @@ export function useTopicImageRender(initialImage: TopicImageUrls | null): {
 				return
 			}
 
-			// the render settled: a success replaces the image, and a failure says so
+			// the render settled: a success replaces the image and reports it, and a failure says so
 			setRenderId(null)
 			if (render?.status === "succeeded" && render.image) {
 				setImage(render.image)
+				onImageRenderedRef.current?.()
 			} else {
 				showClientError(TOPIC_IMAGE_RENDER_FAILED_TEXT)
 			}
 		}
+
+		// the first read, after one poll interval
 		timer = setTimeout(() => void readRender(), RENDER_POLL_MS)
 
 		// the editor closed or another render started

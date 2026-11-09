@@ -3,15 +3,15 @@
 // to the episode's owner with the rest of the episode's cost
 
 import { db } from "@carlnotes/db"
-import { podcastEpisodeChapters, podcastEpisodes } from "@carlnotes/db/schema/podcast"
-import { topics } from "@carlnotes/db/schema/topics"
+import { podcastEpisodes } from "@carlnotes/db/schema/podcast"
 import { deleteStoredObjects } from "@carlnotes/db/store"
 import { loadOrProvisionUserLiteLLMKey } from "@carlnotes/models/litellm"
 import { topicImageCostDollars, topicImageModel } from "@carlnotes/models/topicImageModel"
 import { and, asc, eq, isNull, sql } from "drizzle-orm"
 import { renderTopicImageOriginal, TopicImageRenderFailure } from "../topicImages/renderTopicImageOriginal"
 import { storePodcastEpisodeImageFiles, toPodcastEpisodeImageObjectKeys } from "../topicImages/topicImageFiles"
-import { MAX_SCENE_FINDING_TITLES, writeTopicImageScene } from "../topicImages/writeTopicImageScene"
+import { writeTopicImageScene } from "../topicImages/writeTopicImageScene"
+import { loadPodcastEpisodeImageSceneInput } from "./podcastEpisodeImageRenders"
 
 // why a podcast episode was left without an image: a spent budget or a rejection, which no retry fixes
 export class PodcastEpisodeImageRejectedError extends Error {}
@@ -27,39 +27,19 @@ export async function drawPodcastEpisodeImage({
 	podcastEpisodeId,
 	isPlatformBilled = false,
 }: DrawPodcastEpisodeImageOptions): Promise<void> {
-	// the podcast episode and its topic's tags. one that has an image, or no title yet, has nothing to draw
+	// the podcast episode's owner and image. one that has an image, or no title yet, has nothing to draw
 	const [podcastEpisode] = await db
-		.select({
-			title: podcastEpisodes.title,
-			description: podcastEpisodes.description,
-			ownerId: podcastEpisodes.ownerId,
-			imageHash: podcastEpisodes.imageHash,
-			tags: topics.tags,
-		})
+		.select({ ownerId: podcastEpisodes.ownerId, imageHash: podcastEpisodes.imageHash })
 		.from(podcastEpisodes)
-		.leftJoin(topics, eq(topics.id, podcastEpisodes.topicId))
 		.where(eq(podcastEpisodes.id, podcastEpisodeId))
-	if (!podcastEpisode?.title || podcastEpisode.imageHash) {
+	const sceneInput = podcastEpisode?.imageHash ? null : await loadPodcastEpisodeImageSceneInput(podcastEpisodeId)
+	if (!podcastEpisode || !sceneInput) {
 		return
 	}
 
-	// the first chapters' titles, which say what the episode covers
-	const chapterRows = await db
-		.select({ title: podcastEpisodeChapters.title })
-		.from(podcastEpisodeChapters)
-		.where(eq(podcastEpisodeChapters.podcastEpisodeId, podcastEpisodeId))
-		.orderBy(asc(podcastEpisodeChapters.position))
-		.limit(MAX_SCENE_FINDING_TITLES)
-
 	// the scene from the episode's own words, on the owner's key or the master key for the platform
 	const litellmApiKey = isPlatformBilled ? undefined : await loadOrProvisionUserLiteLLMKey(podcastEpisode.ownerId)
-	const scene = await writeTopicImageScene({
-		topicName: podcastEpisode.title,
-		topicPrompt: podcastEpisode.description ?? "",
-		tags: podcastEpisode.tags ?? [],
-		findingTitles: chapterRows.map((chapterRow) => chapterRow.title),
-		litellmApiKey,
-	})
+	const scene = await writeTopicImageScene({ ...sceneInput, litellmApiKey })
 
 	// the original from the scene and the house style. a spent budget and a rejection are final
 	const model = topicImageModel()
@@ -78,7 +58,11 @@ export async function drawPodcastEpisodeImage({
 	const imageCostDollars = isPlatformBilled ? 0 : topicImageCostDollars(model)
 	const updatedRows = await db
 		.update(podcastEpisodes)
-		.set({ imageHash: hash, cost: sql`${podcastEpisodes.cost} + ${String(imageCostDollars)}` })
+		.set({
+			imageHash: hash,
+			imageOrigin: "generated",
+			cost: sql`${podcastEpisodes.cost} + ${String(imageCostDollars)}`,
+		})
 		.where(and(eq(podcastEpisodes.id, podcastEpisodeId), isNull(podcastEpisodes.imageHash)))
 		.returning({ id: podcastEpisodes.id })
 		.catch(async (error: unknown) => {

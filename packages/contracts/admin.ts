@@ -2,7 +2,6 @@
 
 import type { MobilePlatform } from "./clientTelemetry"
 import type { Plan } from "./plans"
-import type { HomePodcastEpisode } from "./podcast"
 
 // one platform's stored minimum app version, with when it was saved and by whom. the username is null once the
 // saver's account closed
@@ -91,10 +90,4 @@ export type AdminConsoleResponse = {
 	teams: AdminTeamRow[]
 	totals: AdminTotals
 	mobileMinimumVersions: MobileMinimumVersionRow[]
-	// the home's pinned topics and podcast episodes, each list in its order
-	homeTopics: HomeTopic[]
-	homePodcastEpisodes: HomePodcastEpisode[]
 }
-
-// a topic pinned among the home's home topics
-export type HomeTopic = { id: string; name: string; homeOrder: number }

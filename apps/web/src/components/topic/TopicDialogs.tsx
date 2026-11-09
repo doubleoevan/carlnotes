@@ -3,11 +3,20 @@ import { type HomeOrderMove, HomeRankDialog } from "@/components/common/HomeRank
 import { ShareTopic } from "@/components/share/ShareTopic"
 import { AddTopicToTeamDialog } from "@/components/team/AddTopicToTeamDialog"
 import { DeleteTopicDialog } from "./DeleteTopicDialog"
+import { EditImageDialog } from "./EditImageDialog"
 import { EditTopicModal } from "./EditTopicModal"
 import { TopicEditorChoiceDialog } from "./TopicEditorChoiceDialog"
 
 // the topic page's dialogs, one open at a time
-export type TopicDialog = "edit-choice" | "edit" | "make-public" | "share" | "add-topic-to-team" | "rank" | "delete"
+export type TopicDialog =
+	| "edit-choice"
+	| "edit"
+	| "edit-image"
+	| "make-public"
+	| "share"
+	| "add-topic-to-team"
+	| "rank"
+	| "delete"
 
 /**
  * The topic's dialogs, one at a time. Each mounts only while it is the open one, and its state resets every time.
@@ -27,7 +36,7 @@ export function TopicDialogs({
 	onOpenDialog: (dialog: TopicDialog | null) => void
 	onSaveTopic: () => Promise<void>
 	onTopicTeamsChanged: () => void
-	// called after each saved change
+	// called once each new image is in place
 	onTopicImageChanged: () => void
 	onRankTopic: (moves: HomeOrderMove[]) => Promise<void>
 	onTopicDeleted: () => Promise<void>
@@ -49,6 +58,14 @@ export function TopicDialogs({
 					isMakingTopicPublic={openDialog === "make-public"}
 					onClose={() => onOpenDialog(null)}
 					onTopicSaved={onSaveTopic}
+				/>
+			)}
+			{/* the image dialog that a click on an editor's header image opens */}
+			{openDialog === "edit-image" && (
+				<EditImageDialog
+					subject={{ kind: "topic", ...topic }}
+					onImageChanged={onTopicImageChanged}
+					onClose={() => onOpenDialog(null)}
 				/>
 			)}
 			{openDialog === "share" && (

@@ -154,6 +154,14 @@ export const PODCAST_EPISODE_TITLE_MAX_CHARS = 60
 
 export const PODCAST_EPISODE_DESCRIPTION_MAX_CHARS = 155
 
+// an editor's change to a podcast episode's title and description, trimmed and within their limits
+export const updatePodcastEpisodePayload = z.object({
+	title: z.string().trim().min(1).max(PODCAST_EPISODE_TITLE_MAX_CHARS),
+	description: z.string().trim().max(PODCAST_EPISODE_DESCRIPTION_MAX_CHARS),
+})
+
+export type UpdatePodcastEpisodePayload = z.infer<typeof updatePodcastEpisodePayload>
+
 // a podcast episode's entire script. the cold open, the themed segments in order, and the sign-off and goodbye.
 // each segment has the short transition into the segment, then its chapters
 export type PodcastEpisodeScript = {

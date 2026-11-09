@@ -1,8 +1,9 @@
 // the podcast episode routes for a season's episodes, an episode page, the next unplayed episode, one episode,
-// its files and preview card, a listener's progress, a chapter's rating, the owner's podcast switch,
-// and removing an episode
+// its files and preview card, a listener's progress, a chapter's rating, the owner's podcast switch, an editor's
+// change to an episode's title and description, and removing an episode
 
 import { podcastEpisodeListenPayload, ratingPayload } from "@carlnotes/contracts/payloads"
+import { updatePodcastEpisodePayload } from "@carlnotes/contracts/podcast"
 import {
 	nextUnplayedPodcastEpisodeQuery,
 	podcastEpisodeChapterParam,
@@ -23,14 +24,17 @@ import { isAllowed } from "../authorization"
 import { countPodcastEpisodeListen, countWithinRateLimit, toRequestSender } from "../counts/viewerCounts"
 import { type AppEnv, currentUser, toAnalyticsProperties } from "../currentUser"
 import { PRIVATE_NO_STORE_CACHE_CONTROL } from "../edgeCache"
+import { toObjectionableCategory, toObjectionableContentResponse } from "../moderation"
 import { toPodcastEpisodePreview } from "../share/podcastEpisodeImage"
 import { toCachedPodcastEpisodePreviewPng, toPreviewPngResponse } from "../share/preview"
 import { updateTopicFields } from "../tool/topicTools"
+import { clearVisitorTopicPages } from "../topic/feedCaches"
 import { canRateTopic } from "../topic/findingPermissions"
 import { toTopicGateResponse } from "../topic/helpers"
 import { clearHomeCaches } from "../topic/homeOrder"
 import { loadPodcastEpisodePage, loadSeasonPodcastEpisodes } from "./helpers"
 import { readPlayToken } from "./playTokens"
+import { loadPodcastEpisodeEditor } from "./podcastEpisodeEditor"
 import {
 	isFirstAudioRequest,
 	toPodcastEpisodeAudioResponse,
@@ -286,5 +290,37 @@ export const podcastEpisodesRoute = new Hono<AppEnv>()
 		await deletePodcastFeedCache(podcastEpisodeTopicRow.topic.id)
 		// a home podcast episode left the home
 		await clearHomeCaches()
+		return context.json({ ok: true })
+	})
+	// an editor's change to a podcast episode's title and description, after the text moderation
+	.patch("/episodes/:id", zValidator("json", updatePodcastEpisodePayload), async (context) => {
+		// an editor of the podcast episode's topic
+		const editor = await loadPodcastEpisodeEditor(context)
+		if ("response" in editor) {
+			return editor.response
+		}
+
+		// the title and the description pass the moderation together
+		const { title, description } = context.req.valid("json")
+		const objectionableCategory = await toObjectionableCategory({
+			text: `${title}\n${description}`,
+			textKind: "a podcast episode's title and description",
+			subjectKind: "podcastEpisode",
+			subjectId: editor.podcastEpisodeId,
+		})
+		if (objectionableCategory) {
+			return toObjectionableContentResponse(context, objectionableCategory)
+		}
+
+		// the new words, then the caches that show them: the feeds, the topic's visitor page, and the home
+		await db
+			.update(podcastEpisodes)
+			.set({ title, description: description || null })
+			.where(eq(podcastEpisodes.id, editor.podcastEpisodeId))
+		await Promise.all([
+			deletePodcastFeedCache(editor.topicId),
+			clearVisitorTopicPages(editor.topicId),
+			clearHomeCaches(),
+		])
 		return context.json({ ok: true })
 	})

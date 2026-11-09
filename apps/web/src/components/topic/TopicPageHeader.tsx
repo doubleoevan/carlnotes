@@ -1,16 +1,15 @@
 import type { TopicResponse } from "@carlnotes/contracts/topics"
 import { isSubscribeShown } from "@carlnotes/core/lib/topicActions"
+import { EDIT_IMAGE_DIALOG_TITLES } from "@carlnotes/core/lib/topicImageEditor"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { PawPrint } from "lucide-react"
 import { useState } from "react"
 import { PageUpdateCountBadge } from "@/components/common/UpdateCountBadge"
 import { Badge } from "@/components/primitives/badge"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
-import { TOPIC_IMAGE_FRAME_CLASS, TopicImage } from "@/components/primitives/topic-image"
 import { ReactionRow } from "@/components/social/ReactionRow"
 import {
 	ACTIVE_ICON_CLASS,
-	HEADER_TOPIC_IMAGE_CLASS,
 	MENU_BUTTON_CLASS,
 	MENU_BUTTON_HIGHLIGHT_CLASS,
 	TOPIC_HEADER_AREA_CLASSES,
@@ -20,12 +19,21 @@ import { toSubscribeTooltip } from "@/lib/utils"
 import { setChatPanelState } from "@/stores/chatPanelStore"
 import { TopicInfoPopover } from "./Topic"
 import { TopicByline } from "./TopicByline"
+import { TopicHeaderImage } from "./TopicImageButton"
 
 /**
- * Renders a topic's header: the image, with the title and its chat mention badge, the byline and reactions, and the
- * tags beside it.
+ * Renders a topic's header: the image, which an editor clicks to edit, with the title and its chat mention badge, the
+ * byline and reactions, and the tags beside it.
  */
-export function TopicHeader({ topic, isSignedIn }: { topic: TopicResponse; isSignedIn: boolean }) {
+export function TopicHeader({
+	topic,
+	isSignedIn,
+	onEditImage,
+}: {
+	topic: TopicResponse
+	isSignedIn: boolean
+	onEditImage: () => void
+}) {
 	// both the heading and its note icon open the note and show the hint, so the title holds the state the icon reads
 	const [isNoteOpen, setIsNoteOpen] = useState(false)
 	const [isNoteHintOpen, setIsNoteHintOpen] = useState(false)
@@ -35,11 +43,11 @@ export function TopicHeader({ topic, isSignedIn }: { topic: TopicResponse; isSig
 			    under it only once they pass its bottom. the heading wraps instead of truncating, and the note icon sits
 			    in its own text so a wrapped title keeps the icon beside its last word */}
 			<div className={toTopicHeaderGridClass({ hasTags: topic.tags.length > 0, hasActions: false })}>
-				<TopicImage
+				<TopicHeaderImage
 					image={topic.image}
-					size="page"
 					name={topic.name}
-					className={cn(TOPIC_HEADER_AREA_CLASSES.image, HEADER_TOPIC_IMAGE_CLASS, TOPIC_IMAGE_FRAME_CLASS)}
+					editLabel={EDIT_IMAGE_DIALOG_TITLES.topic}
+					onEdit={topic.canEdit ? onEditImage : undefined}
 				/>
 				{/* biome-ignore lint/a11y/useKeyWithClickEvents: the note icon in the heading is the keyboard path */}
 				<h1

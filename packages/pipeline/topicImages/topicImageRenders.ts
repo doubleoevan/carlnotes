@@ -20,10 +20,12 @@ const REPLACED_IMAGE_GRACE_MS = 60 * 60 * 1000
 // a render row
 export type TopicImageRenderRow = typeof topicImageRenders.$inferSelect & { topicOwnerId: string }
 
-// a new render: its topic, the user it bills or null for the platform, why it runs, the model that draws it, and the
-// owner's image prompt, which goes to the workflow and never to a row
+// a new render: its topic, the podcast episode whose image it draws or none for the topic's own, the user it bills or
+// null for the platform, why it runs, the model that draws it, and the editor's image prompt, which goes to the
+// workflow and never to a row
 export type StartTopicImageRenderOptions = {
 	topicId: string
+	podcastEpisodeId?: string
 	userId: string | null
 	kind: Exclude<TopicImageRenderKind, "resize">
 	model: string
@@ -35,16 +37,22 @@ export type StartTopicImageRenderOptions = {
  */
 export async function startTopicImageRender({
 	topicId,
+	podcastEpisodeId,
 	userId,
 	kind,
 	model,
 	imagePrompt,
 }: StartTopicImageRenderOptions): Promise<string> {
 	// the row first, so the workflow finds it, then the workflow named by the row
-	const [renderRow] = await db.insert(topicImageRenders).values({ topicId, userId, kind, model }).returning()
+	const [renderRow] = await db
+		.insert(topicImageRenders)
+		.values({ topicId, podcastEpisodeId, userId, kind, model })
+		.returning()
 	if (!renderRow) {
 		throw new Error(`no render row was written for topic ${topicId}`)
 	}
+
+	// the workflow that draws the image
 	await startTopicImageWorkflow({ topicId, renderId: renderRow.id, imagePrompt })
 	return renderRow.id
 }

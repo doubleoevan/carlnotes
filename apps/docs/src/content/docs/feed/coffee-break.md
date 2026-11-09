@@ -168,6 +168,11 @@ brew](../../../assets/screenshots/podcast-switch.png)
 Below it, **Hot takes for Carl and Vienna** decides whether the podcast takes the hot takes the topic's editors
 share. It starts on, and only the owner can turn it off.
 
+A topic's editor can change a podcast episode's title, description, and image. Pick **Edit podcast** in the podcast
+episode page's **⋮** actions menu, change the fields, and press **Save**. The image changes save on their own, as
+[Topic and podcast visions](/docs/topics/topic-and-podcast-visions/#edit-an-image) describes. A title or description
+that breaks the content rules is rejected.
+
 The owner can also remove one podcast episode. Use the trash button in the episodes list, or pick **Remove podcast
 episode** in a podcast episode page's **⋮** actions menu. Confirm **Remove podcast episode**, or choose **Keep it** to
 cancel. Removal stops that podcast episode if it is playing and clears its saved position on this app. The podcast

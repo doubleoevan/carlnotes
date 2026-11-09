@@ -2,30 +2,35 @@
 // image once they pass its bottom, then the topic's byline with the reactions, under the image on a phone
 import type { PodcastEpisodePageResponse } from "@carlnotes/contracts/podcastEpisodePage"
 import { toTopicPath } from "@carlnotes/contracts/seo"
+import { EDIT_IMAGE_DIALOG_TITLES } from "@carlnotes/core/lib/topicImageEditor"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { AnchorLink } from "@/components/common/AnchorLink"
-import { TOPIC_IMAGE_FRAME_CLASS, TopicImage } from "@/components/primitives/topic-image"
 import { ReactionRow } from "@/components/social/ReactionRow"
 import { TopicByline } from "@/components/topic/TopicByline"
-import { HEADER_TOPIC_IMAGE_CLASS, TOPIC_HEADER_AREA_CLASSES, toTopicHeaderGridClass } from "@/lib/styleClasses"
+import { TopicHeaderImage } from "@/components/topic/TopicImageButton"
+import { TOPIC_HEADER_AREA_CLASSES, toTopicHeaderGridClass } from "@/lib/styleClasses"
 import { PodcastThemeSongNote } from "./PodcastThemeSongNote"
 
-// the podcast episode page and whether the reader is signed in, for the reactions
-type PodcastEpisodeHeaderProps = { podcastEpisodePage: PodcastEpisodePageResponse; isSignedIn: boolean }
+// the podcast episode page, whether the reader is signed in, for the reactions, and the click on an editor's image
+type PodcastEpisodeHeaderProps = {
+	podcastEpisodePage: PodcastEpisodePageResponse
+	isSignedIn: boolean
+	onEditImage: () => void
+}
 
 /**
  * Renders the podcast episode's own image beside its title and description, then the topic's byline with the reactions.
  */
-export function PodcastEpisodeHeader({ podcastEpisodePage, isSignedIn }: PodcastEpisodeHeaderProps) {
+export function PodcastEpisodeHeader({ podcastEpisodePage, isSignedIn, onEditImage }: PodcastEpisodeHeaderProps) {
 	const { podcastEpisode, topic } = podcastEpisodePage
 	const topicPath = toTopicPath(topic)
 	return (
 		<header className={HEADER_GRID_CLASS}>
-			<TopicImage
+			<TopicHeaderImage
 				image={podcastEpisode.image}
-				size="page"
 				name={podcastEpisode.title ?? topic.name}
-				className={IMAGE_CLASS}
+				editLabel={EDIT_IMAGE_DIALOG_TITLES.podcastEpisode}
+				onEdit={podcastEpisodePage.canEditPodcastEpisode ? onEditImage : undefined}
 			/>
 			<h1
 				className={cn(TOPIC_HEADER_AREA_CLASSES.title, "font-display text-2xl leading-tight text-balance sm:text-3xl")}
@@ -56,9 +61,6 @@ export function PodcastEpisodeHeader({ podcastEpisodePage, isSignedIn }: Podcast
 		</header>
 	)
 }
-
-// the podcast episode's own image beside the title, at the topic page's header size and in its frame
-const IMAGE_CLASS = cn(TOPIC_HEADER_AREA_CLASSES.image, HEADER_TOPIC_IMAGE_CLASS, TOPIC_IMAGE_FRAME_CLASS)
 
 // the header's grid from sm up, the topic header's with no tags and no actions, and its float on a phone
 const HEADER_GRID_CLASS = toTopicHeaderGridClass({ hasTags: false, hasActions: false })

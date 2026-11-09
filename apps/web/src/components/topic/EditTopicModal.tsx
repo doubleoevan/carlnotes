@@ -47,7 +47,7 @@ export function EditTopicModal({
 	initialTeam?: { teamId: string; name: string }
 	onClose: () => void
 	onTopicSaved: (topicId: string, topicName: string) => Promise<void>
-	// called after each saved change
+	// called once each new image is in place
 	onTopicImageChanged?: () => void
 }) {
 	// the title input ref to focus it on open
@@ -268,7 +268,11 @@ export function EditTopicModal({
 				{topic && (
 					<div>
 						<FieldLabel>{TOPIC_IMAGE_LABEL}</FieldLabel>
-						<TopicImageEditor key={toTopicImageEditorKey(topic)} topic={topic} onImageChanged={onTopicImageChanged} />
+						<TopicImageEditor
+							key={toTopicImageEditorKey(topic)}
+							subject={{ kind: "topic", ...topic }}
+							onImageChanged={onTopicImageChanged}
+						/>
 					</div>
 				)}
 

@@ -3,42 +3,37 @@
 
 import {
 	fromTopicImageFileName,
-	MAX_TOPIC_IMAGE_UPLOAD_BYTES,
 	regenerateTopicImagePayload,
 	type TopicImageRenderResponse,
+	type TopicImageUrls,
+	toPodcastEpisodeImageUrls,
 	toTopicImageUrls,
 	toTopicImageUrlsOrNull,
 } from "@carlnotes/contracts/topicImages"
 import { db } from "@carlnotes/db"
+import { podcastEpisodes } from "@carlnotes/db/schema/podcast"
 import { topics } from "@carlnotes/db/schema/topics"
 import { loadTopicImage } from "@carlnotes/db/topicImages"
 import { topicImageRegenerateModel } from "@carlnotes/models/topicImageModel"
-import {
-	storeTopicImageFiles,
-	toTopicImageFileKey,
-	toTopicImageOriginal,
-	toTopicImageUploadType,
-} from "@carlnotes/pipeline/topicImages/topicImageFiles"
+import { storeTopicImageFiles, toTopicImageFileKey } from "@carlnotes/pipeline/topicImages/topicImageFiles"
 import {
 	loadTopicImageRender,
 	removeTopicImageUpload,
 	replaceTopicImage,
 	startTopicImageRender,
+	type TopicImageRenderRow,
 } from "@carlnotes/pipeline/topicImages/topicImageRenders"
 import { trackEvent } from "@carlnotes/server/analytics"
 import { zValidator } from "@hono/zod-validator"
 import { eq } from "drizzle-orm"
 import { type Context, Hono } from "hono"
 import { isAllowed } from "../authorization"
-import { MULTIPART_ENVELOPE_BYTES, toBodyLimit, uploadSignedOutRejection } from "../bodyLimit"
+import { uploadSignedOutRejection } from "../bodyLimit"
 import { type AppEnv, currentUser, toAnalyticsProperties } from "../currentUser"
-import { toObjectionableCategory, toObjectionableContentResponse, toObjectionableImageCategory } from "../moderation"
 import { toolCallerRateLimiter } from "../rateLimit"
+import { imageUploadBodyLimit, readUploadedImageOriginal, toImagePromptRejection } from "./imageEdits"
 import { namedTopicColumns } from "./permissions"
 import { serveImageFile } from "./serveImageFile"
-
-// the body limit of an upload, set before parseBody buffers the body: the image limit plus the multipart envelope
-const topicImageBodyLimit = toBodyLimit(MAX_TOPIC_IMAGE_UPLOAD_BYTES + MULTIPART_ENVELOPE_BYTES, "too-large")
 
 // the topic image routes
 export const topicImagesRoute = new Hono<AppEnv>()
@@ -73,16 +68,13 @@ export const topicImagesRoute = new Hono<AppEnv>()
 
 			// an image prompt goes to the image model alone, so it passes the moderation first
 			const { imagePrompt } = context.req.valid("json")
-			const objectionableCategory = imagePrompt
-				? await toObjectionableCategory({
-						text: imagePrompt,
-						textKind: "an image prompt",
-						subjectKind: "topic image prompt",
-						subjectId: editor.topic.id,
-					})
-				: null
-			if (objectionableCategory) {
-				return toObjectionableContentResponse(context, objectionableCategory)
+			const imagePromptRejection = await toImagePromptRejection(context, {
+				imagePrompt,
+				subjectKind: "topic image prompt",
+				subjectId: editor.topic.id,
+			})
+			if (imagePromptRejection) {
+				return imagePromptRejection
 			}
 
 			// the render row and its workflow
@@ -106,52 +98,27 @@ export const topicImagesRoute = new Hono<AppEnv>()
 		}
 		const renderResponse: TopicImageRenderResponse = {
 			status: render.status,
-			image:
-				render.status === "succeeded"
-					? toTopicImageUrlsOrNull(render.topicId, (await loadTopicImage(render.topicId))?.hash ?? null)
-					: null,
+			image: render.status === "succeeded" ? await loadRenderedImage(render) : null,
 		}
 		return context.json(renderResponse)
 	})
 	// the owner's upload: a jpeg, png, or webp, center-cropped and derived in place of the current image
-	.post("/topics/:id/image", toolCallerRateLimiter, uploadSignedOutRejection, topicImageBodyLimit, async (context) => {
+	.post("/topics/:id/image", toolCallerRateLimiter, uploadSignedOutRejection, imageUploadBodyLimit, async (context) => {
 		// an editor of the topic
 		const editor = await loadTopicEditor(context)
 		if ("response" in editor) {
 			return editor.response
 		}
 
-		// the file, checked by its size and by what its bytes decode as
-		const uploadedFile = (await context.req.parseBody()).image
-		if (!(uploadedFile instanceof File) || uploadedFile.size === 0) {
-			return context.json({ error: "unsupported-type" }, 400)
-		}
-		if (uploadedFile.size > MAX_TOPIC_IMAGE_UPLOAD_BYTES) {
-			return context.json({ error: "too-large" }, 413)
-		}
-
-		// the bytes decode as a jpeg, a png, or a webp, or the upload is refused
-		const uploadedBytes = new Uint8Array(await uploadedFile.arrayBuffer())
-		const original = toTopicImageUploadType(uploadedBytes)
-			? await toTopicImageOriginal(uploadedBytes).catch(() => null)
-			: null
-		if (!original) {
-			return context.json({ error: "unsupported-type" }, 400)
-		}
-
-		// the moderation, on the cropped original the topic will show. an image it cannot read is an unsupported type,
-		// and a skipped or failed check lets the upload through
-		const objectionableCategory = await toObjectionableImageCategory({
-			dataUrl: `data:image/jpeg;base64,${Buffer.from(original.jpegBytes).toString("base64")}`,
+		// the file, checked by its size, its type, and the image moderation
+		const uploadedImage = await readUploadedImageOriginal(context, {
 			subjectKind: "topic image",
 			subjectId: editor.topic.id,
 		})
-		if (objectionableCategory === "unreadable") {
-			return context.json({ error: "unsupported-type" }, 400)
+		if ("response" in uploadedImage) {
+			return uploadedImage.response
 		}
-		if (objectionableCategory) {
-			return toObjectionableContentResponse(context, objectionableCategory)
-		}
+		const { original } = uploadedImage
 
 		// the files under their hash, then the row that makes the upload current
 		const hash = await storeTopicImageFiles(editor.topic.id, original)
@@ -205,6 +172,25 @@ export const topicImagesRoute = new Hono<AppEnv>()
 		})
 		return context.json({ renderId }, 202)
 	})
+
+// the image a succeeded render left: its podcast episode's for a podcast episode render, else its topic's
+async function loadRenderedImage(render: TopicImageRenderRow): Promise<TopicImageUrls | null> {
+	// a podcast episode render's image is the podcast episode's current one
+	if (render.podcastEpisodeId) {
+		const [podcastEpisode] = await db
+			.select({ imageHash: podcastEpisodes.imageHash })
+			.from(podcastEpisodes)
+			.where(eq(podcastEpisodes.id, render.podcastEpisodeId))
+
+		// a podcast episode with no image yet has no urls
+		return podcastEpisode?.imageHash
+			? toPodcastEpisodeImageUrls(render.podcastEpisodeId, podcastEpisode.imageHash)
+			: null
+	}
+
+	// a topic render's image is the topic's current one
+	return toTopicImageUrlsOrNull(render.topicId, (await loadTopicImage(render.topicId))?.hash ?? null)
+}
 
 // the signed-in editor of the route's topic, or the response that turns the request away
 type TopicEditor = { userId: string; topic: { id: string; ownerId: string } } | { response: Response }

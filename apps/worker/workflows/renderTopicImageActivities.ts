@@ -7,10 +7,15 @@ import { loadOrProvisionUserLiteLLMKey } from "@carlnotes/models/litellm"
 import { isBudgetRejection } from "@carlnotes/models/models"
 import { topicImageCostDollars } from "@carlnotes/models/topicImageModel"
 import {
+	loadPodcastEpisodeImageSceneInput,
+	replacePodcastEpisodeImage,
+} from "@carlnotes/pipeline/podcast/podcastEpisodeImageRenders"
+import {
 	renderTopicImageOriginal,
 	TopicImageRenderFailure,
 } from "@carlnotes/pipeline/topicImages/renderTopicImageOriginal"
 import {
+	storePodcastEpisodeImageFiles,
 	storeTopicImageFiles,
 	toTopicImageFileKey,
 	toTopicImageFiles,
@@ -22,6 +27,7 @@ import {
 	loadTopicImageSceneInput,
 	recordTopicImageScene,
 	replaceTopicImage,
+	type TopicImageRenderRow,
 } from "@carlnotes/pipeline/topicImages/topicImageRenders"
 import { writeTopicImageScene } from "@carlnotes/pipeline/topicImages/writeTopicImageScene"
 import { trackEvent } from "@carlnotes/server/analytics"
@@ -34,7 +40,8 @@ export { failTopicImageRender } from "@carlnotes/pipeline/topicImages/topicImage
 type WriteTopicImageSceneForRenderOptions = { renderId: string; imagePrompt?: string }
 
 /**
- * Writes the render's scene from its topic's words and the owner's image prompt, and keeps it on the render row. A spent budget fails for good.
+ * Writes the render's scene from its podcast episode's or its topic's words and the editor's image prompt, and keeps it
+ * on the render row. A spent budget fails for good.
  */
 export async function writeTopicImageSceneForRender({
 	renderId,
@@ -45,9 +52,13 @@ export async function writeTopicImageSceneForRender({
 	if (render.scene) {
 		return render.scene
 	}
-	const sceneInput = await loadTopicImageSceneInput(render.topicId)
+
+	// the words the scene is written from: the podcast episode's for a podcast episode render, else the topic's
+	const sceneInput = render.podcastEpisodeId
+		? await loadPodcastEpisodeImageSceneInput(render.podcastEpisodeId)
+		: await loadTopicImageSceneInput(render.topicId)
 	if (!sceneInput) {
-		throw ApplicationFailure.nonRetryable(`topic ${render.topicId} not found`, "TopicNotFound")
+		throw ApplicationFailure.nonRetryable(`the render ${renderId} has nothing to draw`, "TopicNotFound")
 	}
 
 	// write on the user's key, or the master key for the platform
@@ -97,6 +108,23 @@ export async function renderAndStoreTopicImage({
 		throw toRenderActivityFailure(error)
 	})
 
+	// a podcast episode's render stores its files under the podcast episode and makes them its image
+	const costDollars = topicImageCostDollars(model)
+	if (render.podcastEpisodeId) {
+		const podcastEpisodeId = render.podcastEpisodeId
+		const hash = await storePodcastEpisodeImageFiles(podcastEpisodeId, original)
+		await replacePodcastEpisodeImage({
+			podcastEpisodeId,
+			renderId,
+			hash,
+			origin: "generated",
+			imagePrompt: imagePrompt ?? null,
+			costDollars,
+		})
+		trackRenderEvent(render)
+		return
+	}
+
 	// the files under the original's hash, then the row that makes it current
 	const hash = await storeTopicImageFiles(render.topicId, original)
 	await replaceTopicImage({
@@ -109,13 +137,18 @@ export async function renderAndStoreTopicImage({
 		imagePrompt: imagePrompt ?? null,
 		width: original.width,
 		height: original.height,
-		costDollars: topicImageCostDollars(model),
+		costDollars,
 	})
+	trackRenderEvent(render)
+}
 
-	// the event names the topic and the render's kind, and the owner flag says whether the user it bills owns the topic
+// report the render, naming the topic, the podcast episode if it drew one, and the render's kind. the owner flag says
+// whether the user it bills owns the topic
+function trackRenderEvent(render: TopicImageRenderRow): void {
 	if (render.userId) {
 		trackEvent(render.kind === "regenerate" ? "topic_image_regenerate" : "topic_image_generate", render.userId, {
 			topicId: render.topicId,
+			...(render.podcastEpisodeId ? { podcastEpisodeId: render.podcastEpisodeId } : {}),
 			renderKind: render.kind,
 			isOwner: render.topicOwnerId === render.userId,
 			entryPoint: "worker",
@@ -140,9 +173,7 @@ export async function rederiveTopicImageFiles(topicId: string): Promise<void> {
 }
 
 // the render row, a missing row throws without a retry
-async function loadTopicImageRenderOrThrow(
-	renderId: string,
-): Promise<NonNullable<Awaited<ReturnType<typeof loadTopicImageRender>>>> {
+async function loadTopicImageRenderOrThrow(renderId: string): Promise<TopicImageRenderRow> {
 	const render = await loadTopicImageRender(renderId)
 	if (!render) {
 		throw ApplicationFailure.nonRetryable(`topic image render ${renderId} not found`, "RenderNotFound")

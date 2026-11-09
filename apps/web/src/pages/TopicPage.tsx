@@ -220,7 +220,7 @@ export function TopicPage() {
 				<>
 					{/* the topic header: the title with its chat mention badge, then the tags */}
 					<HydrateSection index={0}>
-						<TopicHeader topic={topic} isSignedIn={Boolean(session)} />
+						<TopicHeader topic={topic} isSignedIn={Boolean(session)} onEditImage={() => setOpenDialog("edit-image")} />
 					</HydrateSection>
 					{/* the podcast episode player */}
 					<HydrateSection index={1}>

@@ -11,14 +11,14 @@ import {
 	UNREADABLE_IMAGE_TEXT,
 } from "@carlnotes/core/lib/imageUpload"
 import { cn } from "@carlnotes/nightshift/classNames"
-import { Camera, ImageUp, type LucideIcon, RefreshCw, X } from "lucide-react"
+import { ImageUp, type LucideIcon, RefreshCw, X } from "lucide-react"
 import { Button } from "@/components/primitives/button"
 import { Input } from "@/components/primitives/input"
-import { TOPIC_IMAGE_FRAME_CLASS, TopicImage } from "@/components/primitives/topic-image"
 import { resizeImageFile } from "@/lib/imageResize"
 import { IMAGE_SKELETON_CLASS } from "@/lib/styleClasses"
+import { TopicImageButton } from "./TopicImageButton"
 
-export type { TopicImageEditorTopic } from "@carlnotes/core/components/TopicImageEditor"
+export type { TopicImageEditorSubject } from "@carlnotes/core/components/TopicImageEditor"
 
 // each button's icon
 const BUTTON_ICONS: Record<TopicImageEditorButtonKind, LucideIcon> = {
@@ -43,23 +43,16 @@ const ELEMENTS: TopicImageEditorElements = {
 		</div>
 	),
 	Line: ({ children }) => <p className="text-muted-foreground text-sm">{children}</p>,
-	// the image is the upload button, with the camera overlay on hover or keyboard focus as the avatars show it
-	Image: ({ uploadLabel, isRendering, isDisabled, onUpload, ...topicImageProps }) => (
-		<button
-			type="button"
-			aria-label={uploadLabel}
-			disabled={isDisabled}
+	// the image is the upload button, pulsing while a render runs
+	Image: ({ uploadLabel, isRendering, isDisabled, onUpload, className, ...topicImageProps }) => (
+		<TopicImageButton
+			{...topicImageProps}
+			label={uploadLabel}
+			isDisabled={isDisabled}
 			onClick={onUpload}
-			className="group relative w-full cursor-pointer rounded-lg disabled:cursor-default"
-		>
-			<TopicImage
-				{...topicImageProps}
-				className={cn(TOPIC_IMAGE_FRAME_CLASS, "w-full", isRendering && IMAGE_SKELETON_CLASS)}
-			/>
-			<span className="absolute inset-0 grid place-items-center rounded-lg bg-black/55 opacity-0 transition-opacity group-enabled:group-hover:opacity-100 group-enabled:group-focus-visible:opacity-100">
-				<Camera className="size-6 text-white" />
-			</span>
-		</button>
+			className="w-full"
+			imageClassName={cn(className, isRendering && IMAGE_SKELETON_CLASS)}
+		/>
 	),
 	PromptInput: ({ label, value, placeholder, maxLength, isDisabled, onChange }) => (
 		<Input

@@ -1,8 +1,10 @@
 // the podcast episode page contract: the episode, its topic, the findings it narrates, and its tables
 import { z } from "zod"
+import { topicImageOrigins } from "./enums"
 import { topicFinding } from "./findings"
 import { homePodcastEpisode, podcastEpisode, podcastEpisodeSummary, podcastEpisodeTranscriptBlock } from "./podcast"
 import { commentThreadResponse, reactionSummary } from "./social"
+import { imageRegenerationQuota } from "./topicImages"
 import { topicResponse } from "./topics"
 
 // a podcast episode's page. the episode with its chapters, and the topic with its visibility, byline, and teams.
@@ -24,6 +26,12 @@ export const podcastEpisodePageResponse = z.object({
 	canRate: z.boolean(),
 	// whether this user may remove the podcast episode
 	canRemovePodcastEpisode: z.boolean(),
+	// whether this user may edit the podcast episode, and for that user alone, where its image came from, the image
+	// prompt that drew it, and the user's regenerations this month, null for an admin
+	canEditPodcastEpisode: z.boolean(),
+	podcastEpisodeImageOrigin: z.enum(topicImageOrigins).nullable(),
+	podcastEpisodeImagePrompt: z.string().nullable(),
+	imageRegenerationQuota: imageRegenerationQuota.nullable(),
 	// this episode's position among the home podcast episodes and the home podcast episodes themselves, both null for
 	// anyone but an admin
 	homeOrder: z.number().nullable(),

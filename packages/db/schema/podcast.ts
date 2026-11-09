@@ -13,7 +13,7 @@ import {
 	timestamp,
 	uniqueIndex,
 } from "drizzle-orm/pg-core"
-import { podcastEpisodeStatus, primaryId, rating, timestamps } from "./columns"
+import { podcastEpisodeStatus, primaryId, rating, timestamps, topicImageOrigin } from "./columns"
 import { findings, resources, scans } from "./scans"
 import { topics } from "./topics"
 import { users } from "./users"
@@ -54,6 +54,10 @@ export const podcastEpisodes = pgTable(
 		homeOrder: integer("feature_order"),
 		// the content hash of the podcast episode's own image, drawn once it publishes, or null until it is drawn
 		imageHash: text("image_hash"),
+		// where the image came from, null for a drawn image from before uploads, and the editor's image prompt that the
+		// last render followed, null for the house style and an upload
+		imageOrigin: topicImageOrigin("image_origin"),
+		imagePrompt: text("image_prompt"),
 		// the speech model that recorded the podcast episode, and what the script, the speech, and the image cost in dollars
 		model: text("model"),
 		cost: numeric("cost", { precision: 12, scale: 6 }).notNull().default("0"),

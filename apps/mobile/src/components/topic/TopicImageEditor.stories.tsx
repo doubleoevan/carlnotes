@@ -1,4 +1,4 @@
-import type { TopicImageEditorTopic } from "@carlnotes/core/components/TopicImageEditor"
+import type { TopicImageEditorSubject } from "@carlnotes/core/components/TopicImageEditor"
 import type { Meta, StoryObj } from "@storybook/react-native"
 import { TopicImageEditor } from "./TopicImageEditor"
 
@@ -6,7 +6,8 @@ import { TopicImageEditor } from "./TopicImageEditor"
 const SAMPLE_FILES = { url: "/podcast-cover-placeholder.jpg", url2x: "/podcast-cover-placeholder.jpg" }
 
 // a topic with a generated image and most of the month's regenerations left
-const TOPIC: TopicImageEditorTopic = {
+const TOPIC: TopicImageEditorSubject = {
+	kind: "topic",
 	id: "topic-1",
 	name: "Home espresso",
 	image: { page: SAMPLE_FILES, list: SAMPLE_FILES, thumbnail: SAMPLE_FILES },
@@ -21,11 +22,11 @@ const meta = {
 	title: "Topic/TopicImageEditor",
 	component: TopicImageEditor,
 	parameters: { webReference: "apps/web/src/components/topic/TopicImageEditor.tsx" },
-	args: { topic: TOPIC },
+	args: { subject: TOPIC },
 } satisfies Meta<typeof TopicImageEditor>
 export default meta
 type Story = StoryObj<typeof meta>
 export const Default: Story = {}
-export const Uploaded: Story = { args: { topic: { ...TOPIC, imageOrigin: "uploaded", imagePrompt: null } } }
-export const LimitReached: Story = { args: { topic: { ...TOPIC, imageRegenerationQuota: { used: 15, limit: 15 } } } }
-export const NoImage: Story = { args: { topic: { ...TOPIC, image: null, imageOrigin: null, imagePrompt: null } } }
+export const Uploaded: Story = { args: { subject: { ...TOPIC, imageOrigin: "uploaded", imagePrompt: null } } }
+export const LimitReached: Story = { args: { subject: { ...TOPIC, imageRegenerationQuota: { used: 15, limit: 15 } } } }
+export const NoImage: Story = { args: { subject: { ...TOPIC, image: null, imageOrigin: null, imagePrompt: null } } }

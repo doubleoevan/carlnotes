@@ -392,7 +392,9 @@ through the app's own visit analytics. Their tests render through plain elements
 
 `components/TopicImage` shows a topic's image at a size through the Nightshift contract, picking the 1x or 2x file.
 `components/TopicCard` and `PodcastEpisodeCard` are the home's and the Topics page's cards, and `TopicImageEditor` is
-the editor's image block (Regenerate with an image prompt, Upload, Remove), each app supplying its elements and its file
-picker. `hooks/useTopicImageRender` polls a render until it finishes. `lib/topicImageEditor` holds the block's labels,
-the count line, and the upload check, and `lib/homeFaces` the home's section titles, the three steps, and the empty
-payload.
+the editor's image block for a topic or a podcast episode (Regenerate with an image prompt, Upload, Remove), each app
+supplying its elements and its file picker. `hooks/useTopicImageRender` polls a render until it finishes.
+`lib/topicImageEditor` holds the block's labels, the image dialogs' titles, the count line, and the upload check.
+`hooks/usePodcastEpisodeFields` is the Edit podcast form's title, description, and save, and
+`lib/podcastEpisodeEditor` its labels and the podcast episode's image as the block edits it. `lib/homeFaces` holds the
+home's section titles, the three steps, and the empty payload.

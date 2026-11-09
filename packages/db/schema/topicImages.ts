@@ -2,6 +2,7 @@
 
 import { index, integer, numeric, pgTable, text, timestamp } from "drizzle-orm/pg-core"
 import { primaryId, timestamps, topicImageOrigin, topicImageRenderKind, topicImageRenderStatus } from "./columns"
+import { podcastEpisodes } from "./podcast"
 import { topics } from "./topics"
 import { users } from "./users"
 
@@ -33,6 +34,8 @@ export const topicImageRenders = pgTable(
 		topicId: text("topic_id")
 			.notNull()
 			.references(() => topics.id, { onDelete: "cascade" }),
+		// the podcast episode whose image the render draws, null for the topic's own image
+		podcastEpisodeId: text("podcast_episode_id").references(() => podcastEpisodes.id, { onDelete: "cascade" }),
 		// the user the render bills, null for a render on the platform key
 		userId: text("user_id").references(() => users.id, { onDelete: "set null" }),
 		kind: topicImageRenderKind("kind").notNull(),

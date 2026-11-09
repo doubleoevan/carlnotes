@@ -49,10 +49,8 @@ async function setPodcastEpisodeHomeOrder(podcastEpisodeId: string, position: nu
 	return "ranked"
 }
 
-/**
- * Returns the home podcasts in their order, each with its topic's name and its page.
- */
-export async function loadHomePodcastEpisodes(): Promise<HomePodcastEpisode[]> {
+// load the home podcasts in their order, each with its topic's name and its page
+async function loadHomePodcastEpisodes(): Promise<HomePodcastEpisode[]> {
 	// the pinned rows with their topics, in their order
 	const homeOrderRows = await db
 		.select({

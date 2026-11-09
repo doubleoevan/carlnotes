@@ -6,12 +6,17 @@ import { toTopicPath } from "@carlnotes/contracts/seo"
 import { usePolledCounts } from "@carlnotes/core/hooks/usePolledCounts"
 import { useTopicFindingActions } from "@carlnotes/core/hooks/useTopicFindingActions"
 import { PODCAST_EPISODE_LOAD_FAILED_TEXT } from "@carlnotes/core/lib/podcastEpisodeCopy"
+import {
+	EDIT_PODCAST_EPISODE_LABEL,
+	toPodcastEpisodeImageEditorSubject,
+} from "@carlnotes/core/lib/podcastEpisodeEditor"
 import { toPodcastEpisodeReportSubject, toPodcastEpisodeSocialProps } from "@carlnotes/core/lib/podcastEpisodeSocial"
 import { isAddTopicToTeamShown } from "@carlnotes/core/lib/topicActions"
 import { applyPodcastEpisodePageChanges } from "@carlnotes/core/lib/topicFindingChanges"
+import { EDIT_IMAGE_DIALOG_TITLES } from "@carlnotes/core/lib/topicImageEditor"
 import { useQuery } from "@tanstack/react-query"
 import { router, useFocusEffect, useLocalSearchParams, usePathname } from "expo-router"
-import { Rss, Share as ShareIcon, Trash2, Users } from "lucide-react-native"
+import { Pencil, Rss, Share as ShareIcon, Trash2, Users } from "lucide-react-native"
 import { type ComponentRef, type RefObject, useCallback, useRef, useState } from "react"
 import { View } from "react-native"
 import { AnchorLink } from "@/components/common/AnchorLink"
@@ -20,17 +25,18 @@ import { PageScreen } from "@/components/layout/PageScreen"
 import { Button } from "@/components/primitives/button"
 import { Icon } from "@/components/primitives/icon"
 import { Text } from "@/components/primitives/text"
-import { TopicImage } from "@/components/primitives/topic-image"
 import type { PageActionOption } from "@/components/search/PageActionMenu"
 import { ShareTopicSheet } from "@/components/share/ShareTopic"
 import { ReactionRow } from "@/components/social/ReactionRow"
 import { SocialSection } from "@/components/social/SocialSection"
 import { AddTopicToTeamDialog } from "@/components/team/AddTopicToTeamDialog"
 import { CollapsibleSection } from "@/components/topic/CollapsibleSection"
+import { EditImageDialog } from "@/components/topic/EditImageDialog"
 import { TopicByline } from "@/components/topic/TopicByline"
 import { TopicGateNotice } from "@/components/topic/TopicGateNotice"
 import { NewTopicButton } from "@/components/topic/TopicHomeActions"
-import { HEADER_TOPIC_IMAGE_CLASS } from "@/topicImageClasses"
+import { TopicHeaderImage } from "@/components/topic/TopicImageButton"
+import { EditPodcastEpisodeDialog } from "./EditPodcastEpisodeDialog"
 import { PodcastEpisodeChaptersTable } from "./PodcastEpisodeChaptersTable"
 import { PodcastEpisodeCountsLine } from "./PodcastEpisodeCountsLine"
 import { PodcastEpisodePlayerCard } from "./PodcastEpisodePlayerCard"
@@ -40,7 +46,7 @@ import { PodcastFeedDialog } from "./PodcastFeedDialog"
 import { PodcastThemeSongNote } from "./PodcastThemeSongNote"
 import { RemovePodcastEpisodeDialog } from "./RemovePodcastEpisodeDialog"
 
-type EpisodeDialog = "feed" | "share" | "team" | "remove" | null
+type EpisodeDialog = "feed" | "share" | "team" | "edit" | "edit-image" | "remove" | null
 
 /**
  * Reads the existing episode-page payload and presents its player, transcript, related episodes, and permitted actions.
@@ -149,6 +155,9 @@ function EpisodeContent({
 			? [{ label: "Add topic to team", icon: Users, onSelect: () => setDialog("team") }]
 			: []),
 		{ label: "Share topic", icon: ShareIcon, onSelect: () => setDialog("share") },
+		...(page.canEditPodcastEpisode
+			? [{ label: EDIT_PODCAST_EPISODE_LABEL, icon: Pencil, onSelect: () => setDialog("edit") }]
+			: []),
 		...(page.canRemovePodcastEpisode
 			? [{ label: "Remove podcast episode", icon: Trash2, onSelect: () => setDialog("remove") }]
 			: []),
@@ -166,6 +175,7 @@ function EpisodeContent({
 					isSignedIn={isSignedIn}
 					feedButtonRef={feedButtonRef}
 					onSubscribe={() => setDialog("feed")}
+					onEditImage={() => setDialog("edit-image")}
 				/>
 			}
 			contentClassName="mt-5 gap-2"
@@ -208,6 +218,20 @@ function EpisodeContent({
 			{dialog === "team" && (
 				<AddTopicToTeamDialog topic={topic} onTopicTeamsChanged={onReload} onClose={() => setDialog(null)} />
 			)}
+			{dialog === "edit" && (
+				<EditPodcastEpisodeDialog
+					podcastEpisodePage={page}
+					onPodcastEpisodeChanged={onReload}
+					onClose={() => setDialog(null)}
+				/>
+			)}
+			{dialog === "edit-image" && (
+				<EditImageDialog
+					subject={toPodcastEpisodeImageEditorSubject(page)}
+					onImageChanged={onReload}
+					onClose={() => setDialog(null)}
+				/>
+			)}
 			{dialog === "remove" && (
 				<RemovePodcastEpisodeDialog
 					podcastEpisode={podcastEpisode}
@@ -221,16 +245,19 @@ function EpisodeContent({
 
 // hide the duplicate cover and chapter table at phone width, as the web does
 function PodcastEpisodeHeader({
-	page: { podcastEpisode, topic, reactions },
+	page: { podcastEpisode, topic, reactions, canEditPodcastEpisode },
 	isSignedIn,
 	feedButtonRef,
 	onSubscribe,
+	onEditImage,
 }: {
 	page: PodcastEpisodePageResponse
 	isSignedIn: boolean
 	// the Subscribe button, which the feed dialog returns focus to, and what opens the dialog
 	feedButtonRef: RefObject<ComponentRef<typeof View> | null>
 	onSubscribe: () => void
+	// the press on an editor's image, which opens the image sheet
+	onEditImage: () => void
 }) {
 	return (
 		<View className="mt-3">
@@ -245,11 +272,11 @@ function PodcastEpisodeHeader({
 			{/* the podcast episode's own image beside the title, the description, and the byline. React Native has no
 			    float, so the text stays beside the image instead of running under it as on the web */}
 			<View className="mt-4 flex-row items-start gap-4">
-				<TopicImage
+				<TopicHeaderImage
 					image={podcastEpisode.image}
-					size="page"
 					name={podcastEpisode.title ?? topic.name}
-					className={HEADER_TOPIC_IMAGE_CLASS}
+					editLabel={EDIT_IMAGE_DIALOG_TITLES.podcastEpisode}
+					onEdit={canEditPodcastEpisode ? onEditImage : undefined}
 				/>
 				<View className="min-w-0 flex-1">
 					{/* the title. the heading and credits stay separate screen-reader controls */}

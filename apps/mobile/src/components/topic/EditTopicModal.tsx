@@ -258,7 +258,11 @@ export function EditTopicModal({
 				{topic && (
 					<View className="gap-2">
 						<Text className="text-sm font-medium">{TOPIC_IMAGE_LABEL}</Text>
-						<TopicImageEditor key={toTopicImageEditorKey(topic)} topic={topic} onImageChanged={onTopicImageChanged} />
+						<TopicImageEditor
+							key={toTopicImageEditorKey(topic)}
+							subject={{ kind: "topic", ...topic }}
+							onImageChanged={onTopicImageChanged}
+						/>
 					</View>
 				)}
 				{topic?.podcast && (

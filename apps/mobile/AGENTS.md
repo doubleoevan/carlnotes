@@ -293,7 +293,11 @@ The path from a commit to a store build, in order. Every secret stays in Doppler
 over `components/common/cardElements.tsx`, the card box, topic image, and text row the two cards share, matching the
 web's `cardElements`. `components/topic/UpdatesList.tsx` and `components/topic/UpdatesButton.tsx` adapt the shared
 Updates list and the Update button that picks its length. `components/topic/TopicImageEditor.tsx` adapts the editor's
-image block, with the device's photo picker for its file picker.
+image block, with the device's photo picker for its file picker. `components/topic/TopicImageButton.tsx` is the image as
+a button with a camera in its corner, and the screen header's image, which is that button for an editor.
+`components/topic/EditImageDialog.tsx` is the Edit topic image and Edit podcast image sheet that the header image
+opens, and `components/podcast/EditPodcastEpisodeDialog.tsx` the Edit podcast sheet of the podcast episode screen's
+menu, the web's dialogs of those names.
 `components/search/SearchRowTopicLink.tsx` opens a search row's Topic without opening the surrounding finding sheet,
 the web's `SearchRowTopicLink`. `src/topicImageClasses.ts` holds the classes of a topic image in a header row, a Topics
 row, and the Topic roast sheet, matching the web's topic images at phone width.

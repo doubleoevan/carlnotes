@@ -16,6 +16,7 @@ import {
 	reportPodcastEpisodeAudioEvent,
 } from "../stores/podcastEpisodePlayerStore"
 import type { LoadPodcastEpisodeAudioOptions } from "./podcastEpisodeAudio"
+import type { PodcastEpisodeEditorPage } from "./podcastEpisodeEditor"
 
 // both component browsers use the same six chapters and fictional findings
 export const PODCAST_STORY_EPISODE = toPodcastEpisodeFixture({
@@ -33,6 +34,24 @@ export const PODCAST_STORY_EPISODE = toPodcastEpisodeFixture({
 		}),
 	),
 })
+// the Edit podcast form's page: the podcast episode with a description, an image drawn from an image prompt, and
+// most of the month's regenerations left
+export const PODCAST_STORY_EDITOR_PAGE: PodcastEpisodeEditorPage = {
+	podcastEpisode: {
+		...PODCAST_STORY_EPISODE,
+		description: "Why fresher beans and a finer grind make the morning cup sweeter.",
+		image: {
+			page: { url: "/podcast-cover-placeholder.jpg", url2x: "/podcast-cover-placeholder.jpg" },
+			list: { url: "/podcast-cover-placeholder.jpg", url2x: "/podcast-cover-placeholder.jpg" },
+			thumbnail: { url: "/podcast-cover-placeholder.jpg", url2x: "/podcast-cover-placeholder.jpg" },
+		},
+	},
+	topic: { name: "Home espresso" },
+	podcastEpisodeImageOrigin: "generated",
+	podcastEpisodeImagePrompt: "a sunrise over a coffee farm, watercolor",
+	imageRegenerationQuota: { used: 3, limit: 15 },
+}
+
 // a podcast episode title and chapter titles long enough to run past a phone's width
 export const PODCAST_STORY_LONG_TITLE_EPISODE: PodcastEpisode = {
 	...PODCAST_STORY_EPISODE,

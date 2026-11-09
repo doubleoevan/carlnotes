@@ -1,8 +1,14 @@
-// the editor's image block, shared by both apps: the topic's image, which a click or tap uploads over, Regenerate
+// the editor's image block, shared by both apps: a topic's or a podcast episode's image, which a click or tap uploads
+// over, Regenerate
 // from an image prompt while the month has regenerations left, Upload with the month's regeneration count beside it, and
 // Remove for an upload. The platform supplies the layout, the input, the buttons, and the file picker
 
 import { showClientError } from "@carlnotes/client/apiClient"
+import {
+	sendPodcastEpisodeImageRegeneration,
+	sendPodcastEpisodeImageRemoval,
+	uploadPodcastEpisodeImageBody,
+} from "@carlnotes/client/podcastEpisodeClient"
 import {
 	sendTopicImageRegeneration,
 	sendTopicImageRemoval,
@@ -19,6 +25,7 @@ import {
 	TOPIC_IMAGE_PROMPT_LABEL,
 	TOPIC_IMAGE_RENDERING_TEXT,
 	TOPIC_IMAGE_SAVE_FAILED_TEXT,
+	type TopicImageEditorSubjectKind,
 	toRegenerationCountLabel,
 	toUploadRejection,
 	UPLOAD_IMAGE_LABEL,
@@ -26,12 +33,26 @@ import {
 } from "../lib/topicImageEditor"
 import type { TopicImageProps } from "./TopicImage"
 
-// what the block edits: the topic's image, its origin, the image prompt it was drawn from, and the editor's
-// regenerations this month
-export type TopicImageEditorTopic = Pick<
+// what the block edits: a topic or a podcast episode by its id, the name its image falls back to, the image, its
+// origin, the image prompt it was drawn from, and the editor's regenerations this month
+export type TopicImageEditorSubject = Pick<
 	TopicResponse,
 	"id" | "name" | "image" | "imageOrigin" | "imagePrompt" | "imageRegenerationQuota"
->
+> & { kind: TopicImageEditorSubjectKind }
+
+// the api calls that change each subject's image: a fresh render, an upload, and the removal of an upload
+const IMAGE_WRITES = {
+	topic: {
+		sendRegeneration: sendTopicImageRegeneration,
+		uploadBody: uploadTopicImageBody,
+		sendRemoval: sendTopicImageRemoval,
+	},
+	podcastEpisode: {
+		sendRegeneration: sendPodcastEpisodeImageRegeneration,
+		uploadBody: uploadPodcastEpisodeImageBody,
+		sendRemoval: sendPodcastEpisodeImageRemoval,
+	},
+} satisfies Record<TopicImageEditorSubjectKind, unknown>
 
 // a picked image file as the platform's picker returns it: the multipart body with the file as its image field, and
 // the file's size and type for the check before the upload
@@ -63,17 +84,17 @@ export type TopicImageEditorElements = {
 }
 
 export type TopicImageEditorProps = {
-	topic: TopicImageEditorTopic
-	// called after each saved change
+	subject: TopicImageEditorSubject
+	// called once each new image is in place: after an upload, and once a render succeeds
 	onImageChanged?: () => void
 }
 
 /**
- * Edits a topic's image. A render polls until it lands, an upload replaces the image at once, and Remove on an upload
- * starts a fresh render. Each change calls onImageChanged.
+ * Edits a topic's or a podcast episode's image. A render polls until it succeeds, an upload replaces the image at once,
+ * and Remove on an upload starts a fresh render. Each new image in place calls onImageChanged.
  */
 export function TopicImageEditor({
-	topic,
+	subject,
 	onImageChanged,
 	elements: { Layout, PromptRow, Actions, Line, Image, PromptInput, Button },
 	pickImage,
@@ -82,20 +103,23 @@ export function TopicImageEditor({
 	// the platform's file picker, which returns null when the user picks nothing
 	pickImage: () => Promise<PickedTopicImage | null>
 }) {
-	const { image, isRendering, watchRender, replaceImage } = useTopicImageRender(topic.image)
-	const [imagePrompt, setImagePrompt] = useState(topic.imagePrompt ?? "")
-	const [regenerationsUsed, setRegenerationsUsed] = useState(topic.imageRegenerationQuota?.used ?? 0)
-	const [imageOrigin, setImageOrigin] = useState(topic.imageOrigin)
+	const { image, isRendering, watchRender, replaceImage } = useTopicImageRender(subject.image, onImageChanged)
+	const [imagePrompt, setImagePrompt] = useState(subject.imagePrompt ?? "")
+	const [regenerationsUsed, setRegenerationsUsed] = useState(subject.imageRegenerationQuota?.used ?? 0)
+	const [imageOrigin, setImageOrigin] = useState(subject.imageOrigin)
 	const [isWriting, setIsWriting] = useState(false)
-	const regenerationQuota = topic.imageRegenerationQuota && { ...topic.imageRegenerationQuota, used: regenerationsUsed }
+	const regenerationQuota = subject.imageRegenerationQuota && {
+		...subject.imageRegenerationQuota,
+		used: regenerationsUsed,
+	}
 	const isBusy = isWriting || isRendering
+	const imageWrites = IMAGE_WRITES[subject.kind]
 
 	// run one write, reporting its rejection
 	const runImageWrite = async (write: () => Promise<void>): Promise<void> => {
 		setIsWriting(true)
 		try {
 			await write()
-			onImageChanged?.()
 		} catch (error) {
 			showClientError(error instanceof Error ? error.message : TOPIC_IMAGE_SAVE_FAILED_TEXT)
 		} finally {
@@ -106,7 +130,7 @@ export function TopicImageEditor({
 	// a fresh render, from the image prompt if there is one, which counts one regeneration
 	const handleRegenerate = (): void =>
 		void runImageWrite(async () => {
-			watchRender(await sendTopicImageRegeneration(topic.id, imagePrompt.trim() || undefined))
+			watchRender(await imageWrites.sendRegeneration(subject.id, imagePrompt.trim() || undefined))
 			setRegenerationsUsed((used) => used + 1)
 		})
 
@@ -121,15 +145,16 @@ export function TopicImageEditor({
 			if (uploadRejection) {
 				throw new Error(uploadRejection)
 			}
-			replaceImage(await uploadTopicImageBody(topic.id, pickedImage.body))
+			replaceImage(await imageWrites.uploadBody(subject.id, pickedImage.body))
 			setImageOrigin("uploaded")
 			setImagePrompt("")
+			onImageChanged?.()
 		})
 
 	// the upload goes, and a fresh render takes its place
 	const handleRemove = (): void =>
 		void runImageWrite(async () => {
-			watchRender(await sendTopicImageRemoval(topic.id))
+			watchRender(await imageWrites.sendRemoval(subject.id))
 			setRegenerationsUsed((used) => used + 1)
 			setImageOrigin("generated")
 		})
@@ -141,7 +166,7 @@ export function TopicImageEditor({
 					image={isRendering ? null : image}
 					isRendering={isRendering}
 					size="page"
-					name={topic.name}
+					name={subject.name}
 					uploadLabel={UPLOAD_IMAGE_LABEL}
 					isDisabled={isBusy}
 					onUpload={handleUpload}

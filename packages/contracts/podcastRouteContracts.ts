@@ -8,16 +8,19 @@ import {
 	podcastEpisodeAudio,
 	podcastFeedUrlResponse,
 	seasonPodcastEpisodes,
+	updatePodcastEpisodePayload,
 } from "./podcast"
 import { podcastEpisodePageResponse } from "./podcastEpisodePage"
 import {
 	idParam,
+	multipartFile,
 	nextUnplayedPodcastEpisodeQuery,
 	okResponse,
 	podcastEpisodeChapterParam,
 	podcastEpisodePageParam,
 	seasonPodcastEpisodesQuery,
 } from "./routeShapes"
+import { regenerateTopicImagePayload, regenerateTopicImageResponse, uploadTopicImageResponse } from "./topicImages"
 import { topicPodcastPayload } from "./topicPayloads"
 
 // the entries, in client module order
@@ -67,11 +70,31 @@ export const podcastRouteContracts: Record<string, ApiRouteContract> = {
 		body: { json: ratingPayload },
 		response: okResponse,
 	},
+	"podcastEpisodeClient.sendPodcastEpisodeImageRegeneration": {
+		method: "POST",
+		path: "/api/episodes/:id/image/regenerate",
+		params: idParam,
+		body: { json: regenerateTopicImagePayload },
+		response: regenerateTopicImageResponse,
+	},
+	"podcastEpisodeClient.sendPodcastEpisodeImageRemoval": {
+		method: "DELETE",
+		path: "/api/episodes/:id/image",
+		params: idParam,
+		response: regenerateTopicImageResponse,
+	},
 	"podcastEpisodeClient.sendPodcastEpisodeListen": {
 		method: "POST",
 		path: "/api/episodes/:id/listen",
 		params: idParam,
 		body: { json: podcastEpisodeListenPayload },
+		response: okResponse,
+	},
+	"podcastEpisodeClient.sendPodcastEpisodeUpdate": {
+		method: "PATCH",
+		path: "/api/episodes/:id",
+		params: idParam,
+		body: { json: updatePodcastEpisodePayload },
 		response: okResponse,
 	},
 	"podcastEpisodeClient.sendRemovePodcastEpisode": {
@@ -92,5 +115,12 @@ export const podcastRouteContracts: Record<string, ApiRouteContract> = {
 		params: idParam,
 		body: { json: topicPodcastPayload },
 		response: okResponse,
+	},
+	"podcastEpisodeClient.uploadPodcastEpisodeImageBody": {
+		method: "POST",
+		path: "/api/episodes/:id/image",
+		params: idParam,
+		body: { multipart: multipartFile("image") },
+		response: uploadTopicImageResponse,
 	},
 }

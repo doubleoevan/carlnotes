@@ -3,13 +3,14 @@
 import { fetchTopicImageRender, sendTopicImageRegeneration } from "@carlnotes/client/topicImageClient"
 import type { Meta, StoryObj } from "@storybook/tanstack-react"
 import { expect, fn, mocked, userEvent } from "storybook/test"
-import { TopicImageEditor, type TopicImageEditorTopic } from "./TopicImageEditor"
+import { TopicImageEditor, type TopicImageEditorSubject } from "./TopicImageEditor"
 
 // the podcast cover placeholder stands in for a topic's image, which the app serves from its public files
 const SAMPLE_FILES = { url: "/podcast-cover-placeholder.jpg", url2x: "/podcast-cover-placeholder.jpg" }
 
 // a topic with a generated image and most of the month's regenerations left
-const TOPIC: TopicImageEditorTopic = {
+const TOPIC: TopicImageEditorSubject = {
+	kind: "topic",
 	id: "topic-1",
 	name: "Home espresso",
 	image: { page: SAMPLE_FILES, list: SAMPLE_FILES, thumbnail: SAMPLE_FILES },
@@ -21,7 +22,7 @@ const TOPIC: TopicImageEditorTopic = {
 const meta = {
 	title: "Topic/TopicImageEditor",
 	component: TopicImageEditor,
-	args: { topic: TOPIC, onImageChanged: fn() },
+	args: { subject: TOPIC, onImageChanged: fn() },
 	decorators: [(Story) => <div className="w-full max-w-xl">{Story()}</div>],
 } satisfies Meta<typeof TopicImageEditor>
 
@@ -43,13 +44,15 @@ export const Default: Story = {
 		await canvas.getByRole("button", { name: "Regenerate" }).click()
 		await expect(mocked(sendTopicImageRegeneration)).toHaveBeenCalledWith("topic-1", "a rainy harbor at dusk")
 		await expect(await canvas.findByText("4 of 15 used this month")).toBeVisible()
-		await expect(args.onImageChanged).toHaveBeenCalled()
+
+		// the new image is not in place while the render is pending
+		await expect(args.onImageChanged).not.toHaveBeenCalled()
 	},
 }
 
 // an upload offers Remove beside Upload, and a press on the image uploads too
 export const Uploaded: Story = {
-	args: { topic: { ...TOPIC, imageOrigin: "uploaded", imagePrompt: null } },
+	args: { subject: { ...TOPIC, imageOrigin: "uploaded", imagePrompt: null } },
 	play: async ({ canvas }) => {
 		await expect(canvas.getByRole("button", { name: "Remove" })).toBeVisible()
 		await expect(canvas.getByRole("button", { name: "Upload an image" })).toBeVisible()
@@ -58,7 +61,7 @@ export const Uploaded: Story = {
 
 // the month's limit reached: Regenerate is gone, and the count line says so
 export const LimitReached: Story = {
-	args: { topic: { ...TOPIC, imageRegenerationQuota: { used: 15, limit: 15 } } },
+	args: { subject: { ...TOPIC, imageRegenerationQuota: { used: 15, limit: 15 } } },
 	play: async ({ canvas }) => {
 		await expect(canvas.queryByRole("button", { name: "Regenerate" })).toBeNull()
 		await expect(canvas.getByText("15 of 15 used this month")).toBeVisible()
@@ -67,5 +70,5 @@ export const LimitReached: Story = {
 
 // a topic with no image yet shows the muted ground
 export const NoImage: Story = {
-	args: { topic: { ...TOPIC, image: null, imageOrigin: null, imagePrompt: null } },
+	args: { subject: { ...TOPIC, image: null, imageOrigin: null, imagePrompt: null } },
 }

@@ -10,9 +10,15 @@ import {
 	podcastFeedUrlResponse,
 	type SeasonPodcastEpisodes,
 	seasonPodcastEpisodes,
+	type UpdatePodcastEpisodePayload,
 } from "@carlnotes/contracts/podcast"
 import { type PodcastEpisodePageResponse, podcastEpisodePageResponse } from "@carlnotes/contracts/podcastEpisodePage"
-import { type ApiResponse, apiClient, fetchApi, readApiResponse } from "./apiClient"
+import {
+	regenerateTopicImageResponse,
+	type TopicImageUrls,
+	uploadTopicImageResponse,
+} from "@carlnotes/contracts/topicImages"
+import { type ApiResponse, apiClient, fetchApi, readApiErrorMessage, readApiResponse } from "./apiClient"
 import { readTopicGate, type TopicGate } from "./topicClient"
 
 // the url params of a podcast episode's own page
@@ -174,6 +180,63 @@ export async function sendTopicPodcast({
 export async function sendRemovePodcastEpisode(podcastEpisodeId: string): Promise<boolean> {
 	const response = await apiClient().api.episodes[":id"].$delete({ param: { id: podcastEpisodeId } })
 	return response.ok
+}
+
+/**
+ * Saves a podcast episode's title and description. Throws an error naming the rejection.
+ */
+export async function sendPodcastEpisodeUpdate(
+	podcastEpisodeId: string,
+	payload: UpdatePodcastEpisodePayload,
+): Promise<void> {
+	const response = await apiClient().api.episodes[":id"].$patch({ param: { id: podcastEpisodeId }, json: payload })
+	if (!response.ok) {
+		throw new Error((await readApiErrorMessage(response)) ?? `update failed: ${response.status}`)
+	}
+}
+
+/**
+ * Starts a fresh render of a podcast episode's image, from the editor's image prompt if there is one. Returns the
+ * render's id to poll. Throws an error naming the rejection, which the month's limit is one of.
+ */
+export async function sendPodcastEpisodeImageRegeneration(
+	podcastEpisodeId: string,
+	imagePrompt?: string,
+): Promise<string> {
+	const response = await apiClient().api.episodes[":id"].image.regenerate.$post({
+		param: { id: podcastEpisodeId },
+		json: imagePrompt ? { imagePrompt } : {},
+	})
+	if (!response.ok) {
+		throw new Error((await readApiErrorMessage(response)) ?? `regenerate failed: ${response.status}`)
+	}
+	return (await readApiResponse(regenerateTopicImageResponse, response)).renderId
+}
+
+/**
+ * Uploads a podcast episode's own image encoded by a browser or native file picker as the form's image field. Returns
+ * the image's urls, which replace the current ones at once.
+ */
+export async function uploadPodcastEpisodeImageBody(podcastEpisodeId: string, body: FormData): Promise<TopicImageUrls> {
+	const response = await fetchApi(`/api/episodes/${encodeURIComponent(podcastEpisodeId)}/image`, {
+		method: "POST",
+		body,
+	})
+	if (!response.ok) {
+		throw new Error((await readApiErrorMessage(response)) ?? `upload failed: ${response.status}`)
+	}
+	return (await readApiResponse(uploadTopicImageResponse, response)).image
+}
+
+/**
+ * Removes a podcast episode's uploaded image, which starts a fresh render. Returns the render's id to poll.
+ */
+export async function sendPodcastEpisodeImageRemoval(podcastEpisodeId: string): Promise<string> {
+	const response = await apiClient().api.episodes[":id"].image.$delete({ param: { id: podcastEpisodeId } })
+	if (!response.ok) {
+		throw new Error((await readApiErrorMessage(response)) ?? `remove failed: ${response.status}`)
+	}
+	return (await readApiResponse(regenerateTopicImageResponse, response)).renderId
 }
 
 /**

@@ -4,15 +4,20 @@ import { isPublishedPodcastEpisode, toHomePodcastEpisodeLabel } from "@carlnotes
 import type { PodcastEpisodePageResponse } from "@carlnotes/contracts/podcastEpisodePage"
 import { isTopicSlugStale, toPodcastEpisodePath, toTopicPath } from "@carlnotes/contracts/seo"
 import { toPodcastEpisodeTitleLabel } from "@carlnotes/core/lib/labels"
+import {
+	EDIT_PODCAST_EPISODE_LABEL,
+	toPodcastEpisodeImageEditorSubject,
+} from "@carlnotes/core/lib/podcastEpisodeEditor"
 import { toPodcastEpisodeReportSubject, toPodcastEpisodeSocialProps } from "@carlnotes/core/lib/podcastEpisodeSocial"
 import { SAVE_FAILED_TEXT } from "@carlnotes/core/lib/sessionCopy"
 import { applyPodcastEpisodePageChanges, type TopicFindingChange } from "@carlnotes/core/lib/topicFindingChanges"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { useMatch, useNavigate, useParams } from "@tanstack/react-router"
-import { ListOrdered, Rss, Trash2 } from "lucide-react"
+import { ListOrdered, Pencil, Rss, Trash2 } from "lucide-react"
 import { useCallback, useEffect, useState } from "react"
 import { toast } from "sonner"
 import { type HomeOrderMove, HomeRankDialog } from "@/components/common/HomeRankDialog"
+import { EditPodcastEpisodeDialog } from "@/components/podcast/EditPodcastEpisodeDialog"
 import { PodcastEpisodeChaptersTable } from "@/components/podcast/PodcastEpisodeChaptersTable"
 import { PodcastEpisodeCountsLine } from "@/components/podcast/PodcastEpisodeCountsLine"
 import { PodcastEpisodeHeader } from "@/components/podcast/PodcastEpisodeHeader"
@@ -27,6 +32,7 @@ import { SocialSection } from "@/components/social/SocialSection"
 import { isAddTopicToTeamShown } from "@/components/team/AddTopicToTeamButton"
 import { AddTopicToTeamDialog } from "@/components/team/AddTopicToTeamDialog"
 import { CollapsibleSection } from "@/components/topic/CollapsibleSection"
+import { EditImageDialog } from "@/components/topic/EditImageDialog"
 import { toAddTopicToTeamOption, toShareTopicOption } from "@/components/topic/TopicActions"
 import { NewTopicButton, useNewTopicDialog } from "@/components/topic/TopicEditorChoiceDialog"
 import { TopicGateNotice } from "@/components/topic/TopicGateNotice"
@@ -164,7 +170,11 @@ export function PodcastEpisodePage() {
 			</div>
 			{/* the image beside the title and the description, which run under it once they pass its bottom, then the
 			    topic's byline with the reactions, under the image on a phone */}
-			<PodcastEpisodeHeader podcastEpisodePage={podcastEpisodePage} isSignedIn={Boolean(session)} />
+			<PodcastEpisodeHeader
+				podcastEpisodePage={podcastEpisodePage}
+				isSignedIn={Boolean(session)}
+				onEditImage={() => setOpenDialog("edit-image")}
+			/>
 
 			{/* the player card, whose Subscribe buttons the page's own button row replaces */}
 			<PodcastEpisodePlayerCard podcastEpisode={podcastEpisode} chapterTopicFeed={chapterTopicFeed} />
@@ -210,13 +220,27 @@ export function PodcastEpisodePage() {
 			)}
 			{/* the dialog that the New Topic button opens */}
 			{newTopicDialog}
-			{/* the actions menu's share dialog, Add topic to team dialog, and remove dialog.
-			    a removed episode opens its topic's page */}
+			{/* the actions menu's share, Add topic to team, Edit podcast, and remove dialogs, and the image dialog that a
+			    click on an editor's header image opens. a removed episode opens its topic's page */}
 			{openDialog === "share" && <ShareTopic topic={topic} isDialog onClose={() => setOpenDialog(null)} />}
 			{openDialog === "add-topic-to-team" && (
 				<AddTopicToTeamDialog
 					topic={topic}
 					onTopicTeamsChanged={loadPodcastEpisodePage}
+					onClose={() => setOpenDialog(null)}
+				/>
+			)}
+			{openDialog === "edit" && (
+				<EditPodcastEpisodeDialog
+					podcastEpisodePage={podcastEpisodePage}
+					onPodcastEpisodeChanged={loadPodcastEpisodePage}
+					onClose={() => setOpenDialog(null)}
+				/>
+			)}
+			{openDialog === "edit-image" && (
+				<EditImageDialog
+					subject={toPodcastEpisodeImageEditorSubject(podcastEpisodePage)}
+					onImageChanged={loadPodcastEpisodePage}
 					onClose={() => setOpenDialog(null)}
 				/>
 			)}
@@ -245,7 +269,7 @@ export function PodcastEpisodePage() {
 }
 
 // the dialogs that the actions menu opens
-type PodcastEpisodeDialog = "share" | "add-topic-to-team" | "rank" | "remove"
+type PodcastEpisodeDialog = "share" | "add-topic-to-team" | "edit" | "edit-image" | "rank" | "remove"
 
 // the loaded page, whether the user is signed in, and the call that opens one of the menu's dialogs
 type UseRegisterPodcastEpisodePageActionsOptions = {
@@ -254,8 +278,8 @@ type UseRegisterPodcastEpisodePageActionsOptions = {
 	onOpenDialog: (podcastEpisodeDialog: PodcastEpisodeDialog) => void
 }
 
-// register the actions menu for the podcast episode's topic, with Home podcasts for an admin on a public
-// topic and Remove podcast episode for a user who may remove the podcast episode
+// register the actions menu for the podcast episode's topic, with Edit podcast for a user who may edit the podcast
+// episode, Featured podcasts for an admin on a public topic, and Remove podcast episode for a user who may remove it
 function useRegisterPodcastEpisodePageActions({
 	podcastEpisodePage,
 	isSignedIn,
@@ -271,6 +295,9 @@ function useRegisterPodcastEpisodePageActions({
 							? [toAddTopicToTeamOption(() => onOpenDialog("add-topic-to-team"))]
 							: []),
 						toShareTopicOption(() => onOpenDialog("share")),
+						...(podcastEpisodePage?.canEditPodcastEpisode
+							? [{ label: EDIT_PODCAST_EPISODE_LABEL, Icon: Pencil, onSelect: () => onOpenDialog("edit") }]
+							: []),
 						...(podcastEpisodePage?.homePodcastEpisodes && podcastEpisodeTopic.visibility === "public"
 							? [{ label: "Featured podcasts", Icon: ListOrdered, onSelect: () => onOpenDialog("rank") }]
 							: []),

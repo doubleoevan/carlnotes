@@ -16,6 +16,7 @@ import { loadPageCommentThread } from "../social/pageCommentThread"
 import { loadTopicAccessAndFindings } from "../topic/accessibleFindings"
 import { canRateTopic } from "../topic/findingPermissions"
 import { loadTopicOwner, toTeamFields } from "../topic/helpers"
+import { loadEditorImageRegenerationQuota } from "../topic/imageEdits"
 import { toHomePodcastEpisodes } from "./podcastEpisodeHomeOrder"
 import {
 	loadAccessiblePodcastEpisode,
@@ -199,6 +200,7 @@ export async function loadPodcastEpisodePage(
 		{ topicFindings, isAdmin },
 		canRate,
 		canRemovePodcastEpisode,
+		canEditPodcastEpisode,
 		owner,
 		{ teamLink, team, roomTeams },
 		topicPodcastEpisodes,
@@ -206,13 +208,19 @@ export async function loadPodcastEpisodePage(
 		commentThread,
 	] = await Promise.all([
 		db
-			.select({ script: podcastEpisodes.script, homeOrder: podcastEpisodes.homeOrder })
+			.select({
+				script: podcastEpisodes.script,
+				homeOrder: podcastEpisodes.homeOrder,
+				imageOrigin: podcastEpisodes.imageOrigin,
+				imagePrompt: podcastEpisodes.imagePrompt,
+			})
 			.from(podcastEpisodes)
 			.where(eq(podcastEpisodes.id, podcastEpisodeId)),
 		loadPodcastEpisode({ podcastEpisodeRow, topic, userId }),
 		loadTopicAccessAndFindings({ topic, userId, isReactionReadSkipped: true }),
 		canRateTopic(userId, topic),
 		isAllowed(userId, "podcastEpisode:remove", topic),
+		isAllowed(userId, "topic:edit", topic),
 		// the owner and the team that the topic's byline credits
 		loadTopicOwner(topic.ownerId),
 		toTeamFields(topic.id, topic.teamId, userId),
@@ -245,6 +253,10 @@ export async function loadPodcastEpisodePage(
 		topicFindings: chapterTopicFindings,
 		canRate,
 		canRemovePodcastEpisode,
+		canEditPodcastEpisode,
+		podcastEpisodeImageOrigin: canEditPodcastEpisode ? (podcastEpisodeScriptRow?.imageOrigin ?? null) : null,
+		podcastEpisodeImagePrompt: canEditPodcastEpisode ? (podcastEpisodeScriptRow?.imagePrompt ?? null) : null,
+		imageRegenerationQuota: canEditPodcastEpisode && userId ? await loadEditorImageRegenerationQuota(userId) : null,
 		...(await toHomePodcastEpisodes(podcastEpisodeScriptRow?.homeOrder ?? null, isAdmin)),
 		transcript: podcastEpisodeScriptRow?.script ? toTranscriptBlocks(podcastEpisodeScriptRow.script) : [],
 		topicPodcastEpisodes,

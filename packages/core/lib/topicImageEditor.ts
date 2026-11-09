@@ -3,6 +3,15 @@
 import type { ImageRegenerationQuota } from "@carlnotes/contracts/topicImages"
 import { MAX_TOPIC_IMAGE_UPLOAD_BYTES, TOPIC_IMAGE_UPLOAD_TYPES } from "@carlnotes/contracts/topicImages"
 
+// what owns the image the block edits
+export type TopicImageEditorSubjectKind = "topic" | "podcastEpisode"
+
+// the title of the dialog that a click or tap on each subject's page image opens
+export const EDIT_IMAGE_DIALOG_TITLES: Record<TopicImageEditorSubjectKind, string> = {
+	topic: "Edit topic image",
+	podcastEpisode: "Edit podcast image",
+}
+
 // the block's labels
 export const TOPIC_IMAGE_LABEL = "Image"
 export const REGENERATE_LABEL = "Regenerate"

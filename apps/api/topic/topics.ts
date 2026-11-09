@@ -1,9 +1,7 @@
-import { ADMIN_QUOTA } from "@carlnotes/contracts/plans"
 import { toTopicImageUrlsOrNull } from "@carlnotes/contracts/topicImages"
 import type { TopicResponse } from "@carlnotes/contracts/topics"
 import { toAttachmentFailureMessage } from "@carlnotes/contracts/topics"
 import { db } from "@carlnotes/db"
-import { loadTopicImageRegenerationQuota } from "@carlnotes/db/quotas"
 import { scans } from "@carlnotes/db/schema/scans"
 import { attachments, sources } from "@carlnotes/db/schema/topics"
 import { loadTopicImageForUser } from "@carlnotes/db/topicImages"
@@ -25,6 +23,7 @@ import {
 	toScheduledTimeLabel,
 	toTeamFields,
 } from "./helpers"
+import { loadEditorImageRegenerationQuota } from "./imageEdits"
 import { loadDirectSubscription } from "./permissions"
 import { startOfUtcMonth } from "./quotas"
 import { loadRelatedTopics } from "./relatedTopics"
@@ -110,7 +109,7 @@ export async function loadTopicPage(
 	)
 
 	// the editor's regenerations this month, read for an editor alone
-	const imageRegenerationQuota = canEdit && userId ? await loadTopicImageRegenerationQuota(userId) : null
+	const imageRegenerationQuota = canEdit && userId ? await loadEditorImageRegenerationQuota(userId) : null
 
 	// every later scan reads the generated context, so the owner and admins see the context to edit, and nobody else does.
 	// the owner and admins also see why a failed attachment failed, as a message instead of the recorded reason
@@ -176,11 +175,7 @@ export async function loadTopicPage(
 		latestPodcastEpisode,
 		// the topic's image urls, null until its first render lands, and null for a user who reported this image
 		image: topicImageForUser?.isReportedByUser ? null : toTopicImageUrlsOrNull(topic.id, topic.imageHash),
-		// an admin is never limited, so they see no count
-		imageRegenerationQuota:
-			canEdit && imageRegenerationQuota && imageRegenerationQuota.limit < ADMIN_QUOTA
-				? { used: imageRegenerationQuota.used, limit: imageRegenerationQuota.limit }
-				: null,
+		imageRegenerationQuota,
 		imageOrigin: canEdit ? (topicImageForUser?.topicImage?.origin ?? null) : null,
 		imagePrompt: canEdit ? (topicImageForUser?.topicImage?.imagePrompt ?? null) : null,
 		findings: topicFindings,

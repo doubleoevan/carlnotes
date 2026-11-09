@@ -196,9 +196,14 @@ authenticated encryption itself lives in `@carlnotes/server/privateText`.
   file with the visibility gate and the cache headers, and `topic/topicImagesRoute.ts` serves a topic image's files
   (public ones immutable at the edge under `topic-image:<topicId>`, private ones behind `topic:view`), the editor's
   Regenerate within `imageRegenerationLimit`, the render an editor polls, the upload, and the removal of an upload.
-  `podcast/podcastEpisodeImagesRoute.ts` serves a podcast episode's own image files, gated by its topic's visibility.
-  `podcast/podcastEpisodeHomeOrder.ts` is `PATCH /api/podcast-episodes/:id/home-order` with the topic rules, the
-  pinned podcast episodes the console lists, and the purge of the home on every change. Both home-order routes write
+  `topic/imageEdits.ts` holds what both image routes share: the upload's body limit and checks, the image prompt's
+  moderation, and the editor's regeneration count. `podcast/podcastEpisodeImagesRoute.ts` serves a podcast episode's
+  own image files, gated by its topic's visibility, and its editor's Regenerate, upload, and removal of an upload, each
+  a render or a write of the podcast episode's image. `podcast/podcastEpisodeEditor.ts` loads the signed-in editor of a
+  podcast episode route through `topic:edit` on its topic, which the image routes and `PATCH /api/episodes/:id`, the
+  title and description save, share. `podcast/podcastEpisodeHomeOrder.ts` is
+  `PATCH /api/podcast-episodes/:id/home-order` with the topic rules, the pinned podcast episodes a podcast episode
+  page's rank dialog lists, and the purge of the home on every change. Both home-order routes write
   through `@carlnotes/db/homeOrder`, and `topic/homeOrder.ts` owns `clearHomeCaches`, the home card ids
   cache delete and home purge they share. `report/adminReports.ts` draws a reported topic image again through an `admin` render
   instead of deleting it.

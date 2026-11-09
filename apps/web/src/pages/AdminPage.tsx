@@ -10,7 +10,6 @@ import { setOpenReportCount } from "@carlnotes/core/stores/openReportStore"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { Settings, ShieldUser } from "lucide-react"
 import { useCallback, useEffect, useState } from "react"
-import { HomeOrderCard } from "@/components/admin/HomeOrderCard"
 import { ManageAdminsModal } from "@/components/admin/ManageAdminsModal"
 import { MobileMinimumVersionsCard } from "@/components/admin/MobileMinimumVersionsCard"
 import { CoffeeLoading } from "@/components/branding/CoffeeLoading"
@@ -112,24 +111,13 @@ export function AdminPage() {
 					isShowingAdminBlockedUsers={isShowingAdminBlockedUsers}
 					onToggleAdminBlockedUsers={() => setIsShowingAdminBlockedUsers((isShowing) => !isShowing)}
 				/>
-				{/* the two sections as accordions, the shape every other page's sections take */}
-				<Accordion type="multiple" defaultValue={["reports", "home", "users", "teams", "mobile"]} className="mt-4">
+				{/* the sections as accordions, the shape every other page's sections take */}
+				<Accordion type="multiple" defaultValue={["reports", "users", "teams", "mobile"]} className="mt-4">
 					{/* the open reports first, resolved from here */}
 					<AccordionItem value="reports">
 						<AccordionTrigger className="font-semibold">{`Reports (${reports.length})`}</AccordionTrigger>
 						<AccordionContent>
 							<AdminReportsTable reports={reports} focusedReportId={focusedReportId} onResolved={loadConsole} />
-						</AccordionContent>
-					</AccordionItem>
-					{/* the home's pinned topics and podcast episodes */}
-					<AccordionItem value="home">
-						<AccordionTrigger className="font-semibold">Home</AccordionTrigger>
-						<AccordionContent>
-							<HomeOrderCard
-								homeTopics={adminConsole.homeTopics}
-								homePodcastEpisodes={adminConsole.homePodcastEpisodes}
-								onSaved={loadConsole}
-							/>
 						</AccordionContent>
 					</AccordionItem>
 					<AccordionItem value="users">

@@ -401,5 +401,9 @@ the browser bundle and renders pages through the server build, behind its own ro
 as `TOPIC_IMAGE_FRAME_CLASS`. `components/common/cardElements.tsx` is `CARD_ELEMENTS`, the card box, topic image, and
 text row the two cards share, over core's `CardElements`, with a story beside it.
 `components/topic/TopicImageEditor.tsx` adapts the editor's image block, with the browser's file input as its picker.
+`components/topic/TopicImageButton.tsx` is the image as a button with the camera overlay, and the page header's image,
+which is that button for an editor. `components/topic/EditImageDialog.tsx` is the Edit topic image and Edit podcast
+image dialog that the header image opens, and `components/podcast/EditPodcastEpisodeDialog.tsx` the Edit podcast
+dialog of the podcast episode page's actions menu.
 `components/common/HomeRankDialog.tsx` is the admin's home order list for a topic page and a podcast episode
-page, and `components/admin/HomeOrderCard.tsx` the console's two pin lists.
+page.
