@@ -279,7 +279,7 @@ type UseRegisterPodcastEpisodePageActionsOptions = {
 }
 
 // register the actions menu for the podcast episode's topic, with Edit podcast for a user who may edit the podcast
-// episode, Featured podcasts for an admin on a public topic, and Remove podcast episode for a user who may remove it
+// episode, Featured podcasts for an admin on a public topic, and Remove episode for a user who may remove it
 function useRegisterPodcastEpisodePageActions({
 	podcastEpisodePage,
 	isSignedIn,
@@ -302,7 +302,7 @@ function useRegisterPodcastEpisodePageActions({
 							? [{ label: "Featured podcasts", Icon: ListOrdered, onSelect: () => onOpenDialog("rank") }]
 							: []),
 						...(podcastEpisodePage?.canRemovePodcastEpisode
-							? [{ label: "Remove podcast episode", Icon: Trash2, onSelect: () => onOpenDialog("remove") }]
+							? [{ label: "Remove episode", Icon: Trash2, onSelect: () => onOpenDialog("remove") }]
 							: []),
 					],
 					report: toPodcastEpisodeReportSubject(podcastEpisodePage.podcastEpisode),

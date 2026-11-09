@@ -159,7 +159,7 @@ function EpisodeContent({
 			? [{ label: EDIT_PODCAST_EPISODE_LABEL, icon: Pencil, onSelect: () => setDialog("edit") }]
 			: []),
 		...(page.canRemovePodcastEpisode
-			? [{ label: "Remove podcast episode", icon: Trash2, onSelect: () => setDialog("remove") }]
+			? [{ label: "Remove episode", icon: Trash2, onSelect: () => setDialog("remove") }]
 			: []),
 	]
 	return (
