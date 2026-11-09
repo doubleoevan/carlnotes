@@ -9,7 +9,7 @@ export type HomeCardSection<Row> = { value: string; title: string; noun: string;
 // what a section of topic cards and a section of podcast episode cards count and key by
 const TOPIC_SECTION = { noun: "topic", toRowKey: (topic: TopicCard) => topic.id }
 const PODCAST_EPISODE_SECTION = {
-	noun: "podcast episode",
+	noun: "episode",
 	toRowKey: (podcastEpisodeCard: PodcastEpisodeCard) => podcastEpisodeCard.podcastEpisode.id,
 }
 
