@@ -21,16 +21,16 @@ export const MODERATION_TIMEOUT_MS = 4000
 
 // what the text is, said in the prompt. the model reads a topic prompt as a prompt and a message as a message
 export type ModeratedTextKind =
+	// a chat room message, and a Note with its comments
 	| "a chat room message"
-	// a Note and its comments
 	| "a note's name"
 	| "a note's body"
 	| "a comment on a note"
+	// the names and words a user gives a user, a team, a topic, an image, and a podcast episode
 	| "a username"
 	| "a team's name and description"
 	| "a topic's name, prompt, and tags"
 	| "an image prompt"
-	// a Podcast Episode's own words
 	| "a podcast episode's title and description"
 	// a Comment
 	| "a public comment on an article, a podcast episode, or a topic"

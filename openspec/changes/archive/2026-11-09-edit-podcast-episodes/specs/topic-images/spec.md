@@ -26,7 +26,7 @@ page's image SHALL open the topic image editor, titled Edit podcast image, with 
 #### Scenario: An editor regenerates a Podcast Episode's image
 
 - **WHEN** a Topic's editor enters an image prompt in Edit podcast image and presses Regenerate
-- **THEN** the render draws a new image from the prompt, the page shows it once it lands, and the month's count rises
+- **THEN** the render draws a new image from the prompt, the page shows it once it arrives, and the month's count rises
   by one
 
 #### Scenario: An editor uploads a Podcast Episode's image

@@ -15,7 +15,7 @@ import { toTopicImageObjectKeys } from "./topicImageFiles"
 import { MAX_SCENE_FINDING_TITLES, type TopicImageSceneInput } from "./writeTopicImageScene"
 
 // how long a replaced image's objects stay before the sweep deletes them
-const REPLACED_IMAGE_GRACE_MS = 60 * 60 * 1000
+export const REPLACED_IMAGE_GRACE_MS = 60 * 60 * 1000
 
 // a render row
 export type TopicImageRenderRow = typeof topicImageRenders.$inferSelect & { topicOwnerId: string }

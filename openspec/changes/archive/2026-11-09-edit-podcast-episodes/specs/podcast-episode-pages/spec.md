@@ -5,7 +5,7 @@
 A Podcast Episode page's actions menu SHALL offer Edit podcast to a user the edit gate grants `topic:edit` on its
 Topic. It SHALL open a dialog laid out like Edit topic, with Title, Description, the Image block, and Cancel and
 Save. Save SHALL store the trimmed title and description within their limits after the text moderation. The api SHALL
-respond 404 to anyone else, and the mobile episode menu SHALL offer the same action.
+respond 404 to anyone else, and the mobile Podcast Episode screen's menu SHALL offer the same action.
 
 #### Scenario: An editor renames a Podcast Episode
 

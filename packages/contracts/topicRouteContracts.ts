@@ -222,12 +222,6 @@ export const topicRouteContracts: Record<string, ApiRouteContract> = {
 		body: { multipart: multipartFile("image") },
 		response: uploadTopicImageResponse,
 	},
-	"topicImageClient.sendTopicImageRemoval": {
-		method: "DELETE",
-		path: "/api/topics/:id/image",
-		params: idParam,
-		response: regenerateTopicImageResponse,
-	},
 
 	// topic findings
 	"topicFindingClient.fetchTopicFindingLinkPreview": {

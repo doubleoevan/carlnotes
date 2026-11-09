@@ -1,7 +1,6 @@
 import {
 	type PickedTopicImage,
 	TopicImageEditor as SharedTopicImageEditor,
-	type TopicImageEditorButtonKind,
 	type TopicImageEditorElements,
 	type TopicImageEditorProps,
 } from "@carlnotes/core/components/TopicImageEditor"
@@ -11,20 +10,14 @@ import {
 	UNREADABLE_IMAGE_TEXT,
 } from "@carlnotes/core/lib/imageUpload"
 import { cn } from "@carlnotes/nightshift/classNames"
-import { type LucideIcon, RefreshCw, X } from "lucide-react"
+import { RefreshCw } from "lucide-react"
 import { Button } from "@/components/primitives/button"
 import { Input } from "@/components/primitives/input"
 import { resizeImageFile } from "@/lib/imageResize"
 import { IMAGE_SKELETON_CLASS } from "@/lib/styleClasses"
 import { TopicImageButton } from "./TopicImageButton"
 
-export type { TopicImageEditorSubject } from "@carlnotes/core/components/TopicImageEditor"
-
-// each button's icon
-const BUTTON_ICONS: Record<TopicImageEditorButtonKind, LucideIcon> = {
-	regenerate: RefreshCw,
-	remove: X,
-}
+export type { EditableImage } from "@carlnotes/core/components/TopicImageEditor"
 
 // the browser elements: the image at full width, as the topic info popover draws it, above the controls
 const ELEMENTS: TopicImageEditorElements = {
@@ -35,12 +28,6 @@ const ELEMENTS: TopicImageEditorElements = {
 		</div>
 	),
 	PromptRow: ({ children }) => <div className="flex items-center gap-2">{children}</div>,
-	Actions: ({ end, children }) => (
-		<div className="flex flex-wrap items-center gap-2">
-			{children}
-			<div className="ml-auto">{end}</div>
-		</div>
-	),
 	Line: ({ children }) => <p className="text-muted-foreground text-sm">{children}</p>,
 	// the image is the upload button, pulsing while a render runs
 	Image: ({ uploadLabel, isRendering, isDisabled, onUpload, className, ...topicImageProps }) => (
@@ -63,15 +50,12 @@ const ELEMENTS: TopicImageEditorElements = {
 			onChange={(event) => onChange(event.target.value)}
 		/>
 	),
-	Button: ({ label, kind, isDisabled, onPress }) => {
-		const ButtonIcon = BUTTON_ICONS[kind]
-		return (
-			<Button variant="outline" size="sm" disabled={isDisabled} onClick={onPress}>
-				<ButtonIcon className="size-4" />
-				{label}
-			</Button>
-		)
-	},
+	RegenerateButton: ({ label, isDisabled, onPress }) => (
+		<Button variant="outline" size="sm" disabled={isDisabled} onClick={onPress}>
+			<RefreshCw className="size-4" />
+			{label}
+		</Button>
+	),
 }
 
 // the browser's file picker: a file input opened by a click, resolved with the picked file shrunk and re-encoded to a

@@ -13,7 +13,7 @@ console's Home card repeats the Rank dialog that the topic and podcast episode p
   topic that edits the Podcast Episode's title, description, and image.
 - A Podcast Episode's image can be regenerated from an image prompt, uploaded, and an upload removed, with the Topic
   image's rules and the same monthly regeneration count.
-- The mobile app offers Edit podcast in the episode menu and opens the same image dialogs from a tap on either image.
+- The mobile app offers Edit podcast in the podcast episode screen's menu and opens the same image dialogs from a tap on either image.
 - The admin console drops its Home card.
 
 ## Impact

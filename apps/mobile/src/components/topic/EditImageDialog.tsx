@@ -1,14 +1,14 @@
-// the sheet that a tap on a topic's or a podcast episode's header image opens: the image block alone, whose changes
-// save on their own
+// the sheet that a tap on a topic's or a podcast episode's header image opens.
+// it holds only the image block, which saves its own changes
 
-import type { TopicImageEditorSubject } from "@carlnotes/core/components/TopicImageEditor"
+import type { EditableImage } from "@carlnotes/core/components/TopicImageEditor"
 import { EDIT_IMAGE_DIALOG_TITLES, toTopicImageEditorKey } from "@carlnotes/core/lib/topicImageEditor"
 import { Sheet } from "@/components/common/Sheet"
 import { TopicImageEditor } from "./TopicImageEditor"
 
 // the image the sheet edits, the call after each new image is in place, and the close
 type EditImageDialogProps = {
-	subject: TopicImageEditorSubject
+	editableImage: EditableImage
 	onImageChanged: () => void
 	onClose: () => void
 }
@@ -16,10 +16,14 @@ type EditImageDialogProps = {
 /**
  * Renders the Edit topic image or Edit podcast image sheet.
  */
-export function EditImageDialog({ subject, onImageChanged, onClose }: EditImageDialogProps) {
+export function EditImageDialog({ editableImage, onImageChanged, onClose }: EditImageDialogProps) {
 	return (
-		<Sheet title={EDIT_IMAGE_DIALOG_TITLES[subject.kind]} onClose={onClose}>
-			<TopicImageEditor key={toTopicImageEditorKey(subject)} subject={subject} onImageChanged={onImageChanged} />
+		<Sheet title={EDIT_IMAGE_DIALOG_TITLES[editableImage.kind]} onClose={onClose}>
+			<TopicImageEditor
+				key={toTopicImageEditorKey(editableImage)}
+				editableImage={editableImage}
+				onImageChanged={onImageChanged}
+			/>
 		</Sheet>
 	)
 }

@@ -144,7 +144,7 @@ An owner SHALL be able to upload a jpeg, png, or webp of up to 10 MB. Before it 
 shrink a picked photo to at most 2048 pixels on its longest edge and re-encode it as a jpeg, or a png for a source that
 can be transparent, so a large photo, a heic, or a gif uploads instead of being rejected. The upload SHALL be
 center-cropped to 3:2, resized to the original's size, stripped of metadata, stored as the original, and derived into
-the six files. An upload SHALL replace the generated image until the owner regenerates or removes it.
+the six files. An upload SHALL replace the generated image until the owner regenerates.
 
 #### Scenario: An off-ratio upload is cropped
 
@@ -163,8 +163,8 @@ the six files. An upload SHALL replace the generated image until the owner regen
 
 #### Scenario: Removing an upload renders a fresh image
 
-- **WHEN** an owner removes their upload
-- **THEN** the upload's objects are scheduled for deletion and a fresh render starts on the owner's budget, counted as
+- **WHEN** an owner presses Regenerate over their upload
+- **THEN** the upload's objects are scheduled for deletion once the fresh render replaces it, and the render counts as
   one of the month's regenerations
 
 ### Requirement: An upload passes the image moderation before it is stored
@@ -308,20 +308,20 @@ save on their own, and the page SHALL show the new image after each change. Any 
 ### Requirement: An editor edits a Podcast Episode's image
 
 A user the edit gate grants `topic:edit` on a Podcast Episode's Topic SHALL be able to regenerate its image from an
-optional image prompt, upload an image, and remove an upload, which starts a fresh render, with the Topic image's
-checks. A regeneration and a removal SHALL count toward the user's monthly regeneration limit. The Podcast Episode
-page's image SHALL open the topic image editor, titled Edit podcast image, with the camera overlay for that user.
+optional image prompt and upload an image, with the Topic image's checks. A regeneration SHALL count toward the user's
+monthly regeneration limit. The Podcast Episode page's image SHALL open the topic image editor, titled Edit podcast
+image, with the camera overlay for that user.
 
 #### Scenario: An editor regenerates a Podcast Episode's image
 
 - **WHEN** a Topic's editor enters an image prompt in Edit podcast image and presses Regenerate
-- **THEN** the render draws a new image from the prompt, the page shows it once it lands, and the month's count rises
+- **THEN** the render draws a new image from the prompt, the page shows it once it arrives, and the month's count rises
   by one
 
 #### Scenario: An editor uploads a Podcast Episode's image
 
 - **WHEN** a Topic's editor uploads a PNG in Edit podcast image
-- **THEN** the Podcast Episode shows the upload at once and the editor offers Remove
+- **THEN** the Podcast Episode shows the upload at once
 
 #### Scenario: Someone who may not edit is turned away
 

@@ -1,6 +1,6 @@
 // the podcast episode routes for a season's episodes, an episode page, the next unplayed episode, one episode,
 // its files and preview card, a listener's progress, a chapter's rating, the owner's podcast switch, an editor's
-// change to an episode's title and description, and removing an episode
+// change to a podcast episode's title and description, and removing a podcast episode
 
 import { podcastEpisodeListenPayload, ratingPayload } from "@carlnotes/contracts/payloads"
 import { updatePodcastEpisodePayload } from "@carlnotes/contracts/podcast"

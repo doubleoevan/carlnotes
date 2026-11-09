@@ -229,17 +229,6 @@ export async function uploadPodcastEpisodeImageBody(podcastEpisodeId: string, bo
 }
 
 /**
- * Removes a podcast episode's uploaded image, which starts a fresh render. Returns the render's id to poll.
- */
-export async function sendPodcastEpisodeImageRemoval(podcastEpisodeId: string): Promise<string> {
-	const response = await apiClient().api.episodes[":id"].image.$delete({ param: { id: podcastEpisodeId } })
-	if (!response.ok) {
-		throw new Error((await readApiErrorMessage(response)) ?? `remove failed: ${response.status}`)
-	}
-	return (await readApiResponse(regenerateTopicImageResponse, response)).renderId
-}
-
-/**
  * Loads the url of the user's podcast feed for a topic, or null if the url does not load.
  */
 export async function fetchPodcastFeedUrl(

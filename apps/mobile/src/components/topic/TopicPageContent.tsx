@@ -123,7 +123,7 @@ export function TopicPageContent({
 			{/* the image sheet that an editor's press on the header image opens */}
 			{isImageDialogOpen && (
 				<EditImageDialog
-					subject={{ kind: "topic", ...topic }}
+					editableImage={{ kind: "topic", ...topic }}
 					onImageChanged={onRefresh}
 					onClose={() => setIsImageDialogOpen(false)}
 				/>

@@ -53,12 +53,12 @@ export async function writeTopicImageSceneForRender({
 		return render.scene
 	}
 
-	// the words the scene is written from: the podcast episode's for a podcast episode render, else the topic's
+	// load the scene's words from the podcast episode for a podcast episode render, else from the topic
 	const sceneInput = render.podcastEpisodeId
 		? await loadPodcastEpisodeImageSceneInput(render.podcastEpisodeId)
 		: await loadTopicImageSceneInput(render.topicId)
 	if (!sceneInput) {
-		throw ApplicationFailure.nonRetryable(`the render ${renderId} has nothing to draw`, "TopicNotFound")
+		throw ApplicationFailure.nonRetryable(`the render ${renderId} has nothing to draw`, "SceneInputNotFound")
 	}
 
 	// write on the user's key, or the master key for the platform
@@ -83,8 +83,8 @@ export async function writeTopicImageSceneForRender({
 type RenderAndStoreTopicImageOptions = { renderId: string; scene: string; imagePrompt?: string }
 
 /**
- * Draws the render's image from the scene, in the house style unless the owner gave an image prompt, stores its original and sizes, and makes it the topic's
- * current image. A rejection or a spent budget fails for good, and anything else is worth another attempt.
+ * Draws the render's image from the scene, in the house style unless the editor gave an image prompt, stores its
+ * original and sizes, and makes it the current image of its podcast episode or its topic. A rejection or a spent budget fails for good, and anything else is worth another attempt.
  */
 export async function renderAndStoreTopicImage({
 	renderId,
@@ -108,7 +108,7 @@ export async function renderAndStoreTopicImage({
 		throw toRenderActivityFailure(error)
 	})
 
-	// a podcast episode's render stores its files under the podcast episode and makes them its image
+	// a podcast episode render stores its files under the podcast episode and makes them the podcast episode's image
 	const costDollars = topicImageCostDollars(model)
 	if (render.podcastEpisodeId) {
 		const podcastEpisodeId = render.podcastEpisodeId
@@ -142,8 +142,8 @@ export async function renderAndStoreTopicImage({
 	trackRenderEvent(render)
 }
 
-// report the render, naming the topic, the podcast episode if it drew one, and the render's kind. the owner flag says
-// whether the user it bills owns the topic
+// track the render's event with the topic, the podcast episode if the render drew one, and the render's kind. the
+// owner flag says whether the user the render bills owns the topic
 function trackRenderEvent(render: TopicImageRenderRow): void {
 	if (render.userId) {
 		trackEvent(render.kind === "regenerate" ? "topic_image_regenerate" : "topic_image_generate", render.userId, {

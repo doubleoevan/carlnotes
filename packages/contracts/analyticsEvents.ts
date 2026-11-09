@@ -96,7 +96,6 @@ export type UserAnalyticsEvent =
 	| "topic_image_generate"
 	| "topic_image_regenerate"
 	| "topic_image_upload"
-	| "topic_image_remove"
 	// Personal sources: entries received or deleted, a send or an email that was not saved, and the sender's summary
 	| "personal_source_entry_received"
 	| "personal_source_entry_deleted"

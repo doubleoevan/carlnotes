@@ -6,10 +6,7 @@ import { toTopicPath } from "@carlnotes/contracts/seo"
 import { usePolledCounts } from "@carlnotes/core/hooks/usePolledCounts"
 import { useTopicFindingActions } from "@carlnotes/core/hooks/useTopicFindingActions"
 import { PODCAST_EPISODE_LOAD_FAILED_TEXT } from "@carlnotes/core/lib/podcastEpisodeCopy"
-import {
-	EDIT_PODCAST_EPISODE_LABEL,
-	toPodcastEpisodeImageEditorSubject,
-} from "@carlnotes/core/lib/podcastEpisodeEditor"
+import { EDIT_PODCAST_EPISODE_LABEL, toPodcastEpisodeEditableImage } from "@carlnotes/core/lib/podcastEpisodeEditor"
 import { toPodcastEpisodeReportSubject, toPodcastEpisodeSocialProps } from "@carlnotes/core/lib/podcastEpisodeSocial"
 import { isAddTopicToTeamShown } from "@carlnotes/core/lib/topicActions"
 import { applyPodcastEpisodePageChanges } from "@carlnotes/core/lib/topicFindingChanges"
@@ -46,7 +43,7 @@ import { PodcastFeedDialog } from "./PodcastFeedDialog"
 import { PodcastThemeSongNote } from "./PodcastThemeSongNote"
 import { RemovePodcastEpisodeDialog } from "./RemovePodcastEpisodeDialog"
 
-type EpisodeDialog = "feed" | "share" | "team" | "edit" | "edit-image" | "remove" | null
+type PodcastEpisodeDialog = "feed" | "share" | "team" | "edit" | "edit-image" | "remove" | null
 
 /**
  * Reads the existing episode-page payload and presents its player, transcript, related episodes, and permitted actions.
@@ -129,7 +126,7 @@ function EpisodeContent({
 	userId: string | null
 	onReload: () => void
 }) {
-	const [dialog, setDialog] = useState<EpisodeDialog>(null)
+	const [dialog, setDialog] = useState<PodcastEpisodeDialog>(null)
 	const feedButtonRef = useRef<ComponentRef<typeof View>>(null)
 	const { podcastEpisode, topic } = page
 	const actions = useTopicFindingActions({ userId, shouldUpdateOptimistically: true, onChangeConfirmed: onReload })
@@ -227,7 +224,7 @@ function EpisodeContent({
 			)}
 			{dialog === "edit-image" && (
 				<EditImageDialog
-					subject={toPodcastEpisodeImageEditorSubject(page)}
+					editableImage={toPodcastEpisodeEditableImage(page)}
 					onImageChanged={onReload}
 					onClose={() => setDialog(null)}
 				/>

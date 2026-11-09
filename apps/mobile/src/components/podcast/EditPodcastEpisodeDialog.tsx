@@ -1,5 +1,5 @@
-// the Edit podcast sheet, laid out as the Edit topic sheet: the title, the description, and the image block, whose
-// changes save on their own, then Cancel and Save
+// the Edit podcast sheet: the title, the description, the image block, then Cancel and Save.
+// image changes save on their own
 
 import { PODCAST_EPISODE_DESCRIPTION_MAX_CHARS, PODCAST_EPISODE_TITLE_MAX_CHARS } from "@carlnotes/contracts/podcast"
 import { usePodcastEpisodeFields } from "@carlnotes/core/hooks/usePodcastEpisodeFields"
@@ -8,7 +8,7 @@ import {
 	PODCAST_EPISODE_DESCRIPTION_LABEL,
 	PODCAST_EPISODE_TITLE_LABEL,
 	type PodcastEpisodeEditorPage,
-	toPodcastEpisodeImageEditorSubject,
+	toPodcastEpisodeEditableImage,
 } from "@carlnotes/core/lib/podcastEpisodeEditor"
 import { TOPIC_IMAGE_LABEL, toTopicImageEditorKey } from "@carlnotes/core/lib/topicImageEditor"
 import { View } from "react-native"
@@ -41,12 +41,12 @@ export function EditPodcastEpisodeDialog({
 			onClose()
 		},
 	})
-	const imageEditorSubject = toPodcastEpisodeImageEditorSubject(podcastEpisodePage)
+	const editableImage = toPodcastEpisodeEditableImage(podcastEpisodePage)
 
 	return (
 		<Sheet title={EDIT_PODCAST_EPISODE_LABEL} onClose={onClose}>
 			<View className="gap-4">
-				{/* the same field order as the browser dialog */}
+				{/* the title and the description */}
 				<SessionTextInput
 					label={PODCAST_EPISODE_TITLE_LABEL}
 					value={fields.title}
@@ -66,8 +66,8 @@ export function EditPodcastEpisodeDialog({
 				<View className="gap-2">
 					<Text className="text-sm font-medium">{TOPIC_IMAGE_LABEL}</Text>
 					<TopicImageEditor
-						key={toTopicImageEditorKey(imageEditorSubject)}
-						subject={imageEditorSubject}
+						key={toTopicImageEditorKey(editableImage)}
+						editableImage={editableImage}
 						onImageChanged={onPodcastEpisodeChanged}
 					/>
 				</View>

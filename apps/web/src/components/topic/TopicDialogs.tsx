@@ -63,7 +63,7 @@ export function TopicDialogs({
 			{/* the image dialog that a click on an editor's header image opens */}
 			{openDialog === "edit-image" && (
 				<EditImageDialog
-					subject={{ kind: "topic", ...topic }}
+					editableImage={{ kind: "topic", ...topic }}
 					onImageChanged={onTopicImageChanged}
 					onClose={() => onOpenDialog(null)}
 				/>

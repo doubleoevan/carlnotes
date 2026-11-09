@@ -57,7 +57,7 @@ export function useTopicImageRender(
 				return
 			}
 
-			// the render settled: a success replaces the image and reports it, and a failure says so
+			// the render settled. a success replaces the image and calls onImageRendered, and a failure shows an error
 			setRenderId(null)
 			if (render?.status === "succeeded" && render.image) {
 				setImage(render.image)

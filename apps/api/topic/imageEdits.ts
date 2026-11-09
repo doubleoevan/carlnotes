@@ -1,5 +1,5 @@
-// what a topic's or a podcast episode's image edit shares: the editor's regeneration count, the upload's body limit,
-// its size, type, and moderation, and the moderation of an image prompt
+// the image edit steps a topic and a podcast episode share. the editor's regeneration quota, the upload's body limit,
+// the upload's checks, and the image prompt moderation
 
 import { ADMIN_QUOTA } from "@carlnotes/contracts/plans"
 import { type ImageRegenerationQuota, MAX_TOPIC_IMAGE_UPLOAD_BYTES } from "@carlnotes/contracts/topicImages"
@@ -51,7 +51,7 @@ export async function readUploadedImageOriginal(
 		return { response: context.json({ error: "too-large" }, 413) }
 	}
 
-	// the bytes decode as a jpeg, a png, or a webp, or the upload is refused
+	// the bytes decode as a jpeg, a png, or a webp, or the upload is rejected
 	const uploadedBytes = new Uint8Array(await uploadedFile.arrayBuffer())
 	const original = toTopicImageUploadType(uploadedBytes)
 		? await toTopicImageOriginal(uploadedBytes).catch(() => null)
@@ -60,15 +60,14 @@ export async function readUploadedImageOriginal(
 		return { response: context.json({ error: "unsupported-type" }, 400) }
 	}
 
-	// the moderation, on the cropped original that will show. an image it cannot read is an unsupported type, and a
-	// skipped or failed check lets the upload through
+	// the moderation, on the cropped original that will show. a skipped or failed check lets the upload through
 	const objectionableCategory = await toObjectionableImageCategory({
 		dataUrl: `data:image/jpeg;base64,${Buffer.from(original.jpegBytes).toString("base64")}`,
 		subjectKind,
 		subjectId,
 	})
 
-	// an unreadable image and an objectionable one are refused
+	// an unreadable image is an unsupported type, and an objectionable one is rejected
 	if (objectionableCategory === "unreadable") {
 		return { response: context.json({ error: "unsupported-type" }, 400) }
 	}

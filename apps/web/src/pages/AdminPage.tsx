@@ -111,7 +111,7 @@ export function AdminPage() {
 					isShowingAdminBlockedUsers={isShowingAdminBlockedUsers}
 					onToggleAdminBlockedUsers={() => setIsShowingAdminBlockedUsers((isShowing) => !isShowing)}
 				/>
-				{/* the sections as accordions, the shape every other page's sections take */}
+				{/* the sections as accordions */}
 				<Accordion type="multiple" defaultValue={["reports", "users", "teams", "mobile"]} className="mt-4">
 					{/* the open reports first, resolved from here */}
 					<AccordionItem value="reports">

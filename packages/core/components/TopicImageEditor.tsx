@@ -1,30 +1,24 @@
 // the editor's image block, shared by both apps: a topic's or a podcast episode's image, which a click or tap uploads
-// over, Regenerate from an image prompt while the month has regenerations left, and Remove for an upload with the
-// month's regeneration count beside it. The platform supplies the layout, the input, the buttons, and the file picker
+// over, Regenerate from an image prompt while the month has regenerations left, and the month's regeneration count.
+// The platform supplies the layout, the input, the button, and the file picker
 
 import { showClientError } from "@carlnotes/client/apiClient"
 import {
 	sendPodcastEpisodeImageRegeneration,
-	sendPodcastEpisodeImageRemoval,
 	uploadPodcastEpisodeImageBody,
 } from "@carlnotes/client/podcastEpisodeClient"
-import {
-	sendTopicImageRegeneration,
-	sendTopicImageRemoval,
-	uploadTopicImageBody,
-} from "@carlnotes/client/topicImageClient"
+import { sendTopicImageRegeneration, uploadTopicImageBody } from "@carlnotes/client/topicImageClient"
 import { TOPIC_IMAGE_PROMPT_CHARS } from "@carlnotes/contracts/topicImages"
 import type { TopicResponse } from "@carlnotes/contracts/topics"
 import { type ComponentType, type ReactNode, useState } from "react"
 import { useTopicImageRender } from "../hooks/useTopicImageRender"
 import {
+	type EditableImageKind,
 	hasRegenerationLeft,
 	REGENERATE_LABEL,
-	REMOVE_UPLOAD_LABEL,
 	TOPIC_IMAGE_PROMPT_LABEL,
 	TOPIC_IMAGE_RENDERING_TEXT,
 	TOPIC_IMAGE_SAVE_FAILED_TEXT,
-	type TopicImageEditorSubjectKind,
 	toRegenerationCountLabel,
 	toUploadRejection,
 	UPLOAD_IMAGE_LABEL,
@@ -33,39 +27,27 @@ import type { TopicImageProps } from "./TopicImage"
 
 // what the block edits: a topic or a podcast episode by its id, the name its image falls back to, the image, its
 // origin, the image prompt it was drawn from, and the editor's regenerations this month
-export type TopicImageEditorSubject = Pick<
+export type EditableImage = Pick<
 	TopicResponse,
 	"id" | "name" | "image" | "imageOrigin" | "imagePrompt" | "imageRegenerationQuota"
-> & { kind: TopicImageEditorSubjectKind }
+> & { kind: EditableImageKind }
 
-// the api calls that change each subject's image: a fresh render, an upload, and the removal of an upload
+// the api calls that change each kind's image: a fresh render and an upload
 const IMAGE_WRITES = {
-	topic: {
-		sendRegeneration: sendTopicImageRegeneration,
-		uploadBody: uploadTopicImageBody,
-		sendRemoval: sendTopicImageRemoval,
-	},
-	podcastEpisode: {
-		sendRegeneration: sendPodcastEpisodeImageRegeneration,
-		uploadBody: uploadPodcastEpisodeImageBody,
-		sendRemoval: sendPodcastEpisodeImageRemoval,
-	},
-} satisfies Record<TopicImageEditorSubjectKind, unknown>
+	topic: { sendRegeneration: sendTopicImageRegeneration, uploadBody: uploadTopicImageBody },
+	podcastEpisode: { sendRegeneration: sendPodcastEpisodeImageRegeneration, uploadBody: uploadPodcastEpisodeImageBody },
+} satisfies Record<EditableImageKind, unknown>
 
 // a picked image file as the platform's picker returns it: the multipart body with the file as its image field, and
 // the file's size and type for the check before the upload
 export type PickedTopicImage = { body: FormData; size: number; type: string }
 
-// the block's buttons: what each one does, which the platform draws with its icon
-export type TopicImageEditorButtonKind = "regenerate" | "remove"
-
-// the platform's elements: the layout with the image above its controls, the image prompt row, the action row with a
-// line at its end, a line of text, the image with its upload control, pulsing without its picture while a render runs,
-// the image prompt input, and a button
+// the platform's elements: the layout with the image above its controls, the image prompt row, a line of text, the
+// image with its upload control, pulsing without its picture while a render runs, the image prompt input, and the
+// Regenerate button
 export type TopicImageEditorElements = {
 	Layout: ComponentType<{ image: ReactNode; children: ReactNode }>
 	PromptRow: ComponentType<{ children: ReactNode }>
-	Actions: ComponentType<{ end: ReactNode; children: ReactNode }>
 	Line: ComponentType<{ children: string }>
 	Image: ComponentType<
 		TopicImageProps & { uploadLabel: string; isRendering: boolean; isDisabled: boolean; onUpload: () => void }
@@ -78,40 +60,39 @@ export type TopicImageEditorElements = {
 		isDisabled: boolean
 		onChange: (value: string) => void
 	}>
-	Button: ComponentType<{ label: string; kind: TopicImageEditorButtonKind; isDisabled: boolean; onPress: () => void }>
+	RegenerateButton: ComponentType<{ label: string; isDisabled: boolean; onPress: () => void }>
 }
 
 export type TopicImageEditorProps = {
-	subject: TopicImageEditorSubject
+	editableImage: EditableImage
 	// called once each new image is in place: after an upload, and once a render succeeds
 	onImageChanged?: () => void
 }
 
 /**
- * Edits a topic's or a podcast episode's image. A render polls until it succeeds, an upload replaces the image at once,
- * and Remove on an upload starts a fresh render. Each new image in place calls onImageChanged.
+ * Edits a topic's or a podcast episode's image. A render polls until it succeeds, and an upload replaces the image at
+ * once. Each new image in place calls onImageChanged.
  */
 export function TopicImageEditor({
-	subject,
+	editableImage,
 	onImageChanged,
-	elements: { Layout, PromptRow, Actions, Line, Image, PromptInput, Button },
+	elements: { Layout, PromptRow, Line, Image, PromptInput, RegenerateButton },
 	pickImage,
 }: TopicImageEditorProps & {
 	elements: TopicImageEditorElements
 	// the platform's file picker, which returns null when the user picks nothing
 	pickImage: () => Promise<PickedTopicImage | null>
 }) {
-	const { image, isRendering, watchRender, replaceImage } = useTopicImageRender(subject.image, onImageChanged)
-	const [imagePrompt, setImagePrompt] = useState(subject.imagePrompt ?? "")
-	const [regenerationsUsed, setRegenerationsUsed] = useState(subject.imageRegenerationQuota?.used ?? 0)
-	const [imageOrigin, setImageOrigin] = useState(subject.imageOrigin)
+	const { image, isRendering, watchRender, replaceImage } = useTopicImageRender(editableImage.image, onImageChanged)
+	const [imagePrompt, setImagePrompt] = useState(editableImage.imagePrompt ?? "")
+	const [regenerationsUsed, setRegenerationsUsed] = useState(editableImage.imageRegenerationQuota?.used ?? 0)
 	const [isWriting, setIsWriting] = useState(false)
-	const regenerationQuota = subject.imageRegenerationQuota && {
-		...subject.imageRegenerationQuota,
+	const regenerationQuota = editableImage.imageRegenerationQuota && {
+		...editableImage.imageRegenerationQuota,
 		used: regenerationsUsed,
 	}
 	const isBusy = isWriting || isRendering
-	const imageWrites = IMAGE_WRITES[subject.kind]
+	const imageWrites = IMAGE_WRITES[editableImage.kind]
 
 	// run one write, reporting its rejection
 	const runImageWrite = async (write: () => Promise<void>): Promise<void> => {
@@ -128,7 +109,7 @@ export function TopicImageEditor({
 	// a fresh render, from the image prompt if there is one, which counts one regeneration
 	const handleRegenerate = (): void =>
 		void runImageWrite(async () => {
-			watchRender(await imageWrites.sendRegeneration(subject.id, imagePrompt.trim() || undefined))
+			watchRender(await imageWrites.sendRegeneration(editableImage.id, imagePrompt.trim() || undefined))
 			setRegenerationsUsed((used) => used + 1)
 		})
 
@@ -143,18 +124,9 @@ export function TopicImageEditor({
 			if (uploadRejection) {
 				throw new Error(uploadRejection)
 			}
-			replaceImage(await imageWrites.uploadBody(subject.id, pickedImage.body))
-			setImageOrigin("uploaded")
+			replaceImage(await imageWrites.uploadBody(editableImage.id, pickedImage.body))
 			setImagePrompt("")
 			onImageChanged?.()
-		})
-
-	// the upload goes, and a fresh render takes its place
-	const handleRemove = (): void =>
-		void runImageWrite(async () => {
-			watchRender(await imageWrites.sendRemoval(subject.id))
-			setRegenerationsUsed((used) => used + 1)
-			setImageOrigin("generated")
 		})
 
 	return (
@@ -164,7 +136,7 @@ export function TopicImageEditor({
 					image={isRendering ? null : image}
 					isRendering={isRendering}
 					size="page"
-					name={subject.name}
+					name={editableImage.name}
 					uploadLabel={UPLOAD_IMAGE_LABEL}
 					isDisabled={isBusy}
 					onUpload={handleUpload}
@@ -182,19 +154,13 @@ export function TopicImageEditor({
 						isDisabled={isBusy}
 						onChange={setImagePrompt}
 					/>
-					<Button label={REGENERATE_LABEL} kind="regenerate" isDisabled={isBusy} onPress={handleRegenerate} />
+					<RegenerateButton label={REGENERATE_LABEL} isDisabled={isBusy} onPress={handleRegenerate} />
 				</PromptRow>
 			)}
 			{/* the render under way */}
 			{isRendering && <Line>{TOPIC_IMAGE_RENDERING_TEXT}</Line>}
-			{/* the removal of an upload, with the month's regeneration count at the row's end, left out with neither */}
-			{(imageOrigin === "uploaded" || regenerationQuota) && (
-				<Actions end={regenerationQuota && <Line>{toRegenerationCountLabel(regenerationQuota)}</Line>}>
-					{imageOrigin === "uploaded" && (
-						<Button label={REMOVE_UPLOAD_LABEL} kind="remove" isDisabled={isBusy} onPress={handleRemove} />
-					)}
-				</Actions>
-			)}
+			{/* the month's regeneration count. an admin has none */}
+			{regenerationQuota && <Line>{toRegenerationCountLabel(regenerationQuota)}</Line>}
 		</Layout>
 	)
 }

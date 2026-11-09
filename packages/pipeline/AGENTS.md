@@ -139,8 +139,8 @@ it; it imports `@carlnotes/models`, `@carlnotes/emails`, `@carlnotes/db`, `@carl
 - `podcast/podcastEpisodeImage.ts` draws a published podcast episode's own image from its title, description, topic
   tags, and chapter titles, in the topic image's house style and at its sizes, billed with the episode. The root
   `podcast-episode-images:backfill` script draws one for every published podcast episode that has none.
-  `podcast/podcastEpisodeImageRenders.ts` reads a podcast episode's scene input for a render, replaces its image (the
-  hash, the origin, the image prompt, and the old files' pending deletions), and removes an upload.
+  `podcast/podcastEpisodeImageRenders.ts` reads a podcast episode's scene input for a render and replaces its image
+  (the hash, the origin, the image prompt, and the old files' pending deletions).
 - `topicImages/` — the steps of the worker's `renderTopicImage` workflow. `writeTopicImageScene.ts` has the prompt
   writer's input (the topic's name, prompt, tags, and up to five finding titles, fenced as untrusted) and the image
   prompt with the house style appended. `renderTopicImageOriginal.ts` draws a scene through the image model and returns

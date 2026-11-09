@@ -1,5 +1,5 @@
-// the Edit podcast dialog, laid out as the Edit topic dialog: the title, the description, and the image block, whose
-// changes save on their own, then Cancel and Save
+// the Edit podcast dialog: the title, the description, the image block, then Cancel and Save.
+// image changes save on their own
 
 import { PODCAST_EPISODE_DESCRIPTION_MAX_CHARS, PODCAST_EPISODE_TITLE_MAX_CHARS } from "@carlnotes/contracts/podcast"
 import { usePodcastEpisodeFields } from "@carlnotes/core/hooks/usePodcastEpisodeFields"
@@ -8,7 +8,7 @@ import {
 	PODCAST_EPISODE_DESCRIPTION_LABEL,
 	PODCAST_EPISODE_TITLE_LABEL,
 	type PodcastEpisodeEditorPage,
-	toPodcastEpisodeImageEditorSubject,
+	toPodcastEpisodeEditableImage,
 } from "@carlnotes/core/lib/podcastEpisodeEditor"
 import { TOPIC_IMAGE_LABEL, toTopicImageEditorKey } from "@carlnotes/core/lib/topicImageEditor"
 import { cn } from "@carlnotes/nightshift/classNames"
@@ -45,7 +45,7 @@ export function EditPodcastEpisodeDialog({
 			onClose()
 		},
 	})
-	const imageEditorSubject = toPodcastEpisodeImageEditorSubject(podcastEpisodePage)
+	const editableImage = toPodcastEpisodeEditableImage(podcastEpisodePage)
 
 	return (
 		<Dialog open onOpenChange={(isOpen) => !isOpen && onClose()}>
@@ -83,8 +83,8 @@ export function EditPodcastEpisodeDialog({
 				<div>
 					<FieldLabel>{TOPIC_IMAGE_LABEL}</FieldLabel>
 					<TopicImageEditor
-						key={toTopicImageEditorKey(imageEditorSubject)}
-						subject={imageEditorSubject}
+						key={toTopicImageEditorKey(editableImage)}
+						editableImage={editableImage}
 						onImageChanged={onPodcastEpisodeChanged}
 					/>
 				</div>

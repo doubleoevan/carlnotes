@@ -1,7 +1,7 @@
 // the Edit podcast form, as both apps word it, and the podcast episode's image as the image block edits it
 
 import type { PodcastEpisodePageResponse } from "@carlnotes/contracts/podcastEpisodePage"
-import type { TopicImageEditorSubject } from "../components/TopicImageEditor"
+import type { EditableImage } from "../components/TopicImageEditor"
 
 // the menu option and the dialog title, the form's field labels, and the line after a save
 export const EDIT_PODCAST_EPISODE_LABEL = "Edit podcast"
@@ -20,9 +20,7 @@ export type PodcastEpisodeEditorPage = Pick<
 /**
  * Returns the podcast episode's image as the image block edits it, from its page.
  */
-export function toPodcastEpisodeImageEditorSubject(
-	podcastEpisodePage: PodcastEpisodeEditorPage,
-): TopicImageEditorSubject {
+export function toPodcastEpisodeEditableImage(podcastEpisodePage: PodcastEpisodeEditorPage): EditableImage {
 	const { podcastEpisode } = podcastEpisodePage
 	return {
 		kind: "podcastEpisode",

@@ -2,12 +2,11 @@ import { appendNativeFilePart } from "@carlnotes/client/apiClient"
 import {
 	type PickedTopicImage,
 	TopicImageEditor as SharedTopicImageEditor,
-	type TopicImageEditorButtonKind,
 	type TopicImageEditorElements,
 	type TopicImageEditorProps,
 } from "@carlnotes/core/components/TopicImageEditor"
 import { toCurrentChatAccountGuard } from "@carlnotes/core/stores/chatConversationStore"
-import { type LucideIcon, RefreshCw, X } from "lucide-react-native"
+import { RefreshCw } from "lucide-react-native"
 import { type RefObject, useEffect, useRef } from "react"
 import { View } from "react-native"
 import { useFilePicker } from "@/components/common/FilePickerMenu"
@@ -22,12 +21,6 @@ import { TopicImageButton } from "./TopicImageButton"
 // what the picker menu offers: every image, which the resizer re-encodes to a jpeg or a png before the upload check
 const TOPIC_IMAGE_ACCEPT = ["image/*"]
 
-// each button's icon
-const BUTTON_ICONS: Record<TopicImageEditorButtonKind, LucideIcon> = {
-	regenerate: RefreshCw,
-	remove: X,
-}
-
 // the native elements: the image at full width, as the web draws it, above a column of controls
 const ELEMENTS: TopicImageEditorElements = {
 	Layout: ({ image, children }) => (
@@ -37,12 +30,6 @@ const ELEMENTS: TopicImageEditorElements = {
 		</View>
 	),
 	PromptRow: ({ children }) => <View className="gap-2">{children}</View>,
-	Actions: ({ end, children }) => (
-		<View className="flex-row flex-wrap items-center gap-2">
-			{children}
-			<View className="ml-auto">{end}</View>
-		</View>
-	),
 	Line: ({ children }) => <Text className="text-sm text-muted-foreground">{children}</Text>,
 	// the image is the upload button, pulsing while a render runs
 	Image: ({ uploadLabel, isRendering, isDisabled, onUpload, ...topicImageProps }) => (
@@ -67,16 +54,16 @@ const ELEMENTS: TopicImageEditorElements = {
 			onChangeText={onChange}
 		/>
 	),
-	Button: ({ label, kind, isDisabled, onPress }) => (
+	RegenerateButton: ({ label, isDisabled, onPress }) => (
 		<Button variant="outline" size="sm" accessibilityLabel={label} disabled={isDisabled} onPress={onPress}>
-			<Icon as={BUTTON_ICONS[kind]} className="size-4" />
+			<Icon as={RefreshCw} className="size-4" />
 			<Text>{label}</Text>
 		</Button>
 	),
 }
 
 /**
- * The editor's image block on a phone. The image and Upload open the picker menu of Photo library, Take photo, and
+ * The editor's image block on a phone. A tap on the image opens the picker menu of Photo library, Take photo, and
  * Files. The picked image is re-encoded without its metadata, and its copy is deleted once the upload lands, when
  * another pick replaces it, or when the block closes.
  */

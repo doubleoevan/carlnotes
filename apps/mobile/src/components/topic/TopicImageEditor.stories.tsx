@@ -1,4 +1,4 @@
-import type { TopicImageEditorSubject } from "@carlnotes/core/components/TopicImageEditor"
+import type { EditableImage } from "@carlnotes/core/components/TopicImageEditor"
 import type { Meta, StoryObj } from "@storybook/react-native"
 import { TopicImageEditor } from "./TopicImageEditor"
 
@@ -6,7 +6,7 @@ import { TopicImageEditor } from "./TopicImageEditor"
 const SAMPLE_FILES = { url: "/podcast-cover-placeholder.jpg", url2x: "/podcast-cover-placeholder.jpg" }
 
 // a topic with a generated image and most of the month's regenerations left
-const TOPIC: TopicImageEditorSubject = {
+const TOPIC: EditableImage = {
 	kind: "topic",
 	id: "topic-1",
 	name: "Home espresso",
@@ -16,17 +16,21 @@ const TOPIC: TopicImageEditorSubject = {
 	imageRegenerationQuota: { used: 3, limit: 15 },
 }
 
-// the editor's image block: a generated image with regenerations left, an upload with Remove, the month's limit
-// reached, and a topic with no image yet
+// the editor's image block: a generated image with regenerations left, an upload, the month's limit reached, and a
+// topic with no image yet
 const meta = {
 	title: "Topic/TopicImageEditor",
 	component: TopicImageEditor,
 	parameters: { webReference: "apps/web/src/components/topic/TopicImageEditor.tsx" },
-	args: { subject: TOPIC },
+	args: { editableImage: TOPIC },
 } satisfies Meta<typeof TopicImageEditor>
 export default meta
 type Story = StoryObj<typeof meta>
 export const Default: Story = {}
-export const Uploaded: Story = { args: { subject: { ...TOPIC, imageOrigin: "uploaded", imagePrompt: null } } }
-export const LimitReached: Story = { args: { subject: { ...TOPIC, imageRegenerationQuota: { used: 15, limit: 15 } } } }
-export const NoImage: Story = { args: { subject: { ...TOPIC, image: null, imageOrigin: null, imagePrompt: null } } }
+export const Uploaded: Story = { args: { editableImage: { ...TOPIC, imageOrigin: "uploaded", imagePrompt: null } } }
+export const LimitReached: Story = {
+	args: { editableImage: { ...TOPIC, imageRegenerationQuota: { used: 15, limit: 15 } } },
+}
+export const NoImage: Story = {
+	args: { editableImage: { ...TOPIC, image: null, imageOrigin: null, imagePrompt: null } },
+}

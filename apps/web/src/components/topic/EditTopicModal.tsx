@@ -270,7 +270,7 @@ export function EditTopicModal({
 						<FieldLabel>{TOPIC_IMAGE_LABEL}</FieldLabel>
 						<TopicImageEditor
 							key={toTopicImageEditorKey(topic)}
-							subject={{ kind: "topic", ...topic }}
+							editableImage={{ kind: "topic", ...topic }}
 							onImageChanged={onTopicImageChanged}
 						/>
 					</div>

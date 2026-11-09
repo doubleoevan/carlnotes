@@ -3,11 +3,11 @@
 import type { ImageRegenerationQuota } from "@carlnotes/contracts/topicImages"
 import { MAX_TOPIC_IMAGE_UPLOAD_BYTES, TOPIC_IMAGE_UPLOAD_TYPES } from "@carlnotes/contracts/topicImages"
 
-// what owns the image the block edits
-export type TopicImageEditorSubjectKind = "topic" | "podcastEpisode"
+// whether the block edits a topic's image or a podcast episode's image
+export type EditableImageKind = "topic" | "podcastEpisode"
 
-// the title of the dialog that a click or tap on each subject's page image opens
-export const EDIT_IMAGE_DIALOG_TITLES: Record<TopicImageEditorSubjectKind, string> = {
+// the title of the dialog that a click or tap on a header image opens, by kind
+export const EDIT_IMAGE_DIALOG_TITLES: Record<EditableImageKind, string> = {
 	topic: "Edit topic image",
 	podcastEpisode: "Edit podcast image",
 }
@@ -16,7 +16,6 @@ export const EDIT_IMAGE_DIALOG_TITLES: Record<TopicImageEditorSubjectKind, strin
 export const TOPIC_IMAGE_LABEL = "Image"
 export const REGENERATE_LABEL = "Regenerate"
 export const UPLOAD_IMAGE_LABEL = "Upload an image"
-export const REMOVE_UPLOAD_LABEL = "Remove"
 /**
  * Returns the key an editor mounts under, so a reload of the topic's count or image origin starts its own counts over.
  */
@@ -31,7 +30,7 @@ export function toTopicImageEditorKey(topic: {
 export const TOPIC_IMAGE_PROMPT_LABEL = "Image prompt"
 
 // the lines the block shows while a render runs, and after a render or a save fails
-export const TOPIC_IMAGE_RENDERING_TEXT = "Drawing a new image. This takes about a minute."
+export const TOPIC_IMAGE_RENDERING_TEXT = "Dreaming, takes about a minute..."
 export const TOPIC_IMAGE_RENDER_FAILED_TEXT = "The image didn't render. Try again."
 export const TOPIC_IMAGE_SAVE_FAILED_TEXT = "The image didn't save."
 

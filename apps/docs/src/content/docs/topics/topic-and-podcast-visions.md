@@ -65,16 +65,15 @@ one everywhere, including the show cover for a topic's image.
 ![The Image section of Edit topic: the topic's image, the Image prompt field, and the Regenerate
 button](../../../assets/screenshots/topic-image-editor.png)
 
-Each plan has a monthly limit of regenerations, shared by a topic's image and its podcast episodes' images, shown under
-the image prompt as "X of Y used this month". **Regenerate** is gone once the month's limit is reached, and returns on
+Each plan has a monthly limit of regenerations, shared by all your topic and podcast episode images, shown under the
+image prompt as "X of Y used this month". **Regenerate** is gone once the month's limit is reached, and returns on
 the 1st. The limits are on the [plans page](/docs/account/plans-and-limits/).
 
 ## Upload
 
 Click the image, or tap it on a phone, and pick a photo. A large photo, or an iPhone's HEIC, is shrunk and converted
 before it uploads. The image is cropped to 3:2 from its center, its metadata is stripped, and it is checked for sexual,
-violent, and hateful content before it replaces the drawn image. **Remove** takes an upload away and draws a fresh image
-in its place, which counts as one of the month's regenerations.
+violent, and hateful content before it replaces the drawn image. To go back to a drawn image, press **Regenerate**.
 
 ## Private topics
 

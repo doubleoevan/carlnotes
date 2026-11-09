@@ -1,4 +1,4 @@
-// the typed api client for a topic's image: the owner's regenerate, the render it polls, the upload, and the removal
+// the typed api client for a topic's image. an editor's regenerate, the render it polls, and the upload
 
 import {
 	regenerateTopicImageResponse,
@@ -45,15 +45,4 @@ export async function uploadTopicImageBody(topicId: string, body: FormData): Pro
 		throw new Error((await readApiErrorMessage(response)) ?? `upload failed: ${response.status}`)
 	}
 	return (await readApiResponse(uploadTopicImageResponse, response)).image
-}
-
-/**
- * Removes a topic's uploaded image, which starts a fresh render. Returns the render's id to poll.
- */
-export async function sendTopicImageRemoval(topicId: string): Promise<string> {
-	const response = await apiClient().api.topics[":id"].image.$delete({ param: { id: topicId } })
-	if (!response.ok) {
-		throw new Error((await readApiErrorMessage(response)) ?? `remove failed: ${response.status}`)
-	}
-	return (await readApiResponse(regenerateTopicImageResponse, response)).renderId
 }

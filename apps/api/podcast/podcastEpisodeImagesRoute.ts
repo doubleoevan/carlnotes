@@ -1,5 +1,5 @@
-// the podcast episode image routes: one file of an episode's own image, gated by its topic's visibility, and an
-// editor's regenerate, upload, and removal of an upload
+// the podcast episode image routes. one file of a podcast episode's own image, gated by its topic's visibility, and
+// an editor's regenerate and upload
 
 import {
 	fromTopicImageFileName,
@@ -10,10 +10,7 @@ import { db } from "@carlnotes/db"
 import { podcastEpisodes } from "@carlnotes/db/schema/podcast"
 import { topics } from "@carlnotes/db/schema/topics"
 import { topicImageRegenerateModel } from "@carlnotes/models/topicImageModel"
-import {
-	removePodcastEpisodeImageUpload,
-	replacePodcastEpisodeImage,
-} from "@carlnotes/pipeline/podcast/podcastEpisodeImageRenders"
+import { replacePodcastEpisodeImage } from "@carlnotes/pipeline/podcast/podcastEpisodeImageRenders"
 import {
 	storePodcastEpisodeImageFiles,
 	toPodcastEpisodeImageFileKey,
@@ -58,7 +55,7 @@ export const podcastEpisodeImagesRoute = new Hono<AppEnv>()
 			objectKey: toPodcastEpisodeImageFileKey(podcastEpisodeId, hash, file),
 		})
 	})
-	// an editor's regenerate: a fresh render on the better model, from an optional image prompt, within the month's limit
+	// an editor's regenerate. a fresh render on the better model, from an optional image prompt, within the month's limit
 	.post(
 		"/episodes/:id/image/regenerate",
 		toolCallerRateLimiter,
@@ -139,38 +136,3 @@ export const podcastEpisodeImagesRoute = new Hono<AppEnv>()
 			return context.json({ image: toPodcastEpisodeImageUrls(editor.podcastEpisodeId, hash) })
 		},
 	)
-	// the removal of an upload: its files go, and a fresh render starts on the editor's budget. the render counts as
-	// one of the month's regenerations
-	.delete("/episodes/:id/image", toolCallerRateLimiter, async (context) => {
-		// an editor of the podcast episode's topic with a regeneration left, whose current image is an upload
-		const editor = await loadPodcastEpisodeEditor(context)
-		if ("response" in editor) {
-			return editor.response
-		}
-		if (!(await isAllowed(editor.userId, "topicImage:regenerate"))) {
-			return context.json({ error: "regeneration limit reached" }, 429)
-		}
-
-		// the upload and its files go. a current image that is not an upload reads as missing
-		if (!(await removePodcastEpisodeImageUpload(editor.podcastEpisodeId))) {
-			return context.json({ error: "not found" }, 404)
-		}
-
-		// a fresh render takes the upload's place
-		const renderId = await startTopicImageRender({
-			topicId: editor.topicId,
-			podcastEpisodeId: editor.podcastEpisodeId,
-			userId: editor.userId,
-			kind: "regenerate",
-			model: topicImageRegenerateModel(),
-		})
-
-		// the removal's event, and the render to poll
-		trackEvent("topic_image_remove", editor.userId, {
-			...toAnalyticsProperties(context),
-			topicId: editor.topicId,
-			podcastEpisodeId: editor.podcastEpisodeId,
-			isOwner: editor.topicOwnerId === editor.userId,
-		})
-		return context.json({ renderId }, 202)
-	})

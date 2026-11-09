@@ -1,5 +1,5 @@
-// the topic image routes: the files, gated by the topic's visibility, the owner's regenerate and its poll, the upload,
-// and the removal of an upload
+// the topic image routes. the files, gated by the topic's visibility, an editor's regenerate and upload, and the
+// render poll
 
 import {
 	fromTopicImageFileName,
@@ -18,7 +18,6 @@ import { topicImageRegenerateModel } from "@carlnotes/models/topicImageModel"
 import { storeTopicImageFiles, toTopicImageFileKey } from "@carlnotes/pipeline/topicImages/topicImageFiles"
 import {
 	loadTopicImageRender,
-	removeTopicImageUpload,
 	replaceTopicImage,
 	startTopicImageRender,
 	type TopicImageRenderRow,
@@ -141,39 +140,8 @@ export const topicImagesRoute = new Hono<AppEnv>()
 		})
 		return context.json({ image: toTopicImageUrls(editor.topic.id, hash) })
 	})
-	// the removal of an upload: its files go, and a fresh render starts on the editor's budget. the render counts as
-	// one of the month's regenerations
-	.delete("/topics/:id/image", toolCallerRateLimiter, async (context) => {
-		// an editor of the topic with a regeneration left, whose current image is an upload
-		const editor = await loadTopicEditor(context)
-		if ("response" in editor) {
-			return editor.response
-		}
-		if (!(await isAllowed(editor.userId, "topicImage:regenerate"))) {
-			return context.json({ error: "regeneration limit reached" }, 429)
-		}
 
-		// the upload's row and files go. a current image that is not an upload reads as missing
-		if (!(await removeTopicImageUpload(editor.topic.id))) {
-			return context.json({ error: "not found" }, 404)
-		}
-
-		// a fresh render takes the upload's place
-		const renderId = await startTopicImageRender({
-			topicId: editor.topic.id,
-			userId: editor.userId,
-			kind: "regenerate",
-			model: topicImageRegenerateModel(),
-		})
-		trackEvent("topic_image_remove", editor.userId, {
-			...toAnalyticsProperties(context),
-			topicId: editor.topic.id,
-			isOwner: editor.topic.ownerId === editor.userId,
-		})
-		return context.json({ renderId }, 202)
-	})
-
-// the image a succeeded render left: its podcast episode's for a podcast episode render, else its topic's
+// the urls of the image a succeeded render left, on its podcast episode or its topic
 async function loadRenderedImage(render: TopicImageRenderRow): Promise<TopicImageUrls | null> {
 	// a podcast episode render's image is the podcast episode's current one
 	if (render.podcastEpisodeId) {

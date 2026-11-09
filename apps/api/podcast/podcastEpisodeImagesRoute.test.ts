@@ -1,8 +1,7 @@
 // podcast episode image route tests: the editor gate for a visitor and for a user who may not edit, the regenerate
-// limit, a render that names the podcast episode, and the removal of an upload
+// limit, and a render that names the podcast episode
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import { restoreConnectionPool, stubConnectionPool, toSelectionRow } from "@carlnotes/db/connectionPoolStub"
-import * as podcastEpisodeImageRenders from "@carlnotes/pipeline/podcast/podcastEpisodeImageRenders"
 import * as topicImageRenders from "@carlnotes/pipeline/topicImages/topicImageRenders"
 import * as authorization from "../authorization"
 import * as currentUserModule from "../currentUser"
@@ -51,7 +50,7 @@ test("a visitor is turned away, and a user who may not edit the topic reads the 
 	expect(startRenderSpy).not.toHaveBeenCalled()
 })
 
-test("a regenerate past the month's limit is refused, and within it starts a render of the podcast episode", async () => {
+test("a regenerate past the month's limit is rejected, and within it starts a render of the podcast episode", async () => {
 	stubPodcastEpisodeTopic()
 	spyOn(currentUserModule, "currentUser").mockReturnValue("owner-1")
 	const isAllowedSpy = spyOn(authorization, "isAllowed").mockImplementation(
@@ -73,30 +72,5 @@ test("a regenerate past the month's limit is refused, and within it starts a ren
 		kind: "regenerate",
 		model: "gemini-3.1-flash-image",
 		imagePrompt: "at dawn, in fog",
-	})
-})
-
-test("removing an image that is not an upload is not found, and removing an upload starts a fresh render", async () => {
-	stubPodcastEpisodeTopic()
-	spyOn(currentUserModule, "currentUser").mockReturnValue("owner-1")
-	spyOn(authorization, "isAllowed").mockResolvedValue(true)
-	const removeUploadSpy = spyOn(podcastEpisodeImageRenders, "removePodcastEpisodeImageUpload").mockResolvedValue(false)
-	const startRenderSpy = spyOn(topicImageRenders, "startTopicImageRender").mockResolvedValue("render-2")
-	const requestRemoval = (): Promise<Response> =>
-		Promise.resolve(podcastEpisodeImagesRoute.request("/episodes/episode-1/image", { method: "DELETE" }))
-	expect((await requestRemoval()).status).toBe(404)
-	expect(startRenderSpy).not.toHaveBeenCalled()
-
-	// an upload goes, and a render takes its place
-	removeUploadSpy.mockResolvedValue(true)
-	const accepted = await requestRemoval()
-	expect(accepted.status).toBe(202)
-	expect(removeUploadSpy).toHaveBeenCalledWith("episode-1")
-	expect(startRenderSpy).toHaveBeenCalledWith({
-		topicId: "topic-1",
-		podcastEpisodeId: "episode-1",
-		userId: "owner-1",
-		kind: "regenerate",
-		model: "gemini-3.1-flash-image",
 	})
 })

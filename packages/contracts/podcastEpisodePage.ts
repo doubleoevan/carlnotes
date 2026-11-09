@@ -26,8 +26,8 @@ export const podcastEpisodePageResponse = z.object({
 	canRate: z.boolean(),
 	// whether this user may remove the podcast episode
 	canRemovePodcastEpisode: z.boolean(),
-	// whether this user may edit the podcast episode, and for that user alone, where its image came from, the image
-	// prompt that drew it, and the user's regenerations this month, null for an admin
+	// whether this user may edit the podcast episode. the image's origin, its image prompt, and the regenerations this
+	// month are null for anyone but an editor, and the regenerations are null for an admin too
 	canEditPodcastEpisode: z.boolean(),
 	podcastEpisodeImageOrigin: z.enum(topicImageOrigins).nullable(),
 	podcastEpisodeImagePrompt: z.string().nullable(),

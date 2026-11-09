@@ -77,12 +77,6 @@ export const podcastRouteContracts: Record<string, ApiRouteContract> = {
 		body: { json: regenerateTopicImagePayload },
 		response: regenerateTopicImageResponse,
 	},
-	"podcastEpisodeClient.sendPodcastEpisodeImageRemoval": {
-		method: "DELETE",
-		path: "/api/episodes/:id/image",
-		params: idParam,
-		response: regenerateTopicImageResponse,
-	},
 	"podcastEpisodeClient.sendPodcastEpisodeListen": {
 		method: "POST",
 		path: "/api/episodes/:id/listen",

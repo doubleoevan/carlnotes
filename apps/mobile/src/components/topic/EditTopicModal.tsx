@@ -260,7 +260,7 @@ export function EditTopicModal({
 						<Text className="text-sm font-medium">{TOPIC_IMAGE_LABEL}</Text>
 						<TopicImageEditor
 							key={toTopicImageEditorKey(topic)}
-							subject={{ kind: "topic", ...topic }}
+							editableImage={{ kind: "topic", ...topic }}
 							onImageChanged={onTopicImageChanged}
 						/>
 					</View>

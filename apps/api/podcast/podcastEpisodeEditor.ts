@@ -1,4 +1,4 @@
-// the editor of a podcast episode route: a signed-in user the edit gate grants on the podcast episode's topic
+// the editor of a podcast episode. a signed-in user who may edit the podcast episode's topic
 
 import { db } from "@carlnotes/db"
 import { podcastEpisodes } from "@carlnotes/db/schema/podcast"
@@ -25,7 +25,7 @@ export async function loadPodcastEpisodeEditor(context: Context<AppEnv>): Promis
 		return { response: context.json({ error: "unauthorized" }, 401) }
 	}
 
-	// the podcast episode and its topic, which the edit gate decides
+	// the podcast episode's topic, which the edit gate decides
 	const podcastEpisodeId = context.req.param("id") ?? ""
 	const [podcastEpisodeTopic] = await db
 		.select({ topic: namedTopicColumns })
@@ -33,7 +33,7 @@ export async function loadPodcastEpisodeEditor(context: Context<AppEnv>): Promis
 		.innerJoin(topics, eq(topics.id, podcastEpisodes.topicId))
 		.where(and(eq(podcastEpisodes.id, podcastEpisodeId), ne(podcastEpisodes.status, "removed")))
 
-	// a missing podcast episode, and one the user may not edit, reads as missing
+	// a podcast episode the user may not edit reads as missing
 	if (!podcastEpisodeTopic || !(await isAllowed(userId, "topic:edit", podcastEpisodeTopic.topic))) {
 		return { response: context.json({ error: "not found" }, 404) }
 	}

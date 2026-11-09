@@ -1,7 +1,7 @@
 ## 1. Api
 
 - [x] 1.1 Add `image_origin` and `image_prompt` to `episodes` and a nullable `podcast_episode_id` to `topic_image_renders`
-- [x] 1.2 Draw a Podcast Episode render's scene from the episode and store its image on the episode in the render activities
+- [x] 1.2 Draw a Podcast Episode render's scene from the Podcast Episode and store its image on it in the render activities
 - [x] 1.3 Add the Podcast Episode edit, regenerate, upload, and removal routes, and return its image from the render poll
 - [x] 1.4 Add `canEditPodcastEpisode`, the image's origin and prompt, and the regeneration count to the page response
 - [x] 1.5 Drop the pin lists from the admin console response
@@ -16,7 +16,7 @@
 
 ## 3. Mobile
 
-- [x] 3.1 Add Edit podcast to the episode menu with its dialog
+- [x] 3.1 Add Edit podcast to the podcast episode screen's menu with its dialog
 - [x] 3.2 Open the image dialogs from a tap on the Topic and Podcast Episode images for an editor
 
 ## 4. Docs

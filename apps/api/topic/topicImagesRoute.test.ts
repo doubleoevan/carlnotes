@@ -1,5 +1,5 @@
 // topic image route tests: a public file to a visitor with its edge headers, a private file refused with no session, a
-// stale hash, the regenerate limit, a too-large and a wrong-type upload, and a removal that starts a render
+// stale hash, the regenerate limit, and a too-large and a wrong-type upload
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import { restoreConnectionPool, stubConnectionPool, toSelectionRow } from "@carlnotes/db/connectionPoolStub"
 import * as store from "@carlnotes/db/store"
@@ -140,21 +140,4 @@ test("an upload that is too large or not an image is refused", async () => {
 	const wrongType = await topicImagesRoute.request("/topics/topic-1/image", { method: "POST", body: formData })
 	expect(wrongType.status).toBe(400)
 	expect(await wrongType.json()).toEqual({ error: "unsupported-type" })
-})
-
-test("removing an upload drops its row and objects and starts a fresh render", async () => {
-	stubTopic("public")
-	spyOn(currentUserModule, "currentUser").mockReturnValue("owner-1")
-	spyOn(authorization, "isAllowed").mockResolvedValue(true)
-	const removeUploadSpy = spyOn(topicImageRenders, "removeTopicImageUpload").mockResolvedValue(true)
-	const startRenderSpy = spyOn(topicImageRenders, "startTopicImageRender").mockResolvedValue("render-2")
-	const response = await topicImagesRoute.request("/topics/topic-1/image", { method: "DELETE" })
-	expect(response.status).toBe(202)
-	expect(removeUploadSpy).toHaveBeenCalledWith("topic-1")
-	expect(startRenderSpy).toHaveBeenCalledWith({
-		topicId: "topic-1",
-		userId: "owner-1",
-		kind: "regenerate",
-		model: "gemini-3.1-flash-image",
-	})
 })

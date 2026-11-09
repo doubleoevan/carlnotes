@@ -44,7 +44,7 @@ export function usePodcastEpisodeFields({
 			return
 		}
 
-		// send the trimmed fields, then confirm and reload, or report the rejection
+		// send the trimmed fields, then show the saved message and call onPodcastEpisodeSaved, or show the error
 		setIsSaving(true)
 		try {
 			await sendPodcastEpisodeUpdate(podcastEpisode.id, { title: title.trim(), description: description.trim() })

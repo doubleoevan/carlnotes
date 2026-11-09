@@ -4,10 +4,7 @@ import { isPublishedPodcastEpisode, toHomePodcastEpisodeLabel } from "@carlnotes
 import type { PodcastEpisodePageResponse } from "@carlnotes/contracts/podcastEpisodePage"
 import { isTopicSlugStale, toPodcastEpisodePath, toTopicPath } from "@carlnotes/contracts/seo"
 import { toPodcastEpisodeTitleLabel } from "@carlnotes/core/lib/labels"
-import {
-	EDIT_PODCAST_EPISODE_LABEL,
-	toPodcastEpisodeImageEditorSubject,
-} from "@carlnotes/core/lib/podcastEpisodeEditor"
+import { EDIT_PODCAST_EPISODE_LABEL, toPodcastEpisodeEditableImage } from "@carlnotes/core/lib/podcastEpisodeEditor"
 import { toPodcastEpisodeReportSubject, toPodcastEpisodeSocialProps } from "@carlnotes/core/lib/podcastEpisodeSocial"
 import { SAVE_FAILED_TEXT } from "@carlnotes/core/lib/sessionCopy"
 import { applyPodcastEpisodePageChanges, type TopicFindingChange } from "@carlnotes/core/lib/topicFindingChanges"
@@ -220,8 +217,8 @@ export function PodcastEpisodePage() {
 			)}
 			{/* the dialog that the New Topic button opens */}
 			{newTopicDialog}
-			{/* the actions menu's share, Add topic to team, Edit podcast, and remove dialogs, and the image dialog that a
-			    click on an editor's header image opens. a removed episode opens its topic's page */}
+			{/* the actions menu's share, Add topic to team, Edit podcast, and remove dialogs, and the header image's dialog.
+			    a removed podcast episode opens its topic's page */}
 			{openDialog === "share" && <ShareTopic topic={topic} isDialog onClose={() => setOpenDialog(null)} />}
 			{openDialog === "add-topic-to-team" && (
 				<AddTopicToTeamDialog
@@ -239,7 +236,7 @@ export function PodcastEpisodePage() {
 			)}
 			{openDialog === "edit-image" && (
 				<EditImageDialog
-					subject={toPodcastEpisodeImageEditorSubject(podcastEpisodePage)}
+					editableImage={toPodcastEpisodeEditableImage(podcastEpisodePage)}
 					onImageChanged={loadPodcastEpisodePage}
 					onClose={() => setOpenDialog(null)}
 				/>

@@ -1,5 +1,5 @@
-// a topic's or a podcast episode's image as a button, with the camera overlay on hover or keyboard focus as the
-// avatars show it, and the page header's image, which is that button for an editor
+// a topic's or a podcast episode's image as a button with a camera overlay on hover or keyboard focus.
+// the page header's image is that button for an editor
 
 import type { TopicImageProps } from "@carlnotes/core/components/TopicImage"
 import { cn } from "@carlnotes/nightshift/classNames"

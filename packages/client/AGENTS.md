@@ -101,4 +101,4 @@ signal, and `fetchApi` checks cancellation after asynchronous session headers, b
 `fetchPersonalSourcesEmailSetup` is the read-only mailbox response used by the empty Personal sources hint. It creates no Source and has no setup UI.
 
 `homeClient.ts` reads the home payload, and `topicImageClient.ts` is the editor's image block: the regenerate, the
-render poll, the upload of a multipart body, and the removal of an upload.
+render poll, and the upload of a multipart body.
