@@ -16,7 +16,7 @@ and its tags](../../../assets/screenshots/topic-image-header.png)
 
 ## Where the images show
 
-- **The home page.** Its topic and podcast sections are cards with their images: Home topics, Home podcasts,
+- **The home page.** Its topic and podcast sections are cards with their images: Featured topics, Featured podcasts,
   New podcasts this week, and Your topics once you sign in. Press a podcast card's play button to listen without
   leaving the page.
 - **The Topics page.** Every topic in the directory, with its image. **Topics** is in the user menu.
@@ -25,7 +25,7 @@ and its tags](../../../assets/screenshots/topic-image-header.png)
   button for its latest podcast episode, and its byline.
 - **Search results, share cards, and podcast covers.** A podcast app shows the episode's image under its title.
 
-![Home podcasts on the home page: four podcast episode cards, each with its image, its topic, and a play
+![Featured podcasts on the home page: four podcast episode cards, each with its image, its topic, and a play
 button](../../../assets/screenshots/home-podcasts.png)
 
 ![A podcast episode's page: the episode's image of a paper boat on a river at dusk beside its title, description, and

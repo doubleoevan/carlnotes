@@ -61,10 +61,10 @@ export const MovedDown: Story = {
 // the X asks for confirmation, then clears the pin and reloads the console
 export const Cleared: Story = {
 	play: async ({ canvas, userEvent, args }) => {
-		await userEvent.click(canvas.getByRole("button", { name: "Remove Home espresso from the home topics" }))
+		await userEvent.click(canvas.getByRole("button", { name: "Remove Home espresso from the featured topics" }))
 		// nothing is sent until the removal is confirmed
 		await expect(mocked(sendTopicHomeOrder)).not.toHaveBeenCalled()
-		const confirmDialog = within(await screen.findByRole("dialog", { name: "Remove from home topics?" }))
+		const confirmDialog = within(await screen.findByRole("dialog", { name: "Remove from featured topics?" }))
 		await userEvent.click(confirmDialog.getByRole("button", { name: "Remove" }))
 		await waitFor(() => expect(mocked(sendTopicHomeOrder)).toHaveBeenCalledWith("topic-home-espresso", 0))
 		await waitFor(() => expect(args.onSaved).toHaveBeenCalled())

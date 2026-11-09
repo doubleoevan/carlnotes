@@ -84,7 +84,7 @@ export function toHomeTopicsItemListLd(appUrl: string, homeTopics: { name: strin
 	return {
 		"@context": "https://schema.org",
 		"@type": "ItemList",
-		name: "Home topics",
+		name: "Featured topics",
 		itemListElement: homeTopics.map((homeTopic, index) => ({
 			"@type": "ListItem",
 			position: index + 1,

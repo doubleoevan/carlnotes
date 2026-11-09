@@ -10,7 +10,7 @@ import type { TopicSectionKey } from "@carlnotes/contracts/topics"
 export const TOPIC_SECTION_TITLES: Record<TopicSectionKey, string> = {
 	yours: "Your topics",
 	subscribed: "Your followed topics",
-	home: "Home topics",
+	home: "Featured topics",
 	popular: "Popular topics",
 	unknown: "More topics",
 }

@@ -51,7 +51,7 @@ export function toTopicActionOptions({
 			: []),
 		// an admin arranges the Home topics from inside the topic itself, on a public topic alone
 		...(isAdminUser && topic.visibility === "public"
-			? [{ label: "Home topics", Icon: ListOrdered, onSelect: onRankHomeTopic }]
+			? [{ label: "Featured topics", Icon: ListOrdered, onSelect: onRankHomeTopic }]
 			: []),
 		// the Add topic to team option opens its dialog if Join Team holds the bar's left
 		...(topicActionLayout.isAddTopicToTeamInMenu ? [toAddTopicToTeamOption(onAddTopicToTeam)] : []),

@@ -180,7 +180,7 @@ test("a home topics page past the last shows the last page with links to every p
 	expect(toTopicViewClass("Topic 12")).not.toContain("scripted:hidden")
 
 	// the section's page links go to the plain Topics page url, then page 2, then the current page 3
-	const paginationStart = topicsPageHtml.indexOf('aria-label="Home topics pages"')
+	const paginationStart = topicsPageHtml.indexOf('aria-label="Featured topics pages"')
 	const paginationHtml = topicsPageHtml.slice(paginationStart, topicsPageHtml.indexOf("</nav>", paginationStart))
 	expect(paginationHtml).toContain('href="/topics"')
 	expect(paginationHtml).toContain('href="/topics?home=2"')

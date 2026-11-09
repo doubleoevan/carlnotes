@@ -272,7 +272,7 @@ function useRegisterPodcastEpisodePageActions({
 							: []),
 						toShareTopicOption(() => onOpenDialog("share")),
 						...(podcastEpisodePage?.homePodcastEpisodes && podcastEpisodeTopic.visibility === "public"
-							? [{ label: "Home podcasts", Icon: ListOrdered, onSelect: () => onOpenDialog("rank") }]
+							? [{ label: "Featured podcasts", Icon: ListOrdered, onSelect: () => onOpenDialog("rank") }]
 							: []),
 						...(podcastEpisodePage?.canRemovePodcastEpisode
 							? [{ label: "Remove podcast episode", Icon: Trash2, onSelect: () => onOpenDialog("remove") }]

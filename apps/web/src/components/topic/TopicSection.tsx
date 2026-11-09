@@ -19,7 +19,7 @@ const topicsRoute = getRouteApi("/_layout/topics/")
 type TopicSectionProps = { section: TopicFeedResponse["sections"][number]; onNewTopicChat: () => void }
 
 /**
- * A collapsible section of topics: "Your topics", "Your followed topics", "Home topics", or "Popular topics"
+ * A collapsible section of topics: "Your topics", "Your followed topics", "Featured topics", or "Popular topics"
  */
 export function TopicSection({ section, onNewTopicChat }: TopicSectionProps) {
 	// the topics the section renders: the page the url names, and the first NO_SCRIPT_ROW_LIMIT topics for a reader without JavaScript.

@@ -189,7 +189,7 @@ export function HomeRankDialog({
 							{/* the X removes a pinned row after a confirmation, and drops the page's own new row */}
 							<button
 								type="button"
-								aria-label={`Remove ${rankedItem.label} from the home ${noun}`}
+								aria-label={`Remove ${rankedItem.label} from the featured ${noun}`}
 								onClick={() => handleRemoveItem(rankedItem)}
 								className="text-muted-foreground hover:text-foreground grid size-9 shrink-0 place-items-center"
 							>
@@ -213,7 +213,7 @@ export function HomeRankDialog({
 			{/* removing a pinned row asks first, then clears it */}
 			{removingItem && (
 				<ConfirmDialog
-					title={`Remove from home ${noun}?`}
+					title={`Remove from featured ${noun}?`}
 					confirmLabel="Remove"
 					cancelLabel="Cancel"
 					onConfirm={() => handleConfirmRemoveItem(removingItem)}

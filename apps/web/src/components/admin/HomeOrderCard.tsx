@@ -36,7 +36,7 @@ export function HomeOrderCard({ homeTopics, homePodcastEpisodes, onSaved }: Home
 				its page's actions menu.
 			</p>
 			<HomeOrderList
-				heading="Home topics"
+				heading="Featured topics"
 				rows={homeTopics.map((homeTopic) => ({
 					id: homeTopic.id,
 					label: homeTopic.name,
@@ -47,7 +47,7 @@ export function HomeOrderCard({ homeTopics, homePodcastEpisodes, onSaved }: Home
 				onSaved={onSaved}
 			/>
 			<HomeOrderList
-				heading="Home podcasts"
+				heading="Featured podcasts"
 				rows={homePodcastEpisodes.map((homePodcastEpisode) => ({
 					id: homePodcastEpisode.id,
 					label: toHomePodcastEpisodeLabel(homePodcastEpisode),

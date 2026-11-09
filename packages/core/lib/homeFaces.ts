@@ -15,10 +15,10 @@ const PODCAST_EPISODE_SECTION = {
 
 // the card sections in the order both homes show them, under the home payload's field names
 export const HOME_SECTIONS = {
-	homeTopics: { value: "home-topics", title: "Home topics", ...TOPIC_SECTION },
+	homeTopics: { value: "home-topics", title: "Featured topics", ...TOPIC_SECTION },
 	homePodcastEpisodes: {
 		value: "home-podcast-episodes",
-		title: "Home podcasts",
+		title: "Featured podcasts",
 		...PODCAST_EPISODE_SECTION,
 	},
 	newestPodcastEpisodes: {

@@ -52,12 +52,12 @@ export const Episodes: Story = {
 export const Dropped: Story = {
 	play: async ({ userEvent, args }) => {
 		const dialog = within(await screen.findByRole("dialog"))
-		await userEvent.click(dialog.getByRole("button", { name: "Remove City cycling from the home topics" }))
+		await userEvent.click(dialog.getByRole("button", { name: "Remove City cycling from the featured topics" }))
 		// the removal asks for confirmation before the save goes out
-		const confirmDialog = within(await screen.findByRole("dialog", { name: "Remove from home topics?" }))
+		const confirmDialog = within(await screen.findByRole("dialog", { name: "Remove from featured topics?" }))
 		await userEvent.click(confirmDialog.getByRole("button", { name: "Remove" }))
 		await expect(args.onSave).toHaveBeenCalledWith([{ id: "topic-city-cycling", position: 0 }])
-		await expect(dialog.queryByRole("button", { name: "Remove City cycling from the home topics" })).toBeNull()
+		await expect(dialog.queryByRole("button", { name: "Remove City cycling from the featured topics" })).toBeNull()
 		await expect(args.onClose).not.toHaveBeenCalled()
 	},
 }
