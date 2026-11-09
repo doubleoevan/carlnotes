@@ -16,7 +16,7 @@ export const DEFAULT_UPDATES_MINUTES: UpdatesMinutes = 15
 export const UPDATES_OPENER_MAX_CHARS = 280
 
 // the heading of the updates card on the home page and in the MCP view
-export const UPDATES_TITLE = "Latest Brews"
+export const UPDATES_TITLE = "Brew News"
 
 // what a list with no Findings reads as
 export const EMPTY_UPDATES_TEXT = "Nothing new worth your time. Carl checked. Twice."
