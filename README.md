@@ -196,6 +196,8 @@ bun run smoke:coverage # run every smoke test script, one process each, writing 
                      # with SMOKE_SKIP_DEVELOPER_ONLY=1 it skips the ones that need litellm or temporal. the Smoke workflow starts both as containers instead, and runs a temporal worker beside them, and builds the web app first, so it runs every one
 bun run docs:embed   # chunk the docs markdown by section and embed the changed sections into docs_chunks, which chat quotes; run it after editing docs
 bun run docs:embed:prd # the same sync against the production database, owner-run. the release-main deploy job also runs it on every release
+bun run topic-images:backfill -- --mode missing # under doppler, draw an image for every topic that has none; --mode redo draws every topic again, and --mode resize rederives the sizes from each stored original
+bun run podcast-episode-images:backfill # under doppler, draw an image for every published podcast episode that has none, on the platform's key
 bun run edge:purge   # clear the pages and the signed-out feed that Cloudflare shares; the deploy job that runs right after the app deploys
 bun run sync:releases # re-read every published GitHub release into the releases table the /releases endpoint serves; it seeds history and repairs a missed webhook delivery, and is safe to re-run
 bun run sync:releases:prd # the same sync against the production database; run it once after the first deploy, since the table starts empty. the webhook writes it going forward

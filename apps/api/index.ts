@@ -178,7 +178,7 @@ const server = new Hono<AppEnv>()
 	.all("/api/*", (context) => context.json({ error: "not found" }, 404))
 	// the server-rendered blog and docs pages
 	.route("/", contentRoute)
-	// the documents built per request, and the redirects from the old /pricing and /topics paths
+	// the documents built per request, and the redirect from the old /pricing path
 	.route("/", documentsRoute)
 	// the statically built docs site, which owns every /docs path. the docs assets under _astro have a content hash in
 	// their name, so they get cached like the ui bundle's

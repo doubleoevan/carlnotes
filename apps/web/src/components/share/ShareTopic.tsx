@@ -1,6 +1,7 @@
 import type { Visibility } from "@carlnotes/contracts/enums"
 import { toTopicFeedPath, toTopicPath } from "@carlnotes/contracts/seo"
 import { useSubjectReportFlag } from "@carlnotes/core/hooks/useSubjectReport"
+import { toReportImageLabel } from "@carlnotes/core/lib/socialLabels"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { Check, Flag, Link, Rss, Share } from "lucide-react"
 import { useState } from "react"
@@ -77,13 +78,16 @@ export function ShareTopic({
 	const isPublic = topic.visibility === "public"
 	// only the owner of a non-private topic can offer an invite link
 	const canInviteTopic = isTopicOwner && topic.visibility !== "private"
-	// controlled so the report issue option can close the menu
+	// the open state of the share menu
 	const [isOpen, setIsOpen] = useState(false)
-	const [isReportingIssue, setIsReportingIssue] = useState(false)
-	const handleReportIssue = (): void => {
+	const [reportingSubjectKind, setReportingSubjectKind] = useState<ReportedTopicSubjectKind | null>(null)
+	const handleReport = (subjectKind: ReportedTopicSubjectKind): void => {
 		setIsOpen(false)
-		setIsReportingIssue(true)
+		setReportingSubjectKind(subjectKind)
 	}
+	const reportTopicDialog = (
+		<ReportTopicDialog topic={topic} subjectKind={reportingSubjectKind} onClose={() => setReportingSubjectKind(null)} />
+	)
 
 	// whether this browser can open a share sheet, false until the component mounts in the browser
 	const isShareSheetAvailable = useIsMounted() && canOpenShareSheet()
@@ -196,8 +200,8 @@ export function ShareTopic({
 					onClick={handleDisabledOptionClick}
 				/>
 			)}
-			{/* a trigger for the report issue dialog from the home page icon only */}
-			{isIcon && <ReportTopicOption topicId={topicId} onClick={handleReportIssue} />}
+			{/* the report options: the topic's report option shows on the feed card's icon alone, and the image's shows on both */}
+			{(isIcon || isDialog) && <ReportTopicOptions topicId={topicId} isIcon={isIcon} onReport={handleReport} />}
 		</>
 	)
 
@@ -212,15 +216,8 @@ export function ShareTopic({
 						<div className="grid">{shareOptions}</div>
 					</DialogContent>
 				</Dialog>
-				{/* the report issue dialog mounted when the report issue button is clicked */}
-				{isReportingIssue && (
-					<ReportIssueDialog
-						subjectKind="topic"
-						subjectId={topicId}
-						subjectLabel={topicName}
-						onClose={() => setIsReportingIssue(false)}
-					/>
-				)}
+				{/* the report dialog mounted when a report option is clicked */}
+				{reportTopicDialog}
 			</>
 		)
 	}
@@ -240,29 +237,73 @@ export function ShareTopic({
 			<PopoverContent align="end" className="w-52" bodyClassName="p-1">
 				{shareOptions}
 			</PopoverContent>
-			{isReportingIssue && (
-				<ReportIssueDialog
-					subjectKind="topic"
-					subjectId={topicId}
-					subjectLabel={topicName}
-					onClose={() => setIsReportingIssue(false)}
-				/>
-			)}
+			{reportTopicDialog}
 		</Popover>
 	)
 }
 
-// the share menu's report option, which reads whether the user reported the topic as the menu opens
-function ReportTopicOption({ topicId, onClick }: { topicId: string; onClick: () => void }) {
-	const reportFlag = useSubjectReportFlag({ subjectKind: "topic", subjectId: topicId }, onClick)
+// what the share menu reports: the topic itself, or its image
+type ReportedTopicSubjectKind = "topic" | "topicImage"
+
+// the share menu's report options under their divider: the topic's report option shows on the feed card's icon alone,
+// and the image's shows on both
+function ReportTopicOptions({
+	topicId,
+	isIcon,
+	onReport,
+}: {
+	topicId: string
+	isIcon?: boolean
+	onReport: (subjectKind: ReportedTopicSubjectKind) => void
+}) {
 	return (
 		<>
 			<div className={MENU_DIVIDER_CLASS} />
-			<button type="button" onClick={reportFlag.press} className={SHARE_OPTION_CLASS}>
-				<Flag className={cn("size-4", reportFlag.isReported && ACTIVE_ICON_CLASS)} />
-				{reportFlag.label}
-			</button>
+			{isIcon && <ReportTopicOption topicId={topicId} subjectKind="topic" onClick={() => onReport("topic")} />}
+			<ReportTopicOption topicId={topicId} subjectKind="topicImage" onClick={() => onReport("topicImage")} />
 		</>
+	)
+}
+
+// the report dialog for the topic or its image, mounted while a report option's subject is set
+function ReportTopicDialog({
+	topic,
+	subjectKind,
+	onClose,
+}: {
+	topic: { id: string; name: string }
+	subjectKind: ReportedTopicSubjectKind | null
+	onClose: () => void
+}) {
+	if (!subjectKind) {
+		return null
+	}
+	return (
+		<ReportIssueDialog
+			subjectKind={subjectKind}
+			subjectId={topic.id}
+			subjectLabel={subjectKind === "topicImage" ? `the image of ${topic.name}` : topic.name}
+			onClose={onClose}
+		/>
+	)
+}
+
+// the share menu's report option for the topic or its image, which reads whether the user reported it as the menu opens
+function ReportTopicOption({
+	topicId,
+	subjectKind,
+	onClick,
+}: {
+	topicId: string
+	subjectKind: ReportedTopicSubjectKind
+	onClick: () => void
+}) {
+	const reportFlag = useSubjectReportFlag({ subjectKind, subjectId: topicId }, onClick)
+	return (
+		<button type="button" onClick={reportFlag.press} className={SHARE_OPTION_CLASS}>
+			<Flag className={cn("size-4", reportFlag.isReported && ACTIVE_ICON_CLASS)} />
+			{subjectKind === "topicImage" ? toReportImageLabel(reportFlag.isReported) : reportFlag.label}
+		</button>
 	)
 }
 

@@ -18,6 +18,13 @@ export function toReportLabel(isReported: boolean): string {
 	return isReported ? "Remove report" : REPORT_ISSUE_LABEL
 }
 
+/**
+ * The label of the option that reports a topic's image, or removes that report once the user filed one.
+ */
+export function toReportImageLabel(isReported: boolean): string {
+	return isReported ? "Remove image report" : "Report image"
+}
+
 // the title of the card that holds a page's comment thread, and the thread's heading where it shows without the card
 export const SOCIAL_SECTION_HEADING = "Hot takes 🔥"
 export const COMMENT_THREAD_HEADING = "Hot takes"

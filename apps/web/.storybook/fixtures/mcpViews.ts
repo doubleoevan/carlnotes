@@ -37,6 +37,7 @@ export function toFindingsMcpViewData(isSignedIn: boolean): McpViewData {
 			prompt: "Releases and evaluations of the tools that run language models.",
 			visibility: "public",
 			latestPodcastEpisode: LATEST_PODCAST_EPISODE_FIXTURE,
+			image: null,
 			isSubscribed: isSignedIn ? false : null,
 			canRate: isSignedIn,
 			canBookmark: isSignedIn,

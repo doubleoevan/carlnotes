@@ -17,6 +17,7 @@ import {
 	incrementDaySuggestionCount,
 	loadBillingAccess,
 	loadSpendSince,
+	loadTopicImageRegenerationQuota,
 	loadUserAccess,
 	monthlySpendDollars,
 	toSpendCents,
@@ -130,11 +131,11 @@ test("the daily suggestion limit allows up to 30 suggestions", async () => {
 	expect(incrementDaySuggestionCountResults).toEqual([true, false])
 })
 
-// podcast episode cost counts in the month's spend beside scans and chat
-test("monthly spend sums scans, chat, and episodes", async () => {
+// podcast episode cost and topic image render cost count in the month's spend beside scans and chat
+test("monthly spend sums scans, chat, episodes, and topic image renders", async () => {
 	const spendQueryRows = {
 		accessRow: PLUS_USER_ACCESS_ROW,
-		spendDollars: ["2.50", "1.25", "0.41"],
+		spendDollars: ["2.50", "1.25", "0.41", "0.034"],
 	}
 	const monthlySpend = await withSpendQueryRows(spendQueryRows as SpendQueryRows, () => monthlySpendDollars("user-1"))
 	expect(monthlySpend).toEqual({
@@ -142,8 +143,28 @@ test("monthly spend sums scans, chat, and episodes", async () => {
 		chatDollars: 1.25,
 		podcastEpisodeDollars: 0.41,
 		personalSourcesDollars: 0,
+		topicImageDollars: 0.034,
 	})
-	expect(toSpendCents(monthlySpend)).toBe(416)
+	expect(toSpendCents(monthlySpend)).toBe(419)
+})
+
+// the regeneration count is the owner's regenerate rows this month against the plan's limit, and an admin is never short
+test("the image regeneration quota counts this month's regenerate rows against the plan", async () => {
+	// a count returns one row, and any other read returns the access row
+	stubConnectionPool(({ text }) => (text.includes("count(") ? [["2"]] : [FREE_USER_ACCESS_ROW]))
+	try {
+		expect(await loadTopicImageRegenerationQuota("user-1")).toEqual({ used: 2, limit: 2, remaining: 0 })
+	} finally {
+		restoreConnectionPool()
+	}
+
+	// an admin's limit is the admin quota
+	stubConnectionPool(({ text }) => (text.includes("count(") ? [["40"]] : [ADMIN_USER_ACCESS_ROW]))
+	try {
+		expect((await loadTopicImageRegenerationQuota("admin-1")).remaining).toBeGreaterThan(0)
+	} finally {
+		restoreConnectionPool()
+	}
 })
 
 // the spend checks in one request share one set of month sums, and a write between them, such as a chat turn's spend
@@ -158,12 +179,12 @@ test("the month's spend is summed once per request until a write", async () => {
 		await runWithRequestMemo(async () => {
 			await Promise.all([isMonthlyBudgetCutoffPassed("user-1", "spokenQuestions"), monthlySpendDollars("user-1")])
 			await isMonthlyBudgetCutoffPassed("user-1", "manualScans")
-			expect(countSpendSums()).toBe(4)
+			expect(countSpendSums()).toBe(5)
 
 			// a spend row's insert clears the memo, so the next read sums every spend table again
 			await db.execute(sql`insert into chat_turns default values`)
 			await monthlySpendDollars("user-1")
-			expect(countSpendSums()).toBe(8)
+			expect(countSpendSums()).toBe(10)
 		})
 	} finally {
 		restoreConnectionPool()
@@ -181,7 +202,7 @@ test("the spend for an empty user id is filtered by that id", async () => {
 	}
 
 	// every sum is bound to the empty user id
-	expect(sentQueries).toHaveLength(4)
+	expect(sentQueries).toHaveLength(5)
 	for (const sentQuery of sentQueries) {
 		expect(sentQuery.values).toContain("")
 	}

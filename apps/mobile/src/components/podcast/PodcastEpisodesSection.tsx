@@ -38,7 +38,6 @@ export function PodcastEpisodesSection({
 				columns={columns}
 				valueByKey={podcastEpisodeSortValues}
 				getRowId={(episode) => episode.id}
-				initialPageSize={5}
 			/>
 		</CollapsibleSection>
 	)
@@ -58,7 +57,7 @@ function EpisodeTitle({ episode }: { episode: PodcastEpisodeSummary }) {
 					<Text className="text-sm">{title}</Text>
 				)}
 			</View>
-			<PodcastEpisodePlayButton episode={episode} />
+			<PodcastEpisodePlayButton podcastEpisode={episode} />
 		</View>
 	)
 }

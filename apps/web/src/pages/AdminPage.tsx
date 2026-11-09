@@ -10,6 +10,7 @@ import { setOpenReportCount } from "@carlnotes/core/stores/openReportStore"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { Settings, ShieldUser } from "lucide-react"
 import { useCallback, useEffect, useState } from "react"
+import { FeaturedCard } from "@/components/admin/FeaturedCard"
 import { ManageAdminsModal } from "@/components/admin/ManageAdminsModal"
 import { MobileMinimumVersionsCard } from "@/components/admin/MobileMinimumVersionsCard"
 import { CoffeeLoading } from "@/components/branding/CoffeeLoading"
@@ -112,15 +113,26 @@ export function AdminPage() {
 					onToggleAdminBlockedUsers={() => setIsShowingAdminBlockedUsers((isShowing) => !isShowing)}
 				/>
 				{/* the two sections as accordions, the shape every other page's sections take */}
-				<Accordion type="multiple" defaultValue={["reports", "users", "teams", "mobile"]} className="mt-4">
-					{/* the open reports first, resolved from here. drop the divider lines between the sections */}
-					<AccordionItem value="reports" className="border-b-0">
+				<Accordion type="multiple" defaultValue={["reports", "featured", "users", "teams", "mobile"]} className="mt-4">
+					{/* the open reports first, resolved from here */}
+					<AccordionItem value="reports">
 						<AccordionTrigger className="font-semibold">{`Reports (${reports.length})`}</AccordionTrigger>
 						<AccordionContent>
 							<AdminReportsTable reports={reports} focusedReportId={focusedReportId} onResolved={loadConsole} />
 						</AccordionContent>
 					</AccordionItem>
-					<AccordionItem value="users" className="border-b-0">
+					{/* the home's pinned topics and podcast episodes */}
+					<AccordionItem value="featured">
+						<AccordionTrigger className="font-semibold">Featured</AccordionTrigger>
+						<AccordionContent>
+							<FeaturedCard
+								featuredTopics={adminConsole.featuredTopics}
+								featuredPodcastEpisodes={adminConsole.featuredPodcastEpisodes}
+								onSaved={loadConsole}
+							/>
+						</AccordionContent>
+					</AccordionItem>
+					<AccordionItem value="users">
 						<AccordionTrigger className="font-semibold">Users</AccordionTrigger>
 						<AccordionContent>
 							<AdminUsersTable
@@ -130,7 +142,7 @@ export function AdminPage() {
 							/>
 						</AccordionContent>
 					</AccordionItem>
-					<AccordionItem value="teams" className="border-b-0">
+					<AccordionItem value="teams">
 						<AccordionTrigger className="font-semibold">Teams</AccordionTrigger>
 						<AccordionContent>
 							<AdminTeamsTable teams={adminConsole.teams} />

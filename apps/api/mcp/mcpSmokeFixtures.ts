@@ -54,7 +54,9 @@ export function toResultJson<Shape>(toolResult: unknown): Shape {
 export type FeedPage = { items: { findingId: string; isConsumed?: boolean }[] }
 
 // the page list_topics returns
-export type TopicPage = { items: { topicId: string; sources: { sourceId: string; label: string }[] }[] }
+export type TopicPage = {
+	items: { topicId: string; image: unknown; sources: { sourceId: string; label: string }[] }[]
+}
 
 /** Seeds a public topic with enough findings to be shown, owned by a user who can sign in. */
 export async function seed(): Promise<void> {

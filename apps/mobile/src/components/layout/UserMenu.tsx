@@ -14,6 +14,7 @@ import {
 	Activity,
 	BookOpen,
 	CircleUserRound,
+	Coffee,
 	Columns3Cog,
 	LogIn,
 	LogOut,
@@ -125,6 +126,7 @@ function UserMenuItems({ onClose, onPlayTutorial }: { onClose: () => void; onPla
 
 // preserve native routing, hosted docs/Admin, and the web's exact icon choices
 const MENU_ICONS = {
+	Topics: Coffee,
 	Profile: CircleUserRound,
 	Teams: Users,
 	Activity,

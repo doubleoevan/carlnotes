@@ -25,6 +25,8 @@ export function toCreativeWorkLd(work: {
 	authorUsername: string | null
 	// the last Scan's Findings as a ranked ItemList, or null if there is none to list
 	findingList: object | null
+	// the topic's page image at 2x, or null for a topic with no image yet
+	imageUrl?: string | null
 	appUrl: string
 }): object {
 	return {
@@ -36,6 +38,7 @@ export function toCreativeWorkLd(work: {
 		...(work.dateModified ? { dateModified: work.dateModified.toISOString() } : {}),
 		...(work.authorUsername ? { author: { "@type": "Person", name: work.authorUsername } } : {}),
 		...(work.findingList ? { hasPart: work.findingList } : {}),
+		...(work.imageUrl ? { image: work.imageUrl } : {}),
 		publisher: { "@type": "Organization", name: "CarlNotes", url: work.appUrl },
 		isPartOf: { "@type": "WebSite", name: "CarlNotes", url: work.appUrl },
 	}

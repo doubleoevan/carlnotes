@@ -8,7 +8,7 @@ import { useState } from "react"
 import { RESOURCE_LIST_CARD_CLASS, SCRIPTED_HIDDEN_CLASS } from "@/lib/styleClasses"
 import type { TopicFeedHandlers } from "@/providers/TopicFeedProvider"
 import { CollapsibleSection } from "./CollapsibleSection"
-import { MoreButton } from "./MoreButton"
+import { MORE_UNDER_CARD_CLASS, MoreButton } from "./MoreButton"
 import { TopicResource } from "./TopicResource"
 
 // how many topic finding rows show before the expander
@@ -41,7 +41,7 @@ export function TopicFindingsSection({
 	latestPodcastEpisode,
 }: TopicFindingsSectionProps) {
 	return (
-		<CollapsibleSection value="findings" title="Topic findings" titleAside={newCountInfo} className="mt-2">
+		<CollapsibleSection value="findings" title="Topic findings" titleAside={newCountInfo}>
 			<TopicFindingList
 				topicFindings={topicFindings}
 				shouldRenderHiddenRows
@@ -111,6 +111,7 @@ export function TopicFindingList({
 					moreLabel={`+ ${moreTopicFindingsCount} more `}
 					fullListHref={fullListHref}
 					onToggle={() => setIsExpanded(!isExpanded)}
+					className={MORE_UNDER_CARD_CLASS}
 				/>
 			)}
 		</>

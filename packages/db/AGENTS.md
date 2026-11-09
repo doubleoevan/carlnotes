@@ -119,6 +119,12 @@ and `@carlnotes/contracts`, with `drizzle-orm` and `@neondatabase/serverless`.
   A renewal that finds the lease expired or taken aborts the signal the task receives, and the run rejects with a
   `JobLeaseLostError`. A process that dies leaves a lease that expires on its own.
   A sweep or reset that starts while another run's lease is live does nothing and returns null.
+- `topicImages.ts` — a topic's image row and its urls, one read per topic or for a list of them. `schema/topicImages.ts`
+  holds `topic_images` and `topic_image_renders`, and `topics.image_hash` copies the current hash.
+- `featureOrder.ts` — a row's feature order on the home page, generic over topics and podcast episodes:
+  `setFeatureOrder` puts a row at a position inside the caller's transaction and `releaseFeatureOrder` clears one and
+  closes its gap. `podcastEpisodeFeaturing.ts` wraps it for one podcast episode and for every podcast episode of a topic that leaves
+  the public set.
 - `quotas.ts` — the derived per-user limits, and `loadUserAccess`, the one read of a user's role, plan, budget
   override, and admin block, which the api and the worker share.
 - `inviteLimits.ts` — the daily invite limit. `toAccountSignalWeight` is the age and reputation factor that the invite

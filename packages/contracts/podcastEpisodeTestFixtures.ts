@@ -18,6 +18,7 @@ export function toPodcastEpisodeSummaryFixture(
 		publishedAt: "2026-10-01T00:00:00.000Z",
 		pagePath: "/topics/topic-1/robots/episodes/2026/7",
 		chapterCount: 12,
+		image: null,
 		...podcastEpisodeSummaryFields,
 	}
 }

@@ -70,6 +70,7 @@ export const FINDINGS_TOPIC: McpViewTopic = {
 	prompt: "Tools that run language models",
 	visibility: "public",
 	latestPodcastEpisode: null,
+	image: null,
 	isSubscribed: false,
 	canRate: true,
 	canBookmark: true,
@@ -134,7 +135,7 @@ export const TOPIC_SEARCH_PAGE: McpSearchPage = {
 			path: "/topics/topic-1/llm-tooling",
 			date: null,
 			count: null,
-			topic: { id: "topic-1", name: "LLM tooling", latestPodcastEpisode: null },
+			topic: { id: "topic-1", name: "LLM tooling", latestPodcastEpisode: null, image: null },
 			subscriberCount: 4,
 			isSubscribed: false,
 			url: `${TEST_SITE_URL}/topics/topic-1/llm-tooling`,
@@ -197,7 +198,7 @@ export const UPDATES_RESULT: Updates = {
 		}),
 	],
 	moreCount: 2,
-	morePath: "/",
+	morePath: "/topics",
 }
 
 // the MCP view data of an updates list, with each row's Topic

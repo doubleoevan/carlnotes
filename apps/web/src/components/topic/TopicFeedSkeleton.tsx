@@ -37,7 +37,8 @@ export function TopicFeedSkeleton() {
 // one section skeleton mirroring the TopicSection
 function TopicSectionSkeleton({ isFirst, children }: { isFirst?: boolean; children?: ReactNode }) {
 	return (
-		<div className="border-b last:border-b-0">
+		// the open first section has no divider under it, as an open section never does
+		<div className={cn(!isFirst && "border-b last:border-b-0")}>
 			{/* header: chevron, title, and the topic count on the right */}
 			<div className={cn("flex items-center gap-2 pb-1", !isFirst && "pt-4")}>
 				<div className="bg-muted size-4 shrink-0 animate-pulse rounded" />

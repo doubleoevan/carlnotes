@@ -41,6 +41,8 @@ type PlanConfig = {
 	linkInviteMaxUses: number
 	// the daily invite-limit base, scaled by account age and reputation before it applies
 	inviteLimit: number
+	// how many topic image regenerations the owner may run in a UTC month
+	imageRegenerationLimit: number
 	// how many of those topics may run on a daily frequency, which is what actually decides the monthly spend
 	dailyTopicLimit: BillingIntervalLimit
 	dailyScanLimit: BillingIntervalLimit
@@ -78,6 +80,7 @@ export const PLANS = {
 		teamMemberLimit: 15,
 		linkInviteMaxUses: 25,
 		inviteLimit: 30,
+		imageRegenerationLimit: 2,
 		dailyTopicLimit: { monthly: 1, yearly: 1 },
 		dailyScanLimit: { monthly: 5, yearly: 5 },
 		canEmailCarl: false,
@@ -99,6 +102,7 @@ export const PLANS = {
 		teamMemberLimit: null,
 		linkInviteMaxUses: 100,
 		inviteLimit: 30,
+		imageRegenerationLimit: 15,
 		dailyTopicLimit: { monthly: 3, yearly: 4 },
 		dailyScanLimit: { monthly: 15, yearly: 20 },
 		canEmailCarl: true,
@@ -120,6 +124,7 @@ export const PLANS = {
 		teamMemberLimit: null,
 		linkInviteMaxUses: 250,
 		inviteLimit: 50,
+		imageRegenerationLimit: 30,
 		dailyTopicLimit: { monthly: 6, yearly: 7 },
 		dailyScanLimit: { monthly: 30, yearly: 40 },
 		canEmailCarl: true,

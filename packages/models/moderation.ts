@@ -28,6 +28,7 @@ export type ModeratedTextKind =
 	| "a username"
 	| "a team's name and description"
 	| "a topic's name, prompt, and tags"
+	| "an image prompt"
 	// a Comment
 	| "a public comment on an article, a podcast episode, or a topic"
 

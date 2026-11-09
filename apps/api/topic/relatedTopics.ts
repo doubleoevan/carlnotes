@@ -44,7 +44,13 @@ export async function loadRelatedTopics(
 
 	// the topics as they stand now, each one the user may still open, in the ranked order
 	const relatedTopicRows = await db
-		.select({ id: topics.id, name: topics.name, ownerId: topics.ownerId, visibility: topics.visibility })
+		.select({
+			id: topics.id,
+			name: topics.name,
+			ownerId: topics.ownerId,
+			visibility: topics.visibility,
+			imageHash: topics.imageHash,
+		})
 		.from(topics)
 		.where(and(inArray(topics.id, relatedTopicIds), toTopicViewFilter(userId)))
 	const rankedRelatedTopicRows = toRowsInIdOrder(

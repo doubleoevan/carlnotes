@@ -55,6 +55,8 @@ export const topics = pgTable(
 		tags: text("tags").array().notNull().default([]),
 		// an admin can feature this topic and set its order
 		featureOrder: integer("feature_order"),
+		// the content hash of the topic's current image, copied from its image row
+		imageHash: text("image_hash"),
 		// how many findings a scan keeps for this topic, one of the shared allowed sizes
 		maxTopicFindings: integer("max_results").notNull().default(10),
 		// the unique subscriber count for the topic's active subscribers, not including the owner
@@ -76,6 +78,8 @@ export const topics = pgTable(
 		index("topics_name_lower_trgm").using("gin", sql`lower(${table.name}) gin_trgm_ops`),
 		// covers the owner and team topic lists
 		index("topics_owner_id_idx").on(table.ownerId),
+		// the few pinned topics, which the home's featured cards and the admin console read
+		index("topics_feature_order_idx").on(table.featureOrder).where(sql`${table.featureOrder} is not null`),
 		index("topics_team_id_idx").on(table.teamId),
 		check("topics_max_results_allowed", sql.raw(`max_results in (${maxTopicFindingsOptions.join(", ")})`)),
 	],

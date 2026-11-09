@@ -13,6 +13,7 @@ import {
 	describeScanQueue,
 	SCAN_TASK_QUEUE,
 	SOURCE_TASK_QUEUE,
+	TOPIC_IMAGE_TASK_QUEUE,
 	toScanBacklogCrossing,
 } from "@carlnotes/pipeline/temporalClient"
 import { shutdownAnalytics } from "@carlnotes/server/analytics"
@@ -33,6 +34,7 @@ import * as pushActivities from "./workflows/sendPushNotificationsActivities"
 import { SCAN_EMAIL_TASK_QUEUE } from "./workflows/sendScanEmail"
 import * as scanEmailActivities from "./workflows/sendScanEmailActivities"
 import * as personalSourcesActivities from "./workflows/summarizePersonalSourcesContextActivities"
+import * as topicImageActivities from "./workflows/topicImageWorkflowActivities"
 
 // the SDK shuts a Worker down on its own on SIGINT/SIGTERM, but gives a running activity zero time to finish
 const SHUTDOWN_GRACE_MS = 2 * 60 * 1000
@@ -166,6 +168,15 @@ async function run(): Promise<void> {
 			taskQueue: PODCAST_EPISODE_TASK_QUEUE,
 			shutdownGraceTime: SHUTDOWN_GRACE_MS,
 			maxConcurrentActivityTaskExecutions: PODCAST_RECORDING_CONCURRENCY,
+		}),
+		// draws a topic's image, one scene call and one image call then the store, and runs the backfill over them
+		Worker.create({
+			connection,
+			workflowsPath: new URL("./workflows/topicImageWorkflows.ts", import.meta.url).pathname,
+			activities: topicImageActivities,
+			taskQueue: TOPIC_IMAGE_TASK_QUEUE,
+			shutdownGraceTime: SHUTDOWN_GRACE_MS,
+			maxConcurrentActivityTaskExecutions: SCREEN_CONCURRENCY,
 		}),
 		// fetches a url Source's page to check that it can be read
 		Worker.create({

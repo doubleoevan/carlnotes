@@ -59,7 +59,7 @@ function useWebTopicFeedState(): TopicFeedValue {
 	// read the web-only inputs
 	const { data: session } = authClient().useSession()
 	useNoteBadges(session?.user.id)
-	const loadedTopicFeed = useMatch({ from: "/_layout/", shouldThrow: false })?.loaderData
+	const loadedTopicFeed = useMatch({ from: "/_layout/topics/", shouldThrow: false })?.loaderData
 	const { pathname } = useLocation()
 	const topicFeedState = useTopicFeedState({
 		userId: session?.user.id ?? null,
@@ -72,5 +72,5 @@ function useWebTopicFeedState(): TopicFeedValue {
 	useEffect(() => {
 		resetFilters()
 	}, [pathname, resetFilters])
-	return { ...topicFeedState, hasTopicFeed: pathname === "/" || pathname.startsWith("/topics/") }
+	return { ...topicFeedState, hasTopicFeed: pathname === "/topics" || pathname.startsWith("/topics/") }
 }

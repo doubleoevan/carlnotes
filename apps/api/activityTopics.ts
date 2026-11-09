@@ -85,6 +85,7 @@ export async function loadTopics({
 			ownerId: topics.ownerId,
 			name: topics.name,
 			visibility: topics.visibility,
+			imageHash: topics.imageHash,
 			frequency: topics.frequency,
 			createdAt: topics.createdAt,
 			updatedAt: topics.updatedAt,

@@ -1,4 +1,5 @@
 import { sendReportResolution } from "@carlnotes/client/reportClient"
+import { DEFAULT_PAGE_SIZE } from "@carlnotes/contracts/pagination"
 import { type AdminReport, REPORT_SUBJECT_KIND_LABELS, type ReportResolution } from "@carlnotes/contracts/reports"
 import { toProfilePath } from "@carlnotes/contracts/seo"
 import type { ConfirmationCopy } from "@carlnotes/core/lib/confirmationCopy"
@@ -10,6 +11,7 @@ import { toast } from "sonner"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { ScrollBox } from "@/components/common/ScrollBox"
 import { Button } from "@/components/primitives/button"
+import { TopicImage } from "@/components/primitives/topic-image"
 import { useConfirmDialog } from "@/hooks/useConfirmDialog"
 import { STANDALONE_LINK_CLASS, TABLE_CLASS, TABLE_HEAD_CLASS, TABLE_SCROLL_CLASS } from "@/lib/styleClasses"
 import { SortableHeader } from "./SortableHeader"
@@ -54,7 +56,11 @@ export function AdminReportsTable({
 	const orderedReports = focusedReportId
 		? [...reports].sort((first, second) => Number(second.id === focusedReportId) - Number(first.id === focusedReportId))
 		: reports
-	const { pageRows, sort, pagination } = usePaginatedRowSort({ rows: orderedReports, valueByKey: reportSortValues })
+	const { pageRows, sort, pagination } = usePaginatedRowSort({
+		rows: orderedReports,
+		valueByKey: reportSortValues,
+		initialPageSize: DEFAULT_PAGE_SIZE,
+	})
 	if (reports.length === 0) {
 		return <p className="text-muted-foreground text-sm">No open reports. Carl is relieved.</p>
 	}
@@ -95,24 +101,32 @@ function ReportText({ text }: { text: string }) {
 	return text.length > SCROLLING_REPORT_TEXT_CHARS ? <ScrollBox className="max-h-40">{text}</ScrollBox> : text
 }
 
+// what Remove does to a report's subject: a topic image is drawn again, and every other kind is deleted
+function toRemoveCopy(report: AdminReport): { label: string; pendingLabel: string; clause: string } {
+	return report.subjectKind === "topicImage"
+		? { label: "Regenerate", pendingLabel: "Regenerating…", clause: "draws a new image for the topic" }
+		: { label: "Remove", pendingLabel: "Removing…", clause: "deletes the content" }
+}
+
 // what each resolution's confirmation says. Block names the author, and only content still there is deleted or kept
 function toResolutionConfirmation(
 	resolution: ReportResolution,
 	report: AdminReport,
 ): Omit<ConfirmationCopy, "cancelLabel"> {
 	const isSubjectRemovable = report.canRemove && !report.isSubjectDeleted
+	const removeCopy = toRemoveCopy(report)
 	if (resolution === "removed") {
 		return {
-			title: "Remove this content?",
-			confirmLabel: "Remove",
-			children: "This deletes the content and closes the report.",
+			title: `${removeCopy.label} this ${report.subjectKind === "topicImage" ? "image" : "content"}?`,
+			confirmLabel: removeCopy.label,
+			children: `This ${removeCopy.clause} and closes the report.`,
 		}
 	}
 	if (resolution === "blocked") {
 		return {
 			title: `Block ${report.author?.username ?? "this author"}?`,
 			confirmLabel: "Block",
-			children: `This ${isSubjectRemovable ? "deletes the content, hides everything else they wrote" : "hides everything they wrote"} in hot takes and reactions, and stops new ones until an admin clears the block.`,
+			children: `This ${isSubjectRemovable ? `${removeCopy.clause}, hides everything else they wrote` : "hides everything they wrote"} in hot takes and reactions, and stops new ones until an admin clears the block.`,
 		}
 	}
 	return {
@@ -165,7 +179,13 @@ function ReportRow({
 				{report.isSubjectDeleted ? (
 					<span className="text-muted-foreground italic">already deleted</span>
 				) : (
-					<ReportText text={report.subjectText} />
+					<>
+						{/* a topic image report shows the image as it stands above the topic's label */}
+						{report.subjectKind === "topicImage" && (
+							<TopicImage image={report.subjectImage} size="list" name={report.subjectText} className="mb-1" />
+						)}
+						<ReportText text={report.subjectText} />
+					</>
 				)}
 			</td>
 			<td className="py-2 pr-4 whitespace-nowrap">
@@ -198,7 +218,7 @@ function ReportRow({
 							disabled={pendingResolution !== null}
 							onClick={() => handleResolvePress("removed")}
 						>
-							{pendingResolution === "removed" ? "Removing…" : "Remove"}
+							{pendingResolution === "removed" ? toRemoveCopy(report).pendingLabel : toRemoveCopy(report).label}
 						</Button>
 					)}
 					{report.canAdminBlock && (

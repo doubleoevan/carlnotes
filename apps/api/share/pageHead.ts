@@ -11,6 +11,7 @@ import {
 	toTopicFeedPath,
 	toTopicPath,
 } from "@carlnotes/contracts/seo"
+import { toTopicImageUrls } from "@carlnotes/contracts/topicImages"
 import { db } from "@carlnotes/db"
 import { topics } from "@carlnotes/db/schema/topics"
 import { appUrl } from "@carlnotes/server/appUrl"
@@ -57,6 +58,9 @@ export const pageHeadRoute = new Hono<AppEnv>()
 			dateModified: feedUpdatedAt,
 			authorUsername: topicPreview.ownerUsername,
 			findingList: toFindingListLd(findingRows),
+			imageUrl: topicPreview.imageHash
+				? `${appUrl()}${toTopicImageUrls(topicPreview.topicId, topicPreview.imageHash).page.url2x}`
+				: null,
 			appUrl: appUrl(),
 		})
 
@@ -203,7 +207,12 @@ export function toPodcastEpisodePageHead({
 	const audioUrl = `${appUrl}/api/episodes/${podcastEpisodeRow.id}/audio.mp3`
 	const podcastSeries = toPodcastSeries(topicPreview, appUrl)
 	const podcastEpisodePreviewKey = toPodcastEpisodePreviewKey(
-		toPodcastEpisodePreview(podcastEpisodeRow, topicPreview.title),
+		toPodcastEpisodePreview(podcastEpisodeRow, {
+			id: topicPreview.topicId,
+			name: topicPreview.title,
+			visibility: topicPreview.visibility,
+			imageHash: topicPreview.imageHash,
+		}),
 	)
 
 	// the head that every podcast episode page has, with its titles, its description, and its card. a private or invite

@@ -412,10 +412,14 @@ Check for:
      `episode-renders` task queue, the `episode-render` Langfuse trace, and `PODCAST_RENDER_CONCURRENCY`. the scan
      workflow's `episode-render-workflow` patch id keeps its string, since every scan workflow's history stores it. a
      feed's rendered XML, a cover image, an email, and a component still render
-   - the `/topics` page: `ui/src/pages/PublicTopicsPage.tsx` with its route `topics.index.tsx`, the
+   - the `/topics` page of 2026-10: `ui/src/pages/PublicTopicsPage.tsx`, the
      `GET /api/public-topics` route, and `fetchPublicTopics` in `ui/src/clients/topicClient.ts` (removed: the
      homepage's paged sections, the sitemap, and llms.txt lead a crawler to every public topic, and
      `loadPublicTopics` stays for them)
+   - the `/topics` page returned on 2026-11-08 as `apps/web/src/pages/TopicsPage.tsx` at `topics.index.tsx`, over
+     `GET /api/home`, so that entry names only what stays gone
+   - `apps/web/src/components/topic/TopicRankDialog.tsx` (now `FeatureRankDialog.tsx` in `apps/web/src/components/common/`),
+     and `apps/web/.storybook/fixtures/updates.ts` (removed; the stories read `packages/core/lib/updatesStories.ts`)
    - `AnalyticsEvent` (now `UserAnalyticsEvent` beside `BotAnalyticsEvent` and `VisitAnalyticsEvent` in
      `shared/analytics.ts`), and the `topic_edited` events the add-source and remove-source Topic Tools emitted (now
      `source_added` and `source_removed`, which the topic form emits too). `usePagination` returns

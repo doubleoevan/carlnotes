@@ -21,9 +21,11 @@ import {
 import { isAdminRole, isAllowed } from "./authorization"
 import { type AppEnv, currentUser } from "./currentUser"
 import { loadMobileMinimumVersionRows, saveMobileMinimumVersion } from "./mobileMinimumVersions"
+import { loadFeaturedPodcastEpisodes } from "./podcast/podcastEpisodeFeaturing"
 import { countOpenReports, loadOpenReports, resolveReport } from "./report/adminReports"
 import { refreshSessionUser } from "./sessions"
 import { loadAdminTeamTopics } from "./team/helpers"
+import { loadFeaturedTopics } from "./topic/featuring"
 
 /**
  * Change a user's role. An admin cannot remove their own admin role,
@@ -90,12 +92,14 @@ export const adminRoute = new Hono<AppEnv>()
 			return context.json({ error: "forbidden" }, 403)
 		}
 		const users = await loadAdminUsers()
-		const [teams, totals, mobileMinimumVersions] = await Promise.all([
+		const [teams, totals, mobileMinimumVersions, featuredTopics, featuredPodcastEpisodes] = await Promise.all([
 			loadAdminTeams(),
 			loadAdminTotals(users),
 			loadMobileMinimumVersionRows(),
+			loadFeaturedTopics(),
+			loadFeaturedPodcastEpisodes(),
 		])
-		return context.json({ users, teams, totals, mobileMinimumVersions })
+		return context.json({ users, teams, totals, mobileMinimumVersions, featuredTopics, featuredPodcastEpisodes })
 	})
 	.post(
 		"/admin/mobile-minimum-versions/:platform",

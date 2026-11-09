@@ -13,10 +13,18 @@ and the package boundary check fails anything else, a type-only import of `@carl
 ## Layout
 
 - `app/` — the Expo Router routes. `_layout.tsx` configures the api client with the session cookie on every request,
-  loads the fonts and the session behind the splash screen, stacks the TanStack Query providers and Sentry's wrap, mounts the Reusables `PortalHost` after the sheet provider so anchored controls appear above sheets, and guards the screens with `Stack.Protected`: a user sees `(tabs)/index.tsx`, the Home Feed,
-  `(tabs)/search.tsx`, the retained site search, `(tabs)/settings.tsx`, a retained alias for Account, and `topics/[topicId].tsx`. Visitors may read Home, with the web hero, Search, public Topics, Podcast Episodes, Profiles, Teams, Plans, permitted Topic/Team notes, and `invite/[token].tsx`, the invitation screen, through the same platform routes. Account, Activity, personal Teams, Settings, and chat require sign-in, and `+native-intent.ts` opens sign-in for a visitor's link to one of them, then the linked screen. Retired sessions cannot open public reading until their session is cleared. A visitor also sees `sign-in.tsx`, Google, GitHub, and Apple
+  loads the fonts and the session behind the splash screen, stacks the TanStack Query providers and Sentry's wrap,
+  mounts the Reusables `PortalHost` after the sheet provider so anchored controls appear above sheets, and guards the
+  screens with `Stack.Protected`: a user sees `(tabs)/index.tsx`, the Home with its featured cards and a user's topics,
+  `(tabs)/topics.tsx`, the Topics directory, `(tabs)/search.tsx`, the retained site search, `(tabs)/settings.tsx`, a
+  retained alias for Account, and `topics/[topicId].tsx`. Visitors may read Home, with the web hero, Search, public
+  Topics, Podcast Episodes, Profiles, Teams, Plans, permitted Topic/Team notes, and `invite/[token].tsx`, the invitation
+  screen, through the same platform routes. Account, Activity, personal Teams, Settings, and chat require sign-in, and
+  `+native-intent.ts` opens sign-in for a visitor's link to one of them, then the linked screen. Retired sessions cannot
+  open public reading until their session is cleared. A visitor also sees `sign-in.tsx`, Google, GitHub, and Apple
   and the email form, and `sign-up.tsx`, the email form behind the app signup gate, with the web's prompt for the
-  action that sent the visitor there. `storybook.tsx` is the component browser, which the layout shows only in a
+  action that sent the visitor there. `storybook.tsx` is the component
+  browser, which the layout shows only in a
   development build. A route's component is a screen (`HomeScreen`), the native word for what the web calls a page.
 - `src/` — the app's own modules. `authClient.ts` configures the shared auth client at module load with the api base
   url and Better Auth's Expo plugin over `expo-secure-store`, and exports `mobileAuthClient`, the app's handle with
@@ -69,7 +77,9 @@ and the package boundary check fails anything else, a type-only import of `@carl
   Episode read. `branding/CoffeeMug.tsx` is the web's steaming mug, drawn from `@carlnotes/nightshift/coffeeMug` with
   the steam on React Native's `Animated` and its native driver. As on the web, the steam holds still below Nightshift's
   `md` breakpoint and under reduced motion, and rises on a wider screen. `common/` holds the components shared across
-  areas: `ClassNameSvg.tsx` is an svg whose className sets the `currentColor` its paths draw in, and
+  areas: `cardElements.tsx` is `CARD_ELEMENTS`, the pressable card, topic image, text row, and heading the topic and
+  podcast episode cards share, over core's `CardElements`, `ClassNameSvg.tsx` is an svg whose className sets the
+  `currentColor` its paths draw in, and
   `ClassNameSafeAreaView.tsx` the safe area view whose className sets its style. Uniwind styles only the components it
   wraps, so a screen's safe area goes through it. `LoadFailedNotice.tsx` says a read failed, with its retry button, in
   place of a blank screen. `session/` holds what the sign-in, sign-up, and settings screens share: `SessionScreen.tsx`
@@ -214,7 +224,8 @@ that `note/NoteComments.tsx` reuses, with a plain `TextInput` outside a sheet. `
 add sign-up that returns to the screen, the app's error display, the report sheet, and the thread's view event. The
 flame and mugs of a comment shared with the podcast show their label as their accessibility label. `SocialSection.tsx`
 holds the thread in the collapsible Hot takes card that `topic/TopicPageContent.tsx`,
-`podcast/PodcastEpisodeScreen.tsx`, and the Finding's sheet in `topic/TopicResourceInfo.tsx` mount, each with the
+`podcast/PodcastEpisodeScreen.tsx`, and the Finding's sheet in `topic/TopicResourceInfo.tsx` (its link preview in
+`topic/FindingLinkPreview.tsx`) mount, each with the
 reaction row in its header, and the sheet has the Finding's own flag.
 
 ## Chat and audio
@@ -272,6 +283,20 @@ The path from a commit to a store build, in order. Every secret stays in Doppler
 - Reviewer. `bun run reviewer:seed -- --environment prd` under `doppler run --config prd` creates or refreshes the
   reviewer's account with its fixtures. The credentials come from `REVIEWER_EMAIL` and `REVIEWER_PASSWORD` in Doppler
   and go into the review notes by hand, from `store/listing.md`'s template.
+
+## Topic images and the home
+
+`components/layout/HomeHeadline.tsx` is the Home headline on both faces, the web's `HomeHeadline` at phone width.
+`components/common/AccordionSection.tsx` is one section of a screen's list of sections, the web's `AccordionSection`.
+`components/topic/TopicByline.tsx` is a topic's byline, the team or the owner of the topic with its avatar, the web's
+`TopicByline`. `components/topic/TopicCard.tsx` and `components/podcast/PodcastEpisodeCard.tsx` adapt the shared cards
+over `components/common/cardElements.tsx`, the card box, topic image, and text row the two cards share, matching the
+web's `cardElements`. `components/topic/UpdatesList.tsx` and `components/topic/UpdatesButton.tsx` adapt the shared
+Updates list and the Update button that picks its length. `components/topic/TopicImageEditor.tsx` adapts the editor's
+image block, with the device's photo picker for its file picker.
+`components/search/SearchRowTopicLink.tsx` opens a search row's Topic without opening the surrounding finding sheet,
+the web's `SearchRowTopicLink`. `src/topicImageClasses.ts` holds the classes of a topic image in a header row, a Topics
+row, and the Topic roast sheet, matching the web's topic images at phone width.
 
 ## Personal sources and search
 

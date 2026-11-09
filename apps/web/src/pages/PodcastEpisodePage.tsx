@@ -1,40 +1,38 @@
 import { authClient } from "@carlnotes/client/authClient"
-import { fetchPodcastEpisodePage } from "@carlnotes/client/podcastEpisodeClient"
-import { isPublishedPodcastEpisode } from "@carlnotes/contracts/podcast"
+import { fetchPodcastEpisodePage, sendPodcastEpisodeFeatureOrder } from "@carlnotes/client/podcastEpisodeClient"
+import { isPublishedPodcastEpisode, toFeaturedPodcastEpisodeLabel } from "@carlnotes/contracts/podcast"
 import type { PodcastEpisodePageResponse } from "@carlnotes/contracts/podcastEpisodePage"
 import { isTopicSlugStale, toPodcastEpisodePath, toTopicPath } from "@carlnotes/contracts/seo"
+import { toPodcastEpisodeTitleLabel } from "@carlnotes/core/lib/labels"
 import { toPodcastEpisodeReportSubject, toPodcastEpisodeSocialProps } from "@carlnotes/core/lib/podcastEpisodeSocial"
+import { SAVE_FAILED_TEXT } from "@carlnotes/core/lib/sessionCopy"
 import { applyPodcastEpisodePageChanges, type TopicFindingChange } from "@carlnotes/core/lib/topicFindingChanges"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { useMatch, useNavigate, useParams } from "@tanstack/react-router"
-import { Trash2 } from "lucide-react"
+import { ListOrdered, Rss, Trash2 } from "lucide-react"
 import { useCallback, useEffect, useState } from "react"
-import { AnchorLink } from "@/components/common/AnchorLink"
+import { toast } from "sonner"
+import { type FeatureOrderMove, FeatureRankDialog } from "@/components/common/FeatureRankDialog"
 import { PodcastEpisodeChaptersTable } from "@/components/podcast/PodcastEpisodeChaptersTable"
 import { PodcastEpisodeCountsLine } from "@/components/podcast/PodcastEpisodeCountsLine"
-import { PodcastEpisodeCover } from "@/components/podcast/PodcastEpisodeCover"
+import { PodcastEpisodeHeader } from "@/components/podcast/PodcastEpisodeHeader"
 import { PodcastEpisodePlayerCard } from "@/components/podcast/PodcastEpisodePlayerCard"
+import { PodcastEpisodeSkeleton } from "@/components/podcast/PodcastEpisodeSkeleton"
 import { PodcastEpisodesSection } from "@/components/podcast/PodcastEpisodesSection"
 import { PodcastEpisodeTranscript } from "@/components/podcast/PodcastEpisodeTranscript"
 import { PodcastFeedDialog } from "@/components/podcast/PodcastFeedDialog"
-import { PodcastThemeSongNote } from "@/components/podcast/PodcastThemeSongNote"
 import { RemovePodcastEpisodeDialog } from "@/components/podcast/RemovePodcastEpisodeDialog"
 import { ShareTopic } from "@/components/share/ShareTopic"
-import { ReactionRow } from "@/components/social/ReactionRow"
 import { SocialSection } from "@/components/social/SocialSection"
-import { TableCard } from "@/components/table/TableCard"
 import { isAddTopicToTeamShown } from "@/components/team/AddTopicToTeamButton"
 import { AddTopicToTeamDialog } from "@/components/team/AddTopicToTeamDialog"
 import { CollapsibleSection } from "@/components/topic/CollapsibleSection"
-import { TopicByline } from "@/components/topic/Topic"
 import { toAddTopicToTeamOption, toShareTopicOption } from "@/components/topic/TopicActions"
 import { NewTopicButton, useNewTopicDialog } from "@/components/topic/TopicEditorChoiceDialog"
-import { ExpanderSkeleton } from "@/components/topic/TopicFeedSkeleton"
 import { TopicGateNotice } from "@/components/topic/TopicGateNotice"
-import { CollapsibleSectionSkeleton, PodcastEpisodePlayerCardSkeleton } from "@/components/topic/TopicSkeleton"
 import { useLoadInBrowser } from "@/hooks/useBrowserValue"
 import { usePageTitle } from "@/hooks/usePageTitle"
-import { INFO_CARD_CLASS, PAGE_CLASS } from "@/lib/styleClasses"
+import { MENU_BUTTON_CLASS, NARROW_SCREEN_HIDDEN_CLASS, PAGE_CLASS } from "@/lib/styleClasses"
 import { usePageTopicFeedHandlers } from "@/providers/TopicFeedProvider"
 import { useRegisterPageActions } from "@/stores/pageActionsStore"
 
@@ -142,50 +140,34 @@ export function PodcastEpisodePage() {
 	const { podcastEpisode, topic, topicFindings, canRate, transcript, topicPodcastEpisodes, relatedPodcastEpisodes } =
 		podcastEpisodePage
 	const topicPath = toTopicPath(topic)
+
+	// send the rank dialog's moves one at a time, then reload the page. a rejection leaves the dialog open
+	const handleRankPodcastEpisode = async (moves: FeatureOrderMove[]): Promise<void> => {
+		try {
+			for (const move of moves) {
+				await sendPodcastEpisodeFeatureOrder(move.id, move.position)
+			}
+		} catch (error) {
+			console.error("podcast episode feature order failed", error)
+			toast.error(SAVE_FAILED_TEXT)
+			throw error
+		}
+		loadPodcastEpisodePage()
+	}
 	const chapterTopicFeed = { topicFindings, topic, isRatable: canRate, isBookmarkable: false, topicFeedHandlers }
 	return (
 		<main className={PAGE_CLASS}>
-			{/* the cover beside the title, the description, the topic's name, and the topic's byline with the reactions */}
-			<header className={HEADER_CLASS}>
-				<PodcastEpisodeCover podcastEpisode={podcastEpisode} className={COVER_CLASS} />
-				<div className="min-w-0 flex-1">
-					{/* the title, with the new topic button in the header's top right corner */}
-					<div className="flex items-start justify-between gap-3">
-						<h1 className="font-display min-w-0 text-2xl leading-tight text-balance sm:text-3xl">
-							{podcastEpisode.title}
-							<PodcastThemeSongNote />
-						</h1>
-						<NewTopicButton onNewTopic={openNewTopicDialog} />
-					</div>
-					{podcastEpisode.description && <p className="mt-1.5 text-sm">{podcastEpisode.description}</p>}
-					{/* the byline, the topic's name, and the reactions on one line */}
-					<div className="mt-1.5 flex flex-wrap items-center gap-x-3">
-						<span className="text-muted-foreground inline-flex flex-wrap items-center gap-x-1 text-sm">
-							<TopicByline topic={topic} label="Recorded by" className="text-sm" />
-							<span>
-								{topic.teamLink || topic.owner ? "for " : "Coffee Break podcast for "}
-								<AnchorLink href={topicPath} className="sentence-link">
-									{topic.name}
-								</AnchorLink>
-							</span>
-						</span>
-						<ReactionRow
-							target={{ kind: "podcastEpisode", id: podcastEpisode.id }}
-							summary={podcastEpisodePage.reactions}
-							isSignedIn={Boolean(session)}
-						/>
-					</div>
-				</div>
-			</header>
-
-			{/* the player card */}
-			<div className="mt-5">
-				<PodcastEpisodePlayerCard
-					podcastEpisode={podcastEpisode}
-					chapterTopicFeed={chapterTopicFeed}
-					onOpenPodcastFeedDialog={() => setIsPodcastFeedDialogOpen(true)}
-				/>
+			{/* the Subscribe button on the left and the new topic button on the right */}
+			<div className="flex flex-wrap items-start justify-between gap-3">
+				<PodcastSubscribeButton onSubscribe={() => setIsPodcastFeedDialogOpen(true)} />
+				<NewTopicButton onNewTopic={openNewTopicDialog} />
 			</div>
+			{/* the image beside the title and the description, which run under it once they pass its bottom, then the
+			    topic's byline with the reactions, under the image on a phone */}
+			<PodcastEpisodeHeader podcastEpisodePage={podcastEpisodePage} isSignedIn={Boolean(session)} />
+
+			{/* the player card, whose Subscribe buttons the page's own button row replaces */}
+			<PodcastEpisodePlayerCard podcastEpisode={podcastEpisode} chapterTopicFeed={chapterTopicFeed} />
 
 			{/* the podcast episode's comment thread, where a comment may name a chapter and a chapter's tag plays from it */}
 			<SocialSection {...toPodcastEpisodeSocialProps(podcastEpisodePage, Boolean(session))} />
@@ -238,6 +220,19 @@ export function PodcastEpisodePage() {
 					onClose={() => setOpenDialog(null)}
 				/>
 			)}
+			{openDialog === "rank" && podcastEpisodePage.featuredPodcastEpisodes && (
+				<FeatureRankDialog
+					noun="podcast episodes"
+					pageItem={{ id: podcastEpisode.id, label: toPodcastEpisodeTitleLabel(podcastEpisode) }}
+					featuredItems={podcastEpisodePage.featuredPodcastEpisodes.map((featuredPodcastEpisode) => ({
+						id: featuredPodcastEpisode.id,
+						label: toFeaturedPodcastEpisodeLabel(featuredPodcastEpisode),
+					}))}
+					isPageItemFeatured={podcastEpisodePage.featureOrder !== null}
+					onSave={handleRankPodcastEpisode}
+					onClose={() => setOpenDialog(null)}
+				/>
+			)}
 			{openDialog === "remove" && (
 				<RemovePodcastEpisodeDialog
 					podcastEpisode={podcastEpisode}
@@ -250,7 +245,7 @@ export function PodcastEpisodePage() {
 }
 
 // the dialogs that the actions menu opens
-type PodcastEpisodeDialog = "share" | "add-topic-to-team" | "remove"
+type PodcastEpisodeDialog = "share" | "add-topic-to-team" | "rank" | "remove"
 
 // the loaded page, whether the user is signed in, and the call that opens one of the menu's dialogs
 type UseRegisterPodcastEpisodePageActionsOptions = {
@@ -259,7 +254,8 @@ type UseRegisterPodcastEpisodePageActionsOptions = {
 	onOpenDialog: (podcastEpisodeDialog: PodcastEpisodeDialog) => void
 }
 
-// register the actions menu for the episode's topic, with Remove episode for a user who may remove the episode
+// register the actions menu for the podcast episode's topic, with Featured podcast episodes for an admin on a public
+// topic and Remove podcast episode for a user who may remove the podcast episode
 function useRegisterPodcastEpisodePageActions({
 	podcastEpisodePage,
 	isSignedIn,
@@ -275,8 +271,11 @@ function useRegisterPodcastEpisodePageActions({
 							? [toAddTopicToTeamOption(() => onOpenDialog("add-topic-to-team"))]
 							: []),
 						toShareTopicOption(() => onOpenDialog("share")),
+						...(podcastEpisodePage?.featuredPodcastEpisodes && podcastEpisodeTopic.visibility === "public"
+							? [{ label: "Featured podcast episodes", Icon: ListOrdered, onSelect: () => onOpenDialog("rank") }]
+							: []),
 						...(podcastEpisodePage?.canRemovePodcastEpisode
-							? [{ label: "Remove episode", Icon: Trash2, onSelect: () => onOpenDialog("remove") }]
+							? [{ label: "Remove podcast episode", Icon: Trash2, onSelect: () => onOpenDialog("remove") }]
 							: []),
 					],
 					report: toPodcastEpisodeReportSubject(podcastEpisodePage.podcastEpisode),
@@ -286,77 +285,12 @@ function useRegisterPodcastEpisodePageActions({
 	)
 }
 
-// the page header's layout, which the skeleton shares
-const HEADER_CLASS = "mt-3 flex items-start gap-4"
-
-// the cover's square beside the title, with a card's border and shadow. a narrow screen hides the cover
-const COVER_CLASS = "border-separator shadow-raised hidden size-36 shrink-0 rounded-lg border sm:block"
-
-// what hides the chapters section on a narrow screen with JavaScript. the section stays in the html,
-// and a browser without JavaScript shows the section at every width
-const NARROW_SCREEN_HIDDEN_CLASS = "max-sm:scripted:hidden"
-
-// placeholder keys for the skeleton's chapter rows and transcript lines
-const CHAPTER_ROW_SKELETONS = ["c1", "c2", "c3", "c4", "c5"]
-const TRANSCRIPT_LINE_SKELETONS = ["t1", "t2", "t3", "t4", "t5", "t6"]
-
-// the podcast episode page's loading skeleton, with the cover and title, the player, the chapters, and the transcript
-function PodcastEpisodeSkeleton() {
+// the button that opens the podcast feed dialog, at the left of the page's button row
+function PodcastSubscribeButton({ onSubscribe }: { onSubscribe: () => void }) {
 	return (
-		<div aria-hidden="true">
-			{/* the placeholder cover, beside the title, the description, the topic's line, and the byline */}
-			<div className={HEADER_CLASS}>
-				<PodcastEpisodeCover podcastEpisode={{ smallCoverUrl: null, title: null }} className={COVER_CLASS} />
-				<div className="min-w-0 flex-1">
-					{/* the title beside the new topic button */}
-					<div className="flex items-start justify-between gap-3">
-						<div className="bg-muted h-8 w-96 max-w-full animate-pulse rounded" />
-						<div className="bg-muted h-9 w-32 shrink-0 animate-pulse rounded-md" />
-					</div>
-					<div className="bg-muted mt-2.5 h-4 w-full animate-pulse rounded" />
-					<div className="bg-muted mt-2.5 h-4 w-56 max-w-full animate-pulse rounded" />
-					<div className="mt-2.5 flex items-center gap-2">
-						<div className="bg-muted size-6 shrink-0 animate-pulse rounded-full" />
-						<div className="bg-muted h-4 w-40 animate-pulse rounded" />
-					</div>
-				</div>
-			</div>
-
-			{/* the player card and the line of its expander */}
-			<div className="mt-5">
-				<PodcastEpisodePlayerCardSkeleton />
-				<ExpanderSkeleton />
-			</div>
-
-			{/* the comments card */}
-			<CollapsibleSectionSkeleton titleClassName="w-28" className="mt-2">
-				<div className={cn(INFO_CARD_CLASS, "h-32")} />
-			</CollapsibleSectionSkeleton>
-
-			{/* the chapters section and its table rows */}
-			<CollapsibleSectionSkeleton titleClassName="w-36" className={cn(NARROW_SCREEN_HIDDEN_CLASS, "mt-2")}>
-				<TableCard>
-					{CHAPTER_ROW_SKELETONS.map((skeletonKey) => (
-						<div key={skeletonKey} className="border-separator flex items-center gap-4 border-b py-2 last:border-b-0">
-							<div className="bg-muted size-11 shrink-0 animate-pulse rounded-full sm:size-9" />
-							<div className="bg-muted h-4 w-40 shrink-0 animate-pulse rounded" />
-							<div className="bg-muted h-4 w-10 shrink-0 animate-pulse rounded" />
-							<div className="bg-muted h-4 w-10 shrink-0 animate-pulse rounded" />
-							<div className="bg-muted h-4 flex-1 animate-pulse rounded" />
-						</div>
-					))}
-				</TableCard>
-			</CollapsibleSectionSkeleton>
-
-			{/* the transcript heading and its first lines */}
-			<div className="py-2">
-				<div className="bg-muted h-7 w-40 animate-pulse rounded" />
-			</div>
-			<div className={INFO_CARD_CLASS}>
-				{TRANSCRIPT_LINE_SKELETONS.map((skeletonKey) => (
-					<div key={skeletonKey} className="bg-muted mb-3 h-4 w-full animate-pulse rounded last:mb-0 last:w-2/3" />
-				))}
-			</div>
-		</div>
+		<button type="button" onClick={onSubscribe} className={MENU_BUTTON_CLASS}>
+			<Rss className="size-4" />
+			Subscribe
+		</button>
 	)
 }

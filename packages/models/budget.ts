@@ -23,6 +23,7 @@ export function premiumModelCost(usage: { inputTokens?: number; outputTokens?: n
 	if (usage.inputTokens === undefined || usage.outputTokens === undefined) {
 		return tokenCost(usage.totalTokens ?? 0, PREMIUM_OUTPUT_COST_PER_MILLION_TOKENS)
 	}
+	// price the input and the output at their own rates
 	return (
 		tokenCost(usage.inputTokens, PREMIUM_INPUT_COST_PER_MILLION_TOKENS) +
 		tokenCost(usage.outputTokens, PREMIUM_OUTPUT_COST_PER_MILLION_TOKENS)
@@ -78,6 +79,12 @@ export type SpeechCostOptions = { speechTier: SpeechTier; inputTokens: number; a
 // LiteLLM's Gemini pass-through charges the key nothing for a transcription, so the app prices it itself
 const TRANSCRIPTION_INPUT_COST_PER_MILLION_TOKENS = 2
 const TRANSCRIPTION_OUTPUT_COST_PER_MILLION_TOKENS = 12
+
+// what one topic image render costs in dollars, by model: Google's per-image price at the 1K size
+export const TOPIC_IMAGE_COST_DOLLARS: Record<string, number> = {
+	"gemini-3.1-flash-lite-image": 0.034,
+	"gemini-3.1-flash-image": 0.067,
+}
 
 // one transcription call to price. its audio and text input tokens and its transcript output tokens
 export type TranscriptionCostOptions = { inputTokens: number; outputTokens: number }

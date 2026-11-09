@@ -1,4 +1,4 @@
-import { DEFAULT_PAGE_SIZE, PAGE_SIZES } from "@carlnotes/contracts/pagination"
+import { PAGE_SIZES, TABLE_PAGE_SIZE } from "@carlnotes/contracts/pagination"
 import {
 	TablePagination as SharedTablePagination,
 	type TablePaginationElements,
@@ -26,10 +26,10 @@ type PaginatedRows<Row> = {
 }
 
 /**
- * Returns the current pagination state, with the page's rows and the rows the table renders, starting at ten rows a page
- * unless the table asks for another page size.
+ * Returns the current pagination state, with the page's rows and the rows the table renders, starting at five rows a page
+ * unless the table asks for another page size, as an admin table does.
  */
-export function usePagination<Row>(rows: Row[], initialPageSize: number = DEFAULT_PAGE_SIZE): PaginatedRows<Row> {
+export function usePagination<Row>(rows: Row[], initialPageSize: number = TABLE_PAGE_SIZE): PaginatedRows<Row> {
 	// share the selection rules while keeping the server-rendered row policy on the web
 	const { pageRows, pagination } = useSharedPagination(rows, initialPageSize)
 	const renderedRows = toRenderedRows(rows, { pageNumber: pagination.page + 1, pageSize: pagination.pageSize })

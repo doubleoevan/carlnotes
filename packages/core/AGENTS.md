@@ -16,17 +16,18 @@ the in-place section fixtures. Personal sources stay outside the fetched Source 
 `@carlnotes/core`, the DOM-free components, stores, hooks, and lib that web and mobile import as `@carlnotes/core/<folder>/<name>`.
 It imports `@carlnotes/contracts`, `@carlnotes/client`, `@carlnotes/nightshift`, `react`, and `@tanstack/react-query`, and the non-UI `markdown-to-jsx/markdown` parser.
 
-- `components/` — portable React composition exported as `@carlnotes/core/components/<name>`. `TablePagination`,
+- `components/` — portable React composition exported as `@carlnotes/core/components/<name>`. `cardElements.tsx`
+  holds the `CardElements` type both card components extend. `TablePagination`,
   `Pagination`, `SourceResultsChart`, `TopicScanRecap`, `NumberedTopicFindingList`, `SafeNoteLink`, `TopicScanFailure`,
-  `MoreButton`, `CopyMarkdownButton`, `NotesTable`, `ResourceMetadata`, and `RatingThumbs` own repeated content,
-  visibility, ordering, and interaction state. `UserBlocksSection` lists the people the user blocked with their
-  confirmed Unblock, over `UserBlocksCard`, which the stories render from a fixture list. `ProfileSummaryLine` is the
-  line under a profile's name, with its Blocked link. `TermsAcceptanceNotice` asks a stale account to accept the
-  published Terms or put it off, and `useIsTermsAcceptanceDialogOpen` says when it shows. Each app supplies the small
-  set of typed platform elements the component needs. Keep component adapters at module scope so state changes preserve
-  their identity. Use render callbacks when controls must retain app-local refs or routing. Core imports no DOM or
-  native component library. Platform wrappers keep their existing stories; web integration tests exercise the shared
-  composition through real DOM adapters, and device checks cover native adapters.
+  `MoreButton`, `CopyMarkdownButton`, `NotesTable`, `ResourceMetadata`, `RatingThumbs`, `UpdatesList`, and
+  `UpdatesButton` own repeated content, visibility, ordering, and interaction state. `UserBlocksSection` lists the
+  people the user blocked with their confirmed Unblock, over `UserBlocksCard`, which the stories render from a fixture
+  list. `ProfileSummaryLine` is the line under a profile's name, with its Blocked link. `TermsAcceptanceNotice` asks a
+  stale account to accept the published Terms or put it off, and `useIsTermsAcceptanceDialogOpen` says when it shows.
+  Each app supplies the small set of typed platform elements the component needs. Keep component adapters at module
+  scope so state changes preserve their identity. Use render callbacks when controls must retain app-local refs or
+  routing. Core imports no DOM or native component library. Platform wrappers keep their existing stories; web
+  integration tests exercise the shared composition through real DOM adapters, and device checks cover native adapters.
 
 - `stores/` — app state one module owns and any component may read, named `<thing>Store.ts`. `openReportStore.ts` holds
   the open report count an admin's badges show.
@@ -58,7 +59,9 @@ It imports `@carlnotes/contracts`, `@carlnotes/client`, `@carlnotes/nightshift`,
   sells on the user's storefront, which the app sets, and `usePurchaseOffers`, the signed-in user's purchase offers in
   the app, which read a paid plan's billing provider and stay read-only until it loads. A store that reaches an audio
   element, the media session, or a component library stays in its app.
-- `hooks/` — `useUserBlocks.ts`, the user's user block list and the unblock that shortens the list once the server
+- `hooks/` — `useUpdates.ts`, the list `POST /api/updates` returns, and `useHomeUpdates.ts`, the home's Updates card
+  with its length; `useYourTopicsPages.ts`, the home's Your topics five to a page, the first from the home payload;
+  `useUserBlocks.ts`, the user's user block list and the unblock that shortens the list once the server
   accepts; `useNow.ts`, the current time re-read on a tick for relative labels, one clock per list; `useAvatar.ts`, the
   avatar setting read from the session and updated through it; `useUsernameChange.ts`, changing the signed-in user's
   username, shared by the account page and the profile page's edit modal; `useNoteBodySave.ts`, the save schedule of the
@@ -79,8 +82,8 @@ It imports `@carlnotes/contracts`, `@carlnotes/client`, `@carlnotes/nightshift`,
   `planCards.ts` (which plan card matches the user's plan and billing interval, and which badge shows),
   `streamReconnect.ts` (how long a silent SSE stream runs before it counts as dropped and the wait before reopening it,
   for the chat room stream), `topicFindingFilters.ts` and `topicFindingSorts.ts` (which findings a feed view shows and
-  in what order), `topicSorts.ts` (the homepage's topic order under Trending: viewers, then followers, then the newest
-  finding, with Featured kept in its own order), `topicPromptUrls.ts` (the urls written inside a topic prompt),
+  in what order), `topicSorts.ts` (the Topics page's topic order under Trending: viewers, then followers, then the
+  newest finding, with Featured kept in its own order), `topicPromptUrls.ts` (the urls written inside a topic prompt),
   `emailProviders.ts` (the webmail compose urls an invite is given), `chromeIntentUrl.ts` (the page as an Android intent
   url that opens it in Chrome, out of an embedded webview), `pushCopy.ts` (the push permission sheet's and the
   Notifications section's words), `sessionCopy.ts` (the lines the sign-in, sign-out, sign-up, and close-account controls
@@ -91,16 +94,16 @@ It imports `@carlnotes/contracts`, `@carlnotes/client`, `@carlnotes/nightshift`,
   `updateBadgePoll.ts` (the poll behind `useUpdateBadges`, on `activePoll.ts`), `countsPoll.ts` (the poll behind
   `usePolledCounts`, on `activePoll.ts`), `focusAndOnline.ts` (whether the app is focused and online through Query's
   adapters, and how a poll subscribes to a change), `topicGateCopy.ts` (the invite-only gate's words),
-  `podcastEpisodeCopy.ts` (the words shown if a podcast episode fails to load or play), and `voiceRecordingDecisions.ts`
-  (what the voice recorder decides from each frame, with the `SilenceThresholdSettings` type and the browser's default
-  settings), `voiceRecordingRules.ts` (the mic's visibility, the recording timer, the reopened recording's rejection,
-  and the meter's callback), `voiceRecorder.ts` (the recorder adapter each app supplies: the session a tap opens, the
-  start, the recording's delete, the rejected microphone's action, and the background listener), `spokenAnswerPlayer.ts`
-  (the spoken answer player adapter each app supplies), and `spokenQuestionsPaused.ts` (the mic's action past the spoken
-  questions cutoff, and the plans page's upgrade lines), and `storefrontPurchaseRules.ts` (whether a user may buy a plan
-  and where a paid plan is managed, from the platform, the store's offering, and the user's plan and billing provider,
-  with each place's label). `sessionCopy.ts` also holds the closing copy for a store subscriber, whose plan keeps
-  billing through the store.
+  `podcastEpisodeCopy.ts` (the words shown if a podcast episode fails to load or play), and
+  `voiceRecordingDecisions.ts` (what the voice recorder decides from each frame, with the `SilenceThresholdSettings`
+  type and the browser's default settings), `voiceRecordingRules.ts` (the mic's visibility, the recording timer, the
+  reopened recording's rejection, and the meter's callback), `voiceRecorder.ts` (the recorder adapter each app supplies:
+  the session a tap opens, the start, the recording's delete, the rejected microphone's action, and the background
+  listener), `spokenAnswerPlayer.ts` (the spoken answer player adapter each app supplies), and
+  `spokenQuestionsPaused.ts` (the mic's action past the spoken questions cutoff, and the plans page's upgrade lines),
+  and `storefrontPurchaseRules.ts` (whether a user may buy a plan and where a paid plan is managed, from the platform,
+  the store's offering, and the user's plan and billing provider, with each place's label). `sessionCopy.ts` also
+  holds the closing copy for a store subscriber, whose plan keeps billing through the store.
 - Imports: `@carlnotes/contracts`, `@carlnotes/client`, `@carlnotes/nightshift`, `react`, and `@tanstack/react-query`. Never a server package or an app. Universal: the
   root rule. A module that needs a DOM type is a web module and lives in `apps/web/src`.
 - Tests: `bun test packages/core`.
@@ -384,3 +387,12 @@ and keeps the shown count, and each write marks the cached page out of date. `ho
 Finding's link preview the same way for a minute. `hooks/useCommentThreadViewEvent.ts` sends one view event per showing
 through the app's own visit analytics. Their tests render through plain elements in
 `apps/web/src/components/social/socialTestHarness.tsx`.
+
+## Topic images and the home
+
+`components/TopicImage` shows a topic's image at a size through the Nightshift contract, picking the 1x or 2x file.
+`components/TopicCard` and `PodcastEpisodeCard` are the home's and the Topics page's cards, and `TopicImageEditor` is
+the editor's image block (Regenerate with an image prompt, Upload, Remove), each app supplying its elements and its file
+picker. `hooks/useTopicImageRender` polls a render until it finishes. `lib/topicImageEditor` holds the block's labels,
+the count line, and the upload check, and `lib/homeFaces` the home's section titles, the three steps, and the empty
+payload.

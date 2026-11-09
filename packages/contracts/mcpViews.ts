@@ -1,5 +1,6 @@
 // the MCP views: the MCP view each tool names, and what a tool result gives its MCP view beside the structured result the
 // model reads
+
 import type { TopicFinding } from "./findings"
 import type { McpScanStatus } from "./mcpScanStatus"
 import type { PersonalSourcesSendResult } from "./personalSources"
@@ -7,6 +8,7 @@ import type { PodcastEpisode, PodcastEpisodeSummary } from "./podcast"
 import type { ProfileIdentity } from "./profiles"
 import type { FindingSearchTopic, SearchRequest, SearchResultsPage, SearchRow } from "./search"
 import type { ReactionSummary } from "./social"
+import type { TopicImageUrls } from "./topicImages"
 import type { TopicDraft } from "./topicPayloads"
 import type { Updates } from "./updates"
 
@@ -33,6 +35,8 @@ export const MCP_VIEW_META_KEY = "carlnotes/card"
 export type McpViewTopic = FindingSearchTopic & {
 	latestPodcastEpisode: PodcastEpisodeSummary | null
 	isSubscribed: boolean | null
+	// the topic's image at every size, null until its first render lands
+	image: TopicImageUrls | null
 }
 
 // what an MCP view reads beside the structured result: the signed-in caller, the podcast episodes its play buttons play,

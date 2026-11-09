@@ -1,9 +1,9 @@
 // the updates MCP view: the updates list the tool built, with its opener, the feed's findings as a table, and the link
 // to what did not fit. a row's controls and its Topic go through the host. a story has no host
 import { MCP_VIEW_META_KEY } from "@carlnotes/contracts/mcpViews"
+import { UPDATES_STORY } from "@carlnotes/core/lib/updatesStories"
 import type { Meta, StoryObj } from "@storybook/tanstack-react"
 import { VISITOR_TOOL_RESULT } from "../../.storybook/fixtures/mcpViews"
-import { UPDATES_STORY, UPDATES_STORY_TOPICS } from "../../.storybook/fixtures/updates"
 import { McpViewToolText } from "./McpViewToolText"
 import { setMcpViewData } from "./mcpViewHost"
 import { UpdatesMcpView } from "./UpdatesMcpView"
@@ -12,7 +12,7 @@ import { UpdatesMcpView } from "./UpdatesMcpView"
 const USER_UPDATES_MCP_VIEW_DATA = {
 	session: { userId: "user-vienna", username: "vienna", avatarSource: null, avatarVersion: null },
 	podcastEpisodes: [],
-	updatesTopics: UPDATES_STORY_TOPICS,
+	updatesTopics: UPDATES_STORY.topics,
 }
 
 const meta = {

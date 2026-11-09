@@ -15,6 +15,7 @@ export const STORY_PODCAST_EPISODE: PodcastEpisode = {
 	publishedAt: "2026-10-25T12:00:00Z",
 	pagePath: "/topics/coffee/episodes/2026/1",
 	chapterCount: 4,
+	image: null,
 	topicId: "topic-1",
 	topicVisibility: "public",
 	status: "published",

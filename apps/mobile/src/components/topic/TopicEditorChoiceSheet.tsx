@@ -69,10 +69,19 @@ export function EditTopicDialog({
 	topic,
 	onClose,
 	onTopicSaved,
-}: Required<Pick<ComponentProps<typeof EditTopicModal>, "topic" | "onClose" | "onTopicSaved">>) {
+	onTopicImageChanged,
+}: Required<Pick<ComponentProps<typeof EditTopicModal>, "topic" | "onClose" | "onTopicSaved">> &
+	Pick<ComponentProps<typeof EditTopicModal>, "onTopicImageChanged">) {
 	const [isFormChosen, setIsFormChosen] = useState(false)
 	if (isFormChosen) {
-		return <EditTopicModal topic={topic} onClose={onClose} onTopicSaved={onTopicSaved} />
+		return (
+			<EditTopicModal
+				topic={topic}
+				onClose={onClose}
+				onTopicSaved={onTopicSaved}
+				onTopicImageChanged={onTopicImageChanged}
+			/>
+		)
 	}
 	return <TopicEditorChoiceSheet topicId={topic.id} onChooseTopicForm={() => setIsFormChosen(true)} onClose={onClose} />
 }

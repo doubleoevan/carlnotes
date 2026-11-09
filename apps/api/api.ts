@@ -30,6 +30,7 @@ import { VOICE_TRANSCRIPTION_PATH, voiceRoute } from "./chat/voiceRoute"
 import { countsRoute } from "./counts/countsRoute"
 import { type AppEnv, currentUser } from "./currentUser"
 import { renderedCacheHeaders } from "./edgeCache"
+import { homeRoute } from "./home/homeRoute"
 import { invitesRoute, toInviteTarget } from "./invite/invites"
 import { receivedInvitesRoute } from "./invite/receivedInvites"
 import { userInvitesRoute } from "./invite/userInvites"
@@ -42,6 +43,8 @@ import { PERSONAL_SOURCES_IMPORT_PATH, personalSourcesImportsRoute } from "./per
 import { personalSourcesInboundRoute } from "./personalSources/inboundRoute"
 import { personalSourcesRoute } from "./personalSources/personalSourcesRoute"
 import { personalSourcesSendsRoute } from "./personalSources/sendsRoute"
+import { podcastEpisodeFeaturingRoute } from "./podcast/podcastEpisodeFeaturing"
+import { podcastEpisodeImagesRoute } from "./podcast/podcastEpisodeImagesRoute"
 import { podcastEpisodesRoute } from "./podcast/podcastEpisodes"
 import { podcastFeedsRoute } from "./podcast/podcastFeeds"
 import { profilesRoute } from "./profiles"
@@ -70,7 +73,9 @@ import { buildTopicFeeds, readVisitorTopicFeeds } from "./topic/feeds"
 import { findingsRoute } from "./topic/findings"
 import { scansRoute } from "./topic/scans"
 import { subscriptionsRoute } from "./topic/subscriptions"
+import { topicImagesRoute } from "./topic/topicImagesRoute"
 import { topicsRoute } from "./topic/topicsRoute"
+import { updatesRoute } from "./topic/updatesRoute"
 import {
 	confirmUnsubscribePage,
 	invalidUnsubscribePage,
@@ -246,6 +251,10 @@ export const apiRoute = new Hono<AppEnv>()
 	// the site search, then the topic routes
 	.route("/", searchRoute)
 	.route("/", topicsRoute)
+	.route("/", topicImagesRoute)
+	.route("/", podcastEpisodeImagesRoute)
+	.route("/", homeRoute)
+	.route("/", podcastEpisodeFeaturingRoute)
 	// a topic page's view, and the counts the topic and podcast episode pages read
 	.route("/", countsRoute)
 	// the flag content route
@@ -254,6 +263,8 @@ export const apiRoute = new Hono<AppEnv>()
 	.route("/", findingsRoute)
 	// the manual scan route
 	.route("/", scansRoute)
+	// the updates list
+	.route("/", updatesRoute)
 	// the podcast episode routes, then the podcast feed and cover routes
 	.route("/", podcastEpisodesRoute)
 	.route("/", podcastFeedsRoute)

@@ -1,9 +1,15 @@
 // a podcast episode in the shape the player shows, with its chapters and the user's progress, and in the shape a table
 // row shows, with its chapter count, and each topic's latest of either, limited to what the user may listen to
+
 import type { PodcastEpisode, PodcastEpisodeSummary } from "@carlnotes/contracts/podcast"
 import { isPublishedPodcastEpisode } from "@carlnotes/contracts/podcast"
-import { FULL_PODCAST_COVER_SIZE, SMALL_PODCAST_COVER_SIZE } from "@carlnotes/contracts/podcastEpisodes"
+import {
+	FULL_PODCAST_COVER_SIZE,
+	SMALL_PODCAST_COVER_SIZE,
+	toPodcastEpisodeCover,
+} from "@carlnotes/contracts/podcastEpisodes"
 import { toPodcastEpisodePath } from "@carlnotes/contracts/seo"
+import { toPodcastEpisodeImageUrls } from "@carlnotes/contracts/topicImages"
 import { db } from "@carlnotes/db"
 import { podcastEpisodeChapters, podcastEpisodes } from "@carlnotes/db/schema/podcast"
 import { isAfterSubscriberActivation } from "@carlnotes/db/topicPermissions"
@@ -22,7 +28,7 @@ import {
 } from "./podcastEpisodeRows"
 
 // the topic fields that the latest podcast episode loaders read: the podcast episode's topic and its access check
-type LatestPodcastEpisodeTopic = Pick<TopicRow, "id" | "name" | "ownerId" | "visibility">
+type LatestPodcastEpisodeTopic = Pick<TopicRow, "id" | "name" | "ownerId" | "visibility" | "imageHash">
 
 // a podcast episode's row and the topic that its page path is built from
 export type PodcastEpisodeRowTopic = { podcastEpisodeRow: PodcastEpisodeRow; topic: PodcastEpisodeTopic }
@@ -177,7 +183,7 @@ export function toPodcastEpisode({
 
 	// a podcast episode has a cover once it has a title
 	const podcastCover = podcastEpisodeRow.title
-		? { kind: "episode" as const, id: podcastEpisodeRow.id, title: podcastEpisodeRow.title }
+		? toPodcastEpisodeCover({ ...podcastEpisodeRow, title: podcastEpisodeRow.title }, topic)
 		: null
 	return {
 		...podcastEpisodeSummary,
@@ -228,6 +234,10 @@ function toPodcastEpisodeSummary({
 		// a published podcast episode has its own page
 		pagePath: isPublishedPodcastEpisode(podcastEpisodeRow) ? toPodcastEpisodePath(topic, podcastEpisodeRow) : null,
 		chapterCount,
+		// the podcast episode's own image, once it is drawn
+		image: podcastEpisodeRow.imageHash
+			? toPodcastEpisodeImageUrls(podcastEpisodeRow.id, podcastEpisodeRow.imageHash)
+			: null,
 	}
 }
 

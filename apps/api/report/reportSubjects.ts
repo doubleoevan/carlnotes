@@ -56,6 +56,7 @@ const REPORT_SUBJECT_RESOLVERS: Record<
 	finding: (userId, subjectId) => toReportedSocialTarget(userId, { kind: "finding", id: subjectId }),
 	podcastEpisode: (userId, subjectId) => toReportedSocialTarget(userId, { kind: "podcastEpisode", id: subjectId }),
 	comment: toReportedComment,
+	topicImage: toReportedTopicImage,
 }
 
 // a topic under the same visibility rule the Topic page uses, so anyone who can open a Topic can report it
@@ -78,6 +79,12 @@ async function toReportedTopic(userId: string, topicId: string): Promise<Reporte
 		text: toReportText(`${topic.name}\n${topic.prompt}`),
 		authorUserId: topic.ownerId,
 	}
+}
+
+// a topic's image under the topic's visibility rule. the topic's name is the text
+async function toReportedTopicImage(userId: string, topicId: string): Promise<ReportedSubject | null> {
+	const reportedTopic = await toReportedTopic(userId, topicId)
+	return reportedTopic && { ...reportedTopic, kind: "topicImage", text: reportedTopic.label }
 }
 
 // a team under its visibility rule: members can always report it, anyone can once it is public

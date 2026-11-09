@@ -8,7 +8,10 @@ import { scans } from "@carlnotes/db/schema/scans"
 import { sources, subscriptions, topics } from "@carlnotes/db/schema/topics"
 import { users } from "@carlnotes/db/schema/users"
 import { addViewer } from "@carlnotes/db/viewerCounts"
+import { topicImageModel } from "@carlnotes/models/topicImageModel"
+import { startTopicImageRender } from "@carlnotes/pipeline/topicImages/topicImageRenders"
 import { trackEvent } from "@carlnotes/server/analytics"
+import { purgeEdgeCacheTagAfterDeletion, toTopicImageCacheTag } from "@carlnotes/server/edgePurge"
 import { reportError } from "@carlnotes/server/monitoring"
 import { toUserViewerElement } from "@carlnotes/server/viewerElements"
 import { and, eq, inArray, isNotNull, isNull, notInArray } from "drizzle-orm"
@@ -190,6 +193,12 @@ export async function createTopic(
 		reportError(error, "first-scan", { topicId, userId })
 	})
 
+	// draw the topic's image on the owner's budget, without delaying the response. the drawn covers show until it lands
+	startTopicImageRender({ topicId, userId, kind: "create", model: topicImageModel() }).catch((error) => {
+		console.error(`could not start the image render for topic ${topicId}`, error)
+		reportError(error, "topic-image", { topicId, userId })
+	})
+
 	// count the owner as the topic's first viewer
 	void addViewer({ kind: "topic", id: topicId }, toUserViewerElement(userId))
 
@@ -351,8 +360,11 @@ export async function updateTopic(
 		return reconcileTopicSources({ transaction, topicId, payloadSources: payload.sources, podcastNames })
 	})
 
-	// drop the topic's cached visitor copies
+	// drop the topic's cached visitor copies, and the edge's copies of its image files if it left the public set
 	await clearVisitorTopicCaches({ topicId, visibility, previousVisibility: topic.visibility, isFeatureOrderReleased })
+	if (topic.visibility === "public" && visibility !== "public") {
+		await purgeEdgeCacheTagAfterDeletion(toTopicImageCacheTag(topicId))
+	}
 
 	// check whatever url Sources this edit added, now that the rows are committed
 	startPendingSourceScreens(topicId)

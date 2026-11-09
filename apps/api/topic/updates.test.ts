@@ -255,12 +255,12 @@ test("a scoped list reads its one Topic and boosts from that Topic's last read t
 	expect(updates?.morePath).toBe("/topics/topic-9/moka-pots")
 })
 
-test("an unscoped list boosts from the newest consumption, and its more link opens the home page", async () => {
+test("an unscoped list boosts from the newest consumption, and its more link opens the Topics page", async () => {
 	const { sentQueries } = stubFindingStore([{ findingId: "finding-1" }])
 	const updates = await buildUnscopedUpdates()
 	const lastConsumedQuery = sentQueries.find(({ text }) => text.startsWith('select max("consumptions"'))
 	expect(lastConsumedQuery?.text).not.toContain('"findings"."topic_id" =')
-	expect(updates.morePath).toBe("/")
+	expect(updates.morePath).toBe("/topics")
 })
 
 test("a Topic the user may not read returns no list and writes nothing", async () => {
@@ -387,7 +387,7 @@ test("an empty list runs no opener and writes nothing", async () => {
 		opener: null,
 		findings: [],
 		moreCount: 0,
-		morePath: "/",
+		morePath: "/topics",
 		topics: [],
 		podcastEpisodes: [],
 	})

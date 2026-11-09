@@ -13,6 +13,7 @@ import { PodcastEpisodeNumberPill } from "@/components/podcast/PodcastEpisodePil
 import { toTouchTargetHitSlop } from "@/components/primitives/button"
 import { Icon } from "@/components/primitives/icon"
 import { Text } from "@/components/primitives/text"
+import { TopicImage } from "@/components/primitives/topic-image"
 import { TopicFindingListCard } from "@/components/topic/TopicFindingList"
 import { TopicResource } from "@/components/topic/TopicResource"
 import { SearchResultRow } from "./SearchResultRow"
@@ -47,7 +48,7 @@ export function SearchResultsList({ pages, state }: { pages: SearchResultsPage[]
 							topicFeedHandlers={state.handlers}
 							isPending={state.pendingChanges.some((change) => change.findingId === searchRow.finding.findingId)}
 						>
-							<TopicLink topic={searchRow.topic} prefix="in " />
+							<TopicLink topic={searchRow.topic} />
 						</TopicResource>
 					) : (
 						<LinkedSearchResultRow
@@ -131,6 +132,16 @@ function SearchRowIcon({ searchRow }: { searchRow: LinkedSearchRow }) {
 			/>
 		)
 	}
+	if (searchRow.kind === "topic" && searchRow.topic.image) {
+		return (
+			<TopicImage image={searchRow.topic.image} size="thumbnail" name={searchRow.topic.name} className="shrink-0" />
+		)
+	}
+	if (searchRow.kind === "podcastEpisode" && searchRow.podcastEpisode.image) {
+		return (
+			<TopicImage image={searchRow.podcastEpisode.image} size="thumbnail" name={searchRow.name} className="shrink-0" />
+		)
+	}
 	return <Icon as={searchRow.kind === "topic" ? Coffee : Mic} className="size-4 text-muted-foreground" />
 }
 
@@ -148,8 +159,14 @@ function SearchRowDetails({ searchRow }: { searchRow: LinkedSearchRow }) {
 		case "podcastEpisode":
 			return (
 				<>
-					<TopicLink topic={searchRow.topic} prefix="Podcast in " />
-					<Text className="text-xs text-muted-foreground">{`· ${toDotSeparatedText([toAgoLabel(searchRow.date), toCountLabel(searchRow.count ?? 0, "listener")])}`}</Text>
+					<Text className="text-xs text-muted-foreground">
+						{toDotSeparatedText([
+							"Podcast",
+							toAgoLabel(searchRow.date),
+							toCountLabel(searchRow.count ?? 0, "listener"),
+						])}
+					</Text>
+					<TopicLink topic={searchRow.topic} />
 					<PodcastEpisodeNumberPill podcastEpisode={searchRow.podcastEpisode} />
 				</>
 			)
@@ -169,17 +186,18 @@ function SearchRowDetails({ searchRow }: { searchRow: LinkedSearchRow }) {
 }
 
 // let attribution open its Topic without opening the surrounding finding sheet
-function TopicLink({ topic, prefix }: { topic: { id: string; name: string }; prefix: string }) {
+function TopicLink({ topic }: { topic: { id: string; name: string } }) {
 	return (
 		<AnchorLink
 			href={{ pathname: "/topics/[topicId]", params: { topicId: topic.id } }}
 			accessibilityLabel={`Open topic ${topic.name}`}
 			onPress={(event) => event.stopPropagation()}
 			hitSlop={toTouchTargetHitSlop(20)}
-			className="self-start py-0.5"
+			className="-ml-0.5 py-0.5"
 		>
+			{/* the dot stays with the topic's name when the line wraps, and the margin evens the line's gap with a space */}
 			<Text className="text-xs text-muted-foreground">
-				{prefix}
+				{"· "}
 				{topic.name}
 			</Text>
 		</AnchorLink>

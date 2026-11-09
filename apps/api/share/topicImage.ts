@@ -1,14 +1,17 @@
 // the link-preview card a pasted Topic url renders as
 import type { Visibility } from "@carlnotes/contracts/enums"
+import { toTopicImageOriginalKey } from "@carlnotes/pipeline/topicImages/topicImageFiles"
 import type { PublishedAvatar } from "../avatars"
 import {
 	CARD_MUTED_COLOR,
 	type CardElement,
+	loadCardImageBandDataUri,
 	PREVIEW_TEMPLATE_VERSION,
 	toAvatarIdentity,
 	toBrandIcon,
 	toCardPng,
 	toCountLabel,
+	toImageOverTextCardPng,
 	toOwnerImageDataUri,
 	toOwnerInitials,
 	toOwnerPhoto,
@@ -29,6 +32,8 @@ export type TopicPreview = {
 	ownerAvatar: PublishedAvatar
 	keptCount: number
 	sourceCount: number
+	// the content hash of the topic's image, null until it has one. the card draws the image across its top
+	imageHash: string | null
 	// the topic page's description. a public topic uses its last scan summary, prompt, or name,
 	// and any other topic names only its owner and how many findings Carl kept
 	description: string
@@ -41,7 +46,7 @@ export type TopicPreview = {
  * The social platforms never re-fetch a url they have seen, so the url itself has to change instead.
  */
 export function toTopicPreviewKey(topicPreview: TopicPreview): string {
-	const previewImage = `${topicPreview.title}|${topicPreview.ownerUsername}|${toAvatarIdentity(topicPreview.ownerAvatar)}|${topicPreview.keptCount}|${topicPreview.sourceCount}`
+	const previewImage = `${topicPreview.title}|${topicPreview.ownerUsername}|${toAvatarIdentity(topicPreview.ownerAvatar)}|${topicPreview.keptCount}|${topicPreview.sourceCount}|${toDrawnImageHash(topicPreview) ?? ""}`
 	return `og/${PREVIEW_TEMPLATE_VERSION}/${topicPreview.topicId}/${Bun.hash(previewImage).toString(36)}.png`
 }
 
@@ -52,10 +57,23 @@ export function toTopicPreviewKey(topicPreview: TopicPreview): string {
 export async function toTopicPreviewPng(card: TopicPreview): Promise<Uint8Array> {
 	// the user's avatar bytes, only fetched here. the card's key names the avatar instead, so a stored card loads nothing
 	const ownerImage = await toOwnerImageDataUri(card.ownerAvatar)
-	return toCardPng([toBrandIcon(), toTopicTitle(card.title), toTopicFooter(card, ownerImage)])
+	const footer = toTopicFooter(card, ownerImage)
+	const drawnImageHash = toDrawnImageHash(card)
+	if (!drawnImageHash) {
+		return toCardPng([toBrandIcon(), toTopicTitle(card.title), footer])
+	}
+
+	// the topic's image across the top, with the text on the card under it
+	const imageDataUri = await loadCardImageBandDataUri(toTopicImageOriginalKey(card.topicId, drawnImageHash))
+	return toImageOverTextCardPng({ imageDataUri, title: card.title, footer })
 }
 
-// the Topic's own name as the card title
+// the image hash a card draws: a public topic's
+function toDrawnImageHash(topicPreview: Pick<TopicPreview, "visibility" | "imageHash">): string | null {
+	return topicPreview.visibility === "public" ? topicPreview.imageHash : null
+}
+
+// the Topic's own name as the card title, across the card with no image beside it
 function toTopicTitle(title: string): CardElement {
 	return {
 		type: "div",

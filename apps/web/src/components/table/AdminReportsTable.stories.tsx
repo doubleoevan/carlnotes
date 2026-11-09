@@ -8,7 +8,11 @@ import { expect, fn, mocked, screen, waitFor, within } from "storybook/test"
 import { FIXTURE_DATE, STORY_PEOPLE } from "../../../.storybook/fixtures"
 import { AdminReportsTable } from "./AdminReportsTable"
 
-// a message, a note comment already deleted by its author, and a public topic, each reported by a different person
+// the image stand-in at every size, which the topic image report shows
+const SAMPLE_FILES = { url: "/podcast-cover-placeholder.jpg", url2x: "/podcast-cover-placeholder.jpg" }
+
+// a message, a note comment already deleted by its author, a public topic, and a topic's image, each reported by a
+// different person
 const ADMIN_REPORT_FIXTURES: AdminReport[] = [
 	{
 		id: "report-message",
@@ -16,6 +20,7 @@ const ADMIN_REPORT_FIXTURES: AdminReport[] = [
 		subjectId: "12",
 		subjectText: "Nobody asked you, and nobody will.",
 		subjectPath: "/topics/topic-llm-tooling/chat",
+		subjectImage: null,
 		reason: "Hostile toward another member.",
 		createdAt: FIXTURE_DATE.toISOString(),
 		author: { id: STORY_PEOPLE[1].userId, username: STORY_PEOPLE[1].username },
@@ -30,6 +35,7 @@ const ADMIN_REPORT_FIXTURES: AdminReport[] = [
 		subjectId: "comment-3",
 		subjectText: "Dropped it. Have a look.",
 		subjectPath: "/topics/topic-llm-tooling/notes/note-eval-checklist",
+		subjectImage: null,
 		reason: "Spam link in the comment.",
 		createdAt: new Date(FIXTURE_DATE.getTime() - 86_400_000).toISOString(),
 		author: { id: STORY_PEOPLE[2].userId, username: STORY_PEOPLE[2].username },
@@ -44,6 +50,7 @@ const ADMIN_REPORT_FIXTURES: AdminReport[] = [
 		subjectId: "topic-llm-tooling",
 		subjectText: "LLM tooling",
 		subjectPath: "/topics/topic-llm-tooling",
+		subjectImage: null,
 		reason: "The description copies a paywalled article word for word.",
 		createdAt: new Date(FIXTURE_DATE.getTime() - 2 * 86_400_000).toISOString(),
 		author: null,
@@ -51,6 +58,21 @@ const ADMIN_REPORT_FIXTURES: AdminReport[] = [
 		canRemove: false,
 		isSubjectDeleted: false,
 		canAdminBlock: false,
+	},
+	{
+		id: "report-topic-image",
+		subjectKind: "topicImage",
+		subjectId: "topic-llm-tooling",
+		subjectText: "LLM tooling",
+		subjectPath: "/topics/topic-llm-tooling",
+		subjectImage: { page: SAMPLE_FILES, list: SAMPLE_FILES, thumbnail: SAMPLE_FILES },
+		reason: "The image shows a real person.",
+		createdAt: new Date(FIXTURE_DATE.getTime() - 3 * 86_400_000).toISOString(),
+		author: { id: STORY_PEOPLE[0].userId, username: STORY_PEOPLE[0].username },
+		reporter: { id: STORY_PEOPLE[2].userId, username: STORY_PEOPLE[2].username },
+		canRemove: true,
+		isSubjectDeleted: false,
+		canAdminBlock: true,
 	},
 ]
 

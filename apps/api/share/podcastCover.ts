@@ -1,53 +1,31 @@
-// a topic's show cover and each podcast episode's own cover, drawn over the cover illustration
-// with satori and resvg, then encoded as a JPEG by ffmpeg
+// a topic's show cover, drawn over its topic's image or the cover illustration, and the render and store path that
+// every cover shares: satori and resvg draw the cover once, ffmpeg encodes it, and storage serves it after
 
 import { FULL_PODCAST_COVER_SIZE, type PodcastCover, type PodcastCoverSize } from "@carlnotes/contracts/podcastEpisodes"
 import { attachmentExists, getAttachmentBytes, uploadAttachment } from "@carlnotes/db/store"
 import { runFfmpeg } from "@carlnotes/models/ffmpeg"
-import { latte } from "@carlnotes/nightshift/colors"
-import { toPodcastCoverKey } from "@carlnotes/server/podcastCoverPaths"
-import { renderAsync } from "@resvg/resvg-js"
-import satori from "satori"
-import type { CardElement } from "./previewImage"
+import { toTopicImageCardJpeg, toTopicImageOriginalKey } from "@carlnotes/pipeline/topicImages/topicImageFiles"
+import { toPodcastCoverObjectKey } from "@carlnotes/server/podcastCoverPaths"
+import { type CoverBandTones, toBottomBand, toCoverBandTones, toTopBand } from "./podcastCoverBands"
+import {
+	loadPodcastEpisodeImageDataUri,
+	type PodcastEpisodeCover,
+	toPodcastEpisodeCoverElement,
+} from "./podcastEpisodeCover"
+import { type CardElement, toCardElementPng, toImageDataUri } from "./previewImage"
 
 // the most bytes that Apple allows for a cover
 export const MAX_PODCAST_COVER_BYTES = 512 * 1024
 
-// bump this when the cover's design changes, so every stored cover is drawn again
-export const PODCAST_COVER_TEMPLATE_VERSION = "v4"
+// the pixel size a topic image's square crop is drawn at under the cover
+const TOPIC_IMAGE_SQUARE_SIZE = 1500
 
 // the illustration that every cover is drawn over. the illustration has an empty band across its top 18 percent
 // and an empty table across its bottom 25 percent
 const PODCAST_COVER_ILLUSTRATION_URL = new URL("../../../apps/docs/design/podcast/cover-base.png", import.meta.url)
 
-// the side margin that no text crosses, the margin under the title, and the heights of the illustration's two bands
-const SIDE_MARGIN = FULL_PODCAST_COVER_SIZE * 0.1
-const BOTTOM_MARGIN = FULL_PODCAST_COVER_SIZE * 0.05
-const TOP_BAND_HEIGHT = FULL_PODCAST_COVER_SIZE * 0.18
-const BOTTOM_BAND_HEIGHT = FULL_PODCAST_COVER_SIZE * 0.25
-
-// the font size of the top band's line, and the colors of its two parts
-const TOP_BAND_FONT_SIZE = 190
-const BRAND_NAME_COLOR = latte.heroAccent
-const PODCAST_WORD_COLOR = latte.heroForeground
-
-// the title's color, and how many lines a title may run
-const TITLE_COLOR = latte.foreground
-const MAX_TITLE_LINES = 3
-
-// the longest title that each font size takes, largest size first,
-// and the font size of a longer title
-const TITLE_SIZE_STEPS = [
-	{ maxChars: 14, fontSize: 260 },
-	{ maxChars: 32, fontSize: 180 },
-]
-const SMALLEST_TITLE_FONT_SIZE = 120
-
 // ffmpeg's JPEG qualities to try, best first. a lower number is a larger and better file
 const JPEG_QUALITIES = [3, 5, 8, 12, 18, 25]
-
-// the font, read once at boot. satori takes font bytes, not a font-family name or a stylesheet
-const displayFont = await Bun.file(new URL("./fonts/ArchitectsDaughter-Regular.ttf", import.meta.url)).arrayBuffer()
 
 // the illustration as a data uri, read by the first cover that is drawn
 let coverIllustrationDataUri: Promise<string> | undefined
@@ -67,9 +45,7 @@ export async function toCachedPodcastCoverJpeg(
 	size: PodcastCoverSize,
 ): Promise<Uint8Array> {
 	// return the stored cover if one exists. the object key includes the cover's key, which changes with the title
-	const { kind, id } = podcastCover
-	const coverFileName = `${toPodcastCoverKey(podcastCover)}-${size}.jpg`
-	const coverObjectKey = `podcast-covers/${PODCAST_COVER_TEMPLATE_VERSION}/${kind}/${id}/${coverFileName}`
+	const coverObjectKey = toPodcastCoverObjectKey(podcastCover, size)
 	if (await attachmentExists(coverObjectKey)) {
 		return getAttachmentBytes(coverObjectKey)
 	}
@@ -88,7 +64,8 @@ export async function toCachedPodcastCoverJpeg(
 	return coverRender
 }
 
-// the cover, its size, and the illustration as a data uri, read from its file if not given
+// the cover, its size, and the ground as a data uri: the topic image's square crop, or the illustration, read from
+// storage or its file if not given
 type ToPodcastCoverJpegOptions = {
 	podcastCover: PodcastCover
 	size: PodcastCoverSize
@@ -103,18 +80,16 @@ export async function toPodcastCoverJpeg({
 	size,
 	illustrationDataUri,
 }: ToPodcastCoverJpegOptions): Promise<Uint8Array> {
-	// satori lays the cover out as an svg, and resvg rasterizes it at the cover's full size on a worker thread
-	const coverElement = toPodcastCoverElement(
-		podcastCover,
-		illustrationDataUri ?? (await loadCoverIllustrationDataUri()),
-	)
-	const coverSvg = await satori(coverElement as Parameters<typeof satori>[0], {
+	// the cover's markup, drawn as a png at the cover's full size
+	const coverElement =
+		podcastCover.kind === "episode"
+			? await loadPodcastEpisodeCoverElement(podcastCover, illustrationDataUri)
+			: await loadShowCoverElement(podcastCover, illustrationDataUri)
+	const coverPng = await toCardElementPng({
+		cardElement: coverElement,
 		width: FULL_PODCAST_COVER_SIZE,
 		height: FULL_PODCAST_COVER_SIZE,
-		fonts: [{ name: "Architects Daughter", data: displayFont, weight: 400, style: "normal" }],
 	})
-	const renderedImage = await renderAsync(coverSvg, { fitTo: { mode: "width", value: FULL_PODCAST_COVER_SIZE } })
-	const coverPng = renderedImage.asPng()
 
 	// return the best quality that fits the byte limit, or throw an error
 	for (const quality of JPEG_QUALITIES) {
@@ -126,10 +101,37 @@ export async function toPodcastCoverJpeg({
 	throw new Error(`the ${podcastCover.kind} cover for ${podcastCover.id} does not fit ${MAX_PODCAST_COVER_BYTES} bytes`)
 }
 
+// a show cover over the topic image's square crop when the topic has one, and over the illustration otherwise
+async function loadShowCoverElement(podcastCover: PodcastCover, illustrationDataUri?: string): Promise<CardElement> {
+	const topicImageGround = illustrationDataUri ? null : await loadTopicImageGround(podcastCover)
+	return toPodcastCoverElement(
+		podcastCover,
+		topicImageGround?.dataUri ?? illustrationDataUri ?? (await loadCoverIllustrationDataUri()),
+		topicImageGround?.bandTones ?? null,
+	)
+}
+
+// a podcast episode's cover over its own image, else its topic's, else the illustration
+async function loadPodcastEpisodeCoverElement(
+	podcastCover: PodcastEpisodeCover,
+	illustrationDataUri?: string,
+): Promise<CardElement> {
+	const imageDataUri =
+		illustrationDataUri ??
+		(await loadPodcastEpisodeImageDataUri(podcastCover)) ??
+		(await loadCoverIllustrationDataUri())
+	return toPodcastEpisodeCoverElement(podcastCover, imageDataUri)
+}
+
 /**
- * Returns a cover's markup of the illustration, the top band's line, and the title in the bottom band.
+ * Returns a cover's markup of the ground, the top band's line, and the title in the bottom band. Over a topic image
+ * each band sits on a translucent gradient in its tone, and over the illustration they sit on its own empty bands.
  */
-export function toPodcastCoverElement(podcastCover: PodcastCover, illustrationDataUri: string): CardElement {
+export function toPodcastCoverElement(
+	podcastCover: PodcastCover,
+	groundDataUri: string,
+	bandTones: CoverBandTones | null = null,
+): CardElement {
 	return {
 		type: "div",
 		props: {
@@ -138,94 +140,40 @@ export function toPodcastCoverElement(podcastCover: PodcastCover, illustrationDa
 				{
 					type: "img",
 					props: {
-						src: illustrationDataUri,
+						src: groundDataUri,
 						width: FULL_PODCAST_COVER_SIZE,
 						height: FULL_PODCAST_COVER_SIZE,
 						style: { position: "absolute" },
 					},
 				},
-				toTopBand(),
-				toBottomBand(podcastCover.title),
+				toTopBand(bandTones?.top ?? null),
+				toBottomBand(podcastCover.title, bandTones?.bottom ?? null),
 			],
 		},
 	}
 }
 
-/**
- * Returns the font size of a cover's title, which steps down as the title gets longer.
- */
-export function toPodcastCoverTitleFontSize(title: string): number {
-	// the first size step that takes the title's length
-	const titleSizeStep = TITLE_SIZE_STEPS.find(({ maxChars }) => title.length <= maxChars)
-	return titleSizeStep?.fontSize ?? SMALLEST_TITLE_FONT_SIZE
-}
+// the topic image's square crop as a data uri, with each band's tone read from the image under it, or null for a
+// cover over the illustration
+async function loadTopicImageGround({
+	topicId,
+	topicImageHash,
+}: PodcastCover): Promise<{ dataUri: string; bandTones: CoverBandTones } | null> {
+	if (!topicImageHash) {
+		return null
+	}
 
-// the top band's line, centered in the band between the side margins
-function toTopBand(): CardElement {
-	return {
-		type: "div",
-		props: {
-			style: {
-				position: "absolute",
-				top: 0,
-				left: SIDE_MARGIN,
-				width: FULL_PODCAST_COVER_SIZE - SIDE_MARGIN * 2,
-				height: TOP_BAND_HEIGHT,
-				// the two parts sit on one line in the middle of the band
-				display: "flex",
-				alignItems: "center",
-				justifyContent: "center",
-				fontSize: TOP_BAND_FONT_SIZE,
-				lineHeight: 1,
-			},
-			children: [
-				{ type: "span", props: { style: { color: BRAND_NAME_COLOR }, children: "Coffee Break" } },
-				{ type: "span", props: { style: { color: PODCAST_WORD_COLOR, marginLeft: 60 }, children: "podcast" } },
-			],
-		},
-	}
-}
-
-// the bottom band, with the title left-aligned
-function toBottomBand(title: string): CardElement {
-	// the title wraps and stops at three lines with an ellipsis
-	const titleElement: CardElement = {
-		type: "div",
-		props: {
-			style: {
-				display: "block",
-				lineClamp: MAX_TITLE_LINES,
-				fontSize: toPodcastCoverTitleFontSize(title),
-				lineHeight: 1.1,
-				color: TITLE_COLOR,
-			},
-			children: title,
-		},
-	}
-	return {
-		type: "div",
-		props: {
-			style: {
-				position: "absolute",
-				top: FULL_PODCAST_COVER_SIZE - BOTTOM_BAND_HEIGHT,
-				left: SIDE_MARGIN,
-				width: FULL_PODCAST_COVER_SIZE - SIDE_MARGIN * 2,
-				height: BOTTOM_BAND_HEIGHT - BOTTOM_MARGIN,
-				// the title sits at the bottom of the band, above the bottom margin
-				display: "flex",
-				flexDirection: "column",
-				justifyContent: "flex-end",
-			},
-			children: [titleElement],
-		},
-	}
+	// the square crop of the stored original, and the tones of the bands over it
+	const originalJpeg = await getAttachmentBytes(toTopicImageOriginalKey(topicId, topicImageHash))
+	const squareJpeg = await toTopicImageCardJpeg(originalJpeg, TOPIC_IMAGE_SQUARE_SIZE, TOPIC_IMAGE_SQUARE_SIZE)
+	return { dataUri: toImageDataUri(squareJpeg, "image/jpeg"), bandTones: await toCoverBandTones(squareJpeg) }
 }
 
 // the illustration as a data uri. a read that fails is tried again by the next cover
 function loadCoverIllustrationDataUri(): Promise<string> {
 	coverIllustrationDataUri ??= Bun.file(PODCAST_COVER_ILLUSTRATION_URL)
 		.arrayBuffer()
-		.then((coverIllustrationBytes) => `data:image/png;base64,${Buffer.from(coverIllustrationBytes).toString("base64")}`)
+		.then((coverIllustrationBytes) => toImageDataUri(new Uint8Array(coverIllustrationBytes), "image/png"))
 		// forget a failed read, so a file that arrives later is found
 		.catch((error) => {
 			coverIllustrationDataUri = undefined

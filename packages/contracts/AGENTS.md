@@ -142,3 +142,9 @@ account, and the Terms), and `podcastRouteContracts.ts` (podcast episodes). The 
 and nothing loads them back.
 
 The read-only Personal sources email response returns the environment-configured mailbox for the empty-state hint. Finding views show public notes alone. Send and email routing use editable Topics.
+
+`topicImages.ts` holds the topic image sizes' pixels, the original's size, the upload limits, the urls' shape and
+paths, and the regenerate, render, upload, and quota contracts, with the size, origin, render kind, and render status
+enums in `enums.ts` and `imageRegenerationLimit` per plan in `plans.ts`. `home.ts` holds the home payload: the featured
+counts, the topic and podcast episode card shapes, and a user's topics. `podcast.ts` adds `featuredPodcastEpisode`, a
+pinned podcast episode as the console and the podcast episode page's rank dialog list it.

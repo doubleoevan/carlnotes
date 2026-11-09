@@ -3,6 +3,7 @@
 import { AVATAR_COLOR, toAvatarInitials, toAvatarTint } from "@carlnotes/contracts/avatars"
 import { getAttachmentBytes } from "@carlnotes/db/store"
 import { darkRoast } from "@carlnotes/nightshift/colors"
+import { toTopicImageCardJpeg } from "@carlnotes/pipeline/topicImages/topicImageFiles"
 import { renderAsync } from "@resvg/resvg-js"
 import satori from "satori"
 import { MAX_AVATAR_BYTES, type PublishedAvatar, toAvatarContentType } from "../avatars"
@@ -12,7 +13,7 @@ const PREVIEW_WIDTH = 1200
 const PREVIEW_HEIGHT = 630
 
 // bump this when the card's design changes. Slack and X cache preview images hard and ignore cache headers.
-export const PREVIEW_TEMPLATE_VERSION = "v4"
+export const PREVIEW_TEMPLATE_VERSION = "v5"
 
 /**
  * Returns the version that a card's url names: a short hash of its storage key, which changes with the card.
@@ -34,6 +35,10 @@ const displayFont = await Bun.file(new URL("./fonts/ArchitectsDaughter-Regular.t
 const CARD_BACKGROUND = darkRoast.card
 const CARD_COLOR = darkRoast.foreground
 const CARD_ACCENT = darkRoast.primary
+
+// the image across a card's top, edge to edge like the home page's card, and the padding of the text under it
+const CARD_IMAGE_BAND_HEIGHT = 360
+const CARD_BODY_PADDING = "28px 64px 44px"
 
 // one element of the card's markup, in the React element shape that satori reads
 export type CardElement = {
@@ -59,7 +64,12 @@ export function toAvatarIdentity(avatar: PublishedAvatar): string {
  * it at the card's own width, so the png comes out at exactly the size the platforms crop to.
  */
 export async function toCardPng(rows: CardElement[]): Promise<Uint8Array> {
-	const frame: CardElement = {
+	return toCardElementPng({ cardElement: toCardFrame(rows, "64px"), width: PREVIEW_WIDTH, height: PREVIEW_HEIGHT })
+}
+
+// the card's frame around its rows: the dark card, the brand font, and the padding the card asks for
+function toCardFrame(rows: CardElement[], padding: string): CardElement {
+	return {
 		type: "div",
 		props: {
 			style: {
@@ -72,20 +82,95 @@ export async function toCardPng(rows: CardElement[]): Promise<Uint8Array> {
 				backgroundColor: CARD_BACKGROUND,
 				color: CARD_COLOR,
 				fontFamily: "Architects Daughter",
-				padding: "64px",
+				padding,
 			},
 			children: rows,
 		},
 	}
-	// the svg exported as a png at the exact platform crop size
-	const previewSvg = await satori(frame as Parameters<typeof satori>[0], {
-		width: PREVIEW_WIDTH,
-		height: PREVIEW_HEIGHT,
+}
+
+// the element to draw and the pixel size to draw it at
+type ToCardElementPngOptions = { cardElement: CardElement; width: number; height: number }
+
+/**
+ * Draws an element with satori and returns it as a png at the given size, rasterized by resvg.
+ */
+export async function toCardElementPng({ cardElement, width, height }: ToCardElementPngOptions): Promise<Uint8Array> {
+	// satori lays the element out as an svg in the brand font
+	const cardSvg = await satori(cardElement as Parameters<typeof satori>[0], {
+		width,
+		height,
 		fonts: [{ name: "Architects Daughter", data: displayFont, weight: 400, style: "normal" }],
 	})
-	// renderAsync rasterizes on a worker thread, so a burst of preview fetches never stalls the event loop
-	const renderedImage = await renderAsync(previewSvg, { fitTo: { mode: "width", value: PREVIEW_WIDTH } })
+	// renderAsync rasterizes on a worker thread, so a burst of renders never stalls the event loop
+	const renderedImage = await renderAsync(cardSvg, { fitTo: { mode: "width", value: width } })
 	return renderedImage.asPng()
+}
+
+// the image, the title, and the footer of a card that draws its image across its top
+type ToImageOverTextCardPngOptions = { imageDataUri: string; title: string; footer: CardElement }
+
+/**
+ * Draws a card the way the home page's cards look: the image across the top, edge to edge, then the title beside the
+ * brand and the footer on the card under it. Returns the card as png bytes.
+ */
+export function toImageOverTextCardPng({
+	imageDataUri,
+	title,
+	footer,
+}: ToImageOverTextCardPngOptions): Promise<Uint8Array> {
+	// the image band at the card's width
+	const imageElement: CardElement = {
+		type: "img",
+		props: { src: imageDataUri, width: PREVIEW_WIDTH, height: CARD_IMAGE_BAND_HEIGHT },
+	}
+
+	// the title wraps and stops at two lines with an ellipsis, with the brand at the row's end
+	const titleElement: CardElement = {
+		type: "div",
+		props: { style: { display: "block", lineClamp: 2, fontSize: 54, lineHeight: 1.15, flex: 1 }, children: title },
+	}
+	const titleRow: CardElement = {
+		type: "div",
+		props: {
+			style: { display: "flex", alignItems: "flex-start", gap: "32px" },
+			children: [titleElement, toBrandIcon()],
+		},
+	}
+	const body: CardElement = {
+		type: "div",
+		props: {
+			style: {
+				display: "flex",
+				flexDirection: "column",
+				justifyContent: "space-between",
+				flex: 1,
+				padding: CARD_BODY_PADDING,
+			},
+			children: [titleRow, footer],
+		},
+	}
+	return toCardElementPng({
+		cardElement: toCardFrame([imageElement, body], "0"),
+		width: PREVIEW_WIDTH,
+		height: PREVIEW_HEIGHT,
+	})
+}
+
+/**
+ * Returns a stored original, cropped from its center to the card's image band, as a data uri that satori can draw.
+ */
+export async function loadCardImageBandDataUri(originalKey: string): Promise<string> {
+	const originalJpeg = await getAttachmentBytes(originalKey)
+	const bandJpeg = await toTopicImageCardJpeg(originalJpeg, PREVIEW_WIDTH, CARD_IMAGE_BAND_HEIGHT)
+	return toImageDataUri(bandJpeg, "image/jpeg")
+}
+
+/**
+ * Returns an image's bytes as a data uri that satori can draw.
+ */
+export function toImageDataUri(bytes: Uint8Array, contentType: string): string {
+	return `data:${contentType};base64,${Buffer.from(bytes).toString("base64")}`
 }
 
 /**
@@ -100,7 +185,7 @@ export async function toOwnerImageDataUri(avatar: PublishedAvatar): Promise<stri
 		// a stored upload comes from the app's own bucket, and its avatar key names the type to serve it as
 		if ("avatarKey" in avatar) {
 			const bytes = await getAttachmentBytes(avatar.avatarKey)
-			return `data:${toAvatarContentType(avatar.avatarKey)};base64,${Buffer.from(bytes).toString("base64")}`
+			return toImageDataUri(bytes, toAvatarContentType(avatar.avatarKey))
 		}
 		// a provider photo is somebody else's url, so it is bounded by a timeout and a size before being read
 		const response = await fetch(avatar.imageUrl, { signal: AbortSignal.timeout(PROVIDER_PHOTO_TIMEOUT_MS) })
@@ -113,7 +198,7 @@ export async function toOwnerImageDataUri(avatar: PublishedAvatar): Promise<stri
 		}
 		// what the provider says it sent, falling back to the format a provider photo almost always is
 		const contentType = response.headers.get("content-type") ?? "image/jpeg"
-		return `data:${contentType};base64,${Buffer.from(bytes).toString("base64")}`
+		return toImageDataUri(bytes, contentType)
 	} catch (error) {
 		// an unreadable image draws the initials instead
 		console.error("preview avatar load failed", error)

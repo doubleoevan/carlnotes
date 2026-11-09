@@ -99,7 +99,13 @@ export function toPublicPodcastEpisodePages({
  * Returns the PodcastSeries fields of a public Topic's podcast.
  */
 export function toPodcastSeries(topicPreview: TopicPreview, appUrl: string): PodcastSeries {
-	const showCover = { kind: "show" as const, id: topicPreview.topicId, title: topicPreview.title }
+	const showCover = {
+		kind: "show" as const,
+		id: topicPreview.topicId,
+		title: topicPreview.title,
+		topicId: topicPreview.topicId,
+		topicImageHash: topicPreview.imageHash,
+	}
 	return {
 		name: `${topicPreview.title}: ${PODCAST_SHOW_NAME}`,
 		description: topicPreview.description,

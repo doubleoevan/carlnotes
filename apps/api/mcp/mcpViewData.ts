@@ -1,11 +1,13 @@
 // what a tool result gives its MCP view beside the structured result the model reads: the signed-in caller, the podcast
 // episodes its play buttons play with a play token each, and the findings MCP view's topic and findings in the site's shape
+
 import type { McpScanStatus } from "@carlnotes/contracts/mcpScanStatus"
 import { MCP_VIEW_META_KEY, type McpViewData, type McpViewTopic } from "@carlnotes/contracts/mcpViews"
 import type { PersonalSourcesSendResult } from "@carlnotes/contracts/personalSources"
 import type { PodcastEpisode } from "@carlnotes/contracts/podcast"
 import type { ProfileIdentity } from "@carlnotes/contracts/profiles"
 import type { SearchResultsPage } from "@carlnotes/contracts/search"
+import { toTopicImageUrlsOrNull } from "@carlnotes/contracts/topicImages"
 import type { TopicSuggestionsResult } from "@carlnotes/contracts/topicSuggestions"
 import { db } from "@carlnotes/db"
 import { loadFindingPersonalAnnotations } from "@carlnotes/db/findingPersonalAnnotations"
@@ -195,6 +197,7 @@ export async function loadFindingsMcpViewData(
 		isSubscribed,
 		canRate,
 		canBookmark,
+		image: toTopicImageUrlsOrNull(topic.id, topic.imageHash),
 	}
 	const mcpViewPodcastEpisodes = await loadMcpViewPodcastEpisodes(
 		toolCaller,
@@ -252,7 +255,10 @@ async function loadMcpViewPodcastEpisodes(
 	// each podcast episode's row and its topic, then the player's shape with the caller's progress
 	const userId = toToolCallerUserId(toolCaller)
 	const podcastEpisodeRows = await db
-		.select({ ...podcastEpisodeColumns, topic: { id: topics.id, name: topics.name, visibility: topics.visibility } })
+		.select({
+			...podcastEpisodeColumns,
+			topic: { id: topics.id, name: topics.name, visibility: topics.visibility, imageHash: topics.imageHash },
+		})
 		.from(podcastEpisodes)
 		.innerJoin(topics, eq(podcastEpisodes.topicId, topics.id))
 		.where(and(inArray(podcastEpisodes.id, [...new Set(podcastEpisodeIds)]), eq(podcastEpisodes.status, "published")))

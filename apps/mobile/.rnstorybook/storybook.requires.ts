@@ -41,7 +41,10 @@ globalThis.STORIES = normalizedStories;
 
 module?.hot?.accept?.();
 
-globalThis.FEATURES.ondeviceBackgrounds = true;
+globalThis.FEATURES = {
+  ...globalThis.FEATURES,
+  ondeviceBackgrounds: true,
+};
 
 const options = {}
 

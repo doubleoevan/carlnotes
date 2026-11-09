@@ -100,7 +100,13 @@ export async function loadFindingTopicPodcastEpisodes(
 
 	// the topics' access fields, then each one's latest podcast episode
 	const topicRows = await db
-		.select({ id: topics.id, name: topics.name, ownerId: topics.ownerId, visibility: topics.visibility })
+		.select({
+			id: topics.id,
+			name: topics.name,
+			ownerId: topics.ownerId,
+			visibility: topics.visibility,
+			imageHash: topics.imageHash,
+		})
 		.from(topics)
 		.where(inArray(topics.id, topicIds))
 	return [...(await loadLatestPodcastEpisodes(topicRows, userId)).values()]

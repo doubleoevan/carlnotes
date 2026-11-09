@@ -68,7 +68,9 @@ export function toPodcastEpisodeChapterSourceLabel(chapter: PodcastEpisodeChapte
 
 export type ChapterTopicFeed = {
 	topicFindings: TopicFinding[]
-	topic: Pick<TopicResponse, "id" | "name" | "prompt" | "visibility">
+	// the topic, with the team or owner and the image that a chapter's finding note shows where the caller has them
+	topic: Pick<TopicResponse, "id" | "name" | "prompt" | "visibility"> &
+		Partial<Pick<TopicResponse, "owner" | "teamLink" | "image">>
 	isRatable: boolean
 	isBookmarkable: boolean
 	topicFeedHandlers: TopicFeedHandlers

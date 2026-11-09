@@ -53,6 +53,7 @@ const podcastEpisodeMatchColumns = {
 	topicId: topics.id,
 	topicName: topics.name,
 	topicVisibility: topics.visibility,
+	topicImageHash: topics.imageHash,
 }
 
 /**
@@ -251,6 +252,7 @@ async function toPodcastEpisodeSearchRows(
 			id: podcastEpisodeMatchRow.topicId,
 			name: podcastEpisodeMatchRow.topicName,
 			visibility: podcastEpisodeMatchRow.topicVisibility,
+			imageHash: podcastEpisodeMatchRow.topicImageHash,
 		},
 	}))
 	const podcastEpisodeSummaries = await loadPodcastEpisodeSummaries(podcastEpisodeRowTopics)

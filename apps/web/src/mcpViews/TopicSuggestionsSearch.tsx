@@ -128,7 +128,12 @@ export function TopicSuggestionsSearch({
 								count: null,
 
 								subscriberCount: topic.subscriberCount ?? 0,
-								topic: { id: topic.id, name: topic.name, latestPodcastEpisode: topic.latestPodcastEpisode ?? null },
+								topic: {
+									id: topic.id,
+									name: topic.name,
+									latestPodcastEpisode: topic.latestPodcastEpisode ?? null,
+									image: null,
+								},
 								isSubscribed: null,
 							}}
 							isActive={index === suggestionIndex}

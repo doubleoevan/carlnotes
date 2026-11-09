@@ -120,7 +120,13 @@ export async function buildUpdates({
 		moreCount,
 		hasOpener: opener !== null,
 	})
-	return { opener, findings: updatesFindings, moreCount, morePath: topic ? toTopicPath(topic) : "/", ...updatesTopics }
+	return {
+		opener,
+		findings: updatesFindings,
+		moreCount,
+		morePath: topic ? toTopicPath(topic) : "/topics",
+		...updatesTopics,
+	}
 }
 
 // each Finding's Topic once, with whether the user may rate and bookmark its Findings, and each Topic's latest podcast
@@ -141,6 +147,7 @@ async function loadUpdatesTopics(
 			name: topics.name,
 			prompt: topics.prompt,
 			visibility: topics.visibility,
+			imageHash: topics.imageHash,
 			ownerId: topics.ownerId,
 			teamId: topics.teamId,
 		})

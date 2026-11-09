@@ -19,6 +19,7 @@ import {
 	PODCAST_THEME_SONG_PERFORMANCE_CREDIT,
 	PODCAST_THEME_SONG_PRODUCTION_CREDIT,
 	PODCAST_THEME_SONG_WRITING_CREDIT,
+	toPodcastEpisodeCover,
 	toTranscriptTurn,
 } from "@carlnotes/contracts/podcastEpisodes"
 import { toPodcastEpisodePath, toTopicPath } from "@carlnotes/contracts/seo"
@@ -46,12 +47,14 @@ export type PodcastFeedEpisode = {
 	durationSeconds: number
 	audioByteSize: number
 	publishedAt: Date
+	// the hash of its own image, which its cover is drawn over, null until it is drawn
+	imageHash: string | null
 }
 
 // what a feed is built from. the podcast episode files' base url is the public url or the listener's own token path
 export type ToPodcastFeedXmlOptions = {
 	appUrl: string
-	topic: { id: string; name: string; prompt: string; visibility: Visibility }
+	topic: { id: string; name: string; prompt: string; visibility: Visibility; imageHash: string | null }
 	feedUrl: string
 	podcastEpisodeFilesBaseUrl: string
 	// a listener's own feed is blocked from podcast directories
@@ -73,7 +76,10 @@ export function toPodcastFeedXml({
 	// the show's page, title, cover, and description, which ends with the theme song's credits and its link
 	const topicUrl = `${appUrl}${toTopicPath(topic)}`
 	const showTitle = `${topic.name}: ${PODCAST_SHOW_NAME}`
-	const showCoverPath = toPodcastCoverPath({ kind: "show", id: topic.id, title: topic.name }, FULL_PODCAST_COVER_SIZE)
+	const showCoverPath = toPodcastCoverPath(
+		{ kind: "show", id: topic.id, title: topic.name, topicId: topic.id, topicImageHash: topic.imageHash },
+		FULL_PODCAST_COVER_SIZE,
+	)
 	const showCoverUrl = `${appUrl}${showCoverPath}`
 	const showDescription = `${topic.prompt || `What Carl found for ${topic.name}.`} ${AI_VOICES_NOTE}. ${PODCAST_THEME_SONG_HEADING}: ${PODCAST_THEME_SONG.youtubeUrl}. ${PODCAST_THEME_SONG_WRITING_CREDIT}. ${PODCAST_THEME_SONG_PERFORMANCE_CREDIT}. ${PODCAST_THEME_SONG_PRODUCTION_CREDIT}. ${PODCAST_THEME_SONG_DRUMMING_CREDIT}.`
 
@@ -174,10 +180,7 @@ function toPodcastFeedItem(
 	const audioUrl = toXmlText(`${podcastEpisodeFilesUrl}/audio.mp3`)
 	const chaptersUrl = toXmlText(`${podcastEpisodeFilesUrl}/chapters.json`)
 	const transcriptUrl = toXmlText(`${podcastEpisodeFilesUrl}/transcript.html`)
-	const coverPath = toPodcastCoverPath(
-		{ kind: "episode", id: podcastEpisode.id, title: podcastEpisode.title },
-		FULL_PODCAST_COVER_SIZE,
-	)
+	const coverPath = toPodcastCoverPath(toPodcastEpisodeCover(podcastEpisode, topic), FULL_PODCAST_COVER_SIZE)
 
 	// wrap the item's details, audio, iTunes tags, and Podcasting 2.0 files in an item tag
 	const itemTags = [

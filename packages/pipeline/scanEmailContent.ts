@@ -1,12 +1,13 @@
 // what a Scan's email says: the props the topic scan email and the report render from, with the new Findings, Carl's
 // recap, the Podcast Episode, and the links back into the app, and one subscriber's rendered message
 
+import { toPodcastEpisodeCover } from "@carlnotes/contracts/podcastEpisodes"
 import { toScanFailureLabel } from "@carlnotes/contracts/scanFailure"
 import { toTopicPath } from "@carlnotes/contracts/seo"
 import { db, isFindingShown } from "@carlnotes/db"
 import { podcastEpisodes } from "@carlnotes/db/schema/podcast"
 import { findings, resources, type scans } from "@carlnotes/db/schema/scans"
-import type { topics } from "@carlnotes/db/schema/topics"
+import { topics } from "@carlnotes/db/schema/topics"
 import type { EmailMessage } from "@carlnotes/emails/email"
 import type { ManualScanEmailProps } from "@carlnotes/emails/manual-scan-email"
 import {
@@ -80,8 +81,15 @@ async function toScanEmailPodcastEpisode({
 			title: podcastEpisodes.title,
 			description: podcastEpisodes.description,
 			status: podcastEpisodes.status,
+			season: podcastEpisodes.season,
+			episodeNumber: podcastEpisodes.episodeNumber,
+			imageHash: podcastEpisodes.imageHash,
+			topicId: topics.id,
+			topicName: topics.name,
+			topicImageHash: topics.imageHash,
 		})
 		.from(podcastEpisodes)
+		.innerJoin(topics, eq(topics.id, podcastEpisodes.topicId))
 		.where(eq(podcastEpisodes.scanId, scanId))
 	const isPodcastEpisodeShown = podcastEpisode?.status === "recording" || podcastEpisode?.status === "published"
 	if (!podcastEpisode?.title || !isPodcastEpisodeShown) {
@@ -90,7 +98,12 @@ async function toScanEmailPodcastEpisode({
 
 	// build the Podcast Episode's link and its cover's url
 	const appUrl = appBaseUrl()
-	const coverPath = toPodcastCoverPath({ kind: "episode", id: podcastEpisode.id, title: podcastEpisode.title }, 600)
+	const { title, topicId, topicName, topicImageHash } = podcastEpisode
+	const podcastCover = toPodcastEpisodeCover(
+		{ ...podcastEpisode, title },
+		{ id: topicId, name: topicName, imageHash: topicImageHash },
+	)
+	const coverPath = toPodcastCoverPath(podcastCover, 600)
 	return {
 		title: podcastEpisode.title,
 		description: podcastEpisode.description ?? undefined,

@@ -23,12 +23,11 @@ export function toMcpViewRouteHeading({
 	if (pathname.startsWith(FINDINGS_ROUTE_PREFIX) && mcpViewData.topic) {
 		return { title: mcpViewData.topic.name, href: toTopicPath(mcpViewData.topic) }
 	}
-	// link the search route to its search url
+	// link the search route to its search url and the updates route to the updates page
 	if (pathname === "/search") {
 		const searchUrl = (toolResult?.structuredContent as McpSearchPage | undefined)?.searchUrl
 		return searchUrl ? { title: "Search", href: searchUrl } : null
 	}
-	// link the updates route to the page of its more link
 	if (pathname === "/updates") {
 		const { updates } = mcpViewData
 		return updates ? { title: UPDATES_TITLE, href: updates.morePath } : null

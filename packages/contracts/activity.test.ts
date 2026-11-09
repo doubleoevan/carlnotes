@@ -64,6 +64,7 @@ const activityFixture: ActivityResponse = {
 				publishedAt: "2026-10-02T00:00:00.000Z",
 				pagePath: "/podcast/2026/4",
 				chapterCount: 3,
+				image: null,
 			},
 		},
 	],

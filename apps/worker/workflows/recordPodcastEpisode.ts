@@ -20,6 +20,10 @@ const WRITE_ATTEMPTS = 3
 const SCRIPT_TIMEOUT_MS = 10 * 60 * 1000
 const SCRIPT_ATTEMPTS = 3
 
+// the podcast episode image's scene and render get three minutes an attempt, backing off from 15 seconds over three attempts
+const IMAGE_TIMEOUT_MS = 3 * 60 * 1000
+const IMAGE_RETRY_POLICY = { initialInterval: 15 * 1000, backoffCoefficient: 2, maximumAttempts: 3 }
+
 // a chapter's retries back off from 30 seconds, doubling up to 15 minutes apart
 const CHAPTER_RETRY_POLICY = { initialInterval: 30 * 1000, backoffCoefficient: 2, maximumInterval: 15 * 60 * 1000 }
 
@@ -61,6 +65,12 @@ const { recordPodcastEpisodeChapter: recordFlexChapter } = proxyActivities<typeo
 	startToCloseTimeout: FLEX_CHAPTER_TIMEOUT_MS,
 	scheduleToCloseTimeout: FLEX_CHAPTER_TOTAL_TIMEOUT_MS,
 	retry: CHAPTER_RETRY_POLICY,
+})
+
+// the podcast episode image draws after the publish, and a failure leaves the podcast episode without one
+const { drawPodcastEpisodeImageActivity } = proxyActivities<typeof podcastEpisodeActivities>({
+	startToCloseTimeout: IMAGE_TIMEOUT_MS,
+	retry: IMAGE_RETRY_POLICY,
 })
 
 // the encode starts over from the chapters in object storage, so the encode may retry
@@ -153,7 +163,11 @@ export async function recordPodcastEpisodeWorkflow({
 		})
 	} catch (error) {
 		await failPodcastEpisode({ podcastEpisodeId, reason: toWorkflowFailureReason(error) })
+		return
 	}
+
+	// the published episode's own image. the episode shows its topic's image until one is drawn
+	await drawPodcastEpisodeImageActivity(podcastEpisodeId).catch(() => undefined)
 }
 
 // signal the Scan's email workflow that the outline is settled

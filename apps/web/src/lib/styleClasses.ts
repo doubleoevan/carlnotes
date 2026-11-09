@@ -76,6 +76,25 @@ export const SCRIPTED_ONLY_CLASS = "hidden scripted:inline-flex"
 export const SCRIPTED_HIDDEN_CLASS = "scripted:hidden"
 
 /**
+ * Hides a section on a narrow screen with JavaScript. The section stays in the html, and a browser without JavaScript
+ * shows it at every width.
+ */
+export const NARROW_SCREEN_HIDDEN_CLASS = "max-sm:scripted:hidden"
+
+/**
+ * A card that is one link to its page: the box the heading's link stretches over, the group whose hover underlines the
+ * heading, and the overlay shadow under the pointer or a focus inside it.
+ */
+export const CARD_LINK_BOX_CLASS = "group/card relative flex flex-col hover:shadow-overlay focus-within:shadow-overlay"
+
+/**
+ * The heading of a card that is one link: the display font, underlined while the card is hovered, and a pseudo-element
+ * over the whole card, so a click anywhere opens the page.
+ */
+export const STRETCHED_CARD_LINK_CLASS =
+	"font-display text-foreground text-lg leading-tight no-underline group-hover/card:underline after:absolute after:inset-0 after:content-['']"
+
+/**
  * The muted look that a row's play button adds if its podcast episode or chapter is not the one in the player.
  */
 export const PLAY_BUTTON_MUTED_CLASS = "bg-muted text-muted-foreground hover:bg-accent hover:text-foreground border"
@@ -317,6 +336,60 @@ export const PAGE_CLASS = "mx-auto max-w-5xl px-safe pt-3 pb-10"
  * The row at the top of a page shell, with the page title at the left and the page's action at the right.
  */
 export const PAGE_HEADER_CLASS = "flex items-center justify-between gap-4"
+
+/**
+ * The row of a page header with its image at the left and its fields beside it.
+ */
+export const IMAGE_HEADER_CLASS = "my-4 flex items-start gap-4"
+
+/**
+ * An image's loading state at 3:2: the muted background, pulsing. The caller sets the width and the corners.
+ */
+export const IMAGE_SKELETON_CLASS = "bg-muted aspect-[3/2] animate-pulse"
+
+/**
+ * A topic image's width in a page header. It is as tall as a podcast episode cover at 3:2, and smaller on a phone.
+ */
+export const HEADER_TOPIC_IMAGE_CLASS = "w-36 sm:w-54"
+
+/**
+ * A topic image's width in a Topics row, a step smaller than the page header's.
+ */
+export const LIST_TOPIC_IMAGE_CLASS = "w-30 sm:w-36"
+
+// the topic header grid's layouts from sm up, by whether the topic has tags and whether the row has actions: the
+// title, the byline, and the tags beside the image. the last row stretches to the image's bottom, and the actions
+// end it at the right, at its bottom
+const TOPIC_HEADER_GRID_CLASSES = {
+	tagsAndActions:
+		"sm:grid-rows-[auto_auto_1fr] sm:[grid-template-areas:'image_title_title'_'image_byline_byline'_'image_tags_actions']",
+	actions: "sm:grid-rows-[auto_1fr] sm:[grid-template-areas:'image_title_title'_'image_byline_actions']",
+	tags: "sm:grid-rows-[auto_auto_1fr] sm:[grid-template-areas:'image_title_title'_'image_byline_byline'_'image_tags_tags']",
+	plain: "sm:grid-rows-[auto_1fr] sm:[grid-template-areas:'image_title_title'_'image_byline_byline']",
+}
+
+/**
+ * Returns a topic header's classes, with the same space above and below as every image header. On a phone the image
+ * floats at the left, so the title, the tags, and the byline sit beside it and run under it only once they pass its
+ * bottom. From sm up it is a grid with each part in its named area.
+ */
+export function toTopicHeaderGridClass({ hasTags, hasActions }: { hasTags: boolean; hasActions: boolean }): string {
+	const layoutName = hasTags ? (hasActions ? "tagsAndActions" : "tags") : hasActions ? "actions" : "plain"
+	return `my-4 flow-root sm:grid sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-start sm:gap-x-4 sm:gap-y-1.5 ${TOPIC_HEADER_GRID_CLASSES[layoutName]}`
+}
+
+/**
+ * The classes of a topic header's parts. On a phone the byline row sits under the image and holds the byline with
+ * the actions at its right. From sm up the row uses display: contents, so each child takes its own grid area.
+ */
+export const TOPIC_HEADER_AREA_CLASSES = {
+	image: "float-left mr-4 mb-1.5 [grid-area:image] sm:float-none sm:mr-0 sm:mb-0",
+	title: "[grid-area:title] min-w-0",
+	tags: "[grid-area:tags] mt-1.5 min-w-0 sm:mt-0",
+	bylineRow: "mt-1.5 flex items-center justify-between gap-3 max-sm:clear-left sm:contents",
+	byline: "[grid-area:byline] min-w-0",
+	actions: "[grid-area:actions] shrink-0 sm:self-end",
+}
 
 /**
  * The h1 of a page shell: the display font, with the icon of the page's header menu item in front.

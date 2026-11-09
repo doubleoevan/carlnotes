@@ -1,17 +1,16 @@
-import { toAvatarImagePath } from "@carlnotes/contracts/avatars"
-import { toProfilePath } from "@carlnotes/contracts/seo"
-import { SITE_URL } from "@carlnotes/contracts/site"
 import type { TopicDetails } from "@carlnotes/contracts/topics"
 import { Text as NativeText, View } from "react-native"
-import { Avatar } from "@/components/branding/Avatar"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { PageUpdateCountBadge } from "@/components/common/UpdateCountBadge"
 import { PodcastEpisodePlayButton } from "@/components/podcast/PodcastEpisodePlayButton"
 import { Badge } from "@/components/primitives/badge"
 import { toTouchTargetHitSlop } from "@/components/primitives/button"
 import { Text } from "@/components/primitives/text"
+import { TopicImage } from "@/components/primitives/topic-image"
 import { ShareTopic } from "@/components/share/ShareTopic"
+import { LIST_TOPIC_IMAGE_CLASS } from "@/topicImageClasses"
 import { toTypeRoleStyle } from "@/typeRoleStyles"
+import { TopicByline } from "./TopicByline"
 import { TopicInfoButton } from "./TopicInfo"
 
 /**
@@ -22,97 +21,64 @@ export function Topic({ topic }: { topic: TopicDetails }) {
 	const titleStyle = toTypeRoleStyle("sectionHeading")
 	const titleLineHeight = Number(titleStyle.fontSize) * 1.25
 	return (
-		<View className="mx-4 pt-1.5 pb-1.5">
-			{/* the title is a link, separate from the count and actions below */}
-			<View className="flex-row items-center gap-2">
-				<AnchorLink
-					href={{ pathname: "/topics/[topicId]", params: { topicId: topic.id } }}
-					accessibilityLabel={`Open ${topic.name}`}
-					hitSlop={toTouchTargetHitSlop(titleLineHeight + 8)}
-					className="min-w-0 shrink justify-center py-1 pl-4 active:opacity-75"
-				>
-					<NativeText
-						accessibilityRole="header"
-						style={[titleStyle, { lineHeight: titleLineHeight }]}
-						className="text-link"
-					>
-						{topic.name}
-					</NativeText>
-				</AnchorLink>
-				<PageUpdateCountBadge topicId={topic.id} />
-				{topic.latestPodcastEpisode ? <PodcastEpisodePlayButton episode={topic.latestPodcastEpisode} /> : null}
-				<TopicInfoButton topic={topic} />
-			</View>
-			{/* the attribution and plain unread count share the next line */}
-			<View className="flex-row items-center justify-between gap-3">
-				<TopicByline topic={topic} />
-				<View className="ml-auto min-h-11 shrink-0 flex-row items-center">
-					{topic.newCount > 0 ? (
-						<NativeText style={toTypeRoleStyle("label")} className="pr-1 text-badge">
-							{topic.newCount} new
-						</NativeText>
+		<View className="mx-4 my-4">
+			{/* the image at the left edge of the findings card, with the title, the tags, and the byline beside it */}
+			<View className="flex-row items-start gap-4">
+				<TopicImage image={topic.image} size="page" name={topic.name} className={LIST_TOPIC_IMAGE_CLASS} />
+				<View className="min-w-0 flex-1">
+					<View className="flex-row flex-wrap items-center gap-x-2">
+						<AnchorLink
+							href={{ pathname: "/topics/[topicId]", params: { topicId: topic.id } }}
+							accessibilityLabel={`Open ${topic.name}`}
+							hitSlop={toTouchTargetHitSlop(titleLineHeight + 8)}
+							className="min-w-0 shrink justify-center pb-1 active:opacity-75"
+						>
+							<NativeText
+								accessibilityRole="header"
+								style={[titleStyle, { lineHeight: titleLineHeight }]}
+								className="text-link"
+							>
+								{topic.name}
+							</NativeText>
+						</AnchorLink>
+						<PageUpdateCountBadge topicId={topic.id} />
+						{topic.latestPodcastEpisode ? (
+							<PodcastEpisodePlayButton podcastEpisode={topic.latestPodcastEpisode} />
+						) : null}
+						<TopicInfoButton topic={topic} />
+					</View>
+					{/* the tags, then the byline, with the unread count and the share action at the right of its row, over
+					    the findings card's top right corner. React Native has no float, so they stay beside the image */}
+					{topic.tags.length > 0 ? (
+						<View className="mt-1.5 flex-row flex-wrap gap-1">
+							{topic.tags.map((tag) => (
+								<Badge key={tag} variant="secondary">
+									<Text>{tag}</Text>
+								</Badge>
+							))}
+						</View>
 					) : null}
-					<ShareTopic topic={topic} />
+					<View className="mt-1.5 flex-row items-end justify-between gap-3">
+						<TopicByline topic={topic} />
+						<TopicRowActions topic={topic} />
+					</View>
 				</View>
 			</View>
-			{/* tags keep the web's secondary badge treatment and inset */}
-			{topic.tags.length > 0 ? (
-				<View className="my-1.5 flex-row flex-wrap gap-1 pl-3">
-					{topic.tags.map((tag) => (
-						<Badge key={tag} variant="secondary">
-							<Text>{tag}</Text>
-						</Badge>
-					))}
-				</View>
-			) : null}
 		</View>
 	)
 }
 
-/**
- * Links the delivered byline team or, when absent, the Topic owner.
- */
-export function TopicByline({
-	topic,
-	label = "Brewed by",
-	isPage = false,
-}: {
-	topic: Pick<TopicDetails, "teamLink" | "owner">
-	label?: string
-	isPage?: boolean
-}) {
-	// prefer the team only when the API supplies its visible byline
-	const team = topic.teamLink
-	const owner = topic.owner
-	if (!team && !owner) {
-		return null
-	}
-
-	// use the same identity routes and avatar versions as the web
-	const name = team?.name ?? owner?.username ?? ""
-	const ownerId = team?.teamId ?? owner?.userId ?? ""
-	const path = team ? `/teams/${team.teamId}` : toProfilePath(ownerId)
-	let imageUrl: string | null = null
-	if (team?.avatarVersion) {
-		imageUrl = `/api/team-avatars/${team.teamId}?v=${team.avatarVersion}`
-	} else if (!team && owner?.avatarVersion) {
-		imageUrl = toAvatarImagePath(owner.userId, owner.avatarVersion)
-	}
+// the plain unread count and the share action, at the right of a Topics row. the touch box reaches into the gaps
+// around its row
+function TopicRowActions({ topic }: { topic: TopicDetails }) {
 	return (
-		<AnchorLink
-			href={`${SITE_URL}${path}`}
-			accessibilityLabel={`${label} ${name}`}
-			hitSlop={toTouchTargetHitSlop(44)}
-			className={
-				isPage
-					? "min-h-11 min-w-0 flex-row items-center gap-2 active:opacity-75"
-					: "min-h-11 min-w-0 shrink flex-row items-center gap-2 pl-4 active:opacity-75"
-			}
-		>
-			<Avatar imageUrl={imageUrl} ownerId={ownerId} name={name} />
-			<NativeText style={toTypeRoleStyle(isPage ? "body" : "caption")} className="shrink text-muted-foreground">
-				{label} <NativeText className="text-link">{name}</NativeText>
-			</NativeText>
-		</AnchorLink>
+		<View className="-my-2.5 min-h-11 shrink-0 flex-row items-center">
+			{topic.newCount > 0 ? (
+				<NativeText style={toTypeRoleStyle("label")} className="pr-1 text-badge">
+					{topic.newCount} new
+				</NativeText>
+			) : null}
+			<ShareTopic topic={topic} />
+		</View>
 	)
 }

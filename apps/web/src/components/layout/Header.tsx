@@ -18,7 +18,6 @@ import { HERO_BUTTON_HOVER_CLASS, LOGO_CLASS } from "@/lib/styleClasses"
 import { toLinkClickHandler, toSafeRedirectPath } from "@/lib/utils"
 import { useTopicFeed } from "@/providers/TopicFeedProvider"
 import { clearSearchBar, useSearchBarPath } from "@/stores/searchBarStore"
-import { DocsLink } from "./DocsLink"
 import { HeaderMenu } from "./HeaderMenu"
 import { HomeHero } from "./HomeHero"
 import { ThemeToggle } from "./ThemeToggle"
@@ -51,18 +50,17 @@ export function Header() {
 	const handleHomeClick = pathname === "/" ? toLinkClickHandler(() => void reheat()) : undefined
 	const logoLink = useLogoLink(pathname, handleHomeClick)
 
-	// the hero pitches the app to a visitor. it only shows on the home page to logged-out visitors.
-	// a page without the hero gets the video's button beside the logo instead
+	// the hero pitches the app to a visitor. it only shows on the home page to visitors
 	const isSignedInBeforeSession = useIsSignedInBeforeSession()
 	const isHeroShown = !isSignedInBeforeSession && pathname === "/"
-	// the video on making a topic, which the hero and either menu open in one dialog, and where it was opened from
+	// the video on making a topic, which the header's button and either menu open in one dialog, and where it was opened from
 	const [topicTutorialVideoOpener, setTopicTutorialVideoOpener] = useState<TopicTutorialVideoOpener | null>(null)
 	return (
 		<header className="bg-hero text-hero-foreground relative overflow-hidden">
 			<div className={cn("relative z-10 mx-auto max-w-5xl px-safe pt-5", !isHeroShown && "pb-10")}>
 				{/* the top bar with the brand icon on the left and the menu on the right */}
 				<div className="flex items-center justify-between">
-					{/* the brand, with the video's button after it if the hero is hidden, nudged down to the logo's letters */}
+					{/* the brand, with the video's button after it, nudged down to the logo's letters */}
 					<div className="flex items-center gap-2">
 						{/* the brand links to the search bar's search, or home, emptying the bar from the search page and reheating
 						    the feed if already home */}
@@ -74,21 +72,24 @@ export function Header() {
 							mugClassName="text-hero-accent -translate-y-0.5"
 							nameClassName={cn("animate-hydrate", LOGO_CLASS)}
 						/>
-						{!isHeroShown && (
-							<TopicTutorialVideoButton
-								onSelect={() => setTopicTutorialVideoOpener("header")}
-								className="size-7 -translate-y-px"
-							/>
-						)}
+						<TopicTutorialVideoButton
+							onSelect={() => setTopicTutorialVideoOpener("header")}
+							className="size-7 -translate-y-px"
+						/>
 					</div>
 					{/* the desktop menu items, swapped for the hamburger menu on small screens */}
 					<div className="hidden items-center gap-1 sm:flex">
 						<ThemeToggle isDark={isDark} onToggle={toggleTheme} />
-						{/* docs and plans move into the user menu once signed in */}
+						{/* topics and plans move into the user menu once signed in */}
 						{!session && (
 							<>
-								{/* the docs open in their own tab */}
-								<DocsLink className={cn(buttonVariants({ variant: "ghost" }), "min-h-9", HERO_BUTTON_HOVER_CLASS)} />
+								<AnchorLink
+									href="/topics"
+									aria-current={pathname === "/topics" ? "page" : undefined}
+									className={menuLinkClassName(pathname, "/topics")}
+								>
+									Topics
+								</AnchorLink>
 								<AnchorLink
 									href="/plans"
 									aria-current={pathname === "/plans" ? "page" : undefined}
@@ -138,15 +139,9 @@ export function Header() {
 					/>
 				</div>
 				{/* the hero pitches the app to a visitor */}
-				{isHeroShown && (
-					<HomeHero
-						pathname={pathname}
-						onHomeClick={handleHomeClick}
-						onPlayTopicTutorialVideo={() => setTopicTutorialVideoOpener("hero")}
-					/>
-				)}
+				{isHeroShown && <HomeHero onHomeClick={handleHomeClick} />}
 			</div>
-			{/* the dialog that plays the video on making a topic, opened from the hero or either menu */}
+			{/* the dialog that plays the video on making a topic, opened from the header or either menu */}
 			{topicTutorialVideoOpener && (
 				<TopicTutorialVideoDialog opener={topicTutorialVideoOpener} onClose={() => setTopicTutorialVideoOpener(null)} />
 			)}

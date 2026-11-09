@@ -91,6 +91,24 @@ export async function deleteStoredObject(objectKey: string): Promise<boolean> {
 /**
  * Deletes stored objects a few at a time.
  */
+/**
+ * Returns the keys of every stored object under a prefix.
+ */
+export async function listStoredObjectKeys(keyPrefix: string): Promise<string[]> {
+	// one page at a time, until the listing says there is no more
+	const objectKeys: string[] = []
+	let startAfter: string | undefined
+	while (true) {
+		const page = await bucket().list({ prefix: keyPrefix, startAfter })
+		const pageKeys = (page.contents ?? []).map((storedObject) => storedObject.key)
+		objectKeys.push(...pageKeys)
+		if (!page.isTruncated || pageKeys.length === 0) {
+			return objectKeys
+		}
+		startAfter = pageKeys[pageKeys.length - 1]
+	}
+}
+
 export async function deleteStoredObjects(objectKeys: string[]): Promise<void> {
 	// delete the objects a few at a time
 	await runWithConcurrency(objectKeys, OBJECT_DELETE_CONCURRENCY, deleteStoredObject)

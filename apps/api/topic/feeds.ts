@@ -1,6 +1,8 @@
 // the topic feed logic for the homepage route. it batches every topic's data in one pass and builds each feed in memory
+
 import type { TopicFinding } from "@carlnotes/contracts/findings"
 import { EMPTY_REACTION_SUMMARY, toSocialTargetKey } from "@carlnotes/contracts/social"
+import { toTopicImageUrlsOrNull } from "@carlnotes/contracts/topicImages"
 import type { TopicFeed, TopicFeedResponse, TopicResponse } from "@carlnotes/contracts/topics"
 import { db, isPublicAndShown } from "@carlnotes/db"
 import { cacheJson } from "@carlnotes/db/redis"
@@ -212,14 +214,7 @@ function buildTopicFeed(
 		.flatMap(toTopicSourceSummary)
 
 	// read the attachments, dropping the grouping key from each row
-	const topicAttachments = (feedData.attachmentsByTopic.get(topic.id) ?? []).map((attachment) => ({
-		id: attachment.id,
-		filename: attachment.filename,
-		sourceUrl: attachment.sourceUrl,
-		status: attachment.status,
-		context: null,
-		failureMessage: null,
-	}))
+	const topicAttachments = toFeedAttachments(feedData.attachmentsByTopic.get(topic.id) ?? [])
 
 	// shape each row into a topic finding and set its isConsumed flag
 	const topicFindings: TopicFinding[] = findingRows.map(toTopicFinding)
@@ -237,9 +232,7 @@ function buildTopicFeed(
 		// the topic owner to show
 		owner: toProfileIdentity(feedData.ownerByTopic.get(topic.id) ?? null),
 		isTopicOwner,
-		isOnTeam: topic.teamId !== null,
-		teamLink: feedData.teamLinkByTopic.get(topic.id) ?? null,
-		isTeamMember: userId !== null && feedData.memberTopicIdSet.has(topic.id),
+		...toFeedTeamFields(topic, userId, feedData),
 		chatMentions: feedData.mentionsByTopic.get(topic.id) ?? [],
 		// what this user may do with the topic, plus their unconsumed topic findings count
 		canRate: canRateInFeed(topic, userId, feedData.subscribedTopicIdSet, feedData.memberTopicIdSet),
@@ -247,8 +240,6 @@ function buildTopicFeed(
 		newCount: newTopicFindingCount(topicFindings),
 		subscriberCount,
 		viewerCount: topic.viewerCount,
-		// the first team to hold a topic owns it in a column, and every later team to add a topic gets a shared-in row
-		teamCount: (feedData.sharedTeamCountByTopic.get(topic.id) ?? 0) + (topic.teamId ? 1 : 0),
 		visibility: topic.visibility,
 		// the created time, the newest shown finding's time or the created time, the last scan details, attachments,
 		// sources, and topic findings
@@ -262,7 +253,37 @@ function buildTopicFeed(
 		sources: topicSources,
 		findings: filteredTopicFindings(topicFindings, includeConsumedResources),
 		latestPodcastEpisode: feedData.latestPodcastEpisodeByTopic.get(topic.id) ?? null,
+		image: toTopicImageUrlsOrNull(topic.id, topic.imageHash),
 	}
+}
+
+// a topic's team fields in the feed: whether a team owns it, the team link, the user's membership, and the team count
+function toFeedTeamFields(
+	topic: typeof topics.$inferSelect,
+	userId: string | null,
+	feedData: Awaited<ReturnType<typeof loadTopicFeedData>>,
+): Pick<TopicFeed, "isOnTeam" | "teamLink" | "isTeamMember" | "teamCount"> {
+	// the first team to hold a topic owns it in a column, and every later team to add a topic gets a shared-in row
+	return {
+		isOnTeam: topic.teamId !== null,
+		teamLink: feedData.teamLinkByTopic.get(topic.id) ?? null,
+		isTeamMember: userId !== null && feedData.memberTopicIdSet.has(topic.id),
+		teamCount: (feedData.sharedTeamCountByTopic.get(topic.id) ?? 0) + (topic.teamId ? 1 : 0),
+	}
+}
+
+// an attachment row as the feed shows it, with no context and no failure message, which only the topic page shows
+function toFeedAttachments(
+	attachmentRows: NonNullable<ReturnType<Awaited<ReturnType<typeof loadTopicFeedData>>["attachmentsByTopic"]["get"]>>,
+): TopicFeed["attachments"] {
+	return attachmentRows.map((attachment) => ({
+		id: attachment.id,
+		filename: attachment.filename,
+		sourceUrl: attachment.sourceUrl,
+		status: attachment.status,
+		context: null,
+		failureMessage: null,
+	}))
 }
 
 /**

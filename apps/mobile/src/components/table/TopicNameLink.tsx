@@ -26,7 +26,7 @@ export function TopicNameLink({
 				<Text className="text-sm text-link">{topic.name}</Text>
 			</AnchorLink>
 			<PageUpdateCountBadge topicId={topic.id} />
-			{topic.latestPodcastEpisode ? <PodcastEpisodePlayButton episode={topic.latestPodcastEpisode} /> : null}
+			{topic.latestPodcastEpisode ? <PodcastEpisodePlayButton podcastEpisode={topic.latestPodcastEpisode} /> : null}
 		</View>
 	)
 }

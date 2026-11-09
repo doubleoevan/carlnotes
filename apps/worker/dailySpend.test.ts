@@ -19,6 +19,7 @@ test("loadDailySpend sums the day's scan, chat, and episode costs and counts the
 		chat_turns: [["0.25"]],
 		episodes: [["2"]],
 		personal_source_distillation_spends: [["0.15"]],
+		topic_image_renders: [["0"]],
 	}
 	const sentQueries = stubConnectionPool(({ text }) => {
 		const table = Object.keys(rowsByTable).find((name) => text.includes(`"${name}"`))
@@ -32,12 +33,13 @@ test("loadDailySpend sums the day's scan, chat, and episode costs and counts the
 		chatDollars: 0.25,
 		podcastEpisodeDollars: 2,
 		personalSourcesDollars: 0.15,
+		topicImageDollars: 0,
 		totalDollars: 3.9,
 		newUserCount: 7,
 	})
 
 	// every read starts at midnight UTC, which the driver sends as its ISO text
-	expect(sentQueries).toHaveLength(5)
+	expect(sentQueries).toHaveLength(6)
 	for (const sentQuery of sentQueries) {
 		expect(sentQuery.values).toEqual(["2026-10-11T00:00:00.000Z"])
 	}
@@ -52,6 +54,7 @@ test("reportDailySpend logs the spend and warns only past the threshold", async 
 		chatDollars: 0,
 		podcastEpisodeDollars: 0,
 		personalSourcesDollars: 0,
+		topicImageDollars: 0,
 		totalDollars: 1,
 		newUserCount: 0,
 	}

@@ -1,19 +1,17 @@
-import { toApiUrl } from "@carlnotes/client/apiClient"
 import { authClient } from "@carlnotes/client/authClient"
-import type { ChatLinkPreview } from "@carlnotes/contracts/chat"
-import { toHostWithoutWww } from "@carlnotes/contracts/seo"
+import type { PodcastEpisode } from "@carlnotes/contracts/podcast"
+import { toHostWithoutWww, toTopicPath } from "@carlnotes/contracts/seo"
 import { SITE_URL } from "@carlnotes/contracts/site"
 import type { CommentThreadResponse } from "@carlnotes/contracts/social"
 import { toPlainText } from "@carlnotes/contracts/spokenText"
 import { toOneLineText } from "@carlnotes/contracts/text"
-import { useFindingLinkPreview } from "@carlnotes/core/hooks/useFindingLinkPreview"
+import { useFindingTopic } from "@carlnotes/core/hooks/useFindingTopic"
 import { useSubjectReportFlag } from "@carlnotes/core/hooks/useSubjectReport"
 import { toDateLabel } from "@carlnotes/core/lib/labels"
 import { isFindingRatedDown } from "@carlnotes/core/lib/topicFindingFilters"
 import { toNotesMarkdown } from "@carlnotes/core/lib/topicScanRecap"
-import { Image } from "expo-image"
+import { togglePodcastEpisodeFindingPlayback } from "@carlnotes/core/stores/podcastEpisodePlayActions"
 import { Bookmark, Check, Circle, ExternalLink, Flag } from "lucide-react-native"
-import { useState } from "react"
 import { Text, View } from "react-native"
 import { toActiveIconProps } from "@/activeIconProps"
 import { CoffeeLoading } from "@/components/branding/CoffeeLoading"
@@ -22,14 +20,17 @@ import { ReportIssueDialog } from "@/components/common/ReportIssueDialog"
 import { ScrollBox } from "@/components/common/ScrollBox"
 import { ShareMarkdownButton } from "@/components/common/ShareMarkdownButton"
 import { Sheet, type SheetProps } from "@/components/common/Sheet"
-import { YoutubePlayer } from "@/components/common/YoutubePlayer"
+import { PodcastEpisodePlayButton } from "@/components/podcast/PodcastEpisodePlayButton"
 import { Button, toTouchTargetHitSlop } from "@/components/primitives/button"
 import { Icon } from "@/components/primitives/icon"
 import { Text as ButtonText } from "@/components/primitives/text"
+import { TopicImage } from "@/components/primitives/topic-image"
 import { ReactionRow } from "@/components/social/ReactionRow"
 import { SocialSection } from "@/components/social/SocialSection"
 import { toTypeRoleStyle } from "@/typeRoleStyles"
 import { captureVisitEvent, toPublicTopicProperties } from "@/visitAnalytics"
+import { FindingLinkPreview } from "./FindingLinkPreview"
+import { TopicByline } from "./TopicByline"
 import { TopicFindingRating } from "./TopicFindingRating"
 import { ResourceMetadata } from "./TopicFindingSummary"
 import type { TopicResourceProps } from "./TopicResource"
@@ -118,6 +119,13 @@ export function TopicResourceInfo(props: TopicResourceInfoProps) {
 					{toPlainText(resource.relevanceExplanation) || "No notes yet."}
 				</Text>
 			</ScrollBox>
+			{/* the topic the finding belongs to with its byline, then a divider */}
+			<FindingTopic
+				topic={topic}
+				latestPodcastEpisode={props.latestPodcastEpisode ?? null}
+				findingId={resource.findingId}
+				onClose={onClose}
+			/>
 			<View className="my-3 flex-row justify-between gap-4">
 				<View className="gap-1">
 					<Text style={toTypeRoleStyle("sectionLabel")} className="text-muted-foreground">
@@ -145,7 +153,7 @@ export function TopicResourceInfo(props: TopicResourceInfoProps) {
 			)}
 			{/* the finding's comment thread, which loads as the sheet opens */}
 			{isSocialShown ? (
-				<View className="-mt-1">
+				<View className="-mt-4">
 					<SocialSection
 						target={findingTarget}
 						firstPage={props.commentThread}
@@ -176,6 +184,71 @@ export function TopicResourceInfo(props: TopicResourceInfoProps) {
 				/>
 			)}
 		</Sheet>
+	)
+}
+
+// the finding's topic over a divider: its image beside its name, which links to its page, the latest podcast episode's
+// play button, which starts the finding's chapter, and its byline. a caller without the byline and image has them read,
+// with the loading line in their place until the read finishes
+function FindingTopic({
+	topic,
+	latestPodcastEpisode,
+	findingId,
+	onClose,
+}: {
+	topic: TopicResourceProps["topic"]
+	// the topic's latest podcast episode, whose play button follows the topic's name
+	latestPodcastEpisode: PodcastEpisode | null
+	// the finding whose chapter the play button starts, or the whole podcast episode if no chapter narrates it
+	findingId: string
+	// closes the sheet on a press of either link
+	onClose: () => void
+}) {
+	const { findingTopic, isLoading } = useFindingTopic({ topicId: topic.id, knownFields: topic })
+	// the byline's 44pt touch target already leaves space under the row, so the bottom padding is smaller than the top
+	return (
+		<View className="gap-1 border-b border-separator pt-3 pb-1">
+			<Text style={toTypeRoleStyle("sectionLabel")} className="text-muted-foreground">
+				Topic
+			</Text>
+			{isLoading ? (
+				<CoffeeLoading className="min-h-12" />
+			) : (
+				<View className="flex-row items-center gap-3">
+					<AnchorLink
+						href={toTopicPath(topic)}
+						accessibilityLabel={`Open ${topic.name}`}
+						onPress={onClose}
+						className="shrink-0 active:opacity-75"
+					>
+						<TopicImage image={findingTopic?.image ?? null} size="list" name={topic.name} className="h-12 w-18" />
+					</AnchorLink>
+					<View className="min-w-0 flex-1">
+						{/* the name, then the latest podcast episode's play button, as on the topic page */}
+						<View className="flex-row items-center gap-2">
+							<AnchorLink
+								href={toTopicPath(topic)}
+								accessibilityLabel={`Open ${topic.name}`}
+								onPress={onClose}
+								hitSlop={toTouchTargetHitSlop(44)}
+								className="shrink active:opacity-75"
+							>
+								<Text style={toTypeRoleStyle("label")} className="text-link">
+									{topic.name}
+								</Text>
+							</AnchorLink>
+							{latestPodcastEpisode ? (
+								<PodcastEpisodePlayButton
+									podcastEpisode={latestPodcastEpisode}
+									onPress={() => togglePodcastEpisodeFindingPlayback(latestPodcastEpisode, findingId)}
+								/>
+							) : null}
+						</View>
+						{findingTopic ? <TopicByline topic={findingTopic} isInset={false} /> : null}
+					</View>
+				</View>
+			)}
+		</View>
 	)
 }
 
@@ -217,111 +290,6 @@ function FindingActions({ resource, topic, topicFeedHandlers, isPending }: Topic
 			{isPending ? (
 				<Text accessibilityLiveRegion="polite" style={toTypeRoleStyle("caption")} className="text-muted-foreground">
 					Saving…
-				</Text>
-			) : null}
-		</View>
-	)
-}
-
-// fetch previews only while details are mounted. supplied previews keep stories offline
-function FindingLinkPreview({
-	findingId,
-	linkPreview: suppliedLinkPreview,
-	onOpen,
-}: {
-	findingId: string
-	linkPreview?: ChatLinkPreview | null
-	onOpen: () => void
-}) {
-	const { linkPreview: fetchedLinkPreview, isLoading } = useFindingLinkPreview(
-		findingId,
-		suppliedLinkPreview === undefined,
-	)
-	const linkPreview = suppliedLinkPreview === undefined ? fetchedLinkPreview : suppliedLinkPreview
-	if (isLoading) {
-		return (
-			<View className="mb-3">
-				<CoffeeLoading isSmall className="py-1" />
-			</View>
-		)
-	}
-	if (!linkPreview) {
-		return null
-	}
-	return (
-		<FindingLinkPreviewCard key={linkPreview.imagePath ?? linkPreview.url} linkPreview={linkPreview} onOpen={onOpen} />
-	)
-}
-
-// retain the preview text when its image is missing or cannot load
-function FindingLinkPreviewCard({ linkPreview, onOpen }: { linkPreview: ChatLinkPreview; onOpen: () => void }) {
-	// keep loading visible until the image has actually appeared, including a cached image
-	const [hasImageError, setHasImageError] = useState(false)
-	const [isImageLoading, setIsImageLoading] = useState(Boolean(linkPreview.imagePath))
-	if (linkPreview.youtubeVideoId) {
-		return (
-			<View className="mb-3 overflow-hidden rounded-xl border border-border bg-secondary">
-				<YoutubePlayer
-					key={linkPreview.youtubeVideoId}
-					youtubeVideoId={linkPreview.youtubeVideoId}
-					title={linkPreview.title}
-					thumbnailPath={linkPreview.imagePath}
-					onPlay={onOpen}
-				/>
-				<AnchorLink
-					href={linkPreview.url}
-					accessibilityLabel={`Open ${linkPreview.title || toHostWithoutWww(linkPreview.url)}`}
-					onPress={onOpen}
-				>
-					<LinkPreviewText linkPreview={linkPreview} />
-				</AnchorLink>
-			</View>
-		)
-	}
-	return (
-		<AnchorLink
-			href={linkPreview.url}
-			accessibilityLabel={`Open ${linkPreview.title || toHostWithoutWww(linkPreview.url)}`}
-			onPress={onOpen}
-			className="mb-3 overflow-hidden rounded-xl border border-border bg-secondary active:opacity-75"
-		>
-			{linkPreview.imagePath && !hasImageError ? (
-				<View>
-					<Image
-						source={{ uri: toApiUrl(linkPreview.imagePath) }}
-						style={{ width: "100%", aspectRatio: 1.91 }}
-						contentFit="cover"
-						onDisplay={() => setIsImageLoading(false)}
-						onError={() => setHasImageError(true)}
-						accessible={false}
-					/>
-					{isImageLoading ? (
-						<View className="absolute inset-0 items-center justify-center" pointerEvents="none">
-							<CoffeeLoading isSmall className="py-1" />
-						</View>
-					) : null}
-				</View>
-			) : null}
-			<LinkPreviewText linkPreview={linkPreview} />
-		</AnchorLink>
-	)
-}
-
-// share the source attribution between image and video previews
-function LinkPreviewText({ linkPreview }: { linkPreview: ChatLinkPreview }) {
-	return (
-		<View className="gap-1 p-3">
-			<Text style={toTypeRoleStyle("caption")} className="text-muted-foreground">
-				{toHostWithoutWww(linkPreview.url)}
-			</Text>
-			{linkPreview.title ? (
-				<Text style={toTypeRoleStyle("label")} className="text-secondary-foreground">
-					{toPlainText(linkPreview.title)}
-				</Text>
-			) : null}
-			{linkPreview.description ? (
-				<Text style={toTypeRoleStyle("caption")} className="text-muted-foreground">
-					{toPlainText(linkPreview.description)}
 				</Text>
 			) : null}
 		</View>

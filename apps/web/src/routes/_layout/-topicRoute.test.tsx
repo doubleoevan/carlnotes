@@ -113,6 +113,9 @@ const TOPIC = {
 	relatedTopics: [],
 	podcast: null,
 	latestPodcastEpisode: null,
+	image: null,
+	imageRegenerationQuota: null,
+	imageOrigin: null,
 } satisfies TopicResponse
 
 // the real fetch, restored after the tests

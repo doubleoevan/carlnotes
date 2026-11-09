@@ -124,7 +124,7 @@ function FindingResult({
 		>
 			<ResourceMetadata resource={finding} />
 			<span>
-				in <SearchRowTopicLink topic={topic} />
+				· <SearchRowTopicLink topic={topic} />
 			</span>
 		</McpViewFindingTitle>
 	)

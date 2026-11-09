@@ -4,6 +4,8 @@ import { toInvitePath, toTopicFeedPath, toTopicPath } from "@carlnotes/contracts
 import { SITE_URL } from "@carlnotes/contracts/site"
 import type { TopicDetails } from "@carlnotes/contracts/topics"
 import { useSubjectReportFlag } from "@carlnotes/core/hooks/useSubjectReport"
+import { toReportDialogTitle } from "@carlnotes/core/lib/reportCopy"
+import { toReportImageLabel } from "@carlnotes/core/lib/socialLabels"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { ICON_ACTION_CLASS } from "@carlnotes/nightshift/iconAction"
 import { useRecyclingState } from "@shopify/flash-list"
@@ -72,10 +74,15 @@ export function ShareTopicSheet({
 	const handleShare = (channel: string): void =>
 		captureVisitEvent("visit_share_clicked", { kind: "topic", channel, ...toPublicTopicProperties(topic) })
 	const reportFlag = useSubjectReportFlag({ subjectKind: "topic", subjectId: topic.id })
+	const imageReportFlag = useSubjectReportFlag({ subjectKind: "topicImage", subjectId: topic.id })
+
+	// the sheet turns into the report form for the topic or its image once either report option is pressed
+	const reportingSubjectKind = reportFlag.isReporting ? "topic" : imageReportFlag.isReporting ? "topicImage" : null
+	const reportingSubjectLabel = reportingSubjectKind === "topicImage" ? `the image of ${topic.name}` : topic.name
 	return (
-		<Sheet title={reportFlag.isReporting ? `Report an issue with ${topic.name}` : "Share topic"} {...sheetProps}>
-			{reportFlag.isReporting ? (
-				<ReportIssueForm subjectKind="topic" subjectId={topic.id} onClose={sheetProps.onClose} />
+		<Sheet title={reportingSubjectKind ? toReportDialogTitle(reportingSubjectLabel) : "Share topic"} {...sheetProps}>
+			{reportingSubjectKind ? (
+				<ReportIssueForm subjectKind={reportingSubjectKind} subjectId={topic.id} onClose={sheetProps.onClose} />
 			) : (
 				<>
 					{/* public posts, followed by private send options */}
@@ -152,6 +159,12 @@ export function ShareTopicSheet({
 						icon={Flag}
 						isActive={reportFlag.isReported}
 						onPress={reportFlag.press}
+					/>
+					<ShareOption
+						label={toReportImageLabel(imageReportFlag.isReported)}
+						icon={Flag}
+						isActive={imageReportFlag.isReported}
+						onPress={imageReportFlag.press}
 					/>
 				</>
 			)}

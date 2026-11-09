@@ -29,6 +29,8 @@ export const podcastEpisodeColumns = {
 	// the unique people who played or downloaded the podcast episode
 	listenerCount: podcastEpisodes.listenerCount,
 	publishedAt: podcastEpisodes.publishedAt,
+	// the content hash of the podcast episode's own image
+	imageHash: podcastEpisodes.imageHash,
 }
 
 // a podcast episode row with the columns above, and a topic row
@@ -42,7 +44,7 @@ export type PodcastEpisodeListenRow = Pick<
 >
 
 // the topic fields that a podcast episode's page path is built from
-export type PodcastEpisodeTopic = Pick<TopicRow, "id" | "name" | "visibility">
+export type PodcastEpisodeTopic = Pick<TopicRow, "id" | "name" | "visibility" | "imageHash">
 
 // a podcast episode's row and its topic, for a user who may listen to the episode, and when the user's subscription
 // activated if a gate applies

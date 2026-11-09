@@ -112,3 +112,9 @@ heading for screen readers with `accessibilityRole="header"`.
 
 Mark every logical section of markup with a `{/* section name */}` comment:
 short, lowercase, on the line above the section it describes.
+
+### Collapsible section dividers
+
+A divider sits under a collapsible section only while it is closed, and never under the last one. An open section's
+content flows into the next header with no line. The web and mobile `AccordionSection`
+draw it this way, so a page never adds or removes a section's divider with its own class.

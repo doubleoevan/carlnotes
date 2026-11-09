@@ -25,7 +25,7 @@ import { TopicScanRecap } from "./TopicScanRecap"
  */
 export function TopicScanHistory({ topic }: { topic: TopicResponse }) {
 	// use the web's five-row pages while keeping each scan's note lazy
-	const { pageRows: scans, pagination } = usePagination(topic.scans, 5)
+	const { pageRows: scans, pagination } = usePagination(topic.scans)
 	return (
 		<CollapsibleSection title="Brew diary">
 			<View className="rounded-lg border border-separator bg-card p-1 shadow-raised">

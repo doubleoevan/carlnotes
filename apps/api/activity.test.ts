@@ -102,6 +102,7 @@ function subscriptionRow(topicId: string): Parameters<typeof toSubscriptionRows>
 	return {
 		topicId,
 		name: `topic ${topicId}`,
+		imageHash: null,
 		owner: { userId: "owner-1", username: "Owner", avatarSource: null, avatarVersion: null },
 		team: null,
 		visibility: "public",

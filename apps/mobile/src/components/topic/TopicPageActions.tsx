@@ -177,7 +177,14 @@ function TopicActionDialog({
 }) {
 	return (
 		<>
-			{dialog === "edit" && <EditTopicDialog topic={topic} onClose={() => onClose()} onTopicSaved={onRefresh} />}
+			{dialog === "edit" && (
+				<EditTopicDialog
+					topic={topic}
+					onClose={() => onClose()}
+					onTopicSaved={onRefresh}
+					onTopicImageChanged={onRefresh}
+				/>
+			)}
 			{dialog === "team" && (
 				<AddTopicToTeamDialog topic={topic} onTopicTeamsChanged={onRefresh} onClose={() => onClose()} />
 			)}

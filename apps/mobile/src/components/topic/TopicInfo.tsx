@@ -20,8 +20,10 @@ import { Sheet, type SheetProps } from "@/components/common/Sheet"
 import { PodcastEpisodeRow } from "@/components/podcast/PodcastEpisodeRow"
 import { Button, toTouchTargetHitSlop } from "@/components/primitives/button"
 import { Icon } from "@/components/primitives/icon"
+import { TopicImage } from "@/components/primitives/topic-image"
 import { ShareTopic } from "@/components/share/ShareTopic"
 import { ReactionRow } from "@/components/social/ReactionRow"
+import { SHEET_TOPIC_IMAGE_CLASS } from "@/topicImageClasses"
 import { toTypeRoleStyle } from "@/typeRoleStyles"
 import { TopicAttachmentLink } from "./TopicAttachmentLink"
 import { TopicInfoSection as InfoSection } from "./TopicInfoSection"
@@ -104,6 +106,12 @@ export function TopicInfoContent({
 				</InfoSection>
 			) : null}
 			<TopicBarista topic={topic} isCard={isCard} />
+			{/* the topic's image at full width, in the sheet only */}
+			{!isCard && (
+				<View className="py-3">
+					<TopicImage image={topic.image} size="page" name={topic.name} className={SHEET_TOPIC_IMAGE_CLASS} />
+				</View>
+			)}
 			<TopicPrompt topic={topic} isCard={isCard} />
 			<TopicNotes topic={topic} isCard={isCard} />
 			{topic.attachments.length > 0 ? (

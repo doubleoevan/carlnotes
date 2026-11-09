@@ -1,6 +1,8 @@
 // the admin console contracts: its user, team, and topic subscriber rows, its totals, and the mobile minimum versions
+
 import type { MobilePlatform } from "./clientTelemetry"
 import type { Plan } from "./plans"
+import type { FeaturedPodcastEpisode } from "./podcast"
 
 // one platform's stored minimum app version, with when it was saved and by whom. the username is null once the
 // saver's account closed
@@ -89,4 +91,10 @@ export type AdminConsoleResponse = {
 	teams: AdminTeamRow[]
 	totals: AdminTotals
 	mobileMinimumVersions: MobileMinimumVersionRow[]
+	// the home's pinned topics and podcast episodes, each list in its order
+	featuredTopics: FeaturedTopic[]
+	featuredPodcastEpisodes: FeaturedPodcastEpisode[]
 }
+
+// a topic pinned among the home's featured topics
+export type FeaturedTopic = { id: string; name: string; featureOrder: number }

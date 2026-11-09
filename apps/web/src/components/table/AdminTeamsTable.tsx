@@ -1,6 +1,7 @@
 import { fetchAdminTeamMembers, fetchAdminTeamTopics } from "@carlnotes/client/billingClient"
 import type { OwnerTopic } from "@carlnotes/contracts/activity"
 import type { AdminTeamRow } from "@carlnotes/contracts/admin"
+import { DEFAULT_PAGE_SIZE } from "@carlnotes/contracts/pagination"
 import type { TeamPageResponse } from "@carlnotes/contracts/teams"
 import { toCentsLabel, toCountLabel, toDateLabel } from "@carlnotes/core/lib/labels"
 import { cn } from "@carlnotes/nightshift/classNames"
@@ -40,7 +41,11 @@ const teamSortValues = {
  */
 export function AdminTeamsTable({ teams }: { teams: AdminTeamRow[] }) {
 	// sort feeds pagination, so a sorted column reorders across every page
-	const { pageRows, sort, pagination } = usePaginatedRowSort({ rows: teams, valueByKey: teamSortValues })
+	const { pageRows, sort, pagination } = usePaginatedRowSort({
+		rows: teams,
+		valueByKey: teamSortValues,
+		initialPageSize: DEFAULT_PAGE_SIZE,
+	})
 	return (
 		<TableCard>
 			<div className={TABLE_SCROLL_CLASS}>

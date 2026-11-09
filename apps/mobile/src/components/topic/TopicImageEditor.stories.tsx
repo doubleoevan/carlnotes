@@ -1,0 +1,30 @@
+import type { TopicImageEditorTopic } from "@carlnotes/core/components/TopicImageEditor"
+import type { Meta, StoryObj } from "@storybook/react-native"
+import { TopicImageEditor } from "./TopicImageEditor"
+
+// the podcast cover placeholder stands in for a topic's image, which the app serves from its public files
+const SAMPLE_FILES = { url: "/podcast-cover-placeholder.jpg", url2x: "/podcast-cover-placeholder.jpg" }
+
+// a topic with a generated image and most of the month's regenerations left
+const TOPIC: TopicImageEditorTopic = {
+	id: "topic-1",
+	name: "Home espresso",
+	image: { page: SAMPLE_FILES, list: SAMPLE_FILES, thumbnail: SAMPLE_FILES },
+	imageOrigin: "generated",
+	imageRegenerationQuota: { used: 3, limit: 15 },
+}
+
+// the editor's image block: a generated image with regenerations left, an upload with Remove, the month's limit
+// reached, and a topic with no image yet
+const meta = {
+	title: "Topic/TopicImageEditor",
+	component: TopicImageEditor,
+	parameters: { webReference: "apps/web/src/components/topic/TopicImageEditor.tsx" },
+	args: { topic: TOPIC },
+} satisfies Meta<typeof TopicImageEditor>
+export default meta
+type Story = StoryObj<typeof meta>
+export const Default: Story = {}
+export const Uploaded: Story = { args: { topic: { ...TOPIC, imageOrigin: "uploaded" } } }
+export const LimitReached: Story = { args: { topic: { ...TOPIC, imageRegenerationQuota: { used: 15, limit: 15 } } } }
+export const NoImage: Story = { args: { topic: { ...TOPIC, image: null, imageOrigin: null } } }

@@ -56,17 +56,15 @@ export function Header({ isHome = false, isHeroShown = false, isReheating = fals
 							CarlNotes
 						</Text>
 					</AnchorLink>
-					{/* the same YouTube mark as the compact web header, which the hero shows instead while it is open */}
-					{!isHeroShown && (
-						<Button
-							ref={tutorialTriggerRef}
-							variant="ghost"
-							accessibilityLabel={TOPIC_TUTORIAL_WATCH_LABEL}
-							onPress={() => setIsTutorialOpen(true)}
-						>
-							<YoutubePlayIcon size={28} />
-						</Button>
-					)}
+					{/* the same YouTube mark as the web header, beside the logo on every screen */}
+					<Button
+						ref={tutorialTriggerRef}
+						variant="ghost"
+						accessibilityLabel={TOPIC_TUTORIAL_WATCH_LABEL}
+						onPress={() => setIsTutorialOpen(true)}
+					>
+						<YoutubePlayIcon size={28} />
+					</Button>
 					<UserMenu />
 				</View>
 			</View>

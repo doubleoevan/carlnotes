@@ -11,26 +11,28 @@ import { isAddTopicToTeamShown } from "@carlnotes/core/lib/topicActions"
 import { applyPodcastEpisodePageChanges } from "@carlnotes/core/lib/topicFindingChanges"
 import { useQuery } from "@tanstack/react-query"
 import { router, useFocusEffect, useLocalSearchParams, usePathname } from "expo-router"
-import { Share as ShareIcon, Trash2, Users } from "lucide-react-native"
-import { type ComponentRef, useCallback, useRef, useState } from "react"
+import { Rss, Share as ShareIcon, Trash2, Users } from "lucide-react-native"
+import { type ComponentRef, type RefObject, useCallback, useRef, useState } from "react"
 import { View } from "react-native"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { SkeletonPulse } from "@/components/common/SkeletonPulse"
 import { PageScreen } from "@/components/layout/PageScreen"
 import { Button } from "@/components/primitives/button"
+import { Icon } from "@/components/primitives/icon"
 import { Text } from "@/components/primitives/text"
+import { TopicImage } from "@/components/primitives/topic-image"
 import type { PageActionOption } from "@/components/search/PageActionMenu"
 import { ShareTopicSheet } from "@/components/share/ShareTopic"
 import { ReactionRow } from "@/components/social/ReactionRow"
 import { SocialSection } from "@/components/social/SocialSection"
 import { AddTopicToTeamDialog } from "@/components/team/AddTopicToTeamDialog"
 import { CollapsibleSection } from "@/components/topic/CollapsibleSection"
-import { TopicByline } from "@/components/topic/Topic"
+import { TopicByline } from "@/components/topic/TopicByline"
 import { TopicGateNotice } from "@/components/topic/TopicGateNotice"
 import { NewTopicButton } from "@/components/topic/TopicHomeActions"
+import { HEADER_TOPIC_IMAGE_CLASS } from "@/topicImageClasses"
 import { PodcastEpisodeChaptersTable } from "./PodcastEpisodeChaptersTable"
 import { PodcastEpisodeCountsLine } from "./PodcastEpisodeCountsLine"
-import { PodcastEpisodeCover } from "./PodcastEpisodeCover"
 import { PodcastEpisodePlayerCard } from "./PodcastEpisodePlayerCard"
 import { PodcastEpisodesSection } from "./PodcastEpisodesSection"
 import { PodcastEpisodeTranscript } from "./PodcastEpisodeTranscript"
@@ -158,16 +160,18 @@ function EpisodeContent({
 			hasNewTopicButton
 			options={options}
 			report={toPodcastEpisodeReportSubject(podcastEpisode)}
-			header={<PodcastEpisodeHeader page={page} isSignedIn={isSignedIn} />}
+			header={
+				<PodcastEpisodeHeader
+					page={page}
+					isSignedIn={isSignedIn}
+					feedButtonRef={feedButtonRef}
+					onSubscribe={() => setDialog("feed")}
+				/>
+			}
 			contentClassName="mt-5 gap-2"
 		>
 			{/* player */}
-			<PodcastEpisodePlayerCard
-				podcastEpisode={podcastEpisode}
-				chapterTopicFeed={chapterTopicFeed}
-				onOpenPodcastFeedDialog={() => setDialog("feed")}
-				feedButtonRef={feedButtonRef}
-			/>
+			<PodcastEpisodePlayerCard podcastEpisode={podcastEpisode} chapterTopicFeed={chapterTopicFeed} />
 			{/* the podcast episode's comment thread, where a comment may name a chapter and a chapter's tag plays from it */}
 			<SocialSection {...toPodcastEpisodeSocialProps(page, isSignedIn)} />
 			{/* wide-screen chapters */}
@@ -219,45 +223,60 @@ function EpisodeContent({
 function PodcastEpisodeHeader({
 	page: { podcastEpisode, topic, reactions },
 	isSignedIn,
+	feedButtonRef,
+	onSubscribe,
 }: {
 	page: PodcastEpisodePageResponse
 	isSignedIn: boolean
+	// the Subscribe button, which the feed dialog returns focus to, and what opens the dialog
+	feedButtonRef: RefObject<ComponentRef<typeof View> | null>
+	onSubscribe: () => void
 }) {
 	return (
-		<View className="mt-3 flex-row items-start gap-4">
-			<PodcastEpisodeCover
-				podcastEpisode={podcastEpisode}
-				className="hidden size-36 border border-separator shadow-raised sm:flex"
-			/>
-			<View className="min-w-0 flex-1">
-				{/* the title, with the new topic button in the header's top right corner. the heading and credits stay
-				    separate screen-reader controls */}
-				<View className="flex-row items-start gap-3">
-					<View className="min-w-0 flex-1 flex-row items-end">
+		<View className="mt-3">
+			{/* the Subscribe button on the left and the new topic button on the right */}
+			<View className="flex-row items-start justify-between gap-3">
+				<Button ref={feedButtonRef} variant="outline" accessibilityLabel="Subscribe" onPress={onSubscribe}>
+					<Icon as={Rss} className="size-4" />
+					<Text>Subscribe</Text>
+				</Button>
+				<NewTopicButton />
+			</View>
+			{/* the podcast episode's own image beside the title, the description, and the byline. React Native has no
+			    float, so the text stays beside the image instead of running under it as on the web */}
+			<View className="mt-4 flex-row items-start gap-4">
+				<TopicImage
+					image={podcastEpisode.image}
+					size="page"
+					name={podcastEpisode.title ?? topic.name}
+					className={HEADER_TOPIC_IMAGE_CLASS}
+				/>
+				<View className="min-w-0 flex-1">
+					{/* the title. the heading and credits stay separate screen-reader controls */}
+					<View className="min-w-0 flex-row items-end">
 						<Text accessibilityRole="header" className="min-w-0 flex-1 font-display text-2xl leading-tight">
 							{podcastEpisode.title}
 						</Text>
 						<PodcastThemeSongNote />
 					</View>
-					<NewTopicButton />
-				</View>
-				{podcastEpisode.description && <Text className="mt-1.5 text-sm">{podcastEpisode.description}</Text>}
-				{/* the byline, the topic's name, and the podcast episode's reactions on one line */}
-				<View className="mt-1.5 flex-row flex-wrap items-center gap-x-3">
-					<View className="min-w-0 shrink flex-row flex-wrap items-center gap-x-1">
-						<TopicByline topic={topic} label="Recorded by" isPage />
-						<Text className="text-sm text-muted-foreground">
-							{topic.teamLink || topic.owner ? "for " : "Coffee Break podcast for "}
-							<AnchorLink asChild href={toTopicPath(topic)} accessibilityLabel={`Open ${topic.name}`}>
-								<Text className="text-sm text-link">{topic.name}</Text>
-							</AnchorLink>
-						</Text>
+					{podcastEpisode.description && <Text className="mt-1.5 text-sm">{podcastEpisode.description}</Text>}
+					{/* the byline, the topic's name, and the podcast episode's reactions on one line */}
+					<View className="mt-1.5 flex-row flex-wrap items-center gap-x-3">
+						<View className="min-w-0 shrink flex-row flex-wrap items-center gap-x-1">
+							<TopicByline topic={topic} label="Recorded by" isPage />
+							<Text className="text-sm text-muted-foreground">
+								{topic.teamLink || topic.owner ? "for " : "Coffee Break podcast for "}
+								<AnchorLink asChild href={toTopicPath(topic)} accessibilityLabel={`Open ${topic.name}`}>
+									<Text className="text-sm text-link">{topic.name}</Text>
+								</AnchorLink>
+							</Text>
+						</View>
+						<ReactionRow
+							target={{ kind: "podcastEpisode", id: podcastEpisode.id }}
+							summary={reactions}
+							isSignedIn={isSignedIn}
+						/>
 					</View>
-					<ReactionRow
-						target={{ kind: "podcastEpisode", id: podcastEpisode.id }}
-						summary={reactions}
-						isSignedIn={isSignedIn}
-					/>
 				</View>
 			</View>
 		</View>

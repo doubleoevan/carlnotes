@@ -44,6 +44,9 @@ worker, and the evals all start. It imports `@carlnotes/db`, `@carlnotes/server`
   returns as the WAV if the encode fails. It reads the speech model from `@carlnotes/server/podcastEpisodeSettings`. A
   spent key budget, a retryable failure, and a rejection are sorted by `toModelCallFailure`, which the speech and the
   transcription calls share. `speech.smoke.ts` (`bun run smoke:speech`) checks both against the live proxy.
+- `topicImageModel.ts` renders a topic's image through LiteLLM's Gemini pass-through on the user's key, the cheaper
+  model for a create, a backfill, and an admin render and the better one for an editor's Regenerate, and prices each
+  by its image tokens. Fireworks has no serverless image model on the platform's key.
 - `ffmpeg.ts` runs one ffmpeg process through its pipes, for the chapter join, the api's cover encode, a chat
   recording's transcode, and a spoken chat reply's MP3. `transcription.ts` transcodes a chat recording to 16 kHz mono
   WAV, reading only the containers and codecs a browser records, and transcribes it through Google's Interactions API on

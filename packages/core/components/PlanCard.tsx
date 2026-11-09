@@ -126,6 +126,7 @@ export function PlanCard({
 				<Quota label={`${toWholeDollarLabel(config.monthlyBudgetCents)} coffee fund a month`} />
 				<Quota label={`About ${monthlyScanEstimate} ${toBrewsWord(monthlyScanEstimate)} a month`} />
 				<Quota label={PODCAST_QUOTA_LABELS[isPaidPlan(plan) ? "full" : "short"]} />
+				<Quota label={`${config.imageRegenerationLimit} topic image regenerations a month`} />
 				<Quota label={toSharedCommentSlotsQuotaLabel(isPaidPlan(plan))} />
 			</Quotas>
 			{action && <Action {...action} isDisabled={isCurrentPlan || isRedirecting} />}

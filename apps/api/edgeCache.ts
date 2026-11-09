@@ -1,5 +1,5 @@
 // how long the edge and the browser may cache a response, and the purge by tag that clears a response early
-import { reportError } from "@carlnotes/server/monitoring"
+import { purgeEdgeCacheTagAfterDeletion } from "@carlnotes/server/edgePurge"
 import { getSessionCookie } from "better-auth/cookies"
 import type { Context } from "hono"
 import { createMiddleware } from "hono/factory"
@@ -7,11 +7,8 @@ import { createMiddleware } from "hono/factory"
 // the tag that every shared rendered response is cached under, which the release purge clears
 export const RENDERED_CACHE_TAG = "rendered"
 
-// the tags to purge, with the zone id and api token the purge request uses
-export type PurgeEdgeCacheTagsOptions = { tags: string[]; zoneId: string | undefined; apiToken: string | undefined }
-
-// what one purge did
-export type EdgePurgeResult = { status: "purged" } | { status: "skipped" } | { status: "failed"; reason: string }
+// the tag the home page and its payload also carry
+const HOME_CACHE_TAG = "home"
 
 // the edge shares a rendered response for a minute, then serves it stale for up to a minute while it fetches a new one,
 // and for up to two minutes while the origin responds with an error, such as a shed render's 503
@@ -19,9 +16,6 @@ export const RENDERED_EDGE_CACHE_CONTROL = "max-age=60, stale-while-revalidate=6
 
 // the edge caches a public topic's or podcast episode's counts for thirty seconds, with no stale copy
 const COUNTS_EDGE_CACHE_CONTROL = "max-age=30"
-
-// how long one purge request may take before it counts as failed
-const PURGE_TIMEOUT_MS = 10_000
 
 // a file whose url names its content or version never changes, so the browser caches it for a year
 export const IMMUTABLE_CACHE_CONTROL = "public, max-age=31536000, immutable"
@@ -56,10 +50,27 @@ export function setRenderedCacheHeaders(request: Request, response: Response): v
 		return
 	}
 
-	// the browser always revalidates. only the edge caches a copy, under the tag that the release purge clears
+	// the browser always revalidates. the edge caches a copy under the rendered tag, and the home page and its payload
+	// under the home tag too
 	response.headers.set("Cache-Control", REVALIDATE_CACHE_CONTROL)
 	response.headers.set("CDN-Cache-Control", RENDERED_EDGE_CACHE_CONTROL)
-	response.headers.set("Cache-Tag", RENDERED_CACHE_TAG)
+	response.headers.set(
+		"Cache-Tag",
+		isHomePath(request) ? `${RENDERED_CACHE_TAG},${HOME_CACHE_TAG}` : RENDERED_CACHE_TAG,
+	)
+}
+
+// whether a request is for the home page or its payload
+function isHomePath(request: Request): boolean {
+	const { pathname } = new URL(request.url)
+	return pathname === "/" || pathname === "/api/home"
+}
+
+/**
+ * Purges the home page and its payload at the edge, after the featured topics or podcast episodes change.
+ */
+export function purgeHomeAtEdge(): Promise<unknown> {
+	return purgeEdgeCacheTagAfterDeletion(HOME_CACHE_TAG)
 }
 
 /**
@@ -110,6 +121,9 @@ export function toVersionedImageHeaders(isCurrentVersion: boolean): Record<strin
 		: { "Cache-Control": OLD_IMAGE_CACHE_CONTROL }
 }
 
+// a non-public topic's image is cached by the browser alone, at a url that changes with the image
+export const PRIVATE_IMAGE_HEADERS: Record<string, string> = { "Cache-Control": "private, max-age=31536000, immutable" }
+
 // an unhashed public file changes only with a release, so the browser keeps it an hour and the edge a day, under the
 // tag that the release purge clears
 export const PUBLIC_FILE_HEADERS: Record<string, string> = {
@@ -130,54 +144,4 @@ export function toUserAvatarCacheTag(userId: string): string {
  */
 export function toTeamAvatarCacheTag(teamId: string): string {
 	return `team-avatar:${teamId}`
-}
-
-/**
- * Purges every response cached under the tags from the edge and returns whether it was purged, skipped, or failed.
- */
-export async function purgeEdgeCacheTags(
-	{ tags, zoneId, apiToken }: PurgeEdgeCacheTagsOptions,
-	sendPurgeRequest: (url: string, requestInit: RequestInit) => Promise<Response> = fetch,
-): Promise<EdgePurgeResult> {
-	// skip the purge without both settings
-	if (!zoneId || !apiToken) {
-		return { status: "skipped" }
-	}
-
-	// send one purge by tag, and return a failure instead of throwing an error
-	try {
-		const response = await sendPurgeRequest(`https://api.cloudflare.com/client/v4/zones/${zoneId}/purge_cache`, {
-			method: "POST",
-			headers: { Authorization: `Bearer ${apiToken}`, "Content-Type": "application/json" },
-			body: JSON.stringify({ tags }),
-			signal: AbortSignal.timeout(PURGE_TIMEOUT_MS),
-		})
-
-		// a rejected purge returns Cloudflare's status and message
-		if (!response.ok) {
-			return { status: "failed", reason: `${response.status} ${(await response.text()).slice(0, 500)}` }
-		}
-		return { status: "purged" }
-	} catch (error) {
-		return { status: "failed", reason: error instanceof Error ? error.message : String(error) }
-	}
-}
-
-/**
- * Purges one tag from the edge after a deletion, reporting a failed purge and logging a skipped one.
- */
-export async function purgeEdgeCacheTagAfterDeletion(cacheTag: string): Promise<void> {
-	// send the purge with the settings read from the environment
-	const edgePurgeResult = await purgeEdgeCacheTags({
-		tags: [cacheTag],
-		zoneId: Bun.env.CLOUDFLARE_ZONE_ID,
-		apiToken: Bun.env.CLOUDFLARE_API_TOKEN,
-	})
-
-	// report a failure, and log a skip
-	if (edgePurgeResult.status === "failed") {
-		reportError(new Error(`the edge purge of ${cacheTag} failed: ${edgePurgeResult.reason}`), "api-route")
-	} else if (edgePurgeResult.status === "skipped") {
-		console.warn(`skipped the edge purge of ${cacheTag}: CLOUDFLARE_ZONE_ID and CLOUDFLARE_API_TOKEN are not both set`)
-	}
 }

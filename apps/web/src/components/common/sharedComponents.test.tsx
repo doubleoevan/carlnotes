@@ -167,14 +167,14 @@ test("notes share all columns and totals while sorting and changing page size", 
 	// sorting after a page change returns to the first page without losing the size control
 	const next = getElement<HTMLButtonElement>(harness.container, '[aria-label="Next page"]')
 	await act(async () => next.click())
-	expect(harness.container.textContent).toContain("Page 2 of 2")
+	expect(harness.container.textContent).toContain("Page 2 of 3")
 	const visibility = getElement<HTMLButtonElement>(harness.container, "thead th:nth-child(2) button")
 	await act(async () => visibility.click())
-	expect(harness.container.textContent).toContain("Page 1 of 2")
-	const select = getElement<HTMLSelectElement>(harness.container, "select")
-	select.value = "5"
-	await act(async () => select.dispatchEvent(new window.Event("change", { bubbles: true })))
 	expect(harness.container.textContent).toContain("Page 1 of 3")
+	const select = getElement<HTMLSelectElement>(harness.container, "select")
+	select.value = "10"
+	await act(async () => select.dispatchEvent(new window.Event("change", { bubbles: true })))
+	expect(harness.container.textContent).toContain("Page 1 of 2")
 })
 
 // missing controls fail with their selector instead of weakening the assertions with optional calls

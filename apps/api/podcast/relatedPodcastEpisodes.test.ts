@@ -49,7 +49,7 @@ function isRelatedPodcastEpisodeRowsRead(sentQuery: SentQuery): boolean {
 // a related podcast episode as the check reads it: its columns with a description, then its topic's
 function toRelatedPodcastEpisodeRow(podcastEpisodeId: string, title: string): unknown[] {
 	const podcastEpisodeFields = { id: podcastEpisodeId, topicId: "topic-2", title, description: `About ${title}` }
-	return [...toPublishedPodcastEpisodeRow(podcastEpisodeFields), "topic-2", "Robot vacuums", "public"]
+	return [...toPublishedPodcastEpisodeRow(podcastEpisodeFields), "topic-2", "Robot vacuums", "public", null]
 }
 
 test("the topic's other published podcast episodes are read newest first, up to fifty, with their descriptions", async () => {
@@ -198,5 +198,10 @@ test("a related podcast episode comes back in the merged order with its descript
 		"episode-3",
 	])
 	expect(relatedPodcastEpisodeRows[0]?.podcastEpisodeRow.description).toBe("About Robot vacuums, ranked")
-	expect(relatedPodcastEpisodeRows[0]?.topic).toEqual({ id: "topic-2", name: "Robot vacuums", visibility: "public" })
+	expect(relatedPodcastEpisodeRows[0]?.topic).toEqual({
+		id: "topic-2",
+		name: "Robot vacuums",
+		visibility: "public",
+		imageHash: null,
+	})
 })

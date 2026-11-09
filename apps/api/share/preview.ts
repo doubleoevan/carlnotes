@@ -40,6 +40,7 @@ export async function toTopicPreview(topicId: string): Promise<TopicPreview | nu
 				prompt: topics.prompt,
 				scanSummary: lastScanSummary,
 				visibility: topics.visibility,
+				imageHash: topics.imageHash,
 				ownerUserId: users.id,
 				ownerUsername: users.username,
 				ownerAvatarColumns: publishedAvatarColumns,
@@ -72,6 +73,7 @@ export async function toTopicPreview(topicId: string): Promise<TopicPreview | nu
 		ownerAvatar: toPublishedAvatarFromUser(topicRow.ownerAvatarColumns),
 		keptCount: keptFindingCount,
 		sourceCount: sourceRow?.sources ?? 0,
+		imageHash: topicRow.imageHash,
 		// a public topic's description is its last scan summary, prompt, or name. any other topic's scan summary and
 		// prompt stay private, so its description names only its owner and how many findings Carl kept
 		description:

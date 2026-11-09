@@ -21,6 +21,7 @@ Every piece of writing by another person has a **Report** action:
 - A topic, a team, a podcast episode, or a profile: **Report issue** in the page's actions menu, the **⋮** button in the
   header.
 - A finding or a hot take: **Report issue** beside it.
+- A topic's image: **Report image** in the topic's share menu.
 
 The report asks what is wrong, in your own words. For a message, a note, a comment, or a profile it also offers to
 block the person in the same step. Once you send it, a reported chat message, note, or note comment disappears for you
@@ -28,7 +29,8 @@ right away. Nobody else sees a change until someone has looked. Anything else st
 included, and its **Report issue** flag fills in once you have reported it. Press the filled flag to
 remove your report. If someone edits content after a report was cleared, you can report it again.
 
-A person reviews every report within a day and either removes the content or keeps it. Removed content is deleted the
+A person reviews every report within a day and either removes the content or keeps it. A reported topic image is
+not removed but drawn again, so the topic always has one. Removed content is deleted the
 same way its author would delete it. Either way the report is closed, and you are not asked to do anything more. If
 you want to tell us more, write to [support@carlnotes.com](mailto:support@carlnotes.com).
 

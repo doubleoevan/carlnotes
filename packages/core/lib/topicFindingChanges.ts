@@ -4,6 +4,7 @@ import type { PodcastEpisodePageResponse } from "@carlnotes/contracts/podcastEpi
 import type { SearchResultsPage } from "@carlnotes/contracts/search"
 import type { ReactionSummary } from "@carlnotes/contracts/social"
 import type { TopicDetails, TopicFeedResponse } from "@carlnotes/contracts/topics"
+import type { UpdatesResponse } from "@carlnotes/contracts/updates"
 import { matchesTopicFindingFilter } from "./topicFindingFilters"
 
 // each action owns only the fields it changes
@@ -84,6 +85,16 @@ export function applySearchFindingChanges(
 }
 
 /**
+ * Applies finding changes to an updates list while preserving its order.
+ */
+export function applyUpdatesFindingChanges(updates: UpdatesResponse, changes: TopicFindingChange[]): UpdatesResponse {
+	if (changes.length === 0) {
+		return updates
+	}
+	return { ...updates, findings: updates.findings.map((finding) => applyFindingChanges(finding, changes)) }
+}
+
+/**
  * Changes matching findings and adjusts the topic's unread count by the changed rows.
  */
 export function applyTopicFindingChanges<Topic extends TopicDetails>(
@@ -106,7 +117,10 @@ export function applyTopicFindingChanges<Topic extends TopicDetails>(
 /**
  * Applies all matching actions to a finding in their submitted order.
  */
-export function applyFindingChanges(finding: TopicFinding, changes: TopicFindingChange[]): TopicFinding {
+export function applyFindingChanges<Finding extends TopicFinding>(
+	finding: Finding,
+	changes: TopicFindingChange[],
+): Finding {
 	return changes.reduce(
 		(changedFinding, change) =>
 			change.findingId === finding.findingId ? applyFindingChange(changedFinding, change) : changedFinding,
@@ -117,7 +131,10 @@ export function applyFindingChanges(finding: TopicFinding, changes: TopicFinding
 /**
  * Changes only the fields owned by a finding action.
  */
-export function applyFindingChange(finding: TopicFinding, change: TopicFindingChange): TopicFinding {
+export function applyFindingChange<Finding extends TopicFinding>(
+	finding: Finding,
+	change: TopicFindingChange,
+): Finding {
 	switch (change.kind) {
 		// an open marks the finding read and counts the view
 		case "opened":

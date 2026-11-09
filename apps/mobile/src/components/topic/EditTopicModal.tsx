@@ -11,6 +11,7 @@ import { toUpdateTopicPayload, useTopicFields } from "@carlnotes/core/hooks/useT
 import { useTopicTeamChoice } from "@carlnotes/core/hooks/useTopicTeamChoice"
 import { DAILY_TOPIC_LIMIT_HINTS, MISSING_FIELD_NOTES, saveTopic } from "@carlnotes/core/lib/saveTopic"
 import { PODCAST_COMMENTS_LABEL } from "@carlnotes/core/lib/socialLabels"
+import { TOPIC_IMAGE_LABEL, toTopicImageEditorKey } from "@carlnotes/core/lib/topicImageEditor"
 import { usePurchaseOffers } from "@carlnotes/core/stores/purchaseOffersStore"
 import { Globe, Link, Lock, Mail, X } from "lucide-react-native"
 import { useRef, useState } from "react"
@@ -36,6 +37,7 @@ import {
 	uploadTopicAttachment,
 	useTopicAttachmentCleanup,
 } from "./TopicAttachmentEditor"
+import { TopicImageEditor } from "./TopicImageEditor"
 import { TopicSourceEditor } from "./TopicSourceEditor"
 import { TopicTeamSelect } from "./TopicTeamSelect"
 
@@ -50,12 +52,15 @@ export function EditTopicModal({
 	isMakingTopicPublic,
 	onClose,
 	onTopicSaved,
+	onTopicImageChanged,
 }: {
 	topic?: TopicResponse
 	initialTeam?: { teamId: string; name: string }
 	isMakingTopicPublic?: boolean
 	onClose: () => void
 	onTopicSaved: (topicId: string, topicName: string) => void | Promise<void>
+	// the screen behind the editor reloads after an image change, which saves on its own
+	onTopicImageChanged?: () => void
 }) {
 	const fields = useTopicFields<TopicAttachmentFile>(topic, isMakingTopicPublic)
 	const topicTeam = useTopicTeamChoice(topic, initialTeam)
@@ -249,6 +254,13 @@ export function EditTopicModal({
 					<Text className="text-sm font-medium">Attachments</Text>
 					<TopicAttachmentEditor fields={fields} />
 				</View>
+				{/* the image block, for a saved topic. its changes save on their own */}
+				{topic && (
+					<View className="gap-2">
+						<Text className="text-sm font-medium">{TOPIC_IMAGE_LABEL}</Text>
+						<TopicImageEditor key={toTopicImageEditorKey(topic)} topic={topic} onImageChanged={onTopicImageChanged} />
+					</View>
+				)}
 				{topic?.podcast && (
 					<View className="gap-1">
 						<View className="flex-row items-center gap-2">

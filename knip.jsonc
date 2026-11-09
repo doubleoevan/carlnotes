@@ -30,6 +30,8 @@
 				// the README's Development section runs these backfills by hand
 				"scripts/backfill-resource-content.ts",
 				"scripts/backfill-vectors.ts",
+				"scripts/backfill-topic-images.ts",
+				"scripts/backfill-podcast-episode-images.ts",
 				// the eval:* scripts and smoke:eval
 				"evals/attachment-summaries/attachmentSummariesEval.ts",
 				"evals/personal-sources-context/personalSourcesContextEval.ts",
@@ -67,6 +69,9 @@
 				"workflows/sendScanEmail.ts",
 				"workflows/sendPushNotifications.ts",
 				"workflows/recordPodcastEpisode.ts",
+				"workflows/topicImageWorkflows.ts",
+				"workflows/renderTopicImage.ts",
+				"workflows/backfillTopicImages.ts",
 				"workflows/screenSource.ts",
 				// the smoke:* scripts and scripts/smoke-coverage.sh
 				"scan.smoke.ts",

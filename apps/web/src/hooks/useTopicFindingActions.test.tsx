@@ -3,8 +3,11 @@ import { configureApiClient } from "@carlnotes/client/apiClient"
 import type { ReactionSummary } from "@carlnotes/contracts/social"
 import { toTestTopicFeedResponse } from "@carlnotes/contracts/topicFeedTestFixtures"
 import type { TopicFeedResponse } from "@carlnotes/contracts/topics"
+import type { UpdatesResponse } from "@carlnotes/contracts/updates"
 import { usePageTopicFeedHandlers, useTopicFindingActions } from "@carlnotes/core/hooks/useTopicFindingActions"
+import { UPDATES_QUERY_KEY } from "@carlnotes/core/hooks/useUpdates"
 import { applyTopicFeedChanges, type TopicFindingChange } from "@carlnotes/core/lib/topicFindingChanges"
+import { UPDATES_STORY } from "@carlnotes/core/lib/updatesStories"
 import { act } from "react"
 import { renderTestHook, waitForHook } from "@/lib/hookTestHarness"
 
@@ -61,6 +64,30 @@ test("opening and bookmarking one finding overlap without dropping either action
 	expect(
 		harness.client.getQueryData<TopicFeedResponse>(["topic-feed", "alice"])?.sections[0]?.topics[0]?.findings[0],
 	).toMatchObject({ isConsumed: false, isBookmarked: true, viewCount: 3 })
+})
+
+test("a saved change stays in an updates list with no new read, since a read would build another list", async () => {
+	// the only request here is the write
+	const requests: string[] = []
+	configureApiClient({ apiBaseUrl: "https://test.example", showError: () => undefined })
+	globalThis.fetch = ((input: RequestInfo | URL) => {
+		requests.push(String(input))
+		return Promise.resolve(new Response(null, { status: 204 }))
+	}) as typeof fetch
+	const harness = await renderTestHook(() =>
+		useTopicFindingActions({ userId: "alice", shouldUpdateOptimistically: true }),
+	)
+	cleanups.push(harness.close)
+	const queryKey = [UPDATES_QUERY_KEY, "alice", 15, null]
+	harness.client.setQueryData(queryKey, UPDATES_STORY)
+	const findingId = UPDATES_STORY.findings[0]?.findingId ?? ""
+
+	// the change reaches the list, and the list stays fresh
+	await act(async () => harness.read().handlers.bookmarkTopicFinding(findingId, true))
+	await waitForHook(() => harness.read().pendingChanges.length === 0)
+	expect(requests).toHaveLength(1)
+	expect(harness.client.getQueryData<UpdatesResponse>(queryKey)?.findings[0]?.isBookmarked).toBe(true)
+	expect(harness.client.getQueryState(queryKey)?.isInvalidated).toBe(false)
 })
 
 test("an acknowledged write survives an older response that ignores query cancellation", async () => {

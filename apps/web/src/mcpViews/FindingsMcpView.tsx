@@ -3,6 +3,7 @@ import { EMPTY_FILTERED_FINDINGS } from "@carlnotes/core/lib/topicFeedLabels"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { ChevronLeft, ChevronRight } from "lucide-react"
 import { Button } from "@/components/primitives/button"
+import { TopicImage } from "@/components/primitives/topic-image"
 import { TableCard } from "@/components/table/TableCard"
 import { TopicNameLink } from "@/components/table/TopicNameLink"
 import { FindingsTable } from "./FindingsTable"
@@ -34,8 +35,11 @@ export function FindingsMcpView() {
 		<div>
 			{/* the topic's name with its latest podcast episode's play button, and Follow */}
 			<div className="mb-2 flex items-center justify-between gap-3">
-				<span className="font-display min-w-0 text-lg">
-					<TopicNameLink topic={topic} />
+				<span className="flex min-w-0 items-center gap-3">
+					<TopicImage image={topic.image} size="list" name={topic.name} className="shrink-0" />
+					<span className="font-display min-w-0 text-lg">
+						<TopicNameLink topic={topic} />
+					</span>
 				</span>
 				<McpViewSubscribeButton topicId={topic.id} isSubscribed={topic.isSubscribed} />
 			</div>

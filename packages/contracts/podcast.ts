@@ -3,6 +3,7 @@ import { z } from "zod"
 import { ratings, visibilities } from "./enums"
 import type { PodcastEpisodeChapterScript, PodcastEpisodeTurn } from "./payloads"
 import { displayEnum } from "./tolerantReads"
+import { topicImageUrls } from "./topicImages"
 
 // one chapter of a podcast episode, in the shape that the player shows
 const podcastEpisodeChapter = z.object({
@@ -36,9 +37,32 @@ export const podcastEpisodeSummary = z.object({
 	// the podcast episode's own page, null until the podcast episode publishes
 	pagePath: z.string().nullable(),
 	chapterCount: z.number(),
+	// the podcast episode's own image at every size, with no text on it, null until it is drawn
+	image: topicImageUrls.nullable(),
 })
 
 export type PodcastEpisodeSummary = z.infer<typeof podcastEpisodeSummary>
+
+// a podcast episode pinned among the home's featured episodes: its title, its topic's name, its page, and its position
+export const featuredPodcastEpisode = z.object({
+	id: z.string(),
+	title: z.string(),
+	topicName: z.string(),
+	pagePath: z.string(),
+	featureOrder: z.number(),
+})
+
+export type FeaturedPodcastEpisode = z.infer<typeof featuredPodcastEpisode>
+
+/**
+ * Returns a featured podcast episode's label in a list: its title, then its topic's name.
+ */
+export function toFeaturedPodcastEpisodeLabel({
+	title,
+	topicName,
+}: Pick<FeaturedPodcastEpisode, "title" | "topicName">): string {
+	return `${title} · ${topicName}`
+}
 
 // a published podcast episode's summary, with the season and number it was published under
 export const publishedPodcastEpisodeSummary = podcastEpisodeSummary.extend({

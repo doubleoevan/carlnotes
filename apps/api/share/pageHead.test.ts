@@ -23,6 +23,7 @@ const TOPIC_PREVIEW: TopicPreview = {
 	ownerAvatar: null,
 	keptCount: 4,
 	sourceCount: 2,
+	imageHash: null,
 	description: "What agents are shipping this week.",
 }
 
@@ -169,6 +170,7 @@ const PODCAST_EPISODE_ROW = {
 	durationSeconds: 1690,
 	listenerCount: 0,
 	publishedAt: new Date("2026-10-01T09:00:00Z"),
+	imageHash: null,
 }
 
 // a podcast episode page's head names its own title and description, its card, its audio, and its structured data

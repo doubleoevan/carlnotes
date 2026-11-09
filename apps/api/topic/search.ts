@@ -1,6 +1,7 @@
 // the site search's topic reader: the topics whose name contains the query, under the topic view rules in SQL
 import type { TopicSearchRow } from "@carlnotes/contracts/search"
 import { toTopicPath } from "@carlnotes/contracts/seo"
+import { toTopicImageUrlsOrNull } from "@carlnotes/contracts/topicImages"
 import { db } from "@carlnotes/db"
 import { topics } from "@carlnotes/db/schema/topics"
 import { and, like, type SQL, sql } from "drizzle-orm"
@@ -52,6 +53,7 @@ export async function searchTopics(searchTopicsOptions: SearchTopicsOptions): Pr
 			id: topicRow.id,
 			name: topicRow.name,
 			latestPodcastEpisode: latestPodcastEpisodeByTopicId.get(topicRow.id) ?? null,
+			image: toTopicImageUrlsOrNull(topicRow.id, topicRow.imageHash),
 		},
 		subscriberCount: topicRow.subscriberCount,
 		isSubscribed: subscribedTopicIds ? subscribedTopicIds.has(topicRow.id) : null,
@@ -73,6 +75,7 @@ export function toTopicSearchQuery({ userId, isAdmin, query, limit, topicTagFilt
 			name: topics.name,
 			ownerId: topics.ownerId,
 			visibility: topics.visibility,
+			imageHash: topics.imageHash,
 			createdAt: topics.createdAt,
 			viewerCount: topics.viewerCount,
 			subscriberCount: topics.subscriberCount,

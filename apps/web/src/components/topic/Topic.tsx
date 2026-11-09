@@ -10,23 +10,26 @@ import { useState } from "react"
 import { NoteIcon } from "@/components/branding/NoteIcon"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { PageUpdateCountBadge } from "@/components/common/UpdateCountBadge"
-import { UserProfileLink } from "@/components/common/UserProfileLink"
 import { PodcastEpisodePlayButton } from "@/components/podcast/PodcastEpisodePlayButton"
 import { Badge } from "@/components/primitives/badge"
 import { Popover, PopoverCloseButton, PopoverContent, PopoverTrigger } from "@/components/primitives/popover"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
+import { TOPIC_IMAGE_FRAME_CLASS, TopicImage } from "@/components/primitives/topic-image"
 import { toSignupNavigation } from "@/components/session/signupPrompts"
 import { ShareTopic } from "@/components/share/ShareTopic"
-import { TeamLink } from "@/components/team/TeamLink"
 import { useRevealClassName } from "@/hooks/useRevealClassName"
 import {
 	ACTIVE_ICON_CLASS,
+	LIST_TOPIC_IMAGE_CLASS,
 	POPOVER_PANEL_CLASS,
 	RAIL_BARE_ICON_INSET,
 	RAIL_TEXT_INSET,
 	STANDALONE_LINK_CLASS,
+	TOPIC_HEADER_AREA_CLASSES,
+	toTopicHeaderGridClass,
 } from "@/lib/styleClasses"
 import { useTopicFeed } from "@/providers/TopicFeedProvider"
+import { TopicByline } from "./TopicByline"
 import { TopicFindingList } from "./TopicFindingsSection"
 import { TopicInfo } from "./TopicInfo"
 
@@ -43,20 +46,6 @@ const ICON_BUTTON_CLASS = "relative grid size-7 place-items-center before:absolu
 // the topic feed, the card's classes, and its position on the section's page, which staggers the entrance animation
 type TopicProps = { topic: TopicFeed; index: number; className?: string }
 
-// the team and the owner that a topic's byline chooses between, and the words before the name
-type TopicBylineProps = { topic: Pick<TopicFeed, "teamLink" | "owner">; label?: string; className?: string }
-
-/**
- * A topic's byline, which names the team for anyone who can open the team's page and the topic's owner otherwise.
- */
-export function TopicByline({ topic, label = "Brewed by", className }: TopicBylineProps) {
-	// name the team if there is a team link, and the owner otherwise
-	if (topic.teamLink) {
-		return <TeamLink team={topic.teamLink} label={label} className={className} />
-	}
-	return topic.owner ? <UserProfileLink user={topic.owner} label={label} className={className} /> : null
-}
-
 /**
  * A single topic in the feed. The topic header, then up to five topic resource rows.
  * It stays hidden until scrolled into view, then plays the hydrate animation.
@@ -68,44 +57,35 @@ export function Topic({ topic, index, className }: TopicProps) {
 		<div
 			ref={ref}
 			data-reveal
-			className={cn("py-1.5", revealClassName, className)}
+			className={cn(revealClassName, className)}
 			style={{ animationDelay: `${Math.min(index, 3) * 50}ms` }}
 		>
-			{/* header: the title takes the whole row and wraps instead of truncating, with the byline and
-			    the actions sharing the line below it */}
-			<div>
-				<div className="flex items-center gap-2">
-					{/* the chat mention count sits at the name's top-right corner while the user has unseen chat mentions */}
-					<span className="relative inline-block min-w-0">
-						<AnchorLink href={toTopicPath(topic)} className={cn(STANDALONE_LINK_CLASS, "min-w-0")}>
-							<h3 className="font-display pt-1 pl-4 pb-1 text-lg leading-tight">{topic.name}</h3>
+			{/* header: the image at the left edge of the findings card, with the title, the tags, and the byline beside
+			    it. the actions end the header's last row at the right, over the findings card's top right corner. on a
+			    phone the byline row sits under the image, with the same space below it as above it */}
+			<div
+				className={cn(toTopicHeaderGridClass({ hasTags: topic.tags.length > 0, hasActions: true }), "max-sm:mb-1.5")}
+			>
+				<TopicImage
+					image={topic.image}
+					size="page"
+					name={topic.name}
+					className={cn(TOPIC_HEADER_AREA_CLASSES.image, LIST_TOPIC_IMAGE_CLASS, TOPIC_IMAGE_FRAME_CLASS)}
+				/>
+				{/* the title wraps, and its play and note icons follow its last word. the chat mention count sits at the
+				    name's top-right corner while the user has unseen chat mentions */}
+				<h3 className={cn(TOPIC_HEADER_AREA_CLASSES.title, "font-display pb-1 text-lg leading-tight")}>
+					<span className="relative">
+						<AnchorLink href={toTopicPath(topic)} className={STANDALONE_LINK_CLASS}>
+							{topic.name}
 						</AnchorLink>
 						<PageUpdateCountBadge topicId={topic.id} className="-right-2" />
 					</span>
-					<TopicInfoPopover topic={topic} />
-				</div>
-				<div className="flex items-center justify-between gap-3">
-					{/* the topic creator byline */}
-					<div className="min-w-0">
-						<TopicByline topic={topic} className="mt-1 pl-4 text-xs" />
-					</div>
-					{/* the "# new" count opens the info content, and the subscribe toggle sits to its right.
-					    the row ends in the share icon, so it takes the bare-icon inset */}
-					<div
-						className={cn(
-							topic.isTopicOwner && topic.visibility === "private" ? RAIL_TEXT_INSET : RAIL_BARE_ICON_INSET,
-							"flex shrink-0 items-center",
-						)}
-					>
-						{topic.newCount > 0 && <NewCountInfo topic={topic} />}
-						{!topic.isTopicOwner && <SubscribeToggle topic={topic} />}
-						<ShareTopic topic={topic} isIcon className={cn(ICON_ACTION_ROW_BUTTON_CLASS, ICON_ACTION_CLASS)} />
-					</div>
-				</div>
-				{/* tags, left-padded to line the text up with the resource icons below them.
-				     an untagged topic renders no row at all */}
+					<TopicInfoPopover topic={topic} isInline />
+				</h3>
+				{/* tags, lined up with the title. an untagged topic renders no row at all */}
 				{topic.tags.length > 0 && (
-					<div className="mt-1.5 mb-1.5 pl-3 flex flex-wrap gap-1">
+					<div className={cn(TOPIC_HEADER_AREA_CLASSES.tags, "flex flex-wrap gap-1")}>
 						{topic.tags.map((tag) => (
 							<Badge key={tag} variant="secondary">
 								{tag}
@@ -113,17 +93,44 @@ export function Topic({ topic, index, className }: TopicProps) {
 						))}
 					</div>
 				)}
+				{/* the byline, with the actions at the right of its row */}
+				<div className={TOPIC_HEADER_AREA_CLASSES.bylineRow}>
+					{/* the topic creator byline */}
+					<TopicByline topic={topic} className={cn(TOPIC_HEADER_AREA_CLASSES.byline, "text-xs")} />
+					{/* the "# new" count opens the info content, and the subscribe toggle sits to its right. the row ends in
+					    the share icon, so it takes the bare-icon inset. on a phone the touch boxes reach into the gaps around
+					    their row instead of making it taller. from sm up the row hangs below the header's bottom by the space
+					    under the icons in their touch boxes, so the icons end level with the image's bottom */}
+					<div
+						className={cn(
+							TOPIC_HEADER_AREA_CLASSES.actions,
+							topic.isTopicOwner && topic.visibility === "private" ? RAIL_TEXT_INSET : RAIL_BARE_ICON_INSET,
+							"flex items-center justify-end max-sm:-my-2.5 sm:-mb-1.5",
+						)}
+					>
+						{topic.newCount > 0 && <NewCountInfo topic={topic} />}
+						{!topic.isTopicOwner && <SubscribeToggle topic={topic} />}
+						<ShareTopic topic={topic} isIcon className={cn(ICON_ACTION_ROW_BUTTON_CLASS, ICON_ACTION_CLASS)} />
+					</div>
+				</div>
 			</div>
 			{/* the topic finding rows, with the latest podcast episode's chapter pills */}
 			<TopicFindingList
 				topicFindings={topic.findings}
 				isRatable={topic.canRate}
 				isBookmarkable={topic.isTopicOwner || topic.isTeamMember}
-				topic={{ id: topic.id, name: topic.name, prompt: topic.prompt, visibility: topic.visibility }}
+				topic={{
+					id: topic.id,
+					name: topic.name,
+					prompt: topic.prompt,
+					visibility: topic.visibility,
+					owner: topic.owner,
+					teamLink: topic.teamLink,
+					image: topic.image,
+				}}
 				latestPodcastEpisode={topic.latestPodcastEpisode}
 				emptyText="Nothing new worth your time yet. Carl has standards."
 				fullListHref={toTopicPath(topic)}
-				className="mt-1.5"
 			/>
 		</div>
 	)

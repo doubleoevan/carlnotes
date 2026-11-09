@@ -5,7 +5,7 @@ import {
 } from "@carlnotes/core/components/PodcastEpisodePlayerCard"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { Rss } from "lucide-react"
-import { MoreButton } from "@/components/topic/MoreButton"
+import { MORE_UNDER_CARD_CLASS, MoreButton } from "@/components/topic/MoreButton"
 import {
 	INFO_CARD_CLASS,
 	MENU_BUTTON_CLASS,
@@ -52,7 +52,7 @@ const elements: PodcastEpisodePlayerCardElements<ChapterTopicFeed> = {
 			{label}
 		</button>
 	),
-	More: (props) => <MoreButton {...props} className={SCRIPTED_ONLY_CLASS} />,
+	More: (props) => <MoreButton {...props} className={cn(SCRIPTED_ONLY_CLASS, MORE_UNDER_CARD_CLASS)} />,
 	Feedback: ({ isLoading, errorMessage }) =>
 		errorMessage ? (
 			<p role="alert" className="text-sm text-destructive">
@@ -72,7 +72,7 @@ export function PodcastEpisodePlayerCard(props: {
 	podcastEpisode: PodcastEpisode
 	podcastEpisodePath?: string
 	chapterTopicFeed: ChapterTopicFeed
-	onOpenPodcastFeedDialog: () => void
+	onOpenPodcastFeedDialog?: () => void
 }) {
 	return <SharedPodcastEpisodePlayerCard {...props} elements={elements} />
 }

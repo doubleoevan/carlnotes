@@ -39,6 +39,7 @@ session-only account routes. The one-time key response must remain in the curren
   keeps the gate cookie for the sign-up request.
 - Most clients build on `apiClient()`. Some calls, and all of `chatClient.ts`, `flagContentClient.ts`, and
   `voiceClient.ts`, use `fetchApi` instead. `pageHeadClient.ts` reads a page's head data.
+  `updatesClient.ts` requests an updates list.
   `viewerCountsClient.ts` sends a topic page's view and reads a topic's or a podcast episode's counts, a public
   topic's without credentials so the edge can cache them. `userBlockClient.ts` blocks and unblocks a user and reads the
   block list, `pushClient.ts` registers and unregisters the phone's push token and saves one push preference, passing
@@ -98,3 +99,6 @@ signal, and `fetchApi` checks cancellation after asynchronous session headers, b
 `personalSourcesClient.ts` includes the sender-only current context and Topic-wide entry pagination used by both Personal sources popovers.
 
 `fetchPersonalSourcesEmailSetup` is the read-only mailbox response used by the empty Personal sources hint. It creates no Source and has no setup UI.
+
+`homeClient.ts` reads the home payload, and `topicImageClient.ts` is the editor's image block: the regenerate, the
+render poll, the upload of a multipart body, and the removal of an upload.

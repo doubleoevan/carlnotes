@@ -24,6 +24,7 @@ const episode: PodcastEpisodeRow = {
 	durationSeconds: 60,
 	listenerCount: 0,
 	publishedAt: new Date(),
+	imageHash: null,
 }
 const audioUrl = "https://media.example/audio.mp3?X-Amz-Signature=private"
 afterEach(() => mock.restore())

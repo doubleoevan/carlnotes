@@ -1,0 +1,115 @@
+// the ids of the home's cards: the featured topics and podcast episodes, the pinned ones first and then the trending
+// ones to fill, and the newest podcast episodes, from one cached read every replica shares
+
+import {
+	FEATURED_PODCAST_EPISODE_COUNT,
+	FEATURED_TOPIC_COUNT,
+	NEW_PODCAST_EPISODE_DAYS,
+} from "@carlnotes/contracts/home"
+import { DAY_MS } from "@carlnotes/contracts/time"
+import { db, isPublicAndShown } from "@carlnotes/db"
+import { cacheJson } from "@carlnotes/db/redis"
+import { podcastEpisodes } from "@carlnotes/db/schema/podcast"
+import { topics } from "@carlnotes/db/schema/topics"
+import { and, asc, desc, eq, gte, isNotNull, sql } from "drizzle-orm"
+import { HOME_CARD_IDS_KEY } from "../topic/feedCaches"
+
+// how long every replica serves the same ids before one reads them again
+const HOME_CARD_IDS_TTL_MS = 60_000
+
+// how many published podcast episodes the featured read takes before keeping one per topic, and the most new podcast episodes
+// of a week the home shows
+const PODCAST_EPISODE_CANDIDATE_LIMIT = 30
+const NEW_PODCAST_EPISODE_LIMIT = 100
+
+// the featured topic ids, the featured podcast episode ids, and the newest podcast episode ids, each in the order the
+// home shows them
+export type HomeCardIds = {
+	featuredTopicIds: string[]
+	featuredPodcastEpisodeIds: string[]
+	newestPodcastEpisodeIds: string[]
+}
+
+/**
+ * Returns the ids of the home's cards, read through the shared cache: the pinned topics in their order and then the trending
+ * public shown topics until six, and the pinned podcast episodes and then the most listened published ones of public
+ * shown topics, one per topic, until five, and the podcast episodes of public shown topics published in the last week.
+ */
+export function loadHomeCardIds(): Promise<HomeCardIds> {
+	return cacheJson({ key: HOME_CARD_IDS_KEY, ttlMs: HOME_CARD_IDS_TTL_MS, load: loadHomeCardIdsFromDatabase })
+}
+
+// read the three id lists from the database
+async function loadHomeCardIdsFromDatabase(): Promise<HomeCardIds> {
+	const [featuredTopicIds, featuredPodcastEpisodeIds, newestPodcastEpisodeIds] = await Promise.all([
+		loadFeaturedTopicIds(),
+		loadFeaturedPodcastEpisodeIds(),
+		loadNewestPodcastEpisodeIds(),
+	])
+	return { featuredTopicIds, featuredPodcastEpisodeIds, newestPodcastEpisodeIds }
+}
+
+// the pinned public shown topics in their order, then the trending ones: most viewed, then most followed, then newest
+async function loadFeaturedTopicIds(): Promise<string[]> {
+	const topicRows = await db
+		.select({ id: topics.id })
+		.from(topics)
+		.where(isPublicAndShown)
+		.orderBy(
+			sql`${topics.featureOrder} is null`,
+			asc(topics.featureOrder),
+			desc(topics.viewerCount),
+			desc(topics.subscriberCount),
+			desc(topics.createdAt),
+		)
+		.limit(FEATURED_TOPIC_COUNT)
+	return topicRows.map((topicRow) => topicRow.id)
+}
+
+// the pinned published podcast episodes of public shown topics in their order, then the most listened, newest first
+// among ties, one per topic
+async function loadFeaturedPodcastEpisodeIds(): Promise<string[]> {
+	const podcastEpisodeRows = await db
+		.select({ id: podcastEpisodes.id, topicId: podcastEpisodes.topicId })
+		.from(podcastEpisodes)
+		.innerJoin(topics, eq(topics.id, podcastEpisodes.topicId))
+		.where(and(eq(podcastEpisodes.status, "published"), isNotNull(podcastEpisodes.publishedAt), isPublicAndShown))
+		.orderBy(
+			sql`${podcastEpisodes.featureOrder} is null`,
+			asc(podcastEpisodes.featureOrder),
+			desc(podcastEpisodes.listenerCount),
+			desc(podcastEpisodes.publishedAt),
+		)
+		.limit(PODCAST_EPISODE_CANDIDATE_LIMIT)
+
+	// one podcast episode per topic, in the order read
+	const podcastEpisodeTopicIds = new Set<string>()
+	const podcastEpisodeIds: string[] = []
+	for (const podcastEpisodeRow of podcastEpisodeRows) {
+		if (podcastEpisodeIds.length >= FEATURED_PODCAST_EPISODE_COUNT) {
+			break
+		}
+		// the first podcast episode read for a topic is the one featured
+		if (podcastEpisodeRow.topicId && !podcastEpisodeTopicIds.has(podcastEpisodeRow.topicId)) {
+			podcastEpisodeTopicIds.add(podcastEpisodeRow.topicId)
+			podcastEpisodeIds.push(podcastEpisodeRow.id)
+		}
+	}
+	return podcastEpisodeIds
+}
+
+// the podcast episodes of public shown topics published in the last week, newest first
+async function loadNewestPodcastEpisodeIds(): Promise<string[]> {
+	const publishedSince = new Date(Date.now() - NEW_PODCAST_EPISODE_DAYS * DAY_MS)
+	const podcastEpisodeRows = await db
+		.select({ id: podcastEpisodes.id })
+		.from(podcastEpisodes)
+		.innerJoin(topics, eq(topics.id, podcastEpisodes.topicId))
+		.where(
+			and(eq(podcastEpisodes.status, "published"), gte(podcastEpisodes.publishedAt, publishedSince), isPublicAndShown),
+		)
+		.orderBy(desc(podcastEpisodes.publishedAt))
+		// ponytail: limits a burst week. page on the server past it
+		.limit(NEW_PODCAST_EPISODE_LIMIT)
+	return podcastEpisodeRows.map((podcastEpisodeRow) => podcastEpisodeRow.id)
+}

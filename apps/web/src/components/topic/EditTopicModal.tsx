@@ -3,6 +3,7 @@ import type { TopicPodcast } from "@carlnotes/contracts/podcast"
 import { FULL_PODCAST_EPISODE_MINUTES, SHORT_PODCAST_EPISODE_MINUTES } from "@carlnotes/contracts/podcastEpisodes"
 import type { TopicResponse } from "@carlnotes/contracts/topics"
 import { PODCAST_COMMENTS_LABEL } from "@carlnotes/core/lib/socialLabels"
+import { TOPIC_IMAGE_LABEL, toTopicImageEditorKey } from "@carlnotes/core/lib/topicImageEditor"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { useNavigate } from "@tanstack/react-router"
 import { useId, useRef, useState } from "react"
@@ -22,6 +23,7 @@ import { hasDailySlotLeft, PromptSourceUrls, ScheduleFields, SourceLimitNote } f
 import { MISSING_FIELD_NOTES, saveTopic, showSaveError } from "./saveTopic"
 import { TagPicker } from "./TagPicker"
 import { stageFiles, TopicAttachmentEditor } from "./TopicAttachmentEditor"
+import { TopicImageEditor } from "./TopicImageEditor"
 import { TopicPromptComposer } from "./TopicPromptComposer"
 import { TopicSourceEditor } from "./TopicSourceEditor"
 import { TopicTeamSelect, useTopicTeamChoice } from "./TopicTeamSelect"
@@ -36,6 +38,7 @@ export function EditTopicModal({
 	initialTeam,
 	onClose,
 	onTopicSaved,
+	onTopicImageChanged,
 }: {
 	topic?: TopicResponse
 	// opens with public already selected, staged like any other edit. nothing changes until the owner saves
@@ -44,6 +47,8 @@ export function EditTopicModal({
 	initialTeam?: { teamId: string; name: string }
 	onClose: () => void
 	onTopicSaved: (topicId: string, topicName: string) => Promise<void>
+	// called after each saved change
+	onTopicImageChanged?: () => void
 }) {
 	// the title input ref to focus it on open
 	const titleInputRef = useRef<HTMLInputElement>(null)
@@ -253,6 +258,14 @@ export function EditTopicModal({
 						onPendingChange={fields.setPendingFiles}
 					/>
 				</div>
+
+				{/* the image block, for a saved topic. its changes save on their own */}
+				{topic && (
+					<div>
+						<FieldLabel>{TOPIC_IMAGE_LABEL}</FieldLabel>
+						<TopicImageEditor key={toTopicImageEditorKey(topic)} topic={topic} onImageChanged={onTopicImageChanged} />
+					</div>
+				)}
 
 				{/* the podcast switch, for a saved topic that has a podcast */}
 				{topic?.podcast && (

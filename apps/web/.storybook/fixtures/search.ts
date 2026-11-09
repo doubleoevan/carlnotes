@@ -52,7 +52,12 @@ export const SEARCH_ROW_FIXTURES: SearchRow[] = [
 		path: "/topics/topic-home-espresso/home-espresso",
 		date: "2026-05-18T12:00:00.000Z",
 		count: 214,
-		topic: { id: "topic-home-espresso", name: "Home espresso", latestPodcastEpisode: LATEST_PODCAST_EPISODE_FIXTURE },
+		topic: {
+			id: "topic-home-espresso",
+			name: "Home espresso",
+			latestPodcastEpisode: LATEST_PODCAST_EPISODE_FIXTURE,
+			image: null,
+		},
 		subscriberCount: 31,
 		isSubscribed: false,
 	},

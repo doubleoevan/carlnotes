@@ -262,3 +262,24 @@ test("a post on a private Topic with Personal sources left to convert is closed 
 	expect(await isAllowed("admin-1", "social:post", closedTopic)).toBe(false)
 	expect(await isAllowed("member-1", "social:post", closedTopic)).toBe(false)
 })
+
+// a regeneration is allowed while the owner's month has regenerations left, and an admin is never short
+test("topicImage:regenerate follows the plan's monthly limit", async () => {
+	// a count returns one row, and any other read returns the access row
+	stubConnectionPool(({ text }) => (text.includes("count(") ? [["1"]] : [FREE_USER_ACCESS_ROW]))
+	expect(await isAllowed("user-1", "topicImage:regenerate")).toBe(true)
+	restoreConnectionPool()
+
+	// the free plan's two regenerations are spent
+	stubConnectionPool(({ text }) => (text.includes("count(") ? [["2"]] : [FREE_USER_ACCESS_ROW]))
+	expect(await isAllowed("user-1", "topicImage:regenerate")).toBe(false)
+	restoreConnectionPool()
+
+	// an admin passes the gate before the count is read
+	stubConnectionPool(() => [ADMIN_USER_ACCESS_ROW])
+	expect(await isAllowed("admin-1", "topicImage:regenerate")).toBe(true)
+	restoreConnectionPool()
+
+	// a visitor has no month to count
+	expect(await isAllowed(null, "topicImage:regenerate")).toBe(false)
+})

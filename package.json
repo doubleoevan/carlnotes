@@ -95,6 +95,8 @@
 		"sync:releases:prd": "doppler run --config prd -- bun apps/api/releases.sync.ts",
 		"releases:preview": "doppler run -- bun apps/api/releases.preview.ts",
 		"db:generate": "drizzle-kit generate",
+		"topic-images:backfill": "doppler run -- bun scripts/backfill-topic-images.ts",
+		"podcast-episode-images:backfill": "doppler run -- bun scripts/backfill-podcast-episode-images.ts",
 		"db:migrate": "doppler run -- bun packages/db/migrate.ts",
 		"db:seed": "doppler run -- bun apps/api/seed.ts",
 		"docs:embed": "doppler run -- bun apps/worker/docsSync.ts",

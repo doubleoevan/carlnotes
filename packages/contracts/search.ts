@@ -7,6 +7,7 @@ import { DEFAULT_PAGE_SIZE, PAGE_SIZES } from "./pagination"
 import { podcastEpisode, podcastEpisodeSummary } from "./podcast"
 import { profileIdentity } from "./profiles"
 import { teamIdentity } from "./teams"
+import { topicImageUrls } from "./topicImages"
 import { MAX_TOPIC_DRAFT_TAGS, TOPIC_DRAFT_TAG_CHARS } from "./topics"
 
 // how long a query must be before it searches, and the most characters of a query the search reads
@@ -193,7 +194,12 @@ const searchRowFields = z.object({
 // caller does
 const topicSearchRow = searchRowFields.extend({
 	kind: z.literal("topic"),
-	topic: z.object({ id: z.string(), name: z.string(), latestPodcastEpisode: podcastEpisodeSummary.nullable() }),
+	topic: z.object({
+		id: z.string(),
+		name: z.string(),
+		latestPodcastEpisode: podcastEpisodeSummary.nullable(),
+		image: topicImageUrls.nullable(),
+	}),
 	subscriberCount: z.number(),
 	isSubscribed: z.boolean().nullable(),
 })
@@ -211,7 +217,7 @@ export type PodcastEpisodeSearchRow = z.infer<typeof podcastEpisodeSearchRow>
 
 // a finding row's topic: its name and prompt, which the finding's note copies, its visibility, and whether the caller
 // may rate and bookmark its findings
-const findingSearchTopic = z.object({
+export const findingSearchTopic = z.object({
 	id: z.string(),
 	name: z.string(),
 	prompt: z.string(),

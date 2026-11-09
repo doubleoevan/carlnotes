@@ -45,6 +45,7 @@ capability the app will never need, with the reason, or `deferred` for one an ac
 | `billingClient.sendUserRole` | web-only | Admin stays on the web |
 | `billingClient.sendAdminBlock` | web-only | The admin console's admin block of a user from reactions and comments. Admin stays on the web |
 | `topicClient.sendTopicFeatureOrder` | web-only | An admin's featuring control. Admin stays on the web |
+| `podcastEpisodeClient.sendPodcastEpisodeFeatureOrder` | web-only | An admin's featuring control for a podcast episode. Admin stays on the web |
 | `topicClient.uploadTopicAttachment` | web-only | The browser's File upload. The app uploads to the same route through `topicClient.uploadTopicAttachmentBody` |
 | `mcpClient.fetchMcpClientName` | web-only | The MCP OAuth consent page, which an AI client opens in a browser |
 | `mcpClient.sendMcpConsent` | web-only | The MCP OAuth consent page, which an AI client opens in a browser |
@@ -86,6 +87,7 @@ name.
 | --- | --- | --- |
 | `personalSourcesElements` | platform API | Adapts the shared `TopicPersonalSourcesElements` contract to DOM elements and React Native views, selectable text, links, and confirmation controls. Both apps render the same core Personal sources components. |
 | `socialElements` | platform API | Adapts the shared `SocialElements` contract in `core/lib/socialElements.ts` to DOM elements and React Native views: the composer in a dialog on web and in a bottom sheet with `BottomSheetTextInput` on mobile, a native choice sheet for the chapter, the flame and mugs of a comment shared with Carl with a tooltip on web and an accessibility label on mobile, and hit slops for the touch targets. Both apps render the same core `ReactionRow`, `CommentThread`, and `CommentRow`. |
+| `AccordionSection` | platform difference | Both draw a section's header the same way, the title with its count at the right and a divider only while closed, from the shared `toCountLabel`. Web is a Radix accordion item that keeps closed content in the html for a crawler. Mobile is a pressable header that the Topics tab's recycled list renders as a row of its own. |
 | `AccountSettings` | not yet shared | Shares AccountFields and UserBlocksSection. The section order and close account flow could move to core, with `ConfirmDialog` or `Alert` behind an adapter and mobile's push and store restore sections passed in. |
 | `AddToAiDialog` | platform difference | Shares AddToAi. Web wraps it in a dialog with install deep link anchors. Mobile uses a native sheet with copy-only desktop steps, `expo-clipboard`, and AsyncStorage. |
 | `AddTopicButton` | not yet shared | Web opens a popover with an autofocused filter over topics passed in. Mobile opens a native sheet that fetches addable topics with react-query. An adapter could hold that difference. |
@@ -113,7 +115,8 @@ name.
 | `EditTopicFields` | not yet shared | The scan time picker is a platform API, @react-native-community/datetimepicker on mobile and a TimePicker on web, but the rest of the fields match. The picker could be an adapter element. |
 | `EditTopicModal` | not yet shared | Web edits the topic in a dialog with toasts. Mobile uses a native sheet with inline errors and the share sheet for the invite link. An adapter could hold that difference. |
 | `Header` | platform difference | Web shows a desktop nav, theme toggle, sign-in links, and a hamburger menu over the hero. Mobile shows a compact brand row in a safe area with the user menu. |
-| `HomeHero` | not yet shared | Both use the copy in core homeHero. Web opens the pitch and persona credit in hover popovers with a CSS shimmer. Mobile opens the pitch in a native sheet. An adapter could hold that difference. |
+| `HomeHeadline` | platform difference | Both read the headline from core homeHero. Web reveals it with stacked copies under a CSS mask wipe, and mobile with the native `ShimmerText`. Only the two sentences are shared. |
+| `HomeHero` | not yet shared | Both use the copy in core homeHero. Web opens the pitch and persona credit in hover popovers. Mobile opens the pitch in a native sheet. An adapter could hold that difference. |
 | `HostAvatar` | not yet shared | Both show Carl's or Vienna's portrait from the Nightshift assets. Web uses an img tag, mobile an expo-image sized to the font scale. |
 | `InviteMembersModal` | not yet shared | Both wrap the app's own `TeamInviteFields` and send the staged invites. Web shows them in a dialog, mobile in a native sheet. An adapter could hold that difference. |
 | `InviteUserToTeamButton` | not yet shared | Web lists the teams in a popover menu with hover tooltips and toasts. Mobile lists them in a native sheet and loads statuses with react-query. An adapter could hold that difference. |
@@ -158,6 +161,7 @@ name.
 | `TeamsMembershipTable` | not yet shared | Shares the column definitions. Web renders a wide DOM table with row components, mobile a native `DataTable` with Alert confirmations and a `Sheet` for team members or topics. An adapter could hold that difference. |
 | `Topic` | not yet shared | Both show the topic title link, byline, new count, share action, and tags. That header could move to core. Web adds the findings list and the note popover around it. |
 | `TopicAttachmentEditor` | platform API | Web stages files from a hidden file input. Mobile picks files through a native file picker, resizes images, and uploads native file parts. |
+| `TopicByline` | platform difference | Both name the team for anyone who can open its page and the owner otherwise, with the same label and avatar. Web renders the web app's `TeamLink` or `UserProfileLink`. Mobile draws one `AnchorLink` row with a 44 point touch target that opens the page on the site. |
 | `TopicCountsLine` | not yet shared | Both poll `fetchTopicCounts` with `usePolledCounts` and show Viewers and Followers. Web uses `FlashingCount`, mobile uses `Count` and polls only while the topic route is open. |
 | `TopicFeedSkeleton` | not yet shared | Both draw gray placeholder blocks for the section headers, topic headers, and five finding rows. Each copies its own feed layout, so a core skeleton with a block element would keep the two from drifting. |
 | `TopicFindingRating` | not yet shared | Both show the same heading, box, thumbs, and thanks. Web's `Input` and mobile's bottom sheet input with native keyboard avoidance could be adapter elements. |
@@ -194,8 +198,9 @@ their reason.
 
 | Web page | Native screen | Reuse | Notes |
 | --- | --- | --- | --- |
-| Home, visitor hero | `(tabs)/index.tsx`, `layout/HomeHero.tsx` | logic | the hero copy in `core/lib/homeHero.ts`, the shimmer and the pitch sheet native |
-| Home Feed | `(tabs)/index.tsx` | component, logic | the Feed rules, filters, and Finding actions from core, the list native |
+| Home, visitor hero and the headline on both faces | `(tabs)/index.tsx`, `layout/HomeHero.tsx`, `layout/HomeHeadline.tsx` | logic | the hero copy in `core/lib/homeHero.ts`, the shimmer and the pitch sheet native |
+| Home, the featured cards and the user's topics as cards | `(tabs)/index.tsx` | component, logic | the faces and the card sections from `core/lib/homeFaces.ts`, `TopicCard` and `PodcastEpisodeCard` over the shared card elements, the sections native in `AccordionSection`. Pull to refresh and the logo's reheat read the home payload again, and a failed read shows `LoadFailedNotice` with Try again in place of the cards |
+| Topics tab, the Feed | `(tabs)/topics.tsx` | component, logic | the Feed rules, filters, and Finding actions from core, the list native, pull to refresh and the logo's reheat |
 | Search | `(tabs)/search.tsx` | logic | the shared search bar provider, native results |
 | Topic page, Findings, scan recaps | `topics/[topicId].tsx` | component, logic | `TopicScanRecap`, `TopicSource`, `NumberedTopicFindingList` from core |
 | Topic gate | `topic/TopicGateNotice.tsx` | logic | the web gate's words, Log in and Sign up returning to the Topic |
@@ -205,6 +210,7 @@ their reason.
 | Teams | `teams/index.tsx` | component | the shared membership table and the title badge |
 | Team | `teams/[teamId].tsx` | component | the shared tables, the header's update badge |
 | Activity | `activity.tsx` | component | the shared subscription and invite tables, the title badge |
+| Latest Brews | `(tabs)/index.tsx`, `topic/UpdatesList.tsx`, `topic/UpdatesButton.tsx` | component | `UpdatesList` and `UpdatesButton` from core, the feed's `TopicResource` rows, a native sheet for the lengths |
 | Account, Settings | `account.tsx`, `(tabs)/settings.tsx` | component | `AccountBudget`, `AccountFields`, `UserBlocksSection`, `PlanCard` from core, and the Contact entry. The closing version line is native: a browser loads the current app on every visit, and an installed build names its version, build, and update for a support request |
 | Update notice | `session/AppUpdateNotice.tsx` at the root | logic | the copy from `contracts/appVersions.ts` and the requirement from `core/stores/appUpdateStore.ts` on the session frame. Native alone: a browser never runs an outdated app |
 | Report and block | `common/ReportIssueDialog.tsx` from the message and comment footers, note management, and the profile menu | component, logic | the shared report, the block switch, the hidden quote, and the blocked content filters from core |

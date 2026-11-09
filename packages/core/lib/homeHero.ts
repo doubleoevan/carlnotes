@@ -6,7 +6,7 @@ export const HERO_HEADLINE_LAST_SENTENCE = "All of it."
 
 // Carl's pitch, shown inline on a wide screen and behind its note button on a phone
 export const CARL_PITCH =
-	"Carl doesn't check the news. The news checks in with Carl. Carl never sleeps. He drinks coffee and reads everything. He finished the internet. Now he checks nightly for new stuff. And when you drop by, he has notes and a podcast."
+	"Carl doesn't check the news. The news checks in with Carl. Carl never sleeps. He drinks coffee and reads everything. He finished the internet. Now he scans nightly for new stuff. And when you drop by, he has notes and a podcast."
 
 // the call to action and the tagline under the headline
 export const HERO_CALL_TO_ACTION = "Give Carl a topic. You know the one. He'll brew a hot cup of what you just missed."

@@ -50,6 +50,7 @@ test("the open list shapes each report and marks gone content", async () => {
 		subjectId: "c1",
 		subjectText: "you smell",
 		subjectPath: "/topics/topic-1/raccoons",
+		subjectImage: null,
 		reason: "rude",
 		createdAt: "2026-10-29T10:00:00.000Z",
 		author: { id: "user-2", username: "vienna" },

@@ -240,7 +240,7 @@ test("one plan sums the billed user's month spend once", async () => {
 		podcastEpisodeId: "podcast-episode-1",
 		plannedFindings: [{ findingId: "finding-1", resourceId: "resource-1", sourceUrl: "https://a.com/1" }],
 	})
-	expect(sentQueries.filter((sentQuery) => sentQuery.text.includes("sum("))).toHaveLength(4)
+	expect(sentQueries.filter((sentQuery) => sentQuery.text.includes("sum("))).toHaveLength(5)
 
 	// the Scan's own Findings are the ones it first found, so the read selects the found scan, never the latest review's
 	const findingsQuery = sentQueries.find((sentQuery) => sentQuery.text.includes('from "findings"'))

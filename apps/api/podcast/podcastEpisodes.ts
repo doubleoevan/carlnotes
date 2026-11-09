@@ -26,6 +26,7 @@ import { PRIVATE_NO_STORE_CACHE_CONTROL } from "../edgeCache"
 import { toPodcastEpisodePreview } from "../share/podcastEpisodeImage"
 import { toCachedPodcastEpisodePreviewPng, toPreviewPngResponse } from "../share/preview"
 import { updateTopicFields } from "../tool/topicTools"
+import { clearFeaturedCaches } from "../topic/featuring"
 import { canRateTopic } from "../topic/findingPermissions"
 import { toTopicGateResponse } from "../topic/helpers"
 import { loadPodcastEpisodePage, loadSeasonPodcastEpisodes } from "./helpers"
@@ -194,7 +195,7 @@ export const podcastEpisodesRoute = new Hono<AppEnv>()
 		// draw the preview card on its first request, and read the card from storage after
 		const podcastEpisodePreview = toPodcastEpisodePreview(
 			publishedPodcastEpisode.podcastEpisodeRow,
-			publishedPodcastEpisode.topic.name,
+			publishedPodcastEpisode.topic,
 		)
 		return toPreviewPngResponse(context, await toCachedPodcastEpisodePreviewPng(podcastEpisodePreview))
 	})
@@ -283,5 +284,7 @@ export const podcastEpisodesRoute = new Hono<AppEnv>()
 			return context.json({ error: "not found" }, 404)
 		}
 		await deletePodcastFeedCache(podcastEpisodeTopicRow.topic.id)
+		// a featured podcast episode left the home
+		await clearFeaturedCaches()
 		return context.json({ ok: true })
 	})

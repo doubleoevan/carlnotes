@@ -1,8 +1,12 @@
+import { ADMIN_QUOTA } from "@carlnotes/contracts/plans"
+import { toTopicImageUrlsOrNull } from "@carlnotes/contracts/topicImages"
 import type { TopicResponse } from "@carlnotes/contracts/topics"
 import { toAttachmentFailureMessage } from "@carlnotes/contracts/topics"
 import { db } from "@carlnotes/db"
+import { loadTopicImageRegenerationQuota } from "@carlnotes/db/quotas"
 import { scans } from "@carlnotes/db/schema/scans"
 import { attachments, sources } from "@carlnotes/db/schema/topics"
+import { loadTopicImageForUser } from "@carlnotes/db/topicImages"
 import { traceRequestStage } from "@carlnotes/server/monitoring"
 import { desc, eq } from "drizzle-orm"
 import { isAllowed } from "../authorization"
@@ -66,6 +70,7 @@ export async function loadTopicPage(
 		{ podcast, latestPodcastEpisode, podcastEpisodeByScanId },
 		relatedTopics,
 		commentThread,
+		topicImageForUser,
 	] = await traceRequestStage("topic_page.reads", () =>
 		Promise.all([
 			// the user's access and the findings it gates
@@ -99,8 +104,13 @@ export async function loadTopicPage(
 			isPoll ? [] : loadRelatedTopics(topic, userId),
 			// the first page of the topic's comment thread, none for a poll reload
 			isPoll ? undefined : loadPageCommentThread({ userId, topic, target: { kind: "topic", id: topic.id } }),
+			// the image row for its origin and whether the user reported it
+			userId ? loadTopicImageForUser(topic.id, userId) : null,
 		]),
 	)
+
+	// the editor's regenerations this month, read for an editor alone
+	const imageRegenerationQuota = canEdit && userId ? await loadTopicImageRegenerationQuota(userId) : null
 
 	// every later scan reads the generated context, so the owner and admins see the context to edit, and nobody else does.
 	// the owner and admins also see why a failed attachment failed, as a message instead of the recorded reason
@@ -164,6 +174,14 @@ export async function loadTopicPage(
 		scans: scanHistory,
 		podcast,
 		latestPodcastEpisode,
+		// the topic's image urls, null until its first render lands, and null for a user who reported this image
+		image: topicImageForUser?.isReportedByUser ? null : toTopicImageUrlsOrNull(topic.id, topic.imageHash),
+		// an admin is never limited, so they see no count
+		imageRegenerationQuota:
+			canEdit && imageRegenerationQuota && imageRegenerationQuota.limit < ADMIN_QUOTA
+				? { used: imageRegenerationQuota.used, limit: imageRegenerationQuota.limit }
+				: null,
+		imageOrigin: canEdit ? (topicImageForUser?.topicImage?.origin ?? null) : null,
 		findings: topicFindings,
 		invites: inviteRows,
 		manualScansRemaining,

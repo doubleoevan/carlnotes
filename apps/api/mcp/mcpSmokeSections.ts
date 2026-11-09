@@ -178,6 +178,7 @@ export async function checkUser(accessToken: string): Promise<void> {
 	const listedTopic = listTopicsPage.items.find((listedItem) => listedItem.topicId === topicId)
 	const listedTopicSource = listedTopic?.sources.find((topicSource) => topicSource.label === "reddit — r/startups")
 	check("list_topics shows the source with its id", Boolean(listedTopicSource?.sourceId), listedTopic)
+	check("list_topics carries the topic's image field", listedTopic !== undefined && "image" in listedTopic, listedTopic)
 
 	// removing the source previews first, then saves with the preview's confirmation, which never saves twice
 	const removeArguments = { topic_id: topicId, removeSourceIds: [listedTopicSource?.sourceId ?? ""] }

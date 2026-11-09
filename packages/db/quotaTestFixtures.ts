@@ -5,7 +5,8 @@ import { restoreConnectionPool, stubConnectionPool, toSpendSumRows } from "./con
 // the rows that the spend checks read. the stub picks each row by a pattern in the query's SQL
 export type SpendQueryRows = {
 	accessRow: unknown[]
-	spendDollars: [string, string, string]
+	// the scan, chat, podcast episode, and topic image render sums. a sum left off reads as zero
+	spendDollars: [string, string, string, string?]
 }
 
 /**
@@ -16,11 +17,12 @@ export async function withSpendQueryRows<Result>(
 	spendQueryRows: SpendQueryRows,
 	runCalls: () => Promise<Result>,
 ): Promise<Result> {
-	const [scanDollars, chatDollars, podcastEpisodeDollars] = spendQueryRows.spendDollars
+	const [scanDollars, chatDollars, podcastEpisodeDollars, topicImageDollars = "0"] = spendQueryRows.spendDollars
 	const spendDollarsByFromClause = {
 		'from "scans"': scanDollars,
 		'from "chat_turns"': chatDollars,
 		'from "episodes"': podcastEpisodeDollars,
+		'from "topic_image_renders"': topicImageDollars,
 	}
 
 	// return one table's spend sum for a sum, and the access row for anything else

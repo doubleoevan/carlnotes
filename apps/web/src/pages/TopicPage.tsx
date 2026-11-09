@@ -9,6 +9,7 @@ import { useNavigate, useParams } from "@tanstack/react-router"
 import type * as React from "react"
 import { useCallback, useEffect, useState } from "react"
 import { toast } from "sonner"
+import type { FeatureOrderMove } from "@/components/common/FeatureRankDialog"
 import { NotesSection } from "@/components/note/NotesSection"
 import { PodcastEpisodePlayer } from "@/components/podcast/PodcastEpisodePlayer"
 import { PodcastEpisodesCard } from "@/components/podcast/PodcastEpisodesCard"
@@ -26,7 +27,6 @@ import { TopicGateNotice } from "@/components/topic/TopicGateNotice"
 import { TopicInfoCard } from "@/components/topic/TopicInfoCard"
 import { TopicLinkedFinding } from "@/components/topic/TopicLinkedFinding"
 import { TopicHeader } from "@/components/topic/TopicPageHeader"
-import type { FeatureOrderMove } from "@/components/topic/TopicRankDialog"
 import { TopicScanButton } from "@/components/topic/TopicScanButton.tsx"
 import { TopicScanHistory } from "@/components/topic/TopicScanHistory"
 import { TopicSettingsCard } from "@/components/topic/TopicSettingsCard"
@@ -167,7 +167,7 @@ export function TopicPage() {
 	const handleRankTopic = async (moves: FeatureOrderMove[]): Promise<void> => {
 		await runThenReload(async () => {
 			for (const move of moves) {
-				await sendTopicFeatureOrder(move.topicId, move.position)
+				await sendTopicFeatureOrder(move.id, move.position)
 			}
 		})
 		await reloadHomePage()
@@ -262,6 +262,7 @@ export function TopicPage() {
 						onOpenDialog={setOpenDialog}
 						onSaveTopic={handleSaveTopic}
 						onTopicTeamsChanged={() => void reloadTopicPage()}
+						onTopicImageChanged={() => void reloadTopicPage()}
 						onRankTopic={handleRankTopic}
 						onTopicDeleted={async () => {
 							await reloadHomePage()
@@ -304,6 +305,9 @@ function TopicFindings({ topic, topicFeedHandlers }: { topic: TopicResponse; top
 					prompt: topic.prompt,
 					visibility: topic.visibility,
 					isTopicOwner: topic.isTopicOwner,
+					owner: topic.owner,
+					teamLink: topic.teamLink,
+					image: topic.image,
 				}}
 				newCountInfo={topic.newCount > 0 ? <NewCountInfo topic={topic} /> : undefined}
 				latestPodcastEpisode={topic.latestPodcastEpisode}

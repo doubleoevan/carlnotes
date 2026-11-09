@@ -24,6 +24,7 @@ import {
 import {
 	hasFullPodcastEpisodes,
 	loadBillingAccess,
+	loadTopicImageRegenerationQuota,
 	loadUserAccess,
 	monthlySpendDollars,
 	scansToday,
@@ -57,6 +58,8 @@ export type Capability =
 	| "chat:persist"
 	| "podcastEpisode:full"
 	| "podcastEpisode:remove"
+	// regenerating a topic's image, within the owner's monthly plan limit
+	| "topicImage:regenerate"
 	// reactions and comments: posting one, and deleting anyone's on the topic's social targets
 	| "social:post"
 	| "social:moderate"
@@ -164,6 +167,9 @@ async function decideTopicCapability(
 		// the admin role and the plan are the topic owner's
 		case "podcastEpisode:full":
 			return topic ? hasFullPodcastEpisodes(topic.ownerId) : false
+		// a regeneration needs regenerations left in the owner's month
+		case "topicImage:regenerate":
+			return userId ? (await loadTopicImageRegenerationQuota(userId)).remaining > 0 : false
 		// a new capability fails to compile here
 		default:
 			return assertNever(capability)

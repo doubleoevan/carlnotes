@@ -4,12 +4,7 @@ import { CollapsibleSection } from "@/components/topic/CollapsibleSection"
 import { TABLE_CLASS, TABLE_HEAD_CLASS, TABLE_SCROLL_CLASS } from "@/lib/styleClasses"
 import type { RowSort, SortValue } from "./SortableHeader"
 import { TableCard } from "./TableCard"
-import {
-	ScriptedTablePagination,
-	SMALLEST_PAGE_SIZE,
-	toScriptedPaginationCardClass,
-	usePaginatedRowSort,
-} from "./TablePagination"
+import { ScriptedTablePagination, toScriptedPaginationCardClass, usePaginatedRowSort } from "./TablePagination"
 
 // the section's key and title, its rows and each sortable column's value, the table's own classes, and how to render
 // the column headings, a row's cells, and a row's key
@@ -43,7 +38,6 @@ export function PagedTableSection<Row>({
 	const { renderedRows, sort, pagination } = usePaginatedRowSort({
 		rows,
 		valueByKey: rowSortValues,
-		initialPageSize: SMALLEST_PAGE_SIZE,
 	})
 	if (rows.length === 0) {
 		return null

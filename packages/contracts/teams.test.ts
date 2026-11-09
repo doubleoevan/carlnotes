@@ -60,6 +60,7 @@ const TEAM_PAGE: TeamPageResponse = {
 				publishedAt: "2026-09-29T08:00:00.000Z",
 				pagePath: "/topics/topic-home-espresso/home-espresso/episodes/4",
 				chapterCount: 2,
+				image: null,
 			},
 		},
 	],

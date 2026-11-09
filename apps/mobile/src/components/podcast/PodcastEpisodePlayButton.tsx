@@ -44,13 +44,15 @@ const elements: PodcastEpisodePlayButtonElements = {
  * Plays the selected episode through the shared player and platform audio adapter.
  */
 export function PodcastEpisodePlayButton({
-	episode,
+	podcastEpisode,
 	size = "sm",
 	onPress,
 }: {
-	episode: PodcastEpisodeSummary
+	podcastEpisode: PodcastEpisodeSummary
 	onPress?: () => void
 	size?: "sm" | "default" | "lg"
 }) {
-	return <SharedPodcastEpisodePlayButton podcastEpisode={episode} size={size} elements={elements} onPress={onPress} />
+	return (
+		<SharedPodcastEpisodePlayButton podcastEpisode={podcastEpisode} size={size} elements={elements} onPress={onPress} />
+	)
 }

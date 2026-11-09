@@ -12,6 +12,7 @@ import { ScrollBox } from "@/components/common/ScrollBox"
 import { UserProfileLink } from "@/components/common/UserProfileLink"
 import { PodcastEpisodeRow } from "@/components/podcast/PodcastEpisodeRow"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
+import { TOPIC_IMAGE_FRAME_CLASS, TopicImage } from "@/components/primitives/topic-image"
 import { ShareTopicButton } from "@/components/share/ShareTopic"
 import { ReactionRow } from "@/components/social/ReactionRow"
 import { MENU_BUTTON_CLASS, POPOVER_HEADING_CLASS } from "@/lib/styleClasses"
@@ -116,6 +117,18 @@ export function TopicInfo(props: TopicInfoProps) {
 							/>
 						</div>
 					</InfoSection>
+				)}
+
+				{/* the topic's image at full width, in the popover only */}
+				{!props.isCard && (
+					<div className="py-3">
+						<TopicImage
+							image={topic.image}
+							size="page"
+							name={topic.name}
+							className={cn(TOPIC_IMAGE_FRAME_CLASS, "w-full")}
+						/>
+					</div>
 				)}
 
 				{/* the latest podcast episode's row, in the popover only */}

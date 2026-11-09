@@ -3,6 +3,7 @@ import type { ComponentType, ReactNode } from "react"
 
 // the same destination labels double as stable icon names in both platform adapters
 type UserMenuIcon =
+	| "Topics"
 	| "Profile"
 	| "Teams"
 	| "Activity"
@@ -51,6 +52,7 @@ export function UserMenuItems({
 }) {
 	const { Link, Action, Divider } = elements
 	const destinations = [
+		{ label: "Topics", href: "/topics" },
 		{ label: "Profile", href: toProfilePath(userId) },
 		{ label: "Teams", href: "/teams" },
 		{ label: "Activity", href: "/activity" },
@@ -61,7 +63,7 @@ export function UserMenuItems({
 			{/* account destinations and their optional live counts */}
 			{destinations.map(({ label, href }) => (
 				<Link key={label} label={label} href={href} isSelected={pathname === href} onSelect={onNavigate}>
-					{label !== "Account" && renderBadge?.(label)}
+					{label !== "Account" && label !== "Topics" && renderBadge?.(label)}
 				</Link>
 			))}
 			<Divider />

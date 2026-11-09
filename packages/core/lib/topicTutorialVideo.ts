@@ -1,13 +1,7 @@
 import { TOPIC_TUTORIAL_VIDEO } from "@carlnotes/contracts/youtube"
 
 // the entry points shared by browser and native playback
-export type TopicTutorialVideoOpener =
-	| "hero"
-	| "header"
-	| "account-menu"
-	| "mobile-menu"
-	| "mobile-header"
-	| "mobile-settings"
+export type TopicTutorialVideoOpener = "header" | "account-menu" | "mobile-menu" | "mobile-header" | "mobile-settings"
 export const TOPIC_TUTORIAL_WATCH_LABEL = `Watch ${TOPIC_TUTORIAL_VIDEO.name}`
 
 /**

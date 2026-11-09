@@ -1,12 +1,17 @@
+// a topic's position in the Featured section: the admin's write, the release a delete and a visibility change share,
+// the list, and its route
+
 import { topicFeatureOrderPayload } from "@carlnotes/contracts/topicPayloads"
 import { type DbHandle, db } from "@carlnotes/db"
+import { releaseFeatureOrder as releaseRowFeatureOrder, setFeatureOrder } from "@carlnotes/db/featureOrder"
+import { releaseTopicPodcastEpisodeFeatureOrders } from "@carlnotes/db/podcastEpisodeFeaturing"
 import { topics } from "@carlnotes/db/schema/topics"
 import { zValidator } from "@hono/zod-validator"
-// the Featured section's ordering is whole numbers from 1 to the number of featured topics
-import { and, asc, count, eq, gt, gte, isNotNull, sql } from "drizzle-orm"
+import { asc, eq, isNotNull } from "drizzle-orm"
 import { Hono } from "hono"
 import { isAllowed } from "../authorization"
 import { type AppEnv, currentUser } from "../currentUser"
+import { purgeHomeAtEdge } from "../edgeCache"
 import { clearSharedTopicFeedCaches } from "./feedCaches"
 
 // whether the feature order was applied, and if not, which rule rejected it
@@ -27,58 +32,32 @@ async function setTopicFeatureOrder(topicId: string, position: number): Promise<
 		return "notPublic"
 	}
 
+	// the topic's featured podcast episodes leave the home, then the topic moves to its new position
 	await db.transaction(async (transaction) => {
-		// delete a feature by setting its order to zero
-		await releaseFeatureOrder(topicId, transaction)
-		if (position <= 0) {
-			return
-		}
-
-		// select the feature's new target position
-		const [featuredRow] = await transaction
-			.select({ count: count() })
-			.from(topics)
-			.where(isNotNull(topics.featureOrder))
-		const targetPosition = toTargetPosition(position, featuredRow?.count ?? 0)
-
-		// push everything from the target position down and set the topic's new feature order in the same transaction
-		await transaction
-			.update(topics)
-			.set({ featureOrder: sql`${topics.featureOrder} + 1` })
-			.where(and(isNotNull(topics.featureOrder), gte(topics.featureOrder, targetPosition)))
-		await transaction.update(topics).set({ featureOrder: targetPosition }).where(eq(topics.id, topicId))
+		await releaseTopicPodcastEpisodeFeatureOrders(topicId, transaction)
+		await setFeatureOrder({ table: topics, id: topicId, position, transaction })
 	})
-
-	// delete the shared topic section ids and the visitors' feeds
-	await clearSharedTopicFeedCaches()
+	await clearFeaturedCaches()
 	return "ranked"
 }
 
 /**
- * The position a featured topic will take as an insert or an append
+ * Deletes the shared topic section ids, the home's card ids, and the visitors' feeds, and purges the home at the edge.
  */
-export function toTargetPosition(position: number, featuredCount: number): number {
-	return Math.min(position, featuredCount + 1)
+export async function clearFeaturedCaches(): Promise<void> {
+	await clearSharedTopicFeedCaches()
+	await purgeHomeAtEdge()
 }
 
 /**
- * Clears a topic's feature order and closes the gap it leaves by moving everything below it up one. Returns whether
- * the topic had one, so the caller clears the shared topic section ids once its transaction commits.
+ * Clears a topic's feature order and closes the gap it leaves by moving everything below it up one, with the feature
+ * orders of its podcast episodes. Returns whether the topic or any of its podcast episodes had one.
  */
 export async function releaseFeatureOrder(topicId: string, handle: DbHandle = db): Promise<boolean> {
-	// a topic with no order has nothing to release and nothing below it to move
-	const [topic] = await handle.select({ featureOrder: topics.featureOrder }).from(topics).where(eq(topics.id, topicId))
-	if (topic?.featureOrder == null) {
-		return false
-	}
-
-	// clear the topic's feature order, then pull everything that was below it up one
-	await handle.update(topics).set({ featureOrder: null }).where(eq(topics.id, topicId))
-	await handle
-		.update(topics)
-		.set({ featureOrder: sql`${topics.featureOrder} - 1` })
-		.where(and(isNotNull(topics.featureOrder), gt(topics.featureOrder, topic.featureOrder)))
-	return true
+	// the topic's featured podcast episodes leave the home with it
+	const isPodcastEpisodeOrderReleased = await releaseTopicPodcastEpisodeFeatureOrders(topicId, handle)
+	const isTopicOrderReleased = await releaseRowFeatureOrder({ table: topics, id: topicId, handle })
+	return isPodcastEpisodeOrderReleased || isTopicOrderReleased
 }
 
 /**

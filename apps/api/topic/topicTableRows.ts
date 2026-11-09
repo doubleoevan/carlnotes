@@ -16,6 +16,8 @@ export async function toTopicTableRows(
 		name: string
 		ownerId: string
 		visibility: (typeof topics.$inferSelect)["visibility"]
+		// the topic's image hash
+		imageHash: string | null
 		createdAt: Date
 		updatedAt: Date
 		subscriberCount: number

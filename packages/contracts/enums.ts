@@ -177,6 +177,18 @@ export const billingIntervals = ["monthly", "yearly"] as const
 export const billingProviders = ["stripe", "app_store", "play_store"] as const
 // where a user's public avatar comes from. generated uses the username initials
 export const avatarSources = ["generated", "oauth", "upload"] as const
+// the sizes a topic image is derived into: the page and the cards, a directory row, and a search result
+export const topicImageSizes = ["page", "list", "thumbnail"] as const
+export type TopicImageSize = (typeof topicImageSizes)[number]
+// where a topic image came from: a model render, or the owner's upload
+export const topicImageOrigins = ["generated", "uploaded"] as const
+export type TopicImageOrigin = (typeof topicImageOrigins)[number]
+// why a topic image render ran: the topic's creation, the owner's regenerate, an admin's regenerate from a report, the
+// backfill, or a resize pass that derives the sizes again without a model call
+export const topicImageRenderKinds = ["create", "regenerate", "admin", "backfill", "resize"] as const
+export type TopicImageRenderKind = (typeof topicImageRenderKinds)[number]
+// where a topic image render stands
+export const topicImageRenderStatuses = ["pending", "succeeded", "failed"] as const
 // how many findings a topic scan may keep
 export const maxTopicFindingsOptions = [5, 10, 15, 20] as const
 // who may see a note: its owner alone, the page's team, or everyone
@@ -184,9 +196,9 @@ export const noteVisibilities = ["private", "team", "public"] as const
 // where a prompt version comes from: the topic editor, a chat tool, or an MCP tool
 export const promptVersionOrigins = ["editor", "chat", "mcp"] as const
 // what a report names: a Topic, a profile, a Team, a chat room message, a note, a note comment, a Finding, a Podcast
-// Episode, or a Comment
+// Episode, a Comment, or a Topic's image
 // biome-ignore format: one line keeps the kinds under the comment-density hook's limit
-export const reportSubjectKinds = ["topic", "profile", "team", "chatMessage", "note", "noteComment", "finding", "podcastEpisode", "comment"] as const
+export const reportSubjectKinds = ["topic", "profile", "team", "chatMessage", "note", "noteComment", "finding", "podcastEpisode", "comment", "topicImage"] as const
 // how an admin closes a report: the content was removed, it was cleared and stays, or its author got an admin block
 export const reportResolutions = ["removed", "cleared", "blocked"] as const
 // the types a Reaction can hold, every one positive, in the order the picker shows them

@@ -65,8 +65,8 @@ test("a user's topic rows say whether they subscribe to each topic", async () =>
 	// two matching topics, and a subscription to the first
 	const createdAt = "2026-01-01T00:00:00Z"
 	const topicRows = [
-		["topic-1", "Agents", "user-2", "public", createdAt, 7, 3],
-		["topic-2", "Agents at work", "user-2", "public", createdAt, 2, 0],
+		["topic-1", "Agents", "user-2", "public", null, createdAt, 7, 3],
+		["topic-2", "Agents at work", "user-2", "public", null, createdAt, 2, 0],
 	]
 	stubConnectionPool(({ text }) => {
 		if (text.includes('from "topics"')) {

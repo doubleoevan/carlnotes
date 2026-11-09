@@ -155,8 +155,9 @@ function SearchFindingRow({
 			latestPodcastEpisode={latestPodcastEpisode}
 			isBookmarkOnLine
 		>
-			<span>
-				in{" "}
+			{/* the dot stays with the topic's name when the line wraps, and the margin evens the line's gap with a space */}
+			<span className="-ml-0.5">
+				·{" "}
 				<span onClickCapture={(event) => event.stopPropagation()}>
 					<SearchRowTopicLink topic={topic} />
 				</span>

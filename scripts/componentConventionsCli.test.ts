@@ -24,7 +24,7 @@ beforeAll(async () => {
 		mkdirSync(join(fixtureRoot, folder), { recursive: true })
 	}
 	// contract fixtures preserve the mapping while keeping application modules out of the test
-	for (const name of ["button", "badge", "expandable-row"]) {
+	for (const name of ["button", "badge", "expandable-row", "card", "topic-image"]) {
 		writeFixture(`packages/nightshift/components/${name}.ts`, 'export const platforms = ["web", "mobile"]')
 	}
 	for (const exception of await readComponentExceptions()) {

@@ -198,13 +198,6 @@ test("/pricing redirects permanently to /plans", async () => {
 	expect(response.headers.get("Location")).toBe("/plans")
 })
 
-// the old topics index redirects permanently to the homepage
-test("/topics redirects permanently to the homepage", async () => {
-	const response = await documentsRoute.request("/topics")
-	expect(response.status).toBe(301)
-	expect(response.headers.get("Location")).toBe("/")
-})
-
 // robots.txt allows crawling, keeps crawlers off the sign-in pages that every page links, and names the sitemap
 test("robots.txt keeps crawlers off the sign-in pages and names the sitemap", async () => {
 	const robotsTxt = await Bun.file("apps/web/public/robots.txt").text()

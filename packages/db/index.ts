@@ -27,6 +27,7 @@ import * as storage from "./schema/storage"
 import * as teams from "./schema/teams"
 import * as teamTopics from "./schema/teamTopics"
 import * as topicEmailSends from "./schema/topicEmailSends"
+import * as topicImages from "./schema/topicImages"
 import * as topics from "./schema/topics"
 import * as userBlocks from "./schema/userBlocks"
 import * as users from "./schema/users"
@@ -73,6 +74,7 @@ export const schema = {
 	...notes,
 	...notificationsEmailSends,
 	...podcast,
+	...topicImages,
 	...pushDevices,
 	...releases,
 	...reports,

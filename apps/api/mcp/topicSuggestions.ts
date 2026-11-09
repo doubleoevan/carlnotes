@@ -102,6 +102,8 @@ async function loadWeeklyFindingCounts(topicIds: string[]): Promise<Map<string, 
 	if (!topicIds.length) {
 		return new Map()
 	}
+
+	// one count per topic over the week's findings
 	const weeklyFindings = await db
 		.select({ topicId: findings.topicId, findingCount: count() })
 		.from(findings)
@@ -123,18 +125,23 @@ async function loadSuggestionDisplayTopics(topicIds: string[]): Promise<
 		name: string
 		ownerId: string
 		visibility: "public" | "invite" | "private"
+		// the topic's image hash
+		imageHash: string | null
 		viewerCount: number
 	}[]
 > {
 	if (!topicIds.length) {
 		return []
 	}
+
+	// the fields the suggestion rows and their podcast episode covers read
 	return db
 		.select({
 			id: topics.id,
 			name: topics.name,
 			ownerId: topics.ownerId,
 			visibility: topics.visibility,
+			imageHash: topics.imageHash,
 			viewerCount: topics.viewerCount,
 		})
 		.from(topics)

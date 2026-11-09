@@ -19,11 +19,12 @@ import { stubRedisClientWithCentroid } from "./topic/relatednessTestFixtures"
 // the most queries a request may send: a Redis hit serves the mention count, the topic poll, and the feed's topic
 // section ids without their reads, and one topic page load reads its user's access row once and their topic role once.
 // the topic page's related topics read sends its iterative index scan setting, its read, and the check of its ranked
-// topics, and its reactions and first thread page take two reads for every Finding with the topic and one more
+// topics, and its reactions and first thread page take two reads for every Finding with the topic and one more.
+// an editor's page also counts their topic image regenerations this month
 const MAX_MENTION_COUNT_CACHE_HIT_QUERIES = 0
 const MAX_TOPIC_POLL_CACHE_HIT_QUERIES = 0
 const MAX_TOPIC_FEED_CACHE_HIT_QUERIES = 8
-const MAX_TOPIC_PAGE_QUERIES = 23
+const MAX_TOPIC_PAGE_QUERIES = 25
 
 // a public topic owned by someone else
 const TOPIC_ROW = toTableRow(topics, {

@@ -7,7 +7,7 @@ import { STORY_PODCAST_EPISODE } from "@/components/topic/topicPageStories"
 import { SearchResultsList } from "./SearchResultsList"
 
 // the mixed result fixture shares real finding and podcast contracts
-const topic = { id: "topic-1", name: "Coffee for two", latestPodcastEpisode: STORY_PODCAST_EPISODE }
+const topic = { id: "topic-1", name: "Coffee for two", latestPodcastEpisode: STORY_PODCAST_EPISODE, image: null }
 const row = {
 	id: "coffee-0",
 	name: "Better beans, better mornings",

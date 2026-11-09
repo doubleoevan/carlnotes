@@ -83,7 +83,8 @@ authenticated encryption itself lives in `@carlnotes/server/privateText`.
   Turnstile challenge. The default policy and the component browser's policy both use it, so a story frames what the app
   frames. `responseHeaders.ts` holds `NOINDEX_HEADER`, the `X-Robots-Tag: noindex` header that `documents.ts` and
   `nightshift.ts` set.
-- Domain folders: `topic/`, `team/`, `chat/`, `invite/`, `note/`, `podcast/`, `social/`, `share/`, `tool/`, `mcp/`. Root
+- Domain folders: `topic/`, `team/`, `chat/`, `invite/`, `note/`, `podcast/`, `social/`, `share/`, `tool/`, `mcp/`,
+  `home/`. Root
   files
   serve more than one domain (auth, billing, admin, avatars, favicons, profiles, SEO, `likePattern.ts` for the contains
   pattern the name and text searches match with, `canonicalJson.ts` for the json a keyed digest signs, `content.ts` for
@@ -166,7 +167,8 @@ authenticated encryption itself lives in `@carlnotes/server/privateText`.
   reads it, the preview, and the save through the chat's save path), `topicEditConfirmations.ts` (the keyed confirmation
   that making a topic public or removing a source needs), `searchResults.ts` (what the `search` tool returns, under the
   search rate limit), `scanTools.ts` (`start_scan`, `read_scan_status`, and `stop_scan`), `scanResults.ts` (a Scan's
-  status as those tools return it), `updatesTool.ts` (`read_updates`), `topicContextTool.ts` (`read_topic_context`),
+  status as those tools return it; `topic/updatesRoute.ts` is `POST /api/updates`, the same list for a signed-in
+  client), `updatesTool.ts` (`read_updates`), `topicContextTool.ts` (`read_topic_context`),
   `topicContextResults.ts` (the Findings and excerpts it returns), `uiResources.ts` (the MCP Apps view resources, each
   html written from the bundle `build:ui` makes in `apps/web/dist/mcp-views`, every stored bundle's version read back
   from object storage, and the `_meta` a tool names its MCP view with), `mcpViewData.ts` (what a tool result gives its
@@ -187,6 +189,19 @@ authenticated encryption itself lives in `@carlnotes/server/privateText`.
   revocation, and already-issued JWT behavior. All fixture rows are removed in `finally`. Run `bun run smoke:mcp` before
   handing off an MCP change. Its deterministic Origin and tool-contract assertions also run in `bun run check`.
   `toolTestFixtures.ts` holds the registered tools and the callers the tool tests share.
+- `home/` — the home page's payload: `homeRoute.ts` (`GET /api/home`, the featured topics and podcast episodes and
+  the first page of a user's topics as cards, and `GET /api/home/your-topics`, each later page of five),
+  `homeCardIds.ts` (the pinned topics and podcast episodes first, then the trending ones, one cached read
+  every replica shares for a minute), and `topicCards.ts` (the card shapes). `topic/serveImageFile.ts` streams one image
+  file with the visibility gate and the cache headers, and `topic/topicImagesRoute.ts` serves a topic image's files
+  (public ones immutable at the edge under `topic-image:<topicId>`, private ones behind `topic:view`), the editor's
+  Regenerate within `imageRegenerationLimit`, the render an editor polls, the upload, and the removal of an upload.
+  `podcast/podcastEpisodeImagesRoute.ts` serves a podcast episode's own image files, gated by its topic's visibility.
+  `podcast/podcastEpisodeFeaturing.ts` is `PATCH /api/podcast-episodes/:id/feature-order` with the topic rules, the
+  pinned podcast episodes the console lists, and the purge of the home on every change. Both feature-order routes write
+  through `@carlnotes/db/featureOrder`, and `topic/featuring.ts` owns `clearFeaturedCaches`, the home card ids
+  cache delete and home purge they share. `report/adminReports.ts` draws a reported topic image again through an `admin` render
+  instead of deleting it.
 - `podcast/` — a Topic's podcast episodes: `podcastEpisodes.ts` (the routes for a season's episodes, an episode page,
   the next unplayed episode, one episode with its files and its preview card, a listener's progress, a chapter's rating,
   the podcast switch, and removing an episode), `podcastEpisodeListens.ts` (saving a listener's progress, with a
@@ -210,9 +225,13 @@ authenticated encryption itself lives in `@carlnotes/server/privateText`.
   in Redis by its lowercased words and billed to the user's key or the public key, a visitor's embeddings are rate
   limited per address, and a search that may not embed returns its text matches), and `playTokens.ts` (the play token
   an MCP view's audio url includes, which the audio route reads in place of a session).
-  `share/podcastFeed.ts` builds the feed, `share/podcastCover.ts` draws the covers over
-  `apps/docs/design/podcast/cover-base.png`, and `share/podcastEpisodeImage.ts` draws an episode page's link-preview
-  card. `documents.ts` serves a public Topic's feed at `/topics/:id/podcast.xml` and a listener's own at
+  `share/podcastFeed.ts` builds the feed. `share/podcastCover.ts` draws a show cover over its topic's image or
+  `apps/docs/design/podcast/cover-base.png` and renders, encodes, and stores every cover, `share/podcastCoverBands.ts`
+  draws the show cover's two text bands and picks each band's tone from the picture under it,
+  `share/podcastEpisodeCover.ts` draws a podcast episode's own cover and loads the image under it, and
+  `share/podcastEpisodeImage.ts` draws a podcast episode page's link-preview card: the podcast episode's image, or its
+  topic's, across the top with the title and details under it, the way `share/topicImage.ts` draws a topic's.
+  `documents.ts` serves a public Topic's feed at `/topics/:id/podcast.xml` and a listener's own at
   `/podcast-feeds/:token.xml`.
 - `tool/` — the Topic Tools, each with its own gate check: `topicTools.ts` (the prompt and field updates),
   `topicEditSaves.ts` (a topic edit's saves in order through the Topic Tools, which the chat applies an agreed proposal
@@ -252,11 +271,10 @@ authenticated encryption itself lives in `@carlnotes/server/privateText`.
   year in the browser and a day at the edge, and a public topic's counts for 30 seconds at the edge through
   `setCountsCacheHeaders`. `setStaticFileCacheControl` caches a file of the docs site or the
   component browser for a year if its name holds a content hash, and has the browser revalidate every other file. A
-  user avatar response is tagged `user-avatar:<userId>` and a team avatar response `team-avatar:<teamId>`, and
-  `purgeEdgeCacheTagAfterDeletion` purges one tag once an account close or a team deletion has committed, reporting a
-  failed purge, logging a skipped one, and never failing the deletion. `purgeEdgeCacheTags` is the purge by tag both it
-  and the release job send. `edgeCache.purge.ts` (`bun run edge:purge`) is the deploy job that clears the `rendered` tag
-  right after the app deploys.
+  user avatar response is tagged `user-avatar:<userId>`, a team avatar response `team-avatar:<teamId>`, and a topic's
+  image files `topic-image:<topicId>`. The purge by tag is `packages/server/edgePurge.ts`, which the worker sends too.
+  `edgeCache.purge.ts` (`bun run edge:purge`) is the deploy job that clears the `rendered` tag right after the app
+  deploys.
 - `admin.ts` — the admin writes (a user's role and budget override, and a platform's minimum app version) and the admin
   console routes, over `adminConsole.ts`
   (the users and teams tables, the platform totals, and the expandable rows, a topic's subscribers among them) and

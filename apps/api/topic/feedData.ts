@@ -32,7 +32,7 @@ export async function loadTopicFeedData(topicRows: (typeof topics.$inferSelect)[
 
 	// run the topic-batched queries together, plus the subscription and membership queries for the signed-in user
 	// biome-ignore format: one line keeps the destructure under the comment-density hook's limit
-	const [findingRows, sourceRows, attachmentRows, scanRows, monthCostRows, subscribedTopicIdSet, memberTopicIdSet, ownerRows, teamRows, mentionsByTopic, teamCountRows, latestPodcastEpisodeByTopic] =
+	const [findingRows, sourceRows, attachmentRows, scanRows, monthCostRows, subscribedTopicIdSet, memberTopicIdSet, topicBylines, mentionsByTopic, teamCountRows, latestPodcastEpisodeByTopic] =
 		await Promise.all([
 			// each topic's best findings, with the user's consumed and bookmarked dates
 			loadFeedFindingRows(topicIds, userId),
@@ -45,9 +45,8 @@ export async function loadTopicFeedData(topicRows: (typeof topics.$inferSelect)[
 			// the topics this signed-in user is subscribed to, in one query. a signed-out visitor is subscribed to none
 			userId ? subscribedTopicIds(userId, topicIds) : Promise.resolve(new Set<string>()),
 			userId ? memberTopicIds(userId, topicIds) : Promise.resolve(new Set<string>()),
-			// each topic's owner, and its owning team with whether the user belongs
-			loadFeedOwnerRows(topicIds),
-			loadFeedTeamRows(topicIds, userId),
+			// each topic's owner, and its owning team as the user may see it
+			loadTopicBylines(topicIds, userId),
 			// the user's unseen chat room mentions, for the count badge on each topic's name
 			loadTopicChatMentions(userId, topicIds),
 			// how many teams hold each topic, which the topic roast shows under the follower count
@@ -65,23 +64,44 @@ export async function loadTopicFeedData(topicRows: (typeof topics.$inferSelect)[
 		monthCostByTopic: new Map(monthCostRows.map((costRow) => [costRow.topicId, costRow.monthCost])),
 		subscribedTopicIdSet,
 		memberTopicIdSet,
-		ownerByTopic: new Map(ownerRows.map((ownerRow) => [ownerRow.topicId, ownerRow])),
+		...topicBylines,
 		mentionsByTopic,
 		latestPodcastEpisodeByTopic,
 		// the shared-in teams alone. the owning team has no row here, so each count adds it back
 		sharedTeamCountByTopic: new Map(
 			teamCountRows.map((teamCountRow) => [teamCountRow.topicId, teamCountRow.teamCount]),
 		),
-		// the team link on a private owning team shown only to its own members
-		teamLinkByTopic: new Map(
-			teamRows
-				.filter((teamRow) => teamRow.isPublic || teamRow.memberUserId !== null)
-				.map((teamRow) => [
-					teamRow.topicId,
-					{ teamId: teamRow.teamId, name: teamRow.name, avatarVersion: toAvatarKeyVersion(teamRow.avatarKey) },
-				]),
-		),
 	}
+}
+
+// each topic's byline parts by topic id: its owner, and its owning team as the user may see it
+export type TopicBylines = {
+	ownerByTopic: Map<string, FeedOwnerRow>
+	teamLinkByTopic: Map<string, { teamId: string; name: string; avatarVersion: string | null }>
+}
+
+/**
+ * Reads every topic's owner and owning team at once, each by topic id. A private team's link goes to its own members
+ * alone.
+ */
+export async function loadTopicBylines(topicIds: string[], userId: string | null): Promise<TopicBylines> {
+	const [ownerRows, teamRows] = await Promise.all([loadFeedOwnerRows(topicIds), loadFeedTeamRows(topicIds, userId)])
+	return {
+		ownerByTopic: new Map(ownerRows.map((ownerRow) => [ownerRow.topicId, ownerRow])),
+		teamLinkByTopic: toTeamLinkByTopic(teamRows),
+	}
+}
+
+// each topic's team link by topic id: its owning team, which a private team shows only to its own members
+function toTeamLinkByTopic(teamRows: FeedTeamRow[]): TopicBylines["teamLinkByTopic"] {
+	return new Map(
+		teamRows
+			.filter((teamRow) => teamRow.isPublic || teamRow.memberUserId !== null)
+			.map((teamRow) => [
+				teamRow.topicId,
+				{ teamId: teamRow.teamId, name: teamRow.name, avatarVersion: toAvatarKeyVersion(teamRow.avatarKey) },
+			]),
+	)
 }
 
 // each topic's findings joined with their resources, at most MAX_FEED_FINDINGS_PER_TOPIC per topic by relevance
@@ -199,12 +219,14 @@ async function loadMonthCostRows(
 		.groupBy(scans.topicId)
 }
 
+// a topic's owner: the topic's id, the user's id, and what the avatar draws from
+type FeedOwnerRow = { topicId: string; userId: string } & Pick<
+	typeof users.$inferSelect,
+	"username" | "avatarSource" | "avatarKey"
+>
+
 // each topic's owner, in one query across every topic
-async function loadFeedOwnerRows(
-	topicIds: string[],
-): Promise<
-	({ topicId: string; userId: string } & Pick<typeof users.$inferSelect, "username" | "avatarSource" | "avatarKey">)[]
-> {
+async function loadFeedOwnerRows(topicIds: string[]): Promise<FeedOwnerRow[]> {
 	return db
 		.select({
 			topicId: topics.id,
@@ -218,16 +240,14 @@ async function loadFeedOwnerRows(
 		.where(inArray(topics.id, topicIds))
 }
 
-// each topic's owning team, with the user's id if they are an active member
-async function loadFeedTeamRows(
-	topicIds: string[],
-	userId: string | null,
-): Promise<
-	({ topicId: string; teamId: string; memberUserId: string | null } & Pick<
-		typeof teams.$inferSelect,
-		"name" | "avatarKey" | "isPublic"
-	>)[]
-> {
+// a topic's owning team, with the user's id if they are an active member
+type FeedTeamRow = { topicId: string; teamId: string; memberUserId: string | null } & Pick<
+	typeof teams.$inferSelect,
+	"name" | "avatarKey" | "isPublic"
+>
+
+// each topic's owning team, in one query across every topic
+async function loadFeedTeamRows(topicIds: string[], userId: string | null): Promise<FeedTeamRow[]> {
 	return db
 		.select({
 			topicId: topics.id,

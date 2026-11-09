@@ -2,7 +2,7 @@ import { UserMenuItems as SharedUserMenuItems, type UserMenuElements } from "@ca
 import { useUserMenuUpdateBadges } from "@carlnotes/core/hooks/useUpdateCounts"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { useLocation } from "@tanstack/react-router"
-import { Activity, BookOpen, CircleUserRound, Columns3Cog, LogOut, ShieldUser, User, Users } from "lucide-react"
+import { Activity, BookOpen, CircleUserRound, Coffee, Columns3Cog, LogOut, ShieldUser, User, Users } from "lucide-react"
 import { useState } from "react"
 import { UserAvatar } from "@/components/branding/UserAvatar"
 import { AnchorLink } from "@/components/common/AnchorLink"
@@ -114,6 +114,7 @@ export function UserMenuItems({
 
 // keep DOM navigation, badges, and tutorial rendering in stable platform adapters
 const MENU_ICONS = {
+	Topics: Coffee,
 	Profile: CircleUserRound,
 	Teams: Users,
 	Activity,

@@ -151,7 +151,9 @@ the browser bundle and renders pages through the server build, behind its own ro
 - `components/invite/` — the invite fields, editors, and modals, shared by the topic and team pages.
 - `components/topic/` — the topic page's sections, cards, dialogs, and editors, and the edit topic modal.
   `TopicFindingControls.tsx` and `TopicFindingDetails.tsx` hold a Finding's controls and its expanded note, which the
-  note popover and the MCP view tables share.
+  note popover and the MCP view tables share. `TopicResourceWithTopicLink.tsx` is a Finding's row outside its Topic's
+  page, on the updates list. `UpdatesList.tsx` adapts the shared updates list as the home page's Updates card,
+  with `UpdatesButton.tsx`, its Update button.
   `TopicResourceInfo.tsx` shows a Finding's details and actions in the popover opened from `TopicResource.tsx` or a Podcast Episode chapter.
   `TagsAndNewTopicRow.tsx` is the Tags picker and New Topic button row above the home feed and the search results.
   `TopicCountsLine.tsx` ends the topic page with its viewer and follower counts, empty in the server render.
@@ -176,8 +178,10 @@ the browser bundle and renders pages through the server build, behind its own ro
 - `components/layout/` — the app shell every route shares: `Layout.tsx` holds the header, search bar, page content, and
   footer. `Header.tsx` is the global header, with `UserMenu.tsx`, the signed-in user's dropdown, `HeaderMenu.tsx`, the
   mobile-only menu, and `ThemeToggle.tsx`. `HomeHero.tsx` is a visitor's home page hero below the header's top bar,
-  with its pitch and persona note buttons. `Footer.tsx` is the global footer, `DocsLink.tsx` is every link to the
-  docs, which opens in a new tab, and `Attribution.tsx` is the persona credit in the hero's popover.
+  with its pitch and persona note buttons, and `HomeHeadline.tsx` is the home page's shimmering headline, on both faces.
+  The header shows the tutorial video button beside the logo on every page. `Footer.tsx` is the global footer,
+  `DocsLink.tsx` is every link to the docs, which opens in a new tab, and `Attribution.tsx` is the persona credit in the
+  hero's popover.
 - `components/admin/` — the admin console's own pieces beyond its tables: `MobileMinimumVersionsCard.tsx`, each
   platform's minimum app version with who saved it and the input that raises, lowers, or clears it;
   `ManageAdminsModal.tsx`, where an admin adds
@@ -193,7 +197,9 @@ the browser bundle and renders pages through the server build, behind its own ro
   logo keeps its background, and a JPEG for a photo. A file of a megabyte or more decodes at 512 pixels wide,
   a HEIC file the browser rejects decodes through a HEIC decoder the page loads on that pick, and a file that could
   not be decoded or resized is reported by its content type and byte size and shows a message.
-- `components/podcast/` — the podcast's components, `PodcastEpisodePlayer.tsx` (the topic page's player),
+- `components/podcast/` — the podcast's components, `PodcastEpisodeHeader.tsx` (the podcast episode page's image, title,
+  description, byline, and reactions), `PodcastEpisodeSkeleton.tsx` (that page's loading state),
+  `PodcastEpisodePlayer.tsx` (the topic page's player),
   `PodcastEpisodePlayerCard.tsx` (a published podcast episode's card with its seek bar, also on the podcast episode
   page), `PodcastEpisodeChapters.tsx` (the card's chapter list), `PodcastEpisodeChaptersTable.tsx` (the episode
   page's chapters table), `PodcastEpisodesCard.tsx` (the topic page's podcast episodes by season),
@@ -357,11 +363,11 @@ the browser bundle and renders pages through the server build, behind its own ro
   `components/stories.test.ts` checks. A story gets its data from mocked clients and invented fixtures, never from a
   change to the component. The shared fixtures are in `.storybook/fixtures.ts`, with the date from
   `@carlnotes/core/lib/storyFixtures`, the sessions, and the people, and in one file per domain under
-  `.storybook/fixtures/`: topics, a visitor's and a user's topic feeds, podcast episodes, teams, admin users, waiting
-  updates, and an updates list. A story imports them from there, never from another story. `src/nightshift/` holds the
-  Tokens, Typography, and Inventory pages, the swatch and specimen components they render, `ScrollingTable.tsx`, which
-  renders their tables in the app's table classes with the first column fixed, and the pattern stories, each composed
-  from `lib/styleClasses.ts` where a shared class exists, the section label from `SECTION_LABEL_CLASS`, which
+  `.storybook/fixtures/`: topics, a visitor's and a user's topic feeds, podcast episodes, teams, admin users, and
+  waiting updates. A story imports them from there, never from another story. `src/nightshift/` holds the Tokens,
+  Typography, and Inventory pages, the swatch and specimen components they render, `ScrollingTable.tsx`, which renders
+  their tables in the app's table classes with the first column fixed, and the pattern stories, each composed from
+  `lib/styleClasses.ts` where a shared class exists, the section label from `SECTION_LABEL_CLASS`, which
   `lib/styleClasses.test.ts` checks against the sectionLabel type role in `@carlnotes/nightshift/typography`, as it
   checks `LOGO_CLASS`, the name beside the mug in the logo, against the logo role. `src/nightshift/` also holds the
   fetch guard and the in-memory storage the preview installs, outside `.storybook/` so that `bun test` finds their
@@ -386,3 +392,14 @@ the browser bundle and renders pages through the server build, behind its own ro
 ## Shared components
 
 [Shared web components](shared-components.md) maps Feed, Tasting Notes, menu pages, chat, Coffee Break, Personal sources and MCP Apps views to their core components and browser adapters.
+
+## Topic images and the home
+
+`pages/HomePage.tsx` is the home's two faces over `GET /api/home`, and `pages/TopicsPage.tsx` the directory at
+`/topics`. `components/topic/TopicCard.tsx`, `components/podcast/PodcastEpisodeCard.tsx`, and
+`components/primitives/topic-image.tsx` adapt the shared cards and image, the last also exporting the contract's frame
+as `TOPIC_IMAGE_FRAME_CLASS`. `components/common/cardElements.tsx` is `CARD_ELEMENTS`, the card box, topic image, and
+text row the two cards share, over core's `CardElements`, with a story beside it.
+`components/topic/TopicImageEditor.tsx` adapts the editor's image block, with the browser's file input as its picker.
+`components/common/FeatureRankDialog.tsx` is the admin's featured order list for a topic page and a podcast episode
+page, and `components/admin/FeaturedCard.tsx` the console's two pin lists.

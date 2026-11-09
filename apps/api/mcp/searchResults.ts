@@ -1,7 +1,8 @@
 // what the mcp search tool returns: the site search's page with every row's absolute url, the search that found it,
 // and the search page's url, under the same search rate limit the site's route counts against
 import type { McpSearchPage } from "@carlnotes/contracts/mcpViews"
-import { type SearchRequest, toSearchPath } from "@carlnotes/contracts/search"
+import { type SearchRequest, type SearchRow, toSearchPath } from "@carlnotes/contracts/search"
+import { toAbsoluteTopicImageUrls } from "@carlnotes/contracts/topicImages"
 import { appUrl } from "@carlnotes/server/appUrl"
 import { countSearchRateLimitHit } from "../rateLimit"
 import { searchSite } from "../search/search"
@@ -27,18 +28,44 @@ export async function searchForTool({
 		return { text: SEARCH_RATE_LIMITED_TEXT }
 	}
 
-	// the site's search, with each row's absolute url and the search page's
+	// the site's search, with each row's absolute url and image urls, and the search page's url
 	const searchPage = await searchSite({ userId, clientAddress, searchRequest })
 	const siteUrl = appUrl()
 	return {
 		...searchPage,
 		rows: searchPage.rows.map((searchRow) => ({
-			...searchRow,
+			...toAbsoluteImageSearchRow(searchRow, siteUrl),
 			url: searchRow.kind === "finding" ? searchRow.finding.url : `${siteUrl}${searchRow.path}`,
 		})),
 		searchRequest,
 		searchUrl: `${siteUrl}${toSearchPath({ ...searchRequest, page: 1 })}`,
 	}
+}
+
+// a search row with every image url absolute: a topic's and its latest podcast episode's, or a podcast episode's own
+function toAbsoluteImageSearchRow(searchRow: SearchRow, siteUrl: string): SearchRow {
+	if (searchRow.kind === "topic") {
+		const { image, latestPodcastEpisode } = searchRow.topic
+		return {
+			...searchRow,
+			topic: {
+				...searchRow.topic,
+				image: image && toAbsoluteTopicImageUrls(image, siteUrl),
+				latestPodcastEpisode: latestPodcastEpisode && {
+					...latestPodcastEpisode,
+					image: latestPodcastEpisode.image && toAbsoluteTopicImageUrls(latestPodcastEpisode.image, siteUrl),
+				},
+			},
+		}
+	}
+	if (searchRow.kind === "podcastEpisode") {
+		const { image } = searchRow.podcastEpisode
+		return {
+			...searchRow,
+			podcastEpisode: { ...searchRow.podcastEpisode, image: image && toAbsoluteTopicImageUrls(image, siteUrl) },
+		}
+	}
+	return searchRow
 }
 
 /**

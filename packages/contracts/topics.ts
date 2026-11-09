@@ -8,6 +8,7 @@ import {
 	fetchedSourceKinds,
 	frequencies,
 	scanStatuses,
+	topicImageOrigins,
 	topicSectionKeys,
 	type UnknownCase,
 	visibilities,
@@ -19,6 +20,7 @@ import { profileIdentity } from "./profiles"
 import { commentThreadResponse, reactionSummary } from "./social"
 import { customSourceKeys, SOURCE_RESULT_LABEL_CHARS } from "./sources"
 import { displayEnum } from "./tolerantReads"
+import { imageRegenerationQuota, topicImageUrls } from "./topicImages"
 
 // how long a topic prompt may grow before a copy-paste is treated as an attachment
 export const TOPIC_PROMPT_CHARS = 2_000
@@ -122,6 +124,8 @@ const topicDetails = z.object({
 	latestPodcastEpisode: podcastEpisode.nullable(),
 	// the topic's own reactions, shown in the topic roast. absent on a poll reload
 	reactions: reactionSummary.optional(),
+	// the topic's image at every size, null until its first render lands
+	image: topicImageUrls.nullable(),
 })
 
 export type TopicDetails = z.infer<typeof topicDetails>
@@ -276,6 +280,10 @@ export const topicResponse = topicDetails.extend({
 	),
 	// the first page of the topic's comment thread. absent on a poll reload
 	commentThread: commentThreadResponse.optional(),
+	// the editor's image regenerations this month against the plan's limit, and whether the image was generated or
+	// uploaded. null for anyone who may not edit, and the origin null for a topic with no image yet
+	imageRegenerationQuota: imageRegenerationQuota.nullable(),
+	imageOrigin: z.enum(topicImageOrigins).nullable(),
 })
 
 export type TopicResponse = z.infer<typeof topicResponse>

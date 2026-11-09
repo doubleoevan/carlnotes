@@ -3,6 +3,10 @@
 
 import { isBudgetRejection } from "@carlnotes/models/models"
 import * as podcastEpisodeAudio from "@carlnotes/pipeline/podcast/podcastEpisodeAudio"
+import {
+	drawPodcastEpisodeImage,
+	PodcastEpisodeImageRejectedError,
+} from "@carlnotes/pipeline/podcast/podcastEpisodeImage"
 import type { PodcastEpisodeOutline } from "@carlnotes/pipeline/podcast/podcastEpisodeOutline"
 import { type PodcastEpisodeSegment, RejectedScriptError } from "@carlnotes/pipeline/podcast/podcastEpisodeScript"
 import * as writePodcastEpisodeScript from "@carlnotes/pipeline/podcast/writePodcastEpisodeScript"
@@ -85,6 +89,21 @@ async function withNonRetryableScriptFailures<Result>(runScriptCall: () => Promi
 		if (isBudgetRejection(error)) {
 			const message = error instanceof Error ? error.message : String(error)
 			throw ApplicationFailure.create({ message, type: "BudgetSpent", nonRetryable: true })
+		}
+		throw error
+	}
+}
+
+/**
+ * Draws a published podcast episode's own image. Fails for good on a spent budget or a rejected render.
+ */
+export async function drawPodcastEpisodeImageActivity(podcastEpisodeId: string): Promise<void> {
+	try {
+		await drawPodcastEpisodeImage({ podcastEpisodeId })
+	} catch (error) {
+		// a spent budget and a rejection are final, and anything else is worth another attempt
+		if (error instanceof PodcastEpisodeImageRejectedError || isBudgetRejection(error)) {
+			throw ApplicationFailure.nonRetryable(error instanceof Error ? error.message : String(error), "ImageRejected")
 		}
 		throw error
 	}

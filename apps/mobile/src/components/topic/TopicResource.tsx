@@ -16,9 +16,12 @@ import { TopicResourceInfo } from "./TopicResourceInfo"
 // the row receives presented data and keeps writes in the shared handlers
 export type TopicResourceProps = {
 	resource: TopicFinding
-	topic:
+	// the topic, with the team or owner and the image that the finding sheet shows where the caller has them
+	topic: (
 		| Pick<TopicDetails, "id" | "name" | "prompt" | "visibility" | "isTopicOwner" | "isTeamMember" | "canRate">
 		| Pick<FindingSearchTopic, "id" | "name" | "prompt" | "visibility" | "canRate" | "canBookmark">
+	) &
+		Partial<Pick<TopicDetails, "owner" | "teamLink" | "image">>
 	latestPodcastEpisode?: PodcastEpisode | null
 	children?: ReactNode
 	isBookmarkOnLine?: boolean

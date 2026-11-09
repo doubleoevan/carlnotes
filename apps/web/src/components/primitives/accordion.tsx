@@ -8,12 +8,12 @@ function Accordion({ ...props }: React.ComponentProps<typeof AccordionPrimitive.
 	return <AccordionPrimitive.Root data-slot="accordion" {...props} />
 }
 
-// one collapsible section
+// one collapsible section. the divider under it shows only while it is closed, and never under the last one
 function AccordionItem({ className, ...props }: React.ComponentProps<typeof AccordionPrimitive.Item>) {
 	return (
 		<AccordionPrimitive.Item
 			data-slot="accordion-item"
-			className={cn("border-b last:border-b-0", className)}
+			className={cn("border-b last:border-b-0 data-[state=open]:border-b-0", className)}
 			{...props}
 		/>
 	)

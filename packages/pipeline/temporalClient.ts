@@ -24,6 +24,12 @@ const SCAN_WORKFLOW = "runTopicScanWorkflow"
 export const SOURCE_TASK_QUEUE = "source-screening"
 const SOURCE_WORKFLOW = "screenSourceWorkflow"
 
+// a topic image render polls its own queue, and the backfill and its children share it
+export const TOPIC_IMAGE_TASK_QUEUE = "topic-images"
+const TOPIC_IMAGE_WORKFLOW = "renderTopicImageWorkflow"
+const TOPIC_IMAGE_BACKFILL_WORKFLOW = "backfillTopicImagesWorkflow"
+const TOPIC_IMAGE_BACKFILL_WORKFLOW_ID = "topic-image-backfill"
+
 // how long a connect, a workflow start, a cancel, and a task queue description may each take before it fails
 const CLIENT_CALL_TIMEOUT_MS = 10_000
 
@@ -118,6 +124,66 @@ export async function startSourceScreenWorkflow(sourceId: string): Promise<void>
 		if (!(error instanceof WorkflowExecutionAlreadyStartedError)) {
 			throw error
 		}
+	}
+}
+
+// a render to start: its topic, its render row, and the owner's image prompt, which only the workflow carries
+export type StartTopicImageWorkflowOptions = { topicId: string; renderId: string; imagePrompt?: string }
+
+/**
+ * Starts a topic image render, named by its render row so a second start for the row is ignored.
+ */
+export async function startTopicImageWorkflow({
+	topicId,
+	renderId,
+	imagePrompt,
+}: StartTopicImageWorkflowOptions): Promise<void> {
+	const client = await getClient()
+	try {
+		await withClientDeadline(client, () =>
+			client.workflow.start(TOPIC_IMAGE_WORKFLOW, {
+				taskQueue: TOPIC_IMAGE_TASK_QUEUE,
+				workflowId: `topic-image-${renderId}`,
+				args: [{ topicId, renderId, imagePrompt }],
+			}),
+		)
+	} catch (error) {
+		// a render already started needs no second start, and anything else is a real failure
+		if (!(error instanceof WorkflowExecutionAlreadyStartedError)) {
+			throw error
+		}
+	}
+}
+
+// what the backfill does, and what it did
+export type TopicImageBackfillMode = "missing" | "redo" | "resize"
+export type TopicImageBackfillSummary = { topicCount: number; failedCount: number }
+
+/**
+ * Starts the topic image backfill, or joins the one running, and returns its summary once it ends.
+ */
+export async function startTopicImageBackfillWorkflow({
+	mode,
+}: {
+	mode: TopicImageBackfillMode
+}): Promise<TopicImageBackfillSummary> {
+	// start the backfill under its fixed id, or take the handle of the one running
+	const client = await getClient()
+	try {
+		const workflowHandle = await withClientDeadline(client, () =>
+			client.workflow.start(TOPIC_IMAGE_BACKFILL_WORKFLOW, {
+				taskQueue: TOPIC_IMAGE_TASK_QUEUE,
+				workflowId: TOPIC_IMAGE_BACKFILL_WORKFLOW_ID,
+				args: [{ mode }],
+			}),
+		)
+		return await workflowHandle.result()
+	} catch (error) {
+		// a backfill already running is joined, and anything else is a real failure
+		if (!(error instanceof WorkflowExecutionAlreadyStartedError)) {
+			throw error
+		}
+		return client.workflow.getHandle<typeof startTopicImageBackfillWorkflow>(TOPIC_IMAGE_BACKFILL_WORKFLOW_ID).result()
 	}
 }
 

@@ -117,7 +117,7 @@ export async function loadRelatedPodcastEpisodeRows({
 	const relatedPodcastEpisodeRowTopics = await db
 		.select({
 			podcastEpisodeRow: podcastEpisodeColumns,
-			topic: { id: topics.id, name: topics.name, visibility: topics.visibility },
+			topic: { id: topics.id, name: topics.name, visibility: topics.visibility, imageHash: topics.imageHash },
 		})
 		.from(podcastEpisodes)
 		.innerJoin(topics, eq(podcastEpisodes.topicId, topics.id))

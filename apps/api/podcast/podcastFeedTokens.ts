@@ -132,7 +132,7 @@ export async function loadRenderedPodcastFeed({
 	// a podcast episode missing a field that a feed item needs is left out
 	const publishedPodcastEpisodeRows = await loadPublishedPodcastEpisodeRows(topic, listener?.userId ?? null)
 	const podcastFeedEpisodes = publishedPodcastEpisodeRows.flatMap((podcastEpisodeRow): PodcastFeedEpisode[] => {
-		const { id, title, description, season, episodeNumber, durationSeconds, audioByteSize, publishedAt } =
+		const { id, title, description, season, episodeNumber, durationSeconds, audioByteSize, publishedAt, imageHash } =
 			podcastEpisodeRow
 		if (!title || season === null || episodeNumber === null || !publishedAt) {
 			return []
@@ -140,7 +140,11 @@ export async function loadRenderedPodcastFeed({
 		// a description or a duration that was never saved is empty or zero
 		const descriptionAndDuration = { description: description ?? "", durationSeconds: durationSeconds ?? 0 }
 		return [
-			{ id, title, season, episodeNumber, publishedAt, audioByteSize: audioByteSize ?? 0, ...descriptionAndDuration },
+			{
+				...{ id, title, season, episodeNumber, publishedAt, imageHash },
+				audioByteSize: audioByteSize ?? 0,
+				...descriptionAndDuration,
+			},
 		]
 	})
 

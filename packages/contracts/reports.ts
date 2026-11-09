@@ -4,16 +4,18 @@ import { reportResolutions, reportSubjectKinds } from "./enums"
 import { NOTE_COMMENT_MAX_CHARS } from "./notes"
 import { userIdentity } from "./profiles"
 import { toCutText } from "./text"
+import { topicImageUrls } from "./topicImages"
 
 export type ReportSubjectKind = (typeof reportSubjectKinds)[number]
 
-// the report subject kinds an admin removes from the console. a Topic, profile, Team, Finding, or Podcast Episode is
-// cleared or acted on through the console's own tools
+// the report subject kinds an admin removes from the console, where removing a topic image renders a new one. a Topic,
+// profile, Team, Finding, or Podcast Episode is cleared or acted on through the console's own tools
 export const REMOVABLE_REPORT_SUBJECT_KINDS: ReadonlySet<ReportSubjectKind> = new Set([
 	"chatMessage",
 	"note",
 	"noteComment",
 	"comment",
+	"topicImage",
 ])
 
 export type ReportResolution = (typeof reportResolutions)[number]
@@ -29,6 +31,7 @@ export const REPORT_SUBJECT_KIND_LABELS: Record<ReportSubjectKind, string> = {
 	finding: "finding",
 	podcastEpisode: "podcast episode",
 	comment: "hot take",
+	topicImage: "topic image",
 }
 
 // how much of the subject's text a report keeps. a note body is cut to this length
@@ -42,6 +45,8 @@ const adminReport = z.object({
 	// the subject's text when it was reported, and the page that held it
 	subjectText: z.string(),
 	subjectPath: z.string(),
+	// the topic's image as it stands, on a topic image report alone
+	subjectImage: topicImageUrls.nullable(),
 	reason: z.string(),
 	createdAt: z.string(),
 	// the author, null for a subject with none or whose account closed, and who filed the report

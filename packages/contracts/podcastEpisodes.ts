@@ -1,4 +1,4 @@
-// the podcast episode lengths and findings limits, a cover's sizes and kind, the show and host names, and a turn's
+// the podcast episode lengths and findings limits, a cover's sizes and fields, an episode's detail line, the show and host names, and a turn's
 // transcript text and speaker
 import type { PodcastEpisodeTurn } from "./payloads"
 import { toOneLineText } from "./text"
@@ -21,9 +21,62 @@ export const SMALL_PODCAST_COVER_SIZE = 600
 export const PODCAST_COVER_SIZES = [FULL_PODCAST_COVER_SIZE, SMALL_PODCAST_COVER_SIZE] as const
 export type PodcastCoverSize = (typeof PODCAST_COVER_SIZES)[number]
 
-// a topic's show cover or a podcast episode's cover,
-// with the id of that topic or episode and the title that the cover shows
-export type PodcastCover = { kind: "show" | "episode"; id: string; title: string }
+// what both covers have: the id of the topic or the episode, the title that the cover shows, the topic, and the
+// content hash of the topic's image, null for the illustration
+type PodcastCoverFields = { id: string; title: string; topicId: string; topicImageHash: string | null }
+
+// a topic's show cover, drawn over the topic's image, or a podcast episode's cover, drawn over the episode's own image
+// or else its topic's, with the episode's detail line under its title
+export type PodcastCover =
+	| (PodcastCoverFields & { kind: "show" })
+	| (PodcastCoverFields & { kind: "episode"; podcastEpisodeImageHash: string | null; details: string })
+
+// a podcast episode's fields that its cover and its card's detail line read
+type PodcastEpisodeCoverFields = {
+	id: string
+	title: string
+	season: number | null
+	episodeNumber: number | null
+	imageHash: string | null
+}
+
+/**
+ * Returns a podcast episode's detail line: its topic's name, then the season and number once the episode has them.
+ */
+export function toPodcastEpisodeDetailsLine(
+	{ season, episodeNumber }: Pick<PodcastEpisodeCoverFields, "season" | "episodeNumber">,
+	topicName: string,
+): string {
+	if (season === null || episodeNumber === null) {
+		return topicName
+	}
+	return `${topicName} · ${toSeasonEpisodeLabel({ season, episodeNumber })}`
+}
+
+/**
+ * Returns a podcast episode's season and number as one label, such as "2026 · E14".
+ */
+export function toSeasonEpisodeLabel({ season, episodeNumber }: { season: number; episodeNumber: number }): string {
+	return `${season} · E${episodeNumber}`
+}
+
+/**
+ * Returns a podcast episode's cover from the episode and its topic.
+ */
+export function toPodcastEpisodeCover(
+	podcastEpisode: PodcastEpisodeCoverFields,
+	topic: { id: string; name: string; imageHash: string | null },
+): PodcastCover {
+	return {
+		kind: "episode",
+		id: podcastEpisode.id,
+		title: podcastEpisode.title,
+		topicId: topic.id,
+		topicImageHash: topic.imageHash,
+		podcastEpisodeImageHash: podcastEpisode.imageHash,
+		details: toPodcastEpisodeDetailsLine(podcastEpisode, topic.name),
+	}
+}
 
 // the name that each speaker goes by in a transcript and in chat
 export const PODCAST_EPISODE_SPEAKER_NAMES = { host: "Carl", cohost: "Vienna" } as const

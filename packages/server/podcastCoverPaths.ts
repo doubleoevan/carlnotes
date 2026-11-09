@@ -3,16 +3,49 @@ import type { PodcastCover, PodcastCoverSize } from "@carlnotes/contracts/podcas
 import { toAuthSecretSignature } from "./hmac"
 
 /**
- * Returns a cover's key, an HMAC of its kind, id, and title under the app's auth secret. A new title makes a new key.
+ * Returns a cover's key, an HMAC of what the cover draws under the app's auth secret. A new title or a new image makes
+ * a new key.
  */
-export function toPodcastCoverKey({ kind, id, title }: PodcastCover): string {
-	// key the hash with the app's auth secret, so that only the app can compute a cover's url
+export function toPodcastCoverKey(podcastCover: PodcastCover): string {
+	// key the hash with the app's auth secret, so that only the app can compute a cover's url. a show cover over the
+	// illustration hashes its kind, id, and title, and a cover over a topic image adds the image's hash. a podcast
+	// episode's cover hashes its own image and its detail line, or the topic's image if it has none
+	const { kind, id, title, topicImageHash } = podcastCover
+	const showFields = topicImageHash ? [kind, id, title, topicImageHash] : [kind, id, title]
+	const coverFields =
+		podcastCover.kind === "episode"
+			? [
+					kind,
+					id,
+					title,
+					podcastCover.podcastEpisodeImageHash ? null : topicImageHash,
+					podcastCover.podcastEpisodeImageHash,
+					podcastCover.details,
+				]
+			: showFields
 	const coverHash = toAuthSecretSignature({
-		value: JSON.stringify([kind, id, title]),
+		value: JSON.stringify(coverFields),
 		purpose: "podcast cover urls",
 		encoding: "hex",
 	})
 	return coverHash.slice(0, 32)
+}
+
+// the covers' template version, which names the stored objects so a template change redraws every cover
+const PODCAST_COVER_TEMPLATE_VERSION = "v7"
+
+/**
+ * Returns the object key prefix of every stored cover of a show or a podcast episode, at the current template version.
+ */
+export function toPodcastCoverObjectKeyPrefix(kind: PodcastCover["kind"], id: string): string {
+	return `podcast-covers/${PODCAST_COVER_TEMPLATE_VERSION}/${kind}/${id}/`
+}
+
+/**
+ * Returns the object key a cover is stored under in the given size.
+ */
+export function toPodcastCoverObjectKey(podcastCover: PodcastCover, size: PodcastCoverSize): string {
+	return `${toPodcastCoverObjectKeyPrefix(podcastCover.kind, podcastCover.id)}${toPodcastCoverKey(podcastCover)}-${size}.jpg`
 }
 
 /**

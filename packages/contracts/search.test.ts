@@ -131,7 +131,12 @@ const SEARCH_PAGE: SearchResultsPage = {
 			path: "/topics/topic-home-espresso/home-espresso",
 			date: "2026-05-18T12:00:00.000Z",
 			count: 214,
-			topic: { id: "topic-home-espresso", name: "Home espresso", latestPodcastEpisode: PODCAST_EPISODE_SUMMARY },
+			topic: {
+				id: "topic-home-espresso",
+				name: "Home espresso",
+				latestPodcastEpisode: PODCAST_EPISODE_SUMMARY,
+				image: null,
+			},
 			subscriberCount: 31,
 			isSubscribed: false,
 		},

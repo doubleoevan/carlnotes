@@ -23,6 +23,18 @@ export function togglePodcastEpisodeChapterPlayback(
 }
 
 /**
+ * Toggles the chapter that narrates a Finding, or the whole podcast episode if no chapter narrates it.
+ */
+export function togglePodcastEpisodeFindingPlayback(podcastEpisode: PodcastEpisode, findingId: string): void {
+	const chapter = podcastEpisode.chapters.find((podcastEpisodeChapter) => podcastEpisodeChapter.findingId === findingId)
+	if (chapter) {
+		togglePodcastEpisodeChapterPlayback(podcastEpisode, chapter)
+		return
+	}
+	void togglePodcastEpisodePlayback(podcastEpisode.id)
+}
+
+/**
  * Toggles a loaded episode or fetches and plays the requested one.
  */
 export async function togglePodcastEpisodePlayback(podcastEpisodeId: string): Promise<void> {

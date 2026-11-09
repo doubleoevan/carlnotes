@@ -25,6 +25,7 @@ import { Route as LayoutSignedInActivityRouteImport } from './routes/_layout/_si
 import { Route as LayoutSignedInAdminRouteImport } from './routes/_layout/_signedIn/admin'
 import { Route as LayoutProfilesUserIdRouteImport } from './routes/_layout/profiles.$userId'
 import { Route as LayoutTeamsTeamIdRouteImport } from './routes/_layout/teams.$teamId'
+import { Route as LayoutTopicsIndexRouteImport } from './routes/_layout/topics.index'
 import { Route as LayoutTopicsTopicIdRouteImport } from './routes/_layout/topics.$topicId'
 import { Route as LayoutSignedInMcpConsentRouteImport } from './routes/_layout/_signedIn/mcp.consent'
 import { Route as LayoutSignedInTeamsIndexRouteImport } from './routes/_layout/_signedIn/teams.index'
@@ -109,6 +110,11 @@ const LayoutTeamsTeamIdRoute = LayoutTeamsTeamIdRouteImport.update({
   path: '/teams/$teamId',
   getParentRoute: () => LayoutRoute,
 } as any)
+const LayoutTopicsIndexRoute = LayoutTopicsIndexRouteImport.update({
+  id: '/topics/',
+  path: '/topics/',
+  getParentRoute: () => LayoutRoute,
+} as any)
 const LayoutTopicsTopicIdRoute = LayoutTopicsTopicIdRouteImport.update({
   id: '/topics/$topicId',
   path: '/topics/$topicId',
@@ -155,6 +161,7 @@ export interface FileRoutesByFullPath {
   '/profiles/$userId': typeof LayoutProfilesUserIdRoute
   '/teams/$teamId': typeof LayoutTeamsTeamIdRoute
   '/topics/$topicId': typeof LayoutTopicsTopicIdRoute
+  '/topics/': typeof LayoutTopicsIndexRoute
   '/mcp/consent': typeof LayoutSignedInMcpConsentRoute
   '/topics/$topicId/$topicSlug': typeof LayoutTopicsTopicIdTopicSlugRoute
   '/teams/': typeof LayoutSignedInTeamsIndexRoute
@@ -176,6 +183,7 @@ export interface FileRoutesByTo {
   '/profiles/$userId': typeof LayoutProfilesUserIdRoute
   '/teams/$teamId': typeof LayoutTeamsTeamIdRoute
   '/topics/$topicId': typeof LayoutTopicsTopicIdRoute
+  '/topics': typeof LayoutTopicsIndexRoute
   '/mcp/consent': typeof LayoutSignedInMcpConsentRoute
   '/topics/$topicId/$topicSlug': typeof LayoutTopicsTopicIdTopicSlugRoute
   '/teams': typeof LayoutSignedInTeamsIndexRoute
@@ -200,6 +208,7 @@ export interface FileRoutesById {
   '/_layout/profiles/$userId': typeof LayoutProfilesUserIdRoute
   '/_layout/teams/$teamId': typeof LayoutTeamsTeamIdRoute
   '/_layout/topics/$topicId': typeof LayoutTopicsTopicIdRoute
+  '/_layout/topics/': typeof LayoutTopicsIndexRoute
   '/_layout/_signedIn/mcp/consent': typeof LayoutSignedInMcpConsentRoute
   '/_layout/topics/$topicId_/$topicSlug': typeof LayoutTopicsTopicIdTopicSlugRoute
   '/_layout/_signedIn/teams/': typeof LayoutSignedInTeamsIndexRoute
@@ -223,6 +232,7 @@ export interface FileRouteTypes {
     | '/profiles/$userId'
     | '/teams/$teamId'
     | '/topics/$topicId'
+    | '/topics/'
     | '/mcp/consent'
     | '/topics/$topicId/$topicSlug'
     | '/teams/'
@@ -244,6 +254,7 @@ export interface FileRouteTypes {
     | '/profiles/$userId'
     | '/teams/$teamId'
     | '/topics/$topicId'
+    | '/topics'
     | '/mcp/consent'
     | '/topics/$topicId/$topicSlug'
     | '/teams'
@@ -267,6 +278,7 @@ export interface FileRouteTypes {
     | '/_layout/profiles/$userId'
     | '/_layout/teams/$teamId'
     | '/_layout/topics/$topicId'
+    | '/_layout/topics/'
     | '/_layout/_signedIn/mcp/consent'
     | '/_layout/topics/$topicId_/$topicSlug'
     | '/_layout/_signedIn/teams/'
@@ -395,6 +407,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LayoutTeamsTeamIdRouteImport
       parentRoute: typeof LayoutRoute
     }
+    '/_layout/topics/': {
+      id: '/_layout/topics/'
+      path: '/topics'
+      fullPath: '/topics/'
+      preLoaderRoute: typeof LayoutTopicsIndexRouteImport
+      parentRoute: typeof LayoutRoute
+    }
     '/_layout/topics/$topicId': {
       id: '/_layout/topics/$topicId'
       path: '/topics/$topicId'
@@ -463,6 +482,7 @@ interface LayoutRouteChildren {
   LayoutProfilesUserIdRoute: typeof LayoutProfilesUserIdRoute
   LayoutTeamsTeamIdRoute: typeof LayoutTeamsTeamIdRoute
   LayoutTopicsTopicIdRoute: typeof LayoutTopicsTopicIdRoute
+  LayoutTopicsIndexRoute: typeof LayoutTopicsIndexRoute
   LayoutTopicsTopicIdTopicSlugRoute: typeof LayoutTopicsTopicIdTopicSlugRoute
   LayoutTopicsTopicIdTopicSlugEpisodesSeasonEpisodeNumberRoute: typeof LayoutTopicsTopicIdTopicSlugEpisodesSeasonEpisodeNumberRoute
 }
@@ -477,6 +497,7 @@ const LayoutRouteChildren: LayoutRouteChildren = {
   LayoutProfilesUserIdRoute: LayoutProfilesUserIdRoute,
   LayoutTeamsTeamIdRoute: LayoutTeamsTeamIdRoute,
   LayoutTopicsTopicIdRoute: LayoutTopicsTopicIdRoute,
+  LayoutTopicsIndexRoute: LayoutTopicsIndexRoute,
   LayoutTopicsTopicIdTopicSlugRoute: LayoutTopicsTopicIdTopicSlugRoute,
   LayoutTopicsTopicIdTopicSlugEpisodesSeasonEpisodeNumberRoute:
     LayoutTopicsTopicIdTopicSlugEpisodesSeasonEpisodeNumberRoute,

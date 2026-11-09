@@ -1,5 +1,6 @@
 import type { AdminUserRow } from "@carlnotes/contracts/admin"
 import { isAdminRole, isPaidPlan } from "@carlnotes/contracts/enums"
+import { DEFAULT_PAGE_SIZE } from "@carlnotes/contracts/pagination"
 import { toBytesLabel, toCentsLabel, toCountLabel } from "@carlnotes/core/lib/labels"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { TABLE_CLASS, TABLE_HEAD_CLASS, TABLE_SCROLL_CLASS } from "@/lib/styleClasses"
@@ -39,7 +40,11 @@ export function AdminUsersTable({
 	onReload: () => void
 }) {
 	// sort feeds pagination, so a sorted column reorders across every page
-	const { pageRows, sort, pagination } = usePaginatedRowSort({ rows: users, valueByKey: userSortValues })
+	const { pageRows, sort, pagination } = usePaginatedRowSort({
+		rows: users,
+		valueByKey: userSortValues,
+		initialPageSize: DEFAULT_PAGE_SIZE,
+	})
 
 	return (
 		<TableCard>

@@ -24,7 +24,7 @@ Bun.env.BETTER_AUTH_SECRET ??= "podcast-feed-test-secret"
 // a public topic's feed with one podcast episode
 const podcastFeed: ToPodcastFeedXmlOptions = {
 	appUrl: "https://carlnotes.example.com",
-	topic: { id: "topic-1", name: "Home <espresso>", prompt: "Gear & technique.", visibility: "public" },
+	topic: { id: "topic-1", name: "Home <espresso>", prompt: "Gear & technique.", visibility: "public", imageHash: null },
 	feedUrl: "https://carlnotes.example.com/topics/topic-1/podcast.xml",
 	podcastEpisodeFilesBaseUrl: "https://carlnotes.example.com/api/episodes",
 	isBlockedFromPodcastDirectories: false,
@@ -38,6 +38,7 @@ const podcastFeed: ToPodcastFeedXmlOptions = {
 			durationSeconds: 440,
 			audioByteSize: 3_520_000,
 			publishedAt: new Date("2026-10-01T09:00:00Z"),
+			imageHash: null,
 		},
 	],
 }

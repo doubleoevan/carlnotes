@@ -1065,6 +1065,34 @@
       "when": 1794058934216,
       "tag": "0151_bumpy_catseye",
       "breakpoints": true
+    },
+    {
+      "idx": 152,
+      "version": "7",
+      "when": 1794115517270,
+      "tag": "0152_flat_mantis",
+      "breakpoints": true
+    },
+    {
+      "idx": 153,
+      "version": "7",
+      "when": 1794116928080,
+      "tag": "0153_lowly_patriot",
+      "breakpoints": true
+    },
+    {
+      "idx": 154,
+      "version": "7",
+      "when": 1794148942189,
+      "tag": "0154_rich_mole_man",
+      "breakpoints": true
+    },
+    {
+      "idx": 155,
+      "version": "7",
+      "when": 1794172205830,
+      "tag": "0155_shallow_masked_marvel",
+      "breakpoints": true
     }
   ]
 }

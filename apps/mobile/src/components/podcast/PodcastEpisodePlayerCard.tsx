@@ -27,7 +27,7 @@ const elements: PodcastEpisodePlayerCardElements<ChapterTopicFeed> = {
 		<View className="gap-4 rounded-lg border border-separator bg-card p-5 shadow-raised">{children}</View>
 	),
 	PlayButton: ({ podcastEpisode, size, onPress }) => (
-		<PodcastEpisodePlayButton episode={podcastEpisode} size={size} onPress={onPress} />
+		<PodcastEpisodePlayButton podcastEpisode={podcastEpisode} size={size} onPress={onPress} />
 	),
 	Details: PodcastEpisodeDetails,
 	Controls: ({ podcastEpisode, playbackRate }) => (
@@ -68,7 +68,7 @@ export function PodcastEpisodePlayerCard({
 	podcastEpisode: PodcastEpisode
 	podcastEpisodePath?: string
 	chapterTopicFeed: ChapterTopicFeed
-	onOpenPodcastFeedDialog: () => void
+	onOpenPodcastFeedDialog?: () => void
 	feedButtonRef?: RefObject<ComponentRef<typeof View> | null>
 }) {
 	// keep the trigger renderer stable while playback position updates

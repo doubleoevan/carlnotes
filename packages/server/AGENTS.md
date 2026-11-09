@@ -13,6 +13,10 @@ built-in, or a server SDK, and the package every server package imports. `@carln
 `pipeline`, `apps/api`, and `apps/worker` import it; it imports `@carlnotes/contracts`, `@sentry/bun`, and
 `posthog-node`.
 
+`edgePurge.ts` is the Cloudflare purge by cache tag that the api sends after an account close, a team deletion, a topic
+deletion, or a visibility change, and the worker after a public topic's image changes. A missing zone id or token skips
+it, and a failed purge is reported and never fails the write.
+
 `monitoring.ts` starts Sentry in the api and the worker and defines what tracing reads and writes: the traces sampler, a
 request's transaction name and measurements, the stage and query spans, and the threshold warnings. The send-time redaction
 every outgoing event passes is `redactEvent` and `redactTransaction` in `monitoringRedaction.ts`. `reportError` sends one

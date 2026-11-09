@@ -43,7 +43,8 @@ export function PodcastEpisodePlayerCard<T>({
 	podcastEpisode: PodcastEpisode
 	podcastEpisodePath?: string
 	chapterTopicFeed: T
-	onOpenPodcastFeedDialog: () => void
+	// opens the podcast feed dialog from the card's Subscribe buttons, or undefined for a page that shows Subscribe itself
+	onOpenPodcastFeedDialog?: () => void
 	elements: PodcastEpisodePlayerCardElements<T>
 }) {
 	// show live progress only for the loaded episode
@@ -78,7 +79,9 @@ export function PodcastEpisodePlayerCard<T>({
 					</Group>
 					<Group className="flex shrink-0 flex-row items-center gap-1.5">
 						{isLoaded && <Controls podcastEpisode={podcastEpisode} playbackRate={player.playbackRate} />}
-						<FeedButton onPress={onOpenPodcastFeedDialog} className="hidden sm:flex" label="Subscribe" />
+						{onOpenPodcastFeedDialog && (
+							<FeedButton onPress={onOpenPodcastFeedDialog} className="hidden sm:flex" label="Subscribe" />
+						)}
 					</Group>
 				</Group>
 				{/* playback feedback, progress, and chapter actions */}
@@ -95,11 +98,13 @@ export function PodcastEpisodePlayerCard<T>({
 					chapterTopicFeed={chapterTopicFeed}
 				/>
 				{/* phone subscription action */}
-				<FeedButton
-					onPress={onOpenPodcastFeedDialog}
-					className="flex justify-center sm:hidden"
-					label="Subscribe to podcast"
-				/>
+				{onOpenPodcastFeedDialog && (
+					<FeedButton
+						onPress={onOpenPodcastFeedDialog}
+						className="flex justify-center sm:hidden"
+						label="Subscribe to podcast"
+					/>
+				)}
 			</Card>
 			{/* expand the existing chapters without replacing the loaded player */}
 			{hiddenChapterCount > 0 && (

@@ -1,14 +1,12 @@
 import type { TopicFeedResponse, TopicSectionKey } from "@carlnotes/contracts/topics"
 import type { TopicFeedState } from "@carlnotes/core/hooks/useTopicFeedState"
+import { toCountLabel } from "@carlnotes/core/lib/labels"
 import { TOPIC_SECTION_TITLES } from "@carlnotes/core/lib/topicFeedLabels"
 import { FlashList } from "@shopify/flash-list"
-import { ChevronDown, ChevronRight } from "lucide-react-native"
 import { type ReactElement, useMemo, useState } from "react"
-import { Text as NativeText, View } from "react-native"
+import { Text as NativeText } from "react-native"
+import { AccordionSection } from "@/components/common/AccordionSection"
 import { Footer } from "@/components/layout/Footer"
-import { Button } from "@/components/primitives/button"
-import { Icon } from "@/components/primitives/icon"
-import { Text } from "@/components/primitives/text"
 import { type TopicFeedRow, toInitialTopicSection, toTopicFeedRows } from "@/topicFeedRows"
 import { toTypeRoleStyle } from "@/typeRoleStyles"
 import { MoreButton } from "./MoreButton"
@@ -80,23 +78,12 @@ function FeedRow({
 	switch (row.kind) {
 		case "section":
 			return (
-				<View className="px-4">
-					<Button
-						variant="ghost"
-						className="min-h-11 justify-start px-0 pt-3 pb-1"
-						accessibilityLabel={`${TOPIC_SECTION_TITLES[row.sectionKey]}, ${row.topicCount} topics`}
-						accessibilityState={{ expanded: row.isExpanded }}
-						onPress={() => onSectionPress(row.sectionKey)}
-					>
-						<Icon as={row.isExpanded ? ChevronDown : ChevronRight} />
-						<Text style={toTypeRoleStyle("logo")} className="flex-1 text-left">
-							{TOPIC_SECTION_TITLES[row.sectionKey]}
-						</Text>
-						<Text className="text-muted-foreground">
-							{row.topicCount} {row.topicCount === 1 ? "topic" : "topics"}
-						</Text>
-					</Button>
-				</View>
+				<AccordionSection
+					title={TOPIC_SECTION_TITLES[row.sectionKey]}
+					countLabel={toCountLabel(row.topicCount, "topic")}
+					isExpanded={row.isExpanded}
+					onToggle={() => onSectionPress(row.sectionKey)}
+				/>
 			)
 		case "topic":
 			return <Topic topic={row.topic} />

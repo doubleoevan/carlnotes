@@ -136,12 +136,13 @@ a published Podcast Episode.
 
 Steps
 1. Sign in: open the app, choose Continue with email, and enter the account above.
-2. Home shows the feed. Open the Topic "Carl's own notes" from Your topics.
+2. On Home, open the Topic "Carl's own notes" from Your topics.
 3. Read its Findings. Each one has Carl's note and a link. Open the scan recap under the heading.
 4. Open the Note on the Topic page, under Notes. The editor opens for this account.
 5. Open the menu, choose Teams, open the Team "Review crew", and open its chat room from the Team page.
-6. Back on Home, open the followed public Topic under Your subscribed topics and play its Podcast Episode. Playback
-   continues after leaving the screen and with the screen locked.
+6. Back on Home, tap "All of it." in the headline to open the Topics tab. Open the followed public Topic under Your
+   followed topics and play its Podcast Episode. Playback continues after leaving the screen and with the screen
+   locked.
 7. Open the menu, choose Account. The page shows the profile fields, the plan, the budget, Restore purchases,
    Blocked people, and Close your account.
 8. Buy a plan: open the menu, choose Plans, turn on Bill yearly for the yearly price, and tap Upgrade on Plus.

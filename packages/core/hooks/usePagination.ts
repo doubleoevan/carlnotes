@@ -1,4 +1,4 @@
-import { DEFAULT_PAGE_SIZE } from "@carlnotes/contracts/pagination"
+import { TABLE_PAGE_SIZE } from "@carlnotes/contracts/pagination"
 import { useState } from "react"
 
 // tables on both platforms share zero-based pages and the same page-size choices
@@ -11,12 +11,15 @@ export type PaginationState = {
 	setPageSize: (pageSize: number) => void
 }
 
+// the page shown, how many pages there are, and how to open another, which page buttons read
+export type PageSelection = Pick<PaginationState, "page" | "pageCount" | "setPage">
+
 /**
  * Selects a table's page and clamps it when its rows or page size change.
  */
 export function usePagination<Row>(
 	rows: Row[],
-	initialPageSize: number = DEFAULT_PAGE_SIZE,
+	initialPageSize: number = TABLE_PAGE_SIZE,
 ): {
 	pageRows: Row[]
 	pagination: PaginationState

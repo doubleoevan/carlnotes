@@ -48,7 +48,7 @@ export const podcastPlayerElements: PodcastPlayerElements = {
 	Announcement: PhaseAnnouncement,
 	Progress: PlayerProgress,
 	Controls: PodcastPlayerControls,
-	Play: ({ podcastEpisode }) => <PodcastEpisodePlayButton episode={podcastEpisode} size="default" />,
+	Play: ({ podcastEpisode }) => <PodcastEpisodePlayButton podcastEpisode={podcastEpisode} size="default" />,
 }
 
 /**

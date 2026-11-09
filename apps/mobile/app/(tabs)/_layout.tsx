@@ -9,6 +9,7 @@ export default function TabLayout() {
 	return (
 		<Tabs screenOptions={{ headerShown: false }} tabBar={() => null}>
 			<Tabs.Screen name="index" options={{ title: "Home" }} />
+			<Tabs.Screen name="topics" options={{ title: "Topics" }} />
 			<Tabs.Screen name="search" options={{ title: "Search" }} />
 			<Tabs.Protected guard={Boolean(session)}>
 				<Tabs.Screen name="settings" options={{ title: "Account" }} />

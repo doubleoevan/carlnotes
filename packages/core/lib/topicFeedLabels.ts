@@ -9,7 +9,7 @@ import type { TopicSectionKey } from "@carlnotes/contracts/topics"
 // the feed's section titles and empty states
 export const TOPIC_SECTION_TITLES: Record<TopicSectionKey, string> = {
 	yours: "Your topics",
-	subscribed: "Your subscribed topics",
+	subscribed: "Your followed topics",
 	featured: "Featured topics",
 	popular: "Popular topics",
 	unknown: "More topics",

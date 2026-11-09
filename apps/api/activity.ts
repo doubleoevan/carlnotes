@@ -23,6 +23,8 @@ import { loadLatestPodcastEpisodeSummaries } from "./podcast/podcastEpisodeShape
 // the subscription row fields that the queries read, with the subscribed time as a date
 export type SubscriptionRowFields = Omit<SubscriptionRow, "subscribedAt" | "latestPodcastEpisode"> & {
 	subscribedAt: Date
+	// the topic's image hash
+	imageHash: string | null
 }
 
 /**
@@ -68,6 +70,7 @@ async function loadActivity(userId: string, signedInUserId: string): Promise<Act
 				memberUserId: teamMembers.userId,
 			},
 			visibility: topics.visibility,
+			imageHash: topics.imageHash,
 			subscribedAt: subscriptions.createdAt,
 			isActive: subscriptions.isActive,
 			isEmailEnabled: subscriptions.isEmailEnabled,
@@ -141,6 +144,7 @@ async function loadActivity(userId: string, signedInUserId: string): Promise<Act
 		name: subscriptionRow.name,
 		ownerId: subscriptionRow.owner.userId,
 		visibility: subscriptionRow.visibility,
+		imageHash: subscriptionRow.imageHash,
 	}))
 	const subscriptionPodcastEpisodeByTopic = await loadLatestPodcastEpisodeSummaries(
 		subscriptionTopicRows,
@@ -209,6 +213,7 @@ export async function loadInvitedTopicSubscriptions(userId: string): Promise<Sub
 				memberUserId: teamMembers.userId,
 			},
 			visibility: topics.visibility,
+			imageHash: topics.imageHash,
 			invitedAt: invites.invitedAt,
 		})
 		.from(invites)
@@ -233,6 +238,7 @@ export async function loadInvitedTopicSubscriptions(userId: string): Promise<Sub
 	return [...newestByTopic.values()].toReversed().map((scanRow) => ({
 		topicId: scanRow.topicId,
 		name: scanRow.name,
+		imageHash: scanRow.imageHash,
 		owner: withAvatarVersion(scanRow.owner),
 		team: toTeamIdentity(scanRow.team),
 		visibility: scanRow.visibility,
@@ -267,7 +273,8 @@ export function toSubscriptionRows(
 	subscriptionRows: SubscriptionRowFields[],
 	latestPodcastEpisodeByTopic: Map<string, PodcastEpisodeSummary> = new Map(),
 ): SubscriptionRow[] {
-	return subscriptionRows.map((subscriptionRow) => ({
+	// keep the image hash off the row
+	return subscriptionRows.map(({ imageHash: _imageHash, ...subscriptionRow }) => ({
 		...subscriptionRow,
 		subscribedAt: subscriptionRow.subscribedAt.toISOString(),
 		latestPodcastEpisode: latestPodcastEpisodeByTopic.get(subscriptionRow.topicId) ?? null,

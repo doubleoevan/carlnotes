@@ -73,6 +73,7 @@ export function toStoryPodcastEpisode({
 		publishedAt,
 		pagePath: toPodcastEpisodePath(topic, { season: STORY_PODCAST_SEASON, episodeNumber }),
 		chapterCount,
+		image: null,
 	}
 }
 

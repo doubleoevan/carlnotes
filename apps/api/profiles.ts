@@ -152,6 +152,7 @@ async function loadProfileTopics(
 			name: topics.name,
 			ownerId: topics.ownerId,
 			visibility: topics.visibility,
+			imageHash: topics.imageHash,
 			createdAt: topics.createdAt,
 			updatedAt: topics.updatedAt,
 			subscriberCount: topics.subscriberCount,

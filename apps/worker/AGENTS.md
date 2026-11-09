@@ -74,6 +74,12 @@ about the app; a section whose hash is unchanged is not embedded again).
   activities file beside it imports the rest. `temporal.ts` resolves each workflow
   by `new URL("./workflows/<name>.ts", import.meta.url)`, and `scripts/check-workflow-bundles.ts` bundles every workflow
   in preflight.
+- `workflows/renderTopicImage.ts` and `renderTopicImageActivities.ts` run on the `topic-images` queue: the scene, then
+  the render and the store, with a spent budget and a rejection non-retryable, and a failure recorded on the row so the
+  drawn covers stay. `workflows/backfillTopicImages.ts` is the one-off `topic-image-backfill` workflow that
+  `bun run topic-images:backfill` starts, three children at a time, in the `missing`, `redo`, or `resize` mode.
+  `workflows/topicImageWorkflows.ts` is the one bundle the topic image worker loads, both workflows, and
+  `topicImageWorkflowActivities.ts` registers both activity sets as one namespace.
 - `workflows/runTopicScanActivities.ts` — the Scan's three stages. `ingestForScan` passes on the discovered Resources
   with the Source each is credited to, each Source's outcome narrowed by `toScannedSource` in
   `@carlnotes/pipeline/ingest/index` to the four fields the scan report reads, and each Source's result. `finishScan`

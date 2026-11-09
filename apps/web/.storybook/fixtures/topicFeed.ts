@@ -43,6 +43,7 @@ const LLM_TOOLING_TOPIC_FEED: TopicFeed = {
 	lastScanDurationMs: 84_000,
 	monthCostDollars: null,
 	scanSummary: "A faster local runtime for small models led the scan.",
+	image: null,
 	attachments: [],
 	sources: [],
 	findings: [LOCAL_RUNTIME_FINDING],

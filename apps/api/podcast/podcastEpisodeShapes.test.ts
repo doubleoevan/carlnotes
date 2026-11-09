@@ -112,6 +112,7 @@ test("a summary of each topic's latest podcast episode counts its chapters in on
 		publishedAt: "2026-10-03T12:00:00.000Z",
 		pagePath: "/topics/public-topic/topic-public-topic/episodes/2026/14",
 		chapterCount: 12,
+		image: null,
 	})
 
 	// one count of the listenable episode's chapters, and no chapter rows
@@ -177,7 +178,8 @@ function toPodcastEpisodeRowTopic(podcastEpisodeId: string, episodeNumber: numbe
 			durationSeconds: 600,
 			listenerCount: 0,
 			publishedAt: new Date("2026-10-03T12:00:00.000Z"),
+			imageHash: null,
 		},
-		topic: { id: "topic-1", name: "Agents", visibility: "public" },
+		topic: { id: "topic-1", name: "Agents", visibility: "public", imageHash: null },
 	}
 }

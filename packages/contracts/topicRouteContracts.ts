@@ -3,6 +3,7 @@
 import { z } from "zod"
 import type { ApiRouteContract } from "./apiRouteContracts"
 import { topicFindingLinkPreviewResponse } from "./chat"
+import { homeResponse, yourTopicsPage, yourTopicsQuery } from "./home"
 import { inviteAcceptResponse, inviteCreateResponse } from "./invites"
 import {
 	note,
@@ -39,6 +40,12 @@ import {
 	topicPageQuery,
 } from "./routeShapes"
 import { searchRequestPayload, searchResultsPage } from "./search"
+import {
+	regenerateTopicImagePayload,
+	regenerateTopicImageResponse,
+	topicImageRenderResponse,
+	uploadTopicImageResponse,
+} from "./topicImages"
 import { attachmentContextPayload, suggestSourcesPayload, updateTopicPayload } from "./topicPayloads"
 import {
 	addableTopicsResponse,
@@ -49,6 +56,7 @@ import {
 	topicFeedResponse,
 	topicResponse,
 } from "./topics"
+import { updatesPayload, updatesResponse } from "./updates"
 import { podcastEpisodeCounts, topicCounts } from "./viewerCounts"
 
 // the entries, in client module order
@@ -125,6 +133,12 @@ export const topicRouteContracts: Record<string, ApiRouteContract> = {
 		response: okResponse,
 	},
 	"topicClient.sendDeleteTopic": { method: "DELETE", path: "/api/topics/:id", params: idParam, response: okResponse },
+	"updatesClient.requestUpdates": {
+		method: "POST",
+		path: "/api/updates",
+		body: { json: updatesPayload },
+		response: updatesResponse,
+	},
 	"topicClient.sendManualScan": {
 		method: "POST",
 		path: "/api/topics/:id/scan",
@@ -178,6 +192,41 @@ export const topicRouteContracts: Record<string, ApiRouteContract> = {
 		params: idParam,
 		body: { multipart: multipartFile("file") },
 		response: topicAttachmentUploadResponse,
+	},
+
+	// the home page and a topic's image
+	"homeClient.fetchHome": { method: "GET", path: "/api/home", response: homeResponse },
+	"homeClient.fetchYourTopicsPage": {
+		method: "GET",
+		path: "/api/home/your-topics",
+		query: yourTopicsQuery,
+		response: yourTopicsPage,
+	},
+	"topicImageClient.sendTopicImageRegeneration": {
+		method: "POST",
+		path: "/api/topics/:id/image/regenerate",
+		params: idParam,
+		body: { json: regenerateTopicImagePayload },
+		response: regenerateTopicImageResponse,
+	},
+	"topicImageClient.fetchTopicImageRender": {
+		method: "GET",
+		path: "/api/topic-image-renders/:id",
+		params: idParam,
+		response: topicImageRenderResponse,
+	},
+	"topicImageClient.uploadTopicImageBody": {
+		method: "POST",
+		path: "/api/topics/:id/image",
+		params: idParam,
+		body: { multipart: multipartFile("image") },
+		response: uploadTopicImageResponse,
+	},
+	"topicImageClient.sendTopicImageRemoval": {
+		method: "DELETE",
+		path: "/api/topics/:id/image",
+		params: idParam,
+		response: regenerateTopicImageResponse,
 	},
 
 	// topic findings

@@ -1,8 +1,10 @@
 // the edge purge that each release runs, which clears every response cached under the rendered tag,
 // so no cached page names hashed assets that the new build no longer has.
 // a missing setting is logged, and a failed purge is logged and reported, and neither fails the release
+
+import { type EdgePurgeResult, purgeEdgeCacheTags } from "@carlnotes/server/edgePurge"
 import { reportError, shutdownMonitoring, startMonitoring } from "@carlnotes/server/monitoring"
-import { type EdgePurgeResult, purgeEdgeCacheTags, RENDERED_CACHE_TAG } from "./edgeCache"
+import { RENDERED_CACHE_TAG } from "./edgeCache"
 
 // the zone id and api token that the purge request uses, read from CLOUDFLARE_ZONE_ID and CLOUDFLARE_API_TOKEN
 type EdgePurgeSettings = { zoneId: string | undefined; apiToken: string | undefined }

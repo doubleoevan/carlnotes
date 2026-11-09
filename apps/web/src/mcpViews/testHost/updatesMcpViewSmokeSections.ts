@@ -24,7 +24,7 @@ test("the updates MCP view shows the list and calls no tool on load", async () =
 		// the more link opens on the site
 		await frame.getByRole("link", { name: "and 2 more" }).click()
 		await waitForRecord(links)
-		expect(links).toEqual([`${TEST_SITE_URL}/`])
+		expect(links).toEqual([`${TEST_SITE_URL}/topics`])
 	})
 })
 

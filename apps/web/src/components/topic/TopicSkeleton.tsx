@@ -7,6 +7,9 @@ import { cn } from "@carlnotes/nightshift/classNames"
 import type * as React from "react"
 import {
 	DASHED_ROW_CLASS,
+	HEADER_TOPIC_IMAGE_CLASS,
+	IMAGE_HEADER_CLASS,
+	IMAGE_SKELETON_CLASS,
 	INFO_CARD_CLASS,
 	INFO_CARD_SECTIONS_CLASS,
 	RANK_SLOT_CLASS,
@@ -31,22 +34,23 @@ export function TopicSkeleton({ topicTitle }: { topicTitle?: string }) {
 	return <SharedTopicSkeleton topicTitle={topicTitle} elements={TOPIC_SKELETON_ELEMENTS} />
 }
 
-// the Topic's title and byline above the shared sections
+// the Topic's image placeholder, with its title and byline beside it, above the shared sections
 function TopicSkeletonHeader({ topicTitle }: { topicTitle?: string }) {
 	return (
-		<>
-			<div className="mt-3">
+		<div className={IMAGE_HEADER_CLASS}>
+			<div aria-hidden="true" className={cn(HEADER_TOPIC_IMAGE_CLASS, IMAGE_SKELETON_CLASS, "rounded-lg")} />
+			<div className="min-w-0 flex-1">
 				{topicTitle ? (
 					<h1 className="font-display min-w-0 text-2xl leading-tight">{topicTitle}</h1>
 				) : (
 					<div aria-hidden="true" className="bg-muted h-7.5 w-96 max-w-full animate-pulse rounded" />
 				)}
+				<div aria-hidden="true" className="mt-2 flex h-[31px] items-center gap-2">
+					<div className="bg-muted size-6 shrink-0 animate-pulse rounded-full" />
+					<div className="bg-muted h-4 w-40 animate-pulse rounded" />
+				</div>
 			</div>
-			<div aria-hidden="true" className="mt-2 flex h-[31px] items-center gap-2">
-				<div className="bg-muted size-6 shrink-0 animate-pulse rounded-full" />
-				<div className="bg-muted h-4 w-40 animate-pulse rounded" />
-			</div>
-		</>
+		</div>
 	)
 }
 

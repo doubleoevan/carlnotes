@@ -9,11 +9,13 @@ import { Footer } from "@/components/layout/Footer"
 import { PodcastEpisodePlayer } from "@/components/podcast/PodcastEpisodePlayer"
 import { Badge } from "@/components/primitives/badge"
 import { Text } from "@/components/primitives/text"
+import { TopicImage } from "@/components/primitives/topic-image"
 import { ReactionRow } from "@/components/social/ReactionRow"
 import { SocialSection } from "@/components/social/SocialSection"
+import { HEADER_TOPIC_IMAGE_CLASS } from "@/topicImageClasses"
 import { toTypeRoleStyle } from "@/typeRoleStyles"
 import { CollapsibleSection } from "./CollapsibleSection"
-import { TopicByline } from "./Topic"
+import { TopicByline } from "./TopicByline"
 import { TopicCountsLine } from "./TopicCountsLine"
 import { TopicFindingsSection } from "./TopicFindingsSection"
 import { TopicInfoButton } from "./TopicInfo"
@@ -45,37 +47,43 @@ export function TopicPageContent({
 			contentContainerStyle={{ paddingBottom: 24 }}
 		>
 			<TopicActionBar topic={topic} onRefresh={onRefresh} onScanned={onScanned} />
-			{/* title and byline use the page's own type sizes and insets */}
-			<View className="mx-4 mb-3">
-				<TopicInfoButton topic={topic}>
-					<NativeText
-						accessibilityRole="header"
-						style={toTypeRoleStyle("pageTitle")}
-						className="shrink text-foreground"
-					>
-						{topic.name}
-					</NativeText>
-				</TopicInfoButton>
-				{/* the chat mention and note count sits under the name, and its press opens the chat room */}
-				<PageUpdateCountBadge topicId={topic.id} className="self-start" />
-				{/* the byline and the topic's reactions */}
-				<View className="flex-row flex-wrap items-center gap-x-3">
-					<TopicByline topic={topic} isPage />
-					<ReactionRow
-						target={{ kind: "topic", id: topic.id }}
-						summary={topic.reactions}
-						isSignedIn={Boolean(session)}
-					/>
-				</View>
-				{topic.tags.length > 0 ? (
-					<View className="mt-2 flex-row flex-wrap gap-1">
-						{topic.tags.map((tag) => (
-							<Badge key={tag} variant="secondary">
-								<Text>{tag}</Text>
-							</Badge>
-						))}
+			{/* the image with the title in the page's own type sizes, the tags, and the byline and the reactions beside it,
+			    as the web header shows them at phone width. React Native has no float, so they stay beside the image */}
+			<View className="mx-4 my-4">
+				<View className="flex-row items-start gap-4">
+					<TopicImage image={topic.image} size="page" name={topic.name} className={HEADER_TOPIC_IMAGE_CLASS} />
+					<View className="min-w-0 flex-1">
+						<TopicInfoButton topic={topic}>
+							<NativeText
+								accessibilityRole="header"
+								style={toTypeRoleStyle("pageTitle")}
+								className="shrink text-foreground"
+							>
+								{topic.name}
+							</NativeText>
+						</TopicInfoButton>
+						{/* the chat mention and note count sits under the name, and its press opens the chat room */}
+						<PageUpdateCountBadge topicId={topic.id} className="self-start" />
+						{topic.tags.length > 0 ? (
+							<View className="mt-1.5 flex-row flex-wrap gap-1">
+								{topic.tags.map((tag) => (
+									<Badge key={tag} variant="secondary">
+										<Text>{tag}</Text>
+									</Badge>
+								))}
+							</View>
+						) : null}
+						{/* the byline and the topic's reactions */}
+						<View className="mt-1.5 flex-row flex-wrap items-center gap-x-3">
+							<TopicByline topic={topic} isPage />
+							<ReactionRow
+								target={{ kind: "topic", id: topic.id }}
+								summary={topic.reactions}
+								isSignedIn={Boolean(session)}
+							/>
+						</View>
 					</View>
-				) : null}
+				</View>
 			</View>
 			{/* full-width cards match the web's narrow reading column */}
 			<View className="mx-4">

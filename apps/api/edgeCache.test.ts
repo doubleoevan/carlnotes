@@ -1,6 +1,7 @@
 // edge cache tests: the edge shares a rendered response only if it is a 200 or a permanent redirect and sets no
 // cookie, and its request has no session cookie or authorization header
 import { expect, test } from "bun:test"
+import { toTopicImageCacheTag } from "@carlnotes/server/edgePurge"
 import { RENDERED_CACHE_TAG, RENDERED_EDGE_CACHE_CONTROL, setRenderedCacheHeaders } from "./edgeCache"
 
 // the headers that a rendered response is sent with, given its request's headers
@@ -54,4 +55,9 @@ test("a permanent redirect for a signed-out request is shared, and a temporary o
 	}
 	const temporaryHeaders = toRenderedCacheHeaders({}, new Response(null, { status: 302, headers: { Location: "/" } }))
 	expect(temporaryHeaders.get("Cache-Control")).toBe("private, no-cache")
+})
+
+// a topic's image files share one tag, so a topic leaving the public set purges every file at once
+test("a topic image's cache tag names the topic", () => {
+	expect(toTopicImageCacheTag("topic-1")).toBe("topic-image:topic-1")
 })

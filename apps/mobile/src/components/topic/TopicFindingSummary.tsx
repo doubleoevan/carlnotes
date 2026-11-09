@@ -95,25 +95,29 @@ export function TopicFindingSummary({
 					resource={resource}
 					latestPodcastEpisode={latestPodcastEpisode}
 					isBookmarkOnLine={isBookmarkOnLine}
-				/>
-				{children}
+				>
+					{children}
+				</ResourceMetadata>
 			</View>
 		</View>
 	)
 }
 
 /**
- * Shows the source favicon, host, and publication age with a safe image fallback.
+ * Shows the source favicon, host, and publication age with a safe image fallback, then the children, such as the
+ * finding's topic, before the chapter pill.
  */
 export function ResourceMetadata({
 	resource,
 	latestPodcastEpisode,
 	isBookmarkOnLine,
-}: Pick<TopicFindingSummaryProps, "resource" | "latestPodcastEpisode" | "isBookmarkOnLine">) {
+	children,
+}: Pick<TopicFindingSummaryProps, "resource" | "latestPodcastEpisode" | "isBookmarkOnLine" | "children">) {
 	return (
 		<View className="gap-1">
 			<View className="flex-row flex-wrap items-center gap-1.5">
 				<SharedResourceMetadata resource={resource} components={RESOURCE_METADATA_COMPONENTS} />
+				{children}
 				<FindingChapterPill podcastEpisode={latestPodcastEpisode} findingId={resource.findingId} />
 				{isBookmarkOnLine && resource.isBookmarked ? (
 					<Icon as={Bookmark} className="size-3.5 text-link" fill="currentColor" accessibilityLabel="Bookmarked" />

@@ -23,6 +23,7 @@ beforeEach(() => {
 		chatDollars: recordedChatDollars,
 		podcastEpisodeDollars: 0,
 		personalSourcesDollars: 0,
+		topicImageDollars: 0,
 	}))
 	spyOn(console, "error").mockImplementation(() => {})
 })

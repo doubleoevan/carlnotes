@@ -10,7 +10,7 @@ const meta: Meta<typeof PodcastEpisodePlayButton> = {
 		webReference: "apps/web/src/components/podcast/PodcastEpisodePlayButton.tsx at 375px",
 		surface: "card",
 	},
-	args: { episode: STORY_PODCAST_EPISODE },
+	args: { podcastEpisode: STORY_PODCAST_EPISODE },
 }
 export default meta
 type Story = StoryObj<typeof meta>

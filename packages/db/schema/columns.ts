@@ -27,6 +27,9 @@ import {
 	sourceKinds,
 	sourceVisibilities,
 	teamRoles,
+	topicImageOrigins,
+	topicImageRenderKinds,
+	topicImageRenderStatuses,
 	visibilities,
 } from "@carlnotes/contracts/enums"
 import { customType, pgEnum, text, timestamp } from "drizzle-orm/pg-core"
@@ -75,6 +78,10 @@ export const reactionType = pgEnum("reaction_type", reactionTypes)
 export const pushPlatform = pgEnum("push_platform", MOBILE_PLATFORMS)
 export const pushNotificationKind = pgEnum("push_notification_kind", pushNotificationKinds)
 export const pushReceiptStatus = pgEnum("push_receipt_status", pushReceiptStatuses)
+// where a topic image came from, why a render ran, and where it stands
+export const topicImageOrigin = pgEnum("topic_image_origin", topicImageOrigins)
+export const topicImageRenderKind = pgEnum("topic_image_render_kind", topicImageRenderKinds)
+export const topicImageRenderStatus = pgEnum("topic_image_render_status", topicImageRenderStatuses)
 
 /**
  * Returns every table's text primary key column, defaulted by our code and overridden by Better Auth on its own inserts.

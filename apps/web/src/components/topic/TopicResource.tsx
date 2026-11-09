@@ -107,8 +107,9 @@ export function TopicResource({
 				)}
 				{/* the left padding clears the rank slot, and the right padding is the row's own inset */}
 				<TopicFindingSummary resource={resource} className="flex-1 py-3 pr-3 pl-9">
-					{/* the bookmark mark after the age, if it sits on the line, then the pill of the podcast episode chapter that
-					    narrates this finding */}
+					{/* the children after the age, such as the finding's topic, then the bookmark mark, if it sits on the line,
+					    then the pill of the podcast episode chapter that narrates this finding */}
+					{children}
 					{isBookmarkMarkShown && isBookmarkOnLine && (
 						<BookmarkMark
 							teamBookmarks={resource.teamBookmarks}
@@ -117,7 +118,6 @@ export function TopicResource({
 						/>
 					)}
 					<FindingChapterPill podcastEpisode={latestPodcastEpisode} findingId={resource.findingId} />
-					{children}
 				</TopicFindingSummary>
 				{/* the note and its hint both anchor here, off the row's right edge */}
 				<Tooltip open={isHintOpen && !isNoteOpen} onOpenChange={setIsHintOpen}>

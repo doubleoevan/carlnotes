@@ -16,6 +16,7 @@ import { loadPageCommentThread } from "../social/pageCommentThread"
 import { loadTopicAccessAndFindings } from "../topic/accessibleFindings"
 import { canRateTopic } from "../topic/findingPermissions"
 import { loadTopicOwner, toTeamFields } from "../topic/helpers"
+import { toFeaturedPodcastEpisodes } from "./podcastEpisodeFeaturing"
 import {
 	loadAccessiblePodcastEpisode,
 	loadPodcastEpisodeListenRows,
@@ -187,7 +188,7 @@ export async function loadPodcastEpisodePage(
 		return null
 	}
 
-	// load the podcast episode, its script, the findings that the user may see, whether the user may rate the findings
+	// load the podcast episode, its script and feature order, the findings that the user may see, whether the user may rate the findings
 	// or remove the episode, the topic's byline, the owning team, the holding teams that the user is on, the topic's
 	// other podcast episodes, and the related ones
 	const { podcastEpisodeRow, topic, subscriberActivatedAt } = accessiblePodcastEpisode
@@ -195,7 +196,7 @@ export async function loadPodcastEpisodePage(
 	const [
 		[podcastEpisodeScriptRow],
 		podcastEpisode,
-		{ topicFindings },
+		{ topicFindings, isAdmin },
 		canRate,
 		canRemovePodcastEpisode,
 		owner,
@@ -204,7 +205,10 @@ export async function loadPodcastEpisodePage(
 		relatedPodcastEpisodes,
 		commentThread,
 	] = await Promise.all([
-		db.select({ script: podcastEpisodes.script }).from(podcastEpisodes).where(eq(podcastEpisodes.id, podcastEpisodeId)),
+		db
+			.select({ script: podcastEpisodes.script, featureOrder: podcastEpisodes.featureOrder })
+			.from(podcastEpisodes)
+			.where(eq(podcastEpisodes.id, podcastEpisodeId)),
 		loadPodcastEpisode({ podcastEpisodeRow, topic, userId }),
 		loadTopicAccessAndFindings({ topic, userId, isReactionReadSkipped: true }),
 		canRateTopic(userId, topic),
@@ -241,6 +245,7 @@ export async function loadPodcastEpisodePage(
 		topicFindings: chapterTopicFindings,
 		canRate,
 		canRemovePodcastEpisode,
+		...(await toFeaturedPodcastEpisodes(podcastEpisodeScriptRow?.featureOrder ?? null, isAdmin)),
 		transcript: podcastEpisodeScriptRow?.script ? toTranscriptBlocks(podcastEpisodeScriptRow.script) : [],
 		topicPodcastEpisodes,
 		relatedPodcastEpisodes,

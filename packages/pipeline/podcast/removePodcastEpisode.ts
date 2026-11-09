@@ -2,6 +2,7 @@
 // or of every Podcast Episode of a Topic
 
 import { type DbHandle, type DbTransaction, db } from "@carlnotes/db"
+import { releasePodcastEpisodeFeatureOrder } from "@carlnotes/db/podcastEpisodeFeaturing"
 import { podcastEpisodeChapters, podcastEpisodeListens, podcastEpisodes } from "@carlnotes/db/schema/podcast"
 import { comments, reactions } from "@carlnotes/db/schema/social"
 import {
@@ -12,6 +13,7 @@ import {
 } from "@carlnotes/db/store"
 import { eq, inArray } from "drizzle-orm"
 import { deletePodcastEpisodeVectors } from "../meanVectors"
+import { toPodcastEpisodeImageObjectKeys } from "../topicImages/topicImageFiles"
 import { toChapterTurns } from "./podcastEpisodeScript"
 
 /**
@@ -21,18 +23,28 @@ import { toChapterTurns } from "./podcastEpisodeScript"
 export async function removePodcastEpisode(podcastEpisodeId: string): Promise<boolean> {
 	// remove only a published or failed Podcast Episode. a recording Podcast Episode belongs to its workflow
 	const [podcastEpisode] = await db
-		.select({ id: podcastEpisodes.id, status: podcastEpisodes.status, script: podcastEpisodes.script })
+		.select({
+			id: podcastEpisodes.id,
+			status: podcastEpisodes.status,
+			script: podcastEpisodes.script,
+			imageHash: podcastEpisodes.imageHash,
+		})
 		.from(podcastEpisodes)
 		.where(eq(podcastEpisodes.id, podcastEpisodeId))
 	if (podcastEpisode?.status !== "published" && podcastEpisode?.status !== "failed") {
 		return false
 	}
 
-	// record the audio keys while the script still names the chapters, delete the chapters and the listens, and keep
-	// the row as removed, in one transaction
-	const objectKeys = toPodcastEpisodeAudioKeys(podcastEpisode)
+	// record the audio keys while the script still names the chapters, and the image's keys, delete the chapters and
+	// the listens, and keep the row as removed, in one transaction
+	const objectKeys = [
+		...toPodcastEpisodeAudioKeys(podcastEpisode),
+		...(podcastEpisode.imageHash ? toPodcastEpisodeImageObjectKeys(podcastEpisode.id, podcastEpisode.imageHash) : []),
+	]
 	await db.transaction(async (transaction) => {
 		await recordPendingObjectDeletions({ handle: transaction, objectKeys })
+		// a featured podcast episode leaves the home
+		await releasePodcastEpisodeFeatureOrder(podcastEpisodeId, transaction)
 		// delete the chapters, so a later Podcast Episode may narrate the Findings again
 		await transaction
 			.delete(podcastEpisodeChapters)
@@ -63,10 +75,17 @@ export async function markPodcastEpisodesRemoved(
 	await transaction.delete(reactions).where(inArray(reactions.podcastEpisodeId, podcastEpisodeIds))
 	await transaction.delete(comments).where(inArray(comments.podcastEpisodeId, podcastEpisodeIds))
 
-	// mark each row removed, and clear its script and its audio fields
+	// mark each row removed, and clear its script, its audio fields, and its image
 	await transaction
 		.update(podcastEpisodes)
-		.set({ status: "removed", script: null, audioKey: null, audioByteSize: null, durationSeconds: null })
+		.set({
+			status: "removed",
+			script: null,
+			audioKey: null,
+			audioByteSize: null,
+			durationSeconds: null,
+			imageHash: null,
+		})
 		.where(inArray(podcastEpisodes.id, podcastEpisodeIds))
 }
 

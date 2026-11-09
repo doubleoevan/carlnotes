@@ -2,7 +2,7 @@
 
 import { cn } from "@carlnotes/nightshift/classNames"
 import { useLocation } from "@tanstack/react-router"
-import { Columns3Cog, LogIn, Menu, Moon, Sun, UserPlus } from "lucide-react"
+import { Coffee, Columns3Cog, LogIn, Menu, Moon, Sun, UserPlus } from "lucide-react"
 import { useState } from "react"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { MenuTriggerUpdateCountBadge } from "@/components/common/UpdateCountBadge"
@@ -11,14 +11,13 @@ import { signOutAndReload } from "@/components/session/signOut"
 import { type TopicTutorialVideoOpener, TopicTutorialVideoOption } from "@/components/topic/TopicTutorialVideoDialog"
 import { MENU_DIVIDER_CLASS, MENU_OPTION_CLASS, MENU_OPTION_SELECTED_CLASS } from "@/lib/styleClasses"
 import { toSafeRedirectPath } from "@/lib/utils"
-import { DocsLink } from "./DocsLink"
 import { UserMenuItems } from "./UserMenu"
 
 // the size the count pills shrink to in the hamburger menu's corner
 const MENU_BADGE_CLASS = "h-4 min-w-4 text-[0.625rem]"
 
 /**
- * The mobile-only hamburger menu: the theme toggle, then the video, the docs, plans, and sign-in for a visitor, or the
+ * The mobile-only hamburger menu: the theme toggle, then the video, topics, plans, and sign-in for a visitor, or the
  * user menu items for a signed-in user.
  */
 export function HeaderMenu({
@@ -79,13 +78,20 @@ export function HeaderMenu({
 					{isDark ? <Sun className="size-4" /> : <Moon className="size-4" />}
 					{isDark ? "Light mode" : "Dark mode"}
 				</button>
-				{/* docs and plans move into the user menu once signed in */}
+				{/* topics and plans move into the user menu once signed in */}
 				{!isSignedIn && (
 					<>
 						{/* the video on making a topic, which plays in a dialog */}
 						<TopicTutorialVideoOption onSelect={handlePlayTopicTutorialVideo} />
-						{/* the docs open in their own tab */}
-						<DocsLink className={MENU_OPTION_CLASS} hasIcon onNavigate={closeMenu} />
+						<AnchorLink
+							href="/topics"
+							onClick={closeMenu}
+							aria-current={pathname === "/topics" ? "page" : undefined}
+							className={cn(MENU_OPTION_CLASS, pathname === "/topics" && MENU_OPTION_SELECTED_CLASS)}
+						>
+							<Coffee className="size-4" />
+							Topics
+						</AnchorLink>
 						<AnchorLink
 							href="/plans"
 							onClick={closeMenu}

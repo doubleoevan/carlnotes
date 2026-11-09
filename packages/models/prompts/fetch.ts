@@ -27,6 +27,8 @@ import suggestSourcesTemplate from "./suggest-sources.md" with { type: "text" }
 import summarizePersonalSourcesContextTemplate from "./summarize-personal-sources-context.md" with { type: "text" }
 import summarizeResourceTemplate from "./summarize-resource.md" with { type: "text" }
 import summarizeTopicScanTemplate from "./summarize-topic-scan.md" with { type: "text" }
+import topicImageSceneTemplate from "./topic-image-scene.md" with { type: "text" }
+import topicImageStyleTemplate from "./topic-image-style.md" with { type: "text" }
 import updatesOpenerTemplate from "./updates-opener.md" with { type: "text" }
 import { stripFrontmatter } from "./write.ts"
 import writePodcastEpisodeSegmentTemplate from "./write-podcast-episode-segment.md" with { type: "text" }
@@ -54,6 +56,8 @@ export const FALLBACK_PROMPT_TEMPLATES = {
 	"chat-team": chatTeamTemplate,
 	"chat-room-turn": chatRoomTurnTemplate,
 	"updates-opener": updatesOpenerTemplate,
+	"topic-image-scene": topicImageSceneTemplate,
+	"topic-image-style": topicImageStyleTemplate,
 	"check-agreement": checkAgreementTemplate,
 	"moderate-user-text": moderateUserTextTemplate,
 	"suggest-sources": suggestSourcesTemplate,

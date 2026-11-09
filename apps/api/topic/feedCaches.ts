@@ -1,9 +1,13 @@
 // the Redis keys that the topic feeds and topic pages are cached under, and the deletes that clear them
 import type { Visibility } from "@carlnotes/contracts/enums"
 import { deleteRedisKeys } from "@carlnotes/db/redis"
+import { purgeHomeAtEdge } from "../edgeCache"
 
 // the Redis key every replica reads the featured and popular topic id lists through
 export const TOPIC_SECTION_IDS_KEY = "topic-section-ids"
+
+// the Redis key every replica reads the ids of the home page's cards through
+export const HOME_CARD_IDS_KEY = "home-card-ids"
 
 // the Redis key prefix the visitors' feed is served through, one key per view
 const VISITOR_TOPIC_FEED_KEY_PREFIX = "topic-feed:visitor"
@@ -39,6 +43,11 @@ export async function clearVisitorTopicCaches({
 	// the visitors' feeds list public topics with their sources, so a change to a topic that was or is public drops them
 	const isListingChanged = isFeatureOrderReleased || visibility === "public" || previousVisibility === "public"
 	await deleteRedisKeys(toVisitorTopicPageKey(topicId), ...(isListingChanged ? toSharedTopicFeedKeys() : []))
+
+	// a released pin changes the home's featured cards
+	if (isFeatureOrderReleased) {
+		await purgeHomeAtEdge()
+	}
 }
 
 /**
@@ -50,7 +59,7 @@ export async function clearVisitorTopicPages(...topicIds: string[]): Promise<voi
 
 // the shared topic section id lists and both views of the visitors' feed
 function toSharedTopicFeedKeys(): string[] {
-	return [TOPIC_SECTION_IDS_KEY, toVisitorTopicFeedKey(true), toVisitorTopicFeedKey(false)]
+	return [TOPIC_SECTION_IDS_KEY, HOME_CARD_IDS_KEY, toVisitorTopicFeedKey(true), toVisitorTopicFeedKey(false)]
 }
 
 /**

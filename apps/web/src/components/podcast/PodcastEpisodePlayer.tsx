@@ -67,7 +67,15 @@ export function PodcastEpisodePlayer({ topic, topicFeedHandlers, scanControl }: 
 					podcastEpisodePath={toPodcastEpisodePath(topic, publishedPodcastEpisode)}
 					chapterTopicFeed={{
 						topicFindings: topic.findings,
-						topic: { id: topic.id, name: topic.name, prompt: topic.prompt, visibility: topic.visibility },
+						topic: {
+							id: topic.id,
+							name: topic.name,
+							prompt: topic.prompt,
+							visibility: topic.visibility,
+							owner: topic.owner,
+							teamLink: topic.teamLink,
+							image: topic.image,
+						},
 						isRatable: topic.canRate,
 						isBookmarkable: topic.isTopicOwner || topic.isTeamMember,
 						topicFeedHandlers,

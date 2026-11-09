@@ -1,10 +1,11 @@
-// a topic finding's note popover, with the link out, the finding's reactions, the preview, Carl's notes, the user's
-// buttons, the rating, its comment thread, and its flag
+// a topic finding's note popover, with the link out, the finding's reactions, the preview, Carl's notes, the topic
+// with its byline, the user's buttons, the rating, its comment thread, and its flag
 
 import type { Visibility } from "@carlnotes/contracts/enums"
 import type { TopicFinding } from "@carlnotes/contracts/findings"
 import type { PodcastEpisode } from "@carlnotes/contracts/podcast"
 import { toHostWithoutWww } from "@carlnotes/contracts/seo"
+import type { TopicFeed } from "@carlnotes/contracts/topics"
 import { useSubjectReportFlag } from "@carlnotes/core/hooks/useSubjectReport"
 import { isFindingRatedDown } from "@carlnotes/core/lib/topicFindingFilters"
 import { cn } from "@carlnotes/nightshift/classNames"
@@ -29,8 +30,9 @@ import { TOPIC_FINDING_TOGGLE_CLASS, TopicFindingControls } from "./TopicFinding
 import { TopicFindingDetails } from "./TopicFindingDetails"
 import { ResourceMetadata } from "./TopicFindingSummary"
 
-// the topic that the note popover's copied Markdown names, with its visibility
-export type TopicResourceInfoTopic = {
+// the topic that the note popover names and links to, with its visibility, and the team or owner its byline names
+// and the image its thumbnail shows where the caller has them
+export type TopicResourceInfoTopic = Partial<Pick<TopicFeed, "owner" | "teamLink" | "image">> & {
 	id: string
 	name: string
 	prompt: string
@@ -108,8 +110,8 @@ export function TopicResourceInfo({
 					<FindingChapterPill podcastEpisode={podcastEpisode} findingId={resource.findingId} />
 				</TopicFindingHeading>
 
-				{/* the link preview, Carl's notes, and the stats */}
-				<TopicFindingDetails resource={resource} topic={topic} />
+				{/* the link preview, Carl's notes, the topic with its byline, and the stats */}
+				<TopicFindingDetails resource={resource} topic={topic} podcastEpisode={podcastEpisode} />
 				{/* the bookmark, read, and rating buttons, only shown to a signed-in user */}
 				{isSignedIn && (
 					<TopicFindingControls
@@ -122,7 +124,7 @@ export function TopicResourceInfo({
 
 				{/* the finding's comments, which load as the popover opens */}
 				{isSocialShown && (
-					<div className="-mt-3">
+					<div className="-mt-2">
 						<SocialSection
 							target={findingTarget}
 							isSignedIn={isSignedIn}
@@ -146,7 +148,7 @@ function FindingReportButton({ findingId, subjectLabel }: { findingId: string; s
 	const reportFlag = useSubjectReportFlag({ subjectKind: "finding", subjectId: findingId })
 	return (
 		<>
-			<button type="button" onClick={reportFlag.press} className={cn(TOPIC_FINDING_TOGGLE_CLASS, "-mt-1")}>
+			<button type="button" onClick={reportFlag.press} className={cn(TOPIC_FINDING_TOGGLE_CLASS, "-mt-2")}>
 				<Flag className={cn("size-4", reportFlag.isReported && ACTIVE_ICON_CLASS)} />
 				{reportFlag.label}
 			</button>

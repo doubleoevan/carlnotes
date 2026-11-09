@@ -1,7 +1,7 @@
 // the routes for a listener's podcast feed url and its reset, a podcast episode's files at paths after a feed token,
 // and the podcast covers
 
-import { PODCAST_COVER_SIZES, type PodcastCover } from "@carlnotes/contracts/podcastEpisodes"
+import { PODCAST_COVER_SIZES, type PodcastCover, toPodcastEpisodeCover } from "@carlnotes/contracts/podcastEpisodes"
 import { db } from "@carlnotes/db"
 import { podcastEpisodeListens, podcastEpisodes } from "@carlnotes/db/schema/podcast"
 import { topics } from "@carlnotes/db/schema/topics"
@@ -11,7 +11,7 @@ import { eq, sql } from "drizzle-orm"
 import { Hono } from "hono"
 import { countPodcastEpisodeListen, toRequestSender } from "../counts/viewerCounts"
 import { type AppEnv, currentUser, toAnalyticsProperties } from "../currentUser"
-import { PRIVATE_NO_STORE_CACHE_CONTROL, toVersionedImageHeaders } from "../edgeCache"
+import { PRIVATE_IMAGE_HEADERS, PRIVATE_NO_STORE_CACHE_CONTROL, toVersionedImageHeaders } from "../edgeCache"
 import { toCachedPodcastCoverJpeg } from "../share/podcastCover"
 import {
 	toPodcastEpisodeAudioResponse,
@@ -23,9 +23,6 @@ import { deletePodcastFeedToken, loadOrCreatePodcastFeedUrl, loadPodcastFeedToke
 
 // a cover's file name, made of its key and its size
 const PODCAST_COVER_FILE_NAME_PATTERN = /^([0-9a-f]{32})-(\d+)\.jpg$/
-
-// a private or invite Topic's cover is cached by the browser alone, at a url that changes with its title
-const PRIVATE_PODCAST_COVER_HEADERS = { "Cache-Control": "private, max-age=31536000, immutable" }
 
 // the kind of cover that a url names, and the id of its Topic or its podcast episode
 type LoadPodcastCoverOptions = { kind: string; id: string }
@@ -40,13 +37,29 @@ async function loadPodcastCover({
 	// a show cover's id names its Topic
 	if (kind === "show") {
 		const [topic] = await db.select().from(topics).where(eq(topics.id, id))
-		const podcastCover = { kind: "show" as const, id, title: topic?.name ?? "" }
+		const podcastCover = {
+			kind: "show" as const,
+			id,
+			title: topic?.name ?? "",
+			topicId: id,
+			topicImageHash: topic?.imageHash ?? null,
+		}
 		return topic ? { podcastCover, isPublic: topic.visibility === "public" } : null
 	}
 
 	// a podcast episode cover's id names a podcast episode
 	const [podcastEpisodeRow] = await db
-		.select({ title: podcastEpisodes.title, status: podcastEpisodes.status, visibility: topics.visibility })
+		.select({
+			title: podcastEpisodes.title,
+			status: podcastEpisodes.status,
+			season: podcastEpisodes.season,
+			episodeNumber: podcastEpisodes.episodeNumber,
+			imageHash: podcastEpisodes.imageHash,
+			visibility: topics.visibility,
+			topicId: topics.id,
+			topicName: topics.name,
+			topicImageHash: topics.imageHash,
+		})
 		.from(podcastEpisodes)
 		.innerJoin(topics, eq(podcastEpisodes.topicId, topics.id))
 		.where(eq(podcastEpisodes.id, id))
@@ -55,7 +68,11 @@ async function loadPodcastCover({
 	if (kind !== "episode" || !podcastEpisodeRow?.title || podcastEpisodeRow.status === "removed") {
 		return null
 	}
-	const podcastCover = { kind: "episode" as const, id, title: podcastEpisodeRow.title }
+	const { title, topicId, topicName, topicImageHash } = podcastEpisodeRow
+	const podcastCover = toPodcastEpisodeCover(
+		{ ...podcastEpisodeRow, id, title },
+		{ id: topicId, name: topicName, imageHash: topicImageHash },
+	)
 	return { podcastCover, isPublic: podcastEpisodeRow.visibility === "public" }
 }
 
@@ -171,6 +188,6 @@ export const podcastFeedsRoute = new Hono<AppEnv>()
 		const coverJpeg = await toCachedPodcastCoverJpeg(loadPodcastCoverResult.podcastCover, podcastCoverSize)
 		return context.body(coverJpeg as unknown as ArrayBuffer, 200, {
 			"Content-Type": "image/jpeg",
-			...(loadPodcastCoverResult.isPublic ? toVersionedImageHeaders(true) : PRIVATE_PODCAST_COVER_HEADERS),
+			...(loadPodcastCoverResult.isPublic ? toVersionedImageHeaders(true) : PRIVATE_IMAGE_HEADERS),
 		})
 	})

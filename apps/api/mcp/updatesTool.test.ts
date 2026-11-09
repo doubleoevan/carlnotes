@@ -32,7 +32,7 @@ const UPDATES_RESULT: BuiltUpdates = {
 	opener: "Carl's line.",
 	findings: [FINDING],
 	moreCount: 12,
-	morePath: "/",
+	morePath: "/topics",
 	topics: [
 		{ id: "topic-1", name: "Espresso", prompt: "Grinders", visibility: "public", canRate: true, canBookmark: true },
 	],

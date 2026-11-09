@@ -1,10 +1,12 @@
 // what list_topics returns: the topics a tool caller may read, each with a prompt preview and its ready sources
 
+import { type TopicImageUrls, toAbsoluteTopicImageUrls, toTopicImageUrlsOrNull } from "@carlnotes/contracts/topicImages"
 import { db, isPublicAndShown } from "@carlnotes/db"
 import { isReadySharedSource } from "@carlnotes/db/contentFilters"
 import { teamMembers } from "@carlnotes/db/schema/teams"
 import { teamTopics } from "@carlnotes/db/schema/teamTopics"
 import { sources, subscriptions, topics } from "@carlnotes/db/schema/topics"
+import { appUrl } from "@carlnotes/server/appUrl"
 import { and, desc, eq, inArray, or } from "drizzle-orm"
 import { toTopicSourceLabel } from "../tool/topicSourceTools"
 import { toTopicAccessFilter } from "../topic/permissions"
@@ -23,6 +25,8 @@ export type McpTopic = {
 	visibility: string
 	frequency: string
 	subscriberCount: number
+	// the topic's image at every size, null until its first render lands
+	image: TopicImageUrls | null
 	// the topic's ready sources
 	sources: { sourceId: string; label: string }[]
 }
@@ -35,6 +39,7 @@ const topicColumns = {
 	visibility: topics.visibility,
 	frequency: topics.frequency,
 	subscriberCount: topics.subscriberCount,
+	imageHash: topics.imageHash,
 }
 
 /**
@@ -112,11 +117,12 @@ async function loadUserTopicRows(userId: string): Promise<McpTopicRow[]> {
 // a topic row with the columns a list reads
 type McpTopicRow = Pick<
 	typeof topics.$inferSelect,
-	"id" | "name" | "prompt" | "visibility" | "frequency" | "subscriberCount"
+	"id" | "name" | "prompt" | "visibility" | "frequency" | "subscriberCount" | "imageHash"
 >
 
-// shape a topic for the list, with its prompt clipped to a preview and its ready sources
+// shape a topic for the list, with its prompt clipped to a preview, its image at absolute urls, and its ready sources
 function toMcpTopic(topicRow: McpTopicRow, topicSources: McpTopic["sources"]): McpTopic {
+	const image = toTopicImageUrlsOrNull(topicRow.id, topicRow.imageHash)
 	return {
 		topicId: topicRow.id,
 		name: topicRow.name,
@@ -124,6 +130,7 @@ function toMcpTopic(topicRow: McpTopicRow, topicSources: McpTopic["sources"]): M
 		visibility: topicRow.visibility,
 		frequency: topicRow.frequency,
 		subscriberCount: topicRow.subscriberCount,
+		image: image && toAbsoluteTopicImageUrls(image, appUrl()),
 		sources: topicSources,
 	}
 }

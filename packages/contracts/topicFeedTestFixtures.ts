@@ -68,6 +68,7 @@ export function toTestTopicFeed(overrides: Partial<TopicFeed> = {}): TopicFeed {
 		sources: [],
 		findings: [toTestTopicFinding()],
 		latestPodcastEpisode: null,
+		image: null,
 		viewerCount: 4,
 		feedUpdatedAt: FOUND_AT,
 		...overrides,
@@ -127,6 +128,8 @@ export function toTestTopicResponse(overrides: Partial<TopicResponse> = {}): Top
 		featureOrder: null,
 		featuredTopics: null,
 		relatedTopics: [],
+		imageRegenerationQuota: null,
+		imageOrigin: null,
 		...overrides,
 	}
 }

@@ -3,13 +3,20 @@
 import { toTopicPath } from "@carlnotes/contracts/seo"
 import { type DbHandle, db } from "@carlnotes/db"
 import { chatRoomAttachments } from "@carlnotes/db/schema/chat"
+import { podcastEpisodes } from "@carlnotes/db/schema/podcast"
+import { topicImages } from "@carlnotes/db/schema/topicImages"
 import { attachments, topics } from "@carlnotes/db/schema/topics"
 import { deleteStoredObjects, recordPendingObjectDeletions, toStoredObjectKeys } from "@carlnotes/db/store"
 import { notifyIndexNow } from "@carlnotes/pipeline/indexNow"
 import { loadTopicPodcastEpisodeAudioKeys } from "@carlnotes/pipeline/podcast/removePodcastEpisode"
+import {
+	toPodcastEpisodeImageObjectKeys,
+	toTopicImageObjectKeys,
+} from "@carlnotes/pipeline/topicImages/topicImageFiles"
 import { trackEvent } from "@carlnotes/server/analytics"
 import { appUrl } from "@carlnotes/server/appUrl"
-import { eq } from "drizzle-orm"
+import { purgeEdgeCacheTagAfterDeletion, toTopicImageCacheTag } from "@carlnotes/server/edgePurge"
+import { and, eq, isNotNull } from "drizzle-orm"
 import { isAllowed } from "../authorization"
 import { loadChatAttachmentObjectKeys } from "../chat/chatAttachmentReads"
 import type { AnalyticsProperties } from "../currentUser"
@@ -45,9 +52,10 @@ export async function deleteTopic(
 	await clearVisitorTopicCaches({ topicId, visibility: topic.visibility, isFeatureOrderReleased })
 	await deleteStoredObjects(objectKeys)
 
-	// a deleted public topic's url is gone, so notify IndexNow to drop it
+	// a deleted public topic's url is gone, so notify IndexNow to drop it, and its image files leave the edge
 	if (topic.visibility === "public") {
 		void notifyIndexNow([`${appUrl()}${toTopicPath(topic)}`])
+		await purgeEdgeCacheTagAfterDeletion(toTopicImageCacheTag(topicId))
 	}
 
 	// record who deleted the topic. the row is gone, so this event is the only account of who deleted it
@@ -56,22 +64,37 @@ export async function deleteTopic(
 }
 
 // the keys of every stored object a topic holds: its attachments, its chat attachments, its chat rooms' shared files,
-// and its podcast episodes' audio and chapter audio
+// its podcast episodes' audio, chapter audio, and images, and its own image
 async function loadTopicObjectKeys(topicId: string, handle: DbHandle): Promise<string[]> {
-	const [attachmentRows, chatAttachmentObjectKeys, chatRoomAttachmentRows, podcastEpisodeObjectKeys] =
-		await Promise.all([
-			handle.select({ objectKey: attachments.objectKey }).from(attachments).where(eq(attachments.topicId, topicId)),
-			loadChatAttachmentObjectKeys({ topicId }, handle),
-			handle
-				.select({ objectKey: chatRoomAttachments.objectKey })
-				.from(chatRoomAttachments)
-				.where(eq(chatRoomAttachments.topicId, topicId)),
-			loadTopicPodcastEpisodeAudioKeys(topicId, handle),
-		])
+	const [
+		attachmentRows,
+		chatAttachmentObjectKeys,
+		chatRoomAttachmentRows,
+		podcastEpisodeObjectKeys,
+		podcastEpisodeImageRows,
+		topicImageRows,
+	] = await Promise.all([
+		handle.select({ objectKey: attachments.objectKey }).from(attachments).where(eq(attachments.topicId, topicId)),
+		loadChatAttachmentObjectKeys({ topicId }, handle),
+		handle
+			.select({ objectKey: chatRoomAttachments.objectKey })
+			.from(chatRoomAttachments)
+			.where(eq(chatRoomAttachments.topicId, topicId)),
+		loadTopicPodcastEpisodeAudioKeys(topicId, handle),
+		handle
+			.select({ id: podcastEpisodes.id, imageHash: podcastEpisodes.imageHash })
+			.from(podcastEpisodes)
+			.where(and(eq(podcastEpisodes.topicId, topicId), isNotNull(podcastEpisodes.imageHash))),
+		handle.select({ hash: topicImages.hash }).from(topicImages).where(eq(topicImages.topicId, topicId)),
+	])
 	return [
 		...toStoredObjectKeys(attachmentRows),
 		...chatAttachmentObjectKeys,
 		...toStoredObjectKeys(chatRoomAttachmentRows),
 		...podcastEpisodeObjectKeys,
+		...podcastEpisodeImageRows.flatMap((episodeRow) =>
+			episodeRow.imageHash ? toPodcastEpisodeImageObjectKeys(episodeRow.id, episodeRow.imageHash) : [],
+		),
+		...topicImageRows.flatMap((imageRow) => toTopicImageObjectKeys(topicId, imageRow.hash)),
 	]
 }

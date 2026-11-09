@@ -1,4 +1,4 @@
-// the documents served beside the pages, and the redirects from the old /pricing and /topics paths.
+// the documents served beside the pages, and the redirect from the old /pricing path.
 // the documents are the feeds, the sitemap, the llms files, the IndexNow key, and security.txt
 
 import { toAppleAppSiteAssociation, toAssetLinks } from "@carlnotes/contracts/appLinkPaths"
@@ -101,9 +101,8 @@ export const documentsRoute = new Hono<AppEnv>()
 		const routeHeaders = { ...NOINDEX_HEADER, "Cache-Control": PRIVATE_NO_STORE_CACHE_CONTROL }
 		return toPodcastFeedResponse({ context, renderedPodcastFeed, routeHeaders })
 	})
-	// the permanent redirects from the plans page's old path and the old topics index
+	// the permanent redirect from the plans page's old path
 	.get("/pricing", (context) => context.redirect("/plans", 301))
-	.get("/topics", (context) => context.redirect("/", 301))
 	// the llms.txt index of the site, its docs and blog, the most recently changed public topics,
 	// and the newest podcast episodes of the public topics
 	.get("/llms.txt", async (context) => {

@@ -192,8 +192,8 @@ export function maxSpokenAnswerDollars(textLength: number): number {
  * Sorts a failed model call into a spent key budget, a failure that another attempt can fix, or a rejection.
  */
 export function toModelCallFailure(httpStatus: number, errorBody: string): ModelCallFailure {
-	// LiteLLM names a spent key budget in the body, on a 429 or a 400
-	const reason = errorBody.slice(0, 500)
+	// LiteLLM names a spent key budget in the body, on a 429 or a 400. mask a key that the body echoes
+	const reason = errorBody.replace(/sk-[A-Za-z0-9_-]+/g, "sk-…").slice(0, 500)
 	if (errorBody.includes("budget_exceeded") || errorBody.includes("Budget has been exceeded")) {
 		return { outcome: "budget-spent", reason }
 	}

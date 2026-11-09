@@ -11,6 +11,7 @@ import {
 import type { SearchResultsPage } from "@carlnotes/contracts/search"
 import type { ReactionSummary } from "@carlnotes/contracts/social"
 import type { TopicFeedResponse } from "@carlnotes/contracts/topics"
+import type { UpdatesResponse } from "@carlnotes/contracts/updates"
 import {
 	type InfiniteData,
 	onlineManager,
@@ -25,8 +26,10 @@ import {
 	applySearchFindingChanges,
 	applyTopicFeedChanges,
 	applyTopicPageChanges,
+	applyUpdatesFindingChanges,
 	type TopicFindingChange,
 } from "../lib/topicFindingChanges"
+import { UPDATES_QUERY_KEY } from "./useUpdates"
 
 // the handlers existing feed components share
 export type TopicFeedHandlers = {
@@ -210,5 +213,10 @@ function writeFindingChange({ queryClient, userId, change }: CommitFindingChange
 		page?.status === "visible"
 			? { ...page, podcastEpisodePage: applyPodcastEpisodePageChanges(page.podcastEpisodePage, [change]) }
 			: page,
+	)
+
+	// keep the change in a cached updates list with no new read
+	queryClient.setQueriesData<UpdatesResponse>({ queryKey: [UPDATES_QUERY_KEY, userId] }, (updates) =>
+		updates ? applyUpdatesFindingChanges(updates, [change]) : undefined,
 	)
 }

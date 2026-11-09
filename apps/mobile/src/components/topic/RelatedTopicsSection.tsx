@@ -19,7 +19,6 @@ export function RelatedTopicsSection({ relatedTopics }: Pick<TopicResponse, "rel
 	const { pageRows, sort, pagination } = usePaginatedRowSort({
 		rows: relatedTopics,
 		valueByKey: topicSortValues,
-		initialPageSize: 5,
 	})
 	const hasPagination = relatedTopics.length > PAGE_SIZES[0]
 	if (relatedTopics.length === 0) {

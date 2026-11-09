@@ -69,8 +69,10 @@ function toMatchRow(podcastEpisodeId: string, distance?: number): unknown[] {
 		600,
 		4,
 		"2026-01-01T00:00:00Z",
+		null,
 		"Agents",
 		"public",
+		null,
 	]
 	return distance === undefined ? matchFields : [...matchFields, distance]
 }

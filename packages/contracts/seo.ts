@@ -78,6 +78,23 @@ export function toWebSiteLd(appUrl: string): object {
 }
 
 /**
+ * Builds the home page's ItemList schema of the featured topics, each at its position with its name and url.
+ */
+export function toFeaturedTopicsItemListLd(appUrl: string, featuredTopics: { name: string; path: string }[]): object {
+	return {
+		"@context": "https://schema.org",
+		"@type": "ItemList",
+		name: "Featured topics",
+		itemListElement: featuredTopics.map((featuredTopic, index) => ({
+			"@type": "ListItem",
+			position: index + 1,
+			name: featuredTopic.name,
+			url: `${appUrl}${featuredTopic.path}`,
+		})),
+	}
+}
+
+/**
  * Builds the site's SoftwareApplication schema, with one offer per plan.
  */
 export function toSoftwareApplicationLd(appUrl: string): object {
