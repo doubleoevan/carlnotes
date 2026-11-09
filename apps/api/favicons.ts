@@ -11,6 +11,7 @@ import { and, eq, inArray, isNotNull } from "drizzle-orm"
 import { Hono } from "hono"
 import { toContentSecurityPolicy } from "./contentSecurityPolicy"
 import type { AppEnv } from "./currentUser"
+import { NOINDEX_HEADER } from "./responseHeaders"
 import { toStoredFileHeaders } from "./topic/attachments"
 
 // a month. an icon that changes on its site shows up within it
@@ -111,5 +112,7 @@ export const faviconsRoute = new Hono<AppEnv>().get("/favicons/:host", async (co
 		"Content-Security-Policy": FAVICON_CONTENT_SECURITY_POLICY,
 		// only this origin's pages can embed an icon
 		"Cross-Origin-Resource-Policy": "same-origin",
+		// a search engine reads an svg icon as a page, so the icon stays out of the index
+		...NOINDEX_HEADER,
 	})
 })

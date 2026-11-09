@@ -18,7 +18,7 @@ test("toFaviconPath encodes the host as one path segment", () => {
 })
 
 // an icon opened as a page sets its own policy, which keeps a base url and a form on this origin like the default one
-test("a stored icon is served with a policy that keeps a base url and a form on this origin", async () => {
+test("a stored icon is served unindexed, with a policy that keeps a base url and a form on this origin", async () => {
 	// one stored icon row, with its object key and type, and its bytes read from a stub
 	stubConnectionPool(() => [["favicons/example.com", "image/png"]])
 	spyOn(store, "attachmentStream").mockReturnValue(new Blob(["icon"]).stream())
@@ -31,4 +31,7 @@ test("a stored icon is served with a policy that keeps a base url and a form on 
 	for (const policyDirective of BASELINE_POLICY_DIRECTIVES) {
 		expect(contentSecurityPolicy).toContain(policyDirective)
 	}
+
+	// the icon stays out of the search index
+	expect(response.headers.get("X-Robots-Tag")).toBe("noindex")
 })
