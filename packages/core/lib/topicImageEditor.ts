@@ -15,7 +15,6 @@ export const EDIT_IMAGE_DIALOG_TITLES: Record<TopicImageEditorSubjectKind, strin
 // the block's labels
 export const TOPIC_IMAGE_LABEL = "Image"
 export const REGENERATE_LABEL = "Regenerate"
-export const UPLOAD_LABEL = "Upload"
 export const UPLOAD_IMAGE_LABEL = "Upload an image"
 export const REMOVE_UPLOAD_LABEL = "Remove"
 /**

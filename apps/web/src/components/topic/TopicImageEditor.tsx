@@ -11,7 +11,7 @@ import {
 	UNREADABLE_IMAGE_TEXT,
 } from "@carlnotes/core/lib/imageUpload"
 import { cn } from "@carlnotes/nightshift/classNames"
-import { ImageUp, type LucideIcon, RefreshCw, X } from "lucide-react"
+import { type LucideIcon, RefreshCw, X } from "lucide-react"
 import { Button } from "@/components/primitives/button"
 import { Input } from "@/components/primitives/input"
 import { resizeImageFile } from "@/lib/imageResize"
@@ -23,7 +23,6 @@ export type { TopicImageEditorSubject } from "@carlnotes/core/components/TopicIm
 // each button's icon
 const BUTTON_ICONS: Record<TopicImageEditorButtonKind, LucideIcon> = {
 	regenerate: RefreshCw,
-	upload: ImageUp,
 	remove: X,
 }
 

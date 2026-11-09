@@ -531,12 +531,13 @@ its 2x file.
 - **WHEN** a user opens the Topics tab
 - **THEN** they see the sections the Home tab showed before, each row with its image
 
-### Requirement: The editor regenerates and uploads from the photo library
+### Requirement: The editor regenerates, and uploads from a tap on the image
 
-The mobile topic editor SHALL show the Topic's image with Regenerate and Upload, the latter and a press on the
-image from the photo library, with the same count, the same absent control at the limit, and the server's center crop.
+The mobile topic editor SHALL show the Topic's image with Regenerate, and a tap on the image SHALL upload from the photo
+library, with no separate Upload button, the same count, the same absent control at the limit, and the server's center
+crop.
 
 #### Scenario: An owner uploads a photo
 
-- **WHEN** an owner picks a tall photo from the library
+- **WHEN** an owner taps the image and picks a tall photo from the library
 - **THEN** the stored image is the center 3:2 of it and the editor shows it

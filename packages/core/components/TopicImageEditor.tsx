@@ -1,7 +1,6 @@
 // the editor's image block, shared by both apps: a topic's or a podcast episode's image, which a click or tap uploads
-// over, Regenerate
-// from an image prompt while the month has regenerations left, Upload with the month's regeneration count beside it, and
-// Remove for an upload. The platform supplies the layout, the input, the buttons, and the file picker
+// over, Regenerate from an image prompt while the month has regenerations left, and Remove for an upload with the
+// month's regeneration count beside it. The platform supplies the layout, the input, the buttons, and the file picker
 
 import { showClientError } from "@carlnotes/client/apiClient"
 import {
@@ -29,7 +28,6 @@ import {
 	toRegenerationCountLabel,
 	toUploadRejection,
 	UPLOAD_IMAGE_LABEL,
-	UPLOAD_LABEL,
 } from "../lib/topicImageEditor"
 import type { TopicImageProps } from "./TopicImage"
 
@@ -59,7 +57,7 @@ const IMAGE_WRITES = {
 export type PickedTopicImage = { body: FormData; size: number; type: string }
 
 // the block's buttons: what each one does, which the platform draws with its icon
-export type TopicImageEditorButtonKind = "regenerate" | "upload" | "remove"
+export type TopicImageEditorButtonKind = "regenerate" | "remove"
 
 // the platform's elements: the layout with the image above its controls, the image prompt row, the action row with a
 // line at its end, a line of text, the image with its upload control, pulsing without its picture while a render runs,
@@ -189,13 +187,14 @@ export function TopicImageEditor({
 			)}
 			{/* the render under way */}
 			{isRendering && <Line>{TOPIC_IMAGE_RENDERING_TEXT}</Line>}
-			{/* the upload and the removal of one, with the month's regeneration count at the row's end */}
-			<Actions end={regenerationQuota && <Line>{toRegenerationCountLabel(regenerationQuota)}</Line>}>
-				<Button label={UPLOAD_LABEL} kind="upload" isDisabled={isBusy} onPress={handleUpload} />
-				{imageOrigin === "uploaded" && (
-					<Button label={REMOVE_UPLOAD_LABEL} kind="remove" isDisabled={isBusy} onPress={handleRemove} />
-				)}
-			</Actions>
+			{/* the removal of an upload, with the month's regeneration count at the row's end, left out with neither */}
+			{(imageOrigin === "uploaded" || regenerationQuota) && (
+				<Actions end={regenerationQuota && <Line>{toRegenerationCountLabel(regenerationQuota)}</Line>}>
+					{imageOrigin === "uploaded" && (
+						<Button label={REMOVE_UPLOAD_LABEL} kind="remove" isDisabled={isBusy} onPress={handleRemove} />
+					)}
+				</Actions>
+			)}
 		</Layout>
 	)
 }

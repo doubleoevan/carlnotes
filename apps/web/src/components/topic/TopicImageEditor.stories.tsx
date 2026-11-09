@@ -50,12 +50,13 @@ export const Default: Story = {
 	},
 }
 
-// an upload offers Remove beside Upload, and a press on the image uploads too
+// an upload offers Remove, a press on the image uploads, and no Upload button repeats it
 export const Uploaded: Story = {
 	args: { subject: { ...TOPIC, imageOrigin: "uploaded", imagePrompt: null } },
 	play: async ({ canvas }) => {
 		await expect(canvas.getByRole("button", { name: "Remove" })).toBeVisible()
 		await expect(canvas.getByRole("button", { name: "Upload an image" })).toBeVisible()
+		await expect(canvas.queryByRole("button", { name: "Upload" })).toBeNull()
 	},
 }
 

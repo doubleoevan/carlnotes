@@ -297,7 +297,8 @@ save on their own, and the page SHALL show the new image after each change. Any 
 #### Scenario: An editor opens the image dialog
 
 - **WHEN** a Topic's editor hovers the Topic page's image and clicks it
-- **THEN** the Edit topic image dialog opens with Regenerate, Upload, and the month's regeneration count
+- **THEN** the Edit topic image dialog opens with the image, which uploads on a click, Regenerate, and the month's
+  regeneration count
 
 #### Scenario: A follower sees no camera
 

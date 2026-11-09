@@ -7,7 +7,7 @@ import {
 	type TopicImageEditorProps,
 } from "@carlnotes/core/components/TopicImageEditor"
 import { toCurrentChatAccountGuard } from "@carlnotes/core/stores/chatConversationStore"
-import { ImageUp, type LucideIcon, RefreshCw, X } from "lucide-react-native"
+import { type LucideIcon, RefreshCw, X } from "lucide-react-native"
 import { type RefObject, useEffect, useRef } from "react"
 import { View } from "react-native"
 import { useFilePicker } from "@/components/common/FilePickerMenu"
@@ -25,7 +25,6 @@ const TOPIC_IMAGE_ACCEPT = ["image/*"]
 // each button's icon
 const BUTTON_ICONS: Record<TopicImageEditorButtonKind, LucideIcon> = {
 	regenerate: RefreshCw,
-	upload: ImageUp,
 	remove: X,
 }
 

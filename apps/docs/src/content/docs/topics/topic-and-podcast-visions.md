@@ -48,9 +48,9 @@ waits on the image.
 
 A topic's editor can change the topic's image and each of its podcast episodes' images. On a topic's page or a podcast
 episode's page, hover over the image until a camera shows, and click it. **Edit topic image** or **Edit podcast image**
-opens with the image, **Regenerate**, and **Upload**. On a phone, the camera shows in the image's corner, so tap the
-image. The same image section is also in **Edit topic**, and in **Edit podcast**, which a podcast episode page's **⋮**
-actions menu opens.
+opens with the image and **Regenerate**. Click the image there to upload your own. On a phone, the camera shows in the
+image's corner, so tap the image. The same image section is also in **Edit topic**, and in **Edit podcast**, which a
+podcast episode page's **⋮** actions menu opens.
 
 Each change saves on its own, and the page shows the new image once it is in place.
 
@@ -65,17 +65,16 @@ one everywhere, including the show cover for a topic's image.
 ![The Image section of Edit topic: the topic's image, the Image prompt field, and the Regenerate
 button](../../../assets/screenshots/topic-image-editor.png)
 
-Each plan has a monthly limit of regenerations, shared by a topic's image and its podcast episodes' images, shown beside
-the Upload button as "X of Y used this month". The button is gone once the month's limit is reached, and returns on the
-1st. The limits are on the [plans page](/docs/account/plans-and-limits/).
+Each plan has a monthly limit of regenerations, shared by a topic's image and its podcast episodes' images, shown under
+the image prompt as "X of Y used this month". **Regenerate** is gone once the month's limit is reached, and returns on
+the 1st. The limits are on the [plans page](/docs/account/plans-and-limits/).
 
 ## Upload
 
-Press **Upload**, or the image itself, and pick a photo. A large photo, or an iPhone's HEIC, is shrunk and converted
-before it uploads. The image is cropped to 3:2
-from its center, its metadata is stripped, and it is checked for sexual, violent, and hateful content before it
-replaces the drawn image. **Remove** takes an upload away and
-draws a fresh image in its place, which counts as one of the month's regenerations.
+Click the image, or tap it on a phone, and pick a photo. A large photo, or an iPhone's HEIC, is shrunk and converted
+before it uploads. The image is cropped to 3:2 from its center, its metadata is stripped, and it is checked for sexual,
+violent, and hateful content before it replaces the drawn image. **Remove** takes an upload away and draws a fresh image
+in its place, which counts as one of the month's regenerations.
 
 ## Private topics
 
