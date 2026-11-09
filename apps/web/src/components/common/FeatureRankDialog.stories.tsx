@@ -33,7 +33,7 @@ type Story = StoryObj<typeof meta>
 export const Default: Story = {
 	play: async () => {
 		const dialog = within(await screen.findByRole("dialog"))
-		await expect(dialog.getByRole("button", { name: "Sourdough" })).toHaveAttribute("aria-pressed", "true")
+		await expect(dialog.getByRole("button", { name: "4 Sourdough" })).toHaveAttribute("aria-pressed", "true")
 		await expect(dialog.getByRole("button", { name: "Save" })).toBeDisabled()
 	},
 }
@@ -48,12 +48,15 @@ export const Episodes: Story = {
 	},
 }
 
-// dropping a row enables Save, which sends the clear and the kept order top to bottom
+// dropping a row enables Save, which asks for confirmation, then sends the clear and the kept order top to bottom
 export const Dropped: Story = {
 	play: async ({ userEvent, args }) => {
 		const dialog = within(await screen.findByRole("dialog"))
 		await userEvent.click(dialog.getByRole("button", { name: "Remove City cycling from the featured topics" }))
 		await userEvent.click(dialog.getByRole("button", { name: "Save" }))
+		// a dropped row asks for confirmation before the save goes out
+		const confirmDialog = within(await screen.findByRole("dialog", { name: "Remove from featured topics?" }))
+		await userEvent.click(confirmDialog.getByRole("button", { name: "Remove" }))
 		await expect(args.onSave).toHaveBeenCalledWith([
 			{ id: "topic-city-cycling", position: 0 },
 			{ id: "topic-llm-tooling", position: 1 },

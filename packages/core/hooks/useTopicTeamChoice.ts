@@ -30,7 +30,9 @@ export type TopicTeamField = {
 	setIsNewTeamPublic: (value: boolean) => void
 	pendingInvites: PendingInvite[]
 	setPendingInvites: (invites: PendingInvite[]) => void
-	// whether the save may go ahead, the write after it, and the load state
+	// whether a team the user doesn't lead already holds the topic, whether the save may go ahead, the write after it,
+	// and the load state
+	isHeldElsewhere: boolean
 	isTeamChosen: boolean
 	assignTopicTeam: (topicId: string) => Promise<void>
 	loadError: string | null
@@ -109,11 +111,10 @@ export function useTopicTeamChoice(
 	const isNewTeamSelected = selectedTeamIds.includes(NEW_TEAM_CHOICE)
 
 	// a non-private topic must land on a team: a led one selected, a new one named, or one held where the user can't manage
+	const isHeldElsewhere = teams !== null && isTopicHeldElsewhere(topic, teams)
 	const isTeamChosen =
 		teams !== null &&
-		(selectedRealTeamIds.length > 0 ||
-			isTopicHeldElsewhere(topic, teams) ||
-			(isNewTeamSelected && newTeamName.trim() !== ""))
+		(selectedRealTeamIds.length > 0 || isHeldElsewhere || (isNewTeamSelected && newTeamName.trim() !== ""))
 
 	// apply the selection once the topic is saved: create the named team, add the newly picked, drop the unpicked
 	const assignTopicTeam = async (topicId: string): Promise<void> => {
@@ -204,6 +205,7 @@ export function useTopicTeamChoice(
 		setIsNewTeamPublic,
 		pendingInvites,
 		setPendingInvites,
+		isHeldElsewhere,
 		isTeamChosen,
 		assignTopicTeam,
 	}

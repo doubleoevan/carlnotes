@@ -70,8 +70,9 @@ export function EditTopicModal({
 	// the id a failed Save already created, which the retry updates
 	const createdTopicIdRef = useRef<string | null>(null)
 
-	// a topic that is not private lives on a team
-	const isTeamMissing = fields.visibility !== "private" && !topicTeam.isTeamChosen
+	// a topic that is not private lives on a team, which the user picks unless a team they don't lead already holds it
+	const isTeamRequired = fields.visibility !== "private" && !topicTeam.isHeldElsewhere
+	const isTeamMissing = isTeamRequired && !topicTeam.isTeamChosen
 
 	// the required field the last save click found empty. the mark clears as soon as it is filled
 	const [missingField, setMissingField] = useState<"name" | "prompt" | "team" | null>(null)
@@ -225,7 +226,11 @@ export function EditTopicModal({
 				{/* topic team and invite section. both are hidden for a private topic. */}
 				{fields.visibility !== "private" && (
 					<div ref={teamFieldRef} className="border-y py-4">
-						<TopicTeamSelect teamField={topicTeam} isTeamMissing={missingField === "team" && isTeamMissing} />
+						<TopicTeamSelect
+							teamField={topicTeam}
+							isTeamRequired={isTeamRequired}
+							isTeamMissing={missingField === "team" && isTeamMissing}
+						/>
 						<div className="bg-border my-4 h-px" />
 
 						{/* a topic that was never saved has no id, so it gets the invites without the link */}

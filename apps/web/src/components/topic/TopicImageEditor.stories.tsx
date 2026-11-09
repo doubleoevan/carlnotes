@@ -35,10 +35,14 @@ export const Default: Story = {
 		mocked(fetchTopicImageRender).mockResolvedValue({ status: "pending", image: null })
 	},
 	play: async ({ canvas, args }) => {
-		await userEvent.type(canvas.getByLabelText("Image prompt"), "a rainy harbor at dusk")
+		// the field opens with the prompt that drew the current image, and a new one replaces it
+		const imagePromptInput = canvas.getByLabelText("Image prompt")
+		await expect(imagePromptInput).toHaveValue("a lighthouse in a storm, oil painting")
+		await userEvent.clear(imagePromptInput)
+		await userEvent.type(imagePromptInput, "a rainy harbor at dusk")
 		await canvas.getByRole("button", { name: "Regenerate" }).click()
 		await expect(mocked(sendTopicImageRegeneration)).toHaveBeenCalledWith("topic-1", "a rainy harbor at dusk")
-		await expect(canvas.getByText("4 of 15 used this month")).toBeVisible()
+		await expect(await canvas.findByText("4 of 15 used this month")).toBeVisible()
 		await expect(args.onImageChanged).toHaveBeenCalled()
 	},
 }
