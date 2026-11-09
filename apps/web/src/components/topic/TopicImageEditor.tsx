@@ -1,4 +1,3 @@
-import { TOPIC_IMAGE_UPLOAD_TYPES } from "@carlnotes/contracts/topicImages"
 import {
 	type PickedTopicImage,
 	TopicImageEditor as SharedTopicImageEditor,
@@ -6,11 +5,17 @@ import {
 	type TopicImageEditorElements,
 	type TopicImageEditorProps,
 } from "@carlnotes/core/components/TopicImageEditor"
+import {
+	MAX_ATTACHMENT_IMAGE_PIXELS,
+	PICKED_IMAGE_ACCEPT,
+	UNREADABLE_IMAGE_TEXT,
+} from "@carlnotes/core/lib/imageUpload"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { Camera, ImageUp, type LucideIcon, RefreshCw, X } from "lucide-react"
 import { Button } from "@/components/primitives/button"
 import { Input } from "@/components/primitives/input"
 import { TOPIC_IMAGE_FRAME_CLASS, TopicImage } from "@/components/primitives/topic-image"
+import { resizeImageFile } from "@/lib/imageResize"
 import { IMAGE_SKELETON_CLASS } from "@/lib/styleClasses"
 
 export type { TopicImageEditorTopic } from "@carlnotes/core/components/TopicImageEditor"
@@ -77,21 +82,31 @@ const ELEMENTS: TopicImageEditorElements = {
 	},
 }
 
-// the browser's file picker: a file input opened by a click, resolved with the picked file or null when it closes
+// the browser's file picker: a file input opened by a click, resolved with the picked file shrunk and re-encoded to a
+// jpeg or png the api takes, or null when it closes. a file the browser can't decode throws an error
 function pickImage(): Promise<PickedTopicImage | null> {
-	return new Promise((resolve) => {
+	return new Promise((resolve, reject) => {
 		const fileInput = document.createElement("input")
 		fileInput.type = "file"
-		fileInput.accept = TOPIC_IMAGE_UPLOAD_TYPES.join(",")
+		fileInput.accept = PICKED_IMAGE_ACCEPT
 		fileInput.onchange = () => {
 			const file = fileInput.files?.[0]
 			if (!file) {
 				resolve(null)
 				return
 			}
-			const body = new FormData()
-			body.append("image", file)
-			resolve({ body, size: file.size, type: file.type })
+			// a file that decodes but fails to re-encode, or doesn't decode at all, can't be read
+			void resizeImageFile(file, MAX_ATTACHMENT_IMAGE_PIXELS)
+				.catch(() => null)
+				.then((resizedFile) => {
+					if (!resizedFile) {
+						reject(new Error(UNREADABLE_IMAGE_TEXT))
+						return
+					}
+					const body = new FormData()
+					body.append("image", resizedFile)
+					resolve({ body, size: resizedFile.size, type: resizedFile.type })
+				})
 		}
 		fileInput.oncancel = () => resolve(null)
 		fileInput.click()

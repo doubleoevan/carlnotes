@@ -5,7 +5,13 @@ import { Camera } from "lucide-react"
 import { useState } from "react"
 import { UserAvatar } from "@/components/branding/UserAvatar"
 import { FileDropZone } from "@/components/common/FileDropZone"
-import { AVATAR_ACCEPT, AVATAR_REJECTIONS, AvatarDropOverlay, toDroppedImage, toUploadableAvatar } from "./AvatarUpload"
+import {
+	AVATAR_REJECTIONS,
+	AvatarDropOverlay,
+	PICKED_IMAGE_ACCEPT,
+	toDroppedImage,
+	toUploadableAvatar,
+} from "./AvatarUpload"
 
 /**
  * The signed-in user's own avatar with a camera overlay on hover. A click anywhere on the image opens
@@ -78,7 +84,7 @@ export function UserAvatarPicker({
 					</span>
 					<input
 						type="file"
-						accept={AVATAR_ACCEPT}
+						accept={PICKED_IMAGE_ACCEPT}
 						onChange={handleFileChange}
 						disabled={isUploading}
 						className="sr-only"

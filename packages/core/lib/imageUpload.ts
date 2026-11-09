@@ -3,8 +3,8 @@
 
 import { isModerationRejectionMessage } from "@carlnotes/contracts/moderation"
 
-// the file types an avatar chooser offers. heic and heif are what an iphone camera writes
-export const AVATAR_ACCEPT = "image/png,image/jpeg,image/webp,image/gif,image/heic,image/heif"
+// the file types an avatar or topic image picker offers. heic and heif are what an iphone camera writes
+export const PICKED_IMAGE_ACCEPT = "image/png,image/jpeg,image/webp,image/gif,image/heic,image/heif"
 
 // the longest edge a stored avatar keeps. an avatar renders at 64 pixels, and this leaves room for a retina screen
 export const MAX_AVATAR_PIXELS = 512

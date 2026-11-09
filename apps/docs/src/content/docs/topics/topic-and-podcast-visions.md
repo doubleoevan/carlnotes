@@ -61,7 +61,8 @@ is gone once the month's limit is reached, and returns on the 1st. The limits ar
 
 ## Upload
 
-Press **Upload**, or the image itself, and pick a JPEG, PNG, or WebP of 10 MB or less. The image is cropped to 3:2
+Press **Upload**, or the image itself, and pick a photo. A large photo, or an iPhone's HEIC, is shrunk and converted
+before it uploads. The image is cropped to 3:2
 from its center, its metadata is stripped, and it is checked for sexual, violent, and hateful content before it
 replaces the drawn image. **Remove** takes an upload away and
 draws a fresh image in its place, which counts as one of the month's regenerations.

@@ -5,7 +5,13 @@ import { Camera } from "lucide-react"
 import { toast } from "sonner"
 import { TeamAvatar } from "@/components/branding/TeamAvatar"
 import { FileDropZone } from "@/components/common/FileDropZone"
-import { AVATAR_ACCEPT, AVATAR_REJECTIONS, AvatarDropOverlay, toDroppedImage, toUploadableAvatar } from "./AvatarUpload"
+import {
+	AVATAR_REJECTIONS,
+	AvatarDropOverlay,
+	PICKED_IMAGE_ACCEPT,
+	toDroppedImage,
+	toUploadableAvatar,
+} from "./AvatarUpload"
 
 /**
  * Choose a team's image, by the file chooser or by dropping one on it. What happens to the chosen file
@@ -70,7 +76,7 @@ export function TeamAvatarPicker({
 				</span>
 				<input
 					type="file"
-					accept={AVATAR_ACCEPT}
+					accept={PICKED_IMAGE_ACCEPT}
 					onChange={handleFileChange}
 					disabled={isDisabled}
 					className="sr-only"

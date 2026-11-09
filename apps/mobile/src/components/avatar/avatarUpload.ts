@@ -1,5 +1,5 @@
 import { appendNativeFilePart } from "@carlnotes/client/apiClient"
-import { AVATAR_ACCEPT, AVATAR_JPEG_QUALITY, MAX_AVATAR_PIXELS } from "@carlnotes/core/lib/imageUpload"
+import { AVATAR_JPEG_QUALITY, MAX_AVATAR_PIXELS, PICKED_IMAGE_ACCEPT } from "@carlnotes/core/lib/imageUpload"
 import { toCurrentChatAccountGuard } from "@carlnotes/core/stores/chatConversationStore"
 import { useEffect, useRef } from "react"
 import { useFilePicker } from "@/components/common/FilePickerMenu"
@@ -30,7 +30,7 @@ export function useAvatarPicker({
 		[],
 	)
 	return useFilePicker({
-		accept: AVATAR_ACCEPT.split(","),
+		accept: PICKED_IMAGE_ACCEPT.split(","),
 		onPicked: async (pickedFiles) => {
 			// resize to the avatar edge for the account that picked it, or stop after the unreadable-image notice
 			const [avatarFile] = await toPreparedPickedFiles({
