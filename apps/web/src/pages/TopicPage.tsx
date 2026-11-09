@@ -34,7 +34,7 @@ import { TopicSkeleton } from "@/components/topic/TopicSkeleton"
 import { usePageTitle } from "@/hooks/usePageTitle"
 import { useRevealClassName } from "@/hooks/useRevealClassName"
 import { useTopicPagePayload } from "@/hooks/useTopicPagePayload"
-import { COUNTS_LINE_PAGE_CLASS } from "@/lib/styleClasses"
+import { PAGE_CLASS } from "@/lib/styleClasses"
 import { NEXT_SCAN_DISCLAIMER } from "@/lib/utils"
 import { captureVisitEvent, toPublicTopicProperties } from "@/lib/visitAnalytics"
 import { type TopicFeedHandlers, usePageTopicFeedHandlers, useTopicFeed } from "@/providers/TopicFeedProvider"
@@ -182,7 +182,7 @@ export function TopicPage() {
 	}
 
 	return (
-		<main className={COUNTS_LINE_PAGE_CLASS}>
+		<main className={PAGE_CLASS}>
 			<TopicActionBar
 				topic={topic}
 				isSignedIn={Boolean(session)}

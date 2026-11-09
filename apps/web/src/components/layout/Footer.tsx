@@ -4,6 +4,7 @@ import { useLocation } from "@tanstack/react-router"
 import type * as React from "react"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { STANDALONE_LINK_CLASS } from "@/lib/styleClasses"
+import { useIsPodcastPlayerShown } from "@/stores/podcastEpisodePlayerStore"
 
 // one centered row of footer items that wraps, with a readable gap between items
 const FOOTER_ROW_CLASS = "flex flex-wrap justify-center gap-x-6 gap-y-1"
@@ -17,14 +18,30 @@ export function Footer() {
 
 // semantic web elements preserve the existing footer spacing and active-link treatment
 const FOOTER_ELEMENTS: FooterElements = {
-	Root: ({ children }) => (
-		<footer className="text-muted-foreground mx-auto max-w-5xl px-safe py-6 text-center text-sm">{children}</footer>
-	),
+	Root: FooterRoot,
 	Legal: ({ children }) => <div className="mt-3 space-y-1.5">{children}</div>,
 	Row: ({ children }) => <div className={FOOTER_ROW_CLASS}>{children}</div>,
 	Text: ({ children }) => <span>{children}</span>,
 	Closing: ({ children }) => <p className="mt-2">{children}</p>,
 	Link: FooterLink,
+}
+
+// the footer, with room below its links for the Coffee Talk button, and for the podcast player under it while a podcast
+// episode is loaded
+function FooterRoot({ children }: { children: React.ReactNode }) {
+	const isPodcastPlayerShown = useIsPodcastPlayerShown()
+	return (
+		<footer
+			className={cn(
+				"text-muted-foreground mx-auto max-w-5xl px-safe pt-6 text-center text-sm",
+				isPodcastPlayerShown
+					? "pb-[calc(9.5rem+env(safe-area-inset-bottom))]"
+					: "pb-[calc(4.5rem+env(safe-area-inset-bottom))]",
+			)}
+		>
+			{children}
+		</footer>
+	)
 }
 
 // a footer link, underlined while its page is the one open. an external url never matches the open page

@@ -506,8 +506,4 @@ export const SUBTABLE_CARD_CLASS = "bg-sunken mb-0 shadow-none"
  * The muted counts line at the bottom of the topic and podcast episode pages, spaced apart and at a fixed height while
  * the counts load.
  */
-export const COUNTS_LINE_CLASS = "text-muted-foreground mt-9 flex h-5 items-center justify-center gap-8 text-sm"
-
-// the page shell for a page that ends in the counts line, with no bottom padding, so the space from the counts line
-// to the footer text matches the space above it
-export const COUNTS_LINE_PAGE_CLASS = "mx-auto max-w-5xl px-safe pt-3"
+export const COUNTS_LINE_CLASS = "text-muted-foreground mt-8 flex h-5 items-center justify-center gap-8 text-sm"

@@ -25,8 +25,9 @@ export function Layout() {
 				<div className="relative z-20 mx-auto -mt-6 max-w-5xl px-safe">
 					<SearchBar />
 				</div>
-				{/* the routed page above the steam. a page that suspends shows the loading mug here */}
-				<div className="relative z-10 min-h-dvh">
+				{/* the routed page above the steam. a page that suspends shows the loading mug here. the page sets its own height, so
+				    the footer sits the same distance below every page */}
+				<div className="relative z-10">
 					<Suspense fallback={<CoffeeLoading />}>
 						<Outlet />
 					</Suspense>
