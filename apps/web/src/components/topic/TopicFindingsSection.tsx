@@ -41,7 +41,7 @@ export function TopicFindingsSection({
 	latestPodcastEpisode,
 }: TopicFindingsSectionProps) {
 	return (
-		<CollapsibleSection value="findings" title="Topic findings" titleAside={newCountInfo} isFullWidth>
+		<CollapsibleSection value="findings" title="Topic findings" titleAside={newCountInfo} hasClosedDivider>
 			<TopicFindingList
 				topicFindings={topicFindings}
 				shouldRenderHiddenRows

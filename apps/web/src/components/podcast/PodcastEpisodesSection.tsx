@@ -9,10 +9,12 @@ import { PodcastEpisodeTitleLink } from "@/components/table/PodcastEpisodeTitleL
 import { SortableHeader } from "@/components/table/SortableHeader"
 import { TABLE_WIDE_FIRST_COLUMN_CLASS } from "@/lib/styleClasses"
 
-// the section's key and title, the title column's heading, and its podcast episodes with their descriptions
+// the section's key and title, whether a divider shows under it while closed, the title column's heading, and its
+// podcast episodes with their descriptions
 type PodcastEpisodesSectionProps = {
 	value: string
 	title: string
+	hasClosedDivider?: boolean
 	titleColumnLabel: string
 	podcastEpisodes: PodcastEpisodeSummary[]
 }
@@ -25,6 +27,7 @@ type PodcastEpisodesSectionProps = {
 export function PodcastEpisodesSection({
 	value,
 	title,
+	hasClosedDivider,
 	titleColumnLabel,
 	podcastEpisodes,
 }: PodcastEpisodesSectionProps) {
@@ -39,7 +42,7 @@ export function PodcastEpisodesSection({
 		<PagedTableSection
 			value={value}
 			title={title}
-			isFullWidth
+			hasClosedDivider={hasClosedDivider}
 			rows={podcastEpisodes}
 			rowSortValues={podcastEpisodeSortValues}
 			tableClassName="min-w-2xl"

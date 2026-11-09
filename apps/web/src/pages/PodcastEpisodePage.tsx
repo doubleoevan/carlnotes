@@ -183,7 +183,7 @@ export function PodcastEpisodePage() {
 			<CollapsibleSection
 				value="chapters"
 				title="Episode chapters"
-				isFullWidth
+				hasClosedDivider
 				className={cn(NARROW_SCREEN_HIDDEN_CLASS, "mt-2")}
 			>
 				<PodcastEpisodeChaptersTable podcastEpisode={podcastEpisode} chapterTopicFeed={chapterTopicFeed} />
@@ -197,10 +197,12 @@ export function PodcastEpisodePage() {
 				<PodcastEpisodeTranscript transcript={transcript} />
 			</section>
 
-			{/* the topic's other podcast episodes, then the nearest podcast episodes of other topics */}
+			{/* the topic's other podcast episodes, then the nearest podcast episodes of other topics. the page's last section
+			    has no divider under it */}
 			<PodcastEpisodesSection
 				value="topic-episodes"
 				title="Other episodes"
+				hasClosedDivider={relatedPodcastEpisodes.length > 0}
 				titleColumnLabel="Episode"
 				podcastEpisodes={topicPodcastEpisodes}
 			/>

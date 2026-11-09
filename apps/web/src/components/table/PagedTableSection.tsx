@@ -6,12 +6,12 @@ import type { RowSort, SortValue } from "./SortableHeader"
 import { TableCard } from "./TableCard"
 import { ScriptedTablePagination, toScriptedPaginationCardClass, usePaginatedRowSort } from "./TablePagination"
 
-// the section's key and title, whether it spans the page, its rows and each sortable column's value, the table's own
+// the section's key and title, whether a divider shows under it while closed, its rows and each sortable column's value, the table's own
 // classes, and how to render the column headings, a row's cells, and a row's key
 type PagedTableSectionProps<Row> = {
 	value: string
 	title: string
-	isFullWidth?: boolean
+	hasClosedDivider?: boolean
 	rows: Row[]
 	rowSortValues: Record<string, (row: Row) => SortValue>
 	tableClassName?: string
@@ -27,7 +27,7 @@ type PagedTableSectionProps<Row> = {
 export function PagedTableSection<Row>({
 	value,
 	title,
-	isFullWidth,
+	hasClosedDivider,
 	rows,
 	rowSortValues,
 	tableClassName,
@@ -45,7 +45,7 @@ export function PagedTableSection<Row>({
 		return null
 	}
 	return (
-		<CollapsibleSection value={value} title={title} isFullWidth={isFullWidth}>
+		<CollapsibleSection value={value} title={title} hasClosedDivider={hasClosedDivider}>
 			<TableCard className={toScriptedPaginationCardClass(rows.length)}>
 				<div className={TABLE_SCROLL_CLASS}>
 					<table className={cn(TABLE_CLASS, tableClassName)}>
