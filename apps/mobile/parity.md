@@ -213,7 +213,7 @@ their reason.
 | Teams | `teams/index.tsx` | component | the shared membership table and the title badge |
 | Team | `teams/[teamId].tsx` | component | the shared tables, the header's update badge |
 | Activity | `activity.tsx` | component | the shared subscription and invite tables, the title badge |
-| Brew News | `(tabs)/index.tsx`, `topic/UpdatesList.tsx`, `topic/UpdatesButton.tsx` | component | `UpdatesList` and `UpdatesButton` from core, the feed's `TopicResource` rows, a native sheet for the lengths |
+| Brews News | `(tabs)/index.tsx`, `topic/UpdatesList.tsx`, `topic/UpdatesButton.tsx` | component | `UpdatesList` and `UpdatesButton` from core, the feed's `TopicResource` rows, a native sheet for the lengths |
 | Account, Settings | `account.tsx`, `(tabs)/settings.tsx` | component | `AccountBudget`, `AccountFields`, `UserBlocksSection`, `PlanCard` from core, and the Contact entry. The closing version line is native: a browser loads the current app on every visit, and an installed build names its version, build, and update for a support request |
 | Update notice | `session/AppUpdateNotice.tsx` at the root | logic | the copy from `contracts/appVersions.ts` and the requirement from `core/stores/appUpdateStore.ts` on the session frame. Native alone: a browser never runs an outdated app |
 | Report and block | `common/ReportIssueDialog.tsx` from the message and comment footers, note management, and the profile menu | component, logic | the shared report, the block switch, the hidden quote, and the blocked content filters from core |
