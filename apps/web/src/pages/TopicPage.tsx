@@ -34,6 +34,7 @@ import { TopicSkeleton } from "@/components/topic/TopicSkeleton"
 import { usePageTitle } from "@/hooks/usePageTitle"
 import { useRevealClassName } from "@/hooks/useRevealClassName"
 import { useTopicPagePayload } from "@/hooks/useTopicPagePayload"
+import { COUNTS_LINE_PAGE_CLASS } from "@/lib/styleClasses"
 import { NEXT_SCAN_DISCLAIMER } from "@/lib/utils"
 import { captureVisitEvent, toPublicTopicProperties } from "@/lib/visitAnalytics"
 import { type TopicFeedHandlers, usePageTopicFeedHandlers, useTopicFeed } from "@/providers/TopicFeedProvider"
@@ -180,9 +181,8 @@ export function TopicPage() {
 		await reloadHomePage()
 	}
 
-	// the bottom padding clears the docked chat panel, so the last card can scroll out from under it
 	return (
-		<main className="mx-auto max-w-5xl px-safe pt-3 pb-28">
+		<main className={COUNTS_LINE_PAGE_CLASS}>
 			<TopicActionBar
 				topic={topic}
 				isSignedIn={Boolean(session)}

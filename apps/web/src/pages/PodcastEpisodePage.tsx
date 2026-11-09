@@ -32,7 +32,7 @@ import { NewTopicButton, useNewTopicDialog } from "@/components/topic/TopicEdito
 import { TopicGateNotice } from "@/components/topic/TopicGateNotice"
 import { useLoadInBrowser } from "@/hooks/useBrowserValue"
 import { usePageTitle } from "@/hooks/usePageTitle"
-import { MENU_BUTTON_CLASS, NARROW_SCREEN_HIDDEN_CLASS, PAGE_CLASS } from "@/lib/styleClasses"
+import { COUNTS_LINE_PAGE_CLASS, MENU_BUTTON_CLASS, NARROW_SCREEN_HIDDEN_CLASS, PAGE_CLASS } from "@/lib/styleClasses"
 import { usePageTopicFeedHandlers } from "@/providers/TopicFeedProvider"
 import { useRegisterPageActions } from "@/stores/pageActionsStore"
 
@@ -156,7 +156,7 @@ export function PodcastEpisodePage() {
 	}
 	const chapterTopicFeed = { topicFindings, topic, isRatable: canRate, isBookmarkable: false, topicFeedHandlers }
 	return (
-		<main className={PAGE_CLASS}>
+		<main className={COUNTS_LINE_PAGE_CLASS}>
 			{/* the Subscribe button on the left and the new topic button on the right */}
 			<div className="flex flex-wrap items-start justify-between gap-3">
 				<PodcastSubscribeButton onSubscribe={() => setIsPodcastFeedDialogOpen(true)} />
