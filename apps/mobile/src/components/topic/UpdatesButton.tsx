@@ -17,7 +17,7 @@ const UPDATES_BUTTON_ELEMENTS: UpdatesButtonElements = {
 		const triggerRef = useRef<ComponentRef<typeof View>>(null)
 		return (
 			<>
-				<Button ref={triggerRef} accessibilityLabel={label} onPress={() => onOpenChange(true)}>
+				<Button ref={triggerRef} variant="outline" accessibilityLabel={label} onPress={() => onOpenChange(true)}>
 					<Icon as={RotateCcwClock} className="size-4" />
 					<Text>{label}</Text>
 				</Button>

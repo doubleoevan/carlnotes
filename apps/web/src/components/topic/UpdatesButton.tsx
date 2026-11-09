@@ -6,19 +6,14 @@ import {
 import { cn } from "@carlnotes/nightshift/classNames"
 import { RotateCcwClock } from "lucide-react"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/primitives/popover"
-import {
-	MENU_BUTTON_CLASS,
-	MENU_BUTTON_HIGHLIGHT_CLASS,
-	MENU_OPTION_CLASS,
-	MENU_OPTION_SELECTED_CLASS,
-} from "@/lib/styleClasses"
+import { MENU_BUTTON_CLASS, MENU_OPTION_CLASS, MENU_OPTION_SELECTED_CLASS } from "@/lib/styleClasses"
 
 // the browser elements of the shared control: a popover of lengths, with the shown length highlighted
 const UPDATES_BUTTON_ELEMENTS: UpdatesButtonElements = {
 	Menu: ({ label, isOpen, onOpenChange, children }) => (
 		<Popover open={isOpen} onOpenChange={onOpenChange}>
 			<PopoverTrigger asChild>
-				<button type="button" className={cn(MENU_BUTTON_CLASS, MENU_BUTTON_HIGHLIGHT_CLASS)}>
+				<button type="button" className={MENU_BUTTON_CLASS}>
 					<RotateCcwClock className="size-4" />
 					{label}
 				</button>
