@@ -49,7 +49,7 @@ export async function renderTopicImageWorkflow({
 	try {
 		// the scene from the topic's own words, steered by the owner's image prompt, which takes the house style's place
 		const scene = await writeTopicImageSceneForRender({ renderId, imagePrompt })
-		await renderAndStoreTopicImage({ renderId, scene, isHouseStyle: !imagePrompt })
+		await renderAndStoreTopicImage({ renderId, scene, imagePrompt })
 	} catch (error) {
 		await failTopicImageRender(renderId, toWorkflowFailureReason(error))
 		throw error

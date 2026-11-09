@@ -31,6 +31,7 @@ function stubTopic(visibility: "public" | "private"): void {
 		origin: "generated",
 		scene: null,
 		model: null,
+		imagePrompt: null,
 		width: 1264,
 		height: 848,
 		createdAt: new Date(),

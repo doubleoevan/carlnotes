@@ -130,6 +130,7 @@ export function toTestTopicResponse(overrides: Partial<TopicResponse> = {}): Top
 		relatedTopics: [],
 		imageRegenerationQuota: null,
 		imageOrigin: null,
+		imagePrompt: null,
 		...overrides,
 	}
 }

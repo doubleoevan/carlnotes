@@ -26,10 +26,11 @@ import {
 } from "../lib/topicImageEditor"
 import type { TopicImageProps } from "./TopicImage"
 
-// what the block edits: the topic's image, its origin, and the editor's regenerations this month
+// what the block edits: the topic's image, its origin, the image prompt it was drawn from, and the editor's
+// regenerations this month
 export type TopicImageEditorTopic = Pick<
 	TopicResponse,
-	"id" | "name" | "image" | "imageOrigin" | "imageRegenerationQuota"
+	"id" | "name" | "image" | "imageOrigin" | "imagePrompt" | "imageRegenerationQuota"
 >
 
 // a picked image file as the platform's picker returns it: the multipart body with the file as its image field, and
@@ -82,7 +83,7 @@ export function TopicImageEditor({
 	pickImage: () => Promise<PickedTopicImage | null>
 }) {
 	const { image, isRendering, watchRender, replaceImage } = useTopicImageRender(topic.image)
-	const [imagePrompt, setImagePrompt] = useState("")
+	const [imagePrompt, setImagePrompt] = useState(topic.imagePrompt ?? "")
 	const [regenerationsUsed, setRegenerationsUsed] = useState(topic.imageRegenerationQuota?.used ?? 0)
 	const [imageOrigin, setImageOrigin] = useState(topic.imageOrigin)
 	const [isWriting, setIsWriting] = useState(false)
@@ -107,7 +108,6 @@ export function TopicImageEditor({
 		void runImageWrite(async () => {
 			watchRender(await sendTopicImageRegeneration(topic.id, imagePrompt.trim() || undefined))
 			setRegenerationsUsed((used) => used + 1)
-			setImagePrompt("")
 		})
 
 	// the picked file replaces the image at once after the upload check
@@ -123,6 +123,7 @@ export function TopicImageEditor({
 			}
 			replaceImage(await uploadTopicImageBody(topic.id, pickedImage.body))
 			setImageOrigin("uploaded")
+			setImagePrompt("")
 		})
 
 	// the upload goes, and a fresh render takes its place

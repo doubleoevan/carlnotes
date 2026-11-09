@@ -182,6 +182,7 @@ export async function loadTopicPage(
 				? { used: imageRegenerationQuota.used, limit: imageRegenerationQuota.limit }
 				: null,
 		imageOrigin: canEdit ? (topicImageForUser?.topicImage?.origin ?? null) : null,
+		imagePrompt: canEdit ? (topicImageForUser?.topicImage?.imagePrompt ?? null) : null,
 		findings: topicFindings,
 		invites: inviteRows,
 		manualScansRemaining,

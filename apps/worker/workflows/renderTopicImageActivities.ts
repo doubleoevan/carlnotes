@@ -68,17 +68,17 @@ export async function writeTopicImageSceneForRender({
 	}
 }
 
-// the render row, the scene it draws, and whether the house style follows the scene
-type RenderAndStoreTopicImageOptions = { renderId: string; scene: string; isHouseStyle: boolean }
+// the render row, the scene it draws, and the owner's image prompt, which replaces the house style
+type RenderAndStoreTopicImageOptions = { renderId: string; scene: string; imagePrompt?: string }
 
 /**
- * Draws the render's image from the scene, in the house style if asked, stores its original and sizes, and makes it the topic's
+ * Draws the render's image from the scene, in the house style unless the owner gave an image prompt, stores its original and sizes, and makes it the topic's
  * current image. A rejection or a spent budget fails for good, and anything else is worth another attempt.
  */
 export async function renderAndStoreTopicImage({
 	renderId,
 	scene,
-	isHouseStyle,
+	imagePrompt,
 }: RenderAndStoreTopicImageOptions): Promise<void> {
 	// a render that already succeeded, on a retried activity, has nothing left to do
 	const render = await loadTopicImageRenderOrThrow(renderId)
@@ -90,7 +90,7 @@ export async function renderAndStoreTopicImage({
 	const model = render.model ?? ""
 	const original = await renderTopicImageOriginal({
 		scene,
-		isHouseStyle,
+		isHouseStyle: !imagePrompt,
 		model,
 		litellmApiKey: await loadRenderLitellmApiKey(render.userId),
 	}).catch((error: unknown) => {
@@ -106,6 +106,7 @@ export async function renderAndStoreTopicImage({
 		origin: "generated",
 		scene,
 		model,
+		imagePrompt: imagePrompt ?? null,
 		width: original.width,
 		height: original.height,
 		costDollars: topicImageCostDollars(model),

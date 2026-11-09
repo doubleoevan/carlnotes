@@ -16,6 +16,8 @@ export const topicImages = pgTable("topic_images", {
 	// the scene the writer returned and the model that drew it, both null for an upload
 	scene: text("scene"),
 	model: text("model"),
+	// the owner's image prompt that the render followed, null for the house style and an upload
+	imagePrompt: text("image_prompt"),
 	// the original's pixel size
 	width: integer("width").notNull(),
 	height: integer("height").notNull(),

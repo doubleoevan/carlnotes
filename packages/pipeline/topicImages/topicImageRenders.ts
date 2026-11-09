@@ -99,7 +99,7 @@ export async function recordTopicImageScene(renderId: string, scene: string): Pr
 }
 
 // a stored image to make current: its topic, the render that drew it or null for an upload, its hash, origin, scene,
-// model, pixel size, and cost
+// model, image prompt, pixel size, and cost
 export type ReplaceTopicImageOptions = {
 	topicId: string
 	renderId: string | null
@@ -108,6 +108,8 @@ export type ReplaceTopicImageOptions = {
 	// the writer's scene and the model, both null for an upload
 	scene: string | null
 	model: string | null
+	// the owner's image prompt, null for the house style and an upload
+	imagePrompt: string | null
 	// the original's pixel size and what the render cost
 	width: number
 	height: number
@@ -125,6 +127,7 @@ export async function replaceTopicImage({
 	origin,
 	scene,
 	model,
+	imagePrompt,
 	width,
 	height,
 	costDollars,
@@ -139,7 +142,7 @@ export async function replaceTopicImage({
 			.for("no key update", { of: topics })
 
 		// the new image is the current one, as of now
-		const imageRow = { topicId, hash, origin, scene, model, width, height, updatedAt: new Date() }
+		const imageRow = { topicId, hash, origin, scene, model, imagePrompt, width, height, updatedAt: new Date() }
 		await transaction
 			.insert(topicImages)
 			.values(imageRow)

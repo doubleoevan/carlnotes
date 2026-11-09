@@ -162,6 +162,7 @@ export const topicImagesRoute = new Hono<AppEnv>()
 			origin: "uploaded",
 			scene: null,
 			model: null,
+			imagePrompt: null,
 			width: original.width,
 			height: original.height,
 			costDollars: 0,

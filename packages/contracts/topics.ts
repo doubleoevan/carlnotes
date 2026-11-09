@@ -281,9 +281,11 @@ export const topicResponse = topicDetails.extend({
 	// the first page of the topic's comment thread. absent on a poll reload
 	commentThread: commentThreadResponse.optional(),
 	// the editor's image regenerations this month against the plan's limit, and whether the image was generated or
-	// uploaded. null for anyone who may not edit, and the origin null for a topic with no image yet
+	// uploaded, and the image prompt it was drawn from. null for anyone who may not edit, the origin null for a topic with
+	// no image yet, and the image prompt null for the house style and an upload
 	imageRegenerationQuota: imageRegenerationQuota.nullable(),
 	imageOrigin: z.enum(topicImageOrigins).nullable(),
+	imagePrompt: z.string().nullable(),
 })
 
 export type TopicResponse = z.infer<typeof topicResponse>

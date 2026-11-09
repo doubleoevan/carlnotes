@@ -11,6 +11,7 @@ const TOPIC: TopicImageEditorTopic = {
 	name: "Home espresso",
 	image: { page: SAMPLE_FILES, list: SAMPLE_FILES, thumbnail: SAMPLE_FILES },
 	imageOrigin: "generated",
+	imagePrompt: "a lighthouse in a storm, oil painting",
 	imageRegenerationQuota: { used: 3, limit: 15 },
 }
 
@@ -25,6 +26,6 @@ const meta = {
 export default meta
 type Story = StoryObj<typeof meta>
 export const Default: Story = {}
-export const Uploaded: Story = { args: { topic: { ...TOPIC, imageOrigin: "uploaded" } } }
+export const Uploaded: Story = { args: { topic: { ...TOPIC, imageOrigin: "uploaded", imagePrompt: null } } }
 export const LimitReached: Story = { args: { topic: { ...TOPIC, imageRegenerationQuota: { used: 15, limit: 15 } } } }
-export const NoImage: Story = { args: { topic: { ...TOPIC, image: null, imageOrigin: null } } }
+export const NoImage: Story = { args: { topic: { ...TOPIC, image: null, imageOrigin: null, imagePrompt: null } } }

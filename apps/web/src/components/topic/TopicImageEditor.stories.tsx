@@ -14,6 +14,7 @@ const TOPIC: TopicImageEditorTopic = {
 	name: "Home espresso",
 	image: { page: SAMPLE_FILES, list: SAMPLE_FILES, thumbnail: SAMPLE_FILES },
 	imageOrigin: "generated",
+	imagePrompt: "a lighthouse in a storm, oil painting",
 	imageRegenerationQuota: { used: 3, limit: 15 },
 }
 
@@ -44,7 +45,7 @@ export const Default: Story = {
 
 // an upload offers Remove beside Upload, and a press on the image uploads too
 export const Uploaded: Story = {
-	args: { topic: { ...TOPIC, imageOrigin: "uploaded" } },
+	args: { topic: { ...TOPIC, imageOrigin: "uploaded", imagePrompt: null } },
 	play: async ({ canvas }) => {
 		await expect(canvas.getByRole("button", { name: "Remove" })).toBeVisible()
 		await expect(canvas.getByRole("button", { name: "Upload an image" })).toBeVisible()
@@ -62,5 +63,5 @@ export const LimitReached: Story = {
 
 // a topic with no image yet shows the muted ground
 export const NoImage: Story = {
-	args: { topic: { ...TOPIC, image: null, imageOrigin: null } },
+	args: { topic: { ...TOPIC, image: null, imageOrigin: null, imagePrompt: null } },
 }

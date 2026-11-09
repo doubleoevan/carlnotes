@@ -116,6 +116,7 @@ const TOPIC = {
 	image: null,
 	imageRegenerationQuota: null,
 	imageOrigin: null,
+	imagePrompt: null,
 } satisfies TopicResponse
 
 // the real fetch, restored after the tests
