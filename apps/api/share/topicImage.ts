@@ -24,7 +24,7 @@ const AVATAR_SIZE = 56
 export type TopicPreview = {
 	topicId: string
 	title: string
-	// the card is rendered for every topic, but only a public topic's page may disclose its findings
+	// the card, its name, and its image are rendered for every topic, but only a public topic's page may disclose its findings
 	visibility: Visibility
 	// the topic owner's byline, and the image drawn beside it
 	ownerUserId: string
@@ -46,7 +46,7 @@ export type TopicPreview = {
  * The social platforms never re-fetch a url they have seen, so the url itself has to change instead.
  */
 export function toTopicPreviewKey(topicPreview: TopicPreview): string {
-	const previewImage = `${topicPreview.title}|${topicPreview.ownerUsername}|${toAvatarIdentity(topicPreview.ownerAvatar)}|${topicPreview.keptCount}|${topicPreview.sourceCount}|${toDrawnImageHash(topicPreview) ?? ""}`
+	const previewImage = `${topicPreview.title}|${topicPreview.ownerUsername}|${toAvatarIdentity(topicPreview.ownerAvatar)}|${topicPreview.keptCount}|${topicPreview.sourceCount}|${topicPreview.imageHash ?? ""}`
 	return `og/${PREVIEW_TEMPLATE_VERSION}/${topicPreview.topicId}/${Bun.hash(previewImage).toString(36)}.png`
 }
 
@@ -58,19 +58,13 @@ export async function toTopicPreviewPng(card: TopicPreview): Promise<Uint8Array>
 	// the user's avatar bytes, only fetched here. the card's key names the avatar instead, so a stored card loads nothing
 	const ownerImage = await toOwnerImageDataUri(card.ownerAvatar)
 	const footer = toTopicFooter(card, ownerImage)
-	const drawnImageHash = toDrawnImageHash(card)
-	if (!drawnImageHash) {
+	if (!card.imageHash) {
 		return toCardPng([toBrandIcon(), toTopicTitle(card.title), footer])
 	}
 
 	// the topic's image across the top, with the text on the card under it
-	const imageDataUri = await loadCardImageBandDataUri(toTopicImageOriginalKey(card.topicId, drawnImageHash))
+	const imageDataUri = await loadCardImageBandDataUri(toTopicImageOriginalKey(card.topicId, card.imageHash))
 	return toImageOverTextCardPng({ imageDataUri, title: card.title, footer })
-}
-
-// the image hash a card draws: a public topic's
-function toDrawnImageHash(topicPreview: Pick<TopicPreview, "visibility" | "imageHash">): string | null {
-	return topicPreview.visibility === "public" ? topicPreview.imageHash : null
 }
 
 // the Topic's own name as the card title, across the card with no image beside it

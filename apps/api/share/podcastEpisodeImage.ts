@@ -1,5 +1,4 @@
 // the link-preview card that a pasted podcast episode url renders as
-import type { Visibility } from "@carlnotes/contracts/enums"
 import { toSeasonEpisodeLabel } from "@carlnotes/contracts/podcastEpisodes"
 import {
 	toPodcastEpisodeImageOriginalKey,
@@ -30,8 +29,8 @@ export type PodcastEpisodePreview = {
 	podcastEpisodeImageHash: string | null
 }
 
-// the topic a podcast episode's preview is built with. only a public topic's images are drawn
-export type PodcastEpisodePreviewTopic = { id: string; name: string; visibility: Visibility; imageHash: string | null }
+// the topic a podcast episode's preview is built with
+export type PodcastEpisodePreviewTopic = { id: string; name: string; imageHash: string | null }
 
 // the fields of a podcast episode's row that its card shows
 type PodcastEpisodeCardRow = Pick<
@@ -54,8 +53,8 @@ export function toPodcastEpisodePreview(
 		episodeNumber: podcastEpisodeRow.episodeNumber ?? 0,
 		durationSeconds: podcastEpisodeRow.durationSeconds ?? 0,
 		topicId: topic.id,
-		topicImageHash: topic.visibility === "public" ? topic.imageHash : null,
-		podcastEpisodeImageHash: topic.visibility === "public" ? podcastEpisodeRow.imageHash : null,
+		topicImageHash: topic.imageHash,
+		podcastEpisodeImageHash: podcastEpisodeRow.imageHash,
 	}
 }
 

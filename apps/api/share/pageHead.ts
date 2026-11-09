@@ -210,7 +210,6 @@ export function toPodcastEpisodePageHead({
 		toPodcastEpisodePreview(podcastEpisodeRow, {
 			id: topicPreview.topicId,
 			name: topicPreview.title,
-			visibility: topicPreview.visibility,
 			imageHash: topicPreview.imageHash,
 		}),
 	)
