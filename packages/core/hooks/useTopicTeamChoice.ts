@@ -14,18 +14,23 @@ import { sendPendingTeamInvites } from "../lib/teamInvites"
 import { NEW_TEAM_CHOICE } from "../lib/topicTeamChoices"
 
 export type TopicTeamField = {
+	// the teams offered and the ones selected
 	offeredTeams: { teamId: string; name: string }[]
 	selectedTeamIds: string[]
 	setSelectedTeamIds: (ids: string[]) => void
+	// whether the New team option is on, and the new team's name
 	isNewTeamSelected: boolean
 	newTeamName: string
 	setNewTeamName: (name: string) => void
+	// the name check's note and the check itself
 	newTeamRejection: string | null
 	checkNewTeamName: () => void
+	// the new team's visibility and the invitations it sends once it exists
 	isNewTeamPublic: boolean
 	setIsNewTeamPublic: (value: boolean) => void
 	pendingInvites: PendingInvite[]
 	setPendingInvites: (invites: PendingInvite[]) => void
+	// whether the save may go ahead, the write after it, and the load state
 	isTeamChosen: boolean
 	assignTopicTeam: (topicId: string) => Promise<void>
 	loadError: string | null
@@ -64,6 +69,7 @@ export function useTopicTeamChoice(
 				if (!isCurrent) {
 					return
 				}
+				// the leader teams, and the ones among them already holding the topic, which a retry compares against
 				setTeams(leaderTeams)
 				const holdingLeaderTeamIds = leaderTeams
 					.map((team) => team.teamId)
@@ -74,17 +80,20 @@ export function useTopicTeamChoice(
 					if (chosen.length > 0) {
 						return chosen
 					}
+					// an existing topic keeps the teams holding it
 					if (topic) {
 						return holdingLeaderTeamIds
 					}
 					return leaderTeams[0] ? [leaderTeams[0].teamId] : []
 				})
 			})
+			// a failed load shows its note in place of the teams
 			.catch(() => {
 				if (isCurrent) {
 					setLoadError("Teams didn’t load. Close and reopen the form to try again.")
 				}
 			})
+		// a closed modal or a new topic ignores the load still in flight
 		return () => {
 			isCurrent = false
 		}
@@ -99,14 +108,12 @@ export function useTopicTeamChoice(
 	const selectedRealTeamIds = selectedTeamIds.filter((teamId) => teamId !== NEW_TEAM_CHOICE)
 	const isNewTeamSelected = selectedTeamIds.includes(NEW_TEAM_CHOICE)
 
-	// a non-private topic must land on a team: a led one selected, a new one named, or a team of the
-	// user's that already holds it and is not theirs to manage here
-	const holdingElsewhereCount = holdingTeamIds.filter(
-		(teamId) => !(teams ?? []).some((team) => team.teamId === teamId),
-	).length
+	// a non-private topic must land on a team: a led one selected, a new one named, or one held where the user can't manage
 	const isTeamChosen =
 		teams !== null &&
-		(selectedRealTeamIds.length > 0 || holdingElsewhereCount > 0 || (isNewTeamSelected && newTeamName.trim() !== ""))
+		(selectedRealTeamIds.length > 0 ||
+			isTopicHeldElsewhere(topic, teams) ||
+			(isNewTeamSelected && newTeamName.trim() !== ""))
 
 	// apply the selection once the topic is saved: create the named team, add the newly picked, drop the unpicked
 	const assignTopicTeam = async (topicId: string): Promise<void> => {
@@ -118,6 +125,7 @@ export function useTopicTeamChoice(
 		if (isNewTeamSelected && newTeamName.trim() !== "") {
 			desiredTeamIds.add(await createSelectedTeam(topicId))
 		}
+		// the memberships, then the new team's invitations
 		await saveTopicTeams({ topicId, desiredTeamIds, savedTeamIds: savedTeamIds.current })
 		if (isNewTeamSelected && createdTeam.current) {
 			await sendNewTeamInvites(createdTeam.current.teamId)
@@ -126,6 +134,7 @@ export function useTopicTeamChoice(
 
 	// retain the created identity through later upload or invitation failures
 	async function createSelectedTeam(topicId: string): Promise<string> {
+		// the first save creates the team
 		if (!createdTeam.current) {
 			const createTeamResult = await createTeam({
 				name: newTeamName.trim(),
@@ -139,6 +148,7 @@ export function useTopicTeamChoice(
 			createdTeam.current = { teamId: createTeamResult.teamId, name: newTeamName.trim() }
 			savedTeamIds.current.add(createTeamResult.teamId)
 		} else {
+			// a retry saves the created team's current name and visibility
 			const rejection = await sendUpdateTeam(createdTeam.current.teamId, {
 				name: newTeamName.trim(),
 				description: null,
@@ -164,6 +174,7 @@ export function useTopicTeamChoice(
 		if (teamName === "" || teamName.toLowerCase() === createdTeam.current?.name.toLowerCase()) {
 			return
 		}
+		// a stale check never overwrites a newer one
 		void fetchTeamNameTaken(teamName)
 			.then((isTeamNameTaken) => {
 				if (revision === nameCheckRevision.current) {
@@ -215,6 +226,7 @@ export async function saveTopicTeams({
 		if (savedTeamIds.has(teamId)) {
 			continue
 		}
+		// a rejected add stops the save, and an accepted one is remembered for a retry
 		const rejection = await sendAddTopicTeam(teamId, topicId)
 		if (rejection) {
 			throw new Error(rejection)
@@ -226,9 +238,26 @@ export async function saveTopicTeams({
 		if (desiredTeamIds.has(teamId)) {
 			continue
 		}
+		// a rejected removal stops the save, and an accepted one leaves the saved set
 		if (!(await sendRemoveTopicFromTeam(teamId, topicId))) {
 			throw new Error("A team change didn’t save. Try again.")
 		}
 		savedTeamIds.delete(teamId)
 	}
+}
+
+/**
+ * Returns whether a team the user doesn't lead already holds the topic: its owning team, or a team of the user's that
+ * shares it. Such a team keeps the topic on a team whatever the user's own teams are set to.
+ */
+export function isTopicHeldElsewhere(
+	topic: Pick<TopicResponse, "team" | "roomTeams"> | undefined,
+	leaderTeams: { teamId: string }[],
+): boolean {
+	// the owning team and every holding team of the user's, less the ones the user leads
+	const holdingTeamIds = [
+		...(topic?.team ? [topic.team.teamId] : []),
+		...(topic?.roomTeams ?? []).map((team) => team.teamId),
+	]
+	return holdingTeamIds.some((teamId) => !leaderTeams.some((team) => team.teamId === teamId))
 }

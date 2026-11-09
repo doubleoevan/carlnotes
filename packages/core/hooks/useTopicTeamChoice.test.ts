@@ -1,6 +1,6 @@
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import * as teamClient from "@carlnotes/client/teamClient"
-import { saveTopicTeams } from "./useTopicTeamChoice"
+import { isTopicHeldElsewhere, saveTopicTeams } from "./useTopicTeamChoice"
 
 // restore transport spies after each failure and retry scenario
 afterEach(() => mock.restore())
@@ -27,12 +27,26 @@ test("a partial team addition preserves existing access and remembers accepted w
 })
 
 test("a rejected removal remains pending for retry", async () => {
+	// the first removal is rejected, so its team stays saved
 	const removeTopic = spyOn(teamClient, "sendRemoveTopicFromTeam").mockResolvedValueOnce(false).mockResolvedValue(true)
 	const savedTeamIds = new Set(["original", "retained"])
 	const options = { topicId: "topic", desiredTeamIds: new Set(["retained"]), savedTeamIds }
 	await expect(saveTopicTeams(options)).rejects.toThrow("A team change")
 	expect(savedTeamIds.has("original")).toBe(true)
+	// the retry removes it
 	await saveTopicTeams(options)
 	expect(savedTeamIds).toEqual(new Set(["retained"]))
 	expect(removeTopic).toHaveBeenCalledTimes(2)
+})
+
+test("a topic another team owns needs no team of the user's", () => {
+	// a member who leads only their own team edits a topic that a different team owns
+	const topic = { team: { teamId: "other", name: "Other", isPublic: true }, roomTeams: [] }
+	expect(isTopicHeldElsewhere(topic, [{ teamId: "mine" }])).toBe(true)
+
+	// an owning team the user leads is theirs to keep or drop, so it alone does not count
+	expect(isTopicHeldElsewhere(topic, [{ teamId: "other" }])).toBe(false)
+
+	// a topic no team holds needs a team picked
+	expect(isTopicHeldElsewhere({ team: null, roomTeams: [] }, [{ teamId: "mine" }])).toBe(false)
 })
