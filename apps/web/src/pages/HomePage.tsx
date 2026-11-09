@@ -1,9 +1,10 @@
 import { authClient } from "@carlnotes/client/authClient"
 import { fetchHome } from "@carlnotes/client/homeClient"
-import type {
-	HomeResponse,
-	PodcastEpisodeCard as PodcastEpisodeCardFields,
-	YourTopicsPage,
+import {
+	HOME_CARDS_PAGE_SIZE,
+	type HomeResponse,
+	type PodcastEpisodeCard as PodcastEpisodeCardFields,
+	type YourTopicsPage,
 } from "@carlnotes/contracts/home"
 import { UPDATES_FAILED_TEXT } from "@carlnotes/contracts/updates"
 import { useHomeUpdates } from "@carlnotes/core/hooks/useHomeUpdates"
@@ -190,7 +191,7 @@ function HomeCardsSection<Row>({
 	rows: Row[]
 	renderCard: (row: Row) => ReactNode
 }) {
-	const { pagination } = usePagination(rows)
+	const { pagination } = usePagination(rows, HOME_CARDS_PAGE_SIZE)
 
 	// the index range of the page shown
 	const pageStartIndex = pagination.page * pagination.pageSize

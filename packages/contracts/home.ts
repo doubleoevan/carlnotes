@@ -8,8 +8,8 @@ import { teamIdentity } from "./teams"
 import { topicImageUrls } from "./topicImages"
 
 // how many featured topics and podcast episodes the home shows, and how many days back its new podcast episodes reach
-export const FEATURED_TOPIC_COUNT = 6
-export const FEATURED_PODCAST_EPISODE_COUNT = 5
+export const FEATURED_TOPIC_COUNT = 12
+export const FEATURED_PODCAST_EPISODE_COUNT = 12
 export const NEW_PODCAST_EPISODE_DAYS = 7
 
 // a topic as a card draws it: its page, its image, its byline, its tags, how many reactions it has, and the podcast
@@ -36,8 +36,8 @@ const podcastEpisodeCard = z.object({
 
 export type PodcastEpisodeCard = z.infer<typeof podcastEpisodeCard>
 
-// how many of a user's topics one page of the home's Your topics holds, and the last page a request may ask for
-export const YOUR_TOPICS_PAGE_SIZE = 5
+// how many cards one page of a home card section holds, and the last page of Your topics a request may ask for
+export const HOME_CARDS_PAGE_SIZE = 6
 const YOUR_TOPICS_PAGE_MAX = 10_000
 
 // one page of a user's own and followed topics as cards, and how many topics all the pages hold

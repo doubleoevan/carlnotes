@@ -1,9 +1,10 @@
 import { authClient } from "@carlnotes/client/authClient"
 import { fetchHome } from "@carlnotes/client/homeClient"
-import type {
-	PodcastEpisodeCard as PodcastEpisodeCardFields,
-	TopicCard as TopicCardFields,
-	YourTopicsPage,
+import {
+	HOME_CARDS_PAGE_SIZE,
+	type PodcastEpisodeCard as PodcastEpisodeCardFields,
+	type TopicCard as TopicCardFields,
+	type YourTopicsPage,
 } from "@carlnotes/contracts/home"
 import { UPDATES_FAILED_TEXT } from "@carlnotes/contracts/updates"
 import { useHomeUpdates } from "@carlnotes/core/hooks/useHomeUpdates"
@@ -128,7 +129,7 @@ function HomeCardsSection<Row>({
 	rows: Row[]
 	renderCard: (row: Row) => ReactNode
 }) {
-	const { pageRows, pagination } = usePagination(rows)
+	const { pageRows, pagination } = usePagination(rows, HOME_CARDS_PAGE_SIZE)
 	return (
 		<HomeCardsAccordion
 			section={section}

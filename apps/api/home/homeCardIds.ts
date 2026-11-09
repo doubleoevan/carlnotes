@@ -19,7 +19,7 @@ const HOME_CARD_IDS_TTL_MS = 60_000
 
 // how many published podcast episodes the featured read takes before keeping one per topic, and the most new podcast episodes
 // of a week the home shows
-const PODCAST_EPISODE_CANDIDATE_LIMIT = 30
+const PODCAST_EPISODE_CANDIDATE_LIMIT = 60
 const NEW_PODCAST_EPISODE_LIMIT = 100
 
 // the featured topic ids, the featured podcast episode ids, and the newest podcast episode ids, each in the order the
@@ -32,8 +32,8 @@ export type HomeCardIds = {
 
 /**
  * Returns the ids of the home's cards, read through the shared cache: the pinned topics in their order and then the trending
- * public shown topics until six, and the pinned podcast episodes and then the most listened published ones of public
- * shown topics, one per topic, until five, and the podcast episodes of public shown topics published in the last week.
+ * public shown topics until twelve, and the pinned podcast episodes and then the most listened published ones of public
+ * shown topics, one per topic, until twelve, and the podcast episodes of public shown topics published in the last week.
  */
 export function loadHomeCardIds(): Promise<HomeCardIds> {
 	return cacheJson({ key: HOME_CARD_IDS_KEY, ttlMs: HOME_CARD_IDS_TTL_MS, load: loadHomeCardIdsFromDatabase })

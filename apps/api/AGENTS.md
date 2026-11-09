@@ -190,7 +190,7 @@ authenticated encryption itself lives in `@carlnotes/server/privateText`.
   handing off an MCP change. Its deterministic Origin and tool-contract assertions also run in `bun run check`.
   `toolTestFixtures.ts` holds the registered tools and the callers the tool tests share.
 - `home/` — the home page's payload: `homeRoute.ts` (`GET /api/home`, the featured topics and podcast episodes and
-  the first page of a user's topics as cards, and `GET /api/home/your-topics`, each later page of five),
+  the first page of a user's topics as cards, and `GET /api/home/your-topics`, each later page of six),
   `homeCardIds.ts` (the pinned topics and podcast episodes first, then the trending ones, one cached read
   every replica shares for a minute), and `topicCards.ts` (the card shapes). `topic/serveImageFile.ts` streams one image
   file with the visibility gate and the cache headers, and `topic/topicImagesRoute.ts` serves a topic image's files

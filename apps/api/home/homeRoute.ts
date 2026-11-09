@@ -2,8 +2,8 @@
 // topics as cards
 
 import {
+	HOME_CARDS_PAGE_SIZE,
 	type HomeResponse,
-	YOUR_TOPICS_PAGE_SIZE,
 	type YourTopicsPage,
 	yourTopicsQuery,
 } from "@carlnotes/contracts/home"
@@ -74,8 +74,8 @@ async function loadYourTopicsPage(userId: string, page: number): Promise<YourTop
 			.from(topics)
 			.where(yourTopicsFilter)
 			.orderBy(desc(sql`${isOwned}`), desc(topics.createdAt), desc(topics.id))
-			.limit(YOUR_TOPICS_PAGE_SIZE)
-			.offset(page * YOUR_TOPICS_PAGE_SIZE),
+			.limit(HOME_CARDS_PAGE_SIZE)
+			.offset(page * HOME_CARDS_PAGE_SIZE),
 		db.select({ totalCount: count() }).from(topics).where(yourTopicsFilter),
 	])
 	return { topics: await toTopicCards(topicRows, userId), totalCount: countRow?.totalCount ?? 0 }

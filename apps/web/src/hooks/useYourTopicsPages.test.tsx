@@ -29,9 +29,9 @@ function toTopicCard(id: string): TopicCard {
 }
 
 test("the first page comes from the payload, and the second page is requested once opened", async () => {
-	// seven topics in all, five on the first page and two on the second
-	const firstPage: YourTopicsPage = { topics: ["a", "b", "c", "d", "e"].map(toTopicCard), totalCount: 7 }
-	const secondPage: YourTopicsPage = { topics: ["f", "g"].map(toTopicCard), totalCount: 7 }
+	// eight topics in all, six on the first page and two on the second
+	const firstPage: YourTopicsPage = { topics: ["a", "b", "c", "d", "e", "f"].map(toTopicCard), totalCount: 8 }
+	const secondPage: YourTopicsPage = { topics: ["g", "h"].map(toTopicCard), totalCount: 8 }
 	const requestUrls: string[] = []
 	configureApiClient({ apiBaseUrl: "", showError: () => {} })
 	globalThis.fetch = (async (url: RequestInfo | URL) => {
@@ -41,14 +41,14 @@ test("the first page comes from the payload, and the second page is requested on
 
 	// the first page shows without a request
 	const harness = await renderTestHook(() => useYourTopicsPages(firstPage))
-	expect(harness.read().pageTopics.map((topic) => topic.id)).toEqual(["a", "b", "c", "d", "e"])
+	expect(harness.read().pageTopics.map((topic) => topic.id)).toEqual(["a", "b", "c", "d", "e", "f"])
 	expect(harness.read().pagination.pageCount).toBe(2)
 	expect(requestUrls).toEqual([])
 
 	// opening the second page requests it once
 	await act(async () => harness.read().pagination.setPage(1))
-	await waitForHook(() => harness.read().pageTopics[0]?.id === "f")
-	expect(harness.read().pageTopics.map((topic) => topic.id)).toEqual(["f", "g"])
+	await waitForHook(() => harness.read().pageTopics[0]?.id === "g")
+	expect(harness.read().pageTopics.map((topic) => topic.id)).toEqual(["g", "h"])
 	expect(requestUrls).toHaveLength(1)
 	expect(requestUrls[0]).toContain("/api/home/your-topics?page=1")
 	await harness.close()
