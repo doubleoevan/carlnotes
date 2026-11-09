@@ -43,24 +43,24 @@ export const podcastEpisodeSummary = z.object({
 
 export type PodcastEpisodeSummary = z.infer<typeof podcastEpisodeSummary>
 
-// a podcast episode pinned among the home's featured episodes: its title, its topic's name, its page, and its position
-export const featuredPodcastEpisode = z.object({
+// a podcast episode pinned among the home podcast episodes: its title, its topic's name, its page, and its position
+export const homePodcastEpisode = z.object({
 	id: z.string(),
 	title: z.string(),
 	topicName: z.string(),
 	pagePath: z.string(),
-	featureOrder: z.number(),
+	homeOrder: z.number(),
 })
 
-export type FeaturedPodcastEpisode = z.infer<typeof featuredPodcastEpisode>
+export type HomePodcastEpisode = z.infer<typeof homePodcastEpisode>
 
 /**
- * Returns a featured podcast episode's label in a list: its title, then its topic's name.
+ * Returns a home podcast episode's label in a list: its title, then its topic's name.
  */
-export function toFeaturedPodcastEpisodeLabel({
+export function toHomePodcastEpisodeLabel({
 	title,
 	topicName,
-}: Pick<FeaturedPodcastEpisode, "title" | "topicName">): string {
+}: Pick<HomePodcastEpisode, "title" | "topicName">): string {
 	return `${title} · ${topicName}`
 }
 

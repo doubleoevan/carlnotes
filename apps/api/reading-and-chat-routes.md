@@ -55,7 +55,7 @@
   half a minute; `topic/feedCaches.ts` — the Redis keys of those copies, and `clearVisitorTopicCaches`, which a topic's
   edit and delete and a Source added or removed call to drop its page copy, and the visitors' feed copies if the listing
   changed; `clearVisitorTopicPages`, which a team attach or detach calls; and `clearSharedTopicFeedCaches`, which drops
-  the feed copies with the featured and popular topic id lists; `topic/feedData.ts` — the batched reads behind every
+  the feed copies with the home and popular topic id lists; `topic/feedData.ts` — the batched reads behind every
   topic in a feed, each table read once for the whole batch.
 - `chat/room.ts` — posting to a chat room and its stream. A chat message that addresses Carl reserves his turn's largest
   cost before it posts, priced from the room's stored question by `loadModelRoomQuestionChars` in

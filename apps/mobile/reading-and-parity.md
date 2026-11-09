@@ -4,7 +4,7 @@
 
 `providers/TopicFeedProvider.tsx` adapts the shared core hook to Expo navigation, connectivity, and foreground events.
 It restores one account's queries before their first request. It removes network and app-focus listeners on teardown.
-Visitors use the same hook in an isolated memory-only query client; their feed opens Featured and never persists account data. The visitor menu links to native Log in and Sign up. Public finding details hide read/bookmark/rating controls, and account actions require authentication.
+Visitors use the same hook in an isolated memory-only query client; their feed opens Home topics and never persists account data. The visitor menu links to native Log in and Sign up. Public finding details hide read/bookmark/rating controls, and account actions require authentication.
 `topicFeedRows.ts` flattens Home into section, Topic, Finding-card, empty, and expansion rows with distinct recycling types.
 Only one section opens at a time. Each Topic initially shows five Findings. `MoreButton.tsx` expands them in place
 with the web's `+ N more ▾` and `show less ▴` controls. Topic titles link to the independent Topic page query.

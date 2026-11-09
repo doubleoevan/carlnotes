@@ -8,7 +8,7 @@ description: >-
 Carl reads the internet so you don't have to. You give him a topic you care about. He researches it and keeps what
 matches your prompt. He writes a note about each new finding he keeps. You read the notes and stay informed.
 
-![The CarlNotes home page signed in: search, Latest Brews with the newest findings from your topics, and Featured
+![The CarlNotes home page signed in: search, Latest Brews with the newest findings from your topics, and Home
 topics with their images](../../assets/screenshots/home-topic-feed.png)
 
 Carl keeps only what's relevant to your prompt. He filters out everything else.

@@ -38,7 +38,7 @@ test("views exclude thumbs down, unread keeps bookmarks independent, and only ow
 	).toEqual(["saved"])
 })
 
-test("tag modes, kind reset, and Featured order preserve the web selection", () => {
+test("tag modes, kind reset, and Home topics order preserve the web selection", () => {
 	// each match mode uses the same selected tags
 	const tags = { topicTags: ["coffee"], tagFilters: ["coffee", "tea"] }
 	expect(matchesTagFilters({ ...tags, tagMatchMode: "any" })).toBe(true)
@@ -49,14 +49,14 @@ test("tag modes, kind reset, and Featured order preserve the web selection", () 
 		new Set(resourceKinds),
 	)
 
-	// the Featured sequence stays editorial under Trending
+	// the Home topics sequence stays editorial under Trending
 	const feed = toTestTopicFeedResponse([])
-	const featuredTopics = [
+	const homeTopics = [
 		toTestTopicFeed({ id: "first", viewerCount: 1 }),
 		toTestTopicFeed({ id: "second", viewerCount: 100 }),
 	]
 	feed.sections = feed.sections.map((section) =>
-		section.key === "featured" ? { ...section, topics: featuredTopics } : section,
+		section.key === "home" ? { ...section, topics: homeTopics } : section,
 	)
 	const selected = filterTopicFeed({
 		topicFeed: feed,

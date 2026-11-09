@@ -47,7 +47,7 @@ export function RemovePodcastEpisodeButton({
 		<Button
 			variant="ghost"
 			size="icon"
-			accessibilityLabel={episodeNumber === null ? "Remove episode" : `Remove episode ${episodeNumber}`}
+			accessibilityLabel={episodeNumber === null ? "Remove podcast episode" : `Remove podcast episode ${episodeNumber}`}
 			onPress={onRemovePodcastEpisode}
 		>
 			<Icon as={Trash2} className="size-4 text-muted-foreground" />

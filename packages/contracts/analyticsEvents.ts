@@ -143,6 +143,6 @@ export type VisitAnalyticsEvent =
 	| "visit_podcast_subscribe_clicked"
 	| "visit_video_played"
 	| `social_${CommentEventTarget}_hot_takes_view`
-	// the home page shown, by face, and a featured card opened from it
+	// the home page shown, by face, and a home topic or podcast card opened from it
 	| "home_view"
-	| "featured_card_open"
+	| "home_card_open"

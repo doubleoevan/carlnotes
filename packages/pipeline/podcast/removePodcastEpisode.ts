@@ -2,7 +2,7 @@
 // or of every Podcast Episode of a Topic
 
 import { type DbHandle, type DbTransaction, db } from "@carlnotes/db"
-import { releasePodcastEpisodeFeatureOrder } from "@carlnotes/db/podcastEpisodeFeaturing"
+import { releasePodcastEpisodeHomeOrder } from "@carlnotes/db/podcastEpisodeHomeOrder"
 import { podcastEpisodeChapters, podcastEpisodeListens, podcastEpisodes } from "@carlnotes/db/schema/podcast"
 import { comments, reactions } from "@carlnotes/db/schema/social"
 import {
@@ -43,8 +43,8 @@ export async function removePodcastEpisode(podcastEpisodeId: string): Promise<bo
 	]
 	await db.transaction(async (transaction) => {
 		await recordPendingObjectDeletions({ handle: transaction, objectKeys })
-		// a featured podcast episode leaves the home
-		await releasePodcastEpisodeFeatureOrder(podcastEpisodeId, transaction)
+		// a home podcast episode leaves the home
+		await releasePodcastEpisodeHomeOrder(podcastEpisodeId, transaction)
 		// delete the chapters, so a later Podcast Episode may narrate the Findings again
 		await transaction
 			.delete(podcastEpisodeChapters)

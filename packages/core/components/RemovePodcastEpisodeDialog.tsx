@@ -88,11 +88,11 @@ export function RemovePodcastEpisodeDialog({
 	const name =
 		podcastEpisode.episodeNumber === null
 			? `"${podcastEpisode.title}"`
-			: `Episode ${podcastEpisode.episodeNumber}, "${podcastEpisode.title}",`
+			: `Podcast episode ${podcastEpisode.episodeNumber}, "${podcastEpisode.title}",`
 	return (
 		<Confirm
-			title="Remove this episode?"
-			confirmLabel="Remove episode"
+			title="Remove this podcast episode?"
+			confirmLabel="Remove podcast episode"
 			cancelLabel="Keep it"
 			onConfirm={handleRemove}
 			onClose={onClose}

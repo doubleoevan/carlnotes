@@ -150,7 +150,7 @@ function EpisodeContent({
 			: []),
 		{ label: "Share topic", icon: ShareIcon, onSelect: () => setDialog("share") },
 		...(page.canRemovePodcastEpisode
-			? [{ label: "Remove episode", icon: Trash2, onSelect: () => setDialog("remove") }]
+			? [{ label: "Remove podcast episode", icon: Trash2, onSelect: () => setDialog("remove") }]
 			: []),
 	]
 	return (

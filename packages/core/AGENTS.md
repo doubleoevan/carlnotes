@@ -83,7 +83,7 @@ It imports `@carlnotes/contracts`, `@carlnotes/client`, `@carlnotes/nightshift`,
   `streamReconnect.ts` (how long a silent SSE stream runs before it counts as dropped and the wait before reopening it,
   for the chat room stream), `topicFindingFilters.ts` and `topicFindingSorts.ts` (which findings a feed view shows and
   in what order), `topicSorts.ts` (the Topics page's topic order under Trending: viewers, then followers, then the
-  newest finding, with Featured kept in its own order), `topicPromptUrls.ts` (the urls written inside a topic prompt),
+  newest finding, with Home topics kept in its own order), `topicPromptUrls.ts` (the urls written inside a topic prompt),
   `emailProviders.ts` (the webmail compose urls an invite is given), `chromeIntentUrl.ts` (the page as an Android intent
   url that opens it in Chrome, out of an embedded webview), `pushCopy.ts` (the push permission sheet's and the
   Notifications section's words), `sessionCopy.ts` (the lines the sign-in, sign-out, sign-up, and close-account controls

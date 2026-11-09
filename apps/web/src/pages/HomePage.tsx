@@ -57,8 +57,8 @@ const HOME_SECTION_VALUES = Object.values(HOME_SECTIONS).map((homeSection) => ho
 const HOW_IT_WORKS_GRID_CLASS = "grid grid-cols-1 gap-4 md:grid-cols-3"
 
 /**
- * Renders the home page's two faces. A visitor sees the featured cards, how it works, and sign in under the header's
- * hero. A user sees the featured cards, their own topics as cards, and the Updates button.
+ * Renders the home page's two faces. A visitor sees the home topic and podcast cards, how it works, and sign in under the header's
+ * hero. A user sees the home topic and podcast cards, their own topics as cards, and the Updates button.
  */
 export function HomePage() {
 	// whether a user is signed in or a visitor is browsing
@@ -100,7 +100,7 @@ export function HomePage() {
 	return (
 		<main className={PAGE_CLASS}>
 			{/* both faces open with the headline, the page's h1, beside the New Topic button. a visitor reads how it works
-			    under it and a user reads their Updates, and a user's own topics follow the featured cards */}
+			    under it and a user reads their Updates, and a user's own topics follow the home topic and podcast cards */}
 			<div className="flex items-center justify-between gap-3">
 				<HomeHeadline />
 				<NewTopicButton onNewTopic={openNewTopicDialog} />
@@ -115,18 +115,18 @@ export function HomePage() {
 					className="mt-4 [&>*:first-child_[data-slot=accordion-trigger]]:pt-0"
 				>
 					<HomeCardsSection
-						section={HOME_SECTIONS.featuredTopics}
-						rows={home.featuredTopics}
+						section={HOME_SECTIONS.homeTopics}
+						rows={home.homeTopics}
 						renderCard={(topic) => (
 							<TopicCard
 								topic={topic}
-								onOpen={() => captureVisitEvent("featured_card_open", { kind: "topic", id: topic.id })}
+								onOpen={() => captureVisitEvent("home_card_open", { kind: "topic", id: topic.id })}
 							/>
 						)}
 					/>
 					<HomePodcastEpisodesSection
-						section={HOME_SECTIONS.featuredPodcastEpisodes}
-						podcastEpisodes={home.featuredPodcastEpisodes}
+						section={HOME_SECTIONS.homePodcastEpisodes}
+						podcastEpisodes={home.homePodcastEpisodes}
 					/>
 					<HomePodcastEpisodesSection
 						section={HOME_SECTIONS.newestPodcastEpisodes}
@@ -247,7 +247,7 @@ function HomeCardsAccordion<Row>({
 	)
 }
 
-// the featured or new podcast episodes as cards, each reporting its open
+// the home or new podcast episodes as cards, each reporting its open
 function HomePodcastEpisodesSection({
 	section,
 	podcastEpisodes,
@@ -263,7 +263,7 @@ function HomePodcastEpisodesSection({
 				<PodcastEpisodeCard
 					podcastEpisodeCard={podcastEpisodeCard}
 					onOpen={() =>
-						captureVisitEvent("featured_card_open", {
+						captureVisitEvent("home_card_open", {
 							kind: "podcastEpisode",
 							id: podcastEpisodeCard.podcastEpisode.id,
 						})
@@ -274,7 +274,7 @@ function HomePodcastEpisodesSection({
 	)
 }
 
-// how it works in three steps, which a visitor reads between the headline and the featured cards
+// how it works in three steps, which a visitor reads between the headline and the home topic and podcast cards
 function HowItWorksSection() {
 	return (
 		<section aria-label={HOW_IT_WORKS_TITLE} className="mt-3">

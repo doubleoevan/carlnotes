@@ -214,22 +214,28 @@ copied, released when the Podcast Episode is removed or its Topic leaves the pub
 
 ### Requirement: Dropping a pin asks first
 
-A Rank dialog's Save that drops a pinned Topic or Podcast Episode SHALL first ask the admin to confirm, naming each row
-it drops, and SHALL send nothing if the admin cancels.
+The X on a pinned Topic's or Podcast Episode's row in a Rank dialog SHALL first ask the admin to confirm, naming the
+row. Confirming SHALL clear that row's home order at once and keep the dialog open without the row. Cancelling SHALL
+send nothing. The X on the page's own row that is not pinned yet SHALL drop it without asking.
 
 #### Scenario: An admin cancels a drop
 
-- **WHEN** an admin removes a pinned row with its X, presses Save, and cancels the confirmation
-- **THEN** no feature order changes and the Rank dialog stays open with the row removed
+- **WHEN** an admin presses the X on a pinned row and cancels the confirmation
+- **THEN** no home order changes and the row stays in the Rank dialog
+
+#### Scenario: An admin confirms a drop
+
+- **WHEN** an admin presses the X on a pinned row and confirms
+- **THEN** that row's home order clears, the rows below it move up, and the dialog stays open without the row
 
 ### Requirement: The admin console lists both pin lists
 
-The admin console SHALL show a Featured card listing the pinned Topics and the pinned Podcast Episodes in order, each
-row with the move and clear controls the Rank dialog offers.
+The admin console SHALL show a Home card listing the Home topics and the Home podcasts pins in order, each row with a
+step up, a step down, and an X that clears the pin after a confirmation.
 
 #### Scenario: An admin clears a pin from the console
 
-- **WHEN** an admin clears a pinned Topic's row in the Featured card
+- **WHEN** an admin presses the X on a pinned Topic's row in the Home card and confirms
 - **THEN** the Topics below move up by one and the home page is purged at the edge
 
 ### Requirement: A pin change purges the home page

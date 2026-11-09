@@ -18,7 +18,7 @@ import { filteredTopicFindings, newTopicFindingCount, toTopicFinding } from "./f
 import { toScanDurationMs, toScheduledTimeLabel } from "./helpers"
 import { toTopicSourceSummary } from "./topicSourceSummary"
 
-// how long the featured and popular topic id lists are kept
+// how long the home and popular topic id lists are kept
 const TOPIC_SECTION_IDS_TTL_MS = 60_000
 
 // how long a visitor's cached feed or topic page is kept
@@ -27,8 +27,8 @@ const VISITOR_CACHE_TTL_MS = 30_000
 // how many popular topic ids the homepage keeps, ten pages of its five
 const MAX_POPULAR_TOPIC_IDS = 50
 
-// the featured and popular topic id lists
-type TopicSectionIds = { featuredIds: string[]; popularIds: string[] }
+// the home and popular topic id lists
+type TopicSectionIds = { homeIds: string[]; popularIds: string[] }
 
 /**
  * Returns the query for the topic ids this user actively subscribes to.
@@ -62,44 +62,44 @@ export function readVisitorTopicFeeds(includeConsumedResources: boolean): Promis
 }
 
 /**
- * Returns the public featured and popular topic id lists, read through the shared Redis key for a minute.
+ * Returns the public home and popular topic id lists, read through the shared Redis key for a minute.
  */
 export function readPublicSectionTopicIds(): Promise<TopicSectionIds> {
 	return cacheJson({ key: TOPIC_SECTION_IDS_KEY, ttlMs: TOPIC_SECTION_IDS_TTL_MS, load: loadPublicSectionTopicIds })
 }
 
-// the featured and popular topic id lists from the database. featured topics keep their feature order,
+// the home and popular topic id lists from the database. home topics keep their home order,
 // and every other shown public topic is popular, ranked by subscriber count, newer breaking a tie
 async function loadPublicSectionTopicIds(): Promise<TopicSectionIds> {
-	const [featuredTopicIds, popularTopicIds] = await Promise.all([
+	const [homeTopicIds, popularTopicIds] = await Promise.all([
 		db
 			.select({ id: topics.id })
 			.from(topics)
-			.where(and(isPublicAndShown, isNotNull(topics.featureOrder)))
-			.orderBy(asc(topics.featureOrder)),
+			.where(and(isPublicAndShown, isNotNull(topics.homeOrder)))
+			.orderBy(asc(topics.homeOrder)),
 		db
 			.select({ id: topics.id })
 			.from(topics)
-			.where(and(isPublicAndShown, isNull(topics.featureOrder)))
+			.where(and(isPublicAndShown, isNull(topics.homeOrder)))
 			.orderBy(desc(topics.subscriberCount), desc(topics.createdAt))
 			.limit(MAX_POPULAR_TOPIC_IDS),
 	])
 	return {
-		featuredIds: featuredTopicIds.map((topicIdRow) => topicIdRow.id),
+		homeIds: homeTopicIds.map((topicIdRow) => topicIdRow.id),
 		popularIds: popularTopicIds.map((topicIdRow) => topicIdRow.id),
 	}
 }
 
-// the featured and popular topic rows, rebuilt from the cached id lists
+// the home and popular topic rows, rebuilt from the cached id lists
 async function publicSectionTopics(userId: string | null): Promise<{
-	featuredTopics: (typeof topics.$inferSelect)[]
+	homeTopics: (typeof topics.$inferSelect)[]
 	popularTopics: (typeof topics.$inferSelect)[]
 }> {
 	// the cached id lists say which topics the sections show and in what order
-	const { featuredIds, popularIds } = await readPublicSectionTopicIds()
-	const sectionIds = [...featuredIds, ...popularIds]
+	const { homeIds, popularIds } = await readPublicSectionTopicIds()
+	const sectionIds = [...homeIds, ...popularIds]
 	if (sectionIds.length === 0) {
-		return { featuredTopics: [], popularTopics: [] }
+		return { homeTopics: [], popularTopics: [] }
 	}
 	// re-checking visibility drops a topic made private inside the cached period
 	// ponytail: a popular topic the user owns shortens their popular list until the cache refreshes, fine at this cached period
@@ -112,11 +112,11 @@ async function publicSectionTopics(userId: string | null): Promise<{
 	const topicRowById = new Map(topicRows.map((topicRow) => [topicRow.id, topicRow]))
 	const toTopics = (topicIds: string[]): (typeof topics.$inferSelect)[] =>
 		topicIds.flatMap((topicId) => topicRowById.get(topicId) ?? [])
-	return { featuredTopics: toTopics(featuredIds), popularTopics: toTopics(popularIds) }
+	return { homeTopics: toTopics(homeIds), popularTopics: toTopics(popularIds) }
 }
 
 /**
- * Build a topic feed's sections: featured and popular for everyone, yours and subscribed as well for a logged-in user.
+ * Build a topic feed's sections: home and popular for everyone, yours and subscribed as well for a logged-in user.
  */
 export async function buildTopicFeeds(
 	userId: string | null,
@@ -127,7 +127,7 @@ export async function buildTopicFeeds(
 
 	// the user's own topics, and the topics they subscribe to but don't own. both read newest first.
 	// an unordered select leaves the order to the database, which moves a row after any update to it
-	const [ownersTopics, subscribedTopics, { featuredTopics, popularTopics }] = await traceRequestStage(
+	const [ownersTopics, subscribedTopics, { homeTopics, popularTopics }] = await traceRequestStage(
 		"topic_feed.sections",
 		() =>
 			Promise.all([
@@ -147,25 +147,25 @@ export async function buildTopicFeeds(
 	)
 
 	// fetch every loaded topic's feed data in one batch keyed by topic id, then build each feed in memory
-	const combinedTopics = [...ownersTopics, ...subscribedTopics, ...featuredTopics, ...popularTopics]
+	const combinedTopics = [...ownersTopics, ...subscribedTopics, ...homeTopics, ...popularTopics]
 	const topicFeedData = await traceRequestStage("topic_feed.data", () => loadTopicFeedData(combinedTopics, userId))
 
 	// build each section's feeds from the batched data
 	const toTopicFeeds = (sectionTopics: (typeof topics.$inferSelect)[]): TopicFeed[] =>
 		sectionTopics.map((topic) => buildTopicFeed(topic, userId, includeConsumedResources, topicFeedData))
-	const [ownerTopicFeeds, subscribedTopicFeeds, featuredTopicFeeds, popularTopicFeeds] = traceRequestStage(
+	const [ownerTopicFeeds, subscribedTopicFeeds, homeTopicFeeds, popularTopicFeeds] = traceRequestStage(
 		"topic_feed.assemble",
 		() =>
 			[
 				toTopicFeeds(ownersTopics),
 				toTopicFeeds(subscribedTopics),
-				toTopicFeeds(featuredTopics),
+				toTopicFeeds(homeTopics),
 				toTopicFeeds(popularTopics),
 			] as const,
 	)
 
 	// fill every feed's favicon paths in one query, and every topic's own reactions in one read
-	const allTopicFeeds = [...ownerTopicFeeds, ...subscribedTopicFeeds, ...featuredTopicFeeds, ...popularTopicFeeds]
+	const allTopicFeeds = [...ownerTopicFeeds, ...subscribedTopicFeeds, ...homeTopicFeeds, ...popularTopicFeeds]
 	const [, reactionSummaries] = await Promise.all([
 		traceRequestStage("topic_feed.favicons", () =>
 			attachTopicFindingFaviconPaths(allTopicFeeds.flatMap((topicFeed) => topicFeed.findings)),
@@ -189,7 +189,7 @@ export async function buildTopicFeeds(
 				{ key: "subscribed", topics: subscribedTopicFeeds },
 			]
 		: []
-	sections.push({ key: "featured", topics: featuredTopicFeeds }, { key: "popular", topics: popularTopicFeeds })
+	sections.push({ key: "home", topics: homeTopicFeeds }, { key: "popular", topics: popularTopicFeeds })
 	return { sections }
 }
 

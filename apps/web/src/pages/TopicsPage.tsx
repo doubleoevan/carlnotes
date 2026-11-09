@@ -111,14 +111,14 @@ export function TopicsPage() {
 	)
 }
 
-// which section opens first: featured for a visitor, else the user's own topics, else the ones they follow
+// which section opens first: home topics for a visitor, else the user's own topics, else the ones they follow
 function toDefaultOpenSection(
 	isSignedIn: boolean,
 	ownTopicCount: number | null,
 	followedTopicCount: number | null,
 ): string {
 	if (!isSignedIn) {
-		return "featured"
+		return "home"
 	}
 	return ownTopicCount === 0 && (followedTopicCount ?? 0) > 0 ? "subscribed" : "yours"
 }

@@ -1,6 +1,6 @@
 import { fetchHome } from "@carlnotes/client/homeClient"
 import {
-	toFeaturedTopicsItemListLd,
+	toHomeTopicsItemListLd,
 	toOrganizationLd,
 	toSoftwareApplicationLd,
 	toVideoObjectLd,
@@ -13,8 +13,8 @@ import { createFileRoute } from "@tanstack/react-router"
 import { loadOnServer, readWithDegradedFallback } from "@/lib/loadOnServer"
 import { HomePage } from "@/pages/HomePage"
 
-// the home page, with the site-wide title and description, its canonical url, its structured data with the featured
-// topics and the video on making a topic, and a visitor's featured cards read on the server
+// the home page, with the site-wide title and description, its canonical url, its structured data with the home
+// topics and the video on making a topic, and a visitor's home topic and podcast cards read on the server
 export const Route = createFileRoute("/_layout/")({
 	// a visitor's home payload, read on the server only, or null in the browser or if the read fails, which marks the
 	// render degraded. a user's payload is read in the browser, where their session is
@@ -26,7 +26,7 @@ export const Route = createFileRoute("/_layout/")({
 			toJsonLdScript(toOrganizationLd(SITE_URL)),
 			toJsonLdScript(toSoftwareApplicationLd(SITE_URL)),
 			toJsonLdScript(toVideoObjectLd(SITE_URL, TOPIC_TUTORIAL_VIDEO)),
-			toJsonLdScript(toFeaturedTopicsItemListLd(SITE_URL, loaderData?.featuredTopics ?? [])),
+			toJsonLdScript(toHomeTopicsItemListLd(SITE_URL, loaderData?.homeTopics ?? [])),
 		],
 	}),
 	component: HomePage,

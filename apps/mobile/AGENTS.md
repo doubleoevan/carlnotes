@@ -15,7 +15,7 @@ and the package boundary check fails anything else, a type-only import of `@carl
 - `app/` — the Expo Router routes. `_layout.tsx` configures the api client with the session cookie on every request,
   loads the fonts and the session behind the splash screen, stacks the TanStack Query providers and Sentry's wrap,
   mounts the Reusables `PortalHost` after the sheet provider so anchored controls appear above sheets, and guards the
-  screens with `Stack.Protected`: a user sees `(tabs)/index.tsx`, the Home with its featured cards and a user's topics,
+  screens with `Stack.Protected`: a user sees `(tabs)/index.tsx`, the Home with its home topic and podcast cards and a user's topics,
   `(tabs)/topics.tsx`, the Topics directory, `(tabs)/search.tsx`, the retained site search, `(tabs)/settings.tsx`, a
   retained alias for Account, and `topics/[topicId].tsx`. Visitors may read Home, with the web hero, Search, public
   Topics, Podcast Episodes, Profiles, Teams, Plans, permitted Topic/Team notes, and `invite/[token].tsx`, the invitation

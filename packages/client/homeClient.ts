@@ -1,4 +1,4 @@
-// the home page's client: the featured topics and podcast episodes and a user's topics as cards
+// the home page's client: the home topics and podcast episodes and a user's topics as cards
 import { type HomeResponse, homeResponse, type YourTopicsPage, yourTopicsPage } from "@carlnotes/contracts/home"
 import { apiClient, readApiResponse } from "./apiClient"
 

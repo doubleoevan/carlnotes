@@ -36,7 +36,7 @@ export const Visitor: Story = {
 		topicFeed: {
 			...toTestTopicFeedResponse([]),
 			sections: [
-				{ key: "featured", topics: [toTestTopicFeed({ isTopicOwner: false, isTeamMember: false, canRate: false })] },
+				{ key: "home", topics: [toTestTopicFeed({ isTopicOwner: false, isTeamMember: false, canRate: false })] },
 				{ key: "popular", topics: [] },
 			],
 		},
@@ -50,7 +50,7 @@ export const Followed: Story = {
 			sections: [
 				{ key: "yours", topics: [] },
 				{ key: "subscribed", topics: [toTestTopicFeed({ isTopicOwner: false, canRate: false })] },
-				{ key: "featured", topics: [] },
+				{ key: "home", topics: [] },
 				{ key: "popular", topics: [] },
 			],
 		},

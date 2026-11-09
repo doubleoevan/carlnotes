@@ -1,6 +1,6 @@
 import { authClient } from "@carlnotes/client/authClient"
-import { fetchPodcastEpisodePage, sendPodcastEpisodeFeatureOrder } from "@carlnotes/client/podcastEpisodeClient"
-import { isPublishedPodcastEpisode, toFeaturedPodcastEpisodeLabel } from "@carlnotes/contracts/podcast"
+import { fetchPodcastEpisodePage, sendPodcastEpisodeHomeOrder } from "@carlnotes/client/podcastEpisodeClient"
+import { isPublishedPodcastEpisode, toHomePodcastEpisodeLabel } from "@carlnotes/contracts/podcast"
 import type { PodcastEpisodePageResponse } from "@carlnotes/contracts/podcastEpisodePage"
 import { isTopicSlugStale, toPodcastEpisodePath, toTopicPath } from "@carlnotes/contracts/seo"
 import { toPodcastEpisodeTitleLabel } from "@carlnotes/core/lib/labels"
@@ -12,7 +12,7 @@ import { useMatch, useNavigate, useParams } from "@tanstack/react-router"
 import { ListOrdered, Rss, Trash2 } from "lucide-react"
 import { useCallback, useEffect, useState } from "react"
 import { toast } from "sonner"
-import { type FeatureOrderMove, FeatureRankDialog } from "@/components/common/FeatureRankDialog"
+import { type HomeOrderMove, HomeRankDialog } from "@/components/common/HomeRankDialog"
 import { PodcastEpisodeChaptersTable } from "@/components/podcast/PodcastEpisodeChaptersTable"
 import { PodcastEpisodeCountsLine } from "@/components/podcast/PodcastEpisodeCountsLine"
 import { PodcastEpisodeHeader } from "@/components/podcast/PodcastEpisodeHeader"
@@ -142,13 +142,13 @@ export function PodcastEpisodePage() {
 	const topicPath = toTopicPath(topic)
 
 	// send the rank dialog's moves one at a time, then reload the page. a rejection leaves the dialog open
-	const handleRankPodcastEpisode = async (moves: FeatureOrderMove[]): Promise<void> => {
+	const handleRankPodcastEpisode = async (moves: HomeOrderMove[]): Promise<void> => {
 		try {
 			for (const move of moves) {
-				await sendPodcastEpisodeFeatureOrder(move.id, move.position)
+				await sendPodcastEpisodeHomeOrder(move.id, move.position)
 			}
 		} catch (error) {
-			console.error("podcast episode feature order failed", error)
+			console.error("podcast episode home order failed", error)
 			toast.error(SAVE_FAILED_TEXT)
 			throw error
 		}
@@ -220,15 +220,15 @@ export function PodcastEpisodePage() {
 					onClose={() => setOpenDialog(null)}
 				/>
 			)}
-			{openDialog === "rank" && podcastEpisodePage.featuredPodcastEpisodes && (
-				<FeatureRankDialog
-					noun="podcast episodes"
+			{openDialog === "rank" && podcastEpisodePage.homePodcastEpisodes && (
+				<HomeRankDialog
+					noun="podcasts"
 					pageItem={{ id: podcastEpisode.id, label: toPodcastEpisodeTitleLabel(podcastEpisode) }}
-					featuredItems={podcastEpisodePage.featuredPodcastEpisodes.map((featuredPodcastEpisode) => ({
-						id: featuredPodcastEpisode.id,
-						label: toFeaturedPodcastEpisodeLabel(featuredPodcastEpisode),
+					homeItems={podcastEpisodePage.homePodcastEpisodes.map((homePodcastEpisode) => ({
+						id: homePodcastEpisode.id,
+						label: toHomePodcastEpisodeLabel(homePodcastEpisode),
 					}))}
-					isPageItemFeatured={podcastEpisodePage.featureOrder !== null}
+					isPageItemOnHome={podcastEpisodePage.homeOrder !== null}
 					onSave={handleRankPodcastEpisode}
 					onClose={() => setOpenDialog(null)}
 				/>
@@ -254,7 +254,7 @@ type UseRegisterPodcastEpisodePageActionsOptions = {
 	onOpenDialog: (podcastEpisodeDialog: PodcastEpisodeDialog) => void
 }
 
-// register the actions menu for the podcast episode's topic, with Featured podcast episodes for an admin on a public
+// register the actions menu for the podcast episode's topic, with Home podcasts for an admin on a public
 // topic and Remove podcast episode for a user who may remove the podcast episode
 function useRegisterPodcastEpisodePageActions({
 	podcastEpisodePage,
@@ -271,8 +271,8 @@ function useRegisterPodcastEpisodePageActions({
 							? [toAddTopicToTeamOption(() => onOpenDialog("add-topic-to-team"))]
 							: []),
 						toShareTopicOption(() => onOpenDialog("share")),
-						...(podcastEpisodePage?.featuredPodcastEpisodes && podcastEpisodeTopic.visibility === "public"
-							? [{ label: "Featured podcast episodes", Icon: ListOrdered, onSelect: () => onOpenDialog("rank") }]
+						...(podcastEpisodePage?.homePodcastEpisodes && podcastEpisodeTopic.visibility === "public"
+							? [{ label: "Home podcasts", Icon: ListOrdered, onSelect: () => onOpenDialog("rank") }]
 							: []),
 						...(podcastEpisodePage?.canRemovePodcastEpisode
 							? [{ label: "Remove podcast episode", Icon: Trash2, onSelect: () => onOpenDialog("remove") }]

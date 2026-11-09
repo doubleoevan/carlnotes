@@ -54,12 +54,12 @@ export function toTopicFeedRows({ topicFeed, openSection, expandedTopicKeys }: T
 }
 
 /**
- * Selects Featured for visitors and the account's initial Topic section.
+ * Selects Home topics for visitors and the account's initial Topic section.
  */
 export function toInitialTopicSection(topicFeed: TopicFeedResponse): TopicSectionKey {
 	// the public feed has no account-owned section
 	if (!topicFeed.sections.some((section) => section.key === "yours")) {
-		return "featured"
+		return "home"
 	}
 	// the web's first-open-section rule
 	const ownTopicCount = topicFeed.sections.find((section) => section.key === "yours")?.topics.length ?? 0

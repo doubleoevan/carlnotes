@@ -14,8 +14,8 @@ import { isPodcastEpisodeRecordingConfigured } from "@carlnotes/server/podcastEp
 import { eq } from "drizzle-orm"
 import { isAllowed } from "../authorization"
 import type { AnalyticsProperties } from "../currentUser"
-import { releaseFeatureOrder } from "../topic/featuring"
 import { clearVisitorTopicCaches } from "../topic/feedCaches"
+import { releaseHomeOrder } from "../topic/homeOrder"
 import { type PromptVersionOrigin, savePromptVersion } from "../topic/promptVersions"
 import { authorizeNewDailyTopic, type DailyFrequencyRejection } from "../topic/saveHelpers"
 import { notifyIndexNowOfTopicChange, saveTopicVectorsOnVisibilityChange } from "../topic/saveTopic"
@@ -133,8 +133,8 @@ export async function updateTopicFields({
 			return dailyFrequency
 		}
 	}
-	// write the named fields and release the feature order in one transaction
-	let isFeatureOrderReleased = false
+	// write the named fields and release the home order in one transaction
+	let isHomeOrderReleased = false
 	await db.transaction(async (transaction) => {
 		// serialize publication and podcast activation against private confirmation
 		await lockPersonalSourcesTopic(transaction, topicId)
@@ -142,9 +142,9 @@ export async function updateTopicFields({
 			await assertPersonalSourcesConverted(transaction, topicId)
 		}
 		await transaction.update(topics).set(namedFields).where(eq(topics.id, topicId))
-		// drop the topic from the featured topics if it stops being public
+		// drop the topic from the home topics if it stops being public
 		if (topicFields.visibility && topicFields.visibility !== "public") {
-			isFeatureOrderReleased = await releaseFeatureOrder(topicId, transaction)
+			isHomeOrderReleased = await releaseHomeOrder(topicId, transaction)
 		}
 	})
 
@@ -158,7 +158,7 @@ export async function updateTopicFields({
 		topicId,
 		visibility: savedTopic.visibility,
 		previousVisibility: editableTopic.topic.visibility,
-		isFeatureOrderReleased,
+		isHomeOrderReleased,
 	})
 
 	// tell IndexNow if the edit made the topic public or changed its url

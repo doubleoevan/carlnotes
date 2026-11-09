@@ -19,8 +19,8 @@ import { isAllowed, topicsRemaining } from "../authorization"
 import type { AnalyticsProperties } from "../currentUser"
 import { startInviteEmails } from "../invite/emails"
 import { checkTopicInvitees } from "../invite/userInvites"
-import { releaseFeatureOrder } from "./featuring"
 import { clearVisitorTopicCaches } from "./feedCaches"
+import { releaseHomeOrder } from "./homeOrder"
 import { type PromptVersionOrigin, savePromptVersion } from "./promptVersions"
 import {
 	attachDraftTeam,
@@ -295,8 +295,8 @@ export async function updateTopic(
 		return inviteeCheck
 	}
 	const podcastNames = await toPodcastNames(payload.sources)
-	// whether the visibility change released the topic's feature order inside the transaction
-	let isFeatureOrderReleased = false
+	// whether the visibility change released the topic's home order inside the transaction
+	let isHomeOrderReleased = false
 	const removedSourceKinds = await db.transaction(async (transaction) => {
 		// serialize confirmation with publication and invitation reconciliation
 		await lockPersonalSourcesTopic(transaction, topicId)
@@ -321,9 +321,9 @@ export async function updateTopic(
 		// save a prompt version when the prompt changed
 		await savePromptVersion(transaction, { topicId, prompt, userId, origin: "editor", previousPrompt: topic.prompt })
 
-		// only a public topic can be featured, so changing the visibility from public drops it from the featured topics
+		// only a public topic can be pinned to the home page, so changing the visibility from public drops it from the home topics
 		if (visibility !== "public") {
-			isFeatureOrderReleased = await releaseFeatureOrder(topicId, transaction)
+			isHomeOrderReleased = await releaseHomeOrder(topicId, transaction)
 		}
 
 		// drop the removed emails. only invites naming an address are reconciled, and a declined row stays for reputation
@@ -361,7 +361,7 @@ export async function updateTopic(
 	})
 
 	// drop the topic's cached visitor copies, and the edge's copies of its image files if it left the public set
-	await clearVisitorTopicCaches({ topicId, visibility, previousVisibility: topic.visibility, isFeatureOrderReleased })
+	await clearVisitorTopicCaches({ topicId, visibility, previousVisibility: topic.visibility, isHomeOrderReleased })
 	if (topic.visibility === "public" && visibility !== "public") {
 		await purgeEdgeCacheTagAfterDeletion(toTopicImageCacheTag(topicId))
 	}

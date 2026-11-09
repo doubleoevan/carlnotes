@@ -6,7 +6,7 @@ import { AccordionSection } from "./AccordionSection"
 const meta = {
 	title: "Common/AccordionSection",
 	component: AccordionSection,
-	args: { value: "featured-topics", title: "Featured topics", countLabel: "6 topics", children: "The section's cards" },
+	args: { value: "home-topics", title: "Home topics", countLabel: "6 topics", children: "The section's cards" },
 	argTypes: {
 		title: { control: "text" },
 		countLabel: { control: "text" },

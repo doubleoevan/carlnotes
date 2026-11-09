@@ -263,14 +263,14 @@ function assertPodcastEpisodeResponse(response: ApiResponse, options: PodcastEpi
 }
 
 /**
- * Sets a podcast episode's position among the home's featured episodes, admin only. Position zero clears it.
+ * Sets a podcast episode's position among the home podcast episodes, admin only. Position zero clears it.
  */
-export async function sendPodcastEpisodeFeatureOrder(podcastEpisodeId: string, position: number): Promise<void> {
-	const response = await apiClient().api["podcast-episodes"][":id"]["feature-order"].$patch({
+export async function sendPodcastEpisodeHomeOrder(podcastEpisodeId: string, position: number): Promise<void> {
+	const response = await apiClient().api["podcast-episodes"][":id"]["home-order"].$patch({
 		param: { id: podcastEpisodeId },
 		json: { position },
 	})
 	if (!response.ok) {
-		throw new Error(`podcast episode feature order update failed: ${response.status}`)
+		throw new Error(`podcast episode home order update failed: ${response.status}`)
 	}
 }

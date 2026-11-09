@@ -1,5 +1,5 @@
 import { authClient } from "@carlnotes/client/authClient"
-import { sendTopicFeatureOrder, sendTopicSubscription, type TopicGate } from "@carlnotes/client/topicClient"
+import { sendTopicHomeOrder, sendTopicSubscription, type TopicGate } from "@carlnotes/client/topicClient"
 import { isAdminRole } from "@carlnotes/contracts/enums"
 import type { TopicResponse } from "@carlnotes/contracts/topics"
 import { selectTopicFindings } from "@carlnotes/core/lib/topicFeed"
@@ -9,7 +9,7 @@ import { useNavigate, useParams } from "@tanstack/react-router"
 import type * as React from "react"
 import { useCallback, useEffect, useState } from "react"
 import { toast } from "sonner"
-import type { FeatureOrderMove } from "@/components/common/FeatureRankDialog"
+import type { HomeOrderMove } from "@/components/common/HomeRankDialog"
 import { NotesSection } from "@/components/note/NotesSection"
 import { PodcastEpisodePlayer } from "@/components/podcast/PodcastEpisodePlayer"
 import { PodcastEpisodesCard } from "@/components/podcast/PodcastEpisodesCard"
@@ -115,7 +115,7 @@ export function TopicPage() {
 						onAddTopicToTeam: () => setOpenDialog("add-topic-to-team"),
 						onShareTopic: () => setOpenDialog("share"),
 						onToggleFollowTopic: () => void handleSubscriptionToggle(),
-						onRankFeaturedTopic: () => setOpenDialog("rank"),
+						onRankHomeTopic: () => setOpenDialog("rank"),
 						onEditTopic: () => setOpenDialog("edit-choice"),
 						onDeleteTopic: () => setOpenDialog("delete"),
 					}),
@@ -165,10 +165,10 @@ export function TopicPage() {
 	}
 
 	// send the rank dialog's moves one at a time, then reload both feeds once
-	const handleRankTopic = async (moves: FeatureOrderMove[]): Promise<void> => {
+	const handleRankTopic = async (moves: HomeOrderMove[]): Promise<void> => {
 		await runThenReload(async () => {
 			for (const move of moves) {
-				await sendTopicFeatureOrder(move.id, move.position)
+				await sendTopicHomeOrder(move.id, move.position)
 			}
 		})
 		await reloadHomePage()

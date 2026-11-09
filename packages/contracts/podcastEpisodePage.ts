@@ -1,7 +1,7 @@
 // the podcast episode page contract: the episode, its topic, the findings it narrates, and its tables
 import { z } from "zod"
 import { topicFinding } from "./findings"
-import { featuredPodcastEpisode, podcastEpisode, podcastEpisodeSummary, podcastEpisodeTranscriptBlock } from "./podcast"
+import { homePodcastEpisode, podcastEpisode, podcastEpisodeSummary, podcastEpisodeTranscriptBlock } from "./podcast"
 import { commentThreadResponse, reactionSummary } from "./social"
 import { topicResponse } from "./topics"
 
@@ -24,10 +24,10 @@ export const podcastEpisodePageResponse = z.object({
 	canRate: z.boolean(),
 	// whether this user may remove the podcast episode
 	canRemovePodcastEpisode: z.boolean(),
-	// this episode's position among the home's featured episodes and the featured episodes themselves, both null for
+	// this episode's position among the home podcast episodes and the home podcast episodes themselves, both null for
 	// anyone but an admin
-	featureOrder: z.number().nullable(),
-	featuredPodcastEpisodes: z.array(featuredPodcastEpisode).nullable(),
+	homeOrder: z.number().nullable(),
+	homePodcastEpisodes: z.array(homePodcastEpisode).nullable(),
 	transcript: z.array(podcastEpisodeTranscriptBlock),
 	// up to fifty of the topic's other published podcast episodes that the user may listen to, newest first, and up to
 	// fifty published podcast episodes of other topics that the user may listen to, most related first

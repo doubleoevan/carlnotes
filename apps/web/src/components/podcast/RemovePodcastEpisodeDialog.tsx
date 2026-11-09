@@ -30,7 +30,7 @@ export function RemovePodcastEpisodeButton({
 	return (
 		<button
 			type="button"
-			aria-label={episodeNumber === null ? "Remove episode" : `Remove episode ${episodeNumber}`}
+			aria-label={episodeNumber === null ? "Remove podcast episode" : `Remove podcast episode ${episodeNumber}`}
 			onClick={onRemovePodcastEpisode}
 			className={cn(
 				"text-muted-foreground hover:text-destructive grid size-11 shrink-0 place-items-center sm:size-9",

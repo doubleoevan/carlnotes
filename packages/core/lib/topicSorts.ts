@@ -20,7 +20,7 @@ export function toTrendingTopics<Topic extends TrendingTopic>(topics: Topic[]): 
 }
 
 /**
- * Orders a homepage section's topics for the sort mode. Trending reorders every section but Featured, whose order an
+ * Orders a homepage section's topics for the sort mode. Trending reorders every section but Home topics, whose order an
  * admin sets, and relevant and newest keep the order the topics were delivered in.
  */
 export function toSortedSectionTopics<Topic extends TrendingTopic>(
@@ -28,5 +28,5 @@ export function toSortedSectionTopics<Topic extends TrendingTopic>(
 	topics: Topic[],
 	sort: TopicFindingSort,
 ): Topic[] {
-	return sort === "trending" && sectionKey !== "featured" ? toTrendingTopics(topics) : topics
+	return sort === "trending" && sectionKey !== "home" ? toTrendingTopics(topics) : topics
 }

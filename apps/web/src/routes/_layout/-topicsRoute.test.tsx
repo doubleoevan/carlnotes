@@ -80,14 +80,14 @@ function toTopicFinding(findingNumber: number): TopicFinding {
 	}
 }
 
-// the featured topics of a visitor's feed, and its popular topics if it has any
-type ToTopicFeedResponseOptions = { featuredTopics: TopicFeed[]; popularTopics?: TopicFeed[] }
+// the home topics of a visitor's feed, and its popular topics if it has any
+type ToTopicFeedResponseOptions = { homeTopics: TopicFeed[]; popularTopics?: TopicFeed[] }
 
-// a visitor's feed with these featured and popular topics
-function toTopicFeedResponse({ featuredTopics, popularTopics = [] }: ToTopicFeedResponseOptions): TopicFeedResponse {
+// a visitor's feed with these home and popular topics
+function toTopicFeedResponse({ homeTopics, popularTopics = [] }: ToTopicFeedResponseOptions): TopicFeedResponse {
 	return {
 		sections: [
-			{ key: "featured", topics: featuredTopics },
+			{ key: "home", topics: homeTopics },
 			{ key: "popular", topics: popularTopics },
 		],
 		topicsRemaining: 0,
@@ -128,7 +128,7 @@ async function renderTopicsPage(topicsPagePath = "/topics"): Promise<string> {
 test("a server route loads its feed after the api client was configured for a browser", async () => {
 	configureApiClient({ apiBaseUrl: "", showError: console.error })
 	topicFeedResponse = toTopicFeedResponse({
-		featuredTopics: [toFeedTopic({ id: TOPIC_ID, name: "Server-rendered coffee" })],
+		homeTopics: [toFeedTopic({ id: TOPIC_ID, name: "Server-rendered coffee" })],
 	})
 	expect(await renderTopicsPage()).toContain("Server-rendered coffee")
 })
@@ -136,12 +136,12 @@ test("a server route loads its feed after the api client was configured for a br
 // every request renders its own feed, so a later visitor never sees the feed an earlier request read
 test("each Topics page render shows the feed its own request read", async () => {
 	topicFeedResponse = toTopicFeedResponse({
-		featuredTopics: [toFeedTopic({ id: TOPIC_ID, name: "Espresso machines" })],
+		homeTopics: [toFeedTopic({ id: TOPIC_ID, name: "Espresso machines" })],
 	})
 	expect(await renderTopicsPage()).toContain("Espresso machines")
 
 	// a second request in the same process reads a newer feed
-	topicFeedResponse = toTopicFeedResponse({ featuredTopics: [toFeedTopic({ id: TOPIC_ID, name: "Raccoon behavior" })] })
+	topicFeedResponse = toTopicFeedResponse({ homeTopics: [toFeedTopic({ id: TOPIC_ID, name: "Raccoon behavior" })] })
 	const secondTopicsPageHtml = await renderTopicsPage()
 	expect(secondTopicsPageHtml).toContain("Raccoon behavior")
 	expect(secondTopicsPageHtml).not.toContain("Espresso machines")
@@ -149,7 +149,7 @@ test("each Topics page render shows the feed its own request read", async () => 
 
 // the header's sign-in and sign-up links are nofollow, and the sign-in link still names the page in its next param
 test("a visitor's sign-in and sign-up links are nofollow", async () => {
-	topicFeedResponse = toTopicFeedResponse({ featuredTopics: [] })
+	topicFeedResponse = toTopicFeedResponse({ homeTopics: [] })
 	const topicsPageHtml = await renderTopicsPage()
 	expect(topicsPageHtml).toMatch(/<a rel="nofollow"[^>]*href="\/login\?next=%2Ftopics"/)
 	expect(topicsPageHtml).toMatch(/<a rel="nofollow"[^>]*href="\/signup\?cta=header"/)
@@ -157,15 +157,15 @@ test("a visitor's sign-in and sign-up links are nofollow", async () => {
 
 // a page past the last shows the last page. the topics off that page are in the html, hidden with JavaScript, and
 // the first page's link drops the section's search param
-test("a featured page past the last shows the last page with links to every page", async () => {
-	// twelve featured topics, three pages of five, rendered at page 9
+test("a home topics page past the last shows the last page with links to every page", async () => {
+	// twelve home topics, three pages of five, rendered at page 9
 	topicFeedResponse = toTopicFeedResponse({
-		featuredTopics: Array.from({ length: 12 }, (_, i) => {
+		homeTopics: Array.from({ length: 12 }, (_, i) => {
 			const topicNumber = String(i + 1).padStart(2, "0")
 			return toFeedTopic({ id: `60221dfa-df65-44fa-84d4-fbaf10d48e${topicNumber}`, name: `Topic ${topicNumber}` })
 		}),
 	})
-	const topicsPageHtml = await renderTopicsPage("/topics?featured=9")
+	const topicsPageHtml = await renderTopicsPage("/topics?home=9")
 
 	// the class of a topic's card, the reveal div above its name
 	const toTopicViewClass = (name: string): string => {
@@ -180,23 +180,23 @@ test("a featured page past the last shows the last page with links to every page
 	expect(toTopicViewClass("Topic 12")).not.toContain("scripted:hidden")
 
 	// the section's page links go to the plain Topics page url, then page 2, then the current page 3
-	const paginationStart = topicsPageHtml.indexOf('aria-label="Featured topics pages"')
+	const paginationStart = topicsPageHtml.indexOf('aria-label="Home topics pages"')
 	const paginationHtml = topicsPageHtml.slice(paginationStart, topicsPageHtml.indexOf("</nav>", paginationStart))
 	expect(paginationHtml).toContain('href="/topics"')
-	expect(paginationHtml).toContain('href="/topics?featured=2"')
+	expect(paginationHtml).toContain('href="/topics?home=2"')
 	const currentPageLinkHtml = paginationHtml.match(/<a[^>]*aria-current="page"[^>]*>3<\/a>/)?.[0]
-	expect(currentPageLinkHtml).toContain('href="/topics?featured=3"')
+	expect(currentPageLinkHtml).toContain('href="/topics?home=3"')
 })
 
 // a visitor's closed popular section stays in the html, so a crawler reaches its first page of topics and page links
 test("a closed popular section renders its first page and its page links", async () => {
-	// one featured topic and seven popular topics, two pages of popular topics
+	// one home topic and seven popular topics, two pages of popular topics
 	const popularTopics = Array.from({ length: 7 }, (_, i) => {
 		const topicNumber = String(i + 1).padStart(2, "0")
 		return toFeedTopic({ id: `60221dfa-df65-44fa-84d4-fbaf10d48f${topicNumber}`, name: `Popular topic ${topicNumber}` })
 	})
 	topicFeedResponse = toTopicFeedResponse({
-		featuredTopics: [toFeedTopic({ id: TOPIC_ID, name: "Espresso machines" })],
+		homeTopics: [toFeedTopic({ id: TOPIC_ID, name: "Espresso machines" })],
 		popularTopics,
 	})
 	const topicsPageHtml = await renderTopicsPage()
@@ -208,7 +208,7 @@ test("a closed popular section renders its first page and its page links", async
 	}
 	expect(topicsPageHtml).toContain('href="/topics?popular=2"')
 
-	// the popular section's content is closed for a visitor, whose feed opens on the featured section
+	// the popular section's content is closed for a visitor, whose feed opens on the home topics section
 	const popularSectionHtml = topicsPageHtml.slice(topicsPageHtml.indexOf(">Popular topics<"))
 	const popularContentTag = popularSectionHtml.match(/<div[^>]*data-slot="accordion-content"[^>]*>/)?.[0]
 	expect(popularContentTag).toContain('data-state="closed"')
@@ -219,10 +219,10 @@ test("a closed popular section renders its first page and its page links", async
 
 // a card's expander is a button with JavaScript and a link to the topic's page without it
 test("a card's expander is a link to the topic page without JavaScript", async () => {
-	// one featured topic with seven findings, two more than the five a card shows
+	// one home topic with seven findings, two more than the five a card shows
 	const topicFindings = Array.from({ length: 7 }, (_, index) => toTopicFinding(index + 1))
 	topicFeedResponse = toTopicFeedResponse({
-		featuredTopics: [toFeedTopic({ id: TOPIC_ID, name: "Espresso machines", findings: topicFindings })],
+		homeTopics: [toFeedTopic({ id: TOPIC_ID, name: "Espresso machines", findings: topicFindings })],
 	})
 	const topicsPageHtml = await renderTopicsPage()
 

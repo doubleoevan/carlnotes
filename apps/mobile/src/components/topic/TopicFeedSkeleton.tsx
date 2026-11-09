@@ -6,7 +6,7 @@ import { TopicFindingListCard } from "./TopicFindingList"
 // the first section opens with five findings per Topic, as on Home
 const TOPIC_KEYS = ["first", "second"]
 const FINDING_KEYS = ["first", "second", "third", "fourth", "fifth"]
-const CLOSED_SECTION_KEYS = ["subscribed", "featured", "popular"]
+const CLOSED_SECTION_KEYS = ["subscribed", "home", "popular"]
 
 /**
  * Reserves Home's section headings, Topic headers, and shared finding cards.

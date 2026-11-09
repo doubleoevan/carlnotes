@@ -78,18 +78,18 @@ export function toWebSiteLd(appUrl: string): object {
 }
 
 /**
- * Builds the home page's ItemList schema of the featured topics, each at its position with its name and url.
+ * Builds the home page's ItemList schema of the home topics, each at its position with its name and url.
  */
-export function toFeaturedTopicsItemListLd(appUrl: string, featuredTopics: { name: string; path: string }[]): object {
+export function toHomeTopicsItemListLd(appUrl: string, homeTopics: { name: string; path: string }[]): object {
 	return {
 		"@context": "https://schema.org",
 		"@type": "ItemList",
-		name: "Featured topics",
-		itemListElement: featuredTopics.map((featuredTopic, index) => ({
+		name: "Home topics",
+		itemListElement: homeTopics.map((homeTopic, index) => ({
 			"@type": "ListItem",
 			position: index + 1,
-			name: featuredTopic.name,
-			url: `${appUrl}${featuredTopic.path}`,
+			name: homeTopic.name,
+			url: `${appUrl}${homeTopic.path}`,
 		})),
 	}
 }

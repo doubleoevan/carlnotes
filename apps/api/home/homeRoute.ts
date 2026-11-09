@@ -1,4 +1,4 @@
-// the home route: the featured topics and podcast episodes as cards for everyone, and a user's own and followed
+// the home route: the home topics and podcast episodes as cards for everyone, and a user's own and followed
 // topics as cards
 
 import {
@@ -38,19 +38,19 @@ export const homeRoute = new Hono<AppEnv>()
 	})
 
 /**
- * Builds the home payload: the featured topics and podcast episodes and the newest podcast episodes as cards, and the
+ * Builds the home payload: the home topics and podcast episodes and the newest podcast episodes as cards, and the
  * first page of the user's own and followed topics as cards.
  */
 async function loadHome(userId: string | null): Promise<HomeResponse> {
 	// the ids from the shared cache, then their cards and the user's topics together
 	const homeCardIds = await loadHomeCardIds()
-	const [featuredTopics, featuredPodcastEpisodes, newestPodcastEpisodes, yourTopics] = await Promise.all([
-		loadTopicCards(homeCardIds.featuredTopicIds, userId),
-		loadPodcastEpisodeCards(homeCardIds.featuredPodcastEpisodeIds),
+	const [homeTopics, homePodcastEpisodes, newestPodcastEpisodes, yourTopics] = await Promise.all([
+		loadTopicCards(homeCardIds.homeTopicIds, userId),
+		loadPodcastEpisodeCards(homeCardIds.homePodcastEpisodeIds),
 		loadPodcastEpisodeCards(homeCardIds.newestPodcastEpisodeIds),
 		userId ? loadYourTopicsPage(userId, 0) : null,
 	])
-	return { featuredTopics, featuredPodcastEpisodes, newestPodcastEpisodes, yourTopics }
+	return { homeTopics, homePodcastEpisodes, newestPodcastEpisodes, yourTopics }
 }
 
 // one page of the user's own topics newest first, then the ones they follow newest first, as cards, with how many

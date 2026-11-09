@@ -189,7 +189,7 @@ authenticated encryption itself lives in `@carlnotes/server/privateText`.
   revocation, and already-issued JWT behavior. All fixture rows are removed in `finally`. Run `bun run smoke:mcp` before
   handing off an MCP change. Its deterministic Origin and tool-contract assertions also run in `bun run check`.
   `toolTestFixtures.ts` holds the registered tools and the callers the tool tests share.
-- `home/` — the home page's payload: `homeRoute.ts` (`GET /api/home`, the featured topics and podcast episodes and
+- `home/` — the home page's payload: `homeRoute.ts` (`GET /api/home`, the home topics and podcast episodes and
   the first page of a user's topics as cards, and `GET /api/home/your-topics`, each later page of six),
   `homeCardIds.ts` (the pinned topics and podcast episodes first, then the trending ones, one cached read
   every replica shares for a minute), and `topicCards.ts` (the card shapes). `topic/serveImageFile.ts` streams one image
@@ -197,9 +197,9 @@ authenticated encryption itself lives in `@carlnotes/server/privateText`.
   (public ones immutable at the edge under `topic-image:<topicId>`, private ones behind `topic:view`), the editor's
   Regenerate within `imageRegenerationLimit`, the render an editor polls, the upload, and the removal of an upload.
   `podcast/podcastEpisodeImagesRoute.ts` serves a podcast episode's own image files, gated by its topic's visibility.
-  `podcast/podcastEpisodeFeaturing.ts` is `PATCH /api/podcast-episodes/:id/feature-order` with the topic rules, the
-  pinned podcast episodes the console lists, and the purge of the home on every change. Both feature-order routes write
-  through `@carlnotes/db/featureOrder`, and `topic/featuring.ts` owns `clearFeaturedCaches`, the home card ids
+  `podcast/podcastEpisodeHomeOrder.ts` is `PATCH /api/podcast-episodes/:id/home-order` with the topic rules, the
+  pinned podcast episodes the console lists, and the purge of the home on every change. Both home-order routes write
+  through `@carlnotes/db/homeOrder`, and `topic/homeOrder.ts` owns `clearHomeCaches`, the home card ids
   cache delete and home purge they share. `report/adminReports.ts` draws a reported topic image again through an `admin` render
   instead of deleting it.
 - `podcast/` — a Topic's podcast episodes: `podcastEpisodes.ts` (the routes for a season's episodes, an episode page,

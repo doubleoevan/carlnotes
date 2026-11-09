@@ -40,6 +40,13 @@ Check for:
    or removed in a change, add its old name here in the same change. Only
    names that reached `main` belong here. A name renamed within the branch
    that introduced it never shipped, so nothing can still reference it.
+   - `apps/web/src/components/common/FeatureRankDialog.tsx`, `apps/web/src/components/admin/FeaturedCard.tsx`,
+     `apps/api/topic/featuring.ts`, `apps/api/podcast/podcastEpisodeFeaturing.ts`, `packages/db/featureOrder.ts`, and
+     `packages/db/podcastEpisodeFeaturing.ts` (now `HomeRankDialog.tsx`, `HomeOrderCard.tsx`, `homeOrder.ts`,
+     `podcastEpisodeHomeOrder.ts`, `homeOrder.ts`, and `podcastEpisodeHomeOrder.ts`), with `featureOrder`, `featuredTopics`,
+     `featuredPodcastEpisodes`, the `featured` section key, the `/feature-order` routes, and `admin:setFeatureOrder` (now
+     `homeOrder`, `homeTopics`, `homePodcastEpisodes`, `home`, `/home-order`, and `admin:setHomeOrder`). the
+     `feature_order` columns keep their names
    - `apps/mobile/src/nativePath.ts`, `nativePath.test.ts`, and `toNativePath` (now `platformPath.ts`,
      `platformPath.test.ts`, and `toPlatformPath` in the same module),
    - `apps/web/src/components/podcast/ThemeSongNote.tsx`, `themeSongLyrics.ts`, `themeSongLyrics.test.ts`,

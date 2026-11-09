@@ -20,8 +20,8 @@ import { and, eq, isNotNull } from "drizzle-orm"
 import { isAllowed } from "../authorization"
 import { loadChatAttachmentObjectKeys } from "../chat/chatAttachmentReads"
 import type { AnalyticsProperties } from "../currentUser"
-import { releaseFeatureOrder } from "./featuring"
 import { clearVisitorTopicCaches } from "./feedCaches"
+import { releaseHomeOrder } from "./homeOrder"
 
 /**
  * Deletes a topic and everything it includes. Only allowed by an owner or admin.
@@ -39,17 +39,17 @@ export async function deleteTopic(
 
 	// record every stored object's key and delete the topic in one transaction, so the keys survive the cascade to the
 	// sources, findings, invites, subscriptions, and attachment rows. a scan and a podcast episode keep their rows
-	let isFeatureOrderReleased = false
+	let isHomeOrderReleased = false
 	const objectKeys = await db.transaction(async (transaction) => {
 		const topicObjectKeys = await loadTopicObjectKeys(topicId, transaction)
 		await recordPendingObjectDeletions({ handle: transaction, objectKeys: topicObjectKeys })
-		isFeatureOrderReleased = await releaseFeatureOrder(topicId, transaction)
+		isHomeOrderReleased = await releaseHomeOrder(topicId, transaction)
 		await transaction.delete(topics).where(eq(topics.id, topicId))
 		return topicObjectKeys
 	})
 
 	// clear the topic's cached visitor copies once the rows are gone, then delete the objects
-	await clearVisitorTopicCaches({ topicId, visibility: topic.visibility, isFeatureOrderReleased })
+	await clearVisitorTopicCaches({ topicId, visibility: topic.visibility, isHomeOrderReleased })
 	await deleteStoredObjects(objectKeys)
 
 	// a deleted public topic's url is gone, so notify IndexNow to drop it, and its image files leave the edge

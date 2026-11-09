@@ -26,9 +26,9 @@ import { PRIVATE_NO_STORE_CACHE_CONTROL } from "../edgeCache"
 import { toPodcastEpisodePreview } from "../share/podcastEpisodeImage"
 import { toCachedPodcastEpisodePreviewPng, toPreviewPngResponse } from "../share/preview"
 import { updateTopicFields } from "../tool/topicTools"
-import { clearFeaturedCaches } from "../topic/featuring"
 import { canRateTopic } from "../topic/findingPermissions"
 import { toTopicGateResponse } from "../topic/helpers"
+import { clearHomeCaches } from "../topic/homeOrder"
 import { loadPodcastEpisodePage, loadSeasonPodcastEpisodes } from "./helpers"
 import { readPlayToken } from "./playTokens"
 import {
@@ -284,7 +284,7 @@ export const podcastEpisodesRoute = new Hono<AppEnv>()
 			return context.json({ error: "not found" }, 404)
 		}
 		await deletePodcastFeedCache(podcastEpisodeTopicRow.topic.id)
-		// a featured podcast episode left the home
-		await clearFeaturedCaches()
+		// a home podcast episode left the home
+		await clearHomeCaches()
 		return context.json({ ok: true })
 	})

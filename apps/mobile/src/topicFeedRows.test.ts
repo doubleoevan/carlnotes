@@ -6,16 +6,16 @@ import {
 } from "@carlnotes/contracts/topicFeedTestFixtures"
 import { toInitialTopicSection, toTopicFeedRows, toTopicFindingRows } from "./topicFeedRows"
 
-test("visitors open Featured and receive no account-owned feed sections", () => {
+test("visitors open Home topics and receive no account-owned feed sections", () => {
 	// use the API's public section shape rather than an empty signed-in feed
 	const feed = toTestTopicFeedResponse([])
 	feed.sections = [
-		{ key: "featured", topics: [toTestTopicFeed({ isTopicOwner: false, isTeamMember: false, canRate: false })] },
+		{ key: "home", topics: [toTestTopicFeed({ isTopicOwner: false, isTeamMember: false, canRate: false })] },
 		{ key: "popular", topics: [] },
 	]
 	const rows = toTopicFeedRows({ topicFeed: feed, openSection: toInitialTopicSection(feed) })
-	expect(toInitialTopicSection(feed)).toBe("featured")
-	expect(rows.filter((row) => row.kind === "section").map((row) => row.sectionKey)).toEqual(["featured", "popular"])
+	expect(toInitialTopicSection(feed)).toBe("home")
+	expect(rows.filter((row) => row.kind === "section").map((row) => row.sectionKey)).toEqual(["home", "popular"])
 	expect(rows.some((row) => row.kind === "topic")).toBe(true)
 })
 
@@ -38,10 +38,10 @@ test("one expanded section has five findings per Topic and an in-place expander"
 	const findings = Array.from({ length: 7 }, (_, i) => toTestTopicFinding({ findingId: `finding-${i}` }))
 	const feed = toTestTopicFeedResponse([toTestTopicFeed({ findings })])
 	feed.sections = feed.sections.map((section) =>
-		section.key === "featured" ? { ...section, topics: [toTestTopicFeed({ findings })] } : section,
+		section.key === "home" ? { ...section, topics: [toTestTopicFeed({ findings })] } : section,
 	)
 	const ownRows = toTopicFeedRows({ topicFeed: feed, openSection: "yours" })
-	const featuredRows = toTopicFeedRows({ topicFeed: feed, openSection: "featured" })
+	const homeOrderRows = toTopicFeedRows({ topicFeed: feed, openSection: "home" })
 	expect(ownRows.filter((row) => row.kind === "section")).toHaveLength(4)
 	expect(ownRows.filter((row) => row.kind === "findings")).toHaveLength(1)
 	expect(ownRows.find((row) => row.kind === "findings")?.findingRows).toHaveLength(5)
@@ -51,7 +51,7 @@ test("one expanded section has five findings per Topic and an in-place expander"
 		isExpanded: false,
 	})
 	expect(ownRows.find((row) => row.kind === "findings")?.key).not.toBe(
-		featuredRows.find((row) => row.kind === "findings")?.key,
+		homeOrderRows.find((row) => row.kind === "findings")?.key,
 	)
 	expect(new Set(ownRows.map((row) => row.key)).size).toBe(ownRows.length)
 
@@ -64,9 +64,8 @@ test("one expanded section has five findings per Topic and an in-place expander"
 		ownRows.find((row) => row.kind === "findings")?.key,
 	)
 	expect(
-		toTopicFeedRows({ topicFeed: feed, openSection: "featured", expandedTopicKeys }).find(
-			(row) => row.kind === "findings",
-		)?.findingRows,
+		toTopicFeedRows({ topicFeed: feed, openSection: "home", expandedTopicKeys }).find((row) => row.kind === "findings")
+			?.findingRows,
 	).toHaveLength(5)
 
 	// collapsing restores the original five rows and removes the final separator

@@ -1,11 +1,11 @@
-// a podcast episode's position among the home's featured episodes: the admin's write, the list, and its route
+// a podcast episode's position among the home podcast episodes: the admin's write, the list, and its route
 
-import type { FeaturedPodcastEpisode } from "@carlnotes/contracts/podcast"
+import type { HomePodcastEpisode } from "@carlnotes/contracts/podcast"
 import type { PodcastEpisodePageResponse } from "@carlnotes/contracts/podcastEpisodePage"
 import { toPodcastEpisodePath } from "@carlnotes/contracts/seo"
-import { topicFeatureOrderPayload } from "@carlnotes/contracts/topicPayloads"
+import { topicHomeOrderPayload } from "@carlnotes/contracts/topicPayloads"
 import { db, isPublicAndShown } from "@carlnotes/db"
-import { setFeatureOrder } from "@carlnotes/db/featureOrder"
+import { setHomeOrder } from "@carlnotes/db/homeOrder"
 import { podcastEpisodes } from "@carlnotes/db/schema/podcast"
 import { topics } from "@carlnotes/db/schema/topics"
 import { zValidator } from "@hono/zod-validator"
@@ -13,14 +13,14 @@ import { and, asc, eq, isNotNull } from "drizzle-orm"
 import { Hono } from "hono"
 import { isAllowed } from "../authorization"
 import { type AppEnv, currentUser } from "../currentUser"
-import { clearFeaturedCaches, type FeatureOrderResult } from "../topic/featuring"
+import { clearHomeCaches, type HomeOrderResult } from "../topic/homeOrder"
 
 /**
- * Sets a published podcast episode's position among the featured episodes, with the topic rules: position 0 clears it,
+ * Sets a published podcast episode's position among the home podcast episodes, with the topic rules: position 0 clears it,
  * another position inserts it there and pushes the rest down, and a position past the end appends. Only a published
- * episode of a public shown topic can be featured.
+ * episode of a public shown topic can be pinned to the home page.
  */
-async function setPodcastEpisodeFeatureOrder(podcastEpisodeId: string, position: number): Promise<FeatureOrderResult> {
+async function setPodcastEpisodeHomeOrder(podcastEpisodeId: string, position: number): Promise<HomeOrderResult> {
 	// the podcast episode must be published, on a public shown topic
 	const [podcastEpisode] = await db
 		.select({ status: podcastEpisodes.status, topicId: podcastEpisodes.topicId })
@@ -43,18 +43,18 @@ async function setPodcastEpisodeFeatureOrder(podcastEpisodeId: string, position:
 
 	// the episode leaves its old position and takes the new one, then the home reads its cards again
 	await db.transaction(async (transaction) => {
-		await setFeatureOrder({ table: podcastEpisodes, id: podcastEpisodeId, position, transaction })
+		await setHomeOrder({ table: podcastEpisodes, id: podcastEpisodeId, position, transaction })
 	})
-	await clearFeaturedCaches()
+	await clearHomeCaches()
 	return "ranked"
 }
 
 /**
- * Returns the featured podcast episodes in their order, each with its topic's name and its page.
+ * Returns the home podcasts in their order, each with its topic's name and its page.
  */
-export async function loadFeaturedPodcastEpisodes(): Promise<FeaturedPodcastEpisode[]> {
+export async function loadHomePodcastEpisodes(): Promise<HomePodcastEpisode[]> {
 	// the pinned rows with their topics, in their order
-	const featuredRows = await db
+	const homeOrderRows = await db
 		.select({
 			id: podcastEpisodes.id,
 			title: podcastEpisodes.title,
@@ -63,65 +63,65 @@ export async function loadFeaturedPodcastEpisodes(): Promise<FeaturedPodcastEpis
 			// the topic, which names the episode's page
 			topicId: topics.id,
 			topicName: topics.name,
-			featureOrder: podcastEpisodes.featureOrder,
+			homeOrder: podcastEpisodes.homeOrder,
 		})
 		.from(podcastEpisodes)
 		.innerJoin(topics, eq(topics.id, podcastEpisodes.topicId))
-		.where(isNotNull(podcastEpisodes.featureOrder))
-		.orderBy(asc(podcastEpisodes.featureOrder))
+		.where(isNotNull(podcastEpisodes.homeOrder))
+		.orderBy(asc(podcastEpisodes.homeOrder))
 
-	// the columns are nullable, and a published episode, the only kind featured, has them all
-	return featuredRows.map((featuredRow) => ({
-		id: featuredRow.id,
-		title: featuredRow.title ?? featuredRow.topicName,
-		topicName: featuredRow.topicName,
+	// the columns are nullable, and a published episode, the only kind pinned, has them all
+	return homeOrderRows.map((homeOrderRow) => ({
+		id: homeOrderRow.id,
+		title: homeOrderRow.title ?? homeOrderRow.topicName,
+		topicName: homeOrderRow.topicName,
 		pagePath: toPodcastEpisodePath(
-			{ id: featuredRow.topicId, name: featuredRow.topicName },
-			{ season: featuredRow.season ?? 0, episodeNumber: featuredRow.episodeNumber ?? 0 },
+			{ id: homeOrderRow.topicId, name: homeOrderRow.topicName },
+			{ season: homeOrderRow.season ?? 0, episodeNumber: homeOrderRow.episodeNumber ?? 0 },
 		),
-		featureOrder: featuredRow.featureOrder ?? 0,
+		homeOrder: homeOrderRow.homeOrder ?? 0,
 	}))
 }
 
 /**
- * Where this podcast episode sits among the featured episodes, and the list itself. Only an admin
+ * Where this podcast episode sits among the home podcast episodes, and the list itself. Only an admin
  * sees either.
  */
-export async function toFeaturedPodcastEpisodes(
-	featureOrder: number | null,
+export async function toHomePodcastEpisodes(
+	homeOrder: number | null,
 	isAdmin: boolean,
-): Promise<Pick<PodcastEpisodePageResponse, "featureOrder" | "featuredPodcastEpisodes">> {
+): Promise<Pick<PodcastEpisodePageResponse, "homeOrder" | "homePodcastEpisodes">> {
 	// anyone else sees neither
 	if (!isAdmin) {
-		return { featureOrder: null, featuredPodcastEpisodes: null }
+		return { homeOrder: null, homePodcastEpisodes: null }
 	}
-	return { featureOrder, featuredPodcastEpisodes: await loadFeaturedPodcastEpisodes() }
+	return { homeOrder, homePodcastEpisodes: await loadHomePodcastEpisodes() }
 }
 
-// the featured podcast episodes' order route, admin only
-export const podcastEpisodeFeaturingRoute = new Hono<AppEnv>().patch(
-	"/podcast-episodes/:id/feature-order",
-	zValidator("json", topicFeatureOrderPayload),
+// the home podcasts' order route, admin only
+export const podcastEpisodeHomeOrderRoute = new Hono<AppEnv>().patch(
+	"/podcast-episodes/:id/home-order",
+	zValidator("json", topicHomeOrderPayload),
 	async (context) => {
 		// reject a signed-out visitor, and anyone but an admin
 		const userId = currentUser(context)
 		if (!userId) {
 			return context.json({ error: "unauthorized" }, 401)
 		}
-		if (!(await isAllowed(userId, "admin:setFeatureOrder"))) {
+		if (!(await isAllowed(userId, "admin:setHomeOrder"))) {
 			return context.json({ error: "forbidden" }, 403)
 		}
 
 		// position zero clears the episode's order, and the rejection names the rule
-		const featureOrderResult = await setPodcastEpisodeFeatureOrder(
+		const homeOrderResult = await setPodcastEpisodeHomeOrder(
 			context.req.param("id"),
 			context.req.valid("json").position,
 		)
-		if (featureOrderResult === "missing") {
+		if (homeOrderResult === "missing") {
 			return context.json({ error: "not found" }, 404)
 		}
-		return featureOrderResult === "ranked"
+		return homeOrderResult === "ranked"
 			? context.json({ ok: true })
-			: context.json({ error: "only a published episode of a public topic can be featured" }, 409)
+			: context.json({ error: "only a published episode of a public topic can be pinned to the home page" }, 409)
 	},
 )

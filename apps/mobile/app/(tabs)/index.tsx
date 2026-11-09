@@ -41,7 +41,7 @@ import { captureVisitEvent } from "@/visitAnalytics"
 
 /**
  * The Home screen's two faces, the web's at phone width. A visitor sees the hero, the headline beside New Topic, how
- * it works, and the featured cards. A user sees the headline beside New Topic, their Updates, the featured cards,
+ * it works, and the home topic and podcast cards. A user sees the headline beside New Topic, their Updates, the home topic and podcast cards,
  * and their own topics as cards.
  */
 export default function HomeScreen() {
@@ -75,7 +75,7 @@ export default function HomeScreen() {
 					refreshControl={<RefreshControl refreshing={homeQuery.isRefetching} onRefresh={handleRefresh} />}
 				>
 					{/* both faces open with the headline beside New Topic, under a visitor's hero. a visitor reads how it
-					    works under it and a user reads their Updates, and a user's own topics follow the featured cards */}
+					    works under it and a user reads their Updates, and a user's own topics follow the home topic and podcast cards */}
 					{!isSignedIn && <HomeHero />}
 					<View className="mx-4 mt-6 flex-row items-center justify-between gap-3">
 						<HomeHeadline />
@@ -92,9 +92,9 @@ export default function HomeScreen() {
 						/>
 					) : (
 						<View className="mt-3">
-							<FeaturedSection
-								topics={home.featuredTopics}
-								podcastEpisodes={home.featuredPodcastEpisodes}
+							<HomeCardSections
+								topics={home.homeTopics}
+								podcastEpisodes={home.homePodcastEpisodes}
 								newestPodcastEpisodes={home.newestPodcastEpisodes}
 							/>
 							{isSignedIn && <YourTopicsSection yourTopics={home.yourTopics} />}
@@ -181,9 +181,9 @@ function HomeCardsAccordion<Row>({
 	)
 }
 
-// the featured topic cards, the featured podcast episode cards, and the new podcast episode cards of the week, each in
+// the home topic cards, the home podcast episode cards, and the new podcast episode cards of the week, each in
 // a section
-function FeaturedSection({
+function HomeCardSections({
 	topics,
 	podcastEpisodes,
 	newestPodcastEpisodes,
@@ -195,16 +195,16 @@ function FeaturedSection({
 	return (
 		<>
 			<HomeCardsSection
-				section={HOME_SECTIONS.featuredTopics}
+				section={HOME_SECTIONS.homeTopics}
 				rows={topics}
 				renderCard={(topic) => (
 					<TopicCard
 						topic={topic}
-						onOpen={() => captureVisitEvent("featured_card_open", { kind: "topic", id: topic.id })}
+						onOpen={() => captureVisitEvent("home_card_open", { kind: "topic", id: topic.id })}
 					/>
 				)}
 			/>
-			<HomePodcastEpisodesSection section={HOME_SECTIONS.featuredPodcastEpisodes} podcastEpisodes={podcastEpisodes} />
+			<HomePodcastEpisodesSection section={HOME_SECTIONS.homePodcastEpisodes} podcastEpisodes={podcastEpisodes} />
 			<HomePodcastEpisodesSection
 				section={HOME_SECTIONS.newestPodcastEpisodes}
 				podcastEpisodes={newestPodcastEpisodes}
@@ -213,7 +213,7 @@ function FeaturedSection({
 	)
 }
 
-// the featured or new podcast episodes as cards, each reporting its open
+// the home or new podcast episodes as cards, each reporting its open
 function HomePodcastEpisodesSection({
 	section,
 	podcastEpisodes,
@@ -229,7 +229,7 @@ function HomePodcastEpisodesSection({
 				<PodcastEpisodeCard
 					podcastEpisodeCard={podcastEpisodeCard}
 					onOpen={() =>
-						captureVisitEvent("featured_card_open", {
+						captureVisitEvent("home_card_open", {
 							kind: "podcastEpisode",
 							id: podcastEpisodeCard.podcastEpisode.id,
 						})
@@ -240,7 +240,7 @@ function HomePodcastEpisodesSection({
 	)
 }
 
-// how it works in three steps, which a visitor reads between the headline and the featured cards
+// how it works in three steps, which a visitor reads between the headline and the home topic and podcast cards
 function HowItWorksSection() {
 	return (
 		<HomeSection title={HOW_IT_WORKS_TITLE}>

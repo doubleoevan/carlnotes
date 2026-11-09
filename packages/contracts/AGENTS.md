@@ -145,6 +145,6 @@ The read-only Personal sources email response returns the environment-configured
 
 `topicImages.ts` holds the topic image sizes' pixels, the original's size, the upload limits, the urls' shape and
 paths, and the regenerate, render, upload, and quota contracts, with the size, origin, render kind, and render status
-enums in `enums.ts` and `imageRegenerationLimit` per plan in `plans.ts`. `home.ts` holds the home payload: the featured
-counts, the topic and podcast episode card shapes, and a user's topics. `podcast.ts` adds `featuredPodcastEpisode`, a
+enums in `enums.ts` and `imageRegenerationLimit` per plan in `plans.ts`. `home.ts` holds the home payload: the Home topics and Home podcasts
+counts, the topic and podcast episode card shapes, and a user's topics. `podcast.ts` adds `homePodcastEpisode`, a
 pinned podcast episode as the console and the podcast episode page's rank dialog list it.

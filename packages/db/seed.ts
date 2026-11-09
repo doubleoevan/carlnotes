@@ -7,7 +7,7 @@ import { findings, resources, scans } from "./schema/scans"
 import { sources, subscriptions, topics } from "./schema/topics"
 import { users } from "./schema/users"
 
-// the community owner whose public topics fill the Featured and Popular sections
+// the community owner whose public topics fill the Home topics and Popular sections
 const COMMUNITY_USER_ID = "usr_community"
 
 // the kind unions come straight off the insert types so a bad literal fails the type check
@@ -30,7 +30,7 @@ type SeedTopic = {
 	findings: { resourceKind: SeedResourceKind; title: string; url: string; why: string; score: number }[]
 }
 
-// the seeded topics. the two dev-owned ones fill Your topics and the public community ones fill Featured and Popular
+// the seeded topics. the two dev-owned ones fill Your topics and the public community ones fill Home topics and Popular
 // biome-ignore format: keep each finding on one line
 function buildSeedTopics(devUserId: string): SeedTopic[] {
 	return [
@@ -159,7 +159,7 @@ function buildSeedTopics(devUserId: string): SeedTopic[] {
 			{ resourceKind: "read", title: "Most VO2max supplements do nothing", url: "https://example.com/longevity/vo2-supplements", why: "A meta-analysis that will save you money.", score: 0.74 },
 		],
 	},
-	// SUBSCRIBER_COUNTS and FEATURE_ORDER below key off these topic ids
+	// SUBSCRIBER_COUNTS and HOME_ORDER below key off these topic ids
 	]
 }
 
@@ -173,8 +173,8 @@ const SUBSCRIBER_COUNTS: Record<string, number> = {
 	top_longevity: 31,
 }
 
-// the hard-coded Featured section
-const FEATURE_ORDER: Record<string, number> = {
+// the hard-coded Home topics section
+const HOME_ORDER: Record<string, number> = {
 	top_llm_evals: 1,
 	top_longevity: 2,
 	top_mcp_watch: 3,
@@ -217,8 +217,8 @@ export async function seed(devUserId: string): Promise<void> {
 		.onConflictDoNothing()
 	// the dev user operates the instance, so they hold the admin role. the update keeps re-seeding idempotent
 	await db.update(users).set({ role: "admin" }).where(eq(users.id, devUserId))
-	// each topic and everything it owns clear every feature order before the seeded ones are written
-	await db.update(topics).set({ featureOrder: null }).where(isNotNull(topics.featureOrder))
+	// each topic and everything it owns clear every home order before the seeded ones are written
+	await db.update(topics).set({ homeOrder: null }).where(isNotNull(topics.homeOrder))
 
 	for (const topic of seedTopics) {
 		await seedTopic(topic)
@@ -260,16 +260,16 @@ async function seedTopic(topic: SeedTopic): Promise<void> {
 			ownerId: topic.owner,
 			name: topic.name,
 			prompt: topic.prompt,
-			// frequency, visibility, the filter tags, and the hard-coded featured order
+			// frequency, visibility, the filter tags, and the hard-coded home order
 			frequency: topic.frequency,
 			visibility: topic.visibility,
 			tags: topic.tags,
-			featureOrder: FEATURE_ORDER[topic.id] ?? null,
+			homeOrder: HOME_ORDER[topic.id] ?? null,
 		})
-		// upsert featureOrder, tags, and visibility so that re-seeding refreshes them on already-seeded rows
+		// upsert homeOrder, tags, and visibility so that re-seeding refreshes them on already-seeded rows
 		.onConflictDoUpdate({
 			target: topics.id,
-			set: { featureOrder: FEATURE_ORDER[topic.id] ?? null, tags: topic.tags, visibility: topic.visibility },
+			set: { homeOrder: HOME_ORDER[topic.id] ?? null, tags: topic.tags, visibility: topic.visibility },
 		})
 	// the invited emails for an "invite" topic, idempotent by the (topic, email) primary key
 	const invitees = topic.invitees ?? []

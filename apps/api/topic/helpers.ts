@@ -15,7 +15,7 @@ import { and, eq, inArray, or, sql } from "drizzle-orm"
 import { isAllowed, isMonthlySpendExhausted } from "../authorization"
 import { withAvatarVersion } from "../avatars"
 import { loadPendingTopicInvites } from "../invite/invites"
-import { loadFeaturedTopics } from "./featuring"
+import { loadHomeTopics } from "./homeOrder"
 import { scansRemaining } from "./quotas"
 
 /**
@@ -262,15 +262,15 @@ export function toScheduledTimeLabel(scheduledTime: string): string {
 }
 
 /**
- * Where this topic sits in the Featured section, and the section itself for the Rank menu to show.
+ * Where this topic sits in the Home topics, and the section itself for the Rank menu to show.
  * Only an admin can see it.
  */
-export async function toFeaturedTopics(
-	featureOrder: number | null,
+export async function toHomeTopics(
+	homeOrder: number | null,
 	isAdmin: boolean,
-): Promise<Pick<TopicResponse, "featureOrder" | "featuredTopics">> {
+): Promise<Pick<TopicResponse, "homeOrder" | "homeTopics">> {
 	if (!isAdmin) {
-		return { featureOrder: null, featuredTopics: null }
+		return { homeOrder: null, homeTopics: null }
 	}
-	return { featureOrder, featuredTopics: await loadFeaturedTopics() }
+	return { homeOrder, homeTopics: await loadHomeTopics() }
 }

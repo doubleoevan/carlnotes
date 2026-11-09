@@ -44,8 +44,8 @@ capability the app will never need, with the reason, or `deferred` for one an ac
 | `billingClient.sendUserBudgetOverride` | web-only | Admin stays on the web |
 | `billingClient.sendUserRole` | web-only | Admin stays on the web |
 | `billingClient.sendAdminBlock` | web-only | The admin console's admin block of a user from reactions and comments. Admin stays on the web |
-| `topicClient.sendTopicFeatureOrder` | web-only | An admin's featuring control. Admin stays on the web |
-| `podcastEpisodeClient.sendPodcastEpisodeFeatureOrder` | web-only | An admin's featuring control for a podcast episode. Admin stays on the web |
+| `topicClient.sendTopicHomeOrder` | web-only | An admin's home order control. Admin stays on the web |
+| `podcastEpisodeClient.sendPodcastEpisodeHomeOrder` | web-only | An admin's home order control for a podcast episode. Admin stays on the web |
 | `topicClient.uploadTopicAttachment` | web-only | The browser's File upload. The app uploads to the same route through `topicClient.uploadTopicAttachmentBody` |
 | `mcpClient.fetchMcpClientName` | web-only | The MCP OAuth consent page, which an AI client opens in a browser |
 | `mcpClient.sendMcpConsent` | web-only | The MCP OAuth consent page, which an AI client opens in a browser |
@@ -199,7 +199,7 @@ their reason.
 | Web page | Native screen | Reuse | Notes |
 | --- | --- | --- | --- |
 | Home, visitor hero and the headline on both faces | `(tabs)/index.tsx`, `layout/HomeHero.tsx`, `layout/HomeHeadline.tsx` | logic | the hero copy in `core/lib/homeHero.ts`, the shimmer and the pitch sheet native |
-| Home, the featured cards and the user's topics as cards | `(tabs)/index.tsx` | component, logic | the faces and the card sections from `core/lib/homeFaces.ts`, `TopicCard` and `PodcastEpisodeCard` over the shared card elements, the sections native in `AccordionSection`. Pull to refresh and the logo's reheat read the home payload again, and a failed read shows `LoadFailedNotice` with Try again in place of the cards |
+| Home, the home topic and podcast cards and the user's topics as cards | `(tabs)/index.tsx` | component, logic | the faces and the card sections from `core/lib/homeFaces.ts`, `TopicCard` and `PodcastEpisodeCard` over the shared card elements, the sections native in `AccordionSection`. Pull to refresh and the logo's reheat read the home payload again, and a failed read shows `LoadFailedNotice` with Try again in place of the cards |
 | Topics tab, the Feed | `(tabs)/topics.tsx` | component, logic | the Feed rules, filters, and Finding actions from core, the list native, pull to refresh and the logo's reheat |
 | Search | `(tabs)/search.tsx` | logic | the shared search bar provider, native results |
 | Topic page, Findings, scan recaps | `topics/[topicId].tsx` | component, logic | `TopicScanRecap`, `TopicSource`, `NumberedTopicFindingList` from core |

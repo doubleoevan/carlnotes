@@ -1,4 +1,4 @@
-// the home page as the server renders it for a visitor: the featured cards from the payload, the featured topics'
+// the home page as the server renders it for a visitor: the home topic and podcast cards from the payload, the home topics'
 // structured data, the headline, and the video's button beside the logo
 
 import { afterAll, beforeAll, expect, test } from "bun:test"
@@ -9,9 +9,9 @@ import { RouterProvider } from "@tanstack/react-router"
 import { renderToString } from "react-dom/server"
 import { loadRouter } from "@/routes/-loadRouter"
 
-// a visitor's payload: one featured topic with an image and no episodes
+// a visitor's payload: one home topic with an image and no episodes
 const HOME: HomeResponse = {
-	featuredTopics: [
+	homeTopics: [
 		{
 			id: "topic-1",
 			name: "Espresso machines",
@@ -31,7 +31,7 @@ const HOME: HomeResponse = {
 			latestPodcastEpisode: null,
 		},
 	],
-	featuredPodcastEpisodes: [],
+	homePodcastEpisodes: [],
 	newestPodcastEpisodes: [],
 	yourTopics: null,
 }
@@ -64,7 +64,7 @@ async function renderHomePage(): Promise<string> {
 	return renderToString(<RouterProvider router={router} />)
 }
 
-test("a visitor's home shows the headline, how it works, and the featured cards with their images", async () => {
+test("a visitor's home shows the headline, how it works, and the home topic and podcast cards with their images", async () => {
 	const homePageHtml = await renderHomePage()
 	expect(homePageHtml).toContain("Espresso machines")
 	expect(homePageHtml).toContain('href="/topics/topic-1/espresso-machines"')
@@ -73,7 +73,7 @@ test("a visitor's home shows the headline, how it works, and the featured cards 
 	expect(homePageHtml).toContain("How it works")
 })
 
-test("a visitor's home head holds the featured topics as an ItemList", async () => {
+test("a visitor's home head holds the home topics as an ItemList", async () => {
 	const homePageHtml = await renderHomePage()
 	expect(homePageHtml).toContain('"@type":"ItemList"')
 	expect(homePageHtml).toContain(

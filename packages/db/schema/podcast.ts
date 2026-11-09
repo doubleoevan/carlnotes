@@ -49,8 +49,9 @@ export const podcastEpisodes = pgTable(
 		durationSeconds: integer("duration_seconds"),
 		// the unique people who played or downloaded the podcast episode, all time
 		listenerCount: integer("listener_count").notNull().default(0),
-		// an admin can feature this podcast episode on the home page and set its order
-		featureOrder: integer("feature_order"),
+		// an admin can pin this podcast episode to the home page and set its order. the column kept its old name
+		// through the rename to home order
+		homeOrder: integer("feature_order"),
 		// the content hash of the podcast episode's own image, drawn once it publishes, or null until it is drawn
 		imageHash: text("image_hash"),
 		// the speech model that recorded the podcast episode, and what the script, the speech, and the image cost in dollars
@@ -68,8 +69,8 @@ export const podcastEpisodes = pgTable(
 		uniqueIndex("episodes_scan_unique").on(table.scanId),
 		uniqueIndex("episodes_topic_season_number_unique").on(table.topicId, table.season, table.episodeNumber),
 		index("episodes_topic_published_idx").on(table.topicId, table.publishedAt),
-		// the few pinned podcast episodes, which the home's featured cards and the admin console read
-		index("episodes_feature_order_idx").on(table.featureOrder).where(sql`${table.featureOrder} is not null`),
+		// the few pinned podcast episodes, which the home's home topic and podcast cards and the admin console read
+		index("episodes_feature_order_idx").on(table.homeOrder).where(sql`${table.homeOrder} is not null`),
 		index("episodes_owner_created_idx").on(table.ownerId, table.createdAt),
 		// the trigram indexes behind the episode search, which matches anywhere in the lowercased title or description
 		index("episodes_title_lower_trgm").using("gin", sql`lower(${table.title}) gin_trgm_ops`),

@@ -33,7 +33,7 @@ The app signs in with the same account as carlnotes.com. Your topics, your teams
 
 WHAT YOU CAN DO
 
-• Read your feed. Your topics, the topics you follow, and the featured and popular ones, each with its newest
+• Read your feed. Your topics, the topics you follow, and the home and popular ones, each with its newest
 findings ranked by relevance. Sort by newest or trending, filter to unread or bookmarked, and open any finding's link.
 
 • Make and follow topics. Create a topic with a title, a prompt in your own words, and sources, right from the app.

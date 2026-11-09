@@ -1,7 +1,7 @@
-// feature order tests: the position a ranked row takes, and the statements the write and the release send
+// home order tests: the position a ranked row takes, and the statements the write and the release send
 import { afterEach, describe, expect, test } from "bun:test"
 import { restoreConnectionPool, stubConnectionPool } from "./connectionPoolStub"
-import { releaseFeatureOrder, setFeatureOrder, toTargetPosition } from "./featureOrder"
+import { releaseHomeOrder, setHomeOrder, toTargetPosition } from "./homeOrder"
 import { db } from "./index"
 import { podcastEpisodes } from "./schema/podcast"
 import { topics } from "./schema/topics"
@@ -16,29 +16,29 @@ const UPDATED_AT = expect.any(String)
 
 describe("the position a ranked row takes", () => {
 	test("a row joining an ordering it was not in takes the position offered", () => {
-		// three featured rows, so the featured-order selector offers 1 through 4 and none of them is past the end
+		// three pinned rows, so the home order selector offers 1 through 4 and none of them is past the end
 		expect(toTargetPosition(1, 3)).toBe(1)
 		expect(toTargetPosition(2, 3)).toBe(2)
 		expect(toTargetPosition(4, 3)).toBe(4)
 	})
 
-	test("a row already featured appends to the end instead of past it", () => {
-		// the selector offered 4 against four featured rows, and the row has since left the ordering
+	test("a row already pinned appends to the end instead of past it", () => {
+		// the selector offered 4 against four pinned rows, and the row has since left the ordering
 		expect(toTargetPosition(4, 3)).toBe(4)
 		expect(toTargetPosition(5, 3)).toBe(4)
 	})
 
-	test("the first featured row takes position one", () => {
+	test("the first pinned row takes position one", () => {
 		expect(toTargetPosition(1, 0)).toBe(1)
 	})
 })
 
 describe("the write", () => {
-	test("a topic not yet featured is inserted at its position and the rows from there move down", async () => {
-		// the topic has no order, and three topics are featured
+	test("a topic not yet pinned is inserted at its position and the rows from there move down", async () => {
+		// the topic has no order, and three topics are pinned
 		const sentQueries = stubConnectionPool(({ text }) => (text.includes("count(*)") ? [[3]] : [[null]]))
 		await db.transaction(async (transaction) => {
-			await setFeatureOrder({ table: topics, id: "topic-1", position: 2, transaction })
+			await setHomeOrder({ table: topics, id: "topic-1", position: 2, transaction })
 		})
 
 		// the release reads the order, the count sizes the insert, the bump makes room, and the set takes the position
@@ -53,10 +53,10 @@ describe("the write", () => {
 	})
 
 	test("a position past the end appends", async () => {
-		// three podcast episodes are featured, and the fifth position is offered
+		// three podcast episodes are pinned, and the fifth position is offered
 		const sentQueries = stubConnectionPool(({ text }) => (text.includes("count(*)") ? [[3]] : [[null]]))
 		await db.transaction(async (transaction) => {
-			await setFeatureOrder({ table: podcastEpisodes, id: "episode-1", position: 5, transaction })
+			await setHomeOrder({ table: podcastEpisodes, id: "episode-1", position: 5, transaction })
 		})
 		expect(sentQueries[3]?.text).toBe(
 			'update "episodes" set "feature_order" = $1, "updated_at" = $2 where "episodes"."id" = $3',
@@ -68,7 +68,7 @@ describe("the write", () => {
 		// the row holds the second position
 		const sentQueries = stubConnectionPool(() => [[2]])
 		await db.transaction(async (transaction) => {
-			await setFeatureOrder({ table: topics, id: "topic-1", position: 0, transaction })
+			await setHomeOrder({ table: topics, id: "topic-1", position: 0, transaction })
 		})
 		expect(sentQueries.map(({ text }) => text)).toEqual([
 			'select "feature_order" from "topics" where "topics"."id" = $1',
@@ -83,13 +83,13 @@ describe("the write", () => {
 describe("the release", () => {
 	test("a row with no order sends no write and reports none released", async () => {
 		const sentQueries = stubConnectionPool(() => [[null]])
-		expect(await releaseFeatureOrder({ table: podcastEpisodes, id: "episode-1", handle: db })).toBe(false)
+		expect(await releaseHomeOrder({ table: podcastEpisodes, id: "episode-1", handle: db })).toBe(false)
 		expect(sentQueries).toHaveLength(1)
 	})
 
-	test("a featured row is cleared and the rows below it move up", async () => {
+	test("a pinned row is cleared and the rows below it move up", async () => {
 		const sentQueries = stubConnectionPool(() => [[3]])
-		expect(await releaseFeatureOrder({ table: podcastEpisodes, id: "episode-1", handle: db })).toBe(true)
+		expect(await releaseHomeOrder({ table: podcastEpisodes, id: "episode-1", handle: db })).toBe(true)
 		expect(sentQueries.map(({ text }) => text)).toEqual([
 			'select "feature_order" from "episodes" where "episodes"."id" = $1',
 			'update "episodes" set "feature_order" = $1, "updated_at" = $2 where "episodes"."id" = $3',

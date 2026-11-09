@@ -1,5 +1,5 @@
 import type { TopicResponse } from "@carlnotes/contracts/topics"
-import { type FeatureOrderMove, FeatureRankDialog } from "@/components/common/FeatureRankDialog"
+import { type HomeOrderMove, HomeRankDialog } from "@/components/common/HomeRankDialog"
 import { ShareTopic } from "@/components/share/ShareTopic"
 import { AddTopicToTeamDialog } from "@/components/team/AddTopicToTeamDialog"
 import { DeleteTopicDialog } from "./DeleteTopicDialog"
@@ -29,7 +29,7 @@ export function TopicDialogs({
 	onTopicTeamsChanged: () => void
 	// called after each saved change
 	onTopicImageChanged: () => void
-	onRankTopic: (moves: FeatureOrderMove[]) => Promise<void>
+	onRankTopic: (moves: HomeOrderMove[]) => Promise<void>
 	onTopicDeleted: () => Promise<void>
 }) {
 	return (
@@ -67,14 +67,14 @@ export function TopicDialogs({
 				/>
 			)}
 			{openDialog === "rank" && (
-				<FeatureRankDialog
+				<HomeRankDialog
 					noun="topics"
 					pageItem={{ id: topic.id, label: topic.name }}
-					featuredItems={(topic.featuredTopics ?? []).map((featuredTopic) => ({
-						id: featuredTopic.id,
-						label: featuredTopic.name,
+					homeItems={(topic.homeTopics ?? []).map((homeTopic) => ({
+						id: homeTopic.id,
+						label: homeTopic.name,
 					}))}
-					isPageItemFeatured={topic.featureOrder !== null}
+					isPageItemOnHome={topic.homeOrder !== null}
 					onSave={onRankTopic}
 					onClose={() => onOpenDialog(null)}
 				/>

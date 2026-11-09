@@ -18,7 +18,7 @@ import { newTopicFindingCount } from "./findings"
 import {
 	loadTopicOwner,
 	toDailyFrequencyPaused,
-	toFeaturedTopics,
+	toHomeTopics,
 	toInviteAndScanFields,
 	toLastTopicScanFields,
 	toScanHistory,
@@ -191,7 +191,7 @@ export async function loadTopicPage(
 		isSpendExhausted,
 		...teamFields,
 		isOnTeam: topic.teamId !== null,
-		...(await toFeaturedTopics(topic.featureOrder, isAdmin)),
+		...(await toHomeTopics(topic.homeOrder, isAdmin)),
 		relatedTopics,
 		reactions,
 		commentThread,

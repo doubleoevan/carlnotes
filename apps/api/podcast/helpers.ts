@@ -16,7 +16,7 @@ import { loadPageCommentThread } from "../social/pageCommentThread"
 import { loadTopicAccessAndFindings } from "../topic/accessibleFindings"
 import { canRateTopic } from "../topic/findingPermissions"
 import { loadTopicOwner, toTeamFields } from "../topic/helpers"
-import { toFeaturedPodcastEpisodes } from "./podcastEpisodeFeaturing"
+import { toHomePodcastEpisodes } from "./podcastEpisodeHomeOrder"
 import {
 	loadAccessiblePodcastEpisode,
 	loadPodcastEpisodeListenRows,
@@ -188,7 +188,7 @@ export async function loadPodcastEpisodePage(
 		return null
 	}
 
-	// load the podcast episode, its script and feature order, the findings that the user may see, whether the user may rate the findings
+	// load the podcast episode, its script and home order, the findings that the user may see, whether the user may rate the findings
 	// or remove the episode, the topic's byline, the owning team, the holding teams that the user is on, the topic's
 	// other podcast episodes, and the related ones
 	const { podcastEpisodeRow, topic, subscriberActivatedAt } = accessiblePodcastEpisode
@@ -206,7 +206,7 @@ export async function loadPodcastEpisodePage(
 		commentThread,
 	] = await Promise.all([
 		db
-			.select({ script: podcastEpisodes.script, featureOrder: podcastEpisodes.featureOrder })
+			.select({ script: podcastEpisodes.script, homeOrder: podcastEpisodes.homeOrder })
 			.from(podcastEpisodes)
 			.where(eq(podcastEpisodes.id, podcastEpisodeId)),
 		loadPodcastEpisode({ podcastEpisodeRow, topic, userId }),
@@ -245,7 +245,7 @@ export async function loadPodcastEpisodePage(
 		topicFindings: chapterTopicFindings,
 		canRate,
 		canRemovePodcastEpisode,
-		...(await toFeaturedPodcastEpisodes(podcastEpisodeScriptRow?.featureOrder ?? null, isAdmin)),
+		...(await toHomePodcastEpisodes(podcastEpisodeScriptRow?.homeOrder ?? null, isAdmin)),
 		transcript: podcastEpisodeScriptRow?.script ? toTranscriptBlocks(podcastEpisodeScriptRow.script) : [],
 		topicPodcastEpisodes,
 		relatedPodcastEpisodes,

@@ -67,7 +67,7 @@ function isHomePath(request: Request): boolean {
 }
 
 /**
- * Purges the home page and its payload at the edge, after the featured topics or podcast episodes change.
+ * Purges the home page and its payload at the edge, after the home topics or podcast episodes change.
  */
 export function purgeHomeAtEdge(): Promise<unknown> {
 	return purgeEdgeCacheTagAfterDeletion(HOME_CACHE_TAG)

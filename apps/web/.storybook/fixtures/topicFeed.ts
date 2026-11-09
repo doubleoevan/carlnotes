@@ -1,5 +1,5 @@
 // the invented topic feeds the header and the app shell load, and a builder for a topic finding. a visitor's feed has
-// one featured topic, and a signed-in user's has their own topic and the one they subscribe to above the featured one
+// one home topic, and a signed-in user's has their own topic and the one they subscribe to above the home one
 import { fetchTopicFeed } from "@carlnotes/client/topicClient"
 import type { TopicFinding } from "@carlnotes/contracts/findings"
 import type { TopicFeed, TopicFeedResponse } from "@carlnotes/contracts/topics"
@@ -90,19 +90,19 @@ const VECTOR_DATABASES_TOPIC_FEED: TopicFeed = {
 // the free plan's topic limits, which both feeds show
 const FREE_TOPIC_QUOTA = { topicLimit: 3, dailyTopicLimit: 1, dailyTopicsRemaining: 1 }
 
-// a visitor's feed: one featured topic
+// a visitor's feed: one home topic
 const STORY_TOPIC_FEED: TopicFeedResponse = {
-	sections: [{ key: "featured", topics: [LLM_TOOLING_TOPIC_FEED] }],
+	sections: [{ key: "home", topics: [LLM_TOOLING_TOPIC_FEED] }],
 	topicsRemaining: 3,
 	...FREE_TOPIC_QUOTA,
 }
 
-// a signed-in user's feed: their own topic, the topic they subscribe to, then the same topic among the featured ones
+// a signed-in user's feed: their own topic, the topic they subscribe to, then the same topic among the home topics
 const STORY_USER_TOPIC_FEED: TopicFeedResponse = {
 	sections: [
 		{ key: "yours", topics: [VECTOR_DATABASES_TOPIC_FEED] },
 		{ key: "subscribed", topics: [SUBSCRIBED_LLM_TOOLING_TOPIC_FEED] },
-		{ key: "featured", topics: [SUBSCRIBED_LLM_TOOLING_TOPIC_FEED] },
+		{ key: "home", topics: [SUBSCRIBED_LLM_TOOLING_TOPIC_FEED] },
 	],
 	topicsRemaining: 2,
 	...FREE_TOPIC_QUOTA,

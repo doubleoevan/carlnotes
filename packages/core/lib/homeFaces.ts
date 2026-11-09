@@ -1,5 +1,5 @@
 // the home page's two faces, as both apps word them: the card sections, the three steps a visitor reads, and the
-// visit event a featured card's open reports
+// visit event a home topic or podcast card's open reports
 
 import type { HomeResponse, PodcastEpisodeCard, TopicCard } from "@carlnotes/contracts/home"
 
@@ -15,10 +15,10 @@ const PODCAST_EPISODE_SECTION = {
 
 // the card sections in the order both homes show them, under the home payload's field names
 export const HOME_SECTIONS = {
-	featuredTopics: { value: "featured-topics", title: "Featured topics", ...TOPIC_SECTION },
-	featuredPodcastEpisodes: {
-		value: "featured-podcast-episodes",
-		title: "Featured podcasts",
+	homeTopics: { value: "home-topics", title: "Home topics", ...TOPIC_SECTION },
+	homePodcastEpisodes: {
+		value: "home-podcast-episodes",
+		title: "Home podcasts",
 		...PODCAST_EPISODE_SECTION,
 	},
 	newestPodcastEpisodes: {
@@ -44,8 +44,8 @@ export const HOW_IT_WORKS_STEPS = [
 
 // an empty payload, shown while a user's loads and after a failed read
 export const EMPTY_HOME: HomeResponse = {
-	featuredTopics: [],
-	featuredPodcastEpisodes: [],
+	homeTopics: [],
+	homePodcastEpisodes: [],
 	newestPodcastEpisodes: [],
 	yourTopics: null,
 }

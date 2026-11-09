@@ -1,5 +1,5 @@
 // the topic request payloads: the draft, the create, the prompt and field updates, the proposed edit, the sources,
-// the attachments, the podcast switch, and the feature order
+// the attachments, the podcast switch, and the home order
 import { z } from "zod"
 import { daysOfWeek, frequencies, maxTopicFindingsOptions, visibilities } from "./enums"
 import { customSourceKeys, defaultSourceKeys } from "./sources"
@@ -145,5 +145,5 @@ export const attachmentContextPayload = z.object({ context: z.string().trim().ma
 // the payload for attaching a page by url
 export const attachmentUrlPayload = z.object({ url: z.string().trim().min(1).max(2000) })
 
-// the admin's featured topics order choice
-export const topicFeatureOrderPayload = z.object({ position: z.number().int().min(0) })
+// the admin's home topics order choice
+export const topicHomeOrderPayload = z.object({ position: z.number().int().min(0) })

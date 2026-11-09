@@ -401,5 +401,5 @@ the browser bundle and renders pages through the server build, behind its own ro
 as `TOPIC_IMAGE_FRAME_CLASS`. `components/common/cardElements.tsx` is `CARD_ELEMENTS`, the card box, topic image, and
 text row the two cards share, over core's `CardElements`, with a story beside it.
 `components/topic/TopicImageEditor.tsx` adapts the editor's image block, with the browser's file input as its picker.
-`components/common/FeatureRankDialog.tsx` is the admin's featured order list for a topic page and a podcast episode
-page, and `components/admin/FeaturedCard.tsx` the console's two pin lists.
+`components/common/HomeRankDialog.tsx` is the admin's home order list for a topic page and a podcast episode
+page, and `components/admin/HomeOrderCard.tsx` the console's two pin lists.

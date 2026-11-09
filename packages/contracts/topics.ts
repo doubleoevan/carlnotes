@@ -269,9 +269,9 @@ export const topicResponse = topicDetails.extend({
 	roomTeams: z.array(z.object({ teamId: z.string(), name: z.string() })),
 	// whether the owner holds more daily topics than their plan runs
 	isDailyFrequencyPaused: z.boolean(),
-	// this topic's position in the Featured section as well as all featured topics, both are null on the topic page
-	featureOrder: z.number().nullable(),
-	featuredTopics: z.array(z.object({ id: z.string(), name: z.string(), featureOrder: z.number() })).nullable(),
+	// this topic's position in the Home topics as well as all home topics, both are null on the topic page
+	homeOrder: z.number().nullable(),
+	homeTopics: z.array(z.object({ id: z.string(), name: z.string(), homeOrder: z.number() })).nullable(),
 	// up to fifty other topics most related to this one that the user may open, the public shown ones and the ones the
 	// user reaches through their account, each with its latest published podcast episode that the user may listen to.
 	// empty for a topic with no vector, and on a poll reload

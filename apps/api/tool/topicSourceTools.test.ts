@@ -115,7 +115,7 @@ test("a source added to or removed from a public topic drops the visitors' feed 
 	const storedValueByKey = stubRedisClient()
 	const fillVisitorCopies = (): void => {
 		storedValueByKey.set(toVisitorTopicPageKey("t1"), "{}")
-		storedValueByKey.set("topic-feed:visitor:unread", "{}")
+		storedValueByKey.set("visitor-topic-feed:unread", "{}")
 	}
 
 	// an added source, into a topic with no sources or scans, drops both copies

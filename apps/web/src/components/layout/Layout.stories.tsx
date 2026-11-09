@@ -48,9 +48,9 @@ const meta = {
 export default meta
 type Story = StoryObj<typeof meta>
 
-// a visitor on the home page: the hero, the search bar over its edge, the featured topics, the footer, and the chat pill
+// a visitor on the home page: the hero, the search bar over its edge, the home topics, the footer, and the chat pill
 export const Visitor: Story = {}
 
-// a signed-in user on the home page: no hero, the avatar menu, their own and subscribed topics above the featured ones,
+// a signed-in user on the home page: no hero, the avatar menu, their own and subscribed topics above the home topics,
 // and the chat pill with nothing waiting
 export const User: Story = { parameters: { session: "user" }, beforeEach: mockUserTopicFeed }

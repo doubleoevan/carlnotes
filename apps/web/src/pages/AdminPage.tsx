@@ -10,7 +10,7 @@ import { setOpenReportCount } from "@carlnotes/core/stores/openReportStore"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { Settings, ShieldUser } from "lucide-react"
 import { useCallback, useEffect, useState } from "react"
-import { FeaturedCard } from "@/components/admin/FeaturedCard"
+import { HomeOrderCard } from "@/components/admin/HomeOrderCard"
 import { ManageAdminsModal } from "@/components/admin/ManageAdminsModal"
 import { MobileMinimumVersionsCard } from "@/components/admin/MobileMinimumVersionsCard"
 import { CoffeeLoading } from "@/components/branding/CoffeeLoading"
@@ -113,7 +113,7 @@ export function AdminPage() {
 					onToggleAdminBlockedUsers={() => setIsShowingAdminBlockedUsers((isShowing) => !isShowing)}
 				/>
 				{/* the two sections as accordions, the shape every other page's sections take */}
-				<Accordion type="multiple" defaultValue={["reports", "featured", "users", "teams", "mobile"]} className="mt-4">
+				<Accordion type="multiple" defaultValue={["reports", "home", "users", "teams", "mobile"]} className="mt-4">
 					{/* the open reports first, resolved from here */}
 					<AccordionItem value="reports">
 						<AccordionTrigger className="font-semibold">{`Reports (${reports.length})`}</AccordionTrigger>
@@ -122,12 +122,12 @@ export function AdminPage() {
 						</AccordionContent>
 					</AccordionItem>
 					{/* the home's pinned topics and podcast episodes */}
-					<AccordionItem value="featured">
-						<AccordionTrigger className="font-semibold">Featured</AccordionTrigger>
+					<AccordionItem value="home">
+						<AccordionTrigger className="font-semibold">Home</AccordionTrigger>
 						<AccordionContent>
-							<FeaturedCard
-								featuredTopics={adminConsole.featuredTopics}
-								featuredPodcastEpisodes={adminConsole.featuredPodcastEpisodes}
+							<HomeOrderCard
+								homeTopics={adminConsole.homeTopics}
+								homePodcastEpisodes={adminConsole.homePodcastEpisodes}
 								onSaved={loadConsole}
 							/>
 						</AccordionContent>

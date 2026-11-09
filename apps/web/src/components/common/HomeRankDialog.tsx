@@ -10,31 +10,31 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives
 export type RankedItem = { id: string; label: string }
 
 // one move the save sends: a position, or zero to clear
-export type FeatureOrderMove = { id: string; position: number }
+export type HomeOrderMove = { id: string; position: number }
 
 /**
- * The admin's featured order list, opened from a topic page's or a podcast episode page's actions menu. Rows drag into
- * a new order, clicking a row moves the page's item there, and the X drops a row. Every edit shows in place, and
- * nothing is sent until Save, which asks first if it would drop a featured row.
+ * The admin's home order list, opened from a topic page's or a podcast episode page's actions menu. Rows drag into
+ * a new order and clicking a row moves the page's item there, and the order is sent on Save. The X on a pinned row
+ * asks first, then removes it from the home at once. The X on the page's own new row only drops it.
  */
-export function FeatureRankDialog({
+export function HomeRankDialog({
 	noun,
 	pageItem,
-	featuredItems,
-	isPageItemFeatured,
+	homeItems,
+	isPageItemOnHome,
 	onSave,
 	onClose,
 }: {
 	// what the list ranks, in the title and the empty line
-	noun: "topics" | "podcast episodes"
+	noun: "topics" | "podcasts"
 	pageItem: RankedItem
-	featuredItems: RankedItem[]
-	isPageItemFeatured: boolean
-	onSave: (moves: FeatureOrderMove[]) => Promise<void>
+	homeItems: RankedItem[]
+	isPageItemOnHome: boolean
+	onSave: (moves: HomeOrderMove[]) => Promise<void>
 	onClose: () => void
 }) {
-	// the order as it stands, with this page's item appended if it is not featured yet
-	const initialRankedItems: RankedItem[] = isPageItemFeatured ? featuredItems : [...featuredItems, pageItem]
+	// the order as it stands, with this page's item appended if it is not pinned yet
+	const initialRankedItems: RankedItem[] = isPageItemOnHome ? homeItems : [...homeItems, pageItem]
 
 	// the working order, edited locally until Save
 	const [rankedItems, setRankedItems] = useState(initialRankedItems)
@@ -84,23 +84,44 @@ export function FeatureRankDialog({
 		})
 	}
 
-	// the featured rows the X dropped, which Save clears after a confirmation. the page's item counts only if it was
-	// featured before the dialog opened
-	const keptItemIds = new Set(rankedItems.map((rankedItem) => rankedItem.id))
-	const removedItems = featuredItems.filter((featuredItem) => !keptItemIds.has(featuredItem.id))
-	const [isRemoveConfirmOpen, setIsRemoveConfirmOpen] = useState(false)
+	// the pinned row whose X asks before it is removed
+	const [removingItem, setRemovingItem] = useState<RankedItem | null>(null)
 
-	// clear the removed rows first, then set the kept order top to bottom
+	// the X on a pinned row asks first. the X on the page's own new row only drops it
+	const handleRemoveItem = (rankedItem: RankedItem): void => {
+		if (homeItems.some((homeItem) => homeItem.id === rankedItem.id)) {
+			setRemovingItem(rankedItem)
+			return
+		}
+		setRankedItems(rankedItems.filter((kept) => kept.id !== rankedItem.id))
+	}
+
+	// clear the confirmed row at once and drop it from the list. the rest of the list waits for Save, and a failed clear
+	// keeps the row
+	const handleConfirmRemoveItem = async (removedItem: RankedItem): Promise<void> => {
+		setRemovingItem(null)
+		setIsSavingRankedItems(true)
+		try {
+			await onSave([{ id: removedItem.id, position: 0 }])
+			setRankedItems((currentOrder) => currentOrder.filter((kept) => kept.id !== removedItem.id))
+		} catch {
+			// the row stays after a failed clear
+		} finally {
+			setIsSavingRankedItems(false)
+		}
+	}
+
+	// set the order top to bottom
 	const handleSaveRankedItems = async (): Promise<void> => {
-		const featureOrderMoves: FeatureOrderMove[] = [
-			...removedItems.map((rankedItem) => ({ id: rankedItem.id, position: 0 })),
-			...rankedItems.map((rankedItem, index) => ({ id: rankedItem.id, position: index + 1 })),
-		]
+		const homeOrderMoves: HomeOrderMove[] = rankedItems.map((rankedItem, index) => ({
+			id: rankedItem.id,
+			position: index + 1,
+		}))
 
 		// close the dialog after the order saves
 		setIsSavingRankedItems(true)
 		try {
-			await onSave(featureOrderMoves)
+			await onSave(homeOrderMoves)
 			onClose()
 		} catch {
 			// keep the dialog open after a failed save
@@ -112,7 +133,7 @@ export function FeatureRankDialog({
 	return (
 		<Dialog open onOpenChange={onClose}>
 			<DialogContent className="sm:max-w-md">
-				<DialogTitle>Featured {noun}</DialogTitle>
+				<DialogTitle>Home {noun}</DialogTitle>
 				{/* the rows bleed by the icons' own inset so the drag button and the X line up with the title and its close button.
 				    min-w-0 lets a long name truncate */}
 				<div className="-mx-2.5 min-w-0">
@@ -165,11 +186,11 @@ export function FeatureRankDialog({
 								{rankedItem.id === pageItem.id && <Check className="size-4 shrink-0" />}
 							</button>
 
-							{/* the X drops the row from the working order. nothing is sent until Save */}
+							{/* the X removes a pinned row after a confirmation, and drops the page's own new row */}
 							<button
 								type="button"
-								aria-label={`Remove ${rankedItem.label} from the featured ${noun}`}
-								onClick={() => setRankedItems(rankedItems.filter((kept) => kept.id !== rankedItem.id))}
+								aria-label={`Remove ${rankedItem.label} from the home ${noun}`}
+								onClick={() => handleRemoveItem(rankedItem)}
 								className="text-muted-foreground hover:text-foreground grid size-9 shrink-0 place-items-center"
 							>
 								<X className="size-4" />
@@ -179,33 +200,26 @@ export function FeatureRankDialog({
 				</div>
 
 				{/* nothing to drag when the list emptied out */}
-				{rankedItems.length === 0 && <p className="text-muted-foreground text-sm">No featured {noun}.</p>}
+				{rankedItems.length === 0 && <p className="text-muted-foreground text-sm">No home {noun}.</p>}
 				<DialogFooter>
 					<Button variant="outline" onClick={onClose} disabled={isSavingRankedItems}>
 						Cancel
 					</Button>
-					<Button
-						onClick={() => (removedItems.length > 0 ? setIsRemoveConfirmOpen(true) : void handleSaveRankedItems())}
-						disabled={isSavingRankedItems || !hasRankedItemsChanged}
-					>
+					<Button onClick={() => void handleSaveRankedItems()} disabled={isSavingRankedItems || !hasRankedItemsChanged}>
 						Save
 					</Button>
 				</DialogFooter>
 			</DialogContent>
-			{/* a save that drops featured rows asks first, naming each one */}
-			{isRemoveConfirmOpen && (
+			{/* removing a pinned row asks first, then clears it */}
+			{removingItem && (
 				<ConfirmDialog
-					title={`Remove from featured ${noun}?`}
+					title={`Remove from home ${noun}?`}
 					confirmLabel="Remove"
 					cancelLabel="Cancel"
-					onConfirm={async () => {
-						setIsRemoveConfirmOpen(false)
-						await handleSaveRankedItems()
-					}}
-					onClose={() => setIsRemoveConfirmOpen(false)}
+					onConfirm={() => handleConfirmRemoveItem(removingItem)}
+					onClose={() => setRemovingItem(null)}
 				>
-					{removedItems.map((removedItem) => removedItem.label).join(", ")} will leave the featured {noun} on the home
-					page.
+					{removingItem.label} will leave the home {noun}.
 				</ConfirmDialog>
 			)}
 		</Dialog>

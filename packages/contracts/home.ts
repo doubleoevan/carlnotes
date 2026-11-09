@@ -1,4 +1,4 @@
-// the home page's payload: the featured topics and podcast episodes and a user's own topics as cards, and the card
+// the home page's payload: the home topics and podcast episodes and a user's own topics as cards, and the card
 // shapes both apps draw
 import { z } from "zod"
 import { podcastEpisodeSummary } from "./podcast"
@@ -7,9 +7,9 @@ import type { ReactionSummary } from "./social"
 import { teamIdentity } from "./teams"
 import { topicImageUrls } from "./topicImages"
 
-// how many featured topics and podcast episodes the home shows, and how many days back its new podcast episodes reach
-export const FEATURED_TOPIC_COUNT = 12
-export const FEATURED_PODCAST_EPISODE_COUNT = 12
+// how many home topics and podcast episodes the home shows, and how many days back its new podcast episodes reach
+export const HOME_TOPIC_COUNT = 12
+export const HOME_PODCAST_EPISODE_COUNT = 12
 export const NEW_PODCAST_EPISODE_DAYS = 7
 
 // a topic as a card draws it: its page, its image, its byline, its tags, how many reactions it has, and the podcast
@@ -48,11 +48,11 @@ export type YourTopicsPage = z.infer<typeof yourTopicsPage>
 // the query that asks for one page of a user's topics, zero-based
 export const yourTopicsQuery = z.object({ page: z.coerce.number().int().min(0).max(YOUR_TOPICS_PAGE_MAX) })
 
-// the home payload. a visitor's holds the featured topics and podcast episodes and the newest podcast episodes, and a
+// the home payload. a visitor's holds the home topics and podcast episodes and the newest podcast episodes, and a
 // user's adds the first page of their own and followed topics
 export const homeResponse = z.object({
-	featuredTopics: z.array(topicCard),
-	featuredPodcastEpisodes: z.array(podcastEpisodeCard),
+	homeTopics: z.array(topicCard),
+	homePodcastEpisodes: z.array(podcastEpisodeCard),
 	newestPodcastEpisodes: z.array(podcastEpisodeCard),
 	yourTopics: yourTopicsPage.nullable(),
 })

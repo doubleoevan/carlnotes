@@ -43,7 +43,7 @@ import { PERSONAL_SOURCES_IMPORT_PATH, personalSourcesImportsRoute } from "./per
 import { personalSourcesInboundRoute } from "./personalSources/inboundRoute"
 import { personalSourcesRoute } from "./personalSources/personalSourcesRoute"
 import { personalSourcesSendsRoute } from "./personalSources/sendsRoute"
-import { podcastEpisodeFeaturingRoute } from "./podcast/podcastEpisodeFeaturing"
+import { podcastEpisodeHomeOrderRoute } from "./podcast/podcastEpisodeHomeOrder"
 import { podcastEpisodeImagesRoute } from "./podcast/podcastEpisodeImagesRoute"
 import { podcastEpisodesRoute } from "./podcast/podcastEpisodes"
 import { podcastFeedsRoute } from "./podcast/podcastFeeds"
@@ -68,9 +68,9 @@ import { reactionsRoute } from "./social/reactionsRoute"
 import { teamsRoute } from "./team/teamsRoute"
 import { termsAcceptanceRoute } from "./termsAcceptance"
 import { TOPIC_ATTACHMENT_UPLOAD_PATH, topicAttachmentsRoute } from "./topic/attachments"
-import { featuringRoute } from "./topic/featuring"
 import { buildTopicFeeds, readVisitorTopicFeeds } from "./topic/feeds"
 import { findingsRoute } from "./topic/findings"
+import { homeOrderRoute } from "./topic/homeOrder"
 import { scansRoute } from "./topic/scans"
 import { subscriptionsRoute } from "./topic/subscriptions"
 import { topicImagesRoute } from "./topic/topicImagesRoute"
@@ -225,7 +225,7 @@ export const apiRoute = new Hono<AppEnv>()
 			: 0
 		return context.json({ count: unseenChatMentionCount })
 	})
-	// public: a signed-out visitor gets featured and popular, just no "yours"
+	// public: a signed-out visitor gets home and popular, just no "yours"
 	.get("/topic-feed", renderedCacheHeaders, zValidator("query", topicFeedQuery), async (context) => {
 		const userId = currentUser(context)
 		// only include consumed topic findings unless the api client asks for the "All" view
@@ -254,7 +254,7 @@ export const apiRoute = new Hono<AppEnv>()
 	.route("/", topicImagesRoute)
 	.route("/", podcastEpisodeImagesRoute)
 	.route("/", homeRoute)
-	.route("/", podcastEpisodeFeaturingRoute)
+	.route("/", podcastEpisodeHomeOrderRoute)
 	// a topic page's view, and the counts the topic and podcast episode pages read
 	.route("/", countsRoute)
 	// the flag content route
@@ -362,7 +362,7 @@ export const apiRoute = new Hono<AppEnv>()
 	// the admin console routes
 	.route("/", adminRoute)
 	.route("/", adminBlocksRoute)
-	.route("/", featuringRoute)
+	.route("/", homeOrderRoute)
 
 // a session read that Better Auth rejects as unauthorized reads as signed out. the session's Postgres row is gone.
 // any other failure still fails the request

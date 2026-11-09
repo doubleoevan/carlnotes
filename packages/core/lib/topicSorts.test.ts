@@ -29,16 +29,16 @@ test("toTrendingTopics breaks a full tie by id, whatever the input order", () =>
 	expect(toTrendingTopics([firstTopic, secondTopic]).map((topic) => topic.id)).toEqual(["a", "b"])
 })
 
-// trending reorders a section, Featured keeps the admin's order, and the other sorts keep the delivered order
-test("toSortedSectionTopics reorders under trending, except Featured", () => {
+// trending reorders a section, Home topics keeps the admin's order, and the other sorts keep the delivered order
+test("toSortedSectionTopics reorders under trending, except Home topics", () => {
 	const lessViewedTopic = trendingTopic("less-viewed", 1, 0, "2026-01-01T00:00:00.000Z")
 	const moreViewedTopic = trendingTopic("more-viewed", 9, 0, "2026-01-01T00:00:00.000Z")
 	const deliveredTopics = [lessViewedTopic, moreViewedTopic]
 	const toIds = (topics: { id: string }[]): string[] => topics.map((topic) => topic.id)
 
-	// trending reorders Popular and leaves Featured, and the other sorts leave the order
+	// trending reorders Popular and leaves Home topics, and the other sorts leave the order
 	expect(toIds(toSortedSectionTopics("popular", deliveredTopics, "trending"))).toEqual(["more-viewed", "less-viewed"])
-	expect(toIds(toSortedSectionTopics("featured", deliveredTopics, "trending"))).toEqual(["less-viewed", "more-viewed"])
+	expect(toIds(toSortedSectionTopics("home", deliveredTopics, "trending"))).toEqual(["less-viewed", "more-viewed"])
 	expect(toIds(toSortedSectionTopics("popular", deliveredTopics, "relevant"))).toEqual(["less-viewed", "more-viewed"])
 	expect(toIds(toSortedSectionTopics("yours", deliveredTopics, "newest"))).toEqual(["less-viewed", "more-viewed"])
 })

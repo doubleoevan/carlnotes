@@ -200,14 +200,14 @@ async function toTopicWriteError(response: ApiResponse): Promise<Error | null> {
 	return typeof body?.error === "string" ? new Error(body.error) : null
 }
 
-// sets where a public topic sits in the Featured section, with zero clearing it
-export async function sendTopicFeatureOrder(topicId: string, position: number): Promise<void> {
-	const response = await apiClient().api.topics[":id"]["feature-order"].$patch({
+// sets where a public topic sits in the Home topics, with zero clearing it
+export async function sendTopicHomeOrder(topicId: string, position: number): Promise<void> {
+	const response = await apiClient().api.topics[":id"]["home-order"].$patch({
 		param: { id: topicId },
 		json: { position },
 	})
 	if (!response.ok) {
-		throw new Error(`topic feature order update failed: ${response.status}`)
+		throw new Error(`topic home order update failed: ${response.status}`)
 	}
 }
 

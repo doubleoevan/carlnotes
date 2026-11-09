@@ -12503,7 +12503,7 @@
 									"enum": [
 										"yours",
 										"subscribed",
-										"featured",
+										"home",
 										"popular",
 										"unknown"
 									]
@@ -14529,13 +14529,13 @@
 					"isDailyFrequencyPaused": {
 						"type": "boolean"
 					},
-					"featureOrder": {
+					"homeOrder": {
 						"type": [
 							"number",
 							"null"
 						]
 					},
-					"featuredTopics": {
+					"homeTopics": {
 						"anyOf": [
 							{
 								"type": "array",
@@ -14548,14 +14548,14 @@
 										"name": {
 											"type": "string"
 										},
-										"featureOrder": {
+										"homeOrder": {
 											"type": "number"
 										}
 									},
 									"required": [
 										"id",
 										"name",
-										"featureOrder"
+										"homeOrder"
 									]
 								}
 							},
@@ -14697,8 +14697,8 @@
 					"hasRequestedToJoin",
 					"roomTeams",
 					"isDailyFrequencyPaused",
-					"featureOrder",
-					"featuredTopics",
+					"homeOrder",
+					"homeTopics",
 					"relatedTopics"
 				]
 			}

@@ -133,7 +133,7 @@ export const chatAttachmentKinds = ["image", "pdf", "document", "text", "video"]
 export const sourceVisibilities = ["public", "private"] as const
 export const ratings = ["up", "down"] as const
 // the keys for the homepage's topic feed sections. yours and subscribed require a signed-in visitor
-export const topicSectionKeys = ["yours", "subscribed", "featured", "popular"] as const
+export const topicSectionKeys = ["yours", "subscribed", "home", "popular"] as const
 // the source kinds a user can add from the topic editor. composio and plugin sources will be custom instead of default
 export const editableSourceKinds = ["url", "rss", "reddit", "youtube", "podcast", "search", "bluesky", "x"] as const
 // what a team member may do. a leader manages the team, a member edits its topics and chats
