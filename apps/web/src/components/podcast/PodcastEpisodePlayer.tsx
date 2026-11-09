@@ -58,6 +58,7 @@ export function PodcastEpisodePlayer({ topic, topicFeedHandlers, scanControl }: 
 			title={PODCAST_NAME}
 			titleNote={<PodcastThemeSongNote className="ml-0" />}
 			titleAside={titleAside}
+			isFullWidth
 			className="mt-2"
 		>
 			{/* a published podcast episode's player card, or the card of an episode with no audio */}

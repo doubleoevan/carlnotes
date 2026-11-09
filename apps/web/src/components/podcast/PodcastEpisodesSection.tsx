@@ -39,6 +39,7 @@ export function PodcastEpisodesSection({
 		<PagedTableSection
 			value={value}
 			title={title}
+			isFullWidth
 			rows={podcastEpisodes}
 			rowSortValues={podcastEpisodeSortValues}
 			tableClassName="min-w-2xl"

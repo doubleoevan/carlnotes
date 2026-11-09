@@ -12,6 +12,7 @@ export function CollapsibleSection({
 	titleNote,
 	titleAside,
 	isContentKept,
+	isFullWidth,
 	className,
 	children,
 }: {
@@ -24,12 +25,14 @@ export function CollapsibleSection({
 	titleAside?: React.ReactNode
 	// whether the content stays mounted while closed, for content that holds its own state
 	isContentKept?: boolean
+	// whether the section spans the page, which draws a divider under it while it is closed
+	isFullWidth?: boolean
 	className?: string
 	children: React.ReactNode
 }) {
 	return (
 		<Accordion type="multiple" defaultValue={[value]} className={className}>
-			<AccordionItem value={value}>
+			<AccordionItem value={value} className={cn(isFullWidth && "data-[state=closed]:last:border-b")}>
 				{/* the note and the aside sit beside the trigger, so a click on the note or the aside never toggles the section.
 				    with a note, the trigger ends at the title and the aside moves to the far right */}
 				<div className="flex items-center gap-2">

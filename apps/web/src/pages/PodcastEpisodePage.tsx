@@ -180,7 +180,12 @@ export function PodcastEpisodePage() {
 			<SocialSection {...toPodcastEpisodeSocialProps(podcastEpisodePage, Boolean(session))} />
 
 			{/* the chapters table */}
-			<CollapsibleSection value="chapters" title="Episode chapters" className={cn(NARROW_SCREEN_HIDDEN_CLASS, "mt-2")}>
+			<CollapsibleSection
+				value="chapters"
+				title="Episode chapters"
+				isFullWidth
+				className={cn(NARROW_SCREEN_HIDDEN_CLASS, "mt-2")}
+			>
 				<PodcastEpisodeChaptersTable podcastEpisode={podcastEpisode} chapterTopicFeed={chapterTopicFeed} />
 			</CollapsibleSection>
 

@@ -15,6 +15,7 @@ const ELEMENTS: SocialSectionElements = {
 			title={title}
 			titleAside={titleAside && <span className="text-badge shrink-0 text-sm font-semibold">{titleAside}</span>}
 			isContentKept
+			isFullWidth
 		>
 			{children}
 		</CollapsibleSection>
