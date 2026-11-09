@@ -6,12 +6,17 @@ import { db } from "@carlnotes/db"
 import { podcastEpisodeListens, podcastEpisodes } from "@carlnotes/db/schema/podcast"
 import { topics } from "@carlnotes/db/schema/topics"
 import { trackEvent } from "@carlnotes/server/analytics"
-import { toPodcastCoverKey } from "@carlnotes/server/podcastCoverPaths"
+import { toLatestPodcastCoverKey, toPodcastCoverKey } from "@carlnotes/server/podcastCoverPaths"
 import { eq, sql } from "drizzle-orm"
 import { Hono } from "hono"
 import { countPodcastEpisodeListen, toRequestSender } from "../counts/viewerCounts"
 import { type AppEnv, currentUser, toAnalyticsProperties } from "../currentUser"
-import { PRIVATE_IMAGE_HEADERS, PRIVATE_NO_STORE_CACHE_CONTROL, toVersionedImageHeaders } from "../edgeCache"
+import {
+	LATEST_PRIVATE_IMAGE_HEADERS,
+	PRIVATE_IMAGE_HEADERS,
+	PRIVATE_NO_STORE_CACHE_CONTROL,
+	toVersionedImageHeaders,
+} from "../edgeCache"
 import { toCachedPodcastCoverJpeg } from "../share/podcastCover"
 import {
 	toPodcastEpisodeAudioResponse,
@@ -175,19 +180,22 @@ export const podcastFeedsRoute = new Hono<AppEnv>()
 		const { kind, id } = context.req.param()
 		const loadPodcastCoverResult = podcastCoverSize ? await loadPodcastCover({ kind, id }) : null
 
-		// respond 404 to a missing cover, or to a key that does not match the cover's current title
-		if (
-			!loadPodcastCoverResult ||
-			!podcastCoverSize ||
-			coverKey !== toPodcastCoverKey(loadPodcastCoverResult.podcastCover)
-		) {
+		// respond 404 to a missing cover, or to a key that is neither the cover's current key nor its latest key
+		if (!loadPodcastCoverResult || !podcastCoverSize) {
+			return context.json({ error: "not found" }, 404)
+		}
+		const { podcastCover, isPublic } = loadPodcastCoverResult
+		const isCurrentKey = coverKey === toPodcastCoverKey(podcastCover)
+		if (!isCurrentKey && coverKey !== toLatestPodcastCoverKey(podcastCover.kind, podcastCover.id)) {
 			return context.json({ error: "not found" }, 404)
 		}
 
-		// respond with the cover's JPEG
-		const coverJpeg = await toCachedPodcastCoverJpeg(loadPodcastCoverResult.podcastCover, podcastCoverSize)
+		// respond with the cover's JPEG. the current key's url never changes what it serves, and the latest key's does
+		const coverJpeg = await toCachedPodcastCoverJpeg(podcastCover, podcastCoverSize)
+		const latestHeaders = isPublic ? toVersionedImageHeaders(false) : LATEST_PRIVATE_IMAGE_HEADERS
+		const currentHeaders = isPublic ? toVersionedImageHeaders(true) : PRIVATE_IMAGE_HEADERS
 		return context.body(coverJpeg as unknown as ArrayBuffer, 200, {
 			"Content-Type": "image/jpeg",
-			...(loadPodcastCoverResult.isPublic ? toVersionedImageHeaders(true) : PRIVATE_IMAGE_HEADERS),
+			...(isCurrentKey ? currentHeaders : latestHeaders),
 		})
 	})

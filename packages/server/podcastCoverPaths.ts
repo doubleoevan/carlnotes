@@ -54,3 +54,24 @@ export function toPodcastCoverObjectKey(podcastCover: PodcastCover, size: Podcas
 export function toPodcastCoverPath(podcastCover: PodcastCover, size: PodcastCoverSize): string {
 	return `/api/podcast-covers/${podcastCover.kind}/${podcastCover.id}/${toPodcastCoverKey(podcastCover)}-${size}.jpg`
 }
+
+/**
+ * Returns a cover's latest key, an HMAC of its kind and id alone, which keeps naming the cover through a new title,
+ * image, or detail line.
+ */
+export function toLatestPodcastCoverKey(kind: PodcastCover["kind"], id: string): string {
+	const coverHash = toAuthSecretSignature({
+		value: JSON.stringify(["latest", kind, id]),
+		purpose: "podcast cover urls",
+		encoding: "hex",
+	})
+	return coverHash.slice(0, 32)
+}
+
+/**
+ * Returns the path that serves a cover's current drawing in the given size, for an email sent before the cover is final.
+ */
+export function toLatestPodcastCoverPath(podcastCover: PodcastCover, size: PodcastCoverSize): string {
+	const latestKey = toLatestPodcastCoverKey(podcastCover.kind, podcastCover.id)
+	return `/api/podcast-covers/${podcastCover.kind}/${podcastCover.id}/${latestKey}-${size}.jpg`
+}

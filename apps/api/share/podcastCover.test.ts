@@ -3,7 +3,12 @@
 import { expect, spyOn, test } from "bun:test"
 import * as store from "@carlnotes/db/store"
 import { darkRoast, latte } from "@carlnotes/nightshift/colors"
-import { toPodcastCoverKey, toPodcastCoverPath } from "@carlnotes/server/podcastCoverPaths"
+import {
+	toLatestPodcastCoverKey,
+	toLatestPodcastCoverPath,
+	toPodcastCoverKey,
+	toPodcastCoverPath,
+} from "@carlnotes/server/podcastCoverPaths"
 import { renderAsync } from "@resvg/resvg-js"
 import { MAX_PODCAST_COVER_BYTES, toPodcastCoverElement, toPodcastCoverJpeg } from "./podcastCover"
 import type { CoverBandTones } from "./podcastCoverBands"
@@ -72,6 +77,20 @@ test("a new title, image, or detail line is a new key and a new url, and the sam
 	// the path names the kind, the id, the key, and the size
 	const coverPath = toPodcastCoverPath(podcastCover, 600)
 	expect(coverPath).toBe(`/api/podcast-covers/episode/episode-1/${toPodcastCoverKey(podcastCover)}-600.jpg`)
+})
+
+test("a cover's latest key stays through a new title, image, or detail line, and differs from its current key", () => {
+	// the recording podcast episode's cover, then the same podcast episode once it publishes with its own image
+	const recordingCover = { ...PODCAST_EPISODE_COVER, details: "Home espresso" }
+	const publishedCover = { ...PODCAST_EPISODE_COVER, podcastEpisodeImageHash: "0123456789abcdef0123456789abcdef" }
+	expect(toLatestPodcastCoverPath(recordingCover, 600)).toBe(toLatestPodcastCoverPath(publishedCover, 600))
+
+	// the latest key is its own key, and the path names it like the current one
+	const latestKey = toLatestPodcastCoverKey("episode", "episode-1")
+	expect(latestKey).not.toBe(toPodcastCoverKey(recordingCover))
+	expect(toLatestPodcastCoverPath(recordingCover, 600)).toBe(
+		`/api/podcast-covers/episode/episode-1/${latestKey}-600.jpg`,
+	)
 })
 
 // the JPEG encoding needs ffmpeg, which the runtime image has and a developer's machine may not

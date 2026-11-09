@@ -124,6 +124,9 @@ export function toVersionedImageHeaders(isCurrentVersion: boolean): Record<strin
 // a non-public topic's image is cached by the browser alone, at a url that changes with the image
 export const PRIVATE_IMAGE_HEADERS: Record<string, string> = { "Cache-Control": "private, max-age=31536000, immutable" }
 
+// a non-public cover at a url that keeps naming it through its changes is cached by the browser alone, for a minute
+export const LATEST_PRIVATE_IMAGE_HEADERS: Record<string, string> = { "Cache-Control": "private, max-age=60" }
+
 // an unhashed public file changes only with a release, so the browser keeps it an hour and the edge a day, under the
 // tag that the release purge clears
 export const PUBLIC_FILE_HEADERS: Record<string, string> = {

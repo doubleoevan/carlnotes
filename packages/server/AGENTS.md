@@ -40,7 +40,8 @@ model from `CHAT_TRANSCRIPTION_MODEL` and says whether voice chat is on, which n
 model. `podcastEpisodeSettings.ts` reads `PODCAST_SPEECH_MODEL`, which defaults to `gemini-3.8-flash-tts`, and Podcast
 Episodes are off if it is set empty. `podcastCoverPaths.ts` signs a cover's key through `hmac.ts` with
 `toPodcastCoverKey` and builds its path with `toPodcastCoverPath`, over the sizes and the `PodcastCover` shape in
-`@carlnotes/contracts/podcastEpisodes`. `docsContent.ts` names the docs markdown folder that the api's documents and
+`@carlnotes/contracts/podcastEpisodes`. `toLatestPodcastCoverPath` signs the kind and id alone, so the summary email's
+cover keeps loading after the podcast episode publishes. `docsContent.ts` names the docs markdown folder that the api's documents and
 the worker's docs embed read, and `sourceFileTestFixtures.ts` lists the source files under repo folders for the tests
 that scan them.
 

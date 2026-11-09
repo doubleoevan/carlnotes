@@ -1,7 +1,7 @@
 // what a Scan's email says: the props the topic scan email and the report render from, with the new Findings, Carl's
 // recap, the Podcast Episode, and the links back into the app, and one subscriber's rendered message
 
-import { toPodcastEpisodeCover } from "@carlnotes/contracts/podcastEpisodes"
+import { SMALL_PODCAST_COVER_SIZE, toPodcastEpisodeCover } from "@carlnotes/contracts/podcastEpisodes"
 import { toScanFailureLabel } from "@carlnotes/contracts/scanFailure"
 import { toTopicPath } from "@carlnotes/contracts/seo"
 import { db, isFindingShown } from "@carlnotes/db"
@@ -19,7 +19,7 @@ import {
 } from "@carlnotes/emails/topic-scan-email"
 import { toUnsubscribeHeaders, toUnsubscribeUrl } from "@carlnotes/emails/unsubscribe"
 import { appBaseUrl } from "@carlnotes/server/appUrl"
-import { toPodcastCoverPath } from "@carlnotes/server/podcastCoverPaths"
+import { toLatestPodcastCoverPath } from "@carlnotes/server/podcastCoverPaths"
 import { and, desc, eq } from "drizzle-orm"
 
 // the Scan and Topic columns that an email reads, and one recipient's user id and address
@@ -103,7 +103,7 @@ async function toScanEmailPodcastEpisode({
 		{ ...podcastEpisode, title },
 		{ id: topicId, name: topicName, imageHash: topicImageHash },
 	)
-	const coverPath = toPodcastCoverPath(podcastCover, 600)
+	const coverPath = toLatestPodcastCoverPath(podcastCover, SMALL_PODCAST_COVER_SIZE)
 	return {
 		title: podcastEpisode.title,
 		description: podcastEpisode.description ?? undefined,
