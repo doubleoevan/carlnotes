@@ -10,7 +10,7 @@ import { fetchRedditThread, toRedditPostId } from "./ingest/reddit"
 import { CAPTION_HOSTS, fetchDeclaredTranscript } from "./transcripts"
 
 // the Firecrawl endpoint that scrapes a page to Markdown
-const FIRECRAWL_ENDPOINT = "https://api.firecrawl.dev/v1/scrape"
+const FIRECRAWL_ENDPOINT = "https://api.firecrawl.dev/v2/scrape"
 
 // Firecrawl's own statuses for a bad key, billing, and its rate limit
 const FIRECRAWL_FAULT_STATUSES = new Set([401, 402, 429])

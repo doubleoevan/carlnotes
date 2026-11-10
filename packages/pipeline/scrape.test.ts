@@ -1,5 +1,5 @@
-// scrape tests for the conditional-refetch helpers, the episode skip, and the page favicon
-import { expect, test } from "bun:test"
+// scrape tests for the conditional-refetch helpers, the episode skip, the page scrape, and the page favicon
+import { expect, spyOn, test } from "bun:test"
 import { conditionalHeaders, fetchContent, revalidationOutcome, toPageFaviconUrl } from "./scrape"
 
 // conditionalHeaders sends only the validators that are stored, omitting an absent one
@@ -27,6 +27,47 @@ test("revalidationOutcome maps 304 to not-modified and anything else to changed"
 test("fetchContent skips the fetch for an episode with no transcript", async () => {
 	const fetchResult = await fetchContent("https://example.com/episode", "listen")
 	expect(fetchResult).toEqual({ text: "", cost: 0, etag: null, lastModified: null, title: null, faviconUrl: null })
+})
+
+// a page is scraped through Firecrawl's v2 endpoint, which returns the Markdown and the page's metadata
+test("fetchContent scrapes a page through the v2 endpoint and reads its markdown and metadata", async () => {
+	// stub the key and the scrape response
+	const storedApiKey = Bun.env.FIRECRAWL_API_KEY
+	Bun.env.FIRECRAWL_API_KEY = "test-key"
+	const metadata = { title: " A page ", favicon: "/icon.ico", url: "https://example.com/page", etag: '"abc"' }
+	const fetchSpy = spyOn(globalThis, "fetch").mockResolvedValue(
+		Response.json({ success: true, data: { markdown: "# A page", metadata } }),
+	)
+	try {
+		const fetchResult = await fetchContent("https://example.com/page", "read")
+
+		// the request goes to v2 with the main-content Markdown body
+		const [requestUrl, requestInit] = fetchSpy.mock.calls[0] ?? []
+		expect(requestUrl).toBe("https://api.firecrawl.dev/v2/scrape")
+		expect(JSON.parse(String(requestInit?.body))).toEqual({
+			url: "https://example.com/page",
+			formats: ["markdown"],
+			onlyMainContent: true,
+		})
+
+		// the result holds the Markdown, the fetch's cost, and what the metadata named
+		expect(fetchResult).toEqual({
+			text: "# A page",
+			cost: 0.001,
+			etag: '"abc"',
+			lastModified: null,
+			title: "A page",
+			faviconUrl: "https://example.com/icon.ico",
+		})
+	} finally {
+		// restore the request and the key for the tests that follow
+		fetchSpy.mockRestore()
+		if (storedApiKey === undefined) {
+			delete Bun.env.FIRECRAWL_API_KEY
+		} else {
+			Bun.env.FIRECRAWL_API_KEY = storedApiKey
+		}
+	}
 })
 
 // a url that wraps a redirect lands on the publisher, whose icon is not the requested host's
