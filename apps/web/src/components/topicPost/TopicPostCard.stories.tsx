@@ -7,6 +7,7 @@ import {
 } from "@carlnotes/core/lib/topicPostStories"
 import type { Meta, StoryObj } from "@storybook/tanstack-react"
 import { expect, fn, mocked, within } from "storybook/test"
+import { findVisibleByText } from "../../../.storybook/play"
 import { TopicPostCard } from "./TopicPostCard"
 
 const meta = {
@@ -29,7 +30,7 @@ export const Default: Story = {
 	play: async ({ canvas, canvasElement }) => {
 		await canvas.getByRole("button", { name: "About this post" }).click()
 		const popover = within(canvasElement.ownerDocument.body)
-		await expect(await popover.findByText(TOPIC_POST_CARD_STORY.summary ?? "")).toBeVisible()
+		await findVisibleByText(TOPIC_POST_CARD_STORY.summary ?? "")
 		await expect(popover.getByText("Carl's Notes")).toBeVisible()
 		await expect(popover.getByRole("link", { name: TOPIC_POST_CARD_STORY.topicName })).toBeVisible()
 	},

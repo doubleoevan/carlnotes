@@ -21,6 +21,8 @@ permissions:
 jobs:
   smoke:
     runs-on: ubuntu-latest
+    # a hung step ends the run, so the next smoke run waiting on the concurrency group can start
+    timeout-minutes: 45
     steps:
       # persist-credentials false keeps the checkout token out of .git/config
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -28,8 +30,12 @@ jobs:
           persist-credentials: false
       # the exact Bun the Dockerfile pins, matching the CI gate, and the locked dependencies
       - uses: ./.github/actions/setup-bun
-      # install ffmpeg as the Dockerfile does. the podcast suites encode episode audio and draw covers with it
-      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
+      # install ffmpeg as the Dockerfile does. the podcast suites encode episode audio and draw covers with it.
+      # a stalled mirror download times out and retries instead of hanging the run
+      - run: |
+          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 update
+          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 install -y --no-install-recommends ffmpeg
+        timeout-minutes: 10
       # the doppler cli injects the same dev secrets a local smoke run uses
       - uses: dopplerhq/cli-action@4819d808ab99e5cde19a0637a16536a4038fad73 # v4.0.1
       # apply the commit's migrations to the dev database, so the suites run against the schema that the commit expects
