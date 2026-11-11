@@ -94,10 +94,19 @@ each chapter's finding, and captions of what Carl and Vienna say. It is the same
 and the audio share one place. Stop the audio at 12 minutes, press play on the film, and the film starts at 12 minutes.
 When a film ends, nothing plays after it.
 
+![Coffee Break Cinema on a topic page, the film's opening image with its play button, the chapters along the seek
+bar, and the playback controls](../../../assets/screenshots/coffee-break-cinema.png)
+
 **Coffee Break Cinema** sits at the top of the topic page, right above the podcast player, and plays the topic's latest
 film. It opens until you play the latest film, then stays closed. Open or close it yourself, and the topic page
 remembers your choice until the next film. While the film plays, the finding on screen is highlighted in the list, and
 a finding's chapter tag jumps the film to that chapter. Nothing plays until you press play.
+
+The chapters sit along the seek bar. Rest the pointer on one to see its title and the image the film shows for it,
+then press it to jump there.
+
+![A chapter's tooltip over the film's seek bar, showing the chapter's title above the image the film shows for
+it](../../../assets/screenshots/coffee-break-cinema-chapter.png)
 
 The film's play button sits over the film. Press it to start, and press the film to pause. Under the film are the
 skips, the speed, and the chapter-split progress bar of the audio player. Captions start on, and the captions button

@@ -26,6 +26,9 @@ any time, and so can the topic's owner. Deleting a post removes its hot takes, i
 
 ## What a post's page shows
 
+![An Open Mic post's page: the post's image beside its title, the byline with reactions, the Coffee Break Discussion
+card, the body, and the hot takes below](../../../assets/screenshots/open-mic-post.png)
+
 - **The image.** Carl draws one from the post when it publishes. Press the image to regenerate it, with an optional
   note on what to draw, or to upload your own. The post's author and the topic's editors can change it. Regenerations
   count toward the same monthly limit as topic images.
