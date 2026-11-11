@@ -5,6 +5,7 @@ import { TOPIC_POST_DISCUSSION_STORY } from "@carlnotes/core/lib/topicPostStorie
 import { toTopicPostShare } from "@carlnotes/core/lib/topicPosts"
 import type { Meta, StoryObj } from "@storybook/tanstack-react"
 import { expect, fn, mocked, within } from "storybook/test"
+import { findVisibleByRole } from "../../../.storybook/play"
 import { ShareTopic } from "./ShareTopic"
 
 // the story post's topic, as its owner shares it, and the post that is shared in its place
@@ -34,7 +35,7 @@ type Story = StoryObj<typeof meta>
 export const Topic: Story = {
 	play: async ({ canvasElement }) => {
 		const dialog = within(canvasElement.ownerDocument.body)
-		await expect(await dialog.findByRole("heading", { name: "Share topic" })).toBeVisible()
+		await findVisibleByRole("heading", { name: "Share topic" })
 		await expect(dialog.getByRole("button", { name: "Copy RSS" })).toBeVisible()
 	},
 }
@@ -44,7 +45,7 @@ export const TopicPost: Story = {
 	args: { topicPost: STORY_TOPIC_POST },
 	play: async ({ canvasElement }) => {
 		const dialog = within(canvasElement.ownerDocument.body)
-		await expect(await dialog.findByRole("heading", { name: "Share post" })).toBeVisible()
+		await findVisibleByRole("heading", { name: "Share post" })
 
 		// the platform link names the post's path and title, and the topic's own options are absent
 		const blueskyLink = dialog.getByRole("link", { name: "Bluesky" })
@@ -60,7 +61,7 @@ export const InviteTopicPost: Story = {
 	args: { topic: { ...STORY_TOPIC, visibility: "invite", isTopicOwner: true }, topicPost: STORY_TOPIC_POST },
 	play: async ({ canvasElement }) => {
 		const dialog = within(canvasElement.ownerDocument.body)
-		await expect(await dialog.findByRole("heading", { name: "Share post" })).toBeVisible()
+		await findVisibleByRole("heading", { name: "Share post" })
 		await expect(dialog.queryByRole("link", { name: "Bluesky" })).toBeNull()
 
 		// the invite option creates the topic's link for this post

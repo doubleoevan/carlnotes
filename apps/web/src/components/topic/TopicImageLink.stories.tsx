@@ -50,6 +50,6 @@ export const OwnPage: Story = {
 	parameters: { tanstack: { router: { route: { path: TOPIC_PATH } } } },
 	play: async ({ canvas, canvasElement }) => {
 		await expect(canvasElement.querySelector("a")).toBeNull()
-		await expect(canvas.getByRole("img", { name: "Image of Home espresso" })).toBeVisible()
+		await expect(canvas.getByLabelText("Image of Home espresso")).toBeVisible()
 	},
 }

@@ -211,7 +211,7 @@ function TopicPostSkeleton({
 			<discussionElements.Card>
 				<discussionElements.Row>
 					<Shape className="size-11 shrink-0 rounded-full" />
-					<Stack className="min-w-52 flex-1">
+					<Stack className="min-w-0 grow basis-52">
 						<Row className="h-[23px]">
 							<Shape className="h-4 w-48 max-w-full" />
 						</Row>

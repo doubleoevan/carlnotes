@@ -6,6 +6,7 @@ import { PODCAST_STORY_FILM_EPISODE } from "@carlnotes/core/lib/podcastEpisodeSt
 import type { Meta, StoryObj } from "@storybook/tanstack-react"
 import { expect, mocked, within } from "storybook/test"
 import { LATEST_PODCAST_EPISODE_FIXTURE } from "../../../.storybook/fixtures/podcastEpisodes"
+import { findVisibleByRole } from "../../../.storybook/play"
 import { PodcastEpisodeCard } from "./PodcastEpisodeCard"
 
 // the podcast cover placeholder stands in for a topic's image, which the app serves from its public files
@@ -92,11 +93,13 @@ export const VideoDialog: Story = {
 	beforeEach: () => {
 		mocked(fetchPodcastEpisode).mockResolvedValue(PODCAST_STORY_FILM_EPISODE)
 	},
-	play: async ({ canvas, canvasElement }) => {
-		// the dialog opens over the card, and the capture waits for it to settle
+	play: async ({ canvas, userEvent }) => {
+		// the dialog fades in over the card
 		await canvas.getByRole("button", { name: "Play film" }).click()
-		const page = within(canvasElement.ownerDocument.body)
-		await expect(await page.findByRole("dialog")).toBeVisible()
+		const dialog = await findVisibleByRole("dialog")
+
+		// the film plays in the dialog, so pause it on its frame for the image capture
+		await userEvent.click(await within(dialog).findByRole("button", { name: /^Pause/ }))
 	},
 }
 

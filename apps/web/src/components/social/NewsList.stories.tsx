@@ -38,19 +38,20 @@ const meta = {
 export default meta
 type Story = StoryObj<typeof meta>
 
-// 32 rows show five to a page under carl's opener, numbered across the pages, with the page buttons under them
+// 32 rows show five to a page under carl's opener, numbered across the pages, with the page buttons under them. each
+// page has six links: the five rows and the topic link in the podcast episode's row
 export const FullWeek: Story = {
 	play: async ({ canvas, userEvent }) => {
 		await expect(await canvas.findByText("12 reactions on your hot take")).toBeInTheDocument()
 		await expect(canvas.getByRole("button", { name: "Week" })).toHaveAttribute("aria-pressed", "true")
-		await expect(canvas.getAllByRole("link")).toHaveLength(5)
+		await expect(canvas.getAllByRole("link")).toHaveLength(6)
 		// the Podcast Episode's row plays its episode and holds no Topic note button, and the Topic Post's row opens the
 		// post's info popup in the Topic note's place
 		await expect(canvas.getAllByRole("button", { name: "Topic details" })).toHaveLength(3)
 		await expect(canvas.getAllByRole("button", { name: "About this post" })).toHaveLength(1)
 		await userEvent.click(within(canvas.getByRole("navigation")).getByText("2"))
 		await expect(await canvas.findByText("Grinders, scales, and the pour")).toBeInTheDocument()
-		await expect(canvas.getAllByRole("link")).toHaveLength(5)
+		await expect(canvas.getAllByRole("link")).toHaveLength(6)
 	},
 }
 

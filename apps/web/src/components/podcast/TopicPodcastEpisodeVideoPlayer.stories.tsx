@@ -39,6 +39,12 @@ const playMutedFilm: Story["play"] = async ({ canvasElement }) => {
 	pressButton(canvasElement, "Play")
 }
 
+// wait for the film to play, then pause it on its frame so the image capture holds still
+async function pauseFilm(canvasElement: HTMLElement): Promise<void> {
+	await waitFor(() => expect(canvasElement.querySelector('button[aria-label^="Pause"]')).not.toBeNull())
+	pressButton(canvasElement, "Pause")
+}
+
 // the labels of the skips and the speed, which show before the film plays
 const EARLY_CONTROL_LABEL_STARTS = ["Skip back", "Skip forward", "Playback speed"]
 
@@ -64,7 +70,7 @@ export const StartedBySkipForward: Story = {
 	},
 }
 
-// a film started by a press on the speed, which plays at the next speed
+// a film started by a press on the speed, which plays at the next speed, then paused
 export const StartedBySpeed: Story = {
 	play: async ({ canvasElement }) => {
 		// the speed's label before the press
@@ -75,29 +81,30 @@ export const StartedBySpeed: Story = {
 		// the press starts the film and steps the speed
 		pressButton(canvasElement, "Mute")
 		pressButton(canvasElement, "Playback speed")
-		await waitFor(() => expect(canvasElement.querySelector('button[aria-label^="Pause"]')).not.toBeNull())
+		await pauseFilm(canvasElement)
 		await expect(toSpeedLabel()).not.toBe(speedLabel)
 	},
 }
 
-// a playing film, with the play button hidden
-export const Playing: Story = { play: playMutedFilm }
+// a playing film, with the play button hidden. its frame keeps moving, so it has no image capture
+export const Playing: Story = { tags: ["no-screenshot"], play: playMutedFilm }
 
 // a film paused by a press on its frame, with the play button over the frame again
 export const Paused: Story = {
 	play: async (context) => {
 		await playMutedFilm(context)
-		await waitFor(() => expect(context.canvasElement.querySelector('button[aria-label^="Pause"]')).not.toBeNull())
-		pressButton(context.canvasElement, "Pause")
+		await pauseFilm(context.canvasElement)
 	},
 }
 
 // a muted film on its poster, with the crossed speaker
 export const Muted: Story = { play: async ({ canvasElement }) => pressButton(canvasElement, "Mute") }
+// a film with its captions hidden, paused on its frame
 export const CaptionsOff: Story = {
 	play: async (context) => {
 		await playMutedFilm(context)
 		pressButton(context.canvasElement, "Hide captions")
+		await pauseFilm(context.canvasElement)
 	},
 }
 export const NoPictureInPicture: Story = { parameters: { isPictureInPictureMissing: true } }

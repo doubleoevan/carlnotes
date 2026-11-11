@@ -25,7 +25,7 @@ export const TOPIC_POST_DISCUSSION_CARD_ELEMENTS: TopicPostDiscussionCardElement
 	Row: ({ children }) => <div className="flex flex-wrap items-center gap-3">{children}</div>,
 	PlayButton: ({ podcastEpisode }) => <PodcastEpisodePlayButton podcastEpisode={podcastEpisode} size="default" />,
 	Details: ({ title, detailsText, transcriptToggle }) => (
-		<div className="min-w-52 flex-1">
+		<div className="min-w-0 grow basis-52">
 			{transcriptToggle ? (
 				// the name behind the caret that the news card's title opens and closes with
 				<details className="group/transcript">

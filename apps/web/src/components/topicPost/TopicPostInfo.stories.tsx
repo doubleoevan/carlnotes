@@ -4,6 +4,7 @@ import { fetchTopicPost } from "@carlnotes/client/topicPostClient"
 import { TOPIC_POST_DISCUSSION_STORY, TOPIC_POST_SHORT_DRAFT_STORY } from "@carlnotes/core/lib/topicPostStories"
 import type { Meta, StoryObj } from "@storybook/tanstack-react"
 import { expect, mocked, within } from "storybook/test"
+import { findVisibleByText } from "../../../.storybook/play"
 import { TopicPostInfo, TopicPostInfoButton } from "./TopicPostInfo"
 
 const meta = {
@@ -24,7 +25,7 @@ export const Default: Story = {
 	play: async ({ canvas, canvasElement }) => {
 		await canvas.getByRole("button", { name: "About this post" }).click()
 		const popover = within(canvasElement.ownerDocument.body)
-		await expect(await popover.findByText("Written by")).toBeVisible()
+		await findVisibleByText("Written by")
 		await expect(popover.getByRole("link", { name: TOPIC_POST_DISCUSSION_STORY.author.username })).toBeVisible()
 		await expect(popover.getByRole("button", { name: /^Share/ })).toBeVisible()
 		await expect(popover.getByRole("link", { name: TOPIC_POST_DISCUSSION_STORY.topicName })).toBeVisible()
@@ -46,7 +47,7 @@ export const Draft: Story = {
 	play: async ({ canvas, canvasElement }) => {
 		await canvas.getByRole("button", { name: "About this post" }).click()
 		const popover = within(canvasElement.ownerDocument.body)
-		await expect(await popover.findByText("No notes yet.")).toBeVisible()
+		await findVisibleByText("No notes yet.")
 		await expect(popover.queryByRole("button", { name: /^Share/ })).toBeNull()
 		await expect(popover.queryByText("Coffee Break Discussion")).toBeNull()
 	},
@@ -57,19 +58,17 @@ export const Unavailable: Story = {
 	beforeEach: () => {
 		mocked(fetchTopicPost).mockResolvedValue(null)
 	},
-	play: async ({ canvas, canvasElement }) => {
+	play: async ({ canvas }) => {
 		await canvas.getByRole("button", { name: "About this post" }).click()
-		const popover = within(canvasElement.ownerDocument.body)
-		await expect(await popover.findByText("Carl couldn't open this post's note.")).toBeVisible()
+		await findVisibleByText("Carl couldn't open this post's note.")
 	},
 }
 
 // a row's notebook and pen tile opens the same popup
 export const RowButton: Story = {
 	render: (args) => <TopicPostInfoButton {...args} />,
-	play: async ({ canvas, canvasElement }) => {
+	play: async ({ canvas }) => {
 		await canvas.getByRole("button", { name: "About this post" }).click()
-		const popover = within(canvasElement.ownerDocument.body)
-		await expect(await popover.findByText("Carl's Notes")).toBeVisible()
+		await findVisibleByText("Carl's Notes")
 	},
 }

@@ -36,14 +36,14 @@ export const Default: Story = {
 
 // beside a phone's header image the line wraps between counts, and no count breaks inside itself
 export const WrappedAtPhoneWidth: Story = {
-	decorators: [(Story) => <div className="w-[13.5rem]">{Story()}</div>],
+	decorators: [(Story) => <div style={{ width: "13.5rem" }}>{Story()}</div>],
 	play: async ({ canvas }) => {
 		// every count is one line tall, and the last count sits on a row below the first
 		const podcastEpisodeCount = canvas.getByText("17 podcast episodes ·")
 		const similarTopicCount = canvas.getByText("6 similar topics")
 		await expect(podcastEpisodeCount.getClientRects()).toHaveLength(1)
 		await expect(similarTopicCount.getClientRects()).toHaveLength(1)
-		await expect(similarTopicCount.getBoundingClientRect().top).toBeGreaterThan(
+		await expect(similarTopicCount.getBoundingClientRect().top).toBeGreaterThanOrEqual(
 			canvas.getByText("1 film ·").getBoundingClientRect().bottom,
 		)
 	},

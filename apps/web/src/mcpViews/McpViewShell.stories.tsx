@@ -4,6 +4,7 @@
 
 import { FINISHED_SCAN_STATUS } from "@carlnotes/contracts/mcpScanStatusTestFixtures"
 import { MCP_VIEW_META_KEY } from "@carlnotes/contracts/mcpViews"
+import type { PodcastEpisode } from "@carlnotes/contracts/podcast"
 import { SITE_URL } from "@carlnotes/contracts/site"
 import { PODCAST_STORY_EPISODE, PODCAST_STORY_FILM_EPISODE } from "@carlnotes/core/lib/podcastEpisodeStories"
 import { UPDATES_STORY } from "@carlnotes/core/lib/updatesStories"
@@ -11,7 +12,7 @@ import { restorePodcastEpisode } from "@carlnotes/core/stores/podcastEpisodePlay
 import type { App, McpUiDisplayMode } from "@modelcontextprotocol/ext-apps"
 import type { Meta, StoryObj } from "@storybook/tanstack-react"
 import { RouterProvider } from "@tanstack/react-router"
-import { expect } from "storybook/test"
+import { expect, screen, waitFor } from "storybook/test"
 import { LinkOpenerContext } from "@/components/common/AnchorLink"
 import { MCP_SEARCH_PAGE, toFindingsMcpViewData, VISITOR_TOOL_RESULT } from "../../.storybook/fixtures/mcpViews"
 import { toOwnFrameDocs } from "../../.storybook/parameters"
@@ -105,10 +106,13 @@ function toStoryHost(isLinkDeclined: boolean): App {
 	} as unknown as App
 }
 
-// load a podcast episode paused, with no audio source. this runs after the render. mounting the audio element clears
-// the player
-function showPodcastPlayer(): void {
-	restorePodcastEpisode({ podcastEpisode: PODCAST_STORY_EPISODE, positionSeconds: 0, playbackRate: 1 })
+// load a podcast episode paused, with no audio source. the router can mount the audio element after the play function
+// starts, and mounting it clears the player, so the load repeats until the player bar's seek slider shows
+async function showPodcastPlayer(podcastEpisode: PodcastEpisode = PODCAST_STORY_EPISODE): Promise<void> {
+	await waitFor(() => {
+		restorePodcastEpisode({ podcastEpisode, positionSeconds: 0, playbackRate: 1 })
+		expect(screen.getByRole("slider", { name: "Seek" })).toBeInTheDocument()
+	})
 }
 
 // a table route offers fullscreen, and the route an MCP view opens on has no back
@@ -130,16 +134,16 @@ export const AfterMove: Story = {
 export const Fullscreen: Story = { parameters: { mcpViewRoute: { ...FINDINGS_ROUTE, displayMode: "fullscreen" } } }
 
 // a loaded podcast episode offers picture in picture
-export const PlayerShown: Story = { play: showPodcastPlayer }
+export const PlayerShown: Story = { play: () => showPodcastPlayer() }
 
 // a loaded podcast episode with a film links to the film player on its page, since the MCP view plays only audio
 export const PlayerWithFilm: Story = {
 	play: async ({ canvas }) => {
 		const { video: _video, ...podcastEpisode } = PODCAST_STORY_FILM_EPISODE
-		restorePodcastEpisode({
-			podcastEpisode: { ...podcastEpisode, hasVideo: true, pagePath: "/topics/topic-1/coffee/episodes/2026/7" },
-			positionSeconds: 0,
-			playbackRate: 1,
+		await showPodcastPlayer({
+			...podcastEpisode,
+			hasVideo: true,
+			pagePath: "/topics/topic-1/coffee/episodes/2026/7",
 		})
 		await expect(await canvas.findByRole("link", { name: "Watch on CarlNotes" })).toBeVisible()
 	},
@@ -148,7 +152,7 @@ export const PlayerWithFilm: Story = {
 // picture in picture shows only the brand bar and the player
 export const PictureInPicture: Story = {
 	parameters: { mcpViewRoute: { ...SEARCH_ROUTE, displayMode: "pip" } },
-	play: showPodcastPlayer,
+	play: () => showPodcastPlayer(),
 }
 
 // a call that returned only text shows the tool's words in place of the route
