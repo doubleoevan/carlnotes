@@ -15,7 +15,7 @@
 		"@carlnotes/server": "workspace:*",
 		"@resvg/resvg-js": "^2.6.2",
 		"@temporalio/client": "^1.24.0",
-		"ai": "^7.0.162",
+		"ai": "^7.0.165",
 		"drizzle-orm": "^0.45.4",
 		"exceljs": "^4.4.0",
 		"mammoth": "^1.13.0",
