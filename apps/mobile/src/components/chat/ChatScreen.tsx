@@ -47,6 +47,7 @@ function ChatScreenContent({ state: chatPageState }: { state: ChatPageState }) {
 	const isKeyboardVisible = useIsKeyboardVisible()
 	// whether the chat rooms read failed
 	const hasChatRoomsLoadFailed = useHasChatRoomsLoadFailed()
+	// the page's state, with the Topic Post whose screen opened the chat, which its Topic's private chat asks about
 	const {
 		query: chatPageQuery,
 		session,
@@ -55,6 +56,7 @@ function ChatScreenContent({ state: chatPageState }: { state: ChatPageState }) {
 		choices: chatChoices,
 		selectedId: selectedChatId,
 		name: chatName,
+		chatTopicPost,
 	} = chatPageState
 	if (chatPageQuery.isError) {
 		return (
@@ -125,7 +127,7 @@ function ChatScreenContent({ state: chatPageState }: { state: ChatPageState }) {
 				) : (
 					<PrivateChatPanel
 						key={`${userId}:${toChatKey(selectedChatId)}`}
-						page={toPrivateChatPage(selectedChatId)}
+						page={toPrivateChatPage(selectedChatId, chatTopicPost)}
 						name={chatName}
 						author={{
 							userId: session.user.id,

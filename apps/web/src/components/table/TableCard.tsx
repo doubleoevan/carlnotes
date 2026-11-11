@@ -13,3 +13,14 @@ export function TableCard({ className, children }: { className?: string; childre
 		</div>
 	)
 }
+
+/**
+ * The card an empty list or table shows in its rows' place, around the one muted line that says so.
+ */
+export function EmptyListCard({ className, children }: { className?: string; children: React.ReactNode }) {
+	return (
+		<TableCard className={cn("mb-2", className)}>
+			<p className="text-muted-foreground py-2 text-sm">{children}</p>
+		</TableCard>
+	)
+}

@@ -127,8 +127,8 @@ export const pageRenderRateLimiter = rateLimiter<AppEnv>({
 const searchRateLimitStore = toRateLimitStore("rate-limit:search")
 export const searchRateLimiter = toRateLimiter({ limit: SEARCH_RATE_LIMIT, store: searchRateLimitStore })
 
-// the limiter over the paged reads of reactions and comments and the mention suggestions, keyed by the user else the
-// address. the limit is far above what a person reading a page sends
+// the limiter over the paged reads of reactions and comments, the mention suggestions, and a topic's related topics,
+// keyed by the user else the address. the limit is far above what a person reading a page sends
 const SOCIAL_READ_RATE_LIMIT = 120
 export const socialReadRateLimiter = toRateLimiter({
 	limit: SOCIAL_READ_RATE_LIMIT,

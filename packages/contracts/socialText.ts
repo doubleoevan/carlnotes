@@ -16,7 +16,7 @@ const SOCIAL_TEXT_INPUT_MAX_CHARS = 20_000
 
 // a control character other than a tab, a line feed, or a carriage return
 // biome-ignore lint/suspicious/noControlCharactersInRegex: the pattern exists to find control characters
-const CONTROL_CHARACTER_PATTERN = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f]/
+export const CONTROL_CHARACTER_PATTERN = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f]/
 
 // an html tag, which also matches a forged untrusted-data delimiter
 const MARKUP_PATTERN = /<\/?[a-zA-Z][^<>]*>/g
@@ -122,4 +122,17 @@ export function toCommentBodyParts(body: string, mentions: CommentMention[]): Co
 		commentBodyParts.push({ text: body.slice(partStart), mentionedUserId: null })
 	}
 	return commentBodyParts
+}
+
+// the most characters of a Comment's first line that a row of a list shows
+const COMMENT_FIRST_LINE_MAX_CHARS = 140
+
+/**
+ * Returns a Comment's first line as a list's row shows it, cut to the row's length.
+ */
+export function toCommentFirstLine(commentBody: string): string {
+	const firstLine = commentBody.trim().split("\n", 1)[0]?.trim() ?? ""
+	return firstLine.length > COMMENT_FIRST_LINE_MAX_CHARS
+		? `${firstLine.slice(0, COMMENT_FIRST_LINE_MAX_CHARS - 1)}…`
+		: firstLine
 }

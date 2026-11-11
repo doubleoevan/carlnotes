@@ -36,7 +36,7 @@ you want to tell us more, write to [support@carlnotes.com](mailto:support@carlno
 
 ## Block a person
 
-Blocking someone keeps their messages, comments, notes, and invitations away from you. You stop seeing what they
+Blocking someone keeps their messages, comments, notes, and invites away from you. You stop seeing what they
 write, and they can no longer invite you to a topic or a team. They are not told. A reply to one of their messages
 shows a hidden quote in its place.
 

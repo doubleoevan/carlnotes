@@ -14,6 +14,11 @@ export const mcpViewHistory = createMemoryHistory({ initialEntries: ["/"] })
 // the path every route of a Topic's findings starts with
 export const FINDINGS_ROUTE_PREFIX = "/findings/"
 
+// the news route, and the paths every route of a Topic's Topic Posts and of one Topic Post start with
+export const NEWS_ROUTE_PATH = "/news"
+export const TOPIC_POSTS_ROUTE_PREFIX = "/posts/"
+export const TOPIC_POST_ROUTE_PREFIX = "/post/"
+
 // the MCP view data follows the route, which is how back restores what the route read
 mcpViewHistory.subscribe(() => setMcpViewData(toMcpViewToolCall(mcpViewHistory.location.state)?.toolResult._meta))
 

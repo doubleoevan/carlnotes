@@ -1,4 +1,4 @@
-// daily spend tests: the four reads behind the day's spend, the gauge line, the threshold warning, and a failed read
+// daily spend tests: the reads behind the day's spend, the gauge line, the threshold warning, and a failed read
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import { restoreConnectionPool, stubConnectionPool } from "@carlnotes/db/connectionPoolStub"
 import * as monitoring from "@carlnotes/server/monitoring"
@@ -12,34 +12,39 @@ afterEach(() => {
 })
 
 // the spend sums each table since the start of the UTC day and counts the day's signups
-test("loadDailySpend sums the day's scan, chat, and episode costs and counts the day's signups", async () => {
-	// each table answers its own sum, and the users table its count, as the array rows a select reads
+test("loadDailySpend sums the day's scan, chat, podcast episode, and film costs and counts the day's signups", async () => {
+	// each table answers its own sum, and the users table its count, as the array rows a select reads. the film sum
+	// comes first. its query names the episodes table too
 	const rowsByTable: Record<string, string[][]> = {
+		topic_podcast_episode_videos: [["0.5"]],
 		scans: [["1.5"]],
 		chat_turns: [["0.25"]],
 		episodes: [["2"]],
 		personal_source_distillation_spends: [["0.15"]],
 		topic_image_renders: [["0"]],
+		// a discussion's cost counts with the podcast episodes'
+		topic_post_discussions: [["0.5"]],
 	}
 	const sentQueries = stubConnectionPool(({ text }) => {
 		const table = Object.keys(rowsByTable).find((name) => text.includes(`"${name}"`))
 		return (table && rowsByTable[table]) || [["7"]]
 	})
 
-	// the sums add up, and the signups are counted
+	// the sums add up, with the films and the discussions counted among the podcast episodes, and the signups are
+	// counted
 	const now = new Date("2026-10-11T15:30:00Z")
 	expect(await loadDailySpend(now)).toEqual({
 		scanDollars: 1.5,
 		chatDollars: 0.25,
-		podcastEpisodeDollars: 2,
+		podcastEpisodeDollars: 3,
 		personalSourcesDollars: 0.15,
 		topicImageDollars: 0,
-		totalDollars: 3.9,
+		totalDollars: 4.9,
 		newUserCount: 7,
 	})
 
 	// every read starts at midnight UTC, which the driver sends as its ISO text
-	expect(sentQueries).toHaveLength(6)
+	expect(sentQueries).toHaveLength(8)
 	for (const sentQuery of sentQueries) {
 		expect(sentQuery.values).toEqual(["2026-10-11T00:00:00.000Z"])
 	}

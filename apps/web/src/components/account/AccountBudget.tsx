@@ -11,10 +11,10 @@ import { cn } from "@carlnotes/nightshift/classNames"
 import { Settings } from "lucide-react"
 import { useState } from "react"
 import { AnchorLink } from "@/components/common/AnchorLink"
-import { Button, buttonVariants } from "@/components/primitives/button"
+import { Button } from "@/components/primitives/button"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import { openPlanManagement } from "@/lib/billingRedirects"
-import { CARD_CLASS } from "@/lib/styleClasses"
+import { CARD_CLASS, HIGHLIGHTED_PAGE_BUTTON_CLASS } from "@/lib/styleClasses"
 import { SpendMeter } from "./SpendMeter"
 
 /**
@@ -83,7 +83,7 @@ export function PlanButton({ billing }: { billing: BillingState }) {
 		return (
 			<Tooltip>
 				<TooltipTrigger asChild>
-					<Button onClick={handleManage} disabled={isRedirecting}>
+					<Button className={HIGHLIGHTED_PAGE_BUTTON_CLASS} onClick={handleManage} disabled={isRedirecting}>
 						<Settings className="size-4" />
 						{PLAN_MANAGEMENT_LABELS[planManagement]}
 					</Button>
@@ -96,7 +96,7 @@ export function PlanButton({ billing }: { billing: BillingState }) {
 	return (
 		<Tooltip>
 			<TooltipTrigger asChild>
-				<AnchorLink href={PLANS_PATH} className={cn(buttonVariants({ variant: "default" }))}>
+				<AnchorLink href={PLANS_PATH} className={HIGHLIGHTED_PAGE_BUTTON_CLASS}>
 					<Settings className="size-4" />
 					{PURCHASE_COPY.upgrade}
 				</AnchorLink>

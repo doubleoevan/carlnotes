@@ -1,5 +1,5 @@
 // social target tests: each kind resolves to its Topic, path, and name, a Comment resolves to what it hangs on, a
-// post and a missing target resolve to nothing, and a target the user may not open reads the same as a missing one
+// draft and a missing target resolve to nothing, and a target the user may not open reads the same as a missing one
 import { afterEach, expect, test } from "bun:test"
 import { restoreConnectionPool, stubConnectionPool, toTableRow } from "@carlnotes/db/connectionPoolStub"
 import { comments } from "@carlnotes/db/schema/social"
@@ -68,10 +68,20 @@ test("a Comment resolves to what it hangs on, as the reactions' own social targe
 	expect(await loadSocialTarget({ kind: "comment", id: "missing" })).toBeNull()
 })
 
-test("a post and a missing target resolve to nothing", async () => {
-	const sentQueries = stubConnectionPool()
-	expect(await loadSocialTarget({ kind: "post", id: "post-1" })).toBeNull()
-	expect(sentQueries).toHaveLength(0)
+test("a published Topic Post resolves to its own page, and a draft and a missing target resolve to nothing", async () => {
+	// a published Topic Post's Topic and title. the read leaves out a draft
+	const sentQueries = stubConnectionPool(() => [[...PUBLIC_TOPIC_ROW, "Light Roasts, Ranked"]])
+	expect(await loadSocialTarget({ kind: "post", id: "post-1" })).toEqual({
+		commentTarget: { kind: "post", id: "post-1" },
+		topic: { id: "topic-1", ownerId: "owner-1", visibility: "public", teamId: null, name: "Coffee Roasting" },
+		path: "/topics/topic-1/coffee-roasting/posts/post-1/light-roasts-ranked",
+		label: "Light Roasts, Ranked",
+	})
+	expect(sentQueries[0]?.text).toContain('"topic_posts"."published_at" is not null')
+
+	// a draft's read finds no row, and neither does a missing Topic's
+	stubConnectionPool()
+	expect(await loadSocialTarget({ kind: "post", id: "draft-1" })).toBeNull()
 	expect(await loadSocialTarget({ kind: "topic", id: "missing" })).toBeNull()
 })
 

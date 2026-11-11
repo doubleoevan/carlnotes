@@ -15,9 +15,9 @@ import { LinkPreviewCard } from "@/components/common/LinkPreviewCard"
 import { LinkPreviewLoading } from "@/components/common/LinkPreviewLoading"
 import { ScrollBox } from "@/components/common/ScrollBox"
 import { PodcastEpisodePlayButton } from "@/components/podcast/PodcastEpisodePlayButton"
-import { TopicImage } from "@/components/primitives/topic-image"
 import { SECTION_LABEL_CLASS, STANDALONE_LINK_CLASS } from "@/lib/styleClasses"
 import { TopicByline } from "./TopicByline"
+import { TopicImageLink } from "./TopicImageLink"
 import { TopicInfoSection as InfoSection } from "./TopicInfoSection"
 import type { TopicResourceInfoTopic } from "./TopicResourceInfo"
 import { toNotesMarkdown } from "./TopicScanRecap"
@@ -125,9 +125,13 @@ type FindingTopicRowProps = {
 function FindingTopicRow({ topic, podcastEpisode, findingId, findingTopic }: FindingTopicRowProps) {
 	return (
 		<div className="flex items-center gap-3">
-			<AnchorLink href={toTopicPath(topic)} tabIndex={-1} aria-hidden className="shrink-0">
-				<TopicImage image={findingTopic?.image ?? null} size="list" name={topic.name} className="h-12 w-18" />
-			</AnchorLink>
+			<TopicImageLink
+				image={findingTopic?.image ?? null}
+				size="list"
+				name={topic.name}
+				className="h-12 w-18"
+				path={toTopicPath(topic)}
+			/>
 			<div className="min-w-0 flex-1">
 				{/* the name, then the latest podcast episode's play button, as on the topic page */}
 				<div className="flex items-center gap-2">

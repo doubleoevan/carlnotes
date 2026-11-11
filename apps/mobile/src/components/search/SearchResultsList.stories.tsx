@@ -19,7 +19,7 @@ export const STORY_SEARCH_RESULTS_PAGE: SearchResultsPage = {
 	page: 1,
 	pageSize: 10,
 	pageCount: 1,
-	rowCount: 5,
+	rowCount: 6,
 	podcastEpisodes: [STORY_PODCAST_EPISODE],
 	rows: [
 		{
@@ -30,6 +30,21 @@ export const STORY_SEARCH_RESULTS_PAGE: SearchResultsPage = {
 		},
 		{ ...row, id: topic.id, name: topic.name, kind: "topic", topic, subscriberCount: 12, isSubscribed: false },
 		{ ...row, id: "episode-1", kind: "podcastEpisode", topic, podcastEpisode: STORY_PODCAST_EPISODE },
+		{
+			...row,
+			id: "topic-post-1",
+			name: "Grinding finer than you think",
+			path: "/topics/topic-1/coffee-for-two/posts/topic-post-1/grinding-finer-than-you-think",
+			count: null,
+			kind: "topicPost",
+			// the author, the summary, and no image yet
+			topicPost: {
+				author: { userId: "reader-1", username: "CoffeeReader", avatarVersion: null, avatarSource: null },
+				summary: "A finer grind fixes most sour shots.",
+				image: null,
+			},
+			topic,
+		},
 		{
 			...row,
 			id: "team-1",

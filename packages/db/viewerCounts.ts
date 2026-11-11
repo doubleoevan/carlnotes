@@ -1,12 +1,21 @@
-// a topic's viewers and a podcast episode's listeners, counted as unique people in one Redis HyperLogLog counter
-// each. a changed counter is listed in a set that the scheduled sync takes
+// the viewers of a topic, a profile, and a team, and a podcast episode's listeners, counted as unique people in one
+// Redis HyperLogLog counter each. a changed counter is listed in a set that the scheduled sync takes
 import { runWithRedis } from "./redis"
 
-// the topic or the podcast episode a counter counts
-export type ViewerCountRef = { kind: "topic" | "podcastEpisode"; id: string }
+// what a counter counts: a topic, a podcast episode, a user's profile, or a team, and the start of each one's Redis key
+const COUNTER_KEY_PREFIXES = {
+	topic: "viewers:topic:",
+	podcastEpisode: "listeners:podcastEpisode:",
+	profile: "viewers:profile:",
+	team: "viewers:team:",
+} as const
+export type ViewerCountKind = keyof typeof COUNTER_KEY_PREFIXES
 
-// what a rebuilt Redis counts for one topic or podcast episode. its saved counter, and the signed-in people Postgres
-// records as its viewers or listeners
+// the topic, the podcast episode, the profile's user, or the team a counter counts
+export type ViewerCountRef = { kind: ViewerCountKind; id: string }
+
+// what a rebuilt Redis counts for one ref. its saved counter, and the signed-in people Postgres records as its
+// viewers or listeners
 export type SavedViewerCounter = { viewerCountRef: ViewerCountRef; counter: Uint8Array }
 export type ViewerCountSeed = { viewerCountRef: ViewerCountRef; elements: string[] }
 
@@ -161,9 +170,7 @@ async function seedViewerCounters(viewerCountSeeds: ViewerCountSeed[]): Promise<
 
 // the Redis key of the ref's counter
 function toCounterKey(viewerCountRef: ViewerCountRef): string {
-	return viewerCountRef.kind === "topic"
-		? `viewers:topic:${viewerCountRef.id}`
-		: `listeners:podcastEpisode:${viewerCountRef.id}`
+	return `${COUNTER_KEY_PREFIXES[viewerCountRef.kind]}${viewerCountRef.id}`
 }
 
 /**
@@ -178,8 +185,10 @@ function toViewerCountRef(member: string): ViewerCountRef | null {
 	// the kind comes before the first colon, and the id is everything after it
 	const [kind, ...idParts] = member.split(":")
 	const id = idParts.join(":")
-	if ((kind !== "topic" && kind !== "podcastEpisode") || !id) {
-		return null
-	}
-	return { kind, id }
+	return kind && isViewerCountKind(kind) && id ? { kind, id } : null
+}
+
+// whether a changed set member's first part names something a counter counts
+function isViewerCountKind(kind: string): kind is ViewerCountKind {
+	return Object.hasOwn(COUNTER_KEY_PREFIXES, kind)
 }

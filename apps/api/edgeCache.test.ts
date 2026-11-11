@@ -61,3 +61,24 @@ test("a permanent redirect for a signed-out request is shared, and a temporary o
 test("a topic image's cache tag names the topic", () => {
 	expect(toTopicImageCacheTag("topic-1")).toBe("topic-image:topic-1")
 })
+
+// a profile page and its payloads carry the profile's own tag, which a change to its pins purges
+test("a profile page and its payload are tagged with the profile's user, and the home with its own tag", () => {
+	const toCacheTag = (path: string): string | null => {
+		const response = new Response("page")
+		setRenderedCacheHeaders(new Request(`http://localhost${path}`), response)
+		return response.headers.get("Cache-Tag")
+	}
+
+	// the page, its payload, and the home each carry their own tag beside the rendered one
+	expect(toCacheTag("/profiles/user-1")).toBe(`${RENDERED_CACHE_TAG},profile:user-1`)
+	expect(toCacheTag("/api/profiles/user-1")).toBe(`${RENDERED_CACHE_TAG},profile:user-1`)
+	expect(toCacheTag("/")).toBe(`${RENDERED_CACHE_TAG},home`)
+
+	// a Topic Post's page carries the post's own tag, with or without its slug, and its Topic's page does not
+	expect(toCacheTag("/topics/topic-1/home-espresso/posts/post-1/dialing-in")).toBe(
+		`${RENDERED_CACHE_TAG},topic-post:post-1`,
+	)
+	expect(toCacheTag("/topics/topic-1/home-espresso/posts/post-1")).toBe(`${RENDERED_CACHE_TAG},topic-post:post-1`)
+	expect(toCacheTag("/topics/topic-1/home-espresso")).toBe(RENDERED_CACHE_TAG)
+})

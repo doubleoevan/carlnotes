@@ -1,5 +1,5 @@
 import { sendTopicFindingOpened } from "@carlnotes/client/topicFindingClient"
-import type { SearchRow } from "@carlnotes/contracts/search"
+import { SEARCH_ROW_RESULT_KINDS, type SearchRow } from "@carlnotes/contracts/search"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { ArrowRight } from "lucide-react"
 import { TeamAvatar } from "@/components/branding/TeamAvatar"
@@ -14,9 +14,9 @@ type SuggestionOptionProps = { suggestionId: string; isActive: boolean; onOpen: 
 const SUGGESTION_OPTION_CLASS = "hover:bg-accent flex items-center gap-2.5 rounded-md px-2 py-2 text-sm"
 
 /**
- * One search result in the typeahead, linking to its page: a topic, a podcast episode with its topic's name, a finding
- * that opens its resource in a new tab and records the open, a team, or a profile. isActive marks the arrow-key
- * highlight.
+ * One search result in the typeahead, linking to its page: a topic, a podcast episode or a post with its topic's name,
+ * a finding that opens its resource in a new tab and records the open, a team, or a profile. isActive marks the
+ * arrow-key highlight.
  */
 export function SearchRowOption({
 	suggestionId,
@@ -102,18 +102,21 @@ function SearchRowOptionContent({ searchRow }: { searchRow: SearchRow }) {
 					<span className="text-muted-foreground shrink-0 text-xs">Topic</span>
 				</>
 			)
-		// a podcast episode, with its topic's name
+		// a podcast episode or a Topic Post, with its topic's name
 		case "podcastEpisode":
+		case "topicPost": {
+			const KindIcon = SEARCH_RESULT_KIND_ICON[SEARCH_ROW_RESULT_KINDS[searchRow.kind]]
 			return (
 				<>
-					<SEARCH_RESULT_KIND_ICON.podcastEpisodes
+					<KindIcon
 						className="text-muted-foreground size-4 shrink-0"
-						aria-label="Podcast episode"
+						aria-label={searchRow.kind === "topicPost" ? "Post" : "Podcast episode"}
 					/>
 					<span className="min-w-0 flex-1 truncate">{searchRow.name}</span>
 					<span className="text-muted-foreground max-w-[40%] shrink-0 truncate text-xs">{searchRow.topic.name}</span>
 				</>
 			)
+		}
 		// a finding, with its source
 		case "finding":
 			return (
@@ -141,7 +144,7 @@ function SearchRowOptionContent({ searchRow }: { searchRow: SearchRow }) {
 						className="size-4 shrink-0"
 					/>
 					<span className="min-w-0 flex-1 truncate">{searchRow.name}</span>
-					<span className="text-muted-foreground shrink-0 text-xs">Profile</span>
+					<span className="text-muted-foreground shrink-0 text-xs">Café</span>
 				</>
 			)
 	}

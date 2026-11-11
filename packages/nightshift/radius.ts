@@ -5,9 +5,10 @@ import { toPixels } from "./units"
 export const BASE_RADIUS_REM = 0.625
 
 /**
- * Each radius step's offset from the base, in pixels.
+ * Each radius step's offset from the base, in pixels. The extra small step rounds only the very corner, for a small
+ * image.
  */
-export const radiusSteps = { sm: -4, md: -2, lg: 0, xl: 4 }
+export const radiusSteps = { xs: -7, sm: -4, md: -2, lg: 0, xl: 4 }
 
 /** A radius step's name. */
 export type RadiusStep = keyof typeof radiusSteps

@@ -1,5 +1,5 @@
 // how long the edge and the browser may cache a response, and the purge by tag that clears a response early
-import { purgeEdgeCacheTagAfterDeletion } from "@carlnotes/server/edgePurge"
+import { purgeEdgeCacheTagAfterDeletion, toTopicPostCacheTag } from "@carlnotes/server/edgePurge"
 import { getSessionCookie } from "better-auth/cookies"
 import type { Context } from "hono"
 import { createMiddleware } from "hono/factory"
@@ -54,20 +54,47 @@ export function setRenderedCacheHeaders(request: Request, response: Response): v
 	// under the home tag too
 	response.headers.set("Cache-Control", REVALIDATE_CACHE_CONTROL)
 	response.headers.set("CDN-Cache-Control", RENDERED_EDGE_CACHE_CONTROL)
-	response.headers.set(
-		"Cache-Tag",
-		isHomePath(request) ? `${RENDERED_CACHE_TAG},${HOME_CACHE_TAG}` : RENDERED_CACHE_TAG,
-	)
+	response.headers.set("Cache-Tag", [RENDERED_CACHE_TAG, ...toPageCacheTags(request)].join(","))
 }
 
-// whether a request is for the home page or its payload
-function isHomePath(request: Request): boolean {
+// a profile page's path or its payload's, with the profile's user id
+const PROFILE_PATH_PATTERN = /^\/(?:api\/)?profiles\/([^/]+)/
+
+// a Topic Post page's path, with the post's id after its Topic's id and slug
+const TOPIC_POST_PATH_PATTERN = /^\/topics\/[^/]+\/[^/]+\/posts\/([^/]+)/
+
+// the tags a page carries beside the rendered tag: the home's for the home page and its payload, a profile's own for
+// a profile page and its payloads, and a Topic Post's own for its page
+function toPageCacheTags(request: Request): string[] {
 	const { pathname } = new URL(request.url)
-	return pathname === "/" || pathname === "/api/home"
+	if (pathname === "/" || pathname === "/api/home") {
+		return [HOME_CACHE_TAG]
+	}
+
+	// a profile's page or payload, then a Topic Post's page
+	const profileUserId = PROFILE_PATH_PATTERN.exec(pathname)?.[1]
+	if (profileUserId) {
+		return [toProfileCacheTag(profileUserId)]
+	}
+	const topicPostId = TOPIC_POST_PATH_PATTERN.exec(pathname)?.[1]
+	return topicPostId ? [toTopicPostCacheTag(topicPostId)] : []
+}
+
+// the tag one user's profile page and its payloads are cached under at the edge
+function toProfileCacheTag(profileUserId: string): string {
+	return `profile:${profileUserId}`
 }
 
 /**
- * Purges the home page and its payload at the edge, after the home topics or podcast episodes change.
+ * Purges a user's profile page and its payloads at the edge, after the topics, podcast episodes, or Topic Posts pinned
+ * to it change.
+ */
+export function purgeProfileAtEdge(profileUserId: string): Promise<unknown> {
+	return purgeEdgeCacheTagAfterDeletion(toProfileCacheTag(profileUserId))
+}
+
+/**
+ * Purges the home page and its payload at the edge, after the home topics, podcast episodes, or Topic Posts change.
  */
 export function purgeHomeAtEdge(): Promise<unknown> {
 	return purgeEdgeCacheTagAfterDeletion(HOME_CACHE_TAG)

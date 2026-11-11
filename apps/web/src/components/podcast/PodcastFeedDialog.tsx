@@ -27,6 +27,11 @@ export const podcastFeedDialogElements: PodcastFeedDialogElements = {
 			{children}
 		</Button>
 	),
+	FormatOption: ({ children, isSelected, className, onPress }) => (
+		<button type="button" aria-pressed={isSelected} onClick={onPress} className={className}>
+			{children}
+		</button>
+	),
 	Confirm: ConfirmDialog,
 }
 
@@ -44,7 +49,7 @@ export function PodcastFeedDialog({
 	const { data: session } = authClient().useSession()
 	const feed = usePodcastFeed({ topicId: topic.id, userId: session?.user.id ?? null })
 	const platform = useBrowserValue(readBrowserPlatform, "other")
-	const appLink = feed.url ? toPodcastAppLink({ platform, feedUrl: feed.url }) : null
+	const appLink = feed.chosenFeedUrl ? toPodcastAppLink({ platform, feedUrl: feed.chosenFeedUrl }) : null
 
 	// record the chosen subscription action
 	const captureSubscribeClick = (channel: "app" | "copy-link"): void =>
@@ -61,11 +66,11 @@ export function PodcastFeedDialog({
 
 	// copy the available feed link
 	const handleCopy = (): void => {
-		if (!feed.url) {
+		if (!feed.chosenFeedUrl) {
 			return
 		}
 		captureSubscribeClick("copy-link")
-		void copyToClipboard(feed.url, "Feed link copied.")
+		void copyToClipboard(feed.chosenFeedUrl, "Feed link copied.")
 	}
 	return (
 		<Dialog open onOpenChange={(isOpen) => !isOpen && onClose()}>

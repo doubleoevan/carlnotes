@@ -1,7 +1,6 @@
 import { authClient } from "@carlnotes/client/authClient"
 import type { TopicDraftTeam } from "@carlnotes/contracts/topicPayloads"
 import { TopicEditorChoice, type TopicEditorChoiceElements } from "@carlnotes/core/components/TopicEditorChoice"
-import { cn } from "@carlnotes/nightshift/classNames"
 import { useNavigate } from "@tanstack/react-router"
 import { Plus } from "lucide-react"
 import { type ComponentProps, type ReactNode, useState } from "react"
@@ -9,6 +8,7 @@ import { CoffeeCup } from "@/components/branding/CoffeeCup"
 import { Button } from "@/components/primitives/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle } from "@/components/primitives/dialog"
 import { toSignupNavigation } from "@/components/session/signupPrompts"
+import { HIGHLIGHTED_PAGE_BUTTON_CLASS } from "@/lib/styleClasses"
 import { isWideScreen } from "@/lib/utils"
 import { openNewTopicChat, setChatId, setChatPanelState, startEditingTopic } from "@/stores/chatPanelStore"
 import { EditTopicModal } from "./EditTopicModal"
@@ -133,11 +133,11 @@ export function useNewTopicDialog(onTopicCreated?: () => void): {
 }
 
 /**
- * The New Topic button with its plus icon, which calls onNewTopic.
+ * The New Topic button with its plus icon, a page's one highlighted button, which calls onNewTopic.
  */
-export function NewTopicButton({ className, onNewTopic }: { className?: string; onNewTopic: () => void }) {
+export function NewTopicButton({ onNewTopic }: { onNewTopic: () => void }) {
 	return (
-		<Button className={cn("shrink-0", className)} onClick={onNewTopic}>
+		<Button className={HIGHLIGHTED_PAGE_BUTTON_CLASS} onClick={onNewTopic}>
 			<Plus className="size-4" />
 			New Topic
 		</Button>

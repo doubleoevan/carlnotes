@@ -19,6 +19,9 @@ part of `bun test` or the push gate. Run a prompt's eval before shipping a chang
 | `search-queries/` | the search queries that a Scan writes for a topic | `bun run eval:search-queries` |
 | `attachment-summaries/` | the summary of an attached document and the description of an attached image | `bun run eval:attachment-summaries` |
 | `updates-opener/` | Carl's opener above an updates list | `bun run eval:updates-opener` |
+| `topic-post-summary/` | the summary a published Topic Post shows in its info popup | `bun run eval:topic-post-summary` |
+| `topic-post-discussion/` | the script of the two hosts' recorded talk about a Topic Post | `bun run eval:topic-post-discussion` |
+| `topic-post-chat/` | a question asked from a Topic Post's page, answered from the post and its shared Comments | `bun run eval:topic-post-chat` |
 | `topic-matching/` | how a sent item ranks a user's editable Topics, with no model writing anything | `bun run eval:topic-matching` |
 
 The promptfoo evals and the review pipeline eval call the local LiteLLM proxy (`bun run carl-up`), under Doppler.
@@ -384,3 +387,28 @@ deterministic case checks also run in `bun test` without model calls.
 Its `personalSourcesScoringEval.ts` companion runs three adversarial two-sender cases through the production scorer with
 disposable development accounts. `bun run eval:personal-sources-scoring` requires page-only public evidence and separate
 private annotations, caps model spend per case, and removes its accounts and temporary model credential afterward.
+
+## Topic post discussion eval
+
+Each case is a made-up Topic Post with the Comments readers shared on it and, in some, the starter's note. The provider
+writes the script through the app's own `writeTopicPostDiscussion`, with its checks in code and its retries, and the
+output is the script as a transcript, one turn to a line under its host's name. Scripts are written on `score-model`
+and graded on `chat-model`.
+
+Every case checks in code that both hosts speak and that the script stays inside seven minutes. Every case is graded
+for covering the post's key facts, for stating only what the post and its Comments say, and for reading as two hosts
+talking. The cases cover a post with no Comment, two Comments that each have to be credited by username, a note that
+steers the conversation with an author the hosts do not name, and a Comment and a note that each try to instruct the
+writer.
+
+## Topic post chat eval
+
+Each case is a question asked from a Topic Post's page, with the post and the Comments readers shared on it. The
+provider builds the topic chat prompt with `buildTopicChatPrompt` and the post, which splices the `chat-topic-post`
+fragment, and writes the reply with no tool, as the app's own turn binds no topic tool. Replies are written on
+`chat-model` and graded on `score-model`.
+
+Every case is graded for reporting only what the post and its Comments say. The cases cover a vague question answered
+from the post, an answer that draws on a Comment and credits its author by username, a post with no shared Comment,
+where the reply speaks for no reader, an instruction inside a Comment, and a request to change the topic, which changes
+nothing.

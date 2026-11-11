@@ -10,12 +10,16 @@ import {
 import type { PodcastEpisodeOutline } from "@carlnotes/pipeline/podcast/podcastEpisodeOutline"
 import { type PodcastEpisodeSegment, RejectedScriptError } from "@carlnotes/pipeline/podcast/podcastEpisodeScript"
 import * as writePodcastEpisodeScript from "@carlnotes/pipeline/podcast/writePodcastEpisodeScript"
+import { topicPodcastEpisodeVideoConcurrency } from "@carlnotes/server/podcastEpisodeSettings"
 import { ApplicationFailure, activityInfo } from "@temporalio/activity"
 
 // the plan, the encode, the publish, and the failure are exported as they are. each throws only on an unexpected error
 export { planPodcastEpisode } from "@carlnotes/pipeline/podcast/planPodcastEpisode"
 export { encodePodcastEpisode } from "@carlnotes/pipeline/podcast/podcastEpisodeAudio"
 export { failPodcastEpisode, publishPodcastEpisode } from "@carlnotes/pipeline/podcast/publishPodcastEpisode"
+
+// the Topic Post Discussion's activities run on the same queue
+export * from "./recordTopicPostDiscussionActivities"
 
 // a recorded chapter with how many attempts its recording took
 export type RecordedChapterAttempt = podcastEpisodeAudio.RecordedChapter & { attemptCount: number }
@@ -107,4 +111,11 @@ export async function drawPodcastEpisodeImageActivity(podcastEpisodeId: string):
 		}
 		throw error
 	}
+}
+
+/**
+ * Returns whether films are on, which a TOPIC_PODCAST_EPISODE_VIDEO_CONCURRENCY of zero turns off.
+ */
+export async function isTopicPodcastEpisodeVideoEnabled(): Promise<boolean> {
+	return topicPodcastEpisodeVideoConcurrency() > 0
 }

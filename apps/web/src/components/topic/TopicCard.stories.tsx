@@ -45,3 +45,6 @@ export const Team: Story = {
 
 // a topic whose image has not rendered yet shows the muted ground, and one with no tags or reactions keeps no last line
 export const NoImage: Story = { args: { topic: { ...TOPIC, image: null, tags: [], reactionCount: 0 } } }
+
+// a topic with no tag shows its reaction count at the right of the byline's row, with no row of its own
+export const NoTags: Story = { args: { topic: { ...TOPIC, tags: [] } } }

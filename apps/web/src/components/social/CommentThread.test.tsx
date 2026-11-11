@@ -198,6 +198,41 @@ test("the week's count rises with a post, and takes the api's count after a dele
 	await waitForHook(() => weekCommentCounts.at(-1) === 2)
 })
 
+test("the thread's whole count rises with a post, and takes the api's count after a delete", async () => {
+	const commentCounts: (number | null)[] = []
+	const { harness } = await renderCommentThread(
+		{
+			firstPage: toTestCommentThread({ comments: [toTestComment({ canDelete: true })], commentCount: 9 }),
+			onCommentCountChange: (commentCount) => commentCounts.push(commentCount),
+		},
+		({ method }) =>
+			method === "DELETE"
+				? Response.json({ ok: true, weekCommentCount: 2, commentCount: 7, sharedCommentSlots: null })
+				: Response.json({ comment: toTestComment({ id: "comment-new" }), sharedCommentSlots: null }),
+	)
+	expect(commentCounts).toEqual([9])
+
+	// a post adds one
+	await press(harness.container, COMMENT_THREAD_LABELS.composeButton)
+	await act(async () => toComposer()?.onChange("One more"))
+	await act(async () => toComposer()?.onSubmit())
+	await waitForHook(() => commentCounts.at(-1) === 10)
+
+	// a delete, with its replies, takes the count the api read
+	await press(toRows(harness)[1] as HTMLElement, COMMENT_THREAD_LABELS.delete)
+	await press(harness.container, COMMENT_DELETE_CONFIRMATION.title)
+	await waitForHook(() => commentCounts.at(-1) === 7)
+})
+
+test("a first page from an api that does not count the thread reports a null whole count", async () => {
+	const commentCounts: (number | null)[] = []
+	await renderCommentThread({
+		firstPage: toTestCommentThread(),
+		onCommentCountChange: (commentCount) => commentCounts.push(commentCount),
+	})
+	expect(commentCounts).toEqual([null])
+})
+
 test("a row's flag fills if a read found the user's report, or once they send one", async () => {
 	const { harness } = await renderCommentThread({
 		firstPage: toTestCommentThread({

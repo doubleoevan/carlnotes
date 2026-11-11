@@ -1,5 +1,5 @@
 // the invitation screen, the web's invite page on the native stack: a visitor signs in and comes back, a user's token
-// is accepted once, and the joined Topic or Team replaces the screen
+// is accepted once, and the joined Topic, the Topic Post its invite was shared from, or the Team replaces the screen
 import { authClient } from "@carlnotes/client/authClient"
 import { sendAcceptInvite } from "@carlnotes/client/topicClient"
 import { type InviteNoticeRejection, isInviteToken } from "@carlnotes/contracts/invites"
@@ -32,7 +32,9 @@ export default function InviteScreen() {
 		}
 		try {
 			const inviteDestination = toInviteDestination(await sendAcceptInvite(token))
-			if (inviteDestination.kind === "topic") {
+			if (inviteDestination.kind === "topicPost") {
+				router.replace(`/topics/${inviteDestination.topicId}/posts/${inviteDestination.topicPostId}`)
+			} else if (inviteDestination.kind === "topic") {
 				router.replace(`/topics/${inviteDestination.topicId}`)
 			} else if (inviteDestination.kind === "team") {
 				router.replace(`/teams/${inviteDestination.teamId}`)

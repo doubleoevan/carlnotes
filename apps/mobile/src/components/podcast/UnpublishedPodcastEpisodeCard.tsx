@@ -19,12 +19,10 @@ const elements: UnpublishedPodcastEpisodeCardElements = {
 	Cover: (props) => (
 		<PodcastEpisodeCover {...props} className="size-24 border border-separator shadow-raised sm:size-36" />
 	),
-	Recording: () => (
+	ProgressLine: ({ emoji, text }) => (
 		<View className="flex-row items-start gap-1.5">
-			<Text accessibilityElementsHidden>🤫</Text>
-			<ShimmerText className="text-base font-semibold text-foreground sm:text-lg">
-				Carl and Vienna are recording...
-			</ShimmerText>
+			<Text accessibilityElementsHidden>{emoji}</Text>
+			<ShimmerText className="text-base font-semibold text-foreground sm:text-lg">{text}</ShimmerText>
 		</View>
 	),
 }

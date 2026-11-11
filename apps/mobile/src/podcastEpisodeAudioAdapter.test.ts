@@ -200,6 +200,7 @@ test("the lock screen metadata resolves the cover against the api and a rejected
 	await adapter.load({ ...toLoad(), podcastEpisode })
 	const state = {
 		podcastEpisode,
+		format: "audio" as const,
 		positionSeconds: 45,
 		playbackRate: 1.5,
 		isPlaying: false,

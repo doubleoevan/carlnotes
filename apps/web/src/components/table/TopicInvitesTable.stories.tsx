@@ -76,8 +76,8 @@ export const Default: Story = {}
 export const DeleteConfirmation: Story = {
 	// switch the invitation off and wait for the dialog
 	play: async ({ canvas, userEvent }) => {
-		await userEvent.click(canvas.getByRole("switch", { name: "Withdraw the invitation to carlos@example.com" }))
-		await screen.findByRole("dialog", { name: "Delete this invitation?" })
+		await userEvent.click(canvas.getByRole("switch", { name: "Withdraw the invite to carlos@example.com" }))
+		await screen.findByRole("dialog", { name: "Delete this invite?" })
 	},
 }
 

@@ -1,24 +1,36 @@
-// the page frame pattern: the page shell with its display-font title, and the narrow centered column of a session page
+// the page frame pattern: the page shell with its display-font title, the row of buttons over an avatar header, and
+// the narrow centered column of a session page
 import type { Meta, StoryObj } from "@storybook/tanstack-react"
 import { Plus, Users } from "lucide-react"
 import { fn } from "storybook/test"
+import { AccordionSection } from "@/components/common/AccordionSection"
 import { UserProfileLink } from "@/components/common/UserProfileLink"
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/primitives/accordion"
+import { Accordion } from "@/components/primitives/accordion"
 import { Button } from "@/components/primitives/button"
 import { VerifyEmailNotice } from "@/components/session/VerifyEmailNotice"
-import { PAGE_CLASS, PAGE_HEADER_CLASS, PAGE_TITLE_CLASS } from "@/lib/styleClasses"
+import { EmptyListCard } from "@/components/table/TableCard"
+import {
+	HIGHLIGHTED_PAGE_BUTTON_CLASS,
+	PAGE_BUTTON_ROW_CLASS,
+	PAGE_CLASS,
+	PAGE_HEADER_CLASS,
+	PAGE_TITLE_CLASS,
+	PLAIN_PAGE_BUTTON_CLASS,
+	PLAIN_PAGE_BUTTON_ICON_CLASS,
+} from "@/lib/styleClasses"
 import { STORY_USER, toStoryEmail, toStoryProfile } from "../../../.storybook/fixtures"
 import { PHONE_VIEWPORT_GLOBALS } from "../../../.storybook/viewports"
 
 /**
- * Renders a page in one of the app's two frames: the page shell with its header, or the session page's column.
+ * Renders a page in one of the app's frames: the page shell with its titled header, the page shell with its row of
+ * buttons, or the session page's column.
  */
 function PageFramePattern({
 	frame,
 	title,
 	onAction,
 }: {
-	frame: "page" | "session"
+	frame: "page" | "buttonRow" | "session"
 	title: string
 	// the page's action, the header button and the empty section's link
 	onAction: () => void
@@ -26,6 +38,26 @@ function PageFramePattern({
 	// the narrow centered column, as the signup page shows it after a password signup
 	if (frame === "session") {
 		return <VerifyEmailNotice email={toStoryEmail(STORY_USER.username)} redirectPath="#" />
+	}
+
+	// the Café's shell: the plain button at the left of the row of buttons and the highlighted one at its right, at one
+	// size, with the same gap over the row as under it
+	if (frame === "buttonRow") {
+		return (
+			<main className={PAGE_CLASS}>
+				<div className={PAGE_BUTTON_ROW_CLASS}>
+					<button type="button" className={PLAIN_PAGE_BUTTON_CLASS} onClick={onAction}>
+						<Plus className={PLAIN_PAGE_BUTTON_ICON_CLASS} />
+						New team
+					</button>
+					<button type="button" className={HIGHLIGHTED_PAGE_BUTTON_CLASS} onClick={onAction}>
+						<Plus className="size-4" />
+						New Topic
+					</button>
+				</div>
+				<h1 className="font-display text-2xl">{title}</h1>
+			</main>
+		)
 	}
 
 	// the teams page's shell: the title with its icon and the page's action at the right, the user's profile link, and
@@ -37,7 +69,7 @@ function PageFramePattern({
 					<Users className="size-6" />
 					{title}
 				</h1>
-				<Button className="shrink-0" onClick={onAction}>
+				<Button className={HIGHLIGHTED_PAGE_BUTTON_CLASS} onClick={onAction}>
 					<Plus className="size-4" />
 					New team
 				</Button>
@@ -47,17 +79,14 @@ function PageFramePattern({
 			{/* the page's first section under its header */}
 			<div className="mt-2">
 				<Accordion type="multiple" defaultValue={["teams"]}>
-					<AccordionItem value="teams">
-						<AccordionTrigger className="font-semibold">Your teams</AccordionTrigger>
-						<AccordionContent>
-							<p className="text-muted-foreground pb-4 pl-4 text-sm">
-								<button type="button" onClick={onAction} className="sentence-link">
-									Start a team.
-								</button>{" "}
-								Carl brews for everyone at once.
-							</p>
-						</AccordionContent>
-					</AccordionItem>
+					<AccordionSection value="teams" title="Your teams">
+						<EmptyListCard>
+							<button type="button" onClick={onAction} className="sentence-link">
+								Start a team.
+							</button>{" "}
+							Carl brews for everyone at once.
+						</EmptyListCard>
+					</AccordionSection>
 				</Accordion>
 			</div>
 		</main>
@@ -69,7 +98,7 @@ const meta = {
 	component: PageFramePattern,
 	args: { frame: "page", title: "Teams", onAction: fn() },
 	argTypes: {
-		frame: { control: "inline-radio", options: ["page", "session"] },
+		frame: { control: "inline-radio", options: ["page", "buttonRow", "session"] },
 		title: { control: "text" },
 		onAction: { control: false },
 	},
@@ -81,6 +110,10 @@ type Story = StoryObj<typeof meta>
 
 // PAGE_CLASS: the teams page's shell with its display-font title, icon, and action over its first section
 export const Page: Story = {}
+
+// PAGE_BUTTON_ROW_CLASS: the Café's row of buttons under the search bar, the plain button and the highlighted one at
+// one size
+export const PageButtonRow: Story = { args: { frame: "buttonRow", title: "River's Café" } }
 
 // SESSION_PAGE_CLASS: the narrow centered column of the sign-in, signup, and invite pages
 export const SessionPage: Story = {

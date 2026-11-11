@@ -41,7 +41,7 @@ export function toRemoveMemberConfirmation({
 }): ConfirmationCopy {
 	return {
 		title: `Remove ${username} from ${teamName}?`,
-		children: `They lose access to the team's topics and its ${CHAT_NAME}. Only a new invitation brings them back.`,
+		children: `They lose access to the team's topics and its ${CHAT_NAME}. Only a new invite brings them back.`,
 		confirmLabel: "Remove",
 		cancelLabel: "Keep them",
 	}
@@ -102,9 +102,9 @@ export function isStepDown({
  */
 export function toDeleteSentInviteConfirmation(teamName: string): ConfirmationCopy {
 	return {
-		title: `Delete the invitation to ${teamName}?`,
-		children: "It stops working, so joining takes a new invitation.",
-		confirmLabel: "Delete invitation",
+		title: `Delete the invite to ${teamName}?`,
+		children: "It stops working, so joining takes a new invite.",
+		confirmLabel: "Delete invite",
 		cancelLabel: "Keep it",
 	}
 }
@@ -114,9 +114,9 @@ export function toDeleteSentInviteConfirmation(teamName: string): ConfirmationCo
  */
 export function toDeleteReceivedInviteConfirmation(teamName: string): ConfirmationCopy {
 	return {
-		title: `Delete your invitation to ${teamName}?`,
-		children: "You can't accept it afterward, so joining takes a new invitation.",
-		confirmLabel: "Delete invitation",
+		title: `Delete your invite to ${teamName}?`,
+		children: "You can't accept it afterward, so joining takes a new invite.",
+		confirmLabel: "Delete invite",
 		cancelLabel: "Keep it",
 	}
 }

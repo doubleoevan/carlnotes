@@ -90,6 +90,13 @@ export const AI_VOICES_NOTE = `${PODCAST_HOSTS_NAME} are AI voices`
 // the podcast's name in the app's copy
 export const PODCAST_NAME = "Coffee Break podcast"
 
+// the name of one film, and of a Topic's list of films, in the app's copy
+export const TOPIC_PODCAST_EPISODE_VIDEO_NAME = "Coffee Break film"
+export const FILMS_NAME = "Coffee Break films"
+
+// the anchor of the film player on a podcast episode page
+export const FILM_ANCHOR_ID = "film"
+
 // the podcast's name as a listener and a search engine read it
 export const PODCAST_SHOW_NAME = `${PODCAST_NAME} with ${PODCAST_HOSTS_NAME}`
 

@@ -1,5 +1,5 @@
 // ffmpeg tests: a run that reads the input pipe and writes the output pipe, a run that fails, and a run killed at
-// its timeout
+// its timeout or by its signal
 import { expect, test } from "bun:test"
 import { runFfmpeg } from "./ffmpeg"
 import { toWavBytes } from "./speech"
@@ -34,4 +34,26 @@ test.skipIf(!Bun.which("ffmpeg"))("runFfmpeg kills a run that passes its timeout
 		timeoutMs: 50,
 	})
 	await expect(longRun).rejects.toThrow(/^ffmpeg exited with \d+/)
+})
+
+// a run whose signal aborts is killed, as a cancelled film render's is
+test.skipIf(!Bun.which("ffmpeg"))("runFfmpeg kills a run whose signal aborts", async () => {
+	// an hour of silence written at the pace it plays, with no timeout
+	const abortController = new AbortController()
+	const runStartMs = performance.now()
+	const longRun = runFfmpeg({
+		ffmpegArguments: ["-re", "-f", "lavfi", "-i", "anullsrc=r=16000:cl=mono", "-t", "3600", "-f", "wav", "pipe:1"],
+		signal: abortController.signal,
+	})
+
+	// abort it once it has started, and the run ends at once with a nonzero exit
+	setTimeout(() => abortController.abort(), 50)
+	await expect(longRun).rejects.toThrow(/^ffmpeg exited with \d+/)
+	expect(performance.now() - runStartMs).toBeLessThan(5000)
+})
+
+// a signal that aborted before the run starts no ffmpeg
+test.skipIf(!Bun.which("ffmpeg"))("runFfmpeg rejects a run whose signal has already aborted", async () => {
+	const abortedRun = runFfmpeg({ ffmpegArguments: ["-version"], signal: AbortSignal.abort() })
+	await expect(abortedRun).rejects.toThrow()
 })

@@ -375,7 +375,9 @@ It SHALL stay shared, and it SHALL return to each of them once none of those hol
 A Comment or a reply posted by a user who may edit the Topic SHALL be shared if a shared comment slot is free, unless
 the composer's share switch is off. The switch SHALL show only to a user who may share, and SHALL start on, or on an
 edit from the Comment's share. A post with no share choice SHALL share a top-level Comment and not a reply. A Comment by
-anyone else SHALL start unshared, whatever its post asks.
+anyone else SHALL start unshared, whatever its post asks. A Comment or a reply on a Topic Post SHALL start unshared
+whoever posts it: its composer's switch SHALL start off, and a post with no share choice SHALL share nothing. A user
+who may edit the Topic SHALL share and unshare it afterward as any Comment.
 
 #### Scenario: The owner's Comment starts shared
 
@@ -423,6 +425,17 @@ anyone else SHALL start unshared, whatever its post asks.
 
 - **WHEN** a Topic's owner posts a top-level Comment with no shared comment slot free
 - **THEN** the Comment is posted unshared
+
+#### Scenario: The owner's Comment on a Topic Post starts unshared
+
+- **WHEN** a Topic's owner posts a top-level Comment on one of the Topic's Topic Posts with a shared comment slot free
+- **THEN** the composer's switch starts off, the Comment is posted unshared, and the shared comment slot count is
+  unchanged
+
+#### Scenario: A team member shares a Comment on a Topic Post by hand
+
+- **WHEN** a member of a Team that holds the Topic presses the share toggle on a Comment on a Topic Post
+- **THEN** the Comment is shared, and pressing the toggle again unshares it
 
 ### Requirement: An author who may not edit the Topic takes a waiting share back by editing
 
@@ -534,3 +547,24 @@ and collapsing it SHALL keep a posted Comment and a draft.
 
 - **WHEN** a user closes the Hot takes card and opens it again
 - **THEN** the Comment they just posted still shows
+
+### Requirement: A comment thread counts its Comments and replies
+
+A comment thread's page SHALL include how many Comments and replies the thread holds in all, counting only the
+authors the reader sees, beside the week's count. A delete SHALL return the count as it stands. The field SHALL be
+optional, and a client that reads a thread without it SHALL show no count.
+
+#### Scenario: The first page counts the whole thread
+
+- **WHEN** a reader loads a thread with twelve Comments and replies, four of them from the last seven days
+- **THEN** the page's whole count is twelve and its week count is four
+
+#### Scenario: A blocked author's Comments are not counted
+
+- **WHEN** a reader who blocked the author of two of a thread's five Comments loads the thread
+- **THEN** the page's whole count is three
+
+#### Scenario: A delete returns the count without the Comment and its replies
+
+- **WHEN** an author deletes their top-level Comment with two replies from a thread of five
+- **THEN** the delete returns a whole count of two

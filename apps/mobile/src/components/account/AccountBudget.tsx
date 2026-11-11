@@ -14,6 +14,7 @@ import { View } from "react-native"
 import { Button } from "@/components/primitives/button"
 import { Icon } from "@/components/primitives/icon"
 import { Text } from "@/components/primitives/text"
+import { HIGHLIGHTED_PAGE_BUTTON_CLASS } from "@/pageButtonClasses"
 import { openPlanManagement } from "@/storePurchases"
 import { SpendMeter } from "./SpendMeter"
 
@@ -51,6 +52,7 @@ export function PlanButton({ billing }: { billing: BillingState }) {
 	const label = storeProvider ? PURCHASE_COPY.managePlan : PURCHASE_COPY.upgrade
 	return (
 		<Button
+			className={HIGHLIGHTED_PAGE_BUTTON_CLASS}
 			accessibilityLabel={label}
 			onPress={() => (storeProvider ? void openPlanManagement(storeProvider) : router.push(PLANS_PATH))}
 		>

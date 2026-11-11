@@ -55,9 +55,9 @@ Drafts you write offline wait on the device until you reconnect.
 
 • Search. Topics, podcast episodes, findings, teams, and people from one box.
 
-• Keep up. Activity lists the topics you follow and your invitations. The badge on the app icon counts what is new.
+• Keep up. Activity lists the topics you follow and your invites. The badge on the app icon counts what is new.
 
-• Open links in the app. Once installed, a link to a topic, a note, a podcast episode, a team, or an invitation on
+• Open links in the app. Once installed, a link to a topic, a note, a podcast episode, a team, or an invite on
 carlnotes.com opens here.
 
 • Light and dark. The app follows your device, or you pick one.

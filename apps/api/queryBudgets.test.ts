@@ -12,19 +12,35 @@ import * as redis from "@carlnotes/db/redis"
 import { restoreRedisClient } from "@carlnotes/db/redisClientStub"
 import { runWithRequestMemo } from "@carlnotes/db/requestMemo"
 import { topics } from "@carlnotes/db/schema/topics"
+import { saveEnvSettings } from "@carlnotes/server/savedEnvSettings"
 import { apiRoute } from "./api"
+import { toPublishedPodcastEpisodeRow } from "./podcast/podcastEpisodeTestFixtures"
 import { signInAs } from "./testSession"
 import { stubRedisClientWithCentroid } from "./topic/relatednessTestFixtures"
 
 // the most queries a request may send: a Redis hit serves the mention count, the topic poll, and the feed's topic
-// section ids without their reads, and one topic page load reads its user's access row once and their topic role once.
-// the topic page's related topics read sends its iterative index scan setting, its read, and the check of its ranked
-// topics, and its reactions and first thread page take two reads for every Finding with the topic and one more.
-// an editor's page also counts their topic image regenerations this month
+// section ids without their reads
 const MAX_MENTION_COUNT_CACHE_HIT_QUERIES = 0
 const MAX_TOPIC_POLL_CACHE_HIT_QUERIES = 0
 const MAX_TOPIC_FEED_CACHE_HIT_QUERIES = 8
-const MAX_TOPIC_PAGE_QUERIES = 25
+
+// one topic page load sends 21 reads of its own on this fixture: the topic, its user's access row and topic role, once
+// each, the owner's identity and access row, the attachments, the Sources, the scans, the user's subscription twice,
+// once for the page and once for the findings' gate, the team's shares and the user's teams, the two podcast episode
+// reads, the image, the Topic Posts, the chat mentions, the findings, and two reads for the reactions and comment
+// counts with one for the first thread page. an editor's page also counts their topic image regenerations this month.
+// the related topics add four: the iterative index scan setting, the public ranking, the user's own ranking, and the
+// check of the ranked topics. a page that leaves them to their own read sends the 21 alone, and that read sends the
+// topic, the user's access row and topic role, and the same four
+const MAX_TOPIC_PAGE_WITHOUT_RELATED_TOPICS_QUERIES = 21
+const MAX_TOPIC_PAGE_QUERIES = MAX_TOPIC_PAGE_WITHOUT_RELATED_TOPICS_QUERIES + 4
+const MAX_RELATED_TOPICS_QUERIES = 7
+
+// one visitor's profile load of a person with one public topic sends 14 reads on this fixture: the person, their
+// topics, the ids of the topics' podcast episodes and of their films, the Topic Posts, the subscriber count, the
+// teams, the topic table's kept and seen counts and latest podcast episodes, and the topic cards' owners, team links,
+// reactions, and latest podcast episodes
+const MAX_PROFILE_QUERIES = 14
 
 // a public topic owned by someone else
 const TOPIC_ROW = toTableRow(topics, {
@@ -61,6 +77,14 @@ function toBudgetQueryRows(sentQuery: SentQuery): unknown[] {
 	return []
 }
 
+// the read that only a load with the related topics sends: the related topic ids
+function isRelatedTopicsRead(sentQuery: SentQuery): boolean {
+	return sentQuery.text.includes('from "topic_vectors"')
+}
+
+// the speech model, which turns podcast episodes on, and the secret that signs cover urls, put back after each test
+const restorePodcastSettings = saveEnvSettings(["PODCAST_SPEECH_MODEL", "BETTER_AUTH_SECRET"])
+
 // one Redis with the related reads' centroid stored and one stubbed pool per test, with the console quiet
 beforeEach(() => {
 	stubRedisClientWithCentroid()
@@ -72,6 +96,7 @@ beforeEach(() => {
 afterEach(() => {
 	restoreConnectionPool()
 	restoreRedisClient()
+	restorePodcastSettings()
 	mock.restore()
 })
 
@@ -132,15 +157,84 @@ test("the topic page reads the user's access and topic role once", async () => {
 
 // a poll reload leaves out the related topics read, which a full page load sends
 test("a poll reload skips the related topics read", async () => {
-	// the read that only a full page load sends: the related topic ids
-	const isRelatedTopicsRead = (sentQuery: SentQuery): boolean => sentQuery.text.includes('from "topic_vectors"')
-
 	// a full load sends it, and a poll does not
 	await requestAsUser("/api/topics/topic-1", "user-1")
 	const fullLoadQueryCount = sentQueries.length
 	expect(sentQueries.filter(isRelatedTopicsRead).length).toBeGreaterThanOrEqual(1)
 	await requestAsUser("/api/topics/topic-1?poll=1", "user-1")
 	expect(sentQueries.slice(fullLoadQueryCount).filter(isRelatedTopicsRead)).toHaveLength(0)
+})
+
+// a signed-in page that leaves the related topics to their own read sends no related read and returns none
+test("a page that asks for separate related topics leaves them out inside its maximum", async () => {
+	// a signed-in load with the flag stays inside the page's own reads
+	const { response, queryCount } = await requestAsUser("/api/topics/topic-1?related=separate", "user-1")
+	expect(response.status).toBe(200)
+	expect(queryCount).toBeLessThanOrEqual(MAX_TOPIC_PAGE_WITHOUT_RELATED_TOPICS_QUERIES)
+
+	// no related read was sent, and the list is empty with its shape kept
+	expect(sentQueries.filter(isRelatedTopicsRead)).toHaveLength(0)
+	expect(((await response.json()) as { relatedTopics: unknown[] }).relatedTopics).toEqual([])
+})
+
+// a visitor's page is the one every visitor shares, so it keeps its related topics whatever the query asks
+test("a visitor's page keeps its related topics with the flag", async () => {
+	const { response } = await requestAsUser("/api/topics/topic-1?related=separate", null)
+	expect(response.status).toBe(200)
+	expect(sentQueries.filter(isRelatedTopicsRead).length).toBeGreaterThanOrEqual(1)
+})
+
+// the related topics' own read sends the gate's reads and the related reads, and nothing of the page's
+test("the related topics read stays inside its maximum", async () => {
+	const { response, queryCount } = await requestAsUser("/api/topics/topic-1/related-topics", "user-1")
+	expect(response.status).toBe(200)
+	expect(await response.json()).toEqual({ relatedTopics: [] })
+	expect(sentQueries.filter(isRelatedTopicsRead).length).toBeGreaterThanOrEqual(1)
+	expect(queryCount).toBeLessThanOrEqual(MAX_RELATED_TOPICS_QUERIES)
+})
+
+// a topic with published podcast episodes reads their ready and rendering films once for every list on the page
+test("the topic page reads its podcast episodes' films once", async () => {
+	// speech is on, cover urls can be signed, and the topic has two published podcast episodes
+	Bun.env.PODCAST_SPEECH_MODEL = "test-speech-model"
+	Bun.env.BETTER_AUTH_SECRET = "test-secret"
+	restoreConnectionPool()
+	sentQueries = stubConnectionPool((sentQuery) =>
+		sentQuery.text.includes('from "episodes" where ("episodes"."topic_id" = $1 and "episodes"."status" = $2)')
+			? [
+					toPublishedPodcastEpisodeRow({ id: "episode-2", topicId: "topic-1", episodeNumber: 2 }),
+					toPublishedPodcastEpisodeRow({ id: "episode-1", topicId: "topic-1", episodeNumber: 1 }),
+				]
+			: toBudgetQueryRows(sentQuery),
+	)
+
+	// one page load, and one film read among its queries, for both podcast episodes
+	const { response } = await requestAsUser("/api/topics/topic-1", "user-1")
+	const filmReads = sentQueries.filter((sentQuery) => sentQuery.text.includes('from "topic_podcast_episode_videos"'))
+	expect(response.status).toBe(200)
+	expect(filmReads).toHaveLength(1)
+	expect(filmReads[0]?.values).toEqual(["episode-2", "episode-1", "ready", "rendering"])
+})
+
+// a profile reads the person's topics once, for the cards and the topic table, and stays inside its maximum
+test("a profile reads the person's topics once inside its maximum", async () => {
+	// the person, and the one public topic they own
+	restoreConnectionPool()
+	sentQueries = stubConnectionPool((sentQuery) => {
+		if (sentQuery.text.includes('"avatar_key" from "users" where "users"."id" = $1')) {
+			return [["owner-1", "Owner", new Date("2026-10-01T00:00:00Z"), null, null]]
+		}
+		return sentQuery.text.includes('from "topics" where ("topics"."owner_id" = $1') ? [TOPIC_ROW] : []
+	})
+
+	// a visitor's load, with one read of the topics among its queries
+	const { response, queryCount } = await requestAsUser("/api/profiles/owner-1", null)
+	const topicReads = sentQueries.filter((sentQuery) =>
+		sentQuery.text.includes('from "topics" where ("topics"."owner_id"'),
+	)
+	expect(response.status).toBe(200)
+	expect(topicReads).toHaveLength(1)
+	expect(queryCount).toBeLessThanOrEqual(MAX_PROFILE_QUERIES)
 })
 
 // a cached read that is bypassed sends its queries again, which the maximum catches

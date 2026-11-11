@@ -26,9 +26,7 @@ const elements: PodcastEpisodePlayerCardElements<ChapterTopicFeed> = {
 	Card: ({ children }) => (
 		<View className="gap-4 rounded-lg border border-separator bg-card p-5 shadow-raised">{children}</View>
 	),
-	PlayButton: ({ podcastEpisode, size, onPress }) => (
-		<PodcastEpisodePlayButton podcastEpisode={podcastEpisode} size={size} onPress={onPress} />
-	),
+	PlayButton: PodcastEpisodePlayButton,
 	Details: PodcastEpisodeDetails,
 	Controls: ({ podcastEpisode, playbackRate }) => (
 		<>

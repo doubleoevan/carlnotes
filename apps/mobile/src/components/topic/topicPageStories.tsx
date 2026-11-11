@@ -1,6 +1,8 @@
 import type { PodcastEpisode } from "@carlnotes/contracts/podcast"
 import { toTestTopicFinding, toTestTopicResponse } from "@carlnotes/contracts/topicFeedTestFixtures"
 import type { ScanSourceResults } from "@carlnotes/contracts/topics"
+import { PODCAST_STORY_FILM_EPISODE } from "@carlnotes/core/lib/podcastEpisodeStories"
+import { TOPIC_POST_CARD_STORY, TOPIC_POST_DRAFT_CARD_STORY } from "@carlnotes/core/lib/topicPostStories"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { type ReactNode, useState } from "react"
 
@@ -75,6 +77,31 @@ export const STORY_TOPIC_PAGE = toTestTopicResponse({
 		{ id: "tea", name: "Tea for two", latestPodcastEpisode: null },
 	],
 })
+
+// a season of seven films, newest first, so the films list shows two pages
+const STORY_FILMS = Array.from({ length: 7 }, (_, index) => ({
+	...PODCAST_STORY_FILM_EPISODE,
+	id: `story-film-${index}`,
+	episodeNumber: 7 - index,
+	title: `${PODCAST_STORY_FILM_EPISODE.title} ${7 - index}`,
+}))
+
+// the complete page with every section: the film section on the latest film, the films list, and its Topic Posts
+export const STORY_FILM_TOPIC_PAGE = {
+	...STORY_TOPIC_PAGE,
+	latestPodcastEpisode: STORY_FILMS[0] ?? PODCAST_STORY_FILM_EPISODE,
+	podcast: STORY_TOPIC_PAGE.podcast
+		? {
+				...STORY_TOPIC_PAGE.podcast,
+				latestSeasonPodcastEpisodes: { podcastEpisodes: STORY_FILMS },
+				topicPodcastEpisodeVideoSection: {
+					podcastEpisode: STORY_FILMS[0] ?? PODCAST_STORY_FILM_EPISODE,
+					isOpen: true,
+				},
+			}
+		: null,
+	topicPosts: { topicPosts: [TOPIC_POST_DRAFT_CARD_STORY, TOPIC_POST_CARD_STORY], canPublish: true },
+}
 
 /**
  * Supplies inert note responses for native page stories without an account request.

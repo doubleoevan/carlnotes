@@ -58,7 +58,7 @@ export const NOTE_DELETE = {
  * Names the note and comments that deletion permanently removes.
  */
 export function toNoteDeleteDescription(name: string): string {
-	return `"${name}" and its comments go in the bin. Carl can't fish them back out.`
+	return `"${name}" and its comments go in the compost. Carl can't fish them back out.`
 }
 
 // the report actions on another person's note and comment, and the label a reported comment's dialog shows

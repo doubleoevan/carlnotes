@@ -21,7 +21,7 @@ export function TopicSettingsCard({ topic, personalSources }: { topic: TopicResp
 	// how long the last scan took, shown under the last scan age
 	const lastScanDuration = toDurationLabel(topic.lastScanDurationMs)
 	return (
-		<CollapsibleSection value="blend" title="Artisanal Blend">
+		<CollapsibleSection value="blend" title="Artisanal Blend" hasStackedClosedDivider>
 			<div className={INFO_CARD_CLASS}>
 				<div className={INFO_CARD_SECTIONS_CLASS}>
 					{/* the frequency, its time and (weekly only) day, the last scan age, and how long that scan took */}

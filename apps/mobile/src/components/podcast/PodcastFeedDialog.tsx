@@ -11,7 +11,7 @@ import * as Clipboard from "expo-clipboard"
 import * as Linking from "expo-linking"
 import { Copy, Mic } from "lucide-react-native"
 import { type ComponentRef, type RefObject, useEffect, useRef, useState } from "react"
-import { Platform, View } from "react-native"
+import { Platform, Pressable, View } from "react-native"
 import { ConfirmDialog } from "@/components/common/ConfirmDialog"
 import { Sheet } from "@/components/common/Sheet"
 import { ShimmerText } from "@/components/common/ShimmerText"
@@ -37,6 +37,19 @@ export const podcastFeedDialogElements: PodcastFeedDialogElements = {
 			<Text>{children}</Text>
 		</Button>
 	),
+	FormatOption: ({ children, isSelected, className, onPress }) => (
+		<Pressable
+			accessibilityRole="button"
+			accessibilityLabel={children}
+			accessibilityState={{ selected: isSelected }}
+			onPress={onPress}
+			className={`${className} justify-center`}
+		>
+			<Text className={isSelected ? "text-sm font-bold" : "text-sm font-semibold text-muted-foreground"}>
+				{children}
+			</Text>
+		</Pressable>
+	),
 	Confirm: ConfirmDialog,
 }
 
@@ -55,9 +68,9 @@ export function PodcastFeedDialog({
 	// scope private links to the currently signed-in account
 	const { data: session } = authClient().useSession()
 	const feed = usePodcastFeed({ topicId: topic.id, userId: session?.user.id ?? null })
-	const appLink = feed.url ? toPodcastAppLink({ platform: Platform.OS, feedUrl: feed.url }) : null
+	const appLink = feed.chosenFeedUrl ? toPodcastAppLink({ platform: Platform.OS, feedUrl: feed.chosenFeedUrl }) : null
 	const [message, setMessage] = useState<string | null>(null)
-	const identity = `${session?.user.id ?? "visitor"}/${topic.id}/${feed.url ?? ""}`
+	const identity = `${session?.user.id ?? "visitor"}/${topic.id}/${feed.chosenFeedUrl ?? ""}`
 	const scope = useRef<{ controller: AbortController; identity: string } | null>(null)
 	useEffect(() => {
 		const controller = new AbortController()
@@ -66,12 +79,12 @@ export function PodcastFeedDialog({
 		return () => controller.abort()
 	}, [identity])
 	const handleCopy = async (): Promise<void> => {
-		if (!feed.url) {
+		if (!feed.chosenFeedUrl) {
 			return
 		}
 		try {
 			captureVisitEvent("visit_podcast_subscribe_clicked", { channel: "copy-link", ...toPublicTopicProperties(topic) })
-			await Clipboard.setStringAsync(feed.url)
+			await Clipboard.setStringAsync(feed.chosenFeedUrl)
 			setMessage("Feed link copied.")
 		} catch {
 			showClientError("The feed link could not be copied. Try again.")
@@ -79,12 +92,17 @@ export function PodcastFeedDialog({
 	}
 	const handleOpen = async (): Promise<void> => {
 		const current = scope.current
-		if (!feed.url || !current || current.identity !== identity) {
+		if (!feed.chosenFeedUrl || !current || current.identity !== identity) {
 			return
 		}
 		captureVisitEvent("visit_podcast_subscribe_clicked", { channel: "app", ...toPublicTopicProperties(topic) })
 		const isCurrent = (): boolean => !current.controller.signal.aborted
-		const result = await openPodcastFeed({ feedUrl: feed.url, platform: Platform.OS, adapter: Linking, isCurrent })
+		const result = await openPodcastFeed({
+			feedUrl: feed.chosenFeedUrl,
+			platform: Platform.OS,
+			adapter: Linking,
+			isCurrent,
+		})
 		if (isCurrent()) {
 			setMessage(result)
 		}

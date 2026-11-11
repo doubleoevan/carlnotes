@@ -74,7 +74,7 @@ When mobile analytics is configured, the app sends PostHog screen names, app lif
 
 **Embedded videos.** When you choose to load a YouTube video in the mobile app, its player connects to YouTube. Google can receive your IP address, device information, and playback activity, and its player can use its own cookies or identifiers under the [Google Privacy Policy](https://policies.google.com/privacy).
 
-**Viewer and listener counts.** To show how many people view a topic or listen to a podcast episode, we add your account id, or a one-way keyed hash of your IP address and browser if you are signed out, to an approximate counter. The counter keeps no record of who you are, cannot be turned back into your address, and sets nothing on your device.
+**Viewer and listener counts.** To show how many people view a topic or listen to a podcast episode, we add your account id, or a one-way keyed hash of your IP address and browser if you are signed out, to an approximate counter. The counter keeps no record of who you are, cannot be turned back into your address, and sets nothing on your device. A Café and a team page count their visitors the same way.
 
 ## What we do not collect
 
@@ -132,7 +132,11 @@ Publishing makes the Topic name, description, Topic context, fetched sources, an
 
 A source connected directly to an authenticated account can inform scoring and search on a private Topic. CarlNotes disables those connections before the Topic becomes invite-only or public. Personal sources are separate. A chat or email you explicitly send can help select findings on any Topic you can edit. Readers see the public explanation drawn from the linked page.
 
-When you invite someone to a topic, they see only findings from scans that run after they accept the invitation, never the topic's earlier history.
+When you invite someone to a topic, they see only findings from scans that run after they accept the invite, never the topic's earlier history.
+
+Your Café is a public page. It shows your username, your avatar, your public topics and their podcast episodes, the Open Mic posts you published on public topics, and what happened on them lately, such as new findings, hot takes, and reactions. Only you see your private and invite-only topics there, the topics you follow, and a team whose membership you hid.
+
+An Open Mic post is as visible as its topic. A post on a public topic is public, with its image, its summary, its Coffee Break Discussion, and its hot takes. A post on any other topic is visible only to the people who can open that topic. A draft is visible only to you.
 
 A CarlNotes administrator can open ordinary topics, including private ones, along with their context documents, attachments, and findings for support and debugging. Personal sources items, their summaries, and private Finding annotations are visible only to the sender. Topic ownership and administrative access do not grant access to another sender's private layer. The shared Finding explanation uses linked-page evidence alone.
 

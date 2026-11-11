@@ -164,13 +164,15 @@ export function toChapterTimes(wavByteSizes: number[]): ChapterTime[] {
 }
 
 // one join. the temporary directory that the join works in, the chapter files in order, the file that the join writes,
-// the theme clips that exist, and the talk's length that places the outro
+// the theme clips that exist, the talk's length that places the outro, and whether the theme is mixed in, which a
+// Podcast Episode does and a Topic Post Discussion does not
 export type JoinChapterFilesOptions = {
 	temporaryDirectory: string
 	chapterPaths: string[]
 	audioPath: string
 	themeClips: ThemeClips
 	speechSeconds: number
+	hasThemeMix?: boolean
 }
 
 /**
@@ -183,13 +185,14 @@ export async function joinChapterFiles({
 	audioPath,
 	themeClips,
 	speechSeconds,
+	hasThemeMix,
 }: JoinChapterFilesOptions): Promise<void> {
 	// the concat demuxer reads its inputs from a list file
 	const chapterListPath = join(temporaryDirectory, "chapters.txt")
 	await Bun.write(chapterListPath, chapterPaths.map((chapterPath) => `file '${chapterPath}'`).join("\n"))
 
 	// run ffmpeg over the chapters and the theme clips, which writes the MP3 at the audio path
-	const joinArguments = toJoinArguments({ chapterListPath, audioPath, themeClips, speechSeconds })
+	const joinArguments = toJoinArguments({ chapterListPath, audioPath, themeClips, speechSeconds, hasThemeMix })
 	await runFfmpeg({ ffmpegArguments: joinArguments })
 }
 
@@ -199,21 +202,22 @@ type ToJoinArgumentsOptions = Omit<JoinChapterFilesOptions, "temporaryDirectory"
 }
 
 /**
- * Returns ffmpeg's arguments for one join: the chapters through the concat demuxer, the theme clips if any exist,
- * the loudness filter, and the encode of one channel at the MP3's bitrate and sample rate.
+ * Returns ffmpeg's arguments for one join: the chapters through the concat demuxer, the theme clips if the theme is
+ * mixed in and any exist, the loudness filter, and the encode of one channel at the MP3's bitrate and sample rate.
  */
 export function toJoinArguments({
 	chapterListPath,
 	audioPath,
 	themeClips,
 	speechSeconds,
+	hasThemeMix = true,
 }: ToJoinArgumentsOptions): string[] {
 	// read the chapters through the concat demuxer, and overwrite the output without a prompt
 	const chapterArguments = ["-y", "-f", "concat", "-safe", "0", "-i", chapterListPath]
 	const encodeArguments = ["-ac", "1", "-ar", MP3_SAMPLE_RATE, "-c:a", "libmp3lame", "-b:a", MP3_BITRATE, audioPath]
 
-	// with no theme clip, normalize the talk alone
-	if (!themeClips.intro && !themeClips.outro) {
+	// with the theme mix off, or with no theme clip, normalize the talk alone
+	if (!hasThemeMix || (!themeClips.intro && !themeClips.outro)) {
 		return [...chapterArguments, "-af", LOUDNESS_FILTER, ...encodeArguments]
 	}
 

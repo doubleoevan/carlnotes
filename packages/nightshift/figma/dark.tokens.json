@@ -450,6 +450,13 @@
 		}
 	},
 	"radius": {
+		"xs": {
+			"$type": "dimension",
+			"$value": {
+				"value": 3,
+				"unit": "px"
+			}
+		},
 		"sm": {
 			"$type": "dimension",
 			"$value": {
@@ -636,11 +643,36 @@
 				"$value": 400
 			}
 		},
+		"sectionTitle": {
+			"fontFamily": {
+				"$type": "fontFamily",
+				"$value": "{font.display}",
+				"$description": "a page section's title, with the section's count at the far right. the count shows nothing at zero, and hides on a narrow screen under a title too long to leave it room"
+			},
+			"fontSize": {
+				"$type": "dimension",
+				"$value": {
+					"value": 20,
+					"unit": "px"
+				}
+			},
+			"lineHeight": {
+				"$type": "dimension",
+				"$value": {
+					"value": 28,
+					"unit": "px"
+				}
+			},
+			"fontWeight": {
+				"$type": "fontWeight",
+				"$value": 400
+			}
+		},
 		"sectionHeading": {
 			"fontFamily": {
 				"$type": "fontFamily",
 				"$value": "{font.display}",
-				"$description": "a collapsible section's title, a popover's heading, and an h2 or h3"
+				"$description": "a popover's heading, a card's heading, and an h2 or h3"
 			},
 			"fontSize": {
 				"$type": "dimension",

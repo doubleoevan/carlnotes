@@ -118,22 +118,39 @@ export async function toInviteAndScanFields(
 	isManualScanPaused: boolean
 	isSpendExhausted: boolean
 }> {
-	// the invite list is the owner's alone, and the quota belongs to whoever may scan
-	const inviteRows = isTopicOwner ? await loadPendingTopicInvites(topic.id) : []
-	const canScan = await isAllowed(userId, "scan:request", topic)
+	// the invite list is the owner's alone, and it loads beside the scan fields
+	const [inviteRows, scanFields] = await Promise.all([
+		isTopicOwner ? loadPendingTopicInvites(topic.id) : [],
+		toScanFields(userId, topic),
+	])
+	return { inviteRows, ...scanFields }
+}
 
-	// only someone who may scan needs their spend checked against the manual scans cutoff and the whole budget
-	const [isManualScanPaused, isSpendExhausted] =
-		userId && canScan
-			? await Promise.all([isMonthlyBudgetCutoffPassed(userId, "manualScans"), isMonthlySpendExhausted(userId)])
-			: ([false, false] as const)
-	return {
-		inviteRows,
-		manualScansRemaining: userId ? await scansRemaining(userId, canScan) : null,
-		manualScanLimit: userId && canScan ? await dailyScanLimit(userId) : null,
-		isManualScanPaused,
-		isSpendExhausted,
+// the manual scan quota and the spend checks, which belong to whoever may scan
+async function toScanFields(
+	userId: string | null,
+	topic: typeof topics.$inferSelect,
+): Promise<{
+	manualScansRemaining: number | null
+	manualScanLimit: number | null
+	isManualScanPaused: boolean
+	isSpendExhausted: boolean
+}> {
+	// a visitor has no quota and no spend
+	if (!userId) {
+		return { manualScansRemaining: null, manualScanLimit: null, isManualScanPaused: false, isSpendExhausted: false }
 	}
+
+	// only someone who may scan needs their limit, and their spend checked against the manual scans cutoff and the
+	// whole budget
+	const canScan = await isAllowed(userId, "scan:request", topic)
+	const [manualScansRemaining, manualScanLimit, isManualScanPaused, isSpendExhausted] = await Promise.all([
+		scansRemaining(userId, canScan),
+		canScan ? dailyScanLimit(userId) : null,
+		canScan ? isMonthlyBudgetCutoffPassed(userId, "manualScans") : false,
+		canScan ? isMonthlySpendExhausted(userId) : false,
+	])
+	return { manualScansRemaining, manualScanLimit, isManualScanPaused, isSpendExhausted }
 }
 
 /**
@@ -162,14 +179,19 @@ export async function toTeamFields(
 		teamLink: TopicResponse["teamLink"]
 	}
 > {
-	// the owning team's own row, the source of both the badge fields and the byline
-	const [teamRow] = teamId
-		? await db
-				.select({ name: teams.name, isPublic: teams.isPublic, avatarKey: teams.avatarKey })
-				.from(teams)
-				.where(eq(teams.id, teamId))
-		: []
+	// the owning team's own row, the source of both the badge fields and the byline, and the teams that have this
+	// topic: the owning team in the topic's own column, and one shared row for each
+	const [[teamRow], sharedTeamRows] = await Promise.all([
+		teamId
+			? db
+					.select({ name: teams.name, isPublic: teams.isPublic, avatarKey: teams.avatarKey })
+					.from(teams)
+					.where(eq(teams.id, teamId))
+			: [],
+		db.select({ teamId: teamTopics.teamId }).from(teamTopics).where(eq(teamTopics.topicId, topicId)),
+	])
 	const team = teamId && teamRow ? { teamId, name: teamRow.name, isPublic: teamRow.isPublic } : null
+	const teamCount = sharedTeamRows.length + (teamId ? 1 : 0)
 
 	// the byline's link to the owning team, which only a credited team gets
 	const isPublicTeam = teamRow?.isPublic === true
@@ -177,13 +199,6 @@ export async function toTeamFields(
 		isCredited && teamId && teamRow
 			? { teamId, name: teamRow.name, avatarVersion: toAvatarKeyVersion(teamRow.avatarKey) }
 			: null
-
-	// the teams that have this topic: the owning team in the topic's own column, and one shared row for each
-	const sharedTeamRows = await db
-		.select({ teamId: teamTopics.teamId })
-		.from(teamTopics)
-		.where(eq(teamTopics.topicId, topicId))
-	const teamCount = sharedTeamRows.length + (teamId ? 1 : 0)
 
 	// the user's status for this team
 	if (!userId) {

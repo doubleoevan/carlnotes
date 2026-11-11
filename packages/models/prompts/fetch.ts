@@ -17,6 +17,7 @@ import chatSearchWebTemplate from "./chat-search-web.md" with { type: "text" }
 import chatSpokenTemplate from "./chat-spoken.md" with { type: "text" }
 import chatTeamTemplate from "./chat-team.md" with { type: "text" }
 import chatTopicTemplate from "./chat-topic.md" with { type: "text" }
+import chatTopicPostTemplate from "./chat-topic-post.md" with { type: "text" }
 import checkAgreementTemplate from "./check-agreement.md" with { type: "text" }
 import moderateUserTextTemplate from "./moderate-user-text.md" with { type: "text" }
 import outlinePodcastEpisodeTemplate from "./outline-podcast-episode.md" with { type: "text" }
@@ -26,12 +27,17 @@ import searchTopicTemplate from "./search-topic.md" with { type: "text" }
 import suggestSourcesTemplate from "./suggest-sources.md" with { type: "text" }
 import summarizePersonalSourcesContextTemplate from "./summarize-personal-sources-context.md" with { type: "text" }
 import summarizeResourceTemplate from "./summarize-resource.md" with { type: "text" }
+import summarizeTopicPostTemplate from "./summarize-topic-post.md" with { type: "text" }
 import summarizeTopicScanTemplate from "./summarize-topic-scan.md" with { type: "text" }
 import topicImageSceneTemplate from "./topic-image-scene.md" with { type: "text" }
 import topicImageStyleTemplate from "./topic-image-style.md" with { type: "text" }
+import topicPodcastEpisodeVideoImageStyleTemplate from "./topic-podcast-episode-video-image-style.md" with {
+	type: "text",
+}
 import updatesOpenerTemplate from "./updates-opener.md" with { type: "text" }
 import { stripFrontmatter } from "./write.ts"
 import writePodcastEpisodeSegmentTemplate from "./write-podcast-episode-segment.md" with { type: "text" }
+import writeTopicPostDiscussionTemplate from "./write-topic-post-discussion.md" with { type: "text" }
 
 // the prompts this app serves, and their fallback templates for when the registry can't serve them
 export const FALLBACK_PROMPT_TEMPLATES = {
@@ -39,6 +45,7 @@ export const FALLBACK_PROMPT_TEMPLATES = {
 	"summarize-personal-sources-context": summarizePersonalSourcesContextTemplate,
 	"summarize-resource": summarizeResourceTemplate,
 	"summarize-topic-scan": summarizeTopicScanTemplate,
+	"summarize-topic-post": summarizeTopicPostTemplate,
 	"search-topic": searchTopicTemplate,
 	"attach-context": attachContextTemplate,
 	"attach-image-context": attachImageContextTemplate,
@@ -52,18 +59,21 @@ export const FALLBACK_PROMPT_TEMPLATES = {
 	"chat-search-web": chatSearchWebTemplate,
 	"chat-spoken": chatSpokenTemplate,
 	"chat-podcast-episode": chatPodcastEpisodeTemplate,
+	"chat-topic-post": chatTopicPostTemplate,
 	"chat-new-topic": chatNewTopicTemplate,
 	"chat-team": chatTeamTemplate,
 	"chat-room-turn": chatRoomTurnTemplate,
 	"updates-opener": updatesOpenerTemplate,
 	"topic-image-scene": topicImageSceneTemplate,
 	"topic-image-style": topicImageStyleTemplate,
+	"topic-podcast-episode-video-image-style": topicPodcastEpisodeVideoImageStyleTemplate,
 	"check-agreement": checkAgreementTemplate,
 	"moderate-user-text": moderateUserTextTemplate,
 	"suggest-sources": suggestSourcesTemplate,
 	"podcast-episode-hosts": podcastEpisodeHostsTemplate,
 	"outline-podcast-episode": outlinePodcastEpisodeTemplate,
 	"write-podcast-episode-segment": writePodcastEpisodeSegmentTemplate,
+	"write-topic-post-discussion": writeTopicPostDiscussionTemplate,
 } as const
 
 export type PromptName = keyof typeof FALLBACK_PROMPT_TEMPLATES

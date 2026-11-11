@@ -94,8 +94,8 @@ function MobileMinimumVersionRowForm({ platform, row, onSaved }: MobileMinimumVe
 			{/* the platform and its stored state */}
 			<Label htmlFor={inputId}>{platformLabel}</Label>
 			<p className="text-sm text-muted-foreground">{toMinimumVersionStateLine(row)}</p>
-			{/* the input and the save button */}
-			<div className="flex items-center gap-2">
+			{/* the input and the save button, held to a field's width as the account page's fields are */}
+			<div className="flex max-w-lg items-center gap-2">
 				<Input
 					id={inputId}
 					aria-label={`${platformLabel} minimum version`}

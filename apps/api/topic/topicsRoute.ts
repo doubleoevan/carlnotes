@@ -1,4 +1,5 @@
-// the topic routes: the page, the poll, create, update, delete, removing one Source, and the per-topic settings
+// the topic routes: the page, the poll, the related topics, create, update, delete, removing one Source, and the
+// per-topic settings
 
 import { topicPageQuery } from "@carlnotes/contracts/routeShapes"
 import { suggestSourcesPayload, updateTopicPayload } from "@carlnotes/contracts/topicPayloads"
@@ -10,16 +11,18 @@ import { suggestSources } from "@carlnotes/pipeline/suggest"
 import { trackEvent } from "@carlnotes/server/analytics"
 import { traceRequestStage } from "@carlnotes/server/monitoring"
 import { zValidator } from "@hono/zod-validator"
-import { Hono } from "hono"
+import { type Context, Hono } from "hono"
 import { type AppEnv, currentUser, toAnalyticsProperties } from "../currentUser"
 import { toObjectionableContentResponse } from "../moderation"
-import { toolCallerRateLimiter } from "../rateLimit"
+import { socialReadRateLimiter, toolCallerRateLimiter } from "../rateLimit"
 import { toTermsOutdatedRejection } from "../termsAcceptance"
 import { removeTopicSource } from "../tool/topicSourceTools"
+import { loadViewableTopic } from "./accessibleFindings"
 import { deleteTopic } from "./deleteTopic"
 import { TOPIC_PAGE_KEY_PREFIX } from "./feedCaches"
 import { readVisitorTopicPage } from "./feeds"
 import { loadTopicGateResponse } from "./helpers"
+import { loadRelatedTopics } from "./relatedTopics"
 import { createTopic, updateTopic } from "./saveTopic"
 import { loadTeamTopicOptions } from "./teamTopicOptions"
 import { loadTopicPage } from "./topics"
@@ -108,9 +111,13 @@ export const topicsRoute = new Hono<AppEnv>()
 		// the topic detail payload's traced loader, gated by visibility. a signed-out visitor may only view a public topic
 		const userId = currentUser(context)
 		const topicId = context.req.param("id")
-		const isPoll = context.req.valid("query").poll === "1"
+		const { poll, related } = context.req.valid("query")
+		const isPoll = poll === "1"
+		// a signed-in client that reads the related topics in a read of their own gets the page without them. a visitor's
+		// page always holds them
+		const isRelatedTopicsSeparate = related === "separate" && userId !== null
 		const loadTracedTopicPage = (): Promise<TopicResponse | null> =>
-			traceRequestStage("topic_page.load", () => loadTopicPage(userId, topicId, { isPoll }))
+			traceRequestStage("topic_page.load", () => loadTopicPage(userId, topicId, { isPoll, isRelatedTopicsSeparate }))
 
 		// read the page, then respond with it if it is visible
 		let topicPage: TopicResponse | null
@@ -125,12 +132,17 @@ export const topicsRoute = new Hono<AppEnv>()
 			// read a visitor's page from the visitors' cached page
 			topicPage = await readVisitorTopicPage(topicId, loadTracedTopicPage)
 		}
-		if (topicPage) {
-			return context.json(topicPage)
-		}
-		// respond 403 with the gate of an invite topic, or 404 for a private or missing topic
-		const topicGateResponse = await loadTopicGateResponse(topicId)
-		return topicGateResponse ? context.json(topicGateResponse, 403) : context.json({ error: "not found" }, 404)
+		return topicPage ? context.json(topicPage) : toHiddenTopicResponse(context, topicId)
+	})
+	.get("/topics/:id/related-topics", socialReadRateLimiter, async (context) => {
+		// the topic's related topics, gated by the page's own visibility rule, for a client that reads them apart from
+		// the page
+		const userId = currentUser(context)
+		const topicId = context.req.param("id")
+		const topic = await loadViewableTopic(userId, topicId)
+		return topic
+			? context.json({ relatedTopics: await loadRelatedTopics(topic, userId) })
+			: toHiddenTopicResponse(context, topicId)
 	})
 	.patch("/topics/:id", zValidator("json", updateTopicPayload), async (context) => {
 		// reject a signed-out visitor
@@ -205,3 +217,9 @@ export const topicsRoute = new Hono<AppEnv>()
 				return context.json({ error: removeTopicSourceResult.status }, 409)
 		}
 	})
+
+// respond 403 with the gate of an invite topic, or 404 for a private or missing topic
+async function toHiddenTopicResponse(context: Context<AppEnv>, topicId: string): Promise<Response> {
+	const topicGateResponse = await loadTopicGateResponse(topicId)
+	return topicGateResponse ? context.json(topicGateResponse, 403) : context.json({ error: "not found" }, 404)
+}

@@ -8,6 +8,7 @@ export type SentInviteRow = {
 	inviteId: string
 	target: ReactNode
 	targetName: string
+	// who was invited, by account or by email, and when
 	invitee: ProfileIdentity | null
 	inviteeEmail: string | null
 	invitedAt: string
@@ -23,20 +24,21 @@ export type SentInvitesTableLabels<Body = ReactNode> = {
 	confirmLabel: string
 	confirmBody: (row: SentInviteRow) => Body
 }
+// the team invites table's labels
 export const TEAM_INVITES_TABLE_LABELS: SentInvitesTableLabels<string> = {
 	targetLabel: "Team",
 	acceptedLabel: "Joined",
 	acceptedNoun: "joined",
-	confirmTitle: "Withdraw this invitation?",
+	confirmTitle: "Withdraw this invite?",
 	confirmLabel: "Withdraw it",
-	confirmBody: (row) => `The invitation to ${toInviteeLabel(row)} goes away. Anyone who already joined stays.`,
+	confirmBody: (row) => `The invite to ${toInviteeLabel(row)} goes away. Anyone who already joined stays.`,
 }
 export const TOPIC_INVITES_TABLE_LABELS: SentInvitesTableLabels<string> = {
 	targetLabel: "Topic",
 	acceptedLabel: "Followed",
 	acceptedNoun: "followed",
-	confirmTitle: "Delete this invitation?",
-	confirmLabel: "Delete invitation",
+	confirmTitle: "Delete this invite?",
+	confirmLabel: "Delete invite",
 	confirmBody: (row) => {
 		// join the confirmation parts for a plain-text dialog
 		const { beforeTarget, target, afterTarget } = toTopicInviteConfirmation(row)
@@ -90,10 +92,12 @@ export function toSentInvitesTableColumns({
 	targetLabel: string
 	acceptedLabel: string
 	acceptedNoun: string
+	// how each app draws a cell's text, its invitee, and its active state
 	renderText: (text: string) => ReactNode
 	renderInvitee: (row: SentInviteRow) => ReactNode
 	renderActive?: (row: SentInviteRow) => ReactNode
 }): TableColumn<SentInviteRow>[] {
+	// how many of the invites were accepted, for the column's heading
 	const acceptedCount = inviteRows.filter((row) => row.acceptedAt !== null).length
 	return [
 		{ key: "target", label: targetLabel, width: 192, render: (row) => row.target, footer: renderText("Total") },
@@ -119,7 +123,7 @@ export function toSentInvitesTableColumns({
 						label: "Active",
 						width: 112,
 						isSortable: false,
-						tooltip: `Your active ${targetLabel.toLowerCase()} invitations`,
+						tooltip: `Your active ${targetLabel.toLowerCase()} invites`,
 						render: renderActive,
 					},
 				]

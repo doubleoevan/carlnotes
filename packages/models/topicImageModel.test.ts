@@ -72,6 +72,20 @@ test("a render posts the prompt at 3:2 to the pass-through on the key and return
 	})
 })
 
+test("a render asked for 16:9 posts that aspect ratio", async () => {
+	Bun.env.LITELLM_BASE_URL = "http://litellm.test"
+	Bun.env.LITELLM_MASTER_KEY = "sk-master"
+	const sentRequests: SentRenderRequest[] = []
+	stubRenderFetch(sentRequests, toImageResponse)
+
+	// the image config names the wide ratio
+	await renderTopicImage({ prompt: "A harbor.", model: "gemini-3.1-flash-lite-image", aspectRatio: "16:9" })
+	expect(sentRequests[0]?.requestBody.generationConfig).toEqual({
+		responseModalities: ["IMAGE"],
+		imageConfig: { aspectRatio: "16:9" },
+	})
+})
+
 test("a spent budget, a rejection, a server failure, and an empty response are sorted", async () => {
 	Bun.env.LITELLM_BASE_URL = "http://litellm.test"
 	Bun.env.LITELLM_MASTER_KEY = "sk-master"

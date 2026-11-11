@@ -1,39 +1,55 @@
 import { authClient } from "@carlnotes/client/authClient"
 import { toAvatarImagePath } from "@carlnotes/contracts/avatars"
 import { PODCAST_NAME } from "@carlnotes/contracts/podcastEpisodes"
-import { toProfilePath } from "@carlnotes/contracts/seo"
+import { toProfilePath, toTopicPath } from "@carlnotes/contracts/seo"
 import { SITE_URL } from "@carlnotes/contracts/site"
 import type { TopicDetails, TopicResponse } from "@carlnotes/contracts/topics"
 import { MAX_TOPIC_SOURCES } from "@carlnotes/contracts/topics"
+import {
+	TopicPodcastEpisodeVideoInfoSection,
+	type TopicPodcastEpisodeVideoInfoSectionElements,
+} from "@carlnotes/core/components/TopicPodcastEpisodeVideoInfoSection"
 import { toCountLabel } from "@carlnotes/core/lib/labels"
 import { toNotesMarkdown } from "@carlnotes/core/lib/topicScanRecap"
 import { usePurchaseOffers } from "@carlnotes/core/stores/purchaseOffersStore"
 import { useRecyclingState } from "@shopify/flash-list"
 import { Globe, Lock, Mail } from "lucide-react-native"
 import { type ComponentRef, type ReactNode, useRef, useState } from "react"
-import { type LayoutChangeEvent, Pressable, Text, View } from "react-native"
+import { type LayoutChangeEvent, Text, View } from "react-native"
 import { Avatar } from "@/components/branding/Avatar"
-import { NoteIcon } from "@/components/branding/NoteIcon"
+import { NoteIconButton } from "@/components/branding/NoteIconButton"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { ScrollBox } from "@/components/common/ScrollBox"
 import { Sheet, type SheetProps } from "@/components/common/Sheet"
 import { PodcastEpisodeRow } from "@/components/podcast/PodcastEpisodeRow"
-import { Button, toTouchTargetHitSlop } from "@/components/primitives/button"
+import { PodcastEpisodeVideoButton } from "@/components/podcast/PodcastEpisodeVideoButton"
+import { Button } from "@/components/primitives/button"
 import { Icon } from "@/components/primitives/icon"
-import { TopicImage } from "@/components/primitives/topic-image"
 import { ShareTopic } from "@/components/share/ShareTopic"
 import { ReactionRow } from "@/components/social/ReactionRow"
 import { SHEET_TOPIC_IMAGE_CLASS } from "@/topicImageClasses"
 import { toTypeRoleStyle } from "@/typeRoleStyles"
 import { TopicAttachmentLink } from "./TopicAttachmentLink"
+import { TopicImageLink } from "./TopicImageLink"
 import { TopicInfoSection as InfoSection } from "./TopicInfoSection"
 import { TopicPersonalSourcesSection } from "./TopicPersonalSourcesSection"
 import { NumberedTopicFindingList, SafeNoteText, TopicScanFailure } from "./TopicScanRecap"
 import { TopicSources } from "./TopicSources"
 
+// the title of the sheet and the section that hold a Topic's note, and the note button's name for a screen reader
+export const TOPIC_ROAST_TITLE = "Topic roast"
+export const TOPIC_NOTE_BUTTON_LABEL = "Topic details"
+
 // a topic note follows the same fields as the web's home popover
 type TopicInfoProps = { topic: TopicDetails } & Pick<SheetProps, "onClose" | "triggerRef">
 const VISIBILITY_ICONS = { private: Lock, public: Globe, invite: Mail }
+
+// the film section's elements: the info section, the podcast episode row, and the Video button
+const TOPIC_PODCAST_EPISODE_VIDEO_INFO_SECTION_ELEMENTS: TopicPodcastEpisodeVideoInfoSectionElements = {
+	Section: InfoSection,
+	Row: PodcastEpisodeRow,
+	VideoButton: PodcastEpisodeVideoButton,
+}
 
 /**
  * Opens the Topic roast sheet from the web's note icon beside the title.
@@ -44,23 +60,15 @@ export function TopicInfoButton({ topic, children }: { topic: TopicDetails; chil
 	const triggerRef = useRef<ComponentRef<typeof View>>(null)
 	return (
 		<>
-			<Pressable
+			<NoteIconButton
 				ref={triggerRef}
-				accessibilityRole="button"
-				accessibilityLabel="Topic details"
-				accessibilityHint={`A topic note from Carl about ${topic.name}`}
-				accessibilityState={{ expanded: isOpen }}
-				hitSlop={toTouchTargetHitSlop(28)}
+				label={TOPIC_NOTE_BUTTON_LABEL}
+				hint={`A topic note from Carl about ${topic.name}`}
+				isOpen={isOpen}
 				onPress={() => setIsOpen(true)}
-				className={
-					children
-						? "min-h-11 min-w-0 shrink flex-row items-center gap-2 active:opacity-75"
-						: "min-h-7 min-w-7 shrink-0 items-center justify-center active:opacity-75"
-				}
 			>
 				{children}
-				<NoteIcon />
-			</Pressable>
+			</NoteIconButton>
 			{isOpen ? (
 				<TopicInfo key={topic.id} topic={topic} triggerRef={triggerRef} onClose={() => setIsOpen(false)} />
 			) : null}
@@ -73,8 +81,8 @@ export function TopicInfoButton({ topic, children }: { topic: TopicDetails; chil
  */
 function TopicInfo({ topic, triggerRef, onClose }: TopicInfoProps) {
 	return (
-		<Sheet title="Topic roast" triggerRef={triggerRef} onClose={onClose}>
-			<TopicInfoContent topic={topic} />
+		<Sheet title={TOPIC_ROAST_TITLE} triggerRef={triggerRef} onClose={onClose}>
+			<TopicInfoContent topic={topic} onClose={onClose} />
 		</Sheet>
 	)
 }
@@ -86,10 +94,13 @@ export function TopicInfoContent({
 	topic,
 	isCard = false,
 	personalSources,
+	onClose,
 }: {
 	topic: TopicDetails
 	isCard?: boolean
 	personalSources?: ReactNode
+	// closes the sheet around the content on a press of the image's link
+	onClose?: () => void
 }) {
 	// include scan details if the topic response provides them, and a budget failure's Upgrade where the store sells
 	const latestScan = isCard && "scans" in topic ? (topic as TopicResponse).scans[0] : null
@@ -106,10 +117,18 @@ export function TopicInfoContent({
 				</InfoSection>
 			) : null}
 			<TopicBarista topic={topic} isCard={isCard} />
-			{/* the topic's image at full width, in the sheet only */}
+			{/* the topic's image at full width, in the sheet only. it is the sheet's one link to the topic's screen */}
 			{!isCard && (
 				<View className="py-3">
-					<TopicImage image={topic.image} size="page" name={topic.name} className={SHEET_TOPIC_IMAGE_CLASS} />
+					<TopicImageLink
+						image={topic.image}
+						size="page"
+						name={topic.name}
+						className={SHEET_TOPIC_IMAGE_CLASS}
+						path={toTopicPath(topic)}
+						label={`Open ${topic.name}`}
+						onOpen={onClose}
+					/>
 				</View>
 			)}
 			<TopicPrompt topic={topic} isCard={isCard} />
@@ -173,13 +192,22 @@ export function TopicVisibility({ visibility }: Pick<TopicDetails, "visibility">
 	)
 }
 
-// show the latest episode above the owner's complete prompt
+// show the latest episode's film and its row above the owner's complete prompt
 function TopicPrompt({ topic, isCard }: { topic: TopicDetails; isCard: boolean }) {
+	// the urls the prompt may link, and whether the film's section leads the podcast's
 	const allowedUrls = new Set(topic.findings.map((finding) => finding.url))
+	const hasTopicPodcastEpisodeVideo = Boolean(topic.latestPodcastEpisode?.video)
 	return (
 		<>
+			{!isCard ? (
+				<TopicPodcastEpisodeVideoInfoSection
+					podcastEpisode={topic.latestPodcastEpisode}
+					isFirst={!topic.owner}
+					elements={TOPIC_PODCAST_EPISODE_VIDEO_INFO_SECTION_ELEMENTS}
+				/>
+			) : null}
 			{!isCard && topic.latestPodcastEpisode?.pagePath ? (
-				<InfoSection label={PODCAST_NAME} isFirst={!topic.owner}>
+				<InfoSection label={PODCAST_NAME} isFirst={!topic.owner && !hasTopicPodcastEpisodeVideo}>
 					<PodcastEpisodeRow
 						podcastEpisode={topic.latestPodcastEpisode}
 						podcastEpisodePath={topic.latestPodcastEpisode.pagePath}

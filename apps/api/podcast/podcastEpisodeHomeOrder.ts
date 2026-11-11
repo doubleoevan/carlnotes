@@ -3,17 +3,17 @@
 import type { HomePodcastEpisode } from "@carlnotes/contracts/podcast"
 import type { PodcastEpisodePageResponse } from "@carlnotes/contracts/podcastEpisodePage"
 import { toPodcastEpisodePath } from "@carlnotes/contracts/seo"
-import { topicHomeOrderPayload } from "@carlnotes/contracts/topicPayloads"
+import { pinnedOrderPayload } from "@carlnotes/contracts/topicPayloads"
 import { db, isPublicAndShown } from "@carlnotes/db"
 import { setHomeOrder } from "@carlnotes/db/homeOrder"
 import { podcastEpisodes } from "@carlnotes/db/schema/podcast"
 import { topics } from "@carlnotes/db/schema/topics"
 import { zValidator } from "@hono/zod-validator"
 import { and, asc, eq, isNotNull } from "drizzle-orm"
+import type { AnyPgColumn } from "drizzle-orm/pg-core"
 import { Hono } from "hono"
-import { isAllowed } from "../authorization"
-import { type AppEnv, currentUser } from "../currentUser"
-import { clearHomeCaches, type HomeOrderResult } from "../topic/homeOrder"
+import type { AppEnv } from "../currentUser"
+import { clearHomeCaches, type HomeOrderResult, toHomeOrderAdmin } from "../topic/homeOrder"
 
 /**
  * Sets a published podcast episode's position among the home podcast episodes, with the topic rules: position 0 clears it,
@@ -53,23 +53,49 @@ async function setPodcastEpisodeHomeOrder(podcastEpisodeId: string, position: nu
 async function loadHomePodcastEpisodes(): Promise<HomePodcastEpisode[]> {
 	// the pinned rows with their topics, in their order
 	const homeOrderRows = await db
-		.select({
-			id: podcastEpisodes.id,
-			title: podcastEpisodes.title,
-			season: podcastEpisodes.season,
-			episodeNumber: podcastEpisodes.episodeNumber,
-			// the topic, which names the episode's page
-			topicId: topics.id,
-			topicName: topics.name,
-			homeOrder: podcastEpisodes.homeOrder,
-		})
+		.select(toHomePodcastEpisodeColumns(podcastEpisodes.homeOrder))
 		.from(podcastEpisodes)
 		.innerJoin(topics, eq(topics.id, podcastEpisodes.topicId))
 		.where(isNotNull(podcastEpisodes.homeOrder))
 		.orderBy(asc(podcastEpisodes.homeOrder))
+	return homeOrderRows.map(toHomePodcastEpisode)
+}
 
-	// the columns are nullable, and a published episode, the only kind pinned, has them all
-	return homeOrderRows.map((homeOrderRow) => ({
+/**
+ * Returns the columns a home podcast episode or a home film reads, ordered by the column that holds its pin.
+ */
+// biome-ignore lint/nursery/useExplicitReturnType: drizzle's column types are generated, and naming them here would break on an upgrade
+export function toHomePodcastEpisodeColumns(homeOrderColumn: AnyPgColumn) {
+	return {
+		id: podcastEpisodes.id,
+		title: podcastEpisodes.title,
+		season: podcastEpisodes.season,
+		episodeNumber: podcastEpisodes.episodeNumber,
+		// the topic, which names the episode's page
+		topicId: topics.id,
+		topicName: topics.name,
+		homeOrder: homeOrderColumn,
+	}
+}
+
+// a pinned row as the home shows it. the columns are nullable, and a published episode, the only kind pinned, has them
+// all
+export type HomePodcastEpisodeRow = {
+	id: string
+	title: string | null
+	season: number | null
+	episodeNumber: number | null
+	// the topic, which names the episode's page, and the position the pin holds
+	topicId: string
+	topicName: string
+	homeOrder: number | null
+}
+
+/**
+ * Returns a pinned row as the home shows it, with the path that opens its podcast episode's page.
+ */
+export function toHomePodcastEpisode(homeOrderRow: HomePodcastEpisodeRow): HomePodcastEpisode {
+	return {
 		id: homeOrderRow.id,
 		title: homeOrderRow.title ?? homeOrderRow.topicName,
 		topicName: homeOrderRow.topicName,
@@ -78,7 +104,7 @@ async function loadHomePodcastEpisodes(): Promise<HomePodcastEpisode[]> {
 			{ season: homeOrderRow.season ?? 0, episodeNumber: homeOrderRow.episodeNumber ?? 0 },
 		),
 		homeOrder: homeOrderRow.homeOrder ?? 0,
-	}))
+	}
 }
 
 /**
@@ -99,15 +125,12 @@ export async function toHomePodcastEpisodes(
 // the home podcasts' order route, admin only
 export const podcastEpisodeHomeOrderRoute = new Hono<AppEnv>().patch(
 	"/podcast-episodes/:id/home-order",
-	zValidator("json", topicHomeOrderPayload),
+	zValidator("json", pinnedOrderPayload),
 	async (context) => {
 		// reject a signed-out visitor, and anyone but an admin
-		const userId = currentUser(context)
-		if (!userId) {
-			return context.json({ error: "unauthorized" }, 401)
-		}
-		if (!(await isAllowed(userId, "admin:setHomeOrder"))) {
-			return context.json({ error: "forbidden" }, 403)
+		const admin = await toHomeOrderAdmin(context)
+		if ("response" in admin) {
+			return admin.response
 		}
 
 		// position zero clears the episode's order, and the rejection names the rule

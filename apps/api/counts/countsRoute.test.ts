@@ -119,3 +119,108 @@ test("a private topic's counts are hidden from a visitor and never shared", asyn
 	expect(response.headers.get("Cache-Control")).toBe("private, no-cache")
 	expect(response.headers.get("CDN-Cache-Control")).toBeNull()
 })
+
+// the profile and the team the tests view
+const PROFILE = { kind: "profile", id: "user-1" } as const
+const TEAM = { kind: "team", id: "team-1" } as const
+
+// a user row for the profile, as the view's lookup and the counts read each select one column of it
+function stubUserRow(profileViewerCount = 0): void {
+	stubConnectionPool((sentQuery) => {
+		if (!sentQuery.text.includes('from "users"')) {
+			return []
+		}
+		return sentQuery.text.includes('"profile_viewer_count"') ? [[profileViewerCount]] : [["user-1"]]
+	})
+}
+
+// a team row with no membership row for the sender, in the team page access read's column order
+function stubTeamRow(isPublic: boolean, viewerCount = 0): void {
+	stubConnectionPool((sentQuery) =>
+		sentQuery.text.includes('from "teams"')
+			? [["team-1", "Reading Club", null, null, isPublic, viewerCount, new Date(), null, null]]
+			: [],
+	)
+}
+
+test("a visitor's view of a profile counts once, and a repeat adds nothing", async () => {
+	stubRedisClient()
+	stubUserRow()
+	const firstResponse = await countsRoute.request("/profiles/user-1/view", { method: "POST", headers: BROWSER_HEADERS })
+	await countsRoute.request("/profiles/user-1/view", { method: "POST", headers: BROWSER_HEADERS })
+	expect(firstResponse.status).toBe(204)
+	expect(await readViewerEstimate(PROFILE)).toBe(1)
+})
+
+test("a crawler's view of a profile and a view of no user return 204 and count nothing", async () => {
+	stubRedisClient()
+	stubUserRow()
+	const crawlerResponse = await countsRoute.request("/profiles/user-1/view", {
+		method: "POST",
+		headers: CRAWLER_HEADERS,
+	})
+	expect(crawlerResponse.status).toBe(204)
+
+	// an id that names no user looks the same as one that counted
+	stubConnectionPool(() => [])
+	const missingResponse = await countsRoute.request("/profiles/user-1/view", {
+		method: "POST",
+		headers: BROWSER_HEADERS,
+	})
+	expect(missingResponse.status).toBe(204)
+	expect(await readViewerEstimate(PROFILE)).toBe(0)
+})
+
+test("one address counts at most 30 profile views a minute, and an unreachable Redis still returns 204", async () => {
+	stubRedisClient()
+	stubUserRow()
+	for (let i = 0; i < 31; i++) {
+		await countsRoute.request("/profiles/user-1/view", {
+			method: "POST",
+			headers: { ...BROWSER_HEADERS, "user-agent": `Mozilla/5.0 Firefox/${i}.0` },
+		})
+	}
+	expect(await readViewerEstimate(PROFILE)).toBe(30)
+
+	// a view with Redis down is lost and the response is the same
+	stubUnreachableRedisClient()
+	const response = await countsRoute.request("/profiles/user-1/view", { method: "POST", headers: BROWSER_HEADERS })
+	expect(response.status).toBe(204)
+})
+
+test("a visitor's view counts on a public team and not on a private one", async () => {
+	stubRedisClient()
+	stubTeamRow(false)
+	const privateResponse = await countsRoute.request("/teams/team-1/view", { method: "POST", headers: BROWSER_HEADERS })
+	expect(privateResponse.status).toBe(204)
+	expect(await readViewerEstimate(TEAM)).toBe(0)
+
+	// the same visitor counts once the team is public
+	stubTeamRow(true)
+	const publicResponse = await countsRoute.request("/teams/team-1/view", { method: "POST", headers: BROWSER_HEADERS })
+	expect(publicResponse.status).toBe(204)
+	expect(await readViewerEstimate(TEAM)).toBe(1)
+})
+
+test("a profile's count is shared at the edge, and never lower than the saved column", async () => {
+	stubRedisClient()
+	stubUserRow(5)
+	const response = await countsRoute.request("/counts/profiles/user-1")
+	expect(response.status).toBe(200)
+	expect(await response.json()).toEqual({ viewerCount: 5 })
+	expect(response.headers.get("CDN-Cache-Control")).toBe("max-age=30")
+})
+
+test("a public team's count is shared, and a private team's is hidden from a visitor", async () => {
+	stubRedisClient()
+	stubTeamRow(true, 3)
+	const publicResponse = await countsRoute.request("/counts/teams/team-1")
+	expect(await publicResponse.json()).toEqual({ viewerCount: 3 })
+	expect(publicResponse.headers.get("CDN-Cache-Control")).toBe("max-age=30")
+
+	// a private team reads as missing, and the response is never shared
+	stubTeamRow(false, 3)
+	const privateResponse = await countsRoute.request("/counts/teams/team-1")
+	expect(privateResponse.status).toBe(404)
+	expect(privateResponse.headers.get("Cache-Control")).toBe("private, no-cache")
+})

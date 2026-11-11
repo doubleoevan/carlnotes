@@ -1,7 +1,12 @@
-// a Topic's public podcast feed, and each listener's own podcast feed at a path after a feed token.
+// a Topic's public podcast feed and film feed, and each listener's own feeds at paths after a feed token.
 // a feed token is created on first use, checked against the listener's access, and deleted with that access
 
-import { toPodcastFeedPath } from "@carlnotes/contracts/seo"
+import {
+	type PodcastEpisodeFormat,
+	type PodcastFeedUrlResponse,
+	podcastEpisodeFormats,
+} from "@carlnotes/contracts/podcast"
+import { toPodcastFeedPath, toPodcastVideoFeedPath } from "@carlnotes/contracts/seo"
 import { DAY_MS } from "@carlnotes/contracts/time"
 import { type DbHandle, db } from "@carlnotes/db"
 import { toPodcastFeedCacheKey } from "@carlnotes/db/podcastFeedCache"
@@ -14,6 +19,8 @@ import type { Context } from "hono"
 import { isAllowed } from "../authorization"
 import { type PodcastFeedEpisode, toPodcastFeedXml } from "../share/podcastFeed"
 import { loadPublishedPodcastEpisodeRows } from "./podcastEpisodeRows"
+import { loadTopicPodcastEpisodeVideos } from "./podcastEpisodeShapes"
+import { hasReadyTopicPodcastEpisodeVideo } from "./topicPodcastEpisodeVideos"
 
 // how long a rendered feed stays in Redis
 const PODCAST_FEED_CACHE_TTL_MS = 15 * 60 * 1000
@@ -27,6 +34,9 @@ const MAX_CACHED_PODCAST_FEED_EPISODES = 100
 // how long a token's passing check stays in Redis. a feed works this long at most after its listener loses access
 const PODCAST_FEED_TOKEN_CHECK_TTL_MS = 60 * 1000
 
+// a public Topic's feeds need no token
+const PUBLIC_PODCAST_FEED = "public"
+
 // a topic row, and the listener and the Topic that a podcast feed token opens
 type TopicRow = typeof topics.$inferSelect
 type PodcastFeedTokenListener = { topicId: string; userId: string }
@@ -34,16 +44,44 @@ type PodcastFeedTokenListener = { topicId: string; userId: string }
 // a rendered feed with the etag and the modified time that a conditional request compares
 export type RenderedPodcastFeed = { xml: string; etag: string; lastModifiedMs: number }
 
-// the Topic, and the listener whose own podcast feed to build, or null for the public podcast feed
-type LoadRenderedPodcastFeedOptions = { topic: TopicRow; listener: { userId: string; token: string } | null }
+// the Topic, the listener whose own feed to build, or null for the public feed, and the feed's format, audio by default
+type LoadRenderedPodcastFeedOptions = {
+	topic: TopicRow
+	listener: { userId: string; token: string } | null
+	format?: PodcastEpisodeFormat
+}
 
 /**
- * Loads the user's podcast feed url, creating a feed token if needed, or null if the user may not see the Topic.
+ * Loads the user's podcast feed url, and the film feed's url if the Topic has a film, creating a feed token if needed,
+ * or null if the user may not see the Topic.
  */
-export async function loadOrCreatePodcastFeedUrl(userId: string | null, topic: TopicRow): Promise<string | null> {
+export async function loadOrCreatePodcastFeedUrls(
+	userId: string | null,
+	topic: TopicRow,
+): Promise<PodcastFeedUrlResponse | null> {
+	// the podcast feed's url, and whether the Topic has a film for a film feed
+	const [podcastFeedToken, hasFilm] = await Promise.all([
+		loadOrCreatePodcastFeedToken(userId, topic),
+		hasReadyTopicPodcastEpisodeVideo(topic.id),
+	])
+	if (podcastFeedToken === null) {
+		return null
+	}
+
+	// a public Topic has one pair of feeds for everyone, and a listener has their own pair after one token
+	const toFeedUrl = (format: PodcastEpisodeFormat): string =>
+		podcastFeedToken === PUBLIC_PODCAST_FEED
+			? `${appUrl()}${format === "video" ? toPodcastVideoFeedPath(topic.id) : toPodcastFeedPath(topic.id)}`
+			: toListenerPodcastFeedUrl(podcastFeedToken, format)
+	return { podcastFeedUrl: toFeedUrl("audio"), podcastVideoFeedUrl: hasFilm ? toFeedUrl("video") : null }
+}
+
+// load the user's feed token, creating it if needed, "public" for a public Topic, or null if the user may not see the
+// Topic
+async function loadOrCreatePodcastFeedToken(userId: string | null, topic: TopicRow): Promise<string | null> {
 	// a public Topic has one feed for everyone, and a user who may not see the Topic has none
 	if (topic.visibility === "public") {
-		return `${appUrl()}${toPodcastFeedPath(topic.id)}`
+		return PUBLIC_PODCAST_FEED
 	}
 	if (!userId || !(await isAllowed(userId, "topic:view", topic))) {
 		return null
@@ -61,17 +99,18 @@ export async function loadOrCreatePodcastFeedUrl(userId: string | null, topic: T
 		.select({ token: podcastFeedTokens.token })
 		.from(podcastFeedTokens)
 		.where(and(eq(podcastFeedTokens.topicId, topic.id), eq(podcastFeedTokens.userId, userId)))
-	return podcastFeedTokenRow ? toListenerPodcastFeedUrl(podcastFeedTokenRow.token) : null
+	return podcastFeedTokenRow?.token ?? null
 }
 
 /**
- * Deletes a listener's token for a Topic, with the token's cached check and the listener's cached feed.
+ * Deletes a listener's token for a Topic, with the token's cached check and the listener's cached podcast feed and
+ * film feed.
  */
 export async function deletePodcastFeedToken(
 	{ topicId, userId }: PodcastFeedTokenListener,
 	handle: DbHandle = db,
 ): Promise<void> {
-	// delete the token's row, then its cached check and the listener's cached feed
+	// delete the token's row, then its cached check and the listener's cached feed in both formats
 	const deletedPodcastFeedTokenRows = await handle
 		.delete(podcastFeedTokens)
 		.where(and(eq(podcastFeedTokens.topicId, topicId), eq(podcastFeedTokens.userId, userId)))
@@ -79,7 +118,10 @@ export async function deletePodcastFeedToken(
 	const podcastFeedTokenCheckKeys = deletedPodcastFeedTokenRows.map((deletedPodcastFeedTokenRow) =>
 		toPodcastFeedTokenCheckKey(deletedPodcastFeedTokenRow.token),
 	)
-	await deleteRedisKeys(toPodcastFeedCacheKey({ topicId, listenerUserId: userId }), ...podcastFeedTokenCheckKeys)
+	const podcastFeedCacheKeys = podcastEpisodeFormats.map((format) =>
+		toPodcastFeedCacheKey({ topicId, listenerUserId: userId, format }),
+	)
+	await deleteRedisKeys(...podcastFeedCacheKeys, ...podcastFeedTokenCheckKeys)
 }
 
 /**
@@ -115,14 +157,20 @@ export async function loadPodcastFeedTokenListener(podcastFeedToken: string): Pr
 }
 
 /**
- * Loads a Topic's rendered feed from Redis, or builds the feed and caches it if it is within the episode limit.
+ * Loads a Topic's rendered podcast feed or film feed from Redis, or builds the feed and caches it if it is within the
+ * episode limit. The film feed lists only the podcast episodes with a ready film.
  */
 export async function loadRenderedPodcastFeed({
 	topic,
 	listener,
+	format = "audio",
 }: LoadRenderedPodcastFeedOptions): Promise<RenderedPodcastFeed> {
 	// return the cached feed if there is one
-	const podcastFeedCacheKey = toPodcastFeedCacheKey({ topicId: topic.id, listenerUserId: listener?.userId ?? null })
+	const podcastFeedCacheKey = toPodcastFeedCacheKey({
+		topicId: topic.id,
+		listenerUserId: listener?.userId ?? null,
+		format,
+	})
 	const cachedPodcastFeed = await readRedisJson<RenderedPodcastFeed>(podcastFeedCacheKey)
 	if (cachedPodcastFeed) {
 		return cachedPodcastFeed
@@ -148,8 +196,12 @@ export async function loadRenderedPodcastFeed({
 		]
 	})
 
+	// the film feed keeps the podcast episodes with a ready film
+	const formatPodcastFeedEpisodes =
+		format === "video" ? await toFilmPodcastFeedEpisodes(podcastFeedEpisodes) : podcastFeedEpisodes
+
 	// build the feed, and keep the previous build's modified time if the feed's etag is unchanged
-	const builtPodcastFeed = toRenderedPodcastFeed({ topic, listener }, podcastFeedEpisodes)
+	const builtPodcastFeed = toRenderedPodcastFeed({ topic, listener, format }, formatPodcastFeedEpisodes)
 	const podcastFeedVersionKey = `${podcastFeedCacheKey}:version`
 	const previousPodcastFeedVersion = await readRedisJson<Omit<RenderedPodcastFeed, "xml">>(podcastFeedVersionKey)
 	const lastModifiedMs =
@@ -161,7 +213,7 @@ export async function loadRenderedPodcastFeed({
 	// save the etag with its modified time, and cache a feed of no more podcast episodes than the limit
 	const podcastFeedVersion = { etag: renderedPodcastFeed.etag, lastModifiedMs }
 	await saveRedisJson({ key: podcastFeedVersionKey, value: podcastFeedVersion, ttlMs: PODCAST_FEED_VERSION_TTL_MS })
-	if (podcastFeedEpisodes.length <= MAX_CACHED_PODCAST_FEED_EPISODES) {
+	if (formatPodcastFeedEpisodes.length <= MAX_CACHED_PODCAST_FEED_EPISODES) {
 		await saveRedisJson({ key: podcastFeedCacheKey, value: renderedPodcastFeed, ttlMs: PODCAST_FEED_CACHE_TTL_MS })
 	}
 	return renderedPodcastFeed
@@ -201,19 +253,35 @@ export function toPodcastFeedResponse({
 	return context.body(renderedPodcastFeed.xml, 200, { ...contentTypeHeader, ...validatorHeaders, ...routeHeaders })
 }
 
+// keep the podcast episodes with a ready film, each with its film's size
+async function toFilmPodcastFeedEpisodes(podcastFeedEpisodes: PodcastFeedEpisode[]): Promise<PodcastFeedEpisode[]> {
+	// the ready films' sizes, then each podcast episode that has one
+	const { readyTopicPodcastEpisodeVideos } = await loadTopicPodcastEpisodeVideos(
+		podcastFeedEpisodes.map((podcastFeedEpisode) => podcastFeedEpisode.id),
+	)
+	return podcastFeedEpisodes.flatMap((podcastFeedEpisode) => {
+		const readyTopicPodcastEpisodeVideo = readyTopicPodcastEpisodeVideos.get(podcastFeedEpisode.id)
+		return readyTopicPodcastEpisodeVideo
+			? [{ ...podcastFeedEpisode, videoByteSize: readyTopicPodcastEpisodeVideo.byteSize }]
+			: []
+	})
+}
+
 // a feed's xml with the etag and the modified time that a conditional request compares
 function toRenderedPodcastFeed(
-	{ topic, listener }: LoadRenderedPodcastFeedOptions,
+	{ topic, listener, format }: LoadRenderedPodcastFeedOptions,
 	podcastFeedEpisodes: PodcastFeedEpisode[],
 ): RenderedPodcastFeed {
 	// a listener's own feed links its files at paths after the token and is blocked from podcast directories
+	const publicFeedPath = format === "video" ? toPodcastVideoFeedPath(topic.id) : toPodcastFeedPath(topic.id)
 	const podcastFeedXml = toPodcastFeedXml({
 		appUrl: appUrl(),
 		topic,
-		feedUrl: listener ? toListenerPodcastFeedUrl(listener.token) : `${appUrl()}${toPodcastFeedPath(topic.id)}`,
+		feedUrl: listener ? toListenerPodcastFeedUrl(listener.token, format) : `${appUrl()}${publicFeedPath}`,
 		podcastEpisodeFilesBaseUrl: `${appUrl()}/api${listener ? `/podcast-feeds/${listener.token}` : ""}/episodes`,
 		isBlockedFromPodcastDirectories: listener !== null,
 		podcastEpisodes: podcastFeedEpisodes,
+		format,
 	})
 
 	// the feed's etag, and this build's time rounded down to the second like an http date
@@ -224,9 +292,10 @@ function toRenderedPodcastFeed(
 	}
 }
 
-// the url of a listener's own feed
-function toListenerPodcastFeedUrl(podcastFeedToken: string): string {
-	return `${appUrl()}/podcast-feeds/${podcastFeedToken}.xml`
+// the url of a listener's own podcast feed or film feed, which share the one feed token
+function toListenerPodcastFeedUrl(podcastFeedToken: string, format: PodcastEpisodeFormat = "audio"): string {
+	const feedFolder = format === "video" ? "podcast-video-feeds" : "podcast-feeds"
+	return `${appUrl()}/${feedFolder}/${podcastFeedToken}.xml`
 }
 
 // the key that a token's check is cached under

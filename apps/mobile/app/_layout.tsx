@@ -6,6 +6,7 @@ import { authClient } from "@carlnotes/client/authClient"
 import { configureVoiceClient } from "@carlnotes/client/voiceClient"
 import { isAdminRole } from "@carlnotes/contracts/enums"
 import { toTolerantResponseSchema } from "@carlnotes/contracts/tolerantReads"
+import { useCommentMentionsLoad } from "@carlnotes/core/hooks/useCommentMentionsLoad"
 import { reloadChatRooms, useUpdateBadges } from "@carlnotes/core/hooks/useUpdateBadges"
 import { useAppUpdateRequirement } from "@carlnotes/core/stores/appUpdateStore"
 import { activateChatAccount } from "@carlnotes/core/stores/chatConversationStore"
@@ -266,6 +267,10 @@ function ScreenViewRecorder() {
 	useEffect(() => {
 		captureVisit(pathname)
 	}, [pathname])
+
+	// read the user's unseen Comment Mentions as each screen loads, and never on a timer
+	const { data: session } = authClient().useSession()
+	useCommentMentionsLoad(session?.user.id, pathname)
 	// flush memory-backed events when the app backgrounds
 	useEffect(() => {
 		const subscription = AppState.addEventListener("change", (state) => {

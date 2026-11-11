@@ -16,14 +16,12 @@ import { deletePodcastFeedCache } from "@carlnotes/db/podcastFeedCache"
 import { podcastEpisodeChapters, podcastEpisodes } from "@carlnotes/db/schema/podcast"
 import { topics } from "@carlnotes/db/schema/topics"
 import { removePodcastEpisode } from "@carlnotes/pipeline/podcast/removePodcastEpisode"
-import { trackEvent } from "@carlnotes/server/analytics"
 import { zValidator } from "@hono/zod-validator"
 import { and, eq } from "drizzle-orm"
 import { Hono } from "hono"
 import { isAllowed } from "../authorization"
-import { countPodcastEpisodeListen, countWithinRateLimit, toRequestSender } from "../counts/viewerCounts"
 import { type AppEnv, currentUser, toAnalyticsProperties } from "../currentUser"
-import { PRIVATE_NO_STORE_CACHE_CONTROL } from "../edgeCache"
+import { PRIVATE_NO_STORE_CACHE_CONTROL, purgeProfileAtEdge } from "../edgeCache"
 import { toObjectionableCategory, toObjectionableContentResponse } from "../moderation"
 import { toPodcastEpisodePreview } from "../share/podcastEpisodeImage"
 import { toCachedPodcastEpisodePreviewPng, toPreviewPngResponse } from "../share/preview"
@@ -33,10 +31,10 @@ import { canRateTopic } from "../topic/findingPermissions"
 import { toTopicGateResponse } from "../topic/helpers"
 import { clearHomeCaches } from "../topic/homeOrder"
 import { loadPodcastEpisodePage, loadSeasonPodcastEpisodes } from "./helpers"
-import { readPlayToken } from "./playTokens"
 import { loadPodcastEpisodeEditor } from "./podcastEpisodeEditor"
 import {
-	isFirstAudioRequest,
+	countPodcastEpisodePlayRequest,
+	loadPodcastEpisodePlayRequest,
 	toPodcastEpisodeAudioResponse,
 	toPodcastEpisodeChaptersResponse,
 	toPodcastEpisodeTranscriptResponse,
@@ -46,7 +44,6 @@ import {
 	loadAccessiblePodcastEpisode,
 	loadPublishedPodcastEpisode,
 	loadPublishedPodcastEpisodeById,
-	toPodcastEpisodeAnalyticsProperties,
 } from "./podcastEpisodeRows"
 import { loadPodcastEpisode } from "./podcastEpisodeShapes"
 
@@ -128,45 +125,22 @@ export const podcastEpisodesRoute = new Hono<AppEnv>()
 		}
 		return context.json(await loadPodcastEpisode({ ...accessiblePodcastEpisode, userId }))
 	})
-	// the stable audio url. hono runs this route for a HEAD too and drops the body. an MCP view's audio element sends no
-	// session, so its play token names the caller instead, and a token that names none reads as missing
+	// the stable audio url. hono runs this route for a HEAD too and drops the body
 	.get("/episodes/:id/audio.mp3", async (context) => {
-		// keep denied and successful sources out of shared caches
+		// keep denied and successful sources out of shared caches, and read the listener and the podcast episode
 		context.header("Cache-Control", PRIVATE_NO_STORE_CACHE_CONTROL)
 		context.header("Vary", "Accept")
-		const podcastEpisodeId = context.req.param("id")
-		const playToken = context.req.query("play")
-		const playTokenCaller = playToken ? readPlayToken({ playToken, podcastEpisodeId }) : null
-		if (playToken && !playTokenCaller) {
+		const podcastEpisodePlayRequest = await loadPodcastEpisodePlayRequest(context)
+		if (!podcastEpisodePlayRequest) {
 			return context.json({ error: "not found" }, 404)
 		}
 
-		// the listener is the token's caller, else the session's user, and the podcast episode is read under that listener's access
-		const listenerUserId = playTokenCaller ? playTokenCaller.userId : currentUser(context)
-		const accessiblePodcastEpisode = await loadAccessiblePodcastEpisode({ userId: listenerUserId, podcastEpisodeId })
-		if (!accessiblePodcastEpisode) {
-			return context.json({ error: "not found" }, 404)
+		// count a GET of audio that exists
+		const { podcastEpisodeRow } = podcastEpisodePlayRequest.accessiblePodcastEpisode
+		if (context.req.method === "GET" && podcastEpisodeRow.audioKey) {
+			countPodcastEpisodePlayRequest(context, podcastEpisodePlayRequest, "audio")
 		}
-
-		// count the listener of a web play or a podcast app's download within the listen rate limit, without the redirect
-		// waiting on the count
-		if (context.req.method === "GET" && accessiblePodcastEpisode.podcastEpisodeRow.audioKey) {
-			const requestSender = toRequestSender(context, listenerUserId ?? undefined)
-			void countWithinRateLimit({
-				requestSender,
-				rateLimitName: "podcast-listen",
-				count: () => countPodcastEpisodeListen(requestSender, podcastEpisodeId),
-			})
-
-			// a play token's first audio request reports the play
-			if (playTokenCaller?.userId && isFirstAudioRequest(context.req.header("range"))) {
-				trackEvent("episode_played", playTokenCaller.userId, {
-					entryPoint: "mcp",
-					...toPodcastEpisodeAnalyticsProperties(accessiblePodcastEpisode.topic, podcastEpisodeId),
-				})
-			}
-		}
-		return toPodcastEpisodeAudioResponse(context, accessiblePodcastEpisode.podcastEpisodeRow)
+		return toPodcastEpisodeAudioResponse(context, podcastEpisodeRow)
 	})
 	// the chapters file that a public feed's items name
 	.get("/episodes/:id/chapters.json", async (context) => {
@@ -288,8 +262,9 @@ export const podcastEpisodesRoute = new Hono<AppEnv>()
 			return context.json({ error: "not found" }, 404)
 		}
 		await deletePodcastFeedCache(podcastEpisodeTopicRow.topic.id)
-		// a home podcast episode left the home
+		// a home podcast episode left the home, and the podcast episode left its topic owner's profile page
 		await clearHomeCaches()
+		await purgeProfileAtEdge(podcastEpisodeTopicRow.topic.ownerId)
 		return context.json({ ok: true })
 	})
 	// an editor's change to a podcast episode's title and description, after the text moderation

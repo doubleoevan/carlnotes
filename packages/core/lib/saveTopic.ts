@@ -87,7 +87,7 @@ export async function saveTopic<Attachment>({
 	if (fields.visibility !== "private") {
 		await sendUsernameInvites(topicId, fields.usernameInvites).catch((error) => {
 			console.error("username invites failed", error)
-			onWarning("The topic saved, but its invitations didn't go out.")
+			onWarning("The topic saved, but its invites didn't go out.")
 		})
 		// the team change, after the invites
 		await topicTeam.assignTopicTeam(topicId)

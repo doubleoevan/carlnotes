@@ -1,9 +1,31 @@
 import type { Meta, StoryObj } from "@storybook/react-native"
+import { type ComponentRef, useRef } from "react"
 import { ScrollView } from "react-native"
 import { STORY_TOPIC_FEED_HANDLERS } from "@/components/topic/topicFeedStories"
-import { STORY_PODCAST_EPISODE, STORY_TOPIC_PAGE, TopicPageStoryProvider } from "@/components/topic/topicPageStories"
+import {
+	STORY_FILM_TOPIC_PAGE,
+	STORY_PODCAST_EPISODE,
+	STORY_TOPIC_PAGE,
+	TopicPageStoryProvider,
+} from "@/components/topic/topicPageStories"
 import { PodcastEpisodePlayer } from "./PodcastEpisodePlayer"
 import { PodcastEpisodesCard } from "./PodcastEpisodesCard"
+import { TopicPodcastEpisodeVideoSection } from "./TopicPodcastEpisodeVideoSection"
+
+// Topic Cinema above Coffee Break films, which a row's play scrolls to
+function FilmsWithTopicCinemaStory() {
+	const scrollViewRef = useRef<ComponentRef<typeof ScrollView>>(null)
+	return (
+		<ScrollView ref={scrollViewRef} className="w-full" contentContainerClassName="px-4">
+			<TopicPodcastEpisodeVideoSection
+				topic={STORY_FILM_TOPIC_PAGE}
+				onVideoRenderingPoll={() => {}}
+				scrollViewRef={scrollViewRef}
+			/>
+			<PodcastEpisodesCard topic={STORY_FILM_TOPIC_PAGE} format="video" />
+		</ScrollView>
+	)
+}
 
 // the complete fixture exercises the matching web card without account requests
 const meta: Meta<typeof PodcastEpisodesCard> = {
@@ -44,6 +66,8 @@ export const SeasonsAndPages: Story = {
 		},
 	},
 }
+export const Films: Story = { args: { topic: STORY_FILM_TOPIC_PAGE, format: "video" } }
+export const FilmsWithTopicCinema: Story = { render: () => <FilmsWithTopicCinemaStory /> }
 export const Chapters: Story = {
 	render: () => <PodcastEpisodePlayer topic={STORY_TOPIC_PAGE} topicFeedHandlers={STORY_TOPIC_FEED_HANDLERS} />,
 }

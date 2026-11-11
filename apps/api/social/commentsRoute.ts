@@ -31,7 +31,7 @@ import { resolveSocialTarget, toSocialReader } from "./socialTargets"
 export const commentsRoute = new Hono<AppEnv>()
 	.get("/comments", socialReadRateLimiter, zValidator("query", commentThreadQuery), async (context) => {
 		// one page of the thread, for anyone who may open the social target
-		const { kind, id, cursor } = context.req.valid("query")
+		const { kind, id, cursor, commentId } = context.req.valid("query")
 		const userId = currentUser(context)
 		const resolvedSocialTarget = await resolveSocialTarget(userId, { kind, id })
 		if (!resolvedSocialTarget) {
@@ -41,7 +41,7 @@ export const commentsRoute = new Hono<AppEnv>()
 		// the page as this reader sees it
 		const { topic } = resolvedSocialTarget
 		const reader = await toSocialReader(userId, topic)
-		return context.json(await loadCommentPage({ reader, target: { kind, id }, topic, cursor }))
+		return context.json(await loadCommentPage({ reader, target: { kind, id }, topic, cursor, commentId }))
 	})
 	.get("/comments/:id/replies", socialReadRateLimiter, zValidator("query", commentRepliesQuery), async (context) => {
 		// one page of a comment's replies, for anyone who may open what the comment hangs on
@@ -159,6 +159,7 @@ function toCommentWriteResponse(context: AppContext, commentWriteResult: Comment
 			return context.json({
 				ok: true as const,
 				weekCommentCount: commentWriteResult.weekCommentCount,
+				commentCount: commentWriteResult.commentCount,
 				sharedCommentSlots: commentWriteResult.sharedCommentSlots,
 			})
 		// a missing comment, and one the user may not change

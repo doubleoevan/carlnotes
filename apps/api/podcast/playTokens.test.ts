@@ -37,6 +37,13 @@ test("a token for another episode, an expired token, and a forged one name no ca
 	expect(readPlayToken({ playToken: "not-a-token", podcastEpisodeId: "episode-1" })).toBeNull()
 })
 
+test("a Topic Post discussion's token plays that post alone, and never a podcast episode of the same id", () => {
+	const playToken = toPlayToken({ topicPostId: "post-1", userId: "user-1" })
+	expect(readPlayToken({ playToken, topicPostId: "post-1" })).toEqual({ userId: "user-1" })
+	expect(readPlayToken({ playToken, topicPostId: "post-2" })).toBeNull()
+	expect(readPlayToken({ playToken, podcastEpisodeId: "post-1" })).toBeNull()
+})
+
 test("the audio route reads the episode as the token's user, and a bad token reads as missing", async () => {
 	// no episode is found, so the route stops after the access read
 	const loadAccessiblePodcastEpisodeSpy = spyOn(podcastEpisodeRows, "loadAccessiblePodcastEpisode").mockResolvedValue(

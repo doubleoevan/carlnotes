@@ -1,7 +1,14 @@
 import { expect, test } from "bun:test"
 import type { ChatRoom } from "@carlnotes/contracts/chat"
 import { toPrivateChatId, toPrivateChatPage } from "@carlnotes/core/lib/chatConversations"
-import { toChatHref, toChatRoomHref, toInitialChatId, toNewTopicChatHref, toNewTopicChatId } from "./chatNavigation"
+import {
+	toChatHref,
+	toChatRoomHref,
+	toChatScreenTopicPost,
+	toInitialChatId,
+	toNewTopicChatHref,
+	toNewTopicChatId,
+} from "./chatNavigation"
 
 test("the global launcher retains Topic and Team note context", () => {
 	// context-free pages use the same global destination
@@ -12,6 +19,43 @@ test("the global launcher retains Topic and Team note context", () => {
 	expect(toChatHref("/topics/topic-one/notes/note-one")).toBe("/topics/topic-one/chat")
 	expect(toChatHref("/teams/team-one/notes/note-one")).toBe("/teams/team-one/chat")
 	expect(toChatHref("/profiles/reader")).toEqual({ pathname: "/chat", params: { profileUserId: "reader" } })
+})
+
+// the chat launcher on a Topic Post's screen opens the topic's private chat, which asks about that post
+test("the launcher opens the chat about a Topic Post on that post's screen alone", () => {
+	const chatTopicPost = { id: "post-one", topicId: "topic-one" }
+	const topicPostChatHref = toChatHref("/topics/topic-one/posts/post-one", chatTopicPost)
+	expect(topicPostChatHref).toEqual({
+		pathname: "/topics/[topicId]/chat",
+		params: { topicId: "topic-one", privateChat: "true" },
+	})
+	expect(toInitialChatId({ rooms: [], topicId: "topic-one", chatTeamId: "team-one", isPrivateChat: true })).toEqual({
+		kind: "private",
+		topicId: "topic-one",
+	})
+
+	// a draft's screen names no post, and a screen opened above the post's keeps its own chat
+	expect(toChatHref("/topics/topic-one/posts/post-one")).toBe("/topics/topic-one/chat")
+	expect(toChatHref("/topics/topic-one/posts/post-two", chatTopicPost)).toBe("/topics/topic-one/chat")
+	expect(toChatHref("/topics/topic-one", chatTopicPost)).toBe("/topics/topic-one/chat")
+	expect(toChatHref("/", chatTopicPost)).toBe("/chat")
+})
+
+// a post's screen stays mounted under the screens opened above it, and still names its post
+test("a chat screen asks about the open Topic Post only if that post's screen opened it", () => {
+	const chatTopicPost = { id: "post-one", topicId: "topic-one", title: "Dialing in", path: "/topics/topic-one/posts/1" }
+
+	// the launcher on the post's screen opens the topic's private chat, which asks about the post
+	const topicPostChatPost = toChatScreenTopicPost(chatTopicPost, true)
+	expect(toPrivateChatPage({ kind: "private", topicId: "topic-one" }, topicPostChatPost)).toEqual({
+		topicId: "topic-one",
+		topicPost: { id: "post-one", title: "Dialing in", path: "/topics/topic-one/posts/1" },
+	})
+
+	// the launcher on the topic's screen above the post's opens the topic's chat with no post
+	const topicChatPost = toChatScreenTopicPost(chatTopicPost, false)
+	expect(topicChatPost).toBeNull()
+	expect(toPrivateChatPage({ kind: "private", topicId: "topic-one" }, topicChatPost)).toEqual({ topicId: "topic-one" })
 })
 
 // a page badge opens the chat room its team names, a topic's in that team or a team's own

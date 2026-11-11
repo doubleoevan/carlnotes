@@ -1,11 +1,12 @@
 // the topic image reads: a topic's current image and the image urls of many topics at once
 
-import { type TopicImageUrls, toTopicImageUrls } from "@carlnotes/contracts/topicImages"
+import { type TopicImageUrls, toTopicImageUrls, toTopicPostImageUrls } from "@carlnotes/contracts/topicImages"
 import { and, eq, gt, inArray } from "drizzle-orm"
 import { OPEN_OR_CLEARED_REPORT_FILTER } from "./contentFilters"
 import { db } from "./index"
 import { reports } from "./schema/reports"
 import { topicImages } from "./schema/topicImages"
+import { topicPosts } from "./schema/topicPosts"
 
 // a topic's current image row
 export type TopicImageRow = typeof topicImages.$inferSelect
@@ -33,20 +34,71 @@ export async function loadTopicImageForUser(
 	}
 
 	// the user's report on this image, if it came after the image's last change
+	const isReportedByUser = await isImageReportedByUser({
+		userId,
+		subjectKind: "topicImage",
+		subjectId: topicId,
+		changedAt: topicImage.updatedAt,
+	})
+	return { topicImage, isReportedByUser }
+}
+
+// an image's report read: the reporter, the image's kind and subject, and when the image last changed, or null for an
+// image with no recorded change
+type IsImageReportedByUserOptions = {
+	userId: string
+	subjectKind: "topicImage" | "topicPostImage"
+	subjectId: string
+	changedAt: Date | null
+}
+
+/**
+ * Returns whether the user reported an image since it last changed: a report of theirs, open or cleared.
+ */
+export async function isImageReportedByUser({
+	userId,
+	subjectKind,
+	subjectId,
+	changedAt,
+}: IsImageReportedByUserOptions): Promise<boolean> {
 	const [report] = await db
 		.select({ id: reports.id })
 		.from(reports)
 		.where(
 			and(
 				eq(reports.reporterUserId, userId),
-				eq(reports.subjectKind, "topicImage"),
-				eq(reports.subjectId, topicId),
+				eq(reports.subjectKind, subjectKind),
+				eq(reports.subjectId, subjectId),
 				OPEN_OR_CLEARED_REPORT_FILTER,
-				gt(reports.createdAt, topicImage.updatedAt),
+				changedAt ? gt(reports.createdAt, changedAt) : undefined,
 			),
 		)
 		.limit(1)
-	return { topicImage, isReportedByUser: Boolean(report) }
+	return Boolean(report)
+}
+
+/**
+ * Returns each Topic Post's image urls by post id, or null for a post with no image, leaving out the posts that are
+ * gone.
+ */
+export async function loadTopicPostImageUrlsByPost(
+	topicPostIds: string[],
+): Promise<Map<string, TopicImageUrls | null>> {
+	if (topicPostIds.length === 0) {
+		return new Map()
+	}
+
+	// map each post's hash to its urls
+	const topicPostRows = await db
+		.select({ id: topicPosts.id, imageHash: topicPosts.imageHash })
+		.from(topicPosts)
+		.where(inArray(topicPosts.id, topicPostIds))
+	return new Map(
+		topicPostRows.map((topicPostRow) => [
+			topicPostRow.id,
+			topicPostRow.imageHash ? toTopicPostImageUrls(topicPostRow.id, topicPostRow.imageHash) : null,
+		]),
+	)
 }
 
 /**

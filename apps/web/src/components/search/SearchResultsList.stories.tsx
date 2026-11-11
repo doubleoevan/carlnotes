@@ -32,7 +32,7 @@ const meta = {
 export default meta
 type Story = StoryObj<typeof meta>
 
-// a visitor's first page of twelve results, one row of each kind twice over, with the numbered pages under them
+// a visitor's first page of twelve results, ten rows over every kind, with the numbered pages under them
 export const Default: Story = {}
 
 // the sixth page of a long search, where the page row leaves out the pages between
@@ -58,10 +58,10 @@ export const BookmarkedFinding: Story = {
 	},
 }
 
-// five results, one of each kind, which fit one page and show no page row
+// six results, one of each kind, which fit one page and show no page row
 export const OnePage: Story = {
 	args: {
-		searchPage: { ...SEARCH_PAGE_FIXTURE, rows: SEARCH_ROW_FIXTURES, rowCount: 5, page: 1, pageCount: 1, pageSize: 10 },
+		searchPage: { ...SEARCH_PAGE_FIXTURE, rows: SEARCH_ROW_FIXTURES, rowCount: 6, page: 1, pageCount: 1, pageSize: 10 },
 	},
 }
 

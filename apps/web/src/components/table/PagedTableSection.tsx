@@ -1,3 +1,4 @@
+import { toCountLabel } from "@carlnotes/core/lib/labels"
 import { cn } from "@carlnotes/nightshift/classNames"
 import type * as React from "react"
 import { CollapsibleSection } from "@/components/topic/CollapsibleSection"
@@ -6,11 +7,13 @@ import type { RowSort, SortValue } from "./SortableHeader"
 import { TableCard } from "./TableCard"
 import { ScriptedTablePagination, toScriptedPaginationCardClass, usePaginatedRowSort } from "./TablePagination"
 
-// the section's key and title, whether a divider shows under it while closed, its rows and each sortable column's value, the table's own
-// classes, and how to render the column headings, a row's cells, and a row's key
+// the section's key and title, the noun its count at the far right counts, whether a divider shows under it while
+// closed, its rows and each sortable column's value, the table's own classes, and how to render the column headings, a
+// row's cells, and a row's key
 type PagedTableSectionProps<Row> = {
 	value: string
 	title: string
+	countNoun?: string
 	hasClosedDivider?: boolean
 	rows: Row[]
 	rowSortValues: Record<string, (row: Row) => SortValue>
@@ -27,6 +30,7 @@ type PagedTableSectionProps<Row> = {
 export function PagedTableSection<Row>({
 	value,
 	title,
+	countNoun,
 	hasClosedDivider,
 	rows,
 	rowSortValues,
@@ -45,7 +49,12 @@ export function PagedTableSection<Row>({
 		return null
 	}
 	return (
-		<CollapsibleSection value={value} title={title} hasClosedDivider={hasClosedDivider}>
+		<CollapsibleSection
+			value={value}
+			title={title}
+			countLabel={countNoun && toCountLabel(rows.length, countNoun)}
+			hasClosedDivider={hasClosedDivider}
+		>
 			<TableCard className={toScriptedPaginationCardClass(rows.length)}>
 				<div className={TABLE_SCROLL_CLASS}>
 					<table className={cn(TABLE_CLASS, tableClassName)}>

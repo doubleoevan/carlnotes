@@ -1,14 +1,17 @@
+import { authClient } from "@carlnotes/client/authClient"
+import { toSessionProfileIdentity } from "@carlnotes/contracts/profiles"
 import { UserMenuItems as SharedUserMenuItems, type UserMenuElements } from "@carlnotes/core/components/UserMenuItems"
 import { useUserMenuUpdateBadges } from "@carlnotes/core/hooks/useUpdateCounts"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { useLocation } from "@tanstack/react-router"
-import { Activity, BookOpen, CircleUserRound, Coffee, Columns3Cog, LogOut, ShieldUser, User, Users } from "lucide-react"
+import { Activity, BookOpen, Coffee, Columns3Cog, LogOut, ShieldUser, User, Users } from "lucide-react"
 import { useState } from "react"
 import { UserAvatar } from "@/components/branding/UserAvatar"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { MenuTriggerUpdateCountBadge, UpdateCountBadge } from "@/components/common/UpdateCountBadge"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/primitives/popover"
 import { signOutAndReload } from "@/components/session/signOut"
+import { CommentMentionMenuRow } from "@/components/social/CommentMentionBadge"
 import { type TopicTutorialVideoOpener, TopicTutorialVideoOption } from "@/components/topic/TopicTutorialVideoDialog"
 import { MENU_DIVIDER_CLASS, MENU_OPTION_CLASS, MENU_OPTION_SELECTED_CLASS } from "@/lib/styleClasses"
 
@@ -90,17 +93,23 @@ export function UserMenuItems({
 	// what the last poll read, split into each row's own. each row sums its own into one badge
 	const userMenuUpdateBadges = useUserMenuUpdateBadges()
 
-	// the open page's row shows the selected tint
+	// the open page's row shows the selected tint, and the Café row names the signed-in user
 	const pathname = useLocation({ select: (location) => location.pathname })
+	const { data: session } = authClient().useSession()
+	if (!session) {
+		return null
+	}
 	return (
 		<SharedUserMenuItems
 			elements={USER_MENU_ELEMENTS}
 			userId={userId}
+			username={toSessionProfileIdentity(session.user).username}
 			isAdmin={isAdmin}
 			pathname={pathname}
 			onNavigate={onNavigate}
 			onPlayTutorial={onPlayTopicTutorialVideo}
 			onSignOut={onSignOut}
+			mentionsRow={<CommentMentionMenuRow onNavigate={onNavigate} />}
 			renderBadge={(label) => (
 				<UpdateCountBadge
 					{...userMenuUpdateBadges[label]}
@@ -112,10 +121,27 @@ export function UserMenuItems({
 	)
 }
 
+// the Café row's icon: the user's own avatar, drawn a size up so its circle matches the other icons
+function CafeMenuIcon({ className }: { className?: string }) {
+	const { data: session } = authClient().useSession()
+	if (!session) {
+		return null
+	}
+	const { userId, username, avatarVersion } = toSessionProfileIdentity(session.user)
+	return (
+		<UserAvatar
+			userId={userId}
+			username={username}
+			avatarVersion={avatarVersion}
+			className={cn(className, "-m-0.5 size-5")}
+		/>
+	)
+}
+
 // keep DOM navigation, badges, and tutorial rendering in stable platform adapters
 const MENU_ICONS = {
 	Topics: Coffee,
-	Profile: CircleUserRound,
+	Café: CafeMenuIcon,
 	Teams: Users,
 	Activity,
 	Account: User,
@@ -124,7 +150,7 @@ const MENU_ICONS = {
 	Admin: ShieldUser,
 }
 const USER_MENU_ELEMENTS: UserMenuElements = {
-	Link: ({ label, href, isSelected, onSelect, children }) => {
+	Link: ({ label, text, href, isSelected, onSelect, children }) => {
 		const Icon = MENU_ICONS[label as keyof typeof MENU_ICONS]
 		return (
 			<AnchorLink
@@ -135,7 +161,7 @@ const USER_MENU_ELEMENTS: UserMenuElements = {
 				className={cn(MENU_OPTION_CLASS, isSelected && MENU_OPTION_SELECTED_CLASS)}
 			>
 				<Icon className="size-4" />
-				<span className="flex-1">{label}</span>
+				<span className="min-w-0 flex-1 truncate">{text ?? label}</span>
 				{children}
 			</AnchorLink>
 		)

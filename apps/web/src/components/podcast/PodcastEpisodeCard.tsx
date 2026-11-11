@@ -1,5 +1,6 @@
-// the web podcast episode card: the shared card over a browser link, the topic's image, and the play button that
-// plays the episode where the card is
+// the web podcast episode card: the shared card over a browser link, the topic's image, the play button that plays
+// the episode where the card is, and a film card's play button over its image, which opens its film in a dialog
+
 import {
 	type PodcastEpisodeCardElements,
 	type PodcastEpisodeCardProps,
@@ -9,9 +10,10 @@ import { AnchorLink } from "@/components/common/AnchorLink"
 import { CARD_ELEMENTS } from "@/components/common/cardElements"
 import { STRETCHED_CARD_LINK_CLASS } from "@/lib/styleClasses"
 import { PodcastEpisodePlayButton } from "./PodcastEpisodePlayButton"
+import { PodcastEpisodeVideoButton } from "./PodcastEpisodeVideoButton"
 
 // the browser elements over the shared card: the title as the link stretched over the whole card, the text, and the
-// play button above the link
+// play button and a film card's play button above the link
 const ELEMENTS: PodcastEpisodeCardElements = {
 	...CARD_ELEMENTS,
 	Title: ({ path, label, onOpen, children }) => (
@@ -26,6 +28,7 @@ const ELEMENTS: PodcastEpisodeCardElements = {
 			<PodcastEpisodePlayButton podcastEpisode={podcastEpisode} size="default" />
 		</div>
 	),
+	VideoButton: PodcastEpisodeVideoButton,
 }
 
 /**

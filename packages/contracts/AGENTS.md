@@ -32,6 +32,7 @@ shared Comment's body holds. `socialRouteContracts.ts` holds the routes the soci
 at the package root, one per domain, each imported by its own path (`@carlnotes/contracts/chat`): `chat.ts`, with the
 notes a stored question ends with in `chatQuestionNotes.ts` and the chat turn contracts in `chatTurns.ts` (the memory
 and history limits, the reply stream line, the tool calls a turn leaves, and the sent tool calls), `teams.ts`,
+with a team's identity apart in `teamIdentity.ts` so the card contracts in `home.ts` and the team page both load it,
 `invites.ts`, `activity.ts`, `profiles.ts`, `profilePage.ts`, `admin.ts`, `search.ts`, `findings.ts`, `podcast.ts`,
 `podcastEpisodePage.ts`, `topics.ts`, `notes.ts`, `pageHead.ts`, `signupCta.ts`, `viewerCounts.ts`, a topic's and a
 podcast episode's counts, and `attachmentTypes.ts`, the file types the chat and topic attachment pickers offer on both
@@ -89,7 +90,8 @@ episode, summary, and chapter fixtures the contracts, core, web, and mobile test
   boundary instead of silently. `payloads.ts` imports the contracts for their constants, and the contracts import only
   types back, so the two never load each other's values. A contract module loads another's values only one way:
   `chat.ts`, `findings.ts`, and `invites.ts` load `profiles.ts`, `profiles.ts` loads `avatars.ts` and `podcast.ts`,
-  `profilePage.ts` loads `chat.ts` and `profiles.ts`, `activity.ts` loads `chat.ts`, `invites.ts`, `plans.ts`,
+  `profilePage.ts` loads `chat.ts` and `profiles.ts`, `teams.ts` loads `home.ts`, `profiles.ts`,
+  `teamIdentity.ts`, and `topicPosts.ts`, `home.ts` loads `teamIdentity.ts` and `topicPosts.ts`, `activity.ts` loads `chat.ts`, `invites.ts`, `plans.ts`,
   `podcast.ts`, and `profiles.ts`, `topics.ts` loads `podcast.ts`,
   `findings.ts`, `chat.ts`, `invites.ts`, and `profiles.ts`, `podcastEpisodePage.ts` loads `topics.ts`,
   `podcast.ts`, and `findings.ts`, `routeShapes.ts` loads `chat.ts`, `invites.ts`, `payloads.ts`, and
@@ -145,6 +147,33 @@ The read-only Personal sources email response returns the environment-configured
 
 `topicImages.ts` holds the topic image sizes' pixels, the original's size, the upload limits, the urls' shape and
 paths, and the regenerate, render, upload, and quota contracts, with the size, origin, render kind, and render status
-enums in `enums.ts` and `imageRegenerationLimit` per plan in `plans.ts`. `home.ts` holds the home payload: the Home topics and Home podcasts
-counts, the topic and podcast episode card shapes, and a user's topics. `podcast.ts` adds `homePodcastEpisode`, a
+enums in `enums.ts` and `imageRegenerationLimit` per plan in `plans.ts`. `home.ts` holds the home payload: the Home topics, Home podcasts, and Home posts
+counts, the topic and podcast episode card shapes, the home's Topic Post cards, and a user's topics. `podcast.ts` adds `homePodcastEpisode`, a
 pinned podcast episode as the console and the podcast episode page's rank dialog list it.
+
+`topicPosts.ts` holds a Topic Post's card and page, its save payload, the title and word limits, the word count, the
+body's plain paragraphs, and how a write ends for its editor. A topic's page and a profile's each include their
+Topic Post cards, and a podcast episode card includes its reaction count. A profile's payload holds every Topic
+Post card of its person in `profileTopicPosts`, the pinned ones first, with how many of the first are pinned, each
+card with whether its topic is public, and a person's pinned Topic Posts have no limit. A team page's holds every
+published Topic Post card of its topics in `topicPostCards`, the pinned ones first, and their film cards in the
+optional `topicPodcastEpisodeVideoCards`. The home's payload holds `homeTopicPosts` and the optional `newestTopicPosts`, the
+last `NEW_TOPIC_POST_DAYS` days' posts.
+`homeTopicPostsResponse` is the pinned Topic Posts and the ones a pin may name, as an admin's home rank dialog lists
+them.
+
+`topicPosts.ts` also holds a post's discussion as its page reads it, with its recording's `transcript` in
+`podcastEpisodeTranscriptTurn`s from `podcast.ts`, the reader's discussion regenerations this
+month, the regenerate payload with its note's limit, `TOPIC_POST_DISCUSSION_TITLE`, and the shape the podcast player
+plays a discussion in: `toTopicPostDiscussionPodcastEpisode`, `toDiscussionTopicPostId` for the player's id, and
+`toTopicPostDiscussionAudioPath`. `visitAnalytics.ts` holds `toPlayerVisitEvent`, which reports a discussion's play
+as `social_topic_post_discussion_play`. `reports.ts` has the `topicPostImage` subject kind and
+`isImageReportSubjectKind`. `chat.ts` gives a stored chat turn its `topicPost`, and `payloads.ts` lets a topic chat
+turn name a `topicPostId`, never beside a podcast episode chapter.
+
+`news.ts` holds the news: the `newsWindows` a read covers with their labels and lengths, `NEWS_PAGE_SIZE`, the
+`newsQuery` a read takes, a `NewsEvent` and its kinds, the `newsResponse` of one page, and the title, the failed line,
+and each window's empty line. `commentMentions.ts` holds a signed-in user's unseen Comment Mentions, the payload that
+marks them seen, and the places a mention badge sits. `topicPodcastEpisodeVideoWork.ts` holds the task queues, the
+workflow names, and the workflow ids of a film's render, its rebuild, and the film backfill, with the backfill's
+summary, for the worker, its workflows, and the Temporal client.

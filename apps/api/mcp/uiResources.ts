@@ -7,7 +7,7 @@ import {
 } from "@carlnotes/contracts/mcpViewHtml"
 import { MCP_VIEWS, type McpView, toMcpUiResourceUri } from "@carlnotes/contracts/mcpViews"
 import { STORED_MCP_VIEW_VERSIONS, type StoredMcpViewVersion } from "@carlnotes/contracts/mcpViewVersions"
-import { getResourceContent, toMcpViewBundleKey, toPodcastEpisodeAudioUrl } from "@carlnotes/db/store"
+import { getResourceContent, toMcpViewBundleKey, toPodcastEpisodeFileUrl } from "@carlnotes/db/store"
 import { appUrl } from "@carlnotes/server/appUrl"
 import { reportError } from "@carlnotes/server/monitoring"
 import { RESOURCE_MIME_TYPE, RESOURCE_URI_META_KEY } from "@modelcontextprotocol/ext-apps/server"
@@ -18,7 +18,7 @@ import { MCP_VIEWS_BUNDLE_ROOT } from "../bundlePaths"
 export const MISSING_MCP_VIEW_BUNDLE_MESSAGE = "The MCP view bundle is not built. Run bun run build:ui."
 
 // the versions from before the first stored one, which serve the current build
-const ALIASED_MCP_VIEW_VERSIONS = [2, 3, 4, 5, 6, 7, 8]
+const ALIASED_MCP_VIEW_VERSIONS = [2, 3, 4, 5, 6, 7, 8, 9]
 
 // what each MCP view shows, for the resource list
 const MCP_VIEW_DESCRIPTIONS: Record<McpView, string> = {
@@ -29,6 +29,9 @@ const MCP_VIEW_DESCRIPTIONS: Record<McpView, string> = {
 	findings: "A topic's findings with Carl's notes, the play button, Follow, and thumbs, bookmark, and done.",
 	updates: "Carl's list of unread findings, with his opener and a link to the rest.",
 	scan: "A topic's running brew by stage and source, with stop, then its recap and podcast episode.",
+	news: "Brews News: who mentioned the user, then what happened on their topics over a week, a day, or an hour.",
+	"topic-posts": "A topic's Open Mic posts as cards, newest first, each opening its post.",
+	"topic-post": "An Open Mic post with its image, its body, its Coffee Break Discussion, and its hot takes.",
 }
 
 /**
@@ -150,7 +153,7 @@ export async function readMcpViewBundle(bundleRoot: string): Promise<McpViewBund
 // a server with no object storage configured has none
 function toObjectStorageOrigins(): string[] {
 	try {
-		return [new URL(toPodcastEpisodeAudioUrl("mcp-view-origin")).origin]
+		return [new URL(toPodcastEpisodeFileUrl("mcp-view-origin")).origin]
 	} catch {
 		return []
 	}

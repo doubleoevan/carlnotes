@@ -1,12 +1,18 @@
 // topic client tests: a spent budget returns "budget", the manual scans cutoff "paused", and a started scan the scans
-// left, a topic or podcast episode page names the gate in front of its topic, and the topic search returns the matched
-// topics
+// left, a topic or podcast episode page names the gate in front of its topic, the topic page's flags name its query,
+// the related topics read returns its list, and the topic search returns the matched topics
 import { afterEach, expect, test } from "bun:test"
 import { MANUAL_SCAN_PAUSED_LABEL, SCAN_SPENT_BUDGET_LABEL } from "@carlnotes/contracts/scanFailure"
 import { configureApiClient } from "./apiClient"
 import { stubFetch } from "./fetchTestFixtures"
 import { fetchPodcastEpisodePage } from "./podcastEpisodeClient"
-import { fetchTopicAttachment, fetchTopicPage, sendAcceptInvite, sendManualScan } from "./topicClient"
+import {
+	fetchRelatedTopics,
+	fetchTopicAttachment,
+	fetchTopicPage,
+	sendAcceptInvite,
+	sendManualScan,
+} from "./topicClient"
 
 // the real fetch to put back after each test
 const originalFetch = globalThis.fetch
@@ -85,6 +91,33 @@ test("a topic page and a podcast episode page read the topic gate from a 403, an
 	await expect(
 		fetchPodcastEpisodePage({ topicId: "topic-1", season: "2026", episodeNumber: "1" }),
 	).rejects.toMatchObject({ status: 500 })
+})
+
+// a signed-in page asks for its related topics apart from the page, and their own read returns the list
+test("the topic page's flags name its query, and the related topics read returns the list or rejects", async () => {
+	// each url the client asked for, with a hidden topic's 404 as every response
+	const requestedUrls: string[] = []
+	globalThis.fetch = (async (input) => {
+		requestedUrls.push(String(input))
+		return new Response("not found", { status: 404 })
+	}) as typeof fetch
+
+	// no flag sends no query, and each flag sends its own
+	await fetchTopicPage("topic-1")
+	await fetchTopicPage("topic-1", { isPoll: true })
+	await fetchTopicPage("topic-1", { isRelatedTopicsSeparate: true })
+	expect(requestedUrls).toEqual([
+		"/api/topics/topic-1",
+		"/api/topics/topic-1?poll=1",
+		"/api/topics/topic-1?related=separate",
+	])
+
+	// the related topics read returns its list, and rejects a failed read
+	const relatedTopics = [{ id: "topic-2", name: "Espresso", latestPodcastEpisode: null }]
+	stubFetch(Response.json({ relatedTopics }))
+	expect(await fetchRelatedTopics("topic-1")).toEqual(relatedTopics)
+	stubFetch(new Response(null, { status: 500 }))
+	await expect(fetchRelatedTopics("topic-1")).rejects.toThrow("related topics load failed: 500")
 })
 
 // a visitor's 401 is an unknown token, a rejection the route names comes in the body, and any other rejected status

@@ -35,6 +35,11 @@ const HIGHLIGHTED_PILL_CLASS = "bg-primary text-primary-foreground border-transp
 const IDLE_PILL_CLASS = "border-separator-strong bg-muted text-link"
 
 /**
+ * The classes of a pill that is not playing, which the Video button beside a play pill is drawn with.
+ */
+export const IDLE_PODCAST_EPISODE_PILL_CLASS = cn(PILL_CLASS, IDLE_PILL_CLASS)
+
+/**
  * Composes a chapter pill with the shared toggle behavior and current chapter highlighting.
  */
 export function PodcastEpisodeChapterPill({

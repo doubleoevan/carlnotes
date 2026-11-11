@@ -1,10 +1,11 @@
-// the image edit steps a topic and a podcast episode share. the editor's regeneration quota, the upload's body limit,
-// the upload's checks, and the image prompt moderation
+// the image edit steps a topic, a podcast episode, a Topic Post, and a film share. the editor's regeneration quota, the
+// upload's body limit, the upload's checks, and the image prompt moderation
 
 import { ADMIN_QUOTA } from "@carlnotes/contracts/plans"
 import { type ImageRegenerationQuota, MAX_TOPIC_IMAGE_UPLOAD_BYTES } from "@carlnotes/contracts/topicImages"
 import { loadTopicImageRegenerationQuota } from "@carlnotes/db/quotas"
 import {
+	type TopicImageFormat,
 	type TopicImageOriginal,
 	toTopicImageOriginal,
 	toTopicImageUploadType,
@@ -35,12 +36,12 @@ export async function toImagePromptRejection(
 }
 
 /**
- * Reads the request's uploaded image as the cropped original to store, or the response that rejects it for its size,
- * its type, or the image moderation.
+ * Reads the request's uploaded image as the original to store, cropped to the format's ratio, which is 3:2 if no format
+ * is given, or the response that rejects it for its size, its type, or the image moderation.
  */
 export async function readUploadedImageOriginal(
 	context: Context<AppEnv>,
-	{ subjectKind, subjectId }: ImageEditSubject,
+	{ subjectKind, subjectId, format }: ImageEditSubject & { format?: Pick<TopicImageFormat, "width" | "height"> },
 ): Promise<{ original: TopicImageOriginal } | { response: Response }> {
 	// the file, checked by its size and by what its bytes decode as
 	const uploadedFile = (await context.req.parseBody()).image
@@ -54,7 +55,7 @@ export async function readUploadedImageOriginal(
 	// the bytes decode as a jpeg, a png, or a webp, or the upload is rejected
 	const uploadedBytes = new Uint8Array(await uploadedFile.arrayBuffer())
 	const original = toTopicImageUploadType(uploadedBytes)
-		? await toTopicImageOriginal(uploadedBytes).catch(() => null)
+		? await toTopicImageOriginal(uploadedBytes, format).catch(() => null)
 		: null
 	if (!original) {
 		return { response: context.json({ error: "unsupported-type" }, 400) }

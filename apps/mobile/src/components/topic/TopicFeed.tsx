@@ -4,11 +4,10 @@ import { toCountLabel } from "@carlnotes/core/lib/labels"
 import { TOPIC_SECTION_TITLES } from "@carlnotes/core/lib/topicFeedLabels"
 import { FlashList } from "@shopify/flash-list"
 import { type ReactElement, useMemo, useState } from "react"
-import { Text as NativeText } from "react-native"
 import { AccordionSection } from "@/components/common/AccordionSection"
 import { Footer } from "@/components/layout/Footer"
+import { EmptyListCard } from "@/components/table/TableCard"
 import { type TopicFeedRow, toInitialTopicSection, toTopicFeedRows } from "@/topicFeedRows"
-import { toTypeRoleStyle } from "@/typeRoleStyles"
 import { MoreButton } from "./MoreButton"
 import { Topic } from "./Topic"
 import { TopicFindingList } from "./TopicFindingList"
@@ -90,11 +89,7 @@ function FeedRow({
 		case "findings":
 			return <TopicFindingList topic={row.topic} findingRows={row.findingRows} state={state} />
 		case "empty":
-			return (
-				<NativeText style={toTypeRoleStyle("body")} className="px-4 py-6 text-muted-foreground">
-					{row.text}
-				</NativeText>
-			)
+			return <EmptyListCard text={row.text} className="mx-4 mb-2" />
 		case "more":
 			return (
 				// the toggle starts at the findings card's left edge, inside the card's margin

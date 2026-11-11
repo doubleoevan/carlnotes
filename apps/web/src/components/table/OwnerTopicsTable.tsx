@@ -12,7 +12,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives
 import { STANDALONE_LINK_CLASS, SUBTABLE_CARD_CLASS, TABLE_CLASS, TABLE_SCROLL_CLASS } from "@/lib/styleClasses"
 import { DATA_TABLE_ELEMENTS } from "./DataTable"
 import { SubtableCountButton } from "./SubtableCountButton"
-import { TableCard } from "./TableCard"
+import { EmptyListCard, TableCard } from "./TableCard"
 import { TablePagination, usePaginatedRowSort } from "./TablePagination"
 import { TopicNameLink } from "./TopicNameLink"
 import { TopicScansTable } from "./TopicScansTable"
@@ -102,7 +102,7 @@ export function OwnerTopicsTable({
 		),
 	})
 	if (!topics.length) {
-		return <p className="text-muted-foreground text-sm">No topics yet.</p>
+		return <EmptyListCard className={className}>No topics yet.</EmptyListCard>
 	}
 	return (
 		<TableCard className={cn("mb-4", className)}>

@@ -8,7 +8,9 @@ import {
 import { db } from "@carlnotes/db"
 import { assertPersonalSourcesConverted, lockPersonalSourcesTopic } from "@carlnotes/db/personalSourcesLocks"
 import { deletePodcastFeedCache } from "@carlnotes/db/podcastFeedCache"
+import { releaseTopicProfileOrders } from "@carlnotes/db/profileOrder"
 import { topics } from "@carlnotes/db/schema/topics"
+import { clearUnseenCommentMentions, loadTopicMentionedUserIds } from "@carlnotes/db/unseenCommentMentions"
 import { trackEvent } from "@carlnotes/server/analytics"
 import { isPodcastEpisodeRecordingConfigured } from "@carlnotes/server/podcastEpisodeSettings"
 import { eq } from "drizzle-orm"
@@ -135,6 +137,7 @@ export async function updateTopicFields({
 	}
 	// write the named fields and release the home order in one transaction
 	let isHomeOrderReleased = false
+	let releasedProfileUserIds: string[] = []
 	await db.transaction(async (transaction) => {
 		// serialize publication and podcast activation against private confirmation
 		await lockPersonalSourcesTopic(transaction, topicId)
@@ -142,9 +145,10 @@ export async function updateTopicFields({
 			await assertPersonalSourcesConverted(transaction, topicId)
 		}
 		await transaction.update(topics).set(namedFields).where(eq(topics.id, topicId))
-		// drop the topic from the home topics if it stops being public
+		// drop the topic from the home topics and from its owner's profile pins if it stops being public
 		if (topicFields.visibility && topicFields.visibility !== "public") {
 			isHomeOrderReleased = await releaseHomeOrder(topicId, transaction)
+			releasedProfileUserIds = await releaseTopicProfileOrders(topicId, transaction)
 		}
 	})
 
@@ -159,7 +163,14 @@ export async function updateTopicFields({
 		visibility: savedTopic.visibility,
 		previousVisibility: editableTopic.topic.visibility,
 		isHomeOrderReleased,
+		releasedProfileUserIds,
 	})
+
+	// a changed visibility changes who may read the topic's comments, so clear the cached mentions of its mentioned
+	// users
+	if (savedTopic.visibility !== editableTopic.topic.visibility) {
+		await clearUnseenCommentMentions(await loadTopicMentionedUserIds(topicId))
+	}
 
 	// tell IndexNow if the edit made the topic public or changed its url
 	notifyIndexNowOfTopicChange({ savedTopic, previousTopic: editableTopic.topic })

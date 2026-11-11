@@ -5,21 +5,25 @@ import {
 } from "@carlnotes/core/components/SocialSection"
 import { Text } from "@/components/primitives/text"
 import { CollapsibleSection } from "@/components/topic/CollapsibleSection"
+import { CommentMentionBadge } from "./CommentMentionBadge"
 import { CommentThread } from "./CommentThread"
 
-// a full-width section that stays mounted while closed, so a posted comment and a draft survive a collapse. the week's
+// a section that stays mounted while closed, so a posted comment and a draft survive a collapse. the week's
 // count sits at the title's right
 const ELEMENTS: SocialSectionElements = {
-	Section: ({ title, titleAside, children }) => (
+	Section: ({ title, titleNote, titleAside, hasClosedDivider, children }) => (
 		<CollapsibleSection
 			title={title}
+			titleNote={titleNote}
 			titleAside={titleAside && <Text className="shrink text-sm font-semibold text-badge">{titleAside}</Text>}
 			isContentKept
+			hasClosedDivider={hasClosedDivider}
 		>
 			{children}
 		</CollapsibleSection>
 	),
 	CommentThread,
+	MentionBadge: ({ commentMentions }) => <CommentMentionBadge commentMentions={commentMentions} place="section" />,
 }
 
 /**

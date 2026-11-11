@@ -261,12 +261,17 @@ function toPodcastEpisodeDateLabel(publishedAt: string | null): string {
 }
 
 /**
- * Returns a podcast episode's number and title, such as E14 · The quiet burrs.
+ * Returns a podcast episode's number and title, such as E14 · The quiet burrs. A recording with no number, as a Topic
+ * Post's discussion is, reads as its title alone.
  */
 export function toPodcastEpisodeTitleLabel(podcastEpisode: {
 	episodeNumber: number | null
 	title: string | null
 }): string {
+	// a recording with no number reads as its title
+	if (podcastEpisode.episodeNumber === null) {
+		return podcastEpisode.title ?? ""
+	}
 	return `E${podcastEpisode.episodeNumber} · ${podcastEpisode.title}`
 }
 
@@ -305,3 +310,11 @@ export const STOP_SCAN_LABEL = "Stop this Brew"
 
 // the label of a running Scan
 export const SCAN_RUNNING_LABEL = "Carl is Brewing…"
+
+/**
+ * A section's count with its noun, for the far right of the section's title. Nothing for a count of zero, and nothing
+ * for a count that is not known yet.
+ */
+export function toSectionCountLabel(count: number | null | undefined, noun: string): string | undefined {
+	return count ? toCountLabel(count, noun) : undefined
+}

@@ -1,5 +1,7 @@
 // topic route tests: a visitor's hidden topic page responds 403 with the gate for an invite topic alone, and 404 for a
-// private or missing one. a Source is removed by the owner or an owning team member, and by nobody else
+// private or missing one. the related topics read returns the list the page holds, a signed-in page that asks for the
+// separate read leaves the list out, and a hidden topic's related topics read responds as its page does. a Source is
+// removed by the owner or an owning team member, and by nobody else
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import {
 	FREE_USER_ACCESS_ROW,
@@ -13,6 +15,7 @@ import { topics } from "@carlnotes/db/schema/topics"
 import { toSignedInApp } from "../testSession"
 import * as feeds from "./feeds"
 import * as helpers from "./helpers"
+import { stubRedisClientWithCentroid } from "./relatednessTestFixtures"
 import { topicsRoute } from "./topicsRoute"
 
 // put the spies, the connection pool, and the Redis client back after each test
@@ -42,6 +45,119 @@ test("a visitor's hidden topic page is a 403 gate for an invite topic and a 404 
 	const privateResponse = await topicsRoute.request("/topics/t1")
 	expect(privateResponse.status).toBe(404)
 	expect(await privateResponse.json()).toEqual({ error: "not found" })
+})
+
+// a topic owned by owner-1 with the fields its page reads, public unless a test names another visibility
+function toPageTopicRow(visibility: "public" | "private" | "invite" = "public"): unknown[] {
+	return toTableRow(topics, {
+		id: "topic-1",
+		ownerId: "owner-1",
+		name: "Agents",
+		prompt: "agents",
+		// the schedule and the limits
+		frequency: "daily",
+		scheduledTime: "09:00:00",
+		scheduledDayOfWeek: "monday",
+		visibility,
+		tags: [],
+		maxTopicFindings: 10,
+		subscriberCount: 3,
+		createdAt: new Date("2026-10-01T00:00:00Z"),
+		updatedAt: new Date("2026-10-01T00:00:00Z"),
+	})
+}
+
+// the read of a page's related topic ids, in either ranking
+function isRelatedTopicsRead(sentQuery: SentQuery): boolean {
+	return sentQuery.text.includes('from "topic_vectors"')
+}
+
+// the page's related topics field of a response
+async function readRelatedTopics(response: Response): Promise<unknown> {
+	return ((await response.json()) as { relatedTopics: unknown }).relatedTopics
+}
+
+// the related topics load apart from a signed-in page, and stay on a visitor's
+test("the related topics read returns the page's list, which a signed-in page leaves out on request", async () => {
+	// public topic-1, a free user, and topic-2 ranked as its one related topic
+	stubRedisClientWithCentroid()
+	const sentQueries = stubConnectionPool(({ text }) => {
+		// the public ranking, and no ranking of the user's own. each names the page's topic, so they are matched first
+		if (text.startsWith('with "related_topic_candidates"')) {
+			return [["topic-2", 0.2]]
+		}
+		if (text.includes('from "topic_vectors"')) {
+			return []
+		}
+
+		// the page's topic, and each user's access row
+		if (text.includes('from "topics" where "topics"."id" = $1')) {
+			return [toPageTopicRow()]
+		}
+		if (text.includes('"budget_override_cents" from "users"')) {
+			return [FREE_USER_ACCESS_ROW]
+		}
+
+		// the ranked topic as it stands now
+		return text.includes('from "topics" where ("topics"."id" in (')
+			? [["topic-2", "Espresso", "owner-2", "public", null]]
+			: []
+	})
+	const signedInApp = toSignedInApp(topicsRoute, "user-1")
+
+	// a page with no flag holds the list, and the related topics read returns the same list
+	const pageRelatedTopics = await readRelatedTopics(await signedInApp.request("/topics/topic-1"))
+	expect(pageRelatedTopics).toEqual([{ id: "topic-2", name: "Espresso", latestPodcastEpisode: null }])
+	const relatedTopicsResponse = await signedInApp.request("/topics/topic-1/related-topics")
+	expect(relatedTopicsResponse.status).toBe(200)
+	expect(await relatedTopicsResponse.json()).toEqual({ relatedTopics: pageRelatedTopics })
+
+	// a signed-in page with the flag sends no related read and holds an empty list
+	const queryCountBeforeFlag = sentQueries.length
+	const flaggedPageResponse = await signedInApp.request("/topics/topic-1?related=separate")
+	expect(flaggedPageResponse.status).toBe(200)
+	expect(await readRelatedTopics(flaggedPageResponse)).toEqual([])
+	expect(sentQueries.slice(queryCountBeforeFlag).filter(isRelatedTopicsRead)).toHaveLength(0)
+
+	// a visitor's page holds the list with or without the flag
+	expect(await readRelatedTopics(await topicsRoute.request("/topics/topic-1?related=separate"))).toEqual(
+		pageRelatedTopics,
+	)
+})
+
+// a topic the reader may not see gets the same response from its related topics read as from its page
+test("a hidden topic's related topics read is the page's 403 gate or 404", async () => {
+	// a private topic of someone else's, which a stranger may not see
+	stubRedisClient()
+	const sentQueries = stubConnectionPool(({ text }) => {
+		if (text.includes('from "topics"')) {
+			return [toPageTopicRow("private")]
+		}
+		return text.includes('from "users"') ? [FREE_USER_ACCESS_ROW] : []
+	})
+
+	// the gate that the hidden topic's reads respond with, and a signed-in stranger
+	const topicGate = { error: "forbidden", gatedVisibility: "invite", topicName: "Coffee" } as const
+	const loadTopicGateResponseSpy = spyOn(helpers, "loadTopicGateResponse").mockResolvedValue(topicGate)
+	const strangerApp = toSignedInApp(topicsRoute, "stranger-1")
+
+	// the gate of an invite topic from both reads
+	for (const path of ["/topics/topic-1", "/topics/topic-1/related-topics"]) {
+		const gatedResponse = await strangerApp.request(path)
+		expect(gatedResponse.status).toBe(403)
+		expect(await gatedResponse.json()).toEqual(topicGate)
+	}
+
+	// a private topic has no gate, and reads as missing from both
+	loadTopicGateResponseSpy.mockResolvedValue(null)
+	for (const path of ["/topics/topic-1", "/topics/topic-1/related-topics"]) {
+		const missingResponse = await strangerApp.request(path)
+		expect(missingResponse.status).toBe(404)
+		expect(await missingResponse.json()).toEqual({ error: "not found" })
+	}
+
+	// neither read ranked a related topic
+	expect(sentQueries.filter(isRelatedTopicsRead)).toHaveLength(0)
 })
 
 // the active members of team-1, which owns topic-1: its owner and member-1

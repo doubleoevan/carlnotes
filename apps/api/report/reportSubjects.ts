@@ -1,7 +1,7 @@
 // what a report names, resolved under the same visibility rule that lets the reporter see it
 import type { ReportSubjectKind } from "@carlnotes/contracts/reports"
 import { toReportText } from "@carlnotes/contracts/reports"
-import { toTopicPath } from "@carlnotes/contracts/seo"
+import { toTopicPath, toTopicPostPath } from "@carlnotes/contracts/seo"
 import { toHtmlText } from "@carlnotes/contracts/text"
 import { db } from "@carlnotes/db"
 import { chatRoomMessages } from "@carlnotes/db/schema/chat"
@@ -14,6 +14,7 @@ import { loadChatRoom } from "../chat/roomAccess"
 import { canSeeNote, loadNoteWithPage, loadPageAccess, type NotePage } from "../note/permissions"
 import { toTeamRole } from "../team/members"
 import { canSeeTopic, namedTopicColumns } from "../topic/permissions"
+import { canReadTopicPost, loadTopicPostRow } from "../topicPost/topicPosts"
 import { loadUsername } from "../usernames"
 import { toReportedComment, toReportedSocialTarget } from "./socialReportSubjects"
 
@@ -57,6 +58,7 @@ const REPORT_SUBJECT_RESOLVERS: Record<
 	podcastEpisode: (userId, subjectId) => toReportedSocialTarget(userId, { kind: "podcastEpisode", id: subjectId }),
 	comment: toReportedComment,
 	topicImage: toReportedTopicImage,
+	topicPostImage: toReportedTopicPostImage,
 }
 
 // a topic under the same visibility rule the Topic page uses, so anyone who can open a Topic can report it
@@ -85,6 +87,27 @@ async function toReportedTopic(userId: string, topicId: string): Promise<Reporte
 async function toReportedTopicImage(userId: string, topicId: string): Promise<ReportedSubject | null> {
 	const reportedTopic = await toReportedTopic(userId, topicId)
 	return reportedTopic && { ...reportedTopic, kind: "topicImage", text: reportedTopic.label }
+}
+
+// a published Topic Post's image under the post's read rule. the post's title is the text, and its author is the
+// image's
+async function toReportedTopicPostImage(userId: string, topicPostId: string): Promise<ReportedSubject | null> {
+	const topicPostRow = await loadTopicPostRow(topicPostId)
+	const isReportable = topicPostRow?.topicPost.publishedAt && topicPostRow.topicPost.imageHash
+	if (!topicPostRow || !isReportable || !(await canReadTopicPost(userId, topicPostRow))) {
+		return null
+	}
+
+	// the post's page is where the image shows
+	const { topicPost, topic } = topicPostRow
+	return {
+		kind: "topicPostImage",
+		id: topicPost.id,
+		label: topicPost.title,
+		path: toTopicPostPath(topic, topicPost),
+		text: toReportText(topicPost.title),
+		authorUserId: topicPost.authorUserId,
+	}
 }
 
 // a team under its visibility rule: members can always report it, anyone can once it is public

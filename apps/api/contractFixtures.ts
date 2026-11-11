@@ -20,6 +20,7 @@ import { notesRoute } from "./note/notes"
 import { TEST_NOTE_ID, TEST_NOTE_VERSION, toNoteQueryRows } from "./note/noteTestFixtures"
 import { podcastEpisodesRoute } from "./podcast/podcastEpisodes"
 import { podcastFeedsRoute } from "./podcast/podcastFeeds"
+import { topicPodcastEpisodeVideosRoute } from "./podcast/topicPodcastEpisodeVideoRoutes"
 import { profilesRoute } from "./profiles"
 import { pushDevicesRoute } from "./pushDevices"
 import { searchRoute } from "./search/search"
@@ -70,6 +71,7 @@ const USER_COLUMNS: ColumnValues = {
 	email_verified: true,
 	avatar_source: "generated",
 	avatar_key: null,
+	profile_viewer_count: 2,
 	created_at: ROW_TIME,
 	updated_at: ROW_TIME,
 }
@@ -90,8 +92,21 @@ const TOPIC_COLUMNS: ColumnValues = {
 	subscriber_count: 1,
 	viewer_count: 2,
 	is_podcast_enabled: true,
+	is_podcast_comments_enabled: true,
 	created_at: ROW_TIME,
 	updated_at: ROW_TIME,
+}
+
+// a published Topic Post of the topic by the user, as the site search reads it joined with its topic and its author.
+// the three id columns of the join read the one id
+const TOPIC_POST_COLUMNS: ColumnValues = {
+	...TOPIC_COLUMNS,
+	id: "topic-post-1",
+	title: "Agents that read the docs",
+	summary: "What changes once an agent reads the docs first.",
+	published_at: ROW_TIME,
+	username: USER_ID,
+	avatar_source: "generated",
 }
 
 // the user's team, as the teams table and the team_members join read it, with the user as a member, and as a leader
@@ -99,6 +114,7 @@ const TEAM_COLUMNS: ColumnValues = {
 	id: TEAM_ID,
 	name: "Reading Club",
 	is_public: true,
+	viewer_count: 2,
 	description: null,
 	avatar_key: null,
 	role: "member",
@@ -476,6 +492,11 @@ export const CONTRACT_FIXTURES: Record<string, ContractFixture> = {
 			episode_feed_tokens: { token: "feed-token" },
 		},
 	),
+	"podcastEpisodeClient.sendTopicPodcastEpisodeVideoSection": toFixture(
+		topicPodcastEpisodeVideosRoute,
+		{ params: TOPIC_PARAMS, body: { isOpen: false, podcastEpisodeId: PODCAST_EPISODE_ID } },
+		PODCAST_EPISODE_TABLES,
+	),
 	"podcastEpisodeClient.sendTopicPodcast": toFixture(
 		podcastEpisodesRoute,
 		{ params: TOPIC_PARAMS, body: { isPodcastEnabled: true } },
@@ -510,7 +531,11 @@ export const CONTRACT_FIXTURES: Record<string, ContractFixture> = {
 	),
 
 	// search
-	"searchClient.searchSite": toFixture(searchRoute, { query: { q: "agents" } }, { users: USER_COLUMNS }),
+	"searchClient.searchSite": toFixture(
+		searchRoute,
+		{ query: { q: "agents" } },
+		{ users: USER_COLUMNS, topic_posts: TOPIC_POST_COLUMNS },
+	),
 
 	// teams
 	"teamClient.fetchTeamNameTaken": toFixture(teamsRoute, { query: { name: "Reading Club" } }, {}),
@@ -646,4 +671,16 @@ export const CONTRACT_FIXTURES: Record<string, ContractFixture> = {
 	),
 	"viewerCountsClient.fetchTopicCounts": toFixture(countsRoute, { params: TOPIC_PARAMS }, TOPIC_TABLES),
 	"viewerCountsClient.sendTopicView": toFixture(countsRoute, { params: TOPIC_PARAMS }, TOPIC_TABLES),
+	"viewerCountsClient.fetchProfileViewerCounts": toFixture(
+		countsRoute,
+		{ params: { userId: USER_ID } },
+		{ users: USER_COLUMNS },
+	),
+	"viewerCountsClient.fetchTeamViewerCounts": toFixture(countsRoute, { params: TEAM_PARAMS }, TEAM_TABLES),
+	"viewerCountsClient.sendProfileView": toFixture(
+		countsRoute,
+		{ params: { userId: USER_ID } },
+		{ users: USER_COLUMNS },
+	),
+	"viewerCountsClient.sendTeamView": toFixture(countsRoute, { params: TEAM_PARAMS }, TEAM_TABLES),
 }

@@ -1,6 +1,7 @@
 // the path a visit reports, which never includes an id
-import { expect, test } from "bun:test"
-import { toReportedEvent } from "./visitAnalytics"
+import { expect, spyOn, test } from "bun:test"
+import posthog from "posthog-js"
+import { captureFilmVisitEvent, toReportedEvent } from "./visitAnalytics"
 
 // the settings that keep a visit off the device and unidentified, asserted on the visitAnalytics.ts source
 test("the client is configured to store nothing and identify nobody", async () => {
@@ -124,4 +125,25 @@ test("an event with no url or path is returned unchanged", () => {
 	expect(toReportedEvent(null)).toBeNull()
 	const plainEvent = { event: "$pageview", properties: {} }
 	expect(toReportedEvent(plainEvent as never)).toBe(plainEvent as never)
+})
+
+// a film event sends only the ids and short codes its type names, and nothing without a key
+test("a film visit event sends only its ids, and nothing without a PostHog key", () => {
+	// no key sends nothing
+	const capture = spyOn(posthog, "capture").mockReturnValue(undefined)
+	const previousKey = Bun.env.VITE_POSTHOG_KEY
+	Bun.env.VITE_POSTHOG_KEY = ""
+	captureFilmVisitEvent("visit_episode_video_section_toggled", { topicId: "topic-1", isOpen: false })
+	expect(capture).not.toHaveBeenCalled()
+
+	// a key sends the event with the topic's id and the choice alone
+	Bun.env.VITE_POSTHOG_KEY = "test-key"
+	try {
+		captureFilmVisitEvent("visit_episode_video_section_toggled", { topicId: "topic-1", isOpen: false })
+		expect(capture.mock.calls).toEqual([["visit_episode_video_section_toggled", { topicId: "topic-1", isOpen: false }]])
+	} finally {
+		// restore the key and the spy
+		Bun.env.VITE_POSTHOG_KEY = previousKey
+		capture.mockRestore()
+	}
 })

@@ -1,6 +1,6 @@
 // the Team tables: teams and their members
 import { sql } from "drizzle-orm"
-import { boolean, index, pgTable, primaryKey, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core"
+import { boolean, index, integer, pgTable, primaryKey, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core"
 import { primaryId, teamRole } from "./columns"
 import { users } from "./users"
 
@@ -16,6 +16,8 @@ export const teams = pgTable(
 		avatarKey: text("avatar_key"),
 		// a private team's page shows a non-member its name and a way to ask to join. public renders it to anyone
 		isPublic: boolean("is_public").notNull().default(false),
+		// the unique people who opened the team page, all time
+		viewerCount: integer("viewer_count").notNull().default(0),
 		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 	},
 	(table) => [

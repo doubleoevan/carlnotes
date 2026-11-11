@@ -1,19 +1,12 @@
-// the team contracts: a team's identity, the teams page rows, the team page, and the responses its write routes return
+// the team contracts: the teams page rows, the team page, and the responses its write routes return
 import { z } from "zod"
 import { chatMention } from "./chat"
 import { avatarSources, teamRoles } from "./enums"
+import { podcastEpisodeCard, topicCard } from "./home"
 import { profileIdentity, topic } from "./profiles"
+import { teamIdentity } from "./teamIdentity"
 import { displayEnum } from "./tolerantReads"
-
-// how a Team is shown with its name, avatar and id to link
-export const teamIdentity = z.object({
-	teamId: z.string(),
-	name: z.string(),
-	// the version of its own uploaded image, or null for the initials and tint drawn from its name and id
-	avatarVersion: z.string().nullable(),
-})
-
-export type TeamIdentity = z.infer<typeof teamIdentity>
+import { topicPostCard } from "./topicPosts"
 
 // the fields every teams page row shows, shared by memberships and received invitations
 const teamRowFields = teamIdentity.extend({
@@ -72,6 +65,19 @@ export const teamPageResponse = teamIdentity.extend({
 	chatMentions: z.array(chatMention),
 	// the same profile-shaped rows the profile page's topic table renders
 	topics: z.array(topic),
+	// those topics as cards: the ones their owners pinned on their profiles first, then the rest in the home's
+	// trending order
+	topicCards: z.array(topicCard),
+	// the published podcast episodes of those topics that have a ready film, as film cards: the films their topics'
+	// owners pinned on their profiles first, then the most listened one of each other topic. optional, so a released
+	// app reads a payload without them
+	topicPodcastEpisodeVideoCards: z.array(podcastEpisodeCard).optional(),
+	// the published podcast episodes of those topics as cards: the pinned ones first, then the most listened one of
+	// each other topic
+	podcastEpisodeCards: z.array(podcastEpisodeCard),
+	// every published Topic Post of those topics as cards: the ones their authors pinned on their profiles first in
+	// their order, then the rest newest first
+	topicPostCards: z.array(topicPostCard),
 })
 
 export type TeamPageResponse = z.infer<typeof teamPageResponse>
@@ -118,3 +124,10 @@ export const teamDeleteResponse = z.discriminatedUnion("status", [
 ])
 
 export type TeamDeleteResponse = z.infer<typeof teamDeleteResponse>
+
+/**
+ * Returns a team page's title: the team's name, then Franchise.
+ */
+export function toTeamPageTitle(teamName: string): string {
+	return `${teamName} Franchise`
+}

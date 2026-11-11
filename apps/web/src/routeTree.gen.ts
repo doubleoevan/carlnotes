@@ -30,7 +30,9 @@ import { Route as LayoutTopicsTopicIdRouteImport } from './routes/_layout/topics
 import { Route as LayoutSignedInMcpConsentRouteImport } from './routes/_layout/_signedIn/mcp.consent'
 import { Route as LayoutSignedInTeamsIndexRouteImport } from './routes/_layout/_signedIn/teams.index'
 import { Route as LayoutTopicsTopicIdTopicSlugRouteImport } from './routes/_layout/topics.$topicId_.$topicSlug'
+import { Route as LayoutTopicsTopicIdTopicSlugPostsTopicPostIdRouteImport } from './routes/_layout/topics.$topicId_.$topicSlug_.posts.$topicPostId'
 import { Route as LayoutTopicsTopicIdTopicSlugEpisodesSeasonEpisodeNumberRouteImport } from './routes/_layout/topics.$topicId_.$topicSlug_.episodes.$season.$episodeNumber'
+import { Route as LayoutTopicsTopicIdTopicSlugPostsTopicPostIdPostSlugRouteImport } from './routes/_layout/topics.$topicId_.$topicSlug_.posts.$topicPostId_.$postSlug'
 
 const LayoutRoute = LayoutRouteImport.update({
   id: '/_layout',
@@ -138,10 +140,22 @@ const LayoutTopicsTopicIdTopicSlugRoute =
     path: '/topics/$topicId/$topicSlug',
     getParentRoute: () => LayoutRoute,
   } as any)
+const LayoutTopicsTopicIdTopicSlugPostsTopicPostIdRoute =
+  LayoutTopicsTopicIdTopicSlugPostsTopicPostIdRouteImport.update({
+    id: '/topics/$topicId_/$topicSlug_/posts/$topicPostId',
+    path: '/topics/$topicId/$topicSlug/posts/$topicPostId',
+    getParentRoute: () => LayoutRoute,
+  } as any)
 const LayoutTopicsTopicIdTopicSlugEpisodesSeasonEpisodeNumberRoute =
   LayoutTopicsTopicIdTopicSlugEpisodesSeasonEpisodeNumberRouteImport.update({
     id: '/topics/$topicId_/$topicSlug_/episodes/$season/$episodeNumber',
     path: '/topics/$topicId/$topicSlug/episodes/$season/$episodeNumber',
+    getParentRoute: () => LayoutRoute,
+  } as any)
+const LayoutTopicsTopicIdTopicSlugPostsTopicPostIdPostSlugRoute =
+  LayoutTopicsTopicIdTopicSlugPostsTopicPostIdPostSlugRouteImport.update({
+    id: '/topics/$topicId_/$topicSlug_/posts/$topicPostId_/$postSlug',
+    path: '/topics/$topicId/$topicSlug/posts/$topicPostId/$postSlug',
     getParentRoute: () => LayoutRoute,
   } as any)
 
@@ -165,7 +179,9 @@ export interface FileRoutesByFullPath {
   '/mcp/consent': typeof LayoutSignedInMcpConsentRoute
   '/topics/$topicId/$topicSlug': typeof LayoutTopicsTopicIdTopicSlugRoute
   '/teams/': typeof LayoutSignedInTeamsIndexRoute
+  '/topics/$topicId/$topicSlug/posts/$topicPostId': typeof LayoutTopicsTopicIdTopicSlugPostsTopicPostIdRoute
   '/topics/$topicId/$topicSlug/episodes/$season/$episodeNumber': typeof LayoutTopicsTopicIdTopicSlugEpisodesSeasonEpisodeNumberRoute
+  '/topics/$topicId/$topicSlug/posts/$topicPostId/$postSlug': typeof LayoutTopicsTopicIdTopicSlugPostsTopicPostIdPostSlugRoute
 }
 export interface FileRoutesByTo {
   '/login': typeof LoginRoute
@@ -187,7 +203,9 @@ export interface FileRoutesByTo {
   '/mcp/consent': typeof LayoutSignedInMcpConsentRoute
   '/topics/$topicId/$topicSlug': typeof LayoutTopicsTopicIdTopicSlugRoute
   '/teams': typeof LayoutSignedInTeamsIndexRoute
+  '/topics/$topicId/$topicSlug/posts/$topicPostId': typeof LayoutTopicsTopicIdTopicSlugPostsTopicPostIdRoute
   '/topics/$topicId/$topicSlug/episodes/$season/$episodeNumber': typeof LayoutTopicsTopicIdTopicSlugEpisodesSeasonEpisodeNumberRoute
+  '/topics/$topicId/$topicSlug/posts/$topicPostId/$postSlug': typeof LayoutTopicsTopicIdTopicSlugPostsTopicPostIdPostSlugRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -212,7 +230,9 @@ export interface FileRoutesById {
   '/_layout/_signedIn/mcp/consent': typeof LayoutSignedInMcpConsentRoute
   '/_layout/topics/$topicId_/$topicSlug': typeof LayoutTopicsTopicIdTopicSlugRoute
   '/_layout/_signedIn/teams/': typeof LayoutSignedInTeamsIndexRoute
+  '/_layout/topics/$topicId_/$topicSlug_/posts/$topicPostId': typeof LayoutTopicsTopicIdTopicSlugPostsTopicPostIdRoute
   '/_layout/topics/$topicId_/$topicSlug_/episodes/$season/$episodeNumber': typeof LayoutTopicsTopicIdTopicSlugEpisodesSeasonEpisodeNumberRoute
+  '/_layout/topics/$topicId_/$topicSlug_/posts/$topicPostId_/$postSlug': typeof LayoutTopicsTopicIdTopicSlugPostsTopicPostIdPostSlugRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -236,7 +256,9 @@ export interface FileRouteTypes {
     | '/mcp/consent'
     | '/topics/$topicId/$topicSlug'
     | '/teams/'
+    | '/topics/$topicId/$topicSlug/posts/$topicPostId'
     | '/topics/$topicId/$topicSlug/episodes/$season/$episodeNumber'
+    | '/topics/$topicId/$topicSlug/posts/$topicPostId/$postSlug'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/login'
@@ -258,7 +280,9 @@ export interface FileRouteTypes {
     | '/mcp/consent'
     | '/topics/$topicId/$topicSlug'
     | '/teams'
+    | '/topics/$topicId/$topicSlug/posts/$topicPostId'
     | '/topics/$topicId/$topicSlug/episodes/$season/$episodeNumber'
+    | '/topics/$topicId/$topicSlug/posts/$topicPostId/$postSlug'
   id:
     | '__root__'
     | '/_layout'
@@ -282,7 +306,9 @@ export interface FileRouteTypes {
     | '/_layout/_signedIn/mcp/consent'
     | '/_layout/topics/$topicId_/$topicSlug'
     | '/_layout/_signedIn/teams/'
+    | '/_layout/topics/$topicId_/$topicSlug_/posts/$topicPostId'
     | '/_layout/topics/$topicId_/$topicSlug_/episodes/$season/$episodeNumber'
+    | '/_layout/topics/$topicId_/$topicSlug_/posts/$topicPostId_/$postSlug'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -442,11 +468,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LayoutTopicsTopicIdTopicSlugRouteImport
       parentRoute: typeof LayoutRoute
     }
+    '/_layout/topics/$topicId_/$topicSlug_/posts/$topicPostId': {
+      id: '/_layout/topics/$topicId_/$topicSlug_/posts/$topicPostId'
+      path: '/topics/$topicId/$topicSlug/posts/$topicPostId'
+      fullPath: '/topics/$topicId/$topicSlug/posts/$topicPostId'
+      preLoaderRoute: typeof LayoutTopicsTopicIdTopicSlugPostsTopicPostIdRouteImport
+      parentRoute: typeof LayoutRoute
+    }
     '/_layout/topics/$topicId_/$topicSlug_/episodes/$season/$episodeNumber': {
       id: '/_layout/topics/$topicId_/$topicSlug_/episodes/$season/$episodeNumber'
       path: '/topics/$topicId/$topicSlug/episodes/$season/$episodeNumber'
       fullPath: '/topics/$topicId/$topicSlug/episodes/$season/$episodeNumber'
       preLoaderRoute: typeof LayoutTopicsTopicIdTopicSlugEpisodesSeasonEpisodeNumberRouteImport
+      parentRoute: typeof LayoutRoute
+    }
+    '/_layout/topics/$topicId_/$topicSlug_/posts/$topicPostId_/$postSlug': {
+      id: '/_layout/topics/$topicId_/$topicSlug_/posts/$topicPostId_/$postSlug'
+      path: '/topics/$topicId/$topicSlug/posts/$topicPostId/$postSlug'
+      fullPath: '/topics/$topicId/$topicSlug/posts/$topicPostId/$postSlug'
+      preLoaderRoute: typeof LayoutTopicsTopicIdTopicSlugPostsTopicPostIdPostSlugRouteImport
       parentRoute: typeof LayoutRoute
     }
   }
@@ -484,7 +524,9 @@ interface LayoutRouteChildren {
   LayoutTopicsTopicIdRoute: typeof LayoutTopicsTopicIdRoute
   LayoutTopicsIndexRoute: typeof LayoutTopicsIndexRoute
   LayoutTopicsTopicIdTopicSlugRoute: typeof LayoutTopicsTopicIdTopicSlugRoute
+  LayoutTopicsTopicIdTopicSlugPostsTopicPostIdRoute: typeof LayoutTopicsTopicIdTopicSlugPostsTopicPostIdRoute
   LayoutTopicsTopicIdTopicSlugEpisodesSeasonEpisodeNumberRoute: typeof LayoutTopicsTopicIdTopicSlugEpisodesSeasonEpisodeNumberRoute
+  LayoutTopicsTopicIdTopicSlugPostsTopicPostIdPostSlugRoute: typeof LayoutTopicsTopicIdTopicSlugPostsTopicPostIdPostSlugRoute
 }
 
 const LayoutRouteChildren: LayoutRouteChildren = {
@@ -499,8 +541,12 @@ const LayoutRouteChildren: LayoutRouteChildren = {
   LayoutTopicsTopicIdRoute: LayoutTopicsTopicIdRoute,
   LayoutTopicsIndexRoute: LayoutTopicsIndexRoute,
   LayoutTopicsTopicIdTopicSlugRoute: LayoutTopicsTopicIdTopicSlugRoute,
+  LayoutTopicsTopicIdTopicSlugPostsTopicPostIdRoute:
+    LayoutTopicsTopicIdTopicSlugPostsTopicPostIdRoute,
   LayoutTopicsTopicIdTopicSlugEpisodesSeasonEpisodeNumberRoute:
     LayoutTopicsTopicIdTopicSlugEpisodesSeasonEpisodeNumberRoute,
+  LayoutTopicsTopicIdTopicSlugPostsTopicPostIdPostSlugRoute:
+    LayoutTopicsTopicIdTopicSlugPostsTopicPostIdPostSlugRoute,
 }
 
 const LayoutRouteWithChildren =

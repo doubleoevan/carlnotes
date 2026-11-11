@@ -6,6 +6,7 @@ import { connectionPool, db } from "./index"
 import { chatProposals, chatTurns } from "./schema/chat"
 import { podcastEpisodes } from "./schema/podcast"
 import { teams } from "./schema/teams"
+import { topicPosts } from "./schema/topicPosts"
 import { topics } from "./schema/topics"
 import { users } from "./schema/users"
 
@@ -15,6 +16,7 @@ const userId = `${runId}-user`
 const topicId = `${runId}-topic`
 const teamId = `${runId}-team`
 const podcastEpisodeId = `${runId}-episode`
+const topicPostId = `${runId}-topic-post`
 
 // the postgres error code of a check violation
 const CHECK_VIOLATION_CODE = "23514"
@@ -87,6 +89,8 @@ const validChatTurnShapes: ChatTurnShape[] = [
 	{ label: "a chat room row", values: { kind: "chat_room", userId, topicId, roomMessageId: 1 } },
 	{ label: "a transcription row", values: { kind: "transcription", userId, topicId } },
 	{ label: "a speech row", values: { kind: "speech", userId, teamId } },
+	{ label: "a topic post row", values: { kind: "topic_post", userId, topicId, topicPostId, question: "q" } },
+	{ label: "a topic post row whose post was deleted", values: { kind: "topic_post", userId, topicId } },
 ]
 
 // the rows whose columns do not match their kind, each of which a check must reject
@@ -105,6 +109,8 @@ const mismatchedChatTurnShapes: ChatTurnShape[] = [
 		label: "a podcast row on a team",
 		values: { kind: "podcast", userId, teamId, podcastEpisodeId, chapterPosition: 0, podcastAnswerSpeaker: "host" },
 	},
+	{ label: "a private row with a topic post", values: { kind: "private", userId, topicId, topicPostId } },
+	{ label: "a topic post row on a team", values: { kind: "topic_post", userId, teamId, topicPostId } },
 ]
 
 // the insert that tries one chat turn row
@@ -129,6 +135,9 @@ async function checkChatTurnShapes(transaction: Transaction): Promise<void> {
 	await transaction
 		.insert(podcastEpisodes)
 		.values({ id: podcastEpisodeId, topicId, ownerId: userId, status: "published" })
+
+	// the topic post a topic post row names
+	await transaction.insert(topicPosts).values({ id: topicPostId, topicId, authorUserId: userId })
 
 	// every valid row is kept, and every mismatched row fails its check
 	await checkShapeInserts(transaction, {

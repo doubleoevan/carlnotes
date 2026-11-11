@@ -1,9 +1,9 @@
 import {
 	type NoteEditorElements,
-	type NoteEditorInputProps,
 	type NoteEditorProps,
 	NoteEditor as SharedNoteEditor,
 } from "@carlnotes/core/components/NoteEditor"
+import type { RichTextEditorInputProps } from "@carlnotes/core/hooks/useRichTextEditor"
 import type { RefObject } from "react"
 import type { EnrichedTextInputInstance } from "react-native-enriched-html"
 import { EnrichedTextInput } from "react-native-enriched-html"
@@ -28,8 +28,10 @@ export function NoteEditor(props: Omit<NoteEditorProps, "onError">) {
 	return <SharedNoteEditor {...props} onError={toast.error} elements={ELEMENTS} />
 }
 
-// normalize library events at the platform boundary
-function NoteInput({
+/**
+ * Renders the rich text input a note and a Topic Post share, normalizing library events at the platform boundary.
+ */
+export function NoteInput({
 	editorRef,
 	defaultValue,
 	placeholder,
@@ -37,7 +39,7 @@ function NoteInput({
 	onChangeState,
 	onChangeSelection,
 	onLinkDetected,
-}: NoteEditorInputProps) {
+}: RichTextEditorInputProps) {
 	return (
 		<div className={NOTE_BODY_CLASS} style={NOTE_BODY_STYLE}>
 			<EnrichedTextInput

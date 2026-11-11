@@ -1,21 +1,24 @@
 import { authClient } from "@carlnotes/client/authClient"
 import { sendTopicHomeOrder, sendTopicSubscription, type TopicGate } from "@carlnotes/client/topicClient"
 import { isAdminRole } from "@carlnotes/contracts/enums"
+import type { TopicFinding } from "@carlnotes/contracts/findings"
 import type { TopicResponse } from "@carlnotes/contracts/topics"
+import { sendTopicViewOnce } from "@carlnotes/core/lib/pageViews"
+import type { PinnedOrderMove } from "@carlnotes/core/lib/rankDialog"
 import { selectTopicFindings } from "@carlnotes/core/lib/topicFeed"
-import { sendTopicViewOnce } from "@carlnotes/core/lib/topicViews"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { useNavigate, useParams } from "@tanstack/react-router"
 import type * as React from "react"
 import { useCallback, useEffect, useState } from "react"
 import { toast } from "sonner"
-import type { HomeOrderMove } from "@/components/common/HomeRankDialog"
 import { NotesSection } from "@/components/note/NotesSection"
 import { PodcastEpisodePlayer } from "@/components/podcast/PodcastEpisodePlayer"
 import { PodcastEpisodesCard } from "@/components/podcast/PodcastEpisodesCard"
+import { TopicPodcastEpisodeVideoSection } from "@/components/podcast/TopicPodcastEpisodeVideoSection"
 import { toSignupNavigation } from "@/components/session/signupPrompts"
 import { SocialSection } from "@/components/social/SocialSection"
 import { JoinTeamButton } from "@/components/team/JoinTeamButton"
+import { STACKED_CLOSED_DIVIDER_CLASS } from "@/components/topic/CollapsibleSection"
 import { RelatedTopicsSection } from "@/components/topic/RelatedTopicsSection"
 import { NewCountInfo } from "@/components/topic/Topic"
 import { TopicActionBar, toTopicActionLayout, toTopicActionOptions } from "@/components/topic/TopicActions"
@@ -31,9 +34,11 @@ import { TopicScanButton } from "@/components/topic/TopicScanButton.tsx"
 import { TopicScanHistory } from "@/components/topic/TopicScanHistory"
 import { TopicSettingsCard } from "@/components/topic/TopicSettingsCard"
 import { TopicSkeleton } from "@/components/topic/TopicSkeleton"
+import { TopicPostsSection } from "@/components/topicPost/TopicPostsSection"
 import { usePageTitle } from "@/hooks/usePageTitle"
 import { useRevealClassName } from "@/hooks/useRevealClassName"
 import { useTopicPagePayload } from "@/hooks/useTopicPagePayload"
+import { sendPinnedOrderMoves } from "@/lib/pinnedOrderMoves"
 import { PAGE_CLASS } from "@/lib/styleClasses"
 import { NEXT_SCAN_DISCLAIMER } from "@/lib/utils"
 import { captureVisitEvent, toPublicTopicProperties } from "@/lib/visitAnalytics"
@@ -55,6 +60,11 @@ export function TopicPage() {
 	const { reloadTopicFeed: reloadHomePage, findingFilter } = useTopicFeed()
 	// the open dialog, or null if no dialog is open
 	const [openDialog, setOpenDialog] = useState<TopicDialog | null>(null)
+	// the counts that the comment thread and the notes section report once they load, for the header's details line
+	const [commentCount, setCommentCount] = useState<number | null>(null)
+	const [noteCount, setNoteCount] = useState<number | null>(null)
+	// the findings that the findings section lists, which the header's details line counts
+	const topicFindings = useTopicFindings(topic)
 	usePageTitle(topic?.name ?? null)
 
 	// report the visit once per topic, naming the topic only if it is public. send the topic view once per tab
@@ -116,6 +126,8 @@ export function TopicPage() {
 						onShareTopic: () => setOpenDialog("share"),
 						onToggleFollowTopic: () => void handleSubscriptionToggle(),
 						onRankHomeTopic: () => setOpenDialog("rank"),
+						onRankProfileTopic: () => setOpenDialog("rank-profile"),
+						onEditTopicPodcastEpisodeVideo: () => setOpenDialog("edit-film"),
 						onEditTopic: () => setOpenDialog("edit-choice"),
 						onDeleteTopic: () => setOpenDialog("delete"),
 					}),
@@ -165,12 +177,8 @@ export function TopicPage() {
 	}
 
 	// send the rank dialog's moves one at a time, then reload both feeds once
-	const handleRankTopic = async (moves: HomeOrderMove[]): Promise<void> => {
-		await runThenReload(async () => {
-			for (const move of moves) {
-				await sendTopicHomeOrder(move.id, move.position)
-			}
-		})
+	const handleRankTopic = async (pinnedOrderMoves: PinnedOrderMove[]): Promise<void> => {
+		await runThenReload(() => sendPinnedOrderMoves(pinnedOrderMoves, sendTopicHomeOrder))
 		await reloadHomePage()
 	}
 
@@ -218,12 +226,23 @@ export function TopicPage() {
 			)}
 			{topic && (
 				<>
-					{/* the topic header: the title with its chat mention badge, then the tags */}
+					{/* the topic header: the title with its chat mention badge, the tags, and the page's counts */}
 					<HydrateSection index={0}>
-						<TopicHeader topic={topic} isSignedIn={Boolean(session)} onEditImage={() => setOpenDialog("edit-image")} />
+						<TopicHeader
+							topic={topic}
+							isSignedIn={Boolean(session)}
+							findingCount={topicFindings.length}
+							commentCount={commentCount}
+							noteCount={noteCount}
+							onEditImage={() => setOpenDialog("edit-image")}
+						/>
 					</HydrateSection>
-					{/* the podcast episode player */}
+					{/* Topic Cinema, then the podcast episode player */}
 					<HydrateSection index={1}>
+						<TopicPodcastEpisodeVideoSection
+							topic={topic}
+							onVideoRenderingPoll={() => reloadTopicPage({ isPoll: true })}
+						/>
 						<PodcastEpisodePlayer
 							topic={topic}
 							topicFeedHandlers={topicFeedHandlers}
@@ -247,12 +266,17 @@ export function TopicPage() {
 							isSignedIn={Boolean(session)}
 							topicId={topic.id}
 							isTopicOwner={topic.isTopicOwner}
+							hasClosedDivider
+							onCommentCountChange={setCommentCount}
 						/>
 					</HydrateSection>
+					{/* the topic's Topic Posts, right below its comment thread */}
+					{topic.topicPosts && <TopicPostsSection topicId={topic.id} {...topic.topicPosts} />}
 					<TopicViews
 						topic={topic}
 						onMakeTopicPublic={() => setOpenDialog("make-public")}
 						onReloadTopicPage={reloadTopicPage}
+						onNoteCountChange={setNoteCount}
 					/>
 					{/* the topic's viewer and follower counts */}
 					<TopicCountsLine topicId={topic.id} isPublic={topic.visibility === "public"} />
@@ -281,15 +305,7 @@ export function TopicPage() {
  */
 function TopicFindings({ topic, topicFeedHandlers }: { topic: TopicResponse; topicFeedHandlers: TopicFeedHandlers }) {
 	const { findingFilter, sort, resourceKinds, bookmarkScope } = useTopicFeed()
-
-	// the findings this user sees
-	const topicFindings = selectTopicFindings({
-		findings: topic.findings,
-		resourceKinds,
-		findingFilter,
-		sort,
-		bookmarkScope,
-	})
+	const topicFindings = useTopicFindings(topic)
 	const viewKey = `${findingFilter}-${sort}-${bookmarkScope}-${[...resourceKinds].sort().join()}`
 	return (
 		<HydrateSection key={viewKey} index={2}>
@@ -316,6 +332,12 @@ function TopicFindings({ topic, topicFeedHandlers }: { topic: TopicResponse; top
 	)
 }
 
+// the findings of a loaded topic that this user sees, narrowed and sorted by the shared feed filters
+function useTopicFindings(topic: TopicResponse | null | undefined): TopicFinding[] {
+	const { findingFilter, sort, resourceKinds, bookmarkScope } = useTopicFeed()
+	return selectTopicFindings({ findings: topic?.findings ?? [], resourceKinds, findingFilter, sort, bookmarkScope })
+}
+
 /**
  * The topic info card and its settings on the left, its podcast episodes, scan history, notes, and related topics on
  * the right.
@@ -324,10 +346,12 @@ function TopicViews({
 	topic,
 	onMakeTopicPublic,
 	onReloadTopicPage,
+	onNoteCountChange,
 }: {
 	topic: TopicResponse
 	onMakeTopicPublic: () => void
 	onReloadTopicPage: () => Promise<void>
+	onNoteCountChange: (noteCount: number | null) => void
 }) {
 	return (
 		<HydrateSection index={4}>
@@ -340,7 +364,8 @@ function TopicViews({
 				{/* a grid item sizes to its widest content unless told not to, so long urls inside these cards
 				    would push the column past the viewport instead of truncating */}
 				<div className="min-w-0">
-					{/* the podcast episodes card */}
+					{/* Coffee Break films, then Coffee Break podcast episodes */}
+					<PodcastEpisodesCard topic={topic} format="video" />
 					<PodcastEpisodesCard topic={topic} onPodcastEpisodeRemoved={onReloadTopicPage} />
 					<TopicScanHistory
 						scans={topic.scans}
@@ -352,7 +377,14 @@ function TopicViews({
 						onReloadTopicPage={onReloadTopicPage}
 					/>
 					{/* the notes on this topic, expanded by default with no note bodies loaded */}
-					<NotesSection pageType="topic" pageId={topic.id} titleClassName="font-display text-lg" hasCompactHeader />
+					<NotesSection
+						pageType="topic"
+						pageId={topic.id}
+						titleClassName="font-display text-xl"
+						hasCompactHeader
+						accordionItemClassName={topic.relatedTopics.length > 0 ? STACKED_CLOSED_DIVIDER_CLASS : undefined}
+						onNoteCountChange={onNoteCountChange}
+					/>
 					{/* the topics nearest this one that the user may open */}
 					<RelatedTopicsSection relatedTopics={topic.relatedTopics} />
 				</div>

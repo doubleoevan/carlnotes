@@ -1,11 +1,13 @@
 import type { PodcastEpisode } from "@carlnotes/contracts/podcast"
 import type { FindingSearchRow, SearchResultsPage } from "@carlnotes/contracts/search"
 import { cn } from "@carlnotes/nightshift/classNames"
-import type { ComponentProps } from "react"
+import { type ComponentProps, type ReactNode, useState } from "react"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { Pagination } from "@/components/common/Pagination"
 import { ResourceSkeleton } from "@/components/topic/TopicFeedSkeleton"
+import { TopicNotePopover } from "@/components/topic/TopicNotePopover"
 import { TopicResource } from "@/components/topic/TopicResource"
+import { TopicPostInfoButton } from "@/components/topicPost/TopicPostInfo"
 import { RESOURCE_LIST_CARD_CLASS } from "@/lib/styleClasses"
 import type { TopicFeedHandlers } from "@/providers/TopicFeedProvider"
 import { SearchResultRow } from "./SearchResultRow"
@@ -166,11 +168,16 @@ function SearchFindingRow({
 	)
 }
 
-// a row with its own link, icon, and metadata in the shared layout
+// a row with its own link, icon, and metadata in the shared layout. a click on a topic's row, anywhere but its title
+// and its image, opens the topic's note, and one on a Topic Post's row opens the post's popup
 function LinkedSearchResultRow({ searchRow, rank }: { searchRow: LinkedSearchRow; rank: number }) {
+	const [isPopupOpen, setIsPopupOpen] = useState(false)
+	const hasPopup = searchRow.kind === "topic" || searchRow.kind === "topicPost"
 	return (
 		<SearchResultRow
 			rank={rank}
+			onPress={hasPopup ? () => setIsPopupOpen(true) : undefined}
+			titleAside={toSearchRowTitleAside(searchRow, { isOpen: isPopupOpen, onOpenChange: setIsPopupOpen })}
 			title={
 				<AnchorLink
 					href={searchRow.path}
@@ -182,4 +189,27 @@ function LinkedSearchResultRow({ searchRow, rank }: { searchRow: LinkedSearchRow
 			details={<SearchRowLine searchRow={searchRow} />}
 		/>
 	)
+}
+
+// the control right after a row's title: the button that opens a topic's note, the one that opens a Topic Post's
+// popup, and none on every other kind
+function toSearchRowTitleAside(
+	searchRow: LinkedSearchRow,
+	popup: { isOpen: boolean; onOpenChange: (isOpen: boolean) => void },
+): ReactNode {
+	switch (searchRow.kind) {
+		case "topic":
+			return <TopicNotePopover topicId={searchRow.topic.id} isOpen={popup.isOpen} onOpenChange={popup.onOpenChange} />
+		case "topicPost":
+			return (
+				<TopicPostInfoButton
+					topicPostId={searchRow.id}
+					title={searchRow.name}
+					isOpen={popup.isOpen}
+					onOpenChange={popup.onOpenChange}
+				/>
+			)
+		default:
+			return null
+	}
 }

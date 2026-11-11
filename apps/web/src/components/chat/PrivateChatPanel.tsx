@@ -1,13 +1,13 @@
 import { authClient } from "@carlnotes/client/authClient"
 import type { ChatPage } from "@carlnotes/client/chatClient"
 import { toAvatarVersion } from "@carlnotes/contracts/avatars"
-import { CLEAR_CHAT_COPY, NEW_TOPIC_CHAT_COPY } from "@carlnotes/core/lib/chatCopy"
+import { CLEAR_CHAT_COPY, NEW_TOPIC_CHAT_COPY, toPrivateChatPlaceholder } from "@carlnotes/core/lib/chatCopy"
 import { useNavigate } from "@tanstack/react-router"
 import { lazy, Suspense, useState } from "react"
 import { toSignupNavigation } from "@/components/session/signupPrompts"
 import { type ChatPanelState, clearProposedTopicEdit } from "@/stores/chatPanelStore"
 import { ChatBudgetNotice } from "./ChatBudgetNotice"
-import { CHAT_QUESTION_PLACEHOLDER, ChatComposer } from "./ChatComposer"
+import { ChatComposer } from "./ChatComposer"
 import type { ChatRoomOption } from "./ChatOptionsMenu"
 import { ChatMessagesLoading, ChatPanelWidget } from "./ChatPanelWidget"
 import { DisabledRoomComposer } from "./ChatRoomComposer"
@@ -20,26 +20,6 @@ import { type TopicChat, useTopicChat } from "./useTopicChat"
 const ChatMessages = lazy(() =>
 	import("./ChatMessages").then((chatMessages) => ({ default: chatMessages.ChatMessages })),
 )
-
-// the words the panel shows for a conversation: the private chat's, or the new-topic chat's
-function toChatCopy(
-	page: ChatPage,
-	isFirstTopic: boolean,
-): { headerName: string; placeholder: string; openingLine?: string; clearNote: string } {
-	if (!page.newTopic) {
-		return {
-			headerName: "Private chat",
-			placeholder: CHAT_QUESTION_PLACEHOLDER,
-			clearNote: CLEAR_CHAT_COPY.private,
-		}
-	}
-	return {
-		headerName: NEW_TOPIC_CHAT_COPY.name,
-		placeholder: isFirstTopic ? NEW_TOPIC_CHAT_COPY.firstTopicPlaceholder : NEW_TOPIC_CHAT_COPY.placeholder,
-		openingLine: NEW_TOPIC_CHAT_COPY.openingLine,
-		clearNote: CLEAR_CHAT_COPY.private,
-	}
-}
 
 // the composer, a disabled box while the conversation loads, or the upgrade link when the budget is spent
 function PrivateChatComposer({
@@ -83,6 +63,7 @@ function TopicDraftOrLimitNotice({ chat }: { chat: TopicChat }) {
 export function PrivateChatPanel({
 	page,
 	chatName,
+	chatLabel,
 	panelState,
 	onPanelState,
 	chatRoomOptions,
@@ -93,6 +74,8 @@ export function PrivateChatPanel({
 	page: ChatPage
 	// what the empty conversation's opening line names: the topic, or the team
 	chatName: string
+	// what the row that names the open chat reads: the private chat with what it is about, or the new-topic chat's name
+	chatLabel: string
 	// how much of the screen the panel takes, owned by the shell so it survives a chat room switch
 	panelState: Exclude<ChatPanelState, "collapsed">
 	onPanelState: (nextPanelState: ChatPanelState) => void
@@ -118,8 +101,8 @@ export function PrivateChatPanel({
 		return null
 	}
 
-	// pick the panel's words: the new-topic chat's line for the question box, else the private chat's
-	const chatCopy = toChatCopy(page, chat.isFirstTopic)
+	// the question box's line: the Topic Post chat's, the new-topic chat's, or the private chat's
+	const placeholder = toPrivateChatPlaceholder(page, chat.isFirstTopic)
 
 	// "open" and "enlarged" render the same panel, sized by the flag
 	const isPanelEnlarged = panelState === "enlarged"
@@ -128,7 +111,7 @@ export function PrivateChatPanel({
 		<ChatPanelWidget
 			isEnlarged={isPanelEnlarged}
 			onPanelState={onPanelState}
-			currentChatRoom={{ name: chatCopy.headerName, isPrivate: true }}
+			currentChatRoom={{ name: chatLabel, isPrivate: true }}
 			chatRoomMenu={{
 				chatRoomOptions,
 				onOpenChatRoomMenu,
@@ -145,7 +128,7 @@ export function PrivateChatPanel({
 						chatTurns={chat.chatTurns}
 						isStreaming={chat.isStreaming}
 						chatName={chatName}
-						openingLine={chatCopy.openingLine}
+						openingLine={page.newTopic ? NEW_TOPIC_CHAT_COPY.openingLine : undefined}
 						isBudgetExhausted={chat.isBudgetExhausted}
 						voiceChatPage={chat.voiceChatPage}
 						onRetry={(question) => void chat.send(question)}
@@ -171,12 +154,12 @@ export function PrivateChatPanel({
 					isCarlReplying={chat.isStreaming}
 				/>
 			)}
-			<PrivateChatComposer chat={chat} placeholder={chatCopy.placeholder} onSendQuestion={handleSendChat} />
+			<PrivateChatComposer chat={chat} placeholder={placeholder} onSendQuestion={handleSendChat} />
 
 			{/* the clear confirmation is only mounted while open, so its state resets each time */}
 			{isClearConfirmOpen && (
 				<ClearChatDialog onConfirm={chat.clear} onClose={() => setIsClearConfirmOpen(false)}>
-					{chatCopy.clearNote}
+					{CLEAR_CHAT_COPY.private}
 				</ClearChatDialog>
 			)}
 		</ChatPanelWidget>

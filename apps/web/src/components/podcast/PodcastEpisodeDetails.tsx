@@ -9,7 +9,6 @@ import { cn } from "@carlnotes/nightshift/classNames"
 import type * as React from "react"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
-import { PodcastThemeSongNote } from "./PodcastThemeSongNote"
 
 const elements: PodcastEpisodeDetailsElements = {
 	Group: ({ children, className }) => <div className={className}>{children}</div>,
@@ -29,13 +28,12 @@ const elements: PodcastEpisodeDetailsElements = {
 			) : (
 				podcastEpisode.title
 			)}
-			{!isInTooltip && <PodcastThemeSongNote />}
 		</div>
 	),
 }
 
 /**
- * Adapts shared episode details to browser links and the theme-song popup.
+ * Adapts shared episode details to browser links.
  */
 export function PodcastEpisodeDetails(props: PodcastEpisodeDetailsProps) {
 	return <SharedPodcastEpisodeDetails {...props} elements={elements} />
@@ -51,6 +49,10 @@ export function PodcastEpisodeTooltip({
 	podcastEpisode: PodcastEpisodeSummary
 	children: React.ReactNode
 }) {
+	// a recording with no episode number, as a Topic Post's discussion is, has no episode details to show
+	if (podcastEpisode.episodeNumber === null) {
+		return children
+	}
 	return (
 		<Tooltip>
 			<TooltipTrigger asChild>{children}</TooltipTrigger>

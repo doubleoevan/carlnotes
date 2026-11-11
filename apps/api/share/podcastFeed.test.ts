@@ -1,5 +1,5 @@
-// podcast feed tests: the feed's tags, its guids across a rename, a listener's blocked feed, the chapters file,
-// and the transcript
+// podcast feed tests: the feed's tags, its guids across a rename, a listener's blocked feed, the film feed, the
+// chapters file, and the transcript
 import { expect, test } from "bun:test"
 import type { PodcastEpisodeScript } from "@carlnotes/contracts/podcast"
 import {
@@ -118,6 +118,37 @@ test("a listener's own feed is blocked from directories and links the topic page
 		'url="https://carlnotes.example.com/api/podcast-feeds/token-1/episodes/episode-1/audio.mp3"',
 	)
 	expect(feedXml).toContain("<link>https://carlnotes.example.com/topics/topic-1/home-espresso?episode=episode-1</link>")
+})
+
+test("the film feed encloses each film as video/mp4 under its own guid, with the same chapters and transcript", () => {
+	// the film feed of the same podcast episode, whose film is 48 MB
+	const [podcastFeedEpisode] = podcastFeed.podcastEpisodes
+	const filmFeed: ToPodcastFeedXmlOptions = {
+		...podcastFeed,
+		feedUrl: "https://carlnotes.example.com/topics/topic-1/podcast-video.xml",
+		podcastEpisodes: podcastFeedEpisode ? [{ ...podcastFeedEpisode, videoByteSize: 48_000_000 }] : [],
+		format: "video",
+	}
+	const filmFeedXml = toPodcastFeedXml(filmFeed)
+	const audioFeedXml = toPodcastFeedXml(podcastFeed)
+	const podcastEpisodeFilesUrl = "https://carlnotes.example.com/api/episodes/episode-1"
+
+	// the film's stable url, length, and type, under a guid of its own and a feed guid of its own
+	expect(filmFeedXml).toContain(
+		`<enclosure url="${podcastEpisodeFilesUrl}/video.mp4" length="48000000" type="video/mp4"/>`,
+	)
+	expect(filmFeedXml).not.toContain("audio.mp3")
+	expect(filmFeedXml).toContain('<guid isPermaLink="false">episode-1-video</guid>')
+	const toFeedGuid = (feedXml: string): string | undefined => feedXml.match(/<podcast:guid>[^<]+/)?.[0]
+	expect(toFeedGuid(filmFeedXml)).not.toBe(toFeedGuid(audioFeedXml))
+
+	// the same chapters and transcript as the podcast feed
+	expect(filmFeedXml).toContain(
+		`<podcast:chapters url="${podcastEpisodeFilesUrl}/chapters.json" type="application/json+chapters"/>`,
+	)
+	expect(filmFeedXml).toContain(
+		`<podcast:transcript url="${podcastEpisodeFilesUrl}/transcript.html" type="text/html"/>`,
+	)
 })
 
 test("the chapters file gives each chapter its start, its title, and its finding's source", () => {

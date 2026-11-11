@@ -18,8 +18,10 @@ export function NoteViewer(props: Omit<NoteViewerProps, "onOpenLink">) {
 	return <SharedNoteViewer {...props} onOpenLink={(url) => void openExternalLink(url)} elements={ELEMENTS} />
 }
 
-// render the stored HTML with the editor's own typography and safe destination handling
-function NoteReader({ html, onOpenLink }: NoteReaderProps) {
+/**
+ * Renders the stored HTML with the editor's own typography and safe destination handling.
+ */
+export function NoteReader({ html, onOpenLink }: NoteReaderProps) {
 	const noteStyle = useNoteStyle()
 	return (
 		<EnrichedText

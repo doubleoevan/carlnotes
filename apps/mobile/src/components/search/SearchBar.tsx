@@ -11,8 +11,8 @@ import { useSearchBar } from "@/providers/SearchBarProvider"
 import { toTypeRoleStyle } from "@/typeRoleStyles"
 
 // the same search prompt on the toolbar and the editable search screen
-const SEARCH_PLACEHOLDER = "Topics, podcasts, findings, teams, users..."
-const SEARCH_LABEL = "Search topics, podcasts, findings, teams and users"
+const SEARCH_PLACEHOLDER = "Topics, podcasts, posts, findings, teams, users..."
+const SEARCH_LABEL = "Search topics, podcasts, posts, findings, teams and users"
 
 /**
  * Matches the web toolbar and keeps the active search visible while browsing Topics.

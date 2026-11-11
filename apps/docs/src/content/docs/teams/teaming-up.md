@@ -2,7 +2,7 @@
 title: Teaming up
 description: >-
   Put a topic on a team so several people read, edit, and discuss it together.
-  Roles, invitations, the team page, and what stays yours.
+  Roles, invites, the team page, and what stays yours.
 sidebar:
   order: 1
 ---
@@ -24,14 +24,14 @@ There are three ways to start:
 2. **Team Up** on a topic page. That topic is added to the new team.
 3. **New team…** in the **Team** field when you create or edit a topic. That topic is added the same way.
 
-All three open the Team form. It has a name, an optional description, the topics the team starts with, and invitations.
+All three open the Team form. It has a name, an optional description, the topics the team starts with, and invites.
 Team names are unique across CarlNotes, and the form tells you if a name is taken. Use the topic list to find topics and
 add them to your team.
 
 ![The New team form: name, description, one topic picked, and the Members fields with the Public
 toggle below them](../../../assets/screenshots/teams-new-team-modal.png)
 
-CarlNotes sends the invitations you enter in the form as soon as it creates the team. The **Public** toggle sets whether
+CarlNotes sends the invites you enter in the form as soon as it creates the team. The **Public** toggle sets whether
 the team has a public page.
 
 ## Add a topic to a team
@@ -40,7 +40,7 @@ the team has a public page.
 team member. On an episode page, **Add topic to team** in the actions menu opens the same list for the episode's topic.
 On a topic page that shows **Join Team** instead of Team Up, the same actions-menu option opens the list.
 
-An invited person sees the invitation on their profile page. To accept, they switch it to **Active**.
+An invited person sees the invite on their profile page. To accept, they switch it to **Active**.
 
 ![The Team Up menu on a topic page, listing your teams and New
 team](../../../assets/screenshots/teams-team-up-menu.png)
@@ -56,6 +56,11 @@ requests, add and remove topics, change the team's name and description, and tur
 ## The team page
 
 Every team has a page that lists its members and its topics. Leaders edit their team on this page.
+
+Above the members, the page shows the team's topics as cards in four sections, the same four a Café has: **Featured
+Topics**, **Featured Films**, **Featured Podcasts**, and **Featured Posts**. A team has no picks of its own. Whatever
+the topics' owners and the posts' authors featured on their Cafés leads each section. A section shows only when it
+has a card, and someone who is not on the team sees the cards of its public topics only.
 
 ![The Sunday Book Club team page: members with roles, the team's topics, and mention badges on
 the title, a topic, and the Coffee Talk pill](../../../assets/screenshots/teams-team-page.png)
@@ -76,21 +81,21 @@ After you ask, the same button deletes your request.
 ![The same button after asking, showing a minus and the tooltip "Delete request to join Kickin
 it"](../../../assets/screenshots/teams-join-requested.png)
 
-## Invitations
+## Invites
 
 There are three ways to invite someone:
 
-- **By email.** The address gets an invitation email with a link.
-- **By @username.** CarlNotes sends no email. The invitation waits on their **Teams** page.
+- **By email.** The address gets an invite email with a link.
+- **By @username.** CarlNotes sends no email. The invite waits on their **Teams** page.
 - **Invite by link.** Anyone with the link can join. The link opens in the CarlNotes app too, and someone who opens it
   before signing in comes back to it after they do.
 
-Email and link invitations count against a daily allowance. @username invitations don't.
+Email and link invites count against a daily allowance. @username invites don't.
 
 Each person picks who may invite them in their account settings: **Anyone**, **People I interact with**, or **Nobody**.
-The setting applies to email and @username invitations.
+The setting applies to email and @username invites.
 
-![The Invitations setting on the account page: who may invite you, set to anyone, people I interact
+![The Invites setting on the account page: who may invite you, set to anyone, people I interact
 with, or nobody](../../../assets/screenshots/account-invite-permission.png)
 
 ## What joining costs you

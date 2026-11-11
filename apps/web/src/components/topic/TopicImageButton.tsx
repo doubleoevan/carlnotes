@@ -36,8 +36,12 @@ export function TopicImageButton({
 			onClick={onClick}
 			className={cn("group relative cursor-pointer rounded-lg disabled:cursor-default", className)}
 		>
-			<TopicImage {...topicImageProps} className={cn(TOPIC_IMAGE_FRAME_CLASS, "w-full", imageClassName)} />
-			<span className="absolute inset-0 grid place-items-center rounded-lg bg-black/55 opacity-0 transition-opacity group-enabled:group-hover:opacity-100 group-enabled:group-focus-visible:opacity-100">
+			{/* the image and the hover cover take the button's corner */}
+			<TopicImage
+				{...topicImageProps}
+				className={cn(TOPIC_IMAGE_FRAME_CLASS, "w-full rounded-[inherit]", imageClassName)}
+			/>
+			<span className="absolute inset-0 grid place-items-center rounded-[inherit] bg-black/55 opacity-0 transition-opacity group-enabled:group-hover:opacity-100 group-enabled:group-focus-visible:opacity-100">
 				<Camera className="size-6 text-white" />
 			</span>
 		</button>

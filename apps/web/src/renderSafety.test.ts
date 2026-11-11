@@ -65,6 +65,8 @@ test("the streaming renderer disables raw html and scheme-checks every destinati
 	const rendererSource =
 		readFileSync(join(import.meta.dir, STREAMING_CHAT_RENDERER), "utf8") +
 		readFileSync(new URL("../../../packages/core/lib/safeChatMarkdown.ts", import.meta.url), "utf8")
+
+	// check each destination's scheme, and keep raw html off
 	expect(rendererSource).toContain('from "@carlnotes/core/lib/safeChatMarkdown"')
 	expect(rendererSource).toContain("!isSafeHref(href)")
 	expect(rendererSource).toContain("!isSafeHref(src)")
@@ -88,7 +90,7 @@ test("no ui file injects raw html", () => {
 
 // the body a note stores is sanitized in the api before every write, to the editor's own tag set
 test("the note html is sanitized server-side", () => {
-	const sanitizerSource = readFileSync(join(import.meta.dir, "../../api/note/noteHtml.ts"), "utf8")
+	const sanitizerSource = readFileSync(join(import.meta.dir, "../../api/noteHtml.ts"), "utf8")
 	expect(sanitizerSource).toContain('allowedSchemes: ["http", "https", "mailto"]')
 	const routeSource = readFileSync(join(import.meta.dir, "../../api/note/notes.ts"), "utf8")
 	expect(routeSource).toContain("const sanitizedHtml = sanitizeNoteHtml(html)")

@@ -240,7 +240,7 @@ const INVITE_CHOICES = [
 		value: "connected",
 		label: "People I interact with",
 		description:
-			"People you share a team with, people following one of your topics, and people whose invitations you accepted.",
+			"People you share a team with, people following one of your topics, and people whose invites you accepted.",
 	},
 	{ value: "nobody", label: "Nobody" },
 ] as const
@@ -275,7 +275,7 @@ export function InvitationsSection({ elements }: { elements: AccountFieldElement
 	const selectedChoice = session.user.inviteAccess || "anyone"
 	return (
 		<Card>
-			<Heading>Invitations</Heading>
+			<Heading>Invites</Heading>
 			<Text className="text-muted-foreground mt-1 text-sm">Who may invite you to topics and teams.</Text>
 			<Group>
 				{INVITE_CHOICES.map((choice) => (

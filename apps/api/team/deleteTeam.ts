@@ -5,6 +5,7 @@ import { type DbTransaction, db } from "@carlnotes/db"
 import { chatRoomAttachments } from "@carlnotes/db/schema/chat"
 import { teamMembers, teams } from "@carlnotes/db/schema/teams"
 import { deleteStoredObjects, recordPendingObjectDeletions } from "@carlnotes/db/store"
+import { clearUnseenCommentMentions } from "@carlnotes/db/unseenCommentMentions"
 import { purgeEdgeCacheTagAfterDeletion } from "@carlnotes/server/edgePurge"
 import { and, eq } from "drizzle-orm"
 import { isLeaderRole } from "../authorization"
@@ -102,6 +103,9 @@ async function updateTeamLeader(userId: string, teamId: string): Promise<DeleteT
 	if (!newLeaderId) {
 		return { status: "forbidden" }
 	}
+
+	// the caller left the team, so clear their cached comment mentions
+	await clearUnseenCommentMentions([userId])
 	return { status: "handedOver", newLeaderUsername: (await loadUsername(newLeaderId)) ?? "" }
 }
 

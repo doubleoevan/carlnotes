@@ -15,6 +15,8 @@ import { toPodcastEpisodeChapterBlock, toPodcastQuestionBlock } from "./podcastE
 import type { ChatContext, RetrievedFinding, TopicSettings } from "./retrieve"
 import type { PodcastEpisodeChapterContext } from "./retrievePodcastEpisodeChapter"
 import type { TeamChatContext } from "./retrieveTeam"
+import type { TopicPostChatContext } from "./retrieveTopicPost"
+import { toTopicPostBlock, toTopicPostQuestionBlock } from "./topicPostQuestionPrompt"
 
 // the edit block for a turn without the topic tools
 const EMPTY_EDIT_TOPIC_BLOCK = "None."
@@ -25,11 +27,13 @@ type ChatPromptOptions = { isSpoken?: boolean }
 // the shared fragments with no variables, written once for every chat
 type ChatFragmentName = "chat-conduct" | "chat-docs-guide" | "chat-open-new-topic" | "chat-search-web" | "chat-spoken"
 
-// the topic chat's turn options: the edit block for a turn with the topic tools, the spoken flag, and the podcast
-// episode chapter a question asked from the podcast player was asked during
+// the topic chat's turn options: the edit block for a turn with the topic tools, the spoken flag, the podcast
+// episode chapter a question asked from the podcast player was asked during, and the Topic Post a question asked from
+// its page is about
 type TopicChatPromptOptions = ChatPromptOptions & {
 	editTopicBlock?: string
 	podcastEpisodeChapter?: PodcastEpisodeChapterContext
+	topicPost?: TopicPostChatContext
 }
 
 // the new-topic chat's options: the spoken flag, and what happened to the last proposal this turn
@@ -40,7 +44,12 @@ type NewTopicChatPromptOptions = ChatPromptOptions & { proposalOutcome?: string 
  */
 export async function buildTopicChatPrompt(
 	chatContext: ChatContext,
-	{ editTopicBlock = EMPTY_EDIT_TOPIC_BLOCK, isSpoken = false, podcastEpisodeChapter }: TopicChatPromptOptions = {},
+	{
+		editTopicBlock = EMPTY_EDIT_TOPIC_BLOCK,
+		isSpoken = false,
+		podcastEpisodeChapter,
+		topicPost,
+	}: TopicChatPromptOptions = {},
 ): Promise<BuiltPrompt> {
 	const [
 		{ template, name, registryPrompt },
@@ -51,6 +60,7 @@ export async function buildTopicChatPrompt(
 		searchWebBlock,
 		spokenBlock,
 		podcastQuestionBlock,
+		topicPostQuestionBlock,
 	] = await Promise.all([
 		fetchPromptTemplate("chat-topic"),
 		toGlossaryBlock(TOPIC_CHAT_GLOSSARY_LINE),
@@ -60,6 +70,7 @@ export async function buildTopicChatPrompt(
 		toFragmentBlock("chat-search-web"),
 		toSpokenBlock(isSpoken),
 		toPodcastQuestionBlock(podcastEpisodeChapter),
+		toTopicPostQuestionBlock(topicPost),
 	])
 
 	// fill the template, composing each list block first. the app's own blocks stay unfenced
@@ -76,6 +87,7 @@ export async function buildTopicChatPrompt(
 			chatAttachmentContext: chatContext.chatAttachmentContext || "None.",
 			docsBlock: chatContext.docsBlock || "None.",
 			podcastEpisodeChapterBlock: podcastEpisodeChapter ? toPodcastEpisodeChapterBlock(podcastEpisodeChapter) : "None.",
+			topicPostBlock: topicPost ? toTopicPostBlock(topicPost) : "None.",
 		},
 		{
 			editTopicBlock,
@@ -85,6 +97,7 @@ export async function buildTopicChatPrompt(
 			openNewTopicBlock,
 			podcastQuestionBlock,
 			searchWebBlock,
+			topicPostQuestionBlock,
 			spokenBlock,
 		},
 	)

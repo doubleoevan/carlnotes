@@ -143,15 +143,16 @@ the seek target. This makes the phone dock taller than the web's pointer-sized p
 `PodcastEpisodeSeekBar` overlays the SDK-compatible system slider on shared chapter segments for touch. Its accessible
 wrapper supplies bounded 30-second forward and 15-second backward actions through the shared playback rules.
 `PodcastEpisodeTranscript` uses a bounded platform ScrollView, orange scrollbar, theme-aware
-fade, and the shared expansion state. `PodcastThemeSongNote` opens the shared credits and full lyrics in a sheet.
+fade, and the shared expansion state. `PodcastThemeSongNote` is the headphones tile right after a film section's or a
+podcast section's title, which opens the shared credits and full lyrics in a sheet.
 A chapter's source opens the current Finding reader; an eligible missing Finding exposes chapter ratings in a sheet.
 `chat/PodcastEpisodeChapterTag` adapts the same shared tag as web, so earlier podcast questions retain chapter playback.
 The bottom player's linked cover and title open the loaded episode's screen without restarting audio. Its accessibility
 label includes the full episode title even when the visible title truncates. Topic and episode screens use the same
 player card and segmented seek control.
-Episode titles and theme-song credit buttons use sibling elements. React Native text grouping otherwise hides the
-embedded button from screen readers; each heading and credit button remains independently accessible. Credits and
-feed sheets receive concrete trigger refs so closing them returns screen-reader focus to the opener.
+A section's toggle and its theme-song credits button are sibling elements. A button inside the toggle would be hidden
+from screen readers, so each heading and credits button remains independently accessible. Credits and feed sheets
+receive concrete trigger refs so closing them returns screen-reader focus to the opener.
 
 `PodcastFeedDialog` uses core's account-scoped request hook and composition. `podcastFeedActions.ts` adapts only
 supported podcast schemes; app config declares iOS `podcast` and Android `pcast` queries. Copy is always available.

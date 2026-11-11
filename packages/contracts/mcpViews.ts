@@ -1,24 +1,37 @@
 // the MCP views: the MCP view each tool names, and what a tool result gives its MCP view beside the structured result the
 // model reads
 
+import type { UnseenCommentMention } from "./commentMentions"
 import type { TopicFinding } from "./findings"
 import type { McpScanStatus } from "./mcpScanStatus"
+import type { NewsResponse, NewsWindow } from "./news"
 import type { PersonalSourcesSendResult } from "./personalSources"
 import type { PodcastEpisode, PodcastEpisodeSummary } from "./podcast"
 import type { ProfileIdentity } from "./profiles"
 import type { FindingSearchTopic, SearchRequest, SearchResultsPage, SearchRow } from "./search"
-import type { ReactionSummary } from "./social"
+import type { Comment, CommentThreadResponse, ReactionSummary } from "./social"
 import type { TopicImageUrls } from "./topicImages"
 import type { TopicDraft } from "./topicPayloads"
+import type { TopicPostCard, TopicPostResponse } from "./topicPosts"
 import type { Updates } from "./updates"
 
 // the MCP views, and each one's ui resource
-export const MCP_VIEWS = ["search", "topic", "findings", "suggest-topics", "updates", "scan"] as const
+export const MCP_VIEWS = [
+	"search",
+	"topic",
+	"findings",
+	"suggest-topics",
+	"updates",
+	"scan",
+	"news",
+	"topic-posts",
+	"topic-post",
+] as const
 
 export type McpView = (typeof MCP_VIEWS)[number]
 
 // the version of the MCP view bundle a running api builds, always above every stored version
-export const MCP_VIEW_VERSION = 9
+export const MCP_VIEW_VERSION = 10
 
 /**
  * Returns an MCP view's ui resource uri at a version, the current one by default.
@@ -29,6 +42,18 @@ export function toMcpUiResourceUri(mcpView: McpView, version = MCP_VIEW_VERSION)
 
 // the key of a tool result's _meta entry that only its MCP view reads
 export const MCP_VIEW_META_KEY = "carlnotes/card"
+
+// how many News Events one read_news result holds, which the news MCP view cuts into the list's pages
+export const MCP_NEWS_PAGE_SIZE = 20
+
+// what the news MCP view reads of a read_news result: the window, the caller's unseen Comment Mentions on a first
+// page, the page of News Events in the site's shape, and the cursor of the next page, null on the last
+export type McpViewNews = {
+	window: NewsWindow
+	commentMentions: UnseenCommentMention[]
+	newsPage: NewsResponse
+	nextCursor: string | null
+}
 
 // the topic a findings MCP view heads its rows with: a finding row's topic, its latest podcast episode, and whether the
 // caller subscribes to it
@@ -56,6 +81,14 @@ export type McpViewData = {
 	sendConfirmationLinks?: { entryId: string; links: { url: string; title?: string }[] }[]
 	// the social target's reactions as they stand after the save_reaction tool saved one
 	reactionSummary?: ReactionSummary
+	news?: McpViewNews
+	// one page of a Topic's published Topic Posts, newest first
+	topicPosts?: TopicPostCard[]
+	// one Topic Post as its page shows it, with the first page of its comment thread
+	topicPost?: TopicPostResponse
+	// one page of a comment thread as the read_hot_takes tool read it, and the Comment the post_hot_take tool posted
+	commentThread?: CommentThreadResponse
+	postedComment?: Comment
 }
 
 // the search tool's structured result: the search's page with every row's absolute url, the search that found it, and

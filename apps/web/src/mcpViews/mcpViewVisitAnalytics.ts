@@ -9,3 +9,4 @@ export const captureVisit: typeof visitAnalytics.captureVisit = () => {}
 export const captureVisitEvent: typeof visitAnalytics.captureVisitEvent = () => {}
 export const toPublicTopicProperties: typeof visitAnalytics.toPublicTopicProperties = () => ({})
 export const captureEpisodeVisitEvent: typeof visitAnalytics.captureEpisodeVisitEvent = () => {}
+export const captureFilmVisitEvent: typeof visitAnalytics.captureFilmVisitEvent = () => {}

@@ -5,6 +5,7 @@ import { CoffeeSteam } from "@/components/branding/CoffeeSteam"
 import { AppChatPanel } from "@/components/chat/AppChatPanel"
 import { SpokenAnswerAudio } from "@/components/chat/SpokenAnswerAudio"
 import { PodcastEpisodeAudio } from "@/components/podcast/PodcastEpisodeAudio"
+import { ReturnedTopicPodcastEpisodeVideoDialog } from "@/components/podcast/ReturnedTopicPodcastEpisodeVideoDialog"
 import { SearchBar } from "@/components/search/SearchBar"
 import { TermsAcceptanceDialog } from "@/components/session/TermsAcceptanceDialog"
 import { Footer } from "./Footer"
@@ -38,6 +39,8 @@ export function Layout() {
 			<AppChatPanel />
 			{/* the podcast's audio element and the podcast player, mounted here so playback outlives a route change */}
 			<PodcastEpisodeAudio />
+			{/* the film that returned from picture-in-picture on a page with no film player, in the Video dialog */}
+			<ReturnedTopicPodcastEpisodeVideoDialog />
 			{/* the audio element carl's spoken answers play through, mounted here so a reply outlives a route change */}
 			<SpokenAnswerAudio />
 			{/* the Terms acceptance a signed-in user owes once, on whichever page the session loads */}

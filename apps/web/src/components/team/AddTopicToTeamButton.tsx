@@ -13,7 +13,7 @@ import { useEffect, useState } from "react"
 import { toast } from "sonner"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/primitives/popover"
 import { useConfirmDialog } from "@/hooks/useConfirmDialog"
-import { ACTIVE_ICON_CLASS, MENU_BUTTON_CLASS, MENU_DIVIDER_CLASS } from "@/lib/styleClasses"
+import { MENU_DIVIDER_CLASS, PLAIN_PAGE_BUTTON_CLASS, PLAIN_PAGE_BUTTON_ICON_CLASS } from "@/lib/styleClasses"
 import { EditTeamModal } from "./EditTeamModal"
 import { NewTeamOption, TeamActionOption } from "./TeamMenuOptions"
 
@@ -237,9 +237,9 @@ export function AddTopicToTeamButton({
 		<>
 			<Popover open={isMenuOpen} onOpenChange={(isOpen) => !isOpen && setIsMenuOpen(false)}>
 				<PopoverTrigger asChild>
-					<button type="button" onClick={() => void handleClick()} className={MENU_BUTTON_CLASS}>
-						{/* the filled icon takes the primary color */}
-						<Users className={cn("size-4", isAddTopicToTeamIconFilled && ACTIVE_ICON_CLASS)} />
+					<button type="button" onClick={() => void handleClick()} className={PLAIN_PAGE_BUTTON_CLASS}>
+						{/* the icon takes the highlight color, filled once a team the user leads has the topic */}
+						<Users className={cn(PLAIN_PAGE_BUTTON_ICON_CLASS, isAddTopicToTeamIconFilled && "fill-current")} />
 						Team Up
 					</button>
 				</PopoverTrigger>

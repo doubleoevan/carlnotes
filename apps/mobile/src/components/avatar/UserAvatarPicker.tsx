@@ -17,11 +17,14 @@ import { useAvatarPicker } from "./avatarUpload"
 export function UserAvatarPicker({
 	userId,
 	username,
+	size = 56,
 	isCameraInitiallyShown = false,
 	initialError = null,
 }: {
 	userId: string
 	username: string
+	// the avatar's width and height in points
+	size?: number
 	isCameraInitiallyShown?: boolean
 	initialError?: string | null
 }) {
@@ -77,7 +80,7 @@ export function UserAvatarPicker({
 					ownerId={userId}
 					name={username}
 					imageUrl={avatarVersion ? toAvatarImagePath(userId, avatarVersion) : null}
-					size={56}
+					size={size}
 				/>
 				{isCameraShown && (
 					<View pointerEvents="none" className="absolute inset-0 items-center justify-center rounded-full bg-black/55">

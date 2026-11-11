@@ -1,5 +1,7 @@
 import { authClient } from "@carlnotes/client/authClient"
+import { toAvatarImagePath } from "@carlnotes/contracts/avatars"
 import { isAdminRole } from "@carlnotes/contracts/enums"
+import { toSessionProfileIdentity } from "@carlnotes/contracts/profiles"
 import { SITE_URL } from "@carlnotes/contracts/site"
 import {
 	UserMenuItems as SharedUserMenuItems,
@@ -13,7 +15,6 @@ import { usePathname } from "expo-router"
 import {
 	Activity,
 	BookOpen,
-	CircleUserRound,
 	Coffee,
 	Columns3Cog,
 	LogIn,
@@ -26,6 +27,7 @@ import {
 } from "lucide-react-native"
 import { type ComponentRef, useRef, useState } from "react"
 import { View } from "react-native"
+import { Avatar } from "@/components/branding/Avatar"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { YoutubePlayIcon } from "@/components/common/BrandIcon"
 import { Sheet } from "@/components/common/Sheet"
@@ -33,6 +35,7 @@ import { UpdateCountBadge } from "@/components/common/UpdateCountBadge"
 import { Button } from "@/components/primitives/button"
 import { Icon } from "@/components/primitives/icon"
 import { Text } from "@/components/primitives/text"
+import { CommentMentionMenuRow } from "@/components/social/CommentMentionBadge"
 import { TopicTutorialVideoDialog } from "@/components/topic/TopicTutorialVideoDialog"
 import { useSignOut } from "@/hooks/useSignOut"
 import { ThemeMenu } from "./ThemeMenu"
@@ -113,12 +116,14 @@ function UserMenuItems({ onClose, onPlayTutorial }: { onClose: () => void; onPla
 		<SharedUserMenuItems
 			elements={USER_MENU_ELEMENTS}
 			userId={session.user.id}
+			username={toSessionProfileIdentity(session.user).username}
 			isAdmin={isAdminRole(session.user.role)}
 			pathname={pathname === "/settings" ? "/account" : pathname}
 			onNavigate={onClose}
 			onPlayTutorial={onPlayTutorial}
 			onSignOut={() => void signOut()}
 			isSigningOut={isPending}
+			mentionsRow={<CommentMentionMenuRow onNavigate={onClose} />}
 			renderBadge={(label) => <UpdateCountBadge {...userMenuUpdateBadges[label]} countBadgeClassName="text-xs" />}
 		/>
 	)
@@ -127,7 +132,6 @@ function UserMenuItems({ onClose, onPlayTutorial }: { onClose: () => void; onPla
 // preserve native routing, hosted docs/Admin, and the web's exact icon choices
 const MENU_ICONS = {
 	Topics: Coffee,
-	Profile: CircleUserRound,
 	Teams: Users,
 	Activity,
 	Account: User,
@@ -140,6 +144,7 @@ const MENU_ICONS = {
 // render visitor and account destinations with the same link component
 function MenuLink({
 	label,
+	text,
 	href,
 	isSelected,
 	onSelect,
@@ -148,14 +153,36 @@ function MenuLink({
 	return (
 		<AnchorLink
 			href={href === "/docs" || href === "/admin" ? `${SITE_URL}${href}` : href}
-			accessibilityLabel={label}
+			accessibilityLabel={text ?? label}
 			onPress={onSelect}
 			accessibilityState={{ selected: isSelected }}
 			className={cn("min-h-12 flex-row items-center gap-2 rounded-md px-2 active:bg-accent", isSelected && "bg-accent")}
 		>
-			<Icon as={MenuIcon} className="size-4 text-foreground" />
-			<Text className="text-sm">{label}</Text>
+			{/* the Café row draws the user's own avatar, a size up so its circle matches the other icons */}
+			{label === "Café" ? <CafeMenuAvatar /> : <Icon as={MenuIcon} className="size-4 text-foreground" />}
+			<Text numberOfLines={1} className="shrink text-sm">
+				{text ?? label}
+			</Text>
 		</AnchorLink>
+	)
+}
+
+// the signed-in user's own avatar, the Café row's icon
+function CafeMenuAvatar() {
+	const { data: session } = authClient().useSession()
+	if (!session) {
+		return null
+	}
+	const { userId, username, avatarVersion } = toSessionProfileIdentity(session.user)
+	return (
+		<View className="-m-0.5">
+			<Avatar
+				size={20}
+				ownerId={userId}
+				name={username}
+				imageUrl={avatarVersion ? toAvatarImagePath(userId, avatarVersion) : null}
+			/>
+		</View>
 	)
 }
 

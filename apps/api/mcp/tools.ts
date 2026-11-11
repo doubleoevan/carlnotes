@@ -8,6 +8,7 @@ import type { CallToolResult } from "@modelcontextprotocol/server"
 import { z } from "zod"
 import { setTopicSubscription } from "../topic/subscriptions"
 import { loadFindingsMcpViewData, loadSearchMcpViewData, toMcpViewMeta } from "./mcpViewData"
+import { registerNewsTool } from "./newsTool"
 import { registerPersonalSourcesTools } from "./personalSourcesTools"
 import {
 	bookmarkFinding,
@@ -28,6 +29,7 @@ import { type ToolCaller, toMcpAnalyticsProperties } from "./toolCaller"
 import { type RegisterToolsOptions, toPageResult, topicIdArgument, toTextResult } from "./toolShapes"
 import { registerTopicContextTool } from "./topicContextTool"
 import { registerTopicEditTools } from "./topicEditTools"
+import { registerTopicPostTools } from "./topicPostTools"
 import { listTopics } from "./topicResults"
 import { registerMcpUiResources, toMcpViewToolMeta } from "./uiResources"
 import { registerUpdatesTool } from "./updatesTool"
@@ -50,6 +52,9 @@ export function registerTools(registerToolsOptions: RegisterToolsOptions): void 
 	registerTopicContextTool(registerToolsOptions)
 	registerFindingFeedbackTool(registerToolsOptions)
 	registerSocialTools(registerToolsOptions)
+	// register the news and the Topic Post reads
+	registerNewsTool(registerToolsOptions)
+	registerTopicPostTools(registerToolsOptions)
 }
 
 // register the read tools, the site search, and the consumed write
@@ -112,7 +117,7 @@ function registerReadTools({ mcpServer, toolCaller, routeTopicId, clientAddress 
 		{
 			title: "Search CarlNotes",
 			description:
-				"Find CarlNotes topics, podcast episodes, findings, teams, and profiles by name, the same search the site's search bar and search page run. Rank by relevance, newest, or trending, and page through the results. Each result has its url on carlnotes.com. To rank one topic's findings by meaning, use search_topic_findings. Use it when the user asks Carl or CarlNotes to find something across the site, with phrases like search CarlNotes, find a topic, or look up a podcast episode.",
+				"Find CarlNotes topics, podcast episodes, posts, findings, teams, and profiles by name, the same search the site's search bar and search page run. Rank by relevance, newest, or trending, and page through the results. Each result has its url on carlnotes.com. To rank one topic's findings by meaning, use search_topic_findings. Use it when the user asks Carl or CarlNotes to find something across the site, with phrases like search CarlNotes, find a topic, or look up a podcast episode.",
 			inputSchema: searchRequestPayload,
 			annotations: { readOnlyHint: true },
 			_meta: toMcpViewToolMeta("search"),

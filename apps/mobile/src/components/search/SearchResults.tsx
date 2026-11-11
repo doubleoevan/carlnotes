@@ -13,6 +13,7 @@ import { Footer } from "@/components/layout/Footer"
 import { Button } from "@/components/primitives/button"
 import { Icon } from "@/components/primitives/icon"
 import { Text } from "@/components/primitives/text"
+import { EmptyListCard } from "@/components/table/TableCard"
 import type { TopicFeedControlsProps } from "@/components/topic/TopicFeedControls"
 import { TopicHomeActions } from "@/components/topic/TopicHomeActions"
 import { toTypeRoleStyle } from "@/typeRoleStyles"
@@ -46,7 +47,7 @@ export function SearchResults({
 		>
 			{/* the web's tags, new topic action, and counted search title */}
 			<TopicHomeActions filters={filters} knownTags={knownTags} />
-			<View className="mx-4 mt-4 mb-4 flex-row items-start gap-2">
+			<View className="mx-4 mt-3 mb-4 flex-row items-start gap-2">
 				<Icon as={Search} className="mt-0.5 size-6 text-foreground" />
 				<Text accessibilityRole="header" style={toTypeRoleStyle("pageTitle")} className="flex-1">
 					{title}
@@ -162,9 +163,7 @@ export function SearchStatus({
 		)
 	}
 	if (!hasRows) {
-		return (
-			<Text className="py-6 text-sm text-muted-foreground">{`Carl looked everywhere. Nothing matches “${searchText}”.`}</Text>
-		)
+		return <EmptyListCard text={`Carl looked everywhere. Nothing matches “${searchText}”.`} />
 	}
 	return null
 }

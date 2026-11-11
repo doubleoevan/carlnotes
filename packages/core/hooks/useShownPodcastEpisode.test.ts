@@ -60,3 +60,17 @@ test("recording and failed episodes obey the existing scan permission", () => {
 			?.id,
 	).toBe("latest")
 })
+
+test("a Topic Post's discussion loaded in the player leaves the Topic's own episode shown", () => {
+	// the Topic's latest episode, and one of its posts' discussions in the player
+	const latestPodcastEpisode = toPodcastEpisodeFixture({ id: "latest" })
+	const topic = toTestTopicResponse({ id: "topic-1", latestPodcastEpisode })
+	const loadedDiscussion = toPodcastEpisodeFixture({ id: "topic-post-discussion:post-1:recording-1" })
+
+	// the discussion belongs to the Topic, yet the podcast section keeps the latest episode
+	expect(loadedDiscussion.topicId).toBe(topic.id)
+	expect(
+		toShownPodcastEpisode({ topic, loadedPodcastEpisode: loadedDiscussion, linkedPodcastEpisode: null }).podcastEpisode
+			?.id,
+	).toBe("latest")
+})

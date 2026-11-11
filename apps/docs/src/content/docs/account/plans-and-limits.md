@@ -27,7 +27,8 @@ a day.
 | Send-only API keys | — | — | Up to 10 active |
 | Members per team you lead | 15 | Unlimited | Unlimited |
 | Coffee Break podcast episodes | Up to 10 minutes per brew, latest kept | Up to 30 minutes per brew, every full one kept | Up to 30 minutes per brew, every full one kept |
-| Topic image regenerations a month | 2 | 15 | 30 |
+| Image regenerations a month | 2 | 15 | 30 |
+| Coffee Break Discussion regenerations a month | 2 | 10 | 20 |
 
 Existing Free accounts keep their three-Topic allowance. New Free accounts can create one Topic.
 

@@ -31,7 +31,7 @@ afterEach(() => mock.restore())
 
 test("audio JSON is no-store while GET redirects and HEAD retains range metadata", async () => {
 	// the JSON form is no-store and varies by Accept
-	spyOn(storage, "toPodcastEpisodeAudioUrl").mockReturnValue(audioUrl)
+	spyOn(storage, "toPodcastEpisodeFileUrl").mockReturnValue(audioUrl)
 	const app = new Hono().get("/audio", (context) => toPodcastEpisodeAudioResponse(context, episode))
 	const response = await app.request("/audio", { headers: { Accept: "application/json" } })
 	expect(response.status).toBe(200)
@@ -58,7 +58,7 @@ test("audio JSON is no-store while GET redirects and HEAD retains range metadata
 
 test("JSON audio uses the existing access decision and listen rate limit", async () => {
 	// the access check and the listen rate limit, as spies
-	spyOn(storage, "toPodcastEpisodeAudioUrl").mockReturnValue(audioUrl)
+	spyOn(storage, "toPodcastEpisodeFileUrl").mockReturnValue(audioUrl)
 	const access = spyOn(episodeRows, "loadAccessiblePodcastEpisode").mockResolvedValue(null)
 	const count = spyOn(viewerCounts, "countWithinRateLimit").mockResolvedValue(undefined)
 	const app = toSignedInApp(podcastEpisodesRoute, "owner")
@@ -87,7 +87,7 @@ test("an audio request is first if it has no range or starts at the first byte",
 
 test("an MCP view's first audio request reports the play of the user its token names", async () => {
 	Bun.env.BETTER_AUTH_SECRET = "test-secret"
-	spyOn(storage, "toPodcastEpisodeAudioUrl").mockReturnValue(audioUrl)
+	spyOn(storage, "toPodcastEpisodeFileUrl").mockReturnValue(audioUrl)
 	spyOn(viewerCounts, "countWithinRateLimit").mockResolvedValue(undefined)
 	const topic = { id: "topic-1", visibility: "private" } as episodeRows.TopicRow
 	spyOn(episodeRows, "loadAccessiblePodcastEpisode").mockResolvedValue({ podcastEpisodeRow: episode, topic })
@@ -109,7 +109,7 @@ test("an MCP view's first audio request reports the play of the user its token n
 		[
 			"episode_played",
 			"user-1",
-			{ entryPoint: "mcp", topicId: "topic-1", isTopicPublic: false, episodeId: "episode-1" },
+			{ entryPoint: "mcp", format: "audio", topicId: "topic-1", isTopicPublic: false, episodeId: "episode-1" },
 		],
 	])
 

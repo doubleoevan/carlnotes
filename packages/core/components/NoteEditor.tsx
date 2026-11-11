@@ -1,19 +1,18 @@
 import { fetchNote, NoteReadError } from "@carlnotes/client/noteClient"
 import type { NoteResponse } from "@carlnotes/contracts/notes"
-import { type ComponentType, type ReactNode, type RefObject, useCallback, useEffect, useRef, useState } from "react"
+import { type ComponentType, type ReactNode, useEffect, useRef, useState } from "react"
 import {
-	EMPTY_EDITOR_HTML,
 	type NoteBodySave,
 	type NoteSaveErrorReason,
 	type NoteSaveStatus,
 	useNoteBodySave,
 } from "../hooks/useNoteBodySave"
 import type { NoteCommentThread } from "../hooks/useNoteComments"
-import type { NoteFormatState, NoteLink, NoteSelection } from "../lib/noteFormats"
+import { type RichTextEditorInputProps, useRichTextEditor } from "../hooks/useRichTextEditor"
 import { NOTE_LABELS } from "../lib/noteLabels"
 import type { NoteConflictNoticeProps } from "./NoteConflictNotice"
 import type { NoteToolbarProps } from "./NoteToolbar"
-import type { NoteEditorInstance, NoteLayoutProps } from "./NoteViewer"
+import type { NoteLayoutProps } from "./NoteViewer"
 
 // the shared editor state and the platform elements that display it
 export type NoteEditorProps = {
@@ -28,18 +27,10 @@ export type NoteEditorProps = {
 	onError: (message: string) => void
 	controller?: NoteBodySave
 }
-export type NoteEditorInputProps = {
-	editorRef: RefObject<NoteEditorInstance | null>
-	defaultValue: string
-	placeholder: string
-	onChangeHtml: (html: string) => void
-	onChangeState: (state: NoteFormatState) => void
-	onChangeSelection: (selection: NoteSelection) => void
-	onLinkDetected: (link: NoteLink | null) => void
-}
+export type NoteEditorInputProps = RichTextEditorInputProps
 export type NoteEditorElements = {
 	Layout: ComponentType<NoteLayoutProps>
-	Input: ComponentType<NoteEditorInputProps>
+	Input: ComponentType<RichTextEditorInputProps>
 	Toolbar: ComponentType<NoteToolbarProps>
 	ConflictNotice: ComponentType<NoteConflictNoticeProps>
 }
@@ -62,10 +53,6 @@ export function NoteEditor({
 }: NoteEditorProps & { elements: NoteEditorElements }) {
 	// retain the restored draft and stable event handlers for the editor's lifetime
 	const [initialHtml] = useState(() => controller?.getDraft().html ?? note.html)
-	const editorRef = useRef<NoteEditorInstance>(null)
-	const [formatState, setFormatState] = useState<NoteFormatState | null>(null)
-	const [selection, setSelection] = useState<NoteSelection>({ start: 0, end: 0, text: "" })
-	const [activeLink, setActiveLink] = useState<NoteLink | null>(null)
 	const [isReloading, setIsReloading] = useState(false)
 	const isReloadingRef = useRef(false)
 	const isMountedRef = useRef(true)
@@ -85,23 +72,12 @@ export function NoteEditor({
 		}
 	}, [])
 
-	// treat the first normalized body as a baseline, skipping the library's preliminary empty document
-	const baselineRef = useRef({ isTaken: false, hasBody: initialHtml !== "" })
-	const handleChangeHtml = useCallback(
-		(html: string) => {
-			const baseline = baselineRef.current
-			if (baseline.isTaken) {
-				scheduleSave(html)
-				return
-			}
-			if (baseline.hasBody && html === EMPTY_EDITOR_HTML) {
-				return
-			}
-			baseline.isTaken = true
-			setSavedHtml(html)
-		},
-		[scheduleSave, setSavedHtml],
-	)
+	// the editor's own rendering of the stored body is the saved one, and each edit after it schedules a save
+	const { editorRef, toolbarProps, inputProps, setHtml } = useRichTextEditor({
+		initialHtml,
+		onBaselineHtml: setSavedHtml,
+		onChangeHtml: scheduleSave,
+	})
 
 	// replace a draft only after a deliberate reload returns an editable note successfully
 	async function handleReload(): Promise<void> {
@@ -120,8 +96,7 @@ export function NoteEditor({
 				return
 			}
 			noteBodySave.resolveConflict(storedNote.html, storedNote.version)
-			baselineRef.current = { isTaken: false, hasBody: storedNote.html !== "" }
-			editorRef.current?.setValue(storedNote.html)
+			setHtml(storedNote.html)
 		} catch (error) {
 			reportReloadError(error)
 		} finally {
@@ -151,9 +126,7 @@ export function NoteEditor({
 			isCommentsOpen={isCommentsOpen}
 			onCloseComments={onCloseComments}
 			editorRef={editorRef}
-			toolbar={
-				<Toolbar editorRef={editorRef} formatState={formatState} selection={selection} activeLink={activeLink} />
-			}
+			toolbar={<Toolbar {...toolbarProps} />}
 			conflict={
 				noteBodySave.conflict ? (
 					<ConflictNotice
@@ -164,15 +137,7 @@ export function NoteEditor({
 				) : null
 			}
 		>
-			<Input
-				editorRef={editorRef}
-				defaultValue={initialHtml}
-				placeholder={`TODO: a note about ${pageName}`}
-				onChangeHtml={handleChangeHtml}
-				onChangeState={setFormatState}
-				onChangeSelection={setSelection}
-				onLinkDetected={setActiveLink}
-			/>
+			<Input {...inputProps} placeholder={`TODO: a note about ${pageName}`} />
 		</Layout>
 	)
 }

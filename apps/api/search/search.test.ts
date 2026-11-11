@@ -1,7 +1,7 @@
 // the site search: which kinds it reads, each kind's view rules for a visitor and a user, the finding reader's invite
 // gate, and the route's rate limit
 import { afterEach, beforeEach, expect, mock, test } from "bun:test"
-import { type SearchRequest, searchRequestPayload } from "@carlnotes/contracts/search"
+import { type SearchRequest, searchRequestPayload, searchResultsPage } from "@carlnotes/contracts/search"
 import { restoreConnectionPool, type SentQuery, stubConnectionPool } from "@carlnotes/db/connectionPoolStub"
 import { restoreRedisClient, stubRedisClient } from "@carlnotes/db/redisClientStub"
 import { SEARCH_RATE_LIMIT } from "../rateLimit"
@@ -46,7 +46,7 @@ test("a short query reads nothing and returns an empty page", async () => {
 test("every kind is read by default, each up to the per-kind limit", async () => {
 	const sentQueries = stubConnectionPool()
 	await searchSite(toVisitorSearch("orbit"))
-	for (const tableName of ["topics", "episodes", "resources", "teams", "users"]) {
+	for (const tableName of ["topics", "episodes", "topic_posts", "resources", "teams", "users"]) {
 		expect(findReadFrom(sentQueries, tableName)?.values).toContain(SEARCH_KIND_LIMIT)
 	}
 })
@@ -61,7 +61,23 @@ test("a kind filter reads only those kinds", async () => {
 	expect(findReadFrom(sentQueries, "users")).toBeDefined()
 	expect(findReadFrom(sentQueries, "topics")).toBeUndefined()
 	expect(findReadFrom(sentQueries, "episodes")).toBeUndefined()
+	expect(findReadFrom(sentQueries, "topic_posts")).toBeUndefined()
 	expect(findReadFrom(sentQueries, "resources")).toBeUndefined()
+})
+
+test("a published Topic Post is a row the results page's contract reads", async () => {
+	// one Topic Post row in the order the search selects its columns: the Topic Post, its topic, and its author
+	const topicPostRow = ["topic-post-1", "Orbit, measured", null, "2026-10-01T12:00:00Z", null]
+	const topicAndAuthorColumns = ["topic-1", "Orbit Watch", null, "user-2", "vienna", "generated", null]
+	stubConnectionPool(({ text }) =>
+		text.includes('from "topic_posts"') ? [[...topicPostRow, ...topicAndAuthorColumns]] : [],
+	)
+
+	// the page holds the row under its kind, with no image and no summary yet
+	const searchPage = searchResultsPage.parse(await searchSite(toVisitorSearch("orbit", ["topicPosts"])))
+	expect(searchPage.rows).toMatchObject([
+		{ kind: "topicPost", id: "topic-post-1", topicPost: { summary: null, image: null }, topic: { id: "topic-1" } },
+	])
 })
 
 test("a visitor's finding read keeps public shown topics and shown findings alone", async () => {
@@ -148,11 +164,11 @@ function toFilteredSearch(
 	}
 }
 
-test("tags narrow topics, podcast episodes, and findings by their topic's tags", async () => {
+test("tags narrow topics, podcast episodes, Topic Posts, and findings by their topic's tags", async () => {
 	// any of the tags overlaps the topic's tags in every topic-bound read
 	const sentQueries = stubConnectionPool()
-	await searchSite(toFilteredSearch({ kinds: ["topics", "podcastEpisodes", "findings"], tags: ["ai"] }))
-	for (const tableName of ["topics", "episodes", "resources"]) {
+	await searchSite(toFilteredSearch({ kinds: ["topics", "podcastEpisodes", "topicPosts", "findings"], tags: ["ai"] }))
+	for (const tableName of ["topics", "episodes", "topic_posts", "resources"]) {
 		expect(findReadFrom(sentQueries, tableName)?.text).toContain('"topics"."tags" && $')
 	}
 
@@ -183,11 +199,12 @@ test("tags a result must have leave out teams and profiles, and excluded tags ke
 
 test("unread and bookmarked read the findings alone", async () => {
 	for (const view of ["unread", "bookmarked"] as const) {
-		// the finding reader runs, and the podcast episode and team readers do not
+		// the finding reader runs, and the podcast episode, Topic Post, and team readers do not
 		const viewQueries = stubConnectionPool()
 		await searchSite(toFilteredSearch({ view }, "user-1"))
 		expect(findReadFrom(viewQueries, "resources")).toBeDefined()
 		expect(findReadFrom(viewQueries, "episodes")).toBeUndefined()
+		expect(findReadFrom(viewQueries, "topic_posts")).toBeUndefined()
 		expect(findReadFrom(viewQueries, "teams")).toBeUndefined()
 	}
 

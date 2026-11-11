@@ -5,6 +5,7 @@ import type { ChatMention } from "@carlnotes/contracts/chat"
 import type { TopicInviteBadge } from "@carlnotes/contracts/invites"
 import type { NoteBadge } from "@carlnotes/contracts/notes"
 import {
+	toCommentMentionLabel,
 	toMenuTriggerLabel,
 	toUpdateAccessibleLabel,
 	toUpdateCount,
@@ -42,11 +43,9 @@ test("the update count sums every group", () => {
 
 // the labels name each waiting group, and skip an empty one
 test("the labels name the waiting groups in order", () => {
-	expect(toUpdateLabel(UPDATE_BADGES)).toBe("1 chat for you, 2 unread note changes, 1 topic invitation")
-	expect(toUpdateLabel({ ...UPDATE_BADGES, noteBadges: [] })).toBe("1 chat for you, 1 topic invitation")
-	expect(toUpdateAccessibleLabel(UPDATE_BADGES)).toBe(
-		" updates, 1 chat for you, 2 unread note changes, 1 topic invitation",
-	)
+	expect(toUpdateLabel(UPDATE_BADGES)).toBe("1 chat for you, 2 unread note changes, 1 topic invite")
+	expect(toUpdateLabel({ ...UPDATE_BADGES, noteBadges: [] })).toBe("1 chat for you, 1 topic invite")
+	expect(toUpdateAccessibleLabel(UPDATE_BADGES)).toBe(" updates, 1 chat for you, 2 unread note changes, 1 topic invite")
 	expect(toMenuTriggerLabel("Menu", { chatMentions: [], noteBadges: [], invites: [] })).toBe("Menu")
 })
 
@@ -56,7 +55,7 @@ test("the sections list each group under its heading", () => {
 	expect(sections.map((section) => section.heading)).toEqual([
 		"1 chat for you",
 		"2 unread note changes",
-		"1 topic invitation",
+		"1 topic invite",
 	])
 	expect(sections[0]?.lines[0]?.parts.map((part) => part.text).join("")).toBe(
 		"carlos replied to you: try the eval runner",
@@ -73,4 +72,28 @@ test("the open reports list last under their count", () => {
 	const sections = toUpdateSections({ ...UPDATE_BADGES, openReportCount: 2 })
 	expect(sections.at(-1)).toEqual({ heading: "2 open reports", lines: [] })
 	expect(toUpdateSections(UPDATE_BADGES).map((section) => section.heading)).not.toContain("0 open reports")
+})
+
+test("a Comment Mention counts in the badge and lists who mentioned the user where", () => {
+	const commentMentions = [
+		{
+			commentId: "comment-1",
+			author: { userId: "user-ben", username: "ben" },
+			text: "look at this @ava",
+			createdAt: "2026-11-09T12:00:00.000Z",
+			topicId: "topic-1",
+			target: { kind: "topic" as const, id: "topic-1" },
+			page: { kind: "topic" as const, id: "topic-1", name: "Home espresso" },
+			path: "/topics/topic-1/home-espresso?comment=comment-1",
+		},
+	]
+	const updateBadges = { chatMentions: [], commentMentions, noteBadges: [], invites: [] }
+	expect(toUpdateCount(updateBadges)).toBe(1)
+	expect(toUpdateLabel(updateBadges)).toBe("1 hot take mention")
+	expect(toCommentMentionLabel(2)).toBe("2 hot take mentions")
+
+	// the line names the author and the page in bold, around the Comment's first line
+	const [line] = toUpdateSections(updateBadges)[0]?.lines ?? []
+	expect(line?.parts.map((part) => part.text).join("")).toBe("ben mentioned you on Home espresso: look at this @ava")
+	expect(line?.parts.filter((part) => part.isLabel).map((part) => part.text)).toEqual(["ben", "Home espresso"])
 })

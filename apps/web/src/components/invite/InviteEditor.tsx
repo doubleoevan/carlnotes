@@ -8,7 +8,7 @@ export async function sendPendingUsernameInvites(topicId: string, usernames: str
 	for (const username of usernames) {
 		const rejection = await sendUserInvite({ topicId }, { username })
 		if (rejection) {
-			toast.error(`The invitation to @${username} didn't go through.`)
+			toast.error(`The invite to @${username} didn't go through.`)
 		} else {
 			toast(`Invited @${username}. They'll find it on their Activity page.`)
 		}

@@ -1,4 +1,4 @@
-import type { TeamIdentity } from "@carlnotes/contracts/teams"
+import type { TeamIdentity } from "@carlnotes/contracts/teamIdentity"
 import { TeamFields } from "@carlnotes/core/components/TeamFields"
 import { useTeamFields } from "@carlnotes/core/hooks/useTeamFields"
 import { SAVE_FAILED_TEXT } from "@carlnotes/core/lib/sessionCopy"

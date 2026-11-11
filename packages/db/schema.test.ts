@@ -7,9 +7,13 @@ import { schema } from "./index"
 import { chatProposals, chatRoomMessages, chatTurns } from "./schema/chat"
 import { podcastEpisodeChapters, podcastEpisodes } from "./schema/podcast"
 import { EMBED_DIMENSIONS, EMBED_MODEL_NAME, findings, resources } from "./schema/scans"
+import { commentMentions, comments, reactions } from "./schema/social"
+import { teams } from "./schema/teams"
 import { topicEmailSends } from "./schema/topicEmailSends"
+import { topicPostDiscussions, topicPosts } from "./schema/topicPosts"
 import { subscriptions, topicPromptVersions, topics } from "./schema/topics"
-import { oauthAccessTokens, oauthClients, oauthRefreshTokens } from "./schema/users"
+import { oauthAccessTokens, oauthClients, oauthRefreshTokens, users } from "./schema/users"
+import { viewerCounters } from "./schema/viewerCounts"
 
 // read the generated initial migration once for SQL-level assertions
 const migrationsDirectory = join(import.meta.dir, "migrations")
@@ -411,4 +415,111 @@ test("resources are indexed by content hash and findings by topic and arrival", 
 	expect(allMigrationsSql()).toContain(
 		'CREATE INDEX "findings_topic_created_idx" ON "findings" USING btree ("topic_id","created_at")',
 	)
+})
+
+// a topic post goes with its topic and its author, and its comments, reactions, discussions, and image renders go
+// with it. a draft has no publish time
+test("topic_posts cascade from their topic and author, and their rows cascade from them", () => {
+	expect(topicPosts.publishedAt.notNull).toBe(false)
+	expect(topicPosts.version.notNull).toBe(true)
+	expect(allMigrationsSql()).toMatch(/topic_posts_topic_id_topics_id_fk.*ON DELETE cascade/)
+	expect(allMigrationsSql()).toMatch(/topic_posts_author_user_id_users_id_fk.*ON DELETE cascade/)
+
+	// the rows that name a topic post
+	expect(allMigrationsSql()).toMatch(/comments_post_id_topic_posts_id_fk.*ON DELETE cascade/)
+	expect(allMigrationsSql()).toMatch(/reactions_post_id_topic_posts_id_fk.*ON DELETE cascade/)
+	expect(allMigrationsSql()).toMatch(/topic_post_discussions_topic_post_id_topic_posts_id_fk.*ON DELETE cascade/)
+	expect(allMigrationsSql()).toMatch(/topic_image_renders_topic_post_id_topic_posts_id_fk.*ON DELETE cascade/)
+})
+
+// a discussion keeps its row if the user it billed closes their account, and reads by post and by user
+test("topic_post_discussions null their billed user and index the post and the user", () => {
+	expect(topicPostDiscussions.userId.notNull).toBe(false)
+	expect(allMigrationsSql()).toMatch(/topic_post_discussions_user_id_users_id_fk.*ON DELETE set null/)
+	expect(allMigrationsSql()).toContain(
+		'CREATE INDEX "topic_post_discussions_post_published_idx" ON "topic_post_discussions" USING btree ("topic_post_id","published_at")',
+	)
+	expect(allMigrationsSql()).toContain(
+		'CREATE INDEX "topic_post_discussions_user_kind_created_idx" ON "topic_post_discussions" USING btree ("user_id","kind","created_at")',
+	)
+})
+
+// a mention is unseen while its seen time is null, the unseen ones are indexed by user, and the mentions from before
+// the column count as seen
+test("comment_mentions.seen_at is nullable, backfilled as seen, and indexed while null", () => {
+	expect(commentMentions.seenAt.notNull).toBe(false)
+	expect(allMigrationsSql()).toContain(`UPDATE "comment_mentions" SET "seen_at" = now()`)
+	expect(allMigrationsSql()).toContain(
+		'CREATE INDEX "comment_mentions_unseen_mentioned_user_id_idx" ON "comment_mentions" USING btree ("mentioned_user_id") WHERE "comment_mentions"."seen_at" is null',
+	)
+})
+
+// comments and reactions store the topic of their social target, nullable so the release before it can still insert,
+// backfilled from the target, and indexed with the time
+test("comments and reactions store a nullable, backfilled, indexed target topic", () => {
+	expect(comments.targetTopicId.notNull).toBe(false)
+	expect(reactions.targetTopicId.notNull).toBe(false)
+	expect(allMigrationsSql()).toContain(`UPDATE "comments" SET "target_topic_id" = coalesce(`)
+	expect(allMigrationsSql()).toContain(`UPDATE "reactions" SET "target_topic_id" = coalesce(`)
+	expect(allMigrationsSql()).toContain(
+		'CREATE INDEX "comments_target_topic_created_at_idx" ON "comments" USING btree ("target_topic_id","created_at")',
+	)
+	expect(allMigrationsSql()).toContain(
+		'CREATE INDEX "reactions_target_topic_created_at_idx" ON "reactions" USING btree ("target_topic_id","created_at")',
+	)
+})
+
+// a topic and a podcast episode hold a profile order beside their home order, each indexed where it is set
+test("topics and episodes hold a nullable, indexed profile order", () => {
+	expect(topics.profileOrder.notNull).toBe(false)
+	expect(podcastEpisodes.profileOrder.notNull).toBe(false)
+	expect(allMigrationsSql()).toContain(
+		'CREATE INDEX "topics_owner_profile_order_idx" ON "topics" USING btree ("owner_id","profile_order") WHERE "topics"."profile_order" is not null',
+	)
+	expect(allMigrationsSql()).toContain(
+		'CREATE INDEX "episodes_profile_order_idx" ON "episodes" USING btree ("profile_order") WHERE "episodes"."profile_order" is not null',
+	)
+})
+
+// a Topic Post holds a home order and a profile order, each indexed where it is set
+test("topic posts hold a nullable, indexed home order and profile order", () => {
+	expect(topicPosts.homeOrder.notNull).toBe(false)
+	expect(topicPosts.profileOrder.notNull).toBe(false)
+	expect(allMigrationsSql()).toContain(
+		'CREATE INDEX "topic_posts_home_order_idx" ON "topic_posts" USING btree ("home_order") WHERE "topic_posts"."home_order" is not null',
+	)
+	expect(allMigrationsSql()).toContain(
+		'CREATE INDEX "topic_posts_author_profile_order_idx" ON "topic_posts" USING btree ("author_user_id","profile_order") WHERE "topic_posts"."profile_order" is not null',
+	)
+})
+
+// a saved counter names exactly one of a topic, a podcast episode, a profile's user, and a team, and the profile and
+// team counts default to zero
+test("viewer_counters name exactly one of four, and profiles and teams hold a viewer count", () => {
+	expect(users.profileViewerCount.notNull).toBe(true)
+	expect(teams.viewerCount.notNull).toBe(true)
+	expect(viewerCounters.profileUserId.isUnique).toBe(true)
+	expect(viewerCounters.teamId.isUnique).toBe(true)
+	expect(allMigrationsSql()).toContain(
+		`CONSTRAINT "viewer_counters_ref_shape" CHECK (num_nonnulls("viewer_counters"."topic_id", "viewer_counters"."episode_id", "viewer_counters"."profile_user_id", "viewer_counters"."team_id") = 1)`,
+	)
+})
+
+// a topic post chat turn is on a topic and no team, and only it names a topic post, which clears if the post is deleted
+test("chat_turns checks the topic post kind's shape and clears a deleted post", () => {
+	expect(chatTurns.topicPostId.notNull).toBe(false)
+	expect(allMigrationsSql()).toMatch(/chat_turns_topic_post_id_topic_posts_id_fk.*ON DELETE set null/)
+	expect(allMigrationsSql()).toContain(
+		`CONSTRAINT "chat_turns_topic_post_shape" CHECK (("chat_turns"."kind"::text <> 'topic_post' and "chat_turns"."topic_post_id" is null)`,
+	)
+})
+
+// a migration waits on a table's lock for at most the lock timeout. the migrations before 0155 were written without it
+test("every migration from 0155 on opens with the lock timeout", () => {
+	const laterSqlFiles = readdirSync(migrationsDirectory).filter((file) => file.endsWith(".sql") && file >= "0155")
+	expect(laterSqlFiles.length).toBeGreaterThan(0)
+	for (const file of laterSqlFiles) {
+		const firstLine = readFileSync(join(migrationsDirectory, file), "utf8").split("\n")[0]
+		expect(`${file}: ${firstLine}`).toBe(`${file}: SET LOCAL lock_timeout = '3s';--> statement-breakpoint`)
+	}
 })

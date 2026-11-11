@@ -9,7 +9,7 @@ import type { AccountFieldElements } from "./AccountFields"
 // the section's words: its title, what a user block does, the empty list, and the unblock control
 const USER_BLOCKS_COPY = {
 	title: "Blocked people",
-	description: "Their messages, comments, and invitations no longer reach you. They are not told.",
+	description: "Their messages, comments, and invites no longer reach you. They are not told.",
 	empty: "Nobody is blocked.",
 	loading: "Reading the list…",
 	failed: "Carl couldn't read the list.",
@@ -21,7 +21,7 @@ const USER_BLOCKS_COPY = {
 function toUnblockConfirmation(username: string): ConfirmationCopy {
 	return {
 		title: `Unblock ${username}?`,
-		children: "Their messages, comments, and invitations can reach you again. They are not told.",
+		children: "Their messages, comments, and invites can reach you again. They are not told.",
 		confirmLabel: USER_BLOCKS_COPY.unblock,
 		cancelLabel: "Cancel",
 	}

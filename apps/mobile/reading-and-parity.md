@@ -38,7 +38,7 @@ Its modal provider sits inside `TopicFeedProvider` so sheet content retains the 
 preview and in-place expansion on the Topic screen. Expansion state belongs to the list, so recycling cannot reset it.
 `topic/Topic.tsx` matches the web's linked heading, team-or-owner attribution, plain unread count, share icon, and
 secondary tag badges. `branding/Avatar.tsx` shares the web's stored images, initials, and tints between attribution and
-Settings. `share/ShareTopic.tsx` shows the web sharing options in a native sheet. `ShareTargets.tsx` owns the matching social
+Settings. `share/ShareTopic.tsx` shows the web sharing options in a native sheet, for a Topic or for a Topic Post shared in its place. `ShareTargets.tsx` owns the matching social
 and direct-message destinations. Native Share, owner-only invite creation, Copy page link, and public Copy RSS
 preserve the web visibility gates. Expo Clipboard needs a rebuilt native client; an older client shows selectable
 link text instead of reporting a successful copy.
@@ -60,7 +60,11 @@ The Topic note uses the same safe Markdown subset as the diary. Long prompts and
 `TopicFeedControls.tsx` exposes sort and Finding views through sheets. Team bookmark scope appears on eligible Topic pages.
 `TopicFeedStatus.tsx` supplies loading and retry states. `TopicTutorialVideoDialog.tsx` embeds the shared YouTube tutorial.
 `TopicFeedSkeleton.tsx` and `TopicSkeleton.tsx` match Home and the Topic screen, sharing the real finding-list card.
-The Topic skeleton retains a known title and omits the podcast placeholder when Home reports no episode.
+The Topic skeleton is laid out as the loaded screen is: the button row, the image beside the title, the byline with
+the reactions, and the details line, then each section in `CollapsibleSectionSkeleton` inside the screen's inset
+column, the film's card above the player card. It retains a known title and omits the film and podcast placeholders
+when Home reports no episode. Its film card, player card, and empty section card serve the podcast episode screen's
+loading state too, whose player card has no podcast feed button.
 The first actual play reports the shared opener properties. Dismissal or backgrounding unmounts the player.
 Stories beside these components name their web references. `topicFeedStories.ts` supplies inert handlers and reference paths.
 `search/SearchBar.tsx` edits in place on every reading screen and opens `(tabs)/search.tsx` when the user submits.
@@ -72,11 +76,12 @@ The logo returns to the retained search from another screen. From search they cl
 Search keeps an editable toolbar and scrolling results. Header navigation replaces the bottom tab bar. Opening a Topic preserves the search.
 Search uses account-keyed, abortable transient queries and the current sort, view, Resource kinds, and tag filters.
 `SearchResultsList.tsx` shares `TopicFindingListCard`, `TopicResource`, and the Finding sheet with the feed.
-It adds result ranks, parent Topic links, and metadata for Topics, podcasts, Teams, and profiles.
+It adds result ranks, parent Topic links, and metadata for Topics, podcasts, Topic Posts, Teams, and profiles.
+`toSearchRowTitleAside` returns the control beside each kind's title, the web's function of that name.
 Search shows one API page with shared pagination controls. Changing the query or filters starts at page one.
 Its `site-search` queries stay in memory, expire when unused, and never enter saved reading data.
 `podcast/PodcastEpisodePill.tsx` shares episode and chapter links across search, feed rows, and Finding sheets.
-Topic, Team, profile, and Podcast Episode results navigate to their app screens. `TopicHomeActions.tsx` supplies Tags
+Topic, Team, profile, Podcast Episode, and Topic Post results navigate to their app screens. `TopicHomeActions.tsx` supplies Tags
 and native New Topic. `TopicPageActions.tsx` supplies the shared web action bar, refresh, follow, native editing and scanning, and the shared podcast player. Chat uses the shared global launcher.
 Home supplies Reheat, with Lucide Coffee, to the existing shared `PageActionMenu` and calls the feed's shared reheat handler.
 `topic/TopicSource.tsx` adapts core's actual `TopicSource` and `TopicDefaultSource` components with native Badge and Button
@@ -111,6 +116,7 @@ their title starts the chapter and their current pill toggles playback. The nati
 while its Topic route is active, retains counts when offline, and reserves the footer space before the first read.
 The Topic screen records its view through the shared core helper, once per app runtime.
 Its `PodcastEpisodeRow` also supplies Topic roast's play button, numbered title, date, duration, and latest label.
+Topic roast's film row is the same row, with the Video button's poster thumbnail in its play button's place.
 Topic roast uses the labeled Share button from the web.
 `table/TableCard.tsx` shares the native table surface, header, and row separators. `table/TopicNameLink.tsx` shares
 linked Topic names with the same podcast play button. `RelatedTopicsSection.tsx` uses them for Similar topics,

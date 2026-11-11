@@ -1,5 +1,6 @@
 // the link-preview card that a pasted podcast episode url renders as
 import { toSeasonEpisodeLabel } from "@carlnotes/contracts/podcastEpisodes"
+import type { CardElement } from "@carlnotes/pipeline/cardElementPng"
 import {
 	toPodcastEpisodeImageOriginalKey,
 	toTopicImageOriginalKey,
@@ -7,7 +8,6 @@ import {
 import type { PodcastEpisodeRow } from "../podcast/podcastEpisodeRows"
 import {
 	CARD_MUTED_COLOR,
-	type CardElement,
 	loadCardImageBandDataUri,
 	PREVIEW_TEMPLATE_VERSION,
 	toBrandIcon,

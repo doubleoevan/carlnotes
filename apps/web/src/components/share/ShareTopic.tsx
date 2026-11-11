@@ -1,18 +1,16 @@
 import type { Visibility } from "@carlnotes/contracts/enums"
 import { toTopicFeedPath, toTopicPath } from "@carlnotes/contracts/seo"
-import { useSubjectReportFlag } from "@carlnotes/core/hooks/useSubjectReport"
-import { toReportImageLabel } from "@carlnotes/core/lib/socialLabels"
-import { cn } from "@carlnotes/nightshift/classNames"
-import { Check, Flag, Link, Rss, Share } from "lucide-react"
+import { type SharedTopicPost, TOPIC_POST_LABELS } from "@carlnotes/core/lib/topicPosts"
+import { Check, Link, Rss, Share } from "lucide-react"
 import { useState } from "react"
-import { ReportIssueDialog } from "@/components/common/ReportIssueDialog.tsx"
 import { Dialog, DialogContent, DialogTitle } from "@/components/primitives/dialog"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/primitives/popover"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import { useIsMounted, useOrigin } from "@/hooks/useBrowserValue"
 import { canOpenShareSheet } from "@/lib/shareSheet"
-import { ACTIVE_ICON_CLASS, MENU_DIVIDER_CLASS } from "@/lib/styleClasses"
+import { MENU_DIVIDER_CLASS, PLAIN_PAGE_BUTTON_ICON_CLASS } from "@/lib/styleClasses"
 import { captureVisitEvent, toPublicTopicProperties } from "@/lib/visitAnalytics"
+import { type ReportedTopicSubjectKind, ReportTopicDialog, ReportTopicOptions } from "./ReportTopicOptions"
 import {
 	COPY_PAGE_LABEL,
 	CopyLinkOption,
@@ -50,31 +48,96 @@ function InviteShareOption({
 	)
 }
 
+// what the options share: the topic's page, or the page of the Topic Post shared in the topic's place
+type SharedPage = { kind: "topic" | "topicPost"; name: string; path: string; dialogTitle: string; tooltip: string }
+
+// the page the options share, with the words that name it in the dialog's title and the button's tooltip
+function toSharedPage(topic: { id: string; name: string }, topicPost: SharedTopicPost | undefined): SharedPage {
+	if (topicPost) {
+		return {
+			kind: "topicPost",
+			name: topicPost.title,
+			path: topicPost.path,
+			dialogTitle: TOPIC_POST_LABELS.shareTitle,
+			tooltip: "Share this post",
+		}
+	}
+	return {
+		kind: "topic",
+		name: topic.name,
+		path: toTopicPath(topic),
+		dialogTitle: "Share topic",
+		tooltip: "Share this topic",
+	}
+}
+
+// the option that copies a topic's rss feed, which can only be served for a public topic
+function CopyRssOption({
+	isPublic,
+	isCopied,
+	disabledReason,
+	onCopy,
+	onDisabledOptionClick,
+}: {
+	isPublic: boolean
+	isCopied: boolean
+	disabledReason: string
+	onCopy: () => void
+	onDisabledOptionClick?: () => void
+}) {
+	if (!isPublic) {
+		return (
+			<DisabledShareOption
+				label="Copy RSS"
+				icon={<Rss className="size-4" />}
+				disabledReason={disabledReason}
+				onClick={onDisabledOptionClick}
+			/>
+		)
+	}
+	return (
+		<CopyLinkOption
+			label="Copy RSS"
+			icon={<Rss className="size-4" />}
+			className={SHARE_OPTION_CLASS}
+			isCopied={isCopied}
+			onCopy={onCopy}
+		/>
+	)
+}
+
 /**
- * The Share dialog for a Topic, opened from the actions menu or ShareTopicButton. It shares the topic's page,
- * which can only be opened by a non-subscriber if the topic is public. A private topic's options are disabled with a call to action.
- * A topic subscriber also gets the invite option, which provides a link to subscribe to the topic.
+ * The Share dialog for a Topic, opened from the actions menu or its own share button. It shares the topic's page,
+ * which can only be opened by a non-subscriber if the topic is public. A private topic's options are disabled with a
+ * call to action. A topic subscriber also gets the invite option, which provides a link to subscribe to the topic.
+ * Given a Topic Post, the same options share the post's page, and the invite link opens the post once it is accepted.
  */
 export function ShareTopic({
 	topic,
+	topicPost,
 	className,
 	isIcon,
+	isIconHighlighted,
 	isDialog,
 	onClose,
 	onMakeTopicPublic,
 }: {
 	// the topic being shared. only a public topic can be posted, and only its owner can make it public
 	topic: { id: string; name: string; visibility: Visibility; isTopicOwner?: boolean }
+	// the topic's Topic Post that is shared in the topic's place: its page, its card, and an invite that opens it
+	topicPost?: SharedTopicPost
 	className?: string
 	// the homepage topic card shows the share icon alone instead of the labeled button
 	isIcon?: boolean
+	// the labeled button at the left of a page's top row gives its icon the highlight color
+	isIconHighlighted?: boolean
 	// the topic page opens these options as a dialog from its actions menu, which has no trigger of its own
 	isDialog?: boolean
 	onClose?: () => void
 	// the callback that the owner gets to save the topic as public
 	onMakeTopicPublic?: () => void
 }) {
-	const { id: topicId, name: topicName, isTopicOwner } = topic
+	const { id: topicId, isTopicOwner } = topic
 	const isPublic = topic.visibility === "public"
 	// only the owner of a non-private topic can offer an invite link
 	const canInviteTopic = isTopicOwner && topic.visibility !== "private"
@@ -92,15 +155,22 @@ export function ShareTopic({
 	// whether this browser can open a share sheet, false until the component mounts in the browser
 	const isShareSheetAvailable = useIsMounted() && canOpenShareSheet()
 
-	// the absolute topic and feed urls, with the topic url and title encoded once for use inside a query string
+	// the shared page's name and absolute url, the post's if one is shared, and the topic's feed url. the page url and
+	// name are encoded once for use inside a query string
 	const origin = useOrigin()
-	const topicUrl = `${origin}${toTopicPath(topic)}`
+	const sharedPage = toSharedPage(topic, topicPost)
+	const { name: sharedName } = sharedPage
+	const sharedUrl = `${origin}${sharedPage.path}`
 	const feedUrl = `${origin}${toTopicFeedPath(topicId)}`
-	const [encodedUrl, encodedTitle] = [encodeURIComponent(topicUrl), encodeURIComponent(topicName)]
-	// the topic actions for the options below, which close this menu once a share succeeds
-	const { copiedLabel, copyLink, shareTopic, shareInvite } = useShareTopicActions(topicId, topicName, topicUrl, () =>
-		setIsOpen(false),
-	)
+	const [encodedUrl, encodedTitle] = [encodeURIComponent(sharedUrl), encodeURIComponent(sharedName)]
+	// the share actions for the options below, which close this menu once a share succeeds
+	const { copiedLabel, copyLink, shareTopic, shareInvite } = useShareTopicActions({
+		topicId,
+		topicPostId: topicPost?.id,
+		sharedName,
+		sharedUrl,
+		onShared: () => setIsOpen(false),
+	})
 
 	// a disabled option shows the user why and offers the owner a call-to-action
 	const disabledReason = toDisabledReason(isTopicOwner)
@@ -115,9 +185,13 @@ export function ShareTopic({
 	// the send options are enabled for any non-private topic
 	const canShareTopic = topic.visibility !== "private"
 
-	// report a share by its channel, naming the topic only if it is public
+	// report a share by its kind and its channel, naming the topic only if it is public
 	const handleShareOptionClick = (channel: string): void =>
-		captureVisitEvent("visit_share_clicked", { kind: "topic", channel, ...toPublicTopicProperties(topic) })
+		captureVisitEvent("visit_share_clicked", {
+			kind: sharedPage.kind,
+			channel,
+			...toPublicTopicProperties(topic),
+		})
 
 	// the props every platform option requires
 	const shareTargetProps = {
@@ -177,31 +251,27 @@ export function ShareTopic({
 				isCopied={copiedLabel === COPY_PAGE_LABEL}
 				onCopy={() => {
 					handleShareOptionClick("copy-link")
-					return copyLink(COPY_PAGE_LABEL, topicUrl)
+					return copyLink(COPY_PAGE_LABEL, sharedUrl)
 				}}
 			/>
-			{/* an rss feed can only be served for a public topic */}
-			{isPublic ? (
-				<CopyLinkOption
-					label="Copy RSS"
-					icon={<Rss className="size-4" />}
-					className={SHARE_OPTION_CLASS}
+			{/* a topic's rss feed. a post has none */}
+			{!topicPost && (
+				<CopyRssOption
+					isPublic={isPublic}
 					isCopied={copiedLabel === "Copy RSS"}
+					disabledReason={disabledReason}
 					onCopy={() => {
 						handleShareOptionClick("rss")
-						return copyLink("Copy RSS", feedUrl)
+						void copyLink("Copy RSS", feedUrl)
 					}}
-				/>
-			) : (
-				<DisabledShareOption
-					label="Copy RSS"
-					icon={<Rss className="size-4" />}
-					disabledReason={disabledReason}
-					onClick={handleDisabledOptionClick}
+					onDisabledOptionClick={handleDisabledOptionClick}
 				/>
 			)}
-			{/* the report options: the topic's report option shows on the feed card's icon alone, and the image's shows on both */}
-			{(isIcon || isDialog) && <ReportTopicOptions topicId={topicId} isIcon={isIcon} onReport={handleReport} />}
+			{/* the report options: the topic's report option shows on the feed card's icon alone, and the image's shows on
+			    both. a post's share has neither, since its page's menu reports its image */}
+			{(isIcon || isDialog) && !topicPost && (
+				<ReportTopicOptions topicId={topicId} isIcon={isIcon} onReport={handleReport} />
+			)}
 		</>
 	)
 
@@ -211,7 +281,7 @@ export function ShareTopic({
 				<Dialog open onOpenChange={onClose}>
 					{/* the tighter padding and gap keep the dialog to the popover's own density */}
 					<DialogContent className="gap-2 p-4 sm:max-w-xs">
-						<DialogTitle>Share topic</DialogTitle>
+						<DialogTitle>{sharedPage.dialogTitle}</DialogTitle>
 						{/* one list, so the dialog's grid gap never falls between the options */}
 						<div className="grid">{shareOptions}</div>
 					</DialogContent>
@@ -226,12 +296,12 @@ export function ShareTopic({
 		<Popover open={isOpen} onOpenChange={setIsOpen}>
 			<Tooltip>
 				<TooltipTrigger asChild>
-					<PopoverTrigger className={className} aria-label={`Share ${topicName}`}>
-						<Share className={isIcon ? "size-3.75" : "size-4"} />
+					<PopoverTrigger className={className} aria-label={`Share ${sharedName}`}>
+						<Share className={toShareIconClass(isIcon, isIconHighlighted)} />
 						{!isIcon && "Share"}
 					</PopoverTrigger>
 				</TooltipTrigger>
-				<TooltipContent>Share this topic</TooltipContent>
+				<TooltipContent>{sharedPage.tooltip}</TooltipContent>
 			</Tooltip>
 			{/* nothing takes focus on open, so no option starts with the browser's focus ring */}
 			<PopoverContent align="end" className="w-52" bodyClassName="p-1">
@@ -242,99 +312,10 @@ export function ShareTopic({
 	)
 }
 
-// what the share menu reports: the topic itself, or its image
-type ReportedTopicSubjectKind = "topic" | "topicImage"
-
-// the share menu's report options under their divider: the topic's report option shows on the feed card's icon alone,
-// and the image's shows on both
-function ReportTopicOptions({
-	topicId,
-	isIcon,
-	onReport,
-}: {
-	topicId: string
-	isIcon?: boolean
-	onReport: (subjectKind: ReportedTopicSubjectKind) => void
-}) {
-	return (
-		<>
-			<div className={MENU_DIVIDER_CLASS} />
-			{isIcon && <ReportTopicOption topicId={topicId} subjectKind="topic" onClick={() => onReport("topic")} />}
-			<ReportTopicOption topicId={topicId} subjectKind="topicImage" onClick={() => onReport("topicImage")} />
-		</>
-	)
-}
-
-// the report dialog for the topic or its image, mounted while a report option's subject is set
-function ReportTopicDialog({
-	topic,
-	subjectKind,
-	onClose,
-}: {
-	topic: { id: string; name: string }
-	subjectKind: ReportedTopicSubjectKind | null
-	onClose: () => void
-}) {
-	if (!subjectKind) {
-		return null
+// the share icon's classes: the card's small icon, the top row's icon in the highlight color, or the plain icon
+function toShareIconClass(isIcon: boolean | undefined, isIconHighlighted: boolean | undefined): string {
+	if (isIcon) {
+		return "size-3.75"
 	}
-	return (
-		<ReportIssueDialog
-			subjectKind={subjectKind}
-			subjectId={topic.id}
-			subjectLabel={subjectKind === "topicImage" ? `the image of ${topic.name}` : topic.name}
-			onClose={onClose}
-		/>
-	)
-}
-
-// the share menu's report option for the topic or its image, which reads whether the user reported it as the menu opens
-function ReportTopicOption({
-	topicId,
-	subjectKind,
-	onClick,
-}: {
-	topicId: string
-	subjectKind: ReportedTopicSubjectKind
-	onClick: () => void
-}) {
-	const reportFlag = useSubjectReportFlag({ subjectKind, subjectId: topicId }, onClick)
-	return (
-		<button type="button" onClick={reportFlag.press} className={SHARE_OPTION_CLASS}>
-			<Flag className={cn("size-4", reportFlag.isReported && ACTIVE_ICON_CLASS)} />
-			{subjectKind === "topicImage" ? toReportImageLabel(reportFlag.isReported) : reportFlag.label}
-		</button>
-	)
-}
-
-/**
- * A Topic's share button for posting this topic to social platforms.
- */
-export function ShareTopicButton({
-	topic,
-	className,
-	isCompact,
-	isDialog,
-	onClose,
-	onMakeTopicPublic,
-}: {
-	topic: { id: string; name: string; visibility: Visibility; isTopicOwner: boolean }
-	className?: string
-	isCompact?: boolean
-	// the topic page opens the options as a dialog from its actions menu
-	isDialog?: boolean
-	onClose?: () => void
-	// a click handler only passed in for the topic owner
-	onMakeTopicPublic?: () => void
-}) {
-	return (
-		<ShareTopic
-			topic={topic}
-			isIcon={isCompact}
-			className={className}
-			isDialog={isDialog}
-			onClose={onClose}
-			onMakeTopicPublic={onMakeTopicPublic}
-		/>
-	)
+	return isIconHighlighted ? PLAIN_PAGE_BUTTON_ICON_CLASS : "size-4"
 }

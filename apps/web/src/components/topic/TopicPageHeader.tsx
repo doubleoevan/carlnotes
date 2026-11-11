@@ -1,17 +1,19 @@
 import type { TopicResponse } from "@carlnotes/contracts/topics"
+import { toTopicDetails } from "@carlnotes/core/lib/detailsLine"
 import { isSubscribeShown } from "@carlnotes/core/lib/topicActions"
 import { EDIT_IMAGE_DIALOG_TITLES } from "@carlnotes/core/lib/topicImageEditor"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { PawPrint } from "lucide-react"
 import { useState } from "react"
+import { DetailsLine } from "@/components/common/DetailsLine"
 import { PageUpdateCountBadge } from "@/components/common/UpdateCountBadge"
 import { Badge } from "@/components/primitives/badge"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import { ReactionRow } from "@/components/social/ReactionRow"
 import {
 	ACTIVE_ICON_CLASS,
-	MENU_BUTTON_CLASS,
-	MENU_BUTTON_HIGHLIGHT_CLASS,
+	HIGHLIGHTED_PAGE_BUTTON_CLASS,
+	PLAIN_PAGE_BUTTON_CLASS,
 	TOPIC_HEADER_AREA_CLASSES,
 	toTopicHeaderGridClass,
 } from "@/lib/styleClasses"
@@ -21,19 +23,29 @@ import { TopicInfoPopover } from "./Topic"
 import { TopicByline } from "./TopicByline"
 import { TopicHeaderImage } from "./TopicImageButton"
 
+// the topic, whether the user is signed in, how many findings the findings section lists, the counts that the
+// comment thread and the notes section report once they load, and the click on an editor's image
+type TopicHeaderProps = {
+	topic: TopicResponse
+	isSignedIn: boolean
+	findingCount: number
+	commentCount: number | null
+	noteCount: number | null
+	onEditImage: () => void
+}
+
 /**
  * Renders a topic's header: the image, which an editor clicks to edit, with the title and its chat mention badge, the
- * byline and reactions, and the tags beside it.
+ * byline and reactions, the details line of the page's counts under them, and the tags beside it.
  */
 export function TopicHeader({
 	topic,
 	isSignedIn,
+	findingCount,
+	commentCount,
+	noteCount,
 	onEditImage,
-}: {
-	topic: TopicResponse
-	isSignedIn: boolean
-	onEditImage: () => void
-}) {
+}: TopicHeaderProps) {
 	// both the heading and its note icon open the note and show the hint, so the title holds the state the icon reads
 	const [isNoteOpen, setIsNoteOpen] = useState(false)
 	const [isNoteHintOpen, setIsNoteHintOpen] = useState(false)
@@ -90,11 +102,15 @@ export function TopicHeader({
 						))}
 					</div>
 				)}
-				{/* the byline and the topic's reactions, under the image on a phone */}
+				{/* the byline and the topic's reactions, under the image on a phone, then the counts of the page's sections on
+				    their own line */}
 				<div className="mt-1.5 max-sm:clear-left sm:contents">
-					<div className={cn(TOPIC_HEADER_AREA_CLASSES.byline, "flex flex-wrap items-center gap-x-3")}>
-						<TopicByline topic={topic} className="text-sm" />
-						<ReactionRow target={{ kind: "topic", id: topic.id }} summary={topic.reactions} isSignedIn={isSignedIn} />
+					<div className={TOPIC_HEADER_AREA_CLASSES.byline}>
+						<div className="flex flex-wrap items-center gap-x-3">
+							<TopicByline topic={topic} className="text-sm" />
+							<ReactionRow target={{ kind: "topic", id: topic.id }} summary={topic.reactions} isSignedIn={isSignedIn} />
+						</div>
+						<DetailsLine className="mt-1" details={toTopicDetails({ topic, findingCount, commentCount, noteCount })} />
 					</div>
 				</div>
 			</div>
@@ -126,7 +142,7 @@ export function SubscribeButton({
 					type="button"
 					aria-pressed={topic.isSubscribed}
 					onClick={onToggle}
-					className={cn(MENU_BUTTON_CLASS, isHighlighted && MENU_BUTTON_HIGHLIGHT_CLASS)}
+					className={isHighlighted ? HIGHLIGHTED_PAGE_BUTTON_CLASS : PLAIN_PAGE_BUTTON_CLASS}
 				>
 					{/* the paw is an outline until subscribed, then fills, matching the homepage topic row */}
 					<PawPrint className={cn("size-4", topic.isSubscribed && ACTIVE_ICON_CLASS)} />

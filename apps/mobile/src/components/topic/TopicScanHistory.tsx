@@ -4,7 +4,7 @@ import { fetchScanNote, removeTopicSource } from "@carlnotes/client/topicClient"
 import { KEEP_ONE_SOURCE_MESSAGE } from "@carlnotes/contracts/sources"
 import type { TopicResponse, TopicScan } from "@carlnotes/contracts/topics"
 import { usePagination } from "@carlnotes/core/hooks/usePagination"
-import { toScanTimestamp } from "@carlnotes/core/lib/labels"
+import { toScanTimestamp, toSectionCountLabel } from "@carlnotes/core/lib/labels"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { type ComponentRef, useRef, useState } from "react"
@@ -27,7 +27,11 @@ export function TopicScanHistory({ topic }: { topic: TopicResponse }) {
 	// use the web's five-row pages while keeping each scan's note lazy
 	const { pageRows: scans, pagination } = usePagination(topic.scans)
 	return (
-		<CollapsibleSection title="Brew diary">
+		<CollapsibleSection
+			title="Brew diary"
+			countLabel={toSectionCountLabel(topic.scans.length, "brew")}
+			hasClosedDivider
+		>
 			<View className="rounded-lg border border-separator bg-card p-1 shadow-raised">
 				{scans.length === 0 ? (
 					<Text className="py-3 pl-2 text-sm text-muted-foreground">{"Carl hasn't scanned this topic yet."}</Text>

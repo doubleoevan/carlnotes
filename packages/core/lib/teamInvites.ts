@@ -20,13 +20,15 @@ export async function sendTeamInvites({
 	invites: PendingInvite[]
 	onSent: (invite: PendingInvite) => void
 }): Promise<string | null> {
+	// send each invite in turn, and stop at the first that is rejected
 	for (const invite of invites) {
 		const rejection = await sendUserInvite({ teamId }, invite)
 		if (rejection === "limited") {
 			return "Daily invite limit reached. It resets tomorrow."
 		}
+		// any other rejection names the invite
 		if (rejection) {
-			return `The invitation to ${toInviteLabel(invite)} didn't go through.`
+			return `The invite to ${toInviteLabel(invite)} didn't go through.`
 		}
 		onSent(invite)
 	}

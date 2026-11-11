@@ -1,6 +1,7 @@
 // accepting an invite: the token acceptance, the topic and team acceptances behind it, the spent use, and which way
 // a token is no longer good
 
+import { toTopicPostPath } from "@carlnotes/contracts/seo"
 import { type DbHandle, type DbTransaction, db } from "@carlnotes/db"
 import { loadUserEmail, toInviteAddressedToUserFilter } from "@carlnotes/db/inviteFilters"
 import { hasUnconvertedPersonalSources } from "@carlnotes/db/personalSourcesAuthority"
@@ -14,11 +15,16 @@ import { isLeaderRole } from "../authorization"
 import type { AnalyticsProperties } from "../currentUser"
 import { joinTeam, toTeamRole } from "../team/members"
 import { activateSubscription } from "../topic/subscriptions"
+import { loadTopicPostRow } from "../topicPost/topicPosts"
 import { hasUserBlock } from "../userBlocks"
 
-// how an acceptance ended: the topic or team page to open, or which way the token failed
+// the Topic Post an accepted topic invite opens: its id and its page's path
+type InviteTopicPost = { id: string; path: string }
+
+// how an acceptance ended: the topic or team page to open, with the Topic Post a topic invite was shared from, or
+// which way the token failed
 export type InviteAcceptResult =
-	| { status: "joined"; topicId: string; topicName: string }
+	| { status: "joined"; topicId: string; topicName: string; topicPost?: InviteTopicPost }
 	| { status: "joinedTeam"; teamId: string; teamName: string }
 	| { status: "requestedTeam"; teamId: string; teamName: string }
 	| { status: "teamFull"; teamId: string; teamName: string }
@@ -78,7 +84,7 @@ export function toInviteProperties(invite: typeof invites.$inferSelect): Record<
 		: { kind: inviteKind, pageKind: "topic", topicId: invite.topicId ?? "" }
 }
 
-// a topic invite's acceptance: the subscription, and the use spent conditional on the limit
+// a topic invite's acceptance: the subscription, the use spent conditional on the limit, and the Topic Post to open
 export async function acceptTopicInvite(
 	userId: string,
 	invite: typeof invites.$inferSelect,
@@ -89,8 +95,16 @@ export async function acceptTopicInvite(
 	if (acceptance.status !== "joined") {
 		return acceptance
 	}
+
+	// the joined topic, with the Topic Post the invite was shared from while that post is published
+	const joinedTopic: InviteAcceptResult = {
+		status: "joined",
+		topicId: acceptance.topicId,
+		topicName: acceptance.topicName,
+		topicPost: await toInviteTopicPost(invite.topicPostId),
+	}
 	if (!acceptance.shouldTrack) {
-		return { status: "joined", topicId: acceptance.topicId, topicName: acceptance.topicName }
+		return joinedTopic
 	}
 
 	// report the acceptance and the subscription it made
@@ -101,7 +115,20 @@ export async function acceptTopicInvite(
 		isTopicPublic: acceptance.isTopicPublic,
 		subscriptionSource: "invite",
 	})
-	return { status: "joined", topicId: acceptance.topicId, topicName: acceptance.topicName }
+	return joinedTopic
+}
+
+/**
+ * Returns the published Topic Post an invite names, as its id and its page's path. Undefined for an invite shared
+ * from the topic itself, and for a post that was deleted or is a draft, which leaves the topic to open.
+ */
+export async function toInviteTopicPost(topicPostId: string | null): Promise<InviteTopicPost | undefined> {
+	// only a published post has a page to open
+	const topicPostRow = topicPostId ? await loadTopicPostRow(topicPostId) : null
+	if (!topicPostRow?.topicPost.publishedAt) {
+		return undefined
+	}
+	return { id: topicPostRow.topicPost.id, path: toTopicPostPath(topicPostRow.topic, topicPostRow.topicPost) }
 }
 
 // an old invite never broadens access after the Topic has accepted personal content

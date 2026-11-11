@@ -5,6 +5,15 @@ import {
 	PERSONAL_SOURCES_EMAIL_TASK_QUEUE,
 	PERSONAL_SOURCES_TASK_QUEUE,
 } from "@carlnotes/contracts/personalSourcesWork"
+import {
+	TOPIC_PODCAST_EPISODE_VIDEO_BACKFILL_TASK_QUEUE,
+	TOPIC_PODCAST_EPISODE_VIDEO_BACKFILL_WORKFLOW,
+	TOPIC_PODCAST_EPISODE_VIDEO_BACKFILL_WORKFLOW_ID,
+	TOPIC_PODCAST_EPISODE_VIDEO_REBUILD_WORKFLOW,
+	TOPIC_PODCAST_EPISODE_VIDEO_TASK_QUEUE,
+	type TopicPodcastEpisodeVideoBackfillSummary,
+	toTopicPodcastEpisodeVideoRebuildWorkflowId,
+} from "@carlnotes/contracts/topicPodcastEpisodeVideoWork"
 import type { ThresholdCrossing } from "@carlnotes/server/monitoring"
 import { Client, Connection, WorkflowExecutionAlreadyStartedError, WorkflowNotFoundError } from "@temporalio/client"
 import { CHAT_MENTION_PUSH_WORKFLOW, PUSH_TASK_QUEUE } from "./pushWorkflows"
@@ -24,7 +33,17 @@ const SCAN_WORKFLOW = "runTopicScanWorkflow"
 export const SOURCE_TASK_QUEUE = "source-screening"
 const SOURCE_WORKFLOW = "screenSourceWorkflow"
 
-// a topic image render polls its own queue, and the backfill and its children share it
+// a Topic Post Discussion records on the podcast recordings' queue, which the worker's recording slots limit
+const RECORDING_TASK_QUEUE = "episode-recordings"
+const TOPIC_POST_DISCUSSION_WORKFLOW = "recordTopicPostDiscussionWorkflow"
+
+// the topic post workflows' queue and names
+export const TOPIC_POST_TASK_QUEUE = "topic-posts"
+const TOPIC_POST_PUBLISH_WORKFLOW = "publishTopicPostWorkflow"
+const TOPIC_POST_SUMMARY_WORKFLOW = "summarizeTopicPostWorkflow"
+
+// the topic image workflows' queue and names, and the backfill's one id. a topic image render polls its own queue,
+// and the backfill and its children share it
 export const TOPIC_IMAGE_TASK_QUEUE = "topic-images"
 const TOPIC_IMAGE_WORKFLOW = "renderTopicImageWorkflow"
 const TOPIC_IMAGE_BACKFILL_WORKFLOW = "backfillTopicImagesWorkflow"
@@ -76,16 +95,25 @@ export async function startPersonalSourcesContextWorkflow(topicId: string): Prom
  * Starts durable received-email work whose only argument is a persisted confirmation id.
  */
 export async function startPersonalSourcesEmailWorkflow(confirmationId: string): Promise<void> {
+	await startWorkflowOnce({
+		workflow: "receivePersonalSourcesEmail",
+		taskQueue: PERSONAL_SOURCES_EMAIL_TASK_QUEUE,
+		workflowId: `personal-sources-email-${confirmationId}`,
+		args: [confirmationId],
+	})
+}
+
+// one workflow to start: its name, the queue it runs on, its id, and the arguments it takes
+type StartWorkflowOnceOptions = { workflow: string; taskQueue: string; workflowId: string; args: unknown[] }
+
+// start one workflow under its id, under the call deadline. a workflow already started under that id needs no second
+// start, and anything else is a real failure
+async function startWorkflowOnce({ workflow, taskQueue, workflowId, args }: StartWorkflowOnceOptions): Promise<void> {
 	const client = await getClient()
 	try {
-		await withClientDeadline(client, () =>
-			client.workflow.start("receivePersonalSourcesEmail", {
-				taskQueue: PERSONAL_SOURCES_EMAIL_TASK_QUEUE,
-				workflowId: `personal-sources-email-${confirmationId}`,
-				args: [confirmationId],
-			}),
-		)
+		await withClientDeadline(client, () => client.workflow.start(workflow, { taskQueue, workflowId, args }))
 	} catch (error) {
+		// swallow the duplicate id, and raise anything else
 		if (!(error instanceof WorkflowExecutionAlreadyStartedError)) {
 			throw error
 		}
@@ -110,25 +138,59 @@ export async function startAttachmentWorkflow(attachmentId: string): Promise<voi
  * A Source whose check is already running is rejected by its workflow id, which makes a restart safe to repeat.
  */
 export async function startSourceScreenWorkflow(sourceId: string): Promise<void> {
-	const client = await getClient()
-	try {
-		await withClientDeadline(client, () =>
-			client.workflow.start(SOURCE_WORKFLOW, {
-				taskQueue: SOURCE_TASK_QUEUE,
-				workflowId: `source-${sourceId}`,
-				args: [sourceId],
-			}),
-		)
-	} catch (error) {
-		// a Source whose check is already running needs no second one, and anything else is a real failure
-		if (!(error instanceof WorkflowExecutionAlreadyStartedError)) {
-			throw error
-		}
-	}
+	await startWorkflowOnce({
+		workflow: SOURCE_WORKFLOW,
+		taskQueue: SOURCE_TASK_QUEUE,
+		workflowId: `source-${sourceId}`,
+		args: [sourceId],
+	})
 }
 
 // a render to start: its topic, its render row, and the owner's image prompt, which only the workflow carries
 export type StartTopicImageWorkflowOptions = { topicId: string; renderId: string; imagePrompt?: string }
+
+/**
+ * Starts what follows a Topic Post's publish, named by the post so a second start for it is ignored.
+ */
+export function startTopicPostPublishWorkflow(topicPostId: string): Promise<void> {
+	return startTopicPostWorkflow(TOPIC_POST_PUBLISH_WORKFLOW, `topic-post-publish-${topicPostId}`, topicPostId)
+}
+
+/**
+ * Starts the rewrite of a published Topic Post's summary after an edit, named by the post so the edits saved while
+ * one waits share it.
+ */
+export function startTopicPostSummaryWorkflow(topicPostId: string): Promise<void> {
+	return startTopicPostWorkflow(TOPIC_POST_SUMMARY_WORKFLOW, `topic-post-summary-${topicPostId}`, topicPostId)
+}
+
+// a discussion's row, and the starter's note for the hosts, which goes to the workflow and never to a row
+type StartTopicPostDiscussionWorkflowOptions = { discussionId: string; hint?: string }
+
+/**
+ * Starts a Topic Post Discussion's recording, named by its row so a second start for the row is ignored.
+ */
+export async function startTopicPostDiscussionWorkflow({
+	discussionId,
+	hint,
+}: StartTopicPostDiscussionWorkflowOptions): Promise<void> {
+	await startWorkflowOnce({
+		workflow: TOPIC_POST_DISCUSSION_WORKFLOW,
+		taskQueue: RECORDING_TASK_QUEUE,
+		workflowId: `topic-post-discussion-${discussionId}`,
+		args: [{ discussionId, hint }],
+	})
+}
+
+// start one Topic Post workflow under its id, on the topic post queue
+function startTopicPostWorkflow(workflow: string, workflowId: string, topicPostId: string): Promise<void> {
+	return startWorkflowOnce({
+		workflow,
+		taskQueue: TOPIC_POST_TASK_QUEUE,
+		workflowId,
+		args: [{ topicPostId }],
+	})
+}
 
 /**
  * Starts a topic image render, named by its render row so a second start for the row is ignored.
@@ -138,21 +200,12 @@ export async function startTopicImageWorkflow({
 	renderId,
 	imagePrompt,
 }: StartTopicImageWorkflowOptions): Promise<void> {
-	const client = await getClient()
-	try {
-		await withClientDeadline(client, () =>
-			client.workflow.start(TOPIC_IMAGE_WORKFLOW, {
-				taskQueue: TOPIC_IMAGE_TASK_QUEUE,
-				workflowId: `topic-image-${renderId}`,
-				args: [{ topicId, renderId, imagePrompt }],
-			}),
-		)
-	} catch (error) {
-		// a render already started needs no second start, and anything else is a real failure
-		if (!(error instanceof WorkflowExecutionAlreadyStartedError)) {
-			throw error
-		}
-	}
+	await startWorkflowOnce({
+		workflow: TOPIC_IMAGE_WORKFLOW,
+		taskQueue: TOPIC_IMAGE_TASK_QUEUE,
+		workflowId: `topic-image-${renderId}`,
+		args: [{ topicId, renderId, imagePrompt }],
+	})
 }
 
 // what the backfill does, and what it did
@@ -188,24 +241,62 @@ export async function startTopicImageBackfillWorkflow({
 }
 
 /**
- * Starts the push of a room message's chat mentions, named by the message so a second start for it is ignored.
+ * Starts the rebuild of a podcast episode's film for its current image, named by the podcast episode so a second
+ * start while one runs is ignored.
  */
-export async function startChatMentionPushWorkflow(chatMessageId: number): Promise<void> {
+export async function startTopicPodcastEpisodeVideoRebuild(podcastEpisodeId: string): Promise<void> {
+	await startWorkflowOnce({
+		workflow: TOPIC_PODCAST_EPISODE_VIDEO_REBUILD_WORKFLOW,
+		taskQueue: TOPIC_PODCAST_EPISODE_VIDEO_TASK_QUEUE,
+		workflowId: toTopicPodcastEpisodeVideoRebuildWorkflowId(podcastEpisodeId),
+		args: [{ podcastEpisodeId }],
+	})
+}
+
+// the started or joined film backfill, and a call that waits for its summary. it is a call, so a worker that only
+// starts the backfill opens no long-poll
+export type TopicPodcastEpisodeVideoBackfillStart = {
+	whenFinished: () => Promise<TopicPodcastEpisodeVideoBackfillSummary>
+}
+
+/**
+ * Starts the film backfill at a concurrency, or joins the one running.
+ */
+export async function startTopicPodcastEpisodeVideoBackfillWorkflow(
+	concurrency: number,
+): Promise<TopicPodcastEpisodeVideoBackfillStart> {
+	// start the backfill under its fixed id
 	const client = await getClient()
+	const toBackfillStart = (): TopicPodcastEpisodeVideoBackfillStart => ({
+		whenFinished: () => client.workflow.getHandle(TOPIC_PODCAST_EPISODE_VIDEO_BACKFILL_WORKFLOW_ID).result(),
+	})
 	try {
 		await withClientDeadline(client, () =>
-			client.workflow.start(CHAT_MENTION_PUSH_WORKFLOW, {
-				taskQueue: PUSH_TASK_QUEUE,
-				workflowId: `chat-mention-push-${chatMessageId}`,
-				args: [{ chatMessageId }],
+			client.workflow.start(TOPIC_PODCAST_EPISODE_VIDEO_BACKFILL_WORKFLOW, {
+				taskQueue: TOPIC_PODCAST_EPISODE_VIDEO_BACKFILL_TASK_QUEUE,
+				workflowId: TOPIC_PODCAST_EPISODE_VIDEO_BACKFILL_WORKFLOW_ID,
+				args: [{ concurrency }],
 			}),
 		)
 	} catch (error) {
-		// a message whose push already started needs no second one, and anything else is a real failure
+		// a backfill already running is joined, and anything else is a real failure
 		if (!(error instanceof WorkflowExecutionAlreadyStartedError)) {
 			throw error
 		}
 	}
+	return toBackfillStart()
+}
+
+/**
+ * Starts the push of a room message's chat mentions, named by the message so a second start for it is ignored.
+ */
+export async function startChatMentionPushWorkflow(chatMessageId: number): Promise<void> {
+	await startWorkflowOnce({
+		workflow: CHAT_MENTION_PUSH_WORKFLOW,
+		taskQueue: PUSH_TASK_QUEUE,
+		workflowId: `chat-mention-push-${chatMessageId}`,
+		args: [{ chatMessageId }],
+	})
 }
 
 /**

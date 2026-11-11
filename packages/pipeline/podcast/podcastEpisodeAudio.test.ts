@@ -70,6 +70,16 @@ test("toJoinArguments without a theme clip normalizes and encodes the talk exact
 	expect(joinArguments).toEqual([...chapterArguments, ...loudnessArguments, ...encodeArguments])
 })
 
+// with the theme mix off, the clips on disk are no inputs, as a Topic Post Discussion is joined
+test("toJoinArguments with the theme mix off reads no theme clip, whatever clips exist", () => {
+	const joinOptions = { chapterListPath: "chapters.txt", audioPath: "audio.mp3", speechSeconds: 180 }
+	const joinArguments = toJoinArguments({ ...joinOptions, themeClips: BOTH_THEME_CLIPS, hasThemeMix: false })
+
+	// the talk alone, exactly as a join with no clip
+	expect(joinArguments).toEqual(toJoinArguments({ ...joinOptions, themeClips: NO_THEME_CLIPS }))
+	expect(joinArguments).not.toContain("-filter_complex")
+})
+
 // with both clips, the clips are inputs and one filter graph mixes the clips before the loudness filter
 test("toJoinArguments with both clips mixes them under the talk before the loudness filter", () => {
 	const joinArguments = toJoinArguments({

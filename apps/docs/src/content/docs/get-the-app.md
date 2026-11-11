@@ -29,7 +29,7 @@ bought on the site is managed on the site.
 ## Notifications
 
 A push tells you when a topic finds something new or a teammate mentions you. The app icon counts what is waiting for
-you: unseen mentions, unread note edits and comments, and topic invitations.
+you: unseen mentions, unread note edits and comments, and topic invites.
 
 ![A mention push on an iPhone home screen, and the CarlNotes icon with a badge of
 3](../../assets/screenshots/mobile-push-badge-iphone.png)
@@ -37,7 +37,7 @@ you: unseen mentions, unread note edits and comments, and topic invitations.
 ## Links open in the app
 
 Once the app is installed, a link to carlnotes.com opens in it: a topic, a note, a Coffee Break episode, a team, a
-profile, an invitation, a search, Activity, and your account. A link to the docs, the Terms, or the Privacy Policy stays
+profile, an invite, a search, Activity, and your account. A link to the docs, the Terms, or the Privacy Policy stays
 in your browser.
 
 ## When Carl asks for a newer version

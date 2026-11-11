@@ -12,6 +12,7 @@ import type { TopicDraft, TopicDraftTeam } from "@carlnotes/contracts/topicPaylo
 import { fenceUntrusted } from "@carlnotes/models/prompts/write"
 import type { ImagePart, ModelMessage, TextPart, Tool } from "ai"
 import type { PodcastEpisodeChapterContext } from "./retrievePodcastEpisodeChapter"
+import type { TopicPostChatContext } from "./retrieveTopicPost"
 
 // everything one chat turn needs to answer a user's question about a topic, or about a team's whole topic set
 export type ChatTurnInput = {
@@ -23,6 +24,8 @@ export type ChatTurnInput = {
 	isSpoken?: boolean
 	// the podcast episode chapter that was playing if the user asked from the podcast player. either host answers it
 	podcastEpisodeChapter?: PodcastEpisodeChapterContext
+	// the Topic Post whose page the user asked from, with its shared Comments. the turn binds no Topic Tool
+	topicPost?: TopicPostChatContext
 	history: ChatHistoryTurn[]
 	chatAttachments?: ChatAttachment[]
 	// who is asking. chat is signed-in only, and this scopes their kept chat attachments

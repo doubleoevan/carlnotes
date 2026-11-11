@@ -22,6 +22,7 @@ export function RelatedTopicsSection({ relatedTopics }: { relatedTopics: Related
 		<PagedTableSection
 			value="related-topics"
 			title="Similar topics"
+			countNoun="topic"
 			rows={relatedTopics}
 			rowSortValues={relatedTopicSortValues}
 			toRowKey={(relatedTopic) => relatedTopic.id}

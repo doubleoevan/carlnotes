@@ -1,5 +1,5 @@
-// the MCP view routes, one for each MCP view, in a memory router. a user never sees these paths, and /brew/$topicId is
-// the scan MCP view
+// the MCP view routes, one for each MCP view, in a memory router. a user never sees these paths, /brew/$topicId is
+// the scan MCP view, /posts/$topicId a Topic's Topic Posts, and /post/$topicPostId one Topic Post
 
 import type { McpSearchPage, McpView, McpViewTopicResult } from "@carlnotes/contracts/mcpViews"
 import { personalSourcesSendResult } from "@carlnotes/contracts/personalSources"
@@ -9,16 +9,27 @@ import type { ReactNode } from "react"
 import { CoffeeLoading } from "@/components/branding/CoffeeLoading"
 import { FindingsMcpView } from "./FindingsMcpView"
 import { McpViewShell } from "./McpViewShell"
-import { FINDINGS_ROUTE_PREFIX, type McpViewToolCall, mcpViewHistory, toMcpViewToolCall } from "./mcpViewHistory"
+import {
+	FINDINGS_ROUTE_PREFIX,
+	type McpViewToolCall,
+	mcpViewHistory,
+	NEWS_ROUTE_PATH,
+	TOPIC_POST_ROUTE_PREFIX,
+	TOPIC_POSTS_ROUTE_PREFIX,
+	toMcpViewToolCall,
+} from "./mcpViewHistory"
 import { toMcpViewData } from "./mcpViewHost"
+import { NewsMcpView } from "./NewsMcpView"
 import { ScanMcpView } from "./ScanMcpView"
 import { SearchMcpView } from "./SearchMcpView"
 import { TopicMcpView } from "./TopicMcpView"
+import { TopicPostMcpView } from "./TopicPostMcpView"
+import { TopicPostsMcpView } from "./TopicPostsMcpView"
 import { TopicSuggestionsMcpView } from "./TopicSuggestionsMcpView"
 import { UpdatesMcpView } from "./UpdatesMcpView"
 
-// the id of a Topic route whose tool result names no Topic, which shows the tool's rejection
-const NO_TOPIC_ID = "none"
+// the id of a route whose tool result names no Topic or Topic Post, which shows the tool's rejection
+const NO_ROUTE_ID = "none"
 
 // the root and its routes, which read the tool call in their history entry
 const rootRoute = createRootRoute({ component: McpViewShell })
@@ -30,6 +41,17 @@ const routeTree = rootRoute.addChildren([
 	createRoute({ getParentRoute: () => rootRoute, path: "/send", component: SendRoute }),
 	createRoute({ getParentRoute: () => rootRoute, path: "/updates", component: UpdatesRoute }),
 	createRoute({ getParentRoute: () => rootRoute, path: "/brew/$topicId", component: ScanRoute }),
+	createRoute({ getParentRoute: () => rootRoute, path: NEWS_ROUTE_PATH, component: NewsRoute }),
+	createRoute({
+		getParentRoute: () => rootRoute,
+		path: `${TOPIC_POSTS_ROUTE_PREFIX}$topicId`,
+		component: TopicPostsRoute,
+	}),
+	createRoute({
+		getParentRoute: () => rootRoute,
+		path: `${TOPIC_POST_ROUTE_PREFIX}$topicPostId`,
+		component: TopicPostRoute,
+	}),
 ])
 
 /**
@@ -38,17 +60,21 @@ const routeTree = rootRoute.addChildren([
 export const mcpViewRouter = createRouter({ routeTree, history: mcpViewHistory })
 
 /**
- * Returns the route an MCP view opens on: the MCP view the html names, with the Topic of its tool result.
+ * Returns the route an MCP view opens on: the MCP view the html names, with the Topic or the Topic Post of its tool
+ * result.
  */
 export function toMcpViewOpeningPath(mcpView: McpView, { toolResult }: McpViewToolCall): string {
 	const mcpViewData = toMcpViewData(toolResult._meta)
 	const openingPaths: Record<McpView, string> = {
 		search: "/search",
 		topic: "/topic",
-		findings: `${FINDINGS_ROUTE_PREFIX}${mcpViewData.topic?.id ?? NO_TOPIC_ID}`,
+		findings: `${FINDINGS_ROUTE_PREFIX}${mcpViewData.topic?.id ?? NO_ROUTE_ID}`,
 		"suggest-topics": "/send",
 		updates: "/updates",
-		scan: `/brew/${mcpViewData.scanStatus?.topicId ?? NO_TOPIC_ID}`,
+		scan: `/brew/${mcpViewData.scanStatus?.topicId ?? NO_ROUTE_ID}`,
+		news: NEWS_ROUTE_PATH,
+		"topic-posts": `${TOPIC_POSTS_ROUTE_PREFIX}${mcpViewData.topic?.id ?? NO_ROUTE_ID}`,
+		"topic-post": `${TOPIC_POST_ROUTE_PREFIX}${mcpViewData.topicPost?.id ?? NO_ROUTE_ID}`,
 	}
 	return openingPaths[mcpView]
 }
@@ -62,6 +88,28 @@ function useMcpViewToolCall(): McpViewToolCall | null {
 function UpdatesRoute(): ReactNode {
 	const { updates } = toMcpViewData(useMcpViewToolCall()?.toolResult._meta)
 	return updates ? <UpdatesMcpView updates={updates} /> : null
+}
+
+// the news, which the tool read before the MCP view opened
+function NewsRoute(): ReactNode {
+	const { news } = toMcpViewData(useMcpViewToolCall()?.toolResult._meta)
+	return news ? <NewsMcpView news={news} /> : null
+}
+
+// one page of a Topic's Topic Posts, and whether the tool result has a page after it
+function TopicPostsRoute(): ReactNode {
+	const toolResult = useMcpViewToolCall()?.toolResult
+	const { topic, topicPosts } = toMcpViewData(toolResult?._meta)
+	const { nextCursor } = (toolResult?.structuredContent ?? {}) as { nextCursor?: string | null }
+	return topic && topicPosts ? (
+		<TopicPostsMcpView topic={topic} topicPosts={topicPosts} hasMoreTopicPosts={Boolean(nextCursor)} />
+	) : null
+}
+
+// one Topic Post, as its page shows it
+function TopicPostRoute(): ReactNode {
+	const { topicPost } = toMcpViewData(useMcpViewToolCall()?.toolResult._meta)
+	return topicPost ? <TopicPostMcpView topicPost={topicPost} /> : null
 }
 
 // a Topic's running Scan or its latest recap

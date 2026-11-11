@@ -1,7 +1,6 @@
 // the public profile: who a username belongs to, and the Topics they own.
 import { toAvatarVersion } from "@carlnotes/contracts/avatars"
 import type { ProfileResponse } from "@carlnotes/contracts/profilePage"
-import type { Topic } from "@carlnotes/contracts/profiles"
 import { SEARCH_MIN_CHARS, type UserSearchRow } from "@carlnotes/contracts/search"
 import { toNormalizedUsername } from "@carlnotes/contracts/usernames"
 import { type DbHandle, db } from "@carlnotes/db"
@@ -13,6 +12,7 @@ import { Hono } from "hono"
 import { isAllowed } from "./authorization"
 import { withAvatarVersion } from "./avatars"
 import { type AppEnv, currentUser } from "./currentUser"
+import { loadProfileCards, loadProfileTopicPostCards, loadProfileTopicRows } from "./profileCards"
 import { loadProfileTeamStatuses, loadPublicTeams, loadTeamSummaries } from "./team/helpers"
 import { toTopicTableRows } from "./topic/topicTableRows"
 import { hasUserBlock } from "./userBlocks"
@@ -81,38 +81,60 @@ export function toUserSearchQuery({
  * An owner viewing their own profile sees their private and invite topics, which are hidden for everyone else except an admin.
  */
 async function loadProfile(profileUserId: string, userId: string | null): Promise<ProfileResponse | null> {
-	const [user] = await db
-		.select({
-			id: users.id,
-			username: users.username,
-			createdAt: users.createdAt,
-			avatarSource: users.avatarSource,
-			avatarKey: users.avatarKey,
-		})
-		.from(users)
-		.where(eq(users.id, profileUserId))
+	// the person, whether the reader sees their topics that are not public, which only the person and an admin do, and
+	// whether the signed-in reader has blocked the person
+	const isOwnProfile = userId === profileUserId
+	const [[user], includesNonPublicTopics, isUserBlocked] = await Promise.all([
+		db
+			.select({
+				id: users.id,
+				username: users.username,
+				createdAt: users.createdAt,
+				avatarSource: users.avatarSource,
+				avatarKey: users.avatarKey,
+			})
+			.from(users)
+			.where(eq(users.id, profileUserId)),
+		isOwnProfile || (userId !== null && isAllowed(userId, "admin:console")),
+		userId !== null && !isOwnProfile && hasUserBlock(userId, profileUserId),
+	])
 	if (!user) {
 		return null
 	}
 
-	// only an owner or an admin can see the non-public topics on the profile page
-	const includesNonPublicTopics = userId === user.id || (userId !== null && (await isAllowed(userId, "admin:console")))
+	// the person's topics that the reader sees, read once. the cards take them in the profile's order, and the topic
+	// table oldest first
+	const topicRows = await loadProfileTopicRows({ profileUserId: user.id, includesNonPublicTopics })
+	const oldestFirstTopicRows = topicRows.toSorted(
+		(topicRowA, topicRowB) => topicRowA.createdAt.getTime() - topicRowB.createdAt.getTime(),
+	)
 
-	// whether the signed-in user has blocked this person
-	const isUserBlocked = userId !== null && userId !== user.id && (await hasUserBlock(userId, user.id))
+	// the page's independent reads together: the cards of the topic, film, and podcast episode sections, the cards of
+	// every published Topic Post of the person, the subscriber count, the topic table, and the teams
+	const [profileCards, profileTopicPostCards, subscriberCount, profileTopics, profileTeams] = await Promise.all([
+		loadProfileCards({ topicRows, userId }),
+		// anyone but the person reads the posts of public topics alone
+		loadProfileTopicPostCards(user.id, isOwnProfile),
+		countDistinctSubscribers(user.id),
+		// the same row builder the team page uses
+		toTopicTableRows(oldestFirstTopicRows, userId),
+		// a user's own profile shows every team they belong to.
+		// other users only see the public teams they are a member of.
+		isOwnProfile ? loadTeamSummaries(user.id) : loadPublicTeams(user.id),
+	])
 	return {
 		userId: user.id,
 		username: user.username,
 		avatarSource: user.avatarSource,
 		avatarVersion: toAvatarVersion(user),
 		joinedAt: user.createdAt.toISOString(),
-		subscriberCount: await countDistinctSubscribers(user.id),
+		subscriberCount,
 		includesNonPublicTopics,
 		isBlocked: isUserBlocked,
-		topics: await loadProfileTopics(user.id, includesNonPublicTopics, userId),
-		// a user's own profile shows every team they belong to.
-		// other users only see the public teams they are a member of.
-		teams: userId === user.id ? await loadTeamSummaries(user.id) : await loadPublicTeams(user.id),
+		topics: profileTopics,
+		teams: profileTeams,
+		...profileCards,
+		...profileTopicPostCards,
 	}
 }
 
@@ -134,34 +156,6 @@ export async function countDistinctSubscribers(userId: string, handle: DbHandle 
 		.from(subscriberIds)
 		.where(and(isNotNull(subscriberIds.subscriberId), ne(subscriberIds.subscriberId, userId)))
 	return subscribers?.subscriberCount ?? 0
-}
-
-// the topics the profile table shows
-async function loadProfileTopics(
-	profileUserId: string,
-	includesNonPublicTopics: boolean,
-	// the signed-in user, whose own email switch each row shows
-	userId: string | null,
-): Promise<Topic[]> {
-	const visibleTopics = includesNonPublicTopics
-		? eq(topics.ownerId, profileUserId)
-		: and(eq(topics.ownerId, profileUserId), eq(topics.visibility, "public"))
-	const rows = await db
-		.select({
-			id: topics.id,
-			name: topics.name,
-			ownerId: topics.ownerId,
-			visibility: topics.visibility,
-			imageHash: topics.imageHash,
-			createdAt: topics.createdAt,
-			updatedAt: topics.updatedAt,
-			subscriberCount: topics.subscriberCount,
-		})
-		.from(topics)
-		.where(visibleTopics)
-		.orderBy(topics.createdAt)
-	// the same row builder the team page uses, so that both tables show the same fields
-	return toTopicTableRows(rows, userId)
 }
 
 // the public profile routes: the profile page and the profile's team statuses

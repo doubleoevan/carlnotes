@@ -10,7 +10,12 @@ import {
 } from "@carlnotes/core/lib/updateCounts"
 import { cn } from "@carlnotes/nightshift/classNames"
 import type * as React from "react"
+import { useState } from "react"
+import { Popover, PopoverAnchor, PopoverContent } from "@/components/primitives/popover"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
+import { CommentMentionListPanel } from "@/components/social/CommentMentionBadge"
+import { CommentMentionList } from "@/components/social/CommentMentionList"
+import { captureVisitEvent } from "@/lib/visitAnalytics"
 import { AnchorLink } from "./AnchorLink"
 import { CountBadge } from "./CountBadge"
 
@@ -74,6 +79,7 @@ export function toTooltipLine(updateLine: UpdateLine): TooltipLine {
  */
 export function UpdateCountBadge({
 	chatMentions = [],
+	commentMentions = [],
 	noteBadges = [],
 	invites = [],
 	openReportCount = 0,
@@ -91,7 +97,7 @@ export function UpdateCountBadge({
 	className?: string
 	countBadgeClassName?: string
 }) {
-	const updateBadges = { chatMentions, noteBadges, invites, openReportCount }
+	const updateBadges = { chatMentions, commentMentions, noteBadges, invites, openReportCount }
 	const unreadCount = toUpdateCount(updateBadges)
 	if (unreadCount === 0) {
 		return null
@@ -165,8 +171,9 @@ export function MenuTriggerUpdateCountBadge({
 }
 
 /**
- * Shows one page's unread chat mentions and note changes as one badge at its name's top-right corner, its click
- * opening the chat while a chat mention waits, else the notes' page.
+ * Shows one page's unread chat mentions, unseen Comment Mentions, and note changes as one badge at its name's
+ * top-right corner. Its click opens the chat while a chat mention waits, else the mentions list while a Comment
+ * Mention waits, else the notes' page.
  */
 export function PageUpdateCountBadge({
 	topicId,
@@ -188,19 +195,51 @@ export function PageUpdateCountBadge({
 	className?: string
 }) {
 	// the page's waiting groups, already minus the chat rooms and notes opened this session
-	const { chatMentions, noteBadges, hasChatMention, chatTeamId } = usePageUpdateBadges(topicId, teamId)
+	const {
+		chatMentions,
+		commentMentions = [],
+		noteBadges,
+		hasChatMention,
+		chatTeamId,
+	} = usePageUpdateBadges(topicId, teamId)
 
 	// a waiting chat mention sends the click to the chat, else it goes to the notes' page
 	const pageHref = href ?? (topicId ? `/topics/${topicId}` : `/teams/${teamId}`)
 	const chatHref = href ?? `${pageHref}?chat=${chatTeamId}`
+
+	// a waiting Comment Mention with no chat mention opens the mentions list instead, and reports the open by its place
+	const [isMentionListOpen, setIsMentionListOpen] = useState(false)
+	const handleClick = (event: React.MouseEvent): void => {
+		if (hasChatMention) {
+			onClick?.(event)
+			return
+		}
+		if (commentMentions.length > 0) {
+			event.preventDefault()
+			captureVisitEvent("social_mention_badge_open", { place: "title" })
+			setIsMentionListOpen(true)
+		}
+	}
 	return (
-		<UpdateCountBadge
-			chatMentions={chatMentions}
-			noteBadges={noteBadges}
-			href={hasChatMention ? chatHref : pageHref}
-			onClick={hasChatMention ? onClick : undefined}
-			onMouseEnter={onMouseEnter}
-			className={cn("absolute -top-2 -right-3.5 z-10", className)}
-		/>
+		<Popover open={isMentionListOpen} onOpenChange={setIsMentionListOpen}>
+			{/* the badge at the name's top-right corner, which the list opens from */}
+			<PopoverAnchor asChild>
+				<span className={cn("absolute -top-2 -right-3.5 z-10", className)}>
+					<UpdateCountBadge
+						chatMentions={chatMentions}
+						commentMentions={commentMentions}
+						noteBadges={noteBadges}
+						href={hasChatMention ? chatHref : pageHref}
+						onClick={handleClick}
+						onMouseEnter={onMouseEnter}
+					/>
+				</span>
+			</PopoverAnchor>
+			<PopoverContent align="start" className="w-80 max-w-[calc(100vw-2rem)]" bodyClassName="p-2">
+				<CommentMentionListPanel>
+					<CommentMentionList onChoose={() => setIsMentionListOpen(false)} />
+				</CommentMentionListPanel>
+			</PopoverContent>
+		</Popover>
 	)
 }

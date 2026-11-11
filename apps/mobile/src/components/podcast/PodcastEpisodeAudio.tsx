@@ -20,7 +20,7 @@ import { AppState } from "react-native"
 import { toPodcastEpisodeAudioAdapter } from "@/podcastEpisodeAudioAdapter"
 import { createPodcastEpisodeCheckpointStore } from "@/podcastEpisodeCheckpoint"
 import { registerPodcastEpisodeCheckpoint } from "@/podcastEpisodeSession"
-import { captureEpisodeVisitEvent } from "@/visitAnalytics"
+import { captureEpisodeVisitEvent, captureFilmVisitEvent } from "@/visitAnalytics"
 import { setIsRecordingAudioMode } from "@/voiceAudioMode"
 
 /**
@@ -52,6 +52,8 @@ export function PodcastEpisodeAudio({ userId }: { userId: string | null }) {
 			...adapter,
 			...PODCAST_EPISODE_QUESTION_AUDIO_CALLBACKS,
 			onVisitEvent: captureEpisodeVisitEvent,
+			onFormatSwitched: (podcastEpisode, format) =>
+				captureFilmVisitEvent("visit_episode_format_switched", { podcastEpisodeId: podcastEpisode.id, format }),
 		})
 		const version = retirePodcastEpisodeRequests()
 		const isCurrent = (): boolean => isActive && isPodcastEpisodeRequestCurrent(version)

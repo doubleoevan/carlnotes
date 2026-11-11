@@ -10,6 +10,8 @@ type IconButtonProps = {
 	// the plain-text name a markup tooltip cannot provide on its own
 	ariaLabel?: string
 	isDisabled?: boolean
+	// whether a toggle is on, which a button with two states reports
+	isPressed?: boolean
 	// the classes that replace the muted icon's look
 	className?: string
 	onClick: () => void
@@ -23,6 +25,7 @@ export function IconButton({
 	tooltip,
 	ariaLabel,
 	isDisabled,
+	isPressed,
 	className = ICON_BUTTON_CLASS,
 	onClick,
 	children,
@@ -33,6 +36,7 @@ export function IconButton({
 				<button
 					type="button"
 					aria-label={ariaLabel ?? (typeof tooltip === "string" ? tooltip : undefined)}
+					aria-pressed={isPressed}
 					disabled={isDisabled}
 					onClick={onClick}
 					className={className}

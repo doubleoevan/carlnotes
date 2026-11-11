@@ -3,11 +3,12 @@ import { fetchNotes } from "@carlnotes/client/noteClient"
 import type { NotesResponse } from "@carlnotes/contracts/notes"
 import { SITE_URL } from "@carlnotes/contracts/site"
 import type { TopicResponse } from "@carlnotes/contracts/topics"
+import { toSectionCountLabel } from "@carlnotes/core/lib/labels"
 import { fontFamilies } from "@carlnotes/nightshift/typography"
 import { onlineManager, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useRouter } from "expo-router"
 import { Plus } from "lucide-react-native"
-import { type ComponentRef, useRef, useState, useSyncExternalStore } from "react"
+import { type ComponentRef, useEffect, useRef, useState, useSyncExternalStore } from "react"
 import { View } from "react-native"
 import { CoffeeLoading } from "@/components/branding/CoffeeLoading"
 import { AnchorLink } from "@/components/common/AnchorLink"
@@ -15,6 +16,7 @@ import { Sheet } from "@/components/common/Sheet"
 import { Button, toTouchTargetHitSlop } from "@/components/primitives/button"
 import { Icon } from "@/components/primitives/icon"
 import { Text } from "@/components/primitives/text"
+import { EmptyListCard } from "@/components/table/TableCard"
 import { CollapsibleSection } from "@/components/topic/CollapsibleSection"
 import { useNoteDraftSnapshot, useNoteDraftStore } from "@/noteDraftStorage"
 import { openSessionScreen } from "@/sessionReturnPath"
@@ -22,10 +24,16 @@ import { CreateNote } from "./CreateNote"
 import { NotesTable } from "./NotesTable"
 import { PageNoteBadge } from "./NoteUnreadBadge"
 
+// the topic or the team whose notes the section lists, and where the count of the listed notes goes as it stands,
+// for the screen's details line. the count is null until the notes load
+type NotesSectionProps = ({ topic: TopicResponse } | { pageType: "topic" | "team"; pageId: string }) & {
+	onNoteCountChange?: (noteCount: number | null) => void
+}
+
 /**
  * Lists Topic notes and recoverable drafts, opening the shared native reading and editing flow.
  */
-export function NotesSection(props: { topic: TopicResponse } | { pageType: "topic" | "team"; pageId: string }) {
+export function NotesSection(props: NotesSectionProps) {
 	const page = "topic" in props ? { pageType: "topic" as const, pageId: props.topic.id } : props
 	const path = `/${page.pageType === "topic" ? "topics" : "teams"}/${page.pageId}`
 	// open the same action from the header button and the empty invitation. a visitor is sent to sign-up with the
@@ -67,12 +75,22 @@ export function NotesSection(props: { topic: TopicResponse } | { pageType: "topi
 		networkMode: "always",
 		retry: false,
 	})
+	// report how many notes the section lists
+	const noteCount = query.data ? query.data.notes.length : null
+	const { onNoteCountChange } = props
+	useEffect(() => {
+		onNoteCountChange?.(noteCount)
+	}, [noteCount, onNoteCountChange])
+
 	// a visitor sees the button too, as the web does, and it prompts for an account
 	const canCreate = ((query.data?.creatableVisibilities.length ?? 0) > 0 && isOnline) || !session
 	return (
 		<>
+			{/* a team's notes are its own, and a topic's are the tasting notes. both count at the far right of their title */}
 			<CollapsibleSection
-				title="Tasting Notes"
+				title={page.pageType === "team" ? "Team notes" : "Tasting Notes"}
+				countLabel={toSectionCountLabel(noteCount, "note")}
+				hasClosedDivider={"topic" in props && props.topic.relatedTopics.length > 0}
 				titleAside={
 					<View className="flex-row items-center gap-2">
 						<PageNoteBadge page={page} isOutline />
@@ -154,7 +172,7 @@ function NoteInvitation({
 	onAdd: () => void
 }) {
 	if (!canCreate) {
-		return <Text className="text-sm text-muted-foreground">{`No notes on this ${pageType} yet.`}</Text>
+		return <EmptyListCard text={`No notes on this ${pageType} yet.`} />
 	}
 	return (
 		<AnchorLink

@@ -88,6 +88,8 @@ const expoConfig: ExpoConfig = {
 				recordAudioAndroid: true,
 			},
 		],
+		// films: picture-in-picture, and the film keeps talking with the phone locked or the app in the background
+		["expo-video", { supportsBackgroundPlayback: true, supportsPictureInPicture: true }],
 		[
 			"expo-image-picker",
 			{

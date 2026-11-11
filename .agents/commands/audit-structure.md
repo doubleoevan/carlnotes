@@ -916,6 +916,22 @@ Check for:
      `isUserBlocked` (now `hasUserBlock`), and `toUnblockedAuthorFilter` (now `toNotUserBlockedAuthorFilter`)
    - `isItemExpanded` and the `ItemExpanded` story (now `isEntryExpanded` and `EntryExpanded`), `openHostLink` in
      `apps/web/src/mcpViews/mcpViewHost.ts` (folded into `openMcpViewLink`)
+   - `apps/api/note/noteHtml.ts` and `noteHtml.test.ts` (now `apps/api/noteHtml.ts` and `apps/api/noteHtml.test.ts`)
+   - `apps/api/share/fonts/` (now `packages/pipeline/assets/fonts/`), and `CardElement`, `toCardElementPng`, and
+     `toImageDataUri` in `apps/api/share/previewImage.ts` (now `packages/pipeline/cardElementPng.ts`)
+   - `apps/web/src/components/common/HomeRankDialog.tsx` and its story (now `RankDialog.tsx` and its story there, over
+     `packages/core/components/RankDialog.tsx`)
+   - `UpdatesList.tsx` and `UpdatesButton.tsx` with their stories in `apps/web/src/components/topic/` and
+     `apps/mobile/src/components/topic/`, `packages/core/components/UpdatesButton.tsx`,
+     `packages/core/hooks/useUpdates.ts`, `useHomeUpdates.ts`, `requestUpdates` in `packages/client/updatesClient.ts`,
+     and `POST /api/updates` (now `NewsList.tsx` in each app's `components/social/` over
+     `packages/core/components/NewsList.tsx`, `packages/core/hooks/useNews.ts`, `useNewsList.ts`, and
+     `useUpdatesOpener.ts`, `fetchUpdatesOpener`, and `GET /api/updates/opener`).
+     `packages/core/components/UpdatesList.tsx` stays as the updates MCP view's list
+   - `apps/web/src/components/topic/TopicResourceWithTopicLink.tsx` (removed), and
+     `apps/mobile/src/components/search/SearchRowTopicLink.tsx` (now `SearchRowTopicLink` in
+     `apps/mobile/src/components/search/SearchResultsList.tsx`)
+   - `packages/core/lib/topicViews.ts` and `topicViews.test.ts` (now `pageViews.ts` and `pageViews.test.ts` there)
 
 5. **Cross-harness enforcement parity**: `.claude/settings.json` hooks and
    `.opencode/plugin/guardrails.mjs` must gate the same operations with the

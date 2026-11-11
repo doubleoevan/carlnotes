@@ -52,8 +52,8 @@ export function TeamGateNotice({
 				<DialogTitle>This team is invite-only</DialogTitle>
 				<DialogDescription>
 					{isSignedIn
-						? `Ask to join and a leader of ${teamName} can add you, or they can send you an invitation.`
-						: `Sign up, then ask a leader of ${teamName} for an invitation.`}
+						? `Ask to join and a leader of ${teamName} can add you, or they can send you an invite.`
+						: `Sign up, then ask a leader of ${teamName} for an invite.`}
 				</DialogDescription>
 				<DialogFooter>
 					{isSignedIn && (

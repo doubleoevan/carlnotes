@@ -23,8 +23,15 @@ export function ChoiceSelect({
 }: {
 	label: string
 	value: string
-	// each choice's value, label, icon, and a count badge beside its label
-	options: { value: string; label: string; icon?: LucideIcon | ReactElement; badge?: ReactElement }[]
+	// each choice's value, label, icon, a count badge beside its label, and the lines its label keeps to, in the list
+	// and as the selected choice
+	options: {
+		value: string
+		label: string
+		icon?: LucideIcon | ReactElement
+		badge?: ReactElement
+		numberOfLines?: number
+	}[]
 	isDisabled?: boolean
 	presentation?: "dropdown" | "sheet"
 	numberOfLines?: number
@@ -59,7 +66,7 @@ export function ChoiceSelect({
 						label={selectedOption?.label ?? label}
 						icon={selectedOption?.icon}
 						badge={selectedOption?.badge}
-						numberOfLines={numberOfLines}
+						numberOfLines={numberOfLines ?? selectedOption?.numberOfLines}
 					/>
 					<Icon as={ChevronDown} className="size-4 text-muted-foreground" />
 				</Button>
@@ -109,7 +116,7 @@ export function ChoiceSelect({
 				onLayout={(event) => setTriggerWidth(event.nativeEvent.layout.width)}
 			>
 				{selectedOption?.icon ? (
-					<ChoiceLabel {...selectedOption} numberOfLines={numberOfLines} />
+					<ChoiceLabel {...selectedOption} numberOfLines={numberOfLines ?? selectedOption.numberOfLines} />
 				) : (
 					<SelectValue placeholder={label} />
 				)}

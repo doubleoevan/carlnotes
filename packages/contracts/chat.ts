@@ -224,6 +224,11 @@ export const chatToolCall = z.object({ toolName: z.string(), input: z.unknown(),
 // the podcast episode and the chapter a stored question was asked during, by its position from zero
 export const podcastEpisodeChapterRef = z.object({ podcastEpisodeId: z.string(), chapterPosition: z.number() })
 
+// the topic post a stored question was asked about: its title and its page, each null once the post is deleted
+const chatTurnTopicPost = z.object({ title: z.string().nullable(), path: z.string().nullable() })
+
+export type ChatTurnTopicPost = z.infer<typeof chatTurnTopicPost>
+
 // one persisted chat turn of a stored conversation, replayed on a later page load
 const chatTurnRow = z.object({
 	question: z.string(),
@@ -235,6 +240,8 @@ const chatTurnRow = z.object({
 	// that a podcast chat turn was asked during, or null
 	speaker: z.enum(podcastEpisodeSpeakers),
 	podcastEpisodeChapter: podcastEpisodeChapterRef.nullable(),
+	// the topic post that a chat turn asked from its page was about, or none. a deleted post leaves no title and no page
+	topicPost: chatTurnTopicPost.nullable().optional(),
 	// the tools this chat turn called, sent back with the next question
 	toolCalls: z.array(chatToolCall).optional(),
 	attachments: z.array(chatMessageAttachment),

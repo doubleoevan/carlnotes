@@ -1,13 +1,15 @@
 import { sendDeleteJoinRequest, sendJoinRequest } from "@carlnotes/client/teamClient"
-import { cn } from "@carlnotes/nightshift/classNames"
 import { useNavigate } from "@tanstack/react-router"
 import { Minus, Plus } from "lucide-react"
 import { useState } from "react"
 import { toast } from "sonner"
-import { Button } from "@/components/primitives/button"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import { toSignupNavigation } from "@/components/session/signupPrompts"
-import { MENU_BUTTON_CLASS } from "@/lib/styleClasses"
+import {
+	HIGHLIGHTED_PAGE_BUTTON_CLASS,
+	PLAIN_PAGE_BUTTON_CLASS,
+	PLAIN_PAGE_BUTTON_ICON_CLASS,
+} from "@/lib/styleClasses"
 
 /**
  * The Join Team button a non-member sees: a plus asks, a minus takes the request back, and a logged-out visitor goes to sign-up instead.
@@ -59,17 +61,19 @@ export function JoinTeamButton({
 		toast(`You've asked to join ${teamName}.\nA team leader can add you.`)
 		onChangeRequest()
 	}
+	const JoinIcon = isJoinRequested ? Minus : Plus
 	return (
 		<Tooltip>
 			<TooltipTrigger asChild>
-				<Button
-					variant={isHighlighted ? "default" : "ghost"}
+				<button
+					type="button"
 					onClick={() => void handleChangeRequest()}
-					className={cn("shrink-0", !isHighlighted && MENU_BUTTON_CLASS)}
+					className={isHighlighted ? HIGHLIGHTED_PAGE_BUTTON_CLASS : PLAIN_PAGE_BUTTON_CLASS}
 				>
-					{isJoinRequested ? <Minus className="size-4" /> : <Plus className="size-4" />}
+					{/* the plain button's icon alone takes the highlight color */}
+					<JoinIcon className={isHighlighted ? "size-4" : PLAIN_PAGE_BUTTON_ICON_CLASS} />
 					Join Team
-				</Button>
+				</button>
 			</TooltipTrigger>
 			<TooltipContent>
 				{!isSignedIn ? "Sign up to join " : isJoinRequested ? "Delete request to join " : "Ask to join "}

@@ -16,6 +16,7 @@ test("checkpoints keep only account-owned resume fields and reject corrupt state
 	const store = createPodcastEpisodeCheckpointStore({ storage, userId: "user-a" })
 	store.save({
 		podcastEpisode: toPodcastEpisodeFixture(),
+		format: "audio" as const,
 		positionSeconds: 40,
 		playbackRate: 1.25,
 		isPlaying: true,
@@ -64,18 +65,22 @@ test("retiring an account drains accepted writes before removing its checkpoint"
 	})
 	const state = {
 		podcastEpisode: toPodcastEpisodeFixture(),
+		format: "audio" as const,
 		positionSeconds: 40,
 		playbackRate: 1,
 		isPlaying: false,
 		isLoading: false,
 		errorMessage: null,
 	}
+	// clear while the first save is pending, then save again
 	store.save(state)
 	await Promise.resolve()
 	const clearing = store.clear()
 	store.save(state)
 	pending.resolve()
 	await clearing
+
+	// the clear wins over both saves
 	expect(values.size).toBe(0)
 	expect(await store.read()).toBeNull()
 })
@@ -96,20 +101,26 @@ test("forgetting a removed episode preserves a newer selection and permits later
 	})
 	const state = {
 		podcastEpisode: toPodcastEpisodeFixture(),
+		format: "audio" as const,
 		positionSeconds: 20,
 		playbackRate: 1.5,
 		isPlaying: false,
 		isLoading: false,
 		errorMessage: null,
 	}
+	// forgetting an older podcast episode keeps the newer selection
 	store.save(state)
 	store.save({ ...state, podcastEpisode: toPodcastEpisodeFixture({ id: "episode-2" }) })
 	await store.forget("episode-1")
 	expect((await store.read())?.podcastEpisodeId).toBe("episode-2")
+
+	// forgetting the selection clears it, and a later save still works
 	await store.forget("episode-2")
 	expect(await store.read()).toBeNull()
 	store.save(state)
 	expect((await store.read())?.podcastEpisodeId).toBe("episode-1")
+
+	// a retired store ignores later saves
 	store.retire()
 	store.save({ ...state, positionSeconds: 99 })
 	expect(await store.read()).toBeNull()

@@ -6,12 +6,19 @@ import {
 	type McpUiStyles,
 } from "@modelcontextprotocol/ext-apps"
 import { useApp } from "@modelcontextprotocol/ext-apps/react"
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { RouterProvider } from "@tanstack/react-router"
 import { useEffect, useRef } from "react"
 import { LinkBaseUrlContext, LinkOpenerContext } from "@/components/common/AnchorLink"
 import { replaceMcpViewToolCall } from "./mcpViewHistory"
 import { openMcpViewLink, setMcpViewApp, setMcpViewDisplayModes } from "./mcpViewHost"
 import { mcpViewRouter, toMcpViewOpeningPath } from "./mcpViewRouter"
+
+// the query client the site's components read through. an MCP view's reads are tool calls, so none runs again by
+// itself or after a failure
+const mcpViewQueryClient = new QueryClient({
+	defaultOptions: { queries: { refetchOnWindowFocus: false, refetchOnReconnect: false, retry: false } },
+})
 
 // the host variables an MCP view applies
 const HOST_STYLE_VARIABLE_PREFIXES = ["--color-", "--border-radius-"]
@@ -48,11 +55,13 @@ export function McpViewApp({ mcpView }: { mcpView: McpView }) {
 		}
 	}, [app])
 	return (
-		<LinkBaseUrlContext.Provider value={document.body.dataset.siteUrl ?? null}>
-			<LinkOpenerContext.Provider value={openMcpViewLink}>
-				<RouterProvider router={mcpViewRouter} />
-			</LinkOpenerContext.Provider>
-		</LinkBaseUrlContext.Provider>
+		<QueryClientProvider client={mcpViewQueryClient}>
+			<LinkBaseUrlContext.Provider value={document.body.dataset.siteUrl ?? null}>
+				<LinkOpenerContext.Provider value={openMcpViewLink}>
+					<RouterProvider router={mcpViewRouter} />
+				</LinkOpenerContext.Provider>
+			</LinkBaseUrlContext.Provider>
+		</QueryClientProvider>
 	)
 }
 

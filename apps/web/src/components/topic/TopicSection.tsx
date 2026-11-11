@@ -5,6 +5,7 @@ import { getRouteApi, Link } from "@tanstack/react-router"
 import type { MouseEvent } from "react"
 import { AccordionSection } from "@/components/common/AccordionSection"
 import { Pagination } from "@/components/common/Pagination"
+import { EmptyListCard } from "@/components/table/TableCard"
 import { toRenderedRows } from "@/lib/renderedRows"
 import { STANDALONE_LINK_CLASS } from "@/lib/styleClasses"
 import { Topic } from "./Topic"
@@ -38,11 +39,11 @@ export function TopicSection({ section, onNewTopicChat }: TopicSectionProps) {
 		>
 			{/* the section topics, or a call to action to start one */}
 			{section.topics.length === 0 && (
-				<p className="text-muted-foreground pl-4 pb-4 text-sm">
+				<EmptyListCard>
 					<button type="button" onClick={onNewTopicChat} className={STANDALONE_LINK_CLASS}>
 						{EMPTY_TOPIC_SECTION}
 					</button>
-				</p>
+				</EmptyListCard>
 			)}
 			{/* the topics, each at its position on its page */}
 			{renderedTopics.map(({ row: topic, className }, index) => (

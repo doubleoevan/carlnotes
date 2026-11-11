@@ -40,12 +40,12 @@ We do not use your content to train our own models.
 
 ## 5.1 Sharing and connected sources
 
-You may keep a topic private, share it by invitation, or make it public. Two rules govern connected authenticated sources such as an email account:
+You may keep a topic private, share it by invite, or make it public. Two rules govern connected authenticated sources such as an email account:
 
 - A topic that uses a connected authenticated source can only be private. If you change such a topic to invite-only or public, its connected sources are automatically disabled first.
 - Public and invite-only topics use public sources only. Content from a connected account never appears in any shared or public feed and is never visible to other users; it only shapes how findings are scored and searched on your own private topics.
 
-When you invite someone to a topic, they gain access only after they accept the invitation, and they see only findings from scans that run after they accept, never the topic's earlier history.
+When you invite someone to a topic, they gain access only after they accept the invite, and they see only findings from scans that run after they accept, never the topic's earlier history.
 
 ## 6. Acceptable use
 
@@ -68,7 +68,7 @@ We may suspend or terminate an account that breaks these rules, with notice wher
 
 ## 7. Objectionable content, reports, and removals
 
-We have no tolerance for objectionable content or abusive people. Messages, notes, comments, topic names and prompts, team names, and usernames are read by other people, so each one is checked before it posts, and a post the check rejects is not published. A check is not a guarantee, so anyone can report content or a person from the page where they see it, and can block a person so that person's messages, comments, and invitations no longer reach them.
+We have no tolerance for objectionable content or abusive people. Messages, notes, comments, topic names and prompts, team names, and usernames are read by other people, so each one is checked before it posts, and a post the check rejects is not published. A check is not a guarantee, so anyone can report content or a person from the page where they see it, and can block a person so that person's messages, comments, and invites no longer reach them.
 
 We read every report. We act on a report within one day of receiving it: we remove content that breaks these rules, and we may suspend or close the account that posted it. Content we remove is removed for everyone. Removal and suspension are at our discretion, and we tell the person whose content was removed where that is practical.
 

@@ -69,6 +69,7 @@
 		"expo-splash-screen": "~58.0.13",
 		"expo-system-ui": "~58.0.7",
 		"expo-updates": "~58.0.21",
+		"expo-video": "~58.0.13",
 		"expo-web-browser": "~58.0.7",
 		"lucide-react-native": "^1.68.0",
 		"markdown-to-jsx": "^9.10.4",

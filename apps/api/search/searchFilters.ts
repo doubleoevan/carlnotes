@@ -1,5 +1,5 @@
-// the site search's filters in SQL: the topic tags that narrow topics, podcast episodes, and findings, and the
-// resource kinds and the view that narrow findings
+// the site search's filters in SQL: the topic tags that narrow topics, podcast episodes, Topic Posts, and findings,
+// and the resource kinds and the view that narrow findings
 
 import { resourceKinds } from "@carlnotes/contracts/enums"
 import type { SearchRequest } from "@carlnotes/contracts/search"

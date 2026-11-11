@@ -1,4 +1,4 @@
-// the MCP view resources: the four resources and their security policy, the MCP view html with its escaped script, and
+// the MCP view resources: the nine resources and their security policy, the MCP view html with its escaped script, and
 // the message a missing build reads
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import { toMcpViewHtmlFromBundle } from "@carlnotes/contracts/mcpViewHtml"
@@ -44,12 +44,14 @@ function toRegisteredMcpUiResources(storedMcpViewVersions?: StoredMcpViewVersion
 	return registeredMcpUiResources
 }
 
-test("six versioned MCP view resources retain unversioned aliases with the same security policy", () => {
+test("nine versioned MCP view resources retain unversioned aliases with the same security policy", () => {
 	const registeredMcpUiResources = toRegisteredMcpUiResources()
-	const versionSuffixes = [`?v=${MCP_VIEW_VERSION}`, "", "?v=2", "?v=3", "?v=4", "?v=5", "?v=6", "?v=7", "?v=8"]
+	const aliasedVersionSuffixes = ["", "?v=2", "?v=3", "?v=4", "?v=5", "?v=6", "?v=7", "?v=8", "?v=9"]
+	const versionSuffixes = [`?v=${MCP_VIEW_VERSION}`, ...aliasedVersionSuffixes]
 	const storedUris = STORED_MCP_VIEW_VERSIONS.flatMap(({ version, mcpViews }) =>
 		mcpViews.map((mcpView) => toMcpUiResourceUri(mcpView, version)),
 	)
+	expect(MCP_VIEWS).toHaveLength(9)
 	expect(registeredMcpUiResources.map((uiResource) => uiResource.uri).sort()).toEqual(
 		[
 			...MCP_VIEWS.flatMap((mcpView) =>

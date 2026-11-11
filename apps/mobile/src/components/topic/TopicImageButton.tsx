@@ -2,6 +2,7 @@
 // a phone has no hover, so the camera shows in the corner at all times
 
 import type { TopicImageProps } from "@carlnotes/core/components/TopicImage"
+import { cn } from "@carlnotes/nightshift/classNames"
 import { Camera } from "lucide-react-native"
 import { Pressable, View } from "react-native"
 import { SkeletonPulse } from "@/components/common/SkeletonPulse"
@@ -9,14 +10,15 @@ import { Icon } from "@/components/primitives/icon"
 import { TopicImage } from "@/components/primitives/topic-image"
 import { HEADER_TOPIC_IMAGE_CLASS } from "@/topicImageClasses"
 
-// the image, the button's accessible label, whether it is disabled or pulsing for a render under way, its press, and
-// the button's layout classes
+// the image, the button's accessible label, whether it is disabled or pulsing for a render under way, its press, the
+// button's layout classes, and the image's own, for a button whose corner differs from the image's
 type TopicImageButtonProps = Omit<TopicImageProps, "className"> & {
 	label: string
 	isDisabled?: boolean
 	isRendering?: boolean
 	onPress: () => void
 	className?: string
+	imageClassName?: string
 }
 
 /**
@@ -28,8 +30,10 @@ export function TopicImageButton({
 	isRendering,
 	onPress,
 	className,
+	imageClassName,
 	...topicImageProps
 }: TopicImageButtonProps) {
+	const imageClass = cn("w-full", imageClassName)
 	return (
 		<Pressable
 			accessibilityRole="button"
@@ -41,10 +45,10 @@ export function TopicImageButton({
 			{/* a render under way pulses the empty frame */}
 			{isRendering ? (
 				<SkeletonPulse>
-					<TopicImage {...topicImageProps} className="w-full" />
+					<TopicImage {...topicImageProps} className={imageClass} />
 				</SkeletonPulse>
 			) : (
-				<TopicImage {...topicImageProps} className="w-full" />
+				<TopicImage {...topicImageProps} className={imageClass} />
 			)}
 			<View className="absolute right-2 bottom-2 size-9 items-center justify-center rounded-full bg-black/55">
 				<Icon as={Camera} className="size-5 text-white" />
@@ -71,6 +75,7 @@ export function TopicHeaderImage({ image, name, editLabel, onEdit }: TopicHeader
 			label={editLabel}
 			onPress={onEdit}
 			className={HEADER_TOPIC_IMAGE_CLASS}
+			imageClassName="rounded-xs"
 		/>
 	)
 }

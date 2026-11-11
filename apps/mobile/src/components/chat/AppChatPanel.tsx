@@ -2,6 +2,7 @@ import { authClient } from "@carlnotes/client/authClient"
 import { CHAT_NAME } from "@carlnotes/contracts/chat"
 import { VISITOR_CHAT_COPY } from "@carlnotes/core/lib/chatCopy"
 import { useAllChatMentions } from "@carlnotes/core/stores/chatRoomStore"
+import { useChatTopicPost } from "@carlnotes/core/stores/topicPostChatStore"
 import { router, usePathname } from "expo-router"
 import { useState } from "react"
 import { View } from "react-native"
@@ -27,17 +28,20 @@ export function AppChatPanel() {
 	// every chat mention for a chat that the user hasn't opened, and the visitor's sign-up sheet
 	const chatMentions = useAllChatMentions()
 	const [isNoConversationSheetOpen, setIsNoConversationSheetOpen] = useState(false)
+	// the published Topic Post whose screen is open, which the launcher opens the chat about
+	const chatTopicPost = useChatTopicPost()
 	if (isKeyboardVisible || pathname === "/chat" || pathname.endsWith("/chat") || pathname === "/storybook") {
 		return null
 	}
 
-	// retain the Topic or Team context on its pages and notes. a visitor is asked for an account first
+	// retain the Topic or Team context on its pages and notes, and open the chat about a Topic Post on its screen. a
+	// visitor is asked for an account first
 	const handleOpenChat = (): void => {
 		if (!session) {
 			setIsNoConversationSheetOpen(true)
 			return
 		}
-		router.push(toChatHref(pathname))
+		router.push(toChatHref(pathname, chatTopicPost))
 	}
 	return (
 		<View

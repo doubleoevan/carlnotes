@@ -2,10 +2,12 @@ import { authClient } from "@carlnotes/client/authClient"
 import { fetchChatRooms } from "@carlnotes/client/chatRoomClient"
 import type { ChatRoom } from "@carlnotes/contracts/chat"
 import { isAdminRole } from "@carlnotes/contracts/enums"
+import { useCommentMentionsLoad } from "@carlnotes/core/hooks/useCommentMentionsLoad"
 import { useUpdateBadges } from "@carlnotes/core/hooks/useUpdateBadges"
 import {
 	toChatRoomMenuOrder,
 	toPrivateChatId,
+	toPrivateChatIdLabel,
 	toPrivateChatName,
 	toPrivateChatPage,
 } from "@carlnotes/core/lib/chatConversations"
@@ -17,7 +19,8 @@ import {
 	useAllChatMentions,
 	useChatRooms,
 } from "@carlnotes/core/stores/chatRoomStore"
-import { useNavigate } from "@tanstack/react-router"
+import { useChatTopicPost } from "@carlnotes/core/stores/topicPostChatStore"
+import { useLocation, useNavigate } from "@tanstack/react-router"
 import { useCallback, useEffect, useState } from "react"
 import { Button } from "@/components/primitives/button"
 import { toSignupNavigation } from "@/components/session/signupPrompts"
@@ -123,19 +126,9 @@ function useOpenNewTopicChatOnEmptyFeed(pageContext: ChatPageContext | null, pan
 	}, [isUserTopicFeedEmpty])
 }
 
-/**
- * The one chat panel that every page in the layout shares.
- */
-export function AppChatPanel() {
-	const { data: session } = authClient().useSession()
-	const { panelState, chatId, pageContext } = useChatPanel()
-	// the chat rooms, each with the user's unread chat mentions in it
-	const chatRooms = useChatRooms()
-	// whether the chat room list has loaded yet
+// the read of the chat rooms for the dropdown menu, and whether the user's list has loaded yet
+function useChatRoomsLoad(userId: string | undefined): { hasLoadedChatRooms: boolean; updateChatRooms: () => void } {
 	const [hasLoadedChatRooms, setHasLoadedChatRooms] = useState(false)
-
-	// the chat rooms for the dropdown menu, re-read whenever the badge count says something changed
-	const userId = session?.user.id
 	useEffect(() => activateChatAccount(userId ?? null), [userId])
 	const updateChatRooms = useCallback((): void => {
 		if (!userId) {
@@ -170,12 +163,11 @@ export function AppChatPanel() {
 			updateChatRooms()
 		}
 	}, [userId, updateChatRooms])
+	return { hasLoadedChatRooms, updateChatRooms }
+}
 
-	// poll the chat mention count, the topic invitation badges, and an admin's open report count while the tab is visible
-	// and online
-	useUpdateBadges(userId, isAdminRole(session?.user.role), updateChatRooms)
-
-	// a chat mention badge links to its team or topic page
+// opens the chat room of the team that a chat mention badge's link names, on the topic the page shows
+function useOpenLinkedChatRoom(pageContext: ChatPageContext | null): void {
 	const linkedTeamId = useSearchParams().get("chat")
 	const linkedTopicId = pageContext?.topicId ?? null
 	useEffect(() => {
@@ -183,21 +175,48 @@ export function AppChatPanel() {
 			setChatId({ kind: "room", teamId: linkedTeamId, topicId: linkedTopicId })
 		}
 	}, [linkedTeamId, linkedTopicId])
+}
+
+/**
+ * The one chat panel that every page in the layout shares.
+ */
+export function AppChatPanel() {
+	const { data: session } = authClient().useSession()
+	const { panelState, chatId, pageContext } = useChatPanel()
+	// the Topic Post whose page is open, which its Topic's private chat asks about
+	const chatTopicPost = useChatTopicPost()
+	// the chat rooms, each with the user's unread chat mentions in it, and whether their list has loaded yet
+	const chatRooms = useChatRooms()
+	const userId = session?.user.id
+	const { hasLoadedChatRooms, updateChatRooms } = useChatRoomsLoad(userId)
+
+	// poll the chat mention count, the topic invitation badges, and an admin's open report count while the tab is visible
+	// and online
+	useUpdateBadges(userId, isAdminRole(session?.user.role), updateChatRooms)
+
+	// read the user's unseen Comment Mentions as each page loads, and never on a timer
+	const pathname = useLocation({ select: (location) => location.pathname })
+	useCommentMentionsLoad(userId, pathname)
+
+	// a chat mention badge links to its team or topic page
+	useOpenLinkedChatRoom(pageContext)
 
 	// a default chat id is picked only when nothing is selected yet. a visitor picks nothing unless the page
-	// offers a team to join
+	// offers a team to join. a user on a Topic Post's page picks the chat about that post
+	const userChatTopicPost = session ? chatTopicPost : null
 	const pickDefaultChat = useCallback((): void => {
 		if (chatId || !(session || pageContext?.joinTeam)) {
 			return
 		}
-		const defaultChatId = toDefaultChatId(pageContext, chatRooms)
+		const defaultChatId = toDefaultChatId(pageContext, chatRooms, userChatTopicPost)
 		if (defaultChatId) {
 			setChatId(defaultChatId)
 		}
-	}, [chatId, session, pageContext, chatRooms])
+	}, [chatId, session, pageContext, chatRooms, userChatTopicPost])
 
+	// the chat about a Topic Post needs no chat room, so it opens before the chat rooms load
 	const openPanel = (): void => {
-		if (hasLoadedChatRooms) {
+		if (hasLoadedChatRooms || userChatTopicPost) {
 			pickDefaultChat()
 		}
 		// a phone has no room for a docked panel beside the page, so it opens over it
@@ -222,9 +241,12 @@ export function AppChatPanel() {
 		return <ChatPill onOpenChat={openPanel} chatMentions={chatMentions} />
 	}
 
-	// the private chat opens on the topic this page shows, or on a team when this page or the open chat room names one
-	const privateChatId = toPrivateChatId(pageContext, chatId)
+	// the private chat opens on the Topic Post or the topic this page shows, or on a team if this page or the open
+	// chat room names one. its label names what it is about
+	const privateChatId = toPrivateChatId(pageContext, chatId, chatTopicPost)
 	const openPrivateChat = privateChatId ? () => setChatId(privateChatId) : undefined
+	const privateChatSubjectSources = { chatRooms, pageContext, chatTopicPost }
+	const privateChatLabel = privateChatId ? toPrivateChatIdLabel(privateChatId, privateChatSubjectSources) : undefined
 	// show the new-topic chat in the menu to any signed-in user
 	const openNewTopicChat = toOpenNewTopicChat(Boolean(session), chatId)
 	const chatRoomChoices = toChatRoomOptions(chatRooms, chatId, pageContext)
@@ -232,8 +254,9 @@ export function AppChatPanel() {
 		return (
 			<PrivateChatPanel
 				key={`${userId}:private:${chatId.topicId ?? chatId.teamId ?? "new-topic"}`}
-				page={toPrivateChatPage(chatId)}
+				page={toPrivateChatPage(chatId, chatTopicPost)}
 				chatName={toPrivateChatName(chatId, chatRooms, pageContext)}
+				chatLabel={toPrivateChatIdLabel(chatId, privateChatSubjectSources)}
 				panelState={panelState}
 				onPanelState={setChatPanelState}
 				chatRoomOptions={chatRoomChoices}
@@ -255,6 +278,7 @@ export function AppChatPanel() {
 				chatRoomMenu={{
 					chatRoomOptions: chatRoomChoices,
 					onPrivateChat: openPrivateChat,
+					privateChatLabel,
 					onNewTopicChat: openNewTopicChat,
 					onOpenChatRoomMenu: updateChatRooms,
 				}}

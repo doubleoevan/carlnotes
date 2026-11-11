@@ -1,4 +1,5 @@
-// a topic image's files: the original at 3:2, the six derived sizes, their object keys, and the store that writes them
+// a topic image's files: the original in its format, the six derived sizes, their object keys, and the store that
+// writes them
 
 import { createHash } from "node:crypto"
 import { type TopicImageSize, topicImageSizes } from "@carlnotes/contracts/enums"
@@ -12,6 +13,8 @@ import {
 	toTopicImageFileName,
 } from "@carlnotes/contracts/topicImages"
 import { uploadAttachment } from "@carlnotes/db/store"
+import type { PromptName } from "@carlnotes/models/prompts/fetch"
+import type { TopicImageAspectRatio } from "@carlnotes/models/topicImageModel"
 import sharp from "sharp"
 
 // the jpeg quality of a stored original and the webp quality of a derived file
@@ -23,6 +26,23 @@ const ORIGINAL_FILE_NAME = "original.jpg"
 
 // a stored original: its jpeg bytes and its pixel size
 export type TopicImageOriginal = { jpegBytes: Uint8Array; width: number; height: number }
+
+// what an original is drawn as: the prompt whose house style follows its scene, the aspect ratio the image model draws
+// at, and the pixel size it is cropped and resized to
+export type TopicImageFormat = {
+	stylePromptName: PromptName
+	aspectRatio: TopicImageAspectRatio
+	width: number
+	height: number
+}
+
+// the format of a topic's, a podcast episode's, and a Topic Post's image
+export const TOPIC_IMAGE_FORMAT: TopicImageFormat = {
+	stylePromptName: "topic-image-style",
+	aspectRatio: "3:2",
+	width: TOPIC_IMAGE_ORIGINAL_WIDTH,
+	height: TOPIC_IMAGE_ORIGINAL_HEIGHT,
+}
 
 // one derived file: its name, its bytes, and the size and density it is at
 export type TopicImageFile = { fileName: string; bytes: Uint8Array; size: TopicImageSize; density: TopicImageDensity }
@@ -40,19 +60,23 @@ export function toTopicImageUploadType(imageBytes: Uint8Array): (typeof TOPIC_IM
 	return isJpeg ? "image/jpeg" : isPng ? "image/png" : isWebp ? "image/webp" : null
 }
 
-/**
- * Returns the original an image's bytes make: center-cropped to 3:2, resized to the original's size, every piece of
- * metadata stripped, and encoded as a jpeg. A render's output and an upload take the same path.
- */
 // the most pixels an upload or a render may decode to: a 40 megapixel photo passes, and a small file that unpacks
 // to a huge bitmap is rejected before it costs memory
 const MAX_IMAGE_INPUT_PIXELS = 40_000_000
 
-export async function toTopicImageOriginal(imageBytes: Uint8Array): Promise<TopicImageOriginal> {
+/**
+ * Returns the original an image's bytes make: center-cropped to the format's ratio, which is 3:2 if none is given,
+ * resized to its size, every piece of metadata stripped, and encoded as a jpeg. A render's output and an upload take
+ * the same path.
+ */
+export async function toTopicImageOriginal(
+	imageBytes: Uint8Array,
+	{ width, height }: Pick<TopicImageFormat, "width" | "height"> = TOPIC_IMAGE_FORMAT,
+): Promise<TopicImageOriginal> {
 	// sharp's cover fit crops the center to the ratio and resizes in one pass, and a fresh encode keeps no metadata
 	const { data, info } = await sharp(imageBytes, { limitInputPixels: MAX_IMAGE_INPUT_PIXELS })
 		.rotate()
-		.resize(TOPIC_IMAGE_ORIGINAL_WIDTH, TOPIC_IMAGE_ORIGINAL_HEIGHT, { fit: "cover", position: "centre" })
+		.resize(width, height, { fit: "cover", position: "centre" })
 		.jpeg({ quality: ORIGINAL_JPEG_QUALITY, mozjpeg: true })
 		.toBuffer({ resolveWithObject: true })
 	return { jpegBytes: new Uint8Array(data), width: info.width, height: info.height }
@@ -153,6 +177,40 @@ export function toPodcastEpisodeImageOriginalKey(podcastEpisodeId: string, hash:
  */
 export function storePodcastEpisodeImageFiles(podcastEpisodeId: string, original: TopicImageOriginal): Promise<string> {
 	return storeImageFiles(original, (hash) => toPodcastEpisodeImageKeyPrefix(podcastEpisodeId, hash))
+}
+
+// the object key folder of a Topic Post's image, which holds the same files as a topic image
+function toTopicPostImageKeyPrefix(topicPostId: string, hash: string): string {
+	return `topic-post-images/${topicPostId}/${hash}`
+}
+
+/**
+ * Returns the object key of one derived file of a Topic Post's image.
+ */
+export function toTopicPostImageFileKey(topicPostId: string, hash: string, fileName: string): string {
+	return `${toTopicPostImageKeyPrefix(topicPostId, hash)}/${fileName}`
+}
+
+/**
+ * Returns the object key of a Topic Post image's original.
+ */
+export function toTopicPostImageOriginalKey(topicPostId: string, hash: string): string {
+	return `${toTopicPostImageKeyPrefix(topicPostId, hash)}/${ORIGINAL_FILE_NAME}`
+}
+
+/**
+ * Stores a Topic Post image's original and its six derived files under the original's content hash, and returns the
+ * hash.
+ */
+export function storeTopicPostImageFiles(topicPostId: string, original: TopicImageOriginal): Promise<string> {
+	return storeImageFiles(original, (hash) => toTopicPostImageKeyPrefix(topicPostId, hash))
+}
+
+/**
+ * Returns every object key a Topic Post image holds: its original and its six derived files.
+ */
+export function toTopicPostImageObjectKeys(topicPostId: string, hash: string): string[] {
+	return toImageObjectKeys(toTopicPostImageKeyPrefix(topicPostId, hash))
 }
 
 /**

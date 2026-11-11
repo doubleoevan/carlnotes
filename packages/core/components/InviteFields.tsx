@@ -97,7 +97,7 @@ function InviteInput({
 				setText("")
 			}
 		} catch (error) {
-			setError(error instanceof Error ? error.message : "That invitation didn't go through. Try again.")
+			setError(error instanceof Error ? error.message : "That invite didn't go through. Try again.")
 		} finally {
 			setIsPending(false)
 		}

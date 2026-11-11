@@ -1,6 +1,7 @@
 import {
 	PODCAST_STORY_EPISODE,
 	PODCAST_STORY_FEED,
+	PODCAST_STORY_FILM_EPISODE,
 	PODCAST_STORY_LONG_TITLE_EPISODE,
 	PodcastEpisodeStory,
 } from "@carlnotes/core/lib/podcastEpisodeStories"
@@ -35,6 +36,10 @@ export const Paused: Story = { parameters: { playbackState: "paused" } }
 export const Buffering: Story = { parameters: { playbackState: "buffering" } }
 export const PlaybackError: Story = { parameters: { playbackState: "error" } }
 export const LongTitle: Story = { args: { podcastEpisode: PODCAST_STORY_LONG_TITLE_EPISODE } }
+
+// a podcast episode with a film, whose card has no button for the film and no theme song credits
+export const WithFilm: Story = { args: { podcastEpisode: PODCAST_STORY_FILM_EPISODE } }
+
 export const MissingFinding: Story = {
 	args: {
 		podcastEpisode: {

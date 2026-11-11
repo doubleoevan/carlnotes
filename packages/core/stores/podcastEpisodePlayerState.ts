@@ -1,4 +1,4 @@
-import type { PodcastEpisode, PodcastEpisodeChapter } from "@carlnotes/contracts/podcast"
+import type { PodcastEpisode, PodcastEpisodeChapter, PodcastEpisodeFormat } from "@carlnotes/contracts/podcast"
 import type { PodcastEpisodePlayerState } from "../lib/podcastEpisodeAudio"
 import { toChapterIndexAt } from "../lib/podcastEpisodePlayback"
 import { toStoreListeners } from "./storeListeners"
@@ -6,6 +6,7 @@ import { toStoreListeners } from "./storeListeners"
 // playback state outlives the screen that started the episode
 let playerState: PodcastEpisodePlayerState = {
 	podcastEpisode: null,
+	format: "audio",
 	isPlaying: false,
 	isLoading: false,
 	positionSeconds: 0,
@@ -93,9 +94,20 @@ export function useIsPodcastPlayerShown(): boolean {
 /**
  * Reports whether the named episode is playing.
  */
-export function useIsPodcastEpisodePlaying(podcastEpisodeId: string | undefined): boolean {
+export function useIsPodcastEpisodePlaying(
+	podcastEpisodeId: string | undefined,
+	format?: PodcastEpisodeFormat,
+): boolean {
 	useStoreVersion()
-	return playerState.isPlaying && podcastEpisodeId !== undefined && playerState.podcastEpisode?.id === podcastEpisodeId
+
+	// the named podcast episode playing in the asked format, or in either format if none is asked
+	const isFormatPlaying = format === undefined || playerState.format === format
+	return (
+		playerState.isPlaying &&
+		isFormatPlaying &&
+		podcastEpisodeId !== undefined &&
+		playerState.podcastEpisode?.id === podcastEpisodeId
+	)
 }
 
 /**
@@ -106,6 +118,8 @@ export function updatePodcastEpisodePosition(positionSeconds: number): boolean {
 	const previousChapter = toPlayerChapter()
 	playerState = { ...playerState, positionSeconds }
 	publishPosition()
+
+	// republish the controls if the chapter changed
 	const hasChapterChanged = toPlayerChapter() !== previousChapter
 	if (hasChapterChanged) {
 		publish()

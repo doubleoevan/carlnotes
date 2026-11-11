@@ -5,6 +5,7 @@ import { Plus } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/primitives/button"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
+import { HIGHLIGHTED_PAGE_BUTTON_CLASS, PAGE_BUTTON_ROW_CLASS } from "@/lib/styleClasses"
 import { toSeePlansToastAction } from "@/lib/toastActions"
 import { useTopicFeed } from "@/providers/TopicFeedProvider"
 import { TagPicker } from "./TagPicker"
@@ -21,7 +22,7 @@ export function TagsAndNewTopicRow({ tags, onTagsChange }: { tags: string[]; onT
 	const { data: session } = authClient().useSession()
 	const { openNewTopicDialog, newTopicDialog } = useNewTopicDialog(() => void reloadTopicFeed())
 	return (
-		<div className="flex flex-wrap items-start justify-between gap-3">
+		<div className={PAGE_BUTTON_ROW_CLASS}>
 			<div className="flex min-w-0 flex-wrap items-center gap-1.5">
 				<TagPicker tags={tags} knownTags={knownTags} openPickerLabel="Tags:" onTagsChange={onTagsChange} />
 			</div>
@@ -65,10 +66,9 @@ function NewTopicButton({
 		<Tooltip>
 			<TooltipTrigger asChild>
 				<Button
-					size="sm"
 					onClick={isAtLimit ? () => toast(limitLine, { action: toSeePlansToastAction(navigate) }) : onNewTopic}
 					disabled={isSignedIn && remainingTopics === null}
-					className="min-h-11 shrink-0 gap-1.5 rounded-lg sm:min-h-9"
+					className={HIGHLIGHTED_PAGE_BUTTON_CLASS}
 				>
 					<Plus className="size-4" />
 					New Topic

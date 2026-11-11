@@ -1,4 +1,9 @@
-import { type FetchTopicPageOptions, fetchTopicPage, type TopicGate } from "@carlnotes/client/topicClient"
+import {
+	type FetchTopicPageOptions,
+	fetchRelatedTopics,
+	fetchTopicPage,
+	type TopicGate,
+} from "@carlnotes/client/topicClient"
 import { isTopicSlugStale, toTopicPath } from "@carlnotes/contracts/seo"
 import type { TopicResponse } from "@carlnotes/contracts/topics"
 import { toPolledTopicPage } from "@carlnotes/core/lib/scanPoll"
@@ -7,13 +12,14 @@ import { useMatch, useNavigate } from "@tanstack/react-router"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { useTopicChangeCount } from "@/stores/chatPanelStore"
 import { useLoadInBrowser } from "./useBrowserValue"
+import { useIsSignedInBeforeSession } from "./useIsSignedInBeforeSession"
 
 // the topic id from the url, and the slug if the url has one
 type UseTopicPagePayloadOptions = { topicId: string; topicSlug: string | undefined }
 
 /**
  * Returns the topic page payload and how the topic is gated, seeded by the server's read and reloaded on a new topic id
- * or a chat change.
+ * or a chat change. A signed-in reader's page loads without its related topics, which arrive from a read of their own.
  */
 export function useTopicPagePayload({ topicId, topicSlug }: UseTopicPagePayloadOptions): {
 	topic: TopicResponse | null | undefined
@@ -46,24 +52,49 @@ export function useTopicPagePayload({ topicId, topicSlug }: UseTopicPagePayloadO
 		shownTopicIdRef.current = topicId
 	}, [topicId])
 
+	// how many reloads this hook started, which tells a finished read whether a later reload replaced it
+	const reloadCountRef = useRef(0)
+
+	// whether the reader is signed in, which a reload reads without changing its identity
+	const isSignedIn = useIsSignedInBeforeSession()
+	const isSignedInRef = useRef(isSignedIn)
+	useEffect(() => {
+		isSignedInRef.current = isSignedIn
+	}, [isSignedIn])
+
 	// fetch the topic page payload, which says whether the topic is visible, gated to this user, or missing
 	const reloadTopicPage = useCallback(
 		async (fetchTopicPageOptions: FetchTopicPageOptions = {}) => {
+			// count this reload, so an earlier one's related topics never replace a later one's
+			reloadCountRef.current += 1
+			const reloadCount = reloadCountRef.current
 			try {
+				// a signed-in reader's full load reads the related topics apart from the page, started beside it
+				const isRelatedTopicsSeparate = isSignedInRef.current && !fetchTopicPageOptions.isPoll
+				const relatedTopicsRead = isRelatedTopicsSeparate ? fetchRelatedTopicsOrNull(topicId) : null
+
 				// a poll reload leaves out the related topics, the reactions, and the comment thread, so the page keeps its own
-				const topicPage = await fetchTopicPage(topicId, fetchTopicPageOptions)
+				const topicPage = await fetchTopicPage(topicId, { ...fetchTopicPageOptions, isRelatedTopicsSeparate })
 				if (shownTopicIdRef.current !== topicId) {
 					return
 				}
 				const fetchedTopic = topicPage.status === "visible" ? topicPage.topic : null
-				setTopic((previousTopic) =>
-					fetchTopicPageOptions.isPoll ? toPolledTopicPage(previousTopic, fetchedTopic) : fetchedTopic,
-				)
+				const { isPoll = false } = fetchTopicPageOptions
+				setTopic((previousTopic) => toReloadedTopic({ previousTopic, fetchedTopic, isPoll, isRelatedTopicsSeparate }))
 				setTopicGate(topicPage.status === "gated" ? topicPage.topicGate : null)
+
+				// add the related topics once their own read arrives, if the page still shows their topic and no later reload
+				// started. the reload ends without waiting for them
+				void relatedTopicsRead?.then((relatedTopics) => {
+					if (reloadCountRef.current === reloadCount) {
+						setTopic((shownTopic) => toTopicWithRelatedTopics({ shownTopic, topicId, relatedTopics }))
+					}
+				})
 			} catch (error) {
 				console.error("topic page load failed", error)
-				// a failed reload for a topic the page left changes nothing on the page that replaced it
-				if (shownTopicIdRef.current === topicId) {
+				// a failed reload for a topic the page left changes nothing on the page that replaced it, and a failed poll
+				// keeps the page it reads again
+				if (shownTopicIdRef.current === topicId && !fetchTopicPageOptions.isPoll) {
 					setTopic(null)
 				}
 			}
@@ -102,4 +133,60 @@ export function useTopicPagePayload({ topicId, topicSlug }: UseTopicPagePayloadO
 		}
 	}, [topicChangeCount, reloadTopicPage])
 	return { topic, topicGate, reloadTopicPage, changeTopicFinding }
+}
+
+// a topic's related topics from their own read, or null if the read fails
+async function fetchRelatedTopicsOrNull(topicId: string): Promise<TopicResponse["relatedTopics"] | null> {
+	try {
+		return await fetchRelatedTopics(topicId)
+	} catch (error) {
+		console.error("related topics load failed", error)
+		return null
+	}
+}
+
+// the page a reload replaces, the topic the reload fetched, whether the reload was a poll, and whether it left the
+// related topics to their own read
+type ToReloadedTopicOptions = {
+	previousTopic: TopicResponse | null | undefined
+	fetchedTopic: TopicResponse | null
+	isPoll: boolean
+	isRelatedTopicsSeparate: boolean
+}
+
+// the topic a reload shows. a poll keeps what the page it replaces shows of everything a poll leaves out, and a load
+// without its related topics keeps the ones that page shows until their own read arrives. a topic the page did not
+// show keeps the reload's own
+function toReloadedTopic({
+	previousTopic,
+	fetchedTopic,
+	isPoll,
+	isRelatedTopicsSeparate,
+}: ToReloadedTopicOptions): TopicResponse | null {
+	if (isPoll) {
+		return toPolledTopicPage(previousTopic, fetchedTopic)
+	}
+
+	// a load with its own related topics, a hidden or missing topic, and a topic the page did not show stay as fetched
+	if (!isRelatedTopicsSeparate || !fetchedTopic || previousTopic?.id !== fetchedTopic.id) {
+		return fetchedTopic
+	}
+	return { ...fetchedTopic, relatedTopics: previousTopic.relatedTopics }
+}
+
+// the topic the page shows, and a topic's related topics from their own read, null if the read failed or never ran
+type ToTopicWithRelatedTopicsOptions = {
+	shownTopic: TopicResponse | null | undefined
+	topicId: string
+	relatedTopics: TopicResponse["relatedTopics"] | null
+}
+
+// the shown topic with its related topics from their own read. a page that shows another topic, and a read that
+// returned nothing, leave the shown topic as it is
+function toTopicWithRelatedTopics({
+	shownTopic,
+	topicId,
+	relatedTopics,
+}: ToTopicWithRelatedTopicsOptions): TopicResponse | null | undefined {
+	return shownTopic?.id === topicId && relatedTopics ? { ...shownTopic, relatedTopics } : shownTopic
 }

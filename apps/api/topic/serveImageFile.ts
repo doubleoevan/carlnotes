@@ -1,4 +1,5 @@
-// the response that serves one derived file of a topic's or a podcast episode's image, gated by the topic's visibility
+// the response that serves one file of a topic's, a podcast episode's, or a film's image, gated by the topic's
+// visibility
 
 import { attachmentStream } from "@carlnotes/db/store"
 import { toTopicImageCacheTag } from "@carlnotes/server/edgePurge"
@@ -6,19 +7,31 @@ import type { Context } from "hono"
 import { stream } from "hono/streaming"
 import { isAllowed } from "../authorization"
 import { type AppEnv, currentUser } from "../currentUser"
-import { PRIVATE_IMAGE_HEADERS, toVersionedImageHeaders } from "../edgeCache"
+import {
+	LATEST_PRIVATE_IMAGE_HEADERS,
+	PRIVATE_IMAGE_HEADERS,
+	toVersionedImageHeaders,
+	UNVERSIONED_CACHE_CONTROL,
+} from "../edgeCache"
 import type { NamedTopic } from "./permissions"
 
-// the topic whose visibility gates the file, and the object key of the file
-export type ServeImageFileOptions = { topic: NamedTopic; objectKey: string }
+// the topic whose visibility gates the file, the object key of the file, its content type, which is webp if none is
+// given, and whether the url changes with the image, which it does if not given
+export type ServeImageFileOptions = {
+	topic: NamedTopic
+	objectKey: string
+	contentType?: string
+	isUrlVersioned?: boolean
+}
 
 /**
- * Serves one derived webp file under its topic's visibility: a public topic's file immutable at the edge under the
- * topic's tag, a non-public topic's file to a session the view gate grants and in the browser alone, and 404 otherwise.
+ * Serves one image file under its topic's visibility: a public topic's file immutable at the edge under the topic's
+ * tag, a non-public topic's file to a session the view gate grants and in the browser alone, and 404 otherwise. A file
+ * at a url that keeps naming it through its changes is cached briefly instead.
  */
 export async function serveImageFile(
 	context: Context<AppEnv>,
-	{ topic, objectKey }: ServeImageFileOptions,
+	{ topic, objectKey, contentType = "image/webp", isUrlVersioned = true }: ServeImageFileOptions,
 ): Promise<Response> {
 	// a non-public topic's file goes to a session the view gate grants, and never to the edge
 	const isPublic = topic.visibility === "public"
@@ -26,15 +39,22 @@ export async function serveImageFile(
 		return context.json({ error: "not found" }, 404)
 	}
 
-	// a public file is immutable at the edge under the topic's tag, and a private one in the browser alone
+	// a public file is immutable at the edge under the topic's tag, and a private one in the browser alone. a url
+	// that names no version is cached for an hour, or for a minute in the browser alone
+	const publicCacheHeaders = isUrlVersioned
+		? toVersionedImageHeaders(true)
+		: { "Cache-Control": UNVERSIONED_CACHE_CONTROL }
+	const privateCacheHeaders = isUrlVersioned ? PRIVATE_IMAGE_HEADERS : LATEST_PRIVATE_IMAGE_HEADERS
+
+	// set the headers of the topic's visibility, with the topic's tag on a public file
 	const headers = isPublic
-		? { ...toVersionedImageHeaders(true), "Cache-Tag": toTopicImageCacheTag(topic.id) }
-		: PRIVATE_IMAGE_HEADERS
+		? { ...publicCacheHeaders, "Cache-Tag": toTopicImageCacheTag(topic.id) }
+		: privateCacheHeaders
 	for (const [headerName, headerValue] of Object.entries(headers)) {
 		context.header(headerName, headerValue)
 	}
 
-	// the file's bytes stream from object storage as webp
-	context.header("Content-Type", "image/webp")
+	// the file's bytes stream from object storage in its content type
+	context.header("Content-Type", contentType)
 	return stream(context, (responseStream) => responseStream.pipe(attachmentStream(objectKey)))
 }

@@ -35,7 +35,7 @@ You can also start it from these places:
 In the app, **New Topic** on the home page, **New topic** in the actions menu, and the **New topic** option at the end
 of a team page's Add Topic picker offer the same two choices: **Do it myself** opens the topic form, and **Build with
 Carl** opens this chat, with the team already on the draft from a team page. **Edit topic** offers **Edit with Carl**
-the same way. The chat selector lists this chat after **Private chat**, and when Carl's answer links to it, the link
+the same way. The chat selector lists this chat after the private chat, and when Carl's answer links to it, the link
 opens it. If your home page has no topics, the app opens this chat once each time you start it. The paperclip offers the
 photo library, the camera, and Files, and each file waits on the draft card with an **X** to remove it until the topic
 is made.

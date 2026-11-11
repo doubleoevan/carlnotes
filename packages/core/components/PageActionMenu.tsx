@@ -1,5 +1,5 @@
 import type { ComponentType } from "react"
-import { toReportLabel } from "../lib/socialLabels"
+import { toReportImageLabel, toReportLabel } from "../lib/socialLabels"
 
 // platform icons remain adapters; ordering and visibility belong to the shared menu
 export type PageActionOption<Icon> = {
@@ -7,6 +7,8 @@ export type PageActionOption<Icon> = {
 	Icon: Icon
 	isActive?: boolean
 	isDisabled?: boolean
+	// why a disabled option is disabled, in a tooltip on the web and a dialog on its press in the app
+	disabledReason?: string
 	onSelect: () => void
 }
 
@@ -21,6 +23,7 @@ export function PageActionMenu<Icon>({
 	onAddToAi,
 	onReport,
 	isReported,
+	isImageReport,
 	onClose,
 	Option,
 }: {
@@ -31,16 +34,18 @@ export function PageActionMenu<Icon>({
 	onAddToAi: () => void
 	onReport?: () => void
 	isReported?: boolean
+	// whether the page's report flags an image, which the option then names
+	isImageReport?: boolean
 	onClose: () => void
 	Option: ComponentType<PageActionOption<Icon>>
 }) {
+	// the report option names an image if the page's report flags one
+	const reportLabel = isImageReport ? toReportImageLabel(Boolean(isReported)) : toReportLabel(Boolean(isReported))
 	const actions = [
 		...options,
 		...(hasNewTopicButton ? [] : [{ label: "New topic", Icon: icons.Plus, onSelect: onNewTopic }]),
 		{ label: "Add to AI", Icon: icons.Bot, onSelect: onAddToAi },
-		...(onReport
-			? [{ label: toReportLabel(Boolean(isReported)), Icon: icons.Flag, isActive: isReported, onSelect: onReport }]
-			: []),
+		...(onReport ? [{ label: reportLabel, Icon: icons.Flag, isActive: isReported, onSelect: onReport }] : []),
 	]
 	return actions.map((action) => (
 		<Option

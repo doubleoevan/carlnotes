@@ -116,6 +116,7 @@ test("an edit past its edit time is a 409, and a delete returns the week's count
 	spyOn(comments, "deleteComment").mockResolvedValue({
 		status: "deleted",
 		weekCommentCount: 2,
+		commentCount: 5,
 		sharedCommentSlots: null,
 	})
 
@@ -124,7 +125,12 @@ test("an edit past its edit time is a 409, and a delete returns the week's count
 	const editResponse = await signedInComments.request("/comments/comment-1", toJsonRequest({ body: "new" }, "PATCH"))
 	const deleteResponse = await signedInComments.request("/comments/comment-1", { method: "DELETE" })
 	expect([editResponse.status, deleteResponse.status]).toEqual([409, 200])
-	expect(await deleteResponse.json()).toEqual({ ok: true, weekCommentCount: 2, sharedCommentSlots: null })
+	expect(await deleteResponse.json()).toEqual({
+		ok: true,
+		weekCommentCount: 2,
+		commentCount: 5,
+		sharedCommentSlots: null,
+	})
 })
 
 test.each([

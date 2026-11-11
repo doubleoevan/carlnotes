@@ -2,6 +2,7 @@ import type { ComponentType, ReactNode } from "react"
 import type { PodcastFeedState } from "../hooks/usePodcastFeed"
 import type { ConfirmElementProps } from "../lib/confirmElement"
 import { PODCAST_FEED_RESET_DESCRIPTION, PODCAST_FEED_RESET_TITLE } from "../lib/podcastFeed"
+import { toTabClassName } from "../lib/tabClasses"
 
 type Container = ComponentType<{ children: ReactNode; className?: string }>
 export type PodcastFeedDialogElements = {
@@ -18,6 +19,8 @@ export type PodcastFeedDialogElements = {
 		disabled?: boolean
 		className?: string
 	}>
+	// one of the feeds to choose: the podcast feed, or the film feed
+	FormatOption: ComponentType<{ children: string; isSelected: boolean; className: string; onPress: () => void }>
 	Confirm: ComponentType<ConfirmElementProps>
 }
 
@@ -31,7 +34,7 @@ export function PodcastFeedDialog({
 	appLabel,
 	onOpenApp,
 	onCopy,
-	elements: { Group, Text, Description, Strong, Code, Button, Confirm },
+	elements: { Group, Text, Description, Strong, Code, Button, FormatOption, Confirm },
 }: {
 	topicName: string
 	feed: PodcastFeedState
@@ -58,6 +61,25 @@ export function PodcastFeedDialog({
 			{/* subscription actions and the account-owned private link */}
 			{feed.url && (
 				<Group className="flex flex-col gap-3">
+					{/* the podcast feed or, for a Topic with a film, the film feed */}
+					{feed.videoUrl && (
+						<Group className="flex flex-row gap-1">
+							<FormatOption
+								isSelected={feed.format === "audio"}
+								className={toTabClassName(feed.format === "audio")}
+								onPress={() => feed.chooseFormat("audio")}
+							>
+								Podcast
+							</FormatOption>
+							<FormatOption
+								isSelected={feed.format === "video"}
+								className={toTabClassName(feed.format === "video")}
+								onPress={() => feed.chooseFormat("video")}
+							>
+								Films
+							</FormatOption>
+						</Group>
+					)}
 					{appLabel && (
 						<Button variant="default" icon="podcast" onPress={onOpenApp}>
 							{appLabel}
@@ -75,7 +97,7 @@ export function PodcastFeedDialog({
 							<Text className="text-muted-foreground text-xs">
 								This link is yours alone. Anyone who has it can listen to this topic's episodes, so keep it to yourself.
 							</Text>
-							<Code className="bg-muted/60 rounded-md px-2 py-1.5 text-xs break-all">{feed.url}</Code>
+							<Code className="bg-muted/60 rounded-md px-2 py-1.5 text-xs break-all">{feed.chosenFeedUrl}</Code>
 							<Button variant="ghost" className="self-end" onPress={feed.confirmReset} disabled={feed.isResetting}>
 								Reset my link
 							</Button>

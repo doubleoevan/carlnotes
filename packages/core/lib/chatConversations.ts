@@ -1,8 +1,9 @@
-import type { ChatPage } from "@carlnotes/client/chatClient"
+import type { ChatPage, ChatPageTopicPost } from "@carlnotes/client/chatClient"
 import type { ChatRoom } from "@carlnotes/contracts/chat"
 import type { ProfileResponse } from "@carlnotes/contracts/profilePage"
 import type { ProfileTeamStatus } from "@carlnotes/contracts/profiles"
 import type { TopicDraftTeam } from "@carlnotes/contracts/topicPayloads"
+import { NEW_TOPIC_CHAT_COPY, toPrivateChatLabel } from "./chatCopy"
 
 /**
  * Which chat room the panel is showing, or the private chat about one topic. A chat id includes only the addressing keys,
@@ -103,9 +104,18 @@ export function isSameChat(firstChatId: ChatId | null, secondChatId: ChatId): bo
 }
 
 /**
- * Selects the page's default conversation from its rooms and private chat.
+ * Selects the page's default conversation from its rooms and private chat. A Topic Post's page opens the private chat
+ * of the post's Topic, which asks about that post.
  */
-export function toDefaultChatId(pageContext: ChatPageContext | null, chatRooms: ChatRoom[]): ChatId | null {
+export function toDefaultChatId(
+	pageContext: ChatPageContext | null,
+	chatRooms: ChatRoom[],
+	chatTopicPost: { topicId: string } | null = null,
+): ChatId | null {
+	// a Topic Post's page opens the chat about that post ahead of every room
+	if (chatTopicPost) {
+		return { kind: "private", topicId: chatTopicPost.topicId }
+	}
 	// open the new-topic chat for a user with nothing in their feed
 	if (pageContext?.isUserTopicFeedEmpty) {
 		return { kind: "private", newTopic: true }
@@ -170,24 +180,82 @@ export function toChatRoomMenuOrder<Room extends { name: string }>(rooms: Room[]
 }
 
 /**
- * Returns the private conversation offered for a page or selected Team room.
+ * Returns the private conversation offered for a page or selected Team room. A Topic Post's page offers the private
+ * chat of the post's Topic, which asks about that post.
  */
-export function toPrivateChatId(pageContext: ChatPageContext | null, chatId: ChatId | null): ChatId | null {
+export function toPrivateChatId(
+	pageContext: ChatPageContext | null,
+	chatId: ChatId | null,
+	chatTopicPost: { topicId: string } | null = null,
+): (ChatId & { kind: "private" }) | null {
+	// the open Topic Post's Topic, then the page's Topic
+	if (chatTopicPost) {
+		return { kind: "private", topicId: chatTopicPost.topicId }
+	}
 	if (pageContext?.topicId) {
 		return { kind: "private", topicId: pageContext.topicId }
 	}
+
+	// the page's team, or the open chat room's
 	const teamId = pageContext?.teamId ?? (chatId?.kind !== "private" ? (chatId?.teamId ?? null) : null)
 	return teamId ? { kind: "private", teamId } : null
 }
 
 /**
- * Returns the API page addressed by a private conversation.
+ * Returns the API page addressed by a private conversation. A Topic's conversation opened on the page of one of its
+ * Topic Posts asks about that post.
  */
-export function toPrivateChatPage(chatId: ChatId & { kind: "private" }): ChatPage {
+export function toPrivateChatPage(
+	chatId: ChatId & { kind: "private" },
+	chatTopicPost: (ChatPageTopicPost & { topicId: string }) | null = null,
+): ChatPage {
 	if (chatId.newTopic) {
 		return { newTopic: true, initialTeam: chatId.initialTeam }
 	}
-	return chatId.topicId !== undefined ? { topicId: chatId.topicId } : { teamId: chatId.teamId }
+	if (chatId.topicId === undefined) {
+		return { teamId: chatId.teamId }
+	}
+
+	// the open post, if it is on this Topic
+	if (chatTopicPost?.topicId !== chatId.topicId) {
+		return { topicId: chatId.topicId }
+	}
+	const { id, title, path } = chatTopicPost
+	return { topicId: chatId.topicId, topicPost: { id, title, path } }
+}
+
+// what may name a private conversation's subject: the chat rooms, the page on screen, and the open Topic Post
+type PrivateChatSubjectSources = {
+	chatRooms: ChatRoom[]
+	pageContext: ChatPageContext | null
+	chatTopicPost?: (ChatPageTopicPost & { topicId: string }) | null
+}
+
+/**
+ * Labels a private conversation for a menu, a choice, and the panel's header by what it is about: the open Topic Post
+ * of its Topic, else its Topic, else its team. The new-topic chat keeps its own name.
+ */
+export function toPrivateChatIdLabel(
+	chatId: ChatId & { kind: "private" },
+	{ chatRooms, pageContext, chatTopicPost = null }: PrivateChatSubjectSources,
+): string {
+	if (chatId.newTopic) {
+		return NEW_TOPIC_CHAT_COPY.name
+	}
+
+	// a team's chat is named by its chat room, or by the team's own page
+	if (chatId.topicId === undefined) {
+		const teamChatRoom = chatRooms.find((chatRoom) => chatRoom.teamId === chatId.teamId)
+		const isTeamPage = pageContext?.teamId === chatId.teamId && !pageContext.topicId
+		return toPrivateChatLabel({ teamName: teamChatRoom?.teamName ?? (isTeamPage ? pageContext.name : null) })
+	}
+
+	// a Topic's chat is named by the open post of that Topic, then by the Topic's page or its chat room
+	const topicChatRoom = chatRooms.find((chatRoom) => chatRoom.topicId === chatId.topicId)
+	return toPrivateChatLabel({
+		topicPostTitle: chatTopicPost?.topicId === chatId.topicId ? chatTopicPost.title : null,
+		topicName: pageContext?.topicId === chatId.topicId ? pageContext.name : topicChatRoom?.name,
+	})
 }
 
 /**

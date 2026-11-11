@@ -12,3 +12,9 @@ export const Recording: Story = {}
 export const Failed: Story = {
 	args: { podcastEpisode: { status: "failed", title: "Better beans, better mornings", smallCoverUrl: null } },
 }
+export const VideoRendering: Story = {
+	args: {
+		podcastEpisode: { status: "published", title: "Better beans, better mornings", smallCoverUrl: null },
+		isVideoRendering: true,
+	},
+}

@@ -29,7 +29,8 @@ type SavePodcastEpisodeListenOptions = PodcastEpisodeListenPayload & {
 type LoadNextUnplayedPodcastEpisodeOptions = { userId: string; currentTopicId?: string }
 
 /**
- * Saves a listener's progress through a podcast episode, a play if playback started, and whether the listener finished.
+ * Saves a listener's progress through a podcast episode, a play in its format if playback started, and whether the
+ * listener finished.
  */
 export async function savePodcastEpisodeListen({
 	userId,
@@ -39,20 +40,31 @@ export async function savePodcastEpisodeListen({
 	progressSeconds,
 	isPlaybackStart,
 	isCompleted,
+	format = "audio",
 }: SavePodcastEpisodeListenOptions): Promise<void> {
-	// count one play if playback started, and set the completion time only if the listener finished
+	// count one play if playback started, a film's play among the film plays too, and set the completion time only if
+	// the listener finished
 	const startedPlayCount = isPlaybackStart ? 1 : 0
+	const startedVideoPlayCount = format === "video" ? startedPlayCount : 0
 	const completedFields = isCompleted ? { completedAt: new Date() } : {}
 
 	// insert the listener's row for the podcast episode, or update that row
 	await db
 		.insert(podcastEpisodeListens)
-		.values({ podcastEpisodeId, userId, progressSeconds, playCount: startedPlayCount, ...completedFields })
+		.values({
+			podcastEpisodeId,
+			userId,
+			progressSeconds,
+			playCount: startedPlayCount,
+			videoPlayCount: startedVideoPlayCount,
+			...completedFields,
+		})
 		.onConflictDoUpdate({
 			target: [podcastEpisodeListens.podcastEpisodeId, podcastEpisodeListens.userId],
 			set: {
 				progressSeconds,
 				playCount: sql`${podcastEpisodeListens.playCount} + ${startedPlayCount}`,
+				videoPlayCount: sql`${podcastEpisodeListens.videoPlayCount} + ${startedVideoPlayCount}`,
 				...completedFields,
 			},
 		})
@@ -68,7 +80,7 @@ export async function savePodcastEpisodeListen({
 		...toPodcastEpisodeAnalyticsProperties(topic, podcastEpisodeId),
 	}
 	if (isPlaybackStart) {
-		trackEvent("episode_played", userId, listenProperties)
+		trackEvent("episode_played", userId, { ...listenProperties, format })
 	}
 	if (isCompleted) {
 		trackEvent("episode_completed", userId, listenProperties)

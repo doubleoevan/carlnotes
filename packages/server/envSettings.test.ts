@@ -1,6 +1,6 @@
-// environment setting tests: a whole number above zero and a number of dollars
+// environment setting tests: a whole number above zero, a whole number of zero or more, and a number of dollars
 import { afterEach, describe, expect, test } from "bun:test"
-import { readDollarSetting, toPositiveInteger } from "./envSettings"
+import { readDollarSetting, toPositiveInteger, toWholeNumber } from "./envSettings"
 import { saveEnvSettings } from "./savedEnvSettings"
 
 // unset and empty keep the default, a whole number is used as is, and a word, zero, a negative, or a fraction keeps the default
@@ -16,6 +16,22 @@ test("an unset, a valid, and an unreadable value give the default or the value",
 	]
 	for (const [value, expectedValue] of expectedValues) {
 		expect(toPositiveInteger(value, 40)).toBe(expectedValue)
+	}
+})
+
+// zero is a whole number, and unset, empty, a word, a negative, or a fraction keeps the default
+test("a whole number setting reads zero and keeps the default for anything else", () => {
+	const expectedValues: [string | undefined, number][] = [
+		[undefined, 1],
+		["", 1],
+		["0", 0],
+		["3", 3],
+		["one", 1],
+		["-1", 1],
+		["0.5", 1],
+	]
+	for (const [value, expectedValue] of expectedValues) {
+		expect(toWholeNumber(value, 1)).toBe(expectedValue)
 	}
 })
 

@@ -1,0 +1,12 @@
+{
+	"name": "topic-post-chat",
+	"passedRunCount": 5,
+	"runCount": 5,
+	"ranOn": "2026-11-10",
+	"commit": "ee2e9211",
+	"hasUncommittedChanges": true,
+	"writerModelIds": [
+		"chat-model"
+	],
+	"graderModelId": "score-model"
+}

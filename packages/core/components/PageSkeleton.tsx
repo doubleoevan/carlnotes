@@ -1,57 +1,104 @@
 import type { ComponentType, ReactNode } from "react"
+import { TEAM_SECTION_VALUES } from "../lib/cardSections"
+import type { TopicPostPageElements } from "./TopicPostPage"
 
-// the page shapes and portable elements shared by the browser and native renderers
-type PageSkeletonKind = "profile" | "teams" | "activity" | "account" | "team"
+// the portable elements shared by the browser and native renderers
 type Container = ComponentType<{ children: ReactNode; className?: string }>
 export type PageSkeletonElements = {
 	Root: ComponentType<{ children: ReactNode; label: string }>
 	Stack: Container
 	Row: Container
 	Shape: ComponentType<{ className: string }>
+	// the page's top row of buttons, in the loaded page's own row
+	ButtonRow: Container
+	// one open section of the page's accordion, with a placeholder for its title and its count. a flush section
+	// is the first of an accordion whose first title drops its top padding, and a section says if it holds cards
+	Section: ComponentType<{ children: ReactNode; isFlush?: boolean; hasCards?: boolean }>
+	// the raised card a table, the budget, or a Topic Post's body sits in
+	Card: Container
+	// the news card while its first page loads
+	News: ComponentType
+	// one row of cards while a card section loads
+	CardsRow: ComponentType
+	// a page header's image at its frame, and the lines of its title in the title's place
+	HeaderImage: ComponentType
+	HeaderTitle: ComponentType
 }
-export type PageSkeletonProps = { kind: PageSkeletonKind }
-const TABLE_ROW_KEYS = ["first", "second", "third", "fourth", "fifth"]
-const PAGE_SECTIONS: Record<Exclude<PageSkeletonKind, "account">, string[]> = {
+
+// the loaded Topic Post page's own header, byline row, and discussion card, which its loading state is laid out in
+type TopicPostSkeletonPageElements = Pick<TopicPostPageElements, "Header" | "BylineRow"> & {
+	discussionElements: Pick<TopicPostPageElements["discussionElements"], "Card" | "Row">
+}
+
+// the page a loading state reserves. the account names whether its budget lists monthly budget cutoffs, and a Topic
+// Post's page brings its own layout elements
+export type PageSkeletonProps =
+	| { kind: "profile" | "teams" | "activity" | "team" }
+	| { kind: "account"; hasMonthlyBudgetCutoffs: boolean }
+	| { kind: "topicPost"; pageElements: TopicPostSkeletonPageElements }
+
+// the card sections each page opens over its tables: a profile's first, and a team's topics, films, podcast episodes,
+// and Topic Posts
+const PAGE_CARD_SECTIONS: Record<"profile" | "teams" | "activity" | "team", string[]> = {
+	profile: ["topics"],
+	teams: [],
+	activity: [],
+	team: TEAM_SECTION_VALUES,
+}
+
+// the table sections each page opens under its cards
+const PAGE_SECTIONS: Record<"profile" | "teams" | "activity" | "team", string[]> = {
 	profile: ["topics", "teams"],
 	teams: ["teams"],
 	activity: ["subscriptions", "invitations"],
 	team: ["members", "topics", "notes"],
 }
 
+// the rows a table, a Topic Post's body, and the budget's cutoff list reserve
+const TABLE_ROW_KEYS = ["first", "second", "third", "fourth", "fifth"]
+const BODY_LINE_KEYS = ["first", "second", "third", "fourth", "fifth", "sixth"]
+const CUTOFF_ROW_KEYS = ["first", "second", "third", "fourth", "fifth"]
+
 /**
- * Reserves each page's identity, tables, or budget using one layout on web and mobile.
+ * Reserves each page's buttons, identity, news, cards, tables, or budget in the loaded page's own layout elements.
  */
-export function PageSkeleton({ kind, elements }: PageSkeletonProps & { elements: PageSkeletonElements }) {
-	// keep known page titles and actions outside the loading content
-	const { Root, Stack, Row, Shape } = elements
+export function PageSkeleton({ elements, ...props }: PageSkeletonProps & { elements: PageSkeletonElements }) {
+	// a Topic Post's page and the account's budget have layouts of their own
+	const { Root, Stack } = elements
+	if (props.kind === "topicPost") {
+		return (
+			<Root label="Loading post">
+				<TopicPostSkeleton elements={elements} pageElements={props.pageElements} />
+			</Root>
+		)
+	}
+	if (props.kind === "account") {
+		return (
+			<Root label="Loading account">
+				<BudgetSkeleton elements={elements} hasMonthlyBudgetCutoffs={props.hasMonthlyBudgetCutoffs} />
+			</Root>
+		)
+	}
+
+	// a profile and a team load their buttons and their identity with their sections
+	const { kind } = props
 	const hasIdentity = kind === "profile" || kind === "team"
+	const { News } = elements
 	return (
 		<Root label={`Loading ${kind}`}>
-			<Stack>
-				{/* profiles and team details load their identity with their tables */}
-				{hasIdentity && <IdentitySkeleton elements={elements} />}
-				{kind === "activity" && (
-					<Row className="gap-2">
-						<Shape className="size-6 rounded-full" />
-						<Shape className="h-4 w-24" />
-					</Row>
-				)}
-				{/* account settings stay usable while the budget arrives */}
-				{kind === "account" ? (
-					<BudgetSkeleton elements={elements} />
-				) : (
-					<Stack className={hasIdentity || kind === "activity" ? "mt-2" : undefined}>
-						{PAGE_SECTIONS[kind].map((sectionKey) => (
-							<Stack key={sectionKey} className="mb-3">
-								<Row className="min-h-12 gap-2 py-3">
-									<Shape className="size-4" />
-									<Shape className="h-6 w-40" />
-								</Row>
-								<TableSkeletonContent elements={elements} />
-							</Stack>
-						))}
-					</Stack>
-				)}
+			{hasIdentity && <ActionsSkeleton elements={elements} />}
+			{hasIdentity && <IdentitySkeleton elements={elements} hasWrappedSummary={kind === "profile"} />}
+			{/* a profile's news comes first, and its sections follow the news as a team's follow its header */}
+			<Stack className={kind === "profile" ? "mt-4" : kind === "team" ? "mt-2" : undefined}>
+				{kind === "profile" && <News />}
+				<Stack className={kind === "profile" ? "mt-4" : undefined}>
+					{PAGE_CARD_SECTIONS[kind].map((sectionKey) => (
+						<CardsSectionSkeleton key={sectionKey} elements={elements} isFlush={kind === "profile"} />
+					))}
+					{PAGE_SECTIONS[kind].map((sectionKey) => (
+						<TableSectionSkeleton key={sectionKey} elements={elements} />
+					))}
+				</Stack>
 			</Stack>
 		</Root>
 	)
@@ -69,33 +116,135 @@ export function TableSkeleton({ elements }: { elements: PageSkeletonElements }) 
 	)
 }
 
-// reserve the avatar, name, primary action, and metadata beneath the name
-function IdentitySkeleton({ elements: { Stack, Row, Shape } }: { elements: PageSkeletonElements }) {
+// reserve the page's two buttons in its own row, the plain one at the left and the highlighted one at the right
+function ActionsSkeleton({ elements: { ButtonRow, Shape } }: { elements: PageSkeletonElements }) {
 	return (
-		<Stack className="gap-2">
-			<Row className="gap-3">
-				<Shape className="size-16 shrink-0 rounded-full" />
-				<Stack className="min-w-0 flex-1 gap-2">
-					<Shape className="h-7 w-3/4" />
-				</Stack>
-				<Shape className="h-11 w-20 shrink-0 rounded-lg" />
-			</Row>
-			<Shape className="h-4 w-2/3" />
-		</Stack>
+		<ButtonRow>
+			<Shape className="h-9 w-28 rounded-md" />
+			<Shape className="h-9 w-28 rounded-md" />
+		</ButtonRow>
 	)
 }
 
-// keep the shared table's header, five rows, and totals within the card
-function TableSkeletonContent({ elements: { Stack, Row, Shape } }: { elements: PageSkeletonElements }) {
+// reserve the avatar at the height of a topic's image, with the name's line over the summary line beside it. a
+// profile's summary line wraps onto a second line on a phone
+function IdentitySkeleton({
+	elements: { Stack, Row, Shape },
+	hasWrappedSummary,
+}: {
+	elements: PageSkeletonElements
+	hasWrappedSummary: boolean
+}) {
 	return (
-		<Stack className="overflow-hidden rounded-lg border border-separator bg-card shadow-raised">
-			<Row className="min-h-12 gap-4 border-b border-separator-strong px-4 py-3">
+		<Row className="gap-4">
+			<Shape className="size-20 shrink-0 rounded-full sm:size-24" />
+			<Stack className="min-w-0 flex-1">
+				<Row className="h-8">
+					<Shape className="h-6 w-48 max-w-full" />
+				</Row>
+				<Row className="mt-2 h-5">
+					<Shape className="h-3.5 w-64 max-w-full" />
+				</Row>
+				{hasWrappedSummary && (
+					<Row className="h-5 sm:hidden">
+						<Shape className="h-3.5 w-40 max-w-full" />
+					</Row>
+				)}
+			</Stack>
+		</Row>
+	)
+}
+
+// reserve one section of cards: its title over one row of cards
+function CardsSectionSkeleton({ elements, isFlush }: { elements: PageSkeletonElements; isFlush: boolean }) {
+	const { Section, CardsRow } = elements
+	return (
+		<Section isFlush={isFlush} hasCards>
+			<CardsRow />
+		</Section>
+	)
+}
+
+// reserve one section of a table: its title over the table's card
+function TableSectionSkeleton({ elements }: { elements: PageSkeletonElements }) {
+	const { Section } = elements
+	return (
+		<Section>
+			<TableSkeletonContent elements={elements} />
+		</Section>
+	)
+}
+
+// reserve a Topic Post's page in its own header: its image beside its title, its byline with the reactions after it,
+// and its details line, then its discussion's card and its body's card
+function TopicPostSkeleton({
+	elements: { Stack, Row, Shape, Card, HeaderImage, HeaderTitle },
+	pageElements: { Header, BylineRow, discussionElements },
+}: {
+	elements: PageSkeletonElements
+	pageElements: TopicPostSkeletonPageElements
+}) {
+	return (
+		<>
+			<Header image={<HeaderImage />} title={<HeaderTitle />}>
+				{/* the byline, which wraps onto a second line on a phone, and the reactions after it */}
+				<BylineRow>
+					<Stack className="w-full sm:w-auto">
+						<Row className="h-6 gap-2">
+							<Shape className="size-6 shrink-0 rounded-full" />
+							<Shape className="h-3.5 w-28" />
+						</Row>
+						<Row className="h-5 sm:hidden">
+							<Shape className="h-3.5 w-44" />
+						</Row>
+					</Stack>
+					<Row className="h-8">
+						<Shape className="h-5 w-36" />
+					</Row>
+				</BylineRow>
+				{/* the details line */}
+				<Row className="mt-1 h-5">
+					<Shape className="h-3 w-56 max-w-full" />
+				</Row>
+			</Header>
+			{/* the discussion's card: the play button beside its name and its line, which wraps on a phone */}
+			<discussionElements.Card>
+				<discussionElements.Row>
+					<Shape className="size-11 shrink-0 rounded-full" />
+					<Stack className="min-w-52 flex-1">
+						<Row className="h-[23px]">
+							<Shape className="h-4 w-48 max-w-full" />
+						</Row>
+						<Row className="h-5">
+							<Shape className="h-3 w-40 max-w-full" />
+						</Row>
+						<Row className="h-5 sm:hidden">
+							<Shape className="h-3 w-24" />
+						</Row>
+					</Stack>
+				</discussionElements.Row>
+			</discussionElements.Card>
+			{/* the body's card */}
+			<Card className="my-4 gap-3">
+				{BODY_LINE_KEYS.map((lineKey, i) => (
+					<Shape key={lineKey} className={i === BODY_LINE_KEYS.length - 1 ? "h-4 w-2/3" : "h-4 w-full"} />
+				))}
+			</Card>
+		</>
+	)
+}
+
+// keep the table's header, five rows, and the line under them within the table's own card
+function TableSkeletonContent({ elements: { Stack, Row, Shape, Card } }: { elements: PageSkeletonElements }) {
+	return (
+		<Card className="mb-4">
+			<Row className="h-9 gap-4 border-b border-separator-strong">
 				<Shape className="h-3 w-1/3" />
 				<Shape className="h-3 w-1/4" />
 				<Shape className="h-3 w-1/6" />
 			</Row>
 			{TABLE_ROW_KEYS.map((rowKey, i) => (
-				<Row key={rowKey} className="min-h-12 gap-4 border-b border-separator px-4 py-4">
+				<Row key={rowKey} className="h-[53px] gap-4 border-b border-separator">
 					<Stack className="w-1/3">
 						<Shape className={i % 2 === 0 ? "h-4 w-full" : "h-4 w-3/4"} />
 					</Stack>
@@ -103,40 +252,76 @@ function TableSkeletonContent({ elements: { Stack, Row, Shape } }: { elements: P
 					<Shape className="h-3 w-1/6" />
 				</Row>
 			))}
-			<Row className="min-h-11 justify-between gap-4 px-4 py-3">
+			<Row className="mt-2 h-6 justify-between gap-4">
 				<Shape className="h-3 w-16" />
 				<Shape className="h-3 w-24" />
 			</Row>
-		</Stack>
+		</Card>
 	)
 }
 
-// reserve the fund title, spend meter, pause checkpoints, daily usage, and plan
-function BudgetSkeleton({ elements: { Stack, Row, Shape } }: { elements: PageSkeletonElements }) {
+// reserve the budget's card as the loaded budget lays it out: the fund's title and amount, the bar, its legend, the
+// status line, and the cutoff list if the budget has cutoffs, then the daily scans and the plan
+function BudgetSkeleton({
+	elements: { Stack, Row, Shape, Card },
+	hasMonthlyBudgetCutoffs,
+}: {
+	elements: PageSkeletonElements
+	hasMonthlyBudgetCutoffs: boolean
+}) {
 	return (
-		<Stack className="gap-4 rounded-lg border border-separator bg-card p-4 shadow-raised">
-			<Row className="justify-between gap-4">
-				<Shape className="h-5 w-1/2" />
-				<Shape className="h-4 w-1/4" />
-			</Row>
-			<Stack className="gap-3 pt-6">
-				<Shape className="h-3 w-full rounded-full" />
-				<Shape className="h-3 w-5/6" />
-				<Shape className="h-4 w-3/4" />
-			</Stack>
-			<Stack className="gap-3 py-2">
-				{TABLE_ROW_KEYS.map((checkpointKey) => (
-					<Row key={checkpointKey} className="gap-4">
-						<Shape className="h-3 w-8" />
-						<Shape className="h-3 flex-1" />
+		<Card className="gap-4">
+			<Stack>
+				{/* the fund's title and the amount spent */}
+				<Row className="h-6 justify-between gap-4">
+					<Shape className="h-4 w-36" />
+					<Shape className="h-3.5 w-28" />
+				</Row>
+				{/* the bar, under the cutoff circles if the budget has cutoffs */}
+				<Stack className={hasMonthlyBudgetCutoffs ? "mt-2 pt-7.5" : "mt-2"}>
+					<Shape className="h-3 w-full rounded-full" />
+				</Stack>
+				{/* the legend, which wraps onto a second line on a phone */}
+				<Row className="mt-2 flex-wrap gap-x-4 gap-y-1">
+					<Row className="h-4">
+						<Shape className="h-3 w-28" />
 					</Row>
-				))}
+					<Row className="h-4">
+						<Shape className="h-3 w-28" />
+					</Row>
+					<Row className="h-4">
+						<Shape className="h-3 w-28" />
+					</Row>
+				</Row>
+				{/* the status line */}
+				<Row className="mt-1 h-5">
+					<Shape className="h-3 w-40" />
+				</Row>
+				{/* what each cutoff stops. the first and the third line wrap on a phone */}
+				{hasMonthlyBudgetCutoffs && (
+					<Stack className="mt-3 gap-1">
+						{CUTOFF_ROW_KEYS.map((cutoffKey, i) => (
+							<Row key={cutoffKey} className={i % 2 === 0 && i < 4 ? "h-8 gap-2 sm:h-4" : "h-4 gap-2"}>
+								<Shape className="h-3 w-8" />
+								<Shape className="h-3 flex-1" />
+							</Row>
+						))}
+					</Stack>
+				)}
 			</Stack>
-			<Stack className="gap-2">
-				<Shape className="h-5 w-28" />
-				<Shape className="h-4 w-24" />
+			{/* the daily scans: the heading over the count */}
+			<Stack>
+				<Row className="h-6">
+					<Shape className="h-4 w-24" />
+				</Row>
+				<Row className="h-6">
+					<Shape className="h-3.5 w-20" />
+				</Row>
 			</Stack>
-			<Shape className="h-5 w-20" />
-		</Stack>
+			{/* the plan */}
+			<Row className="h-6">
+				<Shape className="h-3.5 w-36" />
+			</Row>
+		</Card>
 	)
 }

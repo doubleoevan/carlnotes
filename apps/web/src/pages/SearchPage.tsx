@@ -14,6 +14,7 @@ import { SearchResultsList, SearchResultsSkeleton } from "@/components/search/Se
 import { SEARCH_RESULT_KIND_LABELS, TOPIC_FINDING_FILTER_LABELS } from "@/components/search/searchFilterOptions"
 import { toReportingFindingHandlers, toSearchPageWithFindingChange } from "@/components/search/searchFindingChanges"
 import { toRouteSearchRequest, toSearchRouteSearch } from "@/components/search/searchRouteSearch"
+import { TableCard } from "@/components/table/TableCard"
 import { TagsAndNewTopicRow } from "@/components/topic/TagsAndNewTopicRow"
 import { useLoadInBrowser } from "@/hooks/useBrowserValue"
 import { PAGE_CLASS, PAGE_HEADER_CLASS, PAGE_TITLE_CLASS } from "@/lib/styleClasses"
@@ -173,7 +174,7 @@ function EmptySearch({ searchRequest }: { searchRequest: SearchRequest }) {
 	)
 	const offLabels = offResultKinds.map((searchResultKind) => SEARCH_RESULT_KIND_LABELS[searchResultKind])
 	return (
-		<div className="text-muted-foreground py-6 text-sm">
+		<TableCard className="text-muted-foreground py-6 text-sm">
 			<p>Carl looked everywhere. Nothing matches “{searchRequest.q}”.</p>
 			{/* a view that only findings have, which leaves out every other kind */}
 			{searchRequest.view !== "all" && (
@@ -181,6 +182,6 @@ function EmptySearch({ searchRequest }: { searchRequest: SearchRequest }) {
 			)}
 			{/* the kinds the Filters menu turned off, which might hold a match */}
 			{offLabels.length > 0 && <p className="mt-1">Turned off in Filters: {offLabels.join(", ")}.</p>}
-		</div>
+		</TableCard>
 	)
 }

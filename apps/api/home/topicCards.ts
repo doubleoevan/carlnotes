@@ -65,7 +65,7 @@ export async function loadTopicCards(topicIds: string[], userId: string | null):
 }
 
 /**
- * Returns the podcast episodes' cards in the ids' order, each with its topic's page and image.
+ * Returns the podcast episodes' cards in the ids' order, each with its topic's page and image and its reaction count.
  */
 export async function loadPodcastEpisodeCards(podcastEpisodeIds: string[]): Promise<PodcastEpisodeCard[]> {
 	if (podcastEpisodeIds.length === 0) {
@@ -85,11 +85,21 @@ export async function loadPodcastEpisodeCards(podcastEpisodeIds: string[]): Prom
 	// the rows in the ids' order, then each summary with its topic's page and image
 	const rowById = new Map(podcastEpisodeRows.map((row) => [row.podcastEpisodeRow.id, row]))
 	const orderedRows = podcastEpisodeIds.flatMap((podcastEpisodeId) => rowById.get(podcastEpisodeId) ?? [])
-	const podcastEpisodeSummaries = await loadPodcastEpisodeSummaries(orderedRows)
+	const [podcastEpisodeSummaries, reactionSummaryByTarget] = await Promise.all([
+		loadPodcastEpisodeSummaries(orderedRows),
+		loadReactionSummaries({
+			userId: null,
+			targets: orderedRows.map((row) => ({ kind: "podcastEpisode" as const, id: row.podcastEpisodeRow.id })),
+		}),
+	])
 	return podcastEpisodeSummaries.map((podcastEpisode, index) => {
 		const topic = orderedRows[index]?.topic
+		const reactionSummary = reactionSummaryByTarget.get(
+			toSocialTargetKey({ kind: "podcastEpisode", id: podcastEpisode.id }),
+		)
 		return {
 			podcastEpisode,
+			reactionCount: reactionSummary ? toReactionCount(reactionSummary) : 0,
 			topic: {
 				id: topic?.id ?? "",
 				name: topic?.name ?? "",
@@ -98,4 +108,18 @@ export async function loadPodcastEpisodeCards(podcastEpisodeIds: string[]): Prom
 			},
 		}
 	})
+}
+
+/**
+ * Returns the cards of a list's podcast episodes in the ids' order, from cards read for every list at once. An id with
+ * no card among them is left out.
+ */
+export function toPodcastEpisodeCardList(
+	podcastEpisodeCards: PodcastEpisodeCard[],
+	podcastEpisodeIds: string[],
+): PodcastEpisodeCard[] {
+	const podcastEpisodeCardById = new Map(
+		podcastEpisodeCards.map((podcastEpisodeCard) => [podcastEpisodeCard.podcastEpisode.id, podcastEpisodeCard]),
+	)
+	return podcastEpisodeIds.flatMap((podcastEpisodeId) => podcastEpisodeCardById.get(podcastEpisodeId) ?? [])
 }

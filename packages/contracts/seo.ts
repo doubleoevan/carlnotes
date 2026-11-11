@@ -193,6 +193,13 @@ export function toPodcastFeedPath(topicId: string): string {
 }
 
 /**
+ * Returns a public topic's film feed path.
+ */
+export function toPodcastVideoFeedPath(topicId: string): string {
+	return `/topics/${topicId}/podcast-video.xml`
+}
+
+/**
  * Returns the path that opens a Finding: its topic page's path with the Finding's id in the query.
  */
 export function toFindingPath(topic: { id: string; name: string }, findingId: string): string {
@@ -216,6 +223,22 @@ export function toSocialTargetPath(
 	}
 	const podcastEpisode = { season, episodeNumber }
 	return isPublishedPodcastEpisode(podcastEpisode) ? toPodcastEpisodePath(topic, podcastEpisode) : toTopicPath(topic)
+}
+
+/**
+ * Returns a Topic Post page's path, which comes after its topic page's path: the post's id, then the slug of its title.
+ */
+export function toTopicPostPath(topic: { id: string; name: string }, topicPost: { id: string; title: string }): string {
+	const postSlug = toTopicSlug(topicPost.title)
+	const topicPostPath = `${toTopicPath(topic)}/posts/${topicPost.id}`
+	return postSlug ? `${topicPostPath}/${postSlug}` : topicPostPath
+}
+
+/**
+ * Returns the path that opens a Comment on its page: the page's path with the Comment's id added to the query.
+ */
+export function toCommentPath(pagePath: string, commentId: string): string {
+	return `${pagePath}${pagePath.includes("?") ? "&" : "?"}comment=${encodeURIComponent(commentId)}`
 }
 
 /**

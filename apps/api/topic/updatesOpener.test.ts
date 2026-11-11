@@ -54,7 +54,7 @@ test("a list stops waiting for a slow opener, and the opener still reaches the n
 	writeSpy.mockImplementation(() => new Promise((resolve) => (finishWrite = resolve)))
 
 	// the list returns with no opener
-	const options = { userId: "user-1", topicId: null, updatesFindings: UPDATES_FINDINGS }
+	const options = { userId: "user-1", topicId: null, loadUpdatesFindings: async () => UPDATES_FINDINGS }
 	expect(await loadUpdatesOpener(options)).toBeNull()
 
 	// the late opener is stored, and the next list reads it with no second call
@@ -65,33 +65,33 @@ test("a list stops waiting for a slow opener, and the opener still reaches the n
 })
 
 test("the second list of the day shows the cached opener and runs no model call", async () => {
-	const options = { userId: "user-1", topicId: null, updatesFindings: UPDATES_FINDINGS }
+	const options = { userId: "user-1", topicId: null, loadUpdatesFindings: async () => UPDATES_FINDINGS }
 	expect(await loadUpdatesOpener(options)).toBe("Carl's line.")
 	expect(await loadUpdatesOpener(options)).toBe("Carl's line.")
 	expect(writeSpy).toHaveBeenCalledTimes(1)
 })
 
 test("the opener is keyed on the user and the UTC day", async () => {
-	await loadUpdatesOpener({ userId: "user-1", topicId: null, updatesFindings: UPDATES_FINDINGS })
+	await loadUpdatesOpener({ userId: "user-1", topicId: null, loadUpdatesFindings: async () => UPDATES_FINDINGS })
 	const [cacheKey] = [...storedOpeners.keys()]
 	expect(cacheKey).toContain(new Date().toISOString().slice(0, 10))
 	expect(cacheKey).toContain("user-1")
 })
 
 test("another user gets their own opener", async () => {
-	await loadUpdatesOpener({ userId: "user-1", topicId: null, updatesFindings: UPDATES_FINDINGS })
-	await loadUpdatesOpener({ userId: "user-2", topicId: null, updatesFindings: UPDATES_FINDINGS })
+	await loadUpdatesOpener({ userId: "user-1", topicId: null, loadUpdatesFindings: async () => UPDATES_FINDINGS })
+	await loadUpdatesOpener({ userId: "user-2", topicId: null, loadUpdatesFindings: async () => UPDATES_FINDINGS })
 	expect(writeSpy).toHaveBeenCalledTimes(2)
 })
 
 test("a scoped list after an unscoped list writes that Topic's own opener", async () => {
-	await loadUpdatesOpener({ userId: "user-1", topicId: null, updatesFindings: UPDATES_FINDINGS })
-	await loadUpdatesOpener({ userId: "user-1", topicId: "topic-1", updatesFindings: UPDATES_FINDINGS })
+	await loadUpdatesOpener({ userId: "user-1", topicId: null, loadUpdatesFindings: async () => UPDATES_FINDINGS })
+	await loadUpdatesOpener({ userId: "user-1", topicId: "topic-1", loadUpdatesFindings: async () => UPDATES_FINDINGS })
 	expect(writeSpy).toHaveBeenCalledTimes(2)
 })
 
 test("the opener bills the user's own key, from the Topic names and titles, and releases its reservation", async () => {
-	await loadUpdatesOpener({ userId: "user-1", topicId: null, updatesFindings: UPDATES_FINDINGS })
+	await loadUpdatesOpener({ userId: "user-1", topicId: null, loadUpdatesFindings: async () => UPDATES_FINDINGS })
 	expect(writeSpy).toHaveBeenCalledWith({
 		topicNames: ["Espresso"],
 		findingTitles: ["Dialing in"],
@@ -107,7 +107,11 @@ test("the opener bills the user's own key, from the Topic names and titles, and 
 
 test("a rejected reservation returns no opener, runs no model call, and stores nothing", async () => {
 	spyOn(spendReservations, "reserveUserSpend").mockResolvedValue("rejected")
-	const opener = await loadUpdatesOpener({ userId: "user-1", topicId: null, updatesFindings: UPDATES_FINDINGS })
+	const opener = await loadUpdatesOpener({
+		userId: "user-1",
+		topicId: null,
+		loadUpdatesFindings: async () => UPDATES_FINDINGS,
+	})
 	expect(opener).toBeNull()
 	expect(writeSpy).not.toHaveBeenCalled()
 	expect(storedOpeners.size).toBe(0)
@@ -116,7 +120,11 @@ test("a rejected reservation returns no opener, runs no model call, and stores n
 test("a failed reservation returns no opener, stores nothing, and reports the failure", async () => {
 	const reportErrorSpy = spyOn(monitoring, "reportError").mockImplementation(() => {})
 	spyOn(spendReservations, "reserveUserSpend").mockRejectedValue(new Error("reservation failed"))
-	const opener = await loadUpdatesOpener({ userId: "user-1", topicId: null, updatesFindings: UPDATES_FINDINGS })
+	const opener = await loadUpdatesOpener({
+		userId: "user-1",
+		topicId: null,
+		loadUpdatesFindings: async () => UPDATES_FINDINGS,
+	})
 	expect(opener).toBeNull()
 	expect(storedOpeners.size).toBe(0)
 	expect(reportErrorSpy).toHaveBeenCalledTimes(1)
@@ -125,7 +133,11 @@ test("a failed reservation returns no opener, stores nothing, and reports the fa
 test("a failed release returns no opener and reports the failure", async () => {
 	const reportErrorSpy = spyOn(monitoring, "reportError").mockImplementation(() => {})
 	releaseSpy.mockRejectedValue(new Error("release failed"))
-	const opener = await loadUpdatesOpener({ userId: "user-1", topicId: null, updatesFindings: UPDATES_FINDINGS })
+	const opener = await loadUpdatesOpener({
+		userId: "user-1",
+		topicId: null,
+		loadUpdatesFindings: async () => UPDATES_FINDINGS,
+	})
 	expect(opener).toBeNull()
 	expect(reportErrorSpy).toHaveBeenCalledTimes(1)
 })
@@ -133,7 +145,11 @@ test("a failed release returns no opener and reports the failure", async () => {
 test("a failed call returns no opener, stores nothing, reports the failure, and releases the reservation", async () => {
 	const reportErrorSpy = spyOn(monitoring, "reportError").mockImplementation(() => {})
 	writeSpy.mockRejectedValue(new Error("model failed"))
-	const opener = await loadUpdatesOpener({ userId: "user-1", topicId: null, updatesFindings: UPDATES_FINDINGS })
+	const opener = await loadUpdatesOpener({
+		userId: "user-1",
+		topicId: null,
+		loadUpdatesFindings: async () => UPDATES_FINDINGS,
+	})
 	expect(opener).toBeNull()
 	expect(storedOpeners.size).toBe(0)
 	// the failure is reported and the reservation is released
@@ -148,7 +164,11 @@ test("a budget the key's own limit rejects returns no opener and is not reported
 		responseBody: '{"error":{"type":"budget_exceeded"}}',
 	})
 	writeSpy.mockRejectedValue(budgetRejection)
-	const opener = await loadUpdatesOpener({ userId: "user-1", topicId: null, updatesFindings: UPDATES_FINDINGS })
+	const opener = await loadUpdatesOpener({
+		userId: "user-1",
+		topicId: null,
+		loadUpdatesFindings: async () => UPDATES_FINDINGS,
+	})
 	expect(opener).toBeNull()
 	expect(reportErrorSpy).not.toHaveBeenCalled()
 })
@@ -156,7 +176,24 @@ test("a budget the key's own limit rejects returns no opener and is not reported
 test("a failed key read returns no opener", async () => {
 	spyOn(monitoring, "reportError").mockImplementation(() => {})
 	spyOn(litellm, "loadOrProvisionUserLiteLLMKey").mockRejectedValue(new Error("no key"))
-	const opener = await loadUpdatesOpener({ userId: "user-1", topicId: null, updatesFindings: UPDATES_FINDINGS })
+	const opener = await loadUpdatesOpener({
+		userId: "user-1",
+		topicId: null,
+		loadUpdatesFindings: async () => UPDATES_FINDINGS,
+	})
 	expect(opener).toBeNull()
 	expect(releaseSpy).toHaveBeenCalledTimes(1)
+})
+
+test("a read with no Finding returns the day's stored opener and never writes one", async () => {
+	// nothing is stored yet, so a read with no Finding returns no opener and stores nothing
+	const emptyOptions = { userId: "user-1", topicId: null, loadUpdatesFindings: async () => [] }
+	expect(await loadUpdatesOpener(emptyOptions)).toBeNull()
+	expect(storedOpeners.size).toBe(0)
+
+	// a list stores the day's opener, and the read with no Finding then shares it under the same key
+	await loadUpdatesOpener({ ...emptyOptions, loadUpdatesFindings: async () => UPDATES_FINDINGS })
+	expect(await loadUpdatesOpener(emptyOptions)).toBe("Carl's line.")
+	expect(storedOpeners.size).toBe(1)
+	expect(writeSpy).toHaveBeenCalledTimes(1)
 })

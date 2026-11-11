@@ -1,12 +1,14 @@
 import type { PodcastEpisodeTranscriptBlock } from "@carlnotes/contracts/podcast"
 import { type ComponentType, type ReactNode, useState } from "react"
+import {
+	type PodcastEpisodeTranscriptTurnElements,
+	PodcastEpisodeTranscriptTurns,
+} from "./PodcastEpisodeTranscriptTurns"
 
 type Container = ComponentType<{ children: ReactNode; className?: string }>
-export type PodcastEpisodeTranscriptElements = {
+export type PodcastEpisodeTranscriptElements = PodcastEpisodeTranscriptTurnElements & {
 	Card: ComponentType<{ children: ReactNode; isExpanded: boolean }>
 	Group: Container
-	Text: Container
-	Strong: Container
 	Heading: Container
 	Divider: ComponentType
 	More: ComponentType<{ isExpanded: boolean; onToggle: () => void; moreLabel: string; lessLabel: string }>
@@ -36,13 +38,7 @@ export function PodcastEpisodeTranscript({
 						) : index > 0 ? (
 							<Divider />
 						) : null}
-						{block.turns.map((turn, turnIndex) => (
-							// biome-ignore lint/suspicious/noArrayIndexKey: transcript turns never reorder
-							<Text key={turnIndex} className="mb-1.5 leading-relaxed">
-								<Strong className="font-semibold">{`${turn.speakerName}: `}</Strong>
-								{turn.text}
-							</Text>
-						))}
+						<PodcastEpisodeTranscriptTurns turns={block.turns} elements={{ Text, Strong }} />
 					</Group>
 				))}
 			</Card>

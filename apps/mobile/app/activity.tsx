@@ -1,5 +1,7 @@
 import { fetchActivity } from "@carlnotes/client/activityClient"
 import { authClient } from "@carlnotes/client/authClient"
+import { toSessionProfileIdentity } from "@carlnotes/contracts/profiles"
+import { toSectionCountLabel } from "@carlnotes/core/lib/labels"
 import { useQuery } from "@tanstack/react-query"
 import { Activity } from "lucide-react-native"
 import { AnchorLink } from "@/components/common/AnchorLink"
@@ -9,6 +11,7 @@ import { UserProfileLink } from "@/components/common/UserProfileLink"
 import { PageScreen } from "@/components/layout/PageScreen"
 import { PageSkeleton } from "@/components/layout/PageSkeleton"
 import { Text } from "@/components/primitives/text"
+import { EmptyListCard } from "@/components/table/TableCard"
 import { TopicInvitesTable } from "@/components/table/TopicInvitesTable"
 import { TopicSubscriptionsTable } from "@/components/table/TopicSubscriptionsTable"
 import { CollapsibleSection } from "@/components/topic/CollapsibleSection"
@@ -34,7 +37,7 @@ export default function ActivityScreen() {
 			title="Activity"
 			icon={Activity}
 			titleBadge={<UserMenuUpdateCountBadge label="Activity" />}
-			byline={query.data && <UserProfileLink user={query.data.user} />}
+			byline={session && <UserProfileLink user={toSessionProfileIdentity(session.user)} />}
 			contentClassName="mt-2 gap-0"
 			action={<NewTopicButton />}
 			onRefresh={handleReload}
@@ -43,22 +46,32 @@ export default function ActivityScreen() {
 			{/* the same identity and two sections as the web Activity page */}
 			{query.data ? (
 				<>
-					<CollapsibleSection title="Topics you follow">
+					<CollapsibleSection
+						title="Topics you follow"
+						countLabel={toSectionCountLabel(query.data.subscriptions.length, "topic")}
+					>
 						{query.data.subscriptions.length ? (
 							<TopicSubscriptionsTable subscriptions={query.data.subscriptions} onReloadPage={handleReload} />
 						) : (
-							<AnchorLink href="/" accessibilityLabel="Follow a topic">
-								<Text className="text-sm text-link">Follow a topic. You know the one.</Text>
-							</AnchorLink>
+							<EmptyListCard>
+								<AnchorLink href="/" accessibilityLabel="Follow a topic">
+									<Text className="text-sm text-link">Follow a topic. You know the one.</Text>
+								</AnchorLink>
+							</EmptyListCard>
 						)}
 					</CollapsibleSection>
-					<CollapsibleSection title="Your topic invitations">
+					<CollapsibleSection
+						title="Your topic invites"
+						countLabel={toSectionCountLabel(query.data.invites.length, "invite")}
+					>
 						{query.data.invites.length ? (
 							<TopicInvitesTable invites={query.data.invites} onReload={handleReload} />
 						) : (
-							<AnchorLink href="/" accessibilityLabel="Share a topic">
-								<Text className="text-sm text-link">Share a topic. You know the one.</Text>
-							</AnchorLink>
+							<EmptyListCard>
+								<AnchorLink href="/" accessibilityLabel="Share a topic">
+									<Text className="text-sm text-link">Share a topic. You know the one.</Text>
+								</AnchorLink>
+							</EmptyListCard>
 						)}
 					</CollapsibleSection>
 				</>

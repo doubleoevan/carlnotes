@@ -20,7 +20,7 @@ import { deleteComment, editComment, postComment, shareComment } from "./comment
 import * as reactionRows from "./reactionRows"
 import type { SocialReader } from "./socialRows"
 import * as socialTargets from "./socialTargets"
-import { EDITOR_SHARED_COMMENT_SLOTS, RESOLVED_PODCAST_EPISODE } from "./socialTargetTestFixtures"
+import { EDITOR_SHARED_COMMENT_SLOTS, RESOLVED_PODCAST_EPISODE, RESOLVED_TOPIC_POST } from "./socialTargetTestFixtures"
 
 // a public Topic's Podcast Episode, as a post names it
 const PODCAST_EPISODE_TARGET: CommentTarget = { kind: "podcastEpisode", id: "episode-1" }
@@ -148,6 +148,30 @@ test("an editor's top-level comment is shared with the podcast, and the result h
 	}
 })
 
+test("an editor's comment on a Topic Post starts unshared, is shared if the post asks, and its event names the Topic Post", async () => {
+	// the Topic's owner, who may share, posts on a published Topic Post
+	spyOn(socialTargets, "resolveSocialTarget").mockResolvedValue(RESOLVED_TOPIC_POST)
+	toSocialReader.mockResolvedValue({ userId: "owner-1", canModerate: true, canShare: true })
+	stubCommentRows()
+	const postOnTopicPost = (isSharedWithPodcast?: boolean): ReturnType<typeof postComment> =>
+		postComment({
+			userId: "owner-1",
+			payload: { target: { kind: "post", id: "post-1" }, body: "well put", isSharedWithPodcast },
+			analyticsProperties: TEST_ANALYTICS_PROPERTIES,
+		})
+
+	// a post with no share choice shares nothing, and its event names the Topic Post
+	expect((await postOnTopicPost()).status).toBe("saved")
+	expect(shareCommentInFreeSharedCommentSlot).not.toHaveBeenCalled()
+	const [event, , properties] = trackEvent.mock.calls[0] ?? []
+	expect(event).toBe("social_topic_post_hot_take")
+	expect(properties).toMatchObject({ objectId: "post-1", topicId: "topic-1", isOwner: true, isReply: false })
+
+	// a post that asks to share is shared
+	expect((await postOnTopicPost(true)).status).toBe("saved")
+	expect(shareCommentInFreeSharedCommentSlot).toHaveBeenCalledTimes(1)
+})
+
 test("an editor who turns the share off posts an unshared comment", async () => {
 	toSocialReader.mockResolvedValue({ ...PLAIN_READER, canShare: true })
 	stubCommentRows()
@@ -245,7 +269,7 @@ test("a social target the user cannot open reads as not found", async () => {
 // Episode
 function stubCommentRead(authorUserId: string): ReturnType<typeof stubConnectionPool> {
 	spyOn(socialTargets, "loadSocialTarget").mockResolvedValue(RESOLVED_PODCAST_EPISODE)
-	spyOn(commentRows, "loadWeekCommentCount").mockResolvedValue(2)
+	spyOn(commentRows, "loadCommentCounts").mockResolvedValue({ commentCount: 5, weekCommentCount: 2 })
 	return stubConnectionPool(({ text }) => {
 		if (text.includes('from "users"')) {
 			return [FREE_USER_ACCESS_ROW]
@@ -374,7 +398,12 @@ test("an author deletes their own comment, and the delete event names the commen
 		commentId: "comment-9",
 		analyticsProperties: TEST_ANALYTICS_PROPERTIES,
 	})
-	expect(commentWriteResult).toEqual({ status: "deleted", weekCommentCount: 2, sharedCommentSlots: null })
+	expect(commentWriteResult).toEqual({
+		status: "deleted",
+		weekCommentCount: 2,
+		commentCount: 5,
+		sharedCommentSlots: null,
+	})
 	expect(sentQueries.some((sentQuery) => sentQuery.text.startsWith('delete from "comments"'))).toBe(true)
 
 	// the event holds ids and the owner flag, and none of the body
@@ -394,7 +423,12 @@ test("a moderator's delete of another person's comment returns the shared commen
 	stubCommentRead("user-2")
 	expect(
 		await deleteComment({ userId: "owner-1", commentId: "comment-9", analyticsProperties: TEST_ANALYTICS_PROPERTIES }),
-	).toEqual({ status: "deleted", weekCommentCount: 2, sharedCommentSlots: EDITOR_SHARED_COMMENT_SLOTS })
+	).toEqual({
+		status: "deleted",
+		weekCommentCount: 2,
+		commentCount: 5,
+		sharedCommentSlots: EDITOR_SHARED_COMMENT_SLOTS,
+	})
 
 	// a stranger may not moderate
 	toSocialReader.mockResolvedValue({ ...PLAIN_READER, userId: "user-3" })

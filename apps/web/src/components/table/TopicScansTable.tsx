@@ -8,7 +8,7 @@ import { TopicScanRecap, toNotesMarkdown } from "@/components/topic/TopicScanRec
 import { useScanNote } from "@/hooks/useScanNote"
 import { POPOVER_PANEL_CLASS, STANDALONE_LINK_CLASS, SUBTABLE_CARD_CLASS } from "@/lib/styleClasses"
 import { DATA_TABLE_ELEMENTS } from "./DataTable"
-import { TableCard } from "./TableCard"
+import { EmptyListCard, TableCard } from "./TableCard"
 import { TablePagination, usePaginatedRowSort } from "./TablePagination"
 
 /**
@@ -29,11 +29,7 @@ export function TopicScansTable({
 		renderTime: (scan) => <ScanNotesCell scan={scan} topic={topic} />,
 	})
 	if (!scans.length) {
-		return (
-			<TableCard className={SUBTABLE_CARD_CLASS}>
-				<p className="text-muted-foreground text-sm">No brews this month.</p>
-			</TableCard>
-		)
+		return <EmptyListCard className={SUBTABLE_CARD_CLASS}>No brews this month.</EmptyListCard>
 	}
 	return (
 		<TableCard className={SUBTABLE_CARD_CLASS}>

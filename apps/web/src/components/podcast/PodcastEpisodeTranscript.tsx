@@ -14,10 +14,14 @@ import {
 	SCROLL_REGION_FOCUS_CLASS,
 } from "@/lib/styleClasses"
 
-const elements: PodcastEpisodeTranscriptElements = {
+/**
+ * The web's transcript elements. A Topic Post's discussion card draws its transcript's lines with the same Text and
+ * Strong, so a line reads the same in both. The line sets its own size, the info card's, on any card.
+ */
+export const PODCAST_EPISODE_TRANSCRIPT_ELEMENTS: PodcastEpisodeTranscriptElements = {
 	Card: TranscriptCard,
 	Group: ({ children, className }) => <div className={className}>{children}</div>,
-	Text: ({ children, className }) => <p className={className}>{children}</p>,
+	Text: ({ children, className }) => <p className={cn("text-sm", className)}>{children}</p>,
 	Strong: ({ children, className }) => <span className={className}>{children}</span>,
 	Heading: ({ children, className }) => (
 		<h3
@@ -37,7 +41,7 @@ const elements: PodcastEpisodeTranscriptElements = {
  * Adapts the shared transcript to server-visible text and a keyboard-scrollable browser card.
  */
 export function PodcastEpisodeTranscript({ transcript }: { transcript: PodcastEpisodeTranscriptBlock[] }) {
-	return <SharedPodcastEpisodeTranscript transcript={transcript} elements={elements} />
+	return <SharedPodcastEpisodeTranscript transcript={transcript} elements={PODCAST_EPISODE_TRANSCRIPT_ELEMENTS} />
 }
 
 // collapse only after hydration and expose the expanded region to keyboard scrolling

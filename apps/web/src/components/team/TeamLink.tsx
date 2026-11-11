@@ -1,4 +1,4 @@
-import type { TeamIdentity } from "@carlnotes/contracts/teams"
+import type { TeamIdentity } from "@carlnotes/contracts/teamIdentity"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { TeamAvatar } from "@/components/branding/TeamAvatar"
 import { AnchorLink } from "@/components/common/AnchorLink"

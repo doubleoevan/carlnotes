@@ -1,6 +1,7 @@
 import { cn } from "@carlnotes/nightshift/classNames"
 import type { ReactNode } from "react"
 import { View } from "react-native"
+import { Text } from "@/components/primitives/text"
 
 /**
  * Gives native tables the web's shared card, border, and elevation.
@@ -10,6 +11,28 @@ export function TableCard({ children, className }: { children: ReactNode; classN
 		<View className={cn("overflow-hidden rounded-lg border border-separator bg-card shadow-raised", className)}>
 			{children}
 		</View>
+	)
+}
+
+/**
+ * Shows an empty list or table's one muted line in the web's card, in its rows' place.
+ */
+export function EmptyListCard({
+	text,
+	children,
+	className,
+}: {
+	// the plain line, in the card's own text style
+	text?: string
+	// a link or a button in the line's place, which brings its own style
+	children?: ReactNode
+	className?: string
+}) {
+	return (
+		<TableCard className={cn("px-4 py-6", className)}>
+			{text && <Text className="text-sm text-muted-foreground">{text}</Text>}
+			{children}
+		</TableCard>
 	)
 }
 

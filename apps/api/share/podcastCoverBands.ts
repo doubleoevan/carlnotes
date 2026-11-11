@@ -3,8 +3,8 @@
 
 import { FULL_PODCAST_COVER_SIZE } from "@carlnotes/contracts/podcastEpisodes"
 import { darkRoast, latte, toColorChannels } from "@carlnotes/nightshift/colors"
+import type { CardElement } from "@carlnotes/pipeline/cardElementPng"
 import { toImageStripBrightness } from "@carlnotes/pipeline/topicImages/topicImageFiles"
-import type { CardElement } from "./previewImage"
 
 // a text band's tone over a topic image: a dark band with the Dark roast text, or a light band with the Latte text
 type CoverBandTone = "dark" | "light"

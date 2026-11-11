@@ -1,31 +1,24 @@
 import { authClient } from "@carlnotes/client/authClient"
 import { fetchHome } from "@carlnotes/client/homeClient"
-import {
-	HOME_CARDS_PAGE_SIZE,
-	type PodcastEpisodeCard as PodcastEpisodeCardFields,
-	type TopicCard as TopicCardFields,
-	type YourTopicsPage,
+import type {
+	HomeResponse,
+	PodcastEpisodeCard as PodcastEpisodeCardFields,
+	YourTopicsPage,
 } from "@carlnotes/contracts/home"
-import { UPDATES_FAILED_TEXT } from "@carlnotes/contracts/updates"
-import { useHomeUpdates } from "@carlnotes/core/hooks/useHomeUpdates"
-import { type PageSelection, usePagination } from "@carlnotes/core/hooks/usePagination"
+import type { TopicPostCard as TopicPostCardFields } from "@carlnotes/contracts/topicPosts"
+import type { TopicPodcastEpisodeVideoDialogSurface } from "@carlnotes/contracts/visitAnalytics"
+import { useUpdatesOpener } from "@carlnotes/core/hooks/useUpdatesOpener"
 import { useYourTopicsPages } from "@carlnotes/core/hooks/useYourTopicsPages"
-import {
-	EMPTY_HOME,
-	HOME_SECTIONS,
-	HOW_IT_WORKS_STEPS,
-	HOW_IT_WORKS_TITLE,
-	type HomeCardSection,
-} from "@carlnotes/core/lib/homeFaces"
-import { toCountLabel } from "@carlnotes/core/lib/labels"
+import type { CardSection } from "@carlnotes/core/lib/cardSections"
+import { EMPTY_HOME, HOME_SECTIONS, HOW_IT_WORKS_STEPS, HOW_IT_WORKS_TITLE } from "@carlnotes/core/lib/homeFaces"
 import { useQuery } from "@tanstack/react-query"
 import { type ReactNode, useEffect, useState } from "react"
 import { RefreshControl, ScrollView, View } from "react-native"
-import { CoffeeLoading } from "@/components/branding/CoffeeLoading"
 import { AccordionSection } from "@/components/common/AccordionSection"
+import { CardsRowSkeleton, CardsSection, PagedCardsSection } from "@/components/common/CardsSection"
 import { ClassNameSafeAreaView } from "@/components/common/ClassNameSafeAreaView"
 import { LoadFailedNotice } from "@/components/common/LoadFailedNotice"
-import { Pagination } from "@/components/common/Pagination"
+import { SkeletonPulse } from "@/components/common/SkeletonPulse"
 import { Footer } from "@/components/layout/Footer"
 import { Header } from "@/components/layout/Header"
 import { HomeHeadline } from "@/components/layout/HomeHeadline"
@@ -33,16 +26,17 @@ import { HomeHero } from "@/components/layout/HomeHero"
 import { PodcastEpisodeCard } from "@/components/podcast/PodcastEpisodeCard"
 import { Card, CardBody } from "@/components/primitives/card"
 import { Text } from "@/components/primitives/text"
+import { NewsList } from "@/components/social/NewsList"
 import { TopicCard } from "@/components/topic/TopicCard"
 import { NewTopicButton } from "@/components/topic/TopicHomeActions"
-import { UpdatesList } from "@/components/topic/UpdatesList"
+import { TopicPostCard } from "@/components/topicPost/TopicPostCard"
 import { toTypeRoleStyle } from "@/typeRoleStyles"
 import { captureVisitEvent } from "@/visitAnalytics"
 
 /**
  * The Home screen's two faces, the web's at phone width. A visitor sees the hero, the headline beside New Topic, how
- * it works, and the home topic and podcast cards. A user sees the headline beside New Topic, their Updates, the home topic and podcast cards,
- * and their own topics as cards.
+ * it works, and the home topic, film, podcast, and post cards. A user sees the headline beside New Topic, their Brews
+ * News card, the home topic, film, podcast, and post cards, and their own topics as cards.
  */
 export default function HomeScreen() {
 	// whether a user is signed in or a visitor is browsing, and the home payload for that face
@@ -75,13 +69,14 @@ export default function HomeScreen() {
 					refreshControl={<RefreshControl refreshing={homeQuery.isRefetching} onRefresh={handleRefresh} />}
 				>
 					{/* both faces open with the headline beside New Topic, under a visitor's hero. a visitor reads how it
-					    works under it and a user reads their Updates, and a user's own topics follow the home topic and podcast cards */}
+					    works under it and a user reads their news, and a user's own topics follow the home topic, film, and
+					    podcast cards */}
 					{!isSignedIn && <HomeHero />}
 					<View className="mx-4 mt-6 flex-row items-center justify-between gap-3">
 						<HomeHeadline />
 						<NewTopicButton />
 					</View>
-					{isSignedIn ? <UpdatesSection userId={session?.user.id ?? null} /> : <HowItWorksSection />}
+					{isSignedIn ? <NewsSection userId={session?.user.id ?? null} /> : <HowItWorksSection />}
 					{/* the card sections, like the Topics tab's, or the notice when the home read failed */}
 					{homeQuery.isError ? (
 						<LoadFailedNotice
@@ -90,13 +85,11 @@ export default function HomeScreen() {
 							retryLabel="Retry loading home"
 							onRetry={handleRefresh}
 						/>
+					) : homeQuery.isPending ? (
+						<HomeCardsSkeleton />
 					) : (
 						<View className="mt-3">
-							<HomeCardSections
-								topics={home.homeTopics}
-								podcastEpisodes={home.homePodcastEpisodes}
-								newestPodcastEpisodes={home.newestPodcastEpisodes}
-							/>
+							<HomeCardSections home={home} />
 							{isSignedIn && <YourTopicsSection yourTopics={home.yourTopics} />}
 						</View>
 					)}
@@ -107,11 +100,34 @@ export default function HomeScreen() {
 	)
 }
 
-// a section's label and its content, in the page's insets
+// the sections' values, which key the loading skeleton's sections
+const HOME_SECTION_VALUES = Object.values(HOME_SECTIONS).map((homeSection) => homeSection.value)
+
+// a placeholder section never opens or closes
+function handleSkeletonToggle(): void {}
+
+// the card sections while the home loads, as the web's home shows them, in the loaded sections' own accordion
+// section: each title and count as placeholders over its cards, a full page of them in the first section and one
+// card in the others
+function HomeCardsSkeleton() {
+	return (
+		<View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" className="mt-3">
+			<SkeletonPulse>
+				{HOME_SECTION_VALUES.map((sectionValue, sectionIndex) => (
+					<AccordionSection key={sectionValue} title="" isExpanded isLoading onToggle={handleSkeletonToggle}>
+						<CardsRowSkeleton isFullPage={sectionIndex === 0} />
+					</AccordionSection>
+				))}
+			</SkeletonPulse>
+		</View>
+	)
+}
+
+// a section's title in the muted color and its content, in the page's insets
 function HomeSection({ title, children }: { title: string; children: ReactNode }) {
 	return (
 		<View className="mx-4 mt-6 gap-3">
-			<Text accessibilityRole="header" style={toTypeRoleStyle("sectionLabel")} className="text-muted-foreground">
+			<Text accessibilityRole="header" style={toTypeRoleStyle("sectionTitle")} className="text-muted-foreground">
 				{title}
 			</Text>
 			{children}
@@ -119,84 +135,14 @@ function HomeSection({ title, children }: { title: string; children: ReactNode }
 	)
 }
 
-// a section of cards, open at first, five to a page, hidden while it has none, with its count at the far right
-function HomeCardsSection<Row>({
-	section,
-	rows,
-	renderCard,
-}: {
-	section: HomeCardSection<Row>
-	rows: Row[]
-	renderCard: (row: Row) => ReactNode
-}) {
-	const { pageRows, pagination } = usePagination(rows, HOME_CARDS_PAGE_SIZE)
-	return (
-		<HomeCardsAccordion
-			section={section}
-			rowCount={rows.length}
-			pageRows={pageRows}
-			pagination={pagination}
-			renderCard={renderCard}
-		/>
-	)
-}
-
-// one page of a card section's rows under its header, with the page buttons, hidden while the section has no rows
-function HomeCardsAccordion<Row>({
-	section: { title, noun, toRowKey },
-	rowCount,
-	pageRows,
-	pagination,
-	renderCard,
-}: {
-	section: HomeCardSection<Row>
-	rowCount: number
-	pageRows: Row[]
-	pagination: PageSelection
-	renderCard: (row: Row) => ReactNode
-}) {
-	const [isExpanded, setIsExpanded] = useState(true)
-	if (rowCount === 0) {
-		return null
-	}
-	return (
-		<AccordionSection
-			title={title}
-			countLabel={toCountLabel(rowCount, noun)}
-			isExpanded={isExpanded}
-			onToggle={() => setIsExpanded(!isExpanded)}
-		>
-			<View className="mx-4 gap-3 pt-2 pb-2">
-				{pageRows.map((row) => (
-					<View key={toRowKey(row)}>{renderCard(row)}</View>
-				))}
-				<Pagination
-					label={`${title} pages`}
-					pageNumber={pagination.page + 1}
-					pageCount={pagination.pageCount}
-					onOpenPage={(pageNumber) => pagination.setPage(pageNumber - 1)}
-				/>
-			</View>
-		</AccordionSection>
-	)
-}
-
-// the home topic cards, the home podcast episode cards, and the new podcast episode cards of the week, each in
-// a section
-function HomeCardSections({
-	topics,
-	podcastEpisodes,
-	newestPodcastEpisodes,
-}: {
-	topics: TopicCardFields[]
-	podcastEpisodes: PodcastEpisodeCardFields[]
-	newestPodcastEpisodes: PodcastEpisodeCardFields[]
-}) {
+// the home topic cards, the home and new film cards of the week, the home and new podcast episode cards of the week,
+// and the home and new Topic Post cards of the week, each in a section that is hidden while it has none
+function HomeCardSections({ home }: { home: HomeResponse }) {
 	return (
 		<>
-			<HomeCardsSection
+			<PagedCardsSection
 				section={HOME_SECTIONS.homeTopics}
-				rows={topics}
+				rows={home.homeTopics}
 				renderCard={(topic) => (
 					<TopicCard
 						topic={topic}
@@ -204,36 +150,81 @@ function HomeCardSections({
 					/>
 				)}
 			/>
-			<HomePodcastEpisodesSection section={HOME_SECTIONS.homePodcastEpisodes} podcastEpisodes={podcastEpisodes} />
+			{/* the home's and the newest films, right before the home's podcasts, each hidden while it has none */}
+			<HomePodcastEpisodesSection
+				section={HOME_SECTIONS.homeTopicPodcastEpisodeVideos}
+				podcastEpisodes={home.homeTopicPodcastEpisodeVideos ?? []}
+				videoSurface="home-videos"
+			/>
+			<HomePodcastEpisodesSection
+				section={HOME_SECTIONS.newestTopicPodcastEpisodeVideos}
+				podcastEpisodes={home.newestTopicPodcastEpisodeVideos ?? []}
+				videoSurface="newest-videos"
+			/>
+			<HomePodcastEpisodesSection
+				section={HOME_SECTIONS.homePodcastEpisodes}
+				podcastEpisodes={home.homePodcastEpisodes}
+			/>
+			{/* the week's new podcasts, hidden while the week has none */}
 			<HomePodcastEpisodesSection
 				section={HOME_SECTIONS.newestPodcastEpisodes}
-				podcastEpisodes={newestPodcastEpisodes}
+				podcastEpisodes={home.newestPodcastEpisodes}
 			/>
+			{/* the home's Topic Posts and then the week's new ones, each hidden while it has none */}
+			<HomeTopicPostsSection section={HOME_SECTIONS.homeTopicPosts} topicPosts={home.homeTopicPosts} />
+			<HomeTopicPostsSection section={HOME_SECTIONS.newestTopicPosts} topicPosts={home.newestTopicPosts ?? []} />
 		</>
 	)
 }
 
-// the home or new podcast episodes as cards, each reporting its open
+// the home or new podcast episodes as cards, each reporting its open. with a `videoSurface`, they are film cards whose
+// play button reports it
 function HomePodcastEpisodesSection({
 	section,
 	podcastEpisodes,
+	videoSurface,
 }: {
-	section: HomeCardSection<PodcastEpisodeCardFields>
+	section: CardSection<PodcastEpisodeCardFields>
 	podcastEpisodes: PodcastEpisodeCardFields[]
+	videoSurface?: TopicPodcastEpisodeVideoDialogSurface
 }) {
 	return (
-		<HomeCardsSection
+		<PagedCardsSection
 			section={section}
 			rows={podcastEpisodes}
 			renderCard={(podcastEpisodeCard) => (
 				<PodcastEpisodeCard
 					podcastEpisodeCard={podcastEpisodeCard}
+					variant={videoSurface ? "video" : "audio"}
+					videoSurface={videoSurface}
 					onOpen={() =>
 						captureVisitEvent("home_card_open", {
 							kind: "podcastEpisode",
 							id: podcastEpisodeCard.podcastEpisode.id,
 						})
 					}
+				/>
+			)}
+		/>
+	)
+}
+
+// the home or new Topic Posts as cards, each reporting its open
+function HomeTopicPostsSection({
+	section,
+	topicPosts,
+}: {
+	section: CardSection<TopicPostCardFields>
+	topicPosts: TopicPostCardFields[]
+}) {
+	return (
+		<PagedCardsSection
+			section={section}
+			rows={topicPosts}
+			renderCard={(topicPost) => (
+				<TopicPostCard
+					topicPost={topicPost}
+					onOpen={() => captureVisitEvent("home_card_open", { kind: "topicPost", id: topicPost.id })}
 				/>
 			)}
 		/>
@@ -260,45 +251,25 @@ function HowItWorksSection() {
 	)
 }
 
-// a user's Updates under the headline: the list at the length the Update button chose, 30 minutes at first
-function UpdatesSection({ userId }: { userId: string | null }) {
-	const { minutes, setMinutes, updatesQuery, updates, actions } = useHomeUpdates(userId)
+// a user's Brews News card under the headline: carl's opener for the day, then their news with its window picker
+function NewsSection({ userId }: { userId: string | null }) {
+	const opener = useUpdatesOpener(userId)
 	return (
 		<View className="mx-4 mt-6">
-			<UpdatesList
-				updates={updates}
-				actions={actions}
-				minutes={minutes}
-				onSelectMinutes={setMinutes}
-				placeholder={
-					updatesQuery.isError ? (
-						<LoadFailedNotice
-							message={UPDATES_FAILED_TEXT}
-							retryLabel="Retry updates"
-							onRetry={() => void updatesQuery.refetch()}
-						/>
-					) : (
-						<CoffeeLoading className="py-16" />
-					)
-				}
-			/>
+			<NewsList profileUserId={null} userId={userId} opener={opener} />
 		</View>
 	)
 }
 
-// a user's own topics as cards five to a page, or the New Topic button for a user with none once the read finishes
+// a user's own topics as cards five to a page, or the New Topic button with no count for a user with none once the
+// read finishes
 function YourTopicsSection({ yourTopics }: { yourTopics: YourTopicsPage | null }) {
 	const [isExpanded, setIsExpanded] = useState(true)
 	const { pageTopics, pagination } = useYourTopicsPages(yourTopics)
-	const { title, noun } = HOME_SECTIONS.yourTopics
+	const { title } = HOME_SECTIONS.yourTopics
 	if (yourTopics?.totalCount === 0) {
 		return (
-			<AccordionSection
-				title={title}
-				countLabel={toCountLabel(0, noun)}
-				isExpanded={isExpanded}
-				onToggle={() => setIsExpanded(!isExpanded)}
-			>
+			<AccordionSection title={title} isExpanded={isExpanded} onToggle={() => setIsExpanded(!isExpanded)}>
 				<View className="mx-4 flex-row pt-2">
 					<NewTopicButton />
 				</View>
@@ -306,11 +277,12 @@ function YourTopicsSection({ yourTopics }: { yourTopics: YourTopicsPage | null }
 		)
 	}
 	return (
-		<HomeCardsAccordion
+		<CardsSection
 			section={HOME_SECTIONS.yourTopics}
 			rowCount={yourTopics?.totalCount ?? 0}
-			pageRows={pageTopics}
+			rows={pageTopics}
 			pagination={pagination}
+			isPagedOnServer
 			renderCard={(topic) => <TopicCard topic={topic} />}
 		/>
 	)

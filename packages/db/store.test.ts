@@ -3,7 +3,17 @@
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import { saveEnvSettings } from "@carlnotes/server/savedEnvSettings"
 import { restoreConnectionPool, stubConnectionPool } from "./connectionPoolStub"
-import { deleteStoredObject, toResourceContentKey, toStoredObjectKeys } from "./store"
+import {
+	deleteStoredObject,
+	toResourceContentKey,
+	toStoredObjectKeys,
+	toTopicPodcastEpisodeVideoCaptionsKey,
+	toTopicPodcastEpisodeVideoChapterImageKey,
+	toTopicPodcastEpisodeVideoChaptersKey,
+	toTopicPodcastEpisodeVideoImageKey,
+	toTopicPodcastEpisodeVideoImagePartKey,
+	toTopicPodcastEpisodeVideoKeys,
+} from "./store"
 
 // save the endpoint the environment had
 const restoreEnvSettings = saveEnvSettings(["S3_ENDPOINT"])
@@ -22,6 +32,72 @@ test("resourceContentKey namespaces content under the resource id", () => {
 })
 
 // a row still uploading has no key yet, and the keys that exist are returned in order
+// a film's keys sit under its podcast episode, and the parts drawn from the image name the image's hash
+test("the film keys sit under the podcast episode's video folder", () => {
+	expect(toTopicPodcastEpisodeVideoChaptersKey("episode-1")).toBe("episodes/episode-1/video/chapters.mp4")
+	expect(toTopicPodcastEpisodeVideoCaptionsKey("episode-1")).toBe("episodes/episode-1/video/captions.vtt")
+	expect(
+		toTopicPodcastEpisodeVideoImagePartKey({ podcastEpisodeId: "episode-1", part: "sign-off", imageHash: "abc" }),
+	).toBe("episodes/episode-1/video/sign-off-abc.mp4")
+})
+
+// a film row's keys leave out the parts not yet uploaded
+test("toTopicPodcastEpisodeVideoKeys drops the keys not yet uploaded", () => {
+	const topicPodcastEpisodeVideoKeys = toTopicPodcastEpisodeVideoKeys({
+		introKey: "intro",
+		chaptersKey: "chapters",
+		signOffKey: null,
+		filmKey: null,
+		captionsKey: "captions",
+		podcastEpisodeId: "episode-1",
+		imageHash: null,
+		chapterCount: 0,
+	})
+	expect(topicPodcastEpisodeVideoKeys).toEqual(["intro", "chapters", "captions"])
+})
+
+// a film with its own image lists the image's key under the film's folder
+test("toTopicPodcastEpisodeVideoKeys lists the film's own image", () => {
+	const topicPodcastEpisodeVideoKeys = toTopicPodcastEpisodeVideoKeys({
+		introKey: null,
+		chaptersKey: null,
+		signOffKey: null,
+		filmKey: "film",
+		captionsKey: null,
+		podcastEpisodeId: "episode-1",
+		imageHash: "abc",
+		chapterCount: 0,
+	})
+	expect(topicPodcastEpisodeVideoKeys).toEqual(["film", "episodes/episode-1/video/image-abc.jpg"])
+	expect(toTopicPodcastEpisodeVideoImageKey("episode-1", "abc")).toBe("episodes/episode-1/video/image-abc.jpg")
+})
+
+// a film lists an imagined image's key for each chapter of its podcast episode, and a podcast episode with no film
+// row lists none
+test("toTopicPodcastEpisodeVideoKeys lists each chapter's imagined image under the film's folder", () => {
+	const filmRow = { introKey: null, chaptersKey: null, signOffKey: null, filmKey: null, captionsKey: null }
+	const topicPodcastEpisodeVideoKeys = toTopicPodcastEpisodeVideoKeys({
+		...filmRow,
+		podcastEpisodeId: "episode-1",
+		imageHash: null,
+		chapterCount: 2,
+	})
+	expect(topicPodcastEpisodeVideoKeys).toEqual([
+		"episodes/episode-1/video/chapter-0-image.jpg",
+		"episodes/episode-1/video/chapter-1-image.jpg",
+	])
+	expect(toTopicPodcastEpisodeVideoChapterImageKey("episode-1", 1)).toBe("episodes/episode-1/video/chapter-1-image.jpg")
+
+	// no film row, so no chapter image
+	const filmlessKeys = toTopicPodcastEpisodeVideoKeys({
+		...filmRow,
+		podcastEpisodeId: null,
+		imageHash: null,
+		chapterCount: 2,
+	})
+	expect(filmlessKeys).toEqual([])
+})
+
 test("toStoredObjectKeys keeps the keys and drops the nulls", () => {
 	expect(toStoredObjectKeys([{ objectKey: "a" }, { objectKey: null }, { objectKey: "b" }])).toEqual(["a", "b"])
 })

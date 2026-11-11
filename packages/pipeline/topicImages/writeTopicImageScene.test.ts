@@ -89,3 +89,16 @@ test("the image prompt is the scene followed by the house style paragraph", asyn
 	expect(imagePrompt).toContain("No text, letters, numbers, logos, watermarks, or human faces.")
 	expect(imagePrompt).not.toContain("---")
 })
+
+test("a film's image prompt is the scene followed by the film house style paragraph", async () => {
+	const imagePrompt = await toTopicImagePrompt("A harbor at dusk.", "topic-podcast-episode-video-image-style")
+	expect(imagePrompt.startsWith("A harbor at dusk.\n\nA wide cinematic film still")).toBe(true)
+
+	// the frame is full, in the palette, with a calm dark lower third and no text
+	expect(imagePrompt).toContain("no paper edge, border, frame, vignette, or letterbox bars")
+	expect(imagePrompt).toContain("espresso brown, caramel, burnt orange, and one cool slate-blue accent")
+	expect(imagePrompt).toContain("The lower third stays calm and dark")
+	expect(imagePrompt).toContain("No text, letters, numbers, logos, watermarks, or human faces.")
+	expect(imagePrompt).not.toContain("---")
+	expect(imagePrompt).not.toContain("{{")
+})

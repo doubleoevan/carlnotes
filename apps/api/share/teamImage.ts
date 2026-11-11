@@ -1,16 +1,16 @@
 // the link-preview card a pasted team url renders as: the team's avatar and name, and what it holds
+
+import type { CardElement } from "@carlnotes/pipeline/cardElementPng"
 import type { PublishedAvatar } from "../avatars"
 import {
 	CARD_MUTED_COLOR,
-	type CardElement,
 	PREVIEW_TEMPLATE_VERSION,
 	toAvatarIdentity,
 	toBrandIcon,
 	toCardPng,
 	toCountLabel,
+	toOwnerAvatar,
 	toOwnerImageDataUri,
-	toOwnerInitials,
-	toOwnerPhoto,
 } from "./previewImage"
 
 // how wide the avatar renders, filling the slot a team card gives its title
@@ -46,9 +46,12 @@ export async function toTeamPreviewPng(previewCard: TeamPreview): Promise<Uint8A
 // the team title display: the image it publishes, or its initials in its tint, then its name
 function toTeamIdentity(teamPreview: TeamPreview, avatarImage: string | null): CardElement {
 	// the initials fall back to the team's name and id
-	const avatar = avatarImage
-		? toOwnerPhoto(avatarImage, AVATAR_SIZE)
-		: toOwnerInitials(teamPreview.teamId, teamPreview.name, AVATAR_SIZE)
+	const avatar = toOwnerAvatar({
+		id: teamPreview.teamId,
+		name: teamPreview.name,
+		image: avatarImage,
+		size: AVATAR_SIZE,
+	})
 	return {
 		type: "div",
 		props: {

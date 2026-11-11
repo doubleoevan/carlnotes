@@ -1,10 +1,10 @@
 import { showClientError } from "@carlnotes/client/apiClient"
 import {
 	type NoteEditorElements,
-	type NoteEditorInputProps,
 	type NoteEditorProps,
 	NoteEditor as SharedNoteEditor,
 } from "@carlnotes/core/components/NoteEditor"
+import type { RichTextEditorInputProps } from "@carlnotes/core/hooks/useRichTextEditor"
 import type { RefObject } from "react"
 import { EnrichedTextInput, type EnrichedTextInputInstance } from "react-native-enriched-html"
 import { NoteConflictNotice } from "./NoteConflictNotice"
@@ -27,8 +27,11 @@ export function NoteEditor(props: Omit<NoteEditorProps, "onError">) {
 	return <SharedNoteEditor {...props} onError={showClientError} elements={ELEMENTS} />
 }
 
-// normalize native events and leave the bounded input responsible for caret scrolling
-function NoteInput({
+/**
+ * Renders the rich text input a note and a Topic Post share. It normalizes native events and leaves the bounded input
+ * responsible for caret scrolling.
+ */
+export function NoteInput({
 	editorRef,
 	defaultValue,
 	placeholder,
@@ -36,7 +39,7 @@ function NoteInput({
 	onChangeState,
 	onChangeSelection,
 	onLinkDetected,
-}: NoteEditorInputProps) {
+}: RichTextEditorInputProps) {
 	const noteStyle = useNoteStyle()
 	const height = useNoteEditorHeight()
 	return (

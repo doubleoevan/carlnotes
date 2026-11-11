@@ -1,15 +1,16 @@
 ---
 title: Searching
 description: >-
-  One search bar finds topics, podcast episodes, findings, teams, and profiles. How the search page lists them, and
-  how the filters, tags, and sort narrow them.
+  One search bar finds topics, podcast episodes, posts, findings, teams, and profiles. How the search page lists
+  them, and how the filters, tags, and sort narrow them.
 sidebar:
   order: 7
 ---
 
-The search bar at the top of every page finds topics, podcast episodes, findings, teams, and profiles by name. It finds
-what you can open: public results for everyone, and your own topics, your teams' topics, and the invite topics you
-follow once you sign in.
+The search bar at the top of every page finds topics, podcast episodes, posts, findings, teams, and profiles by name.
+A published [Open Mic post](/docs/feed/open-mic/) also matches on its summary and its text. The bar finds what you can
+open: public results for everyone, and your own topics, your teams' topics, and the invite topics you follow once you
+sign in.
 
 ## Typing
 
@@ -30,6 +31,7 @@ Each row names its kind:
 
 - **Topic**: its viewers and followers, with its latest podcast episode's play pill.
 - **Podcast**: the topic it belongs to, how long ago it was published, and its listeners.
+- **Post**: its image, how long ago it was published, and the topic it belongs to.
 - **Finding**: its source and age, the play pill of the chapter that narrates it, and its topic.
 - **Team**: how many topics and members it has.
 - **Profile**: a person's public profile.
@@ -55,7 +57,8 @@ The search page's address holds the whole search, so a copied link opens the sam
   the match: **Any Match**, **All Match**, **Exclude Tags**, or **Off**. Teams and profiles have no tags, so Any Match
   and All Match leave them out.
 - **Sort** orders by **Relevance**, **Newest**, or **Trending**. Relevance puts exact name matches first. Trending puts
-  the most viewed topics, the most played podcast episodes, and the most opened findings first.
+  the most viewed topics, the most played podcast episodes, and the most opened findings first. Posts, teams, and
+  profiles have no count, so they follow.
 
 ## Going home
 

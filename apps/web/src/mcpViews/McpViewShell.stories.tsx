@@ -5,7 +5,7 @@
 import { FINISHED_SCAN_STATUS } from "@carlnotes/contracts/mcpScanStatusTestFixtures"
 import { MCP_VIEW_META_KEY } from "@carlnotes/contracts/mcpViews"
 import { SITE_URL } from "@carlnotes/contracts/site"
-import { PODCAST_STORY_EPISODE } from "@carlnotes/core/lib/podcastEpisodeStories"
+import { PODCAST_STORY_EPISODE, PODCAST_STORY_FILM_EPISODE } from "@carlnotes/core/lib/podcastEpisodeStories"
 import { UPDATES_STORY } from "@carlnotes/core/lib/updatesStories"
 import { restorePodcastEpisode } from "@carlnotes/core/stores/podcastEpisodePlayerStore"
 import type { App, McpUiDisplayMode } from "@modelcontextprotocol/ext-apps"
@@ -131,6 +131,19 @@ export const Fullscreen: Story = { parameters: { mcpViewRoute: { ...FINDINGS_ROU
 
 // a loaded podcast episode offers picture in picture
 export const PlayerShown: Story = { play: showPodcastPlayer }
+
+// a loaded podcast episode with a film links to the film player on its page, since the MCP view plays only audio
+export const PlayerWithFilm: Story = {
+	play: async ({ canvas }) => {
+		const { video: _video, ...podcastEpisode } = PODCAST_STORY_FILM_EPISODE
+		restorePodcastEpisode({
+			podcastEpisode: { ...podcastEpisode, hasVideo: true, pagePath: "/topics/topic-1/coffee/episodes/2026/7" },
+			positionSeconds: 0,
+			playbackRate: 1,
+		})
+		await expect(await canvas.findByRole("link", { name: "Watch on CarlNotes" })).toBeVisible()
+	},
+}
 
 // picture in picture shows only the brand bar and the player
 export const PictureInPicture: Story = {

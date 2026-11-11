@@ -86,14 +86,13 @@ SHALL count a fixed estimate for its kind. Every other length SHALL be rejected 
 ### Requirement: What does not fit collapses into one link
 
 In the MCP view, unread Findings outside the list SHALL collapse into one "and N more" link to the Topics page, or
-to the Topic's page in a scoped list. The Updates card on the home page SHALL show the list at the length its
-Update button chose and no link. They SHALL stay unread.
+to the Topic's page in a scoped list. They SHALL stay unread.
 
 #### Scenario: More remains
 
 - **WHEN** the list leaves twelve unread Findings out
-- **THEN** the MCP view shows one link for twelve more, which opens the Topics page on carlnotes.com, the home card
-  shows none, and those Findings stay unread
+- **THEN** the MCP view shows one link for twelve more, which opens the Topics page on carlnotes.com, and those
+  Findings stay unread
 
 ### Requirement: Shown Findings count as read
 
@@ -186,19 +185,39 @@ more link, so a host without UI gets the whole list.
 - **WHEN** a 30-minute list's Findings would pass the page budget
 - **THEN** the result ends at a whole Finding, the rest count toward more, and they stay unread
 
-### Requirement: The Updates card leads the signed-in home
+### Requirement: The home reads the day's opener without building a list
 
-The web and mobile Updates UI parked in `logs/updates-web-mobile.patch`, the list and its button, SHALL return as the
-"Updates" card under the signed-in home's headline, with no route or screen of its own. The card SHALL load a 30
-minute list, and its Update button SHALL offer 5, 15, and 30 minutes with the shown length highlighted as a selected
-menu option. A choice SHALL load a new list of that length in the card.
+A signed-in user's home, and the news on their own profile page, SHALL read the day's opener on its own: the opener a
+list would show, from the same cache, prompt, wait, and budget rule, with no Finding marked read. A user with no
+unread Finding SHALL keep the opener the day already stored, and no model call SHALL run for them. A missing opener
+SHALL leave the card with its news alone.
 
-#### Scenario: A user opens home and reads their Updates
+#### Scenario: The home's opener is the list's opener
 
-- **WHEN** a signed-in user opens home
-- **THEN** the Updates card under the headline shows a 30 minute list
+- **WHEN** a user opens the home and then asks an AI app for a list on the same day
+- **THEN** both show the same opener, and one model call wrote it
 
-#### Scenario: A user updates the list
+#### Scenario: Reading the opener marks nothing read
 
-- **WHEN** a signed-in user presses Update and picks 15 minutes
-- **THEN** the card loads a new 15 minute list, and the menu highlights 15 minutes
+- **WHEN** a user with twelve unread Findings opens the home
+- **THEN** the twelve stay unread
+
+#### Scenario: The day's opener stays after the last Finding is read
+
+- **WHEN** a user's home showed the day's opener and the user then reads every Finding
+- **THEN** the home still shows that opener for the rest of the day, and no model call runs
+
+#### Scenario: A spent budget shows the news alone
+
+- **WHEN** the opener's reservation is rejected
+- **THEN** the home's card shows the news with nothing in the opener's place
+
+### Requirement: The updates MCP view is titled Brew Updates
+
+The updates MCP view's heading SHALL read "Brew Updates". Only the news SHALL be titled Brews News, on the home, on a
+profile page, and in its own MCP view.
+
+#### Scenario: The two views read apart
+
+- **WHEN** a host renders a `read_updates` result and a `read_news` result
+- **THEN** the first is headed "Brew Updates" and the second "Brews News"

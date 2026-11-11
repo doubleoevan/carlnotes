@@ -71,11 +71,11 @@ Turning the toggle off stops the email. The topic keeps brewing, and its finding
 The unsubscribe link inside the email stops you following another user's topic. Nothing is deleted. You can follow it
 again, and turn its email back on, from the Activity page.
 
-An invitation you haven't answered shows as a count in three places: the **Activity** row of your menu, the Activity
+An invite you haven't answered shows as a count in three places: the **Activity** row of your menu, the Activity
 page's title, and the tab title. The count's tooltip names who invited you to which topic. The badge on your avatar adds
-invitations to your unread chats and notes, and its tooltip lists all three. The app shows the same counts on its menu
-button, its Activity item and title, and its app icon, and a long press on a count lists what is waiting. An invitation
-link opens in the app too, and a link you open before signing in comes back to the invitation after you do.
+invites to your unread chats and notes, and its tooltip lists all three. The app shows the same counts on its menu
+button, its Activity item and title, and its app icon, and a long press on a count lists what is waiting. An invite
+link opens in the app too, and a link you open before signing in comes back to the invite after you do.
 
 ## The Brew diary is your topic brew's history
 
@@ -88,7 +88,7 @@ kept count and findings against the entries before it. Over a few brews, the ent
 The topic feed gives you one finding at a time. When the question is "what changed this month" or "where do these
 sources disagree", ask [Coffee Talk](/docs/feed/chat/). Chat with Carl about what your topic's brews found. On a topic
 one of your teams holds, the panel opens that team's shared chat room, where your teammates join in. For a one-to-one
-conversation, pick **Private chat** in the panel's **…** menu while a topic page is open.
+conversation, pick **Private chat about** the topic in the panel's **…** menu while a topic page is open.
 
 ## Copying and sharing Carl's notes on mobile
 

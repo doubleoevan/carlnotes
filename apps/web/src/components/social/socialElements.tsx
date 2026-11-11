@@ -27,7 +27,7 @@ import {
 	ThumbsUp,
 	Trash2,
 } from "lucide-react"
-import { type ReactNode, useId } from "react"
+import { type PropsWithChildren, type ReactNode, useEffect, useId, useRef, useState } from "react"
 import { CoffeeLoading } from "@/components/branding/CoffeeLoading"
 import { ShareMugsIcon } from "@/components/branding/ShareMugsIcon"
 import { AnchorLink } from "@/components/common/AnchorLink"
@@ -71,7 +71,7 @@ const ROW_CONTROL_ICONS: Record<"edit" | "delete", LucideIcon> = { edit: Pencil,
 export const COMMENT_ELEMENTS: CommentElements = {
 	Message: ({ children }) => <p className="text-muted-foreground">{children}</p>,
 	List: ({ children }) => <ul className="flex flex-col gap-3">{children}</ul>,
-	Row: ({ children }) => <li className="flex flex-col gap-1">{children}</li>,
+	Row: CommentRowItem,
 	Age: ({ children }) => <span className="text-muted-foreground shrink-0 text-xs">{children}</span>,
 	Body: ({ isScrolling, children }) => {
 		const body = <p className="whitespace-pre-wrap break-words">{children}</p>
@@ -334,10 +334,72 @@ function SocialComposer({
 			)}
 			<div className="flex items-center justify-between gap-2">
 				{footerStart}
-				<Button type="submit" size="sm" className="ml-auto" disabled={!canSubmit || isPending}>
+				{/* the button posts by its own press. a sandboxed frame, as an MCP view's is, fires no submit */}
+				<Button type="button" size="sm" className="ml-auto" disabled={!canSubmit || isPending} onClick={onSubmit}>
 					{submitLabel}
 				</Button>
 			</div>
 		</form>
+	)
+}
+
+// how long a linked comment stays highlighted
+const LINKED_COMMENT_HIGHLIGHT_MS = 3000
+
+// one comment's row. a linked comment scrolls into view and is highlighted briefly, with no motion for a reader who
+// asked for less, and a row with a shown handler reports the first time half of it is in view
+function CommentRowItem({
+	isLinked,
+	onShown,
+	children,
+}: PropsWithChildren<{ isLinked?: boolean; onShown?: () => void }>) {
+	const rowRef = useRef<HTMLLIElement>(null)
+	const [isHighlighted, setIsHighlighted] = useState(Boolean(isLinked))
+
+	// the latest shown handler, which the observer calls without watching again on each render
+	const onShownRef = useRef(onShown)
+	onShownRef.current = onShown
+
+	// scroll a linked comment into view, then let its highlight fade
+	useEffect(() => {
+		if (!isLinked) {
+			return
+		}
+		const isReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches
+		rowRef.current?.scrollIntoView({ block: "center", behavior: isReducedMotion ? "auto" : "smooth" })
+		setIsHighlighted(true)
+		const highlightTimeout = setTimeout(() => setIsHighlighted(false), LINKED_COMMENT_HIGHLIGHT_MS)
+		return () => clearTimeout(highlightTimeout)
+	}, [isLinked])
+
+	// report the row once it is in view
+	const hasShownHandler = Boolean(onShown)
+	useEffect(() => {
+		const row = rowRef.current
+		if (!hasShownHandler || !row) {
+			return
+		}
+		const observer = new IntersectionObserver(
+			(entries) => {
+				if (entries.some((entry) => entry.isIntersecting)) {
+					onShownRef.current?.()
+					observer.disconnect()
+				}
+			},
+			{ threshold: 0.5 },
+		)
+		observer.observe(row)
+		return () => observer.disconnect()
+	}, [hasShownHandler])
+	return (
+		<li
+			ref={rowRef}
+			className={cn(
+				"-mx-2 flex flex-col gap-1 rounded-md px-2 transition-colors duration-700 motion-reduce:transition-none",
+				isHighlighted && "bg-primary/15",
+			)}
+		>
+			{children}
+		</li>
 	)
 }

@@ -91,6 +91,7 @@ describe("searchRequestPayload", () => {
 		expect(toSearchRequest({ q: "orbit", kinds: "findings,findings" }).kinds).toEqual([
 			"topics",
 			"podcastEpisodes",
+			"topicPosts",
 			"findings",
 			"teams",
 			"users",
@@ -151,6 +152,21 @@ const SEARCH_PAGE: SearchResultsPage = {
 			topic: { id: "topic-home-espresso", name: "Home espresso" },
 		},
 		{
+			kind: "topicPost",
+			id: "topic-post-burr-alignment",
+			name: "Aligning burrs at home",
+			path: "/topics/topic-home-espresso/home-espresso/posts/topic-post-burr-alignment/aligning-burrs-at-home",
+			date: "2026-09-30T09:00:00.000Z",
+			count: null,
+			// the author, the summary, and no image yet
+			topicPost: {
+				author: { userId: "user-ava", username: "ava", avatarSource: null, avatarVersion: null },
+				summary: "A marker test and two shims bring a home grinder's burrs into line.",
+				image: null,
+			},
+			topic: { id: "topic-home-espresso", name: "Home espresso" },
+		},
+		{
 			kind: "finding",
 			id: "finding-grinder-burrs",
 			name: "Espresso grinder burrs, measured",
@@ -206,7 +222,7 @@ const SEARCH_PAGE: SearchResultsPage = {
 			user: { userId: "user-ava", username: "ava", avatarSource: null, avatarVersion: null },
 		},
 	],
-	rowCount: 5,
+	rowCount: 6,
 	page: 1,
 	pageCount: 1,
 	pageSize: 10,
@@ -219,7 +235,7 @@ describe("searchResultsPage", () => {
 	})
 
 	test("rejects a row of a kind the build does not know", () => {
-		const rows = [{ ...SEARCH_PAGE.rows[3], kind: "room" }]
+		const rows = [{ ...SEARCH_PAGE.rows[4], kind: "room" }]
 		expect(searchResultsPage.safeParse({ ...SEARCH_PAGE, rows }).success).toBe(false)
 	})
 })

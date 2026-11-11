@@ -133,6 +133,8 @@ it; it imports `@carlnotes/models`, `@carlnotes/emails`, `@carlnotes/db`, `@carl
   that same pass, from the clips committed in `assets/podcast/`, and shifts the chapter times by the intro's lead.
   `publishPodcastEpisode.ts` publishes or fails the row, and a short podcast episode's publish replaces the Topic's
   earlier short ones. `removePodcastEpisode.ts` removes a Podcast Episode and deletes its audio and its vector.
+  Both clear the cached unseen Comment Mentions of the users the deleted Comments mentioned, after their commit,
+  through `@carlnotes/db/unseenCommentMentions`.
   `podcastEpisodeChapters.ts` gives a new Finding the newest rating of the chapters that narrated its Resource, and
   links those chapters to it. The review's `upsertFinding` calls both. `podcastEpisodeSmokeFixtures.ts` seeds the rows
   for the worker's podcast episode smoke.
@@ -143,14 +145,40 @@ it; it imports `@carlnotes/models`, `@carlnotes/emails`, `@carlnotes/db`, `@carl
   (the hash, the origin, the image prompt, and the old files' pending deletions).
 - `topicImages/` — the steps of the worker's `renderTopicImage` workflow. `writeTopicImageScene.ts` has the prompt
   writer's input (the topic's name, prompt, tags, and up to five finding titles, fenced as untrusted) and the image
-  prompt with the house style appended. `renderTopicImageOriginal.ts` draws a scene through the image model and returns
-  the 3:2 original, or throws a `TopicImageRenderFailure` naming whether the budget is spent, the render was rejected,
-  or another attempt is worth it. `topicImageFiles.ts` decodes an upload by its bytes under a pixel limit, center-crops
-  to 3:2 with sharp, derives the three sizes at 1x and 2x as webp, and stores them under the original's hash.
-  `topicImageRenders.ts` writes a render row, naming a podcast episode for one that draws its image, and starts its
+  prompt with a house style appended, the topic image's unless another style prompt is named.
+  `renderTopicImageOriginal.ts` draws a scene through the image model and returns the original in its
+  `TopicImageFormat` (the style prompt, the aspect ratio, and the pixel size: 3:2 at 1264 by 848 unless a format is
+  given), or throws a `TopicImageRenderFailure` naming whether the budget is spent, the render was rejected, or another
+  attempt is worth it. `topicImageFiles.ts` decodes an upload by its bytes under a pixel limit, center-crops to the
+  format's ratio with sharp, derives the three sizes at 1x and 2x as webp, and stores them under the original's hash.
+  `topicImageRenders.ts` writes a render row, naming a podcast episode, a Topic Post, or a film for one that draws its
+  image, and starts its
   workflow, replaces a topic's image (the row, `topics.image_hash`, and the old files' pending deletions), removes an
   upload, and marks a render failed; a change to a public topic's image purges its files at the edge. `topicCovers.ts`
   drops a topic's cached podcast feeds and the stored covers drawn over its image after a change.
+- `topicPodcastEpisodeVideo/` — a published podcast episode's film, the steps of the worker's film workflows.
+  `videoTimeline.ts` turns the chapter times into frame-exact segments, `videoCaptions.ts` writes the WebVTT captions
+  from the script, timed with the pauses in the audio, `videoHotTakes.ts` finds where the hosts turn to hot takes,
+  which show the podcast card, `videoFrames.ts` draws the stills and lower thirds, and
+  `videoEncode.ts` and `videoParts.ts` encode the intro, chapters, and sign-off parts with ffmpeg and join the film.
+  `topicPodcastEpisodeVideoInputs.ts` reads the podcast episode, the image its film shows (the film's own, or else
+  the podcast episode's, its topic's, or the podcast card), and each chapter's link preview image.
+  `videoChapterStills.ts` settles each chapter's still before the chapters are encoded: the link preview image, or an
+  imagined image for the longest chapters that run the minimum seconds and have none, up to the limit, or the podcast
+  card. An imagined image is drawn by the film image's own draw from the Finding's title and public relevance
+  explanation alone, checked by the image moderation, stored beside the film's parts, where a second attempt reuses
+  it, and billed to the film's row unless the platform pays. Any failure leaves the podcast card.
+  `topicPodcastEpisodeVideoImage.ts` holds the film's own image: its 16:9 format at the film's frame size, the first
+  draw, the scene input for an editor's regeneration, and the replace that stores the jpeg beside the film's parts,
+  swaps the hash, and starts the rebuild.
+  `renderTopicPodcastEpisodeVideo.ts` draws the film's image if it has none, falling back to the podcast episode's on a
+  failed draw, then renders, uploads, and bills a film, writing a failed row for missing inputs and for an owner past
+  the spend cutoff, which keeps the backfill from rendering that film, and `rebuildTopicPodcastEpisodeVideo.ts` draws only the intro and the sign-off again for a new image and joins them with
+  the stored chapters part. `topicPodcastEpisodeVideoRows.ts` is the film row both of them write: the skipped,
+  rendering, ready, and failed writes, the ready check, the upload that records its pending deletion first, and what a
+  film's rendered minutes cost. `topicPodcastEpisodeVideo.test.ts` renders a fixture podcast episode with ffmpeg.
+- `cardElementPng.ts` lays out an element with satori and rasterizes it with resvg in the fonts under
+  `assets/fonts/`: the api's share cards and podcast covers and the film's lower thirds draw through it.
 - `meanVectors.ts` saves the vectors that rank related topics, related podcast episodes, and the podcast episode search,
   each the mean of the current model's resource embeddings behind it, computed in SQL: a Topic's after every Scan ends,
   succeeded, stopped, or failed, after a save that changes its visibility, and after a rating, from its kept Findings,
@@ -187,3 +215,23 @@ it; it imports `@carlnotes/models`, `@carlnotes/emails`, `@carlnotes/db`, `@carl
 `personalSources/scoreResource.ts` writes a page-grounded public explanation and isolated sender annotations in one redacted call per sender. `review/saveFinding.ts` commits both layers atomically after sender revision checks. Public reports and podcast inputs use the public fields only. `podcast/podcastPersonalSourcesMigration.ts` blocks only unconverted legacy output.
 
 Personal sources items, private summaries, and annotations have no automatic expiry. Their content remains encrypted until explicit deletion. Released read contracts retain nullable expiry fields as null. Optional conversation URLs survive the MCP picker outside matching and open from the shared AI sender label; missing references remain plain labels.
+
+- `topicPosts/` — what follows a Topic Post's publish. `summarizeTopicPost.ts` builds the `summarize-topic-post`
+  prompt with the title and the text fenced and writes the summary, `topicPostSummaries.ts` writes it on the
+  author's key and stores it, and `topicPostImageRenders.ts` reads a post's scene input, starts its first render,
+  and replaces its image. `attach.ts` adds a topic's published Topic Posts to a review's context after the
+  attachments, each under its title and cut at the longest extract. `temporalClient.ts` starts the publish and the
+  summary workflows on the `topic-posts` queue.
+
+Topic Post Discussions and the Topic Post chat: `topicPosts/topicPostDiscussionScript.ts` builds the
+`write-topic-post-discussion` prompt with the hosts block and the post, its Comments, and the starter's note each
+fenced, asks for a length that follows the post's length and the Comments read (`toDiscussionWordCounts`), writes
+drafts until one passes, and checks a draft in code: both hosts speak, the script stays inside seven minutes, and each
+Comment given is credited by username. `topicPosts/topicPostDiscussions.ts` writes a discussion's
+row and starts its workflow, starts a published post's first discussion once, screens each Comment and the author's
+username before the script is written, records the script as one speech call encoded with no theme, stores the audio
+under the post, and closes a row as failed. `topicPosts/topicPostImageRenders.ts` also removes an uploaded image and
+purges a public topic's post page at the edge after an image change. `chat/retrieveTopicPost.ts` loads what a chat
+turn reads of a Topic Post, its text and its shared Comments the reader may see, and
+`chat/topicPostQuestionPrompt.ts` builds the `chat-topic-post` fragment and the fenced post block the topic chat
+prompt splices on that turn alone.

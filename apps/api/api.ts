@@ -35,6 +35,7 @@ import { invitesRoute, toInviteTarget } from "./invite/invites"
 import { receivedInvitesRoute } from "./invite/receivedInvites"
 import { userInvitesRoute } from "./invite/userInvites"
 import { mcpClientsRoute } from "./mcp/server"
+import { newsRoute } from "./news/newsRoute"
 import { noteCommentsRoute } from "./note/noteComments"
 import { NOTE_BODY_PATH, notesRoute } from "./note/notes"
 import { aiAgentAccountsRoute } from "./personalSources/aiAgentAccountsRoute"
@@ -47,6 +48,10 @@ import { podcastEpisodeHomeOrderRoute } from "./podcast/podcastEpisodeHomeOrder"
 import { podcastEpisodeImagesRoute } from "./podcast/podcastEpisodeImagesRoute"
 import { podcastEpisodesRoute } from "./podcast/podcastEpisodes"
 import { podcastFeedsRoute } from "./podcast/podcastFeeds"
+import { topicPodcastEpisodeVideoHomeOrderRoute } from "./podcast/topicPodcastEpisodeVideoHomeOrder"
+import { topicPodcastEpisodeVideoImagesRoute } from "./podcast/topicPodcastEpisodeVideoImagesRoute"
+import { topicPodcastEpisodeVideosRoute } from "./podcast/topicPodcastEpisodeVideoRoutes"
+import { profileOrderRoute } from "./profileOrder"
 import { profilesRoute } from "./profiles"
 import { pushDevicesRoute } from "./pushDevices"
 import { flagContentRoute } from "./report/flagContent"
@@ -63,6 +68,7 @@ import {
 	toTopicPreview,
 } from "./share/preview"
 import { setGateCookie, signGateToken, verifyGateToken, verifyTurnstileToken } from "./signupGate"
+import { commentMentionsRoute } from "./social/commentMentionsRoute"
 import { commentsRoute } from "./social/commentsRoute"
 import { reactionsRoute } from "./social/reactionsRoute"
 import { teamsRoute } from "./team/teamsRoute"
@@ -76,6 +82,10 @@ import { subscriptionsRoute } from "./topic/subscriptions"
 import { topicImagesRoute } from "./topic/topicImagesRoute"
 import { topicsRoute } from "./topic/topicsRoute"
 import { updatesRoute } from "./topic/updatesRoute"
+import { topicPostDiscussionsRoute } from "./topicPost/topicPostDiscussionsRoute"
+import { topicPostHomeOrderRoute } from "./topicPost/topicPostHomeOrder"
+import { topicPostImagesRoute } from "./topicPost/topicPostImagesRoute"
+import { TOPIC_POST_PATH, topicPostsRoute } from "./topicPost/topicPostsRoute"
 import {
 	confirmUnsubscribePage,
 	invalidUnsubscribePage,
@@ -112,6 +122,7 @@ const OWN_BODY_LIMIT_PATHS = [
 	TEAM_AVATAR_UPLOAD_PATH,
 	TOPIC_ATTACHMENT_UPLOAD_PATH,
 	NOTE_BODY_PATH,
+	TOPIC_POST_PATH,
 	PERSONAL_SOURCES_IMPORT_PATH,
 ].map((routePath) => `${API_BASE_PATH}${routePath}`)
 
@@ -255,6 +266,10 @@ export const apiRoute = new Hono<AppEnv>()
 	.route("/", podcastEpisodeImagesRoute)
 	.route("/", homeRoute)
 	.route("/", podcastEpisodeHomeOrderRoute)
+	.route("/", topicPodcastEpisodeVideoHomeOrderRoute)
+	.route("/", topicPostHomeOrderRoute)
+	// a topic's, a podcast episode's, and a Topic Post's place among the pins of their person's profile
+	.route("/", profileOrderRoute)
 	// a topic page's view, and the counts the topic and podcast episode pages read
 	.route("/", countsRoute)
 	// the flag content route
@@ -263,10 +278,14 @@ export const apiRoute = new Hono<AppEnv>()
 	.route("/", findingsRoute)
 	// the manual scan route
 	.route("/", scansRoute)
-	// the updates list
+	// the updates list and the day's opener
 	.route("/", updatesRoute)
+	// the news: the user's own, and a profile's
+	.route("/", newsRoute)
 	// the podcast episode routes, then the podcast feed and cover routes
 	.route("/", podcastEpisodesRoute)
+	.route("/", topicPodcastEpisodeVideosRoute)
+	.route("/", topicPodcastEpisodeVideoImagesRoute)
 	.route("/", podcastFeedsRoute)
 	// the chat routes
 	.route("/", privateChatRoute)
@@ -280,6 +299,12 @@ export const apiRoute = new Hono<AppEnv>()
 	// reactions, comment threads, and the mention suggestions
 	.route("/", reactionsRoute)
 	.route("/", commentsRoute)
+	// a user's unseen comment mentions, and the mark that they saw them
+	.route("/", commentMentionsRoute)
+	// a topic's posts: their drafts, their publish, and their pages
+	.route("/", topicPostsRoute)
+	.route("/", topicPostImagesRoute)
+	.route("/", topicPostDiscussionsRoute)
 	// the kept chat attachment routes
 	.route("/", chatAttachmentsRoute)
 	// the subscription routes

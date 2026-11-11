@@ -3,11 +3,9 @@ import { EMPTY_FILTERED_FINDINGS } from "@carlnotes/core/lib/topicFeedLabels"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { ChevronLeft, ChevronRight } from "lucide-react"
 import { Button } from "@/components/primitives/button"
-import { TopicImage } from "@/components/primitives/topic-image"
 import { TableCard } from "@/components/table/TableCard"
-import { TopicNameLink } from "@/components/table/TopicNameLink"
 import { FindingsTable } from "./FindingsTable"
-import { McpViewSubscribeButton } from "./McpViewSubscribeButton"
+import { McpViewTopicHeader } from "./McpViewTopicHeader"
 import { findMcpViewPodcastEpisode, PAGE_FAILED_TEXT, useMcpViewData } from "./mcpViewHost"
 import { useFindingPages } from "./useFindingPages"
 import { useMcpViewFindings } from "./useMcpViewFindings"
@@ -33,16 +31,8 @@ export function FindingsMcpView() {
 		: null
 	return (
 		<div>
-			{/* the topic's name with its latest podcast episode's play button, and Follow */}
-			<div className="mb-2 flex items-center justify-between gap-3">
-				<span className="flex min-w-0 items-center gap-3">
-					<TopicImage image={topic.image} size="list" name={topic.name} className="shrink-0" />
-					<span className="font-display min-w-0 text-lg">
-						<TopicNameLink topic={topic} />
-					</span>
-				</span>
-				<McpViewSubscribeButton topicId={topic.id} isSubscribed={topic.isSubscribed} />
-			</div>
+			{/* the topic's image and name, and Follow */}
+			<McpViewTopicHeader topic={topic} />
 			{/* the page's findings, or the line a Topic with none shows */}
 			{topicFindings.length ? (
 				<TableCard className={cn("px-3 py-1", findingPages.isLoading && "opacity-60")}>

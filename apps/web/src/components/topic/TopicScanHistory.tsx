@@ -2,7 +2,7 @@ import { type RemoveTopicSourceStatus, removeTopicSource } from "@carlnotes/clie
 import type { TopicFinding } from "@carlnotes/contracts/findings"
 import { KEEP_ONE_SOURCE_MESSAGE } from "@carlnotes/contracts/sources"
 import type { ScanNote, TopicScan } from "@carlnotes/contracts/topics"
-import { toScanTimestamp } from "@carlnotes/core/lib/labels"
+import { toScanTimestamp, toSectionCountLabel } from "@carlnotes/core/lib/labels"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { useState } from "react"
 import { toast } from "sonner"
@@ -90,7 +90,12 @@ export function TopicScanHistory({
 			}
 		: undefined
 	return (
-		<CollapsibleSection value="history" title="Brew diary">
+		<CollapsibleSection
+			value="history"
+			title="Brew diary"
+			countLabel={toSectionCountLabel(scans.length, "brew")}
+			hasStackedClosedDivider
+		>
 			<TopicScanHistoryCard
 				scans={scans}
 				pageNumber={pageNumber}

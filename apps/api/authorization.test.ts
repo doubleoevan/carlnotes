@@ -174,6 +174,26 @@ test("only the topic owner and an admin may view the owner details", async () =>
 	expect(await isAllowed(null, "topic:viewOwnerDetails", teamTopic)).toBe(false)
 })
 
+// publishing a Topic Post follows the topic's edit rule
+test("the topic's owner and its team's members publish a Topic Post, and a follower and a visitor do not", async () => {
+	// member-1 and the owner are on the team that owns the topic, a follower is not, and every user's access row is a
+	// free user's
+	stubConnectionPool(({ text, values }) => {
+		if (!text.includes('from "team_members"')) {
+			return [FREE_USER_ACCESS_ROW]
+		}
+		const ownerMembership = ["owner-1", "leader"]
+		return values.includes("member-1") ? [["member-1", "member"], ownerMembership] : [ownerMembership]
+	})
+	const teamTopic = { id: "topic-1", ownerId: "owner-1", visibility: "public", teamId: "team-1" } as const
+
+	// the owner and a team member may, and a follower and a signed-out visitor may not
+	expect(await isAllowed("owner-1", "topicPost:publish", teamTopic)).toBe(true)
+	expect(await isAllowed("member-1", "topicPost:publish", teamTopic)).toBe(true)
+	expect(await isAllowed("follower-1", "topicPost:publish", teamTopic)).toBe(false)
+	expect(await isAllowed(null, "topicPost:publish", teamTopic)).toBe(false)
+})
+
 // a post needs an account that can see the topic, and deleting anyone's reaction or comment is the owner's and an admin's
 test("the gate decides who posts and who moderates reactions and comments", async () => {
 	// blocked-1 is under an admin block, owner-1 blocked pair-1, admin-1 is an admin, and everyone else is a free user

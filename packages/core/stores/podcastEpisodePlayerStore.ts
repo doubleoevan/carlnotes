@@ -1,6 +1,11 @@
 import { fetchNextUnplayedPodcastEpisode } from "@carlnotes/client/podcastEpisodeClient"
-import type { PodcastEpisode } from "@carlnotes/contracts/podcast"
-import type { PodcastEpisodeAudioAdapter, PodcastEpisodeAudioEvent } from "../lib/podcastEpisodeAudio"
+import type { PodcastEpisode, PodcastEpisodeFormat } from "@carlnotes/contracts/podcast"
+import { toDiscussionTopicPostId } from "@carlnotes/contracts/topicPosts"
+import type {
+	PodcastEpisodeAudioAdapter,
+	PodcastEpisodeAudioEvent,
+	TopicPodcastEpisodeVideoAdapter,
+} from "../lib/podcastEpisodeAudio"
 import { PODCAST_EPISODE_PLAY_FAILED_TEXT } from "../lib/podcastEpisodeCopy"
 import { toChapterIndexAt, toNextPlaybackRate, toPodcastEpisodeSeekSeconds } from "../lib/podcastEpisodePlayback"
 import {
@@ -15,8 +20,25 @@ import {
 	updatePodcastEpisodePlayerState,
 	updatePodcastEpisodePosition,
 } from "./podcastEpisodePlayerState"
+import {
+	isPodcastEpisodeLoadCurrent,
+	isPodcastEpisodeRequestCurrent,
+	isPodcastEpisodeSourceLoaded,
+	loadPodcastEpisodeSource,
+	refreshPodcastEpisodeMediaSession,
+	releasePodcastEpisodeSource,
+	reloadPodcastEpisodeAudio,
+	resumePodcastEpisodeSource,
+	retirePodcastEpisodeRequests,
+	setPodcastEpisodeAudioAdapter,
+	setTopicPodcastEpisodeVideoAdapter,
+	toPodcastEpisodeAudioAdapter,
+	toPodcastEpisodeSourceAdapter,
+	toPodcastEpisodeSourceUrl,
+	toTopicPodcastEpisodeVideoAdapter,
+} from "./podcastEpisodeSource"
 
-// retain the established player imports while state subscriptions live separately
+// the state subscriptions and the source bookkeeping an app reaches through the player
 export {
 	toLoadedPodcastEpisode,
 	toPodcastEpisodePlayerState,
@@ -28,14 +50,11 @@ export {
 	usePlayerPositionSeconds,
 	usePodcastEpisodePlayer,
 } from "./podcastEpisodePlayerState"
-
-// retain one platform owner and reject events from retired loads or requests
-let audioAdapter: PodcastEpisodeAudioAdapter | null = null
-let hasLoadedAudio = false
-let loadId = 0
-let requestVersion = 0
-let lastAudioReloadAt = 0
-const AUDIO_RELOAD_INTERVAL_MS = 10_000
+export {
+	isPodcastEpisodeRequestCurrent,
+	refreshPodcastEpisodeMediaSession,
+	retirePodcastEpisodeRequests,
+} from "./podcastEpisodeSource"
 
 /**
  * Registers the app's single audio adapter and returns its cleanup.
@@ -43,60 +62,135 @@ const AUDIO_RELOAD_INTERVAL_MS = 10_000
 export function registerPodcastEpisodeAudioAdapter(adapter: PodcastEpisodeAudioAdapter): () => void {
 	// release the previous adapter before replacing its event owner
 	clearPodcastEpisodePlayer()
-	audioAdapter = adapter
+	setPodcastEpisodeAudioAdapter(adapter)
 	// return a cleanup that clears the player if this adapter is still the registered one
 	return () => {
-		if (audioAdapter === adapter) {
+		if (toPodcastEpisodeAudioAdapter() === adapter) {
 			clearPodcastEpisodePlayer()
-			audioAdapter = null
+			setPodcastEpisodeAudioAdapter(null)
 		}
 	}
 }
 
 /**
- * Invalidates delayed playback requests and returns the current request identity.
+ * Registers a film player as the video adapter and returns its cleanup, which returns a playing film to audio.
  */
-export function retirePodcastEpisodeRequests(): number {
-	// advance the identity before another asynchronous action starts
-	requestVersion += 1
-	return requestVersion
+export function registerTopicPodcastEpisodeVideoAdapter(adapter: TopicPodcastEpisodeVideoAdapter): () => void {
+	// a film player that replaces another starts from audio
+	returnToPodcastEpisodeAudio()
+	setTopicPodcastEpisodeVideoAdapter(adapter)
+	// return a cleanup that leaves the film if this film player is still the registered one
+	return () => {
+		if (toTopicPodcastEpisodeVideoAdapter() === adapter) {
+			returnToPodcastEpisodeAudio()
+			setTopicPodcastEpisodeVideoAdapter(null)
+		}
+	}
 }
 
 /**
- * Reports whether a delayed playback request still represents the latest action.
+ * Plays a podcast episode's film from an explicit position, or from where its audio stands or its saved progress.
  */
-export function isPodcastEpisodeRequestCurrent(version: number): boolean {
-	return requestVersion === version
+export async function playTopicPodcastEpisodeVideo(
+	podcastEpisode: PodcastEpisode,
+	startSeconds?: number,
+): Promise<boolean> {
+	if (!toTopicPodcastEpisodeVideoAdapter() || !podcastEpisode.video) {
+		return false
+	}
+	// stop the audio before the film plays
+	takePodcastEpisodeFormat("video", podcastEpisode)
+	return playPodcastEpisodeSource(podcastEpisode, startSeconds)
 }
 
 /**
- * Loads and plays an episode from an explicit position or its saved progress.
+ * Skips the loaded film, or starts a podcast episode's film a skip away from the second it would start from.
+ */
+export function skipTopicPodcastEpisodeVideoBy(podcastEpisode: PodcastEpisode, skipSeconds: number): void {
+	// skip the loaded film where it stands
+	if (isTopicPodcastEpisodeVideoLoaded(podcastEpisode)) {
+		skipPlaybackBy(skipSeconds)
+		return
+	}
+	// start any other film, with the audio stopped, a skip away from its start
+	void playTopicPodcastEpisodeVideo(podcastEpisode, toPodcastEpisodeStartSeconds(podcastEpisode) + skipSeconds)
+}
+
+/**
+ * Steps the playback rate, and starts a podcast episode's film if it is not the loaded one.
+ */
+export function cycleTopicPodcastEpisodeVideoPlaybackRate(podcastEpisode: PodcastEpisode): void {
+	// step the rate first, so a film that starts loads at the new rate
+	cyclePlaybackRate()
+	if (!isTopicPodcastEpisodeVideoLoaded(podcastEpisode)) {
+		void playTopicPodcastEpisodeVideo(podcastEpisode)
+	}
+}
+
+/**
+ * Plays a podcast episode's audio from an explicit position, or from where its film stands or its saved progress.
+ */
+export async function playPodcastEpisodeAudio(podcastEpisode: PodcastEpisode, startSeconds?: number): Promise<boolean> {
+	// stop a film before the audio plays
+	takePodcastEpisodeFormat("audio", podcastEpisode)
+	return playPodcastEpisodeSource(podcastEpisode, startSeconds)
+}
+
+/**
+ * Pauses a film where it stands and gives the source back to the audio, so the docked player continues as audio.
+ */
+export function returnToPodcastEpisodeAudio(): void {
+	if (toPodcastEpisodePlayerState().format !== "video") {
+		return
+	}
+	// pause and save the film, then release its source
+	pausePodcastEpisode()
+	releasePodcastEpisodeSource()
+	updatePodcastEpisodePlayerState({ format: "audio", isLoading: false })
+}
+
+/**
+ * Loads and plays an episode from an explicit position or its saved progress, as audio unless it is the loaded film.
  */
 export async function playPodcastEpisode(podcastEpisode: PodcastEpisode, startSeconds?: number): Promise<boolean> {
-	if (!audioAdapter || !podcastEpisode.audioUrl) {
+	// keep the film's format only for the film's own podcast episode
+	const { format, podcastEpisode: loadedPodcastEpisode } = toPodcastEpisodePlayerState()
+	if (format === "video" && loadedPodcastEpisode?.id !== podcastEpisode.id) {
+		takePodcastEpisodeFormat("audio", podcastEpisode)
+	}
+	return playPodcastEpisodeSource(podcastEpisode, startSeconds)
+}
+
+// load and play a podcast episode's source in the format that plays
+async function playPodcastEpisodeSource(podcastEpisode: PodcastEpisode, startSeconds?: number): Promise<boolean> {
+	const adapter = toPodcastEpisodeSourceAdapter()
+	if (!adapter || !toPodcastEpisodeSourceUrl(podcastEpisode)) {
 		return false
 	}
 	// retire earlier requests before changing the loaded episode
 	const version = retirePodcastEpisodeRequests()
-	const adapter = audioAdapter
 	try {
-		// reuse healthy loaded audio and preserve explicit chapter selection
+		// load a new or failed podcast episode, load the source of the format that took over, or seek the loaded source
 		const playerState = toPodcastEpisodePlayerState()
-		if (!hasLoadedAudio || playerState.podcastEpisode?.id !== podcastEpisode.id || playerState.errorMessage) {
+		const loadedPodcastEpisode = playerState.podcastEpisode
+		if (loadedPodcastEpisode?.id !== podcastEpisode.id || playerState.errorMessage) {
 			await loadPodcastEpisode({ podcastEpisode, startSeconds, adapter })
-		} else if (startSeconds !== undefined || toPodcastEpisodePlayerState().podcastEpisode?.isCompleted) {
+		} else if (!isPodcastEpisodeSourceLoaded()) {
+			// the format that took over loads its own source of the same podcast episode
+			await reloadPodcastEpisodeFormat({ loadedPodcastEpisode, startSeconds, adapter })
+		} else if (startSeconds !== undefined || loadedPodcastEpisode.isCompleted) {
 			seekTo(startSeconds ?? 0)
 		}
 		// stop if a newer request started or the adapter changed
-		if (!isPodcastEpisodeRequestCurrent(version) || audioAdapter !== adapter) {
+		if (!isPodcastEpisodeRequestCurrent(version) || toPodcastEpisodeSourceAdapter() !== adapter) {
 			return false
 		}
-		// play the audio, and report the visit event if no newer request started meanwhile
+		// play the source, and report the visit event if no newer request started meanwhile
 		await adapter.play()
 		if (!isPodcastEpisodeRequestCurrent(version)) {
 			return false
 		}
-		adapter.onVisitEvent?.("visit_episode_played", podcastEpisode)
+		toPodcastEpisodeAudioAdapter()?.onVisitEvent?.("visit_episode_played", podcastEpisode)
 		return true
 	} catch {
 		// show the play error if this request is still the latest
@@ -141,7 +235,8 @@ export function restorePodcastEpisode({
 export function resumePodcastEpisode(): void {
 	// retain the current episode while deciding how to resume it
 	const { podcastEpisode, errorMessage, positionSeconds } = toPodcastEpisodePlayerState()
-	if (!audioAdapter || !podcastEpisode) {
+	const adapter = toPodcastEpisodeSourceAdapter()
+	if (!adapter || !podcastEpisode) {
 		return
 	}
 	// retry failed audio at the current position and retain ordinary resume analytics
@@ -149,13 +244,13 @@ export function resumePodcastEpisode(): void {
 		void playPodcastEpisode(podcastEpisode, 0)
 		return
 	}
-	if (errorMessage || !hasLoadedAudio) {
+	if (errorMessage || !isPodcastEpisodeSourceLoaded()) {
 		void playPodcastEpisode(podcastEpisode, positionSeconds)
 		return
 	}
 	// otherwise resume the loaded audio as the newest request
 	const version = retirePodcastEpisodeRequests()
-	void resumeAudio(audioAdapter, version)
+	void resumePodcastEpisodeSource(adapter, version)
 }
 
 /**
@@ -164,7 +259,7 @@ export function resumePodcastEpisode(): void {
 export function pausePodcastEpisode(): void {
 	// retire automatic starts before pausing and saving progress
 	retirePodcastEpisodeRequests()
-	audioAdapter?.pause()
+	toPodcastEpisodeSourceAdapter()?.pause()
 	updatePodcastEpisodePlayerState({ isPlaying: false })
 	savePodcastEpisodeProgress()
 }
@@ -214,10 +309,10 @@ export function skipPodcastEpisodeChapter(direction: 1 | -1): void {
 export function cyclePlaybackRate(): void {
 	// apply and persist the same rate in app controls and system metadata
 	const playbackRate = toNextPlaybackRate(toPodcastEpisodePlayerState().playbackRate)
-	audioAdapter?.setPlaybackRate(playbackRate)
+	toPodcastEpisodeSourceAdapter()?.setPlaybackRate(playbackRate)
 	updatePodcastEpisodePlayerState({ playbackRate })
 	refreshPodcastEpisodeMediaSession()
-	audioAdapter?.onCheckpoint?.(toPodcastEpisodePlayerState())
+	toPodcastEpisodeAudioAdapter()?.onCheckpoint?.(toPodcastEpisodePlayerState())
 }
 
 /**
@@ -235,26 +330,17 @@ export function unloadPodcastEpisode(podcastEpisodeId: string): void {
 export function clearPodcastEpisodePlayer(): void {
 	// invalidate pending work before releasing the platform source
 	retirePodcastEpisodeRequests()
-	loadId += 1
-	hasLoadedAudio = false
-	lastAudioReloadAt = 0
-	audioAdapter?.unload()
+	releasePodcastEpisodeSource()
 	resetPodcastEpisodePlaybackStart()
 	updatePodcastEpisodePlayerState({
 		podcastEpisode: null,
+		format: "audio",
 		isPlaying: false,
 		isLoading: false,
 		positionSeconds: 0,
 		errorMessage: null,
 	})
-	audioAdapter?.updateMetadata(toPodcastEpisodePlayerState())
-}
-
-/**
- * Publishes the current episode and chapter to the app's system controls.
- */
-export function refreshPodcastEpisodeMediaSession(): void {
-	audioAdapter?.updateMetadata(toPodcastEpisodePlayerState())
+	toPodcastEpisodeAudioAdapter()?.updateMetadata(toPodcastEpisodePlayerState())
 }
 
 /**
@@ -265,7 +351,7 @@ export function savePodcastEpisodeProgress(listen?: SavePodcastEpisodeListenOpti
 	const { podcastEpisode, positionSeconds } = toPodcastEpisodePlayerState()
 	if (podcastEpisode) {
 		savePodcastEpisodeListen({ podcastEpisode, positionSeconds, listen })
-		audioAdapter?.onCheckpoint?.(toPodcastEpisodePlayerState())
+		toPodcastEpisodeAudioAdapter()?.onCheckpoint?.(toPodcastEpisodePlayerState())
 	}
 }
 
@@ -273,7 +359,7 @@ export function savePodcastEpisodeProgress(listen?: SavePodcastEpisodeListenOpti
  * Reconciles a status event only while its episode load is current.
  */
 export function reportPodcastEpisodeAudioEvent(event: PodcastEpisodeAudioEvent): void {
-	if (event.loadId !== loadId || !toPodcastEpisodePlayerState().podcastEpisode) {
+	if (!isPodcastEpisodeLoadCurrent(event.loadId) || !toPodcastEpisodePlayerState().podcastEpisode) {
 		return
 	}
 	// route platform events through the same playback rules
@@ -294,6 +380,41 @@ export function reportPodcastEpisodeAudioEvent(event: PodcastEpisodeAudioEvent):
 	}
 }
 
+// whether a podcast episode is the loaded one, in its film format
+function isTopicPodcastEpisodeVideoLoaded(podcastEpisode: PodcastEpisode): boolean {
+	const { podcastEpisode: loadedPodcastEpisode, format } = toPodcastEpisodePlayerState()
+	return loadedPodcastEpisode?.id === podcastEpisode.id && format === "video"
+}
+
+// the second a podcast episode starts from with no explicit position. the loaded one starts where it stands, and any
+// other or a failed one from its saved progress. a completed podcast episode starts over
+function toPodcastEpisodeStartSeconds(podcastEpisode: PodcastEpisode): number {
+	const { podcastEpisode: loadedPodcastEpisode, positionSeconds, errorMessage } = toPodcastEpisodePlayerState()
+	if (loadedPodcastEpisode?.id !== podcastEpisode.id || errorMessage) {
+		return podcastEpisode.isCompleted ? 0 : podcastEpisode.progressSeconds
+	}
+	return loadedPodcastEpisode.isCompleted ? 0 : positionSeconds
+}
+
+// stop the playing format's source where it stands, save its progress, and give the source to the other format,
+// for the podcast episode that plays next
+function takePodcastEpisodeFormat(format: PodcastEpisodeFormat, nextPodcastEpisode: PodcastEpisode): void {
+	const { format: playingFormat, podcastEpisode: loadedPodcastEpisode } = toPodcastEpisodePlayerState()
+	if (playingFormat === format) {
+		return
+	}
+	// retire pending starts, save the progress, and release the source
+	retirePodcastEpisodeRequests()
+	savePodcastEpisodeProgress()
+	releasePodcastEpisodeSource()
+	updatePodcastEpisodePlayerState({ format, isPlaying: false, isLoading: false })
+
+	// report a switch of the loaded podcast episode to its other format
+	if (loadedPodcastEpisode?.id === nextPodcastEpisode.id) {
+		toPodcastEpisodeAudioAdapter()?.onFormatSwitched?.(loadedPodcastEpisode, format)
+	}
+}
+
 async function loadPodcastEpisode({
 	podcastEpisode,
 	startSeconds,
@@ -301,62 +422,50 @@ async function loadPodcastEpisode({
 }: {
 	podcastEpisode: PodcastEpisode
 	startSeconds: number | undefined
-	adapter: PodcastEpisodeAudioAdapter
+	adapter: TopicPodcastEpisodeVideoAdapter
 }): Promise<void> {
-	// checkpoint the old episode and retire its audio events
+	// checkpoint the old episode, and count the new one's playback start once
 	savePodcastEpisodeProgress()
-	loadId += 1
-	adapter.unload()
 	resetPodcastEpisodePlaybackStart()
-	hasLoadedAudio = false
-	lastAudioReloadAt = 0
-	const currentLoadId = loadId
 	// show the new podcast episode loading at the requested start or its saved progress
-	const savedProgressSeconds = podcastEpisode.isCompleted ? 0 : podcastEpisode.progressSeconds
-	const positionSeconds = toPodcastEpisodeSeekSeconds({
-		positionSeconds: startSeconds ?? savedProgressSeconds,
-		durationSeconds: podcastEpisode.durationSeconds,
-	})
-	updatePodcastEpisodePlayerState({
-		podcastEpisode: { ...podcastEpisode, isCompleted: false },
-		positionSeconds,
-		isPlaying: false,
-		isLoading: true,
-		errorMessage: null,
-	})
-	// load the audio, and mark it ready if no newer load started meanwhile
-	await adapter.load({
+	await loadPodcastEpisodeSource({
 		podcastEpisode,
-		positionSeconds,
-		playbackRate: toPodcastEpisodePlayerState().playbackRate,
-		loadId: currentLoadId,
+		positionSeconds: startSeconds ?? toPodcastEpisodeStartSeconds(podcastEpisode),
+		adapter,
 	})
-	if (currentLoadId === loadId) {
-		hasLoadedAudio = true
-		updatePodcastEpisodePlayerState({ isLoading: false })
-		refreshPodcastEpisodeMediaSession()
-	}
 }
 
-async function resumeAudio(adapter: PodcastEpisodeAudioAdapter, version: number): Promise<void> {
-	try {
-		await adapter.play()
-	} catch {
-		// show the play error if this adapter and request are still current
-		if (audioAdapter === adapter && isPodcastEpisodeRequestCurrent(version)) {
-			updatePodcastEpisodePlayerState({ isPlaying: false, errorMessage: PODCAST_EPISODE_PLAY_FAILED_TEXT })
-		}
+// load the loaded podcast episode's source again in the format that now plays, at the requested start or where it
+// stood. a completed podcast episode starts over and counts another playback start
+async function reloadPodcastEpisodeFormat({
+	loadedPodcastEpisode,
+	startSeconds,
+	adapter,
+}: {
+	loadedPodcastEpisode: PodcastEpisode
+	startSeconds: number | undefined
+	adapter: TopicPodcastEpisodeVideoAdapter
+}): Promise<void> {
+	// start a completed podcast episode over
+	if (loadedPodcastEpisode.isCompleted) {
+		resetPodcastEpisodePlaybackStart()
 	}
+	await loadPodcastEpisodeSource({
+		podcastEpisode: loadedPodcastEpisode,
+		positionSeconds: startSeconds ?? toPodcastEpisodeStartSeconds(loadedPodcastEpisode),
+		adapter,
+	})
 }
 
 function seekTo(positionSeconds: number): void {
 	// retain the authorized loaded episode across the synchronous seek
 	const { podcastEpisode } = toPodcastEpisodePlayerState()
-	if (!audioAdapter || !podcastEpisode) {
+	const adapter = toPodcastEpisodeSourceAdapter()
+	if (!adapter || !podcastEpisode) {
 		return
 	}
 	// stop any spoken question before applying the seek
-	audioAdapter.onSeek?.()
+	toPodcastEpisodeAudioAdapter()?.onSeek?.()
 	if (podcastEpisode.isCompleted) {
 		resetPodcastEpisodePlaybackStart()
 		updatePodcastEpisodePlayerState({ podcastEpisode: { ...podcastEpisode, isCompleted: false } })
@@ -365,10 +474,10 @@ function seekTo(positionSeconds: number): void {
 		positionSeconds,
 		durationSeconds: podcastEpisode.durationSeconds,
 	})
-	audioAdapter.seek(seekSeconds)
+	adapter.seek(seekSeconds)
 	updatePodcastEpisodePlayerState({ positionSeconds: seekSeconds })
 	refreshPodcastEpisodeMediaSession()
-	audioAdapter.onCheckpoint?.(toPodcastEpisodePlayerState())
+	toPodcastEpisodeAudioAdapter()?.onCheckpoint?.(toPodcastEpisodePlayerState())
 }
 
 function receivePosition(positionSeconds: number): void {
@@ -388,9 +497,9 @@ function receivePlayback(isPlaying: boolean): void {
 	updatePodcastEpisodePlayerState({ isPlaying, isLoading: false, errorMessage: null })
 	// save the progress, and report a playback start if the audio began playing
 	if (isPlaying) {
-		audioAdapter?.onPlaybackStarted?.()
+		toPodcastEpisodeAudioAdapter()?.onPlaybackStarted?.()
 		refreshPodcastEpisodeMediaSession()
-		savePodcastEpisodeProgress({ isPlaybackStart: true })
+		savePodcastEpisodeProgress({ isPlaybackStart: true, format: toPodcastEpisodePlayerState().format })
 	} else {
 		savePodcastEpisodeProgress()
 	}
@@ -402,7 +511,8 @@ async function finishPodcastEpisode(): Promise<void> {
 	if (!endedPodcastEpisode) {
 		return
 	}
-	// complete this load before requesting another episode
+	// complete this load before requesting another episode. the format is read before the state changes
+	const isFilmEnded = toPodcastEpisodePlayerState().format === "video"
 	const version = retirePodcastEpisodeRequests()
 	updatePodcastEpisodePlayerState({
 		isPlaying: false,
@@ -410,59 +520,17 @@ async function finishPodcastEpisode(): Promise<void> {
 		podcastEpisode: { ...endedPodcastEpisode, isCompleted: true },
 	})
 	savePodcastEpisodeProgress({ isCompleted: true })
-	audioAdapter?.onVisitEvent?.("visit_episode_completed", endedPodcastEpisode)
-	// play the topic's next unplayed podcast episode for a signed-in user, if no newer request started
-	const nextPodcastEpisode = isUserSignedIn()
+	toPodcastEpisodeAudioAdapter()?.onVisitEvent?.("visit_episode_completed", endedPodcastEpisode)
+	// ask for the topic's next unplayed podcast episode for a signed-in user. a film and a Topic Post's discussion
+	// end with nothing after them
+	const isNextPodcastEpisodePlayed =
+		isUserSignedIn() && !isFilmEnded && !toDiscussionTopicPostId(endedPodcastEpisode.id)
+	const nextPodcastEpisode = isNextPodcastEpisodePlayed
 		? await fetchNextUnplayedPodcastEpisode(endedPodcastEpisode.topicId).catch(() => null)
 		: null
+
+	// play it if no newer request started meanwhile
 	if (nextPodcastEpisode && isPodcastEpisodeRequestCurrent(version)) {
 		await playPodcastEpisode(nextPodcastEpisode)
-	}
-}
-
-async function reloadPodcastEpisodeAudio(): Promise<void> {
-	// retry only the selected episode and retain its position and rate
-	const { podcastEpisode, positionSeconds, isPlaying } = toPodcastEpisodePlayerState()
-	if (!audioAdapter || !podcastEpisode) {
-		return
-	}
-	if (Date.now() - lastAudioReloadAt < AUDIO_RELOAD_INTERVAL_MS) {
-		audioAdapter.pause()
-		updatePodcastEpisodePlayerState({
-			isPlaying: false,
-			isLoading: false,
-			errorMessage: PODCAST_EPISODE_PLAY_FAILED_TEXT,
-		})
-		return
-	}
-	// refresh the source without counting another playback start
-	lastAudioReloadAt = Date.now()
-	const version = requestVersion
-	const adapter = audioAdapter
-	updatePodcastEpisodePlayerState({ isLoading: true })
-	try {
-		await adapter.load({
-			podcastEpisode,
-			positionSeconds,
-			playbackRate: toPodcastEpisodePlayerState().playbackRate,
-			loadId,
-		})
-		// end the loading state and resume a playing podcast episode, if this request is still current
-		if (isPodcastEpisodeRequestCurrent(version)) {
-			updatePodcastEpisodePlayerState({ isLoading: false })
-			refreshPodcastEpisodeMediaSession()
-		}
-		if (isPlaying && isPodcastEpisodeRequestCurrent(version)) {
-			await adapter.play()
-		}
-	} catch {
-		// show the play error if this request is still current
-		if (isPodcastEpisodeRequestCurrent(version)) {
-			updatePodcastEpisodePlayerState({
-				isPlaying: false,
-				isLoading: false,
-				errorMessage: PODCAST_EPISODE_PLAY_FAILED_TEXT,
-			})
-		}
 	}
 }

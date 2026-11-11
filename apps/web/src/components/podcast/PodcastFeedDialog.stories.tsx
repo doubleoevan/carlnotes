@@ -37,3 +37,10 @@ export const ResetFailed: Story = {
 	args: { isOwnFeed: true, feed: { ...feed, message: "The link did not change. Try again." } },
 }
 export const ResetConfirmation: Story = { args: { isOwnFeed: true, feed: { ...feed, isConfirmingReset: true } } }
+
+// a Topic with a film offers Films, on the podcast feed and then on the film feed
+const FILM_FEED = { ...feed, videoUrl: "https://example.test/podcast/fictional-video-feed.xml" }
+export const WithFilms: Story = { args: { isOwnFeed: true, feed: FILM_FEED } }
+export const FilmsChosen: Story = {
+	args: { isOwnFeed: true, feed: { ...FILM_FEED, format: "video", chosenFeedUrl: FILM_FEED.videoUrl } },
+}

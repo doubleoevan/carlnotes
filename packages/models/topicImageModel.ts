@@ -13,14 +13,22 @@ const DEFAULT_TOPIC_IMAGE_REGENERATE_MODEL = "gemini-3.1-flash-image"
 // how long one render may take before it aborts
 const RENDER_TIMEOUT_MS = 60 * 1000
 
-// the one aspect ratio every topic image is drawn at
-const TOPIC_IMAGE_ASPECT_RATIO = "3:2"
+// the aspect ratios an image is drawn at: 3:2 for a topic's, a podcast episode's, and a Topic Post's image, and 16:9
+// for a film's
+export type TopicImageAspectRatio = "3:2" | "16:9"
+const DEFAULT_TOPIC_IMAGE_ASPECT_RATIO: TopicImageAspectRatio = "3:2"
 
 // the result of one render: the image's bytes with its content type and token count, or how the call failed
 export type TopicImageRenderResult = { outcome: "rendered"; imageBytes: Uint8Array } | ModelCallFailure
 
-// one render's prompt, the model, and the virtual key that it bills, or the master key if no key is given
-export type RenderTopicImageOptions = { prompt: string; model: string; litellmApiKey?: string }
+// one render's prompt, the model, the aspect ratio, which is 3:2 if none is given, and the virtual key that it bills,
+// or the master key if no key is given
+export type RenderTopicImageOptions = {
+	prompt: string
+	model: string
+	aspectRatio?: TopicImageAspectRatio
+	litellmApiKey?: string
+}
 
 // the shape of the pass-through's generateContent response that the render reads
 type ImageResponseBody = {
@@ -50,12 +58,13 @@ export function topicImageCostDollars(model: string): number {
 }
 
 /**
- * Renders one image at 3:2 from the prompt on the model, through the pass-through route on the key, and returns its
- * bytes or why the call failed.
+ * Renders one image at the aspect ratio from the prompt on the model, through the pass-through route on the key, and
+ * returns its bytes or why the call failed.
  */
 export async function renderTopicImage({
 	prompt,
 	model,
+	aspectRatio = DEFAULT_TOPIC_IMAGE_ASPECT_RATIO,
 	litellmApiKey,
 }: RenderTopicImageOptions): Promise<TopicImageRenderResult> {
 	// reject the call if the proxy or a key is not configured
@@ -72,7 +81,7 @@ export async function renderTopicImage({
 			headers: { "x-goog-api-key": apiKey, "Content-Type": "application/json" },
 			body: JSON.stringify({
 				contents: [{ parts: [{ text: prompt }] }],
-				generationConfig: { responseModalities: ["IMAGE"], imageConfig: { aspectRatio: TOPIC_IMAGE_ASPECT_RATIO } },
+				generationConfig: { responseModalities: ["IMAGE"], imageConfig: { aspectRatio } },
 			}),
 			signal: AbortSignal.timeout(RENDER_TIMEOUT_MS),
 		})

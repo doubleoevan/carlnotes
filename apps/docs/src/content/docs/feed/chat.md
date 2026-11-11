@@ -12,7 +12,9 @@ sidebar:
 On the web, Coffee Talk is the chat panel docked to the bottom-right corner of every page. The panel lives in the app shell, so the
 conversation you have open stays open as you move around the app. On a topic one of your teams holds, the panel opens in
 that team's shared chat room. The panel's **…** menu lists the other rooms you can join and your private chat on this
-topic (see [Group chat with Carl](/docs/teams/group-chat/)). Carl answers anyone from what the open conversation is
+topic (see [Group chat with Carl](/docs/teams/group-chat/)). The private chat is named for what it is about, such as
+**Private chat about Light roasts**: the topic, the team, or the [Open Mic post](/docs/feed/open-mic/) whose page is
+open. On a post's page the panel opens straight on that chat. Carl answers anyone from what the open conversation is
 about. That is a topic's findings, or every topic a team holds in that team's chat room. His answers come from the pages
 he read for you. If your question needs it, he can also run a web search during the conversation. The search counts
 against the coffee fund on your CarlNotes account.
@@ -23,7 +25,8 @@ topic's own findings](../../../assets/screenshots/feed-coffee-talk.png)
 ## Coffee Talk on your phone
 
 Tap the orange **Coffee Talk** pill at the bottom right of any page. A topic held by one of your teams opens that
-team's room. Tap the selector above the conversation to open a full-width sheet. It lists **Private chat** first,
+team's room. A post's page opens your private chat about that post. Tap the selector above the conversation to open a
+full-width sheet. It lists the private chat first, named for its topic, team, or post as **Private chat about …**,
 then rooms alphabetically, with Team avatars and an orange scroll indicator. On Profile pages, the same shared-Team
 and Topic-room preferences as web choose the conversation. Other pages open the web default room, or the new-topic chat
 if you have no rooms. Without rooms, you can also pick a topic from your Feed for private chat.

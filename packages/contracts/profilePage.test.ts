@@ -43,9 +43,39 @@ const profileFixture: ProfileResponse = {
 			chatMentions: [],
 		},
 	],
+	// the one public topic as a pinned card, and no film and no podcast episode
+	profileTopics: [
+		{
+			id: "topic-1",
+			name: "Rust in production",
+			path: "/topics/topic-1/rust-in-production",
+			image: null,
+			tags: ["rust"],
+			owner: null,
+			teamLink: null,
+			reactionCount: 2,
+			latestPodcastEpisode: null,
+			isPublic: true,
+		},
+	],
+	pinnedTopicCount: 1,
+	profileTopicPodcastEpisodeVideos: [],
+	pinnedTopicPodcastEpisodeVideoCount: 0,
+	profilePodcastEpisodes: [],
+	pinnedPodcastEpisodeCount: 0,
+	profileTopicPosts: [],
+	pinnedTopicPostCount: 0,
 }
 
-// the payload parses unchanged, topics and teams included
-test("the profile response parses the topics and the teams", () => {
+// the payload parses unchanged, topics, teams, and cards included
+test("the profile response parses the topics, the teams, and the cards", () => {
 	expect(profileResponse.parse(profileFixture)).toEqual(profileFixture)
+})
+
+// a card with no word on whether its topic is public is rejected
+test("a profile topic card must say whether its topic is public", () => {
+	const [profileTopic] = profileFixture.profileTopics
+	const { isPublic: _isPublic, ...cardWithoutVisibility } = profileTopic ?? { isPublic: true }
+	const parseResult = profileResponse.safeParse({ ...profileFixture, profileTopics: [cardWithoutVisibility] })
+	expect(parseResult.success).toBe(false)
 })

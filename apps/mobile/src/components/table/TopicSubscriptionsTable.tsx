@@ -33,14 +33,14 @@ export function TopicSubscriptionsTable({
 		// preserve the web's warning before permanently removing access
 		const isInvitation = row.inviteId !== null
 		Alert.alert(
-			isInvitation ? "Delete this invitation?" : "Delete this subscription?",
+			isInvitation ? "Delete this invite?" : "Delete this subscription?",
 			isInvitation
-				? `Your invitation to ${row.name} goes away, and whoever sent it is not told.`
+				? `Your invite to ${row.name} goes away, and whoever sent it is not told.`
 				: `Your subscription to ${row.name} gets removed for good.`,
 			[
 				{ text: "Keep it", style: "cancel" },
 				{
-					text: isInvitation ? "Delete invitation" : "Delete subscription",
+					text: isInvitation ? "Delete invite" : "Delete subscription",
 					style: "destructive",
 					onPress: () =>
 						void mutation.run(() =>
@@ -54,7 +54,7 @@ export function TopicSubscriptionsTable({
 		if (row.inviteId) {
 			const acceptedInvite = await sendAcceptInvite(row.inviteId)
 			if (acceptedInvite.status !== "joined") {
-				throw new Error("That invitation couldn't be accepted. Try again.")
+				throw new Error("That invite couldn't be accepted. Try again.")
 			}
 		} else {
 			await sendTopicSubscription(row.topicId, isActive)
@@ -77,7 +77,7 @@ export function TopicSubscriptionsTable({
 		renderOwner: (row) => (row.team ? <TeamLink team={row.team} /> : <UserProfileLink user={row.owner} />),
 		renderActive: (row) => (
 			<PreferenceSwitch
-				label={row.inviteId ? `Accept the invitation to ${row.name}` : `${row.name} subscription`}
+				label={row.inviteId ? `Accept the invite to ${row.name}` : `${row.name} subscription`}
 				isChecked={row.isActive}
 				isDisabled={mutation.isPending}
 				onChange={(isActive) => void mutation.run(() => handleActiveChange(row, isActive))}
@@ -95,7 +95,7 @@ export function TopicSubscriptionsTable({
 			<Button
 				variant="ghost"
 				size="icon-sm"
-				accessibilityLabel={`Delete ${row.inviteId ? "invitation" : "subscription"} to ${row.name}`}
+				accessibilityLabel={`Delete ${row.inviteId ? "invite" : "subscription"} to ${row.name}`}
 				disabled={mutation.isPending}
 				onPress={() => handleRemove(row)}
 			>

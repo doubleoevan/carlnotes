@@ -17,6 +17,7 @@
 		"drizzle-orm": "^0.45.4"
 	},
 	"devDependencies": {
+		"@temporalio/testing": "^1.25.0",
 		"ai": "^7.0.162"
 	}
 }

@@ -8,11 +8,9 @@ import {
 	SOCIAL_EDIT_MS,
 	toCommentEventTarget,
 } from "@carlnotes/contracts/social"
-import { type CommentMention, toMentionedUsernames } from "@carlnotes/contracts/socialText"
 import { db } from "@carlnotes/db"
 import { podcastEpisodeChapters } from "@carlnotes/db/schema/podcast"
-import { commentMentions, comments } from "@carlnotes/db/schema/social"
-import { users } from "@carlnotes/db/schema/users"
+import { comments } from "@carlnotes/db/schema/social"
 import {
 	loadSharedCommentSlots,
 	shareCommentInFreeSharedCommentSlot,
@@ -20,24 +18,32 @@ import {
 	unshareComment,
 } from "@carlnotes/db/sharedComments"
 import { countSocialWriteToday } from "@carlnotes/db/socialLimits"
+import { clearUnseenCommentMentions, loadThreadMentionedUserIds } from "@carlnotes/db/unseenCommentMentions"
 import { trackEvent } from "@carlnotes/server/analytics"
-import { and, eq, gt, inArray } from "drizzle-orm"
+import { and, eq, gt } from "drizzle-orm"
 import { isAllowed } from "../authorization"
 import type { AnalyticsProperties } from "../currentUser"
 import { toObjectionableCategory } from "../moderation"
-import { loadComment, loadWeekCommentCount } from "./commentRows"
+import { loadMentionedUsers, replaceCommentMentions, saveCommentMentions } from "./commentMentions"
+import { loadComment, loadCommentCounts } from "./commentRows"
 import { toSocialEventProperties } from "./reactions"
 import { toRowCommentTarget, toSocialTargetValues } from "./socialTargetColumns"
 import { loadCommentWithTarget, resolvePostableSocialTarget, toSocialReader } from "./socialTargets"
 
-// how many users one comment mentions at most
-const MAX_COMMENT_MENTIONS = 50
+// what a delete leaves: the week's comment count, the thread's whole count, and the shared comment slots for a reader
+// who may share
+type DeletedCommentResult = {
+	status: "deleted"
+	weekCommentCount: number
+	commentCount: number
+	sharedCommentSlots: SharedCommentSlots | null
+}
 
-// how a write ended: the comment as it stands now, with the shared comment slots for a reader who may share, or why
-// nothing was written
+// how a write ended: the comment as it stands now, with the shared comment slots for a reader who may share, what a
+// delete leaves, or why nothing was written
 export type CommentWriteResult =
 	| { status: "saved"; comment: Comment; sharedCommentSlots: SharedCommentSlots | null }
-	| { status: "deleted"; weekCommentCount: number; sharedCommentSlots: SharedCommentSlots | null }
+	| DeletedCommentResult
 	| { status: "notFound" }
 	| { status: "locked" }
 	| { status: "limitReached" }
@@ -59,7 +65,7 @@ type PostCommentOptions = { userId: string; payload: PostCommentPayload; analyti
 /**
  * Posts a comment or a reply on a social target, for a user who may post there. A comment by a user who may edit the
  * Topic is shared with the podcast if the Topic has a free shared comment slot, by default for a top-level comment and
- * otherwise if the post asks.
+ * otherwise if the post asks. A comment on a Topic Post is shared only if the post asks.
  */
 export async function postComment({
 	userId,
@@ -88,7 +94,7 @@ export async function postComment({
 		return commentTextRejection
 	}
 
-	// store the comment with the users it mentions
+	// store the comment with its social target's Topic and the users it mentions
 	const mentions = await loadMentionedUsers(body)
 	const commentRow = await db.transaction(async (transaction) => {
 		const [insertedRow] = await transaction
@@ -96,6 +102,7 @@ export async function postComment({
 			.values({
 				authorUserId: userId,
 				...toSocialTargetValues(target),
+				targetTopicId: resolvedSocialTarget.topic.id,
 				chapterPosition,
 				parentCommentId,
 				body,
@@ -103,21 +110,26 @@ export async function postComment({
 			})
 			.returning({ id: comments.id })
 
-		// the users it mentions
-		if (insertedRow && mentions.length > 0) {
-			await transaction.insert(commentMentions).values(toCommentMentionRows(insertedRow.id, mentions))
+		// the mention rows, which only a stored comment has
+		if (insertedRow) {
+			await saveCommentMentions({ transaction, commentId: insertedRow.id, authorUserId: userId, mentions })
 		}
 		return insertedRow
 	})
+
+	// an insert that returned no row stored nothing
 	if (!commentRow) {
 		return { status: "notFound" }
 	}
 
+	// each mentioned user's next read counts the new mention
+	await clearUnseenCommentMentions(mentions.map((mention) => mention.userId))
+
 	// an editor's comment is shared with the podcast if it is top-level or the post asks, and the Topic has a free shared
-	// comment slot
+	// comment slot. a comment on a Topic Post is shared only if the post asks
 	const { topic } = resolvedSocialTarget
 	const reader = await toSocialReader(userId, topic)
-	const { isSharedWithPodcast = parentCommentId === null } = payload
+	const { isSharedWithPodcast = parentCommentId === null && target.kind !== "post" } = payload
 	if (reader.canShare && isSharedWithPodcast) {
 		await shareCommentInFreeSharedCommentSlot({ commentId: commentRow.id, topic, body })
 	}
@@ -196,6 +208,7 @@ export async function editComment({ userId, commentId, body }: EditCommentOption
 
 	// the update runs only inside the edit time, so a comment that locked since the read stays as it was
 	const mentions = await loadMentionedUsers(body)
+	const changedMentionUserIds: string[] = []
 	const isEdited = await db.transaction(async (transaction) => {
 		const editedRows = await transaction
 			.update(comments)
@@ -208,11 +221,14 @@ export async function editComment({ userId, commentId, body }: EditCommentOption
 			return false
 		}
 
-		// the new body's mentions replace the old ones
-		await transaction.delete(commentMentions).where(eq(commentMentions.commentId, commentId))
-		if (mentions.length > 0) {
-			await transaction.insert(commentMentions).values(toCommentMentionRows(commentId, mentions))
-		}
+		// the users whose cached reads change: the ones the new body mentions, and the ones it dropped
+		const replacedMentionUserIds = await replaceCommentMentions({
+			transaction,
+			commentId,
+			authorUserId: userId,
+			mentions,
+		})
+		changedMentionUserIds.push(...replacedMentionUserIds)
 
 		// an editor approved the words they shared, so a rewrite by an author who may not share takes the share back
 		// until a Podcast Episode reads it. any other shared comment's queued links follow its body
@@ -225,10 +241,11 @@ export async function editComment({ userId, commentId, body }: EditCommentOption
 		return true
 	})
 
-	// the comment as its author reads it now
+	// the comment as its author reads it now, after each mentioned user's next read is cleared to count the edit
 	if (!isEdited) {
 		return { status: "locked" }
 	}
+	await clearUnseenCommentMentions(changedMentionUserIds)
 	return toSavedCommentResult(commentId, reader, topic)
 }
 
@@ -258,17 +275,31 @@ export async function deleteComment({
 	}
 
 	// delete it and record the event. a deleted comment frees the shared comment slot it was shared in
-	await db.delete(comments).where(eq(comments.id, commentId))
+	await deleteCommentThread(commentId)
 	trackEvent(
 		"social_hot_take_delete",
 		userId,
 		toSocialEventProperties({ analyticsProperties, userId, resolvedSocialTarget, objectId: commentId }),
 	)
-	const [weekCommentCount, sharedCommentSlots] = await Promise.all([
-		loadWeekCommentCount(reader, toRowCommentTarget(commentRow)),
+
+	// read the thread's counts and the shared comment slots as they stand without the comment
+	const commentTarget = toRowCommentTarget(commentRow)
+	const [{ commentCount, weekCommentCount }, sharedCommentSlots] = await Promise.all([
+		loadCommentCounts(reader, commentTarget),
 		reader.canShare ? loadSharedCommentSlots(topic) : null,
 	])
-	return { status: "deleted", weekCommentCount, sharedCommentSlots }
+	return { status: "deleted", weekCommentCount, commentCount, sharedCommentSlots }
+}
+
+/**
+ * Deletes a comment's row, which takes its replies and their mentions with it, and clears the cached unseen Comment
+ * Mentions of each user the thread mentioned.
+ */
+export async function deleteCommentThread(commentId: string): Promise<void> {
+	// read who the thread mentions while its rows exist, then delete and clear
+	const mentionedUserIds = await loadThreadMentionedUserIds(commentId)
+	await db.delete(comments).where(eq(comments.id, commentId))
+	await clearUnseenCommentMentions(mentionedUserIds)
 }
 
 // who shares, which comment, whether to share it or take it back, and the request's analytics properties
@@ -348,23 +379,4 @@ async function toCommentTextRejection({
 		subjectId: contentId,
 	})
 	return objectionableCategory ? { status: "objectionable", category: objectionableCategory } : null
-}
-
-// the users a body mentions who exist, each with their id and their name as stored
-async function loadMentionedUsers(body: string): Promise<CommentMention[]> {
-	const mentionedUsernames = toMentionedUsernames(body).slice(0, MAX_COMMENT_MENTIONS)
-	if (mentionedUsernames.length === 0) {
-		return []
-	}
-
-	// the accounts with those names
-	return db
-		.select({ userId: users.id, username: users.username })
-		.from(users)
-		.where(inArray(users.usernameNormalized, mentionedUsernames))
-}
-
-// the mention rows a comment stores
-function toCommentMentionRows(commentId: string, mentions: CommentMention[]): (typeof commentMentions.$inferInsert)[] {
-	return mentions.map((mention) => ({ commentId, mentionedUserId: mention.userId, username: mention.username }))
 }

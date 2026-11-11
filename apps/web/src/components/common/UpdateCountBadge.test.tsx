@@ -6,9 +6,9 @@ import { renderToStaticMarkup } from "react-dom/server"
 import { toTooltipLine } from "./UpdateCountBadge"
 
 // one invitation reads singular, more read plural
-test("the topic invitation label counts invitations", () => {
-	expect(toTopicInviteLabel(1)).toBe("1 topic invitation")
-	expect(toTopicInviteLabel(3)).toBe("3 topic invitations")
+test("the topic invite label counts invites", () => {
+	expect(toTopicInviteLabel(1)).toBe("1 topic invite")
+	expect(toTopicInviteLabel(3)).toBe("3 topic invites")
 })
 
 // a bullet names the inviter and the topic, both bold, keyed by the invitation

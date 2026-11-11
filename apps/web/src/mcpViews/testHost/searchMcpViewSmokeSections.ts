@@ -6,6 +6,7 @@ import {
 	FINDINGS_MCP_VIEW_DATA,
 	FINDINGS_TOPIC,
 	PERSONAL_ANNOTATION,
+	TOPIC_POST_SEARCH_PAGE,
 	TOPIC_SEARCH_PAGE,
 	toMcpViewToolResult,
 	USER_MCP_VIEW_DATA,
@@ -73,6 +74,20 @@ test("a finding in the search table saves, expands, and names its Topic", async 
 		await frame.getByRole("button", { name: "Thumbs down" }).click()
 		await waitForRecord(toolCalls)
 		expect(toolCalls).toEqual([{ name: "rate_finding", arguments: { finding_id: "finding-1", rating: "down" } }])
+	})
+})
+
+test("a Topic Post in the search table links to its page and names its Topic", async () => {
+	await withMcpView({ mcpView: "search" }, async ({ frame, sendToolResult }) => {
+		await sendToolResult(
+			toMcpViewToolResult({ structuredContent: TOPIC_POST_SEARCH_PAGE, mcpViewData: VISITOR_MCP_VIEW_DATA }),
+		)
+		const topicPostRow = frame.getByRole("row").filter({ hasText: "What the evals missed" })
+
+		// the title is the link, and the line names the kind and the Topic
+		await topicPostRow.getByRole("link", { name: "What the evals missed" }).waitFor()
+		await topicPostRow.getByRole("link", { name: "LLM tooling" }).waitFor()
+		expect(await topicPostRow.getByText("Post ·").count()).toBe(1)
 	})
 })
 

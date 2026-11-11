@@ -300,3 +300,78 @@ test("loadChatTurns reads a team's or the new-topic chat's private chat turns by
 		expect(sentQuery.values).toContain("private")
 	}
 })
+
+// a question asked from a Topic Post's page is stored under its own kind with its post, and counted by ids alone
+test("a Topic Post chat turn's row names its post, and its save reports the post with no text", async () => {
+	expect(toTopicChatTurnRow({ topicPostId: "post-1" })).toMatchObject({
+		kind: "topic_post",
+		topicId: "topic-1",
+		teamId: null,
+		topicPostId: "post-1",
+		podcastEpisodeId: null,
+	})
+	expect(toTopicChatTurnRow({}).topicPostId).toBeNull()
+
+	// the save sends the post's event before the chat turn's own
+	stubConnectionPool(() => [["turn-1"]])
+	const trackEventSpy = spyOn(analytics, "trackEvent").mockImplementation(() => {})
+	const analyticsProperties = TEST_ANALYTICS_PROPERTIES
+	await saveChatTurn({
+		...toTopicChatTurnOptions({ question: "what does the pancake part say?", topicPostId: "post-1" }),
+		analyticsProperties,
+		isTopicOwner: true,
+	})
+	expect(trackEventSpy).toHaveBeenCalledWith("social_topic_post_chat", "user-1", {
+		...analyticsProperties,
+		objectId: "post-1",
+		topicId: "topic-1",
+		isOwner: true,
+	})
+	expect(trackEventSpy).toHaveBeenLastCalledWith(
+		"chat_turn_sent",
+		"user-1",
+		expect.objectContaining({ chatTurnKind: "topic_post" }),
+	)
+	expect(JSON.stringify(trackEventSpy.mock.calls)).not.toContain("pancake")
+
+	// a turn asked from the chat reports no post
+	trackEventSpy.mockClear()
+	await saveChatTurn({ ...toTopicChatTurnOptions({}), analyticsProperties })
+	expect(trackEventSpy).toHaveBeenCalledTimes(1)
+})
+
+// the Topic's private chat replays a post's turn with a tag, linked while the post exists
+test("loadChatTurns replays a Topic Post chat turn with its post's title and page, and neither once it is deleted", async () => {
+	spyOn(authorization, "isAllowed").mockResolvedValue(true)
+	spyOn(chatAttachmentReads, "loadTopicChatTurnAttachments").mockResolvedValue(new Map())
+	spyOn(linkPreviews, "loadChatLinkPreviews").mockResolvedValue(new Map())
+
+	// one stored row, by its question, its kind, and the post columns the read joins
+	const toStoredRow = (question: string, kind: string, topicPostColumns: (string | null)[]): unknown[] => [
+		`ct-${question}`,
+		encryptChatText(question),
+		encryptChatText("an answer"),
+		null,
+		false,
+		null,
+		null,
+		null,
+		"2026-11-10T12:00:00.000Z",
+		kind,
+		...topicPostColumns,
+	]
+	const sentQueries = stubConnectionPool(() => [
+		toStoredRow("from the chat", "private", [null, null, null, null]),
+		toStoredRow("about a deleted post", "topic_post", [null, null, null, null]),
+		toStoredRow("about the post", "topic_post", ["post-1", "Dialing in", "topic-1", "Home espresso"]),
+	])
+	const chatTurns = await loadChatTurns("user-1", { topicId: "topic-1" })
+	expect(chatTurns.map((chatTurn) => [chatTurn.question, chatTurn.topicPost])).toEqual([
+		["about the post", { title: "Dialing in", path: "/topics/topic-1/home-espresso/posts/post-1/dialing-in" }],
+		["about a deleted post", { title: null, path: null }],
+		["from the chat", null],
+	])
+
+	// the topic's conversation keeps its Topic Post chat turns beside the private and podcast ones
+	expect(sentQueries[0]?.values).toEqual(expect.arrayContaining(["private", "podcast", "topic_post"]))
+})

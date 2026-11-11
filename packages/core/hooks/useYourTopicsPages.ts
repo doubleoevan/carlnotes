@@ -1,5 +1,5 @@
 import { fetchYourTopicsPage } from "@carlnotes/client/homeClient"
-import { HOME_CARDS_PAGE_SIZE, type TopicCard, type YourTopicsPage } from "@carlnotes/contracts/home"
+import { CARDS_PAGE_SIZE, type TopicCard, type YourTopicsPage } from "@carlnotes/contracts/home"
 import { keepPreviousData, useQuery } from "@tanstack/react-query"
 import { useState } from "react"
 import type { PageSelection } from "./usePagination"
@@ -18,7 +18,7 @@ export function useYourTopicsPages(firstPage: YourTopicsPage | null): {
 	// the page asked for, kept inside the pages the total holds
 	const [page, setPage] = useState(0)
 	const totalCount = firstPage?.totalCount ?? 0
-	const pageCount = Math.max(1, Math.ceil(totalCount / HOME_CARDS_PAGE_SIZE))
+	const pageCount = Math.max(1, Math.ceil(totalCount / CARDS_PAGE_SIZE))
 	const currentPage = Math.min(page, pageCount - 1)
 
 	// a later page, read again whenever the home payload's total changes

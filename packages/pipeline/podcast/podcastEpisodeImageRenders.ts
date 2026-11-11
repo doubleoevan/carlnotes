@@ -3,13 +3,11 @@
 import type { TopicImageOrigin } from "@carlnotes/contracts/enums"
 import { db } from "@carlnotes/db"
 import { podcastEpisodeChapters, podcastEpisodes } from "@carlnotes/db/schema/podcast"
-import { topicImageRenders } from "@carlnotes/db/schema/topicImages"
 import { topics } from "@carlnotes/db/schema/topics"
-import { recordPendingObjectDeletions } from "@carlnotes/db/store"
 import { purgeEdgeCacheTagAfterDeletion, toTopicImageCacheTag } from "@carlnotes/server/edgePurge"
 import { asc, eq } from "drizzle-orm"
 import { toPodcastEpisodeImageObjectKeys } from "../topicImages/topicImageFiles"
-import { REPLACED_IMAGE_GRACE_MS } from "../topicImages/topicImageRenders"
+import { recordReplacedImageDeletions, succeedTopicImageRender } from "../topicImages/topicImageRenders"
 import { MAX_SCENE_FINDING_TITLES, type TopicImageSceneInput } from "../topicImages/writeTopicImageScene"
 
 /**
@@ -84,20 +82,12 @@ export async function replacePodcastEpisodeImage({
 
 		// the replaced objects go after the grace, unless the same bytes came back under the same hash
 		if (podcastEpisode?.previousHash && podcastEpisode.previousHash !== hash) {
-			await recordPendingObjectDeletions({
-				handle: transaction,
-				objectKeys: toPodcastEpisodeImageObjectKeys(podcastEpisodeId, podcastEpisode.previousHash),
-				nextTryAt: new Date(Date.now() + REPLACED_IMAGE_GRACE_MS),
-			})
+			const replacedObjectKeys = toPodcastEpisodeImageObjectKeys(podcastEpisodeId, podcastEpisode.previousHash)
+			await recordReplacedImageDeletions(transaction, replacedObjectKeys)
 		}
 
 		// the render that drew it is done
-		if (renderId) {
-			await transaction
-				.update(topicImageRenders)
-				.set({ status: "succeeded", cost: String(costDollars), finishedAt: new Date() })
-				.where(eq(topicImageRenders.id, renderId))
-		}
+		await succeedTopicImageRender({ transaction, renderId, costDollars })
 		return podcastEpisode
 	})
 
@@ -107,8 +97,11 @@ export async function replacePodcastEpisodeImage({
 	}
 }
 
-// purge a public topic's image files from the edge, where the podcast episode's files are tagged with its topic
-async function purgePublicImageFiles({
+/**
+ * Purges a public topic's image files from the edge, where a podcast episode's and a film's files are tagged with
+ * their topic.
+ */
+export async function purgePublicImageFiles({
 	topicId,
 	visibility,
 }: {

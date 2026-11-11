@@ -24,6 +24,8 @@ export function PodcastEpisodePlayButton({
 	elements: { Button, Icon, Tooltip },
 	size = "sm",
 	className,
+	label,
+	isPlaying: shownIsPlaying,
 	onHover,
 	onPress,
 }: {
@@ -31,14 +33,23 @@ export function PodcastEpisodePlayButton({
 	elements: PodcastEpisodePlayButtonElements
 	size?: "sm" | "default" | "lg"
 	className?: string
+	// the button's accessible name, in place of the play or pause of the podcast episode by its number
+	label?: string
+	// whether the button shows pause, for a player of one format. the loaded podcast episode's playing state if left out
+	isPlaying?: boolean
 	onHover?: () => void
 	onPress?: () => void
 }) {
-	const isPlaying = useIsPodcastEpisodePlaying(podcastEpisode.id)
+	const isPodcastEpisodePlaying = useIsPodcastEpisodePlaying(podcastEpisode.id)
+	const isPlaying = shownIsPlaying ?? isPodcastEpisodePlaying
+
+	// a numbered episode is named by its number, and a recording with none by its title
+	const recordingName =
+		podcastEpisode.episodeNumber === null ? podcastEpisode.title : `episode ${podcastEpisode.episodeNumber}`
 	return (
 		<Tooltip podcastEpisode={podcastEpisode}>
 			<Button
-				label={`${isPlaying ? "Pause" : "Play"} episode ${podcastEpisode.episodeNumber}`}
+				label={label ?? `${isPlaying ? "Pause" : "Play"} ${recordingName}`}
 				onPress={onPress ?? (() => void togglePodcastEpisodePlayback(podcastEpisode.id))}
 				onHover={onHover}
 				className={className}

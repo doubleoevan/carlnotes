@@ -56,7 +56,7 @@ export function PodcastThemeSongCredits({
 			)}
 			<Text className="mt-1 text-right">
 				<Link href={PODCAST_THEME_SONG.youtubeUrl} className="font-bold">
-					Enjoy 😊
+					Enjoy! 😊
 				</Link>
 			</Text>
 		</Group>

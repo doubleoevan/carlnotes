@@ -50,7 +50,7 @@ function toAuthEmailProps({
 		),
 		buttonLabel: "Join the team",
 		url: inviteUrl,
-		linkNote: `This invitation was sent to ${recipientEmail}. Sign up or log in and the team opens for you. Joining is your call once you've had a look.`,
+		linkNote: `This invite was sent to ${recipientEmail}. Sign up or log in and the team opens for you. Joining is your call once you've had a look.`,
 		closingNote: "Not interested? Ignore this email and nothing will change.",
 		appUrl,
 	}

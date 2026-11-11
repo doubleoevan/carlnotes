@@ -22,6 +22,9 @@
 @source "../../packages/core/components/PodcastEpisodePill.tsx";
 @source "../../packages/core/components/ScrollDownButton.tsx";
 
+/* the season tabs and the feed dialog's Podcast and Films choice share one underlined tab */
+@source "../../packages/core/lib/tabClasses.ts";
+
 /* budget segments and legend dots use the same classes returned by the shared model */
 @source "../../packages/core/lib/spendMeter.ts";
 

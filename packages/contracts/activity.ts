@@ -7,7 +7,7 @@ import { inviteRow } from "./invites"
 import { monthlyBudgetCutoff } from "./plans"
 import { podcastEpisodeSummary } from "./podcast"
 import { profileIdentity } from "./profiles"
-import { teamIdentity } from "./teams"
+import { teamIdentity } from "./teamIdentity"
 import { displayEnum } from "./tolerantReads"
 
 // one Scan row in an Activity topic's subtable

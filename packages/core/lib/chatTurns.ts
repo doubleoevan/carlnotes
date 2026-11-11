@@ -1,15 +1,23 @@
 // one chat turn in the chat message list, and the helpers that build and finish a chat turn as a question sends
 
-import type { ChatRejection, ChatSendResult } from "@carlnotes/client/chatClient"
+import type { ChatPageTopicPost, ChatRejection, ChatSendResult } from "@carlnotes/client/chatClient"
 import type { ChatMessageAttachment, ChatTurnRow, KeptChatAttachment } from "@carlnotes/contracts/chat"
 import { withAttachmentNote } from "@carlnotes/contracts/chatQuestionNotes"
 import type { ChatAttachment } from "@carlnotes/contracts/payloads"
 
-// one chat turn in the chat message list: the stored chat turn's text, tool calls, link preview cards, speaker, and
-// podcast episode chapter, with whatever was attached to its question and how its send ended
+// one chat turn in the chat message list: the stored chat turn's text, tool calls, link preview cards, speaker,
+// podcast episode chapter, and Topic Post, with whatever was attached to its question and how its send ended
 export type ChatTurn = Pick<
 	ChatTurnRow,
-	"question" | "answer" | "toolCalls" | "linkPreviews" | "answerLinkPreviews" | "speaker" | "podcastEpisodeChapter"
+	| "question"
+	| "answer"
+	| "toolCalls"
+	| "linkPreviews"
+	| "answerLinkPreviews"
+	// who answered, and what the question was asked from
+	| "speaker"
+	| "podcastEpisodeChapter"
+	| "topicPost"
 > & {
 	rejection: ChatRejection | null
 	at?: number
@@ -59,14 +67,21 @@ export function toLoadedChatTurn(chatTurnRow: ChatTurnRow): ChatTurn {
 		spokenAnswerKey: toSpokenAnswerKey(),
 		speaker: chatTurnRow.speaker,
 		podcastEpisodeChapter: chatTurnRow.podcastEpisodeChapter,
+		topicPost: chatTurnRow.topicPost ?? null,
 		attachments: chatTurnRow.attachments,
 		linkPreviews: chatTurnRow.linkPreviews,
 		answerLinkPreviews: chatTurnRow.answerLinkPreviews,
 	}
 }
 
-// the question a chat turn sent, its files, and whether it was spoken
-type ToSentChatTurnOptions = { question: string; attachments: ChatAttachment[]; isMediaPreviewed?: boolean }
+// the question a chat turn sent, its files, whether the history previews its media, and the Topic Post it was asked
+// about
+type ToSentChatTurnOptions = {
+	question: string
+	attachments: ChatAttachment[]
+	isMediaPreviewed?: boolean
+	topicPost?: Pick<ChatPageTopicPost, "title" | "path">
+}
 
 /**
  * Returns a new chat turn with temporary attachments for its sent files. A sent image or video keeps its data url
@@ -76,6 +91,7 @@ export function toSentChatTurn({
 	question: askedQuestion,
 	attachments: sentAttachments,
 	isMediaPreviewed = true,
+	topicPost,
 }: ToSentChatTurnOptions): ChatTurn {
 	return {
 		question: withAttachmentNote(askedQuestion, sentAttachments),
@@ -84,6 +100,7 @@ export function toSentChatTurn({
 		spokenAnswerKey: toSpokenAnswerKey(),
 		speaker: "host",
 		podcastEpisodeChapter: null,
+		topicPost: topicPost ? { title: topicPost.title, path: topicPost.path } : null,
 		attachments: sentAttachments.map((attachment) => ({
 			id: toPlaceholderId(),
 			kind: attachment.kind,

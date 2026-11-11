@@ -9,9 +9,12 @@ import {
 	toPodcastEpisodeImageUrls,
 	toTopicImageUrls,
 	toTopicImageUrlsOrNull,
+	toTopicPodcastEpisodeVideoPosterUrl,
+	toTopicPostImageUrls,
 } from "@carlnotes/contracts/topicImages"
 import { db } from "@carlnotes/db"
-import { podcastEpisodes } from "@carlnotes/db/schema/podcast"
+import { podcastEpisodes, topicPodcastEpisodeVideos } from "@carlnotes/db/schema/podcast"
+import { topicPosts } from "@carlnotes/db/schema/topicPosts"
 import { topics } from "@carlnotes/db/schema/topics"
 import { loadTopicImage } from "@carlnotes/db/topicImages"
 import { topicImageRegenerateModel } from "@carlnotes/models/topicImageModel"
@@ -89,15 +92,20 @@ export const topicImagesRoute = new Hono<AppEnv>()
 	)
 	// a render as the editor polls it
 	.get("/topic-image-renders/:id", async (context) => {
-		// the render, which only an editor of its topic may read
+		// the render, which the user who started it and an editor of its topic may read
+		const userId = currentUser(context)
 		const render = await loadTopicImageRender(context.req.param("id"))
 		const [topic] = render ? await db.select(namedTopicColumns).from(topics).where(eq(topics.id, render.topicId)) : []
-		if (!render || !topic || !(await isAllowed(currentUser(context), "topic:edit", topic))) {
+		const isOwnRender = Boolean(userId) && render?.userId === userId
+		if (!render || !topic || !(isOwnRender || (await isAllowed(userId, "topic:edit", topic)))) {
 			return context.json({ error: "not found" }, 404)
 		}
+		// the image a succeeded render left, which is the poster for a film's render
+		const isSucceeded = render.status === "succeeded"
 		const renderResponse: TopicImageRenderResponse = {
 			status: render.status,
-			image: render.status === "succeeded" ? await loadRenderedImage(render) : null,
+			image: isSucceeded ? await loadRenderedImage(render) : null,
+			posterUrl: isSucceeded ? await loadRenderedPosterUrl(render) : null,
 		}
 		return context.json(renderResponse)
 	})
@@ -141,8 +149,32 @@ export const topicImagesRoute = new Hono<AppEnv>()
 		return context.json({ image: toTopicImageUrls(editor.topic.id, hash) })
 	})
 
-// the urls of the image a succeeded render left, on its podcast episode or its topic
+// the poster url of the image a succeeded film render left, or null for any other render
+async function loadRenderedPosterUrl(render: TopicImageRenderRow): Promise<string | null> {
+	if (!render.topicPodcastEpisodeVideoId) {
+		return null
+	}
+
+	// the film's current image, at its podcast episode
+	const [topicPodcastEpisodeVideo] = await db
+		.select({
+			podcastEpisodeId: topicPodcastEpisodeVideos.podcastEpisodeId,
+			imageHash: topicPodcastEpisodeVideos.imageHash,
+		})
+		.from(topicPodcastEpisodeVideos)
+		.where(eq(topicPodcastEpisodeVideos.id, render.topicPodcastEpisodeVideoId))
+	return topicPodcastEpisodeVideo?.imageHash
+		? toTopicPodcastEpisodeVideoPosterUrl(topicPodcastEpisodeVideo.podcastEpisodeId, topicPodcastEpisodeVideo.imageHash)
+		: null
+}
+
+// the urls of the image a succeeded render left, on its podcast episode, its Topic Post, or its topic. a film's render
+// leaves a poster and no urls
 async function loadRenderedImage(render: TopicImageRenderRow): Promise<TopicImageUrls | null> {
+	if (render.topicPodcastEpisodeVideoId) {
+		return null
+	}
+
 	// a podcast episode render's image is the podcast episode's current one
 	if (render.podcastEpisodeId) {
 		const [podcastEpisode] = await db
@@ -154,6 +186,15 @@ async function loadRenderedImage(render: TopicImageRenderRow): Promise<TopicImag
 		return podcastEpisode?.imageHash
 			? toPodcastEpisodeImageUrls(render.podcastEpisodeId, podcastEpisode.imageHash)
 			: null
+	}
+
+	// a Topic Post render's image is the post's current one
+	if (render.topicPostId) {
+		const [topicPost] = await db
+			.select({ imageHash: topicPosts.imageHash })
+			.from(topicPosts)
+			.where(eq(topicPosts.id, render.topicPostId))
+		return topicPost?.imageHash ? toTopicPostImageUrls(render.topicPostId, topicPost.imageHash) : null
 	}
 
 	// a topic render's image is the topic's current one

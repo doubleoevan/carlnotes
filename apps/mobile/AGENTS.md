@@ -213,14 +213,19 @@ release build without the project number cannot attest and sends sign-ups to the
 ## Reactions and comment threads
 
 `src/components/layout/SectionAnchor.tsx` is the screen's equivalent of a web anchor. Wrap a section in
-`<SectionAnchor name="...">` and link with `?section=<name>`. `PageScreen` scrolls to it on iOS and Android. A screen
-not built on `PageScreen` needs that scroll added first.
+`<SectionAnchor name="...">` and link with `?section=<name>`. `src/hooks/useSectionTargetScroll.ts` keeps a scroll
+view at the view that fills `SectionTargetContext`'s ref, with no animation, until the user scrolls, and announces the
+end of each scroll. `PageScreen`, the topic screen's scroll view in `topic/TopicPageContent.tsx`, and `Sheet` use it.
+A screen with its own scroll view needs the hook and the context added first.
 
 `src/components/social/` adapts core's `ReactionRow` and `CommentThread`. `socialElements.tsx` is the app's
 `SocialElements` set: the six reaction icons from `lucide-react-native`, each drawn in `ReactionOption.tsx` at the web's
 height with a hit slop to the touch target, the composer in a `Sheet` with `BottomSheetTextInput`, and a choice sheet
 for a Podcast Episode's chapter. Its `COMMENT_ELEMENTS` and `SocialComposer` are the comment parts and the one composer
-that `note/NoteComments.tsx` reuses, with a plain `TextInput` outside a sheet. `ReactionRow.tsx` and `CommentThread.tsx`
+that `note/NoteComments.tsx` reuses, with a plain `TextInput` outside a sheet. Its comment row fills
+`SectionTargetContext`'s ref for the Comment a link names with `?comment=<id>`, so its screen or sheet opens at it,
+and a row with an unseen Comment Mention reports itself seen once half of it is inside the window, as it is laid out
+and at the end of each scroll (`isHalfInWindow`, `subscribeScrollEnd`). `ReactionRow.tsx` and `CommentThread.tsx`
 add sign-up that returns to the screen, the app's error display, the report sheet, and the thread's view event. The
 flame and mugs of a comment shared with the podcast show their label as their accessibility label. `SocialSection.tsx`
 holds the thread in the collapsible Hot takes card that `topic/TopicPageContent.tsx`,
@@ -288,19 +293,78 @@ The path from a commit to a store build, in order. Every secret stays in Doppler
 
 `components/layout/HomeHeadline.tsx` is the Home headline on both faces, the web's `HomeHeadline` at phone width.
 `components/common/AccordionSection.tsx` is one section of a screen's list of sections, the web's `AccordionSection`.
+It and `components/topic/CollapsibleSection.tsx` draw a section's title in the `sectionTitle` type role with its count
+at the far right, and a caller leaves a count of zero out through `toSectionCountLabel`.
+`components/common/CardsSection.tsx` adapts core's `CardsSection`, the home's, the profile's, and the team screen's
+card sections, Featured Posts right below Featured Podcasts on the profile and the team screen and the profile's
+Featured Films right above them, with this app's accordion section, card column, and page buttons. The Home writes its
+sections in `HOME_SECTIONS`' order, as the web does, with New podcasts this week right below Featured podcasts and New
+posts this week right below Featured posts, each absent with no card. The profile's Featured Posts lists every post
+of its person and is its only Topic Post section. The team screen has the profile's four card sections, Featured
+Films right before Featured Podcasts, and its Featured Posts lists every post of its topics. `components/common/ViewerCountLine.tsx` adapts core's
+Visitors line at the end of the profile and team screens. `components/common/DetailsLine.tsx` adapts core's details
+line, a wrapping row of small muted text: the counts under a topic's byline and reactions, a Topic Post's date,
+reading time, and comment count under its byline's row, the profile's and the team screen's summary line, and the
+Topic's viewers and followers in the Topic Post sheet. `components/common/RankDialog.tsx` adapts core's
+`RankDialog` in a `Sheet`, where step buttons replace the web's drag, for the topics, films, podcast episodes, and
+Topic Posts pinned on a person's own profile, opened from the profile and from the screen of one of their topics,
+podcast episodes, or Topic Posts.
 `components/topic/TopicByline.tsx` is a topic's byline, the team or the owner of the topic with its avatar, the web's
 `TopicByline`. `components/topic/TopicCard.tsx` and `components/podcast/PodcastEpisodeCard.tsx` adapt the shared cards
 over `components/common/cardElements.tsx`, the card box, topic image, and text row the two cards share, matching the
-web's `cardElements`. `components/topic/UpdatesList.tsx` and `components/topic/UpdatesButton.tsx` adapt the shared
-Updates list and the Update button that picks its length. `components/topic/TopicImageEditor.tsx` adapts the editor's
+web's `cardElements`. `components/podcast/PodcastEpisodeVideoButton.tsx` adapts the shared button that opens a film,
+with the Video sheet its press opens: a film card's round play button, `PodcastEpisodePlayButton` centered over the
+card's image, and the Video pill beside the play pill on a `components/social/NewsList.tsx` row whose Podcast Episode
+has a film. Its thumbnail size is the play button over the film's poster in `components/topic/TopicInfo.tsx`, whose
+sheet shows the latest film's section, core's `TopicPodcastEpisodeVideoInfoSection`, right above the podcast's, and
+whose Video sheet opens over the Topic roast sheet. `components/podcast/TopicPodcastEpisodeVideoPlayer.tsx` adapts
+core's film player to an `expo-video` view with its captions track, fullscreen, and picture-in-picture, over
+`src/topicPodcastEpisodeVideoAdapter.ts`, which adapts one Expo player to core's playback and keeps the authorized
+film url in memory only. `components/podcast/TopicPodcastEpisodeVideoDialog.tsx` is the Video sheet, and
+`components/podcast/TopicPodcastEpisodeVideoSection.tsx` the topic screen's collapsible film section, which the
+screen scrolls to each time a row asks. While a film renders, that section on a topic with no ready film and the
+podcast episode screen's film section show `components/podcast/UnpublishedPodcastEpisodeCard.tsx` with
+`isVideoRendering` in the film player's place, the recording card's frame with the line "Carl and Vienna are
+filming...", and core's `useTopicPodcastEpisodeVideoRenderingPoll` reads the screen again until the film is ready.
+`components/topic/TopicNotePopover.tsx` adapts core's
+`TopicNotePopover`, a Topic's note in a sheet under the note icon of a search row and a news row, and
+`components/social/CommentMentionBadge.tsx` core's mention badge, a count whose press opens
+`components/social/CommentMentionList.tsx` in a sheet, right after the title of the podcast episode screen and of the
+Topic Post screen. `PageUpdateCountBadge` in `components/common/UpdateCountBadge.tsx` opens the same list on a press
+while a Comment Mention waits and no chat mention does, as the web's does. `components/topic/TopicImageEditor.tsx` adapts the editor's
 image block, with the device's photo picker for its file picker. `components/topic/TopicImageButton.tsx` is the image as
 a button with a camera in its corner, and the screen header's image, which is that button for an editor.
+`components/topic/TopicImageLink.tsx` adapts core's `TopicImageLink`, the image inside an `AnchorLink` to the screen of
+what it shows, the web's `TopicImageLink`: a search row's, a news row's, and a Topics row's image, the Topic's image
+in a Finding's and a Topic Post's sheet, each no accessibility element of its own beside the title that opens the
+same screen, and the full-width image of the Topic roast and Topic Post sheets, each with its name, whose press also
+closes the sheet. It compares the image's path, mapped through `toPlatformPath`, with the open route, and the open
+screen's own image is a plain image.
 `components/topic/EditImageDialog.tsx` is the Edit topic image and Edit podcast image sheet that the header image
-opens, and `components/podcast/EditPodcastEpisodeDialog.tsx` the Edit podcast sheet of the podcast episode screen's
-menu, the web's dialogs of those names.
-`components/search/SearchRowTopicLink.tsx` opens a search row's Topic without opening the surrounding finding sheet,
-the web's `SearchRowTopicLink`. `src/topicImageClasses.ts` holds the classes of a topic image in a header row, a Topics
-row, and the Topic roast sheet, matching the web's topic images at phone width.
+opens, and the Edit film sheet that the Edit film option opens from the action menu of the podcast episode screen and
+of the topic screen (`toEditTopicPodcastEpisodeVideoOption` in `components/search/pageActionOptions.ts`, which also
+holds the Add topic to team and Share topic options and their labels, as both those screens' menus offer them), and
+`components/podcast/EditPodcastEpisodeDialog.tsx` the Edit podcast sheet of the podcast episode screen's menu, the
+web's dialogs of those names. `components/podcast/PodcastEpisodeHeader.tsx` holds that screen's header and
+`components/podcast/PodcastEpisodeSkeleton.tsx` its loading state, the web's files of the same names, and `components/branding/NoteIconButton.tsx` the note tile as the button that opens a
+Topic roast sheet or a Topic Post's info sheet.
+`SearchRowTopicLink` in `components/search/SearchResultsList.tsx` opens a search row's or a news row's Topic without
+opening the surrounding finding sheet, the web's `SearchRowTopicLink`. `src/topicImageClasses.ts` holds the classes of
+a topic image in a header row, a Topics row, and the Topic roast sheet, matching the web's topic images at phone
+width. `src/pageButtonClasses.ts` holds the
+classes of a screen's top row of buttons, the counterpart of the web's page button classes. `PLAIN_PAGE_BUTTON_CLASS`
+is the plain button at the row's left, the card's fill and border with a muted label and an icon that alone takes the
+highlight color, and `HIGHLIGHTED_PAGE_BUTTON_CLASS` the one highlighted button at its right and the button of a titled
+header row. Both go on the default `Button`, so the two draw at one size, 36 points tall with the hit slop to the touch
+target. `PAGE_BUTTON_ROW_CLASS` is the row, and each screen adds the margins that keep 16 points above it, from the
+search bar, and 16 points below it. `AVATAR_HEADER_BUTTON_ROW_CLASS` is that row with `PageScreen`'s margins, which
+the screen and its loading state share. `src/sectionClasses.ts` holds the classes a section and its loading state
+share: `SKELETON_SHAPE_CLASS`, a placeholder's fill, the collapsible section's box and title row, and the news card's
+heading row. A screen's loading state is laid out in the loaded screen's own classes and components, so a section's
+loading state is `AccordionSection` with `isLoading` or `components/topic/CollapsibleSectionSkeleton.tsx`, and the
+news list's is its own loading rows. `components/topic/TopicSkeleton.tsx` is the topic screen's loading state, and
+exports the film card's, the player card's, and the empty section card's loading states that the podcast episode
+screen's loading state shares.
 
 ## Personal sources and search
 
@@ -325,10 +389,40 @@ Personal sources conversation links say “Open shared conversation in {platform
 `components/search/SearchResultRow.tsx` and `TopicSearchResultDetails.tsx` adapt the same core row composition and count/podcast formatting used by web search and the MCP picker, retaining native navigation, font-scaled ranks, and separators. Both have on-device stories.
 
 
-Entity icons use Lucide Coffee for Topics, Mic for Podcast Episodes, and Globe for Findings. The web search kind map, native search rows, Finding summaries, Podcast Episode pills, chapter tags, and podcast feed actions follow this convention. Media-type icons remain specific to files, video, or audio when describing a Source or attachment.
+Entity icons use Lucide Coffee for Topics, Mic for Podcast Episodes, NotebookPen for Topic Posts, and Globe for Findings. The web search kind map, native search rows, Finding summaries, Podcast Episode pills, chapter tags, and podcast feed actions follow this convention. Media-type icons remain specific to files, video, or audio when describing a Source or attachment.
 
 Expanded Personal sources entries reuse core date-only metadata and sender identity, with the same AI provider marks and mail icon as web. Deletion requires confirmation.
 
 Personal sources items, private summaries, and annotations have no automatic expiry. Their content remains encrypted until explicit deletion. Released read contracts retain nullable expiry fields as null. Optional conversation URLs survive the MCP picker outside matching and open from the shared AI sender label; missing references remain plain labels.
 
 Personal sources conversation metadata links the complete date, platform icon, and name when a real reference is supplied. Both apps consume the shared entry list and platform fixtures. A strict existing-chat Codex URI opens the system app; web references use the existing browser adapter. No entry retention sentence is shown.
+
+Topic Posts: `src/components/topicPost/` holds the app's adapters of the shared `TopicPostCard`, `TopicPostInfo`
+(a sheet in the popover's place, which reads its post by id once it opens, under the notebook-pen tile that
+`src/components/social/NewsList.tsx` draws on a published Topic Post's row. The web splits that tile into its own
+`TopicPostInfoButton`, which a sheet needs no second frame for. Its
+Share and the screen's Share open `src/components/share/ShareTopic.tsx` with the post as its `topicPost`, which shares
+the post in the topic's place, and whose invite link opens the post), `TopicPostsSection`, and
+`TopicPostEditor`, and `TopicPostScreen.tsx`, the
+screen at `app/topics/[topicId]/posts/[topicPostId].tsx`. The screen renders the shared `TopicPostPage`: a
+published post in `PageScreen` with its actions menu, whose Featured posts opens the author's `ProfileRankDialog` on
+a published post of a public topic, image sheet, and comment thread, and a draft or an edit in
+the note screen's keyboard-safe frame. `src/platformPath.ts` maps a post's web path to its route.
+`src/components/account/ProfileHeader.tsx` adapts the shared profile header. `note/NoteLayout.tsx` exports
+`NoteBodyScroll` and `NoteKeyboardDoneButton`, which the note and the Topic Post editor both lay out with. A
+disabled page action with a reason stays pressable and says its reason in a dialog.
+
+Topic Post Discussions and the Topic Post chat: `src/components/topicPost/TopicPostDiscussionCard.tsx` adapts the
+shared discussion card with the podcast play button and the session forms' text field. Its name is the button that
+opens and closes the recording's transcript, behind the news card's caret, and the transcript's lines are the podcast
+episode transcript's Text. A discussion plays through the
+shared player and the app's audio adapter, which resolve its audio and its access through the podcast episode client by
+the player's id. `TopicPostScreen` exports `TOPIC_POST_PAGE_ELEMENTS` for the page's stories and names the open post
+to `topicPostChatStore`, again each time the screen takes focus. A chat screen asks about that post only if the
+post's screen opened it (`toChatScreenTopicPost` in `src/components/chat/chatNavigation.ts`), so a Topic screen
+opened above the post's keeps its own chat. On that screen `toChatHref` in `src/components/chat/chatNavigation.ts` sends the chat launcher
+to `/topics/[topicId]/chat` with `privateChat=true`, so the chat screen opens on the topic's private chat, and a
+visitor's press opens the sign-up sheet. `useChatPage` labels the private chat's choice with `toPrivateChatIdLabel`
+on one line, and `PrivateChatPanel` reads its placeholder from `toPrivateChatPlaceholder`. Report image is the
+screen's report in its actions sheet. `src/components/chat/TopicPostTag.tsx` adapts the shared tag to a pressable
+link.

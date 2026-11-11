@@ -22,12 +22,12 @@ export const REACTION_TYPE_LABELS: Record<ReactionType, string> = {
 export type SocialTargetKind = (typeof socialTargetKinds)[number]
 export type CommentTargetKind = (typeof commentTargetKinds)[number]
 
-// how each kind a Comment hangs on reads in an analytics event's name. a post reads as its Topic
+// how each kind a Comment hangs on reads in an analytics event's name
 const COMMENT_EVENT_TARGETS: Record<CommentTargetKind, CommentEventTarget> = {
 	finding: "finding",
 	podcastEpisode: "podcast_episode",
 	topic: "topic",
-	post: "topic",
+	post: "topic_post",
 }
 
 /**
@@ -83,7 +83,7 @@ const socialTarget = z.object({ kind: z.enum(socialTargetKinds), id: socialId })
 export type SocialTarget = z.infer<typeof socialTarget>
 
 // what a Comment hangs on: every social target but a Comment, which a reply names as its parent instead
-const commentTarget = z.object({ kind: z.enum(commentTargetKinds), id: socialId })
+export const commentTarget = z.object({ kind: z.enum(commentTargetKinds), id: socialId })
 export type CommentTarget = z.infer<typeof commentTarget>
 
 // how many of the users who chose a reaction type a summary names
@@ -142,11 +142,13 @@ const sharedCommentSlots = z.object({ usedCount: z.number(), slotCount: z.number
 export type SharedCommentSlots = z.infer<typeof sharedCommentSlots>
 
 // one page of a comment thread, newest first, the cursor of the next page, how many comments and replies the last seven
-// days added, and the shared comment slots for a user who may edit the Topic
+// days added, how many the thread holds in all, and the shared comment slots for a user who may edit the Topic
 export const commentThreadResponse = z.object({
 	comments: z.array(comment),
 	nextCursor: z.string().nullable(),
 	weekCommentCount: z.number(),
+	// every comment and reply of the thread that the reader sees. an older api leaves it out
+	commentCount: z.number().optional(),
 	sharedCommentSlots: sharedCommentSlots.nullable(),
 })
 export type CommentThreadResponse = z.infer<typeof commentThreadResponse>
@@ -182,10 +184,10 @@ export const editCommentPayload = z.object({ body: commentBody })
 export const postCommentResponse = z.object({ comment, sharedCommentSlots: sharedCommentSlots.nullable() })
 export type PostCommentResponse = z.infer<typeof postCommentResponse>
 
-// what a delete returns: the week's comment count, and the shared comment slots as they stand now for a user who may
-// share
+// what a delete returns: the week's comment count, the thread's whole count, and the shared comment slots as they
+// stand now for a user who may share
 export const deleteCommentResponse = commentThreadResponse
-	.pick({ weekCommentCount: true, sharedCommentSlots: true })
+	.pick({ weekCommentCount: true, commentCount: true, sharedCommentSlots: true })
 	.extend({ ok: z.literal(true) })
 export type DeleteCommentResponse = z.infer<typeof deleteCommentResponse>
 
@@ -203,8 +205,12 @@ const sharedComment = commentReply.pick({ id: true, author: true, body: true }).
 export type SharedComment = z.infer<typeof sharedComment>
 export const sharedCommentsResponse = z.object({ comments: z.array(sharedComment) })
 
-// the query of a paged read: the social target, and the cursor a read before it returned
-export const commentThreadQuery = commentTarget.extend({ cursor: z.string().optional() })
+// the query of a paged read: the social target, the cursor a read before it returned, and the Comment a link names,
+// whose top-level Comment a first page leads with
+export const commentThreadQuery = commentTarget.extend({
+	cursor: z.string().optional(),
+	commentId: socialId.optional(),
+})
 export const reactionSummaryQuery = socialTarget
 
 // the mention suggestions: a username prefix in, and the users whose usernames start with it out

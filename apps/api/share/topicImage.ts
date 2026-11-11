@@ -1,10 +1,10 @@
 // the link-preview card a pasted Topic url renders as
 import type { Visibility } from "@carlnotes/contracts/enums"
+import type { CardElement } from "@carlnotes/pipeline/cardElementPng"
 import { toTopicImageOriginalKey } from "@carlnotes/pipeline/topicImages/topicImageFiles"
 import type { PublishedAvatar } from "../avatars"
 import {
 	CARD_MUTED_COLOR,
-	type CardElement,
 	loadCardImageBandDataUri,
 	PREVIEW_TEMPLATE_VERSION,
 	toAvatarIdentity,
@@ -12,9 +12,8 @@ import {
 	toCardPng,
 	toCountLabel,
 	toImageOverTextCardPng,
+	toOwnerAvatar,
 	toOwnerImageDataUri,
-	toOwnerInitials,
-	toOwnerPhoto,
 } from "./previewImage"
 
 // how wide the byline avatar renders, beside the owner's username in the footer
@@ -102,9 +101,12 @@ function toTopicOwner(topicPreview: TopicPreview, ownerImage: string | null): Ca
 		props: {
 			style: { display: "flex", alignItems: "center", gap: "16px" },
 			children: [
-				ownerImage
-					? toOwnerPhoto(ownerImage, AVATAR_SIZE)
-					: toOwnerInitials(topicPreview.ownerUserId, topicPreview.ownerUsername, AVATAR_SIZE),
+				toOwnerAvatar({
+					id: topicPreview.ownerUserId,
+					name: topicPreview.ownerUsername,
+					image: ownerImage,
+					size: AVATAR_SIZE,
+				}),
 				{ type: "div", props: { style: { display: "flex" }, children: topicPreview.ownerUsername } },
 			],
 		},

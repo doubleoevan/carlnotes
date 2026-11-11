@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm"
 import { check, index, integer, pgTable, text, timestamp, unique } from "drizzle-orm/pg-core"
 import { primaryId } from "./columns"
 import { teams } from "./teams"
+import { topicPosts } from "./topicPosts"
 import { topics } from "./topics"
 import { users } from "./users"
 
@@ -14,6 +15,9 @@ export const invites = pgTable(
 		// the invite's one target: the topic it opens, or the team it joins
 		topicId: text("topic_id").references(() => topics.id, { onDelete: "cascade" }),
 		teamId: text("team_id").references(() => teams.id, { onDelete: "cascade" }),
+		// the Topic Post a topic invite was shared from, which the invite opens once it is accepted. null for an invite
+		// shared from the topic itself, and a deleted post leaves the invite opening the topic
+		topicPostId: text("topic_post_id").references(() => topicPosts.id, { onDelete: "set null" }),
 		// what the invite's invite url includes. whoever holds it can accept it, so it is not the row's id
 		token: text("token")
 			.notNull()
@@ -48,5 +52,7 @@ export const invites = pgTable(
 		index("invites_invited_by_invited_at_idx").on(table.invitedByUserId, table.invitedAt),
 		index("invites_invited_user_id_idx").on(table.invitedUserId),
 		index("invites_email_idx").on(table.email),
+		// covers the invites a Topic Post was shared through, which its delete clears
+		index("invites_topic_post_id_idx").on(table.topicPostId).where(sql`${table.topicPostId} is not null`),
 	],
 )

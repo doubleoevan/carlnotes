@@ -3,14 +3,15 @@ import type { TopicResponse } from "@carlnotes/contracts/topics"
 import { toAttachmentFailureMessage } from "@carlnotes/contracts/topics"
 import { db } from "@carlnotes/db"
 import { scans } from "@carlnotes/db/schema/scans"
-import { attachments, sources } from "@carlnotes/db/schema/topics"
+import { attachments, sources, type topics } from "@carlnotes/db/schema/topics"
 import { loadTopicImageForUser } from "@carlnotes/db/topicImages"
 import { traceRequestStage } from "@carlnotes/server/monitoring"
 import { desc, eq } from "drizzle-orm"
-import { isAllowed } from "../authorization"
+import { isAllowed, loadUserAccess } from "../authorization"
 import { loadTopicChatMentions } from "../chat/mentions"
 import { loadTopicPodcast } from "../podcast/helpers"
 import { loadPageCommentThread } from "../social/pageCommentThread"
+import { loadTopicPostCards } from "../topicPost/topicPosts"
 import { loadTopicAccessAndFindings, loadViewableTopic } from "./accessibleFindings"
 import { newTopicFindingCount } from "./findings"
 import {
@@ -29,8 +30,9 @@ import { startOfUtcMonth } from "./quotas"
 import { loadRelatedTopics } from "./relatedTopics"
 import { toTopicSourceSummary } from "./topicSourceSummary"
 
-// whether the load is a poll reload while a scan runs, which leaves out the related topics
-type LoadTopicPageOptions = { isPoll?: boolean }
+// whether the load is a poll reload while a scan runs, which leaves out the related topics, and whether the page's
+// reader loads the related topics in a read of their own, which leaves them out too
+type LoadTopicPageOptions = { isPoll?: boolean; isRelatedTopicsSeparate?: boolean }
 
 /**
  * Loads one topic's page or null if the topic is missing or not visible to this user.
@@ -39,7 +41,7 @@ type LoadTopicPageOptions = { isPoll?: boolean }
 export async function loadTopicPage(
 	userId: string | null,
 	topicId: string,
-	{ isPoll = false }: LoadTopicPageOptions = {},
+	{ isPoll = false, isRelatedTopicsSeparate = false }: LoadTopicPageOptions = {},
 ): Promise<TopicResponse | null> {
 	// load the topic behind the visibility gate. a hidden topic looks identical to a missing one
 	const topic = await traceRequestStage("topic_page.gate", () => loadViewableTopic(userId, topicId))
@@ -70,6 +72,11 @@ export async function loadTopicPage(
 		relatedTopics,
 		commentThread,
 		topicImageForUser,
+		topicPostCards,
+		// the editor's regenerations this month, the user's unseen chat mentions, and the admin's home topics
+		imageRegenerationQuota,
+		chatMentionsByTopicId,
+		homeTopics,
 	] = await traceRequestStage("topic_page.reads", () =>
 		Promise.all([
 			// the user's access and the findings it gates
@@ -99,17 +106,22 @@ export async function loadTopicPage(
 			isAllowed(userId, "topic:viewOwnerDetails", topic),
 			// the topic's podcast, and each scan's podcast episode for the scan history
 			loadTopicPodcast(topic, userId),
-			// the most related topics that the user may open, none for a poll reload
-			isPoll ? [] : loadRelatedTopics(topic, userId),
+			// the most related topics that the user may open, none for a poll reload or a reader who loads them separately
+			isPoll || isRelatedTopicsSeparate ? [] : loadRelatedTopics(topic, userId),
 			// the first page of the topic's comment thread, none for a poll reload
 			isPoll ? undefined : loadPageCommentThread({ userId, topic, target: { kind: "topic", id: topic.id } }),
 			// the image row for its origin and whether the user reported it
 			userId ? loadTopicImageForUser(topic.id, userId) : null,
+			// the topic's published Topic Posts and the user's own drafts, none for a poll reload
+			isPoll ? undefined : loadTopicPostCards(userId, topic.id),
+			// the editor's regenerations this month, read for an editor alone
+			loadImageRegenerationQuotaForEditor(userId, topic),
+			// the user's unseen chat room mentions, for the count badge on the page's title
+			loadTopicChatMentions(userId, [topic.id]),
+			// where the topic sits in the Home topics, and the section itself, for an admin alone
+			loadHomeTopicsForUser(userId, topic.homeOrder),
 		]),
 	)
-
-	// the editor's regenerations this month, read for an editor alone
-	const imageRegenerationQuota = canEdit && userId ? await loadEditorImageRegenerationQuota(userId) : null
 
 	// every later scan reads the generated context, so the owner and admins see the context to edit, and nobody else does.
 	// the owner and admins also see why a failed attachment failed, as a message instead of the recorded reason
@@ -153,8 +165,7 @@ export async function loadTopicPage(
 		isTopicOwner,
 		isDailyFrequencyPaused,
 		isSubscribed: directSubscription?.isActive === true,
-		// the user's unseen chat room mentions, for the count badge on the page's title
-		chatMentions: (await loadTopicChatMentions(userId, [topic.id])).get(topic.id) ?? [],
+		chatMentions: chatMentionsByTopicId.get(topic.id) ?? [],
 		canRate,
 		canEdit,
 		canReadPersonalSources:
@@ -186,11 +197,32 @@ export async function loadTopicPage(
 		isSpendExhausted,
 		...teamFields,
 		isOnTeam: topic.teamId !== null,
-		...(await toHomeTopics(topic.homeOrder, isAdmin)),
+		...homeTopics,
 		relatedTopics,
 		reactions,
 		commentThread,
+		// whoever may edit the topic may publish a Topic Post on it
+		topicPosts: topicPostCards && { topicPosts: topicPostCards, canPublish: canEdit },
 	}
+}
+
+// the regenerations this month of a user who may edit the topic, and null for anyone else. the edit check shares the
+// request's one read of the user's topic role
+async function loadImageRegenerationQuotaForEditor(
+	userId: string | null,
+	topic: typeof topics.$inferSelect,
+): Promise<TopicResponse["imageRegenerationQuota"]> {
+	const canEdit = await isAllowed(userId, "topic:edit", topic)
+	return canEdit && userId ? loadEditorImageRegenerationQuota(userId) : null
+}
+
+// where a topic sits in the Home topics, and the section itself, which only an admin sees
+async function loadHomeTopicsForUser(
+	userId: string | null,
+	homeOrder: number | null,
+): Promise<Pick<TopicResponse, "homeOrder" | "homeTopics">> {
+	const { isAdmin } = userId ? await loadUserAccess(userId) : { isAdmin: false }
+	return toHomeTopics(homeOrder, isAdmin)
 }
 
 // the attachment rows that a topic page lists

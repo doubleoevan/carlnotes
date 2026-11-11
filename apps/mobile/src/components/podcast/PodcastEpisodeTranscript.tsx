@@ -13,7 +13,11 @@ import { ScrollIndicator } from "@/components/common/ScrollIndicator"
 import { Text } from "@/components/primitives/text"
 import { MoreButton } from "@/components/topic/MoreButton"
 
-const elements: PodcastEpisodeTranscriptElements = {
+/**
+ * The app's transcript elements. A Topic Post's discussion card draws its transcript's lines with the same Text and
+ * Strong.
+ */
+export const PODCAST_EPISODE_TRANSCRIPT_ELEMENTS: PodcastEpisodeTranscriptElements = {
 	Card: TranscriptCard,
 	Group: View,
 	Text,
@@ -35,7 +39,7 @@ const elements: PodcastEpisodeTranscriptElements = {
  * Adapts the shared transcript to bounded platform scrolling with the orange overflow indicator.
  */
 export function PodcastEpisodeTranscript({ transcript }: { transcript: PodcastEpisodeTranscriptBlock[] }) {
-	return <SharedPodcastEpisodeTranscript transcript={transcript} elements={elements} />
+	return <SharedPodcastEpisodeTranscript transcript={transcript} elements={PODCAST_EPISODE_TRANSCRIPT_ELEMENTS} />
 }
 
 // keep the transcript bounded while expanded and preserve its complete text for screen readers

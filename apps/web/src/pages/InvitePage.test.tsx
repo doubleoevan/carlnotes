@@ -5,13 +5,13 @@ import { renderWithRouter } from "@/components/chat/renderWithRouter"
 import { InviteNotice } from "./InvitePage"
 
 // a failed request shows the retry, with none of the rejection copy that tells the user to discard the link
-test("a failed acceptance request shows a retry, not an unknown invitation", async () => {
+test("a failed acceptance request shows a retry, not an unknown invite", async () => {
 	const noticeHtml = await renderWithRouter(
 		<InviteNotice isInviteAcceptFailed inviteRejection={null} onRetry={() => {}} />,
 	)
-	expect(noticeHtml).toContain("check your invitation.")
+	expect(noticeHtml).toContain("check your invite.")
 	expect(noticeHtml).toContain("try again")
-	expect(noticeHtml).not.toContain("know that invitation")
+	expect(noticeHtml).not.toContain("know that invite")
 	expect(noticeHtml).not.toContain("fresh link")
 })
 
@@ -28,5 +28,5 @@ test("a rejected token shows its rejection, and the loading line shows before it
 	const loadingHtml = await renderWithRouter(
 		<InviteNotice isInviteAcceptFailed={false} inviteRejection={null} onRetry={() => {}} />,
 	)
-	expect(loadingHtml).toContain("Carl is checking your invitation…")
+	expect(loadingHtml).toContain("Carl is checking your invite…")
 })

@@ -2,7 +2,7 @@ import { useLocalSearchParams } from "expo-router"
 import { type ComponentRef, createContext, type ReactNode, type RefObject, useContext } from "react"
 import { View } from "react-native"
 
-// the section a PageScreen opens at, which the matching SectionAnchor fills in
+// the view a scroll view opens at, which the matching SectionAnchor or a linked comment's row fills in
 export type SectionTargetRef = RefObject<ComponentRef<typeof View> | null>
 export const SectionTargetContext = createContext<SectionTargetRef | null>(null)
 

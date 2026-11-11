@@ -53,6 +53,7 @@ export function PodcastEpisodePlayer({
 			title={PODCAST_NAME}
 			titleNote={<PodcastThemeSongNote />}
 			titleAside={<PodcastEpisodeTitleAside podcastEpisode={podcastEpisode} isLoaded={isLoaded} />}
+			hasClosedDivider
 		>
 			{isPublished && podcastEpisode ? (
 				<PodcastEpisodePlayerCard

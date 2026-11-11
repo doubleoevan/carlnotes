@@ -2,7 +2,7 @@
 // that makes a stored image the topic's current one
 
 import type { TopicImageOrigin, TopicImageRenderKind } from "@carlnotes/contracts/enums"
-import { db, isFindingShown } from "@carlnotes/db"
+import { type DbTransaction, db, isFindingShown } from "@carlnotes/db"
 import { findings, resources } from "@carlnotes/db/schema/scans"
 import { topicImageRenders, topicImages } from "@carlnotes/db/schema/topicImages"
 import { topics } from "@carlnotes/db/schema/topics"
@@ -20,12 +20,15 @@ export const REPLACED_IMAGE_GRACE_MS = 60 * 60 * 1000
 // a render row
 export type TopicImageRenderRow = typeof topicImageRenders.$inferSelect & { topicOwnerId: string }
 
-// a new render: its topic, the podcast episode whose image it draws or none for the topic's own, the user it bills or
-// null for the platform, why it runs, the model that draws it, and the editor's image prompt, which goes to the
-// workflow and never to a row
+// a new render: its topic, the podcast episode, the Topic Post, or the film whose image it draws or none for the
+// topic's own, the user it bills or null for the platform, why it runs, the model that draws it, and the editor's
+// image prompt, which goes to the workflow and never to a row
 export type StartTopicImageRenderOptions = {
 	topicId: string
 	podcastEpisodeId?: string
+	topicPostId?: string
+	topicPodcastEpisodeVideoId?: string
+	// who is billed, why it runs, the model, and the editor's image prompt
 	userId: string | null
 	kind: Exclude<TopicImageRenderKind, "resize">
 	model: string
@@ -38,6 +41,8 @@ export type StartTopicImageRenderOptions = {
 export async function startTopicImageRender({
 	topicId,
 	podcastEpisodeId,
+	topicPostId,
+	topicPodcastEpisodeVideoId,
 	userId,
 	kind,
 	model,
@@ -46,7 +51,7 @@ export async function startTopicImageRender({
 	// the row first, so the workflow finds it, then the workflow named by the row
 	const [renderRow] = await db
 		.insert(topicImageRenders)
-		.values({ topicId, podcastEpisodeId, userId, kind, model })
+		.values({ topicId, podcastEpisodeId, topicPostId, topicPodcastEpisodeVideoId, userId, kind, model })
 		.returning()
 	if (!renderRow) {
 		throw new Error(`no render row was written for topic ${topicId}`)
@@ -106,6 +111,41 @@ export async function recordTopicImageScene(renderId: string, scene: string): Pr
 	await db.update(topicImageRenders).set({ scene }).where(eq(topicImageRenders.id, renderId))
 }
 
+// the transaction that swapped the image, the render that drew it or null for an upload, and what the render cost
+type SucceedTopicImageRenderOptions = { transaction: DbTransaction; renderId: string | null; costDollars: number }
+
+/**
+ * Closes the render that drew a new image as succeeded with its cost, inside the transaction that made the image
+ * current. An upload has no render to close.
+ */
+export async function succeedTopicImageRender({
+	transaction,
+	renderId,
+	costDollars,
+}: SucceedTopicImageRenderOptions): Promise<void> {
+	if (!renderId) {
+		return
+	}
+
+	// close the row with the cost
+	await transaction
+		.update(topicImageRenders)
+		.set({ status: "succeeded", cost: String(costDollars), finishedAt: new Date() })
+		.where(eq(topicImageRenders.id, renderId))
+}
+
+/**
+ * Schedules a replaced image's objects for deletion after the grace, inside the transaction that replaced it, so the
+ * image a reader is still loading stays readable for an hour.
+ */
+export function recordReplacedImageDeletions(transaction: DbTransaction, objectKeys: string[]): Promise<void> {
+	return recordPendingObjectDeletions({
+		handle: transaction,
+		objectKeys,
+		nextTryAt: new Date(Date.now() + REPLACED_IMAGE_GRACE_MS),
+	})
+}
+
 // a stored image to make current: its topic, the render that drew it or null for an upload, its hash, origin, scene,
 // model, image prompt, pixel size, and cost
 export type ReplaceTopicImageOptions = {
@@ -159,20 +199,11 @@ export async function replaceTopicImage({
 
 		// the replaced objects go after the grace, unless the same bytes came back under the same hash
 		if (topicRow?.previousHash && topicRow.previousHash !== hash) {
-			await recordPendingObjectDeletions({
-				handle: transaction,
-				objectKeys: toTopicImageObjectKeys(topicId, topicRow.previousHash),
-				nextTryAt: new Date(Date.now() + REPLACED_IMAGE_GRACE_MS),
-			})
+			await recordReplacedImageDeletions(transaction, toTopicImageObjectKeys(topicId, topicRow.previousHash))
 		}
 
 		// the render that drew it is done
-		if (renderId) {
-			await transaction
-				.update(topicImageRenders)
-				.set({ status: "succeeded", cost: String(costDollars), finishedAt: new Date() })
-				.where(eq(topicImageRenders.id, renderId))
-		}
+		await succeedTopicImageRender({ transaction, renderId, costDollars })
 		return topicRow
 	})
 

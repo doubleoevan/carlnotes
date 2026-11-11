@@ -24,6 +24,9 @@ const EXPECTED_TOOL_ANNOTATIONS = {
 	save_reaction: { readOnlyHint: false, destructiveHint: true, idempotentHint: true },
 	read_hot_takes: { readOnlyHint: true },
 	post_hot_take: { readOnlyHint: false, destructiveHint: false, idempotentHint: false },
+	read_news: { readOnlyHint: true },
+	read_topic_posts: { readOnlyHint: true },
+	read_topic_post: { readOnlyHint: true },
 }
 
 // each advertised tool's phrases, which its description lists so a model finds the tool from the user's words
@@ -56,6 +59,9 @@ const EXPECTED_TOOL_PHRASES: Record<string, readonly string[]> = {
 	save_reaction: ["react to this", "like this finding"],
 	read_hot_takes: ["what are people saying", "read the hot takes", "read the conversation"],
 	post_hot_take: ["leave a hot take", "post a comment", "reply to the conversation"],
+	read_news: ["Brews News", "what happened this week", "who mentioned me"],
+	read_topic_posts: ["Open Mic", "a topic's posts"],
+	read_topic_post: ["Open Mic", "a topic's posts"],
 }
 
 // wording that asks a model to act unprompted. a sentence that opens with Never forbids it instead

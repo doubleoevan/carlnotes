@@ -1,5 +1,5 @@
 // the team avatar with the camera overlay
-import type { TeamIdentity } from "@carlnotes/contracts/teams"
+import type { TeamIdentity } from "@carlnotes/contracts/teamIdentity"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { Camera } from "lucide-react"
 import { toast } from "sonner"

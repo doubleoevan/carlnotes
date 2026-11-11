@@ -47,10 +47,12 @@ describe("toRankedSearchRows", () => {
 			toSearchRow("user", "orbitwatch"),
 			toSearchRow("topic", "Orbit Watch"),
 			toSearchRow("topic", "Orbit Watchers"),
+			toSearchRow("topicPost", "Orbit Report"),
 			toSearchRow("podcastEpisode", "Orbit Weekly"),
 		]
 		const rankedRows = toRankedSearchRows({ searchRows, query: "orbit", sort: "relevant" })
-		expect(rankedRows.map((searchRow) => searchRow.kind)).toEqual(["topic", "topic", "podcastEpisode", "team", "user"])
+		const rankedKinds = rankedRows.map((searchRow) => searchRow.kind)
+		expect(rankedKinds).toEqual(["topic", "topic", "podcastEpisode", "topicPost", "team", "user"])
 		expect(toNames(rankedRows).slice(0, 2)).toEqual(["Orbit Watch", "Orbit Watchers"])
 	})
 

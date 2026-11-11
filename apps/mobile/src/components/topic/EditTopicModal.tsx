@@ -102,7 +102,7 @@ export function EditTopicModal({
 				for (const username of usernames) {
 					const rejection = await sendUserInvite({ topicId: id }, { username })
 					if (rejection) {
-						showClientError(`The invitation to @${username} didn't go through.`)
+						showClientError(`The invite to @${username} didn't go through.`)
 					}
 				}
 			},

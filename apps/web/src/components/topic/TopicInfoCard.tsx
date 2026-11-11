@@ -8,7 +8,7 @@ import { TopicInfo } from "./TopicInfo"
  */
 export function TopicInfoCard({ topic, onMakeTopicPublic }: { topic: TopicResponse; onMakeTopicPublic?: () => void }) {
 	return (
-		<CollapsibleSection value="roast" title="Topic roast" className="min-w-0">
+		<CollapsibleSection value="roast" title="Topic roast" className="min-w-0" hasStackedClosedDivider>
 			<div className={INFO_CARD_CLASS}>
 				<TopicInfo topic={topic} isCard onMakeTopicPublic={onMakeTopicPublic} />
 			</div>

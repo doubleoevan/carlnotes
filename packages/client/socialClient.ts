@@ -90,8 +90,15 @@ export async function saveReaction(saveReactionPayload: SaveReactionPayload): Pr
 /**
  * Reads one page of a social target's comment thread, newest first. Throws an error on a failed read.
  */
-export async function fetchCommentThread(target: CommentTarget, cursor?: string): Promise<CommentThreadResponse> {
-	const response = await apiClient().api.comments.$get({ query: { ...target, ...(cursor ? { cursor } : {}) } })
+export async function fetchCommentThread(
+	target: CommentTarget,
+	cursor?: string,
+	linkedCommentId?: string,
+): Promise<CommentThreadResponse> {
+	// a linked Comment's top-level Comment leads the first page, with the replies up to the linked one
+	const response = await apiClient().api.comments.$get({
+		query: { ...target, ...(cursor ? { cursor } : {}), ...(linkedCommentId ? { commentId: linkedCommentId } : {}) },
+	})
 	if (!response.ok) {
 		throw new Error(`comment thread read failed: ${response.status}`)
 	}

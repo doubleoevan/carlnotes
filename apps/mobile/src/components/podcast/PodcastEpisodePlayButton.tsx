@@ -46,13 +46,24 @@ const elements: PodcastEpisodePlayButtonElements = {
 export function PodcastEpisodePlayButton({
 	podcastEpisode,
 	size = "sm",
+	label,
+	isPlaying,
 	onPress,
 }: {
 	podcastEpisode: PodcastEpisodeSummary
+	label?: string
+	isPlaying?: boolean
 	onPress?: () => void
 	size?: "sm" | "default" | "lg"
 }) {
 	return (
-		<SharedPodcastEpisodePlayButton podcastEpisode={podcastEpisode} size={size} elements={elements} onPress={onPress} />
+		<SharedPodcastEpisodePlayButton
+			podcastEpisode={podcastEpisode}
+			label={label}
+			isPlaying={isPlaying}
+			size={size}
+			elements={elements}
+			onPress={onPress}
+		/>
 	)
 }

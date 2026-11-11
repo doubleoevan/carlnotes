@@ -12,11 +12,15 @@ import { type ReactNode, useState } from "react"
 import { toast } from "sonner"
 import { CoffeeLoading } from "@/components/branding/CoffeeLoading"
 import { TeamAvatar } from "@/components/branding/TeamAvatar"
-import { Button } from "@/components/primitives/button"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/primitives/popover"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import { useConfirmDialog } from "@/hooks/useConfirmDialog"
-import { MENU_DIVIDER_CLASS, MENU_OPTION_CLASS } from "@/lib/styleClasses"
+import {
+	MENU_DIVIDER_CLASS,
+	MENU_OPTION_CLASS,
+	PLAIN_PAGE_BUTTON_CLASS,
+	PLAIN_PAGE_BUTTON_ICON_CLASS,
+} from "@/lib/styleClasses"
 import { NewTeamOption, TeamOption } from "./TeamMenuOptions"
 
 /**
@@ -55,7 +59,7 @@ export function InviteUserToTeamButton({
 	const handleInviteProfileUser = async (profileTeamStatus: ProfileTeamStatus): Promise<void> => {
 		const rejection = await sendUserInvite({ teamId: profileTeamStatus.teamId }, { username: profileUsername })
 		if (rejection) {
-			toast.error(`The invitation to @${profileUsername} didn't go through.`)
+			toast.error(`The invite to @${profileUsername} didn't go through.`)
 		} else {
 			toast(`Invited @${profileUsername} to ${profileTeamStatus.name}.`)
 		}
@@ -76,7 +80,7 @@ export function InviteUserToTeamButton({
 	const handleDeleteTeamInvite = async (profileTeamStatus: ProfileTeamStatus): Promise<void> => {
 		if (profileTeamStatus.inviteId) {
 			await sendDeleteTeamInvite(profileTeamStatus.teamId, profileTeamStatus.inviteId)
-			toast("Team invitation removed.")
+			toast("Team invite removed.")
 		}
 		onReloadProfileTeamStatuses()
 	}
@@ -84,10 +88,10 @@ export function InviteUserToTeamButton({
 	return (
 		<Popover open={isMenuOpen} onOpenChange={handleOpenChange}>
 			<PopoverTrigger asChild>
-				<Button className="shrink-0">
-					<Users className={cn("size-4", isInviteUserToTeamIconFilled && "fill-current")} />
+				<button type="button" className={PLAIN_PAGE_BUTTON_CLASS}>
+					<Users className={cn(PLAIN_PAGE_BUTTON_ICON_CLASS, isInviteUserToTeamIconFilled && "fill-current")} />
 					Team Up
-				</Button>
+				</button>
 			</PopoverTrigger>
 			<PopoverContent align="end" className="w-64" bodyClassName="p-1">
 				{/* the user's teams, each option shaped by the profile user's status there */}
@@ -127,14 +131,14 @@ export function InviteUserToTeamButton({
 							) : (
 								<TeamOptionRemoveAction
 									canRemove={profileTeamStatus.canDeleteInvite}
-									label={`Delete invitation to ${profileTeamStatus.name}`}
+									label={`Delete invite to ${profileTeamStatus.name}`}
 									tooltip={
 										profileTeamStatus.canDeleteInvite ? (
 											<>
-												Delete invitation to <span className="font-semibold">{profileTeamStatus.name}</span>
+												Delete invite to <span className="font-semibold">{profileTeamStatus.name}</span>
 											</>
 										) : (
-											"Must be a leader to delete another member's invitation"
+											"Must be a leader to delete another member's invite"
 										)
 									}
 									onRemove={() =>

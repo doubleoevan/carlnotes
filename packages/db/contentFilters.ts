@@ -164,6 +164,15 @@ export function toTopicRoleFilter(userId: string | SQLWrapper): SQL | undefined 
  * that joins topics and scans. An admin and a role on the topic read every scan, and a null user reads none of them.
  */
 export function toActivatedScanFilter(userId: string | null): SQL {
+	return toActivatedAfterFilter(userId, scans.startedAt)
+}
+
+/**
+ * Returns the filter that keeps what an invite topic held before the user's subscription activated out of a read that
+ * joins topics, by the column that holds each row's time. An admin and a role on the topic read every row, and a null
+ * user reads none of them.
+ */
+export function toActivatedAfterFilter(userId: string | null, timeColumn: SQLWrapper): SQL {
 	const isNotInviteTopic = ne(topics.visibility, "invite")
 	if (!userId) {
 		return isNotInviteTopic
@@ -186,12 +195,7 @@ export function toActivatedScanFilter(userId: string | null): SQL {
 			.from(users)
 			.where(and(eq(users.id, userId), eq(users.role, "admin"))),
 	)
-	return or(
-		isNotInviteTopic,
-		isAdmin,
-		toTopicRoleFilter(userId),
-		sql`${scans.startedAt} > (${activatedAtQuery})`,
-	) as SQL
+	return or(isNotInviteTopic, isAdmin, toTopicRoleFilter(userId), sql`${timeColumn} > (${activatedAtQuery})`) as SQL
 }
 
 /**

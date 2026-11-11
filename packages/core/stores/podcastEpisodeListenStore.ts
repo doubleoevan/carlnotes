@@ -4,6 +4,7 @@
 import { sendPodcastEpisodeListen } from "@carlnotes/client/podcastEpisodeClient"
 import type { PodcastEpisodeListenPayload } from "@carlnotes/contracts/payloads"
 import type { PodcastEpisode } from "@carlnotes/contracts/podcast"
+import { toDiscussionTopicPostId } from "@carlnotes/contracts/topicPosts"
 
 // how often a playing podcast episode saves the user's progress
 const LISTEN_SAVE_INTERVAL_MS = 30_000
@@ -62,6 +63,11 @@ export function savePodcastEpisodeListen({
 	positionSeconds,
 	listen = {},
 }: SavePodcastEpisodeListenOptions): void {
+	// a Topic Post's discussion keeps no progress
+	if (toDiscussionTopicPostId(podcastEpisode.id)) {
+		return
+	}
+
 	// the first play of a loaded episode saves its playback start, and a later play saves nothing
 	if (listen.isPlaybackStart) {
 		if (hasSavedPlaybackStart) {

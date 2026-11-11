@@ -113,6 +113,8 @@ test("a summary of each topic's latest podcast episode counts its chapters in on
 		pagePath: "/topics/public-topic/topic-public-topic/episodes/2026/14",
 		chapterCount: 12,
 		image: null,
+		hasVideo: false,
+		videoPosterUrl: null,
 	})
 
 	// one count of the listenable episode's chapters, and no chapter rows
@@ -123,22 +125,37 @@ test("a summary of each topic's latest podcast episode counts its chapters in on
 	expect(chapterQueries[0]?.values).toEqual(["public-episode"])
 })
 
-test("summaries keep their order, and an episode with no chapter row counts none", async () => {
-	// two podcast episodes, and a chapter count for the second alone
-	const sentQueries = stubConnectionPool(({ text }) =>
-		text.includes('from "episode_chapters"') ? [["episode-2", 4]] : [],
-	)
+test("summaries keep their order, an episode with no chapter row counts none, and each says if it has a film", async () => {
+	// two podcast episodes, and a chapter count and a ready film for the second alone
+	const sentQueries = stubConnectionPool(({ text }) => {
+		if (text.includes('from "topic_podcast_episode_videos"')) {
+			return [["episode-2", "ready", 5678, "film-hash"]]
+		}
+		return text.includes('from "episode_chapters"') ? [["episode-2", 4]] : []
+	})
 	const podcastEpisodeSummaries = await loadPodcastEpisodeSummaries([
 		toPodcastEpisodeRowTopic("episode-1", 1),
 		toPodcastEpisodeRowTopic("episode-2", 2),
 	])
 
-	// the order given, each with its own count, from one query
-	expect(podcastEpisodeSummaries.map(({ id, chapterCount }) => ({ id, chapterCount }))).toEqual([
-		{ id: "episode-1", chapterCount: 0 },
-		{ id: "episode-2", chapterCount: 4 },
+	// the order given, each with its own count, film, and the poster of the film's own image, from one count query and
+	// one film query
+	const summaryFields = podcastEpisodeSummaries.map(({ id, chapterCount, hasVideo, videoPosterUrl }) => ({
+		id,
+		chapterCount,
+		hasVideo,
+		videoPosterUrl,
+	}))
+	expect(summaryFields).toEqual([
+		{ id: "episode-1", chapterCount: 0, hasVideo: false, videoPosterUrl: null },
+		{
+			id: "episode-2",
+			chapterCount: 4,
+			hasVideo: true,
+			videoPosterUrl: "/api/topic-podcast-episode-video-images/episode-2/film-hash/poster.jpg",
+		},
 	])
-	expect(sentQueries).toHaveLength(1)
+	expect(sentQueries).toHaveLength(2)
 })
 
 test("a podcast episode lets the player ask carl and vienna with a speech model and a set or default transcription model", () => {

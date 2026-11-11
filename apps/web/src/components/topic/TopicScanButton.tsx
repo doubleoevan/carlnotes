@@ -19,7 +19,7 @@ import { toast } from "sonner"
 import { IconButton } from "@/components/common/IconButton"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import { useManualScanProgress, usePollWhileScanning } from "@/hooks/useTopicScan"
-import { MENU_BUTTON_CLASS, MENU_BUTTON_HIGHLIGHT_CLASS, RAIL_ICON_INSET } from "@/lib/styleClasses"
+import { HIGHLIGHTED_PAGE_BUTTON_CLASS, RAIL_ICON_INSET } from "@/lib/styleClasses"
 import { toSeeAccountToastAction, toSeePlansToastAction } from "@/lib/toastActions"
 
 // how long after a scan finishes the page keeps looking for the podcast episode that the scan starts
@@ -133,7 +133,7 @@ export function TopicScanButton({
 	// while a scan runs, the trigger becomes a bigger shimmering "Carl is Brewing" with the cancel icon to the right
 	if (isRunningScan || isScanning) {
 		return (
-			<div className={cn(RAIL_ICON_INSET, "flex min-h-11 items-center gap-1 sm:min-h-9")}>
+			<div className={cn(RAIL_ICON_INSET, "flex h-9 items-center gap-1")}>
 				<span className="shimmer-text text-base font-semibold sm:text-lg">{SCAN_RUNNING_LABEL}</span>
 				{/* only a scan with a row to cancel may be stopped, and the icon disappears once clicked */}
 				{isScanning && !isCancellingScan && (
@@ -163,7 +163,7 @@ export function TopicScanButton({
 									action: isBudgetBlocked ? toSeeAccountToastAction(navigate) : toSeePlansToastAction(navigate),
 								})
 							}
-							className={cn(MENU_BUTTON_CLASS, MENU_BUTTON_HIGHLIGHT_CLASS)}
+							className={HIGHLIGHTED_PAGE_BUTTON_CLASS}
 						>
 							<Coffee className="size-4 fill-none" />
 							Brew
@@ -186,11 +186,7 @@ export function TopicScanButton({
 						type="button"
 						onClick={handleManualScan}
 						disabled={manualScansRemaining === null}
-						className={cn(
-							MENU_BUTTON_CLASS,
-							MENU_BUTTON_HIGHLIGHT_CLASS,
-							"disabled:pointer-events-none disabled:opacity-50",
-						)}
+						className={HIGHLIGHTED_PAGE_BUTTON_CLASS}
 					>
 						<Coffee className="size-4 fill-none" />
 						Brew

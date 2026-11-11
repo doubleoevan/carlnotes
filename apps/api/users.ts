@@ -24,6 +24,7 @@ import { refreshSessionUser, revokeUserSessions } from "./sessions"
 import { deleteRevenueCatCustomer } from "./storeBilling"
 import { deleteTeamRow } from "./team/deleteTeam"
 import { deleteTopic } from "./topic/deleteTopic"
+import { loadTopicPostObjectKeys } from "./topicPost/topicPostObjectKeys"
 
 // the error that both close routes send with a 503 while Redis is unreachable
 const ACCOUNT_CLOSE_UNAVAILABLE_TEXT = "closing an account is unavailable for a moment. try again"
@@ -136,17 +137,22 @@ export async function deleteUser(
 		reportError(error, "api-route", { userId: targetUserId })
 	})
 
-	// record the keys of everything kept in chat, on any topic, and of the avatar, then delete the user row in one
-	// transaction, so the keys survive the cascade
+	// record the keys of everything kept in chat, on any topic, of the topic posts written on other users' topics, and
+	// of the avatar, then delete the user row in one transaction, so the keys survive the cascade
 	const { deletedUserRow, objectKeys } = await db.transaction(async (transaction) => {
 		const chatAttachmentObjectKeys = await loadChatAttachmentObjectKeys({ userId: targetUserId }, transaction)
+		const topicPostObjectKeys = await loadTopicPostObjectKeys({ authorUserId: targetUserId }, transaction)
 		const [deletedUserRow] = await transaction
 			.delete(users)
 			.where(eq(users.id, targetUserId))
 			.returning({ litellmVirtualKey: users.litellmVirtualKey, avatarKey: users.avatarKey })
 
 		// every key as pending
-		const objectKeys = [...chatAttachmentObjectKeys, ...(deletedUserRow?.avatarKey ? [deletedUserRow.avatarKey] : [])]
+		const objectKeys = [
+			...chatAttachmentObjectKeys,
+			...topicPostObjectKeys,
+			...(deletedUserRow?.avatarKey ? [deletedUserRow.avatarKey] : []),
+		]
 		await recordPendingObjectDeletions({ handle: transaction, objectKeys })
 		return { deletedUserRow, objectKeys }
 	})

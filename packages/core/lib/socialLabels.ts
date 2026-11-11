@@ -25,6 +25,14 @@ export function toReportImageLabel(isReported: boolean): string {
 	return isReported ? "Remove image report" : "Report image"
 }
 
+// the author of a Comment with no user
+export const CARL_NAME = "Carl"
+
+// the mentions list's title, its one action, and what it reads as with no unseen mention
+export const COMMENT_MENTIONS_TITLE = "Mentions"
+export const MARK_ALL_SEEN_LABEL = "Mark all seen"
+export const COMMENT_MENTIONS_EMPTY_TEXT = "No new mentions."
+
 // the title of the card that holds a page's comment thread, and the thread's heading where it shows without the card
 export const SOCIAL_SECTION_HEADING = "Hot takes 🔥"
 export const COMMENT_THREAD_HEADING = "Hot takes"

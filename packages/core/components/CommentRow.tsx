@@ -18,6 +18,7 @@ import {
 	toSharedCommentSlotsFullLabel,
 	UNSHARE_WITH_PODCAST_LABEL,
 } from "../lib/socialLabels"
+import { markCommentMentionsSeen, useCommentMentions } from "../stores/commentMentionStore"
 import { ReactionRow } from "./ReactionRow"
 import { SocialReportControl } from "./SocialReportControl"
 
@@ -25,6 +26,8 @@ import { SocialReportControl } from "./SocialReportControl"
 // handlers and elements stay the same across renders, so memo holds
 type CommentRowProps = {
 	comment: Comment | CommentReply
+	// the Comment a link named, which its row highlights
+	linkedCommentId?: string
 	chapterByPosition: ReadonlyMap<number, CommentChapter>
 	onChapterPress?: (chapterPosition: number) => void
 	isSignedIn: boolean
@@ -72,6 +75,7 @@ function toShareToggle(
 export const CommentRow = memo(function CommentRow(props: CommentRowProps) {
 	const {
 		comment,
+		linkedCommentId,
 		chapterByPosition,
 		onChapterPress,
 		isSignedIn,
@@ -107,8 +111,12 @@ export const CommentRow = memo(function CommentRow(props: CommentRowProps) {
 	// the chapter the comment names, and its share toggle
 	const chapter = comment.chapterPosition === null ? undefined : chapterByPosition.get(comment.chapterPosition)
 	const shareToggle = toShareToggle(comment, sharedCommentSlots)
+
+	// a row that holds one of the user's unseen mentions marks it seen as the row shows
+	const hasUnseenMention = useCommentMentions().some((commentMention) => commentMention.commentId === comment.id)
+	const handleShown = (): void => void markCommentMentionsSeen([comment.id])
 	return (
-		<Row>
+		<Row isLinked={comment.id === linkedCommentId} onShown={hasUnseenMention ? handleShown : undefined}>
 			<Header>
 				<Author author={comment.author} />
 				<Age>{toAgeLabel(comment.createdAt)}</Age>

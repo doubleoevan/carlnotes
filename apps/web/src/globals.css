@@ -43,6 +43,21 @@
 @source "../../../packages/core/components/PodcastEpisodeChapterTag.tsx";
 @source "../../../packages/core/components/PodcastEpisodePill.tsx";
 
+/* the shared film player owns its layout, and the film's captions read in Karla on the hero band's espresso */
+@source "../../../packages/core/components/TopicPodcastEpisodeVideoPlayer.tsx";
+video::cue {
+	font-family: "Karla", ui-sans-serif, system-ui, sans-serif;
+	font-weight: 500;
+	color: var(--hero-foreground);
+	background-color: color-mix(in srgb, var(--hero) 75%, transparent);
+}
+
+/* the shared playback control class owns the skips' and the speed's touch target size */
+@source "../../../packages/core/components/PlaybackControlButtons.tsx";
+
+/* the season tabs and the feed dialog's Podcast and Films choice share one underlined tab */
+@source "../../../packages/core/lib/tabClasses.ts";
+
 /* budget segments and legend dots use the color classes returned by the shared model */
 @source "../../../packages/core/lib/spendMeter.ts";
 

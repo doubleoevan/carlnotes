@@ -37,6 +37,9 @@ export type StreamedChatTurn = {
 	toolCalls: ChatTurnToolCalls
 	// the podcast episode chapter that a podcast player question was asked during
 	podcastEpisodeChapter?: PodcastEpisodeChapterContext
+	// the Topic Post that a question asked from its page was about, and whether the user owns its topic
+	topicPostId?: string
+	isTopicOwner?: boolean
 	// the properties that the analytics event is sent with, and the LiteLLM key for the attachment summaries
 	analyticsProperties: AnalyticsProperties
 	litellmApiKey: string
@@ -134,6 +137,8 @@ async function saveFinishedChatTurn(chatTurn: StreamedChatTurn, isReplyFinished:
 			isSpoken: chatTurn.isSpoken,
 			podcastEpisodeChapter: chatTurn.podcastEpisodeChapter,
 			podcastAnswerSpeaker: speaker,
+			topicPostId: chatTurn.topicPostId,
+			isTopicOwner: chatTurn.isTopicOwner,
 			analyticsProperties: chatTurn.analyticsProperties,
 		})
 

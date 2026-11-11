@@ -56,6 +56,8 @@ export const topics = pgTable(
 		// an admin can pin this topic to the home page and set its order. the column kept its old name through the
 		// rename to home order
 		homeOrder: integer("feature_order"),
+		// the owner can pin this topic to the top of their profile page and set its order
+		profileOrder: integer("profile_order"),
 		// the content hash of the topic's current image, copied from its image row
 		imageHash: text("image_hash"),
 		// how many findings a scan keeps for this topic, one of the shared allowed sizes
@@ -81,6 +83,10 @@ export const topics = pgTable(
 		index("topics_owner_id_idx").on(table.ownerId),
 		// the few pinned topics, which the home's home topic and podcast cards and the admin console read
 		index("topics_feature_order_idx").on(table.homeOrder).where(sql`${table.homeOrder} is not null`),
+		// one owner's few pinned topics, which their profile page reads
+		index("topics_owner_profile_order_idx")
+			.on(table.ownerId, table.profileOrder)
+			.where(sql`${table.profileOrder} is not null`),
 		index("topics_team_id_idx").on(table.teamId),
 		check("topics_max_results_allowed", sql.raw(`max_results in (${maxTopicFindingsOptions.join(", ")})`)),
 	],

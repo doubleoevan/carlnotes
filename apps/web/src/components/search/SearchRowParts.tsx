@@ -3,13 +3,14 @@ import { isPublishedPodcastEpisode, type PodcastEpisodeSummary } from "@carlnote
 import type { FindingSearchRow, SearchRow } from "@carlnotes/contracts/search"
 import { toTopicPath } from "@carlnotes/contracts/seo"
 import { toDotSeparatedText } from "@carlnotes/contracts/text"
+import type { TopicImageUrls } from "@carlnotes/contracts/topicImages"
 import { toAgoLabel, toCountLabel } from "@carlnotes/core/lib/labels"
 import type { LucideIcon } from "lucide-react"
 import { TeamAvatar } from "@/components/branding/TeamAvatar"
 import { UserAvatar } from "@/components/branding/UserAvatar"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { PodcastEpisodeNumberPill } from "@/components/podcast/PodcastEpisodePill"
-import { TopicImage } from "@/components/primitives/topic-image"
+import { TopicImageLink } from "@/components/topic/TopicImageLink"
 import { SEARCH_RESULT_KIND_ICON } from "./searchFilterOptions"
 import { TopicSearchResultDetails } from "./TopicSearchResultDetails"
 
@@ -33,25 +34,36 @@ export function SearchRowLine({ searchRow }: { searchRow: LinkedSearchRow }) {
 	)
 }
 
-// a row's icon: a topic's or a podcast episode's image, its kind's icon, or a team's or profile's avatar
+// a row's icon: a topic's, a podcast episode's, or a Topic Post's image, its kind's icon, or a team's or profile's avatar
 function SearchRowIcon({ searchRow }: { searchRow: LinkedSearchRow }) {
 	switch (searchRow.kind) {
 		case "topic":
-			return searchRow.topic.image ? (
-				<TopicImage image={searchRow.topic.image} size="thumbnail" name={searchRow.topic.name} className="shrink-0" />
-			) : (
-				<KindIcon Icon={SEARCH_RESULT_KIND_ICON.topics} label="Topic" />
+			return (
+				<SearchRowImage
+					searchRow={searchRow}
+					image={searchRow.topic.image}
+					Icon={SEARCH_RESULT_KIND_ICON.topics}
+					label="Topic"
+				/>
 			)
 		case "podcastEpisode":
-			return searchRow.podcastEpisode.image ? (
-				<TopicImage
+			return (
+				<SearchRowImage
+					searchRow={searchRow}
 					image={searchRow.podcastEpisode.image}
-					size="thumbnail"
-					name={searchRow.name}
-					className="shrink-0"
+					Icon={SEARCH_RESULT_KIND_ICON.podcastEpisodes}
+					label="Podcast episode"
 				/>
-			) : (
-				<KindIcon Icon={SEARCH_RESULT_KIND_ICON.podcastEpisodes} label="Podcast episode" />
+			)
+		// a Topic Post's own image, or its topic's until its own is drawn
+		case "topicPost":
+			return (
+				<SearchRowImage
+					searchRow={searchRow}
+					image={searchRow.topicPost.image}
+					Icon={SEARCH_RESULT_KIND_ICON.topicPosts}
+					label="Post"
+				/>
 			)
 		case "team":
 			return <TeamAvatar team={searchRow.team} className={SEARCH_ROW_ICON_CLASS} />
@@ -65,6 +77,25 @@ function SearchRowIcon({ searchRow }: { searchRow: LinkedSearchRow }) {
 				/>
 			)
 	}
+}
+
+// a row's image, which opens the row's page as its title does, or its kind's icon for a row with no image
+function SearchRowImage({
+	searchRow,
+	image,
+	Icon,
+	label,
+}: {
+	searchRow: LinkedSearchRow
+	image: TopicImageUrls | null
+	Icon: LucideIcon
+	label: string
+}) {
+	return image ? (
+		<TopicImageLink image={image} size="thumbnail" name={searchRow.name} path={searchRow.path} />
+	) : (
+		<KindIcon Icon={Icon} label={label} />
+	)
 }
 
 // a row's details: its kind, its age, its count, the topic it is in, and a podcast episode's play pill
@@ -84,11 +115,16 @@ function SearchRowDetails({ searchRow }: { searchRow: LinkedSearchRow }) {
 			return (
 				<>
 					{toDotSeparatedText(["Podcast", toAgoLabel(searchRow.date), toCountLabel(searchRow.count ?? 0, "listener")])}
-					{/* the dot stays with the topic's name when the line wraps, and the margin evens the line's gap with a space */}
-					<span className="-ml-0.5">
-						· <SearchRowTopicLink topic={searchRow.topic} />
-					</span>
+					<SearchRowTopicDetail topic={searchRow.topic} />
 					<PodcastEpisodePill podcastEpisode={searchRow.podcastEpisode} />
+				</>
+			)
+		// a Topic Post, how long ago it was published, and the topic it is in
+		case "topicPost":
+			return (
+				<>
+					{toDotSeparatedText(["Post", toAgoLabel(searchRow.date)])}
+					<SearchRowTopicDetail topic={searchRow.topic} />
 				</>
 			)
 		// a team, how many topics it holds, and how many members it has
@@ -104,16 +140,28 @@ function SearchRowDetails({ searchRow }: { searchRow: LinkedSearchRow }) {
 			)
 		// a profile names its kind alone
 		case "user":
-			return <>Profile</>
+			return <>Café</>
 	}
 }
 
-// the topic a podcast episode or a finding is in, linked to its page
+// the topic a podcast episode, a Topic Post, or a finding is in, linked to its page
 export function SearchRowTopicLink({ topic }: { topic: { id: string; name: string } }) {
 	return (
 		<AnchorLink href={toTopicPath(topic)} className="hover:text-foreground underline-offset-2 hover:underline">
 			{topic.name}
 		</AnchorLink>
+	)
+}
+
+/**
+ * The topic a row is in, after a dot. The dot stays with the topic's name if the line wraps, and the margin evens the
+ * line's gap with a space.
+ */
+export function SearchRowTopicDetail({ topic }: { topic: { id: string; name: string } }) {
+	return (
+		<span className="-ml-0.5">
+			· <SearchRowTopicLink topic={topic} />
+		</span>
 	)
 }
 

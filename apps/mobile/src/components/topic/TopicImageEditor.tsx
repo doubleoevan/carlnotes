@@ -29,10 +29,11 @@ const ELEMENTS: TopicImageEditorElements = {
 			<View className="min-w-0 gap-2">{children}</View>
 		</View>
 	),
+	// the image prompt above Regenerate
 	PromptRow: ({ children }) => <View className="gap-2">{children}</View>,
 	Line: ({ children }) => <Text className="text-sm text-muted-foreground">{children}</Text>,
-	// the image is the upload button, pulsing while a render runs
-	Image: ({ uploadLabel, isRendering, isDisabled, onUpload, ...topicImageProps }) => (
+	// the image is the upload button, pulsing while a render runs. a film's image takes the film's 16:9 frame
+	Image: ({ aspectRatio, uploadLabel, isRendering, isDisabled, onUpload, ...topicImageProps }) => (
 		<TopicImageButton
 			{...topicImageProps}
 			label={uploadLabel}
@@ -40,6 +41,7 @@ const ELEMENTS: TopicImageEditorElements = {
 			isRendering={isRendering}
 			onPress={onUpload}
 			className="w-full"
+			imageClassName={aspectRatio === "16:9" ? "aspect-video" : undefined}
 		/>
 	),
 	PromptInput: ({ label, value, placeholder, maxLength, isDisabled, onChange }) => (

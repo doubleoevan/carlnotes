@@ -4,6 +4,7 @@ import { canCreateTeamToday, loadUserAccess } from "@carlnotes/db/quotas"
 import { teamMembers, teams } from "@carlnotes/db/schema/teams"
 import { teamTopics } from "@carlnotes/db/schema/teamTopics"
 import { subscriptions, topics } from "@carlnotes/db/schema/topics"
+import { clearUnseenCommentMentions, loadTopicMentionedUserIds } from "@carlnotes/db/unseenCommentMentions"
 import { and, eq, inArray, isNull, notInArray, sql } from "drizzle-orm"
 import { isLeaderRole } from "../authorization"
 import { deletePodcastFeedToken } from "../podcast/podcastFeedTokens"
@@ -328,13 +329,14 @@ export async function removeTopicFromTeam(userId: string, teamId: string, topicI
 		return deactivatedSubscriptionRows.map((deactivatedSubscriptionRow) => deactivatedSubscriptionRow.subscriberUserId)
 	})
 
-	// delete the podcast feed token of each member who lost the subscription, and drop the visitors' copies of the
-	// topic's page, which names its teams
+	// delete the podcast feed token of each member who lost the subscription, drop the visitors' copies of the
+	// topic's page, which names its teams, and clear the cached comment mentions of the topic's mentioned users
 	await Promise.all([
 		...deactivatedSubscriberUserIds.map((deactivatedSubscriberUserId) =>
 			deletePodcastFeedToken({ topicId, userId: deactivatedSubscriberUserId }),
 		),
 		clearVisitorTopicPages(topicId),
+		loadTopicMentionedUserIds(topicId).then(clearUnseenCommentMentions),
 	])
 	return true
 }

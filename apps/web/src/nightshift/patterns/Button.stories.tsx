@@ -1,17 +1,20 @@
 // the hand-built button classes: each button class string from styleClasses.ts on the button the app builds with it
 import { cn } from "@carlnotes/nightshift/classNames"
 import type { Meta, StoryObj } from "@storybook/tanstack-react"
-import { ArrowUp, ArrowUpDown, Coffee, Mic, Paperclip, Play, RotateCcw, Users } from "lucide-react"
+import { ArrowUp, ArrowUpDown, Clapperboard, Coffee, Mic, Paperclip, Play, RotateCcw, Rss, Share } from "lucide-react"
 import type * as React from "react"
 import { fn } from "storybook/test"
 import { SKIP_BACK_SECONDS } from "@/lib/podcastEpisodePlayback"
 import {
 	CARD_CLASS,
 	COMPOSER_FRAME_CLASS,
+	HIGHLIGHTED_PAGE_BUTTON_CLASS,
 	ICON_BUTTON_CLASS,
 	ICON_TILE_BUTTON_CLASS,
 	MENU_BUTTON_CLASS,
 	MENU_BUTTON_HIGHLIGHT_CLASS,
+	PLAIN_PAGE_BUTTON_CLASS,
+	PLAIN_PAGE_BUTTON_ICON_CLASS,
 	PLAY_BUTTON_CLASS,
 	PLAY_BUTTON_MUTED_CLASS,
 	PLAYBACK_CONTROL_BUTTON_CLASS,
@@ -20,34 +23,58 @@ import {
 	SEND_BUTTON_CLASS,
 } from "@/lib/styleClasses"
 
-// the fill under a button class in the app: the page under the toolbar's menu buttons, a card under the player, table,
+// the fill under a button class in the app: the page under a top row's buttons, a card under the menu, player, table,
 // and search bar buttons, and the composer's frame under its buttons
 type ButtonClassFill = "page" | "card" | "composer"
 
 // each button class's constant, its accessible name, its classes as a real call site writes them, its fill, and its
 // content, in the order the gallery shows them
 const BUTTON_CLASS_SAMPLES = {
-	menuButton: {
-		constantName: "MENU_BUTTON_CLASS",
-		label: "Team Up",
-		className: MENU_BUTTON_CLASS,
+	plainPageButton: {
+		constantName: "PLAIN_PAGE_BUTTON_CLASS",
+		label: "Subscribe",
+		className: PLAIN_PAGE_BUTTON_CLASS,
 		fill: "page",
 		content: (
 			<>
-				<Users className="size-4" />
-				Team Up
+				<Rss className={PLAIN_PAGE_BUTTON_ICON_CLASS} />
+				Subscribe
 			</>
 		),
 	},
-	menuButtonHighlight: {
-		constantName: "MENU_BUTTON_HIGHLIGHT_CLASS",
+	highlightedPageButton: {
+		constantName: "HIGHLIGHTED_PAGE_BUTTON_CLASS",
 		label: "Brew",
-		className: cn(MENU_BUTTON_CLASS, MENU_BUTTON_HIGHLIGHT_CLASS, "disabled:pointer-events-none disabled:opacity-50"),
+		className: HIGHLIGHTED_PAGE_BUTTON_CLASS,
 		fill: "page",
 		content: (
 			<>
 				<Coffee className="size-4 fill-none" />
 				Brew
+			</>
+		),
+	},
+	menuButton: {
+		constantName: "MENU_BUTTON_CLASS",
+		label: "Share",
+		className: cn(MENU_BUTTON_CLASS, "bg-muted hover:bg-accent"),
+		fill: "card",
+		content: (
+			<>
+				<Share className="size-4" />
+				Share
+			</>
+		),
+	},
+	menuButtonHighlight: {
+		constantName: "MENU_BUTTON_HIGHLIGHT_CLASS",
+		label: "Watch",
+		className: cn(MENU_BUTTON_CLASS, MENU_BUTTON_HIGHLIGHT_CLASS, "px-3 font-semibold"),
+		fill: "card",
+		content: (
+			<>
+				<Clapperboard className="size-4" />
+				Watch
 			</>
 		),
 	},
@@ -124,7 +151,7 @@ const BUTTON_CLASS_NAMES = Object.keys(BUTTON_CLASS_SAMPLES) as ButtonClassName[
 // the button classes the app ever disables: Brew while the scan count loads, send with nothing to send, and the podcast
 // episode question mic while it waits. the gallery shows only these disabled
 const DISABLED_BUTTON_CLASS_NAMES: ButtonClassName[] = [
-	"menuButtonHighlight",
+	"highlightedPageButton",
 	"sendButton",
 	"podcastEpisodeQuestionButton",
 ]
@@ -190,7 +217,7 @@ function ButtonClassGallery({ isDisabled, onClick }: { isDisabled: boolean; onCl
 const meta = {
 	title: "Patterns/Button",
 	component: ButtonClassSample,
-	args: { buttonClass: "menuButton", isDisabled: false, onClick: fn() },
+	args: { buttonClass: "plainPageButton", isDisabled: false, onClick: fn() },
 	argTypes: {
 		buttonClass: { control: "select", options: BUTTON_CLASS_NAMES },
 		isDisabled: { control: "boolean" },

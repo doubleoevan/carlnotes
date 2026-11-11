@@ -6,12 +6,7 @@ import {
 import { cn } from "@carlnotes/nightshift/classNames"
 import { Rss } from "lucide-react"
 import { MORE_UNDER_CARD_CLASS, MoreButton } from "@/components/topic/MoreButton"
-import {
-	INFO_CARD_CLASS,
-	MENU_BUTTON_CLASS,
-	PLAYBACK_CONTROL_BUTTON_CLASS,
-	SCRIPTED_ONLY_CLASS,
-} from "@/lib/styleClasses"
+import { INFO_CARD_CLASS, MENU_BUTTON_CLASS, PLAYBACK_CONTROL_BUTTON_CLASS } from "@/lib/styleClasses"
 import { PlaybackSpeedButton, SkipPlaybackButtons } from "./PlaybackControlButtons"
 import { type ChapterTopicFeed, PodcastEpisodeChapters } from "./PodcastEpisodeChapters"
 import { PodcastEpisodeDetails } from "./PodcastEpisodeDetails"
@@ -52,7 +47,7 @@ const elements: PodcastEpisodePlayerCardElements<ChapterTopicFeed> = {
 			{label}
 		</button>
 	),
-	More: (props) => <MoreButton {...props} className={cn(SCRIPTED_ONLY_CLASS, MORE_UNDER_CARD_CLASS)} />,
+	More: (props) => <MoreButton {...props} className={MORE_UNDER_CARD_CLASS} />,
 	Feedback: ({ isLoading, errorMessage }) =>
 		errorMessage ? (
 			<p role="alert" className="text-sm text-destructive">

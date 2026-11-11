@@ -8,7 +8,7 @@ import {
 } from "@carlnotes/contracts/social"
 import { toCommentLinkUrls } from "@carlnotes/contracts/socialText"
 import { and, asc, count, desc, eq, inArray, isNotNull, isNull, notInArray, type SQL, sql } from "drizzle-orm"
-import { toVisibleAuthorFilter } from "./contentFilters"
+import { toNoUserBlockBetweenFilter, toVisibleAuthorFilter } from "./contentFilters"
 import { type DbHandle, db, isFindingShown } from "./index"
 import { hasFullPodcastEpisodes } from "./quotas"
 import { findings } from "./schema/scans"
@@ -158,6 +158,31 @@ export async function syncCommentLinks({
 			.values(urls.map((url) => ({ commentId, topicId, url })))
 			.onConflictDoNothing()
 	}
+}
+
+/**
+ * Loads the shared Comments on one Topic Post, waiting or aired, newest shared first, up to a count, for the post's
+ * discussion and its chat. A read for one reader leaves out an author in a user block with them.
+ */
+export function loadTopicPostSharedCommentTexts(
+	topicPostId: string,
+	limit: number,
+	readerUserId?: string,
+): Promise<SharedCommentText[]> {
+	return db
+		.select(sharedCommentTextColumns)
+		.from(comments)
+		.leftJoin(users, eq(users.id, comments.authorUserId))
+		.where(
+			and(
+				eq(comments.postId, topicPostId),
+				isNotNull(comments.sharedWithPodcastTopicId),
+				isSharedCommentShown,
+				readerUserId ? toNoUserBlockBetweenFilter(readerUserId, comments.authorUserId) : undefined,
+			),
+		)
+		.orderBy(desc(comments.sharedWithPodcastAt))
+		.limit(limit)
 }
 
 /**

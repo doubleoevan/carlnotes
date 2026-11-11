@@ -5,11 +5,14 @@ import {
 	nextUnplayedPodcastEpisodeResponse,
 	type PodcastEpisode,
 	type PodcastEpisodeAudio,
+	type PodcastFeedUrlResponse,
 	podcastEpisode,
 	podcastEpisodeAudio,
 	podcastFeedUrlResponse,
 	type SeasonPodcastEpisodes,
 	seasonPodcastEpisodes,
+	type TopicPodcastEpisodeVideoFile,
+	topicPodcastEpisodeVideoFile,
 	type UpdatePodcastEpisodePayload,
 } from "@carlnotes/contracts/podcast"
 import { type PodcastEpisodePageResponse, podcastEpisodePageResponse } from "@carlnotes/contracts/podcastEpisodePage"
@@ -17,7 +20,14 @@ import {
 	regenerateTopicImageResponse,
 	type TopicImageUrls,
 	uploadTopicImageResponse,
+	uploadTopicPodcastEpisodeVideoImageResponse,
 } from "@carlnotes/contracts/topicImages"
+import {
+	toDiscussionTopicPostId,
+	topicPostResponse,
+	toTopicPostDiscussionAudioPath,
+	toTopicPostDiscussionPodcastEpisode,
+} from "@carlnotes/contracts/topicPosts"
 import { type ApiResponse, apiClient, fetchApi, readApiErrorMessage, readApiResponse } from "./apiClient"
 import { readTopicGate, type TopicGate } from "./topicClient"
 
@@ -32,10 +42,27 @@ export async function fetchPodcastEpisode(
 	podcastEpisodeId: string,
 	options: PodcastEpisodeRequestOptions = {},
 ): Promise<PodcastEpisode | null> {
+	// a Topic Post's discussion is read from its post
+	const discussionTopicPostId = toDiscussionTopicPostId(podcastEpisodeId)
+	if (discussionTopicPostId) {
+		return fetchTopicPostDiscussionPodcastEpisode(discussionTopicPostId, options)
+	}
+
 	// validate the response under the caller's error policy
 	const response = await fetchApi(`/api/episodes/${encodeURIComponent(podcastEpisodeId)}`, { signal: options.signal })
 	assertPodcastEpisodeResponse(response, options)
 	return response.ok ? readApiResponse(podcastEpisode, response) : null
+}
+
+// a Topic Post's discussion in the shape the player plays, or null for a post that is missing, that the user may not
+// read, or that has no recording to play
+async function fetchTopicPostDiscussionPodcastEpisode(
+	topicPostId: string,
+	options: PodcastEpisodeRequestOptions,
+): Promise<PodcastEpisode | null> {
+	const response = await fetchApi(`/api/topic-posts/${encodeURIComponent(topicPostId)}`, { signal: options.signal })
+	assertPodcastEpisodeResponse(response, options)
+	return response.ok ? toTopicPostDiscussionPodcastEpisode(await readApiResponse(topicPostResponse, response)) : null
 }
 
 /**
@@ -77,12 +104,14 @@ export type FetchedSeason = { season: number; seasonPodcastEpisodes: SeasonPodca
 export async function fetchSeasonPodcastEpisodes({
 	topicId,
 	season,
+	hasVideo,
 	...options
 }: FetchSeasonPodcastEpisodesOptions): Promise<SeasonPodcastEpisodes> {
-	// preserve the empty fallback unless the caller requests an error
+	// preserve the empty fallback unless the caller requests an error. the films list asks for the ones with a film
+	const filmQuery = hasVideo ? { hasVideo: "true" as const } : {}
 	const response = await apiClient()
 		.api.topics[":id"].episodes.$get(
-			{ param: { id: topicId }, query: { season: String(season) } },
+			{ param: { id: topicId }, query: { season: String(season), ...filmQuery } },
 			{ init: { signal: options.signal } },
 		)
 		.catch((error) => {
@@ -229,38 +258,79 @@ export async function uploadPodcastEpisodeImageBody(podcastEpisodeId: string, bo
 }
 
 /**
- * Loads the url of the user's podcast feed for a topic, or null if the url does not load.
+ * Starts a fresh render of the own image of a podcast episode's film, from the editor's image prompt if there is one.
+ * Returns the render's id to poll. Throws an error naming the rejection, which the month's limit is one of.
+ */
+export async function sendTopicPodcastEpisodeVideoImageRegeneration(
+	podcastEpisodeId: string,
+	imagePrompt?: string,
+): Promise<string> {
+	const response = await apiClient().api.episodes[":id"].video.image.regenerate.$post({
+		param: { id: podcastEpisodeId },
+		json: imagePrompt ? { imagePrompt } : {},
+	})
+	if (!response.ok) {
+		throw new Error((await readApiErrorMessage(response)) ?? `regenerate failed: ${response.status}`)
+	}
+	return (await readApiResponse(regenerateTopicImageResponse, response)).renderId
+}
+
+/**
+ * Uploads the own image of a podcast episode's film, encoded by a browser or native file picker as the form's image
+ * field. Returns the film's poster url, which replaces the current one at once.
+ */
+export async function uploadTopicPodcastEpisodeVideoImageBody(
+	podcastEpisodeId: string,
+	body: FormData,
+): Promise<string> {
+	const response = await fetchApi(`/api/episodes/${encodeURIComponent(podcastEpisodeId)}/video/image`, {
+		method: "POST",
+		body,
+	})
+	if (!response.ok) {
+		throw new Error((await readApiErrorMessage(response)) ?? `upload failed: ${response.status}`)
+	}
+	return (await readApiResponse(uploadTopicPodcastEpisodeVideoImageResponse, response)).posterUrl
+}
+
+/**
+ * Loads the urls of the user's podcast feed and film feed for a topic, or null if the urls do not load.
  */
 export async function fetchPodcastFeedUrl(
 	topicId: string,
 	options: PodcastEpisodeRequestOptions = {},
-): Promise<string | null> {
-	// load the account-owned feed under the caller's error policy
+): Promise<PodcastFeedUrlResponse | null> {
+	// load the account-owned feeds under the caller's error policy
 	const response = await fetchApi(`/api/topics/${encodeURIComponent(topicId)}/podcast-feed`, { signal: options.signal })
 	assertPodcastEpisodeResponse(response, options)
-	return response.ok ? (await readApiResponse(podcastFeedUrlResponse, response)).podcastFeedUrl : null
+	return response.ok ? readApiResponse(podcastFeedUrlResponse, response) : null
 }
 
 /**
- * Replaces the user's own podcast feed url and returns the new url, or null if the reset fails.
- * The old url stops working.
+ * Replaces the user's own podcast feed url and returns the new podcast feed and film feed urls, or null if the reset
+ * fails. The old urls of both feeds stop working.
  */
 export async function sendResetPodcastFeed(
 	topicId: string,
 	options: PodcastEpisodeRequestOptions = {},
-): Promise<string | null> {
-	// replace the account-owned token and validate the new feed URL
+): Promise<PodcastFeedUrlResponse | null> {
+	// replace the account-owned token and validate the new feed urls
 	const response = await fetchApi(`/api/topics/${encodeURIComponent(topicId)}/podcast-feed/reset`, {
 		method: "POST",
 		signal: options.signal,
 	})
 	assertPodcastEpisodeResponse(response, options)
-	return response.ok ? (await readApiResponse(podcastFeedUrlResponse, response)).podcastFeedUrl : null
+	return response.ok ? readApiResponse(podcastFeedUrlResponse, response) : null
 }
 
 // request cancellation and optional errors for retryable failures and denied access
 export type PodcastEpisodeRequestOptions = { shouldThrowOnError?: boolean; signal?: AbortSignal }
-type FetchSeasonPodcastEpisodesOptions = PodcastEpisodeRequestOptions & { topicId: string; season: number }
+type FetchSeasonPodcastEpisodesOptions = PodcastEpisodeRequestOptions & {
+	topicId: string
+	season: number
+	hasVideo?: boolean
+}
+// one podcast episode's listen report
 type SendPodcastEpisodeListenOptions = {
 	podcastEpisodeId: string
 	podcastEpisodeListen: PodcastEpisodeListenPayload
@@ -290,8 +360,14 @@ export async function fetchPodcastEpisodeAudio(
 	podcastEpisodeId: string,
 	signal?: AbortSignal,
 ): Promise<PodcastEpisodeAudio> {
+	// a Topic Post's discussion has its audio on its post, and a podcast episode on its own route
+	const discussionTopicPostId = toDiscussionTopicPostId(podcastEpisodeId)
+	const audioPath = discussionTopicPostId
+		? toTopicPostDiscussionAudioPath(discussionTopicPostId)
+		: `/api/episodes/${encodeURIComponent(podcastEpisodeId)}/audio.mp3`
+
 	// resolve audio through the authenticated API without forwarding credentials to storage
-	const response = await fetchApi(`/api/episodes/${encodeURIComponent(podcastEpisodeId)}/audio.mp3`, {
+	const response = await fetchApi(audioPath, {
 		headers: { Accept: "application/json" },
 		signal,
 		redirect: "error",
@@ -299,6 +375,42 @@ export async function fetchPodcastEpisodeAudio(
 	})
 	assertPodcastEpisodeResponse(response, { shouldThrowOnError: true })
 	return readApiResponse(podcastEpisodeAudio, response)
+}
+
+/**
+ * Resolves an authorized film source without following a redirect with session headers.
+ */
+export async function fetchTopicPodcastEpisodeVideo(
+	podcastEpisodeId: string,
+	signal?: AbortSignal,
+): Promise<TopicPodcastEpisodeVideoFile> {
+	// resolve the film through the authenticated api without forwarding credentials to storage
+	const response = await fetchApi(`/api/episodes/${encodeURIComponent(podcastEpisodeId)}/video.mp4`, {
+		headers: { Accept: "application/json" },
+		signal,
+		redirect: "error",
+		cache: "no-store",
+	})
+	assertPodcastEpisodeResponse(response, { shouldThrowOnError: true })
+	return readApiResponse(topicPodcastEpisodeVideoFile, response)
+}
+
+// the topic, its latest film's podcast episode, and whether the user left Topic Cinema open
+type SendTopicPodcastEpisodeVideoSectionOptions = { topicId: string; podcastEpisodeId: string; isOpen: boolean }
+
+/**
+ * Saves the user's choice to open or close Topic Cinema on a topic and returns whether the choice saved.
+ */
+export async function sendTopicPodcastEpisodeVideoSection({
+	topicId,
+	podcastEpisodeId,
+	isOpen,
+}: SendTopicPodcastEpisodeVideoSectionOptions): Promise<boolean> {
+	// a request that throws an error has no response
+	const response = await apiClient()
+		.api.topics[":id"]["video-section"].$put({ param: { id: topicId }, json: { podcastEpisodeId, isOpen } })
+		.catch(() => null)
+	return response?.ok === true
 }
 
 /**
@@ -315,6 +427,37 @@ function assertPodcastEpisodeResponse(response: ApiResponse, options: PodcastEpi
 }
 
 /**
+ * Sets a podcast episode's position among the podcast episodes its topic's owner pinned to their profile. Position
+ * zero clears it. Throws an error on a rejected write.
+ */
+export async function sendPodcastEpisodeProfileOrder(podcastEpisodeId: string, position: number): Promise<void> {
+	const response = await apiClient().api["podcast-episodes"][":id"]["profile-order"].$patch({
+		param: { id: podcastEpisodeId },
+		json: { position },
+	})
+	if (!response.ok) {
+		throw new Error(`podcast episode profile order update failed: ${response.status}`)
+	}
+}
+
+/**
+ * Sets a podcast episode's film's position among the films its topic's owner pinned to their profile. Position zero
+ * clears it. Throws an error on a rejected write.
+ */
+export async function sendTopicPodcastEpisodeVideoProfileOrder(
+	podcastEpisodeId: string,
+	position: number,
+): Promise<void> {
+	const response = await apiClient().api["podcast-episodes"][":id"].video["profile-order"].$patch({
+		param: { id: podcastEpisodeId },
+		json: { position },
+	})
+	if (!response.ok) {
+		throw new Error(`film profile order update failed: ${response.status}`)
+	}
+}
+
+/**
  * Sets a podcast episode's position among the home podcast episodes, admin only. Position zero clears it.
  */
 export async function sendPodcastEpisodeHomeOrder(podcastEpisodeId: string, position: number): Promise<void> {
@@ -324,5 +467,18 @@ export async function sendPodcastEpisodeHomeOrder(podcastEpisodeId: string, posi
 	})
 	if (!response.ok) {
 		throw new Error(`podcast episode home order update failed: ${response.status}`)
+	}
+}
+
+/**
+ * Sets a podcast episode's film's position among the home films, admin only. Position zero clears it.
+ */
+export async function sendTopicPodcastEpisodeVideoHomeOrder(podcastEpisodeId: string, position: number): Promise<void> {
+	const response = await apiClient().api["podcast-episodes"][":id"].video["home-order"].$patch({
+		param: { id: podcastEpisodeId },
+		json: { position },
+	})
+	if (!response.ok) {
+		throw new Error(`film home order update failed: ${response.status}`)
 	}
 }

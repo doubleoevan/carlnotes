@@ -24,7 +24,6 @@ import { PodcastEpisodePlayButton } from "@/components/podcast/PodcastEpisodePla
 import { Button, toTouchTargetHitSlop } from "@/components/primitives/button"
 import { Icon } from "@/components/primitives/icon"
 import { Text as ButtonText } from "@/components/primitives/text"
-import { TopicImage } from "@/components/primitives/topic-image"
 import { ReactionRow } from "@/components/social/ReactionRow"
 import { SocialSection } from "@/components/social/SocialSection"
 import { toTypeRoleStyle } from "@/typeRoleStyles"
@@ -33,6 +32,7 @@ import { FindingLinkPreview } from "./FindingLinkPreview"
 import { TopicByline } from "./TopicByline"
 import { TopicFindingRating } from "./TopicFindingRating"
 import { ResourceMetadata } from "./TopicFindingSummary"
+import { TopicImageLink } from "./TopicImageLink"
 import type { TopicResourceProps } from "./TopicResource"
 
 // a sheet keeps the row's confirmed and pending state live. a supplied comment thread keeps stories offline
@@ -215,14 +215,14 @@ function FindingTopic({
 				<CoffeeLoading className="min-h-12" />
 			) : (
 				<View className="flex-row items-center gap-3">
-					<AnchorLink
-						href={toTopicPath(topic)}
-						accessibilityLabel={`Open ${topic.name}`}
-						onPress={onClose}
-						className="shrink-0 active:opacity-75"
-					>
-						<TopicImage image={findingTopic?.image ?? null} size="list" name={topic.name} className="h-12 w-18" />
-					</AnchorLink>
+					<TopicImageLink
+						image={findingTopic?.image ?? null}
+						size="list"
+						name={topic.name}
+						className="h-12 w-18"
+						path={toTopicPath(topic)}
+						onOpen={onClose}
+					/>
 					<View className="min-w-0 flex-1">
 						{/* the name, then the latest podcast episode's play button, as on the topic page */}
 						<View className="flex-row items-center gap-2">

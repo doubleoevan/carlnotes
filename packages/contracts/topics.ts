@@ -21,6 +21,7 @@ import { commentThreadResponse, reactionSummary } from "./social"
 import { customSourceKeys, SOURCE_RESULT_LABEL_CHARS } from "./sources"
 import { displayEnum } from "./tolerantReads"
 import { imageRegenerationQuota, topicImageUrls } from "./topicImages"
+import { topicPostsResponse } from "./topicPosts"
 
 // how long a topic prompt may grow before a copy-paste is treated as an attachment
 export const TOPIC_PROMPT_CHARS = 2_000
@@ -241,6 +242,18 @@ export const EMPTY_SCAN_NOTE: ScanNote = { scanSummary: null, sourceResults: nul
 
 export type TopicScan = z.infer<typeof topicScan>
 
+// a topic related to a page's topic, with its latest published podcast episode that the user may listen to
+const relatedTopic = z.object({
+	id: z.string(),
+	name: z.string(),
+	latestPodcastEpisode: podcastEpisodeSummary.nullable(),
+})
+
+// a topic's related topics as their own read returns them. the topic's page holds the same list for a client that
+// does not ask for the separate read
+export const relatedTopicsResponse = z.object({ relatedTopics: z.array(relatedTopic) })
+export type RelatedTopicsResponse = z.infer<typeof relatedTopicsResponse>
+
 // a topic's full payload. the topic's details plus everything the detail page needs
 export const topicResponse = topicDetails.extend({
 	visibility: z.enum(visibilities),
@@ -274,12 +287,12 @@ export const topicResponse = topicDetails.extend({
 	homeTopics: z.array(z.object({ id: z.string(), name: z.string(), homeOrder: z.number() })).nullable(),
 	// up to fifty other topics most related to this one that the user may open, the public shown ones and the ones the
 	// user reaches through their account, each with its latest published podcast episode that the user may listen to.
-	// empty for a topic with no vector, and on a poll reload
-	relatedTopics: z.array(
-		z.object({ id: z.string(), name: z.string(), latestPodcastEpisode: podcastEpisodeSummary.nullable() }),
-	),
+	// empty for a topic with no vector, on a poll reload, and for a client that reads them in a read of their own
+	relatedTopics: z.array(relatedTopic),
 	// the first page of the topic's comment thread. absent on a poll reload
 	commentThread: commentThreadResponse.optional(),
+	// the topic's Topic Posts, the user's own drafts first, and whether the user may publish one. absent on a poll reload
+	topicPosts: topicPostsResponse.optional(),
 	// the editor's image regenerations this month against the plan's limit, and whether the image was generated or
 	// uploaded, and the image prompt it was drawn from. null for anyone who may not edit, the origin null for a topic with
 	// no image yet, and the image prompt null for the house style and an upload

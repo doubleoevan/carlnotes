@@ -260,3 +260,31 @@ test("sendChatTurn reports a 426 to the app and fails the chat turn", async () =
 		configureApiClient({ apiBaseUrl: "", showError: () => {} })
 	}
 })
+
+// a topic's chat opened on a Topic Post's page names the post in every question it sends
+test("sendChatTurn names the Topic Post a question was asked about, and no post from the podcast player", async () => {
+	// keep each request's body as it is sent
+	const originalFetch = globalThis.fetch
+	const sentBodies: Record<string, unknown>[] = []
+	globalThis.fetch = (async (_url: string, requestInit: RequestInit) => {
+		sentBodies.push(JSON.parse(String(requestInit.body)))
+		return toStreamResponse([])
+	}) as unknown as typeof fetch
+	const topicPost = { id: "post-1", title: "Dialing in", path: "/topics/t1/x/posts/post-1" }
+	const chatTurn = { question: "a question", history: [], attachments: [], onChunk: () => {}, onToolCalls: () => {} }
+
+	// a question from the post's page, one from the topic's own page, and one from the podcast player on the post's page
+	try {
+		await sendChatTurn({ ...chatTurn, page: { topicId: "t1", topicPost } })
+		await sendChatTurn({ ...chatTurn, page: { topicId: "t1" } })
+		await sendChatTurn({
+			...chatTurn,
+			page: { topicId: "t1", topicPost },
+			isSpoken: true,
+			podcastEpisodeChapter: { podcastEpisodeId: "episode-1", chapterPosition: 0 },
+		})
+	} finally {
+		globalThis.fetch = originalFetch
+	}
+	expect(sentBodies.map((sentBody) => sentBody.topicPostId)).toEqual(["post-1", undefined, undefined])
+})

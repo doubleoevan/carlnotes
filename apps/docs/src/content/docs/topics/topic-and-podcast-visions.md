@@ -16,9 +16,11 @@ and its tags](../../../assets/screenshots/topic-image-header.png)
 
 ## Where the images show
 
-- **The home page.** Its topic and podcast sections are cards with their images: Featured topics, Featured podcasts,
-  New podcasts this week, and Your topics once you sign in. Press a podcast card's play button to listen without
-  leaving the page.
+- **The home page.** Its sections are cards with their images, in this order: Featured topics, Featured films, New
+  films this week, Featured podcasts, New podcasts this week, Featured posts, New posts this week, and Your topics
+  once you sign in. Each "this week" section shows only in a week that has something new. Press a podcast card's play
+  button to listen without leaving the page. The two post sections show [Open Mic posts](/docs/feed/open-mic/) the
+  same way, each with its own image.
 - **The Topics page.** Every topic in the directory, with its image. **Topics** is in the user menu.
 - **A topic's page and a podcast episode's page,** at the top beside the title.
 - **A finding's note.** Click a finding and its note shows the topic it came from: the topic's image, its name, a play
@@ -65,8 +67,9 @@ one everywhere, including the show cover for a topic's image.
 ![The Image section of Edit topic: the topic's image, the Image prompt field, and the Regenerate
 button](../../../assets/screenshots/topic-image-editor.png)
 
-Each plan has a monthly limit of regenerations, shared by all your topic and podcast episode images, shown under the
-image prompt as "X of Y used this month". **Regenerate** is gone once the month's limit is reached, and returns on
+Each plan has a monthly limit of regenerations, shared by all your topic, podcast episode, post, and film images,
+shown under the image prompt as "X of Y used this month". **Regenerate** is gone once the month's limit is reached,
+and returns on
 the 1st. The limits are on the [plans page](/docs/account/plans-and-limits/).
 
 ## Upload

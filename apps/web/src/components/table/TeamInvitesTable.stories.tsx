@@ -1,6 +1,7 @@
 // the Teams page's team invitations table: who the member invited to their team and whether each one joined
 import { sendDeleteTeamInvite } from "@carlnotes/client/teamClient"
-import type { TeamIdentity, TeamsPageResponse } from "@carlnotes/contracts/teams"
+import type { TeamIdentity } from "@carlnotes/contracts/teamIdentity"
+import type { TeamsPageResponse } from "@carlnotes/contracts/teams"
 import type { Meta, StoryObj } from "@storybook/tanstack-react"
 import { fn, mocked } from "storybook/test"
 import { STORY_PEOPLE, toStoryProfile } from "../../../.storybook/fixtures"
@@ -84,6 +85,6 @@ export const ManyInvites: Story = { args: { invites: MANY_SENT_TEAM_INVITES } }
 // the confirmation that opens when an invitation's switch is turned off
 export const WithdrawConfirmation: Story = {
 	play: async ({ canvas, userEvent }) => {
-		await userEvent.click(canvas.getByRole("switch", { name: "Withdraw the invitation to noor@example.com" }))
+		await userEvent.click(canvas.getByRole("switch", { name: "Withdraw the invite to noor@example.com" }))
 	},
 }

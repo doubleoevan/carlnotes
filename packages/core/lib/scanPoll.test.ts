@@ -9,6 +9,7 @@ const SHOWN_FIELDS = {
 	relatedTopics: [{ id: "related-1", name: "Robot vacuums", latestPodcastEpisode: null }],
 	reactions: { counts: [], ownReactionType: "like" },
 	commentThread: { comments: [], nextCursor: "next-page", weekCommentCount: 2, sharedCommentSlots: null },
+	topicPosts: { topicPosts: [], canPublish: true },
 }
 
 // a topic page with the given id and the fields a full read holds
@@ -16,7 +17,7 @@ function toFullTopicPage(id: string): TopicResponse {
 	return { id, name: "Full read", ...SHOWN_FIELDS } as unknown as TopicResponse
 }
 
-// a poll's topic page with the given id, which has no related topics, reactions, or comment thread
+// a poll's topic page with the given id, which has no related topics, reactions, comment thread, or Topic Posts
 function toPolledTopic(id: string): TopicResponse {
 	return { id, name: "Poll", relatedTopics: [] } as unknown as TopicResponse
 }

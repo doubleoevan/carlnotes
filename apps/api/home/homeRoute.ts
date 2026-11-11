@@ -1,12 +1,8 @@
-// the home route: the home topics and podcast episodes as cards for everyone, and a user's own and followed
-// topics as cards
+// the home route: the home topics, films, podcast episodes, and Topic Posts as cards for everyone, and a user's own
+// and followed topics as cards
 
-import {
-	HOME_CARDS_PAGE_SIZE,
-	type HomeResponse,
-	type YourTopicsPage,
-	yourTopicsQuery,
-} from "@carlnotes/contracts/home"
+import { CARDS_PAGE_SIZE, type HomeResponse, type YourTopicsPage, yourTopicsQuery } from "@carlnotes/contracts/home"
+import type { TopicPostCard } from "@carlnotes/contracts/topicPosts"
 import { db } from "@carlnotes/db"
 import { loadUserAccess } from "@carlnotes/db/quotas"
 import { topics } from "@carlnotes/db/schema/topics"
@@ -17,8 +13,9 @@ import { Hono } from "hono"
 import { type AppEnv, currentUser } from "../currentUser"
 import { renderedCacheHeaders } from "../edgeCache"
 import { activeSubscriptionTopicIdQuery } from "../topic/feeds"
+import { loadTopicPostCardsById } from "../topicPost/topicPosts"
 import { loadHomeCardIds } from "./homeCardIds"
-import { loadPodcastEpisodeCards, loadTopicCards, toTopicCards } from "./topicCards"
+import { loadPodcastEpisodeCards, loadTopicCards, toPodcastEpisodeCardList, toTopicCards } from "./topicCards"
 
 // the home route
 export const homeRoute = new Hono<AppEnv>()
@@ -38,19 +35,47 @@ export const homeRoute = new Hono<AppEnv>()
 	})
 
 /**
- * Builds the home payload: the home topics and podcast episodes and the newest podcast episodes as cards, and the
- * first page of the user's own and followed topics as cards.
+ * Builds the home payload: the home topics, the home and newest films, the home and newest podcast episodes, and the
+ * home and newest Topic Posts as cards, and the first page of the user's own and followed topics as cards.
  */
 async function loadHome(userId: string | null): Promise<HomeResponse> {
-	// the ids from the shared cache, then their cards and the user's topics together
+	// the ids from the shared cache. ids cached before the films or the newest Topic Posts were read have none
 	const homeCardIds = await loadHomeCardIds()
-	const [homeTopics, homePodcastEpisodes, newestPodcastEpisodes, yourTopics] = await Promise.all([
+	const { homeTopicPostIds = [], newestTopicPostIds = [] } = homeCardIds
+	const { homePodcastEpisodeIds, newestPodcastEpisodeIds } = homeCardIds
+	const { homeFilmPodcastEpisodeIds = [], newestFilmPodcastEpisodeIds = [] } = homeCardIds
+
+	// their cards and the user's topics together. one read holds the cards of the four film and podcast episode lists,
+	// each podcast episode once, and one the cards of both Topic Post lists
+	const podcastEpisodeIdLists = [
+		homeFilmPodcastEpisodeIds,
+		newestFilmPodcastEpisodeIds,
+		homePodcastEpisodeIds,
+		newestPodcastEpisodeIds,
+	]
+	const [homeTopics, podcastEpisodeCards, topicPostCards, yourTopics] = await Promise.all([
 		loadTopicCards(homeCardIds.homeTopicIds, userId),
-		loadPodcastEpisodeCards(homeCardIds.homePodcastEpisodeIds),
-		loadPodcastEpisodeCards(homeCardIds.newestPodcastEpisodeIds),
+		loadPodcastEpisodeCards([...new Set(podcastEpisodeIdLists.flat())]),
+		loadTopicPostCardsById([...new Set([...homeTopicPostIds, ...newestTopicPostIds])]),
 		userId ? loadYourTopicsPage(userId, 0) : null,
 	])
-	return { homeTopics, homePodcastEpisodes, newestPodcastEpisodes, yourTopics }
+
+	// each Topic Post list's cards in its ids' order. a post deleted since the ids were cached has no card
+	const topicPostCardById = new Map(topicPostCards.map((topicPostCard) => [topicPostCard.id, topicPostCard]))
+	const toTopicPostCardList = (topicPostIds: string[]): TopicPostCard[] =>
+		topicPostIds.flatMap((topicPostId) => topicPostCardById.get(topicPostId) ?? [])
+	return {
+		homeTopics,
+		// each film and podcast episode list's cards in its ids' order. a podcast episode gone since the ids were cached
+		// has no card
+		homeTopicPodcastEpisodeVideos: toPodcastEpisodeCardList(podcastEpisodeCards, homeFilmPodcastEpisodeIds),
+		newestTopicPodcastEpisodeVideos: toPodcastEpisodeCardList(podcastEpisodeCards, newestFilmPodcastEpisodeIds),
+		homePodcastEpisodes: toPodcastEpisodeCardList(podcastEpisodeCards, homePodcastEpisodeIds),
+		newestPodcastEpisodes: toPodcastEpisodeCardList(podcastEpisodeCards, newestPodcastEpisodeIds),
+		homeTopicPosts: toTopicPostCardList(homeTopicPostIds),
+		newestTopicPosts: toTopicPostCardList(newestTopicPostIds),
+		yourTopics,
+	}
 }
 
 // one page of the user's own topics newest first, then the ones they follow newest first, as cards, with how many
@@ -74,8 +99,8 @@ async function loadYourTopicsPage(userId: string, page: number): Promise<YourTop
 			.from(topics)
 			.where(yourTopicsFilter)
 			.orderBy(desc(sql`${isOwned}`), desc(topics.createdAt), desc(topics.id))
-			.limit(HOME_CARDS_PAGE_SIZE)
-			.offset(page * HOME_CARDS_PAGE_SIZE),
+			.limit(CARDS_PAGE_SIZE)
+			.offset(page * CARDS_PAGE_SIZE),
 		db.select({ totalCount: count() }).from(topics).where(yourTopicsFilter),
 	])
 	return { topics: await toTopicCards(topicRows, userId), totalCount: countRow?.totalCount ?? 0 }

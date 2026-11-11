@@ -5,8 +5,21 @@
  * or the default if the value is unset or is not a whole number above zero.
  */
 export function toPositiveInteger(value: string | undefined, defaultValue: number): number {
-	const parsedNumber = Number(value)
-	return Number.isInteger(parsedNumber) && parsedNumber > 0 ? parsedNumber : defaultValue
+	return toIntegerAtLeast(value, defaultValue, 1)
+}
+
+/**
+ * Returns an environment value as a whole number of zero or more,
+ * or the default if the value is unset, empty, or not a whole number of zero or more.
+ */
+export function toWholeNumber(value: string | undefined, defaultValue: number): number {
+	return toIntegerAtLeast(value, defaultValue, 0)
+}
+
+// an environment value as a whole number at or above the minimum, or the default for an unset, empty, or other value
+function toIntegerAtLeast(value: string | undefined, defaultValue: number, minimum: number): number {
+	const parsedNumber = value?.trim() ? Number(value) : Number.NaN
+	return Number.isInteger(parsedNumber) && parsedNumber >= minimum ? parsedNumber : defaultValue
 }
 
 /**

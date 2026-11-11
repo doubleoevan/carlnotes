@@ -1,0 +1,51 @@
+import { Meta } from "@storybook/addon-docs/blocks"
+
+<Meta title="Nightshift/Layout" />
+
+# Layout
+
+This page states the section order rules that every page follows, on the web and in the app.
+
+## Films come right before podcasts
+
+A podcast episode can have a film. Wherever a page shows films and podcasts, the film section sits right before the
+podcast section it pairs with, so the newer format leads. Four pages pair them today, six times:
+
+- Home: Featured films, then Featured podcasts
+- Home: New films this week, then New podcasts this week
+- Café: Featured Films, then Featured Podcasts
+- Team: Featured Films, then Featured Podcasts
+- Topic: Coffee Break Cinema, then the podcast player
+- Topic: Coffee Break films, then Coffee Break podcast episodes
+
+The podcast episode page is the exception: Coffee Break podcast, with the audio player, comes first, and Coffee Break
+Cinema, with the film, follows it. `sectionOrder.test.ts` checks that order on both apps too.
+
+The home's order lives in `HOME_SECTIONS` in `packages/core/lib/homeFaces.ts`, which both apps render in order. The
+Café's lives in `PROFILE_SECTIONS` in `packages/core/lib/profileSections.ts` and in each app's profile page. The
+team page's lives in `TEAM_SECTIONS` in `packages/core/lib/cardSections.ts` and in each app's team page. The
+topic page's order lives in each app's topic page. `packages/core/lib/sectionOrder.test.ts` fails if any pair loses
+its order. A new page that shows films and podcasts adds its pair to that test.
+
+A film section with no film is hidden, so a page without films reads as it did before.
+
+## The home's sections
+
+The home shows its card sections in one order: Featured topics, Featured films, New films this week, Featured
+podcasts, New podcasts this week, Featured posts, New posts this week, and Your topics for a user. Each week's new
+cards sit right after their featured cards. A "this week" section lists the last seven days alone, so it is absent in
+a week with nothing new. `sectionOrder.test.ts` fails if `HOME_SECTIONS` or either app's home leaves that order.
+
+## The Café's Topic Posts
+
+The Café has one Topic Posts section, Featured Posts, the last of its card sections. It lists every post the person
+published that the reader may open: the pinned ones in their order, then the rest newest first. Open Mic names the
+section of a topic's page alone.
+
+## The team page's sections
+
+A team page has the Café's four card sections, under the same titles in the same order: Featured Topics, Featured
+Films, Featured Podcasts, and Featured Posts. A team has no pins of its own. The cards are those of its topics that
+the reader may open, and the pins their owners and authors set on their Cafés lead each section. Featured Posts lists
+every published post of those topics, the pinned ones first and then the rest newest first.
+`sectionOrder.test.ts` fails if `TEAM_SECTIONS` or either app's team page leaves the Café's titles or that order.

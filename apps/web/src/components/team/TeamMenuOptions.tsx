@@ -1,5 +1,5 @@
 // the options that the team menus share. a team, a team with an action, and New team
-import type { TeamIdentity } from "@carlnotes/contracts/teams"
+import type { TeamIdentity } from "@carlnotes/contracts/teamIdentity"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { Plus } from "lucide-react"
 import { TeamAvatar } from "@/components/branding/TeamAvatar"

@@ -3,26 +3,34 @@ import { fetchAdminConsole } from "@carlnotes/client/billingClient"
 import { fetchAdminReports } from "@carlnotes/client/reportClient"
 import type { AdminConsoleResponse, AdminTeamRow, AdminTotals, AdminUserRow } from "@carlnotes/contracts/admin"
 import { plans } from "@carlnotes/contracts/enums"
-import { toSessionProfileIdentity } from "@carlnotes/contracts/profiles"
+import { type ProfileIdentity, toSessionProfileIdentity } from "@carlnotes/contracts/profiles"
 import type { AdminReport } from "@carlnotes/contracts/reports"
-import { toBytesLabel, toCentsLabel } from "@carlnotes/core/lib/labels"
+import { toBytesLabel, toCentsLabel, toSectionCountLabel } from "@carlnotes/core/lib/labels"
 import { setOpenReportCount } from "@carlnotes/core/stores/openReportStore"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { Settings, ShieldUser } from "lucide-react"
-import { useCallback, useEffect, useState } from "react"
+import { type ReactNode, useCallback, useEffect, useState } from "react"
 import { ManageAdminsModal } from "@/components/admin/ManageAdminsModal"
 import { MobileMinimumVersionsCard } from "@/components/admin/MobileMinimumVersionsCard"
 import { CoffeeLoading } from "@/components/branding/CoffeeLoading"
+import { AccordionSection } from "@/components/common/AccordionSection"
 import { UpdateCountBadge } from "@/components/common/UpdateCountBadge"
 import { UserProfileLink } from "@/components/common/UserProfileLink"
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/primitives/accordion"
+import { Accordion } from "@/components/primitives/accordion"
 import { Button } from "@/components/primitives/button"
 import { AdminReportsTable } from "@/components/table/AdminReportsTable"
 import { AdminTeamsTable } from "@/components/table/AdminTeamsTable"
 import { AdminUsersTable } from "@/components/table/AdminUsersTable"
 import { usePageTitle } from "@/hooks/usePageTitle"
 import { useSearchParams } from "@/hooks/useSearchParams"
-import { HIGHLIGHTED_CARD_CLASS, PAGE_CLASS, PAGE_HEADER_CLASS, PAGE_TITLE_CLASS } from "@/lib/styleClasses"
+import {
+	HIGHLIGHTED_CARD_CLASS,
+	HIGHLIGHTED_PAGE_BUTTON_CLASS,
+	PAGE_CLASS,
+	PAGE_HEADER_CLASS,
+	PAGE_TITLE_CLASS,
+	SKELETON_SHAPE_CLASS,
+} from "@/lib/styleClasses"
 
 /**
  * The admin-only console: a totals summary and a per-user table with inline role and budget-override edits.
@@ -68,40 +76,32 @@ export function AdminPage() {
 		return <main className={cn(PAGE_CLASS, "max-w-6xl")}>You do not have access to this page.</main>
 	}
 
-	// show the animation until the console loads
+	// show the loaded page's own header until the console loads, with a placeholder for its button, over the animation
 	if (!adminConsole) {
 		return (
-			<main className={cn(PAGE_CLASS, "max-w-6xl")}>
-				<CoffeeLoading />
+			<main className={ADMIN_PAGE_CLASS}>
+				<AdminPageHeader user={toSessionProfileIdentity(session.user)} openReportCount={reports.length}>
+					<div aria-hidden="true" className={cn(SKELETON_SHAPE_CLASS, "h-9 w-40 rounded-md")} />
+				</AdminPageHeader>
+				<div className="px-safe mt-6">
+					<CoffeeLoading />
+				</div>
 			</main>
 		)
 	}
 
 	// the users under an admin block, which the Blocks card counts and filters to
 	const adminBlockedUsers = adminConsole.users.filter((user) => user.isAdminBlocked)
+	// the users the table lists: everyone, or the ones under an admin block while the Blocks card is pressed
+	const shownUsers = isShowingAdminBlockedUsers ? adminBlockedUsers : adminConsole.users
 	return (
-		<main className="mx-auto max-w-6xl pt-3 pb-10">
-			{/* the title and profile link align under the search bar's width, while the tables stay wide.
-			    the padding sits on each block instead of the main, so the title lines up with the other pages */}
-			<div className="mx-auto max-w-5xl px-safe">
-				{/* the page title with the same icon as its header menu item, and the manage admins button to the right */}
-				<div className={PAGE_HEADER_CLASS}>
-					<h1 className={PAGE_TITLE_CLASS}>
-						<ShieldUser className="size-6" />
-						{/* the title's top-right corner shows the open report count */}
-						<span className="relative">
-							Admin
-							<UpdateCountBadge openReportCount={reports.length} className="absolute -top-2 -right-3.5 z-10" />
-						</span>
-					</h1>
-					<Button className="shrink-0" onClick={() => setIsManagingAdmins(true)}>
-						<Settings className="size-4" />
-						Manage admins
-					</Button>
-				</div>
-				{/* the admin viewing the console, with a link to their profile */}
-				<UserProfileLink user={toSessionProfileIdentity(session.user)} className="mt-2 text-sm" />
-			</div>
+		<main className={ADMIN_PAGE_CLASS}>
+			<AdminPageHeader user={toSessionProfileIdentity(session.user)} openReportCount={reports.length}>
+				<Button className={HIGHLIGHTED_PAGE_BUTTON_CLASS} onClick={() => setIsManagingAdmins(true)}>
+					<Settings className="size-4" />
+					Manage admins
+				</Button>
+			</AdminPageHeader>
 			<div className="px-safe">
 				<TotalSummaries
 					totals={adminConsole.totals}
@@ -114,35 +114,23 @@ export function AdminPage() {
 				{/* the sections as accordions */}
 				<Accordion type="multiple" defaultValue={["reports", "users", "teams", "mobile"]} className="mt-4">
 					{/* the open reports first, resolved from here */}
-					<AccordionItem value="reports">
-						<AccordionTrigger className="font-semibold">{`Reports (${reports.length})`}</AccordionTrigger>
-						<AccordionContent>
-							<AdminReportsTable reports={reports} focusedReportId={focusedReportId} onResolved={loadConsole} />
-						</AccordionContent>
-					</AccordionItem>
-					<AccordionItem value="users">
-						<AccordionTrigger className="font-semibold">Users</AccordionTrigger>
-						<AccordionContent>
-							<AdminUsersTable
-								users={isShowingAdminBlockedUsers ? adminBlockedUsers : adminConsole.users}
-								signedInUserId={session.user.id}
-								onReload={loadConsole}
-							/>
-						</AccordionContent>
-					</AccordionItem>
-					<AccordionItem value="teams">
-						<AccordionTrigger className="font-semibold">Teams</AccordionTrigger>
-						<AccordionContent>
-							<AdminTeamsTable teams={adminConsole.teams} />
-						</AccordionContent>
-					</AccordionItem>
+					<AccordionSection value="reports" title="Reports" countLabel={toSectionCountLabel(reports.length, "report")}>
+						<AdminReportsTable reports={reports} focusedReportId={focusedReportId} onResolved={loadConsole} />
+					</AccordionSection>
+					<AccordionSection value="users" title="Users" countLabel={toSectionCountLabel(shownUsers.length, "user")}>
+						<AdminUsersTable users={shownUsers} signedInUserId={session.user.id} onReload={loadConsole} />
+					</AccordionSection>
+					<AccordionSection
+						value="teams"
+						title="Teams"
+						countLabel={toSectionCountLabel(adminConsole.teams.length, "team")}
+					>
+						<AdminTeamsTable teams={adminConsole.teams} />
+					</AccordionSection>
 					{/* mobile app minimum versions */}
-					<AccordionItem value="mobile">
-						<AccordionTrigger className="font-semibold">Mobile app</AccordionTrigger>
-						<AccordionContent>
-							<MobileMinimumVersionsCard minimumVersions={adminConsole.mobileMinimumVersions} onSaved={loadConsole} />
-						</AccordionContent>
-					</AccordionItem>
+					<AccordionSection value="mobile" title="Mobile app">
+						<MobileMinimumVersionsCard minimumVersions={adminConsole.mobileMinimumVersions} onSaved={loadConsole} />
+					</AccordionSection>
 				</Accordion>
 			</div>
 			{isManagingAdmins && (
@@ -154,6 +142,39 @@ export function AdminPage() {
 				/>
 			)}
 		</main>
+	)
+}
+
+// the page's shell, loaded or loading. the tables stay wide, and the padding sits on each block instead of the main
+const ADMIN_PAGE_CLASS = "mx-auto max-w-6xl pt-3 pb-10"
+
+// the title and the profile link, which align under the search bar's width: the page title with the same icon as its
+// header menu item, the manage admins button or its placeholder to the right, and the admin viewing the console
+function AdminPageHeader({
+	user,
+	openReportCount,
+	children,
+}: {
+	user: ProfileIdentity
+	openReportCount: number
+	children: ReactNode
+}) {
+	return (
+		<div className="mx-auto max-w-5xl px-safe">
+			<div className={PAGE_HEADER_CLASS}>
+				<h1 className={PAGE_TITLE_CLASS}>
+					<ShieldUser className="size-6" />
+					{/* the title's top-right corner shows the open report count */}
+					<span className="relative">
+						Admin
+						<UpdateCountBadge openReportCount={openReportCount} className="absolute -top-2 -right-3.5 z-10" />
+					</span>
+				</h1>
+				{children}
+			</div>
+			{/* the admin viewing the console, with a link to their profile */}
+			<UserProfileLink user={user} className="mt-2 text-sm" />
+		</div>
 	)
 }
 

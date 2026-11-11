@@ -3,6 +3,7 @@
 import { expect, spyOn, test } from "bun:test"
 import * as store from "@carlnotes/db/store"
 import { darkRoast, latte } from "@carlnotes/nightshift/colors"
+import type { CardElement } from "@carlnotes/pipeline/cardElementPng"
 import {
 	toLatestPodcastCoverKey,
 	toLatestPodcastCoverPath,
@@ -12,7 +13,6 @@ import {
 import { renderAsync } from "@resvg/resvg-js"
 import { MAX_PODCAST_COVER_BYTES, toPodcastCoverElement, toPodcastCoverJpeg } from "./podcastCover"
 import type { CoverBandTones } from "./podcastCoverBands"
-import type { CardElement } from "./previewImage"
 
 // a cover's key is signed with the app's auth secret
 Bun.env.BETTER_AUTH_SECRET ??= "podcast-cover-test-secret"

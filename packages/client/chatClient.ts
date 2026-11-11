@@ -21,12 +21,16 @@ export type ChatRejection = "budget" | "forbidden" | "failed" | "rateLimited" | 
 // how a chat turn ended: answered, rejected for a reason, or stopped by the user mid-stream
 export type ChatSendResult = ChatRejection | "stopped" | null
 
-// the page a private conversation is addressed by: one topic, a whole team, or the new-topic chat bound to neither
+// the topic post whose page a topic's chat is open on: its id, and the title and the page a sent question's tag shows
+export type ChatPageTopicPost = { id: string; title: string; path: string }
+
+// the page a private conversation is addressed by: one topic, a whole team, or the new-topic chat bound to neither. a
+// topic's chat opened on a topic post's page asks about that post
 export type ChatPage =
-	| { topicId: string; teamId?: undefined; newTopic?: undefined }
-	| { teamId: string; topicId?: undefined; newTopic?: undefined }
+	| { topicId: string; teamId?: undefined; newTopic?: undefined; topicPost?: ChatPageTopicPost }
+	| { teamId: string; topicId?: undefined; newTopic?: undefined; topicPost?: undefined }
 	// the team the new-topic chat's draft starts with
-	| { newTopic: true; topicId?: undefined; teamId?: undefined; initialTeam?: TopicDraftTeam }
+	| { newTopic: true; topicId?: undefined; teamId?: undefined; initialTeam?: TopicDraftTeam; topicPost?: undefined }
 
 /**
  * Loads the user's persisted conversation and its metadata, including whether the user can continue chatting
@@ -90,6 +94,8 @@ export async function sendChatTurn({
 				topicDraft,
 				isSpoken,
 				podcastEpisodeChapter,
+				// a question asked from a topic post's page names the post, and one from the podcast player never does
+				topicPostId: podcastEpisodeChapter ? undefined : page.topicPost?.id,
 				history: historyChatTurns.map((chatTurn, index) => ({
 					question: chatTurn.question,
 					answer: index < uncompactedChatTurnStart ? compactChatAnswer(chatTurn.answer) : chatTurn.answer,

@@ -20,6 +20,7 @@ import { resolveClientAddress } from "../trustedProxies"
 import { loadFindingTopicPodcastEpisodes, searchFindings } from "./findingSearch"
 import { isTaglessKindLeftOut, toFindingFilter, toTopicTagFilter } from "./searchFilters"
 import { toRankedSearchRows, toSearchPage } from "./searchRanks"
+import { searchTopicPosts } from "./topicPostSearch"
 
 // the most rows the search reads of each kind
 // ponytail: the union holds at most 250 rows, so a query matching more than 50 of a kind shows 50. page each kind by
@@ -50,6 +51,7 @@ const TAGLESS_RESULT_KINDS: SearchResultKind[] = ["teams", "users"]
 const SEARCH_READERS: Record<SearchResultKind, (searchReaderOptions: SearchReaderOptions) => Promise<SearchRow[]>> = {
 	topics: searchTopics,
 	podcastEpisodes: searchPodcastEpisodes,
+	topicPosts: searchTopicPosts,
 	findings: searchFindings,
 	teams: searchTeams,
 	users: searchUsers,
@@ -74,7 +76,7 @@ export async function searchSite({
 	const findingFilter = toFindingFilter({ ...searchRequest, userId })
 	const searchResultKinds = toFilteredResultKinds(searchRequest)
 
-	// read every requested kind at once. an admin may read every topic, podcast episode, and finding
+	// read every requested kind at once. an admin may read every topic, podcast episode, Topic Post, and finding
 	const isAdmin = userId ? (await loadUserAccess(userId)).isAdmin : false
 	const searchReaderOptions = {
 		userId,

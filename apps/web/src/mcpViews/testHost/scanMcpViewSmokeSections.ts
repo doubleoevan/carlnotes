@@ -306,6 +306,21 @@ test("a recap's play sends a signed token, and a host that blocks the audio gets
 	})
 })
 
+test("a played Podcast Episode with a film links to the film player on its page through the host", async () => {
+	const pagePath = "/topics/topic-1/episodes/1"
+	const filmPodcastEpisode = { ...PODCAST_EPISODE, pagePath, hasVideo: true }
+	const recap = toRecapWithPodcastEpisode({ state: "published", podcastEpisodeId: PODCAST_EPISODE.id, pagePath })
+	const mcpViewData = { ...USER_MCP_VIEW_DATA, podcastEpisodes: [filmPodcastEpisode] }
+	await withMcpView({ mcpView: "scan" }, async ({ frame, links, sendToolResult }) => {
+		// play the recap's podcast episode, and open its film through the host
+		await sendToolResult(toScanToolResult(recap, mcpViewData))
+		await frame.getByRole("button", { name: `Play episode ${PODCAST_EPISODE.episodeNumber}` }).click()
+		await frame.getByRole("link", { name: "Watch on CarlNotes" }).click()
+		await waitForRecord(links)
+		expect(links).toEqual([`${TEST_SITE_URL}${pagePath}#film`])
+	})
+})
+
 test("a Podcast Episode still recording after 30 minutes ends the poll and links to the Topic's page", async () => {
 	const recordingRecap = toRecapWithPodcastEpisode({ state: "recording" })
 	const options: OpenMcpViewOptions = {

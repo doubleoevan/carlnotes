@@ -2,10 +2,15 @@ import { cn } from "@carlnotes/nightshift/classNames"
 import type { ReactNode } from "react"
 import {
 	DASHED_ROW_CLASS,
+	IMAGE_SKELETON_CLASS,
+	LIST_TOPIC_IMAGE_CLASS,
 	RAIL_BARE_ICON_INSET,
 	RAIL_TEXT_INSET,
 	RANK_SLOT_CLASS,
 	RESOURCE_LIST_CARD_CLASS,
+	ROW_AVATAR_SKELETON_CLASS,
+	TOPIC_HEADER_AREA_CLASSES,
+	toTopicHeaderGridClass,
 } from "@/lib/styleClasses"
 
 // the open section's topics, and the sections that start closed
@@ -50,37 +55,36 @@ function TopicSectionSkeleton({ isFirst, children }: { isFirst?: boolean; childr
 	)
 }
 
-// one topic skeleton mirroring an untagged Topic. a header, then the resource rows in the same card they sit in
+// one topic skeleton in an untagged Topic's own header grid, which floats the image on a phone: the image, the title,
+// and the byline with the "# new" count and the share button at its right, then the resource rows in the card they sit
+// in
 function TopicSkeleton() {
 	return (
-		<div className="py-1.5">
-			{/* the title, then the play and note buttons */}
-			<div className="flex items-center gap-2">
-				<div className="bg-muted my-1 ml-4 h-[22.5px] w-52 animate-pulse rounded" />
-				<div className="flex shrink-0 items-center">
-					<div className="grid size-7 place-items-center">
-						<div className="bg-muted size-6 animate-pulse rounded-full" />
-					</div>
-					<div className="grid size-7 place-items-center">
-						<div className="bg-muted size-6 animate-pulse rounded-md" />
+		<div>
+			<div className={TOPIC_SKELETON_HEADER_CLASS}>
+				<div className={TOPIC_SKELETON_IMAGE_CLASS} />
+				{/* the title on its own line */}
+				<div className={cn(TOPIC_HEADER_AREA_CLASSES.title, "pb-1")}>
+					<div className="flex h-[22.5px] items-center">
+						<div className="bg-muted h-5 w-52 max-w-full animate-pulse rounded" />
 					</div>
 				</div>
-			</div>
-			{/* the byline, then the "# new" count and the share button */}
-			<div className="flex h-11 items-center justify-between gap-3 sm:h-[35px]">
-				<div className="flex items-center gap-2 pl-4">
-					<div className="bg-muted size-6 shrink-0 animate-pulse rounded-full" />
-					<div className="bg-muted h-3 w-28 animate-pulse rounded" />
-				</div>
-				<div className={cn(RAIL_BARE_ICON_INSET, "flex shrink-0 items-center gap-1")}>
-					<div className="bg-muted h-4 w-12 animate-pulse rounded" />
-					<div className="grid w-7 place-items-center">
-						<div className="bg-muted size-4 animate-pulse rounded" />
+				{/* the byline, then the "# new" count and the share button */}
+				<div className={TOPIC_HEADER_AREA_CLASSES.bylineRow}>
+					<div className={cn(TOPIC_HEADER_AREA_CLASSES.byline, "flex h-6 items-center gap-2")}>
+						<div className={ROW_AVATAR_SKELETON_CLASS} />
+						<div className="bg-muted h-3 w-28 animate-pulse rounded" />
+					</div>
+					<div className={cn(TOPIC_HEADER_AREA_CLASSES.actions, RAIL_BARE_ICON_INSET, "flex items-center gap-1")}>
+						<div className="bg-muted h-4 w-12 animate-pulse rounded" />
+						<div className="grid w-7 place-items-center">
+							<div className="bg-muted size-4 animate-pulse rounded" />
+						</div>
 					</div>
 				</div>
 			</div>
 			{/* the rows sit in the same card as the real list, so nothing shifts when the feed arrives */}
-			<div className={cn(RESOURCE_LIST_CARD_CLASS, "mt-1.5 p-1")}>
+			<div className={cn(RESOURCE_LIST_CARD_CLASS, "p-1")}>
 				{RESOURCE_SKELETONS.map((resourceKey) => (
 					<ResourceSkeleton key={resourceKey} />
 				))}
@@ -89,6 +93,15 @@ function TopicSkeleton() {
 		</div>
 	)
 }
+
+// the header grid of an untagged Topic with its actions, and its image at a Topics row's width
+const TOPIC_SKELETON_HEADER_CLASS = cn(toTopicHeaderGridClass({ hasTags: false, hasActions: true }), "max-sm:mb-1.5")
+const TOPIC_SKELETON_IMAGE_CLASS = cn(
+	TOPIC_HEADER_AREA_CLASSES.image,
+	LIST_TOPIC_IMAGE_CLASS,
+	IMAGE_SKELETON_CLASS,
+	"self-start",
+)
 
 // one resource skeleton mirroring TopicResource: the rank slot, then the title line and the metadata line
 export function ResourceSkeleton() {

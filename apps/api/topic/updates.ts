@@ -3,7 +3,12 @@
 import type { PodcastEpisode } from "@carlnotes/contracts/podcast"
 import type { FindingSearchTopic } from "@carlnotes/contracts/search"
 import { toTopicPath } from "@carlnotes/contracts/seo"
-import type { Updates, UpdatesFinding, UpdatesMinutes } from "@carlnotes/contracts/updates"
+import {
+	DEFAULT_UPDATES_MINUTES,
+	type Updates,
+	type UpdatesFinding,
+	type UpdatesMinutes,
+} from "@carlnotes/contracts/updates"
 import { db, isFindingShown } from "@carlnotes/db"
 import { toActivatedScanFilter, toTopicRoleFilter } from "@carlnotes/db/contentFilters"
 import { toConvertedPersonalSourcesFilter } from "@carlnotes/db/personalSourcesAuthority"
@@ -108,7 +113,10 @@ export async function buildUpdates({
 		updatesFindings.map((finding) => finding.findingId),
 		analyticsProperties,
 	)
-	const opener = updatesFindings.length > 0 ? await loadUpdatesOpener({ userId, topicId, updatesFindings }) : null
+	const opener =
+		updatesFindings.length > 0
+			? await loadUpdatesOpener({ userId, topicId, loadUpdatesFindings: async () => updatesFindings })
+			: null
 	const moreCount = (unreadRows[0]?.unreadCount ?? 0) - updatesFindings.length
 
 	// report every list, an empty one included, by its counts
@@ -127,6 +135,25 @@ export async function buildUpdates({
 		morePath: topic ? toTopicPath(topic) : "/topics",
 		...updatesTopics,
 	}
+}
+
+/**
+ * Reads the day's opener across the user's Topics and marks no Finding read. The opener is the one a list across
+ * Topics shows, written from the unread Findings the default list would hold. A stored opener returns with no Findings
+ * read. A user with no unread Finding keeps the opener the day already stored, and no model call runs for them.
+ */
+export function readUpdatesOpener(userId: string): Promise<string | null> {
+	return loadUpdatesOpener({ userId, topicId: null, loadUpdatesFindings: () => loadDefaultUpdatesFindings(userId) })
+}
+
+// the unread Findings that the default list across the user's Topics would hold, ranked and inside its reading budget
+async function loadDefaultUpdatesFindings(userId: string): Promise<UpdatesFinding[]> {
+	const [unreadRows, lastConsumedAt] = await Promise.all([
+		loadUnreadFindingRows(userId, null),
+		loadLastConsumedAt(userId, null),
+	])
+	const budgetRows = trimToReadingBudget(rankFindingRows(unreadRows, lastConsumedAt), DEFAULT_UPDATES_MINUTES)
+	return budgetRows.map(toUpdatesFinding)
 }
 
 // each Finding's Topic once, with whether the user may rate and bookmark its Findings, and each Topic's latest podcast

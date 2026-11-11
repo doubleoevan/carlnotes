@@ -154,7 +154,7 @@ test("each MCP view tool returns its structured result and text, with or without
 	expect(loadSearchMcpViewDataSpy).toHaveBeenCalledTimes(1)
 })
 
-test("every tool that names an MCP view names one of the six", () => {
+test("thirteen tools name an MCP view, each one of the nine", () => {
 	const mcpViewToolNames = [...toRegisteredTools(VISITOR)]
 		.filter(([, { config }]) => (config as { _meta?: { ui?: { resourceUri?: string } } })._meta?.ui?.resourceUri)
 		.map(([toolName, { config }]) => [
@@ -162,15 +162,18 @@ test("every tool that names an MCP view names one of the six", () => {
 			(config as { _meta: { ui: { resourceUri: string } } })._meta.ui.resourceUri,
 		])
 	expect(mcpViewToolNames).toEqual([
-		["read_topic_feed", "ui://carlnotes/findings.html?v=9"],
-		["search_topic_findings", "ui://carlnotes/findings.html?v=9"],
-		["search", "ui://carlnotes/search.html?v=9"],
-		["edit_topic", "ui://carlnotes/topic.html?v=9"],
-		["create_topic", "ui://carlnotes/topic.html?v=9"],
-		["send_to_topic", "ui://carlnotes/topic.html?v=9"],
-		["suggest_topics", "ui://carlnotes/suggest-topics.html?v=9"],
-		["read_updates", "ui://carlnotes/updates.html?v=9"],
-		["start_scan", "ui://carlnotes/scan.html?v=9"],
-		["read_scan_status", "ui://carlnotes/scan.html?v=9"],
+		["read_topic_feed", "ui://carlnotes/findings.html?v=10"],
+		["search_topic_findings", "ui://carlnotes/findings.html?v=10"],
+		["search", "ui://carlnotes/search.html?v=10"],
+		["edit_topic", "ui://carlnotes/topic.html?v=10"],
+		["create_topic", "ui://carlnotes/topic.html?v=10"],
+		["send_to_topic", "ui://carlnotes/topic.html?v=10"],
+		["suggest_topics", "ui://carlnotes/suggest-topics.html?v=10"],
+		["read_updates", "ui://carlnotes/updates.html?v=10"],
+		["start_scan", "ui://carlnotes/scan.html?v=10"],
+		["read_scan_status", "ui://carlnotes/scan.html?v=10"],
+		["read_news", "ui://carlnotes/news.html?v=10"],
+		["read_topic_posts", "ui://carlnotes/topic-posts.html?v=10"],
+		["read_topic_post", "ui://carlnotes/topic-post.html?v=10"],
 	])
 })

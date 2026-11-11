@@ -21,7 +21,12 @@ export async function loadViewableTopic(
 	userId: string | null,
 	topicId: string,
 ): Promise<typeof topics.$inferSelect | null> {
-	const [topic] = await db.select().from(topics).where(eq(topics.id, topicId))
+	// read the topic with the user's access read started beside it. the view check shares that read through the
+	// request memo
+	const [[topic]] = await Promise.all([
+		db.select().from(topics).where(eq(topics.id, topicId)),
+		userId ? loadUserAccess(userId) : null,
+	])
 	return topic && (await isAllowed(userId, "topic:view", topic)) ? topic : null
 }
 
@@ -114,12 +119,13 @@ export async function loadTopicAccessAndFindings({
 		pageWindow,
 		isRatedDownExcluded,
 	})
-	await attachTeamBookmarks(topicFindings, topic.id, topic.teamId)
-	await attachTopicFindingFaviconPaths(topicFindings)
 
-	// each Finding's reactions and the page's own, as this user reads them, unless the caller reads its own Findings'
-	const reactions = isReactionReadSkipped
-		? undefined
-		: await attachReactionSummaries({ topicFindings, userId, pageSocialTarget })
+	// each Finding's reactions and the page's own, as this user reads them, unless the caller reads its own Findings',
+	// the owning team's bookmarks, and the favicons. each fills its own fields of the findings, so they load together
+	const [reactions] = await Promise.all([
+		isReactionReadSkipped ? undefined : attachReactionSummaries({ topicFindings, userId, pageSocialTarget }),
+		attachTeamBookmarks(topicFindings, topic.id, topic.teamId),
+		attachTopicFindingFaviconPaths(topicFindings),
+	])
 	return { isAdmin, topicFindings, reactions }
 }

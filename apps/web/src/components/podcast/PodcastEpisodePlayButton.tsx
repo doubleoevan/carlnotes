@@ -47,12 +47,16 @@ const elements: PodcastEpisodePlayButtonElements = {
 export function PodcastEpisodePlayButton({
 	podcastEpisode,
 	className,
+	label,
+	isPlaying,
 	onMouseEnter,
 	onPress,
 	size = "sm",
 }: {
 	podcastEpisode: PodcastEpisodeSummary
 	className?: string
+	label?: string
+	isPlaying?: boolean
 	size?: "sm" | "default" | "lg"
 	onPress?: () => void
 	onMouseEnter?: () => void
@@ -61,6 +65,8 @@ export function PodcastEpisodePlayButton({
 		<SharedPodcastEpisodePlayButton
 			podcastEpisode={podcastEpisode}
 			className={className}
+			label={label}
+			isPlaying={isPlaying}
 			size={size}
 			onHover={onMouseEnter}
 			onPress={onPress}

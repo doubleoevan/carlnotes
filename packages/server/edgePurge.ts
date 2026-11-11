@@ -19,6 +19,13 @@ export function toTopicImageCacheTag(topicId: string): string {
 }
 
 /**
+ * Returns the tag a Topic Post's page is cached under at the edge.
+ */
+export function toTopicPostCacheTag(topicPostId: string): string {
+	return `topic-post:${topicPostId}`
+}
+
+/**
  * Purges every response cached under the tags from the edge and returns whether it was purged, skipped, or failed.
  */
 export async function purgeEdgeCacheTags(

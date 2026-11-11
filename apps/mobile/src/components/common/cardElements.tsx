@@ -1,10 +1,12 @@
-// the native elements a topic card and a podcast episode card share: one pressable link around the card, the topic
-// image at the page size, a text row, and the heading over the card's text
+// the native elements a topic card, a podcast episode card, and a Topic Post card share: one pressable link around
+// the card, the topic image at the page size, a text row, the reaction count, and the heading over the card's text
 import type { CardElements } from "@carlnotes/core/components/cardElements"
 import { cn } from "@carlnotes/nightshift/classNames"
+import { Heart } from "lucide-react-native"
 import type { FunctionComponent } from "react"
 import { View } from "react-native"
 import { AnchorLink } from "@/components/common/AnchorLink"
+import { Icon } from "@/components/primitives/icon"
 import { Text } from "@/components/primitives/text"
 import { TopicImage } from "@/components/primitives/topic-image"
 import { toTypeRoleStyle } from "@/typeRoleStyles"
@@ -23,4 +25,10 @@ export const CARD_ELEMENTS: CardElements & { Heading: FunctionComponent<{ childr
 		</Text>
 	),
 	Row: ({ className, children }) => <View className={className}>{children}</View>,
+	Reactions: ({ count }) => (
+		<View className="ml-auto shrink-0 flex-row items-center gap-1">
+			<Icon as={Heart} className="size-3 text-muted-foreground" />
+			<Text className="text-xs text-muted-foreground">{count}</Text>
+		</View>
+	),
 }

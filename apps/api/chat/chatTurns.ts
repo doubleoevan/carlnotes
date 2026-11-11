@@ -1,11 +1,14 @@
 // the chat_turns rows: saving one for every chat turn, chat room turn, transcription, and speech call, and reading or
 // clearing a user's conversation
 
-import type { ChatTurnRow } from "@carlnotes/contracts/chat"
+import type { ChatTurnRow, ChatTurnTopicPost } from "@carlnotes/contracts/chat"
 import { type ChatTurnKind, conversationChatTurnKinds, type PodcastEpisodeSpeaker } from "@carlnotes/contracts/enums"
 import type { ChatToolCall, PodcastEpisodeChapterRef, VoiceChatPage } from "@carlnotes/contracts/payloads"
+import { toTopicPostPath } from "@carlnotes/contracts/seo"
 import { db } from "@carlnotes/db"
 import { chatTurns } from "@carlnotes/db/schema/chat"
+import { topicPosts } from "@carlnotes/db/schema/topicPosts"
+import { topics } from "@carlnotes/db/schema/topics"
 import { CHAT_COST_PER_MILLION_TOKENS, EXA_COST_PER_SEARCH, tokenCost } from "@carlnotes/models/budget"
 import { trackEvent } from "@carlnotes/server/analytics"
 import { and, desc, eq, inArray, isNotNull, isNull, type SQL } from "drizzle-orm"
@@ -34,24 +37,38 @@ export type ToChatTurnRowOptions = ChatTurnSpend & {
 	// a podcast chat turn's podcast episode and chapter, and the speaker who answered it
 	podcastEpisodeChapter?: PodcastEpisodeChapterRef
 	podcastAnswerSpeaker?: PodcastEpisodeSpeaker
+	// the Topic Post that a chat turn asked from its page was about
+	topicPostId?: string
 }
 
-// a chat turn to save, and the properties that its analytics event is sent with
-type SaveChatTurnOptions = ToChatTurnRowOptions & { analyticsProperties: AnalyticsProperties }
+// a chat turn to save, the properties that its analytics event is sent with, and whether the user owns the page's
+// topic
+type SaveChatTurnOptions = ToChatTurnRowOptions & { analyticsProperties: AnalyticsProperties; isTopicOwner?: boolean }
 
 /**
  * Saves a finished chat turn's row, with its text only if the gate persists it, and returns the row's id.
  */
 export async function saveChatTurn({
 	analyticsProperties,
+	isTopicOwner = false,
 	...chatTurnRowOptions
 }: SaveChatTurnOptions): Promise<string | null> {
 	// build the row and insert it
 	const chatTurnRow = toChatTurnRow(chatTurnRowOptions)
 	const [savedChatTurnRow] = await db.insert(chatTurns).values(chatTurnRow).returning({ id: chatTurns.id })
 
+	// a question asked from a Topic Post's page is counted by its post and its topic, with no text
+	const { userId, page, isSpoken, topicPostId } = chatTurnRowOptions
+	if (topicPostId) {
+		trackEvent("social_topic_post_chat", userId, {
+			...analyticsProperties,
+			objectId: topicPostId,
+			topicId: toChatPageId(page),
+			isOwner: isTopicOwner,
+		})
+	}
+
 	// count the chat turn exactly when its row is saved. a podcast chat turn names who answered it
-	const { userId, page, isSpoken } = chatTurnRowOptions
 	trackEvent("chat_turn_sent", userId, {
 		...analyticsProperties,
 		topicId: toChatPageId(page),
@@ -78,11 +95,13 @@ export function toChatTurnRow({
 	isSpoken,
 	podcastEpisodeChapter,
 	podcastAnswerSpeaker,
+	topicPostId,
 }: ToChatTurnRowOptions): typeof chatTurns.$inferInsert {
 	// return the row. a chat turn that does not persist stores null text and only its spend.
-	// a podcast chat turn also names its podcast episode, its chapter, and who answered it
+	// a podcast chat turn also names its podcast episode, its chapter, and who answered it, and a Topic Post chat turn
+	// names its post
 	return {
-		kind: podcastEpisodeChapter ? "podcast" : "private",
+		kind: toPrivateChatTurnKind({ podcastEpisodeChapter, topicPostId }),
 		userId,
 		topicId: page.topicId ?? null,
 		teamId: page.teamId ?? null,
@@ -95,7 +114,19 @@ export function toChatTurnRow({
 		podcastEpisodeId: podcastEpisodeChapter?.podcastEpisodeId ?? null,
 		chapterPosition: podcastEpisodeChapter?.chapterPosition ?? null,
 		podcastAnswerSpeaker: podcastEpisodeChapter ? (podcastAnswerSpeaker ?? "host") : null,
+		topicPostId: topicPostId ?? null,
 	}
+}
+
+// the kind of a private chat turn's row: asked from the podcast player, from a Topic Post's page, or from the chat
+function toPrivateChatTurnKind({
+	podcastEpisodeChapter,
+	topicPostId,
+}: Pick<ToChatTurnRowOptions, "podcastEpisodeChapter" | "topicPostId">): ChatTurnKind {
+	if (podcastEpisodeChapter) {
+		return "podcast"
+	}
+	return topicPostId ? "topic_post" : "private"
 }
 
 // the chat turn kinds that record a voice call's spend: a transcription and a spoken part
@@ -227,8 +258,16 @@ export async function loadChatTurns(userId: string | null, page: ChatPage): Prom
 				chapterPosition: chatTurns.chapterPosition,
 				podcastAnswerSpeaker: chatTurns.podcastAnswerSpeaker,
 				createdAt: chatTurns.createdAt,
+				// a Topic Post chat turn's kind, and its post's title and topic while the post exists
+				kind: chatTurns.kind,
+				topicPostId: topicPosts.id,
+				topicPostTitle: topicPosts.title,
+				topicPostTopicId: topics.id,
+				topicPostTopicName: topics.name,
 			})
 			.from(chatTurns)
+			.leftJoin(topicPosts, eq(topicPosts.id, chatTurns.topicPostId))
+			.leftJoin(topics, eq(topics.id, topicPosts.topicId))
 			.where(
 				and(
 					eq(chatTurns.userId, userId),
@@ -265,6 +304,7 @@ export async function loadChatTurns(userId: string | null, page: ChatPage): Prom
 				at: chatTurnRow.createdAt.toISOString(),
 				isSpoken: chatTurnRow.isSpoken,
 				...toChatTurnRowPodcastFields(chatTurnRow),
+				topicPost: toChatTurnTopicPost(chatTurnRow),
 				attachments,
 			},
 		]
@@ -301,8 +341,36 @@ function toChatTurnRowPodcastFields({
 	}
 }
 
-// the filter for a page's conversation rows: a topic's private and podcast chat turns, a team's own private chat turns
-// with no topic, or the new-topic chat's private chat turns with neither
+// what a stored row's Topic Post reads as: null for a turn not asked from a post's page, the post's title and page
+// while the post exists, and neither once it is deleted
+function toChatTurnTopicPost(chatTurnRow: {
+	kind: ChatTurnKind
+	topicPostId: string | null
+	topicPostTitle: string | null
+	topicPostTopicId: string | null
+	topicPostTopicName: string | null
+}): ChatTurnTopicPost | null {
+	// a turn asked from the chat or the podcast player names no post
+	if (chatTurnRow.kind !== "topic_post") {
+		return null
+	}
+
+	// a deleted post leaves the turn its kind alone
+	const { topicPostId, topicPostTitle, topicPostTopicId, topicPostTopicName } = chatTurnRow
+	if (topicPostId === null || topicPostTitle === null || topicPostTopicId === null || topicPostTopicName === null) {
+		return { title: null, path: null }
+	}
+	return {
+		title: topicPostTitle,
+		path: toTopicPostPath(
+			{ id: topicPostTopicId, name: topicPostTopicName },
+			{ id: topicPostId, title: topicPostTitle },
+		),
+	}
+}
+
+// the filter for a page's conversation rows: a topic's private, podcast, and Topic Post chat turns, a team's own
+// private chat turns with no topic, or the new-topic chat's private chat turns with neither
 function toPageFilter(page: ChatPage): SQL | undefined {
 	if (page.topicId !== undefined) {
 		return and(eq(chatTurns.topicId, page.topicId), inArray(chatTurns.kind, conversationChatTurnKinds))

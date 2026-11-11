@@ -26,5 +26,13 @@ export const RESOLVED_PODCAST_EPISODE: ResolvedSocialTarget = {
 	label: "Episode One",
 }
 
+// a published Topic Post on the public Topic
+export const RESOLVED_TOPIC_POST: ResolvedSocialTarget = {
+	commentTarget: { kind: "post", id: "post-1" },
+	topic: PUBLIC_TOPIC,
+	path: "/topics/topic-1/coffee/posts/post-1/light-roasts",
+	label: "Light Roasts",
+}
+
 // a Topic's shared comment slots as an editor reads them
 export const EDITOR_SHARED_COMMENT_SLOTS = { usedCount: 1, slotCount: 3 }

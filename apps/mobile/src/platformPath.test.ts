@@ -31,12 +31,26 @@ test("episode links retain season, number, and context before the generic Topic 
 	}
 })
 
+test("Topic Post links keep the Topic's and the post's ids and drop both slugs", () => {
+	for (const path of [
+		"/topics/topic-1/coffee/posts/post-1/light-roasts",
+		"/topics/topic-1/coffee/posts/post-1",
+		"/topics/topic-1/posts/post-1/",
+	]) {
+		expect(toPlatformPath(`${path}?comment=c1`)).toBe("/topics/topic-1/posts/post-1?comment=c1")
+	}
+	expect(toPlatformPath("https://carlnotes.com/topics/topic-1/coffee/posts/post-1/light-roasts")).toBe(
+		"/topics/topic-1/posts/post-1",
+	)
+})
+
 test("hasNativeRoute is true for a native route path and false for any other", () => {
 	for (const path of [
 		"/",
 		"/search?q=x",
 		"/topics/t1",
 		"/topics/t1/episodes/2026/7",
+		"/topics/t1/posts/p1",
 		"/teams/t1/notes/n1",
 		"/invite/k",
 	]) {

@@ -1,10 +1,12 @@
 import { TOPIC_ATTACHMENT_MAX_BYTES } from "@carlnotes/contracts/attachmentTypes"
+import { toHtmlText, toOneLineText } from "@carlnotes/contracts/text"
 import { db } from "@carlnotes/db"
 import {
 	loadPersonalSourcesReviewContexts,
 	type PersonalSourcesContextVersion,
 	type PersonalSourcesReviewContext,
 } from "@carlnotes/db/personalSourcesContext"
+import { topicPosts } from "@carlnotes/db/schema/topicPosts"
 import { attachments, topics } from "@carlnotes/db/schema/topics"
 import {
 	clearPendingObjectDeletion,
@@ -21,7 +23,7 @@ import { type BuiltPrompt, fetchPromptTemplate, promptTelemetry } from "@carlnot
 import { writePrompt } from "@carlnotes/models/prompts/write"
 import { isHostRejection, toFetchableUrl } from "@carlnotes/server/publicFetch"
 import { generateText } from "ai"
-import { and, eq } from "drizzle-orm"
+import { and, desc, eq, isNotNull } from "drizzle-orm"
 import { AttachmentValidationError, isSupportedAttachmentType } from "./attachContentType"
 import { fetchContent } from "./scrape"
 import { startAttachmentWorkflow } from "./temporalClient"
@@ -180,12 +182,15 @@ export async function buildContextPrompt(text: string): Promise<BuiltPrompt> {
 	const { template, name, registryPrompt } = await fetchPromptTemplate("attach-context")
 
 	// a clipped document marks its cut
-	const clippedText =
-		text.length > MAX_EXTRACT_CHARS
-			? `${text.slice(0, MAX_EXTRACT_CHARS)}\n\n[The document is cut here. It runs ${text.length.toLocaleString("en-US")} characters and only the first ${MAX_EXTRACT_CHARS.toLocaleString("en-US")} are included.]`
-			: text
-	const prompt = writePrompt(template, { document: clippedText })
+	const prompt = writePrompt(template, { document: toCutExtract(text, "document") })
 	return { prompt, name, registryPrompt }
+}
+
+// a text cut at the longest extract a model reads, with the cut marked by what the text is and how long it runs
+function toCutExtract(text: string, noun: string): string {
+	return text.length > MAX_EXTRACT_CHARS
+		? `${text.slice(0, MAX_EXTRACT_CHARS)}\n\n[The ${noun} is cut here. It runs ${text.length.toLocaleString("en-US")} characters and only the first ${MAX_EXTRACT_CHARS.toLocaleString("en-US")} are included.]`
+		: text
 }
 
 // generate a context string from any attachment's text with the cheap model, billed to the given key
@@ -225,7 +230,8 @@ export async function generateImageContext(dataUrl: string, litellmApiKey?: stri
 	return text.trim()
 }
 
-// the context a scan reads for a topic. the topic's prompt merged with every attachment's context
+// the context a scan reads for a topic. the topic's prompt merged with every attachment's context, and for a review
+// with the topic's published Topic Posts
 export async function buildTopicScanContext({
 	topicId,
 	purpose,
@@ -258,9 +264,22 @@ export async function buildTopicScanContext({
 		return { name: topic.name, context }
 	}
 
+	// a review also reads the topic's published Topic Posts after the attachments, newest first, each under its title
+	// and cut at the longest extract. a draft is never read
+	const topicPostRows = await db
+		.select({ title: topicPosts.title, html: topicPosts.html })
+		.from(topicPosts)
+		.where(and(eq(topicPosts.topicId, topicId), isNotNull(topicPosts.publishedAt)))
+		.orderBy(desc(topicPosts.publishedAt))
+	const labeledTopicPosts = topicPostRows.map(
+		(topicPostRow) =>
+			`[topic post: ${toOneLineText(topicPostRow.title)}]\n${toCutExtract(toHtmlText(topicPostRow.html), "post")}`,
+	)
+	const reviewContext = [context, ...labeledTopicPosts].filter(Boolean).join("\n\n")
+
 	// retain public context separately from sender-private review inputs
 	const personalSources = await loadPersonalSourcesReviewContexts(topicId)
-	const publicContext = context.slice(0, Math.max(0, MAX_REVIEW_CONTEXT_CHARS - topic.name.length - 2))
+	const publicContext = reviewContext.slice(0, Math.max(0, MAX_REVIEW_CONTEXT_CHARS - topic.name.length - 2))
 	if (personalSources.length === 0) {
 		return { name: topic.name, context: publicContext }
 	}

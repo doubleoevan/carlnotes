@@ -56,7 +56,7 @@ export function PodcastEpisodePlayer({ topic, topicFeedHandlers, scanControl }: 
 		<CollapsibleSection
 			value="podcast"
 			title={PODCAST_NAME}
-			titleNote={<PodcastThemeSongNote className="ml-0" />}
+			titleNote={<PodcastThemeSongNote />}
 			titleAside={titleAside}
 			hasClosedDivider
 			className="mt-2"

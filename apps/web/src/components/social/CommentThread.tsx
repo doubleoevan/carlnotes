@@ -9,6 +9,7 @@ import { useState } from "react"
 import { toast } from "sonner"
 import { ReportIssueDialog } from "@/components/common/ReportIssueDialog"
 import { toSignupNavigation } from "@/components/session/signupPrompts"
+import { useSearchParams } from "@/hooks/useSearchParams"
 import { captureVisitEvent } from "@/lib/visitAnalytics"
 import { SOCIAL_ELEMENTS } from "./socialElements"
 
@@ -20,6 +21,9 @@ import { SOCIAL_ELEMENTS } from "./socialElements"
 export function CommentThread({ topicId, isTopicOwner, ...props }: CommentThreadAdapterProps) {
 	const navigate = useNavigate()
 	const [reportedComment, setReportedComment] = useState<CommentReply | null>(null)
+
+	// the Comment the page's url names, which leads the thread
+	const linkedCommentId = useSearchParams().get("comment") ?? undefined
 	useCommentThreadViewEvent({ target: props.target, topicId, isTopicOwner, captureVisitEvent })
 	const commentReportProps = reportedComment && toCommentReportProps("comment", reportedComment)
 
@@ -27,6 +31,7 @@ export function CommentThread({ topicId, isTopicOwner, ...props }: CommentThread
 		<section aria-label={COMMENT_THREAD_HEADING} className="flex flex-col gap-1">
 			<SharedCommentThread
 				{...props}
+				linkedCommentId={linkedCommentId}
 				onSignIn={() => void navigate(toSignupNavigation("hot-take"))}
 				onError={toast.error}
 				onReport={setReportedComment}

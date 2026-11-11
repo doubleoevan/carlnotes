@@ -19,6 +19,7 @@ import {
 } from "@carlnotes/contracts/social"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { useEffect, useRef, useState } from "react"
+import { loadCommentMentions } from "../stores/commentMentionStore"
 
 // how many top-level comments a thread shows until the user asks for more
 const FIRST_SHOWN_COMMENT_COUNT = 5
@@ -43,6 +44,8 @@ export type CommentThreadState = {
 	sharedCommentSlots: SharedCommentSlots | null
 	// how many comments and replies the last seven days added
 	weekCommentCount: number
+	// how many comments and replies the thread holds in all. null from an api that does not count them
+	commentCount: number | null
 	isLoading: boolean
 	hasError: boolean
 	retry: () => void
@@ -146,19 +149,22 @@ function toReloadedComment(pageComment: Comment, loadedComment: Comment | undefi
 export function useCommentThread(
 	target: CommentTarget,
 	firstPage: CommentThreadResponse | undefined,
+	linkedCommentId?: string,
 ): CommentThreadState {
 	// the first page the page came with, or the cached read of it. a failed or slow read stays with its own query key
 	const queryClient = useQueryClient()
 	const commentThreadKey = ["comment-thread", target.kind, target.id]
 	const commentThreadQuery = useQuery({
-		queryKey: commentThreadKey,
-		queryFn: () => fetchCommentThread(target),
-		enabled: !firstPage,
+		queryKey: linkedCommentId ? [...commentThreadKey, linkedCommentId] : commentThreadKey,
+		queryFn: () => fetchCommentThread(target, undefined, linkedCommentId),
+		enabled: !firstPage || Boolean(linkedCommentId),
 		staleTime: COMMENT_THREAD_STALE_MS,
 		retry: false,
 		networkMode: "always",
 	})
-	const commentPage = firstPage ?? commentThreadQuery.data
+
+	// a link to a Comment reads the page that leads with it, which joins the page's own first page once it comes
+	const commentPage = linkedCommentId ? (commentThreadQuery.data ?? firstPage) : (firstPage ?? commentThreadQuery.data)
 
 	// the pages loaded so far, how many show, the cursor of the next page, and the counts
 	const [comments, setComments] = useState<Comment[]>(commentPage?.comments ?? [])
@@ -168,6 +174,7 @@ export function useCommentThread(
 		commentPage?.sharedCommentSlots ?? null,
 	)
 	const [weekCommentCount, setWeekCommentCount] = useState(commentPage?.weekCommentCount ?? 0)
+	const [commentCount, setCommentCount] = useState(commentPage?.commentCount ?? null)
 	const isLoadingMoreRef = useRef(false)
 
 	// the cursor of each comment's next page of replies, once its first full page has loaded. null for no next page
@@ -181,8 +188,11 @@ export function useCommentThread(
 		setComments(firstCommentPage.comments)
 		setShownCommentCount(FIRST_SHOWN_COMMENT_COUNT)
 		setNextCursor(firstCommentPage.nextCursor)
+
+		// keep the page's shared comment slots and counts, and forget the reply cursors
 		setSharedCommentSlots(firstCommentPage.sharedCommentSlots)
 		setWeekCommentCount(firstCommentPage.weekCommentCount)
+		setCommentCount(firstCommentPage.commentCount ?? null)
 		replyCursorsRef.current = new Map()
 	}
 
@@ -199,6 +209,7 @@ export function useCommentThread(
 		setNextCursor((loadedCursor) => (reloadedPage.nextCursor ? loadedCursor : null))
 		setSharedCommentSlots(reloadedPage.sharedCommentSlots)
 		setWeekCommentCount(reloadedPage.weekCommentCount)
+		setCommentCount(reloadedPage.commentCount ?? null)
 	}
 
 	// another social target starts over, and the same one's next first page joins what is loaded
@@ -290,11 +301,17 @@ export function useCommentThread(
 			return commentWriteResult
 		}
 
+		// the user's own Comment write reads their unseen Comment Mentions again
+		void loadCommentMentions()
+
 		// a top-level comment by a user who may share can take a shared comment slot, so keep the shared comment slots the
 		// post returned
 		const { comment: postedComment } = commentWriteResult
 		setSharedCommentSlots(commentWriteResult.sharedCommentSlots ?? sharedCommentSlots)
 		setWeekCommentCount((count) => count + 1)
+		setCommentCount((count) => (count === null ? null : count + 1))
+
+		// put the posted comment first, or the posted reply last under the comment it answers
 		setComments((currentComments) =>
 			postedComment.parentCommentId
 				? currentComments.map((comment) =>
@@ -325,10 +342,11 @@ export function useCommentThread(
 	async function remove(commentId: string): Promise<boolean> {
 		const deletedComment = await deleteCommentRequest(commentId)
 		if (deletedComment) {
-			// the delete returns the shared comment slots and the week's count
+			// the delete returns the shared comment slots, the week's count, and the thread's whole count
 			setComments((currentComments) => toCommentsWithout(currentComments, commentId))
 			setSharedCommentSlots(deletedComment.sharedCommentSlots ?? sharedCommentSlots)
 			setWeekCommentCount(deletedComment.weekCommentCount)
+			setCommentCount(deletedComment.commentCount ?? null)
 			invalidateCachedPage()
 		}
 		return Boolean(deletedComment)
@@ -359,6 +377,7 @@ export function useCommentThread(
 		comments: comments.slice(0, shownCommentCount),
 		sharedCommentSlots,
 		weekCommentCount,
+		commentCount,
 		isLoading: !commentPage && commentThreadQuery.isFetching,
 		hasError: !commentPage && commentThreadQuery.isError && !commentThreadQuery.isFetching,
 		retry: () => void commentThreadQuery.refetch(),

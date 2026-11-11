@@ -79,6 +79,14 @@ export async function isSharedCommentSpeakable({ username, body }: PodcastShared
 	return classifications.every(isSpeakableClassification)
 }
 
+/**
+ * Classifies a username before a host says it aloud, as a shared Comment's is. A failed classification counts as
+ * flagged.
+ */
+export async function isUsernameSpeakable(username: string): Promise<boolean> {
+	return isSpeakableClassification(await classifyUserText({ text: username, textKind: "a username" }))
+}
+
 // whether a classification lets the text through. a stack with no moderation proxy skips the classification
 function isSpeakableClassification(classification: ModerationClassification): boolean {
 	if (classification.outcome === "failed") {

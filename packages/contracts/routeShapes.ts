@@ -15,12 +15,20 @@ export const okResponse = z.object({ ok: z.literal(true) })
 // the home feed's query: every finding, or the unread ones
 export const topicFeedQuery = z.object({ all: z.enum(["true", "false"]).optional() })
 
-// the topic page's query: a poll while a scan runs
-export const topicPageQuery = z.object({ poll: z.literal("1").optional() })
+// the topic page's query: a poll while a scan runs, and the related topics left out for a client that reads them in
+// a read of their own
+export const topicPageQuery = z.object({
+	poll: z.literal("1").optional(),
+	related: z.literal("separate").optional(),
+})
 
 // a season or podcast episode number from a url, and the queries and params the podcast routes read
 const podcastSeasonOrEpisodeNumberParam = z.coerce.number().pipe(z.int32().positive())
-export const seasonPodcastEpisodesQuery = z.object({ season: podcastSeasonOrEpisodeNumberParam })
+// a season read, filtered to the podcast episodes with a ready film for the Coffee Break films list
+export const seasonPodcastEpisodesQuery = z.object({
+	season: podcastSeasonOrEpisodeNumberParam,
+	hasVideo: z.enum(["true", "false"]).optional(),
+})
 export const podcastEpisodePageParam = z.object({
 	id: z.string(),
 	season: podcastSeasonOrEpisodeNumberParam,

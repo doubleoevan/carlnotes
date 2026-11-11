@@ -12,6 +12,7 @@ import {
 	toChatKey,
 	toChatRoomMenuOrder,
 	toPrivateChatId,
+	toPrivateChatIdLabel,
 	toPrivateChatName,
 	toProfileChatContext,
 } from "@carlnotes/core/lib/chatConversations"
@@ -23,6 +24,7 @@ import {
 	useChatConversation,
 } from "@carlnotes/core/stores/chatConversationStore"
 import { toChatRooms, useChatRooms } from "@carlnotes/core/stores/chatRoomStore"
+import { useChatTopicPost } from "@carlnotes/core/stores/topicPostChatStore"
 import { type UseQueryResult, useQuery } from "@tanstack/react-query"
 import { LockKeyhole, Plus } from "lucide-react-native"
 import { type ComponentProps, useEffect, useRef } from "react"
@@ -31,7 +33,7 @@ import { HostAvatar } from "@/components/branding/HostAvatar"
 import type { ChoiceSelect } from "@/components/common/ChoiceSelect"
 import { CountBadge } from "@/components/common/CountBadge"
 import { useTopicFeed } from "@/providers/TopicFeedProvider"
-import { type NewTopicChatId, toInitialChatId } from "./chatNavigation"
+import { type NewTopicChatId, toChatScreenTopicPost, toInitialChatId } from "./chatNavigation"
 
 // the page that opened the conversation, the team whose chat room a badge named, and a new-topic chat asked for
 export type ChatScreenProps = {
@@ -41,6 +43,8 @@ export type ChatScreenProps = {
 	chatTeamId?: string
 	newTopicChatId?: NewTopicChatId
 	isEditingTopic?: boolean
+	// whether the screen opens on the topic's private chat, as the chat launcher on a Topic Post's screen asks
+	isPrivateChat?: boolean
 }
 
 // loaded page access, conversation choices, and the selected account
@@ -50,7 +54,7 @@ type ChatPageData = {
 }
 type ChatChoice = { id: ChatId } & Pick<
 	ComponentProps<typeof ChoiceSelect>["options"][number],
-	"label" | "icon" | "badge"
+	"label" | "icon" | "badge" | "numberOfLines"
 >
 export type ChatPageState = {
 	query: UseQueryResult<ChatPageData, Error>
@@ -60,6 +64,8 @@ export type ChatPageState = {
 	choices: ChatChoice[]
 	selectedId: ChatId | undefined
 	name: string
+	// the Topic Post whose screen opened the chat, which its Topic's private chat asks about
+	chatTopicPost: ReturnType<typeof useChatTopicPost>
 }
 
 /**
@@ -72,6 +78,7 @@ export function useChatPage({
 	chatTeamId,
 	newTopicChatId,
 	isEditingTopic = false,
+	isPrivateChat = false,
 }: ChatScreenProps): ChatPageState {
 	// read access for this account, and the rooms into the shared store, before mounting a conversation
 	const { data: session } = authClient().useSession()
@@ -116,6 +123,7 @@ export function useChatPage({
 				pageContext,
 				newTopicChatId: newTopicChatIdRef.current,
 				isEditingTopic,
+				isPrivateChat,
 			}),
 		)
 		// an Edit topic choice marks the topic as being edited, as the web's does
@@ -123,9 +131,10 @@ export function useChatPage({
 			startEditingTopic(topicId)
 		}
 		return () => setChatId(null)
-	}, [isPageLoaded, userId, topicId, teamId, chatTeamId, pageContext, newTopicChatKey, isEditingTopic])
+	}, [isPageLoaded, userId, topicId, teamId, chatTeamId, pageContext, newTopicChatKey, isEditingTopic, isPrivateChat])
 
-	// the conversations to choose from
+	// the conversations to choose from, with the private chat named for the Topic Post whose screen opened the chat
+	const chatTopicPost = toChatScreenTopicPost(useChatTopicPost(), isPrivateChat)
 	const topics = [
 		...new Map(
 			(topicFeed?.sections.flatMap((section) => section.topics) ?? []).map((topic) => [topic.id, topic]),
@@ -135,6 +144,7 @@ export function useChatPage({
 		chatId,
 		pageContext: pageContext ?? null,
 		chatRooms,
+		chatTopicPost,
 		topics,
 		hasTopicChoices: !topicId && !teamId && !chatRooms.length,
 	})
@@ -158,6 +168,7 @@ export function useChatPage({
 		choices: chatChoices,
 		selectedId: selectedChatId,
 		name: chatName,
+		chatTopicPost,
 	}
 }
 
@@ -202,24 +213,34 @@ function toChatChoices({
 	chatId,
 	pageContext,
 	chatRooms,
+	chatTopicPost,
 	topics,
 	hasTopicChoices,
 }: {
 	chatId: ChatId | null
 	pageContext: ChatPageContext | null
 	chatRooms: ChatRoom[]
+	chatTopicPost: ReturnType<typeof useChatTopicPost>
 	topics: { id: string; name: string }[]
 	hasTopicChoices: boolean
 }): ChatChoice[] {
 	// retain page-specific private chat, or offer the selected room's Team conversation. the new-topic chat has its own
 	// option, keeping the team a team page gave it
 	const pagePrivateChatId = toPrivateChatId(pageContext, chatId) ?? (chatId?.kind === "private" ? chatId : null)
-	const privateChatId = pagePrivateChatId?.kind === "private" && pagePrivateChatId.newTopic ? null : pagePrivateChatId
+	const privateChatId = pagePrivateChatId?.kind === "private" && !pagePrivateChatId.newTopic ? pagePrivateChatId : null
 	const newTopicChoiceId: ChatId =
 		chatId?.kind === "private" && chatId.newTopic ? chatId : { kind: "private", newTopic: true }
 	return [
 		...(privateChatId && !hasTopicChoices
-			? [{ id: privateChatId, label: "Private chat", icon: <HostAvatar speaker="host" size={20} /> }]
+			? [
+					{
+						id: privateChatId,
+						// the private chat's label names what it is about, on one line
+						label: toPrivateChatIdLabel(privateChatId, { chatRooms, pageContext, chatTopicPost }),
+						numberOfLines: 1,
+						icon: <HostAvatar speaker="host" size={20} />,
+					},
+				]
 			: []),
 		{ id: newTopicChoiceId, label: NEW_TOPIC_CHAT_COPY.name, icon: Plus },
 		...toChatRoomMenuOrder(chatRooms).map((chatRoom) => ({

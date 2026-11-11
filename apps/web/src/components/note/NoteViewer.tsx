@@ -18,8 +18,10 @@ export function NoteViewer(props: Omit<NoteViewerProps, "onOpenLink">) {
 	return <SharedNoteViewer {...props} onOpenLink={openInNewTab} elements={ELEMENTS} />
 }
 
-// render saved HTML with the same typography as the editor
-function NoteReader({ html, onOpenLink }: NoteReaderProps) {
+/**
+ * Renders saved HTML with the same typography as the editor.
+ */
+export function NoteReader({ html, onOpenLink }: NoteReaderProps) {
 	return (
 		<div className={NOTE_BODY_CLASS} style={NOTE_BODY_STYLE}>
 			<EnrichedText htmlStyle={NOTE_HTML_STYLE} onLinkPress={(event) => onOpenLink(event.url)}>

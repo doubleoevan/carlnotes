@@ -15,18 +15,21 @@ import {
 import { primaryId, reactionType, timestamps } from "./columns"
 import { podcastEpisodes } from "./podcast"
 import { findings } from "./scans"
+import { topicPosts } from "./topicPosts"
 import { topics } from "./topics"
 import { users } from "./users"
 
-// the social target columns that reactions and comments share. deleting the Finding, the Podcast Episode, or the
-// Topic takes the row with it. a post has no table yet, so its column references nothing
+// the social target columns that reactions and comments share. deleting the Finding, the Podcast Episode, the Topic,
+// or the Topic Post takes the row with it. the target topic is the Topic the social target belongs to, which every
+// write sets. it is nullable so that a replica still on the release before the column can insert during a deploy
 // biome-ignore lint/nursery/useExplicitReturnType: drizzle's column builder types are generated, and naming them here would break on an upgrade
 function socialTargetColumns() {
 	return {
 		findingId: text("finding_id").references(() => findings.id, { onDelete: "cascade" }),
 		podcastEpisodeId: text("podcast_episode_id").references(() => podcastEpisodes.id, { onDelete: "cascade" }),
 		topicId: text("topic_id").references(() => topics.id, { onDelete: "cascade" }),
-		postId: text("post_id"),
+		postId: text("post_id").references(() => topicPosts.id, { onDelete: "cascade" }),
+		targetTopicId: text("target_topic_id").references(() => topics.id, { onDelete: "cascade" }),
 	}
 }
 
@@ -73,6 +76,8 @@ export const reactions = pgTable(
 		index("reactions_topic_created_at_idx").on(table.topicId, table.createdAt).where(sql`${table.topicId} is not null`),
 		index("reactions_post_created_at_idx").on(table.postId, table.createdAt).where(sql`${table.postId} is not null`),
 		index("reactions_comment_idx").on(table.commentId).where(sql`${table.commentId} is not null`),
+		// a Topic's reactions newest first, which the news reads
+		index("reactions_target_topic_created_at_idx").on(table.targetTopicId, table.createdAt),
 		// the day's reactions, which the notifications email reads
 		index("reactions_created_at_idx").on(table.createdAt),
 		index("reactions_user_id_idx").on(table.userId),
@@ -124,6 +129,8 @@ export const comments = pgTable(
 			.where(sql`${table.podcastEpisodeId} is not null`),
 		index("comments_topic_created_at_idx").on(table.topicId, table.createdAt).where(sql`${table.topicId} is not null`),
 		index("comments_post_created_at_idx").on(table.postId, table.createdAt).where(sql`${table.postId} is not null`),
+		// a Topic's comments newest first, which the news reads
+		index("comments_target_topic_created_at_idx").on(table.targetTopicId, table.createdAt),
 		// the day's comments, which the notifications email reads
 		index("comments_created_at_idx").on(table.createdAt),
 		index("comments_author_user_id_idx").on(table.authorUserId),
@@ -151,11 +158,17 @@ export const commentMentions = pgTable(
 			.notNull()
 			.references(() => users.id, { onDelete: "cascade" }),
 		username: text("username").notNull(),
+		// when the mentioned user scrolled to the comment. null while the mention is unseen
+		seenAt: timestamp("seen_at", { withTimezone: true }),
 	},
 	// one row per comment and user, and the mentions of one user, which the notifications email reads
 	(table) => [
 		primaryKey({ columns: [table.commentId, table.mentionedUserId] }),
 		index("comment_mentions_mentioned_user_id_idx").on(table.mentionedUserId),
+		// one user's unseen mentions, which their badges count
+		index("comment_mentions_unseen_mentioned_user_id_idx")
+			.on(table.mentionedUserId)
+			.where(sql`${table.seenAt} is null`),
 	],
 )
 

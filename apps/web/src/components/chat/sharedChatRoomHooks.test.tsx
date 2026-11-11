@@ -36,6 +36,9 @@ test("room members reuse the loaded Team but fetch when a different room is sele
 		hiddenMemberCount: 0,
 		chatMentions: [],
 		topics: [],
+		topicCards: [],
+		podcastEpisodeCards: [],
+		topicPostCards: [],
 		members: [
 			{
 				userId: "friend",

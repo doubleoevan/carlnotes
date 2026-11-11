@@ -107,6 +107,8 @@ export const scanStatuses = ["running", "succeeded", "failed"] as const
 // a podcast episode's status. recording until it publishes or fails,
 // and removed once its topic's owner or an admin removes it
 export const podcastEpisodeStatuses = ["recording", "published", "failed", "removed"] as const
+// a podcast episode film's status. rendering until it is ready or fails
+export const topicPodcastEpisodeVideoStatuses = ["rendering", "ready", "failed"] as const
 // who speaks a turn of a podcast episode, and who answers a question asked from the podcast player
 export const podcastEpisodeSpeakers = ["host", "cohost"] as const
 export type PodcastEpisodeSpeaker = (typeof podcastEpisodeSpeakers)[number]
@@ -118,13 +120,13 @@ export function isPodcastEpisodeSpeaker(value: unknown): value is PodcastEpisode
 	return podcastEpisodeSpeakers.some((podcastEpisodeSpeaker) => podcastEpisodeSpeaker === value)
 }
 
-// what a chat turn row records: a private chat turn, a podcast chat turn, carl's chat room turn, or a transcription's
-// or a spoken part's spend
-export const chatTurnKinds = ["private", "podcast", "chat_room", "transcription", "speech"] as const
+// what a chat turn row records: a private chat turn, a podcast chat turn, carl's chat room turn, a transcription's
+// or a spoken part's spend, or a topic post chat turn
+export const chatTurnKinds = ["private", "podcast", "chat_room", "transcription", "speech", "topic_post"] as const
 export type ChatTurnKind = (typeof chatTurnKinds)[number]
 // the chat turn kinds a topic's conversation holds, and where a spoken question can be asked from: the chat or the
 // podcast player
-export const conversationChatTurnKinds = ["private", "podcast"] as const satisfies readonly ChatTurnKind[]
+export const conversationChatTurnKinds = ["private", "podcast", "topic_post"] as const satisfies readonly ChatTurnKind[]
 export type ConversationChatTurnKind = (typeof conversationChatTurnKinds)[number]
 // an attachment's async processing status: pending === stored and queued, ready === processed, or failed
 export const attachmentStatuses = ["pending", "ready", "failed"] as const
@@ -198,13 +200,18 @@ export const promptVersionOrigins = ["editor", "chat", "mcp"] as const
 // what a report names: a Topic, a profile, a Team, a chat room message, a note, a note comment, a Finding, a Podcast
 // Episode, a Comment, or a Topic's image
 // biome-ignore format: one line keeps the kinds under the comment-density hook's limit
-export const reportSubjectKinds = ["topic", "profile", "team", "chatMessage", "note", "noteComment", "finding", "podcastEpisode", "comment", "topicImage"] as const
+export const reportSubjectKinds = ["topic", "profile", "team", "chatMessage", "note", "noteComment", "finding", "podcastEpisode", "comment", "topicImage", "topicPostImage"] as const
 // how an admin closes a report: the content was removed, it was cleared and stays, or its author got an admin block
 export const reportResolutions = ["removed", "cleared", "blocked"] as const
 // the types a Reaction can hold, every one positive, in the order the picker shows them
 export const reactionTypes = ["like", "celebrate", "support", "love", "insightful", "funny"] as const
-// what a Comment hangs on. a post is not found until posts exist
+// what a Comment hangs on. a post is a published Topic Post
 export const commentTargetKinds = ["finding", "podcastEpisode", "topic", "post"] as const
+// why a topic post discussion was recorded: the post's publishing, or an editor's regenerate
+export const topicPostDiscussionKinds = ["publish", "regenerate"] as const
+export type TopicPostDiscussionKind = (typeof topicPostDiscussionKinds)[number]
+// where a topic post discussion stands. recording until it publishes or fails
+export const topicPostDiscussionStatuses = ["recording", "published", "failed"] as const
 // what a Reaction hangs on: everything a Comment does, and a Comment
 export const socialTargetKinds = [...commentTargetKinds, "comment"] as const
 // what a push notification is about: a scheduled Scan's new Findings, or a chat mention in a team chat room

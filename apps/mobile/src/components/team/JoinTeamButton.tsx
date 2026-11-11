@@ -6,6 +6,12 @@ import { Button } from "@/components/primitives/button"
 import { Icon } from "@/components/primitives/icon"
 import { Text } from "@/components/primitives/text"
 import { usePageMutation } from "@/hooks/usePageMutation"
+import {
+	HIGHLIGHTED_PAGE_BUTTON_CLASS,
+	PLAIN_PAGE_BUTTON_CLASS,
+	PLAIN_PAGE_BUTTON_ICON_CLASS,
+	PLAIN_PAGE_BUTTON_TEXT_CLASS,
+} from "@/pageButtonClasses"
 import { openSessionScreen } from "@/sessionReturnPath"
 
 /**
@@ -29,6 +35,7 @@ export function JoinTeamButton({
 		<View className="gap-2">
 			<Button
 				variant={isHighlighted ? "default" : "outline"}
+				className={isHighlighted ? HIGHLIGHTED_PAGE_BUTTON_CLASS : PLAIN_PAGE_BUTTON_CLASS}
 				accessibilityLabel={hasRequestedToJoin ? `Delete request to join ${name}` : `Ask to join ${name}`}
 				disabled={mutation.isPending}
 				onPress={() => {
@@ -48,8 +55,12 @@ export function JoinTeamButton({
 					})
 				}}
 			>
-				<Icon as={hasRequestedToJoin ? Minus : Plus} className="size-4" />
-				<Text>Join Team</Text>
+				{/* the plain button's icon alone takes the highlight color */}
+				<Icon
+					as={hasRequestedToJoin ? Minus : Plus}
+					className={isHighlighted ? "size-4" : PLAIN_PAGE_BUTTON_ICON_CLASS}
+				/>
+				<Text className={isHighlighted ? undefined : PLAIN_PAGE_BUTTON_TEXT_CLASS}>Join Team</Text>
 			</Button>
 			{mutation.error && <Text className="text-sm text-destructive">{mutation.error}</Text>}
 		</View>

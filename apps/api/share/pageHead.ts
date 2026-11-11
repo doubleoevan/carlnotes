@@ -1,8 +1,10 @@
-// the page head of a topic, a profile, a team, or an invitation, and the routes that serve it
+// the page head of a topic, a podcast episode, a profile, a team, or an invitation, and the routes that serve it and
+// a Topic Post's
 
 import { MINIMUM_SHOWN_FINDINGS } from "@carlnotes/contracts/enums"
 import type { PageHead } from "@carlnotes/contracts/pageHead"
 import type { PublishedPodcastEpisodeNumbers } from "@carlnotes/contracts/podcast"
+import { toProfilePageTitle } from "@carlnotes/contracts/profilePage"
 import {
 	toInvitePath,
 	toPageTitle,
@@ -27,14 +29,16 @@ import {
 } from "../podcast/podcastEpisodeRows"
 import { toPodcastEpisodeLd, toPodcastSeries, toPodcastSeriesLd } from "../podcast/podcastSeo"
 import { loadTopicFeedUpdatedAt } from "../seo"
+import { toTopicPostPageHead } from "../topicPost/topicPostPageHead"
 import { toPodcastEpisodePreview, toPodcastEpisodePreviewKey } from "./podcastEpisodeImage"
-import { toInvitedTeamPreview, toProfilePreview, toTeamPreview, toTopicPreview } from "./preview"
+import { loadTopicPostPreview, toInvitedTeamPreview, toProfilePreview, toTeamPreview, toTopicPreview } from "./preview"
 import { toCountLabel, toPreviewVersion } from "./previewImage"
 import { type ProfilePreview, toProfilePreviewKey } from "./profileImage"
 import { type TeamPreview, toTeamPreviewKey } from "./teamImage"
 import { type TopicPreview, toTopicPreviewKey } from "./topicImage"
+import { toTopicPostPreviewKey } from "./topicPostImage"
 
-// the page head routes: a topic's, a profile's, a team's, and an invitation's
+// the page head routes: a topic's, a podcast episode's, a Topic Post's, a profile's, a team's, and an invitation's
 export const pageHeadRoute = new Hono<AppEnv>()
 	// what a topic page puts in its head. a private or invite topic serves its card and never its findings
 	.get("/topics/:id/head", async (context) => {
@@ -104,6 +108,15 @@ export const pageHeadRoute = new Hono<AppEnv>()
 			}),
 		)
 	})
+	// what a Topic Post page puts in its head. a draft is not found, and a private or invite topic's post serves its
+	// card alone
+	.get("/topic-posts/:id/head", async (context) => {
+		const loadedTopicPostPreview = await loadTopicPostPreview(context.req.param("id"))
+		if (!loadedTopicPostPreview) {
+			return context.json({ error: "not found" }, 404)
+		}
+		return context.json(toTopicPostPageHead({ ...loadedTopicPostPreview, appUrl: appUrl() }))
+	})
 	// what a profile page puts in its head
 	.get("/profiles/:userId/head", async (context) => {
 		const profilePreview = await toProfilePreview(context.req.param("userId"))
@@ -132,19 +145,29 @@ export const pageHeadRoute = new Hono<AppEnv>()
 		const invitedTeamPreview = "teamId" in inviteTarget ? await toInvitedTeamPreview(inviteTarget.teamId) : null
 		const invitedTopicPreview = "topicId" in inviteTarget ? await toTopicPreview(inviteTarget.topicId) : null
 		const name = invitedTeamPreview?.name ?? invitedTopicPreview?.title
+
+		// a topic invite shared from a Topic Post shows the post's card and title while the post is published
+		const invitedTopicPostPreview =
+			"topicId" in inviteTarget && inviteTarget.topicPostId
+				? ((await loadTopicPostPreview(inviteTarget.topicPostId))?.topicPostPreview ?? null)
+				: null
 		// find the card's storage key. the image url names the key's version
 		const invitePreviewKey =
+			(invitedTopicPostPreview && toTopicPostPreviewKey(invitedTopicPostPreview)) ??
 			(invitedTeamPreview && toTeamPreviewKey(invitedTeamPreview)) ??
 			(invitedTopicPreview && toTopicPreviewKey(invitedTopicPreview))
 		if (!name || !invitePreviewKey) {
 			return context.json({ error: "not found" }, 404)
 		}
+
+		// the join page's head, with the card at its current version
 		return context.json(
 			toInvitePageHead({
 				name,
 				imageUrl: `${appUrl()}/api/invites/${token}/preview.png?v=${toPreviewVersion(invitePreviewKey)}`,
 				inviteUrl: `${appUrl()}${toInvitePath(token)}`,
 				kind: invitedTeamPreview ? "team" : "topic",
+				topicPostTitle: invitedTopicPostPreview?.title,
 			}),
 		)
 	})
@@ -256,7 +279,7 @@ export function toPodcastEpisodePageHead({
  */
 export function toProfilePageHead(profilePreview: ProfilePreview, appUrl: string): PageHead {
 	// the title and the profile page's url
-	const title = toPageTitle(profilePreview.username)
+	const title = toPageTitle(toProfilePageTitle(profilePreview.username))
 	const pageUrl = `${appUrl}/profiles/${profilePreview.userId}`
 	return {
 		title,
@@ -302,14 +325,24 @@ export function toInvitePageHead(invitePreview: {
 	imageUrl: string
 	inviteUrl: string
 	kind: "team" | "topic"
+	// the title of the Topic Post a topic invitation was shared from, if any
+	topicPostTitle?: string
 }): PageHead {
 	// a team invitation joins the team, and a topic invitation follows the topic
 	const inviteVerb = invitePreview.kind === "team" ? "Join" : "Follow"
-	const title = `${inviteVerb} ${invitePreview.name} on CarlNotes`
+	const invitedAction = `${inviteVerb.toLowerCase()} ${invitePreview.name}`
+
+	// an invitation shared from a Topic Post is titled by the post, and says that it opens the post
+	const { topicPostTitle } = invitePreview
+	const title = topicPostTitle
+		? `Read ${topicPostTitle} on CarlNotes`
+		: `${inviteVerb} ${invitePreview.name} on CarlNotes`
 	return {
 		title,
 		cardTitle: title,
-		description: `You are invited to ${inviteVerb.toLowerCase()} ${invitePreview.name}. Carl reads its sources and shares the notes.`,
+		description: topicPostTitle
+			? `You are invited to ${invitedAction} and read this post.`
+			: `You are invited to ${invitedAction}. Carl reads its sources and shares the notes.`,
 		canonicalUrl: null,
 		cardUrl: invitePreview.inviteUrl,
 		imageUrl: invitePreview.imageUrl,

@@ -3,14 +3,28 @@
 
 // a relative import. temporal bundles workflow code with webpack, which has no @shared alias
 import { toWorkflowFailureReason } from "@carlnotes/contracts/scanFailure"
+import {
+	TOPIC_PODCAST_EPISODE_VIDEO_TASK_QUEUE,
+	TOPIC_PODCAST_EPISODE_VIDEO_WORKFLOW,
+	toTopicPodcastEpisodeVideoWorkflowId,
+} from "@carlnotes/contracts/topicPodcastEpisodeVideoWork"
 import type { SpeechTier } from "@carlnotes/models/budget"
 import type { ScanTrigger } from "@carlnotes/pipeline/temporalClient"
-import { getExternalWorkflowHandle, proxyActivities } from "@temporalio/workflow"
+import {
+	getExternalWorkflowHandle,
+	ParentClosePolicy,
+	patched,
+	proxyActivities,
+	startChild,
+} from "@temporalio/workflow"
 import type * as podcastEpisodeActivities from "./recordPodcastEpisodeActivities"
 import { podcastEpisodeOutlineSettledSignal } from "./sendScanEmail"
 
 // the task queue that this workflow and its activities run on, kept apart from the scan activities' slots
 export const PODCAST_EPISODE_TASK_QUEUE = "episode-recordings"
+
+// the Topic Post Discussion's recording runs on this same queue, and one bundle holds both workflows
+export { recordTopicPostDiscussionWorkflow } from "./recordTopicPostDiscussion"
 
 // the plan, the saved script, the publish, and the failure are short writes
 const WRITE_TIMEOUT_MS = 2 * 60 * 1000
@@ -40,10 +54,17 @@ const FLEX_CHAPTER_TOTAL_TIMEOUT_MS = 6 * 60 * 60 * 1000
 const ENCODE_TIMEOUT_MS = 10 * 60 * 1000
 const ENCODE_ATTEMPTS = 3
 
-// the writes are idempotent, so they may retry
-const { planPodcastEpisode, savePodcastEpisodeScript, publishPodcastEpisode, failPodcastEpisode } = proxyActivities<
-	typeof podcastEpisodeActivities
->({
+// the patch that starts the film after the image, which recordings already running before it skip on replay
+const TOPIC_PODCAST_EPISODE_VIDEO_PATCH = "topic-podcast-episode-video"
+
+// the writes and the films setting's read are idempotent, so they may retry
+const {
+	planPodcastEpisode,
+	savePodcastEpisodeScript,
+	publishPodcastEpisode,
+	failPodcastEpisode,
+	isTopicPodcastEpisodeVideoEnabled,
+} = proxyActivities<typeof podcastEpisodeActivities>({
 	startToCloseTimeout: WRITE_TIMEOUT_MS,
 	retry: { maximumAttempts: WRITE_ATTEMPTS },
 })
@@ -168,6 +189,28 @@ export async function recordPodcastEpisodeWorkflow({
 
 	// the published episode's own image. the episode shows its topic's image until one is drawn
 	await drawPodcastEpisodeImageActivity(podcastEpisodeId).catch(() => undefined)
+
+	// the film renders on its own queue as an abandoned child, so the recording never waits for it or fails with it
+	if (patched(TOPIC_PODCAST_EPISODE_VIDEO_PATCH)) {
+		await startTopicPodcastEpisodeVideo(podcastEpisodeId)
+	}
+}
+
+// start the podcast episode's film if films are on. a film already started, or a failed start, leaves no film
+async function startTopicPodcastEpisodeVideo(podcastEpisodeId: string): Promise<void> {
+	try {
+		if (!(await isTopicPodcastEpisodeVideoEnabled())) {
+			return
+		}
+		await startChild(TOPIC_PODCAST_EPISODE_VIDEO_WORKFLOW, {
+			workflowId: toTopicPodcastEpisodeVideoWorkflowId(podcastEpisodeId),
+			taskQueue: TOPIC_PODCAST_EPISODE_VIDEO_TASK_QUEUE,
+			args: [{ podcastEpisodeId }],
+			parentClosePolicy: ParentClosePolicy.ABANDON,
+		})
+	} catch {
+		// the podcast episode is published either way
+	}
 }
 
 // signal the Scan's email workflow that the outline is settled

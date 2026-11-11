@@ -3,15 +3,15 @@
 import type { InviteAcceptResponse, InviteNoticeRejection } from "@carlnotes/contracts/invites"
 
 export const INVITE_REJECTIONS: Record<InviteNoticeRejection, string> = {
-	expired: "That invitation went cold.",
-	exhausted: "That invitation is all poured out.",
+	expired: "That invite went cold.",
+	exhausted: "That invite is all poured out.",
 	teamFull: "That team is full to the brim.",
-	unknown: "Carl doesn't know that invitation.",
+	unknown: "Carl doesn't know that invite.",
 }
 
 // what the page says while it checks, and if the check itself failed, with the retry's words as the link
-export const INVITE_CHECKING_TEXT = "Carl is checking your invitation…"
-export const INVITE_CHECK_FAILED_TEXT = "Carl couldn't check your invitation."
+export const INVITE_CHECKING_TEXT = "Carl is checking your invite…"
+export const INVITE_CHECK_FAILED_TEXT = "Carl couldn't check your invite."
 export const INVITE_CHECK_RETRY_LEAD = "Check your connection, then "
 export const INVITE_CHECK_RETRY_ACTION = "try again"
 
@@ -27,20 +27,25 @@ export type InviteNoticeProps = {
 	onRetry: () => void
 }
 
-// where an accepted invitation goes: the joined topic, the joined or requested team, or the rejection to show
+// where an accepted invitation goes: the joined topic, the Topic Post its invite was shared from, the joined or
+// requested team, or the rejection to show
 export type InviteDestination =
 	| { kind: "topic"; topicId: string }
+	| { kind: "topicPost"; topicId: string; topicPostId: string; path: string }
 	| { kind: "team"; teamId: string }
 	| { kind: "rejection"; rejection: InviteNoticeRejection }
 
 /**
- * Returns where an accepted invitation goes: the topic it joined, the team it joined or asked to join, or the
- * rejection the page shows.
+ * Returns where an accepted invitation goes: the topic it joined, or the Topic Post of that topic its invite was
+ * shared from, the team it joined or asked to join, or the rejection the page shows.
  */
 export function toInviteDestination(inviteResponse: InviteAcceptResponse): InviteDestination {
-	// the joined topic
+	// the joined topic's Topic Post, or the joined topic for an invite with no published post
 	if (inviteResponse.status === "joined") {
-		return { kind: "topic", topicId: inviteResponse.topicId }
+		const { topicId, topicPost } = inviteResponse
+		return topicPost
+			? { kind: "topicPost", topicId, topicPostId: topicPost.id, path: topicPost.path }
+			: { kind: "topic", topicId }
 	}
 
 	// the joined or requested team, else the rejection

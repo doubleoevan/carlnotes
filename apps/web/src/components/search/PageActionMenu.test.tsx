@@ -61,18 +61,19 @@ test("pages with a New Topic button omit only that duplicate menu action", () =>
 
 // preserve selected destinations and permission gates in both menu adapters
 const ELEMENTS: UserMenuElements = {
-	Link: ({ label, href, isSelected }) => (
+	Link: ({ label, text, href, isSelected }) => (
 		<a href={href} aria-current={isSelected ? "page" : undefined}>
-			{label}
+			{text ?? label}
 		</a>
 	),
 	Action: ({ label }) => <button type="button">{label}</button>,
 	Divider: () => <hr />,
 }
-test("the common navigation selects the current account and hides admin from non-admins", () => {
+test("the common navigation selects the current account, names the user's Café, and hides admin from non-admins", () => {
 	const props = {
 		elements: ELEMENTS,
 		userId: "reader",
+		username: "Reader",
 		pathname: "/account",
 		onNavigate: () => {},
 		onPlayTutorial: () => {},
@@ -80,7 +81,7 @@ test("the common navigation selects the current account and hides admin from non
 	}
 	const html = renderToStaticMarkup(<UserMenuItems {...props} isAdmin={false} />)
 	expect(html).toContain('href="/account" aria-current="page"')
-	expect(html).toContain('href="/profiles/reader"')
+	expect(html).toContain('<a href="/profiles/reader">Reader Café</a>')
 	expect(html).not.toContain('href="/admin"')
 	expect(renderToStaticMarkup(<UserMenuItems {...props} isAdmin />)).toContain('href="/admin"')
 })

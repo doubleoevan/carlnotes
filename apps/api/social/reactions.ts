@@ -66,11 +66,12 @@ export async function saveReaction({
 		return { status: "limitReached" }
 	}
 
-	// write the user's one row on this social target
+	// write the user's one row on this social target, with the social target's Topic
 	const now = new Date()
+	const targetTopicId = resolvedSocialTarget.topic.id
 	await db
 		.insert(reactions)
-		.values({ userId, ...toSocialTargetValues(target), reactionType, createdAt: now })
+		.values({ userId, ...toSocialTargetValues(target), targetTopicId, reactionType, createdAt: now })
 		.onConflictDoUpdate({
 			target: [reactions.userId, targetColumn],
 			targetWhere: isNotNull(targetColumn),

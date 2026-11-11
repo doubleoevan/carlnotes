@@ -5,20 +5,23 @@ import { toSessionProfileIdentity } from "@carlnotes/contracts/profiles"
 import type { TeamSummary, TeamsPageResponse } from "@carlnotes/contracts/teams"
 import { useUserMenuUpdateBadges } from "@carlnotes/core/hooks/useUpdateCounts"
 import { toLeaveTeamConfirmation } from "@carlnotes/core/lib/confirmationCopy"
+import { toSectionCountLabel } from "@carlnotes/core/lib/labels"
 import { Plus, Users } from "lucide-react"
 import { useCallback, useEffect, useState } from "react"
 import { toast } from "sonner"
+import { AccordionSection } from "@/components/common/AccordionSection"
 import { ConfirmDialog } from "@/components/common/ConfirmDialog"
 import { UpdateCountBadge } from "@/components/common/UpdateCountBadge"
 import { UserProfileLink } from "@/components/common/UserProfileLink"
 import { PageSkeleton } from "@/components/layout/PageSkeleton"
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/primitives/accordion"
+import { Accordion } from "@/components/primitives/accordion"
 import { Button } from "@/components/primitives/button"
+import { EmptyListCard } from "@/components/table/TableCard"
 import { SentTeamInvitesTable } from "@/components/table/TeamInvitesTable"
 import { TeamsMembershipTable } from "@/components/table/TeamsMembershipTable"
 import { EditTeamModal } from "@/components/team/EditTeamModal"
 import { usePageTitle } from "@/hooks/usePageTitle"
-import { PAGE_CLASS, PAGE_HEADER_CLASS, PAGE_TITLE_CLASS } from "@/lib/styleClasses"
+import { HIGHLIGHTED_PAGE_BUTTON_CLASS, PAGE_CLASS, PAGE_HEADER_CLASS, PAGE_TITLE_CLASS } from "@/lib/styleClasses"
 import { useRegisterChatContext } from "@/stores/chatPanelStore"
 
 /**
@@ -99,7 +102,7 @@ export function TeamsPage() {
 					{/* the unread chat mentions across every chat room and the unread notes on the teams, in one count */}
 					<UpdateCountBadge {...teamsUpdateBadges} countBadgeClassName="h-6 min-w-6 text-sm" />
 				</h1>
-				<Button className="shrink-0" onClick={() => void handleCreateOpen()}>
+				<Button className={HIGHLIGHTED_PAGE_BUTTON_CLASS} onClick={() => void handleCreateOpen()}>
 					<Plus className="size-4" />
 					New team
 				</Button>
@@ -125,36 +128,38 @@ export function TeamsPage() {
 				) : (
 					<Accordion type="multiple" defaultValue={["teams", "invites"]}>
 						{/* the teams the user belongs to. a user with none starts one from here */}
-						<AccordionItem value="teams">
-							<AccordionTrigger className="font-semibold">Your teams</AccordionTrigger>
-							<AccordionContent>
-								{teamsPage.teams.length > 0 || teamsPage.receivedInvites.length > 0 ? (
-									<TeamsMembershipTable
-										teams={teamsPage.teams}
-										receivedInvites={teamsPage.receivedInvites}
-										onLeave={setTeamToLeave}
-										onDelete={setTeamToDelete}
-										onAnswered={reloadTeams}
-									/>
-								) : (
-									<p className="text-muted-foreground pb-4 pl-4 text-sm">
-										<button type="button" onClick={() => void handleCreateOpen()} className="sentence-link">
-											Start a team.
-										</button>{" "}
-										Carl brews for everyone at once.
-									</p>
-								)}
-							</AccordionContent>
-						</AccordionItem>
+						<AccordionSection
+							value="teams"
+							title="Your teams"
+							countLabel={toSectionCountLabel(teamsPage.teams.length, "team")}
+						>
+							{teamsPage.teams.length > 0 || teamsPage.receivedInvites.length > 0 ? (
+								<TeamsMembershipTable
+									teams={teamsPage.teams}
+									receivedInvites={teamsPage.receivedInvites}
+									onLeave={setTeamToLeave}
+									onDelete={setTeamToDelete}
+									onAnswered={reloadTeams}
+								/>
+							) : (
+								<EmptyListCard>
+									<button type="button" onClick={() => void handleCreateOpen()} className="sentence-link">
+										Start a team.
+									</button>{" "}
+									Carl brews for everyone at once.
+								</EmptyListCard>
+							)}
+						</AccordionSection>
 
 						{/* the invitations the user sent. a received one is a row of the teams table above */}
 						{teamsPage.sentInvites.length > 0 && (
-							<AccordionItem value="invites">
-								<AccordionTrigger className="font-semibold">Your team invitations</AccordionTrigger>
-								<AccordionContent>
-									<SentTeamInvitesTable invites={teamsPage.sentInvites} onReload={reloadTeams} />
-								</AccordionContent>
-							</AccordionItem>
+							<AccordionSection
+								value="invites"
+								title="Your team invites"
+								countLabel={toSectionCountLabel(teamsPage.sentInvites.length, "invite")}
+							>
+								<SentTeamInvitesTable invites={teamsPage.sentInvites} onReload={reloadTeams} />
+							</AccordionSection>
 						)}
 					</Accordion>
 				)}

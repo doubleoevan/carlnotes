@@ -45,6 +45,38 @@ export function toCreativeWorkLd(work: {
 }
 
 /**
+ * The BlogPosting schema for a public Topic's Topic Post page: the headline, the author, the publish and edit times,
+ * and the image.
+ */
+export function toBlogPostingLd(post: {
+	headline: string
+	description: string
+	url: string
+	authorUsername: string
+	authorUrl: string
+	publishedAt: Date
+	// when its author last edited it after publishing, or null for a post never edited
+	editedAt: Date | null
+	imageUrl: string
+	appUrl: string
+}): object {
+	return {
+		"@context": "https://schema.org",
+		"@type": "BlogPosting",
+		headline: post.headline,
+		description: post.description,
+		url: post.url,
+		mainEntityOfPage: post.url,
+		datePublished: post.publishedAt.toISOString(),
+		dateModified: (post.editedAt ?? post.publishedAt).toISOString(),
+		author: { "@type": "Person", name: post.authorUsername, url: post.authorUrl },
+		image: post.imageUrl,
+		publisher: { "@type": "Organization", name: "CarlNotes", url: post.appUrl },
+		isPartOf: { "@type": "WebSite", name: "CarlNotes", url: post.appUrl },
+	}
+}
+
+/**
  * The Topic's last succeeded Scan, or null before its first.
  */
 export async function lastScan(topicId: string): Promise<{ id: string } | null> {

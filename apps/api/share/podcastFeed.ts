@@ -1,9 +1,10 @@
-// a Topic's podcast feed as RSS 2.0 with the iTunes and Podcasting 2.0 namespaces, a podcast episode's chapters file,
+// a Topic's podcast feed or film feed as RSS 2.0 with the iTunes and Podcasting 2.0 namespaces, a podcast episode's chapters file,
 // and its transcript. every value from a Topic or a podcast episode is user or model text and is escaped
 
 import type { Visibility } from "@carlnotes/contracts/enums"
 import type {
 	PodcastEpisodeChapter,
+	PodcastEpisodeFormat,
 	PodcastEpisodeScript,
 	PodcastEpisodeTranscriptBlock,
 } from "@carlnotes/contracts/podcast"
@@ -49,6 +50,8 @@ export type PodcastFeedEpisode = {
 	publishedAt: Date
 	// the hash of its own image, which its cover is drawn over, null until it is drawn
 	imageHash: string | null
+	// its ready film's size, which a film feed's enclosure names
+	videoByteSize?: number
 }
 
 // what a feed is built from. the podcast episode files' base url is the public url or the listener's own token path
@@ -60,10 +63,12 @@ export type ToPodcastFeedXmlOptions = {
 	// a listener's own feed is blocked from podcast directories
 	isBlockedFromPodcastDirectories: boolean
 	podcastEpisodes: PodcastFeedEpisode[]
+	// the film feed encloses each podcast episode's film, and the podcast feed its audio
+	format?: PodcastEpisodeFormat
 }
 
 /**
- * Builds a Topic's podcast feed xml, with a channel for the Topic and an item for each podcast episode.
+ * Builds a Topic's podcast feed or film feed xml, with a channel for the Topic and an item for each podcast episode.
  */
 export function toPodcastFeedXml({
 	appUrl,
@@ -72,6 +77,7 @@ export function toPodcastFeedXml({
 	podcastEpisodeFilesBaseUrl,
 	isBlockedFromPodcastDirectories,
 	podcastEpisodes,
+	format = "audio",
 }: ToPodcastFeedXmlOptions): string {
 	// the show's page, title, cover, and description, which ends with the theme song's credits and its link
 	const topicUrl = `${appUrl}${toTopicPath(topic)}`
@@ -114,7 +120,7 @@ export function toPodcastFeedXml({
 
 	// the items, newest first, then the document around the channel's tags and the items
 	const feedItems = podcastEpisodes
-		.map((podcastEpisode) => toPodcastFeedItem({ appUrl, topic, podcastEpisodeFilesBaseUrl }, podcastEpisode))
+		.map((podcastEpisode) => toPodcastFeedItem({ appUrl, topic, podcastEpisodeFilesBaseUrl, format }, podcastEpisode))
 		.join("")
 	const openingTags = `<?xml version="1.0" encoding="UTF-8"?>\n<rss version="2.0" ${RSS_NAMESPACES}>\n<channel>`
 	return `${openingTags}\n${channelTags.join("\n")}\n${feedItems}</channel>\n</rss>`
@@ -160,13 +166,15 @@ export function toTranscriptHtml(podcastEpisodeTitle: string, podcastEpisodeScri
 	return `<!doctype html>\n<html lang="en">\n<head>\n${headHtml}\n</head>\n<body>\n${bodyHtml}\n</body>\n</html>`
 }
 
-// a podcast episode's feed item. its guid is the podcast episode's id, which a new title never changes
+// a podcast episode's feed item. its guid is the podcast episode's id, or the id with a video suffix in the film
+// feed, which a new title never changes
 function toPodcastFeedItem(
 	{
 		appUrl,
 		topic,
 		podcastEpisodeFilesBaseUrl,
-	}: Pick<ToPodcastFeedXmlOptions, "appUrl" | "topic" | "podcastEpisodeFilesBaseUrl">,
+		format,
+	}: Pick<ToPodcastFeedXmlOptions, "appUrl" | "topic" | "podcastEpisodeFilesBaseUrl" | "format">,
 	podcastEpisode: PodcastFeedEpisode,
 ): string {
 	// the podcast episode's own page on a public Topic, and the topic page opened at the episode otherwise
@@ -175,9 +183,8 @@ function toPodcastFeedItem(
 			? `${appUrl}${toPodcastEpisodePath(topic, podcastEpisode)}`
 			: `${appUrl}${toTopicPath(topic)}?episode=${podcastEpisode.id}`
 
-	// the podcast episode's audio, chapters, and transcript urls, and its cover's path
+	// the podcast episode's chapters and transcript urls, and its cover's path
 	const podcastEpisodeFilesUrl = `${podcastEpisodeFilesBaseUrl}/${podcastEpisode.id}`
-	const audioUrl = toXmlText(`${podcastEpisodeFilesUrl}/audio.mp3`)
 	const chaptersUrl = toXmlText(`${podcastEpisodeFilesUrl}/chapters.json`)
 	const transcriptUrl = toXmlText(`${podcastEpisodeFilesUrl}/transcript.html`)
 	const coverPath = toPodcastCoverPath(toPodcastEpisodeCover(podcastEpisode, topic), FULL_PODCAST_COVER_SIZE)
@@ -187,10 +194,9 @@ function toPodcastFeedItem(
 		`<title>${toXmlText(podcastEpisode.title)}</title>`,
 		`<description>${toXmlText(`${podcastEpisode.description} ${AI_VOICES_NOTE}.`)}</description>`,
 		`<link>${toXmlText(podcastEpisodeUrl)}</link>`,
-		`<guid isPermaLink="false">${toXmlText(podcastEpisode.id)}</guid>`,
+		`<guid isPermaLink="false">${toXmlText(format === "video" ? `${podcastEpisode.id}-video` : podcastEpisode.id)}</guid>`,
 		`<pubDate>${podcastEpisode.publishedAt.toUTCString()}</pubDate>`,
-		// the stable audio url, which redirects to a short-lived url
-		`<enclosure url="${audioUrl}" length="${podcastEpisode.audioByteSize}" type="audio/mpeg"/>`,
+		toEnclosureTag({ podcastEpisodeFilesUrl, podcastEpisode, format }),
 		`<itunes:duration>${podcastEpisode.durationSeconds}</itunes:duration>`,
 		`<itunes:season>${podcastEpisode.season}</itunes:season>`,
 		`<itunes:episode>${podcastEpisode.episodeNumber}</itunes:episode>`,
@@ -202,6 +208,22 @@ function toPodcastFeedItem(
 		`<podcast:transcript url="${transcriptUrl}" type="text/html"/>`,
 	]
 	return `<item>\n${itemTags.join("\n")}\n</item>\n`
+}
+
+// the podcast episode's files url, the podcast episode, and the feed's format
+type ToEnclosureTagOptions = Pick<ToPodcastFeedXmlOptions, "format"> & {
+	podcastEpisodeFilesUrl: string
+	podcastEpisode: PodcastFeedEpisode
+}
+
+// the stable film or audio url, which redirects to a short-lived url, with the file's size and type
+function toEnclosureTag({ podcastEpisodeFilesUrl, podcastEpisode, format }: ToEnclosureTagOptions): string {
+	if (format === "video") {
+		const videoUrl = toXmlText(`${podcastEpisodeFilesUrl}/video.mp4`)
+		return `<enclosure url="${videoUrl}" length="${podcastEpisode.videoByteSize ?? 0}" type="video/mp4"/>`
+	}
+	const audioUrl = toXmlText(`${podcastEpisodeFilesUrl}/audio.mp3`)
+	return `<enclosure url="${audioUrl}" length="${podcastEpisode.audioByteSize}" type="audio/mpeg"/>`
 }
 
 /**

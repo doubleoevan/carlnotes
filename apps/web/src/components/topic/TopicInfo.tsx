@@ -1,6 +1,11 @@
 import { PODCAST_NAME } from "@carlnotes/contracts/podcastEpisodes"
+import { toTopicPath } from "@carlnotes/contracts/seo"
 import type { TopicDetails, TopicResponse } from "@carlnotes/contracts/topics"
 import { MAX_TOPIC_SOURCES } from "@carlnotes/contracts/topics"
+import {
+	TopicPodcastEpisodeVideoInfoSection,
+	type TopicPodcastEpisodeVideoInfoSectionElements,
+} from "@carlnotes/core/components/TopicPodcastEpisodeVideoInfoSection"
 import { toCountLabel } from "@carlnotes/core/lib/labels"
 import { toTopicSourceRows } from "@carlnotes/core/lib/topicSources"
 import { cn } from "@carlnotes/nightshift/classNames"
@@ -11,12 +16,14 @@ import { BrandIcon } from "@/components/common/BrandIcon"
 import { ScrollBox } from "@/components/common/ScrollBox"
 import { UserProfileLink } from "@/components/common/UserProfileLink"
 import { PodcastEpisodeRow } from "@/components/podcast/PodcastEpisodeRow"
+import { PodcastEpisodeVideoButton } from "@/components/podcast/PodcastEpisodeVideoButton"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
-import { TOPIC_IMAGE_FRAME_CLASS, TopicImage } from "@/components/primitives/topic-image"
-import { ShareTopicButton } from "@/components/share/ShareTopic"
+import { TOPIC_IMAGE_FRAME_CLASS } from "@/components/primitives/topic-image"
+import { ShareTopic } from "@/components/share/ShareTopic"
 import { ReactionRow } from "@/components/social/ReactionRow"
 import { MENU_BUTTON_CLASS, POPOVER_HEADING_CLASS } from "@/lib/styleClasses"
 import { useIsSignedIn } from "@/providers/TopicFeedProvider"
+import { TopicImageLink } from "./TopicImageLink"
 import { TopicInfoSection as InfoSection } from "./TopicInfoSection"
 import { TopicPersonalSourcesSection } from "./TopicPersonalSourcesSection"
 import { TopicScanFailure } from "./TopicScanFailure"
@@ -66,6 +73,17 @@ const SCROLLING_PROMPT_CHARS = 900
 // a dashed separator between two sections
 const DASHED_SEPARATOR_CLASS = "border-separator-strong border-t border-dashed"
 
+// the film section's elements: the info section, the row at the podcast row's padding, and the Video button
+const TOPIC_PODCAST_EPISODE_VIDEO_INFO_SECTION_ELEMENTS: TopicPodcastEpisodeVideoInfoSectionElements = {
+	Section: InfoSection,
+	Row: (props) => (
+		<ul>
+			<PodcastEpisodeRow {...props} className="py-1 pl-0 hover:before:bg-transparent" />
+		</ul>
+	),
+	VideoButton: PodcastEpisodeVideoButton,
+}
+
 /**
  * The topic info content shared by the homepage popovers and the topic page card, isCard is used to distinguish the info variant
  */
@@ -109,7 +127,7 @@ export function TopicInfo(props: TopicInfoProps) {
 									/>
 								)}
 							</div>
-							<ShareTopicButton
+							<ShareTopic
 								topic={topic}
 								// the card is already bg-card, so the button takes the muted surface to stand off it
 								className={cn(MENU_BUTTON_CLASS, "bg-muted hover:bg-accent")}
@@ -119,16 +137,26 @@ export function TopicInfo(props: TopicInfoProps) {
 					</InfoSection>
 				)}
 
-				{/* the topic's image at full width, in the popover only */}
+				{/* the topic's image at full width, in the popover only. it is the popover's one link to the topic's page */}
 				{!props.isCard && (
 					<div className="py-3">
-						<TopicImage
+						<TopicImageLink
 							image={topic.image}
 							size="page"
 							name={topic.name}
 							className={cn(TOPIC_IMAGE_FRAME_CLASS, "w-full")}
+							path={toTopicPath(topic)}
+							label={`Open ${topic.name}`}
 						/>
 					</div>
+				)}
+
+				{/* the latest podcast episode's film above its row, in the popover only */}
+				{!props.isCard && (
+					<TopicPodcastEpisodeVideoInfoSection
+						podcastEpisode={topic.latestPodcastEpisode}
+						elements={TOPIC_PODCAST_EPISODE_VIDEO_INFO_SECTION_ELEMENTS}
+					/>
 				)}
 
 				{/* the latest podcast episode's row, in the popover only */}

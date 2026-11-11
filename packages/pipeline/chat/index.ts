@@ -209,6 +209,7 @@ async function buildReplyPrompt(
 		editTopicBlock: await toEditTopicBlock(input),
 		isSpoken,
 		podcastEpisodeChapter: input.podcastEpisodeChapter,
+		topicPost: input.topicPost,
 	})
 }
 

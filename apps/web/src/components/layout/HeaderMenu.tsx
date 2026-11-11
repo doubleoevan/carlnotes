@@ -18,7 +18,7 @@ const MENU_BADGE_CLASS = "h-4 min-w-4 text-[0.625rem]"
 
 /**
  * The mobile-only hamburger menu: the theme toggle, then the video, topics, plans, and sign-in for a visitor, or the
- * user menu items for a signed-in user.
+ * user menu items for a signed-in user. Its trigger is hidden without JavaScript, where the header keeps its links.
  */
 export function HeaderMenu({
 	isDark,
@@ -57,7 +57,8 @@ export function HeaderMenu({
 
 	return (
 		<Popover open={isMenuOpen} onOpenChange={setIsMenuOpen}>
-			<PopoverTrigger className="relative grid size-11 place-items-center rounded-md hover:bg-white/10 sm:hidden">
+			{/* the trigger shows on a narrow screen with JavaScript alone, which opens the menu */}
+			<PopoverTrigger className="relative hidden size-11 place-items-center rounded-md hover:bg-white/10 max-sm:scripted:grid">
 				{/* the trigger's name and the one unread count badged on the menu trigger */}
 				<MenuTriggerUpdateCountBadge
 					name="Menu"

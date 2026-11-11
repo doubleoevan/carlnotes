@@ -16,8 +16,11 @@ const TOPIC: EditableImage = {
 	imageRegenerationQuota: { used: 3, limit: 15 },
 }
 
-// the editor's image block: a generated image with regenerations left, an upload, the month's limit reached, and a
-// topic with no image yet
+// a film's own image, which the block edits by the film's podcast episode
+const TOPIC_PODCAST_EPISODE_VIDEO: EditableImage = { ...TOPIC, kind: "topicPodcastEpisodeVideo", id: "episode-1" }
+
+// the editor's image block: a generated image with regenerations left, an upload, the month's limit reached, a topic
+// with no image yet, and a film's own image, in the same layout at the film's 16:9 frame
 const meta = {
 	title: "Topic/TopicImageEditor",
 	component: TopicImageEditor,
@@ -33,4 +36,8 @@ export const LimitReached: Story = {
 }
 export const NoImage: Story = {
 	args: { editableImage: { ...TOPIC, image: null, imageOrigin: null, imagePrompt: null } },
+}
+export const TopicPodcastEpisodeVideo: Story = { args: { editableImage: TOPIC_PODCAST_EPISODE_VIDEO } }
+export const TopicPodcastEpisodeVideoLimitReached: Story = {
+	args: { editableImage: { ...TOPIC_PODCAST_EPISODE_VIDEO, imageRegenerationQuota: { used: 15, limit: 15 } } },
 }

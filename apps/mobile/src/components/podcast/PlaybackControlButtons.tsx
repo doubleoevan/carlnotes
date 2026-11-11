@@ -1,8 +1,10 @@
 import {
 	PLAYBACK_CONTROL_BUTTON_CLASS,
 	type PlaybackControlElement,
+	type PlaybackSpeedButtonProps,
 	PlaybackSpeedButton as SharedPlaybackSpeedButton,
 	SkipPlaybackButtons as SharedSkipPlaybackButtons,
+	type SkipPlaybackButtonsProps,
 } from "@carlnotes/core/components/PlaybackControlButtons"
 import { RotateCcw, RotateCw } from "lucide-react-native"
 import { Button } from "@/components/primitives/button"
@@ -31,13 +33,13 @@ const Control: PlaybackControlElement = ({ label, onPress, icon, text }) => (
 /**
  * Adapts shared skip controls to accessible platform buttons.
  */
-export function SkipPlaybackButtons() {
-	return <SharedSkipPlaybackButtons Control={Control} />
+export function SkipPlaybackButtons(props: SkipPlaybackButtonsProps) {
+	return <SharedSkipPlaybackButtons {...props} Control={Control} />
 }
 
 /**
  * Adapts the shared speed cycle to the platform's labeled button.
  */
-export function PlaybackSpeedButton({ playbackRate }: { playbackRate: number }) {
-	return <SharedPlaybackSpeedButton playbackRate={playbackRate} Control={Control} />
+export function PlaybackSpeedButton(props: PlaybackSpeedButtonProps) {
+	return <SharedPlaybackSpeedButton {...props} Control={Control} />
 }

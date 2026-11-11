@@ -1,6 +1,7 @@
 // a live smoke test for reactions and comments against the dev database: one reaction per user per social target, the
 // summary of one and many, the admin block, the mentions, the replies and their pages, the edit time, the user blocks,
-// the reports, the paged thread, the editor's share with the podcast and its shared comment slots, and the deletes
+// the reports, the paged thread, a user's unseen mentions and their seen marks, a thread read by a linked comment, a
+// comment on a Topic Post, the editor's share with the podcast and its shared comment slots, and the deletes
 // run it with: bun run smoke:social. needs Doppler secrets
 
 import type { Comment } from "@carlnotes/contracts/social"
@@ -12,14 +13,22 @@ delete Bun.env.POSTHOG_API_KEY
 
 const { connectionPool, db } = await import("@carlnotes/db")
 const { reports } = await import("@carlnotes/db/schema/reports")
-const { comments, reactions } = await import("@carlnotes/db/schema/social")
+const { findings, resources, scans } = await import("@carlnotes/db/schema/scans")
+const { commentMentions, comments, reactions } = await import("@carlnotes/db/schema/social")
+const { topicPosts } = await import("@carlnotes/db/schema/topicPosts")
 const { topics } = await import("@carlnotes/db/schema/topics")
 const { users } = await import("@carlnotes/db/schema/users")
+
+// the shared texts a Scan reads, and the query helpers
 const { loadSharedCommentTexts } = await import("@carlnotes/db/sharedComments")
-const { eq, inArray, like } = await import("drizzle-orm")
+const { and, eq, inArray, like } = await import("drizzle-orm")
 
 // the reads and writes under test, loaded after the env is cleared
 const { removeReport, saveReport, toReportTextHash } = await import("../report/reports")
+const { clearUnseenCommentMentions } = await import("@carlnotes/db/unseenCommentMentions")
+const { loadUnseenCommentMentions, saveSeenCommentMentions } = await import("./commentMentions")
+
+// the thread, the reactions, the shares, and the user blocks
 const { loadCommentPage, loadCommentReplyPage } = await import("./commentRows")
 const { deleteComment, editComment, postComment, shareComment } = await import("./comments")
 const { loadReactionSummaries, loadReactionSummary } = await import("./reactionRows")
@@ -81,9 +90,30 @@ async function seed(): Promise<void> {
 	)
 }
 
-// delete the run's topics and users, which takes every reaction, comment, and report with them
+// a Finding of the first topic that its Feed shows, on a Scan that succeeded
+async function seedFinding(): Promise<string> {
+	// the resource and the Scan the Finding hangs on
+	const findingId = `${runId}-finding`
+	await db.insert(resources).values({ id: findingId, url: `https://carlnotes.test/${findingId}`, kind: "read" })
+	const [scan] = await db
+		.insert(scans)
+		.values({ topicId: topicIds.first, ownerId: userIds.owner, status: "succeeded", startedAt: new Date() })
+		.returning()
+	await db.insert(findings).values({
+		id: findingId,
+		topicId: topicIds.first,
+		resourceId: findingId,
+		scanId: scan?.id ?? "",
+		foundScanId: scan?.id ?? "",
+		relevanceScore: 0.9,
+	})
+	return findingId
+}
+
+// delete the run's topics, resources, and users, which takes every reaction, comment, and report with them
 async function cleanUp(): Promise<void> {
 	await db.delete(topics).where(inArray(topics.id, Object.values(topicIds)))
+	await db.delete(resources).where(like(resources.id, `${runId}-%`))
 	await db.delete(users).where(like(users.id, `${runId}-%`))
 }
 
@@ -210,6 +240,20 @@ async function checkComments(): Promise<void> {
 		"a reaction to a comment leaves the topic's counts alone",
 		(await loadReactionSummary(null, firstTopic)).counts.every((count) => count.reactionType !== "funny"),
 	)
+
+	// a comment stores the Topic that its social target belongs to
+	const [storedCommentRow] = await db
+		.select({ targetTopicId: comments.targetTopicId })
+		.from(comments)
+		.where(eq(comments.id, commentId))
+	check("a comment stores its social target's Topic", storedCommentRow?.targetTopicId === topicIds.first)
+
+	// a reaction to that comment stores the same Topic
+	const [storedReactionRow] = await db
+		.select({ targetTopicId: reactions.targetTopicId })
+		.from(reactions)
+		.where(eq(reactions.commentId, commentId))
+	check("a reaction to a comment stores that comment's Topic", storedReactionRow?.targetTopicId === topicIds.first)
 
 	// a reply joins its parent, a reply to a reply joins the same parent, and a parent on another target is missing
 	const reply = toSavedComment(await post(userIds.owner, "first reply", { parentCommentId: commentId }))
@@ -366,6 +410,7 @@ async function checkComments(): Promise<void> {
 		Array.from({ length: 22 }, (_unused, index) => ({
 			authorUserId: userIds.stranger,
 			topicId: topicIds.first,
+			targetTopicId: topicIds.first,
 			body: `comment ${index}`,
 			createdAt: new Date(Date.now() - (30 - index) * 1000),
 		})),
@@ -408,6 +453,263 @@ function toResultSharedCommentSlots(
 	result: Awaited<ReturnType<typeof shareComment>> | Awaited<ReturnType<typeof deleteComment>>,
 ): { usedCount: number; slotCount: number } | null {
 	return result.status === "saved" || result.status === "deleted" ? (result.sharedCommentSlots ?? null) : null
+}
+
+async function checkCommentMentions(): Promise<void> {
+	// the ids of the Comments a user's unseen mentions sit in
+	const loadUnseenCommentIds = async (userId: string): Promise<string[]> =>
+		(await loadUnseenCommentMentions(userId)).map((unseenCommentMention) => unseenCommentMention.commentId)
+
+	// a mention of another user is unseen, with the Comment's first line and the path that opens it
+	const mentioningComment = toSavedComment(
+		await post(userIds.follower, `ping @${userIds.owner} and @${userIds.follower}\nsecond line`),
+	)
+	const mentioningCommentId = mentioningComment?.id ?? ""
+	const ownerMention = (await loadUnseenCommentMentions(userIds.owner)).find(
+		(unseenCommentMention) => unseenCommentMention.commentId === mentioningCommentId,
+	)
+	check("a mention is listed as unseen", ownerMention !== undefined)
+	check(
+		"the mention has the first line alone",
+		ownerMention?.text.endsWith(`@${userIds.follower}`) === true,
+		ownerMention,
+	)
+	check("the mention's path names the comment", ownerMention?.path.endsWith(`comment=${mentioningCommentId}`) === true)
+	check(
+		"the mention names the topic's page",
+		ownerMention?.page.kind === "topic" && ownerMention.page.id === topicIds.first,
+	)
+	check(
+		"an author's own mention is not listed",
+		!(await loadUnseenCommentIds(userIds.follower)).includes(mentioningCommentId),
+	)
+
+	// a second read returns the cached list, whatever the rows say now
+	const ownerMentionFilter = and(
+		eq(commentMentions.commentId, mentioningCommentId),
+		eq(commentMentions.mentionedUserId, userIds.owner),
+	)
+	await db.update(commentMentions).set({ seenAt: new Date() }).where(ownerMentionFilter)
+	check("a second read comes from the cache", (await loadUnseenCommentIds(userIds.owner)).includes(mentioningCommentId))
+	await clearUnseenCommentMentions([userIds.owner])
+	check(
+		"a cleared cache reads the rows again",
+		!(await loadUnseenCommentIds(userIds.owner)).includes(mentioningCommentId),
+	)
+
+	// an edit keeps a seen mention seen, adds an unseen one, and drops one
+	await editComment({
+		userId: userIds.follower,
+		commentId: mentioningCommentId,
+		body: `ping @${userIds.owner} and @${userIds.stranger}`,
+	})
+	check("an edit keeps a seen mention seen", !(await loadUnseenCommentIds(userIds.owner)).includes(mentioningCommentId))
+	check("an edit adds an unseen mention", (await loadUnseenCommentIds(userIds.stranger)).includes(mentioningCommentId))
+	await editComment({ userId: userIds.follower, commentId: mentioningCommentId, body: `ping @${userIds.owner}` })
+	check("an edit drops a mention", !(await loadUnseenCommentIds(userIds.stranger)).includes(mentioningCommentId))
+
+	// a user block in either direction hides a mention, and lifting it brings the mention back
+	const strangerComment = toSavedComment(await post(userIds.stranger, `hey @${userIds.owner}`))
+	const strangerCommentId = strangerComment?.id ?? ""
+	const isStrangerMentionListed = async (): Promise<boolean> =>
+		(await loadUnseenCommentIds(userIds.owner)).includes(strangerCommentId)
+	check("another user's mention is listed", await isStrangerMentionListed())
+	await saveUserBlock(userIds.owner, userIds.stranger)
+	check("a block the mentioned user made hides the mention", !(await isStrangerMentionListed()))
+	await deleteUserBlock(userIds.owner, userIds.stranger)
+
+	// the other direction
+	await saveUserBlock(userIds.stranger, userIds.owner)
+	check("a block of the mentioned user hides the mention", !(await isStrangerMentionListed()))
+	await deleteUserBlock(userIds.stranger, userIds.owner)
+	check("a lifted block lists the mention again", await isStrangerMentionListed())
+
+	// an author under an admin block mentions nobody
+	await db.update(users).set({ adminBlockedAt: new Date() }).where(eq(users.id, userIds.stranger))
+	await clearUnseenCommentMentions([userIds.owner])
+	check("an admin block hides the author's mention", !(await isStrangerMentionListed()))
+	await db.update(users).set({ adminBlockedAt: null }).where(eq(users.id, userIds.stranger))
+	await clearUnseenCommentMentions([userIds.owner])
+
+	// a mention on a private Topic reaches its owner and never a user who may not open it
+	const privateComment = toSavedComment(await post(userIds.owner, `psst @${userIds.stranger}`))
+	const privateCommentId = privateComment?.id ?? ""
+	await db.update(topics).set({ visibility: "private" }).where(eq(topics.id, topicIds.first))
+	await clearUnseenCommentMentions([userIds.stranger])
+	check(
+		"a private Topic's mention is not listed",
+		!(await loadUnseenCommentIds(userIds.stranger)).includes(privateCommentId),
+	)
+	await db.update(topics).set({ visibility: "public" }).where(eq(topics.id, topicIds.first))
+	await clearUnseenCommentMentions([userIds.stranger])
+	check("a public Topic's mention is listed", (await loadUnseenCommentIds(userIds.stranger)).includes(privateCommentId))
+
+	// a mention on a Finding names the Finding in its path, and a thumbs down takes it off the list
+	const findingId = await seedFinding()
+	const findingComment = toSavedComment(
+		await postComment({
+			userId: userIds.follower,
+			payload: { target: { kind: "finding", id: findingId }, body: `look @${userIds.owner}` },
+			analyticsProperties,
+		}),
+	)
+	const findingMention = (await loadUnseenCommentMentions(userIds.owner)).find(
+		(unseenCommentMention) => unseenCommentMention.commentId === findingComment?.id,
+	)
+	check(
+		"a Finding's mention opens the Topic's page at the Finding",
+		findingMention?.page.kind === "topic" && findingMention.path.includes(`finding=${findingId}`),
+		findingMention,
+	)
+	await db.update(findings).set({ rating: "down" }).where(eq(findings.id, findingId))
+	await clearUnseenCommentMentions([userIds.owner])
+	check(
+		"a thumbs down Finding's mention is not listed",
+		!(await loadUnseenCommentIds(userIds.owner)).includes(findingComment?.id ?? ""),
+	)
+
+	// a seen mark of one Comment leaves the others, and a deleted Comment takes its mention with it
+	const seenCount = await saveSeenCommentMentions({
+		userId: userIds.stranger,
+		payload: { commentIds: [privateCommentId] },
+		analyticsProperties,
+	})
+	check("a seen mark returns how many it marked", seenCount === 1, seenCount)
+	check("a seen mention leaves the list", !(await loadUnseenCommentIds(userIds.stranger)).includes(privateCommentId))
+	await deleteComment({ userId: userIds.stranger, commentId: strangerCommentId, analyticsProperties })
+	check("a deleted Comment takes its mention with it", !(await isStrangerMentionListed()))
+
+	// Mark all seen empties the list
+	const secondComment = toSavedComment(await post(userIds.follower, `again @${userIds.owner}`))
+	check("a new mention is listed", (await loadUnseenCommentIds(userIds.owner)).includes(secondComment?.id ?? ""))
+	await saveSeenCommentMentions({ userId: userIds.owner, payload: { isEveryMention: true }, analyticsProperties })
+	check("Mark all seen empties the list", (await loadUnseenCommentIds(userIds.owner)).length === 0)
+
+	// delete the owner's Comment, which holds a shared comment slot
+	await deleteComment({ userId: userIds.owner, commentId: privateCommentId, analyticsProperties })
+}
+
+async function checkLinkedComment(): Promise<void> {
+	// the second topic's thread: one old Comment with five replies, under twenty newer Comments that fill the first page
+	const secondTopic = { kind: "topic", id: topicIds.second } as const
+	const secondTopicRow = { ...firstTopicRow, id: topicIds.second }
+	const oldCommentId = `${runId}-linked-old`
+	const toLinkedRow = (id: string, minutesAgo: number, parentCommentId?: string): typeof comments.$inferInsert => ({
+		id,
+		authorUserId: userIds.follower,
+		topicId: topicIds.second,
+		targetTopicId: topicIds.second,
+		parentCommentId,
+		body: id,
+		createdAt: new Date(Date.now() - minutesAgo * 60_000),
+	})
+	await db.insert(comments).values(toLinkedRow(oldCommentId, 600))
+	await db
+		.insert(comments)
+		.values([
+			...Array.from({ length: 5 }, (_, i) => toLinkedRow(`${runId}-linked-reply-${i + 1}`, 500 - i, oldCommentId)),
+			...Array.from({ length: 20 }, (_, i) => toLinkedRow(`${runId}-linked-new-${i + 1}`, 100 - i)),
+		])
+
+	// a read of the thread as the owner, with or without the Comment a link names
+	const loadLinkedPage = (commentId?: string): ReturnType<typeof loadCommentPage> =>
+		loadCommentPage({ reader: toPlainReader(userIds.owner), target: secondTopic, topic: secondTopicRow, commentId })
+
+	// the first page alone never reaches the old Comment
+	const plainPage = await loadLinkedPage()
+	check(
+		"the first page leaves out a Comment older than it",
+		plainPage.comments.length === 20 && plainPage.comments.every((comment) => comment.id !== oldCommentId),
+	)
+
+	// a link to the old Comment leads the page with it, and the cursor still continues the newest-first page
+	const oldCommentPage = await loadLinkedPage(oldCommentId)
+	check("a linked old Comment leads the page", oldCommentPage.comments[0]?.id === oldCommentId)
+	check("a linked Comment's page keeps the newest twenty after it", oldCommentPage.comments.length === 21)
+	check("a linked Comment's page keeps its next cursor", oldCommentPage.nextCursor === plainPage.nextCursor)
+	check("a linked top-level Comment shows its first replies", oldCommentPage.comments[0]?.replies.length === 3)
+
+	// a link to a reply leads with its top-level Comment and every reply up to the linked one
+	const replyPage = await loadLinkedPage(`${runId}-linked-reply-5`)
+	const replyIds = replyPage.comments[0]?.replies.map((reply) => reply.id) ?? []
+	check("a linked reply leads the page with its top-level Comment", replyPage.comments[0]?.id === oldCommentId)
+	check(
+		"a linked reply's thread holds every reply up to it",
+		replyIds.length === 5 && replyIds.at(-1) === `${runId}-linked-reply-5`,
+		replyIds,
+	)
+	check("a linked reply's Comment still counts its replies", replyPage.comments[0]?.replyCount === 5)
+	const fourthReplyPage = await loadLinkedPage(`${runId}-linked-reply-4`)
+	check("a linked reply's thread stops at it", fourthReplyPage.comments[0]?.replies.length === 4)
+
+	// a link to a Comment that is gone, or to one on another thread, reads the page as usual
+	const missingPage = await loadLinkedPage(`${runId}-linked-missing`)
+	check(
+		"a link to a deleted Comment reads the page as usual",
+		missingPage.comments.length === 20 && missingPage.comments[0]?.id === plainPage.comments[0]?.id,
+	)
+	const otherThreadPage = await loadCommentPage({
+		reader: toPlainReader(userIds.stranger),
+		target: firstTopic,
+		topic: firstTopicRow,
+		commentId: oldCommentId,
+	})
+	check(
+		"a link to another thread's Comment is not shown on this one",
+		otherThreadPage.comments.every((comment) => comment.id !== oldCommentId),
+	)
+
+	// delete the thread's rows
+	await db.delete(comments).where(like(comments.id, `${runId}-linked-%`))
+}
+
+async function checkTopicPostComment(): Promise<void> {
+	// a published Topic Post by the owner on the first topic, which the topic's delete removes
+	const topicPostId = `${runId}-topic-post`
+	const topicPostTarget = { kind: "post", id: topicPostId } as const
+	await db.insert(topicPosts).values({
+		id: topicPostId,
+		topicId: topicIds.first,
+		authorUserId: userIds.owner,
+		title: "smoke post",
+		html: "<p>smoke post</p>",
+		publishedAt: new Date(),
+	})
+
+	// the owner's comment on the post is saved unshared, though a shared comment slot is free
+	const topicPostCommentResult = await postComment({
+		userId: userIds.owner,
+		payload: { target: topicPostTarget, body: "a take on the post" },
+		analyticsProperties,
+	})
+	const topicPostComment = toSavedComment(topicPostCommentResult)
+	check(
+		"an editor's comment on a Topic Post starts unshared",
+		topicPostComment?.isSharedWithPodcast === false,
+		topicPostCommentResult,
+	)
+
+	// its row names the post's topic and no share
+	const [topicPostCommentRow] = await db
+		.select()
+		.from(comments)
+		.where(eq(comments.id, topicPostComment?.id ?? ""))
+	check(
+		"a comment on a Topic Post stores the post's topic",
+		topicPostCommentRow?.targetTopicId === topicIds.first && topicPostCommentRow.sharedWithPodcastAt === null,
+		topicPostCommentRow,
+	)
+
+	// the post's thread holds it for a visitor
+	const topicPostPage = await loadCommentPage({ reader: visitorReader, target: topicPostTarget, topic: firstTopicRow })
+	check(
+		"the Topic Post's thread holds the comment",
+		topicPostPage.comments.some((comment) => comment.id === topicPostComment?.id),
+		topicPostPage.comments,
+	)
+
+	// delete the post, which takes its thread with it
+	await db.delete(topicPosts).where(eq(topicPosts.id, topicPostId))
 }
 
 async function checkSharedComments(): Promise<void> {
@@ -498,6 +800,9 @@ try {
 	await seed()
 	await checkReactions()
 	await checkComments()
+	await checkCommentMentions()
+	await checkLinkedComment()
+	await checkTopicPostComment()
 	await checkSharedComments()
 } finally {
 	// undo the run's rows whether a check threw or not

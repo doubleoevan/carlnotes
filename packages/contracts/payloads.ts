@@ -29,6 +29,7 @@ import {
 } from "./enums"
 import { inviteSources } from "./invites"
 import { NOTE_COMMENT_MAX_CHARS, NOTE_HTML_MAX_CHARS, NOTE_NAME_MAX_CHARS } from "./notes"
+import { podcastEpisodeFormats } from "./podcast"
 import { PODCAST_EPISODE_CHAPTER_POSITION_MAX } from "./podcastEpisodes"
 import { topicDraftPayload } from "./topicPayloads"
 
@@ -166,7 +167,8 @@ export const userInvitePayload = z
 
 export type UserInvitePayload = z.infer<typeof userInvitePayload>
 
-export const inviteCreatePayload = z.object({ source: z.enum(inviteSources) })
+// which control created an invite link, and the Topic Post a topic's link was shared from, if any
+export const inviteCreatePayload = z.object({ source: z.enum(inviteSources), topicPostId: z.string().optional() })
 
 // the subscription email-preference mutation body, independent of the subscription's active state
 export const subscriptionEmailPayload = z.object({
@@ -257,12 +259,22 @@ export const podcastEpisodeChapterPayload = podcastEpisodeChapterRef.extend({
 export type PodcastEpisodeChapterRef = z.infer<typeof podcastEpisodeChapterPayload>
 
 // a topic chat turn, which may be a spoken question asked from the podcast player during one chapter of a podcast
-// episode. a podcast question is always spoken and never sends an attachment
+// episode, or a question asked from a topic post's page. a podcast question is always spoken and never sends an
+// attachment, and no turn is both
 export const topicChatTurnPayload = chatTurnPayload
-	.and(z.object({ podcastEpisodeChapter: podcastEpisodeChapterPayload.optional() }))
+	.and(
+		z.object({
+			podcastEpisodeChapter: podcastEpisodeChapterPayload.optional(),
+			topicPostId: z.string().min(1).optional(),
+		}),
+	)
 	.refine(
 		(chatTurn) => !chatTurn.podcastEpisodeChapter || (chatTurn.isSpoken && chatTurn.attachments.length === 0),
 		"a podcast question is spoken and has no attachment",
+	)
+	.refine(
+		(chatTurn) => !chatTurn.podcastEpisodeChapter || !chatTurn.topicPostId,
+		"a question is asked from the podcast player or from a topic post's page, never both",
 	)
 
 export type TopicChatTurnPayload = z.infer<typeof topicChatTurnPayload>
@@ -324,12 +336,13 @@ export const budgetOverridePayload = z.object({ budgetOverrideCents: z.number().
 // the admin mobile minimum version body: the oldest build a platform's api still serves, or null to serve every build
 export const mobileMinimumVersionPayload = z.object({ minimumVersion: appVersion.nullable() })
 
-// what the player saves as a user listens. the user's progress, whether playback just started,
-// and whether playback ended
+// what the player saves as a user listens. the user's progress, whether playback just started, whether playback
+// ended, and the format that played, audio if left out
 export const podcastEpisodeListenPayload = z.object({
 	progressSeconds: z.number().int().min(0),
 	isPlaybackStart: z.boolean().optional(),
 	isCompleted: z.boolean().optional(),
+	format: z.enum(podcastEpisodeFormats).optional(),
 })
 
 export type PodcastEpisodeListenPayload = z.infer<typeof podcastEpisodeListenPayload>

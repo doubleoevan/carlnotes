@@ -2,6 +2,7 @@ import {
 	PodcastThemeSongCredits,
 	type PodcastThemeSongCreditsElements,
 } from "@carlnotes/core/components/PodcastThemeSongCredits"
+import { Headphones } from "lucide-react-native"
 import { type ComponentRef, useRef, useState } from "react"
 import { Pressable, View } from "react-native"
 import { NoteIcon } from "@/components/branding/NoteIcon"
@@ -28,7 +29,8 @@ const elements: PodcastThemeSongCreditsElements = {
 }
 
 /**
- * Opens the shared theme-song credits and lyrics in the standard mobile sheet.
+ * Draws the headphones tile right after a film section's or a podcast section's title, which opens the shared
+ * theme-song credits and lyrics in the standard mobile sheet.
  */
 export function PodcastThemeSongNote() {
 	// return screen-reader focus to the credits trigger when its sheet closes
@@ -42,9 +44,9 @@ export function PodcastThemeSongNote() {
 				accessibilityLabel="Theme song credits"
 				hitSlop={toTouchTargetHitSlop(24)}
 				onPress={() => setIsOpen(true)}
-				className="ml-2"
+				className="active:opacity-75"
 			>
-				<NoteIcon />
+				<NoteIcon icon={Headphones} />
 			</Pressable>
 			{isOpen && (
 				<Sheet title="Theme song credits" triggerRef={triggerRef} onClose={() => setIsOpen(false)}>

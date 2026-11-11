@@ -2,20 +2,24 @@ import { toAvatarImagePath } from "@carlnotes/contracts/avatars"
 import type { FindingSearchRow, SearchResultsPage, SearchRow } from "@carlnotes/contracts/search"
 import { SITE_URL } from "@carlnotes/contracts/site"
 import { toDotSeparatedText } from "@carlnotes/contracts/text"
+import type { TopicImageUrls } from "@carlnotes/contracts/topicImages"
 import type { TopicFindingActions } from "@carlnotes/core/hooks/useTopicFindingActions"
 import { toAgoLabel, toCountLabel } from "@carlnotes/core/lib/labels"
 import { applySearchFindingChanges } from "@carlnotes/core/lib/topicFindingChanges"
 import { cn } from "@carlnotes/nightshift/classNames"
-import { Coffee, Mic } from "lucide-react-native"
+import { Coffee, type LucideIcon, Mic, NotebookPen } from "lucide-react-native"
+import { type ComponentProps, type ReactNode, useState } from "react"
 import { Avatar } from "@/components/branding/Avatar"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { PodcastEpisodeNumberPill } from "@/components/podcast/PodcastEpisodePill"
 import { toTouchTargetHitSlop } from "@/components/primitives/button"
 import { Icon } from "@/components/primitives/icon"
 import { Text } from "@/components/primitives/text"
-import { TopicImage } from "@/components/primitives/topic-image"
 import { TopicFindingListCard } from "@/components/topic/TopicFindingList"
+import { TopicImageLink } from "@/components/topic/TopicImageLink"
+import { TopicNotePopover } from "@/components/topic/TopicNotePopover"
 import { TopicResource } from "@/components/topic/TopicResource"
+import { TopicPostInfo } from "@/components/topicPost/TopicPostInfo"
 import { SearchResultRow } from "./SearchResultRow"
 import { TopicSearchResultDetails } from "./TopicSearchResultDetails"
 
@@ -48,7 +52,7 @@ export function SearchResultsList({ pages, state }: { pages: SearchResultsPage[]
 							topicFeedHandlers={state.handlers}
 							isPending={state.pendingChanges.some((change) => change.findingId === searchRow.finding.findingId)}
 						>
-							<TopicLink topic={searchRow.topic} />
+							<SearchRowTopicLink topic={searchRow.topic} />
 						</TopicResource>
 					) : (
 						<LinkedSearchResultRow
@@ -74,16 +78,22 @@ function LinkedSearchResultRow({
 	rank: number
 	isLast: boolean
 }) {
-	const href =
-		searchRow.kind === "topic"
-			? { pathname: "/topics/[topicId]" as const, params: { topicId: searchRow.topic.id } }
-			: `${SITE_URL}${searchRow.path}`
+	// a tap on a topic's row, anywhere but its title and its image, opens the topic's note, and one on a Topic Post's
+	// row opens the post's popup
+	const [isPopupOpen, setIsPopupOpen] = useState(false)
+	const hasPopup = searchRow.kind === "topic" || searchRow.kind === "topicPost"
 	return (
 		<SearchResultRow
 			rank={rank}
 			className={cn(!isLast && "border-b border-dashed border-separator-strong")}
+			onPress={hasPopup ? () => setIsPopupOpen(true) : undefined}
+			titleAside={toSearchRowTitleAside(searchRow, { isOpen: isPopupOpen, onOpenChange: setIsPopupOpen })}
 			title={
-				<AnchorLink href={href} accessibilityLabel={`Open ${searchRow.name}`} hitSlop={toTouchTargetHitSlop(20)}>
+				<AnchorLink
+					href={toSearchRowHref(searchRow)}
+					accessibilityLabel={`Open ${searchRow.name}`}
+					hitSlop={toTouchTargetHitSlop(20)}
+				>
 					<Text numberOfLines={1} className="text-sm font-semibold text-card-foreground">
 						{searchRow.name}
 					</Text>
@@ -92,6 +102,37 @@ function LinkedSearchResultRow({
 			details={<SearchRowLine searchRow={searchRow} />}
 		/>
 	)
+}
+
+// a row's page: a topic's screen, and for every other kind its site url, which the link opens in the app if the app
+// has that screen
+function toSearchRowHref(searchRow: LinkedSearchRow): ComponentProps<typeof AnchorLink>["href"] {
+	return searchRow.kind === "topic"
+		? { pathname: "/topics/[topicId]", params: { topicId: searchRow.topic.id } }
+		: `${SITE_URL}${searchRow.path}`
+}
+
+// the control right after a row's title: the button that opens a topic's note, the one that opens a Topic Post's
+// popup, and none on every other kind
+function toSearchRowTitleAside(
+	searchRow: LinkedSearchRow,
+	popup: { isOpen: boolean; onOpenChange: (isOpen: boolean) => void },
+): ReactNode {
+	switch (searchRow.kind) {
+		case "topic":
+			return <TopicNotePopover topicId={searchRow.topic.id} isOpen={popup.isOpen} onOpenChange={popup.onOpenChange} />
+		case "topicPost":
+			return (
+				<TopicPostInfo
+					topicPostId={searchRow.id}
+					title={searchRow.name}
+					isOpen={popup.isOpen}
+					onOpenChange={popup.onOpenChange}
+				/>
+			)
+		default:
+			return null
+	}
 }
 
 // a row's line: its icon where a finding's favicon goes, then its details
@@ -132,17 +173,30 @@ function SearchRowIcon({ searchRow }: { searchRow: LinkedSearchRow }) {
 			/>
 		)
 	}
-	if (searchRow.kind === "topic" && searchRow.topic.image) {
-		return (
-			<TopicImage image={searchRow.topic.image} size="thumbnail" name={searchRow.topic.name} className="shrink-0" />
-		)
+	// a topic's image, a podcast episode's own, and a Topic Post's own or its topic's until its own is drawn
+	if (searchRow.kind === "topic") {
+		return <SearchRowImage searchRow={searchRow} image={searchRow.topic.image} KindIcon={Coffee} />
 	}
-	if (searchRow.kind === "podcastEpisode" && searchRow.podcastEpisode.image) {
-		return (
-			<TopicImage image={searchRow.podcastEpisode.image} size="thumbnail" name={searchRow.name} className="shrink-0" />
-		)
+	if (searchRow.kind === "podcastEpisode") {
+		return <SearchRowImage searchRow={searchRow} image={searchRow.podcastEpisode.image} KindIcon={Mic} />
 	}
-	return <Icon as={searchRow.kind === "topic" ? Coffee : Mic} className="size-4 text-muted-foreground" />
+	return <SearchRowImage searchRow={searchRow} image={searchRow.topicPost.image} KindIcon={NotebookPen} />
+}
+
+// a row's image, which opens the row's page as its title does, or its kind's icon for a row with no image
+function SearchRowImage({
+	searchRow,
+	image,
+	KindIcon,
+}: {
+	searchRow: LinkedSearchRow
+	image: TopicImageUrls | null
+	KindIcon: LucideIcon
+}) {
+	if (!image) {
+		return <Icon as={KindIcon} className="size-4 text-muted-foreground" />
+	}
+	return <TopicImageLink image={image} size="thumbnail" name={searchRow.name} path={searchRow.path} />
 }
 
 // match each kind's web metadata and reuse the same episode pill as findings
@@ -166,8 +220,17 @@ function SearchRowDetails({ searchRow }: { searchRow: LinkedSearchRow }) {
 							toCountLabel(searchRow.count ?? 0, "listener"),
 						])}
 					</Text>
-					<TopicLink topic={searchRow.topic} />
+					<SearchRowTopicLink topic={searchRow.topic} />
 					<PodcastEpisodeNumberPill podcastEpisode={searchRow.podcastEpisode} />
+				</>
+			)
+		case "topicPost":
+			return (
+				<>
+					<Text className="text-xs text-muted-foreground">
+						{toDotSeparatedText(["Post", toAgoLabel(searchRow.date)])}
+					</Text>
+					<SearchRowTopicLink topic={searchRow.topic} />
 				</>
 			)
 		case "team":
@@ -181,12 +244,12 @@ function SearchRowDetails({ searchRow }: { searchRow: LinkedSearchRow }) {
 				</Text>
 			)
 		case "user":
-			return <Text className="text-xs text-muted-foreground">Profile</Text>
+			return <Text className="text-xs text-muted-foreground">Café</Text>
 	}
 }
 
 // let attribution open its Topic without opening the surrounding finding sheet
-function TopicLink({ topic }: { topic: { id: string; name: string } }) {
+export function SearchRowTopicLink({ topic }: { topic: { id: string; name: string } }) {
 	return (
 		<AnchorLink
 			href={{ pathname: "/topics/[topicId]", params: { topicId: topic.id } }}

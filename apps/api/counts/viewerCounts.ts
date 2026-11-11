@@ -1,10 +1,12 @@
-// counting a topic's viewers and a podcast episode's listeners, and reading their counts for the pages
+// counting the viewers of a topic, a profile, and a team and a podcast episode's listeners, and reading their counts
+// for the pages
 
 import { isCountedUserAgent } from "@carlnotes/contracts/userAgent"
-import type { PodcastEpisodeCounts, TopicCounts } from "@carlnotes/contracts/viewerCounts"
+import type { PodcastEpisodeCounts, TopicCounts, ViewerCounts } from "@carlnotes/contracts/viewerCounts"
 import { db } from "@carlnotes/db"
 import { countRateLimitHit } from "@carlnotes/db/redisRateLimits"
 import { topics } from "@carlnotes/db/schema/topics"
+import { users } from "@carlnotes/db/schema/users"
 import { addViewer, readViewerEstimate, type ViewerCountRef } from "@carlnotes/db/viewerCounts"
 import { type RequestSender, toViewerElement } from "@carlnotes/server/viewerElements"
 import { eq } from "drizzle-orm"
@@ -13,6 +15,7 @@ import { isAllowed } from "../authorization"
 import { type AppEnv, currentUser } from "../currentUser"
 import { loadAccessiblePodcastEpisode } from "../podcast/podcastEpisodeRows"
 import { toRateLimitKey } from "../rateLimit"
+import { loadTeamPageAccess } from "../team/teamPageAccess"
 import { gatedTopicColumns } from "../topic/permissions"
 import { resolveClientAddress } from "../trustedProxies"
 
@@ -20,7 +23,7 @@ import { resolveClientAddress } from "../trustedProxies"
 const COUNT_RATE_LIMIT = 30
 const COUNT_RATE_LIMIT_WINDOW_MS = 60_000
 
-// a page's counts, and whether the topic is public
+// a page's counts, and whether the page is public: its topic, its team, or a profile, which always is
 type CountsResult<Counts> = { counts: Counts; isPublic: boolean }
 
 // who sent a view or a listen, the name its rate limit counts under, and the count to run if the sender is within it
@@ -51,6 +54,40 @@ export async function countPodcastEpisodeListen(requestSender: RequestSender, po
 	const element = toCountedElement(requestSender)
 	if (element) {
 		await addViewer({ kind: "podcastEpisode", id: podcastEpisodeId }, element)
+	}
+}
+
+/**
+ * Counts a view of a user's profile page, which is public. A crawler, a link unfurler, a visitor with no address, an
+ * id that names no user, and a Redis failure all count nothing.
+ */
+export async function countProfileView(requestSender: RequestSender, profileUserId: string): Promise<void> {
+	const element = toCountedElement(requestSender)
+	if (!element) {
+		return
+	}
+
+	// count only a view of a profile that exists
+	const [userRow] = await db.select({ id: users.id }).from(users).where(eq(users.id, profileUserId))
+	if (userRow) {
+		await addViewer({ kind: "profile", id: profileUserId }, element)
+	}
+}
+
+/**
+ * Counts a view of a team's page, if the sender is a person the page opens for. A crawler, a link unfurler, a visitor
+ * with no address, and a Redis failure all count nothing.
+ */
+export async function countTeamView(requestSender: RequestSender, teamId: string): Promise<void> {
+	const element = toCountedElement(requestSender)
+	if (!element) {
+		return
+	}
+
+	// count only a view of a team page the sender may open
+	const teamPageAccess = await loadTeamPageAccess(requestSender.userId, teamId)
+	if (teamPageAccess?.canOpen) {
+		await addViewer({ kind: "team", id: teamId }, element)
 	}
 }
 
@@ -127,6 +164,41 @@ export async function loadPodcastEpisodeCounts(
 		accessiblePodcastEpisode.podcastEpisodeRow.listenerCount,
 	)
 	return { counts: { listenerCount }, isPublic: accessiblePodcastEpisode.topic.visibility === "public" }
+}
+
+/**
+ * Reads a profile's viewers, or null if the id names no user. A profile is public, so anyone reads its count.
+ */
+export async function loadProfileViewerCounts(profileUserId: string): Promise<CountsResult<ViewerCounts> | null> {
+	const [userRow] = await db
+		.select({ profileViewerCount: users.profileViewerCount })
+		.from(users)
+		.where(eq(users.id, profileUserId))
+	if (!userRow) {
+		return null
+	}
+
+	// the larger of the live estimate and the saved column
+	const viewerCount = await readViewerCount({ kind: "profile", id: profileUserId }, userRow.profileViewerCount)
+	return { counts: { viewerCount }, isPublic: true }
+}
+
+/**
+ * Reads a team's viewers for someone its page opens for, or null.
+ */
+export async function loadTeamViewerCounts(
+	userId: string | null,
+	teamId: string,
+): Promise<CountsResult<ViewerCounts> | null> {
+	const teamPageAccess = await loadTeamPageAccess(userId, teamId)
+	if (!teamPageAccess?.canOpen) {
+		return null
+	}
+
+	// the larger of the live estimate and the saved column, and whether the team is public
+	const { team } = teamPageAccess
+	const viewerCount = await readViewerCount({ kind: "team", id: teamId }, team.viewerCount)
+	return { counts: { viewerCount }, isPublic: team.isPublic }
 }
 
 /**

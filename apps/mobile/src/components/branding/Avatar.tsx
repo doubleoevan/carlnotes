@@ -42,3 +42,6 @@ export function Avatar({ imageUrl, ownerId, name, size = 24 }: AvatarProps) {
 		</View>
 	)
 }
+
+// the avatar in a profile's or a team's header, at the height of a topic's image on the Topics tab, in points
+export const PAGE_AVATAR_SIZE = 80

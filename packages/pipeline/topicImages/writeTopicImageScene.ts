@@ -3,7 +3,12 @@
 
 import { TOPIC_IMAGE_PROMPT_CHARS } from "@carlnotes/contracts/topicImages"
 import { cheapModel } from "@carlnotes/models/models"
-import { type BuiltPrompt, fetchPromptTemplate, promptTelemetry } from "@carlnotes/models/prompts/fetch"
+import {
+	type BuiltPrompt,
+	fetchPromptTemplate,
+	type PromptName,
+	promptTelemetry,
+} from "@carlnotes/models/prompts/fetch"
 import { writePrompt } from "@carlnotes/models/prompts/write"
 import { generateText } from "ai"
 
@@ -90,10 +95,14 @@ export async function writeTopicImageScene({
 }
 
 /**
- * Returns the image prompt: the scene, then the house style paragraph, which is all the image model ever sees.
+ * Returns the image prompt: the scene, then the house style paragraph of the named prompt, which is the topic image's
+ * if none is named. The image model sees nothing else.
  */
-export async function toTopicImagePrompt(scene: string): Promise<string> {
-	const { template } = await fetchPromptTemplate("topic-image-style")
+export async function toTopicImagePrompt(
+	scene: string,
+	stylePromptName: PromptName = "topic-image-style",
+): Promise<string> {
+	const { template } = await fetchPromptTemplate(stylePromptName)
 	return `${scene}\n\n${writePrompt(template, {})}`
 }
 

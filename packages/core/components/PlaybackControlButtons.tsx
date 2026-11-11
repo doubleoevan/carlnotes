@@ -13,21 +13,30 @@ export type PlaybackControlElement = ComponentType<{
 	onPress: () => void
 }>
 
+// a skip by a number of seconds, backward below zero. the loaded podcast episode's skip if left out
+export type SkipPlaybackButtonsProps = { onSkip?: (skipSeconds: number) => void }
+
+// the playback rate the button shows, and its press. the loaded podcast episode's speed cycle if left out
+export type PlaybackSpeedButtonProps = { playbackRate: number; onPress?: () => void }
+
 /**
  * Composes the shared 15-second backward and 30-second forward controls.
  */
-export function SkipPlaybackButtons({ Control }: { Control: PlaybackControlElement }) {
+export function SkipPlaybackButtons({
+	Control,
+	onSkip = skipPlaybackBy,
+}: SkipPlaybackButtonsProps & { Control: PlaybackControlElement }) {
 	return (
 		<>
 			<Control
 				label={`Skip back ${SKIP_BACK_SECONDS} seconds`}
 				icon="back"
-				onPress={() => skipPlaybackBy(-SKIP_BACK_SECONDS)}
+				onPress={() => onSkip(-SKIP_BACK_SECONDS)}
 			/>
 			<Control
 				label={`Skip forward ${SKIP_FORWARD_SECONDS} seconds`}
 				icon="forward"
-				onPress={() => skipPlaybackBy(SKIP_FORWARD_SECONDS)}
+				onPress={() => onSkip(SKIP_FORWARD_SECONDS)}
 			/>
 		</>
 	)
@@ -38,11 +47,9 @@ export function SkipPlaybackButtons({ Control }: { Control: PlaybackControlEleme
  */
 export function PlaybackSpeedButton({
 	playbackRate,
+	onPress = cyclePlaybackRate,
 	Control,
-}: {
-	playbackRate: number
-	Control: PlaybackControlElement
-}) {
+}: PlaybackSpeedButtonProps & { Control: PlaybackControlElement }) {
 	const text = `${playbackRate}x`
-	return <Control label={`Playback speed ${text}`} text={text} onPress={cyclePlaybackRate} />
+	return <Control label={`Playback speed ${text}`} text={text} onPress={onPress} />
 }

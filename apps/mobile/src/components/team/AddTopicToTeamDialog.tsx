@@ -12,6 +12,7 @@ import { Sheet } from "@/components/common/Sheet"
 import { Button } from "@/components/primitives/button"
 import { Icon } from "@/components/primitives/icon"
 import { Text } from "@/components/primitives/text"
+import { ADD_TOPIC_TO_TEAM_LABEL } from "@/components/search/pageActionOptions"
 import { usePageMutation } from "@/hooks/usePageMutation"
 import { EditTeamModal } from "./EditTeamModal"
 
@@ -46,7 +47,7 @@ export function AddTopicToTeamDialog({
 		)
 	}
 	return (
-		<Sheet title="Add topic to team" onClose={onClose}>
+		<Sheet title={ADD_TOPIC_TO_TEAM_LABEL} onClose={onClose}>
 			<View className="gap-2">
 				{query.isPending && <CoffeeLoading />}
 				{query.error && <Text className="text-destructive">{query.error.message}</Text>}

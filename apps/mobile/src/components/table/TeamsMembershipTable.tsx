@@ -88,7 +88,7 @@ export function TeamsMembershipTable({
 	async function handleAccept(inviteId: string): Promise<void> {
 		const acceptedInvite = await sendAcceptInvite(inviteId)
 		if (acceptedInvite.status !== "joinedTeam" && acceptedInvite.status !== "requestedTeam") {
-			throw new Error("That invitation couldn't be accepted. The team may be full or the invitation expired.")
+			throw new Error("That invite couldn't be accepted. The team may be full or the invite expired.")
 		}
 	}
 	function renderCount(row: TeamsPageRow, kind: "members" | "topics") {
@@ -144,7 +144,7 @@ export function TeamsMembershipTable({
 				<Button
 					variant="ghost"
 					size="icon-sm"
-					accessibilityLabel={`Delete ${"invite" in row ? "invitation to " : ""}${toTeamRowFields(row).name}`}
+					accessibilityLabel={`Delete ${"invite" in row ? "invite to " : ""}${toTeamRowFields(row).name}`}
 					disabled={mutation.isPending}
 					onPress={() =>
 						"membership" in row

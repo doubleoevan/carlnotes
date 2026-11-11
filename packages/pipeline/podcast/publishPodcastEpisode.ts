@@ -11,6 +11,7 @@ import { findings } from "@carlnotes/db/schema/scans"
 import { topics } from "@carlnotes/db/schema/topics"
 import { releasePodcastEpisodeSharedComments } from "@carlnotes/db/sharedComments"
 import { deleteStoredObjects, recordPendingObjectDeletions, toPodcastEpisodeChapterKey } from "@carlnotes/db/store"
+import { clearUnseenCommentMentions } from "@carlnotes/db/unseenCommentMentions"
 import { tracePodcastEpisodeRecording } from "@carlnotes/models/telemetry"
 import { appBaseUrl } from "@carlnotes/server/appUrl"
 import { reportError } from "@carlnotes/server/monitoring"
@@ -55,12 +56,15 @@ type SavePodcastEpisodeAsPublishedOptions = {
 	recordedChapterPositions: number[]
 }
 
-// what a saved publish took. its episode number, and the audio keys the publish deletes: the recorded chapters'
-// audio and the replaced short Podcast Episodes' audio
-type SavedPodcastEpisode = { podcastEpisodeNumber: number; audioKeysToDelete: string[] }
+// what a saved publish took. its episode number, the audio keys the publish deletes: the recorded chapters'
+// audio and the replaced short Podcast Episodes' audio, and the users that the replaced ones' comments mentioned
+type SavedPodcastEpisode = { podcastEpisodeNumber: number; audioKeysToDelete: string[]; mentionedUserIds: string[] }
 
 // the Topic whose short Podcast Episodes a publish replaces, and the published Podcast Episode that stays
 type ReplaceShortPodcastEpisodesOptions = { transaction: DbTransaction; topicId: string; podcastEpisodeId: string }
+
+// the stored keys of the replaced Podcast Episodes' audio and films, and the users that their comments mentioned
+type ReplacedShortPodcastEpisodes = { objectKeys: string[]; mentionedUserIds: string[] }
 
 // a published Podcast Episode's page. its Topic, its season, and its episode number
 type NotifyPodcastEpisodePageOptions = { topicId: string; season: number; podcastEpisodeNumber: number }
@@ -129,9 +133,11 @@ export async function publishPodcastEpisode({
 	})
 
 	// delete the recorded chapters' audio, which the join left in place for a retried join to read, and the audio of
-	// the short Podcast Episodes that this one replaced, now that the publish has committed
-	const { podcastEpisodeNumber, audioKeysToDelete } = savedPodcastEpisode
+	// the short Podcast Episodes that this one replaced, now that the publish has committed. clear the cached unseen
+	// Comment Mentions that the replaced ones' comments held
+	const { podcastEpisodeNumber, audioKeysToDelete, mentionedUserIds } = savedPodcastEpisode
 	await deleteStoredObjects(audioKeysToDelete)
+	await clearUnseenCommentMentions(mentionedUserIds)
 
 	// trace the recording with what it took, then delete the Topic's cached feeds,
 	// and tell IndexNow about a public Topic's podcast episode page
@@ -294,9 +300,9 @@ async function savePodcastEpisodeAsPublished({
 		await savePodcastEpisodeVector(podcastEpisodeId, transaction)
 
 		// a short Podcast Episode replaces the Topic's earlier short ones, and a full one replaces none
-		const replacedObjectKeys = isShort
+		const { objectKeys: replacedObjectKeys, mentionedUserIds } = isShort
 			? await replaceShortPodcastEpisodes({ transaction, topicId, podcastEpisodeId })
-			: []
+			: { objectKeys: [], mentionedUserIds: [] }
 
 		// record the recorded chapters' audio keys and the replaced audio keys as pending, for the delete after the commit
 		const recordedChapterKeys = recordedChapterPositions.map((position) =>
@@ -304,17 +310,18 @@ async function savePodcastEpisodeAsPublished({
 		)
 		const audioKeysToDelete = [...recordedChapterKeys, ...replacedObjectKeys]
 		await recordPendingObjectDeletions({ handle: transaction, objectKeys: audioKeysToDelete })
-		return { podcastEpisodeNumber, audioKeysToDelete }
+		return { podcastEpisodeNumber, audioKeysToDelete, mentionedUserIds }
 	})
 }
 
 // remove the Topic's other published short Podcast Episodes and keep their chapters, so their Findings stay narrated.
-// return the keys of the removed Podcast Episodes' audio, read while their scripts still name the chapters
+// return the keys of the removed Podcast Episodes' audio, read while their scripts still name the chapters, and films,
+// with the users that their deleted comments mentioned
 async function replaceShortPodcastEpisodes({
 	transaction,
 	topicId,
 	podcastEpisodeId,
-}: ReplaceShortPodcastEpisodesOptions): Promise<string[]> {
+}: ReplaceShortPodcastEpisodesOptions): Promise<ReplacedShortPodcastEpisodes> {
 	// find the Topic's other published short Podcast Episodes. a full Podcast Episode is never replaced
 	const replacedPodcastEpisodes = await transaction
 		.select({ id: podcastEpisodes.id, script: podcastEpisodes.script })
@@ -328,12 +335,17 @@ async function replaceShortPodcastEpisodes({
 			),
 		)
 
-	// mark them removed, if there are any
-	if (replacedPodcastEpisodes.length > 0) {
-		const replacedPodcastEpisodeIds = replacedPodcastEpisodes.map((replacedPodcastEpisode) => replacedPodcastEpisode.id)
-		await markPodcastEpisodesRemoved(transaction, replacedPodcastEpisodeIds)
+	// mark them removed with their films, if there are any
+	if (replacedPodcastEpisodes.length === 0) {
+		return { objectKeys: [], mentionedUserIds: [] }
 	}
-	return replacedPodcastEpisodes.flatMap((replacedPodcastEpisode) => toPodcastEpisodeAudioKeys(replacedPodcastEpisode))
+	const replacedPodcastEpisodeIds = replacedPodcastEpisodes.map((replacedPodcastEpisode) => replacedPodcastEpisode.id)
+	const { filmKeys, mentionedUserIds } = await markPodcastEpisodesRemoved(transaction, replacedPodcastEpisodeIds)
+	const objectKeys = [
+		...replacedPodcastEpisodes.flatMap((replacedPodcastEpisode) => toPodcastEpisodeAudioKeys(replacedPodcastEpisode)),
+		...filmKeys,
+	]
+	return { objectKeys, mentionedUserIds }
 }
 
 // tell IndexNow about a public Topic's new podcast episode page. a private or invite Topic's episode page is noindex

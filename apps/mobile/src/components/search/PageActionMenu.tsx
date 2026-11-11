@@ -1,4 +1,5 @@
 import { authClient } from "@carlnotes/client/authClient"
+import { isImageReportSubjectKind } from "@carlnotes/contracts/reports"
 import { SITE_URL } from "@carlnotes/contracts/site"
 import {
 	PageActionMenu as SharedPageActionMenu,
@@ -6,9 +7,10 @@ import {
 } from "@carlnotes/core/components/PageActionMenu"
 import { useSubjectReportFlag } from "@carlnotes/core/hooks/useSubjectReport"
 import { toCarlNotesMcpServer } from "@carlnotes/core/lib/installDeeplinks"
+import { cn } from "@carlnotes/nightshift/classNames"
 import { Bot, EllipsisVertical, Flag, type LucideIcon, Plus } from "lucide-react-native"
 import { type ComponentRef, useRef, useState } from "react"
-import type { View } from "react-native"
+import { Alert, type View } from "react-native"
 import { toActiveIconProps } from "@/activeIconProps"
 import { AddToAiDialog } from "@/components/common/AddToAiDialog"
 import { ReportIssueDialog, type ReportSubject } from "@/components/common/ReportIssueDialog"
@@ -64,6 +66,7 @@ export function PageActionMenu({
 						onAddToAi={() => setIsAddingToAi(true)}
 						onReport={report && session ? reportFlag.press : undefined}
 						isReported={reportFlag.isReported}
+						isImageReport={report ? isImageReportSubjectKind(report.subjectKind) : false}
 						onClose={() => setIsOpen(false)}
 						Option={PageAction}
 					/>
@@ -80,15 +83,24 @@ export function PageActionMenu({
 }
 
 // preserve native touch targets and selected icon colors
-function PageAction({ label, Icon: ActionIcon, isActive, isDisabled, onSelect }: SharedPageActionOption<LucideIcon>) {
+function PageAction({
+	label,
+	Icon: ActionIcon,
+	isActive,
+	isDisabled,
+	disabledReason,
+	onSelect,
+}: SharedPageActionOption<LucideIcon>) {
+	// a disabled option with a reason stays pressable, and its press says why in a dialog
+	const hasDisabledReason = Boolean(isDisabled && disabledReason)
 	return (
 		<Button
 			variant="ghost"
-			className="min-h-12 justify-start"
+			className={cn("min-h-12 justify-start", hasDisabledReason && "opacity-50")}
 			accessibilityLabel={label}
-			accessibilityState={{ selected: isActive }}
-			disabled={isDisabled}
-			onPress={onSelect}
+			accessibilityState={{ selected: isActive, disabled: isDisabled }}
+			disabled={isDisabled && !hasDisabledReason}
+			onPress={hasDisabledReason ? () => Alert.alert(label, disabledReason) : onSelect}
 		>
 			<Icon as={ActionIcon} {...toActiveIconProps(isActive, "size-4 text-muted-foreground")} />
 			<Text>{label}</Text>

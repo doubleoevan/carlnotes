@@ -67,6 +67,15 @@ export function setMcpViewData(toolResultMeta: Record<string, unknown> | undefin
 }
 
 /**
+ * Keeps the podcast episodes a later tool result holds beside the ones the MCP view data has, so a play button of an
+ * earlier page still plays.
+ */
+export function addMcpViewPodcastEpisodes(podcastEpisodes: PodcastEpisode[]): void {
+	mcpViewData = { ...mcpViewData, podcastEpisodes: [...podcastEpisodes, ...mcpViewData.podcastEpisodes] }
+	publishMcpViewData()
+}
+
+/**
  * Returns the MCP view data the last tool result gave the MCP view, re-rendering when it changes.
  */
 export function useMcpViewData(): McpViewData {

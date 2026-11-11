@@ -8,7 +8,7 @@ import { useState } from "react"
 import { toast } from "sonner"
 import { Button } from "@/components/primitives/button"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/primitives/popover"
-import { MENU_OPTION_CLASS } from "@/lib/styleClasses"
+import { HIGHLIGHTED_PAGE_BUTTON_CLASS, MENU_OPTION_CLASS } from "@/lib/styleClasses"
 
 /**
  * Add a topic to the team: attach one the user already has, or open the modal that makes a new one.
@@ -31,7 +31,7 @@ export function AddTopicButton({
 	// if no topics can be added the button opens the new modal
 	if (addableTopics.length === 0) {
 		return (
-			<Button className="shrink-0" onClick={onNewTopic}>
+			<Button className={HIGHLIGHTED_PAGE_BUTTON_CLASS} onClick={onNewTopic}>
 				<Plus className="size-4" />
 				Add Topic
 			</Button>
@@ -64,7 +64,7 @@ export function AddTopicButton({
 	return (
 		<Popover open={isOpen} onOpenChange={setIsOpen}>
 			<PopoverTrigger asChild>
-				<Button className="shrink-0">
+				<Button className={HIGHLIGHTED_PAGE_BUTTON_CLASS}>
 					<Plus className="size-4" />
 					Add Topic
 				</Button>

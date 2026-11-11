@@ -16,6 +16,7 @@ import {
 	hasFullPodcastEpisodes,
 	incrementDaySuggestionCount,
 	loadBillingAccess,
+	loadDiscussionRegenerationQuota,
 	loadSpendSince,
 	loadTopicImageRegenerationQuota,
 	loadUserAccess,
@@ -167,6 +168,45 @@ test("the image regeneration quota counts this month's regenerate rows against t
 	}
 })
 
+// a film image's regeneration is a regenerate row like a topic's, a podcast episode's, and a Topic Post's, and the
+// count reads every one the user started
+test("the image regeneration quota counts a user's regenerate rows whichever image they drew", async () => {
+	const sentQueries = stubConnectionPool(({ text }) => (text.includes("count(") ? [["14"]] : [PLUS_USER_ACCESS_ROW]))
+	try {
+		expect(await loadTopicImageRegenerationQuota("user-1")).toEqual({ used: 14, limit: 15, remaining: 1 })
+	} finally {
+		restoreConnectionPool()
+	}
+
+	// the count filters by the user, the kind, and the month alone, never by the image a render drew
+	const countQuery = sentQueries.find((sentQuery) => sentQuery.text.includes("count("))
+	expect(countQuery?.text).toContain('from "topic_image_renders"')
+	expect(countQuery?.values).toEqual(expect.arrayContaining(["user-1", "regenerate"]))
+	for (const imageColumn of ["topic_podcast_episode_video_id", "podcast_episode_id", "topic_post_id"]) {
+		expect(countQuery?.text).not.toContain(imageColumn)
+	}
+})
+
+// a discussion's regenerations count against their own monthly limit, separate from the image limit, by plan
+test("a person's discussion regenerations are counted against the plan's own limit", async () => {
+	// two regenerations this month on the free plan, which allows two
+	stubConnectionPool(({ text }) => (text.includes("count(") ? [["2"]] : [FREE_USER_ACCESS_ROW]))
+	try {
+		expect(await loadDiscussionRegenerationQuota("user-1")).toEqual({ used: 2, limit: 2, remaining: 0 })
+	} finally {
+		restoreConnectionPool()
+	}
+
+	// the same two on the plus plan leave eight, and the count reads the discussion rows
+	const sentQueries = stubConnectionPool(({ text }) => (text.includes("count(") ? [["2"]] : [PLUS_USER_ACCESS_ROW]))
+	try {
+		expect(await loadDiscussionRegenerationQuota("user-1")).toEqual({ used: 2, limit: 10, remaining: 8 })
+		expect(sentQueries.some((sentQuery) => sentQuery.text.includes('from "topic_post_discussions"'))).toBe(true)
+	} finally {
+		restoreConnectionPool()
+	}
+})
+
 // the spend checks in one request share one set of month sums, and a write between them, such as a chat turn's spend
 // row, makes the next read sum again
 test("the month's spend is summed once per request until a write", async () => {
@@ -179,12 +219,12 @@ test("the month's spend is summed once per request until a write", async () => {
 		await runWithRequestMemo(async () => {
 			await Promise.all([isMonthlyBudgetCutoffPassed("user-1", "spokenQuestions"), monthlySpendDollars("user-1")])
 			await isMonthlyBudgetCutoffPassed("user-1", "manualScans")
-			expect(countSpendSums()).toBe(5)
+			expect(countSpendSums()).toBe(7)
 
 			// a spend row's insert clears the memo, so the next read sums every spend table again
 			await db.execute(sql`insert into chat_turns default values`)
 			await monthlySpendDollars("user-1")
-			expect(countSpendSums()).toBe(10)
+			expect(countSpendSums()).toBe(14)
 		})
 	} finally {
 		restoreConnectionPool()
@@ -202,10 +242,34 @@ test("the spend for an empty user id is filtered by that id", async () => {
 	}
 
 	// every sum is bound to the empty user id
-	expect(sentQueries).toHaveLength(5)
+	expect(sentQueries).toHaveLength(7)
 	for (const sentQuery of sentQueries) {
 		expect(sentQuery.values).toContain("")
 	}
+})
+
+// a podcast episode film's cost adds to the podcast episode spend of its podcast episode's owner
+test("the films' cost counts as podcast episode spend", async () => {
+	// the podcast episode sum and the film sum each return a cost, and every other sum returns none
+	const sentQueries = stubConnectionPool(({ text }) => {
+		if (text.includes('from "topic_podcast_episode_videos"')) {
+			return [["0.25"]]
+		}
+		return [[text.includes('from "episodes"') ? "1.5" : "0"]]
+	})
+
+	// sum the month's spend for the owner
+	try {
+		const recordedSpend = await loadSpendSince({ since: new Date("2026-10-01T00:00:00Z"), userId: "user-1" })
+		expect(recordedSpend.podcastEpisodeDollars).toBe(1.75)
+	} finally {
+		restoreConnectionPool()
+	}
+
+	// the film sum filters by the podcast episode's owner
+	const filmSumQuery = sentQueries.find((sentQuery) => sentQuery.text.includes('from "topic_podcast_episode_videos"'))
+	expect(filmSumQuery?.text).toContain('"episodes"."owner_id"')
+	expect(filmSumQuery?.values).toContain("user-1")
 })
 
 // a paid plan and an admin get full podcast episodes, and the free plan gets short ones

@@ -1,9 +1,11 @@
-// the scheduled copy of each topic's viewers and each podcast episode's listeners from Redis into Postgres, and the
-// rebuild of Redis from Postgres on the first sync and after a Redis restart
+// the scheduled copy of the viewers of each topic, profile, and team and of each podcast episode's listeners from
+// Redis into Postgres, and the rebuild of Redis from Postgres on the first sync and after a Redis restart
 import { type DbTransaction, db } from "@carlnotes/db"
 import { runWithJobLease } from "@carlnotes/db/jobLease"
 import { podcastEpisodes } from "@carlnotes/db/schema/podcast"
+import { teams } from "@carlnotes/db/schema/teams"
 import { topics } from "@carlnotes/db/schema/topics"
+import { users } from "@carlnotes/db/schema/users"
 import { viewerCounters } from "@carlnotes/db/schema/viewerCounts"
 import {
 	hasRestoredViewerCounters,
@@ -13,6 +15,7 @@ import {
 	restoreViewerCounters,
 	type SavedViewerCounter,
 	takeChangedViewerCountRefs,
+	type ViewerCountKind,
 	type ViewerCountRef,
 } from "@carlnotes/db/viewerCounts"
 import { reportError } from "@carlnotes/server/monitoring"
@@ -98,17 +101,38 @@ async function loadSavedCounters(): Promise<SavedViewerCounter[]> {
 		.select({
 			topicId: viewerCounters.topicId,
 			podcastEpisodeId: viewerCounters.podcastEpisodeId,
+			profileUserId: viewerCounters.profileUserId,
+			teamId: viewerCounters.teamId,
 			counter: viewerCounters.counter,
 		})
 		.from(viewerCounters)
-
-	// each row names its topic or its podcast episode
 	return counterRows.map((counterRow) => ({
-		viewerCountRef: counterRow.topicId
-			? { kind: "topic", id: counterRow.topicId }
-			: { kind: "podcastEpisode", id: counterRow.podcastEpisodeId ?? "" },
+		viewerCountRef: toSavedViewerCountRef(counterRow),
 		counter: counterRow.counter,
 	}))
+}
+
+// the reference columns of a saved counter's row
+type SavedCounterRefColumns = {
+	topicId: string | null
+	podcastEpisodeId: string | null
+	profileUserId: string | null
+	teamId: string | null
+}
+
+// the ref a saved counter's row names. the check constraint sets exactly one column, so the first one set is the ref
+function toSavedViewerCountRef(counterRow: SavedCounterRefColumns): ViewerCountRef {
+	if (counterRow.topicId) {
+		return { kind: "topic", id: counterRow.topicId }
+	}
+	if (counterRow.podcastEpisodeId) {
+		return { kind: "podcastEpisode", id: counterRow.podcastEpisodeId }
+	}
+
+	// a row with neither names a profile's user or a team
+	return counterRow.profileUserId
+		? { kind: "profile", id: counterRow.profileUserId }
+		: { kind: "team", id: counterRow.teamId ?? "" }
 }
 
 // one ref's estimate and counter, or null if Redis fails to read the estimate or the counter
@@ -139,37 +163,65 @@ async function saveViewerCount(
 	transaction: DbTransaction,
 	{ viewerCountRef, estimate, counter }: ViewerEstimateAndCounter,
 ): Promise<void> {
-	// whether the ref is a topic, and the row its raise returns
-	const isTopic = viewerCountRef.kind === "topic"
-	let raisedRows: { id: string }[]
-
-	// raise a topic's viewers
-	if (isTopic) {
-		raisedRows = await transaction
-			.update(topics)
-			.set({ viewerCount: sql`greatest(${topics.viewerCount}, ${estimate})` })
-			.where(eq(topics.id, viewerCountRef.id))
-			.returning({ id: topics.id })
-	} else {
-		// or a podcast episode's listeners
-		raisedRows = await transaction
-			.update(podcastEpisodes)
-			.set({ listenerCount: sql`greatest(${podcastEpisodes.listenerCount}, ${estimate})` })
-			.where(eq(podcastEpisodes.id, viewerCountRef.id))
-			.returning({ id: podcastEpisodes.id })
-	}
-
-	// a topic or podcast episode deleted since its view has no row to raise, so its counter is not saved
+	// a ref deleted since its view has no row to raise, so its counter is not saved
+	const raisedRows = await raiseViewerCount(transaction, viewerCountRef, estimate)
 	if (raisedRows.length === 0) {
 		return
 	}
 
-	// save the counter in the row that names the topic or podcast episode
+	// save the counter in the row that names the ref
+	const counterRefColumnKey = COUNTER_REF_COLUMN_KEYS[viewerCountRef.kind]
 	await transaction
 		.insert(viewerCounters)
-		.values(isTopic ? { topicId: viewerCountRef.id, counter } : { podcastEpisodeId: viewerCountRef.id, counter })
+		.values({ [counterRefColumnKey]: viewerCountRef.id, counter })
 		.onConflictDoUpdate({
-			target: isTopic ? viewerCounters.topicId : viewerCounters.podcastEpisodeId,
+			target: viewerCounters[counterRefColumnKey],
 			set: { counter, updatedAt: new Date() },
 		})
+}
+
+// the saved counter's column that names each kind of ref
+const COUNTER_REF_COLUMN_KEYS = {
+	topic: "topicId",
+	podcastEpisode: "podcastEpisodeId",
+	profile: "profileUserId",
+	team: "teamId",
+} as const satisfies Record<ViewerCountKind, string>
+
+// raise the ref's own count column to the estimate, and return the row it raised, if the ref still exists
+function raiseViewerCount(
+	transaction: DbTransaction,
+	{ kind, id }: ViewerCountRef,
+	estimate: number,
+): Promise<{ id: string }[]> {
+	switch (kind) {
+		// a topic's viewers
+		case "topic":
+			return transaction
+				.update(topics)
+				.set({ viewerCount: sql`greatest(${topics.viewerCount}, ${estimate})` })
+				.where(eq(topics.id, id))
+				.returning({ id: topics.id })
+		// a podcast episode's listeners
+		case "podcastEpisode":
+			return transaction
+				.update(podcastEpisodes)
+				.set({ listenerCount: sql`greatest(${podcastEpisodes.listenerCount}, ${estimate})` })
+				.where(eq(podcastEpisodes.id, id))
+				.returning({ id: podcastEpisodes.id })
+		// a profile's viewers, on its user's row
+		case "profile":
+			return transaction
+				.update(users)
+				.set({ profileViewerCount: sql`greatest(${users.profileViewerCount}, ${estimate})` })
+				.where(eq(users.id, id))
+				.returning({ id: users.id })
+		// a team's viewers
+		case "team":
+			return transaction
+				.update(teams)
+				.set({ viewerCount: sql`greatest(${teams.viewerCount}, ${estimate})` })
+				.where(eq(teams.id, id))
+				.returning({ id: teams.id })
+	}
 }

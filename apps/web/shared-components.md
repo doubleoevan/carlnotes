@@ -38,12 +38,21 @@ Topic fields, Source editing, Team choices, and Topic/Team saving now use core h
 supply browser files, routing, and toast feedback. Retries keep created identities and accepted membership writes;
 unsent invitation chips remain visible. Maintain native adapters when changing any of these shared concerns.
 
-`topic/TopicSkeleton` delegates section order to core while preserving DOM placeholders and the desktop grid.
-Its exported section/player skeletons still serve PodcastEpisodePage. Stories cover unknown and known titles.
+`topic/TopicSkeleton` delegates section order to core and lays the Topic page's loading state out in the loaded page's
+own pieces: the header's grid, which floats the image on a phone, the film's card above the player card, each
+section's title row, and the desktop grid. `TopicActionBar` holds a placeholder for each of the row's two buttons
+while the page loads. Its exported section, film card, player card, theme song note, and empty section card
+skeletons also serve `podcast/PodcastEpisodeSkeleton`, whose player card has no podcast feed button. Stories cover
+unknown and known titles, the film's card, and the player card with and without the podcast feed button.
 
-`layout/PageSkeleton` renders core's Profile, Teams, Activity, Account, and Team loading layouts. The page keeps known
-headings and actions visible; Profile and Team reserve their identity while it loads. Account keeps Settings usable.
-Its stories cover each page and the Profile topics table loading separately. Motion respects reduced motion.
+`layout/PageSkeleton` renders core's Profile, Teams, Activity, Account, Team, and Topic Post loading layouts in the
+loaded pages' own pieces: `PAGE_BUTTON_ROW_CLASS`, `AccordionSection` with `isLoading`, `CARD_CLASS`, the news list's
+card and loading rows, `CardsRowSkeleton`, and the topic header's image and title areas. The page keeps known headings
+and actions visible; Profile and Team reserve their identity while it loads. Account keeps Settings usable, holds its
+header row with the plan button's placeholder, and names whether the budget lists monthly budget cutoffs. A
+placeholder is `SKELETON_SHAPE_CLASS`, which pulses unless the reader asked for reduced motion.
+`common/UserProfileLinkSkeleton` holds the profile link's line on an admin's view of another user's Account or
+Activity. Its stories cover each page and the Profile topics table loading separately.
 
 The menu parity adapters `search/PageActionMenu`, `layout/UserMenu`, and `common/AddToAiDialog` render the shared
 core menu composition. DOM popovers, badges, installation links, storage, and clipboard remain web adapters.
@@ -77,7 +86,8 @@ Coffee Break player/card/details/pills/controls, chapter list, episode row, seas
 credits, feed dialog, unpublished card, and removal confirmation compose the corresponding core components.
 The web files retain DOM markup, responsive/SSR behavior, popovers, tooltips, the audio element, Media Session,
 clipboard, and spoken-question adapters. `PodcastEpisodeSeekBar.tsx` adapts shared segments to browser pointer and
-keyboard input. `UnpublishedPodcastEpisodeCard.tsx` retains browser shimmer and cover styling over shared content.
+keyboard input, and on the film's bar shows the web-only tooltip of the hovered chapter.
+`UnpublishedPodcastEpisodeCard.tsx` retains browser shimmer and cover styling over shared content.
 `usePodcastFeed` and `usePodcastEpisodeChapterRating` live in core; reset-private-feed now confirms before sending,
 while failure retains the old link and denial clears it. Stories use shared fictional episode/transcript fixtures.
 Existing playback and spoken-question regression assertions remain the compatibility gate.

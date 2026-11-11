@@ -2,13 +2,15 @@
 
 import { toTopicPath } from "@carlnotes/contracts/seo"
 import { type DbHandle, db } from "@carlnotes/db"
+import { releaseTopicProfileOrders } from "@carlnotes/db/profileOrder"
 import { chatRoomAttachments } from "@carlnotes/db/schema/chat"
 import { podcastEpisodes } from "@carlnotes/db/schema/podcast"
 import { topicImages } from "@carlnotes/db/schema/topicImages"
 import { attachments, topics } from "@carlnotes/db/schema/topics"
 import { deleteStoredObjects, recordPendingObjectDeletions, toStoredObjectKeys } from "@carlnotes/db/store"
+import { clearUnseenCommentMentions, loadTopicMentionedUserIds } from "@carlnotes/db/unseenCommentMentions"
 import { notifyIndexNow } from "@carlnotes/pipeline/indexNow"
-import { loadTopicPodcastEpisodeAudioKeys } from "@carlnotes/pipeline/podcast/removePodcastEpisode"
+import { loadTopicPodcastEpisodeObjectKeys } from "@carlnotes/pipeline/podcast/removePodcastEpisode"
 import {
 	toPodcastEpisodeImageObjectKeys,
 	toTopicImageObjectKeys,
@@ -20,6 +22,7 @@ import { and, eq, isNotNull } from "drizzle-orm"
 import { isAllowed } from "../authorization"
 import { loadChatAttachmentObjectKeys } from "../chat/chatAttachmentReads"
 import type { AnalyticsProperties } from "../currentUser"
+import { loadTopicPostObjectKeys } from "../topicPost/topicPostObjectKeys"
 import { clearVisitorTopicCaches } from "./feedCaches"
 import { releaseHomeOrder } from "./homeOrder"
 
@@ -37,19 +40,32 @@ export async function deleteTopic(
 		return false
 	}
 
+	// the users that the topic's comments mention, read while the comments exist
+	const mentionedUserIds = await loadTopicMentionedUserIds(topicId)
+
 	// record every stored object's key and delete the topic in one transaction, so the keys survive the cascade to the
 	// sources, findings, invites, subscriptions, and attachment rows. a scan and a podcast episode keep their rows
 	let isHomeOrderReleased = false
+	let releasedProfileUserIds: string[] = []
 	const objectKeys = await db.transaction(async (transaction) => {
 		const topicObjectKeys = await loadTopicObjectKeys(topicId, transaction)
 		await recordPendingObjectDeletions({ handle: transaction, objectKeys: topicObjectKeys })
+		// the topic and its podcast episodes leave the home's pins and their owner's profile pins
 		isHomeOrderReleased = await releaseHomeOrder(topicId, transaction)
+		releasedProfileUserIds = await releaseTopicProfileOrders(topicId, transaction)
 		await transaction.delete(topics).where(eq(topics.id, topicId))
 		return topicObjectKeys
 	})
 
-	// clear the topic's cached visitor copies once the rows are gone, then delete the objects
-	await clearVisitorTopicCaches({ topicId, visibility: topic.visibility, isHomeOrderReleased })
+	// clear the topic's cached visitor copies and the cached unseen Comment Mentions that its comments held once the
+	// rows are gone, then delete the objects
+	await clearVisitorTopicCaches({
+		topicId,
+		visibility: topic.visibility,
+		isHomeOrderReleased,
+		releasedProfileUserIds,
+	})
+	await clearUnseenCommentMentions(mentionedUserIds)
 	await deleteStoredObjects(objectKeys)
 
 	// a deleted public topic's url is gone, so notify IndexNow to drop it, and its image files leave the edge
@@ -64,7 +80,8 @@ export async function deleteTopic(
 }
 
 // the keys of every stored object a topic holds: its attachments, its chat attachments, its chat rooms' shared files,
-// its podcast episodes' audio, chapter audio, and images, and its own image
+// its podcast episodes' audio, chapter audio, and images, its own image, and its Topic Posts' images and discussion
+// audio
 async function loadTopicObjectKeys(topicId: string, handle: DbHandle): Promise<string[]> {
 	const [
 		attachmentRows,
@@ -73,6 +90,7 @@ async function loadTopicObjectKeys(topicId: string, handle: DbHandle): Promise<s
 		podcastEpisodeObjectKeys,
 		podcastEpisodeImageRows,
 		topicImageRows,
+		topicPostObjectKeys,
 	] = await Promise.all([
 		handle.select({ objectKey: attachments.objectKey }).from(attachments).where(eq(attachments.topicId, topicId)),
 		loadChatAttachmentObjectKeys({ topicId }, handle),
@@ -80,12 +98,13 @@ async function loadTopicObjectKeys(topicId: string, handle: DbHandle): Promise<s
 			.select({ objectKey: chatRoomAttachments.objectKey })
 			.from(chatRoomAttachments)
 			.where(eq(chatRoomAttachments.topicId, topicId)),
-		loadTopicPodcastEpisodeAudioKeys(topicId, handle),
+		loadTopicPodcastEpisodeObjectKeys(topicId, handle),
 		handle
 			.select({ id: podcastEpisodes.id, imageHash: podcastEpisodes.imageHash })
 			.from(podcastEpisodes)
 			.where(and(eq(podcastEpisodes.topicId, topicId), isNotNull(podcastEpisodes.imageHash))),
 		handle.select({ hash: topicImages.hash }).from(topicImages).where(eq(topicImages.topicId, topicId)),
+		loadTopicPostObjectKeys({ topicId }, handle),
 	])
 	return [
 		...toStoredObjectKeys(attachmentRows),
@@ -96,5 +115,6 @@ async function loadTopicObjectKeys(topicId: string, handle: DbHandle): Promise<s
 			episodeRow.imageHash ? toPodcastEpisodeImageObjectKeys(episodeRow.id, episodeRow.imageHash) : [],
 		),
 		...topicImageRows.flatMap((imageRow) => toTopicImageObjectKeys(topicId, imageRow.hash)),
+		...topicPostObjectKeys,
 	]
 }

@@ -42,3 +42,6 @@ export const Team: Story = {
 
 // a topic with no tags or reactions keeps no last line
 export const NoImage: Story = { args: { topic: { ...TOPIC, tags: [], reactionCount: 0 } } }
+
+// a topic with no tag shows its reaction count at the right of the byline's row, with no row of its own
+export const NoTags: Story = { args: { topic: { ...TOPIC, tags: [] } } }

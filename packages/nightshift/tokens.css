@@ -38,6 +38,7 @@
 	--color-separator-sunken: var(--separator-sunken);
 	--color-spend-chat: var(--spend-chat);
 	--color-spend-podcast-episode: var(--spend-podcast-episode);
+	--radius-xs: calc(var(--radius) - 7px);
 	--radius-sm: calc(var(--radius) - 4px);
 	--radius-md: calc(var(--radius) - 2px);
 	--radius-lg: var(--radius);

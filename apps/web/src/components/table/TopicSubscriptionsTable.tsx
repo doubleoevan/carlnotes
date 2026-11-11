@@ -118,7 +118,7 @@ export function TopicSubscriptionsTable({
 				checked={row.isActive}
 				disabled={isReadOnly}
 				onCheckedChange={(isActive) => void handleActiveChange(row, isActive)}
-				aria-label={row.inviteId ? `Accept the invitation to ${row.name}` : `${row.name} subscription`}
+				aria-label={row.inviteId ? `Accept the invite to ${row.name}` : `${row.name} subscription`}
 			/>
 		),
 		renderEmails: (row) => (
@@ -137,14 +137,13 @@ export function TopicSubscriptionsTable({
 							size="icon-sm"
 							variant="ghost"
 							onClick={() => setSubscriptionToDelete(row)}
-							aria-label={`Delete the ${row.inviteId ? "invitation" : "subscription"} to ${row.name}`}
+							aria-label={`Delete the ${row.inviteId ? "invite" : "subscription"} to ${row.name}`}
 						>
 							<X className="size-4" />
 						</Button>
 					</TooltipTrigger>
 					<TooltipContent>
-						Delete the {row.inviteId ? "invitation" : "subscription"} to{" "}
-						<span className="font-semibold">{row.name}</span>
+						Delete the {row.inviteId ? "invite" : "subscription"} to <span className="font-semibold">{row.name}</span>
 					</TooltipContent>
 				</Tooltip>
 			),
@@ -162,13 +161,13 @@ export function TopicSubscriptionsTable({
 			{/* the delete confirmation, mounted only while a subscription is waiting for it */}
 			{subscriptionToDelete && (
 				<ConfirmDialog
-					title={subscriptionToDelete.inviteId ? "Delete this invitation?" : "Delete this subscription?"}
-					confirmLabel={subscriptionToDelete.inviteId ? "Delete invitation" : "Delete subscription"}
+					title={subscriptionToDelete.inviteId ? "Delete this invite?" : "Delete this subscription?"}
+					confirmLabel={subscriptionToDelete.inviteId ? "Delete invite" : "Delete subscription"}
 					cancelLabel="Keep it"
 					onConfirm={handleDeleteSubscription}
 					onClose={() => setSubscriptionToDelete(null)}
 				>
-					{subscriptionToDelete.inviteId ? "Your invitation to " : "Your subscription to "}
+					{subscriptionToDelete.inviteId ? "Your invite to " : "Your subscription to "}
 					<AnchorLink
 						href={toTopicPath({ id: subscriptionToDelete.topicId, name: subscriptionToDelete.name })}
 						className="sentence-link"

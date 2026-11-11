@@ -27,17 +27,18 @@ const ELEMENTS: TopicImageEditorElements = {
 			<div className="flex min-w-0 flex-col gap-2">{children}</div>
 		</div>
 	),
+	// the image prompt beside Regenerate
 	PromptRow: ({ children }) => <div className="flex items-center gap-2">{children}</div>,
 	Line: ({ children }) => <p className="text-muted-foreground text-sm">{children}</p>,
-	// the image is the upload button, pulsing while a render runs
-	Image: ({ uploadLabel, isRendering, isDisabled, onUpload, className, ...topicImageProps }) => (
+	// the image is the upload button, pulsing while a render runs. a film's image takes the film's 16:9 frame
+	Image: ({ aspectRatio, uploadLabel, isRendering, isDisabled, onUpload, className, ...topicImageProps }) => (
 		<TopicImageButton
 			{...topicImageProps}
 			label={uploadLabel}
 			isDisabled={isDisabled}
 			onClick={onUpload}
 			className="w-full"
-			imageClassName={cn(className, isRendering && IMAGE_SKELETON_CLASS)}
+			imageClassName={cn(className, isRendering && IMAGE_SKELETON_CLASS, aspectRatio === "16:9" && "aspect-video")}
 		/>
 	),
 	PromptInput: ({ label, value, placeholder, maxLength, isDisabled, onChange }) => (

@@ -1,8 +1,10 @@
-// the invite smoke's link sections: creating a link, accepting one, the use-limit race, link reuse, and the refund
+// the invite smoke's link sections: creating a link, accepting one, the use-limit race, link reuse, a link shared from
+// a Topic Post, and the refund
 import assert from "node:assert/strict"
 import { PLANS } from "@carlnotes/contracts/plans"
 import { db } from "@carlnotes/db"
 import { teamMembers } from "@carlnotes/db/schema/teams"
+import { topicPosts } from "@carlnotes/db/schema/topicPosts"
 import { subscriptions, topics } from "@carlnotes/db/schema/topics"
 import { users } from "@carlnotes/db/schema/users"
 import { and, eq } from "drizzle-orm"
@@ -148,6 +150,55 @@ export async function checkSpentAndReusedLinks(): Promise<void> {
 		.where(and(eq(teamMembers.teamId, team.id), eq(teamMembers.userId, requester.id)))
 	assert.equal(requestRow?.isActive, false, "the spent team link wrote no waiting membership row")
 	console.log("PASS  a spent team link lands as a join request a leader can activate")
+}
+
+/** 3c. A link shared from a Topic Post names the post, opens it once accepted, and opens the topic once it is gone. */
+export async function checkTopicPostLink(): Promise<void> {
+	console.log("\n=== 3c. a link shared from a topic post ===")
+	// an invite topic with a published post and a draft, and another topic's published post
+	const owner = await createUser("owner3c")
+	const topic = await createTopic(owner.id, "post link topic")
+	const otherTopic = await createTopic(owner.id, "other post link topic")
+	await db.update(topics).set({ visibility: "invite" }).where(eq(topics.id, topic.id))
+	const [topicPost, draftTopicPost, otherTopicPost] = await db
+		.insert(topicPosts)
+		.values([
+			{ topicId: topic.id, authorUserId: owner.id, title: "Smoke Post", publishedAt: new Date() },
+			{ topicId: topic.id, authorUserId: owner.id, title: "Smoke Draft" },
+			{ topicId: otherTopic.id, authorUserId: owner.id, title: "Other Post", publishedAt: new Date() },
+		])
+		.returning()
+	assert.ok(topicPost && draftTopicPost && otherTopicPost, "the topic posts were not seeded")
+
+	// a draft and another topic's post are rejected
+	const createLink = (topicPostId?: string): ReturnType<typeof createTopicInvite> =>
+		createTopicInvite(owner.id, topic.id, "share-sheet", TEST_ANALYTICS_PROPERTIES, topicPostId)
+	assert.equal(await createLink(draftTopicPost.id), "unknown-topic-post", "a draft got a link")
+	assert.equal(await createLink(otherTopicPost.id), "unknown-topic-post", "another topic's post got a link")
+
+	// the post's link is its own row, names the post, and is reused on a second create
+	const topicLink = toCreatedInvite(await createLink(), "the topic's own link")
+	const topicPostLink = toCreatedInvite(await createLink(topicPost.id), "the post's link")
+	assert.notEqual(topicPostLink.id, topicLink.id, "the post's link reused the topic's own")
+	assert.equal((await loadInvite(topicPostLink.id)).topicPostId, topicPost.id, "the link does not name the post")
+	assert.equal(toCreatedInvite(await createLink(topicPost.id), "the reuse").id, topicPostLink.id, "no reuse")
+	console.log("PASS  only a published post of the topic gets a link, apart from the topic's own, and it is reused")
+
+	// accepting subscribes to the topic and returns the post's page
+	const accepter = await createUser("accepter3c")
+	const acceptance = await acceptInviteToken(accepter.id, topicPostLink.token)
+	assert.equal(acceptance.status, "joined", `the post's link answered ${acceptance.status}`)
+	assert.equal((await loadSubscription(accepter.id, topic.id))?.isActive, true, "the post's link did not subscribe")
+	assert.equal(acceptance.status === "joined" && acceptance.topicPost?.id, topicPost.id, "the post was not returned")
+
+	// a deleted post clears the link's post, and the same link then opens the topic alone
+	await db.delete(topicPosts).where(eq(topicPosts.id, topicPost.id))
+	assert.equal((await loadInvite(topicPostLink.id)).topicPostId, null, "the deleted post stayed on the link")
+	const lateAccepter = await createUser("late3c")
+	const lateAcceptance = await acceptInviteToken(lateAccepter.id, topicPostLink.token)
+	assert.equal(lateAcceptance.status, "joined", `the link answered ${lateAcceptance.status} after the delete`)
+	assert.equal(lateAcceptance.status === "joined" && lateAcceptance.topicPost, undefined, "a deleted post was returned")
+	console.log("PASS  accepting opens the post, and the topic once the post is gone")
 }
 
 /** 4. A team at its member limit rejects the link acceptance and refunds the spent use. */

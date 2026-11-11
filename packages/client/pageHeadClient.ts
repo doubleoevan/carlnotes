@@ -26,6 +26,13 @@ export function fetchPodcastEpisodePageHead({
 }
 
 /**
+ * Returns a published Topic Post page's head, or null for a draft and for a post that is missing.
+ */
+export function fetchTopicPostPageHead(topicPostId: string): Promise<PageHead | null> {
+	return readPageHead(apiClient().api["topic-posts"][":id"].head.$get({ param: { id: topicPostId } }))
+}
+
+/**
  * A profile page's head, or null if no user has that id.
  */
 export function fetchProfilePageHead(userId: string): Promise<PageHead | null> {

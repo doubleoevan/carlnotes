@@ -322,8 +322,10 @@ function checkSegmentSharedComments(
 	}
 }
 
-// whether spoken text names a username as a whole word, in any case
-function isUsernameSpoken(spokenText: string, username: string): boolean {
+/**
+ * Checks whether spoken text names a username as a whole word, in any case.
+ */
+export function isUsernameSpoken(spokenText: string, username: string): boolean {
 	return spokenText.toLowerCase().split(USERNAME_BREAK_PATTERN).includes(username.toLowerCase())
 }
 

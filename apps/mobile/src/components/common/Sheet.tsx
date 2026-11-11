@@ -20,8 +20,10 @@ import {
 } from "react-native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 import { useUniwind } from "uniwind"
+import { SectionTargetContext } from "@/components/layout/SectionAnchor"
 import { Button } from "@/components/primitives/button"
 import { Icon } from "@/components/primitives/icon"
+import { useSectionTargetScroll } from "@/hooks/useSectionTargetScroll"
 import { toTypeRoleStyle } from "@/typeRoleStyles"
 import { ScrollIndicator } from "./ScrollIndicator"
 
@@ -42,6 +44,9 @@ export function Sheet({ title, children, onClose, triggerRef, hasHighlightedScro
 	const sheetRef = useRef<BottomSheetModal>(null)
 	const scrollRef = useRef<ComponentRef<typeof ScrollView>>(null)
 	const titleRef = useRef<ComponentRef<typeof Text>>(null)
+
+	// open the sheet's scroll at a linked comment, and tell the rows waiting to be seen when a scroll ends
+	const { sectionTargetRef, scrollHandlers } = useSectionTargetScroll(scrollRef)
 	const insets = useSafeAreaInsets()
 	const { theme } = useUniwind()
 	const scrollOffset = useRef(new Animated.Value(0)).current
@@ -109,10 +114,14 @@ export function Sheet({ title, children, onClose, triggerRef, hasHighlightedScro
 				indicatorStyle={theme === "dark" ? "white" : "black"}
 				onLayout={(event) => setViewportHeight(event.nativeEvent.layout.height)}
 				onScroll={(event) => scrollOffset.setValue(event.nativeEvent.contentOffset.y)}
+				onScrollBeginDrag={scrollHandlers.onScrollBeginDrag}
+				onScrollEndDrag={scrollHandlers.onScrollEndDrag}
+				onMomentumScrollEnd={scrollHandlers.onMomentumScrollEnd}
 				onContentSizeChange={(_, height) => {
-					// measure content and reveal its scroll indicator
+					// measure content, reveal its scroll indicator, and stay at a linked comment
 					setContentHeight(height)
 					scrollRef.current?.flashScrollIndicators()
+					scrollHandlers.onContentSizeChange()
 				}}
 				contentContainerStyle={{ padding: 16, paddingBottom: Math.max(16, insets.bottom) }}
 				accessibilityViewIsModal
@@ -136,7 +145,9 @@ export function Sheet({ title, children, onClose, triggerRef, hasHighlightedScro
 						<Icon as={X} />
 					</Button>
 				</View>
-				<View className="w-full max-w-3xl self-center">{children}</View>
+				<View className="w-full max-w-3xl self-center">
+					<SectionTargetContext value={sectionTargetRef}>{children}</SectionTargetContext>
+				</View>
 			</BottomSheetScrollView>
 			{hasHighlightedScrollIndicator && (
 				<ScrollIndicator scrollOffset={scrollOffset} viewportSize={viewportHeight} contentSize={contentHeight} />

@@ -6,7 +6,7 @@ import { TAG_MATCH_MODES, TOPIC_FINDING_FILTERS, TOPIC_FINDING_SORTS, topicFindi
 import { DEFAULT_PAGE_SIZE, PAGE_SIZES } from "./pagination"
 import { podcastEpisode, podcastEpisodeSummary } from "./podcast"
 import { profileIdentity } from "./profiles"
-import { teamIdentity } from "./teams"
+import { teamIdentity } from "./teamIdentity"
 import { topicImageUrls } from "./topicImages"
 import { MAX_TOPIC_DRAFT_TAGS, TOPIC_DRAFT_TAG_CHARS } from "./topics"
 
@@ -16,7 +16,7 @@ export const SEARCH_MIN_CHARS = 2
 export const SEARCH_MAX_CHARS = 200
 
 // which kinds of results the search finds, in the order the Filters menu lists them and ties rank in
-export const SEARCH_RESULT_KINDS = ["topics", "podcastEpisodes", "findings", "teams", "users"] as const
+export const SEARCH_RESULT_KINDS = ["topics", "podcastEpisodes", "topicPosts", "findings", "teams", "users"] as const
 
 export type SearchResultKind = (typeof SEARCH_RESULT_KINDS)[number]
 
@@ -46,7 +46,9 @@ export const searchRequestPayload = z.object({
 		.max(SEARCH_RESULT_KINDS.length)
 		.refine(hasEachItemOnce, "Name each kind once.")
 		.default([...SEARCH_RESULT_KINDS])
-		.describe("The kinds of results to find. All of them if left out. users finds profiles."),
+		.describe(
+			"The kinds of results to find. All of them if left out. users finds profiles, and topicPosts finds posts.",
+		),
 	// the filters that narrow findings: their resource kinds, and the view the feed's Filters menu offers
 	resourceKinds: z
 		.array(z.enum(resourceKinds))
@@ -62,7 +64,7 @@ export const searchRequestPayload = z.object({
 			"Which findings to find: all, unread, or bookmarked. The last two read the connected account's marks " +
 				"and find findings alone.",
 		),
-	// the topic tags that narrow topics, podcast episodes, and findings, and how they match
+	// the topic tags that narrow topics, podcast episodes, Topic Posts, and findings, and how they match
 	tags: z
 		.array(z.string().trim().min(1).max(TOPIC_DRAFT_TAG_CHARS).refine(isNulFree, "A tag may not hold a NUL character."))
 		.max(MAX_TOPIC_DRAFT_TAGS)
@@ -215,6 +217,21 @@ const podcastEpisodeSearchRow = searchRowFields.extend({
 
 export type PodcastEpisodeSearchRow = z.infer<typeof podcastEpisodeSearchRow>
 
+// a published Topic Post row, whose id, name, and date are the post's id, title, and published time, with its Topic.
+// the image is the post's own, or its Topic's until the post's is drawn, and null if neither has one
+const topicPostSearchRow = searchRowFields.extend({
+	kind: z.literal("topicPost"),
+	topicPost: z.object({
+		author: profileIdentity,
+		// the summary a model writes on publishing, null until it is written
+		summary: z.string().nullable(),
+		image: topicImageUrls.nullable(),
+	}),
+	topic: z.object({ id: z.string(), name: z.string() }),
+})
+
+export type TopicPostSearchRow = z.infer<typeof topicPostSearchRow>
+
 // a finding row's topic: its name and prompt, which the finding's note copies, its visibility, and whether the caller
 // may rate and bookmark its findings
 export const findingSearchTopic = z.object({
@@ -257,6 +274,7 @@ export type UserSearchRow = z.infer<typeof userSearchRow>
 const searchRow = z.discriminatedUnion("kind", [
 	topicSearchRow,
 	podcastEpisodeSearchRow,
+	topicPostSearchRow,
 	findingSearchRow,
 	teamSearchRow,
 	userSearchRow,
@@ -282,6 +300,7 @@ export type SearchResultsPage = z.infer<typeof searchResultsPage>
 export const SEARCH_ROW_RESULT_KINDS: Record<SearchRow["kind"], SearchResultKind> = {
 	topic: "topics",
 	podcastEpisode: "podcastEpisodes",
+	topicPost: "topicPosts",
 	finding: "findings",
 	team: "teams",
 	user: "users",

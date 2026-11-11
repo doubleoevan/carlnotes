@@ -262,6 +262,8 @@ export function useTopicChat({
 			question: askedQuestion,
 			attachments: sentAttachments,
 			isMediaPreviewed: isSentMediaPreviewed,
+			// a question asked from a Topic Post's page shows the post's tag at once
+			topicPost: page.topicPost,
 		})
 		setChatTurns((previousChatTurns) => [...(isConversationEnded ? [] : previousChatTurns), sentChatTurn])
 		// this question is the new conversation, so the next one keeps it

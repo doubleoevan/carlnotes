@@ -177,18 +177,18 @@ export function TeamInviteRow({ invite, onAnswered }: { invite: ReceivedInvite; 
 			onAnswered()
 		} catch (error) {
 			console.error("invite accept failed", error)
-			toast.error("Accepting that invitation failed.")
+			toast.error("Accepting that invite failed.")
 		}
 	}
 	const { confirm, confirmDialog } = useConfirmDialog()
 	const handleDecline = async (): Promise<void> => {
 		try {
 			await sendDeclineInvite(invite.inviteId)
-			toast("Invitation deleted.")
+			toast("Invite deleted.")
 			onAnswered()
 		} catch (error) {
 			console.error("invite decline failed", error)
-			toast.error("Declining that invitation failed.")
+			toast.error("Declining that invite failed.")
 		}
 	}
 
@@ -281,13 +281,13 @@ export function TeamInviteRow({ invite, onAnswered }: { invite: ReceivedInvite; 
 								size="icon-sm"
 								variant="ghost"
 								onClick={() => confirm(toDeleteReceivedInviteConfirmation(invite.name), handleDecline)}
-								aria-label={`Delete invitation to ${invite.name}`}
+								aria-label={`Delete invite to ${invite.name}`}
 							>
 								<X className="size-4" />
 							</Button>
 						</TooltipTrigger>
 						<TooltipContent>
-							Delete invitation to <span className="font-semibold">{invite.name}</span>
+							Delete invite to <span className="font-semibold">{invite.name}</span>
 						</TooltipContent>
 					</Tooltip>
 					{confirmDialog}

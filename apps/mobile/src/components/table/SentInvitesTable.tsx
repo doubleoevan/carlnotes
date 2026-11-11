@@ -51,7 +51,7 @@ export function SentInvitesTable({
 			),
 		renderActive: (row) => (
 			<PreferenceSwitch
-				label={`Withdraw the invitation to ${toInviteeLabel(row)}`}
+				label={`Withdraw the invite to ${toInviteeLabel(row)}`}
 				isChecked
 				isDisabled={mutation.isPending}
 				onChange={() => handleDelete(row)}

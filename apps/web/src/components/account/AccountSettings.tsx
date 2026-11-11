@@ -63,7 +63,7 @@ function ProfileSection() {
 	}
 	return (
 		<section className={CARD_CLASS}>
-			<h3 className="font-semibold">Profile</h3>
+			<h3 className="font-semibold">Café</h3>
 			<ProfileFields userId={session.user.id} username={session.user.username} className="mt-3" />
 		</section>
 	)

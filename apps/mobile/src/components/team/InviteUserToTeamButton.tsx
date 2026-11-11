@@ -17,6 +17,11 @@ import { Button } from "@/components/primitives/button"
 import { Icon } from "@/components/primitives/icon"
 import { Text } from "@/components/primitives/text"
 import { usePageMutation } from "@/hooks/usePageMutation"
+import {
+	PLAIN_PAGE_BUTTON_CLASS,
+	PLAIN_PAGE_BUTTON_ICON_CLASS,
+	PLAIN_PAGE_BUTTON_TEXT_CLASS,
+} from "@/pageButtonClasses"
 import { openSessionScreen } from "@/sessionReturnPath"
 import { EditTeamModal } from "./EditTeamModal"
 
@@ -45,6 +50,8 @@ export function InviteUserToTeamButton({
 	return (
 		<>
 			<Button
+				variant="outline"
+				className={PLAIN_PAGE_BUTTON_CLASS}
 				accessibilityLabel="Team Up"
 				onPress={() => {
 					if (!session) {
@@ -60,8 +67,8 @@ export function InviteUserToTeamButton({
 					void query.refetch()
 				}}
 			>
-				<Icon as={Users} className="size-4" fill={isFilled ? "currentColor" : "none"} />
-				<Text>Team Up</Text>
+				<Icon as={Users} className={PLAIN_PAGE_BUTTON_ICON_CLASS} fill={isFilled ? "currentColor" : "none"} />
+				<Text className={PLAIN_PAGE_BUTTON_TEXT_CLASS}>Team Up</Text>
 			</Button>
 			{isOpen && (
 				<Sheet title="Team Up" onClose={() => setIsOpen(false)}>
@@ -79,7 +86,7 @@ export function InviteUserToTeamButton({
 										void mutation.run(async () => {
 											const rejection = await sendUserInvite({ teamId: team.teamId }, { username: profileUsername })
 											if (rejection) {
-												throw new Error(`The invitation to @${profileUsername} didn't go through.`)
+												throw new Error(`The invite to @${profileUsername} didn't go through.`)
 											}
 										})
 									}
@@ -95,7 +102,7 @@ export function InviteUserToTeamButton({
 										accessibilityLabel={
 											team.status === "member"
 												? `Remove ${profileUsername} from ${team.name}`
-												: `Delete invitation to ${team.name}`
+												: `Delete invite to ${team.name}`
 										}
 										disabled={
 											mutation.isPending ||

@@ -8,7 +8,6 @@ import { teamMembers, teams } from "@carlnotes/db/schema/teams"
 import { subscriptions, topics } from "@carlnotes/db/schema/topics"
 import { users } from "@carlnotes/db/schema/users"
 import { and, eq, inArray } from "drizzle-orm"
-import type { UserInviteRejection } from "./userInvites"
 
 // one id per run, so emails, usernames, and team names don't collide with an earlier run's rows
 export const runId = `invsmoke-${Date.now()}`
@@ -107,8 +106,8 @@ export async function loadSubscription(
 	return subscription
 }
 
-/** Narrows a creation result to the invite it should be, throwing the rejection it was instead. */
-export function toCreatedInvite(created: Invite | UserInviteRejection, label: string): Invite {
+/** Narrows a creation result to the invite it should be, throwing the rejection, named by a string, it was instead. */
+export function toCreatedInvite(created: Invite | string, label: string): Invite {
 	if (typeof created === "string") {
 		throw new Error(`${label} answered ${created} instead of an invite`)
 	}

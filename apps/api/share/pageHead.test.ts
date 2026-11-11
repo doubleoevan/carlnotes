@@ -105,6 +105,24 @@ test("toInvitePageHead titles a team invitation 'Join' and a topic invitation 'F
 	expect(topicInviteHead.cardUrl).toBe("https://carlnotes.com/invite/t0k3n")
 })
 
+// an invitation shared from a Topic Post is titled by the post, and still follows the topic
+test("toInvitePageHead titles an invitation shared from a Topic Post by the post", () => {
+	const topicPostInviteHead = toInvitePageHead({
+		imageUrl: "https://carlnotes.com/card.png",
+		inviteUrl: "https://carlnotes.com/invite/t0k3n",
+		name: "Espresso Machines",
+		kind: "topic",
+		topicPostTitle: "Light Roasts",
+	})
+
+	// the post's title leads, the description names the topic, and the page stays out of the index
+	expect(topicPostInviteHead.title).toBe("Read Light Roasts on CarlNotes")
+	expect(topicPostInviteHead.cardTitle).toBe("Read Light Roasts on CarlNotes")
+	expect(topicPostInviteHead.description).toBe("You are invited to follow Espresso Machines and read this post.")
+	expect(topicPostInviteHead.isIndexed).toBe(false)
+	expect(topicPostInviteHead.cardUrl).toBe("https://carlnotes.com/invite/t0k3n")
+})
+
 // a profile's head includes its card, canonical url, and the counts its description reads
 test("toProfilePageHead writes the profile's card and counts", () => {
 	const head = toProfilePageHead(

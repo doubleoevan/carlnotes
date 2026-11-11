@@ -35,3 +35,6 @@ export const Default: Story = {}
 
 // a section whose count is not known yet
 export const NoCount: Story = { args: { countLabel: undefined } }
+
+// a section of a page's loading state, with its title and its count as placeholders
+export const Loading: Story = { args: { isLoading: true } }

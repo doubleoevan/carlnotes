@@ -4,7 +4,7 @@ import type { ActivityResponse, SubscriptionRow } from "@carlnotes/contracts/act
 import { toAvatarKeyVersion, toAvatarVersion } from "@carlnotes/contracts/avatars"
 import { toCentsFromDollars } from "@carlnotes/contracts/plans"
 import type { PodcastEpisodeSummary } from "@carlnotes/contracts/podcast"
-import type { TeamIdentity } from "@carlnotes/contracts/teams"
+import type { TeamIdentity } from "@carlnotes/contracts/teamIdentity"
 import { db } from "@carlnotes/db"
 import { loadUserEmail, toPendingTopicInviteFilter } from "@carlnotes/db/inviteFilters"
 import { loadMonthlyBudgetCutoffs } from "@carlnotes/db/monthlyBudgetCutoffs"

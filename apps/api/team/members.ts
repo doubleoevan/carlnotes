@@ -7,6 +7,7 @@ import { teamMembers, teams } from "@carlnotes/db/schema/teams"
 import { teamTopics } from "@carlnotes/db/schema/teamTopics"
 import { subscriptions, topics } from "@carlnotes/db/schema/topics"
 import { users } from "@carlnotes/db/schema/users"
+import { clearUnseenCommentMentions } from "@carlnotes/db/unseenCommentMentions"
 import { trackEvent } from "@carlnotes/server/analytics"
 import { and, count, eq, inArray, not, notInArray } from "drizzle-orm"
 import { isAdminRole, isLeaderRole } from "../authorization"
@@ -212,8 +213,9 @@ export async function removeTeamMember(
 		return "lastLeader"
 	}
 
-	// the team member row and their chat mentions are deleted
+	// the team member row and their chat mentions are deleted, and their cached comment mentions are cleared
 	await db.transaction((transaction) => removeTeamMemberInTransaction(transaction, teamId, removeUserId))
+	await clearUnseenCommentMentions([removeUserId])
 	return "removed"
 }
 

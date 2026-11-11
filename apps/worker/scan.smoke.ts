@@ -23,6 +23,10 @@ import { buildOutlinePrompt, buildSegmentPrompt } from "@carlnotes/pipeline/podc
 import { buildScorePrompt } from "@carlnotes/pipeline/review/score"
 import { buildScanReportPrompt } from "@carlnotes/pipeline/review/summarize"
 import { loadScan } from "@carlnotes/pipeline/scan"
+import { toTopicImagePrompt } from "@carlnotes/pipeline/topicImages/writeTopicImageScene"
+import { TOPIC_PODCAST_EPISODE_VIDEO_IMAGE_FORMAT } from "@carlnotes/pipeline/topicPodcastEpisodeVideo/topicPodcastEpisodeVideoImage"
+import { buildTopicPostSummaryPrompt } from "@carlnotes/pipeline/topicPosts/summarizeTopicPost"
+import { buildTopicPostDiscussionPrompt } from "@carlnotes/pipeline/topicPosts/topicPostDiscussionScript"
 import { buildUpdatesOpenerPrompt } from "@carlnotes/pipeline/updatesOpener"
 import { and, eq, inArray, isNotNull } from "drizzle-orm"
 import { finishScan, ingestForScan, reviewForScan } from "./workflows/runTopicScanActivities"
@@ -254,6 +258,17 @@ async function writeSamplePrompts(): Promise<[string, boolean][]> {
 		topicNames: ["Coffee"],
 		findingTitles: ["Sample"],
 	})
+	const topicPostSummaryResult = await buildTopicPostSummaryPrompt({
+		title: "Sample post",
+		html: "<p>Sample post text.</p>",
+	})
+	const topicPostDiscussionResult = await buildTopicPostDiscussionPrompt({
+		title: "Sample post",
+		html: "<p>Sample post text.</p>",
+		authorUsername: "sample-author",
+		comments: [{ username: "sample-reader", body: "A sample comment." }],
+		hint: "a sample note",
+	})
 
 	// the report prompt renders over a minimal sample scan
 	const sampleFinding = {
@@ -322,6 +337,8 @@ async function writeSamplePrompts(): Promise<[string, boolean][]> {
 		contextResult,
 		agreementResult,
 		updatesOpenerResult,
+		topicPostSummaryResult,
+		topicPostDiscussionResult,
 		reportResult,
 		outlineResult,
 		segmentResult,
@@ -336,16 +353,29 @@ async function writeSamplePrompts(): Promise<[string, boolean][]> {
 		["Personal sources context prompt", personalSourcesContextResult.prompt],
 		["agreement check prompt", agreementResult.prompt],
 		["updates opener prompt", updatesOpenerResult.prompt],
+		["topic post summary prompt", topicPostSummaryResult.prompt],
+		["topic post discussion prompt", topicPostDiscussionResult.prompt],
 		["scan report prompt", reportResult.prompt],
 		["episode outline prompt", outlineResult.prompt],
 		["episode segment prompt", segmentResult.prompt],
 	]
-	return builtPrompts.flatMap(([label, prompt]) => [
+	const builtPromptChecks = builtPrompts.flatMap(([label, prompt]): [string, boolean][] => [
 		[`${label} renders`, prompt.length > 0],
 		[`${label} fences its untrusted inputs`, toUntrustedFences(prompt).length > 0],
 		// the fence closes above the final line, so a prompt ending on a closing tag ends on a value
 		[`${label} restates the task last`, !prompt.trimEnd().endsWith(">")],
 	])
+
+	// the film image prompt is a scene with the film house style after it, which takes no untrusted input
+	const sampleScene = "a sample scene"
+	const topicPodcastEpisodeVideoImagePrompt = await toTopicImagePrompt(
+		sampleScene,
+		TOPIC_PODCAST_EPISODE_VIDEO_IMAGE_FORMAT.stylePromptName,
+	)
+	return [
+		...builtPromptChecks,
+		["film image prompt renders", topicPodcastEpisodeVideoImagePrompt.trim().length > sampleScene.length],
+	]
 }
 
 // seed the test data and run the checks, then always delete the fake owner

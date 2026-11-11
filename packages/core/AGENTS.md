@@ -19,10 +19,22 @@ It imports `@carlnotes/contracts`, `@carlnotes/client`, `@carlnotes/nightshift`,
 - `components/` — portable React composition exported as `@carlnotes/core/components/<name>`. `cardElements.tsx`
   holds the `CardElements` type both card components extend. `TablePagination`,
   `Pagination`, `SourceResultsChart`, `TopicScanRecap`, `NumberedTopicFindingList`, `SafeNoteLink`, `TopicScanFailure`,
-  `MoreButton`, `CopyMarkdownButton`, `NotesTable`, `ResourceMetadata`, `RatingThumbs`, `UpdatesList`, and
-  `UpdatesButton` own repeated content, visibility, ordering, and interaction state. `UserBlocksSection` lists the
+  `MoreButton`, `CopyMarkdownButton`, `NotesTable`, `ResourceMetadata`, `RatingThumbs`, and `UpdatesList`, the
+  updates MCP view's list, own repeated content, visibility, ordering, and interaction state. `CommentMentionBadge`
+  counts the unseen Comment Mentions of a thread or a page and opens `CommentMentionList`, every unseen mention newest
+  first, both over `stores/commentMentionStore.ts`, which `hooks/useCommentMentionsLoad.ts` fills as each page or
+  screen loads. `usePageCommentMentions` in that store reads one page's mentions for its title's badge: a Topic's
+  through `hooks/useUpdateCounts.ts`, a Podcast Episode's in each app's header, and a Topic Post's in `TopicPostPage`.
+  `TopicNotePopover` is a Topic's note under its note icon on a row that holds only the Topic's id,
+  which `hooks/useTopicNote.ts` loads once the note opens. `UserBlocksSection` lists the
   people the user blocked with their confirmed Unblock, over `UserBlocksCard`, which the stories render from a fixture
-  list. `ProfileSummaryLine` is the line under a profile's name, with its Blocked link. `TermsAcceptanceNotice` asks a
+  list. `DetailsLine` is the muted details line under a page's byline, which wraps between details, each with its
+  middle dot at its own end, and is absent with no detail. `lib/detailsLine.ts` builds its details: `toCountDetails`
+  (counts in order, a zero left out), `toTopicDetails` (the counts of a topic page's sections), and
+  `toTopicCountsDetails` (a topic's viewers and followers under its name in the Topic Post popup). A Topic Post's
+  page builds its line with `toTopicPostDetails`, and a team's page with `toTeamDetails`. `ProfileSummaryLine` is the
+  details line under a profile's name, with the page's topic, podcast episode, and team counts and its Blocked link.
+  `TermsAcceptanceNotice` asks a
   stale account to accept the published Terms or put it off, and `useIsTermsAcceptanceDialogOpen` says when it shows.
   Each app supplies the small set of typed platform elements the component needs. Keep component adapters at module
   scope so state changes preserve their identity. Use render callbacks when controls must retain app-local refs or
@@ -59,8 +71,9 @@ It imports `@carlnotes/contracts`, `@carlnotes/client`, `@carlnotes/nightshift`,
   sells on the user's storefront, which the app sets, and `usePurchaseOffers`, the signed-in user's purchase offers in
   the app, which read a paid plan's billing provider and stay read-only until it loads. A store that reaches an audio
   element, the media session, or a component library stays in its app.
-- `hooks/` — `useUpdates.ts`, the list `POST /api/updates` returns, and `useHomeUpdates.ts`, the home's Updates card
-  with its length; `useYourTopicsPages.ts`, the home's Your topics five to a page, the first from the home payload;
+- `hooks/` — `useNews.ts`, one page of a window of the signed-in user's news or of a profile's, `useNewsList.ts`, a
+  news list's window, page, and open state, and `useUpdatesOpener.ts`, the day's opener above the user's own news;
+  `useYourTopicsPages.ts`, the home's Your topics five to a page, the first from the home payload;
   `useUserBlocks.ts`, the user's user block list and the unblock that shortens the list once the server
   accepts; `useNow.ts`, the current time re-read on a tick for relative labels, one clock per list; `useAvatar.ts`, the
   avatar setting read from the session and updated through it; `useUsernameChange.ts`, changing the signed-in user's
@@ -93,8 +106,14 @@ It imports `@carlnotes/contracts`, `@carlnotes/client`, `@carlnotes/nightshift`,
   note changes, and topic invitations, its accessible labels, and the groups a tooltip or a long-press sheet lists),
   `updateBadgePoll.ts` (the poll behind `useUpdateBadges`, on `activePoll.ts`), `countsPoll.ts` (the poll behind
   `usePolledCounts`, on `activePoll.ts`), `focusAndOnline.ts` (whether the app is focused and online through Query's
-  adapters, and how a poll subscribes to a change), `topicGateCopy.ts` (the invite-only gate's words),
-  `podcastEpisodeCopy.ts` (the words shown if a podcast episode fails to load or play), and
+  adapters, and how a poll subscribes to a change), `limitedPoll.ts` (a poll on `activePoll.ts` that reads on an
+  interval while the app is focused and online and stops at a time limit, behind the Topic Post discussion poll and
+  the film rendering poll), `topicGateCopy.ts` (the invite-only gate's words),
+  `podcastEpisodeCopy.ts` (the words shown if a podcast episode fails to load or play, the lines shown while it
+  records and while its film renders, and the film section's title on the topic page and the podcast episode page),
+  `topicPodcastEpisodeVideoDisplay.ts` (what a film section shows for a podcast episode: the film player for a ready
+  film, the rendering card while its film renders, or nothing, and the section a topic's page shows while its only
+  film is rendering), and
   `voiceRecordingDecisions.ts` (what the voice recorder decides from each frame, with the `SilenceThresholdSettings`
   type and the browser's default settings), `voiceRecordingRules.ts` (the mic's visibility, the recording timer, the
   reopened recording's rejection, and the meter's callback), `voiceRecorder.ts` (the recorder adapter each app supplies:
@@ -213,8 +232,19 @@ Its search adapter preserves result order and metadata while applying the same F
 `lib/activePoll.ts` serializes requests while an app-supplied activity predicate is true. `lib/scanPoll.ts` supplies the
 scan backoff shared by both clients and `toPolledTopicPage`, which keeps the related Topics, reactions, and comment
 thread that a poll response leaves out. `lib/topicSchedule.ts` owns schedule options, daily-slot permission, and
-allowance copy shared by both Topic forms. `lib/topicViews.ts` sends one view per Topic per web tab or native app
-runtime, shared by both Topic screens. `lib/sourceResults.ts` shares Source footnote ordering, totals, detail labels,
+allowance copy shared by both Topic forms. `lib/pageViews.ts` sends one view per Topic, profile, or team per web tab or
+native app runtime, shared by both apps' Topic, profile, and team screens. `components/ViewerCountLine` reads a
+profile's or a team's viewer count on the counts poll and shows it as Visitors through each app's line and count
+elements. `lib/cardSections.ts` names the card and the key of a Topic, Podcast Episode, film, or Topic Post card
+section, the three Featured titles a profile and a team share, and a team page's four card sections, Featured Films
+right before Featured Podcasts, and
+`components/CardsSection` renders one section of cards, paged or whole, through each app's section, grid, and page
+buttons. `lib/profileSections.ts` holds a profile's four Featured sections, Featured Films right before Featured
+Podcasts and Featured Posts last with every post of the person, the rows of its rank dialogs for topics, films,
+podcasts, and posts, whose pins have no limit, the send of their moves, and which of them the action menu offers. `lib/rankDialog.ts` holds a rank dialog's rows,
+a Topic Post as a row, the moves, and the words for the home's pins and a profile's,
+and `components/RankDialog` is the list that orders, adds, and removes pins through each app's frame, rows, and
+picker. `lib/sourceResults.ts` shares Source footnote ordering, totals, detail labels,
 and the earlier-findings row. `lib/topicSources.ts` shares default/custom Source ordering, off states, screening
 messages, and staged Source summaries between both apps. `components/TopicSource` exports the shared `TopicSource` row
 and `TopicDefaultSource` enabled/add composition. Web supplies its existing DOM badges and tooltips; mobile supplies
@@ -286,12 +316,19 @@ Uploads, file pickers, router destinations, and visible mutation feedback remain
 `useTeamFields` shares advisory name checks with revision guards. A changed name clears stale errors, and failed
 lookups leave authoritative validation to the save endpoint. Live hook tests cover delayed replies and owned names.
 
-`components/TopicSkeleton` owns the shared Topic loading section order. App adapters supply the header, placeholder
-cards, columns, and motion/accessibility treatment. Web keeps its desktop grid and mobile uses a vertical column.
+`components/TopicSkeleton` owns the shared Topic loading section order: the film's section above the podcast's, the
+findings, the comment thread, the Topic Posts, then the info and settings beside the films' list, the podcast
+episodes' list, and the history. A Topic known to have no podcast episode leaves out the film, the player, and the
+films' list. App adapters supply the header, placeholder cards, columns, and motion/accessibility treatment. Web keeps
+its desktop grid and mobile uses a vertical column.
 
-`components/PageSkeleton` owns the Profile, Teams, Activity, Account, and Team loading layouts, including shared
-identity, table, and budget placeholders. Browser and native adapters supply only elements, animation, and
-accessibility. Its classes are scanned explicitly by both app stylesheets.
+`components/PageSkeleton` owns the Profile, Teams, Activity, Account, Team, and Topic Post loading layouts, including
+shared identity, table, and budget placeholders. Browser and native adapters supply the elements each loaded page is
+laid out in: the button row, a section with a placeholder title and count, the card, the news card, a row of cards,
+and a header's image and title. A Topic Post's loading state takes the page's own `Header`, `BylineRow`, and
+discussion card elements, and the Account's says whether its budget lists monthly budget cutoffs. A Team's holds one
+section of cards for each of `TEAM_SECTION_VALUES`, then its three tables. Its classes are scanned explicitly by both
+app stylesheets.
 
 `components/PageActionMenu` shares page action ordering and global action visibility. `UserMenuItems` shares main
 navigation destinations, grouping, selection, and the Admin permission gate, with optional platform badge slots.
@@ -301,18 +338,45 @@ The adapters keep DOM/native icons, storage, clipboard, and desktop install URLs
 
 `stores/podcastEpisodePlayerStore`, `podcastEpisodePlayActions`, and `podcastEpisodeListenStore` own the loaded
 Podcast Episode, chapter selection, seek/rate actions, deferred-request retirement, next-episode selection, and
-personal listen save interval. `lib/podcastEpisodeAudio` defines the small audio/status adapter each app supplies.
+personal listen save interval. `stores/podcastEpisodeSource` holds what the commands act on: which adapter owns each
+format, which load and which request is current, and how a source is loaded, released, and reloaded after an audio
+error. The player store re-exports its request and media-session functions, which both apps import from the player.
+`lib/podcastEpisodeAudio` defines the small audio/status adapter each app supplies.
+The player holds one Podcast Episode, one position, and one format. `playTopicPodcastEpisodeVideo` gives the source to
+the film, `playPodcastEpisodeAudio` gives it to the audio, each from the same second, and `playPodcastEpisode` keeps
+the loaded Podcast Episode's format and plays any other as audio.
+`components/TopicPodcastEpisodeVideoPlayer` puts the play button over the film's frame and keeps the captions and
+mute choices for the session. Its `isCard` draws each app's `Card` element around the film, the seek bar, the
+controls, and its children, which Topic Cinema and the podcast episode page pass and the Video dialog leaves out. The
+skips and the speed show before the film is loaded, and their presses go through `skipTopicPodcastEpisodeVideoBy` and
+`cycleTopicPodcastEpisodeVideoPlaybackRate`, which start a film that is not loaded.
 `stores/podcastEpisodePlayerState` keeps snapshots and subscriptions separate from playback commands. Progress ticks
-notify position readers; chapter changes also notify controls. The established player-store imports remain compatible.
+notify position readers; chapter changes also notify controls. The player store re-exports them.
 `hooks/useShownPodcastEpisode` selects the Topic's shown episode and polls a linked recording without autoplay.
 Its lifecycle tests use the web's DOM hook harness; its selection rules and player state tests run in core.
+`components/UnpublishedPodcastEpisodeCard` draws three states in one frame: a recording podcast episode, a failed one
+with the permitted scan control, and, with `isVideoRendering`, a published podcast episode whose film is rendering.
+Each app's `ProgressLine` element draws the shimmering line after its emoji, with the words from
+`lib/podcastEpisodeCopy.ts`. `components/TopicPodcastEpisodeVideoSection` shows that card through its `RenderingCard`
+element in the film player's place while the topic's only film renders, and
+`hooks/useTopicPodcastEpisodeVideoRenderingPoll` reads the page again every 30 seconds while the app is focused and
+online, for at most four hours, so the film player shows once the film is ready.
 
 
 Podcast presentation is shared as actual React composition under `components/`: `PodcastEpisodePlayerCard`,
 `UnpublishedPodcastEpisodeCard`, `PodcastEpisodeDetails`, `PodcastEpisodePlayButton`, `PodcastEpisodePill`,
 `PlaybackControlButtons`, `PodcastEpisodeSeekBar`, `PodcastEpisodeChapters`, `PodcastEpisodeRow`, `PodcastPlayer`,
 `PodcastEpisodeTranscript`, `PodcastThemeSongCredits`, `PodcastFeedDialog`, `RemovePodcastEpisodeDialog`,
-`PodcastEpisodesCard`, and `PodcastEpisodeChapterTag`.
+`PodcastEpisodesCard`, and `PodcastEpisodeChapterTag`. `PodcastEpisodeVideoButton` is the button that opens the
+Video dialog and reports its section: a film card's play button on `PodcastEpisodeCard`'s video variant, the card's
+last child, which each app's `PodcastEpisodePlayButton` draws centered over the card's image under the label Play
+film, whose dialog plays the film once it loads, and a Video pill beside the play pill on a `NewsList` row whose
+Podcast Episode has a film, which `lib/newsEvents`' `toNewsEventVideoButton` decides. A film card shows the film's own
+image from the summary's `videoPosterUrl`, and only the title in its title row.
+Its thumbnail size is a play button over the film's poster, which `lib/podcastEpisodePlayback`'s
+`toPodcastEpisodePosterUrl` returns for it and for the film player. `TopicPodcastEpisodeVideoInfoSection` is the
+film's section of a Topic's info, only for a latest Podcast Episode with a ready film: a `PodcastEpisodeRow` with that
+thumbnail as its `playButton`, in its play button's place.
 Apps inject controls, links, images, scroll containers, and confirmation renderers; core owns ordering, labels,
 formatting, visibility, expansion, and action selection. `lib/podcastEpisodeStories.ts` supplies fictional shared
 fixtures and an inert player for both component browsers, without account writes or audio downloads.
@@ -349,7 +413,7 @@ time. `TopicLinkedFinding.tsx` resolves links against the authorized Topic paylo
 
 `personalSourcesCopy.ts` identifies AI conversation destinations by exact host and distinguishes Claude Code paths. `personalSourcesConversationStories.ts` supplies fictional platform examples, including unknown destinations and local agents without a conversation URL. Both component browsers use the same gallery and expanded-item examples.
 
-`components/SearchResultRow.tsx` shares the rank/leading/title/metadata/action composition used by both search lists and the MCP picker. `TopicSearchResultDetails.tsx` shares Topic count formatting and the published podcast pill; apps supply controls and platform typography.
+`components/SearchResultRow.tsx` shares the rank/leading/title with the control beside it/metadata/action composition used by both search lists and the MCP picker. `TopicSearchResultDetails.tsx` shares Topic count formatting and the published podcast pill; apps supply controls and platform typography.
 
 `PersonalSourceEntryList.tsx` shares date-only received metadata and sender identity. Platform adapters draw AI provider marks or a mail icon with the sender address. The redundant transport suffix is omitted.
 
@@ -391,10 +455,67 @@ through the app's own visit analytics. Their tests render through plain elements
 ## Topic images and the home
 
 `components/TopicImage` shows a topic's image at a size through the Nightshift contract, picking the 1x or 2x file.
+`components/TopicImageLink` wraps that image in each app's link to the page of what it shows, a topic's, a podcast
+episode's, or a Topic Post's, and renders the plain image if that page is the one open. A link with no label is for a
+pointer or a touch alone, beside a title that opens the same page. `lib/pagePaths` holds `isCurrentPagePath`, which
+compares a link's path with the open page's path without the query, the hash, and the end slash.
 `components/TopicCard` and `PodcastEpisodeCard` are the home's and the Topics page's cards, and `TopicImageEditor` is
 the editor's image block for a topic or a podcast episode (Regenerate with an image prompt and an upload from the
 image), each app supplying its elements and its file picker. `hooks/useTopicImageRender` polls a render until it
 finishes. `lib/topicImageEditor` holds the block's labels, the image dialogs' titles, the count line, and the upload
 check. `hooks/usePodcastEpisodeFields` is the Edit podcast form's title, description, and save, and
 `lib/podcastEpisodeEditor` its labels and the podcast episode's image as the block edits it. `lib/homeFaces` holds the
-home's section titles, the three steps, and the empty payload.
+home's sections in the order both homes show them, each week's new cards right after their Featured cards, the three
+steps, and the empty payload. `lib/sectionOrder.test.ts` fails if a film section leaves its place right before the
+podcast section it pairs with, on the home or either app's profile, team, or topic page, if `HOME_SECTIONS` or either
+app's home leaves the home's order, if a profile page writes a second Topic Post section, or if a team page's card
+sections leave a profile's titles and order.
+`lib/podcastEpisodeHomeOrder` decides who sees the podcast episode page's Featured podcasts and Featured films.
+
+Topic Posts: `components/TopicPostCard`, `TopicPostInfo`, `TopicPostsSection`, `TopicPostEditor`, and
+`TopicPostPage` are the shared Topic Post components, each over its app's elements. `TopicPostPage` shows the editor
+for a draft and for a published post its author edits inside its edit time, and the post otherwise. `TopicPostInfo`
+is the post's info popup, which follows the Topic's: it takes the post's id and title, reads the post through
+`fetchTopicPost` once it opens, under the mobile screen's `topic-post` cache key, unless its page passes the post, and
+shows the author with the reactions and Share, the post's image, the discussion's play button with the line from
+`toTopicPostDiscussionDateText`, the Topic, and the summary. A row opens it too, through `isOpen` and `onOpenChange`.
+Its Share element takes the post, and `toTopicPostShare` in `lib/topicPosts` returns the topic and the post that each
+app's `ShareTopic` shares. `toInviteDestination` in `lib/inviteRejections` opens the Topic Post an accepted topic
+invite names.
+`hooks/useRichTextEditor.ts` holds the editor state a note and a Topic Post share: the format state, the selection,
+the link at the caret, and the baseline that tells the editor's first rendering of a stored body from an edit.
+`hooks/useTopicPostSave.ts` saves a post's title and body together once typing stops, one save at a time at the
+version the last save returned, and stops on a newer version or a post past its edit time. `lib/topicPosts.ts` holds
+the Topic Post copy, the word count's label, and the post's editable image, and `lib/topicPostStories.ts` the
+fixtures both apps' stories show. `components/ProfileHeader` is the profile page's shared header.
+`components/cardElements` includes the reaction count, which the topic card shows at the right of its tags' row or,
+with no tag, its byline's row, the podcast episode card at the right of its detail line, and the Topic Post card at
+the right of its date row. `TopicImageEditor` edits a third kind of image, a Topic Post's, and a fourth, a film's own
+image (`topicPodcastEpisodeVideo`), in the one layout: its `Image` element takes an `aspectRatio`, 16:9 for a film
+and 3:2 for every other image. `lib/podcastEpisodeEditor` builds the film's editable image from the podcast episode's
+page, and holds the Edit film label and who sees the option on a podcast episode page
+(`isTopicPodcastEpisodeVideoEditShown`) and on a topic page, for the topic's latest film
+(`toTopicPageEditedPodcastEpisode`). `hooks/useTopicPodcastEpisodeVideoEditableImage` reads the podcast episode's page
+for the topic page's Edit film. `lib/podcastEpisodeHomeOrder` says who sees the podcast episode page's Home and
+Featured rank options for podcasts and films.
+
+Topic Post Discussions and the Topic Post chat: `components/TopicPostDiscussionCard` shows a post's discussion on its
+page, with the shared podcast play button, the line from `lib/topicPostDiscussions.ts`, and Regenerate with a note
+for whoever may record it. The card's name opens and closes the recording's transcript, which starts closed:
+`toTopicPostDiscussionTranscript` returns the turns of a recording that plays, and
+`components/PodcastEpisodeTranscriptTurns` lists them, each after its speaker's name, as it lists a podcast episode
+transcript's. `hooks/useTopicPostDiscussion.ts` holds the form, starts a recording, and reads the post
+again while one records. A discussion plays in the shared podcast player as a `PodcastEpisode` built by
+`toTopicPostDiscussionPodcastEpisode` in contracts: `stores/podcastEpisodeListenStore.ts` saves no progress for it,
+and `stores/podcastEpisodePlayerStore.ts` plays nothing after it. `TopicPostPage` places the card between the header
+and the body, and passes its title the app's `MentionBadge` element while the reader has an unseen Comment Mention
+in the post's thread. `stores/topicPostChatStore.ts` names the Topic Post whose
+page is open, through `useRegisterChatTopicPost` while the page shows and `registerChatTopicPost` each time a mobile
+screen takes focus, which `toPrivateChatPage` in `lib/chatConversations.ts` adds to the topic's chat page, so each
+question sent there names the post. `toDefaultChatId` and `toPrivateChatId` open the topic's private chat for an open
+post, `toPrivateChatPlaceholder` in `lib/chatCopy.ts` is the question box's line, the Topic Post chat's while a post
+is named, and `toPrivateChatLabel` with `toPrivateChatIdLabel` names a private chat for what it is about: the open
+post, else its Topic, else its team. `components/TopicPostTag` is the tag under such a question, linked to the post
+while it exists. `lib/topicPosts.ts` also holds `isTopicPostUrlStale`, the rule that moves a post page's url to the
+post's titled path, `toTopicPostImageReport`, what a report of a post's image names, and `isTopicPostPinnable`, the
+rule that a published post of a public topic takes a pin, which both apps' post pages read for their rank options.

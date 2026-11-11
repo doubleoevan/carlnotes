@@ -36,7 +36,7 @@ const ELEMENTS: NoteCommentsElements = {
 		author ? (
 			<AnchorLink
 				href={`${SITE_URL}${toProfilePath(author.userId)}`}
-				accessibilityLabel={`Open ${author.username}'s profile`}
+				accessibilityLabel={`Open ${author.username}'s Café`}
 				className="min-h-6 min-w-6 shrink flex-row items-center gap-2"
 				hitSlop={toTouchTargetHitSlop(24)}
 			>

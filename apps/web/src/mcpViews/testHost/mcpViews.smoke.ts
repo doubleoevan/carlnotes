@@ -36,9 +36,12 @@ import {
 import type { ToolCallResponder } from "./mcpViewTestHost"
 import { type OpenMcpViewOptions, TEST_SITE_URL } from "./mcpViewTestHost"
 import "./findingsMcpViewSmokeSections"
+import "./newsMcpViewSmokeSections"
 import "./scanMcpViewSmokeSections"
 import "./searchMcpViewSmokeSections"
 import "./topicMcpViewSmokeSections"
+import "./topicPostMcpViewSmokeSections"
+import "./topicPostsMcpViewSmokeSections"
 import "./updatesMcpViewSmokeSections"
 
 test.each([...MCP_VIEWS])("the %s MCP view runs in a sandbox and waits for its result", async (mcpView) => {

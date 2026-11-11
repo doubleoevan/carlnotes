@@ -1,17 +1,19 @@
 // the team page read: the team, its members, its topics, and what the user may do on it
 import { toAvatarKeyVersion, toAvatarVersion } from "@carlnotes/contracts/avatars"
+import type { PodcastEpisodeCard } from "@carlnotes/contracts/home"
 import type { TeamPageResponse } from "@carlnotes/contracts/teams"
 import { db } from "@carlnotes/db"
-import { invites } from "@carlnotes/db/schema/invites"
-import { teamMembers, teams } from "@carlnotes/db/schema/teams"
+import { teamMembers } from "@carlnotes/db/schema/teams"
 import { teamTopics } from "@carlnotes/db/schema/teamTopics"
 import { topics } from "@carlnotes/db/schema/topics"
 import { users } from "@carlnotes/db/schema/users"
-import { and, eq, gt, inArray, isNull, or, sql } from "drizzle-orm"
-import { isAllowed, isLeaderRole } from "../authorization"
+import { eq } from "drizzle-orm"
+import { isLeaderRole } from "../authorization"
 import { loadTeamChatMentions } from "../chat/mentions"
-import { verifiedEmailQuery } from "../topic/permissions"
+import { loadPodcastEpisodeCards } from "../home/topicCards"
+import { loadProfileTopicPodcastEpisodeVideoIds, loadTeamCards } from "../profileCards"
 import { toTopicTableRows } from "../topic/topicTableRows"
+import { loadTeamPageAccess } from "./teamPageAccess"
 
 // a team page as one user may see it: the whole page, the gate a private team shows a non-member, or no team at all
 export type TeamPageResult =
@@ -23,26 +25,16 @@ export type TeamPageResult =
  * Loads a team's page as the user may see it, or the gate a private team shows a non-member.
  */
 export async function loadTeamPage(userId: string | null, teamId: string): Promise<TeamPageResult> {
-	// read the team and the user's membership row in one query. a signed-out visitor joins no membership row
-	const [teamRow] = await db
-		.select({ team: teams, membershipRole: teamMembers.role, isMembershipActive: teamMembers.isActive })
-		.from(teams)
-		.leftJoin(teamMembers, and(eq(teamMembers.teamId, teams.id), userId ? eq(teamMembers.userId, userId) : sql`false`))
-		.where(eq(teams.id, teamId))
-	if (!teamRow) {
+	// check access before reading the page
+	const teamPageAccess = await loadTeamPageAccess(userId, teamId)
+	if (!teamPageAccess) {
 		return { status: "missing" }
 	}
 
-	// an active membership is the user's role, and an inactive one is a join request no leader has approved yet
-	const { team } = teamRow
-	const role = teamRow.isMembershipActive ? teamRow.membershipRole : null
-	const hasRequestedToJoin = teamRow.isMembershipActive === false
-
-	// check access before reading the page. a private team shows only its gate to everyone but its members, an admin,
-	// and someone with a pending invite
+	// a private team shows only its gate to someone its page does not open for
+	const { team, role, hasRequestedToJoin, isInvited } = teamPageAccess
 	const isMember = Boolean(role)
-	const isInvited = !isMember && (await hasPendingTeamInvite(userId, team.id))
-	if (!team.isPublic && !isMember && !isInvited && !(await isAllowed(userId, "admin:console"))) {
+	if (!teamPageAccess.canOpen) {
 		return { status: "gated", teamName: team.name, hasRequestedToJoin }
 	}
 
@@ -81,6 +73,20 @@ export async function loadTeamPage(userId: string | null, teamId: string): Promi
 	// the team's topics: a non-member sees only the public ones, a member or someone with a pending invite sees them all
 	const visibleTopics = topicRows.filter((topicRow) => isMember || isInvited || topicRow.visibility === "public")
 
+	// the topics whose cards the page shows: every one for a member, and the public ones for anyone else, a pending
+	// invitee included
+	const cardTopicIds = visibleTopics
+		.filter((topicRow) => isMember || topicRow.visibility === "public")
+		.map((topicRow) => topicRow.id)
+
+	// the topic table's rows, and the cards of the card topics, of their podcast episodes, of every one of their
+	// published Topic Posts, and of their films
+	const [topicTableRows, teamCards, topicPodcastEpisodeVideoCards] = await Promise.all([
+		toTopicTableRows(visibleTopics, userId),
+		loadTeamCards(cardTopicIds, userId),
+		loadTeamTopicPodcastEpisodeVideoCards(cardTopicIds),
+	])
+
 	// build the page from the members and topics the user may see
 	const teamPage: TeamPageResponse = {
 		teamId: team.id,
@@ -101,32 +107,18 @@ export async function loadTeamPage(userId: string | null, teamId: string): Promi
 		})),
 		hiddenMemberCount: hiddenActiveCount,
 		chatMentions: chatMentionsByTeam.get(team.id) ?? [],
-		topics: await toTopicTableRows(visibleTopics, userId),
+		topics: topicTableRows,
+		...teamCards,
+		topicPodcastEpisodeVideoCards,
 	}
 	return { status: "visible", team: teamPage }
 }
 
-// whether a pending invite names this user, by account or by their email address
-async function hasPendingTeamInvite(userId: string | null, teamId: string): Promise<boolean> {
-	if (!userId) {
-		return false
-	}
-
-	// a single matching pending invite row is enough. an address matches only once the account verified it
-	const [invite] = await db
-		.select({ id: invites.id })
-		.from(invites)
-		.where(
-			and(
-				eq(invites.teamId, teamId),
-				or(eq(invites.invitedUserId, userId), inArray(invites.email, verifiedEmailQuery(userId))),
-				eq(invites.usedCount, 0),
-				isNull(invites.declinedAt),
-				or(isNull(invites.expiresAt), gt(invites.expiresAt, new Date())),
-			),
-		)
-		.limit(1)
-	return Boolean(invite)
+// the film cards of the topics whose cards the page shows: the ready films of their published podcast episodes, the
+// ones their topics' owners pinned on their profiles first, then the most listened one of each other topic
+async function loadTeamTopicPodcastEpisodeVideoCards(topicIds: string[]): Promise<PodcastEpisodeCard[]> {
+	const { podcastEpisodeIds } = await loadProfileTopicPodcastEpisodeVideoIds(topicIds)
+	return loadPodcastEpisodeCards(podcastEpisodeIds)
 }
 
 /**

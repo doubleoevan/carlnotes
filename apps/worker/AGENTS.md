@@ -70,6 +70,7 @@ about the app; a section whose hash is unchanged is not embedded again).
   its page can be read), `sendScanEmail.ts`, `sendPushNotifications.ts`, and `recordPodcastEpisode.ts`, with
   `deliveryRetryPolicy.ts` holding the send retry policy that the email and push workflows share. Temporal bundles a
   workflow file with webpack, so a workflow file imports only `@carlnotes/contracts/scanFailure`,
+  `@carlnotes/contracts/topicPodcastEpisodeVideoWork`,
   `@carlnotes/pipeline/stageTimeouts`, `@carlnotes/pipeline/pushWorkflows`, types, and its sibling files, and the
   activities file beside it imports the rest. `temporal.ts` resolves each workflow
   by `new URL("./workflows/<name>.ts", import.meta.url)`, and `scripts/check-workflow-bundles.ts` bundles every workflow
@@ -108,6 +109,26 @@ about the app; a section whose hash is unchanged is not embedded again).
   the email workflow, and the podcast episode workflow signals the Scan's email workflow once its outline is settled, so
   the email can name the Podcast Episode. No audio passes between activities except through object storage. The steps
   are in `@carlnotes/pipeline/podcast/`.
+- A published podcast episode's film renders in `workflows/renderTopicPodcastEpisodeVideo.ts` on the `episode-videos`
+  queue, whose Worker's concurrency is `TOPIC_PODCAST_EPISODE_VIDEO_CONCURRENCY`, default 1. The recording workflow
+  starts the render as an abandoned child after the image step, behind the `topic-podcast-episode-video` patch, and the
+  film route starts the rebuild for a new image on the same queue. The render is one activity, in
+  `workflows/renderTopicPodcastEpisodeVideoActivities.ts` beside the rebuild's, with a four-hour timeout, 3 attempts, and a heartbeat every 30 seconds, and the steps are in `@carlnotes/pipeline/topicPodcastEpisodeVideo/`. The
+  activity draws the film's own 16:9 image before the intro and the sign-off, and a failed draw leaves the podcast
+  episode's image. Before the chapters it draws an imagined image for the longest chapters with no link preview image
+  that run `TOPIC_PODCAST_EPISODE_VIDEO_IMAGINED_CHAPTER_IMAGE_MINIMUM_SECONDS` or longer, default 90, up to
+  `TOPIC_PODCAST_EPISODE_VIDEO_IMAGINED_CHAPTER_IMAGE_LIMIT` a film, default 4, and a
+  failed draw leaves the podcast card. An editor's regeneration of that image runs as a `renderTopicImage` workflow on the `topic-images`
+  queue, whose render row names the film, and its store starts the film's rebuild. A
+  concurrency of 0 turns films off: no film Worker polls, and no recording or backfill starts a film.
+- `workflows/backfillTopicPodcastEpisodeVideos.ts` gives each Topic's latest published podcast episode a film, and only
+  that one, on the platform's bill. It runs under the fixed id `episode-video-backfill` on the `episode-video-backfill`
+  queue at `TOPIC_PODCAST_EPISODE_VIDEO_BACKFILL_CONCURRENCY`, default 1, public Topics first, 100 Topics a page with
+  `continueAsNew`, each page listed by `workflows/backfillTopicPodcastEpisodeVideosActivities.ts`. `temporal.ts`
+  starts or joins it once the Workers poll, without waiting, and `bun run films:backfill`, the root script
+  `scripts/backfill-topic-podcast-episode-videos.ts`, starts or joins it and prints the summary. A podcast episode missing its inputs or failing
+  every attempt gets a failed film row, so no later listing finds it again. The queue names live in
+  `@carlnotes/contracts/topicPodcastEpisodeVideoWork`, which the workflow files may import.
 - `temporal.ts` starts Sentry (`@carlnotes/server/monitoring`) before Langfuse's tracer (`@carlnotes/models/telemetry`)
   and logs the connection pool, the event loop delay, the scan queue, and Redis once a minute, and the sweep reports a
   queue nothing polls and a backlog older than 15 minutes, both through `describeScanQueue` in
@@ -122,5 +143,25 @@ about the app; a section whose hash is unchanged is not embedded again).
   `@carlnotes/contracts`, each module by its package path, plus `@temporalio/worker`, `@temporalio/workflow`, and
   `@temporalio/activity`. Never `@carlnotes/api` or another app.
 - Tests: `bun test apps/worker`; `*.smoke.ts` hit real services and run under `doppler run`.
+- Workflow tests run a workflow in `@temporalio/testing`'s time-skipping test server, in-process, on a queue no other
+  worker polls, through `workflows/workflowTestFixtures.ts`. The first run downloads the test server binary, about
+  65 MB, into the temp folder, and later runs reuse it. `recordPodcastEpisode.test.ts`,
+  `renderTopicPodcastEpisodeVideo.test.ts`, and `backfillTopicPodcastEpisodeVideos.test.ts` use it.
 
 `workflows/personalSourcesContextLoop.ts` shares the durable revision decisions with deterministic virtual-time tests; Temporal supplies replayable waits and activity calls.
+
+- `workflows/publishTopicPost.ts` and `publishTopicPostActivities.ts` run on the `topic-posts` queue:
+  `publishTopicPostWorkflow` writes a published Topic Post's summary and starts its image's render, and
+  `summarizeTopicPostWorkflow` writes the summary again after an edit: one workflow per post, which waits 30 seconds
+  and summarizes the stored text, so the edits saved in that time share one rewrite. `publishTopicPostWorkflow` writes
+  a last summary once the edit time ends, if the post changed since its first one. Every step is best effort. The image render
+  itself is `renderTopicImageWorkflow`, which stores a Topic Post render's files under the post.
+
+Topic Post Discussions: `publishTopicPostWorkflow` waits out the post's edit time after the summary and the image,
+then starts the post's first discussion, billed to its author, through `startTopicPostPublishDiscussionActivity`.
+`workflows/recordTopicPostDiscussion.ts` holds `recordTopicPostDiscussionWorkflow`: the script, then the one speech
+call with its encode and store, closing the row as failed if either fails for good. Its activities are in
+`workflows/recordTopicPostDiscussionActivities.ts`, and both are exported from `recordPodcastEpisode.ts` and
+`recordPodcastEpisodeActivities.ts`, so they run on the `episode-recordings` queue. `notificationsEmailRows.ts`
+joins a reaction's and a comment's Topic Post, sends a post's activity to its author as well as to its topic's owner,
+once if they are one person, and `notificationsEmails.ts` names the post by its title with a link to its page.

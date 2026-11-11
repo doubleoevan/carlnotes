@@ -1,7 +1,7 @@
 import type { AnalyticsEventProperties, VisitAnalyticsEvent } from "@carlnotes/contracts/analyticsEvents"
 import type { PodcastEpisode } from "@carlnotes/contracts/podcast"
 import { toReportedPath } from "@carlnotes/contracts/reportedPath"
-import { toPublicPodcastEpisodeProperties, toReportedEvent } from "@carlnotes/contracts/visitAnalytics"
+import { type FilmVisitEvents, toPlayerVisitEvent, toReportedEvent } from "@carlnotes/contracts/visitAnalytics"
 import PostHog from "posthog-react-native"
 import { deviceTelemetry } from "./deviceTelemetry"
 
@@ -58,5 +58,18 @@ export function captureEpisodeVisitEvent(
 	event: "visit_episode_played" | "visit_episode_completed",
 	episode: PodcastEpisode,
 ): void {
-	captureVisitEvent(event, toPublicPodcastEpisodeProperties(episode))
+	const playerVisitEvent = toPlayerVisitEvent(event, episode)
+	if (playerVisitEvent) {
+		captureVisitEvent(playerVisitEvent.event, playerVisitEvent.properties)
+	}
+}
+
+/**
+ * Reports one film visit event with only the ids and short codes its type allows.
+ */
+export function captureFilmVisitEvent<Event extends keyof FilmVisitEvents>(
+	event: Event,
+	properties: FilmVisitEvents[Event],
+): void {
+	captureVisitEvent(event, properties)
 }

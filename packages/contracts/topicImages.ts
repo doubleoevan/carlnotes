@@ -44,16 +44,21 @@ export const regenerateTopicImagePayload = z.object({
 // what a regeneration returns: the render row that is under way
 export const regenerateTopicImageResponse = z.object({ renderId: z.string() })
 
-// a render as the editor polls it: where it stands, and the topic's image once it succeeded
+// a render as the editor polls it: where it stands, and the topic's image once it succeeded. a film's render leaves
+// the film's poster url instead, which is optional, so a released app reads a render without it
 export const topicImageRenderResponse = z.object({
 	status: z.enum(topicImageRenderStatuses),
 	image: topicImageUrls.nullable(),
+	posterUrl: z.string().nullable().optional(),
 })
 
 export type TopicImageRenderResponse = z.infer<typeof topicImageRenderResponse>
 
 // what an upload returns: the topic's image as uploaded
 export const uploadTopicImageResponse = z.object({ image: topicImageUrls })
+
+// what a film image's upload returns: the film's poster url
+export const uploadTopicPodcastEpisodeVideoImageResponse = z.object({ posterUrl: z.string() })
 
 // how many regenerations the editor has used this month and how many the plan allows
 export const imageRegenerationQuota = z.object({ used: z.number().int(), limit: z.number().int() })
@@ -93,6 +98,41 @@ export function toAbsoluteTopicImageUrls(image: TopicImageUrls, siteUrl: string)
  */
 export function toPodcastEpisodeImageUrls(podcastEpisodeId: string, hash: string): TopicImageUrls {
 	return toImageUrls(`/api/podcast-episode-images/${podcastEpisodeId}/${hash}`)
+}
+
+/**
+ * Returns every size of a Topic Post's image as its 1x and 2x paths, in the topic image's sizes.
+ */
+export function toTopicPostImageUrls(topicPostId: string, hash: string): TopicImageUrls {
+	return toImageUrls(`/api/topic-post-images/${topicPostId}/${hash}`)
+}
+
+// the file name a film's own image is served under
+export const TOPIC_PODCAST_EPISODE_VIDEO_POSTER_FILE_NAME = "poster.jpg"
+
+/**
+ * Returns the path of a film's poster, its own image at the film's size, from its podcast episode's id and the image's
+ * content hash.
+ */
+export function toTopicPodcastEpisodeVideoPosterUrl(podcastEpisodeId: string, hash: string): string {
+	return `/api/topic-podcast-episode-video-images/${podcastEpisodeId}/${hash}/${TOPIC_PODCAST_EPISODE_VIDEO_POSTER_FILE_NAME}`
+}
+
+/**
+ * Returns the path of the imagined image of one chapter of a film, from its podcast episode's id and the chapter's
+ * position. The path is not found for a chapter with no imagined image.
+ */
+export function toTopicPodcastEpisodeVideoChapterImageUrl(podcastEpisodeId: string, position: number): string {
+	return `/api/topic-podcast-episode-video-images/${podcastEpisodeId}/chapters/${position}/image.jpg`
+}
+
+/**
+ * Returns a film's poster as an image's urls, its one file at every size, for an image block or a card that shows it.
+ */
+export function toTopicPodcastEpisodeVideoImageUrls(posterUrl: string): TopicImageUrls {
+	return Object.fromEntries(
+		topicImageSizes.map((size) => [size, { url: posterUrl, url2x: posterUrl }]),
+	) as TopicImageUrls
 }
 
 // the api path a topic image's files are served after: the topic's id, then the image's content hash

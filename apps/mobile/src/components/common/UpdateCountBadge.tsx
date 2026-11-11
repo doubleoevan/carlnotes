@@ -3,6 +3,7 @@ import {
 	usePageUpdateBadges,
 	useUserMenuUpdateBadges,
 } from "@carlnotes/core/hooks/useUpdateCounts"
+import { COMMENT_MENTIONS_TITLE } from "@carlnotes/core/lib/socialLabels"
 import {
 	toListedLines,
 	toUpdateAccessibleLabel,
@@ -18,26 +19,32 @@ import { Pressable, View } from "react-native"
 import { toChatRoomHref } from "@/components/chat/chatNavigation"
 import { toTouchTargetHitSlop } from "@/components/primitives/button"
 import { Text } from "@/components/primitives/text"
+import { CommentMentionList } from "@/components/social/CommentMentionList"
+import { captureVisitEvent } from "@/visitAnalytics"
 import { CountBadge } from "./CountBadge"
 import { Sheet } from "./Sheet"
 
 /**
  * Shows one badge summing chat mentions, note changes, topic invitations, and open reports, as nothing while none waits. A press
- * follows the badge's destination, and a long press lists each group under its own heading, the web tooltip's
- * native replacement. A decorative badge sits inside a control that reads its count itself.
+ * runs the badge's own press or follows its destination, and a long press lists each group under its own heading, the
+ * web tooltip's native replacement. A decorative badge sits inside a control that reads its count itself.
  */
 export function UpdateCountBadge({
 	chatMentions = [],
+	commentMentions = [],
 	noteBadges = [],
 	invites = [],
 	openReportCount = 0,
 	href,
+	onPress,
 	isDecorative = false,
 	className,
 	countBadgeClassName,
 }: Partial<UpdateBadges> & {
 	// where the badge's press goes, or nothing for a badge inside a control that reads its count itself
 	href?: Href
+	// what the badge's press does instead of going there
+	onPress?: () => void
 	isDecorative?: boolean
 	// the badge's placement, and the count's size
 	className?: string
@@ -46,7 +53,7 @@ export function UpdateCountBadge({
 	// the updates sheet's open state and the badge it returns focus to, and the summed count
 	const [isUpdatesSheetOpen, setIsUpdatesSheetOpen] = useState(false)
 	const triggerRef = useRef<ComponentRef<typeof View>>(null)
-	const updateBadges = { chatMentions, noteBadges, invites, openReportCount }
+	const updateBadges = { chatMentions, commentMentions, noteBadges, invites, openReportCount }
 	const unreadCount = toUpdateCount(updateBadges)
 	if (unreadCount === 0) {
 		return null
@@ -59,10 +66,12 @@ export function UpdateCountBadge({
 		)
 	}
 
-	// a press follows the destination, or opens the sheet if the badge goes nowhere
+	// a press runs the badge's own press, follows the destination, or opens the sheet if the badge goes nowhere
 	const openUpdatesSheet = (): void => setIsUpdatesSheetOpen(true)
 	const handlePress = (): void => {
-		if (href) {
+		if (onPress) {
+			onPress()
+		} else if (href) {
 			router.push(href)
 		} else {
 			openUpdatesSheet()
@@ -101,8 +110,9 @@ export function UserMenuUpdateCountBadge({ label, className }: { label: UserMenu
 }
 
 /**
- * Shows one page's unread chat mentions and note changes as one badge beside its name, its press opening the chat
- * room if a chat mention waits, else the page.
+ * Shows one page's unread chat mentions, unseen Comment Mentions, and note changes as one badge beside its name. Its
+ * press opens the chat room if a chat mention waits, else the mentions list in a sheet if a Comment Mention waits,
+ * else the page.
  */
 export function PageUpdateCountBadge({
 	topicId,
@@ -119,17 +129,41 @@ export function PageUpdateCountBadge({
 	className?: string
 }) {
 	// the page's waiting groups, already minus the chat rooms and notes opened this session
-	const { chatMentions, noteBadges, hasChatMention, chatTeamId } = usePageUpdateBadges(topicId, teamId)
+	const {
+		chatMentions,
+		commentMentions = [],
+		noteBadges,
+		hasChatMention,
+		chatTeamId,
+	} = usePageUpdateBadges(topicId, teamId)
 
 	// a waiting chat mention sends the press to its chat room, else it goes to the page
 	const pageHref: Href = href ?? (topicId ? `/topics/${topicId}` : `/teams/${teamId}`)
+
+	// a waiting Comment Mention with no chat mention opens the mentions list instead, and reports the open by its place
+	const [isMentionListOpen, setIsMentionListOpen] = useState(false)
+	const hasMentionList = !hasChatMention && commentMentions.length > 0
+	const handleOpenMentionList = (): void => {
+		captureVisitEvent("social_mention_badge_open", { place: "title" })
+		setIsMentionListOpen(true)
+	}
 	return (
-		<UpdateCountBadge
-			chatMentions={chatMentions}
-			noteBadges={noteBadges}
-			href={hasChatMention ? toChatRoomHref({ topicId, teamId, chatTeamId }) : pageHref}
-			className={className}
-		/>
+		<>
+			<UpdateCountBadge
+				chatMentions={chatMentions}
+				commentMentions={commentMentions}
+				noteBadges={noteBadges}
+				href={hasChatMention ? toChatRoomHref({ topicId, teamId, chatTeamId }) : pageHref}
+				onPress={hasMentionList ? handleOpenMentionList : undefined}
+				className={className}
+			/>
+			{/* the list of every unseen mention, each row opening its Comment */}
+			{isMentionListOpen ? (
+				<Sheet title={COMMENT_MENTIONS_TITLE} onClose={() => setIsMentionListOpen(false)}>
+					<CommentMentionList onChoose={() => setIsMentionListOpen(false)} />
+				</Sheet>
+			) : null}
+		</>
 	)
 }
 

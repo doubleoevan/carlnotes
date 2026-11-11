@@ -1,15 +1,16 @@
 // what a Reaction or a Comment hangs on, resolved to its Topic, its page's path, and its name, under the rule that
 // lets the user open it
 import { isPublishedPodcastEpisode } from "@carlnotes/contracts/podcast"
-import { toFindingPath, toPodcastEpisodePath, toTopicPath } from "@carlnotes/contracts/seo"
+import { toFindingPath, toPodcastEpisodePath, toTopicPath, toTopicPostPath } from "@carlnotes/contracts/seo"
 import type { CommentTarget, SocialTarget } from "@carlnotes/contracts/social"
 import { db, isFindingShown } from "@carlnotes/db"
 import { podcastEpisodes } from "@carlnotes/db/schema/podcast"
 import { findings, resources } from "@carlnotes/db/schema/scans"
 import { comments } from "@carlnotes/db/schema/social"
+import { topicPosts } from "@carlnotes/db/schema/topicPosts"
 import { topics } from "@carlnotes/db/schema/topics"
 import { type NamedTopic, namedTopicColumns } from "@carlnotes/db/topicPermissions"
-import { and, eq } from "drizzle-orm"
+import { and, eq, isNotNull } from "drizzle-orm"
 import { isAllowed } from "../authorization"
 import { loadAccessiblePodcastEpisode } from "../podcast/podcastEpisodeRows"
 import { isTopicFindingVisible } from "../topic/findingPermissions"
@@ -41,8 +42,8 @@ export async function toSocialReader(userId: string | null, topic: NamedTopic): 
 type LoadSocialTargetOptions = { isRatedDownIncluded?: boolean }
 
 /**
- * Loads a social target with its Topic, path, and name, whoever asks, or null if it does not exist. A post and a
- * Podcast Episode that is not published do not exist here, and neither does a Finding rated thumbs down unless the
+ * Loads a social target with its Topic, path, and name, whoever asks, or null if it does not exist. A Topic Post and
+ * a Podcast Episode that is not published do not exist here, and neither does a Finding rated thumbs down unless the
  * read includes one.
  */
 export async function loadSocialTarget(
@@ -60,9 +61,8 @@ export async function loadSocialTarget(
 		// a Comment opens where the thing it hangs on does
 		case "comment":
 			return (await loadCommentWithTarget(target.id, options))?.resolvedSocialTarget ?? null
-		// no post exists yet
 		case "post":
-			return null
+			return loadTopicPostSocialTarget(target.id)
 	}
 }
 
@@ -157,6 +157,28 @@ async function loadFindingSocialTarget(
 		topic: findingRow.topic,
 		path: toFindingPath(findingRow.topic, findingId),
 		label: findingRow.title ?? findingRow.url,
+	}
+}
+
+// a published Topic Post as a social target, on its own page. a draft is no social target
+async function loadTopicPostSocialTarget(topicPostId: string): Promise<ResolvedSocialTarget | null> {
+	// the Topic Post's Topic and title
+	const [topicPostRow] = await db
+		.select({ topic: namedTopicColumns, title: topicPosts.title })
+		.from(topicPosts)
+		.innerJoin(topics, eq(topicPosts.topicId, topics.id))
+		.where(and(eq(topicPosts.id, topicPostId), isNotNull(topicPosts.publishedAt)))
+	if (!topicPostRow) {
+		return null
+	}
+
+	// the Topic Post's own page, named by its title
+	const { topic, title } = topicPostRow
+	return {
+		commentTarget: { kind: "post", id: topicPostId },
+		topic,
+		path: toTopicPostPath(topic, { id: topicPostId, title }),
+		label: title,
 	}
 }
 

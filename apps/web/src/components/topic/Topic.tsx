@@ -7,14 +7,13 @@ import { ICON_ACTION_CLASS } from "@carlnotes/nightshift/iconAction"
 import { useNavigate } from "@tanstack/react-router"
 import { PawPrint } from "lucide-react"
 import { useState } from "react"
-import { NoteIcon } from "@/components/branding/NoteIcon"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { PageUpdateCountBadge } from "@/components/common/UpdateCountBadge"
 import { PodcastEpisodePlayButton } from "@/components/podcast/PodcastEpisodePlayButton"
 import { Badge } from "@/components/primitives/badge"
 import { Popover, PopoverCloseButton, PopoverContent, PopoverTrigger } from "@/components/primitives/popover"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
-import { TOPIC_IMAGE_FRAME_CLASS, TopicImage } from "@/components/primitives/topic-image"
+import { TOPIC_IMAGE_FRAME_CLASS } from "@/components/primitives/topic-image"
 import { toSignupNavigation } from "@/components/session/signupPrompts"
 import { ShareTopic } from "@/components/share/ShareTopic"
 import { useRevealClassName } from "@/hooks/useRevealClassName"
@@ -25,13 +24,16 @@ import {
 	RAIL_BARE_ICON_INSET,
 	RAIL_TEXT_INSET,
 	STANDALONE_LINK_CLASS,
+	TITLE_ICON_BUTTON_CLASS,
 	TOPIC_HEADER_AREA_CLASSES,
 	toTopicHeaderGridClass,
 } from "@/lib/styleClasses"
 import { useTopicFeed } from "@/providers/TopicFeedProvider"
 import { TopicByline } from "./TopicByline"
 import { TopicFindingList } from "./TopicFindingsSection"
+import { TopicImageLink } from "./TopicImageLink"
 import { TopicInfo } from "./TopicInfo"
+import { TOPIC_NOTE_TOOLTIP, TopicNoteTrigger } from "./TopicNoteTrigger"
 
 // the note icon's button and the play button beside the note icon, in a heading's own text flow and beside a heading.
 // each tap area reaches past the tile, so the icons sit close together on a phone too. inline, the first icon keeps
@@ -41,7 +43,6 @@ const INLINE_ICON_BUTTON_CLASS =
 // a follow or share icon in the row under a topic card's title, as tall as a touch target on a phone
 const ICON_ACTION_ROW_BUTTON_CLASS =
 	"text-muted-foreground hover:text-foreground grid h-11 shrink-0 place-items-center sm:h-7"
-const ICON_BUTTON_CLASS = "relative grid size-7 place-items-center before:absolute before:-inset-2 before:content-['']"
 
 // the topic feed, the card's classes, and its position on the section's page, which staggers the entrance animation
 type TopicProps = { topic: TopicFeed; index: number; className?: string }
@@ -66,11 +67,14 @@ export function Topic({ topic, index, className }: TopicProps) {
 			<div
 				className={cn(toTopicHeaderGridClass({ hasTags: topic.tags.length > 0, hasActions: true }), "max-sm:mb-1.5")}
 			>
-				<TopicImage
+				{/* the image opens the topic's page as the title does, and its link is no taller than the image */}
+				<TopicImageLink
 					image={topic.image}
 					size="page"
 					name={topic.name}
-					className={cn(TOPIC_HEADER_AREA_CLASSES.image, LIST_TOPIC_IMAGE_CLASS, TOPIC_IMAGE_FRAME_CLASS)}
+					className={cn(LIST_TOPIC_IMAGE_CLASS, TOPIC_IMAGE_FRAME_CLASS)}
+					path={toTopicPath(topic)}
+					linkClassName={cn(TOPIC_HEADER_AREA_CLASSES.image, "self-start")}
 				/>
 				{/* the title wraps, and its play and note icons follow its last word. the chat mention count sits at the
 				    name's top-right corner while the user has unseen chat mentions */}
@@ -196,7 +200,7 @@ export function TopicInfoPopover({
 	const setIsHintOpen = onHintOpenChange ?? setHintOpenHere
 
 	// the latest podcast episode's play button, then the topic note popover. inline, each icon is a tile in the text
-	const iconButtonClass = isInline ? INLINE_ICON_BUTTON_CLASS : ICON_BUTTON_CLASS
+	const iconButtonClass = isInline ? INLINE_ICON_BUTTON_CLASS : TITLE_ICON_BUTTON_CLASS
 	const iconButtons = (
 		<>
 			{topic.latestPodcastEpisode && (
@@ -208,23 +212,15 @@ export function TopicInfoPopover({
 				/>
 			)}
 			<Popover open={isOpen} onOpenChange={setIsOpen}>
-				<Tooltip open={isHintOpen && !isOpen} onOpenChange={setIsHintOpen}>
-					<TooltipTrigger asChild>
-						<PopoverTrigger
-							onClick={(event) => event.stopPropagation()}
-							className={cn(
-								"hover:opacity-75 shrink-0",
-								iconButtonClass,
-								// inline, the note icon keeps a gap from the play button, whose tile overflows its slot
-								isInline && topic.latestPodcastEpisode && "ml-2",
-							)}
-							aria-label="Topic details"
-						>
-							<NoteIcon />
-						</PopoverTrigger>
-					</TooltipTrigger>
-					<TooltipContent side="top">A topic note from Carl</TooltipContent>
-				</Tooltip>
+				<TopicNoteTrigger
+					className={cn(
+						iconButtonClass,
+						// inline, the note icon keeps a gap from the play button, whose tile overflows its slot
+						isInline && topic.latestPodcastEpisode && "ml-2",
+					)}
+					isHintOpen={isHintOpen && !isOpen}
+					onHintOpenChange={setIsHintOpen}
+				/>
 				<PopoverContent onClick={(event) => event.stopPropagation()} align="start" className={POPOVER_PANEL_CLASS}>
 					<PopoverCloseButton />
 					<TopicInfo topic={topic} />
@@ -267,7 +263,7 @@ export function NewCountInfo({ topic }: { topic: TopicDetails }) {
 						{topic.newCount} new
 					</PopoverTrigger>
 				</TooltipTrigger>
-				<TooltipContent>A topic note from Carl</TooltipContent>
+				<TooltipContent>{TOPIC_NOTE_TOOLTIP}</TooltipContent>
 			</Tooltip>
 			<PopoverContent align="end" className={POPOVER_PANEL_CLASS}>
 				<PopoverCloseButton />

@@ -1,9 +1,11 @@
 // home order tests: the position a ranked row takes, and the statements the write and the release send
 import { afterEach, describe, expect, test } from "bun:test"
 import { restoreConnectionPool, stubConnectionPool } from "./connectionPoolStub"
-import { releaseHomeOrder, setHomeOrder, toTargetPosition } from "./homeOrder"
+import { releaseHomeOrder, releaseTopicHomeOrders, setHomeOrder } from "./homeOrder"
 import { db } from "./index"
+import { toTargetPosition } from "./pinnedOrder"
 import { podcastEpisodes } from "./schema/podcast"
+import { topicPosts } from "./schema/topicPosts"
 import { topics } from "./schema/topics"
 
 // put the connection pool back after each test
@@ -97,5 +99,30 @@ describe("the release", () => {
 		])
 		expect(sentQueries[1]?.values).toEqual([null, UPDATED_AT, "episode-1"])
 		expect(sentQueries[2]?.values).toEqual([UPDATED_AT, 3])
+	})
+
+	test("a topic's pinned Topic Posts are each cleared in turn, and a topic with none reports none released", async () => {
+		// the topic's two pinned posts, then each one's order, and a write returns no row
+		const sentQueries = stubConnectionPool(({ text }) => {
+			if (text.startsWith('select "id" from "topic_posts"')) {
+				return [["post-1"], ["post-2"]]
+			}
+			return text.startsWith("select") ? [[1]] : []
+		})
+		expect(await releaseTopicHomeOrders({ table: topicPosts, topicId: "topic-1", handle: db })).toBe(true)
+
+		// the read takes the topic's pinned posts alone, and each post is cleared
+		expect(sentQueries[0]?.text).toBe(
+			'select "id" from "topic_posts" where ("topic_posts"."topic_id" = $1 and "topic_posts"."home_order" is not null)',
+		)
+		const clearedIds = sentQueries
+			.filter(({ text }) => text.startsWith('update "topic_posts" set "home_order" = $1'))
+			.map(({ values }) => values[2])
+		expect(clearedIds).toEqual(["post-1", "post-2"])
+
+		// a topic with no pinned post sends the one read
+		const emptyQueries = stubConnectionPool(() => [])
+		expect(await releaseTopicHomeOrders({ table: topicPosts, topicId: "topic-2", handle: db })).toBe(false)
+		expect(emptyQueries).toHaveLength(1)
 	})
 })

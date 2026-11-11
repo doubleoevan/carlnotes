@@ -110,12 +110,16 @@ while retaining native touch targets. Plans are bought through the store, and a 
 as Store payments describes. Admin retains its explicit web handoff.
 
 Topic loading uses `core/components/TopicSkeleton` with the web section order, native card shapes, and a pulse that
-stops for reduced motion. Known Topic names stay visible, and a known Topic without a podcast omits its player.
+stops for reduced motion. Known Topic names stay visible, and a known Topic without a podcast omits its film and its
+player.
 The initial loading scroll area fills the available content space. A separate footer scroll area is mounted only
 after loading ends, so it cannot squeeze the skeleton. `TopicFeedStatus.stories.tsx` covers loading and retry states.
 
 `layout/PageSkeleton` uses the same core composition and utility classes as web for Profile, Teams, Activity,
-Account, and Team. `common/SkeletonPulse` shares native reduced-motion behavior with Topic loading. Placeholders
+Account, Team, and Topic Post, in the loaded screens' own pieces: `AVATAR_HEADER_BUTTON_ROW_CLASS`, `AccordionSection`
+with `isLoading` for a section of cards, `topic/CollapsibleSectionSkeleton` for a section of a table, `TableCard`, the
+news list's card and loading rows, and `CardsRowSkeleton`. `src/sectionClasses.ts` holds the classes a section and its
+loading state share. `common/SkeletonPulse` shares native reduced-motion behavior with Topic loading. Placeholders
 expose one busy accessibility label and hide decorative descendants. Loaded pages remain visible during refresh.
 The PageSkeleton stories mirror the web story names, including the separately loading Profile topics table.
 

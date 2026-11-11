@@ -1,4 +1,4 @@
-import type { TeamIdentity } from "@carlnotes/contracts/teams"
+import type { TeamIdentity } from "@carlnotes/contracts/teamIdentity"
 import { View } from "react-native"
 import { Avatar } from "@/components/branding/Avatar"
 import { AnchorLink } from "@/components/common/AnchorLink"

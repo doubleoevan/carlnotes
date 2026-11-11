@@ -19,6 +19,8 @@ export const users = pgTable(
 		// where the public avatar comes from, and the stored object for it
 		avatarSource: avatarSource("avatar_source").notNull().default("generated"),
 		avatarKey: text("avatar_key"),
+		// the unique people who opened the user's profile page, all time
+		profileViewerCount: integer("profile_viewer_count").notNull().default(0),
 		// this user's LiteLLM virtual key, which has the user's spend budget.
 		// null until the key is created, at signup or at the user's first model call if the proxy failed at signup
 		litellmVirtualKey: text("litellm_virtual_key"),

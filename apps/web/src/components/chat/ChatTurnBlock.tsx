@@ -29,6 +29,7 @@ import { ChatVideo, CopyButton, ModelThinkingBubble, toTimeAgoLabel } from "./Ch
 import type { ChatTurn } from "./chatTurns"
 import { PodcastEpisodeChapterTag } from "./PodcastEpisodeChapterTag"
 import { SpokenAnswerButton } from "./SpokenAnswerButton"
+import { TopicPostTag } from "./TopicPostTag"
 
 export type { ChatMessageAuthor } from "@carlnotes/core/components/ChatTurnBlock"
 
@@ -81,6 +82,7 @@ function QuestionBubble({ chatTurn, now, author }: { chatTurn: ChatTurn; now: nu
 						podcastEpisodeNote={podcastEpisodeNote}
 					/>
 				)}
+				{chatTurn.topicPost && <TopicPostTag topicPost={chatTurn.topicPost} />}
 				{/* the images and clips sent with the question, each shown under it in place */}
 				{chatTurn.attachments.map((attachment) => {
 					if (attachment.kind === "image") {

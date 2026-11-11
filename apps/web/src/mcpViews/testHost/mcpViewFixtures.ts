@@ -6,6 +6,7 @@ import {
 	MCP_VIEW_META_KEY,
 	type McpSearchPage,
 	type McpViewData,
+	type McpViewNews,
 	type McpViewTopic,
 	type McpViewTopicResult,
 } from "@carlnotes/contracts/mcpViews"
@@ -15,9 +16,18 @@ import {
 	toPodcastEpisodeSummaryFixture,
 } from "@carlnotes/contracts/podcastEpisodeTestFixtures"
 import { searchRequestPayload } from "@carlnotes/contracts/search"
+import { toTestCommentThread } from "@carlnotes/contracts/socialTestFixtures"
 import { toTestTopicFinding, toTestUpdatesFinding } from "@carlnotes/contracts/topicFeedTestFixtures"
 import { EMPTY_TOPIC_DRAFT } from "@carlnotes/contracts/topicPayloads"
+import {
+	type TopicPostCard,
+	type TopicPostResponse,
+	toTopicPostDiscussionPodcastEpisode,
+} from "@carlnotes/contracts/topicPosts"
 import type { Updates } from "@carlnotes/contracts/updates"
+import { COMMENT_MENTION_STORIES } from "@carlnotes/core/lib/commentMentionStories"
+import { EMPTY_NEWS_STORY, toNewsStoryPage } from "@carlnotes/core/lib/newsStories"
+import { TOPIC_POST_CARD_STORY, TOPIC_POST_DISCUSSION_STORY } from "@carlnotes/core/lib/topicPostStories"
 import { type McpViewToolResult, TEST_SITE_URL } from "./mcpViewTestHost"
 
 // how many bytes the silent podcast episode's audio has
@@ -144,6 +154,30 @@ export const TOPIC_SEARCH_PAGE: McpSearchPage = {
 	searchRequest: searchRequestPayload.parse({ q: "llm" }),
 }
 
+// a search with one Topic Post on that Topic, with no image yet
+export const TOPIC_POST_SEARCH_PAGE: McpSearchPage = {
+	...SEARCH_PAGE,
+	rows: [
+		{
+			kind: "topicPost",
+			id: "topic-post-1",
+			name: "What the evals missed",
+			path: "/topics/topic-1/llm-tooling/posts/topic-post-1/what-the-evals-missed",
+			date: "2026-10-01T12:00:00.000Z",
+			count: null,
+			// the author, the summary, and no image
+			topicPost: {
+				author: { userId: "user-1", username: "vienna", avatarSource: null, avatarVersion: null },
+				summary: "Replay sets catch what a fixed eval suite does not.",
+				image: null,
+			},
+			topic: { id: "topic-1", name: "LLM tooling" },
+			url: `${TEST_SITE_URL}/topics/topic-1/llm-tooling/posts/topic-post-1/what-the-evals-missed`,
+		},
+	],
+	searchRequest: searchRequestPayload.parse({ q: "evals" }),
+}
+
 // text with no place to wrap, as a url or a pasted id may be
 const UNBROKEN_TEXT = "unbrokentext".repeat(12)
 
@@ -204,6 +238,51 @@ export const UPDATES_RESULT: Updates = {
 // the MCP view data of an updates list, with each row's Topic
 export const UPDATES_MCP_VIEW_DATA: McpViewData = { ...USER_MCP_VIEW_DATA, updatesTopics: [FINDINGS_TOPIC] }
 
+// the story week's News Events on the given pages of the list, five to a page
+function toStoryNewsEvents(pageNumbers: number[]): McpViewNews["newsPage"]["newsEvents"] {
+	return pageNumbers.flatMap((pageNumber) => toNewsStoryPage(pageNumber).newsEvents)
+}
+
+// the cursor the week's first read_news result returns for its next page
+export const NEWS_NEXT_CURSOR = "news-cursor-2"
+
+// a week of 32 News Events as read_news returns them: the first twenty with the caller's unseen mentions, then the
+// last twelve from the cursor
+export const NEWS_RESULT: McpViewNews = {
+	window: "week",
+	commentMentions: COMMENT_MENTION_STORIES,
+	newsPage: { ...toNewsStoryPage(1), newsEvents: toStoryNewsEvents([1, 2, 3, 4]) },
+	nextCursor: NEWS_NEXT_CURSOR,
+}
+export const SECOND_NEWS_RESULT: McpViewNews = {
+	...NEWS_RESULT,
+	commentMentions: [],
+	newsPage: { ...toNewsStoryPage(1), newsEvents: toStoryNewsEvents([5, 6, 7]) },
+	nextCursor: null,
+}
+
+// a day in which nothing happened
+export const QUIET_DAY_NEWS_RESULT: McpViewNews = {
+	window: "day",
+	commentMentions: [],
+	newsPage: EMPTY_NEWS_STORY,
+	nextCursor: null,
+}
+
+// the url a link in the Topic Post's body opens
+export const TOPIC_POST_BODY_LINK_URL = "https://example.com/roast-notes"
+
+// a Topic's published Topic Post as its card, and the same post as its page shows it, with an image on the site, a
+// link in its body, a recording, and its comment thread's first page
+export const TOPIC_POST_CARD: TopicPostCard = TOPIC_POST_CARD_STORY
+const TOPIC_POST_IMAGE_FILES = { url: "/topic-post-image.jpg", url2x: "/topic-post-image-2x.jpg" }
+export const TOPIC_POST: TopicPostResponse = {
+	...TOPIC_POST_DISCUSSION_STORY,
+	html: `<p>Start with <a href="${TOPIC_POST_BODY_LINK_URL}">the roast notes</a>.</p>${TOPIC_POST_DISCUSSION_STORY.html}`,
+	image: { page: TOPIC_POST_IMAGE_FILES, list: TOPIC_POST_IMAGE_FILES, thumbnail: TOPIC_POST_IMAGE_FILES },
+	commentThread: toTestCommentThread(),
+}
+
 // what a user saved through a checklist's send
 export const SEND_CONFIRMATION: Extract<PersonalSourcesSendResult, { status: "accepted" }> = {
 	status: "accepted",
@@ -222,7 +301,7 @@ export const TOPIC_EDIT_PREVIEW: Extract<McpViewTopicResult, { status: "confirmR
 	confirmation: "1.a",
 }
 
-// the model's fenced copy of an updates list or a Scan status
+// the model's fenced copy of an updates list, a Scan status, the news, or a Topic Post
 const MODEL_COPY = { opener: "the model's fenced copy" }
 
 /**
@@ -243,6 +322,42 @@ export function toMcpViewToolResult({
  */
 export function toUpdatesToolResult(updates: Updates = UPDATES_RESULT): McpViewToolResult {
 	return toMcpViewToolResult({ structuredContent: MODEL_COPY, mcpViewData: { ...UPDATES_MCP_VIEW_DATA, updates } })
+}
+
+/**
+ * Returns a read_news result that holds a window's news.
+ */
+export function toNewsToolResult(news: McpViewNews = NEWS_RESULT): McpViewToolResult {
+	const mcpViewData = { ...USER_MCP_VIEW_DATA, podcastEpisodes: news.newsPage.podcastEpisodes, news }
+	return toMcpViewToolResult({ structuredContent: MODEL_COPY, mcpViewData })
+}
+
+/**
+ * Returns a read_topic_posts result that holds one page of a Topic's Topic Posts, the last page unless a cursor
+ * follows it.
+ */
+export function toTopicPostsToolResult(
+	topicPosts: TopicPostCard[] = [TOPIC_POST_CARD],
+	nextCursor: string | null = null,
+): McpViewToolResult {
+	const mcpViewData = { ...USER_MCP_VIEW_DATA, topic: FINDINGS_TOPIC, topicPosts }
+	return toMcpViewToolResult({ structuredContent: { items: [], nextCursor }, mcpViewData })
+}
+
+/**
+ * Returns a read_topic_post result that holds a Topic Post, with its discussion as the player plays it: silent audio,
+ * and the cover on the site.
+ */
+export function toTopicPostToolResult(mcpViewData: McpViewData = USER_MCP_VIEW_DATA): McpViewToolResult {
+	const discussionPodcastEpisode = toTopicPostDiscussionPodcastEpisode(TOPIC_POST)
+	const coverUrl = `${TEST_SITE_URL}${TOPIC_POST_IMAGE_FILES.url}`
+	const podcastEpisodes = discussionPodcastEpisode
+		? [{ ...discussionPodcastEpisode, audioUrl: SILENT_AUDIO_URL, coverUrl, smallCoverUrl: coverUrl }]
+		: []
+	return toMcpViewToolResult({
+		structuredContent: MODEL_COPY,
+		mcpViewData: { ...mcpViewData, podcastEpisodes, topicPost: TOPIC_POST },
+	})
 }
 
 /**

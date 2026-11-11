@@ -42,6 +42,7 @@ export function PodcastEpisodesSection({
 		<PagedTableSection
 			value={value}
 			title={title}
+			countNoun="episode"
 			hasClosedDivider={hasClosedDivider}
 			rows={podcastEpisodes}
 			rowSortValues={podcastEpisodeSortValues}

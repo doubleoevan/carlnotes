@@ -35,7 +35,8 @@ name in every list of topics: on a profile, under your teams, on a team's page, 
 **Similar topics** lists the topics most like this one by what they found and the tags they share. It lists public
 topics. Once you sign in, it also lists your own topics, your teams' topics, and the invite topics you follow. The
 chapter tags show on the feed's findings and inside every finding's note. A topic's **Topic roast** opens with its
-latest episode, ready to play.
+latest episode, ready to play. If that episode has a film, **Coffee Break film** shows right above it, and the play
+button over the film's image opens the film.
 
 To find an episode, type in the search bar. **Podcasts** first lists the episodes whose title or description matches.
 Then it lists the episodes about what you typed, even if no title says it.
@@ -78,12 +79,80 @@ within reach. Playback continues when you leave the app or lock the phone.
 A chapter's title starts it from the beginning. Its numbered pill pauses or resumes the current chapter, or jumps to
 another. Tap or drag the progress bar to seek; seeking a paused episode leaves it paused. Expand the chapter list to
 see every chapter without restarting playback. The episode page has its full transcript, **Read more** and **Read
-less**, other episodes, and similar podcasts. The note beside the title opens the theme-song credits and lyrics.
+less**, other episodes, and similar podcasts. The headphones beside **Coffee Break podcast** and **Coffee Break
+Cinema** open the theme-song credits and lyrics.
 
 On reopening the app, your last authorized episode returns paused at its saved position and speed. Press play to
 continue. A sudden shutdown can lose the seconds since the last save. Signing out stops playback and clears this
 account's local resume position. If access to a private episode is revoked, playback stops when the app next checks
 access. A connection problem pauses playback so you can retry.
+
+## Watch the film
+
+Every new episode is also a film: a wide image of its own for the opening, the closing, and the poster, an image for
+each chapter's finding, and captions of what Carl and Vienna say. It is the same episode in a second format, so the film
+and the audio share one place. Stop the audio at 12 minutes, press play on the film, and the film starts at 12 minutes.
+When a film ends, nothing plays after it.
+
+**Coffee Break Cinema** sits at the top of the topic page, right above the podcast player, and plays the topic's latest
+film. It opens until you play the latest film, then stays closed. Open or close it yourself, and the topic page
+remembers your choice until the next film. While the film plays, the finding on screen is highlighted in the list, and
+a finding's chapter tag jumps the film to that chapter. Nothing plays until you press play.
+
+The film's play button sits over the film. Press it to start, and press the film to pause. Under the film are the
+skips, the speed, and the chapter-split progress bar of the audio player. Captions start on, and the captions button
+turns them off. **Mute** turns off the film's sound, so you can watch with captions alone. To go back to the audio,
+press play on the podcast player: the film pauses, and the audio continues from the same place. Fullscreen works
+everywhere, and picture-in-picture works where your browser or phone has it. On a phone, the film keeps talking with the
+screen locked.
+
+On the web, a film in picture-in-picture keeps playing while you browse CarlNotes. Close its window on a page that shows
+the film's player, and the picture returns to the player. Close it anywhere else, and the film pauses. Playing a
+podcast or another film closes it.
+
+**Coffee Break films**, just above the episodes list, lists every film by season, five at a time. Press a row's play
+button to play its film in Coffee Break Cinema. An episode's own page has the same two sections in the other order, and
+you can close either: **Coffee Break podcast** with the audio player, then **Coffee Break Cinema** with the film. Older
+episodes made before films have no film and no Coffee Break Cinema, and an episode whose film could not be made keeps
+its audio.
+
+A film takes longer to make than its episode, from about half an hour to over an hour. Until it is ready, Coffee Break
+Cinema on the episode's page says **Carl and Vienna are filming...**, and so does the topic page while the topic has no
+film yet. The film takes its place when it is ready, with no reload.
+
+Carl draws the film's image the first time the film is made, from what the episode covers. Until it is drawn, the film
+opens on the episode's image. A topic's editor can change it. Pick **Edit film** in the **⋮** actions menu, right
+above **Edit podcast** on the episode's page and right after **Share topic** on the topic's page, where it edits the
+topic's latest film. Type an **Image prompt** and press **Regenerate** for a new image, or press the image to upload
+your own JPEG, PNG, or WebP, which is cropped to the film's wide frame. Each change saves on its own, so the window
+has no Save button. A regeneration counts toward the same monthly limit as your other
+[images](/docs/topics/topic-and-podcast-visions/#regenerate). The poster changes at once, and the film's opening and
+closing follow within about a minute. The chapters stay as they are.
+
+Each chapter shows the image from its finding's page, and zooms in slowly while Carl and Vienna talk. A chapter of 90
+seconds or longer whose finding has no image gets an imagined image. Carl draws it as the film is made, from the
+finding's headline and his note on why it matters, in the film's wide style. He never draws from Personal sources or
+anything else private. A film gets up to four imagined images, for its longest chapters. A shorter chapter with no
+image, and a chapter past the four, shows the Carl and Vienna podcast card. An imagined image counts toward the topic
+owner's plan like the episode, and a chapter whose image cannot be drawn shows the card.
+
+Home lists films on their own, right before the podcasts: **Featured films**, which CarlNotes picks, and **New films
+this week**. A film card shows the film's own image, and its play button opens the film in a window and starts it. A
+**Video** button on a Brews News row opens the film in the same window. The iPhone and Android apps have Coffee Break
+Cinema on the topic screen and the episode screen, Coffee Break films, the film sections on Home, and the same
+buttons, which open a sheet.
+In an AI chat with CarlNotes, the podcast player links to the film on carlnotes.com.
+
+A person's Café lists their films as well. **Featured Films** sits right before Featured Podcasts. A podcast card
+has its play button alone, on Home, a Café, and a team's page, so a film opens from its own card. To pick the films that
+lead your own Café, open its actions menu and choose **Featured films**. Add a film, put the rows in your order, and
+save. You can feature up to 12 films from your public topics. After them, the section shows the most listened film of
+each other topic. Visitors see the films of your public topics only. The apps have the same section and the same menu
+option.
+
+A team's page lists the films of its topics the same way, in **Featured Films** right before Featured Podcasts. A team
+has no list of its own. Films that their topics' owners featured on their Cafés lead the section, and the most
+listened film of each other topic follows. Someone who is not on the team sees the films of its public topics only.
 
 ## Talk with Carl and Vienna
 
@@ -127,19 +196,26 @@ podcast episode takes three and a full one five, those with the most reactions f
 ![Carl and Vienna in a podcast episode's transcript: Carl reads hotcup's hot take, Vienna answers it, and Carl reads
 Bookish-Postscript's reply](../../../assets/screenshots/hot-takes-on-coffee-break.png)
 
+## Coffee Break Discussions
+
+Carl and Vienna also record a short talk about each [Open Mic post](/docs/feed/open-mic/), called a Coffee Break
+Discussion. It plays from the post's page in this same player. It is not an episode of the podcast, so it has no
+chapters, and it does not appear in a podcast app's feed.
+
 ## Subscribe in a podcast app
 
 Press **Subscribe** on the player, then choose **Open in Apple Podcasts** on an iPhone or the podcast-app button on
-Android. If no supported app is available, use **Copy feed link**, which stays available everywhere. Paste the link into Apple Podcasts, Overcast, Pocket Casts, Castro, AntennaPod, or any app
-that adds a show by its link.
+Android. If no supported app is available, use **Copy feed link**, which stays available everywhere. A topic with films
+also offers **Films**: choose it, and both buttons give the film feed, which lists every episode that has a film.
+Paste the link into Apple Podcasts, Overcast, Pocket Casts, Castro, AntennaPod, or any app that adds a show by its link.
 
 ![The Subscribe to Coffee Break dialog, with the Copy feed link
 button](../../../assets/screenshots/podcast-subscribe.png)
 
 A public topic's feed is public. A private or invite topic's feed link is yours alone. Anyone who has the link can
-listen to the topic's episodes, so keep it to yourself. **Reset my link** asks for confirmation before making a new link and stopping the old one. Choose **Keep my link** to
-cancel. If you
-unfollow the topic, your link stops working.
+listen to the topic's episodes, so keep it to yourself. The film feed uses the same link, so a reset stops both. **Reset
+my link** asks for confirmation before making a new link and stopping the old one. Choose **Keep my link** to cancel. If
+you unfollow the topic, your link stops working.
 
 Each episode also has its own page with the full transcript. On a public topic, a search engine reads that page. Every
 episode page ends with **Other episodes** and **Similar podcasts**. **Other episodes** lists the topic's other episodes.

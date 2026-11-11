@@ -15,14 +15,15 @@ import { memoizeInRequest } from "./requestMemo"
 import { billingSubscriptions } from "./schema/billing"
 import { chatTurns } from "./schema/chat"
 import { personalSourcesSummarySpends } from "./schema/personalSources"
-import { podcastEpisodes } from "./schema/podcast"
+import { podcastEpisodes, topicPodcastEpisodeVideos } from "./schema/podcast"
 import { scans } from "./schema/scans"
 import { teamMembers } from "./schema/teams"
 import { topicImageRenders } from "./schema/topicImages"
+import { topicPostDiscussions } from "./schema/topicPosts"
 import { topics } from "./schema/topics"
 import { users } from "./schema/users"
 
-// a recorded spend in dollars, split into scans, chat, and podcast episodes
+// a recorded spend in dollars, split into scans, chat, and podcast episodes, which include Topic Post Discussions
 export type RecordedSpend = {
 	scanDollars: number
 	chatDollars: number
@@ -187,11 +188,11 @@ export async function loadBillingAccess(userId: string, handle: DbHandle = db): 
 	}
 }
 
-// how many topic image regenerations the user has run this UTC month, and how many the plan allows
+// how many image regenerations the user has run this UTC month, and how many the plan allows
 export type ImageRegenerationQuota = { used: number; limit: number; remaining: number }
 
 /**
- * Returns the user's topic image regenerations this UTC month against their plan's limit. An admin has the admin quota.
+ * Returns the user's image regenerations this UTC month against their plan's limit. An admin has the admin quota.
  */
 export async function loadTopicImageRegenerationQuota(userId: string): Promise<ImageRegenerationQuota> {
 	// count the owner's regenerate rows since the month began, beside the plan that limits them
@@ -215,6 +216,31 @@ export async function loadTopicImageRegenerationQuota(userId: string): Promise<I
 }
 
 /**
+ * Returns the user's Topic Post Discussion regenerations this UTC month against their plan's limit, which is separate
+ * from the image limit. An admin has the admin quota.
+ */
+export async function loadDiscussionRegenerationQuota(userId: string): Promise<ImageRegenerationQuota> {
+	// count the user's regenerate rows since the month began, beside the plan that limits them
+	const since = startOfUtcMonth(new Date())
+	const [userAccess, [usedRow]] = await Promise.all([
+		loadUserAccess(userId),
+		db
+			.select({ used: count() })
+			.from(topicPostDiscussions)
+			.where(
+				and(
+					eq(topicPostDiscussions.userId, userId),
+					eq(topicPostDiscussions.kind, "regenerate"),
+					gte(topicPostDiscussions.createdAt, since),
+				),
+			),
+	])
+	const used = usedRow?.used ?? 0
+	const limit = userAccess.isAdmin ? ADMIN_QUOTA : PLANS[userAccess.plan].discussionRegenerationLimit
+	return { used, limit, remaining: Math.max(0, limit - used) }
+}
+
+/**
  * Returns this month's recorded spend for the user, split into scans, chat, and podcast episodes, read at most once per
  * request. A write in the request clears the memo, so a read after a spend row is written sums again.
  */
@@ -229,49 +255,85 @@ export function monthlySpendDollars(userId: string): Promise<RecordedSpend> {
  */
 export async function loadSpendSince({ since, userId }: LoadSpendSinceOptions): Promise<RecordedSpend> {
 	// sum each table's cost since the start time, for the one user if one is given, even an empty user id
-	const [[scanSpendRow], [chatSpendRow], [podcastEpisodeSpendRow], [personalSourcesSpendRow], [topicImageSpendRow]] =
-		await Promise.all([
-			db
-				.select({ dollars: sql<string>`coalesce(sum(${scans.cost}), 0)` })
-				.from(scans)
-				.where(and(userId !== undefined ? eq(scans.ownerId, userId) : undefined, gte(scans.startedAt, since))),
-			db
-				.select({ dollars: sql<string>`coalesce(sum(${chatTurns.cost}), 0)` })
-				.from(chatTurns)
-				.where(and(userId !== undefined ? eq(chatTurns.userId, userId) : undefined, gte(chatTurns.createdAt, since))),
-			db
-				.select({ dollars: sql<string>`coalesce(sum(${podcastEpisodes.cost}), 0)` })
-				.from(podcastEpisodes)
-				.where(
-					and(
-						userId !== undefined ? eq(podcastEpisodes.ownerId, userId) : undefined,
-						gte(podcastEpisodes.createdAt, since),
-					),
+	const [
+		[scanSpendRow],
+		[chatSpendRow],
+		[podcastEpisodeSpendRow],
+		[personalSourcesSpendRow],
+		[topicImageSpendRow],
+		[topicPostDiscussionSpendRow],
+		[topicPodcastEpisodeVideoSpendRow],
+	] = await Promise.all([
+		db
+			.select({ dollars: sql<string>`coalesce(sum(${scans.cost}), 0)` })
+			.from(scans)
+			.where(and(userId !== undefined ? eq(scans.ownerId, userId) : undefined, gte(scans.startedAt, since))),
+		db
+			.select({ dollars: sql<string>`coalesce(sum(${chatTurns.cost}), 0)` })
+			.from(chatTurns)
+			.where(and(userId !== undefined ? eq(chatTurns.userId, userId) : undefined, gte(chatTurns.createdAt, since))),
+		db
+			.select({ dollars: sql<string>`coalesce(sum(${podcastEpisodes.cost}), 0)` })
+			.from(podcastEpisodes)
+			.where(
+				and(
+					userId !== undefined ? eq(podcastEpisodes.ownerId, userId) : undefined,
+					gte(podcastEpisodes.createdAt, since),
 				),
-			db
-				.select({ dollars: sql<string>`coalesce(sum(${personalSourcesSummarySpends.cost}), 0)` })
-				.from(personalSourcesSummarySpends)
-				.where(
-					and(
-						userId !== undefined ? eq(personalSourcesSummarySpends.userId, userId) : undefined,
-						gte(personalSourcesSummarySpends.createdAt, since),
-					),
+			),
+		db
+			.select({ dollars: sql<string>`coalesce(sum(${personalSourcesSummarySpends.cost}), 0)` })
+			.from(personalSourcesSummarySpends)
+			.where(
+				and(
+					userId !== undefined ? eq(personalSourcesSummarySpends.userId, userId) : undefined,
+					gte(personalSourcesSummarySpends.createdAt, since),
 				),
-			// the topic image renders bill the user that asked for them
-			db
-				.select({ dollars: sql<string>`coalesce(sum(${topicImageRenders.cost}), 0)` })
-				.from(topicImageRenders)
-				.where(
-					and(
-						userId !== undefined ? eq(topicImageRenders.userId, userId) : undefined,
-						gte(topicImageRenders.createdAt, since),
-					),
+			),
+		// the topic image renders bill the user that asked for them
+		db
+			.select({ dollars: sql<string>`coalesce(sum(${topicImageRenders.cost}), 0)` })
+			.from(topicImageRenders)
+			.where(
+				and(
+					userId !== undefined ? eq(topicImageRenders.userId, userId) : undefined,
+					gte(topicImageRenders.createdAt, since),
 				),
-		])
+			),
+		// the Topic Post Discussions bill the user that started them
+		db
+			.select({ dollars: sql<string>`coalesce(sum(${topicPostDiscussions.cost}), 0)` })
+			.from(topicPostDiscussions)
+			.where(
+				and(
+					userId !== undefined ? eq(topicPostDiscussions.userId, userId) : undefined,
+					gte(topicPostDiscussions.createdAt, since),
+				),
+			),
+		// the films bill their podcast episode's owner.
+		// ponytail: a rebuild's cost counts in the month the film was made, a cost row per render if that drifts
+		db
+			.select({ dollars: sql<string>`coalesce(sum(${topicPodcastEpisodeVideos.cost}), 0)` })
+			.from(topicPodcastEpisodeVideos)
+			.innerJoin(podcastEpisodes, eq(podcastEpisodes.id, topicPodcastEpisodeVideos.podcastEpisodeId))
+			.where(
+				and(
+					userId !== undefined ? eq(podcastEpisodes.ownerId, userId) : undefined,
+					gte(topicPodcastEpisodeVideos.createdAt, since),
+				),
+			),
+	])
+
+	// a discussion is the two hosts recorded, and a film is its podcast episode's, so both count as podcast episode
+	// spend
+	const podcastEpisodeDollars =
+		Number(podcastEpisodeSpendRow?.dollars ?? 0) +
+		Number(topicPostDiscussionSpendRow?.dollars ?? 0) +
+		Number(topicPodcastEpisodeVideoSpendRow?.dollars ?? 0)
 	return {
 		scanDollars: Number(scanSpendRow?.dollars ?? 0),
 		chatDollars: Number(chatSpendRow?.dollars ?? 0),
-		podcastEpisodeDollars: Number(podcastEpisodeSpendRow?.dollars ?? 0),
+		podcastEpisodeDollars,
 		personalSourcesDollars: Number(personalSourcesSpendRow?.dollars ?? 0),
 		topicImageDollars: Number(topicImageSpendRow?.dollars ?? 0),
 	}

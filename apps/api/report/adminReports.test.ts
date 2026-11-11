@@ -1,17 +1,22 @@
 // admin report tests: the open list shapes each report with its people and whether its content is gone, Keep closes a
-// report without touching the content, and Remove deletes a comment through the comment delete before closing
-import { afterEach, expect, test } from "bun:test"
+// report without touching the content, Remove deletes a comment through the comment delete before closing, and
+// Regenerate draws a reported Topic Post image again
+import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import { restoreConnectionPool, stubConnectionPool } from "@carlnotes/db/connectionPoolStub"
+import * as redis from "@carlnotes/db/redis"
+import * as topicImageRenders from "@carlnotes/pipeline/topicImages/topicImageRenders"
+import * as topicPostImageRenders from "@carlnotes/pipeline/topicPosts/topicPostImageRenders"
 import { saveEnvSettings } from "@carlnotes/server/savedEnvSettings"
 import type { Context } from "hono"
 import { loadOpenReports, resolveReport } from "./adminReports"
 import { toReportTextHash } from "./reports"
 
-// put the connection pool and the auth secret back after each test
+// put the connection pool, the auth secret, and every spy back after each test
 const restoreAuthSecret = saveEnvSettings(["BETTER_AUTH_SECRET"])
 afterEach(() => {
 	restoreConnectionPool()
 	restoreAuthSecret()
+	mock.restore()
 })
 
 // one open report row as the list's read selects it: the report, then the reporter, the author, and when an admin
@@ -105,11 +110,17 @@ test("removing a reported comment deletes it as the admin", async () => {
 	expect(sentQueries.some((sentQuery) => sentQuery.text.startsWith('update "reports"'))).toBe(true)
 })
 
-// Remove deletes a reported comment for everyone
+// Remove deletes a reported comment for everyone, and clears the cached unseen Comment Mentions of the users its
+// thread mentions
 test.each([["comment", "comments"]] as const)("removing a reported %s deletes it", async (subjectKind, table) => {
-	const sentQueries = stubConnectionPool(({ text }) =>
-		text.includes('from "reports"') ? [["report-1", subjectKind, "subject-1", "author-1"]] : [],
-	)
+	// the open report, and the one user the comment's thread mentions
+	const sentQueries = stubConnectionPool(({ text }) => {
+		if (text.includes('from "reports"')) {
+			return [["report-1", subjectKind, "subject-1", "author-1"]]
+		}
+		return text.includes('from "comment_mentions"') ? [["user-ava"]] : []
+	})
+	const deleteRedisKeysSpy = spyOn(redis, "deleteRedisKeys").mockResolvedValue(0)
 	const isResolved = await resolveReport({
 		context: {} as Context,
 		adminUserId: "admin-1",
@@ -122,6 +133,9 @@ test.each([["comment", "comments"]] as const)("removing a reported %s deletes it
 	const deleteQuery = sentQueries.find((sentQuery) => sentQuery.text.startsWith(`delete from "${table}"`))
 	expect(deleteQuery?.values).toEqual(["subject-1"])
 	expect(sentQueries.some((sentQuery) => sentQuery.text.startsWith('update "users"'))).toBe(false)
+
+	// the mentioned user's next read counts without the deleted comment
+	expect(deleteRedisKeysSpy).toHaveBeenCalledWith("unseen-comment-mentions:user-ava")
 })
 
 // Block sets the admin block on the author, deletes a removable subject, and closes the report as blocked
@@ -160,4 +174,51 @@ test("a missing report is not resolved", async () => {
 		resolution: "cleared",
 	})
 	expect(isResolved).toBe(false)
+})
+
+// Regenerate on a Topic Post's image drops an upload and draws a new image that no user is billed for
+test("regenerating a reported post image removes the upload and renders as the admin, with no user", async () => {
+	// the open report of a post's image, and the post's topic
+	const sentQueries = stubConnectionPool(({ text }) => {
+		if (text.includes('from "reports"')) {
+			return [["report-1", "topicPostImage", "post-1"]]
+		}
+		return text.includes('from "topic_posts"') ? [["topic-1"]] : []
+	})
+	// the upload's removal and the render's start
+	const removeUploadSpy = spyOn(topicPostImageRenders, "removeTopicPostImageUpload").mockResolvedValue(true)
+	const startRenderSpy = spyOn(topicImageRenders, "startTopicImageRender").mockResolvedValue("render-1")
+	const isResolved = await resolveReport({
+		context: {} as Context,
+		adminUserId: "admin-1",
+		reportId: "report-1",
+		resolution: "removed",
+	})
+	expect(isResolved).toBe(true)
+
+	// the render names the post and bills the platform's budget, and the report closes
+	expect(removeUploadSpy).toHaveBeenCalledWith("post-1")
+	expect(startRenderSpy).toHaveBeenCalledWith(
+		expect.objectContaining({ topicId: "topic-1", topicPostId: "post-1", userId: null, kind: "admin" }),
+	)
+	expect(sentQueries.some((sentQuery) => sentQuery.text.startsWith('update "reports"'))).toBe(true)
+})
+
+// a post deleted after its report has no image to draw
+test("regenerating the image of a deleted post renders nothing, and still closes the report", async () => {
+	const sentQueries = stubConnectionPool(({ text }) =>
+		text.includes('from "reports"') ? [["report-1", "topicPostImage", "post-1"]] : [],
+	)
+	const removeUploadSpy = spyOn(topicPostImageRenders, "removeTopicPostImageUpload").mockResolvedValue(false)
+	const startRenderSpy = spyOn(topicImageRenders, "startTopicImageRender").mockResolvedValue("render-1")
+	const isResolved = await resolveReport({
+		context: {} as Context,
+		adminUserId: "admin-1",
+		reportId: "report-1",
+		resolution: "removed",
+	})
+	expect(isResolved).toBe(true)
+	expect(removeUploadSpy).not.toHaveBeenCalled()
+	expect(startRenderSpy).not.toHaveBeenCalled()
+	expect(sentQueries.some((sentQuery) => sentQuery.text.startsWith('update "reports"'))).toBe(true)
 })

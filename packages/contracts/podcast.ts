@@ -39,6 +39,11 @@ export const podcastEpisodeSummary = z.object({
 	chapterCount: z.number(),
 	// the podcast episode's own image at every size, with no text on it, null until it is drawn
 	image: topicImageUrls.nullable(),
+	// whether the podcast episode has a ready film. an older api leaves it out
+	hasVideo: z.boolean().optional(),
+	// the url of the ready film's own image, null with no ready film or until the film has one. an older api leaves it
+	// out
+	videoPosterUrl: z.string().nullable().optional(),
 })
 
 export type PodcastEpisodeSummary = z.infer<typeof podcastEpisodeSummary>
@@ -84,6 +89,21 @@ export function isPublishedPodcastEpisode<T extends { season: number | null; epi
 	return podcastEpisode.season !== null && podcastEpisode.episodeNumber !== null
 }
 
+// a podcast episode's film: its stable video url, its captions url, and the url of its own image for the poster,
+// which is null until the film has one and optional, so a released app reads a film without it
+const topicPodcastEpisodeVideo = z.object({
+	videoUrl: z.string(),
+	captionsUrl: z.string(),
+	posterUrl: z.string().nullable().optional(),
+})
+
+export type TopicPodcastEpisodeVideo = z.infer<typeof topicPodcastEpisodeVideo>
+
+// the formats a podcast episode plays in
+export const podcastEpisodeFormats = ["audio", "video"] as const
+
+export type PodcastEpisodeFormat = (typeof podcastEpisodeFormats)[number]
+
 // a podcast episode in the shape that the player shows: its summary, its topic, its status, its audio and covers, its
 // chapters, and the user's progress. a recording or failed episode has its status and its title once written
 export const podcastEpisode = podcastEpisodeSummary.extend({
@@ -96,6 +116,10 @@ export const podcastEpisode = podcastEpisodeSummary.extend({
 	audioUrl: z.string().nullable(),
 	coverUrl: z.string().nullable(),
 	smallCoverUrl: z.string().nullable(),
+	// the film, null if the podcast episode has no ready film. an older api leaves it out
+	video: topicPodcastEpisodeVideo.nullable().optional(),
+	// whether the podcast episode's film is rendering. an older api leaves it out
+	isVideoRendering: z.boolean().optional(),
 	chapters: z.array(podcastEpisodeChapter),
 	// where the user stopped listening and whether the user finished. zero and false for a visitor
 	progressSeconds: z.number(),
@@ -115,13 +139,23 @@ export type SeasonPodcastEpisodes = z.infer<typeof seasonPodcastEpisodes>
 export const nextUnplayedPodcastEpisodeResponse = z.object({ podcastEpisode: podcastEpisode.nullable() })
 
 // the url of the user's podcast feed for a topic, which a feed read and a feed reset both return
-export const podcastFeedUrlResponse = z.object({ podcastFeedUrl: z.string() })
+export const podcastFeedUrlResponse = z.object({
+	podcastFeedUrl: z.string(),
+	// the film feed's url, beside the podcast feed's, if the Topic has a film
+	podcastVideoFeedUrl: z.string().nullable().optional(),
+})
+export type PodcastFeedUrlResponse = z.infer<typeof podcastFeedUrlResponse>
+
+// one turn as a transcript reads it: its speaker's name and its words
+export const podcastEpisodeTranscriptTurn = z.object({ speakerName: z.string(), text: z.string() })
+
+export type PodcastEpisodeTranscriptTurn = z.infer<typeof podcastEpisodeTranscriptTurn>
 
 // one block of a podcast episode's transcript. a chapter under its title,
 // or the cold open, a transition, or the sign-off under no heading
 export const podcastEpisodeTranscriptBlock = z.object({
 	heading: z.string().nullable(),
-	turns: z.array(z.object({ speakerName: z.string(), text: z.string() })),
+	turns: z.array(podcastEpisodeTranscriptTurn),
 })
 
 export type PodcastEpisodeTranscriptBlock = z.infer<typeof podcastEpisodeTranscriptBlock>
@@ -145,9 +179,20 @@ export const topicPodcast = z.object({
 	latestSeasonPodcastEpisodes: seasonPodcastEpisodes,
 	// the public podcast feed, for a public topic with a published episode, and null for every other topic
 	publicFeedUrl: z.string().nullable(),
+	// Topic Cinema: the latest film the user may watch and whether its section opens, null with no film. an older api
+	// leaves it out
+	topicPodcastEpisodeVideoSection: z
+		.object({ podcastEpisode: podcastEpisode, isOpen: z.boolean() })
+		.nullable()
+		.optional(),
+	// the public film feed, for a public topic with a film, and null for every other topic. an older api leaves it out
+	publicVideoFeedUrl: z.string().nullable().optional(),
 })
 
 export type TopicPodcast = z.infer<typeof topicPodcast>
+
+// a user's choice to open or close Topic Cinema, with the latest film when they chose
+export const topicPodcastEpisodeVideoSectionPayload = z.object({ isOpen: z.boolean(), podcastEpisodeId: z.string() })
 
 // the length limits of a podcast episode's title and description
 export const PODCAST_EPISODE_TITLE_MAX_CHARS = 60
@@ -177,3 +222,10 @@ export const podcastEpisodeAudio = z.object({
 })
 
 export type PodcastEpisodeAudio = z.infer<typeof podcastEpisodeAudio>
+
+// a film's short-lived url, which a platform player loads without the session, and when the url expires
+export const topicPodcastEpisodeVideoFile = z.object({
+	videoUrl: z.url().refine((url) => url.startsWith("https://")),
+	expiresAt: z.iso.datetime(),
+})
+export type TopicPodcastEpisodeVideoFile = z.infer<typeof topicPodcastEpisodeVideoFile>

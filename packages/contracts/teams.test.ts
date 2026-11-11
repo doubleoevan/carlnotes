@@ -64,6 +64,9 @@ const TEAM_PAGE: TeamPageResponse = {
 			},
 		},
 	],
+	topicCards: [],
+	podcastEpisodeCards: [],
+	topicPostCards: [],
 }
 
 describe("teamPageResponse", () => {

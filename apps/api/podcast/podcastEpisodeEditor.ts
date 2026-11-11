@@ -10,7 +10,7 @@ import { type AppEnv, currentUser } from "../currentUser"
 import { namedTopicColumns } from "../topic/permissions"
 
 // the signed-in editor of the route's podcast episode, or the response that turns the request away
-type PodcastEpisodeEditor =
+export type PodcastEpisodeEditor =
 	| { userId: string; podcastEpisodeId: string; topicId: string; topicOwnerId: string }
 	| { response: Response }
 

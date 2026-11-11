@@ -72,6 +72,21 @@ export const SEARCH_ROW_FIXTURES: SearchRow[] = [
 		topic: { id: "topic-home-espresso", name: "Home espresso" },
 	},
 	{
+		kind: "topicPost",
+		id: "topic-post-burr-alignment",
+		name: "Aligning burrs at home",
+		path: "/topics/topic-home-espresso/home-espresso/posts/topic-post-burr-alignment/aligning-burrs-at-home",
+		date: "2026-09-30T09:00:00.000Z",
+		count: null,
+		// the author, the summary, and no image yet
+		topicPost: {
+			author: { userId: STORY_USER.userId, username: STORY_USER.username, avatarSource: null, avatarVersion: null },
+			summary: "A marker test and two shims bring a home grinder's burrs into line.",
+			image: null,
+		},
+		topic: { id: "topic-home-espresso", name: "Home espresso" },
+	},
+	{
 		kind: "finding",
 		id: "finding-grinder-burrs",
 		name: "Espresso grinder burrs, measured",
@@ -118,7 +133,7 @@ export const SEARCH_ROW_FIXTURES: SearchRow[] = [
 
 /** The first page of a search with twelve results, ten a page. */
 export const SEARCH_PAGE_FIXTURE: SearchResultsPage = {
-	rows: [...SEARCH_ROW_FIXTURES, ...SEARCH_ROW_FIXTURES].map((searchRow, i) => ({
+	rows: [...SEARCH_ROW_FIXTURES, ...SEARCH_ROW_FIXTURES].slice(0, 10).map((searchRow, i) => ({
 		...searchRow,
 		id: `${searchRow.id}-${i}`,
 	})),

@@ -1,6 +1,7 @@
 // the routes for a listener's podcast feed url and its reset, a podcast episode's files at paths after a feed token,
 // and the podcast covers
 
+import type { PodcastEpisodeFormat } from "@carlnotes/contracts/podcast"
 import { PODCAST_COVER_SIZES, type PodcastCover, toPodcastEpisodeCover } from "@carlnotes/contracts/podcastEpisodes"
 import { db } from "@carlnotes/db"
 import { podcastEpisodeListens, podcastEpisodes } from "@carlnotes/db/schema/podcast"
@@ -21,10 +22,18 @@ import { toCachedPodcastCoverJpeg } from "../share/podcastCover"
 import {
 	toPodcastEpisodeAudioResponse,
 	toPodcastEpisodeChaptersResponse,
+	toPodcastEpisodeFileResponse,
 	toPodcastEpisodeTranscriptResponse,
 } from "./podcastEpisodeFiles"
 import { loadAccessiblePodcastEpisode, toPodcastEpisodeAnalyticsProperties } from "./podcastEpisodeRows"
-import { deletePodcastFeedToken, loadOrCreatePodcastFeedUrl, loadPodcastFeedTokenListener } from "./podcastFeedTokens"
+import { deletePodcastFeedToken, loadOrCreatePodcastFeedUrls, loadPodcastFeedTokenListener } from "./podcastFeedTokens"
+import { loadReadyTopicPodcastEpisodeVideoFiles, TOPIC_PODCAST_EPISODE_VIDEO_FILE } from "./topicPodcastEpisodeVideos"
+
+// the format of each podcast episode file that a feed encloses, by its file name
+const PODCAST_EPISODE_FORMAT_BY_FILE_NAME: Record<string, PodcastEpisodeFormat | undefined> = {
+	"audio.mp3": "audio",
+	"video.mp4": "video",
+}
 
 // a cover's file name, made of its key and its size
 const PODCAST_COVER_FILE_NAME_PATTERN = /^([0-9a-f]{32})-(\d+)\.jpg$/
@@ -93,10 +102,10 @@ export const podcastFeedsRoute = new Hono<AppEnv>()
 			.where(eq(topics.id, context.req.param("id")))
 
 		// a user who may not see the topic gets no url
-		const podcastFeedUrl = topic ? await loadOrCreatePodcastFeedUrl(userId, topic) : null
-		return podcastFeedUrl ? context.json({ podcastFeedUrl }) : context.json({ error: "not found" }, 404)
+		const podcastFeedUrls = topic ? await loadOrCreatePodcastFeedUrls(userId, topic) : null
+		return podcastFeedUrls ? context.json(podcastFeedUrls) : context.json({ error: "not found" }, 404)
 	})
-	// a new url for the user's own feed, which ends the old url
+	// a new url for the user's own feeds, which ends the old urls of both
 	.post("/topics/:id/podcast-feed/reset", async (context) => {
 		// load the topic that the url names
 		const userId = currentUser(context)
@@ -112,9 +121,9 @@ export const podcastFeedsRoute = new Hono<AppEnv>()
 
 		// delete the old feed token, then load the url, which creates a new feed token
 		await deletePodcastFeedToken({ topicId: topic.id, userId })
-		const podcastFeedUrl = await loadOrCreatePodcastFeedUrl(userId, topic)
+		const podcastFeedUrls = await loadOrCreatePodcastFeedUrls(userId, topic)
 		trackEvent("podcast_feed_reset", userId, { ...toAnalyticsProperties(context), topicId: topic.id })
-		return podcastFeedUrl ? context.json({ podcastFeedUrl }) : context.json({ error: "not found" }, 404)
+		return podcastFeedUrls ? context.json(podcastFeedUrls) : context.json({ error: "not found" }, 404)
 	})
 	// a podcast episode's files at paths after a listener's feed token, which grants access without a session.
 	// hono runs this route for a HEAD too
@@ -150,24 +159,46 @@ export const podcastFeedsRoute = new Hono<AppEnv>()
 			return toPodcastEpisodeTranscriptResponse(context, podcastEpisodeRow)
 		}
 
-		// respond 404 to any file name but the audio's
-		if (fileName !== "audio.mp3") {
+		// respond 404 to any file name but the audio's and the film's, and to a film that is not ready
+		const format = PODCAST_EPISODE_FORMAT_BY_FILE_NAME[fileName]
+		const readyTopicPodcastEpisodeVideoFiles =
+			format === "video" ? await loadReadyTopicPodcastEpisodeVideoFiles(podcastEpisodeRow.id) : null
+		if (!format || (format === "video" && !readyTopicPodcastEpisodeVideoFiles)) {
 			return context.json({ error: "not found" }, 404)
 		}
 
-		// count a download through the listener's feed as one play and as its listener, and report the play
+		// count a download through the listener's feed as one play in its format and as its listener, and report the play
 		if (context.req.method === "GET") {
+			const videoPlayCount = format === "video" ? 1 : 0
 			void countPodcastEpisodeListen(toRequestSender(context, podcastFeedTokenListener.userId), podcastEpisodeRow.id)
 			await db
 				.insert(podcastEpisodeListens)
-				.values({ podcastEpisodeId: podcastEpisodeRow.id, userId: podcastFeedTokenListener.userId, playCount: 1 })
+				.values({
+					podcastEpisodeId: podcastEpisodeRow.id,
+					userId: podcastFeedTokenListener.userId,
+					playCount: 1,
+					videoPlayCount,
+				})
 				.onConflictDoUpdate({
 					target: [podcastEpisodeListens.podcastEpisodeId, podcastEpisodeListens.userId],
-					set: { playCount: sql`${podcastEpisodeListens.playCount} + 1` },
+					set: {
+						playCount: sql`${podcastEpisodeListens.playCount} + 1`,
+						videoPlayCount: sql`${podcastEpisodeListens.videoPlayCount} + ${videoPlayCount}`,
+					},
 				})
 			trackEvent("episode_played", podcastFeedTokenListener.userId, {
 				entryPoint: "feed",
+				format,
 				...toPodcastEpisodeAnalyticsProperties(accessiblePodcastEpisode.topic, podcastEpisodeRow.id),
+			})
+		}
+
+		// respond with the film or the audio
+		if (readyTopicPodcastEpisodeVideoFiles) {
+			return toPodcastEpisodeFileResponse(context, {
+				...TOPIC_PODCAST_EPISODE_VIDEO_FILE,
+				objectKey: readyTopicPodcastEpisodeVideoFiles.filmKey,
+				byteSize: readyTopicPodcastEpisodeVideoFiles.byteSize,
 			})
 		}
 		return toPodcastEpisodeAudioResponse(context, podcastEpisodeRow)

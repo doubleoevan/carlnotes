@@ -4,15 +4,23 @@ import { type ChatId, type ChatPageContext, toDefaultChatId } from "@carlnotes/c
 import type { Href } from "expo-router"
 
 /**
- * Returns a Topic or Team chat route, or the global conversation picker.
+ * Returns the chat route the chat launcher opens: a Topic or Team chat route, the Topic's private chat on the screen
+ * of the Topic Post it asks about, or the global conversation picker.
  */
 export function toChatHref(
 	pathname: string,
+	chatTopicPost: { id: string; topicId: string } | null = null,
 ):
 	| "/chat"
 	| `/topics/${string}/chat`
 	| `/teams/${string}/chat`
+	| { pathname: "/topics/[topicId]/chat"; params: { topicId: string; privateChat: "true" } }
 	| { pathname: "/chat"; params: { profileUserId: string } } {
+	// a published Topic Post's own screen opens the chat about that post. a screen above it keeps its own chat
+	if (chatTopicPost && pathname.endsWith(`/posts/${chatTopicPost.id}`)) {
+		return { pathname: "/topics/[topicId]/chat", params: { topicId: chatTopicPost.topicId, privateChat: "true" } }
+	}
+
 	// a Topic or Team page, and its notes, keep their own chat
 	const [, routeKind, routeId] = pathname.split("/")
 	if (routeId && (routeKind === "topics" || routeKind === "teams")) {
@@ -24,6 +32,17 @@ export function toChatHref(
 		return { pathname: "/chat", params: { profileUserId: routeId } }
 	}
 	return "/chat"
+}
+
+/**
+ * Returns the Topic Post a chat screen asks about: the open post, if the chat launcher on that post's screen opened
+ * the chat. A post's screen left mounted under the screen that opened the chat names none.
+ */
+export function toChatScreenTopicPost<ChatTopicPost>(
+	chatTopicPost: ChatTopicPost | null,
+	isPrivateChat: boolean,
+): ChatTopicPost | null {
+	return isPrivateChat ? chatTopicPost : null
 }
 
 /**
@@ -103,22 +122,24 @@ export function toInitialChatId({
 	pageContext,
 	newTopicChatId,
 	isEditingTopic = false,
+	isPrivateChat = false,
 }: {
 	rooms: ChatRoom[]
 	topicId?: string
 	teamId?: string
 	chatTeamId?: string
 	pageContext?: ChatPageContext | null
-	// a requested new-topic chat, or a topic edit
+	// a requested new-topic chat, a topic edit, or the topic's private chat
 	newTopicChatId?: NewTopicChatId
 	isEditingTopic?: boolean
+	isPrivateChat?: boolean
 }): ChatId | null {
 	// open the new-topic chat a New topic choice or an empty Feed asked for, or the topic's private chat an Edit topic
-	// choice asked for
+	// choice or the chat launcher on a Topic Post's screen asked for
 	if (newTopicChatId) {
 		return newTopicChatId
 	}
-	if (isEditingTopic && topicId) {
+	if ((isEditingTopic || isPrivateChat) && topicId) {
 		return { kind: "private", topicId }
 	}
 

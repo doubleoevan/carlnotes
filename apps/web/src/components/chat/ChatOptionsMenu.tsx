@@ -1,6 +1,6 @@
 // the chat room switcher, a row under the title that opens the chat room list
 import type { ChatMention } from "@carlnotes/contracts/chat"
-import { NEW_TOPIC_CHAT_COPY } from "@carlnotes/core/lib/chatCopy"
+import { NEW_TOPIC_CHAT_COPY, toPrivateChatLabel } from "@carlnotes/core/lib/chatCopy"
 import { useAllChatMentions } from "@carlnotes/core/stores/chatRoomStore"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { Check, ChevronDown, Plus, Trash2, Users } from "lucide-react"
@@ -37,6 +37,8 @@ export type ChatOptionsMenuProps = {
 	chatRoomOptions?: ChatRoomOption[]
 	// opens the user's own conversation about this topic, absent where there is no topic
 	onPrivateChat?: () => void
+	// what the private chat's option reads, naming what that chat is about
+	privateChatLabel?: string
 	// opens the new-topic chat, where carl makes a topic. absent for a visitor
 	onNewTopicChat?: () => void
 	// the Clear chat row: the private chat's own, or the chat room's for a team leader
@@ -50,7 +52,7 @@ export type ChatOptionsMenuProps = {
 // the switcher props a chat room panel passes through, without the Clear row it adds itself
 export type ChatRoomMenu = Pick<
 	ChatOptionsMenuProps,
-	"chatRoomOptions" | "onPrivateChat" | "onNewTopicChat" | "onOpenChatRoomMenu"
+	"chatRoomOptions" | "onPrivateChat" | "privateChatLabel" | "onNewTopicChat" | "onOpenChatRoomMenu"
 >
 
 /**
@@ -71,6 +73,7 @@ export type CurrentChatRoomOption = {
 export function ChatOptionsMenu({
 	chatRoomOptions,
 	onPrivateChat,
+	privateChatLabel = toPrivateChatLabel(),
 	onNewTopicChat,
 	onClear,
 	clearLabel,
@@ -114,7 +117,10 @@ export function ChatOptionsMenu({
 					) : currentChatRoom?.isPrivate ? (
 						<HostAvatar speaker="host" className="size-5 shrink-0" />
 					) : null}
-					<span className="min-w-0 flex-1 truncate font-medium">{currentChatRoom?.name ?? "Select a chat"}</span>
+					{/* a long name ends in an ellipsis on its one line, and the title shows it whole */}
+					<span className="min-w-0 flex-1 truncate font-medium" title={currentChatRoom?.name}>
+						{currentChatRoom?.name ?? "Select a chat"}
+					</span>
 					{chatMentions.length > 0 && (
 						<CountBadge count={chatMentions.length} className="h-5 min-w-5 shrink-0 text-xs" />
 					)}
@@ -126,9 +132,11 @@ export function ChatOptionsMenu({
 				{/* the private chat goes first if it's available */}
 				{onPrivateChat && (
 					<button type="button" onClick={() => handleSelectChatOption(onPrivateChat)} className={MENU_OPTION_CLASS}>
-						{/* the private chat is with carl alone, marked with his avatar */}
-						<HostAvatar speaker="host" className="size-5" />
-						Private chat
+						{/* the private chat is with carl alone, marked with his avatar, and named for what it is about */}
+						<HostAvatar speaker="host" className="size-5 shrink-0" />
+						<span className="min-w-0 flex-1 truncate" title={privateChatLabel}>
+							{privateChatLabel}
+						</span>
 					</button>
 				)}
 				{/* the new-topic chat, where carl makes a topic */}

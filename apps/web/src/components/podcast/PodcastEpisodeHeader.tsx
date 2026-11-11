@@ -3,13 +3,14 @@
 import type { PodcastEpisodePageResponse } from "@carlnotes/contracts/podcastEpisodePage"
 import { toTopicPath } from "@carlnotes/contracts/seo"
 import { EDIT_IMAGE_DIALOG_TITLES } from "@carlnotes/core/lib/topicImageEditor"
+import { usePageCommentMentions } from "@carlnotes/core/stores/commentMentionStore"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { AnchorLink } from "@/components/common/AnchorLink"
+import { CommentMentionBadge } from "@/components/social/CommentMentionBadge"
 import { ReactionRow } from "@/components/social/ReactionRow"
 import { TopicByline } from "@/components/topic/TopicByline"
 import { TopicHeaderImage } from "@/components/topic/TopicImageButton"
-import { TOPIC_HEADER_AREA_CLASSES, toTopicHeaderGridClass } from "@/lib/styleClasses"
-import { PodcastThemeSongNote } from "./PodcastThemeSongNote"
+import { PLAIN_TOPIC_HEADER_GRID_CLASS, TOPIC_HEADER_AREA_CLASSES } from "@/lib/styleClasses"
 
 // the podcast episode page, whether the reader is signed in, for the reactions, and the click on an editor's image
 type PodcastEpisodeHeaderProps = {
@@ -25,7 +26,7 @@ export function PodcastEpisodeHeader({ podcastEpisodePage, isSignedIn, onEditIma
 	const { podcastEpisode, topic } = podcastEpisodePage
 	const topicPath = toTopicPath(topic)
 	return (
-		<header className={HEADER_GRID_CLASS}>
+		<header className={PLAIN_TOPIC_HEADER_GRID_CLASS}>
 			<TopicHeaderImage
 				image={podcastEpisode.image}
 				name={podcastEpisode.title ?? topic.name}
@@ -36,7 +37,7 @@ export function PodcastEpisodeHeader({ podcastEpisodePage, isSignedIn, onEditIma
 				className={cn(TOPIC_HEADER_AREA_CLASSES.title, "font-display text-2xl leading-tight text-balance sm:text-3xl")}
 			>
 				{podcastEpisode.title}
-				<PodcastThemeSongNote />
+				<PodcastEpisodeMentionBadge podcastEpisodeId={podcastEpisode.id} />
 			</h1>
 			<div className={TOPIC_HEADER_AREA_CLASSES.byline}>
 				{podcastEpisode.description && <p className="mt-1.5 text-sm sm:mt-0">{podcastEpisode.description}</p>}
@@ -62,5 +63,12 @@ export function PodcastEpisodeHeader({ podcastEpisodePage, isSignedIn, onEditIma
 	)
 }
 
-// the header's grid from sm up, the topic header's with no tags and no actions, and its float on a phone
-const HEADER_GRID_CLASS = toTopicHeaderGridClass({ hasTags: false, hasActions: false })
+// the unseen Comment Mentions in the episode's own thread, as a count right after the title
+function PodcastEpisodeMentionBadge({ podcastEpisodeId }: { podcastEpisodeId: string }) {
+	const commentMentions = usePageCommentMentions({ kind: "podcastEpisode", id: podcastEpisodeId })
+	return (
+		<span className="ml-2 inline-flex align-middle">
+			<CommentMentionBadge commentMentions={commentMentions} place="title" />
+		</span>
+	)
+}

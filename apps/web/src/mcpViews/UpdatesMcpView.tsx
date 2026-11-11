@@ -1,4 +1,5 @@
-import { EMPTY_UPDATES_TEXT, UPDATES_TITLE, type Updates } from "@carlnotes/contracts/updates"
+import type { Updates } from "@carlnotes/contracts/updates"
+import { UpdatesList, type UpdatesListElements } from "@carlnotes/core/components/UpdatesList"
 import { toReadingTimeLabel } from "@carlnotes/core/lib/labels"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { Coffee } from "lucide-react"
@@ -39,17 +40,10 @@ export function UpdatesMcpView({ updates }: { updates: Updates }) {
 		return [{ topicFinding, topic, latestPodcastEpisode, titleLine }]
 	})
 	return (
-		<section className={cn(RESOURCE_LIST_CARD_CLASS, "p-5")}>
-			<h1 className={cn(PAGE_TITLE_CLASS, "mb-4")}>
-				<Coffee className="size-6" />
-				{UPDATES_TITLE}
-			</h1>
-			{updates.findings.length === 0 ? (
-				<p className="text-muted-foreground text-sm">{EMPTY_UPDATES_TEXT}</p>
-			) : (
+		<UpdatesList
+			updates={updates}
+			findings={
 				<>
-					{/* an updates list without an opener starts at its first Finding */}
-					{updates.opener && <p className="mb-4">{updates.opener}</p>}
 					<FindingsTable rows={findingsTableRows} topicFeedHandlers={topicFeedHandlers} />
 					{updates.moreCount > 0 && (
 						<AnchorLink href={updates.morePath} className={cn(STANDALONE_LINE_LINK_CLASS, "mt-4")}>
@@ -57,7 +51,21 @@ export function UpdatesMcpView({ updates }: { updates: Updates }) {
 						</AnchorLink>
 					)}
 				</>
-			)}
-		</section>
+			}
+			elements={UPDATES_LIST_ELEMENTS}
+		/>
 	)
+}
+
+// the browser elements the shared list composes. the heading is the MCP view's h1
+const UPDATES_LIST_ELEMENTS: UpdatesListElements = {
+	Card: ({ children }) => <section className={cn(RESOURCE_LIST_CARD_CLASS, "p-5")}>{children}</section>,
+	Heading: ({ children }) => (
+		<h1 className={cn(PAGE_TITLE_CLASS, "mb-4")}>
+			<Coffee className="size-6" />
+			{children}
+		</h1>
+	),
+	Opener: ({ children }) => <p className="mb-4">{children}</p>,
+	EmptyState: ({ children }) => <p className="text-muted-foreground text-sm">{children}</p>,
 }

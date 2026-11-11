@@ -42,7 +42,8 @@ export async function searchForTool({
 	}
 }
 
-// a search row with every image url absolute: a topic's and its latest podcast episode's, or a podcast episode's own
+// a search row with every image url absolute: a topic's and its latest podcast episode's, a podcast episode's own, or
+// a Topic Post's
 function toAbsoluteImageSearchRow(searchRow: SearchRow, siteUrl: string): SearchRow {
 	if (searchRow.kind === "topic") {
 		const { image, latestPodcastEpisode } = searchRow.topic
@@ -63,6 +64,13 @@ function toAbsoluteImageSearchRow(searchRow: SearchRow, siteUrl: string): Search
 		return {
 			...searchRow,
 			podcastEpisode: { ...searchRow.podcastEpisode, image: image && toAbsoluteTopicImageUrls(image, siteUrl) },
+		}
+	}
+	if (searchRow.kind === "topicPost") {
+		const { image } = searchRow.topicPost
+		return {
+			...searchRow,
+			topicPost: { ...searchRow.topicPost, image: image && toAbsoluteTopicImageUrls(image, siteUrl) },
 		}
 	}
 	return searchRow

@@ -1,12 +1,14 @@
-import type { PodcastEpisode } from "@carlnotes/contracts/podcast"
+import type { PodcastEpisode, PodcastEpisodeFormat } from "@carlnotes/contracts/podcast"
 import { type ComponentType, type ReactNode, useState } from "react"
 import { toClockLabel } from "../lib/labels"
-import { playPodcastEpisode, seekPlaybackTo } from "../stores/podcastEpisodePlayerStore"
+import { playPodcastEpisode, playTopicPodcastEpisodeVideo, seekPlaybackTo } from "../stores/podcastEpisodePlayerStore"
 
 export type PodcastEpisodeSeekBarProps = {
 	podcastEpisode: PodcastEpisode
 	positionSeconds: number
 	isPodcastEpisodeLoaded: boolean
+	// the format a seek starts if the podcast episode is not loaded, audio if left out
+	format?: PodcastEpisodeFormat
 }
 export type PodcastEpisodeSeekBarElements = {
 	Group: ComponentType<{ children: ReactNode; className?: string }>
@@ -28,6 +30,7 @@ export function PodcastEpisodeSeekBar({
 	podcastEpisode,
 	positionSeconds,
 	isPodcastEpisodeLoaded,
+	format = "audio",
 	elements: { Group, Text, Track, Segment },
 }: PodcastEpisodeSeekBarProps & { elements: PodcastEpisodeSeekBarElements }) {
 	// preview a drag without seeking audio until release
@@ -38,6 +41,8 @@ export function PodcastEpisodeSeekBar({
 		setPreviewPositionSeconds(null)
 		if (isPodcastEpisodeLoaded) {
 			seekPlaybackTo(seconds)
+		} else if (format === "video") {
+			void playTopicPodcastEpisodeVideo(podcastEpisode, seconds)
 		} else {
 			void playPodcastEpisode(podcastEpisode, seconds)
 		}

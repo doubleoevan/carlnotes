@@ -22,7 +22,7 @@ export function TopicSettingsCard({ topic, personalSources }: { topic: TopicResp
 	const hasFooter = topic.monthCostDollars !== null || Boolean(topic.podcast)
 	const personalSourcesClassName = hasFooter ? undefined : "border-b border-dashed border-separator-strong"
 	return (
-		<CollapsibleSection title="Artisanal Blend">
+		<CollapsibleSection title="Artisanal Blend" hasClosedDivider>
 			<View className="rounded-lg border border-separator bg-card p-5 shadow-raised">
 				<InfoSection label="Frequency" isFirst>
 					<Text className="text-sm">

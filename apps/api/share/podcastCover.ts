@@ -4,6 +4,7 @@
 import { FULL_PODCAST_COVER_SIZE, type PodcastCover, type PodcastCoverSize } from "@carlnotes/contracts/podcastEpisodes"
 import { attachmentExists, getAttachmentBytes, uploadAttachment } from "@carlnotes/db/store"
 import { runFfmpeg } from "@carlnotes/models/ffmpeg"
+import { type CardElement, toCardElementPng, toImageDataUri } from "@carlnotes/pipeline/cardElementPng"
 import { toTopicImageCardJpeg, toTopicImageOriginalKey } from "@carlnotes/pipeline/topicImages/topicImageFiles"
 import { toPodcastCoverObjectKey } from "@carlnotes/server/podcastCoverPaths"
 import { type CoverBandTones, toBottomBand, toCoverBandTones, toTopBand } from "./podcastCoverBands"
@@ -12,7 +13,6 @@ import {
 	type PodcastEpisodeCover,
 	toPodcastEpisodeCoverElement,
 } from "./podcastEpisodeCover"
-import { type CardElement, toCardElementPng, toImageDataUri } from "./previewImage"
 
 // the most bytes that Apple allows for a cover
 export const MAX_PODCAST_COVER_BYTES = 512 * 1024

@@ -60,9 +60,15 @@ export type Capability =
 	| "podcastEpisode:remove"
 	// regenerating a topic's image, within the owner's monthly plan limit
 	| "topicImage:regenerate"
+	// publishing a Topic Post on a topic, and regenerating its discussion
+	| "topicPost:publish"
+	// changing the image of a Topic Post on a topic, which the post's author may also do
+	| "topicPost:editImage"
 	// reactions and comments: posting one, and deleting anyone's on the topic's social targets
 	| "social:post"
 	| "social:moderate"
+	// pinning a topic or one of its podcast episodes to its owner's profile
+	| "profile:setProfileOrder"
 	// the admin console
 	| "admin:console"
 	| "admin:setRole"
@@ -95,14 +101,9 @@ export async function isAllowed(userId: string | null, capability: Capability, t
 	) {
 		return false
 	}
-	// rating is a subscriber action, not an admin power, so it skips the admin override and uses the topic rule
-	if (capability === "topic:rate") {
-		return topic ? canRateTopic(userId, topic) : false
-	}
-
-	// Scan workers can use the same authority through their transaction
-	if (capability === "scan:request") {
-		return canRequestTopicScan(userId, topic)
+	// a capability the admin override does not apply to is decided by its own rule
+	if (isOwnRuleCapability(capability)) {
+		return decideOwnRuleCapability(userId, capability, topic)
 	}
 
 	// resolve access authority. an admin passes every entitlement and overrides topic view/edit/delete/scan authority
@@ -125,12 +126,39 @@ export async function isAllowed(userId: string | null, capability: Capability, t
 	return decideTopicCapability(userId, capability, topic)
 }
 
+// the capabilities that the admin override does not apply to
+type OwnRuleCapability = "topic:rate" | "scan:request" | "profile:setProfileOrder"
+
+// whether a capability is decided by its own rule, before the admin override
+function isOwnRuleCapability(capability: Capability): capability is OwnRuleCapability {
+	return capability === "topic:rate" || capability === "scan:request" || capability === "profile:setProfileOrder"
+}
+
+// the decision for a capability that the admin override does not apply to
+async function decideOwnRuleCapability(
+	userId: string | null,
+	capability: OwnRuleCapability,
+	topic?: GatedTopic,
+): Promise<boolean> {
+	switch (capability) {
+		// rating is a subscriber action, not an admin power, so it uses the topic rule
+		case "topic:rate":
+			return topic ? canRateTopic(userId, topic) : false
+		// Scan workers can use the same authority through their transaction
+		case "scan:request":
+			return canRequestTopicScan(userId, topic)
+		// a profile's pins are its person's alone, so only the topic's owner passes
+		case "profile:setProfileOrder":
+			return Boolean(userId) && topic?.ownerId === userId
+	}
+}
+
 // the per-capability decisions for a non-admin or a signed-out visitor
 async function decideTopicCapability(
 	userId: string | null,
 	capability: Exclude<
 		Capability,
-		PersonalSourcesCapability | "topic:rate" | "chat:send" | "chat:persist" | "scan:request" | "social:post"
+		PersonalSourcesCapability | OwnRuleCapability | "chat:send" | "chat:persist" | "social:post"
 	>,
 	topic?: GatedTopic,
 ): Promise<boolean> {
@@ -146,8 +174,11 @@ async function decideTopicCapability(
 		// viewing follows the topic's visibility, invite, and subscription rules
 		case "topic:view":
 			return topic ? canSeeTopic(userId, topic) : false
-		// the topic owner and the owning team's members, while the owner is still on it
+		// the topic owner and the owning team's members, while the owner is still on it. whoever may edit a topic may
+		// publish a Topic Post on it and change the image of any Topic Post on it
 		case "topic:edit":
+		case "topicPost:publish":
+		case "topicPost:editImage":
 			return topic ? (await toTopicEditRole(userId, topic)) !== null : false
 		// only the topic owner may delete the topic, manage its invite list, see its costs, failure reasons, and generated
 		// context, or remove one of its podcast episodes

@@ -1,8 +1,13 @@
-// Temporal client tests: a failed connection is retried, a connected client is reused, and a chat mention push starts
-// once per message
+// Temporal client tests: a failed connection is retried, a connected client is reused, a chat mention push and a
+// film rebuild each start once, and a Topic Post's edits share one summary rewrite
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import { Connection, WorkflowClient, WorkflowExecutionAlreadyStartedError } from "@temporalio/client"
-import { describeScanQueue, startChatMentionPushWorkflow } from "./temporalClient"
+import {
+	describeScanQueue,
+	startChatMentionPushWorkflow,
+	startTopicPodcastEpisodeVideoRebuild,
+	startTopicPostSummaryWorkflow,
+} from "./temporalClient"
 
 // put the real connect back after each test
 afterEach(() => {
@@ -52,4 +57,44 @@ test("a chat mention push starts once per message", async () => {
 	})
 	await startChatMentionPushWorkflow(7)
 	await expect(startChatMentionPushWorkflow(7)).rejects.toThrow("temporal is down")
+})
+
+// a film rebuild starts on the film queue under the podcast episode's id, a second start is ignored, and a failure throws
+test("a film rebuild starts once per podcast episode", async () => {
+	// a connected client whose start succeeds, then finds the rebuild running, then fails
+	spyOn(Connection, "connect").mockResolvedValue(toFakeConnection())
+	const startSpy = spyOn(WorkflowClient.prototype, "start")
+		.mockResolvedValueOnce({} as never)
+		.mockRejectedValueOnce(new WorkflowExecutionAlreadyStartedError("running", "episode-video-rebuild-e1", "workflow"))
+		.mockRejectedValueOnce(new Error("temporal is down"))
+
+	// the first start names the queue and the podcast episode, the repeat resolves, and the failure throws
+	await startTopicPodcastEpisodeVideoRebuild("e1")
+	expect(startSpy.mock.calls[0]?.[0]).toBe("rebuildTopicPodcastEpisodeVideoWorkflow")
+	expect(startSpy.mock.calls[0]?.[1]).toMatchObject({
+		taskQueue: "episode-videos",
+		workflowId: "episode-video-rebuild-e1",
+		args: [{ podcastEpisodeId: "e1" }],
+	})
+	await startTopicPodcastEpisodeVideoRebuild("e1")
+	await expect(startTopicPodcastEpisodeVideoRebuild("e1")).rejects.toThrow("temporal is down")
+})
+
+// a summary rewrite starts under the post's id alone, and a start while one is running is ignored
+test("the edits of one Topic Post share one summary rewrite", async () => {
+	// a connected client whose start succeeds, then finds the rewrite running
+	spyOn(Connection, "connect").mockResolvedValue(toFakeConnection())
+	const startSpy = spyOn(WorkflowClient.prototype, "start")
+		.mockResolvedValueOnce({} as never)
+		.mockRejectedValueOnce(new WorkflowExecutionAlreadyStartedError("running", "topic-post-summary-p1", "workflow"))
+
+	// the first start names the post alone, and the repeat resolves
+	await startTopicPostSummaryWorkflow("p1")
+	expect(startSpy.mock.calls[0]?.[0]).toBe("summarizeTopicPostWorkflow")
+	expect(startSpy.mock.calls[0]?.[1]).toMatchObject({
+		workflowId: "topic-post-summary-p1",
+		args: [{ topicPostId: "p1" }],
+	})
+	await startTopicPostSummaryWorkflow("p1")
+	expect(startSpy).toHaveBeenCalledTimes(2)
 })

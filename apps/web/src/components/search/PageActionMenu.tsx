@@ -1,3 +1,4 @@
+import { isImageReportSubjectKind } from "@carlnotes/contracts/reports"
 import { PageActionMenu as SharedPageActionMenu } from "@carlnotes/core/components/PageActionMenu"
 import { useSubjectReportFlag } from "@carlnotes/core/hooks/useSubjectReport"
 import { toCarlNotesMcpServer } from "@carlnotes/core/lib/installDeeplinks"
@@ -54,6 +55,7 @@ export function PageActionMenu() {
 						onAddToAi={() => setIsAddingToAi(true)}
 						onReport={pageActions.report ? reportFlag.press : undefined}
 						isReported={reportFlag.isReported}
+						isImageReport={pageActions.report ? isImageReportSubjectKind(pageActions.report.subjectKind) : false}
 						onClose={() => setIsOpen(false)}
 						Option={PageAction}
 					/>
@@ -74,11 +76,29 @@ export function PageActionMenu() {
 }
 
 // keep row styling in the DOM adapter while the core component owns ordering
-function PageAction({ label, Icon, isActive, isDisabled, onSelect }: PageActionOption) {
-	return (
+function PageAction({ label, Icon, isActive, isDisabled, disabledReason, onSelect }: PageActionOption) {
+	const option = (
 		<button type="button" onClick={onSelect} disabled={isDisabled} className={MENU_OPTION_CLASS}>
 			<Icon className={cn("size-4", isActive ? ACTIVE_ICON_CLASS : "text-muted-foreground")} />
 			<span className="flex-1 text-left">{label}</span>
 		</button>
+	)
+	if (!isDisabled || !disabledReason) {
+		return option
+	}
+
+	// a disabled button takes no hover, so the tooltip hangs on a wrapper a keyboard reaches
+	return (
+		<Tooltip>
+			<TooltipTrigger asChild>
+				{/* biome-ignore lint/a11y/noNoninteractiveTabindex: the wrapper takes focus so the tooltip reads on a keyboard */}
+				<span tabIndex={0} className="block">
+					{option}
+				</span>
+			</TooltipTrigger>
+			<TooltipContent side="left" className="max-w-60">
+				{disabledReason}
+			</TooltipContent>
+		</Tooltip>
 	)
 }

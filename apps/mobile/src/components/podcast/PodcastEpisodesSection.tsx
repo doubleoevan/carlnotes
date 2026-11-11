@@ -1,5 +1,5 @@
 import type { PodcastEpisodeSummary } from "@carlnotes/contracts/podcast"
-import { toPodcastEpisodeTitleLabel } from "@carlnotes/core/lib/labels"
+import { toCountLabel, toPodcastEpisodeTitleLabel } from "@carlnotes/core/lib/labels"
 import {
 	podcastEpisodeSortValues,
 	toPodcastEpisodesTableColumns,
@@ -32,7 +32,7 @@ export function PodcastEpisodesSection({
 		return null
 	}
 	return (
-		<CollapsibleSection title={title}>
+		<CollapsibleSection title={title} countLabel={toCountLabel(podcastEpisodes.length, "episode")}>
 			<DataTable
 				rows={podcastEpisodes}
 				columns={columns}

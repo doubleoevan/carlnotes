@@ -1,3 +1,4 @@
+import { toTopicPath } from "@carlnotes/contracts/seo"
 import type { TopicDetails } from "@carlnotes/contracts/topics"
 import { Text as NativeText, View } from "react-native"
 import { AnchorLink } from "@/components/common/AnchorLink"
@@ -6,11 +7,11 @@ import { PodcastEpisodePlayButton } from "@/components/podcast/PodcastEpisodePla
 import { Badge } from "@/components/primitives/badge"
 import { toTouchTargetHitSlop } from "@/components/primitives/button"
 import { Text } from "@/components/primitives/text"
-import { TopicImage } from "@/components/primitives/topic-image"
 import { ShareTopic } from "@/components/share/ShareTopic"
 import { LIST_TOPIC_IMAGE_CLASS } from "@/topicImageClasses"
 import { toTypeRoleStyle } from "@/typeRoleStyles"
 import { TopicByline } from "./TopicByline"
+import { TopicImageLink } from "./TopicImageLink"
 import { TopicInfoButton } from "./TopicInfo"
 
 /**
@@ -22,9 +23,16 @@ export function Topic({ topic }: { topic: TopicDetails }) {
 	const titleLineHeight = Number(titleStyle.fontSize) * 1.25
 	return (
 		<View className="mx-4 my-4">
-			{/* the image at the left edge of the findings card, with the title, the tags, and the byline beside it */}
+			{/* the image at the left edge of the findings card, which opens the topic's screen as the title does, with
+			    the title, the tags, and the byline beside it */}
 			<View className="flex-row items-start gap-4">
-				<TopicImage image={topic.image} size="page" name={topic.name} className={LIST_TOPIC_IMAGE_CLASS} />
+				<TopicImageLink
+					image={topic.image}
+					size="page"
+					name={topic.name}
+					className={LIST_TOPIC_IMAGE_CLASS}
+					path={toTopicPath(topic)}
+				/>
 				<View className="min-w-0 flex-1">
 					<View className="flex-row flex-wrap items-center gap-x-2">
 						<AnchorLink

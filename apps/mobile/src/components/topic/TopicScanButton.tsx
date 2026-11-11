@@ -18,6 +18,7 @@ import { Icon } from "@/components/primitives/icon"
 import { Text } from "@/components/primitives/text"
 import { usePageMutation } from "@/hooks/usePageMutation"
 import { usePollWhileScanning } from "@/hooks/useTopicScan"
+import { HIGHLIGHTED_PAGE_BUTTON_CLASS } from "@/pageButtonClasses"
 
 /**
  * Starts and stops manual scans with shared progress tracking.
@@ -112,7 +113,12 @@ export function TopicScanButton({
 					)}
 				</View>
 			) : (
-				<Button accessibilityLabel="Brew" disabled={mutation.isPending} onPress={() => void mutation.run(handleScan)}>
+				<Button
+					className={HIGHLIGHTED_PAGE_BUTTON_CLASS}
+					accessibilityLabel="Brew"
+					disabled={mutation.isPending}
+					onPress={() => void mutation.run(handleScan)}
+				>
 					<Icon as={Coffee} className="size-4" />
 					<Text>Brew</Text>
 				</Button>

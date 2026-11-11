@@ -8,6 +8,8 @@ import {
 	podcastEpisodeAudio,
 	podcastFeedUrlResponse,
 	seasonPodcastEpisodes,
+	topicPodcastEpisodeVideoFile,
+	topicPodcastEpisodeVideoSectionPayload,
 	updatePodcastEpisodePayload,
 } from "./podcast"
 import { podcastEpisodePageResponse } from "./podcastEpisodePage"
@@ -20,8 +22,13 @@ import {
 	podcastEpisodePageParam,
 	seasonPodcastEpisodesQuery,
 } from "./routeShapes"
-import { regenerateTopicImagePayload, regenerateTopicImageResponse, uploadTopicImageResponse } from "./topicImages"
-import { topicPodcastPayload } from "./topicPayloads"
+import {
+	regenerateTopicImagePayload,
+	regenerateTopicImageResponse,
+	uploadTopicImageResponse,
+	uploadTopicPodcastEpisodeVideoImageResponse,
+} from "./topicImages"
+import { pinnedOrderPayload, topicPodcastPayload } from "./topicPayloads"
 
 // the entries, in client module order
 export const podcastRouteContracts: Record<string, ApiRouteContract> = {
@@ -63,6 +70,12 @@ export const podcastRouteContracts: Record<string, ApiRouteContract> = {
 		query: seasonPodcastEpisodesQuery,
 		response: seasonPodcastEpisodes,
 	},
+	"podcastEpisodeClient.fetchTopicPodcastEpisodeVideo": {
+		method: "GET",
+		path: "/api/episodes/:id/video.mp4",
+		params: idParam,
+		response: topicPodcastEpisodeVideoFile,
+	},
 	"podcastEpisodeClient.sendPodcastEpisodeChapterRating": {
 		method: "POST",
 		path: "/api/episodes/:id/chapters/:position/rating",
@@ -77,6 +90,20 @@ export const podcastRouteContracts: Record<string, ApiRouteContract> = {
 		body: { json: regenerateTopicImagePayload },
 		response: regenerateTopicImageResponse,
 	},
+	"podcastEpisodeClient.sendTopicPodcastEpisodeVideoImageRegeneration": {
+		method: "POST",
+		path: "/api/episodes/:id/video/image/regenerate",
+		params: idParam,
+		body: { json: regenerateTopicImagePayload },
+		response: regenerateTopicImageResponse,
+	},
+	"podcastEpisodeClient.uploadTopicPodcastEpisodeVideoImageBody": {
+		method: "POST",
+		path: "/api/episodes/:id/video/image",
+		params: idParam,
+		body: { multipart: multipartFile("image") },
+		response: uploadTopicPodcastEpisodeVideoImageResponse,
+	},
 	"podcastEpisodeClient.sendPodcastEpisodeListen": {
 		method: "POST",
 		path: "/api/episodes/:id/listen",
@@ -89,6 +116,20 @@ export const podcastRouteContracts: Record<string, ApiRouteContract> = {
 		path: "/api/episodes/:id",
 		params: idParam,
 		body: { json: updatePodcastEpisodePayload },
+		response: okResponse,
+	},
+	"podcastEpisodeClient.sendPodcastEpisodeProfileOrder": {
+		method: "PATCH",
+		path: "/api/podcast-episodes/:id/profile-order",
+		params: idParam,
+		body: { json: pinnedOrderPayload },
+		response: okResponse,
+	},
+	"podcastEpisodeClient.sendTopicPodcastEpisodeVideoProfileOrder": {
+		method: "PATCH",
+		path: "/api/podcast-episodes/:id/video/profile-order",
+		params: idParam,
+		body: { json: pinnedOrderPayload },
 		response: okResponse,
 	},
 	"podcastEpisodeClient.sendRemovePodcastEpisode": {
@@ -108,6 +149,13 @@ export const podcastRouteContracts: Record<string, ApiRouteContract> = {
 		path: "/api/topics/:id/podcast",
 		params: idParam,
 		body: { json: topicPodcastPayload },
+		response: okResponse,
+	},
+	"podcastEpisodeClient.sendTopicPodcastEpisodeVideoSection": {
+		method: "PUT",
+		path: "/api/topics/:id/video-section",
+		params: idParam,
+		body: { json: topicPodcastEpisodeVideoSectionPayload },
 		response: okResponse,
 	},
 	"podcastEpisodeClient.uploadPodcastEpisodeImageBody": {

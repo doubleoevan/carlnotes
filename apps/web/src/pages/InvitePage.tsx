@@ -28,10 +28,10 @@ const inviteRoute = getRouteApi("/invite/$token")
 
 /**
  * The page an invite link opens. A signed-out visitor is sent to log in and comes back here,
- * and a signed-in user accepts the token and opens the topic or team that sent the invite.
+ * and a signed-in user accepts the token and opens the topic, the Topic Post, or the team that sent the invite.
  */
 export function InvitePage() {
-	usePageTitle("Invitation")
+	usePageTitle("Invite")
 	const { token } = inviteRoute.useParams()
 	const navigate = useNavigate()
 	const { data: session, isPending } = authClient().useSession()
@@ -39,8 +39,8 @@ export function InvitePage() {
 	// whether the acceptance request failed to reach the api, which a retry may pass
 	const [isInviteAcceptFailed, setIsInviteAcceptFailed] = useState(false)
 
-	// accept the token once, then go to the topic or team it opens. a failed request opens the once-latch back up, and
-	// a token outside the token alphabet is rejected without a request
+	// accept the token once, then go to the topic, Topic Post, or team it opens. a failed request opens the once-latch
+	// back up, and a token outside the token alphabet is rejected without a request
 	const isAcceptingInviteRef = useRef(false)
 	const acceptInvite = useCallback((): void => {
 		if (isAcceptingInviteRef.current) {
@@ -63,9 +63,12 @@ export function InvitePage() {
 				if (!inviteResponse) {
 					return
 				}
-				// navigate to the accepted topic or team, or show the rejection
+				// navigate to the accepted topic, the Topic Post its invite was shared from, or the team, or show the
+				// rejection
 				const inviteDestination = toInviteDestination(inviteResponse)
-				if (inviteDestination.kind === "topic") {
+				if (inviteDestination.kind === "topicPost") {
+					navigate({ to: inviteDestination.path, replace: true })
+				} else if (inviteDestination.kind === "topic") {
 					navigate({ to: "/topics/$topicId", params: { topicId: inviteDestination.topicId }, replace: true })
 				} else if (inviteDestination.kind === "team") {
 					navigate({ to: "/teams/$teamId", params: { teamId: inviteDestination.teamId }, replace: true })

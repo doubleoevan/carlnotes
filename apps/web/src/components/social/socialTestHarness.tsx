@@ -188,8 +188,13 @@ export async function renderCommentThread(
 	const signIns: number[] = []
 	configureApiClient({ apiBaseUrl: "https://carlnotes.test", showError: () => {} })
 	globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-		// record the request and return its response
+		// the read of the unseen Comment Mentions that follows a Comment write is not the thread's own request
 		const fetchRequest = new Request(input, init)
+		if (fetchRequest.url.endsWith("/api/comment-mentions/unseen")) {
+			return Response.json({ commentMentions: [] })
+		}
+
+		// record the request and return its response
 		const body = fetchRequest.method === "GET" ? null : await fetchRequest.json().catch(() => null)
 		const request = { method: fetchRequest.method, url: fetchRequest.url, body }
 		requests.push(request)

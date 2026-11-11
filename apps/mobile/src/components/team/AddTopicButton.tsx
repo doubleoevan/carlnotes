@@ -11,6 +11,7 @@ import { Icon } from "@/components/primitives/icon"
 import { Text } from "@/components/primitives/text"
 import { SessionTextInput } from "@/components/session/SessionTextInput"
 import { usePageMutation } from "@/hooks/usePageMutation"
+import { HIGHLIGHTED_PAGE_BUTTON_CLASS } from "@/pageButtonClasses"
 
 /**
  * Offers existing topics before creating one, as the web team's Add Topic menu does.
@@ -39,7 +40,7 @@ export function AddTopicButton({
 	const topics = query.data?.filter((topic) => topic.name.toLowerCase().includes(filter.trim().toLowerCase()))
 	return (
 		<>
-			<Button accessibilityLabel="Add Topic" onPress={() => setIsOpen(true)}>
+			<Button className={HIGHLIGHTED_PAGE_BUTTON_CLASS} accessibilityLabel="Add Topic" onPress={() => setIsOpen(true)}>
 				<Icon as={Plus} className="size-4" />
 				<Text>Add Topic</Text>
 			</Button>

@@ -2,48 +2,78 @@ import { authClient } from "@carlnotes/client/authClient"
 import { fetchPodcastEpisodePage } from "@carlnotes/client/podcastEpisodeClient"
 import { fetchPodcastEpisodeCounts } from "@carlnotes/client/viewerCountsClient"
 import type { PodcastEpisodePageResponse } from "@carlnotes/contracts/podcastEpisodePage"
-import { toTopicPath } from "@carlnotes/contracts/seo"
+import { FILM_ANCHOR_ID, PODCAST_NAME } from "@carlnotes/contracts/podcastEpisodes"
 import { usePolledCounts } from "@carlnotes/core/hooks/usePolledCounts"
 import { useTopicFindingActions } from "@carlnotes/core/hooks/useTopicFindingActions"
-import { PODCAST_EPISODE_LOAD_FAILED_TEXT } from "@carlnotes/core/lib/podcastEpisodeCopy"
-import { EDIT_PODCAST_EPISODE_LABEL, toPodcastEpisodeEditableImage } from "@carlnotes/core/lib/podcastEpisodeEditor"
+import { useTopicPodcastEpisodeVideoRenderingPoll } from "@carlnotes/core/hooks/useTopicPodcastEpisodeVideoRenderingPoll"
+import { toPodcastEpisodeTitleLabel, toSectionCountLabel } from "@carlnotes/core/lib/labels"
+import {
+	PODCAST_EPISODE_LOAD_FAILED_TEXT,
+	TOPIC_PODCAST_EPISODE_VIDEO_SECTION_TITLE,
+} from "@carlnotes/core/lib/podcastEpisodeCopy"
+import {
+	EDIT_PODCAST_EPISODE_LABEL,
+	isTopicPodcastEpisodeVideoEditShown,
+	toPodcastEpisodeEditableImage,
+	toTopicPodcastEpisodeVideoEditableImage,
+} from "@carlnotes/core/lib/podcastEpisodeEditor"
+import {
+	isPodcastEpisodeProfileOrderShown,
+	isTopicPodcastEpisodeVideoProfileOrderShown,
+} from "@carlnotes/core/lib/podcastEpisodeHomeOrder"
 import { toPodcastEpisodeReportSubject, toPodcastEpisodeSocialProps } from "@carlnotes/core/lib/podcastEpisodeSocial"
+import { PROFILE_RANK_OPTION_LABELS } from "@carlnotes/core/lib/rankDialog"
 import { isAddTopicToTeamShown } from "@carlnotes/core/lib/topicActions"
 import { applyPodcastEpisodePageChanges } from "@carlnotes/core/lib/topicFindingChanges"
-import { EDIT_IMAGE_DIALOG_TITLES } from "@carlnotes/core/lib/topicImageEditor"
+import { toTopicPodcastEpisodeVideoDisplay } from "@carlnotes/core/lib/topicPodcastEpisodeVideoDisplay"
 import { useQuery } from "@tanstack/react-query"
 import { router, useFocusEffect, useLocalSearchParams, usePathname } from "expo-router"
-import { Pencil, Rss, Share as ShareIcon, Trash2, Users } from "lucide-react-native"
-import { type ComponentRef, type RefObject, useCallback, useRef, useState } from "react"
+import { ListOrdered, Pencil, Trash2 } from "lucide-react-native"
+import { type ComponentRef, useCallback, useRef, useState } from "react"
 import { View } from "react-native"
-import { AnchorLink } from "@/components/common/AnchorLink"
-import { SkeletonPulse } from "@/components/common/SkeletonPulse"
+import { ProfileRankDialog } from "@/components/common/RankDialog"
 import { PageScreen } from "@/components/layout/PageScreen"
+import { SectionAnchor } from "@/components/layout/SectionAnchor"
 import { Button } from "@/components/primitives/button"
-import { Icon } from "@/components/primitives/icon"
 import { Text } from "@/components/primitives/text"
 import type { PageActionOption } from "@/components/search/PageActionMenu"
+import {
+	toAddTopicToTeamOption,
+	toEditTopicPodcastEpisodeVideoOption,
+	toShareTopicOption,
+} from "@/components/search/pageActionOptions"
 import { ShareTopicSheet } from "@/components/share/ShareTopic"
-import { ReactionRow } from "@/components/social/ReactionRow"
 import { SocialSection } from "@/components/social/SocialSection"
 import { AddTopicToTeamDialog } from "@/components/team/AddTopicToTeamDialog"
 import { CollapsibleSection } from "@/components/topic/CollapsibleSection"
 import { EditImageDialog } from "@/components/topic/EditImageDialog"
-import { TopicByline } from "@/components/topic/TopicByline"
 import { TopicGateNotice } from "@/components/topic/TopicGateNotice"
-import { NewTopicButton } from "@/components/topic/TopicHomeActions"
-import { TopicHeaderImage } from "@/components/topic/TopicImageButton"
+import { toTypeRoleStyle } from "@/typeRoleStyles"
 import { EditPodcastEpisodeDialog } from "./EditPodcastEpisodeDialog"
 import { PodcastEpisodeChaptersTable } from "./PodcastEpisodeChaptersTable"
 import { PodcastEpisodeCountsLine } from "./PodcastEpisodeCountsLine"
+import { PodcastEpisodeHeader } from "./PodcastEpisodeHeader"
 import { PodcastEpisodePlayerCard } from "./PodcastEpisodePlayerCard"
+import { PodcastEpisodeSkeleton } from "./PodcastEpisodeSkeleton"
 import { PodcastEpisodesSection } from "./PodcastEpisodesSection"
 import { PodcastEpisodeTranscript } from "./PodcastEpisodeTranscript"
 import { PodcastFeedDialog } from "./PodcastFeedDialog"
 import { PodcastThemeSongNote } from "./PodcastThemeSongNote"
 import { RemovePodcastEpisodeDialog } from "./RemovePodcastEpisodeDialog"
+import { TopicPodcastEpisodeVideoPlayer } from "./TopicPodcastEpisodeVideoPlayer"
+import { UnpublishedPodcastEpisodeCard } from "./UnpublishedPodcastEpisodeCard"
 
-type PodcastEpisodeDialog = "feed" | "share" | "team" | "edit" | "edit-image" | "remove" | null
+type PodcastEpisodeDialog =
+	| "feed"
+	| "share"
+	| "team"
+	| "edit"
+	| "edit-film"
+	| "edit-image"
+	| "rank-profile"
+	| "rank-profile-films"
+	| "remove"
+	| null
 
 /**
  * Reads the existing episode-page payload and presents its player, transcript, related episodes, and permitted actions.
@@ -147,18 +177,12 @@ function EpisodeContent({
 		isBookmarkable: false,
 		topicFeedHandlers: actions.handlers,
 	}
-	const options: PageActionOption[] = [
-		...(isAddTopicToTeamShown(topic, isSignedIn)
-			? [{ label: "Add topic to team", icon: Users, onSelect: () => setDialog("team") }]
-			: []),
-		{ label: "Share topic", icon: ShareIcon, onSelect: () => setDialog("share") },
-		...(page.canEditPodcastEpisode
-			? [{ label: EDIT_PODCAST_EPISODE_LABEL, icon: Pencil, onSelect: () => setDialog("edit") }]
-			: []),
-		...(page.canRemovePodcastEpisode
-			? [{ label: "Remove episode", icon: Trash2, onSelect: () => setDialog("remove") }]
-			: []),
-	]
+	const options = toPodcastEpisodeActionOptions({ page, isSignedIn, onOpenDialog: setDialog })
+
+	// read the page again while the film renders
+	const topicPodcastEpisodeVideoDisplay = toTopicPodcastEpisodeVideoDisplay(podcastEpisode)
+	const isVideoRendering = topicPodcastEpisodeVideoDisplay === "rendering"
+	useTopicPodcastEpisodeVideoRenderingPoll({ isVideoRendering, onPoll: onReload })
 	return (
 		<PageScreen
 			title="Episode"
@@ -177,19 +201,43 @@ function EpisodeContent({
 			}
 			contentClassName="mt-5 gap-2"
 		>
-			{/* player */}
-			<PodcastEpisodePlayerCard podcastEpisode={podcastEpisode} chapterTopicFeed={chapterTopicFeed} />
+			{/* the podcast's section, with the theme song's credits right after its title and the player card */}
+			<CollapsibleSection title={PODCAST_NAME} titleNote={<PodcastThemeSongNote />} hasClosedDivider>
+				<PodcastEpisodePlayerCard podcastEpisode={podcastEpisode} chapterTopicFeed={chapterTopicFeed} />
+			</CollapsibleSection>
+			{/* the film's section, under the podcast's, which a link opens the screen at with ?section=film, with the theme
+			    song's credits right after its title: the film player in its card, which stays mounted while the section
+			    is closed, or the card that says the film is rendering */}
+			{topicPodcastEpisodeVideoDisplay && (
+				<SectionAnchor name={FILM_ANCHOR_ID}>
+					<CollapsibleSection
+						title={TOPIC_PODCAST_EPISODE_VIDEO_SECTION_TITLE}
+						titleNote={<PodcastThemeSongNote />}
+						isContentKept
+						hasClosedDivider
+					>
+						{isVideoRendering ? (
+							<UnpublishedPodcastEpisodeCard podcastEpisode={podcastEpisode} isVideoRendering />
+						) : (
+							<TopicPodcastEpisodeVideoPlayer podcastEpisode={podcastEpisode} isCard />
+						)}
+					</CollapsibleSection>
+				</SectionAnchor>
+			)}
 			{/* the podcast episode's comment thread, where a comment may name a chapter and a chapter's tag plays from it */}
-			<SocialSection {...toPodcastEpisodeSocialProps(page, isSignedIn)} />
+			<SocialSection {...toPodcastEpisodeSocialProps(page, isSignedIn)} hasClosedDivider />
 			{/* wide-screen chapters */}
 			<View className="hidden sm:flex">
-				<CollapsibleSection title="Episode chapters">
+				<CollapsibleSection
+					title="Episode chapters"
+					countLabel={toSectionCountLabel(podcastEpisode.chapters.length, "chapter")}
+				>
 					<PodcastEpisodeChaptersTable podcastEpisode={podcastEpisode} chapterTopicFeed={chapterTopicFeed} />
 				</CollapsibleSection>
 			</View>
 			{/* transcript */}
 			<View>
-				<Text accessibilityRole="header" className="py-2 font-display text-lg">
+				<Text accessibilityRole="header" style={toTypeRoleStyle("sectionTitle")} className="py-2">
 					Episode transcript
 				</Text>
 				<PodcastEpisodeTranscript transcript={page.transcript} />
@@ -222,10 +270,20 @@ function EpisodeContent({
 					onClose={() => setDialog(null)}
 				/>
 			)}
-			{dialog === "edit-image" && (
+			{/* the header image's sheet, or the film's image sheet that the action menu's Edit film opens */}
+			{(dialog === "edit-image" || dialog === "edit-film") && (
 				<EditImageDialog
-					editableImage={toPodcastEpisodeEditableImage(page)}
+					editableImage={
+						dialog === "edit-film" ? toTopicPodcastEpisodeVideoEditableImage(page) : toPodcastEpisodeEditableImage(page)
+					}
 					onImageChanged={onReload}
+					onClose={() => setDialog(null)}
+				/>
+			)}
+			{(dialog === "rank-profile" || dialog === "rank-profile-films") && (
+				<ProfileRankDialog
+					rankedNoun={dialog === "rank-profile-films" ? "films" : "podcasts"}
+					pageItem={{ id: podcastEpisode.id, label: toPodcastEpisodeTitleLabel(podcastEpisode) }}
 					onClose={() => setDialog(null)}
 				/>
 			)}
@@ -240,90 +298,43 @@ function EpisodeContent({
 	)
 }
 
-// hide the duplicate cover and chapter table at phone width, as the web does
-function PodcastEpisodeHeader({
-	page: { podcastEpisode, topic, reactions, canEditPodcastEpisode },
-	isSignedIn,
-	feedButtonRef,
-	onSubscribe,
-	onEditImage,
-}: {
+// the loaded page, whether the user is signed in, and the call that opens one of the menu's sheets
+type ToPodcastEpisodeActionOptionsOptions = {
 	page: PodcastEpisodePageResponse
 	isSignedIn: boolean
-	// the Subscribe button, which the feed dialog returns focus to, and what opens the dialog
-	feedButtonRef: RefObject<ComponentRef<typeof View> | null>
-	onSubscribe: () => void
-	// the press on an editor's image, which opens the image sheet
-	onEditImage: () => void
-}) {
-	return (
-		<View className="mt-3">
-			{/* the Subscribe button on the left and the new topic button on the right */}
-			<View className="flex-row items-start justify-between gap-3">
-				<Button ref={feedButtonRef} variant="outline" accessibilityLabel="Subscribe" onPress={onSubscribe}>
-					<Icon as={Rss} className="size-4" />
-					<Text>Subscribe</Text>
-				</Button>
-				<NewTopicButton />
-			</View>
-			{/* the podcast episode's own image beside the title, the description, and the byline. React Native has no
-			    float, so the text stays beside the image instead of running under it as on the web */}
-			<View className="mt-4 flex-row items-start gap-4">
-				<TopicHeaderImage
-					image={podcastEpisode.image}
-					name={podcastEpisode.title ?? topic.name}
-					editLabel={EDIT_IMAGE_DIALOG_TITLES.podcastEpisode}
-					onEdit={canEditPodcastEpisode ? onEditImage : undefined}
-				/>
-				<View className="min-w-0 flex-1">
-					{/* the title. the heading and credits stay separate screen-reader controls */}
-					<View className="min-w-0 flex-row items-end">
-						<Text accessibilityRole="header" className="min-w-0 flex-1 font-display text-2xl leading-tight">
-							{podcastEpisode.title}
-						</Text>
-						<PodcastThemeSongNote />
-					</View>
-					{podcastEpisode.description && <Text className="mt-1.5 text-sm">{podcastEpisode.description}</Text>}
-					{/* the byline, the topic's name, and the podcast episode's reactions on one line */}
-					<View className="mt-1.5 flex-row flex-wrap items-center gap-x-3">
-						<View className="min-w-0 shrink flex-row flex-wrap items-center gap-x-1">
-							<TopicByline topic={topic} label="Recorded by" isPage />
-							<Text className="text-sm text-muted-foreground">
-								{topic.teamLink || topic.owner ? "for " : "Coffee Break podcast for "}
-								<AnchorLink asChild href={toTopicPath(topic)} accessibilityLabel={`Open ${topic.name}`}>
-									<Text className="text-sm text-link">{topic.name}</Text>
-								</AnchorLink>
-							</Text>
-						</View>
-						<ReactionRow
-							target={{ kind: "podcastEpisode", id: podcastEpisode.id }}
-							summary={reactions}
-							isSignedIn={isSignedIn}
-						/>
-					</View>
-				</View>
-			</View>
-		</View>
-	)
+	onOpenDialog: (podcastEpisodeDialog: PodcastEpisodeDialog) => void
 }
 
-/**
- * Reserves the phone episode page's title, player, and transcript while its permission-aware payload loads.
- */
-function PodcastEpisodeSkeleton() {
-	return (
-		<View accessible accessibilityLabel="Loading episode" accessibilityState={{ busy: true }}>
-			<SkeletonPulse>
-				<View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" className="gap-5">
-					<View className="h-8 w-5/6 rounded bg-muted" />
-					<View className="h-4 w-3/4 rounded bg-muted" />
-					<View className="h-80 rounded-lg border border-separator bg-card p-5">
-						<View className="size-14 rounded-full bg-muted" />
-					</View>
-					<View className="h-7 w-40 rounded bg-muted" />
-					<View className="h-80 rounded-lg border border-separator bg-card" />
-				</View>
-			</SkeletonPulse>
-		</View>
-	)
+// the action menu's options in the web's order: Add topic to team, Share topic, Edit film right above Edit podcast for
+// a user who may edit the podcast episode, Featured films right above Featured podcasts for a public topic's owner,
+// and Remove episode for a user who may remove it
+function toPodcastEpisodeActionOptions({
+	page,
+	isSignedIn,
+	onOpenDialog,
+}: ToPodcastEpisodeActionOptionsOptions): PageActionOption[] {
+	return [
+		...(isAddTopicToTeamShown(page.topic, isSignedIn) ? [toAddTopicToTeamOption(() => onOpenDialog("team"))] : []),
+		toShareTopicOption(() => onOpenDialog("share")),
+		...(isTopicPodcastEpisodeVideoEditShown(page)
+			? [toEditTopicPodcastEpisodeVideoOption(() => onOpenDialog("edit-film"))]
+			: []),
+		...(page.canEditPodcastEpisode
+			? [{ label: EDIT_PODCAST_EPISODE_LABEL, icon: Pencil, onSelect: () => onOpenDialog("edit") }]
+			: []),
+		...(isTopicPodcastEpisodeVideoProfileOrderShown(page)
+			? [toProfileRankOption("films", () => onOpenDialog("rank-profile-films"))]
+			: []),
+		...(isPodcastEpisodeProfileOrderShown(page)
+			? [toProfileRankOption("podcasts", () => onOpenDialog("rank-profile"))]
+			: []),
+		...(page.canRemovePodcastEpisode
+			? [{ label: "Remove episode", icon: Trash2, onSelect: () => onOpenDialog("remove") }]
+			: []),
+	]
+}
+
+// the option that opens the owner's profile pins for the films or the podcast episodes
+function toProfileRankOption(rankedNoun: "films" | "podcasts", onSelect: () => void): PageActionOption {
+	return { label: PROFILE_RANK_OPTION_LABELS[rankedNoun], icon: ListOrdered, onSelect }
 }

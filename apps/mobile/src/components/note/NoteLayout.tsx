@@ -1,5 +1,5 @@
 import type { NoteLayoutProps } from "@carlnotes/core/components/NoteViewer"
-import { createContext, useContext, useState } from "react"
+import { createContext, type ReactNode, useContext, useState } from "react"
 import { Keyboard as NativeKeyboard, ScrollView, View } from "react-native"
 import { Sheet } from "@/components/common/Sheet"
 import { Button } from "@/components/primitives/button"
@@ -31,50 +31,67 @@ export function NoteLayout({
 	isCommentsOpen,
 	onCloseComments,
 }: NoteLayoutProps) {
-	// measure the remaining body space and show dismissal only for an open keyboard
-	const [viewportHeight, setViewportHeight] = useState(300)
-	const isKeyboardVisible = useIsKeyboardVisible()
 	return (
 		<View className="min-h-0 flex-1">
 			{/* keep the title and formatting together above the body */}
 			{header}
 			{toolbar && <View className="pb-3">{toolbar}</View>}
-			{/* scroll the bounded editor within the remaining keyboard-safe space */}
-			<ScrollView
-				className="flex-1"
-				keyboardShouldPersistTaps="handled"
-				nestedScrollEnabled
-				showsVerticalScrollIndicator
-				onLayout={(event) => setViewportHeight(event.nativeEvent.layout.height)}
-				contentContainerStyle={{ paddingBottom: 16 }}
-			>
-				{conflict}
-				<EditorHeight.Provider value={Math.max(120, Math.min(440, viewportHeight - 32))}>
-					<View className="rounded-lg border border-border bg-card px-4 py-4 shadow-raised">{children}</View>
-				</EditorHeight.Provider>
-			</ScrollView>
+			<NoteBodyScroll notice={conflict}>{children}</NoteBodyScroll>
 			{/* expose the complete thread above the editor with the web phone's sheet behavior */}
 			{isCommentsOpen && (
 				<Sheet title="Comments" onClose={() => onCloseComments?.()} hasHighlightedScrollIndicator>
 					<NoteComments {...noteCommentThread} canComment={canComment} isInSheet />
 				</Sheet>
 			)}
-			{/* keep keyboard dismissal separate from the full-width formatting toolbar */}
-			{isKeyboardVisible && (
-				<Button
-					accessibilityLabel="Hide keyboard"
-					variant="ghost"
-					size="sm"
-					className="self-end"
-					onPress={() => {
-						// dismiss either the rich editor or the comment composer's keyboard
-						editorRef?.current?.blur()
-						NativeKeyboard.dismiss()
-					}}
-				>
-					<Text>Done</Text>
-				</Button>
-			)}
+			<NoteKeyboardDoneButton editorRef={editorRef} />
 		</View>
+	)
+}
+
+/**
+ * Scrolls the bounded body card within the remaining keyboard-safe space, under the notice above it.
+ */
+export function NoteBodyScroll({ notice, children }: { notice?: ReactNode; children: ReactNode }) {
+	// measure the remaining body space
+	const [viewportHeight, setViewportHeight] = useState(300)
+	return (
+		<ScrollView
+			className="flex-1"
+			keyboardShouldPersistTaps="handled"
+			nestedScrollEnabled
+			showsVerticalScrollIndicator
+			onLayout={(event) => setViewportHeight(event.nativeEvent.layout.height)}
+			contentContainerStyle={{ paddingBottom: 16 }}
+		>
+			{notice}
+			<EditorHeight.Provider value={Math.max(120, Math.min(440, viewportHeight - 32))}>
+				<View className="rounded-lg border border-border bg-card px-4 py-4 shadow-raised">{children}</View>
+			</EditorHeight.Provider>
+		</ScrollView>
+	)
+}
+
+/**
+ * Shows the keyboard's dismissal apart from the full-width formatting toolbar, only for an open keyboard.
+ */
+export function NoteKeyboardDoneButton({ editorRef }: Pick<NoteLayoutProps, "editorRef">) {
+	const isKeyboardVisible = useIsKeyboardVisible()
+	if (!isKeyboardVisible) {
+		return null
+	}
+	return (
+		<Button
+			accessibilityLabel="Hide keyboard"
+			variant="ghost"
+			size="sm"
+			className="self-end"
+			onPress={() => {
+				// dismiss either the rich editor or the comment composer's keyboard
+				editorRef?.current?.blur()
+				NativeKeyboard.dismiss()
+			}}
+		>
+			<Text>Done</Text>
+		</Button>
 	)
 }

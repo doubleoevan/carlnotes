@@ -1,5 +1,6 @@
 import { fetchPodcastEpisode } from "@carlnotes/client/podcastEpisodeClient"
 import type { PodcastEpisode } from "@carlnotes/contracts/podcast"
+import { toDiscussionTopicPostId } from "@carlnotes/contracts/topicPosts"
 import type { TopicResponse } from "@carlnotes/contracts/topics"
 import { useEffect, useState } from "react"
 import { isManualScanShown } from "../lib/topicActions"
@@ -12,7 +13,8 @@ const RECORDING_POLL_MS = 5_000
 export type ShownPodcastEpisodeState = { podcastEpisode: PodcastEpisode | null; willScanRecordPodcastEpisode: boolean }
 
 // the podcast episode that the player shows. this topic's loaded episode comes first, then the linked episode,
-// then a recording episode, then a running scan's next episode, then a failed episode, then the latest episode
+// then a recording episode, then a running scan's next episode, then a failed episode, then the latest episode.
+// a Topic Post's discussion loaded in the player is no episode of the topic's podcast, so it is never shown here
 /**
  * Selects the episode shown for a Topic and follows a linked recording until it publishes.
  */
@@ -31,11 +33,15 @@ export function useShownPodcastEpisode({
 		podcastEpisodeId: string
 		podcastEpisode: PodcastEpisode | null
 	} | null>(null)
+
+	// the linked episode, once it is the one this topic and this url name
 	const linkedPodcastEpisode =
 		linkedPodcastEpisodeState?.topicId === topic.id &&
 		linkedPodcastEpisodeState.podcastEpisodeId === linkedPodcastEpisodeId
 			? linkedPodcastEpisodeState.podcastEpisode
 			: null
+
+	// the episode loaded in the player, and the topic the linked episode has to belong to
 	const { podcastEpisode: loadedPodcastEpisode } = usePodcastEpisodePlayer()
 	const topicId = topic.id
 	useEffect(() => {
@@ -80,6 +86,20 @@ export function useShownPodcastEpisode({
 }
 
 /**
+ * Returns the episode loaded in the player if it is an episode of this Topic's podcast, or null. A Topic Post's
+ * discussion plays in the docked player alone, so the Topic's podcast section keeps its own episode.
+ */
+export function toTopicLoadedPodcastEpisode(
+	topicId: string,
+	loadedPodcastEpisode: PodcastEpisode | null,
+): PodcastEpisode | null {
+	// a discussion is held under an id that names its post, and an episode of the podcast is not
+	const isTopicPodcastEpisode =
+		loadedPodcastEpisode?.topicId === topicId && !toDiscussionTopicPostId(loadedPodcastEpisode.id)
+	return isTopicPodcastEpisode ? loadedPodcastEpisode : null
+}
+
+/**
  * Selects the loaded, linked, recording, pending, failed, or latest episode in that order.
  */
 export function toShownPodcastEpisode({
@@ -94,8 +114,10 @@ export function toShownPodcastEpisode({
 	// this topic's loaded podcast episode, the linked episode, or the episode that is recording
 	const { podcast } = topic
 	const unpublishedPodcastEpisode = podcast?.unpublishedPodcastEpisode ?? null
-	const topicLoadedPodcastEpisode = loadedPodcastEpisode?.topicId === topic.id ? loadedPodcastEpisode : null
+	const topicLoadedPodcastEpisode = toTopicLoadedPodcastEpisode(topic.id, loadedPodcastEpisode)
 	const recordingPodcastEpisode = unpublishedPodcastEpisode?.status === "recording" ? unpublishedPodcastEpisode : null
+
+	// the first of the three that exists is the one shown
 	const shownPodcastEpisode =
 		topicLoadedPodcastEpisode ??
 		(linkedPodcastEpisode?.topicId === topic.id ? linkedPodcastEpisode : null) ??

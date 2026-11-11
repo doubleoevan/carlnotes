@@ -68,6 +68,12 @@ function toCommentColumns(reader: SocialReader) {
 	}
 }
 
+// a read of comment rows with each author's name and avatar, which a caller filters and orders
+// biome-ignore lint/nursery/useExplicitReturnType: the query's type is drizzle's generated builder type
+function toCommentRowQuery(reader: SocialReader) {
+	return db.select(toCommentColumns(reader)).from(comments).leftJoin(users, eq(users.id, comments.authorUserId))
+}
+
 /**
  * Loads the users each comment mentions, by the comment's id, with each name as the body wrote it.
  */
@@ -128,40 +134,39 @@ async function toCommentReplies(commentRows: CommentRow[], reader: SocialReader)
  * Loads one comment as the reader sees it, with no replies listed, or null if it is gone.
  */
 export async function loadComment(commentId: string, reader: SocialReader): Promise<Comment | null> {
-	const commentRows = await db
-		.select(toCommentColumns(reader))
-		.from(comments)
-		.leftJoin(users, eq(users.id, comments.authorUserId))
-		.where(eq(comments.id, commentId))
+	const commentRows = await toCommentRowQuery(reader).where(eq(comments.id, commentId))
 
 	// the row as the reader sees it, with no replies listed
 	const [commentReply] = await toCommentReplies(commentRows, reader)
 	return commentReply ? { ...commentReply, replyCount: 0, replies: [] } : null
 }
 
-// who reads, the social target, the Topic it belongs to, and the cursor of the page before
+// who reads, the social target, the Topic it belongs to, the cursor of the page before, and the Comment a link names
 type LoadCommentPageOptions = {
 	reader: SocialReader
 	target: CommentTarget
 	topic: NamedTopic
 	cursor?: string
+	commentId?: string
 }
 
+// a thread's counts: every comment and reply, and the ones the last seven days added
+export type CommentCounts = { commentCount: number; weekCommentCount: number }
+
 /**
- * Counts the comments and replies on a social target that the last seven days added, of the authors the reader sees.
+ * Counts the comments and replies on a social target, of the authors the reader sees, in all and in the last seven
+ * days, in one read.
  */
-export async function loadWeekCommentCount(reader: SocialReader, target: CommentTarget): Promise<number> {
+export async function loadCommentCounts(reader: SocialReader, target: CommentTarget): Promise<CommentCounts> {
+	const weekStart = new Date(Date.now() - WEEK_MS)
 	const [countRow] = await db
-		.select({ commentCount: count() })
+		.select({
+			commentCount: count(),
+			weekCommentCount: sql<number>`count(*) filter (where ${gte(comments.createdAt, weekStart)})`.mapWith(Number),
+		})
 		.from(comments)
-		.where(
-			and(
-				toCommentTargetFilter(target),
-				gte(comments.createdAt, new Date(Date.now() - WEEK_MS)),
-				toVisibleAuthorFilter(reader.userId, comments.authorUserId),
-			),
-		)
-	return countRow?.commentCount ?? 0
+		.where(and(toCommentTargetFilter(target), toVisibleAuthorFilter(reader.userId, comments.authorUserId)))
+	return { commentCount: countRow?.commentCount ?? 0, weekCommentCount: countRow?.weekCommentCount ?? 0 }
 }
 
 // the Findings to count, and the user who reads them, null for a visitor
@@ -189,20 +194,22 @@ export async function loadFindingCommentCounts({
 
 /**
  * Loads one page of a social target's top-level comments, newest first, each with its reply count and its first
- * replies, with the cursor of the next page, the week's comment count, and the shared comment slots for a reader who
- * may share.
+ * replies, with the cursor of the next page, the week's comment count, the thread's whole count, and the shared
+ * comment slots for a reader who may share. A first page that names a Comment leads with that Comment's top-level Comment and its replies up to the
+ * one named, however old it is. A Comment that is gone, or one the reader may not read, changes nothing.
  */
 export async function loadCommentPage({
 	reader,
 	target,
 	topic,
 	cursor,
+	commentId,
 }: LoadCommentPageOptions): Promise<CommentThreadResponse> {
+	// the Comment a link names, which only a first page leads with
+	const linkedCommentRows = commentId && !cursor ? await loadLinkedCommentRows({ reader, target, commentId }) : null
+
 	// one row past the page says whether another page follows
-	const topLevelRows = await db
-		.select(toCommentColumns(reader))
-		.from(comments)
-		.leftJoin(users, eq(users.id, comments.authorUserId))
+	const topLevelRows = await toCommentRowQuery(reader)
 		.where(
 			and(
 				toCommentTargetFilter(target),
@@ -214,24 +221,33 @@ export async function loadCommentPage({
 		.orderBy(desc(comments.createdAt), desc(comments.id))
 		.limit(SOCIAL_PAGE_SIZE + 1)
 
-	// the page's first replies and reply counts, the week's count, and the shared comment slots for a reader who may
-	// share
-	const pageRows = topLevelRows.slice(0, SOCIAL_PAGE_SIZE)
-	const [firstReplyRows, weekCommentCount, sharedCommentSlots] = await Promise.all([
+	// the page's first replies and reply counts, the week's count, the thread's whole count, and the shared comment
+	// slots for a reader who may share
+	const listedRows = topLevelRows.slice(0, SOCIAL_PAGE_SIZE)
+	const pageRows = toPageRows(listedRows, linkedCommentRows)
+	const [firstReplyRows, { commentCount, weekCommentCount }, sharedCommentSlots] = await Promise.all([
 		loadFirstReplyRows(
 			reader,
 			pageRows.map((pageRow) => pageRow.id),
 		),
-		loadWeekCommentCount(reader, target),
+		loadCommentCounts(reader, target),
 		reader.canShare ? loadSharedCommentSlots(topic) : null,
 	])
 
+	// the replies each comment shows: its first few, or the linked Comment's thread up to the reply a link names
+	const linkedReplyRows = linkedCommentRows?.replyRows ?? []
+	const linkedParentCommentId = linkedReplyRows[0]?.parentCommentId
+	const shownReplyRows = [
+		...firstReplyRows.filter((replyRow) => replyRow.parentCommentId !== linkedParentCommentId),
+		...linkedReplyRows,
+	]
+
 	// every row as the reader sees it, in two reads for the page and its replies together
-	const commentReplies = await toCommentReplies([...pageRows, ...firstReplyRows], reader)
+	const commentReplies = await toCommentReplies([...pageRows, ...shownReplyRows], reader)
 	const replyCountByParentId = new Map(
 		firstReplyRows.map((replyRow) => [replyRow.parentCommentId, replyRow.replyCount]),
 	)
-	const lastPageRow = pageRows.at(-1)
+	const lastPageRow = listedRows.at(-1)
 	return {
 		comments: commentReplies.slice(0, pageRows.length).map((commentReply) => ({
 			...commentReply,
@@ -240,8 +256,67 @@ export async function loadCommentPage({
 		})),
 		nextCursor: topLevelRows.length > SOCIAL_PAGE_SIZE && lastPageRow ? toSocialCursor(lastPageRow) : null,
 		weekCommentCount,
+		commentCount,
 		sharedCommentSlots,
 	}
+}
+
+// the most replies a linked Comment's thread returns, from the first to the reply a link names
+// ponytail: limits a very long reply thread. page to the linked reply past it
+const LINKED_REPLY_LIMIT = 200
+
+// the Comment a link names, as its top-level Comment and that Comment's replies up to the one named
+type LinkedCommentRows = { topLevelRow: CommentRow; replyRows: CommentRow[] }
+
+// a page's rows with the linked Comment's top-level Comment first, and never twice
+function toPageRows(listedRows: CommentRow[], linkedCommentRows: LinkedCommentRows | null): CommentRow[] {
+	if (!linkedCommentRows) {
+		return listedRows
+	}
+	const { topLevelRow } = linkedCommentRows
+	return [topLevelRow, ...listedRows.filter((listedRow) => listedRow.id !== topLevelRow.id)]
+}
+
+// the Comment a link names on this thread, or null if it is gone or its author is one the reader does not see
+async function loadLinkedCommentRows({
+	reader,
+	target,
+	commentId,
+}: Pick<LoadCommentPageOptions, "reader" | "target"> & { commentId: string }): Promise<LinkedCommentRows | null> {
+	// one comment of this thread by its id, with its author's columns
+	const loadCommentRow = async (id: string): Promise<CommentRow | undefined> => {
+		const [commentRow] = await toCommentRowQuery(reader).where(
+			and(
+				eq(comments.id, id),
+				toCommentTargetFilter(target),
+				toVisibleAuthorFilter(reader.userId, comments.authorUserId),
+			),
+		)
+		return commentRow
+	}
+
+	// a top-level Comment leads by itself, and a reply leads with its top-level Comment
+	const linkedRow = await loadCommentRow(commentId)
+	if (!linkedRow?.parentCommentId) {
+		return linkedRow ? { topLevelRow: linkedRow, replyRows: [] } : null
+	}
+	const topLevelRow = await loadCommentRow(linkedRow.parentCommentId)
+	if (!topLevelRow) {
+		return null
+	}
+
+	// the replies from the first to the linked one, oldest first
+	const replyRows = await toCommentRowQuery(reader)
+		.where(
+			and(
+				eq(comments.parentCommentId, topLevelRow.id),
+				toVisibleAuthorFilter(reader.userId, comments.authorUserId),
+				sql`(${comments.createdAt}, ${comments.id}) <= (select linked.created_at, linked.id from ${comments} linked where linked.id = ${linkedRow.id})`,
+			),
+		)
+		.orderBy(asc(comments.createdAt), asc(comments.id))
+		.limit(LINKED_REPLY_LIMIT)
+	return { topLevelRow, replyRows }
 }
 
 // the first replies of each top-level comment, oldest first, each with its parent's count of replies the reader sees
@@ -296,10 +371,7 @@ export async function loadCommentReplyPage({
 	cursor,
 }: LoadCommentReplyPageOptions): Promise<CommentRepliesResponse> {
 	// one row past the page says whether another page follows
-	const replyRows = await db
-		.select(toCommentColumns(reader))
-		.from(comments)
-		.leftJoin(users, eq(users.id, comments.authorUserId))
+	const replyRows = await toCommentRowQuery(reader)
 		.where(
 			and(
 				eq(comments.parentCommentId, parentCommentId),

@@ -1,8 +1,10 @@
-import type { PodcastEpisode } from "@carlnotes/contracts/podcast"
+import type { PodcastEpisode, PodcastEpisodeFormat } from "@carlnotes/contracts/podcast"
 
-// the shared playback state. only the audio adapter holds a playable source
+// the shared playback state. the adapter of the playing format, the audio or the film, holds the playable source
 export type PodcastEpisodePlayerState = {
 	podcastEpisode: PodcastEpisode | null
+	format: PodcastEpisodeFormat
+	// where playback stands
 	isPlaying: boolean
 	isLoading: boolean
 	positionSeconds: number
@@ -27,11 +29,19 @@ export type PodcastEpisodeAudioAdapter = {
 	setPlaybackRate: (playbackRate: number) => void
 	unload: () => void
 	updateMetadata: (state: PodcastEpisodePlayerState) => void
+	// the app's optional hooks on playback, seeks, checkpoints, and analytics
 	onPlaybackStarted?: () => void
 	onSeek?: () => void
 	onCheckpoint?: (state: PodcastEpisodePlayerState) => void
 	onVisitEvent?: (event: "visit_episode_played" | "visit_episode_completed", podcastEpisode: PodcastEpisode) => void
+	onFormatSwitched?: (podcastEpisode: PodcastEpisode, format: PodcastEpisodeFormat) => void
 }
+
+// the source operations that a film player supplies. the app-wide hooks stay on the audio adapter
+export type TopicPodcastEpisodeVideoAdapter = Pick<
+	PodcastEpisodeAudioAdapter,
+	"load" | "play" | "pause" | "seek" | "setPlaybackRate" | "unload" | "updateMetadata"
+>
 
 // status events belong to the load that produced them
 export type PodcastEpisodeAudioEvent = { loadId: number } & (

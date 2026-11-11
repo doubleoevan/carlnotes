@@ -38,7 +38,9 @@ export type SocialElements = {
 	Message: ComponentType<PropsWithChildren>
 	Loading: ComponentType
 	List: ComponentType<PropsWithChildren>
-	Row: ComponentType<PropsWithChildren>
+	// one comment's row. a linked one scrolls into view and is highlighted briefly, and a row with a shown handler
+	// reports the first time it shows
+	Row: ComponentType<PropsWithChildren<{ isLinked?: boolean; onShown?: () => void }>>
 	Header: ComponentType<PropsWithChildren>
 	// a row's author with a link to their profile, or Carl for no author
 	Author: ComponentType<{ author: ProfileIdentity | null }>

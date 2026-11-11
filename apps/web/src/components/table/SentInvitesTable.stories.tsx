@@ -110,7 +110,7 @@ export const ReadOnly: Story = { args: { onDeleteInvite: undefined } }
 export const ConfirmWithdraw: Story = {
 	play: async ({ canvas, userEvent }) => {
 		// the confirmation fades and zooms in, so it is visible once the animation ends
-		await userEvent.click(canvas.getByRole("switch", { name: "Withdraw the invitation to pat@example.com" }))
+		await userEvent.click(canvas.getByRole("switch", { name: "Withdraw the invite to pat@example.com" }))
 		await findVisibleByRole("dialog")
 	},
 }

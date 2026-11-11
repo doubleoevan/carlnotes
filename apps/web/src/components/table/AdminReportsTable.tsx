@@ -1,6 +1,11 @@
 import { sendReportResolution } from "@carlnotes/client/reportClient"
 import { DEFAULT_PAGE_SIZE } from "@carlnotes/contracts/pagination"
-import { type AdminReport, REPORT_SUBJECT_KIND_LABELS, type ReportResolution } from "@carlnotes/contracts/reports"
+import {
+	type AdminReport,
+	isImageReportSubjectKind,
+	REPORT_SUBJECT_KIND_LABELS,
+	type ReportResolution,
+} from "@carlnotes/contracts/reports"
 import { toProfilePath } from "@carlnotes/contracts/seo"
 import type { ConfirmationCopy } from "@carlnotes/core/lib/confirmationCopy"
 import { toDateLabel } from "@carlnotes/core/lib/labels"
@@ -11,11 +16,11 @@ import { toast } from "sonner"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { ScrollBox } from "@/components/common/ScrollBox"
 import { Button } from "@/components/primitives/button"
-import { TopicImage } from "@/components/primitives/topic-image"
+import { TopicImageLink } from "@/components/topic/TopicImageLink"
 import { useConfirmDialog } from "@/hooks/useConfirmDialog"
 import { STANDALONE_LINK_CLASS, TABLE_CLASS, TABLE_HEAD_CLASS, TABLE_SCROLL_CLASS } from "@/lib/styleClasses"
 import { SortableHeader } from "./SortableHeader"
-import { TableCard } from "./TableCard"
+import { EmptyListCard, TableCard } from "./TableCard"
 import { TablePagination, usePaginatedRowSort } from "./TablePagination"
 
 // each subject kind's label with its first letter raised, as the table's column reads
@@ -62,7 +67,7 @@ export function AdminReportsTable({
 		initialPageSize: DEFAULT_PAGE_SIZE,
 	})
 	if (reports.length === 0) {
-		return <p className="text-muted-foreground text-sm">No open reports. Carl is relieved.</p>
+		return <EmptyListCard>No open reports. Carl is relieved.</EmptyListCard>
 	}
 	return (
 		<TableCard>
@@ -101,11 +106,14 @@ function ReportText({ text }: { text: string }) {
 	return text.length > SCROLLING_REPORT_TEXT_CHARS ? <ScrollBox className="max-h-40">{text}</ScrollBox> : text
 }
 
-// what Remove does to a report's subject: a topic image is drawn again, and every other kind is deleted
+// what Remove does to a report's subject: a topic's or a topic post's image is drawn again, and every other kind is
+// deleted
 function toRemoveCopy(report: AdminReport): { label: string; pendingLabel: string; clause: string } {
-	return report.subjectKind === "topicImage"
-		? { label: "Regenerate", pendingLabel: "Regenerating…", clause: "draws a new image for the topic" }
-		: { label: "Remove", pendingLabel: "Removing…", clause: "deletes the content" }
+	if (!isImageReportSubjectKind(report.subjectKind)) {
+		return { label: "Remove", pendingLabel: "Removing…", clause: "deletes the content" }
+	}
+	const imageOwner = report.subjectKind === "topicImage" ? "topic" : "post"
+	return { label: "Regenerate", pendingLabel: "Regenerating…", clause: `draws a new image for the ${imageOwner}` }
 }
 
 // what each resolution's confirmation says. Block names the author, and only content still there is deleted or kept
@@ -117,7 +125,7 @@ function toResolutionConfirmation(
 	const removeCopy = toRemoveCopy(report)
 	if (resolution === "removed") {
 		return {
-			title: `${removeCopy.label} this ${report.subjectKind === "topicImage" ? "image" : "content"}?`,
+			title: `${removeCopy.label} this ${isImageReportSubjectKind(report.subjectKind) ? "image" : "content"}?`,
 			confirmLabel: removeCopy.label,
 			children: `This ${removeCopy.clause} and closes the report.`,
 		}
@@ -180,9 +188,17 @@ function ReportRow({
 					<span className="text-muted-foreground italic">already deleted</span>
 				) : (
 					<>
-						{/* a topic image report shows the image as it stands above the topic's label */}
-						{report.subjectKind === "topicImage" && (
-							<TopicImage image={report.subjectImage} size="list" name={report.subjectText} className="mb-1" />
+						{/* an image report shows the image as it stands above the topic's or the post's label, and the image
+						    opens the page the report's kind links to */}
+						{isImageReportSubjectKind(report.subjectKind) && (
+							<TopicImageLink
+								image={report.subjectImage}
+								size="list"
+								name={report.subjectText}
+								className="mb-1"
+								path={report.subjectPath}
+								linkClassName="w-fit"
+							/>
 						)}
 						<ReportText text={report.subjectText} />
 					</>

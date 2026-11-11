@@ -3,12 +3,16 @@ import type { TopicActionContext, TopicActionLayout } from "@carlnotes/core/lib/
 export { toTopicActionLayout } from "@carlnotes/core/lib/topicActions"
 
 import type { TopicResponse } from "@carlnotes/contracts/topics"
-import { cn } from "@carlnotes/nightshift/classNames"
-import { ListOrdered, PawPrint, Pencil, Share, Trash2, Users } from "lucide-react"
+import {
+	EDIT_TOPIC_PODCAST_EPISODE_VIDEO_LABEL,
+	toTopicPageEditedPodcastEpisode,
+} from "@carlnotes/core/lib/podcastEpisodeEditor"
+import { HOME_RANK_OPTION_LABELS, PROFILE_RANK_OPTION_LABELS } from "@carlnotes/core/lib/rankDialog"
+import { Clapperboard, Home, ListOrdered, PawPrint, Pencil, Share, Trash2, Users } from "lucide-react"
 import type * as React from "react"
-import { ShareTopicButton } from "@/components/share/ShareTopic"
+import { ShareTopic } from "@/components/share/ShareTopic"
 import { AddTopicToTeamButton } from "@/components/team/AddTopicToTeamButton"
-import { MENU_BUTTON_CLASS, MENU_BUTTON_HIGHLIGHT_CLASS } from "@/lib/styleClasses"
+import { PAGE_BUTTON_ROW_CLASS, PAGE_BUTTON_SKELETON_CLASS, PLAIN_PAGE_BUTTON_CLASS } from "@/lib/styleClasses"
 import type { PageActionOption } from "@/stores/pageActionsStore"
 import { NewTopicButton } from "./TopicEditorChoiceDialog"
 import { SubscribeButton } from "./TopicPageHeader"
@@ -24,6 +28,8 @@ export function toTopicActionOptions({
 	onShareTopic,
 	onToggleFollowTopic,
 	onRankHomeTopic,
+	onRankProfileTopic,
+	onEditTopicPodcastEpisodeVideo,
 	onEditTopic,
 	onDeleteTopic,
 }: {
@@ -34,6 +40,8 @@ export function toTopicActionOptions({
 	onShareTopic: () => void
 	onToggleFollowTopic: () => void
 	onRankHomeTopic: () => void
+	onRankProfileTopic: () => void
+	onEditTopicPodcastEpisodeVideo: () => void
 	onEditTopic: () => void
 	onDeleteTopic: () => void
 }): PageActionOption[] {
@@ -49,19 +57,44 @@ export function toTopicActionOptions({
 					},
 				]
 			: []),
-		// an admin arranges the Home topics from inside the topic itself, on a public topic alone
-		...(isAdminUser && topic.visibility === "public"
-			? [{ label: "Featured topics", Icon: ListOrdered, onSelect: onRankHomeTopic }]
+		// on a public topic alone, an admin arranges the home's topics from inside the topic itself, and the topic's
+		// owner arranges their own profile's featured topics
+		...(topic.visibility === "public"
+			? toRankOptions({ topic, isAdminUser, onRankHomeTopic, onRankProfileTopic })
 			: []),
 		// the Add topic to team option opens its dialog if Join Team holds the bar's left
 		...(topicActionLayout.isAddTopicToTeamInMenu ? [toAddTopicToTeamOption(onAddTopicToTeam)] : []),
-		// sharing sits directly above editing
+		// sharing sits directly above editing, and Edit film, for a topic whose latest podcast episode has a film, leads
+		// the editing options
 		toShareTopicOption(onShareTopic),
+		...(toTopicPageEditedPodcastEpisode(topic)
+			? [toEditTopicPodcastEpisodeVideoOption(onEditTopicPodcastEpisodeVideo)]
+			: []),
 		...(topic.canEdit
 			? [
 					{ label: "Edit topic", Icon: Pencil, onSelect: onEditTopic },
 					{ label: "Delete topic", Icon: Trash2, onSelect: onDeleteTopic },
 				]
+			: []),
+	]
+}
+
+// a public topic's rank options: the home's for an admin, under the home's icon, and the profile's for its owner
+function toRankOptions({
+	topic,
+	isAdminUser,
+	onRankHomeTopic,
+	onRankProfileTopic,
+}: {
+	topic: TopicResponse
+	isAdminUser: boolean
+	onRankHomeTopic: () => void
+	onRankProfileTopic: () => void
+}): PageActionOption[] {
+	return [
+		...(isAdminUser ? [{ label: HOME_RANK_OPTION_LABELS.topics, Icon: Home, onSelect: onRankHomeTopic }] : []),
+		...(topic.isTopicOwner
+			? [{ label: PROFILE_RANK_OPTION_LABELS.topics, Icon: ListOrdered, onSelect: onRankProfileTopic }]
 			: []),
 	]
 }
@@ -78,6 +111,13 @@ export function toAddTopicToTeamOption(onSelect: () => void): PageActionOption {
  */
 export function toShareTopicOption(onSelect: () => void): PageActionOption {
 	return { label: "Share topic", Icon: Share, onSelect }
+}
+
+/**
+ * Returns the actions menu's Edit film option, which opens the film's image dialog.
+ */
+export function toEditTopicPodcastEpisodeVideoOption(onSelect: () => void): PageActionOption {
+	return { label: EDIT_TOPIC_PODCAST_EPISODE_VIDEO_LABEL, Icon: Clapperboard, onSelect }
 }
 
 /**
@@ -109,10 +149,12 @@ export function TopicActionBar({
 		isShareOnLeft,
 	} = topicActionLayout
 	return (
-		<div className="flex flex-wrap items-start justify-between gap-3">
-			{/* the left holds the first of the join, add topic to team, and share buttons that applies.
-			    the actions menu has the rest */}
+		<div className={PAGE_BUTTON_ROW_CLASS}>
+			{/* the left holds the first of the join, add topic to team, and share buttons that applies, in the plain
+			    style with its icon alone in the highlight color, or a skeleton while the page loads. the actions menu has
+			    the rest */}
 			<div className="flex flex-wrap items-start gap-2">
+				{topic === undefined && <div aria-hidden="true" className={PAGE_BUTTON_SKELETON_CLASS} />}
 				{isJoinOnLeft && renderJoinButton({ isHighlighted: false })}
 				{topic && isAddTopicToTeamOnLeft && (
 					<AddTopicToTeamButton
@@ -121,18 +163,14 @@ export function TopicActionBar({
 						onTopicTeamsChanged={() => window.location.reload()}
 					/>
 				)}
-				{topic && isShareOnLeft && <ShareTopicButton topic={topic} className={MENU_BUTTON_CLASS} />}
+				{topic && isShareOnLeft && <ShareTopic topic={topic} className={PLAIN_PAGE_BUTTON_CLASS} isIconHighlighted />}
 			</div>
 			{/* the call to action, or a skeleton while the page loads */}
 			<div className="flex flex-wrap items-start justify-end gap-2">
-				{topic === undefined && (
-					<div aria-hidden="true" className="bg-muted h-11 w-28 animate-pulse rounded-lg sm:h-9" />
-				)}
+				{topic === undefined && <div aria-hidden="true" className={PAGE_BUTTON_SKELETON_CLASS} />}
 				{/* the scan control mounts for every user to keep its poll running, and shows nothing to the rest */}
 				{scanControl}
-				{isNewTopicCallToAction && (
-					<NewTopicButton className={cn(MENU_BUTTON_CLASS, MENU_BUTTON_HIGHLIGHT_CLASS)} onNewTopic={onNewTopic} />
-				)}
+				{isNewTopicCallToAction && <NewTopicButton onNewTopic={onNewTopic} />}
 				{isJoinCallToAction && renderJoinButton({ isHighlighted: true })}
 				{topic && isSubscribeCallToAction && (
 					<SubscribeButton topic={topic} isSignedIn={isSignedIn} isHighlighted onToggle={onSubscriptionToggle} />

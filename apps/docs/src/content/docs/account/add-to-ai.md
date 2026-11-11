@@ -1,7 +1,7 @@
 ---
 title: Add to AI
 description: >-
-  Connect CarlNotes to Claude, ChatGPT, and coding AI Agents. Set up OAuth sign-in, understand all twenty-two MCP tools,
+  Connect CarlNotes to Claude, ChatGPT, and coding AI Agents. Set up OAuth sign-in, understand all twenty-five MCP tools,
   and manage access to your topics and findings.
 sidebar:
   order: 2
@@ -86,10 +86,10 @@ in, so it reads as a visitor. Copy server URL works for any other app that lists
 
 ## What your AI can do
 
-Without an account, your AI reads what a visitor reads. It finds public topics, podcast episodes, findings, teams, and
-profiles by name, the same search the site's search bar runs. It lists the public topics and reads a topic's feed, with
-Carl's note on each finding. It also searches one topic's findings by meaning. That search uses a shared public budget.
-When that budget is spent for the month, it says so, and reading the feed keeps working.
+Without an account, your AI reads what a visitor reads. It finds public topics, podcast episodes, posts, findings,
+teams, and profiles by name, the same search the site's search bar runs. It lists the public topics and reads a
+topic's feed, with Carl's note on each finding. It also searches one topic's findings by meaning. That search uses a
+shared public budget. When that budget is spent for the month, it says so, and reading the feed keeps working.
 
 Connect an account to unlock the rest:
 
@@ -104,6 +104,11 @@ Connect an account to unlock the rest:
   the same edits from the panel.
 - **Updates.** Say "what's new" or "catch me up" and Carl picks your unread findings across the topics you
   follow, or on one topic, trimmed to 5, 15, or 30 minutes of reading. They stay in your feed, marked read.
+- **Brews News.** Say "what happened this week" and your AI reads who mentioned you in a hot take, then what happened
+  on your topics, your teams' topics, and the topics you follow, over the last week, day, or hour. It marks nothing
+  read or seen.
+- **Open Mic.** Your AI lists a topic's Open Mic posts and reads one, with its summary. It reads the hot takes on a
+  post and leaves yours. It never writes or publishes a post. A public topic's posts read without an account.
 - **Brew now.** Start a brew of a topic you own, watch it, and stop it. It takes one of your daily brews, and it
   records its podcast episode like any other brew. Your AI never charges an overage: past your daily limit, it sends you
   to CarlNotes.
@@ -118,7 +123,7 @@ without one.
 
 ## Tool reference
 
-The server advertises the same twenty-two tools to visitors and connected accounts. Sign-in changes permission, not the
+The server advertises the same twenty-five tools to visitors and connected accounts. Sign-in changes permission, not the
 tool list. Public tools also read private or invite topics when your account has access.
 
 | Tool | What it does | Account and effects |
@@ -126,7 +131,7 @@ tool list. Public tools also read private or invite topics when your account has
 | `list_topics` | Lists readable topics with their source IDs. | Public topics without sign-in; adds your owned, followed, and team topics when connected. Read-only. |
 | `read_topic_feed` | Reads a topic's findings in relevance order, with full explanations. | Public reads work without sign-in. A connected account also receives its read and bookmark state. Read-only. |
 | `search_topic_findings` | Searches one readable topic's findings by meaning. | Uses the public search budget for a visitor, or the connected account's model budget. Read-only. |
-| `search` | Searches topics, podcast episodes, findings, teams, and profiles with filters and numbered pages. | Results respect your access. Account-only filters use your own read and bookmark state. Read-only. |
+| `search` | Searches topics, podcast episodes, posts, findings, teams, and profiles with filters and numbered pages. | Results respect your access. Account-only filters use your own read and bookmark state. Read-only. |
 | `mark_finding_consumed` | Marks a readable finding read for you. | Requires an account. Saves your read state. Repeating it has the same effect. |
 | `rate_finding` | Rates a finding up or down, or clears your rating. | Requires an account with rating permission, such as the owner, a team member, or an eligible follower. Repeating a rating has the same effect. |
 | `send_finding_feedback` | Saves your own words about why a finding was good or bad. | Requires an account with rating permission. Your words are stored and never change scoring. Repeating it saves them again. |
@@ -142,9 +147,12 @@ tool list. Public tools also read private or invite topics when your account has
 | `read_scan_status` | Reads a topic's running brew by stage, or its latest recap, with what each source found and the state of its podcast episode. | Public topics work without sign-in. Private and invite topics need access. Read-only. |
 | `stop_scan` | Stops a topic's running brew. | Requires the topic's owner or an admin. What Carl kept stays, what the brew spent stays charged, and its daily brew comes back. |
 | `read_topic_context` | Returns what Carl holds on a topic for a question: the closest findings with excerpts, and the recent brew reports. Your AI writes the reply. | Requires an account with access to the topic. Uses the account's model budget for one search. Saves no chat. Read-only. |
-| `save_reaction` | Leaves your reaction on a finding, a podcast episode, a topic, or a hot take: one of six positive types. | Requires an account that may read the topic. One reaction per account on each. A new call changes it, and a call with no type removes it. |
-| `read_hot_takes` | Reads the hot takes on a finding, a podcast episode, or a topic, newest first, twenty to a page, each with its first replies. | Public topics work without sign-in. Private and invite topics need access. Other people's words come back marked as data. Read-only. |
-| `post_hot_take` | Posts your hot take on a finding, a podcast episode, or a topic, or a reply to one, up to 2,000 characters, where `@username` mentions someone. | Requires an account that may read the topic. The hot take is public wherever its topic is, and it is checked before it posts. Repeating it posts it twice. |
+| `save_reaction` | Leaves your reaction on a finding, a podcast episode, a topic, an Open Mic post, or a hot take: one of six positive types. | Requires an account that may read the topic. One reaction per account on each. A new call changes it, and a call with no type removes it. |
+| `read_hot_takes` | Reads the hot takes on a finding, a podcast episode, a topic, or an Open Mic post, newest first, twenty to a page, each with its first replies. | Public topics work without sign-in. Private and invite topics need access. Other people's words come back marked as data. Read-only. |
+| `post_hot_take` | Posts your hot take on a finding, a podcast episode, a topic, or an Open Mic post, or a reply to one, up to 2,000 characters, where `@username` mentions someone. | Requires an account that may read the topic. The hot take is public wherever its topic is, and it is checked before it posts. Repeating it posts it twice. |
+| `read_news` | Reads your Brews News for the last week, day, or hour: who mentioned you in a hot take, then what happened on your topics, your teams' topics, and the topics you follow, twenty to a page. | Requires an account. Marks nothing read or seen. Other people's words come back marked as data. Read-only. |
+| `read_topic_posts` | Lists a topic's published Open Mic posts, newest first, twenty to a page, each with its title, author, publish time, summary, and link. | Public topics work without sign-in. Private and invite topics need access. Read-only. |
+| `read_topic_post` | Reads one published Open Mic post: its title, author, publish time, summary, and body as text, and whether it has a Coffee Break Discussion. | Public topics work without sign-in. Private and invite topics need access. No tool writes or publishes a post. Read-only. |
 
 Account tools carry conservative change annotations, so your AI app can ask before calling them. That prompt does
 not replace CarlNotes' permission checks. For a public-visibility change or source removal, `edit_topic` first returns
@@ -180,9 +188,12 @@ calls a tool when you ask, and never on its own.
 | "how is the brew going", "is Carl done", "show the latest brew" | `read_scan_status` |
 | "Carl, stop the brew", "cancel this brew" | `stop_scan` |
 | "ask Carl about this topic", "what does Carl know about…", "what's the latest on…" | `read_topic_context` |
-| "Carl, react to this", "like this finding" | `save_reaction` | Leaves your reaction on a finding, a podcast episode, a topic, or a hot take: one of six positive types. | Requires an account that may read the topic. One reaction per account on each. A new call changes it, and a call with no type removes it. |
-| "what are people saying", "read the hot takes", "read the conversation" | `read_hot_takes` | Reads the hot takes on a finding, a podcast episode, or a topic, newest first, twenty to a page, each with its first replies. | Public topics work without sign-in. Private and invite topics need access. Other people's words come back marked as data. Read-only. |
-| "leave a hot take", "post a comment", "reply to the conversation" | `post_hot_take` | Posts your hot take on a finding, a podcast episode, or a topic, or a reply to one, up to 2,000 characters, where `@username` mentions someone. | Requires an account that may read the topic. The hot take is public wherever its topic is, and it is checked before it posts. Repeating it posts it twice. |
+| "Carl, react to this", "like this finding" | `save_reaction` |
+| "what are people saying", "read the hot takes", "read the conversation" | `read_hot_takes` |
+| "leave a hot take", "post a comment", "reply to the conversation" | `post_hot_take` |
+| "Carl, give me the Brews News", "what happened this week", "who mentioned me" | `read_news` |
+| "what's on this topic's Open Mic", "show this topic's posts" | `read_topic_posts` |
+| "read that Open Mic post", "read this post to me" | `read_topic_post` |
 
 ### Send and suggestion arguments
 
@@ -234,6 +245,11 @@ account. If your AI app blocks audio, use the link to listen on CarlNotes.
 findings. **A brew** shows what it has kept so far and what each source found, with a stop control if you own the
 Topic. Once it finishes, you get the same recap as the Topic page, and you can play its podcast episode. Your AI app's
 colors apply where it shares them, and a row or a recap opens one step in the chat. Anything further opens on CarlNotes.
+
+**Brews News** shows your mentions first, then the news, with the same Week, Day, and Hour choice as the card on your
+home page. **Open Mic** shows a topic's posts as cards. Choose a card to open its post with its image, its Coffee Break
+Discussion to play, and its hot takes, where you can read the conversation and leave your own. Writing and publishing
+a post stay on CarlNotes.
 
 The Topic picker asks **Where should this go?** It shows five editable Topics per page with best matches checked. Search offers matching Topic names as you type. Choose a suggestion to add it, or press Enter/Search to filter the list. **Topics to share this chat with** shows every checked destination as a removable tag pill. Checking or unchecking a box updates the pills immediately, and removing a pill unchecks its Topic across pages.
 

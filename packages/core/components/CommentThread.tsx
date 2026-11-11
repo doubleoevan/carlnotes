@@ -30,6 +30,8 @@ export type CommentThreadProps = {
 	target: CommentTarget
 	// the first page from the page's own read. absent for a thread that loads as it opens
 	firstPage?: CommentThreadResponse
+	// the Comment a link named, which leads the thread and is highlighted
+	linkedCommentId?: string
 	isSignedIn: boolean
 	// opens sign-up for a visitor who presses a type, the composer's button, or Reply
 	onSignIn: () => void
@@ -38,6 +40,8 @@ export type CommentThreadProps = {
 	onReport: (comment: CommentReply) => void
 	// the week's comment count as it stands, for the card's heading
 	onWeekCommentCountChange?: (weekCommentCount: number) => void
+	// the thread's whole comment count as it stands, for the page's details line. null if the api does not count it
+	onCommentCountChange?: (commentCount: number | null) => void
 	// a Podcast Episode's chapters, which a comment may name, and what a press on a chapter's tag does
 	chapters?: CommentChapter[]
 	onChapterPress?: (chapterPosition: number) => void
@@ -94,11 +98,13 @@ function toComposerShare({
 export function CommentThread({
 	target,
 	firstPage,
+	linkedCommentId,
 	isSignedIn,
 	onSignIn,
 	onError,
 	onReport,
 	onWeekCommentCountChange,
+	onCommentCountChange,
 	chapters = NO_CHAPTERS,
 	onChapterPress,
 	elements,
@@ -106,21 +112,26 @@ export function CommentThread({
 	const { Container, Message, Loading, More, List, MoreToggle, Confirm } = elements
 	const { ComposerButton, ComposerFrame, Composer } = elements
 	const { ChapterSelect, ComposerRow, ComposerShareSwitch, SharedCommentSlotsLabel } = elements
-	const thread = useCommentThread(target, firstPage)
+	const thread = useCommentThread(target, firstPage, linkedCommentId)
 
 	// the composer, the chapter a new comment names, whether it is shared, and the comment whose delete awaits
 	// confirmation
 	const [composerState, setComposerState] = useState<ComposerState | null>(null)
 	const [chapterPosition, setChapterPosition] = useState<number | null>(null)
-	const [isShareChosen, setIsShareChosen] = useState(true)
+	// the share switch starts on, and off on a Topic Post's thread
+	const isShareOnAtStart = target.kind !== "post"
+	const [isShareChosen, setIsShareChosen] = useState(isShareOnAtStart)
 	const [commentToDelete, setCommentToDelete] = useState<CommentReply | null>(null)
 	const chapterByPosition = useMemo(() => new Map(chapters.map((chapter) => [chapter.position, chapter])), [chapters])
 
-	// report the week's count
-	const { sharedCommentSlots, weekCommentCount } = thread
+	// report the week's count and the thread's whole count
+	const { sharedCommentSlots, weekCommentCount, commentCount } = thread
 	useEffect(() => {
 		onWeekCommentCountChange?.(weekCommentCount)
 	}, [weekCommentCount, onWeekCommentCountChange])
+	useEffect(() => {
+		onCommentCountChange?.(commentCount)
+	}, [commentCount, onCommentCountChange])
 
 	const composerShare = toComposerShare({ composerState, sharedCommentSlots, isShareChosen })
 
@@ -177,7 +188,7 @@ export function CommentThread({
 	function openComposer(nextComposerState: ComposerState): void {
 		if (isSignedIn) {
 			setComposerState(nextComposerState)
-			setIsShareChosen(true)
+			setIsShareChosen(isShareOnAtStart)
 		} else {
 			onSignIn()
 		}
@@ -276,6 +287,7 @@ export function CommentThread({
 							<CommentRow
 								key={comment.id}
 								comment={comment}
+								linkedCommentId={linkedCommentId}
 								chapterByPosition={chapterByPosition}
 								onChapterPress={onChapterPress ? handleChapterPress : undefined}
 								isSignedIn={isSignedIn}

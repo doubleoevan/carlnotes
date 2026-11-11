@@ -1,10 +1,11 @@
+import { toProfilePageTitle } from "@carlnotes/contracts/profilePage"
 import { toProfilePath } from "@carlnotes/contracts/seo"
 import type { ComponentType, ReactNode } from "react"
 
 // the same destination labels double as stable icon names in both platform adapters
 type UserMenuIcon =
 	| "Topics"
-	| "Profile"
+	| "Café"
 	| "Teams"
 	| "Activity"
 	| "Account"
@@ -15,10 +16,16 @@ type UserMenuIcon =
 	| "Sign out"
 export type UserMenuLinkProps = {
 	label: UserMenuIcon
+	// the row's words where they differ from its label, as the Café row's name the user
+	text?: string
 	href: string
 	isSelected: boolean
 	onSelect: () => void
 	children?: ReactNode
+}
+// one account destination: its stable name, its words if they differ, its page, and the row whose badge it shows
+type UserMenuDestination = Pick<UserMenuLinkProps, "label" | "text" | "href"> & {
+	badgeLabel: "Profile" | "Teams" | "Activity" | null
 }
 export type UserMenuElements = {
 	Link: ComponentType<UserMenuLinkProps>
@@ -32,6 +39,7 @@ export type UserMenuElements = {
 export function UserMenuItems({
 	elements,
 	userId,
+	username,
 	isAdmin,
 	pathname,
 	onNavigate,
@@ -39,9 +47,11 @@ export function UserMenuItems({
 	onSignOut,
 	isSigningOut,
 	renderBadge,
+	mentionsRow,
 }: {
 	elements: UserMenuElements
 	userId: string
+	username: string
 	isAdmin: boolean
 	pathname: string
 	onNavigate: () => void
@@ -49,23 +59,27 @@ export function UserMenuItems({
 	onSignOut: () => void
 	isSigningOut?: boolean
 	renderBadge?: (label: "Profile" | "Teams" | "Activity" | "Admin") => ReactNode
+	// the row that opens the user's unseen Comment Mentions, after the account destinations
+	mentionsRow?: ReactNode
 }) {
 	const { Link, Action, Divider } = elements
-	const destinations = [
-		{ label: "Topics", href: "/topics" },
-		{ label: "Profile", href: toProfilePath(userId) },
-		{ label: "Teams", href: "/teams" },
-		{ label: "Activity", href: "/activity" },
-		{ label: "Account", href: "/account" },
-	] as const
+	// each destination with the row whose badge it shows. the profile page reads as the user's own Café
+	const destinations: UserMenuDestination[] = [
+		{ label: "Topics", href: "/topics", badgeLabel: null },
+		{ label: "Café", text: toProfilePageTitle(username), href: toProfilePath(userId), badgeLabel: "Profile" },
+		{ label: "Teams", href: "/teams", badgeLabel: "Teams" },
+		{ label: "Activity", href: "/activity", badgeLabel: "Activity" },
+		{ label: "Account", href: "/account", badgeLabel: null },
+	]
 	return (
 		<>
 			{/* account destinations and their optional live counts */}
-			{destinations.map(({ label, href }) => (
-				<Link key={label} label={label} href={href} isSelected={pathname === href} onSelect={onNavigate}>
-					{label !== "Account" && label !== "Topics" && renderBadge?.(label)}
+			{destinations.map(({ label, text, href, badgeLabel }) => (
+				<Link key={label} label={label} text={text} href={href} isSelected={pathname === href} onSelect={onNavigate}>
+					{badgeLabel && renderBadge?.(badgeLabel)}
 				</Link>
 			))}
+			{mentionsRow}
 			<Divider />
 			{/* plans and learning */}
 			<Link label="Plans" href="/plans" isSelected={pathname === "/plans"} onSelect={onNavigate} />

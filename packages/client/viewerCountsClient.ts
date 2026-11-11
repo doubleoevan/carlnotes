@@ -1,9 +1,12 @@
-// the api client for a topic page's view and the topic and podcast episode counts
+// the api client for a topic, a profile, and a team page's view and the topic, podcast episode, profile, and team
+// counts
 import {
 	type PodcastEpisodeCounts,
 	podcastEpisodeCounts,
 	type TopicCounts,
 	topicCounts,
+	type ViewerCounts,
+	viewerCounts,
 } from "@carlnotes/contracts/viewerCounts"
 import { apiClient, readApiResponse } from "./apiClient"
 
@@ -48,6 +51,49 @@ export async function fetchPodcastEpisodeCounts(
 		)
 		.catch(() => null)
 	return response?.ok ? readApiResponse(podcastEpisodeCounts, response) : null
+}
+
+/**
+ * Sends a profile page's view, which outlives a page that unloads first. A failure is left alone.
+ */
+export function sendProfileView(userId: string): void {
+	apiClient()
+		.api.profiles[":userId"].view.$post({ param: { userId } }, { init: { keepalive: true } })
+		.catch(() => {})
+}
+
+/**
+ * Sends a team page's view, which outlives a page that unloads first. A failure is left alone.
+ */
+export function sendTeamView(teamId: string): void {
+	apiClient()
+		.api.teams[":id"].view.$post({ param: { id: teamId } }, { init: { keepalive: true } })
+		.catch(() => {})
+}
+
+/**
+ * Fetches a profile's viewers, or null if the read fails. A profile is public, so the read leaves the session cookie
+ * behind.
+ */
+export async function fetchProfileViewerCounts(userId: string, signal?: AbortSignal): Promise<ViewerCounts | null> {
+	const response = await apiClient()
+		.api.counts.profiles[":userId"].$get({ param: { userId } }, { init: toCountsRequestInit(true, signal) })
+		.catch(() => null)
+	return response?.ok ? readApiResponse(viewerCounts, response) : null
+}
+
+/**
+ * Fetches a team's viewers, or null if the read fails. A public team's count is fetched without credentials.
+ */
+export async function fetchTeamViewerCounts(
+	teamId: string,
+	isPublic: boolean,
+	signal?: AbortSignal,
+): Promise<ViewerCounts | null> {
+	const response = await apiClient()
+		.api.counts.teams[":id"].$get({ param: { id: teamId } }, { init: toCountsRequestInit(isPublic, signal) })
+		.catch(() => null)
+	return response?.ok ? readApiResponse(viewerCounts, response) : null
 }
 
 // a public topic's counts leave the session cookie behind, and any other topic's send it for the access check. a

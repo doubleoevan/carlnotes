@@ -3,7 +3,11 @@
 
 import { showClientError } from "@carlnotes/client/apiClient"
 import { fetchTopicImageRender } from "@carlnotes/client/topicImageClient"
-import type { TopicImageUrls } from "@carlnotes/contracts/topicImages"
+import {
+	type TopicImageRenderResponse,
+	type TopicImageUrls,
+	toTopicPodcastEpisodeVideoImageUrls,
+} from "@carlnotes/contracts/topicImages"
 import { useEffect, useRef, useState } from "react"
 import { TOPIC_IMAGE_RENDER_FAILED_TEXT } from "../lib/topicImageEditor"
 
@@ -14,8 +18,8 @@ const RENDER_POLL_LIMIT_MS = 20 * 60 * 1000
 
 /**
  * Keeps the editor's image current through a render. watchRender starts polling a render by its id until it succeeds,
- * which replaces the image and calls onImageRendered, or fails, which reports it. replaceImage sets the image at once,
- * for an upload.
+ * which replaces the image and calls onImageRendered, or fails, which reports it. A film's render leaves its poster,
+ * which replaces the image. replaceImage sets the image at once, for an upload.
  */
 export function useTopicImageRender(
 	initialImage: TopicImageUrls | null,
@@ -24,7 +28,7 @@ export function useTopicImageRender(
 	image: TopicImageUrls | null
 	isRendering: boolean
 	watchRender: (renderId: string) => void
-	replaceImage: (image: TopicImageUrls) => void
+	replaceImage: (image: TopicImageUrls | null) => void
 } {
 	// the image as it stands, and the render under way
 	const [image, setImage] = useState(initialImage)
@@ -57,14 +61,17 @@ export function useTopicImageRender(
 				return
 			}
 
-			// the render settled. a success replaces the image and calls onImageRendered, and a failure shows an error
+			// the render settled. a success left an image or a film's poster, and anything else shows an error
 			setRenderId(null)
-			if (render?.status === "succeeded" && render.image) {
-				setImage(render.image)
-				onImageRenderedRef.current?.()
-			} else {
+			if (!isRenderedImageInPlace(render)) {
 				showClientError(TOPIC_IMAGE_RENDER_FAILED_TEXT)
+				return
 			}
+
+			// replace the image with the render's, or with a film's poster, and call onImageRendered
+			const posterImage = render.posterUrl ? toTopicPodcastEpisodeVideoImageUrls(render.posterUrl) : null
+			setImage(render.image ?? posterImage)
+			onImageRenderedRef.current?.()
 		}
 
 		// the first read, after one poll interval
@@ -77,4 +84,9 @@ export function useTopicImageRender(
 		}
 	}, [renderId])
 	return { image, isRendering: renderId !== null, watchRender: setRenderId, replaceImage: setImage }
+}
+
+// whether a render succeeded and left what it drew: an image, or a film's poster
+function isRenderedImageInPlace(render: TopicImageRenderResponse | null): render is TopicImageRenderResponse {
+	return render?.status === "succeeded" && Boolean(render.image || render.posterUrl)
 }

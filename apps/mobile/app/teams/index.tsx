@@ -1,6 +1,7 @@
 import { authClient } from "@carlnotes/client/authClient"
 import { fetchTeams } from "@carlnotes/client/teamClient"
 import { toSessionProfileIdentity } from "@carlnotes/contracts/profiles"
+import { toSectionCountLabel } from "@carlnotes/core/lib/labels"
 import { useQuery } from "@tanstack/react-query"
 import { Plus, Users } from "lucide-react-native"
 import { useState } from "react"
@@ -12,10 +13,12 @@ import { PageSkeleton } from "@/components/layout/PageSkeleton"
 import { Button } from "@/components/primitives/button"
 import { Icon } from "@/components/primitives/icon"
 import { Text } from "@/components/primitives/text"
+import { EmptyListCard } from "@/components/table/TableCard"
 import { SentTeamInvitesTable } from "@/components/table/TeamInvitesTable"
 import { TeamsMembershipTable } from "@/components/table/TeamsMembershipTable"
 import { EditTeamModal } from "@/components/team/EditTeamModal"
 import { CollapsibleSection } from "@/components/topic/CollapsibleSection"
+import { HIGHLIGHTED_PAGE_BUTTON_CLASS } from "@/pageButtonClasses"
 
 /**
  * Lists the user's teams and pending invitations.
@@ -38,7 +41,11 @@ export default function TeamsScreen() {
 			onRefresh={handleReload}
 			isRefreshing={query.isRefetching}
 			action={
-				<Button accessibilityLabel="New team" onPress={() => setIsCreating(true)}>
+				<Button
+					className={HIGHLIGHTED_PAGE_BUTTON_CLASS}
+					accessibilityLabel="New team"
+					onPress={() => setIsCreating(true)}
+				>
 					<Icon as={Plus} className="size-4" />
 					<Text>New team</Text>
 				</Button>
@@ -48,7 +55,7 @@ export default function TeamsScreen() {
 				<PageSkeleton kind="teams" />
 			) : query.data ? (
 				<>
-					<CollapsibleSection title="Your teams">
+					<CollapsibleSection title="Your teams" countLabel={toSectionCountLabel(query.data.teams.length, "team")}>
 						{query.data.teams.length || query.data.receivedInvites.length ? (
 							<TeamsMembershipTable
 								teams={query.data.teams}
@@ -56,13 +63,23 @@ export default function TeamsScreen() {
 								onChanged={handleReload}
 							/>
 						) : (
-							<Button variant="link" accessibilityLabel="Start a team" onPress={() => setIsCreating(true)}>
-								<Text>Start a team. Carl brews for everyone at once.</Text>
-							</Button>
+							<EmptyListCard>
+								<Button
+									variant="link"
+									accessibilityLabel="Start a team"
+									onPress={() => setIsCreating(true)}
+									className="self-start"
+								>
+									<Text>Start a team. Carl brews for everyone at once.</Text>
+								</Button>
+							</EmptyListCard>
 						)}
 					</CollapsibleSection>
 					{query.data.sentInvites.length > 0 && (
-						<CollapsibleSection title="Your team invitations">
+						<CollapsibleSection
+							title="Your team invites"
+							countLabel={toSectionCountLabel(query.data.sentInvites.length, "invite")}
+						>
 							<SentTeamInvitesTable invites={query.data.sentInvites} onReload={handleReload} />
 						</CollapsibleSection>
 					)}

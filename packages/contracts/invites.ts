@@ -41,9 +41,15 @@ export function isInviteToken(token: string): boolean {
 	return INVITE_TOKEN_PATTERN.test(token)
 }
 
-// what accepting an invite returns: the topic to open, or which way the token failed
+// what accepting an invite returns: the topic to open, with the Topic Post its invite was shared from while that post
+// is published, or which way the token failed
 export const inviteAcceptResponse = z.discriminatedUnion("status", [
-	z.object({ status: z.literal("joined"), topicId: z.string(), topicName: z.string() }),
+	z.object({
+		status: z.literal("joined"),
+		topicId: z.string(),
+		topicName: z.string(),
+		topicPost: z.object({ id: z.string(), path: z.string() }).optional(),
+	}),
 	z.object({ status: z.literal("joinedTeam"), teamId: z.string(), teamName: z.string() }),
 	z.object({ status: z.literal("requestedTeam"), teamId: z.string(), teamName: z.string() }),
 	z.object({ status: z.literal("teamFull"), teamId: z.string(), teamName: z.string() }),

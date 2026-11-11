@@ -1,4 +1,4 @@
-// the link preview of a topic, a team, a profile, or an invitation, and its card image cached in storage
+// the link preview of a topic, a Topic Post, a team, a profile, or an invitation, and its card image cached in storage
 
 import { db, isFindingShown } from "@carlnotes/db"
 import { findings } from "@carlnotes/db/schema/scans"
@@ -12,6 +12,7 @@ import { publishedAvatarColumns, toPublishedAvatar, toPublishedAvatarFromUser } 
 import { toVersionedImageHeaders } from "../edgeCache"
 import { countDistinctSubscribers } from "../profiles"
 import { lastScanSummary, toTeamPublicTopicsFilter, toTopicDescription } from "../seo"
+import { loadTopicPostRow, type TopicPostRow } from "../topicPost/topicPosts"
 import { loadUsername } from "../usernames"
 import {
 	type PodcastEpisodePreview,
@@ -22,6 +23,12 @@ import { toPreviewVersion } from "./previewImage"
 import { type ProfilePreview, toProfilePreviewKey, toProfilePreviewPng } from "./profileImage"
 import { type TeamPreview, toTeamPreviewKey, toTeamPreviewPng } from "./teamImage"
 import { type TopicPreview, toTopicPreviewKey, toTopicPreviewPng } from "./topicImage"
+import {
+	type TopicPostPreview,
+	toTopicPostPreview,
+	toTopicPostPreviewKey,
+	toTopicPostPreviewPng,
+} from "./topicPostImage"
 
 // a card's png bytes, and the version that its url names
 export type PreviewPng = { bytes: Uint8Array; version: string }
@@ -89,6 +96,45 @@ export async function toTopicPreview(topicId: string): Promise<TopicPreview | nu
  */
 export async function toCachedTopicPreviewPng(topicPreview: TopicPreview): Promise<PreviewPng> {
 	return toCachedPng(toTopicPreviewKey(topicPreview), () => toTopicPreviewPng(topicPreview))
+}
+
+// a published Topic Post with its Topic's preview and its own card's fields
+export type LoadedTopicPostPreview = {
+	topicPostRow: TopicPostRow
+	topicPreview: TopicPreview
+	topicPostPreview: TopicPostPreview
+}
+
+/**
+ * Loads what a published Topic Post's card and page head are built from, or null for a draft and for no post.
+ */
+export async function loadTopicPostPreview(topicPostId: string): Promise<LoadedTopicPostPreview | null> {
+	// a draft has no card
+	const topicPostRow = await loadTopicPostRow(topicPostId)
+	if (!topicPostRow?.topicPost.publishedAt) {
+		return null
+	}
+
+	// the Topic's preview and the author's published avatar, read together
+	const [topicPreview, authorAvatar] = await Promise.all([
+		toTopicPreview(topicPostRow.topic.id),
+		toPublishedAvatar(topicPostRow.author.userId),
+	])
+	if (!topicPreview) {
+		return null
+	}
+	return {
+		topicPostRow,
+		topicPreview,
+		topicPostPreview: toTopicPostPreview({ topicPostRow, topicPreview, authorAvatar }),
+	}
+}
+
+/**
+ * A Topic Post's preview bytes, rendered on the first request and read from storage after.
+ */
+export async function toCachedTopicPostPreviewPng(topicPostPreview: TopicPostPreview): Promise<PreviewPng> {
+	return toCachedPng(toTopicPostPreviewKey(topicPostPreview), () => toTopicPostPreviewPng(topicPostPreview))
 }
 
 /**
@@ -186,15 +232,21 @@ export async function toTeamPreview(teamId: string): Promise<TeamPreview | null>
 }
 
 /**
- * An invitation's card bytes for the team or topic its token opens, or null if neither renders one.
+ * An invitation's card bytes for the team, the topic, or the Topic Post its token opens, or null if none renders one.
  */
 export async function toCachedInvitePreviewPng(
-	target: { teamId: string } | { topicId: string },
+	target: { teamId: string } | { topicId: string; topicPostId: string | null },
 ): Promise<PreviewPng | null> {
 	// a team's card ignores the public check here, since the token already opens the team
 	if ("teamId" in target) {
 		const teamPreview = await toInvitedTeamPreview(target.teamId)
 		return teamPreview ? toCachedTeamPreviewPng(teamPreview) : null
+	}
+
+	// an invite shared from a Topic Post shows the post's card while the post is published
+	const loadedTopicPostPreview = target.topicPostId ? await loadTopicPostPreview(target.topicPostId) : null
+	if (loadedTopicPostPreview) {
+		return toCachedTopicPostPreviewPng(loadedTopicPostPreview.topicPostPreview)
 	}
 
 	// a topic's card is shown at any visibility already, so the token does not need a separate loader

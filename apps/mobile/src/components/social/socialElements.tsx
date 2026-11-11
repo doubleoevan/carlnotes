@@ -14,8 +14,17 @@ import { cn } from "@carlnotes/nightshift/classNames"
 import { ICON_ACTION_CLASS } from "@carlnotes/nightshift/iconAction"
 import { BottomSheetTextInput } from "@gorhom/bottom-sheet"
 import { Flag, Flame, type LucideIcon, Pencil, Reply, Trash2 } from "lucide-react-native"
-import type { ComponentType } from "react"
-import { Alert, Pressable, type TextInputProps, View } from "react-native"
+import {
+	type ComponentRef,
+	type ComponentType,
+	type PropsWithChildren,
+	useContext,
+	useEffect,
+	useLayoutEffect,
+	useRef,
+	useState,
+} from "react"
+import { Alert, Dimensions, Pressable, type TextInputProps, View } from "react-native"
 import { toActiveIconProps } from "@/activeIconProps"
 import { CoffeeLoading } from "@/components/branding/CoffeeLoading"
 import { ShareMugsIcon } from "@/components/branding/ShareMugsIcon"
@@ -26,10 +35,12 @@ import { PreferenceSwitch } from "@/components/common/PreferenceSwitch"
 import { ScrollBox } from "@/components/common/ScrollBox"
 import { Sheet } from "@/components/common/Sheet"
 import { UserProfileLink } from "@/components/common/UserProfileLink"
+import { SectionTargetContext } from "@/components/layout/SectionAnchor"
 import { Button, toTouchTargetHitSlop } from "@/components/primitives/button"
 import { Icon } from "@/components/primitives/icon"
 import { Text } from "@/components/primitives/text"
 import { MoreButton } from "@/components/topic/MoreButton"
+import { isHalfInWindow, subscribeScrollEnd } from "@/hooks/useSectionTargetScroll"
 import { toTypeRoleStyle } from "@/typeRoleStyles"
 import { ReactionOption, ROW_CONTROL_HEIGHT } from "./ReactionOption"
 
@@ -40,7 +51,7 @@ const ROW_CONTROL_ICONS: Record<"edit" | "delete", LucideIcon> = { edit: Pencil,
 export const COMMENT_ELEMENTS: CommentElements = {
 	Message: ({ children }) => <Text className="text-sm text-muted-foreground">{children}</Text>,
 	List: ({ children }) => <View className="gap-3">{children}</View>,
-	Row: ({ children }) => <View className="gap-1">{children}</View>,
+	Row: CommentRowItem,
 	Age: ({ children }) => <Text className="text-xs text-muted-foreground">{children}</Text>,
 	Body: ({ isScrolling, children }) => {
 		const body = (
@@ -152,7 +163,7 @@ export const SOCIAL_ELEMENTS: SocialElements = {
 	ReactionGroup: ({ children }) => <View className="-ml-1 flex-row flex-wrap items-center">{children}</View>,
 	ReactionOption,
 	Mention: ({ userId, children }) => (
-		<AnchorLink asChild href={toProfilePath(userId)} accessibilityLabel={`Open ${String(children)}'s profile`}>
+		<AnchorLink asChild href={toProfilePath(userId)} accessibilityLabel={`Open ${String(children)}'s Café`}>
 			<Text className="text-sm font-medium text-link">{children}</Text>
 		</AnchorLink>
 	),
@@ -269,6 +280,89 @@ export function SocialComposer({
 					<Text>{submitLabel}</Text>
 				</Button>
 			</View>
+		</View>
+	)
+}
+
+// how long a linked comment stays highlighted
+const LINKED_COMMENT_HIGHLIGHT_MS = 3000
+
+// one comment's row. the screen or the sheet it sits in scrolls to a linked comment, with no animation, and the row
+// is highlighted briefly. the app has no view observer, so a row with a shown handler reports once at least half of
+// it is inside the window: as it is laid out, and at the end of each scroll. a linked row reports at once
+function CommentRowItem({
+	isLinked,
+	onShown,
+	children,
+}: PropsWithChildren<{ isLinked?: boolean; onShown?: () => void }>) {
+	const rowRef = useRef<ComponentRef<typeof View>>(null)
+	const [isHighlighted, setIsHighlighted] = useState(Boolean(isLinked))
+
+	// the latest shown handler, which a scroll's end calls without subscribing again on each render
+	const onShownRef = useRef(onShown)
+	onShownRef.current = onShown
+
+	// name a linked comment's row as the view its scroll view opens at, until the row leaves
+	const sectionTargetRef = useContext(SectionTargetContext)
+	useLayoutEffect(() => {
+		if (!isLinked || !sectionTargetRef) {
+			return
+		}
+		const row = rowRef.current
+		sectionTargetRef.current = row
+		return () => {
+			if (sectionTargetRef.current === row) {
+				sectionTargetRef.current = null
+			}
+		}
+	}, [isLinked, sectionTargetRef])
+
+	// let a linked comment's highlight end
+	useEffect(() => {
+		if (!isLinked) {
+			return
+		}
+		setIsHighlighted(true)
+		const highlightTimeout = setTimeout(() => setIsHighlighted(false), LINKED_COMMENT_HIGHLIGHT_MS)
+		return () => clearTimeout(highlightTimeout)
+	}, [isLinked])
+
+	// report the row if at least half of it is inside the window
+	const reportIfInWindow = (): void => {
+		rowRef.current?.measureInWindow((_x, y, _width, height) => {
+			if (isHalfInWindow({ y, height, windowHeight: Dimensions.get("window").height })) {
+				onShownRef.current?.()
+			}
+		})
+	}
+
+	// measure a row that waits to be seen again at the end of each scroll
+	const hasShownHandler = Boolean(onShown)
+	const reportIfInWindowRef = useRef(reportIfInWindow)
+	reportIfInWindowRef.current = reportIfInWindow
+	useEffect(() => {
+		if (!hasShownHandler) {
+			return
+		}
+		return subscribeScrollEnd(() => reportIfInWindowRef.current())
+	}, [hasShownHandler])
+
+	// report the row as it is laid out if it is inside the window, or if a link opened it
+	const handleLayout = (): void => {
+		if (isLinked) {
+			onShown?.()
+			return
+		}
+		reportIfInWindow()
+	}
+	return (
+		<View
+			ref={rowRef}
+			collapsable={false}
+			onLayout={onShown ? handleLayout : undefined}
+			className={cn("gap-1 rounded-md", isHighlighted && "bg-primary/15")}
+		>
+			{children}
 		</View>
 	)
 }

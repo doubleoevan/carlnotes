@@ -52,6 +52,23 @@ export const PODCAST_STORY_EDITOR_PAGE: PodcastEpisodeEditorPage = {
 	imageRegenerationQuota: { used: 3, limit: 15 },
 }
 
+// a podcast episode with an eight-second film in four chapters, from the stories' own film and captions files
+export const PODCAST_STORY_FILM_EPISODE: PodcastEpisode = {
+	...PODCAST_STORY_EDITOR_PAGE.podcastEpisode,
+	durationSeconds: 8,
+	chapterCount: 4,
+	chapters: PODCAST_STORY_EPISODE.chapters.slice(0, 4).map((chapter) => ({
+		...chapter,
+		startSeconds: chapter.position * 2,
+		endSeconds: (chapter.position + 1) * 2,
+	})),
+	hasVideo: true,
+	video: {
+		videoUrl: "/stories/topic-podcast-episode-video.mp4",
+		captionsUrl: "/stories/topic-podcast-episode-video.vtt",
+	},
+}
+
 // a podcast episode title and chapter titles long enough to run past a phone's width
 export const PODCAST_STORY_LONG_TITLE_EPISODE: PodcastEpisode = {
 	...PODCAST_STORY_EPISODE,
@@ -92,10 +109,14 @@ export const PODCAST_STORY_TRANSCRIPT: PodcastEpisodeTranscriptBlock[] = Array.f
 // keep feed previews independent of account tokens and reset requests
 export const PODCAST_STORY_FEED_STATE: PodcastFeedState = {
 	url: "https://example.test/podcast/fictional-feed.xml",
+	videoUrl: null,
+	format: "audio",
+	chosenFeedUrl: "https://example.test/podcast/fictional-feed.xml",
 	isLoading: false,
 	isResetting: false,
 	isConfirmingReset: false,
 	message: null,
+	chooseFormat: () => {},
 	confirmReset: () => {},
 	cancelReset: () => {},
 	reset: async () => {},

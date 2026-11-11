@@ -52,6 +52,7 @@ and `@carlnotes/contracts`, with `drizzle-orm` and `@neondatabase/serverless`.
   that registered it so ending the session or closing the account deletes it, and the push sends the push service
   accepted, one per event, recipient, and phone, with each receipt, indexed by phone and recipient for the cascades),
   `viewerCounts.ts` (the saved HyperLogLog counter of each topic's viewers and each podcast episode's listeners),
+  `topicPosts.ts` (a topic's Topic Posts and the recorded discussions of them),
   `vectors.ts` (the topic and podcast episode vectors that rank related topics, related podcast episodes, and the
   podcast episode search, each table kept apart from the row it ranks so a read of a whole row never includes a vector,
   and each table's public and shown flag with its partial HNSW index), and `columns.ts` (the pgEnums and the column
@@ -121,10 +122,16 @@ and `@carlnotes/contracts`, with `drizzle-orm` and `@neondatabase/serverless`.
   A sweep or reset that starts while another run's lease is live does nothing and returns null.
 - `topicImages.ts` — a topic's image row and its urls, one read per topic or for a list of them. `schema/topicImages.ts`
   holds `topic_images` and `topic_image_renders`, and `topics.image_hash` copies the current hash.
-- `homeOrder.ts` — a row's home order on the home page, generic over topics and podcast episodes:
-  `setHomeOrder` puts a row at a position inside the caller's transaction and `releaseHomeOrder` clears one and
-  closes its gap. `podcastEpisodeHomeOrder.ts` wraps it for one podcast episode and for every podcast episode of a topic that leaves
-  the public set.
+- `homeOrder.ts` — a row's home order on the home page, generic over topics, podcast episodes, films, and Topic
+  Posts: `setHomeOrder` puts a row at a position inside the caller's transaction, `releaseHomeOrder` clears one and
+  closes its gap, and `releaseTopicHomeOrders` clears every podcast episode's or every Topic Post's of a topic.
+  `podcastEpisodeHomeOrder.ts` wraps it for one podcast episode, for the films of some podcast episodes, and for
+  every podcast episode and film of a topic that leaves the public set. `profileOrder.ts` holds the same for a
+  profile's pins: a topic's, a podcast episode's, and a film's among their topic's owner's, each limited to twelve,
+  and a Topic Post's among its author's, with no limit, with `releaseTopicProfileOrders`, which returns the users whose pins a
+  topic's change released, `releaseTopicPodcastEpisodeVideoProfileOrders` for the films of removed podcast episodes,
+  and `releaseTopicPostProfileOrder` for a deleted post. `pinnedOrder.ts` is the write and the release
+  both share. `topic_posts.home_order` and `topic_posts.profile_order` hold a Topic Post's two orders.
 - `quotas.ts` — the derived per-user limits, and `loadUserAccess`, the one read of a user's role, plan, budget
   override, and admin block, which the api and the worker share.
 - `inviteLimits.ts` — the daily invite limit. `toAccountSignalWeight` is the age and reputation factor that the invite
@@ -142,8 +149,8 @@ and `@carlnotes/contracts`, with `drizzle-orm` and `@neondatabase/serverless`.
   podcast episodes, daily scans, or manual scans. The daily scans cutoff moves with the daily scans left this month, at
   the mean cost of `loadRecentScanCostDollars` over the scans not started by hand, with a weekdays topic charged only
   for the weekdays left, and `loadMonthlyBudgetCutoffs` returns every cutoff for the spend meter.
-- `podcastFeedCache.ts` — the Redis keys of a Topic's rendered podcast feeds,
-  and `deletePodcastFeedCache`, which a publish, a removal, or a rename runs.
+- `podcastFeedCache.ts` — the Redis keys of a Topic's rendered podcast feeds and film feeds, and
+  `deletePodcastFeedCache`, which clears both and which a publish, a removal, a rename, or a finished film runs.
 - `requestMemo.ts` — the reads one request repeats, its user's access, each topic role, and its monthly spend, kept
   in the request's async context. The api opens a memo for every request, the worker one for each podcast episode plan
   and each sweep's limit reads, and outside a memo every read goes to the database.
@@ -185,6 +192,11 @@ and `@carlnotes/contracts`, with `drizzle-orm` and `@neondatabase/serverless`.
 - `noteBadges.ts` — the unread edit and comment counts on each note a user may see, `loadBadgedPages` (their teams and
   the topics those teams hold), `loadPageNoteBadges` for pages already loaded, and `saveNoteRead`, the read time that
   clears them.
+- `unseenCommentMentions.ts` — the cached read of a user's unseen Comment Mentions: `toUnseenCommentMentionsKey`, its
+  Redis key, `clearUnseenCommentMentions`, which deletes the cached reads of the users given, and the reads of the
+  users that a Comment's thread, an author's Comments, a Topic's Comments, a Topic Post's Comments, or some Podcast
+  Episodes' Comments mention, each for the write that clears them. The api and the pipeline's Podcast Episode removal
+  both clear through it.
 - `updateCounts.ts` — `loadUpdateCount`, a user's unseen chat mentions, unread note edits and comments, and pending
   topic invitations summed as the apps' update count, which each push sets as the app icon badge, and
   `toUnseenChatMentionFilter`, which the api's chat mention reads share.
@@ -230,3 +242,9 @@ entry/Topic/sender matching, send-origin, and retained-entry checks. It reuses d
 titles.
 
 Personal sources items, private summaries, and annotations have no automatic expiry. Their content remains encrypted until explicit deletion. Released read contracts retain nullable expiry fields as null. Optional conversation URLs survive the MCP picker outside matching and open from the shared AI sender label; missing references remain plain labels.
+
+Topic Posts beyond their tables: `quotas.ts` holds `loadDiscussionRegenerationQuota` and sums a discussion's cost
+into the month's podcast spend. `topicImages.ts` holds `isImageReportedByUser`, which a Topic's and a Topic Post's
+image both read, and `loadTopicPostImageUrlsByPost` for the admin's reports. `topic_posts.image_updated_at` is when a
+post's image last changed, which a reporter's hidden image compares against. `sharedComments.ts` reads a post's
+shared Comments for its discussion and, for one reader, its chat. `store.ts` holds a discussion's audio key.

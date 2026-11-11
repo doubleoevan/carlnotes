@@ -1,7 +1,7 @@
 // the menu pattern: a popover of options under the search bar's sort button or the bordered Team Up button
 
 import { TOPIC_FINDING_SORTS, type TopicFindingSort } from "@carlnotes/contracts/findings"
-import type { TeamIdentity } from "@carlnotes/contracts/teams"
+import type { TeamIdentity } from "@carlnotes/contracts/teamIdentity"
 import type { Meta, StoryObj } from "@storybook/tanstack-react"
 import { ArrowUpDown, Plus, Search, Users, X } from "lucide-react"
 import { fn } from "storybook/test"
@@ -10,7 +10,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/primitives
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import { NewTeamOption, TeamActionOption } from "@/components/team/TeamMenuOptions"
 import { TopicFeedSortOptions } from "@/components/topic/TopicFeedSort"
-import { MENU_BUTTON_CLASS, MENU_DIVIDER_CLASS, SEARCH_BAR_ICON_CLASS } from "@/lib/styleClasses"
+import { MENU_DIVIDER_CLASS, PLAIN_PAGE_BUTTON_CLASS, SEARCH_BAR_ICON_CLASS } from "@/lib/styleClasses"
 import { toOwnFrameDocs } from "../../../.storybook/parameters"
 
 // the invented teams the team menu lists. a null avatar version draws the initials
@@ -64,8 +64,8 @@ function SearchBarSortMenu({
 			{/* the magnifying glass, then the search input */}
 			<Search className="text-muted-foreground size-4 shrink-0" />
 			<Input
-				aria-label="Search topics, podcasts, findings, teams and users..."
-				placeholder="Topics, podcasts, findings, teams, users…"
+				aria-label="Search topics, podcasts, posts, findings, teams and users..."
+				placeholder="Topics, podcasts, posts, findings, teams, users…"
 				className="h-11 flex-1 border-0 bg-transparent px-0 shadow-none focus-visible:ring-0 sm:h-9 dark:bg-transparent"
 			/>
 			{/* the divider, then the sort button with its tooltip */}
@@ -92,12 +92,12 @@ function SearchBarSortMenu({
 	)
 }
 
-// the bordered Team Up button and its menu. River Lab holds the topic, so the icon fills in the primary color
+// the plain Team Up button of a page's top row and its menu. River Lab holds the topic, so the icon fills in the primary color
 function TeamUpMenu({ isOpen, onSelectOption }: { isOpen: boolean; onSelectOption: (optionName: string) => void }) {
 	return (
 		<Popover defaultOpen={isOpen}>
 			<PopoverTrigger asChild>
-				<button type="button" className={MENU_BUTTON_CLASS}>
+				<button type="button" className={PLAIN_PAGE_BUTTON_CLASS}>
 					<Users className="text-primary size-4 fill-current" />
 					Team Up
 				</button>

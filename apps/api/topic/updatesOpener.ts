@@ -16,26 +16,33 @@ const OPENER_CACHE_TTL_MS = 24 * 60 * 60 * 1000
 // how long a list waits for its opener. the consumptions are saved by then, so a slow model call never holds the list
 const OPENER_WAIT_MS = 5_000
 
-// the user the opener is for, the one Topic of a scoped list, and the Findings it is written from
+// the user the opener is for, the one Topic of a scoped list, and the read of the Findings it is written from, which
+// runs only if the day has no stored opener
 type LoadUpdatesOpenerOptions = {
 	userId: string
 	topicId: string | null
-	updatesFindings: UpdatesFinding[]
+	loadUpdatesFindings: () => Promise<UpdatesFinding[]>
 }
 
 /**
- * Returns the day's opener, or null if the budget is spent, the call fails, or the call outlasts the wait. Null is
- * never stored, so the next list tries again, and a call that outlasts the wait still stores its opener for that list.
+ * Returns the day's opener, or null if the budget is spent, the call fails, the call outlasts the wait, or no opener is
+ * stored and there is no Finding to write one from. The Findings are read only if the day has no stored opener. Null
+ * is never stored, so the next list tries again, and a call that outlasts the wait still stores its opener for that
+ * list.
  */
 export function loadUpdatesOpener({
 	userId,
 	topicId,
-	updatesFindings,
+	loadUpdatesFindings,
 }: LoadUpdatesOpenerOptions): Promise<string | null> {
 	const openerWrite = cacheJson<string | null>({
 		key: `updates-opener:${toUtcDay(new Date())}:${userId}:${topicId ?? "all-topics"}`,
 		ttlMs: OPENER_CACHE_TTL_MS,
-		load: () => writeOpenerWithinBudget(userId, updatesFindings),
+		// with no Finding to write from, only the day's stored opener returns, and no model call runs
+		load: async () => {
+			const updatesFindings = await loadUpdatesFindings()
+			return updatesFindings.length > 0 ? writeOpenerWithinBudget(userId, updatesFindings) : null
+		},
 		isStorable: (opener) => opener !== null,
 	})
 	return withTimeLimit({

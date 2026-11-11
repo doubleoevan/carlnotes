@@ -32,11 +32,15 @@
 				"scripts/backfill-vectors.ts",
 				"scripts/backfill-topic-images.ts",
 				"scripts/backfill-podcast-episode-images.ts",
+				"scripts/backfill-topic-podcast-episode-videos.ts",
 				// the eval:* scripts and smoke:eval
 				"evals/attachment-summaries/attachmentSummariesEval.ts",
 				"evals/personal-sources-context/personalSourcesContextEval.ts",
 				"evals/personal-sources-context/personalSourcesScoringEval.ts",
 				"evals/updates-opener/updatesOpenerEval.ts",
+				"evals/topic-post-summary/topicPostSummaryEval.ts",
+				"evals/topic-post-discussion/topicPostDiscussionEval.ts",
+				"evals/topic-post-chat/topicPostChatEval.ts",
 				"evals/grader-calibration/graderCalibrationEval.ts",
 				"evals/new-topic-chat/newTopicChatEval.ts",
 				"evals/podcast-chat/podcastChatEval.ts",
@@ -90,6 +94,10 @@
 				"src/mcpViews/mcpViewVisitAnalytics.ts",
 				// vite.mcpViews.config.ts swaps the voice detector for this one by path
 				"src/mcpViews/mcpViewVoiceActivity.ts",
+				// vite.mcpViews.config.ts swaps the Topic Post editor for this one by path
+				"src/mcpViews/mcpViewTopicPostEditor.ts",
+				// vite.mcpViews.config.ts swaps the opening of a url in a new tab for this one by path
+				"src/mcpViews/mcpViewExternalLinks.ts",
 				// the smoke:mcp-views script, and the page mcpViewTestHost.ts bundles for the browser
 				"src/mcpViews/testHost/mcpViews.smoke.ts",
 				"src/mcpViews/testHost/hostPage.ts"

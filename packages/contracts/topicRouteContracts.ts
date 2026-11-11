@@ -1,4 +1,5 @@
-// the topic routes the app reaches: topics, topic findings, viewer counts, notes, and the site search
+// the topic routes the app reaches: topics, topic findings, viewer counts with a profile's and a team's, notes, and
+// the site search
 
 import { z } from "zod"
 import type { ApiRouteContract } from "./apiRouteContracts"
@@ -38,6 +39,7 @@ import {
 	topicAttachmentUploadResponse,
 	topicFeedQuery,
 	topicPageQuery,
+	userIdParam,
 } from "./routeShapes"
 import { searchRequestPayload, searchResultsPage } from "./search"
 import {
@@ -46,18 +48,24 @@ import {
 	topicImageRenderResponse,
 	uploadTopicImageResponse,
 } from "./topicImages"
-import { attachmentContextPayload, suggestSourcesPayload, updateTopicPayload } from "./topicPayloads"
+import {
+	attachmentContextPayload,
+	pinnedOrderPayload,
+	suggestSourcesPayload,
+	updateTopicPayload,
+} from "./topicPayloads"
 import {
 	addableTopicsResponse,
 	manualScanResponse,
+	relatedTopicsResponse,
 	scanNote,
 	suggestSourcesResponse,
 	topicCreateResponse,
 	topicFeedResponse,
 	topicResponse,
 } from "./topics"
-import { updatesPayload, updatesResponse } from "./updates"
-import { podcastEpisodeCounts, topicCounts } from "./viewerCounts"
+import { updatesOpenerResponse } from "./updates"
+import { podcastEpisodeCounts, topicCounts, viewerCounts } from "./viewerCounts"
 
 // the entries, in client module order
 export const topicRouteContracts: Record<string, ApiRouteContract> = {
@@ -67,6 +75,12 @@ export const topicRouteContracts: Record<string, ApiRouteContract> = {
 		path: "/api/topics/addable",
 		query: addableTopicsQuery,
 		response: addableTopicsResponse,
+	},
+	"topicClient.fetchRelatedTopics": {
+		method: "GET",
+		path: "/api/topics/:id/related-topics",
+		params: idParam,
+		response: relatedTopicsResponse,
 	},
 	"topicClient.fetchScanNote": { method: "GET", path: "/api/scans/:id", params: idParam, response: scanNote },
 	"topicClient.fetchSourceSuggestions": {
@@ -133,11 +147,17 @@ export const topicRouteContracts: Record<string, ApiRouteContract> = {
 		response: okResponse,
 	},
 	"topicClient.sendDeleteTopic": { method: "DELETE", path: "/api/topics/:id", params: idParam, response: okResponse },
-	"updatesClient.requestUpdates": {
-		method: "POST",
-		path: "/api/updates",
-		body: { json: updatesPayload },
-		response: updatesResponse,
+	"topicClient.sendTopicProfileOrder": {
+		method: "PATCH",
+		path: "/api/topics/:id/profile-order",
+		params: idParam,
+		body: { json: pinnedOrderPayload },
+		response: okResponse,
+	},
+	"updatesClient.fetchUpdatesOpener": {
+		method: "GET",
+		path: "/api/updates/opener",
+		response: updatesOpenerResponse,
 	},
 	"topicClient.sendManualScan": {
 		method: "POST",
@@ -279,6 +299,20 @@ export const topicRouteContracts: Record<string, ApiRouteContract> = {
 		response: topicCounts,
 	},
 	"viewerCountsClient.sendTopicView": { method: "POST", path: "/api/topics/:id/view", params: idParam },
+	"viewerCountsClient.fetchProfileViewerCounts": {
+		method: "GET",
+		path: "/api/counts/profiles/:userId",
+		params: userIdParam,
+		response: viewerCounts,
+	},
+	"viewerCountsClient.fetchTeamViewerCounts": {
+		method: "GET",
+		path: "/api/counts/teams/:id",
+		params: idParam,
+		response: viewerCounts,
+	},
+	"viewerCountsClient.sendProfileView": { method: "POST", path: "/api/profiles/:userId/view", params: userIdParam },
+	"viewerCountsClient.sendTeamView": { method: "POST", path: "/api/teams/:id/view", params: idParam },
 
 	// notes, on a topic and on a team
 	"noteClient.createNote": {

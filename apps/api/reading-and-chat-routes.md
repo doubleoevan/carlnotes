@@ -29,7 +29,9 @@
   scan of the public and shown HNSW index, and their ids and scores are cached in Redis for fifteen minutes. The Topics
   a user may open through their account are scored for them without an index on every load. Both merge by score, and
   every read checks each topic against the user's view rules again, so one the user may no longer open leaves at once. A
-  topic page poll reload skips this read, and the page keeps the ones it loaded.
+  topic page poll reload skips this read, and the page keeps the ones it loaded. A signed-in page asked for with
+  `related=separate` skips it too, and `GET /api/topics/:id/related-topics` returns the same list behind the page's
+  own gate and the social read limit. A visitor's page always holds the list.
 - `topic/relatedness.ts` — what both related reads share: `loadEmbeddingCentroid`, the current model's average
   resource embedding cached in Redis for a day, `toRelatedScore`, the centered cosine distance less a bonus for each
   shared tag, the score limits, the candidate count, `loadRelatedIds`, the public ranking cached in Redis merged with a
@@ -122,10 +124,12 @@
 - `search/` — the site search behind the search bar, the search page, and the mcp `search` tool: `search.ts`
   (`searchSite` and `GET /api/search` behind `searchRateLimiter`, which reads each requested kind up to
   `SEARCH_KIND_LIMIT`, ranks the union, and cuts one page), `searchRanks.ts` (the match tiers, the kind order, the
-  newest and trending sorts, and the page cut), and `findingSearch.ts` (the finding reader, the resource title or url
-  match through `resources_title_or_url_lower_trgm` on the topics the user may open, under the invite gate). The other
-  readers are `topic/search.ts`, `podcast/podcastEpisodeSearch.ts`, `team/search.ts`, and `searchUsers` in
-  `profiles.ts`.
+  newest and trending sorts, and the page cut), `findingSearch.ts` (the finding reader, the resource title or url
+  match through `resources_title_or_url_lower_trgm` on the topics the user may open, under the invite gate), and
+  `topicPostSearch.ts` (the Topic Post reader, the published Topic Posts whose title, summary, or body text holds the
+  query, under the `topic:view` rules in SQL, each with its own image or its topic's until its own is drawn; no index
+  narrows its match). The other readers are `topic/search.ts`, `podcast/podcastEpisodeSearch.ts`, `team/search.ts`,
+  and `searchUsers` in `profiles.ts`.
 - `topic/search.ts` — `searchTopics`, the site search's topic reader, which applies the `topic:view` rules in SQL ahead
   of the limit, with each topic's latest podcast episode and whether a signed-in user follows it. A user finds the
   listed topics they may open, and a visitor finds public topics with enough findings. Those rules in SQL live in

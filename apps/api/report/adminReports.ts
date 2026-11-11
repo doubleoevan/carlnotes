@@ -6,22 +6,26 @@ import {
 	type ReportResolution,
 	type ReportSubjectKind,
 } from "@carlnotes/contracts/reports"
+import type { TopicImageUrls } from "@carlnotes/contracts/topicImages"
 import { db } from "@carlnotes/db"
 import { chatRoomMessages } from "@carlnotes/db/schema/chat"
 import { noteComments, notes } from "@carlnotes/db/schema/notes"
 import { reports } from "@carlnotes/db/schema/reports"
 import { comments } from "@carlnotes/db/schema/social"
+import { topicPosts } from "@carlnotes/db/schema/topicPosts"
 import { topics } from "@carlnotes/db/schema/topics"
 import { users } from "@carlnotes/db/schema/users"
-import { loadTopicImageUrlsByTopic } from "@carlnotes/db/topicImages"
+import { loadTopicImageUrlsByTopic, loadTopicPostImageUrlsByPost } from "@carlnotes/db/topicImages"
 import { topicImageModel } from "@carlnotes/models/topicImageModel"
 import { removeTopicImageUpload, startTopicImageRender } from "@carlnotes/pipeline/topicImages/topicImageRenders"
+import { removeTopicPostImageUpload } from "@carlnotes/pipeline/topicPosts/topicPostImageRenders"
 import { and, desc, eq, inArray, isNull } from "drizzle-orm"
 import { alias } from "drizzle-orm/pg-core"
 import type { Context } from "hono"
 import { setAdminBlock } from "../adminBlocks"
 import { deleteChatRoomMessage } from "../chat/roomDeletes"
 import { deleteNoteComment } from "../note/noteComments"
+import { deleteCommentThread } from "../social/comments"
 import { toReportTextHash } from "./reports"
 
 // the reporter and the author, each joined to the report from the users table
@@ -62,19 +66,27 @@ export async function loadOpenReports(): Promise<AdminReport[]> {
 		.where(isNull(reports.resolvedAt))
 		.orderBy(desc(reports.createdAt))
 
-	// which removable subjects still exist, read per kind in one query each, and the reported topic images as they stand
-	const [existingSubjectKeys, topicImageUrlsByTopic] = await Promise.all([
+	// which removable subjects still exist, read per kind in one query each, and the reported images as they stand
+	const [existingSubjectKeys, topicImageUrlsByTopic, topicPostImageUrlsByPost] = await Promise.all([
 		loadExistingSubjectKeys(reportRows),
 		loadTopicImageUrlsByTopic(toSubjectIdsOfKind(reportRows, "topicImage")),
+		loadTopicPostImageUrlsByPost(toSubjectIdsOfKind(reportRows, "topicPostImage")),
 	])
+
+	// a reported image as it stands now: a Topic's, a Topic Post's, or none for any other kind
+	const toSubjectImage = ({ subjectKind, subjectId }: (typeof reportRows)[number]): TopicImageUrls | null => {
+		if (subjectKind === "topicImage") {
+			return topicImageUrlsByTopic.get(subjectId) ?? null
+		}
+		return subjectKind === "topicPostImage" ? (topicPostImageUrlsByPost.get(subjectId) ?? null) : null
+	}
 	return reportRows.map((reportRow) => ({
 		id: reportRow.id,
 		subjectKind: reportRow.subjectKind,
 		subjectId: reportRow.subjectId,
 		subjectText: reportRow.subjectText,
 		subjectPath: reportRow.subjectPath,
-		subjectImage:
-			reportRow.subjectKind === "topicImage" ? (topicImageUrlsByTopic.get(reportRow.subjectId) ?? null) : null,
+		subjectImage: toSubjectImage(reportRow),
 		reason: reportRow.reason,
 		createdAt: reportRow.createdAt.toISOString(),
 		author:
@@ -100,7 +112,7 @@ function toSubjectIdsOfKind(
 }
 
 // the subjects among some reports that still exist, as kind:id keys, for the removable kinds. a topic image exists
-// while its topic does
+// while its topic does, and a topic post's image while its post does
 async function loadExistingSubjectKeys(
 	reportRows: { subjectKind: ReportSubjectKind; subjectId: string }[],
 ): Promise<Set<string>> {
@@ -114,9 +126,10 @@ async function loadExistingSubjectKeys(
 	const noteCommentIds = toSubjectIdsOfKind(reportRows, "noteComment")
 	const commentIds = toSubjectIdsOfKind(reportRows, "comment")
 	const topicImageTopicIds = toSubjectIdsOfKind(reportRows, "topicImage")
+	const topicPostIds = toSubjectIdsOfKind(reportRows, "topicPostImage")
 
 	// one read per kind that has any
-	const [chatMessageRows, noteRows, noteCommentRows, commentRows, topicRows] = await Promise.all([
+	const [chatMessageRows, noteRows, noteCommentRows, commentRows, topicRows, topicPostRows] = await Promise.all([
 		chatMessageIds.length
 			? db
 					.select({ id: chatRoomMessages.id })
@@ -131,6 +144,9 @@ async function loadExistingSubjectKeys(
 		topicImageTopicIds.length
 			? db.select({ id: topics.id }).from(topics).where(inArray(topics.id, topicImageTopicIds))
 			: [],
+		topicPostIds.length
+			? db.select({ id: topicPosts.id }).from(topicPosts).where(inArray(topicPosts.id, topicPostIds))
+			: [],
 	])
 	return new Set([
 		...chatMessageRows.map((chatMessageRow) => `chatMessage:${chatMessageRow.id}`),
@@ -138,6 +154,7 @@ async function loadExistingSubjectKeys(
 		...noteCommentRows.map((noteCommentRow) => `noteComment:${noteCommentRow.id}`),
 		...commentRows.map((commentRow) => `comment:${commentRow.id}`),
 		...topicRows.map((topicRow) => `topicImage:${topicRow.id}`),
+		...topicPostRows.map((topicPostRow) => `topicPostImage:${topicPostRow.id}`),
 	])
 }
 
@@ -207,7 +224,7 @@ type RemoveReportedSubjectOptions = {
 	subjectId: string
 }
 
-// delete a reported message, note, note comment, or comment as the admin, or render a reported topic image again
+// delete a reported message, note, note comment, or comment as the admin, or render a reported image again
 async function removeReportedSubject({
 	context,
 	adminUserId,
@@ -245,18 +262,47 @@ async function removeReportedSubject({
 		return
 	}
 
-	// a comment is deleted for everyone, as its Topic's owner would delete it
+	// a comment is deleted for everyone, as its Topic's owner would delete it, with its mentions' cached reads cleared
 	if (subjectKind === "comment") {
-		await db.delete(comments).where(eq(comments.id, subjectId))
+		await deleteCommentThread(subjectId)
 		return
 	}
 
-	// remove an upload, then draw the topic's image again on the platform's budget. skip a topic that is gone
+	// a topic's image and a topic post's are drawn again
 	if (subjectKind === "topicImage") {
-		const [topic] = await db.select({ id: topics.id }).from(topics).where(eq(topics.id, subjectId))
-		if (topic) {
-			await removeTopicImageUpload(subjectId)
-			await startTopicImageRender({ topicId: subjectId, userId: null, kind: "admin", model: topicImageModel() })
-		}
+		await regenerateReportedTopicImage(subjectId)
 	}
+	if (subjectKind === "topicPostImage") {
+		await regenerateReportedTopicPostImage(subjectId)
+	}
+}
+
+// remove an upload, then draw the topic's image again on the platform's budget. skip a topic that is gone
+async function regenerateReportedTopicImage(topicId: string): Promise<void> {
+	const [topic] = await db.select({ id: topics.id }).from(topics).where(eq(topics.id, topicId))
+	if (topic) {
+		await removeTopicImageUpload(topicId)
+		await startTopicImageRender({ topicId, userId: null, kind: "admin", model: topicImageModel() })
+	}
+}
+
+// remove an upload, then draw the topic post's image again on the platform's budget. skip a post that is gone
+async function regenerateReportedTopicPostImage(topicPostId: string): Promise<void> {
+	const [topicPost] = await db
+		.select({ topicId: topicPosts.topicId })
+		.from(topicPosts)
+		.where(eq(topicPosts.id, topicPostId))
+	if (!topicPost) {
+		return
+	}
+
+	// the render row names the post, bills no user, and is the admin's
+	await removeTopicPostImageUpload(topicPostId)
+	await startTopicImageRender({
+		topicId: topicPost.topicId,
+		topicPostId,
+		userId: null,
+		kind: "admin",
+		model: topicImageModel(),
+	})
 }

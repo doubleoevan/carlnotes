@@ -145,5 +145,6 @@ export const attachmentContextPayload = z.object({ context: z.string().trim().ma
 // the payload for attaching a page by url
 export const attachmentUrlPayload = z.object({ url: z.string().trim().min(1).max(2000) })
 
-// the admin's home topics order choice
-export const topicHomeOrderPayload = z.object({ position: z.number().int().min(0) })
+// the position a pinned topic, podcast episode, or Topic Post takes, in the home's order or its person's profile
+// order. zero clears it
+export const pinnedOrderPayload = z.object({ position: z.number().int().min(0) })

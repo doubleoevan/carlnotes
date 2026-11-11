@@ -13,6 +13,8 @@ import {
 	addableTopicsResponse,
 	EMPTY_SCAN_NOTE,
 	manualScanResponse,
+	type RelatedTopicsResponse,
+	relatedTopicsResponse,
 	type ScanNote,
 	type SuggestSourcesResponse,
 	scanNote,
@@ -28,9 +30,17 @@ import { type ApiResponse, apiClient, fetchApi, readApiErrorMessage, readApiResp
 
 import { showFailedWrite } from "./clientWrite"
 
-// create an invite link for a topic. "limited" is the daily invite limit
-export async function sendCreateTopicInvite(topicId: string, source: InviteSource): Promise<Invite | "limited"> {
-	const response = await apiClient().api.topics[":id"].invites.$post({ param: { id: topicId }, json: { source } })
+// create an invite link for a topic, or for a Topic Post of it, which the link opens once it is accepted. "limited" is
+// the daily invite limit
+export async function sendCreateTopicInvite(
+	topicId: string,
+	source: InviteSource,
+	topicPostId?: string,
+): Promise<Invite | "limited"> {
+	const response = await apiClient().api.topics[":id"].invites.$post({
+		param: { id: topicId },
+		json: { source, topicPostId },
+	})
 	if (response.status === 429) {
 		return "limited"
 	}
@@ -86,19 +96,20 @@ export type TopicPageResult =
 	| { status: "gated"; topicGate: TopicGate }
 	| { status: "missing" }
 
-// whether a fetch is the poll that repeats while a scan runs
-export type FetchTopicPageOptions = { isPoll?: boolean }
+// whether a fetch is the poll that repeats while a scan runs, and whether the page comes without its related topics
+// for a signed-in reader who loads them with fetchRelatedTopics
+export type FetchTopicPageOptions = { isPoll?: boolean; isRelatedTopicsSeparate?: boolean }
 
 /**
  * Reads a topic page or its access result, rejecting failed reads.
  */
 export async function fetchTopicPage(
 	topicId: string,
-	{ isPoll = false }: FetchTopicPageOptions = {},
+	{ isPoll = false, isRelatedTopicsSeparate = false }: FetchTopicPageOptions = {},
 ): Promise<TopicPageResult> {
 	const response = await apiClient().api.topics[":id"].$get({
 		param: { id: topicId },
-		query: isPoll ? { poll: "1" } : {},
+		query: { poll: isPoll ? "1" : undefined, related: isRelatedTopicsSeparate ? "separate" : undefined },
 	})
 	if (response.ok) {
 		return { status: "visible", topic: await readApiResponse(topicResponse, response) }
@@ -111,6 +122,18 @@ export async function fetchTopicPage(
 	// distinguish an invitation gate from a missing or private topic
 	const topicGate = await readTopicGate(response)
 	return topicGate ? { status: "gated", topicGate } : { status: "missing" }
+}
+
+/**
+ * Reads a topic's related topics, which its page leaves out of a read that asked for them separately, rejecting a
+ * failed read.
+ */
+export async function fetchRelatedTopics(topicId: string): Promise<RelatedTopicsResponse["relatedTopics"]> {
+	const response = await apiClient().api.topics[":id"]["related-topics"].$get({ param: { id: topicId } })
+	if (!response.ok) {
+		throw new Error(`related topics load failed: ${response.status}`)
+	}
+	return (await readApiResponse(relatedTopicsResponse, response)).relatedTopics
 }
 
 /**
@@ -208,6 +231,20 @@ export async function sendTopicHomeOrder(topicId: string, position: number): Pro
 	})
 	if (!response.ok) {
 		throw new Error(`topic home order update failed: ${response.status}`)
+	}
+}
+
+/**
+ * Sets where a public topic sits among the topics its owner pinned to their profile, with zero clearing it. Throws an
+ * error on a rejected write.
+ */
+export async function sendTopicProfileOrder(topicId: string, position: number): Promise<void> {
+	const response = await apiClient().api.topics[":id"]["profile-order"].$patch({
+		param: { id: topicId },
+		json: { position },
+	})
+	if (!response.ok) {
+		throw new Error(`topic profile order update failed: ${response.status}`)
 	}
 }
 

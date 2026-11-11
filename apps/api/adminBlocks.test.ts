@@ -1,19 +1,22 @@
-// admin block route tests: only an admin sets or clears an admin block, and an unknown user is a 404
-import { afterEach, expect, test } from "bun:test"
+// admin block route tests: only an admin sets or clears an admin block, each clears the cached unseen Comment
+// Mentions of the users the blocked author mentions, and an unknown user is a 404
+import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import {
 	ADMIN_USER_ACCESS_ROW,
 	FREE_USER_ACCESS_ROW,
 	restoreConnectionPool,
 	stubConnectionPool,
 } from "@carlnotes/db/connectionPoolStub"
+import * as redis from "@carlnotes/db/redis"
 import { Hono } from "hono"
-import { adminBlocksRoute } from "./adminBlocks"
+import { adminBlocksRoute, setAdminBlock } from "./adminBlocks"
 import type { AppEnv } from "./currentUser"
 import { toSignedInApp } from "./testSession"
 
-// put the connection pool back after each test
+// put the connection pool and the spies back after each test
 afterEach(() => {
 	restoreConnectionPool()
+	mock.restore()
 })
 
 test("an admin sets a block that records when and who, and clears it", async () => {
@@ -30,6 +33,25 @@ test("an admin sets a block that records when and who, and clears it", async () 
 	expect(blockQuery?.values).toContain("admin-1")
 	expect(blockQuery?.values).toContain("user-2")
 	expect(clearQuery?.values).not.toContain("admin-1")
+})
+
+test("an admin block and its clear each clear the cached reads of the users the author's Comments mention", async () => {
+	// the blocked user's row back from each update, and the two users their Comments mention
+	stubConnectionPool(({ text }) => {
+		if (text.startsWith('update "users"')) {
+			return [["user-2"]]
+		}
+		return text.includes('from "comment_mentions"') ? [["user-ava"], ["user-ben"]] : []
+	})
+	const deleteRedisKeysSpy = spyOn(redis, "deleteRedisKeys").mockResolvedValue(0)
+
+	// the block hides the author's Comments, and its clear shows them again
+	await setAdminBlock("user-2", "admin-1")
+	await setAdminBlock("user-2", null)
+	expect(deleteRedisKeysSpy.mock.calls).toEqual([
+		["unseen-comment-mentions:user-ava", "unseen-comment-mentions:user-ben"],
+		["unseen-comment-mentions:user-ava", "unseen-comment-mentions:user-ben"],
+	])
 })
 
 test("a user who is not an admin and a visitor block nobody", async () => {

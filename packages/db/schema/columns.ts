@@ -30,6 +30,9 @@ import {
 	topicImageOrigins,
 	topicImageRenderKinds,
 	topicImageRenderStatuses,
+	topicPodcastEpisodeVideoStatuses,
+	topicPostDiscussionKinds,
+	topicPostDiscussionStatuses,
 	visibilities,
 } from "@carlnotes/contracts/enums"
 import { customType, pgEnum, text, timestamp } from "drizzle-orm/pg-core"
@@ -43,6 +46,8 @@ export const dayOfWeek = pgEnum("day_of_week", daysOfWeek)
 // the enums for a scan's outcome, a podcast episode's status, a finding, and a user's account
 export const scanStatus = pgEnum("scan_status", scanStatuses)
 export const podcastEpisodeStatus = pgEnum("episode_status", podcastEpisodeStatuses)
+// a podcast episode film's status
+export const topicPodcastEpisodeVideoStatus = pgEnum("episode_video_status", topicPodcastEpisodeVideoStatuses)
 // who speaks a podcast episode's turn, and who answered a question asked from the podcast player
 export const podcastEpisodeSpeaker = pgEnum("episode_speaker", podcastEpisodeSpeakers)
 export const sourceVisibility = pgEnum("source_visibility", sourceVisibilities)
@@ -82,6 +87,9 @@ export const pushReceiptStatus = pgEnum("push_receipt_status", pushReceiptStatus
 export const topicImageOrigin = pgEnum("topic_image_origin", topicImageOrigins)
 export const topicImageRenderKind = pgEnum("topic_image_render_kind", topicImageRenderKinds)
 export const topicImageRenderStatus = pgEnum("topic_image_render_status", topicImageRenderStatuses)
+// why a topic post discussion was recorded, and where it stands
+export const topicPostDiscussionKind = pgEnum("topic_post_discussion_kind", topicPostDiscussionKinds)
+export const topicPostDiscussionStatus = pgEnum("topic_post_discussion_status", topicPostDiscussionStatuses)
 
 /**
  * Returns every table's text primary key column, defaulted by our code and overridden by Better Auth on its own inserts.

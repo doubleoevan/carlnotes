@@ -110,8 +110,8 @@ the browser bundle and renders pages through the server build, behind its own ro
   with no handle back to the page. `toastActions.ts` builds the See plans and See account toast actions.
   `appStoreBanner.ts` builds the App Store smart banner meta tag a page's head includes once `APP_STORE_ID` is set, with
   the page's own url as the app argument. `visiblePoll.ts` is the poll that runs only while the page is visible, one
-  request at a time, used by the scan poll and the counts poll. `@carlnotes/core/lib/topicViews` sends a topic page's
-  view once per topic per tab, keeping the sent topic ids in memory only. `podcastEpisodePlayback.ts` adapts core's
+  request at a time, used by the scan poll and the counts poll. `@carlnotes/core/lib/pageViews` sends a topic, profile,
+  or team page's view once per page per tab, keeping the sent pages in memory only. `podcastEpisodePlayback.ts` adapts core's
   playback rules and metadata to the lock screen's media session, with `isMediaSessionAvailable`, which
   `stores/spokenAnswerStore.ts` uses. `voiceRecorder.ts` records the microphone, reads its level through an analyser,
   ends the recording once the user stops or the limit passes, and releases the microphone at every end, a rejected
@@ -151,12 +151,14 @@ the browser bundle and renders pages through the server build, behind its own ro
 - `components/invite/` — the invite fields, editors, and modals, shared by the topic and team pages.
 - `components/topic/` — the topic page's sections, cards, dialogs, and editors, and the edit topic modal.
   `TopicFindingControls.tsx` and `TopicFindingDetails.tsx` hold a Finding's controls and its expanded note, which the
-  note popover and the MCP view tables share. `TopicResourceWithTopicLink.tsx` is a Finding's row outside its Topic's
-  page, on the updates list. `UpdatesList.tsx` adapts the shared updates list as the home page's Updates card,
-  with `UpdatesButton.tsx`, its Update button.
+  note popover and the MCP view tables share. `TopicNotePopover.tsx` adapts core's `TopicNotePopover`, a Topic's note
+  under its note icon on a search row and a news row.
   `TopicResourceInfo.tsx` shows a Finding's details and actions in the popover opened from `TopicResource.tsx` or a Podcast Episode chapter.
   `TagsAndNewTopicRow.tsx` is the Tags picker and New Topic button row above the home feed and the search results.
   `TopicCountsLine.tsx` ends the topic page with its viewer and follower counts, empty in the server render.
+  `components/common/DetailsLine.tsx` adapts core's details line, which `TopicPageHeader.tsx` draws under the byline
+  and reactions with the counts of the page's sections, the Topic Post page under its byline's row, the profile's
+  summary line and the team header as their counts, and the Topic Post popup under its Topic's name.
   `saveTopic.ts` is the modal's save flow: the create or update, the podcast switch, the attachment uploads, edits, and
   removals, then the invites and the team change, with `MISSING_FIELD_NOTES` and `showSaveError` beside it;
   `EditTopicModal.test.tsx` covers both modules. `TopicSourceEditor.tsx` is the modal's sources field, with its source
@@ -166,10 +168,12 @@ the browser bundle and renders pages through the server build, behind its own ro
 - `components/team/` — the team page's header, gate, menu, dialogs, and buttons, and the team modal. `saveTeam.ts` is
   the team save flow the team modal and the topic modal's teams field share: `createTeam`, `createTeamForInviteLink`,
   `saveTeam`, and `TEAM_REJECTION_REASONS`, the sentence for each team rejection.
-- `components/share/` — the share menus for a topic and a team, over the options they both use.
+- `components/share/` — the share menus for a topic and a team, over the options they both use. `ShareTopic` takes
+  a `topicPost` to share a Topic Post in its topic's place.
 - `components/search/` — the header's search bar, its Filters menu, its typeahead rows, and `SearchResultsList.tsx`,
   the numbered result rows, their skeleton, and the page row that the search page and the search MCP view render, over
-  the row pieces in `SearchRowParts.tsx`.
+  the row pieces in `SearchRowParts.tsx`. A Topic Post's row shows its image, its title, and `Post · age · Topic`, and
+  `toSearchRowTitleAside` in `SearchResultsList.tsx` returns the control beside each kind's title.
   Every kind of match comes from one site search, `GET /api/search`, sent once typing pauses. `searchBarChoices.ts`
   holds what Enter opens, the search page the bar's text opens, and a list after a toggle, `searchFindingChanges.ts`
   shows a finding note's change on its row, `searchFilterOptions.ts` holds the Filters menu's view and kind labels and
@@ -177,7 +181,8 @@ the browser bundle and renders pages through the server build, behind its own ro
   values. On `/search` the bar's input, Filters menu, and sort show and change the page's url.
 - `components/layout/` — the app shell every route shares: `Layout.tsx` holds the header, search bar, page content, and
   footer. `Header.tsx` is the global header, with `UserMenu.tsx`, the signed-in user's dropdown, `HeaderMenu.tsx`, the
-  mobile-only menu, and `ThemeToggle.tsx`. `HomeHero.tsx` is a visitor's home page hero below the header's top bar,
+  mobile-only menu, and `ThemeToggle.tsx`. The menu opens by script, so its button shows on a narrow screen only under
+  the `scripted` class, and without JavaScript the header keeps its links at every width, wrapped onto a second row. `HomeHero.tsx` is a visitor's home page hero below the header's top bar,
   with its pitch and persona note buttons, and `HomeHeadline.tsx` is the home page's shimmering headline, on both faces.
   The header shows the tutorial video button beside the logo on every page. `Footer.tsx` is the global footer,
   `DocsLink.tsx` is every link to the docs, which opens in a new tab, and `Attribution.tsx` is the persona credit in the
@@ -215,14 +220,35 @@ the browser bundle and renders pages through the server build, behind its own ro
   transcript), `PodcastEpisodeCountsLine.tsx` (the podcast episode page's listener count, empty in the server render),
   `PlaybackControlButtons.tsx` (the skip and playback speed buttons, in the player card and the bottom
   player),
-  `PodcastThemeSongNote.tsx` (the note icon whose popup credits the theme song, beside the podcast's name and episode titles,
-  with the lyrics from `podcastThemeSongLyrics.ts`),
+  `PodcastThemeSongNote.tsx` (the headphones tile whose popup credits the theme song, the title note of the film
+  section and the podcast section on the topic page and the podcast episode page, with the lyrics from
+  `podcastThemeSongLyrics.ts`),
   `PodcastEpisodeCover.tsx` (an episode's cover square), and `PodcastEpisodeAudio.tsx`, the one audio element and the
   podcast player that `Layout` mounts.
   `stores/podcastEpisodePlayerStore.ts` binds that element and browser lifecycle/voice hooks to the core player, so
   playback continues from one page to the next, and core `stores/podcastEpisodePlayActions.ts` plays or pauses a
-  podcast episode or a chapter by id from a page. Core `useShownPodcastEpisode` owns selection and recording polling;
-  the web supplies its search parameter.
+  podcast episode or a chapter by id from a page. `stores/topicPodcastEpisodeVideoElement.ts` owns the browser's one
+  film element, the core player's video adapter for the app's lifetime. `TopicPodcastEpisodeVideoPlayer.tsx` moves it
+  into its frame while its film is loaded and back to a hidden host in a layout effect's cleanup, before the frame
+  leaves the document, so a film in picture-in-picture keeps playing from one page to the next and any other pauses
+  for the audio. `TopicPodcastEpisodeVideoDialog.tsx` adapts core's Video dialog to the browser's dialog,
+  `ReturnedTopicPodcastEpisodeVideoDialog.tsx`, which `Layout` mounts, is that dialog for a film that returned from
+  picture-in-picture on a page with no film player, loading the dialog's code once a film returns, and
+  `TopicPodcastEpisodeVideoSection.tsx` is the topic page's
+  collapsible film section. While a topic with no ready film has a latest podcast episode whose film is rendering, the
+  section shows `UnpublishedPodcastEpisodeCard` with `isVideoRendering` in the film player's place, the recording
+  card's frame with the line "Carl and Vienna are filming...", and core's `useTopicPodcastEpisodeVideoRenderingPoll`
+  reads the page again until the film is ready. `pages/PodcastEpisodePage.tsx` shows the same card in its Coffee Break
+  Cinema section for a podcast episode whose film is rendering, and its poll replaces the page once the film is no
+  longer rendering. A failed poll read of the topic page keeps the page shown.
+  The film player's `PodcastEpisodeSeekBar` has `hasChapterTooltips`: hovering a chapter's
+  segment shows `TopicPodcastEpisodeVideoChapterTooltip.tsx`, the chapter's title over the first image of
+  `topicPodcastEpisodeVideoChapterImages.ts` that loads, the Finding's link preview image, then the chapter's imagined
+  image, then the podcast card. The image's frame shows the loading note until the image loads, and an image that
+  failed to load is not requested again until the page reloads. The audio player card's bar has no tooltip.
+  `pages/PodcastEpisodePage.tsx` holds the film in its Coffee Break Cinema section and the
+  player card in its Coffee Break podcast section. Core `useShownPodcastEpisode` owns selection and recording polling; the web
+  supplies its search parameter.
 - `components/social/` — the web's adapters of the shared reaction row and comment thread. `socialElements.tsx` is the
   web's `SocialElements` set with the six reaction icons and the flame and mugs of a comment shared with the podcast.
   Its `COMMENT_ELEMENTS` are the comment parts and the one composer that `note/NoteComments.tsx` spreads too.
@@ -231,7 +257,10 @@ the browser bundle and renders pages through the server build, behind its own ro
   thread's view event. `SocialSection.tsx` holds the thread in the Topic page's, the Podcast Episode page's, and the
   finding popover's collapsible Hot takes card, with the week's count beside its title and the shared count at the
   card's top right. `topic/TopicPageHeader.tsx`, `pages/PodcastEpisodePage.tsx`, and `topic/TopicResourceInfo.tsx` place
-  the reaction row in their headers.
+  the reaction row in their headers. `NewsList.tsx` adapts core's `NewsList` as the news card of the signed-in home
+  and of a profile. `CommentMentionBadge.tsx` adapts core's mention badge, a count whose press opens
+  `CommentMentionList.tsx` in a popover, with `CommentMentionMenuRow`, the user menu's Mentions row. It sits right
+  after the title of the podcast episode page and of the Topic Post page, and on a comment section's title.
 - `components/note/` — the Tasting Notes section, table, and dialog, the dialog's create flow in `CreateNote.tsx`, and
   the shared core note composition adapted to `react-native-enriched-html`, whose web build is a Tiptap editor. `NoteDialog.tsx` fetches the
   note's html and version on every open, loads the comment thread through `useNoteComments` at the same time, and
@@ -280,8 +309,18 @@ the browser bundle and renders pages through the server build, behind its own ro
   build aliases `@carlnotes/client/authClient` to `mcpViewAuthClient.ts`, whose session is the tool result's caller, and
   `@/lib/visitAnalytics` to `mcpViewVisitAnalytics.ts`, which reports nothing, and `@/lib/voiceActivity` to
   `mcpViewVoiceActivity.ts`, which never starts, and `mcpViewFetch.ts` returns a podcast episode read from the tool
-  result, sends a finding's feedback through its tool, and fails every other request, so an MCP view reaches the api
-  only through a tool call.
+  result, sends a finding's feedback, a comment thread's read and post, a reaction, and a Topic Post's read through
+  their tools, and fails every other request, so an MCP view reaches the api only through a tool call.
+  `mcpViewTopicPostInfoElements.tsx` holds what an MCP view replaces in a Topic Post's info popup: reactions through
+  their tool, no Share, and the discussion's play button that plays a tool result's recording. `NewsMcpView.tsx`
+  renders the shared news list with the mentions above it, paging past the tool's rows through `read_news`.
+  `TopicPostsMcpView.tsx`
+  renders a Topic's posts as the site's cards with no publish button, and `TopicPostMcpView.tsx` one post with its
+  image, its recording, and its comments in `McpViewCommentThread.tsx`, which has no edit, delete, or report control.
+  `McpViewTopicHeader.tsx` is the Topic's header the findings and posts MCP views share, and `mcpViewHop.ts` the
+  one hop a link or a post card takes. The build also aliases the Topic Post editor to `mcpViewTopicPostEditor.ts`,
+  which keeps the editor out of the bundle, and a post body's links to `mcpViewExternalLinks.ts`, which opens them
+  through the host.
 - `stores/` — the stores that reach the browser or a component library, named `<thing>Store.ts` and built the way
   `packages/core/AGENTS.md` describes, on `@carlnotes/core/stores/storeListeners`. Reach for a store only when state
   outlives a page or crosses the tree; `useState` and `providers/` cover everything else. The DOM-free stores,
@@ -297,7 +336,7 @@ the browser bundle and renders pages through the server build, behind its own ro
   and saves a signed-in user's progress in the loaded podcast episode, its playback start once per load, for the player
   store.
 - `hooks/` — the React hooks that read the browser or a route, `useTopicPagePayload.ts` among them, the topic page's
-  payload and its poll reload, `useConfirmDialog.tsx`, which asks before an action runs, `useSiteAssetUrl.ts`, a
+  payload, its poll reload, and a signed-in reader's related topics from their own read, `useConfirmDialog.tsx`, which asks before an action runs, `useSiteAssetUrl.ts`, a
   site image's url, absolute in an MCP view's frame, and `useScanNote.ts`, a scan's note behind its recap popover, read
   once the trigger is pointed at, focused, touched, or opened, and kept once the scan has finished; `providers/` —
   context providers. The images the bundler imports, Carl's and Vienna's portraits, come from
@@ -326,6 +365,21 @@ the browser bundle and renders pages through the server build, behind its own ro
   its own color inside a sentence, as the hero's is, takes `faint-underline` alone. A link that stands alone, such as a
   table cell, a footer link, or a link alone in its line, takes `STANDALONE_LINK_CLASS` from `lib/styleClasses.ts`, the
   link color underlined on hover.
+- The top row of buttons under the search bar, and a titled header row's button, take their classes from
+  `lib/styleClasses.ts`: `PLAIN_PAGE_BUTTON_CLASS` for the plain button at the left, with its icon in
+  `PLAIN_PAGE_BUTTON_ICON_CLASS`, and `HIGHLIGHTED_PAGE_BUTTON_CLASS` for the one highlighted button at the right. The
+  two share one size at every width, 36px tall with a pseudo-element that grows the touch target to 44px, and differ
+  in their fill alone. `PAGE_BUTTON_ROW_CLASS` is the row, with 16px above it, from the search bar, and 16px below
+  it. A page never gives a top row's button its own height, padding, or corner. `lib/styleClasses.test.ts` holds the
+  pair to one size.
+- A page's loading state is laid out in the classes and components its loaded page uses, so it holds each block where
+  the page draws it. `SKELETON_SHAPE_CLASS` in `lib/styleClasses.ts` is a placeholder's fill, `AccordionSection` takes
+  `isLoading` for a section's title and count, `CardsRowSkeleton` draws a section's cards in its grid, the news list's
+  `Loading` element is a page of placeholder rows, and `PLAIN_TOPIC_HEADER_GRID_CLASS`, `FILM_CARD_CLASS`, and
+  `NEWS_HEADING_ROW_CLASS` are shared by a loaded page and its loading state. `components/topic/TopicSkeleton.tsx`
+  is the topic page's loading state under the page's button row, which holds its own two placeholders, and exports
+  the collapsible section's, the film card's, the player card's, the theme song note's, and the empty section card's
+  loading states that `components/podcast/PodcastEpisodeSkeleton.tsx` shares.
 - The Nightshift component browser, Storybook on `@storybook/tanstack-react`, a dev dependency. `.storybook/main.ts`
   aliases `@carlnotes/client/authClient` to `.storybook/mocks/authClient.ts`, resolves `@tanstack/react-router` to
   `.storybook/mocks/reactRouter.tsx`, the framework's router mock with a `Link` that keeps the caller's ref and
@@ -364,8 +418,10 @@ the browser bundle and renders pages through the server build, behind its own ro
   change to the component. The shared fixtures are in `.storybook/fixtures.ts`, with the date from
   `@carlnotes/core/lib/storyFixtures`, the sessions, and the people, and in one file per domain under
   `.storybook/fixtures/`: topics, a visitor's and a user's topic feeds, podcast episodes, teams, admin users, and
-  waiting updates. A story imports them from there, never from another story. `src/nightshift/` holds the Tokens,
-  Typography, and Inventory pages, the swatch and specimen components they render, `ScrollingTable.tsx`, which renders
+  waiting updates. A story imports them from there, never from another story. `public/stories/` holds the short film
+  and its captions that the film stories play, which the web build serves at `/stories/` and
+  `@carlnotes/core/lib/podcastEpisodeStories` names by url. `src/nightshift/` holds the Tokens,
+  Typography, Inventory, and Layout pages, the swatch and specimen components they render, `ScrollingTable.tsx`, which renders
   their tables in the app's table classes with the first column fixed, and the pattern stories, each composed from
   `lib/styleClasses.ts` where a shared class exists, the section label from `SECTION_LABEL_CLASS`, which
   `lib/styleClasses.test.ts` checks against the sectionLabel type role in `@carlnotes/nightshift/typography`, as it
@@ -400,10 +456,68 @@ the browser bundle and renders pages through the server build, behind its own ro
 `components/primitives/topic-image.tsx` adapt the shared cards and image, the last also exporting the contract's frame
 as `TOPIC_IMAGE_FRAME_CLASS`. `components/common/cardElements.tsx` is `CARD_ELEMENTS`, the card box, topic image, and
 text row the two cards share, over core's `CardElements`, with a story beside it.
+`components/podcast/PodcastEpisodeVideoButton.tsx` adapts the shared button that opens a film, with the Video dialog
+its press opens: a film card's round play button, `PodcastEpisodePlayButton` centered over the card's image, and the
+Video pill beside the play pill on a `components/social/NewsList.tsx` row whose Podcast Episode has a film. The news
+MCP view's row shows none. Its thumbnail size is the play button over the film's poster in
+`components/topic/TopicInfo.tsx`, whose popover shows the latest film's section, core's
+`TopicPodcastEpisodeVideoInfoSection`, right above the podcast's.
 `components/topic/TopicImageEditor.tsx` adapts the editor's image block, with the browser's file input as its picker.
 `components/topic/TopicImageButton.tsx` is the image as a button with the camera overlay, and the page header's image,
-which is that button for an editor. `components/topic/EditImageDialog.tsx` is the Edit topic image and Edit podcast
-image dialog that the header image opens, and `components/podcast/EditPodcastEpisodeDialog.tsx` the Edit podcast
-dialog of the podcast episode page's actions menu.
-`components/common/HomeRankDialog.tsx` is the admin's home order list for a topic page and a podcast episode
-page.
+which is that button for an editor. `components/topic/TopicImageLink.tsx` adapts core's `TopicImageLink`, the image
+inside an `AnchorLink` to the page of what it shows: a search row's, a news row's, and a Topics row's image, the
+Topic's image in a Finding's and a Topic Post's popup, each out of the tab order and the accessibility tree beside the
+title that opens the same page, and the full-width image of a Topic's and a Topic Post's popup, each with its name
+as the popup's one link to the page. It reads the open page from the router, and the open page's own image is a
+plain image. Every image that opens its page goes through it, never its own link.
+`components/topic/EditImageDialog.tsx` is the Edit topic image and Edit podcast
+image dialog that the header image opens, and the Edit film dialog that the Edit film option opens from the actions
+menu of the podcast episode page and of the topic page (`toEditTopicPodcastEpisodeVideoOption` in
+`components/topic/TopicActions.tsx`), and `components/podcast/EditPodcastEpisodeDialog.tsx` the Edit podcast dialog
+of the podcast episode page's actions menu.
+`components/common/RankDialog.tsx` is the web's rows and frame for core's `RankDialog`, the list that orders pinned
+topics, films, podcast episodes, or Topic Posts: the admin's home order list on a topic page and a podcast episode
+page, and a person's own pins on their profile page, films among them, and on the page of one of their topics, podcast
+episodes, or Topic Posts.
+`components/topicPost/HomeTopicPostRankDialog.tsx` is the admin's Home posts list, which the home page's and a Topic
+Post page's actions menus open: it reads the pinned Topic Posts and the ones a pin may name, offers the page's post a
+place, and sends the order. `components/common/CardsSection.tsx` is the web's accordion section, grid, and page
+buttons for core's `CardsSection`, which the home's, the profile's, and the team page's card sections render,
+Featured Posts right below Featured Podcasts on the profile and the team page. The home writes its sections in
+`HOME_SECTIONS`' order, New podcasts this week right below Featured podcasts and New posts this week right below
+Featured posts, and a section with no card is absent. The profile's Featured Posts lists every post of its person and
+is its only Topic Post section. The team page has the profile's four card sections, Featured Films right before
+Featured Podcasts, and its Featured Posts lists every post of its topics.
+
+Topic Posts: `components/topicPost/` holds the web adapters of the shared `TopicPostCard`, `TopicPostInfo` (the
+info popover, which reads its post by id once it opens, and `TopicPostInfoButton`, the same popover under the
+notebook-pen tile for a row, which `components/social/NewsList.tsx` draws on a published Topic Post's row. Its Share
+and the page's Share open `components/share/ShareTopic.tsx` with the post as its `topicPost`, which shares the post's
+page, title, and card in the topic's place, and whose invite option creates a link that opens the post),
+`TopicPostsSection` (the Topic Posts section on the topic page, whose button creates a draft), and
+`TopicPostEditor` (the title over the note's rich text input and toolbar), with `TopicPostReader.tsx`, which loads
+with the editor package in the browser alone. The server and the first render show the body's plain paragraphs at the
+rich text's line spacing until it loads. `pages/TopicPostPage.tsx` is the page at
+`/topics/$topicId/$topicSlug/posts/$topicPostId/$postSlug`: the shared `TopicPostPage` with the web's elements, the
+actions menu's Share, Edit post, and Delete post, Home posts for an admin and Featured posts for the author on a
+published post of a public topic, each a rank dialog with the post offered a place, the image dialog, and the post's
+comment thread. Its body
+renders as plain paragraphs on the server and in the first browser render, and the rich text display replaces them
+once it loads. The routes are `topics.$topicId_.$topicSlug_.posts.$topicPostId.tsx`, the id alone, where an untitled
+draft's editor opens, and `topics.$topicId_.$topicSlug_.posts.$topicPostId_.$postSlug.tsx`, the canonical path, both
+over `-topicPostRoute.ts`, which redirects a stale slug. `components/account/ProfileHeader.tsx` adapts the shared
+profile header, and the profile route reads the first page of the week's news on the server.
+`components/common/cardElements.tsx` holds the reaction count every card shows at the right of its last row.
+
+Topic Post Discussions and the Topic Post chat: `components/topicPost/TopicPostDiscussionCard.tsx` adapts the shared
+discussion card to a page card with the podcast play button and the account forms' label, input, and buttons. The
+card's name is the summary of a details element behind the news card's caret (`EXPANDER_CARET_CLASS` in
+`lib/styleClasses.ts`), and the transcript stays in the html, hidden until that element opens, so the card is closed
+at first and opens with and without JavaScript. Its lines are the podcast episode transcript's Text and Strong.
+`pages/TopicPostPage.tsx` exports `TOPIC_POST_PAGE_ELEMENTS` for the page's stories, names the open post to
+`topicPostChatStore`, and offers Report image in the page's actions menu. While a post is named,
+`components/chat/AppChatPanel.tsx` opens the chat launcher on the topic's private chat for a user, through
+`toDefaultChatId`, and shows a visitor the sign-up panel. `PrivateChatPanel` reads its question box's line from
+`toPrivateChatPlaceholder`, and the row that names the open chat and the menu's private chat option read
+`toPrivateChatIdLabel`, each on one line with the whole label as its title. `components/chat/TopicPostTag.tsx` adapts
+the shared tag to a link, and `ChatTurnBlock` shows it under a question asked from a post's page.

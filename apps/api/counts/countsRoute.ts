@@ -1,12 +1,17 @@
-// the count routes. a topic page posts its view, and the topic and podcast episode pages read the counts
+// the count routes. a topic, a profile, and a team page each post their view, and the topic, podcast episode, profile,
+// and team pages read their counts
 import { Hono } from "hono"
 import { type AppEnv, currentUser } from "../currentUser"
 import { setCountsCacheHeaders } from "../edgeCache"
 import { isSameOriginRequest } from "../sameOrigin"
 import {
+	countProfileView,
+	countTeamView,
 	countTopicView,
 	countWithinRateLimit,
 	loadPodcastEpisodeCounts,
+	loadProfileViewerCounts,
+	loadTeamViewerCounts,
 	loadTopicCounts,
 	toRequestSender,
 } from "./viewerCounts"
@@ -21,6 +26,30 @@ export const countsRoute = new Hono<AppEnv>()
 				requestSender,
 				rateLimitName: "topic-view",
 				count: () => countTopicView(requestSender, context.req.param("id")),
+			})
+		}
+		return context.body(null, 204)
+	})
+	// count a profile page's view the same way
+	.post("/profiles/:userId/view", async (context) => {
+		if (isSameOriginRequest(context.req.raw)) {
+			const requestSender = toRequestSender(context)
+			await countWithinRateLimit({
+				requestSender,
+				rateLimitName: "profile-view",
+				count: () => countProfileView(requestSender, context.req.param("userId")),
+			})
+		}
+		return context.body(null, 204)
+	})
+	// count a team page's view the same way, so the response never says whether the team exists or opens
+	.post("/teams/:id/view", async (context) => {
+		if (isSameOriginRequest(context.req.raw)) {
+			const requestSender = toRequestSender(context)
+			await countWithinRateLimit({
+				requestSender,
+				rateLimitName: "team-view",
+				count: () => countTeamView(requestSender, context.req.param("id")),
 			})
 		}
 		return context.body(null, 204)
@@ -41,5 +70,23 @@ export const countsRoute = new Hono<AppEnv>()
 			? context.json(podcastEpisodeCountsResult.counts)
 			: context.json({ error: "not found" }, 404)
 		setCountsCacheHeaders(context.req.raw, response, podcastEpisodeCountsResult?.isPublic ?? false)
+		return response
+	})
+	// read a profile's viewer count, shared at the edge
+	.get("/counts/profiles/:userId", async (context) => {
+		const profileViewerCountsResult = await loadProfileViewerCounts(context.req.param("userId"))
+		const response = profileViewerCountsResult
+			? context.json(profileViewerCountsResult.counts)
+			: context.json({ error: "not found" }, 404)
+		setCountsCacheHeaders(context.req.raw, response, profileViewerCountsResult?.isPublic ?? false)
+		return response
+	})
+	// read a team's viewer count, shared at the edge if the team is public
+	.get("/counts/teams/:id", async (context) => {
+		const teamViewerCountsResult = await loadTeamViewerCounts(currentUser(context), context.req.param("id"))
+		const response = teamViewerCountsResult
+			? context.json(teamViewerCountsResult.counts)
+			: context.json({ error: "not found" }, 404)
+		setCountsCacheHeaders(context.req.raw, response, teamViewerCountsResult?.isPublic ?? false)
 		return response
 	})

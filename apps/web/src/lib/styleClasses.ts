@@ -66,6 +66,12 @@ export const PLAY_BUTTON_CLASS =
 	"bg-primary text-primary-foreground hover:bg-primary/90 shadow-raised grid shrink-0 place-items-center rounded-full transition-colors"
 
 /**
+ * The caret that leads a title which opens and closes what is under it. It points right while closed, and its
+ * caller turns it down a quarter turn while open.
+ */
+export const EXPANDER_CARET_CLASS = "text-muted-foreground size-4 shrink-0 transition-transform duration-200"
+
+/**
  * Shows a control only in a browser with JavaScript.
  */
 export const SCRIPTED_ONLY_CLASS = "hidden scripted:inline-flex"
@@ -289,6 +295,11 @@ export const LOGO_CLASS = "font-display text-xl"
 export const INFO_CARD_CLASS = "border-separator bg-card h-fit rounded-lg border p-5 text-sm shadow-raised"
 
 /**
+ * The card around a film: the info card with the frame, the seek bar, and the controls in one column.
+ */
+export const FILM_CARD_CLASS = `${INFO_CARD_CLASS} flex flex-col gap-3`
+
+/**
  * The dashed dividers between an info card's sections.
  */
 export const INFO_CARD_SECTIONS_CLASS = "divide-separator-strong divide-y divide-dashed"
@@ -333,14 +344,52 @@ export const RAIL_BARE_ICON_INSET = "-mr-1.5 sm:mr-1.5"
 export const PAGE_CLASS = "mx-auto max-w-5xl px-safe pt-3 pb-10"
 
 /**
+ * An accordion whose first section's title drops its top padding, so the gap over the sections is the accordion's
+ * own margin alone.
+ */
+export const FLUSH_FIRST_SECTION_CLASS = "[&>*:first-child_[data-slot=accordion-trigger]]:pt-0"
+
+// the size and the states that both buttons of a page's top row share at every width: the default Button's height,
+// label, icon gap, and corner, with a border on both so their boxes match. the pseudo-element grows the 36px button's
+// touch target to 44px
+const PAGE_BUTTON_SIZE_CLASS =
+	"relative inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-md border px-3 text-sm font-medium whitespace-nowrap shadow-raised outline-none transition-colors focus-visible:ring-ring/50 focus-visible:ring-[3px] disabled:pointer-events-none disabled:opacity-50 before:absolute before:-inset-x-px before:-inset-y-[5px] before:content-['']"
+
+/**
+ * The plain button at the left of a page's top row of buttons, and the plain button of a titled header row: the card's
+ * fill and border with a muted label. Its icon takes PLAIN_PAGE_BUTTON_ICON_CLASS.
+ */
+export const PLAIN_PAGE_BUTTON_CLASS = `${PAGE_BUTTON_SIZE_CLASS} bg-card text-muted-foreground hover:text-foreground`
+
+/**
+ * The one highlighted button at the right of a page's top row of buttons or of a titled header row. It differs from
+ * the plain button in its fill alone.
+ */
+export const HIGHLIGHTED_PAGE_BUTTON_CLASS = `${PAGE_BUTTON_SIZE_CLASS} bg-primary text-primary-foreground hover:bg-primary/90 border-transparent`
+
+/**
+ * The icon of the plain button at the left of a page's top row of buttons. The icon alone takes the highlight color,
+ * and the button stays plain.
+ */
+export const PLAIN_PAGE_BUTTON_ICON_CLASS = "text-primary size-4"
+
+/**
+ * The row of buttons under the search bar. The page's own button sits at the left in the plain style, and the button
+ * at the right is the row's one highlighted button. The row keeps 16px above it, from the search bar, and 16px below
+ * it, to the page's header.
+ */
+export const PAGE_BUTTON_ROW_CLASS = "mt-1 mb-4 flex flex-wrap items-start justify-between gap-3"
+
+/**
+ * The news card's heading row: its title at the left and its window picker at the right, which wraps under the title
+ * on a phone.
+ */
+export const NEWS_HEADING_ROW_CLASS = "flex flex-wrap items-center justify-between gap-x-4 gap-y-2"
+
+/**
  * The row at the top of a page shell, with the page title at the left and the page's action at the right.
  */
 export const PAGE_HEADER_CLASS = "flex items-center justify-between gap-4"
-
-/**
- * The row of a page header with its image at the left and its fields beside it.
- */
-export const IMAGE_HEADER_CLASS = "my-4 flex items-start gap-4"
 
 /**
  * An image's loading state at 3:2: the muted background, pulsing. The caller sets the width and the corners.
@@ -348,14 +397,30 @@ export const IMAGE_HEADER_CLASS = "my-4 flex items-start gap-4"
 export const IMAGE_SKELETON_CLASS = "bg-muted aspect-[3/2] animate-pulse"
 
 /**
- * A topic image's width in a page header. It is as tall as a podcast episode cover at 3:2, and smaller on a phone.
+ * A placeholder shape in a page's loading state: the muted fill and a slight corner, pulsing unless the reader asked
+ * for reduced motion. The caller sets the size.
  */
-export const HEADER_TOPIC_IMAGE_CLASS = "w-36 sm:w-54"
+export const SKELETON_SHAPE_CLASS = "bg-muted-foreground/20 rounded motion-safe:animate-pulse"
 
 /**
- * A topic image's width in a Topics row, a step smaller than the page header's.
+ * The loading state of a button in a page's top row, at the default button's height and a label's width.
  */
-export const LIST_TOPIC_IMAGE_CLASS = "w-30 sm:w-36"
+export const PAGE_BUTTON_SKELETON_CLASS = "bg-muted h-9 w-28 animate-pulse rounded-md"
+
+/**
+ * The loading state of the avatar on a comment row or a finding row, pulsing at the row's own icon size.
+ */
+export const ROW_AVATAR_SKELETON_CLASS = "bg-muted size-6 shrink-0 animate-pulse rounded-full"
+
+/**
+ * A topic image's width in a page header. It is as tall as a podcast episode cover at 3:2, and smaller on a phone.
+ */
+export const HEADER_TOPIC_IMAGE_CLASS = "w-36 rounded-xs sm:w-54"
+
+/**
+ * A topic image in a Topics row: a step narrower than the page header's, with the slight corner a small image keeps.
+ */
+export const LIST_TOPIC_IMAGE_CLASS = "w-30 rounded-xs sm:w-36"
 
 // the topic header grid's layouts from sm up, by whether the topic has tags and whether the row has actions: the
 // title, the byline, and the tags beside the image. the last row stretches to the image's bottom, and the actions
@@ -379,6 +444,12 @@ export function toTopicHeaderGridClass({ hasTags, hasActions }: { hasTags: boole
 }
 
 /**
+ * The header grid of a page with an image, a title, and a byline, and no tags or actions: a Topic Post's page and a
+ * podcast episode's page, loaded or loading, and a topic page while it loads.
+ */
+export const PLAIN_TOPIC_HEADER_GRID_CLASS = toTopicHeaderGridClass({ hasTags: false, hasActions: false })
+
+/**
  * The classes of a topic header's parts. On a phone the byline row sits under the image and holds the byline with
  * the actions at its right. From sm up the row uses display: contents, so each child takes its own grid area.
  */
@@ -392,6 +463,12 @@ export const TOPIC_HEADER_AREA_CLASSES = {
 }
 
 /**
+ * The avatar in a profile's or a team's header, at the height of a topic's image on the Topics page: 5rem on a phone
+ * and 6rem from sm up.
+ */
+export const PAGE_AVATAR_CLASS = "size-20 sm:size-24"
+
+/**
  * The h1 of a page shell: the display font, with the icon of the page's header menu item in front.
  */
 export const PAGE_TITLE_CLASS = "font-display flex items-center gap-2 text-2xl"
@@ -401,6 +478,12 @@ export const PAGE_TITLE_CLASS = "font-display flex items-center gap-2 text-2xl"
  */
 export const ICON_TILE_BUTTON_CLASS =
 	"relative inline-grid size-5 shrink-0 place-items-center align-middle before:absolute before:-inset-2 before:content-['']"
+
+/**
+ * A 28px icon button around a 24px icon tile beside a title. Its tap area reaches past the button.
+ */
+export const TITLE_ICON_BUTTON_CLASS =
+	"relative grid size-7 place-items-center before:absolute before:-inset-2 before:content-['']"
 
 /**
  * The icon tile around a table row's small play button, as big as the button's 24px circle so the circle centers in

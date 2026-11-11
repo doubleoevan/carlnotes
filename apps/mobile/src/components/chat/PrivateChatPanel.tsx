@@ -5,7 +5,7 @@ import type { TopicDraftFile } from "@carlnotes/core/components/TopicDraftCard"
 import type { NewTopicDraft } from "@carlnotes/core/hooks/useNewTopicDraft"
 import { useNow } from "@carlnotes/core/hooks/useNow"
 import { type TopicChat, useTopicChat } from "@carlnotes/core/hooks/useTopicChat"
-import { CHAT_QUESTION_PLACEHOLDER, NEW_TOPIC_CHAT_COPY } from "@carlnotes/core/lib/chatCopy"
+import { NEW_TOPIC_CHAT_COPY, toPrivateChatPlaceholder } from "@carlnotes/core/lib/chatCopy"
 import { CHAT_REJECTION_COPY } from "@carlnotes/core/lib/chatRejectionCopy"
 import type { ChatTurn } from "@carlnotes/core/lib/chatTurns"
 import { clearProposedTopicEdit } from "@carlnotes/core/stores/chatConversationStore"
@@ -203,7 +203,7 @@ function PrivateChatComposer({
 			onStop={topicChat.stop}
 			isStreaming={topicChat.isStreaming}
 			isDisabled={!isActive || !topicChat.canChat || isVoiceRecordingBusy}
-			placeholder={toPlaceholder(page, topicChat.isFirstTopic)}
+			placeholder={toPrivateChatPlaceholder(page, topicChat.isFirstTopic)}
 			attachments={topicChat.attachments}
 			onRemoveAttachment={chatAttachmentState.removeAttachment}
 			attachmentActions={
@@ -225,14 +225,6 @@ function PrivateChatComposer({
 			recordingBar={voiceRecording.state === "recording" ? <RecordingBar voiceRecording={voiceRecording} /> : undefined}
 		/>
 	)
-}
-
-// the private chat's placeholder, or the new-topic chat's for a first or a next topic
-function toPlaceholder(page: ChatPage, isFirstTopic: boolean): string {
-	if (!page.newTopic) {
-		return CHAT_QUESTION_PLACEHOLDER
-	}
-	return isFirstTopic ? NEW_TOPIC_CHAT_COPY.firstTopicPlaceholder : NEW_TOPIC_CHAT_COPY.placeholder
 }
 
 // a picked file as the draft card lists it

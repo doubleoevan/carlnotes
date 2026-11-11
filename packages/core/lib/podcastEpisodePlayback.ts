@@ -100,6 +100,15 @@ export function toPodcastEpisodeSpeakerMediaMetadata(
 	}
 }
 
+/**
+ * Returns the poster of a podcast episode's film: the film's own image, the podcast episode's image, or its cover.
+ */
+export function toPodcastEpisodePosterUrl(
+	podcastEpisode: Pick<PodcastEpisode, "video" | "image" | "coverUrl">,
+): string | null {
+	return podcastEpisode.video?.posterUrl ?? podcastEpisode.image?.page.url ?? podcastEpisode.coverUrl
+}
+
 // the podcast episode's cover at each size it is served at
 function toPodcastEpisodeArtwork(podcastEpisode: PodcastEpisode): PodcastEpisodeMediaMetadata["artwork"] {
 	return [

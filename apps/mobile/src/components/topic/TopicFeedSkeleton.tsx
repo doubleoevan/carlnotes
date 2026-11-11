@@ -86,11 +86,11 @@ export function FindingListSkeleton({ hasChapterPills = true }: { hasChapterPill
 }
 
 /**
- * Reserves the text-sized expander at the list's usual inset.
+ * Reserves the text-sized expander at the list's usual inset, or at the inset its caller names.
  */
-export function ExpanderSkeleton() {
+export function ExpanderSkeleton({ className }: { className?: string }) {
 	return (
-		<View className="mt-1 mb-2 min-h-11 justify-center pl-12">
+		<View className={cn("mt-1 mb-2 min-h-11 justify-center pl-12", className)}>
 			<View className="h-4 w-16 rounded bg-muted" />
 		</View>
 	)

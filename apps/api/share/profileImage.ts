@@ -1,16 +1,17 @@
 // the link-preview card a pasted profile url renders as
+
+import { toProfilePageTitle } from "@carlnotes/contracts/profilePage"
+import type { CardElement } from "@carlnotes/pipeline/cardElementPng"
 import type { PublishedAvatar } from "../avatars"
 import {
 	CARD_MUTED_COLOR,
-	type CardElement,
 	PREVIEW_TEMPLATE_VERSION,
 	toAvatarIdentity,
 	toBrandIcon,
 	toCardPng,
 	toCountLabel,
+	toOwnerAvatar,
 	toOwnerImageDataUri,
-	toOwnerInitials,
-	toOwnerPhoto,
 } from "./previewImage"
 
 // how wide the avatar renders, filling the slot a topic card gives its title
@@ -29,7 +30,7 @@ export type ProfilePreview = {
  * The stored object key for a profile preview card, versioned and hashed by its fields.
  */
 export function toProfilePreviewKey(profilePreview: ProfilePreview): string {
-	const previewImage = `${profilePreview.username}|${toAvatarIdentity(profilePreview.avatar)}|${profilePreview.publicTopicCount}|${profilePreview.followerCount}`
+	const previewImage = `${toProfilePageTitle(profilePreview.username)}|${toAvatarIdentity(profilePreview.avatar)}|${profilePreview.publicTopicCount}|${profilePreview.followerCount}`
 	return `og/${PREVIEW_TEMPLATE_VERSION}/profiles/${profilePreview.userId}/${Bun.hash(previewImage).toString(36)}.png`
 }
 
@@ -43,18 +44,24 @@ export async function toProfilePreviewPng(card: ProfilePreview): Promise<Uint8Ar
 	return toCardPng([toBrandIcon(), toProfileOwner(card, avatarImage), toProfileFooter(card)])
 }
 
-// the profile owner title display: the image they publish, or their initials in their tint, then their username
+// the profile owner title display: the image they publish, or their initials in their tint, then their Café's name
 function toProfileOwner(profilePreview: ProfilePreview, avatarImage: string | null): CardElement {
-	const avatar = avatarImage
-		? toOwnerPhoto(avatarImage, AVATAR_SIZE)
-		: toOwnerInitials(profilePreview.userId, profilePreview.username, AVATAR_SIZE)
+	const avatar = toOwnerAvatar({
+		id: profilePreview.userId,
+		name: profilePreview.username,
+		image: avatarImage,
+		size: AVATAR_SIZE,
+	})
 	return {
 		type: "div",
 		props: {
 			style: { display: "flex", alignItems: "center", gap: "28px" },
 			children: [
 				avatar,
-				{ type: "div", props: { style: { display: "flex", fontSize: 76 }, children: profilePreview.username } },
+				{
+					type: "div",
+					props: { style: { display: "flex", fontSize: 76 }, children: toProfilePageTitle(profilePreview.username) },
+				},
 			],
 		},
 	}

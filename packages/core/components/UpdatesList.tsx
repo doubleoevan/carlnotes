@@ -4,61 +4,36 @@ import type { ComponentType, ReactNode } from "react"
 // platform elements keep the list's text and links native
 export type UpdatesListElements = {
 	Card: ComponentType<{ children: ReactNode }>
-	Heading: ComponentType<{ action?: ReactNode; children: ReactNode }>
+	Heading: ComponentType<{ children: ReactNode }>
 	Opener: ComponentType<{ children: ReactNode }>
 	EmptyState: ComponentType<{ children: ReactNode }>
 }
 
 /**
- * Shows a list in one card under its heading, and the placeholder in that card until the list loads. The action sits
- * at the card's top right, and findings holds the platform's own rows.
+ * Shows a list in one card under its heading: carl's opener, then the platform's own rows, or the empty line for a
+ * list with no Finding.
  */
 export function UpdatesList({
 	updates,
 	findings,
-	placeholder,
-	action,
-	elements,
-}: {
-	updates?: Updates
-	findings?: ReactNode
-	placeholder?: ReactNode
-	action?: ReactNode
-	elements: UpdatesListElements
-}) {
-	const { Card, Heading, ...contentElements } = elements
-	return (
-		<Card>
-			<Heading action={action}>{UPDATES_TITLE}</Heading>
-			{updates ? (
-				<UpdatesContent updates={updates} elements={contentElements}>
-					{findings}
-				</UpdatesContent>
-			) : (
-				placeholder
-			)}
-		</Card>
-	)
-}
-
-// carl's opener and the rows
-function UpdatesContent({
-	updates,
-	elements: { Opener, EmptyState },
-	children,
+	elements: { Card, Heading, Opener, EmptyState },
 }: {
 	updates: Updates
-	elements: Omit<UpdatesListElements, "Card" | "Heading">
-	children: ReactNode
+	findings: ReactNode
+	elements: UpdatesListElements
 }) {
-	if (updates.findings.length === 0) {
-		return <EmptyState>{EMPTY_UPDATES_TEXT}</EmptyState>
-	}
 	return (
-		<>
-			{/* a list without an opener starts at its first Finding */}
-			{updates.opener && <Opener>{updates.opener}</Opener>}
-			{children}
-		</>
+		<Card>
+			<Heading>{UPDATES_TITLE}</Heading>
+			{updates.findings.length === 0 ? (
+				<EmptyState>{EMPTY_UPDATES_TEXT}</EmptyState>
+			) : (
+				<>
+					{/* a list without an opener starts at its first Finding */}
+					{updates.opener && <Opener>{updates.opener}</Opener>}
+					{findings}
+				</>
+			)}
+		</Card>
 	)
 }

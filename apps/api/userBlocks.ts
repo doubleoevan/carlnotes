@@ -5,6 +5,7 @@ import { db } from "@carlnotes/db"
 import { deleteRedisKeys } from "@carlnotes/db/redis"
 import { userBlocks } from "@carlnotes/db/schema/userBlocks"
 import { users } from "@carlnotes/db/schema/users"
+import { clearUnseenCommentMentions } from "@carlnotes/db/unseenCommentMentions"
 import { and, desc, eq } from "drizzle-orm"
 import { Hono } from "hono"
 import { toUnseenChatMentionCountKey } from "./chat/mentions"
@@ -18,6 +19,8 @@ import { loadUsername } from "./usernames"
 export async function saveUserBlock(blockerUserId: string, blockedUserId: string): Promise<void> {
 	await db.insert(userBlocks).values({ blockerUserId, blockedUserId }).onConflictDoNothing()
 	await deleteRedisKeys(toUnseenChatMentionCountKey(blockerUserId))
+	// a user block hides each one's comments from the other, so both read their comment mentions again
+	await clearUnseenCommentMentions([blockerUserId, blockedUserId])
 }
 
 /**
@@ -28,6 +31,7 @@ export async function deleteUserBlock(blockerUserId: string, blockedUserId: stri
 		.delete(userBlocks)
 		.where(and(eq(userBlocks.blockerUserId, blockerUserId), eq(userBlocks.blockedUserId, blockedUserId)))
 	await deleteRedisKeys(toUnseenChatMentionCountKey(blockerUserId))
+	await clearUnseenCommentMentions([blockerUserId, blockedUserId])
 }
 
 /**

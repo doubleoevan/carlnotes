@@ -97,6 +97,39 @@ test("the sitemap leaves the component browser out", async () => {
 	}
 })
 
+// the sitemap lists a public Topic's published Topic Post, and its read leaves every other Topic's posts out
+test("the sitemap lists the Topic Posts of public topics alone", async () => {
+	// one published post on a public Topic, with its edit time
+	const sentQueries = stubConnectionPool(({ text }) =>
+		text.includes('from "topic_posts"')
+			? [
+					[
+						"post-1",
+						"Light Roasts",
+						new Date("2026-11-01T10:00:00Z"),
+						new Date("2026-11-01T10:05:00Z"),
+						"topic-1",
+						"Coffee",
+					],
+				]
+			: [],
+	)
+	try {
+		// the post's page is listed at its path, dated by its edit
+		const sitemapXml = await toSitemapXml("https://carlnotes.com")
+		expect(sitemapXml).toContain("<loc>https://carlnotes.com/topics/topic-1/coffee/posts/post-1/light-roasts</loc>")
+		expect(sitemapXml).toContain("2026-11-01")
+
+		// the read keeps public Topics and published posts alone
+		const topicPostQuery = sentQueries.find((sentQuery) => sentQuery.text.includes('from "topic_posts"'))
+		expect(topicPostQuery?.text).toContain('"topics"."visibility" = $1')
+		expect(topicPostQuery?.values).toEqual(["public"])
+		expect(topicPostQuery?.text).toContain('"topic_posts"."published_at" is not null')
+	} finally {
+		restoreConnectionPool()
+	}
+})
+
 // the docs loader parses the folded frontmatter every docs page uses
 test("every docs page parses with a title and description", async () => {
 	const docsPages = await loadDocsPages()

@@ -13,7 +13,7 @@ import { users } from "./schema/users"
 const DAILY_SOCIAL_WRITE_LIMIT = 200
 
 // what a daily write limit counts
-export type SocialWriteKind = "reaction" | "comment"
+export type SocialWriteKind = "reaction" | "comment" | "topicPost"
 
 /**
  * Counts one save or post against the user's UTC day and returns whether it is within the daily limit. The count

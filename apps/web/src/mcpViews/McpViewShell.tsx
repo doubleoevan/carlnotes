@@ -8,7 +8,14 @@ import { useIsPodcastPlayerShown } from "@/stores/podcastEpisodePlayerStore"
 import { McpViewDisplayModeButton } from "./McpViewDisplayModeButton"
 import { McpViewPodcastPlayer } from "./McpViewPodcastPlayer"
 import { McpViewToolText } from "./McpViewToolText"
-import { FINDINGS_ROUTE_PREFIX, mcpViewHistory, toMcpViewToolCall } from "./mcpViewHistory"
+import {
+	FINDINGS_ROUTE_PREFIX,
+	mcpViewHistory,
+	NEWS_ROUTE_PATH,
+	TOPIC_POST_ROUTE_PREFIX,
+	TOPIC_POSTS_ROUTE_PREFIX,
+	toMcpViewToolCall,
+} from "./mcpViewHistory"
 import { useMcpViewData, useMcpViewDisplayModes, useMcpViewLinkError } from "./mcpViewHost"
 import { toMcpViewRouteHeading } from "./mcpViewRouteHeading"
 
@@ -32,6 +39,10 @@ export function McpViewShell() {
 	const isFullscreen = displayMode === "fullscreen"
 	const routeHeading = isFullscreen ? toMcpViewRouteHeading({ pathname, toolResult, mcpViewData }) : null
 	const isTableRoute = pathname === "/search" || pathname === "/updates" || pathname.startsWith(FINDINGS_ROUTE_PREFIX)
+	const isTopicPostRoute = [TOPIC_POSTS_ROUTE_PREFIX, TOPIC_POST_ROUTE_PREFIX].some((routePrefix) =>
+		pathname.startsWith(routePrefix),
+	)
+	const isFullscreenOffered = isTableRoute || isTopicPostRoute || pathname === NEWS_ROUTE_PATH || isFullscreen
 	const isPictureInPicture = displayMode === "pip"
 	const isPodcastPlayerShown = useIsPodcastPlayerShown()
 	return (
@@ -55,7 +66,7 @@ export function McpViewShell() {
 				)}
 				<div className="ml-auto flex items-center gap-1">
 					{(isPodcastPlayerShown || isPictureInPicture) && <McpViewDisplayModeButton displayMode="pip" />}
-					{(isTableRoute || isFullscreen) && <McpViewDisplayModeButton displayMode="fullscreen" />}
+					{isFullscreenOffered && <McpViewDisplayModeButton displayMode="fullscreen" />}
 				</div>
 			</div>
 			{/* the tool's own words for a call that returned only text, or the route, which stays mounted behind the player */}

@@ -4,7 +4,7 @@ import { CommentThread as SharedCommentThread } from "@carlnotes/core/components
 import type { CommentThreadAdapterProps } from "@carlnotes/core/components/SocialSection"
 import { useCommentThreadViewEvent } from "@carlnotes/core/hooks/useCommentThreadViewEvent"
 import { toCommentReportProps } from "@carlnotes/core/lib/reportCopy"
-import { usePathname } from "expo-router"
+import { useLocalSearchParams, usePathname } from "expo-router"
 import { useState } from "react"
 import { View } from "react-native"
 import { ReportIssueDialog } from "@/components/common/ReportIssueDialog"
@@ -20,6 +20,9 @@ import { SOCIAL_ELEMENTS } from "./socialElements"
 export function CommentThread({ topicId, isTopicOwner, ...props }: CommentThreadAdapterProps) {
 	const pathname = usePathname()
 	const [reportedComment, setReportedComment] = useState<CommentReply | null>(null)
+
+	// the Comment the screen's route names, which leads the thread
+	const { comment: linkedCommentId } = useLocalSearchParams<{ comment?: string }>()
 	useCommentThreadViewEvent({ target: props.target, topicId, isTopicOwner, captureVisitEvent })
 	const commentReportProps = reportedComment && toCommentReportProps("comment", reportedComment)
 
@@ -27,6 +30,7 @@ export function CommentThread({ topicId, isTopicOwner, ...props }: CommentThread
 		<View className="gap-1">
 			<SharedCommentThread
 				{...props}
+				linkedCommentId={linkedCommentId}
 				onSignIn={() => openSessionScreen({ screen: "/sign-up", returnPath: pathname, cta: "hot-take" })}
 				onError={showClientError}
 				onReport={setReportedComment}

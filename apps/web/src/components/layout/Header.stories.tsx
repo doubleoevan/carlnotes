@@ -1,5 +1,6 @@
 // the global header: the brand, the theme toggle, a visitor's links or the user's avatar menu, and the home page hero
 import type { Meta, StoryObj } from "@storybook/tanstack-react"
+import { expect } from "storybook/test"
 import { TopicFeedProvider } from "@/providers/TopicFeedProvider"
 import { mockTopicFeed } from "../../../.storybook/fixtures/topicFeed"
 import { seedWaitingUpdates } from "../../../.storybook/fixtures/waitingUpdates"
@@ -45,4 +46,15 @@ export const VisitorPhone: Story = {
 	// the docs page is wider than a phone, so the story stays off it
 	tags: ["!autodocs"],
 	globals: PHONE_VIEWPORT_GLOBALS,
+}
+
+// the same phone without JavaScript: the links wrap onto a second row, and the hamburger menu's button is absent
+export const VisitorPhoneWithoutJavaScript: Story = {
+	...VisitorPhone,
+	parameters: { hasJavaScript: false },
+	play: async ({ canvas }) => {
+		await expect(canvas.getByRole("link", { name: "Topics" })).toBeVisible()
+		await expect(canvas.getByRole("link", { name: "Sign up" })).toBeVisible()
+		await expect(canvas.queryByRole("button", { name: /^Menu/ })).toBeNull()
+	},
 }

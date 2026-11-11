@@ -6,6 +6,7 @@ import type { TopicDetails } from "@carlnotes/contracts/topics"
 import { useSubjectReportFlag } from "@carlnotes/core/hooks/useSubjectReport"
 import { toReportDialogTitle } from "@carlnotes/core/lib/reportCopy"
 import { toReportImageLabel } from "@carlnotes/core/lib/socialLabels"
+import { type SharedTopicPost, TOPIC_POST_LABELS } from "@carlnotes/core/lib/topicPosts"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { ICON_ACTION_CLASS } from "@carlnotes/nightshift/iconAction"
 import { useRecyclingState } from "@shopify/flash-list"
@@ -18,32 +19,52 @@ import { Sheet, type SheetProps } from "@/components/common/Sheet"
 import { Button, toTouchTargetHitSlop } from "@/components/primitives/button"
 import { Icon } from "@/components/primitives/icon"
 import { Text } from "@/components/primitives/text"
+import { SHARE_TOPIC_LABEL } from "@/components/search/pageActionOptions"
+import {
+	PLAIN_PAGE_BUTTON_CLASS,
+	PLAIN_PAGE_BUTTON_ICON_CLASS,
+	PLAIN_PAGE_BUTTON_TEXT_CLASS,
+} from "@/pageButtonClasses"
 import { captureVisitEvent, toPublicTopicProperties } from "@/visitAnalytics"
 import { ShareTargets } from "./ShareTargets"
 
 // visibility governs each option without hiding the share menu itself
 type ShareTopicDetails = Pick<TopicDetails, "id" | "name" | "visibility"> & Partial<Pick<TopicDetails, "isTopicOwner">>
 
+// the topic, and the Topic Post of it that is shared in the topic's place: its page, its card, and an invite that
+// opens it
+type ShareTopicSubject = { topic: ShareTopicDetails; topicPost?: SharedTopicPost }
+
 /**
- * Opens the web's Topic sharing choices in a native sheet.
+ * Opens the web's Topic sharing choices in a native sheet. Given a Topic Post, the same choices share the post.
  */
-export function ShareTopic({ topic, isLabeled = false }: { topic: ShareTopicDetails; isLabeled?: boolean }) {
+export function ShareTopic({
+	topic,
+	topicPost,
+	isLabeled = false,
+	isIconHighlighted = false,
+}: ShareTopicSubject & {
+	isLabeled?: boolean
+	// the labeled button at the left of a screen's top row gives its icon the highlight color
+	isIconHighlighted?: boolean
+}) {
 	// discard an open menu when its feed cell is recycled
 	const [isOpen, setIsOpen] = useRecyclingState(false, [topic.id])
 	const triggerRef = useRef<ComponentRef<typeof View>>(null)
+	const shareLabel = `Share ${topicPost?.title ?? topic.name}`
 	return (
 		<>
 			{isLabeled ? (
 				<Button
 					ref={triggerRef}
 					variant="outline"
-					className="bg-muted active:bg-accent"
-					accessibilityLabel={`Share ${topic.name}`}
+					className={isIconHighlighted ? PLAIN_PAGE_BUTTON_CLASS : "bg-muted active:bg-accent"}
+					accessibilityLabel={shareLabel}
 					accessibilityState={{ expanded: isOpen }}
 					onPress={() => setIsOpen(true)}
 				>
-					<Icon as={ShareIcon} />
-					<Text>Share</Text>
+					<Icon as={ShareIcon} className={isIconHighlighted ? PLAIN_PAGE_BUTTON_ICON_CLASS : undefined} />
+					<Text className={isIconHighlighted ? PLAIN_PAGE_BUTTON_TEXT_CLASS : undefined}>Share</Text>
 				</Button>
 			) : (
 				<Pressable
@@ -51,28 +72,33 @@ export function ShareTopic({ topic, isLabeled = false }: { topic: ShareTopicDeta
 					className={cn("min-h-11 items-center justify-center active:opacity-75", ICON_ACTION_CLASS)}
 					hitSlop={toTouchTargetHitSlop(28)}
 					accessibilityRole="button"
-					accessibilityLabel={`Share ${topic.name}`}
+					accessibilityLabel={shareLabel}
 					accessibilityState={{ expanded: isOpen }}
 					onPress={() => setIsOpen(true)}
 				>
 					<Icon as={ShareIcon} className="size-3.75 text-muted-foreground" />
 				</Pressable>
 			)}
-			{isOpen ? <ShareTopicSheet topic={topic} triggerRef={triggerRef} onClose={() => setIsOpen(false)} /> : null}
+			{isOpen ? (
+				<ShareTopicSheet topic={topic} topicPost={topicPost} triggerRef={triggerRef} onClose={() => setIsOpen(false)} />
+			) : null}
 		</>
 	)
 }
 
 /**
- * Provides social destinations, native sharing, invite sharing, and clipboard links.
+ * Provides social destinations, native sharing, invite sharing, and clipboard links, for a Topic or for a Topic Post
+ * shared in its place.
  */
 export function ShareTopicSheet({
 	topic,
+	topicPost,
 	...sheetProps
-}: { topic: ShareTopicDetails } & Pick<SheetProps, "triggerRef" | "onClose">) {
-	const actions = useShareTopicActions(topic)
+}: ShareTopicSubject & Pick<SheetProps, "triggerRef" | "onClose">) {
+	// the share actions, and the report of a share by its kind and its channel
+	const actions = useShareTopicActions({ topic, topicPost })
 	const handleShare = (channel: string): void =>
-		captureVisitEvent("visit_share_clicked", { kind: "topic", channel, ...toPublicTopicProperties(topic) })
+		captureVisitEvent("visit_share_clicked", { kind: actions.sharedKind, channel, ...toPublicTopicProperties(topic) })
 	const reportFlag = useSubjectReportFlag({ subjectKind: "topic", subjectId: topic.id })
 	const imageReportFlag = useSubjectReportFlag({ subjectKind: "topicImage", subjectId: topic.id })
 
@@ -80,15 +106,18 @@ export function ShareTopicSheet({
 	const reportingSubjectKind = reportFlag.isReporting ? "topic" : imageReportFlag.isReporting ? "topicImage" : null
 	const reportingSubjectLabel = reportingSubjectKind === "topicImage" ? `the image of ${topic.name}` : topic.name
 	return (
-		<Sheet title={reportingSubjectKind ? toReportDialogTitle(reportingSubjectLabel) : "Share topic"} {...sheetProps}>
+		<Sheet
+			title={reportingSubjectKind ? toReportDialogTitle(reportingSubjectLabel) : actions.shareTitle}
+			{...sheetProps}
+		>
 			{reportingSubjectKind ? (
 				<ReportIssueForm subjectKind={reportingSubjectKind} subjectId={topic.id} onClose={sheetProps.onClose} />
 			) : (
 				<>
 					{/* public posts, followed by private send options */}
 					<ShareTargets
-						topic={topic}
-						topicUrl={actions.topicUrl}
+						topic={{ name: actions.sharedName }}
+						topicUrl={actions.sharedUrl}
 						kind="post"
 						isEnabled={actions.isPublic}
 						onShare={handleShare}
@@ -114,12 +143,12 @@ export function ShareTopicSheet({
 						isDisabled={!actions.canSend}
 						onPress={() => {
 							handleShare("share-sheet")
-							void shareTopicUrl({ title: topic.name, url: actions.topicUrl })
+							void shareTopicUrl({ title: actions.sharedName, url: actions.sharedUrl })
 						}}
 					/>
 					<ShareTargets
-						topic={topic}
-						topicUrl={actions.topicUrl}
+						topic={{ name: actions.sharedName }}
+						topicUrl={actions.sharedUrl}
 						kind="send"
 						isEnabled={actions.canSend}
 						onShare={handleShare}
@@ -132,19 +161,22 @@ export function ShareTopicSheet({
 						isCopied={actions.copiedLabel === "page"}
 						onPress={() => {
 							handleShare("copy-link")
-							void actions.handleCopy({ label: "page", url: actions.topicUrl })
+							void actions.handleCopy({ label: "page", url: actions.sharedUrl })
 						}}
 					/>
-					<ShareOption
-						label="Copy RSS"
-						icon={Rss}
-						isDisabled={!actions.isPublic}
-						isCopied={actions.copiedLabel === "rss"}
-						onPress={() => {
-							handleShare("rss")
-							void actions.handleCopy({ label: "rss", url: `${SITE_URL}${toTopicFeedPath(topic.id)}` })
-						}}
-					/>
+					{/* a topic's rss feed. a post has none */}
+					{!topicPost && (
+						<ShareOption
+							label="Copy RSS"
+							icon={Rss}
+							isDisabled={!actions.isPublic}
+							isCopied={actions.copiedLabel === "rss"}
+							onPress={() => {
+								handleShare("rss")
+								void actions.handleCopy({ label: "rss", url: `${SITE_URL}${toTopicFeedPath(topic.id)}` })
+							}}
+						/>
+					)}
 					{actions.copyFallback ? (
 						<View className="gap-2 p-2">
 							<Text className="text-sm text-muted-foreground">Touch and hold the link to copy.</Text>
@@ -153,19 +185,24 @@ export function ShareTopicSheet({
 							</Text>
 						</View>
 					) : null}
-					<View className="my-1 border-t border-separator" />
-					<ShareOption
-						label={reportFlag.label}
-						icon={Flag}
-						isActive={reportFlag.isReported}
-						onPress={reportFlag.press}
-					/>
-					<ShareOption
-						label={toReportImageLabel(imageReportFlag.isReported)}
-						icon={Flag}
-						isActive={imageReportFlag.isReported}
-						onPress={imageReportFlag.press}
-					/>
+					{/* the topic's report options, which a post's share leaves out */}
+					{!topicPost && (
+						<>
+							<View className="my-1 border-t border-separator" />
+							<ShareOption
+								label={reportFlag.label}
+								icon={Flag}
+								isActive={reportFlag.isReported}
+								onPress={reportFlag.press}
+							/>
+							<ShareOption
+								label={toReportImageLabel(imageReportFlag.isReported)}
+								icon={Flag}
+								isActive={imageReportFlag.isReported}
+								onPress={imageReportFlag.press}
+							/>
+						</>
+					)}
 				</>
 			)}
 		</Sheet>
@@ -173,8 +210,11 @@ export function ShareTopicSheet({
 }
 
 // keep copy feedback and unfinished requests local to this opening
-function useShareTopicActions(topic: ShareTopicDetails): {
-	topicUrl: string
+function useShareTopicActions({ topic, topicPost }: ShareTopicSubject): {
+	sharedKind: "topic" | "topicPost"
+	shareTitle: string
+	sharedName: string
+	sharedUrl: string
 	isPublic: boolean
 	canSend: boolean
 	copiedLabel: string | null
@@ -201,17 +241,21 @@ function useShareTopicActions(topic: ShareTopicDetails): {
 		}
 	}
 
+	// the shared page's name and url, the post's if one is shared in the topic's place
+	const sharedName = topicPost?.title ?? topic.name
+	const sharedUrl = `${SITE_URL}${topicPost?.path ?? toTopicPath(topic)}`
+
 	// create and share an invite only when its owner chooses the action
 	const handleShareInvite = async (): Promise<void> => {
 		setIsSharingInvite(true)
 		try {
-			// create an invite only after its owner chooses the action
-			const invite = await sendCreateTopicInvite(topic.id, "share-sheet")
+			// create an invite only after its owner chooses the action. a post's invite opens the post once accepted
+			const invite = await sendCreateTopicInvite(topic.id, "share-sheet", topicPost?.id)
 			if (invite === "limited") {
 				showClientError("Daily invite limit reached. It resets tomorrow.")
 				return
 			}
-			await shareTopicUrl({ title: topic.name, url: `${SITE_URL}${toInvitePath(invite.token)}` })
+			await shareTopicUrl({ title: sharedName, url: `${SITE_URL}${toInvitePath(invite.token)}` })
 		} catch {
 			showClientError("That invite didn't get made. Try again.")
 		} finally {
@@ -219,7 +263,10 @@ function useShareTopicActions(topic: ShareTopicDetails): {
 		}
 	}
 	return {
-		topicUrl: `${SITE_URL}${toTopicPath(topic)}`,
+		sharedKind: topicPost ? "topicPost" : "topic",
+		shareTitle: topicPost ? TOPIC_POST_LABELS.shareTitle : SHARE_TOPIC_LABEL,
+		sharedName,
+		sharedUrl,
 		isPublic: topic.visibility === "public",
 		canSend: topic.visibility !== "private",
 		copiedLabel,

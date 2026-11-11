@@ -9,8 +9,8 @@ sidebar:
 ---
 
 A hot take is what you say about something Carl found, and a reaction is one of six ways to respond to it with a
-press. Both sit on every finding, podcast episode, and topic you can read, and every hot take takes reactions and
-replies of its own.
+press. Both sit on every finding, podcast episode, topic, and [Open Mic post](/docs/feed/open-mic/) you can read, and
+every hot take takes reactions and replies of its own.
 
 The best hot takes go on the air. A topic's editors share them with Carl and Vienna, and the hosts of
 [Coffee Break](/docs/feed/coffee-break/) tackle them in the topic's next podcast episode. See

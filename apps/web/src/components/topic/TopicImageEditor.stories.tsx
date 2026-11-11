@@ -1,4 +1,6 @@
-// the editor's image block: a generated image with regenerations left, an upload, and the month's limit reached
+// the editor's image block: a generated image with regenerations left, an upload, the month's limit reached, and a
+// film's own image, in the same layout at the film's 16:9 frame
+import { sendTopicPodcastEpisodeVideoImageRegeneration } from "@carlnotes/client/podcastEpisodeClient"
 import { fetchTopicImageRender, sendTopicImageRegeneration } from "@carlnotes/client/topicImageClient"
 import type { Meta, StoryObj } from "@storybook/tanstack-react"
 import { expect, fn, mocked, userEvent } from "storybook/test"
@@ -17,6 +19,9 @@ const TOPIC: EditableImage = {
 	imagePrompt: "a lighthouse in a storm, oil painting",
 	imageRegenerationQuota: { used: 3, limit: 15 },
 }
+
+// a film's own image, which the block edits by the film's podcast episode
+const TOPIC_PODCAST_EPISODE_VIDEO: EditableImage = { ...TOPIC, kind: "topicPodcastEpisodeVideo", id: "episode-1" }
 
 const meta = {
 	title: "Topic/TopicImageEditor",
@@ -71,4 +76,47 @@ export const LimitReached: Story = {
 // a topic with no image yet shows the muted ground
 export const NoImage: Story = {
 	args: { editableImage: { ...TOPIC, image: null, imageOrigin: null, imagePrompt: null } },
+}
+
+// a film's own image in the standard layout: the image at 16:9, which a press uploads over, then the image prompt
+// beside Regenerate
+export const TopicPodcastEpisodeVideo: Story = {
+	args: { editableImage: TOPIC_PODCAST_EPISODE_VIDEO },
+	beforeEach: () => {
+		mocked(sendTopicPodcastEpisodeVideoImageRegeneration).mockResolvedValue("render-1")
+		mocked(fetchTopicImageRender).mockResolvedValue({ status: "pending", image: null })
+	},
+	play: async ({ canvas }) => {
+		// the image is the upload control at the film's frame, with no Upload button beside Regenerate
+		const uploadBox = canvas.getByRole("button", { name: "Upload an image" }).getBoundingClientRect()
+		await expect(Math.abs(uploadBox.width / uploadBox.height - 16 / 9)).toBeLessThan(0.02)
+		await expect(canvas.queryByRole("button", { name: "Upload" })).toBeNull()
+
+		// the image prompt sits on Regenerate's line, under the image
+		const imagePromptBox = canvas.getByLabelText("Image prompt").getBoundingClientRect()
+		const regenerateButton = canvas.getByRole("button", { name: "Regenerate" })
+		const regenerateBox = regenerateButton.getBoundingClientRect()
+		await expect(imagePromptBox.top).toBeGreaterThanOrEqual(uploadBox.bottom)
+		await expect(imagePromptBox.right).toBeLessThan(regenerateBox.left)
+		await expect(imagePromptBox.bottom).toBeGreaterThan(regenerateBox.top)
+
+		// Regenerate sends the film's image prompt, counts against the shared limit, and shows the render under way
+		await regenerateButton.click()
+		await expect(mocked(sendTopicPodcastEpisodeVideoImageRegeneration)).toHaveBeenCalledWith(
+			"episode-1",
+			"a lighthouse in a storm, oil painting",
+		)
+		await expect(await canvas.findByText("4 of 15 used this month")).toBeVisible()
+		await expect(canvas.getByText("Dreaming, takes about a minute...")).toBeVisible()
+	},
+}
+
+// a film at the month's limit keeps the image as the upload control, without the image prompt and Regenerate
+export const TopicPodcastEpisodeVideoLimitReached: Story = {
+	args: { editableImage: { ...TOPIC_PODCAST_EPISODE_VIDEO, imageRegenerationQuota: { used: 15, limit: 15 } } },
+	play: async ({ canvas }) => {
+		await expect(canvas.queryByLabelText("Image prompt")).toBeNull()
+		await expect(canvas.queryByRole("button", { name: "Regenerate" })).toBeNull()
+		await expect(canvas.getByRole("button", { name: "Upload an image" })).toBeVisible()
+	},
 }

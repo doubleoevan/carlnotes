@@ -1,8 +1,9 @@
 // what a tool result gives its MCP view beside the structured result the model reads: the signed-in caller, the podcast
-// episodes its play buttons play with a play token each, and the findings MCP view's topic and findings in the site's shape
+// episodes its play buttons play with a play token each, the findings MCP view's topic and findings in the site's
+// shape, and the news MCP view's news. topicPostMcpViewData.ts holds the Topic Post MCP views' data
 
 import type { McpScanStatus } from "@carlnotes/contracts/mcpScanStatus"
-import { MCP_VIEW_META_KEY, type McpViewData, type McpViewTopic } from "@carlnotes/contracts/mcpViews"
+import { MCP_VIEW_META_KEY, type McpViewData, type McpViewNews, type McpViewTopic } from "@carlnotes/contracts/mcpViews"
 import type { PersonalSourcesSendResult } from "@carlnotes/contracts/personalSources"
 import type { PodcastEpisode } from "@carlnotes/contracts/podcast"
 import type { ProfileIdentity } from "@carlnotes/contracts/profiles"
@@ -150,6 +151,15 @@ export async function loadUpdatesMcpViewData(
 }
 
 /**
+ * Loads the news MCP view's data: the caller, and the news with a play token on each Podcast Episode its rows play.
+ */
+export async function loadNewsMcpViewData(toolCaller: ToolCaller, news: McpViewNews): Promise<McpViewData> {
+	const podcastEpisodes = toMcpViewPodcastEpisodes(toolCaller, news.newsPage.podcastEpisodes)
+	const session = await loadMcpViewSession(toolCaller)
+	return { session, podcastEpisodes, news: { ...news, newsPage: { ...news.newsPage, podcastEpisodes } } }
+}
+
+/**
  * Loads the findings MCP view's data: the caller, the topic with its latest podcast episode and whether the caller
  * subscribes to it, and the page's findings in the site's shape with the caller's own marks, in the page's order.
  */
@@ -165,40 +175,18 @@ export async function loadFindingsMcpViewData(
 	// the caller's findings on the topic, behind the topic page's own gate, picked out in the page's order
 	// ponytail: reads up to the topic page's read limit to pick one page out. read by id if a topic grows past it
 	const userId = toToolCallerUserId(toolCaller)
-	const [
-		{ topicFindings },
-		latestPodcastEpisodeByTopicId,
-		session,
-		isSubscribed,
-		canRate,
-		canBookmark,
-		personalAnnotations,
-	] = await Promise.all([
+	const [{ topicFindings }, mcpViewTopic, session, personalAnnotations] = await Promise.all([
 		loadTopicAccessAndFindings({ topic, userId, isRatedDownExcluded: true, isReactionReadSkipped: true }),
-		loadLatestPodcastEpisodeSummaries([topic], userId),
+		loadMcpViewTopic(toolCaller, topic),
 		loadMcpViewSession(toolCaller),
-		userId ? hasSubscription(userId, topicId) : Promise.resolve(null),
-		canRateTopic(userId, topic),
-		canBookmarkTopic(userId, topic),
 		loadMcpViewPersonalAnnotations(toolCaller, findingIds),
 	])
 	const topicFindingById = new Map(topicFindings.map((topicFinding) => [topicFinding.findingId, topicFinding]))
 	const pageTopicFindings = findingIds.flatMap((findingId) => topicFindingById.get(findingId) ?? [])
 	await attachReactionSummaries({ topicFindings: pageTopicFindings, userId })
 
-	// the topic header and the podcast episode its play button plays
-	const latestPodcastEpisode = latestPodcastEpisodeByTopicId.get(topic.id) ?? null
-	const mcpViewTopic: McpViewTopic = {
-		id: topic.id,
-		name: topic.name,
-		prompt: topic.prompt,
-		visibility: topic.visibility,
-		latestPodcastEpisode,
-		isSubscribed,
-		canRate,
-		canBookmark,
-		image: toTopicImageUrlsOrNull(topic.id, topic.imageHash),
-	}
+	// the podcast episode the topic header's play button plays
+	const { latestPodcastEpisode } = mcpViewTopic
 	const mcpViewPodcastEpisodes = await loadMcpViewPodcastEpisodes(
 		toolCaller,
 		latestPodcastEpisode ? [latestPodcastEpisode.id] : [],
@@ -209,6 +197,37 @@ export async function loadFindingsMcpViewData(
 		topic: mcpViewTopic,
 		topicFindings: pageTopicFindings,
 		personalAnnotations,
+	}
+}
+
+/**
+ * Loads the topic an MCP view heads its rows with: its name and image, its latest podcast episode, whether the caller
+ * subscribes to it, and whether the caller may rate and bookmark its findings.
+ */
+export async function loadMcpViewTopic(
+	toolCaller: ToolCaller,
+	topic: typeof topics.$inferSelect,
+): Promise<McpViewTopic> {
+	// the topic's latest podcast episode, and what the caller does and may do on the topic
+	const userId = toToolCallerUserId(toolCaller)
+	const [latestPodcastEpisodeByTopicId, isSubscribed, canRate, canBookmark] = await Promise.all([
+		loadLatestPodcastEpisodeSummaries([topic], userId),
+		userId ? hasSubscription(userId, topic.id) : Promise.resolve(null),
+		canRateTopic(userId, topic),
+		canBookmarkTopic(userId, topic),
+	])
+
+	// the topic as the header shows it
+	return {
+		id: topic.id,
+		name: topic.name,
+		prompt: topic.prompt,
+		visibility: topic.visibility,
+		latestPodcastEpisode: latestPodcastEpisodeByTopicId.get(topic.id) ?? null,
+		isSubscribed,
+		canRate,
+		canBookmark,
+		image: toTopicImageUrlsOrNull(topic.id, topic.imageHash),
 	}
 }
 
@@ -224,8 +243,10 @@ async function loadMcpViewPersonalAnnotations(
 	return Object.fromEntries(personalAnnotations)
 }
 
-// the signed-in caller's identity, or null for a visitor
-async function loadMcpViewSession(toolCaller: ToolCaller): Promise<ProfileIdentity | null> {
+/**
+ * Loads the signed-in caller's identity, or null for a visitor.
+ */
+export async function loadMcpViewSession(toolCaller: ToolCaller): Promise<ProfileIdentity | null> {
 	if (toolCaller.kind !== "user") {
 		return null
 	}
@@ -262,21 +283,45 @@ async function loadMcpViewPodcastEpisodes(
 		.from(podcastEpisodes)
 		.innerJoin(topics, eq(podcastEpisodes.topicId, topics.id))
 		.where(and(inArray(podcastEpisodes.id, [...new Set(podcastEpisodeIds)]), eq(podcastEpisodes.status, "published")))
-	const playerPodcastEpisodes = await loadPodcastEpisodes(
-		podcastEpisodeRows.map(({ topic, ...podcastEpisodeRow }) => ({ podcastEpisodeRow, topic })),
+	const playerPodcastEpisodes = await loadPodcastEpisodes({
+		podcastEpisodeRowTopics: podcastEpisodeRows.map(({ topic, ...podcastEpisodeRow }) => ({
+			podcastEpisodeRow,
+			topic,
+		})),
 		userId,
-	)
+	})
 	return toMcpViewPodcastEpisodes(toolCaller, playerPodcastEpisodes)
 }
 
-// each podcast episode with the audio route's absolute url, the caller's play token in place of a session, and no
-// voice chat
+// each podcast episode as an MCP view plays it, from the audio route's absolute url with the caller's play token
 function toMcpViewPodcastEpisodes(toolCaller: ToolCaller, playerPodcastEpisodes: PodcastEpisode[]): PodcastEpisode[] {
 	const userId = toToolCallerUserId(toolCaller)
 	const siteUrl = appUrl()
-	return playerPodcastEpisodes.map((podcastEpisode) => ({
+	return playerPodcastEpisodes.map((podcastEpisode) => {
+		// the caller's play token in place of a session
+		const playToken = toPlayToken({ podcastEpisodeId: podcastEpisode.id, userId })
+		const audioUrl = `${siteUrl}/api/episodes/${podcastEpisode.id}/audio.mp3?play=${playToken}`
+		return toMcpViewPodcastEpisode(podcastEpisode, audioUrl)
+	})
+}
+
+/**
+ * Returns a recording as an MCP view plays it: the audio url with a play token in place of a session, each cover's
+ * absolute url, since the frame's media session has no origin to resolve a path against, and no voice chat. The film
+ * plays only on the site, so the MCP view learns only whether one exists.
+ */
+export function toMcpViewPodcastEpisode(
+	{ video, ...podcastEpisode }: PodcastEpisode,
+	audioUrl: string,
+): PodcastEpisode {
+	const siteUrl = appUrl()
+	const toSiteUrl = (coverUrl: string | null): string | null => coverUrl && new URL(coverUrl, siteUrl).toString()
+	return {
 		...podcastEpisode,
+		hasVideo: Boolean(video),
 		isVoiceChatConfigured: false,
-		audioUrl: `${siteUrl}/api/episodes/${podcastEpisode.id}/audio.mp3?play=${toPlayToken({ podcastEpisodeId: podcastEpisode.id, userId })}`,
-	}))
+		audioUrl,
+		coverUrl: toSiteUrl(podcastEpisode.coverUrl),
+		smallCoverUrl: toSiteUrl(podcastEpisode.smallCoverUrl),
+	}
 }

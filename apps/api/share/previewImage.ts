@@ -3,9 +3,8 @@
 import { AVATAR_COLOR, toAvatarInitials, toAvatarTint } from "@carlnotes/contracts/avatars"
 import { getAttachmentBytes } from "@carlnotes/db/store"
 import { darkRoast } from "@carlnotes/nightshift/colors"
+import { type CardElement, toCardElementPng, toImageDataUri } from "@carlnotes/pipeline/cardElementPng"
 import { toTopicImageCardJpeg } from "@carlnotes/pipeline/topicImages/topicImageFiles"
-import { renderAsync } from "@resvg/resvg-js"
-import satori from "satori"
 import { MAX_AVATAR_BYTES, type PublishedAvatar, toAvatarContentType } from "../avatars"
 
 // what every platform crops preview images to. 1200x630 is the size X, Slack, and LinkedIn all expect
@@ -28,10 +27,7 @@ export const CARD_MUTED_COLOR = darkRoast.heroMuted
 // how much time a provider photo gets to load before the card gives up on it
 const PROVIDER_PHOTO_TIMEOUT_MS = 3000
 
-// the brand font, read once at boot. Satori takes font bytes, not a font-family name or a stylesheet
-const displayFont = await Bun.file(new URL("./fonts/ArchitectsDaughter-Regular.ttf", import.meta.url)).arrayBuffer()
-
-// the rest of the card's palette, taken from the dark theme
+// the card's palette, taken from the dark theme
 const CARD_BACKGROUND = darkRoast.card
 const CARD_COLOR = darkRoast.foreground
 const CARD_ACCENT = darkRoast.primary
@@ -39,12 +35,6 @@ const CARD_ACCENT = darkRoast.primary
 // the image across a card's top, edge to edge like the home page's card, and the padding of the text under it
 const CARD_IMAGE_BAND_HEIGHT = 360
 const CARD_BODY_PADDING = "28px 64px 44px"
-
-// one element of the card's markup, in the React element shape that satori reads
-export type CardElement = {
-	type: string
-	props: { style?: Record<string, unknown>; children?: (CardElement | string)[] | string } & Record<string, unknown>
-}
 
 /**
  * The rendered avatar's identity in a card's stored key.
@@ -87,24 +77,6 @@ function toCardFrame(rows: CardElement[], padding: string): CardElement {
 			children: rows,
 		},
 	}
-}
-
-// the element to draw and the pixel size to draw it at
-type ToCardElementPngOptions = { cardElement: CardElement; width: number; height: number }
-
-/**
- * Draws an element with satori and returns it as a png at the given size, rasterized by resvg.
- */
-export async function toCardElementPng({ cardElement, width, height }: ToCardElementPngOptions): Promise<Uint8Array> {
-	// satori lays the element out as an svg in the brand font
-	const cardSvg = await satori(cardElement as Parameters<typeof satori>[0], {
-		width,
-		height,
-		fonts: [{ name: "Architects Daughter", data: displayFont, weight: 400, style: "normal" }],
-	})
-	// renderAsync rasterizes on a worker thread, so a burst of renders never stalls the event loop
-	const renderedImage = await renderAsync(cardSvg, { fitTo: { mode: "width", value: width } })
-	return renderedImage.asPng()
 }
 
 // the image, the title, and the footer of a card that draws its image across its top
@@ -167,13 +139,6 @@ export async function loadCardImageBandDataUri(originalKey: string): Promise<str
 }
 
 /**
- * Returns an image's bytes as a data uri that satori can draw.
- */
-export function toImageDataUri(bytes: Uint8Array, contentType: string): string {
-	return `data:${contentType};base64,${Buffer.from(bytes).toString("base64")}`
-}
-
-/**
  * The owner's published image as bytes satori can draw, or null to fall back to their initials.
  * A remote provider photo is fetched here and inlined.
  */
@@ -232,10 +197,20 @@ async function toAvatarBytes(response: Response): Promise<Uint8Array | null> {
 	return Buffer.concat(chunks)
 }
 
+// whose avatar is drawn: their id for the tint, their name for the initials, the image they publish, and the width
+type OwnerAvatarOptions = { id: string; name: string; image: string | null; size: number }
+
+/**
+ * Returns the image a user or a team publishes at this size, or their initials in their tint if they publish none.
+ */
+export function toOwnerAvatar({ id, name, image, size }: OwnerAvatarOptions): CardElement {
+	return image ? toOwnerPhoto(image, size) : toOwnerInitials(id, name, size)
+}
+
 /**
  * The published user image, cropped to fit the same circle the initials draw.
  */
-export function toOwnerPhoto(ownerImage: string, size: number): CardElement {
+function toOwnerPhoto(ownerImage: string, size: number): CardElement {
 	return {
 		type: "img",
 		props: {
@@ -250,7 +225,7 @@ export function toOwnerPhoto(ownerImage: string, size: number): CardElement {
 /**
  * The default username initials image that the app renders, its letters scaled to the circle.
  */
-export function toOwnerInitials(userId: string, username: string, size: number): CardElement {
+function toOwnerInitials(userId: string, username: string, size: number): CardElement {
 	return {
 		type: "div",
 		props: {

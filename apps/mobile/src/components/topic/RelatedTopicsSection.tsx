@@ -1,6 +1,7 @@
 import { PAGE_SIZES } from "@carlnotes/contracts/pagination"
 import type { TopicResponse } from "@carlnotes/contracts/topics"
 import { usePaginatedRowSort } from "@carlnotes/core/hooks/usePaginatedRowSort"
+import { toSectionCountLabel } from "@carlnotes/core/lib/labels"
 import { View } from "react-native"
 import { SortableHeader } from "@/components/table/SortableHeader"
 import { TableCard, TableHeader, TableRow } from "@/components/table/TableCard"
@@ -25,7 +26,7 @@ export function RelatedTopicsSection({ relatedTopics }: Pick<TopicResponse, "rel
 		return null
 	}
 	return (
-		<CollapsibleSection title="Similar topics">
+		<CollapsibleSection title="Similar topics" countLabel={toSectionCountLabel(relatedTopics.length, "topic")}>
 			<TableCard>
 				{/* the same sortable Topic column as the web */}
 				<TableHeader>

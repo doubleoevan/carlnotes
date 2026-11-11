@@ -8,6 +8,7 @@ import { Sheet } from "@/components/common/Sheet"
 import { Button } from "@/components/primitives/button"
 import { Icon } from "@/components/primitives/icon"
 import { Text } from "@/components/primitives/text"
+import { HIGHLIGHTED_PAGE_BUTTON_CLASS } from "@/pageButtonClasses"
 import { useTopicFeed } from "@/providers/TopicFeedProvider"
 import { openSessionScreen } from "@/sessionReturnPath"
 import { NewTopicDialog } from "./TopicEditorChoiceSheet"
@@ -20,7 +21,7 @@ export function TopicHomeActions({ filters, knownTags }: { filters: TopicFeedFil
 	const [isOpen, setIsOpen] = useState(false)
 	const triggerRef = useRef<ComponentRef<typeof View>>(null)
 	return (
-		<View className="mx-4 mb-1 flex-row flex-wrap items-center justify-between gap-2">
+		<View className="mx-4 mt-2 mb-1 flex-row flex-wrap items-center justify-between gap-2">
 			<View className="flex-row items-center gap-1">
 				<Text className="text-sm text-link">Tags:</Text>
 				<Button
@@ -85,7 +86,7 @@ export function NewTopicButton() {
 	const { openNewTopicDialog, newTopicDialog } = useNewTopicDialog()
 	return (
 		<>
-			<Button accessibilityLabel="New Topic" onPress={openNewTopicDialog}>
+			<Button className={HIGHLIGHTED_PAGE_BUTTON_CLASS} accessibilityLabel="New Topic" onPress={openNewTopicDialog}>
 				<Icon as={Plus} className="size-4" />
 				<Text>New Topic</Text>
 			</Button>

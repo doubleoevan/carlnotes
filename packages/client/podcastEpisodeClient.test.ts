@@ -84,3 +84,17 @@ test("season failures preserve default results and opt in to actionable errors",
 		fetchSeasonPodcastEpisodes({ topicId: "topic", season: 2025, signal: controller.signal, shouldThrowOnError: true }),
 	).rejects.toBeDefined()
 })
+
+test("a Topic Post discussion's audio resolves on its post's route, and its read finds no podcast episode", async () => {
+	// the player's id of a discussion names its post
+	const fetch = mock(async (_url: string) =>
+		Response.json({ audioUrl: "https://media.example/d.mp3", expiresAt: "2026-11-10T20:00:00Z" }),
+	)
+	globalThis.fetch = fetch as unknown as typeof globalThis.fetch
+	await fetchPodcastEpisodeAudio("topic-post-discussion:post-1:discussion-1")
+	expect(String(fetch.mock.calls[0]?.[0])).toEndWith("/api/topic-posts/post-1/discussion/audio.mp3")
+
+	// a post that is gone, or that the user may not read, has no discussion to play
+	stubFetch(Response.json({ error: "not found" }, { status: 404 }))
+	expect(await fetchPodcastEpisode("topic-post-discussion:post-1:discussion-1")).toBeNull()
+})

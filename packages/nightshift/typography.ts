@@ -79,13 +79,22 @@ export const typeRoles = {
 		fontWeight: 400,
 		description: "the CarlNotes name in the logo, beside the coffee mug, in the header and on the sign-in pages",
 	},
+	sectionTitle: {
+		family: "display",
+		className: "font-display text-xl",
+		fontSizeRem: 1.25,
+		lineHeightRem: 1.75,
+		fontWeight: 400,
+		description:
+			"a page section's title, with the section's count at the far right. the count shows nothing at zero, and hides on a narrow screen under a title too long to leave it room",
+	},
 	sectionHeading: {
 		family: "display",
 		className: "font-display text-lg",
 		fontSizeRem: 1.125,
 		lineHeightRem: 1.75,
 		fontWeight: 400,
-		description: "a collapsible section's title, a popover's heading, and an h2 or h3",
+		description: "a popover's heading, a card's heading, and an h2 or h3",
 	},
 	label: {
 		family: "sans",

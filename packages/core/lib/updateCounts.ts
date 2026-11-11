@@ -1,10 +1,13 @@
-// the update count: one number summing unread chat mentions, note changes, topic invitations, and an admin's open
-// reports, the labels a screen reader hears, and the groups a tooltip or a long-press sheet lists in that order
+// the update count: one number summing unread chat mentions, unseen Comment Mentions, note changes, topic invitations,
+// and an admin's open reports, the labels a screen reader hears, and the groups a tooltip or a long-press sheet lists
+// in that order
 import type { ChatMention } from "@carlnotes/contracts/chat"
+import type { UnseenCommentMention } from "@carlnotes/contracts/commentMentions"
 import type { TopicInviteBadge } from "@carlnotes/contracts/invites"
 import { type NoteBadge, toNoteCount } from "@carlnotes/contracts/notes"
 import { toCountLabel, toCountNoun } from "./labels"
 import { toNoteChangeLabel } from "./noteBadges"
+import { CARL_NAME } from "./socialLabels"
 
 // how many lines a group lists before folding the rest into a count
 const LISTED_UPDATE_LINE_COUNT = 4
@@ -16,26 +19,41 @@ export type UpdateLine = { key: string; parts: UpdateLinePart[] }
 // one waiting group: its heading and its lines
 export type UpdateSection = { heading: string; lines: UpdateLine[] }
 
-// the groups a badge sums. only an admin has open reports
+// the groups a badge sums. only an admin has open reports, and a badge with no thread counts no Comment Mention
 export type UpdateBadges = {
 	chatMentions: ChatMention[]
+	commentMentions?: UnseenCommentMention[]
 	noteBadges: NoteBadge[]
 	invites: TopicInviteBadge[]
 	openReportCount?: number
 }
 
 /**
- * Sums the chat mentions, the note changes, the topic invitations, and the open reports into the badge's one count.
+ * Sums the chat mentions, the Comment Mentions, the note changes, the topic invitations, and the open reports into
+ * the badge's one count.
  */
-export function toUpdateCount({ chatMentions, noteBadges, invites, openReportCount = 0 }: UpdateBadges): number {
-	return chatMentions.length + toNoteCount(noteBadges) + invites.length + openReportCount
+export function toUpdateCount({
+	chatMentions,
+	commentMentions = [],
+	noteBadges,
+	invites,
+	openReportCount = 0,
+}: UpdateBadges): number {
+	return chatMentions.length + commentMentions.length + toNoteCount(noteBadges) + invites.length + openReportCount
+}
+
+/**
+ * Labels a Comment Mention badge.
+ */
+export function toCommentMentionLabel(commentMentionCount: number): string {
+	return commentMentionCount === 1 ? "1 hot take mention" : `${commentMentionCount} hot take mentions`
 }
 
 /**
  * Labels a topic invitation badge.
  */
 export function toTopicInviteLabel(inviteCount: number): string {
-	return inviteCount === 1 ? "1 topic invitation" : `${inviteCount} topic invitations`
+	return inviteCount === 1 ? "1 topic invite" : `${inviteCount} topic invites`
 }
 
 /**
@@ -62,17 +80,22 @@ export function toMenuTriggerLabel(name: string, updateBadges: UpdateBadges): st
 }
 
 /**
- * Lists the waiting groups under their own headings, chats, then notes, then invitations, then open reports, skipping
- * an empty group. Open reports are a heading with no lines.
+ * Lists the waiting groups under their own headings, chats, then Comment Mentions, then notes, then invitations, then
+ * open reports, skipping an empty group. Open reports are a heading with no lines.
  */
 export function toUpdateSections({
 	chatMentions,
+	commentMentions = [],
 	noteBadges,
 	invites,
 	openReportCount = 0,
 }: UpdateBadges): UpdateSection[] {
 	const sections = [
 		chatMentions.length > 0 && { heading: toChatLabel(chatMentions), lines: toChatMentionLines(chatMentions) },
+		commentMentions.length > 0 && {
+			heading: toCommentMentionLabel(commentMentions.length),
+			lines: toCommentMentionLines(commentMentions),
+		},
 		noteBadges.length > 0 && { heading: toNoteLabel(toNoteCount(noteBadges)), lines: toNoteLines(noteBadges) },
 		invites.length > 0 && { heading: toTopicInviteLabel(invites.length), lines: toTopicInviteLines(invites) },
 		openReportCount > 0 && { heading: toCountLabel(openReportCount, "open report"), lines: [] },
@@ -103,6 +126,18 @@ export function toTopicInviteLines(topicInviteBadges: TopicInviteBadge[]): Updat
 			toLabelPart(topicInviteBadge.inviterUsername),
 			toTextPart(" invited you to subscribe to "),
 			toLabelPart(topicInviteBadge.topicName),
+		]),
+	)
+}
+
+// the Comment Mention lines: who mentioned the user, on which page, and the Comment's first line
+function toCommentMentionLines(commentMentions: UnseenCommentMention[]): UpdateLine[] {
+	return commentMentions.map((commentMention) =>
+		toUpdateLine(commentMention.commentId, [
+			toLabelPart(commentMention.author?.username ?? CARL_NAME),
+			toTextPart(" mentioned you on "),
+			toLabelPart(commentMention.page.name),
+			toTextPart(`: ${commentMention.text}`),
 		]),
 	)
 }

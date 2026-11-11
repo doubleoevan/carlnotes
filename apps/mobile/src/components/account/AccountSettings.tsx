@@ -45,7 +45,7 @@ export function AccountSettings({ provider }: { provider: BillingProvider | null
 				</Text>
 			</View>
 			<View className="rounded-lg border border-separator bg-card p-4 shadow-raised">
-				<Text className="font-semibold">Profile</Text>
+				<Text className="font-semibold">Café</Text>
 				<ProfileFields />
 			</View>
 			<EmailSection elements={ACCOUNT_FIELD_ELEMENTS} callbackURL={`${SITE_URL}/account`} />

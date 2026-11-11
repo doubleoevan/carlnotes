@@ -1,6 +1,6 @@
 // the sweep's notifications email: one email a day to each user that other people reacted to, commented on, or
 // mentioned, with nothing sent on a quiet day
-import { toSocialTargetPath } from "@carlnotes/contracts/seo"
+import { toSocialTargetPath, toTopicPostPath } from "@carlnotes/contracts/seo"
 import { REACTION_TYPE_LABELS } from "@carlnotes/contracts/social"
 import { DAY_MS } from "@carlnotes/contracts/time"
 import { db } from "@carlnotes/db"
@@ -104,16 +104,19 @@ async function loadRecipients(sentDay: string): Promise<Recipient[]> {
 	return recipientRows.filter((recipientRow) => recipientRow.lastSentDay !== sentDay)
 }
 
-// one item as the email shows it: the Finding, the Podcast Episode, or the Topic it is on, by name and page
+// one item as the email shows it: the Finding, the Topic Post, the Podcast Episode, or the Topic it is on, by name
+// and page
 function toNotificationsEmailItem(activityRow: NotificationsEmailRow): NotificationsEmailItem {
-	const { topic, findingId, findingTitle, podcastEpisode } = activityRow
+	const { topic, findingId, findingTitle, podcastEpisode, topicPost } = activityRow
 	const { season, episodeNumber } = podcastEpisode ?? { season: null, episodeNumber: null }
-	const targetPath = toSocialTargetPath(topic, { findingId, season, episodeNumber })
+	const targetPath = topicPost
+		? toTopicPostPath(topic, topicPost)
+		: toSocialTargetPath(topic, { findingId, season, episodeNumber })
 	return {
 		kind: activityRow.kind,
 		authorUsername: activityRow.authorUsername,
 		reactionLabel: activityRow.reactionType ? REACTION_TYPE_LABELS[activityRow.reactionType] : null,
-		targetLabel: findingTitle ?? podcastEpisode?.title ?? topic.name,
+		targetLabel: findingTitle ?? topicPost?.title ?? podcastEpisode?.title ?? topic.name,
 		targetUrl: `${appUrl()}${targetPath}`,
 		text: activityRow.text,
 	}

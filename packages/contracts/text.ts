@@ -1,5 +1,8 @@
 // the text helpers that every module shares
 
+// the words a reader gets through in a minute, which a Finding's and a Topic Post's reading times share
+export const READING_WORDS_PER_MINUTE = 250
+
 /**
  * Returns text on one line, with each run of whitespace, line breaks included, as one space and none at either end.
  */

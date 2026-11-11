@@ -15,10 +15,10 @@ import { Hono } from "hono"
 import { toBodyLimit, toSignedOutRejection } from "../bodyLimit"
 import { type AppEnv, currentUser, toAnalyticsProperties } from "../currentUser"
 import { toObjectionableCategory, toObjectionableContentResponse } from "../moderation"
+import { sanitizeNoteHtml } from "../noteHtml"
 import { noteBodySaveRateLimiter, toolCallerRateLimiter } from "../rateLimit"
 import { toTermsOutdatedResponse } from "../termsAcceptance"
 import { loadUsername } from "../usernames"
-import { sanitizeNoteHtml } from "./noteHtml"
 import { createNote, loadNotesPayload, loadVisibleNote, toNote } from "./notePayloads"
 import {
 	canDeleteNote,

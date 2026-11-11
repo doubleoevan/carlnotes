@@ -4,7 +4,6 @@ import type { PodcastEpisodePageResponse } from "@carlnotes/contracts/podcastEpi
 import type { SearchResultsPage } from "@carlnotes/contracts/search"
 import type { ReactionSummary } from "@carlnotes/contracts/social"
 import type { TopicDetails, TopicFeedResponse } from "@carlnotes/contracts/topics"
-import type { UpdatesResponse } from "@carlnotes/contracts/updates"
 import { matchesTopicFindingFilter } from "./topicFindingFilters"
 
 // each action owns only the fields it changes
@@ -82,16 +81,6 @@ export function applySearchFindingChanges(
 		return finding === row.finding ? row : { ...row, finding }
 	})
 	return { ...searchPage, rows }
-}
-
-/**
- * Applies finding changes to an updates list while preserving its order.
- */
-export function applyUpdatesFindingChanges(updates: UpdatesResponse, changes: TopicFindingChange[]): UpdatesResponse {
-	if (changes.length === 0) {
-		return updates
-	}
-	return { ...updates, findings: updates.findings.map((finding) => applyFindingChanges(finding, changes)) }
 }
 
 /**

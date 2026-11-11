@@ -41,7 +41,7 @@ const meta: Meta<typeof NotificationsCard> = {
 	},
 	parameters: {
 		webReference:
-			"apps/web/src/components/account/AccountSettings.tsx Notifications at 375px for the email switch. The web has no push. Card from apps/web/src/components/account/AccountSettings.tsx Invitations, switch from TopicSubscriptionsTable's Emails column, at 375px",
+			"apps/web/src/components/account/AccountSettings.tsx Notifications at 375px for the email switch. The web has no push. Card from apps/web/src/components/account/AccountSettings.tsx Invites, switch from TopicSubscriptionsTable's Emails column, at 375px",
 	},
 	decorators: [
 		(Story) => (

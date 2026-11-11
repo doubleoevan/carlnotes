@@ -9,7 +9,8 @@ read, and the component contracts both apps' implementations build on. `tokens.c
   `latte` and `darkRoast` are each mode's values by name. `colorModes` lists the modes, and `toColorChannels` reads a
   hex or an rgba value's channels and alpha.
 - `radius.ts` — the base radius and each step's offset. `typography.ts` — the font families, the type roles with the
-  Tailwind classes each maps to, and the email's system font stack. `theme.ts` — the names the web theme maps,
+  Tailwind classes each maps to, and the email's system font stack. `sectionTitle` is every page section's title, with
+  the section's count at the far right. `theme.ts` — the names the web theme maps,
   `toColorCssVariable`, a color token as its runtime `var(--<kebab>)`, so a style that reads it follows the theme toggle,
   `THEME_STORAGE_KEY`, and `DARK_CLASS_SCRIPT`, the script that the web app and the api's content pages run before
   first paint to set the dark class from the saved theme or the OS setting.

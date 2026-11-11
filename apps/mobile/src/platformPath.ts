@@ -19,6 +19,12 @@ export function toPlatformPath(href: string): string {
 		return `/topics/${episode[1]}/episodes/${episode[2]}/${episode[3]}${url.search}${url.hash}`
 	}
 
+	// a Topic Post's canonical and app paths, before the generic Topic route
+	const topicPost = url.pathname.match(/^\/topics\/([^/]+)(?:\/[^/]+)?\/posts\/([^/]+)(?:\/[^/]+)?\/?$/)
+	if (topicPost) {
+		return `/topics/${topicPost[1]}/posts/${topicPost[2]}${url.search}${url.hash}`
+	}
+
 	// a Topic with or without its slug
 	const topic = url.pathname.match(/^\/topics\/([^/]+)(?:\/(?!notes(?:\/|$))[^/]+)?\/?$/)
 	if (topic) {
@@ -39,7 +45,7 @@ const NATIVE_ROUTE_PATTERNS = [
 	/^\/invite\/[^/]+$/,
 	/^\/profiles\/[^/]+$/,
 	/^\/teams\/[^/]+(\/chat|\/notes\/[^/]+)?$/,
-	/^\/topics\/[^/]+(\/chat|\/notes\/[^/]+|\/episodes\/\d+\/\d+)?$/,
+	/^\/topics\/[^/]+(\/chat|\/notes\/[^/]+|\/episodes\/\d+\/\d+|\/posts\/[^/]+)?$/,
 ]
 
 /**

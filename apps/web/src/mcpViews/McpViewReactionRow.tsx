@@ -23,10 +23,15 @@ const MCP_VIEW_REACTION_CLIENT: ReactionClient = {
  * The shared reaction row in an MCP view, with the web's elements: a save calls the tool through the host, a
  * visitor's press opens sign-up on the site, and an error shows under the row.
  */
-export function McpViewReactionRow({ target, summary, isSignedIn }: Omit<ReactionRowAdapterProps, "onSummaryChange">) {
+export function McpViewReactionRow({
+	target,
+	summary,
+	isSignedIn,
+	className = "mt-3 flex flex-col gap-1",
+}: Omit<ReactionRowAdapterProps, "onSummaryChange"> & { className?: string }) {
 	const [errorMessage, setErrorMessage] = useState<string | null>(null)
 	return (
-		<div className="mt-3 flex flex-col gap-1">
+		<div className={className}>
 			<ReactionRow
 				target={target}
 				summary={summary}

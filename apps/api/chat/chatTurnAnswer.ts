@@ -10,7 +10,11 @@ import { reserveUserSpend, toReleaseOnFailure } from "@carlnotes/models/spendRes
 import type { ChatTurnInput } from "@carlnotes/pipeline/chat/chatMessages"
 import { maxChatTurnDollars, toChatTurnMessageChars } from "@carlnotes/pipeline/chat/chatTurnCost"
 import { streamChatReply } from "@carlnotes/pipeline/chat/index"
-import { loadPodcastEpisodeChapterContext } from "@carlnotes/pipeline/chat/retrievePodcastEpisodeChapter"
+import {
+	loadPodcastEpisodeChapterContext,
+	type PodcastEpisodeChapterContext,
+} from "@carlnotes/pipeline/chat/retrievePodcastEpisodeChapter"
+import { loadTopicPostChatContext, type TopicPostChatContext } from "@carlnotes/pipeline/chat/retrieveTopicPost"
 import type { Context } from "hono"
 import { type AnalyticsProperties, toAnalyticsProperties } from "../currentUser"
 import {
@@ -57,16 +61,14 @@ export async function answerChatTurn(
 	context: Context,
 	{ page, authorization, chatTurnPayload }: AnswerChatTurnOptions,
 ): Promise<Response> {
-	// load the podcast episode chapter that a podcast player question names. a chapter off this topic's published podcast
-	// episode rejects the chat turn before any model call
+	// load what the question was asked from, if it names a podcast episode chapter or a Topic Post. one that is not on
+	// this topic rejects the chat turn before any model call
 	const { question, history, attachments, isSpoken } = chatTurnPayload
-	const podcastEpisodeChapter =
-		page.topicId !== undefined && chatTurnPayload.podcastEpisodeChapter
-			? await loadPodcastEpisodeChapterContext({ topicId: page.topicId, ...chatTurnPayload.podcastEpisodeChapter })
-			: undefined
-	if (podcastEpisodeChapter === null) {
+	const chatTurnSubject = await loadChatTurnSubject({ page, chatTurnPayload, userId: authorization.userId })
+	if (!chatTurnSubject) {
 		return context.json({ error: "not found" }, 404)
 	}
+	const { podcastEpisodeChapter, topicPost } = chatTurnSubject
 
 	// read each attached file into its text, and reject the chat turn with why if a file cannot be read
 	const resolvedChatAttachments = await resolveChatAttachments(attachments)
@@ -111,8 +113,10 @@ export async function answerChatTurn(
 	const isTopicEditor = page.topicId !== undefined && authorization.canEditTopic
 
 	// take the proposal this message answers, and apply it if the message agrees. only the new-topic chat and a topic
-	// the user may edit hold proposals, and a question asked from the podcast player answers none
-	const isProposalPage = !podcastEpisodeChapter && (page.newTopic || isTopicEditor)
+	// the user may edit hold proposals, and a question asked from the podcast player or from a Topic Post's page
+	// answers none
+	const isToolTurn = !podcastEpisodeChapter && !topicPost
+	const isProposalPage = isToolTurn && (page.newTopic || isTopicEditor)
 	const chatProposalResult = isProposalPage
 		? await answerChatProposal({
 				userId,
@@ -127,9 +131,10 @@ export async function answerChatTurn(
 		: undefined
 
 	// stream the reply from the page's own material: one topic, the team's held topics, or the topic draft. a podcast
-	// player question takes no tools and ranks findings against its chapter title and its words
+	// player question takes no tools and ranks findings against its chapter title and its words, and a question asked
+	// from a Topic Post's page takes no topic tool
 	const chatReply = await streamChatReply({
-		...(podcastEpisodeChapter
+		...(!isToolTurn
 			? {}
 			: toChatTurnTools({
 					userId,
@@ -140,6 +145,7 @@ export async function answerChatTurn(
 					topicDraft,
 				})),
 		podcastEpisodeChapter,
+		topicPost,
 		retrievalQuestion: podcastEpisodeChapter ? `${podcastEpisodeChapter.chapterTitle}\n${question}` : undefined,
 		topicId: page.topicId,
 		teamId: page.teamId,
@@ -177,6 +183,8 @@ export async function answerChatTurn(
 		isPersisted: authorization.isPersisted,
 		isSpoken,
 		podcastEpisodeChapter,
+		topicPostId: topicPost?.topicPostId,
+		isTopicOwner: authorization.isTopicOwner,
 		toolCalls,
 		analyticsProperties,
 		litellmApiKey,
@@ -184,6 +192,43 @@ export async function answerChatTurn(
 		agreementTokens: chatProposalResult?.agreementTokens ?? 0,
 		reservation,
 	})
+}
+
+// what a topic chat turn was asked from: the podcast episode chapter that was playing, or the Topic Post whose page
+// it was asked from. neither for a question asked from the chat
+type ChatTurnSubject = { podcastEpisodeChapter?: PodcastEpisodeChapterContext; topicPost?: TopicPostChatContext }
+
+// the page, the chat turn, and who asks
+type LoadChatTurnSubjectOptions = { page: ChatPage; chatTurnPayload: TopicChatTurnPayload; userId: string }
+
+// load what a chat turn was asked from. null for a chapter off the topic's published podcast episode, and for a Topic
+// Post that is a draft, gone, or on another topic
+async function loadChatTurnSubject({
+	page,
+	chatTurnPayload,
+	userId,
+}: LoadChatTurnSubjectOptions): Promise<ChatTurnSubject | null> {
+	// only a topic's chat names either
+	const { topicId } = page
+	if (topicId === undefined) {
+		return {}
+	}
+
+	// the chapter that was playing
+	if (chatTurnPayload.podcastEpisodeChapter) {
+		const podcastEpisodeChapter = await loadPodcastEpisodeChapterContext({
+			topicId,
+			...chatTurnPayload.podcastEpisodeChapter,
+		})
+		return podcastEpisodeChapter && { podcastEpisodeChapter }
+	}
+
+	// the post whose page the question came from
+	if (chatTurnPayload.topicPostId) {
+		const topicPost = await loadTopicPostChatContext({ topicId, topicPostId: chatTurnPayload.topicPostId, userId })
+		return topicPost && { topicPost }
+	}
+	return {}
 }
 
 // the response to a chat turn with a file it could not read, naming the rejection, with a retry time for a busy one

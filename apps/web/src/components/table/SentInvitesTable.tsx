@@ -77,12 +77,12 @@ export function SentInvitesTable({
 								<Switch
 									checked
 									onCheckedChange={() => setDeleteInvite(row)}
-									aria-label={`Withdraw the invitation to ${toInviteeLabel(row)}`}
+									aria-label={`Withdraw the invite to ${toInviteeLabel(row)}`}
 								/>
 							</span>
 						</TooltipTrigger>
 						<TooltipContent>
-							Withdraw the invitation to <span className="font-semibold">{toInviteeLabel(row)}</span>
+							Withdraw the invite to <span className="font-semibold">{toInviteeLabel(row)}</span>
 						</TooltipContent>
 					</Tooltip>
 				)

@@ -4,7 +4,7 @@ import type { Meta, StoryObj } from "@storybook/react-native"
 import { Sheet } from "@/components/common/Sheet"
 import { PERSONAL_SOURCES_ELEMENTS } from "./personalSourcesElements"
 import { TopicInfoButton, TopicInfoContent } from "./TopicInfo"
-import { STORY_TOPIC_PAGE } from "./topicPageStories"
+import { STORY_FILM_TOPIC_PAGE, STORY_TOPIC_PAGE } from "./topicPageStories"
 
 // open the complete topic note from its real trigger
 const meta = {
@@ -23,6 +23,9 @@ export default meta
 type Story = StoryObj<typeof meta>
 export const Default: Story = {}
 export const WithPodcast: Story = { args: { topic: STORY_TOPIC_PAGE } }
+
+// the latest podcast episode with a ready film, which shows the film above its row
+export const WithFilm: Story = { args: { topic: STORY_FILM_TOPIC_PAGE } }
 export const Private: Story = { args: { topic: toTestTopicFeed({ visibility: "private" }) } }
 export const Empty: Story = { args: { topic: toTestTopicFeed({ findings: [], scanSummary: null, owner: null }) } }
 export const LongNotes: Story = {

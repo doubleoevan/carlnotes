@@ -3,33 +3,34 @@ import {
 	PodcastThemeSongCredits as SharedPodcastThemeSongCredits,
 } from "@carlnotes/core/components/PodcastThemeSongCredits"
 import { cn } from "@carlnotes/nightshift/classNames"
+import { Headphones } from "lucide-react"
 import { NoteIcon } from "@/components/branding/NoteIcon"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { ScrollBox } from "@/components/common/ScrollBox"
 import { Popover, PopoverCloseButton, PopoverContent, PopoverTrigger } from "@/components/primitives/popover"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import {
-	ICON_TILE_BUTTON_CLASS,
 	POPOVER_HEADING_CLASS,
 	POPOVER_PANEL_CLASS,
 	STANDALONE_LINK_CLASS,
+	TITLE_ICON_BUTTON_CLASS,
 } from "@/lib/styleClasses"
 
 /**
- * The note icon beside the podcast's name or a podcast episode's title, whose popup credits the theme song.
+ * The headphones tile right after a film section's or a podcast section's title, whose popup credits the theme song.
  */
-export function PodcastThemeSongNote({ className }: { className?: string }) {
+export function PodcastThemeSongNote() {
 	return (
 		<Popover>
 			<Tooltip>
 				<TooltipTrigger asChild>
 					<PopoverTrigger
-						// keep the click from the card or the heading behind the note
+						// keep the click from the section's title behind the tile
 						onClick={(event) => event.stopPropagation()}
-						className={cn(ICON_TILE_BUTTON_CLASS, "ml-2 hover:opacity-75", className)}
+						className={cn(TITLE_ICON_BUTTON_CLASS, "shrink-0 hover:opacity-75")}
 						aria-label="Theme song credits"
 					>
-						<NoteIcon />
+						<NoteIcon icon={Headphones} />
 					</PopoverTrigger>
 				</TooltipTrigger>
 				<TooltipContent side="top">Theme song credits</TooltipContent>

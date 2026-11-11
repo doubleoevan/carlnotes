@@ -1,10 +1,12 @@
 // the activity a notifications email reads: who reacted to, commented on, replied to, or mentioned each recipient
 import type { REACTION_TYPE_LABELS } from "@carlnotes/contracts/social"
+import { toCommentFirstLine } from "@carlnotes/contracts/socialText"
 import { db, isFindingShown } from "@carlnotes/db"
 import { toNoUserBlockBetweenFilter } from "@carlnotes/db/contentFilters"
 import { podcastEpisodes } from "@carlnotes/db/schema/podcast"
 import { findings, resources } from "@carlnotes/db/schema/scans"
 import { commentMentions, comments, reactions } from "@carlnotes/db/schema/social"
+import { topicPosts } from "@carlnotes/db/schema/topicPosts"
 import { topics } from "@carlnotes/db/schema/topics"
 import { users } from "@carlnotes/db/schema/users"
 import { type NamedTopic, namedTopicColumns } from "@carlnotes/db/topicPermissions"
@@ -24,10 +26,11 @@ export type NotificationsEmailRow = {
 	reactionType: keyof typeof REACTION_TYPE_LABELS | null
 	text: string | null
 	createdAt: Date
-	// the Topic, and the Finding or the Podcast Episode on it that the activity names, if it names one
+	// the Topic, and the Finding, the Podcast Episode, or the Topic Post on it that the activity names, if it names one
 	topic: NamedTopic
 	findingId: string | null
 	findingTitle: string | null
+	topicPost: { id: string; title: string } | null
 	// the publish time gates the Podcast Episode behind a subscription's activation
 	podcastEpisode: {
 		id: string
@@ -38,7 +41,7 @@ export type NotificationsEmailRow = {
 	} | null
 }
 
-// the columns every activity read selects of the Topic and of the Finding or Podcast Episode on it
+// the columns every activity read selects of the Topic and of the Finding, Podcast Episode, or Topic Post on it
 const emailTargetColumns = {
 	topic: namedTopicColumns,
 	findingId: findings.id,
@@ -50,6 +53,13 @@ const emailTargetColumns = {
 		episodeNumber: podcastEpisodes.episodeNumber,
 		publishedAt: podcastEpisodes.publishedAt,
 	},
+	topicPost: { id: topicPosts.id, title: topicPosts.title },
+}
+
+// whether a recipient is someone other than the author of the Topic Post an activity is on, who already reads the
+// activity as one on their post
+function toNotTopicPostAuthorFilter(recipientUserId: Column): SQL {
+	return sql`(${topicPosts.authorUserId} is null or ${recipientUserId} <> ${topicPosts.authorUserId})`
 }
 
 // the columns of a read of reactions, and of a read of comments
@@ -67,15 +77,24 @@ const commentEmailColumns = {
 }
 
 /**
- * Loads the reactions and comments other people left on each recipient's Topics, Findings, and published Podcast
- * Episodes, the reactions and replies to their comments, and the comments that mention them, all since a time, by
- * authors under no admin block and with no user block between them and the recipient.
+ * Loads the reactions and comments other people left on each recipient's Topics, Findings, published Podcast
+ * Episodes, and Topic Posts, the reactions and replies to their comments, and the comments that mention them, all
+ * since a time, by authors under no admin block and with no user block between them and the recipient. A Topic Post's
+ * activity goes to its Topic's owner and to its author, once if they are one person.
  */
 export async function loadNotificationsEmailRows(
 	since: Date,
 	recipientUserIds: string[],
 ): Promise<NotificationsEmailRow[]> {
-	const [reactionRows, commentRows, mentionRows, commentReactionRows, replyRows] = await Promise.all([
+	const [
+		reactionRows,
+		commentRows,
+		mentionRows,
+		commentReactionRows,
+		replyRows,
+		topicPostReactionRows,
+		topicPostCommentRows,
+	] = await Promise.all([
 		withEmailTarget(
 			db
 				.select({ recipientUserId: topics.ownerId, ...reactionEmailColumns })
@@ -106,7 +125,8 @@ export async function loadNotificationsEmailRows(
 				toShownEmailRowFilter(topics.ownerId, authors.id),
 			),
 		),
-		// a mention of the Topic's owner is already in their comments, and nobody mentions themself
+		// a mention of the Topic's owner, or of the Topic Post's author, is already in their comments, and nobody
+		// mentions themself
 		withEmailTarget(
 			db
 				.select({ recipientUserId: commentMentions.mentionedUserId, ...commentEmailColumns })
@@ -121,6 +141,7 @@ export async function loadNotificationsEmailRows(
 				inArray(commentMentions.mentionedUserId, recipientUserIds),
 				ne(authors.id, commentMentions.mentionedUserId),
 				ne(commentMentions.mentionedUserId, topics.ownerId),
+				toNotTopicPostAuthorFilter(commentMentions.mentionedUserId),
 				toShownEmailRowFilter(commentMentions.mentionedUserId, authors.id),
 			),
 		),
@@ -141,7 +162,8 @@ export async function loadNotificationsEmailRows(
 				toShownEmailRowFilter(targetComments.authorUserId, reactions.userId),
 			),
 		),
-		// a reply goes to the author of the comment it answers. the Topic's owner already reads it as a comment
+		// a reply goes to the author of the comment it answers. the Topic's owner, and the Topic Post's author, already
+		// read it as a comment
 		withEmailTarget(
 			db
 				.select({ recipientUserId: sql<string>`${targetComments.authorUserId}`, ...commentEmailColumns })
@@ -156,24 +178,69 @@ export async function loadNotificationsEmailRows(
 				inArray(targetComments.authorUserId, recipientUserIds),
 				ne(authors.id, targetComments.authorUserId),
 				ne(targetComments.authorUserId, topics.ownerId),
+				toNotTopicPostAuthorFilter(targetComments.authorUserId),
 				toShownEmailRowFilter(targetComments.authorUserId, authors.id),
 			),
 		),
+		// a reaction to a Topic Post goes to its author too, unless its author owns the Topic and already reads it
+		withEmailTarget(
+			db
+				.select({ recipientUserId: sql<string>`${topicPosts.authorUserId}`, ...reactionEmailColumns })
+				.from(reactions)
+				.$dynamic(),
+			reactions,
+			reactions.userId,
+		).where(
+			and(
+				gt(reactions.createdAt, since),
+				inArray(topicPosts.authorUserId, recipientUserIds),
+				ne(reactions.userId, topicPosts.authorUserId),
+				ne(topicPosts.authorUserId, topics.ownerId),
+				toShownEmailRowFilter(topicPosts.authorUserId, reactions.userId),
+			),
+		),
+		// and so does a comment on one
+		withEmailTarget(
+			db
+				.select({ recipientUserId: sql<string>`${topicPosts.authorUserId}`, ...commentEmailColumns })
+				.from(comments)
+				.$dynamic(),
+			comments,
+			comments.authorUserId,
+		).where(
+			and(
+				gt(comments.createdAt, since),
+				inArray(topicPosts.authorUserId, recipientUserIds),
+				ne(authors.id, topicPosts.authorUserId),
+				ne(topicPosts.authorUserId, topics.ownerId),
+				toShownEmailRowFilter(topicPosts.authorUserId, authors.id),
+			),
+		),
 	])
+
+	// a Topic Post's author reads its reactions and comments as the Topic's owner reads theirs
+	const allReactionRows = [...reactionRows, ...topicPostReactionRows]
+	const allCommentRows = [...commentRows, ...topicPostCommentRows]
 	return [
-		...reactionRows.map((reactionRow) => ({ ...reactionRow, kind: "reaction" as const, text: null })),
+		...allReactionRows.map((reactionRow) => ({ ...reactionRow, kind: "reaction" as const, text: null })),
 		...commentReactionRows.map((reactionRow) => ({ ...reactionRow, kind: "commentReaction" as const, text: null })),
 		...replyRows.map((replyRow) => ({ ...replyRow, kind: "reply" as const, reactionType: null })),
-		...commentRows.map((commentRow) => ({ ...commentRow, kind: "comment" as const, reactionType: null })),
-		...mentionRows.map((mentionRow) => ({ ...mentionRow, kind: "mention" as const, reactionType: null })),
+		...allCommentRows.map((commentRow) => ({ ...commentRow, kind: "comment" as const, reactionType: null })),
+		// a mention quotes its Comment's first line alone
+		...mentionRows.map((mentionRow) => ({
+			...mentionRow,
+			text: toCommentFirstLine(mentionRow.text),
+			kind: "mention" as const,
+			reactionType: null,
+		})),
 	]
 }
 
-// an activity read joined to its author, under no admin block, and to what the row hangs on: a Topic, or a Finding or
-// a Podcast Episode of one
+// an activity read joined to its author, under no admin block, and to what the row hangs on: a Topic, or a Finding,
+// a Podcast Episode, or a Topic Post of one
 function withEmailTarget<ActivityQuery extends PgSelect>(
 	activityQuery: ActivityQuery,
-	targetRow: { findingId: Column; podcastEpisodeId: Column; topicId: Column },
+	targetRow: { findingId: Column; podcastEpisodeId: Column; topicId: Column; postId: Column },
 	authorUserId: Column,
 ): ActivityQuery {
 	return activityQuery
@@ -181,9 +248,10 @@ function withEmailTarget<ActivityQuery extends PgSelect>(
 		.leftJoin(findings, eq(findings.id, targetRow.findingId))
 		.leftJoin(resources, eq(resources.id, findings.resourceId))
 		.leftJoin(podcastEpisodes, eq(podcastEpisodes.id, targetRow.podcastEpisodeId))
+		.leftJoin(topicPosts, eq(topicPosts.id, targetRow.postId))
 		.innerJoin(
 			topics,
-			sql`${topics.id} = coalesce(${targetRow.topicId}, ${findings.topicId}, ${podcastEpisodes.topicId})`,
+			sql`${topics.id} = coalesce(${targetRow.topicId}, ${findings.topicId}, ${podcastEpisodes.topicId}, ${topicPosts.topicId})`,
 		) as unknown as ActivityQuery
 }
 

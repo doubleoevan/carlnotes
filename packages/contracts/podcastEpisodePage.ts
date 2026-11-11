@@ -32,10 +32,18 @@ export const podcastEpisodePageResponse = z.object({
 	podcastEpisodeImageOrigin: z.enum(topicImageOrigins).nullable(),
 	podcastEpisodeImagePrompt: z.string().nullable(),
 	imageRegenerationQuota: imageRegenerationQuota.nullable(),
+	// the origin of the film's own image and the image prompt it was drawn from, both null for anyone but an editor
+	// and for a film with no image of its own. both are optional, so a released app reads a page without them
+	topicPodcastEpisodeVideoImageOrigin: z.enum(topicImageOrigins).nullable().optional(),
+	topicPodcastEpisodeVideoImagePrompt: z.string().nullable().optional(),
 	// this episode's position among the home podcast episodes and the home podcast episodes themselves, both null for
 	// anyone but an admin
 	homeOrder: z.number().nullable(),
 	homePodcastEpisodes: z.array(homePodcastEpisode).nullable(),
+	// this podcast episode's film's position among the home films and the home films themselves, both null for anyone
+	// but an admin. both are optional, so a released app reads a page without them
+	topicPodcastEpisodeVideoHomeOrder: z.number().nullable().optional(),
+	homeTopicPodcastEpisodeVideos: z.array(homePodcastEpisode).nullable().optional(),
 	transcript: z.array(podcastEpisodeTranscriptBlock),
 	// up to fifty of the topic's other published podcast episodes that the user may listen to, newest first, and up to
 	// fifty published podcast episodes of other topics that the user may listen to, most related first

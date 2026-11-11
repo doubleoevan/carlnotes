@@ -36,7 +36,7 @@ export function EditProfileModal({
 			<DialogContent className="sm:max-w-md">
 				<DialogTitle className="flex items-center gap-2">
 					<User className="size-5" />
-					Edit profile
+					Edit Café
 				</DialogTitle>
 				<ProfileFields userId={userId} username={username} usernameChange={usernameChange} />
 				<DialogFooter>

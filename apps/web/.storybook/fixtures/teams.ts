@@ -62,7 +62,16 @@ export function toStoryTeamMember(
  * Returns the team page a row's subtables load, with no uploaded avatar and no chat mentions.
  */
 export function toStoryTeamPage(teamPageFields: ToStoryTeamPageOptions): TeamPageResponse {
-	return { ...teamPageFields, avatarVersion: null, hasRequestedToJoin: false, hiddenMemberCount: 0, chatMentions: [] }
+	return {
+		...teamPageFields,
+		avatarVersion: null,
+		hasRequestedToJoin: false,
+		hiddenMemberCount: 0,
+		chatMentions: [],
+		topicCards: [],
+		podcastEpisodeCards: [],
+		topicPostCards: [],
+	}
 }
 
 /**

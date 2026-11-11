@@ -3,10 +3,12 @@
 import type { TopicDraft, UpdateTopicPayload } from "@carlnotes/contracts/topicPayloads"
 import { type DbTransaction, db } from "@carlnotes/db"
 import { assertPersonalSourcesConverted, lockPersonalSourcesTopic } from "@carlnotes/db/personalSourcesLocks"
+import { releaseTopicProfileOrders } from "@carlnotes/db/profileOrder"
 import { invites } from "@carlnotes/db/schema/invites"
 import { scans } from "@carlnotes/db/schema/scans"
 import { sources, subscriptions, topics } from "@carlnotes/db/schema/topics"
 import { users } from "@carlnotes/db/schema/users"
+import { clearUnseenCommentMentions, loadTopicMentionedUserIds } from "@carlnotes/db/unseenCommentMentions"
 import { addViewer } from "@carlnotes/db/viewerCounts"
 import { topicImageModel } from "@carlnotes/models/topicImageModel"
 import { startTopicImageRender } from "@carlnotes/pipeline/topicImages/topicImageRenders"
@@ -297,6 +299,7 @@ export async function updateTopic(
 	const podcastNames = await toPodcastNames(payload.sources)
 	// whether the visibility change released the topic's home order inside the transaction
 	let isHomeOrderReleased = false
+	let releasedProfileUserIds: string[] = []
 	const removedSourceKinds = await db.transaction(async (transaction) => {
 		// serialize confirmation with publication and invitation reconciliation
 		await lockPersonalSourcesTopic(transaction, topicId)
@@ -321,9 +324,11 @@ export async function updateTopic(
 		// save a prompt version when the prompt changed
 		await savePromptVersion(transaction, { topicId, prompt, userId, origin: "editor", previousPrompt: topic.prompt })
 
-		// only a public topic can be pinned to the home page, so changing the visibility from public drops it from the home topics
+		// only a public topic can be pinned, so changing the visibility from public drops it from the home topics and
+		// from its owner's profile pins
 		if (visibility !== "public") {
 			isHomeOrderReleased = await releaseHomeOrder(topicId, transaction)
+			releasedProfileUserIds = await releaseTopicProfileOrders(topicId, transaction)
 		}
 
 		// drop the removed emails. only invites naming an address are reconciled, and a declined row stays for reputation
@@ -361,9 +366,20 @@ export async function updateTopic(
 	})
 
 	// drop the topic's cached visitor copies, and the edge's copies of its image files if it left the public set
-	await clearVisitorTopicCaches({ topicId, visibility, previousVisibility: topic.visibility, isHomeOrderReleased })
+	await clearVisitorTopicCaches({
+		topicId,
+		visibility,
+		previousVisibility: topic.visibility,
+		isHomeOrderReleased,
+		releasedProfileUserIds,
+	})
 	if (topic.visibility === "public" && visibility !== "public") {
 		await purgeEdgeCacheTagAfterDeletion(toTopicImageCacheTag(topicId))
+	}
+
+	// a changed visibility changes who may read the topic's comments, so clear the cached mentions of its mentioned users
+	if (visibility !== topic.visibility) {
+		await clearUnseenCommentMentions(await loadTopicMentionedUserIds(topicId))
 	}
 
 	// check whatever url Sources this edit added, now that the rows are committed

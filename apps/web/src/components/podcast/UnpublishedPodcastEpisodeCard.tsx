@@ -17,12 +17,12 @@ const elements: UnpublishedPodcastEpisodeCardElements = {
 			className={cn("border-separator shadow-raised size-24 border sm:size-36", isRecording && COVER_RECORDING_CLASS)}
 		/>
 	),
-	Recording: () => (
+	ProgressLine: ({ emoji, text }) => (
 		<p className="text-base font-semibold sm:text-lg">
 			<span aria-hidden="true" className="mr-1.5">
-				🤫
+				{emoji}
 			</span>
-			<span className="shimmer-text">Carl and Vienna are recording...</span>
+			<span className="shimmer-text">{text}</span>
 		</p>
 	),
 }

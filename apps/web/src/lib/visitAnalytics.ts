@@ -4,7 +4,8 @@ import type { AnalyticsEventProperties, VisitAnalyticsEvent } from "@carlnotes/c
 import { toClientTelemetry } from "@carlnotes/contracts/clientTelemetry"
 import type { PodcastEpisode } from "@carlnotes/contracts/podcast"
 import {
-	toPublicPodcastEpisodeProperties,
+	type FilmVisitEvents,
+	toPlayerVisitEvent,
 	toReportedEvent as toReportedVisitEvent,
 } from "@carlnotes/contracts/visitAnalytics"
 import posthog, { type CaptureResult } from "posthog-js"
@@ -69,13 +70,26 @@ export function captureVisitEvent(event: VisitAnalyticsEvent, properties: Analyt
 }
 
 /**
+ * Reports one film visit event with only the ids and short codes its type allows.
+ */
+export function captureFilmVisitEvent<Event extends keyof FilmVisitEvents>(
+	event: Event,
+	properties: FilmVisitEvents[Event],
+): void {
+	captureVisitEvent(event, properties)
+}
+
+/**
  * Reports a play or a finish of an episode, naming the episode and its topic only if the topic is public.
  */
 export function captureEpisodeVisitEvent(
 	event: "visit_episode_played" | "visit_episode_completed",
 	podcastEpisode: PodcastEpisode,
 ): void {
-	captureVisitEvent(event, toPublicPodcastEpisodeProperties(podcastEpisode))
+	const playerVisitEvent = toPlayerVisitEvent(event, podcastEpisode)
+	if (playerVisitEvent) {
+		captureVisitEvent(playerVisitEvent.event, playerVisitEvent.properties)
+	}
 }
 
 // share the privacy policy with native visit analytics

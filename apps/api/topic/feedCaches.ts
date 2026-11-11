@@ -1,13 +1,13 @@
 // the Redis keys that the topic feeds and topic pages are cached under, and the deletes that clear them
 import type { Visibility } from "@carlnotes/contracts/enums"
 import { deleteRedisKeys } from "@carlnotes/db/redis"
-import { purgeHomeAtEdge } from "../edgeCache"
+import { purgeHomeAtEdge, purgeProfileAtEdge } from "../edgeCache"
 
 // the Redis key every replica reads the home and popular topic id lists through
 export const TOPIC_SECTION_IDS_KEY = "home-and-popular-topic-ids"
 
 // the Redis key every replica reads the ids of the home page's cards through
-export const HOME_CARD_IDS_KEY = "home-topic-and-podcast-episode-ids"
+export const HOME_CARD_IDS_KEY = "home-card-ids"
 
 // the Redis key prefix the visitors' feed is served through, one key per view
 const VISITOR_TOPIC_FEED_KEY_PREFIX = "visitor-topic-feed"
@@ -16,12 +16,14 @@ const VISITOR_TOPIC_FEED_KEY_PREFIX = "visitor-topic-feed"
 export const TOPIC_PAGE_KEY_PREFIX = "topic-response"
 
 // the topic whose cached visitor copies to drop, its visibility after the change, its visibility before the change if
-// the change may have set a new one, and whether the change released its home order
+// the change may have set a new one, whether the change released its home order, and the users whose profile pins the
+// change released
 type ClearVisitorTopicCachesOptions = {
 	topicId: string
 	visibility: Visibility
 	previousVisibility?: Visibility
 	isHomeOrderReleased?: boolean
+	releasedProfileUserIds?: string[]
 }
 
 /**
@@ -39,15 +41,19 @@ export async function clearVisitorTopicCaches({
 	visibility,
 	previousVisibility = visibility,
 	isHomeOrderReleased = false,
+	releasedProfileUserIds = [],
 }: ClearVisitorTopicCachesOptions): Promise<void> {
 	// the visitors' feeds list public topics with their sources, so a change to a topic that was or is public drops them
 	const isListingChanged = isHomeOrderReleased || visibility === "public" || previousVisibility === "public"
 	await deleteRedisKeys(toVisitorTopicPageKey(topicId), ...(isListingChanged ? toSharedTopicFeedKeys() : []))
 
-	// a released pin changes the home's home topic and podcast cards
+	// a released pin changes the home's topic, podcast episode, and Topic Post cards
 	if (isHomeOrderReleased) {
 		await purgeHomeAtEdge()
 	}
+
+	// a released profile pin changes the profile page of the person who pinned it
+	await Promise.all(releasedProfileUserIds.map(purgeProfileAtEdge))
 }
 
 /**

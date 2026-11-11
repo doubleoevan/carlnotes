@@ -38,7 +38,11 @@ turns a counted person into the element their count adds: `u:<userId>` for a use
 the address and the user agent through `hmac.ts`, never stored. `voiceChat.ts` reads the transcription
 model from `CHAT_TRANSCRIPTION_MODEL` and says whether voice chat is on, which needs that model and the podcast speech
 model. `podcastEpisodeSettings.ts` reads `PODCAST_SPEECH_MODEL`, which defaults to `gemini-3.8-flash-tts`, and Podcast
-Episodes are off if it is set empty. `podcastCoverPaths.ts` signs a cover's key through `hmac.ts` with
+Episodes are off if it is set empty. It also reads the film settings: `TOPIC_PODCAST_EPISODE_VIDEO_CONCURRENCY` and
+`TOPIC_PODCAST_EPISODE_VIDEO_BACKFILL_CONCURRENCY`, both 1 by default, and the imagined image settings,
+`TOPIC_PODCAST_EPISODE_VIDEO_IMAGINED_CHAPTER_IMAGE_MINIMUM_SECONDS`, the 90 seconds a chapter with no link preview
+image runs before it may get an imagined image, and `TOPIC_PODCAST_EPISODE_VIDEO_IMAGINED_CHAPTER_IMAGE_LIMIT`, the 4
+imagined images one film gets at most, where 0 turns them off. `podcastCoverPaths.ts` signs a cover's key through `hmac.ts` with
 `toPodcastCoverKey` and builds its path with `toPodcastCoverPath`, over the sizes and the `PodcastCover` shape in
 `@carlnotes/contracts/podcastEpisodes`. `toLatestPodcastCoverPath` signs the kind and id alone, so the summary email's
 cover keeps loading after the podcast episode publishes. `docsContent.ts` names the docs markdown folder that the api's documents and

@@ -14,7 +14,7 @@ import {
 } from "@/components/topic/TopicTutorialVideoDialog"
 import { useIsSignedInBeforeSession } from "@/hooks/useIsSignedInBeforeSession"
 import { useTheme } from "@/hooks/useTheme"
-import { HERO_BUTTON_HOVER_CLASS, LOGO_CLASS } from "@/lib/styleClasses"
+import { HERO_BUTTON_HOVER_CLASS, LOGO_CLASS, NARROW_SCREEN_HIDDEN_CLASS } from "@/lib/styleClasses"
 import { toLinkClickHandler, toSafeRedirectPath } from "@/lib/utils"
 import { useTopicFeed } from "@/providers/TopicFeedProvider"
 import { clearSearchBar, useSearchBarPath } from "@/stores/searchBarStore"
@@ -58,8 +58,9 @@ export function Header() {
 	return (
 		<header className="bg-hero text-hero-foreground relative overflow-hidden">
 			<div className={cn("relative z-10 mx-auto max-w-5xl px-safe pt-5", !isHeroShown && "pb-10")}>
-				{/* the top bar with the brand icon on the left and the menu on the right */}
-				<div className="flex items-center justify-between">
+				{/* the top bar with the brand icon on the left and the menu on the right. without JavaScript a narrow screen
+				    wraps the menu items onto a second row */}
+				<div className="flex flex-wrap items-center justify-between gap-y-2">
 					{/* the brand, with the video's button after it, nudged down to the logo's letters */}
 					<div className="flex items-center gap-2">
 						{/* the brand links to the search bar's search, or home, emptying the bar from the search page and reheating
@@ -77,8 +78,9 @@ export function Header() {
 							className="size-7 -translate-y-px"
 						/>
 					</div>
-					{/* the desktop menu items, swapped for the hamburger menu on small screens */}
-					<div className="hidden items-center gap-1 sm:flex">
+					{/* the desktop menu items, swapped for the hamburger menu on small screens with JavaScript. the hamburger
+					    menu opens by script, so a browser without JavaScript keeps the items at every width */}
+					<div className={cn("flex flex-wrap items-center gap-1", NARROW_SCREEN_HIDDEN_CLASS)}>
 						<ThemeToggle isDark={isDark} onToggle={toggleTheme} />
 						{/* topics and plans move into the user menu once signed in */}
 						{!session && (

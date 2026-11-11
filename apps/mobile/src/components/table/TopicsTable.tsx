@@ -110,7 +110,7 @@ function TopicPopover({ topic }: { topic: Topic }) {
 			{isOpen && (
 				<Sheet title="Topic roast" onClose={() => setIsOpen(false)}>
 					{query.data?.status === "visible" ? (
-						<TopicInfoContent topic={query.data.topic} />
+						<TopicInfoContent topic={query.data.topic} onClose={() => setIsOpen(false)} />
 					) : query.isPending ? (
 						<CoffeeLoading />
 					) : (

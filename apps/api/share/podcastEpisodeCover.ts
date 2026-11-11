@@ -4,11 +4,11 @@
 import { FULL_PODCAST_COVER_SIZE, type PodcastCover } from "@carlnotes/contracts/podcastEpisodes"
 import { getAttachmentBytes } from "@carlnotes/db/store"
 import { latte } from "@carlnotes/nightshift/colors"
+import { type CardElement, toImageDataUri } from "@carlnotes/pipeline/cardElementPng"
 import {
 	toPodcastEpisodeImageOriginalKey,
 	toTopicImageOriginalKey,
 } from "@carlnotes/pipeline/topicImages/topicImageFiles"
-import { type CardElement, toImageDataUri } from "./previewImage"
 
 // a podcast episode's cover, the episode kind of a cover
 export type PodcastEpisodeCover = Extract<PodcastCover, { kind: "episode" }>

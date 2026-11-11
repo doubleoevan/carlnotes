@@ -8,16 +8,19 @@ import {
 	useTeamMentions,
 	useTopicMentions,
 } from "../stores/chatRoomStore"
+import { useCommentMentions, usePageCommentMentions } from "../stores/commentMentionStore"
 import { useAllNoteBadges, usePageNoteBadges } from "../stores/noteBadgeStore"
 import { useOpenReportCount } from "../stores/openReportStore"
 import { useTopicInviteBadges } from "../stores/topicInviteStore"
 
 /**
- * Reads every unread chat mention, note change, topic invitation, and open report, for a menu trigger's one badge.
+ * Reads every unread chat mention, unseen Comment Mention, note change, topic invitation, and open report, for a menu
+ * trigger's one badge.
  */
 export function useAllUpdateBadges(): UpdateBadges {
 	return {
 		chatMentions: useAllChatMentions(),
+		commentMentions: useCommentMentions(),
 		noteBadges: useAllNoteBadges(),
 		invites: useTopicInviteBadges(),
 		openReportCount: useOpenReportCount(),
@@ -63,7 +66,8 @@ export type PageUpdateBadges = UpdateBadges & {
 }
 
 /**
- * Reads one page's unread chat mentions and note changes: a topic's, or a team's own when topicId is null.
+ * Reads one page's unread chat mentions, unseen Comment Mentions, and note changes: a topic's, or a team's own when
+ * topicId is null. A team's page holds no comment thread.
  */
 export function usePageUpdateBadges(topicId: string | null, teamId: string | undefined): PageUpdateBadges {
 	// the unread chat mentions for this page, already minus the chat rooms opened this session
@@ -73,8 +77,13 @@ export function usePageUpdateBadges(topicId: string | null, teamId: string | und
 
 	// the notes waiting on the same page, already minus the ones opened this session
 	const noteBadges = usePageNoteBadges(topicId, teamId)
+
+	// the mentions in the topic's own thread and its findings' threads
+	const topicCommentMentions = usePageCommentMentions({ kind: "topic", id: topicId ?? "" })
+	const commentMentions = topicId ? topicCommentMentions : []
 	return {
 		chatMentions,
+		commentMentions,
 		noteBadges,
 		invites: [],
 		hasChatMention: chatMentions.length > 0,

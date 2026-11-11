@@ -39,7 +39,11 @@ session-only account routes. The one-time key response must remain in the curren
   keeps the gate cookie for the sign-up request.
 - Most clients build on `apiClient()`. Some calls, and all of `chatClient.ts`, `flagContentClient.ts`, and
   `voiceClient.ts`, use `fetchApi` instead. `pageHeadClient.ts` reads a page's head data.
-  `updatesClient.ts` requests an updates list.
+  `updatesClient.ts` reads the day's opener. `newsClient.ts` reads one page of the signed-in user's news or of a
+  profile's, and `commentMentionClient.ts` reads the signed-in user's unseen Comment Mentions and marks them seen.
+  `topicPostClient.ts` reads a Topic's Topic Posts and one post, and
+  creates, saves, publishes, and deletes one, returning why a write changed nothing. It also sets a post's place among
+  its author's profile pins, and for an admin its place among the home's pins, with the rows the admin's dialog lists.
   `viewerCountsClient.ts` sends a topic page's view and reads a topic's or a podcast episode's counts, a public
   topic's without credentials so the edge can cache them. `userBlockClient.ts` blocks and unblocks a user and reads the
   block list, `pushClient.ts` registers and unregisters the phone's push token and saves one push preference, passing
@@ -65,6 +69,8 @@ session-only account routes. The one-time key response must remain in the curren
 Default calls retain the existing failure message and resolve after reporting. Opt-in calls reject after reporting so optimistic clients can roll back.
 `clientWrite.ts` owns this shared rejection and error-message policy for Topic and Finding writes.
 Opening a Finding always keeps its background failure silent. Topic-page reads in `topicClient.ts` distinguish visible, gated, and missing responses from transport or server failures.
+`fetchTopicPage` takes `isRelatedTopicsSeparate` for a signed-in page without its related topics, which
+`fetchRelatedTopics` reads.
 `sendFindingFeedback` also accepts named options and opt-in rejection, so a details panel only acknowledges a saved note and retains failed text for retry.
 `topicFindingClient.test.ts` covers successful writes, HTTP and network rejection, silent opens, and failed page reads.
 
@@ -102,3 +108,7 @@ signal, and `fetchApi` checks cancellation after asynchronous session headers, b
 
 `homeClient.ts` reads the home payload, and `topicImageClient.ts` is the editor's image block: the regenerate, the
 render poll, and the upload of a multipart body.
+
+`topicPostClient.ts` also starts a regenerate of a post's discussion. `chatClient.ts` lets a topic's chat page name
+the Topic Post whose page it is open on, and sends the post's id with each question. `podcastEpisodeClient.ts` reads a
+player id that names a Topic Post's discussion from the post, and resolves its audio on the post's route.

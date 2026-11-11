@@ -26,6 +26,7 @@ import {
 import { podcastEpisodes } from "./podcast"
 import { EMBED_DIMENSIONS } from "./scans"
 import { teams } from "./teams"
+import { topicPosts } from "./topicPosts"
 import { topics } from "./topics"
 import { users } from "./users"
 
@@ -65,6 +66,8 @@ export const chatTurns = pgTable(
 		podcastEpisodeId: text("episode_id").references(() => podcastEpisodes.id, { onDelete: "cascade" }),
 		chapterPosition: integer("chapter_position"),
 		podcastAnswerSpeaker: podcastEpisodeSpeaker("podcast_answer_speaker"),
+		// a topic post chat turn's topic post. deleting the post clears it and keeps the row's spend
+		topicPostId: text("topic_post_id").references(() => topicPosts.id, { onDelete: "set null" }),
 		// when the chat turn ran. the monthly spend sum uses it and the chat messages replay in its order
 		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 	},
@@ -87,6 +90,14 @@ export const chatTurns = pgTable(
 		check(
 			"chat_turns_podcast_shape",
 			sql`(${table.kind} = 'podcast' and ${table.podcastEpisodeId} is not null and ${table.chapterPosition} is not null and ${table.podcastAnswerSpeaker} is not null and ${table.topicId} is not null and ${table.teamId} is null) or (${table.kind} <> 'podcast' and ${table.podcastEpisodeId} is null and ${table.chapterPosition} is null and ${table.podcastAnswerSpeaker} is null)`,
+		),
+		// only topic post chat turns name a topic post, so the index leaves out every other row
+		index("chat_turns_topic_post_id_idx").on(table.topicPostId).where(sql`${table.topicPostId} is not null`),
+		// a topic post chat turn is on a topic and no team, and is the only kind that names a topic post. the kind
+		// compares as text. postgres rejects an enum value named in the transaction that adds it
+		check(
+			"chat_turns_topic_post_shape",
+			sql`(${table.kind}::text <> 'topic_post' and ${table.topicPostId} is null) or (${table.kind}::text = 'topic_post' and ${table.topicId} is not null and ${table.teamId} is null)`,
 		),
 		// a voice spend row keeps no text
 		check(

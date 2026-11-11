@@ -3,57 +3,83 @@ import { authClient } from "@carlnotes/client/authClient"
 import { fetchProfile, fetchProfileTeamStatuses } from "@carlnotes/client/profileClient"
 import { fetchAddableTopics } from "@carlnotes/client/topicClient"
 import type { OwnerTopic } from "@carlnotes/contracts/activity"
-import type { ProfileResponse } from "@carlnotes/contracts/profilePage"
+import { type ProfileResponse, toProfilePageTitle } from "@carlnotes/contracts/profilePage"
 import type { ProfileTeamStatus } from "@carlnotes/contracts/profiles"
-import { useUserMenuUpdateBadges } from "@carlnotes/core/hooks/useUpdateCounts"
 import { toProfileChatContext } from "@carlnotes/core/lib/chatConversations"
-import { toCountLabel } from "@carlnotes/core/lib/labels"
+import { sendProfileViewOnce } from "@carlnotes/core/lib/pageViews"
+import {
+	sendProfileOrderMoves,
+	toProfileRankDialogItems,
+	toProfileRankedNouns,
+	toProfileTopicCount,
+} from "@carlnotes/core/lib/profileSections"
+import {
+	type PinnedOrderMove,
+	PROFILE_RANK_OPTION_LABELS,
+	type RankedNoun,
+	toProfileRankDialogLabels,
+} from "@carlnotes/core/lib/rankDialog"
 import { REQUEST_FAILED_TEXT } from "@carlnotes/core/lib/sessionCopy"
 import { toggleUserBlock, toUserBlockLabel } from "@carlnotes/core/lib/userBlocks"
-import { cn } from "@carlnotes/nightshift/classNames"
 import { getRouteApi, useNavigate } from "@tanstack/react-router"
-import { Ban, Pencil, Plus, Users } from "lucide-react"
+import { Ban, Clapperboard, ListOrdered, type LucideIcon, NotebookPen, Pencil, Plus, Users } from "lucide-react"
 import { useCallback, useEffect, useState } from "react"
 import { toast } from "sonner"
 import { EditProfileModal } from "@/components/account/EditProfileModal"
-import { ProfileSummaryLine } from "@/components/account/ProfileSummaryLine"
-import { UserAvatarPicker } from "@/components/avatar/UserAvatarPicker"
-import { UserAvatar } from "@/components/branding/UserAvatar"
-import { AnchorLink } from "@/components/common/AnchorLink"
-import { UpdateCountBadge } from "@/components/common/UpdateCountBadge"
-import { PageSkeleton, TableSkeleton } from "@/components/layout/PageSkeleton"
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/primitives/accordion"
-import { Button } from "@/components/primitives/button"
+import { ProfileHeader } from "@/components/account/ProfileHeader"
+import { ProfileSections } from "@/components/account/ProfileSections"
+import { RankDialog } from "@/components/common/RankDialog"
+import { ViewerCountLine } from "@/components/common/ViewerCountLine"
+import { PageSkeleton } from "@/components/layout/PageSkeleton"
 import { toSignupNavigation } from "@/components/session/signupPrompts"
-import { OwnerTopicsTable } from "@/components/table/OwnerTopicsTable"
-import { TeamsMembershipTable } from "@/components/table/TeamsMembershipTable"
-import { TopicsTable } from "@/components/table/TopicsTable"
 import { EditTeamModal } from "@/components/team/EditTeamModal"
 import { InviteUserToTeamButton } from "@/components/team/InviteUserToTeamButton"
 import { NewTopicButton, useNewTopicDialog } from "@/components/topic/TopicEditorChoiceDialog"
 import { useLoadInBrowser } from "@/hooks/useBrowserValue"
 import { usePageTitle } from "@/hooks/usePageTitle"
-import { CARD_CLASS, PAGE_CLASS, STANDALONE_LINK_CLASS } from "@/lib/styleClasses"
-import { openNewTopicChat, useRegisterChatContext } from "@/stores/chatPanelStore"
+import {
+	PAGE_BUTTON_ROW_CLASS,
+	PAGE_CLASS,
+	PLAIN_PAGE_BUTTON_CLASS,
+	PLAIN_PAGE_BUTTON_ICON_CLASS,
+} from "@/lib/styleClasses"
+import { useRegisterChatContext } from "@/stores/chatPanelStore"
 import { type PageActionOption, useRegisterPageActions } from "@/stores/pageActionsStore"
 
-// the owner's edit and new-team actions, or the block of another person
+// the icon of each pin option in the action menu
+const PROFILE_RANK_OPTION_ICONS: Record<RankedNoun, LucideIcon> = {
+	topics: ListOrdered,
+	films: Clapperboard,
+	podcasts: ListOrdered,
+	posts: NotebookPen,
+}
+
+// the owner's edit, pin, and new-team actions, or the block of another person
 function toProfileActionOptions({
 	isOwnProfile,
 	isUserBlocked,
 	onEditProfile,
+	onRank,
 	onNewTeam,
 	onToggleUserBlock,
 }: {
 	isOwnProfile: boolean
 	isUserBlocked: boolean
 	onEditProfile: () => void
+	onRank: (rankedNoun: RankedNoun) => void
 	onNewTeam: () => void
 	onToggleUserBlock: () => void
 }): PageActionOption[] {
+	// the pins the person may order, in the card sections' order
+	const rankOptions = toProfileRankedNouns(isOwnProfile).map((rankedNoun) => ({
+		label: PROFILE_RANK_OPTION_LABELS[rankedNoun],
+		Icon: PROFILE_RANK_OPTION_ICONS[rankedNoun],
+		onSelect: () => onRank(rankedNoun),
+	}))
 	return isOwnProfile
 		? [
-				{ label: "Edit profile", Icon: Pencil, onSelect: onEditProfile },
+				{ label: "Edit Café", Icon: Pencil, onSelect: onEditProfile },
+				...rankOptions,
 				{ label: "New team", Icon: Plus, onSelect: onNewTeam },
 			]
 		: [{ label: toUserBlockLabel(isUserBlocked), Icon: Ban, onSelect: onToggleUserBlock }]
@@ -72,13 +98,17 @@ export function ProfilePage() {
 	const { data: session } = authClient().useSession()
 	// the profile the route loads on the server, or null after a browser navigation
 	const loadedProfile = profileRoute.useLoaderData({ select: (loaderData) => loaderData?.profile ?? null })
+	// the first page of the week's news, for the profile the server loaded alone
+	const loadedNewsPage = profileRoute.useLoaderData({ select: (loaderData) => loaderData?.newsPage ?? undefined })
 	const [profile, setProfile] = useState<ProfileResponse | null>(loadedProfile)
 	const [isProfileMissing, setIsProfileMissing] = useState(false)
 	const { openNewTopicDialog, newTopicDialog } = useNewTopicDialog()
 	const [isEditingProfile, setIsEditingProfile] = useState(false)
 	const [isNewTeamModalOpen, setIsNewTeamModalOpen] = useState(false)
+	// which of the owner's rank dialogs is open, or null if none is
+	const [rankedNoun, setRankedNoun] = useState<RankedNoun | null>(null)
 	const [addableTopics, setAddableTopics] = useState<{ id: string; name: string }[]>([])
-	usePageTitle(profile?.username ?? null)
+	usePageTitle(profile ? toProfilePageTitle(profile.username) : null)
 
 	// a user on their own profile manages their topics in the owner topics table
 	const isOwnProfile = Boolean(session) && session?.user.id === profile?.userId
@@ -123,11 +153,12 @@ export function ProfilePage() {
 	useRegisterPageActions(
 		profile && session
 			? {
-					page: "Profile",
+					page: "Café",
 					options: toProfileActionOptions({
 						isOwnProfile,
 						isUserBlocked: profile.isBlocked,
 						onEditProfile: () => setIsEditingProfile(true),
+						onRank: setRankedNoun,
 						onNewTeam: () => void handleOpenNewTeamModal(),
 						onToggleUserBlock: () => void handleToggleUserBlock(),
 					}),
@@ -155,6 +186,18 @@ export function ProfilePage() {
 		}
 	}
 
+	// send a rank dialog's moves one at a time, then reload the profile once. a rejected move keeps the dialog open
+	const handleSaveProfileOrder = async (pinnedOrderMoves: PinnedOrderMove[]): Promise<void> => {
+		try {
+			await sendProfileOrderMoves(rankedNoun ?? "topics", pinnedOrderMoves)
+		} catch (error) {
+			toast.error(REQUEST_FAILED_TEXT)
+			throw error
+		} finally {
+			await handleReloadProfile()
+		}
+	}
+
 	// load the topics that the New team modal offers, then open the modal
 	const handleOpenNewTeamModal = async (): Promise<void> => {
 		setAddableTopics(await fetchAddableTopics())
@@ -173,6 +216,14 @@ export function ProfilePage() {
 			})
 	}, [userId])
 	useLoadInBrowser({ pageId: userId, isLoadedOnServer: loadedProfile !== null, loadPage: reloadProfilePage })
+
+	// send the profile page's view once per tab, once the profile has loaded
+	const loadedProfileUserId = profile?.userId
+	useEffect(() => {
+		if (loadedProfileUserId === userId) {
+			sendProfileViewOnce(userId)
+		}
+	}, [userId, loadedProfileUserId])
 
 	// show the missing page or the loading page
 	if (isProfileMissing) {
@@ -197,12 +248,15 @@ export function ProfilePage() {
 
 	return (
 		<main className={PAGE_CLASS}>
-			{/* the profile owner can create a topic. a different user can invite the profile user to a team */}
-			<ProfileHeader
+			{/* anyone can create a topic. the profile owner can start a team, and a different user can invite the profile
+			    user to one */}
+			<ProfilePageHeader
 				profile={profile}
+				topicCount={toProfileTopicCount({ profile, isOwnProfile, ownTopics: topics })}
 				profileTeamStatuses={profileTeamStatuses}
 				onLoadProfileTeamStatuses={handleLoadProfileTeamStatuses}
-				onNewTopic={session?.user.id === profile.userId ? openNewTopicDialog : undefined}
+				onNewTopic={openNewTopicDialog}
+				onNewTeam={session?.user.id === profile.userId ? () => void handleOpenNewTeamModal() : undefined}
 				onInviteUserToTeam={session?.user.id === profile.userId ? undefined : handleInviteUserToTeam}
 			/>
 			{isEditingProfile && (
@@ -227,172 +281,78 @@ export function ProfilePage() {
 				isOwnProfile={isOwnProfile}
 				onLoadTopics={handleLoadTopics}
 				onReloadProfile={handleReloadProfile}
+				firstNewsPage={loadedProfile?.userId === profile.userId ? loadedNewsPage : undefined}
 			/>
+			{/* the owner's list of pinned topics, films, podcast episodes, or Topic Posts, with the ones they may still
+			    pin */}
+			{rankedNoun && isOwnProfile && (
+				<RankDialog
+					labels={toProfileRankDialogLabels(rankedNoun)}
+					{...toProfileRankDialogItems(rankedNoun, profile)}
+					onSave={handleSaveProfileOrder}
+					onClose={() => setRankedNoun(null)}
+				/>
+			)}
+			{/* the profile page's visitors, as its last line */}
+			<ViewerCountLine viewerCountPage={{ kind: "profile", id: profile.userId }} />
 			{/* the dialog that the New Topic button opens */}
 			{newTopicDialog}
 		</main>
 	)
 }
 
-// the topics and teams sections. each is an accordion item containing a table
-export function ProfileSections({
+// the page's button row under the search bar, then the shared header
+function ProfilePageHeader({
 	profile,
-	isOwnProfile,
-	topics,
-	isTopicsLoadFailed,
-	onLoadTopics,
-	onReloadProfile,
-}: {
-	profile: ProfileResponse
-	isOwnProfile: boolean
-	topics: OwnerTopic[] | null
-	isTopicsLoadFailed: boolean
-	onLoadTopics: () => void
-	onReloadProfile: () => void
-}) {
-	const navigate = useNavigate()
-	return (
-		<div className="mt-2">
-			<Accordion type="multiple" defaultValue={["topics", "teams"]}>
-				<AccordionItem value="topics">
-					<AccordionTrigger className="font-semibold">
-						{isOwnProfile ? "Your topics" : toCountLabel(profile.topics.length, "topic")}
-					</AccordionTrigger>
-					<AccordionContent>
-						{/* your own profile manages the topics. other users see the profile table, or a muted line if the
-						    profile has no topics */}
-						{isOwnProfile ? (
-							topics === null ? (
-								<TopicsLoading isFailed={isTopicsLoadFailed} onRetry={onLoadTopics} />
-							) : topics.length === 0 ? (
-								<div className={cn(CARD_CLASS, "mb-4")}>
-									<button
-										type="button"
-										onClick={() => openNewTopicChat()}
-										className={cn(STANDALONE_LINK_CLASS, "font-display text-lg")}
-									>
-										Give Carl a topic. You know the one.
-									</button>
-								</div>
-							) : (
-								<OwnerTopicsTable topics={topics} onReloadPage={onLoadTopics} />
-							)
-						) : profile.topics.length > 0 ? (
-							<TopicsTable topics={profile.topics} includesNonPublicTopics={profile.includesNonPublicTopics} />
-						) : (
-							<p className="text-muted-foreground text-sm">No public topics.</p>
-						)}
-					</AccordionContent>
-				</AccordionItem>
-				<AccordionItem value="teams">
-					<AccordionTrigger className="font-semibold">
-						{isOwnProfile ? "Your teams" : toCountLabel(profile.teams.length, "team")}
-					</AccordionTrigger>
-					<AccordionContent>
-						{profile.teams.length > 0 ? (
-							<TeamsMembershipTable
-								teams={profile.teams}
-								receivedInvites={[]}
-								isReadOnly={!isOwnProfile}
-								onLeave={() => navigate({ to: "/teams" })}
-								onDelete={() => navigate({ to: "/teams" })}
-								onAnswered={onReloadProfile}
-							/>
-						) : (
-							<p className="text-muted-foreground text-sm">
-								{isOwnProfile ? "You are on no teams yet." : "No public teams."}
-							</p>
-						)}
-					</AccordionContent>
-				</AccordionItem>
-			</Accordion>
-		</div>
-	)
-}
-
-// the avatar, the username, when they joined, and how many people subscribe to their topics
-function ProfileHeader({
-	profile,
+	topicCount,
 	onNewTopic,
+	onNewTeam,
 	onInviteUserToTeam,
 	profileTeamStatuses,
 	onLoadProfileTeamStatuses,
 }: {
 	profile: ProfileResponse
-	onNewTopic?: () => void
+	// how many topics the page's table lists, null until the person's own topics load
+	topicCount: number | null
+	onNewTopic: () => void
+	// the owner starts a team, and a different user invites the profile user to one
+	onNewTeam?: () => void
 	onInviteUserToTeam?: () => void
 	profileTeamStatuses: ProfileTeamStatus[] | null
 	onLoadProfileTeamStatuses: () => void
 }) {
 	const { data: session } = authClient().useSession()
-	// the topics' unread chat mentions and note changes, the user menu's Profile row, summed on the avatar badge
-	const profileUpdateBadges = useUserMenuUpdateBadges().Profile
-
-	const isOwnProfile = session?.user.id === profile.userId
 	return (
 		<header>
-			<div className="flex items-center gap-4">
-				{isOwnProfile ? (
-					<>
-						{/* the user avatar with its one unread badge */}
-						<span className="relative inline-block">
-							<UserAvatarPicker userId={profile.userId} username={profile.username} className="size-16" />
-							<UpdateCountBadge
-								{...profileUpdateBadges}
-								className="absolute -top-1 -right-1"
-								countBadgeClassName="h-5 min-w-5 text-xs"
-							/>
-						</span>
-						<AnchorLink href="/account" className="rounded-md hover:underline">
-							<h1 className="font-display text-2xl">{profile.username}</h1>
-						</AnchorLink>
-					</>
-				) : (
-					<>
-						{/* a user may not edit another user's avatar */}
-						<UserAvatar
-							userId={profile.userId}
-							username={profile.username}
-							avatarVersion={profile.avatarVersion}
-							className="size-16"
-						/>
-						<h1 className="font-display text-2xl">{profile.username}</h1>
-					</>
+			{/* the page's buttons under the search bar. at the left, in the plain style, the owner starts a team and a
+			    different user invites the profile user to one, its icon alone in the highlight color. New Topic at the right
+			    is the row's one highlighted button */}
+			<div className={PAGE_BUTTON_ROW_CLASS}>
+				{onNewTeam && (
+					<button type="button" className={PLAIN_PAGE_BUTTON_CLASS} onClick={onNewTeam}>
+						<Plus className={PLAIN_PAGE_BUTTON_ICON_CLASS} />
+						New team
+					</button>
 				)}
-				{/* the right column: the owner's New Topic button on top. a different user sees the button that invites the
-				    profile user to a team */}
-				<div className="ml-auto flex flex-col items-end gap-1 self-start">
-					{onNewTopic && <NewTopicButton onNewTopic={onNewTopic} />}
-					{onInviteUserToTeam &&
-						(session ? (
-							<InviteUserToTeamButton
-								profileUserId={profile.userId}
-								profileUsername={profile.username}
-								profileTeamStatuses={profileTeamStatuses}
-								onReloadProfileTeamStatuses={onLoadProfileTeamStatuses}
-								onNewTeam={onInviteUserToTeam}
-							/>
-						) : (
-							<Button className="shrink-0" onClick={onInviteUserToTeam}>
-								<Users className="size-4" />
-								Team Up
-							</Button>
-						))}
-				</div>
+				{onInviteUserToTeam &&
+					(session ? (
+						<InviteUserToTeamButton
+							profileUserId={profile.userId}
+							profileUsername={profile.username}
+							profileTeamStatuses={profileTeamStatuses}
+							onReloadProfileTeamStatuses={onLoadProfileTeamStatuses}
+							onNewTeam={onInviteUserToTeam}
+						/>
+					) : (
+						<button type="button" className={PLAIN_PAGE_BUTTON_CLASS} onClick={onInviteUserToTeam}>
+							<Users className={PLAIN_PAGE_BUTTON_ICON_CLASS} />
+							Team Up
+						</button>
+					))}
+				<NewTopicButton onNewTopic={onNewTopic} />
 			</div>
-			{/* when they joined, the number of unique people subscribed to their topics, and the user's user block of them */}
-			<ProfileSummaryLine profile={profile} />
+			{/* the avatar beside the person's Café name and summary line, with no button in the row */}
+			<ProfileHeader profile={profile} isOwnProfile={session?.user.id === profile.userId} topicCount={topicCount} />
 		</header>
-	)
-}
-
-// offer retry after a failed first read instead of leaving a permanent skeleton
-function TopicsLoading({ isFailed, onRetry }: { isFailed: boolean; onRetry: () => void }) {
-	return isFailed ? (
-		<Button variant="outline" onClick={onRetry}>
-			Retry loading topics
-		</Button>
-	) : (
-		<TableSkeleton />
 	)
 }

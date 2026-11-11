@@ -2,7 +2,7 @@ import type { PodcastEpisode } from "@carlnotes/contracts/podcast"
 import { type ComponentType, type ReactNode, useState } from "react"
 import { toChapterIndexAt } from "../lib/podcastEpisodePlayback"
 import {
-	playPodcastEpisode,
+	playPodcastEpisodeAudio,
 	togglePlayback,
 	toPodcastEpisodePlayerState,
 	usePlayerPositionSeconds,
@@ -15,7 +15,7 @@ import type { PodcastEpisodeDetailsProps } from "./PodcastEpisodeDetails"
 export type PodcastEpisodePlayerCardElements<T> = {
 	Group: ComponentType<{ children: ReactNode; className?: string }>
 	Card: ComponentType<{ children: ReactNode }>
-	PlayButton: ComponentType<{ podcastEpisode: PodcastEpisode; size: "lg"; onPress: () => void }>
+	PlayButton: ComponentType<{ podcastEpisode: PodcastEpisode; size: "lg"; isPlaying: boolean; onPress: () => void }>
 	Details: ComponentType<PodcastEpisodeDetailsProps>
 	Controls: ComponentType<{ podcastEpisode: PodcastEpisode; playbackRate: number }>
 	SeekBar: ComponentType<{ podcastEpisode: PodcastEpisode; positionSeconds: number; isPodcastEpisodeLoaded: boolean }>
@@ -47,9 +47,10 @@ export function PodcastEpisodePlayerCard<T>({
 	onOpenPodcastFeedDialog?: () => void
 	elements: PodcastEpisodePlayerCardElements<T>
 }) {
-	// show live progress only for the loaded episode
+	// show live progress only for the loaded episode, whose position its audio and its film share
 	const player = usePodcastEpisodePlayer()
 	const isLoaded = player.podcastEpisode?.id === podcastEpisode.id
+	const isAudioLoaded = isLoaded && player.format === "audio"
 	const shownPosition = isLoaded ? toPodcastEpisodePlayerState().positionSeconds : podcastEpisode.progressSeconds
 	const chapterIndex = toChapterIndexAt(podcastEpisode.chapters, shownPosition)
 	const [isExpanded, setIsExpanded] = useState(false)
@@ -63,11 +64,12 @@ export function PodcastEpisodePlayerCard<T>({
 						<PlayButton
 							podcastEpisode={podcastEpisode}
 							size="lg"
+							isPlaying={isAudioLoaded && player.isPlaying}
 							onPress={() => {
-								if (isLoaded) {
+								if (isAudioLoaded) {
 									togglePlayback()
 								} else {
-									void playPodcastEpisode(podcastEpisode)
+									void playPodcastEpisodeAudio(podcastEpisode)
 								}
 							}}
 						/>
@@ -78,7 +80,7 @@ export function PodcastEpisodePlayerCard<T>({
 						/>
 					</Group>
 					<Group className="flex shrink-0 flex-row items-center gap-1.5">
-						{isLoaded && <Controls podcastEpisode={podcastEpisode} playbackRate={player.playbackRate} />}
+						{isLoaded && <Controls podcastEpisode={podcastEpisode} playbackRate={player.playbackRate} />}{" "}
 						{onOpenPodcastFeedDialog && (
 							<FeedButton onPress={onOpenPodcastFeedDialog} className="hidden sm:flex" label="Subscribe" />
 						)}

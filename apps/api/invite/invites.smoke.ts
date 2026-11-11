@@ -5,6 +5,7 @@ import {
 	checkLinkCreateAuthority,
 	checkSpentAndReusedLinks,
 	checkTeamLimitRefund,
+	checkTopicPostLink,
 	checkUseLimitRace,
 	checkValidAcceptance,
 } from "./inviteLinkSmokeSections"
@@ -32,6 +33,7 @@ try {
 	await checkUseLimitRace()
 	await checkTeamLimitRefund()
 	await checkSpentAndReusedLinks()
+	await checkTopicPostLink()
 	// then resolution, the invite-access setting, connections, accepting and declining, the daily count,
 	// and each sent invite's avatar version
 	await checkResolution()

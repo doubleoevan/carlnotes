@@ -61,7 +61,7 @@ const { setTopicSubscription } = await import("../apps/api/topic/subscriptions")
 // the api's own note, team, and chat room paths
 const { createNote } = await import("../apps/api/note/notePayloads")
 const { loadTopicPage } = await import("../apps/api/note/permissions")
-const { sanitizeNoteHtml } = await import("../apps/api/note/noteHtml")
+const { sanitizeNoteHtml } = await import("../apps/api/noteHtml")
 const { createTeam } = await import("../apps/api/team/teams")
 const { postChatRoomMessage } = await import("../apps/api/chat/room")
 

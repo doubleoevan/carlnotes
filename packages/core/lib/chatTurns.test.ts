@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
 import { toChatHistoryTurns } from "./chatHistoryTurns"
-import { toFinishedChatTurns, toSentChatTurn } from "./chatTurns"
+import { toFinishedChatTurns, toLoadedChatTurn, toSentChatTurn } from "./chatTurns"
 
 // preserve partial answers and accepted tools when a generation stops
 test("stopping preserves partial text and tool-only turns in the next history", () => {
@@ -44,5 +44,30 @@ test("a sent photo keeps its data url only for an app that previews it", () => {
 		id: expect.any(String),
 		kind: "image",
 		name: "roast.jpg",
+	})
+})
+
+// a question asked from a Topic Post's page shows the post's tag before any reload
+test("a sent chat turn keeps the Topic Post it was asked about, and a loaded one replays its stored post", () => {
+	const topicPost = { id: "post-1", title: "Dialing in", path: "/topics/topic-1/x/posts/post-1" }
+	const sentChatTurn = toSentChatTurn({ question: "what does this say?", attachments: [], topicPost })
+	expect(sentChatTurn.topicPost).toEqual({ title: "Dialing in", path: "/topics/topic-1/x/posts/post-1" })
+	expect(toSentChatTurn({ question: "from the chat", attachments: [] }).topicPost).toBeNull()
+
+	// a stored turn with no post field, as an older api sends it, has no tag
+	const storedChatTurn = {
+		question: "q",
+		answer: "a",
+		isSpoken: false,
+		speaker: "host" as const,
+		podcastEpisodeChapter: null,
+		attachments: [],
+		linkPreviews: [],
+		answerLinkPreviews: [],
+	}
+	expect(toLoadedChatTurn(storedChatTurn).topicPost).toBeNull()
+	expect(toLoadedChatTurn({ ...storedChatTurn, topicPost: { title: null, path: null } }).topicPost).toEqual({
+		title: null,
+		path: null,
 	})
 })

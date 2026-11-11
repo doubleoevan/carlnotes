@@ -2,34 +2,67 @@ import { fetchActivity } from "@carlnotes/client/activityClient"
 import { showClientError } from "@carlnotes/client/apiClient"
 import { authClient } from "@carlnotes/client/authClient"
 import { fetchProfile } from "@carlnotes/client/profileClient"
-import { toAvatarImagePath } from "@carlnotes/contracts/avatars"
 import type { ProfileResponse } from "@carlnotes/contracts/profilePage"
-import { toCountLabel } from "@carlnotes/core/lib/labels"
+import { useUpdatesOpener } from "@carlnotes/core/hooks/useUpdatesOpener"
+import { toSectionCountLabel } from "@carlnotes/core/lib/labels"
+import { sendProfileViewOnce } from "@carlnotes/core/lib/pageViews"
+import {
+	PROFILE_SECTIONS,
+	sendProfileOrderMoves,
+	toProfileRankDialogItems,
+	toProfileRankedNouns,
+	toProfileTopicCount,
+} from "@carlnotes/core/lib/profileSections"
+import {
+	type PinnedOrderMove,
+	PROFILE_RANK_OPTION_LABELS,
+	type RankedNoun,
+	toProfileRankDialogLabels,
+} from "@carlnotes/core/lib/rankDialog"
 import { REQUEST_FAILED_TEXT } from "@carlnotes/core/lib/sessionCopy"
 import { toggleUserBlock, toUserBlockLabel } from "@carlnotes/core/lib/userBlocks"
 import { useQuery } from "@tanstack/react-query"
-import { useLocalSearchParams } from "expo-router"
-import { Ban, Pencil, Plus } from "lucide-react-native"
-import { useState } from "react"
+import { useFocusEffect, useLocalSearchParams, usePathname } from "expo-router"
+import { Ban, Clapperboard, ListOrdered, type LucideIcon, NotebookPen, Pencil, Plus } from "lucide-react-native"
+import { type ReactNode, useCallback, useState } from "react"
 import { View } from "react-native"
 import { ProfileFields } from "@/components/account/AccountSettings"
-import { ProfileSummaryLine } from "@/components/account/ProfileSummaryLine"
-import { UserAvatarPicker } from "@/components/avatar/UserAvatarPicker"
-import { Avatar } from "@/components/branding/Avatar"
-import { AnchorLink } from "@/components/common/AnchorLink"
+import { ProfileHeader } from "@/components/account/ProfileHeader"
+import { AccordionSection } from "@/components/common/AccordionSection"
+import { PagedCardsSection } from "@/components/common/CardsSection"
 import { LoadFailedNotice } from "@/components/common/LoadFailedNotice"
+import { RankDialog } from "@/components/common/RankDialog"
 import { Sheet } from "@/components/common/Sheet"
-import { UserMenuUpdateCountBadge } from "@/components/common/UpdateCountBadge"
+import { ViewerCountLine } from "@/components/common/ViewerCountLine"
 import { PageScreen } from "@/components/layout/PageScreen"
 import { PageSkeleton, TableSkeleton } from "@/components/layout/PageSkeleton"
+import { PodcastEpisodeCard } from "@/components/podcast/PodcastEpisodeCard"
+import { Button } from "@/components/primitives/button"
+import { Icon } from "@/components/primitives/icon"
 import { Text } from "@/components/primitives/text"
+import { NewsList } from "@/components/social/NewsList"
 import { OwnerTopicsTable } from "@/components/table/OwnerTopicsTable"
+import { EmptyListCard } from "@/components/table/TableCard"
 import { TeamsMembershipTable } from "@/components/table/TeamsMembershipTable"
 import { TopicsTable } from "@/components/table/TopicsTable"
 import { EditTeamModal } from "@/components/team/EditTeamModal"
 import { InviteUserToTeamButton } from "@/components/team/InviteUserToTeamButton"
-import { CollapsibleSection } from "@/components/topic/CollapsibleSection"
+import { TopicCard } from "@/components/topic/TopicCard"
 import { NewTopicButton } from "@/components/topic/TopicHomeActions"
+import { TopicPostCard } from "@/components/topicPost/TopicPostCard"
+import {
+	PLAIN_PAGE_BUTTON_CLASS,
+	PLAIN_PAGE_BUTTON_ICON_CLASS,
+	PLAIN_PAGE_BUTTON_TEXT_CLASS,
+} from "@/pageButtonClasses"
+
+// the icon of each pin option in the action menu
+const PROFILE_RANK_OPTION_ICONS: Record<RankedNoun, LucideIcon> = {
+	topics: ListOrdered,
+	films: Clapperboard,
+	podcasts: ListOrdered,
+	posts: NotebookPen,
+}
 
 /**
  * Shows a user's profile, topics, and teams.
@@ -40,6 +73,8 @@ export default function ProfileScreen() {
 	const { data: session } = authClient().useSession()
 	const [isEditing, setIsEditing] = useState(false)
 	const [isCreatingTeam, setIsCreatingTeam] = useState(false)
+	// which of the owner's rank sheets is open, or null if none is
+	const [rankedNoun, setRankedNoun] = useState<RankedNoun | null>(null)
 	const isOwnProfile = session?.user.id === userId
 	const query = useQuery({ queryKey: ["profile", session?.user.id, userId], queryFn: () => fetchProfile(userId) })
 	const activity = useQuery({
@@ -48,6 +83,16 @@ export default function ProfileScreen() {
 		enabled: isOwnProfile,
 	})
 	const profile = query.data
+
+	// count a loaded profile once per app runtime, as the web counts it once per tab
+	const loadedProfileUserId = profile?.userId
+	useFocusEffect(
+		useCallback(() => {
+			if (loadedProfileUserId) {
+				sendProfileViewOnce(loadedProfileUserId)
+			}
+		}, [loadedProfileUserId]),
+	)
 	function handleReload(): void {
 		// refresh the profile and its private activity together
 		void query.refetch()
@@ -68,10 +113,22 @@ export default function ProfileScreen() {
 			showClientError(REQUEST_FAILED_TEXT)
 		}
 	}
+
+	// send a rank sheet's moves one at a time, then reload the profile once. a rejected move keeps the sheet open
+	async function handleSaveProfileOrder(pinnedOrderMoves: PinnedOrderMove[]): Promise<void> {
+		try {
+			await sendProfileOrderMoves(rankedNoun ?? "topics", pinnedOrderMoves)
+		} catch (error) {
+			showClientError(REQUEST_FAILED_TEXT)
+			throw error
+		} finally {
+			await query.refetch()
+		}
+	}
 	return (
 		<PageScreen
 			hasNewTopicButton={isOwnProfile}
-			title="Profile"
+			title="Café"
 			contentClassName={query.isPending ? "mt-0 gap-0" : "mt-2 gap-0"}
 			onRefresh={handleReload}
 			isRefreshing={query.isRefetching}
@@ -88,7 +145,13 @@ export default function ProfileScreen() {
 			options={
 				isOwnProfile
 					? [
-							{ label: "Edit profile", icon: Pencil, onSelect: () => setIsEditing(true) },
+							{ label: "Edit Café", icon: Pencil, onSelect: () => setIsEditing(true) },
+							// the pins the person may order, in the card sections' order
+							...toProfileRankedNouns(isOwnProfile).map((profileRankedNoun) => ({
+								label: PROFILE_RANK_OPTION_LABELS[profileRankedNoun],
+								icon: PROFILE_RANK_OPTION_ICONS[profileRankedNoun],
+								onSelect: () => setRankedNoun(profileRankedNoun),
+							})),
 							{ label: "New team", icon: Plus, onSelect: () => setIsCreatingTeam(true) },
 						]
 					: profile && session
@@ -98,68 +161,76 @@ export default function ProfileScreen() {
 			header={
 				query.isPending
 					? false
-					: profile && <ProfileHeader profile={profile} userId={userId} isOwnProfile={isOwnProfile} />
+					: profile && (
+							<ProfileHeader
+								profile={profile}
+								isOwnProfile={isOwnProfile}
+								topicCount={toProfileTopicCount({ profile, isOwnProfile, ownTopics: activity.data?.topics })}
+							/>
+						)
 			}
+			// the owner starts a team, and a different user invites the profile user to one, in the plain style with the
+			// icon alone in the highlight color
+			leftButton={
+				profile &&
+				(isOwnProfile ? (
+					<Button
+						variant="outline"
+						className={PLAIN_PAGE_BUTTON_CLASS}
+						accessibilityLabel="New team"
+						onPress={() => setIsCreatingTeam(true)}
+					>
+						<Icon as={Plus} className={PLAIN_PAGE_BUTTON_ICON_CLASS} />
+						<Text className={PLAIN_PAGE_BUTTON_TEXT_CLASS}>New team</Text>
+					</Button>
+				) : (
+					<InviteUserToTeamButton profileUserId={userId} profileUsername={profile.username} />
+				))
+			}
+			// the loading state draws both buttons' placeholders, so the row waits for the profile
+			topicButton={query.isPending ? undefined : <NewTopicButton />}
 		>
 			<ProfileContent query={query} activity={activity} isOwnProfile={isOwnProfile} onReload={handleReload} />
 			{isEditing && (
-				<Sheet title="Edit profile" onClose={() => setIsEditing(false)}>
+				<Sheet title="Edit Café" onClose={() => setIsEditing(false)}>
 					<ProfileFields onUsernameChanged={handleReload} />
 				</Sheet>
 			)}
 			{isCreatingTeam && <EditTeamModal onClose={() => setIsCreatingTeam(false)} />}
+			{/* the owner's list of pinned topics, films, podcast episodes, or Topic Posts, with the ones they may still
+			    pin */}
+			{rankedNoun && isOwnProfile && profile && (
+				<RankDialog
+					labels={toProfileRankDialogLabels(rankedNoun)}
+					{...toProfileRankDialogItems(rankedNoun, profile)}
+					onSave={handleSaveProfileOrder}
+					onClose={() => setRankedNoun(null)}
+				/>
+			)}
 		</PageScreen>
 	)
 }
 
-// keep the profile identity and its own actions together
-function ProfileHeader({
-	profile,
-	userId,
-	isOwnProfile,
+// one of the profile's two tables under its title, with its count at the far right, open at first
+function ProfileTableSection({
+	title,
+	countLabel,
+	children,
 }: {
-	profile: ProfileResponse
-	userId: string
-	isOwnProfile: boolean
+	title: string
+	countLabel?: string
+	children: ReactNode
 }) {
+	const [isExpanded, setIsExpanded] = useState(true)
 	return (
-		<View className="gap-2">
-			<View className="flex-row flex-wrap items-center gap-3">
-				{isOwnProfile ? (
-					<View>
-						<UserAvatarPicker userId={userId} username={profile.username} />
-						<UserMenuUpdateCountBadge label="Profile" className="absolute -top-1 -right-1" />
-					</View>
-				) : (
-					<Avatar
-						ownerId={userId}
-						name={profile.username}
-						imageUrl={profile.avatarVersion ? toAvatarImagePath(userId, profile.avatarVersion) : null}
-						size={64}
-					/>
-				)}
-				<View className="flex-1">
-					{isOwnProfile ? (
-						<AnchorLink href="/account" accessibilityLabel={`${profile.username}'s account`}>
-							<Text accessibilityRole="header" className="font-display text-2xl">
-								{profile.username}
-							</Text>
-						</AnchorLink>
-					) : (
-						<Text accessibilityRole="header" className="font-display text-2xl">
-							{profile.username}
-						</Text>
-					)}
-				</View>
-				{isOwnProfile ? (
-					<NewTopicButton />
-				) : (
-					<InviteUserToTeamButton profileUserId={userId} profileUsername={profile.username} />
-				)}
-			</View>
-			{/* when they joined, their followers, and the user's user block of them */}
-			<ProfileSummaryLine profile={profile} />
-		</View>
+		<AccordionSection
+			title={title}
+			countLabel={countLabel}
+			isExpanded={isExpanded}
+			onToggle={() => setIsExpanded(!isExpanded)}
+		>
+			<View className="mx-4 pt-2 pb-2">{children}</View>
+		</AccordionSection>
 	)
 }
 
@@ -179,7 +250,7 @@ function ProfileTopics({
 		return profile.topics.length ? (
 			<TopicsTable topics={profile.topics} includesNonPublicTopics={profile.includesNonPublicTopics} />
 		) : (
-			<Text className="text-muted-foreground">No public topics.</Text>
+			<EmptyListCard text="No public topics." />
 		)
 	}
 	if (activity.isPending) {
@@ -212,30 +283,70 @@ function ProfileContent({
 	onReload: () => void
 }) {
 	const profile = query.data
+	const pathname = usePathname()
+	const { data: session } = authClient().useSession()
+	// carl's line for the day is written from the reader's own unread Findings, so it shows on their own profile alone
+	const opener = useUpdatesOpener(isOwnProfile ? (session?.user.id ?? null) : null)
+	// how many topics the table lists: the person's own once they load, or the ones the profile shows a visitor
+	const topicCount = profile ? toProfileTopicCount({ profile, isOwnProfile, ownTopics: activity.data?.topics }) : null
 	if (query.isPending) {
 		return <PageSkeleton kind="profile" />
 	}
 	if (!profile) {
 		return query.error ? (
-			<LoadFailedNotice message="Profile didn't load." retryLabel="Retry loading profile" onRetry={onReload} />
+			<LoadFailedNotice message="The Café didn't load." retryLabel="Retry loading the Café" onRetry={onReload} />
 		) : (
 			<Text>No one here by that name.</Text>
 		)
 	}
 	return (
 		<>
-			<CollapsibleSection title={isOwnProfile ? "Your topics" : toCountLabel(profile.topics.length, "topic")}>
-				<ProfileTopics profile={profile} isOwnProfile={isOwnProfile} activity={activity} onReload={onReload} />
-			</CollapsibleSection>
-			<CollapsibleSection title={isOwnProfile ? "Your teams" : toCountLabel(profile.teams.length, "team")}>
-				{profile.teams.length ? (
-					<TeamsMembershipTable teams={profile.teams} isReadOnly={!isOwnProfile} onChanged={onReload} />
-				) : (
-					<Text className="text-muted-foreground">
-						{isOwnProfile ? "You are on no teams yet." : "No public teams."}
-					</Text>
-				)}
-			</CollapsibleSection>
+			{/* the person's news, which they read whole and anyone else reads as its public rows */}
+			<NewsList profileUserId={profile.userId} userId={session?.user.id ?? null} opener={opener} />
+			{/* the person's topics, films, podcast episodes, and Topic Posts as cards, the pinned ones first, each hidden
+			    while it has none. the films come right before the podcast episodes, and the Topic Posts section lists
+			    every published one. the sections bring their own side insets, so they give the page's back */}
+			<View className="-mx-4">
+				<PagedCardsSection
+					section={PROFILE_SECTIONS.profileTopics}
+					rows={profile.profileTopics}
+					renderCard={(topic) => <TopicCard topic={topic} />}
+				/>
+				<PagedCardsSection
+					section={PROFILE_SECTIONS.profileTopicPodcastEpisodeVideos}
+					rows={profile.profileTopicPodcastEpisodeVideos}
+					renderCard={(podcastEpisodeCard) => (
+						<PodcastEpisodeCard podcastEpisodeCard={podcastEpisodeCard} variant="video" videoSurface="profile-videos" />
+					)}
+				/>
+				<PagedCardsSection
+					section={PROFILE_SECTIONS.profilePodcastEpisodes}
+					rows={profile.profilePodcastEpisodes}
+					renderCard={(podcastEpisodeCard) => <PodcastEpisodeCard podcastEpisodeCard={podcastEpisodeCard} />}
+				/>
+				<PagedCardsSection
+					section={PROFILE_SECTIONS.profileTopicPosts}
+					rows={profile.profileTopicPosts}
+					renderCard={(topicPost) => <TopicPostCard topicPost={topicPost} />}
+				/>
+				{/* the two tables, each under its title with its count at the far right, as the card sections are. the
+				    person's own topics count once they load */}
+				<ProfileTableSection title="All Topics" countLabel={toSectionCountLabel(topicCount, "topic")}>
+					<ProfileTopics profile={profile} isOwnProfile={isOwnProfile} activity={activity} onReload={onReload} />
+				</ProfileTableSection>
+				<ProfileTableSection title="All Teams" countLabel={toSectionCountLabel(profile.teams.length, "team")}>
+					{profile.teams.length ? (
+						<TeamsMembershipTable teams={profile.teams} isReadOnly={!isOwnProfile} onChanged={onReload} />
+					) : (
+						<EmptyListCard text={isOwnProfile ? "You are on no teams yet." : "No public teams."} />
+					)}
+				</ProfileTableSection>
+			</View>
+			{/* the profile's visitors, read while this profile is the active route */}
+			<ViewerCountLine
+				viewerCountPage={{ kind: "profile", id: profile.userId }}
+				isActiveRoute={pathname === `/profiles/${profile.userId}`}
+			/>
 		</>
 	)
 }

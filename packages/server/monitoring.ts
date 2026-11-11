@@ -234,6 +234,7 @@ const reportedStages = [
 	"email",
 	"push",
 	"podcast-episode",
+	"topic-podcast-episode-video",
 	"topic-image",
 	"chat",
 	"updates",

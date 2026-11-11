@@ -2,16 +2,17 @@
 // security.txt
 import { join } from "node:path"
 import { PODCAST_SHOW_NAME } from "@carlnotes/contracts/podcastEpisodes"
-import { toMetaDescription, toTopicPath } from "@carlnotes/contracts/seo"
+import { toMetaDescription, toTopicPath, toTopicPostPath } from "@carlnotes/contracts/seo"
 import { DAY_MS } from "@carlnotes/contracts/time"
 import type { PublicTopic } from "@carlnotes/contracts/topics"
 import { db, isFindingShown, isPublicAndShown } from "@carlnotes/db"
 import { findings, scans } from "@carlnotes/db/schema/scans"
 import { teams } from "@carlnotes/db/schema/teams"
 import { teamTopics } from "@carlnotes/db/schema/teamTopics"
+import { topicPosts } from "@carlnotes/db/schema/topicPosts"
 import { topics } from "@carlnotes/db/schema/topics"
 import { DOCS_CONTENT_DIRECTORY, listDocsMarkdownPaths } from "@carlnotes/server/docsContent"
-import { and, desc, eq, exists, inArray, or, type SQL, sql } from "drizzle-orm"
+import { and, desc, eq, exists, inArray, isNotNull, or, type SQL, sql } from "drizzle-orm"
 import {
 	loadPublicPodcastEpisodeRows,
 	type PublicPodcastEpisodeRow,
@@ -31,7 +32,8 @@ const LLMS_PODCAST_EPISODE_LIMIT = 50
 const DOCS_PAGES_TTL_MS = 60_000
 
 /**
- * The sitemap, built from live data on each request: the static routes, the blog pages, and every public Topic.
+ * The sitemap, built from live data on each request: the static routes, the blog pages, every public Topic, and the
+ * Topic Posts of public Topics.
  * Profile pages are too thin to promote to a crawler, and a team is listed only once it has a public topic.
  * The docs are absent because they are statically built files instead of anything this route can read, and the docs site emits its own sitemap.
  */
@@ -54,6 +56,20 @@ export async function toSitemapXml(appUrl: string, blogPaths: string[] = []): Pr
 	const publicPodcastEpisodeRows = await loadPublicPodcastEpisodeRows(publicTopics.map((publicTopic) => publicTopic.id))
 	const publicPodcastEpisodePages = toPublicPodcastEpisodePages({ appUrl, publicTopics, publicPodcastEpisodeRows })
 
+	// the published Topic Posts of public topics, each with its own page. an invite or a private topic's are left out
+	const publicTopicPostRows = await db
+		.select({
+			id: topicPosts.id,
+			title: topicPosts.title,
+			publishedAt: topicPosts.publishedAt,
+			editedAt: topicPosts.editedAt,
+			topicId: topics.id,
+			topicName: topics.name,
+		})
+		.from(topicPosts)
+		.innerJoin(topics, eq(topics.id, topicPosts.topicId))
+		.where(and(eq(topics.visibility, "public"), isNotNull(topicPosts.publishedAt)))
+
 	// the releases index and every published release's own page, each release dated by when it went out
 	const releaseRows = await loadReleases()
 
@@ -67,6 +83,13 @@ export async function toSitemapXml(appUrl: string, blogPaths: string[] = []): Pr
 		// a podcast episode's page, dated by when the podcast episode published
 		...publicPodcastEpisodePages.map((podcastEpisodePage) =>
 			toSitemapEntry(podcastEpisodePage.url, podcastEpisodePage.publishedAt ?? undefined),
+		),
+		// a Topic Post's page, dated by its last edit, or by when it published
+		...publicTopicPostRows.map((topicPostRow) =>
+			toSitemapEntry(
+				`${appUrl}${toTopicPostPath({ id: topicPostRow.topicId, name: topicPostRow.topicName }, topicPostRow)}`,
+				topicPostRow.editedAt ?? topicPostRow.publishedAt ?? undefined,
+			),
 		),
 		...teamRows.map((teamRow) => toSitemapEntry(`${appUrl}/teams/${teamRow.id}`)),
 		toSitemapEntry(`${appUrl}/releases`),

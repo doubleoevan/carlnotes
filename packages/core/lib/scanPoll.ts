@@ -23,8 +23,8 @@ export function toScanPollMs(watchedMs: number): number {
 }
 
 /**
- * Returns a poll reload's topic page with the related topics, the reactions, and the comment thread of the page it
- * replaces, which a poll leaves out. A topic the page did not show keeps the reload's own.
+ * Returns a poll reload's topic page with the related topics, the reactions, the comment thread, and the Topic Posts
+ * of the page it replaces, which a poll leaves out. A topic the page did not show keeps the reload's own.
  */
 export function toPolledTopicPage(
 	previousTopic: TopicResponse | null | undefined,
@@ -33,8 +33,8 @@ export function toPolledTopicPage(
 	if (!polledTopic || previousTopic?.id !== polledTopic.id) {
 		return polledTopic
 	}
-	const { relatedTopics, reactions, commentThread } = previousTopic
-	return { ...polledTopic, relatedTopics, reactions, commentThread }
+	const { relatedTopics, reactions, commentThread, topicPosts } = previousTopic
+	return { ...polledTopic, relatedTopics, reactions, commentThread, topicPosts }
 }
 
 /**

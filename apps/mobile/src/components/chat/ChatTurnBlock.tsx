@@ -14,6 +14,7 @@ import { ChatLinkPreviews, ChatMessageAttachmentChips, CopyButton, ModelThinking
 import { ChatRejectionNotice } from "./ChatRejectionNotice"
 import { PodcastEpisodeChapterTag } from "./PodcastEpisodeChapterTag"
 import { SpokenAnswerButton } from "./SpokenAnswerButton"
+import { TopicPostTag } from "./TopicPostTag"
 
 /**
  * Adapts the shared private turn, preserving web authors, bubbles and action order.
@@ -53,6 +54,7 @@ const CHAT_TURN_ELEMENTS: ChatTurnElements = {
 							podcastEpisodeNote={podcastEpisodeNote}
 						/>
 					)}
+					{chatTurn.topicPost && <TopicPostTag topicPost={chatTurn.topicPost} />}
 					{/* attachments and previews */}
 					<ChatMessageAttachmentChips attachments={chatTurn.attachments} />
 					<ChatLinkPreviews previews={chatTurn.linkPreviews} />

@@ -3,6 +3,7 @@
 
 import { toAppleAppSiteAssociation, toAssetLinks } from "@carlnotes/contracts/appLinkPaths"
 import { MOBILE_APP_BUNDLE_IDENTIFIER } from "@carlnotes/contracts/mobileApp"
+import type { PodcastEpisodeFormat } from "@carlnotes/contracts/podcast"
 import { toBot } from "@carlnotes/contracts/userAgent"
 import { db } from "@carlnotes/db"
 import { podcastFeedTokens } from "@carlnotes/db/schema/podcast"
@@ -11,7 +12,7 @@ import { trackEvent } from "@carlnotes/server/analytics"
 import { appUrl } from "@carlnotes/server/appUrl"
 import { isPodcastEpisodeRecordingConfigured } from "@carlnotes/server/podcastEpisodeSettings"
 import { and, eq, isNull } from "drizzle-orm"
-import { Hono } from "hono"
+import { type Context, Hono } from "hono"
 import { loadPages } from "./content"
 import type { AppEnv } from "./currentUser"
 import { PRIVATE_NO_STORE_CACHE_CONTROL, setRenderedCacheHeaders } from "./edgeCache"
@@ -38,69 +39,20 @@ export const documentsRoute = new Hono<AppEnv>()
 		context.set("analyticsTopic", { topicId: context.req.param("id"), isPublic: true })
 		return context.body(topicFeedXml, 200, toDocumentHeaders("application/rss+xml; charset=utf-8", 900))
 	})
-	// a public Topic's podcast feed, after the Topic's id without its slug, shared at the edge like a rendered page
-	.get("/topics/:id/podcast.xml", async (context) => {
-		const [topic] = await db
-			.select()
-			.from(topics)
-			.where(eq(topics.id, context.req.param("id")))
-
-		// only a public topic with a published podcast episode has a public feed
-		const renderedPodcastFeed =
-			topic?.visibility === "public" ? await loadRenderedPodcastFeed({ topic, listener: null }) : null
-		if (!isPodcastEpisodeRecordingConfigured() || !renderedPodcastFeed?.xml.includes("<item>")) {
-			return context.text("not found", 404)
-		}
-
-		// respond with a 304 if the request's copy is current, and let the edge share the feed
-		context.set("analyticsTopic", { topicId: context.req.param("id"), isPublic: true })
-		const podcastFeedResponse = toPodcastFeedResponse({ context, renderedPodcastFeed, routeHeaders: {} })
-		setRenderedCacheHeaders(context.req.raw, podcastFeedResponse)
-		return podcastFeedResponse
-	})
-	// a listener's own podcast feed of a private or invite Topic.
-	// the podcast feed token alone grants access, and nothing caches or indexes the feed
-	.get("/podcast-feeds/:tokenFile", async (context) => {
-		// read the podcast feed token from the file name, and look up its listener
-		const podcastFeedToken = context.req.param("tokenFile").replace(/\.xml$/, "")
-		const podcastFeedTokenListener = isPodcastEpisodeRecordingConfigured()
-			? await loadPodcastFeedTokenListener(podcastFeedToken)
-			: null
-
-		// load the Topic that the podcast feed token opens, or respond 404
-		const [topic] = podcastFeedTokenListener
-			? await db.select().from(topics).where(eq(topics.id, podcastFeedTokenListener.topicId))
-			: []
-		if (!podcastFeedTokenListener || !topic) {
-			return context.text("not found", 404)
-		}
-		context.set("analyticsTopic", { topicId: topic.id, isPublic: topic.visibility === "public" })
-
-		// report a podcast app's first GET of this feed token as the feed added to that app
-		const bot = toBot(context.req.header("user-agent"))
-		if (bot?.kind === "podcastApp" && context.req.method === "GET") {
-			const [firstFetchedRow] = await db
-				.update(podcastFeedTokens)
-				.set({ firstFetchedAt: new Date() })
-				.where(and(eq(podcastFeedTokens.token, podcastFeedToken), isNull(podcastFeedTokens.firstFetchedAt)))
-				.returning({ id: podcastFeedTokens.id })
-			// the row comes back only on the first fetch
-			if (firstFetchedRow) {
-				trackEvent("podcast_feed_added", podcastFeedTokenListener.userId, {
-					entryPoint: "feed",
-					topicId: topic.id,
-					isTopicPublic: topic.visibility === "public",
-					client: bot.name,
-				})
-			}
-		}
-
-		// respond with the listener's own feed, or a 304 if the listener's copy is current
-		const listener = { userId: podcastFeedTokenListener.userId, token: podcastFeedToken }
-		const renderedPodcastFeed = await loadRenderedPodcastFeed({ topic, listener })
-		const routeHeaders = { ...NOINDEX_HEADER, "Cache-Control": PRIVATE_NO_STORE_CACHE_CONTROL }
-		return toPodcastFeedResponse({ context, renderedPodcastFeed, routeHeaders })
-	})
+	// a public Topic's podcast feed and film feed, after the Topic's id without its slug
+	.get("/topics/:id/podcast.xml", (context) =>
+		toPublicPodcastFeedResponse({ context, topicId: context.req.param("id"), format: "audio" }),
+	)
+	.get("/topics/:id/podcast-video.xml", (context) =>
+		toPublicPodcastFeedResponse({ context, topicId: context.req.param("id"), format: "video" }),
+	)
+	// a listener's own podcast feed and film feed of a private or invite Topic, which share one feed token
+	.get("/podcast-feeds/:tokenFile", (context) =>
+		toListenerPodcastFeedResponse({ context, tokenFile: context.req.param("tokenFile"), format: "audio" }),
+	)
+	.get("/podcast-video-feeds/:tokenFile", (context) =>
+		toListenerPodcastFeedResponse({ context, tokenFile: context.req.param("tokenFile"), format: "video" }),
+	)
 	// the permanent redirect from the plans page's old path
 	.get("/pricing", (context) => context.redirect("/plans", 301))
 	// the llms.txt index of the site, its docs and blog, the most recently changed public topics,
@@ -215,4 +167,81 @@ function toSigningFingerprints(value: string | undefined): string[] {
 // the headers of a document response, cached publicly for maxAgeSeconds
 function toDocumentHeaders(contentType: string, maxAgeSeconds: number): Record<string, string> {
 	return { "Content-Type": contentType, "Cache-Control": `public, max-age=${maxAgeSeconds}` }
+}
+
+// a feed request's context, and the feed's format
+type PodcastFeedRequest = { context: Context<AppEnv>; format: PodcastEpisodeFormat }
+
+/**
+ * Returns a public Topic's podcast feed or film feed, shared at the edge like a rendered page, or a 404.
+ */
+async function toPublicPodcastFeedResponse({
+	context,
+	topicId,
+	format,
+}: PodcastFeedRequest & { topicId: string }): Promise<Response> {
+	const [topic] = await db.select().from(topics).where(eq(topics.id, topicId))
+
+	// only a public topic with a published podcast episode has a public feed
+	const renderedPodcastFeed =
+		topic?.visibility === "public" ? await loadRenderedPodcastFeed({ topic, listener: null, format }) : null
+	if (!isPodcastEpisodeRecordingConfigured() || !renderedPodcastFeed?.xml.includes("<item>")) {
+		return context.text("not found", 404)
+	}
+
+	// respond with a 304 if the request's copy is current, and let the edge share the feed
+	context.set("analyticsTopic", { topicId, isPublic: true })
+	const podcastFeedResponse = toPodcastFeedResponse({ context, renderedPodcastFeed, routeHeaders: {} })
+	setRenderedCacheHeaders(context.req.raw, podcastFeedResponse)
+	return podcastFeedResponse
+}
+
+/**
+ * Returns a listener's own podcast feed or film feed of a private or invite Topic. The podcast feed token alone grants
+ * access, and nothing caches or indexes the feed.
+ */
+async function toListenerPodcastFeedResponse({
+	context,
+	tokenFile,
+	format,
+}: PodcastFeedRequest & { tokenFile: string }): Promise<Response> {
+	// read the podcast feed token from the file name, and look up its listener
+	const podcastFeedToken = tokenFile.replace(/\.xml$/, "")
+	const podcastFeedTokenListener = isPodcastEpisodeRecordingConfigured()
+		? await loadPodcastFeedTokenListener(podcastFeedToken)
+		: null
+
+	// load the Topic that the podcast feed token opens, or respond 404
+	const [topic] = podcastFeedTokenListener
+		? await db.select().from(topics).where(eq(topics.id, podcastFeedTokenListener.topicId))
+		: []
+	if (!podcastFeedTokenListener || !topic) {
+		return context.text("not found", 404)
+	}
+	context.set("analyticsTopic", { topicId: topic.id, isPublic: topic.visibility === "public" })
+
+	// report a podcast app's first GET of this feed token as the feed added to that app
+	const bot = toBot(context.req.header("user-agent"))
+	if (bot?.kind === "podcastApp" && context.req.method === "GET") {
+		const [firstFetchedRow] = await db
+			.update(podcastFeedTokens)
+			.set({ firstFetchedAt: new Date() })
+			.where(and(eq(podcastFeedTokens.token, podcastFeedToken), isNull(podcastFeedTokens.firstFetchedAt)))
+			.returning({ id: podcastFeedTokens.id })
+		// the row comes back only on the first fetch
+		if (firstFetchedRow) {
+			trackEvent("podcast_feed_added", podcastFeedTokenListener.userId, {
+				entryPoint: "feed",
+				topicId: topic.id,
+				isTopicPublic: topic.visibility === "public",
+				client: bot.name,
+			})
+		}
+	}
+
+	// respond with the listener's own feed, or a 304 if the listener's copy is current
+	const listener = { userId: podcastFeedTokenListener.userId, token: podcastFeedToken }
+	const renderedPodcastFeed = await loadRenderedPodcastFeed({ topic, listener, format })
+	const routeHeaders = { ...NOINDEX_HEADER, "Cache-Control": PRIVATE_NO_STORE_CACHE_CONTROL }
+	return toPodcastFeedResponse({ context, renderedPodcastFeed, routeHeaders })
 }
