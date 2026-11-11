@@ -468,6 +468,14 @@ export const TOPIC_HEADER_AREA_CLASSES = {
  */
 export const PAGE_AVATAR_CLASS = "size-20 sm:size-24"
 
+// a page header's grid, where the avatar leads and the rest sits in the second column. each part drops to its own
+// full-width row below the avatar as the screen narrows: the description first, then the counts, then the title
+export const PAGE_HEADER_GRID_CLASS = "grid grid-cols-[auto_1fr] items-center gap-x-4 gap-y-2"
+export const PAGE_HEADER_AVATAR_CELL_CLASS = "col-start-1 row-start-1 self-center md:row-span-2 lg:row-span-3"
+export const PAGE_HEADER_TITLE_CELL_CLASS = "col-span-2 min-w-0 sm:col-span-1 sm:col-start-2 sm:row-start-1"
+export const PAGE_HEADER_DETAILS_CELL_CLASS = "col-span-2 min-w-0 md:col-span-1 md:col-start-2"
+export const PAGE_HEADER_DESCRIPTION_CELL_CLASS = "col-span-2 min-w-0 lg:col-span-1 lg:col-start-2"
+
 /**
  * The h1 of a page shell: the display font, with the icon of the page's header menu item in front.
  */

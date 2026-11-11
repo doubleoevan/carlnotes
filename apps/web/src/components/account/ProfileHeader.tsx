@@ -10,7 +10,13 @@ import { UserAvatarPicker } from "@/components/avatar/UserAvatarPicker"
 import { UserAvatar } from "@/components/branding/UserAvatar"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { UpdateCountBadge } from "@/components/common/UpdateCountBadge"
-import { PAGE_AVATAR_CLASS } from "@/lib/styleClasses"
+import {
+	PAGE_AVATAR_CLASS,
+	PAGE_HEADER_AVATAR_CELL_CLASS,
+	PAGE_HEADER_DETAILS_CELL_CLASS,
+	PAGE_HEADER_GRID_CLASS,
+	PAGE_HEADER_TITLE_CELL_CLASS,
+} from "@/lib/styleClasses"
 import { ProfileSummaryLine } from "./ProfileSummaryLine"
 
 // the person's own avatar, which opens the picker, with the one count of their topics' unread chat mentions and note
@@ -31,23 +37,37 @@ function OwnProfileAvatar({ userId, username }: { userId: string; username: stri
 
 // the web's elements, with the avatar at the height of a topic's image on the Topics page
 const PROFILE_HEADER_ELEMENTS: ProfileHeaderElements = {
-	Row: ({ children }) => <div className="flex flex-wrap items-center gap-4">{children}</div>,
-	OwnAvatar: OwnProfileAvatar,
-	Avatar: ({ userId, username, avatarVersion }) => (
-		<UserAvatar userId={userId} username={username} avatarVersion={avatarVersion} className={PAGE_AVATAR_CLASS} />
+	Row: ({ children }) => <div className={PAGE_HEADER_GRID_CLASS}>{children}</div>,
+	OwnAvatar: (ownAvatarProps) => (
+		<div className={PAGE_HEADER_AVATAR_CELL_CLASS}>
+			<OwnProfileAvatar {...ownAvatarProps} />
+		</div>
 	),
-	Identity: ({ children }) => <div className="w-full min-w-0 sm:w-auto sm:flex-1">{children}</div>,
+	Avatar: ({ userId, username, avatarVersion }) => (
+		<div className={PAGE_HEADER_AVATAR_CELL_CLASS}>
+			<UserAvatar userId={userId} username={username} avatarVersion={avatarVersion} className={PAGE_AVATAR_CLASS} />
+		</div>
+	),
+	Identity: ({ children }) => children,
 	Heading: ({ isAccountLink, children }) => {
 		const heading = <h1 className="font-display text-2xl">{children}</h1>
-		return isAccountLink ? (
-			<AnchorLink href="/account" className="rounded-md hover:underline">
-				{heading}
-			</AnchorLink>
-		) : (
-			heading
+		return (
+			<div className={PAGE_HEADER_TITLE_CELL_CLASS}>
+				{isAccountLink ? (
+					<AnchorLink href="/account" className="rounded-md hover:underline">
+						{heading}
+					</AnchorLink>
+				) : (
+					heading
+				)}
+			</div>
 		)
 	},
-	SummaryLine: ProfileSummaryLine,
+	SummaryLine: (summaryLineProps) => (
+		<div className={PAGE_HEADER_DETAILS_CELL_CLASS}>
+			<ProfileSummaryLine {...summaryLineProps} />
+		</div>
+	),
 }
 
 /**

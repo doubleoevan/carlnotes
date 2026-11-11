@@ -4,6 +4,7 @@ import { sendTeamAvatar } from "@carlnotes/client/teamClient"
 import { isLeaderRole } from "@carlnotes/contracts/enums"
 import { type TeamPageResponse, toTeamPageTitle } from "@carlnotes/contracts/teams"
 import { ADD_TEAM_MEMBER_LABEL, toTeamDetails } from "@carlnotes/core/lib/teamFields"
+import { cn } from "@carlnotes/nightshift/classNames"
 import { Plus } from "lucide-react"
 import { type ReactNode, useState } from "react"
 import { toast } from "sonner"
@@ -15,6 +16,11 @@ import { PageUpdateCountBadge } from "@/components/common/UpdateCountBadge"
 import {
 	PAGE_AVATAR_CLASS,
 	PAGE_BUTTON_ROW_CLASS,
+	PAGE_HEADER_AVATAR_CELL_CLASS,
+	PAGE_HEADER_DESCRIPTION_CELL_CLASS,
+	PAGE_HEADER_DETAILS_CELL_CLASS,
+	PAGE_HEADER_GRID_CLASS,
+	PAGE_HEADER_TITLE_CELL_CLASS,
 	PLAIN_PAGE_BUTTON_CLASS,
 	PLAIN_PAGE_BUTTON_ICON_CLASS,
 } from "@/lib/styleClasses"
@@ -101,32 +107,32 @@ export function TeamHeader({
 				)}
 				{topicButton}
 			</div>
-			<div className="flex flex-wrap items-center gap-4">
-				{isTeamLeader ? (
-					<TeamHeaderAvatar team={teamPage} onChanged={onChanged} />
-				) : (
-					<TeamAvatar team={teamPage} className={PAGE_AVATAR_CLASS} />
-				)}
-				{/* the page's title, how many members and topics the team has, and its description, beside the avatar on a
-				wide screen and below it on a phone */}
-				<div className="w-full min-w-0 sm:w-auto sm:flex-1">
-					<span className="relative inline-block">
-						<h1 className="font-display text-2xl">{toTeamPageTitle(teamPage.name)}</h1>
-						{/* the team chat room's unseen mentions. the badge's click opens the chat room, which clears it */}
-						<PageUpdateCountBadge
-							topicId={null}
-							teamId={teamPage.teamId}
-							href={`/teams/${teamPage.teamId}`}
-							onClick={(event) => {
-								// the click opens the chat room in place instead of re-navigating to the page
-								event.preventDefault()
-								onOpenChat()
-							}}
-						/>
-					</span>
-					<DetailsLine className="mt-2" details={toTeamDetails({ teamPage, noteCount })} />
-					{teamPage.description && <p className="mt-1 text-sm">{teamPage.description}</p>}
+			<div className={PAGE_HEADER_GRID_CLASS}>
+				<div className={PAGE_HEADER_AVATAR_CELL_CLASS}>
+					{isTeamLeader ? (
+						<TeamHeaderAvatar team={teamPage} onChanged={onChanged} />
+					) : (
+						<TeamAvatar team={teamPage} className={PAGE_AVATAR_CLASS} />
+					)}
 				</div>
+				{/* the page's title, with the team chat room's unseen mentions. the badge's click opens the chat room */}
+				<span className={cn(PAGE_HEADER_TITLE_CELL_CLASS, "relative")}>
+					<h1 className="font-display text-2xl">{toTeamPageTitle(teamPage.name)}</h1>
+					<PageUpdateCountBadge
+						topicId={null}
+						teamId={teamPage.teamId}
+						href={`/teams/${teamPage.teamId}`}
+						onClick={(event) => {
+							// the click opens the chat room in place instead of re-navigating to the page
+							event.preventDefault()
+							onOpenChat()
+						}}
+					/>
+				</span>
+				<DetailsLine className={PAGE_HEADER_DETAILS_CELL_CLASS} details={toTeamDetails({ teamPage, noteCount })} />
+				{teamPage.description && (
+					<p className={cn(PAGE_HEADER_DESCRIPTION_CELL_CLASS, "text-sm")}>{teamPage.description}</p>
+				)}
 			</div>
 		</header>
 	)
