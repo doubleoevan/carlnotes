@@ -4,7 +4,7 @@ import { fetchPodcastEpisode } from "@carlnotes/client/podcastEpisodeClient"
 import type { PodcastEpisodeCard as PodcastEpisodeCardFields } from "@carlnotes/contracts/home"
 import { PODCAST_STORY_FILM_EPISODE } from "@carlnotes/core/lib/podcastEpisodeStories"
 import type { Meta, StoryObj } from "@storybook/tanstack-react"
-import { expect, mocked } from "storybook/test"
+import { expect, mocked, within } from "storybook/test"
 import { LATEST_PODCAST_EPISODE_FIXTURE } from "../../../.storybook/fixtures/podcastEpisodes"
 import { PodcastEpisodeCard } from "./PodcastEpisodeCard"
 
@@ -92,8 +92,11 @@ export const VideoDialog: Story = {
 	beforeEach: () => {
 		mocked(fetchPodcastEpisode).mockResolvedValue(PODCAST_STORY_FILM_EPISODE)
 	},
-	play: async ({ canvas }) => {
+	play: async ({ canvas, canvasElement }) => {
+		// the dialog opens over the card, and the capture waits for it to settle
 		await canvas.getByRole("button", { name: "Play film" }).click()
+		const page = within(canvasElement.ownerDocument.body)
+		await expect(await page.findByRole("dialog")).toBeVisible()
 	},
 }
 

@@ -1,5 +1,5 @@
 // a section of cards: one page with no page buttons, two pages that keep every card in the html, and no cards
-import type { TopicCard as TopicCardFields } from "@carlnotes/contracts/home"
+import { CARDS_PAGE_SIZE, type TopicCard as TopicCardFields } from "@carlnotes/contracts/home"
 import { PROFILE_SECTIONS } from "@carlnotes/core/lib/profileSections"
 import type { Meta, StoryObj } from "@storybook/tanstack-react"
 import { expect } from "storybook/test"
@@ -62,7 +62,9 @@ export const OnePage: Story = {
 export const TwoPages: Story = {
 	args: { rows: toTopicCards(8) },
 	play: async ({ canvas }) => {
-		await expect(canvas.getAllByRole("link", { name: /^Open Topic/ })).toHaveLength(8)
+		// the page shows its six cards, the two off the page are hidden, and the page buttons sit under them
+		await expect(canvas.getAllByRole("link", { name: /^Open Topic/ })).toHaveLength(CARDS_PAGE_SIZE)
+		await expect(canvas.getAllByRole("link", { name: /^Open Topic/, hidden: true })).toHaveLength(8)
 		await expect(canvas.getByRole("navigation", { name: "Featured Topics pages" })).toBeInTheDocument()
 	},
 }

@@ -56,14 +56,18 @@ async function seedTestData(): Promise<{ subredditSource: Source; searchSource: 
 	return { subredditSource, searchSource, userId: user.id }
 }
 
-// what one Source's run answered: its resources, reddit's own throttle, or a real rejection
-type SourceOutcome = "found" | "throttled" | "failed"
+// what one Source's run answered: its resources, reddit refusing this address, or a real rejection
+type SourceOutcome = "found" | "refused" | "failed"
 
-// reddit answers 429 to an address it is throttling, which it does to the shared addresses hosted
-// runners send from. that says nothing about the ingester, which tried every access mode and reported
-// the reason each gave, so a throttle is recorded instead of failing the run
-function isThrottled(message: string): boolean {
-	return message.includes("429")
+// the statuses reddit answers an address it refuses: 429 while it throttles, and 403 to the keyless host from a
+// hosted runner's datacenter address
+const ADDRESS_REFUSED_STATUSES = ["403", "429"]
+
+// whether every access mode was refused for the address rather than for the Source. the message names each mode's
+// status, so a mode that failed for another reason keeps the run honest and fails it
+function isAddressRefused(message: string): boolean {
+	const statuses = [...message.matchAll(/returned (\d{3})/g)].map(([, status]) => status ?? "")
+	return statuses.length > 0 && statuses.every((status) => ADDRESS_REFUSED_STATUSES.includes(status))
 }
 
 // run one Source and report what came back, or the reason each access mode rejected it
@@ -87,7 +91,7 @@ async function checkSource(label: string, source: Source): Promise<SourceOutcome
 		const message = error instanceof Error ? error.message : String(error)
 		console.log(`\n--- ${label} ---`)
 		console.log(`rejected       : ${message}`)
-		return isThrottled(message) ? "throttled" : "failed"
+		return isAddressRefused(message) ? "refused" : "failed"
 	}
 }
 
@@ -106,9 +110,9 @@ async function check(subredditSource: Source, searchSource: Source): Promise<boo
 		["subreddit Source found resources", subredditOutcome],
 		["search Source found resources", searchOutcome],
 	] as [string, SourceOutcome][]) {
-		// a throttled address proves nothing either way, so it is named loudly and left out of the verdict
-		if (outcome === "throttled") {
-			console.log(`SKIP  ${label}, reddit is throttling this address`)
+		// an address reddit refuses proves nothing either way, so it is named loudly and left out of the verdict
+		if (outcome === "refused") {
+			console.log(`SKIP  ${label}, reddit refused this address`)
 			continue
 		}
 
