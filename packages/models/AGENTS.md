@@ -19,12 +19,24 @@ worker, and the evals all start. It imports `@carlnotes/db`, `@carlnotes/server`
   admin call times out after five seconds. A Scan creates its owner's missing key before any Source runs.
   `litellmTestFixtures.ts` is the stub proxy, the connection pool stub that keeps the call order, the user row, and the
   setup and restore that each LiteLLM test file runs around every test.
+- `modelCallRetry.ts` — `runModelCall`, the runner a Scan's scoring, embedding, and scan report calls go through. A
+  rate limit, a 408, a 5xx, or a timeout waits what the response's `Retry-After` names, read in its plain and
+  `llm_provider-` forms, or a jittered backoff, and tries again: at most 5 attempts, 30 seconds a wait, 60 seconds in
+  all, no new attempt after 3 minutes, and no wait past the review attempt's `modelCallWaitDeadlineAt`. A spent
+  budget, another rejection, and an output that fails its schema end the call at once. Each covered call passes
+  `maxRetries: 0`, and the embedding helpers take a `maxRetries` that defaults to the AI SDK's own.
+- `modelCallFailure.ts` — `toModelCallFailure` sorts a failed call into a spent key budget, a failure that another
+  attempt can fix, or a rejection, and `toRetryableModelCallFailure` sorts a thrown fetch error. The runner, the speech,
+  the transcription, and the topic image calls share it.
 - `budget.ts` — a Scan's one Budget, which every scan stage charges; nothing spends outside it. A Resource reserves
   its largest cost in the Budget's `reservedDollars` with `reserveScanSpend` before its paid section and releases it
   with `releaseScanSpend` after. A Resource starts while the spent and reserved dollars are below the Scan's limit, so
   parallel review passes it by at most one Resource's largest cost. The heartbeat checkpoints
-  `toCheckpointBudget`, the settled spend without the reservations, and `toResumedBudget` starts a retried attempt with
-  none. The shared `SCORE_OUTPUT_TOKENS` bounds ordinary and private scoring, and `premiumModelCost` prices their input/output usage before validation. It also prices the calls the api meters itself: `speechCost` by its speech tier and `transcriptionCost`, and
+  `toCheckpointBudget`, the settled spend without the reservations or the wait deadline, and `toResumedBudget` starts
+  a retried attempt with neither. `modelCallWaitDeadlineAt` is the moment after which no model call in the review
+  attempt waits to try again, and `canScoreResource` starts no new Resource. The shared `SCORE_OUTPUT_TOKENS` bounds
+  ordinary and private scoring, and `premiumModelCost` prices their input/output usage before validation. It also
+  prices the calls the api meters itself: `speechCost` by its speech tier and `transcriptionCost`, and
   `toEstimatedTokens` turns a text length into the tokens a cost estimate prices.
 - `spendReservations.ts` — `reserveUserSpend` reserves a chat turn's, a transcription's, or a spoken part's largest cost
   against the user's monthly budget, a soft limit: the call starts while the app's own monthly spend sums and the open
@@ -41,9 +53,8 @@ worker, and the evals all start. It imports `@carlnotes/db`, `@carlnotes/server`
   Sentry before it.
 - `speech.ts` sends one two-speaker call per chapter through LiteLLM's Gemini pass-through and returns a WAV, and one
   single-speaker call in the answering host's voice for a spoken chat reply, which ffmpeg encodes to a 64 kbps MP3, or
-  returns as the WAV if the encode fails. It reads the speech model from `@carlnotes/server/podcastEpisodeSettings`. A
-  spent key budget, a retryable failure, and a rejection are sorted by `toModelCallFailure`, which the speech and the
-  transcription calls share. `speech.smoke.ts` (`bun run smoke:speech`) checks both against the live proxy.
+  returns as the WAV if the encode fails. It reads the speech model from `@carlnotes/server/podcastEpisodeSettings`.
+  `speech.smoke.ts` (`bun run smoke:speech`) checks both against the live proxy.
 - `topicImageModel.ts` renders a topic's image through LiteLLM's Gemini pass-through on the user's key, the cheaper
   model for a create, a backfill, and an admin render and the better one for an editor's Regenerate, and prices each
   by its image tokens. Fireworks has no serverless image model on the platform's key.

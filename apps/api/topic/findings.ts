@@ -12,6 +12,7 @@ import { Hono } from "hono"
 import { loadOrFetchLinkPreview } from "../chat/linkPreviews"
 import { countSenderRateLimitHit, countWithinRateLimit, isCountedSender, toRequestSender } from "../counts/viewerCounts"
 import { type AppEnv, currentUser, toAnalyticsProperties } from "../currentUser"
+import { linkPreviewRateLimiter } from "../rateLimit"
 import { isSameOriginRequest } from "../sameOrigin"
 import {
 	countVisitorFindingView,
@@ -196,7 +197,7 @@ export function newTopicFindingCount(topicFindings: TopicFinding[]): number {
 // the per-finding routes. rating, consume, bookmark, and record a view need a signed-in user.
 // the link preview card the topic finding popup shows is for anyone who can see the finding
 export const findingsRoute = new Hono<AppEnv>()
-	.get("/topic-findings/:id/link-preview", async (context) => {
+	.get("/topic-findings/:id/link-preview", linkPreviewRateLimiter, async (context) => {
 		// a visitor sees the card wherever they can see a topic finding
 		const userId = currentUser(context)
 		if (!(await isTopicFindingVisible(userId, context.req.param("id")))) {

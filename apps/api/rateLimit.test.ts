@@ -5,21 +5,30 @@ import * as redis from "@carlnotes/db/redis"
 import { restoreRedisClient, stubRedisClient, stubUnreachableRedisClient } from "@carlnotes/db/redisClientStub"
 import * as redisRateLimits from "@carlnotes/db/redisRateLimits"
 import { getIP } from "better-auth/api"
-import { Hono } from "hono"
-import { auth } from "./auth"
+import { Hono, type MiddlewareHandler } from "hono"
+import { auth, type SessionUser } from "./auth"
 import type { AppEnv } from "./currentUser"
 import {
+	API_RATE_LIMIT,
+	APP_SIGNUP_GATE_RATE_LIMIT,
+	apiRateLimiter,
+	appSignupChallengeRateLimiter,
 	CALLER_RATE_LIMIT,
+	LINK_PREVIEW_RATE_LIMIT,
+	linkPreviewRateLimiter,
 	PAGE_RENDER_RATE_LIMIT,
 	pageRenderRateLimiter,
 	SEARCH_RATE_LIMIT,
 	SPEECH_RATE_LIMIT,
 	SPOKEN_EVENT_RATE_LIMIT,
 	searchRateLimiter,
+	socialReadRateLimiter,
 	speechRateLimiter,
 	spokenEventRateLimiter,
+	TOPIC_FEED_RATE_LIMIT,
 	toolCallerRateLimiter,
 	toolCallerRateLimitStore,
+	topicFeedRateLimiter,
 	toRateLimitKey,
 } from "./rateLimit"
 import { SESSION_COOKIE } from "./testSession"
@@ -96,11 +105,11 @@ test("the limiter rejects the 31st request inside a minute while Redis is unreac
 	stubUnreachableRedisClient()
 	spyOn(console, "error").mockImplementation(() => {})
 
-	// 31 requests from one caller through the limiter
+	// 31 requests from one caller's address through the limiter
 	const limitedApp = new Hono<AppEnv>().use(toolCallerRateLimiter).get("/mcp", (context) => context.text("ok"))
 	const statuses: number[] = []
 	for (let i = 0; i < CALLER_RATE_LIMIT + 1; i++) {
-		statuses.push((await limitedApp.request("/mcp")).status)
+		statuses.push((await limitedApp.request("/mcp", { headers: { "x-forwarded-for": "203.0.113.30" } })).status)
 	}
 	expect(statuses.slice(0, CALLER_RATE_LIMIT)).toEqual(Array(CALLER_RATE_LIMIT).fill(200))
 	expect(statuses.at(-1)).toBe(429)
@@ -200,5 +209,125 @@ test.each([
 
 		// the hits count under the limiter's own prefix, apart from the tool callers' window
 		expect([...storedValueByKey.keys()]).toEqual([`${keyPrefix}:address:203.0.113.11`])
+	},
+)
+
+// an app behind one limiter, with the given user signed in or none
+function toLimitedApp(limiter: MiddlewareHandler<AppEnv>, userId: string | null = null): Hono<AppEnv> {
+	// set the signed-in user, or none
+	const limitedApp = new Hono<AppEnv>().use(async (context, next) => {
+		context.set("user", userId ? ({ id: userId } as SessionUser) : null)
+		await next()
+	})
+
+	// the limiter, then a route that always succeeds
+	return limitedApp.use(limiter).get("/limited", (context) => context.json({ ok: true }))
+}
+
+// sends requests to the app with the given headers, and returns each status
+async function toLimitedStatuses(
+	limitedApp: Hono<AppEnv>,
+	requestCount: number,
+	headers: Record<string, string> = {},
+): Promise<number[]> {
+	const statuses: number[] = []
+	for (let i = 0; i < requestCount; i++) {
+		statuses.push((await limitedApp.request("/limited", { headers })).status)
+	}
+	return statuses
+}
+
+test("a limiter no page render reaches counts a request with no user and no external address in the shared bucket", async () => {
+	stubRedisClient()
+
+	// the app signup gate rejects the request past its limit, with no address to key any of them by
+	const sharedStatuses = await toLimitedStatuses(
+		toLimitedApp(appSignupChallengeRateLimiter),
+		APP_SIGNUP_GATE_RATE_LIMIT + 1,
+	)
+	expect(sharedStatuses.at(-1)).toBe(429)
+})
+
+test("a limiter over the reads a page render calls skips a request with no user and no external address", async () => {
+	// count each hit in a stubbed Redis
+	stubRedisClient()
+
+	// a page render's loopback calls send no cookie and no forwarded address, so none is counted
+	const loopbackStatuses = await toLimitedStatuses(toLimitedApp(socialReadRateLimiter), 200)
+	expect(new Set(loopbackStatuses)).toEqual(new Set([200]))
+
+	// a signed-in user and an external address are still limited
+	const signedInStatuses = await toLimitedStatuses(toLimitedApp(socialReadRateLimiter, "user-31"), 121)
+	expect(signedInStatuses.at(-1)).toBe(429)
+	const visitorStatuses = await toLimitedStatuses(toLimitedApp(socialReadRateLimiter), 121, {
+		"x-forwarded-for": "203.0.113.31",
+	})
+	expect(visitorStatuses.at(-1)).toBe(429)
+})
+
+// the general limit, the topic feed limit, and the link preview limit, each under its own Redis key
+const QUIET_LIMITERS = [
+	{ limiterName: "general", limiter: apiRateLimiter, limit: API_RATE_LIMIT, keyPrefix: "rate-limit:api" },
+	{
+		limiterName: "topic feed",
+		limiter: topicFeedRateLimiter,
+		limit: TOPIC_FEED_RATE_LIMIT,
+		keyPrefix: "rate-limit:topic-feed",
+	},
+	{
+		limiterName: "link preview",
+		limiter: linkPreviewRateLimiter,
+		limit: LINK_PREVIEW_RATE_LIMIT,
+		keyPrefix: "rate-limit:link-preview",
+	},
+]
+
+test.each(QUIET_LIMITERS)(
+	"the $limiterName limiter counts by user and by address and sends a plain 429",
+	async ({ limiter, limit, keyPrefix }) => {
+		const storedValueByKey = stubRedisClient()
+
+		// a signed-in user's requests up to the limit pass with no rate limit header, and the next is rejected
+		const signedInApp = toLimitedApp(limiter, "user-32")
+		const allowedResponse = await signedInApp.request("/limited")
+		expect(allowedResponse.status).toBe(200)
+		expect([...allowedResponse.headers.keys()].some((headerName) => headerName.startsWith("ratelimit"))).toBe(false)
+		const signedInStatuses = await toLimitedStatuses(signedInApp, limit)
+		expect(signedInStatuses.slice(0, limit - 1)).toEqual(Array(limit - 1).fill(200))
+		expect(signedInStatuses.at(-1)).toBe(429)
+
+		// the 429 names the seconds left in the window, is never cached, and matches the other limiters' body
+		const limitedResponse = await signedInApp.request("/limited")
+		expect(limitedResponse.status).toBe(429)
+		expect(Number(limitedResponse.headers.get("Retry-After"))).toBeGreaterThanOrEqual(1)
+		expect(Number(limitedResponse.headers.get("Retry-After"))).toBeLessThanOrEqual(60)
+		expect(limitedResponse.headers.get("Cache-Control")).toBe("private, no-cache")
+		expect(await limitedResponse.json()).toEqual({ error: "rate limited" })
+
+		// a visitor's address is counted apart from the user
+		const visitorStatuses = await toLimitedStatuses(toLimitedApp(limiter), limit + 1, {
+			"x-forwarded-for": "203.0.113.32",
+		})
+		expect(visitorStatuses.at(-1)).toBe(429)
+		expect([...storedValueByKey.keys()].sort()).toEqual([
+			`${keyPrefix}:address:203.0.113.32`,
+			`${keyPrefix}:user:user-32`,
+		])
+	},
+)
+
+test.each(QUIET_LIMITERS)(
+	"the $limiterName limiter counts in memory while Redis is unreachable",
+	async ({ limiter, limit }) => {
+		// a Redis client that never connects, so every count falls back to memory
+		stubUnreachableRedisClient()
+		spyOn(console, "error").mockImplementation(() => {})
+
+		// one visitor's requests up to the limit pass, and the next is rejected
+		const statuses = await toLimitedStatuses(toLimitedApp(limiter), limit + 1, {
+			"x-forwarded-for": `203.0.114.${limit % 250}`,
+		})
+		expect(statuses.slice(0, limit)).toEqual(Array(limit).fill(200))
+		expect(statuses.at(-1)).toBe(429)
 	},
 )

@@ -1,7 +1,9 @@
 // filter tests for the threshold, ranking, and gate decisions the free stages make, and the topic context limits
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
+import { restoreConnectionPool, stubConnectionPool } from "@carlnotes/db/connectionPoolStub"
 import { newBudget } from "@carlnotes/models/budget"
 import * as models from "@carlnotes/models/models"
+import { APICallError } from "ai"
 import { toTopicContextHash } from "../attach"
 import { isNearDuplicate } from "./dedupe"
 import { gateResources, isRelevant, rankBySimilarity } from "./filter"
@@ -9,9 +11,10 @@ import { toTestResource } from "./reviewTestFixtures"
 import { loadTopicContext, toScoreContextText } from "./topicContext"
 import { emptyReviewOutcome } from "./track"
 
-// put back the embedding call that a test stubbed
+// put back the embedding call that a test stubbed, and the connection pool
 afterEach(() => {
 	mock.restore()
+	restoreConnectionPool()
 })
 
 // the two gate predicates fire on the right side of their thresholds
@@ -160,4 +163,67 @@ test("personal links skip embedding work and the similarity floor, including mis
 	expect(embed).not.toHaveBeenCalled()
 	expect(considered).toHaveBeenCalledTimes(1)
 	expect(outcome.filteredCounts["below relevance threshold"]).toBe(1)
+})
+
+// two candidates with no stored vector, and an embedding failure as LiteLLM returns it
+const unembeddedResources = ["first", "second"].map((id) => ({
+	id,
+	url: `https://example.com/${id}`,
+	title: id,
+	snippet: "a page",
+	embedding: null,
+	kind: "read",
+})) as Parameters<typeof gateResources>[0]
+function toEmbeddingFailure(statusCode: number, responseBody: string): APICallError {
+	return new APICallError({
+		message: `status ${statusCode}`,
+		url: "http://litellm.test/v1/embeddings",
+		requestBodyValues: {},
+		statusCode,
+		responseBody,
+	})
+}
+
+// gates the two candidates against a matching context with instant waits, and returns the embedding writes it sent
+async function gateUnembeddedResources(
+	reviewOutcome = emptyReviewOutcome(),
+): Promise<{ relevantIds: string[]; embeddingWriteCount: number }> {
+	// the waits resolve at once, the logs stay quiet, and the embedding writes are counted
+	spyOn(Bun, "sleep").mockResolvedValue(undefined)
+	spyOn(console, "warn").mockImplementation(() => {})
+	spyOn(console, "error").mockImplementation(() => {})
+	const sentQueries = stubConnectionPool(() => [])
+
+	// gate both against a context they match
+	const topicContext = { embedding: [1, 0] } as Parameters<typeof gateResources>[1]
+	const relevantResources = await gateResources(unembeddedResources, topicContext, reviewOutcome, newBudget())
+	return {
+		relevantIds: relevantResources.map(({ resource }) => resource.id),
+		embeddingWriteCount: sentQueries.filter((sentQuery) => sentQuery.text.startsWith('update "resources"')).length,
+	}
+}
+
+test("an embedding 503 followed by a success stores every vector in the batch", async () => {
+	// a 503, then a vector for each candidate
+	const embedSpy = spyOn(models, "embedVectors")
+		.mockRejectedValueOnce(toEmbeddingFailure(503, '{"error":{"message":"overloaded"}}'))
+		.mockResolvedValue([
+			[1, 0],
+			[1, 0],
+		])
+	const gateResult = await gateUnembeddedResources()
+	expect(embedSpy).toHaveBeenCalledTimes(2)
+	expect(gateResult).toEqual({ relevantIds: ["first", "second"], embeddingWriteCount: 2 })
+})
+
+test("a spent budget fails the embedding batch after one attempt", async () => {
+	// LiteLLM names the spent budget in a 429's body
+	const embedSpy = spyOn(models, "embedVectors").mockRejectedValue(
+		toEmbeddingFailure(429, '{"error":{"type":"budget_exceeded"}}'),
+	)
+	const reviewOutcome = emptyReviewOutcome()
+	const gateResult = await gateUnembeddedResources(reviewOutcome)
+	expect(embedSpy).toHaveBeenCalledTimes(1)
+	expect(gateResult).toEqual({ relevantIds: [], embeddingWriteCount: 0 })
+	expect(reviewOutcome.failedCount).toBe(2)
 })

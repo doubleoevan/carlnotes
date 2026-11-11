@@ -5,6 +5,7 @@ import { SPENT_BUDGET_LINE } from "@carlnotes/contracts/chat"
 import { EMBED_DIMENSIONS } from "@carlnotes/db/schema/scans"
 import { toPositiveInteger } from "@carlnotes/server/envSettings"
 import { type EmbeddingModel, embed, embedMany, type LanguageModel } from "ai"
+import { isBudgetExhaustedBody } from "./modelCallFailure"
 import { PRIVATE_MODEL_OPTIONS } from "./privateModelOptions"
 
 // how long a model request may run before the request aborts. the default sits above twice the proxy's longest model timeout
@@ -22,23 +23,24 @@ export const MODEL_CHAT_TURN_FAILED_REJECTION = "Carl couldn't answer that one. 
 export function isBudgetRejection(error: unknown): boolean {
 	// read the whole error chain. the AI SDK wraps the proxy's response, and a retry wrapper may wrap the AI SDK's
 	// error again
-	for (const errorCause of toErrorCause(error)) {
+	for (const errorCause of toErrorCauses(error)) {
 		const { statusCode, responseBody } = errorCause as { statusCode?: unknown; responseBody?: unknown }
 		if (statusCode !== 429) {
 			continue
 		}
 		// only a budget rejection named in the body counts. LiteLLM sends one on every tier as a 429.
 		// any other 429 stays a plain rate limit
-		const body = typeof responseBody === "string" ? responseBody : ""
-		if (body.includes("budget_exceeded") || body.includes("Budget has been exceeded")) {
+		if (typeof responseBody === "string" && isBudgetExhaustedBody(responseBody)) {
 			return true
 		}
 	}
 	return false
 }
 
-// the error itself, whatever it wraps, and whatever a retry collected. a nested rejection is still found
-function toErrorCause(error: unknown, seenErrors = new Set<unknown>()): unknown[] {
+/**
+ * Returns the error itself, whatever it wraps, and whatever a retry collected.
+ */
+export function toErrorCauses(error: unknown, seenErrors = new Set<unknown>()): unknown[] {
 	if (typeof error !== "object" || error === null || seenErrors.has(error)) {
 		return []
 	}
@@ -48,8 +50,8 @@ function toErrorCause(error: unknown, seenErrors = new Set<unknown>()): unknown[
 	const nestedErrors = Array.isArray(errors) ? errors : []
 	return [
 		error,
-		...toErrorCause(cause, seenErrors),
-		...nestedErrors.flatMap((nestedError) => toErrorCause(nestedError, seenErrors)),
+		...toErrorCauses(cause, seenErrors),
+		...nestedErrors.flatMap((nestedError) => toErrorCauses(nestedError, seenErrors)),
 	]
 }
 
@@ -87,33 +89,47 @@ function embedModel(litellmApiKey?: string): EmbeddingModel {
 	return createModelProxyClient(litellmApiKey).embeddingModel("embed-model")
 }
 
+// the key an embedding call bills, and how many times the AI SDK retries it
+type EmbedOptions = { litellmApiKey?: string; maxRetries?: number }
+
 /**
  * Embeds one text and returns its vector, cut to the schema's width and scaled to unit length.
  */
-export async function embedVector(text: string, litellmApiKey?: string): Promise<number[]> {
+export async function embedVector(text: string, { litellmApiKey, maxRetries }: EmbedOptions = {}): Promise<number[]> {
 	// embed through the proxy, then reduce to the schema's width
-	const { embedding } = await embed({ model: embedModel(litellmApiKey), value: text })
+	const { embedding } = await embed({ model: embedModel(litellmApiKey), value: text, maxRetries })
 	return toSchemaVector(embedding)
 }
 
 /**
  * Embeds many texts in one embedMany call and returns each vector reduced like embedVector's, in the input order.
  */
-export async function embedVectors(texts: string[], litellmApiKey?: string): Promise<number[][]> {
+export async function embedVectors(
+	texts: string[],
+	{ litellmApiKey, maxRetries }: EmbedOptions = {},
+): Promise<number[][]> {
 	// embed through the proxy, then reduce each vector to the schema's width
-	const { embeddings } = await embedMany({ model: embedModel(litellmApiKey), values: texts })
+	const { embeddings } = await embedMany({ model: embedModel(litellmApiKey), values: texts, maxRetries })
 	return embeddings.map(toSchemaVector)
 }
 
 /**
  * Embeds private routing text on its owner's required key without recording input or vectors in telemetry.
  */
-export async function embedPrivateVectors(texts: string[], litellmApiKey: string): Promise<number[][]> {
+export async function embedPrivateVectors(
+	texts: string[],
+	{ litellmApiKey, maxRetries }: EmbedOptions & { litellmApiKey: string },
+): Promise<number[][]> {
 	if (!litellmApiKey) {
 		throw new Error("Private embeddings require the owner's key")
 	}
 	// stable embedding input keeps relevance ordering consistent between pages
-	const { embeddings } = await embedMany({ model: embedModel(litellmApiKey), values: texts, ...PRIVATE_MODEL_OPTIONS })
+	const { embeddings } = await embedMany({
+		model: embedModel(litellmApiKey),
+		values: texts,
+		maxRetries,
+		...PRIVATE_MODEL_OPTIONS,
+	})
 	return embeddings.map(toSchemaVector)
 }
 

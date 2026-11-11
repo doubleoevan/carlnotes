@@ -2,6 +2,7 @@ import { personalSourceKinds } from "@carlnotes/contracts/enums"
 // the scan report: a short write-up of what one Scan found, filtered, and spent
 
 import { type Budget, CHEAP_COST_PER_MILLION_TOKENS, charge, tokenCost } from "@carlnotes/models/budget"
+import { runModelCall } from "@carlnotes/models/modelCallRetry"
 import { cheapModel } from "@carlnotes/models/models"
 import { type BuiltPrompt, fetchPromptTemplate, promptTelemetry } from "@carlnotes/models/prompts/fetch"
 import { writePrompt } from "@carlnotes/models/prompts/write"
@@ -12,9 +13,6 @@ import type { KeptFinding, ReviewOutcome } from "./track"
 
 // how many kept findings the report lists in full before it just counts the rest
 const MAX_TOPIC_SCAN_REPORT_FINDINGS = 20
-
-// how many times the report call retries before it gives up
-const REPORT_MAX_RETRIES = 4
 
 // one Source's ingestion outcome, as the report's sources section lists it "fallback" means the Source ran
 export type ScannedSource = {
@@ -70,12 +68,17 @@ export async function summarizeTopicScan(
 		budget,
 	})
 
-	// ask the cheap model for the write-up, then charge what it cost
-	const { text, usage } = await generateText({
-		model: cheapModel(litellmApiKey),
-		prompt: reportPrompt.prompt,
-		maxRetries: REPORT_MAX_RETRIES,
-		...promptTelemetry(reportPrompt),
+	// ask the cheap model for the write-up, waiting out a rate limit, then charge what it cost
+	const { text, usage } = await runModelCall({
+		runAttempt: () =>
+			generateText({
+				model: cheapModel(litellmApiKey),
+				prompt: reportPrompt.prompt,
+				maxRetries: 0,
+				...promptTelemetry(reportPrompt),
+			}),
+		waitDeadlineAt: budget.modelCallWaitDeadlineAt,
+		label: "scan-report",
 	})
 	charge(budget, "scoringCheap", tokenCost(usage.totalTokens ?? 0, CHEAP_COST_PER_MILLION_TOKENS))
 
@@ -158,6 +161,7 @@ function toSourcesBlock(scannedSources: ScannedSource[]): string {
 	return scannedSources
 		.filter((source) => !personalSourceKinds.some((kind) => kind === source.sourceKind))
 		.map((scannedSource) => {
+			// name the fallback and the failure reason, if any
 			const fallbackNote = scannedSource.fallbackMode ? ` — fell back to ${scannedSource.fallbackMode}` : ""
 			const failureNote = scannedSource.reason ? ` — ${scannedSource.reason}` : ""
 			return `- ${scannedSource.sourceKind}: ${scannedSource.status}${fallbackNote}${failureNote}`

@@ -1,16 +1,10 @@
-// speech tests: the two request bodies, the flex tier, how a failed call is sorted, the pass-through calls, a spoken
+// speech tests: the two request bodies, the flex tier, the pass-through calls, a spoken
 // answer's MP3 and its WAV fallback, an empty model
 import { afterEach, expect, test } from "bun:test"
 import type { PodcastEpisodeTurn } from "@carlnotes/contracts/payloads"
 import { quietErrorReports } from "@carlnotes/server/monitoringTestFixtures"
 import { saveEnvSettings } from "@carlnotes/server/savedEnvSettings"
-import {
-	recordSpeech,
-	recordSpokenAnswer,
-	toModelCallFailure,
-	toSpeechRequestBody,
-	toSpokenAnswerRequestBody,
-} from "./speech"
+import { recordSpeech, recordSpokenAnswer, toSpeechRequestBody, toSpokenAnswerRequestBody } from "./speech"
 
 // the real fetch and env to put back after each test
 const realFetch = globalThis.fetch
@@ -101,15 +95,6 @@ test("a spoken answer vienna gave names the co-host's voice alone", () => {
 test("a flex request selects the flex tier, and a standard request names none", () => {
 	expect(toSpeechRequestBody(TURNS, "flex").service_tier).toBe("flex")
 	expect("service_tier" in toSpeechRequestBody(TURNS, "standard")).toBe(false)
-})
-
-// a rate limit and a 5xx retry, a spent key budget does not, and any other rejection is final
-test("a failed call is sorted into retryable, budget-spent, or rejected", () => {
-	expect(toModelCallFailure(429, '{"error":"rate limit"}').outcome).toBe("retryable")
-	expect(toModelCallFailure(503, "overloaded").outcome).toBe("retryable")
-	expect(toModelCallFailure(429, '{"error":{"type":"budget_exceeded"}}').outcome).toBe("budget-spent")
-	expect(toModelCallFailure(400, "Budget has been exceeded! Current cost: 3.1").outcome).toBe("budget-spent")
-	expect(toModelCallFailure(400, "invalid voice").outcome).toBe("rejected")
 })
 
 test("a call posts to the pass-through on the key and returns the audio with its token counts", async () => {

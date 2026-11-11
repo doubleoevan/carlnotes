@@ -932,6 +932,10 @@ Check for:
      `apps/mobile/src/components/search/SearchRowTopicLink.tsx` (now `SearchRowTopicLink` in
      `apps/mobile/src/components/search/SearchResultsList.tsx`)
    - `packages/core/lib/topicViews.ts` and `topicViews.test.ts` (now `pageViews.ts` and `pageViews.test.ts` there)
+   - `ModelCallFailure`, `toModelCallFailure`, and `toRetryableModelCallFailure` in `packages/models/speech.ts` (now
+     `packages/models/modelCallFailure.ts`), `REPORT_MAX_RETRIES` in `packages/pipeline/review/summarize.ts` (now
+     `runModelCall` in `packages/models/modelCallRetry.ts`), and the positional `litellmApiKey` of `embedVector`,
+     `embedVectors`, and `embedPrivateVectors` (now an options object with `litellmApiKey` and `maxRetries`)
 
 5. **Cross-harness enforcement parity**: `.claude/settings.json` hooks and
    `.opencode/plugin/guardrails.mjs` must gate the same operations with the

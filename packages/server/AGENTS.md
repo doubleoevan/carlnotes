@@ -51,12 +51,13 @@ that scan them.
 
 `concurrency.ts` runs tasks a few at a time for the review's scoring, the sweep's reads of each owner's daily Topics,
 key budget, and daily scans cutoff, the stored object deletes, and the reset's replacements. `retry.ts` tries a failed
-attempt again after a fixed wait, for the worker's first Temporal connection, a podcast episode's publish, and the
-podcast episode smoke's chapters. Every fetch of a user-supplied url goes through `fetchPublicUrl` (`publicFetch.ts`),
-which re-checks each redirect hop against the internal-address rule, with `readLimitedBody` bounding reads. A fetch
-that a server responds to with an error status throws `FetchStatusError`, `isHostRejection` says whether a failure is
-the host rejecting the request (a 4xx or an oversized body) instead of a fault, and `isRetryableFetchFailure` says
-whether a failure is worth a retry: a timeout, an abort, a 429, or a 5xx.
+attempt again after a fixed wait, or after one chosen from the failure, which can also end the retries. Its callers are
+the worker's first Temporal connection, a podcast episode's publish, a film's images, the podcast episode smoke's
+chapters, and the model call runner in `@carlnotes/models/modelCallRetry`. Every fetch of a user-supplied url goes
+through `fetchPublicUrl` (`publicFetch.ts`), which re-checks each redirect hop against the internal-address rule, with
+`readLimitedBody` bounding reads. A fetch that a server responds to with an error status throws `FetchStatusError`,
+`isHostRejection` says whether a failure is the host rejecting the request (a 4xx or an oversized body) instead of a
+fault, and `isRetryableFetchFailure` says whether a failure is worth a retry: a timeout, an abort, a 429, or a 5xx.
 
 `expoPush.ts` wraps `expo-server-sdk` for the pipeline's push delivery: `chunkPushMessages` splits messages at the
 service's 100 per send request, `sendPushMessageChunk` returns a ticket per message in order, `readPushReceipts` reads

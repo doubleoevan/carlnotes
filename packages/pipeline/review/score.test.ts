@@ -1,5 +1,5 @@
-// Tests for score policy, model requests, bounded concurrency, and paid review.
-import { afterEach, expect, test } from "bun:test"
+// score tests: score policy, model requests, a rate-limited scoring call, bounded concurrency, and paid review
+import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import { PERSONAL_SOURCE_SCORE_BONUS } from "@carlnotes/contracts/sourceScoring"
 import { restoreConnectionPool, stubConnectionPool } from "@carlnotes/db/connectionPoolStub"
 import type { scans } from "@carlnotes/db/schema/scans"
@@ -7,6 +7,7 @@ import { canScoreResource, charge, newBudget, releaseScanSpend } from "@carlnote
 import { toChatCompletionResponse } from "@carlnotes/models/chatCompletionTestFixtures"
 import { SCORE_OUTPUT_TOKENS } from "@carlnotes/models/models"
 import { runWithConcurrency } from "@carlnotes/server/concurrency"
+import { quietErrorReports } from "@carlnotes/server/monitoringTestFixtures"
 import { saveEnvSettings } from "@carlnotes/server/savedEnvSettings"
 import { rankBySimilarity } from "./filter"
 import { findingIdsToFilter } from "./index"
@@ -115,26 +116,34 @@ test("buildScorePrompt includes content and context and gates the relevance expl
 // the proxy settings a scoring call needs, the real fetch, and the scoring replies a stubbed proxy returns in order
 const restoreEnvSettings = saveEnvSettings(["LITELLM_BASE_URL", "LITELLM_MASTER_KEY"])
 const originalFetch = globalThis.fetch
-const scoringReplies: object[] = []
+const scoringReplies: ScoringReply[] = []
 const scoringRequests: Record<string, unknown>[] = []
 let scoringCallCount = 0
 
-// stub the proxy so each scoring call gets the next reply as its structured output
-function stubScoringReplies(replies: object[]): void {
+// a scoring reply: the structured output a call returns, or a failed proxy response with its status and body
+type ScoringReply = object | ProxyFailure
+type ProxyFailure = { proxyStatus: number; proxyBody: string }
+
+// stub the proxy so each scoring call gets the next reply as its structured output or its failed response
+function stubScoringReplies(replies: ScoringReply[]): void {
 	Bun.env.LITELLM_BASE_URL = "http://litellm.test"
 	Bun.env.LITELLM_MASTER_KEY = "master"
 	scoringReplies.splice(0, scoringReplies.length, ...replies)
 	globalThis.fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
 		scoringRequests.push(JSON.parse(String(init?.body)))
 		// one completion whose content is the next reply, repeating the last one past the end
-		const content = JSON.stringify(scoringReplies[Math.min(scoringCallCount, scoringReplies.length - 1)])
+		const scoringReply = scoringReplies[Math.min(scoringCallCount, scoringReplies.length - 1)]
 		scoringCallCount++
-		return toChatCompletionResponse(content)
+		if (scoringReply && "proxyStatus" in scoringReply) {
+			return new Response(scoringReply.proxyBody, { status: scoringReply.proxyStatus })
+		}
+		return toChatCompletionResponse(JSON.stringify(scoringReply))
 	}) as unknown as typeof fetch
 }
 
-// put back the proxy settings, fetch, the call count, and the connection pool
+// put back the spies, the proxy settings, fetch, the call count, and the connection pool
 afterEach(() => {
+	mock.restore()
 	restoreEnvSettings()
 	globalThis.fetch = originalFetch
 	scoringCallCount = 0
@@ -335,4 +344,75 @@ test("a personal-source bonus cannot save a weak link from the normal max-result
 		},
 	]
 	expect(findingIdsToFilter(rows, 1)).toEqual(["personal"])
+})
+
+// a scoring rate limit and a rejection, as LiteLLM returns them
+const RATE_LIMIT: ProxyFailure = { proxyStatus: 429, proxyBody: '{"error":{"message":"rate limited"}}' }
+const REJECTION: ProxyFailure = { proxyStatus: 400, proxyBody: '{"error":{"message":"bad request"}}' }
+
+// scores the tweet through the whole paid path on a budget, with instant waits, and returns what the review counted
+async function scoreTweetWithWaits(
+	budget = newBudget(),
+): Promise<{ keptCount: number; failedCount: number; findingWriteCount: number; sleepCount: number }> {
+	// the waits resolve at once, and Finding writes are counted
+	const sleepSpy = spyOn(Bun, "sleep").mockResolvedValue(undefined)
+	spyOn(console, "warn").mockImplementation(() => {})
+	spyOn(console, "error").mockImplementation(() => {})
+	const sentQueries = stubConnectionPool(({ text }) =>
+		text.startsWith('insert into "findings"') ? [["finding-1", true, 0.5]] : [],
+	)
+
+	// run the paid path and count what it did
+	const reviewOutcome = emptyReviewOutcome()
+	await fetchAndScoreResources([tweetResource], scoringScan, "topic-1", topicContext, reviewOutcome, budget, new Set())
+	return {
+		keptCount: reviewOutcome.keptFindings.length,
+		failedCount: reviewOutcome.failedCount,
+		findingWriteCount: sentQueries.filter((sentQuery) => sentQuery.text.startsWith('insert into "findings"')).length,
+		sleepCount: sleepSpy.mock.calls.length,
+	}
+}
+
+test("a scoring rate limit followed by a success keeps the Finding and charges one call", async () => {
+	// a clean score's charge to compare against
+	stubScoringReplies([{ score: 0.3 }])
+	const cleanBudget = newBudget()
+	await scoreTweetWithWaits(cleanBudget)
+
+	// a 429, then the same score
+	scoringCallCount = 0
+	stubScoringReplies([RATE_LIMIT, { score: 0.3 }])
+	const reportErrorSpy = quietErrorReports()
+	const budget = newBudget()
+	const scoreTweetResult = await scoreTweetWithWaits(budget)
+
+	// two calls, one sleep, one Finding, the clean charge, and no error report
+	expect(scoringCallCount).toBe(2)
+	expect(scoreTweetResult).toMatchObject({ keptCount: 1, failedCount: 0, findingWriteCount: 1, sleepCount: 1 })
+	expect(budget.stageCosts.scoringCheap).toBe(cleanBudget.stageCosts.scoringCheap)
+	expect(reportErrorSpy).not.toHaveBeenCalled()
+})
+
+test("a scoring rate limit that outlasts the waits fails the Resource once and releases its reservation", async () => {
+	// every attempt is rate limited
+	stubScoringReplies([RATE_LIMIT])
+	const reportErrorSpy = quietErrorReports()
+	const budget = newBudget()
+	const scoreTweetResult = await scoreTweetWithWaits(budget)
+
+	// five attempts, four waits, one report, no Finding, and nothing left reserved or charged
+	expect(scoringCallCount).toBe(5)
+	expect(scoreTweetResult).toMatchObject({ keptCount: 0, failedCount: 1, findingWriteCount: 0, sleepCount: 4 })
+	expect(reportErrorSpy).toHaveBeenCalledTimes(1)
+	expect(budget.reservedDollars).toBe(0)
+	expect(budget.stageCosts.scoringCheap).toBe(0)
+})
+
+test("a rejected scoring request fails the Resource after one attempt", async () => {
+	stubScoringReplies([REJECTION])
+	const reportErrorSpy = quietErrorReports()
+	const scoreTweetResult = await scoreTweetWithWaits()
+	expect(scoringCallCount).toBe(1)
+	expect(scoreTweetResult).toMatchObject({ keptCount: 0, failedCount: 1, sleepCount: 0 })
+	expect(reportErrorSpy).toHaveBeenCalledTimes(1)
 })

@@ -1,8 +1,29 @@
 // summarize tests for the report's failure isolation and the prompt it grounds in the scan's own totals
-import { expect, test } from "bun:test"
+import { afterEach, expect, mock, test } from "bun:test"
 import { newBudget } from "@carlnotes/models/budget"
+import { quietErrorReports } from "@carlnotes/server/monitoringTestFixtures"
+import { saveEnvSettings } from "@carlnotes/server/savedEnvSettings"
 // the scan report prompt input reuses the source outcome shape the scan hands over
-import { buildScanReportPrompt, type ScannedSource, toTopicScanSummary, withoutEmptyFindingsHeading } from "./summarize"
+import {
+	buildScanReportPrompt,
+	type ScannedSource,
+	summarizeTopicScan,
+	toTopicScanSummary,
+	withoutEmptyFindingsHeading,
+} from "./summarize"
+import type { TopicContext } from "./topicContext"
+import { emptyReviewOutcome } from "./track"
+
+// the proxy settings and the real fetch a stubbed report call replaces
+const restoreEnvSettings = saveEnvSettings(["LITELLM_BASE_URL", "LITELLM_MASTER_KEY"])
+const originalFetch = globalThis.fetch
+
+// put back the spies, the proxy settings, and fetch
+afterEach(() => {
+	mock.restore()
+	restoreEnvSettings()
+	globalThis.fetch = originalFetch
+})
 
 // an AI report that fails returns an empty summary
 test("toScanSummary yields an empty summary when the report throws an error", async () => {
@@ -92,4 +113,25 @@ test("withoutEmptyFindingsHeading drops a dangling heading and keeps a real list
 	const withFindings = "Two worth reading.\n\nFindings:\n\n- [One](https://a.com/1)"
 	expect(withoutEmptyFindingsHeading(withFindings)).toBe(withFindings)
 	expect(withoutEmptyFindingsHeading("Nothing kept today.")).toBe("Nothing kept today.")
+})
+
+test("a spent budget makes one report attempt and leaves the summary empty", async () => {
+	// the proxy names a spent budget in a 429's body
+	Bun.env.LITELLM_BASE_URL = "http://litellm.test"
+	Bun.env.LITELLM_MASTER_KEY = "master"
+	let reportCallCount = 0
+	globalThis.fetch = (async () => {
+		reportCallCount++
+		return new Response('{"error":{"type":"budget_exceeded"}}', { status: 429 })
+	}) as unknown as typeof fetch
+
+	// the report fails once, and the Scan keeps an empty summary
+	const reportErrorSpy = quietErrorReports()
+	const topicContext = { name: "Grinders", text: "Burr grinders" } as TopicContext
+	const summary = await toTopicScanSummary("scan-1", () =>
+		summarizeTopicScan(topicContext, emptyReviewOutcome(), [], newBudget()),
+	)
+	expect(summary).toBe("")
+	expect(reportCallCount).toBe(1)
+	expect(reportErrorSpy).toHaveBeenCalledTimes(1)
 })

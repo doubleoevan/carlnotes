@@ -161,12 +161,13 @@ test("a Play Integrity decode that throws rejects the proof", async () => {
 	expect(await response.text()).toContain("play integrity unavailable")
 })
 
-// each gate route has the credential paths' limit per address, so a loop stops at ten a minute
+// each gate route has the credential paths' limit per address, so a loop from one visitor stops at ten a minute
 test("the eleventh gate request in a minute is rate limited", async () => {
+	const visitorRequest = { method: "POST", headers: { "x-forwarded-for": "203.0.113.20" } }
 	for (let i = 0; i < APP_SIGNUP_GATE_RATE_LIMIT; i++) {
-		await fetchChallenge()
+		expect((await apiRoute.request("/api/signup-gate/app-challenge", visitorRequest)).status).toBe(200)
 	}
-	const response = await apiRoute.request("/api/signup-gate/app-challenge", { method: "POST" })
+	const response = await apiRoute.request("/api/signup-gate/app-challenge", visitorRequest)
 	expect(response.status).toBe(429)
 })
 

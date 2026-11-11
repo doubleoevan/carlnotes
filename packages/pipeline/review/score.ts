@@ -18,6 +18,7 @@ import {
 	toFetchCountField,
 	tokenCost,
 } from "@carlnotes/models/budget"
+import { runModelCall } from "@carlnotes/models/modelCallRetry"
 import {
 	cheapModel,
 	isBudgetRejection,
@@ -190,6 +191,8 @@ async function fetchAndScoreResource(
 		if (!topicContext.personalSourcesVersions) {
 			await markResourceSafety(resource.id, scoredResource.isUnsafe)
 		}
+
+		// a rejected score ends here, and a kept one is saved as a Finding
 		const rejection = toScoreRejection(scoredResource, Boolean(topicContext.personalSources?.length))
 		if (rejection) {
 			return rejection
@@ -300,16 +303,22 @@ async function scoreResourceContent(
 	// fetch and write the score prompt
 	const scorePrompt = await buildScorePrompt(resourceContent, topicContext, scoreTier.shouldWriteRelevanceExplanation)
 
-	// structured output forces a numeric score. the relevance explanation is only asked for on the premium tier
-	const generated = await generateText({
-		model: scoreTier.model,
-		maxOutputTokens: MAX_SCORE_OUTPUT_TOKENS,
-		maxRetries: 0,
-		...(scoreTier.stage === "scoringPremium" ? { providerOptions: LOW_REASONING_PROVIDER_OPTIONS } : {}),
-		output: Output.object({ schema: scoreSchema }),
-		prompt: scorePrompt.prompt,
-		...promptTelemetry(scorePrompt),
-	}).catch((error: unknown) => chargeScoringFailure(budget, scoreTier.stage, error))
+	// structured output forces a numeric score. the relevance explanation is only asked for on the premium tier.
+	// a failed attempt that returned usage is charged, and a rate limit waits and tries again
+	const generated = await runModelCall({
+		runAttempt: () =>
+			generateText({
+				model: scoreTier.model,
+				maxOutputTokens: MAX_SCORE_OUTPUT_TOKENS,
+				maxRetries: 0,
+				...(scoreTier.stage === "scoringPremium" ? { providerOptions: LOW_REASONING_PROVIDER_OPTIONS } : {}),
+				output: Output.object({ schema: scoreSchema }),
+				prompt: scorePrompt.prompt,
+				...promptTelemetry(scorePrompt),
+			}).catch((error: unknown) => chargeScoringFailure(budget, scoreTier.stage, error)),
+		waitDeadlineAt: budget.modelCallWaitDeadlineAt,
+		label: scoreTier.stage,
+	})
 
 	// track the estimated cost, then return the clamped score, the relevance explanation the cheap model leaves, and
 	// the safety judgment
@@ -365,6 +374,8 @@ function toScoredResourceReservation(senderCount: number): number {
 	if (senderCount === 0) {
 		return MAX_SCORED_RESOURCE_DOLLARS
 	}
+
+	// one fetch and one premium call for each sender
 	return (
 		FIRECRAWL_COST_PER_FETCH +
 		senderCount * premiumModelCost({ inputTokens: 30_000, outputTokens: SCORE_OUTPUT_TOKENS })

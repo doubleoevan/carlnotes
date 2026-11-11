@@ -54,6 +54,7 @@ import { topicPodcastEpisodeVideosRoute } from "./podcast/topicPodcastEpisodeVid
 import { profileOrderRoute } from "./profileOrder"
 import { profilesRoute } from "./profiles"
 import { pushDevicesRoute } from "./pushDevices"
+import { apiRateLimiter, topicFeedRateLimiter } from "./rateLimit"
 import { flagContentRoute } from "./report/flagContent"
 import { searchRoute } from "./search/search"
 import { pageHeadRoute } from "./share/pageHead"
@@ -143,6 +144,8 @@ export const apiRoute = new Hono<AppEnv>()
 		context.set("sessionId", session?.session.id ?? null)
 		await next()
 	})
+	// count every request but the exempt paths against the general limit, by the user else the address
+	.use("*", apiRateLimiter)
 	// bound every body on the routes with no limit of their own
 	.use("*", except(OWN_BODY_LIMIT_PATHS, defaultBodyLimit))
 	.on(["POST", "GET"], "/auth/*", async (context) => {
@@ -237,28 +240,34 @@ export const apiRoute = new Hono<AppEnv>()
 		return context.json({ count: unseenChatMentionCount })
 	})
 	// public: a signed-out visitor gets home and popular, just no "yours"
-	.get("/topic-feed", renderedCacheHeaders, zValidator("query", topicFeedQuery), async (context) => {
-		const userId = currentUser(context)
-		// only include consumed topic findings unless the api client asks for the "All" view
-		const includeConsumed = context.req.valid("query").all === "true"
-		// merge in the topic-creation quota. a signed-out visitor has none so gets zero, and every visitor shares one
-		// feed, read through Redis for half a minute
-		const [topicFeeds, remainingNewTopics, ownedTopicLimit, dailyTopicQuota] = await Promise.all([
-			traceRequestStage("topic_feed.build", () =>
-				userId ? buildTopicFeeds(userId, includeConsumed) : readVisitorTopicFeeds(includeConsumed),
-			),
-			userId ? topicsRemaining(userId) : Promise.resolve(0),
-			userId ? topicLimit(userId) : Promise.resolve(0),
-			userId ? loadDailyTopicQuota(userId) : Promise.resolve({ limit: 0, remainingTopics: 0 }),
-		])
-		return context.json({
-			...topicFeeds,
-			topicsRemaining: remainingNewTopics,
-			topicLimit: ownedTopicLimit,
-			dailyTopicLimit: dailyTopicQuota.limit,
-			dailyTopicsRemaining: dailyTopicQuota.remainingTopics,
-		})
-	})
+	.get(
+		"/topic-feed",
+		topicFeedRateLimiter,
+		renderedCacheHeaders,
+		zValidator("query", topicFeedQuery),
+		async (context) => {
+			const userId = currentUser(context)
+			// only include consumed topic findings unless the api client asks for the "All" view
+			const includeConsumed = context.req.valid("query").all === "true"
+			// merge in the topic-creation quota. a signed-out visitor has none so gets zero, and every visitor shares one
+			// feed, read through Redis for half a minute
+			const [topicFeeds, remainingNewTopics, ownedTopicLimit, dailyTopicQuota] = await Promise.all([
+				traceRequestStage("topic_feed.build", () =>
+					userId ? buildTopicFeeds(userId, includeConsumed) : readVisitorTopicFeeds(includeConsumed),
+				),
+				userId ? topicsRemaining(userId) : Promise.resolve(0),
+				userId ? topicLimit(userId) : Promise.resolve(0),
+				userId ? loadDailyTopicQuota(userId) : Promise.resolve({ limit: 0, remainingTopics: 0 }),
+			])
+			return context.json({
+				...topicFeeds,
+				topicsRemaining: remainingNewTopics,
+				topicLimit: ownedTopicLimit,
+				dailyTopicLimit: dailyTopicQuota.limit,
+				dailyTopicsRemaining: dailyTopicQuota.remainingTopics,
+			})
+		},
+	)
 	// the site search, then the topic routes
 	.route("/", searchRoute)
 	.route("/", topicsRoute)

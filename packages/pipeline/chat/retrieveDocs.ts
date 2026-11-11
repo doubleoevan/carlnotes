@@ -19,7 +19,7 @@ const DOCS_MATCH_MAX_DISTANCE = 0.5
  * Embeds a question or a search query with the query instruction.
  */
 export function embedRetrievalQuery(query: string, litellmApiKey?: string): Promise<number[]> {
-	return embedVector(`Instruct: ${EMBED_QUERY_INSTRUCTION}\nQuery: ${query}`, litellmApiKey)
+	return embedVector(`Instruct: ${EMBED_QUERY_INSTRUCTION}\nQuery: ${query}`, { litellmApiKey })
 }
 
 /**

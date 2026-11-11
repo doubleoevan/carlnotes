@@ -223,7 +223,7 @@ async function embedMatchingTexts(texts: string[], key: string): Promise<number[
 	const vectors: number[][] = []
 	for (let offset = 0; offset < texts.length; offset += TOPIC_MATCH_BATCH_SIZE) {
 		const batch = texts.slice(offset, offset + TOPIC_MATCH_BATCH_SIZE)
-		const embeddings = await embedPrivateVectors(batch, key)
+		const embeddings = await embedPrivateVectors(batch, { litellmApiKey: key })
 		// a short batch or an unusable vector fails the whole embedding
 		if (embeddings.length !== batch.length || embeddings.some((vector) => !isUsableVector(vector))) {
 			throw new Error("Topic matching requires complete embeddings")

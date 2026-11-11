@@ -10,6 +10,7 @@ import {
 	toEstimatedTokens,
 	tokenCost,
 } from "@carlnotes/models/budget"
+import { runModelCall } from "@carlnotes/models/modelCallRetry"
 import { embedPrivateVectors, embedVector } from "@carlnotes/models/models"
 import { type TopicScanContext, toTopicContextHash } from "../attach"
 import { assertPersonalSourcesReviewCurrent, toPrivateReviewError } from "../personalSources/reviewContext"
@@ -123,6 +124,7 @@ export async function loadTopicContext({
 				text: contextTextToEmbed,
 				personalSourcesVersions: topicScanContext.personalSourcesVersions,
 				litellmApiKey,
+				waitDeadlineAt: budget.modelCallWaitDeadlineAt,
 			})
 		: []
 	if (shouldEmbed) {
@@ -139,30 +141,45 @@ export async function loadTopicContext({
 	}
 }
 
-// private vectors remain local to this review and use content-redacted model options
+// private vectors remain local to this review and use content-redacted model options. a rate limit waits and tries
+// again until the review's wait deadline
 async function embedReviewContext({
 	text,
 	personalSourcesVersions,
 	litellmApiKey,
+	waitDeadlineAt,
 }: {
 	text: string
 	personalSourcesVersions?: PersonalSourcesContextVersion[]
 	litellmApiKey?: string
+	waitDeadlineAt: number | null
 }): Promise<number[]> {
 	// a context with no private text embeds as any query does
 	if (!personalSourcesVersions) {
-		return embedQuery(text, litellmApiKey)
+		return runModelCall({
+			runAttempt: () => embedVector(toEmbedQueryText(text), { litellmApiKey, maxRetries: 0 }),
+			waitDeadlineAt,
+			label: "embedding",
+		})
 	}
 
-	// a private context embeds on its owner's key, and only while its versions are current
+	// a private context embeds on its owner's key
 	try {
-		await assertPersonalSourcesReviewCurrent(personalSourcesVersions)
 		if (!litellmApiKey) {
 			throw new Error("Private review requires the owner's key")
 		}
 
-		// one private vector for the context as a query
-		const [vector] = await embedPrivateVectors([`Instruct: ${EMBED_QUERY_INSTRUCTION}\nQuery: ${text}`], litellmApiKey)
+		// one private vector for the context as a query, logging no private text on a retry. each attempt sends the text
+		// only while its versions are current
+		const [vector] = await runModelCall({
+			runAttempt: async () => {
+				await assertPersonalSourcesReviewCurrent(personalSourcesVersions)
+				return embedPrivateVectors([toEmbedQueryText(text)], { litellmApiKey, maxRetries: 0 })
+			},
+			waitDeadlineAt,
+			label: "embedding",
+			isPrivate: true,
+		})
 		if (!vector) {
 			throw new Error("Private review embedding missing")
 		}
@@ -177,7 +194,12 @@ async function embedReviewContext({
  * Embed a query: the topic context wrapped in qwen3's Instruct and Query template, through the truncating helper.
  */
 export async function embedQuery(text: string, litellmApiKey?: string): Promise<number[]> {
-	return embedVector(`Instruct: ${EMBED_QUERY_INSTRUCTION}\nQuery: ${text}`, litellmApiKey)
+	return embedVector(toEmbedQueryText(text), { litellmApiKey })
+}
+
+// a query's text in qwen3's Instruct and Query template
+function toEmbedQueryText(text: string): string {
+	return `Instruct: ${EMBED_QUERY_INSTRUCTION}\nQuery: ${text}`
 }
 
 /**

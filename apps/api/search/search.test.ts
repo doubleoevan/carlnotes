@@ -144,11 +144,13 @@ test("a two-character query reads no finding", async () => {
 })
 
 test("a search past the limit is rejected with 429 and reads nothing", async () => {
+	// one visitor's searches up to the limit pass, and the next is rejected
 	const sentQueries = stubConnectionPool()
+	const visitorRequest = { headers: { "x-forwarded-for": "203.0.113.21" } }
 	for (let i = 0; i < SEARCH_RATE_LIMIT; i++) {
-		expect((await searchRoute.request("/search?q=x")).status).toBe(200)
+		expect((await searchRoute.request("/search?q=x", visitorRequest)).status).toBe(200)
 	}
-	expect((await searchRoute.request("/search?q=orbit")).status).toBe(429)
+	expect((await searchRoute.request("/search?q=orbit", visitorRequest)).status).toBe(429)
 	expect(sentQueries).toHaveLength(0)
 })
 

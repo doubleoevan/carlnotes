@@ -6,9 +6,9 @@ import { type PodcastEpisodeSpeaker, podcastEpisodeSpeakers } from "@carlnotes/c
 import type { PodcastEpisodeTurn } from "@carlnotes/contracts/payloads"
 import { reportError } from "@carlnotes/server/monitoring"
 import { podcastEpisodeSpeechModel } from "@carlnotes/server/podcastEpisodeSettings"
-import { isRetryableHttpStatus } from "@carlnotes/server/publicFetch"
 import { type SpeechTier, speechCost, toEstimatedTokens } from "./budget"
 import { runFfmpeg } from "./ffmpeg"
+import { type ModelCallFailure, toModelCallFailure, toRetryableModelCallFailure } from "./modelCallFailure"
 
 // one chapter's speech call. its turns, its tier, and the virtual key that it bills, or the master key if no key is
 // given
@@ -17,15 +17,6 @@ export type RecordSpeechOptions = { turns: PodcastEpisodeTurn[]; speechTier: Spe
 // one spoken answer's speech call. its text, the host whose voice speaks it, and the virtual key that it bills.
 // the host is carl if no speaker is given, and the key is the master key if no key is given
 export type RecordSpokenAnswerOptions = { text: string; speaker?: PodcastEpisodeSpeaker; litellmApiKey?: string }
-
-// how a model call through the proxy fails
-export type ModelCallFailure =
-	// a failure that a retry can fix. a rate limit, a 5xx, a response with no result, a timeout, or a network failure
-	| { outcome: "retryable"; httpStatus: number | null; reason: string }
-	// the key's budget is spent, and no retry this month can fix a spent budget
-	| { outcome: "budget-spent"; reason: string }
-	// any other rejection
-	| { outcome: "rejected"; httpStatus: number | null; reason: string }
 
 // the result of one speech call. the audio as a WAV file, with the token counts that price it, or how the call failed
 export type SpeechResult =
@@ -186,30 +177,6 @@ export function maxSpokenAnswerDollars(textLength: number): number {
 		inputTokens: toEstimatedTokens(textLength),
 		audioTokens: Math.ceil((textLength / SLOWEST_SPOKEN_CHARS_PER_SECOND) * SPEECH_AUDIO_TOKENS_PER_SECOND),
 	})
-}
-
-/**
- * Sorts a failed model call into a spent key budget, a failure that another attempt can fix, or a rejection.
- */
-export function toModelCallFailure(httpStatus: number, errorBody: string): ModelCallFailure {
-	// LiteLLM names a spent key budget in the body, on a 429 or a 400. mask a key that the body echoes
-	const reason = errorBody.replace(/sk-[A-Za-z0-9_-]+/g, "sk-…").slice(0, 500)
-	if (errorBody.includes("budget_exceeded") || errorBody.includes("Budget has been exceeded")) {
-		return { outcome: "budget-spent", reason }
-	}
-
-	// a rate limit and an overloaded or failing server are worth another attempt
-	if (isRetryableHttpStatus(httpStatus)) {
-		return { outcome: "retryable", httpStatus, reason }
-	}
-	return { outcome: "rejected", httpStatus, reason }
-}
-
-/**
- * Sorts a thrown fetch error, a timeout or a network failure, into a failure that another attempt can fix.
- */
-export function toRetryableModelCallFailure(error: unknown): ModelCallFailure {
-	return { outcome: "retryable", httpStatus: null, reason: error instanceof Error ? error.message : String(error) }
 }
 
 /**

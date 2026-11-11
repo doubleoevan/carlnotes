@@ -1,15 +1,17 @@
-// scan activity tests: the ingest stage runs no Source for a Scan that is already marked failed and passes on only what
-// the later stages read, a finished, a stopped, and a failed scan each save their topic's vectors, while a scan with no
-// topic saves none, and the finish write counts each Source's kept findings
+// scan activity tests: each review attempt gets its own model call wait deadline, the ingest stage runs no Source for
+// a Scan that is already marked failed and passes on only what the later stages read, a finished, a stopped, and a
+// failed scan each save their topic's vectors, while a scan with no topic saves none, and the finish write counts each
+// Source's kept findings
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import type { StoredSourceResult } from "@carlnotes/contracts/topics"
 import { restoreConnectionPool, type SentQuery, stubConnectionPool, toTableRow } from "@carlnotes/db/connectionPoolStub"
 import { scans } from "@carlnotes/db/schema/scans"
 import { topics } from "@carlnotes/db/schema/topics"
-import { newBudget } from "@carlnotes/models/budget"
+import { newBudget, toCheckpointBudget, toResumedBudget } from "@carlnotes/models/budget"
 import * as litellm from "@carlnotes/models/litellm"
 import * as ingest from "@carlnotes/pipeline/ingest/index"
 import type { DiscoveredResource } from "@carlnotes/pipeline/ingest/ingester"
+import { REVIEW_MODEL_CALL_WAIT_DEADLINE_MS } from "@carlnotes/pipeline/stageTimeouts"
 import * as analytics from "@carlnotes/server/analytics"
 import { ApplicationFailure } from "@temporalio/activity"
 import {
@@ -18,6 +20,7 @@ import {
 	type IngestStageResult,
 	ingestForScan,
 	stopScan,
+	toModelCallWaitDeadlineBudget,
 	toScanSourceResults,
 } from "./runTopicScanActivities"
 
@@ -352,4 +355,20 @@ test("a scan whose topic was deleted saves no vectors", async () => {
 	const sentQueries = stubConnectionPool((sentQuery) => (sentQuery.text.startsWith('update "scans"') ? [[null]] : []))
 	await stopScan("scan-1")
 	expect(findTopicVectorUpsert(sentQueries)).toBeUndefined()
+})
+
+test("each review attempt gets a fresh model call wait deadline", () => {
+	// the first attempt's deadline sits twenty minutes after it starts
+	const firstAttemptBudget = toModelCallWaitDeadlineBudget(newBudget())
+	expect(firstAttemptBudget.modelCallWaitDeadlineAt).toBeGreaterThanOrEqual(
+		Date.now() + REVIEW_MODEL_CALL_WAIT_DEADLINE_MS - 1000,
+	)
+
+	// a second attempt resumes from the heartbeat, which drops the deadline, and gets twenty minutes from its own start
+	const nowSpy = spyOn(Date, "now").mockReturnValue(Date.now() + 25 * 60 * 1000)
+	const resumedBudget = toResumedBudget(toCheckpointBudget(firstAttemptBudget), newBudget())
+	const secondAttemptBudget = toModelCallWaitDeadlineBudget(resumedBudget)
+	expect(secondAttemptBudget.modelCallWaitDeadlineAt).toBe(Date.now() + REVIEW_MODEL_CALL_WAIT_DEADLINE_MS)
+	expect(secondAttemptBudget.modelCallWaitDeadlineAt).toBeGreaterThan(firstAttemptBudget.modelCallWaitDeadlineAt ?? 0)
+	nowSpy.mockRestore()
 })

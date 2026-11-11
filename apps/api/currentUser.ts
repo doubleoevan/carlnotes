@@ -2,6 +2,7 @@
 import type { AnalyticsEntryPoint } from "@carlnotes/contracts/analyticsEvents"
 import { type ClientTelemetry, toClientTelemetry } from "@carlnotes/contracts/clientTelemetry"
 import type { Context } from "hono"
+import type { RateLimitInfo } from "hono-rate-limiter"
 import type { SessionUser } from "./auth"
 import type { ToolCaller } from "./mcp/toolCaller"
 
@@ -17,6 +18,8 @@ export type AppEnv = {
 		sessionId?: string | null
 		toolCaller?: ToolCaller
 		analyticsTopic?: AnalyticsTopic
+		// the hit count and reset time that the latest rate limiter set
+		rateLimit?: RateLimitInfo
 	}
 }
 

@@ -17,6 +17,7 @@ import {
 	toEstimatedTokens,
 	tokenCost,
 } from "@carlnotes/models/budget"
+import { runModelCall } from "@carlnotes/models/modelCallRetry"
 import { embedVectors } from "@carlnotes/models/models"
 import { reportError } from "@carlnotes/server/monitoring"
 import { cosineSimilarity } from "ai"
@@ -256,9 +257,13 @@ async function embedResourcesBatch(
 	litellmApiKey?: string,
 ): Promise<void> {
 	try {
-		// embed the batch's document texts in one call, returned in the batch's order
+		// embed the batch's document texts in one call, returned in the batch's order. a rate limit waits and tries again
 		const documentTexts = resourcesBatch.map(embedText)
-		const vectors = await embedVectors(documentTexts, litellmApiKey)
+		const vectors = await runModelCall({
+			runAttempt: () => embedVectors(documentTexts, { litellmApiKey, maxRetries: 0 }),
+			waitDeadlineAt: budget.modelCallWaitDeadlineAt,
+			label: "embedding",
+		})
 
 		// store each vector and charge its own estimated cost, the same writes the one-at-a-time path made
 		await Promise.all(

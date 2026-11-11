@@ -1,6 +1,7 @@
 // each sender's scoring call writes a page-only explanation and their private annotation
 import type { PersonalSourcesReviewContext } from "@carlnotes/db/personalSourcesContext"
 import { type Budget, charge, chargeScoringFailure, premiumModelCost } from "@carlnotes/models/budget"
+import { runModelCall } from "@carlnotes/models/modelCallRetry"
 import { LOW_REASONING_PROVIDER_OPTIONS, SCORE_OUTPUT_TOKENS, scoreModel } from "@carlnotes/models/models"
 import { PRIVATE_MODEL_OPTIONS } from "@carlnotes/models/privateModelOptions"
 import { type BuiltPrompt, fetchPromptTemplate } from "@carlnotes/models/prompts/fetch"
@@ -16,12 +17,16 @@ const personalScoreSchema = z.object({
 	publicEvidence: z.array(z.number().int().min(1)).max(3),
 	annotation: z.string().min(1).max(1600).nullable(),
 })
+
+// what one sender's scoring returns: the score, the safety judgment, the public page excerpts, and the annotations
 export type PersonalSourceScore = {
 	score: number
 	isUnsafe: boolean
 	relevanceExplanation: string
 	annotations: { userId: string; text: string }[]
 }
+
+// the page, the Topic's context, each sender's private context, the Scan's Budget, and the owner's key
 type ScorePersonalSourceResourceOptions = {
 	resourceContent: string
 	topicContext: string
@@ -40,31 +45,47 @@ export async function scorePersonalSourceResource(
 	const content = toUntrustedPromptText(options.resourceContent.slice(0, 8000))
 	let result: PersonalSourceScore = { score: 0, isUnsafe: false, relevanceExplanation: "", annotations: [] }
 	for (const personalSource of options.personalSources) {
+		// write this sender's prompt
 		const scorePrompt = await buildPersonalSourceScorePrompt({
 			resourceContent: content,
 			topicContext: options.topicContext,
 			personalSource,
 		})
-		await assertPersonalSourcesReviewCurrent([personalSource])
-		const generated = await generateText({
-			model: scoreModel(options.litellmApiKey),
-			prompt: scorePrompt.prompt,
-			output: Output.object({ schema: personalScoreSchema }),
-			maxOutputTokens: SCORE_OUTPUT_TOKENS,
-			maxRetries: 0,
-			providerOptions: LOW_REASONING_PROVIDER_OPTIONS,
-			...PRIVATE_MODEL_OPTIONS,
-		}).catch((error: unknown) => chargeScoringFailure(options.budget, "scoringPremium", error))
+
+		// a failed attempt that returned usage is charged, and a rate limit waits and tries again, logging no private text.
+		// each attempt sends the private prompt only while the sender's context is still current
+		const generated = await runModelCall({
+			runAttempt: async () => {
+				await assertPersonalSourcesReviewCurrent([personalSource])
+				return generateText({
+					model: scoreModel(options.litellmApiKey),
+					prompt: scorePrompt.prompt,
+					output: Output.object({ schema: personalScoreSchema }),
+					maxOutputTokens: SCORE_OUTPUT_TOKENS,
+					maxRetries: 0,
+					providerOptions: LOW_REASONING_PROVIDER_OPTIONS,
+					...PRIVATE_MODEL_OPTIONS,
+				}).catch((error: unknown) => chargeScoringFailure(options.budget, "scoringPremium", error))
+			},
+			waitDeadlineAt: options.budget.modelCallWaitDeadlineAt,
+			label: "scoringPremium",
+			isPrivate: true,
+		})
+
 		// account for paid output before reading a structured result that may be missing
 		charge(options.budget, "scoringPremium", premiumModelCost(generated.usage))
 		if (generated.finishReason === "length") {
 			throw new PersonalSourcesReviewError("model_output_truncated")
 		}
+
+		// validate the output while the private context is still current, and stop at an unsafe page
 		await assertPersonalSourcesReviewCurrent([personalSource])
 		const scored = validatePersonalSourceScore({ output: generated.output, resourceContent: content, personalSource })
 		if (scored.isUnsafe) {
 			return scored
 		}
+
+		// keep the best score's explanation and every sender's annotation
 		result = {
 			...(scored.score > result.score || !result.relevanceExplanation ? scored : result),
 			annotations: [...result.annotations, ...scored.annotations],
@@ -85,6 +106,7 @@ export async function buildPersonalSourceScorePrompt({
 	topicContext: string
 	personalSource: PersonalSourcesReviewContext
 }): Promise<BuiltPrompt> {
+	// number the page passages and bound each input
 	const { template, name, registryPrompt } = await fetchPromptTemplate("score-personal-source-resource")
 	const prompt = writePrompt(template, {
 		resourceContent: toPagePassages(resourceContent)
@@ -121,6 +143,8 @@ export function validatePersonalSourceScore({
 	if (passageNumbers.some((number) => !Number.isInteger(number) || number < 1 || number > passages.length)) {
 		throw new PersonalSourcesReviewError("public_evidence")
 	}
+
+	// join the chosen passages, and bind the annotation to its sender
 	return {
 		score: output.score,
 		isUnsafe: false,
@@ -131,9 +155,11 @@ export function validatePersonalSourceScore({
 
 // keep readable paragraphs and split oversized ones at a word boundary
 function toPagePassages(resourceContent: string): string[] {
+	// split the bounded page into paragraphs
 	const paragraphs = toUntrustedPromptText(resourceContent.slice(0, 8000)).split(/\n\s*\n/)
 	const passages: string[] = []
 	for (const paragraph of paragraphs) {
+		// cut a long paragraph at the last word before the passage limit
 		let remainingText = paragraph.trim()
 		while (remainingText.length > 1200) {
 			const wordEnd = remainingText.lastIndexOf(" ", 1200)
@@ -141,6 +167,8 @@ function toPagePassages(resourceContent: string): string[] {
 			passages.push(remainingText.slice(0, splitAt).trim())
 			remainingText = remainingText.slice(splitAt).trim()
 		}
+
+		// keep the rest if it is long enough to read
 		if (remainingText.length >= 20) {
 			passages.push(remainingText)
 		}

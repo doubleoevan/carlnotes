@@ -5,7 +5,8 @@ import { VOICE_RECORDING_MAX_SECONDS } from "@carlnotes/contracts/payloads"
 import { chatTranscriptionModel } from "@carlnotes/server/voiceChat"
 import { toEstimatedTokens, transcriptionCost } from "./budget"
 import { runFfmpeg } from "./ffmpeg"
-import { type ModelCallFailure, toModelCallFailure, toRetryableModelCallFailure, WAV_HEADER_BYTES } from "./speech"
+import { type ModelCallFailure, toModelCallFailure, toRetryableModelCallFailure } from "./modelCallFailure"
+import { WAV_HEADER_BYTES } from "./speech"
 
 // one transcription call. the WAV to transcribe and the virtual key that it bills
 export type TranscribeRecordingOptions = { audioBytes: Uint8Array; litellmApiKey: string }

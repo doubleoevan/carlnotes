@@ -350,9 +350,10 @@ REVIEW_CONCURRENCY=1 MAX_SCORED_RESOURCES_PER_SCAN=8 bun run smoke:review
 
 Load testing shows how many requests one api process can serve at once. [oha](https://github.com/hatoo/oha)
 (`brew install oha`) keeps a set number of requests going. It reports the requests per second and how long the requests
-took, from the fastest to the slowest. Point it at the local dev api, never at carlnotes.com. The repo is public, and
-`/api/topic-feed` has no rate limit. A run against production costs real database time and sets off the Sentry warning
-for requests waiting on a database connection.
+took, from the fastest to the slowest. Point it at the local dev api, never at carlnotes.com. A local run is unlimited,
+because the api's rate limits skip a request from this machine's own address with no session, as a page render's calls
+are. A run against production meets the general limit of 1,800 requests a minute and the topic feed's 120 a minute, and
+the requests it gets through cost real database time.
 
 ```bash
 oha -c 50 -z 30s http://localhost:3000/api/topic-feed   # 50 requests at a time for 30 seconds, as a signed-out visitor

@@ -304,6 +304,7 @@ async function writeSamplePrompts(): Promise<[string, boolean][]> {
 			stageCosts: { ingestion: 0, embedding: 0, fetch: 0, scoringCheap: 0, scoringPremium: 0 },
 			maxScoredResources: 25,
 			fetchCounts: { reusedCount: 0, revalidatedCount: 0, fetchedCount: 0 },
+			modelCallWaitDeadlineAt: null,
 		},
 	})
 

@@ -2,8 +2,7 @@
 // it
 
 import { TOPIC_IMAGE_COST_DOLLARS } from "./budget"
-import type { ModelCallFailure } from "./speech"
-import { toModelCallFailure, toRetryableModelCallFailure } from "./speech"
+import { type ModelCallFailure, toModelCallFailure, toRetryableModelCallFailure } from "./modelCallFailure"
 
 // the model that draws a topic's image on creation, on the backfill, and on an admin's regenerate, and the better one
 // that draws an owner's regenerate. TOPIC_IMAGE_MODEL and TOPIC_IMAGE_REGENERATE_MODEL name others

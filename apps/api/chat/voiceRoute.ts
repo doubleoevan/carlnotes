@@ -14,13 +14,8 @@ import {
 import { isMonthlyBudgetCutoffPassed } from "@carlnotes/db/monthlyBudgetCutoffs"
 import { speechCost, transcriptionCost } from "@carlnotes/models/budget"
 import { loadOrProvisionUserLiteLLMKey } from "@carlnotes/models/litellm"
-import {
-	type ModelCallFailure,
-	maxSpokenAnswerDollars,
-	recordSpokenAnswer,
-	SPOKEN_ANSWER_SPEECH_TIER,
-	toRetryableModelCallFailure,
-} from "@carlnotes/models/speech"
+import { type ModelCallFailure, toRetryableModelCallFailure } from "@carlnotes/models/modelCallFailure"
+import { maxSpokenAnswerDollars, recordSpokenAnswer, SPOKEN_ANSWER_SPEECH_TIER } from "@carlnotes/models/speech"
 import { reserveUserSpend, type SpendReservationKind } from "@carlnotes/models/spendReservations"
 import { MAX_TRANSCRIPTION_DOLLARS, transcodeRecording, transcribeRecording } from "@carlnotes/models/transcription"
 import { trackEvent } from "@carlnotes/server/analytics"

@@ -331,19 +331,25 @@ authenticated encryption itself lives in `@carlnotes/server/privateText`.
   `analyticsTopic`, and a public topic's id is sent with the event.
 - `cursors.ts` — the base64url json cursor a paged read returns and a later page passes back: the news read's window
   cursor and the news tool's page cursor are written and read through it.
-- `rateLimit.ts` — the rate limits: the tool caller limit, shared by the chat turn routes, the transcription
-  route, the source suggestions, and the mcp routes, keyed by the user or by the client address; the page render limit
-  on a visitor's page renders, which `index.ts` mounts ahead of the blog, release, and ui page renders, keyed by
-  address and skipped for a session cookie or an untrusted address; the search limit on the search bar's three
-  routes; the speech limit on the spoken parts of a reply, in its own rate limit window; the spoken events
-  limit, in its own rate limit window; the social read limit on the paged reads of reactions and comments, on
-  the mention suggestions, and on a topic's related topics, keyed by the user or by the client address; and the note
-  body save, app signup challenge and gate, push device, and store billing limits.
-  `trustedProxies.ts` reads that address exactly as Better Auth does: the rightmost `x-forwarded-for` entry outside
-  the Cloudflare ranges that `TRUSTED_PROXIES` lists, and logs the warning once if the setting is unset or misses a
-  hop.
-  Each rate limit window is counted in Redis through `@carlnotes/db/redisRateLimits`, so every replica shares the
-  count. While Redis is unreachable the counter counts in this replica's memory, so a caller stays bounded per replica.
+- `rateLimit.ts` — the rate limits: the general limit of 1,800 requests a minute, which `api.ts` mounts after the
+  session lookup over every api route but the exempt paths (`/api/auth/*`, `/api/webhooks/*`, the podcast feeds and
+  covers, and `/api/unsubscribe` on any method, and on a read a Topic's podcast feed, a podcast episode's files, a Topic
+  Post Discussion's audio, and the `preview.png` share cards); the topic feed limit and the link preview limit, 120
+  each, under it; these three set no rate limit header, and their 429 sends `Retry-After` and `Cache-Control: private,
+  no-cache`; the tool caller limit, shared by the chat turn routes, the transcription route, the source suggestions, and
+  the mcp routes, keyed by the user or by the client address; the page render limit on a visitor's page renders, which
+  `index.ts` mounts ahead of the blog, release, and ui page renders, keyed by address and skipped for a session cookie
+  or an untrusted address; the search limit on the search bar's three routes; the speech limit on the spoken parts of a
+  reply, in its own rate limit window; the spoken events limit, in its own rate limit window; the social read limit on
+  the paged reads of reactions and comments, on the mention suggestions, and on a topic's related topics, keyed by the
+  user or by the client address; and the note body save, app signup challenge and gate, push device, and store billing
+  limits. The limits over the reads a page render calls, which are the general, topic feed, link preview, search, and
+  social read limits, skip a request with no user and no external address, such as a page render's loopback call. Every
+  other limit keyed by the user or the address counts such a request in one shared bucket. `trustedProxies.ts` reads
+  that address exactly as Better Auth does: the rightmost `x-forwarded-for` entry outside the Cloudflare ranges that
+  `TRUSTED_PROXIES` lists, and logs the warning once if the setting is unset or misses a hop. Each rate limit window is
+  counted in Redis through `@carlnotes/db/redisRateLimits`, so every replica shares the count. While Redis is
+  unreachable the counter counts in this replica's memory, so a caller stays bounded per replica.
 - `avatars.ts` — the user and team avatar uploads and the published avatar, and `avatarsRoute.ts` their routes, with
   `POST /api/avatars/decode-failures`, which reports a chosen avatar file that could not be decoded, by its content
   type and byte size, the first five a user sends in a day.

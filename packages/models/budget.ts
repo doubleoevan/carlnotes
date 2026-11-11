@@ -116,10 +116,12 @@ export type Budget = {
 	stageCosts: StageCosts
 	maxScoredResources: number
 	fetchCounts: FetchOutcomeCounts
+	// the moment after which no model call in this stage attempt waits to try again, or null for no deadline
+	modelCallWaitDeadlineAt: number | null
 }
 
 // the budget a heartbeat checkpoints, which includes settled spend only
-export type CheckpointBudget = Omit<Budget, "reservedDollars">
+export type CheckpointBudget = Omit<Budget, "reservedDollars" | "modelCallWaitDeadlineAt">
 
 /**
  * A fresh budget at this Scan's configured limits, with every total at zero.
@@ -132,6 +134,7 @@ export function newBudget(): Budget {
 		stageCosts: emptyStageCosts(),
 		maxScoredResources: MAX_SCORED_RESOURCES_PER_SCAN,
 		fetchCounts: emptyFetchCounts(),
+		modelCallWaitDeadlineAt: null,
 	}
 }
 
@@ -145,7 +148,7 @@ export function toResumedBudget(checkpointBudget: unknown, passedBudget: Budget)
 	// a stage on its first attempt has no checkpoint, and one that cannot be read is not worth resuming from.
 	// a budget passed from before reservations existed has no reserved dollars either
 	if (!isBudgetCheckpoint(checkpointBudget)) {
-		return { ...passedBudget, reservedDollars: 0 }
+		return { ...passedBudget, reservedDollars: 0, modelCallWaitDeadlineAt: null }
 	}
 
 	// the limits come from a fresh budget, not the checkpoint
@@ -157,15 +160,17 @@ export function toResumedBudget(checkpointBudget: unknown, passedBudget: Budget)
 		stageCosts: checkpointBudget.stageCosts,
 		maxScoredResources,
 		fetchCounts: checkpointBudget.fetchCounts,
+		modelCallWaitDeadlineAt: null,
 	}
 }
 
 /**
  * The budget a heartbeat checkpoints: the settled spend and counts, without the dollars that running Resources
- * reserved.
+ * reserved or the attempt's wait deadline.
  */
 export function toCheckpointBudget({
 	reservedDollars: _reservedDollars,
+	modelCallWaitDeadlineAt: _modelCallWaitDeadlineAt,
 	...checkpointBudget
 }: Budget): CheckpointBudget {
 	return checkpointBudget
@@ -254,11 +259,13 @@ export function canSpend(budget: Budget, stopSignal?: AbortSignal): boolean {
 
 /**
  * Whether a Resource may still be scored because the Scan is under both its dollar and scored-resource limits,
- * and the user has not stopped it. A stop is treated the same as a limit reached, so the Resources left over
- * are deferred instead of thrown away.
+ * the review attempt has not reached its model call wait deadline, and the user has not stopped it. A stop or a
+ * passed deadline is treated the same as a limit reached, so the Resources left over are deferred instead of thrown away.
  */
 export function canScoreResource(budget: Budget, stopSignal?: AbortSignal): boolean {
-	if (stopSignal?.aborted) {
+	// a stopped Scan, or a review attempt past its wait deadline, starts no new Resource
+	const isPastWaitDeadline = budget.modelCallWaitDeadlineAt !== null && Date.now() >= budget.modelCallWaitDeadlineAt
+	if (stopSignal?.aborted || isPastWaitDeadline) {
 		return false
 	}
 	return budget.spentDollars < budget.limitDollars && scoredResourcesCount(budget) < budget.maxScoredResources

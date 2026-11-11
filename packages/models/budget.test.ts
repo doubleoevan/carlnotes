@@ -142,7 +142,7 @@ describe("a Budget's reservations", () => {
 		expect(reserveScanSpend(budget, 0.3)).toBe(true)
 	})
 
-	test("are never checkpointed, so a resumed budget includes settled spend and holds no reservation", () => {
+	test("are never checkpointed with the wait deadline, so a resumed budget includes settled spend and holds neither", () => {
 		// an attempt dies while four Resources hold reservations beside the spend it settled
 		const dyingBudget = newBudget()
 		charge(dyingBudget, "fetch", 0.04)
@@ -156,6 +156,13 @@ describe("a Budget's reservations", () => {
 		const resumedBudget = toResumedBudget(checkpoint, newBudget())
 		expect(resumedBudget.spentDollars).toBeCloseTo(0.04, 10)
 		expect(resumedBudget.reservedDollars).toBe(0)
+
+		// a wait deadline is never checkpointed, and a resumed budget starts with none
+		const deadlineBudget = { ...newBudget(), modelCallWaitDeadlineAt: Date.now() + 60_000 }
+		const deadlineCheckpoint = acrossActivityBoundary(toCheckpointBudget(deadlineBudget) as Budget)
+		expect(deadlineCheckpoint).not.toHaveProperty("modelCallWaitDeadlineAt")
+		expect(toResumedBudget(deadlineCheckpoint, newBudget()).modelCallWaitDeadlineAt).toBeNull()
+		expect(toResumedBudget(undefined, deadlineBudget).modelCallWaitDeadlineAt).toBeNull()
 
 		// a passed budget from before reservations existed resumes with nothing reserved too
 		const { reservedDollars: _reservedDollars, ...passedBudgetWithoutReservations } = newBudget()
@@ -205,6 +212,15 @@ describe("a Scan the user stopped", () => {
 		stopController.abort()
 		expect(canScoreResource(budget, stopController.signal)).toBe(false)
 	})
+})
+
+test("a review attempt past its model call wait deadline starts no new Resource", () => {
+	// a deadline still ahead leaves scoring open, and one already passed defers the rest
+	const openBudget: Budget = { ...newBudget(), modelCallWaitDeadlineAt: Date.now() + 60_000 }
+	const passedBudget: Budget = { ...newBudget(), modelCallWaitDeadlineAt: Date.now() - 1 }
+
+	expect(canScoreResource(openBudget)).toBe(true)
+	expect(canScoreResource(passedBudget)).toBe(false)
 })
 
 describe("a speech call's cost", () => {

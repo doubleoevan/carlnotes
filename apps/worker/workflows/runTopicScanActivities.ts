@@ -16,7 +16,7 @@ import { saveTopicVectors } from "@carlnotes/pipeline/meanVectors"
 import type { ReviewSummary } from "@carlnotes/pipeline/review/index"
 import { reviewScan } from "@carlnotes/pipeline/review/index"
 import type { ScannedSource } from "@carlnotes/pipeline/review/summarize"
-import { HEARTBEAT_INTERVAL_MS } from "@carlnotes/pipeline/stageTimeouts"
+import { HEARTBEAT_INTERVAL_MS, REVIEW_MODEL_CALL_WAIT_DEADLINE_MS } from "@carlnotes/pipeline/stageTimeouts"
 import { trackEvent } from "@carlnotes/server/analytics"
 import { appBaseUrl } from "@carlnotes/server/appUrl"
 import { reportError } from "@carlnotes/server/monitoring"
@@ -105,8 +105,9 @@ export async function reviewForScan(
 	ingestResult: IngestStageResult,
 	budget: Budget,
 ): Promise<ReviewStageResult> {
-	// what the last attempt had spent when it died, or what ingestion handed over on the first attempt
-	const stageBudget = toStageBudget(budget)
+	// what the last attempt had spent when it died, or what ingestion handed over on the first attempt, with this
+	// attempt's own wait deadline
+	const stageBudget = toModelCallWaitDeadlineBudget(toStageBudget(budget))
 	return traceScanStage("scan-review", scanId, topicId, () =>
 		withHeartbeat(stageBudget, async () => {
 			// the Scan row and the owner's LiteLLM proxy key
@@ -343,6 +344,13 @@ function withHeartbeat<Result>(budget: Budget, runStage: () => Promise<Result>):
 // the signal that aborts when the user stops the Scan
 function stopSignal(): AbortSignal | undefined {
 	return asyncLocalStorage.getStore()?.cancellationSignal
+}
+
+/**
+ * Returns the review attempt's Budget with the moment after which its model calls stop waiting to try again.
+ */
+export function toModelCallWaitDeadlineBudget(stageBudget: Budget): Budget {
+	return { ...stageBudget, modelCallWaitDeadlineAt: Date.now() + REVIEW_MODEL_CALL_WAIT_DEADLINE_MS }
 }
 
 // the Budget this attempt runs against

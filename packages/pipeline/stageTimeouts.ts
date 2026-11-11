@@ -7,6 +7,10 @@ export const INGEST_TIMEOUT_MS = 30 * 60 * 1000
 export const REVIEW_TIMEOUT_MS = 30 * 60 * 1000
 export const FINISH_TIMEOUT_MS = 2 * 60 * 1000
 
+// how long into a review attempt a model call may still wait to try again. the rest of the review timeout is left
+// for the calls in progress, the scan report, and the closing writes
+export const REVIEW_MODEL_CALL_WAIT_DEADLINE_MS = 20 * 60 * 1000
+
 // how many times each stage may be attempted
 export const INGEST_ATTEMPTS = 3
 export const REVIEW_ATTEMPTS = 2

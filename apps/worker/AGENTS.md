@@ -88,7 +88,9 @@ about the app; a section whose hash is unchanged is not embedded again).
   with its Resource, or as earlier if no Source returned it. The found count adds the review's `earlierFoundCount`, the
   earlier Findings it read again that no Source returned. The kept count and `source_results` go in the same update as
   the found count and `problem_sources`, and a payload with no results, from a worker before them, writes `null`. A stop
-  and a failure write no results.
+  and a failure write no results. `reviewForScan` gives each attempt's stage Budget a fresh model call wait deadline
+  through `toModelCallWaitDeadlineBudget`, 20 minutes into the review's 30. After it, a rate-limited model call stops
+  waiting and fails, and no new Resource starts.
 - A completed Scan's email runs in its own workflow, `workflows/sendScanEmail.ts`, on the `scan-emails` queue that the
   file names, with its own Worker in `temporal.ts`. The scan workflow starts it as a child workflow that outlives the
   Scan's own, so a retrying email never holds up or fails the Scan. Each activity sends one batch or one report through

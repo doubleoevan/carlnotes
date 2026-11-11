@@ -1,10 +1,12 @@
 // api tree tests: a session read rejected with a 401 reads as signed out, any other failure fails the request, an
-// oversized body is rejected before its route, and a visitor's chat post and upload are rejected before their bodies
-// are read
+// oversized body is rejected before its route, a visitor's chat post and upload are rejected before their bodies
+// are read, and the general limit counts every path but the exempt ones and never a server render's loopback call
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import { TOPIC_ATTACHMENT_MAX_BYTES } from "@carlnotes/contracts/attachmentTypes"
 import { NOTE_HTML_MAX_CHARS } from "@carlnotes/contracts/notes"
+import { restoreConnectionPool, stubConnectionPool } from "@carlnotes/db/connectionPoolStub"
 import { restoreRedisClient, stubRedisClient } from "@carlnotes/db/redisClientStub"
+import * as redisRateLimits from "@carlnotes/db/redisRateLimits"
 import { APIError } from "better-auth"
 import { apiRoute } from "./api"
 import { auth } from "./auth"
@@ -13,10 +15,11 @@ import { MULTIPART_ENVELOPE_BYTES } from "./bodyLimit"
 import { SIGNUP_REQUIRED_ERROR } from "./chat/chatTurnAuthorization"
 import { signInAs, toJsonRequest } from "./testSession"
 
-// put the spied session read and the Redis client back after each test
+// put the spied session read, the Redis client, and the connection pool back after each test
 afterEach(() => {
 	mock.restore()
 	restoreRedisClient()
+	restoreConnectionPool()
 })
 
 // a revoked session's refresh throws a 401 error, and the request goes on to its route signed out instead of failing
@@ -123,4 +126,70 @@ test("a note body save past its own limit is rejected with a 413 before the rout
 	// the visitor's save responds 404
 	signInAs(null)
 	expect((await apiRoute.request("/api/notes/n1/body", oversizedNoteBody)).status).toBe(404)
+})
+
+// the general limit's Redis keys that one visitor's request to each path counted under
+async function toApiRateLimitKeys(requests: { path: string; method?: string }[]): Promise<string[]> {
+	// a signed-out visitor at an external address, with every count and query stubbed
+	spyOn(auth.api, "getSession").mockResolvedValue(null)
+	stubConnectionPool()
+	spyOn(console, "error").mockImplementation(() => {})
+	const incrementSpy = spyOn(redisRateLimits, "incrementRateLimitWindow").mockResolvedValue({
+		count: 1,
+		resetAt: Date.now() + 60_000,
+	})
+
+	// send each request, and keep the general limit's keys
+	for (const { path, method = "GET" } of requests) {
+		await apiRoute.request(path, { method, headers: { "x-forwarded-for": "203.0.113.40" } })
+	}
+	return incrementSpy.mock.calls
+		.map(([rateLimitKey]) => rateLimitKey)
+		.filter((key) => key.startsWith("rate-limit:api:"))
+}
+
+test("the general limit never counts an exempt path", async () => {
+	const apiRateLimitKeys = await toApiRateLimitKeys([
+		{ path: "/api/auth/get-session" },
+		{ path: "/api/webhooks/stripe", method: "POST" },
+		{ path: "/api/podcast-feeds/a-secret-token.xml" },
+		{ path: "/api/topics/topic-1/podcast-feed" },
+		{ path: "/api/episodes/episode-1/audio.mp3" },
+		{ path: "/api/episodes/episode-1/chapters.json", method: "HEAD" },
+		{ path: "/api/topic-posts/post-1/discussion/audio.mp3" },
+		{ path: "/api/topics/topic-1/preview.png" },
+		{ path: "/api/unsubscribe" },
+	])
+	expect(apiRateLimitKeys).toEqual([])
+})
+
+test("the general limit counts a file name on another route and a write to a file path", async () => {
+	const apiRateLimitKeys = await toApiRateLimitKeys([
+		{ path: "/api/topics/card.png" },
+		{ path: "/api/rooms/room-1/audio.mp3" },
+		{ path: "/api/episodes/episode-1/audio.mp3", method: "POST" },
+	])
+	expect(apiRateLimitKeys).toHaveLength(3)
+})
+
+test("the general limit counts a visitor's ordinary api request by address", async () => {
+	const apiRateLimitKeys = await toApiRateLimitKeys([{ path: "/api/rooms" }])
+	expect(apiRateLimitKeys).toEqual(["rate-limit:api:address:203.0.113.40"])
+})
+
+test("a server render's loopback calls are never limited", async () => {
+	// the reads a page render sends from this machine, with no cookie and no forwarded address
+	stubRedisClient()
+	stubConnectionPool()
+	spyOn(console, "error").mockImplementation(() => {})
+	const renderPaths = ["http://localhost:3000/api/topic-feed", "http://localhost:3000/api/topic-posts/post-1"]
+
+	// two thousand of each, past the general limit and the topic feed limit, and none is rejected
+	const statuses = new Set<number>()
+	for (let i = 0; i < 2000; i++) {
+		for (const renderPath of renderPaths) {
+			statuses.add((await apiRoute.request(renderPath)).status)
+		}
+	}
+	expect(statuses.has(429)).toBe(false)
 })
