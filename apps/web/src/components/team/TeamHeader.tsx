@@ -101,14 +101,15 @@ export function TeamHeader({
 				)}
 				{topicButton}
 			</div>
-			<div className="flex items-center gap-4">
+			<div className="flex flex-wrap items-center gap-4">
 				{isTeamLeader ? (
 					<TeamHeaderAvatar team={teamPage} onChanged={onChanged} />
 				) : (
 					<TeamAvatar team={teamPage} className={PAGE_AVATAR_CLASS} />
 				)}
-				{/* beside the avatar: the page's title, how many members and topics the team has, and its description */}
-				<div className="min-w-0">
+				{/* the page's title, how many members and topics the team has, and its description, beside the avatar on a
+				wide screen and below it on a phone */}
+				<div className="w-full min-w-0 sm:w-auto sm:flex-1">
 					<span className="relative inline-block">
 						<h1 className="font-display text-2xl">{toTeamPageTitle(teamPage.name)}</h1>
 						{/* the team chat room's unseen mentions. the badge's click opens the chat room, which clears it */}

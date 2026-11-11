@@ -31,12 +31,12 @@ function OwnProfileAvatar({ userId, username }: { userId: string; username: stri
 
 // the web's elements, with the avatar at the height of a topic's image on the Topics page
 const PROFILE_HEADER_ELEMENTS: ProfileHeaderElements = {
-	Row: ({ children }) => <div className="flex items-center gap-4">{children}</div>,
+	Row: ({ children }) => <div className="flex flex-wrap items-center gap-4">{children}</div>,
 	OwnAvatar: OwnProfileAvatar,
 	Avatar: ({ userId, username, avatarVersion }) => (
 		<UserAvatar userId={userId} username={username} avatarVersion={avatarVersion} className={PAGE_AVATAR_CLASS} />
 	),
-	Identity: ({ children }) => <div className="min-w-0">{children}</div>,
+	Identity: ({ children }) => <div className="w-full min-w-0 sm:w-auto sm:flex-1">{children}</div>,
 	Heading: ({ isAccountLink, children }) => {
 		const heading = <h1 className="font-display text-2xl">{children}</h1>
 		return isAccountLink ? (

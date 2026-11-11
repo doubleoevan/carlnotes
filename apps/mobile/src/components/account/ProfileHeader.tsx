@@ -40,7 +40,7 @@ const ELEMENTS: ProfileHeaderElements = {
 			size={PAGE_AVATAR_SIZE}
 		/>
 	),
-	Identity: ({ children }) => <View className="flex-1">{children}</View>,
+	Identity: ({ children }) => <View className="w-full">{children}</View>,
 	Heading: ({ isAccountLink, username, children }) =>
 		isAccountLink ? (
 			<AnchorLink href="/account" accessibilityLabel={`${username}'s account`}>

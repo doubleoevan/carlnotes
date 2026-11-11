@@ -208,8 +208,8 @@ function TeamHeader({ team, noteCount, onReload }: TeamHeaderProps) {
 					/>
 				)}
 				{teamAvatarPicker.filePickerMenu}
-				{/* beside the avatar: the page's title, the details line of the team's counts, and its description */}
-				<View className="flex-1">
+				{/* below the avatar: the page's title, the details line of the team's counts, and its description */}
+				<View className="w-full">
 					<View className="flex-row items-center gap-2">
 						<Text accessibilityRole="header" className="shrink font-display text-2xl">
 							{toTeamPageTitle(team.name)}
