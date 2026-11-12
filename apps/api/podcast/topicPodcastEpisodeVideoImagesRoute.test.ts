@@ -190,7 +190,12 @@ test("a chapter's generated image serves as a jpeg, and a chapter or a film with
 	expect(response.headers.get("Cache-Control")).toBe("public, max-age=3600")
 	expect(response.headers.get("CDN-Cache-Control")).toBeNull()
 	expect(await response.text()).toBe("jpeg")
-	expect(streamSpy).toHaveBeenCalledWith("episodes/episode-1/video/chapter-3-image.jpg")
+	expect(streamSpy).toHaveBeenCalledWith("episodes/episode-1/video/chapter-3-image-s2.jpg")
+
+	// a film not yet rendered again serves its image in the first style
+	existsSpy.mockImplementation(async (objectKey: string) => !objectKey.includes("-s2"))
+	expect((await topicPodcastEpisodeVideoImagesRoute.request(chapterImagePath)).status).toBe(200)
+	expect(streamSpy).toHaveBeenLastCalledWith("episodes/episode-1/video/chapter-3-image.jpg")
 
 	// a position that is no whole number is not found, without a read of the film
 	const chaptersPath = "/topic-podcast-episode-video-images/episode-1/chapters"

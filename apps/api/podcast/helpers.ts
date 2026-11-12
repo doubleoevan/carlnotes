@@ -44,10 +44,7 @@ import {
 } from "./podcastEpisodeShapes"
 import { loadRelatedPodcastEpisodeRows, loadTopicPodcastEpisodeRows } from "./relatedPodcastEpisodes"
 import { toHomeTopicPodcastEpisodeVideos } from "./topicPodcastEpisodeVideoHomeOrder"
-import {
-	isTopicPodcastEpisodeVideoSectionOpen,
-	loadTopicPodcastEpisodeVideoImageEdit,
-} from "./topicPodcastEpisodeVideos"
+import { loadTopicPodcastEpisodeVideoImageEdit } from "./topicPodcastEpisodeVideos"
 
 // the topic page's podcast, its latest podcast episode with chapters, and each scan's published podcast episode
 // by the scan's id
@@ -113,7 +110,7 @@ export async function loadTopicPodcast(topic: TopicRow, userId: string | null): 
 	const scanPodcastEpisodeRows = publishedPodcastEpisodeRows.filter((podcastEpisodeRow) => podcastEpisodeRow.scanId)
 
 	// the unpublished newest podcast episode if the user may see it, the player's podcast episodes with their chapters,
-	// the latest season's episodes, each scan's podcast episode summary, and whether Topic Cinema opens
+	// the latest season's podcast episodes, and each scan's podcast episode summary
 	// ponytail: the whole latest season goes with every topic page. page the list if a season reaches the hundreds
 	const [latestSeason] = seasons
 	const [
@@ -121,7 +118,6 @@ export async function loadTopicPodcast(topic: TopicRow, userId: string | null): 
 		playerPodcastEpisodes,
 		latestSeasonPodcastEpisodes,
 		scanPodcastEpisodeSummaries,
-		isVideoSectionOpen,
 	] = await Promise.all([
 		newestPodcastEpisodeRow && isNewestPodcastEpisodeUnpublished
 			? loadAccessiblePodcastEpisode({ userId, podcastEpisodeId: newestPodcastEpisodeRow.id })
@@ -144,21 +140,15 @@ export async function loadTopicPodcast(topic: TopicRow, userId: string | null): 
 			scanPodcastEpisodeRows.map((podcastEpisodeRow) => ({ podcastEpisodeRow, topic })),
 			topicPodcastEpisodeVideos,
 		),
-		latestFilmRow
-			? isTopicPodcastEpisodeVideoSectionOpen({ topicId: topic.id, latestPodcastEpisodeId: latestFilmRow.id, userId })
-			: false,
 	])
 
-	// the latest podcast episode, and Topic Cinema's latest film with whether its section opens, or null if no podcast
-	// episode has a ready film
+	// the latest podcast episode, and Topic Cinema's latest film, or null if no podcast episode has a ready film
 	const playerPodcastEpisodeById = new Map(
 		playerPodcastEpisodes.map((podcastEpisode) => [podcastEpisode.id, podcastEpisode]),
 	)
 	const latestPodcastEpisode = playerPodcastEpisodeById.get(latestPublishedPodcastEpisodeRow?.id ?? "") ?? null
 	const latestFilmPodcastEpisode = playerPodcastEpisodeById.get(latestFilmRow?.id ?? "")
-	const topicPodcastEpisodeVideoSection = latestFilmPodcastEpisode
-		? { podcastEpisode: latestFilmPodcastEpisode, isOpen: isVideoSectionOpen }
-		: null
+	const topicPodcastEpisodeVideoSection = latestFilmPodcastEpisode ? { podcastEpisode: latestFilmPodcastEpisode } : null
 
 	// the podcast with its episodes and feed, the latest podcast episode, and each scan's podcast episode
 	return {

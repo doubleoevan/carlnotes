@@ -341,36 +341,6 @@ rendering SHALL show no section.
 - **WHEN** a user opens a Topic whose Podcast Episodes have no films
 - **THEN** no Topic Cinema section renders
 
-### Requirement: Topic Cinema opens for an unseen film and remembers each user's choice
-
-Topic Cinema SHALL be open if the user has not played the latest film in either format, and collapsed if they have. A
-signed-in user's open or collapse choice SHALL be kept per Topic across devices. A newer film the user has not played
-SHALL open the section again. A signed-out visitor SHALL see it open. The first render SHALL show the resolved state.
-
-#### Scenario: An unseen film opens the section
-
-- **GIVEN** a user who has not played the Topic's latest film
-- **WHEN** they open the topic page
-- **THEN** Topic Cinema is open
-
-#### Scenario: A choice follows the user
-
-- **GIVEN** a user who collapsed Topic Cinema on a Topic in their browser
-- **WHEN** they open the same Topic in the mobile app
-- **THEN** Topic Cinema is collapsed
-
-#### Scenario: A new film reopens it
-
-- **GIVEN** a user who collapsed Topic Cinema
-- **WHEN** a newer film publishes and they open the topic page
-- **THEN** Topic Cinema is open
-
-#### Scenario: A choice names a published Podcast Episode of the Topic
-
-- **WHEN** `PUT /api/topics/:id/video-section` names a `podcastEpisodeId` that is not a published Podcast Episode of
-  that Topic
-- **THEN** the response is 404, and no choice is saved
-
 ### Requirement: The film section says the hosts are filming while a film renders
 
 While a published Podcast Episode's film renders, the film section SHALL show the recording card's frame with "Carl and
@@ -677,3 +647,21 @@ or explanatory text.
 
 - **WHEN** a Topic with films renders
 - **THEN** its headings read "Coffee Break Cinema" and "Coffee Break films", and none contains "video"
+
+### Requirement: Topic Cinema opens on every page load
+
+Topic Cinema SHALL be open each time a topic page loads, for a signed-in user and a visitor alike, whether or not the
+user played the latest film. A collapse SHALL last until the page is left, and SHALL NOT be saved. The topic read SHALL
+return the latest film alone, with no open state. The first render SHALL show the section open.
+
+#### Scenario: A played film opens the section
+
+- **GIVEN** a user who played the Topic's latest film
+- **WHEN** they open the topic page
+- **THEN** Topic Cinema is open
+
+#### Scenario: A collapse is not saved
+
+- **GIVEN** a user who collapsed Topic Cinema on a Topic
+- **WHEN** they open the same Topic again, in the browser or the mobile app
+- **THEN** Topic Cinema is open

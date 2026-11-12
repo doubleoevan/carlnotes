@@ -2,6 +2,7 @@ import type { PodcastEpisode, PodcastEpisodeTranscriptBlock } from "@carlnotes/c
 import {
 	toPodcastEpisodeChapterFixture,
 	toPodcastEpisodeFixture,
+	toTopicPodcastFixture,
 } from "@carlnotes/contracts/podcastEpisodeTestFixtures"
 import { toTestTopicFinding, toTestTopicResponse } from "@carlnotes/contracts/topicFeedTestFixtures"
 import { type ReactNode, useEffect } from "react"
@@ -17,6 +18,7 @@ import {
 } from "../stores/podcastEpisodePlayerStore"
 import type { LoadPodcastEpisodeAudioOptions } from "./podcastEpisodeAudio"
 import type { PodcastEpisodeEditorPage } from "./podcastEpisodeEditor"
+import { STORY_TOPIC_IMAGE } from "./storyFixtures"
 
 // both component browsers use the same six chapters and fictional findings
 export const PODCAST_STORY_EPISODE = toPodcastEpisodeFixture({
@@ -40,11 +42,7 @@ export const PODCAST_STORY_EDITOR_PAGE: PodcastEpisodeEditorPage = {
 	podcastEpisode: {
 		...PODCAST_STORY_EPISODE,
 		description: "Why fresher beans and a finer grind make the morning cup sweeter.",
-		image: {
-			page: { url: "/podcast-cover-placeholder.jpg", url2x: "/podcast-cover-placeholder.jpg" },
-			list: { url: "/podcast-cover-placeholder.jpg", url2x: "/podcast-cover-placeholder.jpg" },
-			thumbnail: { url: "/podcast-cover-placeholder.jpg", url2x: "/podcast-cover-placeholder.jpg" },
-		},
+		image: STORY_TOPIC_IMAGE,
 	},
 	topic: { name: "Home espresso" },
 	podcastEpisodeImageOrigin: "generated",
@@ -68,6 +66,23 @@ export const PODCAST_STORY_FILM_EPISODE: PodcastEpisode = {
 		captionsUrl: "/stories/topic-podcast-episode-video.vtt",
 	},
 }
+
+// a topic whose latest film is the story film
+export const PODCAST_STORY_FILM_TOPIC = toTestTopicResponse({
+	podcast: toTopicPodcastFixture({
+		latestSeasonPodcastEpisodes: { podcastEpisodes: [PODCAST_STORY_FILM_EPISODE] },
+		topicPodcastEpisodeVideoSection: { podcastEpisode: PODCAST_STORY_FILM_EPISODE },
+	}),
+})
+
+// a topic with no ready film, whose latest podcast episode's film is rendering
+export const PODCAST_STORY_VIDEO_RENDERING_TOPIC = toTestTopicResponse({
+	podcast: toTopicPodcastFixture({
+		latestSeasonPodcastEpisodes: { podcastEpisodes: [PODCAST_STORY_EPISODE] },
+		topicPodcastEpisodeVideoSection: null,
+	}),
+	latestPodcastEpisode: { ...PODCAST_STORY_EPISODE, isVideoRendering: true },
+})
 
 // a podcast episode title and chapter titles long enough to run past a phone's width
 export const PODCAST_STORY_LONG_TITLE_EPISODE: PodcastEpisode = {

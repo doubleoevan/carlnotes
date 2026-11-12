@@ -1,5 +1,5 @@
-// the app's Topic Post editor: the shared editor over the note's rich text input and toolbar, with the title's input
-// above them and the word count and the button below
+// the app's Topic Post editor: the shared editor over the note's rich text input and toolbar, with the title at the top
+// of the body's card and the word count and the button below
 import { showClientError } from "@carlnotes/client/apiClient"
 import {
 	TopicPostEditor as SharedTopicPostEditor,
@@ -37,8 +37,8 @@ export function TopicPostEditor(props: Omit<TopicPostEditorProps, "onError">) {
 	return <SharedTopicPostEditor {...props} onError={showClientError} elements={TOPIC_POST_EDITOR_ELEMENTS} />
 }
 
-// the title over the toolbar, then the body's bounded card, then the footer. an open keyboard hides the footer and
-// shows its own dismissal
+// the toolbar, then the bounded card with the title over a divider and the body under it, then the footer. an open
+// keyboard hides the footer and shows its own dismissal
 function TopicPostEditorLayout({
 	titleInput,
 	toolbar,
@@ -50,16 +50,17 @@ function TopicPostEditorLayout({
 	const isKeyboardVisible = useIsKeyboardVisible()
 	return (
 		<View className="min-h-0 flex-1">
-			{titleInput}
-			<View className="py-3">{toolbar}</View>
-			<NoteBodyScroll notice={conflict}>{children}</NoteBodyScroll>
+			<View className="pb-3">{toolbar}</View>
+			<NoteBodyScroll notice={conflict} header={titleInput}>
+				{children}
+			</NoteBodyScroll>
 			{!isKeyboardVisible && footer}
 			<NoteKeyboardDoneButton editorRef={editorRef} />
 		</View>
 	)
 }
 
-// the title in the display font, limited to the longest title
+// the title in the display font at the top of the body's card, limited to the longest title
 function TopicPostTitleInput({ value, label, placeholder, maxLength, onChange }: TopicPostTitleInputProps) {
 	return (
 		<TextInput
@@ -70,7 +71,7 @@ function TopicPostTitleInput({ value, label, placeholder, maxLength, onChange }:
 			onChangeText={onChange}
 			allowFontScaling
 			multiline
-			className="min-h-12 rounded-md border border-input bg-card px-3 py-2 font-display text-2xl text-foreground"
+			className="min-h-12 p-0 font-display text-2xl text-card-foreground"
 		/>
 	)
 }

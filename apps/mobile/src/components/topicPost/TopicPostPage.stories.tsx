@@ -33,7 +33,8 @@ type Story = StoryObj<typeof meta>
 // discussion, and the body
 export const Default: Story = {}
 
-// the count the comment thread reports replaces the one the post came with, and an edited post says so last
+// the count the comment thread reports replaces the one the Topic Post came with, and an edited Topic Post
+// says so last
 export const EditedWithOneComment: Story = {
 	args: {
 		topicPost: { ...TOPIC_POST_DISCUSSION_STORY, editedAt: "2026-11-03T16:05:00.000Z" },
@@ -41,7 +42,10 @@ export const EditedWithOneComment: Story = {
 	},
 }
 
-// a post whose summary is not written yet, with no discussion yet
+// a Topic Post whose summary is not written yet, with no discussion yet
 export const NoSummary: Story = {
 	args: { topicPost: { ...TOPIC_POST_DISCUSSION_STORY, summary: null, discussion: null } },
 }
+
+// a Topic Post whose image is still to be drawn pulses its empty header frame
+export const PendingImage: Story = { args: { topicPost: { ...TOPIC_POST_DISCUSSION_STORY, image: null } } }

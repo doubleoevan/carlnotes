@@ -171,6 +171,27 @@ test("a link preview fetch fails closed on a redirect chain ending at an interna
 	}
 })
 
+// every link preview fetch names the app in its user agent, which some CDNs require
+test("a link preview fetch sends the app's user agent", async () => {
+	// stand in for the network, and record each request's user agent
+	const originalFetch = globalThis.fetch
+	const userAgents: (string | null)[] = []
+	globalThis.fetch = (async (_input: string | URL | Request, init?: RequestInit) => {
+		userAgents.push(new Headers(init?.headers).get("user-agent"))
+		return new Response("<html><head><title>public</title></head></html>", {
+			headers: { "content-type": "text/html" },
+		})
+	}) as typeof fetch
+
+	try {
+		await fetchLinkPreviewMetadata("https://public.example/page")
+		await expect(fetchLinkPreviewImage("https://public.example/cover.png")).rejects.toThrow(/text\/html/)
+		expect(userAgents).toEqual(["CarlNotes/1.0 (+https://carlnotes.com)", "CarlNotes/1.0 (+https://carlnotes.com)"])
+	} finally {
+		globalThis.fetch = originalFetch
+	}
+})
+
 // a host that does not answer throws with the connection error
 test("a link preview fetch throws when the host does not answer", async () => {
 	// stand in for the network with a host that rejects the connection

@@ -305,6 +305,11 @@ export const PAGE_HEADER_CLASS = "flex items-center justify-between gap-4"
 export const IMAGE_SKELETON_CLASS = "bg-muted aspect-[3/2] animate-pulse"
 
 /**
+ * An image still to be drawn: its empty frame pulses unless the user asked for reduced motion.
+ */
+export const PENDING_IMAGE_CLASS = "motion-safe:animate-pulse"
+
+/**
  * A placeholder shape in a page's loading state: the muted fill and a slight corner, pulsing unless the reader asked
  * for reduced motion. The caller sets the size.
  */

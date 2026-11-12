@@ -9,7 +9,7 @@ import { toEditTopicPodcastEpisodeVideoOption, toTopicActionLayout, toTopicActio
 function toTopic({ canEdit, hasFilm }: { canEdit: boolean; hasFilm: boolean }): TopicResponse {
 	const video = { videoUrl: "/api/episodes/episode-1/video.mp4", captionsUrl: "/api/episodes/episode-1/captions.vtt" }
 	const podcast = {
-		topicPodcastEpisodeVideoSection: { podcastEpisode: toPodcastEpisodeFixture({ video }), isOpen: true },
+		topicPodcastEpisodeVideoSection: { podcastEpisode: toPodcastEpisodeFixture({ video }) },
 	}
 	return toTestTopicResponse({ canEdit, podcast: (hasFilm ? podcast : null) as TopicResponse["podcast"] })
 }

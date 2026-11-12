@@ -8,6 +8,7 @@ import { CircleDollarSign, Settings, User } from "lucide-react-native"
 import { useState } from "react"
 import { View } from "react-native"
 import { AccountBudget } from "@/components/account/AccountBudget"
+import { AccountPlan } from "@/components/account/AccountPlan"
 import { AccountSettings } from "@/components/account/AccountSettings"
 import { AppVersionLine } from "@/components/account/AppVersionLine"
 import { AccordionSection } from "@/components/common/AccordionSection"
@@ -39,6 +40,7 @@ export default function AccountScreen() {
 		<PageScreen
 			title="Account"
 			icon={User}
+			action={<AccountPlan billing={query.data?.billing} isLoadFailed={query.isError} />}
 			byline={
 				session ? (
 					<AvatarHeader

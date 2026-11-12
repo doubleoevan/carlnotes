@@ -251,23 +251,6 @@ the day left, and it SHALL re-read the time each minute.
 - **THEN** the brews card's first ring shows 14 of 5 used with its arc closed, captioned "You have reached your daily
   limit."
 
-### Requirement: Each budget card ends with the plan
-
-Each budget card SHALL end with the current plan at its bottom left, its billing interval after a middle dot on a paid
-plan, and the plan button right after it. An admin's read-only view of another user's account SHALL show no plan
-button.
-
-#### Scenario: A paid plan shows its interval
-
-- **GIVEN** a user on the Plus plan billed yearly
-- **WHEN** the user opens the account page
-- **THEN** each budget card ends with "Plan Plus · billed yearly" and the plan button after it
-
-#### Scenario: An admin's view has no plan button
-
-- **WHEN** an admin opens another user's account page
-- **THEN** neither budget card shows a plan button
-
 ### Requirement: The free plan's monthly budget is $2
 
 The free plan's monthly budget SHALL be $2, with the same cutoff shares. The plans page, the account page's spend
@@ -290,3 +273,22 @@ meter read the $2 budget.
 - **GIVEN** a free user whose key was created before the change with a $3 budget
 - **WHEN** the monthly reset replaces their key
 - **THEN** the new key's budget is $2
+
+### Requirement: The account page's header shows the plan
+
+The account page's header row SHALL show the current plan at its right, its billing interval after a middle dot on a
+paid plan, and the plan button right after it, once for the page. The budget cards SHALL not repeat the plan. While
+the plan loads, a placeholder SHALL hold the header row at the plan button's height. An admin's read-only view of
+another user's account SHALL show the plan with no plan button.
+
+#### Scenario: The plan sits at the right of the header
+
+- **GIVEN** a user on the Plus plan billed yearly
+- **WHEN** the user opens the account page
+- **THEN** the header row ends with "Plan Plus · billed yearly" and the plan button after it, and neither budget card
+  shows the plan
+
+#### Scenario: An admin's view shows the plan with no button
+
+- **WHEN** an admin opens another user's account page
+- **THEN** the header row shows that user's plan with no plan button

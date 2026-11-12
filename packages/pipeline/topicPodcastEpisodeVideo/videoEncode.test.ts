@@ -1,13 +1,9 @@
-// the film's ffmpeg arguments: a shot's move, crossfade, lower third, and fades, the intro's and the sign-off's zoom,
-// and the film's mux and rebuild
+// the film's ffmpeg arguments: a shot's move, crossfade, lower third, and fades, and the film's mux and rebuild
 import { expect, test } from "bun:test"
 import {
 	toFilmMuxArguments,
 	toFilmRemuxArguments,
-	toImagePartPushSeconds,
-	toVideoImagePartArguments,
 	toVideoShotArguments,
-	type VideoImagePartEncode,
 	type VideoShotEncode,
 	type VideoShotPicture,
 } from "./videoEncode"
@@ -40,24 +36,9 @@ const MIDDLE_SHOT: VideoShotEncode = {
 	shotPath: "/work/chapter-0-shot-3.mp4",
 }
 
-// a forty-second intro
-const INTRO_PART: VideoImagePartEncode = {
-	stillPath: "/work/shown-image-still.png",
-	lowerThirdPath: "/work/intro-lower-third.png",
-	frameCount: 960,
-	part: "intro",
-	partPath: "/work/intro.mp4",
-}
-
 // a run's filter graph
 function toFilterGraph(ffmpegArguments: string[]): string {
 	return ffmpegArguments[ffmpegArguments.indexOf("-filter_complex") + 1] ?? ""
-}
-
-// an intro's zoom some seconds in: the push to its end, then the creep
-function toIntroZoomAt(seconds: number, partSeconds: number): number {
-	const pushSeconds = toImagePartPushSeconds(partSeconds)
-	return 1.12 ** Math.min(seconds, pushSeconds) * 1.005 ** Math.max(seconds - pushSeconds, 0)
 }
 
 // a shot stops at its own frames, keeps a keyframe every two seconds, and writes video only
@@ -133,7 +114,11 @@ test("a short segment fades for half its length each way", () => {
 
 // the lower third's fades are timed from the segment's start, whichever shot they fall in
 test("the lower third keeps its segment's fades in a shot that starts later", () => {
-	const lowerThird = { lowerThirdPath: "/work/chapter-0-lower-third.png", shotStartSeconds: 5.5 }
+	const lowerThird = {
+		lowerThirdPath: "/work/chapter-0-lower-third.png",
+		shotStartSeconds: 5.5,
+		isShownThroughout: false,
+	}
 	const shotArguments = toVideoShotArguments({ ...MIDDLE_SHOT, lowerThird })
 	const filterGraph = toFilterGraph(shotArguments)
 
@@ -153,45 +138,14 @@ test("a shot past the lower third draws none", () => {
 	expect(toFilterGraph(shotArguments)).not.toContain("[lowerThird]")
 })
 
-// a forty-second intro pushes for 6.6 seconds to 2.1 times, then creeps to 2.5 times at its end
-test("the intro pushes in, then creeps to 2.5 times at its end", () => {
-	expect(toImagePartPushSeconds(40)).toBeCloseTo(6.62, 2)
-	expect(toIntroZoomAt(0, 40)).toBe(1)
-	expect(toIntroZoomAt(6.62, 40)).toBeCloseTo(2.12, 2)
-	expect(toIntroZoomAt(40, 40)).toBeCloseTo(2.5, 6)
-
-	// the filter graph holds the same push and creep, by the seconds since the intro's start
-	const introGraph = toFilterGraph(toVideoImagePartArguments(INTRO_PART))
-	expect(introGraph).toContain("zoompan=z='pow(1.12,min(on/24,6.616))*pow(1.005,max(on/24-6.616,0))':")
-	expect(introGraph).toContain(":d=960:s=1280x720:fps=24[zoomed]")
-})
-
-// the sign-off runs the intro's zoom by the seconds to its end, so it starts at 2.5 times and ends on the full image
-test("the sign-off runs the same zoom backward", () => {
-	const signOffGraph = toFilterGraph(toVideoImagePartArguments({ ...INTRO_PART, part: "sign-off" }))
-	expect(signOffGraph).toContain("zoompan=z='pow(1.12,min((959-on)/24,6.616))*pow(1.005,max((959-on)/24-6.616,0))':")
-})
-
-// an intro too short to reach 2.5 times pushes for its whole length
-test("a short intro is the push alone", () => {
-	expect(toImagePartPushSeconds(5)).toBe(5)
-	expect(toIntroZoomAt(5, 5)).toBeCloseTo(1.76, 2)
-	expect(toImagePartPushSeconds(8)).toBe(8)
-	expect(toImagePartPushSeconds(8.2)).toBeLessThan(8.2)
-})
-
-// the intro's and the sign-off's lower third fades in and stays, and the part fades through espresso both ways
-test("an image part keeps its lower third and fades in and out", () => {
-	const introArguments = toVideoImagePartArguments(INTRO_PART)
-	const introGraph = toFilterGraph(introArguments)
-	expect(introGraph).toContain("[1:v]format=rgba,fade=t=in:st=0.6:d=0.4:alpha=1[lowerThird]")
-	expect(introGraph).not.toContain("alpha=1,fade=t=out")
-
-	// the part's own fades, and the file it writes
-	expect(introGraph).toContain(
-		"[zoomed][lowerThird]overlay=0:0,fade=t=in:st=0:d=0.3:color=0x0f0c09,fade=t=out:st=39.7:d=0.3:color=0x0f0c09,format=yuv420p[part]",
+// the intro's and the sign-off's lower third fades in on the part's first shot and never fades out
+test("a lower third shown throughout fades in and stays", () => {
+	const lowerThird = { lowerThirdPath: "/work/intro-lower-third.png", shotStartSeconds: 0, isShownThroughout: true }
+	const filterGraph = toFilterGraph(toVideoShotArguments({ ...MIDDLE_SHOT, lowerThird }))
+	expect(filterGraph).toContain(
+		"[2:v]format=rgba,setpts=PTS+0/TB,fade=t=in:st=0.6:d=0.4:alpha=1,setpts=PTS-0/TB[lowerThird]",
 	)
-	expect(introArguments.slice(-2)).toEqual(["-an", "/work/intro.mp4"])
+	expect(filterGraph).not.toContain("alpha=1,fade=t=out")
 })
 
 // the film copies the video, encodes the MP3 as AAC, and muxes the captions as mov_text

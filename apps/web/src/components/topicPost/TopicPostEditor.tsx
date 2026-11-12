@@ -1,5 +1,5 @@
-// the web's Topic Post editor: the shared editor over the note's rich text input and toolbar, with the title's input
-// above them and the word count and the button below
+// the web's Topic Post editor: the shared editor over the note's rich text input and toolbar, with the title at the top
+// of the body's card and the word count and the button below
 import {
 	TopicPostEditor as SharedTopicPostEditor,
 	type TopicPostEditorElements,
@@ -14,7 +14,6 @@ import { NoteConflictNotice } from "@/components/note/NoteConflictNotice"
 import { NoteInput } from "@/components/note/NoteEditor"
 import { NoteToolbar } from "@/components/note/NoteToolbar"
 import { Button } from "@/components/primitives/button"
-import { Input } from "@/components/primitives/input"
 
 // keep platform elements stable so typing never remounts the editor
 const ELEMENTS: TopicPostEditorElements = {
@@ -33,8 +32,8 @@ export function TopicPostEditor(props: Omit<TopicPostEditorProps, "onError">) {
 	return <SharedTopicPostEditor {...props} onError={toast.error} elements={ELEMENTS} />
 }
 
-// the title over the toolbar, then the body on a page card, then the footer. a press on the card outside the body
-// focuses the body
+// the toolbar, then one page card with the title over a divider and the body under it, then the footer. a press on
+// the body's area outside the text focuses the body
 function TopicPostEditorLayout({
 	titleInput,
 	toolbar,
@@ -45,34 +44,36 @@ function TopicPostEditorLayout({
 }: TopicPostEditorLayoutProps) {
 	return (
 		<div className="flex flex-col gap-4 py-4">
-			{titleInput}
 			{toolbar}
 			{conflict}
-			<div
-				onPointerDown={(event) => {
-					if (!(event.target as HTMLElement).closest(".eti-editor")) {
-						editorRef.current?.focus()
-					}
-				}}
-				className="bg-card min-h-80 rounded-lg border py-4 shadow-raised sm:py-6"
-			>
-				{children}
+			<div className="bg-card rounded-lg border shadow-raised">
+				<div className="border-b px-4 py-4 sm:px-6">{titleInput}</div>
+				<div
+					onPointerDown={(event) => {
+						if (!(event.target as HTMLElement).closest(".eti-editor")) {
+							editorRef.current?.focus()
+						}
+					}}
+					className="min-h-80 py-4 sm:py-6"
+				>
+					{children}
+				</div>
 			</div>
 			{footer}
 		</div>
 	)
 }
 
-// the title in the display font, limited to the longest title
+// the title in the display font at the top of the body's card, limited to the longest title
 function TopicPostTitleInput({ value, label, placeholder, maxLength, onChange }: TopicPostTitleInputProps) {
 	return (
-		<Input
+		<input
 			aria-label={label}
 			value={value}
 			placeholder={placeholder}
 			maxLength={maxLength}
 			onChange={(event) => onChange(event.target.value)}
-			className="font-display h-auto py-2 text-2xl sm:text-3xl"
+			className="font-display text-card-foreground placeholder:text-muted-foreground w-full bg-transparent text-2xl outline-none sm:text-3xl"
 		/>
 	)
 }

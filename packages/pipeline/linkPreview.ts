@@ -5,8 +5,18 @@ import { toYoutubeWatchUrl } from "@carlnotes/contracts/youtube"
 import { fetchPublicUrl, toFetchableUrl } from "@carlnotes/server/publicFetch"
 import { toYoutubeVideoId } from "./transcripts"
 
-// how long one link preview fetch may run. a member is waiting on their post
+// how long one link preview fetch may run. a member is waiting on their chat message
 const PREVIEW_TIMEOUT_MS = 3_000
+
+// the user agent that every link preview fetch sends. some CDNs reject a fetch that sends none
+const LINK_PREVIEW_USER_AGENT = "CarlNotes/1.0 (+https://carlnotes.com)"
+
+// fetch a url through the public url guard within the link preview timeout, with the link preview user agent and the
+// accepted types if given
+function fetchPreviewUrl({ url, accept }: { url: string; accept?: string }): Promise<Response> {
+	const headers = { "user-agent": LINK_PREVIEW_USER_AGENT, ...(accept && { accept }) }
+	return fetchPublicUrl(url, { signal: AbortSignal.timeout(PREVIEW_TIMEOUT_MS), headers })
+}
 
 // how much of a page is read to find its meta tags. the head that holds them is far smaller than this
 const MAX_PREVIEW_HTML_BYTES = 256 * 1024
@@ -96,10 +106,7 @@ export async function fetchLinkPreviewMetadata(url: string): Promise<LinkPreview
 // a page's link preview from its own tags
 async function fetchPageMetaTags(url: string): Promise<LinkPreviewMetaTags> {
 	// the fetch checks every redirect hop itself, so an internal address anywhere in the chain throws
-	const response = await fetchPublicUrl(url, {
-		signal: AbortSignal.timeout(PREVIEW_TIMEOUT_MS),
-		headers: { accept: "text/html,application/xhtml+xml" },
-	})
+	const response = await fetchPreviewUrl({ url, accept: "text/html,application/xhtml+xml" })
 	if (!response.ok) {
 		throw new Error(`link preview fetch for ${url} answered ${response.status}`)
 	}
@@ -128,7 +135,7 @@ async function fetchPageMetaTags(url: string): Promise<LinkPreviewMetaTags> {
 async function fetchYoutubeLinkPreviewMetaTags(url: string, videoId: string): Promise<LinkPreviewMetaTags | null> {
 	const watchUrl = toYoutubeWatchUrl(videoId)
 	const oembedUrl = `https://www.youtube.com/oembed?url=${encodeURIComponent(watchUrl)}&format=json`
-	const response = await fetchPublicUrl(oembedUrl, { signal: AbortSignal.timeout(PREVIEW_TIMEOUT_MS) })
+	const response = await fetchPreviewUrl({ url: oembedUrl })
 	if (!response.ok) {
 		console.error(`youtube oembed fell back to the page for ${url}: ${response.status}`)
 		return null
@@ -198,7 +205,7 @@ export async function fetchLinkPreviewImage(
 	imageTypes = PREVIEW_IMAGE_TYPES,
 ): Promise<LinkPreviewImage> {
 	// the same guard the page went through, so an image host redirecting inward is rejected too
-	const response = await fetchPublicUrl(imageUrl, { signal: AbortSignal.timeout(PREVIEW_TIMEOUT_MS) })
+	const response = await fetchPreviewUrl({ url: imageUrl })
 	if (!response.ok) {
 		throw new Error(`link preview image fetch for ${imageUrl} answered ${response.status}`)
 	}

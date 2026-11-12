@@ -1,15 +1,13 @@
-// a Resource's images for the films that narrate it: read from storage, or fetched once from the Markdown the Scan
-// stored for the Resource's page and from the page's link preview image. every fetch goes through the public url
-// guard, and an unsafe Resource has none
+// a Resource's images for the films that narrate it: read from storage, or fetched once under each version of the image
+// filter from the Markdown the Scan stored for the Resource's page and from the page's link preview image. every fetch
+// goes through the public url guard, and an unsafe Resource has none
 
 import { db } from "@carlnotes/db"
 import { runWithJobLease } from "@carlnotes/db/jobLease"
-import { linkPreviews } from "@carlnotes/db/schema/chat"
 import { resourceImages, resources } from "@carlnotes/db/schema/scans"
 import {
 	clearPendingObjectDeletion,
 	deleteStoredObjects,
-	getAttachmentBytes,
 	getResourceContent,
 	recordPendingObjectDeletionBeforeUpload,
 	recordPendingObjectDeletions,
@@ -19,24 +17,18 @@ import {
 import { classifyImage } from "@carlnotes/models/moderation"
 import { runWithConcurrency } from "@carlnotes/server/concurrency"
 import { reportError } from "@carlnotes/server/monitoring"
-import { and, asc, eq, inArray, isNotNull } from "drizzle-orm"
+import { and, asc, eq, inArray } from "drizzle-orm"
 import { toImageDataUri } from "../cardElementPng"
-import { fetchLinkPreviewImage, fetchLinkPreviewMetadata, toNormalizedLinkPreviewUrl } from "../linkPreview"
-import { toYoutubeVideoId } from "../transcripts"
-import { isRejectedImageUrl, toResourceImageCandidateUrls } from "./resourceImageCandidates"
+import { fetchResourceImageCandidate, loadLinkPreviewImageCandidate } from "./fetchResourceImageCandidates"
+import { toResourceImageCandidateUrls } from "./resourceImageCandidates"
 import {
 	addResourceImage,
 	type KeptResourceImage,
+	RESOURCE_IMAGE_FILTER_VERSION,
 	RESOURCE_IMAGE_LIMIT,
 	type ResourceImageCandidate,
 	toStoredResourceImageJpeg,
 } from "./resourceImageFilter"
-
-// the image types that are fetched. a gif and an svg never are
-const RESOURCE_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/avif"])
-
-// how large an image may be before its fetch is rejected
-const RESOURCE_IMAGE_MAX_BYTES = 8 * 1024 * 1024
 
 // how many of a page's images are fetched at once
 const RESOURCE_IMAGE_FETCH_CONCURRENCY = 4
@@ -58,12 +50,18 @@ type NarratedResource = {
 	url: string
 	isUnsafe: boolean
 	contentKey: string | null
-	imagesFetchedAt: Date | null
+	imagesFilterVersion: number
+}
+
+// whether a Resource's images were fetched under the current version of the image filter. a Resource never fetched
+// has version 0
+function isFetchedUnderCurrentFilter({ imagesFilterVersion }: Pick<NarratedResource, "imagesFilterVersion">): boolean {
+	return imagesFilterVersion >= RESOURCE_IMAGE_FILTER_VERSION
 }
 
 /**
  * Returns each Resource's stored images by resource id, in their stored order, fetching them first for a Resource
- * whose fetch has not run. An unsafe Resource has none, and any image stored for it is deleted. A fetch that fails
+ * whose fetch has not run under the current image filter. An unsafe Resource has none, and any image stored for it is deleted. A fetch that fails
  * is reported, returns no image, and runs again on the next call. Throws the signal's reason once it is aborted.
  */
 export async function loadOrFetchResourceImages(
@@ -84,7 +82,7 @@ export async function loadOrFetchResourceImages(
 			url: resources.url,
 			isUnsafe: resources.isUnsafe,
 			contentKey: resources.contentKey,
-			imagesFetchedAt: resources.imagesFetchedAt,
+			imagesFilterVersion: resources.imagesFilterVersion,
 		})
 		.from(resources)
 		.where(inArray(resources.id, distinctResourceIds))
@@ -106,7 +104,8 @@ type SettleResourceImagesOptions = {
 	signal?: AbortSignal
 }
 
-// one Resource's images: none for an unsafe Resource, the stored ones if its fetch ran, or else the ones fetched now
+// one Resource's images: none for an unsafe Resource, the stored ones if its fetch ran under the current filter, or
+// else the ones fetched now
 async function settleResourceImages({
 	narratedResource,
 	storedImages,
@@ -117,7 +116,7 @@ async function settleResourceImages({
 		await deleteResourceImages(narratedResource.id, storedImages)
 		return []
 	}
-	if (narratedResource.imagesFetchedAt) {
+	if (isFetchedUnderCurrentFilter(narratedResource)) {
 		return storedImages
 	}
 
@@ -136,13 +135,13 @@ async function settleResourceImages({
 	}
 }
 
-// a fetched Resource's stored images, or null for a Resource whose fetch has not run
+// a fetched Resource's stored images, or null for a Resource whose fetch has not run under the current filter
 async function loadFetchedResourceImages(resourceId: string): Promise<ResourceImage[] | null> {
 	const [resource] = await db
-		.select({ imagesFetchedAt: resources.imagesFetchedAt })
+		.select({ imagesFilterVersion: resources.imagesFilterVersion })
 		.from(resources)
 		.where(eq(resources.id, resourceId))
-	if (!resource?.imagesFetchedAt) {
+	if (!resource || !isFetchedUnderCurrentFilter(resource)) {
 		return null
 	}
 
@@ -213,6 +212,10 @@ async function fetchResourceImages(narratedResource: NarratedResource, signal?: 
 		return fetchedImages
 	}
 
+	// delete the images that an older filter version kept
+	const olderImages = (await loadStoredResourceImages([narratedResource.id])).get(narratedResource.id) ?? []
+	await deleteResourceImages(narratedResource.id, olderImages)
+
 	// the images the page's own content shows, in the page's order
 	const markdown = await loadResourceMarkdown(narratedResource)
 	const candidateUrls = toResourceImageCandidateUrls(markdown, narratedResource.url)
@@ -263,62 +266,6 @@ async function loadResourceMarkdown({ id, contentKey }: NarratedResource): Promi
 	return resource?.content ?? ""
 }
 
-// fetch one image through the public url guard, or null for a fetch that fails, a type a film does not show, or an
-// image that is too large
-async function fetchResourceImageCandidate(imageUrl: string): Promise<ResourceImageCandidate | null> {
-	try {
-		const { bytes } = await fetchLinkPreviewImage(imageUrl, RESOURCE_IMAGE_MAX_BYTES, RESOURCE_IMAGE_TYPES)
-		return { sourceUrl: imageUrl, imageBytes: bytes, isLinkPreviewImage: false }
-	} catch {
-		return null
-	}
-}
-
-// a page's link preview image as a candidate: a YouTube video's largest thumbnail, or the image a stored link preview
-// holds, or else the image the page's own tags name. returns null for a page that offers none
-async function loadLinkPreviewImageCandidate(pageUrl: string): Promise<ResourceImageCandidate | null> {
-	try {
-		// a YouTube video's largest thumbnail, if the video has one
-		const youtubeVideoId = toYoutubeVideoId(pageUrl)
-		const youtubeThumbnail = youtubeVideoId
-			? await fetchResourceImageCandidate(`https://i.ytimg.com/vi/${youtubeVideoId}/maxresdefault.jpg`)
-			: null
-		if (youtubeThumbnail) {
-			return { ...youtubeThumbnail, isLinkPreviewImage: true }
-		}
-
-		// the image of the page's stored link preview
-		const storedImageObjectKey = await loadStoredLinkPreviewImageKey(pageUrl)
-		if (storedImageObjectKey) {
-			const imageBytes = await getAttachmentBytes(storedImageObjectKey)
-			return { sourceUrl: pageUrl, imageBytes, isLinkPreviewImage: true }
-		}
-
-		// otherwise the image the page's own tags name
-		const { imageUrl } = await fetchLinkPreviewMetadata(pageUrl)
-		const isImageUrlAllowed = imageUrl && !isRejectedImageUrl(imageUrl)
-		const linkPreviewImage = isImageUrlAllowed ? await fetchResourceImageCandidate(imageUrl) : null
-		return linkPreviewImage && { ...linkPreviewImage, isLinkPreviewImage: true }
-	} catch {
-		return null
-	}
-}
-
-// the object key of the image a stored link preview holds for a page, or null if no ready link preview has one
-async function loadStoredLinkPreviewImageKey(pageUrl: string): Promise<string | null> {
-	// a ready link preview of the page's normalized url that has an image
-	const isStoredWithImage = and(
-		eq(linkPreviews.url, toNormalizedLinkPreviewUrl(pageUrl)),
-		eq(linkPreviews.status, "ready"),
-		isNotNull(linkPreviews.imageObjectKey),
-	)
-	const [storedLinkPreview] = await db
-		.select({ imageObjectKey: linkPreviews.imageObjectKey })
-		.from(linkPreviews)
-		.where(isStoredWithImage)
-	return storedLinkPreview?.imageObjectKey ?? null
-}
-
 // store a Resource's kept images under their positions, and record that its fetch ran
 async function storeResourceImages(
 	resourceId: string,
@@ -346,7 +293,7 @@ async function storeResourceImages(
 		const isSafe = and(eq(resources.id, resourceId), eq(resources.isUnsafe, false))
 		const recordedRows = await transaction
 			.update(resources)
-			.set({ imagesFetchedAt: new Date() })
+			.set({ imagesFetchedAt: new Date(), imagesFilterVersion: RESOURCE_IMAGE_FILTER_VERSION })
 			.where(isSafe)
 			.returning({ id: resources.id })
 

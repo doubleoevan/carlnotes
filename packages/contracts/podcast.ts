@@ -179,20 +179,13 @@ export const topicPodcast = z.object({
 	latestSeasonPodcastEpisodes: seasonPodcastEpisodes,
 	// the public podcast feed, for a public topic with a published episode, and null for every other topic
 	publicFeedUrl: z.string().nullable(),
-	// Topic Cinema: the latest film the user may watch and whether its section opens, null with no film. an older api
-	// leaves it out
-	topicPodcastEpisodeVideoSection: z
-		.object({ podcastEpisode: podcastEpisode, isOpen: z.boolean() })
-		.nullable()
-		.optional(),
+	// Topic Cinema: the latest film the user may watch, null with no film. an older api leaves it out
+	topicPodcastEpisodeVideoSection: z.object({ podcastEpisode: podcastEpisode }).nullable().optional(),
 	// the public film feed, for a public topic with a film, and null for every other topic. an older api leaves it out
 	publicVideoFeedUrl: z.string().nullable().optional(),
 })
 
 export type TopicPodcast = z.infer<typeof topicPodcast>
-
-// a user's choice to open or close Topic Cinema, with the latest film when they chose
-export const topicPodcastEpisodeVideoSectionPayload = z.object({ isOpen: z.boolean(), podcastEpisodeId: z.string() })
 
 // the length limits of a podcast episode's title and description
 export const PODCAST_EPISODE_TITLE_MAX_CHARS = 60

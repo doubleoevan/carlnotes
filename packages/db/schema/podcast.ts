@@ -232,7 +232,11 @@ export const topicPodcastEpisodeVideos = pgTable(
 	],
 )
 
-// a user's open or closed choice for one topic's Topic Cinema section
+/**
+ * a user's open or closed choice for one topic's Topic Cinema section. no code reads it, and the table stays so the
+ * api that a deploy replaces can still read it
+ * @public drizzle-kit reads it from the schema files
+ */
 export const topicPodcastEpisodeVideoSections = pgTable(
 	"topic_podcast_episode_video_sections",
 	{

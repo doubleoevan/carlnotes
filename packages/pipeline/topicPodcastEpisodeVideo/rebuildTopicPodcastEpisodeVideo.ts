@@ -1,6 +1,6 @@
 // a ready film rebuilt for a new image, its own or else its podcast episode's: only the intro and the sign-off are
-// rendered again, joined with the stored chapters part, and the audio and captions are copied from the film that plays
-// now
+// rendered again, over the chapters' images that the render stored, joined with the stored chapters part, and the audio
+// and captions are copied from the film that plays now
 
 import { mkdtemp, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
@@ -11,7 +11,6 @@ import { deletePodcastFeedCache } from "@carlnotes/db/podcastFeedCache"
 import { topicPodcastEpisodeVideos } from "@carlnotes/db/schema/podcast"
 import { clearPendingObjectDeletion, deleteStoredObjects, downloadPodcastEpisodeFile } from "@carlnotes/db/store"
 import { toTopicPodcastEpisodeVideoImagePartKey } from "@carlnotes/db/topicPodcastEpisodeVideoKeys"
-import { probeDurationSeconds } from "@carlnotes/models/ffmpeg"
 import { trackEvent } from "@carlnotes/server/analytics"
 import { and, eq, sql } from "drizzle-orm"
 import { recordReplacedImageDeletions } from "../topicImages/topicImageRenders"
@@ -19,22 +18,26 @@ import {
 	loadShownImageStill,
 	loadTopicPodcastEpisodeVideoEpisode,
 	loadVideoChapterRows,
+	type RenderableTopicPodcastEpisodeVideoEpisode,
 	type TopicPodcastEpisodeVideoEpisode,
 } from "./topicPodcastEpisodeVideoInputs"
 import {
 	toTopicPodcastEpisodeVideoCostDollars,
 	uploadTopicPodcastEpisodeVideoFile,
 } from "./topicPodcastEpisodeVideoRows"
-import { renderVideoImageParts, rewriteVideoFilm } from "./videoParts"
-import { toSegmentSeconds, toVideoTimeline } from "./videoTimeline"
+import { loadVideoAudio } from "./videoAudio"
+import { prepareChapterImages } from "./videoChapterImages"
+import { renderVideoImageParts } from "./videoImageParts"
+import { rewriteVideoFilm } from "./videoParts"
+import { toSegmentSeconds } from "./videoTimeline"
 
-// what a rebuild did. it drew the new intro and sign-off, or skipped a podcast episode that is not published, a film
+// what a rebuild did. it rendered the new intro and sign-off, or skipped a podcast episode that is not published, a film
 // that is not ready, a film that already shows the current image, or an owner past the podcast episode spend cutoff
 export type RebuildTopicPodcastEpisodeVideoResult =
 	| { outcome: "rebuilt"; renderSeconds: number }
 	| { outcome: "skipped"; reason: "unpublished" | "not-ready" | "current" | "spend-cutoff" }
 
-// the ready film's stored keys, the image hash it was drawn from, and the render version it was rendered at
+// the ready film's stored keys, the image hash it was rendered from, and the render version it was rendered at
 type ReadyTopicPodcastEpisodeVideo = {
 	introKey: string | null
 	chaptersKey: string
@@ -102,7 +105,7 @@ export async function rebuildTopicPodcastEpisodeVideo(
 type RebuildInputs =
 	| {
 			outcome: "ready"
-			topicPodcastEpisodeVideoEpisode: TopicPodcastEpisodeVideoEpisode & { audioKey: string }
+			topicPodcastEpisodeVideoEpisode: RenderableTopicPodcastEpisodeVideoEpisode
 			readyTopicPodcastEpisodeVideo: ReadyTopicPodcastEpisodeVideo
 	  }
 	| Extract<RebuildTopicPodcastEpisodeVideoResult, { outcome: "skipped" }>
@@ -110,10 +113,10 @@ type RebuildInputs =
 // load the published podcast episode and its ready film, skipping a film that shows the current image or an owner past
 // the cutoff
 async function loadRebuildInputs(podcastEpisodeId: string): Promise<RebuildInputs> {
-	// only a published podcast episode with audio and a ready film rebuilds
+	// only a published podcast episode with audio, a transcript, and a ready film rebuilds
 	const topicPodcastEpisodeVideoEpisode = await loadTopicPodcastEpisodeVideoEpisode(podcastEpisodeId)
-	const { audioKey } = topicPodcastEpisodeVideoEpisode ?? {}
-	if (!topicPodcastEpisodeVideoEpisode || !audioKey) {
+	const { audioKey, script } = topicPodcastEpisodeVideoEpisode ?? {}
+	if (!topicPodcastEpisodeVideoEpisode || !audioKey || !script) {
 		return { outcome: "skipped", reason: "unpublished" }
 	}
 
@@ -123,7 +126,7 @@ async function loadRebuildInputs(podcastEpisodeId: string): Promise<RebuildInput
 		return { outcome: "skipped", reason: "not-ready" }
 	}
 
-	// a film already drawn from the current image, or an owner past the cutoff, is left as it is
+	// a film already rendered from the current image, or an owner past the cutoff, is left as it is
 	if (readyTopicPodcastEpisodeVideo.renderedImageHash === topicPodcastEpisodeVideoEpisode.imageHash) {
 		return { outcome: "skipped", reason: "current" }
 	}
@@ -132,7 +135,7 @@ async function loadRebuildInputs(podcastEpisodeId: string): Promise<RebuildInput
 	}
 	return {
 		outcome: "ready",
-		topicPodcastEpisodeVideoEpisode: { ...topicPodcastEpisodeVideoEpisode, audioKey },
+		topicPodcastEpisodeVideoEpisode: { ...topicPodcastEpisodeVideoEpisode, audioKey, script },
 		readyTopicPodcastEpisodeVideo,
 	}
 }
@@ -173,7 +176,7 @@ type RebuiltFilm = {
 
 // the podcast episode, its ready film, the temp folder, and the signal that stops the ffmpeg runs
 type RebuildFilmFilesOptions = {
-	topicPodcastEpisodeVideoEpisode: TopicPodcastEpisodeVideoEpisode & { audioKey: string }
+	topicPodcastEpisodeVideoEpisode: RenderableTopicPodcastEpisodeVideoEpisode
 	readyTopicPodcastEpisodeVideo: ReadyTopicPodcastEpisodeVideo
 	workDirectory: string
 	signal?: AbortSignal
@@ -186,11 +189,15 @@ async function rebuildFilmFiles({
 	workDirectory,
 	signal,
 }: RebuildFilmFilesOptions): Promise<RebuiltFilm> {
-	// the audio's exact length and the chapters give the intro and the sign-off the render drew
-	const audioPath = join(workDirectory, "audio.mp3")
-	await downloadPodcastEpisodeFile({ key: topicPodcastEpisodeVideoEpisode.audioKey, filePath: audioPath })
-	const chapterTimes = await loadVideoChapterRows(topicPodcastEpisodeVideoEpisode.podcastEpisodeId)
-	const segments = toVideoTimeline({ chapterTimes, durationSeconds: await probeDurationSeconds(audioPath, signal) })
+	// the render's own timeline and caption times, from the audio and the chapters
+	const { podcastEpisodeId, ownerId } = topicPodcastEpisodeVideoEpisode
+	const videoChapterRows = await loadVideoChapterRows(podcastEpisodeId)
+	const { segments, captionCues } = await loadVideoAudio({
+		topicPodcastEpisodeVideoEpisode,
+		videoChapterRows,
+		workDirectory,
+		signal,
+	})
 
 	// the stored chapters part and the film that plays now
 	const chaptersPath = join(workDirectory, "chapters.mp4")
@@ -198,14 +205,29 @@ async function rebuildFilmFiles({
 	await downloadPodcastEpisodeFile({ key: readyTopicPodcastEpisodeVideo.chaptersKey, filePath: chaptersPath })
 	await downloadPodcastEpisodeFile({ key: readyTopicPodcastEpisodeVideo.filmKey, filePath: currentFilmPath })
 
-	// the new intro and sign-off, joined with the chapters by stream copy
+	// the chapters' images that the render stored, for the intro and the sign-off to cut through, with none generated
 	const shownImageStill = await loadShownImageStill(topicPodcastEpisodeVideoEpisode)
+	const { firstChapterImages } = await prepareChapterImages({
+		podcastEpisodeId,
+		ownerId,
+		isPlatformBilled: false,
+		isChapterImageGenerationSkipped: true,
+		videoChapterRows,
+		segments,
+		shownImageStill,
+		signal,
+	})
+
+	// the new intro and sign-off, joined with the chapters by stream copy
 	const imageParts = await renderVideoImageParts({
+		podcastEpisodeId,
 		workDirectory,
 		segments,
-		shownImageStillPng: shownImageStill.stillPng,
+		shownImageStill,
+		chapterImages: firstChapterImages,
 		introText: topicPodcastEpisodeVideoEpisode.introText,
 		signOffText: topicPodcastEpisodeVideoEpisode.signOffText,
+		captionStartSeconds: captionCues.map((captionCue) => captionCue.startSeconds),
 		signal,
 	})
 	const filmPath = join(workDirectory, "film.mp4")
@@ -213,7 +235,7 @@ async function rebuildFilmFiles({
 
 	// the seconds rendered again are the intro's and the sign-off's
 	const imagePartFrameCount = segments
-		.filter((segment) => segment.kind !== "chapter")
+		.filter((segment) => segment.kind === "intro" || segment.kind === "sign-off")
 		.reduce((frameCount, segment) => frameCount + segment.frameCount, 0)
 	return { ...imageParts, filmPath, renderedSeconds: toSegmentSeconds(imagePartFrameCount) }
 }

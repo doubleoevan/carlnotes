@@ -308,9 +308,8 @@ authenticated encryption itself lives in `@carlnotes/server/privateText`.
   the audio and film routes share), `podcastFeedTokens.ts` (a listener's feed token, and building, caching, and
   responding with a podcast feed or film feed, or a 304 for a current copy), `podcastFeeds.ts` (a listener's feed urls
   and their reset, an episode's audio and film files at paths after a feed token, and the covers),
-  `topicPodcastEpisodeVideos.ts` (Topic Cinema's read: whether its section opens for a user, the user's saved
-  choice, and a ready film's files), `topicPodcastEpisodeVideoRoutes.ts` (the film and captions urls, the
-  rebuild a film drawn from an image it no longer shows starts, and the section choice route),
+  `topicPodcastEpisodeVideos.ts` (a ready film's files), `topicPodcastEpisodeVideoRoutes.ts` (the film and captions
+  urls, and the rebuild that starts for a film drawn from an image that it no longer shows),
   `relatedPodcastEpisodes.ts` (the rows of an episode page's Other episodes and Similar podcasts tables: the topic's
   other published episodes that the user may listen to, and the most related published episodes of other topics. The
   public shown topics' episodes rank through the index of the episode vectors saved as public and shown, cached in

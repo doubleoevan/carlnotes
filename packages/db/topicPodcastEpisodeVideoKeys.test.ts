@@ -72,19 +72,25 @@ test("toTopicPodcastEpisodeVideoKeys lists the film's own image and its original
 	)
 })
 
-// a chapter's first generated image keeps its first key, and each further one is numbered from 1
-test("toTopicPodcastEpisodeVideoChapterImageKeys lists the first key, then the numbered ones", () => {
+// a chapter's first generated image has its first key, each further one is numbered from 1, and the current style
+// names itself in each key
+test("toTopicPodcastEpisodeVideoChapterImageKeys lists the first key, then the numbered ones, in a style", () => {
 	const chapterImageKeys = toTopicPodcastEpisodeVideoChapterImageKeys("episode-1", 1)
 	expect(chapterImageKeys).toHaveLength(GENERATED_CHAPTER_IMAGE_LIMIT_PER_CHAPTER)
 	expect(chapterImageKeys[0]).toBe(toTopicPodcastEpisodeVideoChapterImageKey("episode-1", 1))
-	expect(chapterImageKeys[0]).toBe("episodes/episode-1/video/chapter-1-image.jpg")
-	expect(chapterImageKeys[1]).toBe("episodes/episode-1/video/chapter-1-image-1.jpg")
-	expect(chapterImageKeys.at(-1)).toBe("episodes/episode-1/video/chapter-1-image-11.jpg")
+	expect(chapterImageKeys[0]).toBe("episodes/episode-1/video/chapter-1-image-s2.jpg")
+	expect(chapterImageKeys[1]).toBe("episodes/episode-1/video/chapter-1-image-s2-1.jpg")
+	expect(chapterImageKeys.at(-1)).toBe("episodes/episode-1/video/chapter-1-image-s2-11.jpg")
+
+	// the first style's keys have no style suffix
+	const firstStyleKeys = toTopicPodcastEpisodeVideoChapterImageKeys("episode-1", 1, 1)
+	expect(firstStyleKeys[0]).toBe("episodes/episode-1/video/chapter-1-image.jpg")
+	expect(firstStyleKeys.at(-1)).toBe("episodes/episode-1/video/chapter-1-image-11.jpg")
 })
 
-// a film lists every generated image key of each chapter of its podcast episode, and a podcast episode with no film
+// a film lists every generated image key of each chapter of its podcast episode in every style, and a podcast episode with no film
 // row lists none
-test("toTopicPodcastEpisodeVideoKeys lists each chapter's generated images under the film's folder", () => {
+test("toTopicPodcastEpisodeVideoKeys lists each chapter's generated images in every style under the film's folder", () => {
 	const filmRow = { introKey: null, chaptersKey: null, signOffKey: null, filmKey: null, captionsKey: null }
 	const topicPodcastEpisodeVideoKeys = toTopicPodcastEpisodeVideoKeys({
 		...filmRow,
@@ -93,6 +99,8 @@ test("toTopicPodcastEpisodeVideoKeys lists each chapter's generated images under
 		chapterCount: 2,
 	})
 	expect(topicPodcastEpisodeVideoKeys).toEqual([
+		...toTopicPodcastEpisodeVideoChapterImageKeys("episode-1", 0, 1),
+		...toTopicPodcastEpisodeVideoChapterImageKeys("episode-1", 1, 1),
 		...toTopicPodcastEpisodeVideoChapterImageKeys("episode-1", 0),
 		...toTopicPodcastEpisodeVideoChapterImageKeys("episode-1", 1),
 	])

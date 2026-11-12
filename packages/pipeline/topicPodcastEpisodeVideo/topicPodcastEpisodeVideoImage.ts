@@ -1,4 +1,4 @@
-// a film's own image: a wide scene drawn in the film house style and stored beside the film's parts, at the film's
+// a film's own image: a wide scene generated in the film house style and stored beside the film's parts, at the film's
 // size for the poster and as a larger original that the intro and the sign-off zoom into. they show it in place of the
 // podcast episode's image
 
@@ -24,7 +24,7 @@ import { recordReplacedImageDeletions, succeedTopicImageRender } from "../topicI
 import { type TopicImageSceneInput, writeTopicImageScene } from "../topicImages/writeTopicImageScene"
 import { VIDEO_HEIGHT, VIDEO_WIDTH } from "./videoFrames"
 
-// the format of a chapter's generated image: the film house style, drawn wide, at the film's frame size
+// the format of a chapter's generated image: the film house style, generated wide, at the film's frame size
 export const GENERATED_CHAPTER_IMAGE_FORMAT: TopicImageFormat = {
 	stylePromptName: "topic-podcast-episode-video-image-style",
 	aspectRatio: "16:9",
@@ -32,7 +32,7 @@ export const GENERATED_CHAPTER_IMAGE_FORMAT: TopicImageFormat = {
 	height: VIDEO_HEIGHT,
 }
 
-// the format of a film's own image: the same, drawn at the 2K size, with the larger original kept for the zoom of the
+// the format of a film's own image: the same, generated at the 2K size, with the larger original kept for the zoom of the
 // intro and the sign-off
 export const TOPIC_PODCAST_EPISODE_VIDEO_IMAGE_FORMAT: TopicImageFormat = {
 	...GENERATED_CHAPTER_IMAGE_FORMAT,
@@ -41,26 +41,26 @@ export const TOPIC_PODCAST_EPISODE_VIDEO_IMAGE_FORMAT: TopicImageFormat = {
 	largeOriginalHeight: 1536,
 }
 
-// the framing a film image's scene takes, which keeps the lower third clear for the title
+// the framing a film image's scene takes
 export const TOPIC_PODCAST_EPISODE_VIDEO_IMAGE_FRAMING =
-	"a wide establishing shot, with the focal subject in the upper two thirds and open ground, water, or shadow along the bottom"
+	"a wide establishing shot, with the focal subject in the upper two thirds"
 
-// a draw gets two attempts, ten seconds apart
+// an image generation gets two attempts, ten seconds apart
 const DRAW_ATTEMPTS = 2
 const DRAW_RETRY_DELAY_MS = 10 * 1000
 
 // the podcast episode whose film gets its image, and whether the platform pays for it, as the backfill does
-type DrawTopicPodcastEpisodeVideoImageOptions = { podcastEpisodeId: string; isPlatformBilled?: boolean }
+type GenerateTopicPodcastEpisodeVideoImageOptions = { podcastEpisodeId: string; isPlatformBilled?: boolean }
 
 /**
  * Draws and stores the image of a podcast episode's film, unless the film already has one, and adds its cost to the
- * film row unless the platform pays. Returns the image's hash, or null if nothing was drawn. A failed draw throws an
+ * film row unless the platform pays. Returns the image's hash, or null if nothing was generated. A failed image generation throws an
  * error.
  */
-export async function drawTopicPodcastEpisodeVideoImage({
+export async function generateTopicPodcastEpisodeVideoImage({
 	podcastEpisodeId,
 	isPlatformBilled = false,
-}: DrawTopicPodcastEpisodeVideoImageOptions): Promise<string | null> {
+}: GenerateTopicPodcastEpisodeVideoImageOptions): Promise<string | null> {
 	// the film's image and its podcast episode's owner
 	const [topicPodcastEpisodeVideo] = await db
 		.select({ imageHash: topicPodcastEpisodeVideos.imageHash, ownerId: podcastEpisodes.ownerId })
@@ -68,20 +68,20 @@ export async function drawTopicPodcastEpisodeVideoImage({
 		.innerJoin(podcastEpisodes, eq(podcastEpisodes.id, topicPodcastEpisodeVideos.podcastEpisodeId))
 		.where(eq(topicPodcastEpisodeVideos.podcastEpisodeId, podcastEpisodeId))
 
-	// a film that has an image, or a podcast episode with no title, has nothing to draw
-	const isDrawn = Boolean(topicPodcastEpisodeVideo?.imageHash)
-	const sceneInput = isDrawn ? null : await loadPodcastEpisodeImageSceneInput(podcastEpisodeId)
+	// a film that has an image, or a podcast episode with no title, has nothing to generate
+	const isNewlyGenerated = Boolean(topicPodcastEpisodeVideo?.imageHash)
+	const sceneInput = isNewlyGenerated ? null : await loadPodcastEpisodeImageSceneInput(podcastEpisodeId)
 	if (!topicPodcastEpisodeVideo || !sceneInput) {
 		return null
 	}
 
 	// the original from a scene of the podcast episode's own words, on the owner's key or the master key for the
-	// platform, on the model that draws at the film image's size
+	// platform, on the model that generates at the film image's size
 	const litellmApiKey = isPlatformBilled
 		? undefined
 		: await loadOrProvisionUserLiteLLMKey(topicPodcastEpisodeVideo.ownerId)
 	const model = topicImageRegenerateModel()
-	const original = await drawTopicPodcastEpisodeVideoImageOriginal({ sceneInput, model, litellmApiKey })
+	const original = await generateTopicPodcastEpisodeVideoImageOriginal({ sceneInput, model, litellmApiKey })
 
 	// the files, then the image's hash on the film row with the cost. a film that got its image meanwhile keeps it
 	const imageHash = await storeTopicPodcastEpisodeVideoImage(podcastEpisodeId, original)
@@ -102,7 +102,7 @@ export async function drawTopicPodcastEpisodeVideoImage({
 		)
 		.returning({ id: topicPodcastEpisodeVideos.id })
 
-	// no row changed, so this draw's files go
+	// no row changed, so this image generation's files go
 	if (updatedRows.length === 0) {
 		await deleteStoredObjects(toImageObjectKeys(podcastEpisodeId, imageHash))
 		return null
@@ -110,10 +110,10 @@ export async function drawTopicPodcastEpisodeVideoImage({
 	return imageHash
 }
 
-// what one draw reads: the scene's words, the framing its scene takes, which is the film image's if none is given, the
+// what one image generation reads: the scene's words, the framing its scene takes, which is the film image's if none is given, the
 // format, which is the film image's if none is given, the model, and the key it bills, or the master key if no key is
 // given
-type DrawImageOriginalOptions = {
+type GenerateImageOriginalOptions = {
 	sceneInput: TopicImageSceneInput
 	framing?: string
 	format?: TopicImageFormat
@@ -125,25 +125,25 @@ type DrawImageOriginalOptions = {
  * Draws an image in the film house style in a format, from a scene written in a framing over the given words. A spent
  * budget and a rejection are final, and anything else gets a second attempt before it throws.
  */
-export function drawTopicPodcastEpisodeVideoImageOriginal(
-	drawImageOriginalOptions: DrawImageOriginalOptions,
+export function generateTopicPodcastEpisodeVideoImageOriginal(
+	generateImageOriginalOptions: GenerateImageOriginalOptions,
 ): Promise<TopicImageOriginal> {
 	return runWithRetries({
 		attempts: DRAW_ATTEMPTS,
 		delayMs: DRAW_RETRY_DELAY_MS,
-		runAttempt: () => drawImageOriginal(drawImageOriginalOptions),
+		runAttempt: () => generateImageOriginal(generateImageOriginalOptions),
 		isRetryable: (error) => !(error instanceof TopicImageRenderFailure) || error.outcome === "retryable",
 	})
 }
 
-// write the scene in the framing, and draw it in the film house style in the format
-async function drawImageOriginal({
+// write the scene in the framing, and generate it in the film house style in the format
+async function generateImageOriginal({
 	sceneInput,
 	framing = TOPIC_PODCAST_EPISODE_VIDEO_IMAGE_FRAMING,
 	format = TOPIC_PODCAST_EPISODE_VIDEO_IMAGE_FORMAT,
 	model,
 	litellmApiKey,
-}: DrawImageOriginalOptions): Promise<TopicImageOriginal> {
+}: GenerateImageOriginalOptions): Promise<TopicImageOriginal> {
 	const scene = await writeTopicImageScene({ ...sceneInput, framing, litellmApiKey })
 	return renderTopicImageOriginal({ scene, isHouseStyle: true, model, format, litellmApiKey })
 }
@@ -160,7 +160,7 @@ export async function loadTopicPodcastEpisodeVideoImageSceneInput(
 	return sceneInput && { ...sceneInput, framing: TOPIC_PODCAST_EPISODE_VIDEO_IMAGE_FRAMING }
 }
 
-// a new image for a film: the film, the original, the render that drew it or null for an upload, its origin, the
+// a new image for a film: the film, the original, the render that generated it or null for an upload, its origin, the
 // editor's image prompt, and what the render cost
 export type ReplaceTopicPodcastEpisodeVideoImageOptions = {
 	topicPodcastEpisodeVideoId: string
@@ -214,7 +214,7 @@ export async function replaceTopicPodcastEpisodeVideoImage({
 			await recordReplacedImageDeletions(transaction, replacedImageKeys)
 		}
 
-		// the render that drew it is done
+		// the render that generated it is done
 		await succeedTopicImageRender({ transaction, renderId, costDollars })
 		return topicPodcastEpisodeVideo
 	})
@@ -224,7 +224,7 @@ export async function replaceTopicPodcastEpisodeVideoImage({
 		await purgePublicImageFiles(replacedImage)
 	}
 
-	// the intro and the sign-off are drawn again from the new image. a failed start is reported, and the next play
+	// the intro and the sign-off are rendered again from the new image. a failed start is reported, and the next play
 	// starts the rebuild
 	await startTopicPodcastEpisodeVideoRebuild(podcastEpisodeId).catch((error: unknown) => {
 		reportError(error, "topic-podcast-episode-video", { podcastEpisodeId, step: "rebuild" })

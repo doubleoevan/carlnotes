@@ -1,6 +1,6 @@
 // the podcast episode fixtures for the ui tests: a published podcast episode's summary, as a table row and its play
-// button read it, a chapter, and a full podcast episode as the player shows it
-import type { PodcastEpisode, PodcastEpisodeChapter, PodcastEpisodeSummary } from "./podcast"
+// button read it, a chapter, a full podcast episode as the player shows it, and a topic's podcast as its page shows it
+import type { PodcastEpisode, PodcastEpisodeChapter, PodcastEpisodeSummary, TopicPodcast } from "./podcast"
 
 /**
  * Returns a published podcast episode's summary with twelve chapters, with any of its fields replaced.
@@ -68,5 +68,22 @@ export function toPodcastEpisodeFixture(podcastEpisodeFields: Partial<PodcastEpi
 		isCompleted: false,
 		isVoiceChatConfigured: true,
 		...podcastEpisodeFields,
+	}
+}
+
+/**
+ * Returns an enabled topic podcast with a 2026 season and no podcast episode in it, with any of its fields replaced.
+ */
+export function toTopicPodcastFixture(topicPodcastFields: Partial<TopicPodcast> = {}): TopicPodcast {
+	return {
+		isEnabled: true,
+		isCommentsEnabled: true,
+		hasFullPodcastEpisodes: true,
+		canRemovePodcastEpisodes: false,
+		unpublishedPodcastEpisode: null,
+		seasons: [2026],
+		latestSeasonPodcastEpisodes: { podcastEpisodes: [] },
+		publicFeedUrl: null,
+		...topicPodcastFields,
 	}
 }

@@ -111,8 +111,8 @@ type RenderAndStoreTopicImageOptions = { renderId: string; scene: string; imageP
 /**
  * Draws the render's image from the scene, in the house style unless the editor gave an image prompt, stores it, and
  * makes it the current image of its film, its podcast episode, its Topic Post, or its topic. A film's image keeps the
- * film house style after an image prompt too, which leaves its dark lower third clear for the film's title. A
- * rejection or a spent budget fails for good, and anything else is worth another attempt.
+ * film house style after an image prompt too. A rejection or a spent budget fails for good, and anything else is
+ * worth another attempt.
  */
 export async function renderAndStoreTopicImage({
 	renderId,
@@ -208,7 +208,7 @@ async function storeRenderedImage({
 		return
 	}
 
-	// a Topic Post render stores its files under the post and makes them the post's image
+	// a Topic Post render stores its files under the Topic Post and makes them the Topic Post's image
 	if (topicPostId) {
 		const hash = await storeTopicPostImageFiles(topicPostId, original)
 		await replaceTopicPostImage({
@@ -241,7 +241,7 @@ async function storeRenderedImage({
 // track the render's event with the topic, the podcast episode, the Topic Post, or the film if the render drew one,
 // and the render's kind. the owner flag says whether the user the render bills owns the topic
 function trackRenderEvent(render: TopicImageRenderRow): void {
-	// a Topic Post's regenerate has its own event, named by the post
+	// a Topic Post's regenerate has its own event, named by the Topic Post
 	if (render.userId && render.topicPostId && render.kind === "regenerate") {
 		trackEvent("social_topic_post_image_regenerate", render.userId, {
 			objectId: render.topicPostId,

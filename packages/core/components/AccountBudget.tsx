@@ -1,4 +1,3 @@
-import { isPaidPlan } from "@carlnotes/contracts/enums"
 import type { BillingProvider } from "@carlnotes/contracts/plans"
 import type { BillingState } from "@carlnotes/contracts/profiles"
 import type { ComponentType, ReactNode } from "react"
@@ -22,29 +21,25 @@ export type AccountBudgetElements = {
 	Meters: Container
 	Meter: Container
 	MeterRing: ComponentType<MeterRingProps>
-	// the plan line with the plan action right after it
-	PlanRow: Container
 	// the failed-payment notice, whose Update opens where the provider bills the plan
 	PaymentNotice: ComponentType<{ provider: BillingProvider | null }>
 }
 
 /**
  * Composes the payment notice and the coffee fund and daily scans cards, each with its title at the top left beside its
- * meters and the current plan with its button at the bottom, for both account screens.
+ * meters, for both account screens.
  */
 export function AccountBudget({
 	billing,
 	isReadOnly = false,
 	activity,
 	spendMeter,
-	planAction,
 	elements,
 }: {
 	billing: BillingState
 	isReadOnly?: boolean
 	activity: SpendMeterProps | null
 	spendMeter: ReactNode
-	planAction?: ReactNode
 	elements: AccountBudgetElements
 }) {
 	// the elements and the payment and daily-limit conditions
@@ -59,7 +54,6 @@ export function AccountBudget({
 		Meters,
 		Meter,
 		MeterRing,
-		PlanRow,
 		PaymentNotice,
 	} = elements
 	const isPastDue = billing.status === "past_due" || billing.status === "unpaid"
@@ -79,23 +73,10 @@ export function AccountBudget({
 		? "Extra scans beyond your daily limit are billed by the scan."
 		: "You have reached your daily limit."
 
-	// the current plan at the bottom left of each card with its action right after it
-	const planRow = (
-		<PlanRow>
-			<Text>
-				<Text className="font-semibold">Plan </Text>
-				<Text className="text-muted-foreground capitalize">{billing.plan}</Text>
-				{isPaidPlan(billing.plan) && (
-					<Text className="text-muted-foreground">{` · billed ${billing.billingInterval}`}</Text>
-				)}
-			</Text>
-			{planAction}
-		</PlanRow>
-	)
 	return (
 		<>
 			{isPastDue && !isReadOnly && <PaymentNotice provider={billing.provider} />}
-			{/* the coffee fund with its title, reset clock, and amount at the top, the meter, and the plan at the bottom */}
+			{/* the coffee fund with its title, reset clock, and amount at the top, and the meter */}
 			<Card>
 				<CardTopRow>
 					<CardTopStart>
@@ -114,9 +95,8 @@ export function AccountBudget({
 					</CardTopEnd>
 				</CardTopRow>
 				{spendMeter}
-				{planRow}
 			</Card>
-			{/* the daily scans with their title, the scans used beside the reset clock, and the plan at the bottom */}
+			{/* the daily scans with their title, and the scans used beside the reset clock */}
 			<Card>
 				<CardTop>
 					<Heading>Brews today</Heading>
@@ -140,7 +120,6 @@ export function AccountBudget({
 						</Meter>
 					</Meters>
 				</CardTop>
-				{planRow}
 			</Card>
 		</>
 	)

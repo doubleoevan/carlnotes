@@ -1,6 +1,7 @@
-// a Dashboard screen, Topic, Podcast, or Team Dashboard, laid out like the Activity screen: the page icon and heading,
-// the person's or team's byline with its summary counts under it and the team dropdown in the team's name's place, then
-// the chart sections with every one open, Carl's paragraph in the first
+// a Dashboard screen, Topic, Podcast, or Team Dashboard, laid out like the Activity screen: the page icon and heading
+// with the New Topic button to the right on the user's own screen and on every team's, the person's or team's
+// byline with its summary counts under it and the team dropdown in the team's name's place, then the chart sections
+// with every one open, Carl's paragraph in the first
 import {
 	DASHBOARD_PAGE_HEADINGS,
 	DASHBOARD_PAGE_NAMES,
@@ -29,6 +30,7 @@ import { DetailsLine } from "@/components/common/DetailsLine"
 import { PageHeading, PageScreen } from "@/components/layout/PageScreen"
 import { Text } from "@/components/primitives/text"
 import { openShareSheet } from "@/components/share/shareSheet"
+import { NewTopicButton } from "@/components/topic/TopicHomeActions"
 import { toPlatformPath } from "@/platformPath"
 import { useColorMode } from "@/theme"
 import { captureVisitEvent } from "@/visitAnalytics"
@@ -45,13 +47,22 @@ export function DashboardScreen({ dashboardKind, subjectId }: { dashboardKind: D
 	const pageName = DASHBOARD_PAGE_NAMES[dashboardKind]
 	const pageHeading = DASHBOARD_PAGE_HEADINGS[dashboardKind]
 
-	// the reader, the byline's subject and summary, the page title, and the team dropdown
-	const { hasFullAccess, isOwner, subject, summary, pageTitle, isMissing, hasTeamDropdown, teamDropdown } =
-		useDashboardPage({
-			dashboardKind,
-			subjectId,
-			initialDashboard: null,
-		})
+	// the user's access, the byline's subject and summary, the page title, and the team dropdown
+	const {
+		hasFullAccess,
+		isOwner,
+		hasNewTopicButton,
+		subject,
+		summary,
+		pageTitle,
+		isMissing,
+		hasTeamDropdown,
+		teamDropdown,
+	} = useDashboardPage({
+		dashboardKind,
+		subjectId,
+		initialDashboard: null,
+	})
 
 	// the operating system's share sheet with the page's title and url, reported by its channel with the Dashboard's ids
 	const handleShare = (): void => {
@@ -62,7 +73,14 @@ export function DashboardScreen({ dashboardKind, subjectId }: { dashboardKind: D
 	return (
 		<PageScreen
 			title={pageName}
-			header={<PageHeading title={pageHeading} icon={DASHBOARD_PAGE_ICONS[dashboardKind]} />}
+			header={
+				<PageHeading
+					title={pageHeading}
+					icon={DASHBOARD_PAGE_ICONS[dashboardKind]}
+					action={hasNewTopicButton && <NewTopicButton />}
+				/>
+			}
+			hasNewTopicButton={hasNewTopicButton}
 			byline={
 				isMissing ? null : subject ? (
 					<DashboardSubjectHeader

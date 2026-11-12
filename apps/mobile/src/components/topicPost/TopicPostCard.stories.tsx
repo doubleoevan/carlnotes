@@ -26,5 +26,8 @@ export const Default: Story = {}
 // the author's own draft is marked Draft in the date's place
 export const Draft: Story = { args: { topicPost: TOPIC_POST_DRAFT_CARD_STORY } }
 
-// a post with no summary and no reactions yet keeps its byline alone
+// a Topic Post with no summary and no reactions yet keeps its byline alone
 export const NoSummary: Story = { args: { topicPost: { ...TOPIC_POST_CARD_STORY, summary: null, reactionCount: 0 } } }
+
+// a published Topic Post whose image is still to be drawn pulses its empty frame
+export const PendingImage: Story = { args: { topicPost: { ...TOPIC_POST_CARD_STORY, image: null } } }

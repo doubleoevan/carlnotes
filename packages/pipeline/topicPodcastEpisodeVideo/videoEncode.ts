@@ -1,6 +1,5 @@
-// a podcast episode film's ffmpeg runs: one shot from its still, the intro or the sign-off from the film's image, the
-// join of shots or parts by stream copy, and the film's mux with its audio and captions. each run has a timeout and
-// stops once the render's signal aborts
+// a podcast episode film's ffmpeg runs: one shot from its still, the join of shots or parts by stream copy, and the
+// film's mux with its audio and captions. each run has a timeout and stops once the render's signal aborts
 
 import { runFfmpeg } from "@carlnotes/models/ffmpeg"
 import { ESPRESSO, VIDEO_HEIGHT, VIDEO_WIDTH } from "./videoFrames"
@@ -13,12 +12,6 @@ import {
 	toSegmentSeconds,
 	VIDEO_FRAMES_PER_SECOND,
 } from "./videoTimeline"
-
-// the intro's zoom into the film's image: a push that grows 12 percent each second, then a creep of half a percent
-// each second, to 2.5 times at the intro's end. the sign-off runs the same zoom backward
-const IMAGE_PART_PUSH_RATE_PER_SECOND = 1.12
-const IMAGE_PART_CREEP_RATE_PER_SECOND = 1.005
-const IMAGE_PART_ZOOM_END = 2.5
 
 // every run's H.264 settings. the same settings in every run let shots and parts join by stream copy, and a keyframe
 // every two seconds that never moves for a scene change opens every run on a keyframe and keeps seeks fast
@@ -71,90 +64,6 @@ const ZOOM_CENTER = "x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)'"
 // the espresso the film fades through, as ffmpeg writes a color
 const ESPRESSO_COLOR = `0x${ESPRESSO.slice(1)}`
 
-// one image part: the film's image as a still and the part's lower third png, the part's frames, which part it is, and
-// the file it writes
-export type VideoImagePartEncode = {
-	stillPath: string
-	lowerThirdPath: string
-	frameCount: number
-	part: "intro" | "sign-off"
-	partPath: string
-}
-
-/**
- * Encodes the intro or the sign-off, video only: the film's image with its zoom, the lower third over it for the whole
- * part, and a fade from espresso and to it. The encode is killed at its timeout or once the signal aborts.
- */
-export async function encodeVideoImagePart(
-	videoImagePartEncode: VideoImagePartEncode,
-	signal?: AbortSignal,
-): Promise<void> {
-	await runFfmpeg({
-		ffmpegArguments: toVideoImagePartArguments(videoImagePartEncode),
-		timeoutMs: toEncodeTimeoutMs(videoImagePartEncode.frameCount),
-		signal,
-	})
-}
-
-/**
- * Returns ffmpeg's arguments for the intro or the sign-off. The intro pushes in to the film's image at 12 percent a
- * second, then creeps in to 2.5 times at its end, and the sign-off runs the same zoom backward. The lower third fades
- * in after 0.6 seconds and stays. The part fades in from espresso and out to it over 0.3 seconds, and a short part
- * splits its length between the two fades.
- */
-export function toVideoImagePartArguments({
-	stillPath,
-	lowerThirdPath,
-	frameCount,
-	part,
-	partPath,
-}: VideoImagePartEncode): string[] {
-	// the intro's zoom by the seconds since its start, and the sign-off's by the seconds to its end
-	const partSeconds = toSegmentSeconds(frameCount)
-	const pushSeconds = Number(toImagePartPushSeconds(partSeconds).toFixed(4))
-	const zoomSeconds =
-		part === "intro" ? `on/${VIDEO_FRAMES_PER_SECOND}` : `(${frameCount - 1}-on)/${VIDEO_FRAMES_PER_SECOND}`
-	const pushZoom = `pow(${IMAGE_PART_PUSH_RATE_PER_SECOND},min(${zoomSeconds},${pushSeconds}))`
-	const creepZoom = `pow(${IMAGE_PART_CREEP_RATE_PER_SECOND},max(${zoomSeconds}-${pushSeconds},0))`
-	const zoomFilter = `zoompan=z='${pushZoom}*${creepZoom}':${ZOOM_CENTER}:d=${frameCount}:${ZOOM_OUTPUT}`
-
-	// the lower third fades in and stays, and the part fades in from espresso and out to it
-	const lowerThirdFadeIn = `fade=t=in:st=${LOWER_THIRD_IN_SECONDS}:d=${LOWER_THIRD_FADE_SECONDS}:alpha=1`
-	const segmentFades = toSegmentFades({ frameCount, isSegmentStart: true, isSegmentEnd: true }).join(",")
-	const filterGraph = [
-		`[0:v]${zoomFilter}[zoomed]`,
-		`[1:v]format=rgba,${lowerThirdFadeIn}[lowerThird]`,
-		`[zoomed][lowerThird]overlay=0:0,${segmentFades},format=yuv420p[part]`,
-	].join(";")
-
-	// the still is read once and the zoom draws every frame from it. the lower third loops at the film's frame rate, and
-	// the output stops at the part's frames
-	return [
-		...["-y", "-i", stillPath],
-		...toLowerThirdInput(lowerThirdPath),
-		...["-filter_complex", filterGraph, "-map", "[part]", "-frames:v", String(frameCount)],
-		...H264_ARGUMENTS,
-		...["-an", partPath],
-	]
-}
-
-/**
- * Returns how many seconds an intro of a length pushes in at 12 percent a second before it creeps, so that the zoom is
- * 2.5 times at its end. An intro too short to reach 2.5 times pushes for its whole length.
- */
-export function toImagePartPushSeconds(partSeconds: number): number {
-	// a short part never reaches the zoom's end, so it only pushes
-	const pushGrowth = Math.log(IMAGE_PART_PUSH_RATE_PER_SECOND)
-	const creepGrowth = Math.log(IMAGE_PART_CREEP_RATE_PER_SECOND)
-	const zoomEndGrowth = Math.log(IMAGE_PART_ZOOM_END)
-	if (partSeconds * pushGrowth <= zoomEndGrowth) {
-		return partSeconds
-	}
-
-	// the push takes what the creep leaves of the zoom, and a part too long for any push only creeps
-	return Math.max(0, (zoomEndGrowth - partSeconds * creepGrowth) / (pushGrowth - creepGrowth))
-}
-
 // one shot's picture: its still's file, how far its image may zoom, its move, its frames to the next cut, and the
 // frames it is on screen, which include its crossfade into the next shot
 export type VideoShotPicture = {
@@ -166,11 +75,11 @@ export type VideoShotPicture = {
 }
 
 // one shot's run: the shot's picture, the picture of the shot before it, or null for a segment's first shot, the lower
-// third png with the seconds from the segment's start to the shot's, or null for a shot the lower third never reaches,
-// whether the shot starts or ends its segment, and the file it writes
+// third png with the seconds from the segment's start to the shot's and whether it stays once it fades in, or null for a
+// shot the lower third never reaches, whether the shot starts or ends its segment, and the file it writes
 export type VideoShotEncode = VideoShotPicture & {
 	previousShot: VideoShotPicture | null
-	lowerThird: { lowerThirdPath: string; shotStartSeconds: number } | null
+	lowerThird: { lowerThirdPath: string; shotStartSeconds: number; isShownThroughout: boolean } | null
 	isSegmentStart: boolean
 	isSegmentEnd: boolean
 	shotPath: string
@@ -192,7 +101,8 @@ export async function encodeVideoShot(videoShotEncode: VideoShotEncode, signal?:
 /**
  * Returns ffmpeg's arguments for one shot. The still zooms or pans for its frames. The still before it keeps its own
  * move for the crossfade's frames and fades out over them. The lower third keeps the fades of its segment's first 8
- * seconds, whichever shot they fall in. A segment's first shot fades in from espresso, and its last fades out to it.
+ * seconds, whichever shot they fall in, or stays once it fades in if it shows throughout. A segment's first shot fades
+ * in from espresso, and its last fades out to it.
  */
 export function toVideoShotArguments(videoShotEncode: VideoShotEncode): string[] {
 	// the shot's own still, with its move from its first frame
@@ -219,7 +129,7 @@ export function toVideoShotArguments(videoShotEncode: VideoShotEncode): string[]
 	if (lowerThird) {
 		const lowerThirdInputIndex = previousShot ? 2 : 1
 		inputArguments.push(...toLowerThirdInput(lowerThird.lowerThirdPath))
-		filters.push(`[${lowerThirdInputIndex}:v]format=rgba,${toLowerThirdFades(lowerThird.shotStartSeconds)}[lowerThird]`)
+		filters.push(`[${lowerThirdInputIndex}:v]format=rgba,${toLowerThirdFades(lowerThird)}[lowerThird]`)
 		filters.push(`[${shownLabel}][lowerThird]overlay=0:0[titled]`)
 		shownLabel = "titled"
 	}
@@ -260,13 +170,18 @@ function toShotMoveFilter({ shotPicture, frameOffset, frameCount }: ToShotMoveFi
 	return `zoompan=${{ ...zoomMoves, ...panMoves }[move]}:d=${frameCount}:${ZOOM_OUTPUT}`
 }
 
-// the lower third's fades for a shot that starts some seconds into its segment: in after 0.6 seconds of the segment
-// and out by its eighth second. the lower third's times are moved to the segment's, faded, and moved back
-function toLowerThirdFades(shotStartSeconds: number): string {
+// the lower third's fades for a shot that starts some seconds into its segment: in after 0.6 seconds of the segment,
+// and out by its eighth second unless it shows throughout. the lower third's times are moved to the segment's, faded,
+// and moved back
+function toLowerThirdFades({
+	shotStartSeconds,
+	isShownThroughout,
+}: Pick<NonNullable<VideoShotEncode["lowerThird"]>, "shotStartSeconds" | "isShownThroughout">): string {
 	const fadeOutStartSeconds = LOWER_THIRD_OUT_SECONDS - LOWER_THIRD_FADE_SECONDS
 	const fadeIn = `fade=t=in:st=${LOWER_THIRD_IN_SECONDS}:d=${LOWER_THIRD_FADE_SECONDS}:alpha=1`
 	const fadeOut = `fade=t=out:st=${fadeOutStartSeconds}:d=${LOWER_THIRD_FADE_SECONDS}:alpha=1`
-	return `setpts=PTS+${shotStartSeconds}/TB,${fadeIn},${fadeOut},setpts=PTS-${shotStartSeconds}/TB`
+	const fades = isShownThroughout ? fadeIn : `${fadeIn},${fadeOut}`
+	return `setpts=PTS+${shotStartSeconds}/TB,${fades},setpts=PTS-${shotStartSeconds}/TB`
 }
 
 // a run's frames, and whether the run starts or ends its segment

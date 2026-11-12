@@ -4,9 +4,9 @@ import type { ComponentType, ReactNode } from "react"
 import { type PageSelection, usePagination } from "../hooks/usePagination"
 import type { CardSection } from "../lib/cardSections"
 
-// the platform elements of a card section: the collapsible section with its title, its count, and the control a
-// section may have above its cards, the cards' grid, one card's cell, and the page buttons. a cell off the page shown
-// stays in the web's html and is left out of the app
+// the platform elements of a card section: the collapsible section with its title, its count, the control a section
+// may have above its cards, and where its page buttons go, then the cards' grid, one card's cell, and the page buttons.
+// a cell off the page shown stays in the web's html and is left out of the app
 export type CardsSectionElements = {
 	Section: ComponentType<{
 		value: string
@@ -16,6 +16,8 @@ export type CardsSectionElements = {
 		// how many cards the section holds, which decides where a wide screen puts the count
 		cardCount: number
 		action?: ReactNode
+		// the page buttons, left out for a section of one page
+		pageButtons?: ReactNode
 		children: ReactNode
 	}>
 	Grid: ComponentType<{ children: ReactNode }>
@@ -74,6 +76,16 @@ export function CardsSection<Row>({
 			countLabel={toCountLabel(rowCount, section.noun)}
 			cardCount={rowCount}
 			action={action}
+			pageButtons={
+				pagination.pageCount > 1 && (
+					<Pagination
+						label={`${section.title} pages`}
+						pageNumber={pagination.page + 1}
+						pageCount={pagination.pageCount}
+						onOpenPage={(pageNumber) => pagination.setPage(pageNumber - 1)}
+					/>
+				)
+			}
 		>
 			<Grid>
 				{rows.map((row, index) => (
@@ -82,14 +94,6 @@ export function CardsSection<Row>({
 					</Cell>
 				))}
 			</Grid>
-			{pagination.pageCount > 1 && (
-				<Pagination
-					label={`${section.title} pages`}
-					pageNumber={pagination.page + 1}
-					pageCount={pagination.pageCount}
-					onOpenPage={(pageNumber) => pagination.setPage(pageNumber - 1)}
-				/>
-			)}
 		</Section>
 	)
 }

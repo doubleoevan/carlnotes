@@ -1,5 +1,5 @@
 // a film's own image, with the connection pool and the model calls stubbed: the wide crop, which image a film shows,
-// the first draw in the film house style, a film that already has its image, and a replaced image's rebuild
+// the first image generation in the film house style, a film that already has its image, and a replaced image's rebuild
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import { restoreConnectionPool, type SentQuery, stubConnectionPool } from "@carlnotes/db/connectionPoolStub"
 import * as storage from "@carlnotes/db/store"
@@ -12,7 +12,7 @@ import * as topicImageOriginals from "../topicImages/renderTopicImageOriginal"
 import { type TopicImageOriginal, toTopicImageHash, toTopicImageOriginal } from "../topicImages/topicImageFiles"
 import * as topicImageScenes from "../topicImages/writeTopicImageScene"
 import {
-	drawTopicPodcastEpisodeVideoImage,
+	generateTopicPodcastEpisodeVideoImage,
 	replaceTopicPodcastEpisodeVideoImage,
 	TOPIC_PODCAST_EPISODE_VIDEO_IMAGE_FORMAT,
 } from "./topicPodcastEpisodeVideoImage"
@@ -31,7 +31,7 @@ afterEach(() => {
 })
 
 // spy the scene's words, the owner's key, the scene writer, the image render, and the upload
-function spyImageDraw(): {
+function spyImageGeneration(): {
 	writeScene: ReturnType<typeof spyOn>
 	renderOriginal: ReturnType<typeof spyOn>
 	upload: ReturnType<typeof spyOn>
@@ -134,14 +134,14 @@ test("a film shows its own image, or else its podcast episode's, its topic's, or
 	expect(toShownImage({ ...hashes, podcastEpisodeImageHash: null, topicImageHash: null }).imageOriginalKey).toBeNull()
 })
 
-test("a first draw writes a wide scene, draws it in the film house style, and bills the owner", async () => {
+test("a first image generation writes a wide scene, generates it in the film house style, and bills the owner", async () => {
 	// a film with no image yet, whose podcast episode's owner pays
-	const { writeScene, renderOriginal, upload } = spyImageDraw()
+	const { writeScene, renderOriginal, upload } = spyImageGeneration()
 	const sentQueries = stubTopicPodcastEpisodeVideoWithoutImage()
-	expect(await drawTopicPodcastEpisodeVideoImage({ podcastEpisodeId: "episode-1" })).toBe(ORIGINAL_HASH)
+	expect(await generateTopicPodcastEpisodeVideoImage({ podcastEpisodeId: "episode-1" })).toBe(ORIGINAL_HASH)
 
 	// the scene takes the film's framing on the owner's key, and the render is 16:9 at the 2K size on the model that
-	// draws at it, with the larger original kept
+	// generates that size, with the larger original kept
 	expect(writeScene.mock.calls[0]?.[0]).toMatchObject({ litellmApiKey: "sk-owner" })
 	expect(writeScene.mock.calls[0]?.[0].framing).toContain("a wide establishing shot")
 	expect(renderOriginal.mock.calls[0]?.[0]).toMatchObject({
@@ -160,20 +160,20 @@ test("a first draw writes a wide scene, draws it in the film house style, and bi
 		},
 	})
 
-	// the jpeg lands in the film's folder, and the row takes its hash, its origin, and the 2K draw's cost
+	// the jpeg lands in the film's folder, and the row takes its hash, its origin, and the 2K image generation's cost
 	expect(upload).toHaveBeenCalledWith(ORIGINAL_KEY, ORIGINAL.jpegBytes, "image/jpeg")
 	const topicPodcastEpisodeVideoRowUpdate = toTopicPodcastEpisodeVideoRowUpdate(sentQueries)
 	expect(topicPodcastEpisodeVideoRowUpdate?.values).toEqual(expect.arrayContaining([ORIGINAL_HASH, "generated"]))
 	expect(topicPodcastEpisodeVideoRowUpdate?.values).toContain("0.101000")
 })
 
-test("a drawn image with a larger original stores both files, and one without stores the jpeg alone", async () => {
-	// a draw whose original is larger than the film's frame
-	const { renderOriginal, upload } = spyImageDraw()
+test("a generated image with a larger original stores both files, and one without stores the jpeg alone", async () => {
+	// an image generation whose original is larger than the film's frame
+	const { renderOriginal, upload } = spyImageGeneration()
 	const largeOriginalJpegBytes = new Uint8Array([9, 9, 9])
 	renderOriginal.mockResolvedValue({ ...ORIGINAL, largeOriginalJpegBytes })
 	stubTopicPodcastEpisodeVideoWithoutImage()
-	await drawTopicPodcastEpisodeVideoImage({ podcastEpisodeId: "episode-1" })
+	await generateTopicPodcastEpisodeVideoImage({ podcastEpisodeId: "episode-1" })
 
 	// the jpeg at the film's size names the image, and the larger original sits beside it
 	const originalKey = `episodes/episode-1/video/image-${ORIGINAL_HASH}-original.jpg`
@@ -183,7 +183,7 @@ test("a drawn image with a larger original stores both files, and one without st
 	// an original with no larger jpeg, as an existing film's image has, stores one file
 	upload.mockClear()
 	renderOriginal.mockResolvedValue(ORIGINAL)
-	await drawTopicPodcastEpisodeVideoImage({ podcastEpisodeId: "episode-1" })
+	await generateTopicPodcastEpisodeVideoImage({ podcastEpisodeId: "episode-1" })
 	expect(upload).toHaveBeenCalledTimes(1)
 })
 
@@ -204,19 +204,19 @@ test("a large render or upload keeps a larger original at the film's shape, and 
 	expect(smallOriginal.largeOriginalJpegBytes).toBeUndefined()
 })
 
-test("a platform-billed draw runs on the master key and costs the film nothing", async () => {
-	// the backfill's draw of a film with no image yet
-	const { writeScene } = spyImageDraw()
+test("a platform-billed image generation runs on the master key and costs the film nothing", async () => {
+	// the backfill's image generation for a film with no image yet
+	const { writeScene } = spyImageGeneration()
 	const sentQueries = stubTopicPodcastEpisodeVideoWithoutImage()
-	await drawTopicPodcastEpisodeVideoImage({ podcastEpisodeId: "episode-1", isPlatformBilled: true })
+	await generateTopicPodcastEpisodeVideoImage({ podcastEpisodeId: "episode-1", isPlatformBilled: true })
 	expect(writeScene.mock.calls[0]?.[0].litellmApiKey).toBeUndefined()
 	expect(toTopicPodcastEpisodeVideoRowUpdate(sentQueries)?.values).toContain("0.000000")
 })
 
-test("a film that has its image draws nothing", async () => {
-	const { writeScene, renderOriginal } = spyImageDraw()
+test("a film that has its image generates nothing", async () => {
+	const { writeScene, renderOriginal } = spyImageGeneration()
 	const sentQueries = stubConnectionPool(() => [["film-hash", "owner-1"]])
-	expect(await drawTopicPodcastEpisodeVideoImage({ podcastEpisodeId: "episode-1" })).toBeNull()
+	expect(await generateTopicPodcastEpisodeVideoImage({ podcastEpisodeId: "episode-1" })).toBeNull()
 	expect(writeScene).not.toHaveBeenCalled()
 	expect(renderOriginal).not.toHaveBeenCalled()
 	expect(toTopicPodcastEpisodeVideoRowUpdate(sentQueries)).toBeUndefined()
@@ -270,7 +270,7 @@ test("a regenerated or uploaded image with a larger original stores both files",
 		return text.startsWith("select") ? [[null, "topic-1", "private"]] : []
 	})
 
-	// an editor's regenerate, drawn at the larger size
+	// an editor's regenerate, generated at the larger size
 	const largeOriginalJpegBytes = new Uint8Array([9, 9, 9])
 	await replaceTopicPodcastEpisodeVideoImage({
 		topicPodcastEpisodeVideoId: "film-1",

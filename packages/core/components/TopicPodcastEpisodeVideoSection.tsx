@@ -1,6 +1,6 @@
 // Topic Cinema under the topic header: the film player with the topic's latest film, or a film from Coffee Break
-// films, open or collapsed by the user's saved choice. a topic whose only film is rendering shows the rendering card
-// in the film player's place, and its page is read again until the film is ready
+// films, open on each page load until the user collapses it. a topic whose only film is rendering shows the rendering
+// card in the film player's place, and its page is read again until the film is ready
 import type { PodcastEpisode } from "@carlnotes/contracts/podcast"
 import type { TopicResponse } from "@carlnotes/contracts/topics"
 import type { ComponentType, ReactNode } from "react"
@@ -96,11 +96,7 @@ function TopicCinema({
 			title={TOPIC_PODCAST_EPISODE_VIDEO_SECTION_TITLE}
 			isOpen={isOpen}
 			onOpenChange={(isSectionOpen) => {
-				setTopicPodcastEpisodeVideoSectionOpen({
-					topicId,
-					latestPodcastEpisodeId: topicPodcastEpisodeVideoSection.podcastEpisode.id,
-					isOpen: isSectionOpen,
-				})
+				setTopicPodcastEpisodeVideoSectionOpen({ topicId, isOpen: isSectionOpen })
 				onToggled(isSectionOpen)
 			}}
 			scrollRequestCount={scrollRequestCount}

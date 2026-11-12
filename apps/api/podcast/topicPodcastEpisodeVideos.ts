@@ -1,92 +1,9 @@
-// Topic Cinema as the api reads it: whether its section opens for a user, the user's saved choice, and a ready film's
-// files
+// a ready film's files as the api reads them
 
 import type { PodcastEpisodePageResponse } from "@carlnotes/contracts/podcastEpisodePage"
 import { db } from "@carlnotes/db"
-import {
-	podcastEpisodeListens,
-	podcastEpisodes,
-	topicPodcastEpisodeVideoSections,
-	topicPodcastEpisodeVideos,
-} from "@carlnotes/db/schema/podcast"
+import { podcastEpisodes, topicPodcastEpisodeVideos } from "@carlnotes/db/schema/podcast"
 import { and, eq } from "drizzle-orm"
-
-// the topic, its latest film's podcast episode, and the user, null for a visitor
-type IsTopicPodcastEpisodeVideoSectionOpenOptions = {
-	topicId: string
-	latestPodcastEpisodeId: string
-	userId: string | null
-}
-
-/**
- * Returns whether Topic Cinema opens for a user. A choice saved on the latest film decides. Otherwise the section opens
- * until the user plays the latest film in either format, so a new film reopens a section closed on an older one. A
- * visitor sees it open.
- */
-export async function isTopicPodcastEpisodeVideoSectionOpen({
-	topicId,
-	latestPodcastEpisodeId,
-	userId,
-}: IsTopicPodcastEpisodeVideoSectionOpenOptions): Promise<boolean> {
-	if (!userId) {
-		return true
-	}
-
-	// the user's saved choice on this topic, and the user's plays of the latest film's podcast episode
-	const [[savedSectionRow], [listenRow]] = await Promise.all([
-		db
-			.select({
-				isOpen: topicPodcastEpisodeVideoSections.isOpen,
-				podcastEpisodeId: topicPodcastEpisodeVideoSections.podcastEpisodeId,
-			})
-			.from(topicPodcastEpisodeVideoSections)
-			.where(
-				and(eq(topicPodcastEpisodeVideoSections.userId, userId), eq(topicPodcastEpisodeVideoSections.topicId, topicId)),
-			),
-		db
-			.select({ playCount: podcastEpisodeListens.playCount })
-			.from(podcastEpisodeListens)
-			.where(
-				and(
-					eq(podcastEpisodeListens.userId, userId),
-					eq(podcastEpisodeListens.podcastEpisodeId, latestPodcastEpisodeId),
-				),
-			),
-	])
-
-	// a choice made on the latest film stands, and otherwise an unplayed film opens the section
-	if (savedSectionRow?.podcastEpisodeId === latestPodcastEpisodeId) {
-		return savedSectionRow.isOpen
-	}
-	return (listenRow?.playCount ?? 0) === 0
-}
-
-// the user, the topic, and the choice with the latest film when they chose
-type SaveTopicPodcastEpisodeVideoSectionOptions = {
-	userId: string
-	topicId: string
-	podcastEpisodeId: string
-	isOpen: boolean
-}
-
-/**
- * Saves a user's choice to open or close Topic Cinema on a topic, with the latest film when they chose.
- */
-export async function saveTopicPodcastEpisodeVideoSection({
-	userId,
-	topicId,
-	podcastEpisodeId,
-	isOpen,
-}: SaveTopicPodcastEpisodeVideoSectionOptions): Promise<void> {
-	const sectionChoice = { isOpen, podcastEpisodeId, updatedAt: new Date() }
-	await db
-		.insert(topicPodcastEpisodeVideoSections)
-		.values({ userId, topicId, ...sectionChoice })
-		.onConflictDoUpdate({
-			target: [topicPodcastEpisodeVideoSections.userId, topicPodcastEpisodeVideoSections.topicId],
-			set: sectionChoice,
-		})
-}
 
 // the film's and the captions' types, and the field a platform player's JSON names each url in
 export const TOPIC_PODCAST_EPISODE_VIDEO_FILE = { contentType: "video/mp4", urlFieldName: "videoUrl" } as const

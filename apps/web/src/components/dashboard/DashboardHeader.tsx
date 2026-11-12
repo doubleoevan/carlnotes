@@ -1,6 +1,6 @@
-// a Dashboard page's header: the page icon and heading, and under it the person's or team's avatar at the profile
-// page's size beside their name in the display font, or the team dropdown in the team's name's place, and the page's
-// summary counts
+// a Dashboard page's header: the page icon and heading with the page's action to the right, and under it the person's
+// or team's avatar at the profile page's size beside their name in the display font, or the team dropdown in the
+// team's name's place, and the page's summary counts
 import {
 	DASHBOARD_PAGE_HEADINGS,
 	type DashboardKind,
@@ -18,12 +18,12 @@ import {
 	WEB_AVATAR_HEADER_SKELETON_ELEMENTS,
 } from "@/components/common/avatarHeaderElements"
 import { DetailsLine } from "@/components/common/DetailsLine"
-import { PAGE_TITLE_CLASS } from "@/lib/styleClasses"
+import { PAGE_HEADER_CLASS, PAGE_TITLE_CLASS } from "@/lib/styleClasses"
 import { DASHBOARD_PAGE_ICONS } from "./dashboardPageIcons"
 
 /**
- * Shows the page's icon and heading, then the subject header, which holds its placeholder while the subject loads and
- * is left out for a Dashboard that was not found.
+ * Shows the page's icon and heading with the page's action at the right of the row, then the subject header, which
+ * holds its placeholder while the subject loads and is left out for a Dashboard that was not found.
  */
 export function DashboardHeader({
 	dashboardKind,
@@ -32,6 +32,7 @@ export function DashboardHeader({
 	isSubjectHeaderShown,
 	hasTeamDropdown = false,
 	teamDropdown,
+	action,
 }: {
 	dashboardKind: DashboardKind
 	subject: DashboardSubjectIdentity | undefined
@@ -39,15 +40,19 @@ export function DashboardHeader({
 	isSubjectHeaderShown: boolean
 	hasTeamDropdown?: boolean
 	teamDropdown?: ReactNode
+	action?: ReactNode
 }) {
 	const PageIcon = DASHBOARD_PAGE_ICONS[dashboardKind]
 	return (
 		<>
-			{/* the page heading with the same icon as its user menu row */}
-			<h1 className={PAGE_TITLE_CLASS}>
-				<PageIcon className="size-6" />
-				{DASHBOARD_PAGE_HEADINGS[dashboardKind]}
-			</h1>
+			{/* the page heading with the same icon as its user menu row, and the action to the right */}
+			<div className={PAGE_HEADER_CLASS}>
+				<h1 className={PAGE_TITLE_CLASS}>
+					<PageIcon className="size-6" />
+					{DASHBOARD_PAGE_HEADINGS[dashboardKind]}
+				</h1>
+				{action}
+			</div>
 
 			{/* the person's or team's avatar, name, and summary counts, with placeholders while the snapshot loads */}
 			{isSubjectHeaderShown &&

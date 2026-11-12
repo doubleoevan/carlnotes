@@ -49,9 +49,18 @@ export function NoteLayout({
 }
 
 /**
- * Scrolls the bounded body card within the remaining keyboard-safe space, under the notice above it.
+ * Scrolls the bounded body card within the remaining keyboard-safe space, under the notice above it, with an optional
+ * header over a divider at the top of the card.
  */
-export function NoteBodyScroll({ notice, children }: { notice?: ReactNode; children: ReactNode }) {
+export function NoteBodyScroll({
+	notice,
+	header,
+	children,
+}: {
+	notice?: ReactNode
+	header?: ReactNode
+	children: ReactNode
+}) {
 	// measure the remaining body space
 	const [viewportHeight, setViewportHeight] = useState(300)
 	return (
@@ -65,7 +74,10 @@ export function NoteBodyScroll({ notice, children }: { notice?: ReactNode; child
 		>
 			{notice}
 			<EditorHeight.Provider value={Math.max(120, Math.min(440, viewportHeight - 32))}>
-				<View className="rounded-lg border border-border bg-card px-4 py-4 shadow-raised">{children}</View>
+				<View className="rounded-lg border border-border bg-card px-4 py-4 shadow-raised">
+					{header && <View className="mb-4 border-b border-border pb-4">{header}</View>}
+					{children}
+				</View>
 			</EditorHeight.Provider>
 		</ScrollView>
 	)

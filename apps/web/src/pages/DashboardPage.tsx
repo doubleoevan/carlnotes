@@ -1,6 +1,7 @@
-// a Dashboard page, Topic, Podcast, or Team Dashboard, laid out like the Activity page: the page icon and heading, the
-// person's or team's subject header with the summary counts under it and the team dropdown in the team's name's place
-// on Team Dashboard, then the accordion of chart sections with every one open, Carl's paragraph in the first
+// a Dashboard page, Topic, Podcast, or Team Dashboard, laid out like the Activity page: the page icon and heading with
+// the New Topic button to the right on the user's own page and on every team's, the person's or team's subject
+// header with the summary counts under it and the team dropdown in the team's name's place on Team Dashboard, then the
+// accordion of chart sections with every one open, Carl's paragraph in the first
 import {
 	DASHBOARD_PAGE_NAMES,
 	type DashboardKind,
@@ -18,6 +19,7 @@ import { DashboardHeader } from "@/components/dashboard/DashboardHeader"
 import { toWebDashboardElements, WEB_TEAM_DROPDOWN_ELEMENTS } from "@/components/dashboard/dashboardElements"
 import { WEB_DASHBOARD_CHART_RENDERERS } from "@/components/dashboard/webDashboardChartRenderers"
 import { ShareDashboard } from "@/components/share/ShareDashboard"
+import { NewTopicButton, useNewTopicDialog } from "@/components/topic/TopicEditorChoiceDialog"
 import { useColorMode } from "@/hooks/useColorMode"
 import { usePageTitle } from "@/hooks/usePageTitle"
 import { PAGE_CLASS } from "@/lib/styleClasses"
@@ -46,18 +48,31 @@ export function DashboardPage({ dashboardKind, subjectId, initialDashboard }: Da
 
 	// the user's access, the subject header's subject and summary, the page title, whether the Dashboard is missing, and
 	// the team dropdown
-	const { hasFullAccess, isOwner, subject, summary, pageTitle, isMissing, hasTeamDropdown, teamDropdown } =
-		useDashboardPage({
-			dashboardKind,
-			subjectId,
-			initialDashboard,
-		})
+	const {
+		hasFullAccess,
+		isOwner,
+		hasNewTopicButton,
+		subject,
+		summary,
+		pageTitle,
+		isMissing,
+		hasTeamDropdown,
+		teamDropdown,
+	} = useDashboardPage({
+		dashboardKind,
+		subjectId,
+		initialDashboard,
+	})
 	usePageTitle(pageTitle)
 
-	// the search bar's menu offers Share
+	// the New Topic button's dialog
+	const { openNewTopicDialog, newTopicDialog } = useNewTopicDialog()
+
+	// the search bar's menu offers Share, and leaves out New topic while the page shows its own New Topic button
 	useRegisterPageActions({
 		page: pageName,
 		options: [{ label: "Share", Icon: Share, onSelect: () => setIsSharing(true) }],
+		hasNewTopicButton,
 	})
 
 	// an item's page, at its anchor if the path names one, such as a topic's film
@@ -68,7 +83,8 @@ export function DashboardPage({ dashboardKind, subjectId, initialDashboard }: Da
 
 	return (
 		<main className={PAGE_CLASS}>
-			{/* the page heading, and the subject header under it with the team dropdown in the team's name's place */}
+			{/* the page heading with the New Topic button to the right, and the subject header under it with the team
+			    dropdown in the team's name's place */}
 			<DashboardHeader
 				dashboardKind={dashboardKind}
 				subject={subject}
@@ -84,6 +100,7 @@ export function DashboardPage({ dashboardKind, subjectId, initialDashboard }: Da
 						/>
 					)
 				}
+				action={hasNewTopicButton && <NewTopicButton onNewTopic={openNewTopicDialog} />}
 			/>
 
 			{/* the not-found line, or the page's body */}
@@ -102,6 +119,9 @@ export function DashboardPage({ dashboardKind, subjectId, initialDashboard }: Da
 					elements={DASHBOARD_ELEMENTS}
 				/>
 			)}
+
+			{/* the dialog that the New Topic button opens */}
+			{newTopicDialog}
 
 			{/* the Share dialog the menu's Share opens */}
 			{isSharing && (

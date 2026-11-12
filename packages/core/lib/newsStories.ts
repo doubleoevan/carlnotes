@@ -2,6 +2,7 @@
 import { NEWS_PAGE_SIZE, type NewsEvent, type NewsResponse } from "@carlnotes/contracts/news"
 import type { PodcastEpisode } from "@carlnotes/contracts/podcast"
 import { PODCAST_STORY_EPISODE } from "./podcastEpisodeStories"
+import { STORY_TOPIC_IMAGE } from "./storyFixtures"
 
 // how many rows the story's week holds, enough for seven pages
 const NEWS_STORY_ROW_COUNT = 32
@@ -11,14 +12,6 @@ const NEWS_STORY_NEWEST_AT = Date.parse("2026-11-09T12:00:00Z")
 
 // the Topic every story row belongs to
 const NEWS_STORY_TOPIC = { topicId: "topic-espresso", topicName: "Home espresso" }
-
-// the placeholder that shows as a story row's image, which the app serves from its public files
-const NEWS_STORY_IMAGE_FILES = { url: "/podcast-cover-placeholder.jpg", url2x: "/podcast-cover-placeholder.jpg" }
-const NEWS_STORY_IMAGE = {
-	page: NEWS_STORY_IMAGE_FILES,
-	list: NEWS_STORY_IMAGE_FILES,
-	thumbnail: NEWS_STORY_IMAGE_FILES,
-}
 
 // what a row says of nobody and nothing, which each kind's row fills in
 const NEWS_STORY_ROW_DEFAULTS = {
@@ -82,7 +75,7 @@ const NEWS_STORY_EVENTS: NewsEvent[] = Array.from({ length: NEWS_STORY_ROW_COUNT
 	return {
 		...kindRow,
 		...NEWS_STORY_TOPIC,
-		image: kindRow.kind === "finding" ? null : NEWS_STORY_IMAGE,
+		image: kindRow.kind === "finding" ? null : STORY_TOPIC_IMAGE,
 		id: `story-row-${i}`,
 		occurredAt: new Date(NEWS_STORY_NEWEST_AT - i * 60 * 60_000).toISOString(),
 	}

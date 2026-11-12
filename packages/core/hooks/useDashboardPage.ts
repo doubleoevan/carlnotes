@@ -29,6 +29,9 @@ export type UseDashboardPageOptions = {
 export type DashboardPageState = {
 	hasFullAccess: boolean
 	isOwner: boolean
+	// whether the header shows the New Topic button: on one's own Topic and Podcast Dashboards, and on every Team
+	// Dashboard, as the team page shows it to every reader
+	hasNewTopicButton: boolean
 	subject: DashboardSubjectIdentity | undefined
 	summary: DashboardSummary | undefined
 	pageTitle: string | null
@@ -83,6 +86,7 @@ export function useDashboardPage({
 	return {
 		hasFullAccess,
 		isOwner,
+		hasNewTopicButton: isTeamPage || isOwner,
 		subject,
 		summary: dashboard?.summary,
 		pageTitle: subject ? toDashboardPageTitle(dashboardKind, toDashboardSubjectName(subject)) : null,

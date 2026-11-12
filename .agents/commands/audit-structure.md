@@ -965,6 +965,27 @@ Check for:
      `apps/web/src/components/podcast/topicPodcastEpisodeVideoChapterImages.ts` (now `"generated"`)
    - `isSpokenQuestionsPausedResponse` in `packages/client/voiceClient.ts` (removed: `toChatRejection` in
      `packages/client/chatClient.ts` reads a 429's error message for the chat and voice routes alike)
+   - the intro's and the sign-off's one push in `packages/pipeline/topicPodcastEpisodeVideo/videoEncode.ts`:
+     `encodeVideoImagePart`, `toVideoImagePartArguments`, `VideoImagePartEncode`, and `toImagePartPushSeconds`
+     (removed: the parts encode shot by shot through `encodeSegmentShots` in `videoParts.ts`), and
+     `renderVideoImageParts` in `videoParts.ts` (now in `videoImageParts.ts`)
+   - Topic Cinema's saved open or closed choice: the `PUT /api/topics/:id/video-section` route in
+     `apps/api/podcast/topicPodcastEpisodeVideoRoutes.ts`, `saveTopicPodcastEpisodeVideoSection` and
+     `isTopicPodcastEpisodeVideoSectionOpen` in `topicPodcastEpisodeVideos.ts`, `sendTopicPodcastEpisodeVideoSection` in
+     `packages/client/podcastEpisodeClient.ts`, `topicPodcastEpisodeVideoSectionPayload` in
+     `packages/contracts/podcast.ts`, and the `topic_podcast_episode_video_sections` table (removed: Topic Cinema
+     opens on every page load)
+   - "draw" for an image model call in `packages/pipeline/topicPodcastEpisodeVideo/`:
+     `drawTopicPodcastEpisodeVideoImage`, `DrawTopicPodcastEpisodeVideoImageOptions`, `drawImageOriginal`,
+     `spyImageDraw`, `drawnGeneratedChapterImageCount`, `GENERATED_CHAPTER_IMAGE_DRAW_CONCURRENCY`,
+     `GeneratedChapterImageDraw`, `loadGeneratedChapterImageDraws`, and `loadOrDrawGeneratedChapterImage` (now
+     `generateTopicPodcastEpisodeVideoImage`, `GenerateTopicPodcastEpisodeVideoImageOptions`, `generateImageOriginal`,
+     `spyImageGeneration`, `newlyGeneratedChapterImageCount`, `CHAPTER_IMAGE_GENERATION_CONCURRENCY`,
+     `ChapterImageGeneration`, `loadChapterImageGenerations`, and `loadOrGenerateChapterImage`). the Temporal activity
+     names keep "draw"
+   - the shared `AccountBudget`'s `planAction` and `PlanRow` (now `packages/core/components/AccountPlan.tsx` at the
+     right of the account page's header row), and `apps/mobile/src/components/account/AccountBudget.stories.tsx` (now
+     `AccountPlan.stories.tsx`)
 
 5. **Cross-harness enforcement parity**: `.claude/settings.json` hooks and
    `.opencode/plugin/guardrails.mjs` must gate the same operations with the

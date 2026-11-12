@@ -42,8 +42,8 @@ function toPendingDeletionWrites(sentQueries: SentQuery[]): SentQuery[] {
 	return sentQueries.filter((sentQuery) => sentQuery.text.includes('"pending_object_deletions"'))
 }
 
-test("the current render version is 2, which cuts each chapter into a montage", () => {
-	expect(TOPIC_PODCAST_EPISODE_VIDEO_RENDER_VERSION).toBe(2)
+test("the current render version is 3", () => {
+	expect(TOPIC_PODCAST_EPISODE_VIDEO_RENDER_VERSION).toBe(3)
 })
 
 test("a render reads the film's status and its render version", async () => {

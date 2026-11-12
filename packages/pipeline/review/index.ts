@@ -12,6 +12,7 @@ import type { DiscoveredResource } from "../ingest/ingester"
 import { considerReviewLink, loadPersonalSourcesReviewLinks } from "../personalSources/linkQueue"
 import { dedupeResources } from "./dedupe"
 import { gateResources, loadResourcesToReview, loadUrlSourcePageUrls, rankBySimilarity } from "./filter"
+import { isOwnTopicPageUrl } from "./ownTopicPages"
 import { loadFindingIdsWithComments } from "./reactionSignals"
 import { fetchAndScoreResources } from "./score"
 import { loadBookmarkedFindingRows, loadScoreExamplePages } from "./scoreExamplePages"
@@ -50,13 +51,17 @@ export async function reviewScan(
 		return emptyReviewSummary()
 	}
 
+	// drop the topic's own pages on CarlNotes
+	discoveredResources = discoveredResources.filter(({ url }) => !isOwnTopicPageUrl(url, topicId))
+
 	// read the topic's context once. its hash decides which Findings this Scan reviews again
 	const personalSourcesReview = await loadPersonalSourcesReviewLinks({ topicId, scanId: scan.id, discoveredResources })
 	discoveredResources = personalSourcesReview.discoveredResources
 	const topicScanContext = await buildTopicScanContext({ topicId, purpose: "review" })
 	const topicContextHash = toReviewContextHash(topicScanContext)
 
-	// select what this Scan has to review: never reviewed, reviewed against another context, or older content
+	// select what this Scan has to review: never reviewed, reviewed against another context, or older content, and
+	// never one of the topic's own pages that an earlier Finding holds
 	const resourcesToReview = (
 		await loadResourcesToReview({
 			topicId,
@@ -64,10 +69,12 @@ export async function reviewScan(
 			topicContextHash,
 			personalSourceScoreBonuses: personalSourcesReview.personalSourceScoreBonuses,
 		})
-	).map((resource) => ({
-		...resource,
-		personalSourceScoreBonus: personalSourcesReview.personalSourceScoreBonuses.get(resource.url) ?? 0,
-	}))
+	)
+		.filter(({ url }) => !isOwnTopicPageUrl(url, topicId))
+		.map((resource) => ({
+			...resource,
+			personalSourceScoreBonus: personalSourcesReview.personalSourceScoreBonuses.get(resource.url) ?? 0,
+		}))
 	// existing durable Findings already considered these links against this exact context or an explicit down rating
 	const reviewUrls = new Set(resourcesToReview.map(({ url }) => url))
 	for (const url of personalSourcesReview.claimedUrls) {

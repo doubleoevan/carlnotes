@@ -1,7 +1,7 @@
 // film section display tests: the film player for a ready film, the rendering card while a film renders, nothing for
 // a failed or missing film, and the section a topic's page shows for each
 import { expect, test } from "bun:test"
-import { toPodcastEpisodeFixture } from "@carlnotes/contracts/podcastEpisodeTestFixtures"
+import { toPodcastEpisodeFixture, toTopicPodcastFixture } from "@carlnotes/contracts/podcastEpisodeTestFixtures"
 import { toTestTopicResponse } from "@carlnotes/contracts/topicFeedTestFixtures"
 import type { TopicResponse } from "@carlnotes/contracts/topics"
 import {
@@ -24,17 +24,7 @@ function toFilmTopic(
 ): TopicResponse {
 	return toTestTopicResponse({
 		latestPodcastEpisode,
-		podcast: {
-			isEnabled: true,
-			isCommentsEnabled: true,
-			hasFullPodcastEpisodes: true,
-			unpublishedPodcastEpisode: null,
-			publicFeedUrl: null,
-			seasons: [2026],
-			latestSeasonPodcastEpisodes: { podcastEpisodes: [] },
-			canRemovePodcastEpisodes: false,
-			topicPodcastEpisodeVideoSection,
-		},
+		podcast: toTopicPodcastFixture({ topicPodcastEpisodeVideoSection }),
 	})
 }
 
@@ -50,17 +40,14 @@ test("a ready film shows its player while it renders again, and an older api's p
 	expect(toTopicPodcastEpisodeVideoDisplay({})).toBeNull()
 })
 
-test("a topic with no ready film shows an open section on its latest podcast episode while that film renders", () => {
+test("a topic with no ready film shows a section on its latest podcast episode while that film renders", () => {
 	const topic = toFilmTopic(null, videoRenderingPodcastEpisode)
-	expect(toTopicPagePodcastEpisodeVideoSection(topic)).toEqual({
-		podcastEpisode: videoRenderingPodcastEpisode,
-		isOpen: true,
-	})
+	expect(toTopicPagePodcastEpisodeVideoSection(topic)).toEqual({ podcastEpisode: videoRenderingPodcastEpisode })
 })
 
 test("a topic keeps its ready film's section while a newer podcast episode's film renders", () => {
-	// the older podcast episode's ready film stays, closed as the read resolved it
-	const readyFilmSection = { podcastEpisode: readyFilmPodcastEpisode, isOpen: false }
+	// the older podcast episode's ready film stays
+	const readyFilmSection = { podcastEpisode: readyFilmPodcastEpisode }
 	const topic = toFilmTopic(readyFilmSection, videoRenderingPodcastEpisode)
 	expect(toTopicPagePodcastEpisodeVideoSection(topic)).toBe(readyFilmSection)
 })

@@ -1,6 +1,6 @@
 // a Topic Post's page: its image, its title with the info popup and the count of the reader's unseen Comment Mentions
 // in its thread, its author's byline with the reactions right after it, its details line under them, its discussion,
-// and its body, then what the page adds after it. a draft, and a published post its author is editing, show the
+// and its body, then what the page adds after it. a draft, and a published Topic Post its author is editing, show the
 // editor instead
 import type { UnseenCommentMention } from "@carlnotes/contracts/commentMentions"
 import type { ProfileIdentity } from "@carlnotes/contracts/profiles"
@@ -16,14 +16,14 @@ import { TopicPostDiscussionCard, type TopicPostDiscussionCardElements } from ".
 import type { TopicPostEditorProps } from "./TopicPostEditor"
 import type { TopicPostInfoProps } from "./TopicPostInfo"
 
-// the post, whether its reader is signed in, whether its author asked to edit it, the count its comment thread
-// reports as it stands, what a publish and the end of an edit do, the read of the post again that its discussion
-// asks for, the press on an editor's image, and what follows the body
+// the Topic Post, whether its reader is signed in, whether its author asked to edit it, the count its comment thread
+// reports as it stands, what a publish and the end of an edit do, the read of the Topic Post again that its
+// discussion asks for, the press on an editor's image, and what follows the body
 export type TopicPostPageProps = PropsWithChildren<{
 	topicPost: TopicPostResponse
 	isSignedIn: boolean
 	isEditing: boolean
-	// left out or null, the details line counts the comments the post's own read came with
+	// left out or null, the details line counts the comments the Topic Post's own read came with
 	commentCount?: number | null
 	onPublished: (topicPost: TopicPostResponse) => void
 	onEditDone: () => void
@@ -31,12 +31,12 @@ export type TopicPostPageProps = PropsWithChildren<{
 	onEditImage?: () => void
 }>
 
-// each app's elements: the header's layout, the image, the title with its info popup and its mention badge, the badge
-// that counts the mentions and opens their list, the row of the byline and the reactions, the details line under that
-// row, the discussion card's elements, the body, and the app's editor
+// each app's elements: the header's layout, the image, pulsing until it is drawn, the title with its info popup and
+// its mention badge, the badge that counts the mentions and opens their list, the row of the byline and the reactions,
+// the details line under that row, the discussion card's elements, the body, and the app's editor
 export type TopicPostPageElements = {
 	Header: ComponentType<PropsWithChildren<{ image: ReactNode; title: ReactNode }>>
-	Image: ComponentType<{ image: TopicImageUrls | null; name: string; onEdit?: () => void }>
+	Image: ComponentType<{ image: TopicImageUrls | null; name: string; isPending: boolean; onEdit?: () => void }>
 	Title: ComponentType<{ info: ReactNode; mentionBadge: ReactNode; children: string }>
 	Info: ComponentType<TopicPostInfoProps>
 	MentionBadge: ComponentType<{ commentMentions: UnseenCommentMention[] }>
@@ -50,8 +50,8 @@ export type TopicPostPageElements = {
 }
 
 /**
- * Shows a published Topic Post to its readers, and the editor to the author of a draft or of a published post inside
- * its edit time.
+ * Shows a published Topic Post to its readers, and the editor to the author of a draft or of a published Topic Post
+ * inside its edit time.
  */
 export function TopicPostPage({
 	topicPost,
@@ -67,10 +67,10 @@ export function TopicPostPage({
 }: TopicPostPageProps & { elements: TopicPostPageElements }) {
 	const { Header, Image, Title, Info, MentionBadge, BylineRow, Byline, Reactions, DetailsLine, Body, Editor } = elements
 
-	// the reader's unseen mentions in the post's own thread, which the title's badge counts
+	// the reader's unseen mentions in the Topic Post's own thread, which the title's badge counts
 	const commentMentions = usePageCommentMentions({ kind: "post", id: topicPost.id })
 
-	// a draft opens in its editor, and so does a published post its author edits inside its edit time
+	// a draft opens in its editor, and so does a published Topic Post its author edits inside its edit time
 	if (isTopicPostEditorShown(topicPost, isEditing)) {
 		return <Editor topicPost={topicPost} onPublished={onPublished} onDone={onEditDone} />
 	}
@@ -78,7 +78,7 @@ export function TopicPostPage({
 	return (
 		<>
 			<Header
-				image={<Image image={topicPost.image} name={title} onEdit={onEditImage} />}
+				image={<Image image={topicPost.image} name={title} isPending={!topicPost.image} onEdit={onEditImage} />}
 				title={
 					<Title
 						info={<Info topicPostId={topicPost.id} title={title} topicPost={topicPost} />}
@@ -103,8 +103,8 @@ export function TopicPostPage({
 						isSignedIn={isSignedIn}
 					/>
 				</BylineRow>
-				{/* when the post was published, its reading time, its thread's comment count, and whether it was edited, on
-				    their own line */}
+				{/* when the Topic Post was published, its reading time, its thread's comment count, and whether it was
+				    edited, on their own line */}
 				<DetailsLine details={toTopicPostDetails(topicPost, commentCount ?? topicPost.commentThread?.commentCount)} />
 			</Header>
 			<TopicPostDiscussionCard topicPost={topicPost} onChanged={onChanged} elements={elements.discussionElements} />

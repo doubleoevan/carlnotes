@@ -2,6 +2,7 @@
 // backfill started, then every ready film below the current render version, public Topics first, a page at a time
 import { afterEach, expect, test } from "bun:test"
 import { restoreConnectionPool, type SentQuery, stubConnectionPool } from "@carlnotes/db/connectionPoolStub"
+import { TOPIC_PODCAST_EPISODE_VIDEO_RENDER_VERSION } from "@carlnotes/pipeline/topicPodcastEpisodeVideo/topicPodcastEpisodeVideoRows"
 import { listBackfillPodcastEpisodeIds } from "./backfillTopicPodcastEpisodeVideosActivities"
 
 // when the backfill started, and a Topic's time as the database writes it
@@ -117,12 +118,12 @@ test("the films below the current render version follow the Topics on the same p
 		remainingPodcastEpisodeCount: 3,
 	})
 
-	// only a ready film below version 2 is listed, public Topics' films first, then by the film's id
+	// only a ready film below the current render version is listed, public Topics' films first, then by the film's id
 	const filmListingQuery = toFilmListingQuery(sentQueries)
 	expect(filmListingQuery?.text).toContain('"topic_podcast_episode_videos"."status" = $')
 	expect(filmListingQuery?.text).toContain('"topic_podcast_episode_videos"."render_version" < $')
 	expect(filmListingQuery?.values).toContain("ready")
-	expect(filmListingQuery?.values).toContain(2)
+	expect(filmListingQuery?.values).toContain(TOPIC_PODCAST_EPISODE_VIDEO_RENDER_VERSION)
 	expect(filmListingQuery?.text).toContain('"topic_podcast_episode_videos"."id" asc limit $')
 })
 

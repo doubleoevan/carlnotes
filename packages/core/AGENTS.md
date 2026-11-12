@@ -316,14 +316,15 @@ Finding explanations remain plain text. Tasting Note editor headings retain the 
 scrolling and a fixed first column belong to the mobile adapter. Web retains its expandable subtables and
 server-rendered rows.
 
-`components/AccountBudget`, `AccountFields`, `PlanCard`, `MonthlyBudgetCutoffTable`, `InviteFields`, and `TeamFields`
-share page and form composition. `PlanCard` takes the store's price and billing note, a portal action with its label,
-and a plan switch for a subscriber, and `AccountBudget`'s payment notice gets the billing provider. `AccountBudget` is a
-coffee fund card and a brews card, each opening with its title beside its centered rings: the time left until the
-monthly budget resets, or the day's Scans used and the time left until the daily Scan limit resets, and ending with the
-plan line beside the plan action each app passes. Each app's `MeterRing` over `components/MeterRing` draws the rings,
-whose elements each app supplies, from the UTC math in `lib/utcResets.ts`. `AccountFields` includes the shared
-ProfileFields form, with platform identity, photo-toggle, and input elements, and the `Switch` element.
+`components/AccountBudget`, `AccountPlan`, `AccountFields`, `PlanCard`, `MonthlyBudgetCutoffTable`, `InviteFields`,
+and `TeamFields` share page and form composition. `PlanCard` takes the store's price and billing note, a portal action
+with its label, and a plan switch for a subscriber, and `AccountBudget`'s payment notice gets the billing provider.
+`AccountBudget` is a coffee fund card and a brews card, each opening with its title beside its centered rings: the time
+left until the monthly budget resets, or the day's Scans used and the time left until the daily Scan limit resets.
+`AccountPlan` is the plan line beside the plan action each app passes, at the right of the account page's header row.
+Each app's `MeterRing` over `components/MeterRing` draws the rings, whose elements each app supplies, from the UTC math
+in `lib/utcResets.ts`. `AccountFields` includes the shared ProfileFields form, with platform identity, photo-toggle,
+and input elements, and the `Switch` element.
 `NotificationsSection` is the account's Notifications section over those elements: `NotificationsCard` over
 `toNotificationSwitchStates`, with `NotificationsSection` reading the session's push preferences. Only the app renders
 it. `useAvatar` owns upload acknowledgement and session refresh for both File and FormData uploads. `Footer` owns all

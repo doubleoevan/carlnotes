@@ -1,5 +1,6 @@
 // the web's section of a Topic's Topic Posts, on the topic page: the shared section in the page's collapsible
-// section, with the button that starts a draft above the posts
+// section, in a card like the comment thread's with the button that starts a draft above the Topic Posts, and the page
+// buttons under the card as in the scan history
 import { createTopicPostDraft } from "@carlnotes/client/topicPostClient"
 import type { TopicPostsResponse } from "@carlnotes/contracts/topicPosts"
 import {
@@ -23,22 +24,25 @@ import { TopicPostCard } from "./TopicPostCard"
  */
 export const TOPIC_POSTS_SECTION_ELEMENTS: TopicPostsSectionElements = {
 	...CARDS_SECTION_ELEMENTS,
-	Section: ({ value, title, countLabel, action, children }) => (
+	Section: ({ value, title, countLabel, action, pageButtons, children }) => (
 		<CollapsibleSection value={value} title={title} countLabel={countLabel || undefined} isContentKept hasClosedDivider>
-			{action}
-			{children}
+			<div className={cn(INFO_CARD_CLASS, "flex flex-col gap-4")}>
+				{action}
+				{children}
+			</div>
+			{pageButtons}
 		</CollapsibleSection>
 	),
 	Card: TopicPostCard,
-	// the Hot takes card's highlighted button. above the posts it keeps the gap between two cards below it
-	NewPostButton: ({ label, isDisabled, isAboveCards, onPress }) => (
-		<Button size="sm" className={cn("shrink-0", isAboveCards && "mb-4")} disabled={isDisabled} onClick={onPress}>
+	// the highlighted button, as in the comment thread's card
+	NewPostButton: ({ label, isDisabled, onPress }) => (
+		<Button size="sm" className="shrink-0 self-start" disabled={isDisabled} onClick={onPress}>
 			<NotebookPen className="size-4" />
 			{label}
 		</Button>
 	),
 	Empty: ({ action, children }) => (
-		<div className={cn(INFO_CARD_CLASS, "flex flex-wrap items-center justify-between gap-x-4 gap-y-3")}>
+		<div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
 			{action}
 			<p className="text-muted-foreground">{children}</p>
 		</div>

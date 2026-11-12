@@ -1,5 +1,6 @@
-// the filter a Resource's images pass before a film shows them: a photo or an illustration, of a size and a shape the
-// film's frame can hold, and one copy of each picture. a kept image is stored as a jpeg within twice the frame
+// the filter a Resource's images pass before a film shows them: a photo or an illustration of enough colors, at least
+// 200 pixels a side, of a shape the film's frame can hold, and one copy of each picture. a kept image is stored as a
+// jpeg within twice the frame
 
 import sharp from "sharp"
 import { VIDEO_HEIGHT, VIDEO_WIDTH } from "../topicPodcastEpisodeVideo/videoFrames"
@@ -8,6 +9,9 @@ import { toUprightImageSize } from "../uprightImageSize"
 // how many images a Resource keeps
 export const RESOURCE_IMAGE_LIMIT = 6
 
+// the version of this filter
+export const RESOURCE_IMAGE_FILTER_VERSION = 1
+
 // the box a stored image fits inside: twice the film's frame, so a zoom to 2 times stays sharp
 const RESOURCE_IMAGE_STORED_WIDTH = VIDEO_WIDTH * 2
 const RESOURCE_IMAGE_STORED_HEIGHT = VIDEO_HEIGHT * 2
@@ -15,12 +19,27 @@ const RESOURCE_IMAGE_STORED_HEIGHT = VIDEO_HEIGHT * 2
 // the image formats a film shows, as sharp names them. heif is avif's container
 const RESOURCE_IMAGE_FORMATS = new Set(["jpeg", "png", "webp", "heif"])
 
-// the share of the film's frame an image covers at least, at its own size or fitted inside the frame
-const MINIMUM_FRAME_SHARE = 1 / 3
+// the shortest side a kept image has at least
+const MIN_SIDE_PIXELS = 200
 
-// the shapes the frame can hold, as width over height: from a 2:3 portrait to a 21:9 banner
-const MIN_ASPECT_RATIO = 2 / 3
-const MAX_ASPECT_RATIO = 21 / 9
+// the shapes the frame can hold, as width over height: from a 9:16 portrait to a 4.5:1 banner
+const MIN_ASPECT_RATIO = 9 / 16
+const MAX_ASPECT_RATIO = 4.5
+
+// the fewest colors an image shows on a copy of 256 pixels a side, each color read at 5 bits a channel. a silhouette,
+// an identicon, a logo, or an icon shows fewer
+const COLOR_COUNT_SIDE_PIXELS = 256
+const MIN_COLOR_COUNT = 64
+const COLOR_CHANNEL_SHIFT = 3
+
+// the fewest of 64 gray levels that a black-and-white photo shows, counting a level that holds at least 1 percent of
+// the pixels and only the gray pixels, whose channels differ by 16 or less. a gray logo or text on white shows fewer,
+// and a flat color graphic shows none
+const GRAY_LEVEL_COUNT = 64
+const GRAY_LEVEL_SHIFT = 2
+const MIN_GRAY_LEVEL_COUNT = 12
+const MIN_GRAY_LEVEL_PIXEL_SHARE = 0.01
+const GRAY_PIXEL_MAX_CHANNEL_SPREAD = 16
 
 // a difference hash is 8 rows of 8 bits, read from a 9 by 8 gray copy of the image's 16:9 center. two images whose
 // hashes differ by this many bits or fewer show the same picture
@@ -43,7 +62,7 @@ export type StoredResourceImageJpeg = { jpegBytes: Uint8Array; width: number; he
 
 /**
  * Returns the kept images with one more candidate filtered in. A candidate that cannot be decoded, is not a photo or
- * illustration type, covers too little of the frame, or has a shape the frame cannot hold is left out. A copy of a kept
+ * illustration type, is too small, has a shape the frame cannot hold, or shows too few colors is left out. A copy of a kept
  * picture takes that picture's place if it is larger. A new picture goes last, or first if it is the link preview
  * image.
  */
@@ -51,9 +70,10 @@ export async function addResourceImage(
 	keptResourceImages: KeptResourceImage[],
 	candidate: ResourceImageCandidate,
 ): Promise<KeptResourceImage[]> {
-	// leave out an image that cannot be read or that the frame cannot hold
+	// leave out an image that cannot be read, is too small, has a shape the frame cannot hold, or shows too few colors
 	const resourceImage = await readResourceImage(candidate)
-	if (!resourceImage || !isFrameSized(resourceImage) || !hasFrameAspectRatio(resourceImage)) {
+	const isFrameable = resourceImage && isLargeEnough(resourceImage) && hasFrameAspectRatio(resourceImage)
+	if (!isFrameable || !(await hasEnoughColors(candidate.imageBytes))) {
 		return keptResourceImages
 	}
 
@@ -120,11 +140,52 @@ async function readResourceImage(candidate: ResourceImageCandidate): Promise<Kep
 // an image's pixel size
 type ImageSize = { width: number; height: number }
 
-// whether an image covers enough of the film's frame, at its own size or fitted inside the frame if it is larger
-function isFrameSized({ width, height }: ImageSize): boolean {
-	const frameFit = Math.min(1, VIDEO_WIDTH / width, VIDEO_HEIGHT / height)
-	const shownPixelCount = width * frameFit * height * frameFit
-	return shownPixelCount >= VIDEO_WIDTH * VIDEO_HEIGHT * MINIMUM_FRAME_SHARE
+// whether an image's shortest side is long enough
+function isLargeEnough({ width, height }: ImageSize): boolean {
+	return Math.min(width, height) >= MIN_SIDE_PIXELS
+}
+
+// whether an image shows enough colors, or enough gray levels for a black-and-white photo, on a small copy over white
+// if it has transparency
+async function hasEnoughColors(imageBytes: Uint8Array): Promise<boolean> {
+	// the image fitted inside 256 pixels a side, as rgb pixels even if it is stored in gray
+	const rgbPixels = await sharp(imageBytes, { limitInputPixels: MAX_INPUT_PIXELS })
+		.flatten({ background: "#ffffff" })
+		.resize(COLOR_COUNT_SIDE_PIXELS, COLOR_COUNT_SIDE_PIXELS, { fit: "inside" })
+		.removeAlpha()
+		.toColourspace("srgb")
+		.raw()
+		.toBuffer()
+		.catch(() => null)
+
+	// pixels that do not decode, such as a cut-off jpeg's, show no color
+	if (!rgbPixels) {
+		return false
+	}
+
+	// count each pixel's color once, and the gray pixels at each gray level
+	const colors = new Set<number>()
+	const grayLevelPixelCounts = new Uint32Array(GRAY_LEVEL_COUNT)
+	for (let i = 0; i + 2 < rgbPixels.length; i += 3) {
+		// the pixel's color at 5 bits a channel
+		const red = rgbPixels[i] ?? 0
+		const green = rgbPixels[i + 1] ?? 0
+		const blue = rgbPixels[i + 2] ?? 0
+		colors.add(
+			((red >> COLOR_CHANNEL_SHIFT) << 10) | ((green >> COLOR_CHANNEL_SHIFT) << 5) | (blue >> COLOR_CHANNEL_SHIFT),
+		)
+
+		// the gray level of a pixel that is gray
+		if (Math.max(red, green, blue) - Math.min(red, green, blue) <= GRAY_PIXEL_MAX_CHANNEL_SPREAD) {
+			const grayLevel = Math.floor((red + green + blue) / 3) >> GRAY_LEVEL_SHIFT
+			grayLevelPixelCounts[grayLevel] = (grayLevelPixelCounts[grayLevel] ?? 0) + 1
+		}
+	}
+
+	// a gray level counts if it holds enough of the pixels, so a logo's smoothed edges add none
+	const minGrayLevelPixelCount = (rgbPixels.length / 3) * MIN_GRAY_LEVEL_PIXEL_SHARE
+	const grayLevelCount = grayLevelPixelCounts.filter((pixelCount) => pixelCount >= minGrayLevelPixelCount).length
+	return colors.size >= MIN_COLOR_COUNT || grayLevelCount >= MIN_GRAY_LEVEL_COUNT
 }
 
 // whether an image's shape is one the film's frame can hold

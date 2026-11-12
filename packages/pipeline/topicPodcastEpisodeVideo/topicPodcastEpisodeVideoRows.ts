@@ -18,8 +18,10 @@ import { recordReplacedImageDeletions } from "../topicImages/topicImageRenders"
 import { loadTopicPodcastEpisodeVideoEpisode } from "./topicPodcastEpisodeVideoInputs"
 
 // the render version a film is rendered at now. a ready film below it is rendered again, and a film from before render
-// versions is at version 1. version 2 cuts each chapter into a montage
-export const TOPIC_PODCAST_EPISODE_VIDEO_RENDER_VERSION = 2
+// versions is at version 1. version 2 cuts each chapter into a montage. version 3 cuts the intro and the sign-off
+// through the chapters' images, draws the generated images in the second style, and shows the Resource Images that
+// image filter version 1 keeps
+export const TOPIC_PODCAST_EPISODE_VIDEO_RENDER_VERSION = 3
 
 // a ready film below the current render version
 export const isTopicPodcastEpisodeVideoBelowRenderVersion = and(

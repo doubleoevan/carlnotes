@@ -1,11 +1,11 @@
 import { expect, test } from "bun:test"
 import type { PodcastEpisode } from "@carlnotes/contracts/podcast"
-import { toPodcastEpisodeFixture } from "@carlnotes/contracts/podcastEpisodeTestFixtures"
+import { toPodcastEpisodeFixture, toTopicPodcastFixture } from "@carlnotes/contracts/podcastEpisodeTestFixtures"
 import { toTestTopicResponse } from "@carlnotes/contracts/topicFeedTestFixtures"
 import { toShownPodcastEpisode } from "./useShownPodcastEpisode"
 
 test("shown episode precedence preserves loaded, linked, recording, and latest choices", () => {
-	// make all three episode candidates belong to the same Topic
+	// make all three podcast episode candidates belong to the same Topic
 	const latestPodcastEpisode = toPodcastEpisodeFixture({ id: "latest" })
 	const topic = toTestTopicResponse({ id: "topic-1", latestPodcastEpisode })
 	const linkedPodcastEpisode = toPodcastEpisodeFixture({ id: "linked" })
@@ -28,16 +28,7 @@ test("recording and failed episodes obey the existing scan permission", () => {
 	const topic = toTestTopicResponse({
 		id: "topic-1",
 		latestPodcastEpisode: toPodcastEpisodeFixture({ id: "latest" }),
-		podcast: {
-			isEnabled: true,
-			isCommentsEnabled: true,
-			hasFullPodcastEpisodes: true,
-			canRemovePodcastEpisodes: false,
-			unpublishedPodcastEpisode,
-			seasons: [],
-			latestSeasonPodcastEpisodes: { podcastEpisodes: [] },
-			publicFeedUrl: null,
-		},
+		podcast: toTopicPodcastFixture({ unpublishedPodcastEpisode, seasons: [] }),
 	})
 	expect(
 		toShownPodcastEpisode({ topic, linkedPodcastEpisode: null, loadedPodcastEpisode: null }).podcastEpisode?.id,
@@ -62,12 +53,12 @@ test("recording and failed episodes obey the existing scan permission", () => {
 })
 
 test("a Topic Post's discussion loaded in the player leaves the Topic's own episode shown", () => {
-	// the Topic's latest episode, and one of its posts' discussions in the player
+	// the Topic's latest podcast episode, and one of its Topic Posts' discussions in the player
 	const latestPodcastEpisode = toPodcastEpisodeFixture({ id: "latest" })
 	const topic = toTestTopicResponse({ id: "topic-1", latestPodcastEpisode })
 	const loadedDiscussion = toPodcastEpisodeFixture({ id: "topic-post-discussion:post-1:recording-1" })
 
-	// the discussion belongs to the Topic, yet the podcast section keeps the latest episode
+	// the discussion belongs to the Topic, yet the podcast section keeps the latest podcast episode
 	expect(loadedDiscussion.topicId).toBe(topic.id)
 	expect(
 		toShownPodcastEpisode({ topic, loadedPodcastEpisode: loadedDiscussion, linkedPodcastEpisode: null }).podcastEpisode

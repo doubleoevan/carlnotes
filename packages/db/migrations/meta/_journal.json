@@ -1170,6 +1170,13 @@
       "when": 1794510592995,
       "tag": "0166_fuzzy_kitty_pryde",
       "breakpoints": true
+    },
+    {
+      "idx": 167,
+      "version": "7",
+      "when": 1794514118612,
+      "tag": "0167_right_sleeper",
+      "breakpoints": true
     }
   ]
 }

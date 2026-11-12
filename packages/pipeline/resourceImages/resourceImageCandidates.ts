@@ -11,7 +11,7 @@ const MARKDOWN_IMAGE_PATTERN = /!\[[^\]\n]{0,300}\]\(\s*<?([^)\s>]{1,2048})>?(?:
 
 // the words in a url that name an image a film never shows, each as a whole word
 const REJECTED_IMAGE_WORD_PATTERN =
-	/(?<![a-z])(logos?|avatars?|gravatar|favicon|icons?|emojis?|sprites?|badges?|placeholder|adverts?|advertisements?|advertising|doubleclick)(?![a-z])/i
+	/(?<![a-z])(logos?|favicon|icons?|emojis?|sprites?|badges?|placeholder|adverts?|advertisements?|advertising|doubleclick)(?![a-z])/i
 
 // a tracking pixel's file name
 const TRACKING_PIXEL_PATTERN = /(?<![a-z0-9])(pixel|1x1)\.(gif|png)/i
@@ -19,8 +19,8 @@ const TRACKING_PIXEL_PATTERN = /(?<![a-z0-9])(pixel|1x1)\.(gif|png)/i
 /**
  * Returns the urls of the images that a page's main-content Markdown shows outside any link, in the page's order,
  * absolute and each once, up to the candidate limit. An image inside a link is the picture of another page, and an
- * image whose url names a logo, an avatar, an icon, an emoji, a sprite, a badge, a placeholder, an advert, or a
- * tracking pixel is left out. Only the start of a very long page is read.
+ * image whose url names a logo, an icon, an emoji, a sprite, a badge, a placeholder, an advert, or a tracking pixel
+ * is left out. Only the start of a very long page is read.
  */
 export function toResourceImageCandidateUrls(pageMarkdown: string, pageUrl: string): string[] {
 	// how many links' texts each character sits inside
@@ -48,8 +48,8 @@ export function toResourceImageCandidateUrls(pageMarkdown: string, pageUrl: stri
 }
 
 /**
- * Returns whether an image's url names a logo, an avatar, an icon, an emoji, a sprite, a badge, a placeholder, an
- * advert, or a tracking pixel.
+ * Returns whether an image's url names a logo, an icon, an emoji, a sprite, a badge, a placeholder, an advert, or a
+ * tracking pixel.
  */
 export function isRejectedImageUrl(imageUrl: string): boolean {
 	return REJECTED_IMAGE_WORD_PATTERN.test(imageUrl) || TRACKING_PIXEL_PATTERN.test(imageUrl)

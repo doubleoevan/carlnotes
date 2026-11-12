@@ -79,7 +79,10 @@ test("a rejected word inside a longer word is not a rejected name", () => {
 	expect(isRejectedImageUrl("https://cdn.example.com/silicon-valley.jpg")).toBe(false)
 	expect(isRejectedImageUrl("https://cdn.example.com/google-pixel-9-review.jpg")).toBe(false)
 	expect(isRejectedImageUrl("https://cdn.example.com/site-logo.png")).toBe(true)
-	expect(isRejectedImageUrl("https://secure.gravatar.com/avatar/0f6b?s=71")).toBe(true)
+})
+
+test("a person's avatar url is a candidate", () => {
+	expect(isRejectedImageUrl("https://cdn.example.com/users/avatar/jennifer-400x400.jpg")).toBe(false)
 })
 
 test("an advert's url is left out in each of its word forms", () => {

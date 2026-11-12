@@ -1,7 +1,7 @@
 // podcast episode editor tests: who sees Edit film on the podcast episode page and the topic page, and the image the
 // film's image block opens with
 import { expect, test } from "bun:test"
-import { toPodcastEpisodeFixture } from "@carlnotes/contracts/podcastEpisodeTestFixtures"
+import { toPodcastEpisodeFixture, toTopicPodcastFixture } from "@carlnotes/contracts/podcastEpisodeTestFixtures"
 import { toTestTopicResponse } from "@carlnotes/contracts/topicFeedTestFixtures"
 import { toPodcastEpisodeImageUrls, toTopicPodcastEpisodeVideoImageUrls } from "@carlnotes/contracts/topicImages"
 import type { TopicResponse } from "@carlnotes/contracts/topics"
@@ -24,8 +24,8 @@ const FILM_PODCAST_EPISODE = toPodcastEpisodeFixture({
 
 // a topic whose latest film is the podcast episode's, as its editor or as a follower reads it
 function toFilmTopic(canEdit: boolean): TopicResponse {
-	const podcast = { topicPodcastEpisodeVideoSection: { podcastEpisode: FILM_PODCAST_EPISODE, isOpen: true } }
-	return toTestTopicResponse({ canEdit, podcast: podcast as TopicResponse["podcast"] })
+	const podcast = toTopicPodcastFixture({ topicPodcastEpisodeVideoSection: { podcastEpisode: FILM_PODCAST_EPISODE } })
+	return toTestTopicResponse({ canEdit, podcast })
 }
 
 test("the option and the dialog read Edit film", () => {

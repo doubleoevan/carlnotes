@@ -87,9 +87,22 @@ export const topicPodcastEpisodeVideoImagesRoute = new Hono<AppEnv>()
 				)
 			: []
 
-		// an unknown position, a podcast episode with no ready film, and a chapter with no generated image are not found
-		const objectKey = toTopicPodcastEpisodeVideoChapterImageKey(podcastEpisodeId, Number(position))
-		if (!topicPodcastEpisodeVideoTopic || !(await attachmentExists(objectKey))) {
+		// an unknown position and a podcast episode with no ready film are not found
+		if (!topicPodcastEpisodeVideoTopic) {
+			return context.json({ error: "not found" }, 404)
+		}
+
+		// the image in the current style, or the first style's for a film not yet rendered again
+		const currentStyleKey = toTopicPodcastEpisodeVideoChapterImageKey(podcastEpisodeId, Number(position))
+		const firstStyleKey = toTopicPodcastEpisodeVideoChapterImageKey(podcastEpisodeId, Number(position), 1)
+		const objectKey = (await attachmentExists(currentStyleKey))
+			? currentStyleKey
+			: (await attachmentExists(firstStyleKey))
+				? firstStyleKey
+				: null
+
+		// a chapter with neither image is not found
+		if (!objectKey) {
 			return context.json({ error: "not found" }, 404)
 		}
 		return serveImageFile(context, {

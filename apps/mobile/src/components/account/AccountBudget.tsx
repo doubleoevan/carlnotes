@@ -1,21 +1,16 @@
 import type { ActivityResponse } from "@carlnotes/contracts/activity"
-import { type BillingProvider, PLANS_PATH, PURCHASE_COPY } from "@carlnotes/contracts/plans"
+import type { BillingProvider } from "@carlnotes/contracts/plans"
 import type { BillingState } from "@carlnotes/contracts/profiles"
 import { isStoreProvider } from "@carlnotes/contracts/storeBilling"
 import {
 	type AccountBudgetElements,
 	AccountBudget as SharedAccountBudget,
 } from "@carlnotes/core/components/AccountBudget"
-import { PLAN_MANAGEMENT_LABELS } from "@carlnotes/core/lib/storefrontPurchaseRules"
 import { usePurchaseOffers } from "@carlnotes/core/stores/purchaseOffersStore"
-import { router } from "expo-router"
-import { Columns3Cog, Settings } from "lucide-react-native"
 import { View } from "react-native"
 import { MeterRing } from "@/components/common/MeterRing"
 import { Button } from "@/components/primitives/button"
-import { Icon } from "@/components/primitives/icon"
 import { Text } from "@/components/primitives/text"
-import { HIGHLIGHTED_PAGE_BUTTON_CLASS } from "@/pageButtonClasses"
 import { openPlanManagement } from "@/storePurchases"
 import { SpendMeter } from "./SpendMeter"
 
@@ -30,38 +25,8 @@ export function AccountBudget({ billing, activity }: { billing: BillingState; ac
 			billing={billing}
 			activity={activity}
 			spendMeter={activity && <SpendMeter activity={activity} canPurchase={canPurchase} />}
-			planAction={<PlanButton billing={billing} />}
 			elements={ACCOUNT_BUDGET_ELEMENTS}
 		/>
-	)
-}
-
-/**
- * Renders Account's plan button. Upgrade opens Plans where the store sells the user a plan, and Manage plan opens the
- * store that bills the paid plan. A plan billed on the web is named in a line with no link.
- */
-export function PlanButton({ billing }: { billing: BillingState }) {
-	// a plan billed on the web is managed there, with no link from the app
-	const { canPurchase, planManagement } = usePurchaseOffers(billing)
-	if (planManagement === "web") {
-		return <Text className="text-sm text-muted-foreground">{PLAN_MANAGEMENT_LABELS.web}</Text>
-	}
-
-	// a store plan is managed in its store, and a free plan upgrades only where the store sells
-	const storeProvider = isStoreProvider(planManagement) ? planManagement : null
-	if (!storeProvider && !canPurchase) {
-		return null
-	}
-	const label = storeProvider ? PURCHASE_COPY.managePlan : PURCHASE_COPY.upgrade
-	return (
-		<Button
-			className={HIGHLIGHTED_PAGE_BUTTON_CLASS}
-			accessibilityLabel={label}
-			onPress={() => (storeProvider ? void openPlanManagement(storeProvider) : router.push(PLANS_PATH))}
-		>
-			<Icon as={storeProvider ? Settings : Columns3Cog} className="size-4" />
-			<Text>{label}</Text>
-		</Button>
 	)
 }
 
@@ -83,7 +48,6 @@ const ACCOUNT_BUDGET_ELEMENTS: AccountBudgetElements = {
 	Meters: ({ children }) => <View className="flex-row flex-wrap justify-center gap-8">{children}</View>,
 	Meter: ({ children }) => <View className="items-center gap-1.5">{children}</View>,
 	MeterRing,
-	PlanRow: ({ children }) => <View className="flex-row flex-wrap items-center gap-3">{children}</View>,
 	PaymentNotice,
 }
 

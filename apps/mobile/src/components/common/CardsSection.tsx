@@ -15,10 +15,12 @@ import { SKELETON_SHAPE_CLASS } from "@/sectionClasses"
 function CardsSectionFrame({
 	title,
 	countLabel,
+	pageButtons,
 	children,
 }: {
 	title: string
 	countLabel: string
+	pageButtons?: ReactNode
 	children: ReactNode
 }) {
 	const [isExpanded, setIsExpanded] = useState(true)
@@ -30,6 +32,7 @@ function CardsSectionFrame({
 			onToggle={() => setIsExpanded(!isExpanded)}
 		>
 			{children}
+			{pageButtons}
 		</AccordionSection>
 	)
 }

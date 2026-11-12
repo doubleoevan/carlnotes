@@ -20,7 +20,6 @@ import { notesRoute } from "./note/notes"
 import { TEST_NOTE_ID, TEST_NOTE_VERSION, toNoteQueryRows } from "./note/noteTestFixtures"
 import { podcastEpisodesRoute } from "./podcast/podcastEpisodes"
 import { podcastFeedsRoute } from "./podcast/podcastFeeds"
-import { topicPodcastEpisodeVideosRoute } from "./podcast/topicPodcastEpisodeVideoRoutes"
 import { profilesRoute } from "./profiles"
 import { pushDevicesRoute } from "./pushDevices"
 import { searchRoute } from "./search/search"
@@ -491,11 +490,6 @@ export const CONTRACT_FIXTURES: Record<string, ContractFixture> = {
 			topics: { ...TOPIC_COLUMNS, visibility: "private" },
 			episode_feed_tokens: { token: "feed-token" },
 		},
-	),
-	"podcastEpisodeClient.sendTopicPodcastEpisodeVideoSection": toFixture(
-		topicPodcastEpisodeVideosRoute,
-		{ params: TOPIC_PARAMS, body: { isOpen: false, podcastEpisodeId: PODCAST_EPISODE_ID } },
-		PODCAST_EPISODE_TABLES,
 	),
 	"podcastEpisodeClient.sendTopicPodcast": toFixture(
 		podcastEpisodesRoute,

@@ -1,7 +1,7 @@
 // Coffee Break films on the page the server renders: every film of the season, linked to its page, and no removal
 import { expect, test } from "bun:test"
 import type { PodcastEpisode } from "@carlnotes/contracts/podcast"
-import { toPodcastEpisodeFixture } from "@carlnotes/contracts/podcastEpisodeTestFixtures"
+import { toPodcastEpisodeFixture, toTopicPodcastFixture } from "@carlnotes/contracts/podcastEpisodeTestFixtures"
 import { toTestTopicResponse } from "@carlnotes/contracts/topicFeedTestFixtures"
 import { renderWithRouter } from "@/components/chat/renderWithRouter"
 import { PodcastEpisodesCard } from "./PodcastEpisodesCard"
@@ -26,17 +26,11 @@ const audioOnlyPodcastEpisode = toPodcastEpisodeFixture({ id: "audio-only", titl
 const topic = toTestTopicResponse({
 	id: "topic-1",
 	latestPodcastEpisode: latestFilm,
-	podcast: {
-		isEnabled: true,
-		isCommentsEnabled: true,
-		hasFullPodcastEpisodes: true,
-		unpublishedPodcastEpisode: null,
-		publicFeedUrl: null,
-		seasons: [2026],
+	podcast: toTopicPodcastFixture({
 		latestSeasonPodcastEpisodes: { podcastEpisodes: [...films, audioOnlyPodcastEpisode] },
 		canRemovePodcastEpisodes: true,
-		topicPodcastEpisodeVideoSection: { podcastEpisode: latestFilm, isOpen: true },
-	},
+		topicPodcastEpisodeVideoSection: { podcastEpisode: latestFilm },
+	}),
 })
 
 test("the server renders every film of the season with its page link, and no removal or podcast episode without one", async () => {

@@ -45,27 +45,74 @@ export type VideoShotMove = (typeof VIDEO_SHOT_MOVES)[number]
 // its move
 export type VideoShot = { imageIndex: number; startFrame: number; frameCount: number; move: VideoShotMove }
 
-// a segment's frames, the frames where a caption starts, how many images it has, and the seed that makes its plan the
-// same on every render
-type ToVideoShotsOptions = { frameCount: number; captionBreakFrames: number[]; imageCount: number; seed: string }
+// a segment's frames, the frames where a caption starts, how many images it has, the seed that makes its plan the same
+// on every render, and the moves that its first and last shots make, if they must make one
+type ToVideoShotsOptions = {
+	frameCount: number
+	captionBreakFrames: number[]
+	imageCount: number
+	seed: string
+	firstMove?: VideoShotMove
+	lastMove?: VideoShotMove
+}
 
 /**
  * Returns a segment's shots in order. No shot is on screen longer than 8 seconds. Shots run 5 to 8 seconds and average
  * about 6, each cut moves to a caption break within a second if the shots stay that long, a segment of 8 seconds or
  * less is one shot, and a segment too short for two full shots is shared evenly. The images take turns in their order,
- * and no shot uses the move of the shot before it.
+ * the first and last shots make the moves given for them, and no shot uses the move of the shot before it.
  */
-export function toVideoShots({ frameCount, captionBreakFrames, imageCount, seed }: ToVideoShotsOptions): VideoShot[] {
+export function toVideoShots({
+	frameCount,
+	captionBreakFrames,
+	imageCount,
+	seed,
+	firstMove,
+	lastMove,
+}: ToVideoShotsOptions): VideoShot[] {
 	// place the cuts, then give each shot its image and its move
 	const cutFrames = toCutFrames({ frameCount, captionBreakFrames, seed })
 	const shots: VideoShot[] = []
 	for (const [i, startFrame] of cutFrames.entries()) {
 		// a shot runs to the next cut, or to the segment's end
 		const endFrame = cutFrames[i + 1] ?? frameCount
-		const move = toShotMove({ seed, shotIndex: i, previousMove: shots[i - 1]?.move })
+		const shotMoveOptions = { seed, shotIndex: i, shotCount: cutFrames.length, firstMove, lastMove }
+		const move = toShotMove({ ...shotMoveOptions, previousMove: shots[i - 1]?.move })
 		shots.push({ imageIndex: i % Math.max(imageCount, 1), startFrame, frameCount: endFrame - startFrame, move })
 	}
 	return shots
+}
+
+// the intro's or the sign-off's frames, caption breaks, and seed, which part it is, and how many chapter images it cuts
+// between
+type ToImagePartShotsOptions = Omit<ToVideoShotsOptions, "imageCount" | "firstMove" | "lastMove"> & {
+	part: "intro" | "sign-off"
+	chapterImageCount: number
+}
+
+/**
+ * Returns the intro's or the sign-off's shots, where image 0 is the film's image and the chapters' images follow it.
+ * The intro opens on the film's image with a zoom in, cuts through the chapters' images, and returns to the film's
+ * image for its last shot if the intro has three or more shots. The sign-off cuts through the chapters' images and ends on the
+ * film's image with a zoom out. A part with no chapter image shows the film's image in every shot.
+ */
+export function toImagePartShots({ part, chapterImageCount, ...shotPlan }: ToImagePartShotsOptions): VideoShot[] {
+	// the intro's first shot zooms in, and the sign-off's last shot zooms out
+	const isIntro = part === "intro"
+	const shots = toVideoShots({
+		...shotPlan,
+		imageCount: 1,
+		...(isIntro ? { firstMove: "zoom-in" } : { lastMove: "zoom-out" }),
+	})
+	const lastShotIndex = shots.length - 1
+	return shots.map((shot, i) => {
+		// the film's image opens the intro and ends the sign-off, and the chapters' images take turns between. a part with
+		// no chapter image stays on the film's image
+		const isOpeningOrClosingShot = isIntro ? i === 0 || (i === lastShotIndex && i >= 2) : i === lastShotIndex
+		const chapterImageShotIndex = isIntro ? i - 1 : i
+		const isFilmImageShot = isOpeningOrClosingShot || chapterImageCount === 0
+		return { ...shot, imageIndex: isFilmImageShot ? 0 : 1 + (chapterImageShotIndex % chapterImageCount) }
+	})
 }
 
 /**
@@ -172,12 +219,36 @@ export function toSnappedCutFrame({
 	return nearestBreakFrame ?? plannedCutFrame
 }
 
-// the film's seed, the shot's index, and the move of the shot before it, if there is one
-type ToShotMoveOptions = { seed: string; shotIndex: number; previousMove: VideoShotMove | undefined }
+// the film's seed, the shot's index, the segment's shot count, the moves its first and last shots must make, and the
+// move of the shot before it, if there is one
+type ToShotMoveOptions = Pick<ToVideoShotsOptions, "seed" | "firstMove" | "lastMove"> & {
+	shotIndex: number
+	shotCount: number
+	previousMove: VideoShotMove | undefined
+}
 
-// a shot's move: one of the moves that the shot before it did not make
-function toShotMove({ seed, shotIndex, previousMove }: ToShotMoveOptions): VideoShotMove {
-	const otherMoves = VIDEO_SHOT_MOVES.filter((move) => move !== previousMove)
+// a shot's move: the move given for the first or last shot, or else a move that differs from the shot before it and
+// from the move given for the shot after it
+function toShotMove({
+	seed,
+	shotIndex,
+	shotCount,
+	firstMove,
+	lastMove,
+	previousMove,
+}: ToShotMoveOptions): VideoShotMove {
+	// the first and last shots make the moves given for them
+	const lastShotIndex = shotCount - 1
+	if (shotIndex === 0 && firstMove) {
+		return firstMove
+	}
+	if (shotIndex === lastShotIndex && lastMove) {
+		return lastMove
+	}
+
+	// a seeded pick among the moves that neither neighbor makes
+	const nextMove = shotIndex === lastShotIndex - 1 ? lastMove : undefined
+	const otherMoves = VIDEO_SHOT_MOVES.filter((move) => move !== previousMove && move !== nextMove)
 	const moveIndex = Math.floor(toSeededShare(`${seed}:${shotIndex}:move`) * otherMoves.length)
 	return otherMoves[moveIndex] ?? "zoom-in"
 }

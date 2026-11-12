@@ -162,7 +162,9 @@ exist. Only a public Topic's Topic Posts SHALL appear to anyone but a person who
 The Topic page and the mobile Topic screen SHALL show a collapsible section titled "Open Mic" right below the Topic's
 comment thread, holding the Topic's published Topic Posts as cards, newest first, six a page, with every card in the
 server's HTML. An author SHALL see their own drafts first, each marked Draft. A user who may publish SHALL see the
-button that starts a draft. The section SHALL be absent for a reader who may not publish if it has no card.
+button that starts a draft. The button and the cards SHALL sit inside one card, as the comment thread's do, and the
+page buttons SHALL sit under that card, as the scan history's do. The section SHALL be absent for a reader who may not
+publish if it has no card.
 
 #### Scenario: A visitor sees the section on a public Topic
 
@@ -178,6 +180,11 @@ button that starts a draft. The section SHALL be absent for a reader who may not
 
 - **WHEN** an author with one draft opens the Topic
 - **THEN** the section shows the draft's card first, marked Draft, and nobody else's read holds it
+
+#### Scenario: The page buttons sit under the card
+
+- **WHEN** a visitor opens a Topic with seven Topic Posts
+- **THEN** six cards show inside the section's card, and the page buttons sit under it
 
 ### Requirement: A Topic Post has a page nested in its Topic's route
 
@@ -221,13 +228,14 @@ structured data with the headline, the author, the publish and edit times, and t
 ### Requirement: Every published Topic Post gets a generated image
 
 Publishing SHALL draw the Topic Post an image as a Topic's is drawn: a scene written from the post's fenced text, the
-house style, and the same sizes. A card and the page SHALL show a drawn placeholder until the image is stored. An image
-url SHALL be immutable and gated by the Topic's visibility.
+house style, and the same sizes. Until the image is stored, a card and the page SHALL show the image's empty frame
+pulsing, still if the user asked for reduced motion. An image url SHALL be immutable and gated by the Topic's
+visibility.
 
 #### Scenario: A new post's card gains its image
 
 - **WHEN** an author publishes a Topic Post
-- **THEN** its card shows the placeholder at once and the generated image once the render stores it
+- **THEN** its card shows the empty frame pulsing at once and the generated image once the render stores it
 
 ### Requirement: A Topic Post's image is regenerated under the Topic image limit
 

@@ -6,6 +6,7 @@ import { useAccount } from "@carlnotes/core/hooks/useAccount"
 import { CircleDollarSign, Settings, User } from "lucide-react"
 import { useEffect } from "react"
 import { AccountBudget } from "@/components/account/AccountBudget"
+import { AccountPlan } from "@/components/account/AccountPlan"
 import { AccountSettings } from "@/components/account/AccountSettings"
 import { AccordionSection } from "@/components/common/AccordionSection"
 import {
@@ -20,8 +21,8 @@ import { useSearchParams } from "@/hooks/useSearchParams"
 import { PAGE_CLASS, PAGE_HEADER_CLASS, PAGE_TITLE_CLASS, SECTIONS_UNDER_AVATAR_HEADER_CLASS } from "@/lib/styleClasses"
 
 /**
- * The account page: the payment notice, the monthly spend against budget, the scan usage, and the current plan.
- * An admin may view another user's account as read-only without the upgrade button or settings.
+ * The account page: the current plan at the right of its header, the payment notice, the monthly spend against budget,
+ * and the scan usage. An admin may view another user's account as read-only without the plan button or settings.
  */
 export function AccountPage() {
 	usePageTitle("Account")
@@ -54,12 +55,13 @@ export function AccountPage() {
 	const hasMonthlyBudgetCutoffs = !isOwnView || !isAdminRole(session.user.role)
 	return (
 		<main className={PAGE_CLASS}>
-			{/* the page title with the same icon as its header menu item */}
+			{/* the page title with the same icon as its header menu item, and the plan with its button to the right */}
 			<div className={PAGE_HEADER_CLASS}>
 				<h1 className={PAGE_TITLE_CLASS}>
 					<User className="size-6" />
 					Account
 				</h1>
+				<AccountPlan billing={billing} isLoadFailed={query.isError} isReadOnly={!isOwnView} />
 			</div>
 			{/* the avatar header of the user whose account this is, or its placeholder while an admin's view of another
 			    user's account loads */}

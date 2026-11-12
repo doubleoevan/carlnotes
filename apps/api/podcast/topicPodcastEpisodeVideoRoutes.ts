@@ -1,21 +1,14 @@
 // the podcast episode film routes: the stable film and captions urls, which start a rebuild for a film drawn from an
-// image it no longer shows, and a user's choice to open or close Topic Cinema
+// image it no longer shows
 
-import { topicPodcastEpisodeVideoSectionPayload } from "@carlnotes/contracts/podcast"
-import { db } from "@carlnotes/db"
 import { isMonthlyBudgetCutoffPassed } from "@carlnotes/db/monthlyBudgetCutoffs"
 import { takeRateLimitSlot } from "@carlnotes/db/redisRateLimits"
-import { podcastEpisodes } from "@carlnotes/db/schema/podcast"
-import { topics } from "@carlnotes/db/schema/topics"
 import { attachmentStream } from "@carlnotes/db/store"
 import { startTopicPodcastEpisodeVideoRebuild } from "@carlnotes/pipeline/temporalClient"
 import { toShownImage } from "@carlnotes/pipeline/topicPodcastEpisodeVideo/topicPodcastEpisodeVideoInputs"
 import { reportError } from "@carlnotes/server/monitoring"
-import { zValidator } from "@hono/zod-validator"
-import { and, eq } from "drizzle-orm"
 import { Hono } from "hono"
-import { isAllowed } from "../authorization"
-import { type AppEnv, currentUser } from "../currentUser"
+import type { AppEnv } from "../currentUser"
 import { PRIVATE_NO_STORE_CACHE_CONTROL } from "../edgeCache"
 import {
 	countPodcastEpisodePlayRequest,
@@ -27,7 +20,6 @@ import type { AccessiblePodcastEpisode } from "./podcastEpisodeRows"
 import {
 	loadReadyTopicPodcastEpisodeVideoFiles,
 	type ReadyTopicPodcastEpisodeVideoFiles,
-	saveTopicPodcastEpisodeVideoSection,
 	TOPIC_PODCAST_EPISODE_VIDEO_CAPTIONS_FILE,
 	TOPIC_PODCAST_EPISODE_VIDEO_FILE,
 } from "./topicPodcastEpisodeVideos"
@@ -86,43 +78,6 @@ export const topicPodcastEpisodeVideosRoute = new Hono<AppEnv>()
 			objectKey: captionsKey,
 			byteSize: null,
 		})
-	})
-	// a user's choice to open or close Topic Cinema, saved with the latest film when they chose
-	.put("/topics/:id/video-section", zValidator("json", topicPodcastEpisodeVideoSectionPayload), async (context) => {
-		// reject a visitor
-		const userId = currentUser(context)
-		if (!userId) {
-			return context.json({ error: "unauthorized" }, 401)
-		}
-
-		// a topic the user may not view looks identical to a missing one
-		const [topic] = await db
-			.select()
-			.from(topics)
-			.where(eq(topics.id, context.req.param("id")))
-		if (!topic || !(await isAllowed(userId, "topic:view", topic))) {
-			return context.json({ error: "not found" }, 404)
-		}
-
-		// the choice names a published podcast episode of this topic. any other id is not found
-		const sectionChoice = context.req.valid("json")
-		const [podcastEpisodeRow] = await db
-			.select({ id: podcastEpisodes.id })
-			.from(podcastEpisodes)
-			.where(
-				and(
-					eq(podcastEpisodes.id, sectionChoice.podcastEpisodeId),
-					eq(podcastEpisodes.topicId, topic.id),
-					eq(podcastEpisodes.status, "published"),
-				),
-			)
-		if (!podcastEpisodeRow) {
-			return context.json({ error: "not found" }, 404)
-		}
-
-		// save the choice
-		await saveTopicPodcastEpisodeVideoSection({ userId, topicId: topic.id, ...sectionChoice })
-		return context.json({ ok: true })
 	})
 
 /**

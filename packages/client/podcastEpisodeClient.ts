@@ -42,7 +42,7 @@ export async function fetchPodcastEpisode(
 	podcastEpisodeId: string,
 	options: PodcastEpisodeRequestOptions = {},
 ): Promise<PodcastEpisode | null> {
-	// a Topic Post's discussion is read from its post
+	// a Topic Post's discussion is read from its Topic Post
 	const discussionTopicPostId = toDiscussionTopicPostId(podcastEpisodeId)
 	if (discussionTopicPostId) {
 		return fetchTopicPostDiscussionPodcastEpisode(discussionTopicPostId, options)
@@ -54,8 +54,8 @@ export async function fetchPodcastEpisode(
 	return response.ok ? readApiResponse(podcastEpisode, response) : null
 }
 
-// a Topic Post's discussion in the shape the player plays, or null for a post that is missing, that the user may not
-// read, or that has no recording to play
+// a Topic Post's discussion in the shape the player plays, or null for a Topic Post that is missing, that the user
+// may not read, or that has no recording to play
 async function fetchTopicPostDiscussionPodcastEpisode(
 	topicPostId: string,
 	options: PodcastEpisodeRequestOptions,
@@ -360,7 +360,7 @@ export async function fetchPodcastEpisodeAudio(
 	podcastEpisodeId: string,
 	signal?: AbortSignal,
 ): Promise<PodcastEpisodeAudio> {
-	// a Topic Post's discussion has its audio on its post, and a podcast episode on its own route
+	// a Topic Post's discussion has its audio on its Topic Post, and a podcast episode on its own route
 	const discussionTopicPostId = toDiscussionTopicPostId(podcastEpisodeId)
 	const audioPath = discussionTopicPostId
 		? toTopicPostDiscussionAudioPath(discussionTopicPostId)
@@ -393,24 +393,6 @@ export async function fetchTopicPodcastEpisodeVideo(
 	})
 	assertPodcastEpisodeResponse(response, { shouldThrowOnError: true })
 	return readApiResponse(topicPodcastEpisodeVideoFile, response)
-}
-
-// the topic, its latest film's podcast episode, and whether the user left Topic Cinema open
-type SendTopicPodcastEpisodeVideoSectionOptions = { topicId: string; podcastEpisodeId: string; isOpen: boolean }
-
-/**
- * Saves the user's choice to open or close Topic Cinema on a topic and returns whether the choice saved.
- */
-export async function sendTopicPodcastEpisodeVideoSection({
-	topicId,
-	podcastEpisodeId,
-	isOpen,
-}: SendTopicPodcastEpisodeVideoSectionOptions): Promise<boolean> {
-	// a request that throws an error has no response
-	const response = await apiClient()
-		.api.topics[":id"]["video-section"].$put({ param: { id: topicId }, json: { podcastEpisodeId, isOpen } })
-		.catch(() => null)
-	return response?.ok === true
 }
 
 /**

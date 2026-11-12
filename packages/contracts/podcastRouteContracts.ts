@@ -9,7 +9,6 @@ import {
 	podcastFeedUrlResponse,
 	seasonPodcastEpisodes,
 	topicPodcastEpisodeVideoFile,
-	topicPodcastEpisodeVideoSectionPayload,
 	updatePodcastEpisodePayload,
 } from "./podcast"
 import { podcastEpisodePageResponse } from "./podcastEpisodePage"
@@ -149,13 +148,6 @@ export const podcastRouteContracts: Record<string, ApiRouteContract> = {
 		path: "/api/topics/:id/podcast",
 		params: idParam,
 		body: { json: topicPodcastPayload },
-		response: okResponse,
-	},
-	"podcastEpisodeClient.sendTopicPodcastEpisodeVideoSection": {
-		method: "PUT",
-		path: "/api/topics/:id/video-section",
-		params: idParam,
-		body: { json: topicPodcastEpisodeVideoSectionPayload },
 		response: okResponse,
 	},
 	"podcastEpisodeClient.uploadPodcastEpisodeImageBody": {

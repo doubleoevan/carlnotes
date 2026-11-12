@@ -265,7 +265,7 @@ function TableSkeletonContent({ elements: { Stack, Row, Shape, Card } }: { eleme
 
 // reserve the budget as the loaded budget lays it out. the coffee fund card holds its title, reset clock, and amount,
 // the bar, its legend, the status line, and the cutoff list if the budget has cutoffs. the daily scans card holds its
-// title and its two meters. each card ends with the plan and its button
+// title and its two meters
 function BudgetSkeleton({
 	elements,
 	hasMonthlyBudgetCutoffs,
@@ -312,24 +312,12 @@ function BudgetSkeleton({
 						</Stack>
 					)}
 				</Stack>
-				<PlanRowSkeleton elements={elements} />
 			</Card>
-			{/* the daily scans card with its title, the scans used beside the reset clock, and the plan */}
+			{/* the daily scans card with its title, and the scans used beside the reset clock */}
 			<Card className="gap-4">
 				<CardTopSkeleton elements={elements} />
-				<PlanRowSkeleton elements={elements} />
 			</Card>
 		</Stack>
-	)
-}
-
-// reserve the plan line at a card's bottom left with its button right after it
-function PlanRowSkeleton({ elements: { Row, Shape } }: { elements: PageSkeletonElements }) {
-	return (
-		<Row className="gap-3">
-			<Shape className="h-3.5 w-24" />
-			<Shape className="h-9 w-32 rounded-md" />
-		</Row>
 	)
 }
 

@@ -10,9 +10,9 @@ import { runFfmpeg } from "@carlnotes/models/ffmpeg"
 import sharp from "sharp"
 import { detectPauseSeconds, toVideoCaptionCues, toWebVtt } from "./videoCaptions"
 import { loadPodcastCardStillPng, PODCAST_CARD_ZOOM_LIMIT, toVideoStillPng } from "./videoFrames"
+import { renderVideoImageParts } from "./videoImageParts"
 import {
 	renderVideoChaptersPart,
-	renderVideoImageParts,
 	rewriteVideoFilm,
 	type VideoChapterImages,
 	type VideoSegmentImage,
@@ -112,16 +112,20 @@ test.skipIf(isFfmpegMissing)(
 		const captionsPath = join(workDirectory, "captions.vtt")
 		await Bun.write(captionsPath, toWebVtt(captionCues))
 
-		// render the parts, timing the render. the hosts' answer cuts between the podcast card and the film's image
+		// render the parts, timing the render. the intro and the sign-off cut through each chapter's first image, and the
+		// hosts' answer cuts between the podcast card and the film's image
 		const renderStartMs = performance.now()
 		const filmImage = toFixtureImage({ width: 2752, height: 1536, label: "F", color: "#6b4f3a" })
-		const shownImageStillPng = await filmImage.loadStillPng()
+		const captionStartSeconds = captionCues.map((captionCue) => captionCue.startSeconds)
 		const imageParts = await renderVideoImageParts({
+			podcastEpisodeId: "fixture-podcast-episode",
 			workDirectory,
 			segments,
-			shownImageStillPng,
+			shownImageStill: { stillPng: await filmImage.loadStillPng(), zoomLimit: filmImage.zoomLimit },
+			chapterImages: [...chapterImages.values()].flatMap((videoChapterImages) => videoChapterImages.images.slice(0, 1)),
 			introText: INTRO_TEXT,
 			signOffText: SIGN_OFF_TEXT,
+			captionStartSeconds,
 		})
 		const chaptersPath = await renderVideoChaptersPart({
 			podcastEpisodeId: "fixture-podcast-episode",
@@ -129,7 +133,7 @@ test.skipIf(isFfmpegMissing)(
 			segments,
 			chapterImages,
 			podcastCardImages: [podcastCardImage, filmImage],
-			captionStartSeconds: captionCues.map((captionCue) => captionCue.startSeconds),
+			captionStartSeconds,
 		})
 
 		// every still and lower third is deleted once its segment is encoded, and every shot once the part is joined
@@ -187,11 +191,14 @@ test.skipIf(isFfmpegMissing)(
 		const rebuildDirectory = await mkdtemp(join(workDirectory, "rebuild-"))
 		const newFilmImage = toFixtureImage({ width: 1500, height: 1500, label: "N", color: "#1f6f4a" })
 		const imageParts = await renderVideoImageParts({
+			podcastEpisodeId: "fixture-podcast-episode",
 			workDirectory: rebuildDirectory,
 			segments,
-			shownImageStillPng: await newFilmImage.loadStillPng(),
+			shownImageStill: { stillPng: await newFilmImage.loadStillPng(), zoomLimit: newFilmImage.zoomLimit },
+			chapterImages: [],
 			introText: INTRO_TEXT,
 			signOffText: SIGN_OFF_TEXT,
+			captionStartSeconds: [],
 		})
 		const filmPath = join(rebuildDirectory, "film.mp4")
 		await rewriteVideoFilm({ workDirectory: rebuildDirectory, ...imageParts, chaptersPath, currentFilmPath, filmPath })

@@ -9,6 +9,7 @@ import * as moderation from "@carlnotes/models/moderation"
 import * as monitoring from "@carlnotes/server/monitoring"
 import * as linkPreview from "../linkPreview"
 import { loadOrFetchResourceImages } from "./fetchResourceImages"
+import { RESOURCE_IMAGE_FILTER_VERSION } from "./resourceImageFilter"
 import { toTestImageBytes } from "./resourceImageTestFixtures"
 
 // the page the tests fetch, and the Markdown the Scan stored for it: two images of its own and a related story's
@@ -19,15 +20,21 @@ const PAGE_MARKDOWN = [
 	"![Chart](https://cdn.example.com/chart.jpg)",
 ].join("\n\n")
 
-// a Resource row as the fetch reads it: id, url, unsafe, content key, and when its images were fetched
-type ResourceRowOptions = { url?: string; isUnsafe?: boolean; contentKey?: string | null; imagesFetchedAt?: string }
+// a Resource row as the fetch reads it: id, url, unsafe, content key, and the image filter version its images were
+// fetched under, 0 for a Resource never fetched
+type ResourceRowOptions = {
+	url?: string
+	isUnsafe?: boolean
+	contentKey?: string | null
+	imagesFilterVersion?: number
+}
 function toResourceRow({
 	url = PAGE_URL,
 	isUnsafe = false,
 	contentKey = "resources/r1/content.md",
-	imagesFetchedAt,
+	imagesFilterVersion = 0,
 }: ResourceRowOptions = {}): unknown[] {
-	return ["r1", url, isUnsafe, contentKey, imagesFetchedAt ?? null]
+	return ["r1", url, isUnsafe, contentKey, imagesFilterVersion]
 }
 
 // a stored image row as the fetch reads it: resource, object key, width, height, and the link preview flag
@@ -54,9 +61,9 @@ function stubReads({
 }: StubReadsOptions): SentQuery[] {
 	// what each of the fetch's own queries returns, by how the query starts: the second look at whether the fetch
 	// ran, the Markdown a Resource keeps on its row, and the fetch's record, which finds no safe Resource to mark
-	const fetchedAt = isFetchedMeanwhile ? "2026-11-11 10:00:00+00" : resourceRow[4]
+	const filterVersion = isFetchedMeanwhile ? RESOURCE_IMAGE_FILTER_VERSION : resourceRow[4]
 	const rowsByQueryStart: [string, unknown[][]][] = [
-		['select "images_fetched_at" from "resources"', [[fetchedAt]]],
+		['select "images_filter_version" from "resources"', [[filterVersion]]],
 		['select "content" from "resources"', [[null]]],
 		['update "resources"', isUnsafeMeanwhile ? [] : [["r1"]]],
 	]
@@ -163,7 +170,7 @@ test("a Resource judged unsafe later loses its stored images", async () => {
 })
 
 test("a fetched Resource returns its stored images in order and fetches nothing", async () => {
-	const fetchedRow = toResourceRow({ imagesFetchedAt: "2026-11-11 10:00:00+00" })
+	const fetchedRow = toResourceRow({ imagesFilterVersion: RESOURCE_IMAGE_FILTER_VERSION })
 	stubReads({ resourceRow: fetchedRow, storedImageRows: STORED_IMAGE_ROWS })
 	const resourceImagesById = await loadOrFetchResourceImages(["r1", "r1"])
 	expect(resourceImagesById.get("r1")).toEqual([
@@ -175,9 +182,43 @@ test("a fetched Resource returns its stored images in order and fetches nothing"
 })
 
 test("a Resource whose fetch kept no image is not fetched twice", async () => {
-	stubReads({ resourceRow: toResourceRow({ imagesFetchedAt: "2026-11-11 10:00:00+00" }) })
+	stubReads({ resourceRow: toResourceRow({ imagesFilterVersion: RESOURCE_IMAGE_FILTER_VERSION }) })
 	expect((await loadOrFetchResourceImages(["r1"])).get("r1")).toEqual([])
 	expect(fetchImage).not.toHaveBeenCalled()
+})
+
+test("an http image is fetched over https first, and over http if https fails", async () => {
+	// the lead image is served only over https, and the chart only over http
+	spyOn(storage, "getResourceContent").mockResolvedValue(
+		"![Lead](http://cdn.example.com/lead.jpg)\n\n![Chart](http://cdn.example.com/http-only.jpg)",
+	)
+	imageBytesByUrl.set(
+		"http://cdn.example.com/http-only.jpg",
+		await toTestImageBytes({ width: 1200, height: 801, picture: 4 }),
+	)
+	stubReads({ resourceRow: toResourceRow() })
+	const resourceImages = (await loadOrFetchResourceImages(["r1"])).get("r1")
+
+	// both are kept, after the link preview image
+	expect(resourceImages?.map((image) => `${image.width}x${image.height}`)).toEqual(["1200x630", "1600x900", "1200x801"])
+	const fetchedUrls = fetchImage.mock.calls.map(([imageUrl]: [string]) => imageUrl)
+	expect(fetchedUrls).toContain("https://cdn.example.com/lead.jpg")
+	expect(fetchedUrls).not.toContain("http://cdn.example.com/lead.jpg")
+	expect(fetchedUrls).toContain("http://cdn.example.com/http-only.jpg")
+})
+
+test("a Resource fetched under an older filter loses its images and fetches again under the current one", async () => {
+	const olderFilterResourceRow = toResourceRow({ imagesFilterVersion: RESOURCE_IMAGE_FILTER_VERSION - 1 })
+	const sentQueries = stubReads({ resourceRow: olderFilterResourceRow, storedImageRows: STORED_IMAGE_ROWS })
+	const resourceImages = (await loadOrFetchResourceImages(["r1"])).get("r1")
+
+	// the older images are deleted, the page's images are fetched again, and the fetch records the current version
+	expect(deleteObjects).toHaveBeenCalledWith(["resources/r1/images/0.jpg", "resources/r1/images/1.jpg"])
+	expect(sentQueries.some((sentQuery) => sentQuery.text.startsWith('delete from "resource_images"'))).toBe(true)
+	expect(resourceImages).toHaveLength(3)
+	const fetchRecord = sentQueries.find((sentQuery) => sentQuery.text.startsWith('update "resources"'))
+	expect(fetchRecord?.text).toContain('"images_filter_version" = $')
+	expect(fetchRecord?.values).toContain(RESOURCE_IMAGE_FILTER_VERSION)
 })
 
 test("a fetch stores the page's own images after its link preview image, and scrapes nothing", async () => {

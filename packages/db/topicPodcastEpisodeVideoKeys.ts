@@ -65,23 +65,60 @@ export function toTopicPodcastEpisodeVideoImageLargeOriginalKey(podcastEpisodeId
 // how many generated images one chapter of a film may have
 export const GENERATED_CHAPTER_IMAGE_LIMIT_PER_CHAPTER = 12
 
+// the version of the film house style that a chapter's generated images are drawn in. each style version has its own
+// keys
+export const GENERATED_CHAPTER_IMAGE_STYLE_VERSION = 2
+
 /**
- * Returns the object key of the first generated image of one chapter of a film, a jpeg at the film's size.
+ * Returns the object key of the first generated image of one chapter of a film, a jpeg at the film's size, drawn in a
+ * style version, the current one unless given. Style version 1's keys have no style suffix.
  */
-export function toTopicPodcastEpisodeVideoChapterImageKey(podcastEpisodeId: string, position: number): string {
-	return `episodes/${podcastEpisodeId}/video/chapter-${position}-image.jpg`
+export function toTopicPodcastEpisodeVideoChapterImageKey(
+	podcastEpisodeId: string,
+	position: number,
+	styleVersion = GENERATED_CHAPTER_IMAGE_STYLE_VERSION,
+): string {
+	return `episodes/${podcastEpisodeId}/video/chapter-${position}-image${toStyleVersionSuffix(styleVersion)}.jpg`
 }
 
 /**
- * Returns the object keys of every generated image one chapter of a film may have, in the order they are drawn. The
- * first is the chapter's first generated image, and each further one is numbered from 1.
+ * Returns the object keys of every generated image one chapter of a film may have in a style version, the current one
+ * unless given, in the order they are drawn. The first is the chapter's first generated image, and each further one is
+ * numbered from 1.
  */
-export function toTopicPodcastEpisodeVideoChapterImageKeys(podcastEpisodeId: string, position: number): string[] {
+export function toTopicPodcastEpisodeVideoChapterImageKeys(
+	podcastEpisodeId: string,
+	position: number,
+	styleVersion = GENERATED_CHAPTER_IMAGE_STYLE_VERSION,
+): string[] {
+	const styleVersionSuffix = toStyleVersionSuffix(styleVersion)
 	const numberedKeys = Array.from(
 		{ length: GENERATED_CHAPTER_IMAGE_LIMIT_PER_CHAPTER - 1 },
-		(_, i) => `episodes/${podcastEpisodeId}/video/chapter-${position}-image-${i + 1}.jpg`,
+		(_, i) => `episodes/${podcastEpisodeId}/video/chapter-${position}-image${styleVersionSuffix}-${i + 1}.jpg`,
 	)
-	return [toTopicPodcastEpisodeVideoChapterImageKey(podcastEpisodeId, position), ...numberedKeys]
+	return [toTopicPodcastEpisodeVideoChapterImageKey(podcastEpisodeId, position, styleVersion), ...numberedKeys]
+}
+
+/**
+ * Returns the object keys of every generated image that a film's chapters at the positions given may have, in each
+ * style version from 1 through the one given, the current one unless given.
+ */
+export function toTopicPodcastEpisodeVideoChapterImageKeysThroughStyle(
+	podcastEpisodeId: string,
+	positions: number[],
+	lastStyleVersion = GENERATED_CHAPTER_IMAGE_STYLE_VERSION,
+): string[] {
+	const styleVersions = Array.from({ length: lastStyleVersion }, (_, i) => i + 1)
+	return styleVersions.flatMap((styleVersion) =>
+		positions.flatMap((position) =>
+			toTopicPodcastEpisodeVideoChapterImageKeys(podcastEpisodeId, position, styleVersion),
+		),
+	)
+}
+
+// the part of a generated image's key that names its style version. version 1 has none
+function toStyleVersionSuffix(styleVersion: number): string {
+	return styleVersion === 1 ? "" : `-s${styleVersion}`
 }
 
 // a film row's object keys, any of them null until it is uploaded
@@ -101,7 +138,8 @@ type TopicPodcastEpisodeVideoKeyColumns = {
 
 /**
  * Returns every stored object key of a film row, its own image and that image's original among them, without the keys
- * not yet uploaded, and the keys of every generated image each chapter may have, whether or not the chapter has them.
+ * not yet uploaded, and the keys of every generated image each chapter may have in every style, whether or not the
+ * chapter has them.
  */
 export function toTopicPodcastEpisodeVideoKeys(topicPodcastEpisodeVideo: TopicPodcastEpisodeVideoKeyColumns): string[] {
 	// the keys of the film's own image and of its original, if the film has an image
@@ -124,9 +162,8 @@ export function toTopicPodcastEpisodeVideoKeys(topicPodcastEpisodeVideo: TopicPo
 	if (!podcastEpisodeId) {
 		return storedKeys
 	}
-	// ponytail: lists every key a chapter may have. store each chapter's count if a removal gets slow
-	const chapterImageKeys = Array.from({ length: chapterCount }, (_, position) =>
-		toTopicPodcastEpisodeVideoChapterImageKeys(podcastEpisodeId, position),
-	).flat()
+	// ponytail: lists every key a chapter may have in every style. store each chapter's count if a removal gets slow
+	const positions = Array.from({ length: chapterCount }, (_, position) => position)
+	const chapterImageKeys = toTopicPodcastEpisodeVideoChapterImageKeysThroughStyle(podcastEpisodeId, positions)
 	return [...storedKeys, ...chapterImageKeys]
 }

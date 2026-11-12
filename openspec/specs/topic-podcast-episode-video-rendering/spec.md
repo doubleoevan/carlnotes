@@ -107,28 +107,48 @@ chapter starts at the same second in the film as in the audio, to within one fra
 
 ### Requirement: The intro and the sign-off show the film's image
 
-The film's intro SHALL run from its start to the first chapter's start, and SHALL show the film's own image, or the
-image that the Podcast Episode shows if the film has none, with the Podcast Episode's title and details line. The
-sign-off SHALL run from the last chapter's end to the film's end. It SHALL show the same image with "Coffee Break
-podcast with Carl and Vienna" and "Carl and Vienna are AI voices".
+The film's intro SHALL run from its start to the first chapter's start. It SHALL open on the film's own image, or the
+image that the Podcast Episode shows if the film has none, cut through the first image of each chapter in chapter
+order, each image once, and return to the film's image for its last shot if it has three shots or more. The sign-off
+SHALL run from the last chapter's end to the film's end, cut through the same chapter images, and end on the film's
+image. Their shots SHALL be cut as a chapter's montage is. If fewer than two chapter images remain, the podcast card
+SHALL take turns with them, unless the film's image is the podcast card. An intro or a sign-off with no chapter image
+SHALL show the film's image in every shot. The intro's lower third SHALL show the Podcast Episode's title and details
+line, and the sign-off's SHALL show "Coffee Break podcast with Carl and Vienna" and "Carl and Vienna are AI voices".
+Each SHALL fade in and stay until its part ends.
 
 #### Scenario: The intro names the Podcast Episode
 
 - **WHEN** a viewer plays a film from the start
-- **THEN** the film's image shows with the Podcast Episode's title until the first chapter starts
+- **THEN** the film's image shows with the Podcast Episode's title, which stays on screen until the first chapter
+  starts
 
 #### Scenario: The sign-off says the voices are AI
 
 - **WHEN** the film passes the last chapter's end
-- **THEN** the film's image shows with "Carl and Vienna are AI voices"
+- **THEN** "Carl and Vienna are AI voices" shows until the film ends, and the film's image is the last shot
+
+#### Scenario: The intro cuts through the chapters
+
+- **GIVEN** a film of four chapters whose first images are a photo, a chart, the photo again, and a generated image
+- **WHEN** its 30-second intro plays
+- **THEN** it opens on the film's image, cuts to the photo, the chart, and the generated image in that order, and
+  returns to the film's image
+
+#### Scenario: A film with no chapter image stays on its image
+
+- **GIVEN** a film that shows the podcast card as its image, and whose chapters have no image but the podcast card
+- **WHEN** its intro plays
+- **THEN** every shot shows the podcast card
 
 ### Requirement: Each film gets its own cinematic image
 
 The first time a film renders, before its intro and sign-off, the worker SHALL draw the film's own image: 16:9 at 2752
-by 1536, full frame with no paper edge or border, in film lighting and the app's palette, with a calm dark lower third
-for the title. The topic image's scene writer SHALL write its scene, and an image model that draws at that size SHALL
-draw it from a film house style prompt. It SHALL be stored under the film's folder as that original and as a 1280 by
-720 copy, which the poster shows. Its cost SHALL add to the film's cost.
+by 1536, full frame with no paper edge or border, in film lighting and the app's palette, painted to every edge with no
+dark band along the bottom. The lower third's espresso plate SHALL keep the title readable over any image. The topic
+image's scene writer SHALL write its scene, and an image model that draws at that size SHALL draw it from a film house
+style prompt. It SHALL be stored under the film's folder as that original and as a 1280 by 720 copy, which the poster
+shows. Its cost SHALL add to the film's cost.
 
 #### Scenario: A new film opens on its own image
 
@@ -139,8 +159,8 @@ draw it from a film house style prompt. It SHALL be stored under the film's fold
 #### Scenario: The image fills the frame
 
 - **WHEN** the film's image is drawn
-- **THEN** its original is 2752 by 1536, its poster copy is 1280 by 720, neither has a border, and its lower third is
-  dark enough for the title to read over it
+- **THEN** its original is 2752 by 1536, its poster copy is 1280 by 720, neither has a border, and the house style asks
+  for a scene painted to the bottom edge with no dark band, curtain, or empty shadow along it
 
 #### Scenario: A second attempt draws no second image
 
@@ -208,8 +228,8 @@ from an image prompt alone.
 #### Scenario: An image prompt still fills the frame
 
 - **WHEN** an editor regenerates a film's image with the image prompt "a foggy morning over a bridge"
-- **THEN** the image model is sent that scene followed by the film house style, and the image has no paper edge and a
-  dark lower third for the title
+- **THEN** the image model is sent that scene followed by the film house style, and the image has no paper edge and no
+  dark band along the bottom
 
 ### Requirement: Each chapter shows its Finding's image with a lower third
 
@@ -272,7 +292,9 @@ A draw SHALL bill the Topic owner's key and add its cost to the film's cost, and
 platform. A draw SHALL NOT check the owner's spend cutoff. If the owner's budget is spent, a draw fails, or a drawn
 image does not pass the image moderation, the chapter SHALL go on with the images it has, and the render SHALL go on. A
 render that is stopped SHALL start no further draw. A generated image SHALL be stored in the film's folder. A render's
-second attempt and a re-render SHALL reuse a stored image, and it SHALL be deleted with the film.
+second attempt and a re-render SHALL reuse a stored image drawn in the current film house style, and it SHALL be
+deleted with the film. A re-render SHALL draw again the images a chapter has in an older style, and once the film is
+saved it SHALL delete them. Until then the api SHALL serve a chapter's image in the older style.
 
 #### Scenario: A draw is billed to the owner
 
@@ -307,6 +329,13 @@ second attempt and a re-render SHALL reuse a stored image, and it SHALL be delet
 - **GIVEN** an owner who passed the podcast episode spend cutoff while their Podcast Episode recorded
 - **WHEN** its film renders with chapters that lack images
 - **THEN** every generated image the chapters need is drawn on the owner's key, and the film's cost includes them
+
+#### Scenario: A re-render draws again the images of an older style
+
+- **GIVEN** a ready film whose chapter has two generated images drawn in an older film house style
+- **WHEN** the film renders again
+- **THEN** the chapter's images are drawn again in the current style, and once the film is saved the two older images
+  are deleted
 
 ### Requirement: The film fades through espresso between parts and chapters
 
@@ -379,17 +408,16 @@ whose Finding or whose hot takes would show for under 4 seconds SHALL keep its o
 
 ### Requirement: The intro zooms in and the sign-off zooms out
 
-The intro SHALL push in to the film's image at 12 percent a second, then creep in at half a percent a second, and
-reach 2.5 times as the first chapter starts. The sign-off SHALL be the same move backward: it SHALL start at 2.5 times
-and end on the full frame. An intro or a sign-off of 8 seconds or less SHALL zoom at 12 percent a second throughout.
-The Carl and Vienna podcast card SHALL cover the frame as a 16:9 band of its illustration, with no blurred fill.
+The intro's first shot SHALL zoom in on the film's image, and the sign-off's last shot SHALL zoom out from it to the
+full frame as the film fades out. Their other shots SHALL move as a chapter's shots do, and no shot SHALL make the move
+of the shot before it. The Carl and Vienna podcast card SHALL cover the frame as a 16:9 band of its illustration, with
+no blurred fill.
 
 #### Scenario: The film opens moving in and closes moving out
 
 - **WHEN** a film with an intro and a sign-off of 40 seconds each plays from its start to its end
-- **THEN** the intro's image comes toward the viewer fast for its first 7 seconds, then slowly, and is at 2.5 times as
-  the first chapter starts
-- **AND** the sign-off's image starts at 2.5 times, eases back, and pulls back fast to its full frame as it fades out
+- **THEN** the intro's first shot comes toward the film's image at 8 percent a second
+- **AND** the sign-off's last shot pulls back from the film's image to its full frame as it fades out
 
 #### Scenario: A chapter with no image fills the frame
 
@@ -399,7 +427,7 @@ The Carl and Vienna podcast card SHALL cover the frame as a 16:9 band of its ill
 #### Scenario: A short intro is the push alone
 
 - **WHEN** a film's intro runs 5 seconds
-- **THEN** its image zooms in at 12 percent a second and ends at about 1.76 times
+- **THEN** it is one shot that zooms in on the film's image at 8 percent a second
 
 ### Requirement: The film carries captions from the transcript, on by default
 

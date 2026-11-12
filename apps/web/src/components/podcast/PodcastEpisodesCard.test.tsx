@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { toPodcastEpisodeFixture } from "@carlnotes/contracts/podcastEpisodeTestFixtures"
+import { toPodcastEpisodeFixture, toTopicPodcastFixture } from "@carlnotes/contracts/podcastEpisodeTestFixtures"
 import { toTestTopicResponse } from "@carlnotes/contracts/topicFeedTestFixtures"
 import {
 	PodcastEpisodesCard,
@@ -17,16 +17,12 @@ const episodes = Array.from({ length: 8 }, (_, index) =>
 const topic = toTestTopicResponse({
 	id: "topic-1",
 	latestPodcastEpisode: episodes[0],
-	podcast: {
-		isEnabled: true,
-		isCommentsEnabled: true,
-		hasFullPodcastEpisodes: true,
-		unpublishedPodcastEpisode: null,
+	podcast: toTopicPodcastFixture({
 		publicFeedUrl: "https://carlnotes.example/feed.xml",
 		seasons: [2026, 2025],
 		latestSeasonPodcastEpisodes: { podcastEpisodes: episodes },
 		canRemovePodcastEpisodes: true,
-	},
+	}),
 })
 
 test("season selection retains loaded, linked, and latest episode precedence", () => {

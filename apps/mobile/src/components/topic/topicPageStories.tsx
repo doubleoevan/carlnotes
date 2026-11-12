@@ -1,4 +1,5 @@
 import type { PodcastEpisode } from "@carlnotes/contracts/podcast"
+import { toTopicPodcastFixture } from "@carlnotes/contracts/podcastEpisodeTestFixtures"
 import { toTestTopicFinding, toTestTopicResponse } from "@carlnotes/contracts/topicFeedTestFixtures"
 import type { ScanSourceResults } from "@carlnotes/contracts/topics"
 import { PODCAST_STORY_FILM_EPISODE } from "@carlnotes/core/lib/podcastEpisodeStories"
@@ -47,16 +48,7 @@ export const STORY_TOPIC_PAGE = toTestTopicResponse({
 	),
 	latestPodcastEpisode: STORY_PODCAST_EPISODE,
 	scanSummary: "Small changes to water temperature and grind size make a better cup.",
-	podcast: {
-		isEnabled: true,
-		isCommentsEnabled: true,
-		hasFullPodcastEpisodes: true,
-		canRemovePodcastEpisodes: false,
-		unpublishedPodcastEpisode: null,
-		seasons: [2026],
-		latestSeasonPodcastEpisodes: { podcastEpisodes: [STORY_PODCAST_EPISODE] },
-		publicFeedUrl: null,
-	},
+	podcast: toTopicPodcastFixture({ latestSeasonPodcastEpisodes: { podcastEpisodes: [STORY_PODCAST_EPISODE] } }),
 	scans: [
 		{
 			id: "scan-1",
@@ -94,10 +86,7 @@ export const STORY_FILM_TOPIC_PAGE = {
 		? {
 				...STORY_TOPIC_PAGE.podcast,
 				latestSeasonPodcastEpisodes: { podcastEpisodes: STORY_FILMS },
-				topicPodcastEpisodeVideoSection: {
-					podcastEpisode: STORY_FILMS[0] ?? PODCAST_STORY_FILM_EPISODE,
-					isOpen: true,
-				},
+				topicPodcastEpisodeVideoSection: { podcastEpisode: STORY_FILMS[0] ?? PODCAST_STORY_FILM_EPISODE },
 			}
 		: null,
 	topicPosts: { topicPosts: [TOPIC_POST_DRAFT_CARD_STORY, TOPIC_POST_CARD_STORY], canPublish: true },

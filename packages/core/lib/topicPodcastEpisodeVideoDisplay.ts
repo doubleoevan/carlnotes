@@ -39,8 +39,8 @@ export function toPodcastEpisodeVideoPill(
 }
 
 /**
- * Returns Topic Cinema for a topic's page: the topic read's section on its latest ready film, or an open section on
- * the latest podcast episode while its film is rendering and no film is ready, or null.
+ * Returns Topic Cinema for a topic's page: the topic read's section on its latest ready film, or a section on the
+ * latest podcast episode while its film is rendering and no film is ready, or null.
  */
 export function toTopicPagePodcastEpisodeVideoSection(
 	topic: Pick<TopicResponse, "podcast" | "latestPodcastEpisode">,
@@ -53,5 +53,5 @@ export function toTopicPagePodcastEpisodeVideoSection(
 
 	// a topic with no ready film shows its latest podcast episode while that film is rendering
 	const { latestPodcastEpisode } = topic
-	return latestPodcastEpisode?.isVideoRendering ? { podcastEpisode: latestPodcastEpisode, isOpen: true } : null
+	return latestPodcastEpisode?.isVideoRendering ? { podcastEpisode: latestPodcastEpisode } : null
 }

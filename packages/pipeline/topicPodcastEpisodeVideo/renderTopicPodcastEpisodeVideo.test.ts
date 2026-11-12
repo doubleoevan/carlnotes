@@ -11,9 +11,11 @@ import { renderTopicPodcastEpisodeVideo } from "./renderTopicPodcastEpisodeVideo
 import * as topicPodcastEpisodeVideoImage from "./topicPodcastEpisodeVideoImage"
 import * as topicPodcastEpisodeVideoInputs from "./topicPodcastEpisodeVideoInputs"
 import * as topicPodcastEpisodeVideoRows from "./topicPodcastEpisodeVideoRows"
+import { TOPIC_PODCAST_EPISODE_VIDEO_RENDER_VERSION } from "./topicPodcastEpisodeVideoRows"
 import * as videoCaptions from "./videoCaptions"
 import * as videoChapterImages from "./videoChapterImages"
 import * as videoHotTakes from "./videoHotTakes"
+import * as videoImageParts from "./videoImageParts"
 import * as videoParts from "./videoParts"
 
 // a published podcast episode's row, in the column order the film's read selects: topic, owner, status, title,
@@ -140,7 +142,7 @@ function stubRenderReads(filmStateRow: unknown[] | null): SentQuery[] {
 	})
 }
 
-// stub every step that reads storage, runs ffmpeg, or draws, so a render writes its rows and nothing else. returns the
+// stub every step that reads storage, runs ffmpeg, or generates an image, so a render writes its rows and nothing else. returns the
 // upload's spy, which records each key, and the spy of the delete that a failure runs
 function stubRenderSteps(): { upload: ReturnType<typeof spyOn>; deleteObjects: ReturnType<typeof spyOn> } {
 	// the audio, the timeline's inputs, and the captions
@@ -151,17 +153,18 @@ function stubRenderSteps(): { upload: ReturnType<typeof spyOn>; deleteObjects: R
 	spyOn(topicPodcastEpisodeVideoInputs, "toVideoCaptionChapters").mockReturnValue([])
 
 	// the film's image, the parts, and the joined film
-	spyOn(topicPodcastEpisodeVideoImage, "drawTopicPodcastEpisodeVideoImage").mockResolvedValue(null)
+	spyOn(topicPodcastEpisodeVideoImage, "generateTopicPodcastEpisodeVideoImage").mockResolvedValue(null)
 	spyOn(topicPodcastEpisodeVideoInputs, "loadShownImageStill").mockResolvedValue({
 		stillPng: new Uint8Array([7]),
 		zoomLimit: 2,
 		isPodcastCard: false,
 	})
-	spyOn(videoParts, "renderVideoImageParts").mockResolvedValue({ introPath: "/work/intro.mp4", signOffPath: null })
+	spyOn(videoImageParts, "renderVideoImageParts").mockResolvedValue({ introPath: "/work/intro.mp4", signOffPath: null })
 	spyOn(videoChapterImages, "prepareChapterImages").mockResolvedValue({
 		chapterImages: new Map(),
 		podcastCardImages: [],
-		drawnGeneratedChapterImageCount: 5,
+		firstChapterImages: [],
+		newlyGeneratedChapterImageCount: 5,
 	})
 	spyOn(videoParts, "renderVideoChaptersPart").mockResolvedValue("/work/chapters.mp4")
 	spyOn(videoParts, "writeVideoFilm").mockResolvedValue(undefined)
@@ -187,7 +190,7 @@ function toFilmRowUpdates(sentQueries: SentQuery[]): SentQuery[] {
 }
 
 test("a ready film at the current render version is skipped", async () => {
-	const sentQueries = stubRenderReads(toFilmStateRow("ready", 2))
+	const sentQueries = stubRenderReads(toFilmStateRow("ready", TOPIC_PODCAST_EPISODE_VIDEO_RENDER_VERSION))
 	const { upload } = stubRenderSteps()
 	const renderResult = await renderTopicPodcastEpisodeVideo({ podcastEpisodeId: "episode-1", isPlatformBilled: true })
 	expect(renderResult).toEqual({ outcome: "skipped", reason: "ready" })
@@ -205,37 +208,48 @@ test("a new film is stored at the current render version", async () => {
 	const renderResult = await renderTopicPodcastEpisodeVideo({ podcastEpisodeId: "episode-1" })
 	expect(renderResult).toMatchObject({ outcome: "rendered", generatedChapterImageCount: 5 })
 
-	// the row is written rendering first, then ready at version 2 with its keys
+	// the row is written rendering first, then ready at the current render version with its keys
 	expect(toFilmRowWrite(sentQueries)?.values).toContain("rendering")
 	const [readyUpdate] = toFilmRowUpdates(sentQueries)
 	expect(readyUpdate?.text).toContain('"render_version" = $')
 	expect(readyUpdate?.values).toContain("ready")
-	expect(readyUpdate?.values).toContain(2)
-	expect(readyUpdate?.values).toContain("episodes/episode-1/video/chapters-v2.mp4")
-	expect(readyUpdate?.values).toContain("episodes/episode-1/video/film-image-1-v2.mp4")
+	expect(readyUpdate?.values).toContain(TOPIC_PODCAST_EPISODE_VIDEO_RENDER_VERSION)
+	expect(readyUpdate?.values).toContain(
+		`episodes/episode-1/video/chapters-v${TOPIC_PODCAST_EPISODE_VIDEO_RENDER_VERSION}.mp4`,
+	)
+	expect(readyUpdate?.values).toContain(
+		`episodes/episode-1/video/film-image-1-v${TOPIC_PODCAST_EPISODE_VIDEO_RENDER_VERSION}.mp4`,
+	)
 })
 
 // a ready film below the current version is rendered again while its row stays ready, then its files are swapped
 test("a ready film below the current render version is rendered again and swapped", async () => {
 	const sentQueries = stubRenderReads(toFilmStateRow("ready", 1))
 	const { deleteObjects } = stubRenderSteps()
-	const drawOwnImage = spyOn(topicPodcastEpisodeVideoImage, "drawTopicPodcastEpisodeVideoImage")
+	const drawOwnImage = spyOn(topicPodcastEpisodeVideoImage, "generateTopicPodcastEpisodeVideoImage")
 	const renderResult = await renderTopicPodcastEpisodeVideo({ podcastEpisodeId: "episode-1", isPlatformBilled: true })
 	expect(renderResult).toMatchObject({ outcome: "rendered" })
 
-	// the film keeps the image it shows, and the swapped film's files are never deleted
+	// the film keeps the image it shows, and of its stored files only the chapter images in the first style are deleted
 	expect(drawOwnImage).not.toHaveBeenCalled()
-	expect(deleteObjects).not.toHaveBeenCalled()
+	expect(deleteObjects).toHaveBeenCalledTimes(1)
+	const deletedKeys: string[] = deleteObjects.mock.calls[0]?.[0] ?? []
+	expect(deletedKeys).toContain("episodes/episode-1/video/chapter-0-image.jpg")
+	expect(deletedKeys.every((deletedKey) => /\/chapter-\d+-image(-\d+)?\.jpg$/.test(deletedKey))).toBe(true)
 
-	// the row is never written rendering, and one update swaps the keys only while the row is ready below version 2
+	// the row is never written rendering, and one update swaps the keys only while the row is ready below the current render version
 	expect(toFilmRowWrite(sentQueries)).toBeUndefined()
 	const [swapUpdate, ...otherUpdates] = toFilmRowUpdates(sentQueries)
 	expect(otherUpdates).toEqual([])
 	expect(swapUpdate?.text).toContain('"render_version" < $')
 	expect(swapUpdate?.text).toContain('"status" = $')
 	expect(swapUpdate?.values).not.toContain("rendering")
-	expect(swapUpdate?.values).toContain("episodes/episode-1/video/intro-image-1-v2.mp4")
-	expect(swapUpdate?.values).toContain("episodes/episode-1/video/captions-v2.vtt")
+	expect(swapUpdate?.values).toContain(
+		`episodes/episode-1/video/intro-image-1-v${TOPIC_PODCAST_EPISODE_VIDEO_RENDER_VERSION}.mp4`,
+	)
+	expect(swapUpdate?.values).toContain(
+		`episodes/episode-1/video/captions-v${TOPIC_PODCAST_EPISODE_VIDEO_RENDER_VERSION}.vtt`,
+	)
 
 	// the replaced files are scheduled for deletion, the old captions and the old film among them
 	const replacedDeletion = sentQueries.find(
@@ -263,7 +277,9 @@ test("a failed re-render leaves the film row unchanged and deletes its uploads",
 	// the render throws an error
 	const render = renderTopicPodcastEpisodeVideo({ podcastEpisodeId: "episode-1", isPlatformBilled: true })
 	await expect(render).rejects.toThrow("the bucket is down")
-	expect(deleteObjects).toHaveBeenCalledWith(["episodes/episode-1/video/intro-image-1-v2.mp4"])
+	expect(deleteObjects).toHaveBeenCalledWith([
+		`episodes/episode-1/video/intro-image-1-v${TOPIC_PODCAST_EPISODE_VIDEO_RENDER_VERSION}.mp4`,
+	])
 	expect(toFilmRowWrite(sentQueries)).toBeUndefined()
 	expect(toFilmRowUpdates(sentQueries)).toEqual([])
 })
@@ -287,6 +303,6 @@ test("a re-render with missing inputs records the failed render version and keep
 	expect(toFilmRowWrite(sentQueries)).toBeUndefined()
 	const [failedVersionUpdate] = toFilmRowUpdates(sentQueries)
 	expect(failedVersionUpdate?.text).toContain('set "failed_render_version" = $')
-	expect(failedVersionUpdate?.values).toContain(2)
+	expect(failedVersionUpdate?.values).toContain(TOPIC_PODCAST_EPISODE_VIDEO_RENDER_VERSION)
 	expect(failedVersionUpdate?.values).not.toContain("failed")
 })

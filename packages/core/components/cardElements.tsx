@@ -7,7 +7,8 @@ import type { ComponentType, ReactNode } from "react"
 
 export type CardElements = {
 	Card: ComponentType<{ path: string; label: string; className: string; onOpen?: () => void; children: ReactNode }>
-	Image: ComponentType<{ image: TopicImageUrls | null; name: string }>
+	// isPending pulses the empty frame of an image still to be drawn
+	Image: ComponentType<{ image: TopicImageUrls | null; name: string; isPending?: boolean }>
 	Row: ComponentType<{ className: string; children: ReactNode }>
 	Reactions: ComponentType<{ count: number }>
 }

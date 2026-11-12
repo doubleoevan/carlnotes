@@ -2,7 +2,7 @@ import type { BillingState } from "@carlnotes/contracts/profiles"
 import { setStoreOffering } from "@carlnotes/core/stores/purchaseOffersStore"
 import type { Meta, StoryObj } from "@storybook/react-native"
 import { View } from "react-native"
-import { PlanButton } from "./AccountBudget"
+import { PlanButton } from "./AccountPlan"
 
 // a free user's billing state, which each story changes
 const FREE_BILLING: BillingState = {
@@ -26,7 +26,7 @@ const meta: Meta<typeof PlanButton> = {
 	title: "Account/PlanButton",
 	component: PlanButton,
 	args: { billing: FREE_BILLING },
-	parameters: { webReference: "apps/web/src/components/account/AccountBudget.tsx PlanButton at 375px" },
+	parameters: { webReference: "apps/web/src/components/account/AccountPlan.tsx PlanButton at 375px" },
 	beforeEach: () => {
 		setStoreOffering(FULL_STORE_OFFERING)
 	},

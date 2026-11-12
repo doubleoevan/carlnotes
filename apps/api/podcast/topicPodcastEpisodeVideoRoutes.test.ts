@@ -1,19 +1,16 @@
-// the podcast episode film routes: the film and captions urls behind the access check, the rebuild a stale film
-// starts, and a user's choice to open or close Topic Cinema
+// the podcast episode film routes: the film and captions urls behind the access check, and the rebuild that a stale
+// film starts
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
-import { restoreConnectionPool, stubConnectionPool, toTableRow } from "@carlnotes/db/connectionPoolStub"
+import { restoreConnectionPool, stubConnectionPool } from "@carlnotes/db/connectionPoolStub"
 import * as monthlyBudgetCutoffs from "@carlnotes/db/monthlyBudgetCutoffs"
 import * as redisRateLimits from "@carlnotes/db/redisRateLimits"
-import { topics } from "@carlnotes/db/schema/topics"
 import * as storage from "@carlnotes/db/store"
 import * as temporalClient from "@carlnotes/pipeline/temporalClient"
-import * as authorization from "../authorization"
 import * as viewerCounts from "../counts/viewerCounts"
 import { toSignedInApp } from "../testSession"
 import type { PodcastEpisodeRow, TopicRow } from "./podcastEpisodeRows"
 import * as episodeRows from "./podcastEpisodeRows"
 import { startStaleFilmRebuild, topicPodcastEpisodeVideosRoute } from "./topicPodcastEpisodeVideoRoutes"
-import { isTopicPodcastEpisodeVideoSectionOpen } from "./topicPodcastEpisodeVideos"
 
 // a published podcast episode with no image of its own, and its topic, which shows the image "image-new"
 const podcastEpisodeRow: PodcastEpisodeRow = {
@@ -175,83 +172,4 @@ test("a film with its own image rebuilds for that image alone, never for its pod
 	const app = toSignedInApp(topicPodcastEpisodeVideosRoute, "listener")
 	expect((await app.request("/episodes/episode-1/video.mp4", jsonRequest)).status).toBe(200)
 	expect(rebuild).toHaveBeenCalledWith("episode-1")
-})
-
-test("the section choice rejects a visitor and a topic the user cannot view, and saves the user's choice", async () => {
-	// a visitor is a 401
-	const payload = { method: "PUT", body: JSON.stringify({ isOpen: false, podcastEpisodeId: "episode-1" }) }
-	const request = { ...payload, headers: { "Content-Type": "application/json" } }
-	expect((await topicPodcastEpisodeVideosRoute.request("/topics/topic-1/video-section", request)).status).toBe(401)
-
-	// a topic the user cannot view is a 404
-	const sentQueries = stubConnectionPool((sentQuery) =>
-		sentQuery.text.startsWith("select") ? [toTableRow(topics, { id: "topic-1", ownerId: "owner" })] : [],
-	)
-	const isAllowed = spyOn(authorization, "isAllowed").mockResolvedValue(false)
-	const app = toSignedInApp(topicPodcastEpisodeVideosRoute, "listener")
-	expect((await app.request("/topics/topic-1/video-section", request)).status).toBe(404)
-
-	// a topic the user can view saves the choice with the film it was made on, a published podcast episode of the topic
-	isAllowed.mockResolvedValue(true)
-	expect((await app.request("/topics/topic-1/video-section", request)).status).toBe(200)
-	const upsert = sentQueries.find((sentQuery) => sentQuery.text.startsWith("insert"))
-	expect(upsert?.text).toContain('on conflict ("user_id","topic_id") do update')
-	expect(upsert?.values).toEqual(expect.arrayContaining(["listener", "topic-1", false, "episode-1"]))
-})
-
-test("the section choice is not found for an id that is no published podcast episode of the topic, and saves nothing", async () => {
-	// the topic opens for the user, and the podcast episode read finds no published one of this topic
-	const sentQueries = stubConnectionPool((sentQuery) =>
-		sentQuery.text.includes('from "topics"') ? [toTableRow(topics, { id: "topic-1", ownerId: "owner" })] : [],
-	)
-	spyOn(authorization, "isAllowed").mockResolvedValue(true)
-	const app = toSignedInApp(topicPodcastEpisodeVideosRoute, "listener")
-
-	// a malformed id and another topic's podcast episode are both a 404
-	for (const podcastEpisodeId of ["not-an-id", "episode-of-another-topic"]) {
-		const response = await app.request("/topics/topic-1/video-section", {
-			method: "PUT",
-			body: JSON.stringify({ isOpen: true, podcastEpisodeId }),
-			headers: { "Content-Type": "application/json" },
-		})
-		expect(response.status).toBe(404)
-	}
-
-	// the read names the id, the topic, and the published status, and no choice is saved
-	const podcastEpisodeRead = sentQueries.find((sentQuery) => sentQuery.text.includes('from "episodes"'))
-	expect(podcastEpisodeRead?.values).toEqual(["not-an-id", "topic-1", "published"])
-	expect(sentQueries.some((sentQuery) => sentQuery.text.startsWith("insert"))).toBe(false)
-})
-
-// answer the two section reads: the saved choice and the user's plays of the latest film
-function stubSectionReads(savedSectionRow: unknown[] | null, playCount: number): void {
-	stubConnectionPool((sentQuery) => {
-		if (sentQuery.text.includes('from "topic_podcast_episode_video_sections"')) {
-			return savedSectionRow ? [savedSectionRow] : []
-		}
-		return [[playCount]]
-	})
-}
-
-test("Topic Cinema opens for an unseen film, keeps a choice on the latest film, and reopens for a newer film", async () => {
-	// a visitor sees it open
-	const sectionOptions = { topicId: "topic-1", latestPodcastEpisodeId: "episode-2", userId: "listener" }
-	expect(await isTopicPodcastEpisodeVideoSectionOpen({ ...sectionOptions, userId: null })).toBe(true)
-
-	// an unseen film opens, and a played one stays closed
-	stubSectionReads(null, 0)
-	expect(await isTopicPodcastEpisodeVideoSectionOpen(sectionOptions)).toBe(true)
-	restoreConnectionPool()
-	stubSectionReads(null, 1)
-	expect(await isTopicPodcastEpisodeVideoSectionOpen(sectionOptions)).toBe(false)
-
-	// a choice saved on the latest film stands, even if the film is unplayed
-	restoreConnectionPool()
-	stubSectionReads([false, "episode-2"], 0)
-	expect(await isTopicPodcastEpisodeVideoSectionOpen(sectionOptions)).toBe(false)
-
-	// a section closed on an older film reopens for the newer unplayed one
-	restoreConnectionPool()
-	stubSectionReads([false, "episode-1"], 0)
-	expect(await isTopicPodcastEpisodeVideoSectionOpen(sectionOptions)).toBe(true)
 })

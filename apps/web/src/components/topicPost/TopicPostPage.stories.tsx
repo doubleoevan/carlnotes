@@ -1,4 +1,4 @@
-// the Topic Post page: a published post with and without a summary, and the page at the largest text size
+// the Topic Post page: a published Topic Post with and without a summary, and the page at the largest text size
 import { TopicPostPage } from "@carlnotes/core/components/TopicPostPage"
 import { TOPIC_POST_DISCUSSION_STORY } from "@carlnotes/core/lib/topicPostStories"
 import type { Meta, StoryObj } from "@storybook/tanstack-react"
@@ -47,7 +47,8 @@ export const Default: Story = {
 	},
 }
 
-// the count the comment thread reports replaces the one the post came with, and an edited post says so last
+// the count the comment thread reports replaces the one the Topic Post came with, and an edited Topic Post
+// says so last
 export const EditedWithOneComment: Story = {
 	args: {
 		topicPost: { ...TOPIC_POST_DISCUSSION_STORY, editedAt: "2026-11-03T16:05:00.000Z" },
@@ -59,13 +60,16 @@ export const EditedWithOneComment: Story = {
 	},
 }
 
-// a post whose summary is not written yet shows no discussion yet
+// a Topic Post whose summary is not written yet shows no discussion yet
 export const NoSummary: Story = {
 	args: { topicPost: { ...TOPIC_POST_DISCUSSION_STORY, summary: null, discussion: null } },
 	play: async ({ canvas }) => {
 		await expect(canvas.queryByText("Coffee Break Discussion")).toBeNull()
 	},
 }
+
+// a Topic Post whose image is still to be drawn pulses its empty header frame
+export const PendingImage: Story = { args: { topicPost: { ...TOPIC_POST_DISCUSSION_STORY, image: null } } }
 
 // at twice the text size the page still fits its width, with nothing cut off
 export const LargestTextSize: Story = {

@@ -1,6 +1,6 @@
 {
 	"appVersion": "0.1.0",
-	"frozenAt": "2026-11-10",
+	"frozenAt": "2026-11-12",
 	"routes": {
 		"activityClient.fetchActivity": {
 			"method": "GET",
@@ -7607,6 +7607,533 @@
 				},
 				"required": [
 					"ok"
+				]
+			}
+		},
+		"dashboardClient.fetchDashboard": {
+			"method": "GET",
+			"path": "/api/dashboards/:dashboardKind/:subjectId",
+			"request": {
+				"params": {
+					"type": "object",
+					"properties": {
+						"dashboardKind": {
+							"type": "string",
+							"enum": [
+								"topicDashboard",
+								"podcastDashboard",
+								"teamDashboard"
+							]
+						},
+						"subjectId": {
+							"type": "string"
+						}
+					},
+					"required": [
+						"dashboardKind",
+						"subjectId"
+					]
+				},
+				"query": {
+					"type": "object",
+					"properties": {
+						"itemKind": {
+							"type": "string",
+							"enum": [
+								"topic",
+								"finding",
+								"topicPost"
+							]
+						},
+						"format": {
+							"type": "string",
+							"enum": [
+								"audio",
+								"video",
+								"both"
+							]
+						}
+					}
+				}
+			},
+			"response": {
+				"type": "object",
+				"properties": {
+					"subject": {
+						"oneOf": [
+							{
+								"type": "object",
+								"properties": {
+									"subjectKind": {
+										"type": "string",
+										"const": "user"
+									},
+									"user": {
+										"type": "object",
+										"properties": {
+											"userId": {
+												"type": "string"
+											},
+											"username": {
+												"type": "string"
+											},
+											"avatarSource": {
+												"type": [
+													"string",
+													"null"
+												]
+											},
+											"avatarVersion": {
+												"type": [
+													"string",
+													"null"
+												]
+											}
+										},
+										"required": [
+											"userId",
+											"username",
+											"avatarSource",
+											"avatarVersion"
+										]
+									}
+								},
+								"required": [
+									"subjectKind",
+									"user"
+								]
+							},
+							{
+								"type": "object",
+								"properties": {
+									"subjectKind": {
+										"type": "string",
+										"const": "team"
+									},
+									"team": {
+										"type": "object",
+										"properties": {
+											"teamId": {
+												"type": "string"
+											},
+											"name": {
+												"type": "string"
+											},
+											"avatarVersion": {
+												"type": [
+													"string",
+													"null"
+												]
+											}
+										},
+										"required": [
+											"teamId",
+											"name",
+											"avatarVersion"
+										]
+									}
+								},
+								"required": [
+									"subjectKind",
+									"team"
+								]
+							}
+						]
+					},
+					"day": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"summary": {
+						"oneOf": [
+							{
+								"type": "object",
+								"properties": {
+									"dashboardKind": {
+										"type": "string",
+										"const": "topicDashboard"
+									},
+									"topicCount": {
+										"type": "number"
+									},
+									"findingCount": {
+										"type": "number"
+									},
+									"topicPostCount": {
+										"type": "number"
+									},
+									"viewerCount": {
+										"type": "number"
+									}
+								},
+								"required": [
+									"dashboardKind",
+									"topicCount",
+									"findingCount",
+									"topicPostCount",
+									"viewerCount"
+								]
+							},
+							{
+								"type": "object",
+								"properties": {
+									"dashboardKind": {
+										"type": "string",
+										"const": "podcastDashboard"
+									},
+									"podcastCount": {
+										"type": "number"
+									},
+									"podcastEpisodeCount": {
+										"type": "number"
+									},
+									"podcastPlayCount": {
+										"type": "number"
+									},
+									"filmPlayCount": {
+										"type": "number"
+									}
+								},
+								"required": [
+									"dashboardKind",
+									"podcastCount",
+									"podcastEpisodeCount",
+									"podcastPlayCount",
+									"filmPlayCount"
+								]
+							},
+							{
+								"type": "object",
+								"properties": {
+									"dashboardKind": {
+										"type": "string",
+										"const": "teamDashboard"
+									},
+									"topicCount": {
+										"type": "number"
+									},
+									"findingCount": {
+										"type": "number"
+									},
+									"topicPostCount": {
+										"type": "number"
+									},
+									"memberCount": {
+										"type": "number"
+									},
+									"viewerCount": {
+										"type": "number"
+									}
+								},
+								"required": [
+									"dashboardKind",
+									"topicCount",
+									"findingCount",
+									"topicPostCount",
+									"memberCount",
+									"viewerCount"
+								]
+							}
+						]
+					},
+					"paragraph": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"imageUrl": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"series": {
+						"anyOf": [
+							{
+								"type": "object",
+								"properties": {
+									"bars": {
+										"type": "array",
+										"items": {
+											"type": "object",
+											"properties": {
+												"itemId": {
+													"type": "string"
+												},
+												"title": {
+													"type": "string"
+												},
+												"path": {
+													"type": "string"
+												},
+												"count": {
+													"type": "number"
+												},
+												"podcastPlayCount": {
+													"type": "number"
+												},
+												"filmPlayCount": {
+													"type": "number"
+												}
+											},
+											"required": [
+												"itemId",
+												"title",
+												"path",
+												"count"
+											]
+										}
+									},
+									"slices": {
+										"type": "array",
+										"items": {
+											"type": "object",
+											"properties": {
+												"key": {
+													"type": "string"
+												},
+												"title": {
+													"type": "string"
+												},
+												"path": {
+													"type": [
+														"string",
+														"null"
+													]
+												},
+												"count": {
+													"type": "number"
+												},
+												"podcastPlayCount": {
+													"type": "number"
+												},
+												"filmPlayCount": {
+													"type": "number"
+												}
+											},
+											"required": [
+												"key",
+												"title",
+												"path",
+												"count"
+											]
+										}
+									},
+									"trends": {
+										"type": "object",
+										"propertyNames": {
+											"type": "string"
+										},
+										"additionalProperties": {
+											"type": "object",
+											"properties": {
+												"days": {
+													"type": "array",
+													"items": {
+														"type": "string"
+													}
+												},
+												"daysPerPoint": {
+													"type": "number"
+												},
+												"lines": {
+													"type": "array",
+													"items": {
+														"type": "object",
+														"properties": {
+															"key": {
+																"type": "string"
+															},
+															"title": {
+																"type": "string"
+															},
+															"path": {
+																"type": [
+																	"string",
+																	"null"
+																]
+															},
+															"counts": {
+																"type": "array",
+																"items": {
+																	"type": "number"
+																}
+															},
+															"podcastPlayCounts": {
+																"type": "array",
+																"items": {
+																	"type": "number"
+																}
+															},
+															"filmPlayCounts": {
+																"type": "array",
+																"items": {
+																	"type": "number"
+																}
+															}
+														},
+														"required": [
+															"key",
+															"title",
+															"path",
+															"counts"
+														]
+													}
+												}
+											},
+											"required": [
+												"days",
+												"daysPerPoint",
+												"lines"
+											]
+										}
+									},
+									"words": {
+										"type": "array",
+										"items": {
+											"type": "object",
+											"properties": {
+												"word": {
+													"type": "string"
+												},
+												"count": {
+													"type": "number"
+												},
+												"podcastPlayCount": {
+													"type": "number"
+												},
+												"filmPlayCount": {
+													"type": "number"
+												}
+											},
+											"required": [
+												"word",
+												"count"
+											]
+										}
+									},
+									"pins": {
+										"type": "array",
+										"items": {
+											"type": "object",
+											"properties": {
+												"placeLevel": {
+													"type": "string",
+													"enum": [
+														"city",
+														"country"
+													]
+												},
+												"country": {
+													"type": "string"
+												},
+												"region": {
+													"type": [
+														"string",
+														"null"
+													]
+												},
+												"city": {
+													"type": [
+														"string",
+														"null"
+													]
+												},
+												"latitude": {
+													"type": [
+														"number",
+														"null"
+													]
+												},
+												"longitude": {
+													"type": [
+														"number",
+														"null"
+													]
+												},
+												"peopleCount": {
+													"type": "number"
+												},
+												"count": {
+													"type": "number"
+												},
+												"podcastPlayCount": {
+													"type": "number"
+												},
+												"filmPlayCount": {
+													"type": "number"
+												},
+												"items": {
+													"type": "array",
+													"items": {
+														"type": "object",
+														"properties": {
+															"itemId": {
+																"type": "string"
+															},
+															"title": {
+																"type": "string"
+															},
+															"path": {
+																"type": "string"
+															},
+															"count": {
+																"type": "number"
+															},
+															"podcastPlayCount": {
+																"type": "number"
+															},
+															"filmPlayCount": {
+																"type": "number"
+															}
+														},
+														"required": [
+															"itemId",
+															"title",
+															"path",
+															"count"
+														]
+													}
+												}
+											},
+											"required": [
+												"placeLevel",
+												"country",
+												"region",
+												"city",
+												"latitude",
+												"longitude",
+												"peopleCount",
+												"count",
+												"items"
+											]
+										}
+									}
+								},
+								"required": [
+									"bars",
+									"slices",
+									"trends",
+									"words",
+									"pins"
+								]
+							},
+							{
+								"type": "null"
+							}
+						]
+					}
+				},
+				"required": [
+					"subject",
+					"day",
+					"summary",
+					"paragraph",
+					"imageUrl",
+					"series"
 				]
 			}
 		},
@@ -15792,50 +16319,6 @@
 				]
 			}
 		},
-		"podcastEpisodeClient.sendTopicPodcastEpisodeVideoSection": {
-			"method": "PUT",
-			"path": "/api/topics/:id/video-section",
-			"request": {
-				"params": {
-					"type": "object",
-					"properties": {
-						"id": {
-							"type": "string"
-						}
-					},
-					"required": [
-						"id"
-					]
-				},
-				"body": {
-					"type": "object",
-					"properties": {
-						"isOpen": {
-							"type": "boolean"
-						},
-						"podcastEpisodeId": {
-							"type": "string"
-						}
-					},
-					"required": [
-						"isOpen",
-						"podcastEpisodeId"
-					]
-				}
-			},
-			"response": {
-				"type": "object",
-				"properties": {
-					"ok": {
-						"type": "boolean",
-						"const": true
-					}
-				},
-				"required": [
-					"ok"
-				]
-			}
-		},
 		"podcastEpisodeClient.uploadPodcastEpisodeImageBody": {
 			"method": "POST",
 			"path": "/api/episodes/:id/image",
@@ -17797,7 +18280,7 @@
 						},
 						"sort": {
 							"default": "relevant",
-							"description": "relevant ranks by how well the name matches, newest by date, and trending by viewers, listeners, and views.",
+							"description": "relevant ranks by how well the name matches, newest by date, and trending by visitors, listeners, and views.",
 							"type": "string",
 							"enum": [
 								"relevant",
@@ -27073,14 +27556,10 @@
 															"isCompleted",
 															"isVoiceChatConfigured"
 														]
-													},
-													"isOpen": {
-														"type": "boolean"
 													}
 												},
 												"required": [
-													"podcastEpisode",
-													"isOpen"
+													"podcastEpisode"
 												]
 											},
 											{
@@ -33291,6 +33770,34 @@
 				]
 			}
 		},
+		"viewerCountsClient.fetchTopicPostViewerCounts": {
+			"method": "GET",
+			"path": "/api/counts/topicPosts/:id",
+			"request": {
+				"params": {
+					"type": "object",
+					"properties": {
+						"id": {
+							"type": "string"
+						}
+					},
+					"required": [
+						"id"
+					]
+				}
+			},
+			"response": {
+				"type": "object",
+				"properties": {
+					"viewerCount": {
+						"type": "number"
+					}
+				},
+				"required": [
+					"viewerCount"
+				]
+			}
+		},
 		"viewerCountsClient.sendProfileView": {
 			"method": "POST",
 			"path": "/api/profiles/:userId/view",
@@ -33311,6 +33818,23 @@
 		"viewerCountsClient.sendTeamView": {
 			"method": "POST",
 			"path": "/api/teams/:id/view",
+			"request": {
+				"params": {
+					"type": "object",
+					"properties": {
+						"id": {
+							"type": "string"
+						}
+					},
+					"required": [
+						"id"
+					]
+				}
+			}
+		},
+		"viewerCountsClient.sendTopicPostView": {
+			"method": "POST",
+			"path": "/api/topicPosts/:id/view",
 			"request": {
 				"params": {
 					"type": "object",

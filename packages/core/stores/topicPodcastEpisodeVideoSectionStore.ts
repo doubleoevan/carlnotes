@@ -1,13 +1,18 @@
 // Topic Cinema on the open topic page: the film it shows, whether it is open, and the requests to scroll to it. the
-// topic read decides the first render, and a user's open or close choice saves with the latest film
-import { sendTopicPodcastEpisodeVideoSection } from "@carlnotes/client/podcastEpisodeClient"
+// section opens on each page load
 import type { PodcastEpisode } from "@carlnotes/contracts/podcast"
-import { isUserSignedIn } from "./podcastEpisodeListenStore"
+import { useEffect } from "react"
 import { playTopicPodcastEpisodeVideo } from "./podcastEpisodePlayerStore"
 import { toStoreListeners } from "./storeListeners"
 
-// Topic Cinema as the topic read returns it: the latest film and whether the section opens
-export type TopicPodcastEpisodeVideoSection = { podcastEpisode: PodcastEpisode; isOpen: boolean }
+// Topic Cinema as the topic read returns it: the latest film
+export type TopicPodcastEpisodeVideoSection = { podcastEpisode: PodcastEpisode }
+
+// Topic Cinema on the page: the film it shows, whether it is open, and the count of scroll requests
+type ShownTopicPodcastEpisodeVideoSection = TopicPodcastEpisodeVideoSection & {
+	isOpen: boolean
+	scrollRequestCount: number
+}
 
 // the changes a user made on one topic's page: another film from Coffee Break films, a toggle, and how many times a
 // row asked the section to scroll into view
@@ -18,7 +23,7 @@ type TopicPodcastEpisodeVideoSectionChange = {
 	scrollRequestCount: number
 }
 
-// the open page's changes, which reset on another topic
+// the open page's changes, which reset on another topic and when the page closes
 let sectionChange: TopicPodcastEpisodeVideoSectionChange | null = null
 const { publish, useStoreVersion } = toStoreListeners()
 
@@ -28,45 +33,48 @@ const { publish, useStoreVersion } = toStoreListeners()
 export function useTopicPodcastEpisodeVideoSection(
 	topicId: string,
 	topicPodcastEpisodeVideoSection: TopicPodcastEpisodeVideoSection,
-): TopicPodcastEpisodeVideoSection & { scrollRequestCount: number } {
+): ShownTopicPodcastEpisodeVideoSection {
+	// the page's changes end with the page, so the section opens again on the next visit
 	useStoreVersion()
+	useEffect(() => () => clearTopicPodcastEpisodeVideoSectionChange(topicId), [topicId])
 	return toTopicPodcastEpisodeVideoSection(topicId, topicPodcastEpisodeVideoSection)
 }
 
 /**
- * Returns Topic Cinema on a topic's page now: the read's section, with this page's changes over it.
+ * Drops the changes made on a topic's page once the page closes, so its next visit shows the latest film, open.
+ */
+export function clearTopicPodcastEpisodeVideoSectionChange(topicId: string): void {
+	if (sectionChange?.topicId === topicId) {
+		sectionChange = null
+	}
+}
+
+/**
+ * Returns Topic Cinema on a topic's page now: the read's film in an open section, with this page's changes over it.
  */
 export function toTopicPodcastEpisodeVideoSection(
 	topicId: string,
 	topicPodcastEpisodeVideoSection: TopicPodcastEpisodeVideoSection,
-): TopicPodcastEpisodeVideoSection & { scrollRequestCount: number } {
+): ShownTopicPodcastEpisodeVideoSection {
 	const topicSectionChange = sectionChange?.topicId === topicId ? sectionChange : null
 	return {
 		podcastEpisode: topicSectionChange?.podcastEpisode ?? topicPodcastEpisodeVideoSection.podcastEpisode,
-		isOpen: topicSectionChange?.isOpen ?? topicPodcastEpisodeVideoSection.isOpen,
+		isOpen: topicSectionChange?.isOpen ?? true,
 		scrollRequestCount: topicSectionChange?.scrollRequestCount ?? 0,
 	}
 }
 
-// the topic, the latest film's podcast episode, and the user's choice
-type SetTopicPodcastEpisodeVideoSectionOpenOptions = {
-	topicId: string
-	latestPodcastEpisodeId: string
-	isOpen: boolean
-}
-
 /**
- * Opens or closes Topic Cinema, and saves a signed-in user's choice with the latest film.
+ * Opens or closes Topic Cinema on the topic's page.
  */
 export function setTopicPodcastEpisodeVideoSectionOpen({
 	topicId,
-	latestPodcastEpisodeId,
 	isOpen,
-}: SetTopicPodcastEpisodeVideoSectionOpenOptions): void {
+}: {
+	topicId: string
+	isOpen: boolean
+}): void {
 	updateSectionChange(topicId, { isOpen })
-	if (isUserSignedIn()) {
-		void sendTopicPodcastEpisodeVideoSection({ topicId, podcastEpisodeId: latestPodcastEpisodeId, isOpen })
-	}
 }
 
 /**

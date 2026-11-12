@@ -6,6 +6,7 @@ import { Heart } from "lucide-react-native"
 import type { FunctionComponent } from "react"
 import { View } from "react-native"
 import { AnchorLink } from "@/components/common/AnchorLink"
+import { SkeletonPulse } from "@/components/common/SkeletonPulse"
 import { Icon } from "@/components/primitives/icon"
 import { Text } from "@/components/primitives/text"
 import { TopicImage } from "@/components/primitives/topic-image"
@@ -18,7 +19,10 @@ export const CARD_ELEMENTS: CardElements & { Heading: FunctionComponent<{ childr
 			{children}
 		</AnchorLink>
 	),
-	Image: ({ image, name }) => <TopicImage image={image} size="page" name={name} className="rounded-b-none" />,
+	Image: ({ image, name, isPending }) => {
+		const topicImage = <TopicImage image={image} size="page" name={name} className="rounded-b-none" />
+		return isPending ? <SkeletonPulse>{topicImage}</SkeletonPulse> : topicImage
+	},
 	Heading: ({ children }) => (
 		<Text style={toTypeRoleStyle("sectionHeading")} className="text-foreground">
 			{children}

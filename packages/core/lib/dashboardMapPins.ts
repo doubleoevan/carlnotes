@@ -7,8 +7,9 @@ import type { DashboardPoint } from "./dashboardCharts"
 import { sumDashboardCounts, sumPeopleCounts, toDashboardCountFields } from "./dashboardCounts"
 import { groupBy } from "./groupBy"
 
-// the map's box, three wide by two high up to its largest height in pixels, and where it starts, the whole world
-export const DASHBOARD_MAP_BOX = { aspectRatio: 3 / 2, maxHeight: 440 }
+// the map's box, the full width at three wide by two high up to its largest height in pixels, and where it starts,
+// the whole world
+export const DASHBOARD_MAP_BOX = { width: "100%", aspectRatio: 3 / 2, maxHeight: 440 }
 export const DASHBOARD_MAP_CENTER = { latitude: 20, longitude: 0 }
 
 // the space in pixels a zoom to a pin's places keeps around them, and the world's width in pixels at zoom 0

@@ -6,6 +6,7 @@ import { cn } from "@carlnotes/nightshift/classNames"
 import { Camera } from "lucide-react"
 import { TOPIC_IMAGE_FRAME_CLASS, TopicImage } from "@/components/primitives/topic-image"
 import { HEADER_TOPIC_IMAGE_CLASS, TOPIC_HEADER_AREA_CLASSES } from "@/lib/pageHeaderClasses"
+import { PENDING_IMAGE_CLASS } from "@/lib/styleClasses"
 
 // the image, the button's accessible label, whether it is disabled, its click, the button's layout classes, and the
 // image's own classes inside its frame
@@ -51,17 +52,23 @@ export function TopicImageButton({
 // the header image's place in the topic header grid, at the header's size
 const HEADER_IMAGE_CLASS = cn(TOPIC_HEADER_AREA_CLASSES.image, HEADER_TOPIC_IMAGE_CLASS)
 
-// the image, and for an editor, the button's label and the click that opens the image dialog
-type TopicHeaderImageProps = Pick<TopicImageProps, "image" | "name"> & { editLabel: string; onEdit?: () => void }
+// the image, whether it is still to be drawn, and for an editor, the button's label and the click that opens the image
+// dialog
+type TopicHeaderImageProps = Pick<TopicImageProps, "image" | "name"> & {
+	isPending?: boolean
+	editLabel: string
+	onEdit?: () => void
+}
 
 /**
- * Renders a topic page's or a podcast episode page's header image, as the image button if the user may edit it.
+ * Renders a topic page's, a podcast episode page's, or a Topic Post page's header image, as the image button if the
+ * user may edit it, pulsing while it is still to be drawn.
  */
-export function TopicHeaderImage({ image, name, editLabel, onEdit }: TopicHeaderImageProps) {
+export function TopicHeaderImage({ image, name, isPending, editLabel, onEdit }: TopicHeaderImageProps) {
+	const pendingImageClass = isPending && PENDING_IMAGE_CLASS
 	if (!onEdit) {
-		return (
-			<TopicImage image={image} size="page" name={name} className={cn(HEADER_IMAGE_CLASS, TOPIC_IMAGE_FRAME_CLASS)} />
-		)
+		const imageClass = cn(HEADER_IMAGE_CLASS, TOPIC_IMAGE_FRAME_CLASS, pendingImageClass)
+		return <TopicImage image={image} size="page" name={name} className={imageClass} />
 	}
 	return (
 		<TopicImageButton
@@ -71,6 +78,7 @@ export function TopicHeaderImage({ image, name, editLabel, onEdit }: TopicHeader
 			label={editLabel}
 			onClick={onEdit}
 			className={HEADER_IMAGE_CLASS}
+			imageClassName={pendingImageClass || undefined}
 		/>
 	)
 }

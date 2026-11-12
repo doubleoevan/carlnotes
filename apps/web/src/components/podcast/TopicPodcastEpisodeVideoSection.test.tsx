@@ -3,7 +3,7 @@
 // before the film plays, with the rendering card in the player's place while the topic's only film renders, and
 // absent for a topic with no film
 import { expect, test } from "bun:test"
-import { toPodcastEpisodeFixture } from "@carlnotes/contracts/podcastEpisodeTestFixtures"
+import { toPodcastEpisodeFixture, toTopicPodcastFixture } from "@carlnotes/contracts/podcastEpisodeTestFixtures"
 import { toTestTopicResponse } from "@carlnotes/contracts/topicFeedTestFixtures"
 import type { TopicResponse } from "@carlnotes/contracts/topics"
 import { renderWithRouter } from "@/components/chat/renderWithRouter"
@@ -20,24 +20,14 @@ const filmPodcastEpisode = toPodcastEpisodeFixture({
 	},
 })
 
-// a topic whose podcast has the film section in the given state, or none
-function toFilmTopic(topicPodcastEpisodeVideoSection: { isOpen: boolean } | null): TopicResponse {
+// a topic whose podcast has a film, or none
+function toFilmTopic(hasFilm: boolean): TopicResponse {
 	return toTestTopicResponse({
 		id: "topic-1",
-		podcast: {
-			isEnabled: true,
-			isCommentsEnabled: true,
-			hasFullPodcastEpisodes: true,
-			unpublishedPodcastEpisode: null,
-			publicFeedUrl: null,
-			seasons: [2026],
+		podcast: toTopicPodcastFixture({
 			latestSeasonPodcastEpisodes: { podcastEpisodes: [filmPodcastEpisode] },
-			canRemovePodcastEpisodes: false,
-			topicPodcastEpisodeVideoSection: topicPodcastEpisodeVideoSection && {
-				podcastEpisode: filmPodcastEpisode,
-				...topicPodcastEpisodeVideoSection,
-			},
-		},
+			topicPodcastEpisodeVideoSection: hasFilm ? { podcastEpisode: filmPodcastEpisode } : null,
+		}),
 	})
 }
 
@@ -46,9 +36,9 @@ function renderFilmSection(topic: TopicResponse): Promise<string> {
 	return renderWithRouter(<TopicPodcastEpisodeVideoSection topic={topic} onVideoRenderingPoll={() => {}} />)
 }
 
-test("an unseen film renders the section open on the film's poster, under a heading without the word video", async () => {
+test("a film renders the section open on the film's poster, under a heading without the word video", async () => {
 	// the open section, with the poster and the play button over it
-	const html = await renderFilmSection(toFilmTopic({ isOpen: true }))
+	const html = await renderFilmSection(toFilmTopic(true))
 	expect(html).toContain("Coffee Break Cinema")
 	expect(html).not.toContain("Topic Cinema")
 	expect(html).toContain('data-state="open"')
@@ -69,25 +59,19 @@ test("an unseen film renders the section open on the film's poster, under a head
 
 test("the theme song's credits sit right after the title, outside the section's toggle", async () => {
 	// the toggle's button ends at the title, and the credits' button follows the toggle's heading
-	const html = await renderFilmSection(toFilmTopic({ isOpen: true }))
+	const html = await renderFilmSection(toFilmTopic(true))
 	expect(html).toMatch(/Coffee Break Cinema<\/span><\/button><\/h3><button[^>]*aria-label="Theme song credits"/)
 	expect(html.match(/aria-label="Theme song credits"/g)).toHaveLength(1)
 })
 
-test("a saved close renders the section collapsed, with the player kept for a Coffee Break films row", async () => {
-	const html = await renderFilmSection(toFilmTopic({ isOpen: false }))
-	expect(html).toContain('data-state="closed"')
-	expect(html).toContain('aria-label="Play episode 7"')
-})
-
 test("a topic with no film renders no film section", async () => {
-	expect(await renderFilmSection(toFilmTopic(null))).toBe("")
+	expect(await renderFilmSection(toFilmTopic(false))).toBe("")
 })
 
 test("a topic whose only film is rendering renders the open section with the rendering card and no player", async () => {
 	// no ready film, and the latest podcast episode's film is rendering
 	const videoRenderingTopic = {
-		...toFilmTopic(null),
+		...toFilmTopic(false),
 		latestPodcastEpisode: toPodcastEpisodeFixture({ title: "Better beans", isVideoRendering: true }),
 	}
 	const html = await renderFilmSection(videoRenderingTopic)
@@ -106,7 +90,7 @@ test("a topic whose only film is rendering renders the open section with the ren
 
 test("a failed film on a topic with no ready film renders no film section", async () => {
 	const failedFilmTopic = {
-		...toFilmTopic(null),
+		...toFilmTopic(false),
 		latestPodcastEpisode: toPodcastEpisodeFixture({ title: "Better beans", isVideoRendering: false }),
 	}
 	expect(await renderFilmSection(failedFilmTopic)).toBe("")

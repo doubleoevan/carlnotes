@@ -1,4 +1,5 @@
-// the Topic Post card: a published post with its summary and reactions, its author's draft, and a post with neither
+// the Topic Post card: a published Topic Post with its summary and reactions, its author's draft, and a Topic Post
+// with neither
 import { fetchTopicPost } from "@carlnotes/client/topicPostClient"
 import {
 	TOPIC_POST_CARD_STORY,
@@ -14,7 +15,7 @@ const meta = {
 	title: "TopicPost/TopicPostCard",
 	component: TopicPostCard,
 	args: { topicPost: TOPIC_POST_CARD_STORY, onOpen: fn() },
-	// the info popup reads the card's post, so no story reaches the api
+	// the info popup reads the card's Topic Post, so no story reaches the api
 	beforeEach: () => {
 		mocked(fetchTopicPost).mockResolvedValue(TOPIC_POST_DISCUSSION_STORY)
 	},
@@ -24,8 +25,8 @@ const meta = {
 export default meta
 type Story = StoryObj<typeof meta>
 
-// the card as a Topic's Open Mic section shows it. the info button reads the post and opens its author, its Topic,
-// its discussion, and the summary under its label
+// the card as a Topic's Open Mic section shows it. the info button reads the Topic Post and opens its author, its
+// Topic, its discussion, and the summary under its label
 export const Default: Story = {
 	play: async ({ canvas, canvasElement }) => {
 		await canvas.getByRole("button", { name: "About this post" }).click()
@@ -39,5 +40,8 @@ export const Default: Story = {
 // the author's own draft is marked Draft in the date's place
 export const Draft: Story = { args: { topicPost: TOPIC_POST_DRAFT_CARD_STORY } }
 
-// a post with no summary and no reactions yet keeps its byline alone
+// a Topic Post with no summary and no reactions yet keeps its byline alone
 export const NoSummary: Story = { args: { topicPost: { ...TOPIC_POST_CARD_STORY, summary: null, reactionCount: 0 } } }
+
+// a published Topic Post whose image is still to be drawn pulses its empty frame
+export const PendingImage: Story = { args: { topicPost: { ...TOPIC_POST_CARD_STORY, image: null } } }

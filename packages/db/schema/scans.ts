@@ -125,6 +125,8 @@ export const resources = pgTable(
 		isUnsafe: boolean("is_unsafe").notNull().default(false),
 		// when the Resource's images were fetched for its films, with or without an image. null until a film narrates it
 		imagesFetchedAt: timestamp("images_fetched_at", { withTimezone: true }),
+		// the version of the image filter that the fetch ran under. a fetch under an older version runs again
+		imagesFilterVersion: integer("images_filter_version").notNull().default(0),
 		// created and updated timestamps
 		...timestamps(),
 	},

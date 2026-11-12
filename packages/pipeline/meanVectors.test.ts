@@ -178,14 +178,18 @@ test("marking podcast episodes removed returns the chapter image keys for each c
 	expect(scriptReadIndex).toBeGreaterThan(-1)
 	expect(scriptReadIndex).toBeLessThan(scriptClearIndex)
 
-	// the film, then each chapter's first image and its eleven numbered images
+	// the film, then in each style each chapter's first image and its eleven numbered images
 	const imageNumbers = Array.from({ length: 11 }, (_, i) => i + 1)
+	const toChapterImageKeys = (keyPrefix: string): string[] => [
+		`${keyPrefix}.jpg`,
+		...imageNumbers.map((imageNumber) => `${keyPrefix}-${imageNumber}.jpg`),
+	]
 	expect(filmKeys).toEqual([
 		"film.mp4",
-		"episodes/episode-1/video/chapter-0-image.jpg",
-		...imageNumbers.map((imageNumber) => `episodes/episode-1/video/chapter-0-image-${imageNumber}.jpg`),
-		"episodes/episode-1/video/chapter-1-image.jpg",
-		...imageNumbers.map((imageNumber) => `episodes/episode-1/video/chapter-1-image-${imageNumber}.jpg`),
+		...toChapterImageKeys("episodes/episode-1/video/chapter-0-image"),
+		...toChapterImageKeys("episodes/episode-1/video/chapter-1-image"),
+		...toChapterImageKeys("episodes/episode-1/video/chapter-0-image-s2"),
+		...toChapterImageKeys("episodes/episode-1/video/chapter-1-image-s2"),
 	])
 })
 

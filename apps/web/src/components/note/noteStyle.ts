@@ -24,7 +24,7 @@ export const NOTE_BODY_STYLE = { lineHeight: NOTE_BODY_LEADING }
 
 /**
  * The note's text: the body font at the dialog's size in the card's color, inset from the page card's edge, further
- * from the sm breakpoint up.
+ * from the sm breakpoint up, with its code blocks' text inset from their fill.
  */
 export const NOTE_BODY_CLASS =
-	"font-sans text-sm text-card-foreground px-4 sm:px-6 [&_input[type=checkbox]]:min-h-6 [&_input[type=checkbox]]:min-w-6 [&_input[type=checkbox]]:accent-primary"
+	"font-sans text-sm text-card-foreground px-4 sm:px-6 [&_codeblock]:px-3 [&_codeblock]:py-2 [&_input[type=checkbox]]:min-h-6 [&_input[type=checkbox]]:min-w-6 [&_input[type=checkbox]]:accent-primary"

@@ -62,7 +62,7 @@ const TopicPostReader = lazy(() =>
 	import("@/components/topicPost/TopicPostReader").then((readerModule) => ({ default: readerModule.TopicPostReader })),
 )
 
-// the line shown while the post's editor is on its way
+// the line shown while the Topic Post's editor is on its way
 const LOADING_LINE = <p className="text-muted-foreground mt-6 text-sm">{TOPIC_POST_LABELS.loading}</p>
 
 // the web's elements: the topic header's layout, the note's typography on a page card, and the lazy editor
@@ -74,8 +74,14 @@ export const TOPIC_POST_PAGE_ELEMENTS: TopicPostPageElements = {
 			<div className={TOPIC_HEADER_AREA_CLASSES.byline}>{children}</div>
 		</header>
 	),
-	Image: ({ image, name, onEdit }) => (
-		<TopicHeaderImage image={image} name={name} editLabel={EDIT_IMAGE_DIALOG_TITLES.topicPost} onEdit={onEdit} />
+	Image: ({ image, name, isPending, onEdit }) => (
+		<TopicHeaderImage
+			image={image}
+			name={name}
+			isPending={isPending}
+			editLabel={EDIT_IMAGE_DIALOG_TITLES.topicPost}
+			onEdit={onEdit}
+		/>
 	),
 	Title: ({ info, mentionBadge, children }) => (
 		<h1 className={cn(TOPIC_HEADER_AREA_CLASSES.title, "font-display text-2xl leading-tight text-balance sm:text-3xl")}>
@@ -118,7 +124,7 @@ export const TOPIC_POST_PAGE_ELEMENTS: TopicPostPageElements = {
 export function TopicPostPage() {
 	const { topicPostId = "" } = useParams({ strict: false })
 
-	// the post that the route loads on the server, or undefined after a browser navigation
+	// the Topic Post that the route loads on the server, or undefined after a browser navigation
 	const loadedTopicPost =
 		useMatch({
 			from: "/_layout/topics/$topicId_/$topicSlug_/posts/$topicPostId_/$postSlug",
@@ -126,7 +132,7 @@ export function TopicPostPage() {
 			select: (topicPostMatch) => topicPostMatch.loaderData?.topicPost,
 		}) ?? undefined
 
-	// the post. undefined while loading, and null if it is missing or the user may not read it
+	// the Topic Post. undefined while loading, and null if it is missing or the user may not read it
 	const [topicPost, setTopicPost] = useState<TopicPostResponse | null | undefined>(loadedTopicPost)
 	const [isEditing, setIsEditing] = useState(false)
 	const [isDeleteOpen, setIsDeleteOpen] = useState(false)
@@ -139,7 +145,7 @@ export function TopicPostPage() {
 	// the rank dialog that the actions menu opened: the home's, or the author's own profile's
 	const [openRankDialog, setOpenRankDialog] = useState<TopicPostRankDialog | null>(null)
 
-	// load in the browser unless the server already loaded this post
+	// load in the browser unless the server already loaded this Topic Post
 	const loadTopicPost = useCallback((): void => {
 		fetchTopicPost(topicPostId)
 			.then(setTopicPost)
@@ -148,11 +154,12 @@ export function TopicPostPage() {
 	useLoadInBrowser({ pageId: topicPostId, isLoadedOnServer: Boolean(loadedTopicPost), loadPage: loadTopicPost })
 	usePageTitle(topicPost ? toTopicPostTitle(topicPost) : null)
 
-	// the chat launcher opens the private chat of the post's topic, which asks about this post, while its page shows
+	// the chat launcher opens the private chat of the Topic Post's topic, which asks about this Topic Post, while its
+	// page shows
 	useRegisterChatTopicPost(topicPost?.publishedAt ? topicPost : null)
 
-	// keep the url on the post's current path, whose slug follows its title, once the url's post loads. a url that
-	// already left for another page, while that page loads, is left alone
+	// keep the url on the Topic Post's current path, whose slug follows its title, once the url's Topic Post loads. a
+	// url that already left for another page, while that page loads, is left alone
 	const navigate = useNavigate()
 	const pathname = useLocation({ select: (location) => location.pathname })
 	useEffect(() => {
@@ -175,7 +182,7 @@ export function TopicPostPage() {
 		onDelete: () => setIsDeleteOpen(true),
 	})
 
-	// the post's skeleton while it loads, or the line for a post that did not load
+	// the Topic Post's skeleton while it loads, or the line for a Topic Post that did not load
 	if (topicPost === undefined) {
 		return (
 			<main className={PAGE_CLASS}>
@@ -191,7 +198,7 @@ export function TopicPostPage() {
 		)
 	}
 
-	// delete the post and its thread, then open its topic's page. a failed delete keeps the page
+	// delete the Topic Post and its thread, then open its topic's page. a failed delete keeps the page
 	const handleDelete = async (): Promise<void> => {
 		if (await deleteTopicPost(topicPost.id)) {
 			void navigate({ to: toTopicPath({ id: topicPost.topicId, name: topicPost.topicName }) })
@@ -215,7 +222,7 @@ export function TopicPostPage() {
 				onEditImage={topicPost.canEditImage ? () => setIsImageDialogOpen(true) : undefined}
 				elements={TOPIC_POST_PAGE_ELEMENTS}
 			>
-				{/* the post's comment thread, whose first page came with the post */}
+				{/* the Topic Post's comment thread, whose first page came with the Topic Post */}
 				<SocialSection
 					target={{ kind: "post", id: topicPost.id }}
 					firstPage={topicPost.commentThread}
@@ -232,7 +239,7 @@ export function TopicPostPage() {
 				)}
 			</SharedTopicPostPage>
 
-			{/* the actions menu's share dialog, the topic's own with this post shared in the topic's place */}
+			{/* the actions menu's share dialog, the topic's own with this Topic Post shared in the topic's place */}
 			{isShareOpen && <ShareTopic {...toTopicPostShare(topicPost)} isDialog onClose={() => setIsShareOpen(false)} />}
 
 			{/* the image dialog that a press on an editor's header image opens */}
@@ -244,8 +251,8 @@ export function TopicPostPage() {
 				/>
 			)}
 
-			{/* the actions menu's rank dialogs, each with this post offered a place: the admin's home posts, and the
-			    author's own featured posts */}
+			{/* the actions menu's rank dialogs, each with this Topic Post offered a place: the admin's home
+			    Topic Posts, and the author's own featured Topic Posts */}
 			{openRankDialog === "rank" && (
 				<HomeTopicPostRankDialog pageTopicPost={topicPost} onClose={() => setOpenRankDialog(null)} />
 			)}
@@ -273,11 +280,11 @@ export function TopicPostPage() {
 	)
 }
 
-// the rank dialogs that the actions menu opens: the home's pinned posts, and the author's own profile's
+// the rank dialogs that the actions menu opens: the home's pinned Topic Posts, and the author's own profile's
 type TopicPostRankDialog = "rank" | "rank-profile"
 
-// a published post's rank options on a public topic: the home's for an admin and the profile's for the post's author,
-// both under the notebook-pen icon
+// a published Topic Post's rank options on a public topic: the home's for an admin and the profile's for the
+// Topic Post's author, both under the notebook-pen icon
 function toTopicPostRankOptions(
 	topicPost: TopicPostResponse,
 	isAdminUser: boolean,
@@ -302,8 +309,8 @@ function toTopicPostRankOptions(
 	]
 }
 
-// the loaded post, whether the user is an admin, and the calls that open its share dialog, its editor, one of its rank
-// dialogs, and its delete confirmation
+// the loaded Topic Post, whether the user is an admin, and the calls that open its share dialog, its editor, one of
+// its rank dialogs, and its delete confirmation
 type UseRegisterTopicPostPageActionsOptions = {
 	topicPost: TopicPostResponse | null | undefined
 	isAdminUser: boolean
@@ -313,10 +320,10 @@ type UseRegisterTopicPostPageActionsOptions = {
 	onDelete: () => void
 }
 
-// register the actions menu: Share on a published post, which opens its share dialog as the info popup's Share opens
-// its share options, Edit post for its author, disabled past its edit time, Home posts for an admin and Featured
-// posts for its author on a published post of a public topic, Delete post for whoever may delete it, and Report
-// image on a published post
+// register the actions menu: Share on a published Topic Post, which opens its share dialog as the info popup's Share
+// opens its share options, Edit post for its author, disabled past its edit time, Home posts for an admin and
+// Featured posts for its author on a published Topic Post of a public topic, Delete post for whoever may delete it,
+// and Report image on a published Topic Post
 function useRegisterTopicPostPageActions({
 	topicPost,
 	isAdminUser,

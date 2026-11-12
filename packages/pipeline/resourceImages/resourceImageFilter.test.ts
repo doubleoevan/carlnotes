@@ -1,5 +1,5 @@
-// the Resource Image filter over images drawn by sharp: the file types, the smallest size, the shapes, one copy of each
-// picture with the larger kept, the link preview image's place, and the stored jpeg's size
+// the Resource Image filter over images drawn by sharp: the file types, the smallest size, the shapes, the fewest
+// colors, one copy of each picture with the larger kept, the link preview image's place, and the stored jpeg's size
 import { expect, test } from "bun:test"
 import sharp from "sharp"
 import {
@@ -36,22 +36,57 @@ function toSizes(keptResourceImages: KeptResourceImage[]): string[] {
 	return keptResourceImages.map((keptResourceImage) => `${keptResourceImage.width}x${keptResourceImage.height}`)
 }
 
-test("a thumbnail is too small, and a 640 by 480 image just passes", async () => {
+test("a thumbnail is too small, and a 640 by 480 image and a 480 by 450 photo pass", async () => {
 	const keptResourceImages = await keepResourceImages([
-		await toResourceImageCandidate({ width: 425, height: 239, picture: 1 }),
-		await toResourceImageCandidate({ width: 639, height: 480, picture: 2 }),
+		await toResourceImageCandidate({ width: 160, height: 90, picture: 1 }),
+		await toResourceImageCandidate({ width: 356, height: 199, picture: 2 }),
 		await toResourceImageCandidate({ width: 640, height: 480, picture: 3 }),
+		await toResourceImageCandidate({ width: 480, height: 450, picture: 4 }),
 	])
-	expect(toSizes(keptResourceImages)).toEqual(["640x480"])
+	expect(toSizes(keptResourceImages)).toEqual(["640x480", "480x450"])
 })
 
-test("a tall screenshot does not fit, and a portrait photo is kept", async () => {
+test("a tall screenshot and a strip do not fit, and a portrait photo and a profile banner are kept", async () => {
 	const keptResourceImages = await keepResourceImages([
 		await toResourceImageCandidate({ width: 800, height: 1600, picture: 1 }),
 		await toResourceImageCandidate({ width: 800, height: 1067, picture: 2 }),
-		await toResourceImageCandidate({ width: 2400, height: 600, picture: 3 }),
+		await toResourceImageCandidate({ width: 1584, height: 396, picture: 3 }),
+		await toResourceImageCandidate({ width: 2400, height: 400, picture: 4 }),
 	])
-	expect(toSizes(keptResourceImages)).toEqual(["800x1067"])
+	expect(toSizes(keptResourceImages)).toEqual(["800x1067", "1584x396"])
+})
+
+test("a flat graphic of a few grays is dropped", async () => {
+	const keptResourceImages = await keepResourceImages([
+		await toResourceImageCandidate({ width: 673, height: 673, picture: 1, format: "png", isFlat: true }),
+		await toResourceImageCandidate({ width: 400, height: 400, picture: 2 }),
+	])
+	expect(toSizes(keptResourceImages)).toEqual(["400x400"])
+})
+
+test("a black-and-white photo stored in one gray channel is kept", async () => {
+	// a picture in gray shows few colors but many gray levels
+	const pictureBytes = await toTestImageBytes({ width: 800, height: 600, picture: 1 })
+	const grayPhotoBytes = new Uint8Array(await sharp(pictureBytes).toColourspace("b-w").jpeg().toBuffer())
+	const keptResourceImages = await keepResourceImages([
+		{ sourceUrl: "https://cdn.example.com/gray-photo.jpg", imageBytes: grayPhotoBytes, isLinkPreviewImage: false },
+	])
+	expect(toSizes(keptResourceImages)).toEqual(["800x600"])
+})
+
+test("a flat graphic of red stripes at many brightnesses is dropped", async () => {
+	// sixteen red stripes, each at its own gray level but none of them gray
+	const stripes = Array.from(
+		{ length: 16 },
+		(_, i) => `<rect y="${i * 50}" width="800" height="50" fill="rgb(${30 + i * 15},0,0)"/>`,
+	)
+	const stripesSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="800" height="800">${stripes.join("")}</svg>`
+	const stripesBytes = new Uint8Array(await sharp(Buffer.from(stripesSvg)).png().toBuffer())
+	const keptResourceImages = await keepResourceImages([
+		{ sourceUrl: "https://cdn.example.com/stripes.png", imageBytes: stripesBytes, isLinkPreviewImage: false },
+		await toResourceImageCandidate({ width: 400, height: 400, picture: 2 }),
+	])
+	expect(toSizes(keptResourceImages)).toEqual(["400x400"])
 })
 
 test("a gif, an svg, and bytes that are no image are dropped, and a png and a webp are kept", async () => {
@@ -66,6 +101,17 @@ test("a gif, an svg, and bytes that are no image are dropped, and a png and a we
 		await toResourceImageCandidate({ width: 1200, height: 801, picture: 3, format: "webp" }),
 	])
 	expect(toSizes(keptResourceImages)).toEqual(["1200x800", "1200x801"])
+})
+
+test("a jpeg cut off partway is dropped, and the images after it are still kept", async () => {
+	// the header and the start of the pixels survive, so only a full decode finds the cut
+	const jpegBytes = await toTestImageBytes({ width: 800, height: 1067, picture: 1 })
+	const cutOffJpegBytes = jpegBytes.slice(0, Math.floor(jpegBytes.length * 0.85))
+	const keptResourceImages = await keepResourceImages([
+		{ sourceUrl: "https://cdn.example.com/cut-off.jpg", imageBytes: cutOffJpegBytes, isLinkPreviewImage: false },
+		await toResourceImageCandidate({ width: 640, height: 480, picture: 2 }),
+	])
+	expect(toSizes(keptResourceImages)).toEqual(["640x480"])
 })
 
 test("a resized copy is dropped, and the larger copy is kept as the link preview image", async () => {
@@ -90,7 +136,7 @@ test("a link preview image that repeats a larger page image is dropped", async (
 test("a link preview image that fails the filter is dropped", async () => {
 	const keptResourceImages = await keepResourceImages([
 		await toResourceImageCandidate({ width: 1200, height: 675, picture: 1 }),
-		await toResourceImageCandidate({ width: 300, height: 200, picture: 2 }, true),
+		await toResourceImageCandidate({ width: 180, height: 120, picture: 2 }, true),
 	])
 	expect(keptResourceImages.some((keptResourceImage) => keptResourceImage.isLinkPreviewImage)).toBe(false)
 })

@@ -2,6 +2,7 @@
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import * as topicClient from "@carlnotes/client/topicClient"
 import type { TopicPodcast } from "@carlnotes/contracts/podcast"
+import { toTopicPodcastFixture } from "@carlnotes/contracts/podcastEpisodeTestFixtures"
 import { renderToStaticMarkup } from "react-dom/server"
 import { PodcastSwitch } from "./EditTopicModal"
 import { saveTopic } from "./saveTopic"
@@ -9,16 +10,7 @@ import type { TopicTeamField } from "./TopicTeamSelect"
 import type { TopicFields } from "./useTopicFields"
 
 // a topic's podcast that is on and gets full episodes, with nothing published
-const topicPodcast: TopicPodcast = {
-	isEnabled: true,
-	isCommentsEnabled: true,
-	hasFullPodcastEpisodes: true,
-	canRemovePodcastEpisodes: true,
-	unpublishedPodcastEpisode: null,
-	seasons: [],
-	latestSeasonPodcastEpisodes: { podcastEpisodes: [] },
-	publicFeedUrl: null,
-}
+const topicPodcast = toTopicPodcastFixture({ canRemovePodcastEpisodes: true, seasons: [] })
 
 // the topic's podcast, and whether the switch is on
 type ToPodcastSwitchHtmlOptions = { topicPodcast: TopicPodcast; isPodcastEnabled: boolean }

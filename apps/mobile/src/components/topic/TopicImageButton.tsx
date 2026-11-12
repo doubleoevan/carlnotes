@@ -57,15 +57,22 @@ export function TopicImageButton({
 	)
 }
 
-// the image, and for an editor, the button's label and the press that opens the image sheet
-type TopicHeaderImageProps = Pick<TopicImageProps, "image" | "name"> & { editLabel: string; onEdit?: () => void }
+// the image, whether it is still to be drawn, and for an editor, the button's label and the press that opens the
+// image sheet
+type TopicHeaderImageProps = Pick<TopicImageProps, "image" | "name"> & {
+	isPending?: boolean
+	editLabel: string
+	onEdit?: () => void
+}
 
 /**
- * Renders a topic screen's or a podcast episode screen's header image, as the image button if the user may edit it.
+ * Renders a topic screen's, a podcast episode screen's, or a Topic Post screen's header image, as the image button if
+ * the user may edit it, pulsing while it is still to be drawn.
  */
-export function TopicHeaderImage({ image, name, editLabel, onEdit }: TopicHeaderImageProps) {
+export function TopicHeaderImage({ image, name, isPending, editLabel, onEdit }: TopicHeaderImageProps) {
 	if (!onEdit) {
-		return <TopicImage image={image} size="page" name={name} className={HEADER_TOPIC_IMAGE_CLASS} />
+		const topicImage = <TopicImage image={image} size="page" name={name} className={HEADER_TOPIC_IMAGE_CLASS} />
+		return isPending ? <SkeletonPulse>{topicImage}</SkeletonPulse> : topicImage
 	}
 	return (
 		<TopicImageButton
@@ -73,6 +80,7 @@ export function TopicHeaderImage({ image, name, editLabel, onEdit }: TopicHeader
 			size="page"
 			name={name}
 			label={editLabel}
+			isRendering={isPending}
 			onPress={onEdit}
 			className={HEADER_TOPIC_IMAGE_CLASS}
 			imageClassName="rounded-xs"

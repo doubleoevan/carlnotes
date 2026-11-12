@@ -1,9 +1,11 @@
 // a segment's shot plan: no shot on screen over 8 seconds, shots of 5 to 8 seconds that average about 6, cuts on
-// caption breaks, the images in turn, no move twice in a row, the same plan for the same seed, and each image's zoom
+// caption breaks, the images in turn, no move twice in a row, the same plan for the same seed, the intro's and the
+// sign-off's shots, and each image's zoom
 import { expect, test } from "bun:test"
 import {
 	SHOT_CROSSFADE_FRAMES,
 	toCaptionBreakFrames,
+	toImagePartShots,
 	toShotPanZoom,
 	toShotScreenFrameCount,
 	toShotZoomLimit,
@@ -84,6 +86,72 @@ test("no shot uses the move of the shot before it, and every move is used", () =
 	const shots = toPlainShots(300)
 	expect(shots.every((shot, i) => shot.move !== shots[i - 1]?.move)).toBe(true)
 	expect(new Set(shots.map((shot) => shot.move)).size).toBe(4)
+})
+
+test("the first and last shots make the moves given for them, and the shot before the last avoids the last shot's move", () => {
+	for (const seed of ["episode-1:intro", "episode-2:intro", "episode-3:intro"]) {
+		const shots = toVideoShots({
+			frameCount: toFrames(40),
+			captionBreakFrames: [],
+			imageCount: 1,
+			seed,
+			firstMove: "zoom-in",
+			lastMove: "zoom-out",
+		})
+		expect(shots[0]?.move).toBe("zoom-in")
+		expect(shots.at(-1)?.move).toBe("zoom-out")
+		expect(shots.at(-2)?.move).not.toBe("zoom-out")
+	}
+})
+
+test("the intro opens on the film's image, cuts through the chapters' images, and returns to the film's image", () => {
+	const introShots = toImagePartShots({
+		part: "intro",
+		chapterImageCount: 2,
+		frameCount: toFrames(40),
+		captionBreakFrames: [],
+		seed: "episode-1:intro",
+	})
+	const imageIndexes = introShots.map((shot) => shot.imageIndex)
+	expect(imageIndexes[0]).toBe(0)
+	expect(imageIndexes.at(-1)).toBe(0)
+	expect(imageIndexes.slice(1, -1)).toEqual(imageIndexes.slice(1, -1).map((_, i) => 1 + (i % 2)))
+	expect(introShots[0]?.move).toBe("zoom-in")
+
+	// an intro of two shots cuts to the first chapter's image and stays there
+	const shortIntroShots = toImagePartShots({
+		part: "intro",
+		chapterImageCount: 2,
+		frameCount: toFrames(10),
+		captionBreakFrames: [],
+		seed: "episode-1:intro",
+	})
+	expect(shortIntroShots.map((shot) => shot.imageIndex)).toEqual([0, 1])
+})
+
+test("the sign-off cuts through the chapters' images and pulls back from the film's image", () => {
+	const signOffShots = toImagePartShots({
+		part: "sign-off",
+		chapterImageCount: 3,
+		frameCount: toFrames(30),
+		captionBreakFrames: [],
+		seed: "episode-1:sign-off",
+	})
+	const imageIndexes = signOffShots.map((shot) => shot.imageIndex)
+	expect(imageIndexes.at(-1)).toBe(0)
+	expect(imageIndexes.slice(0, -1)).toEqual(imageIndexes.slice(0, -1).map((_, i) => 1 + (i % 3)))
+	expect(signOffShots.at(-1)?.move).toBe("zoom-out")
+})
+
+test("an intro with no chapter image stays on the film's image", () => {
+	const introShots = toImagePartShots({
+		part: "intro",
+		chapterImageCount: 0,
+		frameCount: toFrames(20),
+		captionBreakFrames: [],
+		seed: "episode-1:intro",
+	})
+	expect(introShots.map((shot) => shot.imageIndex)).toEqual(introShots.map(() => 0))
 })
 
 test("the same seed plans the same shots, and another seed plans others", () => {

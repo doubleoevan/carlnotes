@@ -1,6 +1,6 @@
 // each chapter's images in a podcast episode film, in the order its shots show them: its Resource's images, then its
 // generated images, then the podcast card. a chapter gets as many generated images as bring it to one distinct image for
-// every 30 seconds, up to the film's limit
+// every 30 seconds, up to the film's limit. the intro and the sign-off cut through each chapter's first image
 
 import { getAttachmentBytes } from "@carlnotes/db/store"
 import { GENERATED_CHAPTER_IMAGE_LIMIT_PER_CHAPTER } from "@carlnotes/db/topicPodcastEpisodeVideoKeys"
@@ -11,7 +11,7 @@ import {
 	type GeneratedChapterImageRef,
 	loadGeneratedChapterImages,
 } from "./generatedChapterImages"
-import { toChapterLowerThirdText, type VideoChapterRow } from "./topicPodcastEpisodeVideoInputs"
+import { type ShownImageStill, toChapterLowerThirdText, type VideoChapterRow } from "./topicPodcastEpisodeVideoInputs"
 import {
 	loadPodcastCardStillPng,
 	PODCAST_CARD_ZOOM_LIMIT,
@@ -27,31 +27,35 @@ import { toSegmentSeconds, type VideoSegment } from "./videoTimeline"
 const CHAPTER_SECONDS_PER_DISTINCT_IMAGE = 30
 const MINIMUM_DISTINCT_IMAGE_COUNT = 2
 
-// the film's billing, its chapters and timeline, and the film's own image, or null for a film that shows the podcast
-// card in its place
+// the film's billing, its chapters and timeline, the image the film shows, and whether image generation is skipped, so only the
+// generated images that an earlier render stored are read
 type PrepareChapterImagesOptions = GeneratedChapterImageBilling & {
 	videoChapterRows: VideoChapterRow[]
 	segments: VideoSegment[]
-	filmImage: VideoSegmentImage | null
+	shownImageStill: ShownImageStill
+	isChapterImageGenerationSkipped?: boolean
 }
 
-// each chapter's images by its position, the images of a segment that has none of its own, and how many generated
-// images this render drew
+// each chapter's images by its position, the images of a segment that has none of its own, the images that the intro
+// and the sign-off cut through, and how many generated images this render generated
 export type PreparedChapterImages = {
 	chapterImages: Map<number, VideoChapterImages>
 	podcastCardImages: VideoSegmentImage[]
-	drawnGeneratedChapterImageCount: number
+	firstChapterImages: VideoSegmentImage[]
+	newlyGeneratedChapterImageCount: number
 }
 
 /**
  * Settles every chapter's images before the chapters are encoded: fetches the images of each chapter's Resource,
- * draws the generated images that give each chapter one distinct image for every 30 seconds, up to the film's limit,
- * and returns each chapter's images in the order its shots show them. Throws the signal's reason once it is aborted.
+ * generates the generated images that give each chapter one distinct image for every 30 seconds, up to the film's limit,
+ * unless image generation is skipped, and returns each chapter's images in the order its shots show them. Throws the
+ * signal's reason once it is aborted.
  */
 export async function prepareChapterImages({
 	videoChapterRows,
 	segments,
-	filmImage,
+	shownImageStill,
+	isChapterImageGenerationSkipped,
 	...generatedChapterImageBilling
 }: PrepareChapterImagesOptions): Promise<PreparedChapterImages> {
 	// load or fetch every chapter's Resource Images
@@ -70,28 +74,41 @@ export async function prepareChapterImages({
 		}),
 	}))
 
-	// draw what the chapters lack, each chapter's first missing image before any chapter's second, up to the limit
+	// generate what the chapters lack, each chapter's first missing image before any chapter's second, up to the limit
 	const generatedChapterImages = await loadGeneratedChapterImages({
 		...generatedChapterImageBilling,
+		isChapterImageGenerationSkipped,
 		generatedChapterImageRefs: toGeneratedChapterImageRefs(
 			missingGeneratedChapterImageCounts,
 			generatedChapterImageLimit(),
 		),
 	})
 
-	// the podcast card, and the pair that a segment with nothing else cuts between
+	// the podcast card, and the pair that a segment with nothing else cuts between, with the film's own image unless the
+	// film shows the podcast card
 	const podcastCardImage: VideoSegmentImage = {
 		loadStillPng: loadPodcastCardStillPng,
 		zoomLimit: PODCAST_CARD_ZOOM_LIMIT,
 	}
+	const filmImage: VideoSegmentImage | null = shownImageStill.isPodcastCard
+		? null
+		: { loadStillPng: async () => shownImageStill.stillPng, zoomLimit: shownImageStill.zoomLimit }
 	const podcastCardImages = filmImage ? [podcastCardImage, filmImage] : [podcastCardImage]
+
+	// each Resource's images made once, so chapters that narrate one Resource share the same images
+	const resourceSegmentImagesById = new Map(
+		[...resourceImagesById].map(([resourceId, resourceImages]) => [
+			resourceId,
+			resourceImages.map(toResourceSegmentImage),
+		]),
+	)
 
 	// each chapter's Resource images, then its generated images, then the podcast card
 	const chapterImages = new Map<number, VideoChapterImages>()
 	for (const videoChapterRow of videoChapterRows) {
-		const resourceImages = resourceImagesById.get(videoChapterRow.resourceId) ?? []
+		const resourceSegmentImages = resourceSegmentImagesById.get(videoChapterRow.resourceId) ?? []
 		const generatedJpegs = generatedChapterImages.jpegBytesByPosition.get(videoChapterRow.position) ?? []
-		const ownImages = [...resourceImages.map(toResourceSegmentImage), ...generatedJpegs.map(toGeneratedSegmentImage)]
+		const ownImages = [...resourceSegmentImages, ...generatedJpegs.map(toGeneratedSegmentImage)]
 		chapterImages.set(videoChapterRow.position, {
 			images: ownImages.length > 0 ? [...ownImages, podcastCardImage] : podcastCardImages,
 			lowerThirdText: toChapterLowerThirdText(videoChapterRow),
@@ -100,8 +117,41 @@ export async function prepareChapterImages({
 	return {
 		chapterImages,
 		podcastCardImages,
-		drawnGeneratedChapterImageCount: generatedChapterImages.drawnGeneratedChapterImageCount,
+		firstChapterImages: toFirstChapterImages({ chapterImages, podcastCardImage, isFilmImagePodcastCard: !filmImage }),
+		newlyGeneratedChapterImageCount: generatedChapterImages.newlyGeneratedChapterImageCount,
 	}
+}
+
+// each chapter's images, the podcast card, and whether the film shows the podcast card as its image
+type ToFirstChapterImagesOptions = {
+	chapterImages: Map<number, VideoChapterImages>
+	podcastCardImage: VideoSegmentImage
+	isFilmImagePodcastCard: boolean
+}
+
+/**
+ * Returns each chapter's first image in chapter order, each image once, for the intro and the sign-off to cut through.
+ * The podcast card is added if fewer than two images remain, so no two shots in a row show the same image, and left out
+ * of a film that already shows the podcast card as its image.
+ */
+export function toFirstChapterImages({
+	chapterImages,
+	podcastCardImage,
+	isFilmImagePodcastCard,
+}: ToFirstChapterImagesOptions): VideoSegmentImage[] {
+	// each chapter's first image once, without the podcast card if the film already shows it
+	const distinctFirstChapterImages = [
+		...new Set([...chapterImages.values()].flatMap((videoChapterImages) => videoChapterImages.images.slice(0, 1))),
+	]
+	const firstChapterImages = isFilmImagePodcastCard
+		? distinctFirstChapterImages.filter((image) => image !== podcastCardImage)
+		: distinctFirstChapterImages
+
+	// add the podcast card if fewer than two images remain
+	if (!isFilmImagePodcastCard && firstChapterImages.length < 2 && !firstChapterImages.includes(podcastCardImage)) {
+		firstChapterImages.push(podcastCardImage)
+	}
+	return firstChapterImages
 }
 
 // each chapter's length in seconds by its position, from its segment, which holds the gap before the next chapter
@@ -139,7 +189,7 @@ export function toMissingGeneratedChapterImageCount({
 }
 
 /**
- * Returns the generated images a film settles, in the order it draws them: every chapter's first missing image, then
+ * Returns the generated images a film settles, in the order it generates them: every chapter's first missing image, then
  * every chapter's second, and so on, up to the film's limit.
  */
 export function toGeneratedChapterImageRefs(

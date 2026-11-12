@@ -19,7 +19,7 @@ const CARD_GRID_CLASS = "grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3"
 export const CARDS_SECTION_ELEMENTS: CardsSectionElements = {
 	// a section whose cards do not fill a row has its count right after its title: one card from the tablet's two
 	// columns up, and two cards on the desktop's three
-	Section: ({ value, title, countLabel, cardCount, children }) => (
+	Section: ({ value, title, countLabel, cardCount, pageButtons, children }) => (
 		<AccordionSection
 			value={value}
 			title={title}
@@ -28,6 +28,7 @@ export const CARDS_SECTION_ELEMENTS: CardsSectionElements = {
 			isContentKept
 		>
 			{children}
+			{pageButtons}
 		</AccordionSection>
 	),
 	Grid: ({ children }) => <div className={CARD_GRID_CLASS}>{children}</div>,

@@ -67,8 +67,14 @@ export const TOPIC_POST_PAGE_ELEMENTS: TopicPostPageElements = {
 			</View>
 		</View>
 	),
-	Image: ({ image, name, onEdit }) => (
-		<TopicHeaderImage image={image} name={name} editLabel={EDIT_IMAGE_DIALOG_TITLES.topicPost} onEdit={onEdit} />
+	Image: ({ image, name, isPending, onEdit }) => (
+		<TopicHeaderImage
+			image={image}
+			name={name}
+			isPending={isPending}
+			editLabel={EDIT_IMAGE_DIALOG_TITLES.topicPost}
+			onEdit={onEdit}
+		/>
 	),
 	Title: ({ info, mentionBadge, children }) => (
 		<View className="min-w-0 flex-row items-start gap-2">
@@ -103,10 +109,10 @@ export const TOPIC_POST_PAGE_ELEMENTS: TopicPostPageElements = {
 }
 
 /**
- * A Topic Post's screen: the published post with its comment thread, or the editor on its author's draft.
+ * A Topic Post's screen: the published Topic Post with its comment thread, or the editor on its author's draft.
  */
 export function TopicPostScreen() {
-	// scope the post to its account and route identity
+	// scope the Topic Post to its account and route identity
 	const { topicId, topicPostId } = useLocalSearchParams<{ topicId: string; topicPostId: string }>()
 	const { data: session } = authClient().useSession()
 	const queryClient = useQueryClient()
@@ -128,14 +134,17 @@ export function TopicPostScreen() {
 	// the count that the comment thread reports as it stands, for the details line
 	const [commentCount, setCommentCount] = useState<number | null>(null)
 
-	// read the post again as the screen takes focus, except over an open editor, whose draft a read would replace
+	// read the Topic Post again as the screen takes focus, except over an open editor, whose draft a read would
+	// replace
 	const topicPost = query.data
 
-	// the chat launcher opens the private chat of the post's topic, which asks about this post, on its screen
+	// the chat launcher opens the private chat of the Topic Post's topic, which asks about this Topic Post, on its
+	// screen
 	const publishedTopicPost = topicPost?.publishedAt ? topicPost : null
 	useRegisterChatTopicPost(publishedTopicPost)
 
-	// name the post again each time its screen takes focus. another post's screen that closed above it named none
+	// name the Topic Post again each time its screen takes focus. another Topic Post's screen that closed above it
+	// named none
 	const { id: chatTopicPostId, title: chatTopicPostTitle, path: chatTopicPostPath } = publishedTopicPost ?? {}
 	const chatTopicPostTopicId = publishedTopicPost?.topicId
 	useFocusEffect(
@@ -150,7 +159,7 @@ export function TopicPostScreen() {
 			}
 		}, [chatTopicPostId, chatTopicPostTitle, chatTopicPostPath, chatTopicPostTopicId]),
 	)
-	// send a published post's view once per app runtime
+	// send a published Topic Post's view once per app runtime
 	useTopicPostView(publishedTopicPost?.id)
 
 	const isEditorShown = Boolean(topicPost && isTopicPostEditorShown(topicPost, isEditing))
@@ -162,7 +171,7 @@ export function TopicPostScreen() {
 		}, [refetch, isEditorShown]),
 	)
 
-	// the post's skeleton while it loads, the retryable error, or the line for a post that did not load
+	// the Topic Post's skeleton while it loads, the retryable error, or the line for a Topic Post that did not load
 	if (!topicPost) {
 		return (
 			<PageScreen title="Post" contentClassName="mt-0 gap-4" header={<View />}>
@@ -180,7 +189,7 @@ export function TopicPostScreen() {
 		)
 	}
 
-	// the shared page, which shows the editor or the post
+	// the shared page, which shows the editor or the Topic Post
 	const topicPostPage = (
 		<SharedTopicPostPage
 			key={`${session?.user.id ?? "visitor"}/${topicPost.id}`}
@@ -197,7 +206,7 @@ export function TopicPostScreen() {
 			onEditImage={topicPost.canEditImage ? () => setIsImageDialogOpen(true) : undefined}
 			elements={TOPIC_POST_PAGE_ELEMENTS}
 		>
-			{/* the post's comment thread, whose first page came with the post */}
+			{/* the Topic Post's comment thread, whose first page came with the Topic Post */}
 			<SocialSection
 				target={{ kind: "post", id: topicPost.id }}
 				firstPage={topicPost.commentThread}
@@ -206,7 +215,7 @@ export function TopicPostScreen() {
 				isTopicOwner={topicPost.isTopicOwner}
 				onCommentCountChange={setCommentCount}
 			/>
-			{/* a published post's visitors, the page's last line */}
+			{/* a published Topic Post's visitors, the page's last line */}
 			<TopicPostVisitorsLine topicPost={topicPost} />
 		</SharedTopicPostPage>
 	)
@@ -223,7 +232,7 @@ export function TopicPostScreen() {
 		onDelete: () => setIsDeleteOpen(true),
 	})
 
-	// delete the post and its thread, then open its topic's screen. a failed delete keeps the screen
+	// delete the Topic Post and its thread, then open its topic's screen. a failed delete keeps the screen
 	const handleDelete = async (): Promise<void> => {
 		if (await deleteTopicPost(topicPost.id)) {
 			router.replace(`/topics/${topicPost.topicId}`)
@@ -241,7 +250,7 @@ export function TopicPostScreen() {
 			contentClassName="mt-0 gap-2"
 		>
 			{topicPostPage}
-			{/* the actions menu's share sheet, the topic's own with this post shared in the topic's place */}
+			{/* the actions menu's share sheet, the topic's own with this Topic Post shared in the topic's place */}
 			{isShareOpen && <ShareTopicSheet {...toTopicPostShare(topicPost)} onClose={() => setIsShareOpen(false)} />}
 			{/* the image sheet that a press on an editor's header image opens */}
 			{isImageDialogOpen && (
@@ -251,7 +260,7 @@ export function TopicPostScreen() {
 					onClose={() => setIsImageDialogOpen(false)}
 				/>
 			)}
-			{/* the author's own featured posts, with this post offered a place */}
+			{/* the author's own featured Topic Posts, with this Topic Post offered a place */}
 			{isProfileRankDialogOpen && (
 				<ProfileRankDialog
 					rankedNoun="posts"
@@ -275,8 +284,8 @@ export function TopicPostScreen() {
 	)
 }
 
-// the published post, and the calls that open its share sheet, its editor, its author's rank sheet, and its delete
-// confirmation
+// the published Topic Post, and the calls that open its share sheet, its editor, its author's rank sheet, and its
+// delete confirmation
 type ToTopicPostPageOptionsOptions = {
 	topicPost: TopicPostResponse
 	onShare: () => void
@@ -285,9 +294,9 @@ type ToTopicPostPageOptionsOptions = {
 	onDelete: () => void
 }
 
-// the actions menu: Share, which opens the post's share sheet as the info popup's Share does, Edit post for its
-// author, which says its limit past its edit time, Featured posts for the author of a published post of a public
-// topic, as on the web, and Delete post for whoever may delete it. Report image follows them
+// the actions menu: Share, which opens the Topic Post's share sheet as the info popup's Share does, Edit post for
+// its author, which says its limit past its edit time, Featured posts for the author of a published Topic Post of
+// a public topic, as on the web, and Delete post for whoever may delete it. Report image follows them
 function toTopicPostPageOptions({
 	topicPost,
 	onShare,
@@ -313,8 +322,8 @@ function toTopicPostPageOptions({
 	]
 }
 
-// the author of a published post of a public topic arranges their own profile's featured posts from inside the post,
-// as on the web
+// the author of a published Topic Post of a public topic arranges their own profile's featured Topic Posts from
+// inside the Topic Post, as on the web
 function toProfileRankOptions(topicPost: TopicPostResponse, onSelect: () => void): PageActionOption[] {
 	return topicPost.isAuthor && isTopicPostPinnable(topicPost)
 		? [{ label: PROFILE_RANK_OPTION_LABELS.posts, icon: NotebookPen, onSelect }]
@@ -344,7 +353,7 @@ function TopicPostEditorScreen({ closePath, children }: { closePath: string; chi
 				>
 					{/* reserve launcher space inside the keyboard-adjusted viewport */}
 					<View className="flex-1 px-4 pt-4" style={{ paddingBottom: isKeyboardVisible ? 0 : chatPillClearance }}>
-						{/* return to the post's topic. the editor sends a waiting save as it closes */}
+						{/* return to the Topic Post's topic. the editor sends a waiting save as it closes */}
 						<View className="mb-2 flex-row items-center justify-end">
 							<AnchorLink href={closePath} shouldDismissTo accessibilityLabel="Close post" asChild>
 								<Button accessibilityLabel="Close post" variant="ghost" size="icon">
@@ -376,7 +385,7 @@ function TopicPostBody({ html }: { html: string }) {
 	)
 }
 
-// a published post's Visitors line, read while the post's screen is the active route. a draft has none
+// a published Topic Post's Visitors line, read while the Topic Post's screen is the active route. a draft has none
 function TopicPostVisitorsLine({ topicPost }: { topicPost: TopicPostResponse }) {
 	const pathname = usePathname()
 	if (!topicPost.publishedAt) {
