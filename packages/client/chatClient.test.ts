@@ -1,6 +1,7 @@
 // how the stream reader ends a chat turn and which lines it takes as tool calls. a stream read to the end completes
 // unless the server closed it with the failed line, and a rejected file names why it was not read
 import { expect, test } from "bun:test"
+import { CHAT_PAUSED_ERROR } from "@carlnotes/contracts/chat"
 import { type TopicToolCalls, toChatReplyLineText } from "@carlnotes/contracts/chatTurns"
 import { configureApiClient } from "./apiClient"
 import { sendChatTurn, toChatRejection, toChatTurnRejection } from "./chatClient"
@@ -223,6 +224,14 @@ test("sendChatTurn reads a rejected file as too large or unreadable", async () =
 test("toChatRejection reads a 413 and a 422 as failed", () => {
 	expect(toChatRejection(413)).toBe("failed")
 	expect(toChatRejection(422)).toBe("failed")
+})
+
+// a 429 says the chat is paused only if its error names the chat cutoff, and otherwise asks the user to wait
+test("toChatRejection reads the chat cutoff's 429 as paused and any other 429 as rate limited", () => {
+	expect(toChatRejection(429, CHAT_PAUSED_ERROR)).toBe("chatPaused")
+	expect(toChatTurnRejection(429, CHAT_PAUSED_ERROR)).toBe("chatPaused")
+	expect(toChatRejection(429, "too many requests")).toBe("rateLimited")
+	expect(toChatRejection(429)).toBe("rateLimited")
 })
 
 // a chat turn rejected for the build's age reports the 426 to the app and reads as a failed chat turn

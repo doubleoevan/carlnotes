@@ -59,6 +59,9 @@ const TABLE_ROW_KEYS = ["first", "second", "third", "fourth", "fifth"]
 const BODY_LINE_KEYS = ["first", "second", "third", "fourth", "fifth", "sixth"]
 const CUTOFF_ROW_KEYS = ["first", "second", "third", "fourth", "fifth"]
 
+// the daily scans card's two meters, the scans used and the day's reset
+const METER_KEYS = ["dailyScans", "dayReset"]
+
 /**
  * Reserves each page's buttons, identity, news, cards, tables, or budget in the loaded page's own layout elements.
  */
@@ -260,68 +263,111 @@ function TableSkeletonContent({ elements: { Stack, Row, Shape, Card } }: { eleme
 	)
 }
 
-// reserve the budget's card as the loaded budget lays it out: the fund's title and amount, the bar, its legend, the
-// status line, and the cutoff list if the budget has cutoffs, then the daily scans and the plan
+// reserve the budget as the loaded budget lays it out. the coffee fund card holds its title, reset clock, and amount,
+// the bar, its legend, the status line, and the cutoff list if the budget has cutoffs. the daily scans card holds its
+// title and its two meters. each card ends with the plan and its button
 function BudgetSkeleton({
-	elements: { Stack, Row, Shape, Card },
+	elements,
 	hasMonthlyBudgetCutoffs,
 }: {
 	elements: PageSkeletonElements
 	hasMonthlyBudgetCutoffs: boolean
 }) {
+	const { Stack, Row, Shape, Card } = elements
 	return (
-		<Card className="gap-4">
-			<Stack>
-				{/* the fund's title and the amount spent */}
-				<Row className="h-6 justify-between gap-4">
-					<Shape className="h-4 w-36" />
-					<Shape className="h-3.5 w-28" />
-				</Row>
-				{/* the bar, under the cutoff circles if the budget has cutoffs */}
-				<Stack className={hasMonthlyBudgetCutoffs ? "mt-2 pt-7.5" : "mt-2"}>
-					<Shape className="h-3 w-full rounded-full" />
-				</Stack>
-				{/* the legend, which wraps onto a second line on a phone */}
-				<Row className="mt-2 flex-wrap gap-x-4 gap-y-1">
-					<Row className="h-4">
-						<Shape className="h-3 w-28" />
-					</Row>
-					<Row className="h-4">
-						<Shape className="h-3 w-28" />
-					</Row>
-					<Row className="h-4">
-						<Shape className="h-3 w-28" />
-					</Row>
-				</Row>
-				{/* the status line */}
-				<Row className="mt-1 h-5">
-					<Shape className="h-3 w-40" />
-				</Row>
-				{/* what each cutoff stops. the first and the third line wrap on a phone */}
-				{hasMonthlyBudgetCutoffs && (
-					<Stack className="mt-3 gap-1">
-						{CUTOFF_ROW_KEYS.map((cutoffKey, i) => (
-							<Row key={cutoffKey} className={i % 2 === 0 && i < 4 ? "h-8 gap-2 sm:h-4" : "h-4 gap-2"}>
-								<Shape className="h-3 w-8" />
-								<Shape className="h-3 flex-1" />
-							</Row>
-						))}
+		<Stack className="gap-6">
+			{/* the coffee fund card with its title, reset clock, and amount at the top */}
+			<Card className="gap-4">
+				<CardTopRowSkeleton elements={elements} />
+				<Stack>
+					{/* the bar, under the cutoff circles if the budget has cutoffs */}
+					<Stack className={hasMonthlyBudgetCutoffs ? "mt-2 pt-7.5" : "mt-2"}>
+						<Shape className="h-3 w-full rounded-full" />
 					</Stack>
-				)}
+					{/* the legend, which wraps onto a second line on a phone */}
+					<Row className="mt-2 flex-wrap gap-x-4 gap-y-1">
+						<Row className="h-4">
+							<Shape className="h-3 w-28" />
+						</Row>
+						<Row className="h-4">
+							<Shape className="h-3 w-28" />
+						</Row>
+						<Row className="h-4">
+							<Shape className="h-3 w-28" />
+						</Row>
+					</Row>
+					{/* the status line */}
+					<Row className="mt-1 h-5">
+						<Shape className="h-3 w-40" />
+					</Row>
+					{/* what each cutoff stops. the first and the third line wrap on a phone */}
+					{hasMonthlyBudgetCutoffs && (
+						<Stack className="mt-3 gap-1">
+							{CUTOFF_ROW_KEYS.map((cutoffKey, i) => (
+								<Row key={cutoffKey} className={i % 2 === 0 && i < 4 ? "h-8 gap-2 sm:h-4" : "h-4 gap-2"}>
+									<Shape className="h-3 w-8" />
+									<Shape className="h-3 flex-1" />
+								</Row>
+							))}
+						</Stack>
+					)}
+				</Stack>
+				<PlanRowSkeleton elements={elements} />
+			</Card>
+			{/* the daily scans card with its title, the scans used beside the reset clock, and the plan */}
+			<Card className="gap-4">
+				<CardTopSkeleton elements={elements} />
+				<PlanRowSkeleton elements={elements} />
+			</Card>
+		</Stack>
+	)
+}
+
+// reserve the plan line at a card's bottom left with its button right after it
+function PlanRowSkeleton({ elements: { Row, Shape } }: { elements: PageSkeletonElements }) {
+	return (
+		<Row className="gap-3">
+			<Shape className="h-3.5 w-24" />
+			<Shape className="h-9 w-32 rounded-md" />
+		</Row>
+	)
+}
+
+// reserve the coffee fund card's title at the top left, its reset clock's ring over its caption at the top center, and
+// the amount at the top right, on every width
+function CardTopRowSkeleton({ elements: { Stack, Row, Shape } }: { elements: PageSkeletonElements }) {
+	return (
+		<Row className="items-start gap-3">
+			<Stack className="flex-1">
+				<Shape className="h-4 w-24" />
 			</Stack>
-			{/* the daily scans: the heading over the count */}
-			<Stack>
-				<Row className="h-6">
-					<Shape className="h-4 w-24" />
-				</Row>
-				<Row className="h-6">
-					<Shape className="h-3.5 w-20" />
-				</Row>
+			<Stack className="items-center gap-1.5">
+				<Shape className="size-22 rounded-full" />
+				<Shape className="h-3 w-28" />
 			</Stack>
-			{/* the plan */}
+			<Stack className="flex-1 items-end">
+				<Shape className="h-3.5 w-24" />
+			</Stack>
+		</Row>
+	)
+}
+
+// reserve a card's title at the top left and its meters at the top center, each ring over its caption. below the
+// phone breakpoint the title sits over the meters
+function CardTopSkeleton({ elements: { Stack, Row, Shape } }: { elements: PageSkeletonElements }) {
+	return (
+		<Stack className="gap-3 sm:grid sm:grid-cols-[1fr_auto_1fr] sm:items-start">
 			<Row className="h-6">
-				<Shape className="h-3.5 w-36" />
+				<Shape className="h-4 w-24" />
 			</Row>
-		</Card>
+			<Row className="items-start justify-center gap-8">
+				{METER_KEYS.map((meterKey) => (
+					<Stack key={meterKey} className="items-center gap-1.5">
+						<Shape className="size-22 rounded-full" />
+						<Shape className="h-3 w-28" />
+					</Stack>
+				))}
+			</Row>
+		</Stack>
 	)
 }

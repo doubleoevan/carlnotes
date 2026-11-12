@@ -2,7 +2,7 @@
 import type { OwnerTopic } from "@carlnotes/contracts/activity"
 import type { AdminConsoleResponse, AdminTopicSubscriberRow } from "@carlnotes/contracts/admin"
 import type { MobilePlatform } from "@carlnotes/contracts/clientTelemetry"
-import type { StoreCheckoutPayload } from "@carlnotes/contracts/payloads"
+import type { SpendControlSettingsPayload, StoreCheckoutPayload } from "@carlnotes/contracts/payloads"
 import { type BillingState, billingState } from "@carlnotes/contracts/profiles"
 import type { TeamPageResponse, TeamSummary } from "@carlnotes/contracts/teams"
 import { apiClient, readApiResponse } from "./apiClient"
@@ -159,6 +159,16 @@ export async function sendMobileMinimumVersion(platform: MobilePlatform, minimum
 	})
 	if (!response.ok) {
 		throw new Error(`mobile minimum version failed: ${response.status}`)
+	}
+}
+
+/**
+ * Saves the spend control overrides from the admin console. Throws an error on a rejection.
+ */
+export async function sendSpendControlSettings(payload: SpendControlSettingsPayload): Promise<void> {
+	const response = await apiClient().api.admin["spend-control-settings"].$post({ json: payload })
+	if (!response.ok) {
+		throw new Error(`spend control settings failed: ${response.status}`)
 	}
 }
 

@@ -15,7 +15,6 @@ import { CLOSE_ACCOUNT_CONFIRMATION, REQUEST_FAILED_TEXT, toCloseAccountCopy } f
 import { PLAN_MANAGEMENT_LABELS } from "@carlnotes/core/lib/storefrontPurchaseRules"
 import { USER_BLOCKS_SECTION } from "@carlnotes/core/lib/userBlocks"
 import { cn } from "@carlnotes/nightshift/classNames"
-import { Settings } from "lucide-react"
 import { useState } from "react"
 import { UserAvatarPicker } from "@/components/avatar/UserAvatarPicker"
 import { AnchorLink } from "@/components/common/AnchorLink"
@@ -32,11 +31,6 @@ import { AiAgentAccountSection } from "./AiAgentAccountSection"
 export function AccountSettings({ provider }: { provider: BillingProvider | null }) {
 	return (
 		<>
-			{/* the section title with its icon */}
-			<h2 className="font-display flex items-center gap-2 pt-2 text-xl">
-				<Settings className="size-5" />
-				Settings
-			</h2>
 			<ProfileSection />
 			<EmailSection elements={ACCOUNT_FIELD_ELEMENTS} callbackURL="/account" />
 			<PasswordSection elements={ACCOUNT_FIELD_ELEMENTS} />

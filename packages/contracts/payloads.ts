@@ -336,6 +336,20 @@ export const budgetOverridePayload = z.object({ budgetOverrideCents: z.number().
 // the admin mobile minimum version body: the oldest build a platform's api still serves, or null to serve every build
 export const mobileMinimumVersionPayload = z.object({ minimumVersion: appVersion.nullable() })
 
+// the admin spend control settings body. each daily spend cutoff in dollars of at least a cent, the first scan dispatch
+// limit of zero or more, and the hourly signup alert count of one or more, each null to use its default, with the
+// unverified accounts switch
+export const spendControlSettingsPayload = z.object({
+	podcastEpisodesCutoffDollars: z.number().min(0.01).max(1_000_000).nullable(),
+	scheduledScansCutoffDollars: z.number().min(0.01).max(1_000_000).nullable(),
+	chatCutoffDollars: z.number().min(0.01).max(1_000_000).nullable(),
+	firstScanDispatchLimit: z.number().int().min(0).max(10_000).nullable(),
+	hourlySignupAlertCount: z.number().int().min(1).max(1_000_000).nullable(),
+	isUnverifiedFirstScanLimitOn: z.boolean(),
+})
+
+export type SpendControlSettingsPayload = z.infer<typeof spendControlSettingsPayload>
+
 // what the player saves as a user listens. the user's progress, whether playback just started, whether playback
 // ended, and the format that played, audio if left out
 export const podcastEpisodeListenPayload = z.object({

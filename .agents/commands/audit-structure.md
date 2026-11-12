@@ -962,6 +962,8 @@ Check for:
      `TOPIC_PODCAST_EPISODE_VIDEO_IMAGINED_CHAPTER_IMAGE_LIMIT` setting (now `generatedChapterImageLimit` and
      `TOPIC_PODCAST_EPISODE_VIDEO_GENERATED_CHAPTER_IMAGE_LIMIT`), and the `"imagined"` chapter image kind in
      `apps/web/src/components/podcast/topicPodcastEpisodeVideoChapterImages.ts` (now `"generated"`)
+   - `isSpokenQuestionsPausedResponse` in `packages/client/voiceClient.ts` (removed: `toChatRejection` in
+     `packages/client/chatClient.ts` reads a 429's error message for the chat and voice routes alike)
 
 5. **Cross-harness enforcement parity**: `.claude/settings.json` hooks and
    `.opencode/plugin/guardrails.mjs` must gate the same operations with the

@@ -2,7 +2,7 @@ import type { ActivityResponse } from "@carlnotes/contracts/activity"
 import { CHAT_NAME } from "@carlnotes/contracts/chat"
 import type { MonthlyBudgetCutoff } from "@carlnotes/contracts/plans"
 import { PODCAST_NAME } from "@carlnotes/contracts/podcastEpisodes"
-import { toSharePercent, toSharePercentLabel } from "./labels"
+import { toCentsLabel, toSharePercent, toSharePercentLabel } from "./labels"
 import { MONTHLY_BUDGET_CUTOFF_COPY, SPENT_BUDGET_LIST_LINE, toCutoffListLine } from "./monthlyBudgetCutoffCopy"
 
 // messages for each percentage of the budget spent, lowest threshold last so the first match wins. a budget with
@@ -49,6 +49,19 @@ export type SpendMeterModel = {
 	spendSegments: SpendSegment[]
 	legendSegments: SpendSegment[]
 	cutoffRows: { key: string; budgetShare: number; line: string }[]
+}
+
+/**
+ * Returns the month's spend against the monthly budget, such as "$0.43 of $3.00".
+ */
+export function toSpendAmountLabel({
+	scanSpendCents,
+	chatSpendCents,
+	podcastEpisodeSpendCents,
+	budgetCents,
+}: SpendMeterProps): string {
+	const totalCents = scanSpendCents + chatSpendCents + podcastEpisodeSpendCents
+	return `${toCentsLabel(totalCents)} of ${toCentsLabel(budgetCents)}`
 }
 
 /**
@@ -123,19 +136,33 @@ export function toCutoffMarkerState({ monthlyBudgetCutoffs, budgetUsedShare }: C
  * MIN_CIRCLE_GAP_PERCENT to the circle before it shares that circle.
  */
 export function toCutoffMarkers(monthlyBudgetCutoffs: MonthlyBudgetCutoff[]): CutoffMarker[] {
-	const cutoffMarkers: CutoffMarker[] = []
-	for (const monthlyBudgetCutoff of monthlyBudgetCutoffs) {
+	// group the cutoffs by their budget share, then name each group's cutoffs
+	const meterMarkerGroups = toMeterMarkerGroups(monthlyBudgetCutoffs, (cutoff) => cutoff.budgetShare)
+	return meterMarkerGroups.map(({ percent, items }) => ({ percent, monthlyBudgetCutoffs: items }))
+}
+
+// one circle on a meter's bar: where it sits, and the items it marks, lowest first
+export type MeterMarkerGroup<Item> = { percent: number; items: Item[] }
+
+/**
+ * Groups the items that a meter marks into circles by each item's share of the bar, in the items' order. An item that
+ * sits closer than MIN_CIRCLE_GAP_PERCENT to the circle before it shares that circle.
+ */
+export function toMeterMarkerGroups<Item>(items: Item[], toShare: (item: Item) => number): MeterMarkerGroup<Item>[] {
+	const meterMarkerGroups: MeterMarkerGroup<Item>[] = []
+	for (const item of items) {
 		// join the circle before it if the two would overlap, or start a circle of its own
-		const percent = toSharePercent(monthlyBudgetCutoff.budgetShare)
-		const previousCutoffMarker = cutoffMarkers.at(-1)
-		if (previousCutoffMarker && percent - previousCutoffMarker.percent < MIN_CIRCLE_GAP_PERCENT) {
-			previousCutoffMarker.monthlyBudgetCutoffs.push(monthlyBudgetCutoff)
+		const percent = toSharePercent(toShare(item))
+		const previousMeterMarkerGroup = meterMarkerGroups.at(-1)
+		if (previousMeterMarkerGroup && percent - previousMeterMarkerGroup.percent < MIN_CIRCLE_GAP_PERCENT) {
+			previousMeterMarkerGroup.items.push(item)
 		} else {
-			cutoffMarkers.push({ percent, monthlyBudgetCutoffs: [monthlyBudgetCutoff] })
+			meterMarkerGroups.push({ percent, items: [item] })
 		}
 	}
-	// return the circles in the cutoffs' order, lowest first
-	return cutoffMarkers
+
+	// return the circles in the items' order
+	return meterMarkerGroups
 }
 
 /**

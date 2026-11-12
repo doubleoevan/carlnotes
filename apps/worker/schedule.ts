@@ -2,6 +2,7 @@
 
 import { SCHEDULED_SCAN_SPENT_BUDGET_REASON } from "@carlnotes/contracts/scanFailure"
 import { db, sizeConnectionPool } from "@carlnotes/db"
+import { loadDailySpendCutoffState } from "@carlnotes/db/dailySpendCutoffs"
 import { runWithJobLease } from "@carlnotes/db/jobLease"
 import { scansRemainingToday } from "@carlnotes/db/quotas"
 import { scans } from "@carlnotes/db/schema/scans"
@@ -21,7 +22,7 @@ import { remindOpenReports } from "./reportReminders"
 import { retryPendingObjectDeletions } from "./retryPendingObjectDeletions"
 import { reportScanQueue, startUndispatchedScans, toDispatchableScanCount } from "./scanQueue"
 import { toScheduledTopicFilter } from "./scheduledTopicFilter"
-import { isWithinDailyTopicLimit, loadScheduledTopicLimits } from "./scheduledTopicLimits"
+import { isWithinDailyTopicLimit, loadDailySpendCutoffOwnerIds, loadScheduledTopicLimits } from "./scheduledTopicLimits"
 import { syncViewerCounts } from "./syncViewerCounts"
 
 // the sweep's job name, so two sweeps cannot run at once
@@ -30,7 +31,7 @@ const TOPIC_SWEEP_JOB = "scheduled-scan-sweep"
 // a persisted Topic, and what one topic sweep did
 export type Topic = typeof topics.$inferSelect
 // biome-ignore format: one line keeps the summary's fields under the comment-density hook's limit
-export type TopicSweepSummary = { scheduled: number; started: number; skippedOverQuota: number; skippedOverDailyLimit: number; skippedOverDailyScanCutoff: number; skippedOverBudget: number; skippedOverBacklog: number; failed: number }
+export type TopicSweepSummary = { scheduled: number; started: number; skippedWaitingScan: number; skippedOverDailySpendCutoff: number; skippedOverQuota: number; skippedOverDailyLimit: number; skippedOverDailyScanCutoff: number; skippedOverBudget: number; skippedOverBacklog: number; failed: number }
 
 /**
  * Runs one scheduled sweep under its lease or returns null if another sweep holds the lease.
@@ -40,12 +41,22 @@ export function runScheduledTopicScans(): Promise<TopicSweepSummary | null> {
 	return runWithJobLease({ jobName: TOPIC_SWEEP_JOB, runTask: sweepScheduledTopics })
 }
 
-// one sweep. dispatch what was never started, close out what went quiet, screen new Sources, report the queue,
-// then start each scheduled Topic's Scan. each stage first checks that the sweep still holds its lease
+// one sweep. read the daily spend cutoffs, report the queue, dispatch what was never started, close out what went
+// quiet, screen new Sources, then start each scheduled Topic's Scan. each stage first checks that the sweep still holds
+// its lease
 async function sweepScheduledTopics(signal: AbortSignal): Promise<TopicSweepSummary> {
-	// start anything that was opened and never dispatched, then close out anything dispatched that has gone quiet
+	// read the daily spend cutoffs once for the whole sweep
 	signal.throwIfAborted()
-	await startUndispatchedScans()
+	const cutoffState = await loadDailySpendCutoffState()
+
+	// report a scan queue that nothing polls, and a backlog past its limit, and size this sweep's dispatch by the backlog
+	signal.throwIfAborted()
+	const scanQueueDescription = await reportScanQueue()
+	const dispatchableScanCount = toDispatchableScanCount(scanQueueDescription)
+
+	// start what was opened and never dispatched within the dispatch count, then close out what has gone quiet
+	signal.throwIfAborted()
+	const waitingScanTopicIds = await startUndispatchedScans({ cutoffState, dispatchableScanCount })
 	signal.throwIfAborted()
 	await failStaleScans()
 
@@ -53,20 +64,18 @@ async function sweepScheduledTopics(signal: AbortSignal): Promise<TopicSweepSumm
 	signal.throwIfAborted()
 	await screenPendingSources()
 
-	// report a scan queue that nothing polls, and a backlog past its limit, and size this sweep's dispatch by the backlog
-	signal.throwIfAborted()
-	const scanQueueDescription = await reportScanQueue()
-	const dispatchableScanCount = toDispatchableScanCount(scanQueueDescription)
-
-	// load the scheduled Topics and the limits that their owners' plans and budgets set on them, then start the
-	// scheduled Topics' Scans
+	// load the scheduled Topics, the limits that their owners' plans and budgets set on them, and the owners past the
+	// scheduled scans cutoff, then start the scheduled Topics' Scans
 	signal.throwIfAborted()
 	const now = new Date()
 	const scheduledTopics = await db.select().from(topics).where(toScheduledTopicFilter(now))
 	const scheduledTopicLimits = await loadScheduledTopicLimits(scheduledTopics, now)
+	const dailySpendCutoffOwnerIds = await loadDailySpendCutoffOwnerIds(scheduledTopics, cutoffState)
 	const topicSweepSummary = await startScheduledTopicScans({
 		scheduledTopics,
 		...scheduledTopicLimits,
+		waitingScanTopicIds,
+		dailySpendCutoffOwnerIds,
 		dispatchableScanCount,
 		signal,
 	})
@@ -78,6 +87,8 @@ async function sweepScheduledTopics(signal: AbortSignal): Promise<TopicSweepSumm
 	// log a summary line for the sweep
 	const {
 		started,
+		skippedWaitingScan,
+		skippedOverDailySpendCutoff,
 		skippedOverQuota,
 		skippedOverDailyLimit,
 		skippedOverDailyScanCutoff,
@@ -86,24 +97,29 @@ async function sweepScheduledTopics(signal: AbortSignal): Promise<TopicSweepSumm
 		failed,
 	} = topicSweepSummary
 	console.log(
-		`scheduled scan sweep: ${started} started, ${skippedOverQuota} over quota, ${skippedOverDailyLimit} over the daily topic limit, ${skippedOverDailyScanCutoff} weekly past the daily scans cutoff, ${skippedOverBudget} over budget, ${skippedOverBacklog} left for the next sweep behind the backlog, ${failed} could not start, of ${scheduledTopics.length} scheduled`,
+		`scheduled scan sweep: ${started} started, ${skippedWaitingScan} with a Scan still waiting, ${skippedOverDailySpendCutoff} past the scheduled scans cutoff, ${skippedOverQuota} over quota, ${skippedOverDailyLimit} over the daily topic limit, ${skippedOverDailyScanCutoff} weekly past the daily scans cutoff, ${skippedOverBudget} over budget, ${skippedOverBacklog} left for the next sweep behind the backlog, ${failed} could not start, of ${scheduledTopics.length} scheduled`,
 	)
 	return topicSweepSummary
 }
 
-// the scheduled Topics, the limits from scheduledTopicLimits.ts, how many Scans this sweep may start, unbounded when
-// unset, and the signal that the sweep's lease aborts
+// the scheduled Topics, the limits from scheduledTopicLimits.ts, the Topics whose Scan still waits, the owners past the
+// scheduled scans cutoff, how many Scans this sweep may start, unbounded when unset, and the signal that the sweep's
+// lease aborts
 export type StartScheduledTopicScansOptions = {
 	scheduledTopics: Topic[]
 	dailyTopicIdsByOwner: Map<string, Set<string>>
 	dailyTopicOnWeeklyScanIds?: Set<string>
 	budgetExhaustedOwnerIds: Set<string>
+	// the Topics whose Scan still waits, and the owners past the scheduled scans cutoff
+	waitingScanTopicIds?: Set<string>
+	dailySpendCutoffOwnerIds?: Set<string>
 	dispatchableScanCount?: number
 	signal?: AbortSignal
 }
 
 /**
  * Starts a Scan for each scheduled Topic within its owner's quota, daily topic limit, daily scans cutoff, and budget.
+ * A Topic whose Scan still waits, or whose owner is past the scheduled scans cutoff, writes no row and stays scheduled.
  * A Topic whose owner's budget is spent gets a failed Scan instead, unless a Scan of that Topic is still running.
  * Returns what the sweep did. Each owner's remaining scan count is read once and lowered as that owner's Scans start.
  * A sweep whose lease is lost stops before its next Topic.
@@ -113,6 +129,8 @@ export async function startScheduledTopicScans({
 	dailyTopicIdsByOwner,
 	dailyTopicOnWeeklyScanIds = new Set(),
 	budgetExhaustedOwnerIds,
+	waitingScanTopicIds = new Set(),
+	dailySpendCutoffOwnerIds = new Set(),
 	dispatchableScanCount = Number.POSITIVE_INFINITY,
 	signal,
 }: StartScheduledTopicScansOptions): Promise<TopicSweepSummary> {
@@ -124,6 +142,13 @@ export async function startScheduledTopicScans({
 	for (const topic of scheduledTopics) {
 		// stop once the sweep's lease is lost
 		signal?.throwIfAborted()
+
+		// leave a Topic whose Scan still waits, or whose owner is past the scheduled scans cutoff, before any quota read
+		const dailySpendSkip = toDailySpendSkip(topic, waitingScanTopicIds, dailySpendCutoffOwnerIds)
+		if (dailySpendSkip) {
+			topicSweepSummary[dailySpendSkip]++
+			continue
+		}
 
 		// leave a Topic for the next sweep once this sweep has started as many Scans as the backlog allows
 		if (topicSweepSummary.started >= dispatchableScanCount) {
@@ -155,23 +180,47 @@ export async function startScheduledTopicScans({
 			continue
 		}
 
-		// hand the Topic's Scan to Temporal and lower the owner's remaining scan count.
-		// a Scan already running spends nothing
-		try {
-			const scanStart = await startTopicScan(topic.id, topic.ownerId, "scheduled")
-			if (scanStart.status === "running") {
-				continue
-			}
+		// hand the Topic's Scan to Temporal and lower the owner's remaining scan count if a new Scan started
+		if (await startScheduledTopicScan(topic, topicSweepSummary)) {
 			remainingScanCountByOwner.set(topic.ownerId, remainingScanCount - 1)
-			topicSweepSummary.started++
-		} catch (error) {
-			// the start itself failed, so no Scan is under way for this Topic. one Topic's failure never stops the sweep
-			console.error(`could not start scheduled scan for topic ${topic.id}`, error)
-			reportError(error, "scheduled-scan", { topicId: topic.id, ownerId: topic.ownerId })
-			topicSweepSummary.failed++
 		}
 	}
 	return topicSweepSummary
+}
+
+// start one scheduled Topic's Scan and count it, returning whether a new Scan started.
+// a Scan already running spends nothing, and a failed start is counted and reported
+async function startScheduledTopicScan(topic: Topic, topicSweepSummary: TopicSweepSummary): Promise<boolean> {
+	try {
+		// start the Scan, unless one is already running
+		const scanStart = await startTopicScan(topic.id, topic.ownerId, "scheduled")
+		if (scanStart.status === "running") {
+			return false
+		}
+
+		// count the new Scan
+		topicSweepSummary.started++
+		return true
+	} catch (error) {
+		// the start itself failed, so no Scan is under way for this Topic. one Topic's failure never stops the sweep
+		console.error(`could not start scheduled scan for topic ${topic.id}`, error)
+		reportError(error, "scheduled-scan", { topicId: topic.id, ownerId: topic.ownerId })
+		topicSweepSummary.failed++
+		return false
+	}
+}
+
+// the summary count that a Topic is skipped under if its Scan still waits or its owner is past the scheduled scans
+// cutoff, or null
+function toDailySpendSkip(
+	topic: Topic,
+	waitingScanTopicIds: Set<string>,
+	dailySpendCutoffOwnerIds: Set<string>,
+): "skippedWaitingScan" | "skippedOverDailySpendCutoff" | null {
+	if (waitingScanTopicIds.has(topic.id)) {
+		return "skippedWaitingScan"
+	}
+	return dailySpendCutoffOwnerIds.has(topic.ownerId) ? "skippedOverDailySpendCutoff" : null
 }
 
 // the summary count that a daily Topic is skipped under, or null if the sweep runs it
@@ -193,6 +242,8 @@ export function emptyTopicSweepSummary(scheduledCount: number): TopicSweepSummar
 	return {
 		scheduled: scheduledCount,
 		started: 0,
+		skippedWaitingScan: 0,
+		skippedOverDailySpendCutoff: 0,
 		skippedOverQuota: 0,
 		skippedOverDailyLimit: 0,
 		skippedOverDailyScanCutoff: 0,

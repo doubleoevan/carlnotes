@@ -198,16 +198,17 @@ export function ChatRoomPanel({
 	)
 }
 
-// why a post's files did not post, shown only to the poster
-import { CHAT_ROOM_REJECTION_COPY as ATTACHMENT_REJECTION_TEXT } from "@carlnotes/core/lib/chatRejectionCopy"
+// why carl will not answer a post or its files did not post, shown only to the poster
+import { CHAT_ROOM_REJECTION_COPY } from "@carlnotes/core/lib/chatRejectionCopy"
 
 /**
- * Renders why a chat room post was rejected: the plans link for a spent budget, or why its files did not post.
+ * Renders why a chat room post was rejected: the plans link for a spent budget, the chat cutoff, or why its files did
+ * not post.
  */
 export function ChatRoomRejectionNotice({ rejection }: { rejection: ChatRoomRejection }) {
 	return rejection === "budget" ? (
 		<ChatBudgetNotice />
 	) : (
-		<p className="text-muted-foreground text-sm">{ATTACHMENT_REJECTION_TEXT[rejection]}</p>
+		<p className="text-muted-foreground text-sm">{CHAT_ROOM_REJECTION_COPY[rejection]}</p>
 	)
 }

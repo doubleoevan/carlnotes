@@ -140,14 +140,18 @@ the browser bundle and renders pages through the server build, behind its own ro
   the close control put it off until the next rejected write, and a session without a version field never sees it. `signupPrompts.ts` holds
   `toSignupNavigation` and `toSignupHref`, which every action that sends a visitor to signup goes through, tagged with
   the action's cta from `@carlnotes/core/lib/signupPrompts`, whose prompt the signup page shows as a toast on arrival.
-- `components/account/` — the account page's sections. `SpendMeter.tsx` is the monthly budget's bar, with a circle
-  above it for each monthly budget cutoff, a tooltip on each circle, and the list of what each cutoff stops.
+- `components/account/` — the account page's sections, which `pages/AccountPage.tsx` places in expandable Budget and
+  Settings sections through `AccordionSection`'s optional icon. `SpendMeter.tsx` is the monthly budget's bar, with a
+  circle above it for each monthly budget cutoff, a tooltip on each circle, and the list of what each cutoff stops,
+  drawn with `components/common/MeterBar.tsx`, `MeterMarker.tsx`, and `MeterCutoffList.tsx`, which the admin console's
+  `FreePlanSpendMeter.tsx` draws its spend meter with too. The admin console's reset clock and count rings
+  and the account budget's rings are `components/common/MeterRing.tsx`, which adapts core's `MeterRing`.
   `AccountFields.tsx` holds the DOM elements of core's account sections, the Blocked people rows among them, which
-  `UserBlocksSection.stories.tsx` shows in every state.
-  `globals.css` scans `core/lib/spendMeter.ts` for the shared bar and legend colors. The legend uses compact row gaps
-  when wrapping, matching native. Cutoffs come from the API; an admin without a budget override has none.
-  `MonthlyBudgetCutoffTable.tsx` is the plans page's monthly budget cutoff table of every plan's cutoffs, which a test
-  checks against the docs page's copy, and `monthlyBudgetCutoffCopy.ts` holds the wording both of them use.
+  `UserBlocksSection.stories.tsx` shows in every state. `globals.css` scans `core/lib/spendMeter.ts` for the shared bar
+  and legend colors. The legend uses compact row gaps when wrapping, matching native. Cutoffs come from the API; an
+  admin without a budget override has none. `MonthlyBudgetCutoffTable.tsx` is the plans page's monthly budget cutoff
+  table of every plan's cutoffs, which a test checks against the docs page's copy, and `monthlyBudgetCutoffCopy.ts`
+  holds the wording both of them use.
 - `components/invite/` — the invite fields, editors, and modals, shared by the topic and team pages.
 - `components/topic/` — the topic page's sections, cards, dialogs, and editors, and the edit topic modal.
   `TopicFindingControls.tsx` and `TopicFindingDetails.tsx` hold a Finding's controls and its expanded note, which the
@@ -189,8 +193,14 @@ the browser bundle and renders pages through the server build, behind its own ro
   hero's popover.
 - `components/admin/` — the admin console's own pieces beyond its tables: `MobileMinimumVersionsCard.tsx`, each
   platform's minimum app version with who saved it and the input that raises, lowers, or clears it;
-  `ManageAdminsModal.tsx`, where an admin adds
-  and removes other admins.
+  `DailySpendCutoffsCard.tsx`, the Limits section: the meter of the day's free-plan spend and rings of the waiting first
+  scans and the past hour's signups, each over its settings, which save when a field loses focus, except the cutoffs,
+  which save from a Save daily cutoffs button; `FreePlanSpendMeter.tsx`, that meter with a circle at each daily spend
+  cutoff under a ring of the time left until midnight UTC; `spendControlDraft.ts`, the card's typed overrides, each
+  cutoff's typed value, and the save body they send; `EstimatedMonthlySpend.tsx`, the card's table of the worst case
+  monthly spend at each daily signup rate, limited by the highest cutoff beside the month without cutoffs, over the most
+  this month and the past days slider, and its table of how long after midnight UTC each cutoff is passed over a slider
+  for each cutoff; `ManageAdminsModal.tsx`, where an admin adds and removes other admins.
 - `components/branding/` — the coffee drawings, the loading indicator, the note icon, and the avatars.
   `ShareMugsIcon.tsx` draws the two mugs of a comment that a Podcast Episode read. `CoffeeMug.tsx` draws the mug from
   `@carlnotes/nightshift/coffeeMug`, and `coffeeMugSteam.test.ts` fails if the steam's keyframes and still rules in

@@ -1,6 +1,7 @@
 // admin tests for the contribution math that the totals summary reports, the self-demotion check, the route that
-// lists a topic's subscribers, and the mobile minimum version write
+// lists a topic's subscribers, the mobile minimum version write, and the spend control settings read and save
 import { afterEach, beforeEach, expect, test } from "bun:test"
+import { db } from "@carlnotes/db"
 import {
 	ADMIN_USER_ACCESS_ROW,
 	FREE_USER_ACCESS_ROW,
@@ -8,9 +9,17 @@ import {
 	type SentQuery,
 	stubConnectionPool,
 } from "@carlnotes/db/connectionPoolStub"
+import {
+	type DailySpendCutoffState,
+	loadDailySpendCutoffState,
+	toWaitingScanFilter,
+} from "@carlnotes/db/dailySpendCutoffs"
 import { restoreRedisClient, stubRedisClient } from "@carlnotes/db/redisClientStub"
+import { scans } from "@carlnotes/db/schema/scans"
+import { count } from "drizzle-orm"
 import { adminRoute, isSelfDemotion } from "./admin"
 import { computeContributionCents } from "./adminConsole"
+import { loadAdminDailySpendCutoffs } from "./spendControlSettings"
 import { toSignedInApp } from "./testSession"
 
 // each test writes through an in-memory Redis
@@ -161,4 +170,129 @@ test("an unknown platform and a version that is not dotted integers are rejected
 	stubConnectionPool(toMinimumVersionRouteRows)
 	expect((await saveMinimumVersion("admin-1", "web", "1.2.0")).status).toBe(400)
 	expect((await saveMinimumVersion("admin-1", "ios", "soon")).status).toBe(400)
+})
+
+// the spend control settings body with every setting left to its default and the switch off
+const DEFAULT_SPEND_CONTROL_PAYLOAD = {
+	podcastEpisodesCutoffDollars: null,
+	scheduledScansCutoffDollars: null,
+	chatCutoffDollars: null,
+	firstScanDispatchLimit: null,
+	hourlySignupAlertCount: null,
+	isUnverifiedFirstScanLimitOn: false,
+}
+
+// save the spend control settings as the given user, or as a signed-out visitor for null
+async function saveSpendControlSettings(userId: string | null, payload: unknown): Promise<Response> {
+	const app = userId ? toSignedInApp(adminRoute, userId) : adminRoute
+	return await app.request("/admin/spend-control-settings", {
+		method: "POST",
+		headers: { "content-type": "application/json" },
+		body: JSON.stringify(payload),
+	})
+}
+
+// the inserts into the spend control settings table among the sent queries
+function toSpendControlInserts(sentQueries: SentQuery[]): SentQuery[] {
+	return sentQueries.filter(({ text }) => text.startsWith('insert into "spend_control_settings"'))
+}
+
+test("a visitor gets 401, a non-admin gets 403 on the console and the save, and neither reads or writes the settings", async () => {
+	const sentQueries = stubConnectionPool(toMinimumVersionRouteRows)
+	expect((await saveSpendControlSettings(null, DEFAULT_SPEND_CONTROL_PAYLOAD)).status).toBe(401)
+	expect((await saveSpendControlSettings("user-1", DEFAULT_SPEND_CONTROL_PAYLOAD)).status).toBe(403)
+	expect((await toSignedInApp(adminRoute, "user-1").request("/admin/console")).status).toBe(403)
+	expect(sentQueries.some(({ text }) => text.includes("spend_control_settings"))).toBe(false)
+})
+
+test("an admin's save writes the overrides in cents, and an empty value clears its override", async () => {
+	const sentQueries = stubConnectionPool(toMinimumVersionRouteRows)
+	const payload = { ...DEFAULT_SPEND_CONTROL_PAYLOAD, scheduledScansCutoffDollars: 42.5, firstScanDispatchLimit: 0 }
+	expect((await saveSpendControlSettings("admin-1", payload)).status).toBe(200)
+
+	// the scheduled scans cutoff in cents, a dispatch limit of zero, and a null for each setting left empty
+	const spendControlInserts = toSpendControlInserts(sentQueries)
+	expect(spendControlInserts).toHaveLength(1)
+	expect(spendControlInserts[0]?.values.slice(0, 7)).toEqual([1, null, 4250, null, 0, null, false])
+})
+
+test("invalid values are rejected and leave the row unchanged", async () => {
+	const sentQueries = stubConnectionPool(toMinimumVersionRouteRows)
+	const invalidPayloads = [
+		{ ...DEFAULT_SPEND_CONTROL_PAYLOAD, podcastEpisodesCutoffDollars: 0 },
+		{ ...DEFAULT_SPEND_CONTROL_PAYLOAD, scheduledScansCutoffDollars: -5 },
+		{ ...DEFAULT_SPEND_CONTROL_PAYLOAD, chatCutoffDollars: 0 },
+		{ ...DEFAULT_SPEND_CONTROL_PAYLOAD, firstScanDispatchLimit: -1 },
+		{ ...DEFAULT_SPEND_CONTROL_PAYLOAD, firstScanDispatchLimit: 2.5 },
+		{ ...DEFAULT_SPEND_CONTROL_PAYLOAD, hourlySignupAlertCount: 0 },
+		{ ...DEFAULT_SPEND_CONTROL_PAYLOAD, isUnverifiedFirstScanLimitOn: "yes" },
+	]
+	for (const invalidPayload of invalidPayloads) {
+		expect((await saveSpendControlSettings("admin-1", invalidPayload)).status).toBe(400)
+	}
+	expect(toSpendControlInserts(sentQueries)).toHaveLength(0)
+})
+
+test("a save clears the cached cutoff state, so the next read uses the saved settings", async () => {
+	// the stored scheduled scans cutoff starts at 50 dollars, and the day's free-plan spend is 60
+	let storedScheduledScansCutoffCents = 5_000
+	stubConnectionPool((sentQuery) => {
+		// the stored overrides row
+		if (sentQuery.text.includes('from "spend_control_settings"')) {
+			return [[null, storedScheduledScansCutoffCents, null, null, null, false]]
+		}
+
+		// the spend sums, with the day's spend in the scans sum
+		if (sentQuery.text.includes("coalesce(sum(")) {
+			return [[sentQuery.text.includes('from "scans"') ? "60" : "0"]]
+		}
+		return toMinimumVersionRouteRows(sentQuery)
+	})
+
+	// the first read passes the cutoff and is cached
+	const firstCutoffState = await loadDailySpendCutoffState()
+	expect(firstCutoffState).toMatchObject({ status: "loaded", settings: { scheduledScansCutoffCents: 5_000 } })
+
+	// a save of 100 dollars, then a read that uses it
+	storedScheduledScansCutoffCents = 10_000
+	const payload = { ...DEFAULT_SPEND_CONTROL_PAYLOAD, scheduledScansCutoffDollars: 100 }
+	expect((await saveSpendControlSettings("admin-1", payload)).status).toBe(200)
+	const savedCutoffState = await loadDailySpendCutoffState()
+	expect(savedCutoffState).toMatchObject({ status: "loaded", settings: { scheduledScansCutoffCents: 10_000 } })
+})
+
+test("the console's waiting scan count reads the waiting scan filter of the settings in effect", async () => {
+	// an empty settings table, a day's free-plan spend of 150 dollars past the default cutoff, and three waiting scans
+	const sentQueries = stubConnectionPool(({ text }) => {
+		if (text.includes("coalesce(sum(")) {
+			return [[text.includes('from "scans"') ? "150" : "0"]]
+		}
+		return text.startsWith("select count(*)") ? [[3]] : []
+	})
+	const dailySpendCutoffs = await loadAdminDailySpendCutoffs()
+
+	// the spend, the count, and every cutoff passed, the chat cutoff at its amount
+	expect(dailySpendCutoffs).toMatchObject({ freePlanSpendCents: 15_000, waitingScanCount: 3 })
+	expect(dailySpendCutoffs.cutoffs.map((cutoff) => [cutoff.kind, cutoff.isPassed])).toEqual([
+		["podcastEpisodes", true],
+		["scheduledScans", true],
+		["chat", true],
+	])
+
+	// the count's filter is the waiting scan filter for the loaded state at the default settings
+	const readState: DailySpendCutoffState = {
+		status: "loaded",
+		freePlanSpendCents: 15_000,
+		settings: {
+			podcastEpisodesCutoffCents: 6_500,
+			scheduledScansCutoffCents: 10_000,
+			chatCutoffCents: 15_000,
+			firstScanDispatchLimit: 5,
+			hourlySignupAlertCount: 50,
+			isUnverifiedFirstScanLimitOn: false,
+		},
+	}
+	const waitingScanCountQuery = sentQueries.find(({ text }) => text.startsWith('select count(*) from "scans"'))
+	const expectedCountSql = db.select({ count: count() }).from(scans).where(toWaitingScanFilter(readState)).toSQL().sql
+	expect(waitingScanCountQuery?.text).toBe(expectedCountSql)
 })

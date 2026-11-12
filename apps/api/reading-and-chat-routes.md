@@ -59,21 +59,22 @@
   changed; `clearVisitorTopicPages`, which a team attach or detach calls; and `clearSharedTopicFeedCaches`, which drops
   the feed copies with the home and popular topic id lists; `topic/feedData.ts` — the batched reads behind every
   topic in a feed, each table read once for the whole batch.
-- `chat/room.ts` — posting to a chat room and its stream. A chat message that addresses Carl reserves his turn's largest
-  cost before it posts, priced from the room's stored question by `loadModelRoomQuestionChars` in
-  `chat/roomQuestion.ts`, which sums stored lengths in the database through `toDecryptedLengthSql` in
-  `chat/encryption.ts`, and a budget that the spend and open reservations have reached is rejected privately. Both post
-  routes are under the tool callers' rate limit; `chat/roomRoute.ts` — the chat room routes; `chat/roomAccess.ts` — one
-  chat room, the member's access to it, and the topic side of a chat room filter; `chat/roomDeletes.ts` — clearing a
-  room and deleting one message or shared file.
+- `chat/room.ts` — posting to a chat room and its stream. A chat message that addresses Carl from a free user past the
+  chat cutoff is rejected privately before anything posts. Otherwise it reserves his turn's largest cost before it
+  posts, priced from the room's stored question by `loadModelRoomQuestionChars` in `chat/roomQuestion.ts`, which sums
+  stored lengths in the database through `toDecryptedLengthSql` in `chat/encryption.ts`, and a budget that the spend and
+  open reservations have reached is rejected privately. Both post routes are under the tool callers' rate limit;
+  `chat/roomRoute.ts` — the chat room routes; `chat/roomAccess.ts` — one chat room, the member's access to it, and the
+  topic side of a chat room filter; `chat/roomDeletes.ts` — clearing a room and deleting one message or shared file.
 - `chat/privateChat.ts` — the private chat routes, each post rejecting a signed-out visitor through
   `toSignedOutRejection` in `bodyLimit.ts` before the body is read; `chat/chatTurnAnswer.ts` — answering an allowed
   private chat turn: its podcast episode chapter, attachments, the reservation of its largest cost, which rejects a turn
   before any model call once the spend and open reservations reach the budget, its proposal, tools, and streamed reply;
   `chat/chatTurnAuthorization.ts` — whether a user may take a chat turn on a topic, in a team chat, or in the new-topic
   chat, `toChatRejection`, the response each rejected status gets, which the private chat routes, the voice routes, and
-  the chat attachment delete share, and `rejectChatTurn`, which also counts a budget rejection; `chat/chatTurnStream.ts`
-  — streaming a chat turn's reply, saving its row, then releasing its reservation; `chat/chatProposals.ts` — the change
+  the chat attachment delete share, `loadChatSpendRejection`, which returns the rejection for a spent budget, then for a
+  free user past the chat cutoff, and `rejectChatTurn`, which also counts a budget rejection; `chat/chatTurnStream.ts` —
+  streaming a chat turn's reply, saving its row, then releasing its reservation; `chat/chatProposals.ts` — the change
   Carl previewed in a private chat, recorded in `chat_proposals` as a keyed digest that holds none of the preview's
   text, taken by the user's next message on that page, and applied by the server through the topic tools or the create
   path only if it matches its record and the agreement check reads the message as agreeing. No chat binds a tool that

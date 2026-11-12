@@ -7,6 +7,7 @@ import {
 	toCutoffClause,
 	toCutoffMarkerState,
 	toCutoffMarkers,
+	toSpendAmountLabel,
 	toSpendMeterModel,
 	toSpendMeterStatusLine,
 } from "@carlnotes/core/lib/spendMeter"
@@ -39,12 +40,6 @@ export function SpendMeter({
 	} = toSpendMeterModel(activity)
 	return (
 		<View className="w-full">
-			<View className="flex-row flex-wrap items-baseline justify-between gap-2">
-				<Text className="font-semibold">{"Carl's coffee fund"}</Text>
-				<Text className="text-sm text-muted-foreground">
-					{toCentsLabel(totalCents)} of {toCentsLabel(budgetCents)}
-				</Text>
-			</View>
 			{/* cutoff buttons open the web tooltip's content on tap */}
 			<View className={cn("relative mt-2", hasMonthlyBudgetCutoffs && "pt-7.5")}>
 				<View
@@ -54,7 +49,7 @@ export function SpendMeter({
 						min: 0,
 						max: budgetCents,
 						now: Math.min(totalCents, budgetCents),
-						text: `${toCentsLabel(totalCents)} of ${toCentsLabel(budgetCents)}`,
+						text: toSpendAmountLabel(activity),
 					}}
 				>
 					{spendSegments.map((segment) => (

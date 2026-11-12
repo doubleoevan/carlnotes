@@ -15,14 +15,12 @@ import { capitalize } from "@carlnotes/core/lib/labels"
 import { CLOSE_ACCOUNT_CONFIRMATION, REQUEST_FAILED_TEXT, toCloseAccountCopy } from "@carlnotes/core/lib/sessionCopy"
 import { PLAN_MANAGEMENT_LABELS } from "@carlnotes/core/lib/storefrontPurchaseRules"
 import { USER_BLOCKS_SECTION } from "@carlnotes/core/lib/userBlocks"
-import { Settings } from "lucide-react-native"
 import { useState } from "react"
 import { Alert, Linking, View } from "react-native"
 import { mobileAuthClient, retireCurrentSession } from "@/authClient"
 import { UserAvatarPicker } from "@/components/avatar/UserAvatarPicker"
 import { SectionAnchor } from "@/components/layout/SectionAnchor"
 import { Button } from "@/components/primitives/button"
-import { Icon } from "@/components/primitives/icon"
 import { Text } from "@/components/primitives/text"
 import { useApplyStoreBilling } from "@/hooks/useStoreBilling"
 import { askForPushPermission, usePushPermission } from "@/pushPermission"
@@ -38,12 +36,6 @@ import { AiAgentAccountSection } from "./AiAgentAccountSection"
 export function AccountSettings({ provider }: { provider: BillingProvider | null }) {
 	return (
 		<>
-			<View className="flex-row items-center gap-2">
-				<Icon as={Settings} className="size-5 text-foreground" />
-				<Text accessibilityRole="header" className="font-display text-xl">
-					Settings
-				</Text>
-			</View>
 			<View className="rounded-lg border border-separator bg-card p-4 shadow-raised">
 				<Text className="font-semibold">Café</Text>
 				<ProfileFields />

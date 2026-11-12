@@ -89,9 +89,10 @@ export async function sendTranscription({
 
 		// the spoken questions cutoff's own 402 says so, and every other failed status is a chat rejection
 		if (!response.ok) {
-			return (await isSpokenQuestionsPausedResponse(response))
+			const errorMessage = await readApiErrorMessage(response)
+			return response.status === 402 && errorMessage === SPOKEN_QUESTIONS_PAUSED_ERROR
 				? "spokenQuestionsPaused"
-				: toChatRejection(response.status)
+				: toChatRejection(response.status, errorMessage)
 		}
 		return (await response.json()) as { transcript: string }
 	} catch (error) {
@@ -114,11 +115,6 @@ export async function fetchSpokenQuestionsStatus(): Promise<SpokenQuestionsState
 		console.error("spoken questions read failed", error)
 		return "allowed"
 	}
-}
-
-// whether a rejected transcription is the spoken questions cutoff's own 402
-async function isSpokenQuestionsPausedResponse(response: Response): Promise<boolean> {
-	return response.status === 402 && (await readApiErrorMessage(response)) === SPOKEN_QUESTIONS_PAUSED_ERROR
 }
 
 /**
@@ -144,7 +140,9 @@ export async function fetchSpokenAnswerAudio({
 			headers: { "Content-Type": "application/json" },
 			body: JSON.stringify({ page, text, speaker }),
 		})
-		return response.ok ? await readSpokenPartAudio(response) : toChatRejection(response.status)
+		return response.ok
+			? await readSpokenPartAudio(response)
+			: toChatRejection(response.status, await readApiErrorMessage(response))
 	} catch (error) {
 		// the network's own failure
 		console.error("spoken answer audio failed", error)

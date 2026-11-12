@@ -10,6 +10,7 @@ import { setOpenReportCount } from "@carlnotes/core/stores/openReportStore"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { Settings, ShieldUser } from "lucide-react"
 import { type ReactNode, useCallback, useEffect, useState } from "react"
+import { DailySpendCutoffsCard } from "@/components/admin/DailySpendCutoffsCard"
 import { ManageAdminsModal } from "@/components/admin/ManageAdminsModal"
 import { MobileMinimumVersionsCard } from "@/components/admin/MobileMinimumVersionsCard"
 import { CoffeeLoading } from "@/components/branding/CoffeeLoading"
@@ -112,8 +113,16 @@ export function AdminPage() {
 					onToggleAdminBlockedUsers={() => setIsShowingAdminBlockedUsers((isShowing) => !isShowing)}
 				/>
 				{/* the sections as accordions */}
-				<Accordion type="multiple" defaultValue={["reports", "users", "teams", "mobile"]} className="mt-4">
-					{/* the open reports first, resolved from here */}
+				<Accordion type="multiple" defaultValue={["limits", "reports", "users", "teams", "mobile"]} className="mt-4">
+					{/* the daily spend cutoffs and the other limits */}
+					<AccordionSection
+						value="limits"
+						title="Limits"
+						countLabel={toLimitsSectionCountLabel(adminConsole.dailySpendCutoffs.cutoffs.length)}
+					>
+						<DailySpendCutoffsCard dailySpendCutoffs={adminConsole.dailySpendCutoffs} onSaved={loadConsole} />
+					</AccordionSection>
+					{/* the open reports, resolved from here */}
 					<AccordionSection value="reports" title="Reports" countLabel={toSectionCountLabel(reports.length, "report")}>
 						<AdminReportsTable reports={reports} focusedReportId={focusedReportId} onResolved={loadConsole} />
 					</AccordionSection>
@@ -212,6 +221,11 @@ function TotalSummaries({
 			/>
 		</div>
 	)
+}
+
+// the Limits section's count of its settings: the cutoffs, the first scan limit, the signup alert, and the permission
+function toLimitsSectionCountLabel(cutoffCount: number): string {
+	return [toSectionCountLabel(cutoffCount, "cutoff"), "1 limit", "1 alert", "1 permission"].join(" · ")
 }
 
 // a card counting something per plan, one row per plan in order

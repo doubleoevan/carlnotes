@@ -137,6 +137,14 @@ export function toCentsLabel(cents: number | null): string {
 }
 
 /**
+ * A dollar label from a cents figure, in whole dollars if it has no cents, as in $65 or $3,000, and to the cent
+ * otherwise.
+ */
+export function toWholeDollarLabel(cents: number): string {
+	return cents % 100 === 0 ? `$${(cents / 100).toLocaleString("en-US")}` : toCentsLabel(cents)
+}
+
+/**
  * A share of a whole as a rounded percent: 0.6 is 60.
  */
 export function toSharePercent(share: number): number {

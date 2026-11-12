@@ -1,4 +1,5 @@
-// the admin console contracts: its user, team, and topic subscriber rows, its totals, and the mobile minimum versions
+// the admin console contracts: its user, team, and topic subscriber rows, its totals, the mobile minimum versions, and
+// the daily spend cutoffs with their settings
 
 import type { MobilePlatform } from "./clientTelemetry"
 import type { Plan } from "./plans"
@@ -84,10 +85,53 @@ export type AdminTotals = {
 	contributionCents: number | null
 }
 
+// the kinds of free spending a daily spend cutoff pauses: a free user's repeat podcast episodes, their scheduled scans,
+// and their chat with carl
+export type DailySpendCutoffKind = "podcastEpisodes" | "scheduledScans" | "chat"
+
+// the spend controls in effect: each daily spend cutoff in cents, how many waiting scans one sweep starts, how many
+// signups in an hour send an alert, and whether the first scan dispatch limit applies to unverified password accounts
+export type SpendControlSettings = {
+	podcastEpisodesCutoffCents: number
+	scheduledScansCutoffCents: number
+	chatCutoffCents: number
+	firstScanDispatchLimit: number
+	hourlySignupAlertCount: number
+	isUnverifiedFirstScanLimitOn: boolean
+}
+
+// one numeric spend control on the admin console: the value in effect, its default, and whether an override replaced it
+export type AdminSpendControlSetting = { value: number; defaultValue: number; isOverridden: boolean }
+
+// the parts of the worst case free-plan spend for the UTC month: the sum of the free users' monthly budgets in cents,
+// and the signups of each of the past 30 days, today's first
+export type WorstCaseMonthlySpend = { freeUserBudgetCents: number; dailySignupCounts: number[] }
+
+// the admin console's daily spend card: today's free-plan spend, the worst case monthly spend, each cutoff and
+// whether it is passed, the first scan dispatch limit with how many scans wait for it, the signup alert with the past
+// hour's signups, the unverified accounts switch, and the last save
+export type AdminDailySpendCutoffs = {
+	// the spend so far today and the worst case for the month
+	freePlanSpendCents: number
+	worstCaseMonthlySpend: WorstCaseMonthlySpend
+	// the settings with what each one counts
+	cutoffs: (AdminSpendControlSetting & { kind: DailySpendCutoffKind; isPassed: boolean })[]
+	firstScanDispatchLimit: AdminSpendControlSetting
+	waitingScanCount: number
+	hourlySignupAlertCount: AdminSpendControlSetting
+	hourlySignupCount: number
+	isUnverifiedFirstScanLimitOn: boolean
+	// when the overrides were last saved and by whom. both are null before the first save, and the username is null
+	// once the saver's account closed
+	updatedAt: string | null
+	updatedByUsername: string | null
+}
+
 // the admin-console payload: the users and teams tables with the totals summary
 export type AdminConsoleResponse = {
 	users: AdminUserRow[]
 	teams: AdminTeamRow[]
 	totals: AdminTotals
 	mobileMinimumVersions: MobileMinimumVersionRow[]
+	dailySpendCutoffs: AdminDailySpendCutoffs
 }

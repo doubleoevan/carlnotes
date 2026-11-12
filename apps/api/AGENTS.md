@@ -362,11 +362,20 @@ authenticated encryption itself lives in `@carlnotes/server/privateText`.
   image files `topic-image:<topicId>`. The purge by tag is `packages/server/edgePurge.ts`, which the worker sends too.
   `edgeCache.purge.ts` (`bun run edge:purge`) is the deploy job that clears the `rendered` tag right after the app
   deploys.
-- `admin.ts` — the admin writes (a user's role and budget override, and a platform's minimum app version) and the admin
-  console routes, over `adminConsole.ts`
-  (the users and teams tables, the platform totals, and the expandable rows, a topic's subscribers among them) and
-  `report/adminReports.ts` (the open content reports, and resolving one by removing its content through the
+- `admin.ts` — the admin writes (a user's role and budget override, a platform's minimum app version, and the spend
+  control settings through `POST /admin/spend-control-settings`) and the admin console routes, over `adminConsole.ts`
+  (the users and teams tables, the platform totals, and the expandable rows, a topic's subscribers among them),
+  `spendControlSettings.ts` (the console's `dailySpendCutoffs` field read straight from the database: the day's
+  free-plan spend, the worst case monthly spend from `loadWorstCaseMonthlySpend`, each cutoff and whether it is passed,
+  the first scan dispatch limit with the waiting scan count from `toWaitingScanFilter`, the signup alert, and the
+  unverified accounts switch, and the save that writes the one `spend_control_settings` row and deletes both cached
+  reads), and `report/adminReports.ts` (the open content reports, and resolving one by removing its content through the
   content's own delete path or keeping it).
+- The daily spend cutoffs in topic creation and the manual scan route: `topic/saveHelpers.ts` leaves a new Topic's
+  first Scan running and undispatched for the sweep if `isFirstScanWaiting` says it waits, and starts the url Source
+  screens without the wait. `runManualScan` in `topic/scans.ts` returns running while the Topic's first Scan waits, and
+  past the scheduled scans cutoff opens a free user's manual row without a workflow and returns started. Both read
+  `@carlnotes/db/dailySpendCutoffs`, and a paid user's request reads nothing new.
 - `report/` — content reports: `report/flagContent.ts` (the `POST /api/flag-content` route, the daily limit in Redis,
   the stored report, and the email to `SUPPORT_EMAIL` with the admin console link), `report/reportSubjects.ts` (what a
   report names, a Topic, profile, Team, chat room message, note, or note comment, each resolved under the same read rule

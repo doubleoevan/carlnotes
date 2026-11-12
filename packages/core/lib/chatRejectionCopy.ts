@@ -8,6 +8,7 @@ import {
 /** The sentence for each chat rejection. */
 export const CHAT_REJECTION_COPY: Record<ChatRejection, string> = {
 	budget: SPENT_BUDGET_LINE,
+	chatPaused: "Carl is taking a break until midnight UTC. Ask him again then.",
 	rateLimited: "Carl needs a minute to catch up. Ask again shortly.",
 	forbidden: "Carl can't talk about that.",
 	failed: "Carl lost his train of thought.",
@@ -22,8 +23,9 @@ export const MICROPHONE_REJECTED_NOTICE = "Carl can't hear you. Type it, he read
 export const NO_SPEECH_NOTICE = "Carl didn't catch that. Please try again."
 export const CHAT_FAILED_NOTICE = `${CHAT_REJECTION_COPY.failed} Please try again.`
 
-/** The room's attachment rejection copy, shared with its existing web notice. */
-export const CHAT_ROOM_REJECTION_COPY: Record<ChatRoomAttachmentRejection, string> = {
+/** The room's chat cutoff and attachment rejection copy, shared with its existing web notice. */
+export const CHAT_ROOM_REJECTION_COPY: Record<ChatRoomAttachmentRejection | "chatPaused", string> = {
+	chatPaused: CHAT_REJECTION_COPY.chatPaused,
 	attachmentLimitReached: `That would pass the ${CHAT_ROOM_ATTACHMENT_LIMIT} files you can share in this chat room. Delete some to share more.`,
 	attachmentRejected: "Those files didn't post. One of them may be unreadable.",
 	attachmentTooLarge: "Those files didn't post. One of them is too large to read. Share a smaller one.",

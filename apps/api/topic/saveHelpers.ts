@@ -3,6 +3,7 @@ import { isDailyFrequency } from "@carlnotes/contracts/enums"
 import { FIRST_SCAN_PAUSED_REASON, FIRST_SCAN_SPENT_BUDGET_REASON } from "@carlnotes/contracts/scanFailure"
 import type { UpdateTopicPayload } from "@carlnotes/contracts/topicPayloads"
 import type { DbHandle, DbTransaction } from "@carlnotes/db"
+import { isFirstScanWaiting } from "@carlnotes/db/dailySpendCutoffs"
 import { isMonthlyBudgetCutoffPassed } from "@carlnotes/db/monthlyBudgetCutoffs"
 import type { scans } from "@carlnotes/db/schema/scans"
 import { teams } from "@carlnotes/db/schema/teams"
@@ -110,7 +111,7 @@ export function startPendingSourceScreens(topicId: string): void {
 /**
  * Screens the new Topic's url Sources, then starts the Topic's first Scan.
  * If the owner's budget is spent, or the owner's spend is past the manual scans cutoff, the first Scan is marked failed
- * instead of started.
+ * instead of started. A first Scan that waits for the first scan dispatch limit stays open for the sweep to start.
  */
 export async function startFirstScan(topicId: string, firstScan: Scan | undefined, ownerId: string): Promise<void> {
 	// read the owner's budgets before the wait for the Source screens
@@ -120,6 +121,12 @@ export async function startFirstScan(topicId: string, firstScan: Scan | undefine
 	// the Source screens without the wait
 	if (firstScan && firstScanFailureReason) {
 		await failUnstartedScan(firstScan.id, firstScanFailureReason)
+		await screenPendingSources(topicId)
+		return
+	}
+
+	// leave a waiting first Scan running and undispatched for the sweep, and start the Source screens without the wait
+	if (firstScan && (await isFirstScanWaiting(ownerId))) {
 		await screenPendingSources(topicId)
 		return
 	}

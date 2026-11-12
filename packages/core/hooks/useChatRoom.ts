@@ -3,7 +3,7 @@
 import { showClientError } from "@carlnotes/client/apiClient"
 import { type SendChatRoomMessageOptions, sendChatRoomMessage } from "@carlnotes/client/chatRoomClient"
 import type { SpokenQuestionTimings } from "@carlnotes/client/voiceClient"
-import type { ChatRoomAttachmentRejection, ChatRoomMessage } from "@carlnotes/contracts/chat"
+import { CHAT_PAUSED_ERROR, type ChatRoomAttachmentRejection, type ChatRoomMessage } from "@carlnotes/contracts/chat"
 import { CARL_USERNAME, hasAllMention, hasModelMention, isModelChatMessage } from "@carlnotes/contracts/chatMentions"
 import type { RoomTopicToolCalls } from "@carlnotes/contracts/chatTurns"
 import type { VoiceChatPage } from "@carlnotes/contracts/payloads"
@@ -23,9 +23,9 @@ import type { UseChatRoomStream } from "./useChatRoomStream"
 
 export { FIRST_ITEM_INDEX_START } from "./useChatMessagePages"
 
-// why a post was rejected privately to its poster: Carl's spent budget, too many files, an unreadable file, or a file
-// too large to read
-export type ChatRoomRejection = "budget" | ChatRoomAttachmentRejection
+// why a post was rejected privately to its poster: Carl's spent budget, the chat cutoff, too many files, an unreadable
+// file, or a file too large to read
+export type ChatRoomRejection = "budget" | "chatPaused" | ChatRoomAttachmentRejection
 
 // what a member posts: the chat message, what it replies to, its files, and for a spoken transcript its timings
 export type ChatRoomPost = Omit<SendChatRoomMessageOptions, "topicId" | "teamId"> & {
@@ -222,9 +222,9 @@ export function useChatRoom({
 			onNotice("That didn't post. Try again.")
 			return false
 		}
-		// a posted chat message may still show the budget gate's rejection in place of carl's reply
+		// a posted chat message may still show the budget gate's or the chat cutoff's rejection in place of carl's reply
 		const isModelReplyRejected = postChatMessageResult.rejectionReason !== null
-		setRejection(isModelReplyRejected ? "budget" : null)
+		setRejection(isModelReplyRejected ? toModelReplyRejection(postChatMessageResult.rejectionReason) : null)
 		if (spokenQuestionTimings) {
 			awaitSpokenAnswer({
 				chatMessageId: postChatMessageResult.chatMessageId,
@@ -291,6 +291,11 @@ function applyChatRoomToolCalls({ roomToolCalls, topicId, userId, onNotice }: Ap
 		},
 	})
 	publishTopicChanged(topicId)
+}
+
+// the rejection that a post's rejection reason shows: the chat cutoff's, or the spent budget's
+function toModelReplyRejection(rejectionReason: string | null): ChatRoomRejection {
+	return rejectionReason === CHAT_PAUSED_ERROR ? "chatPaused" : "budget"
 }
 
 // whether a post gives carl the chat turn: a mention of him or of everyone, or a reply to his own chat message

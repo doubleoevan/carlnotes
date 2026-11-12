@@ -248,6 +248,25 @@ test("the spend for an empty user id is filtered by that id", async () => {
 	}
 })
 
+// a plan's spend sums only the users on that plan who are not admins, so a paid user's and an admin's spend stay out
+test("the spend for a plan is filtered to that plan's users who are not admins", async () => {
+	// send each sum for the free plan, then put the connection pool's own query back
+	const sentQueries = stubConnectionPool(() => [["0"]])
+	try {
+		await loadSpendSince({ since: new Date("2026-10-01T00:00:00Z"), billedPlan: "free" })
+	} finally {
+		restoreConnectionPool()
+	}
+
+	// every sum keeps the billed users on the free plan and leaves out the admins
+	expect(sentQueries).toHaveLength(7)
+	for (const sentQuery of sentQueries) {
+		expect(sentQuery.text).toContain('"users"."plan" = $')
+		expect(sentQuery.text).toContain(`"users"."role" <> 'admin'`)
+		expect(sentQuery.values).toContain("free")
+	}
+})
+
 // a podcast episode film's cost adds to the podcast episode spend of its podcast episode's owner
 test("the films' cost counts as podcast episode spend", async () => {
 	// the podcast episode sum and the film sum each return a cost, and every other sum returns none

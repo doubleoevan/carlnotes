@@ -10,6 +10,7 @@ import {
 	storedScanSourceResults,
 } from "@carlnotes/contracts/topics"
 import { db } from "@carlnotes/db"
+import { isManualScanWaiting, isTopicFirstScanWaiting } from "@carlnotes/db/dailySpendCutoffs"
 import { scans } from "@carlnotes/db/schema/scans"
 import { topics } from "@carlnotes/db/schema/topics"
 import { isUserLiteLLMKeyBudgetExhausted } from "@carlnotes/models/litellm"
@@ -17,7 +18,7 @@ import { loadScan, startTopicScan } from "@carlnotes/pipeline/scan"
 import { failStaleScans } from "@carlnotes/pipeline/staleScans"
 import { trackEvent } from "@carlnotes/server/analytics"
 import { reportError } from "@carlnotes/server/monitoring"
-import { eq } from "drizzle-orm"
+import { and, eq, sql } from "drizzle-orm"
 import { Hono } from "hono"
 import { isAllowed, loadManualScanAuthorization, loadMonthlyBudgetCutoffStatus } from "../authorization"
 import { reportManualScanOverage } from "../billing"
@@ -41,7 +42,7 @@ type RunManualScanOptions = { isOverageAllowed?: boolean }
 /**
  * Starts a manual scan for the owner or an admin. The scan runs without blocking the request.
  * Enforces the daily quota, the spent monthly budget, the manual scans cutoff, and the budget of the key that the scan
- * bills.
+ * bills. A manual scan that the first scan dispatch limit applies to opens for the sweep to start.
  */
 export async function runManualScan(
 	userId: string,
@@ -85,6 +86,19 @@ export async function runManualScan(
 	// close out any hung scans first, so a stuck scan row doesn't block a new manual scan indefinitely
 	await failStaleScans()
 
+	// a waiting first Scan, or a free user's manual Scan past the scheduled scans cutoff, waits for the sweep
+	const saveWaitingManualScanResult = await saveWaitingManualScan({
+		topic,
+		userId,
+		remainingScans: authorization.remainingScans,
+	})
+	if (saveWaitingManualScanResult?.status === "started") {
+		trackEvent("scan_requested", userId, { ...analyticsProperties, topicId })
+	}
+	if (saveWaitingManualScanResult) {
+		return saveWaitingManualScanResult
+	}
+
 	// hand the scan to Temporal, and report a start that throws as unavailable
 	const startTopicScanResult = await startTopicScan(topicId, userId, "manual").catch((error: unknown) => {
 		console.error(`manual scan could not start for topic ${topicId}`, error)
@@ -119,6 +133,46 @@ export async function runManualScan(
 	// track the scan request analytics event, then return the quota that the user has left
 	trackEvent("scan_requested", userId, { ...analyticsProperties, topicId })
 	return { status: "started", remainingScans: authorization.remainingScans }
+}
+
+// the Topic, the user that the manual Scan bills, and the quota they have left
+type SaveWaitingManualScanOptions = { topic: typeof topics.$inferSelect; userId: string; remainingScans: number }
+
+// the result of a manual Scan that waits for the first scan dispatch limit, or null to start it now.
+// a Topic whose first Scan waits returns running and leaves that row alone. past the scheduled scans cutoff, a free
+// user's manual Scan saves a manual row that the sweep starts, or returns running if the Topic has a running Scan
+async function saveWaitingManualScan({
+	topic,
+	userId,
+	remainingScans,
+}: SaveWaitingManualScanOptions): Promise<ManualScanResult | null> {
+	// return running for a Topic whose first Scan waits, and null for a manual Scan that does not wait
+	if (await isTopicFirstScanWaiting(topic)) {
+		return { status: "running" }
+	}
+	if (!(await isManualScanWaiting(userId))) {
+		return null
+	}
+
+	// save the manual row under the Topic's lock, so two requests at once save one row
+	const isManualRowSaved = await db.transaction(async (transaction) => {
+		await transaction.execute(sql`select pg_advisory_xact_lock(hashtext(${`waiting-manual-scan:${topic.id}`}))`)
+
+		// a Topic with a running Scan already has the Scan the user asked for
+		const [runningScan] = await transaction
+			.select({ id: scans.id })
+			.from(scans)
+			.where(and(eq(scans.topicId, topic.id), eq(scans.status, "running")))
+			.limit(1)
+		if (runningScan) {
+			return false
+		}
+
+		// save the manual row without a workflow
+		await transaction.insert(scans).values({ topicId: topic.id, ownerId: userId, isManual: true })
+		return true
+	})
+	return isManualRowSaved ? { status: "started", remainingScans } : { status: "running" }
 }
 
 /**

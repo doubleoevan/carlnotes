@@ -47,7 +47,9 @@ and `@carlnotes/contracts`, with `drizzle-orm` and `@neondatabase/serverless`.
   `teamTopics.ts` (the topics shared into a team beyond its owning team), `invites.ts`, `chat.ts`, `notes.ts`,
   `podcast.ts`, `billing.ts` (each user's one billing subscription and the provider that bills it), `releases.ts`,
   `jobLeases.ts` (each job's lease row), `storage.ts` (favicons and the pending object deletions),
-  `mobileMinimumVersions.ts` (the minimum app version of each platform), `reports.ts` (content reports), `userBlocks.ts`
+  `mobileMinimumVersions.ts` (the minimum app version of each platform), `spendControlSettings.ts` (the one row of
+  admin overrides on the daily spend cutoffs, the first scan dispatch limit, the hourly signup alert, and the unverified
+  accounts switch), `reports.ts` (content reports), `userBlocks.ts`
   (the users a user blocked), `social.ts` (reactions, comments, the users a comment mentions, and the links of a comment
   shared with the podcast, each row on exactly one social target), `notificationsEmailSends.ts` (one row per user per
   UTC day that a notifications email went out), `pushDevices.ts` (each phone's Expo push token, bound to the session
@@ -96,25 +98,22 @@ and `@carlnotes/contracts`, with `drizzle-orm` and `@neondatabase/serverless`.
   `store.smoke.ts` (`bun run smoke:store`) uploads a fake resource's content, reads it back, and checks the key, size,
   and body round-trip against the live bucket.
 - `redis.ts` — the Redis store, on Bun's built-in client from `REDIS_URL`.
-  `runWithRedis` runs one operation and returns null on any failure, including a command with no reply in two
-  seconds, and three such commands in a row replace the client, so a wedged connection never holds every request.
-  `cacheJson` returns a cached value, or loads the value and caches it. `redisGauges.ts` holds the extra gauges the
-  minute line reads: the store's counts with the server's used and maximum memory, warning if the command connection
-  is down, at eight tenths of the memory limit, and at ten errors in a minute.
-  `redisRateLimits.ts` holds the rate limits over the store: `incrementRateLimitWindow` is the fixed window counter
-  behind the api's shared limiters, `countRateLimitHit` counts a hit and returns whether it is within a limit, and
-  `takeRateLimitSlot` is the slot that one call holds at a time, behind the Resend limit that the api and the worker
-  share.
-  `publishToChannel` and `subscribeToChannel` are the fan-out, and each process subscribes on one subscriber connection.
-  `addSubscriberReconnectListener` runs a listener each time that connection has come back after a drop.
-  `readAndResetRedisGauges` returns the minute line's counts.
-  `redisConnection.ts` is one connection and its reconnects: the client options, the connect with its backoff, the
-  reconnect on a drop, and the failed operation count. The store holds a command connection and a subscriber
-  connection over it. The store reconnects with no limit on attempts, and the reconnect delay doubles from one
-  second up to 30 seconds.
-  If an operation returns null, the caller goes on without Redis.
-  Sessions read Postgres, a cache calls its loader, and a Resend call goes out without a slot.
-  A limiter counts the hit in this process's memory instead, so a caller stays bounded at the limit per replica.
+  `runWithRedis` runs one operation and returns null on any failure, including a command with no reply in two seconds,
+  and three such commands in a row replace the client, so a wedged connection never holds every request. `cacheJson`
+  returns a cached value, or loads the value and caches it, and concurrent callers of one key in a process share one
+  load. `redisGauges.ts` holds the extra gauges the minute line reads: the store's counts with the server's used and
+  maximum memory, warning if the command connection is down, at eight tenths of the memory limit, and at ten errors in a
+  minute. `redisRateLimits.ts` holds the rate limits over the store: `incrementRateLimitWindow` is the fixed window
+  counter behind the api's shared limiters, `countRateLimitHit` counts a hit and returns whether it is within a limit,
+  and `takeRateLimitSlot` is the slot that one call holds at a time, behind the Resend limit that the api and the worker
+  share. `publishToChannel` and `subscribeToChannel` are the fan-out, and each process subscribes on one subscriber
+  connection. `addSubscriberReconnectListener` runs a listener each time that connection has come back after a drop.
+  `readAndResetRedisGauges` returns the minute line's counts. `redisConnection.ts` is one connection and its reconnects:
+  the client options, the connect with its backoff, the reconnect on a drop, and the failed operation count. The store
+  holds a command connection and a subscriber connection over it. The store reconnects with no limit on attempts, and
+  the reconnect delay doubles from one second up to 30 seconds. If an operation returns null, the caller goes on without
+  Redis. Sessions read Postgres, a cache calls its loader, and a Resend call goes out without a slot. A limiter counts
+  the hit in this process's memory instead, so a caller stays bounded at the limit per replica.
 - `viewerCounts.ts` — a topic's viewers and a podcast episode's listeners, one Redis HyperLogLog each, named by a
   `ViewerCountRef`. `addViewer` adds one person and lists the ref as changed if the counter grew, `readViewerEstimate`
   reads the estimate, `takeChangedViewerCountRefs` takes the changed set for the worker's sync, and
@@ -159,6 +158,19 @@ and `@carlnotes/contracts`, with `drizzle-orm` and `@neondatabase/serverless`.
   podcast episodes, daily scans, or manual scans. The daily scans cutoff moves with the daily scans left this month, at
   the mean cost of `loadRecentScanCostDollars` over the scans not started by hand, with a weekdays topic charged only
   for the weekdays left, and `loadMonthlyBudgetCutoffs` returns every cutoff for the spend meter.
+- `dailySpendCutoffs.ts` — the daily spend cutoffs. `loadDailySpendCutoffState` reads the UTC day's free-plan spend
+  (`loadSpendSince` with `billedPlan: "free"`, which leaves admins out) and the spend control settings, each through a
+  one-minute Redis cache, and returns the unavailable state after a failed read, which passes no cutoff.
+  `isDailySpendCutoffPassed` compares the spend with the podcast episodes, scheduled scans, or chat cutoff.
+  `toFirstScanFilter` and `toWaitingScanFilter` derive a Topic's first scan and the waiting scans from the rows, and
+  `isFirstScanWaiting`, `isManualScanWaiting`, and `isTopicFirstScanWaiting` return whether one owner's or Topic's Scan
+  waits, and `isUserPastDailySpendCutoff` returns whether a free user is past a cutoff. Each setting defaults from
+  Doppler (`PODCAST_EPISODES_DAILY_SPEND_CUTOFF_USD`, `SCHEDULED_SCANS_DAILY_SPEND_CUTOFF_USD`,
+  `CHAT_DAILY_SPEND_CUTOFF_USD`, `FIRST_SCAN_DISPATCH_LIMIT`, `HOURLY_SIGNUP_ALERT_COUNT`). `countHourlySignups` counts
+  the accounts the past hour created, for the worker's signup alert and the admin console's signups meter.
+- `worstCaseMonthlySpend.ts` — `loadWorstCaseMonthlySpend`, the parts of the admin console's worst case free-plan spend:
+  the sum of the monthly budgets of the free users who are not admins, each override in place of the plan's, and the
+  signups of each of the past 30 days from one grouped query.
 - `podcastFeedCache.ts` — the Redis keys of a Topic's rendered podcast feeds and film feeds, and
   `deletePodcastFeedCache`, which clears both and which a publish, a removal, a rename, or a finished film runs.
 - `requestMemo.ts` — the reads one request repeats, its user's access, each topic role, and its monthly spend, kept
@@ -183,6 +195,9 @@ and `@carlnotes/contracts`, with `drizzle-orm` and `@neondatabase/serverless`.
   tests import it.
 - `quotaTestFixtures.ts` — `withSpendQueryRows`, the stubbed rows that the quota and monthly budget cutoff
   tests share: an access row and each table's spend sum. Only tests import it.
+- `dailySpendCutoffTestFixtures.ts` — `DEFAULT_SPEND_CONTROL_SETTINGS` and `toDailySpendCutoffState`, the built-in spend
+  control settings and a loaded cutoff state that the daily spend cutoff, scan queue, and scheduled Topic limit tests
+  share. Only tests import it.
 - `connectionPoolStub.ts` — the connection pool stub that the tests share. `stubConnectionPool` returns the rows that
   a test picks for each query, records each query sent, counts each one toward the running request, and runs a
   transaction's callback on the stubbed client. `restoreConnectionPool` puts the pool's own query and the client's own

@@ -50,11 +50,12 @@ async function ownsNoTopic(userId: string | null): Promise<boolean> {
 	return ownedTopic === undefined
 }
 
-// the conversation that every chat page opens with: its chat turns and whether the user may chat on it
+// the conversation that every chat page opens with: its chat turns and whether the user may chat on it. a user past
+// the chat cutoff keeps the chat open, and a chat turn says the chat is paused
 function toChatConversation(chatTurns: ChatTurnRow[], authorization: ChatTurnAuthorization): ChatConversation {
 	return {
 		chatTurns,
-		canChat: authorization.status === "allowed",
+		canChat: authorization.status === "allowed" || authorization.status === "chatPaused",
 		isSignupRequired: authorization.status === "signup",
 		isBudgetExhausted: authorization.status === "budget",
 		isVoiceChatConfigured: isVoiceChatConfigured(),

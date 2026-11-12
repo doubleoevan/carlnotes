@@ -16,6 +16,17 @@ export function toWholeNumber(value: string | undefined, defaultValue: number): 
 	return toIntegerAtLeast(value, defaultValue, 0)
 }
 
+/**
+ * Returns an environment value in dollars as whole cents above zero,
+ * or the default's cents if the value is unset, empty, or not a number of dollars above zero.
+ */
+export function toPositiveCents(value: string | undefined, defaultDollars: number): number {
+	// read the dollars, falling back to the default, then round to at least one cent
+	const parsedDollars = value?.trim() ? Number(value) : Number.NaN
+	const dollars = Number.isFinite(parsedDollars) && parsedDollars > 0 ? parsedDollars : defaultDollars
+	return Math.max(1, Math.round(dollars * 100))
+}
+
 // an environment value as a whole number at or above the minimum, or the default for an unset, empty, or other value
 function toIntegerAtLeast(value: string | undefined, defaultValue: number, minimum: number): number {
 	const parsedNumber = value?.trim() ? Number(value) : Number.NaN

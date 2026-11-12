@@ -116,9 +116,13 @@ function countCommandTimeout(connection: RedisConnection): void {
 	scheduleReconnect(connection)
 }
 
+// the loads that this process is running by key, which concurrent callers of one key share
+const runningLoadByKey = new Map<string, Promise<unknown>>()
+
 /**
  * Returns the JSON value stored under a key, or loads the value on a miss and stores the value for the time to live,
  * unless isStorable rejects it. A failed read loads the value and stores nothing.
+ * Concurrent callers of one key in this process share one load.
  */
 export async function cacheJson<Value>({ key, ttlMs, load, isStorable }: CacheJsonOptions<Value>): Promise<Value> {
 	// read the stored value and load without storing if the read fails or the value does not parse
@@ -130,7 +134,7 @@ export async function cacheJson<Value>({ key, ttlMs, load, isStorable }: CacheJs
 		}
 	})
 	if (cacheRead === null) {
-		return load()
+		return loadOnce(key, load)
 	}
 
 	// count a stored value as a hit, for the minute and for the request, and return the stored value
@@ -140,14 +144,32 @@ export async function cacheJson<Value>({ key, ttlMs, load, isStorable }: CacheJs
 		return cacheRead.storedValue as Value
 	}
 
-	// count a miss for the minute and for the request, then load and store a storable value for the time to live
+	// count a miss for the minute and for the request
 	minuteGauges.cacheMissCount++
 	countCacheRead({ isHit: false, key })
-	const loadedValue = await load()
-	if (!isStorable || isStorable(loadedValue)) {
-		await saveRedisJson({ key, value: loadedValue, ttlMs })
+
+	// load and store a storable value for the time to live
+	return loadOnce(key, async () => {
+		const loadedValue = await load()
+		if (!isStorable || isStorable(loadedValue)) {
+			await saveRedisJson({ key, value: loadedValue, ttlMs })
+		}
+		return loadedValue
+	})
+}
+
+// run a key's load, or join the load that this process is already running for the key
+function loadOnce<Value>(key: string, load: () => Promise<Value>): Promise<Value> {
+	// join the running load
+	const runningLoad = runningLoadByKey.get(key) as Promise<Value> | undefined
+	if (runningLoad) {
+		return runningLoad
 	}
-	return loadedValue
+
+	// start a load that the next callers join until it settles
+	const startedLoad = load().finally(() => runningLoadByKey.delete(key))
+	runningLoadByKey.set(key, startedLoad)
+	return startedLoad
 }
 
 /**

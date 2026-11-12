@@ -2,6 +2,7 @@
 // and the Findings that the Podcast Episode narrates
 import { FULL_PODCAST_EPISODE_FINDINGS, SHORT_PODCAST_EPISODE_FINDINGS } from "@carlnotes/contracts/podcastEpisodes"
 import { db } from "@carlnotes/db"
+import { isUserPastDailySpendCutoff } from "@carlnotes/db/dailySpendCutoffs"
 import { isMonthlyBudgetCutoffPassed } from "@carlnotes/db/monthlyBudgetCutoffs"
 import { hasUnconvertedPersonalSources } from "@carlnotes/db/personalSourcesAuthority"
 import { lockPersonalSourcesTopic } from "@carlnotes/db/personalSourcesLocks"
@@ -11,7 +12,7 @@ import { podcastEpisodeChapters, podcastEpisodes } from "@carlnotes/db/schema/po
 import { findings, resources, scans } from "@carlnotes/db/schema/scans"
 import { topics } from "@carlnotes/db/schema/topics"
 import { podcastEpisodeSpeechModel } from "@carlnotes/server/podcastEpisodeSettings"
-import { and, desc, eq, inArray } from "drizzle-orm"
+import { and, desc, eq, inArray, isNotNull } from "drizzle-orm"
 import { toCanonicalUrl } from "../ingest/normalize"
 import { loadUrlSourcePageUrls } from "../review/filter"
 import { loadBookmarkedFindingRows } from "../review/scoreExamplePages"
@@ -180,8 +181,8 @@ type LoadPodcastEpisodeSpendSkipReasonOptions = {
 
 /**
  * Returns why a new Podcast Episode stops before it spends, or null if it may record. A Topic records one short Podcast
- * Episode at a time, and the billed user's budget pays for the Podcast Episode until their spend passes the podcast
- * episodes cutoff.
+ * Episode at a time, the billed user's budget pays for the Podcast Episode until their spend passes the podcast
+ * episodes cutoff, and a free billed user's repeat Podcast Episode stops past the podcast episodes daily spend cutoff.
  */
 export async function loadPodcastEpisodeSpendSkipReason({
 	topicId,
@@ -197,7 +198,26 @@ export async function loadPodcastEpisodeSpendSkipReason({
 	if (await isMonthlyBudgetCutoffPassed(billedUserId, "podcastEpisodes")) {
 		return "the billed user's monthly spend is past the podcast episodes cutoff"
 	}
+
+	// past the daily spend cutoff, a free billed user's Topic that already published a Podcast Episode records no other
+	if (
+		(await isUserPastDailySpendCutoff(billedUserId, "podcastEpisodes")) &&
+		(await hasPublishedPodcastEpisode(topicId))
+	) {
+		return "the day's free-plan spend is past the podcast episodes cutoff"
+	}
 	return null
+}
+
+// whether the Topic has a Podcast Episode that published, removed or not. only publishing sets the publish time, and
+// removing keeps it
+async function hasPublishedPodcastEpisode(topicId: string): Promise<boolean> {
+	const [publishedPodcastEpisode] = await db
+		.select({ id: podcastEpisodes.id })
+		.from(podcastEpisodes)
+		.where(and(eq(podcastEpisodes.topicId, topicId), isNotNull(podcastEpisodes.publishedAt)))
+		.limit(1)
+	return publishedPodcastEpisode !== undefined
 }
 
 /**

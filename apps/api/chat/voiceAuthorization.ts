@@ -4,7 +4,7 @@ import type { VoiceChatPage } from "@carlnotes/contracts/payloads"
 import { db } from "@carlnotes/db"
 import { topics } from "@carlnotes/db/schema/topics"
 import { eq } from "drizzle-orm"
-import { isAllowed, isMonthlySpendExhausted } from "../authorization"
+import { isAllowed } from "../authorization"
 import { toTeamRole } from "../team/members"
 import { gatedTopicColumns } from "../topic/permissions"
 import {
@@ -12,6 +12,7 @@ import {
 	authorizeNewTopicChatTurn,
 	authorizeTeamChatTurn,
 	type ChatTurnAuthorization,
+	loadChatSpendRejection,
 } from "./chatTurnAuthorization"
 import { loadChatRoom } from "./roomAccess"
 
@@ -22,8 +23,8 @@ export type VoiceChatPageAuthorization =
 	| { status: "allowed"; userId: string }
 	| { status: "notFound" }
 
-// the outcomes of a page's access check, which never reads a budget
-export type VoiceChatPageAccess = Exclude<VoiceChatPageAuthorization, { status: "budget" }>
+// the outcomes of a page's access check, which never reads a budget or the chat cutoff
+export type VoiceChatPageAccess = Exclude<VoiceChatPageAuthorization, { status: "budget" | "chatPaused" }>
 
 /**
  * Decides whether this user may talk to carl on the page right now: a topic's, a team's, or the new-topic chat under
@@ -104,7 +105,8 @@ async function toChatRoomAccess(
 	return (await loadChatRoom(userId, topicId, teamId)) ? { status: "allowed", userId } : { status: "notFound" }
 }
 
-// a chat room's authorization: the chat room's access, then a spent budget rejected before any model is called
+// a chat room's authorization: the chat room's access, then a spent budget or the chat cutoff rejected before any
+// model is called
 async function authorizeChatRoomVoice(
 	userId: string | null,
 	topicId: string | null,
@@ -116,9 +118,6 @@ async function authorizeChatRoomVoice(
 		return chatRoomAccess
 	}
 
-	// reject a member whose budget is spent
-	if (await isMonthlySpendExhausted(chatRoomAccess.userId)) {
-		return { status: "budget", userId: chatRoomAccess.userId }
-	}
-	return chatRoomAccess
+	// reject a member whose budget is spent or who is past the chat cutoff
+	return (await loadChatSpendRejection(chatRoomAccess.userId)) ?? chatRoomAccess
 }

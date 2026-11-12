@@ -84,6 +84,28 @@ picked by the `S3_*` env values.
 Model calls go through a LiteLLM proxy in front of Fireworks. Every user gets a virtual key with a monthly budget. The
 [litellm config](litellm-config.yaml) maps role names to models, so a model swap is a config edit.
 
+### Spend control
+
+Spend is bounded at three levels. A user's LiteLLM key stops at their monthly budget, and the monthly budget cutoffs
+pause kinds of that user's spend as their month runs down. The daily spend cutoffs bound the whole free plan: they read
+one number, the UTC day's spend billed to free users who are not admins.
+
+- Past the podcast episodes cutoff, 65 dollars by default, a free user's repeat podcast episodes are skipped. A Topic's
+  first podcast episode still records.
+- Past the scheduled scans cutoff, 100 dollars by default, a free user's scheduled scans do not start. Their Topics stay
+  scheduled, and nothing is failed or emailed. Free users' first scans and manual scans wait for the first scan dispatch
+  limit, which starts the 5 oldest per sweep by default.
+- Past the chat cutoff, 150 dollars by default, a free user's chat with Carl pauses, and a chat turn says Carl is
+  taking a break until midnight UTC.
+- When the UTC day turns, every cutoff clears and everything paused starts again.
+
+A paid user is never paused or slowed. A new Topic's first scan is never skipped: at most it waits its turn. The admin
+console's Limits section counts down to the cutoffs' reset at midnight UTC and meters the day's free-plan spend
+against every cutoff, the waiting scans, and the past hour's signups. It overrides every setting without a
+deploy. Turning off its permission for unverified email sign-ups to scan makes their first scans wait whatever the
+day's spend. Each sweep also alerts once an hour's signups reach 50, and that alert pauses nothing. The
+[deployment guide](apps/docs/deployment.md#spend-control-settings) lists the settings.
+
 The domain vocabulary lives in `.agents/skills/domain-model/`. The code uses those nouns, so grepping a domain noun
 finds its code. [apps/docs/ai-scaffolding.md](apps/docs/ai-scaffolding.md) explains how the repo constrains
 AI-generated code. Feature work goes through [OpenSpec](https://github.com/Fission-AI/OpenSpec), one change at a time.

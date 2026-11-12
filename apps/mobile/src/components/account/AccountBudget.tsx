@@ -9,8 +9,9 @@ import {
 import { PLAN_MANAGEMENT_LABELS } from "@carlnotes/core/lib/storefrontPurchaseRules"
 import { usePurchaseOffers } from "@carlnotes/core/stores/purchaseOffersStore"
 import { router } from "expo-router"
-import { Settings } from "lucide-react-native"
+import { Columns3Cog, Settings } from "lucide-react-native"
 import { View } from "react-native"
+import { MeterRing } from "@/components/common/MeterRing"
 import { Button } from "@/components/primitives/button"
 import { Icon } from "@/components/primitives/icon"
 import { Text } from "@/components/primitives/text"
@@ -27,7 +28,9 @@ export function AccountBudget({ billing, activity }: { billing: BillingState; ac
 	return (
 		<SharedAccountBudget
 			billing={billing}
+			activity={activity}
 			spendMeter={activity && <SpendMeter activity={activity} canPurchase={canPurchase} />}
+			planAction={<PlanButton billing={billing} />}
 			elements={ACCOUNT_BUDGET_ELEMENTS}
 		/>
 	)
@@ -56,7 +59,7 @@ export function PlanButton({ billing }: { billing: BillingState }) {
 			accessibilityLabel={label}
 			onPress={() => (storeProvider ? void openPlanManagement(storeProvider) : router.push(PLANS_PATH))}
 		>
-			<Icon as={Settings} className="size-4" />
+			<Icon as={storeProvider ? Settings : Columns3Cog} className="size-4" />
 			<Text>{label}</Text>
 		</Button>
 	)
@@ -67,13 +70,20 @@ const ACCOUNT_BUDGET_ELEMENTS: AccountBudgetElements = {
 	Card: ({ children }) => (
 		<View className="gap-4 rounded-lg border border-separator bg-card p-4 shadow-raised">{children}</View>
 	),
-	Group: View,
 	Text: Text,
 	Heading: ({ children }) => (
 		<Text accessibilityRole="header" className="font-semibold">
 			{children}
 		</Text>
 	),
+	CardTop: ({ children }) => <View className="gap-3">{children}</View>,
+	CardTopRow: ({ children }) => <View className="flex-row items-start gap-3">{children}</View>,
+	CardTopStart: ({ children }) => <View className="flex-1">{children}</View>,
+	CardTopEnd: ({ children }) => <View className="flex-1 items-end">{children}</View>,
+	Meters: ({ children }) => <View className="flex-row flex-wrap justify-center gap-8">{children}</View>,
+	Meter: ({ children }) => <View className="items-center gap-1.5">{children}</View>,
+	MeterRing,
+	PlanRow: ({ children }) => <View className="flex-row flex-wrap items-center gap-3">{children}</View>,
 	PaymentNotice,
 }
 

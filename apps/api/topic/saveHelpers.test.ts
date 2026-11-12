@@ -1,9 +1,10 @@
 // topic save helper tests: a Topic's first Scan is marked failed instead of started if its owner's key budget or
-// monthly budget is spent, or the owner's spend is past the manual scans cutoff. the first Scan starts if no check is
-// reached or a check cannot be read
+// monthly budget is spent, or the owner's spend is past the manual scans cutoff, and is left open for the sweep if it
+// waits for the first scan dispatch limit. the first Scan starts if no check is reached or a check cannot be read
 import { afterEach, expect, type Mock, mock, spyOn, test } from "bun:test"
 import { FIRST_SCAN_PAUSED_REASON, FIRST_SCAN_SPENT_BUDGET_REASON } from "@carlnotes/contracts/scanFailure"
 import { restoreConnectionPool, type SentQuery, stubConnectionPool } from "@carlnotes/db/connectionPoolStub"
+import * as dailySpendCutoffs from "@carlnotes/db/dailySpendCutoffs"
 import * as monthlyBudgetCutoffs from "@carlnotes/db/monthlyBudgetCutoffs"
 import * as litellm from "@carlnotes/models/litellm"
 import * as scan from "@carlnotes/pipeline/scan"
@@ -28,10 +29,11 @@ type FirstScanSpies = {
 	scanTopicSpy: Mock<typeof scan.scanTopic>
 	isMonthlySpendExhaustedSpy: Mock<typeof authorization.isMonthlySpendExhausted>
 	isMonthlyBudgetCutoffPassedSpy: Mock<typeof monthlyBudgetCutoffs.isMonthlyBudgetCutoffPassed>
+	isFirstScanWaitingSpy: Mock<typeof dailySpendCutoffs.isFirstScanWaiting>
 }
 
-// spy on the Source screens and the scan start, each stubbed to do nothing, and on the monthly budget and the manual
-// scans cutoff, each stubbed as not reached
+// spy on the Source screens and the scan start, each stubbed to do nothing, and on the monthly budget, the manual
+// scans cutoff, and the first scan dispatch limit, each stubbed as not reached
 function spyOnFirstScan(): FirstScanSpies {
 	return {
 		screenPendingSourcesSpy: spyOn(screen, "screenPendingSources").mockResolvedValue(undefined),
@@ -39,6 +41,7 @@ function spyOnFirstScan(): FirstScanSpies {
 		scanTopicSpy: spyOn(scan, "scanTopic").mockResolvedValue({ status: "running" }),
 		isMonthlySpendExhaustedSpy: spyOn(authorization, "isMonthlySpendExhausted").mockResolvedValue(false),
 		isMonthlyBudgetCutoffPassedSpy: spyOn(monthlyBudgetCutoffs, "isMonthlyBudgetCutoffPassed").mockResolvedValue(false),
+		isFirstScanWaitingSpy: spyOn(dailySpendCutoffs, "isFirstScanWaiting").mockResolvedValue(false),
 	}
 }
 
@@ -163,4 +166,47 @@ test("a creation with no first Scan row screens the Sources and starts no Scan",
 	expect(screenTopicSourcesSpy).toHaveBeenCalledWith("topic-1")
 	expect(sentQueries).toHaveLength(0)
 	expect(scanTopicSpy).not.toHaveBeenCalled()
+})
+
+// past the cutoff a free owner's first Scan stays running and undispatched, with the screens started without the wait
+test("a waiting first Scan writes nothing and starts the Source screens without the wait", async () => {
+	// an owner under every budget whose first Scan waits
+	const sentQueries = stubConnectionPool()
+	const { screenPendingSourcesSpy, screenTopicSourcesSpy, scanTopicSpy, isFirstScanWaitingSpy } = spyOnFirstScan()
+	spyOn(litellm, "isUserLiteLLMKeyBudgetExhausted").mockResolvedValue(false)
+	isFirstScanWaitingSpy.mockResolvedValue(true)
+	await startFirstScan("topic-1", FIRST_SCAN, "owner-1")
+
+	// the row is left as written, no Scan started, and the screens started without the wait
+	expect(isFirstScanWaitingSpy).toHaveBeenCalledWith("owner-1")
+	expect(sentQueries).toHaveLength(0)
+	expect(scanTopicSpy).not.toHaveBeenCalled()
+	expect(screenTopicSourcesSpy).not.toHaveBeenCalled()
+	expect(screenPendingSourcesSpy).toHaveBeenCalledWith("topic-1")
+})
+
+// a first Scan that does not wait, for a paid owner or after a failed cutoff read, starts with the creation trigger
+test("a first Scan that does not wait starts with the creation trigger", async () => {
+	stubConnectionPool()
+	const { scanTopicSpy, isFirstScanWaitingSpy } = spyOnFirstScan()
+	spyOn(litellm, "isUserLiteLLMKeyBudgetExhausted").mockResolvedValue(false)
+	await startFirstScan("topic-1", FIRST_SCAN, "owner-1")
+	expect(isFirstScanWaitingSpy).toHaveBeenCalledWith("owner-1")
+	expect(scanTopicSpy).toHaveBeenCalledWith(FIRST_SCAN, "topic-1", "owner-1", "creation", true)
+})
+
+// a spent monthly budget fails the first Scan before the first scan dispatch limit is read
+test("a spent monthly budget fails a first Scan before the dispatch limit is read", async () => {
+	const sentQueries = stubConnectionPool()
+	const { isMonthlySpendExhaustedSpy, isFirstScanWaitingSpy } = spyOnFirstScan()
+	spyOn(litellm, "isUserLiteLLMKeyBudgetExhausted").mockResolvedValue(false)
+
+	// a spent monthly budget and a first Scan that would wait
+	isMonthlySpendExhaustedSpy.mockResolvedValue(true)
+	isFirstScanWaitingSpy.mockResolvedValue(true)
+
+	// the first Scan fails without reading the dispatch limit
+	await startFirstScan("topic-1", FIRST_SCAN, "owner-1")
+	expectFirstScanFailed(sentQueries, FIRST_SCAN_SPENT_BUDGET_REASON)
+	expect(isFirstScanWaitingSpy).not.toHaveBeenCalled()
 })

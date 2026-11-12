@@ -40,8 +40,8 @@ ends in: what the api starts, the worker's activities run, and the evals measure
 it; it imports `@carlnotes/models`, `@carlnotes/emails`, `@carlnotes/db`, `@carlnotes/server`, and
 `@carlnotes/contracts`, with `@temporalio/client`, `rss-parser`, `ai`, `unpdf`, `mammoth`, `exceljs`, and `zod`.
 
--  `scan.ts` starts a Scan: `startTopicScan` opens the row and the workflow, `stopTopicScan` cancels one, and
-  `scanTopic` and `failUnstartedScan` are what the sweep calls for a row it dispatches or fails. `temporalClient.ts` is
+-  `scan.ts` starts a Scan: `startTopicScan` opens the row and the workflow, `stopTopicScan` cancels one or saves a
+  Waiting Scan with no workflow as stopped, and `scanTopic` and `failUnstartedScan` are what the sweep calls for a row it dispatches or fails. `temporalClient.ts` is
   the Temporal client: the task queue names, the `ScanTrigger` type (`manual`, `scheduled`, or `creation`), the workflow
   starts and the cancel, each giving up after ten seconds, `startChatMentionPushWorkflow`, which the api calls after a
   room post saved mention rows and which ignores a second start for the same message, and `describeScanQueue`, which the

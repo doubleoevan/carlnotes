@@ -1,5 +1,5 @@
 import { cn } from "@carlnotes/nightshift/classNames"
-import { ChevronDown, ChevronRight } from "lucide-react-native"
+import { ChevronDown, ChevronRight, type LucideIcon } from "lucide-react-native"
 import type { ReactNode } from "react"
 import { View } from "react-native"
 import { Button } from "@/components/primitives/button"
@@ -14,18 +14,24 @@ import { toTypeRoleStyle } from "@/typeRoleStyles"
  */
 export function AccordionSection({
 	title,
+	icon,
 	countLabel,
 	isExpanded,
 	isLoading,
+	isContentKept,
 	onToggle,
 	children,
 }: {
 	title: string
+	// the icon before the title
+	icon?: LucideIcon
 	// the section's count, such as "6 topics", or nothing until it is known
 	countLabel?: string
 	isExpanded: boolean
 	// whether the section is a screen's loading state, which shows a placeholder for its title and its count
 	isLoading?: boolean
+	// whether the content stays mounted while closed, for content that holds its own state
+	isContentKept?: boolean
 	onToggle: () => void
 	children?: ReactNode
 }) {
@@ -47,15 +53,19 @@ export function AccordionSection({
 							<View className={cn(SKELETON_SHAPE_CLASS, "h-5 w-40")} />
 						</View>
 					) : (
-						<Text style={toTypeRoleStyle("sectionTitle")} className="flex-1 text-left">
-							{title}
-						</Text>
+						<View className="flex-1 flex-row items-center gap-2">
+							{icon && <Icon as={icon} className="size-5 text-foreground" />}
+							<Text style={toTypeRoleStyle("sectionTitle")} className="shrink text-left">
+								{title}
+							</Text>
+						</View>
 					)}
 					{isLoading && <View className={cn(SKELETON_SHAPE_CLASS, "h-4 w-16")} />}
 					{!isLoading && countLabel && <Text className="text-muted-foreground">{countLabel}</Text>}
 				</Button>
 			</View>
-			{isExpanded && children}
+			{/* the content, hidden instead of unmounted while closed if it is kept */}
+			{isContentKept ? <View className={isExpanded ? "flex" : "hidden"}>{children}</View> : isExpanded && children}
 		</View>
 	)
 }

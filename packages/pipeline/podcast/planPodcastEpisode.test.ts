@@ -8,6 +8,7 @@ import {
 	stubConnectionPool,
 	toTableRow,
 } from "@carlnotes/db/connectionPoolStub"
+import * as dailySpendCutoffs from "@carlnotes/db/dailySpendCutoffs"
 import * as monthlyBudgetCutoffs from "@carlnotes/db/monthlyBudgetCutoffs"
 import * as quotas from "@carlnotes/db/quotas"
 import { topics } from "@carlnotes/db/schema/topics"
@@ -180,6 +181,7 @@ test("a new podcast episode stops if the billed user's spend is past the podcast
 	const isMonthlyBudgetCutoffPassedSpy = spyOn(monthlyBudgetCutoffs, "isMonthlyBudgetCutoffPassed").mockImplementation(
 		async (userId) => userId === "member-1",
 	)
+	spyOn(dailySpendCutoffs, "isUserPastDailySpendCutoff").mockResolvedValue(false)
 	const skipOptions = { topicId: "topic-1", isShortPodcastEpisode: false }
 
 	// the billed team member's cutoff stops the podcast episode, and the owner's spend never comes into it
@@ -191,6 +193,43 @@ test("a new podcast episode stops if the billed user's spend is past the podcast
 
 	// a billed user under the cutoff may record
 	expect(await loadPodcastEpisodeSpendSkipReason({ ...skipOptions, billedUserId: "owner-1" })).toBeNull()
+})
+
+// past the podcast episodes daily spend cutoff a free billed user's topic records its first podcast episode, and no other
+test("past the daily spend cutoff a repeat podcast episode stops, and a topic's first records", async () => {
+	// a free billed user under the monthly cutoff and past the daily one
+	spyOn(monthlyBudgetCutoffs, "isMonthlyBudgetCutoffPassed").mockResolvedValue(false)
+	const isUserPastDailySpendCutoffSpy = spyOn(dailySpendCutoffs, "isUserPastDailySpendCutoff").mockResolvedValue(true)
+	const skipOptions = { topicId: "topic-1", isShortPodcastEpisode: false, billedUserId: "owner-1" }
+
+	// a topic with a published podcast episode, removed or not, stops the new one
+	const sentQueries = stubConnectionPool(() => [["podcast-episode-1"]])
+	expect(await loadPodcastEpisodeSpendSkipReason(skipOptions)).toBe(
+		"the day's free-plan spend is past the podcast episodes cutoff",
+	)
+	expect(isUserPastDailySpendCutoffSpy).toHaveBeenCalledWith("owner-1", "podcastEpisodes")
+	expect(sentQueries[0]?.text).toContain('"episodes"."published_at" is not null')
+
+	// a topic with no published podcast episode, or only a failed one that never published, records
+	restoreConnectionPool()
+	stubConnectionPool(() => [])
+	expect(await loadPodcastEpisodeSpendSkipReason(skipOptions)).toBeNull()
+})
+
+// a paid billed user, or a free one below the daily cutoff or with an unreadable cutoff state, records without the
+// topic's podcast episodes being read
+test("a billed user not past the daily spend cutoff records without reading the topic's podcast episodes", async () => {
+	spyOn(monthlyBudgetCutoffs, "isMonthlyBudgetCutoffPassed").mockResolvedValue(false)
+	spyOn(dailySpendCutoffs, "isUserPastDailySpendCutoff").mockResolvedValue(false)
+	const sentQueries = stubConnectionPool(() => [["podcast-episode-1"]])
+	expect(
+		await loadPodcastEpisodeSpendSkipReason({
+			topicId: "topic-1",
+			isShortPodcastEpisode: false,
+			billedUserId: "owner-1",
+		}),
+	).toBeNull()
+	expect(sentQueries).toHaveLength(0)
 })
 
 // a topic records one short podcast episode at a time, so a short one waits without reading the cutoff

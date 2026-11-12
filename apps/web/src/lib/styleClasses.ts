@@ -32,6 +32,11 @@ export const STANDALONE_LINK_CLASS = "text-link hover:underline"
 export const STANDALONE_LINE_LINK_CLASS = `${STANDALONE_LINK_CLASS} inline-block text-sm`
 
 /**
+ * A small number input an admin types a setting into.
+ */
+export const ADMIN_NUMBER_INPUT_CLASS = "w-16 rounded-md border px-1 py-0.5"
+
+/**
  * The metadata line under a row's title.
  */
 export const METADATA_LINE_CLASS = "text-muted-foreground mt-0.5 flex flex-wrap items-center gap-1.5 text-xs"

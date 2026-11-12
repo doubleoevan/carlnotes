@@ -48,11 +48,11 @@ unknown and known titles, the film's card, and the player card with and without 
 `layout/PageSkeleton` renders core's Profile, Teams, Activity, Account, Team, and Topic Post loading layouts in the
 loaded pages' own pieces: `PAGE_BUTTON_ROW_CLASS`, `AccordionSection` with `isLoading`, `CARD_CLASS`, the news list's
 card and loading rows, `CardsRowSkeleton`, and the topic header's image and title areas. The page keeps known headings
-and actions visible; Profile and Team reserve their identity while it loads. Account keeps Settings usable, holds its
-header row with the plan button's placeholder, and names whether the budget lists monthly budget cutoffs. A
-placeholder is `SKELETON_SHAPE_CLASS`, which pulses unless the reader asked for reduced motion.
-`common/UserProfileLinkSkeleton` holds the profile link's line on an admin's view of another user's Account or
-Activity. Its stories cover each page and the Profile topics table loading separately.
+and actions visible; Profile and Team reserve their identity while it loads. Account keeps Settings usable, holds the
+coffee fund and brews cards with their reset clocks and the plan button's placeholder in each card, and names whether
+the budget lists monthly budget cutoffs. A placeholder is `SKELETON_SHAPE_CLASS`, which pulses unless the reader asked
+for reduced motion. `common/UserProfileLinkSkeleton` holds the profile link's line on an admin's view of another user's
+Account or Activity. Its stories cover each page and the Profile topics table loading separately.
 
 The menu parity adapters `search/PageActionMenu`, `layout/UserMenu`, and `common/AddToAiDialog` render the shared
 core menu composition. DOM popovers, badges, installation links, storage, and clipboard remain web adapters.

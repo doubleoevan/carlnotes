@@ -9,7 +9,7 @@ import {
 } from "@carlnotes/contracts/plans"
 import { SHARED_COMMENT_SLOTS } from "@carlnotes/contracts/social"
 import type { ComponentType, ReactNode } from "react"
-import { toBrewsWord, toCountLabel } from "../lib/labels"
+import { toBrewsWord, toCountLabel, toWholeDollarLabel } from "../lib/labels"
 import { isUsersPlan, toPlanBadge } from "../lib/planCards"
 
 type Container = ComponentType<{ children: ReactNode }>
@@ -163,10 +163,4 @@ function toPlanAction({
 		return onCheckout ? { label: PURCHASE_COPY.switchPlan, isOutlined: true, onPress: onCheckout } : null
 	}
 	return onCheckout ? { label: PURCHASE_COPY.upgrade, isOutlined: false, onPress: onCheckout } : null
-}
-
-// whole dollars stay whole; a fractional effective monthly price keeps its cents
-function toWholeDollarLabel(cents: number): string {
-	const dollars = cents / 100
-	return Number.isInteger(dollars) ? `$${dollars}` : `$${dollars.toFixed(2)}`
 }

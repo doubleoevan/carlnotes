@@ -24,6 +24,7 @@ import { AnchorLink } from "@/components/common/AnchorLink"
 import { ConfirmDialog } from "@/components/common/ConfirmDialog"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import {
+	ADMIN_NUMBER_INPUT_CLASS,
 	STANDALONE_LINK_CLASS,
 	SUBTABLE_CARD_CLASS,
 	TABLE_CLASS,
@@ -209,7 +210,7 @@ export function UserRow({
 						onBlur={(event) => void handleBudgetChange(event.target.value)}
 						aria-label={`${user.username}'s budget override in dollars`}
 						placeholder="$0"
-						className="w-16 rounded-md border px-1 py-0.5"
+						className={ADMIN_NUMBER_INPUT_CLASS}
 					/>
 				</td>
 				<td className="py-2 whitespace-nowrap">

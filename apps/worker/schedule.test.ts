@@ -8,6 +8,13 @@ import * as scan from "@carlnotes/pipeline/scan"
 import { emptyTopicSweepSummary, startScheduledTopicScans } from "./schedule"
 import { toScheduledTopic } from "./scheduledTopicTestFixtures"
 
+// a start of a Scan that always succeeds
+const STARTED_TOPIC_SCAN_START: scan.TopicScanStart = {
+	status: "started",
+	scan: {} as never,
+	whenFinished: async () => {},
+}
+
 // put each spied function and the connection pool's own query back after each test, whether its assertions pass or not
 afterEach(() => {
 	restoreConnectionPool()
@@ -28,7 +35,7 @@ test("ten scheduled topics of one owner with two remaining scans read the quota 
 	})
 	spyOn(scan, "startTopicScan").mockImplementation(async (topicId): Promise<scan.TopicScanStart> => {
 		startedTopicIds.push(topicId)
-		return { status: "started", scan: {} as never, whenFinished: async () => {} }
+		return STARTED_TOPIC_SCAN_START
 	})
 
 	// start the scheduled Topics' Scans
@@ -44,6 +51,8 @@ test("ten scheduled topics of one owner with two remaining scans read the quota 
 	expect(topicSweepSummary).toEqual({
 		scheduled: 10,
 		started: 2,
+		skippedWaitingScan: 0,
+		skippedOverDailySpendCutoff: 0,
 		skippedOverQuota: 8,
 		skippedOverDailyLimit: 0,
 		skippedOverDailyScanCutoff: 0,
@@ -61,7 +70,7 @@ test("a sweep past its dispatchable scan count leaves the remaining topics for t
 	const startedTopicIds: string[] = []
 	spyOn(scan, "startTopicScan").mockImplementation(async (topicId): Promise<scan.TopicScanStart> => {
 		startedTopicIds.push(topicId)
-		return { status: "started", scan: {} as never, whenFinished: async () => {} }
+		return STARTED_TOPIC_SCAN_START
 	})
 
 	// two start, three wait for the next sweep
@@ -85,7 +94,7 @@ test("a sweep whose lease is lost stops before its next topic", async () => {
 	spyOn(scan, "startTopicScan").mockImplementation(async (topicId): Promise<scan.TopicScanStart> => {
 		startedTopicIds.push(topicId)
 		leaseAbortController.abort(new Error("the scheduled-scan-sweep lease was lost while its task ran"))
-		return { status: "started", scan: {} as never, whenFinished: async () => {} }
+		return STARTED_TOPIC_SCAN_START
 	})
 
 	// the sweep rejects with the lease's error, having started only the first Topic's Scan
@@ -122,6 +131,8 @@ test("a running scan spends nothing and a failed start is counted", async () => 
 	expect(topicSweepSummary).toEqual({
 		scheduled: 2,
 		started: 0,
+		skippedWaitingScan: 0,
+		skippedOverDailySpendCutoff: 0,
 		skippedOverQuota: 0,
 		skippedOverDailyLimit: 0,
 		skippedOverDailyScanCutoff: 0,
@@ -136,11 +147,7 @@ test("each Topic whose owner's budget is spent saves a failed Scan with the budg
 	// owner-1's budget is spent and owner-2's is not, and both have scans left today
 	const sentQueries = stubConnectionPool()
 	spyOn(quotas, "scansRemainingToday").mockResolvedValue(5)
-	const startTopicScanSpy = spyOn(scan, "startTopicScan").mockResolvedValue({
-		status: "started",
-		scan: {} as never,
-		whenFinished: async () => {},
-	})
+	const startTopicScanSpy = spyOn(scan, "startTopicScan").mockResolvedValue(STARTED_TOPIC_SCAN_START)
 
 	// start the scheduled Topics' Scans
 	const topicSweepSummary = await startScheduledTopicScans({
@@ -158,6 +165,8 @@ test("each Topic whose owner's budget is spent saves a failed Scan with the budg
 	expect(topicSweepSummary).toEqual({
 		scheduled: 3,
 		started: 1,
+		skippedWaitingScan: 0,
+		skippedOverDailySpendCutoff: 0,
 		skippedOverQuota: 0,
 		skippedOverDailyLimit: 0,
 		skippedOverDailyScanCutoff: 0,
@@ -255,6 +264,65 @@ test("a daily Topic that runs weekly and scanned this week starts no Scan", asyn
 	expect(startTopicScanSpy).not.toHaveBeenCalled()
 })
 
+// past the scheduled scans cutoff a free owner's Topic writes no row and stays scheduled, while a paid owner's starts
+test("a Topic of an owner past the scheduled scans cutoff writes no Scan row, and a paid owner's Topic starts", async () => {
+	// a free owner's Topic and a paid owner's Topic, with plenty of quota
+	const sentQueries = stubConnectionPool()
+	const scansRemainingTodaySpy = spyOn(quotas, "scansRemainingToday").mockResolvedValue(5)
+	const startTopicScanSpy = spyOn(scan, "startTopicScan").mockResolvedValue(STARTED_TOPIC_SCAN_START)
+
+	// start the scheduled Topics' Scans with the free owner past the cutoff
+	const topicSweepSummary = await startScheduledTopicScans({
+		scheduledTopics: [toScheduledTopic("free-topic", "free-owner"), toScheduledTopic("paid-topic", "paid-owner")],
+		dailyTopicIdsByOwner: new Map(),
+		budgetExhaustedOwnerIds: new Set(),
+		dailySpendCutoffOwnerIds: new Set(["free-owner"]),
+	})
+
+	// only the paid owner's Topic reads its quota and starts, and the free owner's Topic wrote nothing
+	expect(scansRemainingTodaySpy.mock.calls).toEqual([["paid-owner"]])
+	expect(startTopicScanSpy.mock.calls.map(([topicId]) => topicId)).toEqual(["paid-topic"])
+	expect(sentQueries).toHaveLength(0)
+	expect(topicSweepSummary).toMatchObject({ started: 1, skippedOverDailySpendCutoff: 1 })
+})
+
+// once the day turns the cutoff owner set is empty, so the same free owner's Topic starts on the next sweep
+test("a free owner's Topic starts on the first sweep after the day turns", async () => {
+	// the free owner's Topic, with plenty of quota
+	spyOn(quotas, "scansRemainingToday").mockResolvedValue(5)
+	const startTopicScanSpy = spyOn(scan, "startTopicScan").mockResolvedValue(STARTED_TOPIC_SCAN_START)
+
+	// a new day's sweep finds no owner past the cutoff
+	const topicSweepSummary = await startScheduledTopicScans({
+		scheduledTopics: [toScheduledTopic("free-topic", "free-owner")],
+		dailyTopicIdsByOwner: new Map(),
+		budgetExhaustedOwnerIds: new Set(),
+		dailySpendCutoffOwnerIds: new Set(),
+	})
+	expect(startTopicScanSpy.mock.calls.map(([topicId]) => topicId)).toEqual(["free-topic"])
+	expect(topicSweepSummary).toMatchObject({ started: 1, skippedOverDailySpendCutoff: 0 })
+})
+
+// a Topic whose first scan still waits is never taken as a scheduled Scan
+test("a Topic whose first scan waits is not taken as a scheduled Scan", async () => {
+	// a Topic whose first scan still waits
+	const scansRemainingTodaySpy = spyOn(quotas, "scansRemainingToday").mockResolvedValue(5)
+	const startTopicScanSpy = spyOn(scan, "startTopicScan")
+
+	// start the scheduled Topics' Scans
+	const topicSweepSummary = await startScheduledTopicScans({
+		scheduledTopics: [toScheduledTopic("waiting-topic")],
+		dailyTopicIdsByOwner: new Map(),
+		budgetExhaustedOwnerIds: new Set(),
+		waitingScanTopicIds: new Set(["waiting-topic"]),
+	})
+
+	// nothing is read or started, and the Topic counts as waiting
+	expect(scansRemainingTodaySpy).not.toHaveBeenCalled()
+	expect(startTopicScanSpy).not.toHaveBeenCalled()
+	expect(topicSweepSummary).toMatchObject({ started: 0, skippedWaitingScan: 1 })
+})
+
 // the sweep hands each Scan to Temporal and does not wait, so its summary count starts
 test("a topic sweep summary counts starts instead of outcomes", () => {
 	const topicSweepSummary = emptyTopicSweepSummary(1)
@@ -265,7 +333,9 @@ test("a topic sweep summary counts starts instead of outcomes", () => {
 		"skippedOverBudget",
 		"skippedOverDailyLimit",
 		"skippedOverDailyScanCutoff",
+		"skippedOverDailySpendCutoff",
 		"skippedOverQuota",
+		"skippedWaitingScan",
 		"started",
 	])
 })

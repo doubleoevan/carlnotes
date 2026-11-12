@@ -2,6 +2,7 @@
 // spend gate, with every rejection kept, and the access check asks the page's access rules alone
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import { restoreConnectionPool, stubConnectionPool } from "@carlnotes/db/connectionPoolStub"
+import * as dailySpendCutoffs from "@carlnotes/db/dailySpendCutoffs"
 import * as authorization from "../authorization"
 import * as teamMembers from "../team/members"
 import * as chatTurnAuthorization from "./chatTurnAuthorization"
@@ -57,23 +58,27 @@ test("a team page and the new-topic chat answer as their chat turns would", asyn
 	expect(authorizeNewTopicChatTurnSpy).toHaveBeenCalledWith("user-1")
 })
 
-// a chat room sends a visitor to signup, answers like a missing one for a non-member, rejects a spent budget before any
-// model is called, and otherwise allows the member
-test("a chat room answers by membership and the monthly spend gate", async () => {
+// a chat room sends a visitor to signup, answers like a missing one for a non-member, rejects a spent budget or the chat
+// cutoff before any model is called, and otherwise allows the member
+test("a chat room answers by membership, the monthly spend gate, and the chat cutoff", async () => {
 	const roomPage = { kind: "room", topicId: "topic-1", teamId: "team-1" } as const
 	expect(await authorizeVoiceChatPage(null, roomPage)).toEqual({ status: "signup" })
 
 	// a chat room the user may not use is a missing one
 	const loadChatRoomSpy = spyOn(roomAccess, "loadChatRoom").mockResolvedValue(null)
 	const isMonthlySpendExhaustedSpy = spyOn(authorization, "isMonthlySpendExhausted").mockResolvedValue(true)
+	const isUserPastDailySpendCutoffSpy = spyOn(dailySpendCutoffs, "isUserPastDailySpendCutoff").mockResolvedValue(true)
 	expect(await authorizeVoiceChatPage("user-1", roomPage)).toEqual({ status: "notFound" })
 	expect(loadChatRoomSpy).toHaveBeenCalledWith("user-1", "topic-1", "team-1")
 	expect(isMonthlySpendExhaustedSpy).not.toHaveBeenCalled()
 
-	// a member whose budget is spent, then a member under budget
+	// a member whose budget is spent, then a member past the chat cutoff, then a member under both
 	loadChatRoomSpy.mockResolvedValue({ topic: null, teamId: "team-1" })
 	expect(await authorizeVoiceChatPage("user-1", roomPage)).toEqual({ status: "budget", userId: "user-1" })
 	isMonthlySpendExhaustedSpy.mockResolvedValue(false)
+	expect(await authorizeVoiceChatPage("user-1", roomPage)).toEqual({ status: "chatPaused", userId: "user-1" })
+	expect(isUserPastDailySpendCutoffSpy).toHaveBeenCalledWith("user-1", "chat")
+	isUserPastDailySpendCutoffSpy.mockResolvedValue(false)
 	expect(await authorizeVoiceChatPage("user-1", roomPage)).toEqual({ status: "allowed", userId: "user-1" })
 })
 

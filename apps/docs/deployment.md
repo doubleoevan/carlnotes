@@ -167,6 +167,24 @@ The LiteLLM proxy builds outside the `release-main` pipeline. [infra/litellm/Doc
 copies [litellm-config.yaml](../../litellm-config.yaml) into the image, and a Northflank path rule on those two files rebuilds
 and redeploys the service on push. A model swap is the config edit and nothing else.
 
+## Spend control settings
+
+Five Doppler settings set the defaults of the daily spend controls. Each one is optional, and an unset, empty, or
+invalid value reads as the built-in default. Zero reads as the default too, except for `FIRST_SCAN_DISPATCH_LIMIT`,
+where zero starts no waiting scans. The admin console overrides each one without a deploy or a restart, and
+clearing an override returns to the Doppler value.
+
+| Setting | Default | What it sets |
+|---|---|---|
+| `PODCAST_EPISODES_DAILY_SPEND_CUTOFF_USD` | 65 | the day's free-plan spend past which a free user's podcast episodes after a topic's first are skipped |
+| `SCHEDULED_SCANS_DAILY_SPEND_CUTOFF_USD` | 100 | the day's free-plan spend past which a free user's scheduled scans wait for the next day, and their first and manual scans wait for the first scan dispatch limit |
+| `CHAT_DAILY_SPEND_CUTOFF_USD` | 150 | the day's free-plan spend past which a free user's chat with Carl pauses until midnight UTC |
+| `FIRST_SCAN_DISPATCH_LIMIT` | 5 | how many waiting scans one sweep starts, oldest first. Zero starts none |
+| `HOURLY_SIGNUP_ALERT_COUNT` | 50 | the accounts created in an hour at which the sweep crosses the `hourly-signups` threshold |
+
+The unverified accounts switch has no Doppler setting. It is off until an admin turns it on in the console. The
+overrides live in the `spend_control_settings` row, and every reader sees a save within its next read.
+
 ## Deploy alerts
 
 Four alerts tell the owner that carlnotes.com stopped rendering. They are set up by hand in Sentry and in the

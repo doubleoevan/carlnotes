@@ -1,17 +1,20 @@
 // the limits that the scheduled Topics' owners' plans and budgets set on the sweep: the daily topic limit, the daily
-// Topics that run weekly past the daily scans cutoff, and the owners whose key budget is spent
+// Topics that run weekly past the daily scans cutoff, the owners whose key budget is spent, and the free owners past the
+// scheduled scans cutoff
 import { isDailyFrequency } from "@carlnotes/contracts/enums"
 import { HOUR_MS } from "@carlnotes/contracts/time"
 import { db } from "@carlnotes/db"
+import { type DailySpendCutoffState, isDailySpendCutoffPassed } from "@carlnotes/db/dailySpendCutoffs"
 import { isMonthlyBudgetCutoffPassed } from "@carlnotes/db/monthlyBudgetCutoffs"
-import { dailyTopicIdsWithinLimit, startOfUtcMonth } from "@carlnotes/db/quotas"
+import { dailyTopicIdsWithinLimit, startOfUtcMonth, toPlanUserIdQuery } from "@carlnotes/db/quotas"
 import { cacheJson } from "@carlnotes/db/redis"
 import { runWithRequestMemo } from "@carlnotes/db/requestMemo"
 import { scans } from "@carlnotes/db/schema/scans"
+import { users } from "@carlnotes/db/schema/users"
 import { isUserLiteLLMKeyBudgetExhausted } from "@carlnotes/models/litellm"
 import { runWithConcurrency } from "@carlnotes/server/concurrency"
 import { reportError } from "@carlnotes/server/monitoring"
-import { and, eq, gte, inArray } from "drizzle-orm"
+import { and, eq, gte, inArray, sql } from "drizzle-orm"
 import type { StartScheduledTopicScansOptions, Topic } from "./schedule"
 import { frequencyWindowMs } from "./scheduledTopicFilter"
 
@@ -119,6 +122,35 @@ export async function loadDailyTopicOnWeeklyScanIds(scheduledTopics: Topic[], no
 			),
 		)
 	return new Set(scannedTopicRows.flatMap((scannedTopicRow) => scannedTopicRow.topicId ?? []))
+}
+
+/**
+ * Returns the scheduled Topics' owners who are free and not admins while the scheduled scans cutoff is passed, in one
+ * query. Below the cutoff, or after a failed read, which is reported, it returns no owner.
+ */
+export async function loadDailySpendCutoffOwnerIds(
+	scheduledTopics: Pick<Topic, "ownerId">[],
+	cutoffState: DailySpendCutoffState,
+): Promise<Set<string>> {
+	// below the cutoff, or with no scheduled Topic, nothing is read
+	const ownerIds = [...new Set(scheduledTopics.map((topic) => topic.ownerId))]
+	if (ownerIds.length === 0 || !isDailySpendCutoffPassed(cutoffState, "scheduledScans")) {
+		return new Set()
+	}
+
+	// the free owners who are not admins among the scheduled Topics' owners
+	try {
+		const freeOwnerRows = await db
+			.select({ id: users.id })
+			.from(users)
+			.where(and(inArray(users.id, ownerIds), sql`${users.id} in ${toPlanUserIdQuery("free")}`))
+		return new Set(freeOwnerRows.map((freeOwnerRow) => freeOwnerRow.id))
+	} catch (error) {
+		// a failed read pauses no owner
+		console.error("could not read the free owners past the scheduled scans cutoff", error)
+		reportError(error, "scheduled-scan", { read: "daily-spend-cutoff-owners" })
+		return new Set()
+	}
 }
 
 // the scheduled Topics on a daily frequency, and the distinct ids of their owners

@@ -1,8 +1,10 @@
 // who may delete one chat room message, decided without a database, what a chat message page reports,
 // how a spoken chat message posts, which replies post, and how the stream's catch-up starts
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
+import { CHAT_PAUSED_ERROR } from "@carlnotes/contracts/chat"
 import { PODCAST_EPISODE_SPEAKER_NAMES } from "@carlnotes/contracts/podcastEpisodes"
 import { restoreConnectionPool, stubConnectionPool } from "@carlnotes/db/connectionPoolStub"
+import * as dailySpendCutoffs from "@carlnotes/db/dailySpendCutoffs"
 import { restoreRedisClient, stubRedisClient } from "@carlnotes/db/redisClientStub"
 import { SPENT_BUDGET_REJECTION } from "@carlnotes/models/models"
 import * as moderation from "@carlnotes/models/moderation"
@@ -298,6 +300,28 @@ test("a chat message is rejected before it posts once the poster's budget is rea
 		maxDollars: expect.any(Number),
 	})
 	expect(prepareChatRoomAttachmentsSpy).not.toHaveBeenCalled()
+	expect(sentQueries.some((sentQuery) => sentQuery.text.startsWith('insert into "room_messages"'))).toBe(false)
+	expect(runModelChatRoomTurnSpy).not.toHaveBeenCalled()
+})
+
+// a free poster past the chat cutoff is told privately before anything posts, and nothing is reserved or called
+test("a chat message to carl is rejected before it posts once a free poster is past the chat cutoff", async () => {
+	// a member of the team's own chat room past the chat cutoff
+	spyOn(roomAccess, "loadChatRoom").mockResolvedValue({ topic: null, teamId: "team-1" })
+	const isUserPastDailySpendCutoffSpy = spyOn(dailySpendCutoffs, "isUserPastDailySpendCutoff").mockResolvedValue(true)
+	const reserveUserSpendSpy = spyOn(spendReservations, "reserveUserSpend")
+	const runModelChatRoomTurnSpy = spyOn(roomTurns, "runModelChatRoomTurn").mockResolvedValue(undefined)
+	const sentQueries = stubConnectionPool()
+
+	// the rejection comes back privately, with the chat cutoff's error
+	expect(await room.postChatRoomMessage("user-1", null, "team-1", "@carl who is hiring?", null, [])).toEqual({
+		chatMessageId: 0,
+		rejectionReason: CHAT_PAUSED_ERROR,
+	})
+
+	// the chat cutoff was read for the poster, and nothing was reserved, stored, or called after
+	expect(isUserPastDailySpendCutoffSpy).toHaveBeenCalledWith("user-1", "chat")
+	expect(reserveUserSpendSpy).not.toHaveBeenCalled()
 	expect(sentQueries.some((sentQuery) => sentQuery.text.startsWith('insert into "room_messages"'))).toBe(false)
 	expect(runModelChatRoomTurnSpy).not.toHaveBeenCalled()
 })

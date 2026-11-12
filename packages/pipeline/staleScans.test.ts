@@ -1,5 +1,7 @@
-// stale scan tests: the stale filter's two cutoffs, and the stale window that clears the longest a Scan may run
+// stale scan tests: the stale filter's two cutoffs, the waiting scans it never matches, and the stale window that clears
+// the longest a Scan may run
 import { expect, test } from "bun:test"
+import { HOUR_MS } from "@carlnotes/contracts/time"
 import { db } from "@carlnotes/db"
 import { scans } from "@carlnotes/db/schema/scans"
 import {
@@ -40,4 +42,11 @@ test("the queued stage bound outlasts every attempt of ingest and review", () =>
 // the stale scan window waits out the longest a picked-up Scan may legally run, its waits for a slot included
 test("the stale scan window clears the longest a Scan may legally run", () => {
 	expect(staleScanWindowMs()).toBeGreaterThan(MAX_SCAN_DURATION_MS)
+})
+
+// a waiting scan is a running row with no dispatch time, so the close-out never matches one however old it is
+test("a six-hour-old waiting scan is never closed out as stale", () => {
+	const sixHoursFromNow = new Date(Date.now() + 6 * HOUR_MS)
+	const { sql } = db.select({ id: scans.id }).from(scans).where(toStaleScanFilter(sixHoursFromNow)).toSQL()
+	expect(sql).toContain('where ("scans"."status" = $1 and "scans"."dispatched_at" is not null and (')
 })

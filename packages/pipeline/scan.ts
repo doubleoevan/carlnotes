@@ -106,9 +106,30 @@ export async function failUnstartedScan(scanId: string, failureReason: string): 
 /**
  * Stop the Scan a Topic is running. The workflow saves its own row from here, persisting when it was stopped,
  * so the Scan keeps the Findings it wrote and the money it spent while giving its daily scan back.
+ * A waiting Scan with no workflow yet is saved as stopped here, so the sweep never starts it.
  */
 export async function stopTopicScan(topicId: string): Promise<ScanCancel> {
-	return cancelTopicScanWorkflow(topicId)
+	// save a waiting Scan as stopped the way its workflow would, before the cancel, so the sweep skips it
+	const now = new Date()
+	const stoppedWaitingScans = await db
+		.update(scans)
+		.set({ status: "succeeded", stoppedAt: now, finishedAt: now })
+		.where(
+			and(
+				eq(scans.topicId, topicId),
+				eq(scans.status, "running"),
+				isNull(scans.dispatchedAt),
+				isNull(scans.pickedUpAt),
+			),
+		)
+		.returning({ id: scans.id })
+
+	// cancel the workflow, and count a stopped waiting Scan as cancelled if no workflow was running
+	const scanCancel = await cancelTopicScanWorkflow(topicId)
+	if (scanCancel.status === "cancelled" || stoppedWaitingScans.length === 0) {
+		return scanCancel
+	}
+	return { status: "cancelled", whenStopped: async () => {} }
 }
 
 // record that a Scan's workflow was started, which is what tells a later sweep it does not need dispatching

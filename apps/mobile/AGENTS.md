@@ -294,7 +294,9 @@ The path from a commit to a store build, in order. Every secret stays in Doppler
 `components/layout/HomeHeadline.tsx` is the Home headline on both faces, the web's `HomeHeadline` at phone width.
 `components/common/AccordionSection.tsx` is one section of a screen's list of sections, the web's `AccordionSection`.
 It and `components/topic/CollapsibleSection.tsx` draw a section's title in the `sectionTitle` type role with its count
-at the far right, and a caller leaves a count of zero out through `toSectionCountLabel`.
+at the far right, and a caller leaves a count of zero out through `toSectionCountLabel`. An optional icon sits before
+the title, as the account screen's Budget and Settings sections show.
+`components/common/MeterRing.tsx` adapts core's `MeterRing` in two stacked svgs, the account budget cards' rings.
 `components/common/CardsSection.tsx` adapts core's `CardsSection`, the home's, the profile's, and the team screen's
 card sections, Featured Posts right below Featured Podcasts on the profile and the team screen and the profile's
 Featured Films right above them, with this app's accordion section, card column, and page buttons. The Home writes its

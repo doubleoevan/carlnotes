@@ -92,6 +92,7 @@ capability the app will never need, with the reason, or `deferred` for one an ac
 | `reportClient.fetchAdminReports` | web-only | The admin console's open reports. Admin stays on the web |
 | `reportClient.sendReportResolution` | web-only | The admin console's Remove, Block, and Clear. Admin stays on the web |
 | `billingClient.sendMobileMinimumVersion` | web-only | The admin console's minimum app version write. Admin stays on the web |
+| `billingClient.sendSpendControlSettings` | web-only | The admin console's spend control settings write. Admin stays on the web |
 | `billingClient.fetchBillingPortalUrl` | web-only | Stripe's billing portal. The app manages a store plan on its store's subscription page, and says a Stripe subscriber's plan is billed on the web, with no link |
 | `billingClient.fetchCheckoutUrl` | web-only | Stripe checkout. The app sells its plans as in-app subscriptions through the App Store and Google Play |
 | `teamClient.sendTeamAvatar` | web-only | The browser's File upload. The app uploads to the same route through `teamClient.sendTeamAvatarBody` |

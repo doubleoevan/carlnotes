@@ -66,6 +66,29 @@ test("cacheJson serves a hit, stores a miss, and reloads a deleted key", async (
 	expect(readAndResetRedisGauges()).toMatchObject({ cacheHitCount: 1, cacheMissCount: 2, errorCount: 0 })
 })
 
+// concurrent misses of one key share one load, and the next miss after it finishes loads again
+test("cacheJson shares one load across concurrent misses of a key", async () => {
+	// a loader that counts its calls and finishes when the test says
+	let loadCount = 0
+	const loadFinish = Promise.withResolvers<void>()
+	const load = async (): Promise<number> => {
+		loadCount++
+		await loadFinish.promise
+		return loadCount
+	}
+
+	// three readers miss together and share the one load
+	const cacheReads = [1, 2, 3].map(() => cacheJson({ key: "shared", ttlMs: 1000, load }))
+	loadFinish.resolve()
+	expect(await Promise.all(cacheReads)).toEqual([1, 1, 1])
+	expect(loadCount).toBe(1)
+
+	// a miss after the load finished loads again
+	await deleteRedisKeys("shared")
+	expect(await cacheJson({ key: "shared", ttlMs: 1000, load })).toBe(2)
+	readAndResetRedisGauges()
+})
+
 // with Redis down every read loads, and nothing counts as a miss
 test("cacheJson loads without a cache while Redis is down", async () => {
 	// a loader that counts its calls, with every command failing

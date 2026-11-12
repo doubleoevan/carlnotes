@@ -1,4 +1,5 @@
 import { cn } from "@carlnotes/nightshift/classNames"
+import type { LucideIcon } from "lucide-react"
 import type { MouseEvent, ReactNode } from "react"
 import { AccordionContent, AccordionItem, AccordionTrigger } from "@/components/primitives/accordion"
 import { RAIL_TEXT_INSET, SKELETON_SHAPE_CLASS } from "@/lib/styleClasses"
@@ -17,6 +18,7 @@ const COUNT_BESIDE_TITLE_CLASSES = {
 export function AccordionSection({
 	value,
 	title,
+	icon: TitleIcon,
 	countLabel,
 	countBesideTitleFrom,
 	titleAside,
@@ -28,6 +30,8 @@ export function AccordionSection({
 	// the accordion's own key for this section
 	value: string
 	title: string
+	// the icon before the title
+	icon?: LucideIcon
 	// the section's count, such as "6 topics", or nothing until it is known
 	countLabel?: string
 	// the screen width from which the count sits right after the title instead of at the far right, for a section
@@ -53,10 +57,11 @@ export function AccordionSection({
 			{/* the title, or its placeholder on the title's own line */}
 			<span
 				className={cn(
-					"font-display flex-1 text-xl",
+					"font-display flex flex-1 items-center gap-2 text-xl",
 					countBesideTitleFrom && COUNT_BESIDE_TITLE_CLASSES[countBesideTitleFrom],
 				)}
 			>
+				{!isLoading && TitleIcon && <TitleIcon aria-hidden="true" className="size-5 shrink-0" />}
 				{isLoading ? <span className={cn(SKELETON_SHAPE_CLASS, "inline-block h-5 w-40 align-middle")} /> : title}
 			</span>
 			{/* the count, inset to end on the same line as the quota line above the Topics page's sections */}

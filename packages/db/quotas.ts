@@ -4,11 +4,13 @@ import {
 	ADMIN_QUOTA,
 	type OverageBillingAccess,
 	PLANS,
+	type Plan,
 	toCentsFromDollars,
 	type UserAccess,
 } from "@carlnotes/contracts/plans"
 import { DAY_MS } from "@carlnotes/contracts/time"
-import { and, count, eq, gte, inArray, isNull, ne, sql } from "drizzle-orm"
+import { and, count, eq, gte, inArray, isNull, ne, type SQL, sql } from "drizzle-orm"
+import type { AnyPgColumn } from "drizzle-orm/pg-core"
 import { type DbHandle, db } from "./index"
 import { countRateLimitHit } from "./redisRateLimits"
 import { memoizeInRequest } from "./requestMemo"
@@ -32,8 +34,9 @@ export type RecordedSpend = {
 	topicImageDollars: number
 }
 
-// when the spend to sum starts, and the one user whose spend to sum, or every user if unset
-export type LoadSpendSinceOptions = { since: Date; userId?: string }
+// when the spend to sum starts, the one user whose spend to sum, and the plan whose users to sum without admins.
+// every user if both are unset
+export type LoadSpendSinceOptions = { since: Date; userId?: string; billedPlan?: Plan }
 
 // how many teams a user may create in a day
 const DAILY_TEAM_LIMIT = 20
@@ -251,10 +254,18 @@ export function monthlySpendDollars(userId: string): Promise<RecordedSpend> {
 }
 
 /**
- * Returns the spend recorded since a time for one user or for every user, split into scans, chat, and podcast episodes.
+ * Returns the spend recorded since a time for one user, for the users on one plan who are not admins, or for every user,
+ * split into scans, chat, and podcast episodes.
  */
-export async function loadSpendSince({ since, userId }: LoadSpendSinceOptions): Promise<RecordedSpend> {
-	// sum each table's cost since the start time, for the one user if one is given, even an empty user id
+export async function loadSpendSince({ since, userId, billedPlan }: LoadSpendSinceOptions): Promise<RecordedSpend> {
+	// filter each sum by the user column it bills, for the one user if one is given, even an empty user id
+	const toBilledUserFilter = (billedUserColumn: AnyPgColumn): SQL | undefined =>
+		and(
+			userId !== undefined ? eq(billedUserColumn, userId) : undefined,
+			billedPlan !== undefined ? inArray(billedUserColumn, toPlanUserIdQuery(billedPlan)) : undefined,
+		)
+
+	// sum each table's cost since the start time for the billed users
 	const [
 		[scanSpendRow],
 		[chatSpendRow],
@@ -267,26 +278,21 @@ export async function loadSpendSince({ since, userId }: LoadSpendSinceOptions): 
 		db
 			.select({ dollars: sql<string>`coalesce(sum(${scans.cost}), 0)` })
 			.from(scans)
-			.where(and(userId !== undefined ? eq(scans.ownerId, userId) : undefined, gte(scans.startedAt, since))),
+			.where(and(toBilledUserFilter(scans.ownerId), gte(scans.startedAt, since))),
 		db
 			.select({ dollars: sql<string>`coalesce(sum(${chatTurns.cost}), 0)` })
 			.from(chatTurns)
-			.where(and(userId !== undefined ? eq(chatTurns.userId, userId) : undefined, gte(chatTurns.createdAt, since))),
+			.where(and(toBilledUserFilter(chatTurns.userId), gte(chatTurns.createdAt, since))),
 		db
 			.select({ dollars: sql<string>`coalesce(sum(${podcastEpisodes.cost}), 0)` })
 			.from(podcastEpisodes)
-			.where(
-				and(
-					userId !== undefined ? eq(podcastEpisodes.ownerId, userId) : undefined,
-					gte(podcastEpisodes.createdAt, since),
-				),
-			),
+			.where(and(toBilledUserFilter(podcastEpisodes.ownerId), gte(podcastEpisodes.createdAt, since))),
 		db
 			.select({ dollars: sql<string>`coalesce(sum(${personalSourcesSummarySpends.cost}), 0)` })
 			.from(personalSourcesSummarySpends)
 			.where(
 				and(
-					userId !== undefined ? eq(personalSourcesSummarySpends.userId, userId) : undefined,
+					toBilledUserFilter(personalSourcesSummarySpends.userId),
 					gte(personalSourcesSummarySpends.createdAt, since),
 				),
 			),
@@ -294,34 +300,19 @@ export async function loadSpendSince({ since, userId }: LoadSpendSinceOptions): 
 		db
 			.select({ dollars: sql<string>`coalesce(sum(${topicImageRenders.cost}), 0)` })
 			.from(topicImageRenders)
-			.where(
-				and(
-					userId !== undefined ? eq(topicImageRenders.userId, userId) : undefined,
-					gte(topicImageRenders.createdAt, since),
-				),
-			),
+			.where(and(toBilledUserFilter(topicImageRenders.userId), gte(topicImageRenders.createdAt, since))),
 		// the Topic Post Discussions bill the user that started them
 		db
 			.select({ dollars: sql<string>`coalesce(sum(${topicPostDiscussions.cost}), 0)` })
 			.from(topicPostDiscussions)
-			.where(
-				and(
-					userId !== undefined ? eq(topicPostDiscussions.userId, userId) : undefined,
-					gte(topicPostDiscussions.createdAt, since),
-				),
-			),
+			.where(and(toBilledUserFilter(topicPostDiscussions.userId), gte(topicPostDiscussions.createdAt, since))),
 		// the films bill their podcast episode's owner.
 		// ponytail: a rebuild's cost counts in the month the film was made, a cost row per render if that drifts
 		db
 			.select({ dollars: sql<string>`coalesce(sum(${topicPodcastEpisodeVideos.cost}), 0)` })
 			.from(topicPodcastEpisodeVideos)
 			.innerJoin(podcastEpisodes, eq(podcastEpisodes.id, topicPodcastEpisodeVideos.podcastEpisodeId))
-			.where(
-				and(
-					userId !== undefined ? eq(podcastEpisodes.ownerId, userId) : undefined,
-					gte(topicPodcastEpisodeVideos.createdAt, since),
-				),
-			),
+			.where(and(toBilledUserFilter(podcastEpisodes.ownerId), gte(topicPodcastEpisodeVideos.createdAt, since))),
 	])
 
 	// a discussion is the two hosts recorded, and a film is its podcast episode's, so both count as podcast episode
@@ -337,6 +328,13 @@ export async function loadSpendSince({ since, userId }: LoadSpendSinceOptions): 
 		personalSourcesDollars: Number(personalSourcesSpendRow?.dollars ?? 0),
 		topicImageDollars: Number(topicImageSpendRow?.dollars ?? 0),
 	}
+}
+
+/**
+ * Returns a subquery of the ids of the users on the plan who are not admins.
+ */
+export function toPlanUserIdQuery(plan: Plan): SQL {
+	return sql`(select ${users.id} from ${users} where ${users.plan} = ${plan} and ${users.role} <> 'admin')`
 }
 
 /**

@@ -1,7 +1,13 @@
-// the admin writes: a user's role, budget override, and a platform's minimum app version, and the admin console routes
+// the admin writes: a user's role, budget override, a platform's minimum app version, and the spend control settings,
+// and the admin console routes
 
 import { isNativePlatform } from "@carlnotes/contracts/clientTelemetry"
-import { budgetOverridePayload, mobileMinimumVersionPayload, setRolePayload } from "@carlnotes/contracts/payloads"
+import {
+	budgetOverridePayload,
+	mobileMinimumVersionPayload,
+	setRolePayload,
+	spendControlSettingsPayload,
+} from "@carlnotes/contracts/payloads"
 import { resolveReportPayload } from "@carlnotes/contracts/reports"
 import { db } from "@carlnotes/db"
 import { users } from "@carlnotes/db/schema/users"
@@ -23,6 +29,7 @@ import { type AppEnv, currentUser } from "./currentUser"
 import { loadMobileMinimumVersionRows, saveMobileMinimumVersion } from "./mobileMinimumVersions"
 import { countOpenReports, loadOpenReports, resolveReport } from "./report/adminReports"
 import { refreshSessionUser } from "./sessions"
+import { loadAdminDailySpendCutoffs, saveSpendControlSettings } from "./spendControlSettings"
 import { loadAdminTeamTopics } from "./team/helpers"
 
 /**
@@ -90,12 +97,26 @@ export const adminRoute = new Hono<AppEnv>()
 			return context.json({ error: "forbidden" }, 403)
 		}
 		const users = await loadAdminUsers()
-		const [teams, totals, mobileMinimumVersions] = await Promise.all([
+		const [teams, totals, mobileMinimumVersions, dailySpendCutoffs] = await Promise.all([
 			loadAdminTeams(),
 			loadAdminTotals(users),
 			loadMobileMinimumVersionRows(),
+			loadAdminDailySpendCutoffs(),
 		])
-		return context.json({ users, teams, totals, mobileMinimumVersions })
+		return context.json({ users, teams, totals, mobileMinimumVersions, dailySpendCutoffs })
+	})
+	.post("/admin/spend-control-settings", zValidator("json", spendControlSettingsPayload), async (context) => {
+		// reject a signed-out visitor
+		const userId = currentUser(context)
+		if (!userId) {
+			return context.json({ error: "unauthorized" }, 401)
+		}
+		// save the spend control overrides, admin only
+		if (!(await isAllowed(userId, "admin:console"))) {
+			return context.json({ error: "forbidden" }, 403)
+		}
+		await saveSpendControlSettings({ payload: context.req.valid("json"), adminUserId: userId })
+		return context.json({ ok: true })
 	})
 	.post(
 		"/admin/mobile-minimum-versions/:platform",

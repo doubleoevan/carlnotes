@@ -5,7 +5,7 @@ import { restoreConnectionPool, stubConnectionPool } from "@carlnotes/db/connect
 import type { scans } from "@carlnotes/db/schema/scans"
 import { toScanSummary } from "./ingest/index"
 import type { NewResource } from "./ingest/ingester"
-import { failUnstartedScan, scanTopic } from "./scan"
+import { failUnstartedScan, scanTopic, stopTopicScan } from "./scan"
 import * as temporalClient from "./temporalClient"
 
 // the connection pool's own query, put back after each test along with the spies
@@ -81,6 +81,27 @@ test("failUnstartedScan marks failed only a running Scan that is not manual, not
 	expect(sentQueries[0]?.values).toEqual(
 		expect.arrayContaining(["failed", "the failure reason", "scan-1", "running", false]),
 	)
+})
+
+// a waiting Scan with no workflow is saved as stopped, and the stop reads as cancelled
+test("stopTopicScan saves a waiting Scan as stopped and returns cancelled when no workflow is running", async () => {
+	spyOn(temporalClient, "cancelTopicScanWorkflow").mockResolvedValue({ status: "idle" })
+	const sentQueries = stubConnectionPool(() => [["scan-1"]])
+	expect((await stopTopicScan("topic-1")).status).toBe("cancelled")
+
+	// the update saves the stop the way the workflow does, on a running row that was never dispatched or picked up
+	expect(sentQueries).toHaveLength(1)
+	expect(sentQueries[0]?.text).toStartWith('update "scans" set "status" = $1, "finished_at" = $2, "stopped_at" = $3')
+	expect(sentQueries[0]?.text).toContain('"scans"."dispatched_at" is null')
+	expect(sentQueries[0]?.text).toContain('"scans"."picked_up_at" is null')
+	expect(sentQueries[0]?.values).toEqual(expect.arrayContaining(["succeeded", "topic-1", "running"]))
+})
+
+// a Topic with no waiting Scan and no running workflow has nothing to stop
+test("stopTopicScan returns idle when no waiting Scan and no workflow is running", async () => {
+	spyOn(temporalClient, "cancelTopicScanWorkflow").mockResolvedValue({ status: "idle" })
+	stubConnectionPool()
+	expect(await stopTopicScan("topic-1")).toEqual({ status: "idle" })
 })
 
 // a fake Resource with just the url and resource kind

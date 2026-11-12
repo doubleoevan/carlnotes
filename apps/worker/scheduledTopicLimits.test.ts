@@ -1,7 +1,9 @@
 // scheduled topic limit tests: the owners whose budget is spent, the daily Topics that run weekly past the daily scans
-// cutoff and the cutoff cached in Redis, and the limit loads' one read of each owner's access row
+// cutoff and the cutoff cached in Redis, the limit loads' one read of each owner's access row, and the free owners past
+// the scheduled scans cutoff
 import { afterEach, expect, type Mock, mock, spyOn, test } from "bun:test"
 import { PLUS_USER_ACCESS_ROW, restoreConnectionPool, stubConnectionPool } from "@carlnotes/db/connectionPoolStub"
+import { toDailySpendCutoffState } from "@carlnotes/db/dailySpendCutoffTestFixtures"
 import * as monthlyBudgetCutoffs from "@carlnotes/db/monthlyBudgetCutoffs"
 import { restoreRedisClient, stubRedisClient } from "@carlnotes/db/redisClientStub"
 import * as litellm from "@carlnotes/models/litellm"
@@ -9,6 +11,7 @@ import { quietErrorReports } from "@carlnotes/server/monitoringTestFixtures"
 import { saveEnvSettings } from "@carlnotes/server/savedEnvSettings"
 import {
 	loadBudgetExhaustedOwnerIds,
+	loadDailySpendCutoffOwnerIds,
 	loadDailyTopicOnWeeklyScanIds,
 	loadScheduledTopicLimits,
 } from "./scheduledTopicLimits"
@@ -186,4 +189,45 @@ test("the sweep's limit loads read each owner's access row once", async () => {
 		budgetExhaustedOwnerIds: new Set(),
 	})
 	expect(sentQueries.filter((sentQuery) => sentQuery.text.includes('from "users"'))).toHaveLength(1)
+})
+
+// below the scheduled scans cutoff, or with an unavailable state, no owner is read
+test("no owner is read below the scheduled scans cutoff or with an unavailable state", async () => {
+	const sentQueries = stubConnectionPool(() => [["owner-1"]])
+	const scheduledTopics = [toScheduledTopic("a", "owner-1")]
+	expect([...(await loadDailySpendCutoffOwnerIds(scheduledTopics, toDailySpendCutoffState(9_999)))]).toEqual([])
+	expect([...(await loadDailySpendCutoffOwnerIds(scheduledTopics, { status: "unavailable" }))]).toEqual([])
+	expect(sentQueries).toHaveLength(0)
+})
+
+// past the cutoff, one query returns the free owners who are not admins among the distinct owners
+test("past the scheduled scans cutoff, one query returns the free owners among the scheduled Topics' owners", async () => {
+	// two owners' Topics, of whom the database returns only the free one
+	const sentQueries = stubConnectionPool(() => [["free-owner"]])
+	const scheduledTopics = [
+		toScheduledTopic("a", "free-owner"),
+		toScheduledTopic("b", "free-owner"),
+		toScheduledTopic("c", "paid-owner"),
+	]
+	const dailySpendCutoffOwnerIds = await loadDailySpendCutoffOwnerIds(scheduledTopics, toDailySpendCutoffState(10_000))
+
+	// one query over the distinct owners, filtered to the free plan without admins
+	expect([...dailySpendCutoffOwnerIds]).toEqual(["free-owner"])
+	expect(sentQueries).toHaveLength(1)
+	expect(sentQueries[0]?.values).toEqual(expect.arrayContaining(["free-owner", "paid-owner", "free"]))
+	expect(sentQueries[0]?.text).toContain(`"users"."role" <> 'admin'`)
+})
+
+// a failed read is reported and pauses no owner
+test("a failed free owner read is reported and pauses no owner", async () => {
+	stubConnectionPool(() => {
+		throw new Error("connection lost")
+	})
+	const reportErrorSpy = quietErrorReports()
+	const dailySpendCutoffOwnerIds = await loadDailySpendCutoffOwnerIds(
+		[toScheduledTopic("a", "owner-1")],
+		toDailySpendCutoffState(10_000),
+	)
+	expect([...dailySpendCutoffOwnerIds]).toEqual([])
+	expect(reportErrorSpy).toHaveBeenCalledTimes(1)
 })

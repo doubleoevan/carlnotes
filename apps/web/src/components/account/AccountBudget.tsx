@@ -8,9 +8,10 @@ import {
 } from "@carlnotes/core/components/AccountBudget"
 import { PLAN_MANAGEMENT_LABELS, toPlanManagement } from "@carlnotes/core/lib/storefrontPurchaseRules"
 import { cn } from "@carlnotes/nightshift/classNames"
-import { Settings } from "lucide-react"
+import { Columns3Cog, Settings } from "lucide-react"
 import { useState } from "react"
 import { AnchorLink } from "@/components/common/AnchorLink"
+import { MeterRing } from "@/components/common/MeterRing"
 import { Button } from "@/components/primitives/button"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import { openPlanManagement } from "@/lib/billingRedirects"
@@ -18,7 +19,8 @@ import { CARD_CLASS, HIGHLIGHTED_PAGE_BUTTON_CLASS } from "@/lib/styleClasses"
 import { SpendMeter } from "./SpendMeter"
 
 /**
- * The budget section on the account page: the payment notice, the spend meter, the scan usage, and the plan card.
+ * The budget section on the account page: the payment notice and the coffee fund and daily scans cards, each with the
+ * plan and its button.
  */
 export function AccountBudget({
 	billing,
@@ -27,7 +29,7 @@ export function AccountBudget({
 }: {
 	billing: BillingState
 	activity: ActivityResponse | null
-	// an admin viewing another user's account does not see the payment notice
+	// an admin viewing another user's account does not see the payment notice, the plan button, or the upgrade link
 	isReadOnly?: boolean
 }) {
 	return (
@@ -35,7 +37,9 @@ export function AccountBudget({
 			billing={billing}
 			isReadOnly={isReadOnly}
 			elements={ACCOUNT_BUDGET_ELEMENTS}
-			spendMeter={activity ? <SpendMeter {...activity} /> : null}
+			activity={activity}
+			spendMeter={activity ? <SpendMeter {...activity} isReadOnly={isReadOnly} /> : null}
+			planAction={isReadOnly ? null : <PlanButton billing={billing} />}
 		/>
 	)
 }
@@ -43,9 +47,18 @@ export function AccountBudget({
 // keep the existing card and text styling around shared account content
 const ACCOUNT_BUDGET_ELEMENTS: AccountBudgetElements = {
 	Card: ({ children }) => <section className={cn(CARD_CLASS, "space-y-4")}>{children}</section>,
-	Group: ({ children }) => <div>{children}</div>,
 	Text: ({ children, className }) => <span className={className}>{children}</span>,
 	Heading: ({ children }) => <h2 className="font-semibold">{children}</h2>,
+	CardTop: ({ children }) => (
+		<div className="flex flex-col gap-3 sm:grid sm:grid-cols-[1fr_auto_1fr] sm:items-start">{children}</div>
+	),
+	CardTopRow: ({ children }) => <div className="grid grid-cols-[1fr_auto_1fr] items-start gap-3">{children}</div>,
+	CardTopStart: ({ children }) => <div className="min-w-0">{children}</div>,
+	CardTopEnd: ({ children }) => <div className="min-w-0 text-right">{children}</div>,
+	Meters: ({ children }) => <div className="flex flex-wrap justify-center gap-8">{children}</div>,
+	Meter: ({ children }) => <div className="flex flex-col items-center gap-1.5">{children}</div>,
+	MeterRing,
+	PlanRow: ({ children }) => <div className="flex flex-wrap items-center gap-3">{children}</div>,
 	PaymentNotice,
 }
 
@@ -66,7 +79,7 @@ function PaymentNotice({ provider }: { provider: BillingProvider | null }) {
 
 // a subscribed user manages the plan where it is billed, the portal or the store that sold it, and a free user
 // selects a plan on the plans page. a store subscriber's button names the store
-export function PlanButton({ billing }: { billing: BillingState }) {
+function PlanButton({ billing }: { billing: BillingState }) {
 	const [isRedirecting, setIsRedirecting] = useState(false)
 	const planManagement = toPlanManagement("web", billing.provider)
 
@@ -97,7 +110,7 @@ export function PlanButton({ billing }: { billing: BillingState }) {
 		<Tooltip>
 			<TooltipTrigger asChild>
 				<AnchorLink href={PLANS_PATH} className={HIGHLIGHTED_PAGE_BUTTON_CLASS}>
-					<Settings className="size-4" />
+					<Columns3Cog className="size-4" />
 					{PURCHASE_COPY.upgrade}
 				</AnchorLink>
 			</TooltipTrigger>

@@ -89,40 +89,40 @@ It imports `@carlnotes/contracts`, `@carlnotes/client`, `@carlnotes/nightshift`,
   and drops a response from a replaced account; and `usePolledCounts.ts`, a page's viewer, follower, or listener counts
   read once the page shows and then every minute while the app is focused and online.
 - `lib/` — pure rules and formatting: `reportCopy.ts` (the report dialog's words on both apps), `confirmElement.ts` (the
-  props of a confirmation dialog), `confirmationCopy.ts` (the words of each one), `labels.ts` (values as
-  the text a user sees: dates, durations, money, sizes, and counts), `pageHead.ts` (a `PageHead`, or a fixed title and
-  path, as the tags a route's `head()` returns), `paginationSlots.ts` (the slots a row of page links shows),
-  `planCards.ts` (which plan card matches the user's plan and billing interval, and which badge shows),
-  `streamReconnect.ts` (how long a silent SSE stream runs before it counts as dropped and the wait before reopening it,
-  for the chat room stream), `topicFindingFilters.ts` and `topicFindingSorts.ts` (which findings a feed view shows and
-  in what order), `topicSorts.ts` (the Topics page's topic order under Trending: viewers, then followers, then the
-  newest finding, with Home topics kept in its own order), `topicPromptUrls.ts` (the urls written inside a topic prompt),
-  `emailProviders.ts` (the webmail compose urls an invite is given), `chromeIntentUrl.ts` (the page as an Android intent
-  url that opens it in Chrome, out of an embedded webview), `pushCopy.ts` (the push permission sheet's and the
-  Notifications section's words), `sessionCopy.ts` (the lines the sign-in, sign-out, sign-up, and close-account controls
-  say, shared by the web and the mobile app), `signupPrompts.ts` (the prompt each account action shows a visitor on the
-  sign-up page, and the lookup by cta tag), `inviteRejections.ts` (what an invite page says while it checks a token, if
-  the check fails, and for each way a token is rejected), `updateCounts.ts` (one badge's count summing chat mentions,
-  note changes, and topic invitations, its accessible labels, and the groups a tooltip or a long-press sheet lists),
-  `updateBadgePoll.ts` (the poll behind `useUpdateBadges`, on `activePoll.ts`), `countsPoll.ts` (the poll behind
-  `usePolledCounts`, on `activePoll.ts`), `focusAndOnline.ts` (whether the app is focused and online through Query's
-  adapters, and how a poll subscribes to a change), `limitedPoll.ts` (a poll on `activePoll.ts` that reads on an
-  interval while the app is focused and online and stops at a time limit, behind the Topic Post discussion poll and
-  the film rendering poll), `topicGateCopy.ts` (the invite-only gate's words),
-  `podcastEpisodeCopy.ts` (the words shown if a podcast episode fails to load or play, the lines shown while it
-  records and while its film renders, and the film section's title on the topic page and the podcast episode page),
-  `topicPodcastEpisodeVideoDisplay.ts` (what a film section shows for a podcast episode: the film player for a ready
-  film, the rendering card while its film renders, or nothing, and the section a topic's page shows while its only
-  film is rendering), and
-  `voiceRecordingDecisions.ts` (what the voice recorder decides from each frame, with the `SilenceThresholdSettings`
-  type and the browser's default settings), `voiceRecordingRules.ts` (the mic's visibility, the recording timer, the
-  reopened recording's rejection, and the meter's callback), `voiceRecorder.ts` (the recorder adapter each app supplies:
-  the session a tap opens, the start, the recording's delete, the rejected microphone's action, and the background
-  listener), `spokenAnswerPlayer.ts` (the spoken answer player adapter each app supplies), and
-  `spokenQuestionsPaused.ts` (the mic's action past the spoken questions cutoff, and the plans page's upgrade lines),
-  and `storefrontPurchaseRules.ts` (whether a user may buy a plan and where a paid plan is managed, from the platform,
-  the store's offering, and the user's plan and billing provider, with each place's label). `sessionCopy.ts` also
-  holds the closing copy for a store subscriber, whose plan keeps billing through the store.
+  props of a confirmation dialog), `confirmationCopy.ts` (the words of each one), `labels.ts` (values as the text a user
+  sees: dates, durations, money, sizes, and counts), `pageHead.ts` (a `PageHead`, or a fixed title and path, as the tags
+  a route's `head()` returns), `paginationSlots.ts` (the slots a row of page links shows), `worstCaseMonthlySpend.ts`
+  (the admin console's worst case free-plan spend for the UTC month at a daily signup rate, the rates its table
+  compares, and the daily signup average of the past days), `planCards.ts` (which plan card matches the user's plan and
+  billing interval, and which badge shows), `streamReconnect.ts` (how long a silent SSE stream runs before it counts as
+  dropped and the wait before reopening it, for the chat room stream), `topicFindingFilters.ts` and
+  `topicFindingSorts.ts` (which findings a feed view shows and in what order), `topicSorts.ts` (the Topics page's topic
+  order under Trending: viewers, then followers, then the newest finding, with Home topics kept in its own order),
+  `topicPromptUrls.ts` (the urls written inside a topic prompt), `emailProviders.ts` (the webmail compose urls an invite
+  is given), `chromeIntentUrl.ts` (the page as an Android intent url that opens it in Chrome, out of an embedded
+  webview), `pushCopy.ts` (the push permission sheet's and the Notifications section's words), `sessionCopy.ts` (the
+  lines the sign-in, sign-out, sign-up, and close-account controls say, shared by the web and the mobile app),
+  `signupPrompts.ts` (the prompt each account action shows a visitor on the sign-up page, and the lookup by cta tag),
+  `inviteRejections.ts` (what an invite page says while it checks a token, if the check fails, and for each way a token
+  is rejected), `updateCounts.ts` (one badge's count summing chat mentions, note changes, and topic invitations, its
+  accessible labels, and the groups a tooltip or a long-press sheet lists), `updateBadgePoll.ts` (the poll behind
+  `useUpdateBadges`, on `activePoll.ts`), `countsPoll.ts` (the poll behind `usePolledCounts`, on `activePoll.ts`),
+  `focusAndOnline.ts` (whether the app is focused and online through Query's adapters, and how a poll subscribes to a
+  change), `limitedPoll.ts` (a poll on `activePoll.ts` that reads on an interval while the app is focused and online and
+  stops at a time limit, behind the Topic Post discussion poll and the film rendering poll), `topicGateCopy.ts` (the
+  invite-only gate's words), `podcastEpisodeCopy.ts` (the words shown if a podcast episode fails to load or play, the
+  lines shown while it records and while its film renders, and the film section's title on the topic page and the
+  podcast episode page), `topicPodcastEpisodeVideoDisplay.ts` (what a film section shows for a podcast episode: the film
+  player for a ready film, the rendering card while its film renders, or nothing, and the section a topic's page shows
+  while its only film is rendering), and `voiceRecordingDecisions.ts` (what the voice recorder decides from each frame,
+  with the `SilenceThresholdSettings` type and the browser's default settings), `voiceRecordingRules.ts` (the mic's
+  visibility, the recording timer, the reopened recording's rejection, and the meter's callback), `voiceRecorder.ts`
+  (the recorder adapter each app supplies: the session a tap opens, the start, the recording's delete, the rejected
+  microphone's action, and the background listener), `spokenAnswerPlayer.ts` (the spoken answer player adapter each app
+  supplies), and `spokenQuestionsPaused.ts` (the mic's action past the spoken questions cutoff, and the plans page's
+  upgrade lines), and `storefrontPurchaseRules.ts` (whether a user may buy a plan and where a paid plan is managed, from
+  the platform, the store's offering, and the user's plan and billing provider, with each place's label).
+  `sessionCopy.ts` also holds the closing copy for a store subscriber, whose plan keeps billing through the store.
 - Imports: `@carlnotes/contracts`, `@carlnotes/client`, `@carlnotes/nightshift`, `react`, and `@tanstack/react-query`. Never a server package or an app. Universal: the
   root rule. A module that needs a DOM type is a web module and lives in `apps/web/src`.
 - Tests: `bun test packages/core`.
@@ -296,15 +296,19 @@ and a fixed first column belong to the mobile adapter. Web retains its expandabl
 
 `components/AccountBudget`, `AccountFields`, `PlanCard`, `MonthlyBudgetCutoffTable`, `InviteFields`, and `TeamFields`
 share page and form composition. `PlanCard` takes the store's price and billing note, a portal action with its label,
-and a plan switch for a subscriber, and `AccountBudget`'s payment notice gets the billing provider. `AccountFields`
-includes the shared ProfileFields form, with platform identity, photo-toggle, and input elements, and the `Switch`
-element. `NotificationsSection` is the account's Notifications section over those elements: `NotificationsCard` over
+and a plan switch for a subscriber, and `AccountBudget`'s payment notice gets the billing provider. `AccountBudget` is a
+coffee fund card and a brews card, each opening with its title beside its centered rings: the time left until the
+monthly budget resets, or the day's Scans used and the time left until the daily Scan limit resets, and ending with the
+plan line beside the plan action each app passes. Each app's `MeterRing` over `components/MeterRing` draws the rings,
+whose elements each app supplies, from the UTC math in `lib/utcResets.ts`. `AccountFields` includes the shared
+ProfileFields form, with platform identity, photo-toggle, and input elements, and the `Switch` element.
+`NotificationsSection` is the account's Notifications section over those elements: `NotificationsCard` over
 `toNotificationSwitchStates`, with `NotificationsSection` reading the session's push preferences. Only the app renders
 it. `useAvatar` owns upload acknowledgement and session refresh for both File and FormData uploads. `Footer` owns all
-footer copy, destinations, and row order for both apps.
-`lib/spendMeter`, `monthlyBudgetCutoffs`, and `monthlyBudgetCutoffCopy` own budget labels and checkpoint calculations.
-`lib/spendMeterStoryFixtures` supplies the same spend and cutoff examples to both component browsers.
-`lib/storyFixtures` holds `FIXTURE_DATE`, the date that the web component browser's fixtures share.
+footer copy, destinations, and row order for both apps. `lib/spendMeter`, `monthlyBudgetCutoffs`, and
+`monthlyBudgetCutoffCopy` own budget labels and checkpoint calculations. `lib/spendMeterStoryFixtures` supplies the same
+spend and cutoff examples to both component browsers. `lib/storyFixtures` holds `FIXTURE_DATE`, the date that the web
+component browser's fixtures share.
 
 `hooks/useTopicFields`, `useTopicSourceEditor`, `useTopicTeamChoice`, `useTeamFields`, and `useTopicEmails` own the
 portable form state. `lib/saveTopic`, `saveTeam`, `teamFields`, `teamInvites`, `topicSourceEditor`, and

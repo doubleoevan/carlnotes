@@ -1,6 +1,7 @@
 // manual scan tests: a scan with a spent monthly budget, one past the manual scans cutoff, and one whose key has spent
 // its budget are rejected before anything starts or is billed. a failed budget read starts the scan, and an admin's
-// scan checks the admin's own budget. scan note tests: who gets a source result's cost, reason, and full url label, and
+// scan checks the admin's own budget. a scan asked for while the first scan waits, or past the scheduled scans cutoff,
+// waits for the sweep. scan note tests: who gets a source result's cost, reason, and full url label, and
 // which stored results never leave the api
 import { afterEach, expect, type Mock, mock, spyOn, test } from "bun:test"
 import { MANUAL_SCAN_PAUSED_LABEL, SCAN_SPENT_BUDGET_LABEL } from "@carlnotes/contracts/scanFailure"
@@ -11,6 +12,7 @@ import {
 	stubConnectionPool,
 	toTableRow,
 } from "@carlnotes/db/connectionPoolStub"
+import * as dailySpendCutoffs from "@carlnotes/db/dailySpendCutoffs"
 import * as monthlyBudgetCutoffs from "@carlnotes/db/monthlyBudgetCutoffs"
 import { topics } from "@carlnotes/db/schema/topics"
 import * as litellm from "@carlnotes/models/litellm"
@@ -50,10 +52,13 @@ type ManualScanSpies = {
 	startTopicScanSpy: Mock<typeof scan.startTopicScan>
 	failStaleScansSpy: Mock<typeof staleScans.failStaleScans>
 	reportManualScanOverageSpy: Mock<typeof billing.reportManualScanOverage>
+	isTopicFirstScanWaitingSpy: Mock<typeof dailySpendCutoffs.isTopicFirstScanWaiting>
+	isManualScanWaitingSpy: Mock<typeof dailySpendCutoffs.isManualScanWaiting>
 }
 
 // stub the gate to allow the scan, the user's spend to be under the whole budget and the manual scans cutoff, and the
-// scan load to return no scan. spy on the scan start, the stale scan close-out, and the overage bill
+// scan load to return no scan. spy on the scan start, the stale scan close-out, the overage bill, and the waiting checks,
+// each stubbed as not waiting
 function spyOnManualScan(isOverage: boolean): ManualScanSpies {
 	spyOn(authorization, "loadManualScanAuthorization").mockResolvedValue({
 		status: "allowed",
@@ -71,6 +76,8 @@ function spyOnManualScan(isOverage: boolean): ManualScanSpies {
 		}),
 		failStaleScansSpy: spyOn(staleScans, "failStaleScans").mockResolvedValue(0),
 		reportManualScanOverageSpy: spyOn(billing, "reportManualScanOverage").mockResolvedValue(undefined),
+		isTopicFirstScanWaitingSpy: spyOn(dailySpendCutoffs, "isTopicFirstScanWaiting").mockResolvedValue(false),
+		isManualScanWaitingSpy: spyOn(dailySpendCutoffs, "isManualScanWaiting").mockResolvedValue(false),
 	}
 }
 
@@ -221,6 +228,63 @@ test("the topic page's request past the daily quota still starts a billed overag
 	// the page's default bills past the daily quota, and a started Scan names its id
 	const response = await sendManualScan("owner-1")
 	expect(response.status).toBe(200)
+	expect(startTopicScanSpy).toHaveBeenCalledWith("topic-1", "owner-1", "manual")
+})
+
+// a manual Scan asked for while the Topic's first scan waits returns running and leaves that row alone
+test("a manual Scan asked for while the first scan waits returns running and writes nothing", async () => {
+	// the Topic's first scan waits, and the key read fails so the scan goes ahead
+	stubOwnedTopicRows()
+	const { startTopicScanSpy, isTopicFirstScanWaitingSpy } = spyOnManualScan(false)
+	isTopicFirstScanWaitingSpy.mockResolvedValue(true)
+	stubUnreachableProxy()
+
+	// the request is a conflict like any running scan, and nothing starts
+	const scanResult = await runManualScan("owner-1", "topic-1", {} as AnalyticsProperties)
+	expect(scanResult).toEqual({ status: "running" })
+	expect(startTopicScanSpy).not.toHaveBeenCalled()
+})
+
+// past the scheduled scans cutoff a free user's manual Scan opens a manual row for the sweep and returns started
+test("past the scheduled scans cutoff a free user's manual Scan opens a manual row and starts no workflow", async () => {
+	// a free user past the cutoff, on a Topic with no running scan
+	const topicRow = toTableRow(topics, { id: "topic-1", ownerId: "owner-1" })
+	const sentQueries = stubConnectionPool(({ text }) => (text.includes('from "topics"') ? [topicRow] : []))
+	const { startTopicScanSpy, isManualScanWaitingSpy } = spyOnManualScan(false)
+	isManualScanWaitingSpy.mockResolvedValue(true)
+	spyOn(litellm, "isUserLiteLLMKeyBudgetExhausted").mockResolvedValue(false)
+
+	// the request starts, with the remaining scans, and opens one manual row of the Topic with no workflow
+	const scanResult = await runManualScan("owner-1", "topic-1", {} as AnalyticsProperties)
+	expect(scanResult).toEqual({ status: "started", remainingScans: 2 })
+	expect(startTopicScanSpy).not.toHaveBeenCalled()
+	const scanInserts = sentQueries.filter((sentQuery) => sentQuery.text.startsWith('insert into "scans"'))
+	expect(scanInserts).toHaveLength(1)
+	expect(scanInserts[0]?.values).toEqual(expect.arrayContaining(["topic-1", "owner-1", true]))
+})
+
+// past the cutoff a Topic that already has a running scan returns running and opens no second row
+test("past the scheduled scans cutoff a Topic with a running scan returns running and opens nothing", async () => {
+	// a free user past the cutoff, on a Topic whose scan is running
+	const topicRow = toTableRow(topics, { id: "topic-1", ownerId: "owner-1" })
+	const sentQueries = stubConnectionPool(({ text }) => (text.includes('from "topics"') ? [topicRow] : [["scan-1"]]))
+	const { isManualScanWaitingSpy } = spyOnManualScan(false)
+	isManualScanWaitingSpy.mockResolvedValue(true)
+	spyOn(litellm, "isUserLiteLLMKeyBudgetExhausted").mockResolvedValue(false)
+	expect(await runManualScan("owner-1", "topic-1", {} as AnalyticsProperties)).toEqual({ status: "running" })
+	expect(sentQueries.some((sentQuery) => sentQuery.text.startsWith('insert into "scans"'))).toBe(false)
+})
+
+// a paid user's manual Scan starts at once past the cutoff
+test("a paid user's manual Scan starts at once past the scheduled scans cutoff", async () => {
+	stubOwnedTopicRows()
+	const { startTopicScanSpy, isManualScanWaitingSpy } = spyOnManualScan(false)
+	spyOn(litellm, "isUserLiteLLMKeyBudgetExhausted").mockResolvedValue(false)
+	expect(await runManualScan("owner-1", "topic-1", {} as AnalyticsProperties)).toEqual({
+		status: "started",
+		remainingScans: 2,
+	})
+	expect(isManualScanWaitingSpy).toHaveBeenCalledWith("owner-1")
 	expect(startTopicScanSpy).toHaveBeenCalledWith("topic-1", "owner-1", "manual")
 })
 

@@ -1,6 +1,6 @@
 // spend meter tests: the cutoffs that share a circle, the status line under the bar, and the rendered circles and list
 import { expect, test } from "bun:test"
-import type { MonthlyBudgetCutoff } from "@carlnotes/contracts/plans"
+import { type MonthlyBudgetCutoff, PURCHASE_COPY } from "@carlnotes/contracts/plans"
 import { renderToString } from "react-dom/server"
 import { SpendMeter, toCutoffMarkers, toSpendMeterStatusLine } from "./SpendMeter"
 
@@ -63,7 +63,11 @@ const FREE_CUTOFFS: MonthlyBudgetCutoff[] = [
 ]
 
 // render the spend meter's server HTML at the given scan spend of the free plan's 300 cent budget
-function renderSpendMeter(scanSpendCents: number, monthlyBudgetCutoffs: MonthlyBudgetCutoff[]): string {
+function renderSpendMeter(
+	scanSpendCents: number,
+	monthlyBudgetCutoffs: MonthlyBudgetCutoff[],
+	isReadOnly = false,
+): string {
 	return renderToString(
 		<SpendMeter
 			scanSpendCents={scanSpendCents}
@@ -71,13 +75,14 @@ function renderSpendMeter(scanSpendCents: number, monthlyBudgetCutoffs: MonthlyB
 			podcastEpisodeSpendCents={0}
 			budgetCents={300}
 			monthlyBudgetCutoffs={monthlyBudgetCutoffs}
+			isReadOnly={isReadOnly}
 		/>,
 	)
 }
 
 // each cutoff circle in the server HTML, with its percent label and its classes
 function toCutoffCircles(html: string): { percentLabel: string; className: string }[] {
-	return [...html.matchAll(/<button[^>]*class="([^"]*)"[^>]*>(\d+)<!-- -->%<\/button>/g)].map(
+	return [...html.matchAll(/<button[^>]*class="([^"]*)"[^>]*>(\d+)%<\/button>/g)].map(
 		([, className = "", percent]) => ({ percentLabel: `${percent}%`, className }),
 	)
 }
@@ -111,4 +116,11 @@ test("the bar shows no circle and no list without cutoffs", () => {
 	const html = renderSpendMeter(171, [])
 	expect(toCutoffCircles(html)).toEqual([])
 	expect(html).not.toContain("<ul")
+})
+
+// a spent budget in an admin's read-only view of another user's account shows no upgrade link
+test("a read-only meter shows no upgrade link once the budget is spent", () => {
+	const html = renderSpendMeter(300, FREE_CUTOFFS, true)
+	expect(html).toContain("100%")
+	expect(html).not.toContain(PURCHASE_COPY.pickUpSomeCoffee)
 })

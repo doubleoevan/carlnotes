@@ -77,6 +77,9 @@ export const CHAT_ROOM_MESSAGE_MAX_CHARS = 4000
 // the sentence that tells the user their budget is spent, in carl's words
 export const SPENT_BUDGET_LINE = "Carl is staring at an empty mug."
 
+// the error that rejects a free user's chat turn once the day's free-plan spend is past the chat cutoff
+export const CHAT_PAUSED_ERROR = "chat paused"
+
 // the error that rejects a spoken question's transcription once the user's spend is past the spoken questions cutoff
 export const SPOKEN_QUESTIONS_PAUSED_ERROR = "spoken questions paused"
 

@@ -15,23 +15,28 @@ Entries: `temporal.ts` (the worker, run as `bun run temporal` in production and 
 with its scan concurrency set by `SCAN_CONCURRENCY`, the concurrency of each of its attachment and Source screening
 Workers by `SCREEN_CONCURRENCY`, and a Worker of its own for the `scan-closing` queue that records a scan's outcome
 apart from the scan slots. A failure that stops it is reported in the `startup` stage before its Workers poll and in
-`worker` after, and the process exits once the report sends), `schedule.ts` (the sweep, `bun run schedule`, or
-`bun run dev:worker` on a minute's interval: it starts as many scheduled scans as the backlog allows, a daily topic past
-its owner's daily scans cutoff once a week, then copies the viewer and listener counts through `syncViewerCounts.ts`,
-retries the pending object deletions through `retryPendingObjectDeletions.ts`, mails the support inbox one reminder for
-each content report open past twelve hours through `reportReminders.ts`, sends the day's notifications emails through
-`notificationsEmails.ts`, and reports the day's spend across every user
-through `dailySpend.ts`, which warns past `GLOBAL_DAILY_SPEND_ALERT_USD`), `scanQueue.ts` (the sweep's view of the scan
-queue: the start of the rows a dying caller never dispatched, the queue's report, and how many Scans a sweep may start,
-`SCAN_DISPATCH_LIMIT` minus the backlog), `scheduledTopicFilter.ts` (the filter that selects the scheduled Topics,
-and the frequency window between their Scans), `scheduledTopicLimits.ts` (the limits that the sweep reads once per owner
-inside one request memo: the daily topic limit, the daily topics that scan weekly past the daily scans cutoff, with each
-owner's cutoff cached in Redis for an hour, and the owners whose key budget is spent, with
-`scheduledTopicTestFixtures.ts` for the scheduled topic that its tests and the sweep's share), `resetMonthlyBudgets.ts`
-(the monthly budget reset, a daily job run as `bun run reset:monthly-budgets`, which replaces each user's LiteLLM key
-through `@carlnotes/models/litellm`), and `docsSync.ts` (`bun run docs:embed`, which splits the pages under
-`apps/docs/src/content/docs` into sections and embeds them into `docs_chunks`, the sections chat quotes for a question
-about the app; a section whose hash is unchanged is not embedded again).
+`worker` after, and the process exits once the report sends), `schedule.ts` (the sweep, `bun run schedule`, or `bun run
+dev:worker` on a minute's interval: it reads the daily spend cutoffs once through `@carlnotes/db/dailySpendCutoffs`,
+starts as many scheduled scans as the backlog allows, a daily topic past its owner's daily scans cutoff once a week, and
+no scheduled scan of a free owner past the scheduled scans cutoff or of a Topic whose first scan still waits, then
+copies the viewer and listener counts through `syncViewerCounts.ts`, retries the pending object deletions through
+`retryPendingObjectDeletions.ts`, mails the support inbox one reminder for each content report open past twelve hours
+through `reportReminders.ts`, sends the day's notifications emails through `notificationsEmails.ts`, and reports the
+day's spend across every user through `dailySpend.ts`, which warns past `GLOBAL_DAILY_SPEND_ALERT_USD` and warns once
+the past hour's signups reach the `hourly-signups` threshold from the spend control settings), `scanQueue.ts` (the
+sweep's view of the scan queue: the start of the rows a dying caller never dispatched with the trigger it would have
+used, oldest first up to the sweep's dispatch count with the rest left for the next sweep, the waiting scans started
+oldest first up to the first scan dispatch limit with no key budget read, the queue's report, and how many Scans a sweep
+may start, `SCAN_DISPATCH_LIMIT` minus the backlog, which the waiting scans do not count against),
+`scheduledTopicFilter.ts` (the filter that selects the scheduled Topics, and the frequency window between their Scans),
+`scheduledTopicLimits.ts` (the limits that the sweep reads once per owner inside one request memo: the daily topic
+limit, the daily topics that scan weekly past the daily scans cutoff, with each owner's cutoff cached in Redis for an
+hour, the owners whose key budget is spent, and the free owners past the scheduled scans cutoff, read in one query only
+while that cutoff is passed, with `scheduledTopicTestFixtures.ts` for the scheduled topic that its tests and the sweep's
+share), `resetMonthlyBudgets.ts` (the monthly budget reset, a daily job run as `bun run reset:monthly-budgets`, which
+replaces each user's LiteLLM key through `@carlnotes/models/litellm`), and `docsSync.ts` (`bun run docs:embed`, which
+splits the pages under `apps/docs/src/content/docs` into sections and embeds them into `docs_chunks`, the sections chat
+quotes for a question about the app; a section whose hash is unchanged is not embedded again).
 
 - The sweep and the reset each run under a job lease from `@carlnotes/db/jobLease`, so two overlapping runs cannot
   do the work twice. Each takes the lease's abort signal and checks it between batches: the sweep before each stage and
@@ -60,7 +65,8 @@ about the app; a section whose hash is unchanged is not embedded again).
   outside its lease, with a doubling backoff up to a day, and reports a key pending for over a day once, deleting each
   through `deleteStoredObject` in `@carlnotes/db/store`. Before the sweep starts a Scan row that was opened and never
   dispatched, the sweep reads the row owner's key budget and marks the row failed with the budget reason if that budget
-  is spent. A Scan that a user started by hand starts without the budget read. The sweep closes out a picked-up Scan
+  is spent. A Scan that a user started by hand, and a waiting scan, starts without the budget read. A waiting scan has
+  no dispatch time, so the close-out never fails it. The sweep closes out a picked-up Scan
   that runs past its stages' total timeouts, and a Scan still waiting for a worker past the ingest and finish stages'
   total timeouts, through `failStaleScans` in `@carlnotes/pipeline/staleScans`, and starts the url Source screen of
   every Source still waiting on one through `@carlnotes/pipeline/screen`.

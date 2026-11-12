@@ -1,7 +1,8 @@
-import type { ChatRoomAttachmentRejection } from "@carlnotes/contracts/chat"
+import { CHAT_PAUSED_ERROR, type ChatRoomAttachmentRejection } from "@carlnotes/contracts/chat"
 import { hasAllMention, hasModelMention, isModelChatMessage } from "@carlnotes/contracts/chatMentions"
 import type { ChatAttachment } from "@carlnotes/contracts/payloads"
 import { db } from "@carlnotes/db"
+import { isUserPastDailySpendCutoff } from "@carlnotes/db/dailySpendCutoffs"
 import { chatRoomMessages } from "@carlnotes/db/schema/chat"
 import { isBudgetRejection, MODEL_CHAT_TURN_FAILED_REJECTION, SPENT_BUDGET_REJECTION } from "@carlnotes/models/models"
 import { reserveUserSpend, type SpendReservation, toReleaseOnFailure } from "@carlnotes/models/spendReservations"
@@ -26,8 +27,9 @@ export type PostChatRoomMessageOptions = { analyticsProperties?: AnalyticsProper
 
 /**
  * Post a chat message into the chatRoom. Member chat mentions become notification rows, and a chat message that addresses Carl
- * starts his chat turn, unless the poster's spend and open reservations have already reached the budget, in which case
- * the rejection comes back privately in this response and nothing posts to the chat room.
+ * starts his chat turn, unless the poster's spend and open reservations have already reached the budget or a free poster
+ * is past the chat cutoff, in which case the rejection comes back privately in this response and nothing posts to the
+ * chat room.
  */
 export async function postChatRoomMessage(
 	userId: string,
@@ -51,6 +53,11 @@ export async function postChatRoomMessage(
 
 	// whether this chat message gives carl the chat turn
 	const isModelChatTurn = isModelAddressed(content, repliedToChatMessage)
+
+	// reject a free user past the chat cutoff privately before anything posts
+	if (isModelChatTurn && (await isUserPastDailySpendCutoff(userId, "chat"))) {
+		return { chatMessageId: 0, rejectionReason: CHAT_PAUSED_ERROR }
+	}
 
 	// the budget gate reserves carl's chat turn's largest cost before anything posts, so a budget that the spend and
 	// open reservations have reached is reported privately and spends nothing
