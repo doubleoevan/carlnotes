@@ -182,7 +182,7 @@ export const Rejected: Story = {
 		await userEvent.type(canvas.getByLabelText("First scan limit"), "-1")
 		await userEvent.tab()
 		const documentBody = canvasElement.ownerDocument.body
-		await waitFor(() => expect(documentBody.textContent).toContain("the first scan limit 0 or more"))
+		await waitFor(() => expect(documentBody.textContent).toContain("the first scan limit 0 to 10,000"))
 		expect(mocked(sendSpendControlSettings)).not.toHaveBeenCalled()
 	},
 }

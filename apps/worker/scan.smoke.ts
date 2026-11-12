@@ -360,7 +360,6 @@ async function writeSamplePrompts(): Promise<[string, boolean][]> {
 		["Personal sources context prompt", personalSourcesContextResult.prompt],
 		["agreement check prompt", agreementResult.prompt],
 		["updates opener prompt", updatesOpenerResult.prompt],
-		["dashboard paragraph prompt", dashboardParagraphResult.prompt],
 		["topic post summary prompt", topicPostSummaryResult.prompt],
 		["topic post discussion prompt", topicPostDiscussionResult.prompt],
 		["scan report prompt", reportResult.prompt],
@@ -380,8 +379,12 @@ async function writeSamplePrompts(): Promise<[string, boolean][]> {
 		sampleScene,
 		TOPIC_PODCAST_EPISODE_VIDEO_IMAGE_FORMAT.stylePromptName,
 	)
+	// the dashboard paragraph prompt takes counts and country names alone, so it has nothing untrusted to fence
+	const dashboardParagraphPrompt = dashboardParagraphResult.prompt
 	return [
 		...builtPromptChecks,
+		["dashboard paragraph prompt renders", dashboardParagraphPrompt.length > 0],
+		["dashboard paragraph prompt restates the task last", !dashboardParagraphPrompt.trimEnd().endsWith(">")],
 		["film image prompt renders", topicPodcastEpisodeVideoImagePrompt.trim().length > sampleScene.length],
 	]
 }

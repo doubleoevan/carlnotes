@@ -3,9 +3,10 @@ import { TopicPostPage } from "@carlnotes/core/components/TopicPostPage"
 import { TOPIC_POST_DISCUSSION_STORY } from "@carlnotes/core/lib/topicPostStories"
 import type { Meta, StoryObj } from "@storybook/tanstack-react"
 import { useEffect } from "react"
-import { expect, fn, within } from "storybook/test"
+import { expect, fn } from "storybook/test"
 import { PAGE_CLASS } from "@/lib/styleClasses"
 import { TOPIC_POST_PAGE_ELEMENTS } from "@/pages/TopicPostPage"
+import { findVisibleByText } from "../../../.storybook/play"
 
 // the root text size the web is built to hold, twice the default
 const LARGEST_TEXT_SIZE = "200%"
@@ -31,7 +32,7 @@ type Story = StoryObj<typeof meta>
 // a reader's page: the title with its info popup, the byline then the reactions, the details line under them, the
 // discussion, and the body
 export const Default: Story = {
-	play: async ({ canvas, canvasElement }) => {
+	play: async ({ canvas }) => {
 		await expect(canvas.getByRole("heading", { level: 1, name: /Light roasts, ranked/ })).toBeVisible()
 
 		// the date, the reading time, and the thread's comment count sit on their own line under the byline's row
@@ -42,8 +43,7 @@ export const Default: Story = {
 		)
 		await expect(canvas.getByText("Coffee Break Discussion")).toBeVisible()
 		await canvas.getByRole("button", { name: "About this post" }).click()
-		const popover = within(canvasElement.ownerDocument.body)
-		await expect(await popover.findByText(TOPIC_POST_DISCUSSION_STORY.summary ?? "")).toBeVisible()
+		await findVisibleByText(TOPIC_POST_DISCUSSION_STORY.summary ?? "")
 	},
 }
 
