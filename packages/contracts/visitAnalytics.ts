@@ -58,6 +58,8 @@ export type TopicPodcastEpisodeVideoDialogSurface =
 	| "profile-news"
 	// the play button over the film's poster in a topic's info
 	| "topic-info"
+	// the Video button on a podcast episode's search result
+	| "search"
 
 // the film visit events, each with only the ids and short codes it holds
 export type FilmVisitEvents = {

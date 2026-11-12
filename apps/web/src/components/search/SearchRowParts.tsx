@@ -5,11 +5,13 @@ import { toTopicPath } from "@carlnotes/contracts/seo"
 import { toDotSeparatedText } from "@carlnotes/contracts/text"
 import type { TopicImageUrls } from "@carlnotes/contracts/topicImages"
 import { toAgoLabel, toCountLabel } from "@carlnotes/core/lib/labels"
+import { toPodcastEpisodeVideoPill } from "@carlnotes/core/lib/topicPodcastEpisodeVideoDisplay"
 import type { LucideIcon } from "lucide-react"
 import { TeamAvatar } from "@/components/branding/TeamAvatar"
 import { UserAvatar } from "@/components/branding/UserAvatar"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { PodcastEpisodeNumberPill } from "@/components/podcast/PodcastEpisodePill"
+import { PodcastEpisodeVideoButton } from "@/components/podcast/PodcastEpisodeVideoButton"
 import { TopicImageLink } from "@/components/topic/TopicImageLink"
 import { SEARCH_RESULT_KIND_ICON } from "./searchFilterOptions"
 import { TopicSearchResultDetails } from "./TopicSearchResultDetails"
@@ -22,14 +24,17 @@ export type LinkedSearchRow = Exclude<SearchRow, FindingSearchRow>
 // a row's icon on its line, at the size of a finding's favicon
 const SEARCH_ROW_ICON_CLASS = "size-[18px] shrink-0"
 
+// a row, and whether a podcast episode's row shows its film's Video pill, which the MCP view cannot play
+type SearchRowLineProps = { searchRow: LinkedSearchRow; isVideoShown?: boolean }
+
 /**
  * A row's line: its icon where a finding's favicon goes, then its details.
  */
-export function SearchRowLine({ searchRow }: { searchRow: LinkedSearchRow }) {
+export function SearchRowLine({ searchRow, isVideoShown = false }: SearchRowLineProps) {
 	return (
 		<>
 			<SearchRowIcon searchRow={searchRow} />
-			<SearchRowDetails searchRow={searchRow} />
+			<SearchRowDetails searchRow={searchRow} isVideoShown={isVideoShown} />
 		</>
 	)
 }
@@ -98,8 +103,8 @@ function SearchRowImage({
 	)
 }
 
-// a row's details: its kind, its age, its count, the topic it is in, and a podcast episode's play pill
-function SearchRowDetails({ searchRow }: { searchRow: LinkedSearchRow }) {
+// a row's details: its kind, its age, its count, the topic it is in, and a podcast episode's Video and play pills
+function SearchRowDetails({ searchRow, isVideoShown }: Required<SearchRowLineProps>) {
 	switch (searchRow.kind) {
 		// a topic, its viewers and followers, and its latest podcast episode's pill
 		case "topic":
@@ -110,13 +115,13 @@ function SearchRowDetails({ searchRow }: { searchRow: LinkedSearchRow }) {
 					latestPodcastEpisode={searchRow.topic.latestPodcastEpisode}
 				/>
 			)
-		// a podcast episode, how long ago it was published, its listeners, the topic it is in, and its pill
+		// a podcast episode, how long ago it was published, its listeners, the topic it is in, and its pills
 		case "podcastEpisode":
 			return (
 				<>
 					{toDotSeparatedText(["Podcast", toAgoLabel(searchRow.date), toCountLabel(searchRow.count ?? 0, "listener")])}
 					<SearchRowTopicDetail topic={searchRow.topic} />
-					<PodcastEpisodePill podcastEpisode={searchRow.podcastEpisode} />
+					<PodcastEpisodePills podcastEpisode={searchRow.podcastEpisode} isVideoShown={isVideoShown} />
 				</>
 			)
 		// a Topic Post, how long ago it was published, and the topic it is in
@@ -165,12 +170,25 @@ export function SearchRowTopicDetail({ topic }: { topic: { id: string; name: str
 	)
 }
 
-// a published podcast episode's play pill, or nothing for none
-function PodcastEpisodePill({ podcastEpisode }: { podcastEpisode: PodcastEpisodeSummary | null }) {
+// a published podcast episode's play pill, with its film's Video pill before it, or nothing for none. the two wrap
+// together, as on a news row
+function PodcastEpisodePills({
+	podcastEpisode,
+	isVideoShown,
+}: {
+	podcastEpisode: PodcastEpisodeSummary | null
+	isVideoShown: boolean
+}) {
 	if (!podcastEpisode || !isPublishedPodcastEpisode(podcastEpisode)) {
 		return null
 	}
-	return <PodcastEpisodeNumberPill podcastEpisode={podcastEpisode} />
+	const videoPill = isVideoShown ? toPodcastEpisodeVideoPill(podcastEpisode, "search") : null
+	return (
+		<span className="inline-flex items-center gap-1.5">
+			{videoPill && <PodcastEpisodeVideoButton {...videoPill} />}
+			<PodcastEpisodeNumberPill podcastEpisode={podcastEpisode} />
+		</span>
+	)
 }
 
 // a kind's icon, named for a screen reader

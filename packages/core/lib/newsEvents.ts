@@ -8,6 +8,7 @@ import type { PodcastEpisodeVideoButtonProps } from "../components/PodcastEpisod
 import { toTimeAgoLabel } from "./chatMessages"
 import { toCountLabel } from "./labels"
 import { CARL_NAME } from "./socialLabels"
+import { toPodcastEpisodeVideoPill } from "./topicPodcastEpisodeVideoDisplay"
 
 /**
  * Returns a News Event's line. The reactions on the reader's own Comment read as theirs.
@@ -104,8 +105,7 @@ export function toNewsEventVideoButton({
 	podcastEpisode,
 	place,
 }: ToNewsEventVideoButtonOptions): PodcastEpisodeVideoButtonProps | null {
-	if (newsEvent.kind !== "podcastEpisode" || !podcastEpisode?.hasVideo) {
-		return null
-	}
-	return { podcastEpisode, label: "Video", surface: NEWS_VIDEO_SURFACES[place], size: "pill" }
+	return newsEvent.kind === "podcastEpisode"
+		? toPodcastEpisodeVideoPill(podcastEpisode, NEWS_VIDEO_SURFACES[place])
+		: null
 }

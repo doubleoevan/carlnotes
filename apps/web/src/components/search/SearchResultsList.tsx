@@ -186,7 +186,7 @@ function LinkedSearchResultRow({ searchRow, rank }: { searchRow: LinkedSearchRow
 					{searchRow.name}
 				</AnchorLink>
 			}
-			details={<SearchRowLine searchRow={searchRow} />}
+			details={<SearchRowLine searchRow={searchRow} isVideoShown />}
 		/>
 	)
 }

@@ -1,6 +1,7 @@
 // the menu pattern: a popover of options under the search bar's sort button or the bordered Team Up button
 
 import { TOPIC_FINDING_SORTS, type TopicFindingSort } from "@carlnotes/contracts/findings"
+import { SEARCH_LABEL, SEARCH_PLACEHOLDER } from "@carlnotes/contracts/search"
 import type { TeamIdentity } from "@carlnotes/contracts/teamIdentity"
 import type { Meta, StoryObj } from "@storybook/tanstack-react"
 import { ArrowUpDown, Plus, Search, Users, X } from "lucide-react"
@@ -64,8 +65,8 @@ function SearchBarSortMenu({
 			{/* the magnifying glass, then the search input */}
 			<Search className="text-muted-foreground size-4 shrink-0" />
 			<Input
-				aria-label="Search topics, podcasts, posts, findings, teams and users..."
-				placeholder="Topics, podcasts, posts, findings, teams, users…"
+				aria-label={SEARCH_LABEL}
+				placeholder={SEARCH_PLACEHOLDER}
 				className="h-11 flex-1 border-0 bg-transparent px-0 shadow-none focus-visible:ring-0 sm:h-9 dark:bg-transparent"
 			/>
 			{/* the divider, then the sort button with its tooltip */}

@@ -1,4 +1,5 @@
 import { toAvatarImagePath } from "@carlnotes/contracts/avatars"
+import type { PodcastEpisodeSummary } from "@carlnotes/contracts/podcast"
 import type { FindingSearchRow, SearchResultsPage, SearchRow } from "@carlnotes/contracts/search"
 import { SITE_URL } from "@carlnotes/contracts/site"
 import { toDotSeparatedText } from "@carlnotes/contracts/text"
@@ -6,12 +7,15 @@ import type { TopicImageUrls } from "@carlnotes/contracts/topicImages"
 import type { TopicFindingActions } from "@carlnotes/core/hooks/useTopicFindingActions"
 import { toAgoLabel, toCountLabel } from "@carlnotes/core/lib/labels"
 import { applySearchFindingChanges } from "@carlnotes/core/lib/topicFindingChanges"
+import { toPodcastEpisodeVideoPill } from "@carlnotes/core/lib/topicPodcastEpisodeVideoDisplay"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { Coffee, type LucideIcon, Mic, NotebookPen } from "lucide-react-native"
 import { type ComponentProps, type ReactNode, useState } from "react"
+import { View } from "react-native"
 import { Avatar } from "@/components/branding/Avatar"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { PodcastEpisodeNumberPill } from "@/components/podcast/PodcastEpisodePill"
+import { PodcastEpisodeVideoButton } from "@/components/podcast/PodcastEpisodeVideoButton"
 import { toTouchTargetHitSlop } from "@/components/primitives/button"
 import { Icon } from "@/components/primitives/icon"
 import { Text } from "@/components/primitives/text"
@@ -221,7 +225,7 @@ function SearchRowDetails({ searchRow }: { searchRow: LinkedSearchRow }) {
 						])}
 					</Text>
 					<SearchRowTopicLink topic={searchRow.topic} />
-					<PodcastEpisodeNumberPill podcastEpisode={searchRow.podcastEpisode} />
+					<PodcastEpisodePills podcastEpisode={searchRow.podcastEpisode} />
 				</>
 			)
 		case "topicPost":
@@ -246,6 +250,17 @@ function SearchRowDetails({ searchRow }: { searchRow: LinkedSearchRow }) {
 		case "user":
 			return <Text className="text-xs text-muted-foreground">Café</Text>
 	}
+}
+
+// a podcast episode's play pill, with its film's Video pill before it, as on a news row. the two wrap together
+function PodcastEpisodePills({ podcastEpisode }: { podcastEpisode: PodcastEpisodeSummary }) {
+	const videoPill = toPodcastEpisodeVideoPill(podcastEpisode, "search")
+	return (
+		<View className="flex-row items-center gap-1.5">
+			{videoPill && <PodcastEpisodeVideoButton {...videoPill} />}
+			<PodcastEpisodeNumberPill podcastEpisode={podcastEpisode} />
+		</View>
+	)
 }
 
 // let attribution open its Topic without opening the surrounding finding sheet

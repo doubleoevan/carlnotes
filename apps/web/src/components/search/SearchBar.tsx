@@ -3,8 +3,10 @@ import { sendTopicFindingOpened } from "@carlnotes/client/topicFindingClient"
 import { resourceKinds } from "@carlnotes/contracts/enums"
 import type { TopicFindingSort } from "@carlnotes/contracts/findings"
 import {
+	SEARCH_LABEL,
 	SEARCH_MAX_CHARS,
 	SEARCH_MIN_CHARS,
+	SEARCH_PLACEHOLDER,
 	SEARCH_RESULT_KINDS,
 	type SearchRequest,
 	type SearchResultKind,
@@ -180,8 +182,8 @@ export function SearchBar() {
 					aria-controls={showSearchSuggestion ? SUGGESTION_LIST_ID : undefined}
 					aria-autocomplete="list"
 					aria-activedescendant={suggestionIndex >= 0 ? `${SUGGESTION_ID_PREFIX}${suggestionIndex}` : undefined}
-					aria-label="Search topics, podcasts, posts, findings, teams and users..."
-					placeholder="Topics, podcasts, posts, findings, teams, users…"
+					aria-label={SEARCH_LABEL}
+					placeholder={SEARCH_PLACEHOLDER}
 					className="h-11 flex-1 border-0 bg-transparent px-0 shadow-none focus-visible:ring-0 sm:h-9"
 				/>
 				{query && (

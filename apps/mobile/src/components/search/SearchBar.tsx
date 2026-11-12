@@ -1,5 +1,5 @@
 import { authClient } from "@carlnotes/client/authClient"
-import { SEARCH_MAX_CHARS, SEARCH_MIN_CHARS } from "@carlnotes/contracts/search"
+import { SEARCH_LABEL, SEARCH_MAX_CHARS, SEARCH_MIN_CHARS, SEARCH_PLACEHOLDER } from "@carlnotes/contracts/search"
 import { router } from "expo-router"
 import { Search, X } from "lucide-react-native"
 import type { ReactNode } from "react"
@@ -9,10 +9,6 @@ import { Icon } from "@/components/primitives/icon"
 import { TopicFeedControls, type TopicFeedControlsProps } from "@/components/topic/TopicFeedControls"
 import { useSearchBar } from "@/providers/SearchBarProvider"
 import { toTypeRoleStyle } from "@/typeRoleStyles"
-
-// the same search prompt on the toolbar and the editable search screen
-const SEARCH_PLACEHOLDER = "Topics, podcasts, posts, findings, teams, users..."
-const SEARCH_LABEL = "Search topics, podcasts, posts, findings, teams and users"
 
 /**
  * Matches the web toolbar and keeps the active search visible while browsing Topics.

@@ -1,7 +1,9 @@
 // what a film section shows for a podcast episode: the film player, the card that says the film is rendering, or
 // nothing, and the section a topic's page shows while its only film is rendering
-import type { PodcastEpisode, TopicPodcast } from "@carlnotes/contracts/podcast"
+import type { PodcastEpisode, PodcastEpisodeSummary, TopicPodcast } from "@carlnotes/contracts/podcast"
 import type { TopicResponse } from "@carlnotes/contracts/topics"
+import type { TopicPodcastEpisodeVideoDialogSurface } from "@carlnotes/contracts/visitAnalytics"
+import type { PodcastEpisodeVideoButtonProps } from "../components/PodcastEpisodeVideoButton"
 
 // the film player for a ready film, the rendering card while the film renders, and null for no film
 export type TopicPodcastEpisodeVideoDisplay = "player" | "rendering" | null
@@ -20,6 +22,20 @@ export function toTopicPodcastEpisodeVideoDisplay(
 		return "player"
 	}
 	return podcastEpisode.isVideoRendering ? "rendering" : null
+}
+
+/**
+ * Returns the Video button of a podcast episode with a ready film, as a pill beside its play pill, or null for a
+ * podcast episode with no film.
+ */
+export function toPodcastEpisodeVideoPill(
+	podcastEpisode: PodcastEpisodeSummary | null | undefined,
+	surface: TopicPodcastEpisodeVideoDialogSurface,
+): PodcastEpisodeVideoButtonProps | null {
+	if (!podcastEpisode?.hasVideo) {
+		return null
+	}
+	return { podcastEpisode, label: "Video", surface, size: "pill" }
 }
 
 /**

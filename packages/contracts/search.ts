@@ -15,6 +15,10 @@ export const SEARCH_MIN_CHARS = 2
 
 export const SEARCH_MAX_CHARS = 200
 
+// the search bar's placeholder and its label for a screen reader, on web and mobile
+export const SEARCH_PLACEHOLDER = "Topics, podcasts, films, posts, findings, teams, users…"
+export const SEARCH_LABEL = "Search topics, podcasts, films, posts, findings, teams and users"
+
 // which kinds of results the search finds, in the order the Filters menu lists them and ties rank in
 export const SEARCH_RESULT_KINDS = ["topics", "podcastEpisodes", "topicPosts", "findings", "teams", "users"] as const
 
