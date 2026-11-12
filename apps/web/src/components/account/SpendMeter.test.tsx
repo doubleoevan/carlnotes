@@ -62,7 +62,7 @@ const FREE_CUTOFFS: MonthlyBudgetCutoff[] = [
 	{ kind: "manualScans", budgetShare: 0.9 },
 ]
 
-// render the spend meter's server HTML at the given scan spend of the free plan's 300 cent budget
+// render the spend meter's server HTML at the given scan spend of a 300 cent budget
 function renderSpendMeter(
 	scanSpendCents: number,
 	monthlyBudgetCutoffs: MonthlyBudgetCutoff[],

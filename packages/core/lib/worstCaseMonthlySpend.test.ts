@@ -11,11 +11,11 @@ import {
 const WORST_CASE_MONTHLY_SPEND = { freeUserBudgetCents: 4_500, dailySignupCounts: [4, 0, 0, 2, 0, 0, 0] }
 
 test("adds the free budget of each signup a daily rate brings in the days left", () => {
-	// 19 and a half days are left at noon on November 11, so 2 signups a day bring 39 at 3 dollars each
+	// 19 and a half days are left at noon on November 11, so 2 signups a day bring 39 at 2 dollars each
 	const now = Date.UTC(2026, 10, 11, 12)
 	expect(
 		toWorstCaseMonthlySpendCents({ worstCaseMonthlySpend: WORST_CASE_MONTHLY_SPEND, dailySignupRate: 2, now }),
-	).toBe(4_500 + 39 * 300)
+	).toBe(4_500 + 39 * 200)
 
 	// no signups leaves the free users' budgets alone
 	expect(

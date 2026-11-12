@@ -167,7 +167,7 @@ render. A film left without its own image SHALL get one from an editor's regener
 
 #### Scenario: A spent budget still renders the film
 
-- **GIVEN** an owner whose model budget is spent but who is under the podcast episode spend cutoff
+- **GIVEN** an owner whose model budget is spent
 - **WHEN** their Podcast Episode's film renders
 - **THEN** the film renders with the podcast episode image, and no image cost is added
 
@@ -269,11 +269,10 @@ image SHALL pass the image moderation that an uploaded image passes before it is
 ### Requirement: An imagined image bills like the film and never blocks it
 
 A draw SHALL bill the Topic owner's key and add its cost to the film's cost, and the backfill's draws SHALL bill the
-platform. An owner's draw SHALL check the spend cutoff first, and an owner past it SHALL draw no more. If the owner's
-budget is spent, a draw fails, or a drawn image does not pass the image moderation, the chapter SHALL go on with the
-images it has, and the render SHALL go on. A render that is stopped SHALL start no further draw. A generated image
-SHALL be stored in the film's folder. A render's second attempt and a re-render SHALL reuse a stored image, and it
-SHALL be deleted with the film.
+platform. A draw SHALL NOT check the owner's spend cutoff. If the owner's budget is spent, a draw fails, or a drawn
+image does not pass the image moderation, the chapter SHALL go on with the images it has, and the render SHALL go on. A
+render that is stopped SHALL start no further draw. A generated image SHALL be stored in the film's folder. A render's
+second attempt and a re-render SHALL reuse a stored image, and it SHALL be deleted with the film.
 
 #### Scenario: A draw is billed to the owner
 
@@ -282,7 +281,7 @@ SHALL be deleted with the film.
 
 #### Scenario: A spent budget leaves the podcast card
 
-- **GIVEN** an owner whose model budget is spent but who is under the podcast episode spend cutoff
+- **GIVEN** an owner whose model budget is spent
 - **WHEN** their Podcast Episode's film renders
 - **THEN** each chapter with no Resource Image shows the podcast card and the image the intro shows in turn, and the
   film renders
@@ -302,6 +301,12 @@ SHALL be deleted with the film.
 
 - **WHEN** the backfill renders a film with a long chapter that lacks images
 - **THEN** the generated images are drawn on the platform's key, and the film's cost does not rise
+
+#### Scenario: An owner past the spend cutoff gets every generated image
+
+- **GIVEN** an owner who passed the podcast episode spend cutoff while their Podcast Episode recorded
+- **WHEN** its film renders with chapters that lack images
+- **THEN** every generated image the chapters need is drawn on the owner's key, and the film's cost includes them
 
 ### Requirement: The film fades through espresso between parts and chapters
 
@@ -478,30 +483,6 @@ Episode image or Topic image SHALL NOT rebuild it. The replaced image SHALL be d
 - **GIVEN** a film drawn from its own image
 - **WHEN** an editor regenerates its Podcast Episode's image and a viewer plays the film
 - **THEN** no rebuild starts, and the film keeps its own image
-
-### Requirement: A render counts against the Topic owner's plan
-
-A film's render and each rebuild SHALL add their cost to the monthly spend of the user that the Podcast Episode
-bills. A render or a rebuild SHALL NOT start once that user has passed the spend cutoff that stops new Podcast
-Episodes. A Podcast Episode whose render was not started SHALL have no film, and the backfill SHALL NOT render one for
-it later.
-
-#### Scenario: A render is billed to the owner
-
-- **WHEN** a film renders for a Topic owner's Podcast Episode
-- **THEN** the render's cost counts in that owner's monthly spend
-
-#### Scenario: A spent budget skips the film
-
-- **GIVEN** an owner past the podcast episode spend cutoff
-- **WHEN** their Podcast Episode publishes
-- **THEN** no film renders, and the Podcast Episode has no film
-
-#### Scenario: The backfill leaves a skipped film alone
-
-- **GIVEN** a Topic's latest Podcast Episode whose film was skipped for its owner's spent budget
-- **WHEN** the worker boots and the backfill runs
-- **THEN** the backfill does not list that Podcast Episode, and it still has no film
 
 ### Requirement: A failed render never touches the Podcast Episode
 
@@ -785,3 +766,22 @@ attempt SHALL NOT be listed again at that render version.
 - **GIVEN** a film whose re-render failed its third attempt
 - **WHEN** the worker boots and the backfill runs again
 - **THEN** the film is not listed, and its old film still plays
+
+### Requirement: A recorded Podcast Episode's film renders in full and bills its owner
+
+A film's first render SHALL start for every Podcast Episode that publishes, whatever its owner's monthly spend. The
+Podcast Episodes cutoff is checked when the Podcast Episode is planned. The render and each rebuild SHALL add their
+cost to the monthly spend of the user that the Podcast Episode bills. A rebuild for a new image SHALL NOT start once
+that user has passed the spend cutoff that stops new Podcast Episodes, and the film that plays now SHALL stay.
+
+#### Scenario: A film renders past the spend cutoff
+
+- **GIVEN** an owner whose Podcast Episode's own cost took them past the podcast episode spend cutoff
+- **WHEN** the Podcast Episode publishes
+- **THEN** its film renders in full, and the render's cost counts in that owner's monthly spend
+
+#### Scenario: A rebuild past the spend cutoff keeps the film
+
+- **GIVEN** a ready film and an owner past the podcast episode spend cutoff
+- **WHEN** an editor regenerates the film's image
+- **THEN** no rebuild starts, and the film that plays now stays

@@ -257,15 +257,15 @@ beside it.
 - **GIVEN** 12 free users with 45 dollars of monthly budgets, 60 signups in the past 30 days, and the time is 12:00 UTC
   on November 11
 - **WHEN** an admin opens the console
-- **THEN** the estimated monthly spend's table marks 2 signups a day over the past 30 days at 162 dollars and 8 dollars
-  per day, and shows 630 dollars and 32 dollars per day at 10 signups a day
+- **THEN** the estimated monthly spend's table marks 2 signups a day over the past 30 days at 123 dollars and 6 dollars
+  per day, and shows 435 dollars and 22 dollars per day at 10 signups a day
 
 #### Scenario: The highest cutoff limits the monthly spend
 
 - **GIVEN** 12 free users with 45 dollars of monthly budgets, the default cutoffs, and the time is 12:00 UTC on November
   11
 - **WHEN** an admin opens the console
-- **THEN** the estimated monthly spend's row of 1000 signups a day shows 2925 dollars and 150 dollars per day with 58545
+- **THEN** the estimated monthly spend's row of 1000 signups a day shows 2925 dollars and 150 dollars per day with 39045
   dollars without cutoffs, and the most this month is 2925 dollars at 150 dollars a day
 
 ### Requirement: The estimate reads a chosen number of past days
@@ -295,9 +295,9 @@ follow its field.
 - **GIVEN** 12 free users with 45 dollars of monthly budgets, the default cutoffs, and the time is 12:00 UTC on November
   11
 - **WHEN** an admin opens the console
-- **THEN** the cutoff table's row of 1000 signups a day shows the podcast episodes cutoff passed after 31m, the
-  scheduled scans cutoff after 47m, and the chat cutoff after 1h 11m, its row of 10 signups a day shows Not reached for
-  each, and each cutoff's slider ends at 3003 dollars
+- **THEN** the cutoff table's row of 1000 signups a day shows the podcast episodes cutoff passed after 46m, the
+  scheduled scans cutoff after 1h 11m, and the chat cutoff after 1h 47m, its row of 10 signups a day shows Not reached
+  for each, and each cutoff's slider ends at 2003 dollars
 
 #### Scenario: A cutoff slider moves the table before a save
 
@@ -305,7 +305,7 @@ follow its field.
   11
 - **WHEN** an admin moves the "Skip podcast episodes after first at" slider to 1500 dollars
 - **THEN** the podcast episodes cutoff's field shows 1500, the cutoff table's row of 1000 signups a day shows that
-  cutoff passed after 11h 59m, and the console sends no request
+  cutoff passed after 17h 58m, and the console sends no request
 
 ### Requirement: The console shows the first scan limit, the signup alert, and the permission
 

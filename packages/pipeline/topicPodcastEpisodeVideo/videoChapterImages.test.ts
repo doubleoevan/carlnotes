@@ -52,7 +52,7 @@ let classifyImage: ReturnType<typeof spyOn>
 let attachmentExists: ReturnType<typeof spyOn>
 let upload: ReturnType<typeof spyOn>
 
-// the owner's key, the error reports, and the owner's spend cutoff
+// the owner's key, the error reports, and the owner's spend cutoff, which the draws never read
 let provisionKey: ReturnType<typeof spyOn>
 let reportError: ReturnType<typeof spyOn>
 let isCutoffPassed: ReturnType<typeof spyOn>
@@ -402,27 +402,20 @@ test("the platform's draws use the master key and add no cost to the film", asyn
 	expect(toCostUpdates(sentQueries)).toEqual([])
 })
 
-test("an owner past the spend cutoff draws no more, and the platform's draws skip the check", async () => {
-	// the owner passes the cutoff after the first image is drawn
+test("an owner past the spend cutoff still draws every image", async () => {
+	// the owner is past the cutoff before the draws start
 	stubChapterReads()
-	isCutoffPassed.mockResolvedValueOnce(false).mockResolvedValue(true)
+	isCutoffPassed.mockResolvedValue(true)
 	const generatedChapterImageRefs = [
 		{ position: 1, imageNumber: 0 },
 		{ position: 1, imageNumber: 1 },
 		{ position: 1, imageNumber: 2 },
 	]
-	const ownerImages = await loadGeneratedChapterImages({ ...OWNER_BILLING, generatedChapterImageRefs })
-	expect(ownerImages.drawnGeneratedChapterImageCount).toBe(1)
-	expect(renderOriginal).toHaveBeenCalledTimes(1)
 
-	// the platform's draws never read the owner's spend
-	isCutoffPassed.mockClear()
-	const platformImages = await loadGeneratedChapterImages({
-		...OWNER_BILLING,
-		isPlatformBilled: true,
-		generatedChapterImageRefs,
-	})
-	expect(platformImages.drawnGeneratedChapterImageCount).toBe(3)
+	// every image is drawn, and the owner's spend is never read
+	const ownerImages = await loadGeneratedChapterImages({ ...OWNER_BILLING, generatedChapterImageRefs })
+	expect(ownerImages.drawnGeneratedChapterImageCount).toBe(3)
+	expect(renderOriginal).toHaveBeenCalledTimes(3)
 	expect(isCutoffPassed).not.toHaveBeenCalled()
 })
 

@@ -4,7 +4,6 @@
 // image out
 
 import { db } from "@carlnotes/db"
-import { isMonthlyBudgetCutoffPassed } from "@carlnotes/db/monthlyBudgetCutoffs"
 import { podcastEpisodeChapters, topicPodcastEpisodeVideos } from "@carlnotes/db/schema/podcast"
 import { findings, resources } from "@carlnotes/db/schema/scans"
 import { attachmentExists, getAttachmentBytes, uploadAttachment } from "@carlnotes/db/store"
@@ -118,7 +117,6 @@ export async function loadGeneratedChapterImages({
 // scene, its framing, the model, and the key the draw bills, or the master key if no key is given
 type GeneratedChapterImageDraw = GeneratedChapterImageRef & {
 	podcastEpisodeId: string
-	ownerId: string
 	signal?: AbortSignal
 	// what the draw reads and bills
 	sceneInput: TopicImageSceneInput
@@ -180,7 +178,7 @@ async function loadGeneratedChapterImageDraws({
 		}
 		const framingIndex = generatedChapterImageRef.imageNumber % GENERATED_CHAPTER_IMAGE_FRAMINGS.length
 		const framing = GENERATED_CHAPTER_IMAGE_FRAMINGS[framingIndex] ?? TOPIC_PODCAST_EPISODE_VIDEO_IMAGE_FRAMING
-		const billing = { podcastEpisodeId, ownerId, isPlatformBilled, signal }
+		const billing = { podcastEpisodeId, isPlatformBilled, signal }
 		return [{ ...generatedChapterImageRef, ...billing, sceneInput, framing, model, loadLitellmApiKey }]
 	})
 }
@@ -212,10 +210,9 @@ async function settleGeneratedChapterImage(
 }
 
 // one generated image's jpeg: the one an earlier render stored, or else a new one, drawn, billed, checked, and stored.
-// returns null for an image the image moderation does not pass, and for an owner past the spend cutoff
+// returns null for an image the image moderation does not pass
 async function loadOrDrawGeneratedChapterImage({
 	podcastEpisodeId,
-	ownerId,
 	position,
 	imageNumber,
 	sceneInput,
@@ -231,11 +228,6 @@ async function loadOrDrawGeneratedChapterImage({
 	}
 	if (await attachmentExists(imageKey)) {
 		return { position, jpegBytes: await getAttachmentBytes(imageKey), isDrawn: false }
-	}
-
-	// an owner who passed the spend cutoff since the render started draws no more
-	if (!isPlatformBilled && (await isMonthlyBudgetCutoffPassed(ownerId, "podcastEpisodes"))) {
-		return null
 	}
 
 	// draw the image

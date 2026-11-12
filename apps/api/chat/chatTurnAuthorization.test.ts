@@ -70,7 +70,7 @@ test("a typed chat turn past the spoken questions cutoff is allowed and never re
 
 // the chat cutoff pauses a free user's chat turns for the rest of the UTC day, and never a paid user's
 test("a free user past the chat cutoff is paused, and a plus user is not", async () => {
-	// a dollar of spend today, past a chat cutoff of 50 cents and under the free budget of 3 dollars
+	// a dollar of spend today, past a chat cutoff of 50 cents and under the free budget of 2 dollars
 	stubRedisClient()
 	stubOwnerTopicRows("1.00", FREE_USER_ACCESS_ROW)
 	expect(await authorizeChatTurn("owner-1", "topic-1")).toEqual({ status: "chatPaused", userId: "owner-1" })

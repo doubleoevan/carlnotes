@@ -52,7 +52,7 @@ export type SpendMeterModel = {
 }
 
 /**
- * Returns the month's spend against the monthly budget, such as "$0.43 of $3.00".
+ * Returns the month's spend against the monthly budget, such as "$0.43 of $2.00".
  */
 export function toSpendAmountLabel({
 	scanSpendCents,

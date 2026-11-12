@@ -176,15 +176,15 @@ it; it imports `@carlnotes/models`, `@carlnotes/emails`, `@carlnotes/db`, `@carl
   segment cut between the podcast card and the film's own image. `generatedChapterImages.ts` draws a generated image
   by the film image's own draw from the Finding's title and public relevance explanation alone, checks it with the
   image moderation, stores it beside the film's parts, where a second attempt reuses it, and bills it to the film's
-  row unless the platform pays. An owner past the spend cutoff draws no more, and a failed draw leaves the chapter
-  on the images it has.
+  row unless the platform pays. A failed draw leaves the chapter on the images it has.
   `topicPodcastEpisodeVideoImage.ts` holds the film's own image: its 16:9 format, the first draw at 2K, the scene
   input for an editor's regeneration, and the replace that stores the jpeg and its larger original beside the film's
   parts, swaps the hash, and starts the rebuild.
   `renderTopicPodcastEpisodeVideo.ts` draws the film's image if it has none, falling back to the podcast episode's on
-  a failed draw, then renders, uploads, and bills a film, writing a failed row for missing inputs and for an owner
-  past the spend cutoff, which keeps the backfill from rendering that film. A ready film below the current render
-  version renders again under versioned keys while it keeps playing, and one guarded update swaps it in.
+  a failed draw, then renders, uploads, and bills a film, writing a failed row for missing inputs. A recorded podcast
+  episode's film renders in full whatever its owner's spend. Its owner was under the podcast episodes cutoff when the
+  podcast episode was planned. A ready film below the current render version renders again under versioned keys
+  while it keeps playing, and one guarded update swaps it in.
   `rebuildTopicPodcastEpisodeVideo.ts` draws only the intro and the sign-off again for a new image and joins them
   with the stored chapters part. `topicPodcastEpisodeVideoRows.ts` is the film row both of them write: the render
   version, the skipped, rendering, ready, re-rendered, and failed writes, the render state read, the upload that

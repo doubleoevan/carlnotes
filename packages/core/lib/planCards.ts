@@ -1,6 +1,6 @@
-// the plan cards' identity rules: which plan the user is on, which badge displays on the plans page cards, and the
-// line under the plans page heading
-import type { BillingInterval, Plan } from "@carlnotes/contracts/plans"
+// the plan cards' rules: which plan the user is on, which badge displays on the plans page cards, the line under the
+// plans page heading, and the monthly scan estimate
+import { type BillingInterval, type Plan, SCAN_COST_CENTS } from "@carlnotes/contracts/plans"
 
 // the recommended plan that a signed-out visitor sees highlighted
 export const RECOMMENDED_PLAN: Plan = "plus"
@@ -27,4 +27,11 @@ export function toPlanBadge(isCurrentPlan: boolean, signedInPlan: Plan | null, i
 		return "Current plan"
 	}
 	return signedInPlan === null && isHighlighted ? "Recommended" : null
+}
+
+/**
+ * Returns about how many scans a monthly budget buys, rounded up to the next ten.
+ */
+export function toMonthlyScanEstimate(monthlyBudgetCents: number): number {
+	return Math.ceil(monthlyBudgetCents / SCAN_COST_CENTS / 10) * 10
 }

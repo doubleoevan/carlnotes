@@ -1,16 +1,9 @@
 import { isPaidPlan } from "@carlnotes/contracts/enums"
-import {
-	type BillingInterval,
-	PLANS,
-	type Plan,
-	PURCHASE_COPY,
-	SCAN_COST_CENTS,
-	userTopicLimit,
-} from "@carlnotes/contracts/plans"
+import { type BillingInterval, PLANS, type Plan, PURCHASE_COPY, userTopicLimit } from "@carlnotes/contracts/plans"
 import { SHARED_COMMENT_SLOTS } from "@carlnotes/contracts/social"
 import type { ComponentType, ReactNode } from "react"
 import { toBrewsWord, toCountLabel, toWholeDollarLabel } from "../lib/labels"
-import { isUsersPlan, toPlanBadge } from "../lib/planCards"
+import { isUsersPlan, toMonthlyScanEstimate, toPlanBadge } from "../lib/planCards"
 
 type Container = ComponentType<{ children: ReactNode }>
 export type PlanCardElements = {
@@ -90,7 +83,7 @@ export function PlanCard({
 	const badge = toPlanBadge(isCurrentPlan, signedInPlan, isHighlighted)
 	const dailyTopicLimit = config.dailyTopicLimit[interval]
 	const dailyScanLimit = config.dailyScanLimit[interval]
-	const monthlyScanEstimate = Math.ceil(config.monthlyBudgetCents / SCAN_COST_CENTS / 10) * 10
+	const monthlyScanEstimate = toMonthlyScanEstimate(config.monthlyBudgetCents)
 	const billingNote = !isPaidPlan(plan)
 		? "Free forever"
 		: isYearly

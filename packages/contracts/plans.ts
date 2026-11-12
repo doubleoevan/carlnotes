@@ -89,7 +89,7 @@ export const PLANS = {
 		dailyScanLimit: { monthly: 5, yearly: 5 },
 		canEmailCarl: false,
 		canUseAiAgentApiKeys: false,
-		monthlyBudgetCents: 300,
+		monthlyBudgetCents: 200,
 		monthlyBudgetCutoffShares: {
 			spokenQuestions: 0.15,
 			fullPodcastEpisodes: null,

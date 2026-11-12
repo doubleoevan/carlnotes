@@ -1,6 +1,9 @@
 // monthly budget cutoff table tests: a row for each cutoff in order, each plan's share, the labels for no fixed share,
-// and the docs page's copy of the table
+// the docs page's copy of the table, and the docs page's monthly budgets and scan estimates
 import { expect, test } from "bun:test"
+import { PLANS } from "@carlnotes/contracts/plans"
+import { toWholeDollarLabel } from "@carlnotes/core/lib/labels"
+import { toMonthlyScanEstimate } from "@carlnotes/core/lib/planCards"
 import { toMonthlyBudgetCutoffRows } from "./MonthlyBudgetCutoffTable"
 
 // the docs page that keeps a copy of the table
@@ -65,4 +68,22 @@ test("the docs' cutoff table matches the plans page's monthly budget cutoff tabl
 		]),
 	]
 	expect(docsTableRows).toEqual(monthlyBudgetCutoffTableRows)
+})
+
+// the docs page types each plan's monthly budget and scan estimate by hand, so both must match the plans catalog
+test("the docs' monthly budgets and scan estimates match the plans catalog", async () => {
+	// each plan's budget and estimate, in the free, plus, premium order the docs page uses
+	const docsMarkdown = await Bun.file(DOCS_PLANS_AND_LIMITS_URL).text()
+	const monthlyBudgetsCents = [PLANS.free, PLANS.plus, PLANS.premium].map((plan) => plan.monthlyBudgetCents)
+	const [freeBudgetLabel, plusBudgetLabel, premiumBudgetLabel] = monthlyBudgetsCents.map(toWholeDollarLabel)
+	const [freeEstimate, plusEstimate, premiumEstimate] = monthlyBudgetsCents.map(toMonthlyScanEstimate)
+
+	// the table row, the account page paragraph, and the estimate quote
+	expect(docsMarkdown).toContain(
+		`| Coffee fund a month | ${freeBudgetLabel} | ${plusBudgetLabel} | ${premiumBudgetLabel} |`,
+	)
+	expect(docsMarkdown).toContain(
+		`${freeBudgetLabel} on **Free**, ${plusBudgetLabel} on **Plus**, or ${premiumBudgetLabel} on **Premium**`,
+	)
+	expect(docsMarkdown).toContain(`"About ${freeEstimate}, ${plusEstimate}, or ${premiumEstimate} Brews a month"`)
 })

@@ -8,7 +8,7 @@ import { withSpendQueryRows } from "./quotaTestFixtures"
 
 // a plus user's budget is 1500 cents, so spoken questions stop at 600 cents and podcast episodes at 1125, and at 600
 // cents every later plus cutoff is still ahead. a premium user's full podcast episodes stop at 2450 of 3500. a free
-// user's podcast episodes stop at 60 of 300, and a free plan has no full podcast episodes cutoff
+// user's podcast episodes stop at 40 of 200, and a free plan has no full podcast episodes cutoff
 test("each cutoff stops its kind of spend at its plan's share of the budget, and not one cent before", async () => {
 	const isPassedAt = (plan: string, scanDollars: string, kind: MonthlyBudgetCutoffKind): Promise<boolean> =>
 		withSpendQueryRows({ accessRow: ["user", plan, null], spendDollars: [scanDollars, "0", "0"] }, () =>
@@ -29,9 +29,9 @@ test("each cutoff stops its kind of spend at its plan's share of the budget, and
 	// premium's full podcast episodes cutoff, and the free plan's two
 	expect(await isPassedAt("premium", "24.49", "fullPodcastEpisodes")).toBe(false)
 	expect(await isPassedAt("premium", "24.50", "fullPodcastEpisodes")).toBe(true)
-	expect(await isPassedAt("free", "0.59", "podcastEpisodes")).toBe(false)
-	expect(await isPassedAt("free", "0.60", "podcastEpisodes")).toBe(true)
-	expect(await isPassedAt("free", "2.99", "fullPodcastEpisodes")).toBe(false)
+	expect(await isPassedAt("free", "0.39", "podcastEpisodes")).toBe(false)
+	expect(await isPassedAt("free", "0.40", "podcastEpisodes")).toBe(true)
+	expect(await isPassedAt("free", "1.99", "fullPodcastEpisodes")).toBe(false)
 })
 
 // an admin with no override spends against the admin backstop alone, and an override is a deliberate limit that brings

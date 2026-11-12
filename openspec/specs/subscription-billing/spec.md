@@ -187,16 +187,15 @@ The Stripe products and prices and the gate SHALL use one spelling of the plan t
 - **WHEN** a Stripe price is resolved to a plan
 - **THEN** it maps to exactly one of `free`, `plus`, `premium`, matching the `plan` enum
 
-### Requirement: A plan card describes its limits in scans, not dollars
+### Requirement: A plan card describes its limits in scans, beside its coffee fund
 
-Each pricing card SHALL describe its plan in the units a reader can reason about, and SHALL NOT show the monthly spend
-backstop. That figure is our cost limit, not the reader's price, and on a page about what things cost it reads as a
-second charge.
+Each pricing card SHALL describe its plan in the units a reader can reason about. Its limits SHALL read in Topics and
+scans, and its only dollar figure outside the price SHALL be the coffee fund, the plan's monthly budget.
 
-Each card SHALL list, in this order: how many Topics the plan allows, how many of them run on a daily schedule, how many
-manual scans a day, an approximate monthly scan total, and the plan's podcast line. The order matters: each line answers
-the question the line above it raises. The podcast line SHALL read "Short podcast for latest brew only" on
-the free plan and "Full podcasts for every brew" on a paid plan.
+Each card SHALL list, in this order among its lines: how many Topics the plan allows, how many of them run on a daily
+schedule, how many manual scans a day, the coffee fund, an approximate monthly scan total, and the plan's podcast line.
+The podcast line SHALL read "Short podcast for latest brew only" on the free plan and "Full podcasts for every brew" on
+a paid plan.
 
 The monthly scan total SHALL be stated as approximate, since it depends on how the user schedules their Topics. It SHALL
 be derived from the plan's monthly budget and the average cost of one scan, rounded up to the next ten.
@@ -204,20 +203,20 @@ be derived from the plan's monthly budget and the average cost of one scan, roun
 #### Scenario: A card reads in scans
 
 - **WHEN** a pricing card renders
-- **THEN** it lists topics, daily-scheduled topics, manual scans a day, an approximate monthly scan total, and its
-  podcast line, and shows no dollar budget
+- **THEN** it lists topics, daily-scheduled topics, manual scans a day, its coffee fund, an approximate monthly scan
+  total, and its podcast line
 
 #### Scenario: The free card
 
-- **WHEN** the free card renders at the monthly interval
-- **THEN** it reads 3 topics, 1 on a daily schedule, 5 manual scans a day, about 30 scans a month, and its podcast
-  line reads "Short podcast for latest brew only"
+- **WHEN** the free card renders at the monthly interval for a visitor
+- **THEN** it reads 1 topic, 1 on a daily schedule, 5 manual scans a day, a $2 coffee fund, and about 20 scans a month,
+  and its podcast line reads "Short podcast for latest brew only"
 
 #### Scenario: The paid cards
 
 - **WHEN** the plus and premium cards render at the monthly interval
-- **THEN** plus reads 10, 3, 15, and about 150, and premium reads 25, 6, 30, and about 350, and each podcast line
-  reads "Full podcasts for every brew"
+- **THEN** plus reads 10, 3, 15, $15, and about 150, and premium reads 25, 6, 30, $35, and about 350, and each podcast
+  line reads "Full podcasts for every brew"
 
 ### Requirement: The yearly toggle marks the limits it raises
 
@@ -386,11 +385,11 @@ job has not yet replaced keeps working until its budget is spent, so the sweep n
 ### Requirement: Plus costs $20 a month and premium $40, with $15 and $35 budgets
 
 The plans catalog SHALL price plus at $20 a month and premium at $40 a month, and yearly billing SHALL stay ten times
-the monthly price, so $200 and $400 a year. The monthly budget SHALL be $15 on plus and $35 on premium. Free, the daily
-Topic limits, the daily scan limits, and metered overage SHALL NOT change. The pricing page, the Plans and limits docs
-page, and the homepage's structured data SHALL show the catalog's prices. Checkout SHALL charge the Stripe Price that
-the plan and interval's `STRIPE_PRICE_*` value names. A user's key SHALL take the new budget the next time it is
-replaced: at the monthly reset, a plan change, or a budget override.
+the monthly price, so $200 and $400 a year. The monthly budget SHALL be $15 on plus and $35 on premium. Free's price,
+the daily Topic limits, the daily scan limits, and metered overage SHALL NOT change. The pricing page, the Plans and
+limits docs page, and the homepage's structured data SHALL show the catalog's prices. Checkout SHALL charge the Stripe
+Price that the plan and interval's `STRIPE_PRICE_*` value names. A user's key SHALL take the new budget the next time it
+is replaced: at the monthly reset, a plan change, or a budget override.
 
 #### Scenario: The pricing page shows the new prices
 
@@ -411,7 +410,7 @@ replaced: at the monthly reset, a plan change, or a budget override.
 #### Scenario: Free does not change
 
 - **WHEN** the free card renders
-- **THEN** it reads $0, and its limits are the ones it had before
+- **THEN** it reads $0, and its Topic and scan limits are the ones it had before
 
 ### Requirement: Monthly spend is the sum of scan, chat, and podcast episode spend
 

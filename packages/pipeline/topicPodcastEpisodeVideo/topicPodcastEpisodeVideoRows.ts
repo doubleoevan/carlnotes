@@ -36,19 +36,12 @@ export type FilmObjectKeys = {
 	captionsKey: string
 }
 
-// why a render drew no film: an owner past the podcast episode spend cutoff, or a podcast episode missing its audio,
-// transcript, or chapters
-export type TopicPodcastEpisodeVideoSkipReason = "spend-cutoff" | "missing-inputs"
-
 /**
- * Writes a podcast episode's film row as failed, with the reason its render was skipped as the error, so no later
- * listing finds the podcast episode again.
+ * Writes a film row as failed for a podcast episode missing its audio, transcript, or chapters, so no later listing
+ * finds the podcast episode again.
  */
-export async function saveTopicPodcastEpisodeVideoSkipped(
-	podcastEpisodeId: string,
-	reason: TopicPodcastEpisodeVideoSkipReason,
-): Promise<void> {
-	const failedRow = { status: "failed" as const, error: reason }
+export async function saveTopicPodcastEpisodeVideoSkipped(podcastEpisodeId: string): Promise<void> {
+	const failedRow = { status: "failed" as const, error: "missing-inputs" }
 	await db
 		.insert(topicPodcastEpisodeVideos)
 		.values({ podcastEpisodeId, ...failedRow })

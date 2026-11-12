@@ -20,7 +20,7 @@ a day.
 | Topics | 1 | 10 | 25 |
 | Topics on a daily schedule | 1 | 3 monthly · 4 yearly | 6 monthly · 7 yearly |
 | Brews a day | 5 | 15 monthly · 20 yearly | 30 monthly · 40 yearly |
-| Coffee fund a month | $3 | $15 | $35 |
+| Coffee fund a month | $2 | $15 | $35 |
 | Send AI chats to Carl to read for your topics | ✓ | ✓ | ✓ |
 | Send emails to Carl to read for your topics | — | ✓ | ✓ |
 | Selected conversation imports | Included | Included | Included |
@@ -71,10 +71,10 @@ overage on your monthly invoice. The account page says so: "Extra scans beyond y
 On the free plan, on a plan bought in the app, or without a card, the daily limit stops brews until midnight UTC. Yearly
 plans don't bill overage. Their higher daily limits replace it.
 
-There is also a monthly limit. Your account page shows **Carl's coffee fund**: the month's AI model spend against your
-plan's monthly limit: $3 on **Free**, $15 on **Plus**, or $35 on **Premium**. The plans page shows each fund, and the
-brews it buys as an estimate: "About 30, 150, or 350 Brews a month". If the coffee fund runs out, your brews pause until
-it resets on the first of the month, UTC.
+There is also a monthly limit. Your account page shows **Carl's coffee fund**, the month's AI model spend against your
+plan's monthly limit. The limit is $2 on **Free**, $15 on **Plus**, or $35 on **Premium**. The plans page shows each
+fund, and the brews it buys as an estimate: "About 20, 150, or 350 Brews a month". If the coffee fund runs out, your
+brews pause until it resets on the first of the month, UTC.
 
 ![Carl's coffee fund on the account page: the month's spend against the plan's monthly limit, split into brews, the
 Coffee Break podcast, and Coffee Talk, with a circle above the bar for each cutoff, the list of cutoffs under it, and

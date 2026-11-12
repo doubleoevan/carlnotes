@@ -30,3 +30,12 @@ test("both billing intervals show AI sends on every plan and email only on Plus 
 		}
 	}
 })
+
+// the free card reads its monthly budget and its scan estimate from the plans catalog
+test("the free card shows a $2 monthly budget and about 20 scans a month", async () => {
+	const html = await renderWithRouter(
+		<PlanCard plan="free" isYearly={false} isHighlighted={false} signedInPlan={null} subscribedInterval={null} />,
+	)
+	expect(html).toContain("$2 coffee fund a month")
+	expect(html).toContain("About 20 Brews a month")
+})

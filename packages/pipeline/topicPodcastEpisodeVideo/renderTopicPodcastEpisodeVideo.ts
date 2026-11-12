@@ -5,7 +5,6 @@
 import { mkdtemp, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { isMonthlyBudgetCutoffPassed } from "@carlnotes/db/monthlyBudgetCutoffs"
 import { deletePodcastFeedCache } from "@carlnotes/db/podcastFeedCache"
 import { deleteStoredObjects, downloadPodcastEpisodeFile } from "@carlnotes/db/store"
 import {
@@ -46,11 +45,10 @@ import { renderVideoChaptersPart, renderVideoImageParts, type VideoSegmentImage,
 import { toVideoTimeline } from "./videoTimeline"
 
 // what a render did. it drew the film, or skipped a podcast episode that is not published, a film already ready at the
-// current render version, an owner past the podcast episode spend cutoff, or a podcast episode missing its audio,
-// transcript, or chapters
+// current render version, or a podcast episode missing its audio, transcript, or chapters
 export type RenderTopicPodcastEpisodeVideoResult =
 	| { outcome: "rendered"; renderSeconds: number; byteSize: number; generatedChapterImageCount: number }
-	| { outcome: "skipped"; reason: "unpublished" | "ready" | "spend-cutoff" | "missing-inputs" }
+	| { outcome: "skipped"; reason: "unpublished" | "ready" | "missing-inputs" }
 
 // the podcast episode, whether the platform pays for the film instead of the owner, as the backfill does, and a signal
 // that stops the render once it aborts
@@ -63,10 +61,9 @@ type RenderTopicPodcastEpisodeVideoOptions = {
 /**
  * Renders and stores a published podcast episode's film at the current render version, then marks its row ready with
  * its keys and cost. A ready film below that version is rendered again: it keeps playing until the new files are
- * stored, then its row takes the new keys, and a failure leaves it as it was. A podcast episode missing its inputs, or
- * whose owner is past the spend cutoff, gets a failed row, so it is never tried again. A failure deletes what it
- * uploaded and throws an error, so another attempt starts clean. An aborted signal kills the ffmpeg run in progress
- * and fails the render before it uploads.
+ * stored, then its row takes the new keys, and a failure leaves it as it was. A podcast episode missing its inputs
+ * gets a failed row, so it is never tried again. A failure deletes what it uploaded and throws an error, so another
+ * attempt starts clean. An aborted signal kills the ffmpeg run in progress and fails the render before it uploads.
  */
 export async function renderTopicPodcastEpisodeVideo({
 	podcastEpisodeId,
@@ -75,7 +72,7 @@ export async function renderTopicPodcastEpisodeVideo({
 }: RenderTopicPodcastEpisodeVideoOptions): Promise<RenderTopicPodcastEpisodeVideoResult> {
 	// what the film is drawn from, or why it is not drawn
 	const renderStartMs = performance.now()
-	const topicPodcastEpisodeVideoInputs = await loadRenderInputs({ podcastEpisodeId, isPlatformBilled })
+	const topicPodcastEpisodeVideoInputs = await loadRenderInputs({ podcastEpisodeId })
 	if (topicPodcastEpisodeVideoInputs.outcome === "skipped") {
 		return topicPodcastEpisodeVideoInputs
 	}
@@ -181,15 +178,12 @@ type RenderInputs =
 	  }
 	| Extract<RenderTopicPodcastEpisodeVideoResult, { outcome: "skipped" }>
 
-// load the podcast episode and its chapters, skipping a film already ready at the current render version and an owner
-// past the cutoff unless the platform pays. on a first render an owner past the cutoff gets a failed row, and so does a
-// podcast episode missing its audio, transcript, or chapters, with a warning. a film rendered again keeps its row
+// load the podcast episode and its chapters, skipping a film already ready at the current render version. a podcast
+// episode missing its audio, transcript, or chapters gets a failed row on a first render, with a warning, and a film
+// rendered again keeps its row
 async function loadRenderInputs({
 	podcastEpisodeId,
-	isPlatformBilled,
-}: Required<
-	Pick<RenderTopicPodcastEpisodeVideoOptions, "podcastEpisodeId" | "isPlatformBilled">
->): Promise<RenderInputs> {
+}: Pick<RenderTopicPodcastEpisodeVideoOptions, "podcastEpisodeId">): Promise<RenderInputs> {
 	// only a published podcast episode renders
 	const topicPodcastEpisodeVideoEpisode = await loadTopicPodcastEpisodeVideoEpisode(podcastEpisodeId)
 	if (!topicPodcastEpisodeVideoEpisode) {
@@ -204,23 +198,16 @@ async function loadRenderInputs({
 	}
 	const isRerender = isReady
 
-	// the owner pays for the film unless the platform does. an owner past the cutoff gets no film, and on a first
-	// render the skip is marked once, so the backfill's listing never renders the film on the platform's bill
-	const { ownerId, audioKey, script } = topicPodcastEpisodeVideoEpisode
-	if (!isPlatformBilled && (await isMonthlyBudgetCutoffPassed(ownerId, "podcastEpisodes"))) {
-		if (!isRerender) {
-			await saveTopicPodcastEpisodeVideoSkipped(podcastEpisodeId, "spend-cutoff")
-		}
-		return { outcome: "skipped", reason: "spend-cutoff" }
-	}
+	// read the audio, the transcript, and the chapters
+	const { audioKey, script } = topicPodcastEpisodeVideoEpisode
+	const videoChapterRows = await loadVideoChapterRows(podcastEpisodeId)
 
 	// a podcast episode missing an input is marked once, so no listing finds it again
-	const videoChapterRows = await loadVideoChapterRows(podcastEpisodeId)
 	if (!audioKey || !script || videoChapterRows.length === 0) {
 		console.warn(`podcast episode ${podcastEpisodeId} has no audio, transcript, or chapters, so it gets no film`)
 		await (isRerender
 			? saveTopicPodcastEpisodeVideoRerenderFailed(podcastEpisodeId)
-			: saveTopicPodcastEpisodeVideoSkipped(podcastEpisodeId, "missing-inputs"))
+			: saveTopicPodcastEpisodeVideoSkipped(podcastEpisodeId))
 		return { outcome: "skipped", reason: "missing-inputs" }
 	}
 
